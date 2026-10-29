@@ -54,7 +54,8 @@ line prints once per walk. The converter's `--trim` (`trim_model_planes`) asks t
 a NextN model trims on both rails or on neither. The planar families the arena holds whole are refused at their turns (`trim_plane_dropped`), the emb region is
 packed off its run's view - or off the whole planes where no job streams (`trim_pack_emb`) - and a walk that armed
 anything but the whole-model driver after the plan accepted declines the mint. A trimmed image serves the device and
-the CPU embed alone: a call the driver passes to the CPU rails panics by name, the NextN draft's CPU fallback included.
+the CPU embed alone: a call the driver passes to the CPU rails panics by name, the NextN draft's CPU fallback included, and a
+mapped lane the driver does not arm for is refused at its load (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-shared-device`).
 A model the plan would not take whole keeps its planar families under the trim, and the load says so; the lane's
 identity folds the lever on every tier, the dry tier's included, so a flip re-bakes it. The identity does not fold the
 context pin, the mirror codec, the resident route, the sliding layers' ring pin or the host-layers ask

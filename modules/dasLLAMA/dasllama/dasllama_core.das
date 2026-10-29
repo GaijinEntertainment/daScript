@@ -297,7 +297,31 @@ def embed(model : Model; text : string; pooling : int64 = -1l; dims : int64 = 0l
     //! L2-normalized sentence embedding of ``text`` (``model.config.dim`` floats, or the leading ``dims`` renormalized - the
     //! Matryoshka read) from the decoder's post-final-norm hidden rows, pooled the way the file's ``pooling_type`` asks (mean; the
     //! last row for Qwen3-Embedding) unless ``pooling`` names one (``POOLING_MEAN`` / ``POOLING_CLS`` / ``POOLING_LAST``; -1 = the file's).
-    return <- embed_(model, text, pooling < 0l ? model.config.pooling : pooling, dims)
+    return <- embed_(model, text, pooling < 0l ? model.config.pooling : pooling, dims, embed_session_dtype(model), moe_gpu_resident_scratch_serves(model))
+}
+
+def embed_window_rows(model : Model) : int64 {
+    //! The rows one ``embed_batch`` window takes on ``model``: its texts share the armed driver's scratch region where the
+    //! driver serves the model, so a window holds at most the region's context; ``EMBED_WINDOW_ROWS`` elsewhere.
+    return embed_window_rows_(model)
+}
+
+def gpu_free_regions() : int64 {
+    //! The armed driver's K/V regions no live device-home session holds - where an in-handler forward (an embedding on a chat
+    //! model) can take one; 0 with no driver armed.
+    return gpu_free_regions_()
+}
+
+def embed_session_dtype(model : Model) : KVDtype {
+    //! The K/V codec ``embed`` and ``embed_batch`` make ``model``'s sessions in: the armed whole-model driver's mirror codec where
+    //! that driver serves ``model``, so it serves the forward (it serves no session of another codec); ``f32`` elsewhere.
+    return embed_session_dtype_(model)
+}
+
+def embed_batch(model : Model; texts : array<string>; pooling : int64 = -1l; dims : int64 = 0l) : array<array<float>> {
+    //! ``embed`` over many texts at once, one unit vector a text in input order: the texts' forwards share a prefill window,
+    //! so a batch costs far less than a call a text. ``pooling`` and ``dims`` read as in ``embed``.
+    return <- embed_batch_(model, texts, pooling < 0l ? model.config.pooling : pooling, dims, embed_window_rows(model), embed_session_dtype(model), moe_gpu_resident_scratch_serves(model))
 }
 
 // ===== Chat =====
@@ -613,6 +637,11 @@ def gpu_tier_status() : dasllama_gpu_tier::GpuTierStatus {
     //! Snapshot of the GPU tier in force: VRAM budget, resident/streamed layer counts, dense
     //! planes, engage/decline state — the server's GPU badge reads this.
     return gpu_tier_status_()
+}
+
+def gpu_resident_prefills() : int64 {
+    //! How many prompt windows the armed whole-model driver has prefilled in this context - the device's served witness.
+    return gpu_resident_prefills_()
 }
 
 def gpu_cpu_passes() : array<tuple<reason : string; words : string; count : int64>> {

@@ -10,6 +10,86 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-10-28, `debug-jit`) - the Vulkan embedding window's bars and lasting allocations
+  (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-scratch`).** Box: the RunPod RTX PRO 4500 Blackwell 32 GB (Linux, 48
+  vCPU), branch `bbatkin/embed-speed` at 4588f21a08 plus the pre-PR fix batch, `bin/daslang -jit` with `DASLLAMA_GPU=1`,
+  `DAS_TUNE_MANIFEST=/workspace/nmt_pod.tune.json` (predating the binary: untuned stamps), Qwen3-Embedding-0.6B-Q8_0 loaded
+  in memory (`load_model_`), one reading each.
+
+  | bar | value | what it holds | reading | cell |
+  |---|---|---|---|---|
+  | `EMB_MEAN_BAR` (test_embeddings) | 0.999 cosine | the device's mean read (f16 mirror, GPU sums) of a 2x-passage text against the CPU's f32-cache read | 0.99989 | `test_embeddings_on_the_resident_driver` |
+  | the batch bar (test_embeddings) | 0.9999 cosine, least over the texts | the device batch's vectors against the device singles' (one scratch window against a window a text) | 0.99997 over the six batch texts | `test_embeddings_on_the_resident_driver`, `test_embeddings_window_rows_follow_the_region` |
+  | `EMB_MEAN_BAR` on a held run (test_embeddings) | 0.999 cosine | the free run's device vectors against the held run's f16 host-cached reads | 0.99931 (device batch against the CPU's f16 sessions, the same texts) | `test_embeddings_every_region_held` |
+
+  Lasting allocations, bytes: the context's embed session pool (`g_embed_pool`) holds one session a text of the largest
+  window the context ran; a host-cached session's flat K/V is 2 x n_layers x seq_len x n_kv_heads x head_dim x codec bytes
+  (Qwen3-Embedding-0.6B: 28 x 8 x 128 at f16 - 3.76 GB at its 32768 context, 0.94 GB at the server worker's 8192), a
+  device-home session holds no K/V, only its rows' scratch per window (npos x dim x 4 bytes a buffer). The Vulkan window's
+  hidden-rows landing (`pf_hid_host`) is pf_np x dim x 4 bytes, host-visible, made at the first ask: 16 MiB at 4096 rows x
+  1024 (the plan's window on this box), 8 MiB at 2048.
+- **MEASURED (2026-10-27 / 2026-10-28, `direction-grade`, `debug-jit`) - the short window's split-K form, the GEMV tail
+  peel, the dev-W floors and the hidden-only window (`ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-split-k`,
+  `#devw-panel-knees`, `#gemv-tail-peel`, `ARCHITECTURE_GPU_PREFILL.md#prefill-hidden-only`,
+  `ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split`).** Branch `bbatkin/embed-speed` at 4588f21a08 and its working tree,
+  `-jit`, `DAS_TUNE_POLICY` unset. Boxes: m5 (Apple M5 Max, `DAS_TUNE_MANIFEST=performance/m5.tune.json`), m1 (Apple M1 Max,
+  its own mint), pod (RunPod RTX PRO 4500 Blackwell 32 GB, driver 595.91, `DASLLAMA_GPU=1`, the pod profile). Every
+  two-candidate row toggles one lever in one process unless it names separate runs; ratios are candidate / control.
+  - **Races (`metal_split_knee_race`, `harness/tune_kernels.das` under `DAS_TUNE_MODE=tune`).** m5 crowns q8 256, K-quant
+    2048, one-way rows 64, base 256 / 2048 (the q8 base knee reads 128 or 256 between rounds - a flat total), half tile 64,
+    dev-W floor 64; m1 512 / 256 / 128, base 256 / 256, dev-W floor off. Pod (`vk_split_knee_race`, the ring and co-running pairs, two rounds, ms per rung's 24 steps, tile /
+    split x2 / x4 / x8): 16 tiles 17.0 / 38.0 / 24.0 / 18.0, 32 tiles 18.0 / 38.6 / 26.0 / 22.4, 64 tiles 29.0 / 42.3 / 35.5 /
+    38.1, 128 tiles 61.7 / 65.5 / 69.0 / 69.8, 256 tiles 123.3 / 132.5 / 136.7 / 137.3 - the split loses at every rung and
+    the race picks 0, against the served window A/B below, where 128 wins every model; the default stays 128. The earlier
+    race shape (one chain on one hazard rail, resident weights) picked 128.
+  - **Isolated GEMM, us** (`harness/short_window_gemm_race.das`, m5, best of 9 after a 150 ms burn), the q8 32-column split
+    stamp at its count against the shipped tile, K x N at 32 / 64 / 128 rows: 1024 x 1024 18.3 / 6.7 (8), 18.2 / 8.1 (4),
+    18.8 / 12.0 (2); 1024 x 3072 22.8 / 12.5 (2), 23.6 / 17.9 (1), 26.3 / 30.4 past the knee; 3072 x 1024 59.7 / 12.8 (8),
+    59.4 / 17.8 (4), 60.3 / 29.4 (2); 4096 x 4096 89.3 / 49.2 (2), 98.2 / 80.1 (1), 178.1 / 140.7 past; 4096 x 14336 184.7 /
+    171.7, 282.8 / 249.4, 528.7 / 514.6, all past. `--wide`: the 32-column one-way tile at 96 rows on 4096 x 4096 129.7
+    against the 64-column 101.4.
+  - **Windows, Metal** (`benchmarks/prefill_window_probe.das --cold --ab split`, the knob forced off in the control; the
+    toggles are window by window in one process). m1, the base split, 9 to 31 rows: Qwen3-Embedding-0.6B Q8_0 0.64-0.65,
+    Llama-3.2-1B Q8_0 / Q4_K_M / IQ4_XS 0.67-0.72, Qwen3-4B Q4_K_M 0.75-0.82, Llama-3.1-8B Q8_0 0.88-0.91, Mistral-7B Q4_K_M
+    0.89-0.95, Qwen3.6-27B Q4_K_M 288-292 -> 251-256 ms. m5 under `DASLLAMA_METAL_TENSOR=0`, 9 to 33 rows: 0.59-0.69 on the
+    0.6B, 0.76-0.78 on Llama-3.2-1B Q4_K_M, 0.85 on the 27B, 1.00 at 40. m5 crowned, Qwen3.6-27B-MTP Q4_K_M at 9 / 16 rows:
+    98.0 / 97.1 ms whole-K, 76.4 / 75.9 the 32-row split, 65.8 / 62.2 the 16-row split; 17 to 31 rows 74-76 on the 32-row
+    split. `--ab split16` after a 2000-token prefix, 16-row / 32-row split at 9 / 16 rows: Qwen3-0.6B Q8_0 0.97 / 0.97,
+    Llama-3.2-1B Q4_K_M 0.89 / 0.87, Llama-3.1-8B Q8_0 0.97 / 0.85 (walls not kept for the m1 and split16 rows; the ratios
+    are as recorded). The 27B at 9 rows: 65.5 GPU ms a window, 53.5 in its split GEMMs (11.9 with them knocked out), 17.1 GB
+    at about 320 GB/s against a decode step's 39.6 ms at 432 (`followup_metal.md` row 59).
+  - **The K-quant knee.** The 27B's 17408-wide gate and up sites at 9 rows: 37.8 -> 29.0 ms of the window split four ways.
+  - **Tail peel** (m5). Embedding corpus, the past-whole-tiles reach cut from eight rows to one: 3.87 -> 3.77 ms a query
+    (`harness/embed_query_probe.das`, Qwen3-Embedding-0.6B Q8_0, 60 queries). `--ab tail`, GEMV forms / split tile over a
+    whole window at 2 / 4 / 5 / 8 rows: Qwen3-0.6B Q8_0 0.85 / 0.86 / 1.10 / 1.10, Llama-3.2-1B Q4_K_M 0.68 / 0.75 / 1.03 /
+    1.03. `--cold --ab tail` past the knee, row forms / tile at 34 / 36 / 40 rows: Qwen3.6-27B Q4_K_M 0.94 / 1.01 / 1.25,
+    Llama-3.3-70B Q4_K_M 0.97 / 1.01 / 0.98.
+  - **Dev-W floors** (`--cold --ab devw`, `DASLLAMA_METAL_TENSOR=0`, 27B Q4_K_M, dev-W / quantized): m5 1.04 / 1.04 / 0.74 /
+    0.52 at 40 / 64 / 128 / 256 rows (1.34 at 40 and 64 under the fixed floor); m1 464 ms at 40 rows against 983 under the
+    fixed floor, the route off by its race.
+  - **Hidden-only window** (`harness/embed_query_probe.das`, m5): the embedding query 3.71 -> 3.39 ms.
+  - **Served, m5** (`--ab split` against the whole-K tiles on the minted profile): the Qwen3-Embedding-0.6B query 5.89 -> 3.40
+    ms in-process (`harness/embed_query_probe.das`, 60 queries); the ladder Q4_K 5.04 -> 3.14, IQ4_XS 5.73 -> 3.34, Q2_K
+    4.67 -> 3.05. `benchmarks/lcpp_bench.das --for-debug-purposes -p 32 -n 0 -r 10 --ngl 99`, `DASLLAMA_METAL_SPLIT_K`
+    forced per run (separate processes), tok/s off -> on: Qwen3-0.6B Q8_0 5522 -> 9165, Llama-3.1-8B Q8_0 1024 -> 1372,
+    Mistral-7B Q4_K_M 1339 -> 1697, Qwen3-8B BF16 (served as q8) 1034 -> 1317. The q8 knob end to end: 3.93 / 3.90 / 3.91 /
+    3.96 ms a query at 128 / 256 / 512 / 1024.
+  - **Windows, Vulkan** (pod, the in-process window driver toggling `vk_split_k_tgs` window by window on one session after a
+    40-window warm-up, median of 21, ms a 31-row window, knee 128 -> 0): Qwen3-Embedding-0.6B Q8_0 3.01 / 4.33, Qwen3-0.6B
+    2.90 / 4.21, Llama-3.2-1B IQ4_XS 3.48 / 5.14, gemma-3-1b 4.31 / 6.09, Qwen3.5-0.8B 6.72 / 7.54, gemma-4-E2B 8.28 / 13.45 -
+    each within a tenth of its own 32-row window, which reads the same either way. The rule on a full column's K-under-2048
+    roles read 5-9% slower at 32 to 64 rows on the Qwen3 0.6B family and Llama-3.2-1B, faster only on gemma.
+  - **Served, pod, 2026-10-28** (the working tree on 4588f21a08; ours `benchmarks/lcpp_bench.das --for-debug-purposes -p
+    <pp> -n 0 -r 7` under `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1`; llama.cpp 9febe63 Vulkan `llama-bench -p <pp> -n 0 -ngl
+    999 -r 7`; separate processes, tok/s, ours / llama.cpp, pp31 then pp32): Qwen3-0.6B Q8_0 10841 +/- 32 / 9096 +/- 76,
+    12376 +/- 43 / 9171 +/- 46; Qwen2.5-0.5B Q8_0 11983 +/- 33 / 9365 +/- 110, 13563 +/- 72 / 9681 +/- 42; gemma-3-1b Q8_0
+    7291 +/- 27 / 6686 +/- 52, 8176 +/- 23 / 6753 +/- 25; Llama-3.2-1B IQ4_XS 8940 +/- 24 / 6413 +/- 75, 9703 +/- 24 / 6613
+    +/- 52; Qwen3.5-0.8B Q8_0 4625 +/- 10 / 6471 +/- 58, 5326 +/- 16 / 5440 +/- 32 (`followup_vulkan.md` row 163);
+    Qwen3-Embedding-0.6B Q8_0 pp32 11611 +/- 115 / 8863 +/- 87, its pp31 VOID (ours +/- 3541 - a cold first rep); gemma-4-E2B
+    ours 3732 +/- 20 / 3682 +/- 18, llama.cpp VOID (+/- 1360 / 748). The embedding server bench (`utils/dasllama-server`
+    against `llama-server --embedding -ngl 999 -c 8192 -b 2048 -ub 2048`, Qwen3-Embedding-0.6B Q8_0, median of 7): one
+    query a request 3.98 ms cv 0.2% (knee 128) / 3.96 cv 0.1% (knee 0) / llama.cpp 6.09 cv 1.0%; 255 phrases in requests of
+    32 0.213 s cv 0.7% / 0.214 cv 0.7% / 0.566 cv 0.4% - the served query does not reach the short-window rule.
 - **MEASURED (2026-10-27, `direction-grade`) - the Bergamot translation family on three homes
   (`ARCHITECTURE_TRANSLATE.md#nmt-device-homes`).** Harness `harness/nmt_probe.das` (the race fixture: interleaved rounds of
   the 30-line ru and en corpora, `benchmarks/nmt/corpus/`, best of 9 rounds after warm-up, ms a sentence, back to back),

@@ -240,11 +240,11 @@ let private PER32_STEMS = fixed_array("Q51", "Iq4nl32", "Q4032", "Q5032")
 def private per32_window_dispatches() : int64 {
     var n = 0l
     for (f in PER32_STEMS) {
-        n += metal_kernel_count("MetalKqMulMm{f}_metal_kq_mulmm")
+        n += metal_kernel_count("MetalKqMulMm{f}_metal_kq_mulmm") + metal_kernel_count_compiled("MetalKqMulMm{f}Sk_metal_kq_mulmm")
         for (v in ["T", "TH", "TH128"]) {   //! the tensor twins under the format's crown, the dev-W pass ahead of them
             n += metal_kernel_count("MetalKqMulMm{f}{v}_metal_kq_mulmm_b32_t")
         }
-        for (v in ["THDb", "THDb128"]) {
+        for (v in ["THDb", "THDb128", "THSk", "TSk", "THSk16", "TSk16"]) {   //! the double-buffered pair and the short window's split-K stamps
             n += metal_kernel_count("MetalKqMulMm{f}{v}_metal_kq_mulmm_db")
         }
         n += metal_kernel_count("MetalKqDequant{f}_metal_kq_dequant")
@@ -323,15 +323,16 @@ def test_metal_format_census_per32(t : T?) {
     }
 }
 
-//! the window's GEMM dispatches of an iq4-family format by its class stem (`Iq3s4`, `Nv4`): the simdgroup base, the tensor twins
+//! the window's GEMM dispatches of an iq4-family format by its class stem (`Iq3s4`, `Nv4`): the simdgroup base and its split stamp, the tensor twins
 //! with the dev-W pass ahead of them (compiled only under the format's crown, so an uncompiled twin reads 0), and the small-batch
 //! forms a short window takes
 def private iq4_family_mm_dispatches(stem : string) : int64 {
-    var n = metal_kernel_count("MetalKqMulMm{stem}_metal_kq_mulmm") + metal_kernel_count_compiled("MetalKqDequant{stem}_metal_kq_dequant")
+    var n = (metal_kernel_count("MetalKqMulMm{stem}_metal_kq_mulmm") + metal_kernel_count_compiled("MetalKqMulMm{stem}Sk_metal_kq_mulmm")
+        + metal_kernel_count_compiled("MetalKqDequant{stem}_metal_kq_dequant"))
     for (v in ["T", "TH", "TH128"]) {
         n += metal_kernel_count_compiled("MetalKqMulMm{stem}{v}_metal_kq_mulmm_iq4xs_t")
     }
-    for (v in ["THDb", "THDb128"]) {
+    for (v in ["THDb", "THDb128", "THSk", "TSk", "THSk16", "TSk16"]) {   //! the double-buffered pair and the short window's split-K stamps
         n += metal_kernel_count_compiled("MetalKqMulMm{stem}{v}_metal_kq_mulmm_db")
     }
     n += metal_kernel_count("MetalKqMvB2{stem}_metal_kq_mv_iq4") + metal_kernel_count("MetalKqMvB4{stem}_metal_kq_mv_iq4")

@@ -110,7 +110,7 @@ def test_gpu_resident_continuation_hc(t : T?) {
             var prompt <- resident_prompt(2l * HALF)
             var first <- [for (i in range64(HALF)); prompt[i]]
             var rest <- [for (i in range64(HALF, 2l * HALF)); prompt[i]]
-            let served0 = moe_gpu_resident_prefills()
+            let served0 = gpu_resident_prefills_()
             var sw <- create_session(tr, mirror_kv_dtype())
             forward_prefill(tr, sw, prompt, 2l * HALF, 0l)
             var whole <- [for (x in sw.logits); x]
@@ -119,7 +119,7 @@ def test_gpu_resident_continuation_hc(t : T?) {
             forward_prefill(tr, sc, first, HALF, 0l)
             sc.n_past = HALF
             forward_prefill(tr, sc, rest, HALF, HALF)
-            t |> equal(moe_gpu_resident_prefills(), served0 + 3l, "the window chain served every prefill: the whole prompt, the first half and its continuation (none passed to the CPU rails)")
+            t |> equal(gpu_resident_prefills_(), served0 + 3l, "the window chain served every prefill: the whole prompt, the first half and its continuation (none passed to the CPU rails)")
             served_every_call(t)
             var cont <- [for (x in sc.logits); x]
             var into : DnSnapshot

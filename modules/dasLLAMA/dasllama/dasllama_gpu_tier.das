@@ -722,6 +722,7 @@ struct public RdecPfSeg {
     pos0 : int64
     region : int64
     seg : int64 = 0l   //! the call's segment this is, or the part of it inside a window, belongs to: the captures name their segment by it
+    koff : int64 = 0l   //! the segment's first row in its region, past the segments packed before it (a scratch window's)
 }
 
 //! A checkpoint stop inside a resident prefill call: segment `seg`'s state after its first `row` rows lands in checkpoint row
@@ -760,7 +761,7 @@ def public rdec_window_segs(segs : array<RdecPfSeg>; w0, wlen : int64; var out :
         let lo = max(sg.row0, w0)
         let hi = min(sg.row0 + sg.npos, w0 + wlen)
         continue if (hi <= lo)
-        out |> push(RdecPfSeg(row0 = lo - w0, npos = hi - lo, pos0 = sg.pos0 + (lo - sg.row0), region = sg.region, seg = int64(i)))
+        out |> push(RdecPfSeg(row0 = lo - w0, npos = hi - lo, pos0 = sg.pos0 + (lo - sg.row0), region = sg.region, seg = int64(i), koff = sg.koff))
     }
 }
 
@@ -1132,6 +1133,47 @@ def public install_rdec_head_warm(ask : RdecHeadWarmAskFn; rows : RdecHeadWarmRo
 def public rdec_head_warm_installed() : bool => g_rdec_head_warm_installed
 def public rdec_head_warm_ask(on : bool) { invoke(g_rdec_head_warm_ask, on) }
 def public rdec_head_warm_rows() : int64 => invoke(g_rdec_head_warm_rows)
+
+//! the window chain's packed segments: `fits` answers whether the armed driver can seat several segments in one region, each from
+//! its own first row (`RdecPfSeg.koff`) - no sliding layer's ring, no block-codec store
+typedef RdecSegsPackedFn = function<() : bool>
+def private rdec_unset_segs_packed : bool => false
+var g_rdec_segs_packed = @@rdec_unset_segs_packed
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-scratch")]
+def public install_rdec_segs_packed(fits : RdecSegsPackedFn) {
+    g_rdec_segs_packed = fits
+}
+
+def public rdec_segs_packed() : bool => invoke(g_rdec_segs_packed)
+
+//! the window chain's final residual rows: `ask` names whether the next chains land every row's final residual (an embedding
+//! pools them), `rows` copies `nrows` of the last chain's rows from window row `src_row` into `dst` at element `dst_off`
+typedef RdecHiddenAskFn = function<(on : bool) : void>
+typedef RdecHiddenRowsFn = function<(var dst : array<float>; src_row, dst_off, nrows : int64) : void>
+def private rdec_unset_hidden_ask(on : bool) {
+    if (on) {
+        panic("dasLLAMA: a window asked for its hidden rows with no hidden-rows seat installed - the program must require dasllama/dasllama_math_vulkan")
+    }
+}
+[unused_argument(dst, src_row, dst_off, nrows)]
+def private rdec_unset_hidden_rows(var dst : array<float>; src_row, dst_off, nrows : int64) {
+    panic("dasLLAMA: a window's hidden rows were read with no hidden-rows seat installed - the program must require dasllama/dasllama_math_vulkan")
+}
+var g_rdec_hidden_ask = @@rdec_unset_hidden_ask
+var g_rdec_hidden_rows = @@rdec_unset_hidden_rows
+var g_rdec_hidden_installed = false
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-hidden-rows")]
+def public install_rdec_hidden(ask : RdecHiddenAskFn; rows : RdecHiddenRowsFn) {
+    g_rdec_hidden_ask = ask
+    g_rdec_hidden_rows = rows
+    g_rdec_hidden_installed = true
+}
+
+def public rdec_hidden_installed() : bool => g_rdec_hidden_installed
+def public rdec_hidden_ask(on : bool) { invoke(g_rdec_hidden_ask, on) }
+def public rdec_hidden_rows(var dst : array<float>; src_row, dst_off, nrows : int64) { invoke(g_rdec_hidden_rows, dst, src_row, dst_off, nrows) }
 
 //! the per-layer-embedding seats (gemma-4 E-series): `set_ple` sizes the side-input rows at the model's ple width
 //! (after prepare, before the layers); `set_ple_layer` wires one layer's gate [dim x ple] and proj [ple x dim] planes

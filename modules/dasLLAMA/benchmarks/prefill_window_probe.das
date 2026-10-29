@@ -8,6 +8,7 @@ require dasllama/dasllama_common   // apply_box_profile_runtime, set_metal_mode,
 require ?das_metal dasllama/dasllama_metal_prefill   // the driver's per-window stage report
 require ?das_metal dasllama/dasllama_metal_common    // the decode stage report, the per-kernel profile
 require ../performance/profile_common.das   // nolint:STYLE029,LINT019 - tune_gate, used only inside the das_metal static_if halves
+require llvm/daslib/llvm_tune   // nolint:STYLE030,LINT019 - tune_median, tune_cv_pct, used only inside the das_metal static_if halves
 require daslib/clargs
 require daslib/cmp   // nolint:STYLE030,LINT019 - cmp_by, used only inside the das_metal static_if halves
 require daslib/strings_boost   // nolint:STYLE030,LINT019 - split, used only inside the das_metal static_if halves
@@ -50,7 +51,7 @@ struct Args {
     top : int = 24
     @clarg_doc = "the routed block's gathered-route knee in tokens (default -1: the box profile's)"
     gemv_max : int = -1
-    @clarg_doc = "an interleaved A/B over every window size, one process: `knee` = the gathered route (knee 512) against the tiles (knee 0), `tail` = the K-quant GEMV-tail peel on against off, `devw` = the dev-W route on against off (the K-quant sites' scratch f16 panels against their own bytes); reps a window per arm, alternating"
+    @clarg_doc = "an interleaved A/B over every window size, one process: `knee` = the gathered route (knee 512) against the tiles (knee 0), `tail` = the K-quant GEMV-tail peel on against off, `devw` = the dev-W route on against off (the K-quant sites' scratch f16 panels against their own bytes), `split` = the short window's split-K tiles on against off, `split16` = the 16-row split stamps against the 32-row ones; reps a window per arm, alternating"
     ab : string = ""
     @clarg_doc = "window sizes to sweep, comma list (default 2,3,4,8,12,16,24,32,48,64,96,128,256,512)"
     windows : string = ""
@@ -62,26 +63,6 @@ struct Args {
 }
 
 let WINDOWS <- [2, 3, 4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 256, 512]
-
-def private median(var xs : array<double>) : double {
-    sort(xs)
-    let n = length(xs)
-    return n % 2 == 1 ? xs[n / 2] : 0.5lf * (xs[n / 2 - 1] + xs[n / 2])
-}
-
-//! the samples' coefficient of variation in percent - a row past 3% is noise, not a reading
-def private cv_pct(xs : array<double>) : double {
-    let n = double(length(xs))
-    var mean = 0.0lf
-    for (x in xs) {
-        mean += x / n
-    }
-    var vsum = 0.0lf
-    for (x in xs) {
-        vsum += (x - mean) * (x - mean) / n
-    }
-    return mean > 0.0lf ? 100.0lf * sqrt(vsum) / mean : 0.0lf
-}
 
 //! the token pool the prefix and every window read from: house notes, encoded as many times as the run needs
 def private token_pool(m : Model; need : int) : array<int64> {
@@ -154,13 +135,14 @@ def private sweep(a : Args) : int {   // nolint:STYLE038 — one flat sweep: the
         if (a.gemv_max >= 0) {
             set_metal_moe_gemv_max(int64(a.gemv_max))
         }
-        if (!empty(a.ab) && a.ab != "knee" && a.ab != "tail" && a.ab != "devw") {
-            print("prefill_window_probe: --ab takes `knee`, `tail` or `devw`, not `{a.ab}`\n")
+        if (!empty(a.ab) && a.ab != "knee" && a.ab != "tail" && a.ab != "devw" && a.ab != "split" && a.ab != "split16") {
+            print("prefill_window_probe: --ab takes `knee`, `tail`, `devw`, `split` or `split16`, not `{a.ab}`\n")
             return 2
         }
         let knee_before = metal_moe_gemv_max()
         let tail_before = get_metal_prefill_mm_tail()
         let devw_before = get_metal_prefill_dev_w()
+        let split_before = get_metal_prefill_split_k()
         var rows_served = 0
         var rows_inert = 0
         with_dasllama_jobque() {   // nolint:STYLE037,LINT019 — the sweep's one block: the ladder and its A/B arms
@@ -178,13 +160,16 @@ def private sweep(a : Args) : int {   // nolint:STYLE038 — one flat sweep: the
             if (empty(a.ab)) {
                 print("\nnpos  gpu_ms  encode_ms  wait_ms  rb_ms  ms/tok  gpu_cv%  (medians of {a.reps - 1} after the warmup rep; {from})\n")
             } else {
-                let arms = a.ab == "knee" ? "route (knee 512) vs tiles (knee 0)" : (a.ab == "tail" ? "peel on vs off" : "scratch panels vs own bytes")
+                let arms = (a.ab == "knee" ? "route (knee 512) vs tiles (knee 0)" : (a.ab == "tail" ? "peel on vs off"
+                    : (a.ab == "split" ? "split-K tiles vs whole-K tiles"
+                    : (a.ab == "split16" ? "16-row split stamps vs 32-row" : "scratch panels vs own bytes"))))
                 print("\nnpos  A_ms  B_ms  A/B  A_cv%  B_cv%  ({a.ab}: {arms}; medians of {a.reps} a arm, the arms alternating after one warmup rep of A; {from})\n")
             }
             for (n in windows) {
                 var inscope gpu, enc, wait, rb, gpu_b : array<double>
                 var declined = 0
                 var devw_sites = 0l   //! the dev-W sites arm A's timed reps ran
+                var split_sites = 0l   //! the split-K sites arm A's timed reps ran
                 let reps = empty(a.ab) ? a.reps : 1 + 2 * a.reps
                 for (r in range(reps)) {
                     let arm_b = !empty(a.ab) && r > 0 && (r - 1) % 2 == 1
@@ -194,6 +179,10 @@ def private sweep(a : Args) : int {   // nolint:STYLE038 — one flat sweep: the
                         set_metal_prefill_mm_tail(!arm_b)
                     } elif (a.ab == "devw") {
                         set_metal_prefill_dev_w(!arm_b)
+                    } elif (a.ab == "split") {
+                        set_metal_prefill_split_k(!arm_b)
+                    } elif (a.ab == "split16") {
+                        set_metal_prefill_held("split_k16", arm_b)
                     }
                     if (a.cold) {
                         delete s
@@ -205,10 +194,12 @@ def private sweep(a : Args) : int {   // nolint:STYLE038 — one flat sweep: the
                     metal_prefill_stage_reset()
                     let declines0 = metal_prefill_stats().declines
                     let devw0 = metal_prefill_devw_scratch_stats().sites
+                    let split0 = metal_prefill_split_k_sites()
                     eval(m, s, win)
                     let st = metal_prefill_stage_stats()
                     if (r > 0 && !arm_b) {
                         devw_sites += metal_prefill_devw_scratch_stats().sites - devw0
+                        split_sites += metal_prefill_split_k_sites() - split0
                     }
                     if (st.prefills != 1l) {
                         declined++
@@ -235,12 +226,17 @@ def private sweep(a : Args) : int {   // nolint:STYLE038 — one flat sweep: the
                     rows_inert++
                     continue
                 }
-                let g = median(gpu)
+                if ((a.ab == "split" || a.ab == "split16") && split_sites == 0l) {
+                    print("{n}  inert: arm A ran no split-K site, the {a.ab} lever changed nothing\n")
+                    rows_inert++
+                    continue
+                }
+                let g = tune_median(gpu)
                 if (empty(a.ab)) {
-                    print("{n}  {g}  {median(enc)}  {median(wait)}  {median(rb)}  {g / double(n)}  {cv_pct(gpu)}\n")
+                    print("{n}  {g}  {tune_median(enc)}  {tune_median(wait)}  {tune_median(rb)}  {g / double(n)}  {tune_cv_pct(gpu)}\n")
                 } else {
-                    let gb = median(gpu_b)
-                    print("{n}  {g}  {gb}  {g / gb}  {cv_pct(gpu)}  {cv_pct(gpu_b)}\n")
+                    let gb = tune_median(gpu_b)
+                    print("{n}  {g}  {gb}  {g / gb}  {tune_cv_pct(gpu)}  {tune_cv_pct(gpu_b)}\n")
                 }
                 rows_served++
             }
@@ -248,6 +244,8 @@ def private sweep(a : Args) : int {   // nolint:STYLE038 — one flat sweep: the
                 set_metal_moe_gemv_max(knee_before)
                 set_metal_prefill_mm_tail(tail_before)
                 set_metal_prefill_dev_w(devw_before)
+                set_metal_prefill_split_k(split_before)
+                set_metal_prefill_held("split_k16", false)
             }
             for (ks in split(a.kprof, ",")) {
                 let n = to_int(ks)
@@ -265,7 +263,7 @@ def private sweep(a : Args) : int {   // nolint:STYLE038 — one flat sweep: the
             delete m
         }
         if (rows_served == 0) {
-            let why = rows_inert > 0 ? "the devw lever was inert" : "every window declined"
+            let why = rows_inert > 0 ? "the {a.ab} lever was inert" : "every window declined"
             print("no window row served - {why}\n")
             return 1
         }

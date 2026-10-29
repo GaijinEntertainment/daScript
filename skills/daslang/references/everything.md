@@ -80,6 +80,7 @@ One section per module: what the module is for, then its public symbols grouped 
 - [linq_fold](#linq_fold) - The LINQ_FOLD module provides the `_fold` and `_old_fold` call macros that rewrite LINQ pipelines into optimized loop forms — `_fold` is the active fusion macro, `_old_fold` is a frozen pre-rewrite baseline kept for benchmark comparison as `_fold` evolves toward splice-mode fusion.
 - [lint](#lint) - The LINT module implements static analysis checks for daslang code.
 - [lint_config](#lint_config) - The lint_config module loads `{get_das_root()}/.lint_config` (a TOML file with a `[rules]` table of booleans) and folds it into a `disabled_codes` set consumed by the three lint pass-macros (`daslib/lint`, `daslib/perf_lint`, `daslib/style_lint`), by the standalone runner `utils/lint/main.das`, and by the MCP `lint` tool.
+- [lint_fixups](#lint_fixups) - The lint_fixups module holds the helpers the lint passes build their `--fix` edits from: the source text of a node or a range, the checks a rewrite must pass, and the shared `LintFix` constructors.
 - [logger](#logger) - The logger module provides a structured, file-backed logging facility for daslang tools (MCP server, daslang-live, dastest, etc).
 - [lpipe](#lpipe) - The LPIPE module provides the `lpipe` macro for passing multiple block arguments to a single function call.
 - [macro_boost](#macro_boost) - The MACRO_BOOST module provides utility macros for macro authors, including pattern matching on AST nodes, code generation helpers, and common transformation patterns used when writing compile-time code.
@@ -3250,6 +3251,17 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 ### Embeddings
 
 - `embed` - L2-normalized sentence embedding of `text` (`model.config.dim` floats, or the leading `dims` renormalized - the Matryoshka read) from the decoder's post-final-norm hidden rows, pooled the way the file's `pooling_type` asks (mean; the last row for Qwen3-Embedding) unless `pooling` names one (`POOLING_MEAN` / `POOLING_CLS` / `POOLING_LAST`; -1 = the file's).
+- `embed_batch` - `embed` over many texts at once, one unit vector a text in input order: the texts' forwards share a prefill window, so a batch costs far less than a call a text.
+
+### Embedding windows
+
+- `embed_session_dtype` - The K/V codec `embed` and `embed_batch` make `model`'s sessions in: the armed whole-model driver's mirror codec where that driver serves `model`, so it serves the forward (it serves no session of another codec); `f32` elsewhere.
+- `embed_window_rows` - The rows one `embed_batch` window takes on `model`: its texts share the armed driver's scratch region where the driver serves the model, so a window holds at most the region's context; `EMBED_WINDOW_ROWS` elsewhere.
+
+### Device regions and windows
+
+- `gpu_free_regions` - The armed driver's K/V regions no live device-home session holds - where an in-handler forward (an embedding on a chat model) can take one; 0 with no driver armed.
+- `gpu_resident_prefills` - How many prompt windows the armed whole-model driver has prefilled in this context - the device's served witness.
 
 ### Vision and audio encoders
 
@@ -6728,6 +6740,7 @@ The lint_config module loads `{get_das_root()}/.lint_config` (a TOML file with a
 
 ### Fixes
 
+- `applied_lint_fix_spans`
 - `apply_lint_fixes`
 - `lint_source_line`
 
@@ -6739,6 +6752,34 @@ The lint_config module loads `{get_das_root()}/.lint_config` (a TOML file with a
 ### Line-length policy
 
 - `line_length_policy_for`
+
+## lint_fixups
+
+The lint_fixups module holds the helpers the lint passes build their `--fix` edits from: the source text of a node or a range, the checks a rewrite must pass, and the shared `LintFix` constructors.
+
+
+### Fixes
+
+- `lint_call_fix`
+- `lint_expr_text`
+- `lint_fills_lines`
+- `lint_fix`
+- `lint_fix_message`
+- `lint_fix_site_ok`
+- `lint_function_names`
+- `lint_has_comment`
+- `lint_indent_of`
+- `lint_is_operand`
+- `lint_merge_fixes`
+- `lint_module_visible`
+- `lint_name_counts`
+- `lint_operand_text`
+- `lint_range`
+- `lint_replace_fix`
+- `lint_span_fix`
+- `lint_span_text`
+- `lint_token_fix`
+- `lint_unwritten_arg`
 
 ## toml
 

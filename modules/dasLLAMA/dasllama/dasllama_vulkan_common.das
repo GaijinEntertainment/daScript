@@ -16,6 +16,7 @@ require dasllama/dasllama_kv_dtype   // KVDtype and its unit arithmetic: the mir
 require dasllama/dasllama_gpu_math   // kv_ring_row: a mirror position's row
 require dasllama/dasllama_gpu_kernels_discrete public   // the deltanet smalls layout and dispatch grids both discrete homes read
 require dasllama/dasllama_gemm_schema
+require dasllama/dasllama_gpu_knee   // the short window's split rule and knee, shared with the Metal home
 require dasllama/dasllama_env
 require dasllama/dasllama_config
 require dasllama/dasllama_par
@@ -26,6 +27,7 @@ require daslib/fio
 require daslib/jobque_boost
 require daslib/enum_trait
 require daslib/algorithm
+require daslib/rtti   // this_context: the context that made `g_gpu` is the one its teardown runs in
 
 // The Vulkan backend's shared infrastructure: device state (GpuState/g_gpu), buffer/descriptor
 // makers, upload + stacks + host-import, the weight arena, command/submit plumbing, the
@@ -159,6 +161,20 @@ def private cm2_reduce_units(nsplit, cnt, d : int64) : int64 => (9l + ((nsplit +
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_tiles(d, cnt : int64) : int64 => cm2_tiles_at(d, cnt, cm2_tile_cols(d, cnt))
 
+//! The short window's split on the s column (`ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split`): the rule both GPU homes serve
+//! (`split_k_on` / `split_k_ways`) under the box's raced knee, over the role's grid and its co-running roles', each share whole
+//! 256-wide chunks with the last one short (`cm2_chunk`'s shares), the planes within the scratch
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split")]
+def private cm2_short_split(d, cnt, n, sib_tiles, scratch_bytes : int64) : tuple<tc : int64; nsplit : int64; ksplit : int64> {
+    let knee = SplitKnee(tgs = vk_split_k_tgs(), min_k = 256l, align = 256l, exact = false)
+    let tiles = cm2_tiles_at(d, cnt, 32l) + sib_tiles
+    var sk = split_k_count(tiles, n, knee)
+    while (sk > 1l && sk * cnt * d * 4l > scratch_bytes) {
+        sk /= 2l
+    }
+    return (tc = 32l, nsplit = sk, ksplit = sk > 1l ? split_k_share(n, sk, knee) : 0l)
+}
+
 //! one dense GEMM's column and split-k, picked together: (tc, chunks, 256-aligned chunk), chunks 1 and chunk 0 = whole. `sib_tiles` = the workgroups of the roles this one co-runs beside; `scratch_bytes` bounds the partial planes
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_gemm_pick(d, cnt, n : int64; sib_tiles : int64 = 0l; scratch_bytes : int64 = 9_223_372_036_854_775_807l) : tuple<tc : int64; nsplit : int64; ksplit : int64> {
@@ -172,6 +188,9 @@ def cm2_gemm_pick(d, cnt, n : int64; sib_tiles : int64 = 0l; scratch_bytes : int
     if (forced > 0l) {
         let sk = cm2_split_fit(n, forced)
         return (tc = tc0, nsplit = sk, ksplit = sk > 1l ? cm2_chunk(n, sk) : 0l)
+    }
+    if (cnt < tc0 && tc0 == 32l && vk_split_k_tgs() > 0l && !khr) {
+        return cm2_short_split(d, cnt, n, sib_tiles, scratch_bytes)
     }
     if (n < 2048l || d < 128l || cnt < tc0) {
         return (tc = tc0, nsplit = 1l, ksplit = 0l)
@@ -498,6 +517,10 @@ struct GpuState {
     os_shared_base : int64   // the adapter's shared usage at init - the desktop's own, before any buffer of ours
     host_bytes : int64       // every live host-visible buffer of ours (make_host_buf's tally) - shared usage past base + this is demotion
     dry : bool               // OFFLINE BAKE: accept/refuse arithmetic runs, every device call is gated off
+    holds_device : bool      //! this context holds a reference on the process's device (`vk_shared_device_acquire`)
+    owner_ctx : uint64       //! the context that made this state - the only one whose teardown releases it
+    own_dev_bytes : int64    //! the device-local bytes this context's buffers hold - the process total less them is every other context's
+    dev_bytes_of : table<uint64; int64>   //! a device buffer's bytes, for the counts its destroy takes back
     msr : int64              // maxStorageBufferRange — device-queried at init, config-supplied when dry
     max_wg_invocations : int64   // maxComputeWorkGroupInvocations — device-queried at init; a class whose workgroup is wider declines its seat
     @do_not_delete stacks : array<VkStack>
@@ -915,6 +938,7 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false; soft : bool = fal
             vk_check(vkMapMemory(dev_raw(), rmem, 0ul, req.size, mf, unsafe(addr(mapped))), null)
             g_gpu.dev_mem |> insert(b._vk, unsafe(reinterpret<uint64>(rmem)))
             g_gpu.dev_mapped |> insert(b._vk, unsafe(reinterpret<uint64>(mapped)))
+            vk_note_dev_bytes(b._vk, int64(req.size))
             return b._vk
         }
     }
@@ -933,8 +957,20 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false; soft : bool = fal
         note_device_address(b)
     }
     g_gpu.dev_mem |> insert(b._vk, m._vk)
+    vk_note_dev_bytes(b._vk, int64(req.size))
     return b._vk
 }
+
+//! a device-local buffer's bytes counted against this context and the process (`vk_shared_device_bytes`)
+def private vk_note_dev_bytes(b : uint64; bytes : int64) {
+    g_gpu.dev_bytes_of[b] = bytes
+    g_gpu.own_dev_bytes += bytes
+    vk_shared_device_bytes(bytes)
+}
+
+//! What every other context sharing the process's device holds on it - the room the resident plan's cap gives up
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-shared-device")]
+def vk_others_dev_bytes : int64 => g_gpu == null || g_gpu.dry ? 0l : max(vk_shared_device_bytes(0l) - g_gpu.own_dev_bytes, 0l)
 
 //! a device buffer destroyed where its handle is set, the handle zeroed after
 def release_device_buf(var h : uint64&) {
@@ -955,6 +991,12 @@ def destroy_device_buf(h : uint64) {
         }
     }
     g_gpu.dev_mapped |> erase(h)
+    let bytes = g_gpu.dev_bytes_of?[h] ?? 0l
+    if (bytes > 0l) {
+        g_gpu.dev_bytes_of |> erase(h)
+        g_gpu.own_dev_bytes -= bytes
+        vk_shared_device_bytes(-bytes)
+    }
 }
 
 def destroy_host_buf(hb : HostBuf) {   // vkFreeMemory implicitly unmaps
@@ -1107,7 +1149,7 @@ def resolve_weight_cap(heap : VkHeapInfo) : int64 {
 // Init-time carving was timing-dependent (a capability probe can init the device BEFORE the
 // loader reports its slot need), which made a dry bake's plan diverge from the live walk's.
 def carved_budget : int64 {
-    var r = g_gpu.weight_budget
+    var r = g_gpu.weight_budget - vk_others_dev_bytes()
     if (gpu_want_moe_stream() != 0l) {
         let need = moe_gpu_stream_need()
         if (need > 0l) {
@@ -1247,6 +1289,78 @@ def private query_sm_count(phys : VkPhysicalDevice) : int {
     return int(sp.shaderSMCount)
 }
 
+//! the queues the process's device asks of each family: a context takes the next one round robin, and contexts past the count
+//! share a queue, every submit to it under the holder's lock (`vk_queue_submit_locked`)
+let VK_DEVICE_QUEUES = 8u
+
+def private vk_timelines_on : bool => g_gpu.has_coopmat && timeline_semaphore_supported(g_gpu.phys)
+
+//! the device-level answers every context reads off the physical device: the families, the cooperative-matrix modes, the
+//! SM count; false where the device lacks the storage set the tier needs
+def private vk_device_flags : bool {
+    if (!storage_8_16_supported(g_gpu.phys) || !subgroup_compute_ops_supported(g_gpu.phys)
+            || !integer_dot_product_supported(g_gpu.phys)) {
+        to_log(LOG_ERROR, "dasLLAMA vulkan tier: device lacks the 8/16-bit SSBO storage set (incl. shaderInt16), compute subgroup ops, or shaderIntegerDotProduct - tier disabled\n")
+        return false
+    }
+    g_gpu.fam = select_graphics_queue_family(g_gpu.phys)
+    // coopmat requested whenever supported — the fa twin needs it even in sdot4 GEMM mode
+    g_gpu.has_coopmat = cooperative_matrix_supported(g_gpu.phys)
+    g_gpu.has_coopmat2 = g_gpu.has_coopmat && cooperative_matrix2_supported(g_gpu.phys)
+    g_gpu.coopmat_mode = resolve_coopmat_mode(g_gpu.has_coopmat, g_gpu.has_coopmat2)
+    // the mode conjunct stays: a device created off cm2 mode (`DASLLAMA_COOPMAT=mm`) enables no coopmat2 extension, and the feature probe alone would say yes
+    g_gpu.has_coopmat2_fa = g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2 && cooperative_matrix2_fa_supported(g_gpu.phys)
+    g_gpu.decvec_on = g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2 && g_env_vulkan.vk_decvec && cooperative_matrix2_decode_vector_supported(g_gpu.phys)
+    g_gpu.sm_count = query_sm_count(g_gpu.phys)
+    g_gpu.has_bda = g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2
+    return true
+}
+
+//! The process's device made by this context, under the holder's lock: the instance, the device on the families the tier
+//! reads, `VK_DEVICE_QUEUES` queues asked of each, the loader's device table loaded once, the handles published
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-shared-device")]
+def private vk_device_create : bool {
+    g_gpu.instance <- create_instance("dasLLAMA vulkan tier", make_api_version(1u, 3u, 0u))
+    volkLoadInstance(boost_value_to_vk(g_gpu.instance))
+    g_gpu.phys = select_physical_device(g_gpu.instance)
+    return false if (!vk_device_flags())
+    // dedicated transfer family: streamed copies overlap compute (DASLLAMA_VK_XFERQ=0 = bisect hatch)
+    var xfam = -1
+    if (vk_timelines_on() && g_env_vulkan.vk_xferq) {
+        xfam = select_transfer_queue_family(g_gpu.phys)
+    }
+    set_device_queue_ask(VK_DEVICE_QUEUES)
+    if (g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2) {
+        // #77's creator: coopmat2 + BDA + vulkanMemoryModel + the query-then-enable extras
+        g_gpu.device <- create_device_storage_8_16_int_dot_coopmat2(g_gpu.phys, g_gpu.fam, xfam, g_env_vulkan.vk_decvec)
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: Q8_0 prefill on NV_coopmat2 tensor tiles (decode-in-load, {g_gpu.sm_count} SMs; DASLLAMA_COOPMAT=mm restores the mul_mm tiles)\n")
+    } elif (g_gpu.has_coopmat) {
+        g_gpu.device <- create_device_storage_8_16_int_dot_coopmat(g_gpu.phys, g_gpu.fam, xfam)
+        if (g_gpu.coopmat_mode != 0) {
+            let cm_name = g_gpu.coopmat_mode == 1 ? "f16" : (g_gpu.coopmat_mode == 2 ? "int8" : "mul_mm L-tile")
+            to_log(LOG_INFO, "dasLLAMA vulkan tier: Q8_0 prefill on {cm_name} cooperative-matrix tiles (DASLLAMA_COOPMAT picks the family)\n")
+        }
+    } else {
+        g_gpu.device <- create_device_storage_8_16_int_dot(g_gpu.phys, g_gpu.fam)
+    }
+    volkLoadDevice(dev_raw())
+    let nq = device_queue_count(g_gpu.phys, g_gpu.fam)
+    let nxq = xfam >= 0 ? device_queue_count(g_gpu.phys, uint(xfam)) : 0u
+    set_device_queue_ask(1u)
+    vk_shared_device_publish(g_gpu.instance._vk, unsafe(reinterpret<uint64>(g_gpu.phys)), g_gpu.device._vk, g_gpu.fam, nq, xfam >= 0 ? uint(xfam) : 0u, nxq)
+    return true
+}
+
+//! The process's device borrowed by this context: the handles the creator published, never deleted here - the last context
+//! out destroys them (`vk_shared_device_release`)
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-shared-device")]
+def private vk_device_borrow(device : uint64) {
+    g_gpu.instance._vk = vk_shared_instance()
+    g_gpu.phys = unsafe(reinterpret<VkPhysicalDevice>(vk_shared_physical_device()))
+    g_gpu.device._vk = device
+    verify(vk_device_flags(), "dasLLAMA vulkan tier: the process's device answers its flags for the context that made it")
+}
+
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-class-pipeline-build")]
 def vk_moe_init : bool {
     if (g_init_failed) {   // checked FIRST: a partially-built g_gpu must never report ready
@@ -1282,49 +1396,30 @@ def vk_moe_init : bool {
         return false
     }
     g_gpu = new GpuState()
-    g_gpu.instance <- create_instance("dasLLAMA vulkan tier", make_api_version(1u, 3u, 0u))
-    volkLoadInstance(boost_value_to_vk(g_gpu.instance))
-    let t_inst = get_time_usec(t0)
-    g_gpu.phys = select_physical_device(g_gpu.instance)
-    if (!storage_8_16_supported(g_gpu.phys) || !subgroup_compute_ops_supported(g_gpu.phys)
-            || !integer_dot_product_supported(g_gpu.phys)) {
-        to_log(LOG_ERROR, "dasLLAMA vulkan tier: device lacks the 8/16-bit SSBO storage set (incl. shaderInt16), compute subgroup ops, or shaderIntegerDotProduct - tier disabled\n")
-        return false
-    }
-    g_gpu.fam = select_graphics_queue_family(g_gpu.phys)
-    // coopmat requested whenever supported — the fa twin needs it even in sdot4 GEMM mode
-    g_gpu.has_coopmat = cooperative_matrix_supported(g_gpu.phys)
-    g_gpu.has_coopmat2 = g_gpu.has_coopmat && cooperative_matrix2_supported(g_gpu.phys)
-    g_gpu.coopmat_mode = resolve_coopmat_mode(g_gpu.has_coopmat, g_gpu.has_coopmat2)
-    // the mode conjunct stays: a device created off cm2 mode (`DASLLAMA_COOPMAT=mm`) enables no coopmat2 extension, and the feature probe alone would say yes
-    g_gpu.has_coopmat2_fa = g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2 && cooperative_matrix2_fa_supported(g_gpu.phys)
-    g_gpu.decvec_on = g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2 && g_env_vulkan.vk_decvec && cooperative_matrix2_decode_vector_supported(g_gpu.phys)
-    g_gpu.sm_count = query_sm_count(g_gpu.phys)
-    // dedicated transfer family: streamed copies overlap compute (DASLLAMA_VK_XFERQ=0 = bisect hatch)
-    let timelines = g_gpu.has_coopmat && timeline_semaphore_supported(g_gpu.phys)
-    var xfam = -1
-    if (timelines && g_env_vulkan.vk_xferq) {
-        xfam = select_transfer_queue_family(g_gpu.phys)
-    }
-    let t_pick = get_time_usec(t0)
-    if (g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2) {
-        // #77's creator: coopmat2 + BDA + vulkanMemoryModel + the query-then-enable extras
-        g_gpu.device <- create_device_storage_8_16_int_dot_coopmat2(g_gpu.phys, g_gpu.fam, xfam, g_env_vulkan.vk_decvec)
-        g_gpu.has_bda = true
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: Q8_0 prefill on NV_coopmat2 tensor tiles (decode-in-load, {g_gpu.sm_count} SMs; DASLLAMA_COOPMAT=mm restores the mul_mm tiles)\n")
-    } elif (g_gpu.has_coopmat) {
-        g_gpu.device <- create_device_storage_8_16_int_dot_coopmat(g_gpu.phys, g_gpu.fam, xfam)
-        if (g_gpu.coopmat_mode != 0) {
-            let cm_name = g_gpu.coopmat_mode == 1 ? "f16" : (g_gpu.coopmat_mode == 2 ? "int8" : "mul_mm L-tile")
-            to_log(LOG_INFO, "dasLLAMA vulkan tier: Q8_0 prefill on {cm_name} cooperative-matrix tiles (DASLLAMA_COOPMAT picks the family)\n")
-        }
+    g_gpu.owner_ctx = intptr(unsafe(addr(this_context())))
+    //! one device a process: the first context creates it under the holder's lock, every other borrows it
+    let borrowed = vk_shared_device_acquire()
+    var ready = false
+    if (borrowed != 0ul) {
+        vk_device_borrow(borrowed)
+        ready = true
     } else {
-        g_gpu.device <- create_device_storage_8_16_int_dot(g_gpu.phys, g_gpu.fam)
+        try {
+            ready = vk_device_create()
+        } recover {
+            vk_shared_device_abort()
+            panic(this_context().last_exception)
+        }
+        if (!ready) {
+            vk_shared_device_abort()
+        }
     }
-    volkLoadDevice(dev_raw())
+    return false if (!ready)
+    g_gpu.holds_device = true
     let t_dev = get_time_usec(t0)
-    g_gpu.queue = get_device_queue(g_gpu.device, g_gpu.fam, 0u)
-    if (timelines) {
+    let qi = vk_shared_queue_take(false)
+    g_gpu.queue = get_device_queue(g_gpu.device, g_gpu.fam, qi)
+    if (vk_timelines_on()) {
         var tci = VkSemaphoreTypeCreateInfo()
         tci.semaphoreType = VkSemaphoreType.TIMELINE
         tci.initialValue = 0ul
@@ -1333,16 +1428,21 @@ def vk_moe_init : bool {
         vk_check(vkCreateSemaphore(dev_raw(), sci, null, g_gpu.xfer_sem), null)
         vk_check(vkCreateSemaphore(dev_raw(), sci, null, g_gpu.cmp_sem), null)
     }
+    let xfam = vk_shared_queue_count(true) > 0u ? int(vk_shared_queue_family(true)) : -1
+    var xqi = 0u
     if (xfam >= 0) {
+        xqi = vk_shared_queue_take(true)
         g_gpu.xfer_fam = xfam
-        g_gpu.xfer_queue = get_device_queue(g_gpu.device, uint(xfam), 0u)
+        g_gpu.xfer_queue = get_device_queue(g_gpu.device, uint(xfam), xqi)
         var xpci : CommandPoolCreateInfo
         xpci.queueFamilyIndex = uint(xfam)
         xpci.flags.reset_command_buffer = true
         g_gpu.xfer_pool <- create_command_pool(g_gpu.device, xpci)
         g_gpu.xfer_cmd = alloc_cmd_in(g_gpu.xfer_pool)
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: transfer queue armed (family {xfam})\n")
     }
+    let how = borrowed != 0ul ? "borrows" : "made"
+    let xq = xfam >= 0 ? ", transfer queue {xqi} of {vk_shared_queue_count(true)} (family {xfam})" : ""
+    to_log(LOG_INFO, "dasLLAMA vulkan tier: this context {how} the process's device ({vk_shared_device_refs()} contexts hold it), compute queue {qi} of {vk_shared_queue_count(false)}{xq}\n")
     g_gpu.has_memprio = (g_gpu.has_coopmat && memory_priority_supported(g_gpu.phys)
         && g_env_vulkan.vk_memprio)
     if (g_gpu.has_memprio) {
@@ -1412,7 +1512,7 @@ def vk_moe_init : bool {
     g_init_failed = false
     g_gpu.full_sg_on = g_env_vulkan.vk_fullsg && compute_full_subgroups_supported(g_gpu.phys)
     let t_up = get_time_usec(t0)
-    to_log(LOG_INFO, "dasLLAMA vulkan tier: device ready (subgroup {int(sg)}, {g_gpu.rows_per_wg} rows/wg{g_gpu.full_sg_on ? ", full subgroups (DASLLAMA_VK_FULLSG)" : ""}{g_gpu.decvec_on ? ", four-wide decode (DASLLAMA_VK_DECVEC)" : ""}) in {t_up / 1000} ms: the instance {t_inst / 1000}, the device pick {(t_pick - t_inst) / 1000}, the device {(t_dev - t_pick) / 1000}, the queues and the heap query {(t_heap - t_dev) / 1000}, the pools {(t_pool - t_heap) / 1000}, the staging buffer {(t_up - t_pool) / 1000}\n")
+    to_log(LOG_INFO, "dasLLAMA vulkan tier: device ready (subgroup {int(sg)}, {g_gpu.rows_per_wg} rows/wg{g_gpu.full_sg_on ? ", full subgroups (DASLLAMA_VK_FULLSG)" : ""}{g_gpu.decvec_on ? ", four-wide decode (DASLLAMA_VK_DECVEC)" : ""}) in {t_up / 1000} ms: the device {t_dev / 1000} ({borrowed != 0ul ? "borrowed" : "made"}), the queues and the heap query {(t_heap - t_dev) / 1000}, the pools {(t_pool - t_heap) / 1000}, the staging buffer {(t_up - t_pool) / 1000}\n")
     vk_log_ext_roster()
     if (g_gpu.has_coopmat2 && g_env_vulkan.vk_decvec && !g_gpu.decvec_on) {
         to_log(LOG_WARNING, "dasLLAMA vulkan tier: the driver reports no VK_NV_cooperative_matrix_decode_vector, so the cm2 tiles run the scalar decode arm - a MoE prefill window runs about half again as long as on a driver with the four-wide arm\n")
@@ -1422,6 +1522,70 @@ def vk_moe_init : bool {
         to_log(LOG_INFO, "dasLLAMA vulkan tier: limits allocs {pdp.limits.maxMemoryAllocationCount} storage-range {pdp.limits.maxStorageBufferRange} desc-storage {pdp.limits.maxDescriptorSetStorageBuffers}\n")
     }
     return true
+}
+
+//! This context's share of the process's device given back at its shutdown: its queues drained, every object it made
+//! destroyed (pipelines, layouts, pools, buffers, fence, semaphores), its bytes taken off the process count, its reference
+//! released - the last context out destroys the device and the instance (`vk_shared_device_release`)
+[finalize, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-shared-device")]
+def vk_context_release {
+    return if (g_gpu == null || !g_gpu.holds_device || g_gpu.owner_ctx != intptr(unsafe(addr(this_context()))))
+    vk_check(vk_queue_wait_idle_locked(g_gpu.queue), null)
+    if (g_gpu.xfer_fam >= 0) {
+        vk_check(vk_queue_wait_idle_locked(g_gpu.xfer_queue), null)
+    }
+    vkd_set_cache_clear()
+    for (cp in g_vkd_classes) {
+        var c & = unsafe(*cp)
+        for (p in c.pipes) {
+            delete p
+        }
+        c.pipes |> clear()
+        delete c.pipe_layout
+        delete c.set_layout
+        c.ready = false
+    }
+    g_vkd_classes |> clear()
+    delete g_pfq_pool
+    delete g_gpu.desc_pools
+    let dev = dev_raw()
+    unsafe {
+        for (b, m in keys(g_gpu.dev_mem), values(g_gpu.dev_mem)) {
+            vkDestroyBuffer(dev, reinterpret<VkBuffer>(b), null)
+            vkFreeMemory(dev, reinterpret<VkDeviceMemory>(m), null)
+        }
+        for (b, m in keys(g_gpu.host_mem), values(g_gpu.host_mem)) {
+            vkDestroyBuffer(dev, reinterpret<VkBuffer>(b), null)
+            vkFreeMemory(dev, reinterpret<VkDeviceMemory>(m), null)
+        }
+        if (g_gpu.staging.buf != 0ul) {
+            vkDestroyBuffer(dev, reinterpret<VkBuffer>(g_gpu.staging.buf), null)
+            vkFreeMemory(dev, reinterpret<VkDeviceMemory>(g_gpu.staging.mem), null)
+        }
+        if (intptr(g_gpu.fence) != 0ul) {
+            vkDestroyFence(dev, g_gpu.fence, null)
+        }
+        if (intptr(g_gpu.xfer_sem) != 0ul) {
+            vkDestroySemaphore(dev, g_gpu.xfer_sem, null)
+        }
+        if (intptr(g_gpu.cmp_sem) != 0ul) {
+            vkDestroySemaphore(dev, g_gpu.cmp_sem, null)
+        }
+    }
+    g_gpu.dev_mem |> clear()
+    g_gpu.host_mem |> clear()
+    g_gpu.dev_mapped |> clear()
+    g_gpu.dev_bytes_of |> clear()
+    delete g_gpu.pool
+    delete g_gpu.xfer_pool
+    vk_shared_device_bytes(-g_gpu.own_dev_bytes)
+    g_gpu.own_dev_bytes = 0l
+    g_gpu.instance._needs_delete = false   //! the holder destroys the process's device and instance, never a context
+    g_gpu.device._needs_delete = false
+    g_gpu.holds_device = false
+    g_init_failed = true   //! nothing arms the tier again in a context that is going away
+    let left = vk_shared_device_release()
+    to_log(LOG_INFO, "dasLLAMA vulkan tier: this context gave the process's device back ({left} contexts hold it)\n")
 }
 
 // ===== upload (loader hook — moe_gpu_upload_resident gathers, we just stage) =====
@@ -1486,9 +1650,9 @@ def upload_batch_open {
 [cold_path]
 def upload_batch_flush {
     return if (empty(g_upload_batch))
-    run_cmd_sync(g_gpu.device, g_gpu.pool, g_gpu.queue) $(cmd) {
+    cmd_one_shot() $(raw : VkCommandBuffer; var _h : VkHaz) {   //! the locked submit and this context's own fence: the queue may be another context's too
         for (r in g_upload_batch) {
-            cmd_copy_range(boost_value_to_vk(cmd), g_gpu.staging.buf, r.src_off, r.dst, r.dst_off, r.bytes)
+            cmd_copy_range(raw, g_gpu.staging.buf, r.src_off, r.dst, r.dst_off, r.bytes)
         }
     }
     g_upload_batch |> clear()
@@ -2527,7 +2691,7 @@ def vk_drop_model_state {
         g_gpu.resident_bytes = 0l
         return
     }
-    vk_check(vkQueueWaitIdle(g_gpu.queue), null)
+    vk_check(vk_queue_wait_idle_locked(g_gpu.queue), null)
     if (g_gpu.xfer_fam >= 0 && g_gpu.xfer_value > 0ul) {
         xfer_wait(g_gpu.xfer_value, false)   // in-flight transfer-queue copies retire before the sweeps
     }
@@ -3300,6 +3464,7 @@ struct RDec {
     pf_facm2 : bool
     pf_fakhr : bool   //! the KHR flash tile armed instead (KHR cooperative matrices, no cm2 flash)
     pf_logits_host : HostBuf      //! the window's logits, a slot of `vocab` a segment: `regions` slots, the one-session window at slot 0
+    pf_hid_host : HostBuf         //! the window's final residual rows when the chain is asked for them (`vk_rdec_hidden_ask`), made at the first ask
     pf_seg_windows : int64        //! the windows that held several sessions' chunks as segments (a cell's witness)
     pf_midx_host : HostBuf        //! the last MoE layer's picks, read back for the profile's bucket report
     pf_meta : array<HostBuf>      // one host meta per (layer, role) + prologue/final/cls
@@ -3982,7 +4147,10 @@ def vkd_class_init(var c : VkdClass; bindings : array<int>; push_bytes : int) {
     c.pipe_layout <- create_pipeline_layout(g_gpu.device, plci)
     c.push_bytes = push_bytes
     c.ready = true
+    g_vkd_classes |> push(unsafe(addr(c)))
 }
+
+var private g_vkd_classes : array<VkdClass?>   //! every class family whose layouts this context made: its teardown destroys them
 
 //! a cached set: the layout and the binding tuple it was written for, checked on every hit
 struct private VkdSetEntry {
@@ -4120,6 +4288,7 @@ def vkd_class_pipe(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wm
     c.pipes[ord] <- (g_gpu.full_sg_on
         ? create_compute_pipeline_full_subgroups(g_gpu.device, c.pipe_layout, shader)
         : create_compute_pipeline(g_gpu.device, c.pipe_layout, shader))
+    delete shader   //! the pipeline holds what it needs of the module
     c.pipe_epochs[ord] = g_vkd_pipe_epoch
     g_vkd_pipe_build_us += get_time_usec(t0)
     g_vkd_pipe_builds++
@@ -4689,7 +4858,7 @@ def private timeline_submit(queue : VkQueue; var raw : VkCommandBuffer; fence : 
             submit.signalSemaphoreCount = 1u
             submit.pSignalSemaphores = addr(ssem)
         }
-        vk_check(vkQueueSubmit(queue, 1u, addr(submit), fence), null)
+        vk_check(vk_queue_submit_locked(queue, 1u, addr(submit), fence), null)   //! a queue other contexts may share: every submit under its lock
     }
 }
 

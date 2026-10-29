@@ -27,7 +27,8 @@ require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting
 // is the identical CPU path in both runs, so any prefill-induced logit shift beyond the shared
 // tolerance envelope surfaces as a token flip. The counting prompt is the kernel-robust fixture
 // family test_parity.das established (high-entropy prompts flip on genuine near-ties, which are
-// not bugs). Skips cleanly without the model, off-Apple, or with no Metal device.
+// not bugs). Skips cleanly without the model, off-Apple, or with no Metal device; the bf16-split arm also where the box's
+// profile crowns no bf16 tensor tile.
 
 let private COUNT_TO = 120   //! "1, 2, …, 120," — long enough to engage the resident path with margin (~300 llama-3 BPE tokens)
 
@@ -560,7 +561,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 pin_kernel_backend("portable")
                 set_wscale_f16(false)
                 set_metal_prefill_mm_tail(true)   // establish the knob the engage claim depends on (no read-back)
-                for (nres in [5l, 257l, 258l, 261l]) {   // 5 = the pure-tail leg (nfull == 0, no mul_mm at all)
+                for (nres in [4l, 257l, 258l, 261l]) {   // 4 = the pure-tail leg (nfull == 0, no mul_mm at all; the split-K tile takes 5 to 8)
                     if (nres > long_length(prompt)) {
                         continue   // a fixture the counting prompt cannot slice; the others still run
                     }
@@ -610,13 +611,16 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     let sprompt <- encode(trs, counting_prompt(COUNT_TO), true, false)
                     let seat = metal_overrides_seat()
                     let prior_lastrow = get_metal_prefill_lastrow()
+                    let prior_split = get_metal_prefill_split_k()
                     t |> success(select_prefill_override("metal"), "override registered (mm-tail smol)")
                     //! the peel-count arithmetic below assumes every layer's FFN rides the mm path
                     set_metal_prefill_lastrow(false)
-                    var ssites : int64[2]
+                    var ssites : int64[4]
                     var sserved_all = true
-                    for (li in range(2)) {
-                        let nres = li == 0 ? 65l : 66l
+                    for (li in range(4)) {
+                        let nres = li % 2 == 0 ? 65l : 66l
+                        //! the first pair on the whole-K tile, where the peel reaches eight rows; the second under the split-K knee
+                        set_metal_prefill_split_k(li >= 2)
                         var ssl : array<int64>
                         ssl |> reserve(nres)
                         for (i in range64(nres)) {
@@ -637,10 +641,13 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                         t |> success(ssites[0] > 0l, "smol npos=65: the gemv leg engaged ({ssites[0]} sites)")
                         t |> success(ssites[1] < ssites[0], "smol npos=66: the alignment guard refused the 576-kdim sites ({ssites[1]} of {ssites[0]})")
                         t |> equal(ssites[1] * 7l, ssites[0], "smol npos=66: exactly the one hidden-kdim site per layer peeled")
+                        t |> equal(ssites[2], ssites[0], "smol npos=65 under the split-K knee: the one-row remainder still peels at every site")
+                        t |> equal(ssites[3], 0l, "smol npos=66 under the split-K knee: a two-row remainder rides the split tile, no site peels")
                     } else {
                         feint("metal prefill declined on smol; the alignment-guard leg skipped\n")
                     }
                     set_metal_prefill_lastrow(prior_lastrow)
+                    set_metal_prefill_split_k(prior_split)
                     with_dasllama_jobque() {
                         lastrow_ab(t, trsg, sprompt, "smol", 2e-2)   //! narrowed rides the mm-tail gemv, full stages X to f16 - measured ~7e-3 here
                     }
@@ -1543,6 +1550,23 @@ enum ShortForm {
     kq_tail
 }
 
+//! the dispatches since the census reset of every compiled stamp whose census name carries both `family` and `form`
+//! (`"MetalKqMulMm", "Sk16"`: every dense format's 16-row split stamps; `"MetalHalfMulMm", "Sk"`: the dev-W half tile's split stamp)
+def private stamp_dispatches(family, form : string) : int64 {
+    var n = 0l
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        var inscope cov <- metal_kernel_coverage()
+        for (name, c in keys(cov), values(cov)) {
+            n += find(name, family) >= 0 && find(name, form) >= 0 ? c : 0l
+        }
+    }
+    return n
+}
+
+def private split16_dispatches() : int64 => stamp_dispatches("MetalKqMulMm", "Sk16")
+
+def private hmm_split_dispatches() : int64 => stamp_dispatches("MetalHalfMulMm", "Sk")
+
 //! One carrier through a short-window form: a 300-row window on the tiles, then a short window the form serves, the last
 //! row's logits against the all-CPU chain within `bar` of its largest, the form's own counter the engage witness, the same
 //! windows with the form off (the tiles) logged beside it, and the control a window whose last token differs landing
@@ -1572,7 +1596,7 @@ def private short_window_cells(t : T?; path, tag : string; bar : float; form : S
         let form_name = route ? "route" : "peel"
         set_metal_prefill_mm_tail(true)   //! the peel's rail decides its engage assert, whatever the environment set
         //! the route's windows: 2, 7 and 24 rows at a knee pinned to 24 (the shipped knee is 16), and 16 rows at the shipped knee itself
-        var inscope windows <- route ? [2l, 7l, 16l, 24l] : [2l, 5l, 8l]
+        var inscope windows <- route ? [2l, 7l, 16l, 24l] : [2l, 4l, 5l, 8l, 34l]   //! 34: a two-row remainder past whole tiles, every site past the knee (split-K pinned off)
         for (n in windows) {
             if (route) {
                 set_metal_moe_gemv_max(n == 16l ? -1l : 24l)
@@ -1580,7 +1604,7 @@ def private short_window_cells(t : T?; path, tag : string; bar : float; form : S
                     t |> equal(16l, pf_moe_gemv_knee(), "{tag}/{n}: the shipped knee is 16 rows")
                 }
             }
-            let knee = route ? pf_moe_gemv_knee() : 8l
+            let knee = route ? pf_moe_gemv_knee() : 34l
             continue if (n > knee)
             var inscope w2 <- [for (i in range64(n)); prompt[w1n + i]]
             t |> equal(n, long_length(w2), "{tag}/{n}: the short window holds {n} rows")
@@ -1591,9 +1615,28 @@ def private short_window_cells(t : T?; path, tag : string; bar : float; form : S
             set_metal_prefill_min_npos(1l)
             let served0 = metal_prefill_stats().prefills
             let engaged0 = route ? metal_prefill_moe_gemv_stats() : metal_prefill_tail_stats().kq_sites
+            let split0 = metal_prefill_split_k_sites()
+            let prior_split = get_metal_prefill_split_k()
+            set_metal_prefill_split_k(n <= 32l && prior_split)
+            let sk16_0 = split16_dispatches()
             var inscope gpu <- two_window_logits(trg, w1, w2)
             let served = metal_prefill_stats().prefills - served0
             let engaged = (route ? metal_prefill_moe_gemv_stats() : metal_prefill_tail_stats().kq_sites) - engaged0
+            let split_sites = metal_prefill_split_k_sites() - split0
+            let sk16 = split16_dispatches() - sk16_0
+            //! the control for the 16-row stamps: the same windows with them held, the 32-row split stamps serving
+            let short16 = !route && n > 4l && n <= 16l && prior_split
+            let held_split0 = metal_prefill_split_k_sites()
+            let held_sk16_0 = split16_dispatches()
+            var held_gap = 0.0
+            if (short16) {
+                let prior_held = set_metal_prefill_held("split_k16", true)
+                var inscope gpu_held <- two_window_logits(trg, w1, w2)
+                set_metal_prefill_held("split_k16", prior_held)
+                held_gap = logits_maxdiff(gpu_held, gpu)
+            }
+            let held_split = metal_prefill_split_k_sites() - held_split0
+            let held_sk16 = split16_dispatches() - held_sk16_0
             var inscope gpu_ctrl <- two_window_logits(trg, w1, w2_ctrl)
             if (route) {
                 set_metal_moe_gemv_max(0l)
@@ -1608,6 +1651,7 @@ def private short_window_cells(t : T?; path, tag : string; bar : float; form : S
             if (!route) {
                 set_metal_prefill_mm_tail(true)
             }
+            set_metal_prefill_split_k(prior_split)
             restore_metal_overrides(seat)
             if (served == 0l) {
                 t |> skip("{tag}/{n}: metal prefill declined (no Metal device?); the {form_name}'s parity skipped")
@@ -1618,7 +1662,20 @@ def private short_window_cells(t : T?; path, tag : string; bar : float; form : S
             if (route) {
                 t |> equal(engaged, 1l, "{tag}/{n}: the short window alone rode the gathered route")
             } else {
-                t |> success(engaged > 0l, "{tag}/{n}: the short window's K-quant sites rode the row-batched GEMV ({engaged} sites)")
+                if (n > 32l) {   //! a remainder past whole tiles, split-K pinned off: the row forms take it at its x offset, no site splits
+                    t |> success(engaged > 0l, "{tag}/{n}: the {n % 32l}-row remainder rode the row forms at its offset ({engaged} sites)")
+                    t |> equal(split_sites, 0l, "{tag}/{n}: with split-K pinned off no site took the split-K tile")
+                } elif (n > 4l && prior_split) {   //! past four rows the split-K tile takes the sites under its knee from the row forms
+                    t |> success(split_sites > 0l, "{tag}/{n}: the split-K tile took the sites under its knee ({split_sites}), the row forms the rest ({engaged})")
+                    if (short16) {   //! one 32-row tile holds the window and it fits 16 rows: the 16-row split stamps
+                        t |> success(sk16 > 0l, "{tag}/{n}: the {n}-row window's split sites rode the 16-row split stamps ({sk16} dispatches)")
+                        t |> equal(held_sk16, 0l, "{tag}/{n}: the control - with the 16-row stamps held none dispatched")
+                        t |> success(held_split > 0l, "{tag}/{n}: ... and the 32-row split stamps took the sites ({held_split})")
+                        to_log(LOG_INFO, "{tag}/{n}: 16-row stamps held - logits {held_gap} off the 16-row run's\n")
+                    }
+                } else {
+                    t |> success(engaged > 0l, "{tag}/{n}: the short window's K-quant sites rode the row-batched GEMV ({engaged} sites)")
+                }
             }
             t |> equal(off_engaged, 0l, "{tag}/{n}: with the {form_name} off the tiles serve it")
             let g = logits_maxdiff(gpu, cpu)
@@ -1958,6 +2015,45 @@ def private scratch_window_cell(t : T?; tr, trg : Model; prompt : array<int64>; 
     }
 }
 
+//! A grid floor no site's tile reaches, and the dev-W half tile's split-K knee wide enough that the short window's tile grid
+//! splits (`ARCHITECTURE_GPU_PREFILL_GEMM.md#devw-panel-knees`, `#prefill-split-k`)
+let private SCRATCH_GRID_FLOOR = 1l << 40l
+let private SCRATCH_HMM_KNEE = 4096l
+
+//! The short window's dev-W knobs on the base forms: under a grid floor no tile reaches every site keeps its quantized tiles (no
+//! panel); under a half-tile knee its grid fits, the panels' half GEMM splits its K (the split stamp's census count) and the window
+//! holds the CPU control's bar, the split pinned off leaving the panels whole - each knob put back and the driver re-armed after
+[cold_path]
+def private scratch_knee_cells(t : T?; tr, trg : Model; prompt : array<int64>; bar : float; tag : string) {   // nolint:LINT019 — the das_metal half's knobs
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        var inscope w <- [for (i in range64(SCRATCH_SHORT)); prompt[i]]
+        let prior_floor = metal_devw_min_tgs()
+        set_metal_devw_min_tgs(SCRATCH_GRID_FLOOR)
+        metal_prefill_shutdown()   //! the driver caches the floor at init
+        let floor0 = metal_prefill_devw_scratch_stats().sites
+        var inscope floored <- one_window_logits(trg, w)
+        t |> equal(metal_prefill_devw_scratch_stats().sites - floor0, 0l, "{tag}/{SCRATCH_SHORT}: under a grid floor no tile reaches no site took a panel (the floor-free window above took them)")
+        set_metal_devw_min_tgs(prior_floor)
+        let prior_knee = metal_split_k_tgs_hmm()
+        set_metal_split_k_tgs_hmm(SCRATCH_HMM_KNEE)
+        metal_prefill_shutdown()   //! ... and the knees
+        let hsk0 = hmm_split_dispatches()
+        scratch_window_cell(t, tr, trg, prompt, SCRATCH_SHORT, true, bar, "{tag}/hmm-split")
+        let hsk = hmm_split_dispatches() - hsk0
+        t |> success(hsk > 0l, "{tag}/hmm-split/{SCRATCH_SHORT}: the panels' half GEMM split its K under the {SCRATCH_HMM_KNEE} knee ({hsk} split dispatches)")
+        let prior_split = get_metal_prefill_split_k()
+        set_metal_prefill_split_k(false)
+        let whole0 = hmm_split_dispatches()
+        let sites0 = metal_prefill_devw_scratch_stats().sites
+        var inscope whole <- one_window_logits(trg, w)
+        t |> success(metal_prefill_devw_scratch_stats().sites - sites0 > 0l, "{tag}/hmm-split/{SCRATCH_SHORT}: the control - split-K off, the sites still took panels")
+        t |> equal(hmm_split_dispatches() - whole0, 0l, "{tag}/hmm-split/{SCRATCH_SHORT}: ... and their half GEMM walked its whole K")
+        set_metal_prefill_split_k(prior_split)
+        set_metal_split_k_tgs_hmm(prior_knee)
+        metal_prefill_shutdown()
+    }
+}
+
 //! One dense carrier through the scratch-panel floors: on the base forms (no crown) both windows serve off scratch panels;
 //! under every twin crown the short window stays on the twins and the long one takes the panels where `twin_long` says the
 //! carrier's twin floor lies under it (a K-quant twin's) - a Q8_0 twin's floor lies past both windows.
@@ -1992,6 +2088,7 @@ def private scratch_panel_cells(t : T?; path, tag : string; bar : float; twin_lo
         } else {
             scratch_window_cell(t, tr, trg, prompt, SCRATCH_SHORT, true, bar, "{tag}/base")
             scratch_window_cell(t, tr, trg, prompt, SCRATCH_LONG, true, bar, "{tag}/base")
+            scratch_knee_cells(t, tr, trg, prompt, bar, "{tag}/base")
             pin_metal_tensor_crowns(SCRATCH_TWIN_CROWNS)
             metal_prefill_shutdown()
             scratch_window_cell(t, tr, trg, prompt, SCRATCH_SHORT, false, bar, "{tag}/crowned")
@@ -2036,5 +2133,71 @@ def test_metal_prefill_kq_scratch(t : T?) {
     t |> run("the dense per-32 sites' scratch panels == CPU control, the crowned twin holding the short window (Llama-3.2-1B Q5_1)") <| @(t : T?) {
         if (!family_on(t, "llama") || !arm_on(t, "kq-scratch")) return
         scratch_panel_cells(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q5_1-local.gguf"), "kq-scratch/llama-q51", 0.08, true)
+    }
+}
+
+let private BF16_SPLIT_ROWS = 24l     //! one 32-row tile: the projection's grid is ple_all / 64 threadgroups
+let private BF16_SPLIT_KNEE = 1024l   //! the q8 / bf16 knee wide enough that the E2B projection's 140-threadgroup grid splits
+
+def private bf16_split_dispatches() : int64 => stamp_dispatches("MetalBf16MulMm", "Sk")
+
+//! the bf16 plane's short-window split (`ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-split-k`) on the per-layer embedding's
+//! projection, the only bf16 site a text window serves
+[test]
+def test_metal_prefill_bf16_split(t : T?) {
+    t |> run("the per-layer embedding's bf16 projection splits its K on a short window, and walks it whole with split-K off (gemma-4-E2B Q8_0)") @(t : T?) {
+        if (!family_on(t, "gemma4e") || !arm_on(t, "bf16-split")) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
+            return if (!model_available(t, path))
+            if (!metal_tensor_crowned("mulmm_bf16")) {
+                t |> skip("the box's profile crowns no bf16 tensor tile - the projection has no split stamp here")
+                return
+            }
+            let prior_wscale = get_wscale_f16()
+            let prior_backend = kernel_backend_seat()
+            let seat = metal_overrides_seat()
+            let prior_knee = metal_split_k_tgs()
+            let prior_split = get_metal_prefill_split_k()
+            set_wscale_f16(false)
+            pin_kernel_backend("portable")
+            var tr <- load_model_(path, QuantMode.q8)
+            var inscope prompt <- encode(tr, counting_prompt(1, 30), true, false)
+            delete tr
+            var inscope w <- [for (i in range64(BF16_SPLIT_ROWS)); prompt[i]]
+            t |> equal(long_length(w), BF16_SPLIT_ROWS, "the window holds {BF16_SPLIT_ROWS} rows")
+            var trg <- blob_twin(t, path, 2048l)
+            t |> success(trg.ple_model_bf16 && pf_ple_proj_form(trg) == PfPleProjForm.bf16_tile, "the projection is the file's bf16 rows on the tile GEMM")
+            t |> success(select_prefill_override("metal"), "override registered")
+            set_metal_prefill_min_npos(1l)
+            set_metal_split_k_tgs(BF16_SPLIT_KNEE)
+            set_metal_prefill_split_k(true)
+            metal_prefill_shutdown()   //! the driver caches the knee at init
+            let served0 = metal_prefill_stats().prefills
+            let b0 = bf16_split_dispatches()
+            var inscope split <- one_window_logits(trg, w)
+            let split_n = bf16_split_dispatches() - b0
+            set_metal_prefill_split_k(false)
+            let b1 = bf16_split_dispatches()
+            var inscope whole <- one_window_logits(trg, w)
+            let whole_n = bf16_split_dispatches() - b1
+            let served = metal_prefill_stats().prefills - served0
+            set_metal_prefill_split_k(prior_split)
+            set_metal_split_k_tgs(prior_knee)
+            restore_metal_overrides(seat)
+            metal_prefill_shutdown()
+            if (served != 2l) {
+                t |> skip("the metal prefill declined a window ({served} of 2 served) - no Metal device?")
+            } else {
+                t |> success(split_n > 0l, "the {BF16_SPLIT_ROWS}-row window's projection rode the bf16 split stamps ({split_n} dispatches)")
+                t |> equal(whole_n, 0l, "the control - split-K off, the projection walked its whole K")
+                to_log(LOG_INFO, "bf16-split: split logits peak {logits_maxabs(split)}, whole-K gap {logits_maxdiff(split, whole)}\n")
+            }
+            delete trg
+            restore_kernel_backend(prior_backend)
+            set_wscale_f16(prior_wscale)
+        } else {
+            t |> skip("das_metal is not built on this platform; the Metal prefill is not compiled")
+        }
     }
 }

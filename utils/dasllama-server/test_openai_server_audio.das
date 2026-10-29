@@ -237,8 +237,9 @@ let UV_DEC_PATH = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf")
 let UV_MM_PATH = path_join(models_dir(), "mmproj-ultravox-v0_5-llama-3_2-1b-f16.gguf")
 let UV_ROWS = 187   // a chunk's soft tokens: 1500 encoder positions over the stack of 8
 
-//! `cover_probe` false sends every known part to the scheduler rowless (`set_media_cover_probe`)
-def private with_tower_audio_server(port : int; cover_probe : bool; blk : block<(base_url : string) : void>) {
+//! `cover_probe` false sends every known part to the scheduler rowless (`set_media_cover_probe`); `media_fault` panics every
+//! media encode job on the worker (`set_worker_seam`)
+def private with_tower_audio_server(port : int; cover_probe, media_fault : bool; blk : block<(base_url : string) : void>) {
     with_job_status(1) $(finished) {
         new_thread() @() {
             allow_cpu_prefill()
@@ -247,7 +248,10 @@ def private with_tower_audio_server(port : int; cover_probe : bool; blk : block<
             set_model_audio("test-uv", UV_MM_PATH)
             set_default_max_tokens(48l)
             set_media_cover_probe(cover_probe)
+            var seam_was = worker_seam()
+            set_worker_seam(WorkerSeam(media_fault = media_fault))
             run_server(port)
+            set_worker_seam(seam_was)
             finished |> notify_and_release
         }
         let ready = serve_clients(port, 1200, "/v1/models", blk)
@@ -322,7 +326,7 @@ def test_openai_server_audio_tower(t : T?) {
         }
         let b64 = jfk_b64()
         let text = "Transcribe this audio."
-        with_tower_audio_server(TOWER_PORT, true) $(base_url) {
+        with_tower_audio_server(TOWER_PORT, true, false) $(base_url) {
             GET("{base_url}/v1/stats") $(resp) {
                 var err : string
                 var js = read_json(string(resp.body), err)
@@ -419,7 +423,7 @@ def test_openai_server_audio_lost_span(t : T?) {
         return if (model_missing(t, files))
         let b64 = jfk_b64()
         let text = "Transcribe this audio."
-        with_tower_audio_server(LOST_PORT, false) $(base_url) {
+        with_tower_audio_server(LOST_PORT, false, false) $(base_url) {
             let cold = ask_counted(t, base_url, SYS_A, b64, text, "the clip, new to the slot")
             t |> equal(cold.admitted, 1l, "a new clip encodes before the submit: one stream")
             t |> equal(cold.rows, int64(UV_ROWS), "carrying the clip's rows")
@@ -444,6 +448,24 @@ def test_openai_server_audio_lost_span(t : T?) {
                 t |> success(count(body, "\"finish_reason\":\"stop\"") + count(body, "\"finish_reason\":\"length\"") == 1, "one finish chunk")
             }
             t |> equal(stats_counts(t, base_url).admitted - before.admitted, 2l, "the streamed ask took the retry too")
+        }
+    }
+}
+
+// A media job that panics on the worker outside the encode's own catch is answered by the worker's job-failed arm: the
+// parked request gets the encode-failure 400, never a hang.
+let FAULT_PORT = 18179
+
+[test]
+def test_openai_server_audio_media_job_fails(t : T?) {
+    var inscope files <- [UV_DEC_PATH, UV_MM_PATH, JFK_PATH]
+    return if (model_missing(t, files))
+    with_tower_audio_server(FAULT_PORT, true, true) $(base_url) {
+        POST("{base_url}/v1/chat/completions", audio_chat_body(jfk_b64(), "Transcribe this audio.")) $(resp) {
+            t |> success(resp != null, "the request with the failed media job is answered")
+            return if (resp == null)
+            t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "the failed media job answers: {resp.body}")
+            t |> success(find(string(resp.body), "the audio encode failed - see the server log") >= 0, "naming the failed encode: {resp.body}")
         }
     }
 }

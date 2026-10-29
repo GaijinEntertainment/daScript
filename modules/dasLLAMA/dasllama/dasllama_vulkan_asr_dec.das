@@ -51,7 +51,6 @@ let private WD_S_CQ = 2l
 let private WD_S_CO = 3l
 let private WD_S_FC1 = 4l
 let private WD_S_FC2 = 5l
-let private WD_SITE_META_BYTES = 64l      //! a GEMV site's region pairs
 
 //! the hazard bits of the driver's buffers
 let private WD_X = 0x1u
@@ -279,27 +278,6 @@ def vulkan_wdec_shutdown {
 }
 
 [cold_path]
-def private wd_gemv_set(meta : HostBuf; y_dev : uint64; y_bytes : int64; y_bit : uint) : VkDescriptorSet {
-    let r & = g_wd
-    let bq = WD_ROW_CAP * 4l * r.d
-    return gemv_planes_set(int(KqFmt.q8), (wq = r.wq_dev, ws = r.ws_dev, wqb = r.wq_bytes, wsb = r.ws_bytes), meta.buf, WD_SITE_META_BYTES, 0u,
-        r.xq_dev, r.xs_dev, bq, bq / kq_elems(KqFmt.q8) * 4l, WD_XQ, y_dev, y_bytes, y_bit)
-}
-
-//! a site's region pairs: each region's first weight block, its activation rows at block 0
-[cold_path]
-def private wd_site_meta(woffs : array<int64>) : HostBuf {
-    let q8e = kq_elems(KqFmt.q8)   // nolint:LINT021 - the element offset divides in 64-bit ahead of the narrowing store
-    let hb = wd_host_buf(WD_SITE_META_BYTES, false)
-    if (hb.buf != 0ul) {
-        for (i in range(length(woffs))) {
-            fill_gemv_region(hb, i, uint(woffs[i] / q8e))
-        }
-    }
-    return hb
-}
-
-[cold_path]
 def private wd_xkv_set : VkDescriptorSet {
     let r & = g_wd
     return vt_tile_cls_set(r.xkv_tile, r.wq_dev, r.ws_dev, r.wq_bytes, r.ws_bytes, r.xkv_meta.buf, r.xkv_meta_bytes, r.xh_dev,
@@ -344,19 +322,21 @@ def private wd_sets {
     r.s_kvx_k = set_tower_wdec_kv_cls(fixed_array(r.xkv_proj_dev, r.kx_dev, r.norms_dev), fixed_array(bt, bkxf, r.norms_bytes), fixed_array(WD_TMP, WD_KX, 0u))
     r.s_kvx_v16 = set_tower_wdec_kv16_cls(fixed_array(r.xkv_proj_dev, r.vxr_dev, r.norms_dev), fixed_array(bt, bkx, r.norms_bytes), fixed_array(WD_TMP, WD_VXR, 0u))
     r.s_kvx_v = set_tower_wdec_kv_cls(fixed_array(r.xkv_proj_dev, r.vx_dev, r.norms_dev), fixed_array(bt, bkxf, r.norms_bytes), fixed_array(WD_TMP, WD_VX, 0u))
+    let f = Q8GemvFeed(planes = (wq = r.wq_dev, ws = r.ws_dev, wqb = r.wq_bytes, wsb = r.ws_bytes), xq = r.xq_dev, xs = r.xs_dev,
+        x_elems = WD_ROW_CAP * 4l * r.d, xbit = WD_XQ)
     r.s_site |> reserve(r.nl * WD_LAYER_SITES + 1l)
     r.s_site |> resize(r.nl * WD_LAYER_SITES + 1l)
     for (l in range64(r.nl)) {
         let b = int(l * WD_LAYER_SITES)
-        r.s_site[b + int(WD_S_QKV)] = wd_gemv_set(r.site_meta[b + int(WD_S_QKV)], r.qkv_dev, 3l * bx, WD_QKV)
-        r.s_site[b + int(WD_S_O)] = wd_gemv_set(r.site_meta[b + int(WD_S_O)], r.yo_dev, bx, WD_YO)
-        r.s_site[b + int(WD_S_CQ)] = wd_gemv_set(r.site_meta[b + int(WD_S_CQ)], r.cq_dev, bx, WD_CQ)
-        r.s_site[b + int(WD_S_CO)] = wd_gemv_set(r.site_meta[b + int(WD_S_CO)], r.yo_dev, bx, WD_YO)
-        r.s_site[b + int(WD_S_FC1)] = wd_gemv_set(r.site_meta[b + int(WD_S_FC1)], r.h_dev, bh, WD_H)
-        r.s_site[b + int(WD_S_FC2)] = wd_gemv_set(r.site_meta[b + int(WD_S_FC2)], r.yo_dev, bx, WD_YO)
+        r.s_site[b + int(WD_S_QKV)] = q8_gemv_set(f, r.site_meta[b + int(WD_S_QKV)].buf, r.qkv_dev, 3l * bx, WD_QKV)
+        r.s_site[b + int(WD_S_O)] = q8_gemv_set(f, r.site_meta[b + int(WD_S_O)].buf, r.yo_dev, bx, WD_YO)
+        r.s_site[b + int(WD_S_CQ)] = q8_gemv_set(f, r.site_meta[b + int(WD_S_CQ)].buf, r.cq_dev, bx, WD_CQ)
+        r.s_site[b + int(WD_S_CO)] = q8_gemv_set(f, r.site_meta[b + int(WD_S_CO)].buf, r.yo_dev, bx, WD_YO)
+        r.s_site[b + int(WD_S_FC1)] = q8_gemv_set(f, r.site_meta[b + int(WD_S_FC1)].buf, r.h_dev, bh, WD_H)
+        r.s_site[b + int(WD_S_FC2)] = q8_gemv_set(f, r.site_meta[b + int(WD_S_FC2)].buf, r.yo_dev, bx, WD_YO)
     }
     let te = int(r.nl * WD_LAYER_SITES)
-    r.s_site[te] = wd_gemv_set(r.site_meta[te], r.logits_dev, r.nvocab * 4l, WD_LOGITS)
+    r.s_site[te] = q8_gemv_set(f, r.site_meta[te].buf, r.logits_dev, r.nvocab * 4l, WD_LOGITS)
 }
 
 //! every class the two chains dispatch built ahead of the sets that bind them, or false
@@ -389,14 +369,14 @@ def private wd_upload_weights(w : WhisperModel) {
         }
         regions |> push(Q8Region(woff = lo.fc1_w, n = d, rows = 4l * d))
         regions |> push(Q8Region(woff = lo.fc2_w, n = 4l * d, rows = d))
-        r.site_meta |> push(wd_site_meta([lo.q_w, lo.k_w, lo.v_w]))   // nolint:STYLE012 - a layer's sites append to the previous layer's
-        r.site_meta |> push(wd_site_meta([lo.o_w]))
-        r.site_meta |> push(wd_site_meta([lo.cq_w]))
-        r.site_meta |> push(wd_site_meta([lo.co_w]))
-        r.site_meta |> push(wd_site_meta([lo.fc1_w]))
-        r.site_meta |> push(wd_site_meta([lo.fc2_w]))
+        r.site_meta |> push(q8_site_meta(r.oom, [lo.q_w, lo.k_w, lo.v_w]))   // nolint:STYLE012 - a layer's sites append to the previous layer's
+        r.site_meta |> push(q8_site_meta(r.oom, [lo.o_w]))
+        r.site_meta |> push(q8_site_meta(r.oom, [lo.cq_w]))
+        r.site_meta |> push(q8_site_meta(r.oom, [lo.co_w]))
+        r.site_meta |> push(q8_site_meta(r.oom, [lo.fc1_w]))
+        r.site_meta |> push(q8_site_meta(r.oom, [lo.fc2_w]))
     }
-    r.site_meta |> push(wd_site_meta([w.d_te_q_off]))
+    r.site_meta |> push(q8_site_meta(r.oom, [w.d_te_q_off]))
     if (!r.oom) {
         vt_upload_regions(w.dqblob, w.dqscales, regions, lay, r.wq_dev, r.ws_dev, r.wq_bytes, r.ws_bytes)
     }
@@ -528,7 +508,7 @@ def private wd_attn(raw : VkCommandBuffer; var h : VkHaz; var s_part : VkDescrip
 //! (the weight and bias rows at `lnoff` / `lnboff`)
 def private wd_gemv_post(raw : VkCommandBuffer; var h : VkHaz; site : int; n_in, d_out, n : int64; role : VtProfRole; var pc_post : GkPostAddLnArgs;
                          boff, lnoff, lnboff : uint) {
-    wd_gemv(raw, h, site, n_in, d_out, 1l, n)
+    q8_gemv(raw, h, g_wd.s_site[site], n_in, d_out, 1l, n)
     vt_pt(raw, role)
     pc_post.boff = boff
     pc_post.lnoff = lnoff
@@ -640,12 +620,6 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
     return true
 }
 
-def private wd_gemv(raw : VkCommandBuffer; var h : VkHaz; site : int; n_in, d_out, nreg, ncols : int64) {
-    var pc = GemvArgs(n = uint(n_in), d = uint(d_out), nreg = uint(nreg), ybase = 0u, lanes_per_row = 0u, act = 0u, bias_on = 0u, gboff = 0u, uboff = 0u,
-        ncols = uint(ncols), ystride = uint(nreg * d_out))
-    gemv_enc(int(KqFmt.q8), raw, h, g_wd.s_site[site], pc, nreg * d_out)
-}
-
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-asr-decoder")]
 def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks : int const?; n : int64) : bool {   // nolint:STYLE038 - the dispatch chain is the shape
     let uid = ds.gpu_uid
@@ -715,7 +689,7 @@ def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks 
                 enc_tower_ln_rq_cls(raw, h, r.s_ln_rq, pc, n)
                 vt_pt(raw, VtProfRole.ln)
             }
-            wd_gemv(raw, h, site + int(WD_S_QKV), d, d, 3l, n)
+            q8_gemv(raw, h, g_wd.s_site[site + int(WD_S_QKV)], d, d, 3l, n)
             vt_pt(raw, VtProfRole.gemm_q)
             pc_kv.soff = uint(d)
             pc_kv.dst_off = uint(l * d * tmax)
@@ -729,12 +703,12 @@ def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks 
             wd_attn(raw, h, r.s_attn_self, pc_as, pc_cs, uint(l * d * tmax), uint(lo.q_b - r.norms_base), wg_attn_s, wg_comb)
             wd_gemv_post(raw, h, site + int(WD_S_O), d, d, n, VtProfRole.gemm_o, pc_post,
                 uint(lo.o_b - r.norms_base), uint(lo.cln_w - r.norms_base), uint(lo.cln_b - r.norms_base))
-            wd_gemv(raw, h, site + int(WD_S_CQ), d, d, 1l, n)
+            q8_gemv(raw, h, g_wd.s_site[site + int(WD_S_CQ)], d, d, 1l, n)
             vt_pt(raw, VtProfRole.gemm_q)
             wd_attn(raw, h, r.s_attn_cross, pc_ac, pc_cc, uint(l * d * ta), uint(lo.cq_b - r.norms_base), wg_attn_c, wg_comb)
             wd_gemv_post(raw, h, site + int(WD_S_CO), d, d, n, VtProfRole.gemm_o, pc_post,
                 uint(lo.co_b - r.norms_base), uint(lo.ln2_w - r.norms_base), uint(lo.ln2_b - r.norms_base))
-            wd_gemv(raw, h, site + int(WD_S_FC1), d, 4l * d, 1l, n)
+            q8_gemv(raw, h, g_wd.s_site[site + int(WD_S_FC1)], d, 4l * d, 1l, n)
             vt_pt(raw, VtProfRole.gemm_fc1)
             pc_gelu.boff = uint(lo.fc1_b - r.norms_base)
             enc_tower_bias_act_rq_cls(raw, h, r.s_bias_h_rq, pc_gelu, wg_nff)
@@ -744,7 +718,7 @@ def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks 
                 uint(last ? r.final_ln_w_off : dec_layer_offsets(w, l + 1l).ln1_w - r.norms_base),
                 uint(last ? r.final_ln_b_off : dec_layer_offsets(w, l + 1l).ln1_b - r.norms_base))
         }
-        wd_gemv(raw, h, int(nl * WD_LAYER_SITES), d, r.nvocab, 1l, 1l)
+        q8_gemv(raw, h, g_wd.s_site[int(nl * WD_LAYER_SITES)], d, r.nvocab, 1l, 1l)
         vt_pt(raw, VtProfRole.logits)
         vhz_dep(raw, h, WD_LOGITS, 0u, true)
         cmd_copy_range(raw, r.logits_dev, 0l, r.xhost.buf, 0l, r.nvocab * 4l)

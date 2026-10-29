@@ -26,7 +26,10 @@ def run_child(cmd : string; var output : string&) : int {
 
 //! the command that runs `root` (a file of this folder) under `envs` on this platform's shell, stderr folded into stdout;
 //! an empty value unsets the variable on both shells; `args` follow the root after `--`, and `jit` runs it under -jit
-def child_cmd(root : string; envs : array<tuple<name : string; value : string>>; args : string = ""; jit : bool = false) : string {
+def child_cmd(root : string; envs : array<tuple<name : string; value : string>>; args : string = ""; jit : bool = false) : string => child_cmd_at("modules/dasLLAMA/tests/{root}", envs, args, jit)
+
+//! `child_cmd` for a root at `path`, relative to the das root - dastest's own, to run a test file of this folder whole
+def child_cmd_at(path : string; envs : array<tuple<name : string; value : string>>; args : string = ""; jit : bool = false) : string {
     let win = get_platform_name() == "windows"
     let prefix = build_string() $(w) {
         for (e in envs) {
@@ -35,5 +38,5 @@ def child_cmd(root : string; envs : array<tuple<name : string; value : string>>;
     }
     let flags = jit ? " -jit" : ""
     let tail = empty(args) ? "" : " -- {args}"
-    return "{prefix}\"{das_exe()}\"{flags} -dasroot \"{get_das_root()}\" \"{get_das_root()}/modules/dasLLAMA/tests/{root}\"{tail} 2>&1"
+    return "{prefix}\"{das_exe()}\"{flags} -dasroot \"{get_das_root()}\" \"{get_das_root()}/{path}\"{tail} 2>&1"
 }

@@ -14,7 +14,7 @@ require ?das_metal dasllama/dasllama_metal_decode   // metal_decode_shutdown
 require ?das_metal dasllama/dasllama_metal_prefill   // the metal prefill override + shutdown, its served count
 require ?das_metal metal/das_metal_boost   // metal_live_object_count - the leak gate
 require ?vulkan dasllama/dasllama_vulkan_mtp_gemma   // the subject's Vulkan half: one draft step on the resident driver
-require dasllama/dasllama_gpu_resident   // nolint:STYLE030,LINT019 — moe_gpu_resident_prefills, read in the vulkan half: the trunk's served witness
+require dasllama/dasllama_gpu_resident   // nolint:STYLE030,LINT019 — gpu_resident_prefills_, read in the vulkan half: the trunk's served witness
 require daslib/jobque_boost
 require daslib/fio
 require math
@@ -495,7 +495,7 @@ def private trunk_counts() : TrunkCounts {
         let p = metal_prefill_stats()
         m = TrunkCounts(prefills = p.prefills, steps = d.decodes + b.steps, declines = d.declines + b.declines + p.declines)
     } else {
-        m.prefills = moe_gpu_resident_prefills()
+        m.prefills = gpu_resident_prefills_()
     }
     return m
 }
@@ -599,9 +599,8 @@ def private with_served_drafter(t : T?; file : string; regions : int64; kv : KVD
     }
 }
 
-//! a Q8_0-fed device's distance from the Q8_0-fed oracle: 0.1 to 0.3 where the feed flips a level, 1e-5 where it does not (the
-//! oracle against itself with its hidden 1e-6 apart moves 0.11 the same way)
-let private VK_FEED_FLIP_BAR = 0.5
+//! the Q8_0-fed oracle's own flip envelope: against itself with its hidden 1e-5 to 1e-4 apart it moves 0.38-0.53 (h_next 0.50-0.62)
+let private VK_FEED_FLIP_BAR = 1.0
 
 //! the device step over `s`'s host rows brought up again - another session's device prefill takes the one region first - with
 //! layer `l`'s K and V rows at `row` held at `v` for the step and put back after (`row` < 0 touches none): the step's logits
@@ -629,9 +628,9 @@ def private vk_reuploaded_draft(t : T?; trg : Model; var s : Session; prompt : a
         }
         var s2 <- make_run_state(c, s.kv_dtype_k, s.kv_dtype_v)
         var p40 <- [for (i in range64(min(40l, long_length(prompt)))); prompt[i]]
-        let pf0 = moe_gpu_resident_prefills()
+        let pf0 = gpu_resident_prefills_()
         eval_(trg, s2, p40)
-        t |> success(moe_gpu_resident_prefills() > pf0, "the stealing session prefilled on the device, so the next step brings the host rows up")
+        t |> success(gpu_resident_prefills_() > pf0, "the stealing session prefilled on the device, so the next step brings the host rows up")
         var dg = -1l
         var hg : array<float>
         hg |> resize(long_length(h))
@@ -681,9 +680,9 @@ def private vk_window_witness(t : T?; trg : Model; dr : GemmaDrafter; var s : Se
     set_resident_prefill_allowed(false)
     var s3 <- make_run_state(trg.config, s.kv_dtype_k, s.kv_dtype_v)
     var p40 <- [for (i in range64(min(40l, long_length(prompt)))); prompt[i]]
-    let pf0 = moe_gpu_resident_prefills()
+    let pf0 = gpu_resident_prefills_()
     eval_(trg, s3, p40)
-    t |> equal(moe_gpu_resident_prefills(), pf0, "{tag}: a prompt read on the CPU rails under the prefill pin counts no device prefill - the re-upload's control")
+    t |> equal(gpu_resident_prefills_(), pf0, "{tag}: a prompt read on the CPU rails under the prefill pin counts no device prefill - the re-upload's control")
     set_resident_prefill_allowed(pin)
     delete p40
     delete s3
@@ -694,7 +693,7 @@ def private vk_window_witness(t : T?; trg : Model; dr : GemmaDrafter; var s : Se
 
 // the GPU drafter step against the CPU oracle on the served twin: same seed token, same carried hidden, same anchor, so the two
 // agree on the argmax and sit within the home's feed rounding - a Q8_0 feed at a rounding tie lands one level over when the sums
-// differ by ulps, and one level in a large-value block moves the 26B's draft by up to 0.3 (`VK_FEED_FLIP_BAR`)
+// differ by ulps, and the levels such ties flip move the 26B's draft by up to half a logit (`VK_FEED_FLIP_BAR`)
 [cold_path]
 def private gpu_step_vs_oracle(t : T?; trg : Model; var dr : GemmaDrafter; prompt : array<int64>; tag : string; window_control : bool) {
     let npos = long_length(prompt)

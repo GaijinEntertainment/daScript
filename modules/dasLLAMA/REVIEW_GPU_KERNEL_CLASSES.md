@@ -174,9 +174,10 @@ module whose name starts with `dasllama` and contains `metal` - a direct
 demand, so no class can compile with that value missing - points that refusal's cell at the
 derived path in the same change.** Deriving the value is not a weakening.
 
-**A kernel field carries `@span` only when every caller binds whole output rows.** A caller
-binding a column tile of a wider row would leave the rest of each row outside the tracked
-hazard range.
+**A kernel field carries `@span` only when the range it declares covers every byte a dispatch
+writes through that field from its bound offset, and ends within the bound buffer.** A write
+outside the tracked range escapes the hazard check, and a range past the buffer tracks memory the
+dispatch does not own.
 
 **A diff that adds or changes an ordered argument list into a generated setter (the
 `set_*(bufs, sizes, gbits)` function a `[vk_dispatch]` class's family generates) gives it one

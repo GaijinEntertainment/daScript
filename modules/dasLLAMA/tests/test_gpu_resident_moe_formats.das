@@ -69,9 +69,9 @@ def private witnessed(t : T?; one_row_rail, dev_rows : bool; body : block<() : v
     let c0 = g_moe_meet_cpu_experts
     let r0 = g_rare_dev_rows
     let d0 = g_rare_dec_rows
-    let p0 = moe_gpu_resident_prefills()
+    let p0 = gpu_resident_prefills_()
     invoke(body)
-    return if (moe_gpu_resident_prefills() == p0)
+    return if (gpu_resident_prefills_() == p0)
     t |> success(g_moe_meet_cpu_experts > c0, "the meet handed the host {g_moe_meet_cpu_experts - c0} experts over the cell's windows")
     if (dev_rows) {
         t |> success(g_rare_dev_rows > r0, "the rare rail read {g_rare_dev_rows - r0} rows off the device planes over the cell's windows - the kernels' rows are in the bar")
@@ -139,12 +139,12 @@ def private knob_cells(t : T?; tag : string) {
         set_gpu_hot_dma(1)
         set_gpu_hot_share(1.0)
         with_gpu_kv_dtype(ct, KVDtype.f16) {
-            let p0 = moe_gpu_resident_prefills()
+            let p0 = gpu_resident_prefills_()
             let s0 = gpu_resident_hot_stats()
             witnessed(ct, false, true) {
                 moe_forced_feed(ct, 40l, fx)
             }
-            if (moe_gpu_resident_prefills() != p0 && pool_armed(ct)) {
+            if (gpu_resident_prefills_() != p0 && pool_armed(ct)) {
                 let s1 = gpu_resident_hot_stats()
                 ct |> success(s1.dma > s0.dma, "the fill landed {s1.dma - s0.dma} experts by DMA over the cell")
                 if (gpu_resident_hot_slots() >= QWEN15_MOE_EXPERTS) {
@@ -163,11 +163,11 @@ def private knob_cells(t : T?; tag : string) {
         let pins = pin_recipe()
         set_gpu_hot_dma(1)
         with_gpu_kv_dtype(ct, KVDtype.f16) {
-            let p0 = moe_gpu_resident_prefills()
+            let p0 = gpu_resident_prefills_()
             witnessed(ct, false, true) {   //! the misses land in the pool by DMA, so the one-row rail reads none of the steps' picks
                 moe_forced_feed(ct, 40l, fx)
             }
-            if (moe_gpu_resident_prefills() != p0 && pool_armed(ct)) {
+            if (gpu_resident_prefills_() != p0 && pool_armed(ct)) {
                 ct |> success(gpu_resident_hot_stats().dma > 0l, "the DMA fill landed {gpu_resident_hot_stats().dma} experts in the pool over the cell")
             }
         }
@@ -179,11 +179,11 @@ def private knob_cells(t : T?; tag : string) {
         set_gpu_hot_dma(0)   // the DMA cell's no-route leg (the meet off too: its claims ride DMA whatever the knob says)
         set_gpu_dec_meet(0)
         with_gpu_kv_dtype(ct, KVDtype.f16) {
-            let p0 = moe_gpu_resident_prefills()
+            let p0 = gpu_resident_prefills_()
             witnessed(ct, false, true) {
                 moe_forced_feed(ct, 40l, fx)
             }
-            if (moe_gpu_resident_prefills() != p0 && pool_armed(ct)) {
+            if (gpu_resident_prefills_() != p0 && pool_armed(ct)) {
                 // the pool's counters are the armed driver's, zeroed at its arm inside the feed's load: absolute reads
                 ct |> equal(gpu_resident_hot_stats().dma, 0l, "control: with the fill off no expert landed by DMA over the cell")
                 ct |> success(gpu_resident_hot_stats().uploads > 0l, "the window's placements and the steps' misses took the host's upload ({gpu_resident_hot_stats().uploads})")
@@ -195,11 +195,11 @@ def private knob_cells(t : T?; tag : string) {
         let pins = pin_recipe()
         set_gpu_dec_meet(1)
         with_gpu_kv_dtype(ct, KVDtype.f16) {
-            let p0 = moe_gpu_resident_prefills()
+            let p0 = gpu_resident_prefills_()
             witnessed(ct, false, true) {   // the meet replaces the one-row rail
                 moe_forced_feed(ct, 40l, fx)
             }
-            if (moe_gpu_resident_prefills() != p0) {
+            if (gpu_resident_prefills_() != p0) {
                 ct |> success(gpu_resident_hot_stats().meet_steps > 0l, "the decode meet claimed {gpu_resident_hot_stats().meet_steps} token steps' picks over the cell")
             }
         }
@@ -253,9 +253,9 @@ def test_moe_formats_rail_arms(t : T?) {
         set_rare_arena(0)
         with_gpu_kv_dtype(ct, KVDtype.f16) {
             let r0 = g_rare_dev_rows
-            let p0 = moe_gpu_resident_prefills()
+            let p0 = gpu_resident_prefills_()
             moe_forced_feed(ct, 40l, fx)
-            if (moe_gpu_resident_prefills() != p0) {
+            if (gpu_resident_prefills_() != p0) {
                 ct |> equal(g_rare_dev_rows, r0, "the arena off: the rail read no row off the device planes")
             }
         }
@@ -359,11 +359,11 @@ def test_moe_formats_hot_pool(t : T?) {
         set_gpu_hot_dma(0)   //! the host fill is the cell's subject: the DMA fill is `knob_cells`'
         with_gpu_kv_dtype(ct, KVDtype.f16) {
             let c0 = g_rare_slot_copies
-            let p0 = moe_gpu_resident_prefills()
+            let p0 = gpu_resident_prefills_()
             witnessed(ct, true, true) {
                 moe_forced_feed(ct, 40l, fx)
             }
-            if (moe_gpu_resident_prefills() != p0 && pool_armed(ct)) {
+            if (gpu_resident_prefills_() != p0 && pool_armed(ct)) {
                 ct |> success(gpu_resident_hot_stats().uploads > 0l, "the plan armed the hot pool beside the mirror and it uploaded {gpu_resident_hot_stats().uploads} experts over the cell")
                 ct |> equal(g_rare_slot_copies - c0, 3l * gpu_resident_hot_stats().uploads, "every slot filled off the pinned mirrors: three plane copies an upload, no planar plane read")
             }
@@ -390,11 +390,11 @@ def test_moe_formats_expert_cache(t : T?) {
         set_vulkan_trim(false)
         with_gpu_kv_dtype(ct, KVDtype.f16) {
             let f0 = moe_gpu_stream_cache_stats().fetches
-            let p0 = moe_gpu_resident_prefills()
+            let p0 = gpu_resident_prefills_()
             witnessed(ct, true, true) {
                 moe_forced_feed(ct, 40l, fx)
             }
-            if (moe_gpu_resident_prefills() != p0) {
+            if (gpu_resident_prefills_() != p0) {
                 let reads1 = moe_gpu_stream_cache_stats().fetches - f0
                 ct |> success(reads1 > 0l, "the cache read {reads1} planes off the lane on demand over the cell")
                 //! the drop wrote the picks' profile beside the lane: the same feed again keeps each layer's hottest experts resident and misses less

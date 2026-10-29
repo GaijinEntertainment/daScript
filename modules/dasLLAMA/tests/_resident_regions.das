@@ -291,11 +291,11 @@ def continue_at(t : T?; tr : Model; n, cut : int64; rel : float) {
     var short_logits <- short_control(tr, prompt, n)
     var whole <- create_session(tr, mirror_kv_dtype())
     var split <- create_session(tr, mirror_kv_dtype())
-    let served0 = moe_gpu_resident_prefills()
+    let served0 = gpu_resident_prefills_()
     forward_prefill(tr, whole, prompt, n, 0l)
     forward_prefill(tr, split, head, cut, 0l)
     forward_prefill(tr, split, tail, n - cut, cut)
-    t |> equal(moe_gpu_resident_prefills(), served0 + 3l, "{n} tokens cut at {cut}: the window chain served all three calls, the continuation among them")
+    t |> equal(gpu_resident_prefills_(), served0 + 3l, "{n} tokens cut at {cut}: the window chain served all three calls, the continuation among them")
     if (!empty(split.dn_state_prefix)) {
         t |> equal(split.dn_pos, n, "{n} tokens cut at {cut}: the recurrent state stands at the prompt's end after the continuation")
     }
@@ -790,9 +790,9 @@ def cell_long_rows_through_host(t : T?; file : string; lc : LongCtx) {
             var prompt <- prose_ids(rows_n, 5l)
             var toks <- feed_a()
             var s <- create_session(tr, mirror_kv_dtype())
-            let served0 = moe_gpu_resident_prefills()
+            let served0 = gpu_resident_prefills_()
             forward_prefill(tr, s, prompt, rows_n, 0l)
-            t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the window chain served the prompt")
+            t |> equal(gpu_resident_prefills_(), served0 + 1l, "the window chain served the prompt")
             moe_gpu_hydrate_session(tr, s)
             t |> success(s.rdec_host_current, "every layer's rows came down to the host")
             moe_gpu_drop_model()
@@ -1101,9 +1101,9 @@ def private cell_device_home_pin(t : T?; file : string) {
                 hold_equal(t, tr, sb.logits, al.rb[1], al.rb[0], "owner B's next step, its region untouched")
                 gpu_device_kv_park(sa)
                 var late <- create_session(tr, mirror_kv_dtype())
-                let served0 = moe_gpu_resident_prefills()
+                let served0 = gpu_resident_prefills_()
                 eval(tr, late, pa)
-                t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "a parked region is anyone's: the next outsider prefills on the device")
+                t |> equal(gpu_resident_prefills_(), served0 + 1l, "a parked region is anyone's: the next outsider prefills on the device")
                 delete ta
                 delete tb
                 delete late
@@ -1129,12 +1129,12 @@ def cell_device_kv_park_adopt(t : T?; file : string) {
             delete first
             t |> success(claim != 0l, "a session that prefilled on the device parks a claim")
             var second <- device_session(tr)
-            let served0 = moe_gpu_resident_prefills()
+            let served0 = gpu_resident_prefills_()
             t |> success(!gpu_device_kv_adopt(second, claim, 999l) && second.n_past == 0l, "a claim over 57 rows refuses 999 of them, and the adopter stays empty")
             t |> success(gpu_device_kv_adopt(second, claim, 40l), "the claim stands: the adopter takes 40 of its 57 rows")
             t |> equal(second.n_past, 40l, "the adopter continues from the adopted rows")
             eval(tr, second, tail)
-            t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "one device prefill: the seventeen tokens past the adopted rows")
+            t |> equal(gpu_resident_prefills_(), served0 + 1l, "one device prefill: the seventeen tokens past the adopted rows")
             hold_within(t, tr, second.logits, want, short_logits, "the adopter against the whole prompt prefilled in one call")
             delete short_logits
             var third <- device_session(tr)
@@ -1181,11 +1181,11 @@ def cell_device_kv_park_adopt_recurrent(t : T?; file : string) {
             t |> equal(gpu_device_kv_parked_pos_(claim), 57l, "the parked claim's recurrent state stands at its last row")
             var second <- device_session(tr)
             t |> success(!gpu_device_kv_adopt(second, claim, 40l) && second.n_past == 0l, "a recurrent claim refuses 40 of its 57 rows, and the adopter stays empty")
-            let served0 = moe_gpu_resident_prefills()
+            let served0 = gpu_resident_prefills_()
             t |> success(gpu_device_kv_adopt(second, claim, 57l), "the claim hands all 57 rows over")
             t |> equal(second.dn_pos, 57l, "the adopter's recurrent state stands where the parked stream's did")
             eval(tr, second, tail)
-            t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "one device prefill: the seventeen tokens past the adopted rows")
+            t |> equal(gpu_resident_prefills_(), served0 + 1l, "one device prefill: the seventeen tokens past the adopted rows")
             t |> equal(second.dn_pos, 74l, "the continuation advanced the adopted state")
             hold_within(t, tr, second.logits, want, short_logits, "the adopter against the whole prompt prefilled in one call")
             gpu_device_kv_park(second)
@@ -1261,9 +1261,9 @@ def cell_scheduler_device_mode(t : T?; file : string) {
     t |> run("a device-mode scheduler emits what the host-cached one does where the two run one code path, and a second turn adopts its first turn's rows") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
             var host, dev : array<SchedEvent>
-            let served0 = moe_gpu_resident_prefills()
+            let served0 = gpu_resident_prefills_()
             t |> success(!serve_four(tr, false, host).on, "the control scheduler serves host-cached sessions")
-            let served1 = moe_gpu_resident_prefills()
+            let served1 = gpu_resident_prefills_()
             let picks0 = rdec_picks_served()
             let segw0 = segment_windows_count()
             let served = serve_four(tr, true, dev)
@@ -1285,7 +1285,7 @@ def cell_scheduler_device_mode(t : T?; file : string) {
             // one code path on both sides: each prompt enters the window chain once and each step the batched token command;
             // a device-home stream differs by the host copy it skips. The adopting turn splits its prefill, so it holds no token compare
             t |> equal(served1 - served0, 4l, "the host-cached side prefilled its four prompts on the device, one call each")
-            t |> equal(moe_gpu_resident_prefills() - served1, 4l, "and so did the device-home side")
+            t |> equal(gpu_resident_prefills_() - served1, 4l, "and so did the device-home side")
             let same_below = gpu_device_prefill_continues(tr) ? 4l : 5l
             hold_streams_equal(t, tr, host, dev, 1l, 5l, same_below, "host-cached", "device-home")
             t |> equal(cached_of(host, 4l), 0l, "the host-cached flat scheduler keeps no prefix")
@@ -1311,10 +1311,10 @@ def cell_scheduler_paged_resident(t : T?; file : string) {
         with_regions_rig(t, file) $(tr) {
             var flat, paged : array<SchedEvent>
             serve_four(tr, false, flat)
-            let served0 = moe_gpu_resident_prefills()
+            let served0 = gpu_resident_prefills_()
             let steps0 = rdec_picks_served()
             serve_four(tr, false, paged, 64l)
-            t |> success(moe_gpu_resident_prefills() - served0 >= 4l, "the paged side's prompts entered the window chain ({moe_gpu_resident_prefills() - served0} calls)")
+            t |> success(gpu_resident_prefills_() - served0 >= 4l, "the paged side's prompts entered the window chain ({gpu_resident_prefills_() - served0} calls)")
             t |> success(rdec_picks_served() - steps0 >= 21l, "the paged side's argmax streams stepped on the device ({rdec_picks_served() - steps0} picks landed)")
             //! the second turn attaches its opening and prefills the rest in a
             //! call of its own: no token compare holds across that split
@@ -1693,10 +1693,10 @@ def cell_scheduler_device_prefill_chunks(t : T?; file : string) {
             t |> success(set_device_kv(sch, true), "an idle scheduler switches to device-home sessions")
             var long_prompt <- prose_ids(PF_WINDOW_ROWS + 188l, 3l)
             var events : array<SchedEvent>
-            let served0 = moe_gpu_resident_prefills()
+            let served0 = gpu_resident_prefills_()
             submit(tr, sch, make_req(1l, long_prompt, 2l))
             drain(tr, sch, events)
-            let calls = moe_gpu_resident_prefills() - served0
+            let calls = gpu_resident_prefills_() - served0
             // the scheduler's own chunk is 64 tokens: eleven calls, were the device window not the floor
             t |> equal(calls, gpu_device_prefill_continues(tr) ? 2l : 1l, "{long_length(long_prompt)} tokens reach the device in window-sized chunks, or whole where the model's prefill cannot continue ({calls} calls)")
             t |> equal(length(toks_of(events, 1l)), 2, "and the stream ran its two tokens")
@@ -1721,12 +1721,12 @@ def cell_scheduler_device_handoff(t : T?; file : string) {
             var pa <- prose_ids(300l, 5l)
             var pb <- prose_ids(2l * PF_WINDOW_ROWS, 9l)
             var events : array<SchedEvent>
-            let served0 = moe_gpu_resident_prefills()
+            let served0 = gpu_resident_prefills_()
             let segw0 = segment_windows_count()
             submit(tr, sch, make_req(1l, pa, 2l))
             submit(tr, sch, make_req(2l, pb, 2l))
             drain(tr, sch, events)
-            let calls = moe_gpu_resident_prefills() - served0
+            let calls = gpu_resident_prefills_() - served0
             if (gpu_device_prefill_segments(tr)) {
                 t |> equal(calls, 4l, "the first tick's window carried both streams and cut the second's prompt there ({calls} calls)")
                 t |> success(segment_windows_count() - segw0 >= 1l, "... through the segmented window")

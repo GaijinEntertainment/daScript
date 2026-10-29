@@ -226,26 +226,6 @@ def private nm_attach(m : NmtModel) : bool {
     return true
 }
 
-struct private NmBufs {
-    sizes : array<uint64>
-    bufs : array<MetalBuffer?>
-}
-
-def private nm_take(var b : NmBufs; bytes : uint64) : MetalBuffer? {
-    b.sizes |> push(bytes)
-    var buf = pool_acquire(g_nm_pool, g_dev, bytes)
-    b.bufs |> push(buf)
-    return buf
-}
-
-def private nm_give(var b : NmBufs) {
-    for (buf, bytes in b.bufs, b.sizes) {
-        pool_release(g_nm_pool, buf, bytes)
-    }
-    b.bufs |> clear()
-    b.sizes |> clear()
-}
-
 //! A sentence's width uniforms, held until its last command buffer completes.
 struct private NmUniforms {
     d : MetalBuffer?
@@ -311,27 +291,31 @@ def private metal_nmt_translate(m : NmtModel; var st : NmtState; src : array<int
     nmt_positions(m, st, max(s, cap))
     let mapped = m.image_map != null
     var wb = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(m.blob, 0l))), uint64(length(m.blob) * 4l), mapped)
-    var b : NmBufs
+    var b = MetalBufSet(no_pin = true)   //! the shutdown drains the pool with the residency set standing
     let half = pf_q8_mm_half()
     let wide = max(3l * d, ff)
-    var bids = nm_take(b, uint64(mp * 4l))
-    var bpos = nm_take(b, uint64(max(s, cap) * d * 4l))
-    var bx = nm_take(b, uint64(mp * d * 4l))
-    var by = nm_take(b, uint64(mp * d * 4l))
-    var bat = nm_take(b, uint64(mp * d * 4l))
-    var bh = nm_take(b, uint64(mp * wide * 4l))
-    var bxh = half ? nm_take(b, uint64(mp * wide * 2l)) : null
-    var bk = nm_take(b, uint64(d * s * 2l))
-    var bv = nm_take(b, uint64(d * s * 2l))
-    var bck = nm_take(b, uint64(m.n_dec * d * s * 2l))
-    var bcv = nm_take(b, uint64(m.n_dec * d * s * 2l))
+    var bids = buf_set_take(b, g_nm_pool, uint64(mp * 4l))
+    var bpos = buf_set_take(b, g_nm_pool, uint64(max(s, cap) * d * 4l))
+    var bx = buf_set_take(b, g_nm_pool, uint64(mp * d * 4l))
+    var by = buf_set_take(b, g_nm_pool, uint64(mp * d * 4l))
+    var bat = buf_set_take(b, g_nm_pool, uint64(mp * d * 4l))
+    var bh = buf_set_take(b, g_nm_pool, uint64(mp * wide * 4l))
+    var bxh = half ? buf_set_take(b, g_nm_pool, uint64(mp * wide * 2l)) : null
+    var bk = buf_set_take(b, g_nm_pool, uint64(d * s * 2l))
+    var bv = buf_set_take(b, g_nm_pool, uint64(d * s * 2l))
+    var bck = buf_set_take(b, g_nm_pool, uint64(m.n_dec * d * s * 2l))
+    var bcv = buf_set_take(b, g_nm_pool, uint64(m.n_dec * d * s * 2l))
     let nch = (s + 255l) / 256l
-    var bpms = nm_take(b, uint64(nch * hh * s * 2l * 4l))
-    var bpy = nm_take(b, uint64(nch * hh * s * hs * 4l))
-    var bcell = nm_take(b, uint64(m.n_dec * d * 4l))
-    var bst = nm_take(b, uint64(NMT_ST_WORDS) * 4ul)
-    var btoks = nm_take(b, uint64(max(cap, 1l) * 4l))
-    var blg = nm_take(b, uint64(g_nm_nvpad * 4l))
+    var bpms = buf_set_take(b, g_nm_pool, uint64(nch * hh * s * 2l * 4l))
+    var bpy = buf_set_take(b, g_nm_pool, uint64(nch * hh * s * hs * 4l))
+    var bcell = buf_set_take(b, g_nm_pool, uint64(m.n_dec * d * 4l))
+    var bst = buf_set_take(b, g_nm_pool, uint64(NMT_ST_WORDS) * 4ul)
+    var btoks = buf_set_take(b, g_nm_pool, uint64(max(cap, 1l) * 4l))
+    var blg = buf_set_take(b, g_nm_pool, uint64(g_nm_nvpad * 4l))
+    if (b.short) {
+        buf_set_release(b, g_nm_pool)
+        return nm_decline(MetalNmtDecline.device)
+    }
     unsafe {
         var ip = reinterpret<uint?>(metal_buffer_contents(bids))
         for (r in range64(mp)) {
@@ -428,7 +412,7 @@ def private metal_nmt_translate(m : NmtModel; var st : NmtState; src : array<int
         g_nm_tokens += nt
         g_nm_rate = 0.9lf * g_nm_rate + 0.1lf * double(nt + 1l) / double(s)
     }
-    nm_give(b)
+    buf_set_release(b, g_nm_pool)
     nm_uniforms_give(u)
     return ok ? true : nm_decline(MetalNmtDecline.gpu_error)
 }

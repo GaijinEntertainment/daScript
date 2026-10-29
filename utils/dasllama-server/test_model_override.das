@@ -2,12 +2,12 @@ options gen2
 options persistent_heap
 
 require dastest/testing_boost public
-require main                                            // the program root: ModelEntry + apply_model_override (sibling by bare name)
+require main                                            // the program root: ModelEntry, apply_model_override, boot_default_index (sibling by bare name)
 require daslib/fio                                      // temp_directory / fwrite / remove / path_join
 
-// Model-free unit coverage for the --model-over-roster override: the match arm, the append
-// arm, and the two warn-and-degrade arms (missing file, route-name collision). Runs fully in
-// CI — no GGUF, no JIT.
+// Model-free unit coverage for the --model-over-roster override (the match arm, the append
+// arm, and the two warn-and-degrade arms: missing file, route-name collision) and for the
+// boot's default pick past embedding models. Runs fully in CI — no GGUF, no JIT.
 
 def private plant(name : string) : string {
     var terr = ""
@@ -43,5 +43,18 @@ def test_model_override(t : T?) {
         remove(c)
         delete models
         delete collide
+    }
+}
+
+[test]
+def test_boot_default_index(t : T?) {
+    t |> run("the default slot is a chat entry: an embedding model never takes the mark") @(t : T?) {
+        var inscope models <- [ModelEntry(path = "chat_a.gguf"), ModelEntry(path = "emb.gguf", is_default = true), ModelEntry(path = "chat_b.gguf")]
+        t |> equal(boot_default_index(models, [false, false, false]), 1, "a marked chat entry is the default")
+        t |> equal(boot_default_index(models, [false, true, false]), 0, "a marked embedding model hands the default to the first chat entry")
+        t |> equal(boot_default_index(models, [true, true, false]), 2, "the first chat entry, past every embedding model")
+        t |> equal(boot_default_index(models, [true, true, true]), -1, "an all-embedding roster has no default slot")
+        var inscope unmarked <- [ModelEntry(path = "emb.gguf"), ModelEntry(path = "chat.gguf")]
+        t |> equal(boot_default_index(unmarked, [true, false]), 1, "with no mark, the first chat entry")
     }
 }

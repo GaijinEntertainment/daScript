@@ -76,7 +76,8 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
   `[init]`-only side-effect requires (arch registrations, GPU tiers, and any module that
   requires the engine back, which the umbrella therefore hosts to break the cycle).
 - **`dasllama_blocks.das`** - the std/dense/MoE transformer block kernels, decode and prefill,
-  plus the two default block sets the arch files bind. `forward()` never names a kernel here - it
+  plus the two default block sets the arch files bind, and the embedding forward that pools those blocks' rows: the
+  context's embed session pool (`embed_pool_take`), `embed_` / `embed_batch_` and their windows (`EMBED_WINDOW_ROWS`). `forward()` never names a kernel here - it
   dispatches through the `ArchBlocks` function pointers, which is why the family lives outside the
   hub with no hook.
 - **`dasllama_moe.das`** - MoE expert routing and dispatch: the top-k router, per-expert FFN

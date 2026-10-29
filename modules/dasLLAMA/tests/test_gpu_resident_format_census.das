@@ -600,6 +600,8 @@ def test_gpu_resident_gather_tied_qwen3(t : T?) {
 
 //! the per-32 table carriers' bar: the 0.5B qwen2 file's forced-feed reading (test_gpu_resident_qwen2.das' LOGIT_BAR_REL)
 let private PER32_TABLE_BAR_REL = 0.06
+//! the qwen2 file's IQ4NL32_BAR_REL: the window's f16 FFN feed puts the RTX PRO 4500's steps at 0.060 of the max logit, one-step-off 7.4+
+let private IQ4NL32_TABLE_BAR_REL = 0.08
 
 //! a per-32 carrier on the whole-model driver: every site the file carries read in its own format (the census), the tied per-32
 //! table gathered on the device by the window and every step, the forced feed against the CPU chain
@@ -617,12 +619,12 @@ def private per32_table_cell(t : T?; file : string; bar_rel : float) {
 
 [test]
 def test_gpu_resident_per32_tables(t : T?) {
-    for (spec in [(file = "Qwen2.5-0.5B-Instruct-IQ4_NL-pure-local.gguf", arm = "vk-per32-iq4nl32"),
-                  (file = "Qwen2.5-0.5B-Instruct-Q4_0-local.gguf", arm = "vk-per32-q4032"),
-                  (file = "Qwen2.5-0.5B-Instruct-Q5_0-pure-local.gguf", arm = "vk-per32-q5032")]) {
+    for (spec in [(file = "Qwen2.5-0.5B-Instruct-IQ4_NL-pure-local.gguf", arm = "vk-per32-iq4nl32", bar = IQ4NL32_TABLE_BAR_REL),
+                  (file = "Qwen2.5-0.5B-Instruct-Q4_0-local.gguf", arm = "vk-per32-q4032", bar = PER32_TABLE_BAR_REL),
+                  (file = "Qwen2.5-0.5B-Instruct-Q5_0-pure-local.gguf", arm = "vk-per32-q5032", bar = PER32_TABLE_BAR_REL)]) {
         t |> run("{spec.file}: the per-32 token table and classifier on the device, census and forced feed") @(t : T?) {
             if (!family_on(t, "qwen2") || !arm_on(t, spec.arm)) return
-            per32_table_cell(t, spec.file, PER32_TABLE_BAR_REL)
+            per32_table_cell(t, spec.file, spec.bar)
         }
     }
     t |> run("Qwen3.5-0.8B-MTP-Q5_1-local.gguf: the q51 table, classifier, deltanet planes and eh_proj on the device") @(t : T?) {

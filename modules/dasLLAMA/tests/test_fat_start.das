@@ -14,12 +14,16 @@ require daslib/fio
 require daslib/env_registry
 require strings
 require _child_run   // the per-box file's policy stand-down reads the tune policy at context init, so it is a child's to show
+require dasllama/dasllama_gpu_knee   // the split rule and the pricing both homes' knee races share
+require ?das_metal dasllama/dasllama_metal_kernels   // metal_knee_tiles: a Metal rung's grid
+require ?das_metal dasllama/dasllama_metal_prefill   // metal_devw_race_grids, METAL_N32_ROWS: the dev-W and one-way races' candidates
+require ?vulkan dasllama/dasllama_vulkan_common   // g_gpu: whether the device the Vulkan knee race ran on serves the cm2 s column
 require dasllama/dasllama_env   // dasllama_home_dir_from - the box file's path under a child's redirected home
 
 // The runtime section's writer and first-start race (dasllama_fat_start), model-free: the
 // snapshot carries the crowns and the knobs; the race writes the app sidecar's runtime section
 // and the checked apply reads it back (on a Metal box the twins race, ~15 s; elsewhere the
-// section records the defaults); the box-profile apply fires an installed race hook exactly when
+// section records the defaults, and the split-K knee race's cell skips); the box-profile apply fires an installed race hook exactly when
 // no section of this box's own exists; and outside a fat exe the fat hook does nothing. The
 // sidecar path is redirected into a temp directory for every case, so the app's real sidecar is
 // never touched.
@@ -74,6 +78,9 @@ def test_first_start_race_writes_the_section_the_apply_reads(t : T?) {
             let text = fread(path)
             t |> success(find(text, "\"runtime\"") >= 0, "the file carries a runtime section:\n{text}")
             t |> success(find(text, "\"metal_tensor\"") >= 0, "the section names the crown list, empty or not")
+            t |> success(find(text, "\"metal_split_k_tgs\"") >= 0 && find(text, "\"metal_split_k_tgs_kq\"") >= 0
+                && find(text, "\"metal_q8_n32_rows\"") >= 0 && find(text, "\"metal_split_k_tgs_base\"") >= 0
+                && find(text, "\"metal_split_k_tgs_kq_base\"") >= 0, "the section carries the split-K knees")
             var err = ""
             var doc = read_json(text, err)
             let ks = doc?["kernels"]
@@ -84,6 +91,82 @@ def test_first_start_race_writes_the_section_the_apply_reads(t : T?) {
             set_metal_tensor_crowns(crowns)
         }
     }
+}
+
+//! The split-K knee race crowns this box's knees: on a Metal box each lands on its race's ladder and goes live in the knobs the
+//! snapshot records; without one it races nothing and the knobs stand (ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-split-k)
+[test]
+def test_the_knee_race_sets_the_split_knees(t : T?) {
+    let q8 = metal_split_k_tgs()
+    let kq = metal_split_k_tgs_kq()
+    let rows = metal_q8_n32_rows()
+    let q8b = metal_split_k_tgs_base()
+    let kqb = metal_split_k_tgs_kq_base()
+    let hmm = metal_split_k_tgs_hmm()
+    let devw = metal_devw_min_tgs()
+    let ran = dasllama_metal_knee_race()
+    if (!ran) {
+        t |> equal(metal_split_k_tgs(), q8, "no device: the q8 knee stands")
+        t |> skip("no Metal device - the knee race ran nothing")
+        return
+    }
+    static_if (typeinfo builtin_module_exists(das_metal)) {   //! the knee race ran: a Metal device answered
+        var inscope q8_rungs <- knee_candidates(KNEE_Q8_WIDTHS) $(n) => metal_knee_tiles(n)
+        var inscope kq_rungs <- knee_candidates(KNEE_KQ_WIDTHS) $(n) => metal_knee_tiles(n)
+        var inscope devw_grids <- metal_devw_race_grids()
+        t |> success(metal_split_k_tgs() == 0l || has_value(q8_rungs, metal_split_k_tgs()), "the q8 knee is a rung of its race ({metal_split_k_tgs()})")
+        t |> success(metal_split_k_tgs_kq() == 0l || has_value(kq_rungs, metal_split_k_tgs_kq()), "the K-quant knee is a rung of its race ({metal_split_k_tgs_kq()})")
+        t |> success(metal_split_k_tgs_base() == 0l || has_value(q8_rungs, metal_split_k_tgs_base()), "the q8 base knee is a rung of its race ({metal_split_k_tgs_base()})")
+        t |> success(metal_split_k_tgs_kq_base() == 0l || has_value(kq_rungs, metal_split_k_tgs_kq_base()), "the K-quant base knee is a rung of its race ({metal_split_k_tgs_kq_base()})")
+        t |> success(metal_split_k_tgs_hmm() == 0l || has_value(q8_rungs, metal_split_k_tgs_hmm()), "the dev-W split knee is a rung of its race ({metal_split_k_tgs_hmm()})")
+        t |> success(metal_devw_min_tgs() == 1048576l || has_value(devw_grids, metal_devw_min_tgs()),
+            "the dev-W grid floor is a rung's grid, or off ({metal_devw_min_tgs()})")
+        t |> success(metal_q8_n32_rows() == 0l || has_value(METAL_N32_ROWS, metal_q8_n32_rows()), "the one-way rows are a rung of their race ({metal_q8_n32_rows()})")
+    }
+    var js = dasllama_runtime_snapshot("")
+    t |> equal(read_json_field(js, "metal_split_k_tgs_kq", -1l), metal_split_k_tgs_kq(), "the snapshot records the raced K-quant knee")
+    t |> equal(read_json_field(js, "metal_split_k_tgs_kq_base", -1l), metal_split_k_tgs_kq_base(), "the snapshot records the raced K-quant base knee")
+    delete_json(js)
+    set_metal_split_k_tgs(q8)
+    set_metal_split_k_tgs_kq(kq)
+    set_metal_q8_n32_rows(rows)
+    set_metal_split_k_tgs_base(q8b)
+    set_metal_split_k_tgs_kq_base(kqb)
+    set_metal_split_k_tgs_hmm(hmm)
+    set_metal_devw_min_tgs(devw)
+}
+
+//! whether this context's Vulkan device is up and serves the cm2 s column
+def private vk_cm2_device() : bool {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return g_gpu != null && g_gpu.coopmat_mode == COOPMAT_CM2
+    } else {
+        return false
+    }
+}
+
+//! The Vulkan short window's knee race (`dasllama_vulkan_knee_race`, ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split): on a device
+//! with the cm2 s column the knee lands on a rung of its race, or 0, and goes live in the knob the snapshot records; on any other
+//! device, or with the GPU tier unasked, the knob stands. Which rung wins is the race's verdict, not this cell's.
+[test]
+def test_the_vulkan_knee_race_sets_the_knee(t : T?) {
+    let saved = vk_split_k_tgs()
+    let marker = 77l   //! a knob no rung offers: the race either overwrites it or leaves it standing
+    set_vk_split_k_tgs(marker)
+    let ran = dasllama_vulkan_knee_race()
+    if (!(ran && vk_cm2_device())) {
+        t |> equal(vk_split_k_tgs(), marker, "no cm2 s column to race (tier up: {ran}): the knee stands")
+        set_vk_split_k_tgs(saved)
+        t |> skip("no Vulkan device with the cm2 s column under an asked GPU tier - the knee race ran nothing")
+        return
+    }
+    var inscope rungs <- knee_candidates(KNEE_Q8_WIDTHS) $(d) => 2l * ((d + 127l) / 128l)
+    let knee = vk_split_k_tgs()
+    t |> success(knee == 0l || has_value(rungs, knee), "the raced knee is a rung of its race, or 0 ({knee})")
+    var js = dasllama_runtime_snapshot("")
+    t |> equal(read_json_field(js, "vk_split_k_tgs", -1l), knee, "the snapshot records the raced knee")
+    delete_json(js)
+    set_vk_split_k_tgs(saved)
 }
 
 // the fake race the hook-wiring cell installs: it mints one knob and counts its firings
@@ -294,4 +377,29 @@ def test_fat_sidecar_lives_per_user(t : T?) {
             t |> equal(tune_manifest_path(), env_manifest, "cleared, the environment's manifest is the path read again")
         }
     }
+}
+
+//! The rule both GPU homes serve and the pricing their knee races share (`dasllama_gpu_knee`): the split engages at half the
+//! knee, doubles to eight while the grid fits, keeps each share whole chunks - even, or the last one short - and the pickers
+//! crown the cheapest priced knob or cutoff, each standing down under a 1% gain
+[test]
+def test_the_shared_knee_rule_and_pricing(t : T?) {
+    let metal = SplitKnee(tgs = 256l, min_k = 128l)
+    t |> success(split_k_on(128l, 2048l, metal) && !split_k_on(129l, 2048l, metal), "the split engages at half the knee")
+    t |> equal(split_k_ways(16l, 2048l, metal), 8l, "a small grid splits eight ways")
+    t |> equal(split_k_ways(64l, 2048l, metal), 4l, "the count doubles only while the grid times it fits the knee")
+    t |> equal(split_k_ways(16l, 384l, metal), 2l, "an even share stops where the next would leave its 64-wide chunks")
+    let vk = SplitKnee(tgs = 128l, min_k = 256l, align = 256l, exact = false)
+    t |> equal(split_k_ways(9l, 6912l, vk), 4l, "a short last chunk lets an odd 256-step K split (gemma-3-1b's down)")
+    t |> equal(split_k_share(6912l, 4l, vk), 1792l, "... its shares cm2_chunk's")
+    t |> equal(split_k_share(6912l, 2l, SplitKnee(align = 256l)), 0l, "the even rule refuses that K")
+    var inscope rungs <- [KneeRung(tiles = 8l, kdim = 2048l, base = 30.0lf, split = fixed_array(18.0lf, 11.0lf, 8.0lf)),
+        KneeRung(tiles = 128l, kdim = 2048l, base = 47.0lf, split = fixed_array(52.0lf, 49.0lf, 51.0lf))]
+    t |> equal(knee_pick(rungs, SplitKnee(min_k = 256l, align = 256l, exact = false), "TEST_KNEE"), 64l,
+        "the least knee that splits the small grid eight ways and leaves the wide one whole")
+    var inscope cuts <- [CutRung(x = 20l, base = 20.0lf, alt = 28.0lf), CutRung(x = 68l, base = 20.0lf, alt = 19.0lf),
+        CutRung(x = 128l, base = 6.0lf, alt = 4.0lf)]
+    t |> equal(knee_cut_pick(cuts, true, 1048576l, "TEST_CUT"), 68l, "the cutoff takes the other form from the first grid it wins on")
+    var inscope flat <- [CutRung(x = 20l, base = 20.0lf, alt = 20.1lf)]
+    t |> equal(knee_cut_pick(flat, true, 1048576l, "TEST_CUT"), 1048576l, "no 1% gain keeps every rung on the current form")
 }

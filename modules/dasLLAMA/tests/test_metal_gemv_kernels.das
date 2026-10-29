@@ -190,15 +190,15 @@ def private kq_mvb_gate(t : T?; var dev, queue; fmt, bwidth, n, d, nr, ys : int;
                 }
             } elif (bwidth == 2) {
                 stamp_run(s2, pso) {
-                    invoke(s2.enc, enc, pks, doff, pks, 0ul, pkq, 0ul, px, py, 0ul, ka, int64(d))
+                    invoke(s2.enc, enc, pks, doff, pks, 0ul, pkq, 0ul, px, 0ul, py, 0ul, ka, int64(d))
                 }
             } elif (bwidth == 4) {
                 stamp_run(s4, pso) {
-                    invoke(s4.enc, enc, pks, doff, pks, 0ul, pkq, 0ul, px, py, 0ul, ka, int64(d), int64(gcols))
+                    invoke(s4.enc, enc, pks, doff, pks, 0ul, pkq, 0ul, px, 0ul, py, 0ul, ka, int64(d), int64(gcols))
                 }
             } else {
                 stamp_run(s8, pso) {
-                    invoke(s8.enc, enc, pks, doff, pks, 0ul, pkq, 0ul, px, py, 0ul, ka, int64(d), int64(gcols))
+                    invoke(s8.enc, enc, pks, doff, pks, 0ul, pkq, 0ul, px, 0ul, py, 0ul, ka, int64(d), int64(gcols))
                 }
             }
         }

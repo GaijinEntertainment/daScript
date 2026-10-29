@@ -12,7 +12,8 @@ require daslib/cmp
 // This tutorial covers:
 //   - embed(model, text): an L2-normalized sentence vector, pooled the way the model's file asks
 //   - Cosine similarity as a plain dot product (the vectors are unit length)
-//   - Semantic ranking: order candidates by closeness to a query
+//   - Semantic ranking: order candidates by closeness to a query,
+//     embedding them in one embed_batch call
 //   - What "RAG-grade" means — when a decoder-as-embedder is the right tool
 //
 // Any chat model dasLLAMA loads doubles as an embedder. embed() runs one forward
@@ -111,6 +112,10 @@ def main() {   // nolint:STYLE038 - the tutorial is one linear read; the section
         // each against the query by cosine similarity, and sort. The on-topic answers
         // float to the top and the unrelated ones sink — and the concept sentence
         // ("Quicksort and merge sort …") ranks high on meaning, not on shared words.
+        // embed_batch embeds every candidate in one call: the texts
+        // share one forward pass, so a batch costs far less than a
+        // call a text, and each vector is the one embed() gives that
+        // text alone.
 
         let candidates = [
             "Use the sorted() built-in or list.sort() to order a Python list.",
@@ -119,11 +124,8 @@ def main() {   // nolint:STYLE038 - the tutorial is one linear read; the section
             "Preheat the oven to 200C before you start baking the bread."
         ]
 
-        var scored : array<tuple<float; string>>
-        for (c in candidates) {
-            var inscope cv <- embed(m, c)
-            scored |> push((cosine(qv, cv), c))
-        }
+        var inscope vectors <- embed_batch(m, candidates)
+        var scored <- [for (c, cv in candidates, vectors); (cosine(qv, cv), c)]
         sort(scored) <| cmp_by(-_._0)
 
         print("ranked by similarity to \"{query}\":\n")

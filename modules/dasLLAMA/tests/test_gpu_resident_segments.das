@@ -113,7 +113,7 @@ def private tails_as_segments(t : T?; tr : Model; ta, tb : int64; what : string)
     open_session(tr, sa, open_a)
     open_session(tr, sb, open_b)
     let sw0 = segment_windows()
-    let pf0 = moe_gpu_resident_prefills()
+    let pf0 = gpu_resident_prefills_()
     var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
     var chunks : array<array<int64>>
     chunks |> reserve(2l)
@@ -122,7 +122,7 @@ def private tails_as_segments(t : T?; tr : Model; ta, tb : int64; what : string)
     eval_segments_(tr, sess, chunks)
     sess |> clear()
     t |> equal(segment_windows() - sw0, shared_windows(ta), "{what}: the two tails rode one segmented call, {shared_windows(ta)} window holding both segments at the {pf_window_rows()}-row window{seg_counter()}")
-    t |> equal(moe_gpu_resident_prefills() - pf0, 2l, "{what}: the driver counted a prefill a segment")
+    t |> equal(gpu_resident_prefills_() - pf0, 2l, "{what}: the driver counted a prefill a segment")
     t |> equal(sa.n_past, OPEN_ROWS + ta, "{what}: session A's position moved by its tail")
     t |> equal(sb.n_past, OPEN_ROWS + tb, "{what}: session B's position moved by its tail")
     var got_a <- steps_after(tr, sa, toks)
@@ -188,11 +188,11 @@ def private owner_first_cell(t : T?; tr : Model) {
     chunks |> push_clone(tail_a)
     chunks |> push_clone(open_b)
     let sw0 = segment_windows()
-    let pf0 = moe_gpu_resident_prefills()
+    let pf0 = gpu_resident_prefills_()
     eval_segments_(tr, sess, chunks)
     sess |> clear()
     t |> equal(segment_windows() - sw0, 1l, "an owner's continuation beside a session with no region: one segmented window (the owner bound first, the free region the newcomer's){seg_counter()}")
-    t |> equal(moe_gpu_resident_prefills() - pf0, 2l, "... a prefill a segment")
+    t |> equal(gpu_resident_prefills_() - pf0, 2l, "... a prefill a segment")
     let got_a <- steps_after(tr, sa, toks)
     hold_rows(t, "the owner's tail beside a newcomer's opening", got_a, want_a)
     unsafe {
@@ -223,13 +223,13 @@ def private outnumber_cell(t : T?; tr : Model) {
     chunks |> push_clone(open_b)
     chunks |> push_clone(open_c)
     let sw0 = segment_windows()
-    let pf0 = moe_gpu_resident_prefills()
+    let pf0 = gpu_resident_prefills_()
     let passes0 <- gpu_cpu_passes_()
     eval_segments_(tr, sess, chunks)
     sess |> clear()
     let passes1 <- gpu_cpu_passes_()
     t |> equal(segment_windows() - sw0, 0l, "three segments over two regions, one of them owned: no segmented window{seg_counter()}")
-    t |> equal(moe_gpu_resident_prefills() - pf0, 3l, "... the fallback served each segment alone on the driver")
+    t |> equal(gpu_resident_prefills_() - pf0, 3l, "... the fallback served each segment alone on the driver")
     t |> equal(length(passes1), length(passes0), "... and the declined call counted no pass ({passes1})")
     unsafe {
         delete sess
@@ -296,7 +296,7 @@ def private decline_cell(t : T?; tr : Model) {
         sess |> push(unsafe(addr(sessions[i])))
     }
     let sw0 = segment_windows()
-    let pf0 = moe_gpu_resident_prefills()
+    let pf0 = gpu_resident_prefills_()
     let pinned = pass_count("pinned_off")
     let allowed = resident_prefill_allowed()
     set_resident_prefill_allowed(false)
@@ -304,7 +304,7 @@ def private decline_cell(t : T?; tr : Model) {
     set_resident_prefill_allowed(allowed)
     sess |> clear()
     t |> equal(segment_windows() - sw0, 0l, "under the prefill pin the sessions rode no segmented window{seg_counter()}")
-    t |> equal(moe_gpu_resident_prefills() - pf0, 0l, "... and the driver counted no prefill (the served cells' counter's control)")
+    t |> equal(gpu_resident_prefills_() - pf0, 0l, "... and the driver counted no prefill (the served cells' counter's control)")
     t |> equal(pass_count("pinned_off") - pinned, 2l, "the engine ran each session alone, each passed to the CPU rails as pinned off")
     //! the steps on both sessions before any reference session takes a region: two live host-cached sessions a region each
     var got : array<array<array<float>>>
@@ -382,12 +382,12 @@ def private decline_arms_cell(t : T?; tr : Model) {
         sb.ds_active = true
         var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
         let sw0 = segment_windows()
-        let pf0 = moe_gpu_resident_prefills()
+        let pf0 = gpu_resident_prefills_()
         let passes0 = pass_total()
         eval_segments_(tr, sess, opens)
         sess |> clear()
         t |> equal(segment_windows() - sw0, 0l, "a session adding deepstack slices: no segmented window on an override with no slice-add arm{seg_counter()}")
-        t |> equal(moe_gpu_resident_prefills() - pf0, 1l, "... the other session's segment ran alone on the driver")
+        t |> equal(gpu_resident_prefills_() - pf0, 1l, "... the other session's segment ran alone on the driver")
         t |> equal(pass_total() - passes0, 0l, "... and the deepstack session took the CPU prefill loop with no pass counted")
         sb.ds_active = false
         unsafe {
@@ -485,7 +485,7 @@ def private captures_cell(t : T?; tr : Model) {
     let stop_b1 = OPEN_ROWS + 20l
     sa.dn_stops <- [stop_a]
     sb.dn_stops <- [stop_b0, stop_b1]
-    let pf0 = moe_gpu_resident_prefills()
+    let pf0 = gpu_resident_prefills_()
     var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
     var chunks : array<array<int64>>
     chunks |> reserve(2l)
@@ -493,7 +493,7 @@ def private captures_cell(t : T?; tr : Model) {
     chunks |> push_clone(tail_b)
     eval_segments_(tr, sess, chunks)
     sess |> clear()
-    t |> equal(moe_gpu_resident_prefills() - pf0, 2l, "captures: the driver counted a prefill a segment")
+    t |> equal(gpu_resident_prefills_() - pf0, 2l, "captures: the driver counted a prefill a segment")
     t |> equal(long_length(sa.dn_captures), 1l, "captures: session A's stop captured inside the segmented call")
     t |> equal(long_length(sb.dn_captures), 2l, "captures: session B's two stops captured inside the segmented call")
     sa.dn_captures |> resize(0)

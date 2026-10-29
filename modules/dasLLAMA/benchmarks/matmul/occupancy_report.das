@@ -32,7 +32,7 @@ def main {
         if (dev == null) {
             return
         }
-        check(dev, "q8_mulmm (prod GEMM)", metal_q8_mulmm_msl, metal_q8_mulmm_msl_entry, metal_q8_mulmm_msl_fastmath)
+        check(dev, "q8_mulmm (prod GEMM)", MetalQ8MulMm_metal_q8_mulmm_msl, MetalQ8MulMm_metal_q8_mulmm_msl_entry, MetalQ8MulMm_metal_q8_mulmm_msl_fastmath)
         check(dev, "q8_mulmm_th 32x64", MetalQ8MulMmTH_metal_q8_mulmm_t_msl, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTH_metal_q8_mulmm_t_msl_fastmath)
         check(dev, "q8_mulmm_th128 128x64", MetalQ8MulMmTH128_metal_q8_mulmm_t_msl, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTH128_metal_q8_mulmm_t_msl_fastmath)
         check(dev, "q8_mulmm_thdb128 128x64 dbuf", MetalQ8MulMmTHDb128_metal_q8_mulmm_t_msl, MetalQ8MulMmTHDb128_metal_q8_mulmm_t_msl_entry, MetalQ8MulMmTHDb128_metal_q8_mulmm_t_msl_fastmath)

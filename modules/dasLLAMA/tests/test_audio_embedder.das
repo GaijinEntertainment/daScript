@@ -5,7 +5,7 @@ options _dasllama_internal = true
 
 // The AudioEmbedder carrier, and the pre-encoded rows seam it feeds. Skips: the gemma4a arm on
 // `mmproj-gemma-4-E2B-it-bf16.gguf` (absent file), its direct-image route on a prepared
-// gemma4a-tagged `.dlim` beside it (absent bake), the E4B width probe on
+// gemma4a-tagged `.dlim` beside it (absent bake, or one baked under another box's identity), the E4B width probe on
 // `mmproj-gemma-4-E4B-it-BF16.gguf` (absent file), the rows seam on `gemma-4-E2B-it-Q4_K_M.gguf`
 // + that mmproj (absent file), the no-audio-arm refusal on `SmolLM2-135M-Instruct-Q8_0.gguf`
 // (absent file). Every skip is loud.
@@ -21,6 +21,7 @@ require daslib/fio
 require math
 require strings
 require _model_tier   // models_dir() + model_available() gate
+require _scratch_dir  // scratch_path: the box's own image, minted for the direct route's control
 
 // the audio twin of test_vision_embedder
 
@@ -77,6 +78,8 @@ def test_audio_embedder_gemma4a_arm(t : T?) {
         delete samples
         delete st
         var image_path = ""
+        var foreign = ""
+        var current <- dlim_current_identities()
         dir(models_dir()) $(name) {
             // the mmproj bakes one dlim PER ARM (gemma4a audio, gemma4v vision) — select by the
             // baked family tag, or directory order hands this audio cell a vision image. The
@@ -85,21 +88,46 @@ def test_audio_embedder_gemma4a_arm(t : T?) {
             if (empty(image_path) && starts_with(name, "{base_name(mm)}.") && ends_with(name, ".dlim")) {
                 let cand = path_join(models_dir(), name)
                 let tag = image_family_tag(cand)
-                //! only the path the rail mints for THIS box identity is loadable by the direct route - a foreign-identity bake sits beside it under its own hash
-                //! and of its two lanes only the one this box serves: the direct route reads under the lane the loader picked above
+                //! of the two lanes only the one this box serves: the direct route reads under the lane the loader picked above
                 if (tag == (e.gemma4a.q8 ? "gemma4a-q8" : "gemma4a-f32") && cand == image_path_for(mm, tag)) {
-                    image_path = cand
+                    //! the lane's file name carries no box identity: a models directory another box shares holds that box's bake under it
+                    let verdict = dlim_image_verdict(image_peek(cand), current)
+                    if (verdict == "CURRENT") {
+                        image_path = cand
+                    } else {
+                        foreign = "{name} ({verdict})"
+                    }
                 }
             }
         }
+        delete current
         if (empty(image_path)) {
-            t |> skip("no prepared gemma4a-tagged {base_name(mm)}.*.dlim beside the mmproj - the direct image route needs a baked image")
+            t |> skip(empty(foreign) ? "no prepared gemma4a-tagged {base_name(mm)}.*.dlim beside the mmproj - the direct image route needs a baked image"
+                : "the gemma4a-tagged image beside the mmproj, {foreign}, was baked under another box's identity - the direct route maps only this box's")
         } else {
             t |> equal(audio_probe_proj_dim(image_path), 0l, "the gguf probe answers 0 on a .dlim by pinned contract")
             var inscope ei <- load_audio_embedder(image_path)
             t |> equal(audio_family(ei), "gemma4a", "a prepared image routes on its baked family tag, not the probe")
             t |> equal(audio_proj_dim(ei), 1536l, "the image-loaded carrier reports the same width")
         }
+    }
+    t |> run("an E2B gemma4a image minted for this box into the scratch directory reads CURRENT and maps by the direct route") @(t : T?) {
+        let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
+        if (!model_available(t, mm)) {
+            return
+        }
+        var inscope st <- stage_gemma4a_encoder(mm)
+        let tag = st.e.q8 ? "gemma4a-q8" : "gemma4a-f32"
+        let img = scratch_path("{base_name(mm)}.{tag}.dlim")
+        var inscope minted <- Gemma4aEncoder()
+        mint_gemma4a_encoder(st, minted, img)
+        t |> success(stat(img).is_valid, "the staged mint wrote {img}")
+        var current <- dlim_current_identities()
+        t |> equal(dlim_image_verdict(image_peek(img), current), "CURRENT", "an image baked on this box reads CURRENT, the verdict the scan above admits")
+        delete current
+        var inscope ei <- load_audio_embedder(img)
+        t |> equal(audio_family(ei), "gemma4a", "the box's own image routes on its baked family tag")
+        t |> equal(audio_proj_dim(ei), 1536l, "the box's own image reports the E2B width")
     }
     t |> run("the E4B mmproj probes its own decoder's width, read off the embedder's rows") @(t : T?) {
         let mm = path_join(models_dir(), "mmproj-gemma-4-E4B-it-BF16.gguf")

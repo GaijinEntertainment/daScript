@@ -282,10 +282,26 @@ def private setup_libri() : bool {
 
 // ===== refs + venvs =====
 
-//! True when the mtmd checkout carries the timing patch - the `MTMD_TIMING` line the record parser
-//! reads; an unpatched build runs and prints no timing, so every reference cell of it fails late.
-def private mtmd_tree_patched(root : string) : bool =>
-    find(fread(normalize("{root}/tools/mtmd/mtmd-cli.cpp")), "MTMD_TIMING") >= 0
+//! A reference's patch: the file named in the port message, the file under the checkout it writes `marker` into, the patches'
+//! README the port message points at.
+struct private RefPatch {
+    file : string
+    rel : string
+    marker : string
+    readme : string
+}
+
+//! the timing patch - the `MTMD_TIMING` line the record parser reads
+let private MTMD_PATCH = RefPatch(file = "mtmd-timing.patch", rel = "tools/mtmd/mtmd-cli.cpp", marker = "MTMD_TIMING",
+                                  readme = "benchmarks/asr/patches/README.md")
+//! the stage-dump patch - the `MARIAN_DUMP_DIR` the oracle dumps read
+let private MARIAN_PATCH = RefPatch(file = "marian-oracle.patch", rel = "inference/marian-fork/src/graph/expression_graph.cpp",
+                                    marker = "MARIAN_DUMP_DIR", readme = "benchmarks/nmt/patches/README.md")
+
+//! True when the checkout at `root` carries a reference patch - its file `rel` holds `marker`; an unpatched reference builds and
+//! runs and writes none of what the records and oracles read, so every cell of it fails late.
+def private tree_carries(root, rel, marker : string) : bool =>
+    find(fread(normalize("{root}/{rel}")), marker) >= 0
 
 //! True when the checkout's HEAD is the pinned commit - a re-pin rebuilds a reference whose
 //! binaries an older pin left behind, since the version capture records HEAD, not the build.
@@ -305,6 +321,18 @@ def private pinned_checkout(name, url, root, pin : string; submodules : bool) : 
     let subs = submodules ? " && git -C \"{root}\" submodule update -q --init --recursive" : ""
     run_capture("git -C \"{root}\" fetch -q origin && git -C \"{root}\" checkout -q {pin}{subs}", false)
     return moved
+}
+
+//! A patched reference's checkout at its pin: fetched and checked out at `pin` with `-f`, which drops the previous pin's applied
+//! patch so the patch lands on a clean tree, `prepare` run on it, then the `apply` command; answers whether the tree carries `p`,
+//! naming the patch to port where it does not.
+def private patched_checkout(root, pin, apply : string; p : RefPatch; prepare : block<() : void>) : bool {
+    run_capture("git -C \"{root}\" fetch -q origin && git -C \"{root}\" checkout -q -f {pin}", false)
+    invoke(prepare)
+    run_capture(apply, false)
+    return true if (tree_carries(root, p.rel, p.marker))
+    to_log(LOG_ERROR, "setup_asr_rig: {p.file} did not apply at {pin} - port the patch to the pin ({p.readme})\n")
+    return false
 }
 
 //! The q8_0 sibling `dst` of the reference carrier `src` (both under `dir`) through the reference's own quantize tool `quant`;
@@ -344,18 +372,14 @@ def private setup_refs(cfg : Args) : bool {
     }
     // patched CPU-only mtmd
     let lroot = normalize("{cfg.refs_root}/llama.cpp-mtmd-ref")
-    let lmoved = stat(normalize("{lroot}/CMakeLists.txt")).is_valid && (!at_commit(lroot, LLAMA_CPP_COMMIT) || !mtmd_tree_patched(lroot))
+    let lmoved = stat(normalize("{lroot}/CMakeLists.txt")).is_valid && (!at_commit(lroot, LLAMA_CPP_COMMIT) || !tree_carries(lroot, MTMD_PATCH.rel, MTMD_PATCH.marker))
     if (lmoved || !stat(mtmd_bin()).is_valid) {
         if (!stat(normalize("{lroot}/CMakeLists.txt")).is_valid) {
             to_log(LOG_INFO, "setup_asr_rig: cloning llama.cpp @ {LLAMA_CPP_COMMIT} for the mtmd reference\n")
             run_capture("git clone https://github.com/ggml-org/llama.cpp.git \"{lroot}\"", false)
         }
-        // -f drops the previous pin's applied patch, so the patch lands on a clean tree
-        run_capture("git -C \"{lroot}\" fetch -q origin && git -C \"{lroot}\" checkout -q -f {LLAMA_CPP_COMMIT}", false)
-        let patch = get_full_file_name("{asr_dir()}/patches/mtmd-timing.patch")
-        run_capture("git -C \"{lroot}\" apply -3 \"{patch}\"", false)
-        if (!mtmd_tree_patched(lroot)) {
-            to_log(LOG_ERROR, "setup_asr_rig: mtmd-timing.patch did not apply at {LLAMA_CPP_COMMIT} - port the patch to the pin (benchmarks/asr/patches/README.md)\n")
+        let patch = get_full_file_name("{asr_dir()}/patches/{MTMD_PATCH.file}")
+        if (!patched_checkout(lroot, LLAMA_CPP_COMMIT, "git -C \"{lroot}\" apply -3 \"{patch}\"", MTMD_PATCH) $ {}) {
             return false
         }
         to_log(LOG_INFO, "setup_asr_rig: building llama-mtmd-cli (CPU-only: Metal OFF)\n")
@@ -375,18 +399,13 @@ def private setup_refs(cfg : Args) : bool {
     return setup_crispasr() && ok
 }
 
-//! True when the marian checkout carries the stage-dump patch - an unpatched decoder translates
-//! and writes no stage, so every oracle dump of it comes back empty.
-def private marian_tree_patched(root : string) : bool =>
-    find(fread(normalize("{root}/inference/marian-fork/src/graph/expression_graph.cpp")), "MARIAN_DUMP_DIR") >= 0
-
 //! The Bergamot translation reference: Mozilla's `translations` repository at `MARIAN_COMMIT`, its `inference/`
 //! tree alone (the training pipeline stays unfetched) with every submodule but emsdk, patched with
 //! `benchmarks/nmt/patches`, and its `marian-decoder` built CPU-only.
 def private setup_marian() : bool {
     let root = marian_root()
     let present = stat(normalize("{root}/.git")).is_valid
-    if (present && at_commit(root, MARIAN_COMMIT) && marian_tree_patched(root) && stat(marian_bin()).is_valid) {
+    if (present && at_commit(root, MARIAN_COMMIT) && tree_carries(root, MARIAN_PATCH.rel, MARIAN_PATCH.marker) && stat(marian_bin()).is_valid) {
         return true
     }
     if (!present) {
@@ -394,21 +413,19 @@ def private setup_marian() : bool {
         run_capture("git clone -q --filter=blob:none --sparse https://github.com/mozilla/translations.git \"{root}\" && git -C \"{root}\" sparse-checkout set inference", false)
     }
     let spm = "inference/marian-fork/src/3rd_party/sentencepiece"
-    // -f drops the previous pin's applied patch, so the patch lands on a clean tree
-    if (stat(normalize("{root}/{spm}/.git")).is_valid) {
-        run_capture("git -C \"{root}/{spm}\" checkout -q -f .", false)
-    }
-    run_capture("git -C \"{root}\" fetch -q origin && git -C \"{root}\" checkout -q -f {MARIAN_COMMIT}", false)
-    let subs = run_capture("git -C \"{root}\" config -f .gitmodules --get-regexp path", false)
-    let paths <- [for (line in split(subs, "\n")); line |> slice(find(line, " ") + 1) |> strip;
-                  where find(line, "inference/") >= 0 && find(line, "emsdk") < 0]
-    run_capture("git -C \"{root}\" submodule update -q --init --recursive --depth 1 {join(paths, " ")}", false)
     let patches = get_full_file_name("{nmt_dir()}/patches")
-    run_capture("git -C \"{root}\" apply \"{patches}/marian-oracle.patch\" && git -C \"{root}/{spm}\" apply \"{patches}/marian-sentencepiece.patch\"", false)
-    if (!marian_tree_patched(root)) {
-        to_log(LOG_ERROR, "setup_asr_rig: marian-oracle.patch did not apply at {MARIAN_COMMIT} - port the patch to the pin (benchmarks/nmt/patches/README.md)\n")
-        return false
+    let apply = "git -C \"{root}\" apply \"{patches}/{MARIAN_PATCH.file}\" && git -C \"{root}/{spm}\" apply \"{patches}/marian-sentencepiece.patch\""
+    let carried = patched_checkout(root, MARIAN_COMMIT, apply, MARIAN_PATCH) $ {
+        // the sentencepiece submodule's applied patch dropped too, ahead of the submodule update
+        if (stat(normalize("{root}/{spm}/.git")).is_valid) {
+            run_capture("git -C \"{root}/{spm}\" checkout -q -f .", false)
+        }
+        let subs = run_capture("git -C \"{root}\" config -f .gitmodules --get-regexp path", false)
+        let paths <- [for (line in split(subs, "\n")); line |> slice(find(line, " ") + 1) |> strip;
+                      where find(line, "inference/") >= 0 && find(line, "emsdk") < 0]
+        run_capture("git -C \"{root}\" submodule update -q --init --recursive --depth 1 {join(paths, " ")}", false)
     }
+    return false if (!carried)
     to_log(LOG_INFO, "setup_asr_rig: building marian-decoder (CPU-only)\n")
     let build = "{root}/inference/build"
     // gcc 12 flags the reference build's bundled GEMM kernels maybe-uninitialized under -march=native; the cache seed puts -Wno-error for that one warning ahead of its own -Werror
@@ -641,7 +658,7 @@ def private check_all() : bool {
     }
     let mt = stat(mtmd_bin()).is_valid
     to_log(mt ? LOG_INFO : LOG_WARNING, "setup_asr_rig: llama-mtmd-cli - {mt ? mtmd_versions() : "MISSING (audio-chat refs will skip)"}\n")
-    if (mt && !mtmd_tree_patched(dir_name(dir_name(dir_name(mtmd_bin()))))) {
+    if (mt && !tree_carries(dir_name(dir_name(dir_name(mtmd_bin()))), MTMD_PATCH.rel, MTMD_PATCH.marker)) {
         to_log(LOG_ERROR, "setup_asr_rig: llama-mtmd-cli's checkout carries no MTMD_TIMING - the timing patch is not applied; run --refs\n")
         ok = false
     }

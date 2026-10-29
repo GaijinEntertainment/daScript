@@ -16,7 +16,8 @@ A driver setter is any other `../dasllama/` call the cell makes whose purpose is
 `unset_*` call - stored in a module global or process-global state that a later load, route choice
 or kernel dispatch reads; a call a loader makes on its own is not the cell's. A driver setter's
 getter is the `../dasllama/` call, or the set of them, that returns the values the driver setter
-last wrote. A lane pin is a lane setter, a `set_metal_tensor_crowns` / `pin_metal_tensor_crowns`
+last wrote - the driver setter itself among them when it returns the value its call replaced. A
+lane pin is a lane setter, a `set_metal_tensor_crowns` / `pin_metal_tensor_crowns`
 call, or the CPU kernel backend's pin (`pin_kernel_backend`, `DASLLAMA_PIN_BACKEND`) - a call or
 knob that picks the weight form, the Metal tensor crowns or the CPU kernel backend a load serves
 on.

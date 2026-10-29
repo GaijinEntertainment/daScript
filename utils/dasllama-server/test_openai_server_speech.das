@@ -5,12 +5,11 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require openai_server                                   // configure_tts / run_server (sibling)
-require _server_rig                                     // child_daslang_argv (sibling)
+require _server_rig                                     // with_spawned_server: the main.das boots (sibling)
 require dasllama/dasllama_common
 require daslib/jobque_boost                             // with_job_status / with_channel (server-thread lifecycle, the burst fan-out)
 require daslib/json_boost                               // read_json — the /v1/stats tts block
-require daslib/fio                                      // run_and_capture — the spawned speech-only boot
-require daslib/module_path                              // get_this_module_dir: main.das sits beside this test
+require daslib/fio                                      // temp_directory / fopen: the staged pack directories
 require math                                            // max: the child's captured tail is clamped to its last bytes
 require strings
 require dasllama/dasllama                               // load_model: the LLM whose handler holds the engine
@@ -45,8 +44,6 @@ let POCKET_CLONE_PORT = 18146   // the Pocket boot with a voices directory
 let POCKET_NOCLONE_PORT = 18147   // the kitten boot under the same voices directory: ignored
 let HELD_PORT = 18163      // the LLM + TTS boot whose engine an embeddings forward holds
 let TTS_BURST = 24      // past the server's queue cap (16): the overflow must be refused, not queued
-let CHILD_TIMEOUT_SEC = 420.0   // the child parses, JITs and loads before it listens
-let BOOT_POLL_ATTEMPTS = 720    // x 500 ms — inside the child's own timeout, so a hung boot still joins
 
 let TTS_PATH = path_join(models_dir(), "kitten-nano.gguf")
 let KOKORO_PATH = path_join(models_dir(), "kokoro-82m.gguf")   // the multi-language front end: two dialects to be wrong about
@@ -57,11 +54,6 @@ let BOGUS_TTS_PATH = path_join(models_dir(), "no-such-tts-model.gguf")   // neve
 struct private BurstAnswer {
     status : int
     body : string
-}
-
-struct private BootOutcome {
-    rc : int
-    tail : string
 }
 
 def private with_speech_server(model_path : string; port : int; lane : string; voices_dir : string; blk : block<(base_url : string) : void>) {
@@ -720,84 +712,10 @@ def test_phonemes_on_a_multi_language_model(t : T?) {
     }
 }
 
-// the child boots from the SAME tree this test runs from: the parent's -dasroot / -module-cache
-// carry over, so a worktree run never compiles main.das against the binary's tree
-def private child_launch_args(server_das : string; port : int; tts_path : string; config : string) : array<string> {
-    // --config PINS the child's configuration: main.das otherwise auto-discovers a
-    // dasllama-server.toml in the cwd or beside itself, and a developer's own (which may be
-    // `authoritative = true`, outranking the flags) would decide what this child serves
-    return <- child_daslang_argv(server_das, ["--", "--tts", tts_path, "--port", "{port}", "--config", config])
-}
-
-// a config carrying one harmless key: the child needs a READABLE one to be pinned to it, and
-// every value that matters rides its flags
-def private write_pinned_config(path : string) : bool {
-    var ok = false
-    fopen(path, "wb") $(f) {
-        if (f != null) {
-            f |> fwrite("streams = 4\n")
-            ok = true
-        }
-    }
-    return ok
-}
-
-// main.das spawned as a child on `port` with `--tts model_path`, held while `blk` runs and shut
-// down after. A [tune] bootstrap exit relaunches once.
+// main.das spawned as a child with `--tts model_path`; its config carries one harmless key - the child needs a READABLE
+// one to be pinned to, and every value that matters rides its flags
 def private with_spawned_boot(t : T?; what : string; port : int; model_path : string; blk : block<(base_url : string) : void>) {
-    let server_das = path_join(get_this_module_dir(), "main.das")
-    if (!stat(server_das).is_valid) {
-        t |> skip("main.das is not beside this test")
-        return
-    }
-    var terr : string
-    let tmp = temp_directory(terr)
-    let config = path_join(empty(tmp) ? "." : tmp, "dasllama_boot_{port}_{ref_time_ticks()}.toml")
-    if (!write_pinned_config(config)) {
-        t |> skip("could not write the child's config at {config}")
-        return
-    }
-    let base_url = "http://127.0.0.1:{port}"
-    var ready = false
-    var why = ""
-    with_channel(1) $(ch) {
-        with_job_status(1) $(done) {
-            var inscope args <- child_launch_args(server_das, port, model_path, config)
-            new_thread <| @capture(<- args) {
-                var out = ""
-                var rc = run_and_capture(args, out, CHILD_TIMEOUT_SEC)
-                if (rc == 3 && find(out, "restart to apply") >= 0) {
-                    out = ""   // [tune] bootstrap: the child adopted this box's kernels and exited with the restart code
-                    rc = run_and_capture(args, out, CHILD_TIMEOUT_SEC)
-                }
-                ch |> push_clone(BootOutcome(rc = rc, tail = slice(out, max(0, length(out) - 600))))
-                ch |> notify()
-                ch |> release()
-                done |> notify_and_release()
-            }
-            var died = false
-            for (_attempt in range(BOOT_POLL_ATTEMPTS)) {
-                GET("{base_url}/v1/stats") $(resp) {
-                    if (resp != null && resp.status_code == http_status.OK) {
-                        ready = true
-                    }
-                }
-                break if (ready)
-                died = ch |> try_pop_clone() $(o : BootOutcome#) {
-                    why = "the boot exited rc={o.rc} before it listened - tail: {clone_string(o.tail)}"
-                }
-                break if (died)
-                sleep(500u)
-            }
-            if (ready) {
-                invoke(blk, base_url)
-            }
-            POST("{base_url}/shutdown", "") $(_resp) {}
-            done |> join()
-        }
-    }
-    remove(config)
-    t |> success(ready, "{what} listened. {why}")
+    with_spawned_server(t, what, port, ["--tts", model_path], "streams = 4\n", blk)
 }
 
 // A --tts boot with no --model is the ONE start shape only main.das can prove: its roster is

@@ -446,9 +446,9 @@ def test_gpu_resident_hybrid_mtp_carry(t : T?) {
         with_mtp_carrier(t, 1l) $(var tr) {
             var prompt <- resident_prompt(40l)
             var toks <- resident_feed(CARRY_STEPS)
-            let served0 = moe_gpu_resident_prefills()
+            let served0 = gpu_resident_prefills_()
             var gpu <- carries_alone(tr, prompt, toks)
-            t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the prompt")
+            t |> equal(gpu_resident_prefills_(), served0 + 1l, "the resident window chain served the prompt")
             served_every_call(t)
             moe_gpu_drop_model()
             var cpu <- carries_alone(tr, prompt, toks)
@@ -516,9 +516,9 @@ def test_gpu_resident_hybrid_mtp_carry_gate(t : T?) {
         with_mtp_carrier(t, 1l) $(var tr) {
             var prompt <- resident_prompt(40l)
             var toks <- resident_feed(CARRY_STEPS)
-            let served0 = moe_gpu_resident_prefills()
+            let served0 = gpu_resident_prefills_()
             var off <- carries_alone(tr, prompt, toks, false)
-            t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the prompt with speculation off")
+            t |> equal(gpu_resident_prefills_(), served0 + 1l, "the resident window chain served the prompt with speculation off")
             for (st in range64(long_length(off))) {
                 let what = st == 0l ? "prefill" : "step {st - 1l}"
                 t |> equal(off[st].pos1, 0l, "{what}: speculation off, the resident driver lands no carry - the watermark stays 0")
@@ -1231,9 +1231,9 @@ def private head_warm_rows_cell(t : T?; nprompt : int64) {
         var prompt <- resident_prompt(nprompt)
         let n = nprompt - 1l
         var s <- create_session(tr, mirror_kv_dtype())
-        let served0 = moe_gpu_resident_prefills()
+        let served0 = gpu_resident_prefills_()
         prefill_warm(tr, s, prompt)
-        t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {nprompt}-token prompt")
+        t |> equal(gpu_resident_prefills_(), served0 + 1l, "the resident window chain served the {nprompt}-token prompt")
         t |> equal(moe_gpu_resident_head_rows(s), n, "the region holds {n} head rows after the prompt warm: one per prompt row but the last, whose next token is not known yet")
         served_every_call(t)
         var gpu <- head_k_rows_f32(tr, s, n)

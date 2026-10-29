@@ -68,6 +68,7 @@ def document_module_vulkan_boost() {
     var groups <- array<DocGroup>(
         group_by_regex("Device selection", mod, %regex~^(select_physical_device|select_graphics_queue_family|try_find_memory_type|find_memory_type)$%%),
         group_by_regex("Instance & device", mod, %regex~^(create_instance|create_device|create_device_descriptor_indexing|create_device_draw_parameters|create_device_vulkan14|create_device_shader_object|dynamic_rendering_supported|vulkan14_supported|shader_object_supported|probe_device|get_device_queue|instance_extension_available|device_extension_available)$%%),
+        group_by_regex("Device queues", mod, %regex~^(set_device_queue_ask|device_queue_count)$%%),
         group_by_regex("Host image copy", mod, %regex~^(host_copy_layout|upload_image_from_host)$%%),
         group_by_regex("Shader objects", mod, %regex~^(spirv_bytes|cmd_bind_graphics_shaders|cmd_set_shader_object_baseline)$%%),
         group_by_regex("Shaders & pipelines", mod, %regex~^(create_shader_module|create_pipeline_layout|create_graphics_pipeline_simple|create_graphics_pipeline_v3d|create_graphics_pipeline_dyn|create_compute_pipeline|create_compute_pipeline_full_subgroups)$%%),

@@ -13,7 +13,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_common   // Model, Session, forward_prefill, forward
 require dasllama/dasllama   // create_session, moe_gpu_drop_model
 require dasllama/dasllama_image
-require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active / moe_gpu_resident_prefills: the driver's witnesses
+require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active / gpu_resident_prefills_: the driver's witnesses
 require dasllama/dasllama_gpu_tier   // gpu_cpu_passes_: the calls the driver handed to the CPU rails, by reason
 require dasllama/dasllama_kv_dtype   // kv_row_bytes / kv_layer_kbase: the head's K row
 require ?vulkan dasllama/dasllama_vulkan_common   // the resolved coopmat mode, where the module exists
@@ -82,11 +82,11 @@ def assert_short_window_takes_chain(t : T?; tr : Model; why : string) {
     let lever = vulkan_prefill_peel()
     set_vulkan_prefill_peel(true)   //! the peel's lever at its default: the decline is the model's, not the lever's
     let peels0 = moe_gpu_resident_peels()
-    let pf0 = moe_gpu_resident_prefills()
+    let pf0 = gpu_resident_prefills_()
     forward_prefill(tr, s, prompt, 2l, 0l)
     set_vulkan_prefill_peel(lever)
     t |> equal(moe_gpu_resident_peels() - peels0, 0l, "a two-token prompt on {why} takes the chain, not the peel")
-    t |> equal(moe_gpu_resident_prefills() - pf0, 1l, "... and the driver counted its prefill")
+    t |> equal(gpu_resident_prefills_() - pf0, 1l, "... and the driver counted its prefill")
     served_every_call(t)
     delete s
     delete prompt
@@ -613,10 +613,10 @@ struct FeedPair {
 def resident_then_cpu_feed(t : T?; tr : Model; prompt, toks : array<int64>; after_prefill : block<void>; after_gpu : block<void>) : FeedPair {
     var pair : FeedPair
     var sg <- create_session(tr, mirror_kv_dtype())
-    let served0 = moe_gpu_resident_prefills()
+    let served0 = gpu_resident_prefills_()
     pair.gpu <- feed_logits(tr, sg, prompt, toks, after_prefill)
     t |> success(moe_gpu_resident_active(), "the whole-model driver stayed armed through the run")
-    t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {long_length(prompt)}-token prompt")
+    t |> equal(gpu_resident_prefills_(), served0 + 1l, "the resident window chain served the {long_length(prompt)}-token prompt")
     invoke(after_gpu)
     delete sg
     moe_gpu_drop_model()
@@ -641,12 +641,12 @@ def f32_chain_rows(path : string; prompt, toks : array<int64>) : array<array<flo
     return <- rows
 }
 
-//! the same-or-better witness: the device no further from the f32 chain's rows than `F32_DIST_REL` of the CPU q8 chain's own
+//! the same-or-better witness: the device no further from the f32 chain's rows than `ratio` of the CPU q8 chain's own
 //! summed distance, the f32 rows one step off past that bound; `tr` decodes the logged picks
-def f32_chain_witness(t : T?; tr : Model; what : string; fed : FeedPair; f32_rows : array<array<float>>) {
+def f32_chain_witness(t : T?; tr : Model; what : string; fed : FeedPair; f32_rows : array<array<float>>; ratio : float = F32_DIST_REL) {
     let dist = chain_distances(t, tr, what, fed.gpu, fed.cpu, f32_rows, 0, "the f32 chain", "the CPU q8 chain")
-    t |> success(dist.dev_ref <= F32_DIST_REL * dist.cpu_ref, "{what}: the device sits no further from the f32 chain ({dist.dev_ref}) than {F32_DIST_REL} of the CPU q8 chain's own distance ({dist.cpu_ref})")
-    t |> success(dist.dev_ref_ctrl > F32_DIST_REL * dist.cpu_ref, "{what} control: the f32 rows one step off sit past that bound ({dist.dev_ref_ctrl})")
+    t |> success(dist.dev_ref <= ratio * dist.cpu_ref, "{what}: the device sits no further from the f32 chain ({dist.dev_ref}) than {ratio} of the CPU q8 chain's own distance ({dist.cpu_ref})")
+    t |> success(dist.dev_ref_ctrl > ratio * dist.cpu_ref, "{what} control: the f32 rows one step off sit past that bound ({dist.dev_ref_ctrl})")
 }
 
 //! the forced-feed form: an `n`-token `resident_prompt` and `steps` fed tokens through `resident_then_cpu_feed` (`after_gpu`
@@ -893,10 +893,10 @@ def peel_cell(t : T?; var tr : Model; rel : float; tag : string; lever_off : boo
         var sa <- create_session(tr, mirror_kv_dtype())
         eval(tr, sa, opening)
         let peels0 = moe_gpu_resident_peels()
-        let pf0 = moe_gpu_resident_prefills()
+        let pf0 = gpu_resident_prefills_()
         forward_prefill(tr, sa, tail, rows, PEEL_OPEN)   // the prefill call a scheduler's chunk takes (`eval` steps a one-token tail)
         t |> equal(moe_gpu_resident_peels() - peels0, peels ? 1l : 0l, "a tail of {rows} rows {peels ? "peels through the token commands" : k < 0l ? "takes the window chain with the lever off" : "takes the window chain"}")
-        t |> equal(moe_gpu_resident_prefills() - pf0, 1l, "the tail of {rows} counted one served prefill")
+        t |> equal(gpu_resident_prefills_() - pf0, 1l, "the tail of {rows} counted one served prefill")
         if (recurrent) {
             t |> equal(sa.dn_pos, PEEL_OPEN + rows, "the recurrent state stands at the tail's end")
         }

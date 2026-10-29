@@ -18,7 +18,8 @@ it does not flag - gains a name, names in every finding text it emits the
 that says which file owns the feature), never `ARCHITECTURE.md`.**
 
 **A diff that adds a check to a `REVIEW.das` under this folder, or a name to a check's licensed
-set, ships in the section the check's finding text names, in the same change, the check's line:
+set, ships in the section carrying the charter of the feature the check guards, in the same
+change, the check's line:
 the check, the names it licenses, and the property those names share, or that the check licenses
 no names.**
 

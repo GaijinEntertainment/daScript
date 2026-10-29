@@ -13,6 +13,8 @@ require dasllama/dasllama_vulkan_dispatch
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_kv_dtype   // KVDtype: the K/V mirror codec the stamp picks key on
 require dasllama/dasllama_gpu_math
+require dasllama/dasllama_gemm_schema   // dev_rows_bytes: the knee race's q8 planes
+require dasllama/dasllama_gpu_knee   // the short window's knee race: the rung loop, the pricing and the knob it sets
 require dasllama/dasllama_gpu_tier   // sel_lane_val and the SEL_* landing layout the classifier tail's kernels share with the host
 require dasllama/dasllama_gpu_kernels_common public
 require dasllama/dasllama_gpu_kernels_discrete public
@@ -8154,4 +8156,186 @@ class TtsPkRope : GkRopeTab {
     }
 }
 
+// ===== the short window's split-K knee race (ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split): synthetic q8 planes, no model =====
 
+let private KNEE_ROWS = 31l                //! under the s column's 32 rows: the windows the rule serves
+let private KNEE_STEPS = 24                //! steps a timed submit issues, a pair of co-running roles a step
+let private KNEE_ROUNDS = 7
+let private KNEE_RING_BYTES = 192l << 20l  //! the weight copies a rung walks, past the card's last-level cache
+
+//! a width's synthetic planes: a ring of hashed q8 weight copies (`d` x K), `KNEE_ROWS` f16 activation rows, four outputs the
+//! steps alternate, the split's one partial-plane scratch, and the one-region schedule of each split count
+struct private KneeSite {
+    wq, ws : array<uint64>
+    xf, part : uint64
+    ys : uint64[4]
+    wq_bytes, ws_bytes, xf_bytes, y_bytes, part_bytes : int64
+    sched : uint64[4]
+    sched_bytes : int64[4]
+}
+
+def private knee_site(d, n : int64) : KneeSite {
+    let rb = dev_rows_bytes(KqFmt.q8, n, d)
+    var st = KneeSite(wq_bytes = rb.q, ws_bytes = rb.s, xf_bytes = KNEE_ROWS * n * 2l, y_bytes = KNEE_ROWS * d * 4l,
+        part_bytes = 8l * KNEE_ROWS * d * 4l)
+    let copies = int(max(2l, KNEE_RING_BYTES / (rb.q + rb.s) + 1l))
+    st.wq |> reserve(copies)
+    st.ws |> reserve(copies)
+    for (c in range(copies)) {
+        st.wq |> push(make_staged_buf(st.wq_bytes) $(var words) {
+            for (i in range64(st.wq_bytes / 4l)) {
+                unsafe(words[i]) = tts_hash_u32(uint(i) + uint(c) * 0x10001u) & 0x3F3F3F3Fu
+            }
+        })
+        st.ws |> push(make_staged_buf(st.ws_bytes) $(var words) {
+            for (i in range64(st.ws_bytes / 4l)) {
+                unsafe(words[i]) = 0x1C001C00u   //! a small finite f16 scale in both halves
+            }
+        })
+    }
+    st.xf = make_staged_buf(st.xf_bytes) $(var words) {
+        for (i in range64(st.xf_bytes / 4l)) {
+            let h = 0x2C00u + uint(i % 64l)
+            unsafe(words[i]) = h | (h << 16u)
+        }
+    }
+    for (i in range(4)) {
+        st.ys[i] = make_device_buf(st.y_bytes)
+    }
+    st.part = make_device_buf(st.part_bytes)
+    let groups = (d + 127l) / 128l
+    for (si, nsk in range(4), [1l, 2l, 4l, 8l]) {
+        st.sched_bytes[si] = (4l + groups * nsk) * 4l
+        st.sched[si] = make_staged_buf(st.sched_bytes[si]) $(var words) {
+            var cur = 4l
+            batch_sched_map(words, cur, 0l, 0l, KNEE_ROWS, groups * nsk)
+        }
+    }
+    return <- st
+}
+
+def private knee_site_release(var st : KneeSite) {
+    for (b in st.wq) {
+        destroy_device_buf(b)
+    }
+    for (b in st.ws) {
+        destroy_device_buf(b)
+    }
+    for (b in st.ys) {
+        destroy_device_buf(b)
+    }
+    for (b in st.sched) {
+        destroy_device_buf(b)
+    }
+    destroy_device_buf(st.xf)
+    destroy_device_buf(st.part)
+    delete st
+}
+
+//! one arm's best host wall a step over the rounds: `KNEE_STEPS` steps of `rec` a submit, two untimed submits ahead
+def private knee_arm_us(rec : block<(raw : VkCommandBuffer) : void>) : double {
+    var raw = alloc_cmd()
+    record_cmd(raw, false) $(r; var _h) {
+        invoke(rec, r)
+    }
+    submit_wait(raw)
+    submit_wait(raw)
+    var best = -1.0lf
+    for (_r in range(KNEE_ROUNDS)) {
+        let t0 = ref_time_ticks()
+        submit_wait(raw)
+        let us = double(get_time_usec(t0)) / double(KNEE_STEPS)
+        best = best < 0.0lf ? us : min(best, us)
+    }
+    return best
+}
+
+//! the cm2 s column's set over copy `c` of the ring into output `y` with the split count's schedule
+def private knee_set(st : KneeSite; c, si : int; y : uint64; y_bytes : int64; ybit : uint) : VkDescriptorSet {
+    return cm2_cls_set(int(KqFmt.q8), 32l, fixed_array(st.wq[c], st.ws[c], st.sched[si], st.xf, y),
+        fixed_array(st.wq_bytes, st.ws_bytes, st.sched_bytes[si], st.xf_bytes, y_bytes), fixed_array(1u, 2u, 0u, 4u, ybit))
+}
+
+//! One width's times at `nsk` chunks: a step is two roles a window issues together (q beside k, gate beside up), their weights
+//! from two copies of the ring - the whole arm both roles on the s column into the outputs the step alternates, the split arm
+//! both through the one partial-plane scratch and each its reduce, the way a window's split roles serialize on it; one hazard
+//! rail, so a step waits on the outputs it reuses
+def private knee_times(st : KneeSite; d, n, nsk : int64; wi : int) : tuple<b : double; t : double> {
+    let groups = (d + 127l) / 128l
+    let nring = length(st.wq)
+    let ck = split_k_share(n, nsk, SplitKnee(align = 256l, exact = false))
+    var whole, split : table<int; VkDescriptorSet>
+    var red <- [for (yi in range(4)); set_splitk_reduce_cls(fixed_array(st.part, st.ys[yi]), fixed_array(st.part_bytes, st.y_bytes),
+        fixed_array(256u, 16u << uint(yi)))]
+    for (i in range(KNEE_STEPS)) {
+        for (j in range(2)) {
+            let c = (2 * i + j) % nring
+            let yi = (i & 1) * 2 + j
+            if (!key_exists(whole, c * 4 + yi)) {
+                whole[c * 4 + yi] = knee_set(st, c, 0, st.ys[yi], st.y_bytes, 16u << uint(yi))
+            }
+            if (!key_exists(split, c)) {
+                split[c] = knee_set(st, c, wi + 1, st.part, st.part_bytes, 256u)
+            }
+        }
+    }
+    let b = knee_arm_us() $(raw) {
+        var h : VkHaz
+        for (i in range(KNEE_STEPS)) {
+            for (j in range(2)) {
+                let yi = (i & 1) * 2 + j
+                var set = whole[((2 * i + j) % nring) * 4 + yi]
+                var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = 0u)
+                cm2_cls_enc(int(KqFmt.q8), 32l, raw, h, set, pc, groups)
+            }
+        }
+    }
+    let t = knee_arm_us() $(raw) {
+        var h : VkHaz
+        for (i in range(KNEE_STEPS)) {
+            for (j in range(2)) {
+                var set = split[(2 * i + j) % nring]
+                var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = uint(ck))
+                cm2_cls_enc(int(KqFmt.q8), 32l, raw, h, set, pc, groups * nsk)
+                splitk_reduce_enc(raw, h, red[(i & 1) * 2 + j], KNEE_ROWS * d, nsk)
+            }
+        }
+    }
+    whole |> clear()
+    split |> clear()
+    red |> clear()
+    return (b = b, t = t)
+}
+
+//! The box's short-window knee on the cm2 s column (`vk_split_k_tgs`): the q8 rung table (`KNEE_Q8_WIDTHS` at `KNEE_Q8_K`) at 31
+//! rows, two co-running roles a rung - the grid the rule sizes the split on counts the role's co-runners - priced by `knee_pick`
+//! as the Metal home prices its own; the knob stands where the device serves no cm2 tile. Leaves the knob set.
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split")]
+def vk_split_knee_race : int64 {
+    if (g_gpu == null || g_gpu.coopmat_mode != COOPMAT_CM2 || !cm2_cls_ensure(int(KqFmt.q8), 32l) || !ensure_splitk_reduce_cls()) {
+        to_log(LOG_INFO, "dasLLAMA vulkan: short-window knee race skipped - no cm2 s column on this device\n")
+        return vk_split_k_tgs()
+    }
+    let shape = SplitKnee(min_k = 256l, align = 256l, exact = false)
+    var cur = -1l
+    var site : array<KneeSite>   //! the width the rungs time now, rebuilt when the width moves
+    var rungs <- knee_rungs(KNEE_Q8_WIDTHS, KNEE_Q8_K, shape, $(d : int64) => 2l * ((d + 127l) / 128l)) $(d, nsk : int64) : tuple<b : double; t : double> {
+        if (d != cur) {
+            for (st in site) {
+                knee_site_release(st)
+            }
+            site |> clear()
+            site |> emplace(knee_site(d, KNEE_Q8_K))
+            cur = d
+        }
+        return knee_times(site[0], d, KNEE_Q8_K, nsk, nsk == 2l ? 0 : (nsk == 4l ? 1 : 2))
+    }
+    for (st in site) {
+        knee_site_release(st)
+    }
+    site |> clear()
+    let tgs = knee_pick(rungs, shape, "vk knee")
+    delete rungs
+    set_vk_split_k_tgs(tgs)
+    return tgs
+}

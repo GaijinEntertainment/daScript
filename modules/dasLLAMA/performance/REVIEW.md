@@ -151,17 +151,18 @@ under `--convert`, a timing runs under `gen_bench_records.das` or a
 value, in `model_specs.das` or `profile_common.das` records its settling evidence in the PR
 description: one `fetch_models.das -- -o <name>` run per entry it adds or changes (`<name>` the
 entry's local file name), on a box holding that entry's model file, ending `0 pending, 0 failed`
-with the entry `ok`, plus one unscoped `fetch_models.das --` run in which no entry the diff
-touched is `pending`.** A box stocks
-only some rows, so an unscoped run's `pending` count is the box's.
+with the entry `ok`.**
 
 **A diff that adds a `recipe` row carrying no `sha256`, or changes such a row's `recipe`,
 records, in the PR description, the conversion command as run and the produced file's
 identity - its byte size, or a `file_identity` hash.** `fetch_models` reports such a row `ok`
 on presence alone, so its run cannot tell a re-mint from the stale file the old recipe made.
 
-**A diff that changes `fetch_models.das` beyond its comments records its settling evidence in
-the PR description: one unscoped `fetch_models.das --` run ending `0 failed`.**
+**A diff that adds a row or a `companions` entry, or changes a `bytes`, `sha256` or `recipe`
+value, in `model_specs.das` or `profile_common.das`, or changes `fetch_models.das` beyond its
+comments, records in the PR description one unscoped `fetch_models.das --` run - in which no entry
+the diff touched is `pending`, and which ends `0 failed` when the diff changes `fetch_models.das`.**
+A box stocks only some rows, so an unscoped run's `pending` count is the box's.
 
 **A diff that adds or re-points a `url` on a `model_specs.das` or `profile_common.das` row, or
 on one of that row's `companions` entries, records in the PR description a fetch through that

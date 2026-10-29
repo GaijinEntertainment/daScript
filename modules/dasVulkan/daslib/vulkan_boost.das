@@ -17,6 +17,7 @@ require vulkan/vulkan_structs public
 require vulkan/vulkan_commands public
 require vulkan/vulkan_cmds public
 require strings
+require math
 require daslib/defer
 
 // ===== selection =====
@@ -426,20 +427,49 @@ def public upload_image_from_host(device : Device; image : Image; pixels : array
     delete trs
 }
 
-//! The one ``vkCreateDevice`` body every creator routes through: one queue at priority 1 per listed
+var private g_device_queue_ask = 1u
+
+//! queues the next ``create_device*`` asks per family, capped by the
+//! family (``device_queue_count``); 1 by default, raised when one
+//! process's contexts share the device
+def public set_device_queue_ask(n : uint) {
+    g_device_queue_ask = max(n, 1u)
+}
+
+//! the queues a ``create_device*`` call under the current ask
+//! creates on family `family` of `phys`
+def public device_queue_count(phys : VkPhysicalDevice;
+                              family : uint) : uint {
+    var count = 0u
+    vkGetPhysicalDeviceQueueFamilyProperties(phys, count, null)
+    var props : array<VkQueueFamilyProperties>
+    props |> resize(int(count))
+    vkGetPhysicalDeviceQueueFamilyProperties(phys, count,
+                                             unsafe(addr(props[0])))
+    let carried = family < count ? props[int(family)].queueCount : 0u
+    let have = carried > 0u ? carried : 1u
+    delete props
+    return min(have, g_device_queue_ask)
+}
+
+//! The ``vkCreateDevice`` body: ``device_queue_count`` per listed
 //! family, `extensions` plus the portability subset, `base_features` on ``pEnabledFeatures`` (null
 //! when the chain carries a ``VkPhysicalDeviceFeatures2``), `next` as the head of the ``pNext`` chain.
 def private create_device_chain(phys : VkPhysicalDevice; queue_families : array<uint>; extensions : array<string>;
                                 var base_features : VkPhysicalDeviceFeatures?; next : void?) : Device {
     g_latest_device_from_create_device_vulkan14 = false
-    var prio = 1.0f
+    var inscope prios : array<float>
+    prios |> resize(int(g_device_queue_ask))
+    for (p in prios) {
+        p = 1.0f
+    }
     var qcis : array<VkDeviceQueueCreateInfo>
     qcis |> resize(length(queue_families))
     for (qf, qc in queue_families, qcis) {
         qc = VkDeviceQueueCreateInfo()
         qc.queueFamilyIndex = qf
-        qc.queueCount = 1u
-        qc.pQueuePriorities = unsafe(addr(prio))
+        qc.queueCount = device_queue_count(phys, qf)
+        qc.pQueuePriorities = unsafe(addr(prios[0]))
     }
     var ci = VkDeviceCreateInfo()
     ci.queueCreateInfoCount = uint(length(qcis))

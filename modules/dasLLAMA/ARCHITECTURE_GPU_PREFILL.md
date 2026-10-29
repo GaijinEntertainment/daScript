@@ -2,9 +2,9 @@
 
 Companion to `ARCHITECTURE.md`; a section is cited by its anchor. This document carries the
 attention slab, the pad-row and cooperative-op constraints, chunked submission, the f16 twin
-dual-store, the last-layer FFN tail and the hyper-connection window. Its companions:
+dual-store, the last-layer FFN tail, the hidden-only window and the hyper-connection window. Its companions:
 
-- `ARCHITECTURE_GPU_PREFILL_GEMM.md` - the GEMM form ladder, the dev-W panel knee map, the GEMV tail peel and the dense-KQ tensor mul_mm scaffold.
+- `ARCHITECTURE_GPU_PREFILL_GEMM.md` - the GEMM form ladder, the short window's split-K form, the dev-W panel knee map, the GEMV tail peel and the dense-KQ tensor mul_mm scaffold.
 - `ARCHITECTURE_GPU_PREFILL_MOE.md` - the routed block: the MoE bucket rail, its tensor-twin scaffold, the split-format expert twins, the K-quant twins' pick, the short window's gathered route and the gemma-4 MoE tail as one step (`#metal-g4-moe-step`).
 - `ARCHITECTURE_GPU_PREFILL_WINDOW.md` - the device attention pair, the mirror-fed window, the segmented window, the recurrent scan and hot-load addressing.
 
@@ -104,6 +104,18 @@ carrier whose `dim` or hidden width is off 256 keeps the full panel) - whatever 
 (`DASLLAMA_METAL_MM_TAIL`) says. `DASLLAMA_METAL_LASTROW=0` pins the full-panel tail. A caller that reads
 `x_b` rows afterwards - embedding pooling, whichever rows its pooling picks, a plane-compare probe - sets
 `Session.keep_hidden` and the prefill keeps every row; the flag is zero-init, so narrowing is the default.
+
+### The hidden-only window {#prefill-hidden-only}
+
+A forward whose caller passes `skip_logits` and whose session sets `keep_hidden` is read through its hidden plane
+alone - the embedding forwards (`embed_forward`, the batch's `embed_window`) are the ones that set both. The Metal
+window then runs no classifier and converts no K/V row into a decode mirror: its stage line reads `logits=none
+kv=panels`, and it marks the session's logits done so no CPU final step follows. Neither half alone names it:
+`skip_logits` alone is an image quantum's inner slice, whose session decodes next and wants its mirror, and
+`keep_hidden` alone is a probe that reads the plane and the logits both. The host K/V store still runs, since the
+session is left filled; a decode that follows anyway uploads the rows to its mirror at its first step, so the
+mirror's absence costs time, never correctness. The override receives the flag through `prefill_logits_skipped`.
+What the embedding query saves is in `PERF_LEDGER.md`'s split-K entry.
 
 ### The hyper-connection window {#prefill-hc-window}
 

@@ -106,6 +106,17 @@ def nmt_seat_poison(m : NmtModel) {
     }
 }
 
+//! the device's largest buffer under the seat's scratch takes stood in by `bytes` (0 reads the device's again), with the
+//! stand-in it replaced; `seam` false where the seat reads no such limit (Vulkan: `ARCHITECTURE_GPU_ASYMMETRIES.md`)
+[unused_argument(bytes)]
+def nmt_seat_take_max_probe(bytes : uint64) : tuple<seam : bool; was : uint64> {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return (seam = true, was = set_metal_take_max_probe_(bytes))
+    } else {
+        return (seam = false, was = 0ul)
+    }
+}
+
 //! every device object the seat owns released; the next served sentence attaches again
 def nmt_seat_shutdown {
     static_if (typeinfo builtin_module_exists(das_metal)) {

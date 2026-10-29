@@ -2071,6 +2071,13 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
     let metal_crown_kernels = (typeinfo builtin_module_exists(das_metal)) ? 1 : 0
     tune_progress_plan("dasllama_kernels", length(benches) + VALIDATE_PLAN_ALLOWANCE + metal_crown_kernels)
 
+    // the GPU split-K knee races ahead of the kernel benches: the last bench pins a CPU backend, and a race behind it would run
+    // under the pin; the knees land in the knobs the runtime snapshot records
+    if (!partialMint) {
+        dasllama_metal_knee_race()
+        dasllama_vulkan_knee_race()
+    }
+
     load_incumbents()
     for (b in benches) {
         let kernel_t0 = kernel_begin(b._0)

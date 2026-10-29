@@ -10,6 +10,7 @@ options _dasllama_internal = true   // the env rail (g_env_*) is knob-internal; 
 require daslib/fio
 require daslib/defer
 require dasllama/dasllama_env   // g_env_harness.models_dir / g_env_core home fields — the env rail
+require dasllama/dasllama_gguf   // gguf_header_read / gguf_has: `embedding_gguf` reads a roster file's header alone
 require ../../modules/dasLLAMA/performance/model_specs.das public   // the ONE model set — the catalog is a view over it (re-exported: the tests gate its serve rows)
 require daslib/json_boost
 require daslib/jobque_boost
@@ -461,4 +462,14 @@ def public catalog_state_json(dir : string; ram_gb : int; vram_mb : int64; needs
         delete doc
     }
     return text
+}
+
+//! Whether the GGUF at `path` names its pooling (`<arch>.pooling_type`): an embedding model, which the server serves on a worker
+//! of its own (``add_embedding_model``). A header-only read; false for a file that is missing, not a GGUF, or cut short.
+def embedding_gguf(path : string) : bool {
+    var found = false
+    let read = gguf_header_read(path) $(m; bytes) {
+        found = gguf_has(m, "general.architecture") && gguf_has(m, "{gguf_str(m, bytes, "general.architecture")}.pooling_type")
+    }
+    return read && found
 }

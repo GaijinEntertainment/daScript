@@ -4,48 +4,55 @@
 docs: `../ARCHITECTURE_GPU.md`, `../ARCHITECTURE_CPU_KERNELS.md`. Planned work:
 `../followup_general.md`, `../followup_vulkan.md`, `../followup_metal.md`.
 
-A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a helper's asserts
-belong to every cell that calls it. A CPU kernel is a function that writes an output buffer from
-operand buffers; one that answers a size, a block or a layout is not. A CPU oracle is the same
-computation written in plain code in this checklist's folder - a cell, or a `_*.das` helper
-module here; it may widen a quantized operand through a `../dasllama/` function that widens a
-quantized block to floats, and calls no other `../dasllama/` function - a kernel under
-`../dasllama/` is never one. A sentinel is a value the kernel cannot write from the cell's own
-inputs - a NaN where every input is finite, or a fixed bit pattern no finite input yields; a
-zero-filled or newly allocated buffer is not one. To loosen an assert is to let pass an input the
-old assert failed. A kernel class is a class that a GPU dispatch annotation - `[metal_dispatch]`,
-`[vk_dispatch]` or `[cuda_dispatch]` - compiles to a device kernel. A home is the GPU backend a
-stamp runs on - Metal, Vulkan or CUDA. A kernel-unit cell is a cell in which a kernel class is
-dispatched, or a CPU kernel in `../dasllama/dasllama_math*.das` is called, by a statement in test
-code outside a CPU oracle - the cell itself, or a helper in its own file or in a `_*.das`
-test-helper module - itself or through a router, a `../dasllama/` function whose only job is to
-pick which compiled form (stamp) of the dispatched class or the CPU kernel runs; a kernel run
-inside any other `../dasllama/` function does not make a cell a kernel-unit cell. A kernel run is a
-dispatch or a CPU kernel call. A gate is any call site that supplies a kernel's dispatch count or
-fills its kargs (kernel-argument) struct itself, other than a serving call in `../dasllama/` the
-kernel exists for - a cell, a probe, a harness. A stamp is a kernel class that compiles to its own
-shader module - a class no other class derives from; every rule here treats each stamp as its own
-class. A path of a class is each branch a value read from the kargs or from any bound buffer
-selects, and each trip-count regime of each loop whose bound such a value sets - the regimes read
-against the loop's stride: zero, under one stride, a whole number of strides, and past a whole
-number of strides (the tail). A branch or loop inside a function the class's methods call, other
-than a method of the class, is not a path of the class - covering it is the job of that function's
-cells. A branch or regime is a path only where a serving call in `../dasllama/` can reach it on
-some shape that call does not decline, whether or not any model file the box holds has that shape.
-A bound assert is a compare of two computed sides, or a measured quality figure against a
-tolerance; a floor on a capacity, a configuration or a roster size is not one, a guard that keeps a
-later index or compare well-defined (a length past the index it reads) is not one, a counter
-asserted to show a route ran is not one, and an assert a rule of this list requires to show a
-compare can fail - the in-place cell's output-differs-from-input assert among them - is not a bound
-assert, and is not the control a bound assert needs. A sibling stamp is another stamp derived from
-the same class; it stands in for a stamp only where the code a rule asks about is the class's own,
-neither stamp overrides it - overriding a template constant that code reads overrides it - the
-sibling's cell compiles once the diff is applied, and the two stamps are in the same home or the
-stamp is CUDA's and the sibling Vulkan's. A control is an extra assert in the same cell proving a
-compare can fail - a poisoned input, or a poisoned expectation (the expected value with a known
-amount added), that must land outside the bar, a mechanism unhooked whose result must miss, or a
-second, independent computation the result must agree with; a cell's own reference is never its
-control.
+- A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a helper's
+  asserts belong to every cell that calls it.
+- A CPU kernel is a function that writes an output buffer from operand buffers; one that answers
+  a size, a block or a layout is not.
+- A CPU oracle is the same computation written in plain code in this checklist's folder - a cell,
+  or a `_*.das` helper module here; it may widen a quantized operand through a `../dasllama/`
+  function that widens a quantized block to floats, and calls no other `../dasllama/` function - a
+  kernel under `../dasllama/` is never one.
+- A sentinel is a value the kernel cannot write from the cell's own inputs - a NaN where every
+  input is finite, or a fixed bit pattern no finite input yields; a zero-filled or newly allocated
+  buffer is not one.
+- To loosen an assert is to let pass an input the old assert failed.
+- A kernel class is a class that a GPU dispatch annotation - `[metal_dispatch]`, `[vk_dispatch]`
+  or `[cuda_dispatch]` - compiles to a device kernel.
+- A home is the GPU backend a stamp runs on - Metal, Vulkan or CUDA.
+- A kernel-unit cell is a cell in which a kernel class is dispatched, or a CPU kernel in
+  `../dasllama/dasllama_math*.das` is called, by a statement in test code outside a CPU oracle -
+  the cell itself, or a helper in its own file or in a `_*.das` test-helper module - itself or
+  through a router, a `../dasllama/` function whose only job is to pick which compiled form
+  (stamp) of the dispatched class or the CPU kernel runs; a kernel run inside any other
+  `../dasllama/` function does not make a cell a kernel-unit cell.
+- A kernel run is a dispatch or a CPU kernel call.
+- A gate is any call site that supplies a kernel's dispatch count or fills its kargs
+  (kernel-argument) struct itself, other than a serving call in `../dasllama/` the kernel exists
+  for - a cell, a probe, a harness.
+- A stamp is a kernel class that compiles to its own shader module - a class no other class
+  derives from; every rule here treats each stamp as its own class.
+- A path of a class is each branch a value read from the kargs or from any bound buffer selects,
+  and each trip-count regime of each loop whose bound such a value sets - the regimes read against
+  the loop's stride: zero, under one stride, a whole number of strides, and past a whole number of
+  strides (the tail). A branch or loop inside a function the class's methods call, other than a
+  method of the class, is not a path of the class - covering it is the job of that function's
+  cells. A branch or regime is a path only where a serving call in `../dasllama/` can reach it on
+  some shape that call does not decline, whether or not any model file the box holds has that
+  shape.
+- A bound assert is a compare of two computed sides, or a measured quality figure against a
+  tolerance; a floor on a capacity, a configuration or a roster size is not one, a guard that keeps
+  a later index or compare well-defined (a length past the index it reads) is not one, a counter
+  asserted to show a route ran is not one, and an assert a rule of this list requires to show a
+  compare can fail - the in-place cell's output-differs-from-input assert among them - is not a
+  bound assert, and is not the control a bound assert needs.
+- A sibling stamp is another stamp derived from the same class; it stands in for a stamp only where
+  the code a rule asks about is the class's own, neither stamp overrides it - overriding a template
+  constant that code reads overrides it - the sibling's cell compiles once the diff is applied, and
+  the two stamps are in the same home or the stamp is CUDA's and the sibling Vulkan's.
+- A control is an extra assert in the same cell proving a compare can fail - a poisoned input, or a
+  poisoned expectation (the expected value with a known amount added), that must land outside the
+  bar, a mechanism unhooked whose result must miss, or a second, independent computation the result
+  must agree with; a cell's own reference is never its control.
 
 **A diff that changes a kernel's dispatch grid (the count its dispatch needs, or its workgroup
 size) or its kargs (the struct, any buffer binding, or the layout of a struct a bound buffer holds)
@@ -66,7 +73,8 @@ no longer writes compares the sentinel to a sum.
 **A diff that dispatches an existing kernel class at a workgroup size no kernel-unit cell runs it
 at, or with a grid formula (the expression that computes its dispatch count from the call's sizes)
 no kernel-unit cell computes its count with, ships a kernel-unit cell that dispatches it at that
-workgroup size, or whose dispatch count that same expression computes, in the same change.**
+workgroup size, or whose dispatch count equals what that formula computes from the cell's sizes, in
+the same change.**
 
 **A kernel-unit cell's compare of kernel output against its reference logs, whether it passes or
 fails, the largest difference it measured with that element's row and column, or, for an output

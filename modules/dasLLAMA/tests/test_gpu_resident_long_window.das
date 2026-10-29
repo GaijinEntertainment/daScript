@@ -46,10 +46,10 @@ def private long_prompt_cell(t : T?; window : int64) {
     with_dasllama_jobque_() {
         var prompt <- resident_prompt(PROMPT)
         var control_prompt <- [for (i in range64(PROMPT - 1l)); prompt[i]]
-        let served0 = moe_gpu_resident_prefills()
+        let served0 = gpu_resident_prefills_()
         var sd <- create_session(tr, mirror_kv_dtype())
         forward_prefill(tr, sd, prompt, PROMPT, 0l)
-        t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the window chain served the prompt")
+        t |> equal(gpu_resident_prefills_(), served0 + 1l, "the window chain served the prompt")
         served_every_call(t)
         var dev <- [for (x in sd.logits); x]
         delete sd

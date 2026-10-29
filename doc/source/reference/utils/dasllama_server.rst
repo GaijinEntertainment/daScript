@@ -186,7 +186,7 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    * - ``--model``
      - ``-m``
      - *(required)*
-     - GGUF model to serve (here or in ``--config``)
+     - GGUF model to serve (here or in ``--config``); an embedding GGUF (one naming its pooling) serves ``/v1/embeddings`` from its own worker and is never the default
    * - ``--port``
      - ``-p``
      - ``8080``
@@ -450,7 +450,10 @@ per-entry ``ctx``, ``quant``, ``kv_dtype``, ``streams``, ``chunk``, ``chunk_idle
 An explicit ``--model`` wins over the roster: the entry with that path becomes
 the default, and a path the roster does not list joins it as the default. A
 missing file, or a route name another entry already takes, is logged, and the
-roster boots unchanged.
+roster boots unchanged. An embedding GGUF (one naming its pooling, see
+Embeddings) never becomes the default, whether ``--model`` or ``default = true``
+names it: the boot logs a warning and the first chat entry is the default; with
+no chat entry the server serves ``/v1/embeddings`` alone.
 
 Chat and completion requests batch continuously (``dasllama/dasllama_scheduler.das``):
 up to ``--streams`` generations run concurrently through one ``eval_batch``
@@ -608,7 +611,13 @@ Endpoints
      - ``/v1/embeddings``
      - L2-normalized sentence embeddings, pooled the way the model's file asks (``pooling_type``:
        last token for Qwen3-Embedding, mean for a chat model); ``pooling`` (``mean`` | ``cls`` |
-       ``last``) overrides, ``dimensions`` keeps the leading components and renormalizes
+       ``last``) overrides, ``dimensions`` keeps the leading components and renormalizes. An
+       embedding model (its GGUF names its pooling) answers from its own worker thread, off the
+       engine loop; a chat model answers on the engine. A request naming no ``model`` goes to
+       the default chat model, or to the first embedding model on a server with no chat model.
+       ``503`` while the embeddings queue (32) is full, and on a chat model whose trimmed image
+       has no CPU planes while every device region holds a live stream; ``500`` when the
+       embedding worker panics
    * - ``POST``
      - ``/v1/audio/transcriptions``
      - Speech to text (multipart upload; needs ``--asr``). One ASR model takes every request, whatever ``model`` says; with several, ``model`` names one by its id (none, or the ``<default slot>-asr`` id: the first; any other name: 404); ``language`` defaults to English, to detection on a model that only detects, and to its own language on a one-language model. ``response_format=verbose_json`` adds timed segments
@@ -835,6 +844,16 @@ the query side ("Instruct: ...\nQuery: ...") is the client's text, as the API ha
 field for it. A chat model used as an embedder gives **RAG-grade** vectors (good for
 retrieval / similarity), not a substitute for a dedicated embedding model. See
 :ref:`tutorial_dasLLAMA_embeddings` for the facade side.
+
+A ``[[models]]`` entry whose GGUF names its pooling (the ``<arch>.pooling_type`` key)
+is an embedding model: it loads once on a worker thread of its own - never as an
+engine slot - and its requests queue to that worker, which computes the inputs'
+vectors in batched forwards, the texts packed into one window up to its token budget
+and into further windows past it, while a chat stream on the same server decodes on. Its
+context is the entry's ``ctx``; unset, the file's trained context capped at 8192 tokens. It
+is listed on ``/v1/models`` under its roster name and reported in the ``embed`` block
+of ``/v1/stats``; a worker that cannot load it is logged and the model serves nothing.
+A chat model named in the request computes its vectors on the engine, in-handler.
 
 .. code-block:: sh
 

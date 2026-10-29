@@ -12,10 +12,9 @@ file outside `modules/`, wherever the diff puts it, from `tests/`; a `.cpp` that
 from `tests-cpp/small/`.** A diff that changes this list changes `routed_paths` in
 `utils/internal/review-md/scan.das` to match, in the same change.
 
-**A `.das` outside `modules/` whose requires reach - directly or through the modules they
-require - modules under exactly one `modules/<M>/` folder, or a `.cpp` outside `modules/` whose
-includes reach - directly or through the headers they include - headers under exactly one
-`modules/<M>/` folder, answers to `modules/<M>/REVIEW.md` too, when that file exists.**
+**A `.das` outside `modules/` whose own `require` lines name modules under exactly one
+`modules/<M>/` folder, or a `.cpp` outside `modules/` whose own includes name headers under
+exactly one `modules/<M>/` folder, answers to `modules/<M>/REVIEW.md` too, when that file exists.**
 `utils/internal/review-md/scan.das` does not apply this route, so the reviewer does.
 
 **A guard on the `dasCUDA` package in a file outside `modules/dasCUDA/` tests for the `cuda`

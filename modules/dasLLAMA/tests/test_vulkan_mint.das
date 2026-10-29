@@ -15,6 +15,8 @@ require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_blocks
 require daslib/jobque_boost
 require daslib/fio
+require daslib/rtti   // this_context().last_exception: the refused load's text
+require strings   // find: the refusal names the lane and the decline
 require _model_tier
 require _compares
 require _resident_feed
@@ -308,6 +310,48 @@ def test_vulkan_mint_trim_follows_the_driver(tst : T?) {
                 var again <- load_cached_q8(path)
                 t |> success(again.planes_trimmed && moe_gpu_resident_active(), "with the override lifted the next load mints the trimmed lane over the untrimmed one and the driver serves it")
                 delete again
+                moe_gpu_drop_model()
+            }
+        }
+    }
+}
+
+//! `path`'s cached load, "" where it served, else the text it panicked with
+def private load_refusal(path : string) : string {
+    var why = ""
+    try {
+        var m <- load_cached_q8(path)
+        delete m
+    } recover {
+        why = this_context().last_exception
+    }
+    return why
+}
+
+[test]
+def test_vulkan_mint_trim_refused_unarmed(tst : T?) {
+    tst |> run("Qwen3.5-0.8B-MTP: a trimmed lane the whole-model driver does not arm for after the trim admitted it is refused at its load, naming the lane and the decline - never at a CPU forward; the same load with the driver armed serves") @(t : T?) {
+        with_mint_file(t, MINT_FILE) $(path) {
+            with_cold_lane(t, path, "the model") $(var plain; img_v) {
+                delete plain
+                moe_gpu_drop_model()
+                set_vulkan_trim(true)
+                remove(img_v)
+                var trimmed <- load_cached_q8(path)
+                t |> success(trimmed.planes_trimmed && moe_gpu_resident_active(), "the trimmed lane mints, and the driver serves it")
+                delete trimmed
+                moe_gpu_drop_model()
+                let lane_size = stat(img_v).size
+                let fault_was = resident_upload_fault()
+                set_resident_upload_fault(true)
+                let why = load_refusal(path)
+                set_resident_upload_fault(fault_was)
+                moe_gpu_drop_model()
+                t |> success(find(why, img_v) >= 0 && find(why, RESIDENT_UPLOAD_FAULT) >= 0 && find(why, "planes-trimmed") >= 0,
+                    "the load refuses the unarmed trimmed lane by name, with the driver's decline: {why}")
+                t |> success(stat(img_v).is_valid && stat(img_v).size == lane_size, "the refused lane stays on disk as the mint left it")
+                t |> equal(load_refusal(path), "", "control: the same load with the driver armed serves the lane")
+                t |> success(moe_gpu_resident_active(), "... on the whole-model driver")
                 moe_gpu_drop_model()
             }
         }

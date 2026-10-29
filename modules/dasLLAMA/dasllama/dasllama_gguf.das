@@ -339,27 +339,36 @@ def gguf_shard_paths(path : string; missing_ok : bool = false) : array<string> {
     return <- res
 }
 
-//! `general.architecture` of the GGUF at `path` ("" when unreadable - a file that is not a GGUF,
-//! or one cut short of its own metadata, the way a download that stopped is) - a header-only read.
-def gguf_file_arch(path : string) : string {
-    var arch = ""
+//! A header-only read of the GGUF at `path`: its parsed metadata and mapped bytes, handed to `blk`. A missing file, one
+//! that is not a GGUF, or one cut short of its own metadata (the way a download that stopped is) never reaches `blk`; a
+//! panic in the parse or in `blk` is recovered, so the read never panics. False when `blk` did not run to its end.
+def gguf_header_read(path : string; blk : block<(m : GGUFMeta; bytes : array<uint8>#) : void>) : bool {
+    var done = false
     fopen(path, "rb") $(f) {
-        if (f == null) {
-            return
-        }
+        return if (f == null)
         fmap(f) $(var bytes : array<uint8>#) {
             return if (long_length(bytes) < GGUF_FIXED_HEADER_BYTES || !gguf_magic_ok(bytes))
             try {
                 var inscope m <- parse_gguf_meta(bytes)
-                if (gguf_has(m, "general.architecture")) {
-                    arch = gguf_str(m, bytes, "general.architecture")
-                }
+                invoke(blk, m, bytes)
+                done = true
             } recover {
-                arch = ""
+                done = false
             }
         }
     }
-    return arch
+    return done
+}
+
+//! `general.architecture` of the GGUF at `path` ("" when ``gguf_header_read`` cannot read it)
+def gguf_file_arch(path : string) : string {
+    var arch = ""
+    let read = gguf_header_read(path) $(m; bytes) {
+        if (gguf_has(m, "general.architecture")) {
+            arch = gguf_str(m, bytes, "general.architecture")
+        }
+    }
+    return read ? arch : ""
 }
 
 //! An assistant drafter (arch `<family>-assistant`: gemma4-assistant) is its own tiny model over the

@@ -212,6 +212,54 @@ def test_models_provenance_invariants(t : T?) {
 }
 
 [test]
+def test_quantize_rows(t : T?) {
+    t |> run("a quantize-minted row names a fetched source and reaches fetch_models with its recipe") @(t : T?) {
+        var inscope entries <- models_provenance()
+        var fetched : table<string>
+        for (e in entries) {
+            if (!empty(e.url) && length(e.sha256) == 64) {
+                fetched |> insert(e.name)
+            }
+        }
+        var minted = 0
+        var inscope specs <- model_specs()
+        for (s in specs) {
+            continue if (empty(s.quantize.fmt))
+            minted++
+            t |> success(empty(s.url) && key_exists(fetched, s.quantize.source), "{s.file} mints from the fetched row {s.quantize.source}")
+            let steps = quantize_commands(s.quantize, s.file, "", "calib.txt", "llama-imatrix", "llama-quantize")
+            t |> equal(s.recipe, "{steps.imatrix}; {steps.quantize}", "{s.file}'s recipe spells its quantize")
+            var reached = false
+            for (e in entries) {
+                if (e.name == s.file) {
+                    reached = e.quantize.fmt == s.quantize.fmt && e.quantize.source == s.quantize.source && e.quantize.token_type == s.quantize.token_type
+                }
+            }
+            t |> success(reached, "{s.file} reaches the provenance view with its quantize")
+        }
+        t |> success(minted > 0, "the table carries quantize-minted rows ({minted})")
+        delete fetched
+    }
+    t |> run("fetch_models --convert routes a quantize row to the mint, a canary row to its conversion, any other to a warning, and Windows to a refusal") @(t : T?) {
+        var minted = ProvEntry(name = "fmt-ladder/x-Q4_K-pure-local.gguf", quantize = QuantizeRecipe(source = "x-f16.gguf", imatrix = "fmt-ladder/x.imatrix", fmt = "Q4_K", token_type = "q4_k"))
+        t |> equal(convert_route(minted, "darwin"), ConvertRoute.quantize, "a row with a quantize format mints")
+        t |> equal(convert_route(minted, "windows"), ConvertRoute.refuse_platform, "... and refuses on Windows")
+        let canary = ProvEntry(name = "canary-qwen-2.5b-decoder-q8_0.gguf", recipe = "convert_canary_to_ggml.py")
+        t |> equal(convert_route(canary, "linux"), ConvertRoute.canary, "a canary row converts")
+        let other = ProvEntry(name = "parakeet-tdt-0.6b-v2.gguf", recipe = "historic note")
+        t |> equal(convert_route(other, "linux"), ConvertRoute.no_recipe, "any other row has no recipe to run")
+        minted.name = "canary-Q4_K-local.gguf"
+        t |> equal(convert_route(minted, "linux"), ConvertRoute.quantize, "the quantize format wins over a canary name")
+    }
+    t |> run("a quantize mint refuses without its source, builds the importance matrix only where it is absent") @(t : T?) {
+        t |> equal(mint_steps(false, true), MintSteps.refuse_no_source, "no source: refused, whatever the matrix")
+        t |> equal(mint_steps(false, false), MintSteps.refuse_no_source, "no source and no matrix: refused")
+        t |> equal(mint_steps(true, false), MintSteps.imatrix_then_quantize, "no matrix: built, then the quantize")
+        t |> equal(mint_steps(true, true), MintSteps.quantize, "a matrix on disk: the quantize alone")
+    }
+}
+
+[test]
 def test_board_provenance(t : T?) {
     t |> run("a board box's fetch holds every file the board sweeps read, and no test-only carrier") @(t : T?) {
         var names : table<string>

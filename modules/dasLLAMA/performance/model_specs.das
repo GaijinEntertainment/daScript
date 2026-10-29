@@ -27,6 +27,65 @@ struct ProvEntry {
     bytes : int64
     sha256 : string
     recipe : string
+    quantize : QuantizeRecipe   //! a row `fetch_models --convert` mints with llama-quantize; an empty `fmt` = none
+}
+
+//! A row minted on-box by llama-quantize from a fetched row: the arguments the row's `recipe` text and the mint both read
+//! through ``quantize_commands``, so the two cannot drift
+struct QuantizeRecipe {
+    source : string       //! the fetched row the planes come from
+    imatrix : string      //! the importance matrix built once from `source` over the calibration text
+    fmt : string          //! llama-quantize's type: every plane in it (`--pure`)
+    token_type : string   //! the token table's and the output's type
+}
+
+//! The two commands minting `file` from `q`, every path under `root`: the importance matrix over `calib`, then the
+//! quantize. The tools as given: bare names in a row's recipe, the reference build's binaries in the mint.
+def quantize_commands(q : QuantizeRecipe; file, root, calib, imatrix_tool, quantize_tool : string) : tuple<imatrix : string; quantize : string> {
+    let src = "{root}{q.source}"
+    let imx = "{root}{q.imatrix}"
+    return (imatrix = "{imatrix_tool} -m \"{src}\" -f \"{calib}\" -o \"{imx}\" -c 128 --chunks 64 -ngl 0",
+        quantize = "{quantize_tool} --imatrix \"{imx}\" --pure --token-embedding-type {q.token_type} --output-tensor-type {q.token_type} \"{src}\" \"{root}{file}\" {q.fmt}")
+}
+
+//! What `fetch_models --convert` runs for an absent row: the quantize mint, the canary conversion, or nothing - a Windows box
+//! and a row with no recipe of either kind refuse
+enum ConvertRoute {
+    refuse_platform
+    quantize
+    canary
+    no_recipe
+}
+
+def convert_route(e : ProvEntry; platform : string) : ConvertRoute {
+    return ConvertRoute.refuse_platform if (platform == "windows")
+    return ConvertRoute.quantize if (!empty(e.quantize.fmt))
+    return ConvertRoute.canary if (find(e.name, "canary") >= 0)
+    return ConvertRoute.no_recipe
+}
+
+//! A quantize mint's steps on a box where its source and its importance matrix are or are not on disk: an absent source
+//! refuses, an absent matrix is built before the quantize
+enum MintSteps {
+    refuse_no_source
+    imatrix_then_quantize
+    quantize
+}
+
+def mint_steps(source_present, imatrix_present : bool) : MintSteps {
+    return MintSteps.refuse_no_source if (!source_present)
+    return imatrix_present ? MintSteps.quantize : MintSteps.imatrix_then_quantize
+}
+
+//! A format-ladder row (the models dir's fmt-ladder/): `stem`'s f16 row with every plane in `fmt`, its token table and
+//! output in `token_type` (`fmt`'s own by default)
+def private ladder_row(stem, fmt : string; token_type : string = "") : ModelSpec {
+    var row = ModelSpec(file = "fmt-ladder/{stem}-{fmt}-pure-local.gguf",
+        quantize = QuantizeRecipe(source = "{stem}-f16.gguf", imatrix = "fmt-ladder/{stem}.imatrix", fmt = fmt,
+            token_type = empty(token_type) ? to_lower(fmt) : token_type))
+    let steps = quantize_commands(row.quantize, row.file, "", "calib.txt", "llama-imatrix", "llama-quantize")
+    row.recipe = "{steps.imatrix}; {steps.quantize}"
+    return <- row
 }
 
 //! A spec's frozen greedy parity fixture — evidence as DATA (pinned ids, never a test name).
@@ -87,6 +146,7 @@ struct ModelSpec {
     bytes : int64
     sha256 : string
     recipe : string
+    quantize : QuantizeRecipe       //! minted on-box by llama-quantize (``ladder_row``); an empty `fmt` = a row nothing mints
     companions : array<ProvEntry>   // artifacts fetched/verified with this model (mmproj, image fixture)
     parity : ParityEvidence
     // serving-catalog membership (dasllama-server's /catalog view): a non-empty serve_name
@@ -446,6 +506,28 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "Qwen3-Embedding-0.6B-Q8_0.gguf",
             url = "{HF}/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/370f27d7550e0def9b39c1f16d3fbaa13aa67728/Qwen3-Embedding-0.6B-Q8_0.gguf",
             bytes = 639150592l, sha256 = "06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439"),
+        // the embedding model's f16 source and its format ladder: every dense plane in one format (`--pure`), the short
+        // window's GEMM forms raced and held per format on one shape; `fetch_models --fetch --convert -o 0.6B-` mints the
+        // ladder under the models dir's fmt-ladder/ from the f16 (each row's `quantize` is the recipe it spells)
+        ModelSpec(file = "Qwen3-Embedding-0.6B-f16.gguf",
+            url = "{HF}/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/370f27d7550e0def9b39c1f16d3fbaa13aa67728/Qwen3-Embedding-0.6B-f16.gguf",
+            bytes = 1197629632l, sha256 = "421a27e58d165478cc7acb984a688c2aa41404968b0203e7cd743ece44c54340"),
+        ladder_row("Qwen3-Embedding-0.6B", "Q4_0"),
+        ladder_row("Qwen3-Embedding-0.6B", "Q5_1"),
+        ladder_row("Qwen3-Embedding-0.6B", "Q2_K"),
+        ladder_row("Qwen3-Embedding-0.6B", "Q3_K"),
+        ladder_row("Qwen3-Embedding-0.6B", "Q4_K"),
+        ladder_row("Qwen3-Embedding-0.6B", "Q5_K"),
+        ladder_row("Qwen3-Embedding-0.6B", "Q6_K"),
+        ladder_row("Qwen3-Embedding-0.6B", "IQ4_NL"),
+        ladder_row("Qwen3-Embedding-0.6B", "IQ4_XS"),
+        ladder_row("Qwen3-Embedding-0.6B", "IQ3_S"),
+        ladder_row("Qwen3-Embedding-0.6B", "IQ3_XXS"),
+        ladder_row("Qwen3-Embedding-0.6B", "IQ2_S"),
+        // the IQ2 token tables stay q4_k: the imatrix covers GEMM inputs only, and these types refuse a plane without one
+        ladder_row("Qwen3-Embedding-0.6B", "IQ2_XS", "q4_k"),
+        ladder_row("Qwen3-Embedding-0.6B", "IQ2_XXS", "q4_k"),
+        ladder_row("Qwen3-Embedding-0.6B", "BF16"),
         // the K-quant twin of the hybrid for the resident driver's native-plane cells
         // (tests/test_gpu_resident_hybrid.das): qkv q6_K, z q4_K, beta/alpha q4_K, the deltanet
         // out plane q4_K - the step leaves the o row f32 for the superblock out plane's requant

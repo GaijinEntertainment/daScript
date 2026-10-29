@@ -72,7 +72,9 @@ Retrieval in miniature: embed a handful of candidate sentences, score each
 against the query by cosine similarity, and sort. The on-topic answers float
 to the top and the unrelated ones sink; the model scores by meaning, so the
 concept sentence ("Quicksort and merge sort …") ranks high without sharing the
-query's words.
+query's words. ``embed_batch(model, texts)`` embeds every candidate in one
+call: the texts share one forward pass, so a batch costs far less than a call
+a text, and each vector is the one ``embed`` gives that text alone.
 
 .. das-doc: given var m = Model()
 .. das-doc: given var qv : array<float>
@@ -80,11 +82,8 @@ query's words.
 .. das-doc: alt
 .. code-block:: das
 
-   var scored : array<tuple<float; string>>
-   for (c in candidates) {
-       let cv <- embed(m, c)
-       scored |> push((cosine(qv, cv), c))
-   }
+   var vectors <- embed_batch(m, candidates)
+   var scored <- [for (c, cv in candidates, vectors); (cosine(qv, cv), c)]
    sort(scored) $(a, b) => a._0 > b._0     // most similar first
 
 Running it against SmolLM2-135M ranks the two sorting answers above the oven

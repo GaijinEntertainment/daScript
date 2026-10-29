@@ -1032,6 +1032,46 @@ def vt_sched_walk(@scratch var maps : array<uint>; meta : HostBuf; nrec : int64;
     }
 }
 
+let Q8_SITE_META_BYTES = 64l   //! a q8 GEMV site's region pairs
+
+//! a resident q8 driver's GEMV feed: the gathered planes (`wq`, `ws` and their bytes) and the requant x's quants and scales
+//! (`xq`, `xs`, sized for `x_elems` quants, bound at `xbit`)
+struct Q8GemvFeed {
+    planes : tuple<wq : uint64; ws : uint64; wqb : int64; wsb : int64>
+    xq : uint64
+    xs : uint64
+    x_elems : int64
+    xbit : uint
+}
+
+//! a q8 GEMV site's region pairs: each region's first weight block at its element offset in `woffs`, its activation rows at
+//! block 0; a failed host buffer marks `oom`
+[cold_path]
+def q8_site_meta(var oom : bool&; woffs : array<int64>) : HostBuf {
+    let q8e = kq_elems(KqFmt.q8)   // nolint:LINT021 - the element offset divides in 64-bit ahead of the narrowing store
+    let hb = soft_host_buf(oom, Q8_SITE_META_BYTES, false)
+    if (hb.buf != 0ul) {
+        for (i in range(length(woffs))) {
+            fill_gemv_region(hb, i, uint(woffs[i] / q8e))
+        }
+    }
+    return hb
+}
+
+//! a q8 GEMV site's set over the feed `f`, its region pairs `meta` and the output `y` (`y_bytes`, bound at `y_bit`)
+[cold_path]
+def q8_gemv_set(f : Q8GemvFeed; meta : uint64; y : uint64; y_bytes : int64; y_bit : uint) : VkDescriptorSet {
+    return gemv_planes_set(int(KqFmt.q8), f.planes, meta, Q8_SITE_META_BYTES, 0u, f.xq, f.xs, f.x_elems, f.x_elems / kq_elems(KqFmt.q8) * 4l,
+        f.xbit, y, y_bytes, y_bit)
+}
+
+//! a q8 site's GEMV over `ncols` rows of `n_in` into `nreg` regions of `d_out` outputs a row
+def q8_gemv(raw : VkCommandBuffer; var h : VkHaz; var site_set : VkDescriptorSet; n_in, d_out, nreg, ncols : int64) {
+    var pc = GemvArgs(n = uint(n_in), d = uint(d_out), nreg = uint(nreg), ybase = 0u, lanes_per_row = 0u, act = 0u, bias_on = 0u, gboff = 0u, uboff = 0u,
+        ncols = uint(ncols), ystride = uint(nreg * d_out))
+    gemv_enc(int(KqFmt.q8), raw, h, site_set, pc, nreg * d_out)
+}
+
 //! the q8 planes' regions gathered into the device layout and uploaded, `wq_bytes` of quants to `wq_dev` and `ws_bytes` of
 //! halfword scales to `ws_dev`
 [cold_path]

@@ -1,7 +1,8 @@
 # dasLLAMA Architecture - the Vulkan tier's GEMM tile family
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This document carries how
-the Vulkan driver picks a cm2 tile and the served GEMM mode, the class-pipeline build seat both
+the Vulkan driver picks a cm2 tile and the served GEMM mode, the short window's split-K under its raced knee
+(`ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split`), the class-pipeline build seat both
 shader instruments hang on, and the MoE expert chain on the cooperative-matrix tiles. The tile and GEMV bodies both
 discrete homes stamp are in `ARCHITECTURE_GPU_SHARED_GEMM.md`: how a cm2 tile decodes its quant bytes
 (`ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes`), the tile body's k step, fast path and loop bounds
@@ -72,6 +73,25 @@ stays whole. The group is the role's workgroups plus its chain neighbours' - q w
 up - because the hazard-mask rail lets independent roles co-run while every split role serializes
 through the one scratch plane (`VHZ_SK`): the whole GEMM's waves count the group, and a split's units
 scale by the group's size over the role's own; so k and v beside q run whole, and the split is the lone role's - wo, down, a classifier.
+
+### A window under the s column's rows splits K under a raced knee {#vk-short-split}
+
+The wave model splits no GEMM whose rows fall short of its column (`cnt < tc0`), so a window of 17 to 31 rows - past the
+token command's peel, under the s column's 32 - ran every role whole: the deep ones (a 0.6B's wo at K 2048 and down at 3072,
+which a 32-row window splits) walked their whole K on 8 to 24 workgroups, and the window read about half again a 32-row one.
+Such a window takes the rule the Metal home serves (`dasllama_gpu_knee`: `split_k_on` / `split_k_ways`,
+`ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-split-k`) on every role, under the box's knee (`vk_split_k_tgs`): the split engages
+while the role's grid, its co-running roles' included, is at most half the knee, and the chunk count doubles while the grid
+times it stays at or under the knee, up to eight, each chunk whole 256-wide steps and at least one deep, the last chunk short
+where K does not divide - `cm2_chunk`'s shares, so a gemma-3-1b down of K 6912 (27 steps) splits as the 32-row window's does
+(`cm2_short_split`, `SplitKnee.exact` false). A full column stays the wave model's: the rule on its K-under-2048 roles reads
+slower there. The knee is raced by `vk_split_knee_race` (`dasllama_vulkan_classes`, beside the cm2 classes it races): the
+shared q8 rung table at 31 rows, each step two roles issued together - the grid the rule sizes on counts the co-runner -
+their weights streamed from a ring of copies past the card's last-level cache, the outputs alternating, the s column whole
+against its split at two, four and eight chunks through the one partial-plane scratch and the reduces, the way a window's
+split roles serialize on it, priced by `knee_pick`. 0 runs the window whole. The knob's default, 128, is the RTX PRO 4500's served window A/B: the race on that card reads the split a loss at every rung, so its pick (0) and the served windows disagree (`PERF_LEDGER.md`'s split-K entry).
+The readings - the race's rungs, the window A/B at the raced knee and on each side of it, the served pp rows and the embedding
+bench against llama.cpp - are `PERF_LEDGER.md`'s split-K entry.
 
 **The f16 feed admits q8 and every kq superblock format** (`kq_sb`) - the set the cm2 decode
 callbacks cover (`ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes`) - and each (format, tile) pair has ONE stamped class, reached through

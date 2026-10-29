@@ -86,6 +86,7 @@ if(NOT DAS_TOOLS_DISABLED)
             utils/dasllama-server/test_openai_server_speech_multi.das
             utils/dasllama-server/test_openai_server_vision_multi.das
             utils/dasllama-server/test_openai_server_mtp.das
+            utils/dasllama-server/test_openai_server_embed.das
             utils/dasllama-server/test_cli.das
         FILES
             utils/dasllama-server/test_cli_args.das

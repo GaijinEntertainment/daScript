@@ -106,9 +106,11 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   expert, a deltanet hybrid's recurrent rows, and the split single-pass attention the single row
   and the verify rows take too (`ARCHITECTURE_GPU_BATCH.md#metal-batch-row-shapes`).
 - `ARCHITECTURE_GPU_PREFILL.md` - the Metal prefill driver's attention slab, pad rows, chunked
-  submission, the f16 twin dual-store, the last-layer FFN tail, and the hyper-connection window.
+  submission, the f16 twin dual-store, the last-layer FFN tail, the hyper-connection window, and an
+  embedding's hidden-only window (`ARCHITECTURE_GPU_PREFILL.md#prefill-hidden-only`).
 - `ARCHITECTURE_GPU_PREFILL_GEMM.md` - the Metal prefill driver's GEMM form ladder, dev-W knee map,
-  GEMV tail peel, and the dense-KQ tensor mul_mm scaffold.
+  GEMV tail peel, the short window's split-K (`ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-split-k`), and
+  the dense-KQ tensor mul_mm scaffold.
 - `ARCHITECTURE_GPU_PREFILL_MOE.md` - the Metal prefill driver's routed block - the MoE bucket
   rail, its tensor-twin scaffold and the split-format expert twins, the K-quant twins' crowns and
   the knee that picks them, and the short window's gathered expert route; the gemma-4 MoE tail as one step
@@ -140,9 +142,12 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   q/k/v projection bias, gpt-oss's sink logits with the flash tiles' sink stamps, and its output bias.
 - `ARCHITECTURE_GPU_VULKAN_WINDOW.md` - what the prefill window does a session at a time: the
   recurrent block over its region's state and ring, the segmented window holding several sessions'
-  chunks, and the short window's peel through the token commands.
+  chunks, the short window's peel through the token commands, an embedding's hidden rows
+  (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-hidden-rows`) and the one scratch region its texts share
+  (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-scratch`).
 - `ARCHITECTURE_GPU_VULKAN_GEMM.md` - how the Vulkan driver runs its GEMMs on the cooperative-matrix
-  tiles - the tile pick and the coopmat mode ladder, the class-pipeline build seat, and the MoE expert
+  tiles - the tile pick and the coopmat mode ladder, the short window's split-K
+  (`ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split`), the class-pipeline build seat, and the MoE expert
   chain on those tiles.
 - `ARCHITECTURE_GPU_VULKAN_KHR.md` - the window GEMMs over a file's f32 rows that ride the KHR arm's
   staged tile on every coopmat card, and why a K-quant window plane stays on the cm2 tiles.
@@ -152,7 +157,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
 - `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` - what a model has to fit on the card before the driver
   runs - the residency plan, the checkpoints a device-home recurrent stream keeps on the device,
   the token rows' gather off the table's own plane, the GPU-slot marks swap that lets one slot
-  serve many models, and the hydrate a call passing to the CPU rails takes first.
+  serve many models, the hydrate a call passing to the CPU rails takes first, and the one Vulkan
+  device every context of a process shares (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-shared-device`).
 - `ARCHITECTURE_GPU_VULKAN_LANDING.md` - the token command's logits landing on the transfer queue, and
   the selection landing a sampled stream's step takes in place of its rows.
 - `ARCHITECTURE_GPU_VULKAN_MTP.md` - the NextN draft head the resident driver homes beside the

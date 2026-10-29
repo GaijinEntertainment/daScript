@@ -10,7 +10,7 @@ attention and the K/V mirror's codecs are in `ARCHITECTURE_GPU_SHARED_ATTN.md`, 
 uploads in `ARCHITECTURE_GPU_VULKAN_ATTN.md`; what the window does a session at a time
 is in `ARCHITECTURE_GPU_VULKAN_WINDOW.md`. The routed block of that window and of the token command is in
 `ARCHITECTURE_GPU_VULKAN_MOE.md`. The tile pick and
-the coopmat mode ladder, the class-pipeline build seat and the MoE expert chain on the cooperative-matrix tiles
+the coopmat mode ladder, the short window's split-K (`ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split`), the class-pipeline build seat and the MoE expert chain on the cooperative-matrix tiles
 are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`, the f32 rows the KHR arm serves
 in `ARCHITECTURE_GPU_VULKAN_KHR.md`; the tile bodies - the cm2 decode spelling, the KHR arm's hand-staged tile - and the decode GEMV
 family's lane split by row length (`ARCHITECTURE_GPU_SHARED_GEMM.md#kq-gemv-lanes`) are in `ARCHITECTURE_GPU_SHARED_GEMM.md`. What a

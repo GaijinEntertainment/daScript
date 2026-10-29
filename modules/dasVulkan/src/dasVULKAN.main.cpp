@@ -1,5 +1,8 @@
 #include "dasVULKAN.h"
 #include <cstdio>
+#include <memory>
+#include <mutex>
+#include <unordered_map>
 #include <vector>
 
 #if defined(_WIN32)
@@ -32,7 +35,7 @@ void * das_metal_layer_for_nswindow(void * ns_window);
 // volkInitializeCustom, so a stock `brew install vulkan-loader molten-vk` (or a
 // VULKAN_SDK env) works with no DYLD_* override. The loader (not MoltenVK direct)
 // is required: VK_KHR_portability_enumeration is a loader extension.
-static int32_t das_volkInitialize() {
+static int32_t das_volkInitialize_once() {
     if (volkInitialize() == VK_SUCCESS) {
         return int32_t(VK_SUCCESS);
     }
@@ -62,25 +65,213 @@ static int32_t das_volkInitialize() {
     return int32_t(VK_ERROR_INITIALIZATION_FAILED);
 }
 #else
-static int32_t das_volkInitialize() {
+static int32_t das_volkInitialize_once() {
     return int32_t(volkInitialize());
 }
 #endif
+
+// ARCHITECTURE_SHARED_DEVICE.md#volk-once
+static std::mutex g_volk_mtx;
+static bool g_volk_ready = false;
+static VkDevice g_volk_device = VK_NULL_HANDLE;
+
+static int32_t das_volkInitialize() {
+    std::lock_guard<std::mutex> guard(g_volk_mtx);
+    if (g_volk_ready) {
+        return int32_t(VK_SUCCESS);
+    }
+    const int32_t res = das_volkInitialize_once();
+    g_volk_ready = res == int32_t(VK_SUCCESS);
+    return res;
+}
 
 static uint32_t das_volkGetInstanceVersion() {
     return volkGetInstanceVersion();
 }
 
 static void das_volkLoadInstance(VkInstance instance) {
-    volkLoadInstance(instance);
+    std::lock_guard<std::mutex> guard(g_volk_mtx);
+    if (g_volk_device != VK_NULL_HANDLE) {
+        volkLoadInstanceOnly(instance);
+    } else {
+        volkLoadInstance(instance);
+    }
 }
 
 static void das_volkLoadDevice(VkDevice device) {
+    std::lock_guard<std::mutex> guard(g_volk_mtx);
+    if (g_volk_device == device) {
+        return;
+    }
     volkLoadDevice(device);
+    g_volk_device = device;
 }
 
 static void das_volkFinalize() {
+    std::lock_guard<std::mutex> guard(g_volk_mtx);
     volkFinalize();
+    g_volk_ready = false;
+    g_volk_device = VK_NULL_HANDLE;
+}
+
+// ARCHITECTURE_SHARED_DEVICE.md#shared-device
+namespace {
+    struct VkSharedDevice {
+        std::mutex create;
+        std::mutex state;
+        uint64_t instance = 0;
+        uint64_t phys = 0;
+        uint64_t device = 0;
+        int32_t refs = 0;
+        uint32_t family[2] = {0, 0};
+        uint32_t queues[2] = {0, 0};
+        uint32_t next[2] = {0, 0};
+        int64_t bytes = 0;
+        std::mutex qmap;
+        std::unordered_map<uint64_t, std::unique_ptr<std::mutex>> qlocks;
+    };
+    VkSharedDevice & vk_shared() {
+        static VkSharedDevice s;
+        return s;
+    }
+    std::mutex & vk_queue_lock(VkQueue queue) {
+        VkSharedDevice & s = vk_shared();
+        std::lock_guard<std::mutex> guard(s.qmap);
+        std::unique_ptr<std::mutex> & m = s.qlocks[(uint64_t)(uintptr_t) queue];
+        if (!m) {
+            m.reset(new std::mutex());
+        }
+        return *m;
+    }
+}
+
+static uint64_t das_vk_shared_device_acquire() {
+    VkSharedDevice & s = vk_shared();
+    s.create.lock();
+    std::lock_guard<std::mutex> guard(s.state);
+    if (s.device == 0) {
+        return 0;
+    }
+    s.refs++;
+    s.create.unlock();
+    return s.device;
+}
+
+static void das_vk_shared_device_publish(uint64_t instance, uint64_t phys, uint64_t device,
+                                         uint32_t family, uint32_t queues, uint32_t xfer_family, uint32_t xfer_queues) {
+    VkSharedDevice & s = vk_shared();
+    {
+        std::lock_guard<std::mutex> guard(s.state);
+        s.instance = instance;
+        s.phys = phys;
+        s.device = device;
+        s.refs = 1;
+        s.family[0] = family;
+        s.queues[0] = queues;
+        s.family[1] = xfer_family;
+        s.queues[1] = xfer_queues;
+        s.next[0] = s.next[1] = 0;
+        s.bytes = 0;
+    }
+    s.create.unlock();
+}
+
+static void das_vk_shared_device_abort() {
+    vk_shared().create.unlock();
+}
+
+static int32_t das_vk_shared_device_release() {
+    VkSharedDevice & s = vk_shared();
+    std::lock_guard<std::mutex> cguard(s.create);
+    std::lock_guard<std::mutex> guard(s.state);
+    if (s.refs <= 0) {
+        return 0;
+    }
+    if (--s.refs > 0) {
+        return s.refs;
+    }
+    VkDevice device = (VkDevice)(uintptr_t) s.device;
+    VkInstance instance = (VkInstance)(uintptr_t) s.instance;
+    vkDeviceWaitIdle(device);
+    vkDestroyDevice(device, nullptr);
+    vkDestroyInstance(instance, nullptr);
+    s.instance = s.phys = s.device = 0;
+    s.queues[0] = s.queues[1] = 0;
+    s.bytes = 0;
+    {
+        std::lock_guard<std::mutex> qguard(s.qmap);
+        s.qlocks.clear();
+    }
+    {
+        std::lock_guard<std::mutex> vguard(g_volk_mtx);
+        if (g_volk_device == device) {
+            g_volk_device = VK_NULL_HANDLE;
+        }
+    }
+    return 0;
+}
+
+static uint64_t das_vk_shared_device() {
+    VkSharedDevice & s = vk_shared();
+    std::lock_guard<std::mutex> guard(s.state);
+    return s.device;
+}
+
+static uint64_t das_vk_shared_instance() {
+    VkSharedDevice & s = vk_shared();
+    std::lock_guard<std::mutex> guard(s.state);
+    return s.instance;
+}
+
+static uint64_t das_vk_shared_physical_device() {
+    VkSharedDevice & s = vk_shared();
+    std::lock_guard<std::mutex> guard(s.state);
+    return s.phys;
+}
+
+static int32_t das_vk_shared_device_refs() {
+    VkSharedDevice & s = vk_shared();
+    std::lock_guard<std::mutex> guard(s.state);
+    return s.refs;
+}
+
+static uint32_t das_vk_shared_queue_family(bool xfer) {
+    VkSharedDevice & s = vk_shared();
+    std::lock_guard<std::mutex> guard(s.state);
+    return s.family[xfer ? 1 : 0];
+}
+
+static uint32_t das_vk_shared_queue_count(bool xfer) {
+    VkSharedDevice & s = vk_shared();
+    std::lock_guard<std::mutex> guard(s.state);
+    return s.queues[xfer ? 1 : 0];
+}
+
+static uint32_t das_vk_shared_queue_take(bool xfer) {
+    VkSharedDevice & s = vk_shared();
+    std::lock_guard<std::mutex> guard(s.state);
+    const int k = xfer ? 1 : 0;
+    if (s.queues[k] == 0) {
+        return 0;
+    }
+    return s.next[k]++ % s.queues[k];
+}
+
+static int64_t das_vk_shared_device_bytes(int64_t delta) {
+    VkSharedDevice & s = vk_shared();
+    std::lock_guard<std::mutex> guard(s.state);
+    s.bytes += delta;
+    return s.bytes;
+}
+
+static VkResult das_vk_queue_submit_locked(VkQueue queue, uint32_t count, const VkSubmitInfo * submits, VkFence fence) {
+    std::lock_guard<std::mutex> guard(vk_queue_lock(queue));
+    return vkQueueSubmit(queue, count, submits, fence);
+}
+
+static VkResult das_vk_queue_wait_idle_locked(VkQueue queue) {
+    std::lock_guard<std::mutex> guard(vk_queue_lock(queue));
+    return vkQueueWaitIdle(queue);
 }
 
 // The loader's vkGetInstanceProcAddr, as a raw pointer (null before volkInitialize).
@@ -315,6 +506,35 @@ Module_dasVULKAN::Module_dasVULKAN() : Module("vulkan") {
         SideEffects::accessExternal, "das_vk_debug_callback_ptr");
     addExtern<DAS_BIND_FUN(das_vk_os_video_memory)>(*this, lib, "vk_os_video_memory",
         SideEffects::accessExternal, "das_vk_os_video_memory")->args({"luid_lo", "luid_hi", "query"});
+    addExtern<DAS_BIND_FUN(das_vk_shared_device_acquire)>(*this, lib, "vk_shared_device_acquire",
+        SideEffects::modifyExternal, "das_vk_shared_device_acquire");
+    addExtern<DAS_BIND_FUN(das_vk_shared_device_publish)>(*this, lib, "vk_shared_device_publish",
+        SideEffects::modifyExternal, "das_vk_shared_device_publish")
+            ->args({"instance", "phys", "device", "family", "queues", "xfer_family", "xfer_queues"});
+    addExtern<DAS_BIND_FUN(das_vk_shared_device_abort)>(*this, lib, "vk_shared_device_abort",
+        SideEffects::modifyExternal, "das_vk_shared_device_abort");
+    addExtern<DAS_BIND_FUN(das_vk_shared_device_release)>(*this, lib, "vk_shared_device_release",
+        SideEffects::modifyExternal, "das_vk_shared_device_release");
+    addExtern<DAS_BIND_FUN(das_vk_shared_device)>(*this, lib, "vk_shared_device",
+        SideEffects::accessExternal, "das_vk_shared_device");
+    addExtern<DAS_BIND_FUN(das_vk_shared_instance)>(*this, lib, "vk_shared_instance",
+        SideEffects::accessExternal, "das_vk_shared_instance");
+    addExtern<DAS_BIND_FUN(das_vk_shared_physical_device)>(*this, lib, "vk_shared_physical_device",
+        SideEffects::accessExternal, "das_vk_shared_physical_device");
+    addExtern<DAS_BIND_FUN(das_vk_shared_device_refs)>(*this, lib, "vk_shared_device_refs",
+        SideEffects::accessExternal, "das_vk_shared_device_refs");
+    addExtern<DAS_BIND_FUN(das_vk_shared_queue_family)>(*this, lib, "vk_shared_queue_family",
+        SideEffects::accessExternal, "das_vk_shared_queue_family")->args({"xfer"});
+    addExtern<DAS_BIND_FUN(das_vk_shared_queue_count)>(*this, lib, "vk_shared_queue_count",
+        SideEffects::accessExternal, "das_vk_shared_queue_count")->args({"xfer"});
+    addExtern<DAS_BIND_FUN(das_vk_shared_queue_take)>(*this, lib, "vk_shared_queue_take",
+        SideEffects::modifyExternal, "das_vk_shared_queue_take")->args({"xfer"});
+    addExtern<DAS_BIND_FUN(das_vk_shared_device_bytes)>(*this, lib, "vk_shared_device_bytes",
+        SideEffects::modifyExternal, "das_vk_shared_device_bytes")->args({"delta"});
+    addExtern<DAS_BIND_FUN(das_vk_queue_submit_locked)>(*this, lib, "vk_queue_submit_locked",
+        SideEffects::modifyArgumentAndExternal, "das_vk_queue_submit_locked")->args({"queue", "submitCount", "pSubmits", "fence"});
+    addExtern<DAS_BIND_FUN(das_vk_queue_wait_idle_locked)>(*this, lib, "vk_queue_wait_idle_locked",
+        SideEffects::modifyArgumentAndExternal, "das_vk_queue_wait_idle_locked")->args({"queue"});
     verifyAotReady();
 }
 
