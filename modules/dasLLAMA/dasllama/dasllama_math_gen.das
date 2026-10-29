@@ -705,6 +705,27 @@ def kq_layout_of(fmt : int) : int64 {
     return int64(k6q8_layout_gen())
 }
 
+//! The stamped witness of a runtime-dispatched format: true where the family's generators emitted
+//! on this target, false where its stubs declined and the reference bodies run (kq_layout_of's twin).
+def kq_witness_of(fmt : int) : bool {
+    if (fmt == 4) return k4q8_witness_gen()
+    if (fmt == 5) return k5q8_witness_gen()
+    if (fmt == 6) return k6q8_witness_gen()
+    if (fmt == 40) return q40q8_witness_gen()
+    if (fmt == 49) return nv4q8_witness_gen()
+    if (fmt == 44) return iq4xsq8_witness_gen()
+    if (fmt == 35) return iq3s4q8_witness_gen()
+    if (fmt == 3) return k3q8_witness_gen()
+    if (fmt == 33) return iq3sq8_witness_gen()
+    if (fmt == 34) return iq3xxsq8_witness_gen()
+    if (fmt == 45) return iq4nlq8_witness_gen()
+    if (fmt == 2) return k2q8_witness_gen()
+    if (fmt == 23) return iq2sq8_witness_gen()
+    if (fmt == 24) return iq2xsq8_witness_gen()
+    if (fmt == 25) return iq2xxsq8_witness_gen()
+    return false
+}
+
 //! One row's dot off the grp<mr> q40 planes, scalar — the q40 stubs' reference body and the
 //! tests' repack oracle (kq_grp_row_dot's q40 sibling; quant plane IS the k4 tiling, only the
 //! scale plane differs). Same float fold order as the q40 dot_kq.
@@ -3927,7 +3948,7 @@ def kq_registries(_f : KqTag_iq3s4) : KqRegistries {
     }
 }
 
-//! no tile registry: a declined tile would run the reference body over planes repacked at the layout companion's mr (the gate reads maxdiff nan)
+//! every registry: until nv4's emitter arm lands (`kq_has_emitter`) its stubs decline on every rail together, so the gate reads the reference body at the reference layout
 def kq_registries(_f : KqTag_nv4) : KqRegistries {
     static_if (typeinfo module_exists(llvm_tune)) {
         return <- KqRegistries(tile <- nv4q8_tile_gen_variants(), tile4 <- nv4q8_tile4_gen_variants(), gemv <- nv4q8_gemv_gen_variants(),

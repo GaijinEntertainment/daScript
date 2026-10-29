@@ -969,6 +969,25 @@ def test_kq_tile(t : T?) {
     }
 }
 
+// A format without an emitter arm (`kq_has_emitter`) stamps nothing: its witness reads false and
+// its layout companion the reference interleave, whatever perm the box's profile or fallback list
+// names. A shared companion that generated for such a format would repack its planes at the
+// perm's mr while the tuner's per-variant clones of its reference bodies read the reference one.
+[test]
+def test_kq_declined_family_keeps_the_reference_layout(t : T?) {
+    for (fmt in KQ_IDS) {
+        let kf = kq_fmt_of_id(fmt, "test_kq_declined_family_keeps_the_reference_layout")
+        t |> run("{kf}: no emitter arm means no witness and the reference layout") @(t : T?) {
+            if (kq_has_emitter(fmt)) {
+                t |> skip("{kf} carries an emitter arm - its stamps are the tile gate's business")
+                return
+            }
+            t |> success(!kq_witness_of(fmt), "{kf}: the witness reads false where the tile declined")
+            t |> equal(kq_layout_of(fmt), 4l, "{kf}: the layout companion declined with the tile")
+        }
+    }
+}
+
 // Groupn gate: the region-list kq GEMV (the MoE expert dispatch) must be BIT-exact vs per-row
 // disk dots — disk-order (the portable matmul_kq_groupn) AND repacked (kq_groupn_gen over
 // per-region grp slices, the per-expert-slice repack shape). Regions carry distinct LCG
