@@ -34,7 +34,7 @@
 <section class="forge-section" style="padding:20px 0 64px;border-top:0">
 <div class="forge-container">
 <article class="dio-story dio-story--page">
-<div class="dio-story__eyebrow"><span class="dio-item__date">2026-10-28</span><span class="dio-item__tag">daslang</span><span class="dio-story__author">Boris Batkin</span></div>
+<div class="dio-story__eyebrow"><span class="dio-item__date">2026-10-28</span><span class="dio-item__tag">daslang</span></div>
 <h1 class="dio-story__title">A game scripting language that runs speech-to-text 5x faster than llama.cpp on CPU.</h1>
 <p class="dio-story__lede">How a scripting language built for game logic ended up running speech, text and translation models, with the numbers, the losses, and the three macros that did it.</p>
 <div class="dio-story__body"><!-- figures: every pair is a row of the ladder (site-dasllama/ladder.html, /api/runs; the checked-in
@@ -159,7 +159,7 @@ public ladder.</p>
 </tr>
 </tbody>
 </table>
-<p>Source: the <a href="../ladder.html">ladder</a>, dasllama 0.6.6, measured 2026-10-21/22; the two RTX 5060 Ti rows
+<p class="dio-story__source">Source: the <a href="../ladder.html">ladder</a>, dasllama 0.6.6, measured 2026-10-21/22; the two RTX 5060 Ti rows
 2026-10-25, the bench built at 896bd646d. We also lose some rows, and they are on the same page.
 More on that below.</p>
 <p>This is the story of how a game scripting language ended up here.</p>
@@ -238,7 +238,7 @@ the same way:</p>
 </tr>
 </tbody>
 </table>
-<p>Source: the <a href="../ladder.html">ladder</a>, dasllama 0.6.6, measured 2026-10-21/22.</p>
+<p class="dio-story__source">Source: the <a href="../ladder.html">ladder</a>, dasllama 0.6.6, measured 2026-10-21/22.</p>
 <p>Nobody wrote clever kernels for that. The first kernel was written by hand. The second one made
 the scope obvious: every operation times every weight format times every CPU times every model
 shape. That is thousands of kernels, and the only way to be fast on all of them by hand is to
@@ -444,7 +444,7 @@ decode:</p>
 </tr>
 </tbody>
 </table>
-<p>Source: the <a href="../ladder.html">ladder</a>; the M5 Max and RTX PRO 4500 rows dasllama 0.6.6, measured
+<p class="dio-story__source">Source: the <a href="../ladder.html">ladder</a>; the M5 Max and RTX PRO 4500 rows dasllama 0.6.6, measured
 2026-10-21/22; the RTX 5060 Ti rows 2026-10-25, the bench built at 896bd646d. Parity is what we
 claim for Vulkan on a model that fits, and the 4500's prefill gap is open work.</p>
 <h2 id="when-the-model-does-not-fit-the-card">When the model does not fit the card</h2>
@@ -495,7 +495,7 @@ does that with <code>-ncmoe</code>. With that same split on the same card:</p>
 </tr>
 </tbody>
 </table>
-<p>Source: the <a href="../ladder.html">ladder</a>, measured 2026-10-25, the bench built at 896bd646d, llama.cpp
+<p class="dio-story__source">Source: the <a href="../ladder.html">ladder</a>, measured 2026-10-25, the bench built at 896bd646d, llama.cpp
 b11798 Vulkan at <code>-ngl 99 -ncmoe &lt;n_layers&gt;</code>.</p>
 <p>This is not a kernel win. It is a scheduling one, and it only works because the whole engine is
 one program. Three pieces:</p>

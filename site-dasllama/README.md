@@ -23,8 +23,8 @@ project "daslang.io Forge") on the daslang.io Forge system.
   down); the deploy copies the directory whole; plain "we", llama.cpp named as the yardstick
 - `articles.html` / `articles/<slug>.html` - the articles: the same pipeline as the stories
   (`_articles/<slug>.md`, `_articles/template.html`, the `articles:begin` markers), with one
-  more front-matter key, `author`, shown on the index row and the page's eyebrow. A story is
-  one arc of the work in the plain "we"; an article is a signed, longer piece - the kind that
+  more front-matter key, `author`, shown on the index row and the page's eyebrow when it is
+  set. A story is one arc of the work in the plain "we"; an article is a longer piece - the kind that
   gets posted elsewhere and linked back here - and is held to the same copy rules
 - `features.html` - every model family the engine loads, grouped by what it does (text LLMs,
   MoE, audio-in, image-in, speech-to-text, text-to-speech, translation, voice activity), then

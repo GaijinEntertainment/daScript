@@ -148,7 +148,7 @@ public ladder.&lt;/p&gt;
 &lt;/tr&gt;
 &lt;/tbody&gt;
 &lt;/table&gt;
-&lt;p&gt;Source: the &lt;a href=&quot;../ladder.html&quot;&gt;ladder&lt;/a&gt;, dasllama 0.6.6, measured 2026-10-21/22; the two RTX 5060 Ti rows
+&lt;p class=&quot;dio-story__source&quot;&gt;Source: the &lt;a href=&quot;../ladder.html&quot;&gt;ladder&lt;/a&gt;, dasllama 0.6.6, measured 2026-10-21/22; the two RTX 5060 Ti rows
 2026-10-25, the bench built at 896bd646d. We also lose some rows, and they are on the same page.
 More on that below.&lt;/p&gt;
 &lt;p&gt;This is the story of how a game scripting language ended up here.&lt;/p&gt;
@@ -227,7 +227,7 @@ the same way:&lt;/p&gt;
 &lt;/tr&gt;
 &lt;/tbody&gt;
 &lt;/table&gt;
-&lt;p&gt;Source: the &lt;a href=&quot;../ladder.html&quot;&gt;ladder&lt;/a&gt;, dasllama 0.6.6, measured 2026-10-21/22.&lt;/p&gt;
+&lt;p class=&quot;dio-story__source&quot;&gt;Source: the &lt;a href=&quot;../ladder.html&quot;&gt;ladder&lt;/a&gt;, dasllama 0.6.6, measured 2026-10-21/22.&lt;/p&gt;
 &lt;p&gt;Nobody wrote clever kernels for that. The first kernel was written by hand. The second one made
 the scope obvious: every operation times every weight format times every CPU times every model
 shape. That is thousands of kernels, and the only way to be fast on all of them by hand is to
@@ -433,7 +433,7 @@ decode:&lt;/p&gt;
 &lt;/tr&gt;
 &lt;/tbody&gt;
 &lt;/table&gt;
-&lt;p&gt;Source: the &lt;a href=&quot;../ladder.html&quot;&gt;ladder&lt;/a&gt;; the M5 Max and RTX PRO 4500 rows dasllama 0.6.6, measured
+&lt;p class=&quot;dio-story__source&quot;&gt;Source: the &lt;a href=&quot;../ladder.html&quot;&gt;ladder&lt;/a&gt;; the M5 Max and RTX PRO 4500 rows dasllama 0.6.6, measured
 2026-10-21/22; the RTX 5060 Ti rows 2026-10-25, the bench built at 896bd646d. Parity is what we
 claim for Vulkan on a model that fits, and the 4500&#x27;s prefill gap is open work.&lt;/p&gt;
 &lt;h2 id=&quot;when-the-model-does-not-fit-the-card&quot;&gt;When the model does not fit the card&lt;/h2&gt;
@@ -484,7 +484,7 @@ does that with &lt;code&gt;-ncmoe&lt;/code&gt;. With that same split on the same
 &lt;/tr&gt;
 &lt;/tbody&gt;
 &lt;/table&gt;
-&lt;p&gt;Source: the &lt;a href=&quot;../ladder.html&quot;&gt;ladder&lt;/a&gt;, measured 2026-10-25, the bench built at 896bd646d, llama.cpp
+&lt;p class=&quot;dio-story__source&quot;&gt;Source: the &lt;a href=&quot;../ladder.html&quot;&gt;ladder&lt;/a&gt;, measured 2026-10-25, the bench built at 896bd646d, llama.cpp
 b11798 Vulkan at &lt;code&gt;-ngl 99 -ncmoe &amp;lt;n_layers&amp;gt;&lt;/code&gt;.&lt;/p&gt;
 &lt;p&gt;This is not a kernel win. It is a scheduling one, and it only works because the whole engine is
 one program. Three pieces:&lt;/p&gt;

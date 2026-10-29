@@ -92,7 +92,11 @@ def load_entries(news_dir: Path) -> list[dict]:
 
 
 def render_md(body_md: str) -> str:
-    return markdown.Markdown(extensions=MD_EXTENSIONS).convert(body_md) if body_md else ''
+    if not body_md:
+        return ''
+    out = markdown.Markdown(extensions=MD_EXTENSIONS).convert(body_md)
+    # a paragraph opening with "Source:" is a figure's provenance line, set small by the stylesheet
+    return re.sub(r'<p>(?=Source:)', '<p class="dio-story__source">', out)
 
 
 def entry_html(e: dict, lead: bool) -> str:
@@ -138,6 +142,8 @@ def page_html(s: dict, template: str, site_url: str, kind: str) -> str:
     out = template
     for slot, value in slots.items():
         out = out.replace(slot, value)
+    if not s['author']:
+        out = out.replace('<span class="dio-story__author"></span>', '')
     return out
 
 
