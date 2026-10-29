@@ -1,7 +1,6 @@
 ---
 date: 2026-10-28
 tag: daslang
-author: Boris Batkin
 title: A game scripting language that runs speech-to-text 5x faster than llama.cpp on CPU.
 lede: How a scripting language built for game logic ended up running speech, text and translation models, with the numbers, the losses, and the three macros that did it.
 ---

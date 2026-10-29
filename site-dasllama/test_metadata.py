@@ -87,10 +87,19 @@ class SiteMetadataTest(unittest.TestCase):
         self.assertTrue(articles, "no articles")
         self.assertEqual(pages, articles)
         for page in pages:
-            # an article names its author on the page; the template's slot is filled, never left raw
+            # a signed article names its author on the page, an unsigned one shows no byline; the
+            # template's slot is filled, never left raw
             text = (ROOT / "articles" / f"{page}.html").read_text(encoding="utf-8")
             self.assertNotIn("{{author}}", text)
-            self.assertRegex(text, r'<span class="dio-story__author">[^<]+</span>')
+            source = (ROOT / "_articles" / f"{page}.md").read_text(encoding="utf-8")
+            if re.search(r"^author:\s*\S", source, re.M):
+                self.assertRegex(text, r'<span class="dio-story__author">[^<]+</span>')
+            else:
+                self.assertNotIn('dio-story__author', text)
+            # a figure's "Source:" line is set small: every such paragraph carries the class, none is bare
+            self.assertNotRegex(text, r"<p>Source:")
+            self.assertEqual(text.count('<p class="dio-story__source">Source:'),
+                             len(re.findall(r"^Source:", source, re.M)))
 
     def test_pages_carry_head_metadata(self):
         # the per-page metadata the site checklist requires: a title, a description, the
@@ -156,7 +165,7 @@ class SiteMetadataTest(unittest.TestCase):
                                  f"{name}: the table wrap starts hidden")
 
     def test_articles_reach_the_index_the_feed_and_the_sitemap(self):
-        # every article: an index row under articles/ naming its author, a feed entry, a lastmod on
+        # every article: an index row under articles/ (naming its author when signed), a feed entry, a lastmod on
         # the index's sitemap row, and section ids on its page (the markdown 'toc' extension)
         index = (ROOT / "articles.html").read_text(encoding="utf-8")
         feed = (ROOT / "feed.xml").read_text(encoding="utf-8")
@@ -169,11 +178,14 @@ class SiteMetadataTest(unittest.TestCase):
                 text = md.read_text(encoding="utf-8")
                 author = re.search(r"^author:\s*(.+)$", text, re.M)
                 date = re.search(r"^date:\s*(\S+)$", text, re.M)
-                self.assertTrue(author and date, "front matter names an author and a date")
+                self.assertTrue(date, "front matter names a date")
                 newest = max(newest or "", date.group(1))
                 row = re.search(rf'<a class="forge-blog-item" href="articles/{re.escape(slug)}\.html">.*?</a>', index, re.S)
                 self.assertTrue(row, "the article has an index row under articles/")
-                self.assertIn(f" · {author.group(1).strip()}</span>", row.group(0), "the row names the author")
+                if author:
+                    self.assertIn(f" · {author.group(1).strip()}</span>", row.group(0), "the row names the author")
+                else:
+                    self.assertNotIn(" · ", row.group(0), "an unsigned article's row carries no byline")
                 self.assertIn(f"https://dasllama.io/articles/{slug}.html", feed)
                 page = (ROOT / "articles" / f"{slug}.html").read_text(encoding="utf-8")
                 self.assertRegex(page, r'<h2 id="[a-z0-9-]+">', "section headings carry ids")

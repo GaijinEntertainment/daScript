@@ -95,6 +95,7 @@
 .dio-story__lede{font-family:var(--font-sans);font-size:18px;line-height:1.45;color:var(--fg-dim);margin:0 0 26px}
 .dio-story__body{color:var(--fg-dim);font-size:15.5px;line-height:1.66}
 .dio-story__body p{margin:0 0 14px}
+.dio-story__body p.dio-story__source{font-size:12.5px;line-height:1.5;opacity:.8;margin:-6px 0 18px}
 .dio-story__body h2{font-family:var(--font-sans);font-size:20px;font-weight:600;letter-spacing:-.012em;color:var(--fg);margin:34px 0 12px}
 .dio-story__body a{color:var(--amber);border-bottom:1px solid var(--amber-dim)}
 .dio-story__body strong{color:var(--fg);font-weight:600}
