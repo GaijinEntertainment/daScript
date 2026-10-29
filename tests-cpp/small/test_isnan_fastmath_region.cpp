@@ -6,8 +6,6 @@
 #endif
 #include <doctest/doctest.h>
 #include "daScript/misc/platform.h"
-#include "daScript/simulate/simulate.h"
-#include "daScript/simulate/aot.h"
 
 // The header's helpers are `inline`, and the executable also links libDaScript: the linker
 // keeps ONE copy per name, so without unique names this TU could test another TU's copy.
@@ -16,6 +14,8 @@
 #define fisfinite fisfinite_fast_math_region_tu
 #define disfinite disfinite_fast_math_region_tu
 #include "daScript/simulate/aot_builtin_math.h"
+#include "daScript/simulate/simulate.h"
+#include "daScript/simulate/aot.h"
 
 #include <cstdint>
 #include <cstring>

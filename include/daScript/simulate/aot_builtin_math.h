@@ -1,5 +1,6 @@
 #pragma once
 
+#include "daScript/misc/vectypes.h"
 #include <dag_noise/dag_uint_noise.h>
 #if defined(__GNUC__) || defined(__clang__)
 #include <cstring> // memcpy
