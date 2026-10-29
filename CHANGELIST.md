@@ -347,6 +347,7 @@
 - **The wasm lane pins emsdk 6.0.12** (#4327) - `latest` had moved to 6.0.13, under which `run_web_tests` died on `NODEFS`; a newer Emscripten lands by bumping the pin
 
 - **The release cells run the build lane target with the lanes' caches** (#4387, #4388) - the RC3 cut's Windows cell was the only place the suite ran cold under JIT, one serial `dastest -jit` process on a 4-core runner, and both watchdogs fired with no failing test; each release cell now runs `run_build` (the JIT sweep in 16-file chunks with the `jit.exe` prefill, the interpreter sweep, `test-small`, the AOT subset), restores the nearest lane's master-seeded sccache slot read-only (the JIT DLL cache rides along where that lane saves one; the dastest result cache never survives the restore, so a release runs every test against its own binary) and configures the dastest watchdogs at 3600 s for a first pass and 5400 s isolated
+- **The pip wheel stays under PyPI's cap and the Linux release cells pin ubuntu-24.04** (#4389) - the Windows wheel reached 100.5 MB against the 100 MB per-file limit, so the dasImgui `text_input` example (14 MB of embedded CJK and emoji fonts) leaves the wheel for the release zip; `ubuntu-latest` had moved to 26.04 under the x86_64 Linux release, cpp-mcp and `bundle_smoke` jobs, lifting the wheel's tag to `manylinux_2_43`, and the three now pin 24.04, the glibc floor the packaging README states
 
 ### Examples and Tutorials
 

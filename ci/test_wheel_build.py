@@ -88,11 +88,14 @@ class WheelBuildTest(BundleFixture):
         keep = ["bin/daslang", "lib/liblibDaScriptDyn.so", "lib/LLVM.dll",
                 "lib/libDaScriptDyn_runtime.lib", "lib/libDaScriptDyn.lib",
                 "daslib/x.das", "modules/dasHV/x.das", "tutorials/language/01.das",
+                "modules/dasImgui/examples/tutorial/application_lifecycle.das",
                 "skills/daslang/SKILL.md", "utils/mcp/main.das", "sgconfig.yml", "LICENSE"]
         drop = ["include/daScript/daScript.h", "lib/libDaScript.lib", "lib/liblibDaScript.a",
                 "lib/libDasModuleVulkan.lib", "lib/cmake/daslang/config.cmake",
                 "lib/pkgconfig/daslang.pc", "examples/gltf/media/BoomBox.glb",
-                "tutorials/_assets/gltf/BoomBox.glb", "doc/index.html", "logs/x.log"]
+                "tutorials/_assets/gltf/BoomBox.glb", "doc/index.html", "logs/x.log",
+                "modules/dasImgui/examples/features/text_input/fonts/noto-cjk/NotoSansCJKsc-Regular.otf",
+                "modules/dasImgui/examples/features/text_input/main.das"]
         for rel in keep:
             self.assertTrue(wb.is_shipped(rel), rel)
         for rel in drop:

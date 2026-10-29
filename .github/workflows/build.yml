@@ -66,7 +66,9 @@ jobs:
   ###########################################################
     needs: pre_job
     if: needs.pre_job.outputs.should_skip != 'true'
-    runs-on: ubuntu-latest
+    # the same pinned image as release.yml's linux x86_64 cell, which reads this job's
+    # sccache slot: objects from another image's compiler never hit
+    runs-on: ubuntu-24.04
     # a cold sccache (the C++ base moved under the branch) builds the whole tree before
     # the smoke runs and finishes past 45 minutes; the budget holds that run with room
     timeout-minutes: 75

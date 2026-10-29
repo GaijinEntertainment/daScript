@@ -69,7 +69,9 @@ jobs:
           - target: linux
             release_target: linux
             release_arch: x86_64
-            runner: ubuntu-latest
+            # pinned: the bundle carries the glibc floor of the box that built it
+            # (manylinux_2_38 on the wheel, ci/packaging/README.md); ubuntu-latest moves
+            runner: ubuntu-24.04
             archive_ext: tar.gz
 
           - target: linux_arm
