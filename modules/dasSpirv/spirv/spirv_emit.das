@@ -6765,6 +6765,9 @@ class SpirvEmit : AstVisitor {
                 ops |> push(aid)
             }
             emit_n(bm, SEC_FUNCS, SpvOp.ExtInst, ops)
+            if (ctx.precise && ge.op == GLSLstd450.Fma) {
+                emit(bm, SEC_DECOR, SpvOp.Decorate, res, uint(SpvDecoration.NoContraction))
+            }
             delete ops
             e2id[k] = res
             return expr

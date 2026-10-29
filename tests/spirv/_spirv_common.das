@@ -83,10 +83,11 @@ def private two_float_step(acc, x : float) : float {
     return s + ((acc - (s - bv)) + (x - bv))
 }
 
-//! the body both twins share: the two-float step, the vector products from either side, `fmod`, `mod`, `dot`, a compound step and an increment
+//! the body both twins share: the two-float step, the vector products from either side, `fmod`, `mod`, `dot`, `mad`, a compound step and an increment
 def private precise_body(i : uint) {
     var s = two_float_step(pr_y[i].x, pr_x[i])
     s += dot(pr_y[i], float2(0.5, 0.25))
+    s = mad(s, 0.5, pr_x[i])
     s++
     let v = 2.0 * pr_y[i] * 0.5 - float2(-s, s / 4.0 % 3.0)
     pr_y[i] = float2(fmod(v.x, 7.0), mod(v.y, 5.0))

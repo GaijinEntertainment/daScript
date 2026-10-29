@@ -7986,12 +7986,13 @@ class TtsSrcNoise : GkSrcNoise {
     }
 }
 
-//! the mixed source signal on either resample law
+//! the mixed source signal on either resample law; `precise` keeps `tts_sin_big`'s four-piece reduction and the mix's
+//! operation order - a driver's inexact algebra (Mesa's NIR) folds the pieces into one 2 pi and lands 0.02 rad off at 7e5
 [vk_dispatch(name = "tts_src_sines_torch_cls", kernel = "run", grid = "n/256", params = "n : int64")]
 class TtsSrcSinesTorch : GkSrcSines {
     override TORCH = true
 
-    [spirv_kernel(local_size_x = 256)]
+    [spirv_kernel(local_size_x = 256, precise = true)]
     def run {
         src_sines_body()
     }
@@ -7999,7 +8000,7 @@ class TtsSrcSinesTorch : GkSrcSines {
 
 [vk_dispatch(name = "tts_src_sines_onnx_cls", kernel = "run", grid = "n/256", params = "n : int64")]
 class TtsSrcSinesOnnx : GkSrcSines {
-    [spirv_kernel(local_size_x = 256)]
+    [spirv_kernel(local_size_x = 256, precise = true)]
     def run {
         src_sines_body()
     }
