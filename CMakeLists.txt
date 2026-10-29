@@ -2427,7 +2427,8 @@ endif()
 # DAS_ARCH_EXTRACT_SPECS global property gets a build-time excerpt - the cited sections
 # only, extracted by utils/internal/arch-extract - installed beside the code. Registration happens
 # where the tree's install rules live (root daslib above, modules in their own CMakeLists);
-# each entry is "<scan root>|<base>|<install destination>". The excerpts
+# each entry is "<scan roots>|<base>|<install destination>", the scan roots a ","-separated
+# list of folders, or of single .das files where a folder ships only in part. The excerpts
 # are what keep LINT026 armed in an installed SDK: every shipped citation resolves, and
 # every shipped excerpt anchor is cited. Cross-compiling skips extraction (the freshly
 # built daslang cannot run) - such bundles simply carry no excerpts.
@@ -2445,8 +2446,12 @@ if(_arch_specs AND NOT ${DAS_TOOLS_DISABLED} AND NOT CMAKE_CROSSCOMPILING)
         set(_out ${CMAKE_BINARY_DIR}/arch_extract/${_arch_id})
         set(_arch_deps "")
         foreach(_s IN LISTS _scan)
-            file(GLOB_RECURSE _sfiles ${PROJECT_SOURCE_DIR}/${_s}/*.das)
-            list(APPEND _arch_deps ${_sfiles})
+            if(IS_DIRECTORY ${PROJECT_SOURCE_DIR}/${_s})
+                file(GLOB_RECURSE _sfiles ${PROJECT_SOURCE_DIR}/${_s}/*.das)
+                list(APPEND _arch_deps ${_sfiles})
+            else()
+                list(APPEND _arch_deps ${PROJECT_SOURCE_DIR}/${_s})
+            endif()
         endforeach()
         # cited docs sit in the scanned folder or on the path up to the base root
         file(GLOB _bdocs ${PROJECT_SOURCE_DIR}/${_base}/*.md ${PROJECT_SOURCE_DIR}/${_base}/*/*.md)
