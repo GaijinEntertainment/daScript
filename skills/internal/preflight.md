@@ -325,7 +325,10 @@ stray include. WSL-mirrorable with the workflow's exact commands; otherwise keep
 
 ## release.yml
 
-Each Release cell: release-modules build -> `dastest -jit` over `tests/` -> `cmake --install
+Each Release cell: release-modules build -> "Run tests" (`run_build`, the lane target every
+per-PR cell and the nightly Windows LLVM job run: the JIT sweep in 16-file chunks with `jit.exe`
+pre-filling the DLL cache under Ninja's job count, the interpreter sweep, `test-small`, the AOT
+subset; the isolated retry on a red pass) -> `cmake --install
 --prefix ./daslang_bundle --strip` + zip -> "Smoke-test installed bundle" -> "Build .deb"
 (linux x86_64) -> "Build .rpm" + "Smoke-test .rpm" (both linux cells; `rpm` and `cpio` come
 from apt, no Fedora runner) -> "Set up Python for the wheel" -> "Build pip wheel" ->
@@ -339,8 +342,23 @@ the scoop manifest to `borisbat/homebrew-daslang` and `borisbat/scoop-daslang` w
 `PACKAGING_TOKEN` secret, a token that can push to both. The packaging scripts are `ci/packaging/`
 (`README.md` there is the per-release ritual).
 
+A release cell builds and tests cold on a 4-core hosted runner, so it restores, read-only (a
+save from a release ref lands on `refs/tags/...` where nothing reads it), the master-seeded
+slot of the lane whose configure is nearest the release-modules build, listing exactly the
+paths that lane saves - the path set is part of a cache's version, a different list is a miss.
+Windows reads `nightly.yml`'s `build_windows_release_llvm_nightly` slot and linux x86_64
+`build.yml`'s `bundle_smoke` slot: sccache objects only, so those two cells' JIT sweeps fill the
+DLL cache themselves through the chunked `jit.exe` prefill. Linux arm64 and macOS read the build
+matrix's Release slot: sccache objects, the JIT DLL directories (`.cache/daslang/_anon_*`) and
+the dastest result cache, and the next step deletes the result cache - a release runs every
+test against its own binary. The configure passes `DAS_TEST_BUDGETS` (the job env), the four
+dastest whole-suite watchdogs: 3600 s for a first pass, double `tests/CMakeLists.txt`'s
+defaults, which fired near the end of a green cold pass; 5400 s isolated, the interpreter
+default and 1.5x the JIT one.
+
 | CI step | Local mirror |
 |---|---|
+| Run tests | `cmake --build build --config Release --target run_build` (the `build.yml` cells' Test step) |
 | Install binaries + Smoke-test installed bundle | `cmake --build build --config Release --target check_bundle_smoke` (the `build.yml` `bundle_smoke` gate) |
 | Build .deb | linux only: `bash ci/packaging/deb_build.sh build/daslang_bundle <tag> <out>`; the control file alone, any unix: `cmake --build build --config Release --target check_deb_control` |
 | Build .rpm + Smoke-test .rpm | linux with `rpm`: `bash ci/packaging/rpm_build.sh build/daslang_bundle <tag> <out>`, then the smoke by hand - `rpm -qpl` naming `/usr/bin/daslang` and `/usr/bin/daslang-live`, `rpm2cpio <rpm> \| cpio -idm` in a scratch dir, `./opt/daslang/bin/daslang --version`, `readlink usr/bin/daslang` = `/opt/daslang/bin/daslang`; the spec alone, any unix: `cmake --build build --config Release --target check_rpm_spec` |
