@@ -1,27 +1,23 @@
 # dasCUDA tests Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`modules/dasCUDA/ARCHITECTURE.md`. Shared emitter rules: `modules/REVIEW_SHADER_EMITTERS.md` -
-apply that list with this one. A fixture is a `[cuda_kernel]` method in `_cuda_common.das`; its
-text is its `<name>_cuda` global, the CUDA C the emitter wrote, and its census is its
-`<name>_cuda_census` global, the kinds - construct labels the emitter records at each emit site -
-that text holds. The compile gate is the `test_cuda_emit.das` cell that compiles the text of every
-fixture through NVRTC.
+`modules/dasCUDA/ARCHITECTURE.md`. A diff that touches a `[cuda_kernel]` method under this folder
+applies `modules/REVIEW_SHADER_EMITTERS.md` too.
 
-**Weakening the census check is a defect: a diff that removes either assert from
-`test_cuda_census.das` - every declared kind is emitted by some fixture, every emitted kind is
-declared - or removes from `declared_cuda_census` (`_cuda_common.das`) a kind the emitter still
-records.** Emitted text cannot be read back into constructs, so the census is the only measure of
-coverage.
+**A diff that removes or weakens an assert in `test_cuda_census.das` is a defect.** That test is
+the only coverage measure: emitted text cannot be read back into constructs, so the emitter records
+a kind - a construct label - for each fixture (a `[cuda_kernel]` method in `_cuda_common.das`) it
+writes, and the test checks those kinds against `declared_cuda_census` in both directions.
 
-**A diff that adds a fixture adds its census to `all_cuda_censuses` and its text to
-`all_cuda_texts` (`_cuda_common.das`) in the same change.** A fixture left out of the first list
-emits kinds the census check never sees; one left out of the second never reaches the compile
-gate.
+**A diff that adds a fixture - a `[cuda_kernel]` method in `_cuda_common.das` - adds its
+`<name>_cuda_census` global to `all_cuda_censuses` and its `<name>_cuda` global (the CUDA C the
+emitter wrote) to `all_cuda_texts`, in the same change.** A fixture left out of the first list emits
+kinds the census check never sees; one left out of the second is never compiled through NVRTC
+(`test_cuda_emit.das`).
 
-**Only a test of the driver, NVRTC or the cubin cache hand-writes a kernel text - a CUDA C source
-string a test passes to NVRTC; every other test emits its text from a `[cuda_kernel]` body.** An
-emitted text is the one the homes run; a hand-written one tests a kernel no home ships.
+**Only `test_cuda_plumbing.das` hand-writes a kernel text - a CUDA C source string a test passes to
+NVRTC; every other test emits its text from a `[cuda_kernel]` body.** An emitted text is the one
+shipped code runs; a hand-written one tests a kernel nothing ships.
 
 **A hand-written kernel text never includes a toolkit header - declare what it needs inline in the
 text.** NVRTC resolves no header without the include dir of the toolkit.
@@ -29,7 +25,7 @@ text.** NVRTC resolves no header without the include dir of the toolkit.
 **A CPU replay - the thread-by-thread run of a kernel method on a class instance - never reuses
 across thread ids a member the kernel writes: every written member is an array the thread
 indexes, or the replay builds a fresh instance per thread.** A written scalar member carries one
-thread's value into the next; a read-only `@kargs` member is the same for every thread.
+thread's value into the next.
 
 **A test that checks the device output of a kernel against its CPU replay uploads each buffer as
 it stood before the replay ran, never a member the replay wrote - copy the inputs before
@@ -40,11 +36,10 @@ read.
 last `with_cuda_context` call.** Driver objects and device memory are invisible to every das leak
 detector; the live-object counter in `das_cuda_boost` is the only witness.
 
-**A `[test]` that calls `with_cuda_context` calls `feint` - the dastest skip, never a failure -
-when the box cannot run the test: `cuda_available()` or `cuda_nvrtc_available()` false, the
-context handed to it null, or the device's compute capability below what a kernel text the test
-compiles needs.** Every CI lane runs the file, and a lane whose GPU cannot run the text must not
-fail.
+**A `[test]` that calls `with_cuda_context` calls `feint` (the dastest skip) when `cuda_available()`
+is false or the context handed to its block is null, and - for each kernel text it compiles - when
+`cuda_nvrtc_available()` is false or the device's compute capability is below what that text
+needs.** Every CI lane runs the file, and a lane whose GPU cannot run the test must not fail.
 
 **A diff that removes or weakens `test_cuda_no_include` (`test_cuda_emit.das`), the check that no
 emitted CUDA text carries an `#include`, is a defect.**

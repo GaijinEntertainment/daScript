@@ -119,6 +119,9 @@ def public cuda_create_context(ordinal : int = 0) : CudaContext? {
     return new CudaContext(ctx = ctx, device = dev)
 }
 
+[arch(at = "../ARCHITECTURE.md#cuda-context-per-thread")]
+def public cuda_bind_context(cc : CudaContext?) : bool => cc != null && cu_ok(cuCtxSetCurrent(cc.ctx), "cuCtxSetCurrent")
+
 def public cuda_release(var cc : CudaContext?) {
     return if (cc == null)
     if (cu_ok(cuDevicePrimaryCtxRelease(cc.device), "cuDevicePrimaryCtxRelease")) {
@@ -418,6 +421,24 @@ def public cuda_event_destroy(event : void?) {
 def public cuda_event_record(event : void?; stream : void? = null) : bool => cu_ok(cuEventRecord(event, stream), "cuEventRecord")
 
 def public cuda_event_synchronize(event : void?) : bool => cu_ok(cuEventSynchronize(event), "cuEventSynchronize")
+
+//! an event with no timestamp (`CU_EVENT_DISABLE_TIMING`): a fence between two streams, never timed
+def public cuda_event_create_untimed() : void? {
+    var e : void?
+    return null if (!cu_ok(cuEventCreate(e, CU_EVENT_DISABLE_TIMING), "cuEventCreate"))
+    track("CudaEvent")
+    return e
+}
+
+//! whether the event's recorded work has completed, without waiting; a never-recorded event reads as ready
+def public cuda_event_ready(event : void?) : bool {
+    let r = cuEventQuery(event)
+    return false if (r == CUDA_ERROR_NOT_READY)
+    return cu_ok(r, "cuEventQuery")
+}
+
+//! `stream`'s later work waits for `event`'s recorded work, on the device - the host does not block
+def public cuda_stream_wait_event(stream, event : void?) : bool => cu_ok(cuStreamWaitEvent(stream, event, 0u), "cuStreamWaitEvent")
 
 //! -1 when the driver refuses (an event not yet recorded)
 def public cuda_event_elapsed_ms(start, end : void?) : float {

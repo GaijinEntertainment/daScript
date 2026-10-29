@@ -12,6 +12,7 @@ options no_aot   // the host gate calls the driver's late externs by name, and t
 require dastest/testing_boost public
 require cuda/das_cuda_boost
 require daslib/fio
+require daslib/jobque_boost   // the worker-thread bind: a context of its own on another thread
 require strings
 
 let N = 1 << 16
@@ -443,6 +444,82 @@ def test_cuda_graph_capture_arms(t : T?) {
             cuda_graph_destroy(empty_graph)
             cuda_stream_destroy(stream)
             t |> equal(cuda_live_object_count(), base, "the stream and the graph came back")
+        }
+        t |> equal(cuda_log_leaks_if_any(), 0l)
+    }
+}
+
+//! what a worker thread's context saw of the device, carried back without a string
+struct WorkerBind {
+    before : uint64
+    bound : bool
+    after : uint64
+}
+
+//! the fences and the thread bind a GPU tier rides: an untimed event recorded behind a long memset on one stream, queried without
+//! a wait and waited on by a second stream; the context bound again on its creating thread, refused on null, and bound on a
+//! worker thread whose device calls answer only after the bind
+[test]
+def test_cuda_fences_and_thread_bind(t : T?) {
+    t |> run("untimed events fence two streams, the ready query never blocks, a worker thread binds the context") <| @(t : T?) {
+        if (!cuda_available()) {
+            feint("no CUDA driver on this box; fence checks skipped\n")
+            return
+        }
+        with_cuda_context() $(cc : CudaContext?) {
+            if (cc == null) {
+                feint("no CUDA device on this box; fence checks skipped\n")
+                return
+            }
+            let base = cuda_live_object_count()
+            t |> equal(cuda_bind_context(null), false, "a null context binds nothing")
+            t |> success(cuda_bind_context(cc), "the creating thread binds its own context again: {cuda_last_error()}")
+            let s0 = cuda_stream_create()
+            let s1 = cuda_stream_create()
+            let fence = cuda_event_create_untimed()
+            t |> success(s0 != null && s1 != null && fence != null, "two streams and an untimed event: {cuda_last_error()}")
+            t |> success(cuda_event_ready(fence), "a never-recorded event reads ready")
+            let bytes = 256ul << 20ul
+            let d = cuda_mem_alloc(bytes)
+            t |> success(d != 0ul, "a 256 MB block to memset: {cuda_last_error()}")
+            var queued = true
+            for (i in range(8)) {   // two gigabytes of memsets: the fence behind them cannot have landed by the time the host asks
+                queued = queued && cuda_memset_d8(d, uint8(i), bytes, s0)
+            }
+            t |> success(queued && cuda_event_record(fence, s0), "eight memsets and the fence behind them queue on the first stream: {cuda_last_error()}")
+            let early = cuda_event_ready(fence)
+            t |> success(empty(cuda_last_error()), "the ready query answers {early} with no error while the memsets may still run")
+            if (early) {
+                feint("the eight memsets landed before the host asked - the not-ready arm is out of reach on this box\n")   // the driver makes no promise the queue is still busy; a fast card lands two gigabytes in under a millisecond
+            } else {
+                t |> success(!early, "the fence behind two gigabytes of memsets reads not-ready at once: the query's not-ready arm")
+            }
+            t |> success(cuda_stream_wait_event(s1, fence), "the second stream waits on the fence: {cuda_last_error()}")
+            t |> success(cuda_stream_synchronize(s1), "the second stream drains: {cuda_last_error()}")
+            t |> success(cuda_event_ready(fence), "... and the fence it waited on reads ready")
+            t |> equal(cuda_event_elapsed_ms(fence, fence), -1.0, "an untimed event refuses an elapsed time")
+            var saw = WorkerBind()
+            with_channel(1) $(ch) {
+                new_thread() <| @capture(= ch, = cc) {
+                    let avail = cuda_available()
+                    let before = avail ? cuda_device_free_memory() : 0ul
+                    let bound = avail && cuda_bind_context(cc)
+                    let after = bound ? cuda_device_free_memory() : 0ul
+                    ch |> push_clone(WorkerBind(before = before, bound = bound, after = after))
+                    ch |> notify_and_release
+                }
+                ch |> join()
+                ch |> for_each_clone() $(r : WorkerBind#) {
+                    saw = WorkerBind(before = r.before, bound = r.bound, after = r.after)
+                }
+            }
+            t |> equal(saw.before, 0ul, "a worker thread's device call before any bind answers nothing")
+            t |> success(saw.bound && saw.after > 0ul, "bound to the creating thread's context, the worker reads the device's free memory ({saw.after} bytes)")
+            cuda_mem_free(d)
+            cuda_event_destroy(fence)
+            cuda_stream_destroy(s0)
+            cuda_stream_destroy(s1)
+            t |> equal(cuda_live_object_count(), base, "every stream, event and buffer of the gate came back")
         }
         t |> equal(cuda_log_leaks_if_any(), 0l)
     }
