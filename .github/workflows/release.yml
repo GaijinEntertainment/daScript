@@ -48,6 +48,11 @@ jobs:
     timeout-minutes: 270
     env:
       das_dll_build: ${{ github.event_name == 'release' && 'YES' || 'NO' }}
+      SCCACHE_GHA_ENABLED: 'false'
+      # dastest's whole-suite watchdogs, every mode: a release cell runs the suite cold on a
+      # 4-core hosted runner, where the defaults (tests/CMakeLists.txt) fire near the end of a
+      # green pass
+      DAS_TEST_BUDGETS: -DDAS_TEST_TIMEOUT=3600 -DDAS_TEST_TIMEOUT_ISOLATED=5400 -DDAS_TEST_JIT_TIMEOUT=3600 -DDAS_TEST_JIT_TIMEOUT_ISOLATED=5400
 
     strategy:
       fail-fast: false
@@ -232,6 +237,52 @@ jobs:
           echo "CMAKE_TOOLCHAIN_FILE=$(pwd)/vcpkg/scripts/buildsystems/vcpkg.cmake" >> $GITHUB_ENV
           # Drop build intermediates so the saved cache holds only installed/ — ~1.2GiB -> ~0.1GiB.
           rm -rf vcpkg/buildtrees vcpkg/downloads vcpkg/packages
+
+      # restore-only, from the master-seeded slot of the nearest lane, listing exactly the paths
+      # that lane saves (the path set is part of the cache's version); never the dastest result
+      # cache - a release runs every test against its own binary (skills/internal/preflight.md)
+      - uses: mozilla-actions/sccache-action@v0.0.10
+
+      - name: "Configure sccache"
+        run: |
+          echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
+          echo "SCCACHE_CACHE_SIZE=6000M" >> $GITHUB_ENV
+          echo "ZERO_AR_DATE=1" >> $GITHUB_ENV
+          # non-Windows exports the launcher; Windows passes it as -D on the main configure only
+          # (sccache + MSVC /Zi in the ExternalProject sub-builds collide on a shared pdb)
+          if [ "$RUNNER_OS" != "Windows" ]; then
+            echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+            echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+          fi
+          case "${{ matrix.target }}${{ matrix.architecture }}" in
+            windows64) echo "SCCACHE_SLOT=sccache-windows-64-Release-llvm" >> $GITHUB_ENV ;;
+            linux64)   echo "SCCACHE_SLOT=sccache-bundle-linux-64-Release" >> $GITHUB_ENV ;;
+            *)         echo "SCCACHE_SLOT=sccache-${{ matrix.target }}-${{ matrix.architecture }}-Release-none" >> $GITHUB_ENV ;;
+          esac
+
+      - name: "Restore sccache objects"
+        if: matrix.target == 'windows' || matrix.target == 'linux'
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/sccache
+          key: ${{ env.SCCACHE_SLOT }}@${{ github.run_id }}
+          restore-keys: ${{ env.SCCACHE_SLOT }}@
+
+      - name: "Restore sccache objects and the JIT DLL cache"
+        if: matrix.target != 'windows' && matrix.target != 'linux'
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ runner.temp }}/sccache
+            .cache/daslang/test_cache
+            .cache/daslang/_anon_*
+          key: ${{ env.SCCACHE_SLOT }}@${{ github.run_id }}
+          restore-keys: ${{ env.SCCACHE_SLOT }}@
+
+      - name: "Drop the restored dastest result cache"
+        if: matrix.target != 'windows' && matrix.target != 'linux'
+        run: rm -rf .cache/daslang/test_cache
+
       - name: "Build: Daslang Linux with modules"
         if: runner.os != 'Windows'
         run: |
@@ -248,7 +299,7 @@ jobs:
                   # elaborated `struct Profile` to avoid that — keeping clang consistent
                   # across CI eliminates the divergence.
                   CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} \
-                    -G "${{ matrix.cmake_generator }}" $ACTIVE_MODULES
+                    -G "${{ matrix.cmake_generator }}" $ACTIVE_MODULES $DAS_TEST_BUDGETS
                   cmake --build ./build --config ${{ matrix.cmake_preset }} --parallel
                   ;;
                 *)
@@ -256,7 +307,7 @@ jobs:
 
                   CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture_string }}" \
                     -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
-                    -G "${{ matrix.cmake_generator }}" $ACTIVE_MODULES
+                    -G "${{ matrix.cmake_generator }}" $ACTIVE_MODULES $DAS_TEST_BUDGETS
 
                   cmake --build ./build --config ${{ matrix.cmake_preset }} --parallel
                   ;;
@@ -276,25 +327,18 @@ jobs:
               # Ninja is single-config: -DCMAKE_BUILD_TYPE replaces the VS
               # generator's -T host / -A arch (cl arch comes from msvc-dev-cmd).
               cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} \
-                $ACTIVE_MODULES -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+                -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+                $ACTIVE_MODULES $DAS_TEST_BUDGETS -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
               cmake --build ./build --config ${{ matrix.cmake_preset }} --parallel
               ;;
           esac
 
+      # the same lane target the per-PR cells and the nightly Windows LLVM job run
       - name: "Run tests"
         if: matrix.architecture_string != 'Win32'
         run: |
-          if [[ "${{ matrix.target }}" == windows* ]]; then
-            cd bin
-            TEST_PATH="../tests"
-            EXEC=".exe"
-          else
-            cd bin
-            TEST_PATH="../tests"
-            EXEC=""
-          fi
-          ./daslang${EXEC} _dasroot_/dastest/dastest.das -jit -- --color --failures-only --timeout 3600 --test "$TEST_PATH" \
-            || ./daslang${EXEC} _dasroot_/dastest/dastest.das -jit -- --color --failures-only --isolated-mode --timeout 5400 --test "$TEST_PATH"
+          cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_build --parallel \
+            || cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_build_isolated --parallel
 
       - name: "Install binaries"
         if: matrix.cmake_preset == 'Release'
