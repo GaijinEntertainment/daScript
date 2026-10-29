@@ -7,6 +7,9 @@
 namespace das {
 
     DAS_API uint64_t getCancelLimit();
+    // "nan", "inf", "-inf", or nullptr for a finite value
+    DAS_API const char * nan_inf_name ( float f );
+    DAS_API const char * nan_inf_name ( double f );
 
     class StringBuilderWriter : public TextWriter {
     public:
@@ -326,10 +329,9 @@ namespace das {
         }
         virtual void Float ( float & f ) override {
             bool typeQualifiers = hasFlag(PrintFlags::typeQualifiers);
-            if ( typeQualifiers && isnan(f) ) {
-                ss << "nan";
-            } else if ( typeQualifiers && isinf(f) ) {
-                ss << (f>0 ? "inf" : "-inf");
+            const char * special = typeQualifiers ? nan_inf_name(f) : nullptr;
+            if ( special ) {
+                ss << special;
             } else {
                 if ( hasFlag(PrintFlags::fixedFloatingPoint) )
                     ss << FIXEDFP << f << SCIENTIFIC;
@@ -342,10 +344,9 @@ namespace das {
         }
         virtual void Double ( double & f ) override {
             bool typeQualifiers = hasFlag(PrintFlags::typeQualifiers);
-            if ( typeQualifiers && isnan(f) ) {
-                ss << "nan";
-            } else if ( typeQualifiers && isinf(f) ) {
-                ss << (f>0 ? "inf" : "-inf");
+            const char * special = typeQualifiers ? nan_inf_name(f) : nullptr;
+            if ( special ) {
+                ss << special;
             } else {
                 if ( hasFlag(PrintFlags::fixedFloatingPoint) )
                     ss << FIXEDFP << f << SCIENTIFIC;

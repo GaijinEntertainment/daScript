@@ -1,10 +1,23 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/simulate/debug_print.h"
+#include "daScript/simulate/aot_builtin_math.h"
 #include "daScript/misc/fpe.h"
 #include "daScript/misc/debug_break.h"
 
 namespace das {
+
+    const char * nan_inf_name ( float f ) {
+        if ( fisnan(f) ) return "nan";
+        if ( !fisfinite(f) ) return f>0 ? "inf" : "-inf";
+        return nullptr;
+    }
+
+    const char * nan_inf_name ( double f ) {
+        if ( disnan(f) ) return "nan";
+        if ( !disfinite(f) ) return f>0 ? "inf" : "-inf";
+        return nullptr;
+    }
 
     string human_readable_formatting ( const string & str ) {
         string result;
