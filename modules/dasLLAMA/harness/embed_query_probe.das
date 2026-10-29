@@ -3,7 +3,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 options persistent_heap
 options _dasllama_internal = true
 
-require dasllama/dasllama   // nolint:STYLE030,LINT019 - used only inside the das_metal static_if half
+require dasllama/dasllama   // nolint:STYLE029,STYLE030,LINT019 - used only inside the das_metal static_if half
 require dasllama/dasllama_common   // set_metal_mode, apply_box_profile_runtime
 require ?das_metal dasllama/dasllama_metal_prefill   // the split-K seat and the window's stage report
 require ../performance/profile_common.das   // nolint:STYLE029,LINT019 - tune_gate, used only inside the das_metal static_if half
