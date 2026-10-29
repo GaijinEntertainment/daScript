@@ -4,8 +4,10 @@
 `README.md`. Planned work: `modules/dasLLAMA/followup_general.md` (repo root).
 
 In this checklist "a page" means a served `.html` file under this directory, the generated news
-region inside index.html, `feed.xml`, and `sitemap.xml`. Publish time is the deploy that
-follows the merge of the change under review.
+region inside index.html, `feed.xml`, and `sitemap.xml`; "an entry" means a `_news/*.md`,
+`_stories/*.md` or `_articles/*.md` file - a news item, a story, an article - and "a generated
+directory" means `stories/` or `articles/`, the per-entry pages `build_news.py` writes. Publish
+time is the deploy that follows the merge of the change under review.
 
 **A program name, flag, command line, or output line shown on a page must match what the
 download that page links accepts or emits, verbatim, for every platform that page offers.**
@@ -41,23 +43,22 @@ top-level `.html` page here, or in a `.js` or `.css` file directly in `files/`, 
 `site/files/dasllama-table.css` (repo root) defines and no `id="..."` in those files declares -
 is a defect.**
 
-**A claim in any text under this folder a reader or an operator reads as fact - a page, a
-`_news/*.md` or `_stories/*.md` entry, `README.md`, a tool's docstring - that is not true at
-publish time is a defect.** A dated `_news` or `_stories` entry is read as a claim about its own
-date; standing page copy - a masthead, section prose, a meta tag - is read as a claim about
-now. A claim is checked against the thing it describes as it stands at publish time: the
-tool's current code, the page's markup and `files/dasllama-io.js`, the artifact at the link.
+**A claim in any text under this folder a reader or an operator reads as fact - a page, an
+entry, `README.md`, a tool's docstring - that is not true at publish time is a defect.** A
+dated entry is read as a claim about its own date; standing page copy - a masthead, section
+prose, a meta tag - is read as a claim about now. A claim is checked against the thing it
+describes as it stands at publish time: the tool's current code, the page's markup and
+`files/dasllama-io.js`, the artifact at the link.
 
-**A diff that falsifies standing page copy - a masthead, section prose, a meta tag - or a
-`_news/*.md` / `_stories/*.md` entry dated on or after the publish day of this change, fixes it
-in the same change.**
+**A diff that falsifies standing page copy - a masthead, section prose, a meta tag - or an
+entry dated on or after the publish day of this change, fixes it in the same change.**
 
 **A PR whose copy describes something the linked download does not yet contain refreshes that
 artifact at its published location - a GitHub release, a Hugging Face repository - before the
 PR merges, or holds the copy until it does** - the copy is judged against the artifact reachable at that
 link at publish time, and an artifact republishes on its own trigger, never on a page's merge.
 
-**A `_news/*.md` or `_stories/*.md` entry for something not yet shipped is a defect.** Shipped
+**An entry for something not yet shipped is a defect.** Shipped
 means a reader can have it at publish time: the code the entry describes is merged to this
 repository's `master`, and any artifact the entry points a reader at is downloadable from where
 it points.
@@ -66,15 +67,15 @@ it points.
 the PR body, the URL it fetched for each artifact the copy points at and what the fetch
 returned.**
 
-**A measurement result in a `_news/*.md` or `_stories/*.md` entry - a figure, or words about
+**A measurement result in an entry - a figure, or words about
 what a run measured: speed, error rate, footprint, size - that does not name the date and the
 build sha of that run, in the entry's own text or in its `<!-- figures: ... -->` comment, is a
 defect, and a sha the entry marks as unconfirmed does not count as named** - a result without
 its date reads as a standing claim.
 
-**An author's query or marker - `[NAME: ...]`, `TODO`, `FIXME` - in a page, or in a
-`_news/*.md` or `_stories/*.md` entry, its `<!-- figures: ... -->` comment included, is a
-defect** - the entry's text, comments and all, ships in the page source and in `feed.xml`.
+**An author's query or marker - `[NAME: ...]`, `TODO`, `FIXME` - in a page, or in an entry,
+its `<!-- figures: ... -->` comment included, is a defect** - the entry's text, comments and
+all, ships in the page source and in `feed.xml`.
 
 **A value `files/dasllama-io.js` takes from `/api/*` and puts into markup or a request URL
 without the context-correct escape is a defect: a value numeric by contract (an id, a count, a
@@ -83,14 +84,15 @@ string landing in `href`/`src` or fed to `fetch` goes through `safeApiHref()` (a
 allow-list, `#` for anything else) and nothing else; any other string landing as text or as a
 quoted-attribute value is `esc()`-escaped (`< > & " '`).**
 
-**A diff to `test_metadata.py` that leaves any page, story page, or browser example shell
+**A diff to `test_metadata.py` that leaves any page or browser example shell
 (`examples/dasLLAMA/*/web_shell.html`, repo root) proved less than it was before - a shell
 dropped from a census the file iterates, an assertion deleted, a required property no longer
 asserted anywhere in the file - is a defect.**
 
-**Weakening `REVIEW.das`'s page census - the gate that reports a served file, or the `stories/`
+**Weakening `REVIEW.das`'s page census - the gate that reports a served file, or a generated
 directory, missing from the dasllama.io deploy step (`.github/workflows/pages.yml`, repo root),
 a top-level `.html` page missing from `build_news.py`'s sitemap list or from
-`test_metadata.py`'s page list, a `stories/*.html` page missing from `sitemap.xml`, or
-`test_metadata.py` not globbing the `stories/` directory - is a defect.** Local preview serves the tree directly, so no
-miss shows there: the page deploys unlisted, uncrawled, or unchecked.
+`test_metadata.py`'s page list, a generated directory's `.html` page missing from
+`sitemap.xml`, or `test_metadata.py` not globbing a generated directory - is a defect.** Local
+preview serves the tree directly, so no miss shows there: the page deploys unlisted, uncrawled,
+or unchecked.

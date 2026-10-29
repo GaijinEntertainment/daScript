@@ -6,7 +6,7 @@ per-box auto-tuner picks the kernel forms for *your* machine, so the same source
 code on an M1 and a Threadripper alike. Backends stack behind one registry: the portable /
 NEON / AVX CPU tiers, an Accelerate "+AMX" float tier on Apple silicon, and **Metal** or
 **Vulkan** compute for GPU-resident serving. It loads stock GGUF files (single-file or
-multi-shard splits, F32/F16/Q8_0/Q4_0/Q5_0/MXFP4 and native Q2_K/Q3_K/Q4_K/Q5_K/Q6_K plus the
+multi-shard splits, F32/F16/Q8_0/Q4_0/Q5_0/MXFP4/NVFP4 and native Q2_K/Q3_K/Q4_K/Q5_K/Q6_K plus the
 i-quants IQ4_XS/IQ4_NL/IQ3_S/IQ3_XXS/IQ2_S/IQ2_XS/IQ2_XXS
 planes), runs text LLMs, audio-input "omni" chat models, speech-to-text, and voice-activity
 detection, and it is fast: consistently ahead of each model's reference C++ engine on prompt processing
@@ -66,7 +66,9 @@ one carries no JIT or interpreter either. Read
   Mistral-7B), Mistral-Medium-3.5-128B, Qwen2.5, Qwen3, Qwen-MoE (Qwen1.5-MoE, Qwen3-30B-A3B),
   the Qwen3.5 / Qwen3.6 hybrid-DeltaNet family — dense 0.8B–27B and MoE 35B-A3B / 122B-A10B,
   including the `-MTP-` files' NextN head for **self-speculative decode** (~1.4× decode on the
-  27B, output-invariant) — Qwen3-Coder-Next (80B-A3B), GLM-4.5-Air (106B-A12B MoE), Phi-3.5, Gemma-2, Gemma-3, Gemma-4 (dense
+  27B, output-invariant) — Qwen3-Coder-Next (80B-A3B), Qwen3.8-Flash-Next (the Qwen4 preview:
+  the hybrid MoE trunk inside hyper-connections with the n-gram PLE side input, `qwen4exp`),
+  GLM-4.5-Air (106B-A12B MoE), Phi-3.5, Gemma-2, Gemma-3, Gemma-4 (dense
   12B/31B, 26B-A4B MoE, and the E2B/E4B edge models with per-layer embeddings + cross-layer KV
   sharing), gpt-oss-20b.
 - **Audio-in chat (omni)**: Qwen2-Audio, Qwen2.5-Omni, Qwen3-Omni-30B-A3B, Ultravox v0.5,
@@ -85,7 +87,16 @@ one carries no JIT or interpreter either. Read
   (`create_chat(model, embedder)` + `add_user_image`), `ask --image`, and the OpenAI server:
   `image_url` data-URI parts under `--image-mmproj`, encoded off the tick thread.
 - **Speech-to-text**: the whole Whisper family (tiny → large-v3-turbo, stock whisper.cpp bins),
-  Parakeet-TDT 0.6b v2/v3, GigaAM v3 (Russian), Qwen3-ASR 0.6B/1.7B, Canary-Qwen 2.5B.
+  Parakeet-TDT 0.6b v2/v3, GigaAM v3 (Russian; CTC and RNN-T heads), Qwen3-ASR 0.6B/1.7B,
+  Canary-Qwen 2.5B.
+- **Text-to-speech**: Kokoro 82M, KittenTTS mini/nano, Pocket TTS (Kyutai) — the engine's own
+  text front end (normalization, POS tagging, G2P: `ARCHITECTURE_TTS.md`), generation on the
+  CPU, Metal and Vulkan.
+- **Translation**: the Bergamot students (Firefox Translations' Marian int8 `.bin` + SentencePiece
+  vocabulary) on the CPU, Metal and Vulkan, and translation LLMs (MiLMMT-46, or any instruct
+  GGUF through its chat template, thinking off) behind one facade — `load_translator` /
+  `translate` (`ARCHITECTURE_TRANSLATE.md`, tutorial 17); `dasllama-cli translate`, the
+  server's `/translate` + `/languages`.
 - **Voice activity detection**: Silero-VAD v6 (weights checked in — works with zero setup).
 
 The full per-model table — exact files tested, arch notes, and the token-for-token oracle
@@ -344,9 +355,9 @@ What a model needs to "just work" today:
 
 | Feature | Supported |
 |---|---|
-| GGUF weight types (read directly) | **F32, F16, Q8_0, Q4_0, Q5_0, Q5_1, MXFP4, the K-quant planes Q2_K / Q3_K / Q4_K / Q5_K / Q6_K, and the i-quants IQ4_XS / IQ4_NL / IQ3_S / IQ3_XXS / IQ2_S / IQ2_XS / IQ2_XXS** — K-quant and i-quant tensors keep their native format and run on dedicated kq kernels (a Q4_K_M file mixes formats per tensor), except the converted copies the load names in its conversion report: a Q5_K plane whose rows are off the 256 lattice and a per-32 plane off the 32 lattice ride a q8 transcode (`kq_fmt_row_ok`; an IQ4_NL or Q4_0 plane off the 256 lattice keeps its bytes as the per-32 `iq4nl32` / `q4032` form, and a Q5_0 plane on any row as `q5032`, at every site - token table, classifier, NextN eh_proj, deltanet and shared expert included, `ARCHITECTURE_ENGINE_FORMATS.md#per-32-tables`); MXFP4 expert stacks stay native too (mx4·q8 kernels); the gemma-4 E-series per-layer `inp_gate` / `proj` planes keep their file format (F32 ones the file's f32 rows) and its `per_layer_model_proj` its own bf16 rows on every home, while an F16/BF16/F32 per-layer-embedding table rides a q8 transcode, and a tied F16/BF16/F32 token table serves its classifier off the exact rows on the CPU and a q8 copy on Metal (the Vulkan whole-model driver declines it by name); bf16 audio-tower mmprojs read exactly |
+| GGUF weight types (read directly) | **F32, F16, Q8_0, Q4_0, Q5_0, Q5_1, MXFP4, NVFP4 (`ARCHITECTURE_ENGINE_FORMATS_NV4.md`), the K-quant planes Q2_K / Q3_K / Q4_K / Q5_K / Q6_K, and the i-quants IQ4_XS / IQ4_NL / IQ3_S / IQ3_XXS / IQ2_S / IQ2_XS / IQ2_XXS** — K-quant and i-quant tensors keep their native format and run on dedicated kq kernels (a Q4_K_M file mixes formats per tensor), except the converted copies the load names in its conversion report: a Q5_K plane whose rows are off the 256 lattice and a per-32 plane off the 32 lattice ride a q8 transcode (`kq_fmt_row_ok`; an IQ4_NL or Q4_0 plane off the 256 lattice keeps its bytes as the per-32 `iq4nl32` / `q4032` form, and a Q5_0 plane on any row as `q5032`, at every site - token table, classifier, NextN eh_proj, deltanet and shared expert included, `ARCHITECTURE_ENGINE_FORMATS.md#per-32-tables`); MXFP4 expert stacks stay native too (mx4·q8 kernels); the gemma-4 E-series per-layer `inp_gate` / `proj` planes keep their file format (F32 ones the file's f32 rows) and its `per_layer_model_proj` its own bf16 rows on every home, while an F16/BF16/F32 per-layer-embedding table rides a q8 transcode, and a tied F16/BF16/F32 token table serves its classifier off the exact rows on the CPU and a q8 copy on Metal (the Vulkan whole-model driver declines it by name); bf16 audio-tower mmprojs read exactly |
 | On-the-fly self-quantization | Q8, Q4 (from an F16/F32 model) |
-| Architecture | `llama`, `mistral3`, `qwen2`, `qwen2vl`, `qwen3`, `qwen3vl`, `phi3`, `gemma2`, `gemma3`, `gemma4`, `qwen2moe`, `qwen3moe`, `qwen3vlmoe`, `qwen35`, `qwen35moe`, `qwen3next`, `glm4moe`, `gpt-oss` — a self-registering arch registry (`dasllama_arch_*.das`, `[init]`); the loader dispatches on GGUF `general.architecture`, splits Phi3's fused attn_qkv / gate_up at load, and panics with the registered list on an unknown arch |
+| Architecture | `llama`, `mistral3`, `qwen2`, `qwen2vl`, `qwen3`, `qwen3vl`, `phi3`, `gemma2`, `gemma3`, `gemma4`, `qwen2moe`, `qwen3moe`, `qwen3vlmoe`, `qwen35`, `qwen35moe`, `qwen3next`, `qwen4exp`, `glm4moe`, `gpt-oss` — a self-registering arch registry (`dasllama_arch_*.das`, `[init]`); the loader dispatches on GGUF `general.architecture`, splits Phi3's fused attn_qkv / gate_up at load, and panics with the registered list on an unknown arch |
 | Attention | MHA **and** GQA (grouped-query); sliding-window with a per-layer pattern (Gemma-2 alternating, Gemma-3 5 local : 1 global, Gemma-4 explicit per-layer bool array); heterogeneous per-layer geometry (Gemma-4: sliding vs global layers differ in head size AND kv-head count, incl. V-from-K layers with no attn_v tensor); **cross-layer KV sharing** (Gemma-4 E-series: later layers carry no K/V of their own — Q only, attending against an earlier layer's cached K/V); configurable attention-score scale (Gemma-4: 1.0); per-head attention-sink logits in the softmax denominator (gpt-oss, all three prefill cores + decode); attention + final-logit soft-capping; suppressed-token logit bias |
 | Normalization | RMSNorm — eps from GGUF metadata (1e-5 Llama/Phi3, 1e-6 Qwen2/Qwen3/Gemma); Gemma's pre+post sandwich norms; per-head Q/K norms pre-RoPE (QK-norm — Qwen3, Gemma-3/4); weightless per-head V-norm (Gemma-4) |
 | Positional encoding | RoPE — **NORM** (Llama, adjacent-pair) and **NEOX** (Qwen2 / Phi3 / Gemma, pairs offset by head_size/2); per-pair freq scaling + θ from metadata (llama3 NTK-by-parts; Phi3 LongRoPE short factors + attn_factor mscale); θ=10000 default, 500000 Llama-3, 1e6 Qwen2.5; per-layer dual θ + linear position scaling (Gemma-3: sliding layers 10k unscaled, global layers 1M ÷8 on the 4B); p-RoPE — proportional freq factors on global layers only, with per-class head sizes (Gemma-4); YaRN (gpt-oss: factor 32 / original context 4096; mistral3: factor 64 / original context 4096, beta_fast 4 from metadata) — the NTK-by-parts ramp folds into the same per-pair factor machinery at load, magnitude correction into mscale; **partial rotary** (`rope.dimension_count` < head size, NEOX only) — qwen35's gated attention (64/256) and the standard attention path (glm4moe: 64/128; rope tables span the rotated width, the `_part` leaves skip the unrotated tail, fused decode falls back) |
@@ -411,7 +422,7 @@ So there's no ambiguity about what will fail:
   `gemma4v`, gemma-3 `gemma3v`, the whole qwen family — Qwen3-Omni / dense Qwen3-VL
   `qwen3vl_merger` incl. deepstack, Qwen2.5-Omni/VL `qwen2.5o`) — vision on the remaining
   multimodal families (pixtral, minicpm-v, …) is what stays out of scope.
-- **GGUF weight types beyond F32 / F16 / Q8_0 / Q4_0 / MXFP4 / Q2_K-Q6_K / IQ4_XS / IQ4_NL / IQ3_S / IQ3_XXS / IQ2_S / IQ2_XS / IQ2_XXS** — no IQ1 or
+- **GGUF weight types beyond F32 / F16 / Q8_0 / Q4_0 / MXFP4 / NVFP4 / Q2_K-Q6_K / IQ4_XS / IQ4_NL / IQ3_S / IQ3_XXS / IQ2_S / IQ2_XS / IQ2_XXS** — no IQ1 or
   quants; BF16 is read only for the audio-tower mmprojs, not as an LLM weight format.
 - `encode(..., parse_special)` is reserved and currently a no-op — the chat renderer injects
   special-token *ids* directly (so templates work); parsing special tokens out of free text

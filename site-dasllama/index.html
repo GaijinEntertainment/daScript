@@ -2,9 +2,9 @@
 <html lang="en"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>dasllama.io — news, stories, ladder</title>
-<meta name="description" content="dasLLAMA — an LLM + speech-to-text inference engine written entirely in daslang and JIT-compiled. News, stories, and the full measurement ladder."/>
+<meta name="description" content="dasLLAMA — an LLM, speech-to-text, text-to-speech and translation inference engine written entirely in daslang and JIT-compiled. News, articles, stories, and the full measurement ladder."/>
 <meta property="og:title" content="dasllama.io"/>
-<meta property="og:description" content="LLM + speech-to-text inference written in daslang, JIT-compiled. News, stories, ladder."/>
+<meta property="og:description" content="LLM, speech and translation inference written in daslang, JIT-compiled. News, articles, stories, ladder."/>
 <meta property="og:type" content="website"/>
 <meta property="og:url" content="https://dasllama.io/"/>
 <link rel="canonical" href="https://dasllama.io/"/>
@@ -24,15 +24,15 @@
 <div class="dio-nav__left">
 <button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
 <a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
-<div class="dio-tabs"><a class="dio-tab is-active" href="/">home</a><a class="dio-tab" href="examples.html">examples</a><a class="dio-tab" href="stories.html">stories</a><a class="dio-tab" href="ladder.html">ladder</a></div>
+<div class="dio-tabs"><a class="dio-tab is-active" href="/">home</a><a class="dio-tab" href="features.html">features</a><a class="dio-tab" href="examples.html">examples</a><a class="dio-tab" href="articles.html">articles</a><a class="dio-tab" href="stories.html">stories</a><a class="dio-tab" href="ladder.html">ladder</a></div>
 </div>
-<div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.5</span><!-- hand-maintained version chip: bump with the daslang release --></div>
+<div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.6</span><!-- hand-maintained version chip: bump with the daslang release --></div>
 </div></div></nav>
 
 <header class="dio-masthead"><div class="forge-container"><div class="dio-masthead__grid">
 <div>
 <h1>Local inference, <em>written in daslang.</em></h1>
-<p class="dio-masthead__lede">dasLLAMA is an LLM + speech-to-text inference engine written entirely in daslang and JIT-compiled. It loads stock GGUF files and runs them on cpu, metal, or vulkan. Kernels are auto-tuned per CPU class; the winning variants ship with the engine as class profiles, so a covered box is tuned by its first compile.</p>
+<p class="dio-masthead__lede">dasLLAMA is an LLM, speech-to-text, text-to-speech and translation inference engine written entirely in daslang and JIT-compiled. It loads stock model files and runs them on cpu, metal, or vulkan. Kernels are auto-tuned per CPU class; the winning variants ship with the engine as class profiles, so a covered box is tuned by its first compile.</p>
 <div class="dio-masthead__links"><a href="https://daslang.io">built on daslang →</a><a href="https://daslang.io/dasllama.html">the scoreboard →</a><span>official measurements live on daslang.io; the full ladder lives here</span></div>
 </div>
 <div class="dio-facts">
@@ -130,8 +130,20 @@
 <div id="dio-feed-items">
 <!-- news:begin — everything between the markers is generated from _news/*.md by
      build_news.py (run at deploy AND checked in, so preview matches production) -->
-<article class="dio-item dio-item--lead is-open" id="n-2026-10-23-dasllama-0-6-6" onclick="this.classList.toggle('is-open')">
-<div class="dio-item__head"><span class="dio-item__date">2026-10-23</span><span class="dio-item__tag">site</span><h2 class="dio-item__title">dasllama 0.6.6 - the release-17 re-mint, and pip install dasllama on pypi.org.<span class="dio-latest">latest</span></h2><span class="dio-item__chev">▾</span></div>
+<article class="dio-item dio-item--lead is-open" id="n-2026-10-28-translation-and-gigaam" onclick="this.classList.toggle('is-open')">
+<div class="dio-item__head"><span class="dio-item__date">2026-10-28</span><span class="dio-item__tag">engine</span><h2 class="dio-item__title">Translation and Russian speech-to-text join the engine - Bergamot and GigaAM v3, in master, in the next release.<span class="dio-latest">latest</span></h2><span class="dio-item__chev">▾</span></div>
+<div class="dio-item__body"><p>Two families landed in master this week, both ahead of the next release. <strong>Translation</strong>: the
+Bergamot students (Firefox Translations' Marian int8 models) run on the CPU, on Metal and on
+Vulkan, and a translation LLM - MiLMMT-46, or any instruct GGUF through its own chat template -
+loads through the same <code>load_translator</code> / <code>translate</code> facade; <code>dasllama-cli translate</code> takes
+typed, scripted or spoken input, and the server gains LibreTranslate-shaped <code>/translate</code> and
+<code>/languages</code>. <strong>GigaAM v3</strong>, the Russian speech-to-text model, with its CTC and RNN-T heads,
+loads from one GGUF like the other speech models. Every family the engine loads is now listed on
+one page: <a href="features.html">features</a>. Translation has a tutorial:
+<a href="https://daslang.io/doc/reference/tutorials/dasLLAMA_17_translate.html">dasLLAMA 17 - translate</a>.</p></div>
+</article>
+<article class="dio-item" id="n-2026-10-23-dasllama-0-6-6" onclick="this.classList.toggle('is-open')">
+<div class="dio-item__head"><span class="dio-item__date">2026-10-23</span><span class="dio-item__tag">site</span><h2 class="dio-item__title">dasllama 0.6.6 - the release-17 re-mint, and pip install dasllama on pypi.org.</h2><span class="dio-item__chev">▾</span></div>
 <div class="dio-item__body"><p><a href="https://github.com/GaijinEntertainment/daScript/releases/tag/dasllama-v0.6.6">dasllama-v0.6.6</a> carries
 the release-17 re-mint: every <code>[tune]</code> kernel ships as one clone per CPU class from the release-17
 class profiles - arm-neon, arm-i8mm, arm-sve, x86-avx2, x86-vnni512 and x86-amx - and the
@@ -298,9 +310,9 @@ scoreboard and carries official measurements only.</p></div>
 <footer class="dio-footer"><div class="forge-container"><div class="dio-footer__grid">
 <div>
 <a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
-<p class="dio-footer__about">LLM + speech-to-text inference written in daslang.<br/>© 2018–2026 Gaijin Entertainment · BSD 3-Clause</p>
+<p class="dio-footer__about">LLM, speech and translation inference written in daslang.<br/>© 2018–2026 Gaijin Entertainment · BSD 3-Clause</p>
 </div>
-<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="/">news</a><a class="dio-footer__link" href="examples.html">examples</a><a class="dio-footer__link" href="stories.html">stories</a><a class="dio-footer__link" href="ladder.html">ladder</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
+<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="/">news</a><a class="dio-footer__link" href="features.html">features</a><a class="dio-footer__link" href="examples.html">examples</a><a class="dio-footer__link" href="articles.html">articles</a><a class="dio-footer__link" href="stories.html">stories</a><a class="dio-footer__link" href="ladder.html">ladder</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
 <div><div class="dio-footer__head">daslang</div><a class="dio-footer__link" href="https://daslang.io">daslang.io</a><a class="dio-footer__link" href="https://daslang.io/dasllama.html">scoreboard</a><a class="dio-footer__link" href="https://daslang.io/downloads.html">downloads</a><a class="dio-footer__link" href="https://daslang.io/playground/index.html">playground</a></div>
 <div><div class="dio-footer__head">method</div><a class="dio-footer__link" href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript">github</a><a class="dio-footer__link" href="https://t.me/daScript">telegram</a></div>
 <div><div class="dio-footer__head">legal</div><a class="dio-footer__link" href="https://legal.gaijin.net/termsofservice">terms of service</a><a class="dio-footer__link" href="https://legal.gaijin.net/privacypolicy">privacy policy</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript/blob/master/LICENSE">bsd 3-clause license</a></div></div></div></footer>

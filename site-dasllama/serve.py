@@ -41,7 +41,8 @@ import stamp_assets  # noqa: E402 - the deploy's stamping pass, found beside thi
 
 SITE_FILES = os.path.normpath(os.path.join(HERE, "..", "site", "files"))
 EXAMPLES_OUT = os.path.realpath(os.path.join(HERE, "..", "web", "output64", "examples"))
-SHARED = {"forge.css", "nav-dropdown.css", "dasllama-table.css", "github-star.js"}
+SHARED = {"forge.css", "nav-dropdown.css", "dasllama-table.css", "github-star.js",
+          "highlight.js", "cm/daslang-keywords.js"}   # the daslang code-block highlighter and its keyword set
 PORT = 8932
 LADDER = "http://127.0.0.1:8201"
 DEVLOG = os.path.join(EXAMPLES_OUT, "devlog.jsonl")
@@ -221,9 +222,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def translate_path(self, path):
         clean = path.split("?", 1)[0].split("#", 1)[0]
         if clean.startswith("/files/"):
-            name = os.path.basename(clean)
-            if name in SHARED:
-                return os.path.join(SITE_FILES, name)
+            rel = clean[len("/files/"):]
+            if rel in SHARED:   # a flat shared file, or the one shared file under a subdirectory
+                return os.path.join(SITE_FILES, *rel.split("/"))
         if clean.startswith("/examples/"):
             rel = clean[len("/examples/"):]
             # containment, not pattern checks: `..`, an absolute remainder (a doubled slash) and a

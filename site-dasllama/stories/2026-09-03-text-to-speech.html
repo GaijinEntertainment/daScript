@@ -16,6 +16,8 @@
 <link rel="stylesheet" href="../files/dasllama-io.css"/>
 <script src="../files/dasllama-io.js" defer></script>
 <script src="../files/github-star.js" defer></script>
+<script src="../files/cm/daslang-keywords.js" defer></script>
+<script src="../files/highlight.js" defer></script>
 <!-- Analytics — site code "dasllama" under the borisbat goatcounter account -->
 <script data-goatcounter="https://dasllama.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 </head><body><div class="forge-page">
@@ -24,9 +26,9 @@
 <div class="dio-nav__left">
 <button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
 <a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
-<div class="dio-tabs"><a class="dio-tab" href="/">home</a><a class="dio-tab" href="../examples.html">examples</a><a class="dio-tab is-active" href="../stories.html">stories</a><a class="dio-tab" href="../ladder.html">ladder</a></div>
+<div class="dio-tabs"><a class="dio-tab" href="/">home</a><a class="dio-tab" href="../features.html">features</a><a class="dio-tab" href="../examples.html">examples</a><a class="dio-tab" href="../articles.html">articles</a><a class="dio-tab is-active" href="../stories.html">stories</a><a class="dio-tab" href="../ladder.html">ladder</a></div>
 </div>
-<div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.5</span><!-- hand-maintained version chip: bump with the daslang release --></div>
+<div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.6</span><!-- hand-maintained version chip: bump with the daslang release --></div>
 </div></div></nav>
 
 <section class="forge-section" style="padding:20px 0 64px;border-top:0">
@@ -78,7 +80,7 @@ announcer), and now, answer out loud.</p>
 a voice, a generated dialogue becomes a scene, a dynamic announcer reads a score that did not
 exist a second ago. So we went on a journey. It opened on the 1st of September and merged on
 the 3rd, and it was fun.</p>
-<h2>The part before the model</h2>
+<h2 id="the-part-before-the-model">The part before the model</h2>
 <p>Text is not phonemes. Before anything can say "Dr. Chen read 3.5 pages and paid $12." it has
 to become</p>
 <pre><code>Doctor Chen read three point five pages and paid twelve dollars.
@@ -107,7 +109,7 @@ Brzezinski:</p>
 <pre><code>ɡˈɜɹzəɡɹˌɑs bɹˈɪzʧɪzkˈIkəbəlz.
 </code></pre>
 <p><audio controls preload="none" src="/files/tts/grzegorz.wav"></audio></p>
-<h2>Small kittens, big Kokoro</h2>
+<h2 id="small-kittens-big-kokoro">Small kittens, big Kokoro</h2>
 <p>Kitten nano is 59 MB, eight voices, and the served default. Kitten mini is 296 MB. Kokoro is
 353 MB with 54 voice packs, of which we drive the 28 English ones: twenty American and, since
 this week, eight British. All three speak at 24 kHz, and all three are the same machine
@@ -165,7 +167,7 @@ to 0.07. The reference engines on the same input, same box:</p>
 </tr>
 </tbody>
 </table>
-<h2>How we measured quality</h2>
+<h2 id="how-we-measured-quality">How we measured quality</h2>
 <p>Speed is easy to measure and easy to fake: a model that speaks fast and says the wrong thing
 is a bug with a good RTF, and memset(0) even sounds smart. So the rig synthesizes the whole
 200-sentence corpus with each model, transcribes the audio back with a speech-to-text model
@@ -201,7 +203,7 @@ and "kay gee" did not.</p>
 </tr>
 </tbody>
 </table>
-<h2>The hunt for "hellows"</h2>
+<h2 id="the-hunt-for-hellows">The hunt for "hellows"</h2>
 <p>We picked a British voice on the speech studio, typed "Hello, how are you", and Emma said
 "hellows, how are yous". That is the kind of bug that ruins an afternoon in the best way.</p>
 <p>First suspect: the dialect. Kokoro picks its phonemizer by the first letter of the voice's
@@ -262,7 +264,7 @@ family gets its own driver's rule, and "hello how are u" goes to the model as</p
 <p><audio controls preload="none" src="/files/tts/hello-bare-emma.wav"></audio></p>
 <p>Kitten is the served default; in the same test its voices did not breathe at the comma.</p>
 <p><audio controls preload="none" src="/files/tts/hello-kitten.wav"></audio></p>
-<h2>British, for 1.3 megabytes</h2>
+<h2 id="british-for-13-megabytes">British, for 1.3 megabytes</h2>
 <p>Two more tables would have made the pronunciation pack 19 MB. It turns out the British word
 for an American key is "key", so both dialects share one, the spelling model went to 16-bit,
 and the fallback dictionary dropped the 44,000 words both dialects already carry:</p>
@@ -286,7 +288,7 @@ and the fallback dictionary dropped the 44,000 words both dialects already carry
 come out identical. Eight differ: two are tag calls that could go either way, and six are ours
 by rule: the lead pipe, the bass player, this minute detail, the does are watching, get the
 lead out, and my resume. Never rhyme retain and Britain.</p>
-<h2>Where it ends</h2>
+<h2 id="where-it-ends">Where it ends</h2>
 <p>So the server speaks now, the page shows what the model heard before it spoke, and every chat
 answer can read itself out. British Emma still does the talking around here: she narrated our
 tutorial videos through a Kokoro server we had to keep running next to the recorder, and the
@@ -302,9 +304,9 @@ out to get.</p></div>
 <footer class="dio-footer"><div class="forge-container"><div class="dio-footer__grid">
 <div>
 <a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
-<p class="dio-footer__about">LLM + speech-to-text inference written in daslang.<br/>© 2018–2026 Gaijin Entertainment · BSD 3-Clause</p>
+<p class="dio-footer__about">LLM, speech and translation inference written in daslang.<br/>© 2018–2026 Gaijin Entertainment · BSD 3-Clause</p>
 </div>
-<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="/">news</a><a class="dio-footer__link" href="../examples.html">examples</a><a class="dio-footer__link" href="../stories.html">stories</a><a class="dio-footer__link" href="../ladder.html">ladder</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
+<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="/">news</a><a class="dio-footer__link" href="../features.html">features</a><a class="dio-footer__link" href="../examples.html">examples</a><a class="dio-footer__link" href="../articles.html">articles</a><a class="dio-footer__link" href="../stories.html">stories</a><a class="dio-footer__link" href="../ladder.html">ladder</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
 <div><div class="dio-footer__head">daslang</div><a class="dio-footer__link" href="https://daslang.io">daslang.io</a><a class="dio-footer__link" href="https://daslang.io/dasllama.html">scoreboard</a><a class="dio-footer__link" href="https://daslang.io/downloads.html">downloads</a></div>
 <div><div class="dio-footer__head">method</div><a class="dio-footer__link" href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript">github</a><a class="dio-footer__link" href="https://t.me/daScript">telegram</a></div>
 <div><div class="dio-footer__head">legal</div><a class="dio-footer__link" href="https://legal.gaijin.net/termsofservice">terms of service</a><a class="dio-footer__link" href="https://legal.gaijin.net/privacypolicy">privacy policy</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript/blob/master/LICENSE">bsd 3-clause license</a></div></div></div></footer>

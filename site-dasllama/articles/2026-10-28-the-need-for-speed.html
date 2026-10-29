@@ -1,0 +1,592 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>A game scripting language that runs speech-to-text 5x faster than llama.cpp on CPU. — dasllama.io</title>
+<meta name="description" content="How a scripting language built for game logic ended up running speech, text and translation models, with the numbers, the losses, and the three macros that did it."/>
+<meta property="og:title" content="A game scripting language that runs speech-to-text 5x faster than llama.cpp on CPU."/>
+<meta property="og:description" content="How a scripting language built for game logic ended up running speech, text and translation models, with the numbers, the losses, and the three macros that did it."/>
+<meta property="og:type" content="article"/>
+<meta property="og:url" content="https://dasllama.io/articles/2026-10-28-the-need-for-speed.html"/>
+<link rel="canonical" href="https://dasllama.io/articles/2026-10-28-the-need-for-speed.html"/>
+<link rel="icon" href="../files/dasllama-favicon.svg" type="image/svg+xml"/>
+<link rel="alternate" type="application/atom+xml" href="/feed.xml" title="dasllama.io news"/>
+<link rel="stylesheet" href="../files/fonts/fonts.css"/>
+<link rel="stylesheet" href="../files/forge.css"/>
+<link rel="stylesheet" href="../files/dasllama-table.css"/>
+<link rel="stylesheet" href="../files/dasllama-io.css"/>
+<script src="../files/dasllama-io.js" defer></script>
+<script src="../files/github-star.js" defer></script>
+<script src="../files/cm/daslang-keywords.js" defer></script>
+<script src="../files/highlight.js" defer></script>
+<!-- Analytics — site code "dasllama" under the borisbat goatcounter account -->
+<script data-goatcounter="https://dasllama.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+</head><body><div class="forge-page">
+
+<nav class="dio-nav" id="nav"><div class="forge-container"><div class="dio-nav__inner">
+<div class="dio-nav__left">
+<button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
+<a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<div class="dio-tabs"><a class="dio-tab" href="/">home</a><a class="dio-tab" href="../features.html">features</a><a class="dio-tab" href="../examples.html">examples</a><a class="dio-tab is-active" href="../articles.html">articles</a><a class="dio-tab" href="../stories.html">stories</a><a class="dio-tab" href="../ladder.html">ladder</a></div>
+</div>
+<div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.6</span><!-- hand-maintained version chip: bump with the daslang release --></div>
+</div></div></nav>
+
+<section class="forge-section" style="padding:20px 0 64px;border-top:0">
+<div class="forge-container">
+<article class="dio-story dio-story--page">
+<div class="dio-story__eyebrow"><span class="dio-item__date">2026-10-28</span><span class="dio-item__tag">daslang</span><span class="dio-story__author">Boris Batkin</span></div>
+<h1 class="dio-story__title">A game scripting language that runs speech-to-text 5x faster than llama.cpp on CPU.</h1>
+<p class="dio-story__lede">How a scripting language built for game logic ended up running speech, text and translation models, with the numbers, the losses, and the three macros that did it.</p>
+<div class="dio-story__body"><!-- figures: every pair is a row of the ladder (site-dasllama/ladder.html, /api/runs; the checked-in
+     store modules/dasLLAMA/performance/records/<box>.json), dasllama 0.6.6. The m5 / epyc9r14 / gnr /
+     graviton4 / rtxpro4500 rows: 2026-10-21/22, das 792defade (the 0.6.6 release-17 rig). The
+     rtx5060ti rows (the two Vulkan rows of the first table, the whole second table, and the
+     fitting-model ratios in the Vulkan paragraph): 2026-10-25, the bench exe built and minted at
+     896bd646d, llama.cpp b11798 (9febe63) Vulkan, the host-experts reference at -ngl 99 -ncmoe
+     <n_layers>, GPU clock pinned at 2392 MHz; the RTX PRO 4500 rows 2026-10-21. The Whisper-on-M1
+     "about 5x" is the first port's figure against whisper.cpp of that day and is dated as such in
+     the text; the ladder's current pair is cited beside it. The home-assistant latency figure is a
+     team member's own report of his setup (Mac mini M4, October 2026, dasllama 0.6.6), not a ladder
+     row. The expert-pool mechanism: modules/dasLLAMA/ARCHITECTURE_GPU_VULKAN_POOL.md and
+     ARCHITECTURE_GPU_VULKAN_STREAM.md; the meet is moe_prefill_meet in dasllama_blocks.das; the
+     N-row decline for host layers is vk_rdec_token_n_rows in dasllama_vulkan_decode.das. The
+     tune grid is k4q8_tile_gen in dasllama_math_gen.das; the dispatch classes are in
+     dasllama_vulkan_classes.das (434 [vk_dispatch] classes at 313fc07cad). -->
+
+<p>daslang is a statically typed scripting language built for games. We wrote an LLM and speech
+inference engine in it, called dasllama, with no C++ and no hand-written assembly in the hot
+path. On CPU it transcribes speech up to 5x faster than llama.cpp, and runs Qwen3.6-35B and
+Gemma-4 at 1.7-2.8x the prefill speed (that is your time to first token) and 20-40% faster
+decode. On Apple GPUs it is 10-35% ahead of llama.cpp Metal. On Vulkan it is at parity for
+models that fit the card, and on a 16 GB card running a 35B mixture-of-experts that does not
+fit, it decodes 2x and prefills 5x faster than llama.cpp with the same split. Every
+number below is a measured pair, same model, same machine, same day, with the receipt on the
+public ladder.</p>
+<table>
+<thead>
+<tr>
+<th>Workload</th>
+<th>Machine</th>
+<th>das</th>
+<th>reference</th>
+<th>gain</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Qwen3-ASR-0.6B, 11 s clip</td>
+<td>Apple M5 Max, CPU</td>
+<td>0.46 s</td>
+<td>llama.cpp 2.52 s</td>
+<td>5.5x</td>
+</tr>
+<tr>
+<td>Gemma-4 E2B audio-in, 11 s clip</td>
+<td>Apple M5 Max, CPU</td>
+<td>1.11 s</td>
+<td>llama.cpp 7.55 s</td>
+<td>6.8x</td>
+</tr>
+<tr>
+<td>Whisper large-v3-turbo, 3 min clip</td>
+<td>Graviton4, CPU</td>
+<td>14.6 s</td>
+<td>whisper.cpp 89.9 s</td>
+<td>6.1x</td>
+</tr>
+<tr>
+<td>Pocket TTS, 20 sentences</td>
+<td>EPYC 9R14, CPU</td>
+<td>9.1 s</td>
+<td>pocket-tts 40.4 s</td>
+<td>4.4x</td>
+</tr>
+<tr>
+<td>Qwen3.6-35B-A3B prefill</td>
+<td>EPYC 9R14, CPU</td>
+<td>425 tok/s</td>
+<td>llama.cpp 181 tok/s</td>
+<td>2.3x</td>
+</tr>
+<tr>
+<td>Qwen3.6-35B-A3B decode</td>
+<td>EPYC 9R14, CPU</td>
+<td>22.5 tok/s</td>
+<td>llama.cpp 16.2 tok/s</td>
+<td>1.4x</td>
+</tr>
+<tr>
+<td>Gemma-4-26B-A4B prefill</td>
+<td>Graviton4, CPU</td>
+<td>256 tok/s</td>
+<td>llama.cpp 91 tok/s</td>
+<td>2.8x</td>
+</tr>
+<tr>
+<td>Qwen3.6-35B-A3B prefill</td>
+<td>Apple M5 Max, Metal</td>
+<td>4430 tok/s</td>
+<td>llama.cpp 3305 tok/s</td>
+<td>1.34x</td>
+</tr>
+<tr>
+<td>Qwen3.6-35B-A3B decode</td>
+<td>Apple M5 Max, Metal</td>
+<td>133 tok/s</td>
+<td>llama.cpp 113 tok/s</td>
+<td>1.18x</td>
+</tr>
+<tr>
+<td>Qwen3.6-35B-A3B decode</td>
+<td>RTX PRO 4500 24 GB, Vulkan</td>
+<td>166 tok/s</td>
+<td>llama.cpp 167 tok/s</td>
+<td>1.00x</td>
+</tr>
+<tr>
+<td>Qwen3.6-35B-A3B decode, experts on host</td>
+<td>RTX 5060 Ti 16 GB, Vulkan</td>
+<td>51.0 tok/s</td>
+<td>llama.cpp 25.7 tok/s</td>
+<td>2.0x</td>
+</tr>
+<tr>
+<td>Qwen3.6-35B-A3B prefill, experts on host</td>
+<td>RTX 5060 Ti 16 GB, Vulkan</td>
+<td>1115 tok/s</td>
+<td>llama.cpp 211 tok/s</td>
+<td>5.3x</td>
+</tr>
+</tbody>
+</table>
+<p>Source: the <a href="../ladder.html">ladder</a>, dasllama 0.6.6, measured 2026-10-21/22; the two RTX 5060 Ti rows
+2026-10-25, the bench built at 896bd646d. We also lose some rows, and they are on the same page.
+More on that below.</p>
+<p>This is the story of how a game scripting language ended up here.</p>
+<h2 id="the-modest-goal">The modest goal</h2>
+<p>daslang started in 2019 at Gaijin Entertainment. The brief was narrow: a scripting language
+fast enough for game logic over an entity-component system, so that nothing ever has to be
+rewritten in C++ later. Strong static typing, a fast compiler, no data marshaling at the C++
+boundary, and three ways to run the same source: an interpreter for iteration, ahead-of-time
+C++ for shipping, and later an LLVM JIT. It did the job. It has been running in production at
+Gaijin ever since.</p>
+<p>In 2026 a game team wanted a voice translator. You are in a random squad, your squadmate speaks
+a language you do not, and the game should transcribe, translate and speak it back, live. The
+constraint is the one every in-game inference project hits: the GPU is busy. It is drawing the
+game. Whatever runs the models runs on the CPU, next to the game, on whatever the player owns.</p>
+<p>llama.cpp was the obvious choice and it did not fit. It did not hit the latency on the CPU
+budget we had, and it is a very large dependency to carry inside a game executable for a
+feature that needs a few small models. So we tried writing the speech-to-text path in daslang.
+The language was fast enough for games. Was it fast enough for this?</p>
+<h2 id="the-surprise">The surprise</h2>
+<p>The first port was Whisper, on an M1. It came out about 5x faster than whisper.cpp of the day.
+whisper.cpp has moved since then; today's ladder has that pair close on Apple silicon and wide
+on the x86 and Graviton servers. The newer speech models kept the gap, and text-to-speech landed
+the same way:</p>
+<table>
+<thead>
+<tr>
+<th>Workload, CPU</th>
+<th>Machine</th>
+<th>das</th>
+<th>reference</th>
+<th>gain</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Whisper large-v3-turbo, 3 min clip</td>
+<td>Apple M5 Max</td>
+<td>17.0 s</td>
+<td>whisper.cpp 21.7 s</td>
+<td>1.27x</td>
+</tr>
+<tr>
+<td>Whisper large-v3-turbo, 3 min clip</td>
+<td>EPYC 9R14</td>
+<td>10.9 s</td>
+<td>whisper.cpp 35.1 s</td>
+<td>3.2x</td>
+</tr>
+<tr>
+<td>Qwen3-Omni-30B audio-in, 11 s clip</td>
+<td>Apple M5 Max</td>
+<td>1.45 s</td>
+<td>llama.cpp 9.35 s</td>
+<td>6.4x</td>
+</tr>
+<tr>
+<td>Qwen3-Omni-30B audio-in, 3 min clip</td>
+<td>Apple M5 Max</td>
+<td>33.8 s</td>
+<td>llama.cpp 158.4 s</td>
+<td>4.7x</td>
+</tr>
+<tr>
+<td>Pocket TTS, 20 sentences</td>
+<td>Granite Rapids</td>
+<td>7.8 s</td>
+<td>pocket-tts 41.6 s</td>
+<td>5.3x</td>
+</tr>
+<tr>
+<td>Kitten TTS mini, 20 sentences</td>
+<td>Graviton4</td>
+<td>10.4 s</td>
+<td>KittenTTS 65.0 s</td>
+<td>6.2x</td>
+</tr>
+</tbody>
+</table>
+<p>Source: the <a href="../ladder.html">ladder</a>, dasllama 0.6.6, measured 2026-10-21/22.</p>
+<p>Nobody wrote clever kernels for that. The first kernel was written by hand. The second one made
+the scope obvious: every operation times every weight format times every CPU times every model
+shape. That is thousands of kernels, and the only way to be fast on all of them by hand is to
+have a hundred contributors each tuning their own box. We do not. So instead of writing the
+third kernel, we wrote a macro.</p>
+<h2 id="the-realization">The realization</h2>
+<p>daslang has Lisp and Haxe style macros: compile-time code that reads and rewrites the typed
+AST. Everything interesting in dasllama is one of them. Three of them are the reason the
+numbers above exist.</p>
+<p><strong><code>[tune]</code>: the machine picks the kernel, not a human.</strong> A kernel is written once, as a plain
+reference function. The annotation above it declares a grid of permutations: the dot-product
+instruction, the vector width, the register tile, the unroll. The reference body runs on the
+interpreter and on any machine the generator declines. Under the JIT, a tuner runs the whole
+grid on the actual CPU with the actual model, records the winner in a small JSON sidecar next
+to the application, and the next compile stamps that winner onto the function. Nothing about
+the callers changes. This is a real one, the 4-bit K-quant tile:</p>
+<pre><code class="language-das">[tune_perm(mr = 8),
+ tune_perm(dot = &quot;maddubs&quot;,  width = 256, mr = 8,  requires = &quot;avx2&quot;),
+ tune_perm(dot = &quot;vpdpbusd&quot;, width = 256, mr = 8,  requires = &quot;avxvnni|avx512vnni&quot;),
+ tune_perm(dot = &quot;vpdpbusd&quot;, width = 512, mr = 16, requires = &quot;avx512vnni,avx512bw&quot;),
+ tune_perm(dot = &quot;vpdpbusd&quot;, width = 256, mr = 16, requires = &quot;avx512vnni,avx512bw&quot;),
+ tune_perm(dot = &quot;amx_bf16&quot;, width = 512, mr = 16, nrsplit = 2, requires = &quot;amx-bf16,avx512bf16,avx512vnni&quot;),
+ tune_perm(dot = &quot;amx_bf16&quot;, width = 512, mr = 16, nrsplit = 1, requires = &quot;amx-bf16,avx512bf16,avx512vnni&quot;),
+ tune(gen = &quot;dasllama_gemm_gen::k4_tile&quot;,
+      fallback = &quot;dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr8&quot;)]
+def k4q8_tile_gen(var yp : float?; kqg : uint8 const?; ksg : uint8 const?;
+                  xqp : int8 const?; xsp : float const?; xbsp : int const?;
+                  n, d, g, t0 : int64) {
+    kq_tile_ref(4, yp, kqg, ksg, xqp, xsp, xbsp, n, d, g, t0)
+}
+</code></pre>
+<p>(The real one also lists seven companion generators, the GEMV, layout and AMX config paths that
+ride the same winner. Cut for length.)</p>
+<p>llama.cpp ships universal kernels, hand-tuned by very good people for the CPUs they have. We
+ship one reference per operation and a tuner, and the release carries a profile per CPU class:
+NEON, i8mm, SVE, AVX2, VNNI-512 and AMX. A box the profile covers is tuned on its first
+compile. A box it does not cover tunes itself once and keeps the sidecar. The 2.3x prefill on
+EPYC and the 2.8x on Graviton are not a better algorithm. They are the right permutation for
+that core and that model, chosen by measurement rather than by a person.</p>
+<p><strong>Templates: permutations across formats are stamped, not written.</strong> The GPU side has the same
+combinatorics, formats times operations times fusion choices. A kernel there is a class; the
+variants are a few overridden constants on a shared template, and a macro turns each class into
+a dispatch plus a SPIR-V or Metal shader. Four fused add-norm-quantize kernels, in full:</p>
+<pre><code class="language-das">[vk_dispatch(name = &quot;cls_ar_rqx&quot;, grid = &quot;wgs&quot;, params = &quot;wgs : int64&quot;)]
+class ArAddRmsRqX : ArRqT {
+    override STOREX = true
+    [spirv_kernel(local_size_x = 256)]
+    def run { ar_rq_body() }
+}
+
+[vk_dispatch(name = &quot;cls_ar_rqk&quot;, grid = &quot;wgs&quot;, params = &quot;wgs : int64&quot;)]
+class ArAddRmsRqK : ArRqT {
+    override KBLK = true
+    [spirv_kernel(local_size_x = 256)]
+    def run { ar_rq_body() }
+}
+
+[vk_dispatch(name = &quot;cls_ar_rqkx&quot;, grid = &quot;wgs&quot;, params = &quot;wgs : int64&quot;)]
+class ArAddRmsRqKX : ArRqT {
+    override KBLK = true
+    override STOREX = true
+    [spirv_kernel(local_size_x = 256)]
+    def run { ar_rq_body() }
+}
+</code></pre>
+<p>The Vulkan backend alone is over four hundred of these dispatch classes, most of them exactly
+this shape: a template and two or three overrides. When a new weight format arrives, the body
+gets one more branch and every kernel that reads weights picks it up.</p>
+<p><strong>Homogeneity: one language from the GGUF parser to the shader.</strong> The loader, the tokenizer,
+the scheduler, the CPU kernels, the Metal and Vulkan shaders and the OpenAI-compatible server
+are the same language, in the same process, compiled by the same JIT. The shader body in the
+snippet above is daslang; the SPIR-V emitter is a daslang library too. There is no FFI between
+the model graph and the kernel, no string-templated shader source, no second build system. When
+a kernel needs a new primitive, the language grows it. dasllama has pushed a lot into daslang
+this way: the 16-bit and 8-bit vector families with closed fp16 arithmetic, a set of SIMD
+intrinsics, a job queue rewritten three times for latency with its own trace visualizer, and the
+tune framework itself.</p>
+<p>The honest summary of the advantage is this: a hand-tuned engine is fast where its authors have
+hardware. A self-tuning engine written in one language is fast wherever the tuner has run, and
+the cost of a new format or a new card is one more row in a grid, not one more file per kernel.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Once the CPU path was ahead, the same machinery went to the GPU, where games have little use
+for it but local inference has every use. Metal came first, then Vulkan.</p>
+<p>On Apple silicon the gap is widest at prefill, the number you feel as time to first token, and
+it is there on the CPU rows of the same machine too:</p>
+<table>
+<thead>
+<tr>
+<th>Apple M5 Max, tok/s</th>
+<th>das</th>
+<th>llama.cpp</th>
+<th>gain</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Qwen3.6-35B-A3B prefill, Metal</td>
+<td>4430</td>
+<td>3305</td>
+<td>1.34x</td>
+</tr>
+<tr>
+<td>Qwen3.6-35B-A3B decode, Metal</td>
+<td>133</td>
+<td>113</td>
+<td>1.18x</td>
+</tr>
+<tr>
+<td>Qwen3.8-27B prefill, Metal</td>
+<td>1026</td>
+<td>788</td>
+<td>1.30x</td>
+</tr>
+<tr>
+<td>Gemma-4-26B-A4B prefill, Metal</td>
+<td>4257</td>
+<td>3762</td>
+<td>1.13x</td>
+</tr>
+<tr>
+<td>Gemma-4-26B-A4B decode, Metal</td>
+<td>119</td>
+<td>106</td>
+<td>1.12x</td>
+</tr>
+<tr>
+<td>Qwen3.6-35B-A3B prefill, CPU</td>
+<td>265</td>
+<td>157</td>
+<td>1.69x</td>
+</tr>
+<tr>
+<td>Qwen3.6-35B-A3B decode, CPU</td>
+<td>60.5</td>
+<td>49.6</td>
+<td>1.22x</td>
+</tr>
+</tbody>
+</table>
+<p>Vulkan is the humbling one. The card zoo changes the story every time we touch a new card. On
+an RTX 5060 Ti the engine was ahead of llama.cpp Vulkan through the summer. We then put the
+full suite on an RTX PRO 4500 Blackwell for the release sweep, and that card came out at parity
+or slightly behind. Same engine, different card, different answer. Back on the 5060 Ti with the
+same release, the models that fit the card are a few percent ahead at prefill and at parity on
+decode:</p>
+<table>
+<thead>
+<tr>
+<th>Vulkan, tok/s</th>
+<th>das</th>
+<th>llama.cpp</th>
+<th>gain</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Qwen3.6-35B-A3B decode, RTX PRO 4500</td>
+<td>166</td>
+<td>167</td>
+<td>1.00x</td>
+</tr>
+<tr>
+<td>Qwen3.8-27B decode, RTX PRO 4500</td>
+<td>38.8</td>
+<td>38.4</td>
+<td>1.01x</td>
+</tr>
+<tr>
+<td>Qwen3.6-35B-A3B prefill, RTX PRO 4500</td>
+<td>4955</td>
+<td>5556</td>
+<td>0.89x</td>
+</tr>
+<tr>
+<td>Qwen3VL-4B prefill, RTX 5060 Ti</td>
+<td>5223</td>
+<td>4316</td>
+<td>1.21x</td>
+</tr>
+<tr>
+<td>Gemma-4 E4B prefill, RTX 5060 Ti</td>
+<td>4554</td>
+<td>3970</td>
+<td>1.15x</td>
+</tr>
+<tr>
+<td>gpt-oss-20b decode, RTX 5060 Ti</td>
+<td>124</td>
+<td>111</td>
+<td>1.12x</td>
+</tr>
+<tr>
+<td>Qwen3VL-4B decode, RTX 5060 Ti</td>
+<td>81.2</td>
+<td>80.5</td>
+<td>1.01x</td>
+</tr>
+<tr>
+<td>Gemma-4 E4B decode, RTX 5060 Ti</td>
+<td>63.7</td>
+<td>63.6</td>
+<td>1.00x</td>
+</tr>
+</tbody>
+</table>
+<p>Source: the <a href="../ladder.html">ladder</a>; the M5 Max and RTX PRO 4500 rows dasllama 0.6.6, measured
+2026-10-21/22; the RTX 5060 Ti rows 2026-10-25, the bench built at 896bd646d. Parity is what we
+claim for Vulkan on a model that fits, and the 4500's prefill gap is open work.</p>
+<h2 id="when-the-model-does-not-fit-the-card">When the model does not fit the card</h2>
+<p>The interesting Vulkan rows are the ones where it does not fit. Qwen3.6-35B-A3B at Q4_K_M is
+23 GB and gemma-4-26B-A4B is 17 GB; the 5060 Ti has 16 GB. Both are mixture-of-experts models,
+and almost all of those bytes are experts, of which each token touches a handful. The usual
+answer is to keep the experts in host RAM and the rest of the model on the card, and llama.cpp
+does that with <code>-ncmoe</code>. With that same split on the same card:</p>
+<table>
+<thead>
+<tr>
+<th>Model, 5060 Ti 16 GB, experts on host</th>
+<th>das</th>
+<th>llama.cpp</th>
+<th>gain</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Qwen3.6-35B-A3B prefill</td>
+<td>1115 tok/s</td>
+<td>211 tok/s</td>
+<td>5.3x</td>
+</tr>
+<tr>
+<td>Qwen3.6-35B-A3B decode</td>
+<td>51.0 tok/s</td>
+<td>25.7 tok/s</td>
+<td>2.0x</td>
+</tr>
+<tr>
+<td>gemma-4-26B-A4B prefill</td>
+<td>1328 tok/s</td>
+<td>287 tok/s</td>
+<td>4.6x</td>
+</tr>
+<tr>
+<td>gemma-4-26B-A4B decode</td>
+<td>46.8 tok/s</td>
+<td>26.2 tok/s</td>
+<td>1.8x</td>
+</tr>
+<tr>
+<td>Qwen3.6-35B-A3B decode, 4 streams</td>
+<td>52.6 tok/s</td>
+<td>59.6 tok/s</td>
+<td>0.88x</td>
+</tr>
+</tbody>
+</table>
+<p>Source: the <a href="../ladder.html">ladder</a>, measured 2026-10-25, the bench built at 896bd646d, llama.cpp
+b11798 Vulkan at <code>-ngl 99 -ncmoe &lt;n_layers&gt;</code>.</p>
+<p>This is not a kernel win. It is a scheduling one, and it only works because the whole engine is
+one program. Three pieces:</p>
+<p><strong>A hot expert pool on the card.</strong> Expert picks are skewed: a layer's tokens land on a few of
+its experts far more often than on the rest, and the card decodes an expert six to ten times
+faster than the host does. So whatever room the card has left after the dense weights and the
+KV cache becomes expert slots, and every token's picks split: the card runs the hits, the host
+sums the misses, and the two meet at the layer's output. The host owns the policy. It counts
+picks per expert, halves the counts every 256 rows so the pool follows the conversation, and
+swaps the coldest slot for the hottest miss, one expert per decode step.</p>
+<p><strong>Misses land in the pool by DMA.</strong> A decode step's misses are already in pinned host memory
+for the CPU kernels to read. The same bytes are copied to the pool's coldest unpicked slot on
+the transfer queue, in the shadow of the step, so the next token finds them and the host spends
+nothing on the fill.</p>
+<p><strong>Prompts meet in the middle.</strong> A prefill walks the prompt in windows of up to 4096 rows. For
+each routed layer the window's experts are sorted by how many rows picked them, busiest first.
+The card claims experts from the busy end, streaming each one's weights across the link once
+and running all of its rows at once, as fast as the transfer ring frees. The CPU claims experts
+from the rare end, the ones with a handful of rows each, where streaming the weights would cost
+more than the math. There is no cost model: both sides take from their end until the cursors
+meet, so the faster side simply takes more. The experts the card streamed stay in the pool, so
+the decode that follows starts warm. That is the 5x: the link carries each busy expert once per
+window instead of once per token, and the rare experts never cross it. The gain grows with the
+window; it is capped at 4096 rows today by a Vulkan buffer-range limit, not by the design.</p>
+<p>The four-stream row is the honest one. With four conversations at once, llama.cpp's host
+experts take all four rows in one pass per expert. Ours step one row at a time in this mode,
+four host passes per step, and it wins by 12%. The batched form exists in the engine for the
+prompt window and for speculative decoding; wiring it into the four-stream decode is the next
+piece of work, and it is the same piece the big-box plan below needs.</p>
+<p>The losses, since you will look for them anyway. Qwen3-ASR on Granite Rapids runs at half the
+speed of llama.cpp, and at parity on EPYC, where the Apple and Graviton rows are at 5x: the
+int8 path on those x86 cores is not tuned yet. Qwen3.6-35B prefill on Granite Rapids is 0.91x.
+Kitten TTS nano, the smallest model on the board, is 0.7-0.85x on x86 servers. Kokoro on x86 is
+a wash. Each of these is a row on the ladder with both command lines in its receipt, and each
+is being worked on.</p>
+<h2 id="what-it-is-for">What it is for</h2>
+<p><strong>A voice assistant on a CPU.</strong> Speech-to-text, a small LLM, and text-to-speech in one process
+with no GPU. Parakeet transcribes an 11-second clip in 0.14 s on the M5 Max CPU and 0.17 s on
+Graviton4; Pocket TTS speaks twenty sentences in 4-9 s on CPU. The dasllama benchmark suite
+grew out of exactly this: a home assistant that has to answer before you notice it is thinking.</p>
+<p>One of us runs such an assistant at home on a Mac mini M4: Parakeet for ears, Qwen3.6 for the
+brain, Kokoro for the voice. It used to be parakeet-cli for the ears and MLX for the other
+two. Replacing all three with dasllama cut end-to-end latency by about 30%, and the answers
+got better, because the dasllama server compiles a forced tool call's schema to a grammar and
+constrains the decode to it, so the model's function calls parse the first time instead of
+being retried.</p>
+<p><strong>Local coding models.</strong> Qwen3.6-35B-A3B at 133 tok/s decode and 4430 tok/s prefill on an M5
+Max, 60 tok/s decode on its CPU alone. Gemma-4-26B-A4B, gpt-oss-20b and Qwen3.8-27B are on
+the board at the same quality bar. These are the "good enough and private" models, and the
+prefill numbers are what decide whether a 20 KB context feels instant.</p>
+<p><strong>In-game speech.</strong> The original goal. Transcription, translation and synthesis on the CPU
+next to a running game, without a 100 MB dependency. That work is in progress at Gaijin.</p>
+<h2 id="what-is-next">What is next</h2>
+<p><strong>CUDA.</strong> The same kernels, through the same macros, emitted as CUDA. The emitter is done and
+the first kernels are running; numbers get published when they pass the pairing rule against
+llama.cpp CUDA on the same card, not before.</p>
+<p><strong>Big mixture-of-experts on one card.</strong> The hot pool above is the small version of this. The
+direction is one big card, a lot of ordinary RAM, and an NVMe behind it, serving a model that
+today takes six cards. The routing is sparse; the bandwidth is the whole problem; and a
+self-tuning engine is the right tool for a problem that is different on every box.</p>
+<p><strong>More cards, more boxes.</strong> The ladder takes submissions. Every row carries both command
+lines, both commits, the file hashes and the probed hardware.</p>
+<h2 id="try-it">Try it</h2>
+<ul>
+<li><code>pip install dasllama</code>, or brew, scoop, <code>.deb</code>, <code>.rpm</code>: <a href="https://dasllama.io/">dasllama.io</a></li>
+<li>The ladder with every receipt: <a href="../ladder.html">dasllama.io/ladder</a></li>
+<li>Every family the engine loads: <a href="../features.html">features</a></li>
+<li>The method, in full: <a href="https://daslang.io/dasllama.html#methodology">daslang.io/dasllama</a></li>
+<li>Source, BSD 3-clause: <a href="https://github.com/GaijinEntertainment/daScript">github.com/GaijinEntertainment/daScript</a></li>
+</ul>
+<p>If you have a Mac and want a voice assistant on it, it is the best option we know of today.
+If you want Qwen3.6-35B on that Mac, it prefills at 1.34x and decodes at 1.18x llama.cpp on
+Metal, 1.7x and 1.2x on the CPU. If you have a 16 GB Vulkan card and want a 35B
+mixture-of-experts on it, it decodes at 2.0x and prefills at 5.3x llama.cpp with the same
+split. If you have a box we do not have, run the suite and send the row.</p>
+<p>Every family on the <a href="../features.html">features page</a> loads from its stock file, auto-detected, and is
+verified token for token against its reference engine. llama.cpp, whisper.cpp, MLX and vLLM were the yardsticks and the
+reading material throughout; none of this exists without them.</p></div>
+<a class="dio-story__back" href="../articles.html">← all articles</a>
+</article>
+</div>
+</section>
+
+<footer class="dio-footer"><div class="forge-container"><div class="dio-footer__grid">
+<div>
+<a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<p class="dio-footer__about">LLM, speech and translation inference written in daslang.<br/>© 2018–2026 Gaijin Entertainment · BSD 3-Clause</p>
+</div>
+<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="/">news</a><a class="dio-footer__link" href="../features.html">features</a><a class="dio-footer__link" href="../examples.html">examples</a><a class="dio-footer__link" href="../articles.html">articles</a><a class="dio-footer__link" href="../stories.html">stories</a><a class="dio-footer__link" href="../ladder.html">ladder</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
+<div><div class="dio-footer__head">daslang</div><a class="dio-footer__link" href="https://daslang.io">daslang.io</a><a class="dio-footer__link" href="https://daslang.io/dasllama.html">scoreboard</a><a class="dio-footer__link" href="https://daslang.io/downloads.html">downloads</a></div>
+<div><div class="dio-footer__head">method</div><a class="dio-footer__link" href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript">github</a><a class="dio-footer__link" href="https://t.me/daScript">telegram</a></div>
+<div><div class="dio-footer__head">legal</div><a class="dio-footer__link" href="https://legal.gaijin.net/termsofservice">terms of service</a><a class="dio-footer__link" href="https://legal.gaijin.net/privacypolicy">privacy policy</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript/blob/master/LICENSE">bsd 3-clause license</a></div></div></div></footer>
+
+</div></body></html>

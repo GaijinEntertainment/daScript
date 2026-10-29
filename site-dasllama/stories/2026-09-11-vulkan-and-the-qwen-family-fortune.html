@@ -16,6 +16,8 @@
 <link rel="stylesheet" href="../files/dasllama-io.css"/>
 <script src="../files/dasllama-io.js" defer></script>
 <script src="../files/github-star.js" defer></script>
+<script src="../files/cm/daslang-keywords.js" defer></script>
+<script src="../files/highlight.js" defer></script>
 <!-- Analytics — site code "dasllama" under the borisbat goatcounter account -->
 <script data-goatcounter="https://dasllama.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 </head><body><div class="forge-page">
@@ -24,9 +26,9 @@
 <div class="dio-nav__left">
 <button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
 <a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
-<div class="dio-tabs"><a class="dio-tab" href="/">home</a><a class="dio-tab" href="../examples.html">examples</a><a class="dio-tab is-active" href="../stories.html">stories</a><a class="dio-tab" href="../ladder.html">ladder</a></div>
+<div class="dio-tabs"><a class="dio-tab" href="/">home</a><a class="dio-tab" href="../features.html">features</a><a class="dio-tab" href="../examples.html">examples</a><a class="dio-tab" href="../articles.html">articles</a><a class="dio-tab is-active" href="../stories.html">stories</a><a class="dio-tab" href="../ladder.html">ladder</a></div>
 </div>
-<div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.5</span><!-- hand-maintained version chip: bump with the daslang release --></div>
+<div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.6</span><!-- hand-maintained version chip: bump with the daslang release --></div>
 </div></div></nav>
 
 <section class="forge-section" style="padding:20px 0 64px;border-top:0">
@@ -71,7 +73,7 @@
 ran the same models, and everything was slower than llama.cpp. Nothing in the engine had
 changed. The card had. That is what Vulkan is like, and it is why the Qwen family got the
 first half of September.</p>
-<h2>Two targets</h2>
+<h2 id="two-targets">Two targets</h2>
 <p>There were two targets from the start. The first was to catch up on Vulkan, where the engine
 lagged, and Qwen was the biggest piece of the lag. The second was Qwen3.8-27B on a 16 GB
 card: the model people want to run at home, and the one that did not fit.</p>
@@ -81,7 +83,7 @@ trunk and the same eight on every other. So a good part of the two weeks went in
 that zoo into the engine, one format at a time, until every file in it loads and runs. On the
 plus side, it now reads all of that. On the minus side, every format is one more mouth to
 feed, on every kernel, on every card.</p>
-<h2>What a Qwen is</h2>
+<h2 id="what-a-qwen-is">What a Qwen is</h2>
 <p>From one perspective Qwen is twenty-seven files, 0.5 to 48 GB, dense and mixture-of-experts,
 with and without a draft head, in those eight formats. From the other it is the shape of a
 layer.</p>
@@ -101,7 +103,7 @@ files is a point on that grid.</p>
 <p>With Vulkan we record the work of one token once, assembled layer by layer from a head and a
 tail, and replay the recording for every token after. One recording serves all twenty-seven
 files of The Qwen Family.</p>
-<h2>The walk</h2>
+<h2 id="the-walk">The walk</h2>
 <p>Walking the walk: it is always one model at a time, smallest first, and a model that does not
 work is fixed before the next one is measured. Otherwise that crazy, and not so rare, scenario
 of one token per second takes the better half of your day to notice.</p>
@@ -164,7 +166,7 @@ size check believed it. And Qwen1.5-MoE, the 2024 ancestor, needed the same bias
 another path.</p>
 <p>The 27B landed. Qwen3.8-27B UD-IQ4_XS, 14.3 GB, runs whole on the 16 GB card at 865 / 23.5
 against 815 / 24.1, and its 4-bit siblings read the same way. The End? Right???</p>
-<h2>Things are never that simple</h2>
+<h2 id="things-are-never-that-simple">Things are never that simple</h2>
 <p>What if it were not this card? What if someone ran a 4080, or an AMD, or, oh no, an Intel?
 None of those have cooperative matrix 2, the extension the 5060 Ti has. They have the older
 cooperative matrix, the one every card past a certain age can run. On that arm the K-quant
@@ -174,7 +176,7 @@ the speed of the integer kernel it replaced. What a nightmare.</p>
 <p>Sometimes you resort to the sincerest form of flattery. We consulted the yardstick's kernels
 and found that back in 2024 kernels were a different shape, and had never heard of the
 extensions the 5-series brought. The 27B went from 395 to 741. Who knew.</p>
-<h2>The other other card</h2>
+<h2 id="the-other-other-card">The other other card</h2>
 <p>So we gave dasLLAMA to a friend to try. Well, we gave it to everyone to try; it is on GitHub
 for anyone to play with. Try he did. Stas ran the 35B on his Linux box, an RTX 5080, against
 the same llama.cpp build, and sent a report. Two things in it. The engine had not even taken
@@ -261,7 +263,7 @@ after that we believed the token counter and nothing else.</p>
 <p><small>RTX 5080 16 GB, Linux, the one-weight decode arm on both engines; 32 generated tokens, not 128. The 30B's and the 27B Q3_K_XL's decode figures were taken before the decode work.</small></p>
 <p>The construction cannot be finished. Only stopped. This is where it stopped, for now. The
 End. Right???</p>
-<h2>Will it run on your card?</h2>
+<h2 id="will-it-run-on-your-card">Will it run on your card?</h2>
 <p>Definitely, if it is one of these two: an RTX 5060 Ti under Windows 11 with the 616 driver,
 the one card we have measured to the bit, or an RTX 5080 under Linux with the 580 driver,
 measured for a day and a half on a rented box. With the right driver and the right operating
@@ -278,7 +280,7 @@ product - the tier switches itself off, says why once, and the CPU takes over.</
 and keeps the winners. For Metal we have one vendor, the same tuner, and a Mac to test on.
 For Vulkan we have a tile pick that is a formula over the card's core count and its matrix
 mode, a lane table measured on one card, and our best wishes for the rest. Works on my PC.</p>
-<h2>Why Vulkan was last to the party</h2>
+<h2 id="why-vulkan-was-last-to-the-party">Why Vulkan was last to the party</h2>
 <p>Because the CPU and Metal are fixed targets. A kernel that works there keeps working, and the
 tuner says when it stops being the fastest. Vulkan is a moving target. The 3060 was fine, and
 the 5060 Ti read slower without a line of code changing, because the new card had a matrix
@@ -290,7 +292,7 @@ driver's list. The rest of this engine is development. This part is keeping a zo
 driver died with the box otherwise fine. Every test stayed green. We ran the 47 files one at a
 time, and none of them did it alone. Don't you love it when your monitor goes black, never to
 return until the reboot.</p>
-<h2>The gift that keeps on giving</h2>
+<h2 id="the-gift-that-keeps-on-giving">The gift that keeps on giving</h2>
 <p>dasLLAMA is written in daslang, and its Vulkan kernels are daslang classes: a buffer is a
 member, a constant is a member, the body is a method, and the compiler writes the GPU code.
 Two weeks of Qwen pushed on that compiler as hard as anything has. A kernel can now read a
@@ -304,7 +306,7 @@ two decode arms and the cooperative-matrix arm are one kernel template with a fe
 kernels in all, 98 of them stamped from a template. A material by light by platform matrix
 is the same problem
 with other nouns, and the same infrastructure now serves both.</p>
-<h2>The door</h2>
+<h2 id="the-door">The door</h2>
 <p>dasLLAMA started on a Mac, because a Mac laptop was the machine at hand in a hospital bed.
 Most of our friends do not run one. Vulkan is the door for them, and two weeks of the Qwen
 family fortune is what it took to get the door to open on the one PC we have, and then on one
@@ -318,9 +320,9 @@ Right???</p></div>
 <footer class="dio-footer"><div class="forge-container"><div class="dio-footer__grid">
 <div>
 <a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
-<p class="dio-footer__about">LLM + speech-to-text inference written in daslang.<br/>© 2018–2026 Gaijin Entertainment · BSD 3-Clause</p>
+<p class="dio-footer__about">LLM, speech and translation inference written in daslang.<br/>© 2018–2026 Gaijin Entertainment · BSD 3-Clause</p>
 </div>
-<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="/">news</a><a class="dio-footer__link" href="../examples.html">examples</a><a class="dio-footer__link" href="../stories.html">stories</a><a class="dio-footer__link" href="../ladder.html">ladder</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
+<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="/">news</a><a class="dio-footer__link" href="../features.html">features</a><a class="dio-footer__link" href="../examples.html">examples</a><a class="dio-footer__link" href="../articles.html">articles</a><a class="dio-footer__link" href="../stories.html">stories</a><a class="dio-footer__link" href="../ladder.html">ladder</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
 <div><div class="dio-footer__head">daslang</div><a class="dio-footer__link" href="https://daslang.io">daslang.io</a><a class="dio-footer__link" href="https://daslang.io/dasllama.html">scoreboard</a><a class="dio-footer__link" href="https://daslang.io/downloads.html">downloads</a></div>
 <div><div class="dio-footer__head">method</div><a class="dio-footer__link" href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript">github</a><a class="dio-footer__link" href="https://t.me/daScript">telegram</a></div>
 <div><div class="dio-footer__head">legal</div><a class="dio-footer__link" href="https://legal.gaijin.net/termsofservice">terms of service</a><a class="dio-footer__link" href="https://legal.gaijin.net/privacypolicy">privacy policy</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript/blob/master/LICENSE">bsd 3-clause license</a></div></div></div></footer>
