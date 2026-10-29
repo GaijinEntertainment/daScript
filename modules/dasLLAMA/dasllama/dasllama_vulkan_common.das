@@ -508,6 +508,7 @@ struct GpuState {
     fence : VkFence          // the one reusable submit fence (reset after every wait)
     rows_per_wg : int64      // subgroups per workgroup = output rows per workgroup
     subgroup_size : int64    // the device's subgroupSize (32 on NVIDIA; the KHR kq tile gates on it)
+    integrated : bool        // VkPhysicalDeviceType INTEGRATED_GPU: the prefill window submits one layer at a time (`pf_chunk_cap`)
     has_coopmat : bool       // device supports VK_KHR_cooperative_matrix (the f16/int8 tensor tiles)
     has_coopmat2 : bool      // device supports NV_cooperative_matrix2 (tensor-addressed wg tiles + decode fns)
     has_coopmat2_fa : bool   // ... plus the cm2 flash-attention trio (reductions, conversions, per-element ops), on a device created in cm2 mode
@@ -1466,6 +1467,10 @@ def vk_moe_init : bool {
     var pdp : VkPhysicalDeviceProperties
     vkGetPhysicalDeviceProperties(g_gpu.phys, pdp)
     g_gpu.msr = int64(pdp.limits.maxStorageBufferRange)
+    g_gpu.integrated = pdp.deviceType == VkPhysicalDeviceType.INTEGRATED_GPU
+    if (g_gpu.integrated) {
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: an integrated GPU - the prefill window submits one layer at a time (DASLLAMA_VK_CHUNK)\n")
+    }
     g_gpu.max_wg_invocations = int64(pdp.limits.maxComputeWorkGroupInvocations)
     // env-vs-auto resolution shared with the DlimConfiguration source (resolve_weight_cap)
     let heap = query_heap_info(g_gpu.phys)

@@ -1777,6 +1777,26 @@ def test_h128_twin_gate(t : T?) {
     }
 }
 
+//! the prefill window's chunk cap: one layer a submit on an integrated GPU (the amdgpu watchdog), the ramp's hold on a discrete one
+[test]
+def test_pf_chunk_cap(t : T?) {
+    t |> run("an integrated GPU submits the window one layer at a time") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (g_env_vulkan.vk_chunk > 0l) {
+                t |> skip("DASLLAMA_VK_CHUNK is set - the device's own cap is not what this process runs")
+                return
+            }
+            var shell = GpuState(integrated = false)
+            var live = g_gpu
+            g_gpu = unsafe(addr(shell))
+            t |> equal(pf_chunk_cap(), PF_CHUNK_MAX, "the control: a discrete GPU holds the ramp at {PF_CHUNK_MAX} layers")
+            shell.integrated = true
+            t |> equal(pf_chunk_cap(), 1l, "an integrated GPU caps a submit at one layer")
+            g_gpu = live
+        }
+    }
+}
+
 //! the expert cache's profile beside the lane: a file the writer made reads back whole for its model's shape, and another
 //! model's shape, a bad magic or a short file reads empty (the cache then keeps the first ids)
 [test]
