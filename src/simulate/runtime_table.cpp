@@ -145,6 +145,16 @@ namespace das
     // keys and values
 
     template <typename KeyType>
+    __forceinline void copyTableKey ( char * dst, const char * src ) {
+        *(KeyType *)dst = *(const KeyType *)src;
+    }
+
+    template <>
+    __forceinline void copyTableKey<vec4f> ( char * dst, const char * src ) {
+        v_stu(dst, v_ldu((const float *)src));
+    }
+
+    template <typename KeyType>
     struct TableKeysIterator : TableIterator {
         TableKeysIterator ( const Table * tab, uint32_t st, LineInfo * at ) : TableIterator(tab,st,at) {}
         virtual char * getData ( ) const override {
@@ -160,7 +170,7 @@ namespace das
             // Only read the key when the slot is real: an empty / fully-erased table lands data at
             // table_end (one past the keys block). For a non-string packed table the keys block is
             // the last region (no hash array follows), so dereferencing there is a heap overflow.
-            if ( data != table_end ) *(KeyType *)_value = *(KeyType *)data;
+            if ( data != table_end ) copyTableKey<KeyType>(_value, data);
             return (bool) table->size;
         }
         virtual bool next  ( Context &, char * _value ) override {
@@ -168,7 +178,7 @@ namespace das
             index = nextValid(index + 1);
             data = originData + index * stride;
             bool more = data != table_end;
-            if ( more ) *(KeyType *)_value = *(KeyType *)data;   // skip the past-end read on exhaustion
+            if ( more ) copyTableKey<KeyType>(_value, data);   // skip the past-end read on exhaustion
             return more;
         }
         virtual void close ( Context & context, char * ) override {
@@ -232,8 +242,7 @@ namespace das
         for ( uint32_t i=0, is=total; i!=is; ++i, pTable-- ) {
             if ( pTable->data ) {
                 if ( !pTable->isLocked() ) {
-                    uint64_t oldSize = pTable->capacity * uint64_t(vts_add_kts) + pTable->capacity*tableHashSlotBytes(*pTable);
-                    context.free(pTable->data, oldSize, &debugInfo);
+                    context.free(pTable->data, tableAllocBytes(*pTable), &debugInfo);
                 } else {
                     context.throw_error_at(debugInfo, "deleting locked table%s", errorMessage);
                     return v_zero();

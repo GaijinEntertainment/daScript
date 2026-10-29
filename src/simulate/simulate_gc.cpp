@@ -351,8 +351,7 @@ namespace das
             popRange();
         }
         virtual void beforeTable ( Table * PT, TypeInfo * ti ) override {
-            auto tsize = (ti->firstType->size + ti->secondType->size) * PT->capacity + tableHashSlotBytes(*PT)*PT->capacity;
-            DAS_ASSERT(tsize==(getTypeSize(ti->firstType)+getTypeSize(ti->secondType))*PT->capacity + tableHashSlotBytes(*PT)*PT->capacity);
+            auto tsize = tableAllocBytes(*PT);
             char * pa = PT->data;
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && markRange(rdata) ) {
@@ -750,7 +749,7 @@ namespace das
             popRange();
         }
         virtual void beforeTable ( Table * PT, TypeInfo * ti ) override {
-            PtrRange rdata(PT->data, (ti->firstType->size+ti->secondType->size)*size_t(PT->capacity) + size_t(tableHashSlotBytes(*PT))*size_t(PT->capacity));
+            PtrRange rdata(PT->data, size_t(tableAllocBytes(*PT)));
             markAndPushRange(rdata);
         }
         virtual void afterTable ( Table *, TypeInfo * ) override {

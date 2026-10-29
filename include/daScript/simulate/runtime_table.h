@@ -114,6 +114,10 @@ namespace das
         return tab.tableNoHash ? uint64_t(1) : uint64_t(sizeof(TableHashKey));
     }
 
+    __forceinline uint64_t tableAllocBytes ( const Table & tab ) {
+        return uint64_t((const char *)tab.hashes - tab.data) + tab.capacity * tableHashSlotBytes(tab);
+    }
+
     // Packed STRING tables store 64-bit hashes in the `hashes` block (declared TableHashKey*=uint32_t*);
     // packed non-string tables store no hash at all, so these helpers are only used on the string path.
     // Access them via memcpy: a direct ((uint64_t*)hashes)[i] lets clang -O3 assume 8-byte alignment
@@ -583,10 +587,7 @@ namespace das
                 }
             }
             if (tab.capacity && (!context->verySafeContext || tab.scratch)) {
-                uint64_t oldHashBytes = (PackedPolicy<KeyType>::storesHash && tab.capacity <= TABLE_MAX_LINEAR_CAPACITY) ? uint64_t(PackedPolicy<KeyType>::hashBytes)
-                    : (PackedPolicy<KeyType>::storesHash ? uint64_t(sizeof(TableHashKey)) : uint64_t(1));
-                uint64_t oldSize = tab.capacity * (uint64_t(valueTypeSize) + uint64_t(sizeof(KeyType)) + oldHashBytes);
-                context->free(tab.data, oldSize, at);
+                context->free(tab.data, tableAllocBytes(tab), at);
             }
             swap ( newTab, tab );
             return true;

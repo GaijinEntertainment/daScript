@@ -138,3 +138,24 @@ def test_key_bit_patterns(t : T?) {
     t |> equal(1, z?[int2(0, 0)] ?? -1, "the +0.0-patterned key")
     t |> equal(2, z?[int2(1 << 31, 0)] ?? -1, "the -0.0-patterned key")
 }
+
+[test]
+def test_vector_keys_iterate_past_bool_values(t : T?) {
+    t |> run("int4 keys, bool values") @(t : T?) {
+        var tab := {int4(1, 2, 3, 4) => true, int4(5, 6, 7, 8) => false}
+        var sum = int4(0)
+        for (k in keys(tab)) {
+            sum += k
+        }
+        t |> equal(sum, int4(6, 8, 10, 12))
+    }
+    t |> run("float4 keys, bool values") @(t : T?) {
+        var tab := {float4(1.0) => true}
+        var n = 0
+        for (k in keys(tab)) {
+            t |> equal(k, float4(1.0))
+            n++
+        }
+        t |> equal(n, 1)
+    }
+}
