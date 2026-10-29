@@ -12,7 +12,9 @@ REPO_ROOT = ROOT.parent
 # and REVIEW.das reads this list to hold each served .html to it
 PAGES = {
     "index.html": "https://dasllama.io/",
+    "features.html": "https://dasllama.io/features.html",
     "examples.html": "https://dasllama.io/examples.html",
+    "articles.html": "https://dasllama.io/articles.html",
     "stories.html": "https://dasllama.io/stories.html",
     "ladder.html": "https://dasllama.io/ladder.html",
     "sidecars.html": "https://dasllama.io/sidecars.html",
@@ -22,7 +24,11 @@ STORY_PAGES = {
     f"stories/{p.name}": f"https://dasllama.io/stories/{p.name}"
     for p in sorted((ROOT / "stories").glob("*.html"))
 }
-ALL_PAGES = {**PAGES, **STORY_PAGES}
+ARTICLE_PAGES = {
+    f"articles/{p.name}": f"https://dasllama.io/articles/{p.name}"
+    for p in sorted((ROOT / "articles").glob("*.html"))
+}
+ALL_PAGES = {**PAGES, **STORY_PAGES, **ARTICLE_PAGES}
 
 
 class MetadataParser(HTMLParser):
@@ -75,6 +81,17 @@ class SiteMetadataTest(unittest.TestCase):
         self.assertTrue(stories, "no stories")
         self.assertEqual(pages, stories)
 
+    def test_there_is_a_page_per_article(self):
+        articles = sorted(p.stem for p in (ROOT / "_articles").glob("*.md"))
+        pages = sorted(p.stem for p in (ROOT / "articles").glob("*.html"))
+        self.assertTrue(articles, "no articles")
+        self.assertEqual(pages, articles)
+        for page in pages:
+            # an article names its author on the page; the template's slot is filled, never left raw
+            text = (ROOT / "articles" / f"{page}.html").read_text(encoding="utf-8")
+            self.assertNotIn("{{author}}", text)
+            self.assertRegex(text, r'<span class="dio-story__author">[^<]+</span>')
+
     def test_pages_carry_head_metadata(self):
         # the per-page metadata the site checklist requires: a title, a description, the
         # OpenGraph quartet, and the Atom link - a new or renamed page included
@@ -94,7 +111,7 @@ class SiteMetadataTest(unittest.TestCase):
         namespace = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
         urls = [node.text for node in tree.findall("sm:url/sm:loc", namespace)]
         self.assertEqual(urls[:len(PAGES)], list(PAGES.values()))
-        self.assertEqual(sorted(urls[len(PAGES):]), sorted(STORY_PAGES.values()))
+        self.assertEqual(sorted(urls[len(PAGES):]), sorted({**STORY_PAGES, **ARTICLE_PAGES}.values()))
 
     def test_feed_links_to_home_page_anchors(self):
         feed = (ROOT / "feed.xml").read_text(encoding="utf-8")
@@ -137,6 +154,57 @@ class SiteMetadataTest(unittest.TestCase):
                                  f"{name}: the bars box is shown")
                 self.assertRegex(page, rf'<div class="dl-table-wrap" id="{re.escape(ids["wrap"])}" hidden>',
                                  f"{name}: the table wrap starts hidden")
+
+    def test_articles_reach_the_index_the_feed_and_the_sitemap(self):
+        # every article: an index row under articles/ naming its author, a feed entry, a lastmod on
+        # the index's sitemap row, and section ids on its page (the markdown 'toc' extension)
+        index = (ROOT / "articles.html").read_text(encoding="utf-8")
+        feed = (ROOT / "feed.xml").read_text(encoding="utf-8")
+        sitemap = (ROOT / "sitemap.xml").read_text(encoding="utf-8")
+        articles = sorted((ROOT / "_articles").glob("*.md"))
+        newest = None
+        for md in articles:
+            slug = md.stem
+            with self.subTest(article=slug):
+                text = md.read_text(encoding="utf-8")
+                author = re.search(r"^author:\s*(.+)$", text, re.M)
+                date = re.search(r"^date:\s*(\S+)$", text, re.M)
+                self.assertTrue(author and date, "front matter names an author and a date")
+                newest = max(newest or "", date.group(1))
+                row = re.search(rf'<a class="forge-blog-item" href="articles/{re.escape(slug)}\.html">.*?</a>', index, re.S)
+                self.assertTrue(row, "the article has an index row under articles/")
+                self.assertIn(f" · {author.group(1).strip()}</span>", row.group(0), "the row names the author")
+                self.assertIn(f"https://dasllama.io/articles/{slug}.html", feed)
+                page = (ROOT / "articles" / f"{slug}.html").read_text(encoding="utf-8")
+                self.assertRegex(page, r'<h2 id="[a-z0-9-]+">', "section headings carry ids")
+        self.assertIn(f"<loc>https://dasllama.io/articles.html</loc><lastmod>{newest}</lastmod>", sitemap)
+
+    def test_serve_maps_the_shared_files_onto_the_daslang_io_tree(self):
+        # serve.py serves the files the deploy stages from site/files - flat ones and the one under
+        # a subdirectory - from that tree, and everything else under files/ from this one
+        import serve
+        handler = serve.Handler.__new__(serve.Handler)
+        handler.directory = str(ROOT)
+        site_files = Path(serve.SITE_FILES)
+        self.assertEqual(Path(handler.translate_path("/files/forge.css")), site_files / "forge.css")
+        self.assertEqual(Path(handler.translate_path("/files/cm/daslang-keywords.js?v=1")), site_files / "cm" / "daslang-keywords.js")
+        self.assertEqual(Path(handler.translate_path("/files/dasllama-io.css")), ROOT / "files" / "dasllama-io.css")
+
+    def test_every_files_reference_on_a_page_is_served(self):
+        # a page's files/<path> reference resolves here, or to a file the deploy stages from
+        # site/files (the shared list in pages.yml); stamp_assets leaves an unresolvable one as a
+        # dead tag, so nothing else catches it
+        yml = (REPO_ROOT / ".github" / "workflows" / "pages.yml").read_text(encoding="utf-8")
+        shared_line = re.search(r"for f in (forge\.css[^;]*); do", yml)
+        self.assertTrue(shared_line, "pages.yml lists the shared files the dasllama.io deploy stages")
+        shared = set(shared_line.group(1).split())
+        pages = list(ALL_PAGES) + ["_stories/template.html", "_articles/template.html"]
+        for filename in pages:
+            text = (ROOT / filename).read_text(encoding="utf-8")
+            for rel in re.findall(r'(?:src|href)="(?:\.\./|\{\{root\}\})?files/([A-Za-z0-9_./-]+)', text):
+                with self.subTest(page=filename, ref=rel):
+                    self.assertTrue((ROOT / "files" / rel).exists() or rel in shared,
+                                    f"files/{rel} is neither here nor in the deploy's shared list")
 
     def test_caddy_redirects_explicit_index(self):
         snippet = (

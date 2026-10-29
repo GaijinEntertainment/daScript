@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>features — dasllama.io</title>
+<meta name="description" content="Every model family dasLLAMA loads, by what it does: text LLMs, mixture-of-experts, audio-in and image-in chat, speech-to-text, text-to-speech, translation, voice activity - and the backends, formats and ways to run it."/>
+<meta property="og:title" content="dasllama.io features"/>
+<meta property="og:description" content="Every model family the engine loads, by what it does, and the backends, formats and ways to run it."/>
+<meta property="og:type" content="website"/>
+<meta property="og:url" content="https://dasllama.io/features.html"/>
+<link rel="canonical" href="https://dasllama.io/features.html"/>
+<link rel="icon" href="files/dasllama-favicon.svg" type="image/svg+xml"/>
+<link rel="alternate" type="application/atom+xml" href="/feed.xml" title="dasllama.io news"/>
+<link rel="stylesheet" href="files/fonts/fonts.css"/>
+<link rel="stylesheet" href="files/forge.css"/>
+<link rel="stylesheet" href="files/dasllama-table.css"/>
+<link rel="stylesheet" href="files/dasllama-io.css"/>
+<script src="files/dasllama-io.js" defer></script>
+<script src="files/github-star.js" defer></script>
+<!-- Analytics — site code "dasllama" under the borisbat goatcounter account -->
+<script data-goatcounter="https://dasllama.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+</head><body><div class="forge-page">
+
+<nav class="dio-nav" id="nav"><div class="forge-container"><div class="dio-nav__inner">
+<div class="dio-nav__left">
+<button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
+<a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<div class="dio-tabs"><a class="dio-tab" href="/">home</a><a class="dio-tab is-active" href="features.html">features</a><a class="dio-tab" href="examples.html">examples</a><a class="dio-tab" href="articles.html">articles</a><a class="dio-tab" href="stories.html">stories</a><a class="dio-tab" href="ladder.html">ladder</a></div>
+</div>
+<div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.6</span><!-- hand-maintained version chip: bump with the daslang release --></div>
+</div></div></nav>
+
+<header class="dio-head"><div class="forge-container"><div class="dio-head__row">
+<div>
+<h1>What it <em>loads.</em></h1>
+<p class="dio-head__lede">Every model family the engine serves, grouped by what it does. A family loads from its stock file - the GGUF, the whisper.cpp bin, the Marian bin - auto-detected from the file's own metadata, and is held token for token against its reference engine before it is listed here. A family marked <b>in master</b> is merged and runs from source today; it ships with the next release.</p>
+</div>
+</div></div></header>
+
+<section class="forge-section" style="padding:12px 0 64px;border-top:0">
+<div class="forge-container">
+<article class="dio-story dio-story--page" style="padding-top:0">
+<div class="dio-story__body">
+
+<h2 id="text">Text LLMs</h2>
+<ul>
+<li><strong>Llama</strong> - Llama-2, Llama-3.1 / 3.2, TinyLlama, SmolLM2, Mistral-7B, Mistral-Medium-3.5-128B, and llama2.c checkpoints.</li>
+<li><strong>Qwen dense</strong> - Qwen2.5, Qwen3, and the Qwen3.5 / Qwen3.6 / Qwen3.8 hybrid Gated-DeltaNet trunk, 0.8B to 27B.</li>
+<li><strong>Gemma</strong> - Gemma-2, Gemma-3, Gemma-4 dense 12B / 31B, and the E2B / E4B edge series with per-layer embeddings and cross-layer KV sharing.</li>
+<li><strong>Phi</strong> - Phi-3.5-mini (LongRoPE).</li>
+<li><strong>gpt-oss</strong> - gpt-oss-20b: native MXFP4 experts, attention sinks, YaRN, the Harmony chat format.</li>
+</ul>
+
+<h2 id="moe">Mixture of experts</h2>
+<ul>
+<li><strong>Qwen MoE</strong> - Qwen1.5-MoE-A2.7B, Qwen3-30B-A3B, Qwen3.6-35B-A3B and 122B-A10B (hybrid DeltaNet plus routed experts), Qwen3-Coder-Next 80B-A3B, and Qwen3.8-Flash-Next, the Qwen4 preview: the same hybrid trunk inside hyper-connections, with an n-gram side input and 512 experts a layer.</li>
+<li><strong>Gemma-4-26B-A4B</strong>, <strong>GLM-4.5-Air</strong> 106B-A12B, <strong>gpt-oss-20b</strong>.</li>
+<li><strong>Self-speculative decode</strong> - a file with a NextN draft head (the <code>-MTP-</code> Qwen3.6 / Qwen3.8 files, Gemma-4) drafts its own next tokens; the output is unchanged.</li>
+<li><strong>Experts on the host</strong> - a MoE whose expert stacks do not fit the card keeps a hot expert pool on the device and sums the rest on the CPU; the prompt window streams the busy experts through the card. How that works, with the numbers: the <a href="articles/2026-10-28-the-need-for-speed.html#when-the-model-does-not-fit-the-card">article</a>.</li>
+</ul>
+
+<h2 id="audio-in">Audio-in chat</h2>
+<ul>
+<li>Qwen2-Audio, Qwen2.5-Omni 3B / 7B, Qwen3-Omni-30B-A3B, Ultravox v0.5, Voxtral-Mini-3B, Gemma-4 E2B / E4B audio. Audio goes straight into the prompt; the server takes it as an OpenAI-style audio part.</li>
+</ul>
+
+<h2 id="image-in">Image-in chat</h2>
+<ul>
+<li><strong>Gemma-4</strong> dense through its <code>gemma4uv</code> vision tower and the E-series through <code>gemma4v</code>, both at dynamic resolution; <strong>Gemma-3</strong> through its SigLIP tower.</li>
+<li><strong>The Qwen vision family</strong> - Qwen3-VL (DeepStack: three tower taps into the decoder), Qwen3-Omni-30B, Qwen2.5-Omni / Qwen2.5-VL - sniffed from the mmproj file; one image per turn. The server takes <code>image_url</code> data-URI parts.</li>
+</ul>
+
+<h2 id="asr">Speech-to-text</h2>
+<ul>
+<li><strong>Whisper</strong> - the whole family, tiny to large-v3-turbo, from the stock whisper.cpp bins.</li>
+<li><strong>Parakeet-TDT</strong> 0.6b v2 and v3 (v3: 25 European languages).</li>
+<li><strong>GigaAM v3</strong> - Russian; its CTC and RNN-T heads, one GGUF carrying encoder and head. <b>In master.</b></li>
+<li><strong>Qwen3-ASR</strong> 0.6B / 1.7B, <strong>Canary-Qwen</strong> 2.5B.</li>
+<li>Long clips are split at Silero-VAD silences; the server serves <code>/v1/audio/transcriptions</code>.</li>
+</ul>
+
+<h2 id="tts">Text-to-speech</h2>
+<ul>
+<li><strong>Kokoro</strong> 82M, <strong>KittenTTS</strong> mini and nano, <strong>Pocket TTS</strong> (Kyutai). The text front end - normalization, part-of-speech tagging, grapheme-to-phoneme - is the engine's own; the generation runs on the CPU, on Metal and on Vulkan.</li>
+</ul>
+
+<h2 id="translate">Translation</h2>
+<ul>
+<li><strong>Bergamot</strong> - Firefox Translations' Marian students (the <code>model.&lt;pair&gt;.intgemm.alphas.bin</code> files with their SentencePiece vocabulary), on the CPU, on Metal and on Vulkan. <b>In master.</b></li>
+<li><strong>Translation LLMs</strong> - MiLMMT-46, or any instruct GGUF through its own chat template with thinking off, behind the same <code>load_translator</code> / <code>translate</code> facade. <b>In master.</b></li>
+<li><code>dasllama-cli translate</code> takes typed, scripted or spoken text and can speak the result back; the server serves LibreTranslate-shaped <code>/translate</code> and <code>/languages</code>, and a target language on <code>/v1/audio/translations</code>. Tutorial: <a href="https://daslang.io/doc/reference/tutorials/dasLLAMA_17_translate.html">dasLLAMA 17 - translate</a>.</li>
+</ul>
+
+<h2 id="vad">Voice activity</h2>
+<ul>
+<li><strong>Silero-VAD v6</strong> - the 1.2 MB weights ship in the repository, so it works with no download.</li>
+</ul>
+
+<h2 id="engine">The engine</h2>
+<ul>
+<li><strong>Weights</strong> - F32, F16, BF16, Q8_0, Q4_0, MXFP4 and NVFP4 are read directly; the K-quants (Q4_K_M, Q5_K_M, Q6_K) and the IQ quants of the Unsloth dynamic files run on their own kernels.</li>
+<li><strong>Backends</strong> - CPU kernels auto-tuned per machine, with a shipped profile per CPU class (NEON, i8mm, SVE, AVX2, VNNI-512, AMX); Metal; Vulkan; WebAssembly in the browser (the <a href="examples.html">examples</a>); CUDA, work in progress - in master, already running some models, with no ladder rows until it passes the pairing rule against llama.cpp CUDA.</li>
+<li><strong>Serving</strong> - an OpenAI-compatible server (chat, audio in, images in, transcription, speech, translation), tool calls and JSON responses constrained to a grammar compiled from their schema, a command-line client, and a library API from daslang and C++.</li>
+<li><strong>Measured</strong> - every family is paired with its reference engine on the <a href="ladder.html">ladder</a>: llama.cpp, whisper.cpp, parakeet, ONNX Runtime, NeMo, mlx-audio, and each TTS model's own package. The method: <a href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology</a>.</li>
+<li><strong>Get it</strong> - <code>pip install dasllama</code>, brew, scoop, <code>.deb</code>, <code>.rpm</code>; the <a href="/#get-it">home page</a> names every form. Source, BSD 3-clause: <a href="https://github.com/GaijinEntertainment/daScript">GitHub</a>.</li>
+</ul>
+
+</div>
+</article>
+</div>
+</section>
+
+<footer class="dio-footer"><div class="forge-container"><div class="dio-footer__grid">
+<div>
+<a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
+<p class="dio-footer__about">LLM, speech and translation inference written in daslang.<br/>© 2018–2026 Gaijin Entertainment · BSD 3-Clause</p>
+</div>
+<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="/">news</a><a class="dio-footer__link" href="features.html">features</a><a class="dio-footer__link" href="examples.html">examples</a><a class="dio-footer__link" href="articles.html">articles</a><a class="dio-footer__link" href="stories.html">stories</a><a class="dio-footer__link" href="ladder.html">ladder</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
+<div><div class="dio-footer__head">daslang</div><a class="dio-footer__link" href="https://daslang.io">daslang.io</a><a class="dio-footer__link" href="https://daslang.io/dasllama.html">scoreboard</a><a class="dio-footer__link" href="https://daslang.io/downloads.html">downloads</a></div>
+<div><div class="dio-footer__head">method</div><a class="dio-footer__link" href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript">github</a><a class="dio-footer__link" href="https://t.me/daScript">telegram</a></div>
+<div><div class="dio-footer__head">legal</div><a class="dio-footer__link" href="https://legal.gaijin.net/termsofservice">terms of service</a><a class="dio-footer__link" href="https://legal.gaijin.net/privacypolicy">privacy policy</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript/blob/master/LICENSE">bsd 3-clause license</a></div></div></div></footer>
+
+</div></body></html>

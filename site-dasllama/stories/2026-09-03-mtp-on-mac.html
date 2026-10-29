@@ -16,6 +16,8 @@
 <link rel="stylesheet" href="../files/dasllama-io.css"/>
 <script src="../files/dasllama-io.js" defer></script>
 <script src="../files/github-star.js" defer></script>
+<script src="../files/cm/daslang-keywords.js" defer></script>
+<script src="../files/highlight.js" defer></script>
 <!-- Analytics — site code "dasllama" under the borisbat goatcounter account -->
 <script data-goatcounter="https://dasllama.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 </head><body><div class="forge-page">
@@ -24,9 +26,9 @@
 <div class="dio-nav__left">
 <button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
 <a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
-<div class="dio-tabs"><a class="dio-tab" href="/">home</a><a class="dio-tab" href="../examples.html">examples</a><a class="dio-tab is-active" href="../stories.html">stories</a><a class="dio-tab" href="../ladder.html">ladder</a></div>
+<div class="dio-tabs"><a class="dio-tab" href="/">home</a><a class="dio-tab" href="../features.html">features</a><a class="dio-tab" href="../examples.html">examples</a><a class="dio-tab" href="../articles.html">articles</a><a class="dio-tab is-active" href="../stories.html">stories</a><a class="dio-tab" href="../ladder.html">ladder</a></div>
 </div>
-<div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.5</span><!-- hand-maintained version chip: bump with the daslang release --></div>
+<div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.6</span><!-- hand-maintained version chip: bump with the daslang release --></div>
 </div></div></nav>
 
 <section class="forge-section" style="padding:20px 0 64px;border-top:0">
@@ -58,7 +60,7 @@ layer that predicts the token after the next one. Gemma 4 ships a four-layer ass
 model next to the 26B main model. Both now run in dasLLAMA on Metal. The drafter is a second
 file you load next to the model. We measured on Boris's new M5 Max laptop and on Anton's
 M4 Pro Mac mini, which answers over ssh from the other side of the globe.</p>
-<h2>What we tried</h2>
+<h2 id="what-we-tried">What we tried</h2>
 <p>How deep to draft, first of all. One draft token means the big model computes two positions
 in one pass: the position it was at anyway, where its own answer either matches the draft or
 replaces it, and the position after the draft, which only counts if the draft matched. So a
@@ -74,7 +76,7 @@ ships.</p>
 <p>We also checked whether squeezing the main model harder hurts the drafter. The 8-bit Gemma
 accepted 76.5% of the drafts, the 4-bit one 74.6%. Not much, then.</p>
 <p>Then the kernels, which turned out to be the real story.</p>
-<h2>How we measured</h2>
+<h2 id="how-we-measured">How we measured</h2>
 <p>The board on daslang.io uses llama-bench, and llama-bench cannot measure speculative
 decoding. So we built a small ruler for ourselves. It takes four chat prompts, renders each
 through the model's own chat template with thinking off, and runs two engines on the
@@ -95,7 +97,7 @@ minutes decodes 13 to 18% slower than a cool one. Who knew. Every arm now waits 
 on the 27B before it measures. The release build also runs before anything else: when the
 measuring program had already run the engine in-process, everything it measured afterwards
 came out 20% low, for reasons we still find funny.</p>
-<h2>What we measured</h2>
+<h2 id="what-we-measured">What we measured</h2>
 <p>So we ran it, and the drafter earns its keep: about one extra token in five, and not a token
 more.</p>
 <table>
@@ -256,7 +258,7 @@ drafting. The four prompts do not agree with each other at all. Gemma on the M5:
 </tr>
 </tbody>
 </table>
-<h2>The arithmetic of a round</h2>
+<h2 id="the-arithmetic-of-a-round">The arithmetic of a round</h2>
 <p>Here is the part we most wanted to write down. A round with one draft token produces, on
 average, <code>1 + a</code> tokens, where <code>a</code> is the acceptance rate. So its speedup over plain decoding
 is <code>(1 + a) / c</code>, with <code>c</code> the cost of the round in plain passes. Turn it around and the
@@ -310,7 +312,7 @@ three most likely tokens at one position instead of a chain. Every candidate is 
 to verify, at half a pass to a whole pass each, and a runner-up only earns its row when the
 first candidate was wrong - one time in four on these prompts. It lost on paper before it
 could lose on the box.</p>
-<h2>Where the two days went</h2>
+<h2 id="where-the-two-days-went">Where the two days went</h2>
 <p>Back to that morning. The M4 read 12.7 tokens per second plain and 11.0 with the drafter on.
 llama.cpp on the same machine read 11.5 and 13.6. Without that second pair, a verify that
 cost two full passes for two rows would have looked like the price of a smaller GPU. With
@@ -325,7 +327,7 @@ plain. Same story, one row up: three rows took a kernel nobody had ever tried on
 We already had all the pieces - two rows on the new kernel, one on the old single pass - and
 1 + 2 turned out to be better than 3. Depth 2 went from 7.9 to 12.4, depth 1 to 14.0, by the
 evening of the 3rd. About a hundred lines and a test.</p>
-<h2>What a draft is worth</h2>
+<h2 id="what-a-draft-is-worth">What a draft is worth</h2>
 <p>Exactly what the verify costs. The drafter's quality, the depth, the box, the quantization -
 each of them moves the number a few percent around that one fact. The models ship with the
 drafter built in, so the question was never whether to use it. The question was how cheap we
@@ -339,9 +341,9 @@ engines, on both chips.</p></div>
 <footer class="dio-footer"><div class="forge-container"><div class="dio-footer__grid">
 <div>
 <a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
-<p class="dio-footer__about">LLM + speech-to-text inference written in daslang.<br/>© 2018–2026 Gaijin Entertainment · BSD 3-Clause</p>
+<p class="dio-footer__about">LLM, speech and translation inference written in daslang.<br/>© 2018–2026 Gaijin Entertainment · BSD 3-Clause</p>
 </div>
-<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="/">news</a><a class="dio-footer__link" href="../examples.html">examples</a><a class="dio-footer__link" href="../stories.html">stories</a><a class="dio-footer__link" href="../ladder.html">ladder</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
+<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="/">news</a><a class="dio-footer__link" href="../features.html">features</a><a class="dio-footer__link" href="../examples.html">examples</a><a class="dio-footer__link" href="../articles.html">articles</a><a class="dio-footer__link" href="../stories.html">stories</a><a class="dio-footer__link" href="../ladder.html">ladder</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
 <div><div class="dio-footer__head">daslang</div><a class="dio-footer__link" href="https://daslang.io">daslang.io</a><a class="dio-footer__link" href="https://daslang.io/dasllama.html">scoreboard</a><a class="dio-footer__link" href="https://daslang.io/downloads.html">downloads</a></div>
 <div><div class="dio-footer__head">method</div><a class="dio-footer__link" href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript">github</a><a class="dio-footer__link" href="https://t.me/daScript">telegram</a></div>
 <div><div class="dio-footer__head">legal</div><a class="dio-footer__link" href="https://legal.gaijin.net/termsofservice">terms of service</a><a class="dio-footer__link" href="https://legal.gaijin.net/privacypolicy">privacy policy</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript/blob/master/LICENSE">bsd 3-clause license</a></div></div></div></footer>

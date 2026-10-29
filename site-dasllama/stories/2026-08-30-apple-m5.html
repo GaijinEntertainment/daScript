@@ -16,6 +16,8 @@
 <link rel="stylesheet" href="../files/dasllama-io.css"/>
 <script src="../files/dasllama-io.js" defer></script>
 <script src="../files/github-star.js" defer></script>
+<script src="../files/cm/daslang-keywords.js" defer></script>
+<script src="../files/highlight.js" defer></script>
 <!-- Analytics — site code "dasllama" under the borisbat goatcounter account -->
 <script data-goatcounter="https://dasllama.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 </head><body><div class="forge-page">
@@ -24,9 +26,9 @@
 <div class="dio-nav__left">
 <button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
 <a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
-<div class="dio-tabs"><a class="dio-tab" href="/">home</a><a class="dio-tab" href="../examples.html">examples</a><a class="dio-tab is-active" href="../stories.html">stories</a><a class="dio-tab" href="../ladder.html">ladder</a></div>
+<div class="dio-tabs"><a class="dio-tab" href="/">home</a><a class="dio-tab" href="../features.html">features</a><a class="dio-tab" href="../examples.html">examples</a><a class="dio-tab" href="../articles.html">articles</a><a class="dio-tab is-active" href="../stories.html">stories</a><a class="dio-tab" href="../ladder.html">ladder</a></div>
 </div>
-<div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.5</span><!-- hand-maintained version chip: bump with the daslang release --></div>
+<div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io"><b>built on</b> daslang.io ↗</a><span>v0.6.6</span><!-- hand-maintained version chip: bump with the daslang release --></div>
 </div></div></nav>
 
 <section class="forge-section" style="padding:20px 0 64px;border-top:0">
@@ -45,7 +47,7 @@
 the same afternoon. dasLLAMA had never run on an M5. Anton lent us his Mac mini - an M4
 Pro, the previous generation, sitting on the other side of the globe and reached over ssh -
 so we could watch the two chips side by side. And we got to work.</p>
-<h2>What a new chip is, to this engine</h2>
+<h2 id="what-a-new-chip-is-to-this-engine">What a new chip is, to this engine</h2>
 <p>dasLLAMA does not ship kernels tuned for a chip. For every heavy operation - a matrix
 multiply, an attention step, a normalization - it ships several ways of computing the same
 thing. The first time it runs on a machine it tries them all, keeps the fastest of each,
@@ -70,7 +72,7 @@ we checked it twice, on both machines.</p>
 <p>The vision towers and the speech-to-text encoders run on the GPU on the M5 the way the text
 path does. Nothing new in the design - the same GPU plumbing - but each one had to be tried
 again and its picks re-made.</p>
-<h2>What we measured</h2>
+<h2 id="what-we-measured">What we measured</h2>
 <p>So we measured it on the M5 and - look at that. What a beast of a machine.</p>
 <table>
 <thead>
@@ -141,7 +143,7 @@ the long winter evenings.</p>
 standard for this kind of thing, and they are the only way we know whether we are fast, and
 the only way we know when to stop. Without a yardstick a new chip is just a machine that
 runs, and every one of these numbers would be a little worse.</p>
-<h2>Sixty-two kernels walked into a new chip.</h2>
+<h2 id="sixty-two-kernels-walked-into-a-new-chip">Sixty-two kernels walked into a new chip.</h2>
 <p>Most walked out the same. Twenty-three swapped to the tensor units. A few found out, in
 the first afternoon, that the form that had carried them for two generations was now the
 slow one, and had to be rewritten before the tuner had anything worth picking. None of this
@@ -155,9 +157,9 @@ week - which probably says something about us.</p></div>
 <footer class="dio-footer"><div class="forge-container"><div class="dio-footer__grid">
 <div>
 <a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 26 L21 6 L30 24 L34 24 L41 6 L40 27 L51 35 L51 42 L46 45 L38 43 L36 61 Z M29 29 L34 29 L34 34 L29 34 Z"></path></svg><span>dasllama<span class="tld">.io</span></span></a>
-<p class="dio-footer__about">LLM + speech-to-text inference written in daslang.<br/>© 2018–2026 Gaijin Entertainment · BSD 3-Clause</p>
+<p class="dio-footer__about">LLM, speech and translation inference written in daslang.<br/>© 2018–2026 Gaijin Entertainment · BSD 3-Clause</p>
 </div>
-<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="/">news</a><a class="dio-footer__link" href="../examples.html">examples</a><a class="dio-footer__link" href="../stories.html">stories</a><a class="dio-footer__link" href="../ladder.html">ladder</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
+<div><div class="dio-footer__head">site</div><a class="dio-footer__link" href="/">news</a><a class="dio-footer__link" href="../features.html">features</a><a class="dio-footer__link" href="../examples.html">examples</a><a class="dio-footer__link" href="../articles.html">articles</a><a class="dio-footer__link" href="../stories.html">stories</a><a class="dio-footer__link" href="../ladder.html">ladder</a><a class="dio-footer__link" href="/feed.xml">atom feed</a></div>
 <div><div class="dio-footer__head">daslang</div><a class="dio-footer__link" href="https://daslang.io">daslang.io</a><a class="dio-footer__link" href="https://daslang.io/dasllama.html">scoreboard</a><a class="dio-footer__link" href="https://daslang.io/downloads.html">downloads</a></div>
 <div><div class="dio-footer__head">method</div><a class="dio-footer__link" href="https://daslang.io/doc/reference/dasllama_methodology.html">methodology</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript">github</a><a class="dio-footer__link" href="https://t.me/daScript">telegram</a></div>
 <div><div class="dio-footer__head">legal</div><a class="dio-footer__link" href="https://legal.gaijin.net/termsofservice">terms of service</a><a class="dio-footer__link" href="https://legal.gaijin.net/privacypolicy">privacy policy</a><a class="dio-footer__link" href="https://github.com/GaijinEntertainment/daScript/blob/master/LICENSE">bsd 3-clause license</a></div></div></div></footer>

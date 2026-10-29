@@ -481,8 +481,12 @@ jobs:
         python3 site-dasllama/test_stamp_assets.py
 
         cp site-dasllama/index.html _site_dasllama/
+        cp site-dasllama/features.html _site_dasllama/
         cp site-dasllama/examples.html _site_dasllama/
+        cp site-dasllama/articles.html _site_dasllama/
         cp site-dasllama/stories.html _site_dasllama/
+        mkdir -p _site_dasllama/articles
+        cp -R site-dasllama/articles/. _site_dasllama/articles/
 
         # The browser examples: the wasm64 build from step 7 above plus its model set, MINTED
         # HERE for that build. examples/dasLLAMA/<ex>/models.json names each source file on Hugging
@@ -546,7 +550,8 @@ jobs:
 
         # Shared visual language, staged from the daslang.io tree — single source
         # in the repo, mirrored by site-dasllama/serve.py for local preview.
-        for f in forge.css nav-dropdown.css dasllama-table.css github-star.js; do
+        mkdir -p _site_dasllama/files/cm
+        for f in forge.css nav-dropdown.css dasllama-table.css github-star.js highlight.js cm/daslang-keywords.js; do
             cp "site/files/$f" "_site_dasllama/files/$f"
         done
 
