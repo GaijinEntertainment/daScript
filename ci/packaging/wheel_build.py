@@ -33,8 +33,9 @@ TOOLS = list(profile("daslang")["commands"])
 # the daslang SDK trims to fit; the dasllama bundle ships whole
 EXCLUDE_TOP = ("include", "examples", "doc", "logs")
 # the tutorial sources ship (0.6 MB, and the skills link into them); the 30 MB of
-# media under tutorials/_assets and the media-heavy examples tree stay in the zip
-EXCLUDE_DIRS = ("tutorials/_assets",)
+# media under tutorials/_assets, the media-heavy examples tree and the dasImgui
+# text_input example (14 MB of CJK and emoji fonts it embeds) stay in the zip
+EXCLUDE_DIRS = ("tutorials/_assets", "modules/dasImgui/examples/features/text_input")
 EXCLUDE_LIB_SUB = ("cmake", "pkgconfig")
 EXCLUDE_LIB_EXT = (".a", ".lib")
 # JIT on Windows links its DLLs against these import libs (module_jit.cpp
