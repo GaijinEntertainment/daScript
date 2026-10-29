@@ -1758,6 +1758,25 @@ def test_ple_f32_tile_gates(t : T?) {
     }
 }
 
+//! the h128 coopmat attention twin serves a KHR device at subgroup 32 alone: its fragment owners are 32-lane subgroups
+[test]
+def test_h128_twin_gate(t : T?) {
+    t |> run("the h128 twin declines a wave64 device") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            var shell = GpuState(coopmat_mode = COOPMAT_MM, has_coopmat = true, subgroup_size = 32l)   //! a KHR-only shell at subgroup 32
+            var live = g_gpu
+            g_gpu = unsafe(addr(shell))
+            t |> success(h128_twin_on(), "the control: a coopmat device at subgroup 32 takes the twin")
+            shell.subgroup_size = 64l
+            t |> success(!h128_twin_on(), "a coopmat device at subgroup 64 (RDNA's wave64) takes the generic chunked tile")
+            shell.subgroup_size = 32l
+            shell.has_coopmat = false
+            t |> success(!h128_twin_on(), "... and so does a device without coopmat")
+            g_gpu = live
+        }
+    }
+}
+
 //! the expert cache's profile beside the lane: a file the writer made reads back whole for its model's shape, and another
 //! model's shape, a bad magic or a short file reads empty (the cache then keeps the first ids)
 [test]

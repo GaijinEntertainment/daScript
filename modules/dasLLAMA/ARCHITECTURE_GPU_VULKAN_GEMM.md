@@ -103,7 +103,10 @@ probe row times the class the driver serves. The decode GEMV keeps its quant cha
 **The served GEMM mode resolves once, at init, through one ladder.** cm2 where the device has
 NV_cooperative_matrix2, else mm where it has KHR_cooperative_matrix, else sdot4; `DASLLAMA_COOPMAT`
 overrides the ladder by name, and a cm2 request or force on a device without the extension lands
-on mm. The same resolver stamps the mode into the `.dlim` flavor configuration, so the recorded
+on mm. Every coopmat mode resolves to sdot4 on a device whose subgroup is not 32 lanes: the coopmat
+tiles split a 128-thread workgroup into four fragment owners by `gl_SubgroupID`, so a wave64 device
+(RDNA's default) holds two subgroups where the tile wants four and leaves half of every output tile
+unwritten. The same resolver stamps the mode into the `.dlim` flavor configuration, so the recorded
 mode and the running mode cannot drift. The four-wide decode callback is not in that
 configuration: a cm2 tile names both callbacks (`coopmatLoadTensorDecode`'s tenth argument) - the
 format's own `decode_v4` under the template's `DECV4` axis (every kq superblock format, `ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes`),

@@ -3747,8 +3747,8 @@ def test_vkd_da_attn_b_row0(t0 : T?) {
                     t |> skip("{tag} declined on this device (workgroup cap)")
                     continue
                 }
-                if (stamp == DAB_H128 && !g_gpu.has_coopmat) {
-                    t |> skip("{tag}: no coopmat on this device")
+                if (stamp == DAB_H128 && !h128_twin_on()) {
+                    t |> skip("{tag}: the h128 twin serves on a coopmat device at subgroup 32 alone")
                     continue
                 }
                 verify(stamp != DAB_H128 || ensure_da_attn_b_h128_cls(), "the h128 class rail must engage on a coopmat device")
@@ -3895,8 +3895,8 @@ def test_vkd_da_attn_b_ring(t0 : T?) {
                 return
             }
             for (stamp in fixed_array(DAB_B, DAB_BW, DAB_H128)) {
-                if (stamp == DAB_H128 && !g_gpu.has_coopmat) {
-                    t |> skip("da_attn_b_h128: no coopmat on this device")
+                if (stamp == DAB_H128 && !h128_twin_on()) {
+                    t |> skip("da_attn_b_h128: the h128 twin serves on a coopmat device at subgroup 32 alone")
                     continue
                 }
                 verify(stamp != DAB_H128 || ensure_da_attn_b_h128_cls(), "the h128 class rail must engage on a coopmat device")
@@ -3935,8 +3935,8 @@ def test_vkd_da_attn_b_h128(t0 : T?) {
                 t |> skip("da_attn_b class declined on this device (workgroup cap)")   // on a no-coopmat device panics, not feints
                 return
             }
-            if (!g_gpu.has_coopmat) {
-                t |> skip("no coopmat on this device")
+            if (!h128_twin_on()) {
+                t |> skip("the h128 twin serves on a coopmat device at subgroup 32 alone")
                 return
             }
             verify(ensure_da_attn_b_h128_cls(), "the h128 class rail must engage on a coopmat device")
@@ -4014,8 +4014,8 @@ def test_vkd_da_attn_b_gated(t0 : T?) {
             } else {
                 t |> skip("da_attn_bw_f16 class declined on this device (workgroup cap) - the f16 gated arm")
             }
-            if (!g_gpu.has_coopmat) {
-                t |> skip("no coopmat on this device - the h128 gated arm")
+            if (!h128_twin_on()) {
+                t |> skip("the h128 twin serves on a coopmat device at subgroup 32 alone - the h128 gated arm")
                 return
             }
             if (!ensure_da_attn_b_h128_cls()) {
@@ -7914,7 +7914,7 @@ def test_vkd_kv16_readers(t0 : T?) {
                 delete y_cls
             }
             // --- da_attn_b_h128_f16: the coopmat twin over f16 mirrors ---
-            if (g_gpu.has_coopmat) {
+            if (h128_twin_on()) {
                 verify(ensure_da_attn_b_h128_f16_cls(), "the h128 f16 class rail must engage on a coopmat device")
                 var f <- da_attn_b_fix(45, 4, 2, 128, 32, 64, 160, 0.05, 1.8, 0.03, 1.4, true)
                 var y_cls <- da_attn_b_run(f, DAB_H128_F16, 0.125, 0.0, 0)
@@ -7924,7 +7924,7 @@ def test_vkd_kv16_readers(t0 : T?) {
                 delete y_ref
                 delete y_cls
             } else {
-                t |> skip("no coopmat on this device - the h128 f16 arm")
+                t |> skip("the h128 twin serves on a coopmat device at subgroup 32 alone - the h128 f16 arm")
             }
         } else {
             t |> skip("dasVulkan not present")
@@ -8562,9 +8562,13 @@ def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
             }
             let saved_force = g_coopmat_mode_force
             g_coopmat_mode_force = -1
-            t |> equal(resolve_coopmat_mode(true, true), 4)    // cm2 where the device has it
-            t |> equal(resolve_coopmat_mode(true, false), 3)   // else mm
-            t |> equal(resolve_coopmat_mode(false, false), 0)  // else sdot4
+            t |> equal(resolve_coopmat_mode(true, true, 32l), 4)    // cm2 where the device has it
+            t |> equal(resolve_coopmat_mode(true, false, 32l), 3)   // else mm
+            t |> equal(resolve_coopmat_mode(false, false, 32l), 0)  // else sdot4
+            t |> equal(resolve_coopmat_mode(true, false, 64l), 0)   // a wave64 device: the coopmat tiles' four fragment owners are 32-lane subgroups
+            t |> equal(resolve_coopmat_mode(true, true, 64l), 0)
+            g_coopmat_mode_force = 3
+            t |> equal(resolve_coopmat_mode(true, false, 64l), 0)   //! ... and a forced mode follows the same rule
             g_coopmat_mode_force = saved_force
             if (!ensure_q8_batch_cls()) {
                 t |> skip("no Vulkan device for the tile pick (it reads the device's SM count)")
@@ -9382,9 +9386,8 @@ def test_vkd_moe_routing(t0 : T?) {
 def test_vkd_gemv_lane_rule(t0 : T?) {
     t0 |> run("gemv_lanes_per_row: the measured lane split per format class and row length") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            let grid = fixed_array(KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3xxs, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s4)
-            //! nv4 decodes its nibbles off a sixteen-entry table, no codebook gather, and rides the lattice split (`gemv_grid_fmt`)
-            let lattice = fixed_array(KqFmt.k2, KqFmt.k3, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq3s, KqFmt.nv4)
+            let grid = fixed_array(KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3xxs, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s4, KqFmt.nv4)
+            let lattice = fixed_array(KqFmt.k2, KqFmt.k3, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq3s)
             //! row length -> (the grid formats' lanes, the k-lattice formats' lanes); 0 = the whole subgroup
             let rows = fixed_array((n = 768l, g = 8u, l = 8u), (n = 1024l, g = 8u, l = 16u), (n = 1536l, g = 8u, l = 16u),
                 (n = 2048l, g = 16u, l = 16u), (n = 3072l, g = 16u, l = 16u), (n = 4096l, g = 16u, l = 0u), (n = 8192l, g = 16u, l = 0u))

@@ -133,6 +133,10 @@ def cm2_splitk_env : int64 => g_cm2_splitk >= 0l ? g_cm2_splitk : g_env_vulkan.c
 [arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#khr-mm-kq-tile")]
 def khr_kq_tile_on : bool => g_gpu.has_coopmat && g_gpu.subgroup_size == 32l
 
+//! the h128 coopmat attention twin: its 128 threads own four 16x16 fragments as four 32-lane subgroups, so a wave64 device
+//! (two of them in one subgroup, the fragment ops divergent) takes the generic chunked tile
+def h128_twin_on : bool => g_gpu.has_coopmat && g_gpu.subgroup_size == 32l && vk_fa_on()
+
 //! the cm2 flash tiles serve where the device was created in cm2 mode AND the mode still reads cm2 - a test that forces the mode in-process moves the pick with it
 def cm2_fa_on : bool => g_gpu.has_coopmat2_fa && g_gpu.coopmat_mode == COOPMAT_CM2
 
@@ -1020,7 +1024,10 @@ def release_host_buf(var hb : HostBuf&) {
 def nonowning_buf(h : uint64) : Buffer => vk_value_to_boost(unsafe(reinterpret<VkBuffer>(h)))
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
-def resolve_coopmat_mode(has_cm, has_cm2 : bool) : int {
+def resolve_coopmat_mode(has_cm, has_cm2 : bool; subgroup_size : int64) : int {
+    if (subgroup_size != 32l) {
+        return COOPMAT_SDOT4
+    }
     var cmode = has_cm2 ? 4 : (has_cm ? 3 : 0)
     if (has_cm) {
         let mode = g_env_vulkan.coopmat
@@ -1225,16 +1232,16 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
         VkExtEntry(name = "VK_KHR_shader_integer_dot_product", present = integer_dot_product_supported(phys),
             rides = "the sdot4 integer tiles and the quant dot kernels; the tier is disabled without it"),
         VkExtEntry(name = "VK_KHR_cooperative_matrix", present = has_cm,
-            rides = "the KHR f16 and int8 tiles (the mm mode), the resident MoE block's expert pieces in mm mode, the KHR flash tile and its sink stamps, the KHR f16 GEMM off cm2 (at subgroup 32), the h128 attention twin, the tower driver's KHR route (the vision, whisper-class and rotary FastConformer (GigaAM) bidirectional flash tiles, the qwen25v f16 GEMM off cm2 and the audio fronts' f16 GEMMs - the conv stems, the qwen3a, canary and GigaAM fronts), the TTS seats' f16 tile off cm2 (the StyleTTS2 decoder and generator convs, at subgroup 32), and the per-layer-embedding window projection's f16 tile off cm2 (at subgroup 32, dim and rows 16-multiples); without it the sdot4 tiles and the chunked attention serve, a resident MoE's routed block rides the Q8-fed chain, the tower driver declines `device` off cm2, the TTS decoder convs ride the f32 tile, and the per-layer-embedding window projection rides the router GEMV"),
+            rides = "the KHR f16 and int8 tiles (the mm mode), the resident MoE block's expert pieces in mm mode, the KHR flash tile and its sink stamps, the KHR f16 GEMM off cm2 (at subgroup 32), the h128 attention twin (at subgroup 32), the tower driver's KHR route (the vision, whisper-class and rotary FastConformer (GigaAM) bidirectional flash tiles, the qwen25v f16 GEMM off cm2 and the audio fronts' f16 GEMMs - the conv stems, the qwen3a, canary and GigaAM fronts), the TTS seats' f16 tile off cm2 (the StyleTTS2 decoder and generator convs, at subgroup 32), and the per-layer-embedding window projection's f16 tile off cm2 (at subgroup 32, dim and rows 16-multiples); without it the sdot4 tiles and the chunked attention serve, a resident MoE's routed block rides the Q8-fed chain, the tower driver declines `device` off cm2, the TTS decoder convs ride the f32 tile, and the per-layer-embedding window projection rides the router GEMV"),
         VkExtEntry(name = "VK_NV_cooperative_matrix2 (workgroup scope, flexible dimensions, tensor addressing, block loads, bufferDeviceAddress)",
             present = has_cm2,
             rides = "the cm2 decode-in-load prefill tiles, the served default, and the per-layer-embedding window projection's f16 tile (dim a multiple of the small f16 GEMM's eight 64-deep chunks, else the router GEMV); without it the KHR tiles serve, the projection on the KHR f16 tile where that fits and on the router GEMV where none does (DASLLAMA_COOPMAT picks a mode by name)"),
         VkExtEntry(name = "VK_NV_cooperative_matrix2 reductions, conversions and per-element operations",
             present = has_cm2 && cooperative_matrix2_fa_supported(phys),
-            knob = "DASLLAMA_COOPMAT", off = resolve_coopmat_mode(has_cm, has_cm2) != COOPMAT_CM2,
+            knob = "DASLLAMA_COOPMAT", off = resolve_coopmat_mode(has_cm, has_cm2, int64(sp.subgroupSize)) != COOPMAT_CM2,
             rides = "the cm2 flash-attention stamps, on a device created in cm2 mode, and the tower driver's cm2 route (the vision, whisper-class and rotary FastConformer (GigaAM) bidirectional flash tiles, and the GigaAM front's f16 GEMMs); without them the KHR flash tile serves at subgroup 32, the h128 twin and the chunked attention tiles where it declines, and the tower driver takes its KHR route"),
         VkExtEntry(name = "VK_NV_cooperative_matrix_decode_vector", present = has_cm2 && cooperative_matrix2_decode_vector_supported(phys),
-            knob = "DASLLAMA_VK_DECVEC", off = !g_env_vulkan.vk_decvec || resolve_coopmat_mode(has_cm, has_cm2) != COOPMAT_CM2,
+            knob = "DASLLAMA_VK_DECVEC", off = !g_env_vulkan.vk_decvec || resolve_coopmat_mode(has_cm, has_cm2, int64(sp.subgroupSize)) != COOPMAT_CM2,
             rides = "the cm2 tiles' four-wide decode callback; without it the scalar callback serves and a MoE prefill window runs about half again as long"),
         VkExtEntry(name = "VK_NV_shader_sm_builtins", present = device_extension_available(phys, "VK_NV_shader_sm_builtins") && sm > 0,
             rides = "the SM count the dense tile pick, split-k and the decode attention's partials plane read ({sm} here) - past four pieces the token command records a wide twin at eight; without it the l tile serves every dense GEMM, nothing splits k and the attention stays at four pieces"),
@@ -1307,7 +1314,7 @@ def private vk_device_flags : bool {
     // coopmat requested whenever supported — the fa twin needs it even in sdot4 GEMM mode
     g_gpu.has_coopmat = cooperative_matrix_supported(g_gpu.phys)
     g_gpu.has_coopmat2 = g_gpu.has_coopmat && cooperative_matrix2_supported(g_gpu.phys)
-    g_gpu.coopmat_mode = resolve_coopmat_mode(g_gpu.has_coopmat, g_gpu.has_coopmat2)
+    g_gpu.coopmat_mode = resolve_coopmat_mode(g_gpu.has_coopmat, g_gpu.has_coopmat2, int64(subgroup_properties(g_gpu.phys).subgroupSize))
     // the mode conjunct stays: a device created off cm2 mode (`DASLLAMA_COOPMAT=mm`) enables no coopmat2 extension, and the feature probe alone would say yes
     g_gpu.has_coopmat2_fa = g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2 && cooperative_matrix2_fa_supported(g_gpu.phys)
     g_gpu.decvec_on = g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2 && g_env_vulkan.vk_decvec && cooperative_matrix2_decode_vector_supported(g_gpu.phys)

@@ -305,6 +305,13 @@ def test_gpu_perop_dense_ffn(t : T?) {
                 var prompt <- resident_prompt(PROMPT)
                 var toks <- resident_feed(STEPS)
                 var off <- load_perop(path, 0)
+                if (!off.kq_repacked) {   //! the rail reads the CPU backend's repacked K-quant planes; a backend without the repack (portable, the reference policy on x86) leaves the triple to the CPU
+                    t |> skip("the per-op FFN rail asks repacked K-quant planes: the '{active_kernel_backend()}' backend repacks none")
+                    delete off
+                    delete prompt
+                    delete toks
+                    return
+                }
                 let off0 = moe_gpu_dense_ffn_rows()
                 var so <- create_session(off, mirror_kv_dtype())
                 var ctl <- feed_logits(off, so, prompt, toks)
