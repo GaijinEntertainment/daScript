@@ -13,6 +13,7 @@ def release() {
     release_main("main.das")
     // host-only GPU tiers: absent from the wasm build, so their guarded requires resolve as absent
     release_wasm_disable_module("dasvulkan")
+    release_wasm_disable_module("dascuda")
     release_wasm_disable_module("dasmetal")
     release_wasm_disable_module("dasaccelerate")
 }
