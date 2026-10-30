@@ -12,10 +12,27 @@ IF(NOT DAS_LLAMA_INCLUDED)
         FILES_MATCHING
         PATTERN "*.das"
     )
-    # dasllama/ carries [arch] citations; ship generated excerpts of the cited sections
-    # (registry processed by the root CMakeLists)
+    # the tune scope's tuner set: the tuner ([tune_scope(tuner = "../harness/dasllama_tuner.das")]
+    # in dasllama_tune_scope.das - the auto policy spawns it on a box the shipped profile covers
+    # only partly), both halves it runs (gen_tune_probe, tune_kernels), what they require from
+    # harness/ and tests/, and the token-block racer. harness/ and tests/ ship only these, so the
+    # arch-extract registration below names them file by file
+    set(DAS_LLAMA_TUNER_FILES
+        modules/dasLLAMA/harness/dasllama_tuner.das
+        modules/dasLLAMA/harness/gen_tune_probe.das
+        modules/dasLLAMA/harness/tune_kernels.das
+        modules/dasLLAMA/harness/tuner_cli.das
+        modules/dasLLAMA/harness/tuner_noise.das
+        modules/dasLLAMA/harness/tuner_phrases.das
+        modules/dasLLAMA/harness/_gen_probe_fixture.das
+        modules/dasLLAMA/harness/tune_tb.das
+        modules/dasLLAMA/tests/_kq_dot.das
+        modules/dasLLAMA/tests/_compares.das)
+    # dasllama/ and the tuner set carry [arch] citations; ship generated excerpts of the cited
+    # sections (registry processed by the root CMakeLists)
+    string(JOIN "," _das_llama_arch_scan modules/dasLLAMA/dasllama ${DAS_LLAMA_TUNER_FILES})
     set_property(GLOBAL APPEND PROPERTY DAS_ARCH_EXTRACT_SPECS
-        "modules/dasLLAMA/dasllama|modules/dasLLAMA|${DAS_INSTALL_MODULESDIR}/dasLLAMA")
+        "${_das_llama_arch_scan}|modules/dasLLAMA|${DAS_INSTALL_MODULESDIR}/dasLLAMA")
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/.das_module
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLAMA
     )
@@ -26,11 +43,12 @@ IF(NOT DAS_LLAMA_INCLUDED)
         ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/models/jfk_ask_not.LICENSE
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLAMA/models
     )
-    # per-box tuning: the profile producer ([tuned] in the module is the consumer) + its doc
-    install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/harness/tune_kernels.das
-        ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/harness/tune_tb.das
-        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLAMA/harness
-    )
+    # the tuner set (above), each file under its own folder, + the tuning doc
+    foreach(_f IN LISTS DAS_LLAMA_TUNER_FILES)
+        get_filename_component(_fdir ${_f} DIRECTORY)
+        get_filename_component(_fsub ${_fdir} NAME)
+        install(FILES ${PROJECT_SOURCE_DIR}/${_f} DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLAMA/${_fsub})
+    endforeach()
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/tune_for_this_box.md
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLAMA
     )

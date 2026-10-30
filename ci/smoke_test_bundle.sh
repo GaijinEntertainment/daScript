@@ -101,6 +101,12 @@ COMPILE_TESTS=(
     # skips the row (dasVulkan is off by default on Apple: the root CMakeLists).
     "vulkan-example|modules/dasVulkan/examples/smoke.das|dasVulkan"
     "vulkan-tutorial|modules/dasVulkan/tutorials/01_triangle/triangle_tut.das|dasVulkan"
+    # The dasllama tune scope's tuner and the two halves it spawns: an installed app whose box
+    # the shipped profile covers only partly runs them at first start, so a bundle where any of
+    # the three does not compile tunes nothing and dies on a missing prerequisite there.
+    "dasllama-tuner|modules/dasLLAMA/harness/dasllama_tuner.das|dasLLAMA"
+    "dasllama-tuner-gen|modules/dasLLAMA/harness/gen_tune_probe.das|dasLLAMA"
+    "dasllama-tuner-kernels|modules/dasLLAMA/harness/tune_kernels.das|dasLLAMA"
 )
 
 # Tools intentionally NOT in COMPILE_TESTS:

@@ -37,7 +37,7 @@ struct Config {
     base : string
 
     @clarg_positional
-    @clarg_doc = "Root-relative folders whose .das files are scanned for [arch] citations"
+    @clarg_doc = "Root-relative folders scanned for [arch] citations, or single .das files"
     scan : array<string>
 }
 
@@ -176,13 +176,16 @@ def main : int {
     let root = arch_path(empty(cfg.root) ? get_das_root() : cfg.root)
     var files : array<string>
     for (scanRel in cfg.scan) {
-        let dir = "{root}/{scanRel}"
-        let st = stat(dir)
-        if (!st.is_valid || !st.is_dir) {
-            to_log(LOG_ERROR, "error: scan folder is not a directory: {dir}\n")
+        let entry = "{root}/{scanRel}"
+        let st = stat(entry)
+        if (st.is_valid && st.is_reg) {
+            files |> push(entry)
+        } elif (st.is_valid && st.is_dir) {
+            scan_das_files(entry, files)
+        } else {
+            to_log(LOG_ERROR, "error: scan entry is not a directory or a file: {entry}\n")
             return 1
         }
-        scan_das_files(dir, files)
     }
     files |> sort
 

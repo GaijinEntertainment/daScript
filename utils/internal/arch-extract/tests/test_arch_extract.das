@@ -327,14 +327,34 @@ def test_scan_edges(t : T?) {
         let rc = run_extract(root, out_dir, "base", ["base"], out)
         t |> equal(rc, 0, "the dangling citation in builtin.das is not scanned - LINT026's walk skips it too\n{out}")
     }
-    t |> run("a scan folder that is not a directory fails the run") @(t : T?) {
+    t |> run("a scan entry that is a single file scans that file alone") @(t : T?) {
+        let root = path_join(tmp_root(), "onefile")
+        let base = path_join(root, "base")
+        let lib = path_join(base, "lib")
+        mkdir_rec(lib)
+        plant_doc(base, "ARCHITECTURE.md", ["shipped", "unshipped"])
+        let up = "../ARCHITECTURE.md"
+        plant_code(lib, "shipped.das", [Cite(doc = up, anchor = "shipped", fn = "s")])
+        plant_code(lib, "unshipped.das", [Cite(doc = up, anchor = "unshipped", fn = "u")])
+        let out_dir = path_join(root, "out")
+        var out : string
+        let rc = run_extract(root, out_dir, "base", ["base/lib/shipped.das"], out)
+        t |> equal(rc, 0, "a file entry is accepted\n{out}")
+        let doc = fread(path_join(out_dir, "base/ARCHITECTURE.md"))
+        t |> success(find(doc, "body of shipped") >= 0,
+            "the named file's citation is extracted\n{doc}")
+        t |> success(find(doc, "body of unshipped") < 0,
+            "the sibling file is not scanned - its anchor would be uncited in the bundle\n{doc}")
+    }
+    t |> run("a scan entry that is neither a directory nor a file fails the run") @(t : T?) {
         let root = path_join(tmp_root(), "badscan")
         mkdir_rec(root)
         let out_dir = path_join(root, "out")
         var out : string
         let rc = run_extract(root, out_dir, "base", ["missing"], out)
         t |> success(rc != 0, "a missing scan root is an error\n{out}")
-        t |> success(find(out, "not a directory") >= 0, "named as the scan-folder violation\n{out}")
+        t |> success(find(out, "not a directory or a file") >= 0,
+            "named as the scan-entry violation\n{out}")
     }
 }
 
