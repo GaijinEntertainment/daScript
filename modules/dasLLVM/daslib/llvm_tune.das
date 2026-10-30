@@ -2943,6 +2943,7 @@ def tune_restart_needed(scopeName : string; manifestPath : string; tunerPath : s
 // final stamped truth per [tune] function, read off the AST (the tune_suffix/tune_from args
 // stamp_llvm_code records) — no macro-state bank, so shared-context reuse across compiles
 // can't pollute it
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#fat-mode")]
 def private collect_status(prog : Program?) : array<TuneStatus> {
     var rows : array<TuneStatus>
     let sidecar = tune_manifest_path()
@@ -2951,6 +2952,20 @@ def private collect_status(prog : Program?) : array<TuneStatus> {
         var scopeName = ""
         if (g_scopes |> key_exists(modName)) {
             scopeName = g_scopes[modName].scopeName
+        }
+        // a generated function (a fat clone) never declares a companion
+        var mainOfCompanion : table<string; string>
+        for_each_function(mod, "") $(fn) {
+            return if (fn.flags.generated)
+            for (ann in fn.annotations) {
+                if (ann.annotation.name == "tune_companion") {
+                    let fv = find_arg(ann.arguments, "fn")
+                    if (fv is tString) {
+                        let cname : string = fv as tString
+                        mainOfCompanion[cname] = "{fn.name}"
+                    }
+                }
+            }
         }
         for_each_function(mod, "") $(fn) {
             var isTuned = false
@@ -2983,13 +2998,11 @@ def private collect_status(prog : Program?) : array<TuneStatus> {
                 var source = !empty(stampedSource) ? stampedSource : "reference"
                 var mpath = from
                 if (empty(stampedSource)) {
-                    //! the reference clone stamps nothing: a profile's explicit
-                    //! `reference` entry (a decision, not a fallback) is read
-                    //! off the class profile here, so the fat release counts it
                     var pk = ""
                     var pp = ""
                     var prof <- profile_kernels(pk, pp, klass)
-                    if ((prof?[base] ?? "") == "reference") {
+                    let key = (mainOfCompanion |> key_exists(base)) ? mainOfCompanion[base] : base
+                    if ((prof?[key] ?? "") == "reference") {
                         source = "profile"
                         mpath = pp
                     }

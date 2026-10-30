@@ -167,6 +167,29 @@ def test_llvm_tune_fat(t : T?) { // nolint:STYLE038 - one flat spawn-and-assert 
         }
     }
 
+    // 7. a profile's explicit `reference` entry is a decision: the main's
+    //    clone and its companion's both read as profiled, which is what a
+    //    fat release and the exe's own gate count
+    write_profile(defdir, low, "reference")
+    let exeRef = path_join(work, "llvm_tune_fat_client_ref")
+    var lref : array<string>
+    let ref_rc = spawn_child("{tune_env_prefix("fat", low, "")}\"{bin}\" -no-module-cache -exe "
+        + "-output \"{exeRef}.exe\" \"{client}\"", lref)
+    t |> equal(ref_rc, 0, "case 7: the fat exe builds on a reference entry\n{join(lref, "\n")}")
+    t |> success(lref |> has("fat clones {top}=k2/profile, {low}=reference/profile"),
+        "case 7: the build names the reference entry as the profile's pick\n{join(lref, "\n")}")
+    if (can_run && fexist("{exeRef}.exe")) {
+        var lrr : array<string>
+        let ref_run_rc = spawn_child("{tune_env_prefix("", "", low)}\"{exeRef}.exe\"", lrr)
+        t |> equal(ref_run_rc, 0, "case 7: the exe runs pinned to the baseline\n{join(lrr, "\n")}")
+        t |> success(lrr |> has("STATUS fat_add|{low}||profile|active"),
+            "case 7: the main's reference clone reads as profiled\n{join(lrr, "\n")}")
+        t |> success(lrr |> has("STATUS fat_kv|{low}||profile|active"),
+            "case 7: the companion's clone follows its main's entry\n{join(lrr, "\n")}")
+        delete lrr
+    }
+    delete lref
+
     // 5. fat is an exe mode: a -jit run refuses by name
     var lj : array<string>
     t |> success(spawn_child("{tune_env_prefix("fat", low, "")}\"{bin}\" -no-module-cache -jit -jit-no-cache \"{client}\"", lj) != 0, "case 5: fat outside -exe refuses")

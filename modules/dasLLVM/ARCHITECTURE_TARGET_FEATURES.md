@@ -133,7 +133,10 @@ the grid carries it and the class's set passes its `requires=`, else the first `
 the class's set passes, else the reference body. Companions clone per class alongside, taking
 their own profile entry when the class's set can run it and the main's pick otherwise. The
 stamp carries one extra `[llvm_code]` argument, `tune_class`, which folds into the cache keys
-with the rest.
+with the rest. A reference clone carries no stamp, so its status row reads the class profile
+instead: an explicit `reference` entry is the profile's decision and the row's source is
+`profile`, and a companion's row with no entry of its own reads its main's entry - the fat
+release gate and the exe's own start-up gate both count only `profile` rows.
 
 The function's own body becomes the dispatch, generated as daslang: one arm per non-baseline
 class, `if ((tune_fat_mask() & bit) != 0) return <clone>(args)`, most capable first, and the
