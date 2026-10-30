@@ -339,12 +339,12 @@ def pinned_width_run(t : T?; width : uint) {
 [test]
 def test_subgroup_pin_gpu(t : T?) {
     let sup = probe_support()
-    if (!sup.subgroups || !sup.int_dot || !sup.pin.compute) {
-        feint("device lacks subgroup ops, integer dot product or the compute-stage subgroup pin; skipping\n")
+    if (!sup.subgroups || !sup.storage || !sup.int_dot || !sup.pin.compute) {
+        feint("device lacks subgroup ops, 8/16-bit storage, integer dot product or the compute-stage subgroup pin; skipping\n")
         return
     }
     pinned_width_run(t, sup.pin.lo)
-    if (sup.pin.hi != sup.pin.lo) {
+    if (sup.pin.hi != sup.pin.lo && sup.pin.lo >= 2u) {
         pinned_width_run(t, sup.pin.hi)
         var inscope instance <- create_instance("dasVulkan probe", make_api_version(1u, 3u, 0u))
         volkLoadInstance(boost_value_to_vk(instance))

@@ -227,7 +227,7 @@ that width on a device whose default is another (RDNA runs 32 or 64 lanes and de
 `subgroup_size_control_range` reports the widths a device admits and whether its compute stage
 may pin at all, and `compute_subgroup_size_pinnable` asks for one width - a power of two inside
 the range, the only widths `requiredSubgroupSize` admits; a pin outside the range, not a power of
-two, or on a device without the pair, fails pipeline creation, so a caller probes first. The pin is the
+two, or on a device without the pair, is an invalid pipeline create, so a caller probes first. The pin is the
 pair's `subgroupSizeControl` bit, so every creator that enables the pair enables the pin. The
 plain, full-subgroups and pinned creators are one private builder.
 
