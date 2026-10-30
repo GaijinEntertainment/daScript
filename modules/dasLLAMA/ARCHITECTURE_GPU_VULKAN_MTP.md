@@ -256,9 +256,14 @@ device's draft and verify counters).
 
 **The gemma-4 assistant drafter attaches where the resident driver serves the trunk whole, and its
 round is a draft command of its own over the trunk's mirror plus one verify on the N-row token
-command.** The attach (`vk_attach`, `dasllama_vulkan_mtp_gemma.das`) refuses a trunk the driver does
-not serve whole, a table the device does not gather, a trunk the N-row command declined, and a
-capture layer that keeps no K/V rows of its own, each by name. The drafter's Q8_0 tensors split
+command.** The attach (`vk_attach`, `dasllama_vulkan_mtp_gemma.das`; `cud_attach`,
+`dasllama_cuda_mtp_gemma.das`) refuses a trunk the driver does not serve whole, a table the device
+does not gather, a trunk the N-row command declined (a routed layer whose experts serve on the host
+declines it on both discrete homes), and a capture layer that keeps no K/V rows of its own, each by
+name - one ladder (`drafter_trunk_why` over a `DrafterTrunk` record) under each home's name. The
+CUDA twin runs the same step over its own kernel classes: its draft command is a CUDA graph
+captured once per (region, depth), its token, carry, picks and logits ride mapped blocks, and the
+same gather, residual, GEMV, attention and classifier classes the CUDA token step dispatches. The drafter's Q8_0 tensors split
 into the quant and scale planes the q8 GEMV reads, its norms and rope table go up as one f32
 plane, and its activation planes are its own. The draft command, one per (region, depth), bakes
 the capture layers' mirror bases; per step it gathers the step's token row off the trunk's table

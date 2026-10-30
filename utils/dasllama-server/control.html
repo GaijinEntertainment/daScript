@@ -2125,7 +2125,7 @@ const FIELDS = [
     { k: "flat", t: "bool" }, { k: "mtp", t: "bool" },
     { k: "rope_scaling", t: "sel", o: ["yarn", "linear", "none"] },
     { k: "rope_scale", t: "float" }, { k: "yarn_orig_ctx", t: "int" },
-    { k: "gpu", t: "sel", o: ["auto", "off", "metal", "metal-required", "vulkan"] },
+    { k: "gpu", t: "sel", o: ["auto", "off", "metal", "metal-required", "vulkan", "cuda"] },
     { k: "gpu_layers", t: "int" }, { k: "gpu_stream", t: "int" },
     { k: "gpu_vram_mb", t: "int" },
     { k: "gpu_dn", t: "bool" }, { k: "gpu_attn", t: "bool" }, { k: "gpu_dense", t: "bool" },
@@ -2272,7 +2272,7 @@ function renderForm(surface, status) {
     // the zeros are safe to save now and the form no longer invents box-specific counts — only the
     // rail toggles need filling in so the page shows what will actually run
     $("f-gpu").addEventListener("change", () => {
-        if ($("f-gpu").value === "vulkan"
+        if (($("f-gpu").value === "vulkan" || $("f-gpu").value === "cuda")
             && !$("f-gpu_dn").checked && !$("f-gpu_attn").checked) {
             $("f-gpu_dn").checked = true;
             $("f-gpu_attn").checked = true;
@@ -2297,9 +2297,9 @@ function renderForm(surface, status) {
 function renderGpu(status) {
     const g = status.gpu || {}, line = $("gpu-line");
     line.style.display = "block";
-    if (g.backend === "vulkan") {
+    if (g.backend === "vulkan" || g.backend === "cuda") {
         if (g.supported) {
-            line.innerHTML = "gpu tier <b>vulkan</b> · experts K" + g.resident_layers + "+S" + g.streamed_layers +
+            line.innerHTML = "gpu tier <b>" + g.backend + "</b> · experts K" + g.resident_layers + "+S" + g.streamed_layers +
                 " · dn " + g.dn_layers + " · attn " + g.attn_layers +
                 (g.dense_planes ? " · dense " + g.dense_planes : "") +
                 (g.cls_resident ? " · cls" : "") +

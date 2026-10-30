@@ -177,7 +177,9 @@ embedding never peels (the token commands land the last row alone), and the hype
 session keeping its hidden state passes there by name (`RdecPass.hidden`). A one-token text takes a one-row window too
 (`embed_forward`): the one-row command lands the logits and no hidden row. The witness is the device cell of
 `tests/test_embeddings.das`: the model card's cosines, batch against single, every window prefilled on the device and no
-call passed to the CPU rails.
+call passed to the CPU rails. The CUDA home installs the same seat (`cud_rdec_hidden_ask` / `cud_rdec_hidden_rows`): its
+window runs the last layer's residual step alone under the ask and reads `pf_x` off the device after each window's sync; its
+window has no last-row FFN tail slice to turn off. The device cell runs on whichever home the tier armed.
 
 ### The scratch window: an embedding request's texts back to back in one region {#vk-prefill-scratch}
 
@@ -190,7 +192,8 @@ first). A segment's rows start past the rows the segments before it hold (`RdecP
 plus `koff` rows (`pf_seg_mir_base`), folded into the rope-and-store's and the attention's `layerbase`, so its keys sit at
 positions 0.. of its own run and no segment reads another's; a window part carries its segment's `koff`. The driver seats
 segments this way where no layer is a sliding ring and no block codec stores (`vk_rdec_segs_packed`, the seat
-`install_rdec_segs_packed`). The texts' rows must fit the region's context; `embed_batch` cuts a request into windows of at
+`install_rdec_segs_packed`; the CUDA home's `cud_rdec_segs_packed` and `crd_seg_mir_base` are the same rule and the same
+offset). The texts' rows must fit the region's context; `embed_batch` cuts a request into windows of at
 most that many rows (`embed_window_rows`). After the window no session claims the region (`rdec_scratch_landed`,
 `rdec_scratch_release`): an embedding reads its hidden rows and starts its next call at position 0. Its sessions are therefore
 device-home - no host K/V - wherever the driver promises the model this window before the call

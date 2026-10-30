@@ -135,6 +135,8 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_gguf_quant.das",
                     "modules/dasLLAMA/tests/test_gguf_shards.das",
                     "modules/dasLLAMA/tests/test_gpu_serving_declines.das",
+                    "modules/dasLLAMA/tests/test_gpu_home.das",
+                    "modules/dasLLAMA/tests/test_gpu_shared_units.das",
                     "modules/dasLLAMA/tests/test_gpu_tier.das",
                     "modules/dasLLAMA/tests/test_groupn.das",
                     "modules/dasLLAMA/tests/test_kernel_backend.das",
@@ -246,7 +248,12 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_gpu_resident_cuda_qwen3.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_cuda_phi3.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_cuda_qwen35.das",
+                    "modules/dasLLAMA/tests/test_gpu_resident_cuda_mtp.das",
+                    "modules/dasLLAMA/tests/test_gpu_resident_cuda_moe_host.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_cuda_moe.das",
+                    "modules/dasLLAMA/tests/test_gpu_resident_cuda_gemma4.das",
+                    "modules/dasLLAMA/tests/test_gpu_resident_cuda_gemma.das",
+                    "modules/dasLLAMA/tests/test_gpu_resident_cuda_qwen2.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_segments.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_moe.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_moe_host_pinned.das",
@@ -313,6 +320,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_vision_chat.das",
                     "modules/dasLLAMA/tests/test_vision_embedder.das",
                     "modules/dasLLAMA/tests/test_vulkan_mint.das",
+                    "modules/dasLLAMA/tests/test_cuda_mint.das",
                     "modules/dasLLAMA/tests/test_whisper.das" ]
     } elif (name == "all") {
         return <- [ "modules/dasLLAMA/tests/test_metal_decode_parity.das",
@@ -366,7 +374,7 @@ def area_tests(area : string) : array<string> {
         return <- [ "test_accel_backend.das", "test_affinity_predicates.das", "test_arch_registry.das", "test_batch_decode.das", "test_bench_rows.das",
                     "test_batch_grid.das", "test_chat.das", "test_deltanet.das", "test_dispatch_shaping.das", "test_driver_knob_getters.das", "test_facade.das",
                     "test_flash.das", "test_forward.das", "test_from_template.das", "test_fused_decode.das", "test_gguf_quant.das", "test_gguf_shards.das",
-                    "test_gpu_model_swap.das", "test_gpu_moe_shexp.das", "test_gpu_perop_kv_codec.das", "test_gpu_perop_kv_codec_iq.das", "test_gpu_perop_kv_codec_k.das", "test_gpu_resident_codec_llama_iq.das", "test_gpu_resident_codec_llama_k.das", "test_gpu_resident_gemma2.das", "test_gpu_resident_gemma3_1b.das", "test_gpu_resident_gemma3_4b.das", "test_gpu_resident_gemma4_12b_k.das", "test_gpu_resident_gemma4_12b_q8.das", "test_gpu_resident_gemma4_26b.das", "test_gpu_resident_gemma4_26b_k.das", "test_gpu_resident_gemma4_26b_mx4.das", "test_gpu_resident_gemma4_26b_host.das", "test_gpu_resident_moe_host_pinned.das", "test_gpu_resident_gemma4_31b.das", "test_gpu_resident_gemma4_e2b.das", "test_gpu_resident_gemma4_e4b.das", "test_gpu_resident_gptoss.das", "test_gpu_resident_hc.das", "test_gpu_resident_hc_micro.das", "test_parity_dump.das", "test_gpu_resident_continuation.das", "test_gpu_resident_long_window.das", "test_gpu_resident_hybrid.das", "test_gpu_resident_llama.das", "test_gpu_resident_cuda_llama.das", "test_gpu_resident_cuda_codec.das", "test_gpu_resident_cuda_batch.das", "test_gpu_resident_cuda_qwen3.das", "test_gpu_resident_cuda_phi3.das", "test_gpu_resident_cuda_qwen35.das", "test_gpu_resident_cuda_moe.das", "test_gpu_resident_segments.das", "test_gpu_resident_moe.das", "test_gpu_resident_moe_host_rows.das", "test_gpu_resident_moe_formats.das", "test_gpu_resident_format_census.das", "test_gpu_resident_qwen2.das", "test_gpu_resident_regions.das", "test_gpu_resident_regions_e2b.das", "test_gpu_resident_regions_gptoss.das", "test_gpu_resident_regions_qwen3moe.das", "test_gpu_resident_regions_qwen35moe.das", "test_gpu_resident_regions_qwen2moe.das", "test_gpu_resident_regions_gemma4moe.das", "test_gpu_resident_regions_gemma2.das", "test_gpu_resident_regions_gemma3.das", "test_gpu_resident_regions_gemma4.das", "test_gpu_resident_regions_hybrid.das", "test_gpu_resident_regions_hybrid_k.das", "test_gpu_resident_regions_hybrid_iq3s.das", "test_gpu_resident_regions_hybrid_q3kxl.das", "test_gpu_resident_regions_llama_k.das", "test_gpu_resident_regions_llama3b_ctx32k.das", "test_gpu_resident_regions_gemma3_4b_ctx128k.das", "test_gpu_resident_regions_gemma4_e2b_ctx128k.das", "test_gpu_resident_regions_phi3.das", "test_gpu_resident_regions_qwen3.das", "test_gpu_resident_regions_q8kv.das", "test_gpu_resident_regions_tq4kv.das", "test_gpu_serving_declines.das", "test_gpu_slot_swap.das", "test_gpu_tier.das", "test_groupn.das",
+                    "test_gpu_home.das", "test_gpu_model_swap.das", "test_gpu_moe_shexp.das", "test_gpu_perop_kv_codec.das", "test_gpu_perop_kv_codec_iq.das", "test_gpu_perop_kv_codec_k.das", "test_gpu_resident_codec_llama_iq.das", "test_gpu_resident_codec_llama_k.das", "test_gpu_resident_gemma2.das", "test_gpu_resident_gemma3_1b.das", "test_gpu_resident_gemma3_4b.das", "test_gpu_resident_gemma4_12b_k.das", "test_gpu_resident_gemma4_12b_q8.das", "test_gpu_resident_gemma4_26b.das", "test_gpu_resident_gemma4_26b_k.das", "test_gpu_resident_gemma4_26b_mx4.das", "test_gpu_resident_gemma4_26b_host.das", "test_gpu_resident_moe_host_pinned.das", "test_gpu_resident_gemma4_31b.das", "test_gpu_resident_gemma4_e2b.das", "test_gpu_resident_gemma4_e4b.das", "test_gpu_resident_gptoss.das", "test_gpu_resident_hc.das", "test_gpu_resident_hc_micro.das", "test_parity_dump.das", "test_gpu_resident_continuation.das", "test_gpu_resident_long_window.das", "test_gpu_resident_hybrid.das", "test_gpu_resident_llama.das", "test_gpu_resident_cuda_llama.das", "test_gpu_resident_cuda_gemma.das", "test_gpu_resident_cuda_qwen2.das", "test_gpu_resident_cuda_codec.das", "test_gpu_resident_cuda_batch.das", "test_gpu_resident_cuda_qwen3.das", "test_gpu_resident_cuda_phi3.das", "test_gpu_resident_cuda_qwen35.das", "test_gpu_resident_cuda_mtp.das", "test_gpu_resident_cuda_moe.das", "test_gpu_resident_cuda_moe_host.das", "test_gpu_resident_cuda_gemma4.das", "test_gpu_resident_segments.das", "test_gpu_resident_moe.das", "test_gpu_resident_moe_host_rows.das", "test_gpu_resident_moe_formats.das", "test_gpu_resident_format_census.das", "test_gpu_resident_qwen2.das", "test_gpu_resident_regions.das", "test_gpu_resident_regions_e2b.das", "test_gpu_resident_regions_gptoss.das", "test_gpu_resident_regions_qwen3moe.das", "test_gpu_resident_regions_qwen35moe.das", "test_gpu_resident_regions_qwen2moe.das", "test_gpu_resident_regions_gemma4moe.das", "test_gpu_resident_regions_gemma2.das", "test_gpu_resident_regions_gemma3.das", "test_gpu_resident_regions_gemma4.das", "test_gpu_resident_regions_hybrid.das", "test_gpu_resident_regions_hybrid_k.das", "test_gpu_resident_regions_hybrid_iq3s.das", "test_gpu_resident_regions_hybrid_q3kxl.das", "test_gpu_resident_regions_llama_k.das", "test_gpu_resident_regions_llama3b_ctx32k.das", "test_gpu_resident_regions_gemma3_4b_ctx128k.das", "test_gpu_resident_regions_gemma4_e2b_ctx128k.das", "test_gpu_resident_regions_phi3.das", "test_gpu_resident_regions_qwen3.das", "test_gpu_resident_regions_q8kv.das", "test_gpu_resident_regions_tq4kv.das", "test_gpu_serving_declines.das", "test_gpu_shared_units.das", "test_gpu_slot_swap.das", "test_gpu_tier.das", "test_groupn.das",
                     "test_embeddings.das", "test_jobque_tripwire.das", "test_kernel_backend.das", "test_kgroup_repack.das", "test_kqformat.das", "test_kquant.das",
                     "test_kv_codec.das", "test_kv_paged.das", "test_kv_prefix.das", "test_metal_batched_row.das", "test_metal_format_census.das", "test_math_activations.das",
                     "test_math_elementwise.das", "test_matmul.das", "test_matmul_batch.das", "test_f32_batch_tile_perms.das",
@@ -379,7 +387,7 @@ def area_tests(area : string) : array<string> {
                     "test_sampling.das", "test_constraint.das", "test_cuda_kernels.das",
                     "test_scheduler.das", "test_silu.das", "test_softmax.das", "test_storyteller_restart.das", "test_storywish.das", "test_think_split.das", "test_tokenizer.das",
                     "test_tool_formats.das", "test_unicode.das", "test_vulkan_dec_tail.das", "test_vulkan_host_twin.das", "test_vulkan_kernels.das", "test_vulkan_kv_codec_kernels.das",
-                    "test_vulkan_mint.das", "test_vulkan_moe_cm2.das", "test_vulkan_tier.das", "test_vulkan_shared_device.das" ]
+                    "test_vulkan_mint.das", "test_cuda_mint.das", "test_vulkan_moe_cm2.das", "test_vulkan_tier.das", "test_vulkan_shared_device.das" ]
     }
     var none : array<string>
     return <- none
@@ -433,7 +441,7 @@ let MODULE_AREAS <- {
     "dasllama_kv_dtype" => "llm", "dasllama_metal_decode" => "llm", "dasllama_metal_mtp_gemma" => "llm",
     "dasllama_kv_codec" => "llm,audio",   // its f16 dot and axpy serve the parakeet decode
     "dasllama_metal_prefill" => "llm,tts,audio,vision,translate",   // its rope serves the Pocket codec transformer, its attention pair and FastConformer kernels the audio towers, its half convert the vision tower, its q8 GEMM the Bergamot chain
-    "dasllama_moe" => "llm", "dasllama_mtp_gemma" => "llm", "dasllama_vulkan_mtp_gemma" => "llm",
+    "dasllama_moe" => "llm", "dasllama_mtp_gemma" => "llm", "dasllama_vulkan_mtp_gemma" => "llm", "dasllama_cuda_mtp_gemma" => "llm",
     "dasllama_parity" => "llm", "dasllama_ple" => "llm", "dasllama_prefix" => "llm", "dasllama_pretok" => "llm",
     // the TTS slab builds its rope tables through it; every gguf load
     // picks its factor tensor through it, and the vision and audio
@@ -446,7 +454,7 @@ let MODULE_AREAS <- {
     "dasllama_unicode" => "llm,tts",   // cpt_count serves the TTS front end and its chunker
     "dasllama_vulkan_decode" => "llm", "dasllama_vulkan_prefill" => "llm", "dasllama_vulkan_seams" => "llm",
     "dasllama_cuda_common" => "llm", "dasllama_cuda_dispatch" => "llm", "dasllama_cuda_classes" => "llm",
-    "dasllama_cuda_decode" => "llm", "dasllama_math_cuda" => "llm"
+    "dasllama_cuda_decode" => "llm", "dasllama_cuda_stream" => "llm", "dasllama_math_cuda" => "llm"
 }
 
 //! the stocked llm files a change to the engine core reaches - a witness a family and home, the codec rig, the regions
@@ -461,7 +469,7 @@ let LLM_CORE_WITNESSES <- [
     "test_gpu_resident_regions.das", "test_gpu_resident_regions_phi3.das", "test_gpu_resident_regions_qwen3.das",
     "test_gpu_resident_segments.das", "test_kv_codec.das", "test_mtp.das", "test_prefill.das", "test_scheduler.das" ]
 
-let CUDA_WITNESSES = "test_cuda_kernels.das,test_gpu_resident_cuda_llama.das,test_gpu_resident_cuda_codec.das,test_gpu_resident_cuda_batch.das,test_gpu_resident_cuda_qwen3.das,test_gpu_resident_cuda_phi3.das,test_gpu_resident_cuda_qwen35.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_segments.das"
+let CUDA_WITNESSES = "test_cuda_kernels.das,test_gpu_resident_cuda_llama.das,test_gpu_resident_cuda_codec.das,test_gpu_resident_cuda_batch.das,test_gpu_resident_cuda_qwen3.das,test_gpu_resident_cuda_phi3.das,test_gpu_resident_cuda_qwen35.das,test_gpu_resident_cuda_mtp.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_cuda_moe_host.das,test_gpu_resident_cuda_gemma4.das,test_gpu_resident_cuda_gemma.das,test_gpu_resident_cuda_qwen2.das,test_gpu_resident_segments.das"
 let KV_CODEC_WITNESSES = "test_kv_codec.das,test_vulkan_kv_codec_kernels.das,test_gpu_resident_codec_llama_k.das,test_gpu_resident_codec_llama_iq.das,test_gpu_perop_kv_codec.das,test_gpu_perop_kv_codec_k.das,test_gpu_perop_kv_codec_iq.das,test_gpu_resident_cuda_codec.das,test_gpu_resident_regions_q8kv.das,test_gpu_resident_regions_tq4kv.das"
 let TOKENIZER_WITNESSES = "test_tokenizer.das,test_unicode.das,test_chat.das,test_tok_seed.das"
 let METAL_WITNESSES = "test_metal_batched_row.das,test_metal_format_census.das,test_metal_gemm.das,test_metal_role_infer.das,test_metal_float_a_gate.das"
@@ -472,22 +480,23 @@ let METAL_WITNESSES = "test_metal_batched_row.das,test_metal_format_census.das,t
 //! test_run_suites.das pins every row to the census
 let MODULE_WITNESSES <- {
     "dasllama_cuda_common" => CUDA_WITNESSES, "dasllama_cuda_dispatch" => CUDA_WITNESSES, "dasllama_cuda_classes" => CUDA_WITNESSES,
-    "dasllama_cuda_decode" => CUDA_WITNESSES, "dasllama_math_cuda" => CUDA_WITNESSES,
+    "dasllama_cuda_decode" => CUDA_WITNESSES, "dasllama_cuda_stream" => CUDA_WITNESSES, "dasllama_math_cuda" => CUDA_WITNESSES,
     "dasllama_arch_llama" => "test_gpu_resident_llama.das,test_gpu_resident_cuda_llama.das,test_gpu_resident_regions_llama_k.das,test_gpu_resident_codec_llama_k.das,test_forward.das,test_prefill.das",
-    "dasllama_arch_qwen2" => "test_gpu_resident_qwen2.das,test_gpu_perop_kv_codec.das,test_gpu_perop_kv_codec_iq.das,test_gpu_resident_regions.das",
+    "dasllama_arch_qwen2" => "test_gpu_resident_qwen2.das,test_gpu_resident_cuda_qwen2.das,test_gpu_perop_kv_codec.das,test_gpu_perop_kv_codec_iq.das,test_gpu_resident_regions.das",
     "dasllama_arch_qwen3" => "test_gpu_resident_cuda_qwen3.das,test_gpu_resident_regions_qwen3.das,test_gpu_perop_kv_codec_k.das",
-    "dasllama_arch_qwen35" => "test_gpu_resident_hybrid.das,test_gpu_resident_continuation.das,test_gpu_resident_cuda_qwen35.das,test_gpu_resident_regions_hybrid.das,test_gpu_resident_long_window.das,test_deltanet.das,test_mtp.das,test_vulkan_mint.das",
-    "dasllama_arch_qwen3moe" => "test_gpu_resident_regions_qwen3moe.das,test_gpu_resident_moe_formats.das,test_gpu_resident_format_census.das",
-    "dasllama_arch_qwen2moe" => "test_gpu_resident_moe.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_regions_qwen2moe.das,test_gpu_moe_shexp.das,test_gpu_resident_moe_host_rows.das,test_gpu_resident_moe_host_pinned.das",
+    "dasllama_arch_qwen35" => "test_gpu_resident_hybrid.das,test_gpu_resident_continuation.das,test_gpu_resident_cuda_qwen35.das,test_gpu_resident_cuda_mtp.das,test_gpu_resident_regions_hybrid.das,test_gpu_resident_long_window.das,test_deltanet.das,test_mtp.das,test_vulkan_mint.das",
+    "dasllama_arch_qwen3moe" => "test_gpu_resident_regions_qwen3moe.das,test_gpu_resident_moe_formats.das,test_gpu_resident_format_census.das,test_gpu_resident_cuda_moe.das",
+    "dasllama_arch_qwen2moe" => "test_gpu_resident_moe.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_cuda_moe_host.das,test_gpu_resident_regions_qwen2moe.das,test_gpu_moe_shexp.das,test_gpu_resident_moe_host_rows.das,test_gpu_resident_moe_host_pinned.das",
     "dasllama_arch_qwen4exp" => "test_qwen4exp.das,test_gpu_resident_hc.das,test_gpu_resident_hc_micro.das",
     "dasllama_arch_gptoss" => "test_gpu_resident_gptoss.das,test_gpu_resident_regions_gptoss.das,test_gpu_resident_cuda_moe.das",
-    "dasllama_arch_gemma2" => "test_gpu_resident_gemma2.das,test_gpu_resident_regions_gemma2.das",
-    "dasllama_arch_gemma3" => "test_gpu_resident_gemma3_1b.das,test_gpu_resident_gemma3_4b.das,test_gpu_resident_regions_gemma3.das",
-    "dasllama_arch_gemma4" => "test_gpu_resident_gemma4_e2b.das,test_gpu_resident_gemma4_e4b.das,test_gpu_resident_gemma4_12b_k.das,test_gpu_resident_gemma4_26b.das,test_gpu_resident_gemma4_31b.das,test_gpu_resident_regions_gemma4.das,test_gpu_resident_regions_gemma4moe.das,test_ple_modes.das,test_mtp_gemma_drafter.das",
+    "dasllama_arch_gemma2" => "test_gpu_resident_gemma2.das,test_gpu_resident_cuda_gemma.das,test_gpu_resident_regions_gemma2.das",
+    "dasllama_arch_gemma3" => "test_gpu_resident_gemma3_1b.das,test_gpu_resident_gemma3_4b.das,test_gpu_resident_cuda_gemma.das,test_gpu_resident_regions_gemma3.das",
+    "dasllama_arch_gemma4" => "test_gpu_resident_cuda_gemma4.das,test_gpu_resident_gemma4_e2b.das,test_gpu_resident_gemma4_e4b.das,test_gpu_resident_gemma4_12b_k.das,test_gpu_resident_gemma4_26b.das,test_gpu_resident_gemma4_31b.das,test_gpu_resident_regions_gemma4.das,test_gpu_resident_regions_gemma4moe.das,test_ple_modes.das,test_mtp_gemma_drafter.das",
     "dasllama_arch_phi3" => "test_gpu_resident_cuda_phi3.das,test_gpu_resident_regions_phi3.das",
     "dasllama_arch_glm4moe" => "test_mtp.das", "dasllama_arch_mistral3" => "test_chat.das,test_model_specs.das",
     "dasllama_moe" => "test_gpu_resident_moe.das,test_gpu_resident_moe_formats.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_gptoss.das,test_gpu_resident_gemma4_26b.das,test_gpu_moe_shexp.das,test_vulkan_dec_tail.das,test_vulkan_moe_cm2.das,test_vulkan_host_twin.das",
     "dasllama_mtp_gemma" => "test_mtp_gemma_drafter.das", "dasllama_vulkan_mtp_gemma" => "test_mtp_gemma_drafter.das",
+    "dasllama_cuda_mtp_gemma" => "test_mtp_gemma_drafter.das",
     "dasllama_metal_decode" => METAL_WITNESSES, "dasllama_metal_prefill" => METAL_WITNESSES, "dasllama_metal_mtp_gemma" => METAL_WITNESSES,
     "dasllama_scheduler" => "test_scheduler.das",
     "dasllama_sampling" => "test_sampling.das,test_sampling_landed.das,test_constraint.das,test_mtp_sampled_walk.das,test_mtp_accept_walks.das,test_scheduler.das",

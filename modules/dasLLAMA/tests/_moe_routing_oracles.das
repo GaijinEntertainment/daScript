@@ -316,3 +316,89 @@ def ar_comb_check(t : T?; tag, ctrl : string; xs, got_x, got_y : array<float>; g
     }
     delete got_yf
 }
+
+//! the by-row gather cells' slot map over `nk` bucket rows: `(b * 5) % nk`, a permutation where 5 is coprime to nk (the cells' 21)
+def gather_row_entries(nk : int) : array<uint> => <- [for (b in range(nk)); uint((b * 5) % nk)]
+
+//! the by-row gather's oracle: window row b of `rows` takes the position row (`entry / k`, `n` wide) of the entry at `at + b`,
+//! rounded to half - the cell's rows at its r0, the control that misses at 0
+def gather_row_oracle(x : array<float>; entries : array<uint>; n, k, at, rows : int) : array<float> {
+    var want : array<float>
+    want |> resize(rows * n)
+    for (b in range(rows)) {
+        let p = int(entries[at + b]) / k
+        for (i in range(n)) {
+            want[b * n + i] = f16r(x[p * n + i])
+        }
+    }
+    return <- want
+}
+
+//! the by-row gather's verdict under `tag`: the window's rows `got` against the oracle at `r0` within 1e-3 of the largest magnitude
+//! (a half's step at |x| < 1 is under 1e-3, the two conversions round at most a step apart) with one poisoned element, and the
+//! oracle at 0 - other positions - the control that misses
+def gather_row_check(t : T?; tag : string; got, x : array<float>; entries : array<uint>; n, k, r0, rows : int) {
+    var inscope want <- gather_row_oracle(x, entries, n, k, r0, rows)
+    var inscope want0 <- gather_row_oracle(x, entries, n, k, 0, rows)
+    let bar = Bar(kind = BarKind.rel_of_max, rel = 1e-3, poison_abs = 0.05, poison_at = 0)
+    check_rows(t, "{tag}: the window's rows", got, want, bar, n)
+    check_exceeds(t, "{tag}: control - the window at 0 reads other positions", got, want0, bar)
+}
+
+//! the by-row combine cells' slot map over `npos x k` bucket rows: the window [r0, r0 + rows) one row a position at alternating
+//! slots, the rows outside it the entries left, in order
+def combine_row_entries(npos, k, r0, rows : int) : array<uint> {
+    let nk = npos * k
+    var entries : array<uint>
+    entries |> resize(nk)
+    var inscope taken : array<bool>
+    taken |> resize(nk)
+    for (b in range(r0, r0 + rows)) {
+        let g = (b - r0) * k + (b % k)
+        entries[b] = uint(g)
+        taken[g] = true
+    }
+    var next = 0
+    for (b in range(nk)) {
+        continue if (b >= r0 && b < r0 + rows)
+        while (taken[next]) {
+            next++
+        }
+        entries[b] = uint(next)
+        taken[next] = true
+    }
+    return <- entries
+}
+
+//! the by-row combine's oracle over `acc`: for b under `rows` the entry at `at + b` (`g`) adds its packed weight times down row
+//! `down_at + b` onto position `g / k`'s row - the cell's rows at its r0 from down row 0, the control that misses at 0
+def combine_row_oracle(acc, w_packed, down : array<float>; entries : array<uint>; n, k, at, down_at, rows : int) : array<float> {
+    var want := acc
+    for (b in range(rows)) {
+        let g = int(entries[at + b])
+        for (i in range(n)) {
+            want[(g / k) * n + i] += w_packed[g] * down[(down_at + b) * n + i]
+        }
+    }
+    return <- want
+}
+
+//! the by-row combine's verdict under `tag`: the accumulated rows `y` against the oracle at `r0` within 1e-5 of the largest
+//! magnitude (one multiply-add per element against the f32 oracle rounds the product and the sum once each) with one poisoned
+//! element, the oracle over the window at 0 the control that misses, position 0's row moved off its input and the last position -
+//! reached by no window row - keeping its accumulated row
+def combine_row_check(t : T?; tag : string; y, acc, w_packed, down : array<float>; entries : array<uint>; n, k, npos, r0, rows : int) {
+    var inscope want <- combine_row_oracle(acc, w_packed, down, entries, n, k, r0, 0, rows)
+    var inscope want0 <- combine_row_oracle(acc, w_packed, down, entries, n, k, 0, 0, rows)
+    let bar = Bar(kind = BarKind.rel_of_max, rel = 1e-5, abs_floor = 1e-6, poison_abs = 0.01, poison_at = 2 * n + 3)
+    check_rows(t, "{tag}: the accumulated rows", y, want, bar, n)
+    check_exceeds(t, "{tag}: control - the window at 0 adds other rows onto other positions", y, want0, bar)
+    var moved = 0
+    for (i in range(n)) {
+        moved++ if (y[i] != acc[i])
+    }
+    t |> success(moved > n / 2, "{tag}: position 0's row moved off its accumulated input ({moved} of {n})")
+    let last = (npos - 1) * n
+    let moved_last = mismatch_exact(y, acc, last, last, n)
+    t |> equal(moved_last, 0, "{tag}: the position no window row reaches keeps its accumulated row ({moved_last} elements moved, the first at {first_mismatch(y, acc, last, last, n)})")
+}

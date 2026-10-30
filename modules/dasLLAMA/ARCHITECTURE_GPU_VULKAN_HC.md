@@ -136,8 +136,8 @@ expert resident: pp3000 368 at a 2048 window against 793 at 4096, one sweep inst
 against 753, three sweeps instead of five), and the knob unset the driver takes the wide window where
 the plan fits with it and the narrow one otherwise (`resident_window_pick`, `PF_ROWS_WIDE` / `PF_ROWS_DEFAULT`),
 since the scratch the window sizes is the plan's third term. At load (`resident_stream_arm`) every routed layer's gate, up and down planes gather
-into pinned mirrors in device layout - the per-op tier's stream stacks (`gather_upload_group` with
-`stream` on, `vk_moe_stream_stack`), registered from the last routed layer down so the tier's prefetch
+into pinned mirrors in device layout - the stream stacks of the expert cache both discrete homes keep
+(`gather_upload_group` with `stream` on, `vk_moe_stream_stack` / `cud_moe_upload_stack`), registered from the last routed layer down so the tier's prefetch
 of the group below a bound one is the next layer's copy; a mirror the pinned budget refuses stops the
 walk, and that layer and the ones below keep the host's sums. At the cut (`rdec_stream_rows`) the rows'
 picks bucket by expert as the pool's do, every touched expert is a region at the model's own plane

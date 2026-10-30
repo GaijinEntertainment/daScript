@@ -2980,9 +2980,23 @@ def private collect_status(prog : Program?) : array<TuneStatus> {
                 if (empty(klass)) {
                     klass = replace(slice(fatName, fatAt + length("__fat_")), "_", "-")
                 }
-                let source = !empty(stampedSource) ? stampedSource : "reference"
+                var source = !empty(stampedSource) ? stampedSource : "reference"
+                var mpath = from
+                if (empty(stampedSource)) {
+                    //! the reference clone stamps nothing: a profile's explicit
+                    //! `reference` entry (a decision, not a fallback) is read
+                    //! off the class profile here, so the fat release counts it
+                    var pk = ""
+                    var pp = ""
+                    var prof <- profile_kernels(pk, pp, klass)
+                    if ((prof?[base] ?? "") == "reference") {
+                        source = "profile"
+                        mpath = pp
+                    }
+                    delete prof
+                }
                 rows |> push(TuneStatus(fname = base, scope = scopeName,
-                    suffix = suffix, source = source, manifestPath = from, klass = klass))
+                    suffix = suffix, source = source, manifestPath = mpath, klass = klass))
             } elif (isTuned && tune_mode() != "fat") {
                 let source = !empty(stampedSource) ? stampedSource : (empty(suffix) ? "reference" : (empty(from) ? "fallback" : "manifest"))
                 let mpath = !empty(from) ? from : sidecar

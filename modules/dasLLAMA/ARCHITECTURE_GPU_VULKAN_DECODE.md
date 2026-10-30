@@ -145,8 +145,11 @@ each requant and after the top-k. The loader carves the router planes with the m
 
 **The deltanet decode step keeps one device copy of a recurrent layer's state and conv ring,
 and that copy belongs to one session at a time.** The step (`vk_moe_dn_step`) records, per
-layer, the host address of the session state it uploaded (`DnStep.owner_state_addr`, with the
-conv history's address beside it): a step from the owner runs on the resident copy; a step from a
+layer, the host address of the session state it uploaded (`DnStep.own`, a `DnSlotOwner` record of
+`dasllama_gpu_tier` - the state and conv history addresses, the ring image the row reads, `valid`
+and `dirty` - which the CUDA home's slots carry too, bound, read and dropped through the record's
+verbs `dn_slot_bind` / `dn_slot_holds` / `dn_slot_advance` / `dn_slot_in` / `dn_slot_drop`): a step
+from the owner runs on the resident copy; a step from a
 different session sends the resident copy home to its owner's buffers when it is dirty, then
 cold-uploads its own state and takes the slot. A flush request (`vk_dn_step_flush`) writes only
 when the requester is the owner - a foreign session's state is already on its host, so the

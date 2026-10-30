@@ -77,12 +77,18 @@ plain pointers, a by-value argument struct, streams in place of command buffers.
   (a test, into its run's temp dir) names its own `cache_dir`. An arch-specific target
   (`sm_120a`, the FP4 forms) has no forward PTX JIT, so a kernel that asks for one bakes per
   arch and the key carries the suffix through the options.
-- **The driver's current context is per thread.** `cuda_create_context` retains the device's
-  primary context and binds it to the calling thread, and every later call runs on that thread.
 - **Every handle and every device allocation is counted.** Driver objects and device memory are
   invisible to all six das leak detectors; the boost counts each live kind and
   `cuda_live_object_report` lists them, so every test file closes on
   `cuda_log_leaks_if_any() == 0`.
+
+### The driver's current context is per thread {#cuda-context-per-thread}
+
+`cuda_create_context` retains the device's primary context and binds it to the calling thread; a
+call from any other thread fails with `invalid device context` until that thread binds too
+(`cuda_bind_context`). A daslang context's `[init]` runs on the thread that made it, so a worker
+thread whose own context created the device at init reaches its first device call unbound - a
+tier's entry gate binds the caller every time.
 
 ### The cuda witness module {#cuda-witness-module}
 

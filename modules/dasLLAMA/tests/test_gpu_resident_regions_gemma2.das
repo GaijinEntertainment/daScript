@@ -10,7 +10,8 @@ require _resident_regions
 // classifier epilogue (the final softcap over every row's logits), so the N-row token command serves two rows
 // bit for bit against the sessions alone - at one window, past the unsplit position so the split attention form
 // records, and a batched step before any one-row step. Skips off the JIT, without DASLLAMA_GPU=1 on a device the
-// driver serves, or without the file under models_dir().
+// driver serves, or without the file under models_dir(); the stamp cell skips under DASLLAMA_CUDA=1 (its slab pick and census
+// names are the Vulkan driver's) and on a build with no kernel census.
 let private REGIONS_FILE = "gemma-2-2b-it-Q8_0.gguf"
 
 [test]

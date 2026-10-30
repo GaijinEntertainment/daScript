@@ -38,5 +38,8 @@ def child_cmd_at(path : string; envs : array<tuple<name : string; value : string
     }
     let flags = jit ? " -jit" : ""
     let tail = empty(args) ? "" : " -- {args}"
-    return "{prefix}\"{das_exe()}\"{flags} -dasroot \"{get_das_root()}\" \"{get_das_root()}/{path}\"{tail} 2>&1"
+    let line = "{prefix}\"{das_exe()}\"{flags} -dasroot \"{get_das_root()}\" \"{get_das_root()}/{path}\"{tail} 2>&1"
+    // cmd.exe strips the first and last quote of a command line that opens with one, which breaks every quoted path after
+    // the exe's; an env prefix opens the line with `set`, and a line with none is wrapped in one more pair cmd strips instead
+    return (win && empty(envs)) ? "\"{line}\"" : line
 }

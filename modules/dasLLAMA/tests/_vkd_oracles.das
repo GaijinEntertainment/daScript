@@ -51,15 +51,6 @@ let MR_SENT = 0x5A5A5A5Au   //! the schedule planes' fill: a word the kernel nev
 //! NaN-fills a device output's [off, off + bytes) before its dispatch: a stale or unwritten output cannot sit inside any bar
 def nan_sentinel_upload(dev : uint64; bytes : int64; off : int64 = 0l) => upload_fill(dev, off, bytes, NAN_SENTINEL_BITS)
 
-//! one region of `cnt` rows at weight block `wblk0` for `wgs` workgroups: the schedule words the tile classes read at `map_off` 4
-def one_region_words(cnt, wgs : int; wblk0 : int = 0) : array<uint> {
-    var words : array<uint>
-    words |> resize(4 + wgs)
-    var cur = 4l
-    batch_sched_map(unsafe(addr(words[0])), cur, 0l, int64(wblk0), int64(cnt), int64(wgs))
-    return <- words
-}
-
 //! `one_region_words` in a device buffer or in host memory (the prefill's `pf_meta` form)
 def one_region_sched(cnt, wgs : int; host : bool = false; wblk0 : int = 0) : tuple<buf : uint64; bytes : int64> {
     var words <- one_region_words(cnt, wgs, wblk0)
@@ -1324,6 +1315,10 @@ def fmt_tile_rows() : array<FmtTile> {
         FmtTile(fmt = KqFmt.mx4, n = 704, blk_k = 32, wq_words = 4, wq_seed = 53u, form = ScaleForm.mx4_e8m0, xf_add = 5u, per32 = true, oracle = @@mx4f16_gemm_oracle)            // 22 blocks: eleven 64-deep k steps, two unrolled 256-passes and a 192 tail
     ]
 }
+
+//! the ways a per-format row's s column splits along K in the short-split cells: a chunk a 256-step, or two with the last short
+//! where K sits off the 256 grid
+def fmt_split_ways(n : int) : int => n % 256 == 0 ? n / 256 : 2
 
 //! the iq4nl32 cells' scale words: cool f16 d, two blocks a word, so the tile's f16 sums stay far from 65504
 def iq4nl32_scale_words(totblk : int; mul : float) : array<uint> {

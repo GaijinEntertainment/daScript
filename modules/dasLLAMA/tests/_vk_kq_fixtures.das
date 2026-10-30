@@ -8,6 +8,7 @@ require dasllama/dasllama_convert
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_kqformat   // KQ_B32_ELEMS: the q8_0 block the stacks' scales step by
 require dasllama/dasllama_gemm_schema
+require dasllama/dasllama_gpu_math   // batch_sched_map: the one-region schedule words
 require _compares
 require daslib/enum_trait
 require daslib/shader_lingua_franca
@@ -263,6 +264,18 @@ def ws_word(i : uint) : uint => safe_half(i * 7u + 3u) | (safe_half(i * 3u + 1u)
 def ws_plane(n : int; mul, add : uint) : array<uint> =>
     <- [for (i in range(n)); ws_word(uint(i) * mul + add)]
 
+//! a window GEMM pick as the cells spell it: `<tile columns>x<k chunks>x<chunk depth>`
+def pick_str(p : tuple<tc : int64; nsplit : int64; ksplit : int64>) : string => "{p.tc}x{p.nsplit}x{p.ksplit}"
+
+//! one region of `cnt` rows at weight block `wblk0` for `wgs` workgroups: the schedule words the tile classes read at `map_off` 4
+def one_region_words(cnt, wgs : int; wblk0 : int = 0) : array<uint> {
+    var words : array<uint>
+    words |> resize(4 + wgs)
+    var cur = 4l
+    batch_sched_map(unsafe(addr(words[0])), cur, 0l, int64(wblk0), int64(cnt), int64(wgs))
+    return <- words
+}
+
 //! `ws_plane` under a format's device-row rule: an nv4 row's fifth word is one finite per-tensor scale a plane, as f32 bits (`../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale`), where a hashed word would read as a wild f32
 def kq_ws_plane(fmt : int; n : int; mul, add : uint) : array<uint> {
     var w <- ws_plane(n, mul, add)
@@ -290,18 +303,15 @@ def q8_plane(totblk : int; wq_mul, wq_add, ws_mul, ws_add : uint; var wqh, wsh :
 
 //! rows [0, cnt0) off weight block 0 and [cnt0, cnt0 + cnt1) off `wblk1`, `extra` zero words past the map; `wgs` the map's length
 def two_region_sched(cnt0, cnt1, wblk1, ttile, wtiles, extra : int) : tuple<words : array<uint>; wgs : int> {
-    let wgs0 = ((cnt0 + ttile - 1) / ttile) * wtiles
-    let wgs = wgs0 + ((cnt1 + ttile - 1) / ttile) * wtiles
+    let tc = int64(ttile)
+    let wt = int64(wtiles)
+    let wgs = int(sched_region_wgs(int64(cnt0), tc, wt) + sched_region_wgs(int64(cnt1), tc, wt))
     var words : array<uint>
     words |> resize(2 * 4 + wgs + extra)
-    words[2] = uint(cnt0)
-    words[4] = uint(wblk1)
-    words[5] = uint(cnt0)
-    words[6] = uint(cnt1)
-    words[7] = uint(wgs0)
-    for (w in range(wgs)) {
-        words[8 + w] = w < wgs0 ? 0u : 1u
-    }
+    var inscope blks <- [for (b in fixed_array(0, wblk1)); int64(b)]
+    var inscope row0s <- [for (r in fixed_array(0, cnt0)); int64(r)]
+    var inscope cnts <- [for (c in fixed_array(cnt0, cnt1)); int64(c)]
+    sched_regions(unsafe(addr(words[0])), blks, row0s, cnts, tc, wt)
     return <- (words = words, wgs = wgs)
 }
 

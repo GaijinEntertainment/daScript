@@ -30,6 +30,8 @@ let public CU_CTX_SCHED_SPIN = 1u   //! the host spins on a sync instead of yiel
 let public CU_MEMHOSTALLOC_DEVICEMAP = 2u   //! pinned host memory the device addresses in place
 let public CU_STREAM_NON_BLOCKING = 1u
 let public CU_EVENT_DEFAULT = 0u
+let public CU_EVENT_DISABLE_TIMING = 2u   //! an event with no timestamp: the cheapest fence between two streams
+let public CUDA_ERROR_NOT_READY = 600       //! cuEventQuery's answer while the event's work is still in flight
 let public CU_LAUNCH_PARAM_END = 0ul
 let public CU_LAUNCH_PARAM_BUFFER_POINTER = 1ul
 let public CU_LAUNCH_PARAM_BUFFER_SIZE = 2ul
@@ -150,6 +152,12 @@ def public cuEventRecord(event : void?; stream : void?) : int => 0
 
 [extern(cdecl, late, name="cuEventSynchronize", windows_library="nvcuda", linux_library="libcuda.so.1;libcuda.so")]
 def public cuEventSynchronize(event : void?) : int => 0
+
+[extern(cdecl, late, name="cuEventQuery", windows_library="nvcuda", linux_library="libcuda.so.1;libcuda.so")]
+def public cuEventQuery(event : void?) : int => 0
+
+[extern(cdecl, late, name="cuStreamWaitEvent", windows_library="nvcuda", linux_library="libcuda.so.1;libcuda.so")]
+def public cuStreamWaitEvent(stream : void?; event : void?; flags : uint) : int => 0
 
 [extern(cdecl, late, name="cuEventElapsedTime_v2", windows_library="nvcuda", linux_library="libcuda.so.1;libcuda.so")]
 def public cuEventElapsedTime(var ms : float&; start : void?; end : void?) : int => 0

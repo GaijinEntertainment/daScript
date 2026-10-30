@@ -11,8 +11,10 @@ require spirv/spirv_markers
 require dasllama/dasllama_cuda_common public
 require dasllama/dasllama_cuda_dispatch
 require dasllama/dasllama_kqformat
+require dasllama/dasllama_gemm_schema   // the q8 block geometry the knee race's synthetic planes take
 require dasllama/dasllama_gpu_math
 require dasllama/dasllama_gpu_tier
+require dasllama/dasllama_gpu_knee   // the short window's knee race over this file's s column and reduce: the rung loop, the pricing, the knob
 require dasllama/dasllama_kv_dtype
 require dasllama/dasllama_gpu_kernels_common public
 require dasllama/dasllama_gpu_kernels_discrete public
@@ -20,6 +22,8 @@ require daslib/templates
 require daslib/typemacro_boost
 require math
 require daslib/math_bits
+require strings   // the skip list's tokens
+require daslib/strings_boost
 
 // The CUDA KERNEL home: every kernel is a [cuda_kernel]/[cuda_dispatch] class stamping a shared
 // template - the discrete layer's GEMV family first - under the same dispatch stems the Vulkan
@@ -268,6 +272,29 @@ class CuEmbGather : EmbGatherT {
     }
 }
 
+//! the per-layer-embedding branch's act as floats, the f32 projection's x, on the template every home stamps (`GkPleAct`): out
+//! of place, an element a thread
+[cuda_dispatch(name = "ple_act_f32_cls", grid = "wgs", params = "wgs : int64")]
+class CuPleActF32 : GkPleAct {
+    override OUT = true
+
+    [cuda_kernel(local_size_x = 256, name = "ple_act_f32_cls_cuda")]
+    def run {
+        act_elem(gl_GlobalInvocationID.x)
+    }
+}
+
+//! the token-table gather off an F32 / F16 / BF16 table's exact f32 rows (`EmbGatherT` under `WF`)
+[cuda_dispatch(name = "emb_gather_f32_cls", grid = "wgs", params = "wgs : int64")]
+class CuEmbGatherF32 : EmbGatherT {
+    override WF = true
+
+    [cuda_kernel(local_size_x = 256, name = "emb_gather_f32_cls_cuda")]
+    def run {
+        emb_body()
+    }
+}
+
 //! the classifier tail's epilogue on the template both homes stamp (`GkClsEpilogue`), an invocation a logit
 [cuda_dispatch(name = "cls_epi", grid = "wgs", params = "wgs : int64")]
 class CuClsEpilogue : GkClsEpilogue {
@@ -291,6 +318,15 @@ class CuClsArgmaxFin : ClsArgmaxFinT {
     [cuda_kernel(local_size_x = 256, name = "cls_argmax_fin_cuda")]
     def run {
         fin_body()
+    }
+}
+
+//! the classifier tail's selection on the template every home stamps (`GkClsSelect`), a block of 1024 threads a row
+[cuda_dispatch(name = "cls_select", grid = "rows", params = "rows : int64")]
+class CuClsSelect : GkClsSelect {
+    [cuda_kernel(local_size_x = 1024, name = "cls_select_cuda")]
+    def run {
+        select_row()
     }
 }
 
@@ -958,6 +994,16 @@ class CuMx4GemvN : Blk32GemvRunT {
     [cuda_kernel(local_size_x = 64, name = "mx4_gemv_n_cls_cuda")]
     def run {
         b32_body()
+    }
+}
+
+//! the MXFP4 expert stacks' gate + up dots, the act and its Q8_0 requant in one dispatch on the one-row step (`Mx4GemvGuT`): a
+//! workgroup an activated block of the hidden rows, the gate and up bias rows joined under the slot's expert where the model carries them
+[cuda_dispatch(name = "mx4_gemv_gu_cls", grid = "wgs", params = "wgs : int64")]
+class CuMx4GemvGu : Mx4GemvGuT {
+    [cuda_kernel(local_size_x = 256, name = "mx4_gemv_gu_cls_cuda"), arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#moe-gate-up-fused")]
+    def run {
+        gu_body()
     }
 }
 
@@ -2299,6 +2345,31 @@ class CuQ5032Cm2S : Q5032Cm2T {
 //! the columns no tile serves: mx4 is an expert-only form, so it has the expert schedule's s and e columns and no dense l or m tile
 let private CUD_CM2_SKIP = "mx4/cm2l_cls mx4/cm2m_cls"
 
+//! the format slots the skip list leaves the s column alone to: both their l and m stamps are skipped (`<fmt>/cm2l_cls <fmt>/cm2m_cls`)
+def private cm2_s_only_slots(skip : string) : table<int> {
+    var seen : table<int; int>
+    for (tok in split(skip, " ")) {
+        let cut = find(tok, "/")
+        continue if (cut < 0)
+        var f = KqFmt.q8
+        continue if (!kq_fmt_of_name(slice(tok, 0, cut), f))
+        let stamp = slice(tok, cut + 1)
+        seen[int(f)] |= stamp == "cm2l_cls" ? 1 : (stamp == "cm2m_cls" ? 2 : 0)
+    }
+    var out : table<int>
+    for (slot, mask in keys(seen), values(seen)) {
+        if (mask == 3) {
+            out |> insert(slot)
+        }
+    }
+    return <- out
+}
+
+let private CUD_CM2_S_ONLY <- cm2_s_only_slots(CUD_CM2_SKIP)
+
+//! whether format slot `fmt`'s cm2 tiles stop at the s column (`CUD_CM2_SKIP` names no l or m stamp for it): a window dispatches no column that was never stamped
+def cud_cm2_s_only(fmt : int) : bool => key_exists(CUD_CM2_S_ONLY, fmt)
+
 let CUD_CM2_TILES = "cm2l_cls cm2m_cls cm2s_cls cm2e_cls"   //! e is the expert schedule's m pieces at the format's own k step (the m stamp on the formats whose step is 64)
 let CUD_CM2_TC_L = 0
 let CUD_CM2_TC_M = 1
@@ -3126,6 +3197,16 @@ let FP4_NIBBLES_PER_BYTE = 2l   //! the FP4 feeds' quant plane: two e2m1 nibbles
 let NV4_FEED_STRIP = 16l        //! the NVFP4 feed's code plane: one UE4M3 code byte a 16-element strip
 let MX4_FEED_WORD_ELEMS = 64l   //! the MXFP4 feed's code plane: one 32-bit word a k64 chunk (its two 32-blocks' UE8M0 codes)
 
+//! the strip pass's geometry as a kernel body reads it: a lane's chunk is four elements, so an NVFP4 strip is `NV4_STRIP_CHUNKS`
+//! chunks and `NV4_CODES_PER_WORD` strips' codes share a word, an MXFP4 32-block is `MX4_BLOCK_CHUNKS` chunks and
+//! `MX4_CODES_PER_WORD` blocks' codes share a word; a code is `FP4_CODE_BITS` wide in it
+let FP4_CHUNK_ELEMS_U = 4u
+let NV4_STRIP_CHUNKS = uint(NV4_FEED_STRIP) / FP4_CHUNK_ELEMS_U
+let NV4_CODES_PER_WORD = 4u   //! four UE4M3 code bytes a word
+let MX4_BLOCK_CHUNKS = KQ_B32_ELEMS_U / FP4_CHUNK_ELEMS_U
+let MX4_CODES_PER_WORD = uint(MX4_FEED_WORD_ELEMS) / KQ_B32_ELEMS_U
+let FP4_CODE_BITS = 8u
+
 def fp4_amax4(v : float4) : float => max(max(abs(v.x), abs(v.y)), max(abs(v.z), abs(v.w)))
 
 let FP4_CODE_MAX = 126u   //! the largest UE4M3 code a strip scale takes (448; the code past it is the format's NaN)
@@ -3136,39 +3217,34 @@ def fp4_strip_code(m : float) : uint {
     return ue4m3_half_f32(code) * 12.0 < m && code < FP4_CODE_MAX ? code + 1u : code
 }
 
-//! the strip pass over chunk `c` (a lane's four elements, over the row scale): `w` is valid where c % 4 < 2, `cw` where c % 16 == 0; every subgroup lane calls it, a lane past the row with zeros
-def fp4_chunk(v : float4; c : uint; var w, cw : uint&) {
-    var m = fp4_amax4(v)
-    m = max(m, gk_subgroup_xor(m, 1u))
-    m = max(m, gk_subgroup_xor(m, 2u))
-    let code = fp4_strip_code(m)
-    let sval = ue4m3_half_f32(code) * 2.0
-    let inv = sval > 0.0 ? 1.0 / sval : 0.0
-    let p = float4(gk_subgroup_xor(v.x, 2u), gk_subgroup_xor(v.y, 2u), gk_subgroup_xor(v.z, 2u), gk_subgroup_xor(v.w, 2u))
-    w = cvt_e2m1x2(v.x * inv, p.x * inv) | (cvt_e2m1x2(v.y * inv, p.y * inv) << 8u) | (cvt_e2m1x2(v.z * inv, p.z * inv) << 16u) | (cvt_e2m1x2(v.w * inv, p.w * inv) << 24u)
-    cw = code << (((c >> 2u) & 3u) * 8u)
-    cw |= gk_subgroup_xor_u(cw, 4u)
-    cw |= gk_subgroup_xor_u(cw, 8u)
-}
-
 //! the UE8M0 code of a 32-block of largest magnitude `m` by the MXFP4 rule (the nearest power of two to `m` over e2m1's top exponent, 2); 0 for an empty block
 def mx4_block_code(m : float) : uint => m > 0.0 ? uint(clamp(int(round(log2(m))) - 2 + 127, 0, 254)) : 0u
 
 //! the inverse of a UE8M0 code's scale: 2^(127 - code), exact
 def mx4_code_inv(code : uint) : float => e8m0_half_f32(255u - code)
 
-//! the MXFP4 strip pass over chunk `c` (a lane's four elements, eight lanes a 32-block): `w` its nibble word in the (k, k + 8) pairing, valid where c % 4 < 2; `cw` the k64's UE8M0 code word (byte i the k32 block i), valid where c % 16 == 0
-def mx4_chunk(v : float4; c : uint; var w, cw : uint&) {
+//! the strip pass over chunk `c` (a lane's `FP4_CHUNK_ELEMS_U` elements): `w` the nibble word in the (k, k + 8) pairing, valid where
+//! c % 4 < 2; `cw` the code word, valid where c % 16 == 0; every subgroup lane calls it, a lane past the row with zeros. A code is a
+//! UE8M0 a 32-block under `mx` (MXFP4), `MX4_CODES_PER_WORD` a k64 word; else (NVFP4) a UE4M3 a strip, `NV4_CODES_PER_WORD` a word,
+//! the elements over the row scale; the max folds over the strip's chunks (the block's under `mx`) by lane xor
+def fp4_strip_chunk(v : float4; c : uint; var w, cw : uint&; mx : bool) {
     var m = fp4_amax4(v)
     m = max(m, gk_subgroup_xor(m, 1u))
     m = max(m, gk_subgroup_xor(m, 2u))
-    m = max(m, gk_subgroup_xor(m, 4u))
-    let code = mx4_block_code(m)
-    let inv = mx4_code_inv(code)
+    if (mx) {
+        m = max(m, gk_subgroup_xor(m, NV4_STRIP_CHUNKS))
+    }
+    let code = mx ? mx4_block_code(m) : fp4_strip_code(m)
+    let sval = mx ? 0.0 : ue4m3_half_f32(code) * 2.0
+    let inv = mx ? mx4_code_inv(code) : (sval > 0.0 ? 1.0 / sval : 0.0)
     let p = float4(gk_subgroup_xor(v.x, 2u), gk_subgroup_xor(v.y, 2u), gk_subgroup_xor(v.z, 2u), gk_subgroup_xor(v.w, 2u))
     w = cvt_e2m1x2(v.x * inv, p.x * inv) | (cvt_e2m1x2(v.y * inv, p.y * inv) << 8u) | (cvt_e2m1x2(v.z * inv, p.z * inv) << 16u) | (cvt_e2m1x2(v.w * inv, p.w * inv) << 24u)
-    cw = code << (((c >> 3u) & 1u) * 8u)
-    cw |= gk_subgroup_xor_u(cw, 8u)
+    let slot = mx ? (c / MX4_BLOCK_CHUNKS) % MX4_CODES_PER_WORD : (c / NV4_STRIP_CHUNKS) % NV4_CODES_PER_WORD
+    cw = code << (slot * FP4_CODE_BITS)
+    if (!mx) {
+        cw |= gk_subgroup_xor_u(cw, NV4_STRIP_CHUNKS)
+    }
+    cw |= gk_subgroup_xor_u(cw, MX4_BLOCK_CHUNKS)
 }
 
 struct Fp4RowsArgs {
@@ -3178,12 +3254,11 @@ struct Fp4RowsArgs {
     ubase : uint    //! the act form's up side: its element base, and with `ustride` the rows of `ulen` elements sit `ustride` apart
     ustride : uint
     ulen : uint
-    gboff : uint    //! the biased act form: this layer's row base in the gate-bias plane ([ne x k] rows a layer)
-    uboff : uint    //! ... and in the up-bias plane
+    gboff : uint    //! the biased act form: this layer's row base in the gate-bias plane and the up-bias plane ([ne x k] rows a layer each)
 }
 
 //! The FP4 activation feed a workgroup a row (256 lanes), a lane four consecutive elements a round: the row's largest magnitude
-//! over 6 x 448 as its f32 scale, then the strip pass (`fp4_chunk`) into the nibble words, the code words and the row scale the
+//! over 6 x 448 as its f32 scale, then the strip pass (`fp4_strip_chunk`) into the nibble words, the code words and the row scale the
 //! FP4 tensor rung reads; the source element is the stamp's (a float plane, or the gate / up pair through the activation),
 //! read as float4 when the planes sit on the four lattice and the up rows are contiguous, and read twice
 [ |> template_struct_instance]
@@ -3210,7 +3285,7 @@ class template Fp4FeedT : GkWgReduce {
         static_if (BIAS) {
             let ex = rex[gl_WorkGroupID.x]
             let c = bias_col(e)
-            return float2(src[e] + gb[pa.gboff + ex * pa.k + c], up[ue] + ub[pa.uboff + ex * pa.k + c])
+            return float2(src[e] + gb[pa.gboff + ex * pa.k + c], up[ue] + ub[pa.gboff + ex * pa.k + c])
         } else {
             static_if (ACT) {
                 return float2(src[e], up[ue])
@@ -3238,7 +3313,7 @@ class template Fp4FeedT : GkWgReduce {
                 let ex = rex[gl_WorkGroupID.x]
                 let c = bias_col(e)
                 let gbo = pa.gboff + ex * pa.k + c
-                let ubo = pa.uboff + ex * pa.k + c
+                let ubo = pa.gboff + ex * pa.k + c
                 return float4(gk_act_mul(g.x + gb[gbo], u.x + ub[ubo], pa.act), gk_act_mul(g.y + gb[gbo + 1u], u.y + ub[ubo + 1u], pa.act),
                     gk_act_mul(g.z + gb[gbo + 2u], u.z + ub[ubo + 2u], pa.act), gk_act_mul(g.w + gb[gbo + 3u], u.w + ub[ubo + 3u], pa.act))
             } else {
@@ -3250,18 +3325,19 @@ class template Fp4FeedT : GkWgReduce {
     }
 
     //! elements e .. e + 3, `e` a four-multiple off the row base: the float4 lanes where both bases sit on the four lattice and the up side is unstrided, else four scalar reads
-    def load4(e : uint) : float4 =>
-        (pa.ustride == 0u && ((pa.inbase | pa.ubase) & 3u) == 0u) ? load4_lanes(e) : float4(load1(e), load1(e + 1u), load1(e + 2u), load1(e + 3u))
+    def load4(e : uint) : float4 {
+        if (pa.ustride == 0u && ((pa.inbase | pa.ubase) & 3u) == 0u) {
+            let lanes = load4_lanes(e)
+            return lanes
+        }
+        return float4(load1(e), load1(e + 1u), load1(e + 2u), load1(e + 3u))
+    }
 
     //! chunk `cc` of row `tok` through the strip pass and its stores; `on` for a chunk inside the row
     def strip_put(tok, cc : uint; on : bool; v : float4) {
         var w = 0u
         var cw = 0u
-        static_if (MX) {
-            mx4_chunk(v, cc, w, cw)
-        } else {
-            fp4_chunk(v, cc, w, cw)
-        }
+        fp4_strip_chunk(v, cc, w, cw, MX)
         if (on && (cc & 3u) < 2u) {
             outq[tok * (pa.k / 8u) + (cc >> 2u) * 2u + (cc & 3u)] = w
         }
@@ -3405,7 +3481,7 @@ class template ArRqFp4T : ArBase {
             }
             var w = 0u
             var cw = 0u
-            fp4_chunk(v, cc, w, cw)
+            fp4_strip_chunk(v, cc, w, cw, false)
             if (on && (cc & 3u) < 2u) {
                 outq4[tok * (pa.dim / 8u) + (cc >> 2u) * 2u + (cc & 3u)] = w
             }
@@ -3568,6 +3644,122 @@ class CuWordsCopy {
 
 //! the words-copy grid over `words`: a thread a word quad, the tail's words a thread each
 def public words_copy_wgs(words : int64) : int64 => ((words >> 2l) + (words & 3l) + 255l) / 256l
+
+//! `words` words of device (or mapped) `src` into device `dst` by the copy kernel on stream `s`: a graph node a memcpy over mapped
+//! memory cannot be
+def public cud_words(var s : void?; src, dst : uint64; words : int64) {
+    var pc = WordsArgs(n = uint(words))
+    enc_words_copy(s, fixed_array(src, dst), pc, words_copy_wgs(words))
+}
+
+//! `bytes` of device memory, zeroed on the compute stream; 0 where the card has no room
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def public cud_dev_zeroed(bytes : int64) : uint64 {
+    let d = cuda_mem_alloc(uint64(bytes))
+    if (d != 0ul) {
+        cuda_memset_d8(d, 0u8, uint64(bytes), g_cud.stream)
+    }
+    return d
+}
+
+// ===== the short window's split-K knee race (ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split) over this file's q8 s column and reduce: synthetic planes, no model =====
+
+//! a width's synthetic planes on the device: a ring of hashed q8 weight copies (`d` x K), `KNEE_S_ROWS` f16 activation rows,
+//! the output, the split's partial planes and the one-region schedule of each split count (the map zero: every block region 0)
+struct private CudKneeSite {
+    wq, ws : array<uint64>
+    xf, y, part : uint64
+    sched : uint64[4]
+}
+
+def private knee_site(d, n : int64) : CudKneeSite {
+    let blocks = d * n / Q8_BLOCK_ELEMS
+    let copies = int(max(2l, KNEE_DISCRETE_RING_BYTES / (blocks * Q8_BLOCK_BYTES) + 1l))
+    var inscope xf_words <- [for (i in range64((KNEE_S_ROWS + TILE_READ_SLACK) * n / 2l)); knee_xf_word(uint(i))]
+    var st = CudKneeSite(xf = buf_upload(xf_words, g_cud.stream), y = cud_dev_zeroed(KNEE_S_ROWS * d * 4l), part = cud_dev_zeroed(8l * KNEE_S_ROWS * d * 4l))
+    st.wq |> reserve(copies)
+    st.ws |> reserve(copies)
+    var inscope scale_words <- [for (_i in range64((blocks * Q8_SPB + 3l) / 4l)); KNEE_Q8_SCALE_WORD]
+    for (c in range(copies)) {
+        var inscope quant_words <- [for (i in range64(blocks * (Q8_QPB / 4l))); knee_q8_word(uint(i), uint(c))]
+        st.wq |> push(buf_upload(quant_words, g_cud.stream))
+        st.ws |> push(buf_upload(scale_words, g_cud.stream))
+    }
+    let groups = (d + 127l) / 128l
+    for (si, nsk in range(4), [1l, 2l, 4l, 8l]) {
+        var inscope words : array<uint>
+        words |> resize(4l + groups * nsk)
+        var cur = 4l
+        batch_sched_map(unsafe(addr(words[0])), cur, 0l, 0l, KNEE_S_ROWS, groups * nsk)
+        st.sched[si] = buf_upload(words, g_cud.stream)
+    }
+    return <- st
+}
+
+def private knee_site_release(var st : CudKneeSite) {
+    for (b in st.wq) {
+        cuda_mem_free(b)
+    }
+    for (b in st.ws) {
+        cuda_mem_free(b)
+    }
+    for (b in [st.xf, st.y, st.part]) {
+        cuda_mem_free(b)
+    }
+    for (b in st.sched) {
+        cuda_mem_free(b)
+    }
+    delete st
+}
+
+//! One width's times at `nsk` chunks: a step is one role on the one stream - a window's GEMM waits on the role before it, so its
+//! latency is the cost - its weights the next copy of the ring; the whole arm the s column into the output, the split arm through
+//! the partial-plane scratch and its reduce
+def private knee_times(st : CudKneeSite; d, n, nsk : int64) : tuple<b : double; t : double> {
+    let groups = (d + 127l) / 128l
+    let nring = length(st.wq)
+    let ck = split_k_share(n, nsk, SplitKnee(align = 256l, exact = false))
+    var cur = 0   // the ring cursor, carried across the runs: each run reads the copies after the last run's
+    return knee_arms_us($ {
+        for (_i in range(KNEE_STEPS)) {
+            var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = 0u)
+            cud_cm2_enc(int(KqFmt.q8), CUD_CM2_TC_S, g_cud.stream, fixed_array(st.wq[cur % nring], st.ws[cur % nring], st.sched[0], st.xf, st.y), pc, groups)
+            cur++
+        }
+        panic("dasLLAMA cuda: the knee race's whole arm did not land ({cuda_last_error()})") if (!cud_sync())
+    }) $ {
+        for (_i in range(KNEE_STEPS)) {
+            var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = uint(ck))
+            cud_cm2_enc(int(KqFmt.q8), CUD_CM2_TC_S, g_cud.stream, fixed_array(st.wq[cur % nring], st.ws[cur % nring], st.sched[knee_way_index(nsk) + 1], st.xf, st.part), pc, groups * nsk)
+            var pr = SkRedArgs(nelem = uint(KNEE_S_ROWS * d), k = uint(nsk), ybase = 0u)
+            enc_splitk_reduce_cls(g_cud.stream, fixed_array(st.part, st.y), pr, splitk_reduce_wgs(KNEE_S_ROWS * d))
+            cur++
+        }
+        panic("dasLLAMA cuda: the knee race's split arm did not land ({cuda_last_error()})") if (!cud_sync())
+    }
+}
+
+//! The box's short-window knee on the CUDA s column (`cud_split_k_tgs`): the q8 rung table (`knee_q8_race`) at 31 rows, one role
+//! a rung - the one stream co-runs none - priced as the other homes price theirs; the knob stands where the device serves no s
+//! column. Leaves the knob set.
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split")]
+def cud_split_knee_race : int64 {
+    if (!ensure_q8_batch_cm2s_cls() || !ensure_splitk_reduce_cls()) {
+        to_log(LOG_INFO, "dasLLAMA cuda: short-window knee race skipped - no q8 s column on this device\n")
+        return cud_split_k_tgs()
+    }
+    var site : array<CudKneeSite>   // the width the rungs time now
+    let tgs = knee_q8_race("cuda knee", $(d : int64) => (d + 127l) / 128l, $(d : int64) {
+        site |> emplace(knee_site(d, KNEE_Q8_K))
+    }, $ {
+        knee_site_release(site[0])
+        site |> clear()
+    }) $(d, nsk : int64) : tuple<b : double; t : double> {
+        return knee_times(site[0], d, KNEE_Q8_K, nsk)
+    }
+    set_cud_split_k_tgs(tgs)
+    return tgs
+}
 
 //! the split-k reduce (`SplitKReduceT`): the partial planes a split GEMM leaves summed into its y
 [cuda_dispatch(name = "splitk_reduce_cls", grid = "wgs", params = "wgs : int64")]
@@ -3732,8 +3924,94 @@ class CuFaCm2H256GF16 : FaH256T {
     }
 }
 
-//! the flash stamp of head size `hs` (64, 96, 128 or 256) with the f32 or the f16 O store; the gate arm is the h256 stamps' alone, and `sink` takes the h64 sink stamps over the per-head sink plane `sinks` (the sink upload holds the head size to 64)
+//! the head-256 softcap flash tile (`FaH256T` under `CAP`): gemma-2's layers, every scaled score through cap * tanh(s / cap)
+[cuda_dispatch(name = "fa_cm2_h256_cap_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaCm2H256Cap : FaH256T {
+    typedef OT = float
+    override CAP = true
+
+    [cuda_kernel(local_size_x = 128, name = "fa_cm2_h256_cap_cls_cuda")]
+    def run {
+        fa_body()
+    }
+}
+
+//! the head-256 softcap flash tile with the f16 O store (`FaH256T` under `CAP`)
+[cuda_dispatch(name = "fa_cm2_h256_cap_f16_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaCm2H256CapF16 : FaH256T {
+    typedef OT = float16
+    override OUT16 = true
+    override CAP = true
+
+    [cuda_kernel(local_size_x = 128, name = "fa_cm2_h256_cap_f16_cls_cuda")]
+    def run {
+        fa_body()
+    }
+}
+
+//! the flash tile at head 512 (`FaH512T`, gemma-4's global layers, V off the raw k row) on the template's KHR arm - the 16-row
+//! q tile over the warps' 16 x 16 fragments: the workgroup-tile arm's 64-row q stage at 512 wide passes the card's shared memory
+[cuda_dispatch(name = "fa_khr_h512_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaKhrH512 : FaH512T {
+    override KHR = true
+    typedef OT = float
+
+    [cuda_kernel(local_size_x = 128, name = "fa_khr_h512_cls_cuda")]
+    def run {
+        fa_body()
+    }
+}
+
+//! the head-512 flash tile with the f16 O store (`FaH512T`, the KHR arm)
+[cuda_dispatch(name = "fa_khr_h512_f16_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaKhrH512F16 : FaH512T {
+    override KHR = true
+    typedef OT = float16
+    override OUT16 = true
+
+    [cuda_kernel(local_size_x = 128, name = "fa_khr_h512_f16_cls_cuda")]
+    def run {
+        fa_body()
+    }
+}
+
+//! the small f16 x f16 GEMM on the cm2 128 x 128 tile (`F16GemmCm2T`): the E-series pre-step's projection over the window's rows,
+//! whole and at the panel's row 0 at its one site
+[cuda_dispatch(name = "f16_gemm_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class CuF16GemmCm2 : F16GemmCm2T {
+    override KSPLIT = false
+    override WOFF = false
+
+    [cuda_kernel(local_size_x = 256, name = "f16_gemm_cm2_cls_cuda")]
+    def run {
+        f16_gemm_body()
+    }
+}
+
+//! bf16 rows widened by their bit shift and stored f16 (saturated at the half range), on the template both homes stamp
+//! (`GkClampRows`): the E-series projection's f16 panel, written once at the seat
+[cuda_dispatch(name = "ple_bf16_cvt_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuPleBf16Cvt : GkClampRows {
+    override OUT16 = true
+    override BF16IN = true
+
+    [cuda_kernel(local_size_x = 256, name = "ple_bf16_cvt_cls_cuda")]
+    def run {
+        clamp_rows_body()
+    }
+}
+
+//! the flash tile of head size `hs` takes the KHR arm's 16-row workgroups (`fa_stamp_wgs`): the 512 stamps alone
+def cud_fa_khr(hs : int64) : bool => hs == 512l
+
+//! the flash tile of head size `hs` serves a scored softcap: the h256 stamps alone carry the `CAP` arm (gemma-2's shape)
+def cud_fa_cap_ok(hs : int64; cap : float) : bool => cap == 0.0 || hs == 256l
+
+//! the flash stamp of head size `hs` (64, 96, 128, 256 or 512) with the f32 or the f16 O store; the gate arm and the softcap arm
+//! (`pc.cap` past zero) are the h256 stamps' alone, and `sink` takes the h64 sink stamps over the per-head sink plane `sinks` (the
+//! sink upload holds the head size to 64)
 def cud_fa_enc(var s : void?; hs : int64; gated, f16out, sink : bool; bufs : uint64 const[4]; sinks : uint64; var pc : FaArgs; wgs : int64) {
+    assert(cud_fa_cap_ok(hs, pc.cap), "cud flash: a softcap off head 256 - the cap stamps are the h256 tile's")
     if (sink) {
         let sbufs = fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], sinks)
         if (f16out) {
@@ -3759,11 +4037,23 @@ def cud_fa_enc(var s : void?; hs : int64; gated, f16out, sink : bool; bufs : uin
         } else {
             enc_fa_cm2_h128_cls(s, bufs, pc, wgs)
         }
+    } elif (hs == 512l) {
+        if (f16out) {
+            enc_fa_khr_h512_f16_cls(s, bufs, pc, wgs)
+        } else {
+            enc_fa_khr_h512_cls(s, bufs, pc, wgs)
+        }
     } elif (gated) {
         if (f16out) {
             enc_fa_cm2_h256_g_f16_cls(s, bufs, pc, wgs)
         } else {
             enc_fa_cm2_h256_g_cls(s, bufs, pc, wgs)
+        }
+    } elif (pc.cap != 0.0) {
+        if (f16out) {
+            enc_fa_cm2_h256_cap_f16_cls(s, bufs, pc, wgs)
+        } else {
+            enc_fa_cm2_h256_cap_cls(s, bufs, pc, wgs)
         }
     } elif (f16out) {
         enc_fa_cm2_h256_f16_cls(s, bufs, pc, wgs)
@@ -3790,6 +4080,27 @@ class CuDaAttnBF16 : DaAttnBT {
     [cuda_kernel(local_size_x = 256, name = "da_attn_b_f16_cls_cuda")]
     def run {
         at_attn_body()
+    }
+}
+
+//! the batch attention's wide-head twin (`DaAttnBWT`): a head past 256 (gemma-4's global layers at 512), a 4-row q tile
+[cuda_dispatch(name = "da_attn_bw_cls", grid = "wgs", params = "wgs : int64")]
+class CuDaAttnBW : DaAttnBWT {
+    typedef KT = float
+
+    [cuda_kernel(local_size_x = 256, name = "da_attn_bw_cls_cuda")]
+    def run {
+        da_attn_bw_body()
+    }
+}
+
+[cuda_dispatch(name = "da_attn_bw_f16_cls", grid = "wgs", params = "wgs : int64")]
+class CuDaAttnBWF16 : DaAttnBWT {
+    typedef KT = float16
+
+    [cuda_kernel(local_size_x = 256, name = "da_attn_bw_f16_cls_cuda")]
+    def run {
+        da_attn_bw_body()
     }
 }
 
@@ -3826,6 +4137,55 @@ class CuRouterGemv : RouterGemvT {
     [cuda_kernel(local_size_x = 256, name = "router_gemv_cls_cuda")]
     def run {
         router_body()
+    }
+}
+
+//! the router GEMV (`RouterGemvT`) over the bf16 rows read as bf16 pairs, one word a step (the E-series pre-step's projection,
+//! its own rows on the device)
+[cuda_dispatch(name = "router_gemv_bf16_cls", grid = "ne", params = "ne : int64")]
+class CuRouterGemvBf16 : RouterGemvT {
+    typedef KT = uint
+    typedef XT = float
+    override VW = 2u
+    override BF16 = true
+
+    [cuda_kernel(local_size_x = 256, name = "router_gemv_bf16_cls_cuda")]
+    def run {
+        router_body()
+    }
+}
+
+//! the router GEMV stamp (`RouterGemvT`) over the bf16 rows a halfword a lane, for an odd dim or base: a row then starts mid-word,
+//! off the pairs' word grid
+[cuda_dispatch(name = "router_gemv_bf16_hw_cls", grid = "ne", params = "ne : int64")]
+class CuRouterGemvBf16Hw : RouterGemvT {
+    typedef KT = uint16
+    typedef XT = float
+    override BF16 = true
+
+    [cuda_kernel(local_size_x = 256, name = "router_gemv_bf16_hw_cls_cuda")]
+    def run {
+        router_body()
+    }
+}
+
+//! the per-layer-embedding branch's activation, its Q8_0 requant and the proj GEMV in one dispatch (`Q8GemvPleActT`): a workgroup
+//! rebuilds the side-wide x and dots one proj row a warp
+[cuda_dispatch(name = "q8_gemv_pleact_cls", grid = "wgs", params = "wgs : int64")]
+class CuQ8GemvPleAct : Q8GemvPleActT {
+    [cuda_kernel(local_size_x = 256, name = "q8_gemv_pleact_cls_cuda"), arch(at="../ARCHITECTURE_GPU_SHARED_ROWS.md#q8-requant-byte-store")]
+    def run {
+        pleact_body()
+    }
+}
+
+//! the E-series pre-step's finish on the template both discrete homes stamp (`GkPleFinish`): a workgroup a slice, the projection
+//! rows arriving scaled (the router GEMV's `YSCALE`)
+[cuda_dispatch(name = "ple_finish_cls", grid = "nslices", params = "nslices : int64")]
+class CuPleFinish : GkPleFinish {
+    [cuda_kernel(local_size_x = 256, name = "ple_finish_cls_cuda")]
+    def run {
+        finish_slice(gl_WorkGroupID.x)
     }
 }
 
@@ -3873,6 +4233,47 @@ class CuDnTail : DnTailRingT {
     [cuda_kernel(local_size_x = 256, name = "dn_tail_cls_cuda")]
     def run {
         tail_ring_body()
+    }
+}
+
+//! a checkpoint capture's conv history into its checkpoint row (`DnCapTailT`)
+[cuda_dispatch(name = "dn_cap_tail_cls", grid = "wgs", params = "wgs : int64")]
+class CuDnCapTail : DnCapTailT {
+    [cuda_kernel(local_size_x = 256, name = "dn_cap_tail_cls_cuda")]
+    def run {
+        cap_tail_body()
+    }
+}
+
+//! the routed combine on the template both homes stamp (`GkMoeCombine`): a workgroup a position over its row; the hot expert pool's
+//! hit rows added onto the host's sum under the slot window
+[cuda_dispatch(name = "combine_cls", grid = "npos", params = "npos : int64")]
+class CuMoeCombine : GkMoeCombine {
+    [cuda_kernel(local_size_x = 256, name = "combine_cls_cuda")]
+    def run {
+        comb_body()
+    }
+}
+
+//! `GkMoeCombine`'s by-row form for the per-expert chain: a workgroup a window row, its weighted down row added onto its
+//! position's accumulated row (the chain zeroes the accumulator at its first expert)
+[cuda_dispatch(name = "combine_row_cls", grid = "rows", params = "rows : int64")]
+class CuMoeCombineRow : GkMoeCombine {
+    override GATHERED = false
+    override BYROW = true
+
+    [cuda_kernel(local_size_x = 256, name = "combine_row_cls_cuda"), arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-split")]
+    def run {
+        comb_body()
+    }
+}
+
+//! the NextN head's eh_proj input rows, [a row ; b row] a row (`GkCat2`, the template both homes stamp)
+[cuda_dispatch(name = "cat2_cls", grid = "wgs", params = "wgs : int64")]
+class CuCat2 : GkCat2 {
+    [cuda_kernel(local_size_x = 256, name = "cat2_cls_cuda")]
+    def run {
+        cat2_body()
     }
 }
 
@@ -3979,12 +4380,54 @@ class CuMoeSched2 : MoeSchedT {
     }
 }
 
+let MMQ_SCHED_ROW_PAD = 128u   //! the FP4 expert chain's bucket row pad: a bucket's rows start at a tile's multiple, so a tile past them lands in its pad
+
+//! the bucket schedule the FP4 expert chain reads (`MoeSchedT`): every bucket padded to the MMQ tile and on the m column, no site
+//! asking the s column alone
+[cuda_dispatch(name = "moe_sched_mmq_cls", kernel = "run", family = "moe_sched_cls", grid = "one", params = "one : int64")]
+class CuMoeSchedMmq : MoeSchedT {
+    override ROW_PAD = 128u   //! `MMQ_SCHED_ROW_PAD`: a template constant takes the literal
+    override M_ONLY = true
+    override S_ONLY_ARG = false
+
+    [cuda_kernel(local_size_x = 256, name = "moe_sched_mmq_cls_cuda")]
+    def run {
+        sched_body()
+    }
+}
+
+//! the 512-thread MMQ-padded bucket schedule past 256 experts (`MoeSchedT`)
+[cuda_dispatch(name = "moe_sched2_mmq_cls", kernel = "run", family = "moe_sched_cls", grid = "one", params = "one : int64")]
+class CuMoeSched2Mmq : MoeSchedT {
+    override WG = 512u
+    override ROW_PAD = 128u   //! `MMQ_SCHED_ROW_PAD`: a template constant takes the literal
+    override M_ONLY = true
+    override S_ONLY_ARG = false
+
+    [cuda_kernel(local_size_x = 512, name = "moe_sched2_mmq_cls_cuda")]
+    def run {
+        sched_body()
+    }
+}
+
 //! the routed block's gather (`MoeGatherT`): every slot row's normed row into its bucket row as halves, the expert tiles' feed
 [cuda_dispatch(name = "moe_gather_f16_cls", grid = "nk", params = "nk : int64")]
 class CuMoeGatherF16 : MoeGatherT {
     typedef XG = float16
 
     [cuda_kernel(local_size_x = 256, name = "moe_gather_f16_cls_cuda")]
+    def run {
+        gather_body()
+    }
+}
+
+//! the per-expert chain's gather (`MoeGatherT` BYROW): a workgroup a window row, over the rows of one expert alone
+[cuda_dispatch(name = "moe_gather_f16_row_cls", grid = "rows", params = "rows : int64")]
+class CuMoeGatherF16Row : MoeGatherT {
+    typedef XG = float16
+    override BYROW = true
+
+    [cuda_kernel(local_size_x = 256, name = "moe_gather_f16_row_cls_cuda"), arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-split")]
     def run {
         gather_body()
     }
@@ -3999,6 +4442,18 @@ class CuClsArComb : ArCombBase {
     [cuda_kernel(local_size_x = 256, name = "cls_ar_comb_cuda")]
     def run {
         ar_body()
+    }
+}
+
+//! the gemma-4 combine on the template both homes stamp (`ArCombG4T`): the routed sum and the dense row each under its post norm,
+//! their sum under the post-FFN norm onto the residual, the next norm as floats - a row a workgroup, the token step's and the window's
+[cuda_dispatch(name = "cls_ar_comb_g4", kernel = "run", grid = "nrows", params = "nrows : int64")]
+class CuClsArCombG4 : ArCombG4T {
+    override OUT_F32 = true
+
+    [cuda_kernel(local_size_x = 256, name = "cls_ar_comb_g4_cuda")]
+    def run {
+        comb_g4_body()
     }
 }
 
@@ -4048,10 +4503,18 @@ def cud_topk_rows_enc(ne : int64; var s : void?; bufs : uint64 const[5]; var pc 
 }
 
 //! the window's bucket schedule over `ne` experts on the stamp that reaches them
-def cud_moe_sched_ensure(ne : int64) : bool => ne > 256l ? ensure_moe_sched2_cls() : ensure_moe_sched_cls()
+//! the schedule stamp for `ne` experts: the 512-thread one past 256, the MMQ-padded one under `mmq`
+def cud_moe_sched_ensure(ne : int64; mmq : bool) : bool =>
+    mmq ? (topk_depth(ne) > 1 ? ensure_moe_sched2_mmq_cls() : ensure_moe_sched_mmq_cls()) : (topk_depth(ne) > 1 ? ensure_moe_sched2_cls() : ensure_moe_sched_cls())
 
-def cud_moe_sched_enc(ne : int64; var s : void?; bufs : uint64 const[6]; var pc : SchedArgs) {
-    if (ne > 256l) {
+def cud_moe_sched_enc(ne : int64; mmq : bool; var s : void?; bufs : uint64 const[6]; var pc : SchedArgs) {
+    if (mmq) {
+        if (topk_depth(ne) > 1) {
+            enc_moe_sched2_mmq_cls(s, bufs, pc, 1l)
+        } else {
+            enc_moe_sched_mmq_cls(s, bufs, pc, 1l)
+        }
+    } elif (topk_depth(ne) > 1) {
         enc_moe_sched2_cls(s, bufs, pc, 1l)
     } else {
         enc_moe_sched_cls(s, bufs, pc, 1l)

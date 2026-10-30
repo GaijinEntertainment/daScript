@@ -158,7 +158,13 @@ Step zero, before any want: ``kernel_backend_available`` answers "can this
 box serve on that backend at all?" by running the backend's own witness (the
 vulkan one enumerates devices once and caches its verdict) — a defaults-first
 host picks its backend from these facts instead of making the user configure
-one. Then before a load we request a tier: ``set_gpu_tier_want`` records the
+one. A discrete card has two homes for the whole-model driver, ``vulkan`` and
+``cuda``, and one of them holds the tier's seats in a process: ``gpu_home``
+names it (the environment's ``DASLLAMA_CUDA`` until a program moves it),
+``gpu_homes`` lists the homes this build carries, and ``set_gpu_home`` moves
+the tier before it arms - a name the build lacks, or a tier the environment
+already armed on the other home, answers ``false`` and says why in the log.
+Then before a load we request a tier: ``set_gpu_tier_want`` records the
 request (the programmatic form of the core ``DASLLAMA_GPU_*`` knobs; a zero
 want keeps the load off the device), ``moe_gpu_tier_arm`` arms it so a
 backend can install its hooks, ``moe_gpu_weight_budget`` says how many bytes
@@ -172,6 +178,7 @@ the running snapshot a status page reads. After the load,
 .. code-block:: das
 
    print("vulkan here: {kernel_backend_available("vulkan")}\n")
+   print("gpu home: {gpu_home()} of {gpu_homes()}; moved to cuda: {set_gpu_home("cuda")}\n")
    set_gpu_tier_want(GpuTierWant(auto_tier = true))
    let armed = moe_gpu_tier_arm()
    print("budget {moe_gpu_weight_budget()} bytes on '{gpu_tier_status().device}'\n")

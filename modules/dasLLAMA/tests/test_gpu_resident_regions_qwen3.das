@@ -10,7 +10,8 @@ require _resident_regions
 // window and past the unsplit position (the N-row token command's q/k norm in the form the one-row command takes,
 // bit for bit against the sessions alone), a batched step before any one-row step, the single steps past the wide
 // position where the wide twin records, and DASLLAMA_VK_FUSE_BISECT a bit at a time within the split bar of the fused
-// run. Skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, or without the file under models_dir().
+// run. Skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, or without the file under models_dir(); the
+// fuse-bisect and the fused q/k norm cells skip under DASLLAMA_CUDA=1 - the fuse knob is the Vulkan driver's.
 let private REGIONS_FILE = "Qwen3-0.6B-Q8_0.gguf"
 
 [test]

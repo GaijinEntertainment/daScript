@@ -18,7 +18,9 @@ up bias rows go up once, every layer's rows in layer order (`moe_gpu_upload_ffn_
 form (`moe_routed_form`, set around the call by `set_moe_gpu_ffn_form`) records the clamped swiglu's act code and, under the
 bias, the biased act (`Q8ActRqB`): its row base in the bias planes, each chain row's expert written to the row -> expert words
 from the regions (`ffn_rex_fill`), on the decode GEMV arm and the batch arm alike; the biased act stores Q8_0 alone, which is
-why a biased layer's down plane is per-32. The down biases join on the host - a decode row's under its own expert, a combined
+why a biased layer's down plane is per-32. The resident driver's streamed window sets the same form with `bias_resident`
+on - the bias planes the driver uploaded, the row base a routed layer's ordinal in them - and the f16 chain's act binds
+those planes (`ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-split`). The down biases join on the host - a decode row's under its own expert, a combined
 prefill position's under each pick's weight. The heat pool admits the same stacks (`heat_advise_layer`): a decode row's
 hits run under the layer's form with each slot row's expert named (`set_moe_gpu_ffn_experts`), the misses on the CPU, and
 the shared expert's three GEMVs on the device after the hits. On gpt-oss the per-op tier serves no attention sink, so its

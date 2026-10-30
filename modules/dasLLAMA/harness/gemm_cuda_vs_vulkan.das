@@ -9,6 +9,9 @@ options stack = 524288
 // Q4_0, IQ4_NL and the four per-32 formats) and the FP4 rung's nv4 leaf at the same shapes, the cm2 flash tile at head 64
 // over the same window (32 heads, kv width 512) and the decode
 // attention's split and unsplit forms - the time a dispatch and the rate it makes.
+// ATTRIBUTION SWEEP: `--only moe[,<fmt>]` races the expert tiles instead: the s and m (or e) columns over a schedule of many
+// regions, each its own expert plane, at gemma-4-26B-A4B's expert shapes - timing-only on both homes, no output compared,
+// the figures attribute the routed block's gap between the homes and never stand as parity.
 // Baseline: each MMQ arm against its CPU reference under its leaf's bound (per element, or relative to the region's largest
 // magnitude for the min-term leaves). Compare region: 64 sampled outputs, token (s x 7919) % 512
 // and row (s x 104729 + 13) % d for s < 64. Every Vulkan and CUDA tile, flash and decode-attention arm is timing-only.
@@ -50,10 +53,12 @@ struct Planes {
     sched : array<uint>
     xf : array<uint>
     wgs : int
+    rows : int   //! the activation rows the schedule covers (the y plane's height)
+    map_off : int   //! the per-workgroup map's word offset in the schedule plane, past its region records
 }
 
 def planes(k, d, tc : int) : Planes {
-    var p : Planes
+    var p = Planes(rows = ROWS, map_off = 2 * 4)
     q8_plane(d * (k / 32), 1u, 17u, 1u, 991u, p.wq, p.ws)
     p.xf <- ws_plane((ROWS + int(TILE_READ_SLACK)) * k / 2, 3u, 5u)
     var sr <- two_region_sched(ROWS, 0, 0, tc, (d + 127) / 128, 0)
@@ -62,7 +67,9 @@ def planes(k, d, tc : int) : Planes {
     return <- p
 }
 
-def tflops(k, d : int; us : double) : double => 2.0lf * double(ROWS) * double(k) * double(d) / us / 1.0e6lf
+def tflops(k, d : int; us : double) : double => tflops(ROWS, k, d, us)
+
+def tflops(rows, k, d : int; us : double) : double => 2.0lf * double(rows) * double(k) * double(d) / us / 1.0e6lf
 
 //! why a cm2 stamp's Vulkan arm refuses, "" when it runs; `armed` is the stamp's ensure, which arms the device the mode is
 //! read off
@@ -84,8 +91,8 @@ def race_tile(p : Planes; d : int; vk_why, cu_why_ : string;
     var vbufs : uint64[5]
     var raw : VkCommandBuffer
     if (vk_why == "") {
-        vbufs = fixed_array(dev_upload(p.wq), dev_upload(p.ws), dev_upload(p.sched), dev_upload(p.xf), make_device_buf(int64(ROWS) * int64(d) * 4l))
-        let sizes = fixed_array(long_length(p.wq) * 4l, long_length(p.ws) * 4l, long_length(p.sched) * 4l, long_length(p.xf) * 4l, int64(ROWS) * int64(d) * 4l)
+        vbufs = fixed_array(dev_upload(p.wq), dev_upload(p.ws), dev_upload(p.sched), dev_upload(p.xf), make_device_buf(int64(p.rows) * int64(d) * 4l))
+        let sizes = fixed_array(long_length(p.wq) * 4l, long_length(p.ws) * 4l, long_length(p.sched) * 4l, long_length(p.xf) * 4l, int64(p.rows) * int64(d) * 4l)
         var set_ = invoke(mk_set, vbufs, sizes, fixed_array(0u, 0u, 0u, 0u, 1u))
         raw = record_arm() $(cmd : VkCommandBuffer; var hz : VkHaz) {
             for (_i in range(DISPATCHES)) {
@@ -96,8 +103,8 @@ def race_tile(p : Planes; d : int; vk_why, cu_why_ : string;
     var cbufs, calt : uint64[5]
     if (cu_why_ == "") {
         let s = g_cud.stream
-        cbufs = fixed_array(buf_upload(p.wq, s), buf_upload(p.ws, s), buf_upload(p.sched, s), buf_upload(p.xf, s), buf_fill(ROWS * d, 0.0, s))
-        calt = fixed_array(cbufs[0], cbufs[1], cbufs[2], cbufs[3], buf_fill(ROWS * d, 0.0, s))
+        cbufs = fixed_array(buf_upload(p.wq, s), buf_upload(p.ws, s), buf_upload(p.sched, s), buf_upload(p.xf, s), buf_fill(p.rows * d, 0.0, s))
+        calt = fixed_array(cbufs[0], cbufs[1], cbufs[2], cbufs[3], buf_fill(p.rows * d, 0.0, s))
     }
     let row = race(ROUNDS, WARMUPS, DISPATCHES, vk_why, raw, cu_why_) $(i) {
         invoke(cu_enc, (i & 1) == 0 ? cbufs : calt)
@@ -117,7 +124,7 @@ def race_tile(p : Planes; d : int; vk_why, cu_why_ : string;
 //! the Q8_0 tile race at the column `tc` (256: the l tile, 128: the m tile)
 def race_q8_tile(p : Planes; k, d, tc : int) : RaceRow {
     let l = tc == 256
-    var pc = BatchArgs(n = uint(k), d = uint(d), map_off = uint(2 * 4))
+    var pc = BatchArgs(n = uint(k), d = uint(d), map_off = uint(p.map_off))
     let wgs = int64(p.wgs)
     let vk_why = cm2_why(l ? dasllama_vulkan_classes::ensure_q8_batch_cm2l_cls() : dasllama_vulkan_classes::ensure_q8_batch_cm2m_cls())
     let cuw = cu_why(l ? dasllama_cuda_classes::ensure_q8_batch_cm2l_cls() : dasllama_cuda_classes::ensure_q8_batch_cm2m_cls())
@@ -141,7 +148,7 @@ def race_q8_tile(p : Planes; k, d, tc : int) : RaceRow {
 
 //! a K-quant plane pair of `d` rows of `k` elements in the device layout, hashed, with the f16 activation panel and the schedule
 def kq_tile_planes(fmt, k, d, tc : int) : Planes {
-    var p : Planes
+    var p = Planes(rows = ROWS, map_off = 2 * 4)
     let nsb = k / 256
     p.wq <- hashed_words(d * nsb * int(kq_qsb(kq_fmt_of_slot(fmt)) / 4l), 1u, uint(fmt) * 77777u)
     p.ws <- kq_ws_plane(fmt, d * nsb * int(kq_dev_ssb_i(fmt) / 4l), 1u, uint(fmt) * 13u)
@@ -155,7 +162,7 @@ def kq_tile_planes(fmt, k, d, tc : int) : Planes {
 //! a per-32 plane pair of `d` rows of `k` elements (the format's quant words a block, a scale word a block or a half of one), hashed,
 //! with the f16 activation panel and the column's schedule
 def b32_tile_planes(fmt, k, d, tc : int) : Planes {
-    var p : Planes
+    var p = Planes(rows = ROWS, map_off = 2 * 4)
     let nb = k / 32
     let f = kq_fmt_of_slot(fmt)
     p.wq <- hashed_words(d * nb * int(kq_qsb(f) / 4l), 1u, uint(fmt) * 77777u)
@@ -167,10 +174,68 @@ def b32_tile_planes(fmt, k, d, tc : int) : Planes {
     return <- p
 }
 
-//! a K-quant or per-32 tile race at the column `tc` (256: the l tile, 128: the m tile, 32: the s tile)
+//! `nreg` regions of `rows_per` rows, region r over its own weight block r x `wblk_stride` and its own rows, in one map:
+//! the expert schedule's shape - every piece its own expert plane
+def moe_sched(nreg, rows_per, wblk_stride, ttile, wtiles : int) : tuple<words : array<uint>; wgs : int> {
+    let wgs = int(sched_region_wgs(int64(rows_per), int64(ttile), int64(wtiles))) * nreg
+    var words : array<uint>
+    words |> resize(4 * nreg + wgs)
+    var inscope blks <- [for (r in range(nreg)); int64(r * wblk_stride)]
+    var inscope row0s <- [for (r in range(nreg)); int64(r * rows_per)]
+    var inscope cnts <- [for (_r in range(nreg)); int64(rows_per)]
+    let wrote = sched_regions(unsafe(addr(words[0])), blks, row0s, cnts, int64(ttile), int64(wtiles))
+    assert(wrote == int64(wgs), "the expert schedule's map is sized by its own rule")
+    return <- (words = words, wgs = wgs)
+}
+
+//! `nreg` expert planes of `d` rows of `k` elements in a format's device layout (superblock or per-32), one hashed plane pair,
+//! the activation panel over every region's rows and the schedule at the column `ttile`
+def moe_planes(fmt, k, d, nreg, rows_per, ttile : int) : Planes {
+    var p = Planes(rows = nreg * rows_per, map_off = 4 * nreg)
+    let f = kq_fmt_of_slot(fmt)
+    let sb = kq_sb(fmt)
+    let nb = k / (sb ? 256 : 32)
+    let blocks = d * nb
+    p.wq <- hashed_words(nreg * blocks * int(kq_qsb(f) / 4l), 1u, uint(fmt) * 77777u)
+    if (sb) {
+        p.ws <- kq_ws_plane(fmt, nreg * blocks * int(kq_dev_ssb_i(fmt) / 4l), 1u, uint(fmt) * 13u)
+    } else {
+        p.ws <- ws_plane((nreg * blocks * int(kq_ssb(f)) + 3) / 4, 1u, uint(fmt) * 13u)
+    }
+    p.xf <- ws_plane((p.rows + int(TILE_READ_SLACK)) * k / 2, 3u, 5u)
+    var sr <- moe_sched(nreg, rows_per, blocks, ttile, (d + 127) / 128)
+    p.sched <- sr.words
+    p.wgs = sr.wgs
+    return <- p
+}
+
+//! the expert tiles at gemma-4-26B-A4B's expert planes (128 experts, 8 routed: a 512-row window's 4096 bucket rows) on each home's
+//! s column (128 regions of 32 rows) and m column (32 regions of 128 rows; the e column on the formats that stamp one), the
+//! window's k4 gate/up and q51 down formats and the IQ3_XXS file's iq3xxs stacks
+def race_moe_rows(only : table<string; void>) : int {
+    var measured = 0
+    print("the expert tiles at gemma-4-26B-A4B's expert shapes, a region an expert plane\n")
+    let arms <- [(fmt = int(KqFmt.k4), e = false, k = 2816, d = 704), (fmt = int(KqFmt.q51), e = false, k = 704, d = 2816),
+        (fmt = int(KqFmt.iq3xxs), e = true, k = 2816, d = 704)]   // the down site's 704 is no superblock multiple: the file's down stacks are per-32
+    for (arm in arms) {
+        if (!key_exists(only, "{kq_fmt_of_slot(arm.fmt)}") && length(only) > 1) continue
+        for (col in [(tc = 32, nreg = 128, rows_per = 32), (tc = 128, nreg = 32, rows_per = 128)]) {
+            var p <- moe_planes(arm.fmt, arm.k, arm.d, col.nreg, col.rows_per, col.tc)
+            let e_col = col.tc == 128 && arm.e
+            let row = race_kq_tile(arm.fmt, p, arm.k, arm.d, e_col ? int(CM2_TC_E) : col.tc)
+            let name = col.tc == 32 ? "s" : (e_col ? "e" : "m")
+            let shape = pad_right("{kq_fmt_of_slot(arm.fmt)} {name} k {arm.k} d {arm.d} x{col.nreg}", 28, ' ')
+            measured += report_race(shape, row, "TFLOP/s") $(us) => tflops(p.rows, arm.k, arm.d, us)
+            delete p
+        }
+    }
+    return measured
+}
+
+//! a K-quant or per-32 tile race at the column `tc` (256: the l tile, 128: the m tile, 32: the s tile, `CM2_TC_E`: the e column)
 def race_kq_tile(fmt : int; p : Planes; k, d, tc : int) : RaceRow {
-    let tci = tc == 256 ? 0 : (tc == 128 ? 1 : 2)
-    var pc = BatchArgs(n = uint(k), d = uint(d), map_off = uint(2 * 4))
+    let tci = tc == int(CM2_TC_E) ? CUD_CM2_TC_E : (tc == 256 ? CUD_CM2_TC_L : (tc == 128 ? CUD_CM2_TC_M : CUD_CM2_TC_S))
+    var pc = BatchArgs(n = uint(k), d = uint(d), map_off = uint(p.map_off))
     let wgs = int64(p.wgs)
     let vk_why = cm2_why(cm2_cls_ensure(fmt, int64(tc)))
     let cuw = cu_why(cud_cm2_ensure(fmt, tci))
@@ -534,6 +599,13 @@ def main {
     let llama8b_shapes = key_exists(only, "8b")
     let shapes <- [(k = llama8b_shapes ? 4096 : 2048, d = llama8b_shapes ? 4096 : 2048), (k = llama8b_shapes ? 4096 : 2048, d = llama8b_shapes ? 14336 : 8192), (k = llama8b_shapes ? 14336 : 8192, d = llama8b_shapes ? 4096 : 2048)]
     var measured = 0
+    if (key_exists(only, "moe")) {
+        dasllama_vulkan_classes::ensure_q8_batch_cm2l_cls()   // arms the device the format picks read their mode off
+        measured += race_moe_rows(only)
+        cud_shutdown()
+        require_measured(measured)
+        return
+    }
     if (!empty(only)) {
         dasllama_vulkan_classes::ensure_q8_batch_cm2l_cls()   // arms the device the format picks read their mode off
         measured += race_sb_rows(shapes, only)

@@ -106,7 +106,7 @@ driver can serve - no home installed the seats, or the home has no selection pip
 (`metal_sel_ask` answers false) - is declined, and the command lands its rows as it would
 unasked: the landing read after it reports no rows. The submit then
 runs the selection command behind the step's on the compute queue (`rd_sel_cmd`: a full barrier,
-then `ClsSelect`, the Vulkan stamp of the template both homes stamp (`GkClsSelect`, `ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs`), a workgroup of 1024 threads a row over the logits plane - a radix select over the
+then `ClsSelect`, the Vulkan stamp of the template every home stamps (`GkClsSelect`, `ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs`; `CuClsSelect` on the CUDA home, launched on the stream after the command's segments with its ask words and four planes in mapped host memory - `cud_rdec_sel_ask`, `cud_rdec_sel_landing` - and the rows the selection stood in for read late off the device's logits plane; `MetalClsSelect` on Metal), a workgroup of 1024 threads a row over the logits plane - a radix select over the
 float's order-preserving key in three histogram passes to the exact 1024th largest logit (each
 pass's bin counts are subgroup-aggregated: a row's logits cluster into a few bins, and a thread an
 atomic serializes the workgroup on them), the
@@ -159,3 +159,14 @@ resets the run, a chain dropped at a switch or a settle backs off nothing) - and
 `vk_rdec_chain_stats` counts the steps taken and the misses.
 The plan charges the snapshot - one region's recurrent states - where the chain is asked
 (`rdec_chain_snap_bytes`).
+
+The CUDA home runs the same chain on its one stream (`crd_chain_submit`), where stream order is every fence: the running step's
+graph is launched and left running, the step's pick (the out block's first word) and, where it landed logits, its logits plane are
+copied aside into a landing slot with an event after them, the prologue copies the pick into the in block's token id word and the
+staged TokMeta block and rope row of the next position into the in block (and the region's recurrent state slots into the
+snapshot), the next step's captured graph is launched behind, and an event marks it done. The host waits the landing event alone
+and reads the running step off its slot; a chained step the next call takes is waited at its own event, its results off the out
+block, or off the slot the chain after it copied them into. The chain needs the row and the side row gathered off the token id,
+no live carry and no host experts (`cud_rdec_chain_wanted`), a step past the first and both steps' graphs captured (the chained
+step launches a graph and captures none), one segment and no selection asked (`crd_chain_ready`); `DASLLAMA_CUDA_CHAIN` picks
+the mode as the Vulkan knob does, `cud_rdec_chain_mode_set` pins it, and `cud_rdec_chain_stats` counts the hits and misses.

@@ -28,8 +28,10 @@ require _attn_oracle
 require ?vulkan _vkd_oracles   // the kq oracle runs the Vulkan leaves' decodes on the CPU
 require dasllama/dasllama_math
 require daslib/math_bits   // nolint:STYLE030,LINT019 — the word hashes of the CUDA cells, inside the vulkan arm alone
+require daslib/jobque_boost   // the worker-thread cell: a context of its own on another thread
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_gpu_math   // ue4m3_half_f32 - the nv4 MMQ cell's reference scales
+require dasllama/dasllama_gpu_knee   // cud_split_k_tgs: the short-window pick cell pins the knee
 require _fp4_feed   // the FP4 feed kernels' CPU oracle
 require _mmq_ref   // the MMQ leaves' CPU references, shared with the GEMM race
 require _moe_routing_oracles   // the routed block's routing kernels' fixtures and oracles, the Vulkan kernel file's too
@@ -45,7 +47,7 @@ require dasllama/dasllama_common
 
 let Y_SENTINEL = 12345.0   //! a row the GEMV never stores keeps it
 let private Q8_GEMV_BAR = Bar(rel = 1e-3, poison_of_max = true, poison = 2.0, poison_abs = 1.0)   //! the q8 GEMV and MMQ cells' bar: 1e-3 of the larger magnitude floored at 1
-let private MMQ_ROW_PAD = 128   //! the MMQ-fed chain's bucket row pad: mirrors the engine's private `CUD_MOE_ROW_PAD`
+let private MMQ_ROW_PAD = int(MMQ_SCHED_ROW_PAD)   //! the MMQ-fed chain's bucket row pad, the MMQ schedule stamp's
 let private TILE_BAR = Bar(kind = BarKind.rel_of_max, rel = 2e-3, abs_floor = 2e-3, poison_of_max = true, poison = 2.0, poison_abs = 1.0)   //! the f16 tiles reassociate: 2e-3 of the plane's largest magnitude floored at 1
 
 //! `nreg` regions of `d` rows, `nb` blocks a row over the ramp scale plane, the activation scales `(i % 5) x 0.125 - 0.25`
@@ -188,41 +190,162 @@ def q8_cm2l_run(t : T?; k : int; wq_seed, ws_seed, xf_mul, xf_add : uint) {
     delete wsh
 }
 
-//! the two-chunk split through the reduce against the whole-K oracle: the k0 / k1 / ybase prologue the window chain's split GEMMs ride
-def q8_cm2l_split_run(t : T?; k : int) {
-    let d = TILE_D
-    let rows = TILE_ROWS0
-    let nsplit = 2
-    let ck = int(cm2_chunk(int64(k), int64(nsplit)))
-    t |> success(ck > 0 && ck % 256 == 0 && ck < k, "k {k} splits in two 256-aligned chunks ({ck} and {k - ck} deep)")
-    var wqh, wsh : array<uint>
-    q8_plane(d * (k / 32), 1u, 17u, 1u, 991u, wqh, wsh)
-    var xfh <- ws_plane((rows + int(TILE_READ_SLACK)) * k / 2, 3u, 5u)
-    let wgs = ((rows + 255) / 256) * ((d + 127) / 128)
-    var sched : array<uint>
-    sched |> resize(4 + wgs * nsplit)
-    sched[2] = uint(rows)
+//! the column `tc`'s tile of format `fmt` split along K through the reduce against the whole-K oracle: one region of `rows` rows
+//! against a `d` x `n` plane in `nsplit` 256-aligned chunks, the last short where K does not divide; the s column takes the f16
+//! operand bar (`cm_bar`), the l column the tile bar. The chunk depth does not enter either bar: the tiles accumulate in f32
+//! (`coopmatWgAcc_f32_64x64`), so a chunk's sum and the reduce's sum of chunks reassociate the same f32 terms (an error of order
+//! K . 2^-24 of the sum of magnitudes, under the bars' floor at every K here), and what the bars cover is the operand rounding -
+//! every x and w rounded to f16 once, each product within 2^-10 of exact, the same at every depth. The partials plane carries
+//! the tile's row footprint past the region (the s tile covers 32 rows at 31, the l tile 256 at 300), sentinel-filled and
+//! asserted untouched: a broken row guard writes there before it writes past the buffer
+def cm2_split_run(t : T?; tag : string; fmt, tc, rows, d, n, nsplit : int; wqh, wsh : array<uint>; xf_add : uint;
+                  oracle : function<(wq : array<uint>; wsu : array<uint>; xf : array<uint>; recs : array<uint>; nrec, n, d : int; var y : array<float>) : void>) {
+    let ck = int(cm2_chunk(int64(n), int64(nsplit)))
+    t |> success(ck > 0 && ck % 256 == 0 && ck < n, "{tag}: K {n} splits {nsplit} ways in 256-aligned chunks ({ck} deep)")
+    return if (ck <= 0)
+    let cols = tc == CUD_CM2_TC_S ? 32 : 256
+    let rows_pad = ((rows + cols - 1) / cols) * cols
+    let slack = (rows_pad - rows) * d
+    var xfh <- ws_plane((rows + int(TILE_READ_SLACK)) * n / 2, 3u, xf_add)
+    let wgs = (rows_pad / cols) * ((d + 127) / 128) * nsplit
+    var sched <- one_region_words(rows, wgs)
     var y_ref : array<float>
     y_ref |> resize(rows * d)
-    q8f16_gemm_oracle(wqh, wsh, xfh, sched, 1, k, d, y_ref)
-    let s = g_cud.stream
-    var bufs = fixed_array(buf_upload(wqh, s), buf_upload(wsh, s), buf_upload(sched, s), buf_upload(xfh, s), buf_fill(rows * d * nsplit, Y_SENTINEL, s))
+    invoke(oracle, wqh, wsh, xfh, sched, 1, n, d, y_ref)
+    var s = g_cud.stream
+    var bufs = fixed_array(buf_upload(wqh, s), buf_upload(wsh, s), buf_upload(sched, s), buf_upload(xfh, s), buf_fill(rows * d * nsplit + slack, Y_SENTINEL, s))
     let y = buf_fill(rows * d, Y_SENTINEL, s)
-    var pc = BatchArgs(n = uint(k), d = uint(d), map_off = 4u, ksplit = uint(ck))
-    enc_q8_batch_cm2l_cls(g_cud.stream, bufs, pc, int64(wgs * nsplit))
+    var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = uint(ck))
+    cud_cm2_enc(fmt, tc, s, bufs, pc, int64(wgs))
     var pr = SkRedArgs(nelem = uint(rows * d), k = uint(nsplit), ybase = 0u)
-    enc_splitk_reduce_cls(g_cud.stream, fixed_array(bufs[4], y), pr, int64((rows * d + 1023) / 1024))
-    t |> success(cud_sync(), "q8 cm2 l tile split k {k}: the launches complete ({cuda_last_error()})")
+    enc_splitk_reduce_cls(s, fixed_array(bufs[4], y), pr, splitk_reduce_wgs(int64(rows * d)))
+    t |> success(cud_sync(), "{tag} split {nsplit} ways at k {n}: the launches complete ({cuda_last_error()})")
     var got <- buf_download(y, rows * d, type<float>)
+    var inscope parts <- buf_download(bufs[4], rows * d * nsplit + slack, type<float>)
     cuda_mem_free(bufs)
     cuda_mem_free(y)
-    check_rows(t, "q8 cm2 l tile split in two k chunks at k {k} + the reduce vs the whole-K oracle", got, y_ref, TILE_BAR, d)
+    check_rows(t, "{tag} split {nsplit} ways at k {n} + the reduce vs the whole-K oracle", got, y_ref, tc == CUD_CM2_TC_S ? cm_bar(y_ref) : TILE_BAR, d)
+    if (slack > 0) {
+        var inscope kept <- [for (_i in range(slack)); Y_SENTINEL]
+        check_exact(t, "{tag} split {nsplit} ways: the {rows_pad - rows} rows of the tile's footprint past the region keep the partials' sentinel", copy_span(parts, rows * d * nsplit, slack), kept)
+    }
     delete got
     delete y_ref
     delete sched
     delete xfh
+}
+
+//! the q8 tile of column `tc` split along K at `rows` rows: the dense window's split on the l column, the short window's on the s column
+def q8_split_run(t : T?; tc, rows, k, nsplit : int) {
+    var wqh, wsh : array<uint>
+    q8_plane(TILE_D * (k / 32), 1u, 17u, 1u, 991u, wqh, wsh)
+    cm2_split_run(t, "q8 cm2 {tc == CUD_CM2_TC_S ? "s" : "l"} tile", int(KqFmt.q8), tc, rows, TILE_D, k, nsplit, wqh, wsh, 5u, @@q8f16_gemm_oracle)
     delete wqh
     delete wsh
+}
+
+//! what a worker thread's context saw of the device, carried back without a string (a string crossing contexts is a pointer into the worker's heap)
+struct WorkerBind {
+    ok : bool
+    rebound : bool
+    free_ : uint64
+    clean : bool
+}
+
+//! a worker thread's own context reaches the device: its `[init]` made the device on the creating thread, and the tier's entry
+//! gate binds the calling thread at EVERY entry - a ready device's too - so after the thread's binding is dropped the next entry
+//! binds again and the free-memory query (the plan's budget) answers as on the main thread; an entry that only answers "ready"
+//! leaves the thread unbound and the query reads nothing
+[test]
+def test_cud_worker_thread_binds(t0 : T?) {
+    t0 |> run("a worker thread's context binds the CUDA device on every entry: dropped from the thread, the ready device binds again and the free-memory query answers") <| @(t : T?) {
+        if (!cud_init()) {
+            t |> skip("no CUDA device with NVRTC")
+            return
+        }
+        let main_free = cuda_device_free_memory()
+        t |> success(main_free > 0ul, "the main thread reads the device's free memory ({main_free} bytes)")
+        var saw = WorkerBind()
+        with_channel(1) $(ch) {
+            new_thread() <| @capture(= ch) {
+                let ok = cud_init()
+                cuCtxSetCurrent(null)   // the thread's binding dropped: a ready device's next entry must bind again
+                let rebound = cud_init()
+                let free_ = cuda_device_free_memory()
+                ch |> push_clone(WorkerBind(ok = ok, rebound = rebound, free_ = free_, clean = empty(cuda_last_error())))
+                ch |> notify_and_release
+            }
+            ch |> join()
+            ch |> for_each_clone() $(w : WorkerBind#) {
+                saw = WorkerBind(ok = w.ok, rebound = w.rebound, free_ = w.free_, clean = w.clean)
+            }
+        }
+        t |> success(saw.ok, "the worker's context initializes the tier")
+        t |> success(saw.rebound, "the ready device's entry answers on the unbound thread")
+        t |> success(saw.free_ > 0ul && saw.clean, "the worker's thread reads the device's free memory after the rebind ({saw.free_} bytes, the driver's last error {saw.clean ? "clear" : "set"})")
+    }
+}
+
+[test]
+def test_cud_q8_cm2s_split(t0 : T?) {
+    t0 |> run("CUDA q8 cm2 s-tile split in two and four k chunks + the reduce == the f16-feed CPU oracle: the short window's form") <| @(t : T?) {
+        if (!ensure_q8_batch_cm2s_cls() || !ensure_splitk_reduce_cls()) {
+            t |> skip("no CUDA device with NVRTC")
+            return
+        }
+        q8_split_run(t, CUD_CM2_TC_S, 31, 1024, 2)
+        q8_split_run(t, CUD_CM2_TC_S, 31, 2048, 4)
+        q8_split_run(t, CUD_CM2_TC_S, 31, 1280, 2)   // the last chunk short: 1280 in two 256-aligned shares is 768 and 512
+    }
+}
+
+//! every format's s column split along K at 31 rows - the short window's form on every plane the window admits - against the
+//! format's own oracle: the Vulkan short-split cell's rows (a per-32 row's K off the 256 grid splits in two, its last chunk short)
+[test]
+def test_cud_cm2s_short_split_family(t0 : T?) {
+    t0 |> run("CUDA s column split along K under 32 rows == the CPU oracle, every per-format tile row") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q8_batch_cm2s_cls() || !ensure_splitk_reduce_cls()) {
+                t |> skip("no CUDA device with NVRTC")
+                return
+            }
+            var tiles <- fmt_tile_rows()
+            for (row in tiles) {
+                let fmt = int(row.fmt)
+                t |> success(cud_cm2_ensure(fmt, CUD_CM2_TC_S), "{row.fmt} s column: the leaf compiles")
+                var wqh, wsh : array<uint>
+                fmt_tile_planes(row, wqh, wsh)
+                cm2_split_run(t, "{row.fmt} s column", fmt, CUD_CM2_TC_S, 31, TILE_CELL_D, row.n, fmt_split_ways(row.n), wqh, wsh, row.xf_add, row.oracle)
+                delete wqh
+                delete wsh
+            }
+            delete tiles
+        } else {
+            t |> skip("dasVulkan not present: the per-format oracles live with the Vulkan cells")
+        }
+    }
+}
+
+
+[test]
+def test_cud_short_window_pick(t0 : T?) {
+    t0 |> run("the CUDA window pick under the s column's rows: whole off the knee, split by the shared rule on it") <| @(t : T?) {
+        if (!ensure_q8_batch_cm2s_cls()) {
+            t |> skip("no CUDA device with NVRTC")
+            return
+        }
+        let saved = cud_split_k_tgs()
+        set_cud_split_k_tgs(0l)
+        t |> equal(pick_str(cud_cm2_pick(1024l, 31l, 1024l)), "32x1x0", "the short window off its knee: the s column whole - knee 0 leaves those windows whole, never the wave model's split")
+        set_cud_split_k_tgs(256l)
+        t |> equal(pick_str(cud_cm2_pick(1024l, 31l, 1024l)), "32x4x256", "... on it the shared rule splits the 8-block grid into four 256-deep chunks")
+        t |> equal(pick_str(cud_cm2_pick(1024l, 31l, 1536l)), "32x2x768", "a 1536-deep K stops doubling where the next share would leave the 256-wide chunks")
+        let full = pick_str(cud_cm2_pick(1024l, 32l, 1024l))
+        t |> equal(cud_cm2_pick(1024l, 32l, 1024l).tc, 32l, "a full column is the wave model's whatever the knee: the s column, split by the card's block slots")
+        set_cud_split_k_tgs(0l)
+        t |> equal(pick_str(cud_cm2_pick(1024l, 32l, 1024l)), full, "... the same pick with the knee off: the short rule stops under 32 rows, the full column is the wave model's")
+        set_cud_split_k_tgs(saved)
+    }
 }
 
 [test]
@@ -232,8 +355,8 @@ def test_cud_q8_cm2l_split(t0 : T?) {
             t |> skip("no CUDA device with NVRTC")
             return
         }
-        q8_cm2l_split_run(t, 576)   // the two-chunk split of the Vulkan cell's K: 512 and 64 deep
-        q8_cm2l_split_run(t, 2048)
+        q8_split_run(t, CUD_CM2_TC_L, TILE_ROWS0, 576, 2)   // the two-chunk split of the Vulkan cell's K: 512 and 64 deep
+        q8_split_run(t, CUD_CM2_TC_L, TILE_ROWS0, 2048, 2)
     }
 }
 
@@ -731,11 +854,11 @@ def private cud_gather_rows(t : T?; fmt : int; wq, ws, ids : array<uint>; xh : a
     return <- y
 }
 
-//! the token-table gathers: every superblock format's `KqEmb<Fmt>` leaf against the class lane decode (the Vulkan cell's oracle)
-//! and the per-32 leaves against the engine's plane dequant - four rows, three ids off a five-row table past a one-row lead,
-//! one `EMB_ID_HOST` row copying the host's staged row
+//! the token-table gathers: every superblock format's `KqEmb<Fmt>` leaf against the class lane decode (the Vulkan cell's oracle),
+//! the per-32 leaves against the engine's plane dequant, and the exact f32 table's leaf against the rows' own floats - four rows,
+//! three ids off a five-row table past a one-row lead, one `EMB_ID_HOST` row copying the host's staged row
 [test]
-def test_cud_emb_family(t0 : T?) {
+def test_cud_emb_family(t0 : T?) {   // nolint:STYLE038 - one flat arm per gather stamp (every kq leaf, the q8 and the f32 table), a split would hide the arm list
     t0 |> run("CUDA token-table gather leaves == the oracles (15 superblock formats, 4 per-32 ones)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_emb_gather_cls()) {
@@ -792,9 +915,231 @@ def test_cud_emb_family(t0 : T?) {
                 var inscope y <- cud_gather_rows(t, fmt, wq, ws, ids, xh32, n32, lead * nb, escale)
                 check_rows(t, "{f} token-table gather against the engine's plane dequant", y, y_ref, BAR_APPROX_CTRL, n32)
             }
+            // the exact table's gather (`CuEmbGatherF32`, the `WF` arm): the row's floats scaled, the `EMB_ID_HOST` row the host's
+            t |> success(ensure_emb_gather_f32_cls(), "the f32 table gather compiles")
+            var inscope wf <- row_fill(vocab * n32, 11, 5, 0.02, -0.7)
+            var inscope yf_ref : array<float>
+            yf_ref |> resize(rows * n32)
+            for (r in range(rows)) {
+                for (e in range(n32)) {
+                    yf_ref[r * n32 + e] = ids[r] == EMB_ID_HOST ? xh32[r * n32 + e] : wf[int(ids[r]) * n32 + e] * escale
+                }
+            }
+            var sf = g_cud.stream
+            let fwgs = (rows * n32 / 4 + 255) / 256
+            let footprint = fwgs * 256 * 4   // the grid's lanes, four elements each: a broken lane guard writes up to here
+            let fbufs = fixed_array(buf_upload(wf, sf), buf_upload(ids, sf), buf_fill(footprint, Y_SENTINEL, sf), buf_upload(xh32, sf))
+            var pcf = EmbArgs(npos = uint(rows), dim = uint(n32), wblk0 = 0u, embed_scale = escale)
+            enc_emb_gather_f32_cls(sf, fbufs, pcf, int64(fwgs))
+            t |> success(cud_sync(), "f32 table gather: the launch completes ({cuda_last_error()})")
+            var inscope yf_all <- buf_download(fbufs[2], footprint, type<float>)
+            cuda_mem_free(fbufs)
+            var inscope yf <- copy_span(yf_all, 0, rows * n32)
+            check_rows(t, "the f32 table gather against the rows' own floats", yf, yf_ref, BAR_APPROX_CTRL, n32)
+            var inscope kept_f <- [for (_i in range(footprint - rows * n32)); Y_SENTINEL]
+            check_exact(t, "the f32 table gather: the {footprint - rows * n32} elements of the grid's footprint past the rows keep the sentinel", copy_span(yf_all, rows * n32, footprint - rows * n32), kept_f)
         } else {
             t |> skip("dasVulkan not present: the gather oracle runs the Vulkan leaves' decodes on the CPU")
         }
+    }
+}
+
+//! the E-series pre-step's finish (`CuPleFinish`, a `GkPleFinish` stamp, the Vulkan cell's fixture): three layers' slices of 256
+//! over two rows in place, side = (side + pnorm . rms(proj)) / sqrt(2) against the CPU form at the approx bar; the slices read as
+//! one row miss it, the control
+[test]
+def test_cud_ple_finish(t0 : T?) {
+    t0 |> run("ple_finish: the side rows == the CPU finish a slice at a time") <| @(t : T?) {
+        if (!ensure_ple_finish_cls()) {
+            t |> skip("no CUDA device with NVRTC")
+            return
+        }
+        let ple = 256
+        let nsl = 6
+        let eps = 1e-6
+        let ascale = 1.0 / sqrt(2.0)
+        var inscope a <- row_fill(ple * nsl, 13, 0, 0.06, 3.0, 89)
+        var inscope x <- row_fill(ple * nsl, 37, 0, 0.11, 5.0, 101)
+        var inscope w <- row_fill(ple, 1, 0, 0.05, 0.0, 17)
+        var inscope want, flat : array<float>
+        want |> resize(ple * nsl)
+        flat |> resize(ple * nsl)
+        var sall = 0.0
+        for (v in a) {
+            sall += v * v
+        }
+        let finv = 1.0 / sqrt(sall / float(ple * nsl) + eps)
+        for (r in range(nsl)) {
+            var sa = 0.0
+            for (k in range(ple)) {
+                sa += a[r * ple + k] * a[r * ple + k]
+            }
+            let ainv = 1.0 / sqrt(sa / float(ple) + eps)
+            for (k in range(ple)) {
+                want[r * ple + k] = (x[r * ple + k] + w[k] * a[r * ple + k] * ainv) * ascale
+                flat[r * ple + k] = (x[r * ple + k] + w[k] * a[r * ple + k] * finv) * ascale
+            }
+        }
+        check_exceeds(t, "ple_finish: the slice norms differ from one norm over every slice (the control)", want, flat, BAR_EXACT)
+        var s = g_cud.stream
+        var bufs = fixed_array(buf_upload(a, s), buf_upload(w, s), buf_upload(x, s))
+        var pc = GkPleFinArgs(ple = uint(ple), eps = eps)
+        enc_ple_finish_cls(s, bufs, pc, int64(nsl))
+        t |> success(cud_sync(), "ple_finish: the launch completes ({cuda_last_error()})")
+        var inscope got <- buf_download(bufs[2], ple * nsl, type<float>)
+        cuda_mem_free(bufs)
+        check_rows(t, "ple_finish against the CPU finish a slice at a time", got, want, BAR_APPROX_CTRL, ple)
+        t |> success(moved_off(got, x, 0, BAR_APPROX), "ple_finish: the finish moved element 0 off its input past the bar (the in-place compare's control)")
+    }
+}
+
+//! the bf16 router-form GEMV stamps: the pairs stamp at an even dim and the halfword stamp at an odd one, ne rows at a row base,
+//! three columns in one dispatch under the output scale (`yscale`), against the CPU dot at the approx bar; the sentinel past the
+//! last column stands, a poisoned output the control
+[test]
+def test_cud_router_gemv_bf16(t0 : T?) {
+    for (spec in [(dim = 1536, hw = false), (dim = 1537, hw = true)]) {
+        t0 |> run("router_gemv_bf16{spec.hw ? "_hw" : ""} (dim {spec.dim}) == the CPU dot at a row base, an output base and three columns") <| @(t : T?) {
+            if (!(spec.hw ? ensure_router_gemv_bf16_hw_cls() : ensure_router_gemv_bf16_cls())) {
+                t |> skip("no CUDA device with NVRTC")
+                return
+            }
+            let dim = spec.dim
+            let ne = 32
+            let ncols = 3
+            let layer1_woff = ne * dim
+            let obase = 16
+            let out_n = obase + ncols * ne + 8
+            var inscope wh <- hash_fill(layer1_woff + ne * dim, 4242u, 1000u, 500.0, 1.0)
+            var inscope xh <- hash_fill(ncols * dim, 99u, 1000u, 500.0, 1.0)
+            var inscope w16 <- pack_bf16(wh)
+            let yscale = 1.0 / sqrt(float(dim))
+            var inscope want : array<float>
+            want |> resize(out_n)
+            for (i in range(out_n)) {
+                want[i] = Y_SENTINEL
+            }
+            for (c in range(ncols)) {
+                for (e in range(ne)) {
+                    var acc = 0.0
+                    for (k in range(dim)) {
+                        acc += bf16_value(w16[layer1_woff + e * dim + k]) * xh[c * dim + k]
+                    }
+                    want[obase + c * ne + e] = acc * yscale
+                }
+            }
+            var s = g_cud.stream
+            var bufs = fixed_array(buf_upload(w16, s), buf_upload(xh, s), buf_fill(out_n, Y_SENTINEL, s), buf_upload(xh, s))
+            var pc = GkRouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(layer1_woff), obase = uint(obase), ncols = uint(ncols), yscale = yscale)
+            if (spec.hw) {
+                enc_router_gemv_bf16_hw_cls(s, bufs, pc, int64(ne))
+            } else {
+                enc_router_gemv_bf16_cls(s, bufs, pc, int64(ne))
+            }
+            let tag = spec.hw ? "router_gemv_bf16_hw" : "router_gemv_bf16"
+            t |> success(cud_sync(), "{tag}: the launch completes ({cuda_last_error()})")
+            var inscope got <- buf_download(bufs[2], out_n, type<float>)
+            cuda_mem_free(bufs)
+            check_rows(t, "{tag} against the CPU dot over three columns, the sentinel outside them", got, want, BAR_APPROX_CTRL, out_n)
+        }
+    }
+}
+
+//! the small f16 x f16 GEMM on the cm2 tile (`CuF16GemmCm2`, the template both discrete homes stamp): the Vulkan cell's direct arm
+//! at its four shapes against the f32 dot of the same f16 values, the header under the output base kept
+[test]
+def test_cud_f16_gemm(t0 : T?) {
+    t0 |> run("the small f16 GEMM on the cm2 tile (the E-series projection's window form) == the f32 dot, direct") <| @(t : T?) {
+        if (!ensure_f16_gemm_cm2_cls()) {
+            t |> skip("no CUDA device with NVRTC")
+            return
+        }
+        for (shape in [(tag = "ba-like", d = 32, n = 512, rows = 70), (tag = "router-like", d = 200, n = 1024, rows = 130),
+                       (tag = "odd router", d = 61, n = 512, rows = 41), (tag = "rel plane, ragged d, short K", d = 2495, n = 64, rows = 37),
+                       (tag = "E2B projection, a whole window", d = 8960, n = 1536, rows = 512)]) {
+            let d = shape.d
+            let n = shape.n
+            let rows = shape.rows
+            let ybase = 16   // the rows land past a header the kernel must leave alone
+            var inscope wh, xh : array<float16>
+            wh |> resize(d * n)
+            xh |> resize(rows * n)
+            for (i in range(d * n)) {
+                wh[i] = float16(float((i * 7) % 61) * 0.02 - 0.6)
+            }
+            for (i in range(rows * n)) {
+                xh[i] = float16(float((i * 11) % 53) * 0.03 - 0.8)
+            }
+            var inscope ref : array<float>
+            ref |> resize(rows * d)
+            for (p in range(rows)) {
+                for (e in range(d)) {
+                    var acc = 0.0
+                    for (kk in range(n)) {
+                        acc += float(xh[p * n + kk]) * float(wh[e * n + kk])
+                    }
+                    ref[p * d + e] = acc
+                }
+            }
+            // both operands are f16-exact, so every product is exact in f32 and the arms differ by f32 reassociation over K alone
+            let bar = Bar(kind = BarKind.rel_of_max, rel = 2e-5, poison = 8e-5, poison_of_max = true)
+            // the tile grid's footprint: 128-row by 128-column tiles, so a broken guard writes rows up to `rows_pad` and columns up to `d_pad` at the row stride - the plane carries that far past the rows, sentinel-filled and asserted untouched
+            let rows_pad = ((rows + 127) / 128) * 128
+            let d_pad = ((d + 127) / 128) * 128
+            let total = ybase + (rows_pad - 1) * d + d_pad
+            var s = g_cud.stream
+            var bufs = fixed_array(buf_upload(wh, s), buf_upload(xh, s), buf_fill(total, NAN_SENTINEL, s))
+            var pc = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = 0u, ybase = uint(ybase), ystride = uint(d), ksplit = 0u)
+            enc_f16_gemm_cm2_cls(s, bufs, pc, f16_gemm_cm2_wgs(int64(rows), int64(d)))
+            t |> success(cud_sync(), "f16 GEMM {shape.tag}: the launch completes ({cuda_last_error()})")
+            var inscope y <- buf_download(bufs[2], total, type<float>)
+            cuda_mem_free(bufs)
+            var inscope header_bits <- [for (i in range(ybase)); float_bits_to_uint(y[i])]
+            var inscope sentinel_bits <- [for (_i in range(ybase)); NAN_SENTINEL_BITS]
+            check_exact(t, "f16 GEMM {shape.tag}: the {ybase} words under the base stay the sentinel", header_bits, sentinel_bits)
+            var inscope got <- copy_span(y, ybase, rows * d)
+            check_rows(t, "f16 GEMM {shape.tag}: {rows} x {d} over K {n} vs the f32 dot", got, ref, bar, d)
+            let past = total - ybase - rows * d
+            if (past > 0) {
+                var inscope past_bits <- [for (i in range(past)); float_bits_to_uint(y[ybase + rows * d + i])]
+                var inscope past_sentinel <- [for (_i in range(past)); NAN_SENTINEL_BITS]
+                check_exact(t, "f16 GEMM {shape.tag}: the {past} words of the tile grid's footprint past the rows keep the sentinel", past_bits, past_sentinel)
+            }
+        }
+    }
+}
+
+//! the per-layer-embedding projection's f16 panel (`CuPleBf16Cvt`, the Vulkan cell's form): bf16 halves widened by their bit shift
+//! and stored f16 bit for bit the language's half cast of the widened value, a value past the half range saturated, the elements
+//! past the count kept
+[test]
+def test_cud_ple_bf16_cvt(t0 : T?) {
+    t0 |> run("ple_bf16_cvt: the bf16 rows as f16 == the widened value's half, saturated") <| @(t : T?) {
+        if (!ensure_ple_bf16_cvt_cls()) {
+            t |> skip("no CUDA device with NVRTC")
+            return
+        }
+        let n = 1030
+        var inscope src <- [for (i in range(n)); 0.37 * float(i % 61) - 11.0]
+        src[7] = 1.0e6   // past the half range: saturates at 65504
+        src[8] = -1.0e6
+        var inscope w16 <- pack_bf16(src)
+        var inscope want <- [for (h in w16); float(float16(clamp(bf16_value(h), -65504.0, 65504.0)))]
+        var s = g_cud.stream
+        let wgs = (n / 4 + 255) / 256 + 1   // a workgroup past the count: its lanes are the guard under test
+        let footprint = wgs * 256 * 4
+        let bufs = fixed_array(buf_upload(w16, s), buf_fill(footprint, uint16(0xFFFF), s))
+        var pc = gk_f16_rows_args(uint(n))
+        enc_ple_bf16_cvt_cls(s, bufs, pc, int64(wgs))
+        t |> success(cud_sync(), "ple_bf16_cvt: the launch completes ({cuda_last_error()})")
+        var inscope got <- buf_download(bufs[1], n, type<float16>)
+        var inscope tail <- buf_download(bufs[1], footprint, type<uint16>)
+        cuda_mem_free(bufs)
+        var inscope gotf <- [for (i in range(n)); float(got[i])]
+        check_exact(t, "ple_bf16_cvt: every element the widened value's half", gotf, want)
+        t |> equal(float(got[7]), 65504.0, "ple_bf16_cvt: a value past the half range saturates")
+        var inscope kept <- [for (_i in range(footprint - n)); uint16(0xFFFF)]
+        check_exact(t, "ple_bf16_cvt: the {footprint - n} elements of the grid's footprint past the count kept", copy_span(tail, n, footprint - n), kept)
     }
 }
 
@@ -865,7 +1210,7 @@ def private cud_feed_actrq(t : T?; var s : void?; sent : float; q8k : bool) {
     }
 }
 
-//! the biased act twins (`ActRqBT` Q8_0 / Q8_K, `ActF16T` BIASED) over four rows of experts `rex`, the second of two bias layers bound (`gboff` / `uboff`); the oracle is the unbiased act over the host-biased rows, the unbiased oracle each form's control
+//! the biased act twins (`ActRqBT` Q8_0 / Q8_K, `ActF16T` BIASED) over four rows of experts `rex`, the second of two bias layers bound (`gboff`); the oracle is the unbiased act over the host-biased rows, the unbiased oracle each form's control
 def private cud_act_biased_arm(t : T?; var s : void?; act : uint; q8k : bool; f16 : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let brow = 256
@@ -881,7 +1226,7 @@ def private cud_act_biased_arm(t : T?; var s : void?; act : uint; q8k : bool; f1
         let boff = ne * brow   // the second layer's rows
         var gb_in <- [for (i in range(nelem)); gh[i] + gbh[boff + int(rex[i / brow]) * brow + i % brow]]
         var ub_in <- [for (i in range(nelem)); uh[i] + ubh[boff + int(rex[i / brow]) * brow + i % brow]]
-        var pc = ActArgs(nelem = uint(nelem), act = act, nblk = uint(nblk), elem0 = 0u, bias_on = 1u, gboff = uint(boff), uboff = uint(boff), brow = uint(brow))
+        var pc = ActArgs(nelem = uint(nelem), act = act, nblk = uint(nblk), elem0 = 0u, bias_on = 1u, gboff = uint(boff), brow = uint(brow))
         let tag = "{f16 ? "f16" : (q8k ? "q8k" : "q8")} biased act{act == ACT_OAI ? " under the clamped swiglu" : ""}"
         if (f16) {
             var bufs = fixed_array(buf_upload(gh, s), buf_upload(uh, s), buf_fill(nelem / 2, NAN_SENTINEL_BITS, s), buf_upload(gbh, s), buf_upload(ubh, s), buf_upload(rex, s))
@@ -1160,7 +1505,7 @@ def test_cud_mx4_feeds(t0 : T?) {
         let gbb = buf_upload(gb, s)
         let ubb = buf_upload(ub, s)
         let rxb = buf_upload(rex, s)
-        var pcb = Fp4RowsArgs(k = uint(k), inbase = 0u, act = ACT_OAI, gboff = uint(gboff), uboff = uint(gboff))
+        var pcb = Fp4RowsArgs(k = uint(k), inbase = 0u, act = ACT_OAI, gboff = uint(gboff))
         enc_mx4_actrows_b(s, fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4], gbb, ubb, rxb), pcb, int64(rows))
         t |> success(cud_sync(), "mx4_actrows_b: the launch completes ({cuda_last_error()})")
         let allowed = rows * k / 800
@@ -1270,7 +1615,7 @@ def private fa_launch(t : T?; hs : int; gated, sink : bool; bufs : uint64[4]; o1
 }
 
 //! the flash tile at head `hs` (64, 96, 128 or 256), f32 and f16 out, against the CPU attention oracle; under `gated` the q rows carry [q | gate] a head (the h256 `G` stamps); under `sink` a per-head sink logit inside the scaled scores' range (the gpt-oss h64 stamps)
-def fa_run(t : T?; hs, window : int; gated : bool = false; sink : bool = false) {
+def fa_run(t : T?; hs, window : int; gated : bool = false; sink : bool = false; cap : float = 0.0) {
     let nheads = 4
     let kv_mul = 2
     let rows = 77
@@ -1283,8 +1628,9 @@ def fa_run(t : T?; hs, window : int; gated : bool = false; sink : bool = false) 
     let kvd = (nheads / kv_mul) * hs
     let kpos = w0 + rows
     let kpad = kpos + int(RDEC_MIR_SLACK_ROWS)
-    var qh <- row_fill(rows * qrow, 41, 0, 0.05, 1.8, 73)
-    var kh <- row_fill(kpos * kvd, 17, 0, 0.03, 1.4, 97)
+    // the softcap fixture's wide q and k values (the Vulkan cell's): the scaled scores run past the cap, so the cap is load-bearing
+    var qh <- row_fill(rows * qrow, 41, 0, cap != 0.0 ? 0.25 : 0.05, cap != 0.0 ? 9.0 : 1.8, 73)
+    var kh <- row_fill(kpos * kvd, 17, 0, cap != 0.0 ? 0.15 : 0.03, cap != 0.0 ? 7.0 : 1.4, 97)
     var vh <- row_fill(kpos * kvd, 53, 0, 0.04, 1.7, 89)
     var kh16, vh16 : array<float16>
     kh16 |> resize(kpad * kvd)
@@ -1297,25 +1643,26 @@ def fa_run(t : T?; hs, window : int; gated : bool = false; sink : bool = false) 
     var bufs = fixed_array(buf_upload(qh, s), buf_upload(kh16, s), buf_upload(vh16, s), buf_fill(rows * qd, Y_SENTINEL, s))
     let o16 = buf_fill(rows * qd, HALF_NAN, s)
     var pc = FaArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd), kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u, scale = scale,
-        qstride = uint(qrow), qhs = uint(qhs), window = uint(window), cap = 0.0, sinkoff = 0u, row0 = 0u, ring = 0u)
-    let wgs = int64(nheads * ((rows + 63) / 64))
+        qstride = uint(qrow), qhs = uint(qhs), window = uint(window), cap = cap, sinkoff = 0u, row0 = 0u, ring = 0u)
+    let wgs = fa_stamp_wgs(cud_fa_khr(int64(hs)), int64(nheads), int64(rows))
     fa_launch(t, hs, gated, sink, bufs, o16, sinkh, pc, wgs)
-    let tag = "fa h{hs}{gated ? " gated" : ""}{sink ? " sink" : ""} window {window}"
+    let cap_tag = cap != 0.0 ? " softcap {cap}" : ""
+    let tag = "fa h{hs}{gated ? " gated" : ""}{sink ? " sink" : ""}{cap_tag} window {window}"
     t |> success(cud_sync(), "{tag}: the launches complete ({cuda_last_error()})")
     var y <- buf_download(bufs[3], rows * qd, type<float>)
     var y16 <- buf_download(o16, rows * qd, type<float16>)
     cuda_mem_free(bufs)
     cuda_mem_free(o16)
-    var y_ref <- fa_oracle(qh, kh, vh, rows, w0, nheads, hs, kv_mul, kvd, scale, window, gated, sinkh)
+    var y_ref <- fa_oracle(qh, kh, vh, rows, w0, nheads, hs, kv_mul, kvd, scale, window, gated, sinkh, cap)
     check_rows(t, "{tag} vs the CPU attention oracle", y, y_ref, TILE_BAR, qd, hs)
     // the f16 twin's store rounds at 2^-11 = 4.9e-4 of the element, under the 2e-3 of the plane's largest the f32 tile's reassociation already takes
     var y16f <- [for (h in y16); float(h)]
     check_rows(t, "{tag}: the f16-out twin vs the CPU attention oracle", y16f, y_ref, TILE_BAR, qd, hs)
-    if (gated || sink) {   // the ungated (sink-free) oracle is the control the rows must miss
+    if (gated || sink || cap != 0.0) {   // the ungated (sink-free, uncapped) oracle is the control the rows must miss
         let nosink : array<float>
         var qplain <- q_halves(qh, rows, nheads, hs, qhs)
         var y_plain <- fa_oracle(qplain, kh, vh, rows, w0, nheads, hs, kv_mul, kvd, scale, window, false, nosink)
-        check_exceeds(t, "{tag}: the rows land off the {gated ? "ungated" : "sink-free"} oracle", y, y_plain, Bar(rel = 2e-3, abs_floor = 2e-3 * logits_maxabs(y_plain)))
+        check_exceeds(t, "{tag}: the rows land off the {gated ? "ungated" : (sink ? "sink-free" : "uncapped")} oracle", y, y_plain, Bar(rel = 2e-3, abs_floor = 2e-3 * logits_maxabs(y_plain)))
         delete qplain
         delete y_plain
     }
@@ -1823,6 +2170,33 @@ def test_cud_fa_h256(t0 : T?) {
     }
 }
 
+//! the head-256 softcap stamps (gemma-2's shape, the Vulkan cell's cap of 50 over its wide scores): the capped CPU oracle, the
+//! uncapped one the control the rows must miss
+[test]
+def test_cud_fa_h256_softcap(t0 : T?) {
+    t0 |> run("CUDA cm2 flash tile at head 256 under a softcap of 50, f32 and f16 out == the capped CPU oracle, whole and under a 40-key window") <| @(t : T?) {
+        if (!ensure_fa_cm2_h256_cap_cls() || !ensure_fa_cm2_h256_cap_f16_cls()) {
+            t |> skip("no CUDA device with NVRTC")
+            return
+        }
+        fa_run(t, 256, 0, false, false, 50.0)
+        fa_run(t, 256, 40, false, false, 50.0)
+    }
+}
+
+//! the flash tile at head 512: gemma-4's global layers on the window (V off the raw k row), the Vulkan cell's h512 arm
+[test]
+def test_cud_fa_h512(t0 : T?) {
+    t0 |> run("CUDA flash tile at head 512 on the KHR arm, f32 and f16 out == the CPU attention oracle, whole and under a 40-key window") <| @(t : T?) {
+        if (!ensure_fa_khr_h512_cls() || !ensure_fa_khr_h512_f16_cls()) {
+            t |> skip("no CUDA device with NVRTC")
+            return
+        }
+        fa_run(t, 512, 0)
+        fa_run(t, 512, 40)
+    }
+}
+
 let private RATE_ROWS = fixed_array(0, 255, 256, 511)   //! the activation rows the rate cell's warm-up is held on: both edges of both 256-row tiles, every weight column
 let private RATE_TAPS = 16   //! the rate fixture's nonzero activations a row: 16 x 128 steps of the 2^-7 scale stay within f16's 2048 exact integers
 let private RATE_SCALE_WORD = 0x20002000u   //! two f16 block scales of 2^-7
@@ -2201,7 +2575,7 @@ def private cud_router_arm(t : T?; ner : int) {
     router_gemm_planes(ner, wh, xh)
     var s = g_cud.stream
     var bufs = fixed_array(buf_upload(wh, s), buf_upload(xh, s), buf_fill(MR_NPOS * ner, Y_SENTINEL, s))
-    var pc = RouterGemmArgs(npos = uint(MR_NPOS), ne = uint(ner), dim = uint(MR_DIM), woff = uint(ner * MR_DIM), ostride = uint(ner))
+    var pc = RouterGemmArgs(npos = uint(MR_NPOS), ne = uint(ner), dim = uint(MR_DIM), woff = uint(ner * MR_DIM))
     enc_router_gemm_cls(s, bufs, pc, router_gemm_wgs(int64(MR_NPOS), int64(ner)))
     t |> success(cud_sync(), "router GEMM ({ner} rows): the launch completes ({cuda_last_error()})")
     var got <- buf_download(bufs[2], MR_NPOS * ner, type<float>)
@@ -2302,13 +2676,127 @@ def private cud_gather_arm(t : T?; f16 : bool; r0, rows : int) {
         let bar = f16 ? Bar(kind = BarKind.rel_of_max, rel = 1e-3, poison_abs = 0.05, poison_at = 0) : BAR_EXACT
         check_rows(t, "{tag}: the window's rows against the CPU gather", copy_span(got, 0, rows * n), want, bar, n)
         check_exceeds(t, "{tag}: control - the CPU gather over the window at 0 reads other positions", copy_span(got, 0, rows * n), want0, bar)
-        t |> success(outside_run(got, 0, rows * n, NAN_SENTINEL), "{tag}: the {slack} rows past the window keep their sentinel")
+        let off = kept_off(got, 0, rows * n, NAN_SENTINEL)
+        t |> equal(off.bad, 0, "{tag}: the {slack} rows past the window keep their sentinel ({off.bad} elements moved, the first at {off.first})")
         delete x
         delete got
         delete want
         delete want0
     }
     delete slot_idx
+}
+
+//! the per-expert chain's by-row gather (`moe_gather_f16_row_cls`): window row b of [r0, r0 + rows) takes its grid entry's
+//! position row as halves over seven positions of three slots, at widths under one 256-thread stride, whole strides and a tail;
+//! the rows past the window keep their sentinel, and the oracle over the window at 0 is the control that misses
+def private cud_gather_row_arm(t : T?; r0, rows : int) {
+    let npos = 7
+    let k = 3
+    let nk = npos * k
+    let slack = 2
+    var entry_of_bucket_row <- gather_row_entries(nk)
+    var s = g_cud.stream
+    for (n in fixed_array(100, 256, 300)) {
+        var x <- hash_steps(npos * n, 91u)
+        let plane = (rows + slack) * n
+        var pc = GatherArgs(n = uint(n), k = uint(k), r0 = uint(r0), r1 = uint(r0 + rows))
+        var bufs = fixed_array(buf_upload(x, s), buf_upload(entry_of_bucket_row, s), buf_fill(plane / 2, HALF_NAN_PAIR, s))
+        enc_moe_gather_f16_row_cls(s, bufs, pc, int64(rows))
+        let tag = "moe gather row n {n}, window [{r0}, {r0 + rows})"
+        t |> success(cud_sync(), "{tag}: the launch completes ({cuda_last_error()})")
+        var got <- cud_mirror_floats(bufs[2], plane, true)
+        cuda_mem_free(bufs)
+        gather_row_check(t, tag, copy_span(got, 0, rows * n), x, entry_of_bucket_row, n, k, r0, rows)
+        let off = kept_off(got, 0, rows * n, NAN_SENTINEL)
+        t |> equal(off.bad, 0, "{tag}: the {slack} rows past the window keep their sentinel ({off.bad} elements moved, the first at {off.first})")
+        delete x
+        delete got
+    }
+    delete entry_of_bucket_row
+}
+
+//! the per-expert chain's by-row combine (`combine_row_cls`): window row b adds its weighted down row onto its position's
+//! accumulated row - the window [r0, r0 + rows) one row a position at alternating slots, a position no row reaches untouched -
+//! at widths under one stride of the 256 threads, whole strides and a tail; the oracle over the window at 0 is the control that misses
+def private cud_combine_row_arm(t : T?; r0, rows : int) {
+    let npos = 7
+    let k = 2
+    let nk = npos * k
+    var entry_of_bucket_row <- combine_row_entries(npos, k, r0, rows)
+    var w_packed <- hash_steps(nk, 97u)   // a position's k weights in a row: the layout every dispatch ships
+    var s = g_cud.stream
+    for (n in fixed_array(100, 256, 300)) {
+        var acc <- hash_steps(npos * n, 71u)
+        var down <- hash_steps(rows * n, 83u)
+        var pc = GkMoeCombArgs(n = uint(n), k = uint(k), r0 = uint(r0), r1 = uint(r0 + rows))
+        var bufs = fixed_array(buf_upload(acc, s), buf_upload(w_packed, s), buf_upload(down, s), buf_upload(entry_of_bucket_row, s))
+        enc_combine_row_cls(s, bufs, pc, int64(rows))
+        let tag = "combine row n {n}, window [{r0}, {r0 + rows})"
+        t |> success(cud_sync(), "{tag}: the launch completes ({cuda_last_error()})")
+        var y <- buf_download(bufs[0], npos * n, type<float>)
+        cuda_mem_free(bufs)
+        combine_row_check(t, tag, y, acc, w_packed, down, entry_of_bucket_row, n, k, npos, r0, rows)
+        delete acc
+        delete down
+        delete y
+    }
+    delete w_packed
+    delete entry_of_bucket_row
+}
+
+//! the routed combine (`combine_cls`, the window form of `GkMoeCombine` the hot expert pool and the whole-layer rail dispatch): a
+//! workgroup a position over its row, the slot window past 0 over slot rows 1 .. k adding the hit rows onto the host's sum under
+//! their weights, a zero weight skipping its stale row - the Vulkan `test_vkd_hot_combine` fixture at widths under one stride of
+//! the 256 threads, at it and past it (the stamp's own loop); the window at 0 starts the sum over and reads a row past the hits,
+//! the control that misses
+def private cud_combine_arm(t : T?) {
+    let k = 5
+    let nhit = 3
+    var s = g_cud.stream
+    var w <- [for (j in range(k)); j < nhit ? 0.05 + float(j) * 0.07 : 0.0]
+    var ident1 <- [for (j in range(k)); uint(j + 1)]
+    for (n in fixed_array(100, 256, 300)) {
+        var miss <- hash_steps(n, 71u)
+        var down <- hash_steps(k * n, 83u)
+        for (i in range(nhit * n, k * n)) {
+            down[i] = NAN_SENTINEL   // a miss's row is stale: no hit chain wrote it
+        }
+        let tag = "combine n {n}"
+        var pc = GkMoeCombArgs(n = uint(n), k = uint(k), r0 = 1u, r1 = uint(k) + 1u)
+        var pc0 = GkMoeCombArgs(n = uint(n), k = uint(k), r0 = 0u, r1 = uint(k))   // the window at 0 starts the sum: the host's row is lost
+        var bufs = fixed_array(buf_upload(miss, s), buf_upload(ident1, s), buf_upload(w, s), buf_upload(down, s))
+        var bufs0 = fixed_array(buf_upload(miss, s), buf_upload(ident1, s), buf_upload(w, s), buf_upload(down, s))
+        enc_combine_cls(s, bufs, pc, 1l)
+        enc_combine_cls(s, bufs0, pc0, 1l)
+        t |> success(cud_sync(), "{tag}: the launches complete ({cuda_last_error()})")
+        var y <- buf_download(bufs[0], n, type<float>)
+        var y0 <- buf_download(bufs0[0], n, type<float>)
+        cuda_mem_free(bufs)
+        cuda_mem_free(bufs0)
+        var want : array<float>
+        want |> resize(n)
+        for (i in range(n)) {
+            var acc = miss[i]
+            for (j in range(nhit)) {
+                acc += w[j] * down[j * n + i]
+            }
+            want[i] = acc
+        }
+        // within 1e-5 of the largest magnitude: three multiply-adds per element against the f32 oracle in the same order
+        let bar = Bar(kind = BarKind.rel_of_max, rel = 1e-5, abs_floor = 1e-6, poison_abs = 0.01, poison_at = n - 1)
+        t |> equal(nan_count(y), 0, "{tag}: no stale row reached the sum - a zero weight skips its row, whose NaN a product would carry")
+        check_rows(t, "{tag}: the hit rows add to the host's sum under their weights", y, want, bar, FLAT_ROWS)
+        // the control's window at 0 reads the stale rows past the hits, which are NaN by construction - `check_count` reads a NaN as off
+        let lost = check_count(y0, want, bar)
+        t |> success(lost > n / 2, "{tag}: control - a slot window at 0 starts the sum over, loses the host's row and reads a row past the hits ({lost} of {n} off)")
+        delete miss
+        delete down
+        delete y
+        delete y0
+        delete want
+    }
+    delete w
+    delete ident1
 }
 
 //! the bucket schedule against its CPU twin, word for word over the whole planes (three empty experts, a sentinel fill); past 256 experts the 512-thread stamp
@@ -2330,9 +2818,8 @@ def private cud_sched_arm(t : T?; ne : int; pad : bool = false) {
         var pc = SchedArgs(nk = uint(nk), ne = uint(ne), wt_gu = uint(wt_gu), wt_dn = uint(wt_dn),
             map_off = uint(sh.map_off), map_off_mgu = uint(sh.map_off_mgu), map_off_mdn = uint(sh.map_off_mdn),
             bound_gu = uint(sh.bound_gu), bound_dn = uint(sh.bound_dn), bound_mgu = uint(sh.bound_mgu), bound_mdn = uint(sh.bound_mdn),
-            base1 = bases[0], stride1 = bases[1], base3 = bases[2], stride3 = bases[3], base2 = bases[4], stride2 = bases[5], s_only = 0u,
-            row_pad = pad ? uint(MMQ_ROW_PAD) : 0u, m_only = pad ? 1u : 0u)
-        cud_moe_sched_enc(int64(ne), s, bufs, pc)
+            base1 = bases[0], stride1 = bases[1], base3 = bases[2], stride3 = bases[3], base2 = bases[4], stride2 = bases[5], s_only = 0u)
+        cud_moe_sched_enc(int64(ne), pad, s, bufs, pc)
         let pad_tag = pad ? ", padded to {MMQ_ROW_PAD}-row tiles on the m column" : ""
         t |> success(cud_sync(), "bucket schedule ({ne} experts{pad_tag}): the launch completes ({cuda_last_error()})")
         var ginv <- buf_download(bufs[1], nk, type<uint>)
@@ -2401,12 +2888,13 @@ def private cud_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {
 
 [test]
 def test_cud_moe_routing(t0 : T?) {
-    t0 |> run("CUDA routed-block routing kernels == the CPU oracles: router GEMM, per-row top-k (the one-deep stamp, and the two-deep one over 512 experts), the bucket schedule, the gather as halves and as floats, the combine-folded residual step") <| @(t : T?) {
-        if (!(ensure_router_gemm_cls() && ensure_topk_rows_cls() && ensure_moe_sched_cls() && ensure_moe_sched2_cls() && ensure_cls_ar_comb())) {
+    t0 |> run("CUDA routed-block routing kernels == the CPU oracles: router GEMM, per-row top-k (the one-deep stamp, and the two-deep one over 512 experts), the bucket schedule, the gather as halves and as floats, the per-expert chain's by-row gather and combine, the combine-folded residual step") <| @(t : T?) {
+        if (!(ensure_router_gemm_cls() && ensure_topk_rows_cls() && ensure_moe_sched_cls() && ensure_moe_sched2_cls() && ensure_moe_sched_mmq_cls() && ensure_moe_sched2_mmq_cls() && ensure_cls_ar_comb())) {
             t |> skip("no CUDA device with NVRTC")
             return
         }
-        verify(cud_topk_rows_ensure(512l) && ensure_moe_gather_f16_cls() && ensure_moe_gather_f32_cls(), "the two-deep select and the gathers must compile on a device that compiled the one-deep select")
+        verify(cud_topk_rows_ensure(512l) && ensure_moe_gather_f16_cls() && ensure_moe_gather_f32_cls() && ensure_moe_gather_f16_row_cls() && ensure_combine_row_cls() && ensure_combine_cls(),
+            "the two-deep select, the gathers, the routed combine and the per-expert chain's by-row pair must compile on a device that compiled the one-deep select")
         cud_router_arm(t, MR_NER)
         cud_router_arm(t, 9)   // fewer rows than the tile's half: the second row of every invocation is guarded off
         cud_topk_rows_arm(t, true, 0.0, MoeGate.softmax, false)
@@ -2417,9 +2905,13 @@ def test_cud_moe_routing(t0 : T?) {
         cud_topk_wide_arm(t, false, 512, 10, true)
         cud_gather_arm(t, true, 5, 9)   // the window [5, 14) of the 21 bucket rows
         cud_gather_arm(t, false, 5, 9)
+        cud_gather_row_arm(t, 5, 9)   // the per-expert chain's by-row pair over the same window
+        cud_combine_row_arm(t, 4, 6)
+        cud_combine_arm(t)
         cud_sched_arm(t, MR_NE)
         cud_sched_arm(t, 512)   // past 256 experts: the 512-thread stamp, experts past 256 routed
         cud_sched_arm(t, MR_NE, true)   // the MMQ form: every bucket's rows from a 128-multiple, all on the m column
+        cud_sched_arm(t, 512, true)   // the 512-thread MMQ stamp: the pad and the scan past 256 experts
         cud_ar_comb_arm(t, true, true, false)
         cud_ar_comb_arm(t, false, true, false)
         cud_ar_comb_arm(t, false, false, false)
@@ -2443,11 +2935,21 @@ def test_cud_compile_gate(t0 : T?) {
     }
 }
 
-//! the leak gate: every device buffer freed, every module released at the shutdown, nothing counted live
+var private g_shutdown_hook_ran = 0   //! the leak gate's hook: how many times the shutdown ran it
+
+def private shutdown_hook() {
+    g_shutdown_hook_ran++
+}
+
+//! the leak gate: the registered shutdown hooks run ahead of the device (a module's device state goes with it), every device buffer
+//! freed, every module released at the shutdown, nothing counted live
 [test]
 def test_cud_shutdown_leaks(t0 : T?) {
-    t0 |> run("the CUDA tier shuts down with nothing live") <| @(t : T?) {
+    t0 |> run("the CUDA tier shuts down with nothing live, its registered hooks run") <| @(t : T?) {
+        let up = cud_init()
+        cud_on_shutdown(@@shutdown_hook)
         cud_shutdown()
+        t |> equal(g_shutdown_hook_ran, up ? 1 : 0, "the shutdown ran the registered hook exactly once (device up: {up})")
         t |> equal(cuda_log_leaks_if_any(), 0l, "no CUDA object or allocation outlives the tier")
     }
 }

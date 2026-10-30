@@ -60,7 +60,7 @@ struct Args {
     @clarg_doc = "Backends to measure: cpu | metal | all (default: all — metal on Apple boxes only)"
     backend : string = "all"
 
-    @clarg_doc = "Comma list of pair legs to run: neon | amx | metal | vulkan (default: every leg --backend implies; cpu = neon,amx; vulkan is asked by name and runs alone, under DASLLAMA_GPU=1 on a dasVulkan build)"
+    @clarg_doc = "Comma list of pair legs to run: neon | amx | metal | vulkan | cuda (default: every leg --backend implies; cpu = neon,amx; a discrete home's leg is asked by name and runs alone - vulkan under DASLLAMA_GPU=1 on a dasVulkan build, cuda under DASLLAMA_GPU=1 DASLLAMA_CUDA=1 on a dasCUDA build)"
     legs : string
 
     @clarg_doc = "Seconds to idle between passes (default: 12) — a dead child's 10-20GB map reclaims ASYNC after exit, and short cells bench right into that churn (12B pp ±33 at 0s settle, ±3 at 12s)"
@@ -81,6 +81,10 @@ struct Args {
     @clarg_name = "ref-vulkan"
     @clarg_doc = "Vulkan-build llama-bench binary for the vulkan leg (default: env LLAMA_BENCH_VULKAN)"
     ref_vulkan : string
+
+    @clarg_name = "ref-cuda"
+    @clarg_doc = "CUDA-build llama-bench binary for the cuda leg (default: env LLAMA_BENCH_CUDA)"
+    ref_cuda : string
 
     @clarg_doc = "Streams of every leg's batched tg row, tg128@<npl> - das through the scheduler, the reference through the llama-batched-bench beside the leg's llama-bench, under its -ngl, op-offload and affinity arms; 0 = no batched row (default: 4)"
     npl : int = 4
@@ -233,22 +237,31 @@ def catalog_known(catalog : string) : bool => catalog == "official" || catalog =
 def store_is_board(store : string) : bool =>
     empty(store) || (base_name(dir_name(store)) == "records" && base_name(dir_name(dir_name(store))) == "performance")
 
-//! The vulkan leg's preconditions: a dasVulkan build off Apple with the GPU tier asked
-//! (DASLLAMA_GPU=1, which every das child inherits), and no other leg in the run - a cpu child
-//! under that environment would serve on the device. Returns the refusal text, or "".
-def vulkan_leg_refusal(vulkan, other_legs, apple, gpu_asked : bool) : string {
-    return "" if (!vulkan)
+//! A discrete home's leg (`leg` = "vulkan" | "cuda") and its preconditions: the home's build off Apple with the GPU
+//! tier asked (DASLLAMA_GPU=1, which every das child inherits; the cuda leg also DASLLAMA_CUDA=1, and the vulkan leg
+//! that knob unset - under it the children serve on the CUDA home), and no other leg in the run - a cpu child under
+//! that environment would serve on the device. Returns the refusal text, or "".
+def gpu_leg_refusal(leg : string; asked, other_legs, apple, gpu_asked, cuda_asked : bool) : string {
+    return "" if (!asked)
     if (apple) {
-        return "the vulkan leg runs off Apple - Metal is this box's GPU leg"
+        return "the {leg} leg runs off Apple - Metal is this box's GPU leg"
     }
-    static_if (!typeinfo builtin_module_exists(vulkan)) {
-        return "the vulkan leg needs a dasVulkan build"
+    let has_cuda = typeinfo builtin_module_exists(cuda)
+    let has_vulkan = typeinfo builtin_module_exists(vulkan)
+    if (leg == "cuda" ? !has_cuda : !has_vulkan) {
+        return "the {leg} leg needs a {leg == "cuda" ? "dasCUDA" : "dasVulkan"} build"
     }
     if (!gpu_asked) {
-        return "the vulkan leg needs DASLLAMA_GPU=1 in the environment - the das children arm the GPU tier off it"
+        return "the {leg} leg needs DASLLAMA_GPU=1 in the environment - the das children arm the GPU tier off it"
+    }
+    if (leg == "cuda" && !cuda_asked) {
+        return "the cuda leg needs DASLLAMA_CUDA=1 in the environment beside DASLLAMA_GPU=1 - the das children arm the CUDA home off it"
+    }
+    if (leg != "cuda" && cuda_asked) {
+        return "the vulkan leg runs with DASLLAMA_CUDA unset - under it the das children serve on the CUDA home"
     }
     if (other_legs) {
-        return "the vulkan leg runs alone - under DASLLAMA_GPU=1 a cpu leg's child would serve on the device"
+        return "the {leg} leg runs alone - under DASLLAMA_GPU=1 a cpu leg's child would serve on the device"
     }
     return ""
 }
@@ -256,10 +269,14 @@ def vulkan_leg_refusal(vulkan, other_legs, apple, gpu_asked : bool) : string {
 //! The guard on a board mint's references: every das LLM cell on `records/<box>.json` publishes
 //! as a ratio, so a leg whose llama-bench is unset refuses the run rather than minting das-only
 //! rows. Returns the refusal text, or "" when the run may start.
-def board_refs_refusal(board, llm, neon, stock_legs : bool; ref_clean, ref_stock : string; vulkan : bool = false; ref_vulkan : string = "") : string {
+def board_refs_refusal(board, llm, neon, stock_legs : bool; ref_clean, ref_stock : string; vulkan : bool = false; ref_vulkan : string = "";
+                       cuda : bool = false; ref_cuda : string = "") : string {
     return "" if (!board || !llm)
     if (vulkan && empty(ref_vulkan)) {
         return "a board mint pairs every vulkan cell - pass --ref-vulkan (LLAMA_BENCH_VULKAN), or measure into --store <path>"
+    }
+    if (cuda && empty(ref_cuda)) {
+        return "a board mint pairs every cuda cell - pass --ref-cuda (LLAMA_BENCH_CUDA), or measure into --store <path>"
     }
     if (neon && empty(ref_clean)) {
         return "a board mint pairs every cpu cell - pass --ref-clean (LLAMA_BENCH_CLEAN), or measure into --store <path>"
@@ -613,10 +630,11 @@ def private run_das_child(file, path, be, tag, exe : string; accel, frozen : boo
     return true
 }
 
-//! True when every das row of the cell carries the backend its GPU leg asked for; the cpu legs
-//! stamp themselves (a Vulkan build's cpu arm reads "vulkan" when the tier served) and pass.
+//! True when every das row of the cell carries the backend its discrete leg asked for (the home's name the
+//! bench row stamps); the cpu legs stamp themselves (a GPU build's cpu arm reads the home's name when the
+//! tier served) and pass.
 def cell_served_on(cell : array<BenchModel>; be : string) : bool {
-    return true if (be != "vulkan")
+    return true if (be != "vulkan" && be != "cuda")
     var any = false
     for (m in cell) {
         for (r in m.runs) {
@@ -1051,14 +1069,13 @@ def private oracle_main(cfg : Args; legNeon, legAmx, legMetal : bool; models : a
     return fails > 0 ? 1 : 0
 }
 
-def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; cfg : Args; threads : int;
+def private ref_pass(file, path, bin, flavor, backend : string; ngl : int; nopo : bool; cfg : Args; threads : int;
                      hw : HardwareInfo; box, date, note, store : string;
                      var models : array<BenchModel>; var failed : array<string>; var refSkipped : array<string>) {
     if (empty(bin)) {
-        refSkipped |> push("{file} ref {flavor} {ngl != 0 ? (get_platform_name() == "darwin" ? "metal" : "vulkan") : "cpu"}")
+        refSkipped |> push("{file} ref {flavor} {backend}")
         return
     }
-    let backend = ngl != 0 ? (get_platform_name() == "darwin" ? "metal" : "vulkan") : "cpu"
     let t0 = ref_time_ticks()
     var refPin : array<string>   //! the CPU reference's affinity - the flat exe's and the batched exe's alike
     if (ngl == 0 && !cfg.ref_no_affinity) {
@@ -1069,6 +1086,9 @@ def private ref_pass(file, path, bin, flavor : string; ngl : int; nopo : bool; c
     // with host weights to Metal (26B: MTL0 193MB, +33% pp) — not a CPU number
     if (nopo) {
         args |> push_from(["-nopo", "1"])
+    }
+    if (backend == "cuda") {   // the CUDA reference row's arm (ARCHITECTURE_MEASUREMENT_REFERENCE_ROWS.md#cuda-reference-rows)
+        args |> push_from(["-fa", "1"])
     }
     args |> push_from(["-t", "{threads}"], refPin, ["-p", "{cfg.plen}", "-n", "{cfg.ngen}", "-r", "{cfg.reps}", "-o", "json"])
     let cmd = argv_line(args)
@@ -1798,6 +1818,7 @@ def main : int {
     var legAmx = false
     var legMetal = false
     var legVulkan = false
+    var legCuda = false
     if (!empty(cfg.legs)) {
         for (l in split(cfg.legs, ",")) {
             let tok = trim(l)
@@ -1812,8 +1833,10 @@ def main : int {
                 legMetal = true
             } elif (tok == "vulkan") {
                 legVulkan = true
+            } elif (tok == "cuda") {
+                legCuda = true
             } elif (!empty(tok)) {
-                to_log(LOG_ERROR, "gen_bench_records: unknown leg `{tok}` (expected cpu | neon | amx | metal | vulkan)\n")
+                to_log(LOG_ERROR, "gen_bench_records: unknown leg `{tok}` (expected cpu | neon | amx | metal | vulkan | cuda)\n")
                 return 1
             }
         }
@@ -1826,12 +1849,18 @@ def main : int {
         to_log(LOG_ERROR, "gen_bench_records: legs metal/amx need an Apple box\n")
         return 1
     }
-    let vulkanRefusal = vulkan_leg_refusal(legVulkan, legNeon || legAmx || legMetal, apple, is_some(g_env_gpu.gpu) && unwrap(g_env_gpu.gpu))
+    let gpuAsked = is_some(g_env_gpu.gpu) && unwrap(g_env_gpu.gpu)
+    let vulkanRefusal = gpu_leg_refusal("vulkan", legVulkan, legNeon || legAmx || legMetal || legCuda, apple, gpuAsked, g_env_gpu.cuda)
     if (!empty(vulkanRefusal)) {
         to_log(LOG_ERROR, "gen_bench_records: {vulkanRefusal}\n")
         return 1
     }
-    if (!(legNeon || legAmx || legMetal || legVulkan)) {
+    let cudaRefusal = gpu_leg_refusal("cuda", legCuda, legNeon || legAmx || legMetal || legVulkan, apple, gpuAsked, g_env_gpu.cuda)
+    if (!empty(cudaRefusal)) {
+        to_log(LOG_ERROR, "gen_bench_records: {cudaRefusal}\n")
+        return 1
+    }
+    if (!(legNeon || legAmx || legMetal || legVulkan || legCuda)) {
         to_log(LOG_ERROR, "gen_bench_records: no legs selected (--backend {cfg.backend} --legs {cfg.legs})\n")
         return 1
     }
@@ -1879,6 +1908,11 @@ def main : int {
         to_log(LOG_WARNING, "gen_bench_records: vulkan ref `{refVulkan}` not found - vulkan cells run das-only\n")
         refVulkan = ""
     }
+    var refCuda = empty(cfg.ref_cuda) ? g_env_prof.llama_bench_cuda : cfg.ref_cuda
+    if (!empty(refCuda) && !stat(refCuda).is_valid) {
+        to_log(LOG_WARNING, "gen_bench_records: cuda ref `{refCuda}` not found - cuda cells run das-only\n")
+        refCuda = ""
+    }
     if (!empty(refClean) && !stat(refClean).is_valid) {
         to_log(LOG_WARNING, "gen_bench_records: clean-cpu ref `{refClean}` not found - neon cells run das-only\n")
         refClean = ""
@@ -1895,7 +1929,7 @@ def main : int {
     if (doLlm && empty(refStock)) {
         to_log(LOG_WARNING, "gen_bench_records: stock ref UNSET (--ref-stock / LLAMA_BENCH_STOCK) - no stock rows, metal/amx cells mint das-only\n")
     }
-    let refsRefusal = board_refs_refusal(store_is_board(cfg.store), doLlm, legNeon, legMetal || legAmx, refClean, refStock, legVulkan, refVulkan)
+    let refsRefusal = board_refs_refusal(store_is_board(cfg.store), doLlm, legNeon, legMetal || legAmx, refClean, refStock, legVulkan, refVulkan, legCuda, refCuda)
     if (!empty(refsRefusal)) {
         to_log(LOG_ERROR, "gen_bench_records: {refsRefusal}\n")
         return 1
@@ -1972,7 +2006,13 @@ def main : int {
             settle(cfg.das_settle)
             das_cell(file, path, "vulkan", exe, false, cfg, threads, cellPath, ent.note, store, models, failed)
             settle(cfg.das_settle)
-            ref_pass(file, path, refVulkan, "stock", 99, false, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
+            ref_pass(file, path, refVulkan, "stock", "vulkan", 99, false, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
+        }
+        if (doLlm && legCuda) {
+            settle(cfg.das_settle)
+            das_cell(file, path, "cuda", exe, false, cfg, threads, cellPath, ent.note, store, models, failed)
+            settle(cfg.das_settle)
+            ref_pass(file, path, refCuda, "stock", "cuda", 99, false, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
         }
         if (doLlm && legMetal) {
             settle(cfg.das_settle)
@@ -1980,7 +2020,7 @@ def main : int {
             // the ref gets COOL-SLOT entry too: it is not insensitive on high-power parts —
             // zen2 35B read pp 81.7 twelve seconds behind a das cell vs 103.9 solo-cooled
             settle(cfg.das_settle)
-            ref_pass(file, path, refStock, "stock", 99, false, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
+            ref_pass(file, path, refStock, "stock", "metal", 99, false, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
             if (!empty(ent.mlx_repo) && !empty(cfg.mlx_lm_store)) {
                 settle(cfg.das_settle)
                 mlx_lm_ref_pass(ent, cfg, hw, box, date, failed, refSkipped)
@@ -1992,7 +2032,7 @@ def main : int {
             // the ref gets COOL-SLOT entry too: it is not insensitive on high-power parts —
             // zen2 35B read pp 81.7 twelve seconds behind a das cell vs 103.9 solo-cooled
             settle(cfg.das_settle)
-            ref_pass(file, path, refClean, "clean-cpu", 0, false, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
+            ref_pass(file, path, refClean, "clean-cpu", "cpu", 0, false, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
         }
         if (doLlm && legAmx) {
             settle(cfg.das_settle)
@@ -2000,7 +2040,7 @@ def main : int {
             // the ref gets COOL-SLOT entry too: it is not insensitive on high-power parts —
             // zen2 35B read pp 81.7 twelve seconds behind a das cell vs 103.9 solo-cooled
             settle(cfg.das_settle)
-            ref_pass(file, path, refStock, "stock", 0, true, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
+            ref_pass(file, path, refStock, "stock", "cpu", 0, true, cfg, threads, hw, box, date, ent.note, store, models, failed, refSkipped)
         }
         // the image-chat legs of a vision decoder (an mmproj companion) — same
         // leg order and cool-slot discipline; the picture is the one pinned fixture

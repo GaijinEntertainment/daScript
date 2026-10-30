@@ -72,7 +72,7 @@ struct ServerArgs {
     @clarg_doc = "Metal (GPU) serving mode: off | auto | required (default off). auto = GPU when a path's gates pass, CPU fallback otherwise; required = a call the GPU cannot serve is a hard failure"
     metal : string
 
-    @clarg_doc = "GPU backend: auto (default: metal/vulkan when detected, else CPU) | off | metal | metal-required | vulkan. vulkan serves a model that fits the card whole from the GPU, every stream's cache with it; the control page's model card says what a slot got (a set --metal flag keeps the legacy env-driven path)"
+    @clarg_doc = "GPU backend: auto (default: metal, else the home DASLLAMA_CUDA spells, else vulkan when a Vulkan device answers, else cuda when the CUDA home answers, else CPU) | off | metal | metal-required | vulkan | cuda. vulkan and cuda name the discrete home: the whole-model driver serves a model that fits the card whole from the GPU, every stream's cache with it; the control page's model card says what a slot got (a set --metal flag keeps the legacy env-driven path)"
     gpu : string
 
     @clarg_doc = "vulkan: resident MoE expert-stack layers K, offloaded from the end (default auto under --gpu vulkan)"
@@ -855,7 +855,7 @@ def mtp_setting(sourced : bool; on : bool) : int
 //! Non-private: test_openai_server_mtp.das gates it.
 def mtp_default_resolved(streams : int; gpu, metal : string; platforms : string = "") : bool
     => mtp_auto_arms(int64(streams), resolved_metal_mode(metal_mode_of(metal).mode, gpu) != MetalMode.off,
-                     gpu == "vulkan" ? "gpu:resident" : "cpu", platforms)
+                     gpu_is_discrete(gpu) ? "gpu:resident" : "cpu", platforms)
 
 //! The GET /config surface's `mtp`: the key where the TOML or `--mtp`
 //! set it, else the unset default on `gpu` for the configured model's
@@ -898,7 +898,7 @@ def boot_slot_opts(ent : ModelEntry) : SlotOpts {
 //! What an unset `chunk` resolves to on the GET /config surface, before any model loads: the scheduler's own
 //! default (`chunk_default`) over the configured backend. Non-private: test_server_flags.das gates it.
 def chunk_default_resolved(gpu, metal : string) : int
-    => int(chunk_default(gpu == "vulkan" || resolved_metal_mode(metal_mode_of(metal).mode, gpu) != MetalMode.off))
+    => int(chunk_default(gpu_is_discrete(gpu) || resolved_metal_mode(metal_mode_of(metal).mode, gpu) != MetalMode.off))
 
 //! One roster entry as the control page's editor reads and writes it; `mtp` rides as the bool the
 //! editor validates, an inherited (-1) knob as absence.
@@ -958,10 +958,10 @@ def build_config_surface(cfg : ServerArgs; save_path : string) : string {
         kv_dtype = empty(cfg.kv_dtype) ? "f16" : cfg.kv_dtype,
         metal = empty(cfg.metal) ? "off" : cfg.metal,
         gpu = cfg.gpu,
-        gpu_layers = gpu == "vulkan" ? int(gpu_detail_layers(cfg)) : cfg.gpu_layers,
-        gpu_stream = gpu == "vulkan" ? int(gpu_detail_stream(cfg)) : cfg.gpu_stream,
-        gpu_dn = gpu == "vulkan" ? gpu_detail_dn(cfg) : cfg.gpu_dn,
-        gpu_attn = gpu == "vulkan" ? gpu_detail_attn(cfg) : cfg.gpu_attn,
+        gpu_layers = gpu_is_discrete(gpu) ? int(gpu_detail_layers(cfg)) : cfg.gpu_layers,
+        gpu_stream = gpu_is_discrete(gpu) ? int(gpu_detail_stream(cfg)) : cfg.gpu_stream,
+        gpu_dn = gpu_is_discrete(gpu) ? gpu_detail_dn(cfg) : cfg.gpu_dn,
+        gpu_attn = gpu_is_discrete(gpu) ? gpu_detail_attn(cfg) : cfg.gpu_attn,
         gpu_dense = cfg.gpu_dense,
         gpu_vram_mb = cfg.gpu_vram_mb,
         asr = cfg.asr,
@@ -1208,7 +1208,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     // kernels read, and the vulkan tier want must be armed before the load walk uploads stacks
     let gpu = effective_gpu(g_cfg)
     if (gpu_pick_is_auto(g_cfg)) {
-        to_log(LOG_INFO, "dasllama-server: gpu backend auto-detected: {gpu} (set gpu = off | metal | vulkan to pin)\n")
+        to_log(LOG_INFO, "dasllama-server: gpu backend auto-detected: {gpu} (set gpu = off | metal | vulkan | cuda to pin)\n")
     }
     if (!empty(gpu) && !from_cli("gpu") && from_cli("metal")) {
         // gpu is the master backend switch, but an explicit CLI --metal losing to a config-file
@@ -1270,7 +1270,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         var gpu_idx = -1
         var slot_want = GpuTierWant()
         // a --tts boot with no LLM has an EMPTY roster: nothing loads, so nothing arms the tier
-        if (gpu == "vulkan" && !empty(g_models)) {
+        if (gpu_is_discrete(gpu) && !empty(g_models)) {
             slot_want = vulkan_serving_want(g_cfg)
             if (def_idx >= 0 && g_models[def_idx].backend != "cpu") {
                 gpu_idx = def_idx
@@ -1297,10 +1297,10 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
             if (embedder[i]) {
                 //! the embedder's worker arms a device tier of its own beside the GPU slot's: the card holds both models
                 add_embedding_model(ent.path, ent.name, pick_quant(!empty(ent.quant) ? ent.quant : g_cfg.quant), ectx,
-                    gpu == "vulkan" && ent.backend != "cpu" ? slot_want : GpuTierWant())
+                    gpu_is_discrete(gpu) && ent.backend != "cpu" ? slot_want : GpuTierWant())
                 continue
             }
-            if (gpu == "vulkan") {
+            if (gpu_is_discrete(gpu)) {
                 set_gpu_tier_want(i == gpu_idx ? slot_want : GpuTierWant())   // zero want: loads CPU-only
                 gpu_residency_ask(ent.streams > 0 ? int64(ent.streams) : streams, ectx, pick_kv_dtype(empty(ent.kv_dtype) ? g_cfg.kv_dtype : ent.kv_dtype))
             }
@@ -1320,7 +1320,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
             to_log(LOG_INFO, "dasllama-server: {empty(ent.name) ? base_name(ent.path) : ent.name} ctx {m.config.seq_len}{ctx_note}\n")
             let opts = boot_slot_opts(ent)
             add_model(m, ent.name, opts, ent.path)   // captures this load's arm outcome + marks onto the slot
-            if (gpu == "vulkan" && ent.backend != "cpu") {
+            if (gpu_is_discrete(gpu) && ent.backend != "cpu") {
                 set_slot_gpu_want(ent.name, slot_want)   // the want switch-in re-arms with
             }
         }

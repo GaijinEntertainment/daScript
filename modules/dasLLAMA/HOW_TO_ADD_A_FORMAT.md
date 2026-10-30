@@ -521,11 +521,11 @@ decoded scale row needs no upload work - only the id bridge and the kernels. The
    `<fmt>q8_rm_tile4_gen` ahead of it as its companion, the reference `rm_kq_rows_ref` over the device-plane
    decode `rm_kq_dev_row`, which takes the format's arm, or the per-32 family's disk-order dot); the stamp in
    every `performance/defaults/*.tune-defaults.json`; the rail's dispatch (`rm_dev_serves`, `rare_rows_core`'s
-   device arm, `rm_dev_tile4` in `dasllama_blocks.das`). The host twin (`dasllama_math_vulkan.das`: the format's
-   own GEMV class run on the CPU - the kq family's `blk_contrib` through `KqGemvBase`, a per-32 or mx4 format's
-   `blk_words` + `blk_xdot` on its own class) is the device layout's test oracle: a superblock format joins
-   `vk_host_kq_cls` with the grid fill the oracle's `kq_cls_ref` arm makes, a per-32 format a pointer on
-   `VkHostTwin` and an arm of `vk_host_rows`, and `vk_host_twin_serves` admits it. The cells are
+   device arm, `rm_dev_tile4` in `dasllama_blocks.das`). The host twin (`dasllama_gpu_host_twin.das`, both discrete
+   homes': the format's GEMV template stamped with no dispatch home and run on the CPU - the kq family's `blk_contrib`
+   through `KqGemvBase`, a per-32 or mx4 format's `blk_words` + `blk_xdot` on its own leaf) is the device layout's test
+   oracle: a superblock format adds its `Host*` leaf and joins `host_kq_cls` with the grid fill the oracle's `kq_cls_ref`
+   arm makes, a per-32 format a leaf, a pointer on `HostTwin` and an arm of `host_rows`, and `host_twin_serves` admits it. The cells are
    `tests/test_vulkan_host_twin.das`: the format joins its family's list in the twin cell, the row-major cell and
    the tile cell, and the planar stack the shell takes - `synth_kq_region` for a superblock format, the fixture's
    block builder through `kq_transcode_superblock` for a per-32 one - must land the same gather the engine

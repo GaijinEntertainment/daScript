@@ -195,8 +195,8 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
         r.stage_tok = make_host_buf(TOK_META_BYTES * nb, true)
         unsafe {
             var sm = reinterpret<TokMeta?>(r.stage_tok.mapped)
-            for (i in range64(nb)) {
-                sm[i] = TokMeta(pos = uint(i))
+            for (i in range64(nb)) {   // row i stands at position i in region 0: its key count is the rows to it
+                sm[i] = TokMeta(pos = uint(i), cnt = uint(i + 1l))
             }
         }
         let sh = zeroed_pair(rd_shadow_bytes())
@@ -911,11 +911,7 @@ def private rdn_state_upload(var st : DnStep; stp : float const?; histp : float 
         cmd_copy_range(raw, g_gpu.dn_smalls.buf, DN_SM_HIST * 4l, st.smalls_dev,
             st.hist_off * 4l + int64(cur_par) * st.ring_image_bytes, st.ring_image_bytes)
     }
-    st.parity = cur_par
-    st.owner_state_addr = intptr(stp)
-    st.owner_hist_addr = intptr(histp)
-    st.valid = true
-    st.dirty = false
+    dn_slot_bind(st.own, stp, histp, cur_par, false)
 }
 
 //! Register a RECURRENT (deltanet) layer: the qkv / z / out arena planes, the beta/alpha rows (the
@@ -963,8 +959,7 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
     L.dn |> resize(nslot)
     for (s in range64(nslot)) {
         L.dn[s] = DnStep(state_dev = state_dev, smalls_dev = smalls_dev, slot_state_bytes = state_bytes, ring_image_bytes = ring_elems * 4l,
-                         smalls_bytes = smalls_bytes, state_byte_off = s * state_bytes, hist_off = DN_SM_HIST + s * 2l * ring_elems,
-                         parity = 0, valid = false, dirty = false, owner_state_addr = 0ul, owner_hist_addr = 0ul)
+                         smalls_bytes = smalls_bytes, state_byte_off = s * state_bytes, hist_off = DN_SM_HIST + s * 2l * ring_elems)
     }
     rdn_upload_constants(L, convw, wnormp, ap, dtp)
     let pqkv = arena_planes(fqkv, bqkv)
@@ -1070,8 +1065,7 @@ def private rd_dn_advance_parity(slot : int64) {
     g_rd.dn_parity[slot] = 1 - g_rd.dn_parity[slot]
     for (L in g_rd.layers) {
         if (L.recurrent) {
-            L.dn[slot].parity = g_rd.dn_parity[slot]
-            L.dn[slot].dirty = true
+            dn_slot_advance(L.dn[slot].own, g_rd.dn_parity[slot])
         }
     }
 }
@@ -1082,12 +1076,9 @@ def vk_rdec_dn_own(l : int64; stp : float?; histp : float?) {
     var L & = unsafe(g_rd.layers[l])
     let slot = g_rd.region
     var st & = unsafe(L.dn[slot])
-    let caller = intptr(stp)
-    if (st.valid && st.owner_state_addr == caller) {
-        return
-    }
+    return if (dn_slot_holds(st.own, stp))
     rd_chain_settle()   //! another session's state takes the slot: a chained step on the old owner's is discarded first
-    if (st.valid && st.dirty) {
+    if (st.own.valid && st.own.dirty) {
         dnd_flush_down(st)
     }
     rdn_state_upload(st, stp, histp, g_rd.dn_parity[slot])
@@ -1699,24 +1690,11 @@ def vk_rdec_hot_submit(l, nhit : int64; slots : int64 const?; w : float const?) 
     g_rd.hot_hits += nhit
 }
 
+//! the hit chain's records and weights staged in the driver's mapped blocks (`hot_stage`)
 def private rd_hot_stage(H : RdHotLayer; nreg, wlen : int64; slots : int64 const?; w : float const?) {
     unsafe {
-        var m1 = reinterpret<uint?>(g_rd.hot_meta1.mapped)
-        var m3 = reinterpret<uint?>(g_rd.hot_meta3.mapped)
-        var m2 = reinterpret<uint?>(g_rd.hot_meta2.mapped)
-        var wp = reinterpret<float?>(g_rd.hot_w.mapped)
-        for (j in range64(wlen)) {
-            wp[j] = j < nreg ? w[j] : 0.0
-        }
-        for (j in range64(nreg)) {
-            let xrow = uint((j / g_rd.k) * H.xnb1)
-            m1[j * 2l] = uint(slots[j] * H.blk1)
-            m1[j * 2l + 1l] = xrow
-            m3[j * 2l] = uint(slots[j] * H.blk3)
-            m3[j * 2l + 1l] = xrow
-            m2[j * 2l] = uint(slots[j] * H.blk2)
-            m2[j * 2l + 1l] = uint(j * H.xnb2)
-        }
+        hot_stage(H, reinterpret<uint?>(g_rd.hot_meta1.mapped), reinterpret<uint?>(g_rd.hot_meta3.mapped), reinterpret<uint?>(g_rd.hot_meta2.mapped),
+            reinterpret<float?>(g_rd.hot_w.mapped), g_rd.k, nreg, wlen, slots, w)
     }
 }
 
@@ -1741,7 +1719,7 @@ def vk_rdec_hot_dma(l, slot, e, woff1 : int64; f1 : int) : bool {
         gpu_said_once(g_rd_hot_dma_said, LOG_WARNING, "vk_rdec_hot_dma: ", "no transfer queue serves (DASLLAMA_VK_XFERQ) - the host fill takes every miss of the pool")
         return false
     }
-    let g = vk_stream_stack_at(woff1, f1) / STREAM_PLANE_KINDS
+    let g = stream_group_of(woff1, f1)
     if (g < 0) {
         gpu_said_once(g_rd_hot_dma_said, LOG_WARNING, "vk_rdec_hot_dma: ", "a routed layer's expert stack (fmt {f1}) is not a streamed stack - the host fill takes its misses")
         return false
@@ -1769,17 +1747,17 @@ def vk_rdec_hot_dma(l, slot, e, woff1 : int64; f1 : int) : bool {
     let blks = fixed_array(H.blk1, H.blk3, H.blk2)
     let fmts = fixed_array(H.f1, H.f3, H.f2)
     for (k in range(3)) {
-        let src = vk_stream_slot(g * 3 + k, e)
+        let src = stream_slot(g * 3 + k, e)
         if (!src.present) {
             gpu_said_once(g_rd_hot_dma_said, LOG_WARNING, "vk_rdec_hot_dma: ", "a pool miss outside the streamed stack's resident experts - the host fill takes every such miss (a partial expert cache, DASLLAMA_EXPERT_CACHE_MB, leaves the non-resident experts to it)")
             return false
         }
         let bb = arena_block_bytes(fmts[k])
         let p = rd_hot_planes(sts[k])
-        let qlen = g_gpu.stream_stacks[g * 3 + k].qlen
-        let slen = g_gpu.stream_stacks[g * 3 + k].slen
+        let qlen = g_stream_stacks[g * 3 + k].qlen
+        let slen = g_stream_stacks[g * 3 + k].slen
         if (qlen != blks[k] * bb.wq) {   //! the host's gather decodes the expert into the slot's form; a copy cannot
-            gpu_said_once(g_rd_hot_dma_said, LOG_WARNING, "vk_rdec_hot_dma: ", "layer {l}'s pool slot ({blks[k] * bb.wq} quant bytes under format {fmts[k]}) and its streamed expert ({qlen} bytes in stack {g * 3 + k}, format {g_gpu.stream_stacks[g * 3 + k].fmt}) differ - the host fill takes it")
+            gpu_said_once(g_rd_hot_dma_said, LOG_WARNING, "vk_rdec_hot_dma: ", "layer {l}'s pool slot ({blks[k] * bb.wq} quant bytes under format {fmts[k]}) and its streamed expert ({qlen} bytes in stack {g * 3 + k}, format {g_stream_stacks[g * 3 + k].fmt}) differ - the host fill takes it")
             return false
         }
         cmd_copy_range(raw, src.qbuf, src.qoff, p.wq, slot * blks[k] * bb.wq, qlen)
@@ -2787,9 +2765,10 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
 def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nrows : int64; ncols : uint) {
     let dim = g_rd.dim
     let ple = g_rd.ple
+    let all = g_rd.n_layers * ple
     let nr = uint(nrows)
     if (L.bpg < 0l) {   //! the f32 rows read the stream as it is
-        var pcg = GkRouterArgs(ne = uint(ple), dim = uint(dim), woff = uint(l * ple * dim), ncols = nr)
+        var pcg = gk_ple_gate_args(ple, dim, l, nr)
         router_enc_cols(false, raw, h, L.s_ple_gate, pcg, ple)
     } else {
         if (!L.ple_fused) {   //! unfused: the gate's feed still wants its own quants of the rows
@@ -2800,20 +2779,19 @@ def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     }
     rd_ts(raw, "p:gate")
     if (L.ple_fused) {
-        var pcf = PleActArgs(n = uint(ple), d = uint(dim), wblk = uint(arena_local_blk(L.bpp)), ubase = uint(l * ple), act = ACT_GELU,
-            ncols = nr, sstride = uint(g_rd.n_layers * ple))
+        var pcf = gk_ple_fused_args(ple, dim, arena_local_blk(L.bpp), l, all, nr)
         pleact_enc_cols(raw, h, L.s_ple_pa, pcf, rd_ar_wgs(dim))
         rd_ts(raw, "p:actproj")
         return
     }
     if (L.bpp < 0l) {
-        var pcf = GkPleActArgs(nelem = uint(ple) * nr, sbase = uint(l * ple), sstride = uint(g_rd.n_layers * ple), slen = uint(ple))
+        var pcf = gk_ple_act_f32_args(ple, l, all, nr)
         enc_ple_act_f32_cls(raw, h, L.s_ple_act, pcf, (ple * nrows + 255l) / 256l)
         rd_ts(raw, "p:act")
-        var pcp = GkRouterArgs(ne = uint(dim), dim = uint(ple), woff = uint(l * ple * dim), ncols = nr)
+        var pcp = gk_ple_proj_args(ple, dim, l, nr)
         router_enc_cols(false, raw, h, L.s_ple_proj, pcp, dim)
     } else {
-        var pca = ActArgs(nelem = uint(ple) * nr, act = ACT_GELU, ubase = uint(l * ple), ustride = uint(g_rd.n_layers * ple), ulen = uint(ple))
+        var pca = gk_ple_act_args(ple, l, all, nr)
         actrq_enc(raw, h, L.s_ple_act, kq_sb(L.fpp), pca, ple * nrows)
         rd_ts(raw, "p:act")
         rd_gemv(L.fpp, raw, h, L.s_ple_proj, ple, dim, ncols, uint(dim))
@@ -2862,13 +2840,12 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         norm_on = L.rtn_fused ? 1u : 0u, nwoff = uint(rd_norm_off(l, RD_NORM_ROUTER)), eps = g_rd.eps, ncols = nr)
     router_enc_cols(false, raw, h, L.s_router, pcr, g_rd.ner)
     rd_ts(raw, "m:router")
-    var pct = GkTopKArgs(ne = uint(g_rd.ne), k = uint(k), norm = g_rd.norm_topk ? 1u : 0u, wscale = g_rd.wscale,
-        dsoff = L.moe_g4 ? uint(L.router_slot * g_rd.ne) : GK_NO_DSCALE,
-        rbias_on = g_rd.router_bias ? 1u : 0u, rboff = uint(L.router_slot * g_rd.ne),
-        base1 = uint(arena_local_blk(L.be1)), stride1 = uint(nfe * dim / kq_unit(L.fe1)),
-        base3 = uint(arena_local_blk(L.be3)), stride3 = uint(nfe * dim / kq_unit(L.fe3)),
-        base2 = uint(arena_local_blk(L.be2)), stride2 = uint(nfe * dim / kq_unit(L.fe2)),
-        xnb2 = uint(nfe / kq_unit(L.fe2)), lstride = uint(g_rd.ner), xnb1 = uint(dim / kq_unit(L.fe1)))
+    var pct = gk_topk_routing(g_rd.ne, k, g_rd.norm_topk, g_rd.wscale, g_rd.ner, g_rd.router_bias, uint(L.router_slot * g_rd.ne),
+        L.moe_g4 ? uint(L.router_slot * g_rd.ne) : GK_NO_DSCALE)
+    pct.base1 = uint(arena_local_blk(L.be1)); pct.stride1 = uint(nfe * dim / kq_unit(L.fe1))
+    pct.base3 = uint(arena_local_blk(L.be3)); pct.stride3 = uint(nfe * dim / kq_unit(L.fe3))
+    pct.base2 = uint(arena_local_blk(L.be2)); pct.stride2 = uint(nfe * dim / kq_unit(L.fe2))
+    pct.xnb2 = uint(nfe / kq_unit(L.fe2)); pct.xnb1 = uint(dim / kq_unit(L.fe1))
     if (one) {
         topk_n_enc(g_rd.ne, raw, h, L.s_topk, pct, 1l)
     } else {
@@ -2881,7 +2858,6 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         pcg.act = act_code(g_rd.act_oai, g_rd.is_gelu)
         pcg.bias_on = g_rd.exps_bias ? 1u : 0u
         pcg.gboff = uint(L.router_slot * g_rd.ne * nfe)
-        pcg.uboff = uint(L.router_slot * g_rd.ne * nfe)
         gemv_shell_enc(L.fe1, GEMV_SHELL_GU, raw, h, L.s_egu, pcg, k * nfe / Q8_BLOCK_ELEMS)
         rd_ts(raw, "m:e_gu")
     } else {
@@ -2892,7 +2868,7 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         let dkq = kq_sb(L.fe2)
         let slot_elems = k * nfe * nrows
         var pca = ActArgs(nelem = uint(slot_elems), act = act_code(g_rd.act_oai, g_rd.is_gelu), nblk = uint(slot_elems / kq_unit(dkq)),
-            bias_on = g_rd.exps_bias ? 1u : 0u, gboff = uint(L.router_slot * g_rd.ne * nfe), uboff = uint(L.router_slot * g_rd.ne * nfe), brow = uint(nfe))
+            bias_on = g_rd.exps_bias ? 1u : 0u, gboff = uint(L.router_slot * g_rd.ne * nfe), brow = uint(nfe))
         if (g_rd.exps_bias) {
             verify(!dkq, "vk decode: biased expert stacks feed a Q8_K down plane - the biased act has no Q8_K twin")
             enc_q8_actrq_b_cls(raw, h, L.s_eact, pca, rq_wgs(dkq, slot_elems))
@@ -3232,8 +3208,6 @@ def private rdq_sample(var led : RdqLedger; what, shape : string; st : RdqStamps
     }
 }
 
-let private RD_PAGING_BYTES_PER_US = 40_000l   // 40 GB/s, the PCIe class
-
 //! The resident driver's device weight bytes (rdec_note_weight_bytes's seat; the plan hands them over after prepare)
 def vk_rdec_note_weight_bytes(bytes : int64) {
     if (g_rd != null) {
@@ -3263,9 +3237,7 @@ def private rd_logits_guard(logits : float const?; n : int64) {
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-plan-room")]   // once per armed driver
 def private rd_warmup_check(wall_us : int64) {
     vk_demotion_check("decode warm-up")
-    if (g_rd.weight_bytes > 0l && wall_us > g_rd.weight_bytes / RD_PAGING_BYTES_PER_US) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan tier: a decode token ran under {RD_PAGING_BYTES_PER_US / 1_000l} GB/s over {g_rd.weight_bytes / 1_000_000l} MB of resident weights - the paging class; close other GPU applications or lower DASLLAMA_GPU_VRAM_MB\n")
-    }
+    rdec_paging_check(g_rd.weight_bytes, wall_us)
 }
 
 //! what a command's landing carries to host memory on the transfer queue beside the picks and the carry row: the logits, nothing, or the selection's planes
@@ -3485,11 +3457,9 @@ def vk_rdec_side_gather_on : bool => g_rd != null && g_rd.ple_tok_on
 //! the token commands gather their token rows off the rows' ids: the driver holds the table
 def vk_rdec_token_gather_on : bool => g_rd != null && rd_emb_on()
 
-let private RD_CHAIN_ENV = -2   //! `g_vk_chain_pin` unset: the mode is the environment's
-var private g_vk_chain_pin = RD_CHAIN_ENV
+var private g_vk_chain_pin = RDEC_CHAIN_ENV   //! unset: the mode is the environment's (`rdec_chain_mode`)
 var private g_rdec_chain_hits = 0l
 var private g_rdec_chain_misses = 0l
-let private RD_CHAIN_BACKOFF_MAX = 64   //! the adaptive mode's longest run of unchained steps after misses
 
 //! pins the greedy chain's mode (`DASLLAMA_VK_CHAIN`): 0 off, 1 every greedy step, -1 adaptive
 def vk_rdec_chain_mode_set(mode : int) {
@@ -3499,13 +3469,13 @@ def vk_rdec_chain_mode_set(mode : int) {
 }
 
 //! the chain's mode: the pin, else the environment's; `vk_rdec_chain_mode_set(vk_rdec_chain_pin())` puts a pin back as found
-def vk_rdec_chain_mode : int => g_vk_chain_pin != RD_CHAIN_ENV ? g_vk_chain_pin : vk_chain_env()
+def vk_rdec_chain_mode : int => rdec_chain_mode(g_vk_chain_pin, vk_chain_env())
 
 //! the greedy chain's announce, where its mode moved off the default off
 def vk_rdec_chain_announce {
     let mode = vk_rdec_chain_mode()
     return if (mode == 0)
-    let pinned = g_vk_chain_pin != RD_CHAIN_ENV
+    let pinned = g_vk_chain_pin != RDEC_CHAIN_ENV
     let knob = pinned ? "vk_rdec_chain_mode_set({mode})" : "DASLLAMA_VK_CHAIN={mode}"
     let form = mode < 0 ? "adaptively, backing off after a miss" : "on every greedy step"
     to_log(LOG_INFO, "dasLLAMA vulkan tier: {knob} - the greedy chain runs {form}\n")
@@ -3664,8 +3634,7 @@ def private rd_chain_drop(miss : bool) {
     return if (!miss)
     g_rdec_chain_misses++
     if (vk_rdec_chain_mode() < 0) {
-        g_rd.ch.backoff_len = clamp(g_rd.ch.backoff_len * 2, 1, RD_CHAIN_BACKOFF_MAX)
-        g_rd.ch.backoff = g_rd.ch.backoff_len
+        rdec_chain_backoff(g_rd.ch.backoff_len, g_rd.ch.backoff)
     }
 }
 
@@ -3808,17 +3777,8 @@ def private rdq_sample_split(var led : RdqLedger) {
 
 // ===== the N-row token command: a batched decode step's rows through one weight pass =====
 
-//! the N-row command answers 0 rows for `why`, said once per armed model: the batched step runs a row at a time from here on
 //! the routed planes hold `MAX_ROUTED_SLOTS` slots a step: every row's k picks must fit
 def rd_routed_slots_fit(nb, k : int64) : bool => nb * k <= MAX_ROUTED_SLOTS
-
-def private rd_n_decline(why : string) : int64 {
-    if (!g_rd.n_decline_said) {
-        g_rd.n_decline_said = true
-        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the N-row token command has no form for {why} - a batched step runs a row at a time\n")
-    }
-    return 0l
-}
 
 //! the rows the N-row command steps at once on the armed model; 0 where a layer or the tail has no N-row form
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
@@ -3826,9 +3786,9 @@ def vk_rdec_token_n_rows : int64 {
     if (g_rd == null || !g_rd.ready) return 0l
     for (L in g_rd.layers) {
         continue if (L.recurrent)
-        if (L.moe && L.experts_host && !g_rd.hc) return rd_n_decline("a routed layer whose experts serve on the host (the split command steps a row at a time)")
-        if (L.moe && !rd_routed_slots_fit(g_rd.nb, g_rd.k)) return rd_n_decline("more routed slots than the block's slot planes hold")
-        if (L.moe && L.ple) return rd_n_decline("a per-layer-embedding layer with a routed block")
+        if (L.moe && L.experts_host && !g_rd.hc) return rdec_n_decline(g_rd.n_decline_said, "a routed layer whose experts serve on the host (the split command steps a row at a time)")
+        if (L.moe && !rd_routed_slots_fit(g_rd.nb, g_rd.k)) return rdec_n_decline(g_rd.n_decline_said, "more routed slots than the block's slot planes hold")
+        if (L.moe && L.ple) return rdec_n_decline(g_rd.n_decline_said, "a per-layer-embedding layer with a routed block")
     }
     if (g_rd.n_rail == NRail.unasked) {   //! the command's kernel classes build once, before any step commits to it
         g_rd.n_rail = rd_ensure_n_rail() ? NRail.built : NRail.declined
@@ -4149,28 +4109,22 @@ def private rd_land_draft(pick_only : bool; var logits : array<float>) : int64 {
     return picked >= 0l ? picked : rd_landed_pick(0l)
 }
 
-[cold_path]
-def private rd_v_decline(why : string) : bool {
-    to_log(LOG_WARNING, "dasLLAMA vulkan resident: the speculative verify has no same-slab form - {why}; the CPU verify serves\n")
-    return false
-}
-
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]   //! once per armed model, behind the rail's latch
 def private rd_ensure_v_rail : bool {
-    if (!g_rd.head_on || !g_rd.carry) return rd_v_decline("the NextN head is off the device (the load log names why)")
+    if (!g_rd.head_on || !g_rd.carry) return rdec_v_decline("the NextN head is off the device (the load log names why)")
     if (g_rd.experts_host) {
         if (g_rd.n_rail == NRail.unasked) {
             g_rd.n_rail = rd_ensure_n_rail() ? NRail.built : NRail.declined
         }
-        if (g_rd.n_rail != NRail.built) return rd_v_decline("the N-row rail's leaves declined on this device (its line above)")
+        if (g_rd.n_rail != NRail.built) return rdec_v_decline("the N-row rail's leaves declined on this device (its line above)")
     } elif (vk_rdec_token_n_rows() < 2l) {
-        return rd_v_decline("the N-row token command declined on this model (its line above)")
+        return rdec_v_decline("the N-row token command declined on this model (its line above)")
     }
-    if (g_rd.verify_rows < 2l) return rd_v_decline("the driver was prepared for {g_rd.verify_rows} verify rows (the tier's verify seat was not installed at the load)")
+    if (g_rd.verify_rows < 2l) return rdec_v_decline("the driver was prepared for {g_rd.verify_rows} verify rows (the tier's verify seat was not installed at the load)")
     let nb = g_rd.nb
     let L & = unsafe(g_rd.head)
     let leaves = (gemv_cls_ensure_n(g_rd.head_eh_fmt, nb) && gemv_cls_ensure_n(L.fq, nb) && gemv_cls_ensure_n(L.fk, nb) && (L.vfk || gemv_cls_ensure_n(L.fv, nb)))
-    return leaves || rd_v_decline("a head plane's format (eh_proj {g_rd.head_eh_fmt}, q {L.fq}, k {L.fk}, v {L.fv}) has no N-column GEMV leaf on this device")
+    return leaves || rdec_v_decline("a head plane's format (eh_proj {g_rd.head_eh_fmt}, q {L.fq}, k {L.fk}, v {L.fv}) has no N-column GEMV leaf on this device")
 }
 
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]   // per speculative round, reached through the tier's registered seat
@@ -4296,19 +4250,19 @@ def private rd_v_seg_first(n : int64; record : block<(seg0 : int64) : void>) : i
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows")]
 def private rd_ensure_hc_v_rail : bool {
-    if (!g_rd.head_on || !g_rd.carry || !g_rd.hc_nextn) return rd_v_decline("the NextN head is off the chain (the load log names why)")
-    if (g_rd.verify_rows < 2l) return rd_v_decline("the driver was prepared for {g_rd.verify_rows} verify rows (the tier's verify seat was not installed at the load)")
-    if (g_rd.ngram && g_rd.ring_roll_dev == 0ul) return rd_v_decline("the n-gram ring has no rollback copy (the driver was prepared with no verify rows to roll back)")
-    if (vk_rdec_token_n_rows() < 2l) return rd_v_decline("the N-row rail declined on this model (its line above); the hyper-connection verify is built on it")
+    if (!g_rd.head_on || !g_rd.carry || !g_rd.hc_nextn) return rdec_v_decline("the NextN head is off the chain (the load log names why)")
+    if (g_rd.verify_rows < 2l) return rdec_v_decline("the driver was prepared for {g_rd.verify_rows} verify rows (the tier's verify seat was not installed at the load)")
+    if (g_rd.ngram && g_rd.ring_roll_dev == 0ul) return rdec_v_decline("the n-gram ring has no rollback copy (the driver was prepared with no verify rows to roll back)")
+    if (vk_rdec_token_n_rows() < 2l) return rdec_v_decline("the N-row rail declined on this model (its line above); the hyper-connection verify is built on it")
     rd_ensure_n_sets()
     let nb = g_rd.nb
     let L & = unsafe(g_rd.head)
     let q8 = int(KqFmt.q8)
-    if (!gemv_cls_ensure_n(q8, nb)) return rd_v_decline("the q8 mixer planes have no {nb}-column GEMV leaf on this device")
-    if (!gemv_cls_ensure_n(g_rd.head_eh_fmt, g_rd.hc_n * nb)) return rd_v_decline("the head's eh_proj format {g_rd.head_eh_fmt} has no {g_rd.hc_n * nb}-column GEMV leaf on this device")
-    if (!gemv_cls_ensure_n(L.fq, nb)) return rd_v_decline("the head's q format {L.fq} has no {nb}-column GEMV leaf on this device")
-    if (!gemv_cls_ensure_n(L.fk, nb)) return rd_v_decline("the head's k format {L.fk} has no {nb}-column GEMV leaf on this device")
-    if (!(L.vfk || gemv_cls_ensure_n(L.fv, nb))) return rd_v_decline("the head's v format {L.fv} has no {nb}-column GEMV leaf on this device")
+    if (!gemv_cls_ensure_n(q8, nb)) return rdec_v_decline("the q8 mixer planes have no {nb}-column GEMV leaf on this device")
+    if (!gemv_cls_ensure_n(g_rd.head_eh_fmt, g_rd.hc_n * nb)) return rdec_v_decline("the head's eh_proj format {g_rd.head_eh_fmt} has no {g_rd.hc_n * nb}-column GEMV leaf on this device")
+    if (!gemv_cls_ensure_n(L.fq, nb)) return rdec_v_decline("the head's q format {L.fq} has no {nb}-column GEMV leaf on this device")
+    if (!gemv_cls_ensure_n(L.fk, nb)) return rdec_v_decline("the head's k format {L.fk} has no {nb}-column GEMV leaf on this device")
+    if (!(L.vfk || gemv_cls_ensure_n(L.fv, nb))) return rdec_v_decline("the head's v format {L.fv} has no {nb}-column GEMV leaf on this device")
     return true
 }
 
@@ -5084,8 +5038,7 @@ def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
                     smalls_dev = make_device_buf(DND_SMALLS_BYTES),
                     cmd = alloc_cmd(), s_qkv = s_qkv, s_z = s_z, s_o = s_o,
                     slot_state_bytes = nvh * ds * ds * 4l, ring_image_bytes = cd * taps * 4l, smalls_bytes = DND_SMALLS_BYTES, state_byte_off = 0l,
-                    parity = 0, tok <- make_host_buf(TOK_META_BYTES, true), valid = false, dirty = false,
-                    owner_state_addr = 0ul, owner_hist_addr = 0ul)
+                    tok <- make_host_buf(TOK_META_BYTES, true))
     let fqkv = g_gpu.stacks[s_qkv].fmt
     let fz = g_gpu.stacks[s_z].fmt
     let fo = g_gpu.stacks[s_o].fmt
@@ -5165,19 +5118,12 @@ def vk_moe_dn_step(var yp : float?; s_qkv, s_z, s_o : int; woq, woz, woo : int64
         dnd_step_make(s_qkv, s_z, s_o, woq, woz, woo, dim, cd, kd, di, nvh, nkh, ds, taps, eps)
     }
     var st = unsafe(g_gpu.dnd_steps?[woq])   // the make above made the key: a read, never an insert
-    let caller_state_addr = intptr(stp)
-    if (st.valid && st.owner_state_addr != caller_state_addr) {
-        if (st.dirty) {
-            dnd_flush_down(*st)
-        }
-        st.valid = false
-        st.dirty = false
+    if (st.own.valid && !dn_slot_holds(st.own, stp)) {
+        dnd_send_home(*st)
     }
-    if (!st.valid) {
+    if (!st.own.valid) {
         dnd_cold_upload(*st, stp, histp, convw, wnormp, ap, dtp, cd, taps, dconv, nvh, ds, eps)
-        st.parity = 0
-        st.owner_state_addr = caller_state_addr
-        st.owner_hist_addr = intptr(histp)
+        dn_slot_bind(st.own, stp, histp, 0, false)
     }
     let ts0 = ref_time_ticks()
     fill_stack_acts(s_qkv, xqp, xsp, dim)   // the z GEMV set shares this image
@@ -5191,7 +5137,7 @@ def vk_moe_dn_step(var yp : float?; s_qkv, s_z, s_o : int; woq, woz, woo : int64
         memcpy(reinterpret<void?>(bg), reinterpret<void?>(bp), nvh * 4l)
         memcpy(reinterpret<void?>(bg + nvh), reinterpret<void?>(gp), nvh * 4l)
         var tm = reinterpret<TokMeta?>(st.tok.mapped)
-        tm[0] = TokMeta(pos = 0u, cnt = 0u, parity = uint(st.parity), mirbase = 0u, dnslot = 0u)
+        tm[0] = TokMeta(pos = 0u, cnt = 0u, parity = uint(st.own.parity), mirbase = 0u, dnslot = 0u)
     }
     let ts1 = ref_time_ticks()
     submit_wait(st.cmd)
@@ -5199,9 +5145,7 @@ def vk_moe_dn_step(var yp : float?; s_qkv, s_z, s_o : int; woq, woz, woo : int64
     unsafe {
         memcpy(reinterpret<void?>(yp), g_gpu.stacks[s_o].y.mapped, dim * 4l)
     }
-    st.parity = 1 - st.parity
-    st.valid = true
-    st.dirty = true
+    dn_slot_advance(st.own, 1 - st.own.parity)
     if (vk_prof()) {
         to_log(LOG_INFO, "vk_dnd prep {get_time_usec(ts0) - get_time_usec(ts1)} submit {get_time_usec(ts1) - get_time_usec(ts2)} copy {get_time_usec(ts2)}\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg
     }
@@ -5215,7 +5159,7 @@ def vk_dn_step_flush(l : int64; var stp : float?; var histp : float?) {
     if (g_rd != null && g_rd.hybrid && l < long_length(g_rd.layers) && g_rd.layers[l].recurrent) {
         var L & = unsafe(g_rd.layers[l])
         for (st in L.dn) {
-            if (st.valid && st.owner_state_addr == intptr(stp)) {
+            if (dn_slot_holds(st.own, stp)) {
                 dnd_send_home(st)
             }
         }
@@ -5226,37 +5170,31 @@ def vk_dn_step_flush(l : int64; var stp : float?; var histp : float?) {
         return
     }
     var st = unsafe(g_gpu.dnd_steps?[woq])   // the key_exists above made sure of the key: a read, never an insert
-    let caller_state_addr = intptr(stp)
-    if (st.owner_state_addr != caller_state_addr) {
-        return
-    }
+    return if (!dn_slot_holds(st.own, stp))
     dnd_send_home(*st)
 }
 
 //! the owner's state goes back to the host where the device holds the newer copy, and the slot is free
 def private dnd_send_home(var st : DnStep) {
-    if (st.dirty) {
+    if (st.own.dirty) {
         dnd_flush_down(st)
     }
     dnd_drop_slot(st)
 }
 
 def private dnd_drop_slot(var st : DnStep) {
-    st.valid = false
-    st.dirty = false
-    st.owner_state_addr = 0ul
-    st.owner_hist_addr = 0ul
+    dn_slot_drop(st.own)
 }
 
 def private dnd_flush_down(st : DnStep) {
     batch_cmd_one_shot() $(raw : VkCommandBuffer) {
         cmd_copy_range(raw, st.state_dev, st.state_byte_off, g_gpu.dn_state_host.buf, 0l, st.slot_state_bytes)
-        cmd_copy_range(raw, st.smalls_dev, st.hist_off * 4l + int64(st.parity) * st.ring_image_bytes,
+        cmd_copy_range(raw, st.smalls_dev, st.hist_off * 4l + int64(st.own.parity) * st.ring_image_bytes,
             g_gpu.dn_tail_host.buf, 0l, st.ring_image_bytes)
     }
     unsafe {
-        memcpy(reinterpret<void?>(st.owner_state_addr), g_gpu.dn_state_host.mapped, st.slot_state_bytes)
-        memcpy(reinterpret<void?>(st.owner_hist_addr), g_gpu.dn_tail_host.mapped, st.ring_image_bytes)
+        memcpy(reinterpret<void?>(st.own.state_addr), g_gpu.dn_state_host.mapped, st.slot_state_bytes)
+        memcpy(reinterpret<void?>(st.own.hist_addr), g_gpu.dn_tail_host.mapped, st.ring_image_bytes)
     }
 }
 
@@ -5270,7 +5208,7 @@ def vk_rdec_dn_peek(slot : int64; dsts : array<RdecDnDst>) : bool {
     let row = g_rd.region * int64(RDEC_DN_SNAPS) + slot
     var bytes = 0l
     for (d in dsts) {
-        return false if (d.l < 0l || d.l >= long_length(g_rd.layers) || !g_rd.layers[d.l].recurrent || (slot == -1l && !g_rd.layers[d.l].dn[g_rd.region].valid))
+        return false if (d.l < 0l || d.l >= long_length(g_rd.layers) || !g_rd.layers[d.l].recurrent || (slot == -1l && !g_rd.layers[d.l].dn[g_rd.region].own.valid))
         let st & = unsafe(g_rd.layers[d.l].dn[g_rd.region])
         bytes += st.slot_state_bytes + st.ring_image_bytes
     }
@@ -5287,7 +5225,7 @@ def vk_rdec_dn_peek(slot : int64; dsts : array<RdecDnDst>) : bool {
             let st & = unsafe(L.dn[g_rd.region])
             if (slot < 0l) {
                 cmd_copy_range(raw, st.state_dev, st.state_byte_off, g_rd.pool_xfer.buf, off, st.slot_state_bytes)
-                cmd_copy_range(raw, st.smalls_dev, st.hist_off * 4l + int64(st.parity) * st.ring_image_bytes,
+                cmd_copy_range(raw, st.smalls_dev, st.hist_off * 4l + int64(st.own.parity) * st.ring_image_bytes,
                     g_rd.pool_xfer.buf, off + st.slot_state_bytes, st.ring_image_bytes)
             } else {
                 let src = row * g_rd.snap_row_bytes + L.snap_off
@@ -5318,7 +5256,7 @@ def vk_rdec_dn_peek(slot : int64; dsts : array<RdecDnDst>) : bool {
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]   // once per prompt, before its first window records
 def vk_rdec_dn_flush_owners(r : int64) {
     for (L in g_rd.layers) {
-        continue if (!L.recurrent || !L.dn[r].valid)
+        continue if (!L.recurrent || !L.dn[r].own.valid)
         dnd_send_home(L.dn[r])
     }
 }
@@ -5355,7 +5293,7 @@ def vk_dn_step_invalidate {
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]   // per session reset, rollback and delete
 def vk_dn_step_release(state_lo : uint64; state_hi : uint64) {
     dnd_drop_slots() $(st : DnStep) : bool {
-        return st.owner_state_addr >= state_lo && st.owner_state_addr < state_hi
+        return dn_slot_in(st.own, state_lo, state_hi)
     }
 }
 
@@ -5418,21 +5356,6 @@ def private enc_routed_ffn_form(raw : VkCommandBuffer; var h : VkHaz; f1, f3, f2
     ffn_actrq_enc(raw, h, sa, sab, kq_sb(f2), pca, nreg * nfe)
     var pcd = GemvArgs(n = uint(nfe), d = uint(n), nreg = uint(nreg), ybase = 0u)
     gemv_enc(f2, raw, h, sd, pcd, nreg * n)
-}
-
-//! the routed form's act push for `elems` gate elements of rows `nfe` wide (`moe_gpu_ffn_form`): its activation code, and under a
-//! bias the layer's row base in the bias planes (the up rows share the gate's) and the row width
-[arch(at="../ARCHITECTURE_GPU_VULKAN_PEROP.md#perop-routed-form")]
-def ffn_form_act(elems, nfe : int64; is_gelu : bool) : ActArgs {
-    let f = moe_gpu_ffn_form()
-    var pca = ActArgs(nelem = uint(elems), act = act_code(f.oai, is_gelu))
-    if (f.bias_off >= 0l) {
-        pca.bias_on = 1u
-        pca.gboff = uint(f.bias_off)
-        pca.uboff = uint(f.bias_off)
-        pca.brow = uint(nfe)
-    }
-    return pca
 }
 
 //! the act + requant of `elems` gate/up floats under the push `pca`: the biased twin over `sab` (it stores Q8_0 alone - the walk
@@ -5729,11 +5652,11 @@ def private span_record(a : MoeSpanDec) {
         vhz_dep(raw, h, VHS_GACTS, 0u)
         var pcro = GkRouterArgs(ne = uint(a.ne), dim = uint(dim), woff = uint(li * a.ne * dim), obase = 0u)
         enc_router_gemv_cls(raw, h, SL.s_router, pcro, a.ne)
-        var pct = GkTopKArgs(ne = uint(a.ne), k = uint(a.k), norm = a.norm_topk ? 1u : 0u, wscale = a.wscale, dsoff = GK_NO_DSCALE,
-            base1 = span_meta_base(a.we1[li], SL.s1, a.f1[li]), stride1 = uint(a.nfe * dim / kq_unit(a.f1[li])),
-            base3 = span_meta_base(a.we3[li], SL.s3, a.f3[li]), stride3 = uint(a.nfe * dim / kq_unit(a.f3[li])),
-            base2 = span_meta_base(a.we2[li], SL.s2, a.f2[li]), stride2 = uint(a.nfe * dim / kq_unit(a.f2[li])),
-            xnb2 = uint(a.nfe / kq_unit(a.f2[li])))
+        var pct = gk_topk_routing(a.ne, a.k, a.norm_topk, a.wscale, 0l, false, 0u, GK_NO_DSCALE)
+        pct.base1 = span_meta_base(a.we1[li], SL.s1, a.f1[li]); pct.stride1 = uint(a.nfe * dim / kq_unit(a.f1[li]))
+        pct.base3 = span_meta_base(a.we3[li], SL.s3, a.f3[li]); pct.stride3 = uint(a.nfe * dim / kq_unit(a.f3[li]))
+        pct.base2 = span_meta_base(a.we2[li], SL.s2, a.f2[li]); pct.stride2 = uint(a.nfe * dim / kq_unit(a.f2[li]))
+        pct.xnb2 = uint(a.nfe / kq_unit(a.f2[li]))
         topk_n_enc(a.ne, raw, h, SL.s_topk, pct, 1l)
         vhz_dep(raw, h, VHS_META, 0u)
         var fc = g_gpu.ffn_cmds[ffn_cmd_key(SL.s1, SL.s3, SL.s2)]
@@ -5946,9 +5869,9 @@ def vk_moe_qkv(var yq : float?; var yk : float?; var yv : float?; woq, wok, wov 
 def private heat_pool_make(l : int64; b1, b3, b2 : int64; f1, f3, f2 : int; n, nfe : int64) {
     ensure_batch_state()   // advise records its slice copies into batch_cmd
     var pool = HeatPool(ege = n * nfe)
-    let src1 = vk_stream_stack_at(b1, f1)
-    let src3 = vk_stream_stack_at(b3, f3)
-    let src2 = vk_stream_stack_at(b2, f2)
+    let src1 = stream_stack_at(b1, f1)
+    let src3 = stream_stack_at(b3, f3)
+    let src2 = stream_stack_at(b2, f2)
     let want = gpu_want_heat()
     // a gate and up of two activation forms each read their own image (`moe_gpu_image2`); the mid-step form follows the down
     if (src1 < 0 || src3 < 0 || src2 < 0 || want <= 0l
@@ -5993,12 +5916,12 @@ def private heat_pool_make(l : int64; b1, b3, b2 : int64; f1, f3, f2 : int; n, n
 //! one plane slice, the expert's cache slot -> pool slot (quants + scales; per-row bytes are uniform by layout)
 [unused_argument(rowlen, ege)]
 def private heat_record_slice(raw : VkCommandBuffer; src_si, dst_si : int; e, slot, rowlen, ege : int64) {
-    let src = vk_stream_slot(src_si, e)
+    let src = stream_slot(src_si, e)
     if (!src.present) {
         panic("dasLLAMA vulkan tier: the heat pool asked for expert {e} of streamed stack {src_si}, which the expert cache does not hold")
     }
-    let qlen = g_gpu.stream_stacks[src_si].qlen
-    let slen = g_gpu.stream_stacks[src_si].slen
+    let qlen = g_stream_stacks[src_si].qlen
+    let slen = g_stream_stacks[src_si].slen
     cmd_copy_range(raw, src.qbuf, src.qoff, g_gpu.stacks[dst_si].wqbuf, slot * qlen, qlen)
     if (slen > 0l) {
         cmd_copy_range(raw, src.sbuf, src.soff, g_gpu.stacks[dst_si].wsbuf, slot * slen, slen)

@@ -27,12 +27,13 @@ let TEST_PORT = 18220   // 18220 .. 18226: this file's seven boots; 18097-18213 
 let EMB_PATH = path_join(models_dir(), "Qwen3-Embedding-0.6B-Q8_0.gguf")
 let CHAT_PATH = path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf")
 let EMB_CTX = 64l   // the embedder's context: an input past it is refused on the worker
-let CHAT_CTX = 4096l   //! the chat slot's region context on a Vulkan box: four streams' mirrors fit beside the embedder's
+let CHAT_CTX = 4096l   //! the chat slot's region context on a discrete home: four streams' mirrors fit beside the embedder's
 let TEXT = "the quick brown fox jumps over the lazy dog"
 
-//! the server's own Vulkan ask before the chat model loads: a region a stream, so the chat slot's streams are device-home
+//! the server's own ask before the chat model loads on a discrete home: a region a stream, so the chat slot's streams are device-home
 def private chat_residency_ask {
-    if (gpu_tier_status().backend == "vulkan") {
+    let home = gpu_tier_status().backend
+    if (home == "vulkan" || home == "cuda") {
         gpu_residency_ask(4l, CHAT_CTX)
     }
 }

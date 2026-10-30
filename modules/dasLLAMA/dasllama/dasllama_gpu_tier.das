@@ -300,6 +300,15 @@ def public install_moe_gpu_resident_kv_ring(on : bool) {
 
 def public rdec_can_ring_kv() : bool => g_rdec_kv_ring
 
+var private g_rdec_kv_share = true
+
+//! Declare whether the installed home serves a shared-KV layer (Q alone projected, the donor's mirror rows read); off, the plan declines such a model by the layer
+def public install_moe_gpu_resident_kv_share(on : bool) {
+    g_rdec_kv_share = on
+}
+
+def public rdec_can_share_kv() : bool => g_rdec_kv_share
+
 [unused_argument(rows)]
 def private rdec_unset_upload_bias(rows : array<float>) {
     panic("dasLLAMA: resident q/k/v bias upload hit without an installed bias seat")
@@ -480,6 +489,36 @@ typedef RdecHotBatchFn = function<(open : bool) : void>
 //! the verify rows' hits of layer `l`: k slot and weight entries a row, a row's hits first, its misses padded at weight 0
 typedef RdecHotSubmitRowsFn = function<(l : int64; nrows : int64; slots : int64 const?; w : float const?) : void>
 
+//! a routed layer's hot expert pool as the hit chain's region records read it, the geometry both discrete homes' pool records
+//! derive from: the three planes' formats, an expert's weight blocks a plane (a slot's stride in the records) and the feed's
+//! blocks a row (the gate and up's over the model dim, the down's over the expert width)
+struct HotLayerGeom {
+    on : bool
+    f1, f3, f2 : int
+    blk1, blk3, blk2 : int64
+    xnb1, xnb2 : int64
+}
+
+//! the hit chain's records and weights staged in the home's mapped blocks (`m1` / `m3` / `m2` two words a region, `wp` a float a
+//! region): region j reads slot `slots[j]`'s blocks and its row's feed (k regions a row), the weights past `nreg` zero to `wlen` so
+//! the combine skips them
+def hot_stage(H : HotLayerGeom; var m1, m3, m2 : uint?; var wp : float?; k, nreg, wlen : int64; slots : int64 const?; w : float const?) {
+    unsafe {
+        for (j in range64(wlen)) {
+            wp[j] = j < nreg ? w[j] : 0.0
+        }
+        for (j in range64(nreg)) {
+            let xrow = uint((j / k) * H.xnb1)
+            m1[j * 2l] = uint(slots[j] * H.blk1)
+            m1[j * 2l + 1l] = xrow
+            m3[j * 2l] = uint(slots[j] * H.blk3)
+            m3[j * 2l + 1l] = xrow
+            m2[j * 2l] = uint(slots[j] * H.blk2)
+            m2[j * 2l + 1l] = uint(j * H.xnb2)
+        }
+    }
+}
+
 [unused_argument(l, slots, f1, f3, f2)]
 def private rdec_unset_hot_layer(l, slots : int64; f1, f3, f2 : int) : tuple<base : int64; stride : int64> => (base = -1l, stride = 0l)
 [unused_argument(l, slot, wq1, ws1, wq3, ws3, wq2, ws2)]
@@ -552,6 +591,15 @@ def public install_moe_gpu_resident_hot_dma(dma : RdecHotDmaFn; flush : RdecHotD
     g_rdec_hot_dma_flush = flush
 }
 
+var private g_moe_gpu_streams = false   //! the tier streams expert stacks through pinned mirrors (`moe_gpu_upload_stack` under `stream`): the Vulkan tier's word
+
+//! Install the tier's word that it streams expert stacks (the per-op tier's pinned mirrors): the resident driver's prompt stream arm reads it
+def public set_moe_gpu_streams(on : bool) {
+    g_moe_gpu_streams = on
+}
+
+def public moe_gpu_streams() : bool => g_moe_gpu_streams
+
 def public rdec_hot_dma(l, slot, e, woff1 : int64; f1 : int) : bool => invoke(g_rdec_hot_dma, l, slot, e, woff1, f1)
 
 def public rdec_hot_dma_flush(l : int64) => invoke(g_rdec_hot_dma_flush, l)
@@ -568,7 +616,7 @@ def public set_gpu_resident_route(on : bool) {
 var private g_vulkan_trim_set = false
 var private g_vulkan_trim = false
 
-//! the trimmed vulkan lane in process (`DASLLAMA_TRIM`'s twin): the next vulkan-armed cold load mints its lane without the
+//! the trimmed GPU lane in process (`DASLLAMA_TRIM`'s twin): the next discrete-home cold load mints its lane without the
 //! planar families, and the lane's identity folds the answer, so a flip re-bakes the lane
 def public set_vulkan_trim(on : bool) {
     g_vulkan_trim_set = true
@@ -594,18 +642,64 @@ def public gpu_resident_route_lever() : bool => g_gpu_resident_route
 def public gpu_want_resident : bool => g_env_gpu.gpu_resident && g_gpu_resident_route
 
 var private g_cuda_want_warned = false
+var private g_gpu_home = ""   //! the discrete home whose entry fills the tier's seats ("vulkan" | "cuda"); "" until first read
+var private g_gpu_home_installers : table<string; array<function<() : void>>>   //! a home's seat installers, by its name
 
-//! the CUDA home takes the tier's seats in place of the Vulkan home (DASLLAMA_CUDA), read at both entries' [init]; off, warned once, in a build without dasCUDA
-def public gpu_want_cuda : bool {
+//! the environment's spelling of the home: "cuda" where DASLLAMA_CUDA asks for it in a build that carries the home, else "vulkan"
+def private gpu_home_default : string {
     static_if (typeinfo builtin_module_exists(cuda)) {
-        return g_env_gpu.cuda
+        return g_env_gpu.cuda ? "cuda" : "vulkan"
     } else {
         if (g_env_gpu.cuda && !g_cuda_want_warned) {
             g_cuda_want_warned = true
             to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_CUDA asks for the CUDA home, which this build does not carry (DAS_CUDA_DISABLED, or a 32-bit host) - the Vulkan home keeps the GPU tier\n")
         }
+        return "vulkan"
+    }
+}
+
+//! the home whose seats the tier holds: the environment's spelling until `set_gpu_home_` moves it (the facade's `gpu_home`)
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def gpu_home_() : string {
+    if (empty(g_gpu_home)) {
+        g_gpu_home = gpu_home_default()
+    }
+    return g_gpu_home
+}
+
+//! the CUDA home takes the tier's seats in place of the Vulkan home (DASLLAMA_CUDA, or `set_gpu_home("cuda")`), read at both entries' [init]
+def public gpu_want_cuda : bool => gpu_home_() == "cuda"
+
+//! a home's entry, and every driver with seats of its own (the assistant drafter's), registers its seat installer under the
+//! home's name at [init]; where the home is asked for, the registrant runs it there as well
+def public register_gpu_home(name : string; install : function<() : void>) {
+    g_gpu_home_installers[name] |> push(install)
+}
+
+//! the homes this build carries - the names `set_gpu_home_` takes (the facade's `gpu_homes`)
+def gpu_homes_() : array<string> => [for (k in keys(g_gpu_home_installers)); k]
+
+//! Move the tier onto the named home before it arms: every seat back to its declared default, the home's entry filling them.
+//! False, said, for a home this build does not carry or a tier already armed on another home (the environment arms at [init]
+//! under DASLLAMA_GPU: spell the home there, DASLLAMA_CUDA, or leave the arm to the program)
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def set_gpu_home_(name : string) : bool {
+    return true if (name == gpu_home_())
+    if (!key_exists(g_gpu_home_installers, name)) {
+        to_log(LOG_WARNING, "dasLLAMA: set_gpu_home(\"{name}\") names a GPU home this build does not carry (it has {gpu_homes_()}) - the tier stays on {gpu_home_()}\n")
         return false
     }
+    if (g_moe_gpu_installed) {
+        to_log(LOG_WARNING, "dasLLAMA: set_gpu_home(\"{name}\") after the tier armed on {gpu_home_()} - a home switch runs before the first arm (the environment armed it at [init]: spell the home there, DASLLAMA_CUDA=1, or leave DASLLAMA_GPU unset and arm from the program)\n")
+        return false
+    }
+    gpu_home_reset_fn_slots()
+    gpu_home_reset_flags()
+    g_gpu_home = name
+    for (install in g_gpu_home_installers[name]) {
+        invoke(install)
+    }
+    return true
 }
 
 //! Install the resident driver's hybrid (deltanet) seats - separately, so a tier without them
@@ -1427,6 +1521,39 @@ def public set_moe_gpu_dnd_route(on : bool) {
 //! The deltanet decode step's routing gate.
 def public moe_gpu_dnd_route() : bool => g_moe_gpu_dnd_route
 
+//! a recurrent layer's device state slot as a session's: the ring image the row reads (`parity`), `valid` where the slot holds a
+//! session's state, `dirty` where the device advanced past the host copy, and the owner's host state and history addresses the
+//! flush writes back to - the bookkeeping both discrete homes keep beside a slot's device buffers
+struct DnSlotOwner {
+    parity : int
+    valid, dirty : bool
+    state_addr, hist_addr : uint64
+}
+
+//! the slot freed: no owner, nothing to write back; the ring image it last advanced onto stays named, since a parked claim's
+//! snapshot reads the slot's image after its owner let go
+def dn_slot_drop(var o : DnSlotOwner) {
+    o = DnSlotOwner(parity = o.parity)
+}
+
+//! the slot bound to the session whose state sits at `stp` / `histp`, its device copy on ring image `parity`; `dirty` where the
+//! device already holds the newer copy (a prefill landed it there)
+def dn_slot_bind(var o : DnSlotOwner; stp, histp : float const?; parity : int; dirty : bool) {
+    o = DnSlotOwner(parity = parity, valid = true, dirty = dirty, state_addr = intptr(stp), hist_addr = intptr(histp))
+}
+
+//! the slot holds the session whose state sits at `stp`
+def dn_slot_holds(o : DnSlotOwner; stp : float const?) : bool => o.valid && o.state_addr == intptr(stp)
+
+//! the slot's owner's state sits in the host range [lo, hi)
+def dn_slot_in(o : DnSlotOwner; lo, hi : uint64) : bool => o.state_addr >= lo && o.state_addr < hi
+
+//! the device advanced the slot onto ring image `parity`: the host copy is stale
+def dn_slot_advance(var o : DnSlotOwner; parity : int) {
+    o.parity = parity
+    o.dirty = true
+}
+
 //! The installed state-residency seams, for a cell that overrides one and restores the set.
 def public moe_gpu_dn_state_hooks() : tuple<flush : MoeGpuDnFlushFn; inval : MoeGpuDnInvalidateFn; release : MoeGpuDnReleaseFn> =>
     (flush = g_moe_gpu_dn_flush, inval = g_moe_gpu_dn_invalidate, release = g_moe_gpu_dn_release)
@@ -1529,6 +1656,7 @@ struct MoeGpuFfnForm {
     bias_off : int64 = -1l   //! this layer's row base in the tier's gate / up bias planes (`moe_gpu_upload_ffn_bias`); -1 = unbiased
     e_base : int64           //! the layer's gate plane offset
     e_stride : int64         //! the elements of one expert's gate rows
+    bias_resident : bool = false   //! the bias planes are the resident driver's (the row base a routed layer's ordinal in them), not the per-op upload's
 }
 
 var private g_ffn_form = MoeGpuFfnForm()
@@ -1948,7 +2076,7 @@ struct GpuTierWant {
 }
 
 var g_gpu_want = GpuTierWant()
-var g_moe_gpu_backend = ""            // name registered with the arm hook ("vulkan")
+var g_moe_gpu_backend = ""
 
 def private moe_gpu_no_arm : bool => false
 def private moe_gpu_no_vram : int64 => 0l
@@ -2155,6 +2283,52 @@ def public set_moe_gpu_arm(name : string; f : function<() : bool>) {
 //! declined (device probe/VRAM); the loud-failure checks use it to say WHICH failure happened.
 def public moe_gpu_backend_registered : bool => !empty(g_moe_gpu_backend)
 
+//! the discrete home that registered the arm ("vulkan" | "cuda"), "" with none: the bench row's backend stamp and the lane's name in the rail's lines
+def public moe_gpu_backend_name : string => g_moe_gpu_backend
+
+//! the PCIe class, 40 GB/s: a first decode token slower than the resident weights at that rate ran paged
+let RDEC_PAGING_BYTES_PER_US = 40_000l
+
+//! the first decode token's wall `wall_us` read against the plan's `weight_bytes` on the device: under the paging class, one warning
+//! naming the serving home - the resident drivers' warm-up check, once an armed driver
+[cold_path]
+def rdec_paging_check(weight_bytes, wall_us : int64) {
+    if (weight_bytes > 0l && wall_us > weight_bytes / RDEC_PAGING_BYTES_PER_US) {
+        to_log(LOG_WARNING, "dasLLAMA {moe_gpu_backend_name()} resident: a decode token ran under {RDEC_PAGING_BYTES_PER_US / 1_000l} GB/s over {weight_bytes / 1_000_000l} MB of resident weights - the paging class; close other GPU applications or lower DASLLAMA_GPU_VRAM_MB\n")
+    }
+}
+
+//! the resident drivers' speculative-verify decline for `why`, under the serving home's name: the CPU verify serves
+[cold_path]
+def rdec_v_decline(why : string) : bool {
+    to_log(LOG_WARNING, "dasLLAMA {moe_gpu_backend_name()} resident: the speculative verify has no same-slab form - {why}; the CPU verify serves\n")
+    return false
+}
+
+//! the N-row command's 0 rows for `why`, said once per armed model through the driver's `said` latch: a batched step runs a row at
+//! a time from here on
+def rdec_n_decline(var said : bool&; why : string) : int64 {
+    if (!said) {
+        said = true
+        to_log(LOG_WARNING, "dasLLAMA {moe_gpu_backend_name()} resident: the N-row token command has no form for {why} - a batched step runs a row at a time\n")
+    }
+    return 0l
+}
+
+//! the greedy chain's mode knob both discrete homes keep: a pin at `RDEC_CHAIN_ENV` reads the environment's value (0 off, 1 every
+//! greedy step, -1 adaptive), and the adaptive mode's run of unchained steps after a miss doubles to `RDEC_CHAIN_BACKOFF_MAX`
+let RDEC_CHAIN_ENV = -2
+let RDEC_CHAIN_BACKOFF_MAX = 64
+
+//! the chain's mode: the `pin`, else the environment's `env`
+def rdec_chain_mode(pin, env : int) : int => pin != RDEC_CHAIN_ENV ? pin : env
+
+//! the adaptive mode's backoff after a miss: the run doubles from one to the cap, and the steps left take the run
+def rdec_chain_backoff(var backoff_len : int&; var backoff : int&) {
+    backoff_len = clamp(backoff_len * 2, 1, RDEC_CHAIN_BACKOFF_MAX)
+    backoff = backoff_len
+}
+
 //! One loud line when GPU rails are requested but no backend module ever registered — the
 //! ``require ?vulkan`` guard makes a failed shared_module load VANISH otherwise. Log-only;
 //! the model-load rail calls it once per load.
@@ -2281,6 +2455,40 @@ def public set_moe_gpu_mirror_slack(f : function<() : int64>) {
 }
 
 def public moe_gpu_mirror_slack() : int64 => invoke(g_moe_gpu_mirror_slack)
+
+//! the env-else-programmatic wants half of the discrete tier's config section (the caps half is the device's, or the dry
+//! config's): both homes' live sources and the dry arm's verify fill it here, so the tag they fold agrees on every knob
+def public gpu_dlim_wants_fill(var v : DlimVulkanConfig) {
+    v.moe_layers = gpu_want_moe_layers()
+    v.moe_stream = gpu_want_moe_stream()
+    v.dn = gpu_want_dn()
+    v.attn = gpu_want_attn()
+    v.dnd = gpu_want_dnd()
+    v.shexp = gpu_want_shexp()
+    v.qkv = gpu_want_qkv()
+    v.cls = gpu_want_cls_upload()   // the walk's gate, not the arm intent
+    v.dense = gpu_want_dense()
+    v.dense_attn = gpu_want_dense_attn()
+    v.dense_shexp = gpu_want_dense_shexp()
+    v.dense_ffn = gpu_want_dense_ffn()
+    v.trim = vulkan_trim()
+    v.split = false
+    v.dn_native = gpu_want_dn_native()
+}
+
+//! the dry bake's config against this process' wants, on `home`'s entry: the walk's gates read the env-else-programmatic wants, so
+//! a config disagreeing with them would write a lane whose identity lies about its plan - fail closed, both tags named; the trim
+//! shapes the save, not the walk, so the config's stands
+def dlim_dry_wants_ok(v : DlimVulkanConfig; home : string) : bool {
+    var w = v
+    gpu_dlim_wants_fill(w)
+    w.trim = v.trim
+    if (dlim_vulkan_tag(w) != dlim_vulkan_tag(v)) {
+        to_log(LOG_ERROR, "dasLLAMA {home} tier: dry-bake config disagrees with this process' wants (set the DASLLAMA_GPU_* knobs to match)\n  config {dlim_vulkan_tag(v)}\n  wants  {dlim_vulkan_tag(w)}\n")
+        return false
+    }
+    return true
+}
 
 [unused_argument(v)]
 def private moe_gpu_no_dry_bake(v : DlimVulkanConfig) : bool => false
@@ -2751,7 +2959,7 @@ def public set_moe_gpu_model_support(reason : string) {
 
 //! Live GPU-tier status (the control-page badge): actual post-load residency and routing.
 struct GpuTierStatus {
-    backend : string          //!< tier backend name ("vulkan"); "" = no GPU tier installed
+    backend : string          //!< tier backend name ("vulkan" | "cuda"); "" = no GPU tier installed
     device : string           //!< GPU marketing name ("" until the device is created at first upload)
     supported : bool          //!< tier installed AND the loaded model rides it
     reason : string           //!< why not, when the tier is installed but ``supported`` is false
@@ -3107,5 +3315,41 @@ def public kernel_coverage_report(backend, population : string; cov : table<stri
 }
 
 
+//! the seats a home's entry declares by value, back to their declared defaults (`set_gpu_home`); the function seats are
+//! `gpu_home_reset_fn_slots`'s, every `= @@fn` global of this module. `REVIEW.das`'s home-switch gate holds this list to the
+//! `*_installed` flags the module declares
+def private gpu_home_reset_flags {
+    g_moe_gpu_backend = ""
+    g_rdec_installed = false
+    g_rdec_dn_installed = false
+    g_rdec_site_feeds = false
+    g_rdec_kv_ring = true
+    g_rdec_kv_share = true
+    g_rdec_bias_installed = false
+    g_rdec_sinks_installed = false
+    g_rdec_moe_installed = false
+    g_rdec_hc_installed = false
+    g_rdec_hot_installed = false
+    g_moe_gpu_streams = false
+    g_rdec_regions_installed = false
+    g_rdec_prefill_ids_installed = false
+    g_rdec_prefill_segs_installed = false
+    g_rdec_carry_installed = false
+    g_rdec_draft_installed = false
+    g_rdec_verify_installed = false
+    g_rdec_rollback_installed = false
+    g_rdec_token_seq_installed = false
+    g_rdec_chain_charged = false
+    g_rdec_dn_snaps_installed = false
+    g_rdec_head_warm_installed = false
+    g_rdec_hidden_installed = false
+    g_rdec_ple_installed = false
+    g_moe_gpu_heat_installed = false
+    g_moe_gpu_host_rows_on = false
+}
+
 [init, boot_restore]
 def private restore_gpu_tier_fn_defaults {}
+
+[seat_reset]
+def private gpu_home_reset_fn_slots {}

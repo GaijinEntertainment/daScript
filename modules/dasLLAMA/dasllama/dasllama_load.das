@@ -3160,6 +3160,9 @@ def quantize_weights_q4(var t : Model) {
 //! Applies the tune sidecar's "runtime" knobs first (see apply_box_profile_runtime).
 def load_model_(path : string; mode : QuantMode = QuantMode.fp32) : Model {
     apply_box_profile_runtime()   // before load: a backend pin must precede the backend-for-load select
+    if (!moe_gpu_tier_installed() && gpu_want_arms_tier()) {
+        moe_gpu_tier_arm_()   // a want set after [init] (a worker's, the server's) arms here: the env path armed at [init], the image rail's identity probe arms on its own, and a load with neither must not fall to the CPU
+    }
     // same guard rail as load_model_cached: a GPU-armed env whose backend never registered
     // (tier module not required, shared_module load swallowed) says so instead of resolving CPU
     if (get_metal_mode() == MetalMode.off) {

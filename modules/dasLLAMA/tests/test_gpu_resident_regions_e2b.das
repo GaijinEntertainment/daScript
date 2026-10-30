@@ -10,7 +10,8 @@ require _resident_regions
 // of the ones below): the rig's bit-for-bit cells - the N-row command hands each row its own side input and projects
 // q alone on a shared-KV layer - and the
 // scheduler's device mode. The tolerance cells stay the qwen2 file's: their bar is calibrated there. Skips off the JIT,
-// without DASLLAMA_GPU=1 on a device the driver serves, or without the file under models_dir().
+// without DASLLAMA_GPU=1 on a device the driver serves, or without the file under models_dir(); the split-forms and the
+// fused q/k norm cells skip under DASLLAMA_CUDA=1 - the fuse knob is the Vulkan driver's.
 let private REGIONS_FILE = "gemma-4-E2B-it-Q8_0.gguf"
 
 //! nine rows over nine regions: past the N-row command's eight the step runs two commands, each group's per-layer-embedding

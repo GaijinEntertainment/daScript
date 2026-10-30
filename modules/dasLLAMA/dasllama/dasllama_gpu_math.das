@@ -108,6 +108,70 @@ def cm2_tiles_at(d, cnt, tc : int64) : int64 {
     return ((d + 127l) / 128l) * ((cnt + tc - 1l) / tc)
 }
 
+//! batch GEMM schedule record `rid` = [wblk0, row0, rows, 0] at word 4 rid and its map of `groups` words at the cursor;
+//! returns the map's word offset and advances the cursor
+def batch_sched_map(var mp : uint?; var cur : int64&; rid : int64; wblk0, rows, groups : int64; row0 : int64 = 0l) : uint {
+    unsafe {
+        mp[rid * 4l] = uint(wblk0)
+        mp[rid * 4l + 1l] = uint(row0)
+        mp[rid * 4l + 2l] = uint(rows)
+        mp[rid * 4l + 3l] = 0u
+        let at = cur
+        for (g in range64(groups)) {
+            mp[at + g] = uint(rid)
+        }
+        cur += groups
+        return uint(at)
+    }
+}
+
+//! the workgroups a region of `cnt` rows takes at the tile column `tc` over `wtiles` weight tiles
+def sched_region_wgs(cnt, tc, wtiles : int64) : int64 => ((cnt + tc - 1l) / tc) * wtiles
+
+//! the batch GEMM schedule over the regions `blks` / `row0s` / `cnts` (a region's weight block base, its window-local row base
+//! and its rows) at the tile column `tc` over `wtiles` weight tiles: the 4-word records [wblk, row0, cnt, wg0] at word 4 i, then
+//! at word 4 nb the per-workgroup map, region i's `sched_region_wgs` words in order; returns the workgroup count (the map's length)
+def sched_regions(var mp : uint?; blks, row0s, cnts : array<int64>; tc, wtiles : int64) : int64 {
+    let nb = long_length(cnts)
+    let map_off = nb * 4l
+    var wg = 0l
+    unsafe {
+        for (i in range64(nb)) {
+            mp[i * 4l] = uint(blks[i])
+            mp[i * 4l + 1l] = uint(row0s[i])
+            mp[i * 4l + 2l] = uint(cnts[i])
+            mp[i * 4l + 3l] = uint(wg)
+            let rwg = sched_region_wgs(cnts[i], tc, wtiles)
+            for (g in range64(rwg)) {
+                mp[map_off + wg + g] = uint(i)
+            }
+            wg += rwg
+        }
+    }
+    return wg
+}
+
+//! the regions of the offset triples `offs` ([weight offset, row base, rows] a region) that keep a row inside the window [r0, r1):
+//! each kept region's index in `regs`, its window-local row base in `row0s` and its rows in `cnts`, in order; the lists emptied first
+def sched_clip(offs : int64 const?; nregions, r0, r1 : int64; var regs, row0s, cnts : array<int64>) {
+    regs |> clear()
+    row0s |> clear()
+    cnts |> clear()
+    regs |> reserve(nregions)
+    row0s |> reserve(nregions)
+    cnts |> reserve(nregions)
+    unsafe {
+        for (r in range64(nregions)) {
+            let b0 = max(offs[r * 3l + 1l], r0)
+            let b1 = min(offs[r * 3l + 1l] + offs[r * 3l + 2l], r1)
+            continue if (b1 <= b0)
+            regs |> push(r)
+            row0s |> push(b0 - r0)
+            cnts |> push(b1 - b0)
+        }
+    }
+}
+
 //! the units a grid of `wgs` workgroups costs over `slots` wave slots at the column's step weight (l 16, m 10, s 5) a `steps`-deep k walk
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_wave_units(wgs, steps, slots, tc : int64) : int64 => ((wgs + slots - 1l) / slots) * steps * (tc == 256l ? 16l : (tc == 128l ? 10l : 5l))
@@ -441,3 +505,67 @@ def act_f32(v : float; act : uint) : float {
     }
     return gelu_tanh_lut_f32(v)
 }
+
+//! the experts one select workgroup reaches: 256 threads, `TOPK_DEPTH_MAX` logits a thread
+let TOPK_DEPTH_MAX = 2
+let TOPK_EXPERTS_MAX = 256l * int64(TOPK_DEPTH_MAX)
+
+//! the select stamps' depth for `ne` experts: one logit a thread to 256, two past it
+def topk_depth(ne : int64) : int => ne > 256l ? 2 : 1
+
+let ROUTER_TP = 64u   //! the router tile's positions per workgroup
+let ROUTER_TE = 32u   //! ... and router rows
+let ROUTER_TH = ROUTER_TE / 2u   //! an invocation's two rows sit a half-tile apart: e and e + ROUTER_TH
+let ROUTER_K4 = 16u   //! a 64-wide K step in float4
+let ROUTER_LD = ROUTER_K4 + 1u   //! the stage's row stride in float4: the step plus one of pad, so the sixteen rows a warp reads (and a fetch writes) spread the eight bank groups
+
+//! the router GEMM's workgroups over `npos` rows and `ne` router rows: one per 64 rows x 32 router rows
+def router_gemm_wgs(npos, ne : int64) : int64 => ((npos + int64(ROUTER_TP) - 1l) / int64(ROUTER_TP)) * ((ne + int64(ROUTER_TE) - 1l) / int64(ROUTER_TE))
+
+let DN_MAX_DS = 128l
+let DN_MAX_HEADS = 64l
+let DN_MAX_CD = 16_384l
+let DN_MAX_QK = 8_192l   //! the conv row's q + k region (2 kd): the channels the conv's per-head norm covers
+let DN_MAX_DCONV = 4l
+let DN_WINDOW = 4_096l
+//! the scan workspace holds the raw o rows alone: position-major, di wide, rewritten in place by the out-norm
+let DN_O_OFF = 0l
+let DN_WS_BYTES = DN_WINDOW * DN_MAX_HEADS * DN_MAX_DS * 4l
+let DN_STATE_BYTES = DN_MAX_HEADS * DN_MAX_DS * DN_MAX_DS * 4l
+let DN_META_BYTES = 128l
+let DN_SM_BETA = 16l
+let DN_SM_G = DN_SM_BETA + DN_WINDOW * DN_MAX_HEADS
+let DN_SM_TAPS = DN_SM_G + DN_WINDOW * DN_MAX_HEADS
+let DN_SM_WNORM = DN_SM_TAPS + DN_MAX_CD * DN_MAX_DCONV
+let DN_SM_A = DN_SM_WNORM + DN_MAX_DS
+let DN_SM_DT = DN_SM_A + DN_MAX_HEADS
+let DN_SM_HIST = DN_SM_DT + DN_MAX_HEADS
+let DN_SM_SLACK = 64l   //! floats past the last ring image, so a ring's last row never sits at the buffer's end
+let DN_SMALLS_BYTES = (DN_SM_HIST + DN_MAX_CD * (DN_MAX_DCONV - 1l) + DN_SM_SLACK) * 4l
+let DN_TAIL_BYTES = DN_MAX_CD * (DN_MAX_DCONV - 1l) * 4l
+
+let DND_BG_BYTES = (2l * DN_MAX_HEADS + 4l) * 4l
+let DND_OQ_BYTES = DN_MAX_HEADS * DN_MAX_DS
+let DND_OS_BYTES = (DN_MAX_HEADS * DN_MAX_DS / 32l) * 4l
+let DND_SMALLS_BYTES = DN_SMALLS_BYTES + DN_MAX_CD * (DN_MAX_DCONV - 1l) * 4l
+
+//! a deltanet geometry inside the kernels' capacities: the state width a power of two of whole 32-lane groups, the heads, conv channels, q/k region and taps under their caps, the widths consistent, the o row inside `DND_OQ_BYTES`
+def dn_geom_fits(ds, nvh, nkh, kd, di, cd, dconv : int64) : bool {
+    return (ds <= DN_MAX_DS && ds % 32l == 0l && (ds & (ds - 1l)) == 0l && nvh <= DN_MAX_HEADS && cd <= DN_MAX_CD
+        && 2l * kd <= DN_MAX_QK && dconv <= DN_MAX_DCONV && di == nvh * ds && kd == nkh * ds && cd == 2l * kd + di
+        && di % 32l == 0l && di <= DND_OQ_BYTES)
+}
+
+[arch(at="../ARCHITECTURE_GPU_SHARED_KERNELS.md#dn-discrete-kernels")]
+def dn_scan_wgs(nvh, ds : int64) : int64 {
+    let cpg = 4l * (32l / (ds / 16l))
+    return nvh * ((ds + cpg - 1l) / cpg)
+}
+
+let DN_CONV_PB = 32u   //! the conv's positions per workgroup
+[arch(at="../ARCHITECTURE_GPU_SHARED_KERNELS.md#dn-discrete-kernels")]
+def dn_conv_wgs(cd, npos : int64) : int64 => ((cd + 255l) / 256l) * ((npos + int64(DN_CONV_PB) - 1l) / int64(DN_CONV_PB))
+
+//! The prefill's beta/alpha tile GEMM's workgroups: 16-position tiles x 16-output groups over the 2 x nvh rows.
+def dn_ba_wgs(npos, nvh : int64) : int64 => ((npos + 15l) / 16l) * ((2l * nvh + 15l) / 16l)
+
