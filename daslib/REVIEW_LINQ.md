@@ -125,8 +125,8 @@ base-table column - a wrong column, with no error.
 **Never pick a projection slot's SQL by `q.seenJoin` - pick it by which of that slot's own
 entries is non-empty: SQL fragment first, then aliased column, then unqualified column.**
 
-**A diff that adds a clause that can emit `?` also pushes that clause's binds at its SQL parse
-position in `collect_query_binds`, in the same change.** `sql_to_frags_ex` re-scans the emitted
+**A diff that adds a SQL-LINQ query clause that can emit `?` also pushes its binds at its SQL
+parse position in `collect_query_binds`, in the same change.** `sql_to_frags_ex` re-scans the emitted
 SQL text and pairs markers with that list in occurrence order, so a clause added to the emitter
 alone binds every later placeholder to the wrong value, with no error.
 
