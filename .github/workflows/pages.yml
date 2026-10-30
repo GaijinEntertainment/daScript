@@ -256,7 +256,10 @@ jobs:
             web/output64/examples/river_run/river_run.wasm \
             web/output64/examples/furier/furier.wasm \
             web/output64/examples/path_tracer_lab/path_tracer_lab.wasm \
-            web/output64/examples/physarum_lab/physarum_lab.wasm; do
+            web/output64/examples/physarum_lab/physarum_lab.wasm \
+            web/output64/examples/storyteller/storyteller.wasm \
+            web/output64/examples/storywish/storywish.wasm \
+            web/output64/examples/parrot/parrot.wasm; do
             [ -f "$f" ] || MISSING="$MISSING $f"
         done
         if [ -n "$MISSING" ]; then
