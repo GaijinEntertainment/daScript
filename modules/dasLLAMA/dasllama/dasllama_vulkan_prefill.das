@@ -67,7 +67,16 @@ def private pf_dno6(l : int64) : bool => pf_f16_feed(g_rd.layers[l].fout)
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def private pf_qkv_feed_fused(l : int64) : bool => !g_rd.layers[l].recurrent && g_env_vulkan.vk_fuse && (pf_qkv6(l) || !kq_sb(g_rd.layers[l].fq))
 
-let private PF_CHUNK_MAX = 8l   // the overlap ramp doubles 1,2,4 then holds here; the cmd ring is sized from it
+let PF_CHUNK_MAX = 8l   // the overlap ramp doubles 1,2,4 then holds here; the cmd ring is sized from the cap
+
+//! layers one submit of the window chain holds at most: DASLLAMA_VK_CHUNK where set, else one on an integrated GPU (a Linux
+//! amdgpu resets the device under a job past its watchdog, which an iGPU's 8-layer chunk reaches on a long prompt) and the ramp's
+//! hold on a discrete one
+def pf_chunk_cap : int64 {
+    let e = g_env_vulkan.vk_chunk
+    if (e > 0l) return min(e, PF_CHUNK_MAX)
+    return g_gpu.integrated ? 1l : PF_CHUNK_MAX
+}
 
 var private @scratch g_pf_segs : array<RdecPfSeg>    //! the call's segments (`RdecPfSeg`), rows over the whole call; a one-session call is one segment at row 0
 var private @scratch g_pf_wsegs : array<RdecPfSeg>   //! the parts of them inside the window being recorded, `row0` window-local, `npos` the part's rows
@@ -165,7 +174,7 @@ def pf_ffn_slice_row0(l, n_layers, wlen : int64; f16_gate, f16_down : bool) : in
     g_pf_ffn_slice && g_env_vulkan.vk_ffn_slice && l + 1l == n_layers && f16_gate && f16_down ? max(wlen - 32l, 0l) : 0l
 
 //! the h128 coopmat twin serves a 128-head layer where the cm2 flash tiles do not
-def private pf_fa128s : bool => !(cm2_fa_on() && vk_fa_on() && rd_pf_reads_f16()) && g_gpu.has_coopmat && vk_fa_on()
+def private pf_fa128s : bool => !(cm2_fa_on() && vk_fa_on() && rd_pf_reads_f16()) && h128_twin_on()
 
 //! a window's rows from `w0`: the last window keeps at least the conv taps, so only window 0 can be shorter, and its history is zero
 def private pf_window_len(npos, w0 : int64) : int64 {
@@ -1145,7 +1154,8 @@ def private pf_setup {
     g_rd.pf_logits_host = make_host_buf(g_rd.regions * g_rd.vocab * 4l, false, [cached = true])
     g_rd.pf_cmd = alloc_cmd()
     if (g_env_vulkan.vk_overlap) {
-        let nring = 3l + (g_rd.n_layers + PF_CHUNK_MAX - 1l) / PF_CHUNK_MAX
+        let cap = pf_chunk_cap()
+        let nring = 3l + (g_rd.n_layers + cap - 1l) / cap
         g_rd.pf_cmd_ring |> reserve(nring)
         for (_i in range64(nring)) {
             g_rd.pf_cmd_ring |> push(alloc_cmd())
@@ -2581,7 +2591,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     raw = g_rd.pf_cmd_ring[nchunk]
                     nchunk++
                     cmd_open(raw, true)
-                    cstep = min(cstep * 2l, PF_CHUNK_MAX)
+                    cstep = min(cstep * 2l, pf_chunk_cap())
                     nextb += cstep
                 }
                 let b = int(l * PF_ROLES)

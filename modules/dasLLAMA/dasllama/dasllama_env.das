@@ -521,11 +521,17 @@ struct public VulkanEnv {
     @clarg_doc = "Prefill record/execute overlap: the window chain submits in ramped chunks (1,2,4,8 layers) so the GPU starts while the CPU still records; 0 pins the single fenced submit (the per-role GPU profile pins it too, so a chunk gap never bills to a role)."
     vk_overlap : bool = true
 
+    @clarg_doc = "Layers one prefill submit holds at most (the overlap ramp's cap, 1..8); 0 = 1 on an integrated GPU, 8 on a discrete one. A Linux amdgpu resets the device under a job past its watchdog (about 10 s), which an iGPU's 8-layer chunk reaches on a long prompt."
+    vk_chunk : int64 = 0l
+
     @clarg_doc = "Device-side token-embedding gather for the resident prefill and every token command (the one-row step, the N-row command, the NextN verify and draft): a q8 or K-quant table off its own plane (the tied classifier's, or an untied table's where it fits the room past the weights and the K/V), an F32/F16/BF16 table off its exact f32 rows uploaded under a 512 MB cap; 0 keeps the CPU embed loop. `set_gpu_resident_embed` pins it for the next loads in process."
     vk_gpu_embed : bool = true
 
     @clarg_doc = "Pin REQUIRE_FULL_SUBGROUPS on every class pipeline (instrument; measured slower than plain pipelines on the mm_a gate shape, so those are the default)."
     vk_fullsg : bool = false
+
+    @clarg_doc = "The subgroup width every class pipeline pins where the device's own differs and its compute stage may pin it (Vulkan 1.3 subgroupSizeControl; RDNA runs 32 or 64 lanes and defaults to 64): the coopmat tiles, the h128 attention twin and the tower tiles own four 32-lane fragments a workgroup, so a device left at 64 serves the sdot4 tiles and the scalar attention instead. 0 = the device's own width."
+    vk_subgroup : int64 = 32l
 
     @clarg_doc = "Place the planes in the ReBAR device-local host-visible memory type (one larger than 1 GB present) and write uploads straight into them. Off by default: on the NVIDIA WDDM driver a mapped plane is a host-side shadow the manager parks in system memory under pressure, and a host-experts plan then decodes at PCIe speed (gemma-4 26B Q8_0 8.1 tok/s mapped against 32.7 staged, the 35B-A3B 38 against 71: debug-jit readings, the ReBAR entry in modules/dasLLAMA/PERF_LEDGER.md) - the default stages every upload into unmapped device-local planes."
     vk_rebar : bool = false

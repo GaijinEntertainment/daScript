@@ -2572,8 +2572,8 @@ def private vt_sets_q3v(var r : VtResident) {
 //! reads `g_gpu` ahead of this answer
 def public vulkan_tower_arms : bool => gpu_want_arms_tier() && vk_moe_init()
 
-//! the arm every chain reads after its shape check: the want and the device first, then the flash arm and the KHR tile where
-//! the arm - or the GEMM feed off cm2, when the chain's GEMMs ride it (`gemm_off_cm2`) - reads it; `ok` false counted the decline
+//! the arm every chain reads after its shape check: the want and the device first, then the tile family the flash arm and
+//! the GEMM feed off cm2 (when the chain's GEMMs ride it, `gemm_off_cm2`) read (`vulkan_tower_tiles_on`); `ok` false counted the decline
 def private vt_arm(r : VtResident; gemm_off_cm2 : bool = false) : tuple<ok : bool; khr : bool; gemm_khr : bool> {
     if (!vulkan_tower_arms()) {
         vt_decline(r, VulkanTowerDecline.device)
@@ -2581,7 +2581,7 @@ def private vt_arm(r : VtResident; gemm_off_cm2 : bool = false) : tuple<ok : boo
     }
     let khr = !cm2_fa_on()
     let gemm_khr = gemm_off_cm2 && f16_gemm_khr()
-    if ((khr || gemm_khr) && !khr_kq_tile_on()) {
+    if (!vulkan_tower_tiles_on()) {
         vt_decline(r, VulkanTowerDecline.device)
         return (ok = false, khr = khr, gemm_khr = gemm_khr)
     }

@@ -1,9 +1,11 @@
 options gen2
 options indenting = 4
 
-// The `precise` shader property: every float arithmetic result the module emits - the called function's
-// included, the vector product too - carries NoContraction, one decoration per float op and each on a float
-// op's result id; the plain twin of the same body carries none; the class-kernel form carries the property.
+// The `precise` shader property: every float arithmetic result the
+// module emits - the called function's included, the vector product
+// and `mad`'s Fma too - carries NoContraction, one decoration per
+// float op and each on a float op's result id; the plain twin of the
+// same body carries none; the class-kernel form carries the property.
 
 require dastest/testing_boost public
 require _spirv_common
@@ -20,6 +22,8 @@ def private float_results_and_no_contraction(words : array<uint>) : tuple<result
                 opcode == uint(SpvOp.MatrixTimesVector) || opcode == uint(SpvOp.MatrixTimesMatrix)) {
             let result_id = w[s + 1]
             result_ids |> insert(result_id)
+        } elif (opcode == uint(SpvOp.ExtInst) && n >= 4 && w[s + 3] == uint(GLSLstd450.Fma)) {
+            result_ids |> insert(w[s + 1])
         } elif (opcode == uint(SpvOp.Decorate) && n >= 2 && w[s + 1] == uint(SpvDecoration.NoContraction)) {
             let target_id = w[s]
             no_contraction_targets |> push(target_id)
@@ -56,8 +60,9 @@ def private check_marked(t : T?; words : array<uint>; lbl : string; least : int)
 def test_precise_marks_every_float_op(t : T?) {
     t |> run("precise: NoContraction on every float op, the callee's and the vector product included") <| @(t : T?) {
         var words <- precise_words()
-        check_marked(t, words, "precise", 8)
+        check_marked(t, words, "precise", 9)
         t |> success(has_op(words, SpvOp.VectorTimesScalar), "precise: the float2 * scalar product is emitted")
+        t |> success(has_op(words, SpvOp.ExtInst), "precise: the mad's Fma is emitted")
         delete words
     }
 }

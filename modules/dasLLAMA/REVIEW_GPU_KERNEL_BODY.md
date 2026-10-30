@@ -110,14 +110,17 @@ loop - whose writes land in the same `@workgroup` elements (the same array, or t
 array a slot argument indexes) puts a `barrier()` between them - or passes the other slot.** A fold
 carries one barrier, so a thread still summing the first fold's partials reads the second's writes.
 
-**Never put an op every lane of its exchange set must reach together - a `barrier()`, a simdgroup
-matrix op, a subgroup shuffle, vote, ballot or reduction, or a call to a function that runs one,
+**Never put an op every lane of its exchange set must reach together - a `barrier()`, a cooperative
+matrix op (a Metal simdgroup matrix op, a KHR or NV cooperative-matrix load, store, multiply-add or
+convert), a subgroup shuffle, vote, ballot or reduction, or a call to a function that runs one,
 directly or through its callees - behind an early `return`, a loop or a branch decided by a value
 that can differ between lanes of the op's exchange set - gate or bound it with a value equal across that set, or
 hoist the op out.** The exchange set is the lanes the op reads: the workgroup for a barrier, the
-simdgroup for a simdgroup matrix op, vote, ballot or reduction, the partner lanes a shuffle reads,
-and for a
-call the widest set among the ops it reaches. A lane that exits early, or reaches the op a
+op's declared scope for a cooperative matrix op (the simdgroup, the subgroup, the workgroup for NV
+cm2), the subgroup for a vote, ballot or reduction, the partner lanes a shuffle reads, and for a
+call the widest set among the ops it reaches. Whether a value differs between lanes is judged at
+every subgroup width the kernel's pipeline can run at - a Vulkan pipeline runs pinned or at the
+device's own width. A lane that exits early, or reaches the op a
 different number of times, leaves the set unable to complete it.
 
 **An encoder that dispatches a kernel form (a kernel class or a template instance) indexing a

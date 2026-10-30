@@ -101,12 +101,16 @@ rows' base inside that buffer - `kvd` merged against the split path's `npos * kv
 
 **A window chain submits in chunks so recording overlaps execution.** The chain splits on a
 1, 2, 4, 8-layer ramp, so the GPU starts on an early small chunk while the CPU is still
-recording, and the doubling stops at 8 layers. Chunks go out through `submit_nofence`; the
+recording, and the doubling stops at the chunk cap (`pf_chunk_cap`): 8 layers on a discrete
+GPU, one layer on an integrated one, `DASLLAMA_VK_CHUNK` naming another. The cap is the device's
+job watchdog in disguise - a Linux amdgpu resets the device under a job past about 10 s, and an
+iGPU's 8-layer chunk of a 512-row window reaches that at a long context, where a discrete card's
+chunk stays at milliseconds. Chunks go out through `submit_nofence`; the
 window's last submit is the `submit_wait` that signals the one fence the caller waits on.
 Ordering between chunks is the hazard rail's: a barrier recorded in chunk N+1 covers the
 writes of chunk N because submission order on one queue spans submits, and the terminal
 fence covers every earlier submit the same way. The command-buffer ring holds
-`3 + ceil(depth/8)` buffers, so chunk N records into a free buffer while chunk N-1 executes;
+`3 + ceil(depth/cap)` buffers, so chunk N records into a free buffer while chunk N-1 executes;
 the per-role GPU profile pins the single submit, so a chunk gap never bills to a role. The
 profile's stamps are bottom-of-pipe timestamps, and what a driver does at one decides how the
 roles read: the Windows driver (616) writes it in passing, so two roles the hazard rail lets

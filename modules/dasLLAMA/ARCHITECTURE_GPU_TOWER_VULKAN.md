@@ -222,7 +222,8 @@ a weight plane or scratch buffer over `vk_max_storage_range()`, or where the fam
 differ from the ones the kernel home stamps (`Q3A_TOK_PER_CHUNK`, qwen3a's 13 positions a chunk;
 `GK_G4A_ATTN_PAST` and `GK_G4A_ATTN_CAP`, gemma4a's 12-row window and cap 50),
 `knob` (`DASLLAMA_VK_TOWER`), `device` where the tier's want (`DASLLAMA_GPU`, read before any
-device init) or a class declines, or for every front where the f16 GEMM feed is off
+device init) or a class declines, where the device has neither tile family the chains ride
+(`vulkan_tower_tiles_on`: cm2, or the KHR tile at subgroup 32; the twin tests skip off it), or for every front where the f16 GEMM feed is off
 (`vulkan_tower_front_route`: the `DASLLAMA_COOPMAT=sdot4` mode - the block chains ride the q8
 batch tile and the KHR flash tile there and serve), `memory` where an allocation fails (the partial
 upload or scratch is released, the CPU chain serves). Each decline is logged once per reason per model.

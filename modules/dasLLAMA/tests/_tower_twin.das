@@ -20,6 +20,7 @@ require _vision_oracle   // the mtmd dump parser and the canvas fixtures the poi
 require _model_tier   // tower_parity_stats - the rel_l2 statistic the audio twins' bar reads
 require _gpu_knobs public
 require ?vulkan dasllama/dasllama_vulkan_tower
+require ?vulkan dasllama/dasllama_vulkan_common   // vulkan_tower_tiles_on, g_gpu: the tile-family skip's words
 require ?vulkan dasllama/dasllama_audio_io
 
 let TWIN_SLACK_VK = 1.5   //! 1.5x: the q8 chain's activation quants plus f16 weight scales, the tiles' summation order
@@ -81,6 +82,10 @@ def vulkan_twin_seat(tt : T?) : bool {
         } else {
             if (!vulkan_tower_arms()) {
                 tt |> skip("no Vulkan device (DASLLAMA_GPU=1 and a device the tier serves)")
+                return false
+            }
+            if (!vulkan_tower_tiles_on()) {
+                tt |> skip("the tower's flash and f16 GEMM stamps need cm2 or the KHR tile at subgroup 32 (subgroup {g_gpu.subgroup_size} here) - the tower declines device")
                 return false
             }
             return true

@@ -2913,7 +2913,7 @@ class template MmBatchT : MoeCmBase {
     @template_constant EDGE : bool = true      //! rows past d / cnt: guarded staging, bounced stores
     @workgroup cml_a : uint[int(BT * CML_SST)]   //! A tile: BT weight rows x one block (32 K) as f16 pairs
     @workgroup cml_b : uint[int(BT * CML_SST)]   //! B tile: BT token rows x one block
-    @workgroup @template_gate = EDGE cml_o : float16[1024]   //! 4 warps x 16x16 f16-acc store bounce (edge tiles only)
+    @workgroup @template_gate = EDGE cml_o : float[1024]   //! 4 warps x 16x16 f32-acc store bounce (edge tiles only)
 
     // stage A: BT weight rows x 1 block; OOR rows -> 0 on the edge policy
     def stage_a(wblk0, gm0, nbb, kb, lw, lr0 : uint) {
@@ -2957,7 +2957,7 @@ class template MmBatchT : MoeCmBase {
     }
 
     // an edge tile's fragment, already stored to this warp's cml_o slab (rowmajor, row = weight
-    // dim): 32 lanes widen and write 8 elements each under the row and column bounds
+    // dim): 32 lanes write 8 elements each under the row and column bounds
     def bounce_out(fr, fc, dr, dc, row0, cnt : uint) {
         static_if (EDGE) {
             let lane = gl_SubgroupInvocationID
@@ -2967,7 +2967,7 @@ class template MmBatchT : MoeCmBase {
                 let wr = dr + fr * 16u + idx / 16u
                 let tc = dc + fc * 16u + idx % 16u
                 if (wr < pa.d && tc < cnt) {
-                    y[(row0 + tc) * pa.d + wr] = float(cml_o[ob + idx])
+                    y[(row0 + tc) * pa.d + wr] = cml_o[ob + idx]
                 }
             }
         }
@@ -3000,7 +3000,7 @@ class template MmBatchT : MoeCmBase {
 
     def l_tile(wblk0, row0, cnt, gm0, gn0, nbb, warp_r, warp_c, lw, lr0 : uint) {   // nolint:STYLE038 — the verbatim tile pass, parity-locked to the shipped kernel
         static_if (BT == 128u) {
-        var acc00, acc01, acc02, acc03, acc10, acc11, acc12, acc13, acc20, acc21, acc22, acc23, acc30, acc31, acc32, acc33 : coopmatAcc_f16_16x16
+        var acc00, acc01, acc02, acc03, acc10, acc11, acc12, acc13, acc20, acc21, acc22, acc23, acc30, acc31, acc32, acc33 : coopmatAcc_f32_16x16   //! f32: an f16 accumulator rounds toward zero on RDNA3's matrix cores
         var kb = 0u
         while (kb < nbb) {
             stage_a(wblk0, gm0, nbb, kb, lw, lr0)
@@ -3055,43 +3055,26 @@ class template MmBatchT : MoeCmBase {
         let dc = gn0 + warp_c * 64u
         let whole = !EDGE || (gm0 + 128u <= pa.d && gn0 + 128u <= cnt)
         if (whole) {
-            var accw : coopmatAcc_f32_16x16
             let yb = (row0 + dc) * pa.d + dr
-            coopmatConvert(accw, acc00)
-            coopmatStore(accw, y, int(yb), int(pa.d), 1)
-            coopmatConvert(accw, acc01)
-            coopmatStore(accw, y, int(yb + 16u * pa.d), int(pa.d), 1)
-            coopmatConvert(accw, acc02)
-            coopmatStore(accw, y, int(yb + 32u * pa.d), int(pa.d), 1)
-            coopmatConvert(accw, acc03)
-            coopmatStore(accw, y, int(yb + 48u * pa.d), int(pa.d), 1)
-            coopmatConvert(accw, acc10)
-            coopmatStore(accw, y, int(yb + 16u), int(pa.d), 1)
-            coopmatConvert(accw, acc11)
-            coopmatStore(accw, y, int(yb + 16u * pa.d + 16u), int(pa.d), 1)
-            coopmatConvert(accw, acc12)
-            coopmatStore(accw, y, int(yb + 32u * pa.d + 16u), int(pa.d), 1)
-            coopmatConvert(accw, acc13)
-            coopmatStore(accw, y, int(yb + 48u * pa.d + 16u), int(pa.d), 1)
-            coopmatConvert(accw, acc20)
-            coopmatStore(accw, y, int(yb + 32u), int(pa.d), 1)
-            coopmatConvert(accw, acc21)
-            coopmatStore(accw, y, int(yb + 16u * pa.d + 32u), int(pa.d), 1)
-            coopmatConvert(accw, acc22)
-            coopmatStore(accw, y, int(yb + 32u * pa.d + 32u), int(pa.d), 1)
-            coopmatConvert(accw, acc23)
-            coopmatStore(accw, y, int(yb + 48u * pa.d + 32u), int(pa.d), 1)
-            coopmatConvert(accw, acc30)
-            coopmatStore(accw, y, int(yb + 48u), int(pa.d), 1)
-            coopmatConvert(accw, acc31)
-            coopmatStore(accw, y, int(yb + 16u * pa.d + 48u), int(pa.d), 1)
-            coopmatConvert(accw, acc32)
-            coopmatStore(accw, y, int(yb + 32u * pa.d + 48u), int(pa.d), 1)
-            coopmatConvert(accw, acc33)
-            coopmatStore(accw, y, int(yb + 48u * pa.d + 48u), int(pa.d), 1)
+            coopmatStore(acc00, y, int(yb), int(pa.d), 1)
+            coopmatStore(acc01, y, int(yb + 16u * pa.d), int(pa.d), 1)
+            coopmatStore(acc02, y, int(yb + 32u * pa.d), int(pa.d), 1)
+            coopmatStore(acc03, y, int(yb + 48u * pa.d), int(pa.d), 1)
+            coopmatStore(acc10, y, int(yb + 16u), int(pa.d), 1)
+            coopmatStore(acc11, y, int(yb + 16u * pa.d + 16u), int(pa.d), 1)
+            coopmatStore(acc12, y, int(yb + 32u * pa.d + 16u), int(pa.d), 1)
+            coopmatStore(acc13, y, int(yb + 48u * pa.d + 16u), int(pa.d), 1)
+            coopmatStore(acc20, y, int(yb + 32u), int(pa.d), 1)
+            coopmatStore(acc21, y, int(yb + 16u * pa.d + 32u), int(pa.d), 1)
+            coopmatStore(acc22, y, int(yb + 32u * pa.d + 32u), int(pa.d), 1)
+            coopmatStore(acc23, y, int(yb + 48u * pa.d + 32u), int(pa.d), 1)
+            coopmatStore(acc30, y, int(yb + 48u), int(pa.d), 1)
+            coopmatStore(acc31, y, int(yb + 16u * pa.d + 48u), int(pa.d), 1)
+            coopmatStore(acc32, y, int(yb + 32u * pa.d + 48u), int(pa.d), 1)
+            coopmatStore(acc33, y, int(yb + 48u * pa.d + 48u), int(pa.d), 1)
         } else {
             static_if (EDGE) {
-                // edge tile: every fragment bounces its f16 acc through this warp's cml_o slab
+                // edge tile: every fragment bounces its acc through this warp's cml_o slab
                 let ob = gl_SubgroupID * 256u
                 for (fi in range(16)) {
                     let fr = uint(fi) / 4u       // fragment row: weight offset fr*16
@@ -3140,7 +3123,7 @@ class template MmBatchT : MoeCmBase {
 
     def m_tile(wblk0, row0, cnt, gm0, gn0, nbb, warp_r, warp_c, lw, lr0 : uint) {
         static_if (BT == 64u) {
-        var acc00, acc01, acc10, acc11 : coopmatAcc_f16_16x16
+        var acc00, acc01, acc10, acc11 : coopmatAcc_f32_16x16   //! f32, as the l tile's
         var kb = 0u
         while (kb < nbb) {
             stage_a(wblk0, gm0, nbb, kb, lw, lr0)
@@ -3169,19 +3152,14 @@ class template MmBatchT : MoeCmBase {
         let dc = gn0 + warp_c * 32u
         let whole = !EDGE || (gm0 + 64u <= pa.d && gn0 + 64u <= cnt)
         if (whole) {
-            var accw : coopmatAcc_f32_16x16
             let yb = (row0 + dc) * pa.d + dr
-            coopmatConvert(accw, acc00)
-            coopmatStore(accw, y, int(yb), int(pa.d), 1)
-            coopmatConvert(accw, acc01)
-            coopmatStore(accw, y, int(yb + 16u * pa.d), int(pa.d), 1)
-            coopmatConvert(accw, acc10)
-            coopmatStore(accw, y, int(yb + 16u), int(pa.d), 1)
-            coopmatConvert(accw, acc11)
-            coopmatStore(accw, y, int(yb + 16u * pa.d + 16u), int(pa.d), 1)
+            coopmatStore(acc00, y, int(yb), int(pa.d), 1)
+            coopmatStore(acc01, y, int(yb + 16u * pa.d), int(pa.d), 1)
+            coopmatStore(acc10, y, int(yb + 16u), int(pa.d), 1)
+            coopmatStore(acc11, y, int(yb + 16u * pa.d + 16u), int(pa.d), 1)
         } else {
             static_if (EDGE) {
-                // edge tile: bounce each f16 acc through this warp's cml_o slab, bounds-checked write-out
+                // edge tile: bounce each acc through this warp's cml_o slab, bounds-checked write-out
                 let ob = gl_SubgroupID * 256u
                 for (fi in range(4)) {
                     let fr = uint(fi) / 2u       // fragment row: weight offset fr*16
@@ -8092,12 +8070,13 @@ class TtsSrcNoise : GkSrcNoise {
     }
 }
 
-//! the mixed source signal on either resample law
+//! the mixed source signal on either resample law; `precise` keeps `tts_sin_big`'s four-piece reduction and the mix's
+//! operation order - a driver's inexact algebra (Mesa's NIR) folds the pieces into one 2 pi and lands 0.02 rad off at 7e5
 [vk_dispatch(name = "tts_src_sines_torch_cls", kernel = "run", grid = "n/256", params = "n : int64")]
 class TtsSrcSinesTorch : GkSrcSines {
     override TORCH = true
 
-    [spirv_kernel(local_size_x = 256)]
+    [spirv_kernel(local_size_x = 256, precise = true)]
     def run {
         src_sines_body()
     }
@@ -8105,7 +8084,7 @@ class TtsSrcSinesTorch : GkSrcSines {
 
 [vk_dispatch(name = "tts_src_sines_onnx_cls", kernel = "run", grid = "n/256", params = "n : int64")]
 class TtsSrcSinesOnnx : GkSrcSines {
-    [spirv_kernel(local_size_x = 256)]
+    [spirv_kernel(local_size_x = 256, precise = true)]
     def run {
         src_sines_body()
     }

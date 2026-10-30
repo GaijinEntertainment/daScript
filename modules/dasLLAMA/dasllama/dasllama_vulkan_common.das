@@ -126,8 +126,29 @@ def cm2_splitk_env : int64 => g_cm2_splitk >= 0l ? g_cm2_splitk : g_env_vulkan.c
 [arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#khr-mm-kq-tile")]
 def khr_kq_tile_on : bool => g_gpu.has_coopmat && g_gpu.subgroup_size == 32l
 
+//! the h128 coopmat attention twin: its 128 threads own four 16x16 fragments as four 32-lane subgroups, so a wave64 device
+//! the tier cannot pin at 32 (two owners in one subgroup, the fragment ops divergent) takes the generic chunked tile
+def h128_twin_on : bool => khr_kq_tile_on() && vk_fa_on()
+
 //! the cm2 flash tiles serve where the device was created in cm2 mode AND the mode still reads cm2 - a test that forces the mode in-process moves the pick with it
 def cm2_fa_on : bool => g_gpu.has_coopmat2_fa && g_gpu.coopmat_mode == COOPMAT_CM2
+
+//! the tower driver's chains (vision, whisper-class, GigaAM, VAD, TTS, NMT) ride cooperative-matrix flash and f16 GEMM
+//! stamps - the cm2 family, or the KHR tile at subgroup 32 - so a device with neither (a wave64 KHR device the tier cannot
+//! pin at 32) declines every tower `device`
+def vulkan_tower_tiles_on : bool => cm2_fa_on() || khr_kq_tile_on()
+
+//! the subgroup width the tier runs `phys` at: the device's own, or `DASLLAMA_VK_SUBGROUP` where that differs and the
+//! compute stage may pin it - `width != own` says the class pipelines pin
+[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
+def vk_subgroup_width(phys : VkPhysicalDevice) : tuple<width : uint; own : uint> {
+    let own = subgroup_properties(phys).subgroupSize
+    let want = g_env_vulkan.vk_subgroup > 0l ? uint(g_env_vulkan.vk_subgroup) : 0u
+    if (want == 0u || want == own || !compute_subgroup_size_pinnable(phys, want)) {
+        return (width = own, own = own)
+    }
+    return (width = want, own = own)
+}
 
 //! the per-32 formats and mx4: off the f16 feed their batch tile is the per-32 one (`Blk32BatchT`), under the kq batch rail
 def blk32_rail(fmt : int) : bool => fmt == int(KqFmt.mx4) || kq_dense_b32(fmt)
@@ -451,7 +472,9 @@ struct GpuState {
     staging : HostBuf
     fence : VkFence          // the one reusable submit fence (reset after every wait)
     rows_per_wg : int64      // subgroups per workgroup = output rows per workgroup
-    subgroup_size : int64    // the device's subgroupSize (32 on NVIDIA; the KHR kq tile gates on it)
+    subgroup_size : int64    // the width the class pipelines run at: the device's own, or `sg_pin` (the KHR kq tile and the h128 twin gate on 32)
+    sg_pin : uint            // the width every class pipeline pins (DASLLAMA_VK_SUBGROUP, where the device's own differs and its compute stage may pin); 0 = the device's own
+    integrated : bool        // VkPhysicalDeviceType INTEGRATED_GPU: the prefill window submits one layer at a time (`pf_chunk_cap`)
     has_coopmat : bool       // device supports VK_KHR_cooperative_matrix (the f16/int8 tensor tiles)
     has_coopmat2 : bool      // device supports NV_cooperative_matrix2 (tensor-addressed wg tiles + decode fns)
     has_coopmat2_fa : bool   // ... plus the cm2 flash-attention trio (reductions, conversions, per-element ops), on a device created in cm2 mode
@@ -954,7 +977,10 @@ def release_host_buf(var hb : HostBuf&) {
 def nonowning_buf(h : uint64) : Buffer => vk_value_to_boost(unsafe(reinterpret<VkBuffer>(h)))
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
-def resolve_coopmat_mode(has_cm, has_cm2 : bool) : int {
+def resolve_coopmat_mode(has_cm, has_cm2 : bool; subgroup_size : int64) : int {
+    if (subgroup_size != 32l) {
+        return COOPMAT_SDOT4
+    }
     var cmode = has_cm2 ? 4 : (has_cm ? 3 : 0)
     if (has_cm) {
         let mode = g_env_vulkan.coopmat
@@ -1143,7 +1169,8 @@ struct public VkExtEntry {
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-extension-roster")]
 def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
-    let sp = subgroup_properties(phys)
+    let sgw = vk_subgroup_width(phys)
+    let want = g_env_vulkan.vk_subgroup
     var props : VkPhysicalDeviceProperties
     vkGetPhysicalDeviceProperties(phys, props)
     let has_cm = cooperative_matrix_supported(phys)
@@ -1154,21 +1181,25 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
             present = storage_8_16_supported(phys),
             rides = "the f16 and int8 SSBO members every kernel reads; the tier is disabled without it"),
         VkExtEntry(name = "compute subgroup ops (basic, arithmetic, shuffle, ballot) at subgroupSize 32 or more",
-            present = subgroup_compute_ops_supported(phys) && sp.subgroupSize >= 32u,
-            rides = "the lane reductions of every quant kernel ({int(sp.subgroupSize)} on this device); the tier is disabled without it"),
+            present = subgroup_compute_ops_supported(phys) && sgw.width >= 32u,
+            rides = "the lane reductions of every quant kernel ({int(sgw.width)} on this device); the tier is disabled without it"),
+        VkExtEntry(name = "subgroupSizeControl at {want} lanes over the device's {int(sgw.own)} (Vulkan 1.3)",
+            present = want > 0l && uint(want) != sgw.own && compute_subgroup_size_pinnable(phys, uint(want)),
+            knob = "DASLLAMA_VK_SUBGROUP", off = want <= 0l,
+            rides = "every class pipeline pinned at that width: the coopmat tiles, the h128 attention twin and the tower tiles on a wave64 RDNA device; a device already at it pins nothing, and one that cannot pin serves the sdot4 tiles and the scalar attention"),
         VkExtEntry(name = "VK_KHR_shader_integer_dot_product", present = integer_dot_product_supported(phys),
             rides = "the sdot4 integer tiles and the quant dot kernels; the tier is disabled without it"),
         VkExtEntry(name = "VK_KHR_cooperative_matrix", present = has_cm,
-            rides = "the KHR f16 and int8 tiles (the mm mode), the resident MoE block's expert pieces in mm mode, the KHR flash tile and its sink stamps, the KHR f16 GEMM off cm2 (at subgroup 32), the h128 attention twin, the tower driver's KHR route (the vision, whisper-class and rotary FastConformer (GigaAM) bidirectional flash tiles, the qwen25v f16 GEMM off cm2 and the audio fronts' f16 GEMMs - the conv stems, the qwen3a, canary and GigaAM fronts), the TTS seats' f16 tile off cm2 (the StyleTTS2 decoder and generator convs, at subgroup 32), and the per-layer-embedding window projection's f16 tile off cm2 (at subgroup 32, dim and rows 16-multiples); without it the sdot4 tiles and the chunked attention serve, a resident MoE's routed block rides the Q8-fed chain, the tower driver declines `device` off cm2, the TTS decoder convs ride the f32 tile, and the per-layer-embedding window projection rides the router GEMV"),
+            rides = "the KHR f16 and int8 tiles (the mm mode), the resident MoE block's expert pieces in mm mode, the KHR flash tile and its sink stamps, the KHR f16 GEMM off cm2 (at subgroup 32), the h128 attention twin (at subgroup 32), the tower driver's KHR route (the vision, whisper-class and rotary FastConformer (GigaAM) bidirectional flash tiles, the qwen25v f16 GEMM off cm2 and the audio fronts' f16 GEMMs - the conv stems, the qwen3a, canary and GigaAM fronts), the TTS seats' f16 tile off cm2 (the StyleTTS2 decoder and generator convs, at subgroup 32), and the per-layer-embedding window projection's f16 tile off cm2 (at subgroup 32, dim and rows 16-multiples); without it the sdot4 tiles and the chunked attention serve, a resident MoE's routed block rides the Q8-fed chain, the tower driver declines `device` off cm2, the TTS decoder convs ride the f32 tile, and the per-layer-embedding window projection rides the router GEMV"),
         VkExtEntry(name = "VK_NV_cooperative_matrix2 (workgroup scope, flexible dimensions, tensor addressing, block loads, bufferDeviceAddress)",
             present = has_cm2,
             rides = "the cm2 decode-in-load prefill tiles, the served default, and the per-layer-embedding window projection's f16 tile (dim a multiple of the small f16 GEMM's eight 64-deep chunks, else the router GEMV); without it the KHR tiles serve, the projection on the KHR f16 tile where that fits and on the router GEMV where none does (DASLLAMA_COOPMAT picks a mode by name)"),
         VkExtEntry(name = "VK_NV_cooperative_matrix2 reductions, conversions and per-element operations",
             present = has_cm2 && cooperative_matrix2_fa_supported(phys),
-            knob = "DASLLAMA_COOPMAT", off = resolve_coopmat_mode(has_cm, has_cm2) != COOPMAT_CM2,
+            knob = "DASLLAMA_COOPMAT", off = resolve_coopmat_mode(has_cm, has_cm2, int64(sgw.width)) != COOPMAT_CM2,
             rides = "the cm2 flash-attention stamps, on a device created in cm2 mode, and the tower driver's cm2 route (the vision, whisper-class and rotary FastConformer (GigaAM) bidirectional flash tiles, and the GigaAM front's f16 GEMMs); without them the KHR flash tile serves at subgroup 32, the h128 twin and the chunked attention tiles where it declines, and the tower driver takes its KHR route"),
         VkExtEntry(name = "VK_NV_cooperative_matrix_decode_vector", present = has_cm2 && cooperative_matrix2_decode_vector_supported(phys),
-            knob = "DASLLAMA_VK_DECVEC", off = !g_env_vulkan.vk_decvec || resolve_coopmat_mode(has_cm, has_cm2) != COOPMAT_CM2,
+            knob = "DASLLAMA_VK_DECVEC", off = !g_env_vulkan.vk_decvec || resolve_coopmat_mode(has_cm, has_cm2, int64(sgw.width)) != COOPMAT_CM2,
             rides = "the cm2 tiles' four-wide decode callback; without it the scalar callback serves and a MoE prefill window runs about half again as long"),
         VkExtEntry(name = "VK_NV_shader_sm_builtins", present = device_extension_available(phys, "VK_NV_shader_sm_builtins") && sm > 0,
             rides = "the SM count the dense tile pick, split-k and the decode attention's partials plane read ({sm} here) - past four pieces the token command records a wide twin at eight; without it the l tile serves every dense GEMM, nothing splits k and the attention stays at four pieces"),
@@ -1241,7 +1272,7 @@ def private vk_device_flags : bool {
     // coopmat requested whenever supported — the fa twin needs it even in sdot4 GEMM mode
     g_gpu.has_coopmat = cooperative_matrix_supported(g_gpu.phys)
     g_gpu.has_coopmat2 = g_gpu.has_coopmat && cooperative_matrix2_supported(g_gpu.phys)
-    g_gpu.coopmat_mode = resolve_coopmat_mode(g_gpu.has_coopmat, g_gpu.has_coopmat2)
+    g_gpu.coopmat_mode = resolve_coopmat_mode(g_gpu.has_coopmat, g_gpu.has_coopmat2, int64(vk_subgroup_width(g_gpu.phys).width))
     // the mode conjunct stays: a device created off cm2 mode (`DASLLAMA_COOPMAT=mm`) enables no coopmat2 extension, and the feature probe alone would say yes
     g_gpu.has_coopmat2_fa = g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2 && cooperative_matrix2_fa_supported(g_gpu.phys)
     g_gpu.decvec_on = g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2 && g_env_vulkan.vk_decvec && cooperative_matrix2_decode_vector_supported(g_gpu.phys)
@@ -1383,7 +1414,8 @@ def vk_moe_init : bool {
     if (g_gpu.has_memprio) {
         to_log(LOG_INFO, "dasLLAMA vulkan tier: memory-priority tags armed (DASLLAMA_VK_MEMPRIO=1 - the A/B arm)\n")
     }
-    let sg = subgroup_properties(g_gpu.phys).subgroupSize
+    let sgw = vk_subgroup_width(g_gpu.phys)
+    let sg = sgw.width
     if (sg < 32u) {
         // the gid-mapped quant kernels reduce with xor masks up to 16 (q8k amax spans 32 lanes)
         to_log(LOG_ERROR, "dasLLAMA vulkan tier: subgroupSize {sg} < 32 - tier disabled\n")
@@ -1391,9 +1423,14 @@ def vk_moe_init : bool {
     }
     g_gpu.rows_per_wg = int64((WG_X + sg - 1u) / sg)   // = gl_NumSubgroups for our 1D workgroup
     g_gpu.subgroup_size = int64(sg)
+    g_gpu.sg_pin = sg != sgw.own ? sg : 0u
     var pdp : VkPhysicalDeviceProperties
     vkGetPhysicalDeviceProperties(g_gpu.phys, pdp)
     g_gpu.msr = int64(pdp.limits.maxStorageBufferRange)
+    g_gpu.integrated = pdp.deviceType == VkPhysicalDeviceType.INTEGRATED_GPU
+    if (g_gpu.integrated) {
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: an integrated GPU - the prefill window submits one layer at a time (DASLLAMA_VK_CHUNK)\n")
+    }
     g_gpu.max_wg_invocations = int64(pdp.limits.maxComputeWorkGroupInvocations)
     // env-vs-auto resolution shared with the DlimConfiguration source (resolve_weight_cap)
     let heap = query_heap_info(g_gpu.phys)
@@ -1447,7 +1484,8 @@ def vk_moe_init : bool {
     g_init_failed = false
     g_gpu.full_sg_on = g_env_vulkan.vk_fullsg && compute_full_subgroups_supported(g_gpu.phys)
     let t_up = get_time_usec(t0)
-    to_log(LOG_INFO, "dasLLAMA vulkan tier: device ready (subgroup {int(sg)}, {g_gpu.rows_per_wg} rows/wg{g_gpu.full_sg_on ? ", full subgroups (DASLLAMA_VK_FULLSG)" : ""}{g_gpu.decvec_on ? ", four-wide decode (DASLLAMA_VK_DECVEC)" : ""}) in {t_up / 1000} ms: the device {t_dev / 1000} ({borrowed != 0ul ? "borrowed" : "made"}), the queues and the heap query {(t_heap - t_dev) / 1000}, the pools {(t_pool - t_heap) / 1000}, the staging buffer {(t_up - t_pool) / 1000}\n")
+    let pinned = g_gpu.sg_pin != 0u ? " pinned over the device's {int(sgw.own)} (DASLLAMA_VK_SUBGROUP)" : ""
+    to_log(LOG_INFO, "dasLLAMA vulkan tier: device ready (subgroup {int(sg)}{pinned}, {g_gpu.rows_per_wg} rows/wg{g_gpu.full_sg_on ? ", full subgroups (DASLLAMA_VK_FULLSG)" : ""}{g_gpu.decvec_on ? ", four-wide decode (DASLLAMA_VK_DECVEC)" : ""}) in {t_up / 1000} ms: the device {t_dev / 1000} ({borrowed != 0ul ? "borrowed" : "made"}), the queues and the heap query {(t_heap - t_dev) / 1000}, the pools {(t_pool - t_heap) / 1000}, the staging buffer {(t_up - t_pool) / 1000}\n")
     vk_log_ext_roster()
     if (g_gpu.has_coopmat2 && g_env_vulkan.vk_decvec && !g_gpu.decvec_on) {
         to_log(LOG_WARNING, "dasLLAMA vulkan tier: the driver reports no VK_NV_cooperative_matrix_decode_vector, so the cm2 tiles run the scalar decode arm - a MoE prefill window runs about half again as long as on a driver with the four-wide arm\n")
@@ -3654,9 +3692,7 @@ def vkd_class_pipe(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wm
     if (intptr(boost_value_to_vk(c.pipes[ord])) != 0ul) {
         delete c.pipes[ord]   // a rebuild (vkd_pipes_rebuild) replaces a live slot; the device is idle by contract
     }
-    c.pipes[ord] <- (g_gpu.full_sg_on
-        ? create_compute_pipeline_full_subgroups(g_gpu.device, c.pipe_layout, shader)
-        : create_compute_pipeline(g_gpu.device, c.pipe_layout, shader))
+    c.pipes[ord] <- create_compute_pipeline_subgroup(g_gpu.device, c.pipe_layout, shader, g_gpu.sg_pin, g_gpu.full_sg_on)
     delete shader   //! the pipeline holds what it needs of the module
     c.pipe_epochs[ord] = g_vkd_pipe_epoch
     g_vkd_pipe_build_us += get_time_usec(t0)

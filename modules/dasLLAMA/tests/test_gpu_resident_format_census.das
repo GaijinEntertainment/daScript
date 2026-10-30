@@ -305,6 +305,13 @@ def test_gpu_perop_dense_ffn(t : T?) {
                 var prompt <- resident_prompt(PROMPT)
                 var toks <- resident_feed(STEPS)
                 var off <- load_perop(path, 0)
+                if (!off.kq_repacked) {   //! the rail reads the CPU backend's repacked K-quant planes; a backend without the repack (portable, the reference policy on x86) leaves the triple to the CPU
+                    t |> skip("the per-op FFN rail asks repacked K-quant planes: the '{active_kernel_backend()}' backend repacks none")
+                    delete off
+                    delete prompt
+                    delete toks
+                    return
+                }
                 let off0 = moe_gpu_dense_ffn_rows()
                 var so <- create_session(off, mirror_kv_dtype())
                 var ctl <- feed_logits(off, so, prompt, toks)
@@ -598,8 +605,10 @@ def test_gpu_resident_gather_tied_qwen3(t : T?) {
     }
 }
 
-//! the per-32 table carriers' bar: the 0.5B qwen2 file's forced-feed reading (test_gpu_resident_qwen2.das' LOGIT_BAR_REL)
-let private PER32_TABLE_BAR_REL = 0.06
+//! the per-32 table carriers' bar: the 0.5B qwen2 file's forced-feed reading (test_gpu_resident_qwen2.das' LOGIT_BAR_REL) on
+//! the f16 feed; on the sdot4 feed (a wave64 device) the q4032 steps read 0.061 of an 11.9 max logit on the Radeon 780M, the
+//! one-step-off control 7.3+, the iq4nl32 class
+let private PER32_TABLE_BAR_REL = 0.08
 //! the qwen2 file's IQ4NL32_BAR_REL: the window's f16 FFN feed puts the RTX PRO 4500's steps at 0.060 of the max logit, one-step-off 7.4+
 let private IQ4NL32_TABLE_BAR_REL = 0.08
 

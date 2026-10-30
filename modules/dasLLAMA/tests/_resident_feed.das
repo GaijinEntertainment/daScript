@@ -1090,6 +1090,13 @@ def greedy_chain_cell(t : T?; path : string) {
     var tr <- load_resident(path, 1l)
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
     if (chain_home()) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!gpu_want_cuda() && g_gpu.xfer_fam < 0) {   //! the chain lands its pick behind the transfer queue, which a one-family device (an iGPU) has none of
+                t |> skip("the greedy chain asks a transfer queue: this device has one queue family")
+                delete tr
+                return
+            }
+        }
         with_dasllama_jobque_() {
             var prompt <- resident_prompt(40l)
             for (off in fixed_array(0l, 3l)) {

@@ -113,8 +113,17 @@ probe row times the class the driver serves. The decode GEMV keeps its quant cha
 **The served GEMM mode resolves once, at init, through one ladder.** cm2 where the device has
 NV_cooperative_matrix2, else mm where it has KHR_cooperative_matrix, else sdot4; `DASLLAMA_COOPMAT`
 overrides the ladder by name, and a cm2 request or force on a device without the extension lands
-on mm. The same resolver stamps the mode into the `.dlim` flavor configuration, so the recorded
-mode and the running mode cannot drift. The four-wide decode callback is not in that
+on mm. The width the ladder reads is the one the tier runs at (`vk_subgroup_width`): the device's
+own, or `DASLLAMA_VK_SUBGROUP` (32) where that differs and the device's compute stage may pin it
+(Vulkan 1.3 subgroupSizeControl, `compute_subgroup_size_pinnable`) - then every class pipeline is
+built pinned (`g_gpu.sg_pin`, `create_compute_pipeline_subgroup`) and every width-keyed route
+(`g_gpu.subgroup_size`: this ladder, the KHR kq tile, the h128 twin, the tower tiles) reads the
+pinned width, so an RDNA device at wave64 serves as a 32-lane card does. Every coopmat mode
+resolves to sdot4 on a device whose width is not 32 lanes: the coopmat tiles split a 128-thread
+workgroup into four fragment owners by `gl_SubgroupID`, so a wave64 device the tier cannot pin
+holds two subgroups where the tile wants four and leaves half of every output tile unwritten. The
+same resolver stamps the mode into the `.dlim` flavor configuration, so the recorded mode and the
+running mode cannot drift. The four-wide decode callback is not in that
 configuration: a cm2 tile names both callbacks (`coopmatLoadTensorDecode`'s tenth argument) - the
 format's own `decode_v4` under the template's `DECV4` axis (every kq superblock format, `ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes`),
 else the `DECVEC` axis's synthesized twin, where a new format starts until its `cm2:<fmt>` row

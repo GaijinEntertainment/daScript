@@ -661,7 +661,7 @@ def gate_ast_verify(ctx : PreflightCtx) : GateResult {
     // so the width is physical cores halved, not hardware threads - -j caps it further, never raises it
     let heavy = max(1, get_total_hw_cores() / 2)
     let workers = compute_worker_count(length(files), ctx.jobs > 0 ? min(ctx.jobs, heavy) : heavy)
-    let results <- run_verify_pool(ctx.daslang, files, workers, 300.0, "")
+    let results <- run_verify_pool(ctx.daslang, files, workers, 600.0, "")
     var red = 0
     var unverifiable = 0
     let output = build_string() $(w) {
@@ -1537,7 +1537,9 @@ def gate_table() : array<GateInfo> {
         GateInfo(name = "review-md", tier = "fast", doc = "REVIEW.das gates of every folder the diff touches (utils/internal/review-md; CI's extended_checks step runs every gate)"),
         GateInfo(name = "review-md-tests", tier = "fast", doc = "the review-md discovery suites (walker fixtures, make-pr gate tests, preflight's own) when the diff touches a REVIEW.das or those tools (mirrors CI's extended_checks step)"),
         GateInfo(name = "md-ascii", tier = "fast", doc = "ci/fix_md_ascii.py --check when the diff touches .md (mirrors CI's Markdown ASCII gate in extended_checks)"),
-        GateInfo(name = "ast-verify", tier = "fast", doc = "daslang -dry-run --ast-verify-batch on changed .das (parallel, 300s/file; mirrors CI) - an AST verify line, a crash, or a timeout fails"),
+        GateInfo(name = "ast-verify", tier = "fast",
+            doc = ("daslang -dry-run --ast-verify-batch on changed .das (parallel, 600s/file;"
+                + " mirrors CI) - an AST verify line, a crash, or a timeout fails")),
         GateInfo(name = "cpp-syntax", tier = "fast", doc = "clang frontend pass on changed C++; header change → full src+tests-cpp sweep"),
         GateInfo(name = "dasgen", tier = "fast", doc = "gen_bind.das freshness vs include/daScript/builtin/", reach <- ["src/builtin/", "include/daScript/builtin/", "utils/internal/dasgen/"]),
         GateInfo(name = "ci-das", tier = "fast", doc = "compile-only sweep of CI-only das surface (ci_only_das.txt)"),

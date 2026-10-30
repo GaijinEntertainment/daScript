@@ -329,6 +329,42 @@ def test_vkd_class_dispatch(t0 : T?) {
     }
 }
 
+[test]
+def test_vkd_subgroup_width(t0 : T?) {
+    t0 |> run("a class pipeline runs at the width the tier reads: the device's own, or the pin where the two differ") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_vkd_subgroup()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let n = 256
+            var widths : array<uint>
+            with_cell_planes() $(var cp : CellPlanes) {
+                let pw = cp |> out_words(int64(n) * 4l, 0xFFFFFFFFu)
+                var s = cp |> cls_set(fixed_array(pw), @@set_vkd_subgroup)
+                var pc = VdArgs(n = uint(n))
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_vkd_subgroup(raw, h, s, pc, int64(n))
+                }
+                delete widths
+                widths <- cp |> plane_as(pw, type<uint>, n)
+            }
+            var off = 0
+            for (w in widths) {
+                if (int64(w) != g_gpu.subgroup_size) {
+                    off++
+                }
+            }
+            let own = int(subgroup_properties(g_gpu.phys).subgroupSize)
+            let pinned = g_gpu.sg_pin != 0u ? " (pinned over the device's {own})" : ""
+            t |> success(off == 0, "every invocation reads gl_SubgroupSize {g_gpu.subgroup_size}{pinned} ({off} of {n} off)")
+            delete widths
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
 let private SPV_CAP_COOPMAT_KHR = 6022u
 let private SPV_CAP_COOPMAT_NV = 5357u
 let private SPV_CAP_NV_COOPMAT2_FIRST = 5430u   //! CooperativeMatrixReductionsNV through TensorAddressingNV: the NV_cooperative_matrix2 capabilities
@@ -778,6 +814,7 @@ def test_vkd_ext_roster(t0 : T?) {
             t |> equal(g_gpu.decvec_on, roster_on(roster, "VK_NV_cooperative_matrix_decode_vector"), "decvec_on follows the decode-vector entry and its knob")
             t |> equal(g_gpu.sm_count > 0, roster_on(roster, "VK_NV_shader_sm_builtins"), "the SM count follows the VK_NV_shader_sm_builtins entry")
             t |> equal(g_gpu.full_sg_on, roster_on(roster, "computeFullSubgroups"), "full_sg_on follows the computeFullSubgroups entry and its knob")
+            t |> equal(g_gpu.sg_pin != 0u, roster_on(roster, "subgroupSizeControl at"), "sg_pin follows the subgroupSizeControl entry and its knob")
             t |> equal(g_gpu.has_memprio, g_gpu.has_coopmat && roster_on(roster, "VK_EXT_memory_priority"), "has_memprio follows the VK_EXT_memory_priority entry and its knob on a coopmat device")
             t |> equal(g_gpu.rebar_type >= 0, roster_on(roster, "a ReBAR memory type"), "the ReBAR type follows the ReBAR entry and its knob")
             t |> equal(g_gpu.dn_shared_ok, roster_on(roster, "maxComputeSharedMemorySize"), "dn_shared_ok follows the shared-memory limit entry")
@@ -3253,7 +3290,52 @@ def private fa_cell_set(cp; khr, sink : bool; p; psink : int) {
     return fa_stamp_set(khr, gather_planes(cp.dev, p), gather_planes(cp.bytes, p), gather_planes(cp.hazard_bit, p))
 }
 
-//! the f16-out twin is held to the f32 stamp's output through the clamp-convert, not to the oracle: the two stamps must agree bit for bit
+//! the f16-out twin is held to the f32 stamp's output through the clamp-convert, not to the oracle: the two stamps agree bit for bit
+//! on a device that rounds the product to f32 before the f16 store, and within one f16 ulp on one that rounds the fused
+//! multiply-convert once (RDNA3's compiler), where an f32 product on an f16 midpoint lands one step apart - `f16_store_rounds_once`
+//! reads which off the device
+def private f16_store_rounds_once : bool {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (!ensure_vkd_mulcvt()) {
+            return false
+        }
+        let n = 64
+        //! a times b is 1 + 2^-11 + 2^-34 - 2^-46: past the f16 midpoint 1 + 2^-11 by less than half an f32 ulp, so an f32 product sits on
+        //! the midpoint and ties to even (1), while the exact product rounds up (1 + 2^-10)
+        var xs, ys : array<float>
+        xs |> resize(n)
+        ys |> resize(n)
+        for (i in range(n)) {
+            xs[i] = 1.0 + 0.00048828125 - 0.00000011920928955078125
+            ys[i] = 1.0 + 0.00000011920928955078125
+        }
+        var hs : array<float16>
+        with_cell_planes() $(var cp : CellPlanes) {
+            let px = cp |> in_(xs)
+            let py = cp |> in_(ys)
+            let ph = cp |> out_words(int64(n) * 2l, NAN_SENTINEL_BITS)
+            var s = cp |> cls_set(fixed_array(px, py, ph), @@set_vkd_mulcvt)
+            var pc = VdArgs(n = uint(n))
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_vkd_mulcvt(raw, h, s, pc, int64(n))
+            }
+            delete hs
+            hs <- cp |> plane_as(ph, type<float16>, n)
+        }
+        let once = float(hs[0]) > 1.0
+        to_log(LOG_INFO, "the f16 store probe: (1 + 2^-11 - 2^-23) x (1 + 2^-23) stores as {float(hs[0])} - the device rounds the product {once ? "once" : "to f32 first"}\n")
+        delete xs
+        delete ys
+        delete hs
+        return once
+    } else {
+        return false
+    }
+}
+
+//! one f16 ulp at `v`
+def private f16_ulp(v : float) : float => v == 0.0 ? 0.0 : exp2(floor(log2(abs(v))) - 10.0)
+
 //! a ring arm's control holds: the ring's rows read a position a row (`flat`, empty on an arm with no ring) miss the oracle
 def private fa_ring_control(t : T?; tag : string; flat, want : array<float>) {
     return if (empty(flat))
@@ -3275,6 +3357,7 @@ def private fa_flat_read(var cp; khr : bool; hs : int; sink : bool; var sfa; pcf
 def private fa_tile_run(t : T?; khr : bool) {   // nolint:STYLE037,LINT019 — one arm table over both flash arms; the head-96 skip is its one branch past the limit
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = khr ? "fa_khr" : "fa_cm2"
+        let once = f16_store_rounds_once()
         let nheads = 4
         let kv_mul = 2
         let rows = 77    // partial 64-tile: q0=64 has 13 valid rows — clamp loads + store discard run (the KHR tile: five 16-row tiles, the last 13 deep)
@@ -3381,7 +3464,7 @@ def private fa_tile_run(t : T?; khr : bool) {   // nolint:STYLE037,LINT019 — o
             // convex combination of V rows with |v| <= 1 on this fixture), so the f16 running sum's rounding
             // stays under the 2e-3 relative bar mismatch_approx holds against the f32 oracle, and the f16 O
             // twin against the f32 stamp pins the same bar - the bound is this fixture's magnitudes, not a proof.
-            // The KHR kernel rounds P to f16 and sums each 64-key step in f16 before its f32 o row: the same bar.
+            // The KHR kernel rounds P to f16, sums each 64-key step in f32 and rounds the step once to f16 before its f32 o row: the same bar.
             var inscope nosink : array<float>
             var inscope y_ref <- sink ? fa_oracle(qh, kh, vh, rows, w0, nheads, hs, kv_mul, kvd, scale, window, false, sinkh) : fa_oracle(qh, kh, vh, rows, w0, nheads, hs, kv_mul, kvd, scale, window, false, nosink)
             check_rows(t, "{tag} hs {hs} window {window}{stag} against the CPU oracle", y_cls, y_ref, BAR_APPROX_CTRL, qd, hs)
@@ -3391,12 +3474,23 @@ def private fa_tile_run(t : T?; khr : bool) {   // nolint:STYLE037,LINT019 — o
                 check_exceeds(t, "{tag} hs {hs} window {window} sink control: the sink moves the output off the sink-free oracle", y_cls, y_nosink, BAR_APPROX)
             }
             var bad16 = 0
+            var one_off = 0
             for (i in range(rows * qd)) {
-                if (float(y16_fused[i]) != float(y16_split[i])) {
+                let fused = float(y16_fused[i])
+                let split = float(y16_split[i])
+                if (fused != split) {
+                    if (once && abs(fused - split) <= f16_ulp(split)) {
+                        one_off++
+                        continue
+                    }
+                    if (bad16 < 6) {
+                        to_log(LOG_INFO, "  {tag} hs {hs}{stag} f16-out twin differs at [{i}]: fused {fused} split {split}, the f32 stamp's {y_cls[i]} (bits {unsafe(reinterpret<uint>(y_cls[i]))})\n")
+                    }
                     bad16++
                 }
             }
-            t |> success(bad16 == 0, "{tag} hs {hs}{stag} f16-out twin == the f32 stamp's clamp-convert ({bad16} of {rows * qd} off)")
+            let how = once ? " within one f16 ulp (the device rounds the store once; {one_off} one step apart)" : ""
+            t |> success(bad16 == 0, "{tag} hs {hs}{stag} f16-out twin == the f32 stamp's clamp-convert{how} ({bad16} of {rows * qd} off)")
             delete sinkh
             delete qh
             delete kh
@@ -3509,6 +3603,29 @@ def private fa_h256_run(nheads, kv_mul, rows, w0 : int; gated : bool; cap : floa
         var qplain <- q_halves(qp, rows, nheads, hs, qhs)
         var y_plain <- fa_oracle(qplain, kh, vh, rows, w0, nheads, hs, kv_mul, kvd, scale, 0, false, nosink)   //! the plain rows: ungated, uncapped
         let bad = mismatch_approx(y_cls, y_ref)
+        if (bad > 0) {   //! the worst (row, head) by relative error, and how much of it sits off: a whole row-head off is its softmax, one column its store
+            var worst = 0.0
+            var worst_at = 0
+            for (i in range(rows * qd)) {
+                let rel = abs(y_cls[i] - y_ref[i]) / max(abs(y_ref[i]), 1e-3)
+                if (rel > worst) {
+                    worst = rel
+                    worst_at = i
+                }
+            }
+            let wr = worst_at / qd
+            let wh = (worst_at % qd) / hs
+            var past = 0
+            var rel_sum = 0.0
+            for (c in range(hs)) {
+                let i = wr * qd + wh * hs + c
+                let rel = abs(y_cls[i] - y_ref[i]) / max(abs(y_ref[i]), 1e-3)
+                rel_sum += rel
+                past += rel > 1e-2 ? 1 : 0
+            }
+            let at = element_at(worst_at, Shape(row_width = qd, head_width = hs))
+            to_log(LOG_INFO, "  fa h256 cap {cap}: the worst element {at} kernel {y_cls[worst_at]} oracle {y_ref[worst_at]} ({worst} relative); that row-head's mean relative error {rel_sum / float(hs)}, {past} of {hs} columns past 1e-2\n")
+        }
         let bad_plain = mismatch_approx(y_cls, y_plain)   //! the control: the same rows without the gate or the cap must miss, or the fixture never reached them
         y_ref[hs + 3] += 0.5
         let poisoned = mismatch_approx(y_cls, y_ref)
@@ -3747,8 +3864,8 @@ def test_vkd_da_attn_b_row0(t0 : T?) {
                     t |> skip("{tag} declined on this device (workgroup cap)")
                     continue
                 }
-                if (stamp == DAB_H128 && !g_gpu.has_coopmat) {
-                    t |> skip("{tag}: no coopmat on this device")
+                if (stamp == DAB_H128 && !h128_twin_on()) {
+                    t |> skip("{tag}: the h128 twin serves on a coopmat device at subgroup 32 alone")
                     continue
                 }
                 verify(stamp != DAB_H128 || ensure_da_attn_b_h128_cls(), "the h128 class rail must engage on a coopmat device")
@@ -3895,8 +4012,8 @@ def test_vkd_da_attn_b_ring(t0 : T?) {
                 return
             }
             for (stamp in fixed_array(DAB_B, DAB_BW, DAB_H128)) {
-                if (stamp == DAB_H128 && !g_gpu.has_coopmat) {
-                    t |> skip("da_attn_b_h128: no coopmat on this device")
+                if (stamp == DAB_H128 && !h128_twin_on()) {
+                    t |> skip("da_attn_b_h128: the h128 twin serves on a coopmat device at subgroup 32 alone")
                     continue
                 }
                 verify(stamp != DAB_H128 || ensure_da_attn_b_h128_cls(), "the h128 class rail must engage on a coopmat device")
@@ -3935,8 +4052,8 @@ def test_vkd_da_attn_b_h128(t0 : T?) {
                 t |> skip("da_attn_b class declined on this device (workgroup cap)")   // on a no-coopmat device panics, not feints
                 return
             }
-            if (!g_gpu.has_coopmat) {
-                t |> skip("no coopmat on this device")
+            if (!h128_twin_on()) {
+                t |> skip("the h128 twin serves on a coopmat device at subgroup 32 alone")
                 return
             }
             verify(ensure_da_attn_b_h128_cls(), "the h128 class rail must engage on a coopmat device")
@@ -4014,8 +4131,8 @@ def test_vkd_da_attn_b_gated(t0 : T?) {
             } else {
                 t |> skip("da_attn_bw_f16 class declined on this device (workgroup cap) - the f16 gated arm")
             }
-            if (!g_gpu.has_coopmat) {
-                t |> skip("no coopmat on this device - the h128 gated arm")
+            if (!h128_twin_on()) {
+                t |> skip("the h128 twin serves on a coopmat device at subgroup 32 alone - the h128 gated arm")
                 return
             }
             if (!ensure_da_attn_b_h128_cls()) {
@@ -4700,7 +4817,7 @@ def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float; ab
     t |> success(badx == 0, "q8 gemv+ar {tag}: the residual row matches the oracle ({badx} of {d} off)")
     t |> success(pbadx == d, "q8 gemv+ar {tag}: the residual bar reds an oracle row pushed a tenth off ({pbadx} of {d} red)")
     t |> success(off.scales == 0, "q8 gemv+ar {tag}: the block scales match ({off.scales} of {nblk_out} off)")
-    t |> success(off.values == 0, "q8 gemv+ar {tag}: the dequantized row sits within a quant step ({off.values} of {d} off)")
+    t |> success(off.values == 0, "q8 gemv+ar {tag}: the dequantized row sits within a quant step ({off.values} of {d} off, the worst {off.worst} steps at {off.worst_at})")
     t |> success(cnt_after[0] == 0u, "q8 gemv+ar {tag}: the arrival counter reads zero after the dispatch ({cnt_after[0]})")
     t |> success(off.poison_inside == 0, "q8 gemv+ar {tag}: the bar reds a poisoned oracle element in every block ({off.poison_inside} passed)")
     delete fx
@@ -4728,6 +4845,8 @@ def test_vkd_q8_gemv_ar(t0 : T?) {
             q8_gemv_ar_run(t, 512, 1152, true, false, 1.0, true)    // a sandwich-normed wo step with an output bias: the bias rides the partner before its norm
             q8_gemv_ar_run(t, 512, 2816, true, false, 1.0)    // gemma-4-26B's wo step: two whole four-column rounds and a three-column tail
             q8_gemv_ar_run(t, 512, 2816, false, false, 1.0)   // the same width on the plain step (the four-column arm's tail)
+            q8_gemv_ar_run(t, 896, 896, false, false, 1.0)    //! Qwen2.5-0.5B's wo step: a width off the four-column round's 1024, so the round's clamped loads pull the last block's line ahead of its writes - the re-read must be coherent
+            q8_gemv_ar_run(t, 4864, 896, false, false, 1.0)   // ... and its down step: 152 blocks, whole passes then a guarded tail
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -7913,7 +8032,7 @@ def test_vkd_kv16_readers(t0 : T?) {
                 delete y_cls
             }
             // --- da_attn_b_h128_f16: the coopmat twin over f16 mirrors ---
-            if (g_gpu.has_coopmat) {
+            if (h128_twin_on()) {
                 verify(ensure_da_attn_b_h128_f16_cls(), "the h128 f16 class rail must engage on a coopmat device")
                 var f <- da_attn_b_fix(45, 4, 2, 128, 32, 64, 160, 0.05, 1.8, 0.03, 1.4, true)
                 var y_cls <- da_attn_b_run(f, DAB_H128_F16, 0.125, 0.0, 0)
@@ -7923,7 +8042,7 @@ def test_vkd_kv16_readers(t0 : T?) {
                 delete y_ref
                 delete y_cls
             } else {
-                t |> skip("no coopmat on this device - the h128 f16 arm")
+                t |> skip("the h128 twin serves on a coopmat device at subgroup 32 alone - the h128 f16 arm")
             }
         } else {
             t |> skip("dasVulkan not present")
@@ -8488,9 +8607,13 @@ def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
             }
             let saved_force = g_coopmat_mode_force
             g_coopmat_mode_force = -1
-            t |> equal(resolve_coopmat_mode(true, true), 4)    // cm2 where the device has it
-            t |> equal(resolve_coopmat_mode(true, false), 3)   // else mm
-            t |> equal(resolve_coopmat_mode(false, false), 0)  // else sdot4
+            t |> equal(resolve_coopmat_mode(true, true, 32l), 4)    // cm2 where the device has it
+            t |> equal(resolve_coopmat_mode(true, false, 32l), 3)   // else mm
+            t |> equal(resolve_coopmat_mode(false, false, 32l), 0)  // else sdot4
+            t |> equal(resolve_coopmat_mode(true, false, 64l), 0)   // a wave64 device: the coopmat tiles' four fragment owners are 32-lane subgroups
+            t |> equal(resolve_coopmat_mode(true, true, 64l), 0)
+            g_coopmat_mode_force = 3
+            t |> equal(resolve_coopmat_mode(true, false, 64l), 0)   //! ... and a forced mode follows the same rule
             g_coopmat_mode_force = saved_force
             if (!ensure_q8_batch_cls()) {
                 t |> skip("no Vulkan device for the tile pick (it reads the device's SM count)")

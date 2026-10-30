@@ -48,7 +48,8 @@ rows.
 **A diff that changes the SPIR-V words a cm2 tile stamp emits - its `DASLLAMA_VK_SPV_DUMP` output
 against the base branch's - puts that stamp's probe rows (runs of `harness/vk_gemm_probe.das`) in
 the PR body, with `DASLLAMA_VK_DECVEC=1` and with `=0` (the four-wide decode callback on and
-off).** A cm2 tile stamp is a class stamped from `KqCm2BatchT` through a format's `<Fmt>Cm2T`.
+off).** A cm2 tile stamp is a class stamped from `KqCm2BatchT` through a format's `<Fmt>Cm2T` with
+`KHR` false (`<Fmt>Cm2{L,M,S,E}Batch`).
 
 **A diff that owes a cm2 stamp's probe rows takes them from that stamp's `harness/vk_gemm_probe.das`
 arm - `cm2:<fmt>` or `cm2g:<fmt>` for the l and m stamps (`<Fmt>Cm2LBatch`, `<Fmt>Cm2MBatch`),
@@ -59,14 +60,15 @@ with a run of its kernel cell (its test block in `tests/test_vulkan_kernels.das`
 
 **A diff that changes the SPIR-V words a KHR tile emits - its `DASLLAMA_VK_SPV_DUMP` output
 against the base branch's - runs that format's kernel cell (its test block in
-`tests/test_vulkan_kernels.das`) on the KHR arm (`DASLLAMA_COOPMAT=mm`, or a device without
-NV_cooperative_matrix2) and puts the run in the PR body.** A KHR tile is a `<Fmt>KhrBatch` class
-in `dasllama/dasllama_vulkan_classes.das`, stamped from `KqCm2BatchT` through a format template
-(`<Fmt>Cm2T`, or `F32RowsKhrT` for the f32 rows).
+`tests/test_vulkan_kernels.das`) on a device where the cell's KHR arm passes rather than skips
+(`DASLLAMA_COOPMAT=mm` on NVIDIA, or a device without NV_cooperative_matrix2 running at 32 lanes)
+and puts the run in the PR body.** A KHR tile is a `<Fmt>KhrBatch` class in
+`dasllama/dasllama_vulkan_classes.das`, stamped from `KqCm2BatchT` through a format template
+(`<Fmt>Cm2T`, or `F32RowsKhrT` for the f32 rows), or an `MmBatchT` stamp (the mm l and m tiles).
 
-**A diff that owes a KHR tile's kernel-cell run carries with it either the `khrx` probe rows
-(`harness/vk_gemm_probe.das`) or a `tests/test_gpu_resident_hybrid.das` run on a model in that
-format.**
+**A diff that owes a KHR tile's kernel-cell run puts in the PR body, beside that run, either the
+`khrx` probe rows (`harness/vk_gemm_probe.das`) or a `tests/test_gpu_resident_hybrid.das` run on a
+model in that format.**
 
 **A diff that adds a `<Fmt>KhrBatch` stamp adds that format's KHR arm to its kernel cell in
 `tests/test_vulkan_kernels.das`, in the same change.**

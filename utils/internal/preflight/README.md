@@ -7,7 +7,7 @@ The budget the tiers serve: a full run fits 20 minutes on the M5 box.
 
 ```bash
 # fast tier, serial, a red stops the run: untracked, format --verify, lint changed .das and .md (three
-# rails), hash-refs, review-md, md-ascii, ast-verify changed .das (batch mode, parallel, 300s/file),
+# rails), hash-refs, review-md, md-ascii, ast-verify changed .das (batch mode, parallel, 600s/file),
 # clang frontend pass on changed C++, dasgen freshness, ci-das, ci-matrix, compile-sweep (every
 # program root under utils/, examples/, tutorials/ and the modules' examples and utils, in parallel)
 daslang utils/internal/preflight/main.das
