@@ -342,7 +342,7 @@ def test_vkd_subgroup_width(t0 : T?) {
             with_cell_planes() $(var cp : CellPlanes) {
                 let pw = cp |> out_words(int64(n) * 4l, 0xFFFFFFFFu)
                 var s = cp |> cls_set(fixed_array(pw), @@set_vkd_subgroup)
-                var pc = VsArgs(n = uint(n))
+                var pc = VdArgs(n = uint(n))
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_vkd_subgroup(raw, h, s, pc, int64(n))
                 }
@@ -3315,7 +3315,7 @@ def private f16_store_rounds_once : bool {
             let py = cp |> in_(ys)
             let ph = cp |> out_words(int64(n) * 2l, NAN_SENTINEL_BITS)
             var s = cp |> cls_set(fixed_array(px, py, ph), @@set_vkd_mulcvt)
-            var pc = VmArgs(n = uint(n))
+            var pc = VdArgs(n = uint(n))
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_vkd_mulcvt(raw, h, s, pc, int64(n))
             }
