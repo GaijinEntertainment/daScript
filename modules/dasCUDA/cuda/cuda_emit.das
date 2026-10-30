@@ -636,7 +636,8 @@ __device__ __forceinline__ int __das_lane() \{ return int((threadIdx.x + threadI
 __device__ __forceinline__ uint __das_ld32(const char* p) \{ return *(const uint*)p; \}
 __device__ __forceinline__ uint __das_ldh2(const char* p0, const char* p1) \{ return uint(*(const ushort*)p0) | (uint(*(const ushort*)p1) << 16); \}
 __device__ __forceinline__ uint __das_ld4b(const char* p0, const char* p1, const char* p2, const char* p3) \{ return uint(*(const uchar*)p0) | (uint(*(const uchar*)p1) << 8) | (uint(*(const uchar*)p2) << 16) | (uint(*(const uchar*)p3) << 24); \}
-__device__ __forceinline__ float __das_h2f(uint h) \{ float f; unsigned short b = (unsigned short)(h & 0xffffu); asm(\"cvt.f32.f16 %0, %1;\" : \"=f\"(f) : \"h\"(b)); return f; \}"
+__device__ __forceinline__ float __das_h2f(uint h) \{ float f; unsigned short b = (unsigned short)(h & 0xffffu); asm(\"cvt.f32.f16 %0, %1;\" : \"=f\"(f) : \"h\"(b)); return f; \}
+__device__ __forceinline__ uint __das_f2h(float f) \{ unsigned short h; asm(\"cvt.rn.f16.f32 %0, %1;\" : \"=h\"(h) : \"f\"(f)); return uint(h); \}"
 
 def private need_coopmat(var ctx : CudaCtx) {
     register_helper(ctx, "{HELPER_RANK_COOPMAT}base", COOPMAT_PRELUDE)
@@ -705,6 +706,9 @@ def private coop_mma_helper(a : CoopInfo; c : CoopInfo) : string {
 
 let private COOPMAT_CVT_F32_F16 = "__device__ __forceinline__ __das_cmC_f32 __das_cm_cvt_f32_f16(const __das_cmC_f16& s) \{ __das_cmC_f32 d; for (int h = 0; h < 2; ++h) \{ d.r[4 * h] = __das_h2f(s.r[2 * h]); d.r[4 * h + 1] = __das_h2f(s.r[2 * h] >> 16); d.r[4 * h + 2] = __das_h2f(s.r[2 * h + 1]); d.r[4 * h + 3] = __das_h2f(s.r[2 * h + 1] >> 16); \} return d; \}"
 
+//! the narrowing twin: an f32 accumulator's quads rounded to f16 pairs (the KHR arms' f16 stash and store form)
+let private COOPMAT_CVT_F16_F32 = "__device__ __forceinline__ __das_cmC_f16 __das_cm_cvt_f16_f32(const __das_cmC_f32& s) \{ __das_cmC_f16 d; for (int h = 0; h < 2; ++h) \{ d.r[2 * h] = __das_f2h(s.r[4 * h]) | (__das_f2h(s.r[4 * h + 1]) << 16); d.r[2 * h + 1] = __das_f2h(s.r[4 * h + 2]) | (__das_f2h(s.r[4 * h + 3]) << 16); \} return d; \}"
+
 //! the element size of the buffer a tile loads from or stores to: a member buffer, a shared array or a pointer local
 def private coop_buf_elem_bytes(t : TypeDecl?) : uint64 {
     if (t == null) {
@@ -754,13 +758,21 @@ def private emit_coop_stmt(var ctx : CudaCtx; ec : ExprCall?) : string {
         }
         let di = coop_type_of(ec.arguments[0]._type)
         let si = coop_type_of(ec.arguments[1]._type)
-        if (!(di.ok && si.ok && di.use == "C" && si.use == "C" && di.comp == "f32" && si.comp == "f16")) {
-            shader_error(ctx, ec.at, "coopmatConvert lowers the f16 accumulator to the f32 accumulator; {describe(ec.arguments[0]._type)} <- {describe(ec.arguments[1]._type)} has no CUDA form yet")
+        let accs = di.ok && si.ok && di.use == "C" && si.use == "C"
+        let widen = accs && di.comp == "f32" && si.comp == "f16"
+        let narrow = accs && di.comp == "f16" && si.comp == "f32"
+        if (!widen && !narrow) {
+            shader_error(ctx, ec.at, "coopmatConvert converts between the f16 and f32 accumulators; {describe(ec.arguments[0]._type)} <- {describe(ec.arguments[1]._type)} has no CUDA form yet")
             return ""
         }
-        register_helper(ctx, "{HELPER_RANK_COOPMAT_OPS}cvt_f32_f16", COOPMAT_CVT_F32_F16)
-        census_kind(ctx, "call.coopmatConvert.f16.f32")
-        return "{emit_value(ctx, ec.arguments[0])} = __das_cm_cvt_f32_f16({emit_value(ctx, ec.arguments[1])});"
+        if (widen) {
+            register_helper(ctx, "{HELPER_RANK_COOPMAT_OPS}cvt_f32_f16", COOPMAT_CVT_F32_F16)
+            census_kind(ctx, "call.coopmatConvert.f16.f32")
+            return "{emit_value(ctx, ec.arguments[0])} = __das_cm_cvt_f32_f16({emit_value(ctx, ec.arguments[1])});"
+        }
+        register_helper(ctx, "{HELPER_RANK_COOPMAT_OPS}cvt_f16_f32", COOPMAT_CVT_F16_F32)
+        census_kind(ctx, "call.coopmatConvert.f32.f16")
+        return "{emit_value(ctx, ec.arguments[0])} = __das_cm_cvt_f16_f32({emit_value(ctx, ec.arguments[1])});"
     }
     let is_load = cname == "coopmatLoad"
     if (na != 5) {
@@ -1024,12 +1036,11 @@ def private is_tensor_layout(t : TypeDecl?) : bool =>
 def private is_tensor_view(t : TypeDecl?) : bool =>
     t != null && t.baseType == Type.tStructure && t.structType != null && (string(t.structType.name) |> starts_with("tensorView2D"))
 
-//! the warp and thread indices, the f32 -> f16 convert, an accumulator fragment's element access by
+//! the warp and thread indices, an accumulator fragment's element access by
 //! index k (0..7: n-half k / 4, the row half k & 2, the column pair bit k & 1), the tensor objects
 let private CM2_PRELUDE = "__device__ __forceinline__ int __das_tid() \{ return int(threadIdx.x + threadIdx.y * blockDim.x + threadIdx.z * blockDim.x * blockDim.y); \}
 __device__ __forceinline__ int __das_nthreads() \{ return int(blockDim.x * blockDim.y * blockDim.z); \}
 __device__ __forceinline__ int __das_warp() \{ return __das_tid() >> 5; \}
-__device__ __forceinline__ uint __das_f2h(float f) \{ unsigned short h; asm(\"cvt.rn.f16.f32 %0, %1;\" : \"=h\"(h) : \"f\"(f)); return uint(h); \}
 __device__ __forceinline__ int __das_cm_row(int i, int g, int k) \{ return i * 16 + g + ((k & 2) ? 8 : 0); \}
 __device__ __forceinline__ int __das_cm_col(int j, int t, int k) \{ return j * 16 + (k >> 2) * 8 + 2 * t + (k & 1); \}
 __device__ __forceinline__ float __das_cmC_get_f32(const __das_cmC_f32& m, int k) \{ return m.r[k]; \}
@@ -1038,7 +1049,6 @@ __device__ __forceinline__ int __das_cmC_get_s32(const __das_cmC_s32& m, int k) 
 __device__ __forceinline__ void __das_cmC_set_s32(__das_cmC_s32& m, int k, int v) \{ m.r[k] = v; \}
 __device__ __forceinline__ float __das_cmC_get_f16(const __das_cmC_f16& m, int k) \{ uint w = m.r[(k >> 2) * 2 + ((k >> 1) & 1)]; return __das_h2f((k & 1) ? (w >> 16) : w); \}
 __device__ __forceinline__ void __das_cmC_set_f16(__das_cmC_f16& m, int k, float v) \{ uint& w = m.r[(k >> 2) * 2 + ((k >> 1) & 1)]; uint h = __das_f2h(v); w = (k & 1) ? ((w & 0xffffu) | (h << 16)) : ((w & 0xffff0000u) | h); \}
-__device__ __forceinline__ __das_cmC_f16 __das_cm_cvt_f16_f32(const __das_cmC_f32& s) \{ __das_cmC_f16 d; for (int h = 0; h < 2; ++h) \{ d.r[2 * h] = __das_f2h(s.r[4 * h]) | (__das_f2h(s.r[4 * h + 1]) << 16); d.r[2 * h + 1] = __das_f2h(s.r[4 * h + 2]) | (__das_f2h(s.r[4 * h + 3]) << 16); \} return d; \}
 struct __das_tlayout \{ uint d0, d1, s0, s1, b0, b1; int pad; \};
 struct __das_tview \{ int t; \};"
 

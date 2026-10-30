@@ -670,6 +670,9 @@ class Coop {
         coopmatConvert(c2f, c2)
         coopmatStore(c2f, o, 512, 16, 0)
         coopmatStore(c2, sh, 0, 8, 0)
+        var c0h : coopmatAcc_f16_16x16
+        coopmatConvert(c0h, c0)
+        coopmatStore(c0h, sh, 0, 8, 0)
         var a8t_ : coopmatA_s8_16x32
         var b8t_ : coopmatB_s8_32x16
         coopmatLoad(a8t_, a8, 0u, 32, 0)
@@ -1202,6 +1205,7 @@ def public declared_cuda_census : table<string> {   // nolint:STYLE038 - one fla
         "stmt.var.wg_view",
         "ufn.param.hidden_shared_scalar",
         "call.coopmatConvert.f16.f32",
+        "call.coopmatConvert.f32.f16",
         "call.coopmatLoad.A.f16.col",
         "call.coopmatLoad.A.f16.row",
         "call.coopmatLoad.A.s8.col",

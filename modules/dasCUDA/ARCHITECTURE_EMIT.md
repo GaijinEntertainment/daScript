@@ -89,7 +89,8 @@ A `[cuda_kernel]` class method lowers to one self-contained CUDA C++ text:
   them (in the buffer's elements, whatever their type) and gather per lane from the byte
   address: a contiguous 32-bit load where the layout keeps a fragment's pair or quad adjacent,
   a lane-wise gather of halves or bytes where it runs the other way. `coopmatMulAdd` is two
-  `mma.sync` per tile, one per n-half; `coopmatConvert` widens the f16 accumulator's pairs.
+  `mma.sync` per tile, one per n-half; `coopmatConvert` widens the f16 accumulator's pairs to
+  f32 quads or rounds the f32 quads to f16 pairs.
   Global and shared operands take the same helper through a generic pointer.
 - **A cm2 workgroup-scope tile is a shared array or a per-warp fragment grid.** A `coopmatWgA_*`
   tile is a k-contiguous [rows][ld] element array in shared memory and a `coopmatWgB_*` tile a
