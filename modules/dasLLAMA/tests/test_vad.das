@@ -136,12 +136,13 @@ def private vad_device_chunks() : int64 {
 }
 
 //! the box carries a seat that must serve: a Metal build where the box has a Metal device; a Vulkan build where the tier arms it
+//! and the device has a tile family the tower rides
 def private vad_device_expected() : bool {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         return metal_common_init()
     } else {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            return vulkan_tower_arms()
+            return vulkan_tower_arms() && vulkan_tower_tiles_on()
         } else {
             return false
         }
@@ -372,6 +373,10 @@ def test_vad_vulkan_declines(t : T?) {
         } else {
             if (!vulkan_tower_arms()) {
                 t |> skip("no Vulkan device (DASLLAMA_GPU=1 and a device the tier serves)")
+                return
+            }
+            if (!vulkan_tower_tiles_on()) {
+                t |> skip("the seat's stamps need cm2 or the KHR tile at subgroup 32 (subgroup {g_gpu.subgroup_size} here) - every call declines device")
                 return
             }
             with_dasllama_jobque_() {

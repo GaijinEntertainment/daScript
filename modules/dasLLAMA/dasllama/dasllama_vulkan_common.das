@@ -140,6 +140,11 @@ def h128_twin_on : bool => g_gpu.has_coopmat && g_gpu.subgroup_size == 32l && vk
 //! the cm2 flash tiles serve where the device was created in cm2 mode AND the mode still reads cm2 - a test that forces the mode in-process moves the pick with it
 def cm2_fa_on : bool => g_gpu.has_coopmat2_fa && g_gpu.coopmat_mode == COOPMAT_CM2
 
+//! the tower driver's chains (vision, whisper-class, GigaAM, VAD, TTS, NMT) ride cooperative-matrix flash and f16 GEMM
+//! stamps - the cm2 family, or the KHR tile at subgroup 32 - so a device with neither (a wave64 KHR device) declines every
+//! tower `device`
+def vulkan_tower_tiles_on : bool => cm2_fa_on() || khr_kq_tile_on()
+
 //! the per-32 formats and mx4: off the f16 feed their batch tile is the per-32 one (`Blk32BatchT`), under the kq batch rail
 def blk32_rail(fmt : int) : bool => fmt == int(KqFmt.mx4) || kq_dense_b32(fmt)
 
