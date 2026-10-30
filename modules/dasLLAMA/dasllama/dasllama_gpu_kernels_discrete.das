@@ -446,7 +446,7 @@ class template Q8GemvArT : GkResidualRow {
     @ssbo @binding = 2 @role = "alias" xq4 : array<uint4>   //! ... as 16-byte words: a lane's half-block in one load
     @ssbo @binding = 3 axs : array<float>          //! ... and their block scales
     @ssbo @binding = 4 @coherent y : array<float>  //! the rows out, read back whole by the last workgroup
-    @ssbo @binding = 5 xres : array<float>         //! the residual row, updated in place
+    @ssbo @binding = 5 @coherent xres : array<float>   //! the residual row, updated in place and re-read by other waves of the epilogue's workgroup
     @ssbo @binding = 6 wn : array<float>           //! the norms plane
     @ssbo @binding = 7 outq : array<int8>          //! the normed row's Q8_0 quants (the next GEMV's feed)
     @ssbo @binding = 8 outs : array<float>         //! ... and its block scales

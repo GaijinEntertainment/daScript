@@ -4700,7 +4700,7 @@ def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float; ab
     t |> success(badx == 0, "q8 gemv+ar {tag}: the residual row matches the oracle ({badx} of {d} off)")
     t |> success(pbadx == d, "q8 gemv+ar {tag}: the residual bar reds an oracle row pushed a tenth off ({pbadx} of {d} red)")
     t |> success(off.scales == 0, "q8 gemv+ar {tag}: the block scales match ({off.scales} of {nblk_out} off)")
-    t |> success(off.values == 0, "q8 gemv+ar {tag}: the dequantized row sits within a quant step ({off.values} of {d} off)")
+    t |> success(off.values == 0, "q8 gemv+ar {tag}: the dequantized row sits within a quant step ({off.values} of {d} off, the worst {off.worst} steps at {off.worst_at})")
     t |> success(cnt_after[0] == 0u, "q8 gemv+ar {tag}: the arrival counter reads zero after the dispatch ({cnt_after[0]})")
     t |> success(off.poison_inside == 0, "q8 gemv+ar {tag}: the bar reds a poisoned oracle element in every block ({off.poison_inside} passed)")
     delete fx
@@ -4728,6 +4728,8 @@ def test_vkd_q8_gemv_ar(t0 : T?) {
             q8_gemv_ar_run(t, 512, 1152, true, false, 1.0, true)    // a sandwich-normed wo step with an output bias: the bias rides the partner before its norm
             q8_gemv_ar_run(t, 512, 2816, true, false, 1.0)    // gemma-4-26B's wo step: two whole four-column rounds and a three-column tail
             q8_gemv_ar_run(t, 512, 2816, false, false, 1.0)   // the same width on the plain step (the four-column arm's tail)
+            q8_gemv_ar_run(t, 896, 896, false, false, 1.0)    //! Qwen2.5-0.5B's wo step: a width off the four-column round's 1024, so the round's clamped loads pull the last block's line ahead of its writes - the re-read must be coherent
+            q8_gemv_ar_run(t, 4864, 896, false, false, 1.0)   // ... and its down step: 152 blocks, whole passes then a guarded tail
         } else {
             t |> skip("dasVulkan not present")
         }

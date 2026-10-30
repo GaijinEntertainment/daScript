@@ -27,7 +27,10 @@ The residual step has two forms on the decode rail: the row kernel (`ArBase`, a 
 regions cells hold the two commands bit for bit. The forms are ONE text - `GkResidualRow.accum_row_into`
 and `GkResidualRow.quant32`, the shell both classes stamp (`dasllama_gpu_kernels_common.das`, the
 Metal residual stamps' shell too), its reads and writes behind accessor overrides (the row kernel's
-stash slab against the GEMV's re-read of its row) - so the
+stash slab against the GEMV's re-read of its row; that re-read crosses the workgroup's waves
+through buffer memory, so the GEMV's residual binding is `@coherent` like its y - a wave's
+clamped four-column loads otherwise hold the last block's line from before another wave wrote
+it, and the barrier pair does not refresh a non-coherent line on RADV) - so the
 reduce, the four-column round and the requant cannot drift apart; a driver still decides per kernel whether a multiply
 feeding an add contracts into one fma: contracting one kernel's sandwich column (`x + wn * (a *
 ainv)`, a gemma's post norm over the add partner) and not the other's rounds the two one ulp

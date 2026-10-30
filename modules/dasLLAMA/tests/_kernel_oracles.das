@@ -275,6 +275,7 @@ def q8_blocks_off(oq : array<int8>; os : array<float>; a : array<float>; nblk : 
         let d_ref = m / 127.0
         if (!(abs(os[blk] - d_ref) <= 2e-3 * max(d_ref, 1e-6))) {
             off.scales++
+            to_log(LOG_INFO, "q8_blocks_off: block {blk} of {nblk} scales {os[blk]} against the reference {d_ref}; its first quants {oq[blk * 32]} {oq[blk * 32 + 1]} {oq[blk * 32 + 2]} {oq[blk * 32 + 3]} {oq[blk * 32 + 4]} {oq[blk * 32 + 5]} {oq[blk * 32 + 6]} {oq[blk * 32 + 7]}\n")
         }
         for (e in range(32)) {
             let w = a[blk * 32 + e]
