@@ -69,6 +69,18 @@ let private DN_LOGIT_BAR_REL_KQ_QUANT_FEED = 0.10
 let private DN_LOGIT_BAR_REL_KQ_Q8OUT = 0.08
 //! the head's K row is the f16-stored projection of a trunk hidden row that already sits within DN_LOGIT_BAR_REL of the CPU chain's, so the row's own rounding stacks on the trunk's: twice the deltanet bar
 let private HEAD_K_BAR_REL = 0.08
+//! ... and off the f16 feed (the sdot4 tiles: a wave64 device) the trunk rows round as the quant feed's (DN_LOGIT_BAR_REL_KQ_QUANT_FEED): a 600-token
+//! two-window prompt on the Radeon 780M reads 0.086 of the row max at one row of 599, the row one down 5.4 bars past
+let private HEAD_K_BAR_REL_QUANT_FEED = 0.10
+
+//! the head-K bar the armed feed sets: the f16 feed's, or the quant feed's where no f16 tile serves the Q8_0 planes
+def private head_k_bar_rel() : float {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return pf_f16_feed(int(KqFmt.q8)) ? HEAD_K_BAR_REL : HEAD_K_BAR_REL_QUANT_FEED
+    } else {
+        return HEAD_K_BAR_REL
+    }
+}
 //! the CPU row one down misses a device row by at least this many bars, or the bar is too wide to tell the row from its neighbour
 let private HEAD_K_CONTROL_BARS = 2.0
 
@@ -1178,10 +1190,10 @@ def private poison_residual_rows(var s : Session; n : int64) {
     }
 }
 
-//! the head's K rows on `gpu` against the CPU warm's within `HEAD_K_BAR_REL` of each CPU row's max, the CPU row one down as the
+//! the head's K rows on `gpu` against the CPU warm's within `head_k_bar_rel()` of each CPU row's max, the CPU row one down as the
 //! control missing every device row by `HEAD_K_CONTROL_BARS` bars
 def private head_rows_within(t : T?; what : string; gpu, cpu : array<array<float>>) {
-    rows_within_control(t, what, gpu, cpu, HEAD_K_BAR_REL, 1l, HEAD_K_CONTROL_BARS, $(r) => "head K row {r}")
+    rows_within_control(t, what, gpu, cpu, head_k_bar_rel(), 1l, HEAD_K_CONTROL_BARS, $(r) => "head K row {r}")
 }
 
 [test]
