@@ -207,7 +207,7 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    * - ``--gpu``
      -
      - ``auto``
-     - GPU backend: ``auto`` (metal or vulkan when detected, else CPU) | ``off`` | ``metal`` | ``metal-required`` | ``vulkan``. ``vulkan`` serves a model that fits the card whole from the GPU, every stream's cache with it; the control page's model card says what a slot got. Details under *The gpu key*
+     - GPU backend: ``auto`` (metal, else the home ``DASLLAMA_CUDA`` spells, else vulkan when a Vulkan device answers, else cuda when the CUDA home answers, else CPU) | ``off`` | ``metal`` | ``metal-required`` | ``vulkan`` | ``cuda``. ``vulkan`` and ``cuda`` name the discrete home: the whole-model driver serves a model that fits the card whole from the GPU, every stream's cache with it; the control page's model card says what a slot got. Details under *The gpu key*
    * - ``--metal``
      -
      - ``off``
@@ -544,13 +544,22 @@ refuses the levers.
 The gpu key
 ===========
 
-``gpu`` (``auto`` | ``off`` | ``metal`` | ``metal-required`` | ``vulkan``) is
+``gpu`` (``auto`` | ``off`` | ``metal`` | ``metal-required`` | ``vulkan`` | ``cuda``) is
 the backend selector, and unset behaves as ``auto``: the boot probes the box and
-serves on the best detected backend - the Metal rails where the box has them,
-else the Vulkan tier when a device answers, else the CPU - logging one
-``gpu backend auto-detected:`` line. ``gpu = off`` is the explicit opt-out, and
+serves on the best detected backend - the Metal rails where the box has them;
+else the home ``DASLLAMA_CUDA=1`` spells where its device answers; else the
+Vulkan home when a Vulkan device answers (the fully served home, preferred while
+the CUDA home is still growing into every form); else the CUDA home; else the
+CPU - logging one ``gpu backend auto-detected:`` line. ``vulkan`` and ``cuda``
+name the discrete home the whole-model driver runs on, and this key is the one
+switch that picks it: the boot moves the engine's tier onto that home before any
+load, and ``DASLLAMA_CUDA=1`` is only the environment's spelling of the same
+choice. A home the build does not carry, or one the environment's
+``DASLLAMA_GPU`` already armed the tier away from, is refused by name in the boot
+log and the slot serves on the CPU. ``gpu = off`` is the explicit opt-out, and
 ``DASLLAMA_GPU=0`` in the environment keeps its meaning. A model the armed tier
-cannot serve falls back to the CPU with the reason on the control page.
+cannot serve falls back to the CPU with the reason on the control page. Every
+rule below applies to both homes alike.
 
 ``gpu = vulkan`` asks for the whole-model resident driver first: a model that
 fits the card serves entirely from VRAM, and so do its streams - the driver

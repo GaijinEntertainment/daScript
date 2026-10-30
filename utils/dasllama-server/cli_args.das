@@ -71,7 +71,7 @@ struct CommonArgs {
     @clarg_doc = "KV cache codec: f32 | f16 | q8_0 | tq4 (rotated 4-bit; needs pow2 head_size) (default f16); under --gpu vulkan the whole-model driver holds its cache in the same codec for f16, q8_0 and tq4"
     kv_dtype : string
 
-    @clarg_doc = "GPU backend: auto (default: metal/vulkan when detected, else CPU) | off | metal | metal-required | vulkan"
+    @clarg_doc = "GPU backend: auto (default: metal, else the home DASLLAMA_CUDA spells, else vulkan when a Vulkan device answers, else cuda when the CUDA home answers, else CPU) | off | metal | metal-required | vulkan | cuda"
     gpu : string
 
     @clarg_doc = "Metal serving mode when --gpu is unset: off | auto | required"
