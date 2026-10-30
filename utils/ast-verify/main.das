@@ -12,7 +12,10 @@ require ../common/verify_pool.das
 
 // --ast-verify-batch prints its findings and exits 0, so the verdict is read from the output.
 
-let CHANGED_TIMEOUT = 300.0
+//! a whole-engine test fixture verifies in about a minute on a
+//! desktop and three to five times that on a 3-core CI runner with
+//! two siblings in flight
+let CHANGED_TIMEOUT = 600.0
 let FILE_TIMEOUT = 120.0
 
 [CommandLineArgs]
