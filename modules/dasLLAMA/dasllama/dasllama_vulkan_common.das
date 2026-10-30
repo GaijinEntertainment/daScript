@@ -128,7 +128,7 @@ def khr_kq_tile_on : bool => g_gpu.has_coopmat && g_gpu.subgroup_size == 32l
 
 //! the h128 coopmat attention twin: its 128 threads own four 16x16 fragments as four 32-lane subgroups, so a wave64 device
 //! the tier cannot pin at 32 (two owners in one subgroup, the fragment ops divergent) takes the generic chunked tile
-def h128_twin_on : bool => g_gpu.has_coopmat && g_gpu.subgroup_size == 32l && vk_fa_on()
+def h128_twin_on : bool => khr_kq_tile_on() && vk_fa_on()
 
 //! the cm2 flash tiles serve where the device was created in cm2 mode AND the mode still reads cm2 - a test that forces the mode in-process moves the pick with it
 def cm2_fa_on : bool => g_gpu.has_coopmat2_fa && g_gpu.coopmat_mode == COOPMAT_CM2

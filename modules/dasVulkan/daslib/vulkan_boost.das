@@ -1918,7 +1918,25 @@ struct public SpecConstantValue {
 //! ``OpSpecConstant`` default at pipeline-create time (``VkSpecializationInfo``), so one module backs
 //! many pipelines — the [tune]-style GPU kernel-family primitive. Ownership as the base overload.
 def public create_compute_pipeline(device : Device; layout : PipelineLayout; shader : ShaderModule;
-                                   spec : array<SpecConstantValue>; entry : string = "main") : Pipeline {
+                                   spec : array<SpecConstantValue>; entry : string = "main") : Pipeline =>
+    <- build_compute_pipeline(device, layout, shader, entry, false, 0u, spec)
+
+var private g_pipeline_capture = false
+
+//! pipelines created after set_pipeline_capture(true) carry the
+//! capture flags dump_pipeline_executables reads
+def public set_pipeline_capture(on : bool) {
+    g_pipeline_capture = on
+}
+
+//! the switch set_pipeline_capture last set
+def public pipeline_capture : bool => g_pipeline_capture
+
+//! the one builder behind the plain, specialized, full-subgroups and pinned-width creators: ``full`` sets
+//! REQUIRE_FULL_SUBGROUPS on the stage, ``subgroup`` lanes (0 = the device's own width) chain a
+//! ``VkPipelineShaderStageRequiredSubgroupSizeCreateInfo``, ``spec`` entries rewrite the shader's ``OpSpecConstant`` defaults
+def private build_compute_pipeline(device : Device; layout : PipelineLayout; shader : ShaderModule; entry : string;
+                                   full : bool; subgroup : uint; spec : array<SpecConstantValue>) : Pipeline {
     var entries : array<VkSpecializationMapEntry>
     var data : array<uint>
     entries |> reserve(length(spec))
@@ -1934,45 +1952,6 @@ def public create_compute_pipeline(device : Device; layout : PipelineLayout; sha
     var si = VkSpecializationInfo()
     si.mapEntryCount = uint(length(spec))
     si.dataSize = uint64(long_length(spec) * 4l)
-    var stage = VkPipelineShaderStageCreateInfo()
-    stage.stage.compute = true
-    stage.module_ = boost_value_to_vk(shader)
-    stage.pName = entry
-    var cp = VkComputePipelineCreateInfo()
-    cp.layout = boost_value_to_vk(layout)
-    var h : VkPipeline
-    unsafe {
-        if (!empty(spec)) {
-            si.pMapEntries = addr(entries[0])
-            si.pData = addr<void?>(data[0])
-            stage.pSpecializationInfo = addr(si)
-        }
-        cp.stage = stage
-        vk_check(vkCreateComputePipelines(boost_value_to_vk(device), null, 1u, addr(cp), null, addr(h)), null)
-    }
-    delete entries
-    delete data
-    var b = vk_value_to_boost(h)
-    b._needs_delete = true
-    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
-    return <- b
-}
-
-var private g_pipeline_capture = false
-
-//! pipelines created after set_pipeline_capture(true) carry the
-//! capture flags dump_pipeline_executables reads
-def public set_pipeline_capture(on : bool) {
-    g_pipeline_capture = on
-}
-
-//! the switch set_pipeline_capture last set
-def public pipeline_capture : bool => g_pipeline_capture
-
-//! the one builder behind the plain, full-subgroups and pinned-width creators: ``full`` sets REQUIRE_FULL_SUBGROUPS on the
-//! stage, ``subgroup`` lanes (0 = the device's own width) chain a ``VkPipelineShaderStageRequiredSubgroupSizeCreateInfo``
-def private build_compute_pipeline(device : Device; layout : PipelineLayout; shader : ShaderModule; entry : string;
-                                   full : bool; subgroup : uint) : Pipeline {
     var rss = VkPipelineShaderStageRequiredSubgroupSizeCreateInfo()
     rss.requiredSubgroupSize = subgroup
     var stage = VkPipelineShaderStageCreateInfo()
@@ -1986,12 +1965,19 @@ def private build_compute_pipeline(device : Device; layout : PipelineLayout; sha
     cp.flags.capture_internal_representations_khr = g_pipeline_capture
     var h : VkPipeline
     unsafe {
+        if (!empty(spec)) {
+            si.pMapEntries = addr(entries[0])
+            si.pData = addr<void?>(data[0])
+            stage.pSpecializationInfo = addr(si)
+        }
         if (subgroup != 0u) {
             stage.pNext = addr<void?>(rss)
         }
         cp.stage = stage
         vk_check(vkCreateComputePipelines(boost_value_to_vk(device), null, 1u, addr(cp), null, addr(h)), null)
     }
+    delete entries
+    delete data
     var b = vk_value_to_boost(h)
     b._needs_delete = true
     b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
@@ -2000,8 +1986,10 @@ def private build_compute_pipeline(device : Device; layout : PipelineLayout; sha
 
 //! create a compute pipeline from a shader module + layout (owns the VkPipeline;
 //! finalizes via vkDestroyPipeline). Wraps the batch vkCreateComputePipelines at count 1.
-def public create_compute_pipeline(device : Device; layout : PipelineLayout; shader : ShaderModule; entry : string = "main") : Pipeline =>
-    <- build_compute_pipeline(device, layout, shader, entry, false, 0u)
+def public create_compute_pipeline(device : Device; layout : PipelineLayout; shader : ShaderModule; entry : string = "main") : Pipeline {
+    let no_spec : array<SpecConstantValue>
+    return <- build_compute_pipeline(device, layout, shader, entry, false, 0u, no_spec)
+}
 
 [arch(at="../ARCHITECTURE.md#subgroup-pair")]
 def public compute_full_subgroups_supported(phys : VkPhysicalDevice) : bool {
@@ -2010,8 +1998,10 @@ def public compute_full_subgroups_supported(phys : VkPhysicalDevice) : bool {
 }
 
 [arch(at="../ARCHITECTURE.md#subgroup-pair")]
-def public create_compute_pipeline_full_subgroups(device : Device; layout : PipelineLayout; shader : ShaderModule; entry : string = "main") : Pipeline =>
-    <- build_compute_pipeline(device, layout, shader, entry, true, 0u)
+def public create_compute_pipeline_full_subgroups(device : Device; layout : PipelineLayout; shader : ShaderModule; entry : string = "main") : Pipeline {
+    let no_spec : array<SpecConstantValue>
+    return <- build_compute_pipeline(device, layout, shader, entry, true, 0u, no_spec)
+}
 
 //! the subgroup widths a compute pipeline on ``phys`` may pin through ``requiredSubgroupSize``, ``lo``..``hi`` (powers of
 //! two), and whether the compute stage may pin at all; all off below API 1.3 or without the subgroup pair
@@ -2039,8 +2029,10 @@ def public compute_subgroup_size_pinnable(phys : VkPhysicalDevice; size : uint) 
 //! REQUIRE_FULL_SUBGROUPS
 [arch(at="../ARCHITECTURE.md#subgroup-pair")]
 def public create_compute_pipeline_subgroup(device : Device; layout : PipelineLayout; shader : ShaderModule; subgroup : uint;
-                                            full : bool = false; entry : string = "main") : Pipeline =>
-    <- build_compute_pipeline(device, layout, shader, entry, full, subgroup)
+                                            full : bool = false; entry : string = "main") : Pipeline {
+    let no_spec : array<SpecConstantValue>
+    return <- build_compute_pipeline(device, layout, shader, entry, full, subgroup, no_spec)
+}
 
 //! Fully general `transition_image` — caller supplies the `aspectMask` (stencil, combined
 //! depth+stencil, anything the two convenience helpers miss). `levelCount = layerCount = 1`; for mip

@@ -3623,7 +3623,8 @@ def private fa_h256_run(nheads, kv_mul, rows, w0 : int; gated : bool; cap : floa
                 rel_sum += rel
                 past += rel > 1e-2 ? 1 : 0
             }
-            to_log(LOG_INFO, "  fa h256 cap {cap}: the worst element row {wr} head {wh} col {worst_at % hs} kernel {y_cls[worst_at]} oracle {y_ref[worst_at]} ({worst} relative); that row-head's mean relative error {rel_sum / float(hs)}, {past} of {hs} columns past 1e-2\n")
+            let at = element_at(worst_at, Shape(row_width = qd, head_width = hs))
+            to_log(LOG_INFO, "  fa h256 cap {cap}: the worst element {at} kernel {y_cls[worst_at]} oracle {y_ref[worst_at]} ({worst} relative); that row-head's mean relative error {rel_sum / float(hs)}, {past} of {hs} columns past 1e-2\n")
         }
         let bad_plain = mismatch_approx(y_cls, y_plain)   //! the control: the same rows without the gate or the cap must miss, or the fixture never reached them
         y_ref[hs + 3] += 0.5

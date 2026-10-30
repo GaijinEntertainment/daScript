@@ -404,9 +404,6 @@ def public coopmatMulAdd(a : coopmatA_f16_16x16; b : coopmatB_f16_16x16; c : coo
     c
 [unused_argument(dst, src), sideeffects]
 def public coopmatConvert(var dst : coopmatAcc_f32_16x16; src : coopmatAcc_f16_16x16) : void {}
-//! ... and the narrowing form: an f32-accumulated tile rounded once to f16 for an f16 store or stash
-[unused_argument(dst, src), sideeffects]
-def public coopmatConvert(var dst : coopmatAcc_f16_16x16; src : coopmatAcc_f32_16x16) : void {}
 
 // The native INT8 path (s8 x s8 -> s32), the Q8-weight tile: K=32 (double the f16 tile), A is 16x32 and
 // B is 32x16, s32 accumulator (16x16). Loading Q8_0 weights as s8 coopmat tiles feeds the tensor cores

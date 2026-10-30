@@ -229,7 +229,7 @@ may pin at all, and `compute_subgroup_size_pinnable` asks for one width - a powe
 the range, the only widths `requiredSubgroupSize` admits; a pin outside the range, not a power of
 two, or on a device without the pair, is an invalid pipeline create, so a caller probes first. The pin is the
 pair's `subgroupSizeControl` bit, so every creator that enables the pair enables the pin. The
-plain, full-subgroups and pinned creators are one private builder.
+plain, specialized, full-subgroups and pinned creators are one private builder.
 
 ## The OS's video memory numbers {#os-video-memory}
 
