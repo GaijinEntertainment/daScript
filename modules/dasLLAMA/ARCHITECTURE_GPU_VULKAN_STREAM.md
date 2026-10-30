@@ -162,7 +162,9 @@ per-layer structure (the dasCUDA host-experts rows of `PERF_LEDGER.md`). Each fo
 `[tune]` family (`<fmt>q8_rm_gemv_gen`, `dasllama_math_gen.das`, the shared perms over the maddubs,
 vpdpbusd and sdot lattices, a scalar decode of the device layout the reference) with its four-token
 tile as the companion (`<fmt>q8_rm_tile4_gen`: every row against four activation rows at a row's
-stride, the weights decoded once a block), and the rail's device arm (`rare_plane`, `rm_dev_serves`,
+stride, the weights decoded once a block) and a witness companion (`<fmt>q8_rm_witness_gen`), raced
+by the generator half on the streamed shape alone
+(`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#rm-family-race`), and the rail's device arm (`rare_plane`, `rm_dev_serves`,
 `rm_dev_tile4`, `dasllama_blocks.das`) runs a run's rows four a tile and the rest a row, reading the
 device block strides off `kq_qsb` / `kq_dev_ssb` (a superblock) or the plane's own block bytes
 (per-32, mx4; q8 is 32 + 2) under the activation form the format reads (Q8_K a superblock plane, Q8_0

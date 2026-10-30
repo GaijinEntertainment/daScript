@@ -2475,15 +2475,6 @@
     TEST gate (`DAS_TUNE_MODE=test harness/gen_tune_probe.das`) green on every seat at its own mr, and the class
     profiles re-minted with the family's crowns.
 
-267. **The `--tune` completeness verdict names the row-major GEMV families no tuner half races.** After a full
-    `--tune` mint of `dasllama-cli`, `llvm_tune` reports the scope incomplete, missing the twenty `<fmt>q8_rm_gemv_gen`
-    families (the streamed expert rail's one-copy GEMVs, `dasllama_math_gen.das`), while a plain start of the cli and
-    of the server on a profile without them races nothing and writes no sidecar - the demanded set differs between
-    the two paths. The 2026-10-21 class profiles carried those twenty entries; neither `gen_tune_probe` nor
-    `tune_kernels` races them now, so the 2026-10-30 profiles do not. Done = one demanded set for both paths (the
-    families the program compiles and the halves race), and the rm families either raced by a half or outside the
-    scope's demand.
-
 268. **The assistant drafter over a trunk with routed experts on the host.** Both discrete homes' N-row token command
     declines a routed layer whose experts serve on the host (`vk_rdec_token_n_rows`, `cud_rdec_token_n_rows`), and the
     drafter's round verifies on that command, so a card that holds the 26B only with its experts on the host (a 16 GB

@@ -13,6 +13,7 @@ require dasllama/dasllama_gpu_math      // ue4m3_half_f32 - the nv4 sub-block sc
 require dasllama/dasllama_tune  // [from_template]: the slot walks stamped per scale plane
 require dasllama/dasllama_repack  // the grp<mr> repack family + kq panel unpack (pure transforms; the _gen/_bake twins below feed them numbers)
 require daslib/f16_cvt  // the kq reference bodies widen the f16 (s, o) scale pairs
+require daslib/enum_trait  // for (kf in type<KqFmt>) - the family census walk
 require daslib/tune public  // [tune]/[tune_perm]/[tune_companion] + [llvm_code], inert without dasLLVM; PUBLIC so the auto-policy infer pass reaches app roots that require this module
 require [tune_framework] public  // PUBLIC so tune_status reaches app roots that require this module; the one framework call below sits under static_if
 require dasllama/dasllama_tune_scope  // nolint:STYLE029,LINT019 — an ORDER dependency, not a symbol use: the dasllama [tune_scope] must be on the AST before this module's [tune] kernels pick their perms
@@ -1563,6 +1564,47 @@ def q8q8_gemv_s16_gen(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp
     q8q8_gemv_ref(yp, wp, sp, xqp, xsp, n, rb, re)
 }
 
+//! the row-major families' witness companions: the reference body reads false, a stamped perm's true
+def q8q8_rm_witness_gen() : bool => false
+
+def iq4nl32q8_rm_witness_gen() : bool => false
+
+def q4032q8_rm_witness_gen() : bool => false
+
+def q51q8_rm_witness_gen() : bool => false
+
+def q5032q8_rm_witness_gen() : bool => false
+
+def mx4q8_rm_witness_gen() : bool => false
+
+def k4q8_rm_witness_gen() : bool => false
+
+def k5q8_rm_witness_gen() : bool => false
+
+def k6q8_rm_witness_gen() : bool => false
+
+def k3q8_rm_witness_gen() : bool => false
+
+def k2q8_rm_witness_gen() : bool => false
+
+def q40q8_rm_witness_gen() : bool => false
+
+def iq4nlq8_rm_witness_gen() : bool => false
+
+def iq4xsq8_rm_witness_gen() : bool => false
+
+def iq3s4q8_rm_witness_gen() : bool => false
+
+def iq3sq8_rm_witness_gen() : bool => false
+
+def iq3xxsq8_rm_witness_gen() : bool => false
+
+def iq2sq8_rm_witness_gen() : bool => false
+
+def iq2xsq8_rm_witness_gen() : bool => false
+
+def iq2xxsq8_rm_witness_gen() : bool => false
+
 //! the four-token tile of the row-major q8 kernel (the q8q8_rm_gemv_gen family's companion): token t's row at yp + t * d
 [hint(unsafe_range_check, noalias = wp, noalias = sp, noalias = xqp, noalias = xsp)]
 def q8q8_rm_tile4_gen(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, d : int64) : void {
@@ -1581,6 +1623,7 @@ def q8q8_rm_tile4_gen(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
  tune_perm(mr = 4),
  tune_companion(fn = "q8q8_rm_tile4_gen", gen = "dasllama_gemm_gen::q8q8_rm_tile4"),
+ tune_companion(fn = "q8q8_rm_witness_gen", gen = "dasllama_gemm_gen::q8q8_witness"),
  tune(gen = "dasllama_gemm_gen::q8q8_rm_gemv",
       fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
  hint(unsafe_range_check, noalias = wp, noalias = sp, noalias = xqp, noalias = xsp)]
@@ -1611,6 +1654,7 @@ def iq4nl32q8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
  tune_perm(mr = 4),
  tune_companion(fn = "iq4nl32q8_rm_tile4_gen", gen = "dasllama_gemm_gen::iq4nl32_rm_tile4"),
+ tune_companion(fn = "iq4nl32q8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
  tune(gen = "dasllama_gemm_gen::iq4nl32_rm_gemv",
       fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
  unused_argument(xbsp), hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
@@ -1640,6 +1684,7 @@ def q4032q8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; 
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
  tune_perm(mr = 4),
  tune_companion(fn = "q4032q8_rm_tile4_gen", gen = "dasllama_gemm_gen::q4032_rm_tile4"),
+ tune_companion(fn = "q4032q8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
  tune(gen = "dasllama_gemm_gen::q4032_rm_gemv",
       fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
  unused_argument(xbsp), hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
@@ -1669,6 +1714,7 @@ def q51q8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xq
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
  tune_perm(mr = 4),
  tune_companion(fn = "q51q8_rm_tile4_gen", gen = "dasllama_gemm_gen::q51_rm_tile4"),
+ tune_companion(fn = "q51q8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
  tune(gen = "dasllama_gemm_gen::q51_rm_gemv",
       fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
  unused_argument(xbsp), hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
@@ -1698,6 +1744,7 @@ def q5032q8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; 
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
  tune_perm(mr = 4),
  tune_companion(fn = "q5032q8_rm_tile4_gen", gen = "dasllama_gemm_gen::q5032_rm_tile4"),
+ tune_companion(fn = "q5032q8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
  tune(gen = "dasllama_gemm_gen::q5032_rm_gemv",
       fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
  unused_argument(xbsp), hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
@@ -1728,6 +1775,7 @@ def mx4q8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xq
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
  tune_perm(mr = 4),
  tune_companion(fn = "mx4q8_rm_tile4_gen", gen = "dasllama_gemm_gen::mx4_rm_tile4"),
+ tune_companion(fn = "mx4q8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
  tune(gen = "dasllama_gemm_gen::mx4_rm_gemv",
       fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
  unused_argument(xbsp), hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
@@ -1977,6 +2025,7 @@ def k4q8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
  tune_perm(mr = 4),
  tune_companion(fn = "k4q8_rm_tile4_gen", gen = "dasllama_gemm_gen::k4_rm_tile4"),
+ tune_companion(fn = "k4q8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
  tune(gen = "dasllama_gemm_gen::k4_rm_gemv",
       fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
  hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
@@ -1998,6 +2047,7 @@ def k5q8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
  tune_perm(mr = 4),
  tune_companion(fn = "k5q8_rm_tile4_gen", gen = "dasllama_gemm_gen::k5_rm_tile4"),
+ tune_companion(fn = "k5q8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
  tune(gen = "dasllama_gemm_gen::k5_rm_gemv",
       fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
  hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
@@ -2019,6 +2069,7 @@ def k6q8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
  tune_perm(mr = 4),
  tune_companion(fn = "k6q8_rm_tile4_gen", gen = "dasllama_gemm_gen::k6_rm_tile4"),
+ tune_companion(fn = "k6q8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
  tune(gen = "dasllama_gemm_gen::k6_rm_gemv",
       fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
  hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
@@ -2040,6 +2091,7 @@ def k3q8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
  tune_perm(mr = 4),
  tune_companion(fn = "k3q8_rm_tile4_gen", gen = "dasllama_gemm_gen::k3_rm_tile4"),
+ tune_companion(fn = "k3q8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
  tune(gen = "dasllama_gemm_gen::k3_rm_gemv",
       fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
  hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
@@ -2061,6 +2113,7 @@ def k2q8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
  tune_perm(mr = 4),
  tune_companion(fn = "k2q8_rm_tile4_gen", gen = "dasllama_gemm_gen::k2_rm_tile4"),
+ tune_companion(fn = "k2q8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
  tune(gen = "dasllama_gemm_gen::k2_rm_gemv",
       fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
  hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
@@ -2082,6 +2135,7 @@ def q40q8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xq
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
  tune_perm(mr = 4),
  tune_companion(fn = "q40q8_rm_tile4_gen", gen = "dasllama_gemm_gen::q40_rm_tile4"),
+ tune_companion(fn = "q40q8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
  tune(gen = "dasllama_gemm_gen::q40_rm_gemv",
       fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
  hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
@@ -2103,6 +2157,7 @@ def iq4nlq8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; 
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
  tune_perm(mr = 4),
  tune_companion(fn = "iq4nlq8_rm_tile4_gen", gen = "dasllama_gemm_gen::iq4nl_rm_tile4"),
+ tune_companion(fn = "iq4nlq8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
  tune(gen = "dasllama_gemm_gen::iq4nl_rm_gemv",
       fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
  hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
@@ -2124,6 +2179,7 @@ def iq4xsq8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; 
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
  tune_perm(mr = 4),
  tune_companion(fn = "iq4xsq8_rm_tile4_gen", gen = "dasllama_gemm_gen::iq4xs_rm_tile4"),
+ tune_companion(fn = "iq4xsq8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
  tune(gen = "dasllama_gemm_gen::iq4xs_rm_gemv",
       fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
  hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
@@ -2145,6 +2201,7 @@ def iq3s4q8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; 
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
  tune_perm(mr = 4),
  tune_companion(fn = "iq3s4q8_rm_tile4_gen", gen = "dasllama_gemm_gen::iq3s4_rm_tile4"),
+ tune_companion(fn = "iq3s4q8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
  tune(gen = "dasllama_gemm_gen::iq3s4_rm_gemv",
       fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
  hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
@@ -2166,6 +2223,7 @@ def iq3sq8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; x
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
  tune_perm(mr = 4),
  tune_companion(fn = "iq3sq8_rm_tile4_gen", gen = "dasllama_gemm_gen::iq3s_rm_tile4"),
+ tune_companion(fn = "iq3sq8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
  tune(gen = "dasllama_gemm_gen::iq3s_rm_gemv",
       fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
  hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
@@ -2187,6 +2245,7 @@ def iq3xxsq8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?;
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
  tune_perm(mr = 4),
  tune_companion(fn = "iq3xxsq8_rm_tile4_gen", gen = "dasllama_gemm_gen::iq3xxs_rm_tile4"),
+ tune_companion(fn = "iq3xxsq8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
  tune(gen = "dasllama_gemm_gen::iq3xxs_rm_gemv",
       fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
  hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
@@ -2208,6 +2267,7 @@ def iq2sq8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; x
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
  tune_perm(mr = 4),
  tune_companion(fn = "iq2sq8_rm_tile4_gen", gen = "dasllama_gemm_gen::iq2s_rm_tile4"),
+ tune_companion(fn = "iq2sq8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
  tune(gen = "dasllama_gemm_gen::iq2s_rm_gemv",
       fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
  hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
@@ -2229,6 +2289,7 @@ def iq2xsq8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; 
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
  tune_perm(mr = 4),
  tune_companion(fn = "iq2xsq8_rm_tile4_gen", gen = "dasllama_gemm_gen::iq2xs_rm_tile4"),
+ tune_companion(fn = "iq2xsq8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
  tune(gen = "dasllama_gemm_gen::iq2xs_rm_gemv",
       fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
  hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
@@ -2250,6 +2311,7 @@ def iq2xxsq8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?;
  tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
  tune_perm(mr = 4),
  tune_companion(fn = "iq2xxsq8_rm_tile4_gen", gen = "dasllama_gemm_gen::iq2xxs_rm_tile4"),
+ tune_companion(fn = "iq2xxsq8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
  tune(gen = "dasllama_gemm_gen::iq2xxs_rm_gemv",
       fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
  hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
@@ -3863,8 +3925,8 @@ typedef KqTileGenFn = function<(var yp : float?; kqg : uint8 const?; ksg : uint8
 typedef KqPanelGenFn = function<(kqg : uint8 const?; ksg : uint8 const?; mr : int64; nsb : int64; n : int64; ngr : int64; var dst : uint16?) : void>
 
 //! One kq format's [tune] family registries - each `<fn>_variants()`, the reference row first, one row per stamped perm
-//! under DAS_TUNE_MODE=tune/test. Every array is empty for a format with no kq family (q8, q51, mx4 and iq4nl32 carry
-//! their own families), so the formats a walk covers are the ones whose registries are non-empty.
+//! under DAS_TUNE_MODE=tune/test. A tile walk covers the formats whose tile rows are non-empty (q8, the per-32 formats and
+//! mx4 carry their own tile families); the rm rows are stamped for every format but q8 (its own rows type) and nv4 (no rm family).
 struct KqRegistries {
     tile : array<tuple<string; KqTileGenFn>>
     tile4 : array<tuple<string; KqTileGenFn>>
@@ -3874,25 +3936,87 @@ struct KqRegistries {
     amx_cfg : array<tuple<string; function<() : void>>>
     witness : array<tuple<string; function<() : bool>>>
     panel : array<tuple<string; KqPanelGenFn>>
+    rm_gemv : array<tuple<string; MatmulKqRowsFn>>
+    rm_witness : array<tuple<string; function<() : bool>>>
+}
+
+//! a format's registries by its member: the stamp resolves the member's `kq_registries` overload at compile time
+def kq_registries_of(kf : KqFmt) : KqRegistries {   // nolint:STYLE037 - kq_fmt_stamp's generated arms, one a format
+    var regs : KqRegistries
+    kq_fmt_stamp(kf) $(F) {
+        regs <- kq_registries(F)
+    }
+    return <- regs
+}
+
+//! the members whose registries pass `keep`, in KqFmt order - the one walk every family census reads
+def kq_family_fmts(keep : block<(regs : KqRegistries) : bool>) : array<KqFmt> {
+    var fmts : array<KqFmt>
+    for (kf in type<KqFmt>) {
+        var regs <- kq_registries_of(kf)
+        if (invoke(keep, regs)) {
+            fmts |> push(kf)
+        }
+        delete regs
+    }
+    return <- fmts
+}
+
+//! the formats with a row-major [tune] family: every member with rm rows, then q8 (its rows ride `q8q8_rm_gemv_gen_variants`)
+def rm_family_fmts() : array<KqFmt> {
+    var fmts <- kq_family_fmts() $(regs : KqRegistries) => !empty(regs.rm_gemv)
+    fmts |> push(KqFmt.q8)
+    return <- fmts
 }
 
 def kq_registries(_f : KqTag_q8) : KqRegistries => <- KqRegistries()
 
-def kq_registries(_f : KqTag_q51) : KqRegistries => <- KqRegistries()
+def kq_registries(_f : KqTag_q51) : KqRegistries {
+    static_if (typeinfo module_exists(llvm_tune)) {
+        return <- KqRegistries(rm_gemv <- q51q8_rm_gemv_gen_variants(), rm_witness <- q51q8_rm_witness_gen_variants())
+    } else {
+        return <- KqRegistries()
+    }
+}
 
-def kq_registries(_f : KqTag_iq4nl32) : KqRegistries => <- KqRegistries()
+def kq_registries(_f : KqTag_iq4nl32) : KqRegistries {
+    static_if (typeinfo module_exists(llvm_tune)) {
+        return <- KqRegistries(rm_gemv <- iq4nl32q8_rm_gemv_gen_variants(), rm_witness <- iq4nl32q8_rm_witness_gen_variants())
+    } else {
+        return <- KqRegistries()
+    }
+}
 
-def kq_registries(_f : KqTag_q4032) : KqRegistries => <- KqRegistries()
+def kq_registries(_f : KqTag_q4032) : KqRegistries {
+    static_if (typeinfo module_exists(llvm_tune)) {
+        return <- KqRegistries(rm_gemv <- q4032q8_rm_gemv_gen_variants(), rm_witness <- q4032q8_rm_witness_gen_variants())
+    } else {
+        return <- KqRegistries()
+    }
+}
 
-def kq_registries(_f : KqTag_q5032) : KqRegistries => <- KqRegistries()
+def kq_registries(_f : KqTag_q5032) : KqRegistries {
+    static_if (typeinfo module_exists(llvm_tune)) {
+        return <- KqRegistries(rm_gemv <- q5032q8_rm_gemv_gen_variants(), rm_witness <- q5032q8_rm_witness_gen_variants())
+    } else {
+        return <- KqRegistries()
+    }
+}
 
-def kq_registries(_f : KqTag_mx4) : KqRegistries => <- KqRegistries()
+def kq_registries(_f : KqTag_mx4) : KqRegistries {
+    static_if (typeinfo module_exists(llvm_tune)) {
+        return <- KqRegistries(rm_gemv <- mx4q8_rm_gemv_gen_variants(), rm_witness <- mx4q8_rm_witness_gen_variants())
+    } else {
+        return <- KqRegistries()
+    }
+}
 
 def kq_registries(_f : KqTag_k4) : KqRegistries {
     static_if (typeinfo module_exists(llvm_tune)) {
         return <- KqRegistries(tile <- k4q8_tile_gen_variants(), tile4 <- k4q8_tile4_gen_variants(), gemv <- k4q8_gemv_gen_variants(),
             layout <- k4q8_layout_gen_variants(), tileform <- k4q8_tileform_gen_variants(), amx_cfg <- k4q8_amx_cfg_gen_variants(),
-            witness <- k4q8_witness_gen_variants(), panel <- k4q8_panel_gen_variants())
+            witness <- k4q8_witness_gen_variants(), panel <- k4q8_panel_gen_variants(),
+            rm_gemv <- k4q8_rm_gemv_gen_variants(), rm_witness <- k4q8_rm_witness_gen_variants())
     } else {
         return <- KqRegistries()
     }
@@ -3902,7 +4026,8 @@ def kq_registries(_f : KqTag_k5) : KqRegistries {
     static_if (typeinfo module_exists(llvm_tune)) {
         return <- KqRegistries(tile <- k5q8_tile_gen_variants(), tile4 <- k5q8_tile4_gen_variants(), gemv <- k5q8_gemv_gen_variants(),
             layout <- k5q8_layout_gen_variants(), tileform <- k5q8_tileform_gen_variants(), amx_cfg <- k5q8_amx_cfg_gen_variants(),
-            witness <- k5q8_witness_gen_variants(), panel <- k5q8_panel_gen_variants())
+            witness <- k5q8_witness_gen_variants(), panel <- k5q8_panel_gen_variants(),
+            rm_gemv <- k5q8_rm_gemv_gen_variants(), rm_witness <- k5q8_rm_witness_gen_variants())
     } else {
         return <- KqRegistries()
     }
@@ -3912,7 +4037,8 @@ def kq_registries(_f : KqTag_k6) : KqRegistries {
     static_if (typeinfo module_exists(llvm_tune)) {
         return <- KqRegistries(tile <- k6q8_tile_gen_variants(), tile4 <- k6q8_tile4_gen_variants(), gemv <- k6q8_gemv_gen_variants(),
             layout <- k6q8_layout_gen_variants(), tileform <- k6q8_tileform_gen_variants(), amx_cfg <- k6q8_amx_cfg_gen_variants(),
-            witness <- k6q8_witness_gen_variants(), panel <- k6q8_panel_gen_variants())
+            witness <- k6q8_witness_gen_variants(), panel <- k6q8_panel_gen_variants(),
+            rm_gemv <- k6q8_rm_gemv_gen_variants(), rm_witness <- k6q8_rm_witness_gen_variants())
     } else {
         return <- KqRegistries()
     }
@@ -3922,7 +4048,8 @@ def kq_registries(_f : KqTag_q40) : KqRegistries {
     static_if (typeinfo module_exists(llvm_tune)) {
         return <- KqRegistries(tile <- q40q8_tile_gen_variants(), tile4 <- q40q8_tile4_gen_variants(), gemv <- q40q8_gemv_gen_variants(),
             layout <- q40q8_layout_gen_variants(), tileform <- q40q8_tileform_gen_variants(), amx_cfg <- q40q8_amx_cfg_gen_variants(),
-            witness <- q40q8_witness_gen_variants(), panel <- q40q8_panel_gen_variants())
+            witness <- q40q8_witness_gen_variants(), panel <- q40q8_panel_gen_variants(),
+            rm_gemv <- q40q8_rm_gemv_gen_variants(), rm_witness <- q40q8_rm_witness_gen_variants())
     } else {
         return <- KqRegistries()
     }
@@ -3932,7 +4059,8 @@ def kq_registries(_f : KqTag_iq4xs) : KqRegistries {
     static_if (typeinfo module_exists(llvm_tune)) {
         return <- KqRegistries(tile <- iq4xsq8_tile_gen_variants(), tile4 <- iq4xsq8_tile4_gen_variants(), gemv <- iq4xsq8_gemv_gen_variants(),
             layout <- iq4xsq8_layout_gen_variants(), tileform <- iq4xsq8_tileform_gen_variants(), amx_cfg <- iq4xsq8_amx_cfg_gen_variants(),
-            witness <- iq4xsq8_witness_gen_variants(), panel <- iq4xsq8_panel_gen_variants())
+            witness <- iq4xsq8_witness_gen_variants(), panel <- iq4xsq8_panel_gen_variants(),
+            rm_gemv <- iq4xsq8_rm_gemv_gen_variants(), rm_witness <- iq4xsq8_rm_witness_gen_variants())
     } else {
         return <- KqRegistries()
     }
@@ -3942,7 +4070,8 @@ def kq_registries(_f : KqTag_iq3s4) : KqRegistries {
     static_if (typeinfo module_exists(llvm_tune)) {
         return <- KqRegistries(tile <- iq3s4q8_tile_gen_variants(), tile4 <- iq3s4q8_tile4_gen_variants(), gemv <- iq3s4q8_gemv_gen_variants(),
             layout <- iq3s4q8_layout_gen_variants(), tileform <- iq3s4q8_tileform_gen_variants(), amx_cfg <- iq3s4q8_amx_cfg_gen_variants(),
-            witness <- iq3s4q8_witness_gen_variants(), panel <- iq3s4q8_panel_gen_variants())
+            witness <- iq3s4q8_witness_gen_variants(), panel <- iq3s4q8_panel_gen_variants(),
+            rm_gemv <- iq3s4q8_rm_gemv_gen_variants(), rm_witness <- iq3s4q8_rm_witness_gen_variants())
     } else {
         return <- KqRegistries()
     }
@@ -3963,7 +4092,8 @@ def kq_registries(_f : KqTag_k3) : KqRegistries {
     static_if (typeinfo module_exists(llvm_tune)) {
         return <- KqRegistries(tile <- k3q8_tile_gen_variants(), tile4 <- k3q8_tile4_gen_variants(), gemv <- k3q8_gemv_gen_variants(),
             layout <- k3q8_layout_gen_variants(), tileform <- k3q8_tileform_gen_variants(), amx_cfg <- k3q8_amx_cfg_gen_variants(),
-            witness <- k3q8_witness_gen_variants(), panel <- k3q8_panel_gen_variants())
+            witness <- k3q8_witness_gen_variants(), panel <- k3q8_panel_gen_variants(),
+            rm_gemv <- k3q8_rm_gemv_gen_variants(), rm_witness <- k3q8_rm_witness_gen_variants())
     } else {
         return <- KqRegistries()
     }
@@ -3973,7 +4103,8 @@ def kq_registries(_f : KqTag_iq3s) : KqRegistries {
     static_if (typeinfo module_exists(llvm_tune)) {
         return <- KqRegistries(tile <- iq3sq8_tile_gen_variants(), tile4 <- iq3sq8_tile4_gen_variants(), gemv <- iq3sq8_gemv_gen_variants(),
             layout <- iq3sq8_layout_gen_variants(), tileform <- iq3sq8_tileform_gen_variants(), amx_cfg <- iq3sq8_amx_cfg_gen_variants(),
-            witness <- iq3sq8_witness_gen_variants(), panel <- iq3sq8_panel_gen_variants())
+            witness <- iq3sq8_witness_gen_variants(), panel <- iq3sq8_panel_gen_variants(),
+            rm_gemv <- iq3sq8_rm_gemv_gen_variants(), rm_witness <- iq3sq8_rm_witness_gen_variants())
     } else {
         return <- KqRegistries()
     }
@@ -3983,7 +4114,8 @@ def kq_registries(_f : KqTag_iq3xxs) : KqRegistries {
     static_if (typeinfo module_exists(llvm_tune)) {
         return <- KqRegistries(tile <- iq3xxsq8_tile_gen_variants(), tile4 <- iq3xxsq8_tile4_gen_variants(), gemv <- iq3xxsq8_gemv_gen_variants(),
             layout <- iq3xxsq8_layout_gen_variants(), tileform <- iq3xxsq8_tileform_gen_variants(), amx_cfg <- iq3xxsq8_amx_cfg_gen_variants(),
-            witness <- iq3xxsq8_witness_gen_variants(), panel <- iq3xxsq8_panel_gen_variants())
+            witness <- iq3xxsq8_witness_gen_variants(), panel <- iq3xxsq8_panel_gen_variants(),
+            rm_gemv <- iq3xxsq8_rm_gemv_gen_variants(), rm_witness <- iq3xxsq8_rm_witness_gen_variants())
     } else {
         return <- KqRegistries()
     }
@@ -3993,7 +4125,8 @@ def kq_registries(_f : KqTag_iq4nl) : KqRegistries {
     static_if (typeinfo module_exists(llvm_tune)) {
         return <- KqRegistries(tile <- iq4nlq8_tile_gen_variants(), tile4 <- iq4nlq8_tile4_gen_variants(), gemv <- iq4nlq8_gemv_gen_variants(),
             layout <- iq4nlq8_layout_gen_variants(), tileform <- iq4nlq8_tileform_gen_variants(), amx_cfg <- iq4nlq8_amx_cfg_gen_variants(),
-            witness <- iq4nlq8_witness_gen_variants(), panel <- iq4nlq8_panel_gen_variants())
+            witness <- iq4nlq8_witness_gen_variants(), panel <- iq4nlq8_panel_gen_variants(),
+            rm_gemv <- iq4nlq8_rm_gemv_gen_variants(), rm_witness <- iq4nlq8_rm_witness_gen_variants())
     } else {
         return <- KqRegistries()
     }
@@ -4003,7 +4136,8 @@ def kq_registries(_f : KqTag_k2) : KqRegistries {
     static_if (typeinfo module_exists(llvm_tune)) {
         return <- KqRegistries(tile <- k2q8_tile_gen_variants(), tile4 <- k2q8_tile4_gen_variants(), gemv <- k2q8_gemv_gen_variants(),
             layout <- k2q8_layout_gen_variants(), tileform <- k2q8_tileform_gen_variants(), amx_cfg <- k2q8_amx_cfg_gen_variants(),
-            witness <- k2q8_witness_gen_variants(), panel <- k2q8_panel_gen_variants())
+            witness <- k2q8_witness_gen_variants(), panel <- k2q8_panel_gen_variants(),
+            rm_gemv <- k2q8_rm_gemv_gen_variants(), rm_witness <- k2q8_rm_witness_gen_variants())
     } else {
         return <- KqRegistries()
     }
@@ -4013,7 +4147,8 @@ def kq_registries(_f : KqTag_iq2s) : KqRegistries {
     static_if (typeinfo module_exists(llvm_tune)) {
         return <- KqRegistries(tile <- iq2sq8_tile_gen_variants(), tile4 <- iq2sq8_tile4_gen_variants(), gemv <- iq2sq8_gemv_gen_variants(),
             layout <- iq2sq8_layout_gen_variants(), tileform <- iq2sq8_tileform_gen_variants(), amx_cfg <- iq2sq8_amx_cfg_gen_variants(),
-            witness <- iq2sq8_witness_gen_variants(), panel <- iq2sq8_panel_gen_variants())
+            witness <- iq2sq8_witness_gen_variants(), panel <- iq2sq8_panel_gen_variants(),
+            rm_gemv <- iq2sq8_rm_gemv_gen_variants(), rm_witness <- iq2sq8_rm_witness_gen_variants())
     } else {
         return <- KqRegistries()
     }
@@ -4023,7 +4158,8 @@ def kq_registries(_f : KqTag_iq2xs) : KqRegistries {
     static_if (typeinfo module_exists(llvm_tune)) {
         return <- KqRegistries(tile <- iq2xsq8_tile_gen_variants(), tile4 <- iq2xsq8_tile4_gen_variants(), gemv <- iq2xsq8_gemv_gen_variants(),
             layout <- iq2xsq8_layout_gen_variants(), tileform <- iq2xsq8_tileform_gen_variants(), amx_cfg <- iq2xsq8_amx_cfg_gen_variants(),
-            witness <- iq2xsq8_witness_gen_variants(), panel <- iq2xsq8_panel_gen_variants())
+            witness <- iq2xsq8_witness_gen_variants(), panel <- iq2xsq8_panel_gen_variants(),
+            rm_gemv <- iq2xsq8_rm_gemv_gen_variants(), rm_witness <- iq2xsq8_rm_witness_gen_variants())
     } else {
         return <- KqRegistries()
     }
@@ -4033,7 +4169,8 @@ def kq_registries(_f : KqTag_iq2xxs) : KqRegistries {
     static_if (typeinfo module_exists(llvm_tune)) {
         return <- KqRegistries(tile <- iq2xxsq8_tile_gen_variants(), tile4 <- iq2xxsq8_tile4_gen_variants(), gemv <- iq2xxsq8_gemv_gen_variants(),
             layout <- iq2xxsq8_layout_gen_variants(), tileform <- iq2xxsq8_tileform_gen_variants(), amx_cfg <- iq2xxsq8_amx_cfg_gen_variants(),
-            witness <- iq2xxsq8_witness_gen_variants(), panel <- iq2xxsq8_panel_gen_variants())
+            witness <- iq2xxsq8_witness_gen_variants(), panel <- iq2xxsq8_panel_gen_variants(),
+            rm_gemv <- iq2xxsq8_rm_gemv_gen_variants(), rm_witness <- iq2xxsq8_rm_witness_gen_variants())
     } else {
         return <- KqRegistries()
     }

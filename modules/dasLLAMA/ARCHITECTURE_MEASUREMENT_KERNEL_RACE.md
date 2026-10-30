@@ -3,8 +3,9 @@
 Companion to `ARCHITECTURE_MEASUREMENT.md`; a section is cited by its anchor. This
 document carries the instruments that time a kernel away from the
 served graph and the conditions their verdict holds under: what makes an isolated race predict
-the graph it imitates, how the gemv earns a second tune seat, and the fixture the CPU kernel
-bench times on. It also carries the vocabulary of the timing-race checklist. The rig that
+the graph it imitates, how the gemv earns a second tune seat, how the row-major families race
+on their one streamed shape, and the fixture the CPU kernel bench times on. It also carries the
+vocabulary of the timing-race checklist. The rig that
 produces recorded numbers, the tune gate, the Vulkan GEMM probe's axes and the instrumentation
 rails stay in `ARCHITECTURE_MEASUREMENT.md`.
 
@@ -142,6 +143,37 @@ a 512-row build at the ffn width tiled 320 times, past the largest L3 a socket l
 and the seat takes the MEDIAN of seven rounds, which discards a round that finds the plane in
 L3. In normal mode `llvm_tune` stamps a companion from its own manifest entry when one exists
 and is a perm this box can run, else from the tile's.
+
+### The row-major families race on the streamed shape alone {#rm-family-race}
+
+The twenty `<fmt>q8_rm_gemv_gen` families (the one-copy rare rail's GEMVs over the device
+planes, `ARCHITECTURE_GPU_VULKAN_STREAM.md`) have one serving regime: an expert's rows read once
+from DRAM by every lane. So `gen_tune_probe` races each on one streamed fixture - the rail's
+width, a stack past the cache - best-of `ROUNDS`, no screen, no hot shape and no seat of its
+own; the four-token tile follows the crown as a companion. The fixture is the family's own
+planes in the layout the rail reads: the generator fixture's disk-order planes on a Model shell,
+gathered by the engine's own gather (`layout_gather_dispatch` under `disk`, as the host twin's
+cells gather theirs) - a superblock format's decoded scale rows, the per-32 and mx4 planes as
+they lie on disk, the q8 scales narrowed to binary16. Before any number the family's reference
+row - the device-plane scalar decode, the registry's first row - is held to the generator
+fixture's own scalar oracle over the token row (a wrong gather or a wrong reference decode fails
+here, not in every perm at once; the q8 oracle sums over the narrowed scales the rows read),
+and every perm to the reference row, at the kq race's bar
+(`kq_tol`, `close_tol` of the row's largest magnitude), the per-32 and mx4 rows at the per-32
+tile race's (`b32_tol`, `close_to_b32_ref`'s), since they fold the block scale in float; a miss
+rejects the family and the scope completes on the reference body, and every report row carries
+its row's largest miss and the bound. The crown is the
+fastest generated perm whose witness companion (`<fmt>q8_rm_witness_gen`, the same `kq_witness`
+generator the tiles carry) says it emitted - a declined perm's clone runs the reference row and
+would otherwise win or lose on noise. The reference row takes the crown only by the win margin:
+the streamed rows tie at the DRAM ceiling, and a generated perm brings the four-token tile
+companion the reference row lacks. The sticky margin keeps the incumbent only while it emitted
+too, and the transcript says so when it did not. The TEST gate walks the same families on two
+shapes a format and names every perm without a witness row as a desync;
+`tests/test_kernel_backend.das` holds the same lockstep without a model over the formats
+`kq_family_fmts` reports with rm rows - every one but q8 (its rows ride their own registry) and
+nv4 (no rm family) - each carrying one witness row per perm, keyed alike, the reference row
+first.
 
 ### The CPU kernel bench's fixture conditions {#cpu-kernel-bench-fixture}
 
