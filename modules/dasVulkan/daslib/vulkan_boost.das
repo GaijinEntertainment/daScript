@@ -622,7 +622,7 @@ def public create_device(phys : VkPhysicalDevice; queue_families : array<uint>; 
     return <- create_device_chain(phys, queue_families, extensions, null, unsafe(addr<void?>(features2)))
 }
 
-[arch(at="../ARCHITECTURE.md#storage-8-16")]
+[arch(at="../ARCHITECTURE_DEVICE_FEATURES.md#storage-8-16")]
 def public storage_8_16_supported(phys : VkPhysicalDevice) : bool {
     var f11 = VkPhysicalDeviceVulkan11Features()
     var f12 = VkPhysicalDeviceVulkan12Features()
@@ -644,7 +644,7 @@ def public create_device_storage_8_16(phys : VkPhysicalDevice; queue_family : ui
     return <- create_device_storage_8_16(phys, queue_family, no_ext)
 }
 
-[arch(at="../ARCHITECTURE.md#storage-8-16")]
+[arch(at="../ARCHITECTURE_DEVICE_FEATURES.md#storage-8-16")]
 def public create_device_storage_8_16(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>) : Device {
     var f11 = VkPhysicalDeviceVulkan11Features()
     var f12 = VkPhysicalDeviceVulkan12Features()
@@ -732,7 +732,7 @@ def public os_video_memory(phys : VkPhysicalDevice) : tuple<budget : uint64; usa
 //! create_device_cooperative_matrix PLUS the Vulkan 1.3 subgroup-size-control pair so pipelines can pin
 //! ``requiredSubgroupSize``; each bit is enabled only when the device reports it (degrades to the plain
 //! coopmat device). Instance must be api 1.3; opportunistically enables VK_KHR_pipeline_executable_properties.
-[arch(at="../ARCHITECTURE.md#subgroup-pair")]
+[arch(at="../ARCHITECTURE_DEVICE_FEATURES.md#subgroup-pair")]
 def public create_device_coopmat_full_subgroups(phys : VkPhysicalDevice; queue_family : uint) : Device {
     var q13 = VkPhysicalDeviceVulkan13Features()
     query_core_features(phys, 3u, q13)   // the result is ignored: below 1.3 q13 stays zeroed, so both bits stay off
@@ -801,7 +801,8 @@ def public integer_dot_product_supported(phys : VkPhysicalDevice) : bool {
 //! Create a device with the 8/16-bit SSBO storage set AND ``shaderIntegerDotProduct`` (a Vulkan11 ->
 //! Vulkan12 -> ShaderIntegerDotProduct chain through features2); pre-1.3 devices get the
 //! VK_KHR_shader_integer_dot_product string automatically. Pairs with ``sdot4``; gate with both probes.
-[arch(at="../ARCHITECTURE.md#storage-8-16"), arch(at="../ARCHITECTURE.md#subgroup-pair")]
+[arch(at="../ARCHITECTURE_DEVICE_FEATURES.md#storage-8-16"),
+ arch(at="../ARCHITECTURE_DEVICE_FEATURES.md#subgroup-pair")]
 def public create_device_storage_8_16_int_dot(phys : VkPhysicalDevice; queue_family : uint) : Device {
     var f11 = VkPhysicalDeviceVulkan11Features()
     var f12 = VkPhysicalDeviceVulkan12Features()
@@ -854,7 +855,8 @@ def private push_memory_management_extensions(var ext : array<string>; with_memp
     }
 }
 
-[arch(at="../ARCHITECTURE.md#storage-8-16"), arch(at="../ARCHITECTURE.md#subgroup-pair")]
+[arch(at="../ARCHITECTURE_DEVICE_FEATURES.md#storage-8-16"),
+ arch(at="../ARCHITECTURE_DEVICE_FEATURES.md#subgroup-pair")]
 def public create_device_storage_8_16_int_dot_coopmat(phys : VkPhysicalDevice; queue_family : uint; transfer_family : int = -1) : Device {
     var q12 = VkPhysicalDeviceVulkan12Features()
     var qmp = VkPhysicalDeviceMemoryPriorityFeaturesEXT()
@@ -941,7 +943,7 @@ def public memory_priority_supported(phys : VkPhysicalDevice) : bool {
 //! True iff ``phys`` can create the cm2 device: VK_NV_cooperative_matrix2 (+ its VK_KHR_cooperative_matrix
 //! dependency), the cm2 feature set the dasSpirv rails emit (wg scope, flexible dims, tensor addressing, block
 //! loads), and the bits create_device_storage_8_16_int_dot_coopmat2 enables (``cooperativeMatrix``, ``bufferDeviceAddress``, ``shaderInt16``).
-[arch(at="../ARCHITECTURE.md#storage-8-16")]
+[arch(at="../ARCHITECTURE_DEVICE_FEATURES.md#storage-8-16")]
 def public cooperative_matrix2_supported(phys : VkPhysicalDevice) : bool {
     if (!device_extension_available(phys, "VK_NV_cooperative_matrix2")
             || !device_extension_available(phys, "VK_KHR_cooperative_matrix")) {
@@ -978,7 +980,7 @@ def public cooperative_matrix2_fa_supported(phys : VkPhysicalDevice) : bool {
 //! True when the device also carries the four-wide cm2 decode callback
 //! (VK_NV_cooperative_matrix_decode_vector); ``create_device_storage_8_16_int_dot_coopmat2`` enables it
 //! when asked and reported, and a module naming it on a device created without it drops that operand first.
-[arch(at="../ARCHITECTURE.md#subgroup-pair")]
+[arch(at="../ARCHITECTURE_DEVICE_FEATURES.md#subgroup-pair")]
 def public cooperative_matrix2_decode_vector_supported(phys : VkPhysicalDevice) : bool {
     var fdv = VkPhysicalDeviceCooperativeMatrixDecodeVectorFeaturesNV()
     return (cooperative_matrix2_supported(phys) && query_extension_features(phys, "VK_NV_cooperative_matrix_decode_vector", fdv)
@@ -1031,7 +1033,8 @@ def public select_transfer_queue_family(phys : VkPhysicalDevice) : int {
 //! external_memory_host, ``pipelineExecutableInfo`` of
 //! VK_KHR_pipeline_executable_properties, the four-wide decode unless
 //! ``decode_vector`` is false) and ``transfer_family``.
-[arch(at="../ARCHITECTURE.md#storage-8-16"), arch(at="../ARCHITECTURE.md#subgroup-pair")]
+[arch(at="../ARCHITECTURE_DEVICE_FEATURES.md#storage-8-16"),
+ arch(at="../ARCHITECTURE_DEVICE_FEATURES.md#subgroup-pair")]
 def public create_device_storage_8_16_int_dot_coopmat2(   // nolint:STYLE037,STYLE038 - pNext hops
                                                        phys : VkPhysicalDevice;
                                                        queue_family : uint;
@@ -1933,11 +1936,9 @@ def public set_pipeline_capture(on : bool) {
 //! the switch set_pipeline_capture last set
 def public pipeline_capture : bool => g_pipeline_capture
 
-//! the one builder behind the plain, specialized, full-subgroups and
-//! pinned-width creators: ``full`` sets REQUIRE_FULL_SUBGROUPS on the
-//! stage, ``subgroup`` lanes (0 = the device's own width) chain a
-//! ``VkPipelineShaderStageRequiredSubgroupSizeCreateInfo``, ``spec``
-//! entries rewrite the shader's ``OpSpecConstant`` defaults
+//! the one builder behind every compute pipeline creator: ``full``
+//! sets REQUIRE_FULL_SUBGROUPS, ``subgroup`` lanes (0 = the device's
+//! own) pin the stage, ``spec`` rewrites ``OpSpecConstant`` defaults
 def private build_compute_pipeline(device : Device; layout : PipelineLayout; shader : ShaderModule;
                                    entry : string; full : bool; subgroup : uint;
                                    spec : array<SpecConstantValue>) : Pipeline {
@@ -1995,25 +1996,27 @@ def public create_compute_pipeline(device : Device; layout : PipelineLayout; sha
     return <- build_compute_pipeline(device, layout, shader, entry, false, 0u, no_spec)
 }
 
-[arch(at="../ARCHITECTURE.md#subgroup-pair")]
+[arch(at="../ARCHITECTURE_DEVICE_FEATURES.md#subgroup-pair")]
 def public compute_full_subgroups_supported(phys : VkPhysicalDevice) : bool {
     var q13 = VkPhysicalDeviceVulkan13Features()
     return query_core_features(phys, 3u, q13) && q13.subgroupSizeControl != 0u && q13.computeFullSubgroups != 0u
 }
 
-[arch(at="../ARCHITECTURE.md#subgroup-pair")]
+[arch(at="../ARCHITECTURE_DEVICE_FEATURES.md#subgroup-pair")]
 def public create_compute_pipeline_full_subgroups(device : Device; layout : PipelineLayout; shader : ShaderModule; entry : string = "main") : Pipeline {
     let no_spec : array<SpecConstantValue>
     return <- build_compute_pipeline(device, layout, shader, entry, true, 0u, no_spec)
 }
 
-//! the subgroup widths a compute pipeline on ``phys`` may pin through
-//! ``requiredSubgroupSize``, ``lo``..``hi`` (powers of two), and
+//! the widths a compute pipeline may pin (``requiredSubgroupSize``):
+//! ``lo``..``hi`` (powers of two), and whether compute may pin at all
+typedef SubgroupPinRange = tuple<lo : uint; hi : uint; compute : bool>
+
+//! the subgroup widths a compute pipeline on ``phys`` may pin, and
 //! whether the compute stage may pin at all; all off below API 1.3 or
 //! without the subgroup pair
-[arch(at="../ARCHITECTURE.md#subgroup-pair")]
-def public subgroup_size_control_range(phys : VkPhysicalDevice)
-    : tuple<lo : uint; hi : uint; compute : bool> {
+[arch(at="../ARCHITECTURE_DEVICE_FEATURES.md#subgroup-pair")]
+def public subgroup_size_control_range(phys : VkPhysicalDevice) : SubgroupPinRange {
     if (!compute_full_subgroups_supported(phys)) {
         return (lo = 0u, hi = 0u, compute = false)
     }
@@ -2034,11 +2037,9 @@ def public compute_subgroup_size_pinnable(phys : VkPhysicalDevice; size : uint) 
 }
 
 //! create_compute_pipeline with the stage pinned at ``subgroup``
-//! lanes (0 = the device's own width; a width
-//! `compute_subgroup_size_pinnable` admits, on a device from a
-//! creator that enabled the subgroup pair), ``full`` adding
-//! REQUIRE_FULL_SUBGROUPS
-[arch(at="../ARCHITECTURE.md#subgroup-pair")]
+//! lanes (0 = the device's own; else a width the device admits, see
+//! `compute_subgroup_size_pinnable`), ``full`` adding the flag
+[arch(at="../ARCHITECTURE_DEVICE_FEATURES.md#subgroup-pair")]
 def public create_compute_pipeline_subgroup(device : Device; layout : PipelineLayout;
                                             shader : ShaderModule; subgroup : uint;
                                             full : bool = false;

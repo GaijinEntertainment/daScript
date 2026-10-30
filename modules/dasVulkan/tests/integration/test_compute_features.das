@@ -174,10 +174,8 @@ class Cm2ScaleAcc {
 // ===== a multi-SSBO compute runner =====
 
 // One coherent STORAGE buffer per binding, bufs[i] -> binding i, read
-// back into `bufs`; `spec` empty = plain pipeline; `subgroup` pins
-// the stage's width (0 = the device's own; the int_dot creator and up
-// enable the pin). The feature flags pick the device - gate on
-// probe_support(), else creation fails.
+// back into `bufs`; empty `spec` = plain pipeline; `subgroup` pins
+// the stage's width (0 = own); gate flags on probe_support() first.
 def run_multi(var words : array<uint>; var bufs : array<array<uint8>>; groups : uint;   // nolint:STYLE038 - flat command-record run
               spec : array<SpecConstantValue>; storage_8_16 : bool; int_dot : bool = false;
               coopmat : bool = false; coopmat2 : bool = false; subgroup : uint = 0u) {
@@ -339,8 +337,8 @@ def pinned_width_run(t : T?; width : uint) {
     t |> success(bad_size == 0,
         "pinned at {width}: gl_SubgroupSize reads {width} on every invocation ({bad_size} wrong)")
     t |> success(bad_sum == 0,
-        "pinned at {width}: subgroupAdd(1.0) == the lanes of {width} a 64-wide workgroup fills "
-            + "({bad_sum} wrong)")
+        ("pinned at {width}: subgroupAdd(1.0) == the lanes of {width} a 64-wide workgroup fills "
+            + "({bad_sum} wrong)"))
     delete words
     delete bufs
 }
@@ -654,12 +652,9 @@ def test_coopmat_gpu(t : T?) {
     delete expected
 }
 
-//! an f16 accumulator's rounding off two dots against a column of
-//! ones, [2048, 1 x 15] = 2063 and [1024, 0.5 x 15] = 1031.5: once
-//! to nearest-even reads 2064 and 1032 (NVIDIA), once toward zero
-//! 2062 and 1031 (RDNA3's WMMA), a pairwise f16 tree 2062 and 1030,
-//! a sequential f16 sum 2048 and 1024 - a kernel summing many
-//! products into an f16 accumulator carries the device's form
+//! an f16 accumulator's rounding: [2048, 1 x 15] and [1024, 0.5 x 15]
+//! against ones read 2064/1032 once to even (NVIDIA), 2062/1031 once
+//! toward zero (RDNA3), 2062/1030 pairwise tree, 2048/1024 sequential
 [test]
 def test_coopmat_f16_acc_rounding_gpu(t : T?) {
     let sup = probe_support()
@@ -686,12 +681,12 @@ def test_coopmat_f16_acc_rounding_gpu(t : T?) {
     run_multi(words, bufs, 1u, no_spec, true, true, true)
     let got = f16_ref(bufs[2], 0)
     let got1 = f16_ref(bufs[2], 1)
-    let form = got1 == 1032.0 ? "once to nearest-even"
+    let form = (got1 == 1032.0 ? "once to nearest-even"
         : (got1 == 1031.0 ? "once toward zero"
         : (got1 == 1030.0 ? "a pairwise f16 tree"
-        : (got1 == 1024.0 ? "a sequential f16 sum" : "an unknown form")))
-    to_log(LOG_INFO, "f16 coopmat accumulator: 2048 + 15 x 1 reads {got}, "
-        + "1024 + 15 x 0.5 reads {got1} - {form}\n")
+        : (got1 == 1024.0 ? "a sequential f16 sum" : "an unknown form"))))
+    to_log(LOG_INFO, ("f16 coopmat accumulator: 2048 + 15 x 1 reads {got}, "
+        + "1024 + 15 x 0.5 reads {got1} - {form}\n"))
     t |> success(form != "an unknown form",
         "the f16 accumulator's rounding is a known form ({got} and {got1}: {form})")
     delete words
