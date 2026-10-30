@@ -189,7 +189,13 @@ cards. `performance/REVIEW.das` checks the records' tree-decidable provenance:
 - `check_row_archive` - a current-release row's `tune_sha` names an archive that exists, pins
   the current release, and stamps an `engine_sha` HEAD reaches. Licenses no names.
 - `check_defaults_profiles` - a `defaults/` profile is a quiet mint at the current release with
-  a `kernels` section and no `engine_sha`. Licenses no names.
+  a `kernels` section, no `engine_sha`, and an entry for every `[tune(gen = ...)]` family the
+  scope's modules declare (`tune_gen_families`, a text scan of `dasllama/`): the set a fat
+  release demands a profile clone for - a fat exe ships clones, never fallback stamps - so a
+  class whose profile lacks one fails here instead of in `daspkg release --fat`. A profile
+  carries no `engine_sha` because its validity is its release pin and its feature class: a
+  commit stamp would name an orphan commit after every rebase and give a reader nothing to act
+  on. Licenses no names.
 - `check_ruler_records` - a `records/mtp/` file names no home directory. Licenses no names.
 - `main` - `dasllama_version.das` declares a readable `DASLLAMA_RELEASE`. Licenses no names.
 

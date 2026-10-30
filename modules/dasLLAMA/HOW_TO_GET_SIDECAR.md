@@ -247,10 +247,13 @@ produce `<class>.tune-defaults.json`, and that one IS committed. Box differences
 
 `modules/dasLLAMA/performance/REVIEW.md` and its `REVIEW.das` gate: a `defaults/` profile carries no
 `engine_sha`, its `provenance.dasllama_version` equals `DASLLAMA_RELEASE`, its `noise` reads `ok`,
-and it is minted on a quiet, session-free box - never hand-edited. The shipped profile is the
-scope's defaults every kernel reads at its own compile
-(`ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers`). Run the gate before pushing:
-`bin/daslang utils/internal/preflight/main.das -- --only review-md`.
+it carries an entry for every `[tune(gen = ...)]` family the scope declares (a fat release ships a
+clone per family, `ARCHITECTURE_MEASUREMENT.md#committed-records-gate`), and it is minted on a
+quiet, session-free box - never hand-edited. The shipped profile is the scope's defaults every
+kernel reads at its own compile (`ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers`). Run the gate
+before pushing: `bin/daslang utils/internal/preflight/main.das -- --only review-md`. The push
+itself runs the dasllama-server release workflow on a profile change (its path filter names
+`performance/defaults/`), so the fat build proves the profile before the PR merges.
 
 ## 8. The unattended form
 

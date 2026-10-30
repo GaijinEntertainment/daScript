@@ -206,11 +206,34 @@ def private check_das_row(full : string; box : string; what : string; r : JsonVa
     }
 }
 
-// the shipped defaults profiles: a quiet mint, a version pin, and NO commit stamp (a
-// profile's validity is its pin + feature class; an engine_sha would be an orphan after
-// every rebase and says nothing a reader can act on)
+let private TUNE_SCOPE_DIR = "{MODULE_ROOT}/dasllama"
+
+//! a text scan of these sources, never the registries: the gate stays engine-free
+def private tune_gen_families() : array<string> {
+    var fams, files : array<string>
+    walk_das_files(TUNE_SCOPE_DIR, files)
+    for (f in files) {
+        let text = fread(f)
+        continue if (empty(text))
+        peek_data(text) $(d) {
+            var at = find(text, "tune(gen = \"")
+            while (at >= 0) {
+                let defAt = find(text, "\ndef ", at)
+                break if (defAt < 0)
+                let nameAt = defAt + 5
+                let paren = find(text, "(", nameAt)
+                break if (paren < 0)
+                fams |> push(slice(d, nameAt, paren))
+                at = find(text, "tune(gen = \"", paren)
+            }
+        }
+    }
+    return <- fams
+}
+
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#committed-records-gate")]
 def private check_defaults_profiles {
+    var fams <- tune_gen_families()
     dir(DEFAULTS_DIR) $(name) {
         return if (!(name |> ends_with(".tune-defaults.json")))
         let full = "{DEFAULTS_DIR}/{name}"
@@ -244,8 +267,15 @@ def private check_defaults_profiles {
         let kernels = doc?["kernels"]
         if (kernels == null || !(kernels.value is _object) || empty(kernels.value as _object)) {
             gate_finding(full, "no kernels section - not a profile")
+            return
+        }
+        for (fam in fams) {
+            if (!(kernels.value as _object |> key_exists(fam))) {
+                gate_finding(full, "no entry for the [tune] family {fam} - a fat release ships a profile clone for every family the scope compiles (`daspkg release --fat` refuses this class without one); re-mint the class, the generator half races every family (ARCHITECTURE_MEASUREMENT.md#committed-records-gate)")
+            }
         }
     }
+    delete fams
 }
 
 // the ruler records live one level down, where the corpus walk above does not reach
