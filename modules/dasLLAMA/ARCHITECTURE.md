@@ -245,8 +245,9 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
 - `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` - the Vulkan GEMM probe's arms, the shapes they run
   at, and the alternates they are read against.
 - `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md` - the instruments that time a kernel away from the
-  served graph - kernel-race fidelity, the gemv's own tune seat, and the CPU kernel bench's
-  fixture conditions - and the timing-race vocabulary the race checklist's terms come from
+  served graph - kernel-race fidelity, the gemv's own tune seat, the row-major families' race on
+  the streamed shape alone, and the CPU kernel bench's fixture conditions - and the timing-race
+  vocabulary the race checklist's terms come from
   (`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#timing-race-vocabulary`).
 - `ARCHITECTURE_CPU_KERNELS.md` - the sub-block-packed k3/k6 planes, the grid formats' panel and
   row-group decodes, the VBMI symbol lattice, the tier that selects on the target rather than the

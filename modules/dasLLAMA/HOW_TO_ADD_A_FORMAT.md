@@ -518,8 +518,13 @@ decoded scale row needs no upload work - only the id bridge and the kernels. The
    `rm_grid_block`), `rm_b32_gen` for a per-32 one - and a
    `register_llvm_code_generator` row for its `<fmt>_rm_gemv` and `<fmt>_rm_tile4` keys; in
    `dasllama_math_gen.das` the `[tune]` family `<fmt>q8_rm_gemv_gen` (the shared perms, the tile stub
-   `<fmt>q8_rm_tile4_gen` ahead of it as its companion, the reference `rm_kq_rows_ref` over the device-plane
-   decode `rm_kq_dev_row`, which takes the format's arm, or the per-32 family's disk-order dot); the stamp in
+   `<fmt>q8_rm_tile4_gen` and the witness stub `<fmt>q8_rm_witness_gen` ahead of it as its companions, the
+   reference `rm_kq_rows_ref` over the device-plane decode `rm_kq_dev_row`, which takes the format's arm, or the
+   per-32 family's disk-order dot) and the `rm_gemv` / `rm_witness` rows of the format's `kq_registries`, which
+   `gen_tune_probe` reads to gate and race the family
+   (`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#rm-family-race`; a format with no rows is never raced, and
+   `performance/REVIEW.das` fails every class profile that lacks the family's entry,
+   `ARCHITECTURE_MEASUREMENT.md#committed-records-gate`); the stamp in
    every `performance/defaults/*.tune-defaults.json`; the rail's dispatch (`rm_dev_serves`, `rare_rows_core`'s
    device arm, `rm_dev_tile4` in `dasllama_blocks.das`). The host twin (`dasllama_gpu_host_twin.das`, both discrete
    homes': the format's GEMV template stamped with no dispatch home and run on the CPU - the kq family's `blk_contrib`

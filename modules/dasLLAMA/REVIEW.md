@@ -19,6 +19,10 @@ this file) too.**
 check's licensed set - the names a check does not flag - or changes a constant a check compares
 against, applies `REVIEW_GATES.md` (beside this file) too.**
 
+**A diff that cites a timing as the reason it picks one candidate over another, adds a race,
+changes which candidates a race times, or picks a numeric threshold by a race applies
+`REVIEW_RACE_PICKS.md` (beside this file) too.**
+
 **Wherever it lives, each of these answers to this folder's `benchmarks/REVIEW.md` beside its own
 folder's checklist: code that times a run on its own clock (not a spawned child's) and hands the
 wall or rate back as its result (a file printing it, or a function returning it to its caller); a
@@ -72,8 +76,9 @@ area or a file makes `run.das -- --changed` skip those tests, so a regression th
 every `dasllama/` change answer to this folder's `tests/REVIEW.md` - open it; the walk does not
 surface it for a `dasllama/`-only diff.**
 
-**A diff that changes a CPU kernel - a function in `dasllama/dasllama_math*.das` that runs on the
-CPU and writes an output buffer from operand buffers - applies `tests/REVIEW_KERNEL_CELLS.md`.**
+**A diff that changes the body, parameters or return type of a CPU kernel - a function in
+`dasllama/dasllama_math*.das` that runs on the CPU and writes an output buffer from operand
+buffers - applies `tests/REVIEW_KERNEL_CELLS.md`.**
 
 **A diff that adds, moves or removes a `[test]` file outside this folder's `tests/` with a
 `require dasllama/...` line of its own adds, corrects or drops its row, with the reason it lives
@@ -107,8 +112,9 @@ knockout (an arm that skips a stage to measure that stage's cost), a hand-bindin
 writes buffer or kernel-argument (kargs) binding numbers as literals), a cell or probe that fills
 or binds a `TokMeta` block, a read of `g_env_gpu.cuda` (`DASLLAMA_CUDA`) or
 `g_env_vulkan.cuda_mmq` (`DASLLAMA_CUDA_MMQ`), a call of `gpu_want_cuda`, a branch whose true arm
-calls a `moe_gpu_*`, `vk_*`, `cud_*` or `rdec_*` entry, or a call of `vk_moe_init`, wherever the
-diff puts it, applies `REVIEW_GPU.md`.**
+directly calls a `moe_gpu_*`, `vk_*`, `cud_*` or `rdec_*` function that records, submits or waits
+on GPU work, or allocates, uploads to or frees device memory, or a call of `vk_moe_init`,
+wherever the diff puts it, applies `REVIEW_GPU.md`.**
 
 **A change to `dasllama/dasllama_image.das`, or, wherever the diff puts it, to a `.dlim` mint
 (building a `.dlim` from a gguf), a `.dlim` load, an image identity, a flavor (the
@@ -185,22 +191,6 @@ a non-private `dasllama/` setter a file outside `tests/` calls, or an on-disk st
 writes or a user places, any of them moving a gate, policy or threshold off its default) or its
 announce (the line a run prints where the override changes the outcome) applies
 `REVIEW_OVERRIDES.md` (beside this file) too.**
-
-**A diff that cites a timing (in a `PERF_LEDGER.md` row, a `followup_*.md` row, a commit message or
-the PR body) as the reason it picks one candidate over another - a constant's value, a body
-replacing another that computes the same quantity, a predicate or a dispatch order choosing among
-kernels that compute the same result - takes the winner from one script that races every candidate
-in one process, interleaved, each chosen by a flag or argument in the code the diff ships, or
-carried as an arm of the race script where the diff deletes it** - two commits or two processes
-differ by everything else that changed, so their timings pick nothing.
-
-**A diff that picks a candidate by racing every candidate in one process, interleaved, puts the
-race's output lines, one per candidate and each naming it, in the PR body or in a `PERF_LEDGER.md`
-row the diff adds.**
-
-**A diff whose race picks a numeric threshold - a cutoff a predicate compares against, or a size a
-kernel variant is compiled for: a row count, a byte size, a lane width - times the chosen value and
-at least one value on each side of it that the device admits, in that race.**
 
 **A call site a diff adds - not a call it moved from another site - of a CPU or GPU matrix
 multiply whose weight operand is an f32 plane, outside a correctness-comparison path (one only

@@ -123,9 +123,12 @@ cd ~/daScript
 DAS_TUNE_MODE=test DAS_JOBQUE_THREADS=8 bin/daslang -jit modules/dasLLAMA/harness/gen_tune_probe.das
 ```
 
-Every `[tune_perm]` seat of every family is stamped and checked bit-exact against its reference body;
-the box's ISA is what makes seats that never ran before run here (the 512-bit VNNI seats on zen4, the
-AMX leg on Intel). `ok` on every line, or the box has found a defect and the walk stops until it is fixed.
+Every `[tune_perm]` seat of every family is stamped and held to its reference body within the family's
+bar (`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#rm-family-race` names the row-major families') - the q8
+tile, the superblock and per-32 tiles, the bf16-weight tile and the twenty row-major GEMVs
+(`<fmt>q8_rm_gemv_gen`, the streamed expert rail); the box's ISA is what makes seats that never ran
+before run here (the 512-bit VNNI seats on zen4, the AMX leg on Intel). `ok` on every line, or the box
+has found a defect and the walk stops until it is fixed.
 The gate is the tune framework's TEST mode over the perm grids
 (`ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers`); it does not reach the cells that call a
 stamped tile directly, so run the module's dastest files on the box too.
@@ -161,6 +164,12 @@ unset DAS_TUNE_MANIFEST
 DASLLAMA_MODELS_DIR=~/models DASLLAMA_CONFIRM_MODEL=$HOME/models/Llama-3.2-1B-Instruct-Q8_0.gguf bin/daslang utils/daspkg/main.das -- release --root modules/dasLLAMA/benchmarks --out modules/dasLLAMA/performance/_rig > ~/mint.log 2>&1
 ```
 
+The tuner's own transcript - every family's rows, a rejected family's miss - is
+`modules/dasLLAMA/benchmarks/modules/.daspkg.log`, not the release's stdout. A box that minted
+before keeps a previous `lcpp_bench.tune.json` beside the app, and a seat whose perm emits on
+this box stays crowned inside the win margin (the sticky seat; the transcript names a seat that
+moved because its perm runs the reference body here); delete it first for a mint that answers on
+its own.
 `DASLLAMA_CONFIRM_MODEL` names the q8 vehicle the confirm runs the q8 leg on; without one the
 confirm pins the q8 fallback for want of a q8 model. A kernel family that wins the race and then
 loses `confirm_e2e_prefill` is a defect to fix before the profile is committed, not evidence that
@@ -238,10 +247,13 @@ produce `<class>.tune-defaults.json`, and that one IS committed. Box differences
 
 `modules/dasLLAMA/performance/REVIEW.md` and its `REVIEW.das` gate: a `defaults/` profile carries no
 `engine_sha`, its `provenance.dasllama_version` equals `DASLLAMA_RELEASE`, its `noise` reads `ok`,
-and it is minted on a quiet, session-free box - never hand-edited. The shipped profile is the
-scope's defaults every kernel reads at its own compile
-(`ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers`). Run the gate before pushing:
-`bin/daslang utils/internal/preflight/main.das -- --only review-md`.
+it carries an entry for every `[tune(gen = ...)]` family the scope declares (a fat release ships a
+clone per family, `ARCHITECTURE_MEASUREMENT.md#committed-records-gate`), and it is minted on a
+quiet, session-free box - never hand-edited. The shipped profile is the scope's defaults every
+kernel reads at its own compile (`ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers`). Run the gate
+before pushing: `bin/daslang utils/internal/preflight/main.das -- --only review-md`. The push
+itself runs the dasllama-server release workflow on a profile change (its path filter names
+`performance/defaults/`), so the fat build proves the profile before the PR merges.
 
 ## 8. The unattended form
 

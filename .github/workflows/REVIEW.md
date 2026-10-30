@@ -29,13 +29,18 @@ scopes its own steps use.**
 fewer cases than before, or word a finding so it no longer names what failed is a defect.**
 
 **A workflow the diff adds or deletes, or whose trigger or matrix the diff adds, changes, or
-removes, adds, corrects, or deletes in the same change its row in sec."What CI runs (per-PR +
-nightly)" of `skills/internal/preflight.md` (repo root) - naming every event that triggers it,
-each with its path filter when it has one, and what the lane runs - and its section there,
-naming its local mirror or saying it has none. Its section is the heading beginning
-`## <workflow>.yml`; a workflow with one such heading per job answers in the section of each job
-the diff changes, and a trigger change corrects every section that names the trigger.** A lane
-the table does not list, or lists wrong, is one nobody mirrors before a push.
+removes, adds, corrects, or deletes in the same change its row in the table under
+`## What CI runs (per-PR + nightly)` in `skills/internal/preflight.md` (repo root), naming every
+event that triggers it, each with its path filter when it has one - its globs, or words a reader
+matches to every glob from the glob's path alone - and what the lane runs.** A lane the table
+does not list, or lists wrong, is one nobody mirrors before a push.
+
+**A workflow the diff adds or deletes, or whose trigger or matrix the diff adds, changes, or
+removes, adds, corrects, or deletes in the same change its section in
+`skills/internal/preflight.md` (repo root) - the heading beginning `## <workflow>.yml` - naming
+its local mirror or saying it has none; a workflow with one such heading per job answers in the
+section of each job the diff changes, and a trigger change corrects every section that names the
+trigger.**
 
 **A step the diff adds, renames, or deletes, other than a provisioning step, adds, corrects, or
 deletes its entry, in the same change, in the section of `skills/internal/preflight.md` (repo
@@ -54,12 +59,15 @@ preflight gate - a check `preflight` runs locally before a push - that keeps it 
 (`skills/internal/preflight.md` sec."extended_checks.yml") or states the platform no per-PR
 cell has.** A job on a `pull_request` lane fits 35 minutes; what does not fit moves.
 
-**A diff that adds or changes a per-PR check, or adds, changes, or removes a step a per-PR
-check depends on, states in its PR body or commit message a run of that check's command on one
-of the lane's platforms, naming which; an author with none of the lane's platforms states that
-in the PR body instead, with the URL of the lane's green run on the PR's head commit. A green
-run of that lane on the PR's head commit covers the lane's other platforms.** A check that fails
-for a non-defect turns a green branch red for everyone.
+**A diff that adds or changes a per-PR check's steps or matrix cells, or adds, changes, or
+removes a step a per-PR check depends on, states in its PR body or commit message a run of that
+check's command on one of the lane's platforms, naming which; an author with none of the lane's
+platforms states that in the PR body instead, with the URL of the lane's green run on the PR's
+head commit.** A check that fails for a non-defect turns a green branch red for everyone.
+
+**A diff that changes a per-PR lane's trigger, path filter, `if:`, `needs:`, `runs-on`, or
+`timeout-minutes`, and leaves the lane running on that pull request, states in its PR body the
+URL of the lane's green run on the PR's head commit.**
 
 **A step in `pages.yml` that names more than one id under `examples/games/` spells them as a
 `for g in <ids>; do` loop, never inline.** `examples/games/REVIEW.das` (repo root) reads the

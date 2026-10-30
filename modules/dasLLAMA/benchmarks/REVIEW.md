@@ -12,7 +12,8 @@ instrument's timed body is the statements between its clock reads, and the funct
 defines that they call.
 
 A lever is a flag, an environment switch, a runtime setter or a profile key that picks what the run
-executes - never an input's size or content. A mode is one selectable run of the file, chosen by
+executes - never an input's size or content, and never a choice among the forms of one `[tune]`
+family. A mode is one selectable run of the file, chosen by
 its own flag or argument; a file with none is one mode. A switch that only reorders a mode's arms
 is not a lever and does not select another mode. A diff that makes an instrument refuse one value
 of an input changes that input.
@@ -22,13 +23,16 @@ kernel or its dispatch builder - a class or function that carries a `*_dispatch`
 annotation, or a global holding kernel source text. A race times two implementations of one
 computation in one process, each one either a form the engine serves or a candidate an instrument
 defines - a function, or a kernel a GPU kernel emitter generates (two values of one lever are not
-two implementations); an A/B is timed runs in one process differing only in one lever's value, arm
+two implementations; the forms of one `[tune]` family are, even where a profile key picks among
+them); an A/B is timed runs in one process differing only in one lever's value, arm
 order aside. An arm is every timed run of one implementation or one lever value; a round is one
 timed run of one arm, and a warmup round is a round the instrument's header comment says the
 report row drops; a compared arm is one whose output, from any run of it, the run reads back and
 measures against another arm's output or a CPU reference over the compare region, the output
 elements the instrument's header comment names; the baseline arm is the one the header comment
-names as baseline. A run of an arm refuses when it produces no figure or output, or runs on a
+names as baseline. An instrument's header comment is the comment at the top of its file; in a
+file that holds more than one race or A/B, the header comment of each is the doc comment of the
+function that runs it. A run of an arm refuses when it produces no figure or output, or runs on a
 backend other than the backend name the report row records.
 
 A board cell is a run whose reading lands as a records row of `../performance/records/<box>.json`
@@ -49,16 +53,18 @@ environment the run measures) applies `../REVIEW_MEASUREMENT.md` too.**
 puts it, applies `../REVIEW_GPU_RACE.md` too.**
 
 **A diff that adds or changes the timed body of an instrument that requires
-`../performance/profile_common.das` and dispatches a kernel of a `[tune]` family or a `[tuned]`
-kernel - one whose form the tune sidecar (the `.tune.json` beside the file or the box's) or
-`DAS_TUNE_MANIFEST` picks - calls `tune_gate()` before its first round.** Without the gate the
-instrument measures fallback kernels silently.
+`../performance/profile_common.das` and dispatches a `[tune]` family's kernel or a `[tuned]`
+kernel through the form the tune sidecar (the `.tune.json` beside the file or the box's) or
+`DAS_TUNE_MANIFEST` picks - a direct call of one `_variants()` registry row is not that - calls
+`tune_gate()` before its first round.** Without the gate the instrument measures fallback
+kernels silently.
 
-**A diff that adds or changes the timed body of an instrument that dispatches a kernel of a
-`[tune]` family or a `[tuned]` kernel and does not require `../performance/profile_common.das`
-prints, on every report row, the tune manifest `DAS_TUNE_MANIFEST` names, the class profile
-(`../performance/defaults/<class>.tune-defaults.json`) or the `.tune.json` sidecar path the run
-compiled against.**
+**A diff that adds or changes the timed body of an instrument that dispatches a `[tune]`
+family's kernel or a `[tuned]` kernel through the form the tune sidecar or `DAS_TUNE_MANIFEST`
+picks - a direct call of one `_variants()` registry row is not that - and does not require
+`../performance/profile_common.das` prints, on every report row, the tune manifest
+`DAS_TUNE_MANIFEST` names, the class profile (`../performance/defaults/<class>.tune-defaults.json`)
+or the `.tune.json` sidecar path the run compiled against.**
 
 **A diff that adds a compared arm to an instrument, or changes a compared arm's run or report row,
 makes the instrument's header comment name the baseline arm and the compare region.**
@@ -129,11 +135,13 @@ board cell or instrument that times the kernel.**
 the compare showing the emitted kernel code byte-identical before and after: its emitted source
 text, or the binary it builds into (for SPIR-V, the words `DASLLAMA_VK_SPV_DUMP` writes).**
 
-**A diff that adds a result-row mode - one reporting rows that carry a time, a rate, or a
+**A diff that adds a result-row mode - one printing report rows carrying a time, a rate, or a
 per-kernel occupancy count - to an instrument, or changes how such a mode reports or exits, makes
-every result-row mode of that instrument exit non-zero on a run that reports no such row, whatever
-stopped it - wrong flags, a failed load, a device that declines.** A run that matched nothing and
-reported success leaves a sidecar or a record untouched, and its caller cannot tell.
+every result-row mode of that instrument exit non-zero on a run that prints no report row
+carrying a figure - a line that prints a refusal or a bound miss in place of the figure does not
+count - whatever stopped it: wrong flags, a failed load, a device that declines, a gate that
+rejected every arm.** A run that matched nothing and reported success leaves a sidecar or a
+record untouched, and its caller cannot tell.
 
 **A diff that adds an A/B arm, adds or changes a lever an instrument's A/B arm reads - a lever in
 a file under this folder - or changes how such an arm reports or exits, makes that instrument exit

@@ -146,7 +146,7 @@ def private crossed_row(rows : array<auto(R)>) : string {
     return ""
 }
 
-[test]
+[test, arch(at = "../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#rm-family-race")]
 def test_kq_registries(t : T?) {
     static_if (typeinfo module_exists(dasllama_math_gen)) {
         t |> run("kq_registries: a kq family's eight registries are all present with the reference row first, or all absent") @(t : T?) {
@@ -174,6 +174,24 @@ def test_kq_registries(t : T?) {
             t |> success(families > 0, "at least one format carries a kq family ({families})")
             let q8 <- kq_registries(KqTag_q8())
             t |> equal(length(q8.tile), 0, "control: q8 has no kq family (its tile family is the q8q8 one)")
+        }
+        t |> run("kq_registries: every format but q8 and nv4 carries rm rows, one witness row per perm, keyed alike, the reference row first") @(t : T?) {
+            var fmts <- kq_family_fmts() $(regs : KqRegistries) => !empty(regs.rm_gemv)
+            var members = 0
+            for (_kf in type<KqFmt>) {
+                members++
+            }
+            t |> equal(length(fmts), members - 2, "every format but q8 (its own rows type) and nv4 (no rm family) carries rm rows ({fmts})")
+            for (kf in fmts) {
+                var r <- kq_registries_of(kf)
+                t |> equal(length(r.rm_witness), length(r.rm_gemv), "{kf}: a witness row per rm perm")
+                t |> equal(r.rm_gemv[0]._0, "reference", "{kf}: the reference row first")
+                for (i in range(length(r.rm_gemv))) {
+                    t |> equal(r.rm_witness[i]._0, r.rm_gemv[i]._0, "{kf}: perm {i} keyed alike")
+                }
+                delete r
+            }
+            delete fmts
         }
         t |> run("kq_registries: every format's kernel rows are its own - no row is another format's") @(t : T?) {
             var tiles : array<tuple<fmt : KqFmt; fn : KqTileGenFn>>
