@@ -6,10 +6,17 @@ doc: `../ARCHITECTURE_MEASUREMENT.md`. Planned work: `../followup_general.md`.
 **Never add a second validator for exchange submissions (record stores and tune sidecars) -
 validate through `../dasllama/dasllama_exchange_schema.das` instead.**
 
-**A diff that clears a `REVIEW.das` finding about the conditions a `records/` row, an archived
-sidecar, a `defaults/` profile, or `last_known_good_sidecar.json` was measured under - box
-noise, a remote-desktop session, the release it was minted at - by hand-editing that artifact
-is a defect: re-mint it on a quiet box with no remote-desktop session instead.**
+**A diff that changes `provenance.noise`, `hardware.remote_desktop`, or a `dasllama_version`
+pin in a `records/` row, an archived sidecar, or a `defaults/` profile by hand - the field
+changes while the measured values of the artifact stay as they were - is a defect: re-mint the
+artifact on a quiet box with no remote-desktop session instead.**
+
+**A diff that changes a `kernels` entry of a `defaults/<class>.tune-defaults.json` profile
+names, in the PR body, the box of that CPU class that ran the tune, and quotes the line of that
+box's tuner log (`../benchmarks/modules/.daspkg.log`) that names the new value as the entry's
+winner; a changed entry that no quoted line backs is a defect - re-mint the profile on a box of
+that class.** A `kernels` entry names the variant the tuner timed fastest on a box of that
+class; an entry written by hand was never timed there.
 
 **A diff that writes a `sha` on a `das` row (a run row whose `engine` is `das`) whose
 `dasllama_version` is below `DASLLAMA_RELEASE`, the `engine_sha` of a sidecar archive no
@@ -17,8 +24,7 @@ current-release row names, or a ruler record's `meta.das_sha` makes it name a co
 reaches: re-stamp to the commit the stamped artifact's exe was built at, or re-mint when the
 branch cannot reach that commit.** An empty field names no commit, so it breaks this rule too.
 
-**Weakening `REVIEW.das`'s commit-stamp checks
-(`../ARCHITECTURE_MEASUREMENT.md#committed-records-gate`) is a defect.**
+**Weakening any check in `REVIEW.das` is a defect.**
 
 **A diff that hand-edits a commit stamp under this folder names, in the PR body, each edited
 field, its old stamp, and its new value.**
@@ -66,8 +72,6 @@ it installed from.**
 of either, writes `DASLLAMA_RELEASE` (`../dasllama/dasllama_version.das`) as that pin - re-mint
 otherwise.** The pin is the row's `dasllama_version`, and `provenance.dasllama_version` in a
 sidecar archive; for a sidecar with an `engine_sha`, read the value at that commit.
-
-**Weakening `REVIEW.das`'s version-pin checks is a defect.**
 
 **A diff that writes a row to `records/<box>.json` mints that row from a run
 `gen_bench_records.das` spawns, or from the `../benchmarks/lcpp_bench.das` command a

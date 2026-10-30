@@ -20,6 +20,11 @@ configuration or a roster size is not one, nor is an index guard or a route coun
 artifact is a file a test reads from under `models_dir()` that neither this repo's build nor its
 tests produce - model files, mmprojs, front-end packs, image fixtures, oracle dumps. An area is a
 name in `run.das`'s `AREAS` list, standing for the files `run.das`'s `area_tests` returns for it.
+A box fact is a condition one box or run mode meets and another does not: the device or its
+memory, whether the build carries a module (`typeinfo module_exists` or `typeinfo
+builtin_module_exists`), the value of an environment variable or runner flag the run reads, the
+value a tune companion returns (a function whose body is the winner the `[tune]` framework
+picked for this box), a host toolchain, or a stocked artifact's presence.
 
 **A kernel-unit cell - one in which test code outside a CPU oracle (the cell, a helper in its file
 or a `_*.das` helper module) dispatches a kernel class or calls a `../dasllama/dasllama_math*.das`
@@ -141,20 +146,17 @@ reader to a flag that no longer does what the text says.
 **On every platform, a cell that neither asserts nor registers a skip is a defect.** A cell that
 returns without asserting registers `t |> skip` there; `feint` is a print, not a skip.
 
-**A cell whose claim holds only on some boxes or run modes - it depends on the device or its
-memory (a card too small for the shape the cell asks), the build, a run-mode knob's value, the
-value a tune companion (a function whose body the `[tune]` stamp in force selects, like
-`kq_tileform_of`) returns, a host toolchain or the stocked files - registers its skip on that fact
-before the asserts that need it, never a bare return and never a failure.**
+**A cell whose claim holds only where a box fact holds registers its skip on that fact before
+the asserts that need it - never a failure.**
 
 **A cell's skip condition, and any condition that picks a cell's assert or bar by something
-other than an input the cell sets itself (a format, a shape, a loop value), keys on a fact the
-box owns - a device capability, a run-mode knob's value, the value a tune companion returns on
-this box, a host toolchain's presence, a compile-time module-presence check (`typeinfo
-builtin_module_exists`) - or on a stocked fixture beside the models (a model file, an mmproj, an
-oracle dump); never on the existence of an artifact this repo's build or a previous test run
-produced (a minted `.dlim`, a generated binary, a dump a test wrote).** An artifact condition goes
-permanently false when its producer moves.
+other than an input the cell sets itself (a format, a shape, a loop value), queries a box fact
+directly - a device query, a `typeinfo` module check, an environment read, a tune companion's
+return, a toolchain probe, a stocked artifact's presence - and never tests a registry a
+`register_*` call fills, or the presence or content of a file that the build, a mint or a test
+run writes (a minted `.dlim`, a generated binary, a dump a test wrote).** Once the producer is
+renamed, moved or removed, a condition on its product skips the cell on every box, and the suite
+still passes.
 
 **A cell that loads or gates on a stocked model file - a `.gguf` carrier, its shards, or an
 mmproj - gates through `model_available` (`_model_tier.das`), one call per file; a test that

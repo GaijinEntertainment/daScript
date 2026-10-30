@@ -12,16 +12,17 @@ still names as a defect - fix the flagged code instead.**
 
 **A finding text names what failed; a diff that rewords one keeps it naming what failed.**
 
-**A new check in any `REVIEW.das` under this folder, or a check whose licensed set - the names
-it does not flag - gains a name, names in every finding text it emits the
+**A diff that adds a finding condition to a `REVIEW.das` under this folder - in a new gate
+function or an existing one - or a name to the licensed set of a check (the names the check
+does not flag), names, in every finding text that condition or check emits, the
 `ARCHITECTURE_*.md#<anchor>` section carrying the charter of the feature it guards (the section
 that says which file owns the feature), never `ARCHITECTURE.md`.**
 
-**A diff that adds a check to a `REVIEW.das` under this folder, or a name to a check's licensed
-set, ships in the section carrying the charter of the feature the check guards, in the same
-change, the check's line:
-the check, the names it licenses, and the property those names share, or that the check licenses
-no names.**
+**A diff that adds a finding condition to a `REVIEW.das` under this folder - in a new gate
+function or an existing one - or a name to a check's licensed set, ships in the section carrying
+the charter of the feature the check guards, in the same change, the check's line: the check,
+the names it licenses, and the property those names share, or that the check licenses no
+names.**
 
 **A diff that creates or extends a check's licensed set adds a name only when the finding text
 names the property the licensed names share - one a reviewer can test a name against without
