@@ -1,9 +1,11 @@
 options gen2
 options indenting = 4
 
-// The `precise` shader property: every float arithmetic result the module emits - the called function's
-// included, the vector product and `mad`'s Fma too - carries NoContraction, one decoration per float op and each
-// on a float op's result id; the plain twin of the same body carries none; the class-kernel form carries the property.
+// The `precise` shader property: every float arithmetic result the
+// module emits - the called function's included, the vector product
+// and `mad`'s Fma too - carries NoContraction, one decoration per
+// float op and each on a float op's result id; the plain twin of the
+// same body carries none; the class-kernel form carries the property.
 
 require dastest/testing_boost public
 require _spirv_common

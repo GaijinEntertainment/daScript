@@ -1918,7 +1918,8 @@ struct public SpecConstantValue {
 //! ``OpSpecConstant`` default at pipeline-create time (``VkSpecializationInfo``), so one module backs
 //! many pipelines — the [tune]-style GPU kernel-family primitive. Ownership as the base overload.
 def public create_compute_pipeline(device : Device; layout : PipelineLayout; shader : ShaderModule;
-                                   spec : array<SpecConstantValue>; entry : string = "main") : Pipeline =>
+                                   spec : array<SpecConstantValue>;
+                                   entry : string = "main") : Pipeline =>
     <- build_compute_pipeline(device, layout, shader, entry, false, 0u, spec)
 
 var private g_pipeline_capture = false
@@ -1932,11 +1933,14 @@ def public set_pipeline_capture(on : bool) {
 //! the switch set_pipeline_capture last set
 def public pipeline_capture : bool => g_pipeline_capture
 
-//! the one builder behind the plain, specialized, full-subgroups and pinned-width creators: ``full`` sets
-//! REQUIRE_FULL_SUBGROUPS on the stage, ``subgroup`` lanes (0 = the device's own width) chain a
-//! ``VkPipelineShaderStageRequiredSubgroupSizeCreateInfo``, ``spec`` entries rewrite the shader's ``OpSpecConstant`` defaults
-def private build_compute_pipeline(device : Device; layout : PipelineLayout; shader : ShaderModule; entry : string;
-                                   full : bool; subgroup : uint; spec : array<SpecConstantValue>) : Pipeline {
+//! the one builder behind the plain, specialized, full-subgroups and
+//! pinned-width creators: ``full`` sets REQUIRE_FULL_SUBGROUPS on the
+//! stage, ``subgroup`` lanes (0 = the device's own width) chain a
+//! ``VkPipelineShaderStageRequiredSubgroupSizeCreateInfo``, ``spec``
+//! entries rewrite the shader's ``OpSpecConstant`` defaults
+def private build_compute_pipeline(device : Device; layout : PipelineLayout; shader : ShaderModule;
+                                   entry : string; full : bool; subgroup : uint;
+                                   spec : array<SpecConstantValue>) : Pipeline {
     var entries : array<VkSpecializationMapEntry>
     var data : array<uint>
     entries |> reserve(length(spec))
@@ -2003,10 +2007,13 @@ def public create_compute_pipeline_full_subgroups(device : Device; layout : Pipe
     return <- build_compute_pipeline(device, layout, shader, entry, true, 0u, no_spec)
 }
 
-//! the subgroup widths a compute pipeline on ``phys`` may pin through ``requiredSubgroupSize``, ``lo``..``hi`` (powers of
-//! two), and whether the compute stage may pin at all; all off below API 1.3 or without the subgroup pair
+//! the subgroup widths a compute pipeline on ``phys`` may pin through
+//! ``requiredSubgroupSize``, ``lo``..``hi`` (powers of two), and
+//! whether the compute stage may pin at all; all off below API 1.3 or
+//! without the subgroup pair
 [arch(at="../ARCHITECTURE.md#subgroup-pair")]
-def public subgroup_size_control_range(phys : VkPhysicalDevice) : tuple<lo : uint; hi : uint; compute : bool> {
+def public subgroup_size_control_range(phys : VkPhysicalDevice)
+    : tuple<lo : uint; hi : uint; compute : bool> {
     if (!compute_full_subgroups_supported(phys)) {
         return (lo = 0u, hi = 0u, compute = false)
     }
@@ -2014,22 +2021,28 @@ def public subgroup_size_control_range(phys : VkPhysicalDevice) : tuple<lo : uin
     var p2 = VkPhysicalDeviceProperties2()
     p2.pNext = unsafe(addr<void?>(sp))
     vkGetPhysicalDeviceProperties2(phys, p2)
-    return (lo = sp.minSubgroupSize, hi = sp.maxSubgroupSize, compute = sp.requiredSubgroupSizeStages.compute)
+    return (lo = sp.minSubgroupSize, hi = sp.maxSubgroupSize,
+        compute = sp.requiredSubgroupSizeStages.compute)
 }
 
-//! true iff a compute pipeline on ``phys`` may pin ``size`` lanes a subgroup: a power of two inside the device's range
+//! true iff a compute pipeline on ``phys`` may pin ``size`` lanes a
+//! subgroup: a power of two inside the device's range
 //! (``requiredSubgroupSize`` admits nothing else)
 def public compute_subgroup_size_pinnable(phys : VkPhysicalDevice; size : uint) : bool {
     let r = subgroup_size_control_range(phys)
     return r.compute && size >= r.lo && size <= r.hi && (size & (size - 1u)) == 0u
 }
 
-//! create_compute_pipeline with the stage pinned at ``subgroup`` lanes (0 = the device's own width; a width
-//! `compute_subgroup_size_pinnable` admits, on a device from a creator that enabled the subgroup pair), ``full`` adding
+//! create_compute_pipeline with the stage pinned at ``subgroup``
+//! lanes (0 = the device's own width; a width
+//! `compute_subgroup_size_pinnable` admits, on a device from a
+//! creator that enabled the subgroup pair), ``full`` adding
 //! REQUIRE_FULL_SUBGROUPS
 [arch(at="../ARCHITECTURE.md#subgroup-pair")]
-def public create_compute_pipeline_subgroup(device : Device; layout : PipelineLayout; shader : ShaderModule; subgroup : uint;
-                                            full : bool = false; entry : string = "main") : Pipeline {
+def public create_compute_pipeline_subgroup(device : Device; layout : PipelineLayout;
+                                            shader : ShaderModule; subgroup : uint;
+                                            full : bool = false;
+                                            entry : string = "main") : Pipeline {
     let no_spec : array<SpecConstantValue>
     return <- build_compute_pipeline(device, layout, shader, entry, full, subgroup, no_spec)
 }

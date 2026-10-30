@@ -83,7 +83,9 @@ def private two_float_step(acc, x : float) : float {
     return s + ((acc - (s - bv)) + (x - bv))
 }
 
-//! the body both twins share: the two-float step, the vector products from either side, `fmod`, `mod`, `dot`, `mad`, a compound step and an increment
+//! the body both twins share: the two-float step, the vector
+//! products from either side, `fmod`, `mod`, `dot`, `mad`, a
+//! compound step and an increment
 def private precise_body(i : uint) {
     var s = two_float_step(pr_y[i].x, pr_x[i])
     s += dot(pr_y[i], float2(0.5, 0.25))
@@ -2348,9 +2350,10 @@ def coopmat_sm_kernel {
 
 def public coopmat_sm_words : array<uint> => clone_to_move(coopmat_sm_spv)
 
-// ===== the two accumulator widths in one tile (the KHR arms' form): MulAdd accumulates in f32 -
-// an f16 accumulator rounds toward zero on RDNA3's matrix cores - then coopmatConvert, a
-// componentwise OpFConvert over the tile, rounds it once to f16 for the f16 store. =====
+// ===== the two accumulator widths in one tile (the KHR arms' form):
+// MulAdd accumulates in f32 - an f16 accumulator rounds toward zero
+// on RDNA3's matrix cores - then coopmatConvert, a componentwise
+// OpFConvert over the tile, rounds it once to f16 for the f16 store.
 var @ssbo @binding = 0 cmh_a : array<float16>
 var @ssbo @binding = 1 cmh_b : array<float16>
 var @ssbo @binding = 2 cmh_c : array<float16>

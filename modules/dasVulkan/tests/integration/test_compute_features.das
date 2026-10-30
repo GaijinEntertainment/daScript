@@ -69,7 +69,8 @@ var @ssbo @binding = 0 cma_a : array<float16>   // 16x16 A, row-major
 var @ssbo @binding = 1 cma_b : array<float16>   // 16x16 B, column-major
 var @ssbo @binding = 2 cma_c : array<float16>   // 16x16 C, column-major: the f16 accumulator
 
-//! the f16-accumulator twin of cmt_kernel: how the device rounds a 16-product dot into an f16 accumulator
+//! the f16-accumulator twin of cmt_kernel: how the device rounds a
+//! 16-product dot into an f16 accumulator
 [compute_shader(local_size_x=64, name="cma_spv")]
 def cma_kernel {
     var a : coopmatA_f16_16x16
@@ -172,9 +173,11 @@ class Cm2ScaleAcc {
 
 // ===== a multi-SSBO compute runner =====
 
-// One coherent STORAGE buffer per binding, bufs[i] -> binding i, read back into `bufs`; `spec` empty = plain
-// pipeline; `subgroup` pins the stage's width (0 = the device's own; the int_dot creator and up enable the pin).
-// The feature flags pick the device - gate on probe_support(), else creation fails.
+// One coherent STORAGE buffer per binding, bufs[i] -> binding i, read
+// back into `bufs`; `spec` empty = plain pipeline; `subgroup` pins
+// the stage's width (0 = the device's own; the int_dot creator and up
+// enable the pin). The feature flags pick the device - gate on
+// probe_support(), else creation fails.
 def run_multi(var words : array<uint>; var bufs : array<array<uint8>>; groups : uint;   // nolint:STYLE038 - flat command-record run
               spec : array<SpecConstantValue>; storage_8_16 : bool; int_dot : bool = false;
               coopmat : bool = false; coopmat2 : bool = false; subgroup : uint = 0u) {
@@ -266,9 +269,11 @@ def run_multi(var words : array<uint>; var bufs : array<array<uint8>>; groups : 
     var plci : PipelineLayoutCreateInfo
     plci.pSetLayouts <- [weak_copy(set_layout)]
     var inscope pipe_layout <- create_pipeline_layout(device, plci)
-    var inscope pipeline <- (subgroup != 0u ? create_compute_pipeline_subgroup(device, pipe_layout, shader, subgroup)
-                                            : (empty(spec) ? create_compute_pipeline(device, pipe_layout, shader)
-                                                           : create_compute_pipeline(device, pipe_layout, shader, spec)))
+    var inscope pipeline <- (subgroup != 0u
+        ? create_compute_pipeline_subgroup(device, pipe_layout, shader, subgroup)
+        : (empty(spec)
+            ? create_compute_pipeline(device, pipe_layout, shader)
+            : create_compute_pipeline(device, pipe_layout, shader, spec)))
 
     var cpci : CommandPoolCreateInfo
     cpci.queueFamilyIndex = gfx
@@ -306,8 +311,9 @@ def probe_support() {
         coopmat2 = cooperative_matrix2_supported(phys), pin = subgroup_size_control_range(phys))
 }
 
-//! the subgroup kernel pinned at `width` lanes: every invocation reads that `gl_SubgroupSize`, and the sum the lanes the
-//! 64-wide workgroup fills of it
+//! the subgroup kernel pinned at `width` lanes: every invocation
+//! reads that `gl_SubgroupSize`, and the sum the lanes the 64-wide
+//! workgroup fills of it
 def pinned_width_run(t : T?; width : uint) {
     let n = 256
     var bufs : array<array<uint8>>
@@ -330,8 +336,11 @@ def pinned_width_run(t : T?; width : uint) {
             bad_sum++
         }
     }
-    t |> success(bad_size == 0, "pinned at {width}: gl_SubgroupSize reads {width} on every invocation ({bad_size} wrong)")
-    t |> success(bad_sum == 0, "pinned at {width}: subgroupAdd(1.0) == the lanes of {width} a 64-wide workgroup fills ({bad_sum} wrong)")
+    t |> success(bad_size == 0,
+        "pinned at {width}: gl_SubgroupSize reads {width} on every invocation ({bad_size} wrong)")
+    t |> success(bad_sum == 0,
+        "pinned at {width}: subgroupAdd(1.0) == the lanes of {width} a 64-wide workgroup fills "
+            + "({bad_sum} wrong)")
     delete words
     delete bufs
 }
@@ -340,7 +349,7 @@ def pinned_width_run(t : T?; width : uint) {
 def test_subgroup_pin_gpu(t : T?) {
     let sup = probe_support()
     if (!sup.subgroups || !sup.storage || !sup.int_dot || !sup.pin.compute) {
-        feint("device lacks subgroup ops, 8/16-bit storage, integer dot product or the compute-stage subgroup pin; skipping\n")
+        feint("device lacks subgroup ops, 8/16-bit storage, int dot or the pin; skipping\n")
         return
     }
     pinned_width_run(t, sup.pin.lo)
@@ -350,13 +359,16 @@ def test_subgroup_pin_gpu(t : T?) {
     var inscope instance <- create_instance("dasVulkan probe", make_api_version(1u, 3u, 0u))
     volkLoadInstance(boost_value_to_vk(instance))
     let phys = select_physical_device(instance)
-    t |> success(compute_subgroup_size_pinnable(phys, sup.pin.lo), "the range's floor {sup.pin.lo} is pinnable")
-    t |> success(compute_subgroup_size_pinnable(phys, sup.pin.hi), "the range's ceiling {sup.pin.hi} is pinnable")
-    t |> success(!compute_subgroup_size_pinnable(phys, sup.pin.hi * 2u), "{sup.pin.hi * 2u} lanes sit past the range: not pinnable")
+    t |> success(compute_subgroup_size_pinnable(phys, sup.pin.lo),
+        "the range's floor {sup.pin.lo} is pinnable")
+    t |> success(compute_subgroup_size_pinnable(phys, sup.pin.hi),
+        "the range's ceiling {sup.pin.hi} is pinnable")
+    t |> success(!compute_subgroup_size_pinnable(phys, sup.pin.hi * 2u),
+        "{sup.pin.hi * 2u} lanes sit past the range: not pinnable")
     if (sup.pin.hi != sup.pin.lo && sup.pin.lo >= 2u) {
         let odd = sup.pin.lo + sup.pin.lo / 2u
         t |> success(!compute_subgroup_size_pinnable(phys, odd),
-            "{odd} lanes sit inside {sup.pin.lo}..{sup.pin.hi} but are not a power of two: not pinnable")
+            "{odd} lanes sit inside {sup.pin.lo}..{sup.pin.hi}, not a power of two: not pinnable")
     }
 }
 
@@ -642,9 +654,12 @@ def test_coopmat_gpu(t : T?) {
     delete expected
 }
 
-//! an f16 accumulator's rounding off two dots against a column of ones, [2048, 1 x 15] = 2063 and [1024, 0.5 x 15] = 1031.5: once to
-//! nearest-even reads 2064 and 1032 (NVIDIA), once toward zero 2062 and 1031 (RDNA3's WMMA), a pairwise f16 tree 2062 and 1030,
-//! a sequential f16 sum 2048 and 1024 - a kernel summing many products into an f16 accumulator carries the device's form
+//! an f16 accumulator's rounding off two dots against a column of
+//! ones, [2048, 1 x 15] = 2063 and [1024, 0.5 x 15] = 1031.5: once
+//! to nearest-even reads 2064 and 1032 (NVIDIA), once toward zero
+//! 2062 and 1031 (RDNA3's WMMA), a pairwise f16 tree 2062 and 1030,
+//! a sequential f16 sum 2048 and 1024 - a kernel summing many
+//! products into an f16 accumulator carries the device's form
 [test]
 def test_coopmat_f16_acc_rounding_gpu(t : T?) {
     let sup = probe_support()
@@ -658,7 +673,9 @@ def test_coopmat_f16_acc_rounding_gpu(t : T?) {
     b_bytes |> resize(256 * 2)
     for (k in range(16)) {
         put_half(a_bytes, k, k == 0 ? 2048.0 : 1.0)
-        put_half(a_bytes, 16 + k, k == 0 ? 1024.0 : 0.5)   //! row 1: exact 1031.5 - once to even 1032, once toward zero 1031, a pairwise f16 tree 1030, a sequential f16 sum 1024
+        //! row 1: exact 1031.5 - once to even 1032, once toward zero 1031,
+        //! a pairwise f16 tree 1030, a sequential f16 sum 1024
+        put_half(a_bytes, 16 + k, k == 0 ? 1024.0 : 0.5)
         put_half(b_bytes, k, 1.0)
     }
     var yb : array<uint8>
@@ -669,9 +686,14 @@ def test_coopmat_f16_acc_rounding_gpu(t : T?) {
     run_multi(words, bufs, 1u, no_spec, true, true, true)
     let got = f16_ref(bufs[2], 0)
     let got1 = f16_ref(bufs[2], 1)
-    let form = got1 == 1032.0 ? "once to nearest-even" : (got1 == 1031.0 ? "once toward zero" : (got1 == 1030.0 ? "a pairwise f16 tree" : (got1 == 1024.0 ? "a sequential f16 sum" : "an unknown form")))
-    to_log(LOG_INFO, "f16 coopmat accumulator: 2048 + 15 x 1 reads {got}, 1024 + 15 x 0.5 reads {got1} - {form}\n")
-    t |> success(form != "an unknown form", "the f16 accumulator's rounding is a known form ({got} and {got1}: {form})")
+    let form = got1 == 1032.0 ? "once to nearest-even"
+        : (got1 == 1031.0 ? "once toward zero"
+        : (got1 == 1030.0 ? "a pairwise f16 tree"
+        : (got1 == 1024.0 ? "a sequential f16 sum" : "an unknown form")))
+    to_log(LOG_INFO, "f16 coopmat accumulator: 2048 + 15 x 1 reads {got}, "
+        + "1024 + 15 x 0.5 reads {got1} - {form}\n")
+    t |> success(form != "an unknown form",
+        "the f16 accumulator's rounding is a known form ({got} and {got1}: {form})")
     delete words
     delete bufs
 }

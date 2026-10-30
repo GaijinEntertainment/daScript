@@ -68,9 +68,10 @@ def test_coopmat(t : T?) { // nolint:STYLE038 - flat list of opcode/capability a
         }
         delete words
     }
-    t |> run("cooperative matrix f32 ACCUMULATOR + coopmatConvert narrowing (the KHR arms' f16 stash and store form)") <| @(t : T?) {
+    t |> run("cooperative matrix f32 ACCUMULATOR + coopmatConvert narrowing to f16") <| @(t : T?) {
         var words <- coopmat_f16acc_words()
-        t |> success(op_has_operand(words, SpvOp.Capability, uint(SpvCapability.CooperativeMatrixKHR)),
+        t |> success(op_has_operand(words, SpvOp.Capability,
+                uint(SpvCapability.CooperativeMatrixKHR)),
             "OpCapability CooperativeMatrixKHR (6022)")
         t |> success(length(words) >= 2 && words[1] == SPV_VERSION_1_6,
             "SPIR-V header version floored to 1.6")
