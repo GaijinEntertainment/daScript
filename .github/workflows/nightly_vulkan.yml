@@ -84,7 +84,7 @@ jobs:
   build_macos:
     # Build + loader-discovery smoke only (see the header comment). Exercises the
     # APPLE branch: dasVULKAN.metal.mm, Cocoa/QuartzCore, MoltenVK via Homebrew.
-    runs-on: macos-14
+    runs-on: macos-26
     timeout-minutes: 40
     steps:
       - name: "Checkout"

@@ -73,6 +73,7 @@ working-tree copy.
 | `dasllama_server_release.yml` | `release: prereleased` of a `dasllama-v*` tag (a daslang tag runs nothing), `workflow_dispatch` (`publish` input), and a branch push editing a non-`.md` file the workflow's `paths:` filter names (the workflow itself, what the bundle carries - the server, the watchdog, daspkg, dasHV, the benchmark companion's script and rows, and the class profiles under `modules/dasLLAMA/performance/defaults/` a fat build clones its kernels from - and `ci/packaging/**`) | four cells (linux x86_64 on ubuntu-22.04, linux arm64 on ubuntu-22.04-arm, darwin arm64, windows x64): daslang with the release modules, `daspkg release --fat x86-avx2 \| arm-neon` of `utils/dasllama-server`, the smoke run from a copy with a fresh HOME (write-protected off Windows), the `dasllama` archive, `.deb` + `.rpm` (linux) and pip wheel with their smokes; a release or a `publish` dispatch uploads the archives to the rolling `dasllama-server` release, and a release also uploads every asset to the dasllama release being cut; then, on a release event only, `pypi_route` + `publish_pypi` by tag shape (`dasllama-vX.Y.Z` to PyPI, any other to TestPyPI), and `publish_manifests` - section below |
 | `release.yml` | `release: prereleased` of a daslang tag (`v*`; a `dasllama-*` tag runs nothing) and `workflow_dispatch` (build + smoke; publishes nothing) | four cells (linux x86_64 on ubuntu-24.04, linux arm64 on ubuntu-24.04-arm, darwin26 arm64, windows x86_64): build, the `run_build` lane target, bundle + smoke, `.deb` / `.rpm` / pip wheel, sha256 per asset, the `.rpm` and wheel smokes, upload; then `pypi_route` + `publish_pypi` by tag shape - section below |
 | `cpp_mcp_release.yml` | `pull_request` touching `utils/mcp/**`, `utils/common/**`, `ci/make_cpp_mcp_bundle.sh`, `ci/smoke_test_cpp_mcp.sh`, the workflow file or `CMakeLists.txt`, and a `master` push touching the same paths (linux cell only; the push seeds the cell's sccache slot); `workflow_dispatch` (all four cells, no upload); `release: prereleased` of a daslang tag (a `dasllama-*` tag runs nothing) | per cell: a lean build of `cpp-mcp` with every external module off, the bundle assembly + smoke, the archive; a release uploads it to the daslang release being cut - section below |
+| `llvm_release.yml` | `workflow_dispatch` only (input `llvm_version`, default 22.1.5) | `build`, four cells (linux_64 on ubuntu-22.04, linux_arm64 on ubuntu-22.04-arm, mac_arm64 on macos-26, win64 on windows-2022): the LLVM C-API build the dasLLVM module links, one `<name>_llvm.tar.gz` plus its sha256 per cell; then `release` publishes every archive to the `llvm-v<llvm_version>` prerelease - a dispatch is never a dry run - section below |
 | `tree_sitter_daslang.yml` | `pull_request` and a `master` push, each touching `tree-sitter-daslang/**` or the workflow file itself | `test` (ubuntu, windows, macos-15), `lint`, and `fuzz` - section below |
 | `tree_sitter_daslang_sources.yml` | `pull_request` and a `master` push, each touching a `.das` file, `tree-sitter-daslang/**`, `ci/tree_sitter_parse_sources.sh`, `ci/tree_sitter_compiler_rejected_sources.txt`, or the workflow file itself | `sources` (ubuntu) - section below |
 | `nightly_issue.yml` | `workflow_call`, from `nightly.yml` once a `schedule` run has a failed job | keeps ONE open `nightly-failure` issue for the whole nightly, titled `The nightly is red`: the first red night files it with a link to each failed job, and every red night after that comments on it with its own while it is open. Close the issue when the nightly is green. No local mirror |
@@ -417,6 +418,14 @@ the linux cell only; dispatch and a release build all four. The build job runs f
 |---|---|
 | Configure + build cpp-mcp, Assemble and smoke-test bundle | `cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDAS_BUILD_CPP_MCP=ON` with the workflow's `*_DISABLED=ON` set, then `cmake --build build --target check_cpp_mcp_bundle` |
 | the packaging and the uploads | none - runner-side plumbing |
+
+## llvm_release.yml
+
+Dispatch only. Each `build` cell configures and builds the LLVM C-API for its platform and
+packages `<name>_llvm.tar.gz` with its sha256; `release` then publishes every archive to the
+`llvm-v<llvm_version>` prerelease, the tag the dasLLVM builds download. A dispatch on any ref
+publishes, so a run meant as a proof of a cell is cancelled before its `release` job. No local
+mirror.
 
 ## tree_sitter_daslang.yml
 
