@@ -765,14 +765,9 @@ def private emit_coop_stmt(var ctx : CudaCtx; ec : ExprCall?) : string {
             shader_error(ctx, ec.at, "coopmatConvert converts between the f16 and f32 accumulators; {describe(ec.arguments[0]._type)} <- {describe(ec.arguments[1]._type)} has no CUDA form yet")
             return ""
         }
-        if (widen) {
-            register_helper(ctx, "{HELPER_RANK_COOPMAT_OPS}cvt_f32_f16", COOPMAT_CVT_F32_F16)
-            census_kind(ctx, "call.coopmatConvert.f16.f32")
-            return "{emit_value(ctx, ec.arguments[0])} = __das_cm_cvt_f32_f16({emit_value(ctx, ec.arguments[1])});"
-        }
-        register_helper(ctx, "{HELPER_RANK_COOPMAT_OPS}cvt_f16_f32", COOPMAT_CVT_F16_F32)
-        census_kind(ctx, "call.coopmatConvert.f32.f16")
-        return "{emit_value(ctx, ec.arguments[0])} = __das_cm_cvt_f16_f32({emit_value(ctx, ec.arguments[1])});"
+        let fn = need_cm_cvt(ctx, widen)
+        census_kind(ctx, "call.coopmatConvert.{si.comp}.{di.comp}")
+        return "{emit_value(ctx, ec.arguments[0])} = {fn}({emit_value(ctx, ec.arguments[1])});"
     }
     let is_load = cname == "coopmatLoad"
     if (na != 5) {
@@ -1057,6 +1052,13 @@ def private need_cm2(var ctx : CudaCtx) {
     register_helper(ctx, "{HELPER_RANK_CM2}cm2", CM2_PRELUDE)
     register_helper(ctx, "{HELPER_RANK_COOPMAT_OPS}cvt_f32_f16", COOPMAT_CVT_F32_F16)
     census_kind(ctx, "prelude.cm2")
+}
+
+//! the accumulator width convert, registered and named in one place: f16 -> f32 when `widen`, else f32 -> f16
+def private need_cm_cvt(var ctx : CudaCtx; widen : bool) : string {
+    let dir = widen ? "f32_f16" : "f16_f32"
+    register_helper(ctx, "{HELPER_RANK_COOPMAT_OPS}cvt_{dir}", widen ? COOPMAT_CVT_F32_F16 : COOPMAT_CVT_F16_F32)
+    return "__das_cm_cvt_{dir}"
 }
 
 //! the tile struct, declared once: a shared element array (A, B) or the per-warp fragment slots (C)
@@ -1453,7 +1455,7 @@ def private emit_wg_convert_stmt(var ctx : CudaCtx; ec : ExprCall?; di, si : WgI
         return ""
     }
     if (di.use == "C" && si.use == "C" && di.comp != si.comp && di.comp != "s32" && si.comp != "s32") {
-        let fn = di.comp == "f32" ? "__das_cm_cvt_f32_f16" : "__das_cm_cvt_f16_f32"
+        let fn = need_cm_cvt(ctx, di.comp == "f32")
         census_kind(ctx, "call.coopmatConvert.wg.{si.comp}.{di.comp}")
         return "for (int __s = 0; __s < {di.slots}; ++__s) \{ {dst}.fr[__s] = {fn}({src}.fr[__s]); \}"
     }
