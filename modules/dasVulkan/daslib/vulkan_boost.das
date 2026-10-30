@@ -2027,10 +2027,11 @@ def public subgroup_size_control_range(phys : VkPhysicalDevice) : tuple<lo : uin
     return (lo = sp.minSubgroupSize, hi = sp.maxSubgroupSize, compute = sp.requiredSubgroupSizeStages.compute)
 }
 
-//! true iff a compute pipeline on ``phys`` may pin ``size`` lanes a subgroup
+//! true iff a compute pipeline on ``phys`` may pin ``size`` lanes a subgroup: a power of two inside the device's range
+//! (``requiredSubgroupSize`` admits nothing else)
 def public compute_subgroup_size_pinnable(phys : VkPhysicalDevice; size : uint) : bool {
     let r = subgroup_size_control_range(phys)
-    return r.compute && size >= r.lo && size <= r.hi
+    return r.compute && size >= r.lo && size <= r.hi && (size & (size - 1u)) == 0u
 }
 
 //! create_compute_pipeline with the stage pinned at ``subgroup`` lanes (0 = the device's own width; a width

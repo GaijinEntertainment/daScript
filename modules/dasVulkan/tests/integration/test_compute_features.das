@@ -346,6 +346,12 @@ def test_subgroup_pin_gpu(t : T?) {
     pinned_width_run(t, sup.pin.lo)
     if (sup.pin.hi != sup.pin.lo) {
         pinned_width_run(t, sup.pin.hi)
+        var inscope instance <- create_instance("dasVulkan probe", make_api_version(1u, 3u, 0u))
+        volkLoadInstance(boost_value_to_vk(instance))
+        let phys = select_physical_device(instance)
+        let odd = sup.pin.lo + sup.pin.lo / 2u
+        t |> success(!compute_subgroup_size_pinnable(phys, odd),
+            "{odd} lanes sit inside {sup.pin.lo}..{sup.pin.hi} but are not a power of two: not pinnable")
     }
 }
 
