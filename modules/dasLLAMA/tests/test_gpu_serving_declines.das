@@ -1797,6 +1797,8 @@ def test_vk_subgroup_pin(t : T?) {
                 t |> equal(g_gpu.sg_pin, uint(want), "a device at {int(own)} that can pin {want} pins it")
                 t |> equal(g_gpu.subgroup_size, want, "... the tier runs at the pinned width")
                 t |> equal(khr_kq_tile_on(), g_gpu.has_coopmat && want == 32l, "... and the KHR kq tile reads it")
+                t |> equal(g_gpu.coopmat_mode != COOPMAT_SDOT4, g_gpu.has_coopmat && want == 32l,
+                    "... and the coopmat mode resolved at the pinned width, not the device's own (a tile mode on a coopmat device)")
             } else {
                 t |> equal(g_gpu.sg_pin, 0u, "a device at {int(own)} that cannot pin {want} runs at its own width")
                 t |> equal(g_gpu.subgroup_size, int64(own), "... which the tier reads")

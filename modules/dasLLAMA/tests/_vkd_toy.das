@@ -37,6 +37,11 @@ class VkdToy {
     }
 }
 
+//! the one-count push constant the subgroup, mul-convert and q8 decode probes share
+struct VdArgs {
+    n : uint
+}
+
 //! every invocation writes the width its subgroup runs at: the tier's pipeline builder pins it where the device's own differs
 [vk_dispatch(name = "vkd_subgroup", grid = "n/64", params = "n : int64")]
 class VkdSubgroup {
@@ -72,10 +77,6 @@ class VkdMulCvt {
 
 struct VdBlk {
     qs : int16[16]   //! 32 int8 quants as 16-bit lanes (the q8 block shape)
-}
-
-struct VdArgs {
-    n : uint
 }
 
 [vk_dispatch(name = "vkd_direct_decode", grid = "wgs", params = "wgs : int64")]

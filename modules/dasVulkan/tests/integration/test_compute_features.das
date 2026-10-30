@@ -344,11 +344,16 @@ def test_subgroup_pin_gpu(t : T?) {
         return
     }
     pinned_width_run(t, sup.pin.lo)
-    if (sup.pin.hi != sup.pin.lo && sup.pin.lo >= 2u) {
+    if (sup.pin.hi != sup.pin.lo) {
         pinned_width_run(t, sup.pin.hi)
-        var inscope instance <- create_instance("dasVulkan probe", make_api_version(1u, 3u, 0u))
-        volkLoadInstance(boost_value_to_vk(instance))
-        let phys = select_physical_device(instance)
+    }
+    var inscope instance <- create_instance("dasVulkan probe", make_api_version(1u, 3u, 0u))
+    volkLoadInstance(boost_value_to_vk(instance))
+    let phys = select_physical_device(instance)
+    t |> success(compute_subgroup_size_pinnable(phys, sup.pin.lo), "the range's floor {sup.pin.lo} is pinnable")
+    t |> success(compute_subgroup_size_pinnable(phys, sup.pin.hi), "the range's ceiling {sup.pin.hi} is pinnable")
+    t |> success(!compute_subgroup_size_pinnable(phys, sup.pin.hi * 2u), "{sup.pin.hi * 2u} lanes sit past the range: not pinnable")
+    if (sup.pin.hi != sup.pin.lo && sup.pin.lo >= 2u) {
         let odd = sup.pin.lo + sup.pin.lo / 2u
         t |> success(!compute_subgroup_size_pinnable(phys, odd),
             "{odd} lanes sit inside {sup.pin.lo}..{sup.pin.hi} but are not a power of two: not pinnable")
