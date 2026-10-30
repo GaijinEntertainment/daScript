@@ -55,7 +55,7 @@
 <li><strong>Qwen MoE</strong> - Qwen1.5-MoE-A2.7B, Qwen3-30B-A3B, Qwen3.6-35B-A3B and 122B-A10B (hybrid DeltaNet plus routed experts), Qwen3-Coder-Next 80B-A3B, and Qwen3.8-Flash-Next, the Qwen4 preview: the same hybrid trunk inside hyper-connections, with an n-gram side input and 512 experts a layer.</li>
 <li><strong>Gemma-4-26B-A4B</strong>, <strong>GLM-4.5-Air</strong> 106B-A12B, <strong>gpt-oss-20b</strong>.</li>
 <li><strong>Self-speculative decode</strong> - a file with a NextN draft head (the <code>-MTP-</code> Qwen3.6 / Qwen3.8 files, Gemma-4) drafts its own next tokens; the output is unchanged.</li>
-<li><strong>Experts on the host</strong> - a MoE whose expert stacks do not fit the card keeps a hot expert pool on the device and sums the rest on the CPU; the prompt window streams the busy experts through the card. How that works, with the numbers: the <a href="articles/2026-10-28-the-need-for-speed.html#when-the-model-does-not-fit-the-card">article</a>.</li>
+<li><strong>Experts on the host</strong> - a MoE whose expert stacks do not fit the card keeps a hot expert pool on the device and sums the rest on the CPU; the prompt window streams the busy experts through the card. How that works, with the numbers: the <a href="articles/2026-10-28-the-need-for-speed.html#sometimes-its-not-a-nail">article</a>.</li>
 </ul>
 
 <h2 id="audio-in">Audio-in chat</h2>
