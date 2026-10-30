@@ -4,8 +4,22 @@
 <author><name>dasllama.io</name></author>
 <link href="https://dasllama.io/"/>
 <link href="https://dasllama.io/feed.xml" rel="self"/>
-<updated>2026-10-28T00:00:00Z</updated>
+<updated>2026-10-31T00:00:00Z</updated>
 <id>https://dasllama.io/</id>
+<entry>
+<title>dasllama 0.6.7 - every class profile re-minted on the row-major race, the CUDA home past VRAM, Radeon on RADV.</title>
+<link href="https://dasllama.io/#n-2026-10-31-dasllama-0-6-7"/>
+<id>https://dasllama.io/#n-2026-10-31-dasllama-0-6-7</id>
+<updated>2026-10-31T00:00:00Z</updated>
+<content type="html">&lt;p&gt;&lt;a href=&quot;https://github.com/GaijinEntertainment/daScript/releases/tag/dasllama-v0.6.7&quot;&gt;dasllama-v0.6.7&lt;/a&gt;
+carries the six release-17 class profiles re-minted on the row-major GEMV race - the tuner now
+times the streamed expert rail&#x27;s twenty kernel families on every class instead of carrying their
+seats by hand - beside the CUDA home serving MoE host experts, the NextN head and the K/V ring
+(&lt;code&gt;--gpu cuda&lt;/code&gt;), and the Vulkan tier serving a wave64 device (a Radeon on RADV, pinned at 32
+lanes). &lt;code&gt;pip install dasllama&lt;/code&gt;, brew, scoop, the &lt;code&gt;.deb&lt;/code&gt; and the &lt;code&gt;.rpm&lt;/code&gt; install it; the
+&lt;a href=&quot;/#get-it&quot;&gt;get it&lt;/a&gt; section names every form, and the rolling &lt;code&gt;dasllama-server&lt;/code&gt; archives are
+refreshed from it.&lt;/p&gt;</content>
+</entry>
 <entry>
 <title>Translation and Russian speech-to-text join the engine - Bergamot and GigaAM v3, in master, in the next release.</title>
 <link href="https://dasllama.io/#n-2026-10-28-translation-and-gigaam"/>
