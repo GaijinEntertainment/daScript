@@ -2145,7 +2145,7 @@ def test_vkd_act_family(t0 : T?) {
                 var q_cls : array<uint>
                 var s_cls : array<float>
                 var h_cls : array<uint>
-                var pc = ActArgs(nelem = uint(nb), act = ACT_OAI, nblk = uint(nb / 32), bias_on = 1u, gboff = 0u, uboff = 0u, brow = uint(brow))
+                var pc = ActArgs(nelem = uint(nb), act = ACT_OAI, nblk = uint(nb / 32), bias_on = 1u, gboff = 0u, brow = uint(brow))
                 with_cell_planes() $(var cp : CellPlanes) {
                     let pg = cp |> in_(gh)
                     let pu = cp |> in_(uh)
@@ -3027,7 +3027,7 @@ def test_vkd_cm2s_short_split(t0 : T?) {
                 var wqh, wsuh : array<uint>
                 fmt_tile_planes(r, wqh, wsuh)
                 var f <- tile_fixture(r.n, r.blk_k, wqh, wsuh, 3u, r.xf_add)
-                short_split_arm(t, "{r.fmt}", int(r.fmt), f, 31, f.n % 256 == 0 ? f.n / 256 : 2, false, r.oracle)   //! a per-32 row's K off the 256 grid: its last chunk short
+                short_split_arm(t, "{r.fmt}", int(r.fmt), f, 31, fmt_split_ways(f.n), false, r.oracle)
                 delete f
             }
             delete trows
@@ -4368,9 +4368,9 @@ def private mx4_gemv_gu_run(t : T?; d, nreg : int; bias : bool) {
             let up = fixed_array(pwq, pws, prg3, pxq, pxs, pyu)
             var s_g = gemv_cls_set(int(KqFmt.mx4), gather_planes(cp.dev, gate), gather_planes(cp.bytes, gate), gather_planes(cp.hazard_bit, gate))
             var s_u = gemv_cls_set(int(KqFmt.mx4), gather_planes(cp.dev, up), gather_planes(cp.bytes, up), gather_planes(cp.hazard_bit, up))
-            var pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(nreg), ybase = 0u, act = act, bias_on = bias ? 1u : 0u, gboff = 0u, uboff = 0u)
+            var pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(nreg), ybase = 0u, act = act, bias_on = bias ? 1u : 0u, gboff = 0u)
             var pc2 = GemvArgs(n = uint(n), d = uint(d), nreg = uint(nreg), ybase = 0u)
-            var pca = ActArgs(nelem = uint(rows), act = act, nblk = uint(nblk), bias_on = bias ? 1u : 0u, gboff = 0u, uboff = 0u, brow = uint(d))
+            var pca = ActArgs(nelem = uint(rows), act = act, nblk = uint(nblk), bias_on = bias ? 1u : 0u, gboff = 0u, brow = uint(d))
             cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
                 enc_mx4_gemv_gu_cls(raw2, h2, s_cls, pc, int64(nblk))
                 gemv_enc(int(KqFmt.mx4), raw2, h2, s_g, pc2, int64(rows))
@@ -6706,10 +6706,9 @@ def test_vkd_dn_cap_tail(t0 : T?) {
                 let pc = cp |> in_plain(capw)
                 let pd = cp |> out_(2 * img + 4)
                 var sc = cp |> cls_set(fixed_array(ps, pm, pc, pd), @@set_dn_cap_tail_cls)
-                let wg = (img + 255) / 256
-                var pa = DnCapTailArgs(cd = uint(cd), taps = uint(taps), row0 = 0u, entry_off = uint(old_off), cap_rec = 0u, cap_hist_off = 0u, wg_per_cap = uint(wg))
+                var pa = DnCapTailArgs(cd = uint(cd), taps = uint(taps), row0 = 0u, entry_off = uint(old_off), cap_rec = 0u, cap_hist_off = 0u)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
-                    enc_dn_cap_tail_cls(raw, h, sc, pa, int64(wg * 2))
+                    enc_dn_cap_tail_cls(raw, h, sc, pa, dn_cap_tail_wgs(int64(cd), int64(taps)) * 2l)
                 }
                 var got <- cp |> plane_run(pd)
                 for (ci in range(2)) {
@@ -8158,11 +8157,7 @@ def test_vkd_moe_gather_row(t0 : T?) {
             let r0 = 5      //! the window [5, 14) of the 21 bucket rows
             let rows = 9
             let slack = 2   //! rows past the window the dispatch never writes
-            var entry_of_bucket_row : array<uint>   // a permutation of the 21 entries: 5 is coprime to 21
-            entry_of_bucket_row |> resize(nk)
-            for (b in range(nk)) {
-                entry_of_bucket_row[b] = uint((b * 5) % nk)
-            }
+            var entry_of_bucket_row <- gather_row_entries(nk)
             for (n in [100, 256, 300]) {   //! under one stride of the 256 threads, whole strides, a tail
                 var x <- hash_steps(npos * n, 91u)
                 var halves : array<uint16>
@@ -8183,24 +8178,7 @@ def test_vkd_moe_gather_row(t0 : T?) {
                 for (i in range(rows * n)) {
                     got[i] = f16_to_f32(uint(halves[i]))
                 }
-                //! the oracle: row b of the window reads its grid entry's position, rounded to half; the oracle with the
-                //! window at 0 reads other entries and must miss
-                var want, want0 : array<float>
-                want |> resize(rows * n)
-                want0 |> resize(rows * n)
-                for (b in range(rows)) {
-                    let p = int(entry_of_bucket_row[r0 + b]) / k
-                    let p0 = int(entry_of_bucket_row[b]) / k
-                    for (i in range(n)) {
-                        want[b * n + i] = f16r(x[p * n + i])
-                        want0[b * n + i] = f16r(x[p0 * n + i])
-                    }
-                }
-                //! within 1e-3 of the largest magnitude: a half's step at |x| < 1 is under 1e-3, the two conversions round at
-                //! most a step apart; the control moves one expected element by 0.05
-                let bar = Bar(kind = BarKind.rel_of_max, rel = 1e-3, poison_abs = 0.05, poison_at = 0)
-                check(t, "gather row n {n}: the window's rows", got, want, bar, Shape(row_width = n))
-                t |> success(check_count(got, want0, bar) > n, "gather row n {n}: control - the window at 0 reads other positions ({check_count(got, want0, bar)} of {rows * n} off)")
+                gather_row_check(t, "gather row n {n}", got, x, entry_of_bucket_row, n, k, r0, rows)
                 var strayed = 0
                 var first_stray = -1
                 for (i in range(rows * n, (rows + slack) * n)) {
@@ -8215,8 +8193,6 @@ def test_vkd_moe_gather_row(t0 : T?) {
                 delete x
                 delete halves
                 delete got
-                delete want
-                delete want0
             }
             delete entry_of_bucket_row
         } else {
@@ -8238,25 +8214,7 @@ def test_vkd_combine_row(t0 : T?) {
             let nk = npos * k
             let r0 = 4
             let rows = 6   //! the window [4, 10): rows of one expert, one a position, at alternating slots
-            var entry_of_bucket_row : array<uint>   // the window's rows to positions 0..5 at alternating slots, the rest to the entries left
-            entry_of_bucket_row |> resize(nk)
-            var taken : array<bool>
-            taken |> resize(nk)
-            for (b in range(r0, r0 + rows)) {
-                let g = (b - r0) * k + (b % k)
-                entry_of_bucket_row[b] = uint(g)
-                taken[g] = true
-            }
-            var next = 0
-            for (b in range(nk)) {
-                continue if (b >= r0 && b < r0 + rows)
-                while (taken[next]) {
-                    next++
-                }
-                entry_of_bucket_row[b] = uint(next)
-                taken[next] = true
-            }
-            delete taken
+            var entry_of_bucket_row <- combine_row_entries(npos, k, r0, rows)
             var w_packed <- hash_steps(nk, 97u)   // a position's k weights in a row: the layout every dispatch ships
             for (n in [100, 256, 300]) {   //! under one stride of the 256 threads, whole strides, a tail
                 var acc <- hash_steps(npos * n, 71u)
@@ -8275,33 +8233,9 @@ def test_vkd_combine_row(t0 : T?) {
                     delete y
                     y <- cp |> plane_run(pa)
                 }
-                //! the oracle: each window row's weighted down row onto its position; the oracle over the window at 0 (other
-                //! rows, other positions) must miss
-                var want := acc
-                var want0 := acc
-                for (b in range(rows)) {
-                    let g = int(entry_of_bucket_row[r0 + b])
-                    let g0 = int(entry_of_bucket_row[b])
-                    for (i in range(n)) {
-                        want[(g / k) * n + i] += w_packed[g] * down[b * n + i]
-                        want0[(g0 / k) * n + i] += w_packed[g0] * down[b * n + i]
-                    }
-                }
-                //! within 1e-5 of the largest magnitude: one multiply-add per element against the f32 oracle, fused or not,
-                //! rounds the product and the sum once each - under 1e-6 of the magnitude; the control moves one expected
-                //! element by 0.01
-                let bar = Bar(kind = BarKind.rel_of_max, rel = 1e-5, abs_floor = 1e-6, poison_abs = 0.01, poison_at = 2 * n + 3)
                 let tag = "combine row n {n}"
-                check(t, tag, y, want, bar, Shape(row_width = n))
-                t |> success(check_count(y, want0, bar) > n, "{tag}: control - the window at 0 adds other rows onto other positions ({check_count(y, want0, bar)} of {npos * n} off)")
-                var moved = 0
-                for (i in range(n)) {
-                    moved++ if (y[i] != acc[i])
-                }
-                t |> success(moved > n / 2, "{tag}: position 0's row moved off its accumulated input ({moved} of {n})")
+                combine_row_check(t, tag, y, acc, w_packed, down, entry_of_bucket_row, n, k, npos, r0, rows)
                 delete y
-                delete want
-                delete want0
                 //! the region-base arm (`goff`): a bundle's second region starts at chunk row 2 of the dispatch's down rows and at
                 //! grid entry r0 + 2 of the list, so the dispatch over rows 2..5 reads `down_rows[(2 + b) * n]`; the oracle over
                 //! the same rows read from chunk row 0 must miss
@@ -8320,15 +8254,8 @@ def test_vkd_combine_row(t0 : T?) {
                     delete yb
                     yb <- cp |> plane_run(pa)
                 }
-                var wantb := acc
-                var wantb0 := acc
-                for (b in range(rb, rows)) {
-                    let g = int(entry_of_bucket_row[r0 + b])
-                    for (i in range(n)) {
-                        wantb[(g / k) * n + i] += w_packed[g] * down[b * n + i]
-                        wantb0[(g / k) * n + i] += w_packed[g] * down[(b - rb) * n + i]
-                    }
-                }
+                var wantb <- combine_row_oracle(acc, w_packed, down, entry_of_bucket_row, n, k, r0 + rb, rb, rows - rb)
+                var wantb0 <- combine_row_oracle(acc, w_packed, down, entry_of_bucket_row, n, k, r0 + rb, 0, rows - rb)
                 let barb = Bar(kind = BarKind.rel_of_max, rel = 1e-5, abs_floor = 1e-6, poison_abs = 0.01, poison_at = 3 * n + 5)
                 check(t, "{tag}, region base 2", yb, wantb, barb, Shape(row_width = n))
                 t |> success(check_count(yb, wantb0, barb) > n, "{tag}, region base 2: control - the rows read from chunk row 0 miss ({check_count(yb, wantb0, barb)} of {npos * n} off)")
@@ -8550,7 +8477,6 @@ def test_vkd_ar_rq_fused(t0 : T?) {
 }
 
 //! a GEMM pick as "column x chunks x chunk", so a miss prints all three
-def private pick_str(p : tuple<tc : int64; nsplit : int64; ksplit : int64>) : string => "{p.tc}x{p.nsplit}x{p.ksplit}"
 
 [test]
 def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
@@ -8709,7 +8635,7 @@ def private moe_router_arm(t : T?; ner : int) {
             let px = cp |> in_(xh)
             let pl = cp |> out_(MR_NPOS * ner)
             var sc = cp |> cls_set(fixed_array(pw, px, pl), @@set_router_gemm_cls)
-            var pc = RouterGemmArgs(npos = uint(MR_NPOS), ne = uint(ner), dim = uint(MR_DIM), woff = uint(ner * MR_DIM), ostride = uint(ner))
+            var pc = RouterGemmArgs(npos = uint(MR_NPOS), ne = uint(ner), dim = uint(MR_DIM), woff = uint(ner * MR_DIM))
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_router_gemm_cls(raw, h, sc, pc, router_gemm_wgs(int64(MR_NPOS), int64(ner)))
             }
@@ -9382,9 +9308,9 @@ def test_vkd_moe_routing(t0 : T?) {
 def test_vkd_gemv_lane_rule(t0 : T?) {
     t0 |> run("gemv_lanes_per_row: the measured lane split per format class and row length") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            let grid = fixed_array(KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3xxs, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s4)
-            //! nv4 decodes its nibbles off a sixteen-entry table, no codebook gather, and rides the lattice split (`gemv_grid_fmt`)
-            let lattice = fixed_array(KqFmt.k2, KqFmt.k3, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq3s, KqFmt.nv4)
+            // nv4 decodes its nibbles off a sixteen-entry table like iq4nl, and takes the grid split with it (`gemv_grid_fmt`)
+            let grid = fixed_array(KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3xxs, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s4, KqFmt.nv4)
+            let lattice = fixed_array(KqFmt.k2, KqFmt.k3, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq3s)
             //! row length -> (the grid formats' lanes, the k-lattice formats' lanes); 0 = the whole subgroup
             let rows = fixed_array((n = 768l, g = 8u, l = 8u), (n = 1024l, g = 8u, l = 16u), (n = 1536l, g = 8u, l = 16u),
                 (n = 2048l, g = 16u, l = 16u), (n = 3072l, g = 16u, l = 16u), (n = 4096l, g = 16u, l = 0u), (n = 8192l, g = 16u, l = 0u))

@@ -389,11 +389,7 @@ class ClsSelect : GkClsSelect {
 class MoeCombine : GkMoeCombine {
     [spirv_kernel(local_size_x = 256, name = "combine_cls_spv")]
     def run {
-        var i = gl_LocalInvocationID.x
-        while (i < pa.n) {
-            comb_elem(gl_WorkGroupID.x, i)
-            i += 256u
-        }
+        comb_body()
     }
 }
 
@@ -406,11 +402,7 @@ class MoeCombineRow : GkMoeCombine {
 
     [spirv_kernel(local_size_x = 256, name = "combine_row_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-split")]
     def run {
-        var i = gl_LocalInvocationID.x
-        while (i < pa.n) {
-            comb_row_elem(gl_WorkGroupID.x, i)
-            i += 256u
-        }
+        comb_body()
     }
 }
 
@@ -599,7 +591,7 @@ class RouterGemm : RouterGemmT {
 
 //! npos rows of ne router logits at a row stride of ne, over the router rows at woff: one workgroup per 64 rows x 32 router rows
 def router_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; var rset : VkDescriptorSet; npos, ne, dim, woff : int64) {
-    var pc = RouterGemmArgs(npos = uint(npos), ne = uint(ne), dim = uint(dim), woff = uint(woff), ostride = uint(ne))
+    var pc = RouterGemmArgs(npos = uint(npos), ne = uint(ne), dim = uint(dim), woff = uint(woff))
     enc_router_gemm_cls(raw, h, rset, pc, router_gemm_wgs(npos, ne))
 }
 
@@ -959,42 +951,12 @@ class DnScan : DnScanT {
     }
 }
 
-struct DnCapTailArgs {
-    cd : uint
-    taps : uint
-    row0 : uint       //! the part's first row in the projected rows
-    entry_off : uint  //! the ring image the part entered on (float offset in smalls): the rows before the part, for a capture under the taps
-    cap_rec : uint    //! the part's records (two words a capture: the row the state stands after, the checkpoint row's float base)
-    cap_hist_off : uint   //! the layer's ring image 0 floats into a checkpoint row ((`RLayer.snap_off` + the slot's state bytes) / 4)
-    wg_per_cap : uint     //! the workgroups one capture's elements take: the dispatch is that many a capture, back to back
-}
-
-//! a capture's conv history into its checkpoint row's ring image 0 (`DnTailT`; the row's parity reads image 0): the taps
-//! projected rows before the capture's row, the rows before the part off the image it entered on
+//! a capture's conv history into its checkpoint row (`DnCapTailT`, the template both discrete homes stamp)
 [vk_dispatch(name = "dn_cap_tail_cls", grid = "wgs", params = "wgs : int64")]
-class DnCapTail : DnTailT {
-    @ssbo @binding = 0 @readonly src : array<float>      //! the projected rows (position-major)
-    @ssbo @binding = 1 @readonly smalls : array<float>   //! the layer's smalls (the entry ring image at entry_off)
-    @ssbo @binding = 2 @readonly caps : array<uint>      //! the window's capture records
-    @ssbo @binding = 3 dst : array<float>                //! the checkpoint rows
-    @push_constant pa : DnCapTailArgs
-
-    def override src_at(i : uint) : float => src[i]
-    def override entry_at(i : uint) : float => smalls[i]
-    def override put(i : uint; v : float) : void {
-        dst[i] = v
-    }
-
-    //! a capture at part row `crow` is a window tail ending there: the rows under `crow` come off the entry image
+class DnCapTail : DnCapTailT {
     [spirv_kernel(local_size_x = 256, name = "dn_cap_tail_cls_spv")]
     def run {
-        let wpc = max(1u, pa.wg_per_cap)
-        let cap = gl_WorkGroupID.x / wpc
-        let rec = pa.cap_rec + cap * 2u
-        let crow = caps[rec]
-        let lead = min(crow, pa.taps)
-        tail_tap((gl_WorkGroupID.x % wpc) * 256u + gl_LocalInvocationID.x, pa.cd, pa.taps, pa.row0 + crow - lead, pa.taps - lead,
-            pa.entry_off, caps[rec + 1u] + pa.cap_hist_off)
+        cap_tail_body()
     }
 }
 
@@ -1697,6 +1659,181 @@ class DaAttnBF16 : DaAttnBT {
     }
 }
 
+
+//! DaAttnB's hs=128 twin on f16 MMAs; hs unread, baked to 128
+[ |> template_struct_instance]
+class template DaAttnBH128T {
+    @ssbo @binding = 0 qpanel : array<float>   //! roped q rows
+    @ssbo @binding = 1 kpanel : array<KT>      //! the K mirror plane (kbase offsets)
+    @ssbo @binding = 2 vpanel : array<KT>      //! the V mirror plane (vbase offsets)
+    @ssbo @binding = 3 outp : array<float>     //! attention out rows
+    @push_constant pa : DaAttnBArgs
+    @workgroup fbq : uint[2048]    //! the 32-row q tile, f16 pairs
+    @workgroup fbkv : uint[2048]   //! one 32-row K/V stage, f16 pairs
+    @workgroup fbp : float[1024]   //! the 32x32 score/probability tile
+    @workgroup fbm : float[32]     //! per-row online-softmax state
+    @workgroup fbl : float[32]
+    @workgroup fba : float[32]
+
+    [spirv_inline]
+    def da_attn_bh128_body {   // nolint:STYLE037,STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
+        let qd = pa.nh * 128u
+        let qhs = pa.qhs == 0u ? 128u : pa.qhs
+        let qrow = pa.nh * qhs
+        let qtiles = (pa.npos + 31u) / 32u
+        let h = gl_WorkGroupID.x / qtiles
+        let q0 = (gl_WorkGroupID.x % qtiles) * 32u
+        let tid = gl_LocalInvocationID.x
+        let warp = tid / 32u
+        let kvh = h / pa.kv_mul
+        var i = tid
+        while (i < 2048u) {
+            let qr = q0 + i / 64u
+            let jp = (i % 64u) * 2u
+            if (qr < pa.npos) {
+                let src = (pa.row0 + qr) * qrow + h * qhs + jp
+                fbq[i] = packHalf2x16(float2(qpanel[src], qpanel[src + 1u]))
+            } else {
+                fbq[i] = 0u
+            }
+            i += 128u
+        }
+        if (tid < 32u) {
+            fbm[tid] = -3.0e38
+            fbl[tid] = 0.0
+        }
+        var o : float[32]   //! 2 rows x 16 cols per thread
+        for (z in range(32)) {
+            o[z] = 0.0
+        }
+        let orow0 = (tid / 8u) * 2u
+        let oe = (tid % 8u) * 16u
+        let srow = tid / 4u
+        let cb = (tid % 4u) * 8u
+        let lane4 = tid % 4u
+        barrier()
+        let br = warp / 2u
+        let bc = warp % 2u
+        var qa : coopmatA_f16_16x16[8]
+        for [unroll_full] (c in range(8)) {
+            coopmatLoad(qa[c], fbq, int(br * 16u) * 64 + c * 8, 64, 0)
+        }
+        let kend = pa.w0 + min(q0 + 32u, pa.npos)
+        var k0 = (pa.window != 0u && pa.w0 + q0 > pa.window) ? ((pa.w0 + q0 - pa.window) / 32u) * 32u : 0u   //! a sliding layer's first K stage under the tile's first query's window
+        while (k0 < kend) {
+            i = tid
+            while (i < 2048u) {
+                let kr = k0 + i / 64u
+                let jp = (i % 64u) * 2u
+                if (kr < kend) {
+                    let src = pa.kbase + kv_ring_row(kr, pa.ring) * pa.kvd + kvh * 128u + jp
+                    fbkv[i] = packHalf2x16(float2(float(kpanel[src]), float(kpanel[src + 1u])))   // nolint:PERF020,LINT019 -- KT convert-on-load; a no-op only in the f32 stamp
+                } else {
+                    fbkv[i] = 0u
+                }
+                i += 128u
+            }
+            barrier()
+            var acc : coopmatAcc_f32_16x16
+            var kb : coopmatB_f16_16x16
+            for [unroll_full] (c in range(8)) {
+                coopmatLoad(kb, fbkv, int(bc * 16u) * 64 + c * 8, 64, 1)
+                acc = coopmatMulAdd(qa[c], kb, acc)
+            }
+            coopmatStore(acc, fbp, int(br * 16u) * 32 + int(bc * 16u), 32, 0)
+            barrier()
+            let gq = pa.w0 + q0 + srow
+            let m_old = fbm[srow]
+            var mloc = -3.0e38
+            for [unroll] (j in range(8)) {
+                let idx = srow * 32u + cb + uint(j)
+                let gk = k0 + cb + uint(j)
+                let inwin = pa.window == 0u || gk + pa.window > gq
+                let s = (gk <= gq && inwin && q0 + srow < pa.npos && gk < kend) ? attn_softcap(fbp[idx] * pa.scale, pa.cap) : -3.0e38
+                fbp[idx] = s
+                mloc = max(mloc, s)
+            }
+            mloc = max(mloc, subgroupShuffleXor(mloc, 1u))
+            mloc = max(mloc, subgroupShuffleXor(mloc, 2u))
+            let mt = max(m_old, mloc)
+            var lloc = 0.0
+            for [unroll] (j in range(8)) {
+                let idx = srow * 32u + cb + uint(j)
+                let e = exp(fbp[idx] - mt)
+                fbp[idx] = e
+                lloc += e
+            }
+            lloc += subgroupShuffleXor(lloc, 1u)
+            lloc += subgroupShuffleXor(lloc, 2u)
+            if (lane4 == 0u) {
+                let alpha = exp(m_old - mt)
+                fbl[srow] = fbl[srow] * alpha + lloc
+                fbm[srow] = mt
+                fba[srow] = alpha
+            }
+            barrier()
+            i = tid
+            while (i < 2048u) {   //! V tile reuses the K staging
+                let kr = k0 + i / 64u
+                let jp = (i % 64u) * 2u
+                if (kr < kend) {
+                    let src = pa.vbase + kv_ring_row(kr, pa.ring) * pa.kvd + kvh * 128u + jp
+                    fbkv[i] = packHalf2x16(float2(float(vpanel[src]), float(vpanel[src + 1u])))   // nolint:PERF020,LINT019 -- KT convert-on-load; a no-op only in the f32 stamp
+                } else {
+                    fbkv[i] = 0u
+                }
+                i += 128u
+            }
+            barrier()
+            let av0 = fba[orow0]
+            let av1 = fba[orow0 + 1u]
+            for (z in range(16)) {
+                o[z] *= av0
+                o[16 + z] *= av1
+            }
+            var c2 = 0u
+            while (c2 < 32u) {
+                let pw0 = fbp[orow0 * 32u + c2]
+                let pw1 = fbp[(orow0 + 1u) * 32u + c2]
+                let vb = c2 * 64u + oe / 2u
+                for [unroll] (zp in range(8)) {
+                    let pair = unpackHalf2x16(fbkv[vb + uint(zp)])
+                    o[zp * 2] += pw0 * pair.x
+                    o[zp * 2 + 1] += pw0 * pair.y
+                    o[16 + zp * 2] += pw1 * pair.x
+                    o[16 + zp * 2 + 1] += pw1 * pair.y
+                }
+                c2++
+            }
+            barrier()
+            k0 += 32u
+        }
+        if (q0 + orow0 < pa.npos) {
+            let inv0 = 1.0 / fbl[orow0]
+            let ob0 = (pa.row0 + q0 + orow0) * qd + h * 128u + oe
+            let gb0 = (pa.row0 + q0 + orow0) * qrow + h * qhs + 128u + oe
+            for (z in range(16)) {
+                var v = o[z] * inv0
+                if (pa.gated != 0u) {
+                    v = sig_gate(v, qpanel[gb0 + uint(z)])
+                }
+                outp[ob0 + uint(z)] = v
+            }
+        }
+        if (q0 + orow0 + 1u < pa.npos) {
+            let inv1 = 1.0 / fbl[orow0 + 1u]
+            let ob1 = (pa.row0 + q0 + orow0 + 1u) * qd + h * 128u + oe
+            let gb1 = (pa.row0 + q0 + orow0 + 1u) * qrow + h * qhs + 128u + oe
+            for (z in range(16)) {
+                var v = o[16 + z] * inv1
+                if (pa.gated != 0u) {
+                    v = sig_gate(v, qpanel[gb1 + uint(z)])
+                }
+                outp[ob1 + uint(z)] = v
+            }
+        }
+    }
+}
 
 [vk_dispatch(name = "da_attn_b_h128_cls", grid = "wgs", params = "wgs : int64")]
 class DaAttnBH128 : DaAttnBH128T {
@@ -4323,6 +4460,32 @@ class Q8KhrBatch : Q8Cm2T {
 }
 
 
+//! a file's f32 rows under the template: a block is one 16-byte word of four f32 bit patterns; only the KHR stamp exists, so the
+//! decode serves the template's uncalled cm2 body alone
+[ |> template_struct_instance]
+class template F32RowsKhrT : KqCm2BatchT {
+    typedef BLK = uint4
+    typedef ST = float16
+    override BLKW = 4u
+    override SCALES = false
+
+    //! one region record ahead of the map: the window's every f32-row GEMM is one region at row 0
+    [spirv_inline]
+    def override map_word : uint => 4u
+
+    [spirv_decode]
+    def decode(blk : uint4; bc, cib : uint2) : float16 => float16(uint_bits_to_float(blk[int(cib.y & 3u)]))
+
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {
+            for [unroll_full] (c in range(4)) {
+                let w4 = wq4[blk + uint(c)]   //! e0 is always 0 at BLKW 4: the row's 16 weights are four consecutive words
+                khr_put4(sbase + uint(c) * 2u, float4(uint_bits_to_float(w4.x), uint_bits_to_float(w4.y), uint_bits_to_float(w4.z), uint_bits_to_float(w4.w)))
+            }
+        }
+    }
+}
+
 [vk_dispatch(name = "f32_batch_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile")]
 class F32KhrBatch : F32RowsKhrT {
     override KHR = true
@@ -4660,66 +4823,12 @@ def splitk_reduce_enc(raw : VkCommandBuffer; var h : VkHaz; var rset : VkDescrip
     enc_splitk_reduce_cls(raw, h, rset, pcr, splitk_reduce_wgs(nelem))
 }
 
-struct F16GemmArgs {
-    n : uint        //! K, the row width (elements), a 64-multiple
-    d : uint        //! M, the weight rows
-    rows : uint     //! N, the positions
-    woff : uint     //! the weight rows' element base
-    ybase : uint    //! the output's element base: the sum's, or the first partial plane's
-    ystride : uint  //! the output row stride (elements) when the GEMM stores whole
-    ksplit : uint   //! the k chunk per workgroup; 0 = the whole K, one plane at ybase with ystride
-}
-
-//! a small f16 x f16 GEMM on the cm2 128 x 128 tile, y[rows x d] = x[rows x n] w[d x n]^T; a k chunk's partial plane lands at ybase + chunk * rows * d (stride d)
+//! the small f16 x f16 GEMM on the cm2 128 x 128 tile (`F16GemmCm2T`, the template both discrete homes stamp)
 [vk_dispatch(name = "f16_gemm_cm2_cls", grid = "wgs", params = "wgs : int64")]
-class F16GemmCm2 {
-    @ssbo @binding = 0 w : array<float16>   //! the weight rows; no `weight` role: the E-series projection binds its f16 panel, rewritten every window
-    @ssbo @binding = 1 xf16 : array<float16>
-    @ssbo @binding = 2 y : array<float>
-    @push_constant pa : F16GemmArgs
-    typedef AT = coopmatWgA_f16_128x64
-    typedef BT = coopmatWgB_f16_64x128
-    typedef ACC = coopmatWgAcc_f32_128x128
-
-    [spirv_kernel(local_size_x = 256, name = "f16_gemm_cm2_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
+class F16GemmCm2 : F16GemmCm2T {
+    [spirv_kernel(local_size_x = 256, name = "f16_gemm_cm2_cls_spv")]
     def run {
-        let xtiles = (pa.rows + 127u) / 128u
-        let wtiles = (pa.d + 127u) / 128u
-        let chunk = gl_WorkGroupID.x / (xtiles * wtiles)
-        let rem = gl_WorkGroupID.x % (xtiles * wtiles)
-        let t0 = (rem / wtiles) * 128u
-        let m0 = (rem % wtiles) * 128u
-        let split = pa.ksplit != 0u
-        let k0 = split ? (chunk * pa.ksplit) & ~(F16G_BK - 1u) : 0u
-        let k1 = split ? min(k0 + pa.ksplit, pa.n) : pa.n
-        let ybase = split ? pa.ybase + chunk * pa.rows * pa.d : pa.ybase
-        let ystride = split ? pa.d : pa.ystride
-        var tv : tensorView2Dt
-        tensorViewCreate(tv)
-        var tla : tensorLayout2DPad
-        tensorLayoutCreate(tla)
-        tensorLayoutSetDimension(tla, pa.d, pa.n)
-        tensorLayoutSetStride(tla, pa.n, 1u)
-        var tlb : tensorLayout2DPad
-        tensorLayoutCreate(tlb)
-        tensorLayoutSetDimension(tlb, pa.rows, pa.n)
-        tensorLayoutSetStride(tlb, pa.n, 1u)
-        var tlo : tensorLayout2DPad
-        tensorLayoutCreate(tlo)
-        tensorLayoutSetDimension(tlo, pa.rows, pa.d)
-        tensorLayoutSetStride(tlo, ystride, 1u)
-        var a : AT
-        var b : BT
-        var acc : ACC
-        coopmatFill(acc, 0.0)   //! a split chunk past K (a k split rounded up to the step on a short K) stores a zero plane, never a stale accumulator
-        var k = k0
-        while (k < k1) {
-            coopmatLoadTensor(a, w, pa.woff, tla, m0, 128u, k, F16G_BK)
-            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, F16G_BK, tv)
-            acc = coopmatMulAdd(a, b, acc)
-            k += F16G_BK
-        }
-        coopmatStoreTensor(acc, y, ybase, tlo, t0, 128u, m0, 128u, tv)
+        f16_gemm_body()
     }
 }
 
@@ -4788,10 +4897,7 @@ class F16GemmKhr {
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
-def f16_gemm_wgs(khr : bool; rows, d : int64) : int64 {
-    let tile = khr ? 64l : 128l
-    return ((rows + tile - 1l) / tile) * ((d + tile - 1l) / tile)
-}
+def f16_gemm_wgs(khr : bool; rows, d : int64) : int64 => khr ? ((rows + 63l) / 64l) * ((d + 63l) / 64l) : f16_gemm_cm2_wgs(rows, d)
 
 //! an f16 GEMM off a cm2-mode device takes the KHR tile (`f16_gemm_set`'s `khr`)
 def f16_gemm_khr : bool => g_gpu.coopmat_mode != COOPMAT_CM2
@@ -8158,12 +8264,7 @@ class TtsPkRope : GkRopeTab {
 
 // ===== the short window's split-K knee race (ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split): synthetic q8 planes, no model =====
 
-let private KNEE_ROWS = 31l                //! under the s column's 32 rows: the windows the rule serves
-let private KNEE_STEPS = 24                //! steps a timed submit issues, a pair of co-running roles a step
-let private KNEE_ROUNDS = 7
-let private KNEE_RING_BYTES = 192l << 20l  //! the weight copies a rung walks, past the card's last-level cache
-
-//! a width's synthetic planes: a ring of hashed q8 weight copies (`d` x K), `KNEE_ROWS` f16 activation rows, four outputs the
+//! a width's synthetic planes: a ring of hashed q8 weight copies (`d` x K), `KNEE_S_ROWS` f16 activation rows, four outputs the
 //! steps alternate, the split's one partial-plane scratch, and the one-region schedule of each split count
 struct private KneeSite {
     wq, ws : array<uint64>
@@ -8176,27 +8277,26 @@ struct private KneeSite {
 
 def private knee_site(d, n : int64) : KneeSite {
     let rb = dev_rows_bytes(KqFmt.q8, n, d)
-    var st = KneeSite(wq_bytes = rb.q, ws_bytes = rb.s, xf_bytes = KNEE_ROWS * n * 2l, y_bytes = KNEE_ROWS * d * 4l,
-        part_bytes = 8l * KNEE_ROWS * d * 4l)
-    let copies = int(max(2l, KNEE_RING_BYTES / (rb.q + rb.s) + 1l))
+    var st = KneeSite(wq_bytes = rb.q, ws_bytes = rb.s, xf_bytes = KNEE_S_ROWS * n * 2l, y_bytes = KNEE_S_ROWS * d * 4l,
+        part_bytes = 8l * KNEE_S_ROWS * d * 4l)
+    let copies = int(max(2l, KNEE_DISCRETE_RING_BYTES / (rb.q + rb.s) + 1l))
     st.wq |> reserve(copies)
     st.ws |> reserve(copies)
     for (c in range(copies)) {
         st.wq |> push(make_staged_buf(st.wq_bytes) $(var words) {
             for (i in range64(st.wq_bytes / 4l)) {
-                unsafe(words[i]) = tts_hash_u32(uint(i) + uint(c) * 0x10001u) & 0x3F3F3F3Fu
+                unsafe(words[i]) = knee_q8_word(uint(i), uint(c))
             }
         })
         st.ws |> push(make_staged_buf(st.ws_bytes) $(var words) {
             for (i in range64(st.ws_bytes / 4l)) {
-                unsafe(words[i]) = 0x1C001C00u   //! a small finite f16 scale in both halves
+                unsafe(words[i]) = KNEE_Q8_SCALE_WORD
             }
         })
     }
     st.xf = make_staged_buf(st.xf_bytes) $(var words) {
         for (i in range64(st.xf_bytes / 4l)) {
-            let h = 0x2C00u + uint(i % 64l)
-            unsafe(words[i]) = h | (h << 16u)
+            unsafe(words[i]) = knee_xf_word(uint(i))
         }
     }
     for (i in range(4)) {
@@ -8208,7 +8308,7 @@ def private knee_site(d, n : int64) : KneeSite {
         st.sched_bytes[si] = (4l + groups * nsk) * 4l
         st.sched[si] = make_staged_buf(st.sched_bytes[si]) $(var words) {
             var cur = 4l
-            batch_sched_map(words, cur, 0l, 0l, KNEE_ROWS, groups * nsk)
+            batch_sched_map(words, cur, 0l, 0l, KNEE_S_ROWS, groups * nsk)
         }
     }
     return <- st
@@ -8232,22 +8332,13 @@ def private knee_site_release(var st : KneeSite) {
     delete st
 }
 
-//! one arm's best host wall a step over the rounds: `KNEE_STEPS` steps of `rec` a submit, two untimed submits ahead
-def private knee_arm_us(rec : block<(raw : VkCommandBuffer) : void>) : double {
+//! one arm's `KNEE_STEPS` steps of `rec` recorded once: a submit a timed run
+def private knee_arm_cmd(rec : block<(raw : VkCommandBuffer) : void>) : VkCommandBuffer {
     var raw = alloc_cmd()
     record_cmd(raw, false) $(r; var _h) {
         invoke(rec, r)
     }
-    submit_wait(raw)
-    submit_wait(raw)
-    var best = -1.0lf
-    for (_r in range(KNEE_ROUNDS)) {
-        let t0 = ref_time_ticks()
-        submit_wait(raw)
-        let us = double(get_time_usec(t0)) / double(KNEE_STEPS)
-        best = best < 0.0lf ? us : min(best, us)
-    }
-    return best
+    return raw
 }
 
 //! the cm2 s column's set over copy `c` of the ring into output `y` with the split count's schedule
@@ -8260,9 +8351,10 @@ def private knee_set(st : KneeSite; c, si : int; y : uint64; y_bytes : int64; yb
 //! from two copies of the ring - the whole arm both roles on the s column into the outputs the step alternates, the split arm
 //! both through the one partial-plane scratch and each its reduce, the way a window's split roles serialize on it; one hazard
 //! rail, so a step waits on the outputs it reuses
-def private knee_times(st : KneeSite; d, n, nsk : int64; wi : int) : tuple<b : double; t : double> {
+def private knee_times(st : KneeSite; d, n, nsk : int64) : tuple<b : double; t : double> {
     let groups = (d + 127l) / 128l
     let nring = length(st.wq)
+    let wi = knee_way_index(nsk)
     let ck = split_k_share(n, nsk, SplitKnee(align = 256l, exact = false))
     var whole, split : table<int; VkDescriptorSet>
     var red <- [for (yi in range(4)); set_splitk_reduce_cls(fixed_array(st.part, st.ys[yi]), fixed_array(st.part_bytes, st.y_bytes),
@@ -8279,7 +8371,7 @@ def private knee_times(st : KneeSite; d, n, nsk : int64; wi : int) : tuple<b : d
             }
         }
     }
-    let b = knee_arm_us() $(raw) {
+    var raw_b = knee_arm_cmd() $(raw) {
         var h : VkHaz
         for (i in range(KNEE_STEPS)) {
             for (j in range(2)) {
@@ -8290,21 +8382,26 @@ def private knee_times(st : KneeSite; d, n, nsk : int64; wi : int) : tuple<b : d
             }
         }
     }
-    let t = knee_arm_us() $(raw) {
+    var raw_t = knee_arm_cmd() $(raw) {
         var h : VkHaz
         for (i in range(KNEE_STEPS)) {
             for (j in range(2)) {
                 var set = split[(2 * i + j) % nring]
                 var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = uint(ck))
                 cm2_cls_enc(int(KqFmt.q8), 32l, raw, h, set, pc, groups * nsk)
-                splitk_reduce_enc(raw, h, red[(i & 1) * 2 + j], KNEE_ROWS * d, nsk)
+                splitk_reduce_enc(raw, h, red[(i & 1) * 2 + j], KNEE_S_ROWS * d, nsk)
             }
         }
+    }
+    let times = knee_arms_us($ {
+        submit_wait(raw_b)
+    }) $ {
+        submit_wait(raw_t)
     }
     whole |> clear()
     split |> clear()
     red |> clear()
-    return (b = b, t = t)
+    return times
 }
 
 //! The box's short-window knee on the cm2 s column (`vk_split_k_tgs`): the q8 rung table (`KNEE_Q8_WIDTHS` at `KNEE_Q8_K`) at 31
@@ -8316,26 +8413,15 @@ def vk_split_knee_race : int64 {
         to_log(LOG_INFO, "dasLLAMA vulkan: short-window knee race skipped - no cm2 s column on this device\n")
         return vk_split_k_tgs()
     }
-    let shape = SplitKnee(min_k = 256l, align = 256l, exact = false)
-    var cur = -1l
-    var site : array<KneeSite>   //! the width the rungs time now, rebuilt when the width moves
-    var rungs <- knee_rungs(KNEE_Q8_WIDTHS, KNEE_Q8_K, shape, $(d : int64) => 2l * ((d + 127l) / 128l)) $(d, nsk : int64) : tuple<b : double; t : double> {
-        if (d != cur) {
-            for (st in site) {
-                knee_site_release(st)
-            }
-            site |> clear()
-            site |> emplace(knee_site(d, KNEE_Q8_K))
-            cur = d
-        }
-        return knee_times(site[0], d, KNEE_Q8_K, nsk, nsk == 2l ? 0 : (nsk == 4l ? 1 : 2))
+    var site : array<KneeSite>   // the width the rungs time now
+    let tgs = knee_q8_race("vk knee", $(d : int64) => 2l * ((d + 127l) / 128l), $(d : int64) {
+        site |> emplace(knee_site(d, KNEE_Q8_K))
+    }, $ {
+        knee_site_release(site[0])
+        site |> clear()
+    }) $(d, nsk : int64) : tuple<b : double; t : double> {
+        return knee_times(site[0], d, KNEE_Q8_K, nsk)
     }
-    for (st in site) {
-        knee_site_release(st)
-    }
-    site |> clear()
-    let tgs = knee_pick(rungs, shape, "vk knee")
-    delete rungs
     set_vk_split_k_tgs(tgs)
     return tgs
 }

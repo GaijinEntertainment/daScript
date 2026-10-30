@@ -6,12 +6,15 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_DOCS.md`. Planned work: `followup_general
 
 **A diff that adds a `followup_*.md` entry asking that a function carrying a STYLE037/STYLE038
 suppression (`// nolint:`, `options _function_length` / `_cyclomatic_complexity`) be shortened or
-split (not merged with a twin onto one template) removes that suppression, or lands the shortening
+split (an entry asking to replace its repeated, hand-copied code with a loop counts; one asking to
+merge it with a twin onto one template does not) removes that suppression, or lands the shortening
 or split, in the same change.**
 
-**A diff that adds a STYLE037/STYLE038 suppression under this folder to a function that a
-`followup_*.md` entry asks to have shortened or split is a defect - it lands the shortening or
-split instead.**
+**A diff that adds a STYLE037/STYLE038 suppression under this folder to a function that carried no
+such suppression on the base branch, in whatever file it sat there, where a `followup_*.md` entry
+asks that function to be shortened or split (an entry asking to replace its repeated, hand-copied
+code with a loop counts; one asking to merge it with a twin onto one template does not), is a
+defect - it lands the shortening or split instead.**
 
 **A diff that adds a file under `dasllama/` adds that file's charter line - the one line saying
 what the file holds - to an `ARCHITECTURE_*.md` companion in the same change, never to

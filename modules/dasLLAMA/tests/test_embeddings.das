@@ -431,6 +431,16 @@ def test_embeddings_on_the_resident_driver(t : T?) {
         tt |> success(worst > 0.9999, "the device's batch against its singles: least cosine {worst}")
         let other = batch_vs_single(m, texts, -1l, 0l, EMBED_WINDOW_ROWS, 1)
         tt |> success(other < 0.9999, "the control: each batch vector against another text's single misses the bar ({other})")
+        // more texts than the N-row command's rows (RDEC_NROW_MAX): a hidden window seats every segment, the logits slots bound nothing
+        var many <- [for (i in range(int(RDEC_NROW_MAX) + 3)); "{EMB_DOCS[i % length(EMB_DOCS)]} ({i})"]
+        let served_many = gpu_resident_prefills_()
+        let scratch_many = moe_gpu_resident_scratch_windows()
+        var inscope pooled_many <- embed_batch(m, many)
+        tt |> equal(moe_gpu_resident_scratch_windows() - scratch_many, 1l, "{length(many)} texts - more than the {RDEC_NROW_MAX} rows a token command steps - sit in one packed window")
+        tt |> equal(gpu_resident_prefills_() - served_many, long_length(many), "... every text a prefill on the device")
+        let worst_many = batch_vs_single(m, many, -1l, 0l, EMBED_WINDOW_ROWS)
+        tt |> success(worst_many > 0.9999, "... the batch against its singles: least cosine {worst_many}")
+        delete many
         //! a mean read past the last layer's 32-row FFN tail: every row the window lands must have run the whole stack
         let long_text = "{EMB_DOCS[1]} {EMB_DOCS[1]}"
         var inscope long_ids <- encode(m, long_text)
@@ -453,6 +463,37 @@ def test_embeddings_on_the_resident_driver(t : T?) {
         var inscope cpu_other <- embed_(cpu, EMB_DOCS[0], POOLING_MEAN, 0l, KVDtype.f32)
         tt |> success(cosine(dev_mean, cpu_other) < EMB_MEAN_BAR, "the control: against another text's CPU mean read it misses the bar ({cosine(dev_mean, cpu_other)})")
         delete cpu
+        restore_levers(was)
+    }
+}
+
+//! the packed window's seat on a model with sliding layers: neither discrete home seats segments back to back over a ring layer
+//! (`cud_rdec_segs_packed`, its Vulkan twin), so a batch's texts take a window each, no packed window is counted, and the batch's
+//! vectors are still the singles'; the packed form's own witness is the resident-driver cell on Qwen3-Embedding
+[test]
+def test_embeddings_ring_layers_take_a_window_each(t : T?) {
+    t |> run("gemma-3-1b Q8_0 on the whole-model driver: the packed seat declines a sliding layer's ring on either home, so the batch's texts take a window each and still match their singles") <| @(tt : T?) {
+        let path = path_join(models_dir(), "gemma-3-1b-it-Q8_0.gguf")
+        return if (!jit_model_available(tt, path))
+        let was = device_levers(0l)
+        var m = Model()
+        if (!served_load(tt, path, m)) {
+            restore_levers(was)
+            return
+        }
+        var texts <- batch_texts()
+        let n = long_length(texts)
+        let served1 = gpu_resident_prefills_()
+        let scratch1 = moe_gpu_resident_scratch_windows()
+        var inscope pooled <- embed_batch(m, texts)
+        tt |> equal(gpu_resident_prefills_() - served1, n, "every text a prefill on the device")
+        let worst = batch_vs_single(m, texts, -1l, 0l, EMBED_WINDOW_ROWS)
+        tt |> equal(rdec_segs_packed(), false, "the {gpu_want_cuda() ? "CUDA" : "Vulkan"} home seats no segments back to back over a sliding layer's ring")
+        tt |> equal(moe_gpu_resident_scratch_windows() - scratch1, 0l, "... so the batch took no packed window: a window a text")
+        tt |> success(worst > 0.9999, "the batch against its singles on this home: least cosine {worst}")
+        delete texts
+        delete m
+        moe_gpu_drop_model()
         restore_levers(was)
     }
 }

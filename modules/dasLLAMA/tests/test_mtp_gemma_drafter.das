@@ -14,6 +14,8 @@ require ?das_metal dasllama/dasllama_metal_decode   // metal_decode_shutdown
 require ?das_metal dasllama/dasllama_metal_prefill   // the metal prefill override + shutdown, its served count
 require ?das_metal metal/das_metal_boost   // metal_live_object_count - the leak gate
 require ?vulkan dasllama/dasllama_vulkan_mtp_gemma   // the subject's Vulkan half: one draft step on the resident driver
+require ?cuda dasllama/dasllama_cuda_mtp_gemma   // the subject's CUDA half: the same step on the CUDA home's resident driver
+require dasllama/dasllama_gpu_tier   // gpu_want_cuda: which discrete home the served cells read
 require dasllama/dasllama_gpu_resident   // nolint:STYLE030,LINT019 — gpu_resident_prefills_, read in the vulkan half: the trunk's served witness
 require daslib/jobque_boost
 require daslib/fio
@@ -37,8 +39,10 @@ def private allow_cpu_prefill_intent() {
 // and on a trunk whose token table is K-quant. The drafter sidecar is a 440 MiB small-tier file; the 15.8 GiB target is
 // PARITY_FULL-gated. A model cell skips where a file it reads is absent: the sidecar, the target, the Q4_0 head the type
 // decline reads (`mtp-gemma-4-26B-A4B-it-Q4_0.gguf`), and the E2B trunk the per-layer-embedding refusal loads. The GPU cells
-// skip on a build with no GPU home and on a box that does not serve the target on it; the Metal attach's gather refusal and
-// the verify-decline cell skip on a build without das_metal, the Vulkan driver check without dasVulkan.
+// skip on a build with no GPU home and on a box that does not serve the target on it, and the served rounds skip where the
+// card holds the trunk only with routed layers' experts on the host (the drafter's verify rides the N-row command, which has
+// no host-experts form on either discrete home); the Metal attach's gather refusal and the verify-decline cell skip on a build
+// without das_metal, the Vulkan driver check without dasVulkan.
 
 let private TARGET_FILE = "gemma-4-26B-A4B-it-Q4_K_M.gguf"
 let private IQ3_FILE = "gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf"   //! its token table is Q6_K: the seed embed gathers a K-quant row
@@ -78,12 +82,12 @@ def test_gemma_drafter_refusals(t : T?) {
     t |> run("the resolver finds the upstream head beside an unsloth -UD- trunk, a K-quant and an i-quant one, through the facade too") @(t : T?) {
         let dir = scratch_path("ud")
         mkdir_rec(dir)
-        let head = arch_gguf("ud/mtp-gemma-4-26B-A4B-it-Q8_0.gguf", "gemma4-assistant")
+        let head = arch_gguf(path_join("ud", "mtp-gemma-4-26B-A4B-it-Q8_0.gguf"), "gemma4-assistant")
         for (trunk in ["gemma-4-26B-A4B-it-UD-Q4_K_M.gguf", "gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf", "gemma-4-26B-A4B-it-Q4_K_M.gguf", "gemma-4-26B-A4B-it-IQ4_XS.gguf"]) {
             t |> equal(gemma_drafter_sidecar(path_join(dir, trunk)), head, "{trunk} finds mtp-gemma-4-26B-A4B-it-Q8_0.gguf")
             t |> equal(mtp_drafter_sidecar(path_join(dir, trunk)), head, "{trunk} finds it through the facade")
         }
-        let own = arch_gguf("ud/mtp-gemma-4-26B-A4B-it-UD-Q8_0.gguf", "gemma4-assistant")
+        let own = arch_gguf(path_join("ud", "mtp-gemma-4-26B-A4B-it-UD-Q8_0.gguf"), "gemma4-assistant")
         t |> equal(gemma_drafter_sidecar(path_join(dir, "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf")), own, "a head named with the trunk's -UD tag wins over the untagged one")
         t |> equal(gemma_drafter_sidecar(path_join(dir, "gemma-4-12B-it-UD-Q4_K_M.gguf")), "", "the control: another model's trunk finds no head")
     }
@@ -91,11 +95,11 @@ def test_gemma_drafter_refusals(t : T?) {
         let dir = scratch_path("nextn")
         mkdir_rec(dir)
         let trunk = path_join(dir, "Qwen3.8-27B-Q4_K_M.gguf")
-        arch_gguf("nextn/mtp-Qwen3.8-27B-Q8_0.gguf", "qwen35")
+        arch_gguf(path_join("nextn", "mtp-Qwen3.8-27B-Q8_0.gguf"), "qwen35")
         t |> equal(gemma_drafter_sidecar(trunk), "", "the qwen35 head beside the trunk is not an assistant drafter")
-        let exact = arch_gguf("nextn/mtp-Qwen3.8-27B-Q4_K_M.gguf", "qwen35")
+        let exact = arch_gguf(path_join("nextn", "mtp-Qwen3.8-27B-Q4_K_M.gguf"), "qwen35")
         t |> equal(gemma_drafter_sidecar(trunk), "", "nor is the exact-name qwen35 head")
-        let side = arch_gguf("nextn/mtp-Qwen3.8-27B-Q8_0.gguf", "gemma4-assistant")
+        let side = arch_gguf(path_join("nextn", "mtp-Qwen3.8-27B-Q8_0.gguf"), "gemma4-assistant")
         t |> equal(gemma_drafter_sidecar(trunk), side, "the control: the same name carrying gemma4-assistant is found")
         remove(exact)
     }
@@ -128,8 +132,8 @@ def test_gemma_drafter_attach_checks(t : T?) {
         delete shell
     }
     t |> run("the facade's refusal names every registered backend's own refusal, or that this build registers none") @(t : T?) {
-        t |> equal(mtp_attach_refusal(default<array<string>>), ("no GPU driver on this build carries an assistant drafter - require dasllama/dasllama_metal_mtp_gemma (dasMetal) or "
-            + "dasllama/dasllama_vulkan_mtp_gemma (dasVulkan)"), "no backend registered names the modules")
+        t |> equal(mtp_attach_refusal(default<array<string>>), ("no GPU driver on this build carries an assistant drafter - require dasllama/dasllama_metal_mtp_gemma (dasMetal), "
+            + "dasllama/dasllama_vulkan_mtp_gemma (dasVulkan) or dasllama/dasllama_cuda_mtp_gemma (dasCUDA)"), "no backend registered names the modules")
         t |> equal(mtp_attach_refusal(["metal: a", "vulkan: b"]), "metal: a; vulkan: b", "each backend's refusal, joined")
         var shell = Model()
         let why = attach_mtp_drafter_(shell, path_join(scratch_path("."), "no-such-drafter.gguf"))
@@ -586,6 +590,12 @@ def private with_served_drafter(t : T?; file : string; regions : int64; kv : KVD
             delete trg
             return
         }
+        if (gpu_resident_host_layers() > 0l) {   // the round's verify rides the N-row command, which has no host-experts form on either discrete home
+            t |> skip("the card holds the trunk only with {gpu_resident_host_layers()} routed layers' experts on the host: the drafter's verify has no host form")
+            delete trg
+            gdraft_shutdown(t)
+            return
+        }
         t |> success(!mtp_capable(trg), "a gemma-4 target with no drafter attached cannot speculate")
         let pins = gdraft_pin()
         t |> success(attach_mtp_drafter(trg, side), "the facade attaches the drafter on the GPU home")
@@ -601,6 +611,33 @@ def private with_served_drafter(t : T?; file : string; regions : int64; kv : KVD
 
 //! the Q8_0-fed oracle's own flip envelope: against itself with its hidden 1e-5 to 1e-4 apart it moves 0.38-0.53 (h_next 0.50-0.62)
 let private VK_FEED_FLIP_BAR = 1.0
+
+//! the discrete home's one draft step on the resident driver: the CUDA home's under DASLLAMA_CUDA, else the Vulkan home's
+def private dev_draft_step(trg : Model; var s : Session; tok, anchor : int64; h : array<float>; var out_tok : int64&; var hout : array<float>) : bool {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        if (gpu_want_cuda()) {
+            return cud_gemma_draft_step(trg, s, tok, anchor, h, out_tok, hout)
+        }
+    }
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return vk_gemma_draft_step(trg, s, tok, anchor, h, out_tok, hout)
+    } else {
+        return false
+    }
+}
+
+//! the last device draft step's full-vocab logits on the home `dev_draft_step` ran
+def private dev_drafter_last_logits(var lg : array<float>) {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        if (gpu_want_cuda()) {
+            cud_gemma_drafter_last_logits(lg)
+            return
+        }
+    }
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        vk_gemma_drafter_last_logits(lg)
+    }
+}
 
 //! the device step over `s`'s host rows brought up again - another session's device prefill takes the one region first - with
 //! layer `l`'s K and V rows at `row` held at `v` for the step and put back after (`row` < 0 touches none): the step's logits
@@ -634,8 +671,8 @@ def private vk_reuploaded_draft(t : T?; trg : Model; var s : Session; prompt : a
         var dg = -1l
         var hg : array<float>
         hg |> resize(long_length(h))
-        t |> success(vk_gemma_draft_step(trg, s, seed, anchor, h, dg, hg), "the device draft step over the brought-up rows served")
-        vk_gemma_drafter_last_logits(lg)
+        t |> success(dev_draft_step(trg, s, seed, anchor, h, dg, hg), "the device draft step over the brought-up rows served")
+        dev_drafter_last_logits(lg)
         if (row >= 0l) {
             unsafe {
                 kv_store_row(kv_layer_kbase(s, l, c.seq_len), s.kv_dtype_k, kvd, prow, 0l, kvd, addr<float const?>(kept_k[0]))
@@ -719,12 +756,10 @@ def private gpu_step_vs_oracle(t : T?; trg : Model; var dr : GemmaDrafter; promp
         t |> success(gemma_draft_step_gpu(trg, s, seed, anchor, h, dg, hg), "{tag}: the GPU draft step served")
         gemma_drafter_last_logits(lg)
     } else {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            t |> success(vk_gemma_draft_step(trg, s, seed, anchor, h, dg, hg), "{tag}: the device draft step served")
-            vk_gemma_drafter_last_logits(lg)
-        }
+        t |> success(dev_draft_step(trg, s, seed, anchor, h, dg, hg), "{tag}: the device draft step served")
+        dev_drafter_last_logits(lg)
     }
-    let q8 = !(typeinfo builtin_module_exists(das_metal)) && typeinfo builtin_module_exists(vulkan)   //! the oracle's GEMVs read the device's rows: Vulkan's are Q8_0 activation rows, Metal's f32
+    let q8 = !(typeinfo builtin_module_exists(das_metal)) && (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda))   // the oracle's GEMVs read the device's rows: the discrete homes' are Q8_0 activation rows, Metal's f32
     moe_gpu_hydrate_session(trg, s)   //! the oracle reads the host cache: the resident driver's device-only rows come down first
     var out : GemmaDraftOut
     gemma_draft_step_cpu(trg, s, dr, seed, h, anchor, out, q8)
@@ -1079,10 +1114,10 @@ def private gdraft_chain(t : T?; trg : Model; var s : Session; seed, anchor, k :
                 gemma_drafter_last_logits(lg)
             }
         } else {
-            static_if (typeinfo builtin_module_exists(vulkan)) {
-                t |> success(vk_gemma_draft_step(trg, s, tok, anchor, hin, dg, hout), "draft step {i} served on the device")
+            static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
+                t |> success(dev_draft_step(trg, s, tok, anchor, hin, dg, hout), "draft step {i} served on the device")
                 if (i == 0l) {
-                    vk_gemma_drafter_last_logits(lg)
+                    dev_drafter_last_logits(lg)
                 }
             } else {
                 t |> skip("draft step {i}: no GPU home on this build for the gemma drafter")

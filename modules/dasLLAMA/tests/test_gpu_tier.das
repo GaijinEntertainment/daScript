@@ -695,11 +695,11 @@ let private RING_OFF = "dasLLAMA: probe home - the sliding layers' K/V rows keep
 let private METAL_RING_ON = "dasLLAMA: metal decode - the sliding layers' K/V rows ride rings of their window plus the rows the longest window"
 let private METAL_RING_OFF = "dasLLAMA: metal decode - the sliding layers' K/V rows keep every position's row, no ring, as asked (set_gpu_kv_ring, DASLLAMA_GPU_KV_RING=0)"
 let private EMBED_OFF = "dasLLAMA: resident driver - the host embeds every token row as asked (set_gpu_resident_embed, DASLLAMA_VK_GPU_EMBED=0)"
-let private HOT_DMA_OFF = "dasLLAMA: resident driver - the hot expert pool's misses fill on the host (set_gpu_hot_dma, DASLLAMA_GPU_HOT_DMA=0; =1 fills by DMA on the transfer queue)"
+let private HOT_DMA_OFF = "dasLLAMA: resident driver - the hot expert pool's misses fill on the host (set_gpu_hot_dma, DASLLAMA_GPU_HOT_DMA=0; =1 fills by DMA on the home's copy queue)"
 let private DEC_MEET_ON = "dasLLAMA: resident driver - a decode token's picks on a streamed layer go through the prefill's meet (set_gpu_dec_meet, DASLLAMA_GPU_DEC_MEET=1; =0 takes the one-row host step)"
 let private ONEPASS_OFF = "dasLLAMA: resident driver - the rare rail runs its three region-list passes (set_rare_onepass, DASLLAMA_RARE_ONEPASS=0; =1 runs the one-pass lane)"
 let private BATCHED_OFF = "dasLLAMA: resident driver - the one-pass lane runs the rows core a row (set_rare_batched, DASLLAMA_RARE_BATCHED=0; =1 runs the batched expert cores)"
-let private ARENA_OFF = "dasLLAMA: resident driver - the rare rail reads the planar planes (set_rare_arena, DASLLAMA_RARE_ARENA=0; =1 reads the pinned device-layout planes)"
+let private ARENA_OFF = "dasLLAMA: resident driver - the rare rail reads the planar planes (set_rare_arena, DASLLAMA_RARE_ARENA=0; =1 reads the pinned device-layout planes on a trimmed lane and the planar planes where the load kept them, =2 the pinned planes on every lane)"
 let private HOST_FIRST_8 = "dasLLAMA: resident driver - the meet hands the host its 8 rarest experts before the device claims (set_moe_host_first, DASLLAMA_MOE_HOST_FIRST=8; 0 lets the sides claim at their own pace)"
 let private PF_ROWS_300 = "dasLLAMA: resident driver - the prompt window is 256 rows (set_pf_window_rows_pin, DASLLAMA_GPU_PF_ROWS=300: rounded down to a multiple of 128, never under it; a recurrent model's window is cut at its deltanet chunk; unasked, the plan picks 4096 where it fits with its scratch, else 2048)"
 let private GATHER_TAIL = " for the prefill window, the one-row step, the N-row command and the NextN draft and verify (set_gpu_resident_embed, DASLLAMA_VK_GPU_EMBED=0 keeps the host embed)"
@@ -782,6 +782,59 @@ def test_override_announces(t : T?) {
         t |> equal(count(case_lines(off, "metal_fuse_restore"), FUSE_OFF), 0, "the restore to the knob's off says nothing")
         t |> equal(count(case_lines(off, "metal_fuse_off"), FUSE_OFF), 0, "the setter's off, already said, says nothing")
         t |> equal(count(case_lines(off, "metal_fuse_on_off"), FUSE_OFF), 1, "on then off says it again")
+    }
+}
+
+let private FALLBACK_CUDA = "the CPU rails serve (DASLLAMA_CUDA=1: this home has no per-op tier)"
+let private FALLBACK_PEROP = "the per-op rails serve"
+let private FOREIGN_HOME_VULKAN = "dasLLAMA vulkan tier: dry-bake config names home 'cuda' - this process bakes the vulkan lane alone"
+let private FOREIGN_HOME_CUDA = "dasLLAMA cuda tier: dry-bake config names home 'vulkan' - this process bakes the cuda lane alone"
+
+//! the home-words root under the ask `cuda` ("1": DASLLAMA_GPU=1 with DASLLAMA_CUDA=1; "": neither), at the info floor its records print at
+def private home_words_child(t : T?; cuda : string) : string {
+    var out : string
+    let rc = run_child(child_cmd("_home_words_root.das", [(name = "DASLLAMA_GPU", value = cuda), (name = "DASLLAMA_CUDA", value = cuda), (name = "DAS_LOG_LEVEL", value = "info")]), out)
+    t |> equal(rc, 0, "the home-words root ran (DASLLAMA_CUDA='{cuda}'):\n{out}")
+    t |> success(find(out, "ROOT_DONE") >= 0, "the home-words root reached its end:\n{out}")
+    return out
+}
+
+//! the texts that follow the asked home, read off a child under each ask: what serves a model the whole-model driver declined
+//! (`rdec_fallback_words`: the per-op rails, or the CPU rails on the CUDA home, which has none), and each discrete home's
+//! dry-bake arm refusing by name a config the other home wrote (a lane minted off it would lie about its plan)
+[test]
+def test_home_words(t : T?) {
+    let plain = home_words_child(t, "")
+    let cuda = home_words_child(t, "1")
+    t |> run("a declined model falls to the per-op rails with no CUDA ask, and to the CPU rails under DASLLAMA_CUDA=1 on a dasCUDA build") @(t : T?) {
+        t |> success(find(case_lines(plain, "fallback"), "FALLBACK {FALLBACK_PEROP}") >= 0, "no CUDA ask: the per-op rails serve:\n{case_lines(plain, "fallback")}")
+        static_if (typeinfo builtin_module_exists(cuda)) {
+            t |> success(find(case_lines(cuda, "fallback"), "FALLBACK {FALLBACK_CUDA}") >= 0, "DASLLAMA_CUDA=1: the CPU rails serve, this home having no per-op tier:\n{case_lines(cuda, "fallback")}")
+        } else {
+            t |> success(find(case_lines(cuda, "fallback"), "FALLBACK {FALLBACK_PEROP}") >= 0, "no dasCUDA module: the ask arms no home, the per-op rails serve:\n{case_lines(cuda, "fallback")}")
+        }
+    }
+    t |> run("the Vulkan home's dry-bake arm refuses a config whose home is cuda, naming the home") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            let lines = case_lines(plain, "vulkan_foreign")
+            t |> success(find(lines, "ARM false") >= 0, "the arm refused the config:\n{lines}")
+            t |> success(find(lines, FOREIGN_HOME_VULKAN) >= 0, "... naming the foreign home:\n{lines}")
+        } else {
+            t |> skip("no dasVulkan module on this build")
+        }
+    }
+    t |> run("the CUDA home's dry-bake arm refuses a config whose home is vulkan, naming the home") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(cuda)) {
+            let lines = case_lines(cuda, "cuda_foreign")
+            if (find(lines, "no CUDA device") >= 0 || find(lines, "no CUDA driver") >= 0) {
+                t |> skip("no CUDA device the home arms: the arm declined before it read the config\n{lines}")
+                return
+            }
+            t |> success(find(lines, "ARM false") >= 0, "the arm refused the config:\n{lines}")
+            t |> success(find(lines, FOREIGN_HOME_CUDA) >= 0, "... naming the foreign home:\n{lines}")
+        } else {
+            t |> skip("no dasCUDA module on this build")
+        }
     }
 }
 

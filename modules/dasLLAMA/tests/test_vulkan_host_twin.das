@@ -7,7 +7,8 @@ options _dasllama_internal = true
 // The host twin - the tier's own block decode run on the CPU over a streamed stack's device-layout planes - against the
 // planar kernels, every expert format the tier streams, model-free and device-free: a planar disk-order stack in a Model
 // shell, the engine's own gather into the device layout, the planar dispatcher's rows and the twin's rows within the
-// summation bar, the poisoned expectation the control. A build with no Vulkan module registers no twin and skips.
+// summation bar, the poisoned expectation the control. The twin is the shared module's (`dasllama_gpu_host_twin`), registered by
+// the home a build arms; a build with neither discrete home registers none and skips.
 
 require dastest/testing_boost public
 require math
@@ -19,7 +20,8 @@ require dasllama/dasllama_math_default
 require dasllama/dasllama_math   // e8m0_half: the mx4 oracle's scale
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_math_gen
-require ?vulkan dasllama/dasllama_math_vulkan
+require ?vulkan dasllama/dasllama_math_vulkan   // its [init] registers the twin on a Vulkan build
+require ?cuda dasllama/dasllama_math_cuda   // ... and on a CUDA build under DASLLAMA_CUDA
 require _kq_fixtures
 require _compares
 
@@ -229,7 +231,7 @@ def private twin_rows(m : Model; f : KqFmt; x : array<float>; n, rows : int64) :
 
 def private twin_cell(t : T?; f : KqFmt) {
     if (!moe_gpu_host_rows_on()) {
-        t |> skip("no host twin is registered - a build with no Vulkan module")
+        t |> skip("no host twin is registered - a build with neither discrete home (the CUDA home registers it under DASLLAMA_CUDA=1)")
         return
     }
     t |> success(moe_gpu_host_twin_serves(int(f)), "the host twin serves {f}")

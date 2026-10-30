@@ -1887,7 +1887,7 @@ def main() : int {
                 var sp = SamplingParams(temp = cfg.mtp_temp, top_p = cfg.mtp_top_p, top_k = int64(cfg.mtp_top_k))
                 let ask = sampler_is_argmax(sp)
                 var refused = ""   // one rep with no figure, or one served off the row's backend stamp, drops the whole row
-                let vk_stamp = !gpu && moe_gpu_tier_installed()   // the row records the armed Vulkan tier as its backend: a call the driver passed to the CPU rails ran off it
+                let gpu_stamp = !gpu && moe_gpu_tier_installed()   // the row records the armed discrete home as its backend: a call the driver passed to the CPU rails ran off it
                 for (rep in range(reps)) {
                     var total_us = 0l
                     var rep_gen = 0l
@@ -1938,9 +1938,9 @@ def main() : int {
                         break
                     }
                     let passed = cpu_pass_total() - passes0
-                    if (vk_stamp && passed > 0l) {
+                    if (gpu_stamp && passed > 0l) {
                         let words = cpu_pass_words()
-                        refused = "rep {rep} ran off the row's vulkan backend: the resident driver passed {passed} call(s) to the CPU rails ({words})"
+                        refused = "rep {rep} ran off the row's {moe_gpu_backend_name()} backend: the resident driver passed {passed} call(s) to the CPU rails ({words})"
                         break
                     }
                     tps |> push(double(rep_gen) * 1.0e6lf / double(total_us))
@@ -2167,10 +2167,10 @@ def main() : int {
             continue
         }
         // the das row's backend is what OUR engine ran on — metal (--ngl protocol), the armed
-        // vulkan tier, or cpu; the reference row keeps the --ngl-derived value (llama-bench
-        // knows nothing of the vulkan tier)
+        // discrete home by its name (vulkan | cuda), or cpu; the reference row keeps the
+        // --ngl-derived value (llama-bench knows nothing of the GPU tier)
         let backend = gpu ? "metal" : "cpu"
-        let das_backend = gpu ? "metal" : (moe_gpu_tier_installed() ? "vulkan" : "cpu")
+        let das_backend = gpu ? "metal" : (moe_gpu_tier_installed() ? moe_gpu_backend_name() : "cpu")
         let gguf = base_name(mpath)
         if (fmt == OutFmt.md) {
             for (st in results) {

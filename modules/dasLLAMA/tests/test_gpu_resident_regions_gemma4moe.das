@@ -14,7 +14,7 @@ require _resident_regions
 // the bar's reading `_resident_regions.das`'s). The split-forms cells pin the one-row command's fused forms off for their
 // load; the fold cell holds the rows against the fused one-row command the server runs, both commands folding the per-32
 // routed down under the routing weights. Skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, or
-// without the file under models_dir().
+// without the file under models_dir(); the split-forms cell skips under DASLLAMA_CUDA=1 - the fuse knob is the Vulkan driver's.
 let private REGIONS_FILE = "gemma-4-26B-A4B-it-Q4_K_M.gguf"
 
 [test]

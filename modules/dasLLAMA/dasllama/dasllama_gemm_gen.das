@@ -3972,6 +3972,100 @@ def private rm_gen_fmt(gc : LlvmCodeCtx) : KqFmt {
     return f
 }
 
+//! two consecutive 32-blocks of a k4 / k5 plane as the low-strip and high-strip code vectors: lanes 0..15 block `j`'s
+//! weights, 16..31 block `j + 1`'s - the k / k+16 pairing puts a block's low strip in its 16 bytes' low nibbles, so one
+//! 32-byte load serves both blocks; k5's fifth bits deposited block by block and re-split the same way
+def private rm_pair_codes(var te : TileEmit; var qoff : LLVMOpaqueValue?; j : int; k5 : bool) : tuple<lo : LLVMOpaqueValue?; hi : LLVMOpaqueValue?> {
+    let b = te.builder
+    var noff = LLVMBuildAdd(b, qoff, te.types->ConstI64(uint64(B32_NIB_BYTES) * uint64(j)), "")
+    var v = rm_load32(te, noff, "pair{j}")
+    var lo = LLVMBuildAnd(b, v, const_splat(te.types.t_int8, 32, 15ul), "plo{j}")
+    var hi = LLVMBuildLShr(b, v, const_splat(te.types.t_int8, 32, 4ul), "phi{j}")
+    if (k5) {
+        let qh = rm_pair_k5_qh(te, qoff, j)
+        lo = LLVMBuildOr(b, lo, qh.lo, "plo5_{j}")
+        hi = LLVMBuildOr(b, hi, qh.hi, "phi5_{j}")
+    }
+    return (lo = lo, hi = hi)
+}
+
+//! the fifth bits of blocks `j`, `j + 1` as 0x10-or-0 bytes over the pair's low-strip and high-strip lanes: the two blocks'
+//! eight qh bytes in one load, each byte spread over its four weights' lanes, the strip's bit taken by one mask and compare
+def private rm_pair_k5_qh(var te : TileEmit; var qoff : LLVMOpaqueValue?; j : int) : tuple<lo : LLVMOpaqueValue?; hi : LLVMOpaqueValue?> {
+    let b = te.builder
+    var v8ty = LLVMVectorType(te.types.t_int8, 8u)
+    var v32ty = LLVMVectorType(te.types.t_int8, 32u)
+    var qp = LLVMBuildGEP2(b, te.types.t_int8, te.wg, LLVMBuildAdd(b, qoff, te.types->ConstI64(uint64(K4_QSB + K5_QH_B32 * int64(j))), ""), "")
+    var bytes8 = LLVMBuildLoad2Aligned(b, v8ty, qp, 1u, "qh8")
+    let spread <- [for (i in range(32)); i / 4]
+    var bytes = LLVMBuildShuffleVector(b, te.types, bytes8, bytes8, spread, "qhb{j}")
+    var loElems <- [for (i in range(32)); LLVMConstInt(te.types.t_int8, uint64(1 << (i % 4)), 0)]
+    var hiElems <- [for (i in range(32)); LLVMConstInt(te.types.t_int8, uint64(1 << (4 + i % 4)), 0)]
+    var loMask = LLVMConstVector(array_data_ptr(loElems), 32u)
+    var hiMask = LLVMConstVector(array_data_ptr(hiElems), 32u)
+    var sixteen = const_splat(te.types.t_int8, 32, 16ul)
+    var loSet = LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntEQ, LLVMBuildAnd(b, bytes, loMask, ""), loMask, "")
+    var hiSet = LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntEQ, LLVMBuildAnd(b, bytes, hiMask, ""), hiMask, "")
+    return (lo = LLVMBuildAnd(b, LLVMBuildSExt(b, loSet, v32ty, ""), sixteen, "qlo{j}"), hi = LLVMBuildAnd(b, LLVMBuildSExt(b, hiSet, v32ty, ""), sixteen, "qhi{j}"))
+}
+
+//! the shuffle masks that take two blocks' 32-byte vectors apart into their low strips and their high strips
+def private rm_pair_lo_halves() : array<int> => <- [for (i in range(32)); i < 16 ? i : 16 + i]
+def private rm_pair_hi_halves() : array<int> => <- [for (i in range(32)); i < 16 ? 16 + i : 32 + i]
+
+//! token `t`'s activation bytes of blocks `j`, `j + 1` as the low-strip and high-strip vectors `rm_pair_codes` pairs with
+def private rm_pair_x(var te : TileEmit; var xoff : LLVMOpaqueValue?; j, t : int) : tuple<lo : LLVMOpaqueValue?; hi : LLVMOpaqueValue?> {
+    let b = te.builder
+    var v32ty = LLVMVectorType(te.types.t_int8, 32u)
+    var o0 = LLVMBuildAdd(b, xoff, te.types->ConstI64(uint64(KQ_B32_ELEMS * int64(j))), "")
+    var o1 = LLVMBuildAdd(b, xoff, te.types->ConstI64(uint64(KQ_B32_ELEMS * int64(j + 1))), "")
+    var x0 = load_vec(te, v32ty, te.x[t], o0, "xa{j}")
+    var x1 = load_vec(te, v32ty, te.x[t], o1, "xb{j}")
+    return (lo = LLVMBuildShuffleVector(b, te.types, x0, x1, rm_pair_lo_halves(), "xlo{j}"), hi = LLVMBuildShuffleVector(b, te.types, x0, x1, rm_pair_hi_halves(), "xhi{j}"))
+}
+
+//! the superblock's eight sub-scales (k4 / k5: the unsigned bytes at +4 of the row's scale record) widened to i16
+def private rm_sb_scales16(var te : TileEmit; var soff : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    let b = te.builder
+    var v8ty = LLVMVectorType(te.types.t_int8, 8u)
+    var sp = LLVMBuildGEP2(b, te.types.t_int8, te.sg, LLVMBuildAdd(b, soff, te.types->ConstI64(uint64(KQ_SREC_SCALES_OFF)), ""), "")
+    var s8 = LLVMBuildLoad2Aligned(b, v8ty, sp, 1u, "sc8")
+    return LLVMBuildZExt(b, s8, LLVMVectorType(te.types.t_int16, 8u), "sc16")
+}
+
+//! blocks `j`, `j + 1`'s sub-scales over the i16 lanes of their strips (eight a block): the pair chain's pmaddwd multiplier
+def private rm_pair_scale16(var te : TileEmit; var sc16 : LLVMOpaqueValue?; j : int) : LLVMOpaqueValue? {
+    let mask <- [for (i in range(16)); i < 8 ? j : j + 1]
+    return LLVMBuildShuffleVector(te.builder, te.types, sc16, sc16, mask, "ps16_{j}")
+}
+
+//! the same over the i32 lanes (four a block): the dot-product kinds' multiplier
+def private rm_pair_scale32(var te : TileEmit; var sc16 : LLVMOpaqueValue?; j : int) : LLVMOpaqueValue? {
+    let b = te.builder
+    let mask <- [for (i in range(8)); i < 4 ? j : j + 1]
+    var s = LLVMBuildShuffleVector(b, te.types, sc16, sc16, mask, "")
+    return LLVMBuildZExt(b, s, te.vni32, "ps32_{j}")
+}
+
+//! the superblock's min term as one vector: the eight mins (the bytes at +12 of the scale record) x the eight 32-blocks'
+//! activation sums, each the sum of its two 16-strips off token `t`'s Q8_K block sums
+def private rm_sb_min_vec(var te : TileEmit; var soff, sb16 : LLVMOpaqueValue?; t : int) : LLVMOpaqueValue? {
+    let b = te.builder
+    var v8ty = LLVMVectorType(te.types.t_int8, 8u)
+    var v8i32 = LLVMVectorType(te.types.t_int32, 8u)
+    var mp = LLVMBuildGEP2(b, te.types.t_int8, te.sg, LLVMBuildAdd(b, soff, te.types->ConstI64(uint64(KQ_SREC_MINS_OFF)), ""), "")
+    var mn = LLVMBuildZExt(b, LLVMBuildLoad2Aligned(b, v8ty, mp, 1u, "mn8"), v8i32, "mn32")
+    var bp0 = LLVMBuildGEP2(b, te.types.t_int32, te.xbs[t], sb16, "")
+    var bp1 = LLVMBuildGEP2(b, te.types.t_int32, te.xbs[t], LLVMBuildAdd(b, sb16, te.types->ConstI64(8ul), ""), "")
+    var s0 = LLVMBuildLoad2Aligned(b, v8i32, bp0, 4u, "bs0")
+    var s1 = LLVMBuildLoad2Aligned(b, v8i32, bp1, 4u, "bs1")
+    let even <- [for (i in range(8)); 2 * i]
+    let odd <- [for (i in range(8)); 2 * i + 1]
+    var e = LLVMBuildShuffleVector(b, te.types, s0, s1, even, "")
+    var o = LLVMBuildShuffleVector(b, te.types, s0, s1, odd, "")
+    return LLVMBuildMul(b, mn, LLVMBuildAdd(b, e, o, "bs32"), "minv{t}")
+}
+
 [arch(at = "../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena")]
 def private rm_kq_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE038 - one register-coupled block body a format family
     if (!ptrs_then_i64_signature(gc.fn, 6, nt > 1 ? 2 : 3)) return false
@@ -4044,6 +4138,38 @@ def private rm_kq_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE03
         if (k3) {
             var hoff = LLVMBuildAdd(b, qoff, te.types->ConstI64(64ul), "")
             hmask = rm_load32(te, hoff, "hmask")
+        }
+        if ((k4 || k5) && !neon && te.width == 256) {   // the pair form: two blocks a weight load, their strips' i16 pair sums under one scaled pmaddwd, the min term a vector
+            var sc16 = rm_sb_scales16(te, soff)
+            var jp = 0
+            while (jp < 8) {
+                var codes2 = rm_pair_codes(te, qoff, jp, k5)
+                for (t in range(nt)) {
+                    var x2 = rm_pair_x(te, xoff, jp, t)
+                    if (te.dotKind == DOT_MADDUBS) {
+                        var chain = madd16_acc(te, null, codes2.lo, x2.lo)
+                        chain = madd16_acc(te, chain, codes2.hi, x2.hi)
+                        dot_sum[t] = madd16_flush_scaled(te, dot_sum[t], chain, rm_pair_scale16(te, sc16, jp))
+                    } else {
+                        var zero = LLVMConstNull(te.vni32)
+                        var a0args <- [zero, codes2.lo, x2.lo]
+                        var a0 = LLVMBuildCall2(b, te.dp_ty, te.dp_decl, a0args, "")
+                        var a1args <- [a0, codes2.hi, x2.hi]
+                        var a = LLVMBuildCall2(b, te.dp_ty, te.dp_decl, a1args, "pdot{jp}")
+                        dot_sum[t] = LLVMBuildAdd(b, dot_sum[t], LLVMBuildMul(b, a, rm_pair_scale32(te, sc16, jp), ""), "isum{t}")
+                    }
+                }
+                jp += 2
+            }
+            for (t in range(nt)) {
+                var dq = LLVMBuildFMul(b, dsc, xsv[t], "dq")
+                var af = LLVMBuildSIToFP(b, dot_sum[t], te.vnf32, "af")
+                f[t] = fold_fma(te, af, splat_to(te, te.vnf32, dq, "dqv"), f[t], "fsb{t}")
+                var ndmq = LLVMBuildFSub(b, LLVMConstNull(te.types.t_float), LLVMBuildFMul(b, dmn, xsv[t], ""), "ndmq")
+                var mf = LLVMBuildSIToFP(b, rm_sb_min_vec(te, soff, sb16, t), te.vnf32, "mf")
+                f[t] = fold_fma(te, mf, splat_to(te, te.vnf32, ndmq, "ndmqv"), f[t], "fm{t}")
+            }
+            return
         }
         let blocks_per_vec = neon ? 1 : te.width / 256
         let loMask <- [for (i in range(16)); i]

@@ -19,6 +19,12 @@ struct CudGpu {
     subgroup_size : int64    //! a warp
     rows_per_wg : int64      //! subgroups a workgroup at `CUD_WG_X` - the GEMV ladders' output rows a workgroup
     stream : void?
+    copy : CudCopy           //! the copy stream: every pinned stack's DMA rides it, apart from the launches on `stream`
+    dry : bool               //! the lane mint's walk: every seat runs its accept / refuse arithmetic and allocates and uploads nothing (`cud_mint_dry`)
+}
+
+struct CudCopy {
+    stream : void?
 }
 
 let CUD_WG_X = 64u   //! the kernel workgroup width the GEMV ladders size against (the Vulkan home's `WG_X`)
@@ -26,8 +32,17 @@ let FP4_RUNG_SM = 120   //! the first compute capability with the FP4 tensor run
 
 var g_cud : CudGpu
 
+//! the calling thread bound to the ready device ahead of a serving seat's device work: a host that steps a model from a thread
+//! other than the one that loaded it reaches the driver unbound otherwise; no device, nothing to bind
+[arch(at="../ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-thread-binding")]
+def cud_bind() {
+    verify(!g_cud.ready || cuda_bind_context(g_cud.cc), "dasLLAMA cuda: the device is ready and the calling thread cannot bind its context")   // nolint:PERF026,LINT019 — the interpolation is cu_ok's failure line, off the bound path; the walk fires from the seats
+}
+
+//! the tier's device, made ready once a context and bound to the calling thread at every entry
+[arch(at="../ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-thread-binding")]
 def cud_init() : bool {
-    return true if (g_cud.ready)
+    return cuda_bind_context(g_cud.cc) if (g_cud.ready)
     return false if (g_cud.tried)
     g_cud.tried = true
     if (!cuda_available()) {
@@ -50,6 +65,7 @@ def cud_init() : bool {
     g_cud.subgroup_size = 32l
     g_cud.rows_per_wg = int64(CUD_WG_X / 32u)
     g_cud.stream = cuda_stream_create()
+    g_cud.copy.stream = cuda_stream_create()
     g_cud.ready = true
     cuda_set_launch_pdl(g_cud.sm >= 90 && g_env_vulkan.cuda_pdl != 0l)   // every kernel of the home comes through the emitter, which puts the entry wait in each
     to_log(LOG_INFO, "dasLLAMA cuda tier: device ready ({g_cud.name}, {g_cud.sm_count} SMs, sm_{g_cud.sm}, driver {cuda_driver_version()}, nvrtc {cuda_nvrtc_version()}, programmatic dependent launch {cuda_launch_pdl() ? "on" : "off"})\n")
@@ -66,9 +82,19 @@ def cud_proc_buf(b : uint64) {
 //! the device epoch: a shutdown moves it, so a holder of a process buffer knows its buffer went with the last device
 def cud_epoch() : int => g_cud_epoch
 
+var private g_cud_shutdown_hooks : array<function<() : void>>   //! the home's other modules' device state, dropped ahead of the context (the stream chain's)
+
+//! `f` runs at the shutdown before the device goes: a module whose state the context owns registers it once
+def cud_on_shutdown(f : function<() : void>) {
+    g_cud_shutdown_hooks |> push(f)
+}
+
 //! every loaded kernel module released and the device state dropped; a class rebuilds its functions on its next ensure
 def cud_shutdown() {
     return if (!g_cud.ready)
+    for (f in g_cud_shutdown_hooks) {
+        invoke(f)
+    }
     for (b in g_cud_proc_bufs) {
         cuda_mem_free(b)
     }
@@ -80,6 +106,8 @@ def cud_shutdown() {
     g_cud_epoch++
     cuda_stream_destroy(g_cud.stream)
     g_cud.stream = null
+    cuda_stream_destroy(g_cud.copy.stream)
+    g_cud.copy.stream = null
     cuda_release(g_cud.cc)
     g_cud.cc = null
     g_cud.ready = false
@@ -183,6 +211,11 @@ def cud_kernel_coverage_of(kernel : string) : int {
     }
     return g_cud_census?[kernel] ?? 0
 }
+
+//! the census count of `kernel`'s dispatches, -1 for a name outside this home's census (a cell's witness over a stamp name
+//! the other home spells): the Vulkan cells' `<stem>_spv` names read this home's `<stem>_cuda` through it
+def cud_kernel_census_of(kernel : string) : int64 =>
+    key_exists(g_cud_ensures, kernel) ? int64(g_cud_census?[kernel] ?? 0) : -1l
 
 def cud_kernel_names : array<string> {
     var names <- [for (k in keys(g_cud_ensures)); k]

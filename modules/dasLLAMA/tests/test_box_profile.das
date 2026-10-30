@@ -220,10 +220,11 @@ def test_metal_prefill_knobs_apply(t : T?) {
     let prior_devw = metal_devw_min_tgs()
     let prior_hmm = metal_split_k_tgs_hmm()
     let prior_vk = vk_split_k_tgs()
+    let prior_cud = cud_split_k_tgs()
     t |> success(fwrite(path, ("\{\"runtime\":\{\"metal_tall_floor\":96,"
         + "\"metal_devw_small_panel_mb\":24,\"metal_cvt_min_rows\":320,\"metal_moe_gemv_max\":24,\"metal_split_k_tgs\":384,"
         + "\"metal_split_k_tgs_kq\":512,\"metal_q8_n32_rows\":96,\"metal_split_k_tgs_base\":128,"
-        + "\"metal_split_k_tgs_kq_base\":1024,\"metal_devw_min_tgs\":48,\"metal_split_k_tgs_hmm\":96,\"vk_split_k_tgs\":192\}\}")),
+        + "\"metal_split_k_tgs_kq_base\":1024,\"metal_devw_min_tgs\":48,\"metal_split_k_tgs_hmm\":96,\"vk_split_k_tgs\":192,\"cud_split_k_tgs\":160\}\}")),
         "metal-knob profile written")
     apply_box_profile_runtime(path)
     t |> equal(metal_tall_floor(), 96l, "metal_tall_floor applied")
@@ -238,6 +239,7 @@ def test_metal_prefill_knobs_apply(t : T?) {
     t |> equal(metal_devw_min_tgs(), 48l, "metal_devw_min_tgs applied")
     t |> equal(metal_split_k_tgs_hmm(), 96l, "metal_split_k_tgs_hmm applied")
     t |> equal(vk_split_k_tgs(), 192l, "vk_split_k_tgs applied")
+    t |> equal(cud_split_k_tgs(), 160l, "cud_split_k_tgs applied")
 
     // out-of-range values are refused with a warning — the stored value stands; a knee of 0 is a value (the route off)
     t |> success(fwrite(path, ("\{\"runtime\":\{\"metal_tall_floor\":0,"
@@ -267,11 +269,14 @@ def test_metal_prefill_knobs_apply(t : T?) {
     t |> equal(metal_split_k_tgs_hmm(), 96l, "a negative dev-W split knee is refused by the setter")
     set_vk_split_k_tgs(-1l)
     t |> equal(vk_split_k_tgs(), 192l, "a negative Vulkan short-window knee is refused by the setter")
+    set_cud_split_k_tgs(-1l)
+    t |> equal(cud_split_k_tgs(), 160l, "a negative CUDA short-window knee is refused by the setter")
     set_metal_split_k_tgs_base(prior_base)
     set_metal_split_k_tgs_kq_base(prior_base_kq)
     set_metal_devw_min_tgs(prior_devw)
     set_metal_split_k_tgs_hmm(prior_hmm)
     set_vk_split_k_tgs(prior_vk)
+    set_cud_split_k_tgs(prior_cud)
     set_metal_moe_gemv_max(-2l)
     t |> equal(metal_moe_gemv_max(), 0l, "a knee under -1 is refused by the setter")
     set_metal_moe_gemv_max(prior_gemv_max)

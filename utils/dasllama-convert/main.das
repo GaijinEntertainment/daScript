@@ -437,6 +437,12 @@ def main() : int {
             to_log(LOG_ERROR, "dasllama-convert: --config quant '{want.quant}' is not a QuantMode\n")
             return 2
         }
+        //! the config's GPU home: the tier moves there before the bake arms
+        if (want.vulkan_on && !empty(want.vulkan.home) && !set_gpu_home(want.vulkan.home)) {
+            to_log(LOG_ERROR, "dasllama-convert: --config names the {want.vulkan.home} home and"
+                + " this process cannot take it (the line above says why)\n")
+            return 2
+        }
         // apply what a host can take, then verify FAIL-CLOSED: any knob that did not take
         // (missing s16 twins, no repack family for a foreign backend) shows up as an identity
         // mismatch below. A FOREIGN backend name arms repack-by-numbers: the local generic

@@ -729,6 +729,24 @@ def moe_gpu_tier_arm() : bool {
     return moe_gpu_tier_arm_()
 }
 
+def gpu_home() : string {
+    //! The discrete GPU home whose seats the tier holds, ``"vulkan"`` or ``"cuda"``: the environment's
+    //! spelling (``DASLLAMA_CUDA``) until ``set_gpu_home`` moves it.
+    return gpu_home_()
+}
+
+def gpu_homes() : array<string> {
+    //! The discrete homes this build carries - the names ``set_gpu_home`` takes.
+    return <- gpu_homes_()
+}
+
+def set_gpu_home(name : string) : bool {
+    //! Move the tier onto the named home before it arms - the program's twin of ``DASLLAMA_CUDA`` (dasllama-server's
+    //! ``--gpu vulkan | cuda`` key): every seat back to its default, the home's entry filling them. False, said in the
+    //! log, for a home this build does not carry or a tier that already armed on another home.
+    return set_gpu_home_(name)
+}
+
 def moe_gpu_weight_budget() : int64 {
     //! The armed backend's resident-weight VRAM budget in bytes (0 = no GPU backend armed).
     //! CAVEAT: the hook device-inits on first call — a reporting caller gates on

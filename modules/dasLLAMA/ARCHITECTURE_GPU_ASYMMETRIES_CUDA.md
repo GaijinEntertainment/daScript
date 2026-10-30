@@ -13,7 +13,10 @@ prefill, the MXFP4 expert pieces on the FP4 tensor rung, the nv4 nibble decode a
 - **The int8 MMQ prefill is the CUDA home's alone** (`DASLLAMA_CUDA_MMQ`, on by default; `crd_site_mmq`): a window
   GEMM site whose plane's format has a leaf - Q8_0; the superblock Q4_K, IQ4_XS, Q4_0 and IQ4_NL; the per-32 Q5_1, Q5_0
   and the off-lattice Q4_0 and IQ4_NL - whose output width is a multiple of 128 and whose reduction of 256 (512 where
-  the leaf carries a min term), at a window of whole 128-row tiles, runs on that leaf over the activations requantized
+  the leaf carries a min term), at a window past one s tile of rows (`CUD_MMQ_S_ROWS`: the leaf pads the window's rows to
+  its 128-row tile, and at 32 rows or fewer the padded tile costs more than the s column split along K - the ledger's
+  short-window entry; the admission reads the window being run, `CudRdec.pf_wlen`) and never on an embedding's window (the
+  hidden ask: a batch's texts and the same texts alone ride one GEMM form, so a batch's vectors are its singles'), runs on that leaf over the activations requantized
   to Q8_0 blocks between the GEMMs, as the token step's feeds are; every other site - the other formats, a shape off the
   tile, `=0` - takes the f16-fed cm2 tiles, and a layer whose sites split produces both feeds (the residual step's
   requant, then its f16 norm pass with no add). `=1` leaves out the leaves whose windows did not beat the tiles on every
@@ -65,7 +68,7 @@ prefill, the MXFP4 expert pieces on the FP4 tensor rung, the nv4 nibble decode a
   gathered rows and the hidden rows as the MXFP4 feed (`CuMx4Rows`, `CuMx4ActRows` / `CuMx4ActRowsB`: e2m1 under a
   power-of-two scale a 32-block by the MXFP4 rule, two codes a k64 word, the row scale 1), the product through
   `mma_block_scaled_mx` (`kind::mxf4`, both operands UE8M0-scaled). The schedule pads every bucket's rows to a 128-row
-  multiple and puts every row on the m column (`SchedArgs.row_pad`, `m_only`), so a tile past a bucket's rows lands in its
+  multiple and puts every row on the m column (the MMQ schedule stamps `CuMoeSchedMmq` / `CuMoeSched2Mmq`, `MoeSchedT`'s `ROW_PAD` and `M_ONLY` constants), so a tile past a bucket's rows lands in its
   pad and the f16 s column retires; the workgroup's record names the expert plane's block base, the bucket's row base and
   the tile in place of the grid's; a plane off the 128 lattice (gpt-oss's 2880) stores its last column tile through a
   staged guard, and a reduction off the 128 lattice runs a k tail (the last step's second k64 under a zero scale on both
@@ -89,3 +92,14 @@ prefill, the MXFP4 expert pieces on the FP4 tensor rung, the nv4 nibble decode a
 - **`set_cuda_mmq_pin` is a CUDA-only setter.** It pins the MMQ knob's answer ahead of a load, so one process can hold a
   carrier to the leaves and then to the tiles (the resident cells' knob-off control, the W4A4 instrument). The Vulkan
   window's form follows the device's coopmat mode and Metal has one window form, so neither home has a pin to set.
+
+### The CUDA home binds its context to the calling thread at every entry {#cuda-thread-binding}
+
+The CUDA driver's current context is a property of the OS thread, not of the process (the dasCUDA module's
+`ARCHITECTURE.md`, its per-thread context section): a context made on one thread is unbound on every other. A Vulkan
+device has no such binding - any thread submits on it under the queue lock - so the Vulkan home's entry gate checks the
+device once. The CUDA home's entry gate, `cud_init`, binds `g_cud.cc` to the calling thread on every call once the device
+is ready (`cuda_bind_context`), because a context's `[init]` runs on the thread that made it and a server's worker thread,
+or a job on the team, reaches its first device call on another: without the rebind the query answers an invalid-context
+error and the worker falls to the CPU with no decline named. The bind is one driver call, cheaper than any device work
+behind it.

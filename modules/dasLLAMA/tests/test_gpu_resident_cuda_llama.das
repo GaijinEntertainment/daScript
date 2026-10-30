@@ -4,7 +4,7 @@ options persistent_heap
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require dasllama/dasllama_transformer   // nolint:STYLE029 — the umbrella's [init] registrations arm the llama arch and the CUDA home
+require dasllama/dasllama_transformer   // nolint:STYLE029,LINT019 — the umbrella's [init] registrations arm the llama arch and the CUDA home
 require dasllama/dasllama_common
 require daslib/jobque_boost
 require dasllama/dasllama_math
@@ -14,6 +14,8 @@ require dasllama/dasllama_cuda_decode   // set_cuda_mmq_pin - the FP4 arm's knob
 require _model_tier
 require _resident_feed
 require _cuda_feed
+require daslib/fio   // path_join
+require dasllama/dasllama   // load_model_: the declined-route cell's own load
 
 // The CUDA home's whole-model driver on Llama-3.2-1B Q8_0 (`DASLLAMA_GPU=1 DASLLAMA_CUDA=1`): the dense slice - one
 // arena of Q8_0 planes, the f16 mirror, the token step as a captured graph, the prefill as the window chain over the
@@ -43,6 +45,48 @@ def test_gpu_resident_cuda_llama_1b(t : T?) {
     }
     t |> run("{FILE_1B}: a {PF_WINDOW_ROWS + 88l}-token prompt (two windows) and eight steps on the CUDA driver") @(t : T?) {
         cuda_forced_feed(t, FILE_1B, "llama", PF_WINDOW_ROWS + 88l, 2l, LOGIT_BAR_REL)
+    }
+}
+
+//! the greedy chain on the CUDA home (`greedy_chain_cell`): the chained walks' tokens and logits bit for bit the plain walks', the
+//! hits and misses counted where the Vulkan llama file counts them
+[test]
+def test_gpu_resident_cuda_llama_greedy_chain(t : T?) {
+    t |> run("{FILE_1B}: the greedy chain's walks on the CUDA driver") @(t : T?) {
+        return if (!cuda_home_asked(t))
+        greedy_chain_cell(t, path_join(models_dir(), FILE_1B))
+    }
+}
+
+//! a model the whole-model driver does not take under the CUDA ask runs on the CPU rails: this home has no per-op tier, so the
+//! route lever off leaves every plane on the host and the decline line names the CPU rails - the load, the window and eight steps
+//! run with no per-op stub reached
+[test]
+def test_gpu_resident_cuda_llama_declined_runs_on_cpu(t : T?) {
+    t |> run("{FILE_1B} with the whole-model route off under the CUDA ask: no per-op tier serves, the CPU rails run the window and eight steps") @(t : T?) {
+        return if (!cuda_home_asked(t))
+        let path = path_join(models_dir(), FILE_1B)
+        return if (!resident_ready(t, path))
+        let route = gpu_resident_route_lever()
+        set_gpu_resident_route(false)
+        var tr <- load_model_(path, QuantMode.q8)
+        set_gpu_resident_route(route)
+        t |> success(!moe_gpu_resident_active(), "the whole-model route is off: the driver did not take the model")
+        var placed = 0l
+        for (l in range64(tr.config.n_layers)) {
+            placed += moe_gpu_layer_on_gpu(l) ? 1l : 0l
+        }
+        t |> equal(placed, 0l, "no layer sits on the device: this home has no per-op tier to place one")
+        with_dasllama_jobque_() {
+            var prompt <- resident_prompt(40l)
+            var toks <- resident_feed(8l)
+            var got <- feed_alone(tr, mirror_kv_dtype(), prompt, toks)
+            t |> success(long_length(got) >= 8l, "the window and eight steps landed on the CPU rails ({long_length(got)} rows)")
+            delete got
+            delete prompt
+            delete toks
+        }
+        delete tr
     }
 }
 

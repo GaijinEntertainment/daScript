@@ -18,8 +18,11 @@ require dasllama/dasllama_gpu_tier   // gpu_cpu_passes_: the calls the driver ha
 require dasllama/dasllama_kv_dtype   // kv_row_bytes / kv_layer_kbase: the head's K row
 require ?vulkan dasllama/dasllama_vulkan_common   // the resolved coopmat mode, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_decode   // the greedy chain's mode pin and its hits and misses
+require ?cuda dasllama/dasllama_cuda_decode   // ... the CUDA home's
+require strings   // ends_with, slice: a Vulkan stamp name respelled as the CUDA home's census name
 require dasllama/dasllama_math   // with_dasllama_jobque_
 require dasllama/dasllama_sampling   // sample_, set_seed_: the sampled speculative stream
+require dasllama/dasllama_blocks   // set_moe_host_first / moe_host_first_pin: the stream twin's claim order
 require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — pf_window_rows / the pins: read under the vulkan static_if, unused in the darwin world
 require _compares   // argmax_of: the row's peak a red names; logits_of: the session's row copied
 require _model_tier   // logits_maxdiff, mirror_kv_dtype, live_maxabs, SUPPRESSED_LOGIT
@@ -164,6 +167,43 @@ def restore_resident_levers(l : ResidentLevers) {
     }
 }
 
+//! the streamed prompt's levers the host-experts cells pin, as a cell found them (`restore_stream_pins`): the prompt stream, the
+//! rare rail's arena, the meet's host share, the pool's DMA fill and share, the decode meet, the rare rail's one-pass and batched
+//! arms, and the tier want's slot ask; a file pins the subset its cells shape and puts every lever back through the one record
+struct StreamPins {
+    pf_stream : int
+    arena : int
+    host_first : int64
+    hot_dma : int
+    hot_share : float
+    dec_meet : int
+    onepass : int
+    batched : int
+    heat : int64
+}
+
+def stream_pins() : StreamPins => StreamPins(pf_stream = gpu_want_pf_stream_pin(), arena = rare_arena_pin(), host_first = moe_host_first_pin(),
+    hot_dma = gpu_hot_dma_pin(), hot_share = gpu_hot_share_pin(), dec_meet = gpu_dec_meet_pin(), onepass = rare_onepass_pin(), batched = rare_batched_pin(), heat = g_gpu_want.heat)
+
+def restore_stream_pins(was : StreamPins) {
+    set_gpu_want_pf_stream(was.pf_stream)
+    set_rare_arena(was.arena)
+    set_moe_host_first(was.host_first)
+    set_gpu_hot_dma(was.hot_dma)
+    set_gpu_hot_share(was.hot_share)
+    set_gpu_dec_meet(was.dec_meet)
+    set_rare_onepass(was.onepass)
+    set_rare_batched(was.batched)
+    want_heat(was.heat)
+}
+
+//! the pool's slot ask routed through the tier's want (`set_gpu_tier_want_`, `g_gpu_want` the getter): `slots` a layer asked
+def want_heat(slots : int64) {
+    var want = g_gpu_want
+    want.heat = slots
+    set_gpu_tier_want_(want)
+}
+
 //! `body` with the K/V mirror asked at `kv`, the ask put back as it was found - the pin for a rig that loads its own model
 //! and makes its sessions on the armed codec; a skip where the environment arms another codec over the ask
 def with_gpu_kv_dtype(t : T?; kv : KVDtype; body : block<void>) {
@@ -242,11 +282,16 @@ let NO_CENSUS = -1l   //! the census count with no vulkan module: a census witne
 
 //! the coverage census's count of a kernel's dispatches so far; NO_CENSUS with no vulkan module
 def census(kernel : string) : int64 {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        if (gpu_want_cuda()) {   // the CUDA home stamps the same stems under `_cuda`: a stamp this home has no leaf of reads NO_CENSUS
+            let cuda_name = (kernel |> ends_with("_spv")) ? "{slice(kernel, 0, length(kernel) - 4)}_cuda" : kernel
+            return cud_kernel_census_of(cuda_name)
+        }
+    }
     static_if (typeinfo builtin_module_exists(vulkan)) {
         return vk_kernel_coverage_of(kernel)
-    } else {
-        return NO_CENSUS
     }
+    return NO_CENSUS
 }
 
 //! `path` loaded at q8 with the whole-model route pinned on - at `regions` mirror regions where it is past 0, the context
@@ -291,6 +336,47 @@ def served_every_call(t : T?) {
     var passes <- gpu_cpu_passes_()
     t |> equal(length(passes), 0, "the device served every call: {passes}")
     delete passes
+}
+
+//! the CUDA driver's served-position count across the process's models (`cud_rdec_served_total`, which a model drop inside the
+//! cell leaves standing); -1 off the CUDA home, or with no cuda module. A compare whose device side is a CUDA call reads it before
+//! and after, so its rows are shown to have run on the CUDA driver and not on the CPU rails (`served_every_call` reads an empty
+//! pass list, which a run that never reached the driver reads too)
+def cuda_positions_served() : int64 {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        return cud_rdec_served_total() if (gpu_want_cuda())
+    }
+    return -1l
+}
+
+//! the CUDA driver's window-chain count (`cud_rdec_stats().windows`); -1 off the CUDA home, or with no cuda module
+def cuda_windows_run() : int64 {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        return cud_rdec_stats().windows if (gpu_want_cuda())
+    }
+    return -1l
+}
+
+//! on the CUDA home, the driver served at least `n` positions since `c0` (a `cuda_positions_served` reading taken before the
+//! compare's device rows): asserted under `what`; off the home (`c0` -1) nothing is asserted
+def cuda_served_since(t : T?; c0, n : int64; what : string) {
+    return if (c0 < 0l)
+    let served = cuda_positions_served() - c0
+    t |> success(served >= n, "{what}: the CUDA driver served {served} positions (at least {n} asked) - the device rows ran on the CUDA driver")
+}
+
+//! the counter's control on the CUDA home: no position served since `c0`; off the home nothing is asserted
+def cuda_served_none(t : T?; c0 : int64; what : string) {
+    return if (c0 < 0l)
+    t |> equal(cuda_positions_served(), c0, "{what}: the CUDA driver served no position")
+}
+
+//! the counter's bounded control on the CUDA home: at most `n` positions served since `c0` (the rows the arm sends to the
+//! device by design, `why`), none past them; off the home nothing is asserted
+def cuda_served_at_most(t : T?; c0, n : int64; what, why : string) {
+    return if (c0 < 0l)
+    let served = cuda_positions_served() - c0
+    t |> success(served <= n, "{what}: the CUDA driver served {served} positions, at most {n} ({why})")
 }
 
 //! how many calls the driver passed to the CPU rails for `reason` (the `RdecPass` name; "" = any reason) since the model armed
@@ -601,6 +687,99 @@ def feed_alone(tr : Model; kv : KVDtype; prompt, toks : array<int64>) : array<ar
     return <- rows
 }
 
+//! the first `count` ids of ordinary prose through the model's own tokenizer: on a junk prompt gemma's
+//! logits swing twenty points between the CPU chain's own prefill and decode, so a bar on it measures nothing
+def prose_tokens(tr : Model; count : int64) : array<int64> {
+    let para = "The river bends twice before it reaches the old mill, and in spring the water runs high enough to turn the wheel without help. The miller keeps a ledger of every sack that comes through the door, the name of the farm it came from, and the weight the scale showed. On market days the road fills with carts before sunrise, and the children sell bread from baskets at the gate. "
+    var one <- encode_(tr, para, true, false)
+    let reps = count / long_length(one) + 2l   // a repeat may tokenize a little shorter than the sum of its parts
+    delete one
+    let text = build_string() $(var w : StringBuilderWriter) {
+        for (_i in range64(reps)) {
+            w |> write(para)
+        }
+    }
+    let ids <- encode_(tr, text, true, false)
+    assert(long_length(ids) >= count, "the prose repeats cover the count")
+    return <- [for (i in range64(count)); ids[i]]
+}
+
+//! a prose feed: the first `n` prose ids the prompt, the next `steps` the fed tokens
+struct ProseFeed {
+    prompt : array<int64>
+    toks : array<int64>
+}
+
+def prose_feed(tr : Model; n, steps : int64) : ProseFeed {
+    var ids <- prose_tokens(tr, n + steps)
+    var f <- ProseFeed(prompt <- [for (i in range64(n)); ids[i]], toks <- [for (i in range64(n, n + steps)); ids[i]])
+    delete ids
+    return <- f
+}
+
+//! one load's run in `ring_vs_flat`: the logits rows, whether the driver armed the rings, and the mirror's bytes on the card
+struct private RingRun {
+    rows : array<array<float>>
+    slack : int64
+    mirror : int64
+    window : int64
+}
+
+//! `path` loaded at mirror codec `kv` under the ring pin `ring` (`with_gpu_kv_ring`) and the session cap `ctx`, the `n` prose ids
+//! and eight fed steps through it; `ok` false after the skip `resident_trunk` names
+def private ring_run(t : T?; path : string; kv : KVDtype; ring : int; n, ctx : int64) : tuple<ok : bool; run : RingRun> {
+    var tr <- resident_trunk(t, path, ctx, "") $() : Model {
+        var m <- Model()
+        with_gpu_kv_ring(ring) {
+            delete m
+            m <- load_resident_at(path, kv)
+        }
+        return <- m
+    }
+    var run : RingRun
+    let ok = tr.config.n_layers > 0l
+    if (ok) {
+        var inscope feed <- prose_feed(tr, n, 8l)
+        let c0 = cuda_positions_served()
+        let w0 = cuda_windows_run()
+        run.rows <- feed_alone(tr, kv, feed.prompt, feed.toks)
+        served_every_call(t)
+        let load = ring != 0 ? "the ringed load" : "the flat load"
+        cuda_served_since(t, c0, n + 8l, load)
+        if (w0 >= 0l) {   // the CUDA home: the prompt ran as the window chains its rows take at the pinned window
+            let rows = pf_window_rows()
+            t |> equal(cuda_windows_run() - w0, (n + rows - 1l) / rows, "{load}: the {n} prose ids ran as {(n + rows - 1l) / rows} window chain(s) of {rows} rows on the CUDA driver")
+        }
+        run.slack = gpu_resident_kv_ring_slack()
+        run.mirror = gpu_resident_mirror_bytes()
+        run.window = tr.config.sliding_window
+    }
+    moe_gpu_drop_model()
+    delete tr
+    return <- (ok = ok, run <- run)
+}
+
+//! The sliding layers' rings against the flat mirror on one driver: `n` prose ids past the window and eight fed steps on a ringed load
+//! and a flat one (`set_gpu_kv_ring`), at mirror codec `kv` under the session cap `ctx` - the logits bit for bit, since a ring moves
+//! where a row sits and never which rows a query reads or their order
+def ring_vs_flat(t : T?; n : int64; path : string; kv : KVDtype; ctx : int64) {
+    return if (!resident_ready(t, path))
+    with_dasllama_jobque_() {
+        var inscope ringed <- ring_run(t, path, kv, 1, n, ctx)
+        var inscope flat <- ring_run(t, path, kv, 0, n, ctx)
+        if (ringed.ok && flat.ok) {
+            t |> success(n > ringed.run.window && ringed.run.window > 0l, "the {n}-token prompt runs past the {ringed.run.window}-position window")
+            t |> success(ringed.run.slack > 0l && flat.run.slack == 0l, "the ringed load armed its rings (slack {ringed.run.slack}), the flat load none ({flat.run.slack})")
+            t |> success(ringed.run.mirror < flat.run.mirror, "the rings charge the card less mirror ({ringed.run.mirror >> 20l} MB) than every row ({flat.run.mirror >> 20l} MB)")
+            for (st in range(length(ringed.run.rows))) {
+                let what = st == 0 ? "the prompt's logits" : "step {st - 1}"
+                check_exact(t, "{what}: the ringed mirror against the flat one, bit for bit", ringed.run.rows[st], flat.run.rows[st])
+                check_exceeds(t, "{what} control: the flat row a step off", ringed.run.rows[st], flat.run.rows[st > 0 ? st - 1 : 1], BAR_EXACT)
+            }
+        }
+    }
+}
+
 //! the two arms' logits rows: the resident driver's, then the CPU chain's
 struct FeedPair {
     gpu : array<array<float>>
@@ -614,9 +793,11 @@ def resident_then_cpu_feed(t : T?; tr : Model; prompt, toks : array<int64>; afte
     var pair : FeedPair
     var sg <- create_session(tr, mirror_kv_dtype())
     let served0 = gpu_resident_prefills_()
+    let c0 = cuda_positions_served()
     pair.gpu <- feed_logits(tr, sg, prompt, toks, after_prefill)
     t |> success(moe_gpu_resident_active(), "the whole-model driver stayed armed through the run")
     t |> equal(gpu_resident_prefills_(), served0 + 1l, "the resident window chain served the {long_length(prompt)}-token prompt")
+    cuda_served_since(t, c0, long_length(prompt) + long_length(toks), "the resident feed")
     invoke(after_gpu)
     delete sg
     moe_gpu_drop_model()
@@ -626,6 +807,61 @@ def resident_then_cpu_feed(t : T?; tr : Model; prompt, toks : array<int64>; afte
 
 //! the same with no seat between the resident prefill and its first step
 def resident_then_cpu_feed(t : T?; tr : Model; prompt, toks : array<int64>; after_gpu : block<void>) : FeedPair => <- resident_then_cpu_feed(t, tr, prompt, toks, $ {}, after_gpu)
+
+//! the stream twin's bar, of the row's largest live logit: the device's chain over its share of the routed experts against the host's
+//! f32 sums over the same share reads 0.4 to 1.0 of the rows' 7-12 max logits on both homes (Qwen1.5-MoE Q8_0 and gpt-oss on the
+//! 5060 Ti), under the CPU chain's fifth; the chain's biased-act count is the form's own witness beside it
+let STREAM_TWIN_BAR_REL = 0.15
+
+//! `path` loaded twice with `host_layers` routed layers' experts on the host - the prompt stream pinned on, then off - the streamed
+//! windows' rows against the host's sums' within `bar_rel` of the row's largest live logit, the device claiming first
+//! (`set_moe_host_first(0)`) so the chain carries most of the rows; the pins put back, a declined model skipped
+def stream_twin_within(t : T?; path : string; host_layers, n, steps : int64; bar_rel : float; tag : string) {
+    let was_pf = gpu_want_pf_stream_pin()
+    let was_first = moe_host_first_pin()
+    set_moe_host_first(0l)
+    var prompt <- resident_prompt(n)
+    var toks <- resident_feed(steps)
+    set_gpu_want_pf_stream(1)
+    with_dasllama_jobque_() {   // the stream's readers and the model drop ask the queue, as the forced feed's does around its whole run
+        var tr_on <- load_resident(path, 1l, 0l, host_layers)
+        let admitted = resident_admitted(t, "the whole-model driver armed on the model with the prompt stream on (the load log names any decline)", "")
+        let c0 = cuda_positions_served()
+        var on <- device_rows_if(tr_on, prompt, toks, admitted)
+        if (admitted) {
+            cuda_served_since(t, c0, n + steps, "{tag}the streamed prompt's load")
+        }
+        moe_gpu_drop_model()
+        delete tr_on
+        if (admitted) {
+            set_gpu_want_pf_stream(0)
+            var tr <- load_resident(path, 1l, 0l, host_layers)
+            let off_admitted = resident_admitted(t, "the whole-model driver armed on the model with the prompt stream off", "")
+            var off <- device_rows_if(tr, prompt, toks, off_admitted)
+            moe_gpu_drop_model()
+            if (off_admitted) {
+                feed_steps_within(t, tr, tag, n, on, off, toks, bar_rel, "the streamed windows", "the host's sums")
+            }
+            delete off
+            delete tr
+        }
+        delete on
+    }
+    set_gpu_want_pf_stream(was_pf)
+    set_moe_host_first(was_first)
+    delete prompt
+    delete toks
+}
+
+//! `prompt` then `toks` through the armed driver on a session of its own (the caller holds the job queue); no rows where `go` is off
+def private device_rows_if(tr : Model; prompt, toks : array<int64>; go : bool) : array<array<float>> {
+    var rows : array<array<float>>
+    return <- rows if (!go)
+    var sg <- create_session(tr, mirror_kv_dtype())
+    var fed <- feed_logits(tr, sg, prompt, toks)
+    delete sg
+    return <- fed
+}
 
 //! the device's summed distance from the file's f32 chain, as a ratio of the CPU q8 chain's own: the Qwen3.5 mixed twin reads
 //! 0.91 (3.42 against 3.77)
@@ -766,11 +1002,54 @@ struct ChainWalk {
     rows : array<array<float>>
 }
 
+//! the armed discrete home's greedy chain: whether this build and ask have one, its mode pin, the pin's setter and its counts
+def chain_home : bool {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        return true if (gpu_want_cuda())
+    }
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return !gpu_want_cuda()
+    }
+    return false
+}
+
+def chain_pin : int {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        return cud_rdec_chain_pin() if (gpu_want_cuda())
+    }
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return vk_rdec_chain_pin()
+    }
+    return 0
+}
+
+def chain_mode_set(mode : int) {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        if (gpu_want_cuda()) {
+            cud_rdec_chain_mode_set(mode)
+            return
+        }
+    }
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        vk_rdec_chain_mode_set(mode)
+    }
+}
+
+def chain_stats : tuple<hits : int64; misses : int64> {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        return cud_rdec_chain_stats() if (gpu_want_cuda())
+    }
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return vk_rdec_chain_stats()
+    }
+    return (hits = 0l, misses = 0l)
+}
+
 def chain_walk(tr : Model; prompt : array<int64>; steps, off_every : int64; mode : int) : ChainWalk {
     var w : ChainWalk
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        let pin = vk_rdec_chain_pin()
-        vk_rdec_chain_mode_set(mode)
+    if (chain_home()) {
+        let pin = chain_pin()
+        chain_mode_set(mode)
         var s <- create_session(tr, mirror_kv_dtype())
         eval(tr, s, prompt)
         let vocab = tr.config.vocab_size
@@ -794,12 +1073,13 @@ def chain_walk(tr : Model; prompt : array<int64>; steps, off_every : int64; mode
         }
         delete one
         delete s
-        vk_rdec_chain_mode_set(pin)
+        chain_mode_set(pin)
     }
     return <- w
 }
 
-//! the greedy chain (`../ARCHITECTURE_GPU_VULKAN_LANDING.md#vk-greedy-chain`) on the carrier at `path`: a walk fed the argmax and
+//! the greedy chain (`../ARCHITECTURE_GPU_VULKAN_LANDING.md#vk-greedy-chain`) on the carrier at `path`, on the armed discrete home
+//! (`chain_home`): a walk fed the argmax and
 //! one fed a token off it every third step, each with the chain off and forced on - the chained walk's tokens and every step's
 //! logits bit for bit the plain walk's, every step after the first a hit on the argmax walk, and on the other every off-pick
 //! step a miss (its state put back) and every other step a hit
@@ -809,14 +1089,15 @@ def greedy_chain_cell(t : T?; path : string) {
     if (!resident_ready(t, path)) return
     var tr <- load_resident(path, 1l)
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
-    static_if (typeinfo builtin_module_exists(vulkan)) {
+    if (chain_home()) {
         with_dasllama_jobque_() {
             var prompt <- resident_prompt(40l)
             for (off in fixed_array(0l, 3l)) {
+                let c0 = cuda_positions_served()
                 var plain <- chain_walk(tr, prompt, CHAIN_STEPS, off, 0)
-                let st0 = vk_rdec_chain_stats()
+                let st0 = chain_stats()
                 var chained <- chain_walk(tr, prompt, CHAIN_STEPS, off, 1)
-                let st1 = vk_rdec_chain_stats()
+                let st1 = chain_stats()
                 let hits = st1.hits - st0.hits
                 let misses = st1.misses - st0.misses
                 let offs = off > 0l ? CHAIN_STEPS / off : 0l
@@ -831,9 +1112,9 @@ def greedy_chain_cell(t : T?; path : string) {
                 t |> equal(differ, 0, "{what}: the chained run's tokens are the plain run's")
                 t |> equal(misses, offs, "{what}: every off-pick step discarded its chained step, and no other did")
                 t |> equal(hits, CHAIN_STEPS - 1l - offs, "{what}: every other step after the first took its chained step")
-                let sa0 = vk_rdec_chain_stats()
+                let sa0 = chain_stats()
                 var adaptive <- chain_walk(tr, prompt, CHAIN_STEPS, off, -1)
-                let sa1 = vk_rdec_chain_stats()
+                let sa1 = chain_stats()
                 log_gen_texts(tr, "{path} {what} (plain, adaptive)", plain.toks, adaptive.toks)
                 for (i in range64(CHAIN_STEPS)) {
                     t |> equal(adaptive.toks[i], plain.toks[i], "{what}, step {i}: adaptive token")
@@ -849,6 +1130,7 @@ def greedy_chain_cell(t : T?; path : string) {
                 t |> equal(sa1.hits - sa0.hits, CHAIN_STEPS - 1l - offs - backed,
                     "{what}: adaptive, the step after each miss but the last unchained")
                 served_every_call(t)
+                cuda_served_since(t, c0, 3l * CHAIN_STEPS, "{what}: the three walks")
                 delete plain
                 delete chained
                 delete adaptive
@@ -856,7 +1138,7 @@ def greedy_chain_cell(t : T?; path : string) {
             delete prompt
         }
     } else {
-        t |> skip("no dasVulkan module: the greedy chain is the Vulkan driver's")
+        t |> skip("no discrete GPU home on this build: the greedy chain is the Vulkan and CUDA drivers'")
     }
     delete tr
 }
@@ -894,6 +1176,7 @@ def peel_cell(t : T?; var tr : Model; rel : float; tag : string; lever_off : boo
         eval(tr, sa, opening)
         let peels0 = moe_gpu_resident_peels()
         let pf0 = gpu_resident_prefills_()
+        let c0 = cuda_positions_served()
         forward_prefill(tr, sa, tail, rows, PEEL_OPEN)   // the prefill call a scheduler's chunk takes (`eval` steps a one-token tail)
         t |> equal(moe_gpu_resident_peels() - peels0, peels ? 1l : 0l, "a tail of {rows} rows {peels ? "peels through the token commands" : k < 0l ? "takes the window chain with the lever off" : "takes the window chain"}")
         t |> equal(gpu_resident_prefills_() - pf0, 1l, "the tail of {rows} counted one served prefill")
@@ -912,6 +1195,7 @@ def peel_cell(t : T?; var tr : Model; rel : float; tag : string; lever_off : boo
         }
         var want <- steps_after(tr, sb, steps)
         let what = "{tag}a tail of {rows} rows{k < 0l ? " with the lever off" : ""}"
+        cuda_served_since(t, c0, rows + PEEL_STEPS, "{what}: the tail and its steps")
         rows_within_control(t, what, got, want, rel, 1l, 1.0, $(r) => r == 0l ? "the tail's last row" : "step {r}")
         log_argmax_rows(tr, "{what}: the row-at-a-time rows, then the tail's", got, want)
         served_every_call(t)

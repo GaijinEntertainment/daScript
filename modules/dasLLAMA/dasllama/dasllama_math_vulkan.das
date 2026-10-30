@@ -14,11 +14,10 @@ require dasllama/dasllama_vulkan_prefill public
 require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_math
-require dasllama/dasllama_math_default   // dot_q8q8_f16s - the q8 twin's block dot
+require dasllama/dasllama_gpu_host_twin   // the host twin both discrete homes register
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_config
 require dasllama/dasllama_kqformat
-require dasllama/dasllama_gemm_schema
 
 // dasLLAMA Vulkan GPU tier — the backend ENTRY: capability probe + arm, the dry-bake arm, the
 // .dlim identity source, the FFN router, and the [init] that installs every hook. The backend
@@ -34,39 +33,15 @@ require dasllama/dasllama_gemm_schema
 // fallback). The registered "vulkan" KernelBackend stays a named-only stub (priority -1, GEMV
 // slots panic) — the MoE tier hooks are the real integration surface.
 
-// fill the env-else-programmatic wants half of a config section (the caps half is the
-// device's / the dry config's) — shared by the live source and the dry arm's verify
-def private vk_dlim_wants_fill(var v : DlimVulkanConfig) {
-    v.moe_layers = gpu_want_moe_layers()
-    v.moe_stream = gpu_want_moe_stream()
-    v.dn = gpu_want_dn()
-    v.attn = gpu_want_attn()
-    v.dnd = gpu_want_dnd()
-    v.shexp = gpu_want_shexp()
-    v.qkv = gpu_want_qkv()
-    v.cls = gpu_want_cls_upload()   // the WALK's gate, not the arm-intent (they had split defaults)
-    v.dense = gpu_want_dense()
-    v.dense_attn = gpu_want_dense_attn()
-    v.dense_shexp = gpu_want_dense_shexp()
-    v.dense_ffn = gpu_want_dense_ffn()
-    v.trim = vulkan_trim()
-    v.split = false
-    v.dn_native = gpu_want_dn_native()
-}
-
 //! Arm the tier for an OFFLINE bake: the load walk runs its full accept/refuse arithmetic
 //! against the config's numbers, gathers collect into the bake blob, and no Vulkan call is
 //! made — no instance, no device, no VRAM. The converter's `-f vulkan` rail.
 def vulkan_dry_bake_arm(v : DlimVulkanConfig) : bool {
-    // the walk's gates read env-else-programmatic wants — a bake whose config disagrees with
-    // them would write an image whose identity lies about its own plan. Fail closed, name both.
-    var w = v
-    vk_dlim_wants_fill(w)
-    w.trim = v.trim   // trim shapes the SAVE, not the walk — the converter's flag decides it
-    if (dlim_vulkan_tag(w) != dlim_vulkan_tag(v)) {
-        to_log(LOG_ERROR, "dasLLAMA vulkan tier: dry-bake config disagrees with this process' wants (set the DASLLAMA_GPU_* knobs to match)\n  config {dlim_vulkan_tag(v)}\n  wants  {dlim_vulkan_tag(w)}\n")
+    if (!empty(v.home) && v.home != "vulkan") {
+        to_log(LOG_ERROR, "dasLLAMA vulkan tier: dry-bake config names home '{v.home}' - this process bakes the vulkan lane alone (a config another home wrote mints there)\n")
         return false
     }
+    return false if (!dlim_dry_wants_ok(v, "vulkan"))
     g_vk_dry_want = true
     g_vk_dry_cfg = v
     set_moe_gpu_layer_count(v.moe_layers)
@@ -183,7 +158,7 @@ def private vk_unmap_notify(base : void?; bytes : uint64) {
     }
     var hit = false
     let b0 = intptr(base)
-    for (ss in g_gpu.stream_stacks) {
+    for (ss in g_stream_stacks) {
         let p = intptr(ss.hwq.mapped)
         if (p >= b0 && p < b0 + bytes) {
             hit = true
@@ -345,7 +320,7 @@ def private vk_dlim_source(var v : DlimVulkanConfig) : bool {
     if (!vulkan_moe_gpu_arm()) {
         return false
     }
-    vk_dlim_wants_fill(v)
+    gpu_dlim_wants_fill(v)
     if (g_gpu != null) {
         vk_caps_fill(g_gpu.phys, v)
     } elif (vk_shared_physical_device() != 0ul) {   //! the process's device: its physical device answers, no probe instance
@@ -379,230 +354,36 @@ def private vk_bake_tag : string {
     return dlim_vulkan_tag(v)
 }
 
-//! a kq GEMV class of the tier's `fmt` space on the CPU - its blk_contrib IS the device's block decode, bit for bit; a grid
-//! format's staged codebook fills here, since no kernel head runs
-def private vk_host_kq_cls(fmt : int) : KqGemvBase? {
-    var k : KqGemvBase?
-    if (fmt == int(KqFmt.k4)) {
-        k = new KqGemvK4()
-    } elif (fmt == int(KqFmt.q40)) {
-        k = new KqGemvQ40()
-    } elif (fmt == int(KqFmt.k5)) {
-        k = new KqGemvK5()
-    } elif (fmt == int(KqFmt.iq4xs)) {
-        k = new KqGemvIq4xs()
-    } elif (fmt == int(KqFmt.iq3s4)) {
-        k = new KqGemvIq3s4()
-    } elif (fmt == int(KqFmt.k3)) {
-        k = new KqGemvK3()
-    } elif (fmt == int(KqFmt.iq3s)) {
-        var ki = new KqGemvIq3s()
-        for (i in range(512)) {
-            ki.gridw[i] = IQ3S_GRID[i]
-        }
-        k = ki
-    } elif (fmt == int(KqFmt.iq3xxs)) {
-        var kx = new KqGemvIq3xxs()
-        for (i in range(256)) {
-            kx.gridw[i] = IQ3XXS_GRID[i]
-        }
-        k = kx
-    } elif (fmt == int(KqFmt.iq4nl)) {
-        k = new KqGemvIq4nl()
-    } elif (fmt == int(KqFmt.k2)) {
-        k = new KqGemvK2()
-    } elif (fmt == int(KqFmt.iq2s)) {
-        var k2s = new KqGemvIq2s()
-        for (i in range(2048)) {
-            k2s.gridw[i] = IQ2S_GRID[i]
-        }
-        k = k2s
-    } elif (fmt == int(KqFmt.iq2xs)) {
-        var k2x = new KqGemvIq2xs()
-        for (i in range(1024)) {
-            k2x.gridw[i] = IQ2XS_GRID[i]
-        }
-        k = k2x
-    } elif (fmt == int(KqFmt.iq2xxs)) {
-        var k2xx = new KqGemvIq2xxs()
-        for (i in range(512)) {
-            k2xx.gridw[i] = IQ2XXS_GRID[i]
-        }
-        k = k2xx
-    } elif (fmt == int(KqFmt.k6)) {
-        k = new KqGemvK6()
-    }
-    return k
-}
-
-enum private VkTwinFamily {
-    superblock
-    block32
-    q8
-}
-
-//! a lane's host twin: the format's GEMV class - the superblock family through its base, a per-32 or mx4 format its own
-//! class, q8 none (its dot is spelled here) - and the device plane strides it reads at
-struct private VkHostTwin {
-    fam : VkTwinFamily
-    k : KqGemvBase?
-    q51 : Q51Gemv?
-    iq4nl32 : Iq4nl32Gemv?
-    q4032 : Q4032Gemv?
-    q5032 : Q5032Gemv?
-    mx4 : Mx4Gemv?
-    qsb : int64   //! device bytes a block (a superblock, or a 32-block)
-    ssb : int64
-}
-
-//! MoeGpuHostServesFn: the formats the host twin reads - every expert format the tier streams
-def vk_host_twin_serves(fmt : int) : bool => expert_chain_fmt_ok(kq_fmt_of_slot(fmt))
-
-//! MoeGpuHostTwinFn: a per-lane host twin for `fmt` - null for a format the twin does not serve
-[arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena")]
-def vk_host_twin(fmt : int) : void? {
-    return null if (!vk_host_twin_serves(fmt))
-    let f = unsafe(reinterpret<KqFmt>(uint8(fmt)))   //! the tier's stack-format space is int(KqFmt)
-    var tw = new VkHostTwin()
-    let b = dev_block_bytes(f)
-    tw.qsb = b.qsb
-    tw.ssb = b.ssb
-    if (kq_sb(f)) {
-        tw.fam = VkTwinFamily.superblock
-        tw.k = vk_host_kq_cls(fmt)
-    } elif (f == KqFmt.q8) {
-        tw.fam = VkTwinFamily.q8
-    } else {
-        tw.fam = VkTwinFamily.block32
-        if (f == KqFmt.q51) {
-            tw.q51 = new Q51Gemv()
-        } elif (f == KqFmt.iq4nl32) {
-            tw.iq4nl32 = new Iq4nl32Gemv()
-        } elif (f == KqFmt.q4032) {
-            tw.q4032 = new Q4032Gemv()
-        } elif (f == KqFmt.q5032) {
-            tw.q5032 = new Q5032Gemv()
-        } else {
-            tw.mx4 = new Mx4Gemv()
-        }
-    }
-    return unsafe(reinterpret<void?>(tw))
-}
-
-//! the per-32 and mx4 twin: the class's own block decode and dot (`blk_words`, `blk_xdot`), its planes and the Q8_0
-//! activation bound as borrowed views, the row's blocks summed in order
-def private vk_b32_rows(var k : auto(TK)?; var yp : float?; q : uint8 const?; s : uint8 const?; xq : int8 const?; xs : float const?; n, rb, re, qsb, ssb : int64) {
-    let nb = n / 32l
-    unsafe {
-        vk_bind_view(k.wq, reinterpret<void?>(q), re * nb * qsb / 4l)
-        vk_bind_view(k.wsu, reinterpret<void?>(s), (re * nb * ssb + 3l) / 4l)
-        vk_bind_view(k.xqw, reinterpret<void?>(xq), n / 4l)
-        vk_bind_view(k.axs, reinterpret<void?>(xs), nb)
-        for (r in range64(rb, re)) {
-            var acc = 0.0
-            let wb0 = uint(r * nb)
-            for (b in range64(nb)) {
-                var wl = uint4(0u)
-                var wh = uint4(0u)
-                let sc = k->blk_words(wb0 + uint(b), wl, wh)
-                acc += k->blk_xdot(wl, wh, sc, uint(b))
-            }
-            yp[r] = acc
-        }
-    }
-}
-
-//! the q8 twin: the device's int8 rows and f16 block scales, a block's dot in integers, (dot x d) x the activation scale
-//! - the `Q8Gemv` class's fold order
-def private vk_q8_rows(var yp : float?; q : uint8 const?; s : uint8 const?; xq : int8 const?; xs : float const?; n, rb, re : int64) {
-    let nb = n / 32l
-    unsafe {
-        let wq = reinterpret<int8 const?>(q)
-        let ws = reinterpret<uint16 const?>(s)
-        for (r in range64(rb, re)) {
-            yp[r] = dot_q8q8_f16s(wq + r * n, ws + r * nb, xq, xs, n)
-        }
-    }
-}
-
-//! `a` as a borrowed view of `count` elements at `p` (the earlier view forgotten)
-def private vk_bind_view(var a : array<auto(TT)>; p : void?; count : int64) {
-    unsafe {
-        if (lock_count(a) != 0) {
-            _builtin_forget_temp_array(a)
-        }
-        _builtin_make_temp_array_i64(a, p, count)
-    }
-}
-
-//! MoeGpuHostRowsFn over the kq GEMV classes: the rows' superblocks folded a block at a time through the class's own decode
-def vk_host_rows(twin : void?; var yp : float?; q : uint8 const?; s : uint8 const?; xq : int8 const?; xs : float const?; n, rb, re : int64) {
-    var tw = unsafe(reinterpret<VkHostTwin?>(twin))
-    if (tw.fam == VkTwinFamily.q8) {
-        vk_q8_rows(yp, q, s, xq, xs, n, rb, re)
-        return
-    }
-    if (tw.fam == VkTwinFamily.block32) {
-        if (tw.q51 != null) {
-            vk_b32_rows(tw.q51, yp, q, s, xq, xs, n, rb, re, tw.qsb, tw.ssb)
-        } elif (tw.iq4nl32 != null) {
-            vk_b32_rows(tw.iq4nl32, yp, q, s, xq, xs, n, rb, re, tw.qsb, tw.ssb)
-        } elif (tw.q4032 != null) {
-            vk_b32_rows(tw.q4032, yp, q, s, xq, xs, n, rb, re, tw.qsb, tw.ssb)
-        } elif (tw.q5032 != null) {
-            vk_b32_rows(tw.q5032, yp, q, s, xq, xs, n, rb, re, tw.qsb, tw.ssb)
-        } else {
-            vk_b32_rows(tw.mx4, yp, q, s, xq, xs, n, rb, re, tw.qsb, tw.ssb)
-        }
-        return
-    }
-    var k = tw.k
-    let nsb = n / 256l
-    let qsb = tw.qsb
-    let ssb = tw.ssb
-    unsafe {
-        vk_bind_view(k.wq, reinterpret<void?>(q), re * nsb * qsb / 4l)
-        vk_bind_view(k.wq4, reinterpret<void?>(q), re * nsb * qsb / 16l)
-        vk_bind_view(k.wsu, reinterpret<void?>(s), re * nsb * ssb / 4l)
-        vk_bind_view(k.xq4, reinterpret<void?>(xq), n / 16l)
-        vk_bind_view(k.axs, reinterpret<void?>(xs), nsb)
-        for (r in range64(rb, re)) {
-            var acc = 0.0
-            let wsb0 = uint(r * nsb)
-            for (sb in range64(nsb)) {
-                for (blk in range(8)) {
-                    acc += k->blk_contrib(wsb0 + uint(sb), uint(blk), uint(sb))
-                }
-            }
-            yp[r] = acc
-        }
-    }
-}
-
 [init, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def dasllama_math_vulkan_register() {
-    if (gpu_want_cuda()) {   //! the CUDA home takes every seat below (dasllama_math_cuda); this home installs nothing
+    register_kernel_backend(KernelBackend(name = "vulkan", mm = @@vulkan_no_gemv, batch = @@vulkan_no_batch,
+        group3 = @@vulkan_no_group3, repack = @@vulkan_repack_noop,
+        needs_repack = false, batch_only = true, priority = -1, available = @@vulkan_backend_available))   //! the witness answers under either home
+    register_gpu_home("vulkan", @@vulkan_install_seats)
+    if (gpu_want_cuda()) {   //! the CUDA home takes every seat (dasllama_math_cuda); this home installs nothing until `set_gpu_home` moves the tier here
         to_log(LOG_INFO, "dasLLAMA vulkan tier: standing down - DASLLAMA_CUDA asks the CUDA home for the GPU tier\n")
         return
     }
-    register_kernel_backend(KernelBackend(name = "vulkan", mm = @@vulkan_no_gemv, batch = @@vulkan_no_batch,
-        group3 = @@vulkan_no_group3, repack = @@vulkan_repack_noop,
-        needs_repack = false, batch_only = true, priority = -1, available = @@vulkan_backend_available))
+    vulkan_install_seats()
+}
+
+//! the Vulkan home's seats in the tier: at [init] where the home is asked for, or when `set_gpu_home("vulkan")` moves the tier here
+def vulkan_install_seats() {
     set_moe_gpu_arm("vulkan", @@vulkan_moe_gpu_arm)
     set_moe_gpu_bake_tag(@@vk_bake_tag)
     set_dlim_vulkan_source(@@vk_dlim_source)
     set_moe_gpu_dry_bake_arm(@@vulkan_dry_bake_arm)
     set_moe_gpu_unmap_notify(@@vk_unmap_notify)
     set_moe_gpu_would_accept_fn(@@vk_moe_would_accept)
-    set_moe_gpu_stream_cache_fns(@@vk_stream_expert, @@vk_stream_fetch, @@vk_stream_cache_layer, @@vk_stream_cache_ring, @@vk_stream_ring_release)
-    set_moe_gpu_stream_view_fn(@@vk_stream_view)
-    set_moe_gpu_stream_request_fns(@@vk_stream_request, @@vk_stream_ready)
-    set_moe_gpu_stream_cache_stats_fn(@@vk_stream_cache_stats)
-    set_moe_gpu_stream_cache_order_fn(@@vk_stream_cache_order)
+    set_moe_gpu_stream_cache_fns(@@stream_expert, @@stream_fetch, @@stream_cache_layer, @@stream_cache_ring, @@stream_ring_release)
+    set_moe_gpu_stream_view_fn(@@stream_view)
+    set_moe_gpu_stream_request_fns(@@stream_request, @@stream_ready)
+    set_moe_gpu_stream_cache_stats_fn(@@stream_cache_stats)
+    set_moe_gpu_stream_cache_order_fn(@@stream_cache_order)
     set_moe_gpu_host_bytes_fn(@@vk_host_bytes)
     set_moe_gpu_mint_dry_fn(@@vk_mint_dry)
     set_moe_gpu_xf_pool_window_fn(@@vk_xf_pool_window)
-    set_moe_gpu_host_twin_fns(@@vk_host_twin, @@vk_host_rows, @@vk_host_twin_serves)
+    install_host_twin()
     set_moe_gpu_vram_report(@@vk_resident_bytes)
     set_moe_gpu_device_report(@@vk_device_name)
     set_moe_gpu_budget_hooks(@@vk_weight_budget, @@vk_plane_bytes)
@@ -639,6 +420,7 @@ def dasllama_math_vulkan_register() {
     install_moe_gpu_resident_hc(@@vk_rdec_set_hc, @@vk_rdec_set_ngram, @@vk_rdec_set_host_experts, @@vk_rdec_token_split, @@vk_rdec_ngram_ring, @@vk_rdec_prefill_hc)
     install_moe_gpu_resident_hot(@@vk_rdec_hot_layer, @@vk_rdec_hot_upload, @@vk_rdec_hot_submit, @@vk_rdec_hot_submit_rows)
     install_moe_gpu_resident_hot_dma(@@vk_rdec_hot_dma, @@vk_rdec_hot_dma_flush)
+    set_moe_gpu_streams(true)
     install_moe_gpu_resident_hot_batch(@@vk_rdec_hot_batch)
     set_moe_gpu_dn_state_hooks(@@vk_dn_step_flush, @@vk_dn_step_invalidate, @@vk_dn_step_release)
     set_moe_gpu_heat_hooks(@@vk_moe_heat_query, @@vk_moe_heat_advise, @@vk_moe_ffn_begin, @@vk_moe_ffn_join)

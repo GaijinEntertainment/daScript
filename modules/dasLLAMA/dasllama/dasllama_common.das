@@ -1077,7 +1077,7 @@ def mtp_drafter_sidecar_(model_path : string) : string {
 
 //! why no backend took the drafter: each registered backend's refusal (`whys`, "<backend>: <why>"), or that none is registered
 def mtp_attach_refusal(whys : array<string>) : string
-    => (empty(whys) ? "no GPU driver on this build carries an assistant drafter - require dasllama/dasllama_metal_mtp_gemma (dasMetal) or dasllama/dasllama_vulkan_mtp_gemma (dasVulkan)"
+    => (empty(whys) ? "no GPU driver on this build carries an assistant drafter - require dasllama/dasllama_metal_mtp_gemma (dasMetal), dasllama/dasllama_vulkan_mtp_gemma (dasVulkan) or dasllama/dasllama_cuda_mtp_gemma (dasCUDA)"
         : join(whys, "; "))
 
 //! Attach the assistant drafter at `path` to `t` on the backend that serves it: "" attached, else every backend's refusal, logged.
@@ -2447,6 +2447,7 @@ def apply_box_profile_runtime_at(ppath : string) {   // nolint:STYLE038 — a fl
     apply_i64_knob(rt, "metal_devw_min_tgs") $(v) { set_metal_devw_min_tgs(v) }
     apply_i64_knob(rt, "metal_split_k_tgs_hmm") $(v) { set_metal_split_k_tgs_hmm(v) }
     apply_i64_knob(rt, "vk_split_k_tgs") $(v) { set_vk_split_k_tgs(v) }
+    apply_i64_knob(rt, "cud_split_k_tgs") $(v) { set_cud_split_k_tgs(v) }
     apply_i64_knob(rt, "metal_split_k_tgs_kq_base") $(v) { set_metal_split_k_tgs_kq_base(v) }
     apply_i64_knob(rt, "mtp_depth_nextn") $(v) { set_mtp_depth_nextn(v) }
     apply_i64_knob(rt, "mtp_depth_assistant") $(v) { set_mtp_depth_assistant(v) }
@@ -6019,6 +6020,8 @@ var private g_mtp_batch_cls = true
 
 //! the verify's row cap: depth k runs k+1 rows, so the deepest round drafts MTP_MAX_ROWS-1
 let MTP_MAX_ROWS = 9l
+//! the deepest draft chain a discrete home captures: a round's rows less the seed
+let DRAFT_K_MAX = MTP_MAX_ROWS - 1l
 //! Which speculative round serves: the native NextN head (qwen) or the assistant drafter (gemma-4).
 enum public MtpRoundKind {
     nextn

@@ -22,6 +22,7 @@ require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the who
 require dasllama/dasllama_gpu_math   // nolint:STYLE030,LINT019 — the grid helpers, read under the vulkan static_if, unused in the darwin world
 require dasllama/dasllama_moe   // heat_totals, heat_reset and the shared expert's row counters: the per-op heat cell's witnesses
 require ?vulkan dasllama/dasllama_vulkan_common   // the resolved coopmat mode and the kernel census, where the module exists
+require ?cuda dasllama/dasllama_cuda_decode   // the same witnesses on the CUDA home
 require dasllama/dasllama_kqformat
 require daslib/enum_trait   // the KqFmt members as a loop
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
@@ -57,22 +58,26 @@ struct MoeFixture {
 let MOE_LOGIT_BAR_REL = 0.20
 let FED_STEPS = 6l
 
-//! the token command's attention split count (0 without the module or the driver)
+//! the token command's attention split count on the armed discrete home (0 without a module or the driver)
 def private attn_nsplit : int64 {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        return cud_rdec_attn_nsplit() if (gpu_want_cuda())
+    }
     static_if (typeinfo builtin_module_exists(vulkan)) {
         return vk_rdec_attn_nsplit()
-    } else {
-        return 0l
     }
+    return 0l
 }
 
-//! the tokens the token command's unsplit twin served so far
+//! the tokens the token command's unsplit twin served so far, on the armed discrete home
 def private unsplit_tokens : int64 {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        return cud_rdec_unsplit_tokens() if (gpu_want_cuda())
+    }
     static_if (typeinfo builtin_module_exists(vulkan)) {
         return vk_rdec_unsplit_tokens()
-    } else {
-        return 0l
     }
+    return 0l
 }
 
 let private UNSPLIT_UNDECIDED = -1l   //! the steps straddle the twin's threshold, or no vulkan module: the witness stands down
@@ -107,6 +112,9 @@ def private column_census(col : string) : int64 {
 //! plane in cm2 mode; in mm mode the KHR tile takes both the s and the m dispatch of every plane. Either way the count is a floor: the
 //! KHR tile and the 64-step formats' m stamp both serve the window's dense GEMMs too
 def private expert_column() : tuple<col : string; per_plane : int64> {
+    if (gpu_want_cuda()) {   // the CUDA home's expert pieces ride its cm2 e and s tiles (the FP4 leaf's pieces count on no column)
+        return (col = "cm2e", per_plane = 1l)
+    }
     static_if (typeinfo builtin_module_exists(vulkan)) {
         if (!device_has_expert_tiles()) {
             return (col = "sdot4", per_plane = 1l)
@@ -215,6 +223,10 @@ let HEAT_CELL_STEPS = 80l   //! fed steps past the heat pool's re-pin interval (
 //! the fixture's bar, the pool serving some of the streamed layers' picks, and on a shared-expert fixture every routed layer's
 //! shared expert on the device after the routed chain or the pool's hits - none overlapped, none on the CPU, none on the GEMMs
 def moe_perop_heat_cell(t : T?; fx : MoeFixture; resident, slots : int64) {
+    if (gpu_want_cuda()) {
+        t |> skip("the CUDA home is asked: the per-op tier and its heat pool are the Vulkan home's")
+        return
+    }
     let path = path_join(models_dir(), fx.file)
     if (!resident_ready(t, path)) return
     let route = gpu_resident_route_lever()

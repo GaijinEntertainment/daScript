@@ -113,7 +113,8 @@ swaps since the pool armed, where the misses sit) is its cross-check.
 the pool's coldest unpicked slot on the transfer queue, so the next token finds it, and the host spends
 nothing on the fill.** The host's fill gathers an expert's three planes into scratch and uploads them
 through staging under a budget of a few experts a step and a heat gate of twice the victim's count; the
-DMA fill (`rdec_hot_fill_dma`, `vk_rdec_hot_dma`) records the three copies of each miss into a batch a
+DMA fill (`rdec_hot_fill_dma`; `vk_rdec_hot_dma` on the Vulkan tier's transfer queue, `cud_rdec_hot_dma` on the CUDA
+home's copy stream) records the three copies of each miss into a batch a
 layer on a ring of four transfer commands (`HOT_DMA_RING`), submits it after the step's last copy, and
 the layer's next hit chain waits the batch's landing through the pending transfer value
 (`RdHotLayer.dma_value`, `rd_hot_go`). The victim is the coldest slot whose expert the step does not
@@ -133,7 +134,8 @@ in the tables at once, with the slot marked landing (`HotLayer.landing`), so the
 miss (`rdec_hot_hit_slot`) and the hit chain never waits a copy; after the chain's submit the step
 clears the marks and flushes the batch (`rdec_hot_land`), whose value the next compute submit waits
 (`vk_rdec_hot_dma_flush` folds it into the pending transfer wait, and in-order submits after it
-inherit the ordering), so no command reads a slot a DMA still writes. A same-step landing - the
+inherit the ordering; `cud_rdec_hot_dma_flush` records the batch's event on the copy stream and makes the device
+stream wait it), so no command reads a slot a DMA still writes. A same-step landing - the
 chain waiting the batch and summing the fills - lost on the reference box at every share (the token
 step 67.8 ms with the gate alone, 77 / 79 / 86 at shares 0.3 / 0.5 / 0.7; `debug-jit`, the same entry): a decode step's host
 sums carry a per-layer floor the fewer misses do not lower, and the copies sat on the chain's
@@ -163,7 +165,10 @@ hits first starved it while the host claimed the busy misses from the rare end (
 the prefix's length and its layer (`moe_gpu_xf_pool_window`): the chain opens with the pool's stacks
 for the prefix and the slot's for the rest (`XfMeet.p1/p3/p2`, `npool`), a bundle never straddles the
 seam, a prefix region's copy lands in its slot (`xf_expert_copy_pool`) and a stream region's on the
-slot, and the window's compute waits the layer's last DMA fill. After the join a copied region the
+slot, and the window's compute waits the layer's last DMA fill. The window opens on a layer the prompt
+streams alone: the slot's stacks are the stream's, so on a layer with none (`DASLLAMA_GPU_PF_STREAM=0`,
+or the pinned budget) the host sums every row of the window (`rdec_hot_window_unstreamed`) while the
+decode's hit chains serve off the host-filled slots. After the join a copied region the
 device took keeps its slot (`rdec_pool_promote`); the hits count as the pool's. The prompt leaves the
 pool holding its hottest experts, so the decode behind it hits at the warm rate from its first token
 (on Qwen3.6-35B the decode's pool hits read 90.7% against 79.0% with the knob off, its host experts

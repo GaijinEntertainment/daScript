@@ -36,10 +36,11 @@ other filing unnecessary. Only a comment no name can carry goes on to the rest.
   the function the comment sat on, which gets `[arch(at="<doc>#<anchor>")]` when the fact
   lands. A FACT without a citer is not filed: it is KEEP or DROP. Delete the comment.
 - **KEEP** - a constraint true only at this code site, which filing to the architecture doc
-  would bury. Compress to one line in place, spelled `//!` - a contract comment, legal on
-  any visibility (a private `//!` caps at 3 lines under STYLE015). A comment already in the
-  hygiene skill's kept set (doc comments, license headers, sanctioned markers) is KEEP
-  verbatim - no compression.
+  would bury. Compress to one line in place, in the spelling its position takes: `//!` on a
+  definition - a contract comment, legal on any visibility (a private `//!` caps at 3 lines
+  under STYLE015) - and plain `//` inside a body, where `//!` annotates nothing. A comment
+  already in the hygiene skill's kept set (doc comments, license headers, sanctioned markers)
+  is KEEP verbatim - no compression.
 - **DROP** - it narrates, restates the code, or records history. Delete it.
 - **TODO** - unfinished work. Propose the follow-up ledger line; delete the comment.
 

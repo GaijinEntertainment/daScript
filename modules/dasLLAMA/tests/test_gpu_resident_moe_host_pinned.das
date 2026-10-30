@@ -10,7 +10,9 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 // table and a grid-format one.
 
 require dastest/testing_boost public
-require _moe_resident
+require _moe_resident   // stream_twin_within, resident_ready through its public _resident_feed
+require _model_tier   // models_dir
+require daslib/fio   // path_join
 require dasllama/dasllama_kv_dtype   // KVDtype: the cells pin the f16 mirror
 
 let private PINNED_Q8 = MoeFixture(file = "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, host_layers_ask = 4l)
@@ -29,7 +31,15 @@ def private pinned_cells(t : T?; tag : string; fx : MoeFixture) {
             moe_forced_feed(ct, PF_WINDOW_ROWS + 88l, fx)
         }
     }
+    t |> run("{tag} with four routed layers' experts pinned to the host: the streamed windows' rows against the host's sums' at the stream twin's bar, the device claiming first") @(ct : T?) {
+        let path = path_join(models_dir(), fx.file)
+        return if (!resident_ready(ct, path))
+        with_gpu_kv_dtype(ct, KVDtype.f16) {
+            stream_twin_within(ct, path, 4l, 40l, 8l, STREAM_TWIN_BAR_REL, "{tag} ")
+        }
+    }
 }
+
 
 [test]
 def test_gpu_resident_moe_host_pinned_q8(t : T?) {

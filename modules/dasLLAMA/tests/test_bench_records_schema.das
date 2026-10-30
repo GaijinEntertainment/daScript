@@ -368,6 +368,7 @@ def test_stored_row_leg(t : T?) {
         t |> success(!stored_row_leg("metal", "accel", leg), "accel is a CPU-tier stamp - no metal leg produces it")
         t |> equal(leg, "", "a refusal leaves no stale leg behind")
         t |> success(!stored_row_leg("vulkan", "tuned", leg), "a foreign backend has no rig leg")
+        t |> success(!stored_row_leg("cuda", "tuned", leg), "the cuda home's rows are the vulkan home's kind to the oracle - no rig leg")
         t |> success(!stored_row_leg("cpu", "debug-jit", leg), "a debug flavor has no rig leg")
     }
 }
@@ -519,7 +520,8 @@ def test_mtmd_versions_bin_param(t : T?) {
 def test_marian_reference_stamp(t : T?) {
     t |> run("the translation reference: the patched decoder under the checkout's inference build, its stamp the commit and both patches' hashes") @(tt : T?) {
         let bin = marian_bin()
-        tt |> success(find(bin, "{marian_root()}/inference/build") == 0 && find(bin, "marian-decoder") >= 0, "the decoder under the checkout's inference build: {bin}")
+        let under = normalize("{marian_root()}/inference/build")   // the built-bin path comes back in the box's separators
+        tt |> success(find(bin, under) == 0 && find(bin, "marian-decoder") >= 0, "the decoder under the checkout's inference build: {bin} (under {under})")
         let v = marian_versions()
         if (!stat("{marian_root()}/.git").is_valid) {
             tt |> equal(v, "", "no checkout stamps nothing")

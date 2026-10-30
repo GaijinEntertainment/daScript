@@ -46,6 +46,7 @@ def GEMM_REFERENCE_MR : int => 4
 //! quants + one f16 scale halfword per block. Every q8 plane sizing (gathers, arena/stack math)
 //! derives from these.
 let Q8_BLOCK_ELEMS = KQ_B32_ELEMS
+let Q8_BLOCK_BYTES = Q8_BLOCK_ELEMS + 2l   //! a block's bytes: its quants and the f16 scale
 let Q8_QPB = 32l   // quant bytes per block
 let Q8_SPB = 2l    // scale bytes per block (f16 halfword)
 

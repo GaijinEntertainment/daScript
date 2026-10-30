@@ -192,7 +192,8 @@ reference below the indexer's `indexer_top_k` budget.
   globals, and the paths derived from them: the per-user `~/.dasllama` directory and the config
   lookup the server, its CLI and the exchange share.
 - **`dasllama_fat_start.das`** - a fat exe's first start: the runtime-section snapshot the tuner's
-  kernel half also writes, the Metal twin crown race (synthetic, no model), the first-start hook
+  kernel half also writes, the Metal twin crown race and the three homes' short-window knee races
+  (`dasllama_metal_knee_race`, `dasllama_vulkan_knee_race`, `dasllama_cuda_knee_race`; synthetic, no model), the first-start hook
   it registers with the box-profile apply, and the per-user sidecar placement - the path, the
   one-time adoption of a sidecar beside the exe, and the placement hook the apply runs first
   (`ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`). The placement hook is optional, unlike a
