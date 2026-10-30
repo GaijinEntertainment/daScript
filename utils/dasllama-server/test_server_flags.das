@@ -6,6 +6,8 @@ options _dasllama_internal = true   // the K/V room seam the ctx-clamp cell doub
 require dastest/testing_boost public
 require main                                            // the program root: cli_has_flag, mtp_setting, mtp_default_resolved (sibling by bare name)
 require openai_server                                   // mtp_auto_arms, clamp_ctx_to_device_room, and serving_knobs' Metal-mode pair through it
+require serving_knobs                                   // gpu_auto_pick, detected_gpu: the auto pick's table and its probe
+require model_catalog                                   // gpu_env_master_off: the probe's opt-out
 require dasllama/dasllama                               // MetalMode through the facade
 require dasllama/dasllama_gpu_tier                      // the K/V room seam a cell doubles
 require daslib/clargs                                   // get_user_args / flag_present: the match cli_has_flag rests on
@@ -37,6 +39,27 @@ def test_flag_match(t : T?) {
         t |> success(!flag_present(args, "--gpu-dn"), "a flag the list does not hold is absent")
         let none : array<string>
         t |> success(!flag_present(none, "--flat"), "an empty list holds no flag")
+    }
+}
+
+//! the `auto` pick's table (`gpu_auto_pick`, README.md#gpu-key): Metal first; then the home the environment spells where its
+//! witness answers; then Vulkan wherever a Vulkan device answers (the fully served home); then the CUDA home; else off. The
+//! probe under the environment's CUDA ask (DASLLAMA_CUDA=1 on a card) lands `cuda`
+[test]
+def test_gpu_auto_pick(t : T?) {
+    t |> run("the auto pick: metal, the environment's home, vulkan, cuda, off") @(t : T?) {
+        t |> equal(gpu_auto_pick(true, true, true, "vulkan"), "metal", "Metal wins over both discrete homes")
+        t |> equal(gpu_auto_pick(true, false, false, "vulkan"), "metal", "Metal alone")
+        t |> equal(gpu_auto_pick(false, true, true, "vulkan"), "vulkan", "both discrete homes answer: Vulkan, the fully served home")
+        t |> equal(gpu_auto_pick(false, true, true, "cuda"), "cuda", "both answer and the environment spells cuda: the CUDA home")
+        t |> equal(gpu_auto_pick(false, true, false, "cuda"), "vulkan", "the environment spells cuda but no CUDA device: Vulkan")
+        t |> equal(gpu_auto_pick(false, false, true, "vulkan"), "cuda", "the CUDA home alone")
+        t |> equal(gpu_auto_pick(false, false, false, "vulkan"), "off", "no backend: off")
+        if (gpu_home() == "cuda" && kernel_backend_available("cuda") && !kernel_backend_available("metal") && !gpu_env_master_off()) {
+            t |> equal(detected_gpu(), "cuda", "the environment's CUDA ask on a card: the probe lands cuda")
+        } else {
+            to_log(LOG_INFO, "test_gpu_auto_pick: the probe's CUDA arm needs DASLLAMA_CUDA=1 on a card (home {gpu_home()}, metal {kernel_backend_available("metal")}, cuda {kernel_backend_available("cuda")})\n")
+        }
     }
 }
 

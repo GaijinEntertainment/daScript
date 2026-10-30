@@ -167,7 +167,12 @@ llama.cpp with the same split: `llama-bench -m <shard 1> -ngl 99 -ncmoe <n_layer
 the device, the shape the resident driver's split token command serves. The row is external
 (`REVIEW_MEASUREMENT.md`): it names the build tag, the backend build (Vulkan or CUDA) and the
 driver version beside the figures, and `-ngl 99` alone is not the reference - it streams the
-experts across the link every batch and measures the link.
+experts across the link every batch and measures the link. Where the card holds some routed layers'
+experts and the plan moves the rest to the host, the reference keeps the same count there: `-ncmoe
+<the plan's host layers>` - the count off our load's host-layers line - with `-fa 1` beside it on the
+CUDA build (`ARCHITECTURE_MEASUREMENT_REFERENCE_ROWS.md#cuda-reference-rows`, that build's arm), so the row
+reads `llama-bench -m <gguf> -ngl 99 -fa 1 -ncmoe <n> -t <threads> -p 512 -n 128 -r 3`; a row under
+another count compares two splits, not two engines.
 
 ### The committed records gate {#committed-records-gate}
 

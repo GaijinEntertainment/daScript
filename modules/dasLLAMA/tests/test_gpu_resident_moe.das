@@ -23,7 +23,8 @@ require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active
 // first - every site the file carries read in its own format. Qwen3-Coder-Next (512 experts) holds the device select past
 // 256 experts beside the host-layer split. All the fixtures are large-tier (DASLLAMA_PARITY_FULL=1); the
 // file is -jit only, and skips without the file or the armed tier; the twin's tq4 serving-rule cell also skips under
-// DASLLAMA_VK_KV32=1, which arms the f32 mirror over the codec asked; the driver's admission of every fixture is asserted,
+// DASLLAMA_VK_KV32=1, which arms the f32 mirror over the codec asked; the per-op heat cells skip under DASLLAMA_CUDA=1 (the
+// per-op tier and its heat pool are the Vulkan home's); the driver's admission of every fixture is asserted,
 // never skipped - on a device with neither the cm2 tile family nor KHR cooperative matrices at subgroup 32 (or under
 // DASLLAMA_COOPMAT=sdot4) the expert pieces ride the Q8-fed chain's batch tiles.
 

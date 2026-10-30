@@ -84,7 +84,7 @@ Such a window takes the rule the Metal home serves (`dasllama_gpu_knee`: `split_
 while the role's grid, its co-running roles' included, is at most half the knee, and the chunk count doubles while the grid
 times it stays at or under the knee, up to eight, each chunk whole 256-wide steps and at least one deep, the last chunk short
 where K does not divide - `cm2_chunk`'s shares, so a gemma-3-1b down of K 6912 (27 steps) splits as the 32-row window's does
-(`cm2_short_split`, `SplitKnee.exact` false). A full column stays the wave model's: the rule on its K-under-2048 roles reads
+(`short_split_pick` in `dasllama_gpu_knee`, the one rule body both discrete homes call under their own knee, `SplitKnee.exact` false). A full column stays the wave model's: the rule on its K-under-2048 roles reads
 slower there. The knee is raced by `vk_split_knee_race` (`dasllama_vulkan_classes`, beside the cm2 classes it races): the
 shared q8 rung table at 31 rows, each step two roles issued together - the grid the rule sizes on counts the co-runner -
 their weights streamed from a ring of copies past the card's last-level cache, the outputs alternating, the s column whole
@@ -92,6 +92,16 @@ against its split at two, four and eight chunks through the one partial-plane sc
 split roles serialize on it, priced by `knee_pick`. 0 runs the window whole. The knob's default, 128, is the RTX PRO 4500's served window A/B: the race on that card reads the split a loss at every rung, so its pick (0) and the served windows disagree (`PERF_LEDGER.md`'s split-K entry).
 The readings - the race's rungs, the window A/B at the raced knee and on each side of it, the served pp rows and the embedding
 bench against llama.cpp - are `PERF_LEDGER.md`'s split-K entry.
+
+**The CUDA home serves the same short-window rule over its own stamps and knee.** `cud_cm2_pick` takes `short_split_pick`
+for a window under the s column's rows, under `cud_split_k_tgs` (the Vulkan knob's twin in `dasllama_gpu_knee`, a grid alone
+since the one stream co-runs no roles), the partial planes within the split scratch. `cud_split_knee_race` prices the knee as
+`vk_split_knee_race` does - the shared rung loop (`knee_rungs`) over the same q8 rung table at 31 rows, the weights from the
+same ring of copies past the cache, the s column whole against its split at two, four and eight ways, one role a step on the
+one stream, host wall over a synced run of launches (`knee_best_us`) - and the
+fat start and the mint run it under the CUDA ask (`dasllama_cuda_knee_race`), the knob landing in the runtime section as
+`cud_split_k_tgs`. The cells are `test_cud_q8_cm2s_split`, `test_cud_cm2s_short_split_family` (every per-format tile row's s
+column split at 31 rows) and `test_cud_short_window_pick` in `tests/test_cuda_kernels.das`.
 
 **The f16 feed admits q8 and every kq superblock format** (`kq_sb`) - the set the cm2 decode
 callbacks cover (`ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes`) - and each (format, tile) pair has ONE stamped class, reached through

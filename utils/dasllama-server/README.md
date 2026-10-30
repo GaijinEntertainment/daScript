@@ -209,7 +209,7 @@ Run under `-jit` - the interpreter is refused, it is far too slow for inference.
 | `--port` | `-p` | `8080` | Listen port |
 | `--host` | - | `127.0.0.1` | Interface to listen on: this machine only by default; `0.0.0.0` opens the server to every device on the network - the operator's choice, never the default |
 | `--quant` | `-q` | `q8` | Weight quantization: `fp32` \| `q8` \| `q4` - plus the loader's file-format spellings `q4_k` \| `q5_k` \| `q6_k` \| `mxfp4` \| `f16` \| `bf16` (all serve on the `q8` kquant-native tier) |
-| `--gpu` | - | `auto` | GPU backend: auto (default: metal/vulkan when detected, else CPU) \| off \| metal \| metal-required \| vulkan. vulkan serves a model that fits the card whole from the GPU, every stream's cache with it; the control page's model card says what a slot got (a set --metal flag keeps the legacy env-driven path). Details: *The gpu key* below |
+| `--gpu` | - | `auto` | GPU backend: auto (default: metal, else the home `DASLLAMA_CUDA` spells, else vulkan when a Vulkan device answers, else cuda when the CUDA home answers, else CPU) \| off \| metal \| metal-required \| vulkan \| cuda. vulkan and cuda name the discrete home: the whole-model driver serves a model that fits the card whole from the GPU, every stream's cache with it; the control page's model card says what a slot got (a set --metal flag keeps the legacy env-driven path). Details: *The gpu key* below |
 | `--metal` | - | `off` | Metal serving mode when `--gpu` is unset: `off` \| `auto` (the GPU when a path's gates pass, the CPU otherwise) \| `required` (a call the GPU cannot serve is a hard failure). A set flag keeps the legacy env-driven path |
 | `--gpu-layers` | - | *auto* | vulkan: resident MoE expert-stack layers, offloaded from the end (config key `gpu_layers`; *The gpu key* below) |
 | `--gpu-stream` | - | *auto* | vulkan: streamed prefill MoE layers below the resident set (config key `gpu_stream`) |
@@ -562,14 +562,22 @@ release refuses the levers (its kernels are the shipped class clones).
 
 ### The gpu key {#gpu-key}
 
-The `gpu` key (`auto | off | metal | metal-required | vulkan`) is the first-class
+The `gpu` key (`auto | off | metal | metal-required | vulkan | cuda`) is the first-class
 backend selector, and **defaults-first: unset (with no legacy `--metal` flag) behaves as
 `auto`** - the boot probes the box and serves on the best detected backend (the Metal rails
-where the box has them, else the Vulkan tier when a device answers, else the CPU), logging
+where the box has them; else the home `DASLLAMA_CUDA=1` spells where its device answers; else
+the Vulkan home when a Vulkan device answers - the fully served home, preferred while the CUDA home
+is still growing into every form; else the CUDA home; else the CPU), logging
 one `gpu backend auto-detected:` line; `gpu = off` is the explicit opt-out, and an explicit
 `DASLLAMA_GPU=0` in the environment keeps its meaning - auto-detection never out-votes it
 (the env master only overrides the `auto_tier` field of an explicit want, so the pick
-resolves to `off` before any want is constructed). Per-model
+resolves to `off` before any want is constructed). `vulkan` and `cuda` name the discrete HOME the
+whole-model driver runs on, and this key is the one switch that picks it: the boot moves the engine's
+tier onto that home (`set_gpu_home`) before any load, and `DASLLAMA_CUDA=1` is only the environment's
+spelling of the same choice (what `auto` honors). A home this build does not carry, or one the
+environment's `DASLLAMA_GPU` already armed the tier away from, is refused by name in the boot log and
+the slot serves on the CPU. Every rule below - the region a stream, the context asked whole, the
+want, the control page's rail toggles - applies to both homes alike. Per-model
 support is unchanged - a model the armed tier cannot serve falls back to the CPU with the
 reason on the control page. `gpu = vulkan` asks for the **whole-model resident driver** first - a
 model that fits the card serves entirely from VRAM, and so do its streams: the driver holds a

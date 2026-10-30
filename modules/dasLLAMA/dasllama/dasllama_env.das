@@ -71,8 +71,8 @@ struct public EngineEnv {
     @clarg_doc = "The one-pass rare rail runs an expert's rows through the batched expert cores (the plane read once a tile); 0 = the rows core a row (the A/B arm)."
     rare_batched : bool = true
 
-    @clarg_doc = "The rare rail reads a streamed layer's experts off the tier's pinned device-layout planes through the format's row-major kernel - the prompt's host share and a token's host picks alike - one copy of the experts, no planar mirror of a streamed layer. =0 is the A/B arm: every format on the planar planes."
-    rare_arena : bool = true
+    @clarg_doc = "The rare rail reads a streamed layer's experts off the tier's pinned device-layout planes through the format's row-major kernel - the prompt's host share and a token's host picks alike. =1 (the default) takes the rail where the load kept no planar planes (a trimmed lane: one copy of the experts); where the planar planes are loaded (the CUDA home, a lane minted with DASLLAMA_TRIM=0, DASLLAMA_IMAGE=0) the tuned planar kernels serve them. =2 takes the rail on the planar planes too (the A/B arm of the row-major kernels, the environment's twin of `set_rare_arena(1)`); =0 keeps every format on the planar planes."
+    rare_arena : int64 = 1l
 
     @clarg_doc = "The meet hands the host this many of a streamed layer's rarest experts before the device claims any (0 = none: the two sides claim at their own pace) - a measurement lever, so a carrier the device would take whole still runs the host rail."
     moe_host_first : int64 = 0l
@@ -129,7 +129,7 @@ struct public GpuTierEnv {
     @clarg_doc = "One switch for the measured-best GPU rail set; any DASLLAMA_GPU_* knob still overrides individually. On a Vulkan build it is also the want the tower driver reads before any device init: the vision and audio towers' block loops serve on the device only while it is on, and decline `device` otherwise."
     gpu : Option<bool>
 
-    @clarg_doc = "The CUDA home takes the GPU tier's seats in place of the Vulkan home (with DASLLAMA_GPU on): the whole-model driver for a dense q8 model on an NVIDIA card through the driver API and NVRTC, no Vulkan call made. Off, the Vulkan home serves as before. A build without dasCUDA (`DAS_CUDA_DISABLED`, or a 32-bit host) has no CUDA home: the knob is ignored with one warning and the Vulkan home keeps the tier."
+    @clarg_doc = "The environment's spelling of the GPU home (the program's is `set_gpu_home`, dasllama-server's its `--gpu vulkan | cuda` key): on, the CUDA home takes the GPU tier's seats in place of the Vulkan home (with DASLLAMA_GPU on) - the whole-model driver for a dense q8 model on an NVIDIA card through the driver API and NVRTC, no Vulkan call made. Off, the Vulkan home holds the seats until a program moves them. A build without dasCUDA (`DAS_CUDA_DISABLED`, or a 32-bit host) has no CUDA home: the knob is ignored with one warning and the Vulkan home keeps the tier."
     cuda : bool = false
 
     @clarg_default_doc = "-1 (auto)"
@@ -159,7 +159,7 @@ struct public GpuTierEnv {
     @clarg_doc = "The whole-model driver's prompt window in rows: the prefill panels' size, and the rows a hyper-connection model's host expert step and the hot pool's window chain take at once; a longer prompt runs as sequential windows, each paying every routed layer's expert pass again. 0 (the default) lets the driver pick: 4096 where its plan fits with the wider window's scratch, else 2048. Rounded down to a multiple of 128, never under 128; the plan charges the panels at this count, so a wider window shortens the K/V mirror or the pool."
     gpu_pf_rows : int64 = 0l
 
-    @clarg_doc = "Stream each routed layer's expert stack to the device for the prompt, where the routed experts serve on the host (a hyper-connection model): pinned device-layout mirrors of every routed layer at load, two device slots of a layer's stack, the next layer's copy on the transfer queue while this one computes, the host summing nothing. 0 keeps the host's sums and the hot pool's window chain."
+    @clarg_doc = "Stream each routed layer's expert stack to the device for the prompt, where the routed experts serve on the host (a hyper-connection model, or a plain MoE's host layers) - on the Vulkan tier over its transfer queue, on the CUDA home over its copy stream: pinned device-layout mirrors of every routed layer at load, a device slot (a layer's stack, or under DASLLAMA_GPU_MOE_SPLIT the per-expert chain's ring of experts), the copies landing while the chain computes, the host summing what the meet hands it. 0 keeps the host's sums and the hot pool's window chain."
     gpu_pf_stream : bool = true
 
     @clarg_default_doc = "0 (every host layer)"
@@ -176,7 +176,7 @@ struct public GpuTierEnv {
     @clarg_doc = "The whole-model resident driver for a model that fits the card, MoE included; 0 keeps the per-op rails (the A/B lever)."
     gpu_resident : bool = true
 
-    @clarg_doc = "A sliding-window layer's K/V mirror rows on a GPU home hold its window plus the rows one command writes, a position's row at its slot of that ring (the Metal and Vulkan homes; the CUDA home keeps the flat slab whatever this asks); 0 keeps every position's row (the flat slab, the A/B lever). A ringed history serves a continuation that starts no more than that slack under the rows it holds; one further back prefills again."
+    @clarg_doc = "A sliding-window layer's K/V mirror rows on a GPU home hold its window plus the rows one command writes, a position's row at its slot of that ring; 0 keeps every position's row (the flat slab, the A/B lever). A ringed history serves a continuation that starts no more than that slack under the rows it holds; one further back prefills again."
     gpu_kv_ring : bool = true
 
     @clarg_default_doc = "follows DASLLAMA_GPU"
@@ -225,7 +225,7 @@ struct public GpuTierEnv {
     @clarg_doc = "A decode token's picks on a streamed layer take the prefill's route: the meet claims them as the GPU's per-expert DMAs from the busy end and the CPU's rail from the rare end, in place of the one-row host step. The experiment knob; the window floors lift under it."
     gpu_dec_meet : bool = false
 
-    @clarg_doc = "The hot expert pool fills by DMA: a token's miss is copied off its pinned stack into the pool's coldest unpicked slot on the transfer queue, every miss a step and no host time, so the next token finds it; and a prompt's streamed window serves the pool's hits off their slots first and lands its busiest misses in the pool's free and coldest slots, so the decode behind the prompt starts warm. 0 keeps the host's gather-and-upload fill under its step budget and the window off the pool. The A/B knob."
+    @clarg_doc = "The hot expert pool fills by DMA: a token's miss is copied off its pinned stack into the pool's coldest unpicked slot on the home's copy queue (the Vulkan tier's transfer queue, the CUDA home's copy stream), every miss a step and no host time, so the next token finds it; and a prompt's streamed window serves the pool's hits off their slots first and lands its busiest misses in the pool's free and coldest slots, so the decode behind the prompt starts warm. 0 keeps the host's gather-and-upload fill under its step budget and the window off the pool. The A/B knob."
     gpu_hot_dma : bool = true
 
     @clarg_default_doc = "0"
@@ -491,7 +491,7 @@ struct public VulkanEnv {
     @clarg_doc = "The experts one bundle of the streamed expert chain takes at most (0 = a sixteenth of the layer's experts, 1 to 32). A bundle is the unit the device claims at the meet, at most two in flight, so the cap sets the device's pace against the host's share; the A/B lever."
     vk_xf_bundle : int64 = 0l
 
-    @clarg_doc = "Mint the TRIMMED vulkan lane (the default; =0 mints the lane with its planar families): the device twin plus the packed emb region the CPU embed reads, the planar weight families dropped - a MoE's expert stacks too, the device holding them or the host reading its streamed layers' pinned mirrors through the rare rail (so the prompt stream and the rail's arena arm must be on where routed layers serve on the host). A model the whole-model driver would not take whole keeps its families, and the load says so, as does one with per-layer embeddings, biased expert stacks or the gemma-4 MoE form (the host reads their planar planes); a call the driver passes to the CPU rails panics by name. Folded into the lane's identity, so a flip re-bakes the lane; `set_vulkan_trim` is the in-process lever."
+    @clarg_doc = "Mint the TRIMMED GPU lane - the armed home's, vulkan or cuda (the default; =0 mints the lane with its planar families): the device twin plus the packed emb region the CPU embed reads, the planar weight families dropped - a MoE's expert stacks too, the device holding them or the host reading its streamed layers' pinned mirrors through the rare rail (so the prompt stream and the rail's arena arm must be on where routed layers serve on the host). A model the whole-model driver would not take whole keeps its families, and the load says so, as does one with per-layer embeddings, biased expert stacks or the gemma-4 MoE form (the host reads their planar planes); a call the driver passes to the CPU rails panics by name. Folded into the lane's identity, so a flip re-bakes the lane; `set_vulkan_trim` is the in-process lever."
     trim : bool = true
 
     @clarg_doc = "Tag every device allocation priority 1.0 (VK_EXT_memory_priority). Off by default: on the NVIDIA WDDM driver the tag makes the tagged weights the pageable set, and a resident model then decodes at PCIe speed once anything is demoted."
@@ -556,6 +556,9 @@ struct public VulkanEnv {
 
     @clarg_doc = "The CUDA home's launches under programmatic dependent launch: a kernel is launched while the one before it in the stream still runs, and its entry wait (`griddepcontrol.wait`, in every emitted kernel on sm_90 and up) holds its reads until that one completes, so the launch latency rides under the predecessor's tail. 1 = on where the card is sm_90 or newer, 0 = plain stream order (A/B instrument). The device-ready log line names the state."
     cuda_pdl : int64 = 1l
+
+    @clarg_doc = "The CUDA home's greedy chain: the next one-row step launched behind the running one on the device's own pick; 0 off, 1 every greedy step, -1 adaptive (backs off after a miss). A sampled session never chains."
+    cuda_chain : int = 0
 
     @clarg_path
     @clarg_doc = "Directory of <kernel>.spv files served instead of the emitted words at pipeline creation (offline spirv-opt / hand-patched A/B instrument)."
@@ -809,6 +812,11 @@ struct public ProfilingEnv {
     @clarg_path
     @clarg_doc = "Path to a Vulkan-build llama-bench (setup_lcpp_ref's vulkan flavor) for the vulkan leg's reference column."
     llama_bench_vulkan : string = ""
+
+    @clarg_env = "LLAMA_BENCH_CUDA"
+    @clarg_path
+    @clarg_doc = "Path to a CUDA-build llama-bench (-DGGML_CUDA=ON at the reference tag) for the cuda leg's reference column."
+    llama_bench_cuda : string = ""
 
     @clarg_env = "WHISPER_CPP"
     @clarg_path

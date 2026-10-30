@@ -63,10 +63,11 @@ key it has on that home.
   `RopeKvStoreBT`, `RopeKvStoreT`, `QknRopeKvT`) with their args structs and the K/V block
   readers (`kv_blk_scale`, `kv_skew_word`, the quant unpackers); the prefill's batch GEMM tiles
   over the region rail `MoeCmBase` (`BatchArgs`, `SCHED_NONE`: `KqCm2BatchT` -> the twenty
-  `<Fmt>Cm2T` block decodes, `F32RowsKhrT`, `MmBatchT`, `Blk32BatchT`, the KHR f16 shell
-  `CmF16Base`) and the flash attention (`FaT` -> the `FaH<hs>T` fragment shapes with the `facm2_*`
-  per-element laws, `AtAttnTileT` -> the batched mirror pass `DaAttnBT` and the wide `DaAttnBWT`,
-  `DaAttnBH128T`). Every class there is a `class template` under the same contract as
+  `<Fmt>Cm2T` block decodes, `MmBatchT`, `Blk32BatchT`, the KHR f16 shell
+  `CmF16Base`), the small f16 x f16 GEMM on the cm2 tile (`F16GemmCm2T`: the E-series projection's
+  window form on both homes, the MoE router's logits on Vulkan) and the flash attention (`FaT` -> the `FaH<hs>T` fragment shapes with the `facm2_*`
+  per-element laws, `AtAttnTileT` -> the batched mirror pass `DaAttnBT` and the wide `DaAttnBWT`). Every class
+  there is a `class template` under the same contract as
   this file's `Gk*` ones - but for the plain classes a chain roots in: `KqGemvBase`, the kq
   chain's root - the family's planes and the three abstract block-decode methods a host caller
   reaches through a `KqGemvBase?` (the CPU host twin, the kernel cells' oracle), nothing a kernel
@@ -78,7 +79,11 @@ key it has on that home.
   A template, not a plain class, because a body's `gk_subgroup_*` calls and the dispatch lens's
   access walk both resolve in the module that stamps it. The Vulkan leaves keep their
   specialization-constant width (`local_size_x_id`) and their census names on the leaf's
-  annotation.
+  annotation. `dasllama_vulkan_classes.das` also holds two templates the Vulkan home alone
+  stamps and no driver dispatches - `DaAttnBH128T` (the batched attention's h128 coopmat tile)
+  and `F32RowsKhrT` (a file's f32 rows on the KHR tile) - held by their kernel cells
+  (`test_vkd_da_attn_b_h128`, `test_vkd_f32_khr_batch`): a body one home runs lives in that
+  home's classes file.
 - **A home that must lower one method differently stamps a home-only template between the shared
   template and its leaf, never a second body.** The template is the shared one's child in the home's
   classes file, overriding the one method, and the leaf derives from it under its unchanged dispatch

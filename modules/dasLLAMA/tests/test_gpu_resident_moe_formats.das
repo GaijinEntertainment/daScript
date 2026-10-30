@@ -26,39 +26,15 @@ let private HOST_FIRST = 8l   //! the rarest experts the meet hands the host bef
 let private QWEN15_MOE_EXPERTS = 60l   //! the carrier's routed experts a layer (Qwen1.5-MoE-A2.7B): a pool at or past it never fills
 let private SHARE_CELL_SLOTS = 16l     //! the share cell's pool: a quarter of the experts, so a step's misses outrun the free slots
 
-//! the levers a cell pins, as a cell found them
-struct private RecipePins {
-    pf_stream : int
-    arena : int
-    host_first : int64
-    hot_dma : int
-    hot_share : float
-    dec_meet : int
-    onepass : int
-    batched : int
-}
-
 //! the cells' recipe: the streamed prompt (the split is the environment's default) with the host's share on the arena and a
-//! host share the device cannot take whole, pinned here so the file carries its own shape; the pins as the cell found them
-//! come back, for `unpin_recipe`
-def private pin_recipe() : RecipePins {
-    let was = RecipePins(pf_stream = gpu_want_pf_stream_pin(), arena = rare_arena_pin(), host_first = moe_host_first_pin(),
-        hot_dma = gpu_hot_dma_pin(), hot_share = gpu_hot_share_pin(), dec_meet = gpu_dec_meet_pin(), onepass = rare_onepass_pin(), batched = rare_batched_pin())
+//! host share the device cannot take whole, pinned here so the file carries its own shape; the levers as the cell found them
+//! come back (`stream_pins`), for `restore_stream_pins`
+def private pin_recipe() : StreamPins {
+    let was = stream_pins()
     set_gpu_want_pf_stream(1)
     set_rare_arena(1)
     set_moe_host_first(HOST_FIRST)
     return was
-}
-
-def private unpin_recipe(was : RecipePins) {
-    set_gpu_want_pf_stream(was.pf_stream)
-    set_rare_arena(was.arena)
-    set_moe_host_first(was.host_first)
-    set_gpu_hot_dma(was.hot_dma)
-    set_gpu_hot_share(was.hot_share)
-    set_gpu_dec_meet(was.dec_meet)
-    set_rare_onepass(was.onepass)
-    set_rare_batched(was.batched)
 }
 
 //! `body` with the meet's host counter as the witness: the cell's windows handed the host experts; under `dev_rows` the
@@ -109,7 +85,7 @@ def private format_cells(t : T?; tag : string) {
                 moe_forced_feed(ct, 40l, fx)
             }
         }
-        unpin_recipe(pins)
+        restore_stream_pins(pins)
     }
     t |> run("{tag} experts on four host layers through the one-copy rail: the same across two windows") @(ct : T?) {
         let pins = pin_recipe()
@@ -120,7 +96,7 @@ def private format_cells(t : T?; tag : string) {
                 }
             }
         }
-        unpin_recipe(pins)
+        restore_stream_pins(pins)
     }
 }
 
@@ -156,7 +132,7 @@ def private knob_cells(t : T?; tag : string) {
             }
         }
         g_gpu_want.heat = heat0
-        unpin_recipe(pins)
+        restore_stream_pins(pins)
     }
     t |> run("{tag} experts on twenty host layers, the pool's misses filled by DMA: the token command vs the CPU chain") @(ct : T?) {
         return if (!pool_asked(ct))
@@ -171,7 +147,7 @@ def private knob_cells(t : T?; tag : string) {
                 ct |> success(gpu_resident_hot_stats().dma > 0l, "the DMA fill landed {gpu_resident_hot_stats().dma} experts in the pool over the cell")
             }
         }
-        unpin_recipe(pins)
+        restore_stream_pins(pins)
     }
     t |> run("{tag} experts on twenty host layers, the DMA fill off and the meet off: no expert lands by DMA, the token steps' misses take the host's upload beside the window's placements") @(ct : T?) {
         return if (!pool_asked(ct))
@@ -189,7 +165,7 @@ def private knob_cells(t : T?; tag : string) {
                 ct |> success(gpu_resident_hot_stats().uploads > 0l, "the window's placements and the steps' misses took the host's upload ({gpu_resident_hot_stats().uploads})")
             }
         }
-        unpin_recipe(pins)
+        restore_stream_pins(pins)
     }
     t |> run("{tag} experts on twenty host layers, a token's picks through the decode meet: the token command vs the CPU chain") @(ct : T?) {
         let pins = pin_recipe()
@@ -203,7 +179,7 @@ def private knob_cells(t : T?; tag : string) {
                 ct |> success(gpu_resident_hot_stats().meet_steps > 0l, "the decode meet claimed {gpu_resident_hot_stats().meet_steps} token steps' picks over the cell")
             }
         }
-        unpin_recipe(pins)
+        restore_stream_pins(pins)
     }
 }
 
@@ -236,7 +212,7 @@ def test_moe_formats_rail_arms(t : T?) {
                 moe_forced_feed(ct, 40l, fx)
             }
         }
-        unpin_recipe(pins)
+        restore_stream_pins(pins)
     }
     t |> run("Q4_K experts on four host layers, the rows core a row (DASLLAMA_RARE_BATCHED=0): the token command vs the CPU chain") @(ct : T?) {
         let pins = pin_recipe()
@@ -246,7 +222,7 @@ def test_moe_formats_rail_arms(t : T?) {
                 moe_forced_feed(ct, 40l, fx)
             }
         }
-        unpin_recipe(pins)
+        restore_stream_pins(pins)
     }
     t |> run("Q4_K experts on four host layers off the planar planes (DASLLAMA_RARE_ARENA=0): the token command vs the CPU chain") @(ct : T?) {
         let pins = pin_recipe()
@@ -259,7 +235,7 @@ def test_moe_formats_rail_arms(t : T?) {
                 ct |> equal(g_rare_dev_rows, r0, "the arena off: the rail read no row off the device planes")
             }
         }
-        unpin_recipe(pins)
+        restore_stream_pins(pins)
     }
 }
 
@@ -368,7 +344,7 @@ def test_moe_formats_hot_pool(t : T?) {
                 ct |> equal(g_rare_slot_copies - c0, 3l * gpu_resident_hot_stats().uploads, "every slot filled off the pinned mirrors: three plane copies an upload, no planar plane read")
             }
         }
-        unpin_recipe(pins)
+        restore_stream_pins(pins)
     }
 }
 
@@ -406,6 +382,6 @@ def test_moe_formats_expert_cache(t : T?) {
         }
         restore_vulkan_trim(trim_set, trim)
         set_expert_cache_mb(cache_was)
-        unpin_recipe(pins)
+        restore_stream_pins(pins)
     }
 }

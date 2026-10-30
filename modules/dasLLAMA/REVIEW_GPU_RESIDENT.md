@@ -1,7 +1,7 @@
 # dasLLAMA GPU Resident-Session Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`. Planned work:
+docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`. Planned work:
 `followup_metal.md`, `followup_vulkan.md`, `followup_general.md` (the CUDA rows).
 
 **A diff never hands a whole GPU decode or prefill call that the device served before the diff to
@@ -16,7 +16,8 @@ it does not serve.** The weight stream is what the batch amortizes.
 
 **A diff that adds such a per-row decline names the declined layer kind in the backend's
 architecture doc in the same change - `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command` for
-Vulkan, `ARCHITECTURE_GPU_MTP.md#batch-same-slab` for Metal.**
+Vulkan, `ARCHITECTURE_GPU_MTP.md#batch-same-slab` for Metal, the `dasllama_cuda_decode` entry of the
+`dasllama_<gpu>_decode` row of `ARCHITECTURE_GPU.md#gpu-backends` for CUDA.**
 
 **A diff in `dasllama/` that calls `create_device_session` or `create_device_session_` for a
 session holding its own region, or turns a scheduler's device mode on (`set_device_kv`),
@@ -34,9 +35,11 @@ host-cached sessions when none is.** The driver panics on a device-home session 
 **A diff that calls a listed setter calls it before the load it governs - the `set_gpu_*` and
 `reset_gpu_*` functions of `dasllama/dasllama_core.das`, `set_pf_window_rows_pin`,
 `set_expert_cache_mb`, `set_gpu_want_pf_stream`, `set_cuda_mmq_pin`, `set_resident_upload_fault`,
-`install_moe_gpu_resident_site_feeds` and `install_moe_gpu_resident_kv_ring`; this list is the
-trigger.** The load reads these values once, to decide what the whole-model GPU driver holds on
-the device; a value set after the load never reaches that decision.
+`set_moe_gpu_streams`, `vk_rdec_chain_mode_set`, `cud_rdec_chain_mode_set`,
+`install_moe_gpu_resident_site_feeds`, `install_moe_gpu_resident_kv_ring` and
+`install_moe_gpu_resident_kv_share`; this list is the trigger.** The load reads these values once,
+to decide what the whole-model GPU driver holds on the device; a value set after the load never
+reaches that decision.
 
 **A diff that defines a setter - a function whose stored value the next load reads to plan what
 the device holds, a `set_*` knob or an `install_*` declaration alike - adds its name to the list
@@ -45,7 +48,8 @@ same change.** The list is the trigger a reviewer reads; an unlisted setter reac
 check.
 
 **A diff that adds or rewords an `RdecPass` value's sentence in `rdec_pass_words` writes it in
-plain words a reader who never saw the engine understands, naming no part of the engine.** A status page prints those words to a reader who never saw the engine.
+plain words a reader who never saw the engine understands, naming no part of the engine.** A
+status page prints those words to a reader who never saw the engine.
 
 **Weakening `REVIEW.das`'s `check_rdec_pass_words` is a defect.** That check requires every
 `RdecPass` value to have its own sentence in `rdec_pass_words`.

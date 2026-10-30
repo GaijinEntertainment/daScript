@@ -32,36 +32,8 @@ require _vulkan_lane
 // lane on disk maps under it as a lane minted again with its planar families.
 // Skips when interpreted, without the model, with the image rail off (DASLLAMA_IMAGE=0), without a live armed tier,
 // and when the whole-model driver declines the model on this box; the K/V codecs cell also skips where DASLLAMA_VK_KV32=1
-// arms an f32 mirror over the codec it asks.
-
-let private MINT_FILE = "Qwen3.5-0.8B-MTP-Q8_0.gguf"
-let private KQ_FILE = "Qwen3.5-0.8B-Q4_K_M.gguf"
-let private MINT_PROMPT = 16
-let private MINT_STEPS = 12
-
-//! `MINT_STEPS` greedy tokens over a counting prompt, and the CPU embed row of one token: what the two lanes must agree on
-def private mint_witness(tr : Model; var ids : array<int64>; var row : array<float>; kv : KVDtype = KVDtype.f16) {
-    with_dasllama_jobque_() {
-        var s <- create_session(tr, kv)
-        var prompt <- [for (i in range64(int64(MINT_PROMPT))); 1000l + i * 7l]
-        delete ids
-        ids <- generate(tr, s, prompt, MINT_PROMPT + MINT_STEPS)
-        row |> resize(tr.config.dim)
-        embed_row(tr, 1234l, unsafe(addr(row[0])))
-        delete s
-        delete prompt
-    }
-}
-
-typedef private MintRun = tuple<ids : array<int64>; row : array<float>>
-
-//! `mint_witness` over `tr` with its token count asserted: `what` generated the asked steps past the prompt
-def private witness_steps(t : T?; tr : Model; what : string) : MintRun {
-    var w : MintRun
-    mint_witness(tr, w.ids, w.row)
-    t |> equal(long_length(w.ids), int64(MINT_PROMPT + MINT_STEPS), "{what} generated the {MINT_STEPS} asked steps past the {MINT_PROMPT}-token prompt")
-    return <- w
-}
+// arms an f32 mirror over the codec it asks; the MoE lane's trimmed-rail assert skips under DASLLAMA_RARE_ARENA=0, which
+// keeps every lane on the planar planes.
 
 //! the forced-feed form a routed carrier's lanes are held to: the prompt's row and `MINT_STEPS` fed steps' rows on a session
 //! of `tr`, the same tokens fed on every lane, so two lanes compare row by row at the routed block's bar with the row one
@@ -84,87 +56,11 @@ def private hold_feed_rows(t : T?; what : string; got, want : array<array<float>
     rows_within_control(t, what, got, want, MOE_LOGIT_BAR_REL, 1l, 1.0, $(r) => r == 0l ? "the prompt's row" : "step {r}")
 }
 
-//! the box facts every cell here skips on; "" = the cell runs
-def private mint_skip(t : T?; path : string) : bool {
-    return true if (!jit_only(t))
-    if (!g_env_engine.image) {
-        t |> skip("the image rail is off (DASLLAMA_IMAGE=0) - the lane mint has nothing to write")
-        return true
-    }
-    if (!model_available(t, path)) {
-        return true
-    }
-    if (empty(moe_gpu_bake_tag())) {
-        t |> skip("no armed vulkan tier (DASLLAMA_GPU=1 on a box with a device)")
-        return true
-    }
-    return false
-}
-
-//! the lane cells' frame: the family gate and `file`'s skips, then `body` over the model's path under the pinned lane levers, put back after
-def private with_mint_file(t : T?; file : string; body : block<(path : string) : void>) {
-    return if (!family_on(t, "qwen35"))
-    let path = path_join(models_dir(), file)
-    return if (mint_skip(t, path))
-    let levers = pin_lane_levers()
-    invoke(body, path)
-    restore_lane_levers(levers)
-}
-
-//! a cold vulkan-armed load of `path` with both lanes' images removed first, `body` over it and the vulkan image's path (the body
-//! drops its models), the image removed after; a skip naming `what` where the whole-model driver did not take the model
-def private with_cold_lane(t : T?; path, what : string; body : block<(var cold : Model; img_v : string) : void>) {
-    let img_v = image_path_for(path, moe_gpu_bake_tag())
-    let img_p = image_path_for(path, "", "q8")
-    remove(img_v)
-    remove(img_p)
-    var cold <- load_cached_q8(path)
-    if (moe_gpu_resident_active()) {
-        t |> success(stat(img_v).is_valid && !stat(img_p).is_valid, "the cold load minted {what}'s vulkan lane and no planar lane")
-        invoke(body, cold, img_v)
-    } else {
-        delete cold
-        moe_gpu_drop_model()
-        t |> skip("the whole-model driver did not take {what} on this box (the decline line above)")
-    }
-    remove(img_v)
-}
-
 [test]
 def test_vulkan_mint_lanes(tst : T?) {
     tst |> run("Qwen3.5-0.8B-MTP: a cold vulkan-armed load mints the vulkan lane alone; the trimmed lane serves the same tokens and embed rows, cold and warm") @(t : T?) {
-        with_mint_file(t, MINT_FILE) $(path) {
-            with_cold_lane(t, path, "the model") $(var plain; img_v) {
-                t |> success(plain.image_map != null && long_length(plain.vkplan) > 0l && long_length(plain.qblob) > 0l, "the served image is the vulkan lane, the planar families kept with the trim off")
-                let plain_bytes = stat(img_v).size
-                var a <- witness_steps(t, plain, "the untrimmed lane")
-                delete plain
-                moe_gpu_drop_model()
-                set_vulkan_trim(true)
-                remove(img_v)
-                var trimmed <- load_cached_q8(path)
-                t |> success(moe_gpu_resident_active(), "the trimmed lane is served by the whole-model driver")
-                t |> success(trimmed.image_map != null && trimmed.planes_trimmed && long_length(trimmed.qblob) == 0l && long_length(trimmed.embq) > 0l,
-                    "the trimmed lane serves without the planar families, the emb region packed")
-                t |> success(stat(img_v).size < plain_bytes, "the trimmed lane is the smaller file ({stat(img_v).size} against {plain_bytes} bytes)")
-                var b <- witness_steps(t, trimmed, "the trimmed lane")
-                log_gen_texts(trimmed, "untrimmed lane / trimmed lane", a.ids, b.ids)
-                t |> equal(mismatch_exact(a.ids, b.ids), 0, "the trimmed lane's greedy tokens are the untrimmed lane's, token for token (both streams decoded above)")
-                t |> equal(mismatch_exact(a.row, b.row), 0, "the CPU embed row off the packed emb region is the planar plane's, bit for bit")
-                delete trimmed
-                moe_gpu_drop_model()
-                var warm <- load_cached_q8(path)
-                t |> success(moe_gpu_resident_active(), "the warm trimmed lane is served by the whole-model driver")
-                t |> success(warm.image_map != null && warm.planes_trimmed, "the trimmed lane maps back warm")
-                var c <- witness_steps(t, warm, "the warm lane")
-                log_gen_texts(warm, "untrimmed lane / warm trimmed lane", a.ids, c.ids)
-                t |> equal(mismatch_exact(a.ids, c.ids), 0, "... and serves the same tokens (both streams decoded above)")
-                delete warm
-                moe_gpu_drop_model()
-                delete a
-                delete b
-                delete c
-            }
+        with_mint_file(t, "qwen35", MINT_FILE) $(path) {
+            lanes_cell(t, path) $(_img) {}
         }
     }
 }
@@ -172,25 +68,39 @@ def test_vulkan_mint_lanes(tst : T?) {
 let private MOE_FILE = "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf"
 let private MOE_HOST_LAYERS = 20l   //! routed layers asked onto the host: their stacks stream, the plan's room arms the unasked pool beside the mirror
 
-//! the MoE lane under the trim: twenty routed layers' expert stacks streamed to the host's pinned mirrors, so the lane drops every planar family and the host reads the mirrors through the rare rail
+//! the MoE lane under the trim: twenty routed layers' expert stacks streamed to the host's pinned mirrors, so the lane drops every
+//! planar family and the host reads the mirrors through the rare rail; on the untrimmed lane the rail's arena arm pinned off
+//! reads the planar planes (none through the rail) and pinned on - `set_rare_arena(1)`, the in-process twin of
+//! DASLLAMA_RARE_ARENA=2 - reads the same picks off the mirrors through the rail, its rows within the routed block's bar of the
+//! planar kernels'; the trimmed lane's rail follows the knob's default policy (the pin put back as found)
 [test]
 def test_vulkan_mint_moe_streamed(tst : T?) {
-    tst |> run("Qwen1.5-MoE Q4_K_M with twenty routed layers streamed: the trimmed lane drops the planar families and serves the untrimmed lane's tokens, cold and warm, off the mirrors") @(t : T?) {
+    tst |> run("Qwen1.5-MoE Q4_K_M with twenty routed layers streamed: the trimmed lane drops the planar families and serves the untrimmed lane's tokens, cold and warm, off the mirrors; the untrimmed lane's picks through the rail under the arena pin alone") @(t : T?) {
         return if (!family_on(t, "qwen2moe"))
         let path = path_join(models_dir(), MOE_FILE)
         return if (mint_skip(t, path))
         let levers = pin_lane_levers()
         let hl = gpu_host_layers_pin_()
+        let pf0 = gpu_want_pf_stream_pin()
+        let arena0 = rare_arena_pin()
         set_gpu_host_layers_(MOE_HOST_LAYERS)
         set_gpu_want_pf_stream(1)
         with_cold_lane(t, path, "the MoE") $(var plain; img_v) {
             t |> success(!plain.planes_trimmed && long_length(plain.vkplan) > 0l, "the served image is the vulkan lane, the planar families kept with the trim off")
             t |> equal(gpu_resident_host_layers(), MOE_HOST_LAYERS, "the first {MOE_HOST_LAYERS} routed layers' experts serve on the host")
             let plain_bytes = stat(img_v).size
+            set_rare_arena(0)   // the arena arm pinned off: the host picks read the planar planes the untrimmed lane kept
             let r0 = g_rare_dec_rows
             var a <- witness_steps(t, plain, "the untrimmed lane")
             var a_rows <- feed_rows(plain)
-            t |> success(g_rare_dec_rows > r0, "the untrimmed lane's host picks read {g_rare_dec_rows - r0} pairs off the mirrors through the rail")
+            t |> equal(g_rare_dec_rows, r0, "set_rare_arena(0): the untrimmed lane's host picks read the planar planes the lane kept, none through the rail")
+            set_rare_arena(1)   // the arm pinned on (DASLLAMA_RARE_ARENA=2's twin): the same picks read off the pinned mirrors through the rail
+            let r_on = g_rare_dec_rows
+            var arena_rows <- feed_rows(plain)
+            t |> success(g_rare_dec_rows > r_on, "set_rare_arena(1): the untrimmed lane's host picks read {g_rare_dec_rows - r_on} pairs off the mirrors through the rail, the planar planes loaded beside them")
+            hold_feed_rows(t, "the untrimmed lane's rows through the rail against the planar kernels'", arena_rows, a_rows)
+            set_rare_arena(arena0)
+            delete arena_rows
             delete plain
             moe_gpu_drop_model()
             set_vulkan_trim(true)
@@ -204,7 +114,11 @@ def test_vulkan_mint_moe_streamed(tst : T?) {
             let r1 = g_rare_dec_rows
             var b <- witness_steps(t, trimmed, "the trimmed lane")
             var b_rows <- feed_rows(trimmed)
-            t |> success(g_rare_dec_rows > r1, "the trimmed lane's host picks read {g_rare_dec_rows - r1} pairs off the mirrors through the rail")
+            if (rare_arena_serves(trimmed)) {
+                t |> success(g_rare_dec_rows > r1, "the trimmed lane's host picks read {g_rare_dec_rows - r1} pairs off the mirrors through the rail (DASLLAMA_RARE_ARENA={g_env_engine.rare_arena}, the pin {rare_arena_pin()})")
+            } else {
+                t |> skip("DASLLAMA_RARE_ARENA={g_env_engine.rare_arena} (the pin {rare_arena_pin()}) keeps the trimmed lane off the rail: the rail's assert needs the knob's default")
+            }
             log_gen_texts(trimmed, "untrimmed lane / trimmed lane", a.ids, b.ids)
             hold_feed_rows(t, "the trimmed lane's rows against the untrimmed lane's", b_rows, a_rows)
             t |> equal(mismatch_exact(a.row, b.row), 0, "the CPU embed row off the packed emb region is the planar plane's, bit for bit")
@@ -225,7 +139,7 @@ def test_vulkan_mint_moe_streamed(tst : T?) {
             delete b_rows
             delete c_rows
         }
-        set_gpu_want_pf_stream(-1)
+        set_gpu_want_pf_stream(pf0)
         set_gpu_host_layers_(hl)
         restore_lane_levers(levers)
     }
@@ -234,24 +148,8 @@ def test_vulkan_mint_moe_streamed(tst : T?) {
 [test]
 def test_vulkan_mint_kquant(tst : T?) {
     tst |> run("Qwen3.5-0.8B-Q4_K_M: the K-quant twin's lane mints off its native planes and maps back warm to the same tokens") @(t : T?) {
-        with_mint_file(t, KQ_FILE) $(path) {
-            with_cold_lane(t, path, "the K-quant twin") $(var cold; _img_v) {
-                t |> success(cold.kq_repacked, "the loader kept the K-quant planes native and froze their interleave (the job view copies it)")
-                t |> success(long_length(cold.vkplan) > 0l, "the K-quant model's cold lane carries the plan")
-                var a <- witness_steps(t, cold, "the cold lane")
-                delete cold
-                moe_gpu_drop_model()
-                var warm <- load_cached_q8(path)
-                t |> success(moe_gpu_resident_active() && warm.image_map != null, "the lane maps back warm onto the whole-model driver")
-                var b <- witness_steps(t, warm, "the warm lane")
-                log_gen_texts(warm, "cold mint / warm map", a.ids, b.ids)
-                t |> equal(mismatch_exact(a.ids, b.ids), 0, "the mapped twin serves the mint's tokens, token for token (both streams decoded above)")
-                t |> equal(mismatch_exact(a.row, b.row), 0, "the CPU embed row is the same on both loads, bit for bit")
-                delete warm
-                moe_gpu_drop_model()
-                delete a
-                delete b
-            }
+        with_mint_file(t, "qwen35", KQ_FILE) $(path) {
+            kquant_cell(t, path) $(_img) {}
         }
     }
 }
@@ -265,7 +163,7 @@ def private pass_prefill(tr : Model; var s : Session; npos : int64; start_pos : 
 [test]
 def test_vulkan_mint_trim_follows_the_driver(tst : T?) {
     tst |> run("Qwen3.5-0.8B-MTP: the trim admits what the whole-model driver serves - a foreign prefill override declines both with one text, the trimmed lane on disk stays for the next run and this run serves planar from memory, a cold trim ask under the override writes the untrimmed lane the next load under it serves, and the load after the override lifts mints the trimmed lane over it") @(t : T?) {
-        with_mint_file(t, MINT_FILE) $(path) {
+        with_mint_file(t, "qwen35", MINT_FILE) $(path) {
             with_cold_lane(t, path, "the model") $(var plain; img_v) {
                 t |> success(resident_would_serve(plain) && empty(resident_decline_reason(plain)), "the trim admits the model the driver serves")
                 delete plain
@@ -331,7 +229,7 @@ def private load_refusal(path : string) : string {
 [test]
 def test_vulkan_mint_trim_refused_unarmed(tst : T?) {
     tst |> run("Qwen3.5-0.8B-MTP: a trimmed lane the whole-model driver does not arm for after the trim admitted it is refused at its load, naming the lane and the decline - never at a CPU forward; the same load with the driver armed serves") @(t : T?) {
-        with_mint_file(t, MINT_FILE) $(path) {
+        with_mint_file(t, "qwen35", MINT_FILE) $(path) {
             with_cold_lane(t, path, "the model") $(var plain; img_v) {
                 delete plain
                 moe_gpu_drop_model()
@@ -361,7 +259,7 @@ def test_vulkan_mint_trim_refused_unarmed(tst : T?) {
 [test]
 def test_vulkan_mint_failed_write_leaves_nothing(tst : T?) {
     tst |> run("Qwen3.5-0.8B-MTP: a mint whose write fails writes no lane, leaves no temp file and still serves; the next load mints") @(t : T?) {
-        with_mint_file(t, MINT_FILE) $(path) {
+        with_mint_file(t, "qwen35", MINT_FILE) $(path) {
             with_cold_lane(t, path, "the model") $(var plain; img_v) {
                 delete plain
                 moe_gpu_drop_model()
@@ -390,65 +288,11 @@ def test_vulkan_mint_failed_write_leaves_nothing(tst : T?) {
     }
 }
 
-//! the greedy tokens a staged (no image) load of `path` serves on the device at mirror codec `kv`: what a lane serves at that codec
-[cold_path]
-def private staged_tokens_at(t : T?; path : string; kv : KVDtype) : array<int64> {
-    var m <- load_resident_at(path, kv)
-    var ids : array<int64>
-    if (moe_gpu_resident_active()) {   // no driver, no tokens: the caller skips
-        t |> equal(mirror_kv_dtype(), kv, "the staged load arms the mirror at the asked codec")
-        var row : array<float>
-        mint_witness(m, ids, row, kv)
-        delete row
-    }
-    delete m
-    moe_gpu_drop_model()
-    return <- ids
-}
-
 [test]
 def test_vulkan_mint_kv_codecs(tst : T?) {
     tst |> run("Qwen3.5-0.8B-MTP: the trimmed lane minted under a q8_0 mirror maps under tq4 and f16 with no re-mint, and serves at each codec the tokens the staged load serves there") @(t : T?) {
-        with_mint_file(t, MINT_FILE) $(path) {
-            let codecs = fixed_array(KVDtype.q8_0, KVDtype.tq4, KVDtype.f16)   // the mint's codec first
-            with_gpu_kv_dtype(t, codecs[0]) {
-                var want <- [for (kv in codecs); staged_tokens_at(t, path, kv)]
-                if (empty(want[0])) {
-                    t |> skip("the whole-model driver did not take the model on this box (the decline line above)")
-                } else {
-                    set_vulkan_trim(true)
-                    let img_t = image_path_for(path, moe_gpu_bake_tag())
-                    remove(img_t)
-                    var minted_size = 0ul
-                    var minted_at = 0l
-                    for (kv, ids_want, i in codecs, want, count()) {
-                        set_gpu_kv_dtype(kv)
-                        var m <- load_cached_q8(path)
-                        t |> success(moe_gpu_resident_active() && mirror_kv_dtype() == kv, "{kv}: the lane is served by the whole-model driver at the asked mirror codec")
-                        t |> success(m.image_map != null && m.planes_trimmed, "{kv}: the served image is the trimmed lane")
-                        let st = stat(img_t)
-                        if (i == 0) {
-                            minted_size = st.size
-                            minted_at = int64(st.mtime)
-                            t |> success(st.is_valid, "the cold load under {kv} minted the trimmed lane")
-                        } else {
-                            t |> success(st.size == minted_size && int64(st.mtime) == minted_at, "{kv}: the lane minted under {codecs[0]} mapped as it was - no re-mint ({st.size} bytes)")
-                        }
-                        var inscope ids : array<int64>
-                        var inscope row : array<float>
-                        mint_witness(m, ids, row, kv)   // a trimmed lane panics on a call passed to the CPU rails: generating is the served witness
-                        log_gen_texts(m, "{kv}: the staged load / the trimmed lane", ids_want, ids)
-                        t |> equal(mismatch_exact(ids, ids_want), 0, "{kv}: the trimmed lane's greedy tokens are the staged load's at that codec, token for token")
-                        delete ids
-                        delete row
-                        delete m
-                        moe_gpu_drop_model()
-                    }
-                    t |> success(mismatch_exact(want[0], want[2]) > 0 || mismatch_exact(want[1], want[2]) > 0, "control: a block codec moves the greedy tokens off the f16 mirror's on this prompt, so the per-codec compares tell the codecs apart")
-                    remove(img_t)
-                }
-                delete want
-            }
+        with_mint_file(t, "qwen35", MINT_FILE) $(path) {
+            kv_codecs_cell(t, path) $(_img) {}
         }
     }
 }

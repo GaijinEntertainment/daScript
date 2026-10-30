@@ -2843,6 +2843,10 @@ namespace das
             }
         }
         SimNode * simSubE = (expr->subexpr && !skipIt) ? getE(expr->subexpr) : nullptr;
+        if ( expr->subexpr && !skipIt && !simSubE ) {
+            setE(expr, nullptr);
+            return expr;
+        }
         if (!expr->subexpr) {
             setE(expr, context.code->makeNode<SimNode_ReturnNothing>(at));
             return expr;

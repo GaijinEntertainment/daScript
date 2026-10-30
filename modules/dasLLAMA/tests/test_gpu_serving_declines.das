@@ -1588,7 +1588,7 @@ def test_trim_lane_ring_pin(t : T?) {
         t |> equal(ids[0], ids[1], "the lane's identity reads the same under either pin: the image holds no K/V row")
         t |> success(mirrors[0] * 7l < mirrors[1], "the plan charges the ringed mirror under one pin and the flat one under the other ({mirrors[0] >> 20l} MB against {mirrors[1] >> 20l} MB)")
         var terr = ""
-        let path = path_join(temp_directory(terr), "dasllama_trim_lane_ring_{ref_time_ticks()}.dlim")
+        let path = path_join(temp_directory(terr), "dasllama_trim_lane_ring_{ref_time_ticks()}.vulkan.dlim")
         let route = gpu_resident_route_lever()
         set_gpu_resident_route(false)   //! the route off: the decline is this run's on every box, a device or none
         for (trimmed in [true, false]) {

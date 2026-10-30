@@ -8,7 +8,15 @@ layout the host reads through row-major kernels (`#streamed-layer-arena`), the s
 ring of experts (`#stream-slot-ring`) and the expert cache whose misses read off the lane
 (`#expert-cache`). The tier's decode era is in `ARCHITECTURE_GPU_VULKAN_DECODE.md`, the cm2
 tiles and the expert chain they carry in `ARCHITECTURE_GPU_VULKAN_GEMM.md`, the model's residency
-on the card in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`.
+on the card in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`. The form is both discrete homes': the Vulkan tier runs
+it over its command buffers and timelines (`dasllama_vulkan_prefill.das`, `dasllama_vulkan_decode.das`), the CUDA
+home over a copy stream and events (`dasllama_cuda_stream.das` - every `xf_*` of the Vulkan chain has a `cxf_*`
+twin: the ring positions, a bundle's three schedules built on the host and copied on the device stream, the copy's
+event waited by the chain and the chain's event waited by the copy that reuses its positions; the pool's DMA fill
+flushes as an event the device stream waits), and both keep one expert cache (`dasllama_gpu_stream_cache.das`: the
+stacks' pinned planes and slot tables, the resident set, the transient ring, the lane readers and the fetch; a home
+supplies its pinned memory through `set_stream_pinned_fns` and sources its DMA off a slot's buffer handle or host
+pointer). Where a paragraph below names a Vulkan function alone, the CUDA twin carries the same step.
 
 ### A streamed expert layer's prefill is split between the GPU and the CPU {#streamed-layer-split}
 
@@ -80,6 +88,15 @@ once, so no two rows of one dispatch add onto one position's row, and the add ne
 A head whose region held two slots of one position would race there - the per-expert chain never
 builds one, and the chain's test routes one slot a region for that reason.
 
+**The chain's act takes the window's routed form.** The driver sets the layer's form around a streamed window
+(`rdec_stream_form_set`: `moe_gpu_ffn_form` with the clamped swiglu's act code and, on a biased model, the row base of the
+layer's gate and up bias rows in the resident driver's planes - `bias_resident`, the ordinal of the routed layer - beside
+the window's regions' experts through `moe_gpu_ffn_experts`, since a pool region's offsets name a slot and not an
+expert), and each bundle's command runs the act under it (`xf_act_enc`, the CUDA home's `cxf_act`): plain into the f16
+hidden plane, or the biased twin (`actf16_b_cls`) over the bundle's rows' experts - the row-expert ring beside the grid
+list, copied chunk-local into `comb_rex_dev` behind the command's barrier - and the driver's bias planes; the whole-layer
+form the same through `ffn_rex_fill`'s words. A plain model sets no form, and the act is the silu or gelu the call names.
+
 **The two partial outputs reduce into one combine.** The host's rows sit in the window's slot
 rows under the weights of the experts it took (`moe_w_cpu`, zero for the device's experts), the
 device's in the joined accumulator, and the caller sums the two. Where the split CAN engage -
@@ -97,10 +114,13 @@ transfer queue DMAs from.** The vulkan lane's `vkblob` section holds the device 
 placed expert, the streamed layers' included; a mapped load names the file and that section's
 place in it (`vk_image_source_set`), the slice walk records a streamed entry's two file offsets
 instead of copying its twin out of the mapping (`moe_gpu_stream_source`), and the stack reads its
-planes off the file straight into its pinned memory (`vk_read_plane`: a seek and a 64-bit read),
+planes off the file straight into its pinned memory (`stream_read_plane`: a seek and a 64-bit read),
 so the mapping's expert pages are never faulted - on the reference box the 30B's warm load drops
 from 8.5 to 7.7 s and its peak working set by the streamed layers' twin, 8 GB (`DASLLAMA_VK_STREAM_FILE_READ`
-against `=0`, the prefill rotation rows of `PERF_LEDGER.md`). A chunk-built image
+against `=0`, the prefill rotation rows of `PERF_LEDGER.md`). The CUDA home's own lane
+(`ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint`) feeds the same cache, its misses read off that lane by the same
+readers; a load with no lane behind it (`DASLLAMA_IMAGE=0`, a live regather) copies its stacks off the gathered planes
+whole on either home, the budget's ask said once. A chunk-built image
 has no file and copies as before (`DASLLAMA_VK_STREAM_FILE_READ=0` is the same arm on a file); the
 mapped-image import (`VK_EXT_external_memory_host`) stays the first choice where a driver takes it,
 and the NVIDIA Windows driver does not. Under the file-read arm the tier never tries the import: the
@@ -108,7 +128,17 @@ planes land in mirrors of the stack's own, so the mapping's window has nothing t
 NVIDIA Windows driver a refused file-backed import leaves the next host-cached allocation refused as
 well.
 
-**The host's share reads those same planes through row-major kernels.** Every generated CPU kernel
+**The host's share reads those same planes through row-major kernels where the load kept no planar
+planes.** `rare_arena_serves` is the gate: a trimmed lane holds a streamed expert once, so its host picks
+and window rows read the pinned mirror; where the planar planes are loaded - a lane minted untrimmed,
+`DASLLAMA_IMAGE=0` - the tuned planar kernels serve them and the mirror
+is the device's alone, because the row-major bodies trail the planar kernels: on the reference box (RTX 5060 Ti,
+`debug-jit`) the 35B UD-Q4_K_M's host step reads 354 us a layer-token through the rail against 305 on the planar
+k4/k5 kernels - tg128 60.06 against 64.52 tok/s on the CUDA home and 51.92 against 56.84 on the Vulkan home at the
+strict 32k, 7% and 9% of the decode (the dasCUDA host-experts rows of `PERF_LEDGER.md`; the file's committed Vulkan
+board row is `performance/records/rtx5060ti.json`'s, minted before the gate); `set_rare_arena(1)` pins the rail on the planar planes too, the formats witness's arm, and
+`DASLLAMA_RARE_ARENA=2` is its environment twin, the row-major kernels' A/B arm.
+Every generated CPU kernel
 walks the grp<mr> interleave the CPU repack lays rows out in, and the device planes are row-major -
 a row's blocks one after another - so the rare rail reads them through a second kernel shape
 (`dasllama_gemm_gen.das`, `rm_rows_walk` and its bodies): a vector holds 32 weights of one row, the
@@ -119,7 +149,16 @@ codes under the unsigned one with q51's m term on the activation sum), and the s
 (a superblock an iteration, its eight blocks' codes off the device's k / k+16 nibble pairing with the
 fifth and high bits deposited from the block's qh bytes and the 2-bit lanes off their byte fields,
 each vector's dot widened through the sub-scales a quarter, the min and offset terms as scalars off
-the Q8_K sums, one fold a superblock under d times the activation scale). Each format is its own
+the Q8_K sums, one fold a superblock under d times the activation scale). On the 256-bit x64 arm k4 and k5 take
+the pair form (`rm_pair_codes`, `rm_sb_min_vec`): one 32-byte load holds two blocks, its low nibbles both blocks'
+low strips and its high nibbles their high strips (the k / k+16 pairing), the activation's two blocks re-split the
+same way, the two strips' pmaddubsw pair sums added in i16 and widened under the pair's sub-scales by one pmaddwd,
+k5's fifth bits off the two blocks' eight qh bytes in one spread, and the min term one vector a superblock - the
+eight mins times the eight 32-blocks' activation sums off the Q8_K strip sums - folded under -dmin x xs; the
+other widths and NEON keep the block-a-vector walk. The pair form halves a core's time over the 35B's K-quant
+planes (k4 80 -> 48 us, k5 100 -> 64 at n=2048 d=768, one thread); the token's host step at sixteen lanes streams a
+layer's picks at the box's DRAM ceiling either way, so what the rail still trails the planar path by on a token is its
+per-layer structure (the dasCUDA host-experts rows of `PERF_LEDGER.md`). Each format is its own
 `[tune]` family (`<fmt>q8_rm_gemv_gen`, `dasllama_math_gen.das`, the shared perms over the maddubs,
 vpdpbusd and sdot lattices, a scalar decode of the device layout the reference) with its four-token
 tile as the companion (`<fmt>q8_rm_tile4_gen`: every row against four activation rows at a row's
@@ -146,10 +185,16 @@ the mirror took, where a resident layer's slot gathers off the planar planes. So
 serve no call of the driver at all.
 The stream mirrors are host-CACHED memory: a write-combined mapping reads at tens of MB/s a core
 whatever reads it, and the DMA source rate is the same either way. The host twin - the tier's own
-block decode run on the CPU (`vk_host_twin` / `vk_host_rows`, `dasllama_math_vulkan.das`) - is the
+block decode run on the CPU (`host_twin` / `host_rows`, `dasllama_gpu_host_twin.das`: the discrete templates stamped
+with no dispatch home, registered by whichever home arms) - is the
 test oracle of the device layout: `tests/test_vulkan_host_twin.das` holds the twin and every
 row-major kernel, GEMV and tile, to the planar kernels, device-free, and the model-level matrix is
 `tests/test_gpu_resident_moe_formats.das`.
+
+The host's copies between a streamed stack's pinned planes and the rail's planes split across the job
+queue's lanes (`par_memcpy`, in `PAR_COPY_CHUNK` pieces; a copy under two pieces, or with no job queue,
+runs as one memcpy): a hop moves 8 to 34 MB, one lane's memcpy runs well under the box's DRAM rate, and
+the lanes sit idle while the GPU owns the layer.
 
 ### The streamed slot is the chain's ring of experts {#stream-slot-ring}
 
@@ -200,8 +245,8 @@ expert rounded up a page plus one, since a slot takes its expert's lane span wid
 and the expert's bytes start the lane skew in (`stream_page_span`; the lane packs experts at their
 natural stride). `DASLLAMA_EXPERT_READERS` threads loop on a request channel, each with its own
 buffered handle of the lane and a page-aligned bounce of one slot, and answer on a second channel
-(`vk_stream_readers_make`); a request claims a slot round robin and queues the read
-(`vk_stream_request`), ready says whether it landed (`vk_stream_ready`), and fetch is the two in turn.
+(`stream_readers_make`); a request claims a slot round robin and queues the read
+(`stream_request`), ready says whether it landed (`stream_ready`), and fetch is the two in turn.
 The reads are buffered, not direct: the lane stays mapped for the planes the host reads, and the
 kernel serializes unbuffered reads of a mapped file behind its coherency flush - eight readers at one
 reader's rate, 0.77 against 1.97 GB/s unmapped on the reference box's NVMe - where buffered reads
@@ -209,13 +254,13 @@ through the same cache keep their parallelism (1.68 GB/s mapped), and the pages 
 standby (`harness/kq_disk_rail_probe.das` reads the kernels, the rates are the prefill rotation
 rows of `PERF_LEDGER.md`). A channel's timed pop waits only while a job is outstanding, so each channel carries one
 for the readers' lifetime; the readers quit at the ring's drop and at the context's shutdown
-(`vk_stream_readers_quit`, a `[finalize]`), since the job queue's teardown waits on every thread.
+(`stream_readers_quit`, a `[finalize]`), since the job queue's teardown waits on every thread.
 A reader's answer to the quit order is its last touch of either channel - it releases its two
 references first - so once every reader answered the main context's reference is the last and
 `channel_remove` frees the channels (a release alone never frees one: the exit-time dump would list
 them at zero references). A reader that never answers keeps its references, and the channels stay with it.
 Every slot frees at the window's join, the window sum's end and the decode step's end
-(`vk_stream_ring_release`), a read still in flight landing first.
+(`stream_ring_release`), a read still in flight landing first.
 
 **The meet claims over what has arrived.** The window's experts are queued in the list's order, the
 busiest first, before the requant; the device takes bundles off the ready prefix, the host takes the

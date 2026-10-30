@@ -9,7 +9,8 @@ options _dasllama_internal = true
 // JIT (loop hints only bite there — see dasllama_tune), correctness-gates every variant vs an f64
 // reference over every element the kernel writes (exact equality for the requant; TOL relative
 // elsewhere, a REJECTED row names it), and reports each variant's time as a DELTA vs that kernel's
-// SHIPPED fallback perm - the baseline arm; a report row's rounds follow one warm round it drops.
+// SHIPPED fallback perm - the baseline arm; a report row's rounds follow one warm round it drops, and the knee-race rows
+// (the discrete homes' short-window split, `knee_arms_us`) follow two warm rounds of each arm they drop.
 //
 // Run:  bin/daslang -jit modules/dasLLAMA/harness/tune_kernels.das, then rebuild/rerun the model
 // with -jit to pick up the sidecar (it re-keys the JIT DLL cache). The debugging concession is
@@ -2076,6 +2077,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat one-bench-per-kernel rail;
     if (!partialMint) {
         dasllama_metal_knee_race()
         dasllama_vulkan_knee_race()
+        dasllama_cuda_knee_race()
     }
 
     load_incumbents()

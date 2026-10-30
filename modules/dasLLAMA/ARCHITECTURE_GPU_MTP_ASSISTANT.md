@@ -1,9 +1,10 @@
 # dasLLAMA Architecture - the gemma-4 assistant drafter
 
 Companion to `ARCHITECTURE_GPU_MTP.md`; a section is cited by its anchor. This document carries the gemma-4 assistant
-drafter on both GPU homes: one drafter step, the sidecar and the attach, and the speculative rounds of a scheduler tick.
+drafter on every GPU home: one drafter step, the sidecar and the attach, and the speculative rounds of a scheduler tick.
 The Metal round's queue order and the accept walk it shares are `ARCHITECTURE_GPU_MTP.md#mtp-round-one-join`, the batch
-driver's same-slab rows `ARCHITECTURE_GPU_MTP.md#batch-same-slab`; the Vulkan driver's draft command and verify are
+driver's same-slab rows `ARCHITECTURE_GPU_MTP.md#batch-same-slab`; the discrete homes' draft command and verify - the
+Vulkan driver's, and the CUDA driver's twin over its own kernel classes and graphs - are
 `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter`. The engine charter of the backend-free file
 (`dasllama_mtp_gemma.das`) is in `ARCHITECTURE_ENGINE.md`.
 
@@ -42,8 +43,10 @@ other type refuses naming the tensor and its type, and the trunk serves plain. E
 input the draft ids index, and no sidecar exists for one - then the hidden width against the drafter's `tdim`, then each
 drafter layer's capture layer (the trunk's last layer of its attention class) against the drafter's head size, kv heads
 and class. Each GPU home registers its seams (`MtpAssistantSeams`, `register_mtp_assistant`) and refuses a trunk it does
-not serve - Metal a trunk that is not the metal-blob flavor or whose table the device does not gather, Vulkan one the
-resident driver does not serve whole - before it reads the sidecar; the facade attaches on the home that takes the trunk
+not serve - Metal a trunk that is not the metal-blob flavor or whose table the device does not gather, Vulkan and CUDA
+one their resident driver does not serve whole or whose N-row token command declined (a trunk with routed experts on the
+host: the round's verify rides that command, which has no host-experts form on either discrete home) - before it reads the
+sidecar; the facade attaches on the home that takes the trunk
 and logs every home's refusal where none does. One drafter attaches at a time, and the attach selects the assistant
 round kind, so `get_mtp_depth` serves `runtime.mtp_depth_assistant`.
 
@@ -58,9 +61,9 @@ position, a round past its context or - on Metal - a mirror short of the round's
 draft their chain at their own anchor from their own token and carried hidden; on Metal every chain encodes at the head of
 the verify's first command buffer, its inputs written into a slot a stream, the token rows a stream's group in one token list. One verify
 then carries every warm stream's [token, drafts]: on Metal the batch driver's same-slab step in groups
-(`verify_batch_groups`, a group a stream's consecutive rows over its own mirror), on Vulkan the N-row token command
-(`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter`). Both homes open the round through one gather
+(`verify_batch_groups`, a group a stream's consecutive rows over its own mirror), on Vulkan and CUDA the N-row token
+command (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter`). Every home opens the round through one gather
 (`mtp_round_gather`: each stream's round begun, its depth under its cap, the home's cold test answering a plain step or the
-stream's word - the Vulkan region it binds), and each stream's accept walk and host commit are the shared pair
+stream's word - the region a discrete home binds), and each stream's accept walk and host commit are the shared pair
 (`mtp_accept_walk`, `mtp_round_commit_host`); its carry becomes the verify's hidden row at the accepted count. Each home
 keeps its rounds' tallies as one `MtpAssistantStats`, reset at the attach, which its `stats` seam answers.

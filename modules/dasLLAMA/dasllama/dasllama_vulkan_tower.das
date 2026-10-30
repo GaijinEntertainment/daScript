@@ -1067,7 +1067,7 @@ def q8_gemv_set(f : Q8GemvFeed; meta : uint64; y : uint64; y_bytes : int64; y_bi
 
 //! a q8 site's GEMV over `ncols` rows of `n_in` into `nreg` regions of `d_out` outputs a row
 def q8_gemv(raw : VkCommandBuffer; var h : VkHaz; var site_set : VkDescriptorSet; n_in, d_out, nreg, ncols : int64) {
-    var pc = GemvArgs(n = uint(n_in), d = uint(d_out), nreg = uint(nreg), ybase = 0u, lanes_per_row = 0u, act = 0u, bias_on = 0u, gboff = 0u, uboff = 0u,
+    var pc = GemvArgs(n = uint(n_in), d = uint(d_out), nreg = uint(nreg), ybase = 0u, lanes_per_row = 0u, act = 0u, bias_on = 0u, gboff = 0u,
         ncols = uint(ncols), ystride = uint(nreg * d_out))
     gemv_enc(int(KqFmt.q8), raw, h, site_set, pc, nreg * d_out)
 }

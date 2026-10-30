@@ -10,7 +10,6 @@ require dasllama/dasllama_kqformat   // KqFmt - the PLE table's tag
 require dasllama/dasllama_gpu_resident   // resident_plan - the table's seat
 require _format_census   // census_cell - the per-layer planes in their own formats
 require daslib/fio
-require math   // nolint:STYLE030,LINT019 - abs, read in the vulkan half
 require strings
 require dasllama/dasllama_ple   // ple_cpu_pre_rows - the CPU pre-step's witness
 require dasllama/dasllama_common   // Model, embed_row, forward, forward_prefill
@@ -127,7 +126,7 @@ def test_gpu_resident_gemma4_e2b_ple_planes(t : T?) {
             let sdot0 = empty(spec.tile) ? 0l : census("{spec.tile}_cls_spv")
             let f16t0 = empty(spec.tile) ? 0l : f16_tile_count(spec.tile)
             var inscope gv0 <- [for (g in gemvs); format_gemv_count(g)]
-            let staged = staged_window_tile()
+            let staged = armed && staged_window_tile()   // the tile pick reads the device: a carrier the rig never armed has none to read
             let route = staged ? " [the staged tile, DASLLAMA_VK_PLE_F32_TILE on]" : " [the scalar f32 tile]"
             gemma_forced_feed(t, 40l, gf, spec.f32, staged ? F32_DIST_REL_STAGED : F32_DIST_REL, route)   //! the Q4_K_M file's CPU q8 chain sits off its f32 chain at one step: its `exact` form
             return if (!armed || act0 == NO_CENSUS)
@@ -223,18 +222,7 @@ def test_gpu_resident_gemma4_e2b_ple_pre_step(t : T?) {
                     served_every_call(t)
                     var dev : array<float>
                     vk_rdec_ple_side_row(dev)
-                    var inscope cpu <- cpu_side_row(tr, tok)
-                    var inscope other <- cpu_side_row(tr, tok + 1l)
-                    let mx = logits_maxdiff(dev, cpu)   //! a NaN on either side reads as infinite
-                    let off = logits_maxdiff(dev, other)
-                    var big = 0.0   //! the bar's scale: the CPU row's largest finite magnitude
-                    for (v in cpu) {
-                        big = max(big, abs(v))
-                    }
-                    let bar = 1e-4 * big
-                    to_log(LOG_INFO, "e2b pre-step: device side row against the CPU's: maxdiff {mx}, another token's {off} (bar {bar}, largest {big})\n")
-                    t |> success(mx <= bar, "the device side row within 1e-4 of the CPU's largest ({mx} of {bar})")
-                    t |> success(off > bar, "another token's CPU row lands outside the bar ({off})")
+                    side_row_within(t, dev, tr, tok, "the step's row", 1e-4)
                     delete dev
                     delete sg
                     delete prompt
@@ -267,17 +255,6 @@ def test_gpu_resident_gemma4_e2b_greedy_chain(t : T?) {
         return if (!arm_on(t, "g4e-chain"))
         greedy_chain_cell(t, path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf"))
     }
-}
-
-//! the CPU pre-step's side row of `tok` on a scratch session: the scaled embedding row, then `ple_pre_decode`
-def private cpu_side_row(tr : Model; tok : int64) : array<float> {
-    var s <- make_run_state(tr.config)
-    embed_text_rows(tr, [tok], s.x, 0l)
-    ple_pre_decode(tr, s, tok)
-    let n = tr.config.n_layers * tr.config.n_embd_per_layer
-    var row <- [for (i in range64(n)); s.ple_inp[i]]
-    delete s
-    return <- row
 }
 
 //! the tied F16 token table (arm `g4e-f16`, the `-local` mint of `../performance/model_specs.das`): no device plane carries the

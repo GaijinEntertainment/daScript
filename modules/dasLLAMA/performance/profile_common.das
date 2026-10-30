@@ -2133,7 +2133,7 @@ struct InputFile {
 //! `cmd` is the reproduction receipt: the exact invocation that produced the numbers.
 struct BenchRun {
     engine : string          // "das" | the reference engine's stored name (pinned by tests/test_bench_records_schema.das) | ASR references ("whisper-cli", "parakeet-cli", "llama-mtmd-cli", "onnx", "nemo")
-    backend : string         // "cpu" | "metal" | "vulkan"
+    backend : string         // "cpu" | "metal" | "vulkan" | "cuda"
     flavor : string          // das: "tuned" | "accel" (+AMX tier); reference build flavor: "stock" | "clean-cpu"
     box : string
     threads : int

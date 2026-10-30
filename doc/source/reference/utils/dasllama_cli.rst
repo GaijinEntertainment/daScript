@@ -112,7 +112,7 @@ server's names; the config file fills whatever they leave empty (below).
    * - ``--kv-dtype``
      - KV cache codec: ``f32`` | ``f16`` (default) | ``q8_0`` | ``tq4`` (rotated 4-bit; needs a power-of-two head size); under ``--gpu vulkan`` the whole-model driver holds its cache in the same codec for ``f16``, ``q8_0`` and ``tq4``
    * - ``--gpu``
-     - GPU backend: ``auto`` (default: metal or vulkan when detected, else CPU) | ``off`` | ``metal`` | ``metal-required`` | ``vulkan``; ``vulkan`` serves a model that fits the card whole from the device, the conversation's cache with it
+     - GPU backend: ``auto`` (default: metal, else the home ``DASLLAMA_CUDA`` spells, else vulkan when a Vulkan device answers, else cuda when the CUDA home answers, else CPU) | ``off`` | ``metal`` | ``metal-required`` | ``vulkan`` | ``cuda``; ``vulkan`` and ``cuda`` name the discrete home: the whole-model driver serves a model that fits the card whole from the device, the conversation's cache with it
    * - ``--metal``
      - Metal serving mode when ``--gpu`` is unset: ``off`` | ``auto`` | ``required``
    * - ``--gpu-layers``

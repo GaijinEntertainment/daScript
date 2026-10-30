@@ -4388,6 +4388,11 @@ struct GkTopKArgs {
     raw : uint       //! select on the raw logits, no softmax (the Metal stamp's gpt-oss softmax_weight: the softmax runs over the picks)
 }
 
+//! a `GkTopKArgs` with the routing fields both homes fill alike - the pick (`ne`, `k`, the renormalize, the weight scale), the
+//! logits row stride, the router bias row base and the down-scale row base; the caller adds its planes' bases and strides
+def gk_topk_routing(ne, k : int64; norm_topk : bool; wscale : float; lstride : int64; router_bias : bool; rboff, dsoff : uint) : GkTopKArgs =>
+    GkTopKArgs(ne = uint(ne), k = uint(k), norm = norm_topk ? 1u : 0u, wscale = wscale, lstride = uint(lstride), rbias_on = router_bias ? 1u : 0u, rboff = rboff, dsoff = dsoff)
+
 //! The router's select over one row of `ne` logits: the softmax (max, exp floored at -80, sum) unless `raw`, then k picks of the
 //! largest, the lowest expert on a tie, landing in `pick` / `pickw` for the stamp to write; lane `tid` holds experts tid + i x
 //! LANES for i < DEPTH (a workgroup of LANES lanes - one simdgroup on Metal, 256 on Vulkan); `pick_weight_into` is the renorm
@@ -4849,6 +4854,20 @@ class template GkMoeCombine : GkQ8BlockStore {
             let g = bkt_grid[pa.r0 + b]
             let p = g / k
             acc_rows[p * n + i] += slot_w[g] * down_rows[(pa.goff + b) * n + i]
+        }
+    }
+
+    //! the workgroup's row over its elements, 256 lanes striding: a position's row, or under `BYROW` a window row's onto its position
+    [spirv_inline]
+    def comb_body {
+        var i = gl_LocalInvocationID.x
+        while (i < pa.n) {
+            static_if (BYROW) {
+                comb_row_elem(gl_WorkGroupID.x, i)
+            } else {
+                comb_elem(gl_WorkGroupID.x, i)
+            }
+            i += 256u
         }
     }
 }

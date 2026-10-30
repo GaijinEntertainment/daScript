@@ -79,6 +79,32 @@ let private GEMMA_DRAFTER_ARCH = "gemma4-assistant"
 let private Q8_BLK_BYTES = 34l
 let private Q8_BLK_ELEMS = 32l
 
+//! the drafter's q8 GEMV sites as the discrete homes' graphs order them: the three step projections, then five a layer
+let G_PRE = 0
+let G_POST = 1
+let G_CLS = 2
+let G_LAYER0 = 3
+let G_PER_LAYER = 5
+
+//! layer `l`'s GEMV site `site` (0 q, 1 o, 2 gate, 3 up, 4 down)
+def g_layer(l : int64; site : int) : int => G_LAYER0 + int(l) * G_PER_LAYER + site
+
+//! the q8 tensors of the drafter in the planes' order: (byte offset in the GGUF blob, elements) - the GEMV sites' order
+def q8_tensors(dr : GemmaDrafter) : array<tuple<boff : int64; n : int64>> {
+    var out <- [(boff = dr.pre_proj_off, n = 2l * dr.tdim * dr.dim), (boff = dr.post_proj_off, n = dr.dim * dr.tdim),
+        (boff = dr.tok_emb_off, n = dr.dim * dr.vocab)]
+    out |> reserve(3l + int64(G_PER_LAYER) * dr.n_layers)
+    for (l in range64(dr.n_layers)) {
+        let qd = dr.n_heads * dr.hs[l]
+        out |> push((boff = dr.wq_offs[l], n = dr.dim * qd))
+        out |> push((boff = dr.wo_offs[l], n = qd * dr.dim))
+        out |> push((boff = dr.w1_offs[l], n = dr.dim * dr.hidden))
+        out |> push((boff = dr.w3_offs[l], n = dr.dim * dr.hidden))
+        out |> push((boff = dr.w2_offs[l], n = dr.hidden * dr.dim))
+    }
+    return <- out
+}
+
 // one planned tensor copy: where it lives on disk and where it lands in blob/fblob
 struct private DrPlan {
     ti : int
@@ -326,6 +352,40 @@ def private copy_planned(var dr : GemmaDrafter; m : GGUFMeta; bytes : array<uint
             gguf_read_tensor_f32(m, bytes, m.tensors[pl.ti].name, dr.fblob, pl.dst, pl.n)
         }
     }
+}
+
+//! what an armed resident driver holds of the trunk, as a discrete home's attach reads it (`drafter_trunk_why`)
+struct public DrafterTrunk {
+    served : bool               //! the resident driver serves the trunk whole
+    hc : bool                   //! a hyper-connection trunk
+    emb_table : bool            //! the device holds a token table to gather the seed rows from
+    assist_rows : int64         //! the rows the N-row token command takes (`gpu_resident_assist_rows`)
+    own_kv : array<bool>        //! per trunk layer: it keeps K/V rows of its own on the device
+}
+
+//! why the `home` (the word in the refusal: "Vulkan", "CUDA") resident driver holding `f` cannot take the drafter ("" = it can):
+//! the device must hold the trunk whole on the resident driver, gather its token table, run the N-row command a round's verify
+//! rides, and hold the capture layers' K/V rows itself
+def public drafter_trunk_why(home : string; f : DrafterTrunk; dr : GemmaDrafter) : string {
+    if (!f.served) {
+        return "the {home} resident driver does not serve the trunk whole (the load log names why)"
+    }
+    if (f.hc) {
+        return "a hyper-connection trunk"
+    }
+    if (!f.emb_table) {
+        return "the device holds no token table to gather the seed rows from"
+    }
+    if (f.assist_rows < 2l) {
+        return "the N-row token command declined the trunk (its line above), and the round's verify rides it"
+    }
+    for (l in range64(dr.n_layers)) {
+        let kvl = dr.kv_layer[l]
+        if (kvl < 0l || kvl >= long_length(f.own_kv) || !f.own_kv[kvl]) {
+            return "the capture layer {kvl} keeps no K/V rows of its own on the device"
+        }
+    }
+    return ""
 }
 
 //! Resolve `kv_layer` against the target's layer count: a sliding drafter layer reads the target's

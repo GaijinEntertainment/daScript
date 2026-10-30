@@ -2134,7 +2134,7 @@
     their parity cells - so the release-17 pod board (RTX PRO 4500) carries six LLM pairs and no audio or image row.
     Done = a Vulkan leg on the asr, tts and image passes, each das cell paired with the reference's own GPU build (a
     whisper.cpp and an mtmd Vulkan build at `-ngl 99`, NeMo and the TTS packages on CUDA) through `asr_gpu_pair_tool` and
-    the TTS seats' roster, `vulkan_leg_refusal` admitting them, `test_gen_records_args.das` holding the pairing, and the
+    the TTS seats' roster, `gpu_leg_refusal` admitting them, `test_gen_records_args.das` holding the pairing, and the
     pod board re-measured with those rows - `DASLLAMA_GPU=1 bin/daslang modules/dasLLAMA/performance/gen_bench_records.das
     -- --legs vulkan -w all --ref-vulkan <the vulkan flavor's llama-bench>` on a dasVulkan build on the RunPod RTX PRO
     4500 pod, `WHISPER_CPP`, `MTMD_BIN` and `NEMO_PY` naming those Vulkan and CUDA reference builds.
@@ -2177,25 +2177,6 @@
     modules/dasLLAMA/performance/gen_bench_records.das -- -w llm --backend cpu -o <model>` over the four carriers on an
     AWS m8i box, `--ref-clean` naming the clean-cpu `llama-bench` `benchmarks/setup_lcpp_ref.das` builds at
     `DEFAULT_REF_SHA`, no other environment setting.
-
-226. **The CUDA home's stamps that wait on their families.** Seven discrete templates have a Vulkan stamp and no CUDA
-    stamp (`DISCRETE_ONE_HOME_STAMPS` in `REVIEW.das` names them for the stamp census), each a family or a fused form
-    the CUDA home does not serve yet: `DaAttnBWT` and `DaAttnBH128T` (the batched attention at wide and 128 heads; the
-    CUDA window declines past 512 and sends every other width to `DaAttnBT`), `F32RowsKhrT` (the MoE router's f32
-    rows on the KHR tile), `FaH512T` (the flash tile past 256), `Mx4GemvGuT` (MXFP4's fused gate + up + act + requant;
-    the CUDA token step runs the three dispatches), `Q8GemvPleActT` (gemma-3n's PLE), and `ArCombG4T` (gemma-4's routed
-    residual combine); the CUDA leaves the home never dispatched (the paired N-column Q8 forms, the f32 gather) went
-    with them. Done = each returns as one leaf the day the CUDA driver
-    dispatches it, under `REVIEW_GPU_KERNEL_CLASSES.md`'s stamp census, and its name leaves the gate's set.
-
-227. **The CUDA home answers to the Vulkan home's name in the records and the image rail.** `lcpp_bench` stamps every
-    device-tier row `vulkan` (`BenchRun.backend` at its three sites), the records rig keys its device leg on that word
-    (`gen_bench_records`'s legs, the schema's `stored_row_leg`, the site projection), and `image_lane_name` folds every
-    `vulkan*` tag into the one `vulkan` lane, so a CUDA mint and a Vulkan mint of one file share a `.dlim` (the CUDA home
-    serves off the lane's planar families, so the twin it maps is the Vulkan home's). Done = a `cuda` backend value on the
-    bench row and a `cuda` leg in the records rig paired with llama.cpp's CUDA build (`--ref` on the pod's `build-cuda`
-    `llama-bench`), the site printing it, and a ruling on the lane - its own `cuda` lane, or the shared lane renamed for
-    both discrete homes, which re-mints every box.
 
 228. **Vulkan-only text inside the shared companions.** The sections that moved whole from the Vulkan documents into
     `ARCHITECTURE_GPU_SHARED_GEMM.md`, `ARCHITECTURE_GPU_SHARED_ROWS.md` and `ARCHITECTURE_GPU_SHARED_ATTN.md` keep their
@@ -2342,21 +2323,6 @@
     layer's `rot` (it passes the head today, as no partial-rope dense model reached it), and the file served on the
     CPU and both discrete homes through the forced-feed form, within the phi bar.
 
-244. **Phi-3.5-mini's one-row steps after a short prompt sit past the llama bar on the CUDA home.** After the 40-token
-    `resident_prompt` the steps at positions 41 and 44 read 2.64 and 2.75 of a 34 and 42 max logit apart from the CPU
-    chain (7.7 and 6.6 percent against the 6 percent bar), the same on the h96 flash tile and on the chunked pair, the
-    argmax the CPU's at every step; the two-window prompt's steps hold the bar at 0.5 to 1.5, and the fixture's
-    one-step-off rows sit 3.17 of 49 apart at one of them, so a wider bar lets the control through (the readings: a
-    one-window `cuda_forced_feed` arm of `tests/test_gpu_resident_cuda_phi3.das` run through `tests/run.das` on the 5060
-    Ti, not kept in the file; `PERF_LEDGER.md`, the dasCUDA arc's "CUDA resident bars" entry).
-    `tests/test_gpu_resident_cuda_phi3.das` holds the two-window arm of the Q4_K_M file meanwhile. The site is the
-    K-quant one-row decode chain, not the attention: on the Q8_0 file both homes read 0.21 to 0.73 of bars of 1.9 to
-    2.9 at every step (the file's cells in the same test), while on the Q4_K_M file the Vulkan home reads 1.40 and 2.42
-    at the same two steps (bars 2.06 and 2.50) and the CUDA home 2.64 and 2.75, the f32 mirror moving neither. Done =
-    the CUDA home's K-quant one-row chain brought to the Vulkan home's rounding at that step - the arms the K-quant chain
-    alone takes (`followup_vulkan.md` item 75's list: the split add+rms and the Q8_K requant a site) compared between
-    the homes on the phi shapes - and the one-window arm of the Q4_K_M file back at the llama bar.
-
 245. **The int8 MMQ window GEMM serves the 32-wide-scale formats but Q5_K; the rest stay on the f16 tiles.** (The Q5_K
     figure: the 27B NVFP4 window entry of `PERF_LEDGER.md`, the dasCUDA deltanet leg - 24 ms of the 375 ms window on
     the f16 cm2 tiles against llama.cpp's int8 path.) `MmqT`
@@ -2442,14 +2408,6 @@
     board box that can mint the cell - the das `cpu/tuned` row everywhere, the `metal` row and the `crispasr` Metal
     reference on the Apple boxes, the `crispasr` CPU and `onnx` references wherever `setup_asr_rig --refs --venvs`
     builds them - and puts each row beside the ledger entry's figure in its own dated entry.
-249. **The CUDA home keeps a sliding layer's mirror rows flat.** Every kernel the home stamps takes its `ring` field, and
-    the plan would seat the rings, but the home's row movers (`cud_rdec_kv_sync`, `cud_rdec_kv_read`) copy a layer's rows
-    end to end from row 0, so the home declares `install_moe_gpu_resident_kv_ring(false)` and a sliding model's mirror
-    holds a row a position (`ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`): gpt-oss at the default 131072-position ask
-    charges 24 flat layers where the Vulkan home charges 12 rings of 4224 rows. Done = the movers walking a ring through
-    the Vulkan accessors' twins (`rd_mir_row`, `rd_ring_runs`), the flag dropped, and the CUDA gpt-oss cells holding
-    under the ring on and off as `test_gpu_resident_gemma3_ring` does on Vulkan.
-
 251. **The dense FP4 site's width lattice.** The FP4 tile (`MmqFp4T`) runs a k tail under `KTAIL` for the routed mx4
     pieces alone (gpt-oss's 2880 = 22 full k128 steps and a k64); the dense nv4 site still asks a reduction width on the
     256 lattice (`crd_site_mmq`), so an NVFP4 model whose dim or hidden sits off it falls to the cm2 tiles. Done = the
@@ -2464,34 +2422,15 @@
     "27B NVFP4 window on the pod" entry) reads the FP4 leaf at k 128 a step on a two-deep cp.async ring against
     llama.cpp's k 512 and stream-k, 1.15x to 1.36x a call, 13 ms of the 375 ms window. Done = the tile at a deeper k
     step or ring, raced against the shipped stamp on the 27B shape, the entry's rows re-read.
-254. **The discrete file's host-side shape functions belong in `dasllama_gpu_math.das`.** `dn_scan_wgs`, `dn_conv_wgs`,
-    `dn_ba_wgs`, `router_gemm_wgs` and `topk_depth` read shape values alone and both discrete drivers call them, which
-    `REVIEW_PLACEMENT.md` sends to the math file; they sit beside the `DN_*` / `ROUTER_*` constants they read in
-    `dasllama_gpu_kernels_discrete.das`. Done = the functions and the constants they read in the math file, the kernel
-    file reading them from there.
-255. **The CUDA driver's host bookkeeping restates the Vulkan driver's.** The deltanet slot ownership and parity
-    functions (`crd_dn_*` / `cud_dn_*` against `dnd_*` / `vk_dn_*` / `pf_dn_*`, 26 members), the window's activation feed
-    builders (`crd_x_feeds_from`, the recurrent out site, the attention tail), the routed block's argument builders
-    (`crd_topk_args` and the `SchedArgs` blocks against the Vulkan ones), the window's dense FFN front (`crd_window_moe`
-    against `crd_window`), and the MXFP4 / NVFP4 feed passes (`mx4_chunk` / `fp4_chunk`; their test reader is one
-    `fp4_feed_value` over an `mx` flag already) differ only on the slot struct, the device copy call, the plane set or
-    the code width. Done = a shared owner record and generic functions in a host module both drivers require, feed and
-    argument builders beside their args structs in the discrete file, the window front folded as the token path's
-    `crd_ffn_hidden` is, the feed passes one `static_if (MX)` method.
-256. **The schedule's pad and the derivable scalars ride as push constants.** `SchedArgs.row_pad` / `m_only` are 0 on
-    every Vulkan dispatch and set only by the CUDA FP4 chain (`m_only` always `row_pad != 0`); `Fp4RowsArgs.uboff`
-    always equals `gboff`, `RouterGemmArgs.ostride` and `ActArgs.uboff` likewise on the CUDA stamps; the act kernels
-    read `pa.act` in their main loop. `REVIEW_GPU_KERNEL_CLASSES.md` wants a per-stamp constant for a value fixed per
-    stamp and one scalar for a derivable pair. Done = the pad a template constant of the CUDA schedule stamp, the
-    derivable fields dropped, the act code a template constant of each act stamp.
+256. **The act code rides as a push constant.** `ActArgs.act` is a value fixed per stamp, and the act kernels (`ActRqT`,
+    `ActF16T`) read it in their main loop; `REVIEW_GPU_KERNEL_CLASSES.md` wants a per-stamp constant for a value fixed per
+    stamp. Done = the act code a template constant of each act stamp, the field dropped.
 257. **CUDA driver arms no stocked fixture reaches.** The f32 beta/alpha arm (`dn_ba_f32`: `DnBaGemmT` on the window,
-    the f32 router GEMV on the step - every stocked hybrid file carries Q8_0, Q4_K or BF16 beta/alpha planes), the q8_0
-    / tq4 / f32 sink decode stamps (gpt-oss is the one sink carrier and runs on the f16 mirror), the two-deep select on
-    the token step (no CUDA carrier past 128 experts), `xe_own` and the class-mix requants (a shared expert of one
-    class beside routed stacks of another; k against v, z against qkv, alpha against beta of different classes), the
-    hybrid N-row command, the `moe_g4` and geometry declines, and the mixed-class `down_ar` term. Done = a fixture a
-    cell can load for each (a minted file, or a kernel cell where the arm is one dispatch), the arm's branch red
-    without it.
+    the f32 router GEMV on the step - every stocked hybrid file carries Q8_0, Q4_K or BF16 beta/alpha planes), the tq4 sink
+    decode stamps (gpt-oss, the one sink carrier, carries a Q/K/V bias, which steps a tq4 ask down to q8_0), the class-mix
+    requants of k against v and of alpha against beta, the `moe_g4` and geometry declines, and the mixed-class `down_ar`
+    term. Done = a fixture a cell can load for each (a minted file, or a kernel cell where the arm is one dispatch), the
+    arm's branch red without it.
 
 258. **The translation reference lives in the media rig.** `performance/setup_asr_rig.das` builds the pinned, patched
     `marian-decoder` (`benchmarks/nmt/patches/`) and the `nmt` oracle venv (`benchmarks/asr/requirements-nmt.txt`)
@@ -2525,3 +2464,99 @@
     embedding path within the Metal window's distance of the f32 model on those rows (`test_embeddings`'
     `EMB_FP32_BAR` cell, run on the CPU rail), or a measured reading that the cost of a wider activation row on the
     CPU q8 GEMVs outweighs it.
+
+266. **nv4 has no CPU emitter arm.** `kq_has_emitter` (`dasllama_gemm_schema.das`) leaves schema 49 out, so every
+    `nv4q8_*` stub declines on every rail and the NVFP4 CPU planes serve through the reference bodies at the grp4
+    layout - correct, and the only superblock format whose mr8/mr16 seats never emit. Done = the nv4 block body in
+    `dasllama_gemm_gen.das`: the mx4 codebook decode (`mx4_lut`, the doubled e2m1 table) on `emit_block_iq4xs`'s
+    sign-trick lattice with split lo/hi accumulators (the iq2 forms' shape), folded per 32-block by the two UE4M3
+    sub-block scales at half (`ue4m3_half_f32`'s law on a byte vector) and the per-superblock Q8_K scale; its
+    `panel_scales` / `panel_quads` / `panel_ioff` arms for the bf16 panel; 49 admitted to `kq_has_emitter`; the
+    TEST gate (`DAS_TUNE_MODE=test harness/gen_tune_probe.das`) green on every seat at its own mr, and the class
+    profiles re-minted with the family's crowns.
+
+267. **The `--tune` completeness verdict names the row-major GEMV families no tuner half races.** After a full
+    `--tune` mint of `dasllama-cli`, `llvm_tune` reports the scope incomplete, missing the twenty `<fmt>q8_rm_gemv_gen`
+    families (the streamed expert rail's one-copy GEMVs, `dasllama_math_gen.das`), while a plain start of the cli and
+    of the server on a profile without them races nothing and writes no sidecar - the demanded set differs between
+    the two paths. The 2026-10-21 class profiles carried those twenty entries; neither `gen_tune_probe` nor
+    `tune_kernels` races them now, so the 2026-10-30 profiles do not. Done = one demanded set for both paths (the
+    families the program compiles and the halves race), and the rm families either raced by a half or outside the
+    scope's demand.
+
+268. **The assistant drafter over a trunk with routed experts on the host.** Both discrete homes' N-row token command
+    declines a routed layer whose experts serve on the host (`vk_rdec_token_n_rows`, `cud_rdec_token_n_rows`), and the
+    drafter's round verifies on that command, so a card that holds the 26B only with its experts on the host (a 16 GB
+    card at any context) attaches no drafter, and `test_mtp_gemma_drafter.das`'s served arms skip there. Done = the N-row
+    command's host cut (the window chain's `crd_window_host_cut` form over a rows callback on the seat, the experts summed
+    on the host between the segments), the drafter's verify over it, the served arms running on a 16 GB card and the pod
+    alike.
+269. **The CUDA home's K-quant expert tiles trail the Vulkan driver's past one wave.** `harness/gemm_cuda_vs_vulkan.das --
+    --only moe` at gemma-4-26B-A4B's expert shape (`debug-jit`, the pod's RTX PRO 4500 on boost, us a dispatch, Vulkan / CUDA)
+    reads the k4 m tile (`CuK4Cm2M`, the e column's alias) at 214 / 231 over 32 regions of 128 rows - 0.90-0.96x the Vulkan
+    stamp at 32, 64 and 128 regions and 1.18x under one wave (16 regions) - and the k4 s tile at 504 / 516 (0.976x) over 128
+    regions of 32 rows; the iq3xxs and q51 tiles are at or ahead (q51 m 259 / 227, iq3xxs s 698 / 485, iq3xxs e 256 / 230),
+    and one block an SM reads 0.65-0.70x of the two-block tile, so the pair stays (`PERF_LEDGER.md`'s "gemma-4-26B-A4B on the
+    pod's plan" entry of 2026-10-28). The Q4_K_M file's pp512 reads 0.95x the Vulkan home's on the pod (CUDA 6278.2 and 6262.4
+    against Vulkan 6620.0 and 6629.3 tok/s in that entry's interleaved A/B, `lcpp_bench`, `debug-jit`). Done = the k4 m and s
+    stamps at or above the Vulkan stamps on the race's every region count (a persistent grid-stride tile, a B-fragment
+    prefetch, or what Nsight Compute names on `CuK4Cm2M` at the race's shape), and the Q4_K_M pp512 at or above the Vulkan
+    home's in the interleaved A/B.
+270. **Phi-3.5-mini's one-row steps after a short prompt sit at the llama bar on both discrete homes.** After the
+    40-token `resident_prompt` the step at position 44 reads 2.48 (CUDA) and 2.42 (Vulkan) of a 41.6 max logit apart
+    from the CPU chain - 5.96 and 5.8 percent against the 6 percent bar - and position 41 reads 1.55 and 1.40 of 34.3,
+    the argmax the CPU's at every step and the other six steps 0.7 to 1.4 apart, the two homes within 0.2 of each other
+    at every step; the two-window prompt's steps hold the bar at 0.5 to 1.5, and the fixture's one-step-off rows sit 4.8
+    of 48 apart at three of the steps, so a wider bar lets the control through; the CUDA kernels built without
+    `--use_fast_math` read 2.84 at the same step (`PERF_LEDGER.md`, the host-experts section's "Phi-3.5-mini Q4_K_M
+    one-window readings on both homes" entry of 2026-10-28). `tests/test_gpu_resident_cuda_phi3.das` holds the two-window
+    arm of the Q4_K_M file meanwhile, the Vulkan regions file the same. The site is the shared K-quant one-row decode
+    chain against the CPU reference, not a home: on the Q8_0 file both homes read 0.21 to 0.73 of bars of 1.9 to 2.9 at
+    every step. Done = the K-quant chain's arms (`followup_vulkan.md` item 75's list: the split add+rms and the Q8_K
+    requant a site) each pinned to the CPU reference's form on the phi shapes until the step reads under 4 percent, and
+    the one-window arm of the Q4_K_M file in both homes' files at the llama bar.
+271. **The tq4 sink decode stamps of both homes have no carrier.** The one sink carrier, gpt-oss, carries a Q/K/V bias,
+    which steps a tq4 ask down to q8_0 by the serving rule, so the Vulkan and the CUDA home's tq4 sink stamps of the decode
+    attention dispatch for no model. Done = the stamps deleted on both homes with their census rows, or a sink carrier
+    without the bias minted and a cell over it.
+272. **The records rig's `cuda` leg has no board rows.** `gen_bench_records --legs cuda`
+    (`ARCHITECTURE_MEASUREMENT_REFERENCE_ROWS.md#cuda-reference-rows`) exists and no `performance/records/<box>.json`
+    carries a `cuda` row: every CUDA-home figure in `PERF_LEDGER.md` is `debug-jit` from `lcpp_bench --for-debug-purposes`,
+    its exe named by the commit that landed the entry. Done = the leg minted on the author's CUDA board boxes (rtx5060ti,
+    rtxpro4500) with `--ref-cuda` against the b10660 CUDA build (a `cuda` flavor of `benchmarks/setup_lcpp_ref.das` at the
+    pin, or that build ledgered as a sanctioned case in the section above), the rows beside the dasCUDA entries' figures in
+    dated `PERF_LEDGER.md` entries, and the legs whose timed path the arc changed re-read on the released exe - the vulkan
+    leg's 35B UD-Q4_K_M and 26B Q4_K_M cells on rtx5060ti (the rare rail's gate, `rare_arena_serves`) and the cuda leg's
+    short windows (the `CUD_MMQ_S_ROWS` gate and the wave split).
+273. **The CUDA s stamp's short window trails the Vulkan driver's.** On a 20-row window of Llama-3.2-1B the split s column
+    serves every format on the pod, and the 4-bit lattice and K-quant stamps read 19-25 percent under the Vulkan home's
+    (IQ4_NL 4732 against 6013 tok/s, IQ4_XS 4308 against 5759, Q4_K_M 4906 against 6051, Q5_1 4383 against 5713, NVFP4
+    4335 against 5442; the dense Q8_0 files 0.84-0.94x at 20 and 32 rows), while the iq2 and iq3xxs stamps lead; at the
+    knee race's smallest grid the whole s tile takes 35 to 43 us a role where the Vulkan pair takes 17 to 21 us together
+    (`PERF_LEDGER.md`, the short-windows section of 2026-10-28, `debug-jit`). The split rule is not the gap - the s stamp's
+    lowering against the driver's and the window's residual steps are. Done = a kernel pass over the s stamp and the short
+    window's residual steps, raced against the Vulkan stamps at the window's shapes, the 20- and 32-row rows re-read at or
+    above the Vulkan home's.
+274. **Six host-side twins the two discrete homes keep are written twice, one body a home.** Each pair differs on the home's
+    primitive or driver record alone: the streamed per-expert chain's walkers (`dasllama_cuda_stream.das`'s `cxf_expert_copy`,
+    `cxf_push_copy`, `cxf_assign_land` / `cxf_land_done`, `cxf_bundle_lists`, `cxf_group_prefetch`, `cud_xf_pool_window`,
+    `cud_moe_ffn_xf_open` / `_begin` / `_join` against `dasllama_vulkan_prefill.das`'s `xf_*` and `vk_moe_ffn_xf_*`: the copy
+    primitive and the ring's retire token), the greedy chain's knob and host control (`cud_rdec_chain_*`, `crd_chain_snap_walk` /
+    `_drop` / `_settle` and `CrdChain` against the Vulkan decode's and `RdChain`), the recurrent slot's host logic
+    (`cud_rdec_dn_own`, `cud_dn_step_*`, `crd_dn_begin` / `_window_done` / `_end`, `crd_roll_alloc` / `crd_snap_alloc`,
+    `crd_window_caps`, `CudDnSlot` against the Vulkan twins and `DnStep`), the hot pool's submit and stats over the shared
+    `HotLayerGeom`, the seat accessors each home answers off its own driver record and the `static_if` home wrappers the
+    tests grew to read them, and the assistant drafter's skeleton (`cud_attach` / `cud_detach` / `cud_drop_forget` /
+    `cud_drafter_init` / `cud_buffers_make` / `cud_gemvs_make` / `cud_gemma_draft_step` against `vk_*`). Done = each pair
+    one body in the shared module its role table row names (`dasllama_gpu_stream_cache`, `dasllama_gpu_tier`,
+    `dasllama_mtp_gemma`), the home's primitive a block or seam parameter as `knee_rungs` and `discrete_gemma_rounds` take
+    theirs, the asks and counters the tests read kept in the tier's state so the wrappers go, and the CUDA pass and the
+    Vulkan home's whole run green on the fold alone - one pass, every pair, no pair ledgered on.
+275. **Two knobs the cells cannot ask for in-process.** The hot pool's slot ask reads `g_env_gpu.gpu_heat`, then the want's
+    `heat` where it is above 0, else `HOT_SLOTS_AUTO` (`resident_hot_ask`, `dasllama_gpu_resident.das`): a want of 0 means
+    auto, so no pin asks for NO pool, and the pool-off control in `tests/test_gpu_resident_cuda_moe_host.das` is a fourth
+    load with no host layer instead of a leg on the same load. And `DASLLAMA_RARE_ARENA=2` (the rail on every lane) has no
+    setter spelling of its own - `set_rare_arena(1)` is its in-process twin, so the cell names the twin where the knob list
+    names 2. Done = `set_gpu_hot_slots_pin(n)` / `gpu_hot_slots_pin()` (-1 unpinned, 0 = `HOT_SLOTS_NONE`, n a count) read by
+    `resident_hot_ask` ahead of the environment and the pool-off control a same-load leg; `set_rare_arena` taking the knob's
+    own 2; landed with row 272's hot-pool fold, which rewrites that host side.

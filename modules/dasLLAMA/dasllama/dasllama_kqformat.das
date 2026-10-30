@@ -560,6 +560,22 @@ def kq_sb(fmt : int) : bool => fmt >= 0 && fmt < KQ_FMT_COUNT && kq_sb(kq_fmt_of
 //! an expert plane format the expert chain and the host twin read: q8, a superblock format, a per-32 one, mx4 (the GEMVs and the batch tiles)
 def public expert_chain_fmt_ok(f : KqFmt) : bool => f == KqFmt.q8 || kq_sb(f) || kq_dense_b32(f) || f == KqFmt.mx4
 
+//! the same predicate over the int slot the GPU drivers carry per plane: the CUDA driver's arenas and the host twin serve exactly these
+def public expert_chain_slot_ok(fmt : int) : bool => expert_chain_fmt_ok(kq_fmt_of_slot(fmt))
+
+//! the formats the CUDA home's MMQ leaves serve on a window GEMM site (int8 over Q8_0 feeds; NVFP4 on the FP4 tensor cores), in the
+//! leaf table's order, and their names for the load log; `kq_mmq_leaf_index` is -1 off the table
+let KQ_MMQ_LEAF_FMTS <- [KqFmt.q8, KqFmt.k4, KqFmt.iq4xs, KqFmt.q40, KqFmt.iq4nl, KqFmt.q51, KqFmt.q5032, KqFmt.q4032, KqFmt.iq4nl32, KqFmt.nv4]
+let KQ_MMQ_LEAF_NAMES <- ["Q8_0", "Q4_K", "IQ4_XS", "Q4_0", "IQ4_NL", "Q5_1", "Q5_0", "Q4_0 (per-32)", "IQ4_NL (per-32)", "NVFP4 (FP4 tensor cores)"]
+def kq_mmq_leaf_index(f : KqFmt) : int => find_index(KQ_MMQ_LEAF_FMTS, f)
+def kq_mmq_leaf(f : KqFmt) : bool => kq_mmq_leaf_index(f) >= 0
+
+//! the leaves only `DASLLAMA_CUDA_MMQ=2` arms: their windows did not beat the cm2 tiles on every measured card
+def kq_mmq_raced(f : KqFmt) : bool => f == KqFmt.q51 || f == KqFmt.q5032
+
+//! the leaves with a min term: their reduction folds sixteen blocks at a time, so a row is a multiple of 512
+def kq_mmq_min(f : KqFmt) : bool => f == KqFmt.k4 || f == KqFmt.q51
+
 //! a per-32 plane format - Q5_1, Q5_0, the per-32 IQ4_NL and Q4_0 -
 //! served off its own plane pair at the 32-block reduction, never a
 //! superblock plane bind
@@ -613,7 +629,11 @@ def kq_ggml_type(f : KqFmt) : int => kq_desc(f).ggml_type
 let K4_QSB = 128l   // Q4_K quant plane: 128 nibble bytes
 let K4_SSB = 20l    // Q4_K scale plane: 16B disk block + 4B pad, decoded in place at repack
 let K5_QSB = 160l   // Q5_K quant plane: 128 nibble bytes + 32 qh bytes
+let K5_QH_B32 = (K5_QSB - K4_QSB) / (KQ_SB_ELEMS / KQ_B32_ELEMS)   //! a k5 superblock's qh bytes a 32-block (its 32 past the nibbles, over eight blocks)
 let K5_SSB = 20l    // Q5_K scale plane: same 20B row as k4
+//! the k4 / k5 device scale record (`KQ_DEV_SSB` bytes): f16 d, f16 dmin, the eight 6-bit sub-scales decoded to a byte each at +4, the eight mins at +12
+let KQ_SREC_SCALES_OFF = 4l
+let KQ_SREC_MINS_OFF = 12l
 let K6_QSB = 192l   // Q6_K quant plane: 128 ql + 64 qh bytes
 let K6_SSB = 18l    // Q6_K scale plane: 16 int8 sub-scales + f16 d, native
 let Q40_QSB = 128l  // Q4_0 quant plane: 128 nibble bytes (k4 tiling)

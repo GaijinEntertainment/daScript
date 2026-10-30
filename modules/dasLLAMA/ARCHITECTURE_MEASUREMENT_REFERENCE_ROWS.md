@@ -27,3 +27,10 @@ A kernel-by-kernel reference row traces the same binary under Nsight Systems (`n
 2026.3.2 on the pod, 2026.4.1 on the Windows box) over `llama-bench -m <gguf> -ngl 99 -fa 1 -p 512 -n 64 -r 1`, the
 same pass count as ours under the tracer, and reads per-kernel wall from the trace; the traced rates are not compared
 (the per-launch cost lands on the many small kernels), the per-kernel times are.
+
+On the records rig the CUDA home is the `cuda` leg: `gen_bench_records --legs cuda` under `DASLLAMA_GPU=1 DASLLAMA_CUDA=1`
+on a dasCUDA build, alone in its run as the vulkan leg is, paired with `--ref-cuda <build-cuda/bin/llama-bench>` (or
+`LLAMA_BENCH_CUDA`) under the row's `-ngl 99 -fa 1` arms and the sibling `llama-batched-bench` for `tg128@4`. A das row
+stamps `backend` with the armed home's name (`lcpp_bench` reads `moe_gpu_backend_name`), so a cuda cell whose row came back
+`vulkan` or `cpu` fails as a vulkan cell's would, and the oracle treats the home's rows as it treats the vulkan home's -
+no rig leg re-measures them.

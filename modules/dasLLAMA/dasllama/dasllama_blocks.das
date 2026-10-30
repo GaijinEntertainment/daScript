@@ -1628,7 +1628,13 @@ var private g_rare_onepass_pin = -1   //! `set_rare_onepass`'s pin: -1 reads the
 var private g_rare_batched_pin = -1   //! `set_rare_batched`'s pin: -1 reads the environment
 
 //! the rare rail's arena arm (`DASLLAMA_RARE_ARENA`): the host share reads streamed experts off the tier's pinned device-layout planes through the row-major kernels; the pin is a fixture's in-process twin, -1 lifts it
-def rare_arena_on() : bool => g_rare_arena_pin >= 0 ? g_rare_arena_pin == 1 : g_env_engine.rare_arena
+def rare_arena_on() : bool => g_rare_arena_pin >= 0 ? g_rare_arena_pin == 1 : g_env_engine.rare_arena != 0l
+
+//! whether the arena arm serves model `t`'s host picks and window rows: a pin of 1 or the knob at 2 outright (the formats
+//! witness and the row-major kernels' A/B arm), else the arm where the load kept no planar planes - a trimmed lane holds a
+//! streamed expert once, in the pinned mirror; where the planar planes are loaded the tuned planar kernels serve
+[arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena")]
+def rare_arena_serves(t : Model) : bool => g_rare_arena_pin >= 0 ? g_rare_arena_pin == 1 : g_env_engine.rare_arena == 2l || (g_env_engine.rare_arena != 0l && t.planes_trimmed)
 
 //! the one-pass lane (`DASLLAMA_RARE_ONEPASS`): each (expert, row) pair's whole chain on one lane, one fork a batch; off = the three region-list passes
 def rare_onepass_on() : bool => g_rare_onepass_pin >= 0 ? g_rare_onepass_pin == 1 : g_env_engine.rare_onepass
@@ -1913,7 +1919,7 @@ def private rare_batch_core(p : RarePlane; var yp : float?; woff : int64; xq : i
 def private rare_plane(t : Model; f : KqFmt; n, woff : int64) : tuple<on : bool; p : RarePlane> {
     var p = RarePlane(f = f)
     unsafe {
-        if (rare_arena_on() && rm_dev_serves(f)) {
+        if (rare_arena_serves(t) && rm_dev_serves(f)) {
             p.view = moe_gpu_stream_view(woff, int(f))
             if (p.view.q != null) {   //! the stack's pinned planes, where it holds every expert resident; an unmapped stack views null and the ring serves it
                 p.dev_layout = true
@@ -2098,7 +2104,7 @@ def private rare_onepass_serves(t : Model; l : int64) : bool {
 //! whether layer l's routed triple is the tier's pinned device-layout stack, so a token's host picks read it through the rail
 //! (one copy of a streamed layer's experts): every plane device-served, the one-pass rail serving the layer
 def private rare_dev_layer(t : Model; l : int64) : bool {
-    return false if (!rare_arena_on() || !rare_onepass_serves(t, l))
+    return false if (!rare_arena_serves(t) || !rare_onepass_serves(t, l))
     let ep = expert_planes(t, l)
     for (f, off in ep.fmts, ep.offs) {
         return false if (!rare_plane(t, f, 256l, off).p.dev_layout)
@@ -2109,11 +2115,11 @@ def private rare_dev_layer(t : Model; l : int64) : bool {
 var g_rare_dec_rows = 0l   //! the (row, expert) pairs a token's or a window's host sum read off the device planes (the decode cells' witness)
 var g_rare_slot_copies = 0l   //! the hot pool slots filled off a streamed layer's pinned mirror (the pool's witness that no planar plane was read)
 
-//! a planar read of layer `l`'s experts on a trimmed vulkan lane is a panic by name: the lane carries no planar family
+//! a planar read of layer `l`'s experts on a trimmed GPU lane is a panic by name: the lane carries no planar family
 [cold_path]
 def trim_planar_guard(t : Model; l : int64; what : string) {
     if (t.planes_trimmed) {
-        panic("dasLLAMA: planes_trimmed vulkan lane - {what} would read routed layer {l}'s experts off the planar planes the lane does not carry (the stream mirror or the rare rail declined this run; the decline line above)")
+        panic("dasLLAMA: planes_trimmed GPU lane - {what} would read routed layer {l}'s experts off the planar planes the lane does not carry (the stream mirror or the rare rail declined this run; the decline line above)")
     }
 }
 

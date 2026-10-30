@@ -550,33 +550,57 @@ def test_board_refs_guard(t : T?) {
 }
 
 [test]
-def test_vulkan_leg_guards(t : T?) {
-    t |> run("the vulkan leg runs alone, off Apple, under the GPU ask, on a dasVulkan build") @(t : T?) {
-        t |> equal(vulkan_leg_refusal(false, true, true, false), "", "no vulkan leg - nothing to refuse")
-        t |> success(find(vulkan_leg_refusal(true, false, true, true), "Apple") >= 0, "refused on Apple")
+def test_gpu_leg_guards(t : T?) {
+    t |> run("the vulkan leg runs alone, off Apple, under the GPU ask with the CUDA knob unset, on a dasVulkan build") @(t : T?) {
+        t |> equal(gpu_leg_refusal("vulkan", false, true, true, false, false), "", "no vulkan leg - nothing to refuse")
+        t |> success(find(gpu_leg_refusal("vulkan", true, false, true, true, false), "Apple") >= 0, "refused on Apple")
         var built = false
         static_if (typeinfo builtin_module_exists(vulkan)) {
             built = true
         }
         if (built) {
-            t |> success(find(vulkan_leg_refusal(true, false, false, false), "DASLLAMA_GPU") >= 0, "refused without the GPU ask")
-            t |> success(find(vulkan_leg_refusal(true, true, false, true), "alone") >= 0, "refused beside another leg")
-            t |> equal(vulkan_leg_refusal(true, false, false, true), "", "admitted alone under the ask")
+            t |> success(find(gpu_leg_refusal("vulkan", true, false, false, false, false), "DASLLAMA_GPU") >= 0, "refused without the GPU ask")
+            t |> success(find(gpu_leg_refusal("vulkan", true, false, false, true, true), "DASLLAMA_CUDA unset") >= 0, "refused under the CUDA ask - the children would serve on the CUDA home")
+            t |> success(find(gpu_leg_refusal("vulkan", true, true, false, true, false), "alone") >= 0, "refused beside another leg")
+            t |> equal(gpu_leg_refusal("vulkan", true, false, false, true, false), "", "admitted alone under the ask")
         } else {
-            t |> success(find(vulkan_leg_refusal(true, false, false, true), "dasVulkan") >= 0, "refused on a build without dasVulkan")
+            t |> success(find(gpu_leg_refusal("vulkan", true, false, false, true, false), "dasVulkan") >= 0, "refused on a build without dasVulkan")
         }
         t |> success(find(board_refs_refusal(true, true, false, false, "", "", true, ""), "--ref-vulkan") >= 0, "a board mint pairs every vulkan cell")
         t |> equal(board_refs_refusal(true, true, false, false, "", "", true, "/b/vk"), "", "with the vulkan ref the mint starts")
     }
-    t |> run("a vulkan cell holds only when every das row served on the device") @(t : T?) {
+    t |> run("the cuda leg runs alone, off Apple, under both asks, on a dasCUDA build") @(t : T?) {
+        t |> equal(gpu_leg_refusal("cuda", false, true, true, false, false), "", "no cuda leg - nothing to refuse")
+        t |> success(find(gpu_leg_refusal("cuda", true, false, true, true, true), "Apple") >= 0, "refused on Apple")
+        var built = false
+        static_if (typeinfo builtin_module_exists(cuda)) {
+            built = true
+        }
+        if (built) {
+            t |> success(find(gpu_leg_refusal("cuda", true, false, false, false, true), "DASLLAMA_GPU") >= 0, "refused without the GPU ask")
+            t |> success(find(gpu_leg_refusal("cuda", true, false, false, true, false), "DASLLAMA_CUDA=1") >= 0, "refused without the CUDA ask - the children would serve on the Vulkan home")
+            t |> success(find(gpu_leg_refusal("cuda", true, true, false, true, true), "alone") >= 0, "refused beside another leg")
+            t |> equal(gpu_leg_refusal("cuda", true, false, false, true, true), "", "admitted alone under both asks")
+        } else {
+            t |> success(find(gpu_leg_refusal("cuda", true, false, false, true, true), "dasCUDA") >= 0, "refused on a build without dasCUDA")
+        }
+        t |> success(find(board_refs_refusal(true, true, false, false, "", "", false, "", true, ""), "--ref-cuda") >= 0, "a board mint pairs every cuda cell")
+        t |> equal(board_refs_refusal(true, true, false, false, "", "", false, "", true, "/b/cuda"), "", "with the cuda ref the mint starts")
+    }
+    t |> run("a discrete leg's cell holds only when every das row served on its home") @(t : T?) {
         var served <- [BenchModel(gguf = "m.gguf", runs <- [BenchRun(engine = "das", backend = "vulkan")])]
+        var served_cuda <- [BenchModel(gguf = "m.gguf", runs <- [BenchRun(engine = "das", backend = "cuda")])]
         var fell <- [BenchModel(gguf = "m.gguf", runs <- [BenchRun(engine = "das", backend = "cpu")])]
         let empty_cell : array<BenchModel>
         t |> success(cell_served_on(served, "vulkan"), "a vulkan-stamped das row holds")
         t |> success(!cell_served_on(fell, "vulkan"), "a cpu-stamped das row on the vulkan leg fails")
         t |> success(!cell_served_on(empty_cell, "vulkan"), "a cell with no das row fails")
+        t |> success(cell_served_on(served_cuda, "cuda"), "a cuda-stamped das row holds on the cuda leg")
+        t |> success(!cell_served_on(served, "cuda"), "a vulkan-stamped das row on the cuda leg fails - the other home served")
+        t |> success(!cell_served_on(fell, "cuda"), "a cpu-stamped das row on the cuda leg fails")
         t |> success(cell_served_on(fell, "cpu"), "the cpu legs stamp themselves")
         delete served
+        delete served_cuda
         delete fell
     }
 }

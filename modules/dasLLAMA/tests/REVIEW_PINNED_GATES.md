@@ -117,6 +117,19 @@ must keep holding:
 - `test_vulkan_kernels.das`'s `test_vk_coopmat_default_and_tile_pick` cell must hold which tile
   the Vulkan matmul picks, and whether that dispatch splits its reduction across partial planes,
   on every input of the prefill's tile-and-split pick.
+- `test_cuda_kernels.das`'s `test_cud_short_window_pick` cell must hold the tile and split that
+  `cud_cm2_pick` returns for a window under 32 rows at two knee values. The knee is the value
+  `set_cud_split_k_tgs` sets: how small the tile grid must be before the K splits. At knee 0 the cell
+  must hold the s column (the 32-row tile column, `tc` 32) whole - one chunk, no split. At a knee that
+  splits, it must hold K split into chunks whose depth is a whole multiple of 256: four 256-deep chunks
+  at K 1024, and two 768-deep chunks at K 1536, where a four-way split would leave 384-deep chunks. It
+  must also hold that a 32-row window gets the same pick at either knee.
+- `test_gpu_tier.das`'s `test_home_words` cell must hold `rdec_fallback_words` (the text naming what
+  serves a model the whole-model driver declined) in two cases. It must read as the per-op rails with
+  no CUDA ask, and also under the CUDA ask on a build without dasCUDA. It must read as the CPU rails
+  under `DASLLAMA_CUDA=1` on a dasCUDA build. The cell must also hold that each discrete home's dry
+  bake (the lane's plan built without calling the device) refuses a config whose home is the other
+  one, with a message naming the config's home.
 - `test_vulkan_kernels.das`'s `test_vkd_ext_roster` cell must hold the device-init roster's
   entries against the arming's fields.
 - `test_vulkan_kernels.das`'s `test_vkd_ple_finish` cell must hold the finish's 256-wide slices

@@ -38,6 +38,21 @@ twin: the lane carries the planar families alone, as a CPU-mode load's lane does
 the CPU lane on its own first load: each lane is its mode's (`#image-lane-name`). The mapped lane arms the device
 through the slice walk; the mint's dry walk armed nothing off the streamed struct the map replaces.
 
+**The CUDA home mints the `cuda` lane by the same walk.** The mint, the slice, the plan's marker entries and the stream
+sources live in the shared driver (`dasllama_gpu_resident`), so the CUDA home's registration fills the same seats - the bake
+tag off the discrete config section with `home` set to `cuda` (`cud_dlim_source`), the dry-bake arm (`cud_dry_bake_arm`: it
+refuses a config whose `home` is not `cuda` or whose tag disagrees with this process' wants, arms the device for the walk's
+kernels, and hands the walk the config's `vram_mb` as the dry budget - `cud_mint_dry_budget`, read by `cud_dry_budget` under
+the dry flag - so the card's live free memory never sizes a bake and a bake beside a loaded model plans the lane an empty
+card would), the would-accept
+arithmetic (the format and the row lattice) and the mint's dry flag (`cud_mint_dry`: every seat the load walk reaches runs
+its accept / refuse arithmetic and allocates nothing, the arenas counting blocks with no device memory behind them,
+`g_cud_dry_arenas`; the pool arms nothing and the pre-step's projection stays with the host under the dry walk, as on the
+Vulkan home) - and `image_lane_name` folds a `cuda*` tag into the `cuda` lane. The two lanes hold the same device-layout
+planes and differ in the plan; a box with both homes keeps one lane each, since each home's budget and carve move the
+plan's split. The CUDA home's stream mirrors are its own pinned copies, never imports of the mapping, so the unmap notice
+has nothing to release there.
+
 **The walk declines rather than fail the load.** A trimmed mint the walk cannot honour - the whole-model driver did not
 arm, a plan role outside the arena, an emb region no run of jobs holds or that would not pack - abandons the save with its
 reason logged (`vk_mint_walk`), and the same load builds the planar image again in memory without the mint and serves it,

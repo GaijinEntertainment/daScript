@@ -154,11 +154,23 @@ struct GpuKnobs {
     vram_mb : int
 }
 
-def private gpu_auto_pick(metal_ok, vulkan_ok : bool) : string {
+//! the two discrete homes' keys: the whole-model driver on the Vulkan or the CUDA home
+def gpu_is_discrete(gpu : string) : bool => gpu == "vulkan" || gpu == "cuda"
+
+//! the `auto` pick: Metal first; then the home the environment spells (`DASLLAMA_CUDA=1` = `env_home` "cuda") where its
+//! witness answers; then Vulkan, the fully served home, wherever a Vulkan device answers; then the CUDA home; else off
+[arch(at = "README.md#gpu-key")]
+def gpu_auto_pick(metal_ok, vulkan_ok, cuda_ok : bool; env_home : string) : string {
     if (metal_ok) {
         return "metal"
     }
-    return vulkan_ok ? "vulkan" : "off"
+    if (env_home == "cuda" && cuda_ok) {
+        return "cuda"
+    }
+    if (vulkan_ok) {
+        return "vulkan"
+    }
+    return cuda_ok ? "cuda" : "off"
 }
 
 var private g_gpu_detected = ""   // cached auto-pick ("" = not probed yet; the probes cache too)
@@ -167,33 +179,43 @@ def detected_gpu() : string {
     if (empty(g_gpu_detected)) {
         // an explicit DASLLAMA_GPU=0 stays the opt-out: the env master only overrides the
         // auto_tier field of an explicit want, so arming the blessed shape would out-vote it
-        g_gpu_detected = (gpu_env_master_off() ? "off"
-                          : gpu_auto_pick(kernel_backend_available("metal"), kernel_backend_available("vulkan")))
+        if (gpu_env_master_off()) {
+            g_gpu_detected = "off"
+        } else {
+            let metal_ok = kernel_backend_available("metal")
+            let vulkan_ok = !metal_ok && kernel_backend_available("vulkan")
+            //! the CUDA witness brings the driver up: asked only where the pick can land on it
+            let cuda_ok = !metal_ok && (gpu_home() == "cuda" || !vulkan_ok) && kernel_backend_available("cuda")
+            g_gpu_detected = gpu_auto_pick(metal_ok, vulkan_ok, cuda_ok, gpu_home())
+        }
     }
     return g_gpu_detected
 }
+
+//! the `--gpu` key's spellings; "" and "auto" fall to the detected backend
+def private gpu_key_named(l : string) : bool => l == "off" || l == "metal" || l == "metal-required" || gpu_is_discrete(l)
 
 // the ONE derivation of "does the pick fall to auto-detection" — effective_gpu and the boot
 // announce both read it, so the log can never disagree with the pick (an unknown --gpu
 // spelling falls through to auto exactly like unset)
 def gpu_pick_is_auto(k : GpuKnobs) : bool {
     let l = to_lower(k.gpu)
-    if (l == "off" || l == "metal" || l == "metal-required" || l == "vulkan") {
+    if (gpu_key_named(l)) {
         return false
     }
     return l == "auto" || empty(k.metal)
 }
 
-// --gpu selector: one knob over the metal mode and the vulkan tier. Defaults-first: unset
+// --gpu selector: one knob over the metal mode and the discrete homes' tier. Defaults-first: unset
 // (with no legacy --metal flag) and the explicit "auto" spelling both serve on the detected
 // backend — `gpu = off` is the opt-out. A set --metal keeps the legacy env-driven path.
 def effective_gpu(k : GpuKnobs; tool : string = "dasllama-server") : string {
     let l = to_lower(k.gpu)
-    if (l == "off" || l == "metal" || l == "metal-required" || l == "vulkan") {
+    if (gpu_key_named(l)) {
         return l
     }
     if (!empty(l) && l != "auto") {
-        to_log(LOG_WARNING, "{tool}: unknown --gpu '{k.gpu}', ignoring (valid: auto | off | metal | metal-required | vulkan)\n")
+        to_log(LOG_WARNING, "{tool}: unknown --gpu '{k.gpu}', ignoring (valid: auto | off | metal | metal-required | vulkan | cuda)\n")
     }
     return gpu_pick_is_auto(k) ? detected_gpu() : ""
 }
@@ -226,9 +248,9 @@ def vulkan_serving_want(k : GpuKnobs) : GpuTierWant
                    attn = gpu_detail_attn(k), dense = k.dense, shexp = true)
 
 //! Land the picked backend on the engine before any load: the Metal mode pins the row-major
-//! backend the GPU kernels read, and the Vulkan tier want must be armed before the load walk
-//! uploads stacks. `gpu` is ``effective_gpu``'s answer; returns whether the Vulkan tier armed
-//! (false under every other pick).
+//! backend the GPU kernels read, and a discrete home's tier want must be armed before the load walk
+//! uploads stacks - the key names the home (`set_gpu_home`), then the want arms it. `gpu` is
+//! ``effective_gpu``'s answer; returns whether the discrete tier armed (false under every other pick).
 def apply_gpu_backend(k : GpuKnobs; gpu : string; tool : string = "dasllama-server") : bool {
     let metal_mode = resolved_metal_mode(pick_metal_mode(k.metal, tool), gpu)
     set_metal_mode(metal_mode)
@@ -236,21 +258,25 @@ def apply_gpu_backend(k : GpuKnobs; gpu : string; tool : string = "dasllama-serv
         // the Metal-build CPU-prefill guard is a profiling tripwire; its panic would drop every
         // live stream, and serving on the CPU arm is a legitimate configuration
         allow_cpu_prefill()
-        if (gpu != "vulkan") {
+        if (!gpu_is_discrete(gpu)) {
             to_log(LOG_INFO, "{tool}: prefill runs on the CPU arm - pass --gpu metal for the Metal rails\n")
         }
     }
     to_log(LOG_INFO, "{tool}: metal mode {get_metal_mode()}\n")
-    if (gpu != "vulkan") {
+    if (!gpu_is_discrete(gpu)) {
+        return false
+    }
+    if (!set_gpu_home(gpu)) {
+        to_log(LOG_WARNING, "{tool}: gpu = {gpu} requested but the engine kept the {gpu_home()} home (the line above says why) - the tier is not armed\n")
         return false
     }
     set_gpu_tier_want(vulkan_serving_want(k))
     if (moe_gpu_tier_arm()) {
         let ktag = gpu_detail_layers(k) < 0l ? "auto" : "{gpu_detail_layers(k)}"
         let stag = gpu_detail_stream(k) < 0l ? "auto" : "{gpu_detail_stream(k)}"
-        to_log(LOG_INFO, "{tool}: vulkan GPU tier armed (K={ktag}, S={stag}, dn={gpu_detail_dn(k)}, attn={gpu_detail_attn(k)})\n")
+        to_log(LOG_INFO, "{tool}: {gpu} GPU tier armed (K={ktag}, S={stag}, dn={gpu_detail_dn(k)}, attn={gpu_detail_attn(k)})\n")
         return true
     }
-    to_log(LOG_WARNING, "{tool}: gpu = vulkan requested but the tier did not arm (no vulkan device, or this build lacks the vulkan module)\n")
+    to_log(LOG_WARNING, "{tool}: gpu = {gpu} requested but the tier did not arm (no {gpu} device, or this build lacks its module)\n")
     return false
 }

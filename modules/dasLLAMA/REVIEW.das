@@ -284,7 +284,7 @@ var private GPU_ROLES_VULKAN <- {
 }
 
 var private GPU_ROLES_CUDA <- {
-    "classes", "common", "dispatch", "decode"
+    "classes", "common", "dispatch", "decode", "stream", "mtp_gemma"
 }
 
 // the fastmath default, mechanically: a [metal_kernel] declaring fastmath=false reds unless
@@ -1167,6 +1167,72 @@ def private check_exe_fn_global_restore {
     }
 }
 
+//! the GPU home switch resets the tier's seats: the `= @@fn` globals through `[seat_reset]`'s walk, the flags a home's entry
+//! declares by value through `gpu_home_reset_flags` - every `g_*_installed` global but the arm's own `g_moe_gpu_installed`
+//! (the switch runs before any arm) and every global a public `install_*` seat, `set_moe_gpu_streams` or
+//! `set_rdec_chain_charged` assigns `on`, `true` or `false` must appear in that function's body, or the other home inherits
+//! the first one's declaration; the `set_moe_gpu_*_route` levers are the process's, not a home's (ARCHITECTURE_GPU.md#gpu-backends)
+def private check_gpu_home_reset_flags {
+    let path = "modules/dasLLAMA/dasllama/dasllama_gpu_tier.das"
+    return if (!fexist(path))   // a fixture tree without the tier carries no home switch to hold
+    let text = strip_line_comments(fread(path))
+    return if (find(text, "def set_gpu_home_(") < 0)   // a tier with no home switch (a fixture's cut-down copy) has nothing to reset
+    var owed : table<string; int>   //! flag global -> the line that declares or assigns it
+    var reset_names : table<string>   //! the globals `gpu_home_reset_flags` assigns
+    var in_setter = false
+    var in_reset = false
+    var seen_reset = false
+    var line_no = 0
+    for (line in split(text, "\n")) {
+        line_no++
+        if (line |> starts_with("def ")) {
+            in_setter = (line |> starts_with("def public install_")) || (line |> starts_with("def public set_moe_gpu_streams(")) || (line |> starts_with("def public set_rdec_chain_charged("))
+            in_reset = line |> starts_with("def private gpu_home_reset_flags")
+            seen_reset = seen_reset || in_reset
+            continue
+        }
+        if (in_reset) {
+            let body = strip(line)
+            if (find(body, " = ") > 0) {
+                reset_names |> insert(ident_prefix(body))
+            }
+            continue
+        }
+        var rest = ""
+        if (line |> starts_with("var private ")) {
+            rest = slice(line, length("var private "))
+        } elif (line |> starts_with("var ")) {
+            rest = slice(line, length("var "))
+        }
+        if (!empty(rest)) {
+            let gname = ident_prefix(rest)
+            if ((gname |> starts_with("g_")) && (gname |> ends_with("_installed")) && gname != "g_moe_gpu_installed" && !key_exists(owed, gname)) {
+                owed[gname] = line_no
+            }
+            continue
+        }
+        if (in_setter) {
+            let body = strip(line)
+            let eq = find(body, " = ")
+            continue if (eq < 0)
+            let gname = ident_prefix(body)
+            let rhs = strip(slice(body, eq + 3))
+            if ((gname |> starts_with("g_")) && gname != "g_moe_gpu_installed" && (rhs == "on" || rhs == "true" || rhs == "false") && !key_exists(owed, gname)) {
+                owed[gname] = line_no
+            }
+        }
+    }
+    if (!seen_reset) {
+        gate_finding(path, 1, "`gpu_home_reset_flags` is missing: the GPU home switch cannot reset the flags a home's entry declares")
+        return
+    }
+    for (gname, at in keys(owed), values(owed)) {
+        if (!key_exists(reset_names, gname)) {
+            gate_finding(path, at, "`{gname}` is a flag a GPU home's entry declares, and `gpu_home_reset_flags` does not reset it - the other home would inherit this one's declaration after `set_gpu_home`")
+        }
+    }
+}
+
 // The ONE release, mechanically. A carrier's image backing is either a mapping or a chunk, and
 // image_chunk_alloc hands back an image-page-aligned offset INTO a das-heap array<uint8> - so
 // munmap on a chunk SUCCEEDS and punches a hole in the process heap, which kills an unrelated
@@ -1224,7 +1290,7 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
 let private IMAGE_LAYOUT_STAMP_VERSION = 54
-let private IMAGE_LAYOUT_STAMP_HASH = 0xc09575b08a4d273eul
+let private IMAGE_LAYOUT_STAMP_HASH = 0xac7d2ff25ee49b1ful
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, the header's scalar stores, the lattice
@@ -2040,6 +2106,62 @@ def private check_cuda_stream_discipline {
     delete files
 }
 
+
+// The whole-model driver's seats are one set the two discrete homes both fill (ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries,
+// the seats entry): a seat the Vulkan registration installs and the CUDA registration does not is a gap the entry or a
+// ledger row rules, named here with its ruling - a new Vulkan seat lands on the CUDA home in the same change, or lands a row.
+let private SEAT_PREFIXES <- [ "install_rdec_", "install_moe_gpu_resident", "set_moe_gpu_", "set_dlim_", "register_" ]
+var private CUDA_SEATS_RULED <- {
+    "install_rdec_dn_snap_ring" => "a hyper-connection seat (the n-gram conv ring) - the CUDA home declines the chain by name",
+    "set_moe_gpu_attn_dec_hooks" => "a per-op tier hook - the Vulkan family's",
+    "set_moe_gpu_ffn_bias_hook" => "a per-op tier hook - the Vulkan family's",
+    "set_moe_gpu_ffn_tail_hooks" => "a per-op tier hook - the Vulkan family's",
+    "set_moe_gpu_heat_hooks" => "a per-op tier hook - the Vulkan family's",
+    "set_moe_gpu_qkv_hook" => "a per-op tier hook - the Vulkan family's",
+    "set_moe_gpu_span_dec_hook" => "a per-op tier hook - the Vulkan family's",
+    "set_moe_gpu_host_bytes_fn" => "the mint census's host-bytes line - the CUDA home keeps no host-visible count",
+    "set_moe_gpu_unmap_notify" => "the mapping's unmap notice - the CUDA home imports no mapping"
+}
+
+//! the seat names a registration file calls: an identifier under one of `SEAT_PREFIXES` followed by `(`
+def private seats_called(path : string) : table<string> {
+    var seats : table<string>
+    for (line in split(strip_line_comments(fread(path)), "\n")) {
+        for (prefix in SEAT_PREFIXES) {
+            var at = find(line, prefix)
+            while (at >= 0) {
+                let name = ident_prefix(slice(line, at))
+                if (slice(line, at + length(name)) |> starts_with("(")) {
+                    seats |> insert(name)
+                }
+                at = find(line, prefix, at + 1)
+            }
+        }
+    }
+    return <- seats
+}
+
+def private check_discrete_seat_parity {
+    let vk_path = "modules/dasLLAMA/dasllama/dasllama_math_vulkan.das"
+    let cud_path = "modules/dasLLAMA/dasllama/dasllama_math_cuda.das"
+    return if (!fexist(vk_path) || !fexist(cud_path))   // a fixture tree without the two entries has no parity to hold
+    var vk <- seats_called(vk_path)
+    var cud <- seats_called(cud_path)
+    for (seat in keys(vk)) {
+        continue if (key_exists(cud, seat) || key_exists(CUDA_SEATS_RULED, seat))
+        gate_finding(cud_path, "the Vulkan registration installs `{seat}` and the CUDA registration does not - install it on the CUDA home, or rule it in this gate's CUDA_SEATS_RULED where it serves a mechanism the CUDA home does not have (a per-op tier, the hyper-connection chain, a host-visible plane count, a mapped import - the property ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries' seats entry names), and name it in that entry; a seat the CUDA home could fill is a finding, never a ruling")
+    }
+    for (seat in keys(CUDA_SEATS_RULED)) {
+        if (key_exists(cud, seat)) {
+            gate_finding(cud_path, "`{seat}` is ruled Vulkan-only in this gate's CUDA_SEATS_RULED and the CUDA registration installs it - drop the ruling here and in ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries' seats entry")
+        } elif (!key_exists(vk, seat)) {
+            gate_finding(vk_path, "`{seat}` is ruled Vulkan-only in this gate's CUDA_SEATS_RULED and the Vulkan registration no longer installs it - drop the ruling here and in ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries' seats entry")
+        }
+    }
+    delete vk
+    delete cud
+}
+
 // A Vulkan pipeline is built only by the `[vk_dispatch]`-generated `ensure_*`: a hand build bypasses the
 // hazard rail and the dispatch census, so its races and its coverage are invisible. The two llama.cpp
 // shader ports under performance/ are reference measurements of another engine's kernels, outside this walk.
@@ -2222,7 +2344,7 @@ let private GEMM_GEN_FILES = [
     "modules/dasLLAMA/dasllama/dasllama_gemm_gen.das",
     "modules/dasLLAMA/dasllama/dasllama_gemm_schema.das"
 ]
-let private GEMM_GEN_STAMP_HASH = 0x97b0e9baa24da790ul
+let private GEMM_GEN_STAMP_HASH = 0x54069c43b16d99f7ul
 
 [arch(at = "ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers")]
 def private check_gemm_gen_stamp {
@@ -2447,8 +2569,7 @@ let private METAL_KERNELS_FILE = "modules/dasLLAMA/dasllama/dasllama_metal_kerne
 
 //! the discrete templates one home stamps - the row of
 //! followup_general.md naming the stamps that wait on their families
-var private DISCRETE_ONE_HOME_STAMPS <- { "DaAttnBWT", "DaAttnBH128T", "F32RowsKhrT",
-    "FaH512T", "Mx4GemvGuT", "Q8GemvPleActT", "ArCombG4T" }
+var private DISCRETE_ONE_HOME_STAMPS : table<string; void>   //! empty: every discrete template is stamped by both homes; a one-home stamp lands here with its followup_general.md row
 
 //! `class [template] X : Y` lines of `path`: X's base, whether X is a
 //! template, and the home or shared file X lives in
@@ -3470,6 +3591,7 @@ def main() : int {
     check_meta_tripwires()
     check_image_layout_stamp()
     check_exe_fn_global_restore()
+    check_gpu_home_reset_flags()
     check_race_bind_numbers()
     check_gpu_role_partition()
     check_fastmath_default()
@@ -3485,6 +3607,7 @@ def main() : int {
     check_kq_form_matrix()
     check_vk_extension_roster()
     check_cuda_stream_discipline()
+    check_discrete_seat_parity()
     check_no_hand_pipelines()
     check_locked_queue_calls()
     check_verify_decline_before_state_move()

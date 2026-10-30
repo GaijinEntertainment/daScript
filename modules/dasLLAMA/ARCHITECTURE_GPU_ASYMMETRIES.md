@@ -17,10 +17,25 @@ prefill, the FP4 expert rung, the nv4 nibble decode, the MMQ pin) in `ARCHITECTU
   walk collects, so its mint streams the walk's entries into the save and a trim can drop the planar families the arena
   holds whole; the Metal flavor bakes device-form blobs the CPU planes convert into, with no walk to collect from and no
   family to drop.
-- **The `dasllama_gpu_tier` cooperation SPI is the Vulkan family's, the CUDA family registering two seats beside it**: every hook seat the tier exposes (`install_moe_gpu_tier` and the `set_moe_gpu_*_hooks` setters) is registered by the
-  Vulkan family, the CUDA family registering the deltanet state hooks (`set_moe_gpu_dn_state_hooks`) and the drop-model hook for its own driver, and the tier's entry in `ARCHITECTURE_GPU.md#gpu-backends` enumerates the seats; a new seat lands in that
-  entry, not as a new entry here. The one seat outside that rule is the deltanet mirror room seat, its own entry
-  here.
+- **The per-op tier's hook seats are the Vulkan family's; the whole-model driver's seats both discrete families fill.** The
+  per-op hooks of `install_moe_gpu_tier` and the `set_moe_gpu_*_hooks` setters (ffn, cls, dense, dn, attn, attn_dec, ffn_tail,
+  span_dec, ffn_bias, heat, qkv) are the Vulkan family's - the CUDA home installs the tier with stubs that decline or panic by
+  name, having no per-op tier (`dasllama_math_cuda.das`) - while every `install_rdec_*` / `install_moe_gpu_resident_*` seat of
+  the resident driver both homes register (the prepared-image seats among them: each home mints its own lane,
+  `ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint`; the assistant drafter among them, each discrete home's own
+  `register_mtp_assistant`), and registering the hyper-connection seats as stubs
+  that decline the chain by name. Nine seats the Vulkan registration fills stay off the CUDA registration by this entry - `REVIEW.das`'s
+  `check_discrete_seat_parity`'s licensed set, `CUDA_SEATS_RULED`: the per-op tier hooks `set_moe_gpu_attn_dec_hooks`,
+  `set_moe_gpu_ffn_bias_hook`, `set_moe_gpu_ffn_tail_hooks`, `set_moe_gpu_heat_hooks`, `set_moe_gpu_qkv_hook` and
+  `set_moe_gpu_span_dec_hook`, the n-gram conv ring's checkpoint `install_rdec_dn_snap_ring` (a hyper-connection seat), the
+  mint census's host-bytes line `set_moe_gpu_host_bytes_fn` (the CUDA home keeps no host-visible count) and the mapping's
+  unmap notice `set_moe_gpu_unmap_notify` (the CUDA home imports no mapping). The property the nine share: each serves a
+  mechanism the CUDA home does not have - a per-op tier, the hyper-connection chain, a host-visible plane count, a mapped
+  import - so no CUDA code could fill it; a seat the CUDA home could fill and does not is a finding, never a ruling. The
+  check finds a seat the Vulkan registration installs that the CUDA registration neither installs nor rules, and a ruled
+  seat either registration contradicts. The tier's
+  entry in `ARCHITECTURE_GPU.md#gpu-backends` enumerates the seats; a new seat lands in that entry, not as a new entry here.
+  The one seat outside that rule is the deltanet mirror room seat, its own entry here.
 - **The split token command with the routed experts on the host is Vulkan-only**
   (`vk_rdec_token_split`, `ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`): the Vulkan whole-model driver
   leaves a hyper-connection MoE's expert stacks on the host by construction (`resident_host_experts`, the
@@ -31,28 +46,33 @@ prefill, the FP4 expert rung, the nv4 nibble decode, the MMQ pin) in `ARCHITECTU
   staged KHR tile reads the file's f32 rows, rounds each weight to f16 on its stage, feeds f16 rows and accumulates in
   f16, because the f32 scalar tile is the only f32-exact form the Vulkan tier has and runs at a twenty-fifth of its rate; Metal
   serves the same planes on its f32-exact tile, and has no form to pick between.
-- **The hot expert pool is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool`, the tier's four hot
-  seats, `DASLLAMA_GPU_HEAT`): where routed experts live on the host the Vulkan driver keeps the hottest in
-  per-layer device slots; Metal has every expert resident, so nothing is hot or cold.
-- **A plain MoE's host-layer form is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`,
+- **The hot expert pool is the discrete homes'** (`ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool`, the tier's four hot
+  seats, `DASLLAMA_GPU_HEAT`): where routed experts live on the host the Vulkan and the CUDA driver keep the hottest in
+  per-layer device slots (the CUDA home's slots, hit chain and the pool's place in its segments: `ARCHITECTURE_GPU.md#gpu-backends`;
+  its window's pool prefix, its DMA fill and its placement batch the Vulkan form's over the home's copy stream); Metal has every expert
+  resident, so nothing is hot or cold.
+- **A plain MoE's host-layer form is the discrete homes'** (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`,
   `#hc-window-chain`, the host-rows seat): a plain MoE a discrete card does not hold whole beside a context
   asked whole, or one whose host-layers ask names them, moves its first routed layers' experts to the host,
-  the token command and the window cut at those layers; Metal holds the model whole from unified memory and
+  the token command and the window cut at those layers (the CUDA home's cut and segments: `ARCHITECTURE_GPU.md#gpu-backends`); Metal holds the model whole from unified memory and
   cuts nothing.
-- **The host-layers ask is read by the Vulkan plan alone** (`set_gpu_host_layers`,
+- **The host-layers ask is read by the discrete homes' plan alone** (`set_gpu_host_layers`,
   `DASLLAMA_GPU_HOST_LAYERS`, `ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool`): it names how many routed
-  layers' experts the Vulkan plan moves to the host whatever the card holds; Metal moves no expert off the
+  layers' experts the resident plan moves to the host whatever the card holds; Metal moves no expert off the
   device, so the ask has nothing to move.
-- **The streamed prompt and its levers are the Vulkan driver's alone** (`set_gpu_want_pf_stream`,
+- **The streamed prompt and its levers are the discrete homes'** (`set_gpu_want_pf_stream`,
   `DASLLAMA_GPU_PF_STREAM`, `DASLLAMA_GPU_PF_STREAM_LAYERS`, `set_pf_window_rows_pin`, `DASLLAMA_GPU_PF_ROWS`,
   `set_expert_cache_mb`, `DASLLAMA_EXPERT_CACHE_MB`, `DASLLAMA_EXPERT_RING`, `DASLLAMA_EXPERT_READERS`,
   `DASLLAMA_VK_XF_BUNDLE`, `DASLLAMA_GPU_HOT_DMA`, `DASLLAMA_GPU_DEC_MEET`,
   `ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-split`, `#expert-cache`,
   `ARCHITECTURE_GPU_VULKAN_POOL.md#pool-dma-fill`): a routed layer whose experts serve on the host streams
-  its stack to the device for the prompt window, the window's rows cut at `DASLLAMA_GPU_PF_ROWS`, the
-  stacks held in pinned memory under the expert cache's budget and read off the lane by its readers, the
-  pool's misses filled by DMA and a decode token's picks met over the pool under the two experiment knobs;
-  Metal holds every expert in unified memory, streams nothing and reads none of these.
+  its stack to the device for the prompt window - the Vulkan tier over its transfer queue, the CUDA home over its
+  copy stream (`dasllama_cuda_stream`) - the window's rows cut at `DASLLAMA_GPU_PF_ROWS`, the stacks held in the
+  pinned memory of the expert cache the two share, the pool's misses filled by DMA and a decode token's picks met
+  over the pool under the two experiment knobs; the cache's partial form - a quota of a layer's experts resident,
+  the rest read off the lane by its readers under `DASLLAMA_EXPERT_CACHE_MB` - rides either home's own lane
+  (`ARCHITECTURE_GPU_VULKAN_STREAM.md#expert-cache`; a load with no lane keeps every streamed stack whole, the ask
+  said once); Metal holds every expert in unified memory, streams nothing and reads none of these.
 - **The strict context pin is read by the Vulkan plan alone** (`set_gpu_ctx_strict`,
   `DASLLAMA_GPU_CTX_STRICT`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`): Metal's mirror is the
   model's own context in unified memory, so no plan shortens it and the pin has nothing to hold.
@@ -154,7 +174,7 @@ prefill, the FP4 expert rung, the nv4 nibble decode, the MMQ pin) in `ARCHITECTU
   `DASLLAMA_METAL_MIRROR_ADOPT`, the counters `metal_prefill_mirror_served`, `metal_prefill_mirror_panel_served`,
   `metal_mirror_uploaded_rows` and `metal_mirror_adopted_rows`): the Vulkan resident driver's window chain writes its
   K/V into the region the decode reads, so it has no mirror to feed or adopt.
-- **The NextN draft seat is Vulkan-only.** `register_mtp_draft_override("vulkan", ...)` has one registrant, the resident driver's head (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`); Metal drafts inside its round seat. Each backend's owner (`register_mtp_seat_owner`, `mtp_seats_own`) claims the round its own way: Metal's a blob model alone, so a planar one under the metal overrides runs the CPU round, Vulkan's the resident driver armed on a NextN model. The head's prompt warm is a seat on Vulkan alone (`install_rdec_head_warm`: the window chain's extra layer, `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm`), where Metal's prefill driver warms the slab inside its own loop; the CPU warm stands down behind either once the driver landed the logits (`prefill_override_logits_done`).
+- **The NextN draft seat is the discrete homes'.** `register_mtp_draft_override("vulkan", ...)` has one registrant, the resident driver's head (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`), which the Vulkan and the CUDA home fill through the tier's seats (`install_rdec_draft`, `install_rdec_verify`, `install_rdec_rollback`, `install_rdec_dn_snaps`, `install_rdec_head_warm`; the CUDA home's forms in `ARCHITECTURE_GPU.md#gpu-backends`); Metal drafts inside its round seat. Each backend's owner (`register_mtp_seat_owner`, `mtp_seats_own`) claims the round its own way: Metal's a blob model alone, so a planar one under the metal overrides runs the CPU round, Vulkan's the resident driver armed on a NextN model. The head's prompt warm is a seat on the discrete homes (`install_rdec_head_warm`: the window chain's extra layer, `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm`), where Metal's prefill driver warms the slab inside its own loop; the CPU warm stands down behind either once the driver landed the logits (`prefill_override_logits_done`).
 - **Lens depth**: both lenses generate `enc_*` builders from kernel classes - Metal via
   `[metal_dispatch]`, Vulkan via `[vk_dispatch]` (per-class set layouts + push constants, and
   NonWritable derived per binding from the access classification - `ARCHITECTURE_GPU_VULKAN.md#vk-readonly-lens` carries the rule, its refusal and its reading; Metal lowers a read role to `device const`

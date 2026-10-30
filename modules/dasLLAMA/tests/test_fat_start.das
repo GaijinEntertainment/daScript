@@ -18,6 +18,7 @@ require dasllama/dasllama_gpu_knee   // the split rule and the pricing both home
 require ?das_metal dasllama/dasllama_metal_kernels   // metal_knee_tiles: a Metal rung's grid
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_devw_race_grids, METAL_N32_ROWS: the dev-W and one-way races' candidates
 require ?vulkan dasllama/dasllama_vulkan_common   // g_gpu: whether the device the Vulkan knee race ran on serves the cm2 s column
+require ?cuda cuda/das_cuda_boost   // cuda_device_bytes_allocated: the CUDA knee race's planes come back
 require dasllama/dasllama_env   // dasllama_home_dir_from - the box file's path under a child's redirected home
 
 // The runtime section's writer and first-start race (dasllama_fat_start), model-free: the
@@ -151,7 +152,7 @@ def private vk_cm2_device() : bool {
 [test]
 def test_the_vulkan_knee_race_sets_the_knee(t : T?) {
     let saved = vk_split_k_tgs()
-    let marker = 77l   //! a knob no rung offers: the race either overwrites it or leaves it standing
+    let marker = 77l   // a knob no rung offers: the race either overwrites it or leaves it standing
     set_vk_split_k_tgs(marker)
     let ran = dasllama_vulkan_knee_race()
     if (!(ran && vk_cm2_device())) {
@@ -167,6 +168,36 @@ def test_the_vulkan_knee_race_sets_the_knee(t : T?) {
     t |> equal(read_json_field(js, "vk_split_k_tgs", -1l), knee, "the snapshot records the raced knee")
     delete_json(js)
     set_vk_split_k_tgs(saved)
+}
+
+//! The CUDA short window's knee race (`dasllama_cuda_knee_race`, the Vulkan race's twin on the shared rung loop): under the CUDA
+//! home's ask on a device with the q8 s column the knee lands on a rung of its race, or 0, goes live in the knob the snapshot
+//! records, and a second race allocates nothing the first left - every width's planes came back through the rung loop's close;
+//! with the home unasked or no device, the knob stands. Which rung wins is the race's verdict, not this cell's.
+[test]
+def test_the_cuda_knee_race_sets_the_knee(t : T?) {
+    let saved = cud_split_k_tgs()
+    let marker = 77l   // a knob no rung offers: the race either overwrites it or leaves it standing
+    set_cud_split_k_tgs(marker)
+    let ran = dasllama_cuda_knee_race()
+    if (!ran) {
+        t |> equal(cud_split_k_tgs(), marker, "the CUDA home unasked or no device: the knee stands")
+        set_cud_split_k_tgs(saved)
+        t |> skip("no CUDA device under an asked CUDA home (DASLLAMA_GPU=1 DASLLAMA_CUDA=1) - the knee race ran nothing")
+        return
+    }
+    static_if (typeinfo builtin_module_exists(cuda)) {   // the knee race ran: a CUDA device answered
+        var inscope rungs <- knee_candidates(KNEE_Q8_WIDTHS) $(d) => (d + 127l) / 128l
+        let knee = cud_split_k_tgs()
+        t |> success(knee == 0l || has_value(rungs, knee), "the raced knee is a rung of its race, or 0 ({knee})")
+        var js = dasllama_runtime_snapshot("")
+        t |> equal(read_json_field(js, "cud_split_k_tgs", -1l), knee, "the snapshot records the raced knee")
+        delete_json(js)
+        let held = cuda_device_bytes_allocated()
+        t |> success(dasllama_cuda_knee_race(), "the race runs again on the same device")
+        t |> equal(cuda_device_bytes_allocated(), held, "... and holds no device bytes the first race left: every width's planes came back")
+    }
+    set_cud_split_k_tgs(saved)
 }
 
 // the fake race the hook-wiring cell installs: it mints one knob and counts its firings

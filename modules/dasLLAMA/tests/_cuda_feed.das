@@ -68,14 +68,27 @@ def fp4_rung_on(t : T?) : bool {
     return true
 }
 
-//! `file` of family `arch` through the CUDA chain and the CPU chain over an `n`-token prompt and eight steps, at `bar` of the step's max |logit|
+//! `file` of family `arch` through the CUDA chain and the CPU chain over an `n`-token prompt and eight steps, at `bar` of the step's max |logit|;
+//! `host_layers` past 0 asks at least that many routed layers' experts onto the host (`set_gpu_host_layers`): the split token command
+//! and the cut window chain, on any card; the plan is held to exactly that count unless `host_more` admits the plan moving more
+//! (a carrier the card cannot hold whole)
 [cold_path]
-def cuda_forced_feed(t : T?; file, arch : string; n, windows : int64; bar : float) {
+def cuda_forced_feed(t : T?; file, arch : string; n, windows : int64; bar : float; host_layers : int64 = 0l; host_more : bool = false) {
+    cuda_forced_feed(t, file, arch, n, windows, bar, host_layers, host_more) $ {}
+}
+
+//! ... with `witness`, the caller's own reads of the driver's counters, run after the fed steps while the model still holds the card
+def cuda_forced_feed(t : T?; file, arch : string; n, windows : int64; bar : float; host_layers : int64; host_more : bool; witness : block<void>) {
     let path = cuda_model_path(t, file)
     if (empty(path) || !assert_pf_window(t)) return
-    var tr <- load_resident(path, 1l)
+    var tr <- load_resident(path, 1l, 0l, host_layers)
     t |> equal(tr.arch, arch, "the file is a {arch}-family model")
     return if (!resident_admitted(t, "the whole-model driver armed on the model (the load log names any decline)", ""))
+    if (host_layers > 0l && host_more) {
+        t |> success(gpu_resident_host_layers() >= host_layers, "at least the first {host_layers} routed layers' experts serve on the host as asked (set_gpu_host_layers): {gpu_resident_host_layers()} of {tr.config.n_layers} do")
+    } elif (host_layers > 0l) {
+        t |> equal(gpu_resident_host_layers(), host_layers, "exactly the first {host_layers} routed layers' experts serve on the host as asked (set_gpu_host_layers; the card holds the rest): {gpu_resident_host_layers()} of {tr.config.n_layers} do")
+    }
     let before = cud_rdec_stats()
     with_dasllama_jobque_() {
         forced_feed_over(t, tr, "{file} cuda ", n, 8l, bar) $ {
@@ -88,6 +101,7 @@ def cuda_forced_feed(t : T?; file, arch : string; n, windows : int64; bar : floa
             t |> success(st.graph, "the token step replays as a captured graph past the first step")
             let unsplit_want = st.unsplit_form && n + 8l <= RD_UNSPLIT_POS ? 8l : 0l
             t |> equal(st.unsplit - before.unsplit, unsplit_want, "the attention's unsplit form served {unsplit_want} of the fed steps (the keys {n + 8l <= RD_UNSPLIT_POS ? "under" : "past"} the unsplit position{st.unsplit_form ? "" : "; the device splits no keys"})")
+            invoke(witness)
         }
         var prompt <- resident_prompt(40l)
         var toks <- resident_feed(8l)

@@ -30,8 +30,7 @@ require _resident_feed
 // row still within the bar of the device-prefilled references. Never more live host-cached sessions than regions: a
 // later prefill would take a live session's region, which the engine leaves to the scheduler's pin.
 // Every cell skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, without its file under
-// models_dir(), or on a card whose room the plan does not fit at two regions; the recurrent and E-series cells also skip
-// under DASLLAMA_CUDA=1 (that home serves the dense slice alone).
+// models_dir(), or on a card whose room the plan does not fit at two regions.
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -430,18 +429,6 @@ def test_gpu_resident_segments_llama_1b_k(t : T?) {
     segments_cells(t, "Llama-3.2-1B-Instruct-Q4_K_M.gguf")
 }
 
-//! the segmented window on a recurrent model: each segment's recurrent rows conv and scan over its own region's slot, a tail
-//! shorter than the conv taps among them; a NextN carrier's carry lands a row a segment, a routed model routes every row
-//! the CUDA home declines an E-series carrier (the per-layer embeddings), so under its ask that cell skips: the whole-model
-//! driver these cells assert armed is that home
-def private cuda_declines_eseries(t : T?) : bool {
-    if (gpu_want_cuda()) {
-        t |> skip("the CUDA home declines the E-series - this carrier's segmented window is the Vulkan home's")
-        return true
-    }
-    return false
-}
-
 //! a fresh device-home session adopts `claim` at `at` - a checkpoint row's position - continues the tail past it and takes `STEPS`
 //! fed steps, held to the solo form; its own parked claim comes back for the next adoption
 def private adopt_at_row(t : T?; tr : Model; claim, at : int64; opening, tail, toks : array<int64>; want : array<array<float>>; what : string) : int64 {
@@ -534,9 +521,7 @@ def private recurrent_segments_cells(t : T?; file : string) {
         segments_cell(t, tr)
         tails_as_segments(t, tr, 2l, TAIL_B, "a tail under the conv taps")   //! the ring's leading rows off the history segment A continues
         tails_as_segments(t, tr, LONG_TAIL, LONG_TAIL, "tails past one window")
-        if (!gpu_want_cuda()) {   //! the CUDA home installs no snapshot seats, so a prefill asks no checkpoint captures of it
-            captures_cell(t, tr)
-        }
+        captures_cell(t, tr)
     }
     g_seg_bar_rel = SPLIT_BAR_REL
     set_resident_prefill_allowed(allowed)
@@ -567,7 +552,7 @@ def test_gpu_resident_segments_hybrid_moe(t : T?) {
 def test_gpu_resident_segments_gemma4_e2b(t : T?) {
     let file = "gemma-4-E2B-it-Q8_0.gguf"
     let path = path_join(models_dir(), file)
-    return if (!family_on(t, "gemma4e") || cuda_declines_eseries(t) || !resident_ready(t, path))
+    return if (!family_on(t, "gemma4e") || !resident_ready(t, path))
     with_gpu_resident_embed(1) {   //! the segmented window reads the side rows' ids: the load gathers the token table on the device
         var tr <- load_resident(path, 2l)
         if (resident_admitted(t, "the whole-model driver armed on {file} (the load log names any decline)", "")) {

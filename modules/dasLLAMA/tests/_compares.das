@@ -116,14 +116,25 @@ def poisoned_copy(v : array<auto(TT)>; at : int; by : TT) : array<TT> {
     return <- c
 }
 
-//! true when every element of `whole` outside [lo, lo + n) is `kept` (any NaN for a NaN) - the slots a run leaves as they were
-def outside_run(whole : array<float>; lo, n : int; kept : float) : bool {
-    for (i in range(length(whole))) {
+//! the elements of `whole` outside [lo, lo + n) that are not `kept` (any NaN for a NaN) - the slots a run moved that it should have
+//! left: their count and the first one's index (-1 where none moved), what a sentinel scan logs
+def kept_off(whole : array<float>; lo, n : int; kept : float) : tuple<bad : int; first : int> {
+    var bad = 0
+    var first = -1
+    for (v, i in whole, count()) {
         continue if (i >= lo && i < lo + n)
-        return false if (is_nan(kept) ? !is_nan(whole[i]) : whole[i] != kept)
+        if (is_nan(kept) ? !is_nan(v) : v != kept) {
+            if (bad == 0) {
+                first = i
+            }
+            bad++
+        }
     }
-    return true
+    return (bad = bad, first = first)
 }
+
+//! true when every element of `whole` outside [lo, lo + n) is `kept` (any NaN for a NaN) - the slots a run leaves as they were
+def outside_run(whole : array<float>; lo, n : int; kept : float) : bool => kept_off(whole, lo, n, kept).bad == 0
 
 //! true when every element of `whole` outside [lo, lo + n) equals the same element of `kept` - the input a run leaves
 def outside_run(whole : array<float>; lo, n : int; kept : array<float>) : bool {

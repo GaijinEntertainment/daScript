@@ -210,6 +210,14 @@ def section_gpu_slots(m : Model) {
     // enumerates devices once and caches) - a defaults-first host picks its
     // backend from these two facts instead of making the user configure one
     print("backends here: metal={kernel_backend_available("metal")}, vulkan={kernel_backend_available("vulkan")}\n")
+    // a discrete card has two homes for the whole-model driver, vulkan
+    // and cuda, and one of them holds the tier's seats a process:
+    // gpu_home names it (the environment's DASLLAMA_CUDA until a program
+    // moves it), gpu_homes lists the homes this build carries, and
+    // set_gpu_home moves the tier before it arms - a name the build
+    // lacks, or a tier already armed elsewhere, answers false
+    print("gpu home: {gpu_home()} of {gpu_homes()};"
+        + " moved to cuda: {set_gpu_home("cuda")}\n")
     set_gpu_tier_want(GpuTierWant(auto_tier = true))
     let armed = moe_gpu_tier_arm()
     let tier = gpu_tier_status()

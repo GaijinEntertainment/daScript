@@ -40,7 +40,8 @@ what licenses deletion without judgment.
 ### An image is named by its lane {#image-lane-name}
 
 A `.dlim` sits beside its source as `<file>.<lane>.dlim`, and the lane is what a person switches
-between on one box: `metal` (the blob flavor), `vulkan`, `cpu-<class>` (the planar flavor under the
+between on one box: `metal` (the blob flavor), `vulkan` and `cuda` (the discrete homes' lanes, each
+minted by its own home's walk - the tag's first word names the home, `#image-vulkan-mint`), `cpu-<class>` (the planar flavor under the
 box's tune class - `cpu-arm-i8mm`, `cpu-x86-vnni512`; a build without the tune framework spells the
 architecture alone, never the active backend, which is a pin the identity supersedes), a family's
 own tag (`whisper-f32`), with `-lut` / `-grid` on the CPU and metal lanes where the IQ3_S serve mode

@@ -22,6 +22,7 @@ require ?vulkan dasllama/dasllama_vulkan_common   // the prompt window's rows, w
 require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_token_n_rows: the N-row command served the batched cells' rows
 require ?vulkan dasllama/dasllama_vulkan_classes   // the discrete layer's GEMV_COL_TILE through it: the groups cell's column tiles
 require ?vulkan dasllama/dasllama_vulkan_prefill   // vk_rdec_prefill_segment_windows: the device-mode tick's segmented-window witness
+require ?cuda dasllama/dasllama_cuda_decode   // the same witnesses on the CUDA home
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed   // served_every_call: the shared served witness
 require _compares   // the head-rows cell's draft compare
@@ -372,6 +373,7 @@ def cell_prefill_continues_on_the_device(t : T?; file : string; rel : float) {
 [cold_path]
 def cell_window_qkn_fused(t : T?; file : string; bar : LogitsBar = LogitsBar.split_bar) {
     t |> run("the window's q/k norm, rope and store as one fused pass reads within the {bar} of the split pair") @(t : T?) {
+        return if (!vulkan_home_cell(t))
         with_regions_rig(t, file) $(tr) {
             static_if (typeinfo builtin_module_exists(vulkan)) {
                 t |> success(tr.config.qk_norm, "the carrier norms its q and k heads")
@@ -467,25 +469,85 @@ def private dn_state_home(var s : Session) : double {
     return sum
 }
 
-//! two sessions over `pa` and `pb`, a region each, through STEPS batched steps against each session alone, every step through the N-row command
-//! the segmented windows the Vulkan driver counted so far; 0 with no vulkan module
+//! the armed discrete home's witnesses - the CUDA driver's under the CUDA ask, else the Vulkan driver's; 0 (true, false) with
+//! neither module: the segmented windows counted so far, whether the N-row command splits the keys as the row alone does, the rows
+//! it steps at once, the side rows gathered off the ids, and the N-row rows whose side / token row the device gathered
 def private segment_windows_count : int64 {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        return cud_rdec_prefill_segment_windows() if (gpu_want_cuda())
+    }
     static_if (typeinfo builtin_module_exists(vulkan)) {
         return vk_rdec_prefill_segment_windows()
-    } else {
-        return 0l
     }
+    return 0l
+}
+
+def private home_rows_split_alike(rows, pos : int64) : bool {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        return cud_rdec_rows_split_alike(rows, pos) if (gpu_want_cuda())
+    }
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return vk_rdec_rows_split_alike(rows, pos)
+    }
+    return true
+}
+
+def private home_token_n_rows : int64 {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        return cud_rdec_token_n_rows() if (gpu_want_cuda())
+    }
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return vk_rdec_token_n_rows()
+    }
+    return 0l
+}
+
+def private home_side_gather_on : bool {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        return cud_rdec_side_gather_on() if (gpu_want_cuda())
+    }
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return vk_rdec_side_gather_on()
+    }
+    return false
+}
+
+def private home_nrow_side_gathered : int64 {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        return cud_rdec_nrow_side_gathered() if (gpu_want_cuda())
+    }
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return vk_rdec_nrow_side_gathered()
+    }
+    return 0l
+}
+
+def private home_nrow_embed_gathered : int64 {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        return cud_rdec_nrow_embed_gathered() if (gpu_want_cuda())
+    }
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return vk_rdec_nrow_embed_gathered()
+    }
+    return 0l
+}
+
+//! a cell over a lever the Vulkan driver alone carries: false after the loud skip where the CUDA home is asked
+def private vulkan_home_cell(t : T?) : bool {
+    if (gpu_want_cuda()) {
+        t |> skip("the CUDA home is asked: this lever is the Vulkan driver's")
+        return false
+    }
+    return true
 }
 
 //! `bar`, or the split bar where a bit-for-bit claim cannot hold over `rows`: past the unsplit position the N-row command splits
 //! a layer's keys into fewer pieces than the row alone wherever its rows' workgroups over the pieces run past one wave of the
 //! card's SMs, and the two commands then sum the keys in two orders (`vk_rdec_rows_split_alike`)
 def private rows_bar(bar : LogitsBar; rows, pos : int64) : LogitsBar {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        if (bar == LogitsBar.bit_exact && !vk_rdec_rows_split_alike(rows, pos)) {
-            to_log(LOG_WARNING, "the N-row command over {rows} rows splits the keys apart from the row alone at {pos} positions on this card: the batched rows hold the split bar, not bit for bit\n")
-            return LogitsBar.split_bar
-        }
+    if (bar == LogitsBar.bit_exact && !home_rows_split_alike(rows, pos)) {
+        to_log(LOG_WARNING, "the N-row command over {rows} rows splits the keys apart from the row alone at {pos} positions on this card: the batched rows hold the split bar, not bit for bit\n")
+        return LogitsBar.split_bar
     }
     return bar
 }
@@ -497,9 +559,7 @@ def private batched_steps_body(t : T?; tr : Model; prompts, feeds : array<array<
         furthest = max(furthest, long_length(p))
     }
     let bar = rows_bar(bar0, rows, furthest + long_length(feeds[0]))
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        t |> success(vk_rdec_rows_split_alike(1l, furthest + long_length(feeds[0])), "one row splits a layer's keys as one row does")
-    }
+    t |> success(home_rows_split_alike(1l, furthest + long_length(feeds[0])), "one row splits a layer's keys as one row does")
     let steps_alone0 = rdec_nrow_steps()
     var alone <- [for (i in range64(rows)); logits_alone(tr, prompts[i], feeds[i])]
     t |> equal(rdec_nrow_steps() - steps_alone0, 0l, "the sessions alone stepped through the one-row command: the N-row counter's control")
@@ -545,13 +605,9 @@ def private batched_steps_body(t : T?; tr : Model; prompts, feeds : array<array<
 //! the commands a batched step of `rows` rows takes: the fewest groups of the rows the N-row command steps at once, the command
 //! asserted to serve the rows at once (a declined command passes the bars above the same); one where the module is absent
 def private batched_groups(t : T?; rows : int64) : int64 {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        let at_once = vk_rdec_token_n_rows()
-        t |> success(at_once >= 2l, "the N-row token command serves the rows at once ({at_once} rows)")
-        return at_once > 0l ? (rows + at_once - 1l) / at_once : 1l
-    } else {
-        return 1l
-    }
+    let at_once = home_token_n_rows()
+    t |> success(at_once >= 2l, "the N-row token command serves the rows at once ({at_once} rows)")
+    return at_once > 0l ? (rows + at_once - 1l) / at_once : 1l
 }
 
 //! the two-prompt form over `pa` and `pb` with the rig's feeds
@@ -570,18 +626,16 @@ def cell_regions_batched_side_rows(t : T?; file : string) {
     t |> run("the side rows of the sessions alone and of the batched steps gather on the device off the rows' ids") @(t : T?) {
         with_gpu_resident_embed(1) {
             with_regions_rig(t, file) $(tr) {
-                static_if (typeinfo builtin_module_exists(vulkan)) {
-                    t |> success(has_ple(tr.config) && vk_rdec_side_gather_on(), "the driver gathers the side rows off the ids (the table and the projection on the device)")
-                    var pa <- prompt_a()
-                    var pb <- prompt_b()
-                    let host0 = ple_host_gather_rows()
-                    let dev0 = vk_rdec_nrow_side_gathered()
-                    batched_steps_body(t, tr, pa, pb, LogitsBar.bit_exact)
-                    t |> equal(ple_host_gather_rows() - host0, 0l, "the host gathered no table row")
-                    t |> equal(vk_rdec_nrow_side_gathered() - dev0, 2l * STEPS, "every batched row's side row gathered off its id")
-                    delete pa
-                    delete pb
-                }
+                t |> success(has_ple(tr.config) && home_side_gather_on(), "the driver gathers the side rows off the ids (the table and the projection on the device)")
+                var pa <- prompt_a()
+                var pb <- prompt_b()
+                let host0 = ple_host_gather_rows()
+                let dev0 = home_nrow_side_gathered()
+                batched_steps_body(t, tr, pa, pb, LogitsBar.bit_exact)
+                t |> equal(ple_host_gather_rows() - host0, 0l, "the host gathered no table row")
+                t |> equal(home_nrow_side_gathered() - dev0, 2l * STEPS, "every batched row's side row gathered off its id")
+                delete pa
+                delete pb
             }
         }
     }
@@ -610,24 +664,24 @@ def cell_regions_batched_embed_gather(t : T?; file : string) {
             var dev, host : array<array<float>>
             with_gpu_resident_embed(1) {
                 with_regions_rig(t, file) $(tr) {
-                    let g0 = vk_rdec_nrow_embed_gathered()
+                    let g0 = home_nrow_embed_gathered()
                     let h0 = batch_rows_host_embedded()
                     delete dev
                     dev <- batched_rows_logits(t, tr)
-                    t |> equal(vk_rdec_nrow_embed_gathered() - g0, 2l * STEPS, "every batched row's token row gathered off its id")
+                    t |> equal(home_nrow_embed_gathered() - g0, 2l * STEPS, "every batched row's token row gathered off its id")
                     t |> equal(batch_rows_host_embedded() - h0, 0l, "the host embedded no batched row")
                 }
             }
             with_gpu_resident_embed(0) {
                 with_regions_rig(t, file) $(tr) {
-                    let g0 = vk_rdec_nrow_embed_gathered()
+                    let g0 = home_nrow_embed_gathered()
                     let h0 = batch_rows_host_embedded()
-                    let side0 = vk_rdec_nrow_side_gathered()
+                    let side0 = home_nrow_side_gathered()
                     delete host
                     host <- batched_rows_logits(t, tr)
-                    t |> equal(vk_rdec_nrow_embed_gathered() - g0, 0l, "with the gather off no batched row gathered: the counter's control")
+                    t |> equal(home_nrow_embed_gathered() - g0, 0l, "with the gather off no batched row gathered: the counter's control")
                     t |> equal(batch_rows_host_embedded() - h0, 2l * STEPS, "with the gather off the host embedded every batched row")
-                    t |> equal(vk_rdec_nrow_side_gathered() - side0, 0l, "with the gather off no side row gathered off an id: the side-rows cell's control")
+                    t |> equal(home_nrow_side_gathered() - side0, 0l, "with the gather off no side row gathered off an id: the side-rows cell's control")
                     gathered_rows_bit_same(t, tr, file, dev, host, 2l)
                 }
             }
@@ -883,10 +937,8 @@ def cell_long_streams(t : T?; file : string; lc : LongCtx) {
                 delete sess
             }
             t |> equal(rdec_nrow_steps() - steps0, STEPS, "every batched step went through the N-row command")
-            static_if (typeinfo builtin_module_exists(vulkan)) {
-                let nrows = vk_rdec_token_n_rows()
-                t |> success(nrows >= n, "the N-row token command serves the {n} rows at once ({nrows} rows)")
-            }
+            let nrows = home_token_n_rows()
+            t |> success(nrows >= n, "the N-row token command serves the {n} rows at once ({nrows} rows)")
             served_every_call(t)
             for (i in range64(n)) {
                 gpu_device_kv_park(owned[i])
@@ -922,7 +974,7 @@ def cell_regions_batched_steps_split(t : T?; file : string; bar : LogitsBar = Lo
 //! hold bit for bit to the row alone on the split pair
 def cell_regions_fuse_bisect(t : T?; file : string) {
     t |> run("the fuse bisect's every bit serves logits within the split bar of the fused run; the split-pair rows batch bit for bit") @(t : T?) {
-        if (!regions_ready(t, file)) return
+        return if (!regions_ready(t, file) || !vulkan_home_cell(t))
         static_if (typeinfo builtin_module_exists(vulkan)) {
             var pa <- prompt_a()
             var fa <- feed_a()
@@ -1878,9 +1930,11 @@ def private da_attn_stamp_key(t : T?; tr : Model; slab_heads : int) : string {
 }
 
 //! a session stepped once through the driver dispatches the decode attention stamp of the armed mirror codec that the
-//! carrier's head shape picks - a slab `slab_heads` q heads wide - the pick a logits compare cannot see, the census can
+//! carrier's head shape picks - a slab `slab_heads` q heads wide - the pick a logits compare cannot see, the census can; the
+//! slab pick and the census names are the Vulkan driver's, so the cell skips under the CUDA ask and without a census
 def cell_regions_stamp_served(t : T?; file : string; slab_heads : int) {
     t |> run("the driver's step dispatches the stamp the carrier's shape picks") @(t : T?) {
+        return if (!vulkan_home_cell(t))
         with_regions_rig(t, file) $(tr) {
             var pa <- prompt_a()
             var fa <- feed_a()
@@ -1890,7 +1944,11 @@ def cell_regions_stamp_served(t : T?; file : string; slab_heads : int) {
             let before = census(key)
             forward(tr, s, fa[0], long_length(pa))
             let after = census(key)
-            t |> success(before == NO_CENSUS || after > before, "the step dispatched {key} ({after - before} dispatches)")
+            if (before == NO_CENSUS) {
+                t |> skip("no kernel census on this build (no dasVulkan module): the stamp's dispatch cannot be counted")
+            } else {
+                t |> success(after > before, "the step dispatched {key} ({after - before} dispatches)")
+            }
             delete s
             delete pa
             delete fa
@@ -1912,7 +1970,13 @@ def private split_forms_pin(on : bool) {
 //! fused act + proj); without the Vulkan module the knob does not exist and the cell skips
 def cell_regions_batched_steps_split_forms(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        cell_regions_batched_steps(t, file, bar, true)
+        if (gpu_want_cuda()) {
+            t |> run("the split one-row forms need the Vulkan driver") @(t : T?) {
+                t |> skip("the CUDA home is asked: the fuse knob is the Vulkan driver's")
+            }
+        } else {
+            cell_regions_batched_steps(t, file, bar, true)
+        }
     } else {
         t |> run("the split one-row forms need the Vulkan driver") @(t : T?) {
             t |> skip("no Vulkan module in this build: the split one-row forms are the Vulkan driver's")
@@ -2017,11 +2081,9 @@ def cell_regions_batched_widen(t : T?; file : string; bar : LogitsBar = LogitsBa
 def cell_regions_batched_groups(t : T?; file : string; rows : int64; bar : LogitsBar = LogitsBar.split_bar) {
     t |> run("{rows} sessions, a region each: a batched step over all of them runs in groups of the command's rows, its GEMVs in column tiles, and every row reads what its session reads alone") @(t : T?) {
         with_regions_rig(t, file, RegionsLoad(regions = rows)) $(tr) {
-            static_if (typeinfo builtin_module_exists(vulkan)) {
-                let at_once = vk_rdec_token_n_rows()
-                t |> success(at_once >= 2l && (at_once < rows || min(rows, at_once) > int64(GEMV_COL_TILE)),
-                    "the command steps {at_once} rows at once against the {rows} rows: the cell measures the groups or the column tiles past {GEMV_COL_TILE}")
-            }
+            let at_once = home_token_n_rows()
+            t |> success(at_once >= 2l && (at_once < rows || min(rows, at_once) > int64(GEMV_COL_TILE)),
+                "the command steps {at_once} rows at once against the {rows} rows: the cell measures the groups or the column tiles past {GEMV_COL_TILE}")
             var prompts <- [for (i in range64(rows)); ramp_ids(40l + i, i, 1000l + 100l * i, 37l + 2l * i, 5000l)]
             var feeds <- [for (i in range64(rows)); ramp_ids(STEPS, i, 2000l, 53l, 4000l)]
             batched_steps_body(t, tr, prompts, feeds, bar)

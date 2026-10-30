@@ -10,9 +10,9 @@ sliding-window layer's K/V mirror rows as a ring, and the floor a ringed history
 sliding layer that owns rows holds `kv_ring_rows` of them: its window plus the most rows one command writes before its
 attention reads (the slack), rounded up to the attention tiles' 64-row step; position `p`'s row sits at slot `kv_ring_row(p,
 ring)` = `p % ring`. A global layer, the NextN head, a ring that would reach the context, and every layer under
-`DASLLAMA_GPU_KV_RING=0` (`set_gpu_kv_ring` in process) keep a row a position, `ring` 0. A shared-KV layer reads its donor's ring. A home whose row movers copy a layer's rows end to end declares
-`install_moe_gpu_resident_kv_ring(false)` (the CUDA home), and the plan then seats a row a position on every sliding layer
-whatever the knob asks, announcing the flat slabs.
+`DASLLAMA_GPU_KV_RING=0` (`set_gpu_kv_ring` in process) keep a row a position, `ring` 0. A shared-KV layer reads its donor's ring. A home whose row movers would copy a layer's rows end to end declares
+`install_moe_gpu_resident_kv_ring(false)`, and the plan then seats a row a position on every sliding layer whatever the knob
+asks, announcing the flat slabs; every home rings.
 The slack is what makes the ring sound: a command writes its rows before it attends, and the earliest query of a command of `n`
 rows reads back to `window - 1` rows under its own position, so the ring must hold `window + n - 1` positions at once; the Vulkan
 slack is the window chain's 512 rows, past the N-row command's 16 and every verify.
@@ -22,7 +22,8 @@ stamps (`GkRopeKvStore`, `GkQknRopeKv` through their `ring` field), the window's
 shadow pass, the decode attention, the flash tiles and the chunked tiles - maps a position through it from the layer's `ring`
 push field, and every host mover reaches the rows through the Vulkan accessors `rd_mir_row` (a position's row in a region) and
 `rd_ring_runs` (a span cut to the runs that sit back to back in the slab: its last `ring` positions, split where the slots
-wrap); the drafter's borrow of the target's mirror reads through the same accessor. A flash tile's step loads 64 (or 32, or a
+wrap) or, on the CUDA home, through `kv_ring_runs` itself over the layer's region base; the drafter's borrow of the target's
+mirror reads through the same accessor. A flash tile's step loads 64 (or 32, or a
 16-row fragment) keys that never straddle the wrap, since both the step start and the ring are multiples of the step; the keys a
 tile loads under a query's window or past the last position land on slots holding other positions' finite rows, which the mask
 drops. The block codecs' f16 shadow stays a row a position: the shadow pass reads each attended position's ring slot and the
