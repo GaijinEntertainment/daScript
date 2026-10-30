@@ -148,11 +148,15 @@ stride of 20 words (16 plus 4 pad, so the fragment loads spread across banks). q
 card's dense q8 GEMMs take the f16 feed; the q8-fed mul_mm L-tile serves the sdot4 and int8 modes.
 
 **The eight subgroups tile the 128 x 128 step two by four.** Each owns 64 weight rows against
-32 tokens as eight 16x16 f16 accumulators (a `coopmatAcc_f16_16x16[8]` walked under
+32 tokens as eight 16x16 f32 accumulators (a `coopmatAcc_f32_16x16[8]` walked under
 `for [unroll_full]`, so every fragment sits in registers) and loads four weight fragments and
 two token fragments per 16-deep multiply-add round: 96 fragment loads per workgroup per k step
 against 144 when every subgroup owned a 16-row strip across all 128 tokens. The accumulators
-widen to f32 (`coopmatConvert`) before the store. A whole tile stores its fragments straight
+are f32 on every KHR arm (this tile, the mm l and m tiles, the flash tile's P V step): RDNA3's
+matrix cores round an f16 accumulator toward zero at every multiply-add (the dasVulkan
+compute-features suite's rounding probe reads it), so a k-long sum in f16 drifts low there by
+about a percent of a row where NVIDIA's round-to-nearest stays inside the bars, and the KHR arms
+serve the cards without cm2, where the f32 accumulate costs no tensor rate. A whole tile stores its fragments straight
 into y (token-major, so a fragment's (weight, token) is `y[token * d + weight]`); an edge tile
 bounces each widened fragment through the weight staging array - free once the k loop ends,
 and its 2560 words hold the eight subgroups' 256-word fragments - and writes under the row and
@@ -173,7 +177,8 @@ tile pick answers 128 and the wave model weighs its k chunks alone (a deep, narr
 into the same scratch planes and reduce the cm2 tiles use), and `cm2_cls_ensure/set/enc` take the KHR
 tile as their tail-0 arm (`cm2_tile_tail`), the same `(fmt)` key the kernel cells' `khr_cls_*` ladder stamps. The f16 feed admits a kq format in mm mode
 only on a 32-lane subgroup (`khr_kq_tile_on`): the body indexes eight subgroups over the tile, so
-a wave64 device (four subgroups per 256-thread workgroup) keeps its kq planes on the sdot4 tile.
+a wave64 device the tier cannot pin at 32 (four subgroups per 256-thread workgroup,
+`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`) keeps its kq planes on the sdot4 tile.
 
 ### The decode GEMV family splits a subgroup across rows by the row length {#kq-gemv-lanes}
 

@@ -2348,25 +2348,25 @@ def coopmat_sm_kernel {
 
 def public coopmat_sm_words : array<uint> => clone_to_move(coopmat_sm_spv)
 
-// ===== f16-ACCUMULATOR coopmat (llama.cpp's NV-default mul_mm form): MulAdd accumulates in f16
-// (halves accumulator registers so big-tile kernels hold many live fragments), then coopmatConvert
-// — a componentwise OpFConvert over the tile — widens to f32 for the store. =====
+// ===== the two accumulator widths in one tile (the KHR arms' form): MulAdd accumulates in f32 -
+// an f16 accumulator rounds toward zero on RDNA3's matrix cores - then coopmatConvert, a
+// componentwise OpFConvert over the tile, rounds it once to f16 for the f16 store. =====
 var @ssbo @binding = 0 cmh_a : array<float16>
 var @ssbo @binding = 1 cmh_b : array<float16>
-var @ssbo @binding = 2 cmh_c : array<float>
+var @ssbo @binding = 2 cmh_c : array<float16>
 
 [compute_shader(local_size_x=32, name="coopmat_f16acc_spv"), marker(no_coverage)]
 def coopmat_f16acc_kernel {
     var a : coopmatA_f16_16x16
     var b : coopmatB_f16_16x16
-    var acc : coopmatAcc_f16_16x16
+    var acc : coopmatAcc_f32_16x16
     let tile0 = gl_WorkGroupID.x * 256u   //! a uint element index, as the engine's f16 K/V mirrors past 2 GB address their tiles
     coopmatLoad(a, cmh_a, tile0, 16, 0)   // A: 16x16 row-major, stride 16
     coopmatLoad(b, cmh_b, tile0, 16, 1)   // B: 16x16 column-major, stride 16
     acc = coopmatMulAdd(a, b, acc)
-    var accw : coopmatAcc_f32_16x16
-    coopmatConvert(accw, acc)
-    coopmatStore(accw, cmh_c, 0, 16, 1)   // C: the WIDENED f32 tile, column-major
+    var acch : coopmatAcc_f16_16x16
+    coopmatConvert(acch, acc)
+    coopmatStore(acch, cmh_c, 0, 16, 1)   // C: the NARROWED f16 tile, column-major
 }
 
 def public coopmat_f16acc_words : array<uint> => clone_to_move(coopmat_f16acc_spv)

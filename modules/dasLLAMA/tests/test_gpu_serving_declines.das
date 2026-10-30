@@ -15,6 +15,7 @@ require ?vulkan dasllama/dasllama_vulkan_prefill  // ple_proj_gemv_why - the win
 require dasllama/dasllama_gpu_kernels_common  // gk_bf16_pairs - the bf16 projection's stamp pick on both homes
 require ?vulkan dasllama/dasllama_vulkan_classes   // ple_proj_bf16_hw - the resident projection's halfword pick, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_common   // GpuState / g_gpu - the device shell ple_proj_gemv_why reads, where the module exists
+require ?vulkan vulkan/vulkan_boost   // subgroup_properties / compute_subgroup_size_pinnable - the pin cell's own reading of the device
 require ?vulkan dasllama/dasllama_vulkan_tower   // vulkan_tower_front_route - the fronts' route asked before any device is up, where the module exists
 require dasllama/dasllama_metal_shapes   // moe_metal_ok - the Metal routed block's admission, portable
 require ?das_metal dasllama/dasllama_metal_common   // decline - the required-mode panic, where the module exists
@@ -1773,6 +1774,33 @@ def test_h128_twin_gate(t : T?) {
             shell.has_coopmat = false
             t |> success(!h128_twin_on(), "... and so does a device without coopmat")
             g_gpu = live
+        }
+    }
+}
+
+//! the subgroup pin: the class pipelines run at DASLLAMA_VK_SUBGROUP where the device's own width differs and it can pin, and
+//! the width-keyed routes read the pinned width
+[test]
+def test_vk_subgroup_pin(t : T?) {
+    t |> run("a device whose own width differs from the knob's pins where it can, and the routes read the pin") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let own = subgroup_properties(g_gpu.phys).subgroupSize
+            let want = g_env_vulkan.vk_subgroup
+            if (want <= 0l || uint(want) == own) {
+                t |> equal(g_gpu.sg_pin, 0u, "the knob off, or a device already at its width ({int(own)}): no pin")
+                t |> equal(g_gpu.subgroup_size, int64(own), "... and the tier runs at the device's own width")
+            } elif (compute_subgroup_size_pinnable(g_gpu.phys, uint(want))) {
+                t |> equal(g_gpu.sg_pin, uint(want), "a device at {int(own)} that can pin {want} pins it")
+                t |> equal(g_gpu.subgroup_size, want, "... the tier runs at the pinned width")
+                t |> equal(khr_kq_tile_on(), g_gpu.has_coopmat && want == 32l, "... and the KHR kq tile reads it")
+            } else {
+                t |> equal(g_gpu.sg_pin, 0u, "a device at {int(own)} that cannot pin {want} runs at its own width")
+                t |> equal(g_gpu.subgroup_size, int64(own), "... which the tier reads")
+            }
         }
     }
 }

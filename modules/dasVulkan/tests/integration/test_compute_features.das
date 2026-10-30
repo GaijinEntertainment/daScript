@@ -65,6 +65,22 @@ def cmt_kernel {
     coopmatStore(acc, cmt_c, 0, 16, 1)
 }
 
+var @ssbo @binding = 0 cma_a : array<float16>   // 16x16 A, row-major
+var @ssbo @binding = 1 cma_b : array<float16>   // 16x16 B, column-major
+var @ssbo @binding = 2 cma_c : array<float16>   // 16x16 C, column-major: the f16 accumulator
+
+//! the f16-accumulator twin of cmt_kernel: how the device rounds a 16-product dot into an f16 accumulator
+[compute_shader(local_size_x=64, name="cma_spv")]
+def cma_kernel {
+    var a : coopmatA_f16_16x16
+    var b : coopmatB_f16_16x16
+    var acc : coopmatAcc_f16_16x16
+    coopmatLoad(a, cma_a, 0, 16, 0)
+    coopmatLoad(b, cma_b, 0, 16, 1)
+    acc = coopmatMulAdd(a, b, acc)
+    coopmatStore(acc, cma_c, 0, 16, 1)
+}
+
 //! packs to 34 bytes: f16 ``d`` at +0, 32 int8 ``qs`` at +2
 struct GBlockQ8 {
     d  : float16
@@ -156,12 +172,12 @@ class Cm2ScaleAcc {
 
 // ===== a multi-SSBO compute runner =====
 
-// One coherent STORAGE buffer per binding, bufs[i] -> binding i, read
-// back into `bufs`; `spec` empty = plain pipeline. The feature flags
-// pick the device - gate on probe_support(), else creation fails.
+// One coherent STORAGE buffer per binding, bufs[i] -> binding i, read back into `bufs`; `spec` empty = plain
+// pipeline; `subgroup` pins the stage's width (0 = the device's own; the int_dot creator and up enable the pin).
+// The feature flags pick the device - gate on probe_support(), else creation fails.
 def run_multi(var words : array<uint>; var bufs : array<array<uint8>>; groups : uint;   // nolint:STYLE038 - flat command-record run
               spec : array<SpecConstantValue>; storage_8_16 : bool; int_dot : bool = false;
-              coopmat : bool = false; coopmat2 : bool = false) {
+              coopmat : bool = false; coopmat2 : bool = false; subgroup : uint = 0u) {
     if (volkInitialize() != 0) {
         panic("no Vulkan loader")
     }
@@ -250,8 +266,9 @@ def run_multi(var words : array<uint>; var bufs : array<array<uint8>>; groups : 
     var plci : PipelineLayoutCreateInfo
     plci.pSetLayouts <- [weak_copy(set_layout)]
     var inscope pipe_layout <- create_pipeline_layout(device, plci)
-    var inscope pipeline <- (empty(spec) ? create_compute_pipeline(device, pipe_layout, shader)
-                                         : create_compute_pipeline(device, pipe_layout, shader, spec))
+    var inscope pipeline <- (subgroup != 0u ? create_compute_pipeline_subgroup(device, pipe_layout, shader, subgroup)
+                                            : (empty(spec) ? create_compute_pipeline(device, pipe_layout, shader)
+                                                           : create_compute_pipeline(device, pipe_layout, shader, spec)))
 
     var cpci : CommandPoolCreateInfo
     cpci.queueFamilyIndex = gfx
@@ -279,14 +296,57 @@ def run_multi(var words : array<uint>; var bufs : array<array<uint8>>; groups : 
 def probe_support() {
     if (volkInitialize() != 0) {
         return (subgroups = false, storage = false, int_dot = false,
-            coopmat = false, coopmat2 = false)
+            coopmat = false, coopmat2 = false, pin = (lo = 0u, hi = 0u, compute = false))
     }
     var inscope instance <- create_instance("dasVulkan probe", make_api_version(1u, 3u, 0u))
     volkLoadInstance(boost_value_to_vk(instance))
     let phys = select_physical_device(instance)
     return (subgroups = subgroup_compute_ops_supported(phys), storage = storage_8_16_supported(phys),
         int_dot = integer_dot_product_supported(phys), coopmat = cooperative_matrix_supported(phys),
-        coopmat2 = cooperative_matrix2_supported(phys))
+        coopmat2 = cooperative_matrix2_supported(phys), pin = subgroup_size_control_range(phys))
+}
+
+//! the subgroup kernel pinned at `width` lanes: every invocation reads that `gl_SubgroupSize`, and the sum the lanes the
+//! 64-wide workgroup fills of it
+def pinned_width_run(t : T?; width : uint) {
+    let n = 256
+    var bufs : array<array<uint8>>
+    bufs |> reserve(4)
+    for (_bi in range(4)) {
+        var inscope b : array<uint8>
+        b |> resize(n * 4)
+        bufs |> emplace(b)
+    }
+    var words <- clone_to_move(sgt_spv)
+    let no_spec : array<SpecConstantValue>
+    run_multi(words, bufs, uint(n / 64), no_spec, true, true, false, false, width)
+    var bad_size = 0
+    var bad_sum = 0
+    for (i in range(n)) {
+        if (u32_of(bufs[1], i) != width) {
+            bad_size++
+        }
+        if (unsafe(reinterpret<float>(u32_of(bufs[0], i))) != float(min(width, 64u))) {
+            bad_sum++
+        }
+    }
+    t |> success(bad_size == 0, "pinned at {width}: gl_SubgroupSize reads {width} on every invocation ({bad_size} wrong)")
+    t |> success(bad_sum == 0, "pinned at {width}: subgroupAdd(1.0) == the lanes of {width} a 64-wide workgroup fills ({bad_sum} wrong)")
+    delete words
+    delete bufs
+}
+
+[test]
+def test_subgroup_pin_gpu(t : T?) {
+    let sup = probe_support()
+    if (!sup.subgroups || !sup.int_dot || !sup.pin.compute) {
+        feint("device lacks subgroup ops, integer dot product or the compute-stage subgroup pin; skipping\n")
+        return
+    }
+    pinned_width_run(t, sup.pin.lo)
+    if (sup.pin.hi != sup.pin.lo) {
+        pinned_width_run(t, sup.pin.hi)
+    }
 }
 
 def put_f32(var buf : array<uint8>; elem : int; v : float) {
@@ -569,6 +629,40 @@ def test_coopmat_gpu(t : T?) {
     delete words
     delete bufs
     delete expected
+}
+
+//! an f16 accumulator's rounding off two dots against a column of ones, [2048, 1 x 15] = 2063 and [1024, 0.5 x 15] = 1031.5: once to
+//! nearest-even reads 2064 and 1032 (NVIDIA), once toward zero 2062 and 1031 (RDNA3's WMMA), a pairwise f16 tree 2062 and 1030,
+//! a sequential f16 sum 2048 and 1024 - a kernel summing many products into an f16 accumulator carries the device's form
+[test]
+def test_coopmat_f16_acc_rounding_gpu(t : T?) {
+    let sup = probe_support()
+    if (!sup.storage || !sup.int_dot || !sup.coopmat) {
+        feint("device lacks cooperative matrix (+8/16-bit storage, int-dot); skipping\n")
+        return
+    }
+    var a_bytes : array<uint8>
+    a_bytes |> resize(256 * 2)
+    var b_bytes : array<uint8>
+    b_bytes |> resize(256 * 2)
+    for (k in range(16)) {
+        put_half(a_bytes, k, k == 0 ? 2048.0 : 1.0)
+        put_half(a_bytes, 16 + k, k == 0 ? 1024.0 : 0.5)   //! row 1: exact 1031.5 - once to even 1032, once toward zero 1031, a pairwise f16 tree 1030, a sequential f16 sum 1024
+        put_half(b_bytes, k, 1.0)
+    }
+    var yb : array<uint8>
+    yb |> resize(256 * 2)
+    var bufs <- [ <- a_bytes, <- b_bytes, <- yb]
+    var words <- clone_to_move(cma_spv)
+    let no_spec : array<SpecConstantValue>
+    run_multi(words, bufs, 1u, no_spec, true, true, true)
+    let got = f16_ref(bufs[2], 0)
+    let got1 = f16_ref(bufs[2], 1)
+    let form = got1 == 1032.0 ? "once to nearest-even" : (got1 == 1031.0 ? "once toward zero" : (got1 == 1030.0 ? "a pairwise f16 tree" : (got1 == 1024.0 ? "a sequential f16 sum" : "an unknown form")))
+    to_log(LOG_INFO, "f16 coopmat accumulator: 2048 + 15 x 1 reads {got}, 1024 + 15 x 0.5 reads {got1} - {form}\n")
+    t |> success(form != "an unknown form", "the f16 accumulator's rounding is a known form ({got} and {got1}: {form})")
+    delete words
+    delete bufs
 }
 
 def csa_a(i : int) : int => (i * 5 + 3) % 7 - 3

@@ -220,6 +220,16 @@ either way, and a missing pair leaves the bits off.
 partial-subgroup guards. A pipeline it returns is valid only on a device from a creator that
 enabled the pair, and only for a workgroup width that is a multiple of the subgroup size.
 
+`create_compute_pipeline_subgroup` is the pair's other consumer: it chains a
+`VkPipelineShaderStageRequiredSubgroupSizeCreateInfo` on the stage, so a kernel written for one
+width - a coopmat tile whose 128 threads own four fragments as four 32-lane subgroups - runs at
+that width on a device whose default is another (RDNA runs 32 or 64 lanes and defaults to 64).
+`subgroup_size_control_range` reports the widths a device admits and whether its compute stage
+may pin at all, and `compute_subgroup_size_pinnable` asks for one width; a pin outside the range,
+or on a device without the pair, fails pipeline creation, so a caller probes first. The pin is the
+pair's `subgroupSizeControl` bit, so every creator that enables the pair enables the pin. The
+plain, full-subgroups and pinned creators are one private builder.
+
 ## The OS's video memory numbers {#os-video-memory}
 
 `vk_os_video_memory` (`src/dasVULKAN.main.cpp`, bound by hand) answers what Vulkan cannot: how

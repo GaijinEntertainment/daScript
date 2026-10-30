@@ -37,6 +37,47 @@ class VkdToy {
     }
 }
 
+struct VsArgs {
+    n : uint
+}
+
+//! every invocation writes the width its subgroup runs at: the tier's pipeline builder pins it where the device's own differs
+[vk_dispatch(name = "vkd_subgroup", grid = "n/64", params = "n : int64")]
+class VkdSubgroup {
+    @ssbo @binding = 0 ws : array<uint>
+    @push_constant pa : VsArgs
+
+    [spirv_kernel(local_size_x = 64, name = "vkd_subgroup_spv")]
+    def run {
+        let i = gl_GlobalInvocationID.x
+        if (i < pa.n) {
+            ws[i] = gl_SubgroupSize
+        }
+    }
+}
+
+struct VmArgs {
+    n : uint
+}
+
+//! an f16 store of a product, the flash tile's `OUT16` store shape: a device that fuses the multiply and the convert rounds the
+//! exact product once, one that rounds it to f32 first rounds twice - the two differ on a product that lands on an f16 midpoint
+[vk_dispatch(name = "vkd_mulcvt", grid = "n/64", params = "n : int64")]
+class VkdMulCvt {
+    @ssbo @binding = 0 xs : array<float>
+    @ssbo @binding = 1 ys : array<float>
+    @ssbo @binding = 2 hs : array<float16>
+    @push_constant pa : VmArgs
+
+    [spirv_kernel(local_size_x = 64, name = "vkd_mulcvt_spv")]
+    def run {
+        let i = gl_GlobalInvocationID.x
+        if (i < pa.n) {
+            hs[i] = float16(xs[i] * ys[i])
+        }
+    }
+}
+
 struct VdBlk {
     qs : int16[16]   //! 32 int8 quants as 16-bit lanes (the q8 block shape)
 }

@@ -68,18 +68,22 @@ def test_coopmat(t : T?) { // nolint:STYLE038 - flat list of opcode/capability a
         }
         delete words
     }
-    t |> run("cooperative matrix f16 ACCUMULATOR + coopmatConvert widening (the mul_mm f16acc form)") <| @(t : T?) {
+    t |> run("cooperative matrix f32 ACCUMULATOR + coopmatConvert narrowing (the KHR arms' f16 stash and store form)") <| @(t : T?) {
         var words <- coopmat_f16acc_words()
+        t |> success(op_has_operand(words, SpvOp.Capability, uint(SpvCapability.CooperativeMatrixKHR)),
+            "OpCapability CooperativeMatrixKHR (6022)")
+        t |> success(length(words) >= 2 && words[1] == SPV_VERSION_1_6,
+            "SPIR-V header version floored to 1.6")
         t |> success(count_op(words, SpvOp.TypeCooperativeMatrixKHR) == 4,
-            "four OpTypeCooperativeMatrixKHR (A, B, f16 accumulator, f32 widened)")
+            "four OpTypeCooperativeMatrixKHR (A, B, f32 accumulator, f16 narrowed)")
         t |> equal(count_uint_indexed_coopmat_loads(words), 2,
             "both f16 A/B loads chain their pointer through a uint-typed element index (the widened `idx : int | uint`)")
         t |> success(count_op(words, SpvOp.CooperativeMatrixMulAddKHR) == 1,
-            "one OpCooperativeMatrixMulAddKHR (f16 accumulate, no operands mask)")
+            "one OpCooperativeMatrixMulAddKHR (f32 accumulate, no operands mask)")
         t |> success(count_op(words, SpvOp.FConvert) == 1,
-            "one OpFConvert — the componentwise f16->f32 tile widening")
+            "one OpFConvert - the componentwise f32->f16 tile narrowing")
         t |> success(count_op(words, SpvOp.CooperativeMatrixStoreKHR) == 1,
-            "one OpCooperativeMatrixStoreKHR (the f32 tile)")
+            "one OpCooperativeMatrixStoreKHR (the f16 tile)")
         let r = validate_spirv(words, "vulkan1.3")
         if (r.ran) {
             t |> success(r.ok, "spirv-val (vulkan1.3): {r.msg}")

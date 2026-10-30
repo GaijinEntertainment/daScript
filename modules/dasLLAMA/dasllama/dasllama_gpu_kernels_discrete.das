@@ -3885,7 +3885,7 @@ class template FaT {
                 m = mt
                 barrier()
                 let sg_col0 = sg * (HS / 4u)
-                var acc : coopmatAcc_f16_16x16[8]
+                var acc : coopmatAcc_f32_16x16[8]   //! f32: an f16 accumulator rounds toward zero on RDNA3's matrix cores, and a step's sum drifts low
                 var kc = 0u
                 while (kc < 64u) {
                     if (j + kc < kvlen) {
@@ -3900,7 +3900,9 @@ class template FaT {
                     kc += 16u
                 }
                 for [unroll_full] (f2 in range(int(HS / 64u))) {
-                    coopmatStore(acc[f2], fpv, int((sg_col0 + uint(f2) * 16u) / 2u), int(hw), 0)
+                    var a16 : coopmatAcc_f16_16x16   //! the step's sum rounded once for the f16 stash
+                    coopmatConvert(a16, acc[f2])
+                    coopmatStore(a16, fpv, int((sg_col0 + uint(f2) * 16u) / 2u), int(hw), 0)
                 }
                 barrier()
                 for [unroll] (z2 in range(int(HS / 16u))) {
@@ -5342,7 +5344,7 @@ class template KqCm2BatchT : MoeCmBase {
         let trow_in_cnt = trow < cnt
         let wrow0 = (sg & 1u) * 64u
         let trow0 = (sg >> 1u) * 32u
-        var acc : coopmatAcc_f16_16x16[8]   // [r * 2 + c]: weight fragment r against token fragment c
+        var acc : coopmatAcc_f32_16x16[8]   // [r * 2 + c]: weight fragment r against token fragment c; f32, since an f16 accumulator rounds toward zero on RDNA3's matrix cores
         var k = k0
         while (k < k1) {
             let kk = k + skh
@@ -5388,21 +5390,17 @@ class template KqCm2BatchT : MoeCmBase {
         let tile_whole = m0 + 128u <= pa.d && tok_tile * BN + BN <= cnt
         if (tile_whole) {
             let yb = ybase + (t0 + trow0) * pa.d + m0 + wrow0
-            var accf32 : coopmatAcc_f32_16x16
             for [unroll_full] (r in range(4)) {
                 for [unroll_full] (c in range(2)) {
-                    coopmatConvert(accf32, acc[r * 2 + c])
-                    coopmatStore(accf32, y, int(yb + uint(c) * 16u * pa.d + uint(r) * 16u), int(pa.d), 1)
+                    coopmatStore(acc[r * 2 + c], y, int(yb + uint(c) * 16u * pa.d + uint(r) * 16u), int(pa.d), 1)
                 }
             }
         } else {
             let lane = gl_SubgroupInvocationID
             let ob = sg * 256u
-            var accf32 : coopmatAcc_f32_16x16
             for [unroll_full] (r in range(4)) {
                 for [unroll_full] (c in range(2)) {
-                    coopmatConvert(accf32, acc[r * 2 + c])
-                    coopmatStore(accf32, khr_ao, int(ob), 16, 0)
+                    coopmatStore(acc[r * 2 + c], khr_ao, int(ob), 16, 0)
                     barrier()
                     for (e in range(8)) {
                         let idx = lane * 8u + uint(e)

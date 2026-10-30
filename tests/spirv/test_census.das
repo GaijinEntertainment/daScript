@@ -112,6 +112,7 @@ def test_opcode_census(t : T?) { // nolint:STYLE038 — a flat one-add_set-per-f
         add_set(present, q8blk_words())
         add_set(present, sdot_words())
         add_set(present, coopmat_words())
+        add_set(present, coopmat_f16acc_words())
         add_set(present, coopmat_i8_words())
         add_set(present, coopmat_sm_words())
         add_set(present, coopmat2_words())
