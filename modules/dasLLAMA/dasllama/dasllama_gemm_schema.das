@@ -101,6 +101,20 @@ def kq_ssb(fmt : int) : int64 => kq_ssb(kq_fmt_of_id(fmt, "kq_ssb"))
 def kq_reads_packed_planes(fmt : int64) : bool =>
     fmt == 4l || fmt == 40l || fmt == 44l || fmt == 3l || fmt == 45l || fmt == 2l || fmt == 35l || fmt == 49l
 
+//! the kq ids whose block body decodes a codebook grid (iq3s, iq3xxs, iq2s, iq2xs, iq2xxs)
+def kq_is_grid(fmt : int) : bool => fmt == 33 || fmt == 34 || fmt == 23 || fmt == 24 || fmt == 25
+
+//! the kq ids whose nibbles pass a 16-entry codebook (iq4xs, iq4nl, iq3s4)
+def kq_is_lut(fmt : int) : bool => fmt == 44 || fmt == 45 || fmt == 35
+
+//! the kq ids whose tile reads nibble planes (k4, k5, k6, q40 and the codebook formats)
+def panel_is_nibble(fmt : int) : bool => fmt == 4 || fmt == 5 || fmt == 6 || fmt == 40 || kq_is_lut(fmt)
+
+//! True for the kq ids `dasllama_gemm_gen` carries a block body for: their generators and every
+//! companion stamp a perm together. Any other member's stubs decline on every rail, the layout
+//! companion included, so its planes stay at the reference interleave the reference bodies read.
+def kq_has_emitter(fmt : int) : bool => panel_is_nibble(fmt) || kq_is_grid(fmt) || fmt == 3 || fmt == 2
+
 //! eight +-1 bytes for sign byte `sb`, lane k negative when bit k is set
 def pm1_of(sb : int) : uint64 {
     var v = 0ul

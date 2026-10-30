@@ -309,11 +309,15 @@ resident plan seats the table under).
 - `dasllama_gemm_gen.das`: nothing to register - `register_dasllama_gemm_generators` walks
   `KqFmt` and registers `<fmt>_gemv`, `<fmt>_tile`, `<fmt>_tile4` and `<fmt>_panel` for every
   member with a schema id, each generator reading its format off its own key.
-  Until the emitter arm exists, leave the format out of `panel_supported`: its gemv, tile and
-  tile4 generators then decline and its panel is a bare return - a declined generator IS the
-  framework's fallback, so the stubs are the cheapest way to have a real family; the `[tune]`
-  family must exist before the emitter does because the loader's kq dispatch, the layout
-  companion and the tuner's completeness check all resolve it by name.
+  Until the emitter arm exists, leave the format out of `kq_has_emitter`
+  (`dasllama_gemm_schema.das`): every stub of the family then declines on every rail - the gemv,
+  tile, tile4 and panel generators AND the shared companions (`perm_declines` reads the stub's
+  format off its `<fmt>q8_` name), so the layout stays at the reference interleave the reference
+  bodies read - a declined generator IS the framework's fallback, so the stubs are the cheapest
+  way to have a real family; the `[tune]` family must exist before the emitter does because the
+  loader's kq dispatch, the layout companion and the tuner's completeness check all resolve it
+  by name. `test_kquant`'s declined-family cell holds that lockstep: a format outside
+  `kq_has_emitter` reads a false witness and layout 4.
 - The AMX bf16 leg (`ARCHITECTURE_CPU_KERNELS.md#amx-bf16-tile`): q40's grid carries two
   `amx_bf16` rows, and a family that copies them owes the leg's companions. In
   `dasllama_math_gen.das`: the stubs `<fmt>q8_tileform_gen` (returns 0), `<fmt>q8_amx_cfg_gen`,
@@ -328,10 +332,9 @@ resident plan seats the table under).
 - `dasllama_math_gen.das`: the format's `kq_registries` overload, returning every registry of
   its family (tile, tile4, gemv by suffix, panel, the tileform and arm companions). The tuner
   walk, the TEST gate and `benchmarks/matmul/kq_kernel_bench.das` read the family from it - a
-  format whose tile registry is non-empty is in the TEST gate and the tune rail. Leave the tile
-  registry empty until the emitter arm lands: the shared layout companion generates for any
-  perm `perm_declines` admits, so a declined tile runs the reference body over planes repacked
-  at the companion's `mr` and reads `maxdiff nan`.
+  format whose tile registry is non-empty is in the TEST gate and the tune rail, and a format
+  with no emitter arm passes both at the reference layout (every seat reports `mr=4`, maxdiff
+  0), since its companions decline with its tile.
 - `harness/gen_tune_probe.das`: `pack_kq_disk_block`, `repack_kq_grp_fmt`, `build_kq_fixture`
   (block size, transcode, the yref oracle), `b32_layout_mrs`; and the
   `<fmt>q8_tile4_gen_variants()` term in `harness/gen_x64_emission_probe.das`, so the emission
@@ -423,7 +426,8 @@ wires differ. The IQ4_XS arms:
 2. `emit_one_block`: `te.kq == 44` routes to the new body ahead of the `te.kq != 0` arm.
 3. `setup_tile_emit(te, gc, p, needMx4 = fmt == 44)`: the mx4 primitive wiring is reused as
    is; the LUT bake picks `iq4nl_lut()` over the e2m1 table on `te.kq == 44`.
-4. `panel_supported` admits 44, so the registered generators emit instead of declining.
+4. `kq_has_emitter` (`dasllama_gemm_schema.das`) admits 44, so the registered generators and the
+   shared companions emit instead of declining.
 5. No `perm_declines` change: the tbl1 rail already sits on every sdot perm (it is the mx4
    companion's), and pshufb is implied by the x64 tiers.
 

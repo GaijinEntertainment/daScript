@@ -2525,3 +2525,22 @@
     embedding path within the Metal window's distance of the f32 model on those rows (`test_embeddings`'
     `EMB_FP32_BAR` cell, run on the CPU rail), or a measured reading that the cost of a wider activation row on the
     CPU q8 GEMVs outweighs it.
+
+266. **nv4 has no CPU emitter arm.** `kq_has_emitter` (`dasllama_gemm_schema.das`) leaves schema 49 out, so every
+    `nv4q8_*` stub declines on every rail and the NVFP4 CPU planes serve through the reference bodies at the grp4
+    layout - correct, and the only superblock format whose mr8/mr16 seats never emit. Done = the nv4 block body in
+    `dasllama_gemm_gen.das`: the mx4 codebook decode (`mx4_lut`, the doubled e2m1 table) on `emit_block_iq4xs`'s
+    sign-trick lattice with split lo/hi accumulators (the iq2 forms' shape), folded per 32-block by the two UE4M3
+    sub-block scales at half (`ue4m3_half_f32`'s law on a byte vector) and the per-superblock Q8_K scale; its
+    `panel_scales` / `panel_quads` / `panel_ioff` arms for the bf16 panel; 49 admitted to `kq_has_emitter`; the
+    TEST gate (`DAS_TUNE_MODE=test harness/gen_tune_probe.das`) green on every seat at its own mr, and the class
+    profiles re-minted with the family's crowns.
+
+267. **The `--tune` completeness verdict names the row-major GEMV families no tuner half races.** After a full
+    `--tune` mint of `dasllama-cli`, `llvm_tune` reports the scope incomplete, missing the twenty `<fmt>q8_rm_gemv_gen`
+    families (the streamed expert rail's one-copy GEMVs, `dasllama_math_gen.das`), while a plain start of the cli and
+    of the server on a profile without them races nothing and writes no sidecar - the demanded set differs between
+    the two paths. The 2026-10-21 class profiles carried those twenty entries; neither `gen_tune_probe` nor
+    `tune_kernels` races them now, so the 2026-10-30 profiles do not. Done = one demanded set for both paths (the
+    families the program compiles and the halves race), and the rm families either raced by a half or outside the
+    scope's demand.

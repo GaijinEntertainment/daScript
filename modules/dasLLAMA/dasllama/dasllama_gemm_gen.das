@@ -138,10 +138,21 @@ def private parse_perm(gc : LlvmCodeCtx) : TilePerm {
     return p
 }
 
+//! the schema id of the kq format a `<fmt>q8_<kind>_gen` stub belongs to, -1 for every other stub: a name that is no KqFmt member, or a member with no schema id (q8, mx4 and the per-32 families, which have emitters of their own)
+def private kq_stub_fmt(gc : LlvmCodeCtx) : int {
+    let nm = "{gc.fn.name}"
+    let cut = find(nm, "q8_")
+    return -1 if (cut <= 0)
+    var f = KqFmt.q8
+    return kq_fmt_of_name(slice(nm, 0, cut), f) ? kq_desc(f).schema_id : -1
+}
+
 // The ONE decline predicate all four generators share — the tile and its companions must
 // fall back together on every rail, or repack and kernel desync (the two-function-stamp
-// contract). Rails: knob validity, schema, per-ISA leg, geometry, vreg budget, dot availability.
+// contract). Rails: the format's emitter arm, knob validity, schema, per-ISA leg, geometry, vreg budget, dot availability.
 def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint:STYLE037,STYLE038 — the flat decline ladder IS the perm contract; splitting hides which leg refused
+    let sf = kq_stub_fmt(gc)
+    if (sf >= 0 && !kq_has_emitter(sf)) return true
     if (p.dotPrim == "amx_bf16") {
         if ((p.kstep != 1)
             || (p.nrsplit != 1 && p.nrsplit != 2)
@@ -4441,7 +4452,7 @@ def private is_kq_gemv_signature(fn : Function const?) : bool => ptrs_then_i64_s
 // IR riding kq_dot_lane, so it declines via the SAME perm_declines — no new rails.
 def private kq_gemv_gen(var gc : LlvmCodeCtx) : bool {
     let fmt = kq_gen_fmt(gc)
-    if (!panel_supported(fmt) || !is_kq_gemv_signature(gc.fn)) return false
+    if (!kq_has_emitter(fmt) || !is_kq_gemv_signature(gc.fn)) return false
     let p0 = parse_perm(gc)
     if (perm_declines(gc, p0)) return false
     let p = companion_perm(p0)
@@ -4614,11 +4625,6 @@ def private panel_i8_row(te : TileEmit; var p : LLVMOpaqueValue?; signed : bool;
     var wide = signed ? LLVMBuildSExt(b, raw, te.vni32, "") : LLVMBuildZExt(b, raw, te.vni32, "")
     return LLVMBuildSIToFP(b, wide, te.vnf32, name)
 }
-
-def private kq_is_grid(fmt : int) : bool => fmt == 33 || fmt == 34 || fmt == 23 || fmt == 24 || fmt == 25
-def private kq_is_lut(fmt : int) : bool => fmt == 44 || fmt == 45 || fmt == 35
-def private panel_is_nibble(fmt : int) : bool => fmt == 4 || fmt == 5 || fmt == 6 || fmt == 40 || kq_is_lut(fmt)
-def private panel_supported(fmt : int) : bool => panel_is_nibble(fmt) || kq_is_grid(fmt) || fmt == 3 || fmt == 2
 
 //! the integer offset a format's code carries (w = s * (q - ioff)); the k4/k5 and k2 mins are a separate o term
 def private panel_ioff(fmt : int) : int => fmt == 6 ? 32 : (fmt == 40 ? 8 : (fmt == 3 ? 4 : 0))
@@ -4809,7 +4815,7 @@ def private panel_gen_impl(var gc : LlvmCodeCtx; fmt, q8ScaleBytes : int) : bool
     let b = gc.jit.builder
     var entry = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "entry")
     LLVMPositionBuilderAtEnd(b, entry)
-    if (dot_kind(p.dotPrim) != DOT_AMX_BF16 || p.mr != 16 || !(q8 || panel_supported(fmt))) {
+    if (dot_kind(p.dotPrim) != DOT_AMX_BF16 || p.mr != 16 || !(q8 || kq_has_emitter(fmt))) {
         LLVMBuildRetVoid(b)
         return true
     }
@@ -4929,7 +4935,7 @@ def private panel_gen_impl(var gc : LlvmCodeCtx; fmt, q8ScaleBytes : int) : bool
 // vs 4 per-token GEMVs. Declines via the SAME perm_declines — no new rails.
 def private kq_tile_gen(var gc : LlvmCodeCtx) : bool {
     let fmt = kq_gen_fmt(gc)
-    if (!panel_supported(fmt) || !is_tile_signature(gc.fn)) return false
+    if (!kq_has_emitter(fmt) || !is_tile_signature(gc.fn)) return false
     let p0 = parse_perm(gc)
     if (perm_declines(gc, p0)) return false
     if (dot_kind(p0.dotPrim) == DOT_AMX_BF16) {
@@ -4940,7 +4946,7 @@ def private kq_tile_gen(var gc : LlvmCodeCtx) : bool {
 
 def private kq_tile4_gen(var gc : LlvmCodeCtx) : bool {
     let fmt = kq_gen_fmt(gc)
-    if (!panel_supported(fmt) || !is_tile_signature(gc.fn)) return false
+    if (!kq_has_emitter(fmt) || !is_tile_signature(gc.fn)) return false
     let p0 = parse_perm(gc)
     if (perm_declines(gc, p0)) return false
     return emit_kq_vector_tile(gc, tile4_perm(p0), fmt)

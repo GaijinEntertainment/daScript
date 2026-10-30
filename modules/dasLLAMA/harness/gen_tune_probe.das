@@ -303,8 +303,8 @@ def kq_gemv_entry(fmt : int64) : string => replace(kq_tile_entry(fmt), "_tile_ge
 
 //! the gemv's seat among the tile winner's same-layout rows; "" when the tile winner keeps it
 [arch(at = "../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#gemv-seat")]
-def private kq_gemv_seat(fmt : int64; winner : int; names : array<string>; vmr : array<int64>; tile, gemv : array<double>) : string {
-    var cand <- [for (i in range(length(names))); i; where vmr[i] == vmr[winner] && tile[i] < 1.0e29lf]
+def private kq_gemv_seat(fmt : int64; winner : int; names : array<string>; vmr : array<int64>; tile, gemv : array<double>; emits : array<bool>) : string {
+    var cand <- [for (i in range(length(names))); i; where emits[i] && vmr[i] == vmr[winner] && tile[i] < 1.0e29lf]
     cand |> sort() <| cmp_by(tile[_])
     if (length(cand) > 2) {
         cand |> resize(2)
@@ -322,7 +322,7 @@ def private kq_gemv_seat(fmt : int64; winner : int; names : array<string>; vmr :
     }
     pick = gen_sticky(kq_gemv_entry(fmt), names, gemv, pick)
     delete cand
-    return pick == winner ? "" : names[pick]
+    return pick == winner || !emits[pick] ? "" : names[pick]   // a declined incumbent never keeps the seat: the gemv follows the tile
 }
 
 // synthetic disk superblocks, varied per (row, superblock) so no two blocks repeat: any byte
@@ -585,6 +585,17 @@ def private panel_of(pvs : array<tuple<string; KqPanelFn>>; suffix : string) : K
         }
     }
     return fn
+}
+
+//! whether a variant's stamp emitted on this box - its witness companion's answer; the reference row counts, being the body every declined variant also runs
+def private emits_of(wvs : array<tuple<string; function<() : bool>>>; suffix : string) : bool {
+    return true if (suffix == "reference")
+    for (v in wvs) {
+        if (v._0 == suffix) {
+            return invoke(v._1)
+        }
+    }
+    return false
 }
 
 def run_kq_tile_bf16(tile; gemv; panel : KqPanelFn; fx : KqFixture; kq : array<uint8>; ks : array<uint8>; mr, form : int64; var y : array<float>) {
@@ -1276,16 +1287,19 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>; var ge
     let gmacs = double(kgfx.n * kgfx.d)
     let hmacs = double(khfx.n * khfx.d)
     let gwbytes = double(kgfx.d * kgfx.nsb * (kq_qsb(fmt) + kq_ssb(fmt)))
+    // a declined variant runs the reference body - the race times it, but never crowns its name
+    var emits <- [for (t in tvs); emits_of(regs.witness, t._0)]
     var winner = 0
     for (vi in range(nv)) {
-        if (best[vi] < best[winner]) {
+        if (emits[vi] && (!emits[winner] || best[vi] < best[winner])) {
             winner = vi
         }
         rows_out[tvs[vi]._0] = JV((tile_us = best[vi], gemv_us = gbest[vi], hot_us = hbest[vi]))
-        tune_detail("k{fmt} {tvs[vi]._0} (mr={vmr[vi]}): tile {macs / best[vi] / 1000.0lf} GMAC/s, gemv stream {gmacs / gbest[vi] / 1000.0lf} GMAC/s ({gwbytes / gbest[vi] / 1000.0lf} GB/s w), hot {hmacs / hbest[vi] / 1000.0lf} GMAC/s (best of {ROUNDS}){held[vi]}\n")
+        tune_detail("k{fmt} {tvs[vi]._0} (mr={vmr[vi]}): tile {macs / best[vi] / 1000.0lf} GMAC/s, gemv stream {gmacs / gbest[vi] / 1000.0lf} GMAC/s ({gwbytes / gbest[vi] / 1000.0lf} GB/s w), hot {hmacs / hbest[vi] / 1000.0lf} GMAC/s (best of {ROUNDS}){held[vi]}{emits[vi] ? "" : ", declined"}\n")
     }
     var tnames <- [for (t in tvs); t._0]
-    winner = gen_sticky(kq_tile_entry(fmt), tnames, best, winner)
+    let sticky = gen_sticky(kq_tile_entry(fmt), tnames, best, winner)
+    winner = emits[sticky] ? sticky : winner
     var tbest : array<double>
     tbest |> resize(nv)
     for (i in range(nv)) {
@@ -1340,12 +1354,13 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>; var ge
             delete ktfx
         }
     }
-    gemv_out = kq_gemv_seat(fmt, winner, tnames, vmr, best, tbest)
+    gemv_out = kq_gemv_seat(fmt, winner, tnames, vmr, best, tbest, emits)
     if (!empty(gemv_out)) {
         rows_out["gemv_seat"] = JV((seat = gemv_out, tile_seat = tvs[winner]._0, gemv_us = gbest[winner], team_us = tbest[winner]))
     }
     delete tbest
     delete tnames
+    delete emits
     let wname = tvs[winner]._0
     delete ky
     delete kyg
