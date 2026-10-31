@@ -561,6 +561,7 @@ def public cubin_cached(source, name : string; compile_opts : array<string>; var
         return <- image if (!empty(image))
     }
     var log : string
+    delete image
     image <- cuda_compile(source, name, compile_opts, CudaImage.cubin, log)
     if (empty(image)) {
         error = log

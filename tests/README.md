@@ -975,6 +975,7 @@ Coverage of per-iteration `finally` semantics across every loop form. Each cell 
 | File | Description | Expects errors |
 |---|---|---|
 | _cuda_common.das | *(helper)* Shared fixtures - the kernel classes every suite emits, CPU-runs and launches, plus the declared census | |
+| test_cuda_cache_read_cleanup.das | CPU fault injection checks cache-hit ownership and failed-read buffer release before compilation | |
 | test_cuda_plumbing.das | Host gate - driver and NVRTC, the cubin cache, a hand-written kernel launched with the struct-of-pointers parameter blob, graphs, the boost's refusals and panics, the leak gate | |
 | test_cuda_emit.das | Emitted text shape of every construct family on the fixtures, plus every fixture's text through NVRTC for the card present | |
 | test_cuda_census.das | Census gate - union of construct kinds the emitter records across every fixture == `declared_cuda_census`, both directions | |
