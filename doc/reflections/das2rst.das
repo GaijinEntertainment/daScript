@@ -615,7 +615,7 @@ def document_module_json(_root : string) {
     var mod = find_module("json")
     var groups <- array<DocGroup>(
         group_by_regex("Value conversion", mod, %regex~(JV|JVNull)$%%),
-        group_by_regex("Read and write", mod, %regex~(read_json|read_json_bounded|write_json|write_json_compact)$%%),
+        group_by_regex("Read and write", mod, %regex~(read_json|read_json_bounded|write_json|write_json_compact|sorted_keys)$%%),
         group_by_regex("Memory management", mod, %regex~(delete_json|update|json_null_sentinel)$%%),
         group_by_regex("JSON properties", mod, %regex~(set_no_trailing_zeros|set_no_empty_arrays|set_allow_duplicate_keys)$%%),
         group_by_regex("Broken JSON", mod, %regex~(try_fixing_broken_json)$%%)

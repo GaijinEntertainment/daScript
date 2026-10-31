@@ -601,7 +601,7 @@ def private save_sidecar_doc(path : string; var doc : JsonValue?) : bool {
         }
     }
     update(doc, "provenance", prov)
-    let ok = fwrite(path, write_json(doc))
+    let ok = fwrite(path, write_json(doc, true))
     if (ok) {
         // mtime is 1s-granular: a same-second re-read must not reuse a PRE-write box observation
         var sfs : FStat
@@ -725,7 +725,7 @@ def tune_profile_export(outPath : string; klass : string) : bool {
     prov["class"] = JV(klass)
     prov["written"] = JV(iso8601_now())
     var out = JV({ "kernels" => JV(kernels), "provenance" => JV(prov) })
-    let ok = fwrite(outPath, write_json(out))
+    let ok = fwrite(outPath, write_json(out, true))
     print(ok ? "llvm_tune: profile '{klass}' exported -> {outPath} ({length(ks as _object)} kernel entries)\n"
              : "llvm_tune: profile export FAILED writing {outPath}\n")
     delete_json(out)

@@ -757,8 +757,34 @@ def set_allow_duplicate_keys(value : bool) {
     return old_adc
 }
 
-def private write_value(var writer : StringBuilderWriter; jsv : JsonValue?; depth : int) {
-    //! writes JSON value `jsv` into the `writer` at indentation `depth`.
+def sorted_keys(tab : table<string; JsonValue?>) : array<string> {
+    //! an object's keys in sorted order - the order a file that is diffed
+    //! and merged prints them in
+    var ks <- [for (k in keys(tab)); k]
+    sort(ks)
+    return <- ks
+}
+
+def private write_member(var writer : StringBuilderWriter; first : bool; elemK : string;
+                         elemV : JsonValue?; depth : int; sort_keys : bool) : bool {
+    //! writes one object member after the comma its predecessor owes;
+    //! returns whether the next member is still the first one written
+    if (no_empty_arrays && elemV.value is _array && empty(elemV.value as _array)) return first
+    if (!first) {
+        write(writer, ",\n")
+    }
+    write_chars(writer, '\t', depth + 1)
+    write(writer, "\"");
+    write_escape_string(writer, elemK);
+    write(writer, "\" : ")
+    write_value(writer, elemV, depth + 1, sort_keys)
+    return false
+}
+
+def private write_value(var writer : StringBuilderWriter; jsv : JsonValue?; depth : int;
+                        sort_keys : bool) {
+    //! writes JSON value `jsv` into the `writer` at indentation `depth`,
+    //! an object's keys sorted under `sort_keys`.
     if (jsv == null) {
         write(writer, "null")
     } elif (jsv.value is _string) {
@@ -786,7 +812,7 @@ def private write_value(var writer : StringBuilderWriter; jsv : JsonValue?; dept
                     write(writer, ",\n")
                 }
                 write_chars(writer, '\t', depth + 1)
-                write_value(writer, elem, depth + 1)
+                write_value(writer, elem, depth + 1, sort_keys)
             }
             write(writer, "\n")
             write_chars(writer, '\t', depth)
@@ -798,18 +824,17 @@ def private write_value(var writer : StringBuilderWriter; jsv : JsonValue?; dept
         } else {
             write(writer, "\{\n")
             var first = true
-            for (elemK, elemV in keys(jsv.value as _object), values(jsv.value as _object)) {
-                if (no_empty_arrays && elemV.value is _array && empty(elemV.value as _array)) continue
-                if (first) {
-                    first = false
-                } else {
-                    write(writer, ",\n")
+            if (sort_keys) {
+                var inscope ks <- sorted_keys(jsv.value as _object)
+                for (elemK in ks) {
+                    (jsv.value as _object) |> get(elemK) $(elemV) {
+                        first = write_member(writer, first, elemK, elemV, depth, sort_keys)
+                    }
                 }
-                write_chars(writer, '\t', depth + 1)
-                write(writer, "\"");
-                write_escape_string(writer, elemK);
-                write(writer, "\" : ")
-                write_value(writer, elemV, depth + 1)
+            } else {
+                for (elemK, elemV in keys(jsv.value as _object), values(jsv.value as _object)) {
+                    first = write_member(writer, first, elemK, elemV, depth, sort_keys)
+                }
             }
             write(writer, "\n")
             write_chars(writer, '\t', depth)
@@ -829,10 +854,12 @@ def private write_value(var writer : StringBuilderWriter; jsv : JsonValue?; dept
 }
 
 [temp_string_result]
-def write_json(val : JsonValue?) : string {
-    //! returns JSON (textual) representation of JsonValue as a string.
+def write_json(val : JsonValue?; sort_keys : bool = false) : string {
+    //! returns JSON (textual) representation of JsonValue as a string;
+    //! `sort_keys` prints every object's keys in sorted order (a file
+    //! that is diffed and merged), else the table's order.
     let st = build_string() $(var writer) {
-        write_value(writer, val, 0)
+        write_value(writer, val, 0, sort_keys)
     }
     return st
 }
@@ -901,10 +928,10 @@ def write_json_compact(val : JsonValue?) : string {
     return st
 }
 
-def write_json(val : JsonValue?#) : string {
+def write_json(val : JsonValue?#; sort_keys : bool = false) : string {
     //! Overload accepting temporary type
     unsafe {
-        return write_json(reinterpret<JsonValue?>(val))
+        return write_json(reinterpret<JsonValue?>(val), sort_keys)
     }
 }
 
