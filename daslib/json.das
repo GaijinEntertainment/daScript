@@ -757,8 +757,8 @@ def set_allow_duplicate_keys(value : bool) {
     return old_adc
 }
 
-def private write_value(var writer : StringBuilderWriter; jsv : JsonValue?; depth : int) {
-    //! writes JSON value `jsv` into the `writer` at indentation `depth`.
+def private write_value(var writer : StringBuilderWriter; jsv : JsonValue?; depth : int; sorted_keys : bool) {
+    //! writes JSON value `jsv` into the `writer` at indentation `depth`, an object's keys sorted under `sorted_keys`.
     if (jsv == null) {
         write(writer, "null")
     } elif (jsv.value is _string) {
@@ -786,7 +786,7 @@ def private write_value(var writer : StringBuilderWriter; jsv : JsonValue?; dept
                     write(writer, ",\n")
                 }
                 write_chars(writer, '\t', depth + 1)
-                write_value(writer, elem, depth + 1)
+                write_value(writer, elem, depth + 1, sorted_keys)
             }
             write(writer, "\n")
             write_chars(writer, '\t', depth)
@@ -798,18 +798,25 @@ def private write_value(var writer : StringBuilderWriter; jsv : JsonValue?; dept
         } else {
             write(writer, "\{\n")
             var first = true
-            for (elemK, elemV in keys(jsv.value as _object), values(jsv.value as _object)) {
-                if (no_empty_arrays && elemV.value is _array && empty(elemV.value as _array)) continue
-                if (first) {
-                    first = false
-                } else {
-                    write(writer, ",\n")
+            var inscope ks <- [for (k in keys(jsv.value as _object)); k]
+            if (sorted_keys) {   //! the same document then always prints the same, so two files of it diff and merge
+                sort(ks)
+            }
+            for (elemK in ks) {
+                (jsv.value as _object) |> get(elemK) $(elemV) {
+                    if (!(no_empty_arrays && elemV.value is _array && empty(elemV.value as _array))) {
+                        if (first) {
+                            first = false
+                        } else {
+                            write(writer, ",\n")
+                        }
+                        write_chars(writer, '\t', depth + 1)
+                        write(writer, "\"");
+                        write_escape_string(writer, elemK);
+                        write(writer, "\" : ")
+                        write_value(writer, elemV, depth + 1, sorted_keys)
+                    }
                 }
-                write_chars(writer, '\t', depth + 1)
-                write(writer, "\"");
-                write_escape_string(writer, elemK);
-                write(writer, "\" : ")
-                write_value(writer, elemV, depth + 1)
             }
             write(writer, "\n")
             write_chars(writer, '\t', depth)
@@ -829,10 +836,10 @@ def private write_value(var writer : StringBuilderWriter; jsv : JsonValue?; dept
 }
 
 [temp_string_result]
-def write_json(val : JsonValue?) : string {
-    //! returns JSON (textual) representation of JsonValue as a string.
+def write_json(val : JsonValue?; sorted_keys : bool = false) : string {
+    //! returns JSON (textual) representation of JsonValue as a string; `sorted_keys` prints every object's keys in sorted order (a file that is diffed and merged), else the table's order.
     let st = build_string() $(var writer) {
-        write_value(writer, val, 0)
+        write_value(writer, val, 0, sorted_keys)
     }
     return st
 }
@@ -901,10 +908,10 @@ def write_json_compact(val : JsonValue?) : string {
     return st
 }
 
-def write_json(val : JsonValue?#) : string {
+def write_json(val : JsonValue?#; sorted_keys : bool = false) : string {
     //! Overload accepting temporary type
     unsafe {
-        return write_json(reinterpret<JsonValue?>(val))
+        return write_json(reinterpret<JsonValue?>(val), sorted_keys)
     }
 }
 
