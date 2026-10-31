@@ -420,18 +420,40 @@ def bench_gemv_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
     delete regs
 }
 
+//! the suffix's panel companion row; null when the registry has none (the shared `kq_panel_bf16` builds it then)
+def panel_row(pvs : array<tuple<string; KqPanelGenFn>>; suffix : string) : KqPanelGenFn {
+    var fn : KqPanelGenFn
+    for (v in pvs) {
+        if (v._0 == suffix) {
+            fn = v._1
+        }
+    }
+    return fn
+}
+
 def bench_tile_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; var p : Planes; nsb : int64; sh : PlaneShape) {
     let plane_bytes = int64(cfg.d) * (sh.tileW_row + sh.ws_row)
     var regs <- fmt_registries(f)
+    for (w in regs.witness) {   // the family's witness rows: the amx ones take the per-process tile permission their tiles need (SIGILL without it), as the q8 family's do
+        invoke(w._1)
+    }
     var mrs <- companion_ints(regs.layout)
+    var forms <- companion_ints(regs.tileform)
     let perCall : table<string; int64>   // a kq / per-32 tile covers TILE_TOKENS a call
     var stats : array<RowStat>
     var fns : array<TileFn>
-    var mrOf, stepOf : array<int64>
+    var mrOf, stepOf, formOf : array<int64>
+    var panels : array<KqPanelGenFn>
     select_tile_rows(cfg, name, int64(cfg.d), regs.tile, mrs, perCall, stats, fns, mrOf, stepOf)
+    formOf |> reserve(length(stats))
+    panels |> reserve(length(stats))
+    for (st in stats) {
+        formOf |> push(forms?[st.perm] ?? 0l)
+        panels |> push(panel_row(regs.panel, st.perm))
+    }
     unsafe {
-        time_tile_rows(stats, cfg, fns, mrOf, stepOf, addr<uint8 const?>(p.arena[p.tileKq]), addr<uint8 const?>(p.arena[p.ks]), sh, p,
-            type<uint8 const?>, type<uint8 const?>)
+        time_tile_rows_kq(stats, cfg, int(f), fns, mrOf, stepOf, formOf, panels, addr<uint8 const?>(p.arena[p.gemvKq]), addr<uint8 const?>(p.arena[p.tileKq]),
+            addr<uint8 const?>(p.arena[p.ks]), sh, p)
     }
     for (st in stats) {
         emit_row(rows, name, "tile", st, int64(cfg.n), int64(cfg.d), int64(cfg.ntok), nsb, plane_bytes)
@@ -440,8 +462,74 @@ def bench_tile_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
     delete fns
     delete mrOf
     delete stepOf
+    delete formOf
+    delete panels
     delete regs
     delete mrs
+    delete forms
+}
+
+//! the kq TILE arm's timing: a row of the quant-plane form walks its groups over the batch as `time_tile_rows` does, off the
+//! tile plane `wp`; a row of a bf16 form (`formOf` > 0, the amx_bf16 perms) builds its unit's panel a token block off the grp
+//! plane `gp` and runs the tile over the bf16 activation plane - the production walk (`bf16_walk`), the panel build inside
+//! its time as in the tuner's race
+def time_tile_rows_kq(var stats : array<RowStat>; cfg : BenchArgs; fmt : int; fns : array<TileFn>; mrOf, stepOf, formOf : array<int64>;
+                      panels : array<KqPanelGenFn>; gp, wp, sp : uint8 const?; sh : PlaneShape; var p : Planes) {
+    let n = int64(cfg.n)
+    let d = int64(cfg.d)
+    let ntok = int64(cfg.ntok)
+    let nsb = n / 256l
+    var maxForm = 0l
+    for (fm in formOf) {
+        maxForm = max(maxForm, fm)
+    }
+    var pbuf : array<uint16>
+    unsafe {
+        let xqp = addr<int8 const?>(p.arena[p.xq])
+        let xsp = addr<float const?>(p.arena[p.xs])
+        let xbsp = addr<int const?>(p.arena[p.xbs])
+        var yp = addr<float?>(p.arena[p.y])
+        var pp : uint16?
+        var xbp : int8 const?
+        if (maxForm > 0l) {
+            if (ntok % amx_bf16_tile_tokens() != 0l) {
+                panic("kq_kernel_bench: --ntok {ntok} is not a multiple of the bf16 tile's {amx_bf16_tile_tokens()} tokens, which a bf16 form row walks")
+            }
+            pbuf |> resize(maxForm * 16l * n + 32l)
+            pp = bf16_align64(addr(pbuf[0]))
+            xbp = reinterpret<int8 const?>(xbf16_build(xqp, xsp, n, ntok, 256l))
+        }
+        time_rows(stats, cfg.rounds) $(row : int) {
+            let mr = mrOf[row]
+            let form = formOf[row]
+            if (form > 0l) {
+                bf16_walk(0l, d / mr, form, 0l, ntok, ntok, amx_bf16_tile_tokens(), $(g : int64) {
+                    let kqg = gp + g * mr * sh.gemvW_row
+                    let ksg = sp + g * mr * sh.ws_row
+                    if (panels[row] != null) {
+                        invoke(panels[row], kqg, ksg, mr, nsb, n, form, pp)
+                    } else {
+                        kq_panel_bf16(fmt, kqg, ksg, mr, nsb, n, form, pp)
+                    }
+                }, $(g, tk : int64) {
+                    invoke(fns[row], yp, reinterpret<uint8 const?>(pp), sp + g * mr * sh.ws_row, xbp, xsp, xbsp, n, d, g, tk)
+                }, $(g, tk : int64) {
+                    panic("kq_kernel_bench: a four-token tail at group {g} token {tk} under a bf16 form row")
+                }, $(g, gn, tk : int64) {
+                    panic("kq_kernel_bench: a token tail at group {g} ({gn} groups) token {tk} under a bf16 form row")
+                })
+                return
+            }
+            for (g in range64(d / mr)) {
+                var t0k = 0l
+                while (t0k < ntok) {
+                    invoke(fns[row], yp, wp + g * mr * sh.tileW_row, sp + g * mr * sh.ws_row, xqp, xsp, xbsp, n, d, g, t0k)
+                    t0k += stepOf[row]
+                }
+            }
+        }
+    }
+    delete pbuf
 }
 
 //! the registry rows --perm selects, into stats and the typed function list
