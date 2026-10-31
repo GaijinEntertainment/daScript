@@ -130,7 +130,8 @@ def private cls_select_run(t : T?; var dev, queue; y : array<float>; words : arr
         var inscope ids <- mc |> plane_as(pi, type<uint>, cap * rows)
         var inscope vals <- mc |> plane_as(pv, type<float>, cap * rows)
         var inscope rec <- mc |> plane_as(pr, type<float>, recw * rows)
-        out <- sel_unpack(hdr, ids, vals, rec, words, int64(rows))
+        out <- sel_unpack( // nolint:PERF030 - fresh; cell runs once
+            hdr, ids, vals, rec, words, int64(rows))
     }
     return <- out
 }

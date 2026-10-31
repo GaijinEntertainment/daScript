@@ -583,6 +583,8 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 
 | File | Description | Expects errors |
 |---|---|---|
+| _cmres_block_common.das | *(helper)* Invokes a callback while returning a separate aggregate | |
+| cmres_block.das | Captured returned locals retain copied values, moved array ownership, and nested read access | |
 | _glob.das | *(helper)* Shared module defining `AAA = 10` | |
 | _helper_foo.das | *(helper)* Module providing `TestObjectFoo` struct and `testFoo` function | |
 | _helper_macro_uninferred.das | *(helper)* `[bad_emitter]` structure_macro that adds an un-inferred function during patch | |

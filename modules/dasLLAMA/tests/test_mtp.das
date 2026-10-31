@@ -54,7 +54,8 @@ def private gen_spec(tr : Model; prompt : array<int64>; total : int; var nd, na 
     var out : array<int64>
     with_dasllama_jobque() {
         var s = make_run_state(tr.config)
-        out <- generate_mtp_greedy(tr, s, prompt, int64(total), nd, na)
+        out <- generate_mtp_greedy( // nolint:PERF030 - fresh; queue runs once
+            tr, s, prompt, int64(total), nd, na)
         delete s
     }
     return <- out

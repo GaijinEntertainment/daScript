@@ -1240,7 +1240,8 @@ def private cls_argmax_run(y : array<float>; vocab, rows : int64) : array<uint> 
                 enc_cls_argmax_part(raw, h, sp, pc, rows * nchunk)
                 enc_cls_argmax_fin(raw, h, sf, pc, rows)
             }
-            ids <- cp |> plane_as(pd, type<uint>, int(rows))
+            ids <- cp |> plane_as( // nolint:PERF030,LINT019 - fresh; Vulkan cell runs once
+                pd, type<uint>, int(rows))
         }
     }
     return <- ids
@@ -1340,7 +1341,8 @@ def private cls_select_run(y : array<float>; sel : array<uint>; vocab, rows : in
             var inscope ids <- cp |> plane_as(pi, type<uint>, int(cap * rows))
             var inscope vals <- cp |> plane_as(pv, type<float>, int(cap * rows))
             var inscope rec <- cp |> plane_as(pr, type<float>, int(recw * rows))
-            out <- sel_unpack(hdr, ids, vals, rec, sel, rows)
+            out <- sel_unpack( // nolint:PERF030,LINT019 - fresh; Vulkan cell runs once
+                hdr, ids, vals, rec, sel, rows)
         }
     }
     return <- out
@@ -1583,7 +1585,8 @@ def private actf16_halves(g, u : array<float>; nelem, elem0 : int; ubase : int =
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_actf16_cls(raw, h, sc, pc, int64((nelem / 4 + 255) / 256))
             }
-            halves <- cp |> plane_as(ph, type<uint>, length(g) / 2)
+            halves <- cp |> plane_as( // nolint:PERF030,LINT019 - fresh; Vulkan cell runs once
+                ph, type<uint>, length(g) / 2)
         }
     }
     return <- halves
@@ -3835,7 +3838,7 @@ def private da_attn_b_run(f : DaAttnBFix; stamp : int; scale, cap : float; windo
                     enc_da_attn_b_h128_f16_cls(raw2, h2, sc, pc, wgs)
                 }
             }
-            y <- cp |> plane_run(py)
+            y <- cp |> plane_run(py) // nolint:PERF030,LINT019 - fresh; Vulkan cell runs once
         }
     }
     return <- y

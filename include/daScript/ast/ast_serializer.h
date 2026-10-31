@@ -362,7 +362,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 237;   // 237: SideEffects::mayRaise in a function's sideEffectFlags
+            return 238;   // 238: captured return locals retain stack storage
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

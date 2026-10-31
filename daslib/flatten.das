@@ -720,7 +720,8 @@ def public flatten_opt_residuals(var func : FunctionPtr; no_fast_math : bool = f
     //! `hadd_min_width` MUST be the floor the `flatten_fuse` run used (`flatten_hadd_pack_pairs() ? 2 : 3`) — a floor-3 oracle over a floor-2 pass calls a unit with surviving width-2 misses complete.
     var res : array<string>
     ast_gc_guard() {
-        res <- opt_residuals(func, FLATTEN_BARRIERS, no_fast_math, hadd_min_width)
+        res <- opt_residuals( // nolint:PERF030 - empty; guard fills once
+            func, FLATTEN_BARRIERS, no_fast_math, hadd_min_width)
     }
     return <- res
 }
@@ -813,7 +814,7 @@ def public flatten_fold_residuals(var func : FunctionPtr; no_fast_math : bool = 
         make_visitor(*v) $(adapter) {
             visit(func.body, adapter)
         }
-        res <- v.found
+        res <- v.found // nolint:PERF030 - empty local filled once by this guard
         unsafe {
             delete v
         }

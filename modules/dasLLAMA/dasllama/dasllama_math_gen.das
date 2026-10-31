@@ -3944,7 +3944,7 @@ struct KqRegistries {
 def kq_registries_of(kf : KqFmt) : KqRegistries {   // nolint:STYLE037 - kq_fmt_stamp's generated arms, one a format
     var regs : KqRegistries
     kq_fmt_stamp(kf) $(F) {
-        regs <- kq_registries(F)
+        regs <- kq_registries(F) // nolint:PERF030 - fresh; one format arm
     }
     return <- regs
 }

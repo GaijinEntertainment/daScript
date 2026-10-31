@@ -154,7 +154,8 @@ def private step_logits(tr : Model; tabled : bool) : array<float> {
         let n = long_length(prompt)
         forward_prefill(tr, s, prompt, n, 0l)
         forward(tr, s, argmax_of(s.logits), n)
-        out <- [for (i in range64(tr.config.vocab_size)); s.logits[i]]
+        out <- [ // nolint:PERF030 - fresh; queue runs once
+            for (i in range64(tr.config.vocab_size)); s.logits[i]]
         delete prompt
         delete s
     }
