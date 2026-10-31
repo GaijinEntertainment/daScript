@@ -450,6 +450,18 @@ def private sub_test_any_lambda(name : string; func : lambda; args_num : int; va
 }
 
 
+//! Run in runner context so diagnostics belong to its heap.
+[export]
+def private record_test_log(context : FileCtx; var messages : array<string>;
+                            var location : string&; msg : string; at : LineInfo) {
+    let loc = file_info_hr(at, context.uriPaths)
+    log::info("{context.indenting}{loc}: {msg}")
+    messages |> push("{loc}: {msg}")
+    if (empty(location)) {
+        location = "{at.fileInfo != null ? string(at.fileInfo.name) : ""}:{int(at.line)}"
+    }
+}
+
 def private test_any(name : string; func; args_num : int; var context : FileCtx; var res : SuiteResult&) {  // nolint:STYLE038 - one invoke-and-report arm per test-function signature
     if (!log::failuresOnly) {
         log::info("{context.indenting}=== RUN '{name}'")
@@ -504,12 +516,11 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
                     }
                 }
 
-                testing.onLog <- @ capture(& context, & testMessages, & testLocation)(msg : string; at : LineInfo) {
-                    let loc = file_info_hr(at, context.uriPaths)
-                    log::info("{context.indenting}{loc}: {msg}")
-                    testMessages |> push("{loc}: {msg}")
-                    if (empty(testLocation)) {
-                        testLocation = "{at.fileInfo != null ? string(at.fileInfo.name) : ""}:{int(at.line)}"
+                testing.onLog <- @ capture(& selfCtx, & context, & testMessages,
+                    & testLocation)(msg : string; at : LineInfo) {
+                    unsafe {
+                        selfCtx |> invoke_in_context("record_test_log", context,
+                            testMessages, addr(testLocation), msg, at)
                     }
                 }
 
@@ -549,20 +560,6 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
                 }
             }
         }
-    }
-
-    // clone strings from test context into dastest context
-    if (!empty(testMessages)) {
-        var clonedMessages : array<string>
-        clonedMessages |> reserve(length(testMessages))
-        for (m in testMessages) {
-            clonedMessages |> push(clone_string(m))
-        }
-        delete testMessages
-        testMessages <- clonedMessages
-    }
-    if (!empty(testLocation)) {
-        testLocation = clone_string(testLocation)
     }
 
     var expectFailure = context.expectFailure

@@ -81,13 +81,9 @@ class T : Asserter {
         skipNow()
     }
 
-    def const getTimeUsec() : int {
-        return get_time_usec(startTick)
-    }
+    def const getTimeUsec() : int => get_time_usec(startTick)
 
-    def const getTimeSec() : double {
-        return double(getTimeUsec()) / 1000000.0lf
-    }
+    def const getTimeSec() : double => double(getTimeUsec()) / 1000000.0lf
 }
 
 let private BENCH_UNROLL = 10
@@ -344,10 +340,7 @@ def failure(tb : Asserter?; msg = "") : bool {
 
 //! Skip the current test arm: prints `msg` and lands the arm in the suite's skipped count (not
 //! a pass). Does NOT unwind — use the arm-fatal shape `if (gate) { t |> skip("..."); return }`.
-//! Deliberately avoids both T.skipNow (its panic from AOT-compiled test frames corrupted state
-//! at volume) and onLog (the log handler grows dastest-owned arrays under the TEST context —
-//! a cross-context allocation that corrupted the heap at skip volume; skips don't need the
-//! failure-report message capture, so the reason prints directly).
+//! Skips print directly, without retaining failure-report messages.
 def skip(t : T?; msg : string) {
     to_log(LOG_INFO, "\tskipped: {msg}\n")
     t.onSkipNow |> invoke()
@@ -413,8 +406,7 @@ def private run_impl(b : B?, name : string; chunk_size : int64; op : block) {
     var num_runs = 1
     var time_total = 0l
     var name_announced = false
-    var before : AllocSnapshot
-    var after : AllocSnapshot
+    var before, after : AllocSnapshot
     while (true) {
         before = alloc_snapshot()
         time_total = run_batch_ns(num_runs, op)
