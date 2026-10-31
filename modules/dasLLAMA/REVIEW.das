@@ -1131,7 +1131,7 @@ def private check_exe_fn_global_restore {
         var line_no = 0
         for (line in split(strip_line_comments(text), "\n")) {
             line_no++
-            if (line |> starts_with("[init, boot_restore]") || line |> starts_with("[boot_restore, init]")) {
+            if ((line |> starts_with("[")) && annotation_has(line, "init") && annotation_has(line, "boot_restore")) {
                 generated = true
                 restore_line = line_no
             }
@@ -1167,16 +1167,23 @@ def private check_exe_fn_global_restore {
     }
 }
 
+//! the tier's text with comments stripped, "" where the tree carries no tier or its tier has no home switch (a fixture's cut-down copy)
+def private gpu_tier_text : string {
+    let path = "{DASLLAMA_DIR}/dasllama_gpu_tier.das"
+    return "" if (!fexist(path))
+    let text = strip_line_comments(fread(path))
+    return find(text, "def set_gpu_home_(") < 0 ? "" : text
+}
+
 //! the GPU home switch resets the tier's seats: the `= @@fn` globals through `[seat_reset]`'s walk, the flags a home's entry
 //! declares by value through `gpu_home_reset_flags` - every `g_*_installed` global but the arm's own `g_moe_gpu_installed`
 //! (the switch runs before any arm) and every global a public `install_*` seat, `set_moe_gpu_streams` or
 //! `set_rdec_chain_charged` assigns `on`, `true` or `false` must appear in that function's body, or the other home inherits
 //! the first one's declaration; the `set_moe_gpu_*_route` levers are the process's, not a home's (ARCHITECTURE_GPU.md#gpu-backends)
 def private check_gpu_home_reset_flags {
-    let path = "modules/dasLLAMA/dasllama/dasllama_gpu_tier.das"
-    return if (!fexist(path))   // a fixture tree without the tier carries no home switch to hold
-    let text = strip_line_comments(fread(path))
-    return if (find(text, "def set_gpu_home_(") < 0)   // a tier with no home switch (a fixture's cut-down copy) has nothing to reset
+    let path = "{DASLLAMA_DIR}/dasllama_gpu_tier.das"
+    let text = gpu_tier_text()
+    return if (empty(text))
     var owed : table<string; int>   //! flag global -> the line that declares or assigns it
     var reset_names : table<string>   //! the globals `gpu_home_reset_flags` assigns
     var in_setter = false
@@ -1229,6 +1236,95 @@ def private check_gpu_home_reset_flags {
     for (gname, at in keys(owed), values(owed)) {
         if (!key_exists(reset_names, gname)) {
             gate_finding(path, at, "`{gname}` is a flag a GPU home's entry declares, and `gpu_home_reset_flags` does not reset it - the other home would inherit this one's declaration after `set_gpu_home`")
+        }
+    }
+}
+
+//! the tier's globals declared `= @@fn` - the seats `[seat_reset]` walks, `var` and `var private` alike
+def private fn_seat_globals(text : string) : table<string> {
+    var seats : table<string>
+    for (line in split(text, "\n")) {
+        var rest = ""
+        if (line |> starts_with("var private ")) {
+            rest = slice(line, length("var private "))
+        } elif (line |> starts_with("var ")) {
+            rest = slice(line, length("var "))
+        }
+        if (!empty(rest) && find(rest, "= @@") > 0) {
+            seats |> insert(ident_prefix(rest))
+        }
+    }
+    return <- seats
+}
+
+//! the setters of the tier's function seats: every function of `dasllama_gpu_tier` whose body assigns one of `fn_seat_globals`
+def private gpu_tier_seat_setters(text : string) : table<string> {
+    var inscope seats <- fn_seat_globals(text)
+    var setters : table<string>
+    var fn = ""
+    for (line in split(text, "\n")) {
+        if (line |> starts_with("def ")) {
+            fn = def_name_of(line)
+            continue
+        }
+        continue if (empty(fn))
+        let body = strip(line)
+        continue if (find(body, " = ") <= 0)
+        if (key_exists(seats, ident_prefix(body))) {
+            setters |> insert(fn)
+        }
+    }
+    return <- setters
+}
+
+//! `name` among the names of a function's annotation lines (`[init]`, `[init, arch(...)]`, `[boot_restore, init]`, several lines joined)
+def private annotation_has(ann, name : string) : bool {
+    for (group in split(ann, "]")) {
+        let open = find(group, "[")
+        continue if (open < 0)
+        for (part in split(slice(group, open + 1), ",")) {
+            return true if (strip(part) == name)
+        }
+    }
+    return false
+}
+
+//! the home switch resets every seat and refills them from the installers alone (`register_gpu_home`, `register_gpu_home_shared`):
+//! a seat an `[init]` fills directly is empty after `set_gpu_home`, and the tier reads its declared default (a provider that answers
+//! nothing, a hook that declines) with no line said
+def private check_gpu_home_seat_registrants {
+    let tier_text = gpu_tier_text()
+    return if (empty(tier_text))
+    var inscope setters <- gpu_tier_seat_setters(tier_text)
+    dir(DASLLAMA_DIR) $(name) {
+        return if (!ends_with(name, ".das") || name == "dasllama_gpu_tier.das")
+        let path = "{DASLLAMA_DIR}/{name}"
+        var ann = ""
+        var fn = ""
+        var fn_init = false
+        var line_no = 0
+        for (line in split(strip_line_comments(fread(path)), "\n")) {
+            line_no++
+            if (line |> starts_with("[")) {
+                ann += line
+                continue
+            }
+            if (line |> starts_with("def ")) {
+                fn = def_name_of(line)
+                fn_init = annotation_has(ann, "init")
+                ann = ""
+                continue
+            }
+            if (line |> starts_with("}")) {
+                fn_init = false
+                continue
+            }
+            continue if (!fn_init)
+            for (setter in keys(setters)) {
+                if (find(line, "{setter}(") >= 0) {
+                    gate_finding(path, line_no, "`{setter}` fills a GPU home seat from `[init]` (`{fn}`): `set_gpu_home` resets every seat and refills them from the installers alone - register the call with `register_gpu_home` under its home, or `register_gpu_home_shared` where every home holds it alike, and run the installer from the `[init]` (ARCHITECTURE_GPU.md#gpu-backends)")
+                }
+            }
         }
     }
 }
@@ -3592,6 +3688,7 @@ def main() : int {
     check_image_layout_stamp()
     check_exe_fn_global_restore()
     check_gpu_home_reset_flags()
+    check_gpu_home_seat_registrants()
     check_race_bind_numbers()
     check_gpu_role_partition()
     check_fastmath_default()

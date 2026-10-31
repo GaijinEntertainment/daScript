@@ -6430,6 +6430,12 @@ def private vulkan_embed_decode_gate(t : Model; s : Session; npos, pos : int64) 
 [hot_path, unused_argument(t, s, npos, pos), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private vulkan_embed_batch_gate(t : Model; s : Session; npos, pos : int64) : bool => g_rdec_active && g_rdec_emb_gpu && !g_rdec_experts_host
 
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def private resident_install_loader_seats() {
+    set_moe_gpu_slice_window_fn(@@vk_slice_window_provider)
+    set_moe_gpu_stream_source_fn(@@vk_stream_source_provider)
+}
+
 [init, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def resident_driver_register() {
     register_dn_host_sync(@@rdec_ring_to_host)
@@ -6451,8 +6457,8 @@ def resident_driver_register() {
     register_ple_gpu_decode_gate(@@vulkan_ple_gate)   //! the one-row token command gathers the row on device too
     register_prefill_override_split_span("vulkan")
     register_gpu_upload_resident(@@moe_gpu_upload_resident)
-    set_moe_gpu_slice_window_fn(@@vk_slice_window_provider)
-    set_moe_gpu_stream_source_fn(@@vk_stream_source_provider)
+    register_gpu_home_shared(@@resident_install_loader_seats)
+    resident_install_loader_seats()
 }
 
 // ===== multi-model GPU slot switch (marks swap + whole-model drop/re-arm) =====

@@ -1727,7 +1727,12 @@ declares by value read back as that home's (the CUDA home's site feeds on, the V
 `set_gpu_home` refuses a name no entry registered (`metal`, the empty name) and leaves the home, answers true for the current
 one; the switch to the other home this build carries lands and comes back with every flag following, and where the
 environment armed the tier at [init] (`DASLLAMA_GPU=1`) the switch is refused and the home stands - the arm the env runs
-decides which arm of the cell runs, so the file runs under both envs.
+decides which arm of the cell runs, so the file runs under both envs. The switch cell registers a counting installer with
+`register_gpu_home_shared` and takes it back out on both exits: the switch to the other home runs it once, the switch back
+once more, and the switch refused after the tier armed at [init] not at all; the whole-model driver's two provider seats
+(`moe_gpu_loader_seats_installed`) hold its providers before, after each switch, and after the refused one - on a build
+carrying both discrete homes with `DASLLAMA_GPU` unset, the driver's shared registration deleted, or the shared loop moved
+ahead of the reset, fails the cell.
 `test_gpu_shared_units.das` - model-free, device-free, loads neither GPU home: the host code both discrete homes share -
 `test_stream_pinned_free_follows_the_maker` installs fake allocators for both homes on the expert cache's pinned seat
 (`set_stream_pinned_fns`) and holds `stream_pinned_release` to the buffer's maker (`PinnedBuf.home`): a CUDA-made buffer

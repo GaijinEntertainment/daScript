@@ -27,10 +27,18 @@ config): every seat goes back to its declared default (`[seat_reset]`'s walk of 
 installers fill them. A home this build does not carry, or a switch after the tier armed (the
 environment arms at `[init]` under `DASLLAMA_GPU`), is refused by name. A driver with seats of its
 own under one home - the CUDA assistant drafter's seams - registers its installer under that home
-too. The knob reads as off in a build without dasCUDA (`gpu_home` is `"vulkan"` where the `cuda`
-witness module is absent, one warning said): the engine never requires the CUDA home there, and
-the Vulkan entry keeps the seats rather than standing down for a home that does not exist. The
-resident rail's override key stays the literal `"vulkan"` under either home: it names the whole-model
+too. A driver whose seats read the same under every home - the whole-model driver's slice-window
+and stream-source providers, the Metal mirror's K/V-room and dn-room hooks - registers its
+installer as shared (`register_gpu_home_shared`) and runs it at `[init]`; a switch runs the shared
+installers right after the reset, before the named home's. A seat an `[init]` fills directly
+reads its declared default after a switch: the reset empties it and only the installers fill
+seats again. `REVIEW.das`'s `check_gpu_home_seat_registrants` fails an `[init]` function that
+calls a seat setter of `dasllama_gpu_tier.das` directly: it walks every `dasllama/` file but
+`dasllama_gpu_tier.das` (the seats' owner) and licenses no names. The knob reads as off in a
+build without dasCUDA (`gpu_home` is `"vulkan"` where the `cuda` witness module is absent, one
+warning said): the engine never requires the CUDA home there, and the Vulkan entry keeps the
+seats rather than standing down for a home that does not exist. The resident rail's override key
+stays the literal `"vulkan"` under either home: it names the whole-model
 tier, not the backend serving it. The roles:
 
 | role | holds | must not hold |
@@ -181,13 +189,14 @@ tier, not the backend serving it. The roles:
   `ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`) and `install_moe_gpu_resident_kv_share` (a shared-KV layer serves off its donor's mirror; both
   discrete homes declare it on, and under off the plan declines the model by the layer) - all behind the route lever `set_gpu_resident_route` / `gpu_want_resident`, the streamed layers' seats
   both homes fill - the classifier tail's selection landing `install_rdec_select` (`ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-selection-landing`, `ARCHITECTURE_GPU_MTP_DECODE_PICK.md#metal-selection-landing`) - the streamed layers' seats
-  both discrete homes fill - the tier's word that it streams `set_moe_gpu_streams`, the mint's dry flag `set_moe_gpu_mint_dry_fn` (`vk_mint_dry` / `cud_mint_dry`), the f16-fed chain `set_moe_gpu_ffn_xf_hooks` /
+  both discrete homes fill - the lane's stream sources `set_moe_gpu_stream_source_fn` and slice windows
+  `set_moe_gpu_slice_window_fn` (the whole-model driver's shared installer's, under either home), the tier's word that it streams `set_moe_gpu_streams`, the mint's dry flag `set_moe_gpu_mint_dry_fn` (`vk_mint_dry` / `cud_mint_dry`), the f16-fed chain `set_moe_gpu_ffn_xf_hooks` /
   `_async_hooks`, the meet's device/host claim `set_moe_gpu_ffn_xf_meet_hooks`, the pool window `set_moe_gpu_xf_pool_window_fn`,
   the pool's DMA fill `install_moe_gpu_resident_hot_dma`, the pool's placement batch `install_moe_gpu_resident_hot_batch`, the
   slot's carve `set_moe_gpu_carve_fn`, and the expert cache's view, order, stats, slot and request seats `set_moe_gpu_stream_view_fn` /
   `_cache_order_fn` / `_cache_stats_fn` / `_cache_fns` / `_request_fns` (the shared `dasllama_gpu_stream_cache` answers them for
   either home) and the host twin `set_moe_gpu_host_twin_fns` (the shared `dasllama_gpu_host_twin`'s) - and the streamed layers'
-  seats the Vulkan family alone fills - the lane's stream sources `set_moe_gpu_stream_source_fn`, the checkpoint row's ring `install_rdec_dn_snap_ring`
+  seats the Vulkan family alone fills - the checkpoint row's ring `install_rdec_dn_snap_ring`
   and the host-bytes census `set_moe_gpu_host_bytes_fn` (`ARCHITECTURE_GPU_VULKAN_STREAM.md`,
   `ARCHITECTURE_GPU_VULKAN_POOL.md`) - the
   OS video-memory seat `install_moe_gpu_os_memory` the residency plan sizes against, the weight-bytes seat

@@ -24,6 +24,12 @@ def private home_flags_follow(tc : T?; home : string) {
 //! the environment's spelling of the home: the CUDA ask in a build that carries the home, else vulkan
 def private env_home : string => g_env_gpu.cuda && has_value(gpu_homes(), "cuda") ? "cuda" : "vulkan"
 
+var private g_shared_installs = 0
+
+def private count_shared_install() {
+    g_shared_installs++
+}
+
 [test]
 def test_gpu_home(t : T?) {
     t |> run("the home is the environment's spelling, among the homes this build carries") @(tc : T?) {
@@ -53,14 +59,25 @@ def test_gpu_home(t : T?) {
             tc |> skip("this build carries one discrete home ({gpu_homes()})")
             return
         }
+        register_gpu_home_shared(@@count_shared_install)
+        let installs = g_shared_installs
+        tc |> success(moe_gpu_loader_seats_installed(), "the whole-model driver's provider seats hold its providers at [init]")
         if (moe_gpu_tier_installed()) {
-            tc |> success(!set_gpu_home(other), "the tier armed on {home} at [init] (DASLLAMA_GPU): the switch to {other} is refused")
+            tc |> success(!set_gpu_home(other), "the tier armed on {home} at [init] (DASLLAMA_GPU=1): the switch to {other} is refused")
             home_flags_follow(tc, home)
+            tc |> equal(g_shared_installs, installs, "the refused switch (DASLLAMA_GPU=1) ran no shared installer")
+            tc |> success(moe_gpu_loader_seats_installed(), "and left the provider seats filled")
+            unregister_gpu_home_shared(@@count_shared_install)
             return
         }
         tc |> success(set_gpu_home(other), "the switch to {other} lands")
         home_flags_follow(tc, other)
+        tc |> equal(g_shared_installs, installs + 1, "the switch (DASLLAMA_GPU unset) ran the shared installer once")
+        tc |> success(moe_gpu_loader_seats_installed(), "the provider seats hold the driver's providers again under {other}: the shared installers ran after the reset")
         tc |> success(set_gpu_home(home), "and back to {home}")
         home_flags_follow(tc, home)
+        tc |> equal(g_shared_installs, installs + 2, "the switch back (DASLLAMA_GPU unset) ran it once more")
+        tc |> success(moe_gpu_loader_seats_installed(), "and the provider seats hold the driver's providers under {home}")
+        unregister_gpu_home_shared(@@count_shared_install)
     }
 }
