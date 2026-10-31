@@ -4921,6 +4921,15 @@ def private panel_scales(var te : TileEmit; fmt : int; var sb : LLVMOpaqueValue?
         s[1] = dd
         o[0] = null
         o[1] = null
+    } elif (fmt == 49) {   //! the block's two UE4M3 strip codes a row, the rows' pairs interleaved: strip h of row r is byte 2r + h
+        var v32i8 = LLVMVectorType(te.types.t_int8, 32u)
+        var pairs = LLVMBuildLoad2Aligned(b, v32i8, panel_gep8(te, sb, blk * 32), 1u, "ue")
+        for (h in range(2)) {
+            var inscope mask <- [for (r in range(16)); 2 * r + h]
+            var codes = LLVMBuildZExt(b, LLVMBuildShuffleVector(b, te.types, pairs, pairs, mask, ""), te.vni32, "")
+            s[h] = ue4m3_half_ir(te, codes, "s{h}")
+            o[h] = null
+        }
     } elif (fmt == 2) {
         var dd = panel_f16_row(te, sb, 256, "dd")
         var dm = panel_f16_row(te, sb, 288, "dm")
@@ -5113,7 +5122,7 @@ def private panel_gen_impl(var gc : LlvmCodeCtx; fmt, q8ScaleBytes : int) : bool
         if (te.pshuf_decl == null) return false
         var b2Types <- [te.vwi8, te.vwi8]
         te.pshuf_ty = LLVMFunctionType(te.vwi8, b2Types)
-        te.lut = codebook_lut(te, fmt == 35 ? iq3s4_lut() : iq4nl_lut(), 4)
+        te.lut = codebook_lut(te, fmt == 35 ? iq3s4_lut() : (fmt == 49 ? mx4_lut() : iq4nl_lut()), 4)
     }
     let signed = q8 || kq_is_grid(fmt) || kq_is_lut(fmt)
     let ioff = panel_ioff(fmt)

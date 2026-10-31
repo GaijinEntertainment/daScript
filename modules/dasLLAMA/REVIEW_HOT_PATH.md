@@ -25,13 +25,13 @@ step makes sure the function that records the dispatch or holds the loop or call
 under, a region entry that carries `[hot_path]` or a `[no_alloc]` / `[no_env]` / `[no_io]`
 contract.**
 
-**A function that a serving step runs through a function value, where no `[hot_path]`, contract or
-`[cold_path]` function reaches the `invoke`, carries `[hot_path]`, a `[no_alloc]` / `[no_env]` /
-`[no_io]` contract, or `[cold_path]`.** The allocation lint follows an `invoke` only from inside an
-annotated region, so nothing else covers that path into the function.
+**A function that a serving step `invoke`s from a seat filled in a module other than the reaching
+annotated function's carries `[hot_path]`, a `[no_alloc]` / `[no_env]` / `[no_io]` contract, or
+`[cold_path]`.** The allocation lint does not follow an `invoke` into a function another module
+filled the seat with, so nothing else covers that path into the function.
 
 **A `[cold_path]` function that a serving step calls, or runs through a function value, with no
-guard around the call or the `invoke` - a guard that skips it on most steps of every generation
+guard around the call or the `invoke` - a guard that skips it on most steps of every request
 that runs it at least once - is a defect: split the rarely-taken part (a rebuild, a first-use
 allocation, a log) into its own `[cold_path]` function behind the guard that keeps it rare, and
 leave the function every serving step reaches unmarked.** The annotation is a promise about how
@@ -50,13 +50,8 @@ rarely-taken branch.**
 serving step reaches through a call or an `invoke` - it is no region entry; it carries
 `[cold_path]` or nothing.**
 
-**A diff that adds or changes a non-`[test]` function under this module's `tests/`, `harness/`,
-`benchmarks/` or `performance/` that reaches - calls, directly or through other functions - a
-function carrying `[hot_path]` or a `[no_alloc]` / `[no_env]` / `[no_io]` contract gives it
-`[cold_path]` where no other non-`[test]` function under those four folders reaches it, and no
-annotation otherwise.**
-
-**A diff that adds or changes a non-`[test]` function under `tests/`, `harness/`, `benchmarks/` or
-`performance/` that reaches - calls, directly or through other functions - a function carrying
-`[hot_path]` or a `[no_alloc]` / `[no_env]` / `[no_io]` contract leaves no `[cold_path]` on any
-function under those four folders that it reaches.**
+**A non-`[test]` function a diff adds or changes under this module's `tests/`, `harness/`,
+`benchmarks/` or `performance/` that reaches a `[hot_path]`, `[no_alloc]`, `[no_env]` or `[no_io]`
+function puts the one `[cold_path]` of its chain on the outermost non-`[test]` function of those
+four folders that reaches it - no function it reaches under those folders carries another, edited
+by the diff or not.**

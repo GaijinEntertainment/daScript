@@ -235,13 +235,13 @@ naming the operation the API or device of the side without it lacks, in
 the same change.** A variable that also adds a backend-only behavior takes one entry, not two.
 
 **A diff that adds or extends, on one GPU backend (Metal, Vulkan or CUDA), a prefill or decode
-path or a K/V cache feature for a model family another backend also serves - a capability being
-any behavior a served call shows, or that a test shows by driving a setter or an environment
-variable the engine exposes - lands the same capability on every other backend that serves the
-family, in the same change, wherever that backend's API offers the operations it uses on any
-device it supports; a PR body that defers it is a defect.** A capability one backend
-has makes a served model's behavior depend on the box it runs on. The same path served faster or
-slower is not a capability.
+path or a K/V cache feature for a model family or a weight format another backend also serves - a
+capability being any behavior a served call shows, or that a test shows by driving a setter or an
+environment variable the engine exposes - lands the same capability on every other backend that
+serves that family, or that serves that weight format at the site the capability reads, in the
+same change, wherever that backend's API offers the operations it uses on any device it supports;
+a PR body that defers it is a defect.** A capability one backend has makes a served model's
+behavior depend on the box it runs on. The same path served faster or slower is not a capability.
 
 **A diff that changes how a dev-W resident panel's cache key is built - a dev-W panel is a
 weight plane dequantized once into a device f16 panel - changes both the seed site and the
@@ -273,9 +273,15 @@ are.** A base off the format's own block grid is gathered under a layout that is
 `DEVICE_CREATION_CALLS` in `REVIEW.das` does not list, adds that spelling to the list in the same
 change.** The gate finds only the spellings it lists, so a new one passes it silently.
 
-**Never call a device function in `dasllama/dasllama_math_cuda.das`'s registration before
-`cuda_available()` returns true, and register nothing when it returns false.** A box without the
-driver loads the module too, and its first device call would fault.
+**Never make a call that reaches the CUDA driver from `dasllama_math_cuda_register`
+(`dasllama/dasllama_math_cuda.das`), or from anything it runs, before `cud_init()`
+(`dasllama/dasllama_cuda_common.das`) returns true.** A box without the driver loads the module
+too, and its first driver call would fault.
+
+**`dasllama_math_cuda_register` calls `cuda_install_seats` only after `gpu_want_cuda()` returns
+true - a seat the home does not want is installed by `set_gpu_home("cuda")` instead.** The seats
+replace the current home's hooks, so installing them unconditionally hands a box that asked for
+another home over to CUDA.
 
 **Weakening `check_shared_file_spelling` in `REVIEW.das` is a defect.** It holds a shared kernel
 file - `dasllama/dasllama_gpu_kernels_common.das` or `dasllama/dasllama_gpu_kernels_discrete.das` -

@@ -6,12 +6,11 @@ docs: `../ARCHITECTURE_GPU.md`, `../ARCHITECTURE_CPU_KERNELS.md`. Planned work:
 
 - A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a helper's
   asserts belong to every cell that calls it.
-- A CPU kernel is a function that writes an output buffer from operand buffers; one that answers
-  a size, a block or a layout is not.
+- A CPU kernel is a function in `../dasllama/dasllama_math*.das` that writes an output buffer from
+  operand buffers.
 - A CPU oracle is the same computation written in plain code in this checklist's folder - a cell,
-  or a `_*.das` helper module here; it may widen a quantized operand through a `../dasllama/`
-  function that widens a quantized block to floats, and calls no other `../dasllama/` function - a
-  kernel under `../dasllama/` is never one.
+  or a `_*.das` helper module here; only its operands may be built, quantized, widened or read
+  through `../dasllama/` functions, and a kernel under `../dasllama/` is never one.
 - A sentinel is a value the kernel cannot write from the cell's own inputs - a NaN where every
   input is finite, or a fixed bit pattern no finite input yields; a zero-filled or newly allocated
   buffer is not one.
@@ -19,8 +18,8 @@ docs: `../ARCHITECTURE_GPU.md`, `../ARCHITECTURE_CPU_KERNELS.md`. Planned work:
 - A kernel class is a class that a GPU dispatch annotation - `[metal_dispatch]`, `[vk_dispatch]`
   or `[cuda_dispatch]` - compiles to a device kernel.
 - A home is the GPU backend a stamp runs on - Metal, Vulkan or CUDA.
-- A kernel-unit cell is a cell in which a kernel class is dispatched, or a CPU kernel in
-  `../dasllama/dasllama_math*.das` is called, by a statement in test code outside a CPU oracle -
+- A kernel-unit cell is a cell in which a kernel class is dispatched, or a CPU kernel is called,
+  by a statement in test code outside a CPU oracle -
   the cell itself, or a helper in its own file or in a `_*.das` test-helper module - itself or
   through a router, a `../dasllama/` function whose only job is to pick which compiled form
   (stamp) of the dispatched class or the CPU kernel runs; a kernel run inside any other
@@ -31,14 +30,14 @@ docs: `../ARCHITECTURE_GPU.md`, `../ARCHITECTURE_CPU_KERNELS.md`. Planned work:
   for - a cell, a probe, a harness.
 - A stamp is a kernel class that compiles to its own shader module - a class no other class
   derives from; every rule here treats each stamp as its own class.
-- A path of a class is each branch a value read from the kargs or from any bound buffer selects,
-  and each trip-count regime of each loop whose bound such a value sets - the regimes read against
-  the loop's stride: zero, under one stride, a whole number of strides, and past a whole number of
-  strides (the tail). A branch or loop inside a function the class's methods call, other than a
-  method of the class, is not a path of the class - covering it is the job of that function's
-  cells. A branch or regime is a path only where a serving call in `../dasllama/` can reach it on
-  some shape that call does not decline, whether or not any model file the box holds has that
-  shape.
+- A path of a kernel class or a CPU kernel is each branch a value read from its arguments, its
+  kargs or any buffer it reads selects, and each trip-count regime of each loop whose bound such a
+  value sets - read against the loop's stride: zero, under one stride, a whole number of strides,
+  and past a whole number of strides (the tail). A branch or loop inside a function the kernel
+  calls, other than a method of the class, is not its path - covering it is the job of that
+  function's cells. A branch or regime is a path only where a serving call in `../dasllama/` can
+  reach it on some shape that call does not decline, whether or not any model file the box holds
+  has that shape.
 - A bound assert is a compare of two computed sides, or a measured quality figure against a
   tolerance; a floor on a capacity, a configuration or a roster size is not one, a guard that keeps
   a later index or compare well-defined (a length past the index it reads) is not one, a counter
@@ -83,18 +82,24 @@ compare - a sentinel scan, a per-row flag - logs its mismatch count and first mi
 (for a per-row output, its row) instead.** A failure, or a pass that looks wrong, must say how far
 and where, not only how many.
 
-**A kernel-unit cell with a kernel run whose output no CPU-oracle compare covers at that run's
-shapes - every size its dispatch grid or a loop bound reads, the row count included - is a
-defect: the compare sits in that cell, or - where the cell compares two kernel forms against each
-other - in a cell of the same file that dispatches one of those two forms at the same
-shapes.** Two forms can be bit-equal and both wrong.
+**A kernel-unit cell holds a CPU-oracle compare of every kernel run's output at that run's
+shapes - every size a dispatch grid or loop bound of that run reads, the row count included - or
+compares the run against a second kernel form that a cell of the same file holds to a CPU
+oracle.** Two forms can be bit-equal and both wrong.
 
-**A diff that changes an existing kernel class's branch selection - a branch added, or a predicate
-widened or narrowed, so that a different set of kargs values, or of marker values a bound buffer
-holds, reaches a path - ships a kernel-unit cell that dispatches that class at a value the change
-moved onto or off that path, or names the existing cell that already does.** A sibling stamp's
-cell counts. At every value the change left where it was the kernel computes what it did before,
-so a cell that dispatches only those values passes whether the change is right or wrong.
+**A kernel-unit cell that compares a kernel run against a second kernel form has, in the same
+file, a cell that runs one of the two forms - directly or through any `../dasllama/` call - at the
+same shapes against a CPU oracle, and that runs on every box and every build the comparing cell
+runs on.** A companion that skips where the comparing cell runs leaves that run held to nothing
+but another kernel form.
+
+**A diff that changes an existing kernel class's or CPU kernel's branch selection - a branch added,
+or a predicate widened or narrowed, so that a different set of kargs or argument values, or of
+marker values a bound or operand buffer holds, reaches a path - ships a kernel-unit cell that runs
+that kernel at a value the change moved onto or off that path, or names the existing cell that
+already does.** A sibling stamp's cell counts. At every value the change left in place the kernel
+computes what it did before, so a cell that runs only those values passes whether the change is
+right or wrong.
 
 **A diff that adds a kargs field to a kernel class, or changes what an existing field means, so that
 a stamp reads or writes different elements, ships for each such stamp a kernel-unit cell that
@@ -103,11 +108,17 @@ pass and at which the elements read or written differ from the ones before the c
 added field, never 0 and never the value a serving call that does not use the field passes.** At
 the value where nothing moved, a cell passes whether the new indexing is right or wrong.
 
-**A diff that adds a kernel class ships a kernel-unit cell that dispatches it on every path its body
-has - a sibling stamp's cell counts, and for a stamp whose override changes only `static_if` arms, none
-of which holds a branch or a loop a kargs or bound-buffer value sets, a cell counts that dispatches it
-at the arguments of sibling cells that together reach every sibling path.** A
-path no cell reaches is one a merge can drop and every cell still passes.
+**A diff that adds a parameter to a CPU kernel, or changes what one means, so that the kernel
+reads or writes different elements or scales them differently, ships a kernel-unit cell that calls
+it with that parameter at a value a serving call can pass and at which the result differs from the
+one before the change - never 0, 1, or the value a serving call that does not use it passes.** At a
+value where nothing moved, the cell passes whether the change is right or wrong.
+
+**A diff that adds a kernel class or a CPU kernel ships a kernel-unit cell that runs it on every path
+its body has - a sibling stamp's cell counts, and for a stamp whose override changes only
+`static_if` arms, none holding a branch or loop a kargs or bound-buffer value sets, a cell counts
+that dispatches it at the arguments of sibling cells that together reach every sibling path.** A
+merge can drop a path no cell reaches, and every cell still passes.
 
 **Before every kernel run whose output a kernel-unit cell reads in any assert, directly or through
 a later run in the same cell, the cell fills with a sentinel every range of that run's output

@@ -31,8 +31,10 @@ or a `_*.das` helper module) dispatches a kernel class or calls a `../dasllama/d
 kernel (a function writing an output buffer from operand buffers), directly or through a
 `../dasllama/` router whose only job is to pick which compiled form of that class or kernel runs -
 applies `REVIEW_KERNEL_CELLS.md` (beside this file) too, wherever the diff puts it.** A CPU oracle
-is the same computation in plain code in this folder; it may widen a quantized block to floats
-through a `../dasllama/` function and calls no other `../dasllama/` function.
+is the same computation written in plain code in this checklist's folder - a cell, or a `_*.das`
+helper module here; only its operands may be built, quantized, widened or read through
+`../dasllama/` functions, and a kernel under `../dasllama/` is never one; a diff that changes this
+definition changes the companion's in the same change.
 
 **A diff that touches a test file or cell `REVIEW_PINNED_GATES.md` (beside this file) lists, or
 changes which `run.das` suites list one, applies that checklist too.**
@@ -68,11 +70,11 @@ that box in the PR body.** A reached cell run without the capability did not run
 capability selects.
 
 **A PR that adds a cell loading a model above the large tier (`LARGE_TIER_BYTES`,
-`_model_tier.das`), or changes something such a cell's result depends on, also runs that cell
-with `DASLLAMA_PARITY_FULL=1` set, on a box with the model stocked, through a `run.das` suite
-listing the cell's file - with `--arm` naming the cell when `run.das` accepts `--arm` for that
-suite - and names the box in the PR body.** A run without `DASLLAMA_PARITY_FULL=1` skips every
-such cell and passes.
+`_model_tier.das`), or whose change reaches such a cell, runs that cell under
+`DASLLAMA_PARITY_FULL=1` on a box with the model stocked - in a `run.das -- --changed` run whose
+`PLAN` holds the cell's file, or in a `run.das --suite` run listing the file, with `--arm` naming
+the cell where that suite takes `--arm` - and names the box in the PR body.** A run without
+`DASLLAMA_PARITY_FULL=1` skips every such cell and passes.
 
 **The `--changed` run a PR cites carries no `--exclude` and no `--only`; the one `--only` run a
 PR cites is the CUDA pass - `--changed --only <tokens>` under `DASLLAMA_GPU=1 DASLLAMA_CUDA=1`,
@@ -171,9 +173,9 @@ when it checks the image's mint, map or identity, including how a lane pin chang
 lane pin is a call that picks the weight form, the Metal tensor crowns - the pin that compiles a
 family's half-precision GEMM twins - or the CPU kernel backend a load serves on). A baking loader
 is any load call that writes a `.dlim` beside the model when `DASLLAMA_IMAGE` is unset, itself or
-through a loader it calls. A test that sets no `DASLLAMA_IMAGE=0` loads its media carrier in memory through the family's
-`stage_*` function paired with its `mint_*`, or through `cache_via_image_staged` with an empty
-image path.
+through a loader it calls. A test that sets no `DASLLAMA_IMAGE=0` loads its media carrier in
+memory through the family's `stage_*` function paired with its `mint_*`, or through
+`cache_via_image_staged` with an empty image path.
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
 therefore cannot differ between two runs on one machine is never tested through its own
