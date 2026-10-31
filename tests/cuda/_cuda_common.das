@@ -714,7 +714,8 @@ def cm2_pick(r, c : uint; v, o : float) : float => max(v, o)
 
 //! the workgroup-scope tiles over four warps: a 64x64 f16 GEMM through the transposed B view, the
 //! per-element, copy, scale, clamp, add, sub, Hadamard and reduce forms, the f16 accumulator, the
-//! accumulator-to-A convert feeding a second product, a filled B tile, the pad-clamped store
+//! accumulator width converts both ways, the accumulator-to-A convert feeding a second product, a
+//! filled B tile, the pad-clamped store
 class Cm2 {
     @ssbo @binding = 0 a : array<float16>    //! A 64x64 row-major: (r, k) at r * 64 + k
     @ssbo @binding = 1 bt : array<float16>   //! B transposed: (n, k) at n * 64 + k
@@ -724,6 +725,8 @@ class Cm2 {
     @ssbo @binding = 5 e : array<float>      //! P B, P the worked product as an f16 A tile
     @ssbo @binding = 6 rs : array<float>     //! P x ones: the row sums of P broadcast
     @ssbo @binding = 7 t : array<float>      //! ((c + cc) - cc) x itself
+    @ssbo @binding = 8 narrowed : array<float16>   //! the worked product narrowed to an f16 accumulator
+    @ssbo @binding = 9 widened : array<float>      //! the f16-accumulated product widened to an f32 accumulator
 
     [cuda_kernel(name="cm2_cuda", local_size_x = 128), marker(no_coverage)]
     def cm2 {
@@ -748,12 +751,18 @@ class Cm2 {
         var acc16 : coopmatWgAcc_f16_64x64
         acc16 = coopmatMulAdd(at, btile, acc16)   // nolint:STYLE011 - MulAdd seeds from its own zero-filled tile
         coopmatStoreTensor(acc16, o2, 0u, tl, 0u, 64u, 0u, 64u)
+        var wide : coopmatWgAcc_f32_64x64
+        coopmatConvert(wide, acc16)
+        coopmatStoreTensor(wide, widened, 0u, tl, 0u, 64u, 0u, 64u)
         coopmatPerElement(acc, acc, @@cm2_bias, 1.0)
         var cc : coopmatWgAcc_f32_64x64
         coopmatCopy(cc, acc)
         coopmatScale(cc, 2.0)
         coopmatPerElement(acc, acc, @@cm2_pick, cc)
         coopmatClamp(acc, -100.0, 100.0)
+        var narrow : coopmatWgAcc_f16_64x64
+        coopmatConvert(narrow, acc)
+        coopmatStoreTensor(narrow, narrowed, 0u, tl, 0u, 64u, 0u, 64u)
         var tt : coopmatWgAcc_f32_64x64
         coopmatAdd(tt, acc, cc)
         coopmatSub(tt, tt, cc)
@@ -1156,8 +1165,10 @@ def public declared_cuda_census : table<string> {   // nolint:STYLE038 - one fla
         "call.unpackHalf2x16",
         "call.coopmatAdd.wg.f32",
         "call.coopmatClamp.wg.f32",
+        "call.coopmatConvert.wg.f16.f32",
         "call.coopmatConvert.wg.f32.A",
         "call.coopmatConvert.wg.f32.A.warp",
+        "call.coopmatConvert.wg.f32.f16",
         "call.coopmatCopy.wg",
         "call.coopmatFill.wg.ones",
         "call.coopmatFill.wg.shared",

@@ -818,6 +818,8 @@ struct Cm2Params {
     e : uint64
     rs : uint64
     t : uint64
+    narrowed : uint64
+    widened : uint64
 }
 
 struct Cm2DecParams {
@@ -864,10 +866,13 @@ def test_cm2_gpu(t : T?) {
             cm2_inputs(a, bt)
             var err : string
             var p = Cm2Params(a = buf_upload(a), bt = buf_upload(bt), c = buf_fill(4096, -1.0), o2 = buf_fill(4096, float16(0.0)),
-                red = buf_fill(8192, 0.0), e = buf_fill(4096, 0.0), rs = buf_fill(4096, 0.0), t = buf_fill(4096, 0.0))
+                red = buf_fill(8192, 0.0), e = buf_fill(4096, 0.0), rs = buf_fill(4096, 0.0), t = buf_fill(4096, 0.0),
+                narrowed = buf_fill(4096, float16(0.0)), widened = buf_fill(4096, 0.0))
             t |> success(launch(cc, cm2_cuda, "cm2", cm2_cuda_entry, p, 128u, err, cm2_cuda_smem, 128u), "cm2 launch: {err}")
             let gc <- buf_download(p.c, 4096, type<float>)
             let go2 <- buf_download(p.o2, 4096, type<float16>)
+            let gnarrowed <- buf_download(p.narrowed, 4096, type<float16>)
+            let gwidened <- buf_download(p.widened, 4096, type<float>)
             let gred <- buf_download(p.red, 8192, type<float>)
             let ge <- buf_download(p.e, 4096, type<float>)
             let grs <- buf_download(p.rs, 4096, type<float>)
@@ -906,10 +911,12 @@ def test_cm2_gpu(t : T?) {
                     bad += ge[i] == pe ? 0 : 1
                     bad += grs[i] == prs ? 0 : 1
                     bad += gt[i] == worked_product[i] * worked_product[i] ? 0 : 1
+                    bad += float(gnarrowed[i]) == worked_product[i] ? 0 : 1
+                    bad += gwidened[i] == prod ? 0 : 1
                 }
             }
-            t |> equal(bad, 0, "every tile element matches (pad-clamped store, f16 accumulator, row max, column sum, P B over the [n][k] and the [k][n] shared tiles, row sums, Hadamard)")
-            for (q in [p.a, p.bt, p.c, p.o2, p.red, p.e, p.rs, p.t]) {
+            t |> equal(bad, 0, "every tile element matches (pad-clamped store, f16 accumulator, the accumulator narrowed and widened, row max, column sum, P B over the [n][k] and the [k][n] shared tiles, row sums, Hadamard)")
+            for (q in [p.a, p.bt, p.c, p.o2, p.red, p.e, p.rs, p.t, p.narrowed, p.widened]) {
                 cuda_mem_free(q)
             }
         }
