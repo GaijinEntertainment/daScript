@@ -82,6 +82,18 @@ class BuildMatrix(unittest.TestCase):
             else:
                 self.assertIn(cell["phase"], ("tests", "slow", "backend"), cell)
 
+    def test_half_speed_sweeps_carry_raised_watchdogs(self):
+        # the sanitizer cells and windows Debug run their sweeps at half speed and lose the
+        # default whole-suite watchdog to runner variance; every other cell keeps the defaults,
+        # so a hang still fails fast where the sweep is quick
+        for cell in ci_matrix.build_cells(True):
+            slow = cell["sanitizers"] != "none" or cell["cmake_preset"] == "Debug"
+            for flag in ("-DDAS_TEST_TIMEOUT=3600", "-DDAS_TEST_TIMEOUT_ISOLATED=7200",
+                         "-DDAS_TEST_TIMEOUT_AOT=3600"):
+                (self.assertIn if slow else self.assertNotIn)(flag, cell["cmake_extra"], cell)
+        for cell in ci_matrix.build_cells(False):
+            self.assertNotIn("DAS_TEST_TIMEOUT", cell["cmake_extra"], cell)
+
 
 class ExtendedMatrix(unittest.TestCase):
     def test_per_pr_is_two_darwin_roles(self):

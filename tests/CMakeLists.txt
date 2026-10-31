@@ -11,14 +11,18 @@
 # lands well inside them; a lane that needs more says so at configure time via
 # -DDAS_TEST_TIMEOUT / -DDAS_TEST_TIMEOUT_ISOLATED rather than inflating the
 # budget everywhere - a watchdog only catches a hang while it is still tight.
-# The RelWithDebInfo Windows nightly is the lane that needs it: DAS_TRACK_ALLOC
-# with the free list off roughly doubles the sweep, and the hosted runner adds
-# another ~1.4x of its own variance on top.
+# The lanes that need it run the sweep at about half speed on their own - the
+# RelWithDebInfo Windows nightly (DAS_TRACK_ALLOC with the free list off, its
+# budget set in nightly.yml), the unoptimized Windows Debug cell and the linux
+# sanitizer cells (ci/ci_matrix.py) - and ride a hosted runner that swings
+# another ~1.4x night to night.
 if(NOT DAS_TOOLS_DISABLED)
     set(DAS_TEST_TIMEOUT 1800 CACHE STRING
         "dastest global suite watchdog, seconds, for run_tests_interpreter")
     set(DAS_TEST_TIMEOUT_ISOLATED 5400 CACHE STRING
         "dastest global suite watchdog, seconds, for run_tests_interpreter_isolated")
+    set(DAS_TEST_TIMEOUT_AOT 1800 CACHE STRING
+        "dastest global suite watchdog, seconds, for run_tests_aot and run_tests_aot_subset")
 
     set(_DAS_DASTEST  ${PROJECT_SOURCE_DIR}/dastest/dastest.das)
     set(_DAS_TEST_DIR ${PROJECT_SOURCE_DIR}/tests)
@@ -118,7 +122,7 @@ endif()
 # preflight --full).
 if(TARGET test_aot)
     add_das_target(run_tests_aot
-        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_aot> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --timeout 1800 --test ${PROJECT_SOURCE_DIR}/tests
+        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_aot> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --timeout ${DAS_TEST_TIMEOUT_AOT} --test ${PROJECT_SOURCE_DIR}/tests
         DEPENDS test_aot
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (AOT)"
@@ -130,7 +134,7 @@ endif()
 # cache serves it until the subset binary changes.
 if(TARGET test_aot_subset)
     add_das_target(run_tests_aot_subset
-        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_aot_subset> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --timeout 1800 --test ${PROJECT_SOURCE_DIR}/tests/language --cache-dir ${DAS_TEST_CACHE_DIR}
+        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_aot_subset> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --timeout ${DAS_TEST_TIMEOUT_AOT} --test ${PROJECT_SOURCE_DIR}/tests/language --cache-dir ${DAS_TEST_CACHE_DIR}
         DEPENDS test_aot_subset dastest_cache_guard
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (AOT, tests/language subset)"

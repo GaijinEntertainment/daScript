@@ -89,8 +89,10 @@ part of ALL) as a compile+link gate, and run no AOT tests.
 **The build matrix runs `run_build` (`run_tests_sweeps`, `test-small`), retried as
 `run_build_isolated` (`run_tests_sweeps_isolated`, `test-small`) when it fails, and, on the nightly
 lane, `run_build_nightly` (`run_tests_slow`, `run_backend_sweeps`, `test_aot_subset`).** The retry
-is the workflow's `||`, not a cmake target: the windows 64 Debug cell's first pass outgrows the
-1800 s watchdog every run, and the isolated pass is the one that finishes. Which sweeps
+is the workflow's `||`, not a cmake target. The windows 64 Debug cell and the sanitizer cells
+configure with raised watchdogs (`SLOW_SWEEP_BUDGETS` in `ci/ci_matrix.py`: 3600 s for a sweep
+and the full AOT suite, 7200 s isolated) - their sweeps run at half speed on their own and the
+default budgets fired on runner variance alone. Which sweeps
 `run_tests_sweeps` runs is decided in cmake, not in the workflow: no JIT where dasLLVM is off (the
 sweep targets live under `if(NOT DAS_LLVM_DISABLED)`) or on Debug; no interpreter sweep under a
 sanitizer.
