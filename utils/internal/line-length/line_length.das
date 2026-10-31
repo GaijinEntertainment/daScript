@@ -192,7 +192,7 @@ def private scan_comments(d : array<uint8> const implicit) : table<int; int> {
 def comment_columns(text : string) : table<int; int> {
     var cols : table<int; int>
     peek_data(text) $(d) {
-        cols <- scan_comments(d)
+        cols <- scan_comments(d) // nolint:PERF030 - empty; view fills once
     }
     return <- cols
 }

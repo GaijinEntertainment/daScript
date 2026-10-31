@@ -59,7 +59,7 @@ def private continuation(trp, trd : Model; prompt : array<int64>; n_gen : int; k
     with_dasllama_jobque() {
         var s = make_run_state(trp.config, kdt, kdt)
         eval_(trp, s, prompt)
-        got <- greedy_steps(trd, s, n_gen)
+        got <- greedy_steps(trd, s, n_gen) // nolint:PERF030 - fresh; queue runs once
         delete s
     }
     return <- got
@@ -184,7 +184,7 @@ def private paged_greedy(tr, trg : Model; prompt : array<int64>; page_rows : int
             at = hi
         }
         select_decode_override(gpu ? "metal" : "")
-        got <- greedy_steps(gpu ? trg : tr, sb, n)
+        got <- greedy_steps(gpu ? trg : tr, sb, n) // nolint:PERF030 - fresh; queue runs once
         select_decode_override("")
         release_kv_pages_(sa)
         release_kv_pages_(sb)
@@ -207,7 +207,7 @@ def private rewind_greedy(tr, trg : Model; prompt, prompt2 : array<int64>; n : i
         delete warm
         s.n_past = 0l                           // rewind: reuse the session from scratch
         eval_(tr, s, prompt2)                   // shorter prompt ⇒ first GPU pos < watermark
-        got <- greedy_steps(trg, s, n)
+        got <- greedy_steps(trg, s, n) // nolint:PERF030 - fresh; queue runs once
         select_decode_override("")
         delete s
     }

@@ -44,7 +44,7 @@ def private feed_rows(tr : Model) : array<array<float>> {
         var s <- create_session(tr, KVDtype.f16)
         var prompt <- [for (i in range64(int64(MINT_PROMPT))); 1000l + i * 7l]
         var toks <- [for (i in range64(int64(MINT_STEPS))); 2000l + i * 11l]
-        out <- feed_logits(tr, s, prompt, toks)
+        out <- feed_logits(tr, s, prompt, toks) // nolint:PERF030 - fresh; queue runs once
         delete s
         delete prompt
         delete toks

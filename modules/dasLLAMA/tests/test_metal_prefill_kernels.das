@@ -3605,7 +3605,7 @@ def private ew2_gate(t : T?; var dev, queue; tag : string; st; x, y, want : arra
         }
         return if (!ran)
         check_buf(t, tag, mc.buf[bx], want, exact ? BAR_EXACT : BAR_FP, FLAT_SHAPE)
-        got <- mc |> plane_run(bx)
+        got <- mc |> plane_run(bx) // nolint:PERF030 - fresh; cell runs once
     }
     return <- got
 }
