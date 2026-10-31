@@ -127,11 +127,7 @@ namespace das {
         VariablePtr             cmresVAR = nullptr;
         bool                    failedToCMRES = false;
         bool                    isEverything = false;
-        // SimNode_MakeArrayHeap repoints abiCMRES at the heap block while constructing
-        // elements, so a CMRES-aliased local read inside a heap-mode literal would resolve
-        // into the (zeroed) heap buffer instead of the return slot. Track such reads and
-        // decline the elision for that variable — an extra move at return, always correct.
-        das_hash_set<Variable *> usedInHeapLiteral;
+        das_hash_set<Variable *> needsStableStorage;
         int                     heapLiteralDepth = 0;
     protected:
 
@@ -147,11 +143,11 @@ namespace das {
         }
         virtual FunctionPtr visit ( Function * that ) override {
             if ( cmresVAR && !failedToCMRES
-                && usedInHeapLiteral.find(cmresVAR) == usedInHeapLiteral.end() ) cmresVAR->aliasCMRES = true;
+                && needsStableStorage.find(cmresVAR) == needsStableStorage.end() ) cmresVAR->aliasCMRES = true;
             func = nullptr;
             cmresVAR = nullptr;
             failedToCMRES = false;
-            usedInHeapLiteral.clear();
+            needsStableStorage.clear();
             DAS_ASSERT(blocks.size()==0);
             DAS_ASSERT(heapLiteralDepth==0);
             return Visitor::visit(that);
@@ -165,10 +161,11 @@ namespace das {
             if ( expr->makeArrayOnHeap ) heapLiteralDepth --;
             return Visitor::visit(expr);
         }
+        // src/ast/ARCHITECTURE.md#return-local-storage
         virtual void preVisit ( ExprVar * expr ) override {
             Visitor::preVisit(expr);
-            if ( heapLiteralDepth && expr->local && expr->variable ) {
-                usedInHeapLiteral.insert(expr->variable);
+            if ( (heapLiteralDepth || !blocks.empty()) && expr->local && expr->variable ) {
+                needsStableStorage.insert(expr->variable);
             }
         }
     // ExprBlock
