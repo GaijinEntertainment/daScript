@@ -420,10 +420,10 @@ def bench_gemv_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
     delete regs
 }
 
-//! the suffix's panel companion row; null when the registry has none (the shared `kq_panel_bf16` builds it then)
-def panel_row(pvs : array<tuple<string; KqPanelGenFn>>; suffix : string) : KqPanelGenFn {
-    var fn : KqPanelGenFn
-    for (v in pvs) {
+//! the suffix's companion row of a registry; null when the registry has none (a panel row: the shared `kq_panel_bf16` builds it then)
+def companion_row(vs : array<tuple<string; auto(FT)>>; suffix : string) : FT {
+    var fn : FT
+    for (v in vs) {
         if (v._0 == suffix) {
             fn = v._1
         }
@@ -444,15 +444,18 @@ def bench_tile_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
     var fns : array<TileFn>
     var mrOf, stepOf, formOf : array<int64>
     var panels : array<KqPanelGenFn>
+    var cfgs : array<function<() : void>>
     select_tile_rows(cfg, name, int64(cfg.d), regs.tile, mrs, perCall, stats, fns, mrOf, stepOf)
     formOf |> reserve(length(stats))
     panels |> reserve(length(stats))
+    cfgs |> reserve(length(stats))
     for (st in stats) {
         formOf |> push(forms?[st.perm] ?? 0l)
-        panels |> push(panel_row(regs.panel, st.perm))
+        panels |> push(companion_row(regs.panel, st.perm))
+        cfgs |> push(companion_row(regs.amx_cfg, st.perm))
     }
     unsafe {
-        time_tile_rows_kq(stats, cfg, int(f), fns, mrOf, stepOf, formOf, panels, addr<uint8 const?>(p.arena[p.gemvKq]), addr<uint8 const?>(p.arena[p.tileKq]),
+        time_tile_rows_kq(stats, cfg, int(f), fns, mrOf, stepOf, formOf, panels, cfgs, addr<uint8 const?>(p.arena[p.gemvKq]), addr<uint8 const?>(p.arena[p.tileKq]),
             addr<uint8 const?>(p.arena[p.ks]), sh, p)
     }
     for (st in stats) {
@@ -464,6 +467,7 @@ def bench_tile_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
     delete stepOf
     delete formOf
     delete panels
+    delete cfgs
     delete regs
     delete mrs
     delete forms
@@ -472,9 +476,10 @@ def bench_tile_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
 //! the kq TILE arm's timing: a row of the quant-plane form walks its groups over the batch as `time_tile_rows` does, off the
 //! tile plane `wp`; a row of a bf16 form (`formOf` > 0, the amx_bf16 perms) builds its unit's panel a token block off the grp
 //! plane `gp` and runs the tile over the bf16 activation plane - the production walk (`bf16_walk`), the panel build inside
-//! its time as in the tuner's race
+//! its time as in the tuner's race; every row's amx_cfg companion runs ahead of its sweep (an amx tile's exit releases the
+//! tile palette, and the rows interleave)
 def time_tile_rows_kq(var stats : array<RowStat>; cfg : BenchArgs; fmt : int; fns : array<TileFn>; mrOf, stepOf, formOf : array<int64>;
-                      panels : array<KqPanelGenFn>; gp, wp, sp : uint8 const?; sh : PlaneShape; var p : Planes) {
+                      panels : array<KqPanelGenFn>; cfgs : array<function<() : void>>; gp, wp, sp : uint8 const?; sh : PlaneShape; var p : Planes) {
     let n = int64(cfg.n)
     let d = int64(cfg.d)
     let ntok = int64(cfg.ntok)
@@ -502,6 +507,9 @@ def time_tile_rows_kq(var stats : array<RowStat>; cfg : BenchArgs; fmt : int; fn
         time_rows(stats, cfg.rounds) $(row : int) {
             let mr = mrOf[row]
             let form = formOf[row]
+            if (cfgs[row] != null) {
+                invoke(cfgs[row])
+            }
             if (form > 0l) {
                 bf16_walk(0l, d / mr, form, 0l, ntok, ntok, amx_bf16_tile_tokens(), $(g : int64) {
                     let kqg = gp + g * mr * sh.gemvW_row
