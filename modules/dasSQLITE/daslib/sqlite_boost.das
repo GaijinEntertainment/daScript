@@ -1161,7 +1161,7 @@ def insert_or_replace(db : SqlRunner; rows : array<auto(TT)>) : int {
 // ===== by-PK UPDATE / DELETE =====
 
 def try_update(db : SqlRunner; row : auto(TT)) : Result<int, string> {
-    //! Updates a single row identified by its @sql_primary_key field. Returns
+    //! Updates one row using all @sql_primary_key fields.
     //! ``Ok(rows_affected)`` (1 if the row matched, 0 if not), ``Err(errmsg)``
     //! on SQL failure.
     return <- db |> try_step_dml(_::_sql_update_by_pk_sql(row), $(var stmt : sqlite3_stmt?) {
@@ -1179,7 +1179,7 @@ def update(db : SqlRunner; row : auto(TT)) : int {
 }
 
 def try_delete_(db : SqlRunner; row : auto(TT)) : Result<int, string> {
-    //! Deletes the row identified by ``row``'s @sql_primary_key field (non-PK fields ignored).
+    //! Deletes the row matching every key field; ignores other fields.
     //! ``Ok(rows_affected)`` (1 if matched, 0 if not), ``Err(errmsg)`` on SQL failure.
     //! Trailing underscore: ``delete`` is a daslang keyword (cf. ``daslib/linq``'s ``where_``).
     return <- db |> try_step_dml(_::_sql_delete_by_pk_sql(row), $(var stmt : sqlite3_stmt?) {
@@ -1198,8 +1198,12 @@ def delete_(db : SqlRunner; row : auto(TT)) : int {
 
 [unused_argument(t)]
 def try_delete_by_id(db : SqlRunner; t : type<auto(TT)>; id : auto(K)) : Result<int, string> {
-    //! Deletes the row of type ``T`` whose primary key equals ``id`` — no dummy struct needed.
-    //! ``Ok(rows_affected)`` (1 or 0), ``Err(errmsg)`` on SQL failure.
+    //! Deletes using a single-column primary key.
+    //! For composite keys, use ``delete_(row)``.
+    //! Returns ``Ok(count)`` or ``Err`` for SQL/key-shape errors.
+    if (_::_sql_pk_count(default<TT>) != 1) {
+        return err("delete_by_id requires a single-column primary key", type<int>)
+    }
     return <- db |> try_step_dml(_::_sql_delete_by_pk_sql(default<TT>), $(var stmt : sqlite3_stmt?) {
         sql_bind_to_stmt(stmt, 1, id)
     }, "delete_by_id")
@@ -1836,6 +1840,8 @@ class private SqlFts5Macro : AstStructureAnnotation {
         compiling_module() |> add_function(fn_ins_nopk)
         var fn_pk_unset = make_pk_is_unset_returns_false_fn(st)
         compiling_module() |> add_function(fn_pk_unset)
+        var fn_pk_count = make_pk_count_constant_fn(st, 0)
+        compiling_module() |> add_function(fn_pk_count)
         var fn_bind = make_fts5_bind_row_fn(st, fields)
         compiling_module() |> add_function(fn_bind)
         var fn_col_info = make_fts5_column_info_fn(st, fields)

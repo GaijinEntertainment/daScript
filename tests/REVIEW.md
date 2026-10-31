@@ -3,6 +3,9 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`.
 
+**A test of lint suppression or lint configuration, wherever the diff puts it, answers to
+`lint/REVIEW.md`.**
+
 **A test that runs a class carrying a `[metal_kernel]` method or creates any Metal object,
 wherever under this folder the diff puts it, answers to `metal/REVIEW.md`.**
 

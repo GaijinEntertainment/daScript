@@ -421,11 +421,28 @@ def private derive_index_name(table_name : string; sql_cols : array<string>) : s
     }
 }
 
+def private find_pk_fields(fields : array<FieldInfo>) : array<int> {
+    var keys <- [for (i in range(length(fields))); i; where fields[i].is_pk]
+    return <- keys
+}
+
+//! Build the key-count helper for a row type; callers register it.
+def make_pk_count_constant_fn(var st : StructurePtr; key_count : int) : FunctionPtr {
+    var fn = qmacro_function("_sql_pk_count") $(row : $t(st)) : int {
+        return $v(key_count)
+    }
+    fn.flags.generated = true
+    fn.body |> force_at(st.at)
+    return <- fn
+}
+
 def private build_field_unique_indexes_sql(table_name : string; fields : array<FieldInfo>) : string {
+    let pk_fields <- find_pk_fields(fields)
+    let single_key = length(pk_fields) == 1
     var stmt_count = 0
     return build_string() $(var w) {
         for (info in fields) {
-            if (!info.is_unique || info.is_pk) continue
+            if (!info.is_unique || (info.is_pk && single_key)) continue
             if (stmt_count > 0) {
                 w |> write("; ")
             }
@@ -505,7 +522,9 @@ class SqlIndexMacro : AstStructureAnnotation {
     }
 }
 
-def private find_parent_table_and_pk(var st : StructurePtr; parent_name : string) : tuple<tab_name : string; pk_col : string; found : bool> {
+typedef private ParentKey = tuple<tab_name : string; pk_col : string; found : bool; key_count : int>
+
+def private find_parent_table_and_pk(var st : StructurePtr; parent_name : string) : ParentKey {
     var found_st : StructurePtr
     if (st.name == parent_name) {
         found_st = st
@@ -516,12 +535,19 @@ def private find_parent_table_and_pk(var st : StructurePtr; parent_name : string
             }
         }
     }
-    if (found_st == null) return (tab_name = "", pk_col = "", found = false)
+    if (found_st == null) return (tab_name = "", pk_col = "", found = false, key_count = 0)
     var tab = string(found_st.name)
     for (ann in found_st.annotations) {
         if (ann.annotation.name == "sql_table") {
             tab = find_annotation(ann.arguments, "name", tab)
         }
+    }
+    var key_count = 0
+    for (pf in found_st.fields) {
+        if (find_annotation(pf.annotation, "sql_primary_key", false)) { key_count++ }
+    }
+    if (key_count != 1) {
+        return (tab_name = tab, pk_col = "", found = false, key_count = key_count)
     }
     for (pf in found_st.fields) {
         if (find_annotation(pf.annotation, "sql_primary_key", false)) {
@@ -530,10 +556,10 @@ def private find_parent_table_and_pk(var st : StructurePtr; parent_name : string
             if (pk_anno is tString) {
                 pk_col = pk_anno as tString
             }
-            return (tab_name = tab, pk_col = pk_col, found = true)
+            return (tab_name = tab, pk_col = pk_col, found = true, key_count = 1)
         }
     }
-    return (tab_name = tab, pk_col = "", found = false)
+    return (tab_name = tab, pk_col = "", found = false, key_count = 0)
 }
 
 [structure_macro(name=sql_table)]
@@ -686,6 +712,9 @@ class SqlTableMacro : AstStructureAnnotation {
                 if (!pk_lookup.found) {
                     if (empty(pk_lookup.tab_name)) {
                         errors := "[sql_table]: field '{fname}' @sql_references=\"{references}\" - no struct named '{references}' is visible in this module."
+                    } elif (pk_lookup.key_count > 1) {
+                        errors := ("[sql_table]: @sql_references needs a parent with one " +
+                            "primary-key column; '{references}' has a composite primary key.")
                     } else {
                         errors := "[sql_table]: field '{fname}' @sql_references=\"{references}\" - parent struct '{references}' has no @sql_primary_key field; FK target column cannot be resolved."
                     }
@@ -768,6 +797,9 @@ class SqlTableMacro : AstStructureAnnotation {
             compiling_module() |> add_function(fn_ins_nopk)
             var fn_pk_unset = make_pk_is_unset_fn(st, fields)
             compiling_module() |> add_function(fn_pk_unset)
+            let primary_fields <- find_pk_fields(fields)
+            var fn_pk_count = make_pk_count_constant_fn(st, length(primary_fields))
+            compiling_module() |> add_function(fn_pk_count)
             var fn_bind = make_bind_row_fn(st, fields)
             compiling_module() |> add_generic(fn_bind)
             var fn_upd_pk_named = make_update_by_pk_sql_named_fn(st, fields)
@@ -971,6 +1003,7 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
     def make_create_table_sql_named_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
+        let pk_fields <- find_pk_fields(fields)
         var write_exprs : array<ExpressionPtr>
         write_exprs |> reserve(3 * length(fields) + 4)
 
@@ -986,7 +1019,7 @@ class SqlTableMacro : AstStructureAnnotation {
                 let storage = info.is_stored ? "STORED" : "VIRTUAL"
                 suffix = " GENERATED ALWAYS AS ({info.computed_sql}) {storage}"
             } else {
-                if (info.is_pk) {
+                if (info.is_pk && length(pk_fields) == 1) {
                     suffix = " PRIMARY KEY"
                 } elif (!info.is_optional) {
                     suffix = " NOT NULL"
@@ -1003,6 +1036,17 @@ class SqlTableMacro : AstStructureAnnotation {
                 write_exprs |> push(qmacro_expr(${ writer |> write(sql_storage_type_for(type<$t(st.fields[i]._type)>)); }))
             }
             write_exprs |> push(qmacro_expr(${ writer |> write($v(suffix)); }))
+        }
+        if (length(pk_fields) > 1) {
+            let clause = build_string() $(var writer) {
+                writer |> write(", PRIMARY KEY (")
+                for (index, i in pk_fields, count()) {
+                    if (i != 0) { writer |> write(", ") }
+                    writer |> write(sql_quote_id(fields[index].col_name))
+                }
+                writer |> write(")")
+            }
+            write_exprs |> push(qmacro_expr(${ writer |> write($v(clause)); }))
         }
         write_exprs |> push(qmacro_expr(${ writer |> write(")"); }))
 
@@ -1114,14 +1158,9 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
     def make_pk_is_unset_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
-        var pk_field_index = -1
-        for (i in range(length(fields))) {
-            if (fields[i].is_int_pk) {
-                pk_field_index = i
-                break
-            }
-        }
-        if (pk_field_index >= 0) {
+        let keys <- find_pk_fields(fields)
+        if (length(keys) == 1 && fields[keys[0]].is_int_pk) {
+            let pk_field_index = keys[0]
             let pk_name = fields[pk_field_index].name
             var fn = qmacro_function("_sql_pk_is_unset") $(row : $t(st)) : bool {
                 return row.$f(pk_name) == default<$t(st.fields[pk_field_index]._type)>
@@ -1225,11 +1264,14 @@ class SqlTableMacro : AstStructureAnnotation {
         return <- fn
     }
 
-    def find_pk_field(fields : array<FieldInfo>) : int {
-        for (i in range(length(fields))) {
-            if (fields[i].is_pk) return i
+    def primary_key_predicate(fields : array<FieldInfo>; keys : array<int>) : string {
+        return build_string() $(var writer) {
+            for (key, i in keys, count()) {
+                if (i != 0) { writer |> write(" AND ") }
+                writer |> write(sql_quote_id(fields[key].col_name))
+                writer |> write(" = ?")
+            }
         }
-        return -1
     }
 
     def make_update_by_pk_sql_fn(var st : StructurePtr; table_name : string; fields : array<FieldInfo>) : FunctionPtr {
@@ -1242,8 +1284,8 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
     def make_update_by_pk_sql_named_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
-        let pk_idx = find_pk_field(fields)
-        if (pk_idx < 0) {
+        let pk_fields <- find_pk_fields(fields)
+        if (empty(pk_fields)) {
             let st_name = string(st.name)
             let msg = "[sql_table] {st_name}: update(row) / delete_(row) / delete_by_id are unavailable - no @sql_primary_key field. Use the macro forms `_sql_update(type<{st_name}>, where, set)` / `_sql_delete(type<{st_name}>, where)` instead."
             var fn = qmacro_function("_sql_update_by_pk_sql") $(typ : $t(st); name : string) : string {
@@ -1254,7 +1296,6 @@ class SqlTableMacro : AstStructureAnnotation {
             fn.body |> force_at(st.at)
             return <- fn
         }
-        let pk_col = fields[pk_idx].col_name
         let set_clause = build_string() $(var w) {
             var first = true
             for (info in fields) {
@@ -1280,7 +1321,7 @@ class SqlTableMacro : AstStructureAnnotation {
             return <- fn
         }
         let prefix = "UPDATE "
-        let suffix = " SET {set_clause} WHERE \"{pk_col}\" = ?"
+        let suffix = " SET {set_clause} WHERE {primary_key_predicate(fields, pk_fields)}"
         var fn = qmacro_function("_sql_update_by_pk_sql") $(typ : $t(st); name : string) : string {
             return $v(prefix) + sql_quote_id(name) + $v(suffix)
         }
@@ -1299,8 +1340,8 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
     def make_delete_by_pk_sql_named_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
-        let pk_idx = find_pk_field(fields)
-        if (pk_idx < 0) {
+        let pk_fields <- find_pk_fields(fields)
+        if (empty(pk_fields)) {
             let st_name = string(st.name)
             let msg = "[sql_table] {st_name}: delete_(row) / delete_by_id require a @sql_primary_key field. Use `_sql_delete(type<{st_name}>, where)` instead."
             var fn = qmacro_function("_sql_delete_by_pk_sql") $(typ : $t(st); name : string) : string {
@@ -1311,9 +1352,8 @@ class SqlTableMacro : AstStructureAnnotation {
             fn.body |> force_at(st.at)
             return <- fn
         }
-        let pk_col = fields[pk_idx].col_name
         let prefix = "DELETE FROM "
-        let suffix = " WHERE \"{pk_col}\" = ?"
+        let suffix = " WHERE {primary_key_predicate(fields, pk_fields)}"
         var fn = qmacro_function("_sql_delete_by_pk_sql") $(typ : $t(st); name : string) : string {
             return $v(prefix) + sql_quote_id(name) + $v(suffix)
         }
@@ -1323,8 +1363,8 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
     def make_bind_row_for_update_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
-        let pk_idx = find_pk_field(fields)
-        if (pk_idx < 0) {
+        let pk_fields <- find_pk_fields(fields)
+        if (empty(pk_fields)) {
             var fn = qmacro_function("_sql_bind_row_for_update") $(var stmt; row : $t(st)) : void {
                 pass
             }
@@ -1334,6 +1374,7 @@ class SqlTableMacro : AstStructureAnnotation {
         }
 
         var bind_exprs : array<ExpressionPtr>
+        bind_exprs |> reserve(length(fields))
         var bind_idx = 0
         for (field in fields) {
             if (field.is_pk || field.is_computed) continue
@@ -1344,12 +1385,14 @@ class SqlTableMacro : AstStructureAnnotation {
                 sql_bind_to_stmt(stmt, $v(bi), row.$f(field_name));
             }))
         }
-        bind_idx++
-        let pk_bind_idx = bind_idx
-        let pk_field_name = fields[pk_idx].name
-        bind_exprs |> push(qmacro_expr(${
-            sql_bind_to_stmt(stmt, $v(pk_bind_idx), row.$f(pk_field_name));
-        }))
+        for (pk_idx in pk_fields) {
+            bind_idx++
+            let pk_bind_idx = bind_idx
+            let pk_field_name = fields[pk_idx].name
+            bind_exprs |> push(qmacro_expr(${
+                sql_bind_to_stmt(stmt, $v(pk_bind_idx), row.$f(pk_field_name));
+            }))
+        }
 
         var fn = qmacro_function("_sql_bind_row_for_update") $(var stmt; row : $t(st)) : void {
             $b(bind_exprs)
@@ -1360,8 +1403,8 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
     def make_bind_row_pk_only_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
-        let pk_idx = find_pk_field(fields)
-        if (pk_idx < 0) {
+        let pk_fields <- find_pk_fields(fields)
+        if (empty(pk_fields)) {
             var fn = qmacro_function("_sql_bind_row_pk_only") $(var stmt; row : $t(st)) : void {
                 pass
             }
@@ -1369,9 +1412,17 @@ class SqlTableMacro : AstStructureAnnotation {
             fn.body |> force_at(st.at)
             return <- fn
         }
-        let pk_field_name = fields[pk_idx].name
+        var bind_exprs : array<ExpressionPtr>
+        bind_exprs |> reserve(length(pk_fields))
+        for (pk_idx, i in pk_fields, count()) {
+            let pk_field_name = fields[pk_idx].name
+            let bind_idx = i + 1
+            bind_exprs |> push(qmacro_expr(${
+                sql_bind_to_stmt(stmt, $v(bind_idx), row.$f(pk_field_name));
+            }))
+        }
         var fn = qmacro_function("_sql_bind_row_pk_only") $(var stmt; row : $t(st)) : void {
-            sql_bind_to_stmt(stmt, 1, row.$f(pk_field_name))
+            $b(bind_exprs)
         }
         fn.flags.generated = true
         fn.body |> force_at(st.at)
@@ -1624,6 +1675,8 @@ class private SqlViewMacro : AstStructureAnnotation {
         compiling_module() |> add_function(fn_del_pk)
         var fn_pk_unset = make_pk_is_unset_returns_false_fn(st)
         compiling_module() |> add_function(fn_pk_unset)
+        var fn_pk_count = make_pk_count_constant_fn(st, 0)
+        compiling_module() |> add_function(fn_pk_count)
         var fn_bind = make_view_bind_row_panic_stub_fn(st, "_sql_bind_row", st_name, "insert", true)
         compiling_module() |> add_generic(fn_bind)
         var fn_bind_upd = make_view_bind_row_panic_stub_fn(st, "_sql_bind_row_for_update", st_name, "update", false)

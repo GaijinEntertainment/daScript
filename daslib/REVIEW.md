@@ -79,11 +79,6 @@ default-suite test (what `dastest` runs over `tests/` (repo root) with no flags,
 environment-gated or nightly-only test excluded) reports when it goes false, and that the code's own
 names do not make self-evident.**
 
-**A diff that weakens `tests/lint/test_nolint_suppression.das` or `tests/lint/test_stale_nolint.das`
-(repo root) is a defect.** They pin that a string literal, a URL, and a mid-comment `nolint:` do not
-suppress while a first-token directive after `//` or `//!` does, and that a `lint-skip-file` past
-the header window (the leading lines where that directive counts) is prose.
-
 **A diff that changes `build_lint_macro_disabled` (`lint_config.das`) keeps its steps in this order,
 each overriding the ones before it: the default-off seeding, the repo `.lint_config` `off`
 directives, its `on` directives, the `DAS_LINT_DISABLE` environment variable, and last the file's
@@ -92,10 +87,6 @@ directives, its `on` directives, the `DAS_LINT_DISABLE` environment variable, an
 
 **A diff that changes `options _enable_default_off_rules` keeps it skipping BOTH the default seeding
 and the repo `off` directives.** Repo policy must not silence the rule a fixture exists to exercise.
-
-**A diff that weakens `tests/lint/test_lint_config.das` (repo root) is a defect** - it pins that
-each `[format]` key of `.lint_config` resolves nearest-wins independently up to the `.git` root, so
-a nearer `.lint_config` declaring one key does not reset the other.
 
 **A daslib module that emits a lint rule id joins `RULE_MODULES` in `utils/lint/REVIEW.das` in the
 same change.** An unlisted module's ids are never scanned, so its fixture-and-rst check never runs.
