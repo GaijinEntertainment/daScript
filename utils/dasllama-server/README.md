@@ -955,8 +955,8 @@ absent; set `DASLLAMA_MODELS_DIR`):
   the catalog's `serve_mtp` read off a file's base name, and carried by the slot options both
   the boot load and a runtime POST load build; a slot's chunk defaults off its own arm outcome (`slot_chunk_defaults`: the
   CPU's short chunk and one-window idle chunk, a GPU's one-window chunk and the idle floor, the resident driver's idle
-  chunk at its prompt window or wider); the checkpoint byte budget and the box's RAM
-  under a container's cgroup limit; the `translate` flag and config key (the string and array
+  chunk at its prompt window or wider); the checkpoint byte budget off the box's RAM (the RAM
+  read itself is `modules/dasLLAMA/tests/test_box_ident.das`'s); the `translate` flag and config key (the string and array
   forms, the flag-versus-config precedence, the row and its source on the config surface) and a
   boot whose translation model file is present serving rather than entering setup mode - all
   model-free. One cell is not: a Vulkan slot over

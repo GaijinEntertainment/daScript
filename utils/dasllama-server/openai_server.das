@@ -28,6 +28,7 @@ require strings
 require math
 require daslib/base64                // base64_decode: the data: URI payload
 require uriparser                    // unescape_uri: a urlencoded /translate form
+require ../../modules/dasLLAMA/performance/box_ident.das   // probe_cpu_brand / box_ram_gb: the engine-free box probes
 
 // An OpenAI-compatible HTTP server over the dasLLAMA facade. The SERVING paths reach only public
 // facade verbs — no engine internals — which is the acceptance test for the API: if a full OpenAI
@@ -1820,54 +1821,7 @@ def private handle_images(var resp : Reply) : http_status {
 
 var private g_hardware_line = ""   // "<cpu> · N worker lanes · <gpu>" — composed once at init_server
 
-// The CPU marketing name: registry on Windows, /proc/cpuinfo on Linux, sysctl on macOS.
-def private cpu_brand : string {
-    var out = ""
-    if (get_platform_name() == "windows") {
-        var args <- ["reg", "query", "HKLM\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
-                     "/v", "ProcessorNameString"]
-        run_and_capture(args, out, 10.0)
-        delete args
-        for (ln in split(out, "\n")) {
-            let i = find(ln, "REG_SZ")
-            if (i >= 0 && find(ln, "ProcessorNameString") >= 0) {
-                return strip(slice(ln, i + length("REG_SZ")))
-            }
-        }
-        return ""
-    }
-    let cpuinfo = fread("/proc/cpuinfo")
-    if (!empty(cpuinfo)) {
-        for (ln in split(cpuinfo, "\n")) {
-            if (ln |> starts_with("model name")) {
-                let c = find(ln, ":")
-                return c >= 0 ? strip(slice(ln, c + 1)) : ""
-            }
-        }
-    }
-    var args <- ["sysctl", "-n", "machdep.cpu.brand_string"]
-    run_and_capture(args, out, 10.0)
-    delete args
-    return strip(out)
-}
-
 var private g_box_ram_gb = 0   // total physical RAM in whole GiB, probed once at init_server (0 = unknown)
-
-// linux /proc/meminfo: "MemTotal:       131842348 kB" -> whole GiB; 0 = parse failure
-def private ram_gb_from_meminfo(text : string) : int {
-    for (ln in split(text, "\n")) {
-        if (ln |> starts_with("MemTotal")) {
-            let c = find(ln, ":")
-            if (c >= 0) {
-                var inscope toks <- split(strip(slice(ln, c + 1)), " ")
-                let kb = empty(toks) ? 0.0 : to_float(toks[0])
-                delete toks
-                return int(kb / (1024.0 * 1024.0) + 0.5)
-            }
-        }
-    }
-    return 0
-}
 
 let SERVER_PREFIX_STATES_MIN = 256l   //! under its byte budget - a library caller keeps `DEFAULT_PREFIX_STATES`
 let SERVER_PREFIX_STATES_MAX = 1024l   //! the count the budget may raise it to: every attach scans each checkpoint's tokens against the prompt
@@ -1889,59 +1843,6 @@ def prefix_state_budget_mb(requested_mb, ram_gb : int64) : int64 {
     return ram_gb > 0l ? ram_gb * 1024l / 4l : 4096l
 }
 
-// Total physical RAM — a twin of profile_common's private platform_ram_gb (kept separate so
-// the server never pays that file's tool closure); wmic falls through to CIM on Windows.
-def private box_ram_gb() : int {
-    let gib = 1024.0 * 1024.0 * 1024.0
-    var out = ""
-    if (get_platform_name() == "windows") {
-        var args <- ["wmic", "ComputerSystem", "get", "TotalPhysicalMemory", "/value"]
-        run_and_capture(args, out, 10.0)
-        delete args
-        for (ln in split(out, "\n")) {
-            let i = find(ln, "=")
-            if (i >= 0 && find(ln, "TotalPhysicalMemory") >= 0) {
-                return int(to_float(strip(slice(ln, i + 1))) / gib + 0.5)
-            }
-        }
-        var ps <- ["powershell", "-NoProfile", "-Command", "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory"]
-        out = ""
-        run_and_capture(ps, out, 15.0)
-        delete ps
-        let t = strip(out)
-        return empty(t) ? 0 : int(to_float(t) / gib + 0.5)
-    }
-    if (get_platform_name() == "darwin") {
-        var args <- ["sysctl", "-n", "hw.memsize"]
-        run_and_capture(args, out, 10.0)
-        delete args
-        return int(to_float(strip(out)) / gib + 0.5)
-    }
-    return linux_ram_gb(fread("/proc/meminfo"), fread("/sys/fs/cgroup/memory.max"),
-        fread("/sys/fs/cgroup/memory/memory.limit_in_bytes"))
-}
-
-//! a Linux box's RAM in whole GiB from its three files' texts: the
-//! cgroup v2 limit, else the v1 one, where under the meminfo total
-def linux_ram_gb(meminfo, cgroup_v2, cgroup_v1 : string) : int {
-    let total = ram_gb_from_meminfo(meminfo)
-    var cap = ram_gb_from_cgroup(cgroup_v2)
-    if (cap == 0) {
-        cap = ram_gb_from_cgroup(cgroup_v1)
-    }
-    return cap > 0 && (total == 0 || cap < total) ? cap : total
-}
-
-//! a cgroup memory-limit file's text in whole GiB, rounded up so a finite cap under a GiB still reads as one;
-//! 0 for no limit (`max`, or v1's page-rounded count past a petabyte) and for text that is no byte count
-def ram_gb_from_cgroup(text : string) : int {
-    let t = strip(text)
-    return 0 if (empty(t) || !is_number(first_character(t)))
-    let bytes = to_float(t)
-    let gib = 1024.0 * 1024.0 * 1024.0
-    return bytes <= 0.0 || bytes >= 1024.0 * 1024.0 * gib ? 0 : int(ceil(bytes / gib))
-}
-
 //! the lanes the kernels actually dispatch on: the jobque workers plus the calling thread,
 //! narrowed by the dispatch cap when one is set (the cap sentinel 0 means all of them)
 def private served_lanes() : int {
@@ -1951,7 +1852,7 @@ def private served_lanes() : int {
 }
 
 def private compose_hardware_line {
-    var cpu = cpu_brand()
+    var cpu = probe_cpu_brand()
     if (empty(cpu)) {
         cpu = "unknown cpu"
     }
@@ -8249,7 +8150,7 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
         }
         to_log(LOG_INFO, g_setup_mode ? "dasllama-server: setup mode - serving the catalog/config page only\n" : "dasllama-server: no LLM slot - serving the speech route and the catalog only\n")
     }
-    g_box_ram_gb = box_ram_gb()   // probed once: a probe spawns sysctl, wmic or powershell
+    g_box_ram_gb = box_ram_gb()   // probed once: a probe spawns sysctl, or wmic then powershell
     let state_mb = prefix_state_budget_mb(prefix_state_mb, int64(g_box_ram_gb))
     init_slot_schedulers(max_streams, max_queue, chunk_tokens, idle_chunk_tokens, page_rows, prefix_groups,
                          prefix_states, state_mb * 1048576l, kv_dtype, mtp)

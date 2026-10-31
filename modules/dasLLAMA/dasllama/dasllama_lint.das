@@ -8,15 +8,16 @@ module dasllama_lint shared private
 //! DASLLAMA001 (macro_error, code 50503): a consumer requires a dasLLAMA internal
 //! directly - by name, or by a path that resolves into the module tree. The public entry
 //! points are ``dasllama/dasllama`` (the facade) and ``dasllama/dasllama_core`` (the facade without file decoders), ``dasllama/dasllama_scheduler`` (serving),
-//! ``dasllama/dasllama_exchange`` (the tune-sidecar exchange) and ``dasllama/dasllama_bench``
-//! (the benchmark rows). Engine files, in-module tests and harnesses opt out per file via
-//! ``options _dasllama_internal = true``.
+//! ``dasllama/dasllama_exchange`` (the tune-sidecar exchange), ``dasllama/dasllama_bench``
+//! (the benchmark rows) and, by path, ``performance/box_ident.das`` (the engine-free box probes:
+//! the box tag, the CPU brand, the RAM, the WMI query). Engine files, in-module tests and harnesses
+//! opt out per file via ``options _dasllama_internal = true``.
 
 require daslib/ast_boost
 require strings
 
 let private ALLOWED_DASLLAMA : table<string> <- {
-    "dasllama", "dasllama_core", "dasllama_scheduler", "dasllama_exchange", "dasllama_exchange_schema", "dasllama_bench", "dasllama_lint"
+    "dasllama", "dasllama_core", "dasllama_scheduler", "dasllama_exchange", "dasllama_exchange_schema", "dasllama_bench", "dasllama_lint", "box_ident"
 }
 
 [lint_macro]
@@ -46,7 +47,7 @@ class DasllamaLintMacro : AstPassMacro {
             let inside_tree = find(to_lower(replace(string(rmod.fileName), "\\", "/")), "modules/dasllama/") >= 0
             if (!inside_tree) return
             prog |> macro_error(at,
-                "DASLLAMA001: require of dasLLAMA internal '{mname}' - the public surface is require dasllama/dasllama or dasllama/dasllama_core (+ dasllama/dasllama_scheduler for serving, dasllama/dasllama_exchange for the sidecar exchange, dasllama/dasllama_bench for the benchmark rows). A symbol the facade lacks means the facade is missing it: add it to dasllama_core.das. Engine/test escape: options _dasllama_internal = true.")
+                "DASLLAMA001: require of dasLLAMA internal '{mname}' - the public surface is require dasllama/dasllama or dasllama/dasllama_core (+ dasllama/dasllama_scheduler for serving, dasllama/dasllama_exchange for the sidecar exchange, dasllama/dasllama_bench for the benchmark rows, performance/box_ident.das by path for the box probes). A symbol the facade lacks means the facade is missing it: add it to dasllama_core.das. Engine/test escape: options _dasllama_internal = true.")
         }
         return true
     }

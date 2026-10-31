@@ -3,15 +3,19 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `README.md`. Planned work: `modules/dasLLAMA/followup_general.md` (repo root).
 
-**A diff to a file that requires - directly or through another file in this folder - a
-`dasllama/*` module, or to `README.md` text stating dasLLAMA engine behavior or a measured
-number, applies `modules/dasLLAMA/REVIEW.md` (repo root) too.**
+**A diff to a file that requires a file under `modules/dasLLAMA/` (repo root) - by a
+`dasllama/*` module name, a module group, or a relative path, directly or through another
+file in this folder - applies `modules/dasLLAMA/REVIEW.md` (repo root) too.**
+
+**A diff to `README.md` text that states what code under `modules/dasLLAMA/` does, or that
+states any measured number, applies `modules/dasLLAMA/REVIEW.md` (repo root) too.**
 
 **A Playwright `.spec.js` or a captured fixture, wherever the diff puts it, applies the
 `tests/` subfolder's `REVIEW.md` (beside this file) too.**
 
-**A `[test]` file in this folder that carries a `require dasllama/...` line of its own answers
-to `modules/dasLLAMA/tests/REVIEW.md` (repo root) as well.**
+**A `[test]` file in this folder whose own `require` line names a file under
+`modules/dasLLAMA/` - by a `dasllama/*` module name, a module group, or a relative path -
+answers to `modules/dasLLAMA/tests/REVIEW.md` (repo root) as well.**
 
 **A diff that changes what a `main.das` or `cli_args.das` flag does or says - a flag added, its
 default, a file or path it reads or writes, what it makes the program do, the value

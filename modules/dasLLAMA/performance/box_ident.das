@@ -6,7 +6,9 @@ options no_unused_function_arguments = false
 // (<box>.tune.json) and every per-box artifact - so it is DERIVED FROM HARDWARE, never
 // defaulted: a wrong tag silently serves another box's crowns and poisons its store.
 // Engine-free on purpose: tests/run.das requires this file without paying the engine
-// compile, and profile_common re-exports box_name() through it.
+// compile, and profile_common re-exports box_name() through it. It is also the one home of
+// the box probes (CPU brand, RAM, WMI, the argv capture they run on), which the server
+// requires by path for the same reason.
 
 module box_ident shared private
 
@@ -47,81 +49,166 @@ def private box_from_cpu(cpu : string) : string {
     return ""
 }
 
-def private capture_line(cmd : string) : string {
-    var out = ""
-    unsafe(popen(cmd) $(f) {
-        if (f != null) {
-            let ln = fgets(f)
-            out = strip(ln)
+//! argv spawn (no shell), stdout+stderr merged by popen_argv, the whole output trimmed; "" where the program is missing
+[arch(at="../ARCHITECTURE_ENGINE.md#instrumentation-and-support")]
+def public run_capture_argv(args : array<string>) : string {
+    var acc = ""
+    unsafe(popen_argv(args, 0.0, $(f) {
+        if (f == null) {   // popen_argv hands a null handle on spawn failure (a missing program)
+            return
         }
-    })
-    return out
+        while (true) {   // fgets, not fread: the loop predates fread's pipe-safe EOF fallback and has never dropped output
+            let line = fgets(f)
+            if (empty(line)) {   // fgets keeps the newline, so "" only at EOF
+                break
+            }
+            acc = "{acc}{line}"
+        }
+    }))
+    return strip(acc)
 }
 
-//! the first line of `path`, "" without the file
-def private first_line(path : string) : string {
-    var out = ""
-    fopen(path, "rb") $(f) {
-        if (f != null) {
-            out = strip(fgets(f))
+//! the after-colon tail of the first line of `raw` containing `key`, "" when none does
+def public line_value(raw, key : string) : string {
+    for (ln in split(raw, "\n")) {
+        let k = find(ln, key)
+        if (k >= 0) {
+            let c = find(ln, ":", k)
+            if (c >= 0) {
+                return strip(slice(ln, c + 1))
+            }
         }
     }
-    return out
+    return ""
 }
 
-//! the box's RAM in GiB, 0 where no probe answers: the physical memory, or the container's limit where a cgroup caps
-//! this process under it (a RunPod pod reads the host's 251 GB off /proc/meminfo and holds 62)
+//! the `Key=value` lines of a WMI answer, each stripped; every line without '=' dropped
+def public wmi_lines_of(raw : string) : array<string> =>
+    <- [for (ln in split(raw, "\n")); strip(ln); where find(ln, "=") >= 0]
+
+//! the Get-CimInstance script answering `props` ("Capacity,Speed") of `cls` in wmic's own `Key=value` lines
+def public cim_script(cls : string; props : string) : string {
+    let quoted = "'" + replace(props, ",", "','") + "'"
+    return "Get-CimInstance {cls} | ForEach-Object \{ foreach ($p in {quoted}) \{ $p + '=' + $_.$p \} \}"
+}
+
+//! a Windows WMI class's `Key=value` lines for `props`, one block per instance; empty where nothing answers
+[arch(at="../ARCHITECTURE_ENGINE.md#instrumentation-and-support")]
+def public wmi_lines(cls : string; props : string) : array<string> {
+    var lines <- wmi_lines_of(run_capture_argv(["wmic", "path", cls, "get", props, "/value"]))
+    if (empty(lines)) {
+        lines <- wmi_lines_of(run_capture_argv(["powershell", "-NoProfile", "-Command", cim_script(cls, props)]))
+    }
+    return <- lines
+}
+
+//! the value of `key` on one `Key=value` line, "" when the line carries another key
+def public kv_value(ln : string; key : string) : string {
+    let eq = find(ln, "=")
+    return (eq >= 0 && strip(slice(ln, 0, eq)) == key) ? strip(slice(ln, eq + 1)) : ""
+}
+
+//! every non-empty value of `key` across `Key=value` lines, in line order
+def public kv_values(lines : array<string>; key : string) : array<string> {
+    var vals : array<string>
+    for (ln in lines) {
+        let v = kv_value(ln, key)
+        if (!empty(v)) {
+            vals |> push(v)
+        }
+    }
+    return <- vals
+}
+
+//! every instance's non-empty `prop` of a Windows WMI class, in answer order
+def public wmi_prop(cls : string; prop : string) : array<string> =>
+    <- kv_values(wmi_lines(cls, prop), prop)
+
+//! the RAM modules a `Win32_PhysicalMemory` `Capacity,Speed` answer lists: their count, one module's GiB, its MT/s
+def public ram_modules_of(lines : array<string>) : tuple<count : int; cap_gb : int; speed : int> {
+    var count = 0
+    var cap_gb = 0
+    var speed = 0
+    for (ln in lines) {
+        let cap = kv_value(ln, "Capacity")
+        if (!empty(cap)) {
+            count++
+            cap_gb = int(to_float(cap) / (1024.0 * 1024.0 * 1024.0) + 0.5)
+            continue
+        }
+        let spd = kv_value(ln, "Speed")
+        if (!empty(spd)) {
+            speed = to_int(spd)
+        }
+    }
+    return (count = count, cap_gb = cap_gb, speed = speed)
+}
+
+//! /proc/meminfo's MemTotal ("131842348 kB") in whole GiB, 0 without the line
+def private ram_gb_from_meminfo(text : string) : int {
+    var inscope toks <- split(line_value(text, "MemTotal"), " ")
+    let kb = empty(toks) ? 0.0 : to_float(toks[0])
+    return int(kb / (1024.0 * 1024.0) + 0.5)
+}
+
+def public ram_gb_from_cgroup(text : string) : int {
+    //! a cgroup memory-limit file's text in whole GiB, rounded up so a finite cap under a GiB still reads as one;
+    //! 0 for no limit (`max`, or v1's page-rounded count past a petabyte) and for text that is no byte count
+    let t = strip(text)
+    return 0 if (empty(t) || !is_number(first_character(t)))
+    let bytes = to_float(t)
+    let gib = 1024.0 * 1024.0 * 1024.0
+    return bytes <= 0.0 || bytes >= 1024.0 * 1024.0 * gib ? 0 : int(ceil(bytes / gib))
+}
+
+def public linux_ram_gb(meminfo, cgroup_v2, cgroup_v1 : string) : int {
+    //! a Linux box's RAM in whole GiB from its three files' texts: the
+    //! cgroup v2 limit, else the v1 one, where under the meminfo total
+    let total = ram_gb_from_meminfo(meminfo)
+    var cap = ram_gb_from_cgroup(cgroup_v2)
+    if (cap == 0) {
+        cap = ram_gb_from_cgroup(cgroup_v1)
+    }
+    return cap > 0 && (total == 0 || cap < total) ? cap : total
+}
+
+[arch(at="../ARCHITECTURE_ENGINE.md#instrumentation-and-support")]
 def public box_ram_gb() : int {
+    //! the box's RAM in GiB, 0 where no probe answers: the physical memory, or the container's limit where a cgroup
+    //! caps this process under it (a RunPod pod reads the host's 251 GB off /proc/meminfo and holds 62)
     let gib = 1024.0 * 1024.0 * 1024.0
     let plat = get_platform_name()
     if (plat == "windows") {
-        // wmic emits "TotalPhysicalMemory=68632934400"; clean Windows 11 24H2+ installs ship without wmic (it survives
-        // in-place upgrades), so CIM answers when it yields nothing - and 2>nul keeps the miss off the console
-        let raw = capture_line("wmic ComputerSystem get TotalPhysicalMemory /value 2>nul | findstr TotalPhysicalMemory")
-        let i = find(raw, "=")
-        if (i >= 0) {
-            return int(to_float(strip(slice(raw, i + 1))) / gib + 0.5)
-        }
-        let ps = capture_line("powershell -NoProfile -Command \"(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory\"")
-        return empty(ps) ? 0 : int(to_float(ps) / gib + 0.5)
+        var inscope bytes <- wmi_prop("Win32_ComputerSystem", "TotalPhysicalMemory")
+        return empty(bytes) ? 0 : int(to_float(bytes[0]) / gib + 0.5)
     }
     if (plat == "darwin") {
-        return int(to_float(capture_line("sysctl -n hw.memsize")) / gib + 0.5)
+        return int(to_float(run_capture_argv(["sysctl", "-n", "hw.memsize"])) / gib + 0.5)
     }
-    // linux /proc/meminfo: "MemTotal:       131842348 kB"; a cgroup v2 limit in bytes at memory.max ("max" = none)
-    let ln = first_line("/proc/meminfo")
-    let i = find(ln, ":")
-    var gb = 0
-    if (i >= 0) {
-        let toks <- split(strip(slice(ln, i + 1)), " ")
-        gb = empty(toks) ? 0 : int(to_float(toks[0]) / (1024.0 * 1024.0) + 0.5)
-    }
-    let cap = first_line("/sys/fs/cgroup/memory.max")
-    if (!empty(cap) && cap != "max") {
-        let cap_gb = int(to_float(cap) / gib + 0.5)
-        gb = gb == 0 ? cap_gb : min(gb, cap_gb)
-    }
-    return gb
+    return linux_ram_gb(fread("/proc/meminfo"), fread("/sys/fs/cgroup/memory.max"),
+        fread("/sys/fs/cgroup/memory/memory.limit_in_bytes"))
 }
 
+//! the CPU marketing name, "" where no probe answers
 def public probe_cpu_brand : string {
-    let plat = get_platform_name()   // "darwin" / "windows" / "linux" (probe-verified 2026-08-25)
+    let plat = get_platform_name()
     if (plat == "darwin") {
-        return capture_line("sysctl -n machdep.cpu.brand_string")
+        return run_capture_argv(["sysctl", "-n", "machdep.cpu.brand_string"])
     }
     if (plat == "windows") {
-        // one REG_SZ line; the tail after the type column is the brand
-        let ln = capture_line("reg query \"HKLM\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0\" /v ProcessorNameString | findstr REG_SZ")
-        let i = find(ln, "REG_SZ")
-        return i >= 0 ? strip(slice(ln, i + length("REG_SZ"))) : ""
+        let listing = run_capture_argv(["reg", "query", "HKLM\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
+            "/v", "ProcessorNameString"])
+        for (ln in split(listing, "\n")) {
+            let i = find(ln, "REG_SZ")
+            if (i >= 0 && find(ln, "ProcessorNameString") >= 0) {
+                return strip(slice(ln, i + length("REG_SZ")))
+            }
+        }
+        return ""
     }
-    // arm64 /proc/cpuinfo carries no "model name" line - lscpu names the core from its part id
-    var ln = capture_line("grep -m1 \"model name\" /proc/cpuinfo")
-    if (empty(ln)) {
-        ln = capture_line("lscpu | grep -m1 \"Model name\"")
-    }
-    let i = find(ln, ":")
-    return i >= 0 ? strip(slice(ln, i + 1)) : ""
+    let brand = line_value(fread("/proc/cpuinfo"), "model name")
+    // arm64's /proc/cpuinfo carries no "model name" line; lscpu names the core from its part id
+    return empty(brand) ? line_value(run_capture_argv(["lscpu"]), "Model name") : brand
 }
 
 // unknown hardware gets its own hardware-keyed tag, never another box's store
