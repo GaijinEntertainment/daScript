@@ -7700,10 +7700,11 @@ records as the expert GEMVs' regions, the act and the combine.
   the `sbbody` loop of `nv4q8_rm_gemv_gen__mr4` / `q40q8_rm_gemv_gen__mr4` under `kq_kernel_bench ... --jit-dump`); the
   split, not the decode, moved it. What stays is the grp tier's per-strip decode and split accumulators, inherent to the k4
   nibble tiling the device layout shares: the planar kernels keep 1.3x (gemv) to 1.9x (tile) behind q40 on x64, 2.5x and
-  1.5x on NEON, and the layout stays as the GPU reads it (hardware compatibility over the last 10%). The accumulator split is
-  neutral on zen4's row-major GEMV (throughput-bound there) and a loss on NEON's tile at two sets (4101 -> 6865 us at four
-  tokens, spills - `RM_TILE_ACC_SETS` set to 2 on NEON before the per-ISA pick, a one-constant build that is not in the
-  tree; the `accs` perm axis of the row-major families now races the candidates in one process).
+  1.5x on NEON, and the layout stays as the GPU reads it (hardware compatibility over the last 10%). The accumulator split read
+  neutral on zen4's row-major GEMV across the two builds (the in-process race in the entry below puts one set 5 to 10%
+  ahead there) and a loss on NEON's tile at two sets (4101 -> 6865 us at four tokens, spills - `RM_TILE_ACC_SETS` set to 2
+  on NEON before the per-ISA pick, a one-constant build that is not in the tree; the `accs` perm axis of the row-major
+  families now races the candidates in one process).
 - **MEASURED (2026-10-31, served, the pod - RTX PRO 4500 Blackwell 32 GB, EPYC 7443P 48 vCPU, a 62 GB container cgroup:
   Qwen3.6-35B-A3B NVFP4 (knoopx) against a pure Q4_0 of the same model (bartowski's Q4_0 requantized `--pure`, its Q4_1
   `ffn_down_exps` have no reader arm), every row the two engines on the same file; ours `lcpp_bench.das
@@ -7729,3 +7730,20 @@ records as the expert GEMVs' regions, the act and the combine.
   the nv4 stacks add: `Model.exps_scale`, one float an expert a scaled stack (the 35B: 40 layers x 3 stacks x 256 x 4 B =
   123 KB) plus the `site_scale` table's entry an expert, and the Vulkan mint view's table holds the same entries a gather
   (freed with the view); a dense nv4 carrier adds none.
+- **MEASURED (2026-10-31, `debug-jit`, the row-major accumulator sets raced in one process - the `accs` perm axis of the
+  rm families, `kq_kernel_bench.das --fmt nv4,q40 --rm --ntok 512` under `DAS_TUNE_MODE=test`, `-p mr4,mr8` on the M5 Max
+  (arm-i8mm, the box profile `performance/m5.tune.json`) and `-p vpdpbusd,maddubs` on zen4 (x86-vnni512, the class profile),
+  `DAS_TUNE_POLICY` unset, the CPU backend on auto, best of 5, us; no suffix = the shipped pick: four sets in the GEMV, two
+  in the x64 tile, one in NEON's).** The M5, nv4: rm_gemv `mr4` 1927, `mr4_accs1` 3082, `mr4_accs2` 1985; rm_tile `mr4`
+  536621, `_accs1` 536813, `_accs2` 844747. The M5, q40: rm_gemv 1017 / 1514 / 1005; rm_tile 343100 / 343176 / 343097. zen4,
+  nv4: rm_gemv `dot_vpdpbusd_width256_mr8` 1941 / `_accs1` 1746 / `_accs2` 1890, `dot_vpdpbusd_width512_mr16` 1878 / 1835 /
+  1907, `dot_maddubs_width256_mr8` 1924 / 1936 / 1927; rm_tile `dot_vpdpbusd_width512_mr16` 526647 / 529620 / 526794,
+  `dot_vpdpbusd_width256_mr8` 555283 / 558998 / 555371, `dot_maddubs_width256_mr8` 638887 / 648039 / 639057. zen4, q40:
+  rm_gemv `dot_vpdpbusd_width256_mr8` 1742 / 1657 / 1724, `dot_vpdpbusd_width512_mr16` 1871 / 1832 / 1876,
+  `dot_maddubs_width256_mr8` 1888 / 1822 / 1851; rm_tile `dot_vpdpbusd_width512_mr16` 574428 / 567441 / 574437,
+  `dot_vpdpbusd_width256_mr8` 569771 / 573691 / 569780. Read: on NEON the GEMV's four sets are the pick (one set is 1.6x
+  slower, two sets 3% slower) and the tile's one set (two sets spill, 1.57x slower); on zen4 ONE set leads the GEMV by 5
+  to 10% on every row (the entry above's "neutral" read the four-set build against the one-set build across two
+  processes), and the tile is flat across the sets. The shipped constants stay as they are; the class profiles' races
+  now hold the `accs` rows, so a box whose GEMV wants one set crowns `_accs1` at its next mint (x86-vnni512 and x86-amx
+  re-mint on this branch).
