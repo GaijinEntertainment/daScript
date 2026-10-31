@@ -662,6 +662,8 @@ def time_rm_tile(var stats : array<RowStat>; cfg : BenchArgs; fns : array<RmQ8Ti
     }
 }
 
+//! one format's row-major rows over the device planes: the gemv registry's rows, then the four-token tile's; every row drops
+//! its warm rounds first (SOLO_BURN solo, TEAM_BURN under --team) and reports best and median over the rounds after them
 def bench_rm_rows(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; var p : Planes; nsb : int64; sh : PlaneShape;
                   gvs : array<tuple<string; auto(GF)>>; tvs : array<tuple<string; auto(TF)>>) {
     let n = int64(cfg.n)
@@ -693,52 +695,15 @@ def bench_rm_rows(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
 }
 
 //! the row-major families by format (q8s16 shares q8's: the device q8 plane IS int8 rows + f16 scales)
-def bench_rm(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; mx4 : bool; var p : Planes; nsb : int64; sh : PlaneShape) { // nolint:STYLE037 - one arm a family
-    if (mx4) {
-        bench_rm_rows(rows, cfg, name, KqFmt.mx4, p, nsb, sh, mx4q8_rm_gemv_gen_variants(), mx4q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.q8) {
+def bench_rm(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; mx4 : bool; var p : Planes; nsb : int64; sh : PlaneShape) {
+    if (f == KqFmt.q8 && !mx4) {
         bench_rm_rows(rows, cfg, name, f, p, nsb, sh, q8q8_rm_gemv_gen_variants(), q8q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.iq4nl32) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq4nl32q8_rm_gemv_gen_variants(), iq4nl32q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.q4032) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, q4032q8_rm_gemv_gen_variants(), q4032q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.q51) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, q51q8_rm_gemv_gen_variants(), q51q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.q5032) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, q5032q8_rm_gemv_gen_variants(), q5032q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.k4) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, k4q8_rm_gemv_gen_variants(), k4q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.k5) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, k5q8_rm_gemv_gen_variants(), k5q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.k6) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, k6q8_rm_gemv_gen_variants(), k6q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.k3) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, k3q8_rm_gemv_gen_variants(), k3q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.k2) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, k2q8_rm_gemv_gen_variants(), k2q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.q40) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, q40q8_rm_gemv_gen_variants(), q40q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.iq4nl) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq4nlq8_rm_gemv_gen_variants(), iq4nlq8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.iq4xs) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq4xsq8_rm_gemv_gen_variants(), iq4xsq8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.iq3s4) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq3s4q8_rm_gemv_gen_variants(), iq3s4q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.iq3s) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq3sq8_rm_gemv_gen_variants(), iq3sq8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.iq3xxs) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq3xxsq8_rm_gemv_gen_variants(), iq3xxsq8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.iq2s) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq2sq8_rm_gemv_gen_variants(), iq2sq8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.iq2xs) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq2xsq8_rm_gemv_gen_variants(), iq2xsq8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.iq2xxs) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq2xxsq8_rm_gemv_gen_variants(), iq2xxsq8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.nv4) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, nv4q8_rm_gemv_gen_variants(), nv4q8_rm_tile4_gen_variants())
-    } else {
-        to_log(LOG_WARNING, "kq_kernel_bench: {name} has no row-major family - no rm rows\n")
+        return
     }
+    let kf = mx4 ? KqFmt.mx4 : f
+    var regs <- kq_registries_of(kf)
+    bench_rm_rows(rows, cfg, name, kf, p, nsb, sh, regs.rm_gemv, regs.rm_tile4)
+    delete regs
 }
 
 //! one --fmt name as (name, KqFmt, is_mx4): mx4 and q8s16 are q8-family flavors bench_q8_family races

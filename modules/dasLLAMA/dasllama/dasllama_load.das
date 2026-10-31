@@ -317,7 +317,7 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
     let pp32 = ple_f32_base(has_ple(c) && t.ple_proj_f32, fo, layers * dim * c.n_embd_per_layer)
     if (c.n_expert > 0l) {
         // MoE: routed expert stacks — expert e of layer l is a normal 2D matrix at we*_off + (l*n_expert+e)*(dim*n_ff_exp)
-        let ege = dim * c.n_ff_exp   // per-expert element count (same for gate/up and down)
+        let ege = expert_elems(c)
         t.we1_offs |> clear(); t.we1_offs |> reserve(layers)
         t.we2_offs |> clear(); t.we2_offs |> reserve(layers)
         t.we3_offs |> clear(); t.we3_offs |> reserve(layers)
@@ -1719,16 +1719,25 @@ def private ple_kind_f32(m : GGUFMeta; layers : int64; kind : string) : bool {
 //! a device driver on this load reads the shared expert and the tied classifier off planes of their own: an armed GPU tier, or a Metal mode
 def private device_reads_side_planes() : bool => moe_gpu_tier_installed() || get_metal_mode() != MetalMode.off
 
+//! the name of the `.scale` companion a weight tensor may carry
+def private scale_name(name : string) : string => "{trim_suffix(name, ".weight")}.scale"
+
+//! the file's index of `name`'s `.scale` companion, -1 when it carries none; a companion on a plane served in any other format
+//! is refused, since only the NVFP4 planes' epilogue applies it
+def private scale_tensor_index(m : GGUFMeta; name : string; fmt : KqFmt) : int {
+    let ti = gguf_find_tensor(m, scale_name(name))
+    if (ti >= 0 && fmt != KqFmt.nv4) {
+        panic("dasLLAMA load: {name} carries a per-tensor scale ({scale_name(name)}) and serves as {ggml_type_name(kq_ggml_type(fmt))} - the scale lands only on the NVFP4 planes' epilogue")
+    }
+    return ti
+}
+
 [arch(at="../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
 def private note_site_scale(var t : Model; m : GGUFMeta; bytes : array<uint8> | #; name : string; fmt : KqFmt; woff : int64) {
-    let sname = "{trim_suffix(name, ".weight")}.scale"
-    return if (gguf_find_tensor(m, sname) < 0)
-    if (fmt != KqFmt.nv4) {
-        panic("dasLLAMA load: {name} carries a per-tensor scale ({sname}) and serves as {ggml_type_name(kq_ggml_type(fmt))} - the scale lands only on the NVFP4 planes' epilogue")
-    }
+    return if (scale_tensor_index(m, name, fmt) < 0)
     var v : array<float>
     v |> resize(1)
-    gguf_read_tensor_f32(m, bytes, sname, v, 0l, 1l, 0l)
+    gguf_read_tensor_f32(m, bytes, scale_name(name), v, 0l, 1l, 0l)
     t.site_scale[site_scale_key(fmt, woff)] = v[0]
     delete v
 }
@@ -1736,26 +1745,22 @@ def private note_site_scale(var t : Model; m : GGUFMeta; bytes : array<uint8> | 
 [arch(at="../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
 def private note_stack_scales(var t : Model; m : GGUFMeta; bytes : array<uint8> | #; name : string; fmt : KqFmt; offs : array<int64>; l : int64) {
     return if (l >= long_length(offs) || offs[l] < 0l)
-    let sname = "{trim_suffix(name, ".weight")}.scale"
-    let ti = gguf_find_tensor(m, sname)
+    let ti = scale_tensor_index(m, name, fmt)
     return if (ti < 0)
-    if (fmt != KqFmt.nv4) {
-        panic("dasLLAMA load: {name} carries a per-tensor scale ({sname}) and serves as {ggml_type_name(kq_ggml_type(fmt))} - the scale lands only on the NVFP4 planes' epilogue")
-    }
     let ne = t.config.n_expert
     let cnt = m.tensors[ti].n_elem
     if (cnt != 1l && cnt != ne) {
-        panic("dasLLAMA load: {sname} holds {cnt} scales for a stack of {ne} experts - one a expert or one for the stack")
+        panic("dasLLAMA load: {scale_name(name)} holds {cnt} scales for a stack of {ne} experts - one per expert or one for the whole stack")
     }
-    var v : array<float>
-    v |> resize(ne)
-    gguf_read_tensor_f32(m, bytes, sname, v, 0l, cnt)
+    var @exact_size v : array<float>
+    reserve_resize(v, ne)
+    gguf_read_tensor_f32(m, bytes, scale_name(name), v, 0l, cnt)
     if (cnt == 1l) {
         for (e in range64(1l, ne)) {
             v[e] = v[0]
         }
     }
-    let ege = t.config.dim * t.config.n_ff_exp
+    let ege = expert_elems(t.config)
     for (e in range64(ne)) {
         t.site_scale[site_scale_key(fmt, offs[l] + e * ege)] = v[e]
     }
@@ -1764,9 +1769,8 @@ def private note_stack_scales(var t : Model; m : GGUFMeta; bytes : array<uint8> 
 
 [arch(at="../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
 def private refuse_site_scale(m : GGUFMeta; name : string) {
-    let sname = "{trim_suffix(name, ".weight")}.scale"
-    if (gguf_find_tensor(m, sname) >= 0) {
-        panic("dasLLAMA load: {name} carries a per-tensor scale ({sname}) at a site the engine applies no per-tensor scale to (a fused gate-up stack, the token table, the classifier, the NextN projection, the PLE table)")
+    if (gguf_find_tensor(m, scale_name(name)) >= 0) {
+        panic("dasLLAMA load: {name} carries a per-tensor scale ({scale_name(name)}) at a site the engine applies no per-tensor scale to (a fused gate-up stack, the token table, the classifier, the NextN projection, the PLE table)")
     }
 }
 
@@ -1812,7 +1816,7 @@ def private detect_site_scales(var t : Model; m : GGUFMeta; bytes : array<uint8>
         if (t.config.n_expert > 0l && l >= t.config.n_layer_dense_lead && l < t.config.n_layers) {
             note_stack_scales(t, m, bytes, "blk.{l}.ffn_gate_exps.weight", fmt_at(t.we1_fmt, l), t.we1_offs, l)
             note_stack_scales(t, m, bytes, "blk.{l}.ffn_up_exps.weight", fmt_at(t.we3_fmt, l), t.we3_offs, l)
-            if (!t.config.moe_dense_shexp) {   // gemma4's `ffn_down_exps.scale` is the routed block's per-expert down scale, not a site scale
+            if (!t.config.moe_dense_shexp) {   // gemma4's `ffn_down_exps.scale` is the routed block's per-expert output weight (`moe_down_scale_off`), not a dequant scale
                 note_stack_scales(t, m, bytes, "blk.{l}.ffn_down_exps.weight", fmt_at(t.we2_fmt, l), t.we2_offs, l)
             }
             if (t.config.n_ff_shexp > 0l) {

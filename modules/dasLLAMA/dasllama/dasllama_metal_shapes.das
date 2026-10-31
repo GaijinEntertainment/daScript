@@ -248,8 +248,14 @@ def private dense_fmts_unserved(t : Model; a : array<KqFmt>; offs : array<int64>
 //! the words for layer `l`'s plane of one site when its weights ride a per-tensor `.scale` (`Model.site_scale`, keyed by format
 //! and plane offset) - the Metal kernels read a plane's own bytes and apply no epilogue factor; "" otherwise
 def private plane_scale_unserved(t : Model; f : KqFmt; offs : array<int64>; l : int; words : string) : string {
-    return "" if (empty(t.site_scale) || l >= length(offs))
-    return "layer {l}'s {words} plane is {f} under a per-tensor .scale" if (key_exists(t.site_scale, site_scale_key(f, offs[l])))
+    return "" if (l >= length(offs))
+    return scale_unserved_at(t, f, offs[l], l, words)
+}
+
+//! the same words for layer `l`'s plane at `off` - a routed stack's first expert, a shared-expert plane
+def private scale_unserved_at(t : Model; f : KqFmt; off : int64; l : int; words : string) : string {
+    return "" if (empty(t.site_scale))
+    return "layer {l}'s {words} plane is {f} under a per-tensor .scale" if (key_exists(t.site_scale, site_scale_key(f, off)))
     return ""
 }
 
@@ -400,10 +406,22 @@ def private moe_layer_fmt_unserved(l : int64; f1, f3, f2 : KqFmt) : string {
 def moe_fmts_unserved(t : Model) : string {
     return "" if (!t.config.moe || t.experts_mx4)
     for (l in range64(t.config.n_layers + t.config.n_layer_nextn)) {
-        let why = moe_layer_fmt_unserved(l, fmt_at(t.we1_fmt, l), fmt_at(t.we3_fmt, l), fmt_at(t.we2_fmt, l))
+        let why = moe_layer_unserved(t, l)
         return why if (!empty(why))
     }
     return ""
+}
+
+//! layer `l`'s routed stacks: the first whose format the routed block has no kernel for, or whose weights ride a per-expert
+//! `.scale` no Metal kernel folds, named by site and `KqFmt` member; "" when all three serve
+def private moe_layer_unserved(t : Model; l : int64) : string {
+    let f1 = fmt_at(t.we1_fmt, l)
+    let f3 = fmt_at(t.we3_fmt, l)
+    let f2 = fmt_at(t.we2_fmt, l)
+    var why = moe_layer_fmt_unserved(l, f1, f3, f2)
+    why = empty(why) ? plane_scale_unserved(t, f1, t.we1_offs, int(l), kq_site_words("ffn_gate_exps")) : why
+    why = empty(why) ? plane_scale_unserved(t, f3, t.we3_offs, int(l), kq_site_words("ffn_up_exps")) : why
+    return empty(why) ? plane_scale_unserved(t, f2, t.we2_offs, int(l), kq_site_words("ffn_down_exps")) : why
 }
 
 //! the first layer's sigmoid-gated shared expert plane this home has no one-row GEMV for, named by layer, site and `KqFmt` member;
@@ -412,9 +430,15 @@ def shexp_fmts_unserved(t : Model) : string {
     let c = t.config
     return "" if (!c.moe || c.n_ff_shexp <= 0l || c.moe_dense_shexp)
     for (l in range64(c.n_layers + c.n_layer_nextn)) {
-        var why = one_row_unserved(l, kq_site_words("ffn_gate_shexp"), shexp_plane(t, l, 1).f, c.dim)
-        why = empty(why) ? one_row_unserved(l, kq_site_words("ffn_up_shexp"), shexp_plane(t, l, 3).f, c.dim) : why
-        why = empty(why) ? one_row_unserved(l, kq_site_words("ffn_down_shexp"), shexp_plane(t, l, 2).f, c.n_ff_shexp) : why
+        let g = shexp_plane(t, l, 1)
+        let u = shexp_plane(t, l, 3)
+        let d = shexp_plane(t, l, 2)
+        var why = one_row_unserved(l, kq_site_words("ffn_gate_shexp"), g.f, c.dim)
+        why = empty(why) ? one_row_unserved(l, kq_site_words("ffn_up_shexp"), u.f, c.dim) : why
+        why = empty(why) ? one_row_unserved(l, kq_site_words("ffn_down_shexp"), d.f, c.n_ff_shexp) : why
+        why = empty(why) ? scale_unserved_at(t, g.f, g.off, int(l), kq_site_words("ffn_gate_shexp")) : why
+        why = empty(why) ? scale_unserved_at(t, u.f, u.off, int(l), kq_site_words("ffn_up_shexp")) : why
+        why = empty(why) ? scale_unserved_at(t, d.f, d.off, int(l), kq_site_words("ffn_down_shexp")) : why
         return why if (!empty(why))
     }
     return ""
@@ -528,7 +552,7 @@ def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape ref
         let f1 = fmt_at(t.we1_fmt, l)
         let f2 = fmt_at(t.we2_fmt, l)
         let f3 = fmt_at(t.we3_fmt, l)
-        return false if (!empty(moe_layer_fmt_unserved(l, f1, f3, f2)))
+        return false if (!empty(moe_layer_unserved(t, l)))
         // per-site alignment + reduction dims: superblock kq kernels iterate whole 256-rows,
         // the per-32 formats whole 32-blocks (+ the mul_mm's 64-col output tiles)
         let sb1 = kq_sb(f1)

@@ -641,6 +641,11 @@ def test_metal_fmt_decline_names_site(t : T?) {
         t |> equal(moe_fmts_unserved(m), "layer 1's expert stack down plane is mx4")
         t |> equal(metal_fmt_decline_line("prefill", "{MetalPrefillDecline.graph}", m),
             "dasLLAMA metal prefill: declined graph - layer 1's expert stack down plane is mx4, a format the Metal kernels do not read there; the CPU serves the call")
+        m.we2_fmt[1] = KqFmt.nv4
+        t |> equal(moe_fmts_unserved(m), "", "an nv4 stack with no .scale has the routed block's kernels")
+        m.site_scale[site_scale_key(KqFmt.nv4, m.we2_offs[1])] = 0.01
+        t |> success(!moe_metal_ok(m), "the routed block declines an nv4 stack under a per-expert .scale: no Metal kernel reads the factor")
+        t |> equal(moe_fmts_unserved(m), "layer 1's expert stack down plane is nv4 under a per-tensor .scale")
         delete m
     }
 }
@@ -664,6 +669,11 @@ def test_metal_graph_decline_names_site(t : T?) {
         t |> equal(shexp_fmts_unserved(m), "layer 1's shared expert up plane is mx4")
         t |> equal(metal_fmt_decline_line("decode", "{MetalDecodeDecline.graph}", m),
             "dasLLAMA metal decode: declined graph - layer 1's shared expert up plane is mx4, a format the Metal kernels do not read there; the CPU serves the call")
+        m.wsh3_fmt[1] = KqFmt.nv4
+        t |> equal(shexp_fmts_unserved(m), "", "an nv4 shared-expert plane with no .scale has its one-row GEMV")
+        m.site_scale[site_scale_key(KqFmt.nv4, m.wshk3_offs[1])] = 0.01
+        t |> success(!moe_metal_ok(m), "the routed block declines an nv4 shared-expert plane under a .scale")
+        t |> equal(shexp_fmts_unserved(m), "layer 1's shared expert up plane is nv4 under a per-tensor .scale")
         delete m
     }
     t |> run("a deltanet plane's unserved format names its layer, site and member under graph") @(t : T?) {

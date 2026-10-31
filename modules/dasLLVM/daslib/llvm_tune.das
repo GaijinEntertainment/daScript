@@ -601,7 +601,7 @@ def private save_sidecar_doc(path : string; var doc : JsonValue?) : bool {
         }
     }
     update(doc, "provenance", prov)
-    let ok = fwrite(path, write_json(doc, true))   //! sorted keys: two sidecars of the same kernels diff and merge
+    let ok = fwrite(path, write_json(doc, true))
     if (ok) {
         // mtime is 1s-granular: a same-second re-read must not reuse a PRE-write box observation
         var sfs : FStat

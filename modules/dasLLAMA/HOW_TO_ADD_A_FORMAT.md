@@ -325,7 +325,7 @@ resident plan seats the table under).
   their `tune_companion` rows (`kq_tileform`, `kq_amx_cfg`, `kq_witness`, `<fmt>_panel`), and
   the format's `KqTag_<fmt>` overload of `kq_tileform`, `kq_amx_arm` and `kq_panel_gen` - a
   `KqFmt` member without one fails the compile. In `dasllama_gemm_gen.das`: the format's
-  arm in `panel_supported`, `panel_scales`, `panel_quads` and `panel_ioff` (the `<fmt>_panel`
+  arm in `panel_scales`, `panel_quads` and `panel_ioff` (the `<fmt>_panel`
   generator registers with the format). In
   `harness/gen_x64_emission_probe.das` and `gen_x64_emission_check.sh`: the panel registry and
   its gate row. A format whose panel is not written yet leaves the two rows out of its grid.

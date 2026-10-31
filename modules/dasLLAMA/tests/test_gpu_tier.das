@@ -826,10 +826,6 @@ def test_home_words(t : T?) {
     t |> run("the CUDA home's dry-bake arm refuses a config whose home is vulkan, naming the home") @(t : T?) {
         static_if (typeinfo builtin_module_exists(cuda)) {
             let lines = case_lines(cuda, "cuda_foreign")
-            if (find(lines, "no CUDA device") >= 0 || find(lines, "no CUDA driver") >= 0) {
-                t |> skip("no CUDA device the home arms: the arm declined before it read the config\n{lines}")
-                return
-            }
             t |> success(find(lines, "ARM false") >= 0, "the arm refused the config:\n{lines}")
             t |> success(find(lines, FOREIGN_HOME_CUDA) >= 0, "... naming the foreign home:\n{lines}")
         } else {

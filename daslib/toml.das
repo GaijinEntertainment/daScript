@@ -1403,16 +1403,6 @@ def private is_table_array(v : JsonValue?) : bool {
     return true
 }
 
-def private sorted_keys(tab : table<string; JsonValue?>) : array<string> {
-    var ks : array<string>
-    ks |> reserve(length(tab))
-    for (k in keys(tab)) {
-        ks |> push(k)
-    }
-    ks |> sort()
-    return <- ks
-}
-
 def private write_toml_inline(var writer : StringBuilderWriter; v : JsonValue?; var path : array<string>; var error : string&) : bool {
     if (v == null || v.value is _null) {
         error = "TOML has no null: key '{join(path, ".")}'"

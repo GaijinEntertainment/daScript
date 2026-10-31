@@ -1739,7 +1739,8 @@ and the logits left alone); the unset N-row token command and per-layer planes p
 no ask and one under `DASLLAMA_GPU=1 DASLLAMA_CUDA=1`, each printing `rdec_fallback_words` - the per-op rails' words with no
 ask, the CPU rails' words under the CUDA ask on a dasCUDA build - and each home's dry-bake arm refusing a config that names
 the other home (`vulkan_dry_bake_arm` a `cuda` home, `moe_gpu_dry_bake_arm` a `vulkan` home under the ask), the arm false and
-the refusal line naming the foreign home read off the child's log; the CUDA arm skips where the child logs no device); and the
+the refusal line naming the foreign home read off the child's log; the CUDA arm refuses the home before it asks for a device, so
+the cell holds on a dasCUDA build with no card); and the
 overrides' announces (`test_override_announces`: two children on
 `_override_announce_root.das` through `_child_run.das`, unset and under `DASLLAMA_METAL_FUSE=0`, each case's lines read between
 its `CASE` records - the sliding layers' rings ringed, flat and silent on a model with none, on Metal once a layout; the pinned

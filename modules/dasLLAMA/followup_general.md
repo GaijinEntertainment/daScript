@@ -2384,8 +2384,8 @@
     the decode kernels by the ruling that NVFP4 is a specialty hardware format. Every figure here is a `PERF_LEDGER.md`
     row of the dasCUDA arc (the FP4 leaf and its feeds, the nv4 decode GEMV, W4A4's perplexity cost); (5) the planar grp-tier
     kernels' time against q40's - 1.3x (gemv) to 1.9x (tile) on zen4, 2.5x and 1.5x on the M5 (`PERF_LEDGER.md`, the two
-    2026-10-30 nv4-vs-q40 entries; the row-major rail sits at q40's time) - the per-strip UE4M3 decode and the split
-    accumulators the k4 nibble tiling forces; the layout stays the device's, so the gap is accepted and closes only through a
+    2026-10-30 nv4-vs-q40 entries; the row-major rail sits at q40's time on zen4 alone, 1.02x, and reads 1.9x gemv / 1.6x
+    tile on the M5) - the per-strip UE4M3 decode and the split accumulators the k4 nibble tiling forces; the layout stays the device's, so the gap is accepted and closes only through a
     cheaper decode or a fold that merges the strips without a layout change. Done = each item its own commit; the pp512 /
     tg128 rows of the impact carrier (Qwen3.8-27B NVFP4 on the pod against its Q4_K_M) beside them.
 
@@ -2465,16 +2465,6 @@
     embedding path within the Metal window's distance of the f32 model on those rows (`test_embeddings`'
     `EMB_FP32_BAR` cell, run on the CPU rail), or a measured reading that the cost of a wider activation row on the
     CPU q8 GEMVs outweighs it.
-
-266. **nv4 has no CPU emitter arm.** `kq_has_emitter` (`dasllama_gemm_schema.das`) leaves schema 49 out, so every
-    `nv4q8_*` stub declines on every rail and the NVFP4 CPU planes serve through the reference bodies at the grp4
-    layout - correct, and the only superblock format whose mr8/mr16 seats never emit. Done = the nv4 block body in
-    `dasllama_gemm_gen.das`: the mx4 codebook decode (`mx4_lut`, the doubled e2m1 table) on `emit_block_iq4xs`'s
-    sign-trick lattice with split lo/hi accumulators (the iq2 forms' shape), folded per 32-block by the two UE4M3
-    sub-block scales at half (`ue4m3_half_f32`'s law on a byte vector) and the per-superblock Q8_K scale; its
-    `panel_scales` / `panel_quads` / `panel_ioff` arms for the bf16 panel; 49 admitted to `kq_has_emitter`; the
-    TEST gate (`DAS_TUNE_MODE=test harness/gen_tune_probe.das`) green on every seat at its own mr, and the class
-    profiles re-minted with the family's crowns.
 
 268. **The assistant drafter over a trunk with routed experts on the host.** Both discrete homes' N-row token command
     declines a routed layer whose experts serve on the host (`vk_rdec_token_n_rows`, `cud_rdec_token_n_rows`), and the

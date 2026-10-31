@@ -254,3 +254,8 @@ prefill, the FP4 expert rung, the nv4 nibble decode, the MMQ pin) in `ARCHITECTU
   cm2 expert chain (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain`), the KHR tile
   (`ARCHITECTURE_GPU_SHARED_GEMM.md#khr-mm-kq-tile`) or, on a device with neither, the Q8-fed chain's batch tiles
   (`ARCHITECTURE_GPU_VULKAN_MOE.md#vk-moe-q8-chain`) - and has no tile-per-expert form to route away from.
+- **An nv4 expert stack under a per-expert `.scale` serves on the discrete homes alone**
+  (`ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale`): Vulkan and CUDA fold the factor off the word the gather writes
+  into each slice's device scale rows; the Metal routed block binds the compact scale row, which carries no word for it,
+  so `moe_fmts_unserved` and `shexp_fmts_unserved` decline such a stack by layer, site and member and the CPU serves the
+  call (`followup_general.md` row 246 (3) is the Metal gap).

@@ -7675,9 +7675,9 @@ records as the expert GEMVs' regions, the act and the combine.
   the 4-bit lattice and K-quant s stamps trail the driver's by 19-25 percent (`followup_general.md` row 273; the 26B's k4 tile item is row 269), the iq2 and
   iq3xxs stamps lead, and `test_cud_cm2s_short_split_family` holds each row's split against its oracle.
 
-- **MEASURED (2026-10-30, the nv4 CPU kernels against q40's - the format whose nibble tiling nv4 shares - `kq_kernel_bench.das
-  --fmt nv4,q40 --rm --ntok 512` under `DAS_TUNE_MODE=test`, n 14336 d 4096, best of 5, us; zen4 = x86-vnni512, the M5 Max =
-  arm-i8mm).** zen4: gemv nv4 1103 (`dot_vpdpbusd_width512_mr16`) vs q40 811, 1.36x; tile over 512 tokens 250354 vs 122670,
+- **MEASURED (2026-10-30, `debug-jit`, the nv4 CPU kernels against q40's - the format whose nibble tiling nv4 shares -
+  `kq_kernel_bench.das --fmt nv4,q40 --rm --ntok 512` under `DAS_TUNE_MODE=test`, `DAS_TUNE_POLICY` unset and the CPU
+  backend on auto, n 14336 d 4096, best of 5, us; zen4 = x86-vnni512, the M5 Max = arm-i8mm).** zen4: gemv nv4 1103 (`dot_vpdpbusd_width512_mr16`) vs q40 811, 1.36x; tile over 512 tokens 250354 vs 122670,
   2.04x; rm_gemv 4377 (`dot_vpdpbusd_width256_mr8`) vs 1670, 2.62x; rm_tile 897958 vs 568159, 1.58x. The M5: gemv 1614
   (`mr8`) vs 554, 2.9x; tile 358094 vs 204686, 1.75x; rm_gemv 3083 (`mr4`) vs 1519, 2.0x; rm_tile 572842 vs 343202, 1.67x. The reference bodies sit 7x to
   30x behind every stamped perm, so the stamps are the serving floor; the gap to q40 is the per-strip float fold - two
@@ -7687,33 +7687,45 @@ records as the expert GEMVs' regions, the act and the combine.
 - **MEASURED (2026-10-30, the same race after the scale path and the accumulator split - the row-major rail decodes a
   superblock's sixteen scales once as vectors and picks a block's strip lanes by shuffle; the UE4M3 decode is eight ops; the
   grp tier lands d8 once a superblock; `rm_block_loop` runs four accumulator sets abreast in the GEMV, two in the x64 tile,
-  one on NEON's - `kq_kernel_bench.das --fmt nv4,q40 --rm --ntok 512 -p <live perms>`, us, best of 5).** zen4: rm_gemv nv4
-  4377 -> 1759 against q40's 1729 (1.02x); rm_tile 897958 -> 526914 against 570040 (nv4 ahead); gemv 1103 -> 1057 (the
-  width-256 mr16 row, ahead of the crowned width-512 1113) against 811 (1.30x); tile 250354 -> 242580 against 125361 (1.93x).
-  The M5: rm_gemv 3083 -> 1911 against q40's 1519 -> 1005 (the split lifts every row-major family: q40 1.5x, q8 837, k4 883);
-  rm_tile at four tokens 4092 against 2589; gemv 1614 -> 1392 against 554; tile 358094 -> 306936 against 204433. The
-  row-major GEMV on NEON was latency-bound - one fma chain, sixteen folds a superblock at three cycles each, 48 against the
-  measured 50 - with only a quarter more instructions than q40 (214 against 171 a superblock in the JIT's IR); the split, not
-  the decode, moved it. What stays is the grp tier's per-strip decode and split accumulators, inherent to the k4 nibble tiling
-  the device layout shares: the planar kernels keep 1.3x (gemv) to 1.9x (tile) behind q40 on x64, 2.5x and 1.5x on NEON, and
-  the layout stays as the GPU reads it (Boris 2026-10-30: hardware compatibility over the last 10%). The accumulator split
-  is neutral on zen4's row-major GEMV (throughput-bound there) and a loss on NEON's tile at two sets (4101 -> 6865, spills).
+  one on NEON's - `kq_kernel_bench.das --fmt nv4,q40 --rm --ntok 512` with `-p vpdpbusd,maddubs` on zen4 and `-p mr4,mr8`
+  on the M5, `DAS_TUNE_POLICY` unset and the CPU backend on auto, us, best of 5; `debug-jit`, the before -> after readings
+  `direction-grade` - the before figures are the entry above's run).** zen4: rm_gemv nv4 4377 -> 1759 against q40's 1729
+  (1.02x); rm_tile 897958 -> 526914 against 570040 (nv4 ahead); gemv 1103 -> 1057 (the width-256 mr16 row; the tile
+  family's race crowns the pair at width512_mr16, whose gemv row reads 1113 - the gemv row alone is faster at width 256)
+  against 811 (1.30x); tile 250354 -> 242580 against 125361 (1.93x). The M5: rm_gemv 3083 -> 1911 against q40's 1519 -> 1005
+  (the split lifts every row-major family, q40 by 1.5x); rm_tile at four tokens 4092 against 2589; gemv 1614 -> 1392 against
+  554; tile 358094 -> 306936 against 204433. The row-major GEMV on NEON was latency-bound - one fma chain, sixteen folds a
+  superblock at three cycles each: 48 cycles a superblock against the 50 the before figure reads as 3083 us over the
+  4096 x 56 superblocks at the M5's ~3.7 GHz - with only a quarter more instructions than q40 (214 against 171 a superblock,
+  the `sbbody` loop of `nv4q8_rm_gemv_gen__mr4` / `q40q8_rm_gemv_gen__mr4` under `kq_kernel_bench ... --jit-dump`); the
+  split, not the decode, moved it. What stays is the grp tier's per-strip decode and split accumulators, inherent to the k4
+  nibble tiling the device layout shares: the planar kernels keep 1.3x (gemv) to 1.9x (tile) behind q40 on x64, 2.5x and
+  1.5x on NEON, and the layout stays as the GPU reads it (hardware compatibility over the last 10%). The accumulator split is
+  neutral on zen4's row-major GEMV (throughput-bound there) and a loss on NEON's tile at two sets (4101 -> 6865 us at four
+  tokens, spills - `RM_TILE_ACC_SETS` set to 2 on NEON before the per-ISA pick, a one-constant build that is not in the
+  tree; the `accs` perm axis of the row-major families now races the candidates in one process).
 - **MEASURED (2026-10-31, served, the pod - RTX PRO 4500 Blackwell 32 GB, EPYC 7443P 48 vCPU, a 62 GB container cgroup:
   Qwen3.6-35B-A3B NVFP4 (knoopx) against a pure Q4_0 of the same model (bartowski's Q4_0 requantized `--pure`, its Q4_1
   `ffn_down_exps` have no reader arm), every row the two engines on the same file; ours `lcpp_bench.das
   --for-debug-purposes -p 512 -n 128 -r 5` under `DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1`, the split
-  `DASLLAMA_GPU_HOST_LAYERS=4`; llama.cpp 9febe63 `llama-bench -p 512 -n 128 -r 5 -ngl 999 -t 48`, its split
-  `-ot 'blk\.[0-3]\.ffn_.*_exps=CPU'`; tok/s, +/- the run's sd).** Vulkan, nv4: ours full 4821 +/- 76 / 174.3 +/- 0.1,
+  `DASLLAMA_GPU_HOST_LAYERS=4`, `DAS_TUNE_POLICY`, `DASLLAMA_COOPMAT` (the Vulkan rows), `DASLLAMA_CUDA_MMQ` and
+  `DASLLAMA_CUDA_PDL` (the CUDA rows) unset; the llama.cpp figures `external` - 9febe63 `llama-bench -p 512 -n 128 -r 5
+  -ngl 999 -t 48`, its split `-ot 'blk\.[0-3]\.ffn_.*_exps=CPU'`, the recipe in
+  `ARCHITECTURE_MEASUREMENT_REFERENCE_ROWS.md#cuda-reference-rows`; tok/s, +/- the run's sd; `debug-jit`, the cross-engine
+  readings `direction-grade`).** Vulkan, nv4: ours full 4821 +/- 76 / 174.3 +/- 0.1,
   split 3762 +/- 142 / 168.4 +/- 0.8; llama.cpp full 4795 +/- 49 / 110.0 +/- 0.3, split 1910 +/- 117 / 12.0 +/- 5.8.
   Vulkan, q40: ours full 5259 +/- 69 / 205.2 +/- 0.1, split 4118 +/- 167 / 196.6 +/- 1.0; llama.cpp full 5567 +/- 78 /
   200.0 +/- 1.0, split 2038 +/- 52 / 19.6 +/- 5.3. CUDA, nv4: ours full 5224 +/- 51 / 192.7 +/- 0.3, split 4288 +/- 135 /
   179.6 +/- 0.6; llama.cpp (its CUDA build, `-DCMAKE_CUDA_ARCHITECTURES=120`, the native Blackwell NVFP4 kernels) full
-  7949 +/- 839 (cv 10%, VOID as a figure; the five reps ranged past the sd) / 138.6 +/- 0.4, split 3393 +/- 209 /
-  27.6 +/- 3.5. CUDA, q40: ours full 5361 +/- 59 / 234.1 +/- 0.8, split 4489 +/- 107 / 215.4 +/- 1.2; llama.cpp full
-  5867 +/- 356 (cv 6%) / 247.6 +/- 1.5, split 2959 +/- 142 / 36.4 +/- 6.6. Read: nv4 costs us 8% of pp512 and 15% of
-  tg128 against q40 on Vulkan, 3% and 18% on CUDA - the decode GEMV's UE4M3 fold against q40's one d; llama.cpp's CUDA
-  NVFP4 prefill (the FP4 tensor op) leads ours by half again where its reps hold, the `followup_general.md` row 246 (4)
-  leaf; its NVFP4 decode trails ours on both homes. The four-layer host split costs us 18-22% of pp512 and 4-8% of tg128
-  (the row-major rail's share on 48 avx2 cores); llama.cpp's tensor override halves its prefill and leaves a decode of
-  12-36 tok/s with a third of it as spread. Numbers are debug-grade (`-jit`, the untuned pod sidecar's crowns), one
-  process a row, no affinity pin.
+  7949 +/- 839 (cv 10%: VOID, to re-measure - the five reps ranged past the sd; its median would read half again ahead of
+  ours, and nothing here leans on it) / 138.6 +/- 0.4, split 3393 +/- 209 / 27.6 +/- 3.5. CUDA, q40: ours full 5361 +/- 59
+  / 234.1 +/- 0.8, split 4489 +/- 107 / 215.4 +/- 1.2; llama.cpp full 5867 +/- 356 (cv 6%) / 247.6 +/- 1.5, split 2959 +/-
+  142 / 36.4 +/- 6.6. Read: nv4 costs us 8% of pp512 and 15% of tg128 against q40 on Vulkan, 3% and 18% on CUDA - the
+  decode GEMV's UE4M3 fold against q40's one d; llama.cpp's CUDA NVFP4 prefill (the FP4 tensor op) is the
+  `followup_general.md` row 246 (4) leaf, its full-model figure void here; its NVFP4 decode trails ours on both homes. The
+  four-layer host split costs us 16-22% of pp512 and 3-8% of tg128 (the row-major rail's share on 48 avx2 cores);
+  llama.cpp's tensor override halves its prefill and leaves a decode of 12-36 tok/s with a third of it as spread. Numbers
+  are debug-grade (`-jit`, the untuned pod sidecar's crowns), one process a row, no affinity pin. The lasting allocation
+  the nv4 stacks add: `Model.exps_scale`, one float an expert a scaled stack (the 35B: 40 layers x 3 stacks x 256 x 4 B =
+  123 KB) plus the `site_scale` table's entry an expert, and the Vulkan mint view's table holds the same entries a gather
+  (freed with the view); a dense nv4 carrier adds none.

@@ -28,6 +28,11 @@ A kernel-by-kernel reference row traces the same binary under Nsight Systems (`n
 same pass count as ours under the tracer, and reads per-kernel wall from the trace; the traced rates are not compared
 (the per-launch cost lands on the many small kernels), the per-kernel times are.
 
+A pod board's NVFP4 and Q4_0 rows (the 35B-A3B split cells) read against a Release source build of `9febe63` on the
+pod, `build-vulkan` (`-DGGML_VULKAN=ON`) and `build-cuda` (`-DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=120`), each run as
+`llama-bench -m <gguf> -ngl 999 -t 48 -p 512 -n 128 -r 5` with no `-fa` and, for the forced-split rows, the `-ot` regex
+that keeps the same layers' expert stacks on the host, with no environment setting beyond the command line.
+
 On the records rig the CUDA home is the `cuda` leg: `gen_bench_records --legs cuda` under `DASLLAMA_GPU=1 DASLLAMA_CUDA=1`
 on a dasCUDA build, alone in its run as the vulkan leg is, paired with `--ref-cuda <build-cuda/bin/llama-bench>` (or
 `LLAMA_BENCH_CUDA`) under the row's `-ngl 99 -fa 1` arms and the sibling `llama-batched-bench` for `tg128@4`. A das row

@@ -60,4 +60,5 @@ first row into its epilogue (a plane is whole 128-row tiles, so a tile never str
 as an argument: the plane carries it, so a site the driver never named (a deltanet projection, a merged K/V pair) scales the same.
 The Metal tier binds the CPU scale row verbatim - its compact 16-byte form carries no pad word
 (`ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane`) - so a plane under a `.scale` declines there by site and
-member (`kq_load_gpu_unserved`), and the mints with no `.scale` serve.
+member (`kq_load_gpu_unserved` for a dense or table plane, `moe_fmts_unserved` and `shexp_fmts_unserved` for a routed or
+shared-expert stack, `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`), and the mints with no `.scale` serve.

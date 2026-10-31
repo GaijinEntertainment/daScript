@@ -101,18 +101,18 @@
 		"class" : "arm-sve",
 		"dasllama_version" : "17",
 		"features" : "neon;dotprod;i8mm;bf16;fullfp16;sve;lse",
-		"mint_gen_ms" : "874168",
-		"mint_kernels_ms" : "98354",
-		"mint_total_ms" : "972525",
+		"mint_gen_ms" : "789224",
+		"mint_kernels_ms" : "85650",
+		"mint_total_ms" : "874878",
 		"mode" : "normal",
 		"noise" : "ok",
-		"noise_floor_cv_pct" : "0.06",
-		"noise_probes" : "start cv 0.03%; mid1 cv 0.06%; mid2 cv 0.03%; end cv 0.06%",
+		"noise_floor_cv_pct" : "0.14",
+		"noise_probes" : "start cv 0.02%; mid1 cv 0.03%; mid2 cv 0.14%; end cv 0.14%",
 		"origin" : "profile",
 		"platform" : "linux",
 		"validation" : "ok",
 		"validation_demoted" : "1",
-		"validation_max_drift_pct" : "1.00",
-		"written" : "2026-10-30T18:52:05.526Z"
+		"validation_max_drift_pct" : "0.95",
+		"written" : "2026-10-31T04:43:04.961Z"
 	}
 }

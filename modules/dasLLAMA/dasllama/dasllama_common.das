@@ -5052,7 +5052,10 @@ def private kq_slot(what : string; fmt : KqFmt) : int {
 def site_scale_key(fmt : KqFmt; woff : int64) : int64 => (int64(fmt) << 52) | woff
 
 [arch(at = "../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
-def site_scale(t : Model; fmt : KqFmt; woff : int64) : float => empty(t.site_scale) ? 1.0 : (t.site_scale?[site_scale_key(fmt, woff)] ?? 1.0)
+def site_scale(t : Model; fmt : KqFmt; woff : int64) : float => site_scale(t.site_scale, fmt, woff)
+
+//! the same off the table alone - a lane that holds the table by pointer reads it here
+def site_scale(tab : table<int64; float>; fmt : KqFmt; woff : int64) : float => empty(tab) ? 1.0 : (tab?[site_scale_key(fmt, woff)] ?? 1.0)
 
 def private apply_site_scale(var y : array<float>; t : Model; fmt : KqFmt; woff, yoff, count : int64) {
     let sc = site_scale(t, fmt, woff)
@@ -5060,6 +5063,9 @@ def private apply_site_scale(var y : array<float>; t : Model; fmt : KqFmt; woff,
         scale_inplace(unsafe(addr(y[yoff])), sc, count)
     }
 }
+
+//! one routed expert's element count - a gate / up / down plane of the stack (expert e of a stack at `base` sits at base + e * expert_elems)
+def expert_elems(c : Config) : int64 => c.dim * c.n_ff_exp
 
 //! the per-expert scales of the routed stack at `base` as the lanes read them, null for a stack carrying none
 def exps_scale_ptr(t : Model; base : int64) : float const? {

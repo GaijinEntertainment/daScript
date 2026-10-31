@@ -109,6 +109,8 @@ struct private TilePerm {
     pf : int = 0          // software prefetch distance in bytes along the gemv's weight stream (0 = none):
                           // one llvm.prefetch per weight line, pf bytes ahead - memory-level parallelism at
                           // many lanes, where the hardware prefetcher alone leaves DRAM bandwidth unused
+    accs : int = 0        // the row-major block loop's accumulator sets abreast (0 = the shipped pick: four in the
+                          // GEMV, two in the x64 tile, one in the NEON tile); the tile takes at most two
 }
 
 def private parse_perm(gc : LlvmCodeCtx) : TilePerm {
@@ -133,6 +135,8 @@ def private parse_perm(gc : LlvmCodeCtx) : TilePerm {
     if (lv is tInt) { p.latch = lv as tInt }
     let grv = find_arg(gc.ann.arguments, "grid")
     if (grv is tString) { p.grid = grv as tString }
+    let av = find_arg(gc.ann.arguments, "accs")
+    if (av is tInt) { p.accs = av as tInt }
     let pfv = find_arg(gc.ann.arguments, "pf")
     if (pfv is tInt) { p.pf = pfv as tInt }
     return p
@@ -308,6 +312,7 @@ struct private TileEmit {
     rm_wg : LLVMOpaqueValue? [4]        // the row-lane form: the rows' quant plane bases (row i of the vector)
     rm_sg : LLVMOpaqueValue? [4]        // ... and their scale plane bases
     rm_rpv : int                        // ... rows a vector (2 at width 256, 4 at 512; 0 = the form is off)
+    rm_acc_sets : int                   // the perm's accumulator sets abreast in the row-major block loop (0 = the shipped pick)
     sign_code_pm1_g : LLVMOpaqueValue?   // the row-group grid decode: ksigns code -> eight +-1 bytes, [128 x i64], parity bit folded in
     gridRows : bool                      // set while the row-group grid decode emits: the column dword read (a panel-form win) reverts to byte loads
     vbmi : bool                          // grid = "vbmi": the grid gemv decodes through the VBMI symbol lattice (row form)
@@ -2103,12 +2108,12 @@ def private emit_block_iq4xs(var te : TileEmit; var sbi : LLVMOpaqueValue?; var 
             dv[qd] = load_f16_vec_at(te, te.sg, LLVMBuildAdd(b, sb, te.types->ConstI64(uint64(2 * (qd * te.rv))), ""), "d{qd}")
         }
     }
-    var d8nl : LLVMOpaqueValue? [4]
+    var d8tok : LLVMOpaqueValue? [4]
     if (blockScale) {
         for (i in range(tokCount)) {
             let tk = tokBase + i
             var qp0 = LLVMBuildGEP2(b, te.types.t_float, te.xs[tk], sbi, "qp{tk}")
-            d8nl[i] = splat_f32(te, LLVMBuildLoad2Aligned(b, te.types.t_float, qp0, 4u, "d8{tk}"), "d8v{tk}")
+            d8tok[i] = splat_f32(te, LLVMBuildLoad2Aligned(b, te.types.t_float, qp0, 4u, "d8{tk}"), "d8v{tk}")
         }
     }
     var iacc, fsb : LLVMOpaqueValue? [8]
@@ -2180,7 +2185,7 @@ def private emit_block_iq4xs(var te : TileEmit; var sbi : LLVMOpaqueValue?; var 
             }
             for (i in range(tokCount)) {
                 for (qd in range(rq)) {
-                    var dsn = LLVMBuildFMul(b, dblk[qd], d8nl[i], "dsn{tokBase + i}_{blk}_{qd}")
+                    var dsn = LLVMBuildFMul(b, dblk[qd], d8tok[i], "dsn{tokBase + i}_{blk}_{qd}")
                     f[i * rq + qd] = fold_fma(te, LLVMBuildSIToFP(b, a[i * rq + qd], te.vnf32, ""), dsn, f[i * rq + qd], "f{tokBase + i}_{blk}_{qd}n")
                 }
             }
@@ -2226,12 +2231,12 @@ def private emit_block_iq4xs(var te : TileEmit; var sbi : LLVMOpaqueValue?; var 
     if (nv4) {
         for (i in range(tokCount)) {
             for (qd in range(rq)) {
-                f[i * rq + qd] = fold_fma(te, fsb[i * rq + qd], d8nl[i], f[i * rq + qd], "f{tokBase + i}_{qd}sb")
+                f[i * rq + qd] = fold_fma(te, fsb[i * rq + qd], d8tok[i], f[i * rq + qd], "f{tokBase + i}_{qd}sb")
             }
         }
     }
     if (blockScale) {
-        return   // the per-block fold already landed everything in f
+        return
     }
     for (i in range(tokCount)) {
         let tk = tokBase + i
@@ -2428,6 +2433,7 @@ def private setup_tile_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePer
     te.types = gc.jit.types
     te.interleave = rt.interleave
     te.dotKind = dot_kind(p.dotPrim)
+    te.rm_acc_sets = p.accs
     // mx4/kq/q51/iq4nl32 planes are kgroup-independent — under an smmla perm they ride the plain sdot lattice
     let nibblePlane = te.mx4 || te.q51 || te.q5032 || te.iq4nl32 || te.kq != 0
     if (nibblePlane && te.dotKind == DOT_SMMLA) {
@@ -3484,7 +3490,9 @@ def private rm_rows_loop(var gc : LlvmCodeCtx; var te : TileEmit; var r0, r1 : L
             te.rm_sg[i] = LLVMBuildGEP2(b, te.types.t_int8, sp, LLVMBuildMul(b, ri, srowb, ""), "srow{i}")
         }
     }
-    let nacc = nt == 1 ? RM_GEMV_ACC_SETS : (te.dotKind == DOT_SDOT ? 1 : RM_TILE_ACC_SETS)
+    let picked = nt == 1 ? RM_GEMV_ACC_SETS : (te.dotKind == DOT_SDOT ? 1 : RM_TILE_ACC_SETS)
+    let asked = te.rm_acc_sets
+    let nacc = asked <= 0 ? picked : (nt == 1 || asked < RM_TILE_ACC_SETS ? asked : RM_TILE_ACC_SETS)
     var fZero : LLVMOpaqueValue? [16]
     for (k in range(nacc * nt)) {
         fZero[k] = LLVMConstNull(te.vnf32)

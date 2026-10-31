@@ -130,6 +130,8 @@ def test_llvm_tune_manifest_roundtrip(t : T?) {   // nolint:STYLE038 - flat sequ
     // with the box swapped, touch it fresh, and the client must fall back again.
     let sidecarText = fread(sidecarPath)
     t |> success(find(sidecarText, "\"box\"") >= 0, "provenance carries the box identity stamp")
+    t |> success(find(sidecarText, "\"kernels\"") < find(sidecarText, "\"provenance\"") && find(sidecarText, "\"arch\"") < find(sidecarText, "\"binary\"") && find(sidecarText, "\"binary\"") < find(sidecarText, "\"box\""),
+        "a written sidecar prints its keys in sorted order (a file that is diffed and merged)")
     var jerr = ""
     var jdoc = read_json(sidecarText, jerr)
     t |> success(jdoc != null, "sidecar parses: {jerr}")
