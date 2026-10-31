@@ -173,3 +173,12 @@ Run with `MINIAUDIO_H` naming the fetched header, `EMCC` naming Emscripten's com
 and Playwright available to Node. `BROWSER_EXECUTABLE` optionally selects a browser.
 The test uses a temporary directory and removes it afterward. It verifies patch
 idempotence, requested node channels and actual audio callbacks.
+
+## Per-channel pause fades {#channel-pause-fades}
+
+A pause fade clamps at its target and remains there until a new pause command.
+The ramp scales only that channel's converted PCM before it is accumulated into
+the shared mix. Scaling the shared output would also fade channels mixed earlier
+in the callback. Source progress freezes after the current render block has been consumed; it
+does not promise sample-accurate resumption within that block. Zero-duration fades
+still take one sample to reach the target.

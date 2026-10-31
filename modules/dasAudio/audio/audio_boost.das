@@ -302,6 +302,7 @@ class AudioChannel {
     def report_eos {
         publish_status(AudioChannelState.stopped)
     }
+    [arch(at="../ARCHITECTURE.md#channel-pause-fades")]
     def mix(var data : array<float>#; channels, rate : int; dt : float) : bool {  // nolint:STYLE037,STYLE038 - one DSP stage per branch, linear pipeline
         if (!source->ready() || g_pitch == 0.) return true
         if (paused) {
@@ -380,27 +381,18 @@ class AudioChannel {
             unsafe(addr(samples[0])),
             outputFrames)
         delete samples
-        // apply volume envelope
-        ma_volume_mixer_set_channels(unsafe(addr(volume_mixer)), uint(channels))
-        ma_volume_mixer_process_pcm_frames(
-            unsafe(addr(volume_mixer)),
-            unsafe(addr(channel_data[0])),
-            unsafe(addr(data[0])),
-            outputFrames)
-        delete channel_data
-        // apply pause fade (per-channel ramp speed, default ~2ms to avoid clicks)
         if (pause_fade != pause_fade_target) {
             let fade_step = pause_fade_step
             let fade_frames = int(outputFrames)
             for (f in range(fade_frames)) {
                 let fade = pause_fade
                 for (c in range(channels)) {
-                    data[f * channels + c] *= fade
+                    channel_data[f * channels + c] *= fade
                 }
                 if (pause_fade_target < pause_fade) {
-                    pause_fade = max(pause_fade - fade_step, 0.0)
-                } else {
-                    pause_fade = min(pause_fade + fade_step, 1.0)
+                    pause_fade = max(pause_fade - fade_step, pause_fade_target)
+                } elif (pause_fade_target > pause_fade) {
+                    pause_fade = min(pause_fade + fade_step, pause_fade_target)
                 }
             }
             if (pause_fade <= 0.001 && pause_fade_target == 0.0) {
@@ -410,6 +402,13 @@ class AudioChannel {
                 pause_fade = 1.0
             }
         }
+        ma_volume_mixer_set_channels(unsafe(addr(volume_mixer)), uint(channels))
+        ma_volume_mixer_process_pcm_frames(
+            unsafe(addr(volume_mixer)),
+            unsafe(addr(channel_data[0])),
+            unsafe(addr(data[0])),
+            outputFrames)
+        delete channel_data
         // update position
         playback_position += inputFrames
         // update status
