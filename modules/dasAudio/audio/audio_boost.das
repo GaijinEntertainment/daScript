@@ -15,6 +15,14 @@ module audio_boost shared private
 //! Supports volume, pan, pitch, 3D positioning with HRTF, distance attenuation,
 //! Doppler effect, I3DL2 reverb presets, and look-ahead limiting.
 //!
+//! PCM playback can opt out of global pause.
+//! Set its ``ignore_global_pause`` argument to true.
+//! Individual pause/stop controls and master volume still apply.
+//! Ordinary sources and their buffered samples remain paused.
+//! Device or browser-context suspension still prevents all playback.
+//! Restart persistent audio contexts after an SDK audio upgrade
+//! before using newly introduced commands.
+//!
 //! All audio commands are archive-serialized and shipped to the audio thread through a
 //! byte ``Stream``. Stream bytes are owned C++-side, so cleanup is automatic: either
 //! side can free without coordinating with the other (no "collect channel" needed).
@@ -106,7 +114,13 @@ def public get_playback_diagnostics() : PlaybackBufferStats {
     //! Samples threaded browser device counters; unavailable counters are zero.
     //! Values are read independently and do not form an atomic transaction.
     let snapshot = sound_playback_diagnostics()
-    return PlaybackBufferStats(callbacks = snapshot.callbacks, underrun_frames = snapshot.underrun_frames, underruns = snapshot.underruns, recovery_frames = snapshot.recovery_frames, recoveries = snapshot.recoveries, refills = snapshot.refills, wait_timeouts = snapshot.wait_timeouts, max_mix_us = snapshot.max_mix_us, max_wake_us = snapshot.max_wake_us, max_callback_gap_us = snapshot.max_callback_gap_us, queued_frames = snapshot.queued_frames, capacity_frames = snapshot.capacity_frames)
+    return PlaybackBufferStats(callbacks = snapshot.callbacks,
+                               underrun_frames = snapshot.underrun_frames,
+        underruns = snapshot.underruns, recovery_frames = snapshot.recovery_frames,
+        recoveries = snapshot.recoveries, refills = snapshot.refills,
+        wait_timeouts = snapshot.wait_timeouts, max_mix_us = snapshot.max_mix_us,
+        max_wake_us = snapshot.max_wake_us, max_callback_gap_us = snapshot.max_callback_gap_us,
+        queued_frames = snapshot.queued_frames, capacity_frames = snapshot.capacity_frames)
 }
 
 struct public AudioSystemStats {
@@ -191,6 +205,7 @@ class AudioChannel {
     pause_fade : float = 1.0        // current fade level (0=silent, 1=full)
     pause_fade_target : float = 1.0 // 0=fading to pause, 1=fading to play
     pause_fade_step : float = 1.0 / (0.002 * float(MA_SAMPLE_RATE)) // ~2ms ramp at the configured sample rate
+    ignoreGlobalPause : bool = false
     ignoreGlobalVolume : bool = false  // if true, g_volume does not multiply this channel
     stop   : bool = false
     pitch  : float = 1.
@@ -233,7 +248,8 @@ class AudioChannel {
             null,
             ma_channel_mix_mode.ma_channel_mix_mode_default
         )
-        ma_channel_converter_init(unsafe(addr(channel_converter_config)), unsafe(addr(channel_converter)))
+        ma_channel_converter_init(unsafe(addr(channel_converter_config)),
+                                  unsafe(addr(channel_converter)))
         // volume mixer
         ma_volume_mixer_init(unsafe(addr(volume_mixer)), 1u)
     }
@@ -261,7 +277,8 @@ class AudioChannel {
                 null,
                 ma_channel_mix_mode.ma_channel_mix_mode_default
             )
-            ma_channel_converter_init(unsafe(addr(channel_converter_config)), unsafe(addr(channel_converter)))
+            ma_channel_converter_init(unsafe(addr(channel_converter_config)),
+                                      unsafe(addr(channel_converter)))
         }
     }
     def finalize {
@@ -351,9 +368,11 @@ class AudioChannel {
             var temp : array<float>
             temp |> resize(int(outputFrames) * channels)
             if (nSoundChannels == 1) {
-                reverb |> process_mono(unsafe(addr(samples[0])), unsafe(addr(temp[0])), int(outputFrames))
+                reverb |> process_mono(unsafe(addr(samples[0])), unsafe(addr(temp[0])),
+                                       int(outputFrames))
             } elif (nSoundChannels == 2) {
-                reverb |> process_stereo(unsafe(addr(samples[0])), unsafe(addr(temp[0])), int(outputFrames))
+                reverb |> process_stereo(unsafe(addr(samples[0])), unsafe(addr(temp[0])),
+                                         int(outputFrames))
             } else {
                 panic("unsupported channel count {channels}")
             }
@@ -364,7 +383,8 @@ class AudioChannel {
         if (chorus != null && nSoundChannels == 2) {
             var temp : array<float>
             temp |> resize(int(outputFrames) * 2)
-            chorus_process(chorus, unsafe(addr(samples[0])), unsafe(addr(temp[0])), int(outputFrames))
+            chorus_process(chorus, unsafe(addr(samples[0])), unsafe(addr(temp[0])),
+                           int(outputFrames))
             delete samples
             samples <- temp
         }
@@ -866,6 +886,7 @@ variant AudioCommand {
     hrtf_budget             : int
     system_memory_box       : uint64
     system_stats_box        : uint64       //! opaque SeqBox? (archive-safe)
+    add_pcm_unpaused        : AudioCommandAddPCM
 }
 
 var g_command_stream : Stream?
@@ -886,7 +907,8 @@ def add_channel(sid : SID; var channel : AudioChannel?) {
     ma_volume_mixer_set_volume(unsafe(addr(channel.volume_mixer)), channel.volume * g)
 }
 
-def add_channel_3d(sid : SID; position : float3; attenuation : Attenuation; var channel : AudioChannel?) {
+def add_channel_3d(sid : SID; position : float3; attenuation : Attenuation;
+                   var channel : AudioChannel?) {
     channel.position3d = position
     channel.attenuation = attenuation
     channel->set3D()
@@ -898,6 +920,18 @@ def public audio_system_release_context {
     if (g_command_stream != null) {
         unsafe(invoke_in_context(mixer_context(), "command_processor"))
     }
+}
+
+def private add_pcm_channel(var command : AudioCommandAddPCM; unpaused : bool) {
+    var decoder : audio_boost::AudioSource?
+    if (command.loop) {
+        decoder = new AudioSourcePCMLoop(command.channels, command.rate, command.samples)
+    } else {
+        decoder = new AudioSourcePCM(command.channels, command.rate, command.samples)
+    }
+    var channel = new AudioChannel(decoder)
+    channel.ignoreGlobalPause = unpaused
+    add_channel(command.sid, channel)
 }
 
 [pinvoke]
@@ -922,7 +956,8 @@ def command_processor {  // nolint:STYLE038 - one arm per AudioCommand variant
             } else {
                 decoder = new AudioSourceDecoder()
             }
-            decoder->initFromDecoder(unsafe(reinterpret<ma_decoder?>(dcmd.decoder)), dcmd.rate, dcmd.channels)
+            decoder->initFromDecoder(unsafe(reinterpret<ma_decoder?>(dcmd.decoder)), dcmd.rate,
+                                     dcmd.channels)
             add_channel(dcmd.sid) <| new AudioChannel(decoder)
         } elif (cmd is add_decoder_3d) {
             assume dcmd = cmd as add_decoder_3d
@@ -932,7 +967,8 @@ def command_processor {  // nolint:STYLE038 - one arm per AudioCommand variant
             } else {
                 decoder = new AudioSourceDecoder()
             }
-            decoder->initFromDecoder(unsafe(reinterpret<ma_decoder?>(dcmd.decoder)), dcmd.rate, dcmd.channels)
+            decoder->initFromDecoder(unsafe(reinterpret<ma_decoder?>(dcmd.decoder)), dcmd.rate,
+                                     dcmd.channels)
             add_channel_3d(dcmd.sid, dcmd.position, dcmd.attenuation) <| new AudioChannel(decoder)
         } elif (cmd is add_pcm_stream) {
             assume pcmd = cmd as add_pcm_stream
@@ -943,14 +979,9 @@ def command_processor {  // nolint:STYLE038 - one arm per AudioCommand variant
             var decoder = new AudioSourcePCMStream(pcmd.channels, pcmd.rate)
             add_channel_3d(pcmd.sid, pcmd.position, pcmd.attenuation) <| new AudioChannel(decoder)
         } elif (cmd is add_pcm) {
-            assume pcmd = cmd as add_pcm
-            var decoder : audio_boost::AudioSource?
-            if (pcmd.loop) {
-                decoder = new AudioSourcePCMLoop(pcmd.channels, pcmd.rate, pcmd.samples)
-            } else {
-                decoder = new AudioSourcePCM(pcmd.channels, pcmd.rate, pcmd.samples)
-            }
-            add_channel(pcmd.sid) <| new AudioChannel(decoder)
+            add_pcm_channel(cmd as add_pcm, false)
+        } elif (cmd is add_pcm_unpaused) {
+            add_pcm_channel(cmd as add_pcm_unpaused, true)
         } elif (cmd is add_pcm_3d) {
             assume pcmd = cmd as add_pcm_3d
             var decoder : audio_boost::AudioSource?
@@ -993,7 +1024,8 @@ def command_processor {  // nolint:STYLE038 - one arm per AudioCommand variant
                 let effective = vcmd.volume * g
                 if (vcmd.time > 0.) {
                     let nFrames = uint64(vcmd.time * float(MA_SAMPLE_RATE))
-                    ma_volume_mixer_set_volume_over_time(unsafe(addr(ch.volume_mixer)), effective, nFrames)
+                    ma_volume_mixer_set_volume_over_time(unsafe(addr(ch.volume_mixer)), effective,
+                                                         nFrames)
                 } else {
                     ma_volume_mixer_set_volume(unsafe(addr(ch.volume_mixer)), effective)
                 }
@@ -1018,7 +1050,8 @@ def command_processor {  // nolint:STYLE038 - one arm per AudioCommand variant
             for (it in values(g_sid_2_channel)) {
                 // 3D channels are handled in update_hrtf which reads g_volume each callback
                 if (!it.stop && !it.ignoreGlobalVolume && !it.is3D) {
-                    ma_volume_mixer_set_volume_over_time(unsafe(addr(it.volume_mixer)), it.volume * g_volume, nFrames)
+                    ma_volume_mixer_set_volume_over_time(unsafe(addr(it.volume_mixer)),
+                                                         it.volume * g_volume, nFrames)
                 }
             }
         } elif (cmd is ignore_global_volume) {
@@ -1119,6 +1152,8 @@ def command_processor {  // nolint:STYLE038 - one arm per AudioCommand variant
 
 var g_limiter : ma_limiter
 var g_mix_buffer : array<float>
+var g_unpaused_limiter : ma_limiter
+var g_unpaused_buffer, g_unpaused_output : array<float>
 var g_pause : bool = false
 var g_volume : float = 1.  //! global master volume multiplier (1.0 = full, 0.0 = mute)
 
@@ -1135,39 +1170,53 @@ var g_stats_recent_util_pct : float = 0.0
 var g_stats_3d_count : int = 0
 var g_stats_hrtf_count : int = 0
 
+[arch(at="../ARCHITECTURE.md#pause-exempt-pcm")]
+def private mix_bus(var data : array<float>#; channels, rate : int; dt : float;
+                    var limiter : ma_limiter; var buffer : array<float>; unpaused : bool) {
+    let output_samples = length(data) / channels
+    let input_samples = int(ma_limiter_get_required_input_frame_count(
+        unsafe(addr(limiter)), uint64(output_samples)))
+    let current_samples = length(buffer) / channels
+    let missing_samples = input_samples - current_samples
+    if (missing_samples < 0) {
+        panic("mixer bus unpaused={unpaused}: input={input_samples}"
+            + " retained={current_samples} output={output_samples}")
+    }
+    buffer |> resize(input_samples * channels)
+    array_view(buffer, current_samples * channels, missing_samples * channels) $(mix_data) {
+        let count = length(g_channels)
+        for (index in range(count)) {
+            let position = count - index - 1
+            assume channel = g_channels[position]
+            if (channel.ignoreGlobalPause == unpaused
+                    && !channel->mix(mix_data, channels, rate, dt)) {
+                remove_channel(position)
+            }
+        }
+    }
+    ma_limiter_process_pcm_frames(unsafe(addr(limiter)), unsafe(addr(buffer[0])),
+        unsafe(addr(data[0])), uint64(output_samples))
+    buffer |> erase(0, output_samples * channels)
+}
+
 [export]
 def mixer(var data : array<float>#; channels, rate : int; dt : float) {
     let t0 = ref_time_ticks()
     command_processor()
     if (g_pause) {
-        unsafe {
-            memset32(addr(data[0]), 0u, length(data))
-        }
+        unsafe { memset32(addr(data[0]), 0u, length(data)) }
     } else {
-        let output_samples = length(data) / channels
-        update_hrtf(dt, uint64(output_samples))
-        let input_samples = int(ma_limiter_get_required_input_frame_count(unsafe(addr(g_limiter)), uint64(output_samples)))
-        let current_samples = length(g_mix_buffer) / channels
-        let missing_samples = input_samples - current_samples
-        if (missing_samples < 0) {
-            panic("{input_samples} - {current_samples}, need {output_samples}; mixer: missing_samples < 0")
+        update_hrtf(dt, uint64(length(data) / channels))
+        mix_bus(data, channels, rate, dt, g_limiter, g_mix_buffer, false)
+    }
+    resize(g_unpaused_output, length(data))
+    array_view(g_unpaused_output, 0, length(g_unpaused_output)) $(output) {
+        mix_bus(output, channels, rate, dt, g_unpaused_limiter, g_unpaused_buffer, true)
+    }
+    for (sample, unpaused in data, g_unpaused_output) {
+        if (unpaused != 0.0) {
+            sample = clamp(sample + unpaused, -MA_LIMITER_THRESHOLD, MA_LIMITER_THRESHOLD)
         }
-        g_mix_buffer |> resize(input_samples * channels)
-        array_view(g_mix_buffer, current_samples * channels, missing_samples * channels) $(mix_data) {
-            let srct = g_channels |> length
-            for (i in range(srct)) {
-                let srci = srct - i - 1
-                assume ch = g_channels[srci]
-                if (!ch->mix(mix_data, channels, rate, dt)) {
-                    remove_channel(srci)
-                }
-            }
-        }
-        ma_limiter_process_pcm_frames(unsafe(addr(g_limiter)),
-            unsafe(addr(g_mix_buffer[0])),
-            unsafe(addr(data[0])),
-            uint64(output_samples))
-        g_mix_buffer |> erase(0, output_samples * channels)
     }
     let dt_ms = double(get_time_usec(t0)) / 1000.lf
     g_mixer_total_time += dt_ms
@@ -1179,7 +1228,8 @@ def mixer(var data : array<float>#; channels, rate : int; dt : float) {
 // utilization (= mixer time / real time) and update the caller's stats LockBox so main thread can read it.
 def private publish_audio_stats(dt_ms : double; frames : uint64) {
     return if (g_stats_box == null && g_memory_box == null)
-    if (g_stats_last_callback != 0l) { g_stats_max_callback_gap_ms = max(g_stats_max_callback_gap_ms, double(get_time_nsec(g_stats_last_callback)) / 1000000.lf) }
+    if (g_stats_last_callback != 0l) { g_stats_max_callback_gap_ms = max(
+        g_stats_max_callback_gap_ms, double(get_time_nsec(g_stats_last_callback)) / 1000000.lf) }
     g_stats_last_callback = ref_time_ticks(); g_stats_callbacks++
     g_stats_max_mix_ms = max(g_stats_max_mix_ms, dt_ms)
     g_stats_window_time_ms += dt_ms
@@ -1207,6 +1257,9 @@ def initialize_mixer {
             MA_LIMITER_RELEASE_TIME,
             float(MA_SAMPLE_RATE),
             uint(MA_CHANNELS))
+        ma_limiter_init(unsafe(addr(g_unpaused_limiter)), MA_LIMITER_THRESHOLD,
+            MA_LIMITER_ATTACK_TIME, MA_LIMITER_RELEASE_TIME,
+            float(MA_SAMPLE_RATE), uint(MA_CHANNELS))
         static_if (MA_HRTF) {
             calibrate_hrtf_frontal_gain()
         }
@@ -1280,6 +1333,8 @@ def private calibrate_hrtf_frontal_gain {
 def finalize_mixer {
     if (this_context().category.audio) {
         ma_limiter_uninit(unsafe(addr(g_limiter)))
+        ma_limiter_uninit(unsafe(addr(g_unpaused_limiter)))
+        delete g_unpaused_buffer; delete g_unpaused_output
         delete g_mix_buffer
         if (g_mixer_total_samples > 0ul) {
             let SPEED = g_mixer_total_time / double(g_mixer_total_samples)
@@ -1426,69 +1481,101 @@ def push_cmd(var cmd : AudioCommand) {
     }
 }
 
-def public play_sound_from_file(filename : string; rate, channels : int; sid : SID = INVALID_SID; loop : bool = false) {
+def public play_sound_from_file(filename : string; rate, channels : int; sid : SID = INVALID_SID;
+                                loop : bool = false) {
     //! plays sound from file. If sid is INVALID_SID, a new SID is generated.
     //! note - this function is blocking for the duration of the decoder creation
     var decoder = make_decoder(filename, rate, channels)
     if (decoder == null) return INVALID_SID
     let useSid = sid != INVALID_SID ? sid : generate_sound_sid()
-    push_cmd(AudioCommand(add_decoder = AudioCommandAddDecoder(sid = useSid, decoder = intptr(decoder), rate = rate, channels = channels, loop = loop)))
+    push_cmd(
+             AudioCommand(
+                          add_decoder = AudioCommandAddDecoder(sid = useSid,
+                                                               decoder = intptr(decoder),
+        rate = rate, channels = channels, loop = loop)))
     return useSid
 }
 
-def public play_3d_sound_from_file(filename : string; position : float3; attenuation : Attenuation; rate, channels : int; sid : SID = INVALID_SID; loop : bool = false) {
+def public play_3d_sound_from_file(filename : string; position : float3; attenuation : Attenuation;
+                                   rate, channels : int; sid : SID = INVALID_SID;
+                                   loop : bool = false) {
     //! plays 3D sound from file. If sid is INVALID_SID, a new SID is generated.
     //! note - this function is blocking for the duration of the decoder creation
     var decoder = make_decoder(filename, rate, channels)
     if (decoder == null) return INVALID_SID
     let useSid = sid != INVALID_SID ? sid : generate_sound_sid()
     push_cmd(AudioCommand(add_decoder_3d =
-        AudioCommandAddDecoder3D(sid = useSid, decoder = intptr(decoder), rate = rate, channels = channels, position = position, attenuation = attenuation, loop = loop)))
+        AudioCommandAddDecoder3D(sid = useSid, decoder = intptr(decoder), rate = rate,
+                                 channels = channels, position = position,
+            attenuation = attenuation, loop = loop)))
     return useSid
 }
 
 def public play_sound_from_pcm_stream(rate, channels : int; sid : SID = INVALID_SID) {
     //! Create a PCM streaming channel. Feed it samples with append_to_pcm. If sid is INVALID_SID, a new SID is generated.
     let useSid = sid != INVALID_SID ? sid : generate_sound_sid()
-    push_cmd(AudioCommand(add_pcm_stream <- AudioCommandAddPCMStream(sid = useSid, rate = rate, channels = channels)))
+    push_cmd(
+             AudioCommand(
+                          add_pcm_stream <- AudioCommandAddPCMStream(sid = useSid, rate = rate,
+                                                                     channels = channels)))
     return useSid
 }
 
-def public play_3d_sound_from_pcm_stream(position : float3; attenuation : Attenuation; rate, channels : int; sid : SID = INVALID_SID) {
+def public play_3d_sound_from_pcm_stream(position : float3; attenuation : Attenuation; rate,
+                                         channels : int; sid : SID = INVALID_SID) {
     //! Create a 3D PCM streaming channel. Feed it samples with append_to_pcm. If sid is INVALID_SID, a new SID is generated.
     let useSid = sid != INVALID_SID ? sid : generate_sound_sid()
     push_cmd(AudioCommand(add_pcm_stream_3d <-
-        AudioCommandAddPCMStream3D(sid = useSid, rate = rate, channels = channels, position = position, attenuation = attenuation)))
+        AudioCommandAddPCMStream3D(sid = useSid, rate = rate, channels = channels,
+                                   position = position, attenuation = attenuation)))
     return useSid
 }
 
-def public play_sound_from_pcm(rate, channels : int; var samples : array<float>; sid : SID = INVALID_SID) {
-    //! plays sound from PCM data. If sid is INVALID_SID, a new SID is generated.
+[arch(at="../ARCHITECTURE.md#pause-exempt-pcm")]
+def public play_sound_from_pcm(rate, channels : int; var samples : array<float>;
+                               sid : SID = INVALID_SID; ignore_global_pause : bool = false) {
+    //! Plays PCM data, optionally exempt from global pause.
+    //! Generates an SID when omitted.
+    //! Per-sound pause, stop, pitch and volume still apply.
     let useSid = sid != INVALID_SID ? sid : generate_sound_sid()
-    push_cmd(AudioCommand(add_pcm <- AudioCommandAddPCM(sid = useSid, rate = rate, channels = channels, samples <- samples, loop = false)))
+    var command = AudioCommandAddPCM(sid = useSid, rate = rate, channels = channels,
+        samples <- samples, loop = false)
+    if (ignore_global_pause) { push_cmd(AudioCommand(add_pcm_unpaused <- command)) }
+    else { push_cmd(AudioCommand(add_pcm <- command)) }
     return useSid
 }
 
-def public play_sound_loop_from_pcm(rate, channels : int; var samples : array<float>; sid : SID = INVALID_SID) {
+def public play_sound_loop_from_pcm(rate, channels : int; var samples : array<float>;
+                                    sid : SID = INVALID_SID) {
     //! plays looping sound from PCM data. If sid is INVALID_SID, a new SID is generated.
     let useSid = sid != INVALID_SID ? sid : generate_sound_sid()
-    push_cmd(AudioCommand(add_pcm <- AudioCommandAddPCM(sid = useSid, rate = rate, channels = channels, samples <- samples, loop = true)))
+    push_cmd(
+             AudioCommand(
+                          add_pcm <- AudioCommandAddPCM(sid = useSid, rate = rate,
+                                                        channels = channels, samples <- samples,
+        loop = true)))
     return useSid
 }
 
-def public play_3d_sound_from_pcm(position : float3; attenuation : Attenuation; rate, channels : int; var samples : array<float>; sid : SID = INVALID_SID) {
+def public play_3d_sound_from_pcm(position : float3; attenuation : Attenuation; rate,
+                                  channels : int; var samples : array<float>;
+                                  sid : SID = INVALID_SID) {
     //! plays 3D sound from PCM data. If sid is INVALID_SID, a new SID is generated.
     let useSid = sid != INVALID_SID ? sid : generate_sound_sid()
     push_cmd(AudioCommand(add_pcm_3d <-
-        AudioCommandAddPCM3D(sid = useSid, rate = rate, channels = channels, samples <- samples, loop = false, position = position, attenuation = attenuation)))
+        AudioCommandAddPCM3D(sid = useSid, rate = rate, channels = channels, samples <- samples,
+                             loop = false, position = position, attenuation = attenuation)))
     return useSid
 }
 
-def public play_3d_sound_loop_from_pcm(position : float3; attenuation : Attenuation; rate, channels : int; var samples : array<float>; sid : SID = INVALID_SID) {
+def public play_3d_sound_loop_from_pcm(position : float3; attenuation : Attenuation; rate,
+                                       channels : int; var samples : array<float>;
+                                       sid : SID = INVALID_SID) {
     //! plays 3D looping sound from PCM data. If sid is INVALID_SID, a new SID is generated.
     let useSid = sid != INVALID_SID ? sid : generate_sound_sid()
     push_cmd(AudioCommand(add_pcm_3d <-
-        AudioCommandAddPCM3D(sid = useSid, rate = rate, channels = channels, samples <- samples, loop = true, position = position, attenuation = attenuation)))
+        AudioCommandAddPCM3D(sid = useSid, rate = rate, channels = channels, samples <- samples,
+                             loop = true, position = position, attenuation = attenuation)))
     return useSid
 }
 
@@ -1536,7 +1623,7 @@ def public set_global_pitch(pitch : float) {
 }
 
 def public set_global_pause(pause : bool) {
-    //! set global pause of sounds
+    //! Pauses ordinary sounds; pause-exempt PCM continues.
     push_cmd(AudioCommand(global_pause = pause))
 }
 
@@ -1588,12 +1675,19 @@ def public stop(sid : SID; time : float = 0.0f) {
 
 def public set_head_position(pos, dir : float3; vel : float3 = float3(0.)) {
     //! set head position for 3D sound
-    push_cmd(AudioCommand(head_transform = AudioCommandHeadPosition3D(position = pos, direction = dir, velocity = vel)))
+    push_cmd(
+             AudioCommand(
+                          head_transform = AudioCommandHeadPosition3D(position = pos,
+                                                                      direction = dir,
+        velocity = vel)))
 }
 
 def public set_position(sid : SID; pos : float3; dir : float3 = float3(0.)) {
     //! set sound position for 3D sound
-    push_cmd(AudioCommand(sound_position = AudioCommandSoundPosition3D(sid = sid, position = pos, velocity = dir)))
+    push_cmd(
+             AudioCommand(
+                          sound_position = AudioCommandSoundPosition3D(sid = sid, position = pos,
+        velocity = dir)))
     return sid
 }
 
@@ -1678,7 +1772,8 @@ def public decode_audio(data : array<uint8> | #; var channels, rate : int&) : ar
     //! Decode an audio file (MP3, WAV, FLAC, Vorbis) from raw bytes to PCM float samples. Returns interleaved sample data; sets channels and rate.
     var decoder = new ma_decoder
     var config <- ma_decoder_config_init(ma_format.ma_format_f32, 0u, 0u)
-    let result = ma_decoder_init_memory(unsafe(addr(data[0])), uint64(length(data)), unsafe(addr(config)), decoder)
+    let result = ma_decoder_init_memory(unsafe(addr(data[0])), uint64(length(data)),
+                                        unsafe(addr(config)), decoder)
     channels = int(decoder.outputChannels)
     rate = int(decoder.outputSampleRate)
     let nframes = ma_decoder_get_length_in_pcm_frames(decoder)

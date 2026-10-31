@@ -2123,13 +2123,13 @@ Module audio_boost
 - `play_3d_sound_from_pcm_stream` - Create a 3D PCM streaming channel.
 - `play_3d_sound_loop_from_pcm` - plays 3D looping sound from PCM data.
 - `play_sound_from_file` - plays sound from file.
-- `play_sound_from_pcm` - plays sound from PCM data.
+- `play_sound_from_pcm` - Plays PCM data, optionally exempt from global pause.
 - `play_sound_from_pcm_stream` - Create a PCM streaming channel.
 - `play_sound_loop_from_pcm` - plays looping sound from PCM data.
 
 ### Sound control
 
-- `set_global_pause` - set global pause of sounds
+- `set_global_pause` - Pauses ordinary sounds; pause-exempt PCM continues.
 - `set_global_pitch` - set global pitch of sounds
 - `set_global_volume` - Set global master volume (multiplier for all currently-playing sounds).
 - `set_ignore_global_volume` - Make a specific channel ignore the global master volume (used by editor preview so muting the game's master volume does not silence the asset preview).

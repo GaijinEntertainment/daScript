@@ -136,7 +136,8 @@ At four chunks of buffered output it returns without rendering another chunk,
 so a paused consumer bounds production while shutdown and track commands remain
 responsive.
 
-Global pause stops channel status publication. Buffered frames are the larger of
+Global pause stops ordinary channel status publication. Pause-exempt PCM continues
+to mix and publish its own status. Buffered frames are the larger of
 reported queued frames and cumulative generated frames minus acknowledged consumed
 frames, clamped at zero. This includes appended output awaiting acknowledgement,
 so stale status cannot allow unbounded production.
@@ -182,3 +183,21 @@ the shared mix. Scaling the shared output would also fade channels mixed earlier
 in the callback. Source progress freezes after the current render block has been consumed; it
 does not promise sample-accurate resumption within that block. Zero-duration fades
 still take one sample to reach the target.
+
+## Pause-exempt PCM {#pause-exempt-pcm}
+
+`play_sound_from_pcm` can opt a new two-dimensional PCM sound out of global pause.
+The flag travels atomically with its creation command; it cannot move an already
+buffered sound between buses. Ordinary and exempt channels use separate limiter
+look-ahead buffers. Pausing freezes the ordinary buffer and sources while the exempt
+bus continues. This prevents ordinary buffered samples from leaking into exempt
+output and prevents an exempt sound from replaying when ordinary audio resumes.
+Both buses retain per-sound pause/stop/pitch and master-volume behavior. When an exempt sample contributes nonzero output, the sum is clamped to the
+configured limiter threshold. Zero exempt samples preserve ordinary output exactly,
+including the ordinary limiter's existing transient behavior. Device or browser-context
+suspension still stops all output; this flag does not unlock an audio device.
+
+Audio command archives carry numeric variant tags. New command arms are appended
+so existing commands retain their meaning in an audio context preserved across a
+script reload. New commands still require a restarted audio system after an SDK
+audio module upgrade; the live stream does not negotiate new decoder capabilities.
