@@ -7747,3 +7747,16 @@ records as the expert GEMVs' regions, the act and the combine.
   processes), and the tile is flat across the sets. The shipped constants stay as they are; the class profiles' races
   now hold the `accs` rows, so a box whose GEMV wants one set crowns `_accs1` at its next mint (x86-vnni512 and x86-amx
   re-mint on this branch).
+- **MEASURED (2026-10-31, `debug-jit`, the AMX bf16 tile against the int8 tiles - AWS c7i.4xlarge, Xeon Platinum 8488C
+  (Sapphire Rapids, x86-amx), 16 vCPU, `kq_kernel_bench.das --fmt nv4,q40,k4 --ntok 512 -p amx,vpdpbusd,maddubs,mr4` under
+  `DAS_TUNE_MODE=test`, `DAS_TUNE_POLICY` unset, the CPU backend on auto, n 14336 d 4096, best of 5, us; the bf16 rows walk
+  their panel - the bf16 panel built a token block off the grp planes, inside the time - as the production `bf16_walk`
+  does).** tile over 512 tokens: nv4 `dot_amx_bf16_width512_mr16_kstep1_nrsplit2` 87130 / `_nrsplit1` 120963 against
+  `dot_vpdpbusd_width512_mr16` 311602, `dot_vpdpbusd_width256_mr8` 396653, `dot_vpdpbusd_width256_mr16` 396241,
+  `dot_maddubs_width256_mr8` 532587; q40 amx 85594 / 119247 against 141256 / 226466 / 194476 / 278343; k4 amx 85959 /
+  119325 against 264608 / 301884 / 246440 / 355203. gemv (the companion rows, the same int8 GEMV under every tile perm):
+  nv4 1390-1735, q40 1086-1106, k4 1101-1129. Read: the AMX bf16 tile is format-blind - nv4, q40 and k4 all land at 86-87 ms
+  once their panel is bf16 - so on an AMX box nv4's prefill tile runs at q40's time (3.6x its own best int8 tile; q40 gains
+  1.65x, k4 2.9x), and the grp tier's nv4 gap (the entry above, 1.3x-1.9x) is an int8-tile gap only. nrsplit 2 leads
+  nrsplit 1 by 1.4x on every format. The x86-amx profile crowns `dot_amx_bf16_width512_mr16_kstep1_nrsplit2` for the three
+  tile families.

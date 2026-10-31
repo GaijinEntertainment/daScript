@@ -25,6 +25,7 @@ require ?vulkan dasllama/dasllama_vulkan_common   // the resolved coopmat mode a
 require ?cuda dasllama/dasllama_cuda_decode   // the same witnesses on the CUDA home
 require dasllama/dasllama_kqformat
 require daslib/enum_trait   // the KqFmt members as a loop
+require daslib/strings_boost   // split: a fixture's census sites
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed public   // resident_ready, load_resident, resident_prompt, resident_then_cpu_feed, feed_steps_within, tile_arm_tag
 require _kv_codec_cells   // codec_distance_over: the three-chain form of the block-codec cells
@@ -45,6 +46,7 @@ struct MoeFixture {
     expect_host_layers : bool = false   //! the card does not hold the experts whole: the driver arms with some routed layers' experts on the host
     strict_ctx : int64 = 0l      //! > 0: the load pins this context whole (`set_gpu_ctx_max` + `set_gpu_ctx_strict`), and the armed region holds it
     census : bool = false        //! every site the file carries read in its own format (`census_cell`): a file whose planes all sit on their formats' lattices
+    census_sites : string        //! the sites the census binds to their own format, `;`-separated; empty = every site (a carrier whose BF16 planes serve as q8 names its own-bytes sites)
     image : bool = false         //! the load goes through the prepared lane (minted beside the file on the first load): the cells that read off it
     host_layers_ask : int64 = 0l //! > 0: the load asks at least this many routed layers' experts onto the host (`set_gpu_host_layers`) whatever the card holds - the host-layers form on any card
 }
@@ -181,8 +183,12 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
         return
     }
     if (fx.census) {
-        var inscope any_sites : array<string>
-        census_cell(t, tr, path, "vulkan load", any_sites)
+        var inscope any_sites, bound : array<string>
+        if (!empty(fx.census_sites)) {
+            delete bound
+            bound <- split(fx.census_sites, ";")
+        }
+        census_cell(t, tr, path, "vulkan load", any_sites, bound)
     }
     let device_routed_layers = tr.config.n_layers - host_layers   // a host layer runs its router alone
     let windows = (n + PF_WINDOW_ROWS - 1l) / PF_WINDOW_ROWS
