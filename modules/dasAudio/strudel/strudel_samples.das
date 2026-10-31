@@ -197,7 +197,7 @@ def render_sample(bank : SampleBank; name : string; variation : int; speed : flo
         resampled |> resize(int(outFrames) * int(srcChannels))
         // convert to stereo if needed
         if (srcChannels == 2u) {
-            stereo <- resampled
+            stereo <- resampled // nolint:PERF030 - empty; lookup fills once
         } else {
             var converter : ma_channel_converter
             var converter_config <- ma_channel_converter_config_init(

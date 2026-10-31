@@ -7,6 +7,16 @@ host-built programs, `ARCHITECTURE_GC.md` gc roots, `ARCHITECTURE_SHARED.md` sha
 the inliner's conditional call lowering.
 The rest of inference, with parsing and simulation, is in `skills/internal/cpp_codebase_notes.md` (repo-only).
 
+## Returned locals captured by blocks or heap literals {#return-local-storage}
+
+`VarCMRes` can alias a returned local to the caller's result buffer. That storage is
+addressed through the current context's `abiCMRES`. A heap-mode array literal
+temporarily redirects `abiCMRES` to its element buffer. A block invoked by another
+function can run with that function's result buffer; its captured stack frame does
+not restore the defining function's `abiCMRES`. Locals referenced inside either
+shape therefore retain stack storage and are copied or moved on return. The check
+covers both reads and writes, including references nested in another block.
+
 ## The module-cache read in `trySerializeProgramModule` (`ast_parse.cpp`) {#module-cache-read}
 
 The front end parses modules in require order. When a module cache is installed
