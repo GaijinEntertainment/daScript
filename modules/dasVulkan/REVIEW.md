@@ -9,8 +9,7 @@ file, wherever the diff puts it, answers to the `tests/` subfolder's checklist. 
 function annotated `[spirv_kernel]`, `[metal_kernel]`, or with an annotation whose name ends in
 `_shader` - answers to `modules/REVIEW_SHADER_EMITTERS.md` as well, wherever the diff puts it.
 
-**Weakening `REVIEW.das` (beside this file) is a defect:** dropping a check, adding a name to
-its ignore set, or changing a finding text so it no longer names what failed.
+**Weakening `REVIEW.das` (beside this file) is a defect.**
 
 **A diff that adds a feature bit or a device extension that a `create_device*` creator in
 `daslib/vulkan_boost.das` always enables adds it, in the same change, to that creator's
