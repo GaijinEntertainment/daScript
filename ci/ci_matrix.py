@@ -15,6 +15,10 @@ CLANG = "-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++"
 LINUX_ARM_EXTRA = CLANG + " -DDAS_GLFW_DISABLED=ON -DDAS_HV_DISABLED=OFF -DDAS_SQLITE_DISABLED=OFF"
 WINDOWS_EXTRA = ("-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
                  " -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake")
+# dastest's whole-suite watchdogs, raised for the cells whose sweep runs at half speed (windows
+# Debug, the sanitizers) and then rides the hosted runner's ~1.4x swing; every other cell keeps
+# tests/CMakeLists.txt's defaults, so a hang there still fails fast
+SLOW_SWEEP_BUDGETS = " -DDAS_TEST_TIMEOUT=3600 -DDAS_TEST_TIMEOUT_ISOLATED=7200 -DDAS_TEST_TIMEOUT_AOT=3600"
 
 
 SANITIZERS = ("asan", "tsan", "ubsan")
@@ -58,12 +62,13 @@ def build_cells(nightly):
     if nightly:
         cells += _cells("windows", 64, ["Debug"], release_target="windows", release_arch="x86_64",
                         runner="windows-latest", architecture_string="x64", archive_ext="zip",
-                        jit_disabled="ON", nightly_only="ON", cmake_extra=WINDOWS_EXTRA, **cmake)
+                        jit_disabled="ON", nightly_only="ON", cmake_extra=WINDOWS_EXTRA + SLOW_SWEEP_BUDGETS,
+                        **cmake)
         for san in SANITIZERS:
             for phase in SANITIZER_PHASES:
                 cells.append(dict(target="linux", architecture=64, cmake_preset="Release", sanitizers=san,
                                   runner="ubuntu-latest", build_name="linux_" + san, nightly_only="ON",
-                                  fast_math="OFF", phase=phase, cmake_extra=CLANG, **cmake))
+                                  fast_math="OFF", phase=phase, cmake_extra=CLANG + SLOW_SWEEP_BUDGETS, **cmake))
         # the tree built -ffast-math, the way an embedder that passes it does (dagor is one)
         cells.append(dict(target="linux", architecture=64, cmake_preset="Release", sanitizers="none",
                           fast_math="ON", runner="ubuntu-latest", build_name="linux_fastmath",

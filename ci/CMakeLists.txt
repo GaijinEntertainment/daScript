@@ -130,8 +130,7 @@ das_lane_group(run_build_clangcl "Running the clang-cl lane"
 das_lane_group(run_build_mingw "Running the mingw lane"
     run_build run_tests_aot check_clangbind_fresh run_tests_cbind_const_preproc)
 # The isolated retry of a lane whose sweep failed: the workflow chains `<lane> || <lane>_isolated`
-# (cmake has no retry primitive inside one target). The windows 64 Debug cell needs it every run -
-# its first pass outgrows the 1800 s watchdog and only the isolated pass finishes.
+# (cmake has no retry primitive inside one target).
 das_lane_group(run_build_isolated "Retrying the build lane's sweeps in isolated mode"
     run_tests_sweeps_isolated test-small run_tests_aot_subset)
 das_lane_group(run_build_sanitizers_isolated "Retrying the sanitizer lane's sweep in isolated mode"
