@@ -484,7 +484,7 @@ let MODULE_WITNESSES <- {
     "dasllama_arch_llama" => "test_gpu_resident_llama.das,test_gpu_resident_cuda_llama.das,test_gpu_resident_regions_llama_k.das,test_gpu_resident_codec_llama_k.das,test_forward.das,test_prefill.das",
     "dasllama_arch_qwen2" => "test_gpu_resident_qwen2.das,test_gpu_resident_cuda_qwen2.das,test_gpu_perop_kv_codec.das,test_gpu_perop_kv_codec_iq.das,test_gpu_resident_regions.das",
     "dasllama_arch_qwen3" => "test_gpu_resident_cuda_qwen3.das,test_gpu_resident_regions_qwen3.das,test_gpu_perop_kv_codec_k.das",
-    "dasllama_arch_qwen35" => "test_gpu_resident_hybrid.das,test_gpu_resident_continuation.das,test_gpu_resident_cuda_qwen35.das,test_gpu_resident_cuda_mtp.das,test_gpu_resident_regions_hybrid.das,test_gpu_resident_long_window.das,test_deltanet.das,test_mtp.das,test_vulkan_mint.das",
+    "dasllama_arch_qwen35" => "test_gpu_resident_hybrid.das,test_gpu_resident_continuation.das,test_gpu_resident_cuda_qwen35.das,test_gpu_resident_cuda_mtp.das,test_gpu_resident_regions_hybrid.das,test_gpu_resident_long_window.das,test_gpu_resident_moe_formats.das,test_deltanet.das,test_mtp.das,test_vulkan_mint.das",
     "dasllama_arch_qwen3moe" => "test_gpu_resident_regions_qwen3moe.das,test_gpu_resident_moe_formats.das,test_gpu_resident_format_census.das,test_gpu_resident_cuda_moe.das",
     "dasllama_arch_qwen2moe" => "test_gpu_resident_moe.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_cuda_moe_host.das,test_gpu_resident_regions_qwen2moe.das,test_gpu_moe_shexp.das,test_gpu_resident_moe_host_rows.das,test_gpu_resident_moe_host_pinned.das",
     "dasllama_arch_qwen4exp" => "test_qwen4exp.das,test_gpu_resident_hc.das,test_gpu_resident_hc_micro.das",

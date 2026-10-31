@@ -83,6 +83,12 @@ there with a reason naming the site and the member.** A site that serves only th
 author's files carried converts the rest without saying so, and the first file in another format
 fails or converts at load with no message naming the site.
 
+**A diff that makes the load accept a `.scale` tensor - a per-plane dequant factor stored beside a
+weight tensor - at a site makes each backend whose serving call reaches the site apply that factor
+in the same change, or makes the load decline the plane on that backend with a reason naming the
+site and the member.** A backend that reads the plane and skips the factor produces wrong output,
+and no message names the site.
+
 **A diff that adds or changes a site that names, with a literal `KqFmt` member, the format of a
 weight plane whose disk type some `KqFmt` member describes is a defect: tag the plane from its
 disk type with `kq_tag` / `kq_fmt_of` (`dasllama/dasllama_load.das`) and read that tag at the

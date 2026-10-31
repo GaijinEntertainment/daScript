@@ -810,8 +810,9 @@ def resident_then_cpu_feed(t : T?; tr : Model; prompt, toks : array<int64>; afte
 
 //! the stream twin's bar, of the row's largest live logit: the device's chain over its share of the routed experts against the host's
 //! f32 sums over the same share reads 0.4 to 1.0 of the rows' 7-12 max logits on both homes (Qwen1.5-MoE Q8_0 and gpt-oss on the
-//! 5060 Ti), under the CPU chain's fifth; the chain's biased-act count is the form's own witness beside it
-let STREAM_TWIN_BAR_REL = 0.15
+//! 5060 Ti) and 1.30 of 8.0 on gpt-oss's CUDA prefill window on the RTX PRO 4500 (driver 595), under the CPU chain's fifth; the
+//! chain's biased-act count is the form's own witness beside it
+let STREAM_TWIN_BAR_REL = 0.18
 
 //! `path` loaded twice with `host_layers` routed layers' experts on the host - the prompt stream pinned on, then off - the streamed
 //! windows' rows against the host's sums' within `bar_rel` of the row's largest live logit, the device claiming first

@@ -11,7 +11,7 @@ merge it with a twin onto one template does not) removes that suppression, or la
 or split, in the same change.**
 
 **A diff that adds a STYLE037/STYLE038 suppression under this folder to a function that carried no
-such suppression on the base branch, in whatever file it sat there, where a `followup_*.md` entry
+suppression of that STYLE code on the base branch, in any file, where a `followup_*.md` entry
 asks that function to be shortened or split (an entry asking to replace its repeated, hand-copied
 code with a loop counts; one asking to merge it with a twin onto one template does not), is a
 defect - it lands the shortening or split instead.**
@@ -21,19 +21,24 @@ what the file holds - to an `ARCHITECTURE_*.md` companion in the same change, ne
 `ARCHITECTURE.md`.** `ARCHITECTURE.md#file-charters`'s routing block names the companion holding
 each file's charter line.
 
-**A `followup_*.md` row's number never changes and is never reused: a row a diff adds takes a
-number higher than every number that file has carried on the base branch or in the diff's own
-commits, deleted rows included.** Text cites rows by number.
+**A `followup_*.md` row's number, and an item's label inside a row, never changes and is never
+reused: a row a diff adds takes a number higher than every number its file has carried, and an
+item a diff adds takes a label higher than every label its row has carried, on the base branch or
+in the diff's own commits, deleted ones included.** Text cites rows and items by number.
 
 **A diff that removes the problem a `followup_*.md` row states deletes the row - or, when the row
 lists several items and the diff resolves only some, deletes those items alone and the row keeps
-its number - and repoints every checked-in citation naming what it deleted to where the fact now
-lives (the architecture doc or the code) or drops it.**
+its number - and repoints every checked-in citation of what it deleted to where the resolution now
+lives (the architecture doc or the code), or drops the citation.**
 
-**A diff that rewrites the problem a `followup_*.md` row states deletes the row, repoints every
-checked-in citation that names it to the new row's number or drops it, and adds the new problem
-under a new number; deleting a resolved item, or narrowing a row's problem to the part the diff
-leaves unresolved, is not a rewrite.** A row rewritten under its number turns every citation of
+**A diff that deletes a `followup_*.md` row or item rewrites every checked-in text that states the
+deleted problem as still open - a comment, a doc sentence - to state the current behavior, or
+deletes the sentence.**
+
+**A diff that changes the problem a surviving `followup_*.md` row or item states - beyond deleting
+what it resolves or adding an item under a new label - deletes it, repoints every checked-in
+citation that names it to the new row's number or drops it, and adds the new problem under a new
+number.** A row rewritten under its number turns every citation of
 that number into a citation of something else.
 
 **A diff files planned work in the ledger that owns it: `followup_metal.md` for work that would
@@ -43,8 +48,9 @@ driver or dispatch, outside every template the CUDA home also stamps, and no Met
 `followup_general.md` for everything else, rig and instrument rows included.**
 
 **A time, rate, ratio or error a box measured, written by a diff into an `ARCHITECTURE*.md` or a
-`followup_*.md`, has its entry in `PERF_LEDGER.md`; a `followup_*.md` row that carries one cites
-the entry it comes from.**
+`followup_*.md`, names each box it holds on, and the `PERF_LEDGER.md` entry it comes from shows it
+on each of them; a `followup_*.md` row that carries one cites that entry.** A parity claim - X runs
+at Y's time - is a ratio.
 
 **A diff that adds or removes an `ARCHITECTURE_*.md` companion adds or drops its line in
 `ARCHITECTURE.md`'s routing block (under `File charters` or `Mechanisms`) in the same change.**

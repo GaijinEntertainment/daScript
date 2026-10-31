@@ -95,6 +95,13 @@ def census_sites_all() : array<string> {
 //! format, the sites `want` names carried at all - each check soft so the cell names every site still on a converted copy,
 //! that list logged as one line
 def census_cell(t : T?; tr : Model; path, tag : string; want : array<string>) {
+    var inscope every : array<string>
+    census_cell(t, tr, path, tag, want, every)
+}
+
+//! the same census binding the own-format duty to the sites `bound` names alone (every site when empty): a carrier whose
+//! other sites the tier serves off a converted form by design - a BF16 plane as q8 - holds its own-bytes sites to the duty
+def census_cell(t : T?; tr : Model; path, tag : string; want, bound : array<string>) {
     let f = fopen(path, "rb")
     if (f == null) {
         t |> failure("{tag}: cannot open {path}")
@@ -108,7 +115,7 @@ def census_cell(t : T?; tr : Model; path, tag : string; want : array<string>) {
             if (want |> has_value(s.site)) {
                 t |> success(s.planes > 0, "{tag} {s.site}: the file carries the site")
             }
-            continue if (s.planes == 0)
+            continue if (s.planes == 0 || (!empty(bound) && !(bound |> has_value(s.site))))
             t |> success(s.copies == 0, "{tag} {s.site}: {s.copies} of {s.planes} planes read through a converted copy ({s.first})")
             if (s.copies > 0) {
                 copies = "{copies} [{s.site}: {s.copies}/{s.planes}]"

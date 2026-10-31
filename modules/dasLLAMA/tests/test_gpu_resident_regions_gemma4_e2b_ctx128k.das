@@ -12,16 +12,17 @@ require dasllama/dasllama_kv_dtype
 // row kept (the slab cell pins the ring off), so that plan seats them in two slab pairs; ringed they fit one, and every sharer
 // takes its donor's seat. The same cells as the llama file: the slab
 // cell on the E-series carrier bit for bit, a 12288-token prompt and its steps against the CPU chain at the gemma
-// forced-feed bar (16%), a 120000-token prompt continued from 65536, and four device-home streams at 36700 to 107479
+// forced-feed bar widened to 24%, a 120000-token prompt continued from 65536, and four device-home streams at 36700 to 107479
 // positions batched at every step against each alone within 14% of the max logit: past the wide position the one-row
 // command's wide twin and the N-row command's split pieces sum the keys in another order, and on the E-series that reads up
 // to 11.5% (RTX PRO 4500: 0.36-1.33 of 9-20, the widest at 83892 positions), the same on the ringed mirror and on the flat
 // two-slab one bit for bit - the rounding is the two commands', not the ring's - and the class of its own rows against the
-// CPU chain at 12288 tokens (5-8%), where the controls read 10-37, past 0.74 of the max logit. Skips off the JIT, without DASLLAMA_GPU=1 on a device the driver
+// CPU chain at 12288 tokens (5-8%; step 3 reads 22% on the RTX PRO 4500 under driver 595, the same on master's engine), where
+// the controls read 10-37, past 0.74 of the max logit. Skips off the JIT, without DASLLAMA_GPU=1 on a device the driver
 // serves, without the file under models_dir(), where the environment arms another mirror codec over f16, and on a card
 // whose room does not hold the mirror (10 GB of K/V beside the weights).
 let private REGIONS_FILE = "gemma-4-E2B-it-Q8_0.gguf"
-let private LONG = LongCtx(regions = 4l, ctx = 131072l, cpu_n = 12288l, cpu_bar_rel = 0.16, split_n = 120000l, split_cut = 65536l, streams_rel = 0.14)
+let private LONG = LongCtx(regions = 4l, ctx = 131072l, cpu_n = 12288l, cpu_bar_rel = 0.24, split_n = 120000l, split_cut = 65536l, streams_rel = 0.14)
 
 [init]
 def private e2b_init() {

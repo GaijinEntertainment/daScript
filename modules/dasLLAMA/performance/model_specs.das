@@ -902,6 +902,10 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             recipe = "llama-quantize --pure Qwen3.6-35B-A3B-BF16-00001-of-00002.gguf Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf IQ4_XS",
             bytes = 18951018528l, sha256 = "8296de4b5b62724ae7eac1cf005a65a2936f227ef2cafcee8d9bad0a25c4806c",
             serve_mtp = "vulkan"),
+        // the NVFP4 35B (tests/test_gpu_resident_moe_formats.das): RedHatAI's NVFP4 checkpoint through llama.cpp's converter - every Linear plane nv4 under its `.scale`, the norms, SSM parameters, convs and router gates in float
+        ModelSpec(file = "Qwen3.6-35B-A3B-NVFP4.gguf",
+            url = "{HF}/knoopx/Qwen3.6-35B-A3B-NVFP4-GGUF/resolve/b1bb81d83149a74fc9c7179b539a796d93f18820/Qwen3.6-35B-A3B-NVFP4.gguf",
+            bytes = 22499026048l, sha256 = "c1358e8808eb7695b364de30e84c415801656838392578250524c3b7fddd1906"),
         ModelSpec(file = "Qwen3-Coder-30B-A3B-Instruct-Q8_0.gguf", display = "Qwen3-Coder-30B",
             parity <- ev_qwen_count([moe_reference = true])),
         ModelSpec(file = "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf", display = "Qwen3-Coder-30B-q4k", quant_label = "q4_k_m",

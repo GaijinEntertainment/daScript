@@ -9,8 +9,9 @@ box configuration - a crown (a kernel family the box's tune sidecar enables) or 
 (an environment variable's or a setting's) - reaches that it did not reach before counts as added;
 an allocation the diff moves with its size and reach unchanged does not.
 
-A lasting allocation is one that outlives the call that makes it - a device buffer, or an array a
-module or a struct holds; a pooled buffer acquired and released inside one call is not one.
+A lasting allocation is a container (array, table, device buffer) that outlives the call making
+it - held by a module global, or by a field of a struct that outlives the call; a pooled buffer
+acquired and released inside one call is not one.
 
 A scaling count is a count the model file sets, the context a session serves (the model's own or
 one a caller pins), how many tokens one step computes at once, how many rows one media encode
@@ -47,8 +48,9 @@ a `resize` with no reserve before it - checks only `@exact_size` arrays.
 
 **Every `resize` of a buffer in `dasllama/` whose element count grows with a count the model
 file sets follows a `reserve(n)` or `ensure_capacity(n)` whose `n` is the resized count, or goes
-through a helper of `dasllama/dasllama_math.das` that does both, or is the builtin `scratch_resize`
-on a `@scratch` buffer; weakening PERF032 is a defect.**
+through a `dasllama/dasllama_math.das` helper whose own body does that before it resizes
+(`reserve_resize`, `grow_resize`), or is the builtin `scratch_resize` on a `@scratch` buffer;
+weakening PERF032 is a defect.**
 The lint never compares the two counts, and a resize past the heap's limit on unreserved growth
 (`max_unreserved_size`) panics on the first model big enough.
 

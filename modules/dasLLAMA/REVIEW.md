@@ -69,12 +69,14 @@ no row runs every area, one with `llm` and no witness row the core set: safe, an
 
 **A diff after which an area's tests, or a `model-free` or `stocked` `llm` test file, run an
 existing module's code that its `MODULE_AREAS` or `MODULE_WITNESSES` row omits adds the area or
-the file to the row in the same change.** A new caller counts, wherever it sits; a row missing an
-area or a file makes `run.das -- --changed` skip those tests, so a regression there goes unrun.
+the file to the row in the same change.** A new caller counts, wherever it sits, and so does an
+existing test file that starts loading a GGUF it did not load before: the module it now runs is
+the `dasllama/dasllama_arch_*.das` file that registers that GGUF's `general.architecture` string;
+a row missing an area or a file makes `run.das -- --changed` skip those tests, so a regression
+there goes unrun.
 
 **A `[test]` file with a `require dasllama/...` line of its own, wherever the diff puts it, and
-every `dasllama/` change answer to this folder's `tests/REVIEW.md` - open it; the walk does not
-surface it for a `dasllama/`-only diff.**
+every `dasllama/` change answer to this folder's `tests/REVIEW.md`.**
 
 **A diff that changes the body, parameters or return type of a CPU kernel - a function in
 `dasllama/dasllama_math*.das` that runs on the CPU and writes an output buffer from operand
@@ -165,9 +167,10 @@ to a require, new or existing, in `dasllama/dasllama.das` or in a file it reache
 requires alone, or adds an `[EnvConfig]` area struct, applies `REVIEW_FACADE.md` too.**
 
 **A diff that does any of these, wherever it sits, applies `REVIEW_KQ_FORMATS.md`: adds a weight
-plane a backend's serving call reads, or changes which `KqFmt` members such a plane is served in;
-makes a backend's serving call read a weight format in a form other than its disk bytes; or states,
-in checked-in text, a commit message or the PR body, that a backend serves a weight format.**
+plane a backend's serving call reads, or changes which `KqFmt` members such a plane is served in,
+or makes the load accept a `.scale` tensor beside such a plane; makes a backend's serving call read
+a weight format in a form other than its disk bytes; or states, in checked-in text, a commit
+message or the PR body, that a backend serves a weight format.**
 
 **A diff that does any of these, wherever it sits, applies `REVIEW_KQ_FORMATS.md` too: turns a
 weight-format id (a `KqFmt` member, a GGUF type number, or the int a generated kernel takes as its
@@ -184,9 +187,10 @@ Every recorded row, tune sidecar and exchange entry carries the release, so a bu
 **A change that invalidates only images never bumps `DASLLAMA_RELEASE` - it applies
 `REVIEW_IMAGE.md`.**
 
-**A diff that adds or changes a `dasllama/dasllama_common.das` function working through or reporting
-on another module's hook, moves a `dasllama/` stage's work onto a GPU hook, calls a `set_*_q8`
-lane setter under `dasllama/` or `harness/`, or adds or changes an override (an environment knob,
+**A diff that adds or changes a `dasllama/dasllama_common.das` function that reaches, or reports
+on, another module's hook (a function-typed global another module's `[init]` sets), moves a
+`dasllama/` stage's work onto a GPU hook (a hook a GPU driver module's `[init]` sets), calls a
+`set_*_q8` lane setter under `dasllama/` or `harness/`, or adds or changes an override (an environment knob,
 a non-private `dasllama/` setter a file outside `tests/` calls, or an on-disk state file a run
 writes or a user places, any of them moving a gate, policy or threshold off its default) or its
 announce (the line a run prints where the override changes the outcome) applies
@@ -264,9 +268,10 @@ that entry names the re-export; any other re-export is a defect - the file's own
 the symbol through `dasllama/dasllama.das` instead.**
 
 **Checked-in text - docs, comments, or string data, any language - that describes a mechanism of
-the reference build (any third-party engine, library or runtime whose figure a sentence compares
-with this module's own), or names that build, its binaries or symbols, wherever the diff puts it -
-and the commit message or PR body of such a diff - applies `REVIEW_UPSTREAM.md`.**
+the reference build (any third-party engine, library or runtime whose figure any checked-in text
+of this module compares with this module's own), or names that build, its binaries or symbols,
+wherever the diff puts it - and the commit message or PR body of such a diff - applies
+`REVIEW_UPSTREAM.md`.**
 
 **A diff that changes the work a `HOW_TO_*.md` tells its author to do - a step added or dropped, a
 file the author must touch, a table, fixture or probe entry the work must supply, or a gate it must

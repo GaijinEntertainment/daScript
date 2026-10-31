@@ -11,6 +11,7 @@ require dasllama/dasllama_gemm_schema
 require dasllama/dasllama_math_default   // dot_q8q8_f16s - the q8 twin's block dot
 require dasllama/dasllama_gpu_kernels_discrete
 require spirv/spirv_shader   // the templates' builtins (sdot4, unpackHalf2x16, the subgroup folds), run here on the CPU
+require daslib/math_bits     // uint_bits_to_float: the nv4 leaf's site word, read by its decode stamped here
 require daslib/templates
 require daslib/typemacro_boost
 require math
@@ -35,6 +36,7 @@ class private HostKqGemvIq2s : Iq2sGemvT {}
 class private HostKqGemvIq2xs : Iq2xsGemvT {}
 class private HostKqGemvIq2xxs : Iq2xxsGemvT {}
 class private HostKqGemvK6 : K6GemvT {}
+class private HostKqGemvNv4 : Nv4GemvT {}
 
 class private HostQ51Gemv : Blk32GemvRunT {
     typedef FMT = KqTag_q51
@@ -88,7 +90,7 @@ def private host_kq_new(_t : KqTag_mx4) : KqGemvBase? => null
 def private host_kq_new(_t : KqTag_iq4nl32) : KqGemvBase? => null
 def private host_kq_new(_t : KqTag_q4032) : KqGemvBase? => null
 def private host_kq_new(_t : KqTag_q5032) : KqGemvBase? => null
-def private host_kq_new(_t : KqTag_nv4) : KqGemvBase? => null
+def private host_kq_new(_t : KqTag_nv4) : KqGemvBase? => new HostKqGemvNv4()
 
 def private host_kq_cls(f : KqFmt) : KqGemvBase? {   // nolint:STYLE037 - kq_fmt_stamp's generated arms, one a format
     var k : KqGemvBase?

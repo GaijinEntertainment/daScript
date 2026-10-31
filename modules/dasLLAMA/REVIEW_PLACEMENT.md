@@ -104,11 +104,12 @@ tokenizer's own file (`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`)
 `[metal_dispatch]`, `[vk_dispatch]` or `[cuda_dispatch]` declares) picks one variant of - that one
 home stamps lands in that home's kernel file: `dasllama/dasllama_metal_kernels.das`,
 `dasllama/dasllama_vulkan_classes.das` or `dasllama/dasllama_cuda_classes.das` - a class stamped
-from a template declared in another file is not one; it lands by the next rule.**
+from a template declared in another file is not one.**
 
 **A class stamped from a template declared in another file lands in its home's kernel file, or in a
-driver file whose role row in `ARCHITECTURE_GPU.md#gpu-backends` names that template's stamps; a
-diff that stamps one in a driver file whose row does not name them adds them to the row.**
+file whose role row in `ARCHITECTURE_GPU.md#gpu-backends` names that template's stamps; a diff that
+stamps one in another file of the role table adds that template's stamps to the file's row, and a
+file in no row of the role table never holds one.**
 
 **A `class template` two homes stamp never sits in one home's kernel file: it lands in
 `dasllama/dasllama_gpu_kernels_discrete.das` when the Vulkan and the CUDA homes stamp it and Metal

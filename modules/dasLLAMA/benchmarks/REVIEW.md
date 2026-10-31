@@ -31,9 +31,10 @@ report row drops; a compared arm is one whose output, from any run of it, the ru
 measures against another arm's output or a CPU reference over the compare region, the output
 elements the instrument's header comment names; the baseline arm is the one the header comment
 names as baseline. An instrument's header comment is the comment at the top of its file; in a
-file that holds more than one race or A/B, the header comment of each is the doc comment of the
-function that runs it. A run of an arm refuses when it produces no figure or output, or runs on a
-backend other than the backend name the report row records.
+file that holds more than one race or A/B, the header comment of each is the file's top comment
+together with the doc comment of every function between `main` and its rounds; a fact stated in
+either counts. A run of an arm refuses when it produces no figure or output, or runs on a backend
+other than the backend name the report row records.
 
 A board cell is a run whose reading lands as a records row of `../performance/records/<box>.json`
 or a figure in `../PERF_LEDGER.md`.
@@ -87,10 +88,10 @@ whether its multiply-adds fuse, decide bit-identity - not the declared precision
 **A diff that adds a compared arm, or changes its run or report row, makes its report row print no
 time when the arm misses its bound - only the miss and the bound.**
 
-**A diff that adds a race or an A/B with a compared arm, or changes its arms' runs or report
-rows, checks its baseline arm against a CPU reference in the same process, over the compare
-region, and prints that compare on the baseline's report row, bit-exact or bounded with the bound
-it passed.** Two arms can agree and both be wrong; only the reference makes the winner right.
+**A diff that adds a compared arm to a race or an A/B, or changes a compared arm's run or report
+row, checks that race's or A/B's baseline arm against a CPU reference in the same process, over
+the compare region, and prints that compare on the baseline's report row, bit-exact or bounded with
+the bound it passed.** Two arms can agree and both be wrong; only the reference makes the winner right.
 
 **A diff that adds a race arm that is not a compared arm, or changes its run or report row,
 makes that arm carry the literal token `timing-only` on its report row.**

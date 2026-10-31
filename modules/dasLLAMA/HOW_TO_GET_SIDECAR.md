@@ -125,7 +125,7 @@ DAS_TUNE_MODE=test DAS_JOBQUE_THREADS=8 bin/daslang -jit modules/dasLLAMA/harnes
 
 Every `[tune_perm]` seat of every family is stamped and held to its reference body within the family's
 bar (`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#rm-family-race` names the row-major families') - the q8
-tile, the superblock and per-32 tiles, the bf16-weight tile and the twenty row-major GEMVs
+tile, the superblock and per-32 tiles, the bf16-weight tile and the twenty-one row-major GEMVs
 (`<fmt>q8_rm_gemv_gen`, the streamed expert rail); the box's ISA is what makes seats that never ran
 before run here (the 512-bit VNNI seats on zen4, the AMX leg on Intel). `ok` on every line, or the box
 has found a defect and the walk stops until it is fixed.

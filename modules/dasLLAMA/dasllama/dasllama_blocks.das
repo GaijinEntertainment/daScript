@@ -1658,7 +1658,7 @@ def rare_batched_pin : int => g_rare_batched_pin
 def rm_dev_serves(f : KqFmt) : bool {
     return (f == KqFmt.q8 || f == KqFmt.iq4nl32 || f == KqFmt.q4032 || f == KqFmt.q51 || f == KqFmt.q5032 || f == KqFmt.mx4
         || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.k3 || f == KqFmt.k2 || f == KqFmt.q40
-        || f == KqFmt.iq4nl || f == KqFmt.iq4xs || f == KqFmt.iq3s4
+        || f == KqFmt.iq4nl || f == KqFmt.iq4xs || f == KqFmt.iq3s4 || f == KqFmt.nv4
         || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs)
 }
 
@@ -1686,9 +1686,10 @@ struct private RarePlane {
     q8s : float const?
     q8fn : MatmulQ8Q8RowsFn
     dev_layout : bool      //! the planes are the tier's pinned device-layout stack, read through the format's row-major kernel
-    base : int64           //! ... the stack's first element (the region offsets are relative to it)
-    ege : int64            //! ... and an expert's elements, the stack's slots an expert each (`rare_dev_ptrs`)
-    view : MoeGpuStreamView   //! ... the cache's layout of the stack, captured in the main context: a lane resolves experts off it alone
+    base : int64           //! the stack's first element (the region offsets are relative to it)
+    ege : int64            //! an expert's elements, the stack's slots an expert each
+    scales : float const?  //! the stack's per-expert scales (`exps_scale_ptr`), null where it carries none
+    view : MoeGpuStreamView   //! the cache's layout of the stack, captured in the main context: a lane resolves experts off it alone
 }
 
 //! the device-plane pointers of the block at `woff` of a device-served plane: its expert's cache slot off the captured view plus
@@ -1886,7 +1887,8 @@ def private rare_batch_core(p : RarePlane; var yp : float?; woff : int64; xq : i
             var t = 0l
             let xs_row = n / p.belems   //! a superblock plane's activation carries a scale a superblock, the rest a 32-block; the Q8_K sums sixteen a superblock
             let ptrs = rare_dev_ptrs(p, woff)
-            while (t + 4l <= ntok && rm_dev_tile4(p, yp + t * d, ptrs.q, ptrs.s, xq + t * n, xs + t * xs_row, xbs != null ? xbs + t * (n / 16l) : null, n, d)) {
+            while (t + 4l <= ntok) {
+                rm_dev_tile4(p, yp + t * d, ptrs.q, ptrs.s, xq + t * n, xs + t * xs_row, xbs != null ? xbs + t * (n / 16l) : null, n, d)
                 t += 4l
             }
             while (t < ntok) {
@@ -1910,6 +1912,7 @@ def private rare_batch_core(p : RarePlane; var yp : float?; woff : int64; xq : i
         } else {
             b32_expert_batch_core(p.f, yp, qp, sp, xq, xs, n, d, ntok, p.tb, ln.bsums)
         }
+        rare_scale_planar_rows(p, yp, woff, ntok * d)
     }
 }
 
@@ -1917,14 +1920,12 @@ def private rare_batch_core(p : RarePlane; var yp : float?; woff : int64; xq : i
 //! (mx4, a q8 plane under f16 scales)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena")]
 def private rare_plane(t : Model; f : KqFmt; n, woff : int64) : tuple<on : bool; p : RarePlane> {
-    var p = RarePlane(f = f)
+    var p = RarePlane(f = f, base = woff, ege = expert_elems(t.config), scales = exps_scale_ptr(t, woff))
     unsafe {
         if (rare_arena_serves(t) && rm_dev_serves(f)) {
             p.view = moe_gpu_stream_view(woff, int(f))
             if (p.view.q != null) {   //! the stack's pinned planes, where it holds every expert resident; an unmapped stack views null and the ring serves it
                 p.dev_layout = true
-                p.base = woff
-                p.ege = t.config.dim * t.config.n_ff_exp
                 p.q = p.view.q
                 p.s = p.view.s
                 let b = dev_block_bytes(f)
@@ -1969,105 +1970,22 @@ def private rare_plane(t : Model; f : KqFmt; n, woff : int64) : tuple<on : bool;
 }
 
 //! four activation rows against every row of a device plane's region at `dq` / `ds` through the format's row-major
-//! tile, token t's row at yp + t * d; false for a format with none, which the caller walks a row at a time
-def private rm_dev_tile4(p : RarePlane; var yp : float?; dq, ds : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, d : int64) : bool { // nolint:STYLE037 - one dispatch ladder a format
-    unsafe {
-        if (p.f == KqFmt.q8) {
-            q8q8_rm_tile4_gen(yp, reinterpret<int8 const?>(dq), reinterpret<uint16 const?>(ds), xq, xs, n, d)
-        } elif (p.f == KqFmt.iq4nl32) {
-            iq4nl32q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
-        } elif (p.f == KqFmt.q4032) {
-            q4032q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
-        } elif (p.f == KqFmt.q51) {
-            q51q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
-        } elif (p.f == KqFmt.q5032) {
-            q5032q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
-        } elif (p.f == KqFmt.mx4) {
-            mx4q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
-        } elif (p.f == KqFmt.k4) {
-            k4q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
-        } elif (p.f == KqFmt.k5) {
-            k5q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
-        } elif (p.f == KqFmt.k6) {
-            k6q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
-        } elif (p.f == KqFmt.k3) {
-            k3q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
-        } elif (p.f == KqFmt.k2) {
-            k2q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
-        } elif (p.f == KqFmt.q40) {
-            q40q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
-        } elif (p.f == KqFmt.iq4nl) {
-            iq4nlq8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
-        } elif (p.f == KqFmt.iq4xs) {
-            iq4xsq8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
-        } elif (p.f == KqFmt.iq3s4) {
-            iq3s4q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
-        } elif (p.f == KqFmt.iq3s) {
-            iq3sq8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
-        } elif (p.f == KqFmt.iq3xxs) {
-            iq3xxsq8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
-        } elif (p.f == KqFmt.iq2s) {
-            iq2sq8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
-        } elif (p.f == KqFmt.iq2xs) {
-            iq2xsq8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
-        } elif (p.f == KqFmt.iq2xxs) {
-            iq2xxsq8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
-        } else {
-            return false
-        }
+//! tile, token t's row at yp + t * d
+def private rm_dev_tile4(p : RarePlane; var yp : float?; dq, ds : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, d : int64) {   // nolint:STYLE037 - kq_fmt_stamp's generated arms, one a format
+    let f = p.f
+    kq_fmt_stamp(f) $(F) {
+        rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d, F)
     }
-    return true
 }
 
 //! the region at element offset `woff` of plane `p` dotted with one activation row over rows [rb, re), on the calling lane
-def private rare_rows_core(p : RarePlane; var yp : float?; woff : int64; xq : int8 const?; xs : float const?; xbs : int const?; n, rb, re : int64) { // nolint:STYLE037 - one dispatch ladder a format
+def private rare_rows_core(p : RarePlane; var yp : float?; woff : int64; xq : int8 const?; xs : float const?; xbs : int const?; n, rb, re : int64) {   // nolint:STYLE037 - kq_fmt_stamp's generated arms, one a format
     unsafe {
         if (p.dev_layout) {
             let ptrs = rare_dev_ptrs(p, woff)
-            let dq = ptrs.q
-            let ds = ptrs.s
-            if (p.f == KqFmt.q8) {
-                q8q8_rm_gemv_gen(yp, reinterpret<int8 const?>(dq), reinterpret<uint16 const?>(ds), xq, xs, n, rb, re)
-            } elif (p.f == KqFmt.iq4nl32) {
-                iq4nl32q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
-            } elif (p.f == KqFmt.q4032) {
-                q4032q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
-            } elif (p.f == KqFmt.q51) {
-                q51q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
-            } elif (p.f == KqFmt.q5032) {
-                q5032q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
-            } elif (p.f == KqFmt.mx4) {
-                mx4q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
-            } elif (p.f == KqFmt.k4) {
-                k4q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
-            } elif (p.f == KqFmt.k5) {
-                k5q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
-            } elif (p.f == KqFmt.k6) {
-                k6q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
-            } elif (p.f == KqFmt.k3) {
-                k3q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
-            } elif (p.f == KqFmt.k2) {
-                k2q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
-            } elif (p.f == KqFmt.q40) {
-                q40q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
-            } elif (p.f == KqFmt.iq4nl) {
-                iq4nlq8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
-            } elif (p.f == KqFmt.iq4xs) {
-                iq4xsq8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
-            } elif (p.f == KqFmt.iq3s4) {
-                iq3s4q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
-            } elif (p.f == KqFmt.iq3s) {
-                iq3sq8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
-            } elif (p.f == KqFmt.iq3xxs) {
-                iq3xxsq8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
-            } elif (p.f == KqFmt.iq2s) {
-                iq2sq8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
-            } elif (p.f == KqFmt.iq2xs) {
-                iq2xsq8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
-            } elif (p.f == KqFmt.iq2xxs) {
-                iq2xxsq8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
-            } else {
-                panic("dasLLAMA: the rare rail's device arm holds a {p.f} plane with no row-major kernel")
+            let f = p.f
+            kq_fmt_stamp(f) $(F) {
+                rm_gemv_gen(yp, ptrs.q, ptrs.s, xq, xs, xbs, n, rb, re, F)
             }
             return
         }
@@ -2089,7 +2007,14 @@ def private rare_rows_core(p : RarePlane; var yp : float?; woff : int64; xq : in
         } else {
             q5032q8_gemv_gen(yp, qp, sp, xq, xs, xbs, n, rb, re)
         }
+        rare_scale_planar_rows(p, yp + rb, woff, re - rb)
     }
+}
+
+//! the planar read's rows multiplied by expert `woff`'s scale
+def private rare_scale_planar_rows(p : RarePlane; var yp : float?; woff, count : int64) {
+    return if (p.scales == null)
+    scale_inplace(yp, unsafe(p.scales[(woff - p.base) / p.ege]), count)
 }
 
 //! whether every plane of layer l's routed triple has a rows core the one-pass rail can call
@@ -2171,7 +2096,7 @@ def moe_routed_rail_k(t : Model; var s : Session; l, k : int64) : bool {
     let c = t.config
     let dim = c.dim
     let nfe = c.n_ff_exp
-    let ege = dim * nfe
+    let ege = expert_elems(c)
     for (i in range64(dim)) {
         s.moe_acc[i] = 0.0
     }
@@ -2390,7 +2315,7 @@ def private moe_prefill_rare_rows_onepass(t : Model; var s : Session; l, lo, hi 
     let dim = c.dim
     let nfe = c.n_ff_exp
     let k = c.n_expert_used
-    let ege = dim * nfe
+    let ege = expert_elems(c)
     let f1 = expert_fmt(t, t.we1_fmt, l)
     let f2 = expert_fmt(t, t.we2_fmt, l)
     let f3 = expert_fmt(t, t.we3_fmt, l)
@@ -2544,7 +2469,7 @@ def private moe_prefill_rare_rows_passes(t : Model; var s : Session; l, lo, hi :
     let nfe = c.n_ff_exp
     let ne = c.n_expert
     let k = c.n_expert_used
-    let ege = dim * nfe
+    let ege = expert_elems(c)
     let f1 = fmt_at(t.we1_fmt, l)
     let f2 = fmt_at(t.we2_fmt, l)
     let f3 = fmt_at(t.we3_fmt, l)

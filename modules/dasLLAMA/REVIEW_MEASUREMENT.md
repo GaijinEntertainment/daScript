@@ -13,8 +13,10 @@ percentage of two such numbers, produced by the runs its sides came from - or an
 agreement reading (a cosine, a max-abs error) that a test's tolerance, or the bound an
 instrument's bounded-difference compare checks against, is set from, or that a change cites as
 evidence that a tolerance set for another cell, model or tier holds for the one it adds or alters.
-A test suite's pass, fail and skip tally, and the count of kernels a compare of two dumps of
-emitted kernel code finds identical or different, are not figures.
+A test suite's pass, fail and skip tally, the count of kernels a compare of two dumps of
+emitted kernel code finds identical or different, and a value inside the `provenance` object of a
+`performance/defaults/<class>.tune-defaults.json` profile or a tune sidecar, where it sits in that
+file, are not figures; the same value written into other text is one.
 
 A served-turn leg is prefill, decode, a batched decode row, or a whole served request end to end;
 the wall of one internal stage (one model component's forward pass, one decoder block) is not a
@@ -152,9 +154,9 @@ checked-in text, names its source and the report it appears in.**
 **A figure a third-party program (an exe or a script) produced, and no cell, script, or exe of this
 repository produced, written down in any checked-in text, names its recipe: that program, its
 version, the model, the command line, and any environment settings the command line does not
-show.** A citation of an architecture section that, together with the cited row's own `cmd` and
-`versions` fields, states that run's recipe in full - no placeholder in its exe, model or command
-line - names it.
+show.** A citation of an architecture section that, together with the `cmd` and `versions` fields
+of the cited `performance/records/<box>.json` row where there is one, states that run's recipe in
+full - no placeholder in its exe, model or command line - names it.
 
 **A figure an instrument outside the tree produced, written down in any checked-in text, names
 that instrument by its role, the model, the box and the flags it ran under; a private instrument
@@ -242,15 +244,17 @@ computed from one - or changes what such a number measures, ships that number's 
 same change: the same instrument's row on the same fixture and input size with exactly one flag or
 environment override changed; the same instrument's row on the same fixture, input size, flags and
 overrides at a named other commit, tagged `direction-grade`; the other arm of the race the number
-comes from; or a third-party row that cites the architecture section holding the part of its recipe
-its own `cmd` and `versions` fields do not carry.** A number with no alternate beside it cannot
+comes from; or a third-party row that cites the architecture section holding its recipe - all of
+it, less what the row's own `cmd` and `versions` fields carry when it is a
+`performance/records/<box>.json` row.** A number with no alternate beside it cannot
 be compared to anything.
 
-**A diff that records a third-party row lands, in the same change, every part of that row's
-recipe its own `cmd` and `versions` fields do not carry - the program, its version, the model, the
-command line, and any environment settings the command line does not show - in the
-`ARCHITECTURE_MEASUREMENT*.md` section that describes the instrument the row is compared with;
-where no section describes that instrument, the diff adds one.** The next entry re-runs the
+**A diff that records a third-party row lands, in the same change, in the
+`ARCHITECTURE_MEASUREMENT*.md` section that describes the instrument the row is compared with -
+adding that section where none exists - the row's recipe: the program, its version, the model, the
+command line, and any environment settings the command line does not show. A row of
+`performance/records/<box>.json` may leave out what its own `cmd` and `versions` fields carry; any
+other third-party figure lands the whole recipe.** The next entry re-runs the
 reference from the section, not from the earlier entry's prose.
 
 **A figure a cell, script or exe of this repository produced that is not a served-turn leg, whose
