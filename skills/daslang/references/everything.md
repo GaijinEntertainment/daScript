@@ -3343,7 +3343,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `moe_gpu_tier_arm` - Arm the recorded tier want so a GPU backend can install its hooks — call between `set_gpu_tier_want` and `load_model`.
 - `moe_gpu_weight_budget` - The armed backend's resident-weight VRAM budget in bytes (0 = no GPU backend armed).
 - `resident_prefill_allowed` - The pin as `set_resident_prefill_allowed` left it.
-- `set_gpu_home` - Move the tier onto the named home before it arms - the program's twin of `DASLLAMA_CUDA` (dasllama-server's `--gpu vulkan | cuda` key): every seat back to its default, the home's entry filling them.
+- `set_gpu_home` - Move the tier onto the named home before it arms - the program's twin of `DASLLAMA_CUDA` (dasllama-server's `--gpu vulkan | cuda` key): every seat back to its default, the shared installers and then the home's entry filling them.
 - `set_gpu_tier_want` - Record the GPU tier request the NEXT `moe_gpu_tier_arm`/`load_model` honors — the programmatic form of the core `DASLLAMA_GPU_*` knobs (an env var present overrides its field; the classifier/dense-arm knobs are env-only).
 - `set_resident_prefill_allowed` - Allow or pin out the resident prefill arm for HOST-CACHED sessions: more of them than the driver has K/V regions would strand device-only rows.
 

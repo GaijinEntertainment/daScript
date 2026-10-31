@@ -644,6 +644,7 @@ def public gpu_want_resident : bool => g_env_gpu.gpu_resident && g_gpu_resident_
 var private g_cuda_want_warned = false
 var private g_gpu_home = ""   //! the discrete home whose entry fills the tier's seats ("vulkan" | "cuda"); "" until first read
 var private g_gpu_home_installers : table<string; array<function<() : void>>>   //! a home's seat installers, by its name
+var private g_gpu_home_shared_installers : array<function<() : void>>   //! the installers of seats every home holds alike, run on every switch
 
 //! the environment's spelling of the home: "cuda" where DASLLAMA_CUDA asks for it in a build that carries the home, else "vulkan"
 def private gpu_home_default : string {
@@ -676,12 +677,26 @@ def public register_gpu_home(name : string; install : function<() : void>) {
     g_gpu_home_installers[name] |> push(install)
 }
 
+//! a driver whose seats read the same under every home registers its installer here at [init] and runs it there itself:
+//! `set_gpu_home_` resets every seat, then runs the shared installers before the named home's
+def public register_gpu_home_shared(install : function<() : void>) {
+    g_gpu_home_shared_installers |> push(install)
+}
+
+//! the shared installer taken back out (a test's, registered for one cell)
+def public unregister_gpu_home_shared(install : function<() : void>) {
+    let at = find_index(g_gpu_home_shared_installers, install)
+    if (at >= 0) {
+        g_gpu_home_shared_installers |> erase(at)
+    }
+}
+
 //! the homes this build carries - the names `set_gpu_home_` takes (the facade's `gpu_homes`)
 def gpu_homes_() : array<string> => [for (k in keys(g_gpu_home_installers)); k]
 
-//! Move the tier onto the named home before it arms: every seat back to its declared default, the home's entry filling them.
-//! False, said, for a home this build does not carry or a tier already armed on another home (the environment arms at [init]
-//! under DASLLAMA_GPU: spell the home there, DASLLAMA_CUDA, or leave the arm to the program)
+//! Move the tier onto the named home before it arms: every seat back to its declared default, the shared installers and
+//! then the home's entry filling them. False, said, for a home this build does not carry or a tier already armed on
+//! another home (the environment arms at [init] under DASLLAMA_GPU: spell the home there, DASLLAMA_CUDA, or arm from the program)
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def set_gpu_home_(name : string) : bool {
     return true if (name == gpu_home_())
@@ -696,6 +711,9 @@ def set_gpu_home_(name : string) : bool {
     gpu_home_reset_fn_slots()
     gpu_home_reset_flags()
     g_gpu_home = name
+    for (install in g_gpu_home_shared_installers) {
+        invoke(install)
+    }
     for (install in g_gpu_home_installers[name]) {
         invoke(install)
     }
@@ -2539,6 +2557,10 @@ def public set_moe_gpu_stream_source_fn(f : function<(woff : int64; fmt : int) :
 }
 
 def public moe_gpu_stream_source(woff : int64; fmt : int) : MoeGpuStreamSource => invoke(g_moe_gpu_stream_source, woff, fmt)
+
+//! both loader provider seats hold a registered provider, not their declared default (the home switch's witness)
+def public moe_gpu_loader_seats_installed() : bool =>
+    !(g_moe_gpu_slice_window == @@moe_gpu_no_slice_window) && !(g_moe_gpu_stream_source == @@moe_gpu_no_stream_source)
 
 //! One expert of a streamed stack as the expert cache holds it: the slot's quant and scale pointers for the host's reads, the
 //! slot's buffer handles and offsets for the DMA; `present` false where the expert has no slot (resident or ring)

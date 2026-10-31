@@ -1739,10 +1739,15 @@ def private mirror_rows_within_ceiling(row_bytes : int64) : int64 {
     return int64(bound) / max(row_bytes, 1l)
 }
 
+def private mirror_install_kv_room {
+    set_gpu_kv_room_hook(@@mirror_rows_within_ceiling)
+}
+
 [init]
 def private mirror_orphan_register {
     register_kv_release_listener(@@mirror_orphan)
-    set_gpu_kv_room_hook(@@mirror_rows_within_ceiling)
+    register_gpu_home_shared(@@mirror_install_kv_room)
+    mirror_install_kv_room()
     register_reload_prep(@@mirror_sigs_drop_all)
     register_reload_prep(@@mirror_ring_slack_reset)
     g_mirror_adopt = g_env_metal.mirror_adopt
@@ -3171,10 +3176,15 @@ def private metal_spin_window_register {
     register_reload_prep(@@metal_spin_window_reset)
 }
 
+def private metal_install_dn_room {
+    set_moe_gpu_dn_room_hook(@@dn_mirror_room)
+}
+
 [init]
 def private metal_weights_listener_register {
     register_weights_epoch_listener(@@metal_weights_drop)
-    set_moe_gpu_dn_room_hook(@@dn_mirror_room)
+    register_gpu_home_shared(@@metal_install_dn_room)
+    metal_install_dn_room()
 }
 
 [cold_path]   // fires only at load/map boundaries (bump_weights_epoch)

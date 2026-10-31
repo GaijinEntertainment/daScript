@@ -742,8 +742,8 @@ def gpu_homes() : array<string> {
 
 def set_gpu_home(name : string) : bool {
     //! Move the tier onto the named home before it arms - the program's twin of ``DASLLAMA_CUDA`` (dasllama-server's
-    //! ``--gpu vulkan | cuda`` key): every seat back to its default, the home's entry filling them. False, said in the
-    //! log, for a home this build does not carry or a tier that already armed on another home.
+    //! ``--gpu vulkan | cuda`` key): every seat back to its default, the shared installers and then the home's entry filling
+    //! them. False, said in the log, for a home this build does not carry or a tier that already armed on another home.
     return set_gpu_home_(name)
 }
 
