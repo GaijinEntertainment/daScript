@@ -109,6 +109,8 @@ struct private TilePerm {
     pf : int = 0          // software prefetch distance in bytes along the gemv's weight stream (0 = none):
                           // one llvm.prefetch per weight line, pf bytes ahead - memory-level parallelism at
                           // many lanes, where the hardware prefetcher alone leaves DRAM bandwidth unused
+    accs : int = 0        // the row-major block loop's accumulator sets abreast (0 = the shipped pick: four in the
+                          // GEMV, two in the x64 tile, one in the NEON tile); the tile takes at most two
 }
 
 def private parse_perm(gc : LlvmCodeCtx) : TilePerm {
@@ -133,6 +135,8 @@ def private parse_perm(gc : LlvmCodeCtx) : TilePerm {
     if (lv is tInt) { p.latch = lv as tInt }
     let grv = find_arg(gc.ann.arguments, "grid")
     if (grv is tString) { p.grid = grv as tString }
+    let av = find_arg(gc.ann.arguments, "accs")
+    if (av is tInt) { p.accs = av as tInt }
     let pfv = find_arg(gc.ann.arguments, "pf")
     if (pfv is tInt) { p.pf = pfv as tInt }
     return p
@@ -308,6 +312,7 @@ struct private TileEmit {
     rm_wg : LLVMOpaqueValue? [4]        // the row-lane form: the rows' quant plane bases (row i of the vector)
     rm_sg : LLVMOpaqueValue? [4]        // ... and their scale plane bases
     rm_rpv : int                        // ... rows a vector (2 at width 256, 4 at 512; 0 = the form is off)
+    rm_acc_sets : int                   // the perm's accumulator sets abreast in the row-major block loop (0 = the shipped pick)
     sign_code_pm1_g : LLVMOpaqueValue?   // the row-group grid decode: ksigns code -> eight +-1 bytes, [128 x i64], parity bit folded in
     gridRows : bool                      // set while the row-group grid decode emits: the column dword read (a panel-form win) reverts to byte loads
     vbmi : bool                          // grid = "vbmi": the grid gemv decodes through the VBMI symbol lattice (row form)
@@ -2065,6 +2070,7 @@ def private emit_grid_rows_blk(var te : TileEmit; var wbP, xb : LLVMOpaqueValue?
 // One 256-weight SUPERBLOCK, IQ4_XS/iq3s grp<mr> form (te.kq = 44/33): mx4's LUT decode (44)
 // or the byte-expanded signed panel (33; the gemv gathers it per superblock, the tile gets the
 // runtime unpack) — dot_lane's sign-trick lattice, k4's fold with no min term.
+[arch(at = "../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-planes")]
 def private emit_block_iq4xs(var te : TileEmit; var sbi : LLVMOpaqueValue?; var f : LLVMOpaqueValue? [8]; tokBase, tokCount : int) {   // nolint:STYLE037,STYLE038 — one register-coupled superblock loop nest (the kqv2 emitters' shape)
     let b = te.builder
     let rq = te.rq
@@ -2073,6 +2079,8 @@ def private emit_block_iq4xs(var te : TileEmit; var sbi : LLVMOpaqueValue?; var 
     let panel = kq_is_grid(te.kq)   // iq3s/iq3xxs/iq2s/iq2xs/iq2xxs: the byte-expanded signed panel replaces the nibble+LUT decode
     let iq2 = te.kq == 23 || te.kq == 24     // iq2s/iq2xs: per-16 UNSIGNED strips - lo/hi halves keep split accumulators
     let nl = te.kq == 45                     // iq4nl: the 44 LUT decode with q40's PER-BLOCK f16 d fold (no sub-scales, no min term)
+    let nv4 = te.kq == 49
+    let blockScale = nl || nv4
     let gather = panel && te.gridPanel != null   // gemv mode: gather this superblock off the packed planes first
     // the decode shape composes row GROUPS straight from the grid words (emit_grid_rows_blk) - no panel
     let pairs = gather && tokCount == 1 && grid_rows_path(te)
@@ -2091,26 +2099,27 @@ def private emit_block_iq4xs(var te : TileEmit; var sbi : LLVMOpaqueValue?; var 
             prefetch_block(te, wb, mr * int(IQ4XS_QSB))
         }
     }
-    var sb = LLVMBuildMul(b, sbi, te.types->ConstI64(uint64(mr * (nl ? 16 : 20))), "sb")
+    var sb = LLVMBuildMul(b, sbi, te.types->ConstI64(uint64(mr * (blockScale ? 16 : 20))), "sb")
     var xb = LLVMBuildMul(b, sbi, te.types->ConstI64(0x100ul), "xb")
     var vri8 = LLVMVectorType(te.types.t_int8, uint(te.rv))
     var dv : LLVMOpaqueValue? [2]
-    if (!nl) {   // one superblock d per row lane; iq4nl loads its per-block d inside the walk
+    if (!blockScale) {
         for (qd in range(rq)) {
             dv[qd] = load_f16_vec_at(te, te.sg, LLVMBuildAdd(b, sb, te.types->ConstI64(uint64(2 * (qd * te.rv))), ""), "d{qd}")
         }
     }
-    var d8nl : LLVMOpaqueValue? [4]
-    if (nl) {   // hoist the per-token activation scales - the per-block fold consumes them 8x
+    var d8tok : LLVMOpaqueValue? [4]
+    if (blockScale) {
         for (i in range(tokCount)) {
             let tk = tokBase + i
             var qp0 = LLVMBuildGEP2(b, te.types.t_float, te.xs[tk], sbi, "qp{tk}")
-            d8nl[i] = splat_f32(te, LLVMBuildLoad2Aligned(b, te.types.t_float, qp0, 4u, "d8{tk}"), "d8v{tk}")
+            d8tok[i] = splat_f32(te, LLVMBuildLoad2Aligned(b, te.types.t_float, qp0, 4u, "d8{tk}"), "d8v{tk}")
         }
     }
-    var iacc : LLVMOpaqueValue? [8]
+    var iacc, fsb : LLVMOpaqueValue? [8]
     for (i in range(tokCount * rq)) {
         iacc[i] = LLVMConstNull(te.vni32)
+        fsb[i] = LLVMConstNull(te.vnf32)
     }
     for (blk in range(8)) {
         var xoff0 = LLVMBuildAdd(b, xb, te.types->ConstI64(uint64(blk * 32)), "")
@@ -2159,7 +2168,7 @@ def private emit_block_iq4xs(var te : TileEmit; var sbi : LLVMOpaqueValue?; var 
                 var ulo = abs_w(te, wlo, "ulo{blk}_{j * rq + qd}")
                 var uhi = abs_w(te, whi, "uhi{blk}_{j * rq + qd}")
                 for (i in range(tokCount)) {
-                    if (iq2) {
+                    if (iq2 || nv4) {
                         a[i * rq + qd] = dot_lane(te, a[i * rq + qd], wlo, ulo, xv0[i], j)
                         a1[i * rq + qd] = dot_lane(te, a1[i * rq + qd], whi, uhi, xv1[i], j)
                     } else {
@@ -2176,8 +2185,22 @@ def private emit_block_iq4xs(var te : TileEmit; var sbi : LLVMOpaqueValue?; var 
             }
             for (i in range(tokCount)) {
                 for (qd in range(rq)) {
-                    var dsn = LLVMBuildFMul(b, dblk[qd], d8nl[i], "dsn{tokBase + i}_{blk}_{qd}")
+                    var dsn = LLVMBuildFMul(b, dblk[qd], d8tok[i], "dsn{tokBase + i}_{blk}_{qd}")
                     f[i * rq + qd] = fold_fma(te, LLVMBuildSIToFP(b, a[i * rq + qd], te.vnf32, ""), dsn, f[i * rq + qd], "f{tokBase + i}_{blk}_{qd}n")
+                }
+            }
+        } elif (nv4) {
+            var slo, shi : LLVMOpaqueValue? [2]
+            for (qd in range(rq)) {
+                var pp = LLVMBuildGEP2(b, te.types.t_int8, te.sg, LLVMBuildAdd(b, sb, te.types->ConstI64(uint64(blk * 2 * mr + 2 * (qd * te.rv))), ""), "")
+                var pair = LLVMBuildZExt(b, LLVMBuildLoad2Aligned(b, te.vni16, pp, 2u, ""), te.vni32, "sp{blk}_{qd}")
+                slo[qd] = ue4m3_half_ir(te, LLVMBuildAnd(b, pair, splat_i32n(te, 255), ""), "slo{blk}_{qd}")
+                shi[qd] = ue4m3_half_ir(te, LLVMBuildLShr(b, pair, splat_i32n(te, 8), ""), "shi{blk}_{qd}")
+            }
+            for (i in range(tokCount)) {
+                for (qd in range(rq)) {
+                    fsb[i * rq + qd] = fold_fma(te, LLVMBuildSIToFP(b, a[i * rq + qd], te.vnf32, ""), slo[qd], fsb[i * rq + qd], "fsb{tokBase + i}_{blk}_{qd}lo")
+                    fsb[i * rq + qd] = fold_fma(te, LLVMBuildSIToFP(b, a1[i * rq + qd], te.vnf32, ""), shi[qd], fsb[i * rq + qd], "fsb{tokBase + i}_{blk}_{qd}hi")
                 }
             }
         } else {
@@ -2205,8 +2228,15 @@ def private emit_block_iq4xs(var te : TileEmit; var sbi : LLVMOpaqueValue?; var 
             }
         }
     }
-    if (nl) {
-        return   // the per-block fold already landed everything in f
+    if (nv4) {
+        for (i in range(tokCount)) {
+            for (qd in range(rq)) {
+                f[i * rq + qd] = fold_fma(te, fsb[i * rq + qd], d8tok[i], f[i * rq + qd], "f{tokBase + i}_{qd}sb")
+            }
+        }
+    }
+    if (blockScale) {
+        return
     }
     for (i in range(tokCount)) {
         let tk = tokBase + i
@@ -2403,6 +2433,7 @@ def private setup_tile_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePer
     te.types = gc.jit.types
     te.interleave = rt.interleave
     te.dotKind = dot_kind(p.dotPrim)
+    te.rm_acc_sets = p.accs
     // mx4/kq/q51/iq4nl32 planes are kgroup-independent — under an smmla perm they ride the plain sdot lattice
     let nibblePlane = te.mx4 || te.q51 || te.q5032 || te.iq4nl32 || te.kq != 0
     if (nibblePlane && te.dotKind == DOT_SMMLA) {
@@ -3316,6 +3347,20 @@ def private rm_e8m0_at(var te : TileEmit; var base, off : LLVMOpaqueValue?; name
     return LLVMBuildBitCast(b, bits, te.types.t_float, name)
 }
 
+//! `ue4m3_half_f32` in IR, byte for byte - a byte past 127 included: the value masks bit 7, the 0x7F test reads the raw byte as the reference does
+def private ue4m3_half_ir(var te : TileEmit; var v : LLVMOpaqueValue?; name : string) : LLVMOpaqueValue? {
+    let b = te.builder
+    var v7 = LLVMBuildAnd(b, v, splat_i32n(te, 127), "")
+    var norm = LLVMBuildBitCast(b, LLVMBuildAdd(b, LLVMBuildShl(b, v7, splat_i32n(te, 20), ""), splat_i32n(te, int(0x3B800000)), ""), te.vnf32, "")
+    var two = splat_f32(te, LLVMConstReal(te.types.t_float, 2.0lf), "")
+    var mhalf = splat_f32(te, LLVMConstReal(te.types.t_float, -0.0078125lf), "")
+    var sub = fold_fma(te, norm, two, mhalf, "")
+    var eZero = LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntULT, v7, splat_i32n(te, 8), "")
+    var val = LLVMBuildSelect(b, eZero, sub, norm, "")
+    var isNan = LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntEQ, v, splat_i32n(te, 127), "")
+    return LLVMBuildSelect(b, isNan, LLVMConstNull(te.vnf32), val, name)
+}
+
 def private rm_xs_at(var te : TileEmit; var bi : LLVMOpaqueValue?; t : int; name : string) : LLVMOpaqueValue? {
     let b = te.builder
     var qp = LLVMBuildGEP2(b, te.types.t_float, te.xs[t], bi, "")
@@ -3344,10 +3389,76 @@ def private rm_x_vec(var te : TileEmit; var bi : LLVMOpaqueValue?; nblk, t : int
     return rm_widen_block(te, x32, "x64_{t}")
 }
 
+let private RM_GEMV_ACC_SETS = 4
+let private RM_TILE_ACC_SETS = 2
+
+struct private RmLoopExit {
+    bi : LLVMOpaqueValue?
+    f : LLVMOpaqueValue? [16]       //! the accumulator sets there, [set x nt + token]
+}
+
+//! blocks [bi0, biEnd), `copies` body copies an iteration, each on its own accumulator set - biEnd a multiple of `copies` x `bpv` past bi0; leaves the builder at the loop's exit block
+def private rm_block_loop(gc : LlvmCodeCtx; var te : TileEmit; var bi0, biEnd : LLVMOpaqueValue?; bpv, copies, nt : int; paired : bool;
+                          var fIn : LLVMOpaqueValue? [16]; tag : string;
+                          body : block<(var bi : LLVMOpaqueValue?; nblk : int; paired : bool; var f : LLVMOpaqueValue? [4]) : void>) : RmLoopExit {
+    let b = gc.jit.builder
+    let i64 = te.types.t_int64
+    var pre = LLVMGetInsertBlock(b)
+    var head = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "{tag}head")
+    var bbody = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "{tag}body")
+    var exit = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "{tag}exit")
+    LLVMBuildBr(b, head)
+    LLVMPositionBuilderAtEnd(b, head)
+    var biPhi = LLVMBuildPhi(b, i64, "{tag}bi")
+    var biEntryVals <- [bi0]
+    var biEntryBlocks <- [pre]
+    LLVMAddIncoming(biPhi, biEntryVals, biEntryBlocks)
+    var fPhi : LLVMOpaqueValue? [16]
+    for (k in range(copies * nt)) {
+        fPhi[k] = LLVMBuildPhi(b, te.vnf32, "{tag}f{k}")
+        var fEntryVals <- [fIn[k]]
+        var fEntryBlocks <- [pre]
+        LLVMAddIncoming(fPhi[k], fEntryVals, fEntryBlocks)
+    }
+    var more = LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntSLT, biPhi, biEnd, "{tag}more")
+    LLVMBuildCondBr(b, more, bbody, exit)
+    LLVMPositionBuilderAtEnd(b, bbody)
+    var fNext : LLVMOpaqueValue? [16]
+    for (u in range(copies)) {
+        var fcur : LLVMOpaqueValue? [4]
+        for (t in range(nt)) {
+            fcur[t] = fPhi[u * nt + t]
+        }
+        var bu = u == 0 ? biPhi : LLVMBuildAdd(b, biPhi, te.types->ConstI64(uint64(u * bpv)), "")
+        invoke(body, bu, bpv, paired, fcur)
+        for (t in range(nt)) {
+            fNext[u * nt + t] = fcur[t]
+        }
+    }
+    var biNext = LLVMBuildAdd(b, biPhi, te.types->ConstI64(uint64(copies * bpv)), "{tag}binext")
+    var bodyEnd = LLVMGetInsertBlock(b)
+    LLVMBuildBr(b, head)
+    var biLoopVals <- [biNext]
+    var biLoopBlocks <- [bodyEnd]
+    LLVMAddIncoming(biPhi, biLoopVals, biLoopBlocks)
+    for (k in range(copies * nt)) {
+        var fLoopVals <- [fNext[k]]
+        var fLoopBlocks <- [bodyEnd]
+        LLVMAddIncoming(fPhi[k], fLoopVals, fLoopBlocks)
+    }
+    LLVMPositionBuilderAtEnd(b, exit)
+    var r = RmLoopExit(bi = biPhi)
+    for (k in range(copies * nt)) {
+        r.f[k] = fPhi[k]
+    }
+    return r
+}
+
 //! the row loop of the walk: rows [r0, r1) `rstep` a group - the row-lane form (`paired`: a 128-bit lane a row's half
 //! block, the rows' plane bases in te.rm_wg / te.rm_sg) or a row alone (`bpv` blocks a vector) - the blocks under `body`,
 //! one ordered sum a row and token; leaves the builder at the loop's exit block
-def private rm_rows_loop(var gc : LlvmCodeCtx; var te : TileEmit; var r0, r1 : LLVMOpaqueValue?; rstep, bpv, nt : int; tile : bool; // nolint:STYLE038 - the row loop, the block loop and their phis are one walk
+[arch(at = "../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena")]
+def private rm_rows_loop(var gc : LlvmCodeCtx; var te : TileEmit; var r0, r1 : LLVMOpaqueValue?; rstep, bpv, nt : int; tile : bool; // nolint:STYLE037,STYLE038 - the row loop, the block loops and their folds are one walk
                          var rev, yp, wp, sp, qrow, srowb, nb : LLVMOpaqueValue?; paired : bool;
                          body : block<(var bi : LLVMOpaqueValue?; nblk : int; paired : bool; var f : LLVMOpaqueValue? [4]) : void>) {
     let b = gc.jit.builder
@@ -3355,10 +3466,6 @@ def private rm_rows_loop(var gc : LlvmCodeCtx; var te : TileEmit; var r0, r1 : L
     let tag = paired ? "p" : "s"
     var rhead = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "{tag}rhead")
     var rbody = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "{tag}rbody")
-    var bhead = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "{tag}bhead")
-    var bbody = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "{tag}bbody")
-    var btail = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "{tag}btail")
-    var bfold = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "{tag}bfold")
     var rdone = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "{tag}rdone")
     var pre = LLVMGetInsertBlock(b)
     var any = LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntSLT, r0, r1, "{tag}any")
@@ -3383,68 +3490,52 @@ def private rm_rows_loop(var gc : LlvmCodeCtx; var te : TileEmit; var r0, r1 : L
             te.rm_sg[i] = LLVMBuildGEP2(b, te.types.t_int8, sp, LLVMBuildMul(b, ri, srowb, ""), "srow{i}")
         }
     }
-    LLVMBuildBr(b, bhead)
-
-    LLVMPositionBuilderAtEnd(b, bhead)
-    var biPhi = LLVMBuildPhi(b, i64, "bi")
-    var fPhi : LLVMOpaqueValue? [4]
-    for (t in range(nt)) {
-        fPhi[t] = LLVMBuildPhi(b, te.vnf32, "f{t}")
+    let picked = nt == 1 ? RM_GEMV_ACC_SETS : (te.dotKind == DOT_SDOT ? 1 : RM_TILE_ACC_SETS)
+    let asked = te.rm_acc_sets
+    let nacc = asked <= 0 ? picked : (nt == 1 || asked < RM_TILE_ACC_SETS ? asked : RM_TILE_ACC_SETS)
+    var fZero : LLVMOpaqueValue? [16]
+    for (k in range(nacc * nt)) {
+        fZero[k] = LLVMConstNull(te.vnf32)
     }
-    var bi0 = LLVMConstNull(i64)
-    var biEntryVals <- [bi0]
-    var biEntryBlocks <- [rbody]
-    LLVMAddIncoming(biPhi, biEntryVals, biEntryBlocks)
-    for (t in range(nt)) {
-        var f0 = LLVMConstNull(te.vnf32)
-        var fEntryVals <- [f0]
-        var fEntryBlocks <- [rbody]
-        LLVMAddIncoming(fPhi[t], fEntryVals, fEntryBlocks)
+    let ustep = bpv * nacc
+    var nbU = ustep == 1 ? nb : LLVMBuildSub(b, nb, LLVMBuildSRem(b, nb, te.types->ConstI64(uint64(ustep)), ""), "nbu")
+    var e1 = rm_block_loop(gc, te, LLVMConstNull(i64), nbU, bpv, nacc, nt, paired, fZero, "{tag}u", body)
+    var fSets = e1.f
+    var curBi = e1.bi
+    if (nacc > 1) {
+        var nbFull = bpv == 1 ? nb : LLVMBuildSub(b, nb, LLVMBuildSRem(b, nb, te.types->ConstI64(uint64(bpv)), ""), "nbfull")
+        var fIn0 : LLVMOpaqueValue? [16]
+        for (t in range(nt)) {
+            fIn0[t] = e1.f[t]
+        }
+        var e2 = rm_block_loop(gc, te, e1.bi, nbFull, bpv, 1, nt, paired, fIn0, "{tag}r", body)
+        for (t in range(nt)) {
+            fSets[t] = e2.f[t]
+        }
+        curBi = e2.bi
     }
-    var bstep = te.types->ConstI64(uint64(bpv))
-    var nbFull = bpv == 1 ? nb : LLVMBuildSub(b, nb, LLVMBuildSRem(b, nb, bstep, ""), "nbfull")
-    var more = LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntSLT, biPhi, nbFull, "more")
-    LLVMBuildCondBr(b, more, bbody, btail)
-
-    LLVMPositionBuilderAtEnd(b, bbody)
-    var fcur : LLVMOpaqueValue? [4]
-    for (t in range(nt)) {
-        fcur[t] = fPhi[t]
-    }
-    invoke(body, biPhi, bpv, paired, fcur)
-    var biNext = LLVMBuildAdd(b, biPhi, bstep, "binext")
-    var bodyEnd = LLVMGetInsertBlock(b)
-    LLVMBuildBr(b, bhead)
-    var biLoopVals <- [biNext]
-    var biLoopBlocks <- [bodyEnd]
-    LLVMAddIncoming(biPhi, biLoopVals, biLoopBlocks)
-    for (t in range(nt)) {
-        var fLoopVals <- [fcur[t]]
-        var fLoopBlocks <- [bodyEnd]
-        LLVMAddIncoming(fPhi[t], fLoopVals, fLoopBlocks)
-    }
-
-    LLVMPositionBuilderAtEnd(b, btail)
+    var btail = LLVMGetInsertBlock(b)
+    var bfold = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "{tag}bfold")
     var fTail : LLVMOpaqueValue? [4]
     for (t in range(nt)) {
-        fTail[t] = fPhi[t]
+        fTail[t] = fSets[t]
     }
     if (bpv == 2) {
-        var tailOn = LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntSLT, biPhi, nb, "tail")
+        var tailOn = LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntSLT, curBi, nb, "tail")
         var tbody = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "{tag}tbody")
         LLVMBuildCondBr(b, tailOn, tbody, bfold)
         LLVMPositionBuilderAtEnd(b, tbody)
         var fT : LLVMOpaqueValue? [4]
         for (t in range(nt)) {
-            fT[t] = fPhi[t]
+            fT[t] = fSets[t]
         }
-        invoke(body, biPhi, 1, paired, fT)
+        invoke(body, curBi, 1, paired, fT)
         var tailEnd = LLVMGetInsertBlock(b)
         LLVMBuildBr(b, bfold)
         LLVMPositionBuilderAtEnd(b, bfold)
         for (t in range(nt)) {
             var fFold = LLVMBuildPhi(b, te.vnf32, "ffold{t}")
-            var foldVals <- [fPhi[t], fT[t]]
+            var foldVals <- [fSets[t], fT[t]]
             var foldBlocks <- [btail, tailEnd]
             LLVMAddIncoming(fFold, foldVals, foldBlocks)
             fTail[t] = fFold
@@ -3452,6 +3543,11 @@ def private rm_rows_loop(var gc : LlvmCodeCtx; var te : TileEmit; var r0, r1 : L
     } else {
         LLVMBuildBr(b, bfold)
         LLVMPositionBuilderAtEnd(b, bfold)
+    }
+    for (u in range(1, nacc)) {
+        for (t in range(nt)) {
+            fTail[t] = LLVMBuildFAdd(b, fTail[t], fSets[u * nt + t], "fsum{t}_{u}")
+        }
     }
 
     for (t in range(nt)) {
@@ -4081,10 +4177,12 @@ def private rm_kq_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE03
     let iq4nl = fmt == KqFmt.iq4nl
     let iq4xs = fmt == KqFmt.iq4xs
     let iq3s4 = fmt == KqFmt.iq3s4
+    let nv4 = fmt == KqFmt.nv4
     let grid = fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs
-    return false if (!(k4 || k5 || k6 || k3 || k2 || q40 || iq4nl || iq4xs || iq3s4 || grid))
-    let lut = q40 || iq4nl || iq4xs || iq3s4
+    return false if (!(k4 || k5 || k6 || k3 || k2 || q40 || iq4nl || iq4xs || iq3s4 || nv4 || grid))
+    let lut = q40 || iq4nl || iq4xs || iq3s4 || nv4
     let signedW = lut || grid             //! LUT and grid weights are signed bytes: the sign trick on the u8 x i8 dots
+    let perStripFloat = nv4
     let twoWord = iq4xs || iq3s4 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq2xxs   //! the codebook row: f16 d, eight 4-bit fields
     let fieldSc = twoWord && !iq4xs       //! the field's sub-scale is 1 + 2 x field
     let strips16 = fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs   //! sixteen per-16 strip scales after the f16 d
@@ -4111,8 +4209,11 @@ def private rm_kq_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE03
         for (t in range(nt)) {
             xsv[t] = rm_xs_at(te, sbv, t, "xs{t}")
         }
-        var dsc, dmn, w0, w1 : LLVMOpaqueValue?
-        if (twoWord) {
+        var dsc, dmn, w0, w1, site : LLVMOpaqueValue?
+        if (nv4) {
+            var soff16 = LLVMBuildAdd(b, soff, te.types->ConstI64(16ul), "")
+            site = LLVMBuildBitCast(b, rm_u32_at(te, te.sg, soff16, ""), te.types.t_float, "site")
+        } elif (twoWord) {
             w0 = rm_u32_at(te, te.sg, soff, "w0")
             var soff4 = LLVMBuildAdd(b, soff, te.types->ConstI64(4ul), "")
             w1 = rm_u32_at(te, te.sg, soff4, "w1")
@@ -4175,6 +4276,22 @@ def private rm_kq_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE03
         let loMask <- [for (i in range(16)); i]
         let hiMask <- [for (i in range(16)); 16 + i]
         let cat <- [for (i in range(64)); i]
+        var ssc : LLVMOpaqueValue? [16]   // nv4, [token x 4 + vector]: the sixteen strip scales at half x site x the token's scale, rv lanes a vector
+        if (nv4) {
+            var ue16 = load_vec(te, te.v16i8, te.sg, soff, "ue16")
+            var siteXsv : LLVMOpaqueValue? [4]
+            for (t in range(nt)) {
+                siteXsv[t] = splat_f32(te, LLVMBuildFMul(b, site, xsv[t], ""), "sxs{t}")
+            }
+            for (k in range(16 / te.rv)) {
+                var inscope sub_mask <- [for (i in range(te.rv)); k * te.rv + i]
+                var sub = LLVMBuildShuffleVector(b, te.types, ue16, ue16, sub_mask, "")
+                var sv = ue4m3_half_ir(te, LLVMBuildZExt(b, sub, te.vni32, ""), "ue{k}")
+                for (t in range(nt)) {
+                    ssc[t * 4 + k] = LLVMBuildFMul(b, sv, siteXsv[t], "ssc{t}_{k}")
+                }
+            }
+        }
         var j = 0
         while (j < 8) {
             // the vector's blocks' codes in k order and their sub-scales (the low strip or whole block, and the high strip)
@@ -4184,7 +4301,7 @@ def private rm_kq_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE03
                 var c : LLVMOpaqueValue?
                 if (grid) {
                     c = rm_grid_block(te, fmt, qoff, jj, "gw{jj}")
-                } elif (k4 || k5 || q40 || iq4nl || iq4xs || iq3s4) {
+                } elif (k4 || k5 || q40 || iq4nl || iq4xs || iq3s4 || nv4) {
                     var noff = LLVMBuildAdd(b, qoff, te.types->ConstI64(uint64(16 * jj)), "")
                     c = rm_nib_codes(te, noff, "nib{jj}")
                     if (k5) {
@@ -4248,6 +4365,9 @@ def private rm_kq_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE03
                     var o1 = LLVMBuildAdd(b, soff, te.types->ConstI64(uint64(4 + 2 * jj + 1)), "")
                     sc0[tb] = rm_u8_at(te, te.sg, o0, "sc{jj}a")
                     sc1[tb] = rm_u8_at(te, te.sg, o1, "sc{jj}b")
+                } elif (nv4) {
+                    sc0[tb] = null
+                    sc1[tb] = null
                 } else {   // q40, iq4nl: the block's own f16 d
                     var o = LLVMBuildAdd(b, soff, te.types->ConstI64(uint64(2 * jj)), "")
                     sc0[tb] = rm_f16_at(te, te.sg, o, "bd{jj}")
@@ -4312,6 +4432,19 @@ def private rm_kq_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE03
                         var dqv = splat_to(te, te.vnf32, dq, "dq")
                         var af = LLVMBuildSIToFP(b, a, te.vnf32, "af")
                         f[t] = fold_fma(te, af, dqv, f[t], "fblk{t}")
+                    } elif (perStripFloat) {
+                        var zero4 = LLVMConstNull(te.vni32)
+                        var args0 <- [zero4, wlo, x0]
+                        var a0 = LLVMBuildCall2(b, te.sdot_ty, te.sdot_decl, args0, "a0")
+                        var args1 <- [zero4, whi, x1]
+                        var a1 = LLVMBuildCall2(b, te.sdot_ty, te.sdot_decl, args1, "a1")
+                        var ssv = ssc[t * 4 + (2 * j) / te.rv]
+                        var inscope m0 <- [for (_i in range(te.rv)); (2 * j) % te.rv]
+                        var inscope m1 <- [for (_i in range(te.rv)); (2 * j) % te.rv + 1]
+                        var dq0 = LLVMBuildShuffleVector(b, te.types, ssv, ssv, m0, "dq0")
+                        var dq1 = LLVMBuildShuffleVector(b, te.types, ssv, ssv, m1, "dq1")
+                        f[t] = fold_fma(te, LLVMBuildSIToFP(b, a0, te.vnf32, ""), dq0, f[t], "flo{t}")
+                        f[t] = fold_fma(te, LLVMBuildSIToFP(b, a1, te.vnf32, ""), dq1, f[t], "fhi{t}")
                     } else {
                         var scaled = rm_dot_strips_neon(te, wlo, whi, x0, x1, sc0[0], sc1[0])
                         dot_sum[t] = LLVMBuildAdd(b, dot_sum[t], scaled, "isum{t}")
@@ -4325,6 +4458,17 @@ def private rm_kq_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE03
                         var dqv = rm_scale_lanes(te, dq0, dq1, blocks_per_vec, "dq")
                         var af = LLVMBuildSIToFP(b, a, te.vnf32, "af")
                         f[t] = fold_fma(te, af, dqv, f[t], "fblk{t}")
+                    } elif (perStripFloat) {
+                        var a = rm_dot_vec(te, wv, xv)
+                        var sidx : int [4]
+                        for (q in range(4)) {
+                            sidx[q] = blocks_per_vec == 2 ? 2 * j + q : 2 * j + q / 2
+                        }
+                        var inscope qmask <- [for (i in range(te.rv)); sidx[i / (te.rv / 4)] % te.rv]
+                        var ssv = ssc[t * 4 + (2 * j) / te.rv]
+                        var dqv = LLVMBuildShuffleVector(b, te.types, ssv, ssv, qmask, "dq")
+                        var af = LLVMBuildSIToFP(b, a, te.vnf32, "af")
+                        f[t] = fold_fma(te, af, dqv, f[t], "fblk{t}")
                     } else {
                         var scaled = rm_dot_strips(te, wv, xv, q0, q1, q2, q3, signedW)
                         dot_sum[t] = LLVMBuildAdd(b, dot_sum[t], scaled, "isum{t}")
@@ -4333,7 +4477,7 @@ def private rm_kq_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE03
             }
             j += blocks_per_vec
         }
-        if (!perBlockD) {
+        if (!perBlockD && !perStripFloat) {
             for (t in range(nt)) {
                 var dq = LLVMBuildFMul(b, dsc, xsv[t], "dq")
                 var dqv = splat_to(te, te.vnf32, dq, "dqv")
@@ -4777,6 +4921,15 @@ def private panel_scales(var te : TileEmit; fmt : int; var sb : LLVMOpaqueValue?
         s[1] = dd
         o[0] = null
         o[1] = null
+    } elif (fmt == 49) {   //! the block's two UE4M3 strip codes a row, the rows' pairs interleaved: strip h of row r is byte 2r + h
+        var v32i8 = LLVMVectorType(te.types.t_int8, 32u)
+        var pairs = LLVMBuildLoad2Aligned(b, v32i8, panel_gep8(te, sb, blk * 32), 1u, "ue")
+        for (h in range(2)) {
+            var inscope mask <- [for (r in range(16)); 2 * r + h]
+            var codes = LLVMBuildZExt(b, LLVMBuildShuffleVector(b, te.types, pairs, pairs, mask, ""), te.vni32, "")
+            s[h] = ue4m3_half_ir(te, codes, "s{h}")
+            o[h] = null
+        }
     } elif (fmt == 2) {
         var dd = panel_f16_row(te, sb, 256, "dd")
         var dm = panel_f16_row(te, sb, 288, "dm")
@@ -4969,7 +5122,7 @@ def private panel_gen_impl(var gc : LlvmCodeCtx; fmt, q8ScaleBytes : int) : bool
         if (te.pshuf_decl == null) return false
         var b2Types <- [te.vwi8, te.vwi8]
         te.pshuf_ty = LLVMFunctionType(te.vwi8, b2Types)
-        te.lut = codebook_lut(te, fmt == 35 ? iq3s4_lut() : iq4nl_lut(), 4)
+        te.lut = codebook_lut(te, fmt == 35 ? iq3s4_lut() : (fmt == 49 ? mx4_lut() : iq4nl_lut()), 4)
     }
     let signed = q8 || kq_is_grid(fmt) || kq_is_lut(fmt)
     let ioff = panel_ioff(fmt)
@@ -5133,7 +5286,7 @@ def public register_dasllama_gemm_generators {
         register_llvm_code_generator("dasllama_gemm_gen::{f}_rm_gemv", @@rm_b32_gemv_gen)
         register_llvm_code_generator("dasllama_gemm_gen::{f}_rm_tile4", @@rm_b32_tile4_gen)
     }
-    for (f in [KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.k2, KqFmt.q40, KqFmt.iq4nl, KqFmt.iq4xs, KqFmt.iq3s4,
+    for (f in [KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.k2, KqFmt.q40, KqFmt.iq4nl, KqFmt.iq4xs, KqFmt.iq3s4, KqFmt.nv4,
                KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
         register_llvm_code_generator("dasllama_gemm_gen::{f}_rm_gemv", @@rm_kq_gemv_gen)
         register_llvm_code_generator("dasllama_gemm_gen::{f}_rm_tile4", @@rm_kq_tile4_gen)

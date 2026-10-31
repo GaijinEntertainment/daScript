@@ -100,7 +100,8 @@ a panic and never a silent zero.
 ## Parsing, writing, embedding
 
 - `read_json(text, var error)` takes a `string` or an `array<uint8>`; `write_json(js)` serializes,
-  a null pointer as `"null"`. `\uXXXX` escapes decode to UTF-8, a surrogate pair folding into one
+  a null pointer as `"null"`; `write_json(js, true)` prints every object's keys sorted, for a file that is
+  diffed and merged. `\uXXXX` escapes decode to UTF-8, a surrogate pair folding into one
   code point; an unpaired surrogate becomes U+FFFD.
 - `try_fixing_broken_json(text)` repairs model-generated output before `read_json` - concatenation
   (`"a" + "b"`), trailing commas, double-quoted nesting.

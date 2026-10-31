@@ -175,13 +175,13 @@ def test_kq_registries(t : T?) {
             let q8 <- kq_registries(KqTag_q8())
             t |> equal(length(q8.tile), 0, "control: q8 has no kq family (its tile family is the q8q8 one)")
         }
-        t |> run("kq_registries: every format but q8 and nv4 carries rm rows, one witness row per perm, keyed alike, the reference row first") @(t : T?) {
+        t |> run("kq_registries: every format but q8 carries rm rows, one witness row per perm, keyed alike, the reference row first") @(t : T?) {
             var fmts <- kq_family_fmts() $(regs : KqRegistries) => !empty(regs.rm_gemv)
             var members = 0
             for (_kf in type<KqFmt>) {
                 members++
             }
-            t |> equal(length(fmts), members - 2, "every format but q8 (its own rows type) and nv4 (no rm family) carries rm rows ({fmts})")
+            t |> equal(length(fmts), members - 1, "every format but q8 (its own rows type) carries rm rows ({fmts})")
             for (kf in fmts) {
                 var r <- kq_registries_of(kf)
                 t |> equal(length(r.rm_witness), length(r.rm_gemv), "{kf}: a witness row per rm perm")

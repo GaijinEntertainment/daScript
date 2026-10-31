@@ -8,8 +8,10 @@ options _dasllama_internal = true
 // per-32 fallback where a superblock type is asked), four routed layers' experts pinned to the host under the streamed
 // split, the rare rail reading them off the tier's pinned device-layout planes through the host twin: the split token
 // command and the cut window chain against the CPU chain, one window and two; the pool's two knobs (the DMA fill, the
-// decode meet) and the rare rail's three A/B arms off, each pinned in process on a carrier of the matrix. Skips: a file not
-// minted, no armed Vulkan tier, the knob cells where the plan found no room for the pool, the expert-cache cell under
+// decode meet) and the rare rail's three A/B arms off, each pinned in process on a carrier of the matrix; the NVFP4 row
+// runs the same two cells on Qwen3.6-35B-A3B's own NVFP4 file (large tier). Skips: a file not
+// minted (the 35B NVFP4 not stocked - it is downloaded, not minted), DASLLAMA_PARITY_FULL unset for the large tier, no armed
+// Vulkan tier, the knob cells where the plan found no room for the pool, the expert-cache cell under
 // DASLLAMA_IMAGE=0 (it reads the lane). Run the format cells under DASLLAMA_IMAGE=0: a dozen carriers would mint a dozen
 // images beside them (the image rail's own coverage is the image suites'), and the planes in RAM reach the same kernels.
 
@@ -76,9 +78,14 @@ def private pool_asked(t : T?) : bool {
     return true
 }
 
+[cold_path]
 def private format_cells(t : T?; tag : string) {
-    let fx = MoeFixture(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps-{tag}.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, host_layers_ask = 4l)
-    t |> run("{tag} experts on four host layers through the one-copy rail: the split token command and the cut window chain vs the CPU chain, one window") @(ct : T?) {
+    format_cells_of(t, tag, MoeFixture(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps-{tag}.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, host_layers_ask = 4l))
+}
+
+//! the matrix's two cells over any host-pinned carrier: `tag` names the expert format in the cell's title
+def private format_cells_of(t : T?; tag : string; fx : MoeFixture) {
+    t |> run("{tag} experts on at least four host layers through the one-copy rail: the split token command and the cut window chain vs the CPU chain, one window") @(ct : T?) {
         let pins = pin_recipe()
         with_gpu_kv_dtype(ct, KVDtype.f16) {
             witnessed(ct, true, true) {
@@ -87,7 +94,7 @@ def private format_cells(t : T?; tag : string) {
         }
         restore_stream_pins(pins)
     }
-    t |> run("{tag} experts on four host layers through the one-copy rail: the same across two windows") @(ct : T?) {
+    t |> run("{tag} experts on at least four host layers through the one-copy rail: the same across two windows") @(ct : T?) {
         let pins = pin_recipe()
         with_gpu_kv_dtype(ct, KVDtype.f16) {
             if (assert_pf_window(ct)) {
@@ -278,6 +285,14 @@ def test_moe_formats_Q8_0(t : T?) {   //! the source file itself, linked into th
 [test]
 def test_moe_formats_IQ4_XS(t : T?) {
     format_cells(t, "IQ4_XS")
+}
+
+//! the carrier is the 35B NVFP4 file itself (large tier): its routed stacks reach the nv4 row-major kernels under the per-tensor scale word
+[test]
+def test_moe_formats_NVFP4_35B(t : T?) {
+    //! the census binds the file's nv4 sites; its BF16 deltanet planes, table and classifier serve as q8 by the tier's design
+    format_cells_of(t, "NVFP4 (Qwen3.6-35B-A3B)", MoeFixture(file = "Qwen3.6-35B-A3B-NVFP4.gguf", shexp = true, census = true,
+        census_sites = "attention q/k/v/o;routed experts;shared expert", bar_rel = MOE_LOGIT_BAR_REL, host_layers_ask = 4l))
 }
 
 [test]

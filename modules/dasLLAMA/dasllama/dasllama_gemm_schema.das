@@ -105,8 +105,8 @@ def kq_reads_packed_planes(fmt : int64) : bool =>
 //! the kq ids whose block body decodes a codebook grid (iq3s, iq3xxs, iq2s, iq2xs, iq2xxs)
 def kq_is_grid(fmt : int) : bool => fmt == 33 || fmt == 34 || fmt == 23 || fmt == 24 || fmt == 25
 
-//! the kq ids whose nibbles pass a 16-entry codebook (iq4xs, iq4nl, iq3s4)
-def kq_is_lut(fmt : int) : bool => fmt == 44 || fmt == 45 || fmt == 35
+//! the kq ids whose nibbles pass a 16-entry codebook (iq4xs, iq4nl, iq3s4, nv4)
+def kq_is_lut(fmt : int) : bool => fmt == 44 || fmt == 45 || fmt == 35 || fmt == 49
 
 //! the kq ids whose tile reads nibble planes (k4, k5, k6, q40 and the codebook formats)
 def panel_is_nibble(fmt : int) : bool => fmt == 4 || fmt == 5 || fmt == 6 || fmt == 40 || kq_is_lut(fmt)

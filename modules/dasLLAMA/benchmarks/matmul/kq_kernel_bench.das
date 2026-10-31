@@ -420,18 +420,43 @@ def bench_gemv_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
     delete regs
 }
 
+//! the suffix's companion row of a registry; null when the registry has none (a panel row: the shared `kq_panel_bf16` builds it then)
+def companion_row(vs : array<tuple<string; auto(FT)>>; suffix : string) : FT {
+    var fn : FT
+    for (v in vs) {
+        if (v._0 == suffix) {
+            fn = v._1
+        }
+    }
+    return fn
+}
+
 def bench_tile_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; var p : Planes; nsb : int64; sh : PlaneShape) {
     let plane_bytes = int64(cfg.d) * (sh.tileW_row + sh.ws_row)
     var regs <- fmt_registries(f)
+    for (w in regs.witness) {   // the family's witness rows: the amx ones take the per-process tile permission their tiles need (SIGILL without it), as the q8 family's do
+        invoke(w._1)
+    }
     var mrs <- companion_ints(regs.layout)
+    var forms <- companion_ints(regs.tileform)
     let perCall : table<string; int64>   // a kq / per-32 tile covers TILE_TOKENS a call
     var stats : array<RowStat>
     var fns : array<TileFn>
-    var mrOf, stepOf : array<int64>
+    var mrOf, stepOf, formOf : array<int64>
+    var panels : array<KqPanelGenFn>
+    var cfgs : array<function<() : void>>
     select_tile_rows(cfg, name, int64(cfg.d), regs.tile, mrs, perCall, stats, fns, mrOf, stepOf)
+    formOf |> reserve(length(stats))
+    panels |> reserve(length(stats))
+    cfgs |> reserve(length(stats))
+    for (st in stats) {
+        formOf |> push(forms?[st.perm] ?? 0l)
+        panels |> push(companion_row(regs.panel, st.perm))
+        cfgs |> push(companion_row(regs.amx_cfg, st.perm))
+    }
     unsafe {
-        time_tile_rows(stats, cfg, fns, mrOf, stepOf, addr<uint8 const?>(p.arena[p.tileKq]), addr<uint8 const?>(p.arena[p.ks]), sh, p,
-            type<uint8 const?>, type<uint8 const?>)
+        time_tile_rows_kq(stats, cfg, int(f), fns, mrOf, stepOf, formOf, panels, cfgs, addr<uint8 const?>(p.arena[p.gemvKq]), addr<uint8 const?>(p.arena[p.tileKq]),
+            addr<uint8 const?>(p.arena[p.ks]), sh, p)
     }
     for (st in stats) {
         emit_row(rows, name, "tile", st, int64(cfg.n), int64(cfg.d), int64(cfg.ntok), nsb, plane_bytes)
@@ -440,8 +465,79 @@ def bench_tile_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
     delete fns
     delete mrOf
     delete stepOf
+    delete formOf
+    delete panels
+    delete cfgs
     delete regs
     delete mrs
+    delete forms
+}
+
+//! the kq TILE arm's timing: a row of the quant-plane form walks its groups over the batch as `time_tile_rows` does, off the
+//! tile plane `wp`; a row of a bf16 form (`formOf` > 0, the amx_bf16 perms) builds its unit's panel a token block off the grp
+//! plane `gp` and runs the tile over the bf16 activation plane - the production walk (`bf16_walk`), the panel build inside
+//! its time as in the tuner's race; every row's amx_cfg companion runs ahead of its sweep (an amx tile's exit releases the
+//! tile palette, and the rows interleave)
+def time_tile_rows_kq(var stats : array<RowStat>; cfg : BenchArgs; fmt : int; fns : array<TileFn>; mrOf, stepOf, formOf : array<int64>;
+                      panels : array<KqPanelGenFn>; cfgs : array<function<() : void>>; gp, wp, sp : uint8 const?; sh : PlaneShape; var p : Planes) {
+    let n = int64(cfg.n)
+    let d = int64(cfg.d)
+    let ntok = int64(cfg.ntok)
+    let nsb = n / 256l
+    var maxForm = 0l
+    for (fm in formOf) {
+        maxForm = max(maxForm, fm)
+    }
+    var pbuf : array<uint16>
+    unsafe {
+        let xqp = addr<int8 const?>(p.arena[p.xq])
+        let xsp = addr<float const?>(p.arena[p.xs])
+        let xbsp = addr<int const?>(p.arena[p.xbs])
+        var yp = addr<float?>(p.arena[p.y])
+        var pp : uint16?
+        var xbp : int8 const?
+        if (maxForm > 0l) {
+            if (ntok % amx_bf16_tile_tokens() != 0l) {
+                panic("kq_kernel_bench: --ntok {ntok} is not a multiple of the bf16 tile's {amx_bf16_tile_tokens()} tokens, which a bf16 form row walks")
+            }
+            pbuf |> resize(maxForm * 16l * n + 32l)
+            pp = bf16_align64(addr(pbuf[0]))
+            xbp = reinterpret<int8 const?>(xbf16_build(xqp, xsp, n, ntok, 256l))
+        }
+        time_rows(stats, cfg.rounds) $(row : int) {
+            let mr = mrOf[row]
+            let form = formOf[row]
+            if (cfgs[row] != null) {
+                invoke(cfgs[row])
+            }
+            if (form > 0l) {
+                bf16_walk(0l, d / mr, form, 0l, ntok, ntok, amx_bf16_tile_tokens(), $(g : int64) {
+                    let kqg = gp + g * mr * sh.gemvW_row
+                    let ksg = sp + g * mr * sh.ws_row
+                    if (panels[row] != null) {
+                        invoke(panels[row], kqg, ksg, mr, nsb, n, form, pp)
+                    } else {
+                        kq_panel_bf16(fmt, kqg, ksg, mr, nsb, n, form, pp)
+                    }
+                }, $(g, tk : int64) {
+                    invoke(fns[row], yp, reinterpret<uint8 const?>(pp), sp + g * mr * sh.ws_row, xbp, xsp, xbsp, n, d, g, tk)
+                }, $(g, tk : int64) {
+                    panic("kq_kernel_bench: a four-token tail at group {g} token {tk} under a bf16 form row")
+                }, $(g, gn, tk : int64) {
+                    panic("kq_kernel_bench: a token tail at group {g} ({gn} groups) token {tk} under a bf16 form row")
+                })
+                return
+            }
+            for (g in range64(d / mr)) {
+                var t0k = 0l
+                while (t0k < ntok) {
+                    invoke(fns[row], yp, wp + g * mr * sh.tileW_row, sp + g * mr * sh.ws_row, xqp, xsp, xbsp, n, d, g, t0k)
+                    t0k += stepOf[row]
+                }
+            }
+        }
+    }
+    delete pbuf
 }
 
 //! the registry rows --perm selects, into stats and the typed function list
@@ -662,6 +758,8 @@ def time_rm_tile(var stats : array<RowStat>; cfg : BenchArgs; fns : array<RmQ8Ti
     }
 }
 
+//! one format's row-major rows over the device planes: the gemv registry's rows, then the four-token tile's; every row drops
+//! its warm rounds first (SOLO_BURN solo, TEAM_BURN under --team) and reports best and median over the rounds after them
 def bench_rm_rows(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; var p : Planes; nsb : int64; sh : PlaneShape;
                   gvs : array<tuple<string; auto(GF)>>; tvs : array<tuple<string; auto(TF)>>) {
     let n = int64(cfg.n)
@@ -693,50 +791,15 @@ def bench_rm_rows(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
 }
 
 //! the row-major families by format (q8s16 shares q8's: the device q8 plane IS int8 rows + f16 scales)
-def bench_rm(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; mx4 : bool; var p : Planes; nsb : int64; sh : PlaneShape) { // nolint:STYLE037 - one arm a family
-    if (mx4) {
-        bench_rm_rows(rows, cfg, name, KqFmt.mx4, p, nsb, sh, mx4q8_rm_gemv_gen_variants(), mx4q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.q8) {
+def bench_rm(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; mx4 : bool; var p : Planes; nsb : int64; sh : PlaneShape) {
+    if (f == KqFmt.q8 && !mx4) {
         bench_rm_rows(rows, cfg, name, f, p, nsb, sh, q8q8_rm_gemv_gen_variants(), q8q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.iq4nl32) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq4nl32q8_rm_gemv_gen_variants(), iq4nl32q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.q4032) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, q4032q8_rm_gemv_gen_variants(), q4032q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.q51) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, q51q8_rm_gemv_gen_variants(), q51q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.q5032) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, q5032q8_rm_gemv_gen_variants(), q5032q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.k4) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, k4q8_rm_gemv_gen_variants(), k4q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.k5) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, k5q8_rm_gemv_gen_variants(), k5q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.k6) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, k6q8_rm_gemv_gen_variants(), k6q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.k3) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, k3q8_rm_gemv_gen_variants(), k3q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.k2) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, k2q8_rm_gemv_gen_variants(), k2q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.q40) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, q40q8_rm_gemv_gen_variants(), q40q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.iq4nl) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq4nlq8_rm_gemv_gen_variants(), iq4nlq8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.iq4xs) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq4xsq8_rm_gemv_gen_variants(), iq4xsq8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.iq3s4) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq3s4q8_rm_gemv_gen_variants(), iq3s4q8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.iq3s) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq3sq8_rm_gemv_gen_variants(), iq3sq8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.iq3xxs) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq3xxsq8_rm_gemv_gen_variants(), iq3xxsq8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.iq2s) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq2sq8_rm_gemv_gen_variants(), iq2sq8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.iq2xs) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq2xsq8_rm_gemv_gen_variants(), iq2xsq8_rm_tile4_gen_variants())
-    } elif (f == KqFmt.iq2xxs) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq2xxsq8_rm_gemv_gen_variants(), iq2xxsq8_rm_tile4_gen_variants())
-    } else {
-        to_log(LOG_WARNING, "kq_kernel_bench: {name} has no row-major family - no rm rows\n")
+        return
     }
+    let kf = mx4 ? KqFmt.mx4 : f
+    var regs <- kq_registries_of(kf)
+    bench_rm_rows(rows, cfg, name, kf, p, nsb, sh, regs.rm_gemv, regs.rm_tile4)
+    delete regs
 }
 
 //! one --fmt name as (name, KqFmt, is_mx4): mx4 and q8s16 are q8-family flavors bench_q8_family races

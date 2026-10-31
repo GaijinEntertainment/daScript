@@ -52,13 +52,13 @@ scoped to that construct.** State an early return leaves set poisons the next co
 stack - a diff that saves it in one scalar field is a defect.** A saved value kept in a scalar
 survives into the sibling construct's exit path and unbalances it.
 
-**A diff that adds or changes something a second site must agree with - a daslib fact (code or a
-`//!` contract), or what a C++ name `aot_cpp.das` writes into generated code does or returns -
-records the pair in an `ARCHITECTURE*.md` of this folder, naming both sides by symbol name, when
-nothing fails on a mismatch: no lint, no compile error, no default-suite test (what `dastest` runs
-over `tests/` (repo root) with no flags, an environment-gated or nightly-only test excluded).** The
-second site can sit inside or outside this repository; a statement about a family of symbols is not
-a pair.
+**A diff that adds or changes a daslib fact (code or a `//!` contract), or what a C++ name
+`aot_cpp.das` writes into generated code does or returns, that code at a second site must agree
+with records the pair in an `ARCHITECTURE*.md` of this folder, naming both sides by symbol name,
+when nothing fails on a mismatch: no lint, no compile error, no default-suite test (what `dastest`
+runs over `tests/` (repo root) with no flags, an environment-gated or nightly-only test
+excluded).** The second site can sit inside or outside this repository; a statement about a family
+of symbols is not a pair.
 
 **A diff that records a pair puts it in the section that holds its daslib file (for a C++ name, the
 emitter file that writes it), or in a new section of `ARCHITECTURE.md` or a companion when no

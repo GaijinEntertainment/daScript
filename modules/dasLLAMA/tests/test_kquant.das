@@ -2069,30 +2069,40 @@ def test_kq_gpu_gather_grp(t : T?) {
 
 let private NV4_ROW_LENGTH_OFF = 1000000   //! `nv4_gather_row_misses` when the gathered scale row is not the twenty bytes a superblock
 
-//! the count of bytes and words off the nv4 device scale row the gather writes under site scale `site_scale_v`: the sixteen UE4M3 codes verbatim in sub-block order, then `site_scale_v`'s f32 bits in the fifth word
-def private nv4_gather_row_misses(site_scale_v : float) : int {
+//! the count of bytes and words off the nv4 device scale row the gather writes under a slice's site scale: the sixteen UE4M3 codes verbatim in sub-block order, then that scale's f32 bits in the fifth word
+//! a two-expert stack of two row groups each gathered as two slices, the first expert under `scale0`, the second under `scale1`;
+//! `repacked` gathers off the grp planes (an expert's rows are whole groups, as a model's are)
+def private nv4_gather_row_misses(scale0, scale1 : float; repacked : bool = false) : int {
     let n = 512l
-    let d = 4l
     let nv4_id = kq_schema_id(KqFmt.nv4)
+    let mr = kq_layout_of(nv4_id)
+    let slice = 2l * mr
+    let rows = 2l * slice
     var inscope kq, ks : array<uint8>
-    synth_kq_region(nv4_id, kq, ks, d, n, 0xC0FFEEu, 0x9E3779Bu)
+    synth_kq_region(nv4_id, kq, ks, rows, n, 0xC0FFEEu, 0x9E3779Bu)
     var m = Model()
     m.kq[int(KqFmt.nv4)].q := kq
     m.kq[int(KqFmt.nv4)].s := ks
-    m.site_scale[site_scale_key(KqFmt.nv4, 0l)] = site_scale_v
+    if (repacked) {
+        unsafe {
+            repack_kq_grp(KqFmt.nv4, addr(m.kq[int(KqFmt.nv4)].q[0]), addr(m.kq[int(KqFmt.nv4)].s[0]), n, rows, mr)
+        }
+    }
+    m.site_scale[site_scale_key(KqFmt.nv4, 0l)] = scale0
+    m.site_scale[site_scale_key(KqFmt.nv4, slice * n)] = scale1
     var inscope wq, ws : array<uint8>
-    moe_gpu_gather_stack_kq(m, KqFmt.nv4, 0l, n, d, d, false, kq_layout_of(nv4_id), wq, ws)
-    if (long_length(ws) != d * (n / 256l) * 20l) {
+    moe_gpu_gather_stack_kq(m, KqFmt.nv4, 0l, n, rows, slice, repacked, mr, wq, ws)
+    if (long_length(ws) != rows * (n / 256l) * 20l) {
         delete m
         return NV4_ROW_LENGTH_OFF
     }
     var miss = 0
-    for (sb in range64(d * n / 256l)) {
+    for (sb in range64(rows * n / 256l)) {
         for (si in range64(16l)) {
             miss += ws[sb * 20l + si] != ks[sb * 16l + si] ? 1 : 0
         }
         let w = uint(ws[sb * 20l + 16l]) | (uint(ws[sb * 20l + 17l]) << 8u) | (uint(ws[sb * 20l + 18l]) << 16u) | (uint(ws[sb * 20l + 19l]) << 24u)
-        miss += w != float_bits_to_uint(site_scale_v) ? 1 : 0
+        miss += w != float_bits_to_uint(sb < slice * (n / 256l) ? scale0 : scale1) ? 1 : 0
     }
     delete m
     return miss
@@ -2100,9 +2110,63 @@ def private nv4_gather_row_misses(site_scale_v : float) : int {
 
 [test]
 def test_kq_gpu_gather_nv4_row(t : T?) {
-    t |> run("moe_gpu_gather_stack_kq nv4: the device scale row is the UE4M3 codes, then the per-tensor scale word") @(t : T?) {
-        t |> equal(nv4_gather_row_misses(1.0299681e-4), 0, "every row carries its codes verbatim and the 0.8B's scale word")
-        t |> equal(nv4_gather_row_misses(1.0), 0, "a plane with no `.scale` carries 1.0")
+    t |> run("moe_gpu_gather_stack_kq nv4: the device scale row is the UE4M3 codes, then the slice's scale word") @(t : T?) {
+        t |> equal(nv4_gather_row_misses(1.0299681e-4, 1.0299681e-4), 0, "every row carries its codes verbatim and the 0.8B's scale word")
+        t |> equal(nv4_gather_row_misses(1.0, 1.0), 0, "a plane with no `.scale` carries 1.0")
+        t |> equal(nv4_gather_row_misses(1.0299681e-4, 7.5e-3), 0, "a stack whose experts carry their own scales lands each expert's word on its slice")
+        t |> equal(nv4_gather_row_misses(1.0299681e-4, 7.5e-3, true), 0, "the grp-plane gather lands the same codes and words")
+    }
+}
+
+//! every UE4M3 code through the live nv4 row-major gemv: row r's first strip carries code r under all-6.0 nibbles (the doubled
+//! lattice's 12), its other strips the zero code, x the all-127 row (a Q8_K scale of 1.0) - so y[r] is ue4m3_half_f32(r) x 12 x
+//! 16 x 127 exactly; the count of rows off that word
+def private nv4_ue4m3_code_misses() : int {
+    let n = 256l
+    let rows = 128l
+    let ssb = kq_dev_ssb(KqFmt.nv4)
+    var dq, ds : array<uint8>
+    dq |> resize(rows * NV4_QSB)
+    for (b in dq) {
+        b = uint8(0x77)
+    }
+    ds |> resize(rows * ssb)
+    let one = float_bits_to_uint(1.0)
+    for (r in range64(rows)) {
+        ds[r * ssb] = uint8(r)
+        for (i in range64(4l)) {
+            ds[r * ssb + NV4_SSB + i] = uint8((one >> uint(8l * i)) & 0xFFu)
+        }
+    }
+    var x : array<float>
+    x |> resize(n)
+    for (v in x) {
+        v = 127.0
+    }
+    var xq : array<int8>
+    var xs : array<float>
+    var xbs : array<int>
+    xq |> resize(n)
+    xs |> resize(1)
+    xbs |> resize(n / 16l)
+    quantize_q8_k_into(x, n, xq, xs, xbs, 0l, 0l, 0l)
+    var y : array<float>
+    y |> resize(rows)
+    unsafe {
+        nv4q8_rm_gemv_gen(addr(y[0]), addr<uint8 const?>(dq[0]), addr<uint8 const?>(ds[0]), addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), addr<int const?>(xbs[0]), n, 0l, rows)
+    }
+    var miss = 0
+    for (r in range64(rows)) {
+        let want = ue4m3_half_f32(uint(r)) * (12.0 * 16.0 * 127.0)
+        miss += float_bits_to_uint(y[r]) != float_bits_to_uint(want) ? 1 : 0
+    }
+    return miss
+}
+
+[test]
+def test_nv4_rm_gemv_ue4m3_codes(t : T?) {
+    t |> run("nv4q8_rm_gemv_gen: every UE4M3 scale code decodes to ue4m3_half_f32's word, the subnormals and the nan code among them") @(t : T?) {
+        t |> equal(nv4_ue4m3_code_misses(), 0, "128 codes, every row's word exact")
     }
 }
 

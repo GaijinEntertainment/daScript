@@ -1790,11 +1790,11 @@ def private kq_unset_rows(var yp : float?; kqp : uint8 const?; ksp : uint8 const
 }
 [unused_argument(fmt, yp, kqp, ksp, offs, nregions, xqp, xsp, xbsp, n, d)]
 def private kq_unset_groupn(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) {
-    panic("dasLLAMA: the active kernel backend '{g_active_backend}' has no K-quant region-list kernel (kq_groupn)")
+    panic("dasLLAMA: the active kernel backend '{g_active_backend}' has no K-quant region-list kernel (kq_groupn) - require dasllama/dasllama_math_gen, the generated tier that registers one")
 }
 [unused_argument(fmt, yp, kqp, ksp, offs, nregions, xqp, xsp, xbsp, n, d)]
 def private kq_unset_batch_groupn(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) {
-    panic("dasLLAMA: the active kernel backend '{g_active_backend}' has no K-quant batched region-list kernel (kq_batch_groupn)")
+    panic("dasLLAMA: the active kernel backend '{g_active_backend}' has no K-quant batched region-list kernel (kq_batch_groupn) - require dasllama/dasllama_math_gen, the generated tier that registers one")
 }
 [unused_argument(fmt, yp, kqp, ksp, xqp, xsp, xbsp, n, d, ntok)]
 def private kq_unset_batch(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, ntok : int64) {

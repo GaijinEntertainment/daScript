@@ -31,8 +31,8 @@ require jit
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-// Current entry: the row-major K-quant kernels' pair form.
-let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xA3ul
+// Current entry: rm_block_loop's accumulator sets and the nv4 arms.
+let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xA4ul
 
 let public JIT_FNV_PRIME : uint64 = 1099511628211ul
 

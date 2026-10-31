@@ -142,7 +142,13 @@ Every generated CPU kernel
 walks the grp<mr> interleave the CPU repack lays rows out in, and the device planes are row-major -
 a row's blocks one after another - so the rare rail reads them through a second kernel shape
 (`dasllama_gemm_gen.das`, `rm_rows_walk` and its bodies): a vector holds 32 weights of one row, the
-lanes are k chunks, each block's lane dot folds under its scale, a row's lanes sum in order. One body
+lanes are k chunks, each block's lane dot folds under its scale, a row's lanes sum in order. A fold is one
+fused multiply-add a block on a loop-carried accumulator, so a row's chain is latency-bound alone; the
+block loop runs the body on several accumulator sets abreast (`rm_block_loop`: four in the GEMV; two in
+the four-token tile on x64, whose four tokens already run four chains; one in the NEON tile, where a
+second set spills its 32 vector registers; the sets summed once after the loop, the blocks past the last
+whole group one set at a time); nv4 folds a strip - sixteen a superblock against q40's eight - off its sixteen scales
+decoded once as vectors and picked by shuffle a block. One body
 a family: q8 (int8 rows, one f16 scale a block), the per-32 and MXFP4 planes (16 nibble bytes a block
 as 32 codes in k order, the codebook formats' weights off the LUT under the signed lattice, the 5-bit
 codes under the unsigned one with q51's m term on the activation sum), and the superblock formats

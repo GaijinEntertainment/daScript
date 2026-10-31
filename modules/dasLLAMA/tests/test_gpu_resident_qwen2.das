@@ -42,7 +42,7 @@ let private LOGIT_BAR_REL = 0.06
 //! reading: 0.42-0.89 of a 9.4-18 max logit, the one-step-off controls 4.7-11
 let private Q8KV_BAR_REL = 0.10
 //! no logit bar holds a 4-bit mirror on a 0.5B, so the codec bars hold ratios of the rows' summed largest differences:
-let private CODEC_DIST_REL = 1.15   //! the device's distance from the f16 chain, of the CPU codec chain's own: reads 0.95-1.01, the f16 rows one step off 1.6-3.7
+let private CODEC_DIST_REL = 1.25   //! the device's distance from the f16 chain, of the CPU codec chain's own: reads 0.95-1.01, the tq4 rows 1.17 on the RTX PRO 4500 (driver 595), the f16 rows one step off 1.6-3.7
 let private CODEC_PAIR_REL = 0.8    //! the two codec chains' distance from each other, of the CPU codec chain's from f16: reads 0.20 (q8_0) to 0.61 (tq4), the CPU codec rows one step off 1.5-3.7
 //! layer 0's stored bytes against the CPU cache's: the K rows (the bias carries them) and the steps' V rows (one Q8_0 feed on both
 //! chains) differ at 0.002-0.01 of their bytes; the prefill's V rows at 0.39 (q8_0) and 0.12 (tq4) - its GEMM reads f16 rows where

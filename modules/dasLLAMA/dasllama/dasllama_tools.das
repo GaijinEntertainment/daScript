@@ -828,8 +828,7 @@ def private gemma4_json_dsl(v : JsonValue?) : string {
         delete parts
         return "[{joined}]"
     }
-    var ks <- [for (k in keys(v.value as _object)); k]
-    sort(ks)
+    var ks <- sorted_keys(v.value as _object)
     var parts <- [for (k in ks); "{k}:{gemma4_json_dsl(v?[k])}"]
     let joined = join(parts, ",")
     delete ks
@@ -893,8 +892,7 @@ def gemma4_tool_declaration(tool_json : string) : string {
         let props = params?["properties"]
         if (props != null && props.value is _object) {
             w |> write("properties:\{")
-            var ks <- [for (k in keys(props.value as _object)); k]
-            sort(ks)
+            var ks <- sorted_keys(props.value as _object)
             var first = true
             for (k in ks) {
                 if (!first) {

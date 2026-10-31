@@ -12,6 +12,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require math
+require daslib/enum_trait
 require dasllama/dasllama_common
 require dasllama/dasllama_layout
 require dasllama/dasllama_convert
@@ -26,7 +27,8 @@ require _kq_fixtures
 require _compares
 
 let private ROWS = 8l
-let private N_SB = 768l    //! three superblocks
+let private N_SB = 1280l   //! five superblocks: past the four-superblock trip of the row-major gemv's accumulator sets
+let private NV4_SITE_SCALE = 1.7   //! the nv4 shell's per-tensor scale, off unity so a kernel that drops it misses the bar
 let private N_B32 = 704l   //! 22 blocks, off the superblock lattice - the per-32 formats' reason
 
 def private x_row(n : int64) : array<float> {
@@ -104,11 +106,15 @@ def private sentinel_rows(rows : int64) : array<float> {
     return <- y
 }
 
-//! a Model shell holding ROWS x `n` of format `f` in disk order, in the q8 serving mode the gathers read
+//! a Model shell holding ROWS x `n` of format `f` in disk order, in the q8 serving mode the gathers read; an nv4 stack
+//! carries a site scale off unity, so the device row's scale word and the planar epilogue both have to apply it
 def private planar_shell(f : KqFmt; n : int64) : Model {
     var m = Model()
     m.quant = QuantMode.q8
     put_planar(m, f, ROWS, n)
+    if (f == KqFmt.nv4) {
+        m.site_scale[site_scale_key(f, 0l)] = NV4_SITE_SCALE
+    }
     return <- m
 }
 
@@ -173,7 +179,7 @@ def private ref_rows(m : Model; f : KqFmt; x : array<float>; n, rows : int64) : 
         for (i in range64(n)) {
             acc += w[i] * xa[i]
         }
-        y[r] = acc
+        y[r] = acc * site_scale(m, f, 0l)   //! the shell's per-tensor scale (nv4's; unity elsewhere), part of the tensor's value
     }
     return <- y
 }
@@ -247,7 +253,7 @@ def private twin_cell(t : T?; f : KqFmt) {
 
 [test]
 def test_host_twin_superblock(t : T?) {
-    for (f in [KqFmt.k2, KqFmt.k3, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq3s4, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
+    for (f in [KqFmt.k2, KqFmt.k3, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq3s4, KqFmt.nv4, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
         t |> run("the host twin over a {f} expert stack") <| @(ct : T?) {
             twin_cell(ct, f)
         }
@@ -331,7 +337,7 @@ def test_host_rm_block32(t : T?) {
 }
 
 //! the K-quant row-major kernels over the device planes against the planar kernels, under the Q8_K activation
-def private rm_kq_rows(m : Model; f : KqFmt; x : array<float>; n, rows : int64) : array<float> {
+def private rm_kq_rows(m : Model; f : KqFmt; x : array<float>; n, rows : int64) : array<float> {   // nolint:STYLE037 - kq_fmt_stamp's generated arms, one a format
     var wq, ws : array<uint8>
     layout_gather_dispatch(m, f, 0l, n, rows, rows, 1l, 32l, 0l, wq, ws, true)
     var xq : array<int8>
@@ -349,34 +355,8 @@ def private rm_kq_rows(m : Model; f : KqFmt; x : array<float>; n, rows : int64) 
         let xsp = addr<float const?>(xs[0])
         let xbsp = addr<int const?>(xbs[0])
         var yp = addr(got[0])
-        if (f == KqFmt.k4) {
-            k4q8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
-        } elif (f == KqFmt.k5) {
-            k5q8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
-        } elif (f == KqFmt.k6) {
-            k6q8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
-        } elif (f == KqFmt.k3) {
-            k3q8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
-        } elif (f == KqFmt.k2) {
-            k2q8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
-        } elif (f == KqFmt.q40) {
-            q40q8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
-        } elif (f == KqFmt.iq4nl) {
-            iq4nlq8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
-        } elif (f == KqFmt.iq4xs) {
-            iq4xsq8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
-        } elif (f == KqFmt.iq3s4) {
-            iq3s4q8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
-        } elif (f == KqFmt.iq3s) {
-            iq3sq8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
-        } elif (f == KqFmt.iq3xxs) {
-            iq3xxsq8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
-        } elif (f == KqFmt.iq2s) {
-            iq2sq8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
-        } elif (f == KqFmt.iq2xs) {
-            iq2xsq8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
-        } else {
-            iq2xxsq8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
+        kq_fmt_stamp(f) $(F) {
+            rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows, F)
         }
     }
     return <- got
@@ -384,7 +364,7 @@ def private rm_kq_rows(m : Model; f : KqFmt; x : array<float>; n, rows : int64) 
 
 [test]
 def test_host_rm_superblock(t : T?) {
-    for (f in [KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.k2, KqFmt.q40, KqFmt.iq4nl, KqFmt.iq4xs, KqFmt.iq3s4,
+    for (f in [KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.k2, KqFmt.q40, KqFmt.iq4nl, KqFmt.iq4xs, KqFmt.iq3s4, KqFmt.nv4,
                KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
         t |> run("the row-major kernel over a {f} expert stack") <| @(ct : T?) {
             let n = N_SB
@@ -398,7 +378,7 @@ def test_host_rm_superblock(t : T?) {
 }
 
 //! four activation rows through a format's row-major tile over the device planes, against the planar kernels a row
-def private rm_tile4_rows(m : Model; f : KqFmt; xs4 : array<float>; n, rows : int64) : array<float> {
+def private rm_tile4_rows(m : Model; f : KqFmt; xs4 : array<float>; n, rows : int64) : array<float> {   // nolint:STYLE037 - kq_fmt_stamp's generated arms, one a format
     var wq, ws : array<uint8>
     layout_gather_dispatch(m, f, 0l, n, rows, rows, 1l, 32l, 0l, wq, ws, true)
     let sb = kq_sb(f)
@@ -429,32 +409,8 @@ def private rm_tile4_rows(m : Model; f : KqFmt; xs4 : array<float>; n, rows : in
         let xsp = addr<float const?>(xs[0])
         let xbsp = addr<int const?>(xbs[0])
         var yp = addr(got[0])
-        if (f == KqFmt.q8) {
-            q8q8_rm_tile4_gen(yp, addr<int8 const?>(wq[0]), addr<uint16 const?>(ws[0]), xqp, xsp, n, rows)
-        } elif (f == KqFmt.iq4nl32) {
-            iq4nl32q8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
-        } elif (f == KqFmt.q51) {
-            q51q8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
-        } elif (f == KqFmt.mx4) {
-            mx4q8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
-        } elif (f == KqFmt.k4) {
-            k4q8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
-        } elif (f == KqFmt.k6) {
-            k6q8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
-        } elif (f == KqFmt.k2) {
-            k2q8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
-        } elif (f == KqFmt.iq3s) {
-            iq3sq8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
-        } elif (f == KqFmt.iq3xxs) {
-            iq3xxsq8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
-        } elif (f == KqFmt.iq2s) {
-            iq2sq8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
-        } elif (f == KqFmt.iq2xs) {
-            iq2xsq8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
-        } elif (f == KqFmt.iq2xxs) {
-            iq2xxsq8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
-        } else {
-            iq4xsq8_rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows)
+        kq_fmt_stamp(f) $(F) {
+            rm_tile4_gen(yp, q, s, xqp, xsp, xbsp, n, rows, F)
         }
     }
     return <- got
@@ -462,8 +418,7 @@ def private rm_tile4_rows(m : Model; f : KqFmt; xs4 : array<float>; n, rows : in
 
 [test]
 def test_host_rm_tile4(t : T?) {
-    for (f in [KqFmt.q8, KqFmt.iq4nl32, KqFmt.q51, KqFmt.mx4, KqFmt.k4, KqFmt.k6, KqFmt.k2, KqFmt.iq4xs,
-               KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
+    for (f in type<KqFmt>) {
         t |> run("the row-major tile over a {f} expert stack") <| @(ct : T?) {
             let n = kq_sb(f) ? N_SB : N_B32
             var inscope m <- planar_shell(f, n)

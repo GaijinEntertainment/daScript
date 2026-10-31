@@ -23,7 +23,7 @@ options _dasllama_internal = true
 //         either) — real generator bugs (wrong stride/lane/scale) are orders louder and
 //         still die here. Declining perms (mr8_budget, and every ISA-gated row the box
 //         fails) run the reference bodies.
-//   The twenty row-major families (<fmt>q8_rm_gemv_gen) race on one streamed shape: the baseline
+//   The twenty-one row-major families (<fmt>q8_rm_gemv_gen) race on one streamed shape: the baseline
 //         arm is the registry's first row, `reference`, held to the generator fixture's scalar
 //         oracle; the compare region is the d outputs of the one token row; every perm is held
 //         to the reference row over it; the report row is each arm's best of ROUNDS, no warmup
@@ -1416,6 +1416,7 @@ def kq_test_family(fmt : int64; kfxs : array<KqFixture>) : bool {
     var mrs <- forms_of(regs.layout)
     var forms <- forms_of(regs.tileform)
     var allok = true
+    var liveRows = 0
     for (v in regs.tile) {
         let mr = int64(mrs?[v._0] ?? 4)
         let form = int64(forms?[v._0] ?? 0)
@@ -1424,10 +1425,18 @@ def kq_test_family(fmt : int64; kfxs : array<KqFixture>) : bool {
         if (form > 0l) {
             arm_of(regs.witness, regs.amx_cfg, v._0)
         }
+        let live = emits_of(regs.witness, v._0)
+        liveRows += live ? 1 : 0
         var maxdiff = 0.0
         let ok = kq_gate_variant(v._0, v._1, gtab[v._0], t4tab[v._0], panel_of(regs.panel, v._0), kfxs, mr, maxdiff, form)
-        print("k{fmt} {v._0} (mr={mr}{form > 0l ? ", bf16 tile" : ""}): {ok ? "ok" : "MISMATCH"} (maxdiff {maxdiff})\n")
+        print("k{fmt} {v._0} (mr={mr}{form > 0l ? ", bf16 tile" : ""}, {live ? "live" : "ref"}): {ok ? "ok" : "MISMATCH"} (maxdiff {maxdiff})\n")
         allok = allok && ok
+    }
+    // the grp-tier census: every family carries an ISA-neutral perm, so a format whose rows all ran the reference body on this
+    // box is an emitter that declined silently, not a box without the ISA
+    if (liveRows == 0) {
+        print("  GRP CENSUS: k{fmt} emitted no live tile row - every perm fell back to the reference body\n")
+        allok = false
     }
     delete forms
     delete mrs
@@ -1794,8 +1803,8 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
     delete kids
     var rmf <- rm_family_fmts()
     var members <- kq_family_fmts() $(_regs : KqRegistries) => true
-    if (length(rmf) != length(members) - 1) {   // every format but nv4 carries a row-major family
-        print("  RM FAMILY CENSUS: {length(rmf)} of {length(members) - 1} formats carry rm rows ({rmf})\n")
+    if (length(rmf) != length(members)) {
+        print("  RM FAMILY CENSUS: {length(rmf)} of {length(members)} formats carry rm rows ({rmf})\n")
         allok = false
     }
     delete members

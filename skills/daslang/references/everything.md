@@ -6338,6 +6338,7 @@ The JSON module implements JSON parsing and serialization. It provides `read_jso
 
 - `read_json` - reads JSON from the `text` array of uint8.
 - `read_json_bounded` - Strict read with preflight budgets before recursive tree construction.
+- `sorted_keys` - an object's keys in sorted order - the order a file that is diffed and merged prints them in
 - `write_json` - Overload accepting temporary type
 - `write_json_compact` - `write_json` on one line: no newlines or indentation, `", "` / `": "` separators — the python `json.dumps` / jinja `tojson` shape chat templates and wire protocols carry.
 

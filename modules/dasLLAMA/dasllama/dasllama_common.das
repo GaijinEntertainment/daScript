@@ -1698,6 +1698,9 @@ struct Model {
     //! the site scale a plane carries beside its blocks (NVFP4's per-tensor scale, the file's `<tensor>.scale`), keyed by
     //! `site_scale_key`: the matmul epilogues multiply their rows by it, never the plane; a plane with no entry scales by one
     site_scale : table<int64; float>
+    //! a routed stack's per-expert scales (NVFP4's `ffn_*_exps.scale`, one an expert) keyed by the stack's plane offset: the
+    //! rare rail's lanes read them as a pointer, the table above holds the same values under each expert's own offset
+    exps_scale : table<int64; array<float>>
     // gemma4 E-series PLE token table (per_layer_token_embd) — gather-only (whole superblock-
     // aligned rows dequant per token), never repacked, never matmul'd; kq tag = native planes
     ple_emb_fmt : KqFmt = KqFmt.q8
@@ -5049,13 +5052,28 @@ def private kq_slot(what : string; fmt : KqFmt) : int {
 def site_scale_key(fmt : KqFmt; woff : int64) : int64 => (int64(fmt) << 52) | woff
 
 [arch(at = "../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
-def site_scale(t : Model; fmt : KqFmt; woff : int64) : float => empty(t.site_scale) ? 1.0 : (t.site_scale?[site_scale_key(fmt, woff)] ?? 1.0)
+def site_scale(t : Model; fmt : KqFmt; woff : int64) : float => site_scale(t.site_scale, fmt, woff)
+
+//! the same off the table alone - a lane that holds the table by pointer reads it here
+def site_scale(tab : table<int64; float>; fmt : KqFmt; woff : int64) : float => empty(tab) ? 1.0 : (tab?[site_scale_key(fmt, woff)] ?? 1.0)
 
 def private apply_site_scale(var y : array<float>; t : Model; fmt : KqFmt; woff, yoff, count : int64) {
     let sc = site_scale(t, fmt, woff)
     if (sc != 1.0) {
         scale_inplace(unsafe(addr(y[yoff])), sc, count)
     }
+}
+
+//! one routed expert's element count - a gate / up / down plane of the stack (expert e of a stack at `base` sits at base + e * expert_elems)
+def expert_elems(c : Config) : int64 => c.dim * c.n_ff_exp
+
+//! the per-expert scales of the routed stack at `base` as the lanes read them, null for a stack carrying none
+def exps_scale_ptr(t : Model; base : int64) : float const? {
+    var p : float const?
+    t.exps_scale |> get(base) $(v) {
+        p = unsafe(addr<float const?>(v[0]))
+    }
+    return p
 }
 
 // K-quant GEMV against a PRE-quantized activation (xq/xs/xbs already filled by the bs quantizer).
@@ -5109,6 +5127,11 @@ def mm_at_kq_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs : array<i
     } else {
         matmul_kq_groupn(kq_schema_id(fmt), y, t.kq[i].q, t.kq[i].s, offs, nregions, xq, xs, xbs, n, d)
     }
+    if (!empty(t.site_scale)) {
+        for (r in range64(nregions)) {
+            apply_site_scale(y, t, fmt, offs[r * 2l], r * d, d)
+        }
+    }
 }
 
 // Fused batched region-list kq GEMM (the fused MoE prefill's kq twin of the mx4 batch groupn;
@@ -5116,6 +5139,11 @@ def mm_at_kq_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs : array<i
 def mm_b_kq_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d : int64) {
     let i = kq_slot("mm_b_kq_groupn", fmt)
     matmul_kq_batch_groupn(kq_schema_id(fmt), y, t.kq[i].q, t.kq[i].s, offs, nregions, xq, xs, xbs, n, d)
+    if (!empty(t.site_scale)) {   // offs is (weight offset, first row, rows) a region
+        for (r in range64(nregions)) {
+            apply_site_scale(y, t, fmt, offs[r * 3l], offs[r * 3l + 1l] * d, offs[r * 3l + 2l] * d)
+        }
+    }
 }
 
 // Batched kq GEMM off PRE-quantized activation rows (the grouped MoE prefill's kq twin of

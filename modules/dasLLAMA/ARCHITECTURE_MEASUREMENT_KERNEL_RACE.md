@@ -146,7 +146,7 @@ and is a perm this box can run, else from the tile's.
 
 ### The row-major families race on the streamed shape alone {#rm-family-race}
 
-The twenty `<fmt>q8_rm_gemv_gen` families (the one-copy rare rail's GEMVs over the device
+The twenty-one `<fmt>q8_rm_gemv_gen` families (the one-copy rare rail's GEMVs over the device
 planes, `ARCHITECTURE_GPU_VULKAN_STREAM.md`) have one serving regime: an expert's rows read once
 from DRAM by every lane. So `gen_tune_probe` races each on one streamed fixture - the rail's
 width, a stack past the cache - best-of `ROUNDS`, no screen, no hot shape and no seat of its
@@ -171,9 +171,8 @@ companion the reference row lacks. The sticky margin keeps the incumbent only wh
 too, and the transcript says so when it did not. The TEST gate walks the same families on two
 shapes a format and names every perm without a witness row as a desync;
 `tests/test_kernel_backend.das` holds the same lockstep without a model over the formats
-`kq_family_fmts` reports with rm rows - every one but q8 (its rows ride their own registry) and
-nv4 (no rm family) - each carrying one witness row per perm, keyed alike, the reference row
-first.
+`kq_family_fmts` reports with rm rows - every one but q8 (its rows ride their own registry) -
+each carrying one witness row per perm, keyed alike, the reference row first.
 
 ### The CPU kernel bench's fixture conditions {#cpu-kernel-bench-fixture}
 

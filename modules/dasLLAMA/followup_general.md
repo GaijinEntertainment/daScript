@@ -2368,25 +2368,26 @@
     drivers serve it (the nv4 cm2 tiles race at Q4_0's time on both homes, `harness/gemm_cuda_vs_vulkan --only nv4,q40`).
     Not yet served: (1) the pp512 / tg128 rows on the 5060 Ti - the ModelOpt files keep BF16 k/v planes beside an nv4 q,
     which the whole-model drivers decline as mixed feeds, so a dense carrier with every plane nv4 is still to mint (the
-    pod's 27B iMatrix file, FFN nv4 under Q5_K attention, serves whole); (2) a `.scale` at the expert and shared-expert stacks,
+    pod's 27B iMatrix file, FFN nv4 under Q5_K attention, serves whole); (2) a `.scale` at a fused gate-up stack,
     the token table, the classifier, the NextN projection and the PLE table - `refuse_site_scale` refuses the load by
     name; (3) on the Metal tier a plane under a per-tensor `.scale` - the tier serves nv4 at every site off the compact
     16-byte UE4M3 row (the iq4 family's stamps under `NV4`), and that row has no pad word for the factor, so
     `kq_load_gpu_unserved` declines such a plane by site and member - the ModelOpt files' carrier; (3b) a plane whose
     rows sit off the 256 lattice - NVFP4's 64-weight disk block fills them, Qwen1.5-MoE's 1408-wide stacks among them -
     falls to the q8 rail on every home (`kq_fmt_row_ok`), a converted copy the load report names; serving its own bytes
-    takes a per-64 nv4 member in the per-32 rail's shape; (4) the CPU
-    JIT emitter arm (`panel_supported` leaves 49 out, so the `nv4q8_tile_gen` family declines to its reference body and
-    `kq_registries` ships no tile registry); (5) the one-copy rare rail's `nv4q8_rm_gemv_gen` family, the Vulkan host
-    twin cells and the served cells per site x backend; (6) on the CUDA home's FP4 leaf (`CuNv4Mmq`, the window chain's
+    takes a per-64 nv4 member in the per-32 rail's shape; (4) on the CUDA home's FP4 leaf (`CuNv4Mmq`, the window chain's
     GEMM for nv4 planes under the MMQ knob, W4A4 - the activations quantized to e2m1 per token by the `fp4_rows` /
     `fp4_actrows` / `cls_ar_fp4_b` feeds): the tile runs one block an SM (44 KB of shared, 512
     threads, 86 registers; the 2-block form at 64 registers spills and reads 9 to 12% slower on the RTX 5060 Ti at the 1B
     window's shapes), the window's pp512 ahead of llama.cpp's native path on both cards and its tg128 4 to 6% under it -
     the decode's room is the nv4 GEMV leaf's UE4M3 decode - and the non-native rails - Vulkan, Metal, the CPU - stay on
     the decode kernels by the ruling that NVFP4 is a specialty hardware format. Every figure here is a `PERF_LEDGER.md`
-    row of the dasCUDA arc (the FP4 leaf and its feeds, the nv4 decode GEMV, W4A4's perplexity cost). Done = each item its
-    own commit; the pp512 / tg128 rows of the impact carrier (Qwen3.8-27B NVFP4 on the pod against its Q4_K_M) beside them.
+    row of the dasCUDA arc (the FP4 leaf and its feeds, the nv4 decode GEMV, W4A4's perplexity cost); (5) the planar grp-tier
+    kernels' time against q40's - 1.3x (gemv) to 1.9x (tile) on zen4, 2.5x and 1.5x on the M5 (`PERF_LEDGER.md`, the two
+    2026-10-30 nv4-vs-q40 entries; the row-major rail sits at q40's time on zen4 alone, 1.02x, and reads 1.9x gemv / 1.6x
+    tile on the M5) - the per-strip UE4M3 decode and the split accumulators the k4 nibble tiling forces; the layout stays the device's, so the gap is accepted and closes only through a
+    cheaper decode or a fold that merges the strips without a layout change. Done = each item its own commit; the pp512 /
+    tg128 rows of the impact carrier (Qwen3.8-27B NVFP4 on the pod against its Q4_K_M) beside them.
 
 247. **The KHR flash tile has no head-96 stamp.** `FaH96T` (phi-3's heads) is stamped on the cm2 arm of both discrete
     homes; the KHR arm's lane map walks a head in 64-wide halves (`HS / 64u` in `FaT`'s KHR branch: the P x V
@@ -2464,16 +2465,6 @@
     embedding path within the Metal window's distance of the f32 model on those rows (`test_embeddings`'
     `EMB_FP32_BAR` cell, run on the CPU rail), or a measured reading that the cost of a wider activation row on the
     CPU q8 GEMVs outweighs it.
-
-266. **nv4 has no CPU emitter arm.** `kq_has_emitter` (`dasllama_gemm_schema.das`) leaves schema 49 out, so every
-    `nv4q8_*` stub declines on every rail and the NVFP4 CPU planes serve through the reference bodies at the grp4
-    layout - correct, and the only superblock format whose mr8/mr16 seats never emit. Done = the nv4 block body in
-    `dasllama_gemm_gen.das`: the mx4 codebook decode (`mx4_lut`, the doubled e2m1 table) on `emit_block_iq4xs`'s
-    sign-trick lattice with split lo/hi accumulators (the iq2 forms' shape), folded per 32-block by the two UE4M3
-    sub-block scales at half (`ue4m3_half_f32`'s law on a byte vector) and the per-superblock Q8_K scale; its
-    `panel_scales` / `panel_quads` / `panel_ioff` arms for the bf16 panel; 49 admitted to `kq_has_emitter`; the
-    TEST gate (`DAS_TUNE_MODE=test harness/gen_tune_probe.das`) green on every seat at its own mr, and the class
-    profiles re-minted with the family's crowns.
 
 268. **The assistant drafter over a trunk with routed experts on the host.** Both discrete homes' N-row token command
     declines a routed layer whose experts serve on the host (`vk_rdec_token_n_rows`, `cud_rdec_token_n_rows`), and the

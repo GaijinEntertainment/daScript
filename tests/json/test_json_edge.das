@@ -406,6 +406,19 @@ def test_write_json(t : T?) {
         var js : JsonValue?
         t |> equal(write_json(js), "null")
     }
+    t |> run("sort_keys sorts an object's keys, nested too; the default round-trips") @(t : T?) {
+        var js = parse("\{\"zeta\":1,\"alpha\":\{\"y\":2,\"x\":3\},\"mid\":4\}", t)
+        let sorted = ("\{\n\t\"alpha\" : \{\n\t\t\"x\" : 3,\n\t\t\"y\" : 2\n\t\},\n" +
+            "\t\"mid\" : 4,\n\t\"zeta\" : 1\n\}")
+        t |> equal(write_json(js, true), sorted)
+        var error : string
+        var back = read_json(write_json(js), error)
+        t |> equal(error, "")
+        t |> equal(int(back?["alpha"]?["y"] ?? 0lf), 2)
+        t |> equal(length(write_json(js)), length(write_json(js, true)))
+        let compact = "\{\"zeta\": 1, \"alpha\": \{\"y\": 2, \"x\": 3\}, \"mid\": 4\}"
+        t |> equal(length(write_json_compact(js)), length(compact))
+    }
     t |> run("no trailing zeros") @(t : T?) {
         let old = set_no_trailing_zeros(true)
         var js = JV(1.0lf)
