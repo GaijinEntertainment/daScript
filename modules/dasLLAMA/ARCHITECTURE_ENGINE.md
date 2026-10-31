@@ -213,7 +213,8 @@ reference below the indexer's `indexer_top_k` budget.
   one step per tick (`ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig`).
 - **`dasllama_lint.das`** - the facade boundary as a compile-time lint (DASLLAMA001): every engine
   module carries it, so a consumer requiring anything under `modules/dasLLAMA/` but the entry
-  modules (facade, scheduler, exchange pair, bench) fails to compile. Escape:
+  modules (facade, scheduler, exchange pair, bench, the `performance/box_ident.das` box probes)
+  fails to compile. Escape:
   `options _dasllama_internal = true` - engine files, this module's own tests/harnesses/
   benchmarks/rigs, and the ruled consumers: `utils/dasllama-convert` (the bake tool reads the mint
   rail), `utils/dasllama-server/model_catalog.das` (the env rail + the model-set serving view; it
@@ -235,6 +236,13 @@ reference below the indexer's `indexer_top_k` budget.
   recorded box's CPU brand to its store tag (the M3 row is an EXACT match so bigger M3s slug),
   the `DASLLAMA_BOX` override wins, and unknown hardware slugs from the brand - never another
   box's store. `profile_common.das`'s `box_name()` and `tests/run.das`'s manifest pick both resolve through it.
+  It is also the one home of the engine-free box probes the bench's hardware identity and the
+  server's hardware line and checkpoint budget share: the CPU brand, the RAM (a cgroup limit capping
+  it on Linux), the WMI query `wmi_lines` (wmic where the box ships it, Get-CimInstance where a clean
+  Windows 11 24H2+ install dropped it) and the argv capture `run_capture_argv` every probe and
+  reference exe spawns through (no shell: a missing program is an empty answer, never a console
+  line). A sanctioned public entry point, required by path, like the exchange: the fifth door in
+  `dasllama_lint`'s allowed table, and the SDK bundle installs it beside `model_specs.das`.
 - **`performance/fetch_models.das`** - the fetch/verify driver over the provenance view.
   Verify by default, `--fetch` downloads; it never converts on `--fetch`, never benches, and
   it touches no tune state (`tune_policy(missing="fallback")`). BRINGUP.md sec.2 is the runbook.

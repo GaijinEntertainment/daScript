@@ -28,9 +28,10 @@ IF(NOT DAS_LLAMA_INCLUDED)
         modules/dasLLAMA/harness/tune_tb.das
         modules/dasLLAMA/tests/_kq_dot.das
         modules/dasLLAMA/tests/_compares.das)
-    # dasllama/ and the tuner set carry [arch] citations; ship generated excerpts of the cited
-    # sections (registry processed by the root CMakeLists)
-    string(JOIN "," _das_llama_arch_scan modules/dasLLAMA/dasllama ${DAS_LLAMA_TUNER_FILES})
+    # dasllama/, the tuner set and the box probes carry [arch] citations; ship generated excerpts
+    # of the cited sections (registry processed by the root CMakeLists)
+    string(JOIN "," _das_llama_arch_scan modules/dasLLAMA/dasllama ${DAS_LLAMA_TUNER_FILES}
+        modules/dasLLAMA/performance/box_ident.das)
     set_property(GLOBAL APPEND PROPERTY DAS_ARCH_EXTRACT_SPECS
         "${_das_llama_arch_scan}|modules/dasLLAMA|${DAS_INSTALL_MODULESDIR}/dasLLAMA")
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/.das_module
@@ -53,8 +54,11 @@ IF(NOT DAS_LLAMA_INCLUDED)
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLAMA
     )
     # the ONE model set (provenance + serving-catalog rows) — dasllama-server's /catalog is a
-    # view over it, so the bundle must carry it or the server dies at require
-    install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/performance/model_specs.das
+    # view over it - and the engine-free box probes (CPU brand, RAM, WMI) the server's hardware
+    # line and its checkpoint budget read; the bundle must carry both or the server dies at require
+    install(FILES
+        ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/performance/model_specs.das
+        ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/performance/box_ident.das
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLAMA/performance
     )
     # shipped defaults profiles ([tune_scope(defaults = ...)]): an untuned SDK box adopts its
@@ -127,7 +131,11 @@ if(NOT DAS_TOOLS_DISABLED)
 
     das_lane_dastest_target(run_tests_dasllama_env_registry COMMENT "Testing the dasLLAMA env-knob registry"
         FILES modules/dasLLAMA/tests/test_env_registry.das)
-    
+
+    # engine-free: the box tag and the box probes the bench and the server share
+    das_lane_dastest_target(run_tests_dasllama_box_ident COMMENT "Testing the dasLLAMA box probes"
+        FILES modules/dasLLAMA/tests/test_box_ident.das)
+
     das_lane_dastest_target(run_tests_dasllama_facade_lint COMMENT "Testing the dasllama facade lint"
         JIT_FILES
             modules/dasLLAMA/tests/failed_dasllama_lint_require.das

@@ -28,7 +28,7 @@ require [tune_framework]                  // nolint:STYLE030,LINT019 — tune_st
 require model_specs public                // the model-set table + its llm/official views
 require ../harness/tts_corpus.das public   // tts_corpus_path / tts_corpus_head - the TTS cells' sentences
 require ../harness/_corpus.das public     // load_corpus - the prompt corpus reader the served instrument shares
-require box_ident                         // derive_box_name — the hardware-keyed box tag
+require box_ident public                  // derive_box_name, box_ram_gb, wmi_*, run_capture_argv — the box tag and the engine-free box probes, re-exported to the rigs
 
 // ===== Box + model roots =====
 
@@ -333,27 +333,6 @@ def run_and_stream(args : array<string>; var tail_out : string&; keep_tail : int
     }))
     tail_out = length(acc) > keep_tail ? slice(acc, length(acc) - keep_tail) : acc
     return rc
-}
-
-//! Capture twin of [[run_and_stream]] — argv spawn (no shell parse, the Windows cmd quoting
-//! traps can't bite), stdout+stderr merged by popen_argv, whole output returned trimmed.
-//! Reads via the same fgets loop as run_and_stream — predates fread's pipe-safe EOF
-//! fallback, and the line loop has never dropped output, so it stays.
-def run_capture_argv(args : array<string>) : string {
-    var acc = ""
-    unsafe(popen_argv(args, 0.0, $(f) {
-        if (f == null) {   // popen_argv can hand a null handle on spawn failure (bad binary path)
-            return
-        }
-        while (true) {
-            let line = fgets(f)
-            if (empty(line)) {   // fgets keeps the newline, so "" only at EOF
-                break
-            }
-            acc = "{acc}{line}"
-        }
-    }))
-    return strip(acc)
 }
 
 // a `~` a shell expands stands outside the quotes: the home is spelled first, the rest is
@@ -687,20 +666,6 @@ def private platform_ram_gb() : int {
     return box_ram_gb()
 }
 
-// after-colon tail of the first line of `raw` containing `key`; "" when absent
-def private line_value(raw, key : string) : string {
-    for (ln in split(raw, "\n")) {
-        let k = find(ln, key)
-        if (k >= 0) {
-            let c = find(ln, ":", k)
-            if (c >= 0) {
-                return strip(slice(ln, c + 1))
-            }
-        }
-    }
-    return ""
-}
-
 // display-adapter names that belong to a virtual/remote stack (Parsec, RDP, Hyper-V, VMware,
 // Citrix, the driverless fallback), not the physical GPU; matched case-insensitively
 def private is_virtual_gpu(name : string) : bool {
@@ -730,26 +695,7 @@ def private platform_gpu() : string {
         return ov
     }
     if (is_windows()) {
-        // wmic emits "Name=..." lines where present; clean Windows 11 24H2+ installs ship without
-        // it (survives in-place upgrades), so fall through to the same probe via CIM
-        var inscope names : array<string>
-        let raw = run_capture("wmic path win32_VideoController get name /value 2>nul", false)
-        for (ln in split(raw, "\n")) {
-            let i = find(ln, "Name=")
-            if (i >= 0) {
-                names |> push(strip(slice(ln, i + length("Name="))))
-            }
-        }
-        if (empty(names)) {
-            let ps = run_capture("powershell -NoProfile -Command \"(Get-CimInstance Win32_VideoController).Name\"", false)
-            for (ln in split(ps, "\n")) {
-                let name = strip(ln)
-                if (!empty(name)) {
-                    names |> push(name)
-                }
-            }
-        }
-        return pick_gpu_name(names)
+        return pick_gpu_name(wmi_prop("Win32_VideoController", "Name"))
     }
     if (is_macos()) {
         let raw = run_capture("system_profiler SPDisplaysDataType", false)
@@ -791,19 +737,14 @@ def private platform_cores() : tuple<perf : int; total : int> {
     return (perf = 0, total = to_int(run_capture("nproc", true)))
 }
 
-//! Physical core count — the thread-policy input ([[profile_threads]]): performance cores on
-//! Apple, `wmic cpu get NumberOfCores` on Windows (logical count would double-count SMT), lscpu
-//! math on Linux. 0 when the box can't answer (policy then falls back to its cap).
+//! Physical core count — the thread-policy input ([[profile_threads]]); 0 when the box can't answer (policy then falls back to its cap)
 def physical_perf_cores() : int {
     if (is_windows()) {
-        let raw = run_capture("wmic cpu get NumberOfCores /value", false)
-        for (ln in split(raw, "\n")) {
-            let i = find(ln, "=")
-            if (i >= 0 && find(ln, "NumberOfCores") >= 0) {
-                return to_int(strip(slice(ln, i + 1)))
-            }
+        var cores = 0
+        for (n in wmi_prop("Win32_Processor", "NumberOfCores")) {   // physical cores per socket, summed: the logical count would double-count SMT
+            cores += to_int(n)
         }
-        return 0
+        return cores
     }
     if (is_macos()) {
         return to_int(run_capture("sysctl -n hw.perflevel0.physicalcpu", true))
@@ -824,27 +765,11 @@ def private platform_ram_config() : string {
     if (!is_windows()) {
         return ""
     }
-    // wmic emits one block per module: "Capacity=34359738368\n...\nSpeed=3200"
-    let raw = run_capture("wmic memorychip get Capacity,Speed /value", false)
-    var count = 0
-    var cap_gb = 0
-    var speed = 0
-    for (ln in split(raw, "\n")) {
-        let i = find(ln, "=")
-        if (i < 0) {
-            continue
-        }
-        if (find(ln, "Capacity") >= 0) {
-            count++
-            cap_gb = int(to_float(strip(slice(ln, i + 1))) / (1024.0 * 1024.0 * 1024.0) + 0.5)
-        } elif (find(ln, "Speed") >= 0) {
-            speed = to_int(strip(slice(ln, i + 1)))
-        }
-    }
-    if (count == 0) {
+    let mods = ram_modules_of(wmi_lines("Win32_PhysicalMemory", "Capacity,Speed"))
+    if (mods.count == 0) {
         return ""
     }
-    return speed > 0 ? "{count}x{cap_gb} GB @ {speed} MT/s" : "{count}x{cap_gb} GB"
+    return mods.speed > 0 ? "{mods.count}x{mods.cap_gb} GB @ {mods.speed} MT/s" : "{mods.count}x{mods.cap_gb} GB"
 }
 
 // Windows active power scheme name — a "Power saver" sweep is not a "High performance" sweep

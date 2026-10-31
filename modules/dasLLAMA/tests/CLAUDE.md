@@ -1461,6 +1461,17 @@ are): one with no manifest reads the box file under that home, raced and written
 `test_fat_hook_umbrella.das` - model-free: a program requiring the engine umbrella alone (what
 the shipped bench requires, never the facade) carries the first-start race hook - the umbrella's
 `[init]` set registers it, or a fat bench exe would serve Metal uncrowned forever.
+`test_box_ident.das` - model-free: the hardware-keyed box tag (`../performance/box_ident.das`) -
+the fleet table's brands to their store tags, an unknown brand to its own slug (the M3 row exact),
+the `DASLLAMA_BOX` override over the probe, and an unset override resolving through this box's
+probed brand; and the box probes beside it - a WMI answer's `Key=value` lines (wmic's `\r\r\n`
+endings and blank lines dropped, CIM's plain lines kept, a line with no `=` no value), a line's
+value by its own key, one key's values across lines (empty ones skipped), the RAM modules a
+`Capacity,Speed` answer lists, the Get-CimInstance script that stands in for a missing wmic, a
+cgroup limit file's byte count, the Linux RAM read (the v2 limit, else the v1 one, where under
+the total), and the live probes - this box's CPU brand non-empty and its RAM above 0, and on
+Windows `Win32_ComputerSystem` answering one instance and every processor its core count; a
+Linux box with no "model name" line and no lscpu skips the cell.
 `failed_dasllama_lint_require.das` - model-free, expected-compile-failure: the
 facade lint trips DASLLAMA001 (code 50503) on a direct engine require with no escape.
 `failed_dasllama_lint_sidedoor.das` - model-free, expected-compile-failure: the lint's tree

@@ -568,26 +568,4 @@ def test_prefix_state_budget(t : T?) {
         t |> equal(slot_prefix_states(c, 500l * one + one - 1l), 500l, "between them, the whole checkpoints the budget holds")
         t |> equal(slot_prefix_states(c, 2000l * one), 1024l, "a budget past 1024 checkpoints keeps the cap")
     }
-    t |> run("a cgroup limit file's byte count, no limit read as none") @(t : T?) {
-        t |> equal(58, ram_gb_from_cgroup("61999996928\n"), "a 62 GB container limit (v2)")
-        t |> equal(1, ram_gb_from_cgroup("268435456\n"), "256 MiB reads as one GiB, not no limit")
-        t |> equal(0, ram_gb_from_cgroup("max\n"), "v2 with no limit")
-        t |> equal(0, ram_gb_from_cgroup("9223372036854771712\n"), "v1 with no limit")
-        t |> equal(0, ram_gb_from_cgroup(""), "no cgroup file")
-        t |> equal(0, ram_gb_from_cgroup("+68719476736\n"), "a signed count")
-        t |> equal(0, ram_gb_from_cgroup(".5e11\n"), "text opening on no digit")
-        t |> equal(0, ram_gb_from_cgroup("nan\n"), "a float spelling")
-    }
-    t |> run("a Linux box's RAM: the v2 limit, else the v1 one, where under the total") @(t : T?) {
-        let mem = "MemFree:  1024 kB\nMemTotal:       67108864 kB\n"
-        let gb16 = "17179869184\n"
-        let gb8 = "8589934592\n"
-        t |> equal(64, linux_ram_gb(mem, "", ""), "no cgroup: the total")
-        t |> equal(16, linux_ram_gb(mem, gb16, gb8), "the v2 limit, the v1 file unread")
-        t |> equal(8, linux_ram_gb(mem, "max\n", gb8), "v2 with no limit: the v1 one")
-        t |> equal(8, linux_ram_gb(mem, "", gb8), "no v2 file: the v1 one")
-        t |> equal(64, linux_ram_gb(mem, "137438953472\n", ""), "a limit past the total")
-        t |> equal(16, linux_ram_gb("", gb16, ""), "the total unread: the limit")
-        t |> equal(0, linux_ram_gb("", "max\n", ""), "neither: unknown")
-    }
 }
