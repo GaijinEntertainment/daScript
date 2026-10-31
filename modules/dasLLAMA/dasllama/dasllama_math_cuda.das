@@ -180,12 +180,11 @@ def private cud_bake_tag : string {
 //! (a config disagreeing with this process' knobs would write a lane whose identity lies about its plan: fail closed, name both);
 //! the card's own budget stands in for a dry config's, since the home arms off a device alone
 def private cud_dry_bake_arm(v : DlimVulkanConfig) : bool {
-    return false if (!cuda_moe_gpu_arm())
-    if (v.home != "cuda") {
+    if (v.home != "cuda") {   // the home is refused before the device is asked, as the vulkan arm does, so a foreign home fails by name on any box
         to_log(LOG_ERROR, "dasLLAMA cuda tier: dry-bake config names home '{v.home}' - this process bakes the cuda lane alone (a config another home wrote mints there)\n")
         return false
     }
-    return false if (!dlim_dry_wants_ok(v, "cuda"))
+    return false if (!cuda_moe_gpu_arm() || !dlim_dry_wants_ok(v, "cuda"))
     cud_mint_dry(true)
     cud_mint_dry_budget(v.vram_mb * 1_000_000l)
     return true
