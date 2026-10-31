@@ -516,7 +516,9 @@ decoded scale row needs no upload work - only the id bridge and the kernels. The
    `dasllama_gemm_gen.das` the format takes an arm of the family body its planes fit - `rm_kq_gen` for a
    superblock format (its codes, sub-scales and the min or offset term; a codebook-grid block's weights come off
    `rm_grid_block`), `rm_b32_gen` for a per-32 one - and a
-   `register_llvm_code_generator` row for its `<fmt>_rm_gemv` and `<fmt>_rm_tile4` keys; in
+   `register_llvm_code_generator` row for its `<fmt>_rm_gemv` and `<fmt>_rm_tile4` keys (the row-major perms emit only
+   once sec.5's emitter admits the format: `perm_declines` reads `kq_has_emitter` for every family a format's stubs name,
+   so a row-major arm landed ahead of the grp-tier arm reads "(ref)" on every perm with no other sign); in
    `dasllama_math_gen.das` the `[tune]` family `<fmt>q8_rm_gemv_gen` (the shared perms, the tile stub
    `<fmt>q8_rm_tile4_gen` and the witness stub `<fmt>q8_rm_witness_gen` ahead of it as its companions, the
    reference `rm_kq_rows_ref` over the device-plane decode `rm_kq_dev_row`, which takes the format's arm, or the

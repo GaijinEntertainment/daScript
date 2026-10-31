@@ -1734,10 +1734,39 @@ def private note_site_scale(var t : Model; m : GGUFMeta; bytes : array<uint8> | 
 }
 
 [arch(at="../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
+def private note_stack_scales(var t : Model; m : GGUFMeta; bytes : array<uint8> | #; name : string; fmt : KqFmt; offs : array<int64>; l : int64) {
+    return if (l >= long_length(offs) || offs[l] < 0l)
+    let sname = "{trim_suffix(name, ".weight")}.scale"
+    let ti = gguf_find_tensor(m, sname)
+    return if (ti < 0)
+    if (fmt != KqFmt.nv4) {
+        panic("dasLLAMA load: {name} carries a per-tensor scale ({sname}) and serves as {ggml_type_name(kq_ggml_type(fmt))} - the scale lands only on the NVFP4 planes' epilogue")
+    }
+    let ne = t.config.n_expert
+    let cnt = m.tensors[ti].n_elem
+    if (cnt != 1l && cnt != ne) {
+        panic("dasLLAMA load: {sname} holds {cnt} scales for a stack of {ne} experts - one a expert or one for the stack")
+    }
+    var v : array<float>
+    v |> resize(ne)
+    gguf_read_tensor_f32(m, bytes, sname, v, 0l, cnt)
+    if (cnt == 1l) {
+        for (e in range64(1l, ne)) {
+            v[e] = v[0]
+        }
+    }
+    let ege = t.config.dim * t.config.n_ff_exp
+    for (e in range64(ne)) {
+        t.site_scale[site_scale_key(fmt, offs[l] + e * ege)] = v[e]
+    }
+    t.exps_scale[offs[l]] <- v
+}
+
+[arch(at="../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
 def private refuse_site_scale(m : GGUFMeta; name : string) {
     let sname = "{trim_suffix(name, ".weight")}.scale"
     if (gguf_find_tensor(m, sname) >= 0) {
-        panic("dasLLAMA load: {name} carries a per-tensor scale ({sname}) at a site the engine applies no per-tensor scale to (the expert and shared-expert stacks, the token table, the classifier, the NextN projection, the PLE table)")
+        panic("dasLLAMA load: {name} carries a per-tensor scale ({sname}) at a site the engine applies no per-tensor scale to (a fused gate-up stack, the token table, the classifier, the NextN projection, the PLE table)")
     }
 }
 
@@ -1780,9 +1809,20 @@ def private detect_site_scales(var t : Model; m : GGUFMeta; bytes : array<uint8>
                 }
             }
         }
-        for (stem in ["ffn_gate_exps", "ffn_up_exps", "ffn_down_exps", "ffn_gate_up_exps", "ffn_gate_shexp", "ffn_up_shexp", "ffn_down_shexp", "nextn.eh_proj"]) {
-            //! gemma4's `ffn_down_exps.scale` is the routed block's per-expert down scale, not a site scale
-            if (stem == "ffn_down_exps" && t.config.moe_dense_shexp) continue
+        if (t.config.n_expert > 0l && l >= t.config.n_layer_dense_lead && l < t.config.n_layers) {
+            note_stack_scales(t, m, bytes, "blk.{l}.ffn_gate_exps.weight", fmt_at(t.we1_fmt, l), t.we1_offs, l)
+            note_stack_scales(t, m, bytes, "blk.{l}.ffn_up_exps.weight", fmt_at(t.we3_fmt, l), t.we3_offs, l)
+            if (!t.config.moe_dense_shexp) {   // gemma4's `ffn_down_exps.scale` is the routed block's per-expert down scale, not a site scale
+                note_stack_scales(t, m, bytes, "blk.{l}.ffn_down_exps.weight", fmt_at(t.we2_fmt, l), t.we2_offs, l)
+            }
+            if (t.config.n_ff_shexp > 0l) {
+                for (kind, stem in [1, 3, 2], ["gate", "up", "down"]) {
+                    let sp = shexp_plane(t, l, kind)
+                    note_site_scale(t, m, bytes, "blk.{l}.ffn_{stem}_shexp.weight", sp.f, sp.off)
+                }
+            }
+        }
+        for (stem in ["ffn_gate_up_exps", "nextn.eh_proj"]) {
             refuse_site_scale(m, "blk.{l}.{stem}.weight")
         }
     }

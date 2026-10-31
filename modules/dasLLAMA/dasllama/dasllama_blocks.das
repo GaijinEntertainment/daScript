@@ -1658,7 +1658,7 @@ def rare_batched_pin : int => g_rare_batched_pin
 def rm_dev_serves(f : KqFmt) : bool {
     return (f == KqFmt.q8 || f == KqFmt.iq4nl32 || f == KqFmt.q4032 || f == KqFmt.q51 || f == KqFmt.q5032 || f == KqFmt.mx4
         || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.k3 || f == KqFmt.k2 || f == KqFmt.q40
-        || f == KqFmt.iq4nl || f == KqFmt.iq4xs || f == KqFmt.iq3s4
+        || f == KqFmt.iq4nl || f == KqFmt.iq4xs || f == KqFmt.iq3s4 || f == KqFmt.nv4
         || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs)
 }
 
@@ -1686,8 +1686,9 @@ struct private RarePlane {
     q8s : float const?
     q8fn : MatmulQ8Q8RowsFn
     dev_layout : bool      //! the planes are the tier's pinned device-layout stack, read through the format's row-major kernel
-    base : int64           //! ... the stack's first element (the region offsets are relative to it)
-    ege : int64            //! ... and an expert's elements, the stack's slots an expert each (`rare_dev_ptrs`)
+    base : int64           //! the stack's first element (the region offsets are relative to it)
+    ege : int64            //! an expert's elements, the stack's slots an expert each (`rare_dev_ptrs`)
+    scales : float const?  //! the stack's per-expert scales (`exps_scale_ptr`), null where it carries none
     view : MoeGpuStreamView   //! ... the cache's layout of the stack, captured in the main context: a lane resolves experts off it alone
 }
 
@@ -1910,6 +1911,7 @@ def private rare_batch_core(p : RarePlane; var yp : float?; woff : int64; xq : i
         } else {
             b32_expert_batch_core(p.f, yp, qp, sp, xq, xs, n, d, ntok, p.tb, ln.bsums)
         }
+        rare_scale_planar_rows(p, yp, woff, ntok * d)
     }
 }
 
@@ -1917,14 +1919,12 @@ def private rare_batch_core(p : RarePlane; var yp : float?; woff : int64; xq : i
 //! (mx4, a q8 plane under f16 scales)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena")]
 def private rare_plane(t : Model; f : KqFmt; n, woff : int64) : tuple<on : bool; p : RarePlane> {
-    var p = RarePlane(f = f)
+    var p = RarePlane(f = f, base = woff, ege = t.config.dim * t.config.n_ff_exp, scales = exps_scale_ptr(t, woff))
     unsafe {
         if (rare_arena_serves(t) && rm_dev_serves(f)) {
             p.view = moe_gpu_stream_view(woff, int(f))
             if (p.view.q != null) {   //! the stack's pinned planes, where it holds every expert resident; an unmapped stack views null and the ring serves it
                 p.dev_layout = true
-                p.base = woff
-                p.ege = t.config.dim * t.config.n_ff_exp
                 p.q = p.view.q
                 p.s = p.view.s
                 let b = dev_block_bytes(f)
@@ -2012,6 +2012,8 @@ def private rm_dev_tile4(p : RarePlane; var yp : float?; dq, ds : uint8 const?; 
             iq2xsq8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
         } elif (p.f == KqFmt.iq2xxs) {
             iq2xxsq8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+        } elif (p.f == KqFmt.nv4) {
+            nv4q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
         } else {
             return false
         }
@@ -2066,6 +2068,8 @@ def private rare_rows_core(p : RarePlane; var yp : float?; woff : int64; xq : in
                 iq2xsq8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
             } elif (p.f == KqFmt.iq2xxs) {
                 iq2xxsq8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+            } elif (p.f == KqFmt.nv4) {
+                nv4q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
             } else {
                 panic("dasLLAMA: the rare rail's device arm holds a {p.f} plane with no row-major kernel")
             }
@@ -2089,7 +2093,14 @@ def private rare_rows_core(p : RarePlane; var yp : float?; woff : int64; xq : in
         } else {
             q5032q8_gemv_gen(yp, qp, sp, xq, xs, xbs, n, rb, re)
         }
+        rare_scale_planar_rows(p, yp + rb, woff, re - rb)
     }
+}
+
+//! the planar read's rows multiplied by expert `woff`'s scale
+def private rare_scale_planar_rows(p : RarePlane; var yp : float?; woff, count : int64) {
+    return if (p.scales == null)
+    scale_inplace(yp, unsafe(p.scales[(woff - p.base) / p.ege]), count)
 }
 
 //! whether every plane of layer l's routed triple has a rows core the one-pass rail can call

@@ -734,6 +734,8 @@ def bench_rm(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; mx4 : b
         bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq2xsq8_rm_gemv_gen_variants(), iq2xsq8_rm_tile4_gen_variants())
     } elif (f == KqFmt.iq2xxs) {
         bench_rm_rows(rows, cfg, name, f, p, nsb, sh, iq2xxsq8_rm_gemv_gen_variants(), iq2xxsq8_rm_tile4_gen_variants())
+    } elif (f == KqFmt.nv4) {
+        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, nv4q8_rm_gemv_gen_variants(), nv4q8_rm_tile4_gen_variants())
     } else {
         to_log(LOG_WARNING, "kq_kernel_bench: {name} has no row-major family - no rm rows\n")
     }

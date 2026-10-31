@@ -444,7 +444,8 @@ cuda-g4m cuda-g4mk cuda-g4e cuda-g4f cuda-g4q8 cuda-g31 cuda-g4mx`. By substring
 `--arm cuda-` selects the CUDA files' arms alone.
 
 The `image` suite (test_model_image - the prepared-image .dlim rail): `mechanics` (synthetic
-carrier, model-free - runs with no model stocked; also the layout fingerprint; the save's temp
+carrier, model-free - runs with no model stocked; also the layout fingerprint; the Model meta's two site-scale tables -
+the per-tensor table and the nv4 stacks' per-expert vectors - read back through `serialize_image_meta`; the save's temp
 file - a save the `set_image_write_fault` seam fails publishes nothing and leaves no temp file,
 a temp file a killed writer left (its mtime set back) goes at the next save and one written a
 moment ago stays; the lane naming -
@@ -1170,8 +1171,8 @@ twin on a Vulkan build, the CUDA home under `DASLLAMA_CUDA=1`): the one-copy rar
 kernels and their oracle on every expert format the tier streams, against the planar kernels over a planar disk-order
 stack on a Model shell gathered into the device layout by the engine's own gather (`layout_gather_dispatch` under `disk`),
 the poisoned expectation the control: the host twin (the discrete templates' own block decode run on the CPU, the shared
-`dasllama_gpu_host_twin`'s `moe_gpu_host_twin` / `moe_gpu_host_rows`) on the fourteen superblock formats, the four per-32 ones, mx4 and q8; the row-major GEMVs
-(`<fmt>q8_rm_gemv_gen`: q8, the per-32 and MXFP4 planes, the fourteen superblock formats) and their four-token
+`dasllama_gpu_host_twin`'s `moe_gpu_host_twin` / `moe_gpu_host_rows`) on the fifteen superblock formats, the four per-32 ones, mx4 and q8; the row-major GEMVs
+(`<fmt>q8_rm_gemv_gen`: q8, the per-32 and MXFP4 planes, the fifteen superblock formats) and their four-token
 tiles (`<fmt>q8_rm_tile4_gen`, four activation rows against the planar rows a token). A new expert format lands its cells
 here (`HOW_TO_ADD_A_FORMAT.md`, the Vulkan section's one-copy step).
 `test_vulkan_moe_cm2.das` - model-free (a cm2 device, else skips): the cm2 expert chain over a
@@ -3044,7 +3045,8 @@ under the models dir, a junction to another drive on the reference box; the rest
 type's per-32 fallback where a superblock type is asked - Q4_K's down is Q5_0), four routed layers' experts pinned to the host
 under the streamed prompt (`set_gpu_want_pf_stream`), the rare rail reading them off the tier's pinned device-layout planes through
 the host twin (`set_rare_arena`): the host-pinned file's two cells a format - the split token command and the cut window chain
-against the CPU chain, one window and two, one `[test]` a format (dastest's `--test-names test_moe_formats_<TYPE>` runs one),
+against the CPU chain, one window and two, one `[test]` a format (dastest's `--test-names test_moe_formats_<TYPE>` runs one;
+`test_moe_formats_NVFP4_35B` runs the two cells on Qwen3.6-35B-A3B's own NVFP4 file, large tier, the nv4 row-major kernels),
 the meet's host share forced through `set_moe_host_first` and witnessed by its counter, since a small carrier's device
 ring would otherwise take every expert, and the fed steps' host picks witnessed off the device planes too (`g_rare_dec_rows`:
 the one-row rail); `test_moe_formats_hot_pool` puts twenty of the Q4_K file's layers on the host, so the plan's room arms the

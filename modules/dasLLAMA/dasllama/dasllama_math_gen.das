@@ -10,6 +10,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_math_aarch64_neon
 require dasllama/dasllama_math_default  // the row-major tail dots of the slot walks
 require dasllama/dasllama_gpu_math      // ue4m3_half_f32 - the nv4 sub-block scale's one decode
+require daslib/math_bits
 require dasllama/dasllama_tune  // [from_template]: the slot walks stamped per scale plane
 require dasllama/dasllama_repack  // the grp<mr> repack family + kq panel unpack (pure transforms; the _gen/_bake twins below feed them numbers)
 require daslib/f16_cvt  // the kq reference bodies widen the f16 (s, o) scale pairs
@@ -1589,6 +1590,8 @@ def k2q8_rm_witness_gen() : bool => false
 
 def q40q8_rm_witness_gen() : bool => false
 
+def nv4q8_rm_witness_gen() : bool => false
+
 def iq4nlq8_rm_witness_gen() : bool => false
 
 def iq4xsq8_rm_witness_gen() : bool => false
@@ -1795,8 +1798,9 @@ def mx4q8_rm_gemv_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp
 def private rm_kq_dev_row(f : KqFmt; q : uint8 const?; s : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n : int64) : float { // nolint:STYLE037 - one decode ladder a format family
     let qsb = kq_qsb(f)
     let ssb = kq_dev_ssb(f)
-    let lutv = f == KqFmt.q40 ? q40_lut() : (f == KqFmt.iq3s4 ? iq3s4_lut() : iq4nl_lut())
-    let lut = f == KqFmt.q40 || f == KqFmt.iq4nl || f == KqFmt.iq4xs || f == KqFmt.iq3s4
+    let nv4 = f == KqFmt.nv4
+    let lutv = f == KqFmt.q40 ? q40_lut() : (f == KqFmt.iq3s4 ? iq3s4_lut() : (nv4 ? mx4_lut() : iq4nl_lut()))
+    let lut = f == KqFmt.q40 || f == KqFmt.iq4nl || f == KqFmt.iq4xs || f == KqFmt.iq3s4 || nv4
     let two_word = f == KqFmt.iq4xs || f == KqFmt.iq3s4
     let per_block_d = f == KqFmt.q40 || f == KqFmt.iq4nl
     var acc = 0.0
@@ -1810,7 +1814,10 @@ def private rm_kq_dev_row(f : KqFmt; q : uint8 const?; s : uint8 const?; xq : in
             var w1 = 0u
             var d = 0.0
             var dmin = 0.0
-            if (two_word) {
+            var site = 1.0
+            if (nv4) {
+                site = uint_bits_to_float(uint(sp[16]) | (uint(sp[17]) << 8u) | (uint(sp[18]) << 16u) | (uint(sp[19]) << 24u))
+            } elif (two_word) {
                 w0 = uint(sp[0]) | (uint(sp[1]) << 8u) | (uint(sp[2]) << 16u) | (uint(sp[3]) << 24u)
                 w1 = uint(sp[4]) | (uint(sp[5]) << 8u) | (uint(sp[6]) << 16u) | (uint(sp[7]) << 24u)
                 d = f16_to_f32(w0 & 0xFFFFu)
@@ -1829,7 +1836,11 @@ def private rm_kq_dev_row(f : KqFmt; q : uint8 const?; s : uint8 const?; xq : in
                 var mn_lo = 0
                 var mn_hi = 0
                 var bd = 0.0
-                if (f == KqFmt.k4 || f == KqFmt.k5) {
+                var bd_hi = 0.0
+                if (nv4) {
+                    bd = ue4m3_half_f32(uint(sp[2l * j])) * site
+                    bd_hi = ue4m3_half_f32(uint(sp[2l * j + 1l])) * site
+                } elif (f == KqFmt.k4 || f == KqFmt.k5) {
                     sc_lo = int(sp[4l + j])
                     sc_hi = sc_lo
                     mn_lo = int(sp[12l + j])
@@ -1881,13 +1892,15 @@ def private rm_kq_dev_row(f : KqFmt; q : uint8 const?; s : uint8 const?; xq : in
                 }
                 if (per_block_d) {
                     fblk += bd * float(dot_lo + dot_hi)
+                } elif (nv4) {
+                    fblk += float(dot_lo) * bd + float(dot_hi) * bd_hi
                 } else {
                     isum += sc_lo * dot_lo + sc_hi * dot_hi
                     bsum += mn_lo * bp[2l * j] + mn_hi * bp[2l * j + 1l]
                 }
             }
             let x8 = xs[sb]
-            if (per_block_d) {
+            if (per_block_d || nv4) {
                 acc += fblk * x8
             } else {
                 acc += float(isum) * (d * x8) - float(bsum) * (dmin * x8)
@@ -2141,6 +2154,28 @@ def q40q8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xq
  hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
 def q40q8_rm_gemv_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) : void {
     rm_kq_rows_ref(KqFmt.q40, yp, qp, sp, xqp, xsp, xbsp, n, rb, re)
+}
+
+[hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
+def nv4q8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) : void {
+    for (t in range64(4l)) {
+        unsafe {
+            rm_kq_rows_ref(KqFmt.nv4, yp + t * d, qp, sp, xqp + t * n, xsp + t * (n / 256l), xbsp + t * (n / 16l), n, 0l, d)
+        }
+    }
+}
+
+[tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
+ tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_perm(mr = 4),
+ tune_companion(fn = "nv4q8_rm_tile4_gen", gen = "dasllama_gemm_gen::nv4_rm_tile4"),
+ tune_companion(fn = "nv4q8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
+ tune(gen = "dasllama_gemm_gen::nv4_rm_gemv",
+      fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
+ hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
+def nv4q8_rm_gemv_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) : void {
+    rm_kq_rows_ref(KqFmt.nv4, yp, qp, sp, xqp, xsp, xbsp, n, rb, re)
 }
 
 [hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
@@ -4077,12 +4112,12 @@ def kq_registries(_f : KqTag_iq3s4) : KqRegistries {
     }
 }
 
-//! every registry: until nv4's emitter arm lands (`kq_has_emitter`) its stubs decline on every rail together, so the gate reads the reference body at the reference layout
 def kq_registries(_f : KqTag_nv4) : KqRegistries {
     static_if (typeinfo module_exists(llvm_tune)) {
         return <- KqRegistries(tile <- nv4q8_tile_gen_variants(), tile4 <- nv4q8_tile4_gen_variants(), gemv <- nv4q8_gemv_gen_variants(),
             layout <- nv4q8_layout_gen_variants(), tileform <- nv4q8_tileform_gen_variants(), amx_cfg <- nv4q8_amx_cfg_gen_variants(),
-            witness <- nv4q8_witness_gen_variants(), panel <- nv4q8_panel_gen_variants())
+            witness <- nv4q8_witness_gen_variants(), panel <- nv4q8_panel_gen_variants(),
+            rm_gemv <- nv4q8_rm_gemv_gen_variants(), rm_witness <- nv4q8_rm_witness_gen_variants())
     } else {
         return <- KqRegistries()
     }

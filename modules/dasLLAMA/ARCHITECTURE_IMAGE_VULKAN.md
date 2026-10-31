@@ -23,7 +23,8 @@ stack takes when the loader records it one expert at a time (`stream_job_span`) 
 planes whose offset 0 is the run's first `woff` (`stream_job_view`: the scale halves as the gathers read them, every job's
 repack regions applied, the frozen K-quant interleave copied), and the arena placement's own gather runs over that view
 (`layout_gather_dispatch`). The gather keeps the last run's view while the next entry sits in the same run
-(`vk_mint_gather_hook`), so the pieces of one entry - a token table's rows - share one transcode. A model whose streaming
+(`vk_mint_gather_hook`), so the pieces of one entry - a token table's rows - share one transcode; an nv4 entry's site
+scales ride into the view under its rebased keys, one a slice, so a stack's experts keep their own. A model whose streaming
 plan disarmed has no jobs and its planes whole in RAM, and the walk gathers them as the eager rail would; an entry no run
 of recorded jobs holds is a shape the mint does not know: the hook feeds the walk a zero stand-in of the entry's size so
 the walk runs to its end without a gather over a plane the stream never filled, records the entry, and the mint declines

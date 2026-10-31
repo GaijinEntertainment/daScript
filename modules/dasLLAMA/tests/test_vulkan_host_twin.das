@@ -247,7 +247,7 @@ def private twin_cell(t : T?; f : KqFmt) {
 
 [test]
 def test_host_twin_superblock(t : T?) {
-    for (f in [KqFmt.k2, KqFmt.k3, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq3s4, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
+    for (f in [KqFmt.k2, KqFmt.k3, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq3s4, KqFmt.nv4, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
         t |> run("the host twin over a {f} expert stack") <| @(ct : T?) {
             twin_cell(ct, f)
         }
@@ -375,6 +375,8 @@ def private rm_kq_rows(m : Model; f : KqFmt; x : array<float>; n, rows : int64) 
             iq2sq8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
         } elif (f == KqFmt.iq2xs) {
             iq2xsq8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
+        } elif (f == KqFmt.nv4) {
+            nv4q8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
         } else {
             iq2xxsq8_rm_gemv_gen(yp, q, s, xqp, xsp, xbsp, n, 0l, rows)
         }
@@ -384,7 +386,7 @@ def private rm_kq_rows(m : Model; f : KqFmt; x : array<float>; n, rows : int64) 
 
 [test]
 def test_host_rm_superblock(t : T?) {
-    for (f in [KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.k2, KqFmt.q40, KqFmt.iq4nl, KqFmt.iq4xs, KqFmt.iq3s4,
+    for (f in [KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.k2, KqFmt.q40, KqFmt.iq4nl, KqFmt.iq4xs, KqFmt.iq3s4, KqFmt.nv4,
                KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
         t |> run("the row-major kernel over a {f} expert stack") <| @(ct : T?) {
             let n = N_SB

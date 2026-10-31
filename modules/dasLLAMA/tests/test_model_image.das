@@ -306,6 +306,42 @@ def test_image_table_slot_names(t : T?) {
 }
 
 [test]
+def test_image_meta_carries_site_scales(t : T?) {
+    t |> run("Model meta: an nv4 stack's per-expert scale vector rides the image beside the site table, both directions") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        var src = Model()
+        src.site_scale[site_scale_key(KqFmt.nv4, 4096l)] = 0.25
+        src.exps_scale[4096l] <- [0.5, 0.125, 2.0]
+        var meta <- new MemSerializer()
+        var warch = Archive(reading = false, stream = meta)
+        serialize_image_meta(warch, src)
+        var blob <- meta->extractData()
+        delete meta
+        var rmeta <- new MemSerializer(blob)
+        var rarch = Archive(reading = true, stream = rmeta)
+        var dst = Model()
+        serialize_image_meta(rarch, dst)
+        t |> equal(site_scale(dst, KqFmt.nv4, 4096l), 0.25, "the site table's entry read back")
+        t |> equal(length(dst.exps_scale), 1, "the per-expert vector table read back one stack")
+        var got : array<float>
+        dst.exps_scale |> get(4096l) $(v) {
+            got := v
+        }
+        t |> equal(length(got), 3, "the stack's three expert scales")
+        t |> equal(got[0], 0.5, "expert 0's scale")
+        t |> equal(got[1], 0.125, "expert 1's scale")
+        t |> equal(got[2], 2.0, "expert 2's scale")
+        delete got
+        delete rmeta
+        delete blob
+        delete dst
+        delete src
+    }
+}
+
+[test]
 def test_tower_exact_lanes_are_config_free(t : T?) {
     t |> run("a tower's exact lane keys one identity whatever CPU backend the process runs; its q8 lane follows the backend") @(t : T?) {
         if (!arm_on(t, "mechanics")) {

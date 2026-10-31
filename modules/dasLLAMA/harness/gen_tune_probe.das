@@ -1794,8 +1794,8 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
     delete kids
     var rmf <- rm_family_fmts()
     var members <- kq_family_fmts() $(_regs : KqRegistries) => true
-    if (length(rmf) != length(members) - 1) {   // every format but nv4 carries a row-major family
-        print("  RM FAMILY CENSUS: {length(rmf)} of {length(members) - 1} formats carry rm rows ({rmf})\n")
+    if (length(rmf) != length(members)) {
+        print("  RM FAMILY CENSUS: {length(rmf)} of {length(members)} formats carry rm rows ({rmf})\n")
         allok = false
     }
     delete members

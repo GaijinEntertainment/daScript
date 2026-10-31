@@ -1079,8 +1079,9 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
     let qrow = nsb * qsb
     let srow = nsb * dssb
     let ng = repacked ? slice_rows / mr : 0l
-    let nv4_site_scale_bits = fmt == KqFmt.nv4 ? float_bits_to_uint(site_scale(t, fmt, woff)) : 0u
+    var slice_scale_bits <- [for (sl in range(nslices)); fmt == KqFmt.nv4 ? float_bits_to_uint(site_scale(t, fmt, woff + int64(sl) * slice_rows * n)) : 0u]
     unsafe {
+        let sbp = addr<uint const?>(slice_scale_bits[0])
         let sb0 = woff / KQ_SUPERBLOCK_ELEMS
         let qp = addr<uint8 const?>(t.kq[int(fmt)].q[sb0 * qsb])
         let sp = addr<uint8 const?>(t.kq[int(fmt)].s[sb0 * dssb])
@@ -1181,7 +1182,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                     dsc[blk * 2l + 1l] = gs[blk * 2l * mr + 2l * r + 1l]
                                 }
                                 for (idx in range64(16l, 20l)) {
-                                    dsc[idx] = uint8((nv4_site_scale_bits >> uint((idx - 16l) * 8l)) & 0xFFu)
+                                    dsc[idx] = uint8((sbp[rr / slice_rows] >> uint((idx - 16l) * 8l)) & 0xFFu)
                                 }
                             } elif (fmt == KqFmt.k2) {   // the field-major grp header re-packs to [d][dmin][16 pair bytes]
                                 dsc[0] = gs[16l * mr + 2l * r]
@@ -1240,7 +1241,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                     dsc[idx] = rs[idx]
                                 }
                                 for (idx in range64(dssb, KQ_DEV_SSB)) {
-                                    dsc[idx] = uint8((nv4_site_scale_bits >> uint((idx - 16l) * 8l)) & 0xFFu)
+                                    dsc[idx] = uint8((sbp[rr / slice_rows] >> uint((idx - 16l) * 8l)) & 0xFFu)
                                 }
                             } else {
                                 for (idx in range64(4l)) {   // f16 d + f16 dmin verbatim
