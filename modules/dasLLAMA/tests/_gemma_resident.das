@@ -56,7 +56,7 @@ let GEMMA_RIG_CTX = 32768l
 struct GemmaFile {
     file : string
     arm : string
-    host_experts : bool   //! the load asks the rig's context whole on a card that cannot hold every expert stack beside it: the driver arms with the first routed layers' experts on the host
+    host_experts : bool   //! the load asks the rig's context whole and at least one routed layer's experts onto the host: the driver arms with the first routed layers' experts on the host on any card
 }
 
 [init]
@@ -95,8 +95,8 @@ let GEMMA_MOE_PPL_RATIO = 2.0
 def private gemma_model(t : T?; gf : GemmaFile) : Model {
     let path = path_join(models_dir(), gf.file)
     var tr <- resident_trunk(t, path, GEMMA_RIG_CTX, " - DASLLAMA_GPU_MIN_CTX=1024 arms the 12B Q8_0 file on a 16 GB card") $() : Model {
-        var m <- load_resident(path, 0l, gf.host_experts ? GEMMA_RIG_CTX : 0l)
-        if (gf.host_experts) {   //! the pinned cap decides the plan whatever the card: a memory decline is the form missing, never a skip
+        var m <- load_resident(path, 0l, gf.host_experts ? GEMMA_RIG_CTX : 0l, gf.host_experts ? 1l : 0l)
+        if (gf.host_experts) {   //! the pinned cap and the one routed layer asked onto the host decide the plan whatever the card (a card past the rig's holds the stacks beside the cap): a memory decline is the form missing, never a skip
             t |> success(moe_gpu_resident_active(), "the whole-model driver armed with host experts ({gpu_resident_decline_()})")
         }
         return <- m
