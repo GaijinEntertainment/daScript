@@ -536,7 +536,7 @@ def stage_qwen3v_tower(path : string) : Qwen3vStaging {
 // every GEMM tensor the halfword twin route serves: the block set at every layer, the merger
 // pair, and each deepstack tap's fc1/fc2. A sample of two would let a mixed file bake a twin
 // the route reads as one type.
-[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
+[arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane")]
 def private q3v_gemm_types_uniform(m : GGUFMeta; t : Qwen3vTower; gt : int) : bool {
     if (gguf_tensor_type(m, "mm.0.weight") != gt || gguf_tensor_type(m, "mm.2.weight") != gt) {
         return false
@@ -559,7 +559,7 @@ def private q3v_gemm_types_uniform(m : GGUFMeta; t : Qwen3vTower; gt : int) : bo
 
 //! The exact lane's halfword GEMM twin ([[tower_bake_half_twin]]): plane absence IS the
 //! ineligibility flag (mixed/f32/q8), and `blk_bf16` names the format the route dispatches.
-[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
+[arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane")]
 def private q3v_bake_half_twin(var st : Qwen3vStaging; bf16 : bool) {
     tower_bake_half_twin(st.blob, st.wblob, bf16)
 }

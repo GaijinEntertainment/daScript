@@ -137,7 +137,7 @@ dequant work, which only a large row count repays. The raced evidence (32 MiB wi
 **Every dense site takes a scratch panel from its row floor.** The scratch pair is the window's working memory - a site's
 panel dequantized from its own bytes inside the window, the pair reused by the next one - so it is no converted copy
 (`REVIEW_KQ_FORMATS.md`); a STORED panel, baked into an image or resident across windows, is one, and only the lever builds
-it (`set_metal_devw_panels`, `DASLLAMA_METAL_DEVW=1`; `ARCHITECTURE_IMAGE.md#image-devw-plane`). The floor
+it (`set_metal_devw_panels`, `DASLLAMA_METAL_DEVW=1`; `ARCHITECTURE_IMAGE_GPU_PLANES.md#image-devw-plane`). The floor
 (`devw_scratch_floor`) is `DEVW_SCRATCH_ROWS` (64 padded rows) where the site has no crowned tensor form - the base tiles
 re-dequantize W every 32-row tile - and where its twin is crowned, the band the twin holds: `DEVW_KQ_TWIN_ROWS` (384) on a
 K-quant site, `DEVW_Q8_TWIN_ROWS` (2048) on a Q8_0 one. Scratch / own-bytes window ratios (`benchmarks/prefill_window_probe.das

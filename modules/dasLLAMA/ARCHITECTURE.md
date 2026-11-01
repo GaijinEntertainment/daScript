@@ -76,8 +76,10 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   trimmed lane, the walk's decline
 - `ARCHITECTURE_IMAGE_LEDGER.md` - the image rail's ledgered cases: the assistant drafter's non-image lane and the suite
   cells that mint a model image by design
-- `ARCHITECTURE_IMAGE.md` - the prepared-image rail, the baked dev-W f16 plane, the lattice-only
-  per-format plane table both halves of the rail skip around, the baked tower twin-W plane, the
+- `ARCHITECTURE_IMAGE_GPU_PLANES.md` - the planes a mint bakes for a GPU halfword route: the dev-W f16 panel plane and
+  the tower twin-W plane
+- `ARCHITECTURE_IMAGE.md` - the prepared-image rail, the lattice-only
+  per-format plane table both halves of the rail skip around, the
   layout stamp `REVIEW.das` keeps over the byte-placing code, the meta-field tripwire every
   struct serializer opens with, the planar-vs-blob flavor rebake, and the per-format slots the
   interleave identity prints.

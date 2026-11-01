@@ -1565,7 +1565,7 @@
     here.
 146. **ACCEPTED, not planned: the dev-W bake set follows the minting program, not the box.** The
     split-scale `devwf16` panels bake only where the Metal prefill module registered its CPU
-    mirror (`ARCHITECTURE_IMAGE.md#image-devw-plane`), so a program on the same box built without that
+    mirror (`ARCHITECTURE_IMAGE_GPU_PLANES.md#image-devw-plane`), so a program on the same box built without that
     module mints a thinner image at the SAME identity and every site it skipped serves off the
     runtime dequant until a program carrying the mirror re-mints. Ruled acceptable: a `.dlim` is
     a box-local cache, so the thinner image costs a dequant pass and never a different answer.

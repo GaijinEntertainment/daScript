@@ -362,7 +362,7 @@ class MetalDequantK6H {
     @ssbo @binding = 3 @role = "write" wh : array<float16>
     @uniform @binding = 4 ka : CvtArgs
 
-    [metal_kernel(name="metal_dequant_k6h_msl"), arch(at="../ARCHITECTURE_IMAGE.md#image-devw-plane")]
+    [metal_kernel(name="metal_dequant_k6h_msl"), arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-devw-plane")]
     def metal_dequant_k6h {
         let gid = gl_GlobalInvocationID.x
         if (gid >= ka.total) {
@@ -695,7 +695,7 @@ class template MetalKqMulMmSplitTensorBase : MetalMoeTileWalkT {
     }
 
     //! the double-buffered walk over the tile's K - under `SK` the z-th share of it, stored into the z-th partial plane
-    [arch(at="../ARCHITECTURE_IMAGE.md#image-devw-plane")]
+    [arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-devw-plane")]
     def db_shell {
         let mBase = gl_WorkGroupID.x * MT
         let nBase = gl_WorkGroupID.y * 64u

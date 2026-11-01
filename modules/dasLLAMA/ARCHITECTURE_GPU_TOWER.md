@@ -153,7 +153,7 @@ compiled the half GEMM (`pf_hmm_ready`): `fc_twin_attach` converts the whole blo
 the device once a blob, at the f32 element offsets, and the half x half tensor GEMM serves each
 site over it with X converted into one shared half panel. The twin holds the halves the f16-staged tile stamp rounds a tile at
 a time, so the route changes the GEMM, not the values it multiplies; the file is f32, so no image
-carries this twin (`ARCHITECTURE_IMAGE.md#image-tower-twin-plane` is the f16-source form) and it
+carries this twin (`ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane` is the f16-source form) and it
 drops with the weights epoch and the tower shutdown. GigaAM's exact lane needs no device twin: its
 block GEMMs are the carrier's own halfwords (`wblob`), bound as the GEMM plane directly, and its q8 lane
 reads the q8 slab (`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`). `DASLLAMA_METAL_TOWER_F16=0` pins the f32

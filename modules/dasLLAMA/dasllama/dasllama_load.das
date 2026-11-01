@@ -1170,7 +1170,7 @@ def private devw_bake_covers(t : Model; j : FillJob) : bool {
 //! Fill the site tables (fmt/key/off/n) for the panels the plane fill will write — call BEFORE
 //! the image build so the tables serialize as regular planes. Returns total panel BYTES (page
 //! padding not included); 0 = nothing to bake.
-[arch(at="../ARCHITECTURE_IMAGE.md#image-devw-plane")]
+[arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-devw-plane")]
 def devw_bake_tables(var t : Model; jobs : array<FillJob>) : int64 {
     var mine <- devw_bake_jobs(t, jobs)
     // the tables are the WHOLE bake set, not an addition to one: a second call on the same
@@ -1200,7 +1200,7 @@ def devw_bake_tables(var t : Model; jobs : array<FillJob>) : int64 {
 //! Write the devwf16 plane: per baked site, transcode its data from the gguf mapping and run
 //! the format's devw_dequant_*_core (the CPU mirror of the runtime dev-W dequant kernel), so
 //! a baked panel is bit-equal to a runtime one. Walks the table build's sorted set verbatim
-[arch(at="../ARCHITECTURE_IMAGE.md#image-devw-plane")]
+[arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-devw-plane")]
 def fill_devwf16_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model;
                        jobs : array<FillJob>;
                        append : block<(p : void?; nbytes : uint64) : void>) : bool {

@@ -3309,7 +3309,7 @@ struct FpRowsPlus {
 // the dev-W bake tables: devw_bake_tables fills the four site tables from the job list, and it
 // is the WHOLE bake set each time - a second call on the same carrier must not append to the
 // first. Model-free: the tables are pure taxonomy over a job list, no plane bytes are read.
-[test, arch(at="../ARCHITECTURE_IMAGE.md#image-devw-plane")]
+[test, arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-devw-plane")]
 def test_devw_bake_tables(t : T?) {
     t |> run("the bake tables are rebuilt, not appended, and key by format") @(tt : T?) {
         if (!arm_on(tt, "mechanics")) {

@@ -2,7 +2,8 @@
 
 Companion to `ARCHITECTURE.md`; a section is cited by its anchor. The vulkan lane's mint off the gguf is
 `ARCHITECTURE_IMAGE_VULKAN.md`; the rail's ledgered cases - the drafter's non-image lane and the suite cells that mint an
-image by design - are `ARCHITECTURE_IMAGE_LEDGER.md`.
+image by design - are `ARCHITECTURE_IMAGE_LEDGER.md`; the planes a mint bakes for a GPU halfword route - the dev-W f16
+panel plane and the tower twin-W plane - are `ARCHITECTURE_IMAGE_GPU_PLANES.md`.
 
 ### There is ONE way to load a model {#there-is-one-way-to-load-a}
 
@@ -46,7 +47,7 @@ box's tune class - `cpu-arm-i8mm`, `cpu-x86-vnni512`; a build without the tune f
 architecture alone, never the active backend, which is a pin the identity supersedes), a family's
 own tag (`whisper-f32`), with `-lut` / `-grid` on the CPU and metal lanes where the IQ3_S serve mode
 (`iq3s_serve_mode`: the pin, else `DASLLAMA_IQ3S_SERVE`) names the served form, `-devw` on the metal
-lane under the dev-W panel lever (`#image-devw-plane`; a coexisting knob, `devw` in the blob
+lane under the dev-W panel lever (`ARCHITECTURE_IMAGE_GPU_PLANES.md#image-devw-plane`; a coexisting knob, `devw` in the blob
 identity alone), `-yarn<s>` / `-linear<s>` / `-norope` where the rope scaling override rides (on the
 flavors whose identity carries it - a config-free family's does not), `-<quant>` off q8, and
 `-mtp-<head>` when a split head rides the load (the head file's stem with its `mtp-` prefix dropped,
@@ -158,76 +159,11 @@ the box profile first because that pin can change the backend, and the parse
 runs the same load select the gguf loader runs, before any kernel touches planes packed for that
 backend. A family whose plane bytes no box property shapes (the TTS f32 carrier: layouts minted
 from the model's own geometry; every vision and audio tower's exact lane: the file's planes widened
-to f32 and the twin of its own halfwords, `#image-tower-twin-plane`) registers its tag config-free, and `image_config_for` keys its
+to f32 and the twin of its own halfwords, `ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane`) registers its tag config-free, and `image_config_for` keys its
 identity by the default configuration instead: one identity on every box, not one per tune
 state - two processes
 on one box with different tune manifests would otherwise bake different identities in the same
 lane and reap each other's image on every switch.
-
-
-### The baked dev-W f16 panel plane {#image-devw-plane}
-
-A metal-flavor image minted under the dev-W panel lever (`set_metal_devw_panels`, its lane `metal-devw`; off, the sites
-take per-window scratch panels and the image carries none) carries `devwf16`: every dev-W-eligible q8, k4/k5/k6 and split-scale
-(iq4xs, iq4nl, q40, k3, iq3s, iq3xxs, k2, iq2s, iq2xs, iq2xxs) weight - a plane job whose f16 panel fits
-`DEVW_BAKE_PANEL_MAX`, the prefill knee's mirror, and whose tensor is not an expert stack (`*_exps.weight`: gemma-4
-splits its fused stacks per expert at load, and the routed block reads the quantized planes with no dev-W route, so a
-baked expert panel is never read) - pre-dequantized at mint into one concatenated f16 plane, with parallel site
-tables (`devwf16_fmt/key/off/n`) serialized as ordinary planes. The mint dequant is the format's CPU mirror of the runtime dev-W dequant
-kernel. The q8 and K-quant mirrors are hand-written and bit-exact by construction: each f32
-product fits the 24-bit significand exactly (the widest, k6's `dsc*q`, needs 24), so only the
-final f16 round exists and contraction cannot move it. The split-scale mirror is the dequant
-class itself run on the CPU (`devw_dequant_kq_mirror`, registered into the loader by the
-Metal prefill at init - a build with no Metal tier bakes none of those formats): its
-`stage16` decodes the same 64x64 chunk into the same tile the kernel stages, and the
-kernel-gate cell holds the two bit-equal per format. Either way a baked panel is bit-equal
-to a runtime one. The first served prefill seeds the resident-panel cache with zero-copy
-`(buffer, offset)` views over the mapped plane, so a baked site never dispatches a dequant
-and holds no dedicated memory; sites the bake does not cover (q51 - the dev-W route has no
-dequant kernel for it - and owned gguf loads) stay on the runtime path, resident under
-`DASLLAMA_METAL_DEVW_RESIDENT` or scratch. Which form a site's prefill takes under the lever, and
-why the default is a per-window scratch panel rather than a stored one, is `ARCHITECTURE_GPU_PREFILL_GEMM.md#devw-panel-knees`.
-
-The bake set is the minting PROGRAM's, not the box's: the split-scale formats bake only where
-the Metal prefill module registered its mirror, so a program on the same box whose module graph
-lacks that module mints a thinner image at the SAME identity, and every split-scale site it
-skipped serves off the runtime dequant until a program carrying the mirror re-mints. The
-asymmetry is accepted rather than designed away: a `.dlim` is a box-local cache, so a thinner
-image costs a dequant pass and never a different answer.
-
-The k6 dequant writes its value as `dsc * (q - 32)` at every site - the runtime kernel, its
-double-buffered twin, and the mint's CPU mirror. The factored spelling costs nothing, since the
-compiler factors the distributed form anyway, and it pins the SIGN of a zero result: at q == 32
-with a negative scale the distributed form yields +0 and the factored one -0. One spelling
-everywhere makes the equality hold by source rather than by toolchain mood.
-
-### The baked tower twin-W plane {#image-tower-twin-plane}
-
-A vision- or audio-tower image carries `wblob`: the tower's block and merger GEMM weights
-re-emitted as halfwords in the same element order as the f32 blob, so a site reads its twin at
-the f32 offset doubled. The mint emits the twin only for a GEMM whose source tensor is already
-f16 or bf16, so the twin holds the file's own values and introduces no rounding; an empty
-`wblob` is therefore the ineligibility flag a driver tests, not a separate capability field. A
-GEMM whose weights are COMPUTED at load - the folded patch-conv pair of the qwen3v and qwen25v
-stems - has no source tensor, no twin, and stays on the f32 route.
-
-The f16 arm needs a tensor crown (`pf_hmm_ready`) and converts X once per encode into one
-shared half panel every site reuses; the bf16 arm reads the twin natively and takes that panel
-only where its half-X stamp compiled. `DASLLAMA_METAL_TOWER_F16=0` pins the f32 route, and
-`metal_tower_f16_encodes()` is the engage witness.
-
-The bake (`tower_bake_half_twin`) is whole-blob: the file's own halves land at the same element
-offsets, and the f32 regions that ride along (norms, biases, position tables) clamp on the f16
-form - safe because the halfword route never reads them. An f16 source round-trips exactly and a
-bf16 source is the f32 word's top halfword, so the twin holds the file's bits, not a re-rounded
-copy. A streamed mint writes the same bytes as the eager bake over the same span, so an image
-minted either way serves the same twin. The q8 lane never bakes one - it serves quantized planes
-instead. `blk_bf16` names which halfword family the route dispatches.
-
-The crown set is read when the prefill PSOs compile, not when a GEMM dispatches, so
-`pf_hmm_ready` answers for whatever crowns were armed at the last `metal_prefill_init`. A
-caller that arms a crown after bring-up runs `metal_prefill_shutdown` to force the recompile;
-without it the f16 arm silently stays unavailable and every encode takes the f32 route.
 
 ### A split head is part of the image's identity {#image-identity-head-fold}
 

@@ -256,7 +256,7 @@ def test_qwen3v_tier1_metal(t : T?) {
     }
 }
 
-[test, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
+[test, arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane")]
 def test_qwen3v_tier1_metal_f16(t : T?) {
     t |> run("tier-1 on the Metal tower's twin-W route (crowned twins, 4B f16 + Omni bf16)") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {

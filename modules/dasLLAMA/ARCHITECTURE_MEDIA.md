@@ -144,7 +144,7 @@ carriers name, and no TTS family file (`dasllama_kitten`, `dasllama_kokoro`, `da
   quantize fine at 0.007 x rms, and a float-activation q8 GEMM wins nothing on these
   compute-bound shapes since the CPU speedup IS the int8xint8 dot). It stages every GEMM
   f32-in-blob at the served padded widths (`ARCHITECTURE_MEDIA.md#tower-padded-widths`) whatever the file's element type, and
-  bakes the halfword twin (`ARCHITECTURE_IMAGE.md#image-tower-twin-plane`) when the block and merger GEMMs
+  bakes the halfword twin (`ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane`) when the block and merger GEMMs
   share one halfword type; the Metal tower serves stem, blocks and merger tail off `s.x0`
   through `register_qwen25v_gpu`.
 - **`dasllama_vision_embedder.das`** - the vision carrier: `VisionEmbedder` / `VisionState`, the

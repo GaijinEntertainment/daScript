@@ -235,7 +235,7 @@ def private g3v_gemm_names(swapped : bool) : array<string> {
 
 // every GEMM tensor the halfword twin route serves: the block set at every layer, plus the
 // input projection. A sample of two would let a mixed file bake a twin the route reads as one type.
-[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
+[arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane")]
 def private g3v_gemm_types_uniform(m : GGUFMeta; names : array<string>; n_layer : int64; gt : int) : bool {
     if (gguf_tensor_type(m, "mm.input_projection.weight") != gt) {
         return false
@@ -420,7 +420,7 @@ def private g3v_repack_all(var st : Gemma3vStaging; gemm_sizes : array<int64>) {
 //! Read the tower off an mmproj gguf into owned staging arrays — the mint side of the image rail,
 //! the only path that touches the source file. Every plane lands f32 in `blob` (the file's f16
 //! widens exactly); the q8 lane transcodes the block GEMMs to Q8_0 at read.
-[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
+[arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane")]
 def stage_gemma3v_tower(path : string) : Gemma3vStaging {
     var st = Gemma3vStaging()
     st.t.q8 = g3v_serve_q8()

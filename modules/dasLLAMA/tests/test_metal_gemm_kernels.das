@@ -608,7 +608,7 @@ def private bf16_split_gate(t : T?; var dev, queue; m, kdim, ndim, nsk : int; ha
     }
 }
 
-[arch(at="../ARCHITECTURE_IMAGE.md#image-devw-plane")]
+[arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-devw-plane")]
 def private devw_bake_mirror_gate(t : T?; var dev, queue; fmt : int; ndim, kdim : int) {
     let tag = "devw_bake_mirror fmt{fmt} n={ndim} k={kdim}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {

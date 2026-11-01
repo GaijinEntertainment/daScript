@@ -870,7 +870,7 @@ def geglu_quick_lut_rows(var h : array<float>; gate, up : array<float>; ff, npos
 //! Bake a tower's halfword GEMM twin off its staged f32 blob - the file's own bits (an f16
 //! source round-trips exactly; bf16 = the f32 word's top halfword). Whole-blob at the same
 //! element offsets; ride-along f32 regions clamp on the f16 form and the route never reads them.
-[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
+[arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane")]
 def tower_bake_half_twin(blob : array<float>; var wblob : array<uint16>; bf16 : bool) {
     let n = long_length(blob)
     if (long_length(wblob) < n) {

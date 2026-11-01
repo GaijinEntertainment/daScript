@@ -369,7 +369,7 @@ def private tw_q8_regions(t : Gemma4vTower) : array<Q8Region> {
 // The whisper-class block loop as ONE command buffer; the attention trio rides uend = npos (the
 // non-causal uniform span). The mel's spectrum and the projector tail ride their own seats. Pad-row garbage is
 // CONTAINED: QK/AV zero k/v rows >= npos, softmax zeroes [uend, np32), pad outputs go unread.
-[hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
+[hot_path, arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane")]
 def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int64) : bool
     => metal_tower_blocks_form(t, s, npos, TwForm.blocks)
 
@@ -522,7 +522,7 @@ def private tw_tail_land(t : AudioTower; var tl : TwTail; ran : bool; var s : En
     }
 }
 
-[hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
+[hot_path, arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def private metal_tower_blocks_form(t : AudioTower; var s : EncoderState; npos : int64; form : TwForm) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
@@ -2986,7 +2986,7 @@ def private g3v_tail_land(t : Gemma3vTower; var tl : G3vTail; ran : bool; var s 
 // The gemma3v SigLIP block loop as ONE command buffer on the f32 blob — LN(w,b), biased f32 GEMMs,
 // scaled attention, GELU. The 72-wide heads restride to the attention tiles' 128 (zero pads exact,
 // scale stays 1/sqrt(72)); ffn serves at the layout's ff_pad. The stem and the tail ride the same command buffer (`g3v_tail_make`); both lanes serve.
-[hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-attn-routes"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
+[hot_path, arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-attn-routes"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>; w, h, npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
@@ -3147,7 +3147,7 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; planes 
 //! One block/merger GEMM: f16/bf16 read W from the baked twin plane at the f32 route's element
 //! offset (bytes x2), X converting into the shared xh panel where the form takes it; f32 =
 //! enc_f32_mm. `cvt` false reuses the panel a previous site converted.
-[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
+[arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane")]
 def private tw_mm(enc : MetalComputeEncoder?; f16w, bf16w : bool; bwh, bblob : MetalBuffer?; welem : int64;
                   bx, bxh, by : MetalBuffer?; yoff : uint64; bk, bn : MetalBuffer?;
                   rows, nd, kdim : int64; cvt : bool) {
@@ -3166,7 +3166,7 @@ def private tw_mm(enc : MetalComputeEncoder?; f16w, bf16w : bool; bwh, bblob : M
 // The qwen3vl ViT: gemma3v's chain + the vision NEOX rope (enc_rope on compact q/k) + the
 // fused qkv as three weight-offset GEMMs; tap chains encode inline over the live residual
 // (hazard-ordered), the tail merger follows, ONE readback lands proj outputs for the scatter.
-[hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-attn-routes"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
+[hot_path, arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-attn-routes"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w, h, npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
@@ -3366,7 +3366,7 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; planes : a
 
 //! The qwen25v window ViT as ONE command buffer: conv + window-sort gather stem, RMS-normed
 //! blocks, swiglu FFN at ff_pad, the merger tail; ONE readback lands sorted proj rows in s.mout.
-[hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-attn-routes"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
+[hot_path, arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-attn-routes"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; planes : array<float>; w, h, npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)

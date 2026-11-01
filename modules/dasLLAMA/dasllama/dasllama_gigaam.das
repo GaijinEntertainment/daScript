@@ -378,7 +378,7 @@ def private gg_dw_f16(m : GGUFMeta; n_layer : int64) : bool {
 }
 
 [arch(at="../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
-def gg_kq_carrier(m : GGUFMeta; n_layer : int64) : bool {
+def private gg_kq_carrier(m : GGUFMeta; n_layer : int64) : bool {
     var quant = ""
     var flt = ""
     for (l in range64(n_layer)) {

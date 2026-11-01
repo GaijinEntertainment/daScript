@@ -109,7 +109,8 @@ var private FACADE_DEFS_WITHOUT_TUTORIAL <- {
     "rnnt_dev_land_tokens", "rnnt_dev_layer_args", "rnnt_dev_layout", "rnnt_dev_round_budget",   //! the host half of the device transducer decode the Metal and Vulkan seats call
     "rnnt_dev_rounds", "rnnt_dev_shape_ok", "rnnt_dev_slab", "rnnt_dev_state_words",   //! the host half of the device transducer decode the Metal and Vulkan seats call
     "set_rnnt_dev_fault", "set_rnnt_dev_round_budget",    //! probe seams a fixture sets to force a device fault, a round budget or a lane split
-    "set_rnnt_trace"   //! the CPU transducer decode's per-frame trace an engine developer flips while bringing a family up
+    "set_rnnt_trace",   //! the CPU transducer decode's per-frame trace an engine developer flips while bringing a family up
+    "gigaam_gemm_stride", "gigaam_lane_tag", "gigaam_kq_members", "gigaam_lane_pinned"   //! the kq lane's seat geometry a test pins, the lane's image tag the bake tool names, the lane's members the load log and the tests read, the pin the carrier's lane policy reads
 }
 
 [arch(at = "ARCHITECTURE_TTS.md#text-to-speech")]
@@ -1385,8 +1386,8 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // the TTS block file's *_prepare mints, the layout helpers and the layout constants' declaration
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
-let private IMAGE_LAYOUT_STAMP_VERSION = 55
-let private IMAGE_LAYOUT_STAMP_HASH = 0x2f4428fbc305df73ul
+let private IMAGE_LAYOUT_STAMP_VERSION = 56
+let private IMAGE_LAYOUT_STAMP_HASH = 0x9f51a1dde3ef8ae1ul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, the header's scalar stores, the lattice
@@ -2440,7 +2441,7 @@ let private GEMM_GEN_FILES = [
     "modules/dasLLAMA/dasllama/dasllama_gemm_gen.das",
     "modules/dasLLAMA/dasllama/dasllama_gemm_schema.das"
 ]
-let private GEMM_GEN_STAMP_HASH = 0xa4ca111635be73b6ul
+let private GEMM_GEN_STAMP_HASH = 0xed575c7c8876ebdeul
 
 [arch(at = "ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers")]
 def private check_gemm_gen_stamp {

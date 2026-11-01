@@ -11,7 +11,6 @@ options _dasllama_internal = true
 //       --lane exact --corpus F:/corpora/fleurs/ru_ru --out F:/corpora/fleurs/ru_ru/hyp/f16-exact.tsv
 
 require dasllama/dasllama
-require dasllama/dasllama_gigaam   // set_gigaam_q8: the lane pin
 require daslib/clargs
 require daslib/jobque_boost
 require daslib/fio
@@ -94,7 +93,7 @@ def main() : int {
         return 0
     }
     if (cfg.lane == "q8" || cfg.lane == "exact") {
-        set_gigaam_q8(cfg.lane == "q8")
+        set_asr_tower_q8(cfg.lane == "q8")
     } elif (!empty(cfg.lane)) {
         print("error: --lane is q8 or exact\n")
         return 1

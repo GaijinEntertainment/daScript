@@ -543,7 +543,7 @@ def stage_whisper_model(path : string; enc_q8, dec_q8 : bool) : WhisperStaging {
 // a job's dense-q8 membership: a marked GEMM whose contraction is a 32-multiple
 def private wjob_quantizable(j : WFillJob) : bool => j.gemm_n != 0l && j.gemm_n % 32l == 0l
 
-[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
+[arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane")]
 def private wenc_gemm_all_f16(recs : table<string; WTensorRec>; jobs : array<WFillJob>) : bool {
     for (j in jobs) {
         if (j.gemm_n != 0l && (recs?[j.name] ?? default<WTensorRec>).ttype != GGML_TYPE_F16) {
