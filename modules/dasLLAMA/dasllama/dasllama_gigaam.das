@@ -129,6 +129,9 @@ struct GigaamModel {
     kq : PlaneU8 = PlaneU8()        //!< the kq lane's K-quant quant planes, a GEMM's superblocks at its seat's byte offset
     ks : PlaneU8 = PlaneU8()        //!< ... and their scale planes
     gemm_seats : PlaneI64 = PlaneI64()   //!< the kq lane's seats: `TOWER_SEAT_WORDS` words a block GEMM in layout order (`tower_gemm_seat`)
+    dev_backend : TowerDev               //!< the driver whose device block the image carries (`#tower-dev-block`); `none` on a CPU image
+    dev : PlaneU8 = PlaneU8()            //!< ... the device block's bytes
+    devplan : PlaneI64 = PlaneI64()      //!< ... and its plan, `TOWER_DEV_PIECE_WORDS` words a piece
     tabs : GigaamMelTabs = GigaamMelTabs()
     image_map : void?
     image_bytes : uint64
@@ -145,7 +148,7 @@ def finalize(var t : GigaamModel) {
 }
 
 //! serialize_image_meta(GigaamModel) covers 52 fields; tabs (rebuilt at load), image_map and image_bytes are skipped
-let private GIGAAM_META_FIELDS = 52 + 3
+let private GIGAAM_META_FIELDS = 53 + 3
 
 def private serialize_image_meta(var arch : Archive; var t : GigaamModel) {
     verify(count_meta_fields(t) == GIGAAM_META_FIELDS)
@@ -201,6 +204,7 @@ def private serialize_image_meta(var arch : Archive; var t : GigaamModel) {
     arch |> serialize_raw(t.kq_lane)
     arch |> serialize_raw(t.kq_repacked)
     arch |> serialize_raw(t.kq_fmt)
+    arch |> serialize_raw(t.dev_backend)
 }
 
 def private image_post_load(var t : GigaamModel) {
@@ -264,6 +268,8 @@ struct GigaamStaging {
     @exact_size kq : array<uint8>
     @exact_size ks : array<uint8>
     @exact_size gemm_seats : array<int64>   //!< the kq lane's seats, held through the mint: the plan writes them, the image carries them
+    @exact_size dev : array<uint8>          //!< a GPU-flavored mint's device block (`TowerDevBuild`)
+    @exact_size devplan : array<int64>      //!< ... and its plan
     src : string
     plan : GigaamPlan = GigaamPlan()
 }
@@ -923,7 +929,7 @@ def private gg_hold_planes(m : GGUFMeta; b : array<uint8> | #; var st : GigaamSt
 
 //! whether the quantizing lanes repack for the load's backend - selected here, as the fills need it - with `e.kq_repacked` set beside
 def private gg_repack(var e : GigaamModel) : bool {
-    let rep = (e.q8 || e.kq_lane) && select_matmul_backend_for_load_()
+    let rep = e.dev_backend == TowerDev.none && (e.q8 || e.kq_lane) && select_matmul_backend_for_load_()   // a GPU flavor's planes are the driver's to lay
     e.kq_repacked = e.kq_lane && rep && kernel_backend_has_kq()
     return rep
 }
@@ -1032,6 +1038,75 @@ def private gg_mint(var st : GigaamStaging; var out : GigaamModel; img : string)
     return wrote
 }
 
+//! A GPU driver's GigaAM flavor (`#tower-dev-block`): the backend whose image it mints, whether its chain serves a carrier of
+//! these hparams and lane (`e`, the staging's meta), and the bake that converts a CPU-form model into the driver's device block
+typedef GigaamServesModelFn = function<(e : GigaamModel) : bool>
+typedef GigaamBakeFn = function<(m : GigaamModel; var b : TowerDevBuild) : bool>
+
+struct GigaamFlavor {
+    backend : TowerDev
+    serves : GigaamServesModelFn
+    bake : GigaamBakeFn
+}
+
+var private g_ga_flavor = GigaamFlavor()
+
+def register_gigaam_flavor(backend : TowerDev; serves : GigaamServesModelFn; bake : GigaamBakeFn) {
+    g_ga_flavor = GigaamFlavor(backend = backend, serves = serves, bake = bake)
+}
+
+//! The device flavor a load of a carrier with meta `e` takes: the registered driver's where its knob is on and its chain serves
+//! the carrier, else `none` - the CPU image
+def gigaam_dev_flavor(e : GigaamModel) : TowerDev {
+    return TowerDev.none if (g_ga_flavor.backend == TowerDev.none || !gigaam_gpu_serves() || !invoke(g_ga_flavor.serves, e))
+    return g_ga_flavor.backend
+}
+
+//! a flavor's image tag: the lane's, the driver's name after it on a GPU flavor
+def private gg_flavor_tag(lane : string; dev : TowerDev) : string => dev == TowerDev.none ? lane : "{lane}-{dev}"
+
+//! the lane flags a lane's tag names - the meta a flavor's `serves` reads before the staging exists
+def private gg_lane_meta(lane : string) : GigaamModel => GigaamModel(q8 = lane == "gigaam-q8", kq_lane = lane == GIGAAM_KQ_TAG)
+
+//! A GPU-flavored model reached a CPU path at `stage`: the device seat declined what the load handed it, and the CPU never runs
+//! that image (`#tower-dev-block`)
+def private gg_cpu_refuse(m : GigaamModel; stage : string) {
+    if (m.dev_backend != TowerDev.none) {
+        panic("{GG_WHO}: the {stage} declined on the {m.dev_backend} device - a {m.dev_backend}-flavored image never runs on the CPU")
+    }
+}
+
+//! The GPU-flavored mint (`#tower-dev-block`): the CPU form minted in memory, the driver's bake over it into the device block,
+//! then the image of the planes the driver reads as stored beside the block - the Q8_0 and K-quant planes and their seats the
+//! bake consumed left out
+[cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
+def private gg_mint_gpu(var st : GigaamStaging; var out : GigaamModel; img : string; dev : TowerDev) : bool {
+    var cpu = GigaamModel()
+    st.e.dev_backend = dev   // the CPU form the bake reads stays in disk order: no CPU backend lays it
+    gg_mint(st, cpu, "")
+    cpu.dev_backend = TowerDev.none   // ... and is the CPU form: the bake's builders read its planes
+    var b : TowerDevBuild
+    if (!invoke(g_ga_flavor.bake, cpu, b)) {
+        panic("{GG_WHO}: the {dev} driver could not bake '{st.src}' - its chain declined a carrier the load handed it")
+    }
+    var gst = GigaamStaging(src = st.src)
+    gst.e := cpu
+    gst.e.image_map = null
+    gst.e.image_bytes = 0ul
+    gst.e.dev_backend = dev
+    plane_copy(cpu.filters, gst.filters)
+    plane_copy(cpu.window, gst.window)
+    plane_copy(cpu.blob, gst.blob)
+    plane_copy(cpu.wblob, gst.wblob)
+    gst.dev <- b.blob
+    gst.devplan <- b.plan
+    delete cpu
+    let tag = gg_flavor_tag(gigaam_image_tag(gst.e.q8, gst.e.kq_lane), dev)
+    let wrote = cache_via_image_staged_hooked(gst, out, img, 0ul, tag, "q8") $ [unused_argument(name, w, sections)] (name : string; var w : ImgWriter; var sections : array<ImgSection>) => false
+    delete gst
+    return wrote
+}
+
 //! Mint a served model from a staged read WITHOUT touching disk - the in-memory image rail, the suites' load.
 def mint_gigaam_model(var st : GigaamStaging; var out : GigaamModel; q8 : bool = false) {
     if (!st.e.kq_lane && q8 != st.e.q8) {
@@ -1044,10 +1119,12 @@ def mint_gigaam_model(var st : GigaamStaging; var out : GigaamModel; q8 : bool =
 //! lane - unless a lane is `pinned`; then ``q8`` transcodes them to Q8_0, and the exact lane, f16 taps and an f16 CTC head serve
 //! the carrier's f16 (`#gigaam-planes`). A missing image is minted streaming the carrier one tensor at a time; cached like ``load_model``.
 def load_gigaam_model(path : string; q8 : bool = false; pinned : bool = false) : GigaamModel {
-    let tag = gigaam_lane_tag(path, q8, pinned)
+    let lane = gigaam_lane_tag(path, q8, pinned)
+    let dev = path |> ends_with(".dlim") ? TowerDev.none : gigaam_dev_flavor(gg_lane_meta(lane))
+    let tag = gg_flavor_tag(lane, dev)
     var m <- load_through_image(path, tag, GIGAAM_ARCH, "source model", type<GigaamModel>, $(img : string; var out : GigaamModel) {
         var inscope st <- stage_gigaam_model(path, q8, false, pinned)
-        return gg_mint(st, out, img)
+        return dev == TowerDev.none ? gg_mint(st, out, img) : gg_mint_gpu(st, out, img, dev)
     }, $ [unused_argument(t)] (t : GigaamModel) => true, $ [unused_argument(t, src)] (t : GigaamModel; src : string) {})
     if (m.kq_lane) {
         let layout = m.kq_repacked ? "repacked for {active_kernel_backend()}" : "in disk order (the portable batch GEMM)"
@@ -1249,6 +1326,7 @@ def gigaam_encode(m : GigaamModel; var st : GigaamState) : int64 {
     dispatch_phase_encode(gigaam_conv_out(gigaam_conv_out(st.n_len, m.subs_kernel), m.subs_kernel))
     var tt = g_ga_gpu_encode_set ? invoke(g_ga_gpu_encode, m, st, null, 0l) : -1l
     if (tt < 0l) {
+        gg_cpu_refuse(m, "encode")
         tt = gg_encode_cpu_front(m, st)
     }
     st.enc_gen = tower_rows_gen()
@@ -1276,6 +1354,7 @@ def gigaam_encode_span(samples : array<float> | #; s0, s1 : int64; m : GigaamMod
             return served
         }
     }
+    gg_cpu_refuse(m, "encode")
     var tp = ref_time_ticks()
     gg_log_mel_span(samples, s0, s1, m, st)
     asr_prof_add("ga.mel", tp)
@@ -1296,6 +1375,7 @@ def private gg_encode_cpu_front(m : GigaamModel; var st : GigaamState) : int64 {
     tp = ref_time_ticks()
     let served = g_ga_seat.set && invoke(g_ga_gpu, m, st, tt)
     if (!served) {
+        gg_cpu_refuse(m, "block chain")
         for (l in range64(m.n_layer)) {
             gigaam_encode_block(m, st, l, tt)
         }
@@ -1356,6 +1436,7 @@ def private gg_decode_ctc(m : GigaamModel; var st : GigaamState; n_frames : int6
     ensure_length(st.plogs, n_frames)
     let dev = g_ga_gpu_ctc_set && invoke(g_ga_gpu_ctc, m, st, n_frames)
     if (!dev) {
+        gg_cpu_refuse(m, "CTC head")
         ensure_length(st.logits, n_frames * nc)
         gg_ctc_logits_cpu(m, st, n_frames)
     }
@@ -1374,7 +1455,7 @@ def private gg_rnnt_net(m : GigaamModel) : RnntNet {
     var net = RnntNet(blob = m.blob, n_layers = m.pred_layers, pred_dim = m.pred_dim, joint_dim = m.joint_dim,
         n_tokens = m.n_classes, blank_id = m.blank_id, max_symbols = GG_MAX_SYMBOLS, zero_start = true, torch_gates = true, two_biases = true,
         embed = m.embed_w, joint_pred_w = m.jpred_w, joint_pred_b = m.jpred_b, joint_net_w = m.jout_w, joint_net_b = m.jout_b,
-        prof_step = "ga.dec.step", prof_pick = "ga.dec.pick", prof_joint = "ga.dec.joint")
+        prof_step = "ga.dec.step", prof_pick = "ga.dec.pick", prof_joint = "ga.dec.joint", dev_only = m.dev_backend != TowerDev.none)
     net.lstm_ih[0] = m.lstm_ih
     net.lstm_hh[0] = m.lstm_hh
     net.lstm_b[0] = m.lstm_b_ih

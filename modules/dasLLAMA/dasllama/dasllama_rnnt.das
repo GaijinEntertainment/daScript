@@ -55,6 +55,7 @@ struct RnntNet {
     prof_step : string = "rnnt.dec.step"     //!< the asr_prof bucket of a predictor step
     prof_pick : string = "rnnt.dec.pick"     //!< the bucket of a row's pick
     prof_joint : string = "rnnt.dec.joint"   //!< the bucket of a blank step's joint
+    dev_only : bool                //!< a GPU-flavored image's net: the CPU never runs it, so a device decline panics
 }
 
 //! The decoder's per-session state: the LSTM's h/c, the projected prediction, the halves the session lays
@@ -489,6 +490,9 @@ def rnnt_decode(net : RnntNet; var s : RnntState; enc : RnntEnc; x : array<float
         }
         rnnt_reset(net, s)
         return if (invoke(g_rnnt_gpu, net, s, enc, x, encp, n_frames, toks))
+    }
+    if (net.dev_only) {
+        panic("dasLLAMA rnnt: the device decode declined a GPU-flavored image's net, which never runs on the CPU")
     }
     if (!projected) {
         invoke(project, encp)

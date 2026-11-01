@@ -240,9 +240,15 @@ let private TW_Q8_BLOCK_BYTES = Q8_QPB + Q8_SPB
 var private g_tw_q8_vis : St2SlabBase            //!< the served vision tower's q8 block GEMM planes as one device blob, beside the audio one
 var private @exact_size g_tw_q8_vis_boffs : array<uint64>    //!< its regions' byte offsets, the family's count a layer
 
-//! a q8 slab's key: the q8 planes and their scales under the layout the load repacked under - a pure read, since selecting again could name another
+var private g_tw_bake_rowmajor = false   //! a device-block bake runs: the CPU form it reads lays its q8 planes row-major, whatever the backend
+
+//! the layout a q8 slab reads its planes in: row-major under a bake (`#tower-dev-block`), else the layout the load repacked under -
+//! a pure read, since selecting again could name another
+def private tw_q8_layout : Q8RepackLayout => active_q8_repack_layout(!g_tw_bake_rowmajor && kernel_backend_needs_repack(active_kernel_backend()))
+
+//! a q8 slab's key: the q8 planes and their scales under the layout `tw_q8_layout` reads
 def private tw_q8_key(qblob : PlaneI8; qscales : PlaneF) : uint64 {
-    let lay = active_q8_repack_layout(kernel_backend_needs_repack(active_kernel_backend()))
+    let lay = tw_q8_layout()
     let shape = hash_combine64(hash_combine64(uint64(lay.mr), uint64(lay.kgroup)), hash_combine64(uint64(lay.wbias), lay.repacked ? 1ul : 0ul))
     let planes = hash_combine64(hash_combine64(intptr(plane_at(qblob, 0l)), uint64(qblob.n)), hash_combine64(intptr(plane_at(qscales, 0l)), uint64(qscales.n)))
     return hash_combine64(planes, shape)
@@ -258,7 +264,7 @@ def private tw_q8_attach_vis(t : auto(TT)) : bool => tw_q8_attach_slab(g_tw_q8_v
 //! `boffs`, keyed by the planes under that layout; true where the slab already holds them, false where the buffer cannot be made
 [cold_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def private tw_q8_attach_slab(var slab : St2SlabBase; var boffs : array<uint64>; qblob : PlaneI8; qscales : PlaneF; regions : array<Q8Region>) : bool {
-    let lay = active_q8_repack_layout(kernel_backend_needs_repack(active_kernel_backend()))
+    let lay = tw_q8_layout()
     let key = tw_q8_key(qblob, qscales)
     return true if (st2_slab_current(slab, key))
     st2_slab_free(slab)
@@ -280,6 +286,7 @@ def private tw_q8_attach_slab(var slab : St2SlabBase; var boffs : array<uint64>;
         }
         slab.buf = blob
         slab.key = key
+        slab.bytes = cur
     }
     delete staging
     return blob != null
@@ -1248,10 +1255,146 @@ def private tw_fc_kq_attach(fc : TwFc) : bool {
     delete recs
     g_tw_kq_fc.buf = blob
     g_tw_kq_fc.key = blob != null ? key : 0ul
+    g_tw_kq_fc.bytes = uint64(max(cur, 16l))
     return blob != null
 }
 
+let private TW_FC_Q8_PIECE = "fc.q8"              //! the q8 slab: the q8 lane's GEMMs, or the kq lane's Q8_0 seats
+let private TW_FC_Q8_OFFS_PIECE = "fc.q8.offs"    //! ... its regions, two words each: the element offset in the family's qblob, the slab byte offset
+let private TW_FC_KQ_PIECE = "fc.kq"              //! the kq slab: the K-quant members' superblocks and Metal-form scales
+let private TW_FC_KQ_BINDS_PIECE = "fc.kq.binds"  //! ... every GEMM record's bind, `TW_KQ_BIND_WORDS` words each
+let private TW_GA_MEL_PIECE = "ga.mel"            //! GigaAM's mel panel: the twiddles, the window and the filterbank
+let private TW_GA_CTC_PIECE = "ga.ctc"            //! GigaAM's f32 CTC head padded to 64 rows, its bias behind
+let private TW_KQ_BIND_WORDS = 5l                 //! a bind's words: the virtual offset, the format slot, the quant, scale and d offsets
+
+//! A device-block piece as a Metal buffer: zero-copy on a mapped image, copied once otherwise; null where the block holds none
+def private tw_dev_buffer(dev : PlaneU8; plan : PlaneI64; name : string; mapped : bool) : MetalBuffer? {
+    let p = tower_dev_find(plan, name)
+    return null if (p.off < 0l || p.bytes <= 0l)
+    return plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(dev, p.off))), uint64(p.bytes), mapped)
+}
+
+//! a piece's int64 words, copied out - the bind tables the chain's lookups read
+def private tw_dev_words(dev : PlaneU8; plan : PlaneI64; name : string) : array<int64> {
+    var words : array<int64>
+    let p = tower_dev_find(plan, name)
+    if (p.off >= 0l && p.bytes > 0l) {
+        words |> resize(p.bytes / 8l)
+        unsafe {
+            memcpy(addr(words[0]), plane_at(dev, p.off), p.bytes)
+        }
+    }
+    return <- words
+}
+
+//! a slab's buffer copied into the piece `name` of `b`
+[cold_path]
+def private tw_dev_put_slab(var b : TowerDevBuild; name : string; slab : St2SlabBase) {
+    tower_dev_put(b, name, unsafe(reinterpret<uint8 const?>(metal_buffer_contents(slab.buf))), int64(slab.bytes))
+}
+
+//! int64 words into the piece `name` of `b`
+def private tw_dev_put_words(var b : TowerDevBuild; name : string; words : array<int64>) {
+    tower_dev_put(b, name, empty(words) ? null : unsafe(addr<uint8 const?>(words[0])), long_length(words) * 8l)
+}
+
+//! The FastConformer chain's weights off a Metal image's pieces (`#tower-dev-block`): the q8 and kq slabs wrap their pieces,
+//! the region offsets and the binds read back from theirs - no conversion; false where the lane's piece is missing
+[cold_path]
+def private tw_fc_dev_bind(fc : TwFc) : bool {
+    let key = hash_combine64(intptr(plane_at(fc.dev, 0l)), uint64(fc.dev.n))
+    return true if (g_tw_q8_fc.key == key || g_tw_kq_fc.key == key)
+    st2_slab_free(g_tw_q8_fc)
+    st2_slab_free(g_tw_kq_fc)
+    var q8 = tw_dev_buffer(fc.dev, fc.devplan, TW_FC_Q8_PIECE, fc.mapped)
+    if (q8 != null) {
+        g_tw_q8_fc = St2SlabBase(buf = q8, key = key, borrowed = true)
+        var inscope offs <- tw_dev_words(fc.dev, fc.devplan, TW_FC_Q8_OFFS_PIECE)
+        let n = long_length(offs) / 2l
+        g_tw_q8_fc_woffs |> reserve(n)
+        g_tw_q8_fc_woffs |> resize(n)
+        g_tw_q8_fc_boffs |> reserve(n)
+        g_tw_q8_fc_boffs |> resize(n)
+        for (i in range64(n)) {
+            g_tw_q8_fc_woffs[i] = offs[2l * i]
+            g_tw_q8_fc_boffs[i] = uint64(offs[2l * i + 1l])
+        }
+    }
+    if (fc.kq_lane) {
+        var kq = tw_dev_buffer(fc.dev, fc.devplan, TW_FC_KQ_PIECE, fc.mapped)
+        return false if (kq == null)
+        g_tw_kq_fc = St2SlabBase(buf = kq, key = key, borrowed = true)
+        var inscope words <- tw_dev_words(fc.dev, fc.devplan, TW_FC_KQ_BINDS_PIECE)
+        let n = long_length(words) / TW_KQ_BIND_WORDS
+        g_tw_kq_fc_binds |> reserve(n)
+        g_tw_kq_fc_binds |> resize(n)
+        for (i in range64(n)) {
+            let w = i * TW_KQ_BIND_WORDS
+            g_tw_kq_fc_binds[i] = TwKqBind(woff = words[w], fmt = kq_fmt_of_slot(int(words[w + 1l])), qoff = uint64(words[w + 2l]),
+                soff = uint64(words[w + 3l]), doff = uint64(words[w + 4l]))
+        }
+    }
+    return q8 != null || !fc.q8
+}
+
+//! GigaAM's Metal chain serves a carrier on its lane (`e`, the lane's meta): the tower knob on, and on the kq lane a base mul_mm
+//! tile for every superblock member a carrier can hold
+def private metal_gigaam_serves_model(e : GigaamModel) : bool {
+    return false if (!g_tw_env_tower)
+    if (e.kq_lane) {
+        for (fmt in range(KQ_FMT_COUNT)) {
+            let f = kq_fmt_of_slot(fmt)
+            return false if (kq_sb(f) && !kq_mm_base_tile_on(f))
+        }
+    }
+    return true
+}
+
+//! GigaAM's Metal device block (`#tower-dev-block`): the attach's own builders run once over the CPU-form model - the q8 slab
+//! and its regions, the kq slab and its binds, the mel panel, an f32 CTC head's panel - each copied into its piece
+[cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
+def private metal_gigaam_bake(m : GigaamModel; var b : TowerDevBuild) : bool {
+    return false if (!metal_tower_init())
+    let fc = tw_fc_of_ga(m)
+    g_tw_bake_rowmajor = true
+    let built = fc.kq_lane ? tw_fc_kq_attach(fc) : (!fc.q8 || tw_fc_q8_attach(fc))
+    g_tw_bake_rowmajor = false
+    return false if (!built)
+    if (fc.kq_lane) {
+        tw_dev_put_slab(b, TW_FC_KQ_PIECE, g_tw_kq_fc)
+        var inscope words : array<int64>
+        for (bind in g_tw_kq_fc_binds) {
+            words |> push_from([bind.woff, int64(int(bind.fmt)), int64(bind.qoff), int64(bind.soff), int64(bind.doff)])
+        }
+        tw_dev_put_words(b, TW_FC_KQ_BINDS_PIECE, words)
+    }
+    if (g_tw_q8_fc.buf != null && (fc.q8 || fc.qblob.n > 0l)) {
+        tw_dev_put_slab(b, TW_FC_Q8_PIECE, g_tw_q8_fc)
+        var inscope offs : array<int64>
+        for (w, o in g_tw_q8_fc_woffs, g_tw_q8_fc_boffs) {
+            offs |> push_from([w, int64(o)])
+        }
+        tw_dev_put_words(b, TW_FC_Q8_OFFS_PIECE, offs)
+    }
+    let g = tw_ga_mel_geo(m)
+    return false if (tw_ga_mel_panel(m, g) == null)
+    tw_dev_put_slab(b, TW_GA_MEL_PIECE, g_tw_ga_mel_panel)
+    if (m.head == GigaamHead.ctc && !m.ctc_f16) {
+        return false if (tw_ga_ctc_panel(m, round_up(m.n_classes, 64l)) == null)
+        tw_dev_put_slab(b, TW_GA_CTC_PIECE, g_tw_ga_ctc_panel)
+    }
+    st2_slab_free(g_tw_q8_fc)
+    st2_slab_free(g_tw_kq_fc)
+    st2_slab_free(g_tw_ga_mel_panel)
+    st2_slab_free(g_tw_ga_ctc_panel)
+    return true
+}
+
 def private fc_weights_ready(fc : TwFc) : bool {
+    if (fc.dev_backend == TowerDev.metal) {
+        return false if (!tw_fc_dev_bind(fc))
+        return fc.q8 || fc.kq_lane || empty(fc.wblob) || (g_tw_env_tower_f16 && pf_hmm_ready())
+    }
     return tw_fc_kq_attach(fc) if (fc.kq_lane)
     return tw_fc_q8_attach(fc) if (fc.q8)
     return empty(fc.wblob) || (g_tw_env_tower_f16 && pf_hmm_ready())
@@ -1717,6 +1860,9 @@ struct private TwFc {
     kq : PlaneU8 = PlaneU8()        //!< ... the K-quant planes the seats index
     ks : PlaneU8 = PlaneU8()
     kq_fmts : uint                  //!< ... the K-quant members' format slots, a bit each
+    dev_backend : TowerDev          //!< the device block the model's image carries (`#tower-dev-block`): `metal` binds its pieces
+    dev : PlaneU8 = PlaneU8()
+    devplan : PlaneI64 = PlaneI64()
     d : int64
     ff : int64
     n_head : int64
@@ -1757,12 +1903,12 @@ def private tw_fc_of_ga(m : GigaamModel) : TwFc {
     for (l in range64(m.n_layer)) {
         g_tw_fc_offs[l] = gigaam_layer_offsets(m, l)
     }
-    let nseats = m.kq_lane ? m.n_layer * GIGAAM_FC_RECORDS : 0l
+    let nseats = m.kq_lane && m.dev_backend == TowerDev.none ? m.n_layer * GIGAAM_FC_RECORDS : 0l   // a Metal image's binds stand in for the seats
     g_tw_fc_gseats |> reserve(nseats)
     g_tw_fc_gseats |> resize(nseats)
-    let kq_fmts = gigaam_fc_record_seats(m, g_tw_fc_gseats)
+    let kq_fmts = nseats > 0l ? gigaam_fc_record_seats(m, g_tw_fc_gseats) : 0u
     return TwFc(blob = m.blob, wblob = m.gemm_f16 ? m.wblob : PlaneU16(), taps = m.dw_f16 ? m.wblob : PlaneU16(), qblob = m.qblob, qscales = m.qscales, mapped = m.image_map != null,
-        q8 = m.q8, q8_served = true, kq_lane = m.kq_lane, kq_repacked = m.kq_repacked,
+        q8 = m.q8, q8_served = true, kq_lane = m.kq_lane, kq_repacked = m.kq_repacked, dev_backend = m.dev_backend, dev = m.dev, devplan = m.devplan,
         kq = m.kq_lane ? m.kq : PlaneU8(), ks = m.kq_lane ? m.ks : PlaneU8(), kq_fmts = kq_fmts,
         d = m.d_model, ff = m.n_ff, n_head = m.n_head, nk = m.conv_kernel, n_layer = m.n_layer, eps = m.eps,
         form = FcForm(tap_major = true, rotary = true, conv_ln = true, holds_rows = true, prof = "ga"))
@@ -2089,7 +2235,7 @@ def private metal_parakeet_encode(t : ParakeetModel; var st : ParakeetState) : i
 
 [hot_path, arch(at="../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary")]
 def private metal_gigaam_blocks(m : GigaamModel; var st : GigaamState; tt : int64) : bool
-    => tw_fc_seat(tw_fc_of_ga(m), st.x, tt, 0l, st.rope_cos, st.rope_sin)
+    => m.dev_backend == TowerDev.metal || !g_tw_env_tower ? tw_fc_seat(tw_fc_of_ga(m), st.x, tt, 0l, st.rope_cos, st.rope_sin) : tw_decline(MetalTowerDecline.flavor)
 
 var private g_tw_ga_front = true
 
@@ -2135,6 +2281,7 @@ def private tw_ga_mel_shape_ok(m : GigaamModel; g : TwGaMelGeo; n_in, n_len : in
 
 //! the mel planes' buffer, built once a model; null where it cannot be made
 def private tw_ga_mel_panel(m : GigaamModel; g : TwGaMelGeo) : MetalBuffer? {
+    return tw_dev_buffer(m.dev, m.devplan, TW_GA_MEL_PIECE, m.image_map != null) if (m.dev_backend == TowerDev.metal)
     let tw_key = hash_combine64(intptr(unsafe(addr(m.tabs.twiddles[0]))), uint64(long_length(m.tabs.twiddles)))
     let key = hash_combine64(hash_combine64(tw_plane_key(m.window), tw_plane_key(m.filters)), tw_key)
     return g_tw_ga_mel_panel.buf if (st2_slab_current(g_tw_ga_mel_panel, key))
@@ -2154,6 +2301,7 @@ def private tw_ga_mel_panel_build(m : GigaamModel; g : TwGaMelGeo; key : uint64)
     }
     g_tw_ga_mel_panel.buf = panel
     g_tw_ga_mel_panel.key = key
+    g_tw_ga_mel_panel.bytes = uint64((g.foff + g.n_mel * g.n_bins) * 4l)
     return panel
 }
 
@@ -2265,7 +2413,7 @@ def private tw_ga_encode_off() : bool {
 //! ``st.mel``, then the conv front and the block loop; -1 with nothing counted where the chain cannot serve.
 [hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains"), arch(at="../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary")]
 def private metal_gigaam_encode(m : GigaamModel; var st : GigaamState; samples : float const?; n_in : int64) : int64 {
-    return -1l if (tw_ga_encode_off())
+    return -1l if (tw_ga_encode_off() || m.dev_backend != TowerDev.metal)
     let d = m.d_model
     let k = m.subs_kernel
     let nch = m.n_sub_ch
@@ -2350,6 +2498,7 @@ def metal_tower_ga_ctcs() : int64 => g_tw_ga_ctcs
 //! the CTC head's planes, built once a model: the weights' rows padded to the GEMM's 64-row column tile with zero rows, the
 //! bias behind them at `ncp * d`; null where the buffer cannot be made
 def private tw_ga_ctc_panel(m : GigaamModel; ncp : int64) : MetalBuffer? {
+    return tw_dev_buffer(m.dev, m.devplan, TW_GA_CTC_PIECE, m.image_map != null) if (m.dev_backend == TowerDev.metal)
     let key = hash_combine64(tw_plane_key(m.blob), hash_combine64(uint64(m.ctc_w), uint64(m.n_classes)))
     return g_tw_ga_ctc_panel.buf if (st2_slab_current(g_tw_ga_ctc_panel, key))
     return tw_ga_ctc_panel_build(m, ncp, key)
@@ -2372,6 +2521,7 @@ def private tw_ga_ctc_panel_build(m : GigaamModel; ncp : int64; key : uint64) : 
     }
     g_tw_ga_ctc_panel.buf = panel
     g_tw_ga_ctc_panel.key = key
+    g_tw_ga_ctc_panel.bytes = uint64((ncp * d + nc) * 4l)
     return panel
 }
 
@@ -2380,6 +2530,7 @@ def private tw_ga_ctc_panel_build(m : GigaamModel; ncp : int64; key : uint64) : 
 [hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def private metal_gigaam_ctc(m : GigaamModel; var st : GigaamState; n_frames : int64) : bool {
     return false if (!g_tw_env_tower)
+    return tw_decline(MetalTowerDecline.flavor) if (m.dev_backend != TowerDev.metal)
     let d = m.d_model
     let nc = m.n_classes
     let ncp = round_up(nc, 64l)
@@ -3966,6 +4117,8 @@ def private st2_uniform_pair_release(var a, b : MetalBuffer?&) {
 struct private St2SlabBase {
     buf : MetalBuffer?
     key : uint64
+    bytes : uint64     //!< the buffer's bytes, where a bake copies it into a device-block piece
+    borrowed : bool    //!< the buffer wraps an image's device-block piece (the region cache owns it): freeing the slab drops the view alone
 }
 
 struct private St2DecSlab : St2SlabBase {
@@ -4071,7 +4224,9 @@ def private st2_release_any(var x : auto(TT)) {
 
 [arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-tts-chain")]
 def private st2_slab_free(var base : auto(TT)) {
-    st2_release_any(base)
+    if (!base.borrowed) {
+        st2_release_any(base)
+    }
     unsafe {
         delete base
     }
@@ -6350,6 +6505,7 @@ def dasllama_metal_tower_register {
     register_gigaam_gpu(@@metal_gigaam_blocks, @@metal_tower_serves, true, true, true)
     register_gigaam_gpu_encode(@@metal_gigaam_encode)
     register_gigaam_gpu_ctc(@@metal_gigaam_ctc)
+    register_gigaam_flavor(TowerDev.metal, @@metal_gigaam_serves_model, @@metal_gigaam_bake)
     register_tower_rows_gen(@@metal_tower_rows_gen)
     register_vad_gpu(@@metal_vad_chunks)
     register_styletts2_gpu(metal_styletts2_driver())

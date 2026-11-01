@@ -389,6 +389,58 @@ def fc_gemm_seat_index(d, ff, gemm_off, gemm_stride, woff : int64) : int64 {
     return l * FC_BLOCK_GEMMS + int64(i)
 }
 
+//! A tower image's device backend: the driver whose device block it carries - `none` on a CPU image, which no GPU chain
+//! reads, and the GPU flavors, which the CPU never runs
+enum TowerDev {
+    none
+    metal
+    vulkan
+}
+
+let TOWER_DEV_PIECE_WORDS = 3l   //! a piece's words in a ``devplan`` plane: its name's key, its byte offset in ``dev``, its bytes
+let TOWER_DEV_ALIGN = 16384l     //! a piece's alignment in ``dev``: the image page, so a mapped piece wraps as a device buffer with no copy
+
+//! A device-block piece's key: its name hashed - a driver names its pieces, the plan carries the keys
+def tower_dev_key(name : string) : int64 => int64(hash(name))
+
+//! The device block a GPU-flavored mint builds: the pieces' bytes and the plan naming them
+struct TowerDevBuild {
+    @exact_size blob : array<uint8>
+    @exact_size plan : array<int64>
+}
+
+//! Append the `n` bytes at `src` to `b` as the piece `name`, at the next aligned offset; a name the block already holds panics
+[arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
+def tower_dev_put(var b : TowerDevBuild; name : string; src : uint8 const?; n : int64) {
+    let key = tower_dev_key(name)
+    for (i in range64(long_length(b.plan) / TOWER_DEV_PIECE_WORDS)) {
+        if (b.plan[i * TOWER_DEV_PIECE_WORDS] == key) {
+            panic("dasLLAMA tower: the device block already holds a piece named '{name}'")
+        }
+    }
+    let off = (long_length(b.blob) + TOWER_DEV_ALIGN - 1l) / TOWER_DEV_ALIGN * TOWER_DEV_ALIGN
+    b.blob |> reserve(off + n)
+    b.blob |> resize(off + n)
+    if (n > 0l) {
+        unsafe {
+            memcpy(addr(b.blob[off]), src, n)
+        }
+    }
+    b.plan |> push_from([key, off, n])
+}
+
+//! The piece `name` of a model's device block (`devplan`): its byte offset in ``dev`` and its bytes - (-1, 0) where the block
+//! holds none
+def tower_dev_find(plan : PlaneI64; name : string) : tuple<off : int64; bytes : int64> {
+    let key = tower_dev_key(name)
+    for (i in range64(plan.n / TOWER_DEV_PIECE_WORDS)) {
+        if (plan[i * TOWER_DEV_PIECE_WORDS] == key) {
+            return (off = plan[i * TOWER_DEV_PIECE_WORDS + 1l], bytes = plan[i * TOWER_DEV_PIECE_WORDS + 2l])
+        }
+    }
+    return (off = -1l, bytes = 0l)
+}
+
 //! The seat of the kq-lane block GEMM at the chain's virtual element offset `woff`.
 def tower_gemm_seat(m : auto(MT); woff : int64) : TowerGemmSeat {
     let i = fc_gemm_seat_index(m.d_model, m.n_ff, m.gemm_off, m.gemm_stride, woff) * TOWER_SEAT_WORDS

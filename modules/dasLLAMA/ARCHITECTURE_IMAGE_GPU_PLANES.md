@@ -1,7 +1,7 @@
 # dasLLAMA Architecture - the prepared-image rail, the baked GPU planes
 
-Companion to `ARCHITECTURE_IMAGE.md`; this document carries the two planes a mint bakes for a GPU halfword route - the
-dev-W f16 panel plane and the tower twin-W plane - each section cited by its anchor.
+Companion to `ARCHITECTURE_IMAGE.md`; this document carries the planes a mint bakes for a GPU route - the dev-W f16 panel
+plane, the tower twin-W plane and a GPU-flavored tower image's device block - each section cited by its anchor.
 
 ### The baked dev-W f16 panel plane {#image-devw-plane}
 
@@ -66,3 +66,15 @@ The crown set is read when the prefill PSOs compile, not when a GEMM dispatches,
 `pf_hmm_ready` answers for whatever crowns were armed at the last `metal_prefill_init`. A
 caller that arms a crown after bring-up runs `metal_prefill_shutdown` to force the recompile;
 without it the f16 arm silently stays unavailable and every encode takes the f32 route.
+
+### A GPU-flavored tower image carries its driver's device block {#tower-dev-block}
+
+Each GPU backend loads its own tower image and converts nothing on load: a tower family's Metal and Vulkan images hold the
+bytes that driver's kernels read, and the CPU never runs either. The image carries them as one device block - ``dev``, the
+pieces' bytes, and ``devplan``, `TOWER_DEV_PIECE_WORDS` words a piece (the key of its name, its byte offset in ``dev``, its
+bytes) - and a ``dev_backend`` meta field (`TowerDev`) naming the driver. A GPU-flavored mint builds the family's CPU form in
+memory, runs the driver's bake over it - the conversions the attach ran before: the q8 re-lay or gather, the K-quant device
+forms, the padded panels, the f16 halves - into a `TowerDevBuild` (`tower_dev_put`, each piece at `TOWER_DEV_ALIGN`, the image
+page, so a mapped piece wraps as a device buffer with no copy), and writes the planes the driver reads as stored beside the
+block, the planes the bake consumed dropped. The attach finds each piece by name (`tower_dev_find`) and binds it: zero-copy on
+Metal, a byte-for-byte upload on Vulkan.

@@ -273,3 +273,14 @@ def finalize(var pl : PlaneI32) {
 def finalize(var pl : PlaneI64) {
     plane_release(pl)
 }
+
+//! The plane's elements copied into `dst` - a staging takes a borrowed plane's bytes as its own
+def plane_copy(pl; var dst : array<auto(ET)>) {
+    dst |> reserve(pl.n)
+    dst |> resize(pl.n)
+    if (pl.n > 0l) {
+        unsafe {
+            memcpy(addr(dst[0]), pl.p, pl.n * int64(typeinfo sizeof(dst[0])))
+        }
+    }
+}

@@ -56,6 +56,7 @@ enum MetalTowerDecline {
     knob                // DASLLAMA_METAL_TOWER=0 — the A/B rail
     quant_mode          // a q8-loaded tower: the f32/bf16 lane only (the q8 tower lane is its own slice)
     kq_lane             // the kq lane's planes in the CPU backend's interleave, or a member with no base mul_mm tile on this build
+    flavor              // the model is not the Metal-flavored image: each backend serves its own (`#tower-dev-block`)
     shape               // a dim violating the GEMM grids (m%32 / ndim%64 / kdim%32) or a misaligned plane offset
     device              // metal init failed (no device / PSO build failure)
     gpu_error           // dispatch failed at execution time
