@@ -7698,16 +7698,17 @@ def vt_gemm_groups(d, rows : int64) : int64 {
 struct VtTile {
     v : int
     tc : int64
+    fmt : int    //! the weight format slot the tile decodes: 0 (the q8 slot) the q8 planes, else a kq lane seat's K-quant member on the cm2 tiles
 }
 
-def vt_tile(cm2 : bool; width, rows : int64) : VtTile {
+def vt_tile(cm2 : bool; width, rows : int64; fmt : int = int(KqFmt.q8)) : VtTile {
     if (cm2) {
-        return VtTile(v = 0, tc = cm2_tile_cols(width, rows))
+        return VtTile(v = 0, tc = cm2_tile_cols(width, rows), fmt = fmt)
     }
-    return VtTile(v = q8_batch_cls_variant(q8_batch_tile_for(width, rows), q8_batch_aligned(width, rows)), tc = 0l)
+    return VtTile(v = q8_batch_cls_variant(q8_batch_tile_for(width, rows), q8_batch_aligned(width, rows)), tc = 0l, fmt = fmt)
 }
 
-def vt_tile_ensure(t : VtTile) : bool => t.tc > 0l ? cm2_cls_ensure(int(KqFmt.q8), t.tc) : q8_batch_cls_ensure(t.v)
+def vt_tile_ensure(t : VtTile) : bool => t.tc > 0l ? cm2_cls_ensure(t.fmt, t.tc) : (t.fmt == int(KqFmt.q8) && q8_batch_cls_ensure(t.v))
 
 def vt_tile_groups(t : VtTile; width, rows : int64) : int64 => t.tc > 0l ? cm2_tiles_at(width, rows, t.tc) : vt_gemm_groups(width, rows)
 
@@ -7751,7 +7752,7 @@ def vt_tile_rows(t : VtTile; rows : int64) : int64 => t.tc == 256l ? round_up(ro
 def vt_tile_cls_set(t : VtTile; wq, ws : uint64; wqb, wsb : int64; meta : uint64; meta_bytes : int64; xh : uint64; xh_bytes : int64;
                     xq, xs : uint64; xq_elems : int64; xbit : uint; y : uint64; y_bytes : int64; ybit : uint) : VkDescriptorSet {
     if (t.tc > 0l) {
-        return cm2_cls_set(int(KqFmt.q8), t.tc, fixed_array(wq, ws, meta, xh, y), fixed_array(wqb, wsb, meta_bytes, xh_bytes, y_bytes),
+        return cm2_cls_set(t.fmt, t.tc, fixed_array(wq, ws, meta, xh, y), fixed_array(wqb, wsb, meta_bytes, xh_bytes, y_bytes),
             fixed_array(0u, 0u, 0u, xbit, ybit))
     }
     return q8_batch_cls_set(t.v, fixed_array(wq, ws, meta, xq, xs, y), fixed_array(wqb, wsb, meta_bytes, xq_elems, xq_elems / kq_elems(KqFmt.q8) * 4l, y_bytes),
@@ -7760,7 +7761,7 @@ def vt_tile_cls_set(t : VtTile; wq, ws : uint64; wqb, wsb : int64; meta : uint64
 
 def vt_tile_enc(raw : VkCommandBuffer; var h : VkHaz; t : VtTile; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
     if (t.tc > 0l) {
-        cm2_cls_enc(int(KqFmt.q8), t.tc, raw, h, s, pc, groups)
+        cm2_cls_enc(t.fmt, t.tc, raw, h, s, pc, groups)
     } else {
         q8_batch_cls_enc(t.v, raw, h, s, pc, groups)
     }

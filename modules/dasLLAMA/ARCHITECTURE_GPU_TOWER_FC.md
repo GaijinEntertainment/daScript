@@ -45,8 +45,10 @@ or a failed command buffer; the CPU then cuts the mel and the block seat
 serves behind the CPU front and counts its own declines.
 Both seats serve the q8 and exact weight lanes (`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`): the exact lane's GEMMs on
 the half tensor GEMM over the carrier's halfwords, the q8 lane's on the prefill q8 ladder over the model's q8 slab. The kq
-lane - a quantized carrier's own planes - declines by name (`kq_lane`, `TwFc.kq_lane`, the members in the words): no
-chain GEMM reads the engine's K-quant planes, and the encode seat stands down with it. Canary and
+lane - a quantized carrier's own planes - the Metal chain declines by name (`kq_lane`, `TwFc.kq_lane`, the members in the
+words): no Metal chain GEMM reads the engine's K-quant planes, the encode seat stands down with it, and the seat registers
+no kq lane, so the facade's device-lane arm keeps the CPU kq lane (`followup_metal.md` ledgers the seats); the Vulkan chain
+serves it (`ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-kq`). Canary and
 parakeet keep declining their q8 lane (`quant_mode`, `TwFc.q8_served` off).
 
 The chain submits on the timed encoder, which every submission already pays for, so its device time costs the served

@@ -1302,15 +1302,77 @@ def private ga_vk_lane_policy_cell(t : T?) {
     }
 }
 
+//! the k4 cm2 and KHR tile dispatches the device counted: the kq lane's K-quant seats run on one of them, by the device's mode
+//! and the column pick
+def private k4_tile_count() : int64 {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return (vk_kernel_coverage_of("kq_batch_k4_cm2l_cls_spv") + vk_kernel_coverage_of("kq_batch_k4_cm2m_cls_spv")
+            + vk_kernel_coverage_of("kq_batch_k4_cm2s_cls_spv") + vk_kernel_coverage_of("kq_batch_k4_khr_cls_spv"))
+    } else {
+        return 0l
+    }
+}
+
+//! GigaAM's kq lane on the Vulkan chain - the Q4_K carrier's block GEMMs on the K-quant cm2 tiles over the carrier's own planes,
+//! its Q8_0 conv pointwise GEMMs on the q8 tiles - against the CPU kq chain: the encode, its front and every block on the device
+//! with no `kq_lane` or `quant_mode` decline, the frame count and the token ids the CPU kq chain's, the device rows' rel_l2 from
+//! the exact chain within 1.5x the CPU kq chain's own plus a floor, and the k4 tiles counted (`REVIEW_KQ_FORMATS.md`'s served
+//! cell: the loader's tag the disk type, a counter no other plane of the file moves). Off the f16 GEMM feed the lane's GEMMs have
+//! no device form: the chain declines `device` and the CPU serves.
+[cold_path, unused_argument(t, mx, mk, samples, clip), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-kq")]   // without dasVulkan the gated body is empty
+def private ga_vk_kq_cell(t : T?; mx, mk : GigaamModel; samples : array<float>; clip : string) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let tag = "gigaam {clip} kq lane"
+        t |> success(mk.kq_lane, "{tag}: the carrier serves as its own planes")
+        t |> equal(gigaam_exec_fmt(mk), "k4", "{tag}: the loader's tag for the attention and FF planes is the disk type, Q4_K")
+        with_gpu_knobs() {
+            with_dasllama_jobque_() {
+                set_vulkan_tower(false)
+                var inscope ex <- ga_leg(mx, samples)
+                var inscope cpu <- ga_leg(mk, samples)
+                set_vulkan_tower(true)
+                let s0 = vulkan_tower_stats()
+                let dk0 = vulkan_tower_declines()?["kq_lane"] ?? 0l
+                let dq0 = vulkan_tower_declines()?["quant_mode"] ?? 0l
+                let dd0 = vulkan_tower_declines()?["device"] ?? 0l
+                let k4_0 = k4_tile_count()
+                var inscope dev <- ga_leg(mk, samples)
+                let s1 = vulkan_tower_stats()
+                t |> equal((vulkan_tower_declines()?["kq_lane"] ?? 0l) - dk0, 0l, "{tag}: no kq_lane decline")
+                t |> equal((vulkan_tower_declines()?["quant_mode"] ?? 0l) - dq0, 0l, "{tag}: no quant_mode decline")
+                t |> equal(dev.n, cpu.n, "{tag}: the frame count")
+                if (!vulkan_tower_front_route()) {
+                    t |> equal(s1.encodes - s0.encodes, 0l, "{tag}: off the f16 GEMM feed no encode on the device")
+                    t |> success((vulkan_tower_declines()?["device"] ?? 0l) > dd0, "{tag}: off the f16 GEMM feed the chain declined `device`")
+                    return
+                }
+                device_leg_served(t, tag, s0, s1, mk.n_layer, -1l)
+                t |> equal(s1.convs - s0.convs, 1l, "{tag}: the conv front ran on the device")
+                t |> success(k4_tile_count() > k4_0, "{tag}: the k4 tiles served the K-quant seats (the census counter rose)")
+                t |> equal(dev.ids, cpu.ids, "{tag}: the token ids are the CPU kq chain's")
+                to_log(LOG_INFO, "test_audio: {tag} cpu kq : {cpu.text}\n")
+                to_log(LOG_INFO, "test_audio: {tag} vulkan : {dev.text}\n")
+                tower_twin_bar(t, tag, ex.x, cpu.x, dev.x, mk.n_layer, 1.5lf, 1e-4lf)
+            }
+        }
+    }
+}
+
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-rotary")]
 def test_gigaam_vulkan_twin(tst : T?) {
-    tst |> run("GigaAM v3 e2e-rnnt: the Vulkan rotary FastConformer front and blocks on both lanes - the q8 lane vs the CPU q8 chain and the exact lane off the halfwords vs the CPU exact chain - on the FLEURS ru clips") @(t : T?) {
+    tst |> run("GigaAM v3 e2e-rnnt: the Vulkan rotary FastConformer front and blocks on every lane - the q8 lane vs the CPU q8 chain, the exact lane off the halfwords vs the CPU exact chain, the Q4_K carrier's kq lane vs the CPU kq chain - on the FLEURS ru clips") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-f16.gguf")
             return if (!family_on(t, "gigaam") || !model_available(t, path) || !vulkan_twin_seat(t))
             var mx <- mint_ga(path, false, -1l)
             var m <- mint_ga(path, true, -1l)
             t |> success(!mx.q8 && m.q8, "the exact and the q8 models minted")
+            let kq_path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k.gguf")
+            var mk = GigaamModel()
+            if (stat(kq_path).is_valid) {
+                delete mk
+                mk <- mint_ga(kq_path, false, -1l)
+            }
             for (clip in ["ru_short", "ru_mid"]) {
                 let wav = asr_clip("{clip}.wav")
                 if (!stat(wav).is_valid) {
@@ -1320,8 +1382,14 @@ def test_gigaam_vulkan_twin(tst : T?) {
                 var inscope samples <- load_audio_16k_mono(wav)
                 ga_vk_clip_cell(t, path, mx, m, samples, clip)
                 ga_vk_exact_cell(t, path, mx, m, samples, clip)
+                if (mk.kq_lane) {
+                    ga_vk_kq_cell(t, mx, mk, samples, clip)
+                } else {
+                    t |> skip("{clip}: the Q4_K carrier (gigaam-v3-e2e-rnnt-q4_k.gguf) not present - the kq lane cell")
+                }
             }
             ga_vk_lane_policy_cell(t)
+            delete mk
             delete m
             delete mx
             vulkan_tower_shutdown()

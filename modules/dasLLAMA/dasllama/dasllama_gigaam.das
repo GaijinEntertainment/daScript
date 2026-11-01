@@ -1187,9 +1187,9 @@ var private g_ga_gpu_encode_set = false
 
 //! `exact_lane`: the driver's halfword GEMMs are its faster lane, so the policy prefers the exact planes over the q8 image
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
-def register_gigaam_gpu(fn : GigaamGpuBlocksFn; serves : GigaamServesFn; exact_lane : bool = true) {
+def register_gigaam_gpu(fn : GigaamGpuBlocksFn; serves : GigaamServesFn; exact_lane : bool = true; kq_lane : bool = false) {
     g_ga_gpu = fn
-    g_ga_seat = GpuLaneSeat(set = true, f32_lane = exact_lane, serves = serves)
+    g_ga_seat = GpuLaneSeat(set = true, f32_lane = exact_lane, serves = serves, kq_lane = kq_lane)
 }
 
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
@@ -1204,9 +1204,9 @@ def gigaam_gpu_serves() : bool => g_ga_seat.set && invoke(g_ga_seat.serves)
 //! Would a GPU driver serve the block loop with the exact planes its faster lane - the lane policy's question.
 def gigaam_gpu_exact_serves() : bool => gpu_exact_serves(g_ga_seat)
 
-//! Would a GPU driver serve the loaded model's encode: the q8 lane or the halfword planes, with a driver whose knob is on - the
-//! facade's device-lane arm.
-def gigaam_device_gpu(m : GigaamModel) : bool => (m.q8 || m.gemm_f16) && gigaam_gpu_serves()
+//! Would a GPU driver serve the loaded model's encode: the q8 lane, the halfword planes, or the kq lane where the driver's seat
+//! takes it, with a driver whose knob is on - the facade's device-lane arm.
+def gigaam_device_gpu(m : GigaamModel) : bool => (m.q8 || m.gemm_f16 || (m.kq_lane && g_ga_seat.kq_lane)) && gigaam_gpu_serves()
 
 var private g_ga_pin = GemmLane.unset
 

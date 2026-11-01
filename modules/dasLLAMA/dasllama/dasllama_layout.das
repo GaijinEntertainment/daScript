@@ -1064,28 +1064,45 @@ def moe_gpu_gather_stack_mx4(t : Model; woff : int64; n, rows, slice_rows : int6
 // row-major per superblock in the k/k+16 nibble pairing, plus the device scale rows (decoded 20 B, or
 // the codebook formats' two words); grp<mr> interleave or disk-order in, identical device bytes out.
 [arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-subblock-planes"), arch(at = "../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
+//! The MoE stack's kq gather: `rows` rows of format `fmt` from the Model's planes at `woff` into the device layout, `wq` and
+//! `ws` grown to hold them; the nv4 rows' site-scale word read a slice off the model's table.
 def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_rows : int64;
                             repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
+    let nsb = n / KQ_SUPERBLOCK_ELEMS
+    let qsb = kq_qsb(fmt)
+    let dssb = kq_ssb(fmt)
+    assert(rows * nsb * qsb <= 2147483647l, "GPU MoE kq stack exceeds the int32 gather-buffer rail")
+    wq |> grow_resize(rows * nsb * qsb)
+    ws |> grow_resize(rows * nsb * kq_dev_ssb(fmt))
+    //! the nv4 rows' site-scale word a slice; no other member carries one
+    var slice_sbits <- [for (sl in range64(fmt == KqFmt.nv4 ? rows / slice_rows : 0l)); float_bits_to_uint(site_scale(t.site_scale, fmt, woff + sl * slice_rows * n))]
+    unsafe {
+        let sb0 = woff / KQ_SUPERBLOCK_ELEMS
+        kq_gather_rows_dev(fmt, addr<uint8 const?>(t.kq[int(fmt)].q[sb0 * qsb]), addr<uint8 const?>(t.kq[int(fmt)].s[sb0 * dssb]),
+            n, rows, slice_rows, repacked, mr, wq, ws, 0l, 0l, slice_sbits)
+    }
+    delete slice_sbits
+}
+
+//! The kq gather's core over raw planes: `rows` x `n` prepared K-quant rows at `qp` with their scale rows at `sp` (the CPU backend's
+//! grp<mr> interleave a `slice_rows` slice where `repacked`, else disk order) into the device layout at byte `dst_q` of `wq` and
+//! `dst_s` of `ws`; `slice_sbits` a slice's site-scale word (nv4's), empty elsewhere. The MoE stack gather and the towers gather through it.
+def kq_gather_rows_dev(fmt : KqFmt; qp, sp : uint8 const?; n, rows, slice_rows : int64; repacked : bool; mr : int64;
+                       var wq : array<uint8>; var ws : array<uint8>; dst_q, dst_s : int64; slice_sbits : array<uint>) {
     let nsb = n / KQ_SUPERBLOCK_ELEMS
     let qsb = kq_qsb(fmt)    // quant plane stride per superblock (disk == device for quants)
     let dssb = kq_ssb(fmt)   // disk/plane scale stride; device rows decode to kq_dev_ssb(fmt)
     let dev_ssb = kq_dev_ssb(fmt)
     let two_word_row = kq_two_word_row(fmt)
-    assert(n % KQ_SUPERBLOCK_ELEMS == 0l, "GPU MoE kq gather: row length must be a superblock multiple")
-    assert(rows * nsb * qsb <= 2147483647l, "GPU MoE kq stack exceeds the int32 gather-buffer rail")
-    wq |> grow_resize(rows * nsb * qsb)
-    ws |> grow_resize(rows * nsb * dev_ssb)
+    assert(n % KQ_SUPERBLOCK_ELEMS == 0l, "GPU kq gather: row length must be a superblock multiple")
     let nslices = int(rows / slice_rows)
     let qrow = nsb * qsb
     let srow = nsb * dssb
     let ng = repacked ? slice_rows / mr : 0l
     unsafe {
-        let sb0 = woff / KQ_SUPERBLOCK_ELEMS
-        let qp = addr<uint8 const?>(t.kq[int(fmt)].q[sb0 * qsb])
-        let sp = addr<uint8 const?>(t.kq[int(fmt)].s[sb0 * dssb])
-        var wqp = addr(wq[0])
-        var wsp = addr(ws[0])
-        let site_tab = addr(t.site_scale)
+        var wqp = addr(wq[dst_q])
+        var wsp = addr(ws[dst_s])
+        let sbp = long_length(slice_sbits) > 0l ? addr<uint const?>(slice_sbits[0]) : null
         let nrows = nslices * int(slice_rows)
         let njobs = is_job_que_available() ? min(nrows, 4 * (get_total_hw_jobs() + 1)) : 1
         maybe_parallel_for(0, nrows, njobs) $(rowb, rowe) {   //! a row a unit: one slice alone still spreads over the lanes
@@ -1093,8 +1110,8 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                 for (row in range(rowb, rowe)) {
                     let rr = int64(row)
                     let ri = rr % slice_rows
-                    //! the nv4 row's fifth word: its slice's site scale (a slice is one expert's plane), a const table read a row
-                    let sbits = fmt == KqFmt.nv4 ? float_bits_to_uint(site_scale(*site_tab, fmt, woff + (rr - ri) * n)) : 0u
+                    //! the nv4 row's fifth word: its slice's site scale (a slice is one expert's plane)
+                    let sbits = sbp != null ? sbp[(rr - ri) / slice_rows] : 0u
                     let sliceQ = (rr - ri) * qrow
                     let sliceS = (rr - ri) * srow
                     let grouped = repacked && ri < ng * mr

@@ -313,28 +313,37 @@ def private exact_reference(t : T?; clip : string; var want : string&) : bool {
 }
 
 //! The kq lane over the published Q4_K carrier - the hosted file whose attention and FF GEMMs are Q4_K and conv pointwise GEMMs
-//! Q8_0: the carrier's own planes serve, named by their one K-quant member; a GPU block seat declines it by name; a pinned lane
-//! dequantizes it into that lane's planes. Every lane's transcript holds the q8 bar against the f16 carrier's exact lane.
+//! Q8_0: the carrier's own planes serve, named by their one K-quant member; the Vulkan block seat serves it (its parity cell
+//! `test_gigaam_vulkan_twin`), the Metal seat declines it by name; a pinned lane dequantizes it into that lane's planes. Every
+//! lane's transcript holds the q8 bar against the f16 carrier's exact lane.
 [test]
 def test_gigaam_kq_lane(tst : T?) {
     with_dasllama_jobque_() {
         let path = kq_carrier()
         return if (!model_available(tst, path))
-        tst |> run("e2e_rnnt q4_k: the kq lane serves the carrier's own planes, the GPU block seat declining by name") @(t : T?) {
+        tst |> run("e2e_rnnt q4_k: the kq lane serves the carrier's own planes - on the Vulkan seat too, the Metal seat declining by name") @(t : T?) {
             let declines = gpu_tower_declines_of("kq_lane")
             var inscope m <- mint(path, false)
             t |> success(m.kq_lane, "the un-pinned load takes the kq lane")
             t |> equal(gigaam_exec_fmt(m), "k4", "the lane's name: the one K-quant member")
             t |> equal(gigaam_kq_members(m), "k4+q8", "the carrier's members: Q4_K attention and FF, Q8_0 conv pointwise")
-            t |> success(!gigaam_device_gpu(m), "no device serves the kq lane's encode")
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                t |> success(!gigaam_device_gpu(m), "the Metal seat does not serve the kq lane's encode")
+            } else {
+                t |> equal(gigaam_device_gpu(m), gigaam_gpu_serves(), "the Vulkan seat serves the kq lane's encode wherever it serves the q8 lane's")
+            }
             for (clip in split("ru_short,ru_mid", ",")) {
                 var want = ""
                 if (exact_reference(t, clip, want)) {
                     lane_clip(t, m, clip, "e2e_rnnt", "kq", want, "f16 lane")
                 }
             }
-            if (gigaam_gpu_serves()) {
-                t |> success(gpu_tower_declines_of("kq_lane") > declines, "the GPU block seat declined the kq lane by name")
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                if (gigaam_gpu_serves()) {
+                    t |> success(gpu_tower_declines_of("kq_lane") > declines, "the Metal block seat declined the kq lane by name")
+                }
+            } else {
+                t |> equal(gpu_tower_declines_of("kq_lane"), declines, "no kq_lane decline on the Vulkan seat")
             }
         }
         tst |> run("e2e_rnnt q4_k: a pinned q8 lane dequantizes the carrier into Q8_0 planes") @(t : T?) {

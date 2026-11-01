@@ -8,8 +8,10 @@ module dasllama_vulkan_tower shared public
 require dasllama/dasllama_lint public
 require vulkan
 require math
+require daslib/strings_boost   // join - the kq lane members' names in a decline
 require dasllama/dasllama_env
 require dasllama/dasllama_kqformat
+require dasllama/dasllama_gemm_schema   // kq_dev_ssb, dev_rows_bytes - the kq lane's device plane strides
 require dasllama/dasllama_math
 require dasllama/dasllama_layout
 require dasllama/dasllama_plane
@@ -171,6 +173,20 @@ struct private VtBatchSetsFf {
     s_hu : VkDescriptorSet
 }
 
+//! a K-quant member's device planes on the kq lane: its seats' rows gathered in the tier's layout, in layout order
+struct private VtKqPlane {
+    q_dev : uint64
+    s_dev : uint64
+    q_bytes : int64
+    s_bytes : int64
+}
+
+//! a GEMM record's seat on the kq lane: a Q8_0 seat's block base in the q8 planes, a K-quant seat's superblock base in its member's planes
+struct private VtFcSeat {
+    fmt : int
+    wblk0 : int64
+}
+
 struct private VtResident {
     key : uint64
     wq_dev : uint64
@@ -277,6 +293,8 @@ struct private VtResident {
     @scratch sets_ff : table<int; VtBatchSetsFf>
     @scratch sets_qkv : table<int; VkDescriptorSet>
     @scratch sets_rel_proj : table<int; VkDescriptorSet>   //! the rel-table projection's set per tile key (its feed the table's own rows)
+    @scratch kq_planes : table<int; VtKqPlane>   //! the kq lane's device planes a K-quant member, keyed by its format slot (`vt_upload_fc_kq`)
+    @scratch kq_seats : array<VtFcSeat>          //! the kq lane's seat a GEMM record: the member's slot and the record's block base in its planes
     family : string       //! the family name the counter and the announce carry
     served_said : bool    //! the serves-on-the-device line said for the model the key names
     s_qkv : VkDescriptorSet
@@ -450,6 +468,8 @@ var private g_vt_cn : VtResident
 var private g_vt_pk : VtResident   //! parakeet's resident: the FastConformer chain over its q8 planes, its front beside
 var private g_vt_ga : VtResident   //! gigaam's resident: the rotary FastConformer chain over its q8 planes, its conv front beside
 var private @scratch @exact_size g_vt_fc_offs : array<CanaryLayerOffs>   //! the FastConformer encode's block offsets, the family's record mapped onto canary's
+var private @scratch @exact_size g_vt_fc_gseats : array<TowerGemmSeat>   //! the kq lane's seat a GEMM record (`VT_CN_GEMMS` a block, the rel record empty): the family's `tower_gemm_seat` over its offsets
+var private g_vt_no_sbits : array<uint>   //! the kq gather's empty site-scale words: no member of the lane carries one
 var private g_vt_q3a_front : VtResident   //! the qwen3a conv front's resident: the conv_out q8 plane, the f16 conv slab, the chunk scratch
 var private @scratch @exact_size g_vt_rope2d_tabs : array<float>   //! the packed rope tables staging, [row][cx | sx | cy | sy]
 var private @scratch @exact_size g_vt_maps : array<uint>           //! the encode's schedule map offsets, one a GEMM record
@@ -468,7 +488,7 @@ def private vt_decline_words(why : VulkanTowerDecline) : string {
     } elif (why == VulkanTowerDecline.quant_mode) {
         return "the tower's planes are not the lane the driver serves"
     } elif (why == VulkanTowerDecline.kq_lane) {
-        return "the block GEMMs are the carrier's own K-quant planes, which the Vulkan FastConformer chain has no GEMM for - the CPU kq lane serves them"
+        return "a K-quant member of the carrier's own block GEMM planes has no tile on this device's f16 feed - the CPU kq lane serves them"
     } elif (why == VulkanTowerDecline.shape) {
         return "a width, head size, row count, window or buffer range the stamps do not serve"
     } elif (why == VulkanTowerDecline.memory) {
@@ -484,8 +504,8 @@ def private vt_decline(r : VtResident; why : VulkanTowerDecline) : bool
 
 //! the kq-lane decline, naming the site and the carrier's members (`REVIEW_KQ_FORMATS.md`'s site rule)
 [cold_path]
-def private vt_decline_kq(r : VtResident; m : GigaamModel) : bool
-    => g_vt_declines |> note("the {r.family} tower", "{VulkanTowerDecline.kq_lane}", "the tower stays on the CPU chain: the GigaAM block GEMMs ({gigaam_kq_members(m)}) - {vt_decline_words(VulkanTowerDecline.kq_lane)}")
+def private vt_decline_kq(r : VtResident; members : string) : bool
+    => g_vt_declines |> note("the {r.family} tower", "{VulkanTowerDecline.kq_lane}", "the tower stays on the CPU chain: the GigaAM block GEMMs ({members}) - {vt_decline_words(VulkanTowerDecline.kq_lane)}")
 
 //! a scratch or upload builder's outcome: built, or the reason the seat declines
 enum private VtBuild {
@@ -523,7 +543,8 @@ def private vt_unbind_batch_sets(var r : VtResident) {
 
 let private VT_TILE_CM2_KEY_BASE = 1000   //! the cm2 tiles' key base in the set caches, past the q8 batch variants' 0..5 (a tile's key adds its token column)
 
-def private vt_tile_key(t : VtTile) : int => t.tc > 0l ? VT_TILE_CM2_KEY_BASE + int(t.tc) : t.v
+let private VT_TILE_FMT_KEY_STRIDE = 4096   //! a tile key's format band: the kq lane's K-quant tiles key beside the q8 ones
+def private vt_tile_key(t : VtTile) : int => (t.tc > 0l ? VT_TILE_CM2_KEY_BASE + int(t.tc) : t.v) + t.fmt * VT_TILE_FMT_KEY_STRIDE
 
 //! `k` folded with `VT_KEY_SAMPLE_WORDS` words sampled evenly over the `bytes` at `p`
 def private vt_fold_words(k : uint64; p : uint8 const?; bytes : int64) : uint64 {
@@ -739,6 +760,11 @@ def private vt_release(var r : VtResident) {
         release_device_buf(r.wq_dev)
         release_device_buf(r.ws_dev)
         release_device_buf(r.norms_dev)
+        for (kp in values(r.kq_planes)) {
+            release_device_buf(kp.q_dev)
+            release_device_buf(kp.s_dev)
+        }
+        r.kq_planes |> clear()
         if (r.taps_bytes > 0l) {
             release_device_buf(r.taps_dev)
             r.taps_bytes = 0l
@@ -1613,6 +1639,11 @@ struct private VtFc {
     taps : PlaneU16 = PlaneU16()   //! gigaam's f16 depthwise taps: `taps_n` halfwords at `taps_off`, the layer offsets indexing the plane; empty: f32 in `blob`
     taps_off : int64
     taps_n : int64
+    kq_lane : bool       //! gigaam's kq lane: the block GEMMs the carrier's own planes - a Q8_0 seat's blocks in `qblob` at its seat offset, a K-quant seat's superblocks in `kq` / `ks`; the seats `g_vt_fc_gseats`
+    kq : PlaneU8 = PlaneU8()
+    ks : PlaneU8 = PlaneU8()
+    kq_repacked : bool   //! the K-quant planes in the CPU backend's grp interleave, which the gather un-groups; else disk order
+    kq_fmts : uint       //! the K-quant members' format slots, a bit each (`vt_fc_kq_members` names them)
     n_layer : int64
     d : int64
     ff : int64
@@ -1673,13 +1704,31 @@ def private vt_fc_of_pk(m : ParakeetModel) : VtFc {
 def private vt_fc_of_ga(m : GigaamModel) : VtFc {
     g_vt_fc_offs |> reserve(m.n_layer)
     g_vt_fc_offs |> resize(m.n_layer)
+    g_vt_fc_gseats |> reserve(m.n_layer * VT_CN_GEMMS)
+    g_vt_fc_gseats |> resize(m.n_layer * VT_CN_GEMMS)
+    var kq_fmts = 0u
     for (l in range64(m.n_layer)) {
-        g_vt_fc_offs[l] = gigaam_layer_offsets(m, l)
+        let lo = gigaam_layer_offsets(m, l)
+        g_vt_fc_offs[l] = lo
+        continue if (!m.kq_lane)
+        let woffs = fixed_array(lo.ff1a_w, lo.ff1b_w, lo.q_w, lo.k_w, lo.v_w, -1l, lo.o_w, lo.pw1_w, lo.pw2_w, lo.ff2a_w, lo.ff2b_w)   //! the records' order, the rel record empty
+        for (g in range64(VT_CN_GEMMS)) {
+            var seat = TowerGemmSeat(fmt = KqFmt.q8, qoff = -1l, soff = -1l)
+            if (woffs[g] >= 0l) {
+                seat = tower_gemm_seat(m, woffs[g])
+                if (seat.fmt != KqFmt.q8) {
+                    kq_fmts |= 1u << uint(int(seat.fmt))
+                }
+            }
+            g_vt_fc_gseats[l * VT_CN_GEMMS + g] = seat
+        }
     }
     let f16w = !m.q8 && m.gemm_f16
     return VtFc(family = "gigaam", front_name = "gigaam-front", q8 = m.q8, qblob = m.qblob, qscales = m.qscales, blob = m.blob,
         f16w = f16w, wblob = f16w ? m.wblob : PlaneU16(), w_off = m.gemm_off, w_n = f16w ? m.n_layer * m.gemm_stride : 0l,
         taps = m.dw_f16 ? m.wblob : PlaneU16(), taps_off = m.dw_off, taps_n = m.dw_f16 ? m.n_layer * m.conv_kernel * m.d_model : 0l,
+        kq_lane = m.kq_lane, kq = m.kq_lane ? m.kq : PlaneU8(), ks = m.kq_lane ? m.ks : PlaneU8(), kq_repacked = m.kq_repacked,
+        kq_fmts = kq_fmts,
         n_layer = m.n_layer, d = m.d_model, ff = m.n_ff, n_head = m.n_head, conv_kernel = m.conv_kernel, eps = m.eps,
         biased = true, tap_major = true, device_mel = false, rotary = true, conv_ln = true, n_mel = m.n_mel, n_fft = m.n_fft,
         n_fb = m.n_fft / 2l + 1l, nch = m.n_sub_ch, c0_w = m.c0_w, c0_b = m.c0_b, c2_w = m.c2_w, c2_b = m.c2_b,
@@ -1728,8 +1777,105 @@ def private vt_cn_regions(lo : CanaryLayerOffs; d, ff : int64; var out : Q8Regio
     out[VT_CN_FF2B] = Q8Region(woff = lo.ff2b_w, n = ff, rows = d)
 }
 
+//! the kq lane's upload: the Q8_0 seats' blocks gathered into the q8 planes at their seat offsets, each K-quant member's seats
+//! gathered in the tier's layout into planes of its own in layout order (`kq_seats` the schedule's block base a record), the
+//! norms beside them
+[cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-kq")]
+def private vt_upload_fc_kq(var r : VtResident; key : uint64; fc : VtFc; lay : Q8RepackLayout) : bool {
+    let q8e = kq_elems(KqFmt.q8)
+    let nrec = fc.n_layer * VT_CN_GEMMS
+    var regions : array<Q8Region>
+    var qbytes, sbytes : table<int; int64>
+    r.kq_seats |> clear()
+    r.kq_seats |> reserve(nrec)
+    r.kq_seats |> resize(nrec)
+    var recs : Q8Region[int(VT_CN_GEMMS)]
+    for (l in range64(fc.n_layer)) {
+        vt_cn_regions(g_vt_fc_offs[l], fc.d, fc.ff, recs)
+        for (g in range64(VT_CN_GEMMS)) {
+            let rid = l * VT_CN_GEMMS + g
+            let seat = g_vt_fc_gseats[rid]
+            r.kq_seats[rid] = VtFcSeat(fmt = int(KqFmt.q8), wblk0 = 0l)
+            continue if (recs[g].rows == 0l)
+            if (seat.fmt == KqFmt.q8) {
+                regions |> push(Q8Region(woff = seat.qoff, n = recs[g].n, rows = recs[g].rows))
+                r.kq_seats[rid] = VtFcSeat(fmt = int(KqFmt.q8), wblk0 = seat.qoff / q8e)
+            } else {
+                let fmt = int(seat.fmt)
+                let bytes = dev_rows_bytes(seat.fmt, recs[g].n, recs[g].rows)
+                let q0 = qbytes?[fmt] ?? 0l
+                r.kq_seats[rid] = VtFcSeat(fmt = fmt, wblk0 = q0 / kq_qsb(seat.fmt))
+                qbytes[fmt] = q0 + bytes.q
+                sbytes[fmt] = (sbytes?[fmt] ?? 0l) + bytes.s
+            }
+        }
+    }
+    vt_upload_begin(r, key)
+    r.wq_bytes = fc.qblob.n
+    r.ws_bytes = fc.qscales.n * 2l
+    if (r.wq_bytes > 0l) {   //! a carrier with no Q8_0 seat has no q8 planes
+        r.wq_dev = vt_dev_buf(r, r.wq_bytes)
+        r.ws_dev = vt_dev_buf(r, r.ws_bytes)
+    }
+    r.ones_off = fc.blob.n
+    r.norms_bytes = fc.blob.n * 4l
+    r.norms_dev = vt_dev_buf(r, r.norms_bytes)
+    for (fmt, qb in keys(qbytes), values(qbytes)) {
+        let sb = sbytes?[fmt] ?? 0l
+        r.kq_planes[fmt] = VtKqPlane(q_dev = vt_dev_buf(r, qb), s_dev = vt_dev_buf(r, sb), q_bytes = qb, s_bytes = sb)
+    }
+    if (r.oom) {
+        vt_release(r)
+        delete regions
+        return false
+    }
+    if (r.wq_bytes > 0l) {
+        vt_upload_regions(fc.qblob, fc.qscales, regions, lay, r.wq_dev, r.ws_dev, r.wq_bytes, r.ws_bytes)
+    }
+    delete regions
+    upload_float_ranges(r.norms_dev, [(p = plane_at(fc.blob, 0l), n = fc.blob.n)], 0l)
+    for (fmt in keys(qbytes)) {
+        vt_upload_kq_member(r, fc, fmt)
+    }
+    r.cap_rows = 0l
+    vt_unbind_batch_sets(r)
+    return true
+}
+
+//! one K-quant member's seats gathered in the tier's layout at their block bases (`kq_seats`) and uploaded into the member's planes
+[cold_path]
+def private vt_upload_kq_member(r : VtResident; fc : VtFc; fmt : int) {
+    let kp = r.kq_planes?[fmt] ?? VtKqPlane()
+    var wq, ws : array<uint8>
+    wq |> reserve_resize(kp.q_bytes)
+    ws |> reserve_resize(kp.s_bytes)
+    var recs : Q8Region[int(VT_CN_GEMMS)]
+    for (l in range64(fc.n_layer)) {
+        vt_cn_regions(g_vt_fc_offs[l], fc.d, fc.ff, recs)
+        for (g in range64(VT_CN_GEMMS)) {
+            let rid = l * VT_CN_GEMMS + g
+            let seat = g_vt_fc_gseats[rid]
+            continue if (recs[g].rows == 0l || int(seat.fmt) != fmt)
+            let kf = seat.fmt
+            let base = r.kq_seats[rid].wblk0
+            kq_gather_rows_dev(kf, plane_at(fc.kq, seat.qoff), plane_at(fc.ks, seat.soff), recs[g].n, recs[g].rows, recs[g].rows,
+                fc.kq_repacked, fc.kq_repacked ? active_kq_layout_mr(kq_schema_id(kf)) : 1l,
+                wq, ws, base * kq_qsb(kf), base * kq_dev_ssb(kf), g_vt_no_sbits)
+        }
+    }
+    unsafe {
+        upload_region_at(kp.q_dev, 0l, addr<uint8 const?>(wq[0]), kp.q_bytes)
+        upload_region_at(kp.s_dev, 0l, addr<uint8 const?>(ws[0]), kp.s_bytes)
+    }
+    delete wq
+    delete ws
+}
+
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_upload_fc(var r : VtResident; key : uint64; fc : VtFc; lay : Q8RepackLayout) : bool {
+    if (fc.kq_lane) {
+        return vt_upload_fc_kq(r, key, fc, lay)
+    }
     let d = fc.d
     let ff = fc.ff
     var regions : array<Q8Region>
@@ -1899,13 +2045,42 @@ def vt_bias_act(raw : VkCommandBuffer; var h : VkHaz; var s_bias : VkDescriptorS
 def private vt_fc_range_ok(fc : VtFc; npos : int64) : bool {
     let hsp = vt_fc_hs(fc.d, fc.n_head) <= 64l ? 64l : 128l
     let dp = fc.rotary ? fc.n_head * hsp : 0l
-    return vk_range_ok(fc.f16w ? fc.w_n * 2l : fc.qblob.n) && vk_range_ok(fc.blob.n * 4l) && vt_fc_rows_ok(fc.rotary, npos, fc.d, fc.ff, dp)
+    return (vk_range_ok(fc.f16w ? fc.w_n * 2l : fc.qblob.n) && vk_range_ok(fc.blob.n * 4l) && vt_fc_rows_ok(fc.rotary, npos, fc.d, fc.ff, dp)
+        && (!fc.kq_lane || (vk_range_ok(fc.kq.n) && vk_range_ok(fc.ks.n))))
 }
 
 //! the exact lane's GEMMs on the device: the f16 feed (cm2 or KHR), the f16 GEMM class built, the widths on its 64 lattice and
 //! the pointwise conv's 2d rows inside the ff-wide plane it lands in; the q8 lane asks nothing here
-def private vt_fc_lane_ok(fc : VtFc; gemm_khr : bool) : bool
-    => !fc.f16w || (vt_cm2_feed() && fc.d % 64l == 0l && fc.ff % 64l == 0l && fc.ff >= 2l * fc.d && f16_gemm_ensure(gemm_khr))
+def private vt_fc_lane_ok(fc : VtFc; gemm_khr : bool) : bool {
+    if (fc.f16w) {
+        return vt_cm2_feed() && fc.d % 64l == 0l && fc.ff % 64l == 0l && fc.ff >= 2l * fc.d && f16_gemm_ensure(gemm_khr)
+    }
+    return !fc.kq_lane || vt_cm2_feed()   //! the kq lane's K-quant tiles read the f16 feed, as the exact lane's GEMM does
+}
+
+//! the kq lane's members by name, `+`-joined in slot order with the Q8_0 seats' `q8` last - the decline's words
+[cold_path]
+def private vt_fc_kq_members(fc : VtFc) : string {
+    var names <- [for (fmt in range(KQ_FMT_COUNT)); "{kq_fmt_of_slot(fmt)}"; where(fc.kq_fmts & (1u << uint(fmt))) != 0u]
+    if (fc.qblob.n > 0l) {
+        names |> push("q8")
+    }
+    return join(names, "+")
+}
+
+//! every K-quant member's tile at the chain's three widths compiled - the kq lane's members on the f16 feed's tiles; the q8 and
+//! exact lanes' tiles are `vt_fc_classes_ok`'s. Asked after `vt_fc_lane_ok`, which holds the feed.
+[arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-kq")]
+def private vt_fc_kq_tiles_ok(fc : VtFc; npos : int64) : bool {
+    return true if (!fc.kq_lane)
+    for (fmt in range(KQ_FMT_COUNT)) {
+        continue if ((fc.kq_fmts & (1u << uint(fmt))) == 0u)
+        if (!vt_tile_ensure(vt_tile(true, fc.d, npos, fmt)) || !vt_tile_ensure(vt_tile(true, fc.ff, npos, fmt)) || !vt_tile_ensure(vt_tile(true, 2l * fc.d, npos, fmt))) {
+            return false
+        }
+    }
+    return true
+}
 
 //! the block chain would admit `npos` rows behind a front about to run (its own ropes built for them): nothing counted - a
 //! front that serves only to have the blocks decline does the CPU's front over again, and the block seat behind the CPU front
@@ -1913,7 +2088,8 @@ def private vt_fc_lane_ok(fc : VtFc; gemm_khr : bool) : bool
 def private vt_fc_admits(fc : VtFc; npos, ww : int64; khr, gemm_khr : bool) : bool {
     let rope_n = npos * (vt_fc_hs(fc.d, fc.n_head) / 2l)
     return (vt_fc_shape_ok(fc.rotary, fc.d, fc.ff, fc.n_head, fc.conv_kernel, npos, ww, rope_n) && vt_fc_range_ok(fc, npos)
-        && vt_fc_classes_ok(fc.rotary, fc.d, fc.ff, fc.n_head, npos, ww, khr, gemm_khr, vt_cm2_feed()) && vt_fc_lane_ok(fc, gemm_khr))
+        && vt_fc_classes_ok(fc.rotary, fc.d, fc.ff, fc.n_head, npos, ww, khr, gemm_khr, vt_cm2_feed()) && vt_fc_lane_ok(fc, gemm_khr)
+        && vt_fc_kq_tiles_ok(fc, npos))
 }
 
 //! one block GEMM of the chain off its feed: the f16 GEMM over the halfword plane at `woff` (gigaam's exact lane), else the q8
@@ -1961,6 +2137,28 @@ def private vt_sets_fc16(var r : VtResident; gemm_khr : bool) {
     r.fc16 = true
 }
 
+let private VT_FC_OUT_Q = 0      //! a chain GEMM's output plane, the set `vt_fc_site` picks from a tile's bundle
+let private VT_FC_OUT_K = 1
+let private VT_FC_OUT_V = 2
+let private VT_FC_OUT_O = 3
+let private VT_FC_OUT_DOWN = 4
+let private VT_FC_OUT_HG = 5
+
+//! the tile and set a GEMM record runs on: the chain's own (`t`, `s`) on the q8 and exact lanes and at a Q8_0 seat; at a
+//! K-quant seat the same column's tile over the member's planes, its set from the tile key's cached bundle
+[arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-kq")]
+def private vt_fc_site(var r : VtResident; fc : VtFc; rid : int64; t : VtTile; s : VkDescriptorSet; out : int) : tuple<t : VtTile; s : VkDescriptorSet> {
+    return (t = t, s = s) if (!fc.kq_lane || r.kq_seats[rid].fmt == int(KqFmt.q8))
+    var tt = t
+    tt.fmt = r.kq_seats[rid].fmt
+    if (out == VT_FC_OUT_HG) {
+        return (t = tt, s = vt_sets_ff(r, tt).s_hg)
+    }
+    let sd = vt_sets_d(r, tt)
+    let ss = out == VT_FC_OUT_Q ? sd.s_q : (out == VT_FC_OUT_K ? sd.s_k : (out == VT_FC_OUT_V ? sd.s_v : (out == VT_FC_OUT_O ? sd.s_o : sd.s_down)))
+    return (t = tt, s = ss)
+}
+
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_fc_blocks(var r : VtResident; fc : VtFc; var x : array<float>; npos, ww : int64;   // nolint:STYLE038 — the dispatch chain is the shape
                          rope_cos : array<float> = g_vt_no_rows; rope_sin : array<float> = g_vt_no_rows) : bool {
@@ -1984,6 +2182,9 @@ def private vt_fc_blocks(var r : VtResident; fc : VtFc; var x : array<float>; np
     let cm2 = vt_cm2_feed()
     if (!vt_fc_classes_ok(fc.rotary, d, ff, fc.n_head, npos, ww, arm.khr, arm.gemm_khr, cm2) || !vt_fc_lane_ok(fc, arm.gemm_khr)) {
         return vt_decline(r, VulkanTowerDecline.device)
+    }
+    if (!vt_fc_kq_tiles_ok(fc, npos)) {
+        return vt_decline_kq(r, vt_fc_kq_members(fc))
     }
     let mm = VtFcMm(f16w = fc.f16w, gemm_khr = arm.gemm_khr, npos = npos, w_base = fc.w_off)
     let v = vt_tile(cm2, d, npos)
@@ -2028,7 +2229,7 @@ def private vt_fc_blocks(var r : VtResident; fc : VtFc; var x : array<float>; np
             }
             let groups = g == VT_CN_POS ? g_rel : (g == VT_CN_PW1 ? g_2d : ((g == VT_CN_FF1A || g == VT_CN_FF2A) ? g_ff : g_d))
             let rows = g == VT_CN_POS ? (fc.rotary ? 0l : vt_tile_rows(rec_tiles[g], ww)) : vt_tile_rows(rec_tiles[g], npos)
-            return VtSchedRec(wblk0 = recs[g].woff / q8e, rows = rows, groups = groups)
+            return VtSchedRec(wblk0 = fc.kq_lane ? r.kq_seats[rid].wblk0 : recs[g].woff / q8e, rows = rows, groups = groups)
         }
     }
     var s_rel = fc.rotary ? s_none : vt_rel_proj_set(r, v_rel)
@@ -2076,11 +2277,13 @@ def private vt_fc_blocks(var r : VtResident; fc : VtFc; var x : array<float>; np
             pc_ln.lnboff = uint(lo.nf1_b)
             enc_tower_ln_cls(raw, h, r.s_ln, pc_ln, npos)
             vt_pt(raw, VtProfRole.ln)
-            vt_fc_fed_mm(raw, h, mm, r.s_rq_xb, nd, r.s_hg, vff, rb + VT_CN_FF1A, g_ff, lo.ff1a_w, d, ff)
+            var m_ff1a = vt_fc_site(r, fc, rb + VT_CN_FF1A, vff, r.s_hg, VT_FC_OUT_HG)
+            vt_fc_fed_mm(raw, h, mm, r.s_rq_xb, nd, m_ff1a.s, m_ff1a.t, rb + VT_CN_FF1A, g_ff, lo.ff1a_w, d, ff)
             vt_pt(raw, VtProfRole.gemm_fc1)
             vt_fc_bias(raw, h, fc.biased, r.s_bias_hg, r.s_silu_hg, ff, nff, lo.ff1a_b, BIAS_ACT_SILU)
             vt_pt(raw, VtProfRole.bias)
-            vt_fc_fed_mm(raw, h, mm, r.s_rq_hg, nff, r.s_down, v, rb + VT_CN_FF1B, g_d, lo.ff1b_w, ff, d)
+            var m_ff1b = vt_fc_site(r, fc, rb + VT_CN_FF1B, v, r.s_down, VT_FC_OUT_DOWN)
+            vt_fc_fed_mm(raw, h, mm, r.s_rq_hg, nff, m_ff1b.s, m_ff1b.t, rb + VT_CN_FF1B, g_d, lo.ff1b_w, ff, d)
             vt_pt(raw, VtProfRole.gemm_fc2)
             pc_post.boff = uint(lo.ff1b_b)
             pc_post.ascale = 0.5
@@ -2091,7 +2294,7 @@ def private vt_fc_blocks(var r : VtResident; fc : VtFc; var x : array<float>; np
             vt_feed_enc(raw, h, cm2, r.s_rq_xb, pc_rq_xb, nd)
             vt_pt(raw, VtProfRole.rq)
             if (fc.rotary) {
-                vt_fc_rot_attn(raw, h, r, v, mm, rb, g_d, d, lo, cm2, pc_rq_xb, nd, pc_rope, wg_rope, pc_rs, wg_pad, wg_unpad, arm.khr, hsp, pc_fa, wg_fa)
+                vt_fc_rot_attn(raw, h, r, fc, v, mm, rb, g_d, d, lo, cm2, pc_rq_xb, nd, pc_rope, wg_rope, pc_rs, wg_pad, wg_unpad, arm.khr, hsp, pc_fa, wg_fa)
             } else {
                 var pc_g = BatchArgs(n = uint(d), d = uint(d), map_off = g_vt_maps[rb + VT_CN_Q])
                 vt_tile_enc(raw, h, v, r.s_q, pc_g, g_d)
@@ -2130,7 +2333,8 @@ def private vt_fc_blocks(var r : VtResident; fc : VtFc; var x : array<float>; np
                 }
                 vt_pt(raw, VtProfRole.attn)
             }
-            vt_fc_fed_mm(raw, h, mm, r.s_rq_att, nd, r.s_o, v, rb + VT_CN_O, g_d, lo.o_w, d, d)
+            var m_o = vt_fc_site(r, fc, rb + VT_CN_O, v, r.s_o, VT_FC_OUT_O)
+            vt_fc_fed_mm(raw, h, mm, r.s_rq_att, nd, m_o.s, m_o.t, rb + VT_CN_O, g_d, lo.o_w, d, d)
             vt_pt(raw, VtProfRole.gemm_o)
             pc_post.boff = uint(lo.o_b)
             pc_post.ascale = 1.0
@@ -2138,7 +2342,8 @@ def private vt_fc_blocks(var r : VtResident; fc : VtFc; var x : array<float>; np
             pc_post.lnboff = uint(lo.ncv_b)
             vt_fc_post(raw, h, fc.biased, r.s_post_o_ln, r.s_post_o_ln_nb, pc_post, npos)
             vt_pt(raw, VtProfRole.post_add)
-            vt_fc_fed_mm(raw, h, mm, r.s_rq_xb, nd, s_h2, v2d, rb + VT_CN_PW1, g_2d, lo.pw1_w, d, 2l * d)
+            var m_pw1 = vt_fc_site(r, fc, rb + VT_CN_PW1, v2d, s_h2, VT_FC_OUT_HG)
+            vt_fc_fed_mm(raw, h, mm, r.s_rq_xb, nd, m_pw1.s, m_pw1.t, rb + VT_CN_PW1, g_2d, lo.pw1_w, d, 2l * d)
             vt_pt(raw, VtProfRole.gemm_pw)
             vt_fc_bias(raw, h, fc.biased, r.s_bias_hg, s_none, 2l * d, n2d, lo.pw1_b, BIAS_ACT_NONE)
             vt_pt(raw, VtProfRole.bias)
@@ -2168,7 +2373,8 @@ def private vt_fc_blocks(var r : VtResident; fc : VtFc; var x : array<float>; np
                 enc_tower_cn_dw_cls(raw, h, r.s_cn_dw, pc_dw, (nd + 255l) / 256l)
             }
             vt_pt(raw, VtProfRole.dwconv)
-            vt_fc_fed_mm(raw, h, mm, r.s_rq_yd, nd, r.s_o, v, rb + VT_CN_PW2, g_d, lo.pw2_w, d, d)
+            var m_pw2 = vt_fc_site(r, fc, rb + VT_CN_PW2, v, r.s_o, VT_FC_OUT_O)
+            vt_fc_fed_mm(raw, h, mm, r.s_rq_yd, nd, m_pw2.s, m_pw2.t, rb + VT_CN_PW2, g_d, lo.pw2_w, d, d)
             vt_pt(raw, VtProfRole.gemm_pw)
             pc_post.boff = uint(lo.pw2_b)
             pc_post.ascale = 1.0
@@ -2176,11 +2382,13 @@ def private vt_fc_blocks(var r : VtResident; fc : VtFc; var x : array<float>; np
             pc_post.lnboff = uint(lo.nf2_b)
             vt_fc_post(raw, h, fc.biased, r.s_post_o_ln, r.s_post_o_ln_nb, pc_post, npos)
             vt_pt(raw, VtProfRole.post_add)
-            vt_fc_fed_mm(raw, h, mm, r.s_rq_xb, nd, r.s_hg, vff, rb + VT_CN_FF2A, g_ff, lo.ff2a_w, d, ff)
+            var m_ff2a = vt_fc_site(r, fc, rb + VT_CN_FF2A, vff, r.s_hg, VT_FC_OUT_HG)
+            vt_fc_fed_mm(raw, h, mm, r.s_rq_xb, nd, m_ff2a.s, m_ff2a.t, rb + VT_CN_FF2A, g_ff, lo.ff2a_w, d, ff)
             vt_pt(raw, VtProfRole.gemm_fc1)
             vt_fc_bias(raw, h, fc.biased, r.s_bias_hg, r.s_silu_hg, ff, nff, lo.ff2a_b, BIAS_ACT_SILU)
             vt_pt(raw, VtProfRole.bias)
-            vt_fc_fed_mm(raw, h, mm, r.s_rq_hg, nff, r.s_down, v, rb + VT_CN_FF2B, g_d, lo.ff2b_w, ff, d)
+            var m_ff2b = vt_fc_site(r, fc, rb + VT_CN_FF2B, v, r.s_down, VT_FC_OUT_DOWN)
+            vt_fc_fed_mm(raw, h, mm, r.s_rq_hg, nff, m_ff2b.s, m_ff2b.t, rb + VT_CN_FF2B, g_d, lo.ff2b_w, ff, d)
             vt_pt(raw, VtProfRole.gemm_fc2)
             pc_post.boff = uint(lo.ff2b_b)
             pc_post.ascale = 0.5
@@ -2221,17 +2429,20 @@ def vulkan_tower_fc_rows(gen : uint64; bytes : int64) : uint64
 //! project the rotated rows, the biased restrides pad every head onto the flash tile's width (zero lanes, the head's own
 //! scale), the bidirectional flash tile, the unpad into `att`
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-rotary")]
-def private vt_fc_rot_attn(raw : VkCommandBuffer; var h : VkHaz; var r : VtResident; v : VtTile; mm : VtFcMm; rb, g_d, d : int64; lo : CanaryLayerOffs;
+def private vt_fc_rot_attn(raw : VkCommandBuffer; var h : VkHaz; var r : VtResident; fc : VtFc; v : VtTile; mm : VtFcMm; rb, g_d, d : int64; lo : CanaryLayerOffs;
                            cm2 : bool; var pc_rq : RqArgs; nd : int64; var pc_rope : GkRopeTabArgs; wg_rope : int64; var pc_rs : GkRestrideArgs;
                            wg_pad, wg_unpad : int64; khr : bool; hsp : int64; var pc_fa : FaArgs; wg_fa : int64) {
-    vt_fc_mm(raw, h, mm, r.s_v, v, rb + VT_CN_V, g_d, lo.v_w, d, d)
+    var m_v = vt_fc_site(r, fc, rb + VT_CN_V, v, r.s_v, VT_FC_OUT_V)
+    vt_fc_mm(raw, h, mm, m_v.s, m_v.t, rb + VT_CN_V, g_d, lo.v_w, d, d)
     vt_pt(raw, VtProfRole.gemm_v)
     enc_tower_rope_tab_cls(raw, h, r.s_rope_tq, pc_rope, wg_rope)   //! its time reads under the feed's role
     vt_feed_enc(raw, h, cm2, r.s_rq_xb, pc_rq, nd)
     vt_pt(raw, VtProfRole.rq)
-    vt_fc_mm(raw, h, mm, r.s_q, v, rb + VT_CN_Q, g_d, lo.q_w, d, d)
+    var m_q = vt_fc_site(r, fc, rb + VT_CN_Q, v, r.s_q, VT_FC_OUT_Q)
+    vt_fc_mm(raw, h, mm, m_q.s, m_q.t, rb + VT_CN_Q, g_d, lo.q_w, d, d)
     vt_pt(raw, VtProfRole.gemm_q)
-    vt_fc_mm(raw, h, mm, r.s_k, v, rb + VT_CN_K, g_d, lo.k_w, d, d)
+    var m_k = vt_fc_site(r, fc, rb + VT_CN_K, v, r.s_k, VT_FC_OUT_K)
+    vt_fc_mm(raw, h, mm, m_k.s, m_k.t, rb + VT_CN_K, g_d, lo.k_w, d, d)
     vt_pt(raw, VtProfRole.gemm_k)
     vt_enc_pad_b(raw, h, r, pc_rs, wg_pad, lo.q_b, lo.k_b, lo.v_b)
     fa_stamp_enc(khr, hsp, false, false, false, false, raw, h, r.s_fa, pc_fa, wg_fa, true)
@@ -2481,13 +2692,25 @@ def private vt_mm_clamped32(raw : VkCommandBuffer; var h : VkHaz; c : Clamp; cop
 }
 
 [cold_path]
+//! a tile's set: the q8 planes, or the kq lane member's planes the tile's format names
 def private vt_tile_set(r : VtResident; t : VtTile; y_dev : uint64; y_bytes : int64; y_bit : uint) : VkDescriptorSet {
     let w = max(r.d, r.ff)
-    return vt_tile_cls_set(t, r.wq_dev, r.ws_dev, r.wq_bytes, r.ws_bytes, r.meta.buf, r.meta_bytes, r.xh_dev, (r.cap_rows + TILE_READ_SLACK) * w * 2l,
+    var wq = r.wq_dev
+    var ws = r.ws_dev
+    var wqb = r.wq_bytes
+    var wsb = r.ws_bytes
+    if (t.fmt != int(KqFmt.q8)) {
+        let kp = r.kq_planes?[t.fmt] ?? VtKqPlane()
+        wq = kp.q_dev
+        ws = kp.s_dev
+        wqb = kp.q_bytes
+        wsb = kp.s_bytes
+    }
+    return vt_tile_cls_set(t, wq, ws, wqb, wsb, r.meta.buf, r.meta_bytes, r.xh_dev, (r.cap_rows + TILE_READ_SLACK) * w * 2l,
         r.xq_dev, r.xs_dev, r.cap_rows * w, VT_XQ, y_dev, y_bytes, y_bit)
 }
 
-def private vt_tile_words(t : VtTile) : string => t.tc > 0l ? "token column {t.tc}" : "variant {t.v}"
+def private vt_tile_words(t : VtTile) : string => (t.tc > 0l ? "token column {t.tc}" : "variant {t.v}") + (t.fmt != int(KqFmt.q8) ? " {kq_fmt_of_slot(t.fmt)}" : "")
 
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_sets_d(var r : VtResident; t : VtTile) : VtBatchSetsD {
@@ -2625,6 +2848,17 @@ def private vt_front_arm(var r : VtResident; n_len, cap_floor : int64; classes :
 //! a FastConformer resident's GEMM planes - the halfwords on gigaam's exact lane, else the q8 planes - uploaded where its key
 //! moved; false where the upload will not take
 def private vt_fc_planes(var r : VtResident; fc : VtFc) : bool {
+    if (fc.kq_lane) {
+        let lay = active_q8_repack_layout(g_active_needs_repack)
+        var kk = vt_fold_taps(vt_key(fc.qblob, fc.qscales, fc.blob, 0l, fc.blob.n, 0l, fc.n_layer, lay.mr, lay.kgroup, lay.wbias), fc)
+        kk = vt_fold_addr(kk, unsafe(reinterpret<void?>(fc.kq.p)))
+        kk = vt_fold_int(kk, fc.kq.n)
+        kk = vt_fold_int(kk, fc.ks.n)
+        kk = vt_fold_int(kk, fc.kq_repacked ? 1l : 0l)
+        kk = vt_fold_words(kk, plane_at(fc.kq, 0l), fc.kq.n)
+        kk = vt_fold_words(kk, plane_at(fc.ks, 0l), fc.ks.n)
+        return r.key == kk || (vt_upload_fc(r, kk, fc, lay) && vt_upload_taps(r, fc))
+    }
     if (fc.f16w) {
         let key16 = vt_fold_taps(vt_key_f16(fc.wblob, fc.w_off, fc.w_n, fc.blob, 0l, fc.blob.n, fc.n_layer), fc)
         return r.key == key16 || (vt_upload_f16(r, key16, fc.wblob, fc.w_off, fc.w_n, fc.blob, 0l, fc.blob.n) && vt_upload_taps(r, fc))
@@ -5307,9 +5541,9 @@ def set_vulkan_gigaam_front(on : bool) : bool {
     return was
 }
 
-//! the lanes the GigaAM chain serves: the q8 planes, and the exact lane where its block GEMMs are the carrier's halfwords; the
-//! kq lane declines by name (`vt_decline_kq`)
-def private vt_ga_lane_served(m : GigaamModel) : bool => !m.kq_lane && (m.q8 || m.gemm_f16)
+//! the lanes the GigaAM chain serves: the q8 planes, the exact lane where its block GEMMs are the carrier's halfwords, and the kq
+//! lane - the carrier's own planes on the K-quant tiles (a member without a tile declines by name, `vt_decline_kq`)
+def private vt_ga_lane_served(m : GigaamModel) : bool => m.kq_lane || m.q8 || m.gemm_f16
 
 var private g_vt_env_ga_exact = false
 
@@ -5320,20 +5554,17 @@ def set_vulkan_gigaam_exact_lane(on : bool) : bool {
     let was = g_vt_env_ga_exact
     g_vt_env_ga_exact = on
     static_if (!typeinfo builtin_module_exists(das_metal)) {
-        register_gigaam_gpu(@@vulkan_gigaam_blocks, @@vulkan_tower_on, on)
+        register_gigaam_gpu(@@vulkan_gigaam_blocks, @@vulkan_tower_on, on, true)
     }
     return was
 }
 
-//! the GigaAM block loop behind the CPU front and the session's rope tables, on the lane's planes - the q8 planes or the
-//! halfwords
+//! the GigaAM block loop behind the CPU front and the session's rope tables, on the lane's planes - the q8 planes, the
+//! halfwords or the kq lane's seats
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-rotary")]
 def private vulkan_gigaam_blocks(m : GigaamModel; var st : GigaamState; tt : int64) : bool {
     var r & = g_vt_ga
     g_vt_fc_out_bytes = 0l
-    if (g_vt_env_tower && m.kq_lane) {
-        return vt_decline_kq(r, m)
-    }
     if (!vt_gate(r, vt_ga_lane_served(m))) {
         return false
     }
@@ -5354,10 +5585,6 @@ def private vulkan_gigaam_encode(m : GigaamModel; var st : GigaamState; samples 
     }
     if (!g_vt_env_ga_front) {
         vt_decline(r, VulkanTowerDecline.ga_front)
-        return -1l
-    }
-    if (m.kq_lane) {
-        vt_decline_kq(r, m)
         return -1l
     }
     if (!vt_ga_lane_served(m)) {
