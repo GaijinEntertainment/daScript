@@ -10,9 +10,11 @@ embedding, and the scratch window that seats an embedding request's texts back t
 
 **A recurrent (deltanet) layer's window block replaces the attention head; the FFN tail is
 shared.** Per window the block runs the qkv and z GEMMs into the window planes, the beta and
-alpha rows into the layer's smalls, the conv over the selected region's ring image, the sequential
-scan over that region's state slot (the slot's bases ride the pushes, the sets bind every region's
-slot), and the out GEMM into `pf_xb2`. The smalls are the layer's per-layer f32 plane: the layer's
+alpha rows into the layer's smalls, the conv over the selected region's ring image, the scan over
+that region's state slot (the chunked tensor-core form `DnScanChunkT` under `DASLLAMA_DN_CHUNK` where
+the device has KHR cooperative matrices at subgroup 32, its own set `pf_dn_scan_chunk_set`; the
+sequential `DnScanT` elsewhere; the slot's bases ride the pushes, the sets bind every region's slot -
+`ARCHITECTURE_GPU_SHARED_KERNELS.md#dn-discrete-kernels`), and the out GEMM into `pf_xb2`. The smalls are the layer's per-layer f32 plane: the layer's
 cold constants (conv taps, out-norm weights, the `a` and `dt` rows), the beta and alpha rows, and a
 parity ring pair per region (`ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`). A call enters on the image the region's
 parity word names (`pf_dn_begin`; a prompt from position zero resets the word and zero-fills the slot's state and that image,

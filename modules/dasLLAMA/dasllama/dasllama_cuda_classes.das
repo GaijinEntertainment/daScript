@@ -2918,7 +2918,7 @@ class CuQ8Mmq : MmqT {
 }
 
 struct MmqFp4Args {
-    n : uint      //! reduction width, a multiple of 256 (a superblock the scale row); a `KTAIL` stamp takes any multiple of 64
+    n : uint      //! reduction width: a multiple of 256 on an nv4 stamp (a superblock the scale row), of 64 on an mx4 one (the last step's tail runs whole k64s)
     d : uint      //! the weight rows (the output width), a multiple of 128; a `MOE` stamp takes any width (its last tile stores under a guard)
     rows : uint   //! the tokens, a multiple of 128 (unread on a `MOE` stamp: the record's rows)
     wblk : uint   //! the plane's first superblock (an `MX` stamp: its first 32-block); unread on a `MOE` stamp (the record's)
@@ -2942,8 +2942,9 @@ def nv4_fp4_pairs(w : uint4) : uint4 {
 [ |> template_struct_instance]
 class template MmqFp4T {
     @template_constant MX : bool = false      //!< the MXFP4 form: the plane by 32-block (no superblock lattice), its UE8M0 byte a block read as the k64's pair, the feed's codes a UE8M0 a k32 block, the product through `mma_block_scaled_mx`; no per-tensor factor
-    @template_constant KTAIL : bool = false   //!< a width off the 128 lattice (a multiple of 64): the last step's second k64 under a zero scale on both sides (the weight stage zero codes, the feed stage the next row's codes the zero scale annuls)
-    @template_constant MOE : bool = false     //!< the expert schedule's form (`MmqT`'s): the workgroup's record names the plane's block base, the bucket's row base and count and the tile; a tile's columns past `d` stay unstored
+    @template_constant MOE : bool = false     //!< the expert schedule's form (`MmqT`'s): the workgroup's record names the plane's block base, the bucket's row base and count and the tile among the bucket's `ceil(cnt / TN)` row tiles; a tile's columns past `d` and its token rows past the bucket's count stay unstored
+    @template_constant TN : uint = 128u       //!< the token tile: 128 on the dense stamps and the schedule's m column (sixteen warps, four a side), 32 on its s column (four warps down the weight rows, one across) - the block is `4 x TN` threads
+    @template_constant KSTEP : uint = 128u    //!< the reduction one pipeline step stages, a multiple of 128: a row's `KSTEP / 32` quads and a pad quad a stage (the odd stride keeps ldmatrix off the banks), `KSTEP / 64` scale words; a width off the step's lattice (any multiple of 64) runs its last step's missing k64s under zero scales on both sides (the weight stage zero codes, the feed stage the next row's codes the zero scale annuls)
     @ssbo @binding = 0 @readonly @role = "weight" wq4 : array<uint4>    //! the nv4 quant plane: superblock sb's 32-block g at sb * 8 + g; an `MX` stamp's mx4 plane: 32-block b at b
     @ssbo @binding = 1 @readonly @role = "weight" wsu : array<uint>     //! the nv4 scale rows: five words a superblock, word j < 4 the k64 strip j's four UE4M3 codes, word 4 the plane's per-tensor factor as f32 bits; an `MX` stamp's mx4 scale plane: a UE8M0 byte a block, four a word
     @ssbo @binding = 2 @readonly xq4 : array<uint4>    //! the FP4 feed: a token's k / 2 nibble bytes, (k, k + 8) pairs inside each 16
@@ -2952,10 +2953,10 @@ class template MmqFp4T {
     @ssbo @binding = 5 y : array<float>                //! [token][d]
     @ssbo @binding = 6 @readonly @template_gate = MOE sched : array<uint>   //! the expert schedule: 4-word records [wblk0, row0, cnt, wg0], the per-workgroup map at `pa.map_off`
     @kargs pa : MmqFp4Args
-    @workgroup sa : uint4[1280]     //! two stages x 128 rows x five uint4 (a step's four 32-blocks and a pad)
-    @workgroup sb : uint4[1280]
-    @workgroup swa : uint[512]      //! two stages x 128 rows x the step's two k64 scale words
-    @workgroup swb : uint[512]      //! ... the tokens'
+    @workgroup sa : uint4[int(2u * 128u * (KSTEP / 32u + 1u))]   //! two stages x 128 rows x (a step's 32-blocks and a pad)
+    @workgroup sb : uint4[int(2u * TN * (KSTEP / 32u + 1u))]     //! two stages x TN rows x the same
+    @workgroup swa : uint[int(2u * 128u * (KSTEP / 64u))]        //! two stages x 128 rows x the step's k64 scale words
+    @workgroup swb : uint[int(2u * TN * (KSTEP / 64u))]          //! ... the tokens'
     @workgroup @template_gate = MOE ystage : float[2048]   //! two warps' 32 x 32 tiles at a time, [token][d], the guarded store's stage
 
     //! the tile's plane block base: record `rid`'s on a `MOE` stamp, the args' else
@@ -2968,21 +2969,32 @@ class template MmqFp4T {
     }
 
     //! the tile's first weight row and first token row: on a `MOE` stamp record `rid`'s bucket row base and the tile among the
-    //! bucket's `ceil(cnt / 128)` row tiles by the plane's `ceil(d / 128)` column tiles, else the grid's tile over `rows`
+    //! bucket's `ceil(cnt / TN)` row tiles by the plane's `ceil(d / 128)` column tiles, else the grid's tile over `rows`
     def tile_base(rid : uint) : uint2 {
         static_if (MOE) {
             let rb = rid * 4u
-            let ttiles = (sched[rb + 2u] + 127u) / 128u
+            let ttiles = (sched[rb + 2u] + TN - 1u) / TN
             let lt = gl_WorkGroupID.x - sched[rb + 3u]
-            return uint2((lt / ttiles) * 128u, sched[rb + 1u] + (lt % ttiles) * 128u)
+            return uint2((lt / ttiles) * 128u, sched[rb + 1u] + (lt % ttiles) * TN)
         } else {
-            let ttiles = pa.rows / 128u
+            let ttiles = pa.rows / TN
             let tix = gl_WorkGroupID.x
-            return uint2((tix / ttiles) * 128u, (tix % ttiles) * 128u)
+            return uint2((tix / ttiles) * 128u, (tix % ttiles) * TN)
         }
     }
 
-    def is_past_row_blocks(kb, h, nb : uint) : bool => KTAIL && kb * 4u + h * 2u >= nb
+    //! the token row past the tile's last stored one: the bucket's end on a `MOE` stamp (a packed schedule puts the next bucket's rows
+    //! right after it, and the plane's slack rows after the last), every row else
+    def tile_rows_end(rid : uint) : uint {
+        static_if (MOE) {
+            return sched[rid * 4u + 1u] + sched[rid * 4u + 2u]
+        } else {
+            return 0xFFFFFFFFu
+        }
+    }
+
+    //! k128 step `kb`'s k64 half `h` lies past the row's `nb` blocks: the last step's tail on a width off the step's lattice
+    def is_past_row_blocks(kb, h, nb : uint) : bool => kb * 4u + h * 2u >= nb
 
     def wq_block_index(ksrc, kb : uint) : uint {
         static_if (MX) {
@@ -3026,92 +3038,128 @@ class template MmqFp4T {
 
     //! the tile: the grid's (`rid` unread), or on a `MOE` stamp record `rid`'s
     [spirv_inline, arch(at="../ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries")]
-    def mmq_tile(rid : uint) {   // nolint:STYLE038 - the pipeline and its unrolled products, register- and barrier-coupled
+    def mmq_tile(rid : uint) {   // nolint:STYLE037,STYLE038 - the pipeline and its unrolled products, register- and barrier-coupled
+        let WN = TN / 32u            // warps across the token tile
+        let WARPS = 4u * WN          // ... by four down the weight rows
+        let THREADS = WARPS * 32u
+        let KROWS = THREADS / 4u     // weight rows one stage pass covers: a lane a block, four blocks a k128
+        let WI = 128u / KROWS        // stage passes a k128 over the 128 weight rows
+        let KQ = KSTEP / 128u        // k128s a step
+        let RS = KSTEP / 32u + 1u    // a row's stride in quads a stage: the step's blocks and the pad
+        let SW = KSTEP / 64u         // a row's scale words a stage
+        let XS0 = THREADS > 128u ? 128u : 0u   // the token scale lanes: past the 128 weight scale lanes, or the same lanes on a small block
+        let SAS = 128u * RS          // a stage of the weight quads
+        let SBS = TN * RS            // ... of the token quads
+        let SWAS = 128u * SW         // ... of the weight scale words
+        let SWBS = TN * SW           // ... of the token scale words
         let nb = pa.n / 32u
         let nsb = pa.n / 256u
-        let nb4 = KTAIL ? (nb + 3u) / 4u : pa.n / 128u
+        let nbs = (nb + 4u * KQ - 1u) / (4u * KQ)   // the steps, the last one partial on a width off the step's lattice
         let wblk = tile_wblk(rid)
         let tbase = tile_base(rid)
         let m0 = tbase.x
         let t0 = tbase.y
+        let tend = tile_rows_end(rid)
         let tid = gl_LocalInvocationID.x
         let warp = tid >> 5u
         let lane = tid & 31u
-        let wm = warp >> 2u
-        let wn = warp & 3u
+        let wm = warp / WN
+        let wn = warp % WN
         let g = lane >> 2u
         let t = lane & 3u
         let mt = lane >> 3u
         let mr = lane & 7u
-        // the weight stage through registers: a lane one 32-block of a row (the k4 uint4 in, the re-paired uint4 out), eight rows
-        // a warp; the activation stage by cp.async: the same lane map, a token's four uint4 of the step
-        let krow = (warp << 3u) + (lane >> 2u)
-        let kblk = lane & 3u
-        let ksrc = MX ? wblk + (m0 + krow) * nb + kblk : (wblk + (m0 + krow) * nsb) * 8u + kblk   // the lane's block of step 0: `wq_block_index` steps it
-        let kdst = krow * 5u + kblk
-        let xsrc = (t0 + krow) * nb + kblk             // a token's row is n / 32 uint4; step kb adds kb * 4
-        let krow_ok = m0 + krow < pa.d   // a `MOE` stamp's last column tile reaches past the plane's rows: those stage zero
+        // the weight stage through registers - a lane one 32-block of a row re-paired, `WI` passes a k128, `KQ` k128s a step; the activations by cp.async on the same lane map
+        let krow = tid >> 2u
+        let kblk = tid & 3u
+        let kdst = krow * RS + kblk
+        let xsrc = (t0 + krow) * nb + kblk
+        var ksrc : uint[int(WI)]      // the lane's blocks of k128 0: `wq_block_index` steps them
+        var krow_ok : bool[int(WI)]   // a `MOE` stamp's last column tile reaches past the plane's rows: those stage zero
+        for [unroll] (i in range(int(WI))) {
+            let row = m0 + krow + uint(i) * KROWS
+            ksrc[i] = MX ? wblk + row * nb + kblk : (wblk + row * nsb) * 8u + kblk
+            krow_ok[i] = row < pa.d
+        }
         let wi = tid & 127u
         let wstage = tid < 128u
-        let xstage = tid >= 128u && tid < 256u
+        let xi = tid - XS0
+        let xstage = tid >= XS0 && tid < XS0 + TN
         let wsrow = (wblk + (m0 + wi) * nsb) * 5u   // the nv4 scale row (unread on an `MX` stamp: `w_scale_word` reads the byte plane)
         let wrow_ok = m0 + wi < pa.d
-        let xsrow = (t0 + wi) * (pa.n / 64u)           // step kb: + kb * 2
+        let xsrow = (t0 + xi) * (pa.n / 64u)
         var f00, f01, f10, f11 : coopmatAcc_f32_16x16
-        var wnext = w_stage(ksrc, 0u, kblk, nb, krow_ok)
-        sa[kdst] = wnext
-        if (nb4 > 1u) {
-            wnext = w_stage(ksrc, 1u, kblk, nb, krow_ok)
+        var wnext : uint4[int(WI * KQ)]
+        for [unroll] (i in range(int(WI))) {
+            for [unroll] (q in range(int(KQ))) {
+                sa[kdst + uint(i) * KROWS * RS + uint(q) * 4u] = w_stage(ksrc[i], uint(q), kblk, nb, krow_ok[i])
+                if (nbs > 1u) {
+                    wnext[i * int(KQ) + q] = w_stage(ksrc[i], KQ + uint(q), kblk, nb, krow_ok[i])
+                }
+            }
         }
-        cp_async_16(unsafe(addr(sb[kdst])), unsafe(addr(xq4[xsrc])))
+        for [unroll] (q in range(int(KQ))) {
+            cp_async_16(unsafe(addr(sb[kdst + uint(q) * 4u])), unsafe(addr(xq4[xsrc + uint(q) * 4u])))
+        }
         cp_async_commit()
-        if (wstage) {
-            swa[wi * 2u] = w_scale_word(wblk, m0 + wi, wsrow, 0u, 0u, nb, wrow_ok)
-            swa[wi * 2u + 1u] = w_scale_word(wblk, m0 + wi, wsrow, 0u, 1u, nb, wrow_ok)
-        } elif (xstage) {
-            swb[wi * 2u] = x_scale_word(xsrow, 0u, 0u, nb)
-            swb[wi * 2u + 1u] = x_scale_word(xsrow, 0u, 1u, nb)
+        for [unroll] (hh in range(int(2u * KQ))) {
+            let h = uint(hh)
+            if (wstage) {
+                swa[wi * SW + h] = w_scale_word(wblk, m0 + wi, wsrow, h >> 1u, h & 1u, nb, wrow_ok)
+            }
+            if (xstage) {
+                swb[xi * SW + h] = x_scale_word(xsrow, h >> 1u, h & 1u, nb)
+            }
         }
         var kb = 0u
-        while (kb < nb4) {
+        while (kb < nbs) {
             cp_async_wait(0)   // this step's stage landed
             barrier()          // ... and every warp is done with the other stage, which the next copies overwrite
             let st = kb & 1u
             let nk = kb + 1u
-            if (nk < nb4) {
+            if (nk < nbs) {
                 let st2 = nk & 1u
-                sa[st2 * 640u + kdst] = wnext
-                if (nk + 1u < nb4) {
-                    wnext = w_stage(ksrc, nk + 1u, kblk, nb, krow_ok)
+                let k0 = nk * KQ   // the next step's first k128
+                for [unroll] (i in range(int(WI))) {
+                    for [unroll] (q in range(int(KQ))) {
+                        sa[st2 * SAS + kdst + uint(i) * KROWS * RS + uint(q) * 4u] = wnext[i * int(KQ) + q]
+                        if (nk + 1u < nbs) {
+                            wnext[i * int(KQ) + q] = w_stage(ksrc[i], k0 + KQ + uint(q), kblk, nb, krow_ok[i])
+                        }
+                    }
                 }
-                cp_async_16(unsafe(addr(sb[st2 * 640u + kdst])), unsafe(addr(xq4[xsrc + nk * 4u])))
-                if (wstage) {
-                    swa[st2 * 256u + wi * 2u] = w_scale_word(wblk, m0 + wi, wsrow, nk, 0u, nb, wrow_ok)
-                    swa[st2 * 256u + wi * 2u + 1u] = w_scale_word(wblk, m0 + wi, wsrow, nk, 1u, nb, wrow_ok)
-                } elif (xstage) {
-                    swb[st2 * 256u + wi * 2u] = x_scale_word(xsrow, nk, 0u, nb)
-                    swb[st2 * 256u + wi * 2u + 1u] = x_scale_word(xsrow, nk, 1u, nb)
+                for [unroll] (q in range(int(KQ))) {
+                    cp_async_16(unsafe(addr(sb[st2 * SBS + kdst + uint(q) * 4u])), unsafe(addr(xq4[xsrc + (k0 + uint(q)) * 4u])))
+                }
+                for [unroll] (hh in range(int(2u * KQ))) {
+                    let h = uint(hh)
+                    if (wstage) {
+                        swa[st2 * SWAS + wi * SW + h] = w_scale_word(wblk, m0 + wi, wsrow, k0 + (h >> 1u), h & 1u, nb, wrow_ok)
+                    }
+                    if (xstage) {
+                        swb[st2 * SWBS + xi * SW + h] = x_scale_word(xsrow, k0 + (h >> 1u), h & 1u, nb)
+                    }
                 }
             }
             cp_async_commit()
-            for [unroll] (k64h in range(2)) {
+            for [unroll] (k64h in range(int(2u * KQ))) {
                 let k64hu = uint(k64h)
-                let abase = st * 640u + (wm * 32u + mr + 8u * (mt & 1u)) * 5u + k64hu * 2u + (mt >> 1u)   // the lane's A row: (rows lo, k lo), (rows hi, k lo), (rows lo, k hi), (rows hi, k hi)
-                let bbase = st * 640u + (wn * 32u + mr + 8u * (mt >> 1u)) * 5u + k64hu * 2u + (mt & 1u)   // the lane's B row: (n lo, k lo), (n lo, k hi), (n hi, k lo), (n hi, k hi)
+                let abase = st * SAS + (wm * 32u + mr + 8u * (mt & 1u)) * RS + k64hu * 2u + (mt >> 1u)   // the lane's A row: (rows lo, k lo), (rows hi, k lo), (rows lo, k hi), (rows hi, k hi)
+                let bbase = st * SBS + (wn * 32u + mr + 8u * (mt >> 1u)) * RS + k64hu * 2u + (mt & 1u)   // the lane's B row: (n lo, k lo), (n lo, k hi), (n hi, k lo), (n hi, k hi)
                 var a0, a1 : coopmatA_e2m1_16x64
                 ldmatrix(a0, unsafe(addr(sa[abase])))
-                ldmatrix(a1, unsafe(addr(sa[abase + 80u])))
+                ldmatrix(a1, unsafe(addr(sa[abase + 16u * RS])))
                 var b0, b1 : coopmatB_e2m1_64x16
                 ldmatrix(b0, unsafe(addr(sb[bbase])))
-                ldmatrix(b1, unsafe(addr(sb[bbase + 80u])))
-                let sw = st * 256u + (wm * 32u + g + 8u * (lane & 1u)) * 2u + k64hu   // the lane's A rows' words: row g from lane % 4 == 0, row g + 8 from lane % 4 == 1
-                let sx = st * 256u + (wn * 32u + g) * 2u + k64hu                   // column g of each n-half, from lane % 4 == 0
+                ldmatrix(b1, unsafe(addr(sb[bbase + 16u * RS])))
+                let sw = st * SWAS + (wm * 32u + g + 8u * (lane & 1u)) * SW + k64hu   // the lane's A rows' words: row g from lane % 4 == 0, row g + 8 from lane % 4 == 1
+                let sx = st * SWBS + (wn * 32u + g) * SW + k64hu                   // column g of each n-half, from lane % 4 == 0
                 let sa0 = swa[sw]
-                let sa1 = swa[sw + 32u]
+                let sa1 = swa[sw + 16u * SW]
                 let sb00 = swb[sx]
-                let sb01 = swb[sx + 16u]
-                let sb10 = swb[sx + 32u]
-                let sb11 = swb[sx + 48u]
+                let sb01 = swb[sx + 8u * SW]
+                let sb10 = swb[sx + 16u * SW]
+                let sb11 = swb[sx + 24u * SW]
                 static_if (MX) {
                     mma_block_scaled_mx(f00, a0, b0, sa0, sb00, sb01)
                     mma_block_scaled_mx(f01, a0, b1, sa0, sb10, sb11)
@@ -3136,7 +3184,7 @@ class template MmqFp4T {
         mma_scale_cols(f01, cs1)
         mma_scale_cols(f11, cs1)
         static_if (MOE) {
-            for [unroll] (rnd in range(8)) {
+            for [unroll] (rnd in range(int(WARPS) / 2)) {
                 let mine = (warp >> 1u) == uint(rnd)
                 let slot = (warp & 1u) * 1024u
                 if (mine) {
@@ -3149,8 +3197,11 @@ class template MmqFp4T {
                 if (mine) {
                     let col = m0 + wm * 32u + lane
                     if (col < pa.d) {
+                        let trow0 = t0 + wn * 32u
                         for [unroll] (j in range(32)) {
-                            y[(t0 + wn * 32u + uint(j)) * pa.d + col] = ystage[slot + uint(j) * 32u + lane]
+                            if (trow0 + uint(j) < tend) {
+                                y[(trow0 + uint(j)) * pa.d + col] = ystage[slot + uint(j) * 32u + lane]
+                            }
                         }
                     }
                 }
@@ -3167,13 +3218,12 @@ class template MmqFp4T {
     }
 }
 
-//! the MXFP4 expert leaf on the FP4 tensor rung fed from the expert schedule (`MX`, `KTAIL`, `MOE`): gpt-oss's routed stacks over
-//! the gathered rows' MXFP4 feed - raw e2m1 nibbles on both sides under the UE8M0 block scales, a 2880-wide row on the k tail, a
-//! 2880-wide plane's last column tile under the store's guard
+//! the MXFP4 expert leaf on the FP4 tensor rung fed from the expert schedule (`MX`, `MOE`): gpt-oss's routed stacks over the
+//! gathered rows' MXFP4 feed - raw e2m1 nibbles on both sides under the UE8M0 block scales, a 2880-wide row on the step's tail, a
+//! 2880-wide plane's last column tile under the store's guard; the schedule's m column
 [cuda_dispatch(name = "mx4_fp4_mmq_moe", grid = "wgs", params = "wgs : int64")]
 class CuMx4Fp4MmqMoe : MmqFp4T {
     override MX = true
-    override KTAIL = true
     override MOE = true
 
     [cuda_kernel(local_size_x = 512, name = "mx4_fp4_mmq_moe_cuda")]
@@ -3182,10 +3232,49 @@ class CuMx4Fp4MmqMoe : MmqFp4T {
     }
 }
 
+//! ... its s column: the 32-token tile over a bucket's rows short of the m column
+[cuda_dispatch(name = "mx4_fp4_mmq_moe_s", grid = "wgs", params = "wgs : int64")]
+class CuMx4Fp4MmqMoeS : MmqFp4T {
+    override MX = true
+    override MOE = true
+    override TN = 32u
+
+    [cuda_kernel(local_size_x = 128, name = "mx4_fp4_mmq_moe_s_cuda")]
+    def run {
+        mmq_body()
+    }
+}
+
 //! the NVFP4 leaf on the FP4 tensor rung: the window chain's GEMM for nv4 planes under DASLLAMA_CUDA_MMQ
 [cuda_dispatch(name = "nv4_mmq", grid = "wgs", params = "wgs : int64")]
 class CuNv4Mmq : MmqFp4T {
+
     [cuda_kernel(local_size_x = 512, name = "nv4_mmq_cuda")]
+    def run {
+        mmq_body()
+    }
+}
+
+//! the NVFP4 expert leaf on the FP4 tensor rung fed from the expert schedule (`MOE`): a routed layer's nv4 stacks over the gathered
+//! rows' FP4 feed - the nv4 weight stage on the superblock lattice, each expert plane's factor off its own scale rows, the store's
+//! column and row guards; the schedule's m column
+[cuda_dispatch(name = "nv4_fp4_mmq_moe", grid = "wgs", params = "wgs : int64")]
+class CuNv4Fp4MmqMoe : MmqFp4T {
+    override MOE = true
+
+    [cuda_kernel(local_size_x = 512, name = "nv4_fp4_mmq_moe_cuda")]
+    def run {
+        mmq_body()
+    }
+}
+
+//! ... its s column: the 32-token tile over a bucket's rows short of the m column
+[cuda_dispatch(name = "nv4_fp4_mmq_moe_s", grid = "wgs", params = "wgs : int64")]
+class CuNv4Fp4MmqMoeS : MmqFp4T {
+    override MOE = true
+    override TN = 32u
+
+    [cuda_kernel(local_size_x = 128, name = "nv4_fp4_mmq_moe_s_cuda")]
     def run {
         mmq_body()
     }
@@ -4207,6 +4296,444 @@ class CuDnScan : DnScanT {
     }
 }
 
+let DNC_QS4 = uint(DN_MAX_DS / 8l) + 1u   //! a staged q / k / state row in 16-byte quads: `DN_MAX_DS / 8` halves-quads plus a pad quad, so ldmatrix's eight rows land on eight bank groups
+let DNC_DB1 = uint(DN_MAX_DS / 32l)        //! the second state tile's first 16-row d block: half the largest head's blocks
+let DNC_TS4 = 3u    //! a 16-wide pair matrix's row quads (T, P): two quads and a pad
+let DNC_VS4 = 5u    //! a 32-wide pair matrix's row quads (delta / solved, solved-to-end): four quads and a pad
+let DNC_LS = 17u    //! the lower matrix's row floats: sixteen and a pad
+
+[ |> template_struct_instance]
+class template DnScanChunkCuT {
+    @ssbo @binding = 0 @readonly conv : array<float>     //! the conv output rows (position-major: q | k | v)
+    @ssbo @binding = 0 @readonly @role = "alias" conv4 : array<float4>
+    @ssbo @binding = 1 state : array<float>              //! the persistent per-head f32 state [nvh][ds][ds]
+    @ssbo @binding = 2 @readonly smalls : array<float>   //! raw beta/g rows, a/dt per head (push offsets)
+    @ssbo @binding = 3 orows : array<float>              //! the raw o rows at o_off
+    @ssbo @binding = 4 @readonly caps : array<uint>      //! the window's capture records
+    @ssbo @binding = 5 capst : array<float>              //! the checkpoint rows (`snap_dev`): a capture's state lands at its row's base plus the layer's
+    @kargs pa : DnScanArgs
+    @workgroup qhi : uint4[int(DN_CHUNK_C) * int(DNC_QS4)]   //! the chunk's q rows as f16 pairs, [t][d], and their residues
+    @workgroup qlo : uint4[int(DN_CHUNK_C) * int(DNC_QS4)]
+    @workgroup khi : uint4[int(DN_CHUNK_C) * int(DNC_QS4)]   //! ... the k rows: the Gram products' B operand plain, the update's through the transposing load
+    @workgroup klo : uint4[int(DN_CHUNK_C) * int(DNC_QS4)]
+    @workgroup shi : uint4[int(DNC_V) * int(DNC_QS4)]        //! the state slice transposed, [v][d], as pairs: the K S and Q S products' B operand
+    @workgroup slo : uint4[int(DNC_V) * int(DNC_QS4)]
+    @workgroup dhi : uint4[int(DN_CHUNK_C) * int(DNC_VS4)]   //! delta, then solved, [t][v]: a B operand through the transposing load
+    @workgroup dlo : uint4[int(DN_CHUNK_C) * int(DNC_VS4)]
+    @workgroup ghi : uint4[int(DN_CHUNK_C) * int(DNC_VS4)]   //! solved x decay-to-end, [t][v]: the update's A operand through the transposing load
+    @workgroup glo : uint4[int(DN_CHUNK_C) * int(DNC_VS4)]
+    @workgroup thi : uint4[int(DN_CHUNK_C) * int(DNC_TS4)]   //! T = (I + beta A)^-1, [t][t']
+    @workgroup tlo : uint4[int(DN_CHUNK_C) * int(DNC_TS4)]
+    @workgroup phi : uint4[int(DN_CHUNK_C) * int(DNC_TS4)]   //! P = lower(Q K^T decay), [t][t']
+    @workgroup plo : uint4[int(DN_CHUNK_C) * int(DNC_TS4)]
+    @workgroup lower : float[int(DN_CHUNK_C) * int(DNC_LS)]   //! beta A strictly below the diagonal: the solve's f32 operand
+    @workgroup prefix : float[int(DN_CHUNK_C)]
+    @workgroup egs : float[int(DN_CHUNK_C)]
+    @workgroup bts : float[int(DN_CHUNK_C)]
+
+    //! eight floats as a quad of f16 pairs and the quad of their residues (`split_pair` four times)
+    def split8(a, b : float4; var lo : uint4&) : uint4 {
+        let p0 = split_pair(a.xy)
+        let p1 = split_pair(a.zw)
+        let p2 = split_pair(b.xy)
+        let p3 = split_pair(b.zw)
+        lo = uint4(p0.y, p1.y, p2.y, p3.y)
+        return uint4(p0.x, p1.x, p2.x, p3.x)
+    }
+
+    //! a pair word, its residue word through the reference
+    def split2(v : float2; var lo : uint&) : uint {
+        let p = split_pair(v)
+        lo = p.y
+        return p.x
+    }
+
+    //! the chunk at `cs`'s rows into registers: a thread eight consecutive q and k values (`pq` / `pk`), subgroup 7's first sixteen
+    //! lanes the raw gate and beta; a row past the window reads zero
+    [spirv_inline]
+    def fetch_chunk(cs : uint; var pq, pk : float4[2]; var pg, pb : float&) {
+        let tid = gl_LocalInvocationID.x
+        let lane = tid & 31u
+        let sg = tid >> 5u
+        let ds = pa.ds
+        let dq = ds / 8u
+        let nsl = ds / DNC_V
+        let h = gl_WorkGroupID.x / nsl
+        let kh = h % pa.nkh
+        let cbase = pa.row0 * pa.cd
+        {
+            let t = tid / dq
+            let d = (tid % dq) * 8u
+            let on = tid < DN_CHUNK_C * dq && cs + t < pa.npos
+            let crow = cbase + (cs + t) * pa.cd
+            let q4 = (crow + kh * ds + d) / 4u
+            let k4 = (crow + pa.kd + kh * ds + d) / 4u
+            pq[0] = on ? conv4[q4] : float4(0.0)
+            pq[1] = on ? conv4[q4 + 1u] : float4(0.0)
+            pk[0] = on ? conv4[k4] : float4(0.0)
+            pk[1] = on ? conv4[k4 + 1u] : float4(0.0)
+        }
+        if (sg == 7u && lane < DN_CHUNK_C) {
+            let on = cs + lane < pa.npos
+            pg = on ? smalls[pa.g_off + (pa.row0 + cs + lane) * pa.nvh + h] : 0.0
+            pb = on ? smalls[pa.beta_off + (pa.row0 + cs + lane) * pa.nvh + h] : 0.0
+        }
+    }
+
+    //! the chunk at `cs`'s v values at the lane's K S elements of its subgroup's 16-column half (subgroups 0 and 1), zero past the window
+    [spirv_inline]
+    def fetch_v(cs : uint; var pv : float[8]) {
+        let tid = gl_LocalInvocationID.x
+        let lane = tid & 31u
+        let sg = tid >> 5u
+        let ds = pa.ds
+        let nsl = ds / DNC_V
+        let h = gl_WorkGroupID.x / nsl
+        let v0 = (gl_WorkGroupID.x % nsl) * DNC_V
+        let cbase = pa.row0 * pa.cd
+        for [unroll] (e in range(8)) {
+            let t = mma_acc_row(lane, e)
+            pv[e] = cs + t < pa.npos ? conv[cbase + (cs + t) * pa.cd + 2u * pa.kd + h * ds + v0 + sg * 16u + mma_acc_col(lane, e)] : 0.0
+        }
+    }
+
+    //! the pair word of columns `c`, `c + 1` (`c` even) in row `r` of a `[t][16]` pair matrix (quad stride `DNC_TS4`) or a `[t][32]` one (`DNC_VS4`)
+    def pair_at(r, c : uint) : uint => r * DNC_TS4 + c / 8u
+    def pair_at_v(r, c : uint) : uint => r * DNC_VS4 + c / 8u
+    def pair_word(c : uint) : int => int((c / 2u) & 3u)
+
+    [spirv_inline, arch(at="../ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries")]
+    def dn_scan_chunk_cu_body {   // nolint:STYLE037,STYLE038 - the chunk pipeline's barrier-coupled phases
+        let QS4 = DNC_QS4
+        let TS4 = DNC_TS4
+        let LS = DNC_LS
+        let VS4 = DNC_VS4
+        let ds = pa.ds
+        let dq = ds / 8u                  // a row's live quads
+        let nblk = ds / 16u               // the state's d-blocks, one tile each
+        let nsl = ds / DNC_V
+        let h = gl_WorkGroupID.x / nsl
+        let v0 = (gl_WorkGroupID.x % nsl) * DNC_V
+        let tid = gl_LocalInvocationID.x
+        let sg = tid >> 5u
+        let lane = tid & 31u
+        let mt = int(lane >> 3u)
+        let mr = int(lane & 7u)
+        let aa = smalls[pa.a_off + h]
+        let dtb = smalls[pa.dt_off + h]
+        let sbase = pa.region_state_base + h * ds * ds + v0
+        let vh = sg & 1u                  // the subgroup's 16-column half of the slice
+        let db0 = sg >> 1u
+        let db1 = db0 + DNC_DB1
+        let has0 = db0 < nblk
+        let has1 = db1 < nblk
+        var st0, st1 : coopmatAcc_f32_16x16   // the subgroup's state tiles, [v][d] for its half and d-blocks, the lane's elements off the state's [d][v] rows
+        for [unroll] (e in range(8)) {
+            let v = vh * 16u + mma_acc_row(lane, e)
+            let d = db0 * 16u + mma_acc_col(lane, e)
+            if (has0) {
+                mma_acc_set(st0, e, state[sbase + d * ds + v])
+            }
+            if (has1) {
+                mma_acc_set(st1, e, state[sbase + (d + DNC_DB1 * 16u) * ds + v])
+            }
+        }
+        var pq, pk : float4[2]
+        var pv : float[8]
+        var pg = 0.0
+        var pb = 0.0
+        fetch_chunk(0u, pq, pk, pg, pb)
+        if (sg < 2u) {
+            fetch_v(0u, pv)
+        }
+        var base : coopmatAcc_f32_16x16   // subgroups 2 and 3: decay Q S of their half, the o rows' first term
+        var c0 = 0u
+        while (c0 < pa.npos) {
+            var valid = min(DN_CHUNK_C, pa.npos - c0)
+            var ci = 0u
+            while (ci < pa.cap_n) {   // a capture row inside the chunk ends it there, so the checkpoint reads the state after that row
+                let cr = caps[pa.cap_rec + ci * 2u]
+                if (cr > c0 && cr - c0 < valid) {
+                    valid = cr - c0
+                }
+                ci++
+            }
+            barrier()   // the last chunk's readers of the staged pairs are done
+            // the q and k rows as pairs (zero past `valid`), the state tiles as [v][d] pairs, and on subgroup 7 the gates: the log decay's inclusive prefix (held past `valid`), its exp, the beta
+            if (tid < DN_CHUNK_C * dq) {
+                let on = tid / dq < valid
+                let z = float4(0.0)
+                let at = (tid / dq) * QS4 + tid % dq
+                var lo : uint4
+                qhi[at] = split8(on ? pq[0] : z, on ? pq[1] : z, lo)
+                qlo[at] = lo
+                khi[at] = split8(on ? pk[0] : z, on ? pk[1] : z, lo)
+                klo[at] = lo
+            }
+            for [unroll] (i in range(4)) {
+                let e = i * 2
+                let v = vh * 16u + mma_acc_row(lane, e)
+                let c = db0 * 16u + mma_acc_col(lane, e)
+                var lo = 0u
+                if (has0) {
+                    let hi = split2(float2(mma_acc_get(st0, e), mma_acc_get(st0, e + 1)), lo)
+                    shi[v * QS4 + c / 8u][pair_word(c)] = hi
+                    slo[v * QS4 + c / 8u][pair_word(c)] = lo
+                }
+                if (has1) {
+                    let hi1 = split2(float2(mma_acc_get(st1, e), mma_acc_get(st1, e + 1)), lo)
+                    shi[v * QS4 + c / 8u + DNC_DB1 * 2u][pair_word(c)] = hi1
+                    slo[v * QS4 + c / 8u + DNC_DB1 * 2u][pair_word(c)] = lo
+                }
+            }
+            if (sg == 7u) {
+                var g = lane < valid ? aa * softplus(pg + dtb) : 0.0
+                for [unroll] (s in range(4)) {
+                    let off = 1u << uint(s)
+                    let up = subgroupShuffle(g, lane >= off ? lane - off : lane)
+                    if (lane >= off) {
+                        g += up
+                    }
+                }
+                if (lane < DN_CHUNK_C) {
+                    prefix[lane] = g
+                    egs[lane] = exp(g)
+                    bts[lane] = lane < valid ? sigmoid_f32(pb) : 0.0
+                }
+            }
+            fetch_chunk(c0 + valid, pq, pk, pg, pb)
+            barrier()
+            // the six products, one a subgroup: K S and Q S over ds a half each (0-3), K K^T (4), Q K^T (5), each epilogue off the lane elements
+            if (sg < 6u) {
+                var acc : coopmatAcc_f32_16x16
+                let a_is_k = sg < 2u || sg == 4u
+                let b_is_s = sg < 4u
+                let bn0 = b_is_s ? int(vh) * 16 : 0
+                let aa0 = (mr + 8 * (mt & 1)) * int(QS4) + (mt >> 1)
+                let bb0 = (bn0 + mr + 8 * (mt >> 1)) * int(QS4) + (mt & 1)
+                if (nblk == 8u) {   // the 128-wide head on a constant trip count: the steps' loads scheduled across the chain
+                    for [unroll] (ks in range(8)) {
+                        var a0, a1 : coopmatA_f16_16x16
+                        var b0, b1 : coopmatB_f16_16x16
+                        if (a_is_k) {
+                            ldmatrix(a0, unsafe(addr(khi[aa0 + ks * 2])))
+                            ldmatrix(a1, unsafe(addr(klo[aa0 + ks * 2])))
+                        } else {
+                            ldmatrix(a0, unsafe(addr(qhi[aa0 + ks * 2])))
+                            ldmatrix(a1, unsafe(addr(qlo[aa0 + ks * 2])))
+                        }
+                        if (b_is_s) {
+                            ldmatrix(b0, unsafe(addr(shi[bb0 + ks * 2])))
+                            ldmatrix(b1, unsafe(addr(slo[bb0 + ks * 2])))
+                        } else {
+                            ldmatrix(b0, unsafe(addr(khi[bb0 + ks * 2])))
+                            ldmatrix(b1, unsafe(addr(klo[bb0 + ks * 2])))
+                        }
+                        acc = coopmatMulAdd(a1, b0, acc)
+                        acc = coopmatMulAdd(a0, b1, acc)
+                        acc = coopmatMulAdd(a0, b0, acc)
+                    }
+                } else {
+                    for (ks in range(int(nblk))) {
+                        var a0, a1 : coopmatA_f16_16x16
+                        var b0, b1 : coopmatB_f16_16x16
+                        if (a_is_k) {
+                            ldmatrix(a0, unsafe(addr(khi[aa0 + ks * 2])))
+                            ldmatrix(a1, unsafe(addr(klo[aa0 + ks * 2])))
+                        } else {
+                            ldmatrix(a0, unsafe(addr(qhi[aa0 + ks * 2])))
+                            ldmatrix(a1, unsafe(addr(qlo[aa0 + ks * 2])))
+                        }
+                        if (b_is_s) {
+                            ldmatrix(b0, unsafe(addr(shi[bb0 + ks * 2])))
+                            ldmatrix(b1, unsafe(addr(slo[bb0 + ks * 2])))
+                        } else {
+                            ldmatrix(b0, unsafe(addr(khi[bb0 + ks * 2])))
+                            ldmatrix(b1, unsafe(addr(klo[bb0 + ks * 2])))
+                        }
+                        acc = coopmatMulAdd(a1, b0, acc)
+                        acc = coopmatMulAdd(a0, b1, acc)
+                        acc = coopmatMulAdd(a0, b0, acc)
+                    }
+                }
+                if (sg < 2u) {
+                    for [unroll] (i in range(4)) {
+                        let e = i * 2
+                        let t = mma_acc_row(lane, e)
+                        let v = vh * 16u + mma_acc_col(lane, e)
+                        let d0 = bts[t] * (pv[e] - egs[t] * mma_acc_get(acc, e))
+                        let d1 = bts[t] * (pv[e + 1] - egs[t] * mma_acc_get(acc, e + 1))
+                        var lo = 0u
+                        let hi = split2(float2(d0, d1), lo)
+                        dhi[pair_at_v(t, v)][pair_word(v)] = hi
+                        dlo[pair_at_v(t, v)][pair_word(v)] = lo
+                    }
+                    fetch_v(c0 + valid, pv)   // the next chunk's v, its latency under the solve
+                } elif (sg < 4u) {
+                    for [unroll] (e in range(8)) {
+                        mma_acc_set(base, e, egs[mma_acc_row(lane, e)] * mma_acc_get(acc, e))
+                    }
+                } elif (sg == 4u) {
+                    for [unroll] (e in range(8)) {
+                        let r = mma_acc_row(lane, e)
+                        let c = mma_acc_col(lane, e)
+                        lower[r * LS + c] = (c < r && r < valid) ? bts[r] * mma_acc_get(acc, e) * exp(prefix[r] - prefix[c]) : 0.0
+                    }
+                } else {
+                    for [unroll] (i in range(4)) {
+                        let e = i * 2
+                        let r = mma_acc_row(lane, e)
+                        let c = mma_acc_col(lane, e)
+                        let p0 = (c <= r && r < valid) ? mma_acc_get(acc, e) * exp(prefix[r] - prefix[c]) : 0.0
+                        let p1 = (c + 1u <= r && r < valid) ? mma_acc_get(acc, e + 1) * exp(prefix[r] - prefix[c + 1u]) : 0.0
+                        var lo = 0u
+                        let hi = split2(float2(p0, p1), lo)
+                        phi[pair_at(r, c)][pair_word(c)] = hi
+                        plo[pair_at(r, c)][pair_word(c)] = lo
+                    }
+                }
+            }
+            barrier()
+            // T = (I + beta A)^-1, a row a lane half and a lane a column: the fifteen pivots walked on every lane under a predicate, so the shuffle chain stays converged
+            {
+                let half = lane >> 4u
+                let col = lane & 15u
+                let ru = sg * 2u + half
+                var x = col == ru ? 1.0 : (col < ru ? -lower[ru * LS + col] : 0.0)
+                for [unroll] (i in range(15)) {
+                    let pu = 15u - uint(i)
+                    let xp = subgroupShuffle(x, half * 16u + pu)
+                    if (pu < ru && col < pu) {
+                        x -= xp * lower[pu * LS + col]
+                    }
+                }
+                let xn = subgroupShuffle(x, half * 16u + ((col + 1u) & 15u))
+                if ((col & 1u) == 0u) {
+                    let tp = split_pair(float2(x, xn))
+                    thi[pair_at(ru, col)][pair_word(col)] = tp.x
+                    tlo[pair_at(ru, col)][pair_word(col)] = tp.y
+                }
+            }
+            barrier()
+            // solved = T delta ([t][v]) over delta's pairs a half (subgroups 0, 1), and scaled to the chunk's end for the state update
+            if (sg < 2u) {
+                var acc : coopmatAcc_f32_16x16
+                var a0, a1 : coopmatA_f16_16x16
+                var b0, b1 : coopmatB_f16_16x16
+                let aat = (mr + 8 * (mt & 1)) * int(TS4) + (mt >> 1)
+                let bat = (mr + 8 * (mt & 1)) * int(VS4) + int(vh) * 2 + (mt >> 1)   // the [t'][v] rows as B's k rows, the half's columns
+                ldmatrix(a0, unsafe(addr(thi[aat])))
+                ldmatrix(a1, unsafe(addr(tlo[aat])))
+                ldmatrix_trans(b0, unsafe(addr(dhi[bat])))
+                ldmatrix_trans(b1, unsafe(addr(dlo[bat])))
+                acc = coopmatMulAdd(a1, b0, acc)
+                acc = coopmatMulAdd(a0, b1, acc)
+                acc = coopmatMulAdd(a0, b0, acc)
+                let gend = prefix[valid - 1u]
+                for [unroll] (i in range(4)) {
+                    let e = i * 2
+                    let t = mma_acc_row(lane, e)
+                    let v = vh * 16u + mma_acc_col(lane, e)
+                    let s0 = mma_acc_get(acc, e)
+                    let s1 = mma_acc_get(acc, e + 1)
+                    var lo = 0u
+                    let hi = split2(float2(s0, s1), lo)
+                    dhi[pair_at_v(t, v)][pair_word(v)] = hi
+                    dlo[pair_at_v(t, v)][pair_word(v)] = lo
+                    let sc = exp(gend - prefix[t])
+                    let ghi_w = split2(float2(s0 * sc, s1 * sc), lo)
+                    ghi[pair_at_v(t, v)][pair_word(v)] = ghi_w
+                    glo[pair_at_v(t, v)][pair_word(v)] = lo
+                }
+            }
+            barrier()
+            // o = decay Q S + P solved a half (subgroups 2, 3); every subgroup's state tiles decayed and advanced by (solved decay-to-end)^T K
+            if (sg == 2u || sg == 3u) {
+                var acc : coopmatAcc_f32_16x16
+                var a0, a1 : coopmatA_f16_16x16
+                var b0, b1 : coopmatB_f16_16x16
+                let aat = (mr + 8 * (mt & 1)) * int(TS4) + (mt >> 1)
+                let bat = (mr + 8 * (mt & 1)) * int(VS4) + int(vh) * 2 + (mt >> 1)
+                ldmatrix(a0, unsafe(addr(phi[aat])))
+                ldmatrix(a1, unsafe(addr(plo[aat])))
+                ldmatrix_trans(b0, unsafe(addr(dhi[bat])))
+                ldmatrix_trans(b1, unsafe(addr(dlo[bat])))
+                acc = coopmatMulAdd(a1, b0, acc)
+                acc = coopmatMulAdd(a0, b1, acc)
+                acc = coopmatMulAdd(a0, b0, acc)
+                for [unroll] (e in range(8)) {
+                    let t = mma_acc_row(lane, e)
+                    if (t < valid) {
+                        orows[pa.o_off + (pa.row0 + c0 + t) * pa.di + h * ds + v0 + vh * 16u + mma_acc_col(lane, e)] = mma_acc_get(base, e) + mma_acc_get(acc, e)
+                    }
+                }
+            }
+            if (has0) {
+                let gend = egs[valid - 1u]
+                let gv = float4(gend, gend, gend, gend)
+                var a0, a1 : coopmatA_f16_16x16
+                let aat = (mr + 8 * (mt >> 1)) * int(VS4) + int(vh) * 2 + (mt & 1)   // the [t][v] rows as A's k rows: (solved decay-to-end)^T, the half's columns
+                ldmatrix_trans(a0, unsafe(addr(ghi[aat])))
+                ldmatrix_trans(a1, unsafe(addr(glo[aat])))
+                var b0, b1 : coopmatB_f16_16x16
+                let bat0 = (mr + 8 * (mt & 1)) * int(QS4) + int(db0) * 2 + (mt >> 1)   // the k rows [t][d] as B's k rows, the d-block
+                ldmatrix_trans(b0, unsafe(addr(khi[bat0])))
+                ldmatrix_trans(b1, unsafe(addr(klo[bat0])))
+                mma_scale_cols(st0, gv)
+                st0 = coopmatMulAdd(a1, b0, st0)
+                st0 = coopmatMulAdd(a0, b1, st0)
+                st0 = coopmatMulAdd(a0, b0, st0)
+                if (has1) {
+                    ldmatrix_trans(b0, unsafe(addr(khi[bat0 + 8])))
+                    ldmatrix_trans(b1, unsafe(addr(klo[bat0 + 8])))
+                    mma_scale_cols(st1, gv)
+                    st1 = coopmatMulAdd(a1, b0, st1)
+                    st1 = coopmatMulAdd(a0, b1, st1)
+                    st1 = coopmatMulAdd(a0, b0, st1)
+                }
+            }
+            ci = 0u
+            while (ci < pa.cap_n) {   // the checkpoint after this chunk's last row, in the state's own [d][v] layout
+                let rec = pa.cap_rec + ci * 2u
+                if (caps[rec] == c0 + valid) {
+                    let cb = caps[rec + 1u] + pa.cap_state_off + h * ds * ds + v0
+                    for [unroll] (e in range(8)) {
+                        let v = vh * 16u + mma_acc_row(lane, e)
+                        let d = db0 * 16u + mma_acc_col(lane, e)
+                        if (has0) {
+                            capst[cb + d * ds + v] = mma_acc_get(st0, e)
+                        }
+                        if (has1) {
+                            capst[cb + (d + DNC_DB1 * 16u) * ds + v] = mma_acc_get(st1, e)
+                        }
+                    }
+                }
+                ci++
+            }
+            c0 += valid
+        }
+        for [unroll] (e in range(8)) {
+            let v = vh * 16u + mma_acc_row(lane, e)
+            let d = db0 * 16u + mma_acc_col(lane, e)
+            if (has0) {
+                state[sbase + d * ds + v] = mma_acc_get(st0, e)
+            }
+            if (has1) {
+                state[sbase + (d + DNC_DB1 * 16u) * ds + v] = mma_acc_get(st1, e)
+            }
+        }
+    }
+}
+
+//! the window's chunked scan on the tensor cores (`DnScanChunkCuT`, this home's intrinsics form of the shared `DnScanChunkT`)
+[cuda_dispatch(name = "dn_scan_chunk_cls", grid = "wgs", params = "wgs : int64")]
+class CuDnScanChunk : DnScanChunkCuT {
+    [cuda_kernel(local_size_x = 256, min_blocks = 2, name = "dn_scan_chunk_cls_cuda")]
+    def run {
+        dn_scan_chunk_cu_body()
+    }
+}
+
 //! the gated out-norm (`DnScanP3T` over `GkDnGate`), silu and sigmoid out-gates
 [cuda_dispatch(name = "dn_scan_p3_cls", kernel = "run", grid = "npos", params = "npos : int64")]
 class CuDnScanP3 : DnScanP3T {
@@ -4380,35 +4907,6 @@ class CuMoeSched2 : MoeSchedT {
     }
 }
 
-let MMQ_SCHED_ROW_PAD = 128u   //! the FP4 expert chain's bucket row pad: a bucket's rows start at a tile's multiple, so a tile past them lands in its pad
-
-//! the bucket schedule the FP4 expert chain reads (`MoeSchedT`): every bucket padded to the MMQ tile and on the m column, no site
-//! asking the s column alone
-[cuda_dispatch(name = "moe_sched_mmq_cls", kernel = "run", family = "moe_sched_cls", grid = "one", params = "one : int64")]
-class CuMoeSchedMmq : MoeSchedT {
-    override ROW_PAD = 128u   //! `MMQ_SCHED_ROW_PAD`: a template constant takes the literal
-    override M_ONLY = true
-    override S_ONLY_ARG = false
-
-    [cuda_kernel(local_size_x = 256, name = "moe_sched_mmq_cls_cuda")]
-    def run {
-        sched_body()
-    }
-}
-
-//! the 512-thread MMQ-padded bucket schedule past 256 experts (`MoeSchedT`)
-[cuda_dispatch(name = "moe_sched2_mmq_cls", kernel = "run", family = "moe_sched_cls", grid = "one", params = "one : int64")]
-class CuMoeSched2Mmq : MoeSchedT {
-    override WG = 512u
-    override ROW_PAD = 128u   //! `MMQ_SCHED_ROW_PAD`: a template constant takes the literal
-    override M_ONLY = true
-    override S_ONLY_ARG = false
-
-    [cuda_kernel(local_size_x = 512, name = "moe_sched2_mmq_cls_cuda")]
-    def run {
-        sched_body()
-    }
-}
 
 //! the routed block's gather (`MoeGatherT`): every slot row's normed row into its bucket row as halves, the expert tiles' feed
 [cuda_dispatch(name = "moe_gather_f16_cls", grid = "nk", params = "nk : int64")]
@@ -4502,19 +5000,11 @@ def cud_topk_rows_enc(ne : int64; var s : void?; bufs : uint64 const[5]; var pc 
     }
 }
 
-//! the window's bucket schedule over `ne` experts on the stamp that reaches them
-//! the schedule stamp for `ne` experts: the 512-thread one past 256, the MMQ-padded one under `mmq`
-def cud_moe_sched_ensure(ne : int64; mmq : bool) : bool =>
-    mmq ? (topk_depth(ne) > 1 ? ensure_moe_sched2_mmq_cls() : ensure_moe_sched_mmq_cls()) : (topk_depth(ne) > 1 ? ensure_moe_sched2_cls() : ensure_moe_sched_cls())
+def cud_moe_sched_ensure(ne : int64) : bool => topk_depth(ne) > 1 ? ensure_moe_sched2_cls() : ensure_moe_sched_cls()
 
-def cud_moe_sched_enc(ne : int64; mmq : bool; var s : void?; bufs : uint64 const[6]; var pc : SchedArgs) {
-    if (mmq) {
-        if (topk_depth(ne) > 1) {
-            enc_moe_sched2_mmq_cls(s, bufs, pc, 1l)
-        } else {
-            enc_moe_sched_mmq_cls(s, bufs, pc, 1l)
-        }
-    } elif (topk_depth(ne) > 1) {
+//! the window's bucket schedule over `ne` experts on the stamp that reaches them
+def cud_moe_sched_enc(ne : int64; var s : void?; bufs : uint64 const[6]; var pc : SchedArgs) {
+    if (topk_depth(ne) > 1) {
         enc_moe_sched2_cls(s, bufs, pc, 1l)
     } else {
         enc_moe_sched_cls(s, bufs, pc, 1l)

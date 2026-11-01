@@ -29,7 +29,7 @@ require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active
 // DASLLAMA_COOPMAT=sdot4) the expert pieces ride the Q8-fed chain's batch tiles.
 
 let private TWIN = MoeFixture(file = "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL)   //! the Q4_K_M mint of the Q8_0 carrier (its recipe row in ../performance/model_specs.das)
-let private HYBRID = MoeFixture(file = "Qwen3.6-35B-A3B-UD-IQ2_XXS.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, census = true)   //! the deltanet hybrid MoE with a gated shared expert, the 16 GB card's whole-model fit
+let private HYBRID = MoeFixture(file = "Qwen3.6-35B-A3B-UD-IQ2_XXS.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, census = true, dn_chunk = true)   //! the deltanet hybrid MoE with a gated shared expert, the 16 GB card's whole-model fit
 let private NO_SHEXP = MoeFixture(file = "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf", shexp = false, bar_rel = MOE_LOGIT_BAR_REL, census = true)   //! the MoE with no shared expert: the routed block alone at the FFN site
 
 [test]

@@ -60,25 +60,34 @@ prefill, the MXFP4 expert pieces on the FP4 tensor rung, the nv4 nibble decode a
   an `sm_120a` text); below it an nv4 plane's window runs on the cm2 tiles under any knob value. Both forms stay compiled whichever one a card favors: the int8 against f16 tensor rate
   is the card's and the driver's, and the default is a static pick until a card flips it. The Vulkan window's form follows the device's coopmat mode
   (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`), and the knob reaches nothing there or on Metal.
-- **The CUDA window's MXFP4 expert pieces ride the FP4 tensor rung fed from the expert schedule; the Vulkan window keeps the
-  f16 cm2 tiles.** The routed block's gate, up and down pieces take `MmqFp4T` under its `MX`, `KTAIL` and `MOE` arms
-  (`CuMx4Fp4MmqMoe`, `CudLayer.moe_mmq`, on a card at `FP4_RUNG_SM` under `DASLLAMA_CUDA_MMQ`, both reduction widths on the
-  64 lattice - `crd_moe_mmq_fits`, since the k tail stages a k64 pair and the feed packs two codes a word): the weights' e2m1 nibbles and
+- **The CUDA window's MXFP4 and NVFP4 expert pieces ride the FP4 tensor rung fed from the expert schedule; the Vulkan window
+  keeps the f16 cm2 tiles.** The routed block's gate, up and down pieces take `MmqFp4T` under its `MOE` arm (`CudLayer.moe_mmq`, on
+  a card at `FP4_RUNG_SM` under `DASLLAMA_CUDA_MMQ`, the three stacks in one format with a stamp on the rung - `crd_moe_mmq_fits`):
+  nv4 stacks on the dense nv4 stamp's weight stage (`CuNv4Fp4MmqMoe` / `CuNv4Fp4MmqMoeS`: the superblock rows, the sixteen UE4M3
+  strip codes, each expert plane's per-tensor factor off its own scale rows' pad word - the schedule's block base is the expert's
+  superblock base - both reduction widths on the 256 lattice, the gathered rows and the hidden rows through the dense site's feeds
+  `CuFp4Rows` / `CuFp4ActRows`, whose act form adds no bias rows, so a biased nv4 stack keeps the tiles); mx4 stacks under the `MX`
+  arm (`CuMx4Fp4MmqMoe` / `CuMx4Fp4MmqMoeS`, both reduction widths on the 64 lattice: the last step's tail runs whole k64s and the
+  MXFP4 feed packs two block codes a k64 word, so a width at 32 past a multiple of 64 - a legal mx4 plane - has no half pair and
+  keeps the tiles, as every other format does; `crd_moe_mmq_fits`): the weights' e2m1 nibbles and
   UE8M0 bytes straight off the mx4 arena planes (the pair of a k64 read as one half-word: a row's first block is even), the
   gathered rows and the hidden rows as the MXFP4 feed (`CuMx4Rows`, `CuMx4ActRows` / `CuMx4ActRowsB`: e2m1 under a
   power-of-two scale a 32-block by the MXFP4 rule, two codes a k64 word, the row scale 1), the product through
-  `mma_block_scaled_mx` (`kind::mxf4`, both operands UE8M0-scaled). The schedule pads every bucket's rows to a 128-row
-  multiple and puts every row on the m column (the MMQ schedule stamps `CuMoeSchedMmq` / `CuMoeSched2Mmq`, `MoeSchedT`'s `ROW_PAD` and `M_ONLY` constants), so a tile past a bucket's rows lands in its
-  pad and the f16 s column retires; the workgroup's record names the expert plane's block base, the bucket's row base and
-  the tile in place of the grid's; a plane off the 128 lattice (gpt-oss's 2880) stores its last column tile through a
-  staged guard, and a reduction off the 128 lattice runs a k tail (the last step's second k64 under a zero scale on both
-  sides: the weight stage zero codes, the feed stage the next row's real codes, which the zero scale annuls - the dense
-  FP4 site keeps the 256 lattice). The int8 form of the same pieces (Q8_0 feeds on
-  the `MmqT` tile) measured behind the cm2 tiles on the same card - the tile's token rows are a bucket's, so a 512-row
-  window's 32 buckets of about 64 rows each waste half of every 128-row tile - and the FP4 rate is what pays for the pad;
-  the 4-bit activation widens the gpt-oss cells' logit distance from a tenth of the bar to half of it (the routed-block
-  entry of `PERF_LEDGER.md`, 2026-10-26). Below the rung, and
-  with the knob off, the pieces run on the schedule's s and e cm2 tiles as the Vulkan window's do.
+  `mma_block_scaled_mx` (`kind::mxf4`, both operands UE8M0-scaled). The chain reads the cm2 tiles' own packed ladder schedule
+  (`CuMoeSched` / `CuMoeSched2`: a bucket's rows within the s column on one 32-row piece, past it whole 128-row m columns and a
+  remainder past the s column joined to the last as a partial): the m pieces run on the 128-token stamps and the s pieces on the
+  32-token ones (`MmqFp4T`'s `TN`: four warps down the weight rows and one across, a 128-thread block whose lanes stage four
+  weight quads a step), and the store guards its token rows by the record's count as well as its columns by `d`, since a
+  packed bucket's last tile reaches into the next bucket's rows (or the plane's read slack past the last). The workgroup's
+  record names the expert plane's block base, the bucket's row base and count and the tile in place of the grid's; a plane
+  off the 128 lattice (gpt-oss's 2880) stores its last column tile through the staged guard, and a reduction off the 128
+  lattice runs a k tail (the last step's second k64 under a zero scale on both sides: the weight stage zero codes, the feed
+  stage the next row's real codes, which the zero scale annuls - the dense FP4 site keeps the 256 lattice). The s column is
+  what keeps a 256-expert window off eight times its work: at pp512 a bucket holds about 16 rows, and a 128-row tile a bucket
+  would be mostly padding (`PERF_LEDGER.md`, the 35B NVFP4 prefill entry); the int8 form of the same pieces (Q8_0 feeds on the `MmqT` tile) measured behind the cm2 tiles on the same card; the 4-bit
+  activation widens the gpt-oss cells' logit distance from a tenth of the bar to half of it (the routed-block entry of
+  `PERF_LEDGER.md`, 2026-10-26). Below the rung, and with the knob off, the pieces run on the schedule's s and e cm2 tiles as
+  the Vulkan window's do.
 - **The nv4 decode GEMV's nibble decode is a byte permute on CUDA, the SWAR formula on Vulkan and a staged codebook on
   Metal.** The shared leaf (`Nv4GemvT`) routes the e2m1 nibble decode through one virtual (`e2m1_split`); the CUDA home's
   `Nv4GemvPrmtT` overrides it with `byte_perm` over the doubled-magnitude table and its negation - 18 lane ops a quant word
@@ -89,6 +98,27 @@ prefill, the MXFP4 expert pieces on the FP4 tensor rung, the nv4 nibble decode a
   UE4M3 byte pair read off the compact 16-byte row (`ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane`);
   the per-tensor `.scale` the Vulkan and CUDA rows carry in their pad word has no Metal carrier, so a plane under one
   declines there.
+- **The CUDA window's chunked deltanet scan is its own class on the intrinsics tier** (`DnScanChunkCuT` /
+  `dn_scan_chunk_cu_body` in `dasllama_cuda_classes`; the Vulkan home stamps the shared `DnScanChunkT`,
+  `ARCHITECTURE_GPU_SHARED_KERNELS.md#dn-discrete-kernels`). The algorithm is the shared body's; what the shared surface cannot
+  express is where a chunk's time went: a 16 x 16 cooperative tile has no element access and loads A and B from one layout each,
+  so the shared body lands every product as f32 in shared memory, re-splits it into the next product's pairs and re-lays the
+  operands a product needs transposed - ten barriers a chunk and a chunk-long chain of staged tiles. The CUDA class runs eight
+  subgroups over 32 of a head's value columns (`dn_scan_chunk_wgs` at `DNC_V`: half the shared body's grid, so the 35B's 128 workgroups
+  fit one wave at two a multiprocessor - `min_blocks = 2` holds the register allocation to 128 a lane, where the unbounded
+  kernel took 226 and ran one workgroup a multiprocessor - and a head's q and k rows are staged half as often), holds the state slice in
+  accumulator fragments across chunks - a subgroup one 16-column half and two d-blocks - and writes each product's epilogue
+  straight off the lane elements
+  (`mma_acc_get` / `mma_acc_set`: delta, P, the lower matrix and the o rows read where they land, the decayed Q S held in the
+  registers of the warp that lands the o rows), reads the operands a product lands transposed through the transposing `ldmatrix`
+  (delta and solved as [t][v] serve the solve and the o product as B, solved x decay-to-end serves the update as A, the k rows
+  serve the update as B - no transpose pass), folds the chunk's decay into the state by the column scale, fetches the next
+  chunk's q, k, v rows and gates into registers a chunk ahead (the gates' prefix a shuffle scan over sixteen lanes, where the
+  shared body's one lane walks sixteen dependent loads), and runs a chunk on five barriers - ahead of the per-token scan at
+  every length measured, where the shared body on this home is not (`PERF_LEDGER.md`, the 35B NVFP4 prefill entry's scan
+  cuts). The cells hold it to the per-token scan and the
+  CPU oracle on the CUDA kernel file's dn family, and the intrinsics' lane map and transposing loads to a CPU reference in
+  `tests/cuda/test_cuda_oracle.das`.
 - **`set_cuda_mmq_pin` is a CUDA-only setter.** It pins the MMQ knob's answer ahead of a load, so one process can hold a
   carrier to the leaves and then to the tiles (the resident cells' knob-off control, the W4A4 instrument). The Vulkan
   window's form follows the device's coopmat mode and Metal has one window form, so neither home has a pin to set.

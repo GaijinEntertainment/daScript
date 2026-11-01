@@ -4540,9 +4540,6 @@ def gk_ple_act_args(ple, l, all : int64; nr : uint) : ActArgs =>
 //! the window's bucket schedule, a thread an expert: `WG` threads reach `WG` experts (the 512-thread stamp past 256); its scan is `WgScanT`'s
 [ |> template_struct_instance]
 class template MoeSchedT : WgScanT {
-    @template_constant ROW_PAD : uint = 0u    //!< every bucket's rows start at a multiple of it (the MMQ tiles' 128: a tile past a bucket's rows lands in its pad); 0 = packed
-    @template_constant M_ONLY : bool = false  //!< every bucket's rows on the m column (the MMQ tiles, which take a partial tile); off, the ladder
-    @template_constant S_ONLY_ARG : bool = true   //!< `pa.s_only` is read; off (a stamp no site ever asks the s column alone of), every dispatch takes the ladder or `M_ONLY`
     @ssbo @binding = 0 idx : array<uint>       //! [nk] the picked expert per slot row
     @ssbo @binding = 1 inv : array<uint>       //! [nk] slot row -> bucket row
     @ssbo @binding = 2 sched1 : array<uint>    //! the gate plane's records + maps
@@ -4624,10 +4621,8 @@ class template MoeSchedT : WgScanT {
         }
         barrier()
         let c = mine ? cnt[tid] : 0u
-        let pad = max(1u, ROW_PAD)
-        let padded_cnt = ((c + pad - 1u) / pad) * pad
-        let st = excl_scan(padded_cnt)
-        let mrows = mine && !(S_ONLY_ARG && pa.s_only != 0u) ? (M_ONLY ? c : sched_ladder_m_rows(c)) : 0u
+        let st = excl_scan(c)
+        let mrows = mine && pa.s_only == 0u ? sched_ladder_m_rows(c) : 0u
         let srows = mine ? c - mrows : 0u
         let ri_s = excl_scan(srows > 0u ? 1u : 0u)
         let ri_m = pa.ne + excl_scan(mrows > 0u ? 1u : 0u)
@@ -6986,6 +6981,14 @@ class template DnScanT {
             }
         }
     }
+}
+
+let DN_CHUNK_C = 16u    //! the chunked scan's tokens a chunk: one 16 x 16 fragment's rows
+
+//! an f32 pair as f16 halves and the halves of their residues - the chunked scans' operand form: `x` the hi word, `y` the lo
+def split_pair(v : float2) : uint2 {
+    let hi = packHalf2x16(v)
+    return uint2(hi, packHalf2x16(v - unpackHalf2x16(hi)))
 }
 
 //! the gated out-norm over the scan's raw o rows on the template every home stamps (`GkDnGate`), one workgroup a row, its

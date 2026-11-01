@@ -562,6 +562,12 @@ def dn_scan_wgs(nvh, ds : int64) : int64 {
     return nvh * ((ds + cpg - 1l) / cpg)
 }
 
+let DN_CHUNK_VS = 16u   //! the Vulkan chunked scan's state columns a workgroup: one fragment's width
+let DNC_V = 32u         //! the CUDA chunked scan's: two fragments' width over eight subgroups
+//! a head's state in `cols`-column slices, one workgroup each
+[arch(at="../ARCHITECTURE_GPU_SHARED_KERNELS.md#dn-discrete-kernels")]
+def dn_scan_chunk_wgs(nvh, ds : int64; cols : uint) : int64 => nvh * (ds / int64(cols))
+
 let DN_CONV_PB = 32u   //! the conv's positions per workgroup
 [arch(at="../ARCHITECTURE_GPU_SHARED_KERNELS.md#dn-discrete-kernels")]
 def dn_conv_wgs(cd, npos : int64) : int64 => ((cd + 255l) / 256l) * ((npos + int64(DN_CONV_PB) - 1l) / int64(DN_CONV_PB))

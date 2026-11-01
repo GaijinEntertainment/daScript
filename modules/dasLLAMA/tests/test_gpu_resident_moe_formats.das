@@ -291,7 +291,7 @@ def test_moe_formats_IQ4_XS(t : T?) {
 [test]
 def test_moe_formats_NVFP4_35B(t : T?) {
     //! the census binds the file's nv4 sites; its BF16 deltanet planes, table and classifier serve as q8 by the tier's design
-    format_cells_of(t, "NVFP4 (Qwen3.6-35B-A3B)", MoeFixture(file = "Qwen3.6-35B-A3B-NVFP4.gguf", shexp = true, census = true,
+    format_cells_of(t, "NVFP4 (Qwen3.6-35B-A3B)", MoeFixture(file = "Qwen3.6-35B-A3B-NVFP4.gguf", shexp = true, census = true, fp4_chain = true, dn_chunk = true,
         census_sites = "attention q/k/v/o;routed experts;shared expert", bar_rel = MOE_LOGIT_BAR_REL, host_layers_ask = 4l))
 }
 

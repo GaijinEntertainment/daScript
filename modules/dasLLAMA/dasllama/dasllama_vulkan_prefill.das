@@ -56,6 +56,23 @@ def private pf_qkv6(l : int64) : bool => qkv6_of(g_rd.layers[l])
 def private qkv6_of(L : RLayer) : bool => pf_f16_feed(L.fq) && pf_f16_feed(L.fk) && pf_f16_feed(L.fv)
 [arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
 def private pf_gu6(l : int64) : bool => g_env_vulkan.vk_f16_ffn && pf_f16_feed(g_rd.layers[l].f1) && pf_f16_feed(g_rd.layers[l].f3)
+
+var private g_dn_chunk_announced = false
+
+//! the chunked scan serves the window's recurrent layers: the knob on and the KHR tiles present; the form announced once, with why not
+def private vk_dn_chunk_on : bool {
+    let on = g_env_vulkan.dn_chunk != 0l && khr_kq_tile_on() && ensure_dn_scan_chunk_cls()
+    announce_dn_chunk(on) if (!g_dn_chunk_announced)
+    return on
+}
+
+[cold_path]
+def private announce_dn_chunk(on : bool) {
+    g_dn_chunk_announced = true
+    let form = on ? "the chunked form" : (g_env_vulkan.dn_chunk == 0l ? "a token at a time (DASLLAMA_DN_CHUNK=0)" : "a token at a time (no KHR cooperative-matrix tile at subgroup 32)")
+    to_log(LOG_INFO, "dasLLAMA vulkan tier: the window's deltanet scan: {form}\n")
+}
+
 //! the down GEMM's feed: the hidden rows as f16 where the tile admits the plane and the FFN lever leaves the group on it (off it the rows quantize to the Q8 blocks the CPU chain uses)
 [arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
 def private pf_dn6(l : int64) : bool => g_env_vulkan.vk_f16_ffn && pf_f16_feed(g_rd.layers[l].f2)
@@ -342,6 +359,12 @@ def private pf_dn_layer_sets(l, dim, cd, di : int64) {
         fixed_array(g_rd.pf_dnconv, dn0.state_dev, smalls_dev, g_gpu.dn_ws_dev, g_rd.pf_cap_dev, snap_dev),
         fixed_array(np * cd * 4l, dn0.slot_state_bytes * long_length(L.dn), smalls_bytes, DN_WS_BYTES, PF_CAP_WORDS * 4l, snap_bytes),
         fixed_array(VHZ_DNC, VHZ_DNST, VHZ_DNSM, VHZ_DNWS, 0u, VHZ_DNSM))
+    if (vk_dn_chunk_on()) {
+        L.pf_dn_scan_chunk_set = set_dn_scan_chunk_cls(
+            fixed_array(g_rd.pf_dnconv, dn0.state_dev, smalls_dev, g_gpu.dn_ws_dev, g_rd.pf_cap_dev, snap_dev),
+            fixed_array(np * cd * 4l, dn0.slot_state_bytes * long_length(L.dn), smalls_bytes, DN_WS_BYTES, PF_CAP_WORDS * 4l, snap_bytes),
+            fixed_array(VHZ_DNC, VHZ_DNST, VHZ_DNSM, VHZ_DNWS, 0u, VHZ_DNSM))
+    }
     L.pf_dn_captail_set = set_dn_cap_tail_cls(
         fixed_array(g_rd.pf_dnqkv, smalls_dev, g_rd.pf_cap_dev, snap_dev),
         fixed_array(np * cd * 4l, smalls_bytes, PF_CAP_WORDS * 4l, snap_bytes),
@@ -460,7 +483,11 @@ def private dn_window_parts_enc(raw : VkCommandBuffer; var h : VkHaz; var L : RL
             beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G), a_off = uint(DN_SM_A), dt_off = uint(DN_SM_DT),
             o_off = uint(DN_O_OFF), di = uint(di), region_state_base = uint(st.state_byte_off / 4l), row0 = uint(ws.row0),
             cap_n = uint(wc.n), cap_rec = uint(wc.rec), cap_state_off = uint(L.snap_off / 4l))
-        enc_dn_scan_cls(raw, h, L.pf_dn_scan_set, pcs, dn_scan_wgs(nvh, ds))
+        if (vk_dn_chunk_on()) {
+            enc_dn_scan_chunk_cls(raw, h, L.pf_dn_scan_chunk_set, pcs, dn_scan_chunk_wgs(nvh, ds, DN_CHUNK_VS))
+        } else {
+            enc_dn_scan_cls(raw, h, L.pf_dn_scan_set, pcs, dn_scan_wgs(nvh, ds))
+        }
         if (wc.n > 0l) {
             let img = int(st.ring_image_bytes / 4l)
             let cur = g_rd.pf_dn_cur[ws.region]

@@ -950,6 +950,377 @@ class DnScan : DnScanT {
     }
 }
 
+let DN_CHUNK_QS = DN_MAX_DS / 2l + 4l   //! a staged q / k / state row's words: the halves plus a four-word pad, so a fragment load's eight rows land on eight bank groups
+let DN_CHUNK_TS = 12l                   //! a 16-wide pair matrix's row words (T, P, delta / solved, solved-to-end): eight halves plus the pad
+let DN_CHUNK_FS = 20l                   //! a 16 x 16 f32 landing's row floats
+let DN_CHUNK_US = DN_MAX_DS + 4l        //! the state update's f32 landing row, [v][d]
+
+//! the window's chunked delta rule on the KHR 16 x 16 f16 tiles - the Vulkan home's body (the CUDA home stamps its own
+//! `DnScanChunkCuT`): four subgroups a workgroup over one head's sixteen state columns; the chunk's q and k rows staged as f16
+//! hi/lo pairs, k written over the spent q rows a second time transposed ([d][t]) as the update's B operand; the state slice
+//! transposed ([v][d]) as hi/lo pairs alone, so it serves Q S and K S as a column-layout B operand and the update lands on the
+//! same layout; T = (I + beta A)^-1 by forward substitution, two rows a subgroup on its lane halves, a lane a column; every
+//! tile product the three hi/lo terms, every staged row padded off the bank stride (`DN_CHUNK_QS`, `DN_CHUNK_TS`)
+[ |> template_struct_instance]
+class template DnScanChunkT {
+    @ssbo @binding = 0 @readonly conv : array<float>     //! the conv output rows (position-major: q | k | v)
+    @ssbo @binding = 1 state : array<float>              //! the persistent per-head f32 state [nvh][ds][ds]
+    @ssbo @binding = 2 @readonly smalls : array<float>   //! raw beta/g rows, a/dt per head (push offsets)
+    @ssbo @binding = 3 orows : array<float>              //! the raw o rows at o_off
+    @ssbo @binding = 4 @readonly caps : array<uint>      //! the window's capture records
+    @ssbo @binding = 5 capst : array<float>              //! the checkpoint rows (`snap_dev`): a capture's state lands at its row's base plus the layer's
+    @push_constant pa : DnScanArgs
+    @workgroup qhi : uint[int(DN_CHUNK_C) * int(DN_CHUNK_QS)]   //! the chunk's q rows as f16 pairs, [t][d], and their residues; after the products, k transposed [d][t] at eight words a row
+    @workgroup qlo : uint[int(DN_CHUNK_C) * int(DN_CHUNK_QS)]
+    @workgroup khi : uint[int(DN_CHUNK_C) * int(DN_CHUNK_QS)]   //! ... the k rows
+    @workgroup klo : uint[int(DN_CHUNK_C) * int(DN_CHUNK_QS)]
+    @workgroup shi : uint[int(DN_CHUNK_VS) * int(DN_CHUNK_QS)]  //! the state slice transposed, [v][d], as pairs and residues
+    @workgroup slo : uint[int(DN_CHUNK_VS) * int(DN_CHUNK_QS)]
+    @workgroup stage : float[4 * int(DN_CHUNK_C) * int(DN_CHUNK_FS) + int(DN_CHUNK_VS) * int(DN_CHUNK_US)]   //! four 16 x 16 f32 landings (K S; Q S, then decay Q S in place; K K^T, then beta A in place; Q K^T), then the state update's [v][d]
+    @workgroup dhi : uint[int(DN_CHUNK_VS) * int(DN_CHUNK_TS)]  //! delta, then solved, transposed [v][t], as pairs and residues
+    @workgroup dlo : uint[int(DN_CHUNK_VS) * int(DN_CHUNK_TS)]
+    @workgroup ghi : uint[int(DN_CHUNK_VS) * int(DN_CHUNK_TS)]  //! solved x decay-to-end, [v][t]: the state update's A operand
+    @workgroup glo : uint[int(DN_CHUNK_VS) * int(DN_CHUNK_TS)]
+    @workgroup thi : uint[int(DN_CHUNK_C) * int(DN_CHUNK_TS)]   //! T = (I + beta A)^-1
+    @workgroup tlo : uint[int(DN_CHUNK_C) * int(DN_CHUNK_TS)]
+    @workgroup phi : uint[int(DN_CHUNK_C) * int(DN_CHUNK_TS)]   //! P = lower(Q K^T decay)
+    @workgroup plo : uint[int(DN_CHUNK_C) * int(DN_CHUNK_TS)]
+    @workgroup prefix : float[int(DN_CHUNK_C)]                 //! the in-chunk log-decay prefix (inclusive)
+    @workgroup egs : float[int(DN_CHUNK_C)]                    //! exp(prefix)
+    @workgroup bts : float[int(DN_CHUNK_C)]                    //! sigmoid(beta) a token
+
+    //! the pair's two values back: the half plus its residue
+    def join_pair(hi, lo : uint) : float2 => unpackHalf2x16(hi) + unpackHalf2x16(lo)
+
+    //! one 16 x 16 tile product over `ksteps` k16 steps on hi/lo pairs (three tile products a step), landed as f32 at `stage[dst]` with
+    //! row stride `dstride`: the A operand `ak` (0 q, 1 k, 2 T, 3 P, 4 solved-to-end) row-major from word `ai0` stepping `astep`, stride
+    //! `ast`; the B operand `bk` (0 the state, 1 k, 2 delta / solved, 3 k transposed over the q rows) column-major - its rows the output
+    //! columns - from word `bi0` stepping `bstep`, stride `bs`
+    [spirv_inline]
+    def tile_product(ak, ai0, astep, ast, bk, bi0, bstep, bs, ksteps, dst, dstride : int) {
+        var acc : coopmatAcc_f32_16x16
+        for (ks in range(ksteps)) {
+            let ai = ai0 + ks * astep
+            let bi = bi0 + ks * bstep
+            var a0, a1 : coopmatA_f16_16x16
+            if (ak == 0) {
+                coopmatLoad(a0, qhi, ai, ast, 0)
+                coopmatLoad(a1, qlo, ai, ast, 0)
+            } elif (ak == 1) {
+                coopmatLoad(a0, khi, ai, ast, 0)
+                coopmatLoad(a1, klo, ai, ast, 0)
+            } elif (ak == 2) {
+                coopmatLoad(a0, thi, ai, ast, 0)
+                coopmatLoad(a1, tlo, ai, ast, 0)
+            } elif (ak == 3) {
+                coopmatLoad(a0, phi, ai, ast, 0)
+                coopmatLoad(a1, plo, ai, ast, 0)
+            } else {
+                coopmatLoad(a0, ghi, ai, ast, 0)
+                coopmatLoad(a1, glo, ai, ast, 0)
+            }
+            var b0, b1 : coopmatB_f16_16x16
+            if (bk == 0) {
+                coopmatLoad(b0, shi, bi, bs, 1)
+                coopmatLoad(b1, slo, bi, bs, 1)
+            } elif (bk == 1) {
+                coopmatLoad(b0, khi, bi, bs, 1)
+                coopmatLoad(b1, klo, bi, bs, 1)
+            } elif (bk == 2) {
+                coopmatLoad(b0, dhi, bi, bs, 1)
+                coopmatLoad(b1, dlo, bi, bs, 1)
+            } else {
+                coopmatLoad(b0, qhi, bi, bs, 1)
+                coopmatLoad(b1, qlo, bi, bs, 1)
+            }
+            acc = coopmatMulAdd(a1, b0, acc)
+            acc = coopmatMulAdd(a0, b1, acc)
+            acc = coopmatMulAdd(a0, b0, acc)
+        }
+        coopmatStore(acc, stage, dst, dstride, 0)
+    }
+
+    [spirv_inline, arch(at="../ARCHITECTURE_GPU_SHARED_KERNELS.md#dn-discrete-kernels")]
+    def dn_scan_chunk_body {   // nolint:STYLE037,STYLE038 - the chunk pipeline's barrier-coupled phases
+        let VS = DN_CHUNK_VS
+        let QS = uint(DN_CHUNK_QS)
+        let TS = uint(DN_CHUNK_TS)
+        let FS = uint(DN_CHUNK_FS)
+        let US = uint(DN_CHUNK_US)
+        let UP0 = 4u * DN_CHUNK_C * FS   // the state update's landing past the four 16 x 16 ones
+        let ds = max(2u, pa.ds)           // clamped: every divisor below reads it
+        let dw = ds / 2u                  // a q / k / state row's live words
+        let nsl = max(1u, ds / VS)
+        let h = gl_WorkGroupID.x / nsl
+        let v0 = (gl_WorkGroupID.x % nsl) * VS
+        let kh = h % max(1u, pa.nkh)
+        let tid = gl_LocalInvocationID.x
+        let sg = tid >> 5u
+        let lane = tid & 31u
+        let aa = smalls[pa.a_off + h]
+        let dtb = smalls[pa.dt_off + h]
+        let cbase = pa.row0 * pa.cd
+        let sbase = pa.region_state_base + h * ds * ds + v0
+        // the state slice in, transposed to [v][d], as pairs
+        var i = tid
+        while (i < VS * dw) {
+            let v = i / dw
+            let d = (i % dw) * 2u
+            let sp = split_pair(float2(state[sbase + d * ds + v], state[sbase + (d + 1u) * ds + v]))
+            shi[v * QS + i % dw] = sp.x
+            slo[v * QS + i % dw] = sp.y
+            i += 128u
+        }
+        var c0 = 0u
+        while (c0 < pa.npos) {
+            var valid = min(DN_CHUNK_C, pa.npos - c0)
+            var ci = 0u
+            while (ci < pa.cap_n) {   // a capture row inside the chunk ends it there, so the checkpoint reads the state after that row
+                let cr = caps[pa.cap_rec + ci * 2u]
+                if (cr > c0 && cr - c0 < valid) {
+                    valid = cr - c0
+                }
+                ci++
+            }
+            barrier()   // the last chunk's readers of the staged rows and the state are done
+            // the q and k rows as pairs, zero past `valid`: the loads of a lane's eight pairs issued together
+            {
+                var qv, kv : float2[8]
+                for [unroll] (it in range(8)) {
+                    let j = tid + uint(it) * 128u
+                    let t = j / dw
+                    let d = (j % dw) * 2u
+                    let crow = cbase + (c0 + t) * pa.cd
+                    let on = j < DN_CHUNK_C * dw && t < valid
+                    qv[it] = on ? float2(conv[crow + kh * ds + d], conv[crow + kh * ds + d + 1u]) : float2(0.0)
+                    kv[it] = on ? float2(conv[crow + pa.kd + kh * ds + d], conv[crow + pa.kd + kh * ds + d + 1u]) : float2(0.0)
+                }
+                for [unroll] (it in range(8)) {
+                    let j = tid + uint(it) * 128u
+                    if (j < DN_CHUNK_C * dw) {
+                        let at = (j / dw) * QS + j % dw
+                        let qp = split_pair(qv[it])
+                        qhi[at] = qp.x
+                        qlo[at] = qp.y
+                        let kp = split_pair(kv[it])
+                        khi[at] = kp.x
+                        klo[at] = kp.y
+                    }
+                }
+            }
+            if (tid == 0u) {   // the gates: the log decay's inclusive prefix (held past `valid`) and its exp
+                var acc_g = 0.0
+                for (t in range(int(DN_CHUNK_C))) {
+                    let tu = uint(t)
+                    if (tu < valid) {
+                        acc_g += aa * softplus(smalls[pa.g_off + (pa.row0 + c0 + tu) * pa.nvh + h] + dtb)
+                    }
+                    prefix[t] = acc_g
+                    egs[t] = exp(acc_g)
+                }
+            } elif (tid >= 32u && tid < 32u + DN_CHUNK_C) {
+                let t = tid - 32u
+                bts[t] = t < valid ? sigmoid_f32(smalls[pa.beta_off + (pa.row0 + c0 + t) * pa.nvh + h]) : 0.0
+            }
+            barrier()
+            // the four products of the chunk, one a subgroup: K S and Q S (16 x VS over ds), K K^T and Q K^T (16 x 16 over ds)
+            {
+                let nks = int(ds / 16u)
+                if (sg == 0u) {
+                    tile_product(1, 0, 8, int(QS), 0, 0, 8, int(QS), nks, 0, int(FS))
+                } elif (sg == 1u) {
+                    tile_product(0, 0, 8, int(QS), 0, 0, 8, int(QS), nks, int(DN_CHUNK_C * FS), int(FS))
+                } elif (sg == 2u) {
+                    tile_product(1, 0, 8, int(QS), 1, 0, 8, int(QS), nks, int(2u * DN_CHUNK_C * FS), int(FS))
+                } else {
+                    tile_product(0, 0, 8, int(QS), 1, 0, 8, int(QS), nks, int(3u * DN_CHUNK_C * FS), int(FS))
+                }
+            }
+            barrier()
+            // delta = beta (v - decay K S) as [v][t] pairs; decay Q S in place; beta A strictly below the diagonal in place; P on and below it
+            if (sg == 0u) {
+                for [unroll] (e in range(4)) {   // a lane four [v][t] pairs: rows t, t + 1 of column v
+                    let j = lane * 4u + uint(e)
+                    let v = j / 8u
+                    let t = (j % 8u) * 2u
+                    let crow0 = cbase + (c0 + t) * pa.cd + 2u * pa.kd + h * ds + v0 + v
+                    let vv0 = t < valid ? conv[crow0] : 0.0
+                    let vv1 = t + 1u < valid ? conv[crow0 + pa.cd] : 0.0
+                    let d0 = bts[t] * (vv0 - egs[t] * stage[t * FS + v])
+                    let d1 = bts[t + 1u] * (vv1 - egs[t + 1u] * stage[(t + 1u) * FS + v])
+                    let dp = split_pair(float2(d0, d1))
+                    dhi[v * TS + t / 2u] = dp.x
+                    dlo[v * TS + t / 2u] = dp.y
+                }
+            } elif (sg == 1u) {
+                for [unroll] (e in range(8)) {
+                    let idx = lane * 8u + uint(e)
+                    let at = DN_CHUNK_C * FS + (idx / 16u) * FS + idx % 16u
+                    stage[at] = egs[idx / 16u] * stage[at]
+                }
+            } elif (sg == 2u) {
+                for [unroll] (e in range(8)) {
+                    let idx = lane * 8u + uint(e)
+                    let r = idx / 16u
+                    let c = idx % 16u
+                    let at = 2u * DN_CHUNK_C * FS + r * FS + c
+                    stage[at] = (c < r && r < valid) ? bts[r] * stage[at] * exp(prefix[r] - prefix[c]) : 0.0
+                }
+            } else {
+                for [unroll] (e in range(4)) {
+                    let idx = lane * 8u + uint(e) * 2u
+                    let r = idx / 16u
+                    let c = idx % 16u
+                    let at = 3u * DN_CHUNK_C * FS + r * FS + c
+                    let p0 = (c <= r && r < valid) ? stage[at] * exp(prefix[r] - prefix[c]) : 0.0
+                    let p1 = (c + 1u <= r && r < valid) ? stage[at + 1u] * exp(prefix[r] - prefix[c + 1u]) : 0.0
+                    let pp = split_pair(float2(p0, p1))
+                    phi[r * TS + c / 2u] = pp.x
+                    plo[r * TS + c / 2u] = pp.y
+                }
+            }
+            // k transposed, [d][t] at eight words a row over the spent q rows: a lane's consecutive d read consecutive words
+            i = tid
+            while (i < ds * 8u) {
+                let d = i % ds
+                let tp = i / ds
+                let w0 = khi[(2u * tp) * QS + d / 2u]
+                let w1 = khi[(2u * tp + 1u) * QS + d / 2u]
+                let l0 = klo[(2u * tp) * QS + d / 2u]
+                let l1 = klo[(2u * tp + 1u) * QS + d / 2u]
+                let shf = (d & 1u) * 16u
+                qhi[d * 8u + tp] = ((w0 >> shf) & 0xFFFFu) | (((w1 >> shf) & 0xFFFFu) << 16u)
+                qlo[d * 8u + tp] = ((l0 >> shf) & 0xFFFFu) | (((l1 >> shf) & 0xFFFFu) << 16u)
+                i += 128u
+            }
+            barrier()
+            // T = (I + beta A)^-1 row by row, two rows a subgroup on its lane halves and a lane a column, the pivots walked from the diagonal down: T[r][j] = -A[r][j] - sum over j < p < r of T[r][p] A[p][j], the lane's A column in registers, the row's pairs off the lane pair
+            {
+                let half = lane >> 4u
+                let col = lane & 15u
+                var acol : float[16]
+                for [unroll] (p in range(int(DN_CHUNK_C))) {
+                    acol[p] = stage[2u * DN_CHUNK_C * FS + uint(p) * FS + col]
+                }
+                for (rr in range(2)) {   // the fifteen pivots walked on every lane under a predicate: a converged shuffle chain on both lane halves
+                    let r = int(sg) * 4 + rr * 2 + int(half)
+                    let ru = uint(r)
+                    var x = col == ru ? 1.0 : (col < ru ? -acol[r] : 0.0)
+                    for [unroll] (pi in range(15)) {
+                        let p = 15 - pi
+                        let pu = uint(p)
+                        let xp = subgroupShuffle(x, half * 16u + pu)
+                        if (pu < ru && col < pu) {
+                            x -= xp * acol[p]
+                        }
+                    }
+                    let xn = subgroupShuffle(x, half * 16u + ((col + 1u) & 15u))
+                    if ((col & 1u) == 0u) {
+                        let tp = split_pair(float2(x, xn))
+                        thi[ru * TS + col / 2u] = tp.x
+                        tlo[ru * TS + col / 2u] = tp.y
+                    }
+                }
+            }
+            barrier()
+            // solved = T delta ([t][v])
+            if (sg == 0u) {
+                tile_product(2, 0, 0, int(TS), 2, 0, 0, int(TS), 1, 0, int(FS))
+            }
+            barrier()
+            // solved as [v][t] pairs for P solved, and scaled to the chunk's end for the state update
+            if (sg == 0u) {
+                let gend = prefix[valid - 1u]
+                for [unroll] (e in range(4)) {
+                    let j = lane * 4u + uint(e)
+                    let v = j / 8u
+                    let t = (j % 8u) * 2u
+                    let s2 = float2(stage[t * FS + v], stage[(t + 1u) * FS + v])
+                    let sp = split_pair(s2)
+                    dhi[v * TS + t / 2u] = sp.x
+                    dlo[v * TS + t / 2u] = sp.y
+                    let gp = split_pair(float2(s2.x * exp(gend - prefix[t]), s2.y * exp(gend - prefix[t + 1u])))
+                    ghi[v * TS + t / 2u] = gp.x
+                    glo[v * TS + t / 2u] = gp.y
+                }
+            }
+            barrier()
+            // o = base o + P solved ([t][v], sg 0); the state update's (solved decay-to-end)^T K blocks, [v][d] over d (every subgroup)
+            if (sg == 0u) {
+                tile_product(3, 0, 0, int(TS), 2, 0, 0, int(TS), 1, 0, int(FS))
+            }
+            {
+                var d = sg * 16u
+                while (d < ds) {
+                    tile_product(4, 0, 0, int(TS), 3, int(d * 8u), 0, 8, 1, int(UP0 + d), int(US))
+                    d += 64u
+                }
+            }
+            barrier()
+            {
+                let gend = egs[valid - 1u]
+                for [unroll] (e in range(2)) {
+                    let idx = tid * 2u + uint(e)
+                    let r = idx / 16u
+                    let c = idx % 16u
+                    if (r < valid) {
+                        orows[pa.o_off + (pa.row0 + c0 + r) * pa.di + h * ds + v0 + c] = stage[DN_CHUNK_C * FS + r * FS + c] + stage[r * FS + c]
+                    }
+                }
+                i = tid
+                while (i < VS * dw) {   // the state advanced on its transposed layout: the pair's value times the chunk's decay plus the update
+                    let v = i / dw
+                    let w = i % dw
+                    let at = v * QS + w
+                    let u = float2(stage[UP0 + v * US + 2u * w], stage[UP0 + v * US + 2u * w + 1u])
+                    let sp = split_pair(join_pair(shi[at], slo[at]) * gend + u)
+                    shi[at] = sp.x
+                    slo[at] = sp.y
+                    i += 128u
+                }
+            }
+            barrier()
+            ci = 0u
+            while (ci < pa.cap_n) {   // the checkpoint after this chunk's last row, in the state's own [d][v] layout
+                let rec = pa.cap_rec + ci * 2u
+                if (caps[rec] == c0 + valid) {
+                    let cb = caps[rec + 1u] + pa.cap_state_off + h * ds * ds + v0
+                    i = tid
+                    while (i < VS * dw) {
+                        let v = i / dw
+                        let w = i % dw
+                        let s2 = join_pair(shi[v * QS + w], slo[v * QS + w])
+                        capst[cb + (2u * w) * ds + v] = s2.x
+                        capst[cb + (2u * w + 1u) * ds + v] = s2.y
+                        i += 128u
+                    }
+                }
+                ci++
+            }
+            c0 += valid
+        }
+        barrier()
+        i = tid
+        while (i < VS * dw) {
+            let v = i / dw
+            let w = i % dw
+            let s2 = join_pair(shi[v * QS + w], slo[v * QS + w])
+            state[sbase + (2u * w) * ds + v] = s2.x
+            state[sbase + (2u * w + 1u) * ds + v] = s2.y
+            i += 128u
+        }
+    }
+}
+
+//! the window's chunked scan on the KHR tiles (`DnScanChunkT` above; the CUDA home stamps its own `DnScanChunkCuT`)
+[vk_dispatch(name = "dn_scan_chunk_cls", grid = "wgs", params = "wgs : int64")]
+class DnScanChunk : DnScanChunkT {
+    [spirv_kernel(local_size_x = 128, name = "dn_scan_chunk_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]
+    def run {
+        dn_scan_chunk_body()
+    }
+}
+
 //! a capture's conv history into its checkpoint row (`DnCapTailT`, the template both discrete homes stamp)
 [vk_dispatch(name = "dn_cap_tail_cls", grid = "wgs", params = "wgs : int64")]
 class DnCapTail : DnCapTailT {

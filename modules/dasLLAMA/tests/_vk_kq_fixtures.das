@@ -241,8 +241,15 @@ def hash_word(i : uint) : uint {
 }
 
 //! `n` hashed words `hash_word(i * mul + add)`: a synthetic quant plane
-def hashed_words(n : int; mul, add : uint) : array<uint> =>
-    <- [for (i in range(n)); hash_word(uint(i) * mul + add)]
+def hashed_words(n : int; mul, add : uint) : array<uint> {
+    var w : array<uint>
+    w |> reserve(n)   // past the unreserved growth cap at the 2048-row window's planes
+    w |> resize(n)
+    for (i in range(n)) {
+        w[i] = hash_word(uint(i) * mul + add)
+    }
+    return <- w
+}
 
 //! `n` hashed floats `float(hash_word(i + salt) % modulus) / div - off`: a cell's unit-range input fill
 def hash_fill(n : int; salt, modulus : uint; div, off : float) : array<float> =>
@@ -261,8 +268,15 @@ def safe_half(i : uint) : uint {
 def ws_word(i : uint) : uint => safe_half(i * 7u + 3u) | (safe_half(i * 3u + 1u) << 16u)
 
 //! `n` scale words `ws_word(i * mul + add)`: two finite halves a word
-def ws_plane(n : int; mul, add : uint) : array<uint> =>
-    <- [for (i in range(n)); ws_word(uint(i) * mul + add)]
+def ws_plane(n : int; mul, add : uint) : array<uint> {
+    var w : array<uint>
+    w |> reserve(n)
+    w |> resize(n)
+    for (i in range(n)) {
+        w[i] = ws_word(uint(i) * mul + add)
+    }
+    return <- w
+}
 
 //! a window GEMM pick as the cells spell it: `<tile columns>x<k chunks>x<chunk depth>`
 def pick_str(p : tuple<tc : int64; nsplit : int64; ksplit : int64>) : string => "{p.tc}x{p.nsplit}x{p.ksplit}"

@@ -2379,10 +2379,16 @@
     GEMM for nv4 planes under the MMQ knob, W4A4 - the activations quantized to e2m1 per token by the `fp4_rows` /
     `fp4_actrows` / `cls_ar_fp4_b` feeds): the tile runs one block an SM (44 KB of shared, 512
     threads, 86 registers; the 2-block form at 64 registers spills and reads 9 to 12% slower on the RTX 5060 Ti at the 1B
-    window's shapes), the window's pp512 ahead of llama.cpp's native path on both cards and its tg128 4 to 6% under it -
-    the decode's room is the nv4 GEMV leaf's UE4M3 decode - and the non-native rails - Vulkan, Metal, the CPU - stay on
+    window's shapes), the dense window's pp512 ahead of llama.cpp's native path on both cards and its tg128 4 to 6% under it -
+    the decode's room is the nv4 GEMV leaf's UE4M3 decode; the routed expert stacks ride the same rung through the expert
+    schedule's ladder (`CuNv4Fp4MmqMoe` on the 128-row m pieces, `CuNv4Fp4MmqMoeS` on the 32-row s pieces), where the
+    35B-A3B's pp512 on the RTX PRO 4500 reads 7941 against llama.cpp's 8270 +/- 750 (cv 9%) with the deltanet scan on the
+    chunked CUDA class; what is left of that window is the s stamp's half-empty 32-token tile on the 35B's ~16-row buckets
+    (389 us a window's gate pieces at 256 experts x 16 rows, bandwidth-latency bound) and the dense leaf's short grids (row
+    277) - and the non-native rails - Vulkan, Metal, the CPU - stay on
     the decode kernels by the ruling that NVFP4 is a specialty hardware format. Every figure here is a `PERF_LEDGER.md`
-    row of the dasCUDA arc (the FP4 leaf and its feeds, the nv4 decode GEMV, W4A4's perplexity cost); (5) the planar grp-tier
+    row of the dasCUDA arc (the FP4 leaf and its feeds, the nv4 decode GEMV, W4A4's perplexity cost) or of the 35B NVFP4
+    prefill entry (the ladder, the per-kernel tables, the scan's cuts); (5) the planar grp-tier
     kernels' time against q40's - 1.3x (gemv) to 1.9x (tile) on zen4, 2.5x and 1.5x on the M5 (`PERF_LEDGER.md`, the two
     2026-10-30 nv4-vs-q40 entries; the row-major rail sits at q40's time on zen4 alone, 1.02x, and reads 1.9x gemv / 1.6x
     tile on the M5) - the per-strip UE4M3 decode and the split accumulators the k4 nibble tiling forces; the layout stays the device's, so the gap is accepted and closes only through a
@@ -2409,11 +2415,11 @@
     board box that can mint the cell - the das `cpu/tuned` row everywhere, the `metal` row and the `crispasr` Metal
     reference on the Apple boxes, the `crispasr` CPU and `onnx` references wherever `setup_asr_rig --refs --venvs`
     builds them - and puts each row beside the ledger entry's figure in its own dated entry.
-251. **The dense FP4 site's width lattice.** The FP4 tile (`MmqFp4T`) runs a k tail under `KTAIL` for the routed mx4
-    pieces alone (gpt-oss's 2880 = 22 full k128 steps and a k64); the dense nv4 site still asks a reduction width on the
-    256 lattice (`crd_site_mmq`), so an NVFP4 model whose dim or hidden sits off it falls to the cm2 tiles. Done = the
-    dense FP4 leaf under `KTAIL` where the width is a multiple of 64, its cell at a width off the 128 lattice, and the
-    admission widened.
+251. **The dense FP4 site's width lattice.** The FP4 tile (`MmqFp4T`) runs its last step's tail over whole k64s on every
+    stamp (gpt-oss's 2880 = 22 full k128 steps and a k64 on the routed mx4 pieces); the dense nv4 site still asks a
+    reduction width on the 256 lattice (`crd_site_mmq`), so an NVFP4 model whose dim or hidden sits off it falls to the
+    cm2 tiles. Done = the dense FP4 leaf admitted where the width is a multiple of 64, its cell at a width off the 128
+    lattice, and the admission widened.
 252. **A `//!` above a method inside a class body documents the class, not the method.** The kernel class files carry
     the shape at some forty sites (`MmqFp4T`, `Fp4FeedT`, `ActRqBT` among the newest, thirty-odd on master before them),
     so a class's reference entry collects its methods' paragraphs. Done = one tree-wide sweep respelling each as a `//`
@@ -2421,8 +2427,11 @@
     rule.
 253. **The FP4 tile's k step and ring depth.** The 27B NVFP4 window trace (`PERF_LEDGER.md`, the dasCUDA deltanet leg's
     "27B NVFP4 window on the pod" entry) reads the FP4 leaf at k 128 a step on a two-deep cp.async ring against
-    llama.cpp's k 512 and stream-k, 1.15x to 1.36x a call, 13 ms of the 375 ms window. Done = the tile at a deeper k
-    step or ring, raced against the shipped stamp on the 27B shape, the entry's rows re-read.
+    llama.cpp's k 512 and stream-k, 1.15x to 1.36x a call, 13 ms of the 375 ms window. The k step is raced: `KSTEP` 256
+    reads flat against 128 on the RTX PRO 4500's dense leaf (207 to 227 TFLOP/s) and the m stamp, worse on the 128-thread
+    s stamp, and 512 asks more shared memory than the card's 99 KB (`PERF_LEDGER.md`, the 2026-10-31 / 11-01 35B NVFP4
+    CUDA prefill entry); the grid is row 277's. Done = the ring at three deep, raced against the shipped stamp on the 27B
+    shape, the entry's rows re-read.
 256. **The act code rides as a push constant.** `ActArgs.act` is a value fixed per stamp, and the act kernels (`ActRqT`,
     `ActF16T`) read it in their main loop; `REVIEW_GPU_KERNEL_CLASSES.md` wants a per-stamp constant for a value fixed per
     stamp. Done = the act code a template constant of each act stamp, the field dropped.
@@ -2547,3 +2556,7 @@
     `PERF_LEDGER.md` 2026-11-01). Done = the release re-mint's `performance/gen_bench_records.das -- --legs vulkan` on zen4
     landing the vulkan rows beside the CPU ones, with a `llama-batched-bench` built beside the 9febe63 vulkan reference
     (`benchmarks/setup_lcpp_ref.das --flavor vulkan` builds it) so the reference's tg128@4 row lands too.
+277. **The FP4 tile's short dense grids.** A dense NVFP4 site's 8 to 64 tiles on the RTX PRO 4500's 82 SMs run whole,
+    where llama.cpp splits the reduction across blocks (stream-k); `PERF_LEDGER.md`'s 2026-10-31 / 11-01 35B NVFP4 CUDA
+    prefill entry measures the k step flat, so the grid is what stays. Done = the FP4 leaf under the cm2 tiles' k split
+    (or a stream-k form) where its grid falls short of the card, raced on the 27B's dense shapes, the entry's rows re-read.

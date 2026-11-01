@@ -7730,6 +7730,67 @@ records as the expert GEMVs' regions, the act and the combine.
   the nv4 stacks add: `Model.exps_scale`, one float an expert a scaled stack (the 35B: 40 layers x 3 stacks x 256 x 4 B =
   123 KB) plus the `site_scale` table's entry an expert, and the Vulkan mint view's table holds the same entries a gather
   (freed with the view); a dense nv4 carrier adds none.
+- **MEASURED (2026-10-31 / 11-01, the pod - RTX PRO 4500 Blackwell 32 GB: the 35B NVFP4's CUDA prefill behind llama.cpp's,
+  debugged kernel by kernel; `debug-jit`, `DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1`, one process a row, the cross-engine
+  readings `direction-grade`).** The cause was a pick, not a kernel: `L.moe_mmq` admitted mx4 expert stacks alone, so the 35B's
+  routed NVFP4 experts ran on the f16 cm2 e tiles while llama.cpp's CUDA build ran the FP4 tensor op; the dense nv4 planes
+  already rode the FP4 leaf. Every das pp512 here is one `lcpp_bench.das --for-debug-purposes -p 512 -n 128 -r 5` process (mean +/- spread over the five reps). (1) The nv4 MoE stamp on the padded expert chain read pp512 4644 +/- 26 against 5224 on the tiles: the
+  chain padded every bucket to a 128-row m tile, and 256 experts x top-8 at 512 tokens is ~16 rows a bucket, eight times the
+  work. (2) The ladder form - the packed schedule's 32-row s pieces on a 32-token s stamp (128 threads, four weight quads a lane)
+  and its 128-row m pieces on the m stamp, the store guarded by the record's count, no pad - 6740 +/- 32 / 192 (`lcpp_bench.das
+  --for-debug-purposes -p 512 -n 128 -r 5`); the all-tiles control (`DASLLAMA_CUDA_MMQ=0`) 4914; llama.cpp (b76b13379, its CUDA build,
+  `-DCMAKE_CUDA_ARCHITECTURES=120`, `llama-bench -p 512 -n 128 -r 10 -ngl 999`) 8270 +/- 750 / 138 (cv 9%, direction only). gpt-oss-20b
+  mxfp4 on the same ladder 12085 +/- 121 / 234. (3) nsys per kernel, both engines (`--cuda-graph-trace=node`, PDL off, `-p 512 -n 16 -r 1`; the kernel-side
+  averages are the comparable figures - llama.cpp's pp512 under the tracer read 4856 on its ~2000 launches a window, ours
+  6798), per 512-row window: ours nv4 MoE s stamp 140 us x 120 = 16.8 ms, m stamp 67 us x 120 = 8.1 ms, the per-token deltanet
+  scan `CuDnScan` 500 us x 30 = 15.0 ms, `CuQ8Mmq` (the BF16 deltanet planes as q8) 89 us x 90 = 8.0 ms, the dense FP4 leaf
+  23.5 us x 150 = 3.5 ms, the conv 1.7, the router 1.5, the fp4 feeds 2.3, attention 1.3, the gather 1.0 (~75 ms the window);
+  llama.cpp `mul_mat_q` (every FP4 GEMM, experts and dense) 104 us x 274 = 28.4 ms, `gdn_single` (the chunked gated delta rule
+  on mma) 124 us x 30 = 3.7 ms, the cutlass bf16 GEMMs ~7 ms, `mm_ids_helper` 1.3, `quantize_mmq_nvfp4` 1.3, `stream_k_fixup`
+  0.9. Two levers: the expert GEMMs (36.5 against 28.4 ms) and the scan (15 against 3.7 ms), the scan the larger single gap.
+  (4) The expert GEMMs isolated (`harness/gemm_cuda_vs_vulkan.das -- --only nv4moe`, 256 experts, model-free): the s stamp 389 us
+  on 256 x 16 rows at k 2048 / d 768 (~600 GB/s of weights, bandwidth-latency bound), the m stamp 564 us on 256 x 64 rows
+  (91 TFLOP/s); the dense leaf 207-227 TFLOP/s against llama.cpp's 248 at 4096 x 512 x 14336 (`test-backend-ops perf -o MUL_MAT`); llama.cpp's
+  `MUL_MAT_ID` at the 35B shape (`test-backend-ops perf -o MUL_MAT_ID`, `n_mats=256`, 512 tokens, the perf case list's NVFP4 MUL_MAT_ID entry given that shape) 435 / 581 us gate / down against
+  ours 400 / 430 - the expert GEMMs are not behind, the window's GEMM total is the s stamp's half-empty 32-token tile on 16-row
+  buckets. A k step of 256 read flat on the dense leaf and the m stamp and 389 -> 465 us worse on the s stamp; 512 refused (152 KB
+  against the card's 99 KB): `KSTEP` stays 128, `followup_general.md` row 277 holds the short-grid / stream-k item, row 253 the ring depth. (5) The scan,
+  cut by cut on the harness's `--only dnscan` arm (16 key heads, 32 value heads, 128 wide; us a dispatch at 512 rows, the
+  per-token scan 507-510): the shared chunked body `DnScanChunkT` on CUDA 511 at its best portable shape (the operands held in the
+  orientations the emitter loads 32-bit, the state as pairs, padded strides; its first shape 824 on 32-word-stride bank conflicts,
+  its first cut 6177 pp512 against 6565), a bisect with the phases knocked out one at a time reading the solve 112, the products
+  151, the q/k loads 47 of it; the CUDA-only `DnScanChunkCuT` on the intrinsics tier 671 with the staged f32 landings kept (the
+  state landed and re-split every chunk, the gates one lane's sixteen dependent loads, nine barriers), then 517 with no tile
+  staged (the epilogues off the accumulator's lane elements, the transposed operands through `ldmatrix.trans`, the next chunk
+  fetched a chunk ahead, five barriers), 448 with eight subgroups over 32 value columns a workgroup (half the grid), 270 with
+  the register allocation held to two workgroups a multiprocessor (`min_blocks = 2`: 127 registers and 112 bytes of stack
+  against the unbounded 226, which ran one workgroup a multiprocessor and the 128 workgroups as two waves), 248 with the solve
+  reading its column off shared memory (a pivot-indexed register array lives in local memory), and 118 once the CUDA emitter
+  lowered a written vector lane by pointer arithmetic: a `clock32` probe a barrier phase (workgroup 0, lane 0) read ~24 thousand
+  cycles a chunk with the phases that only write f16 pairs at 5 to 7 thousand each, and the SASS showed every lane store
+  (`v[i] = w` on a shared `uint4`, ~100 a chunk) as a four-way jump table (`BRX`) with its convergence bookkeeping - the
+  emitter's `__das_at_T` was a ternary chain of references; the fix reaches every CUDA kernel the emitter produces (the same
+  probe after it: ~9.6 thousand cycles a chunk, the pair-write phase 1.6, the six products 3.5 and the solve 2.8 - both on
+  loops of a runtime trip count), and 101 with the products on a constant eight-step loop at the 128-wide head and the solve's
+  fifteen pivots walked unrolled and predicated (8 bytes of stack; the probe 7.4 thousand cycles a chunk, the solve 1.1, the
+  products 3.1 - the chain of 24 dependent mma a warp, three accumulators would shorten it). At 2048 rows 415 against the
+  per-token scan's 2435;
+  llama.cpp's `gdn_single` on the same card 124 us a layer at 512 rows.
+  Whole-model, the chunked scan read 6517 +/- 31 (cut 4) and 6223 +/- 27 (cut 5) against 6565 +/- 43 per-token, 6557 +/- 131 at parity, 6770 +/- 40
+  on the 32-column workgroup, 7291 +/- 54 / 191 under the register cap, 7363 +/- 39 with the solve off shared memory and
+  7941 +/- 44 / 192 with the lane store fixed and 7938 +/- 27 with the unrolled loops (the scan's last 17 us a layer are under
+  1% of the window) - 52% over the leg's starting 5224, llama.cpp's own 8270 +/- 750 (cv 9%) within its spread. The
+  four-layer host split (`DASLLAMA_GPU_HOST_LAYERS=4`) 5927 +/- 234 / 177.9 at ten reps (cv 3.9%, direction only - the host
+  rail's share on 48 vCPUs with no pin spreads the reps; a five-rep read 5375 +/- 184) against 4288 +/- 135 / 179.6 before
+  the leg, the decode the host rail's. The Vulkan home stamps the shared body under KHR cooperative matrices at subgroup 32; on the pod's
+  card, the knob A/B (`DASLLAMA_DN_CHUNK=1` then `0`, alternated twice, `DASLLAMA_GPU=1` alone, `-p 512 -n 0 -r 5`): the 35B
+  NVFP4 5082 +/- 42 and 5087 +/- 46 on against 4933 +/- 35 and 4920 +/- 39 off (+3%), the 35B MTP UD-Q4_K_M 5438 +/- 26 and
+  5414 +/- 27 against 5181 +/- 26 and 5179 +/- 25 (+5%). Metal keeps the per-token walk: a chunked body on the 8 x 8 simdgroup
+  matrices (64 state columns a threadgroup, half rows, raw gates; correct to 1e-7 of the sequential rule) raced 1.64 ms a layer
+  against the half-row walk's 0.97 at the 35B's heads and 2048 rows (thirty dispatches a command buffer, best of three), the body not landed, and on the M5 Max Qwen3.5-35B-A3B
+  UD-IQ2_XXS (`--ngl 99`, the same alternation) read pp512 3977 +/- 19 and 3977 +/- 12 against 4135 +/- 9 and 4129 +/- 13, pp2048
+  5426 +/- 20 against 5734 +/- 11 at `-r 3`; its knockouts put 0.40 ms of the 1.64 in a chunk's fixed cost (the barriers, the
+  gates, the o rows) and 0.48 in the decayed Grams.
 - **MEASURED (2026-10-31, `debug-jit`, the row-major accumulator sets raced in one process - the `accs` perm axis of the
   rm families, `kq_kernel_bench.das --fmt nv4,q40 --rm --ntok 512` under `DAS_TUNE_MODE=test`, `-p mr4,mr8` on the M5 Max
   (arm-i8mm, the box profile `performance/m5.tune.json`) and `-p vpdpbusd,maddubs` on zen4 (x86-vnni512, the class profile),

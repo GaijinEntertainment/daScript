@@ -252,15 +252,20 @@ registers through the update, the out-norm's sum by the shared fold, the o row a
 `out_f32`; the row's region slot and ring parity off its token block, `TokMeta.dnslot` / `parity`), the window's scan
 `DnScanT` (the plain per-token delta rule, a column of a head's state a lane cluster, 16 state rows a lane in registers, the
 next token's k and q read ahead of the recurrence, a capture record writing the state after its row into the checkpoint
-rows), the conv front's bindings `DnConvT` over the common `GkDnConv` (the taps and the history out of the layer's smalls,
-the history per channel under `hist_mode` 1), the gate shell `DnScanP3T` over the common `GkDnGate` (a workgroup a row, its
+rows) and its chunked form `DnScanChunkT` (the CPU chain's chunked WY rule on the 16 x 16 f16 tiles, hi/lo pairs throughout: a
+workgroup one head's sixteen state columns, sixteen tokens a chunk - Q S, K S, the decayed Grams, T = (I + beta A)^-1, solved =
+T delta, o = decay Q S + P solved, S <- decay S + K^T (solved decay-to-end), a capture row ending its chunk; picked under
+`DASLLAMA_DN_CHUNK` where the home has the tiles - the Vulkan classes file holds this body, stamped under KHR cooperative matrices
+at subgroup 32, the CUDA one its own `DnScanChunkCuT`, `ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries` - the per-token scan otherwise), the
+conv front's bindings `DnConvT` over the common `GkDnConv` (the taps and the history out of the layer's smalls, the history per
+channel under `hist_mode` 1), the gate shell `DnScanP3T` over the common `GkDnGate` (a workgroup a row, its
 subgroups walking the value heads), the ring hand-off `DnTailRingT` over `DnTailT` (the window's last `taps` projected rows
 into the other ring image, a part shorter than the taps taking its leading rows off the entry image), the f32 beta/alpha
 tile `DnBaGemmT` (a workgroup 16 positions by 16 of the `2 nvh` output rows, the x rows in the stamp's element type `XT`:
 the Vulkan window's f32 normed rows, the CUDA window's f16 feed), and the router GEMV `RouterGemvT` over the common
 `GkRouterGemv` (the f32 arm's beta and alpha rows in one dispatch: `ne` 2 nvh split at nvh between the beta base and the g
 base). A home's leaf calls the body under its own kernel annotation and dispatch line (`dn_step_body`, `dn_scan_body`,
-`dn_conv_body`, `dn_gate_body`, `tail_ring_body`, `dn_ba_body`, `router_body`); the Vulkan home's capture tail
+`dn_scan_chunk_body`, `dn_conv_body`, `dn_gate_body`, `tail_ring_body`, `dn_ba_body`, `router_body`); the Vulkan home's capture tail
 `DnCapTail` stays its own leaf over `DnTailT`, since the CUDA home installs no snapshot seats.
 
 **The smalls plane is one layout on both homes** (`DN_SM_*`, `DN_WINDOW`, `DN_MAX_*`, the per-step scratch sizes
@@ -268,7 +273,7 @@ base). A home's leaf calls the body under its own kernel annotation and dispatch
 weights at `DN_SM_WNORM`, a and dt at `DN_SM_A` / `DN_SM_DT`, then from `DN_SM_HIST` a ring pair (two images of
 `cd x (dconv - 1)` floats) a region slot, `DN_SM_SLACK` floats past the last. The dispatch grids are the layout's too:
 `dn_conv_wgs` (256 channels by `DN_CONV_PB` positions a workgroup), `dn_scan_wgs` (a workgroup `4 x 32 / (ds / 16)`
-columns of one head), `dn_ba_wgs` (16-position by 16-row tiles). A kernel reads the offsets off its arguments, so a
+columns of one head), `dn_scan_chunk_wgs` (a head's state in column slices: `DN_CHUNK_VS` 16 on the shared body, `DNC_V` 32 on the CUDA class), `dn_ba_wgs` (16-position by 16-row tiles). A kernel reads the offsets off its arguments, so a
 driver that moves a row moves it for both homes in the one place.
 
 **The chain's capacities are fixed constants, sized for the qwen35 family with headroom.** A window runs `DN_WINDOW`

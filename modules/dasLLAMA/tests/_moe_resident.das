@@ -24,6 +24,7 @@ require dasllama/dasllama_moe   // heat_totals, heat_reset and the shared expert
 require ?vulkan dasllama/dasllama_vulkan_common   // the resolved coopmat mode and the kernel census, where the module exists
 require ?cuda dasllama/dasllama_cuda_decode   // the same witnesses on the CUDA home
 require dasllama/dasllama_kqformat
+require dasllama/dasllama_env   // the chunked scan's knob, the census's gate
 require daslib/enum_trait   // the KqFmt members as a loop
 require daslib/strings_boost   // split: a fixture's census sites
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
@@ -49,6 +50,34 @@ struct MoeFixture {
     census_sites : string        //! the sites the census binds to their own format, `;`-separated; empty = every site (a carrier whose BF16 planes serve as q8 names its own-bytes sites)
     image : bool = false         //! the load goes through the prepared lane (minted beside the file on the first load): the cells that read off it
     host_layers_ask : int64 = 0l //! > 0: the load asks at least this many routed layers' experts onto the host (`set_gpu_host_layers`) whatever the card holds - the host-layers form on any card
+    fp4_chain : bool = false     //! every routed stack mx4 or nv4: on the CUDA home at the rung the census holds the FP4 expert chain's m stamps to the window's pieces, not the cm2 e tiles alone
+    dn_chunk : bool = false      //! a deltanet carrier: where the home has the tiles and the knob is on, the census holds the chunked scan's stamp to the windows
+}
+
+//! the chunked deltanet scan serves the window on this home: the knob on, and on the Vulkan home the KHR tiles at subgroup 32
+def private dn_chunk_served() : bool {
+    return false if (g_env_vulkan.dn_chunk == 0l)
+    return true if (gpu_want_cuda())
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return khr_kq_tile_on()
+    } else {
+        return false
+    }
+}
+
+//! the FP4 expert chain's m stamps: the CUDA home's census alone - the Vulkan census seeds no such name and panics on a read of it
+def private fp4_census() : int64 {
+    return 0l if (!gpu_want_cuda())
+    return max(0l, census("mx4_fp4_mmq_moe_cuda")) + max(0l, census("nv4_fp4_mmq_moe_cuda"))
+}
+
+//! the CUDA FP4 expert chain serves the window's routed pieces on this box
+def private fp4_chain_served() : bool {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        return gpu_want_cuda() && cuda_fp4_chain_served()
+    } else {
+        return false
+    }
 }
 
 //! the logits bar as a fraction of the step's max |logit|: the routed chain's CPU-vs-device noise class (test_gpu_moe_shexp.das's
@@ -93,11 +122,13 @@ def private unsplit_want(nprompt : int64) : int64 {
     }
 }
 
-//! the census over every `KqFmt` member's stamp of one tile column - `cm2e` (the expert schedule's m pieces in cm2 mode), `khr`
-//! (every piece in mm mode) or `sdot4` (every piece on the Q8-fed chain's batch tiles) - the expert planes carrying whichever format
-//! the file holds and the box serves it in (IQ3_S as `iq3s` or `iq3s4`); a 64-step format's e column is its m stamp
-//! (KQ_CM2E_ALIASES_M), so `cm2e` reads that stamp's census for it
+//! the census over every `KqFmt` member's stamp of one tile column - `cm2e` (the expert schedule's m pieces in cm2 mode; a 64-step
+//! format's e column is its m stamp, KQ_CM2E_ALIASES_M), `khr` (every piece in mm mode), `sdot4` (every piece on the Q8-fed chain's
+//! batch tiles) or `cuda_e` (the CUDA home's cm2 e tiles plus the FP4 expert chain's m stamps) - in the format the box serves the file's planes
 def private column_census(col : string) : int64 {
+    if (col == "cuda_e") {
+        return column_census("cm2e") + fp4_census()
+    }
     var n = 0l
     for (f in type<KqFmt>) {
         let name = "{f}"
@@ -114,8 +145,8 @@ def private column_census(col : string) : int64 {
 //! plane in cm2 mode; in mm mode the KHR tile takes both the s and the m dispatch of every plane. Either way the count is a floor: the
 //! KHR tile and the 64-step formats' m stamp both serve the window's dense GEMMs too
 def private expert_column() : tuple<col : string; per_plane : int64> {
-    if (gpu_want_cuda()) {   // the CUDA home's expert pieces ride its cm2 e and s tiles (the FP4 leaf's pieces count on no column)
-        return (col = "cm2e", per_plane = 1l)
+    if (gpu_want_cuda()) {   // the cm2 e tile or the FP4 expert chain's m stamp (mx4 / nv4 stacks under the knob): one counted dispatch a plane either way
+        return (col = "cuda_e", per_plane = 1l)
     }
     static_if (typeinfo builtin_module_exists(vulkan)) {
         if (!device_has_expert_tiles()) {
@@ -174,6 +205,20 @@ def moe_fixture_admitted(t : T?; tr : Model; fx : MoeFixture) : int64 {
 //! block's census growing by the MoE layer count per window and per step
 [cold_path]
 def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        if (fx.fp4_chain && gpu_want_cuda()) {   //! the FP4 chain's census assert reads the MMQ route: pinned to the winners, so `DASLLAMA_CUDA_MMQ` cannot stand it down
+            let was = cuda_mmq_pin()
+            set_cuda_mmq_pin(CUDA_MMQ_WINNERS)
+            moe_forced_feed_pinned(t, n, fx)
+            set_cuda_mmq_pin(was)
+            return
+        }
+    }
+    moe_forced_feed_pinned(t, n, fx)
+}
+
+[cold_path]
+def private moe_forced_feed_pinned(t : T?; n : int64; fx : MoeFixture) {
     let path = path_join(models_dir(), fx.file)
     if (!resident_ready(t, path)) return
     var tr <- load_resident(path, 1l, fx.strict_ctx, fx.host_layers_ask, fx.image)   //! one region: the context asked whole is the region's
@@ -202,6 +247,9 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
         let topk0 = census(topk_key)
         let ecol = expert_column()
         let e0 = column_census(ecol.col)
+        let f0 = fp4_census()
+        let chunk_key = gpu_want_cuda() ? "dn_scan_chunk_cls_cuda" : "dn_scan_chunk_cls_spv"
+        let c0 = census(chunk_key)
         let un0 = unsplit_tokens()
         forced_feed_over(t, tr, "", n, FED_STEPS, fx.bar_rel) $ {
             if (attn_nsplit() > 1l && unsplit_want(n) != UNSPLIT_UNDECIDED && host_layers == 0l) {   //! a split device records the unsplit twin: it serves the steps under RD_UNSPLIT_POS and none past it
@@ -215,6 +263,14 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
                 t |> success(topk >= device_routed_layers && topk % device_routed_layers == 0l, "the token command recorded a top-k per device-routed layer ({topk} over {device_routed_layers} layers)")
                 let edelta = column_census(ecol.col) - e0
                 let ewant = 3l * ecol.per_plane * device_routed_layers * windows
+                if (fx.fp4_chain && fp4_chain_served()) {   //! the FP4 chain's own stamps, apart from the cm2 e tiles the column counts beside them
+                    let fdelta = fp4_census() - f0
+                    t |> success(fdelta >= ewant, "the FP4 expert chain's m stamps served the window's routed pieces ({fdelta} over a floor of {ewant}): the stacks on the tensor rung, not the cm2 tiles")
+                }
+                if (fx.dn_chunk && dn_chunk_served()) {
+                    let cdelta = census(chunk_key) - c0
+                    t |> success(cdelta >= windows, "the chunked deltanet scan ({chunk_key}) served the recurrent layers of every window ({cdelta} dispatches over {windows} window(s))")
+                }
                 t |> success(edelta >= ewant, "the expert schedule's pieces dispatched the {ecol.col} column at least {ecol.per_plane} a plane per device-routed layer per window ({edelta} over a floor of {ewant})")
             }
         }
