@@ -3772,7 +3772,7 @@ class template FaT {
     @template_constant HS : uint = 64u           //! the head width
     @template_constant BC : uint = 64u           //! the cm2 arm's K/V step: 64 at hs 64, 32 above
     @template_constant OUT16 : bool = false      //! the o store as f16
-    @template_constant GATED : bool = false      //! cm2 arm: o times the sigmoid of the [q | gate] head's gate half
+    @template_constant GATED : bool = false      //! o times the sigmoid of the [q | gate] head's gate half (both arms, head 256)
     @template_constant CAP : bool = false        //! the softcap stamps: every scaled score through cap * tanh(s / cap) before the mask (gemma-2)
     @template_constant SINK : bool = false       //! the sink stamps (gpt-oss): the online softmax seeds its max with the head's sink logit and its sum with one - the phantom key with no value row
     @template_constant KHR : bool = false        //! the KHR cooperative-matrix arm; its lane map is the cited section's
@@ -3917,10 +3917,19 @@ class template FaT {
                 let inv = 1.0 / l
                 let ob = (pa.row0 + q0 + softmax_row) * pa.qd + h * HS + o_dim0
                 for [unroll] (z3 in range(int(HS / 8u))) {
-                    static_if (OUT16) {
-                        outp[ob + uint(z3)] = float16(o[z3] * inv)
+                    static_if (GATED) {   // a gated panel is [q | gate] a head: the row stride 2 qd and the head width 2 HS follow; the gate half is read unscaled
+                        let ov = o[z3] * inv * sigmoid_f32(qpanel[(pa.row0 + q0 + softmax_row) * (2u * pa.qd) + h * (2u * HS) + HS + o_dim0 + uint(z3)])
+                        static_if (OUT16) {
+                            outp[ob + uint(z3)] = float16(ov)
+                        } else {
+                            outp[ob + uint(z3)] = ov
+                        }
                     } else {
-                        outp[ob + uint(z3)] = o[z3] * inv
+                        static_if (OUT16) {
+                            outp[ob + uint(z3)] = float16(o[z3] * inv)
+                        } else {
+                            outp[ob + uint(z3)] = o[z3] * inv
+                        }
                     }
                 }
             }

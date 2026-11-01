@@ -171,7 +171,7 @@ must keep holding:
   `test_vkd_gemv_ncol`, `test_vkd_q8_gemv_gu_n`, `test_vkd_q8_gemv_pleact`, `test_vkd_act_family`,
   `test_vkd_moe_routing`, `test_vkd_dn_family`, `test_vkd_hc_seams`, `test_vkd_hc_rows`,
   `test_vkd_ple_side`, `test_vkd_f16_gemm_khr`, `test_vkd_fa_cm2`, `test_vkd_fa_khr`,
-  `test_vkd_fa_khr_h256_softcap`, `test_vkd_da_attn`, `test_vkd_da_attn_rqk`, `test_vkd_da_attn_bw`,
+  `test_vkd_fa_khr_h256_softcap`, `test_vkd_fa_khr_h256_gated`, `test_vkd_da_attn`, `test_vkd_da_attn_rqk`, `test_vkd_da_attn_bw`,
   `test_vkd_moe_gather_row`, `test_vkd_combine_row`, `test_vkd_kq_batch_family`,
   `test_vkd_emb_gather_family` and `test_vkd_nv4_cm2_batch` cells - the census's evidence for the
   classes no zoo row dispatches - must hold each class against its CPU oracle at the bar the cell

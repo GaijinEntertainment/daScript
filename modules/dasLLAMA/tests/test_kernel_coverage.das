@@ -1144,9 +1144,13 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // in test_vulkan_tower_kernels.das, the driver's whole sentence test_nmt_device in test_nmt.das
     "nmt_embed_cls", "nmt_ssru_cls", "nmt_pick_cls", "nmt_attn_part_cls", "nmt_attn_comb_cls",
     // the KHR flash-attention tile's 256 and 512 heads: the mode sweep's mm row reaches the 64 and 128 heads through the
-    // zoo's qwens, and no zoo row carries a wider head (the gemmas sit above the tier); their coverage is test_vkd_fa_khr
-    // and test_vkd_fa_khr_h256_softcap in test_vulkan_kernels.das
+    // zoo's qwens; no zoo row carries a 512 head or an ungated or capped 256 head (the gemmas sit above the tier); the
+    // gated 256 keys are the zoo's Qwen3.5-9B's, which the census runs at the box's coopmat mode - cm2 on the pod, so its
+    // row takes the cm2 stamp; a KHR-only box (the zen4 760M) dispatches them through that file and the Qwen3.6-35B-A3B
+    // files; their coverage is test_vkd_fa_khr, test_vkd_fa_khr_h256_softcap and test_vkd_fa_khr_h256_gated in
+    // test_vulkan_kernels.das
     "fa_khr_h256_cls_spv", "fa_khr_h256_f16_cls_spv", "fa_khr_h256_cap_cls_spv", "fa_khr_h256_cap_f16_cls_spv",
+    "fa_khr_h256_g_cls_spv", "fa_khr_h256_g_f16_cls_spv",
     "fa_khr_h512_cls_spv", "fa_khr_h512_f16_cls_spv",
     // the bidirectional flash tiles (the vision towers' encoder attention): the 64 head is the gemma4v tower's (the stocked
     // mmproj-gemma-4-E2B-it-bf16.gguf, dispatched by test_gemma4v_vulkan_twin in test_gemma4v.das), the padded 128 the

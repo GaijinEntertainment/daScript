@@ -1237,6 +1237,7 @@ def private pf_setup {
     let sinks = g_rd.has_sinks   //! the sink stamps take every flash layer of a sink model (its heads are 64 wide, the stamps' one size)
     g_rd.pf_facm2 = false
     g_rd.pf_fakhr = false
+    var chunked_why : table<string; int64>   //! why each layer took the chunked pair, by count - the load-time lines below
     for (L in g_rd.layers) {
         continue if (L.recurrent)
         L.pf_fa = fa_dev && fa_cm2_serves(L.hs, L.attn_cap, gated_stamp)
@@ -1251,6 +1252,8 @@ def private pf_setup {
             fakhr_hs |> insert(L.hs)
         } else {
             chunked_hs |> insert(L.hs)
+            let why = pf_chunked_why(fa_dev || fakhr_dev, L.hs, L.attn_cap, gated_stamp)
+            chunked_why[why] = (chunked_why?[why] ?? 0l) + 1l
         }
     }
     let fa128s = pf_fa128s() && key_exists(chunked_hs, 128l)
@@ -1278,7 +1281,7 @@ def private pf_setup {
         && (!key_exists(fa_hs, 512l) || fa_stamp_pair_ensure(false, 512l, false, false, false, any_f16_feed))
         && (!key_exists(fakhr_hs, 64l) || fa_stamp_pair_ensure(true, 64l, false, false, sinks, any_f16_feed))
         && (!key_exists(fakhr_hs, 128l) || fa_stamp_pair_ensure(true, 128l, false, false, false, any_f16_feed))
-        && (!key_exists(fakhr_hs, 256l) || fa_stamp_pair_ensure(true, 256l, false, false, false, any_f16_feed))
+        && (!key_exists(fakhr_hs, 256l) || fa_stamp_pair_ensure(true, 256l, gated_stamp, false, false, any_f16_feed))
         && (!any_khr_cap || fa_stamp_pair_ensure(true, 256l, false, true, false, any_f16_feed))
         && (!key_exists(fakhr_hs, 512l) || fa_stamp_pair_ensure(true, 512l, false, false, false, any_f16_feed))
         && (!sinks || long_length(chunked_hs) == 0l)   //! the sink rides the flash tiles alone: a sink model whose layer fell to the chunked pair declined at the sink upload
@@ -1293,6 +1296,10 @@ def private pf_setup {
     if (g_rd.pf_fakhr) {
         to_log(LOG_INFO, "dasLLAMA vulkan tier: KHR flash attention armed ({long_length(fakhr_hs)} head size(s), {kvq ? "the block-codec mirrors' f16 shadow" : "native f16 mirrors"}; {long_length(chunked_hs)} on the chunked pair)\n")
     }
+    for (k, v in keys(chunked_why), values(chunked_why)) {   //! one line a reason, whether or not any layer armed a tile
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: {v} attention layer(s) on the chunked pair, off the flash tiles: {k}\n")
+    }
+    delete chunked_why
     delete fa_hs
     delete fakhr_hs
     delete chunked_hs
@@ -2295,6 +2302,15 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
 def vk_rdec_prefill_hc(x_batch : array<float>; cos_batch : array<float>; side : array<float>; npos, pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
     pf_run_hc(x_batch, cos_batch, side, npos, pos0, logits, experts)
+}
+
+//! why an attention layer takes the chunked pair instead of a flash tile: no tile on the device at all (no cooperative matrix at
+//! a width the tiles run at, the tile knob off, or no f16 feed), a softcap off an ungated 256 head, a gated head off 256, or a head size no stamp serves
+def private pf_chunked_why(tile_dev : bool; hs : int64; cap : float; gated : bool) : string {
+    return "no flash tile on this device" if (!tile_dev)
+    return "the softcap off an ungated 256 head" if (cap != 0.0 && (gated || hs != 256l))
+    return "a gated head off 256" if (gated && hs != 256l)
+    return "head size {hs}"
 }
 
 [arch(at="../ARCHITECTURE_GPU_SHARED_ATTN.md#vk-kv-tq4-basis"), arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-segments")]

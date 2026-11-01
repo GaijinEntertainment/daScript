@@ -1413,14 +1413,6 @@ module) is independent and can land any time - it is pure structure.
     answer, not a decline. Item 42's real-hardware pass on such a card is where it shows; the fix
     is the pipeline's `VkPipelineShaderStageRequiredSubgroupSizeCreateInfo` at 32 on every KHR
     stamp, or a decline where the device cannot pin it.
-64. **The folded flash template's KHR stamps carry two constants their arm never reads.** `FaT`
-    declares `BC` (the cm2 arm's K/V step) and `GATED` (the cm2 arm's gate multiply), and the
-    head-size templates set `BC` for both arms, so every `fa_khr_*` stamp inherits a `BC` and a
-    `GATED` its compiled `static_if (KHR)` arm ignores - an `override GATED = true` on a KHR leaf
-    compiles to an ungated kernel with no diagnostic, and only the host ladders'
-    `fa_stamp_refuse` keep such a stamp off the device. The arms share one `run` because the
-    SPIR-V emitter emits a method call as an `OpFunction` it never inlines; once the emitter inlines
-    device-side calls, each arm becomes a method on its own template and the constants move with it.
 65. **The per-op streamed prefill of a mixed-format MoE dies on a bounds check.** With the resident
     route off and a 5000 MiB cap (`DASLLAMA_GPU_RESIDENT=0 DASLLAMA_GPU_VRAM_MB=5000`) the
     Qwen3-30B-A3B UD-IQ2_XXS loads on the per-op rails with its expert stacks streamed for the
@@ -2204,3 +2196,19 @@ module) is independent and can land any time - it is pure structure.
     holds the gap fixed or bounded by measurement, and pp31/pp32 on Qwen3.5-0.8B re-read against llama.cpp: the
     reference is `/workspace/llama.cpp-ref-9febe63/build-vulkan/bin/llama-bench -m
     /workspace/models/Qwen3.5-0.8B-Q8_0.gguf -p 31,32 -n 0 -ngl 99 -r 10`, no environment beyond the shell's, after one untimed warm-up run of the same line.
+
+164. **The q8 MoE chain's schedule plane does not hold the 35B-A3B's window.** On zen4's 760M under
+    `DASLLAMA_VK_SUBGROUP=64` (the device's own width, so the coopmat tiles are off and the routed block takes the q8
+    chain, `pf_moe_q8`) the resident prefill asserts `the MoE block's schedule exceeds its plane`
+    (`pf_moe_setup`, `dasllama_vulkan_prefill.das`): `moe_sched_bounds` over 256 experts, a 4096-row window and
+    eight picks a row outgrows `BATCH_META_BYTES`. The pinned 32-lane width is the served default on that device, so
+    the assert reaches only the A/B arm and any KHR device whose compute stage cannot pin. Done = the schedule plane
+    sized from the plan's own bounds (or the window capped where it would not fit, with the cap said), and the
+    64-wide arm of `benchmarks/lcpp_bench.das -p 512` on the 35B-A3B Q4_K_M running through on zen4.
+
+165. **The folded flash template's KHR stamps carry a K/V step constant their arm never reads.** `FaT`
+    declares `BC` (the cm2 arm's K/V step) and the head-size templates set it for both arms, so every
+    `fa_khr_*` stamp inherits a `BC` its compiled `static_if (KHR)` arm ignores (its step is 64 keys, in
+    the code). The arms share one `run` because the SPIR-V emitter emits a method call as an
+    `OpFunction` it never inlines; once the emitter inlines device-side calls, each arm becomes a
+    method on its own template and the constant moves with it.
