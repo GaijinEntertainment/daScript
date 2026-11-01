@@ -4,8 +4,19 @@
 <author><name>dasllama.io</name></author>
 <link href="https://dasllama.io/"/>
 <link href="https://dasllama.io/feed.xml" rel="self"/>
-<updated>2026-10-31T00:00:00Z</updated>
+<updated>2026-11-01T00:00:00Z</updated>
 <id>https://dasllama.io/</id>
+<entry>
+<title>Do you speak Russian? Try our interpreter.</title>
+<link href="https://dasllama.io/#n-2026-11-01-interpreter"/>
+<id>https://dasllama.io/#n-2026-11-01-interpreter</id>
+<updated>2026-11-01T00:00:00Z</updated>
+<content type="html">&lt;p&gt;&lt;a href=&quot;/examples/interpreter/interpreter.html&quot;&gt;The interpreter&lt;/a&gt; is the fourth browser example: press listen and talk in
+Russian - Говорите по-русски - and hear it in English. Silero VAD cuts each utterance at the pause, GigaAM transcribes
+it, Mozilla&#x27;s Firefox Translations student puts it into English and Kyutai&#x27;s Pocket TTS says it, every stage on the engine
+compiled to WebAssembly in your tab; what you say stays there. The speech model is the 154 MB Q4_K file served as its
+own planes, beside a 32 MB translator and a 13 MB voice, with a 1 MB voice-activity model.&lt;/p&gt;</content>
+</entry>
 <entry>
 <title>dasllama 0.6.7 - every class profile re-minted on the row-major race, the CUDA home past VRAM, Radeon on RADV.</title>
 <link href="https://dasllama.io/#n-2026-10-31-dasllama-0-6-7"/>

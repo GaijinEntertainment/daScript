@@ -615,6 +615,7 @@ def draw_listen_panel() {
     same_line((spacing = 16.0))
     group(LISTEN_SIDE) {
         text(LISTEN_LABEL, (text = g_listening ? "stop" : "listen"))
+        text(LISTEN_HINT, (text = "Говорите по-русски"))
         let meter = clamp(g_level * 8.0, 0.0, 1.0)
         progress_bar(LEVEL, (fraction = meter, size = float2(160.0, 0.0), overlay = ""))
         GAIN.bounds = (0.25, 4.0)
