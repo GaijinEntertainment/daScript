@@ -142,7 +142,9 @@ struct and the body; a stamp sets the template constants its home needs and maps
 (64 floats) in registers for the whole walk, the plane laid k-major so the one load pass reads consecutive rows; a step
 is the two half dots, a barrier, the first 128 lanes' cell, and a second barrier that publishes h to the next step's dots
 and the decoder's per-subgroup partials (summed in the cell lanes' whole subgroups - 128 is a multiple of every subgroup
-size) to lane 0, which lands the probability.
+size) to lane 0, which lands the probability. The 64 held floats a lane would cap the pipeline at 512 lanes on the M1
+family, so the Metal stamp declares its 1024 on the entry (`[metal_kernel(max_threads = 1024)]`, the
+`[[max_total_threads_per_threadgroup]]` attribute) and the compiler fits them.
 
 **The Metal E-series pre-step serves every table, ple width and model dim a blob model carries.** The gather reads the
 table on its own format's block grid - a K-quant table at whole superblocks, a per-32 table at whole 32-blocks, the

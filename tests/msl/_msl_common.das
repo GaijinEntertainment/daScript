@@ -651,7 +651,7 @@ class UserFns {
     @ssbo @binding = 4 yp : array<float>
     @workgroup part : float[32]
 
-    [metal_kernel(name="userfns_msl"), marker(no_coverage)]
+    [metal_kernel(name="userfns_msl", max_threads=1024), marker(no_coverage)]
     def userfns {
         let i = ufx_lane()
         let lid = gl_LocalInvocationID.x
@@ -1105,6 +1105,7 @@ def public declared_msl_census : table<string> {   // nolint:STYLE038 — one fl
         // signature + parameters
         "preamble",
         "kernel_sig",
+        "kernel.max_threads",
         "param.buffer",
         "param.buffer_const",
         "param.uniform",

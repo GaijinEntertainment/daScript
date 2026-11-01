@@ -916,6 +916,8 @@ def private vad_lstm_gate(t : T?; var dev, queue; nch : int) {
         let kd = kernel_of(@@enc_vad_lstm)
         var pso = mc |> keep_stamp(kd, err)
         return if (!pso_ok(t, tag, pso, err))
+        let lanes = metal_pipeline_max_total_threads(pso)
+        t |> success(lanes >= 1024u, "{tag}: the pipeline takes the recurrence's 1024 lanes ({lanes}) - the entry declares them")
         var fx <- vad_fixture(nch)
         let x <- vad_signal(nch)
         let gx <- vad_enc_oracle(x, fx.slab, fx.pa)
@@ -3364,7 +3366,7 @@ def private st2_source_gate(t : T?; var dev, queue; torch_math : bool) {
             for (i in range(n * nh)) {
                 want_noise[i] = tts_hash_normal(ka_own.seed, uint(i))
             }
-            check_buf(t, "{tag} own draw vs the CPU hash", mc.buf[pnz1], want_noise, Bar(rel = 1e-5, abs_floor = 1e-6, poison_scaled = true), Shape(row_width = n))   //! the kernel's log and cos under the default fast math against the CPU's: within 1e-5 of a value under 5
+            check_buf(t, "{tag} own draw vs the CPU hash", mc.buf[pnz1], want_noise, Bar(rel = 1e-5, abs_floor = 2e-5, poison_scaled = true), Shape(row_width = n))   //! the kernel's log and cos under the default fast math against the CPU's: within 1e-5 of a value under 5; the floor a near-zero cosine - the argument's ulp times the amplitude
             var inscope own1 <- mc |> plane_run(ph1)
             var in_tanh_range = true
             for (v in own1) {
@@ -3475,7 +3477,8 @@ def private st2_istft_gate(t : T?; var dev, queue; envelope : bool) {
             }
             continue if (!ran)
             if (leg == 0) {
-                check_buf(t, tag, mc.buf[pw], ref.want, Bar(rel = 1e-4, abs_floor = 1e-5, poison_scaled = true), FLAT_SHAPE)
+                //! the bar rides each sample's sum of term magnitudes: a sample where terms in the hundreds cancel carries their f32 rounding
+                check_buf(t, tag, mc.buf[pw], ref.want, Bar(kind = BarKind.envelope, rel = 1e-4, abs_floor = 1e-5, poison_scaled = true), FLAT_SHAPE, ref.terms)
             } else {
                 t |> success(mc |> rerun_mismatches(pw, ref.want, 1e-4, 1e-5, "{tag} poison (MUST mismatch)") > 0, "{tag}: a poisoned magnitude reds the compare")
             }
@@ -4776,7 +4779,7 @@ def private moe_select_gate(t : T?; var dev, queue; ne, k, nst : int; ties : boo
             }
         }
         var inscope widx <- [for (i in sidx); uint(i)]
-        var inscope ds <- [for (e in range(ne)); float(1 + (e * 3) % 7) * 0.25]
+        var inscope ds <- [for (e in range(ne)); float(1 + (e * 3) % 7) * 0.3]   //! off the dyadic grid, so the two fold orders round apart
         var inscope wunds := ww
         if (dscale) {
             for (i in range(nst * k)) {

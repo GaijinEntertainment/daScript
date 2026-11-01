@@ -58,8 +58,8 @@ class MetalKernel : AstFunctionAnnotation {
         }
         var err : array<string>
         var census : table<string>
-        var cfg = MslEmitConfig()
-        cfg.float_a_ok = args |> find_arg("float_a_ok") ?as tBool ?? false
+        var cfg = MslEmitConfig(float_a_ok = args |> find_arg("float_a_ok") ?as tBool ?? false,
+            max_threads = args |> find_arg("max_threads") ?as tInt ?? 0)
         if (empty(args |> find_arg("name") ?as tString ?? "")) {
             cfg.kernel_name = kernel_derived_name(func)
         }
