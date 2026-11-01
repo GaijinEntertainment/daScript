@@ -23,6 +23,7 @@ require dasllama/dasllama_tower
 require dasllama/dasllama_blocks   // embed_text_rows/eval_embd_ — the ASR turn drives the Gemma-4 decoder
 require dasllama/dasllama_common   // apply_box_profile_runtime for the gemma4a-image identity
 require dasllama/dasllama_image
+require dasllama/dasllama_tower_image
 
 // Gemma-4 E-series audio front end: the `gemma4a` Conformer encoder + the audio multimodal
 // embedder, read straight from the bf16 audio mmproj GGUF (mmproj-gemma-4-E{2,4}B-it-bf16.gguf,
@@ -99,6 +100,9 @@ struct Gemma4aEncoder {
     outproj_w : int64; outproj_b : int64
     mmproj_w : int64
     layers : G4aLayerPlane = G4aLayerPlane()
+    dev_backend : TowerDev    //! the GPU flavor whose device block the image carries (`#tower-dev-block`); `none` on the CPU image
+    dev : PlaneU8 = PlaneU8()
+    devplan : PlaneI64 = PlaneI64()
     image_map : void?         // non-null when the planes borrow a mapped .dlim (dasllama_image)
     image_bytes : uint64
 }
@@ -148,7 +152,7 @@ def finalize(var t : Gemma4aEncoder) {
 
 // the tripwire: serialize_image_meta(Gemma4aEncoder) covers 20 fields; image_map + image_bytes
 // are deliberate skips (the eight planes and the layer table are sections, not meta).
-let private GEMMA4A_META_FIELDS = 20 + 2
+let private GEMMA4A_META_FIELDS = 21 + 2
 
 // every meta-carried Gemma4aEncoder field, explicitly, both directions (see dasllama_image)
 def private serialize_image_meta(var arch : Archive; var t : Gemma4aEncoder) {
@@ -173,6 +177,7 @@ def private serialize_image_meta(var arch : Archive; var t : Gemma4aEncoder) {
     arch |> serialize_raw(t.outproj_w)
     arch |> serialize_raw(t.outproj_b)
     arch |> serialize_raw(t.mmproj_w)
+    arch |> serialize_raw(t.dev_backend)
 }
 
 [unused_argument(t)]
@@ -192,6 +197,8 @@ struct Gemma4aStaging {
     qblob : array<int8>       // section names must match the served plane fields (bind-by-name)
     qscales : array<float>
     layers : array<G4aLayer>
+    @exact_size dev : array<uint8>       //!< a GPU-flavored mint's device block (`TowerDevBuild`)
+    @exact_size devplan : array<int64>   //!< ... and its plan
 }
 
 def private serialize_image_meta(var arch : Archive; var st : Gemma4aStaging) {
@@ -209,6 +216,8 @@ def private image_post_load(var st : Gemma4aStaging) {}
 def private register_gemma4a_image_tags {
     register_image_family_tag("gemma4a-f32", true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
     register_image_family_tag("gemma4a-q8")
+    register_tower_dev_tags("gemma4a-f32")
+    register_tower_dev_tags("gemma4a-q8")
 }
 
 //! Hot-path scratch for one clip encode — a transcribe allocates nothing per call.
@@ -290,12 +299,51 @@ def private g4a_htk_filterbank(n_mel, n_fft, sample_rate : int64) : array<float>
 def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
     let tag = g4a_serve_q8() ? "gemma4a-q8" : "gemma4a-f32"
     announce_lane("gemma4a encoder", g4a_serve_q8(), "f32 planes", "set_gemma4a_q8", g_g4a_pin != GemmLane.unset, gemma4a_gpu_serves())
+    let dev = path |> ends_with(".dlim") ? TowerDev.none : gemma4a_dev_flavor(g4a_serve_q8())
+    if (dev != TowerDev.none) {
+        return <- load_staged_image_dev(path, tag, "gemma4a-encoder", "source mmproj gguf", type<Gemma4aEncoder>, dev, g_g4a_flavor.bake, GEMMA4A_DEV_CONSUMED) {
+            return <- stage_gemma4a_encoder(path)
+        }
+    }
     return <- load_staged_image(path, tag, "gemma4a-encoder", "source mmproj gguf", type<Gemma4aEncoder>, $ {
         return <- stage_gemma4a_encoder(path)
     }, $(t : Gemma4aEncoder) {
         // an image minted off a widening embedder read as a square one carries the encoder's width as the decoder's: mint again
         return t.proj_dim == gemma4a_probe_proj_dim(path)
     }, $ [unused_argument(t, src)] (t : Gemma4aEncoder; src : string) {})
+}
+
+//! A GPU driver's gemma4a flavor (`#tower-dev-block`): the backend whose image it mints, whether its chain serves a lane, and
+//! the bake that converts a CPU-form encoder into the driver's device block
+typedef Gemma4aServesLaneFn = function<(q8 : bool) : bool>
+typedef Gemma4aBakeFn = function<(m : Gemma4aEncoder; var b : TowerDevBuild) : bool>
+
+struct Gemma4aFlavor {
+    backend : TowerDev
+    serves : Gemma4aServesLaneFn
+    bake : Gemma4aBakeFn
+}
+
+var private g_g4a_flavor = Gemma4aFlavor()
+let private GEMMA4A_DEV_CONSUMED <- ["qblob", "qscales"]   //! the planes a gemma4a bake converts: a GPU flavor carries their device forms instead
+
+def register_gemma4a_flavor(backend : TowerDev; serves : Gemma4aServesLaneFn; bake : Gemma4aBakeFn) {
+    g_g4a_flavor = Gemma4aFlavor(backend = backend, serves = serves, bake = bake)
+}
+
+//! The device flavor a load on the `q8` lane takes: the registered driver's where its chain serves the lane, else `none` - the
+//! CPU image
+def gemma4a_dev_flavor(q8 : bool) : TowerDev {
+    return TowerDev.none if (g_g4a_flavor.backend == TowerDev.none || !invoke(g_g4a_flavor.serves, q8))
+    return g_g4a_flavor.backend
+}
+
+//! A GPU-flavored encoder reached a CPU path at `stage`: the device seat declined what the load handed it, and the CPU never
+//! runs that image (`#tower-dev-block`)
+def private g4a_cpu_refuse(enc : Gemma4aEncoder; stage : string) {
+    if (enc.dev_backend != TowerDev.none) {
+        panic("dasLLAMA gemma4a: the {stage} declined on the {enc.dev_backend} device - a {enc.dev_backend}-flavored image never runs on the CPU")
+    }
 }
 
 //! Mint a served encoder from a staged read - with no `img`, WITHOUT touching disk: the off-rail control for suites (no `.dlim`
@@ -809,6 +857,7 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
     // the conformer block loop walks the twice-subsampled frame count
     dispatch_phase_encode(conv_s2_out(conv_s2_out(st.n_len)))
 
+    g4a_cpu_refuse(enc, "encode")
     var tprof = ref_time_ticks()
     // subsample: mel [n_len × n_mel] as image [ih=n_len][iw=n_mel][c=1]
     g4a_conv_stage(enc, st, st.y0, st.mel, enc.c0_w, enc.norm0_w, n_mel, st.n_len, 1l, enc.sub_ch0)
@@ -967,6 +1016,7 @@ def private g4a_tail_after_gpu(enc : Gemma4aEncoder; var st : Gemma4aState; npos
 def gemma4a_mid_dim(enc : Gemma4aEncoder) : int64 => length(enc.ones)
 
 def private g4a_projector_tail(enc : Gemma4aEncoder; var st : Gemma4aState; npos : int64) : int64 {
+    g4a_cpu_refuse(enc, "projector tail")
     let d = enc.d_model
     let mid = gemma4a_mid_dim(enc)
     let tprof = ref_time_ticks()

@@ -1305,7 +1305,9 @@ def private vt_g4a_regions(lo : G4aLayer; d, ff : int64; var out : Q8Region[int(
 }
 
 def private vt_g4a_key(t : Gemma4aEncoder; lay : Q8RepackLayout) : uint64 {
-    let key = vt_key(t.qblob, t.qscales, t.blob, 0l, t.blob.n, 0l, t.n_layer, lay.mr, lay.kgroup, lay.wbias)
+    let src = vt_dev_src(t)
+    let key = (src.on ? vt_key_dev(src, t.blob, 0l, t.blob.n, t.n_layer)
+        : vt_key(t.qblob, t.qscales, t.blob, 0l, t.blob.n, 0l, t.n_layer, lay.mr, lay.kgroup, lay.wbias))
     return vt_fold_words(key, unsafe(reinterpret<uint8 const?>(plane_at(t.pos_emb, 0l))), (gemma4a_attn_past() + 1l) * t.d_model * 4l)
 }
 
@@ -1319,19 +1321,8 @@ def private vt_g4a_planes(var r : VtResident; t : Gemma4aEncoder) : bool {
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_upload_g4a(var r : VtResident; key : uint64; t : Gemma4aEncoder; lay : Q8RepackLayout) : bool {
     let d = t.d_model
-    let ff = t.n_ff
-    var regions : array<Q8Region>
-    regions |> reserve(t.n_layer * VT_G4A_GEMMS + 3l)
-    var recs : Q8Region[int(VT_G4A_GEMMS)]
-    for (l in range64(t.n_layer)) {
-        vt_g4a_regions(t.layers[l], d, ff, recs)
-        regions |> push_from(recs)
-    }
-    regions |> push(Q8Region(woff = t.inproj_w, n = d, rows = d))
-    regions |> push(Q8Region(woff = t.outproj_w, n = d, rows = t.proj_dim))
-    regions |> push(Q8Region(woff = t.mmproj_w, n = t.proj_dim, rows = t.proj_dim))
-    let ok = vt_upload(r, key, t.qblob, t.qscales, regions, t.blob, 0l, t.blob.n, t.proj_dim, lay)
-    delete regions
+    var inscope regions <- vt_g4a_all_regions(t)
+    let ok = vt_upload(r, key, t.qblob, t.qscales, regions, t.blob, 0l, t.blob.n, t.proj_dim, lay, vt_dev_src(t), VT_G4A_PIECE)
     if (!ok) {
         return false
     }
@@ -1481,6 +1472,7 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
     if (!vt_gate(r, t.q8)) {
         return false
     }
+    return vt_decline(r, VulkanTowerDecline.flavor) if (t.dev_backend != TowerDev.vulkan)
     let q8e = kq_elems(KqFmt.q8)
     let d = t.d_model
     let ff = t.n_ff
@@ -5263,17 +5255,62 @@ let private VTF_MEL = 0x80u
 
 [cold_path]
 def private vt_g4a_front_slab(var r : VtResident; t : Gemma4aEncoder) : bool {
+    let n_fft = (t.n_bins - 1l) * 2l
+    let btw = n_fft * 2l * t.n_bins * 4l
+    let bfil = t.n_mel * t.n_bins * 4l
+    let src = vt_dev_src(t)
+    if (src.on) {
+        let f16 = tower_dev_find(src.devplan, VT_G4A_FRONT16_PIECE)
+        return f16.off >= 0l && vt_front_upload16(r, plane_at(src.dev, f16.off), f16.bytes, t.twiddles, btw, t.filters, bfil)
+    }
+    var slab <- vt_g4a_front32(t)
+    return vt_front_upload(r, slab, t.twiddles, btw, t.filters, bfil)
+}
+
+//! gemma4a's two subsample convs as the front's f32 slab: each row's taps on the f16 GEMM's 64 lattice
+def private vt_g4a_front32(t : Gemma4aEncoder) : array<float> {
     let kdp0 = 64l
     let kd1 = t.sub_ch0 * 9l
     let kdp1 = round_up(kd1, 64l)
-    let total = t.sub_ch0 * kdp0 + t.sub_ch1 * kdp1
     var slab : array<float>
-    slab |> reserve_resize(total)
+    slab |> reserve_resize(t.sub_ch0 * kdp0 + t.sub_ch1 * kdp1)
     tower_stage_f32_pad_row_stride(slab, t.blob, t.c0_w, 0l, t.sub_ch0, 9l, kdp0)
     tower_stage_f32_pad_row_stride(slab, t.blob, t.c1_w, t.sub_ch0 * kdp0, t.sub_ch1, kd1, kdp1)
-    let n_fft = (t.n_bins - 1l) * 2l
-    return vt_front_upload(r, slab, t.twiddles, n_fft * 2l * t.n_bins * 4l, t.filters, t.n_mel * t.n_bins * 4l)
+    return <- slab
 }
+
+let private VT_G4A_PIECE = "vk.g4a"                  //! gemma4a's q8 pieces' prefix
+let private VT_G4A_FRONT16_PIECE = "vk.g4a.front16"  //! ... its subsample convs as the f16 slab
+
+//! gemma4a's q8 regions: every block's GEMMs, the input projection, the projector tail's two
+def private vt_g4a_all_regions(t : Gemma4aEncoder) : array<Q8Region> {
+    let d = t.d_model
+    var regions : array<Q8Region>
+    regions |> reserve(t.n_layer * VT_G4A_GEMMS + 3l)
+    var recs : Q8Region[int(VT_G4A_GEMMS)]
+    for (l in range64(t.n_layer)) {
+        vt_g4a_regions(t.layers[l], d, t.n_ff, recs)
+        regions |> push_from(recs)
+    }
+    regions |> push(Q8Region(woff = t.inproj_w, n = d, rows = d))
+    regions |> push(Q8Region(woff = t.outproj_w, n = d, rows = t.proj_dim))
+    regions |> push(Q8Region(woff = t.mmproj_w, n = t.proj_dim, rows = t.proj_dim))
+    return <- regions
+}
+
+//! gemma4a's Vulkan device block (`#tower-dev-block`): its q8 regions gathered, the subsample convs' f16 slab
+[cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
+def private vulkan_gemma4a_bake(t : Gemma4aEncoder; var b : TowerDevBuild) : bool {
+    var inscope regions <- vt_g4a_all_regions(t)
+    vt_bake_q8(b, VT_G4A_PIECE, t.qblob, t.qscales, regions)
+    var inscope slab <- vt_g4a_front32(t)
+    var inscope slab16 <- cvt_f32_to_f16_sat_array(slab)
+    tower_dev_put(b, VT_G4A_FRONT16_PIECE, unsafe(addr<uint8 const?>(slab16[0])), long_length(slab16) * 2l)
+    return true
+}
+
+//! gemma4a's Vulkan chain serves the lane: the q8 lane, the tower knob on, the device armed with the f16 feed its front reads
+def private vulkan_gemma4a_serves_model(q8 : bool) : bool => q8 && g_vt_env_tower && vulkan_tower_arms() && vt_cm2_feed()
 
 //! a spectral front's model-owned planes uploaded (the f16 conv slab, the DFT twiddles, the mel filters); false with the buffers released on a failed allocation
 [cold_path]
@@ -5372,6 +5409,10 @@ def private vt_g4a_front_scratch(var r : VtResident; t : Gemma4aEncoder; cap : i
 def private vulkan_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len : int64) : int64 {   // nolint:STYLE038 — the dispatch chain is the shape
     var r & = g_vt_g4a
     if (!vt_gate(r, t.q8)) {
+        return -1l
+    }
+    if (t.dev_backend != TowerDev.vulkan) {
+        vt_decline(r, VulkanTowerDecline.flavor)
         return -1l
     }
     let d = t.d_model
@@ -6218,6 +6259,7 @@ def dasllama_vulkan_tower_register {
         register_parakeet_flavor(TowerDev.vulkan, @@vulkan_parakeet_serves_model, @@vulkan_parakeet_bake)
         register_canary_flavor(TowerDev.vulkan, @@vulkan_canary_serves_model, @@vulkan_canary_bake)
         register_audio_tower_flavor(TowerDev.vulkan, @@vulkan_audio_tower_serves_model, @@vulkan_audio_tower_bake)
+        register_gemma4a_flavor(TowerDev.vulkan, @@vulkan_gemma4a_serves_model, @@vulkan_gemma4a_bake)
         register_vad_gpu(@@vulkan_vad_chunks)
         register_tower_rows_gen(@@vulkan_tower_fc_gen)
     }
