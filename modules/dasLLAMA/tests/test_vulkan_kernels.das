@@ -529,11 +529,11 @@ def test_vkd_fa_stamp_words(t0 : T?) {
 
 [test]
 def test_vkd_fa_stamp_refusals(t0 : T?) {
-    t0 |> run("the flash stamp ladders refuse a gated KHR stamp, a softcap or gated stamp off head size 256 and a head size no stamp serves, before any device work") <| @(t : T?) {
+    t0 |> run("the flash stamp ladders refuse a softcap or gated stamp off head size 256 on either arm and a head size no stamp serves, before any device work") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             for (enc in fixed_array(false, true)) {
                 let ladder = enc ? "encode" : "ensure"
-                t |> success(fa_ladder_panics(enc, true, 256l, true, false), "the KHR arm has no gated stamp: the {ladder} ladder refuses")
+                t |> success(fa_ladder_panics(enc, true, 128l, true, false), "no gated stamp off head size 256 on the KHR arm: the {ladder} ladder refuses")
                 t |> success(fa_ladder_panics(enc, false, 128l, false, true), "no softcap stamp off head size 256: the {ladder} ladder refuses")
                 t |> success(fa_ladder_panics(enc, false, 128l, true, false), "no gated stamp off head size 256: the {ladder} ladder refuses")
                 t |> success(fa_ladder_panics(enc, false, 112l, false, false), "a head size no stamp serves: the {ladder} ladder refuses")
@@ -3553,9 +3553,12 @@ def test_vkd_fa_khr(t0 : T?) {
 //! a [q | gate] q panel (per-head stride 2 x hs), the oracle scaled by the sigmoid of the gate half - the Qwen3.5 attention shape;
 //! else the softcap stamps at gemma-2's shape, wide q and k values whose scaled scores run past `cap`, the oracle under the same
 //! cap. The control is the plain oracle - ungated, or uncapped - which must miss the kernel. Returns (f32 mismatches, f16-vs-f32
-//! mismatches, outputs compared - 0 when the control does not miss, f32 mismatches with one oracle element poisoned).
-def private fa_h256_run(nheads, kv_mul, rows, w0 : int; gated : bool; cap : float; khr : bool) : tuple<bad : int; bad16 : int; n : int; poisoned : int> {
+//! mismatches, outputs compared - 0 when the control does not miss, f32 mismatches with one oracle element poisoned, f16-vs-f32
+//! mismatches with one f32 element poisoned, and the out planes' elements past the rows the last tile covers that moved).
+def private fa_h256_run(nheads, kv_mul, rows, w0 : int; gated : bool; cap : float; khr : bool) : tuple<bad : int; bad16 : int; n : int; poisoned : int; poisoned16 : int; slack_moved : int> {
     static_if (typeinfo builtin_module_exists(vulkan)) {
+        let rows_pad = ((rows + 63) / 64) * 64   //! the cm2 tile covers 64 rows, the KHR tile 16: the out planes carry the larger tile's rows past `rows`
+        var slack_moved = 0
         let hs = 256
         let qhs = gated ? 2 * hs : hs
         let scale = 0.0625
@@ -3578,8 +3581,8 @@ def private fa_h256_run(nheads, kv_mul, rows, w0 : int; gated : bool; cap : floa
             let pv = cp |> in_(vh)
             let pk_shadow16 = cp |> out_words(int64(kpad * kvd) * 2l, NAN_SENTINEL_BITS)
             let pv_shadow16 = cp |> out_words(int64(kpad * kvd) * 2l, NAN_SENTINEL_BITS)
-            let py = cp |> out_(rows * qd)
-            let py16 = cp |> out_words(int64(rows * qd) * 2l, NAN_SENTINEL_BITS)
+            let py = cp |> out_(rows * qd, 0, (rows_pad - rows) * qd)   //! the last tile's rows past `rows` stay under the sentinel
+            let py16 = cp |> out_words(int64(rows_pad * qd) * 2l, NAN_SENTINEL_BITS)
             var sck = cp |> cls_set(fixed_array(pk, pk_shadow16), @@set_tower_clamp_cvt_cls)
             var scv = cp |> cls_set(fixed_array(pv, pv_shadow16), @@set_tower_clamp_cvt_cls)
             var sfa = fa_cell_set(cp, khr, false, fixed_array(pq, pk_shadow16, pv_shadow16, py), -1)
@@ -3599,6 +3602,16 @@ def private fa_h256_run(nheads, kv_mul, rows, w0 : int; gated : bool; cap : floa
             delete y16
             y_cls <- cp |> plane_run(py)
             y16 <- cp |> plane_as(py16, type<float16>, rows * qd)
+            if (rows_pad > rows) {   //! a whole number of tiles leaves no slack to read
+                var inscope y_whole <- cp |> plane_whole(py)
+                var inscope slack16 <- cp |> plane_as(py16, type<uint>, (rows_pad - rows) * qd / 2, rows * qd / 2)
+                for (i in range(rows * qd, rows_pad * qd)) {
+                    slack_moved += float_bits_to_uint(y_whole[i]) != NAN_SENTINEL_BITS ? 1 : 0
+                }
+                for (w in slack16) {
+                    slack_moved += w != NAN_SENTINEL_BITS ? 1 : 0
+                }
+            }
         }
         // oracle: q (the gate halves too) pre-scales and rounds to f16 like the kernel, K / V round through the shadow; the gate reads the f32 panel
         let nosink : array<float>
@@ -3606,40 +3619,41 @@ def private fa_h256_run(nheads, kv_mul, rows, w0 : int; gated : bool; cap : floa
         var qplain <- q_halves(qp, rows, nheads, hs, qhs)
         var y_plain <- fa_oracle(qplain, kh, vh, rows, w0, nheads, hs, kv_mul, kvd, scale, 0, false, nosink)   //! the plain rows: ungated, uncapped
         let bad = mismatch_approx(y_cls, y_ref)
-        if (bad > 0) {   //! the worst (row, head) by relative error, and how much of it sits off: a whole row-head off is its softmax, one column its store
-            var worst = 0.0
-            var worst_at = 0
-            for (i in range(rows * qd)) {
-                let rel = abs(y_cls[i] - y_ref[i]) / max(abs(y_ref[i]), 1e-3)
-                if (rel > worst) {
-                    worst = rel
-                    worst_at = i
-                }
+        // the largest difference, pass or fail - the worst (row, head) by relative error and how much of it sits off: a whole
+        // row-head off is its softmax, one column its store
+        var worst = 0.0
+        var worst_at = 0
+        for (i in range(rows * qd)) {
+            let rel = abs(y_cls[i] - y_ref[i]) / max(abs(y_ref[i]), 1e-3)
+            if (rel > worst) {
+                worst = rel
+                worst_at = i
             }
-            let wr = worst_at / qd
-            let wh = (worst_at % qd) / hs
-            var past = 0
-            var rel_sum = 0.0
-            for (c in range(hs)) {
-                let i = wr * qd + wh * hs + c
-                let rel = abs(y_cls[i] - y_ref[i]) / max(abs(y_ref[i]), 1e-3)
-                rel_sum += rel
-                past += rel > 1e-2 ? 1 : 0
-            }
-            let at = element_at(worst_at, Shape(row_width = qd, head_width = hs))
-            to_log(LOG_INFO, "  fa h256 cap {cap}: the worst element {at} kernel {y_cls[worst_at]} oracle {y_ref[worst_at]} ({worst} relative); that row-head's mean relative error {rel_sum / float(hs)}, {past} of {hs} columns past 1e-2\n")
         }
+        let wr = worst_at / qd
+        let wh = (worst_at % qd) / hs
+        var past = 0
+        var rel_sum = 0.0
+        for (c in range(hs)) {
+            let i = wr * qd + wh * hs + c
+            let rel = abs(y_cls[i] - y_ref[i]) / max(abs(y_ref[i]), 1e-3)
+            rel_sum += rel
+            past += rel > 1e-2 ? 1 : 0
+        }
+        let at = element_at(worst_at, Shape(row_width = qd, head_width = hs))
+        to_log(LOG_INFO, "  fa h256 {khr ? "khr" : "cm2"}{gated ? " gated" : ""} cap {cap}: the largest difference {at} kernel {y_cls[worst_at]} oracle {y_ref[worst_at]} ({worst} relative, {bad} of {rows * qd} past the bar); that row-head's mean relative error {rel_sum / float(hs)}, {past} of {hs} columns past 1e-2\n")
         let bad_plain = mismatch_approx(y_cls, y_plain)   //! the control: the same rows without the gate or the cap must miss, or the fixture never reached them
         y_ref[hs + 3] += 0.5
         let poisoned = mismatch_approx(y_cls, y_ref)
         y_ref[hs + 3] -= 0.5
-        var bad16 = 0
-        // the f16 twin's 2e-3 bar: the O accumulator's f16 step is bounded as test_vkd_fa_cm2's oracle note states, on the same fixture magnitudes
-        for (i in range(rows * qd)) {
-            if (!(abs(float(y16[i]) - y_cls[i]) <= 2e-3 * max(1.0, abs(y_cls[i])))) {
-                bad16++
-            }
-        }
+        // the f16 twin's 2e-3 bar: the cm2 arm accumulates O in f16 under the row-max bias; the KHR arm packs P to f16 and rounds
+        // each 64-key step's partial sum to f16 once before its f32 row - on this fixture |v| <= 1.7, every row a convex
+        // combination of V rows, so one f16 rounding of a partial sum is under 1.7 * 2^-11 = 8.3e-4 and the steps' roundings
+        // carry both signs; the bar is this fixture's magnitudes, not a proof (test_vkd_fa_cm2's oracle note says the same)
+        let bad16 = f16_twin_off(y16, y_cls)
+        y_cls[hs + 5] += 0.5   //! the control: one poisoned f32 element reds the f16 compare by exactly one
+        let poisoned16 = f16_twin_off(y16, y_cls)
+        y_cls[hs + 5] -= 0.5
         delete qp
         delete kh
         delete vh
@@ -3648,30 +3662,43 @@ def private fa_h256_run(nheads, kv_mul, rows, w0 : int; gated : bool; cap : floa
         delete y_plain
         delete y_cls
         delete y16
-        return (bad = bad, bad16 = bad16, n = bad_plain > 0 ? rows * qd : 0, poisoned = poisoned)
+        return (bad = bad, bad16 = bad16, n = bad_plain > 0 ? rows * qd : 0, poisoned = poisoned, poisoned16 = poisoned16, slack_moved = slack_moved)
     } else {
-        return (bad = 0, bad16 = 0, n = 0, poisoned = 0)
+        return (bad = 0, bad16 = 0, n = 0, poisoned = 0, poisoned16 = 0, slack_moved = 0)
     }
 }
 
-//! a gated h256 cell at one geometry: the gate moves the output, the kernel matches the gated oracle, the bar reds one poisoned
-//! oracle element, the f16-out twin matches the f32 stamp rounded
-def private fa_h256_gated_cell(t : T?; tag : string; nheads, kv_mul, rows, w0 : int) {
+//! the f16-out twin's elements off the f32 stamp past 2e-3 of the larger magnitude
+def private f16_twin_off(y16 : array<float16>; y : array<float>) : int {
+    var off = 0
+    for (h, v in y16, y) {
+        if (!(abs(float(h) - v) <= 2e-3 * max(1.0, abs(v)))) {
+            off++
+        }
+    }
+    return off
+}
+
+//! a gated h256 cell at one geometry on the cm2 tile or the KHR one (`khr`): the gate moves the output, the kernel matches the
+//! gated oracle, the bar reds one poisoned oracle element, the f16-out twin matches the f32 stamp rounded
+def private fa_h256_gated_cell(t : T?; tag : string; nheads, kv_mul, rows, w0 : int; khr : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         if (!ensure_tower_clamp_cvt_cls()) {
             t |> skip("no Vulkan device")
             return
         }
-        if (!g_gpu.has_coopmat2_fa) {
-            t |> skip("device lacks the cm2 flash-attention trio")
+        if (khr ? !(g_gpu.has_coopmat && khr_kq_tile_on()) : !g_gpu.has_coopmat2_fa) {
+            t |> skip(khr ? "device lacks KHR cooperative matrices at subgroup 32" : "device lacks the cm2 flash-attention trio")
             return
         }
-        verify(fa_stamp_pair_ensure(false, 256l, true, false, false, true), "the gated h256 fa rails must engage on an fa-capable device")
-        let r = fa_h256_run(nheads, kv_mul, rows, w0, true, 0.0, false)
+        verify(fa_stamp_pair_ensure(khr, 256l, true, false, false, true), "the gated h256 fa rails must engage on a device that serves the tile")
+        let r = fa_h256_run(nheads, kv_mul, rows, w0, true, 0.0, khr)
         t |> success(r.n > 0, "{tag}: the gate moves the output (the ungated oracle misses the kernel)")
         t |> success(r.bad == 0, "{tag}: matches the CPU oracle ({r.bad} of {r.n} off)")
         t |> equal(r.poisoned, 1, "{tag}: the bar reds one poisoned oracle element")
         t |> success(r.bad16 == 0, "{tag}: f16-out twin == the f32 stamp rounded ({r.bad16} of {r.n} off)")
+        t |> equal(r.poisoned16, r.bad16 + 1, "{tag}: the f16 bar reds one poisoned f32 element")
+        t |> equal(r.slack_moved, 0, "{tag}: the out planes' rows past the last tile's rows stay under the sentinel ({r.slack_moved} moved)")
     } else {
         t |> skip("dasVulkan not present")
     }
@@ -3680,7 +3707,17 @@ def private fa_h256_gated_cell(t : T?; tag : string; nheads, kv_mul, rows, w0 : 
 [test]
 def test_vkd_fa_cm2_h256_gated(t0 : T?) {
     t0 |> run("cm2 flash-attention h256 gated == the CPU oracle (q at the head's stride, sigmoid gate on the output)") <| @(t : T?) {
-        fa_h256_gated_cell(t, "fa_cm2 h256 gated", 4, 2, 77, 64)   // partial 64-tile, a nonzero window base
+        fa_h256_gated_cell(t, "fa_cm2 h256 gated", 4, 2, 77, 64, false)   // partial 64-tile, a nonzero window base
+    }
+}
+
+[test]
+def test_vkd_fa_khr_h256_gated(t0 : T?) {
+    t0 |> run("KHR flash-attention h256 gated == the CPU oracle (q at the head's stride, sigmoid gate on the output)") <| @(t : T?) {
+        fa_h256_gated_cell(t, "fa_khr h256 gated", 4, 2, 77, 64, true)   // a partial 16-row tile, a nonzero window base
+    }
+    t0 |> run("KHR flash-attention h256 gated at the 35B-A3B geometry (16 heads / 2 kv, 512 rows at w0 0) == the CPU oracle") <| @(t : T?) {
+        fa_h256_gated_cell(t, "fa_khr h256 gated 35B", 16, 8, 512, 0, true)
     }
 }
 
@@ -3702,7 +3739,10 @@ def private fa_h256_softcap_cell(t : T?; khr : bool) {
         let r = fa_h256_run(4, 2, 77, 64, false, 50.0, khr)
         t |> success(r.n > 0, "the softcap fixture's scores reach the cap (the uncapped oracle misses the kernel)")
         t |> success(r.bad == 0, "{tag} h256 softcap matches the capped CPU oracle ({r.bad} of {r.n} off)")
+        t |> equal(r.poisoned, 1, "{tag} h256 softcap: the bar reds one poisoned oracle element")
         t |> success(r.bad16 == 0, "{tag} h256 softcap f16-out twin == the f32 stamp rounded ({r.bad16} of {r.n} off)")
+        t |> equal(r.poisoned16, r.bad16 + 1, "{tag} h256 softcap: the f16 bar reds one poisoned f32 element")
+        t |> equal(r.slack_moved, 0, "{tag} h256 softcap: the out planes' rows past the last tile's rows stay under the sentinel ({r.slack_moved} moved)")
     } else {
         t |> skip("dasVulkan not present")
     }
@@ -3726,7 +3766,7 @@ def test_vkd_fa_khr_h256_softcap(t0 : T?) {
 [test]
 def test_vkd_fa_cm2_h256_9b(t0 : T?) {
     t0 |> run("cm2 flash-attention h256 gated at the 9B geometry (16 heads / 4 kv, 512 rows at w0 0) == the CPU oracle") <| @(t : T?) {
-        fa_h256_gated_cell(t, "fa_cm2 h256 gated 9B", 16, 4, 512, 0)
+        fa_h256_gated_cell(t, "fa_cm2 h256 gated 9B", 16, 4, 512, 0, false)
     }
 }
 
@@ -8647,8 +8687,8 @@ def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
             t |> equal(cm2_gemm_pick(2048l, 512l, 2048l).nsplit, 1l)           // ... where its q shape's 64 tiles run whole
             g_gpu.coopmat_mode = COOPMAT_SDOT4
             t |> success(!pf_f16_feed(int(KqFmt.q8)), "under sdot4 Q8_0 keeps the requant feed - the reference arm's quant path")
-            t |> success(fa_khr_serves(256l, 50.0, false) && fa_khr_serves(512l, 0.0, false), "the KHR flash pick: a 256 head under the softcap, a 512 head")
-            t |> success(!fa_khr_serves(128l, 50.0, false) && !fa_khr_serves(128l, 0.0, true) && !fa_khr_serves(96l, 0.0, false), "... not a capped 128 head, a gated model, or a 96 head")
+            t |> success(fa_khr_serves(256l, 50.0, false) && fa_khr_serves(512l, 0.0, false) && fa_khr_serves(256l, 0.0, true), "the KHR flash pick: a 256 head under the softcap, a 512 head, a gated 256 head")
+            t |> success(!fa_khr_serves(128l, 50.0, false) && !fa_khr_serves(128l, 0.0, true) && !fa_khr_serves(96l, 0.0, false) && !fa_khr_serves(256l, 50.0, true), "... not a capped 128 head, a gated 128 head, a 96 head, or a gated head under the softcap")
             g_gpu.coopmat_mode = COOPMAT_CM2
             t |> equal(cm2_tile_cols(3072l, 128l), 128l)    // a short window never takes the half-empty l column
             t |> equal(cm2_tile_cols(3072l, 512l), 128l)    // the 3B q/down shape: m on a strict wave win (96 tiles in 3 waves, 30 units, vs 48 in 2, 32)

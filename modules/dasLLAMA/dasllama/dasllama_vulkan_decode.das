@@ -103,7 +103,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     let will_fakhr = !will_facm2 && khr_kq_tile_on() && vk_fa_on() && pf_reads_f16 && fa_khr_serves(head_size, 0.0, gated_stamp)
     var fa_ok = true
     if (will_facm2 || will_fakhr) {
-        let gated256 = gated_stamp && head_size == 256l   // the gated stamp exists at 256 on the cm2 arm alone
+        let gated256 = gated_stamp && head_size == 256l   // the gated stamp exists at head 256 alone
         let stamp_ok = fa_stamp_ensure(will_fakhr, head_size, gated256, false, false, false)
         fa_ok = stamp_ok && (head_size != 256l || gated256 || fa_stamp_ensure(will_fakhr, 256l, false, true, false, false))   // an ungated 256 pre-flights its softcap twin
     }

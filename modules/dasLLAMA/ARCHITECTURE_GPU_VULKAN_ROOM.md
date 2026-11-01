@@ -45,6 +45,22 @@ decline the 35B-A3B hybrid on a 16 GB card whose floor arms it at a reduced cont
 taken with no OS answer names the headroom it stood on and `DASLLAMA_GPU_VRAM_MB` as the pin
 that reads no room.
 
+**The room is one heap on a discrete card and every heap on an integrated device.** A discrete
+card's host-visible heaps are the host's memory across the bus, so `heap_room` takes the one
+device-local heap with the largest live budget (the largest size where `VK_EXT_memory_budget` is
+absent). An integrated device's heaps - a device-local carve-out and a host heap - are one DRAM
+the device reads at one bandwidth, so the room is their sum, and a device buffer the device-local heap
+cannot take falls to a host-visible, host-coherent type on a heap that is not device-local
+(`uma_spill_pick` from `make_device_buf`, the spill said once) - a device-local type that is also
+host-visible sits on the heap that just refused. The device-init line prints the room taken: on the zen4
+box's Radeon 760M (RADV, subgroup 32 pinned), `benchmarks/lcpp_bench.das --for-debug-purposes -p 512 -n 128`
+on `Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf` under `DASLLAMA_GPU=1 DASLLAMA_IMAGE=0` (`-jit`, the box's mint,
+`DAS_TUNE_POLICY` and `DASLLAMA_COOPMAT` unset) read `device heap budget 22459 MB, weight cap 20376 MB` off
+the one device-local heap, its plan `weights 21615 MB ... does not fit` and the window profile `31 host
+layers left out of the role table` - 31 routed layers' experts summed on the CPU; over every heap the same
+run reads `device heap budget 33689 MB (used 0) over every heap of the integrated device, weight cap 31638
+MB` and the model loads whole.
+
 **Two guards stand whatever the plan decided.** The resident decode panics on an all-zero
 logits row (the first four tokens and every 256th are scanned) naming the over-commit, and at
 its eighth token it reads the demotion tell and measures the token's wall against the weights

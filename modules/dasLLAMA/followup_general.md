@@ -2542,3 +2542,8 @@
     names 2. Done = `set_gpu_hot_slots_pin(n)` / `gpu_hot_slots_pin()` (-1 unpinned, 0 = `HOT_SLOTS_NONE`, n a count) read by
     `resident_hot_ask` ahead of the environment and the pool-off control a same-load leg; `set_rare_arena` taking the knob's
     own 2; landed with row 272's hot-pool fold, which rewrites that host side.
+276. **zen4 has no vulkan board row.** `performance/records/zen4.json` carries the box's CPU rows alone, while its Radeon
+    760M serves the stocked files on the Vulkan home (the 35B-A3B Q4_K_M at 324 / 19.2 tok/s on the released exe,
+    `PERF_LEDGER.md` 2026-11-01). Done = the release re-mint's `performance/gen_bench_records.das -- --legs vulkan` on zen4
+    landing the vulkan rows beside the CPU ones, with a `llama-batched-bench` built beside the 9febe63 vulkan reference
+    (`benchmarks/setup_lcpp_ref.das --flavor vulkan` builds it) so the reference's tg128@4 row lands too.

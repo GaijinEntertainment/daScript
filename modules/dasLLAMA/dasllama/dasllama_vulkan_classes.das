@@ -30,9 +30,8 @@ require math
 //! the head sizes a flash tile is stamped at
 def fa_head_ok(hs : int64) : bool => hs == 64l || hs == 128l || hs == 256l || hs == 512l
 
-//! the KHR flash tile serves a head of 64, 128, 256 or 512 on an ungated model, the softcap at 256 alone (its cap stamps)
-def fa_khr_serves(hs : int64; cap : float; gated : bool) : bool
-    => fa_head_ok(hs) && !gated && (cap == 0.0 || hs == 256l)
+//! the KHR flash tile serves what the cm2 tile serves but the head of 96 (its lane map walks the head in 64-wide halves)
+def fa_khr_serves(hs : int64; cap : float; gated : bool) : bool => hs != 96l && fa_cm2_serves(hs, cap, gated)
 
 //! the cm2 flash tile serves a head of 64, 96, 128, 256 or 512, gated at 256 alone, the softcap at an ungated 256 alone
 def fa_cm2_serves(hs : int64; cap : float; gated : bool) : bool
@@ -1499,6 +1498,33 @@ class FaKhrH256F16 : FaH256T {
     }
 }
 
+//! the gated flash tile at head 256 (`FaH256T` under `GATED`, the template the CUDA home stamps too), the KHR arm: the Qwen3.5 / Qwen3.6 attention shape off cm2
+[vk_dispatch(name = "fa_khr_h256_g_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
+class FaKhrH256G : FaH256T {
+    override KHR = true
+    typedef OT = float
+    override GATED = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
+//! ... its f16-out twin (`FaH256T` under `GATED` and `OUT16`): the store lands the `wo` feed plane
+[vk_dispatch(name = "fa_khr_h256_g_f16_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
+class FaKhrH256GF16 : FaH256T {
+    override KHR = true
+    typedef OT = float16
+    override OUT16 = true
+    override GATED = true
+
+    [spirv_kernel(local_size_x = 128)]
+    def run {
+        fa_body()
+    }
+}
+
 [vk_dispatch(name = "fa_khr_h256_cap_cls", kernel = "run", family = "fa_khr_cls", grid = "wgs", params = "wgs : int64")]
 class FaKhrH256Cap : FaH256T {
     override KHR = true
@@ -1555,9 +1581,6 @@ def private fa_stamp_refuse(khr : bool; hs : int64; gated, cap, sink, f16, bidir
     if (bidir && hs != 64l && hs != 128l) {
         panic("vk flash: the bidirectional stamps serve head sizes 64 and 128 alone")
     }
-    if (khr && gated) {
-        panic("vk flash: the KHR flash tile has no gated stamp")
-    }
     if (khr && hs == 96l) {
         panic("vk flash: the KHR flash tile has no head-96 stamp (its lane map walks the head in 64-wide halves)")
     }
@@ -1577,7 +1600,7 @@ def private fa_stamp_refuse(khr : bool; hs : int64; gated, cap, sink, f16, bidir
 
 //! every flash stamp's stem, four a form - cm2 f32, KHR f32, cm2 f16, KHR f16 - over the forms h64, h128, h256, h512, gated h256,
 //! capped h256, the h64 sink, the h64 and h128 bidirectional twins and h96 (cm2 alone); `-` where a form has no such stamp
-let private FA_STAMPS = "fa_cm2_h64 fa_khr_h64 fa_cm2_h64_f16 fa_khr_h64_f16 fa_cm2_h128 fa_khr_h128 fa_cm2_h128_f16 fa_khr_h128_f16 fa_cm2_h256 fa_khr_h256 fa_cm2_h256_f16 fa_khr_h256_f16 fa_cm2_h512 fa_khr_h512 fa_cm2_h512_f16 fa_khr_h512_f16 fa_cm2_h256_g - fa_cm2_h256_g_f16 - fa_cm2_h256_cap fa_khr_h256_cap fa_cm2_h256_cap_f16 fa_khr_h256_cap_f16 fa_cm2_h64_sink fa_khr_h64_sink fa_cm2_h64_sink_f16 fa_khr_h64_sink_f16 fa_cm2_h64_bidir fa_khr_h64_bidir - - fa_cm2_h128_bidir fa_khr_h128_bidir - - fa_cm2_h96 - fa_cm2_h96_f16 -"
+let private FA_STAMPS = "fa_cm2_h64 fa_khr_h64 fa_cm2_h64_f16 fa_khr_h64_f16 fa_cm2_h128 fa_khr_h128 fa_cm2_h128_f16 fa_khr_h128_f16 fa_cm2_h256 fa_khr_h256 fa_cm2_h256_f16 fa_khr_h256_f16 fa_cm2_h512 fa_khr_h512 fa_cm2_h512_f16 fa_khr_h512_f16 fa_cm2_h256_g fa_khr_h256_g fa_cm2_h256_g_f16 fa_khr_h256_g_f16 fa_cm2_h256_cap fa_khr_h256_cap fa_cm2_h256_cap_f16 fa_khr_h256_cap_f16 fa_cm2_h64_sink fa_khr_h64_sink fa_cm2_h64_sink_f16 fa_khr_h64_sink_f16 fa_cm2_h64_bidir fa_khr_h64_bidir - - fa_cm2_h128_bidir fa_khr_h128_bidir - - fa_cm2_h96 - fa_cm2_h96_f16 -"
 
 //! the flash stamp's ordinal in FA_STAMPS, once the refusals passed
 def private fa_stamp_key(khr : bool; hs : int64; gated, cap, sink, f16, bidir : bool) : int {
