@@ -97,9 +97,7 @@ def private mint(path : string; q8 : bool; pinned : bool = false) : GigaamModel 
     return <- m
 }
 
-//! `blk` as the GPU seat reads the kq carrier: on a Metal build under the row-major pin for the whole of it - the mint and
-//! every load and encode after, since a model's planes match the backend at its mint and the first un-pinned load selects
-//! the repacking one (the Metal mode pins every load the same way); elsewhere as any run
+//! `blk` under the row-major pin on a Metal build - the mint, the loads and the encodes alike, as a model's planes match the backend at its mint - else as any run
 def private under_seat_backend(blk : block<() : void>) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         if (!with_kernel_backend("portable", blk)) {
@@ -251,8 +249,7 @@ def private word_agreement(got, want : string) : float {
     return float(prev[nw]) / float(max(max(nw, ng), 1))
 }
 
-//! A quantized lane's transcript of `clip` against the words of `want` (named `ref`): one segment, Russian detected, the
-//! agreement at the bar, and the control - the clip with its second half silenced reads under it.
+//! a quantized lane's transcript of `clip` at the bar against the words of `want` (named `ref`), the clip with its second half silenced the control under it
 def private lane_clip(t : T?; m : GigaamModel; clip, kind, lane : string; want, ref : string) {
     let samples <- load_audio_16k_mono(asr_clip("{clip}.wav"))
     var st = GigaamState()
@@ -312,8 +309,7 @@ def test_gigaam_ctc(tst : T?) {
     }
 }
 
-//! The kq-lane cells' reference: the f16 carrier's exact-lane transcript of `clip` - the lane the oracle holds stage by stage
-//! (`reference_clip`) - so a box with the two carriers and the clips runs them with no oracle dumps; skips naming what is missing.
+//! the kq-lane cells' reference: the f16 carrier's exact-lane transcript of `clip` (the lane the oracle holds stage by stage), so they run with no oracle dumps
 def private exact_reference(t : T?; clip : string; var want : string&) : bool {
     let f16 = carrier("e2e_rnnt")
     if (!stat(f16).is_valid || !stat(asr_clip("{clip}.wav")).is_valid) {

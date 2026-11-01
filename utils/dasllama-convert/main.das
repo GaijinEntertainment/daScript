@@ -188,7 +188,7 @@ def private convert_asr(cfg : ConvertArgs; kind : AsrCarrierKind; qm : QuantMode
         to_log(LOG_ERROR, "dasllama-convert: ASR and translation sources bake q8 or fp32\n")
         return 2
     }
-    let gigaam_pinned = !q8   //! fp32 pins the exact lane; q8 is the loader's un-pinned default - a quantized carrier takes the kq lane
+    let gigaam_pinned = !q8   // fp32 pins the exact lane; q8 is the loader's un-pinned default - a quantized carrier takes the kq lane
     var tag = ""
     if (kind == AsrCarrierKind.whisper) {
         tag = q8 ? "whisper-q8" : "whisper-f32"

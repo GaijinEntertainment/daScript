@@ -5172,8 +5172,7 @@ class MetalVadEnc : GkVadEnc {
     }
 }
 
-//! the VAD's recurrence and decoder on the template both homes stamp (`GkVadLstm`): one threadgroup of 1024 walks every chunk,
-//! declared on the entry (`max_threads`) so the compiler fits the 64 held floats a lane where it would cap the pipeline at 512
+//! the VAD's recurrence and decoder on the template both homes stamp (`GkVadLstm`): one threadgroup of 1024 walks every chunk
 [metal_dispatch(name = "enc_vad_lstm", pso = "g_pf_pso_vad_lstm", tgmem = "metal_vad_lstm_msl_tgmem", tg = 1024, grid = "1")]
 class MetalVadLstm : GkVadLstm {
     override PTR_LOADS = true

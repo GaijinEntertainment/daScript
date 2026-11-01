@@ -115,7 +115,7 @@ activation image (`tower_requant` - the per-superblock scales in `xs`, the per-1
 batch GEMM (`matmul_kq_batch_disk_at`: the weight row walked once a position while it is hot) where the planes stayed in
 disk order, the repacked GEMV a position where a backend repacked them but carries no batch tile, and a Q8_0 seat on the q8
 batch GEMM over the Q8_0 image. The attention's q, k and v read one image, so the planner holds their formats to one class; a GEMM's format is
-its disk type's tag on its row (`kq_tag`), and a type the lane has no seat for - a per-32 member, NVFP4, a demoted row -
+its disk type's tag on its row (`kq_tag`), and a type the lane has no seat for - a per-32 member, NVFP4 (a seat carries no `.scale` factor, the per-plane dequant factor NVFP4 stores beside its blocks), a demoted row -
 is refused naming the tensor, the pinned lanes being the way to dequantize it. The lane's name is its one K-quant member
 (`gigaam_exec_fmt`: `k4`), `kq` where the members mix, `q8` where every GEMM is Q8_0 - that carrier serves its blocks
 exactly where the q8 lane would requantize them. Pinned (`set_gigaam_q8`, the facade's fp32 rails), a quantized carrier
@@ -139,12 +139,13 @@ its halfword GEMM plane and reads it through the half tensor GEMM alone - the f3
 without the half tensor crown, or under `DASLLAMA_METAL_TOWER_F16=0`, declines the chain and the CPU serves; the front's
 conv stays on the f32 tile over `blob`. On the q8 lane the chain uploads every block's Q8_0 regions once a model into one
 device slab (`tw_fc_q8_attach`, the whisper-class towers' slab form) and runs each GEMM on the prefill q8 ladder
-(`pf_enc_q8_mm`); the mel, the front, the CTC head and the transducer decode serve on the device on both lanes. Neither
-GPU chain has a GEMM over the kq lane's planes: each declines that lane by name (`kq_lane`, the members in the words) and
-the CPU serves its blocks, the mel and the heads keeping their device seats. The Vulkan
-FastConformer chain serves both other lanes, the exact lane's GEMMs on the f16 GEMM over the uploaded halfwords
-(`ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-rotary`), the f16 taps uploaded as the resident's own halfword plane
-(`taps_dev`) on both lanes.
+(`pf_enc_q8_mm`); the mel, the front, the CTC head and the transducer decode serve on the device on every lane. Both
+chains serve the kq lane too, each on its own K-quant tiles over the carrier's planes
+(`ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-kq`, `ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-kq`), and decline it by
+name (`kq_lane`, the members in the words) only where a member has no device form - then the CPU serves its blocks, the
+mel and the heads keeping their device seats. The Vulkan FastConformer chain serves the exact lane's GEMMs on the f16 GEMM
+over the uploaded halfwords (`ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-rotary`), the f16 taps uploaded as the
+resident's own halfword plane (`taps_dev`) on every lane.
 
 The un-pinned lane follows the device's faster lane (`ARCHITECTURE_MEDIA.md#tower-weight-lane`): the Metal driver
 registers the exact lane as its faster one; the Vulkan driver registers the q8 image as its faster one until the two lanes

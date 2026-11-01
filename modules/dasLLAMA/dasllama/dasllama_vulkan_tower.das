@@ -53,7 +53,7 @@ enum private VulkanTowerDecline {
     ga_front     //! set_vulkan_gigaam_front(false): the GigaAM conv front pinned to the CPU, the block seat serving behind it
     blocks       //! set_vulkan_audio_blocks(false): the whisper-class block hooks pinned off while the stem still serves
     quant_mode   //! the tower's planes are not the lane the driver serves
-    kq_lane      //! the block GEMMs are the carrier's own K-quant planes (GigaAM's kq lane), which the FastConformer chain has no GEMM for
+    kq_lane      //! a kq lane member with no K-quant tile on the device
     shape        //! a width, head size, row count or buffer range the stamps do not serve
     device       //! the tier has no device, or a class failed to build
     memory       //! a device or pinned allocation failed: the tower stays on the CPU chain
@@ -502,7 +502,7 @@ def private vt_decline_words(why : VulkanTowerDecline) : string {
 def private vt_decline(r : VtResident; why : VulkanTowerDecline) : bool
     => g_vt_declines |> note("the {r.family} tower", "{why}", "the tower stays on the CPU chain: {vt_decline_words(why)}")
 
-//! the kq-lane decline, naming the site and the carrier's members (`REVIEW_KQ_FORMATS.md`'s site rule)
+//! the kq-lane decline - "a reason naming the site and the member" (REVIEW_KQ_FORMATS.md)
 [cold_path]
 def private vt_decline_kq(r : VtResident; members : string) : bool
     => g_vt_declines |> note("the {r.family} tower", "{VulkanTowerDecline.kq_lane}", "the tower stays on the CPU chain: the GigaAM block GEMMs ({members}) - {vt_decline_words(VulkanTowerDecline.kq_lane)}")
@@ -1711,7 +1711,7 @@ def private vt_fc_of_ga(m : GigaamModel) : VtFc {
         let lo = gigaam_layer_offsets(m, l)
         g_vt_fc_offs[l] = lo
         continue if (!m.kq_lane)
-        let woffs = fixed_array(lo.ff1a_w, lo.ff1b_w, lo.q_w, lo.k_w, lo.v_w, -1l, lo.o_w, lo.pw1_w, lo.pw2_w, lo.ff2a_w, lo.ff2b_w)   //! the records' order, the rel record empty
+        let woffs = fixed_array(lo.ff1a_w, lo.ff1b_w, lo.q_w, lo.k_w, lo.v_w, -1l, lo.o_w, lo.pw1_w, lo.pw2_w, lo.ff2a_w, lo.ff2b_w)   // the records' order, the rel record empty
         for (g in range64(VT_CN_GEMMS)) {
             var seat = TowerGemmSeat(fmt = KqFmt.q8, qoff = -1l, soff = -1l)
             if (woffs[g] >= 0l) {
@@ -1777,9 +1777,6 @@ def private vt_cn_regions(lo : CanaryLayerOffs; d, ff : int64; var out : Q8Regio
     out[VT_CN_FF2B] = Q8Region(woff = lo.ff2b_w, n = ff, rows = d)
 }
 
-//! the kq lane's upload: the Q8_0 seats' blocks gathered into the q8 planes at their seat offsets, each K-quant member's seats
-//! gathered in the tier's layout into planes of its own in layout order (`kq_seats` the schedule's block base a record), the
-//! norms beside them
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-kq")]
 def private vt_upload_fc_kq(var r : VtResident; key : uint64; fc : VtFc; lay : Q8RepackLayout) : bool {
     let q8e = kq_elems(KqFmt.q8)
@@ -1813,7 +1810,7 @@ def private vt_upload_fc_kq(var r : VtResident; key : uint64; fc : VtFc; lay : Q
     vt_upload_begin(r, key)
     r.wq_bytes = fc.qblob.n
     r.ws_bytes = fc.qscales.n * 2l
-    if (r.wq_bytes > 0l) {   //! a carrier with no Q8_0 seat has no q8 planes
+    if (r.wq_bytes > 0l) {   // a carrier with no Q8_0 seat has no q8 planes
         r.wq_dev = vt_dev_buf(r, r.wq_bytes)
         r.ws_dev = vt_dev_buf(r, r.ws_bytes)
     }
@@ -2050,12 +2047,12 @@ def private vt_fc_range_ok(fc : VtFc; npos : int64) : bool {
 }
 
 //! the exact lane's GEMMs on the device: the f16 feed (cm2 or KHR), the f16 GEMM class built, the widths on its 64 lattice and
-//! the pointwise conv's 2d rows inside the ff-wide plane it lands in; the q8 lane asks nothing here
+//! the pointwise conv's 2d rows inside the ff-wide plane it lands in; the kq lane asks the f16 feed alone, the q8 lane nothing
 def private vt_fc_lane_ok(fc : VtFc; gemm_khr : bool) : bool {
     if (fc.f16w) {
         return vt_cm2_feed() && fc.d % 64l == 0l && fc.ff % 64l == 0l && fc.ff >= 2l * fc.d && f16_gemm_ensure(gemm_khr)
     }
-    return !fc.kq_lane || vt_cm2_feed()   //! the kq lane's K-quant tiles read the f16 feed, as the exact lane's GEMM does
+    return !fc.kq_lane || vt_cm2_feed()
 }
 
 //! the kq lane's members by name, `+`-joined in slot order with the Q8_0 seats' `q8` last - the decline's words
@@ -2068,8 +2065,7 @@ def private vt_fc_kq_members(fc : VtFc) : string {
     return join(names, "+")
 }
 
-//! every K-quant member's tile at the chain's three widths compiled - the kq lane's members on the f16 feed's tiles; the q8 and
-//! exact lanes' tiles are `vt_fc_classes_ok`'s. Asked after `vt_fc_lane_ok`, which holds the feed.
+//! asked after `vt_fc_lane_ok`, which holds the f16 feed these tiles read
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-kq")]
 def private vt_fc_kq_tiles_ok(fc : VtFc; npos : int64) : bool {
     return true if (!fc.kq_lane)
@@ -2144,8 +2140,6 @@ let private VT_FC_OUT_O = 3
 let private VT_FC_OUT_DOWN = 4
 let private VT_FC_OUT_HG = 5
 
-//! the tile and set a GEMM record runs on: the chain's own (`t`, `s`) on the q8 and exact lanes and at a Q8_0 seat; at a
-//! K-quant seat the same column's tile over the member's planes, its set from the tile key's cached bundle
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-kq")]
 def private vt_fc_site(var r : VtResident; fc : VtFc; rid : int64; t : VtTile; s : VkDescriptorSet; out : int) : tuple<t : VtTile; s : VkDescriptorSet> {
     return (t = t, s = s) if (!fc.kq_lane || r.kq_seats[rid].fmt == int(KqFmt.q8))
@@ -5541,8 +5535,6 @@ def set_vulkan_gigaam_front(on : bool) : bool {
     return was
 }
 
-//! the lanes the GigaAM chain serves: the q8 planes, the exact lane where its block GEMMs are the carrier's halfwords, and the kq
-//! lane - the carrier's own planes on the K-quant tiles (a member without a tile declines by name, `vt_decline_kq`)
 def private vt_ga_lane_served(m : GigaamModel) : bool => m.kq_lane || m.q8 || m.gemm_f16
 
 var private g_vt_env_ga_exact = false
@@ -5559,8 +5551,7 @@ def set_vulkan_gigaam_exact_lane(on : bool) : bool {
     return was
 }
 
-//! the GigaAM block loop behind the CPU front and the session's rope tables, on the lane's planes - the q8 planes, the
-//! halfwords or the kq lane's seats
+//! the GigaAM block loop behind the CPU front and the session's rope tables, on the lane's planes
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-rotary")]
 def private vulkan_gigaam_blocks(m : GigaamModel; var st : GigaamState; tt : int64) : bool {
     var r & = g_vt_ga

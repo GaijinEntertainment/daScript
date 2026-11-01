@@ -37,7 +37,7 @@ struct InterpreterArgs {
     vad_model : string = ""
     @clarg_doc = "a clip heard in place of the microphone, as one utterance (wav, flac, mp3, ogg)"
     clip : string = ""
-    @clarg_doc = "pin the speech model's q8 lane - the browser build's form, whose backend serves no K-quant plane batched"
+    @clarg_doc = "pin the speech model's q8 lane: the carrier dequantized to Q8_0 at load instead of serving its own planes"
     q8 : bool = false
     @clarg_doc = "the smoke rail: hear --clip, translate it, speak it, exit once it is spoken"
     smoke : bool = false
@@ -46,7 +46,7 @@ struct InterpreterArgs {
 }
 
 let PEAK_COLUMN = 160   //! samples per waveform column: 10 ms at the detector's 16 kHz
-let OUT_PEAK_COLUMN = 240   //! ... and at Pocket's 24 kHz
+let OUT_PEAK_COLUMN = 240   //! samples per output waveform column: 10 ms at Pocket's 24 kHz
 
 //! the frame thread's requests to the worker thread, as archived records
 struct Ask {
@@ -54,7 +54,7 @@ struct Ask {
     asr : string
     nmt : string
     tts : string
-    q8 : bool         //! kind 0: pin the speech model's q8 lane
+    pin_q8 : bool     //! kind 0: pin the speech model's q8 lane
     turn : int
     pcm : array<float>
 }
@@ -72,7 +72,7 @@ struct Answer {
     pcm : array<float>
 }
 
-// the per-turn rows of the history: indexed widgets take their state from a table
+//! the per-turn rows of the history: indexed widgets take their state from a table
 var private TURN_RU : table<int; NarrativeState>
 var private TURN_EN : table<int; NarrativeState>
 var private TURN_TIMES : table<int; NarrativeState>
@@ -84,7 +84,7 @@ var g_status = ""
 var g_turns : array<TurnRow>         //! every turn of the session, oldest first
 var g_turn_no = 0
 var g_raw : array<float>             //! the microphone since the last cut as recorded, MIC_RATE mono, the gain applied
-var g_ears = VadResampler()          //! MIC_RATE to the detector's 16 kHz, one running position across drains
+var g_mic_resampler = VadResampler()          //! MIC_RATE to the detector's 16 kHz, one running position across drains
 var g_ears_out : array<float>
 var g_take : array<float>            //! the microphone since the last cut at 16 kHz: what the detector and GigaAM hear
 var g_scratch : array<float>
@@ -97,7 +97,7 @@ var g_last_frames_s = 0.0            //! when the device last delivered a frame;
 var g_frames_seen = false
 var g_level = 0.0
 var g_level_peak = 0.0
-var g_ready = false                  //! the worker thread has the models
+var g_models_ready = false                  //! the worker thread has the models
 var g_tts_rate = 24000
 var g_voice = ""
 var g_lane = ""
@@ -108,7 +108,7 @@ var g_pending_clip : array<float>    //! a --clip decoded before the models were
 var g_ask : Stream?
 var g_answer : Stream?
 var g_worker_done : Channel?
-var g_clips : array<Answer>          //! generated, not yet played
+var g_unplayed_clips : array<Answer>          //! generated, not yet played
 var g_out_pcm : array<float>         //! the session's spoken audio, every clip appended
 var g_out_peaks : array<float2>
 var g_playing_sid = INVALID_SID
@@ -121,13 +121,11 @@ var g_speaking_until = 0.0
 var g_audio_initialized = false
 var g_asch : AudioSystemChannels
 var g_frames = 0
-var g_done_turns = 0                 //! turns whose done line was logged
-
-// ===== the worker thread =====
+var g_logged_done_turns = 0                 //! turns whose done line was logged
 
 let IDLE_RELEASE_MS = 500   //! the worker thread waits this long for a request before it gives the engine's scratch back
 
-//! one utterance through the three models, each stage answered as it lands; a stage with nothing to pass on ends the turn
+[arch(at = "../ARCHITECTURE.md#interpreter-turns")]
 def serve_turn(var asr : AsrModel; var tr : Translator; var tts : TtsModel; voice : string; var a : Ask; var answer : Stream?) {
     var t0 = ref_time_ticks()
     var inscope s <- create_session(asr, "ru")
@@ -162,10 +160,10 @@ def start_worker_thread(var ask, answer : Stream?; var done : Channel?) {
             setup.asr = clone_string(a.asr)
             setup.nmt = clone_string(a.nmt)
             setup.tts = clone_string(a.tts)
-            setup.q8 = a.q8
+            setup.pin_q8 = a.pin_q8
         }
-        if (setup.q8) {
-            set_gigaam_q8(true)   // this context's pin: the frame thread's would not reach the load here
+        if (setup.pin_q8) {
+            set_gigaam_q8(true)
         }
         var inscope asr <- load_asr_model(setup.asr)
         var inscope tr <- load_translator(setup.nmt)
@@ -188,7 +186,7 @@ def start_worker_thread(var ask, answer : Stream?; var done : Channel?) {
             if (got) {
                 released = false
             } elif (!released) {
-                tts_release_scratch(tts)   // nothing queued: idle memory is what a phone's tab runs out of
+                tts_release_scratch(tts)
                 released = true
             }
         }
@@ -198,19 +196,16 @@ def start_worker_thread(var ask, answer : Stream?; var done : Channel?) {
     }
 }
 
-// ===== the answers =====
-
 def on_ready(a : Answer) {
-    g_ready = true
+    g_models_ready = true
     g_tts_rate = a.rate
     g_voice = clone_string(a.text)
     g_lane = clone_string(a.ru)
     g_direction = clone_string(a.en)
     g_status = "press listen and talk in Russian"
-    //! the smoke rail's witness lines, here and below: modules/dasLLAMA/tests/test_interpreter.das reads them word for word
     to_log(LOG_INFO, "interpreter: ready - speech lane {g_lane}, {g_direction}, voice {g_voice} at {g_tts_rate} Hz\n")
     if (!empty(g_pending_clip)) {
-        hear(g_pending_clip)
+        queue_turn(g_pending_clip)
         delete g_pending_clip
     }
 }
@@ -237,11 +232,11 @@ def on_clip(var a : Answer) {
     let i = turn_index(g_turns, a.turn)
     return if (i < 0)
     g_turns[i].tts_us = a.us
-    g_turns[i].samples = long_length(a.pcm)
-    g_turns[i].start = long_length(g_out_pcm)
+    g_turns[i].clip_samples = long_length(a.pcm)
+    g_turns[i].out_start = long_length(g_out_pcm)
     g_out_pcm |> push_from(a.pcm)
-    peaks_append(g_out_peaks, g_out_pcm, g_turns[i].start, OUT_PEAK_COLUMN)
-    g_clips |> emplace(a)
+    peaks_append(g_out_peaks, g_out_pcm, g_turns[i].out_start, OUT_PEAK_COLUMN)
+    g_unplayed_clips |> emplace(a)
 }
 
 def poll_answers() {
@@ -263,7 +258,6 @@ def poll_answers() {
     poll_playback()
 }
 
-//! the playing clip's status box, unhooked from the mixer and dropped
 def release_play_status() {
     return if (g_play_status == null)
     unset_status_update(g_playing_sid)
@@ -271,7 +265,6 @@ def release_play_status() {
     g_play_status = null
 }
 
-//! the playing clip's position, off the mixer's own clock, and the next clip once it is done
 [arch(at = "../ARCHITECTURE.md#interpreter-turns")]
 def poll_playback() {
     if (g_playing_sid != INVALID_SID) {
@@ -288,50 +281,49 @@ def poll_playback() {
         let i = turn_index(g_turns, g_playing_turn)
         if (i >= 0) {
             g_turns[i].state = TurnState.spoken
-            g_playhead = g_turns[i].start + g_turns[i].samples
-            to_log(LOG_INFO, "interpreter: spoke {g_turns[i].no} - {s1(float(g_turns[i].samples) / float(max(g_tts_rate, 1)))} s of speech, synthesized in {ms(g_turns[i].tts_us)} ms\n")
+            g_playhead = g_turns[i].out_start + g_turns[i].clip_samples
+            to_log(LOG_INFO, "interpreter: spoke {g_turns[i].no} - {tenths(float(g_turns[i].clip_samples) / float(max(g_tts_rate, 1)))} s of speech, synthesized in {ms(g_turns[i].tts_us)} ms\n")
         }
         g_playing_turn = -1
-        if (empty(g_clips)) {
-            flush_take()   // what the microphone heard of the reply goes, and the detector starts over
+        if (empty(g_unplayed_clips)) {
+            flush_take()
         }
     }
-    if (!empty(g_clips)) {
-        let seconds = float(length(g_clips[0].pcm)) / float(max(g_clips[0].rate, 1))
-        var pcm <- g_clips[0].pcm
-        g_playing_turn = g_clips[0].turn
+    if (!empty(g_unplayed_clips)) {
+        let seconds = float(length(g_unplayed_clips[0].pcm)) / float(max(g_unplayed_clips[0].rate, 1))
+        var pcm <- g_unplayed_clips[0].pcm
+        g_playing_turn = g_unplayed_clips[0].turn
         let i = turn_index(g_turns, g_playing_turn)
-        g_play_start = i >= 0 ? g_turns[i].start : 0l
-        g_playing_sid = play_sound_from_pcm(g_clips[0].rate, 1, pcm)
-        g_play_status = seq_box_create()   //! one box per clip: a box shared across clips reads the last clip's stop as this one's
+        g_play_start = i >= 0 ? g_turns[i].out_start : 0l
+        g_playing_sid = play_sound_from_pcm(g_unplayed_clips[0].rate, 1, pcm)
+        g_play_status = seq_box_create()
         set_status_update(g_playing_sid, g_play_status)
-        g_clips |> erase(0)
-        g_speaking_until = g_elapsed_s + seconds + 0.5   //! the mixer's stopped state is the clock; this is the guard behind it
+        g_unplayed_clips |> erase(0)
+        g_speaking_until = g_elapsed_s + seconds + 0.5   // the mixer's stopped state is the clock; this is the guard behind it
     }
     log_done_turns()
 }
 
 //! the done line of every turn that has ended since the last frame, in order
 def log_done_turns() {
-    while (g_done_turns < length(g_turns) && !turn_in_flight(g_turns[g_done_turns].state)) {
-        let spoken = g_turns[g_done_turns].state == TurnState.spoken
-        to_log(LOG_INFO, "interpreter: turn {g_turns[g_done_turns].no} is {spoken ? "done" : "empty"}\n")
-        g_done_turns++
+    while (g_logged_done_turns < length(g_turns) && !turn_in_flight(g_turns[g_logged_done_turns].state)) {
+        let spoken = g_turns[g_logged_done_turns].state == TurnState.spoken
+        to_log(LOG_INFO, "interpreter: turn {g_turns[g_logged_done_turns].no} is {spoken ? "done" : "empty"}\n")
+        g_logged_done_turns++
     }
 }
 
-// ===== the listen =====
-
 //! the reply is playing: the microphone would hear it, so its frames are dropped until it ends
-def muted() : bool => g_playing_sid != INVALID_SID || !empty(g_clips)
+def reply_pending() : bool => g_playing_sid != INVALID_SID || !empty(g_unplayed_clips)
 
+[arch(at = "../ARCHITECTURE.md#interpreter-turns")]
 def start_listen() {
     return if (g_listening)
-    if (!g_ready) {
+    if (!g_models_ready) {
         g_status = "the models are still loading"
         return
     }
-    if (!sound_record_start(MIC_RATE, 1, MIC_RATE * 4, -1)) {   // parrot's rate: the one the browsers' capture serves
+    if (!sound_record_start(MIC_RATE, 1, MIC_RATE * 4, -1)) {
         g_status = "no microphone - is one connected, and allowed?"
         return
     }
@@ -348,7 +340,7 @@ def start_listen() {
 
 def stop_listen() {
     return if (!g_listening)
-    drain_rest()   // before the device stops: stopping frees the ring
+    drain_ring_tail()   // before the device stops: stopping frees the ring
     if (g_in_speech) {
         cut_utterance(g_speech_start, long_length(g_take))
     }
@@ -362,10 +354,9 @@ def stop_listen() {
     to_log(LOG_INFO, "interpreter: stopped listening\n")
 }
 
-//! everything heard so far dropped and the detector started over: after an utterance, after a reply, after a long quiet
 def flush_take() {
     g_raw |> clear()
-    g_ears.pos = 0.0lf
+    g_mic_resampler.pos = 0.0lf
     g_take |> clear()
     g_take_peaks |> clear()
     vad_iter_reset(g_vad, default_vad_opts())
@@ -373,8 +364,6 @@ def flush_take() {
     g_speech_start = 0l
 }
 
-//! the frames the device has since delivered, through the gain slider onto the recording, and resampled onto the take the
-//! detector hears
 def append_frames(n : int) {
     var ssq = 0.0
     let base = length(g_raw)
@@ -392,7 +381,7 @@ def append_frames(n : int) {
     g_frames_seen = true
     g_last_frames_s = g_elapsed_s
     let base16 = long_length(g_take)
-    resample_step(g_ears, g_raw, g_ears_out)
+    resample_step(g_mic_resampler, g_raw, g_ears_out)
     g_take |> push_from(g_ears_out)
     peaks_append(g_take_peaks, g_take, base16, PEAK_COLUMN)
 }
@@ -400,15 +389,15 @@ def append_frames(n : int) {
 [arch(at = "../ARCHITECTURE.md#interpreter-turns")]
 def drain_listen() {
     let n = sound_record_read(g_scratch)
-    if (n > 0 && muted()) {
-        g_frames_seen = true   // the frames are heard and dropped: the reply is playing
+    if (n > 0 && reply_pending()) {
+        g_frames_seen = true
         g_last_frames_s = g_elapsed_s
     } elif (n > 0) {
         let base = long_length(g_take)
         append_frames(n)
-        var inscope fresh <- [for (i in range64(base, long_length(g_take))); g_take[i]]   // the 16 kHz samples this drain added
+        var inscope added_16k <- [for (i in range64(base, long_length(g_take))); g_take[i]]   // the 16 kHz samples this drain added
         var end = -1l
-        vad_iter_feed(g_vad_model, g_vad, fresh) $(ev : VadEvent) {
+        vad_iter_feed(g_vad_model, g_vad, added_16k) $(ev : VadEvent) {
             if (ev.kind == VadEventKind.speech_start) {
                 if (!g_in_speech) {
                     g_speech_start = max(0l, ev.sample)
@@ -418,11 +407,11 @@ def drain_listen() {
                 end = min(ev.sample, long_length(g_take))
             }
         }
-        if (end > g_speech_start) {   // outside the feed: the cut resets the detector
+        if (end > g_speech_start) {
             cut_utterance(g_speech_start, end)
         } elif (g_in_speech && speech_at_cap(g_speech_start, long_length(g_take))) {
             cut_utterance(g_speech_start, long_length(g_take))
-        } elif (take_idles(g_in_speech, long_length(g_take))) {
+        } elif (is_idle_take(g_in_speech, long_length(g_take))) {
             flush_take()
         }
     }
@@ -430,12 +419,12 @@ def drain_listen() {
         stop_listen()
         g_status = (!g_frames_seen
             ? "nothing heard - the microphone gave no audio at all: it was refused, or there is none"
-            : "nothing heard for {s1(NO_FRAMES_ENDS_LISTEN_S)} s - the microphone stopped delivering")
+            : "nothing heard for {tenths(NO_FRAMES_ENDS_LISTEN_S)} s - the microphone stopped delivering")
     }
 }
 
 //! the ring's tail before the device stops
-def drain_rest() {
+def drain_ring_tail() {
     for (_i in range(8)) {
         let n = sound_record_read(g_scratch)
         break if (n <= 0)
@@ -451,16 +440,16 @@ def cut_utterance(start, end : int64) {
     for (i in range64(w.to - w.from)) {
         clip[i] = g_take[w.from + i]
     }
-    hear(clip)
+    queue_turn(clip)
     flush_take()
 }
 
 //! one utterance queued as the next turn
-def hear(var clip : array<float>) {
+def queue_turn(var clip : array<float>) {
     g_turn_no++
     let seconds = float(length(clip)) / float(LISTEN_RATE)
-    g_turns |> push(TurnRow(no = g_turn_no, state = TurnState.transcribing, seconds = seconds))
-    to_log(LOG_INFO, "interpreter: utterance {g_turn_no} - {s1(seconds)} s\n")
+    g_turns |> push(TurnRow(no = g_turn_no, state = TurnState.transcribing, heard_s = seconds))
+    to_log(LOG_INFO, "interpreter: utterance {g_turn_no} - {tenths(seconds)} s\n")
     var a = Ask(kind = 1, turn = g_turn_no, pcm <- clip)
     g_ask |> push_archive(a)
 }
@@ -472,8 +461,6 @@ def toggle_listen() {
         start_listen()
     }
 }
-
-// ===== the screen =====
 
 let INK = rgba(236, 229, 210, 255)
 let DIM = rgba(141, 133, 119, 255)
@@ -487,10 +474,10 @@ let WAVE_DIM = rgba(80, 90, 120, 255)
 def ms(us : int64) : string => fmt(":.0f", double(us) / 1000.0lf)
 
 //! seconds and speeds to a tenth
-def s1(x : float) : string => fmt(":.1f", x)
+def tenths(x : float) : string => fmt(":.1f", x)
 
 //! the turn the chip speaks for: the newest one still on its way
-def current_turn() : int {
+def newest_in_flight() : int {
     var found = -1
     for (t, i in g_turns, count()) {
         if (turn_in_flight(t.state)) {
@@ -501,13 +488,13 @@ def current_turn() : int {
 }
 
 def phase_chip() : tuple<text : string; color : uint> {
-    if (!g_ready) {
+    if (!g_models_ready) {
         return (text = empty(g_error) ? "loading the models" : "the models did not load", color = empty(g_error) ? DIM : RED)
     }
     if (g_playing_sid != INVALID_SID) {
         return (text = "speaking", color = GREEN)
     }
-    let i = current_turn()
+    let i = newest_in_flight()
     if (i >= 0) {
         let st = g_turns[i].state
         return (text = st == TurnState.transcribing ? "transcribing" : (st == TurnState.translating ? "translating" : "synthesizing"), color = ACCENT)
@@ -518,10 +505,8 @@ def phase_chip() : tuple<text : string; color : uint> {
     return (text = "ready", color = GREEN)
 }
 
-//! something is going on: a listen, a turn on its way, a clip playing
 def busy() : bool => g_listening || g_playing_sid != INVALID_SID || turns_in_flight(g_turns) > 0
 
-//! the promise line first, then the state chip - pulsing, with a spinner beside it while something is going on - and the status line
 def draw_status_bar() {
     with_font(GetFont(), GetStyle().FontSizeBase * 1.15) {   // the base is the unscaled size: the current one over the style's scale
         with_style((ImGuiCol.Text, rgba(255, 252, 244, 255))) {
@@ -555,14 +540,12 @@ def draw_status_bar() {
     }
 }
 
-//! a colour at another alpha
 def with_alpha(color : uint; alpha : float) : uint {
     let a = uint(clamp(alpha, 0.0, 1.0) * 255.0)
     return (color & 0x00ffffffu) | (a << 24u)
 }
 
-//! min/max columns over a box: the take or the spoken audio; the playhead and the turn ticks ride on top. The box spans
-//! `span` samples at least, so a picture that grows clip by clip keeps its scale
+//! the box spans `span` samples at least, so a picture that grows clip by clip keeps its scale
 def draw_wave(peaks : array<float2>; size : float2; per_column : int; span, playhead : int64; ticks : array<int64>) {
     let origin = GetCursorScreenPos()
     let cols = length(peaks)
@@ -572,12 +555,12 @@ def draw_wave(peaks : array<float2>; size : float2; per_column : int; span, play
         dl |> add_line(float2(origin.x, mid), float2(origin.x + size.x, mid), WAVE_DIM, 1.0)
         if (cols > 0) {
             let total = max(int64(cols) * int64(per_column), span)
-            let shown = int(total / int64(per_column))   // columns the box spans, drawn or not yet
-            let per_px = max(1.0, float(shown) / size.x)
+            let spanned_cols = int(total / int64(per_column))   // columns the box spans, drawn or not yet
+            let per_px = max(1.0, float(spanned_cols) / size.x)
             let x_of = @(sample : int64) => origin.x + size.x * float(double(sample) / double(max(total, 1l)))
             var px = 0.0
-            let drawn = min(size.x, float(cols) / per_px)   // the pixels the columns reach
-            while (px < drawn) {
+            let drawn_px = min(size.x, float(cols) / per_px)   // the pixels the columns reach
+            while (px < drawn_px) {
                 let c0 = int(px * per_px)
                 let c1 = min(cols, int((px + 1.0) * per_px) + 1)
                 var lo = 1.0
@@ -604,7 +587,6 @@ def draw_wave(peaks : array<float2>; size : float2; per_column : int; span, play
     dummy(WAVE_BOX, (size = size))
 }
 
-//! the listen button: a red disc that becomes a square while listening, the level breathing around it
 def draw_listen_button() {
     let size = float2(96.0, 96.0)
     let origin = GetCursorScreenPos()
@@ -614,13 +596,13 @@ def draw_listen_button() {
     with_window_drawlist() $(var dl) {
         dl |> add_circle(center, 44.0, hovered ? INK : DIM, 0, 2.0)
         if (g_listening) {
-            dl |> add_rect_filled(float2(center.x - 18.0, center.y - 18.0), float2(center.x + 18.0, center.y + 18.0), muted() ? DIM : RED, 4.0)
+            dl |> add_rect_filled(float2(center.x - 18.0, center.y - 18.0), float2(center.x + 18.0, center.y + 18.0), reply_pending() ? DIM : RED, 4.0)
             let breath = clamp(g_level * 8.0, 0.0, 1.0)
-            if (breath > 0.0 && !muted()) {
+            if (breath > 0.0 && !reply_pending()) {
                 dl |> add_circle(center, 30.0 + 14.0 * breath, with_alpha(RED, 0.6), 0, 2.0)
             }
         } else {
-            dl |> add_circle_filled(center, 30.0, g_ready ? RED : DIM, 0)
+            dl |> add_circle_filled(center, 30.0, g_models_ready ? RED : DIM, 0)
         }
     }
     if (clicked) {
@@ -639,14 +621,14 @@ def draw_listen_panel() {
         with_item_width(160.0) {
             slider_float(GAIN, (text = "gain", format = "%.2f"))
         }
-        text(LISTEN_STATE, (text = !g_listening ? "not listening" : (muted() ? "muted while the reply plays" : (g_in_speech ? "speech" : "listening"))))
+        text(LISTEN_STATE, (text = !g_listening ? "not listening" : (reply_pending() ? "muted while the reply plays" : (g_in_speech ? "speech" : "listening"))))
     }
     spacing()
     let no_ticks : array<int64>
     draw_wave(g_take_peaks, float2(GetContentRegionAvail().x, 72.0), PEAK_COLUMN, 10l * int64(LISTEN_RATE), 0l, no_ticks)
     spacing()
     with_style((ImGuiCol.Text, DIM)) {
-        text_wrapped(MODELS_LINE, (text = g_ready ? "{g_args.asr_model} ({g_lane})  ->  {g_direction}  ->  {g_args.tts_model} ({g_voice})" : "loading {g_args.asr_model}, the translator and {g_args.tts_model}..."))
+        text_wrapped(MODELS_LINE, (text = g_models_ready ? "{g_args.asr_model} ({g_lane})  ->  {g_direction}  ->  {g_args.tts_model} ({g_voice})" : "loading {g_args.asr_model}, the translator and {g_args.tts_model}..."))
         if (!imgui_touch_device) {
             text("space listens and stops")
         }
@@ -666,7 +648,6 @@ def state_words(t : TurnRow) : string {
     return t.en
 }
 
-//! one turn's three lines: the Russian, the English (its state while on its way), and the stage times in grey
 def draw_turn(t : TurnRow) {
     with_style((ImGuiCol.Text, INK)) {
         text_wrapped(TURN_RU[t.no], (text = "{t.no}.  {empty(t.ru) && t.state == TurnState.transcribing ? "..." : t.ru}"))
@@ -675,7 +656,7 @@ def draw_turn(t : TurnRow) {
         text_wrapped(TURN_EN[t.no], (text = "     {state_words(t)}"))
     }
     with_style((ImGuiCol.Text, DIM)) {
-        var times = "     heard {s1(t.seconds)} s"
+        var times = "     heard {tenths(t.heard_s)} s"
         if (t.asr_us > 0l) {
             times += "   asr {ms(t.asr_us)} ms"
         }
@@ -683,14 +664,13 @@ def draw_turn(t : TurnRow) {
             times += "   nmt {ms(t.nmt_us)} ms"
         }
         if (t.tts_us > 0l) {
-            times += "   tts {ms(t.tts_us)} ms   spoke {s1(float(t.samples) / float(max(g_tts_rate, 1)))} s"
+            times += "   tts {ms(t.tts_us)} ms   spoke {tenths(float(t.clip_samples) / float(max(g_tts_rate, 1)))} s"
         }
         text(TURN_TIMES[t.no], (text = times))
         text(TURN_GAP[t.no], (text = ""))   // the gap between turns: a keyed line, since a bare spacing() may render once a frame
     }
 }
 
-//! the history: every turn, oldest first, the newest kept in view while turns land
 def draw_history_panel() {
     child(HISTORY_VIEW, (text = "history", size = float2(0.0, 0.0), child_flags = ImGuiChildFlags.Borders, window_flags = ImGuiWindowFlags.None)) {
         if (empty(g_turns)) {
@@ -708,10 +688,10 @@ def draw_history_panel() {
 }
 
 def draw_output_panel() {
-    let ticks <- [for (t in g_turns); t.start; where t.start > 0l]
+    let ticks <- [for (t in g_turns); t.out_start; where t.out_start > 0l]
     draw_wave(g_out_peaks, float2(GetContentRegionAvail().x, 72.0), OUT_PEAK_COLUMN, 30l * int64(g_tts_rate), g_playhead, ticks)
     let seconds = double(long_length(g_out_pcm)) / double(max(g_tts_rate, 1))
-    text(OUT_LINE, (text = "{s1(float(seconds))} s spoken over {length(g_turns)} turns   playhead {s1(float(double(g_playhead) / double(max(g_tts_rate, 1))))} s"))
+    text(OUT_LINE, (text = "{tenths(float(seconds))} s spoken over {length(g_turns)} turns   playhead {tenths(float(double(g_playhead) / double(max(g_tts_rate, 1))))} s"))
 }
 
 def setup_narrow_dock_layout(dock_id, status_id, rest_id : uint) {
@@ -727,7 +707,6 @@ def setup_narrow_dock_layout(dock_id, status_id, rest_id : uint) {
 
 var g_front_tab_frames = 0   //! frames left of pulling the column layout's front tab forward - a node opens on its first tab bar's own pick
 
-//! the first layout of the dock: the status strip across the top, the listen left, the history over the output on the right
 def setup_dock_layout(dock_id : uint) {
     DockBuilderRemoveNode(dock_id)
     DockBuilderAddDockSpaceNode(dock_id, ImGuiDockNodeFlags.None)
@@ -780,14 +759,11 @@ def draw_screen() {
     }
 }
 
-//! the chord: space listens and stops
 def poll_chords() {
     if (IsKeyPressed(ImGuiKey.Space, false)) {
         toggle_listen()
     }
 }
-
-// ===== the program =====
 
 [export]
 def init() {
@@ -827,13 +803,13 @@ def init() {
     g_vad_model <- load_vad_model(empty(g_args.vad_model) ? "{get_das_root()}/modules/dasLLAMA/models/silero_vad.bin" : path_join(g_args.models, g_args.vad_model))
     vad_iter_reset(g_vad, default_vad_opts())
     g_ask = unsafe(stream_create())
-    g_ask |> append(1)   // one producer on the books: the worker thread's pop waits for a request instead of returning empty at once
+    g_ask |> append(1)
     g_answer = unsafe(stream_create())
     g_answer |> append(1)
     g_worker_done = unsafe(channel_create())
     g_worker_done |> append(1)
     var setup = Ask(kind = 0, asr = path_join(g_args.models, g_args.asr_model), nmt = path_join(g_args.models, g_args.nmt_model),
-        tts = path_join(g_args.models, g_args.tts_model), q8 = g_args.q8)
+        tts = path_join(g_args.models, g_args.tts_model), pin_q8 = g_args.q8)
     g_ask |> push_archive(setup)
     start_worker_thread(g_ask, g_answer, g_worker_done)
 }
@@ -878,18 +854,18 @@ def shutdown() {
         audio_system_finalize(g_asch.command, g_asch.next_sid)
         g_audio_initialized = false
     }
-    delete g_clips
+    delete g_unplayed_clips
     delete g_vad_model
     destroy_job_que()
     harness_shutdown()
 }
 
 //! the clip was heard, translated and spoken to the end
-def interpreted() : bool => !empty(g_turns) && turns_in_flight(g_turns) == 0 && empty(g_clips) && g_playing_sid == INVALID_SID
+def all_turns_done() : bool => !empty(g_turns) && turns_in_flight(g_turns) == 0 && empty(g_unplayed_clips) && g_playing_sid == INVALID_SID
 
 def done_for_smoke() : bool {
     return true if (g_args.max_frames > 0 && g_frames >= g_args.max_frames)
-    return g_args.smoke && interpreted()
+    return g_args.smoke && all_turns_done()
 }
 
 [export, unsafe_heap_collect, arch(at = "../ARCHITECTURE.md#one-source-two-builds")]
@@ -901,7 +877,7 @@ def main() {
         return false if (done_for_smoke())
         return !exit_requested()
     }
-    let finished = interpreted()
+    let finished = all_turns_done()
     shutdown()
     if (g_args.smoke) {
         to_log(LOG_INFO, finished

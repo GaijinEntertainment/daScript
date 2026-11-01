@@ -1074,7 +1074,6 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
     assert(rows * nsb * qsb <= 2147483647l, "GPU MoE kq stack exceeds the int32 gather-buffer rail")
     wq |> grow_resize(rows * nsb * qsb)
     ws |> grow_resize(rows * nsb * kq_dev_ssb(fmt))
-    //! the nv4 rows' site-scale word a slice; no other member carries one
     var slice_sbits <- [for (sl in range64(fmt == KqFmt.nv4 ? rows / slice_rows : 0l)); float_bits_to_uint(site_scale(t.site_scale, fmt, woff + sl * slice_rows * n))]
     unsafe {
         let sb0 = woff / KQ_SUPERBLOCK_ELEMS
@@ -1110,7 +1109,7 @@ def kq_gather_rows_dev(fmt : KqFmt; qp, sp : uint8 const?; n, rows, slice_rows :
                 for (row in range(rowb, rowe)) {
                     let rr = int64(row)
                     let ri = rr % slice_rows
-                    //! the nv4 row's fifth word: its slice's site scale (a slice is one expert's plane)
+                    // the nv4 row's fifth word: its slice's site scale (a slice is one expert's plane)
                     let sbits = sbp != null ? sbp[(rr - ri) / slice_rows] : 0u
                     let sliceQ = (rr - ri) * qrow
                     let sliceS = (rr - ri) * srow

@@ -341,7 +341,7 @@ struct ParakeetState {
     // q8 activation image (q/k/v share one requant; decode reuses it)
     xqi : array<int8>
     xsi : array<float>
-    xbsi : array<int>   // the Q8_K image's per-16 sums (a kq-lane tower's; the FC chain passes it, parakeet never fills it)
+    xbsi : array<int>   //!< the Q8_K image's per-16 sums (a kq-lane tower's; the FC chain passes it, parakeet never fills it)
     // decode
     encp : array<float>
     @scratch toks : array<ParakeetToken>

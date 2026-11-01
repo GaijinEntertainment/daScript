@@ -395,9 +395,6 @@ def tower_gemm_seat(m : auto(MT); woff : int64) : TowerGemmSeat {
     return TowerGemmSeat(fmt = kq_fmt_of_slot(int(m.gemm_seats[i])), qoff = m.gemm_seats[i + 1l], soff = m.gemm_seats[i + 2l])
 }
 
-//! the kq lane's GEMM: a Q8_0 seat on the q8 batch GEMM over the Q8_0 image; a K-quant seat on the backend's kq batch tile
-//! over the repacked planes and the Q8_K image, else its GEMV a row at a time - the backend's over repacked planes, the
-//! portable one over disk order
 [arch(at="../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
 def private tower_mm_kq(m : auto(MT); var y : array<float>; s : TowerGemmSeat; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d, npos : int64) {
     if (s.fmt == KqFmt.q8) {

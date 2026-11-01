@@ -1956,8 +1956,7 @@ var g_image_destination = ""   //! the one sink a mint under `with_image_destina
 //! Whether a mint writes the file at `img`: the lane's path under the save switch, or the destination the converter named.
 def image_sink_writes(img : string) : bool => img != "" && (image_save_enabled() || img == g_image_destination)
 
-//! Every mint inside `blk` writes its image to `out` and nothing else: no warm map of the lane beside the source, no GC
-//! there. An empty `out` names no destination, and `blk` runs as any load does.
+//! Every mint inside `blk` writes its image to `out` alone; an empty `out` names no destination, and `blk` runs as any load does.
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-destination")]
 def with_image_destination(out : string; blk : block<() : void>) {
     let prev = g_image_destination

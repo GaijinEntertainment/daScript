@@ -42,7 +42,7 @@ def test_msl_functions(t : T?) {
         // hidden builtin threaded as a trailing by-value parameter, at decl and call
         has(t, "uint ufx_lane(uint3 gl_GlobalInvocationID)")
         has(t, "ufx_lane(gl_GlobalInvocationID)")
-        has(t, "[[max_total_threads_per_threadgroup(1024)]] kernel void ")   // max_threads=1024 on the entry
+        has(t, "[[max_total_threads_per_threadgroup(1024)]] kernel void ")
         // write-through var array param lowers device non-const; call in statement position
         has(t, "void ufx_splat(device float* yo, uint i, float v)")
         has(t, "ufx_splat(yo, i, acc);")

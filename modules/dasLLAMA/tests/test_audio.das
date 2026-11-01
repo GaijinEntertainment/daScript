@@ -938,8 +938,7 @@ def private ga_q8_cell(t : T?; path : string; mx : GigaamModel; samples : array<
     }
 }
 
-//! the dense K-quant mul_mm dispatches the device counted, every format's stamp and form: on the Q4_K carrier the kq lane's
-//! K-quant seats alone move them (its Q8_0 seats ride the q8 stamps)
+//! the device's dense K-quant mul_mm dispatches, every stamp and form: on the Q4_K carrier the kq lane's K-quant seats alone move them
 def private kq_mm_count() : int64 {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var n = 0l
@@ -956,12 +955,7 @@ def private kq_mm_count() : int64 {
     }
 }
 
-//! the kq lane on the Metal chain - the Q4_K carrier's block GEMMs on the K-quant mul_mm stamps over the carrier's own planes,
-//! its Q8_0 conv pointwise GEMMs on the q8 slab - against the CPU kq chain with the exact chain `mx` the reference: the encode,
-//! its log-mel and every block on the device with no `kq_lane` or `quant_mode` decline, the frame count and the token ids the
-//! CPU kq chain's, the device rows' rel_l2 from the exact chain within ``TWIN_SLACK_VK`` x the CPU kq chain's own plus
-//! ``TWIN_REL_L2_FLOOR``, and a K-quant mul_mm stamp counted (`REVIEW_KQ_FORMATS.md`'s served cell: the loader's tag the disk
-//! type, a counter no other plane of the file moves)
+//! the kq lane on the Metal chain against the CPU kq chain, the exact chain `mx` the reference: no `kq_lane` or `quant_mode` decline, and a K-quant mul_mm stamp counted - "a kernel counter ... that no other plane of that file moves" (REVIEW_KQ_FORMATS.md)
 [cold_path, unused_argument(t, kq_path, mx, samples, clip), arch(at = "../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-kq")]   // off-Apple the gated body is empty
 def private ga_kq_cell(t : T?; kq_path : string; mx : GigaamModel; samples : array<float>; clip : string) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -1135,7 +1129,7 @@ def test_gigaam_metal_twin(tst : T?) {
                     ga_clip_cell(t, m, samples, clip)
                     ga_q8_cell(t, path, m, samples, clip)
                     if (stat(kq_path).is_valid) {
-                        //! the chain reads disk-order planes: the load under the row-major pin, as the Metal mode pins it for every load
+                        // the Metal chain reads disk-order planes alone: the row-major pin the Metal mode sets for every load
                         let pinned = with_kernel_backend("portable") {
                             ga_kq_cell(t, kq_path, m, samples, clip)
                         }
@@ -1377,8 +1371,7 @@ def private ga_vk_lane_policy_cell(t : T?) {
     }
 }
 
-//! the k4 cm2 and KHR tile dispatches the device counted: the kq lane's K-quant seats run on one of them, by the device's mode
-//! and the column pick
+//! the device's k4 cm2 and KHR tile dispatches: the kq lane's K-quant seats run on one of them, by the device's mode and the column pick
 def private k4_tile_count() : int64 {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         return (vk_kernel_coverage_of("kq_batch_k4_cm2l_cls_spv") + vk_kernel_coverage_of("kq_batch_k4_cm2m_cls_spv")
@@ -1388,12 +1381,7 @@ def private k4_tile_count() : int64 {
     }
 }
 
-//! GigaAM's kq lane on the Vulkan chain - the Q4_K carrier's block GEMMs on the K-quant cm2 tiles over the carrier's own planes,
-//! its Q8_0 conv pointwise GEMMs on the q8 tiles - against the CPU kq chain: the encode, its front and every block on the device
-//! with no `kq_lane` or `quant_mode` decline, the frame count and the token ids the CPU kq chain's, the device rows' rel_l2 from
-//! the exact chain within 1.5x the CPU kq chain's own plus a floor, and the k4 tiles counted (`REVIEW_KQ_FORMATS.md`'s served
-//! cell: the loader's tag the disk type, a counter no other plane of the file moves). Off the f16 GEMM feed the lane's GEMMs have
-//! no device form: the chain declines `device` and the CPU serves.
+//! GigaAM's kq lane on the Vulkan chain against the CPU kq chain: no `kq_lane` or `quant_mode` decline, the k4 tiles counted - "a kernel counter ... that no other plane of that file moves" (REVIEW_KQ_FORMATS.md); off the f16 GEMM feed the chain declines `device`
 [cold_path, unused_argument(t, mx, mk, samples, clip), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-kq")]   // without dasVulkan the gated body is empty
 def private ga_vk_kq_cell(t : T?; mx, mk : GigaamModel; samples : array<float>; clip : string) {
     static_if (typeinfo builtin_module_exists(vulkan)) {

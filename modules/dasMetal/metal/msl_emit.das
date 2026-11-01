@@ -33,9 +33,7 @@ require daslib/cmp
 
 struct public MslEmitConfig {
     kernel_name : string    // "" -> the method name (class-prefix stripped)
-    max_threads : int       // > 0 declares [[max_total_threads_per_threadgroup(N)]] on the entry: the
-                            // compiler fits N lanes (spilling registers) where it would cap the
-                            // pipeline under them - a 1024-lane kernel on the M1 family
+    max_threads : int       // > 0 declares [[max_total_threads_per_threadgroup(N)]] on the entry; 0 declares none
     float_a_ok : bool       // licenses a FLOAT A operand in tmm2d forms (the deliberate f32-X
                             // fallback stamps) — unlicensed float A is a compile error: the half
                             // twin is measured 8-11% faster per GEMM (matmul2d native half path)

@@ -27,7 +27,6 @@
     display: flex; flex-direction: column;
     font: 15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; color: #d6cfbf;
   }
-  /* the site's nav sits above the stage; the stage takes the rest of the viewport */
   .dio-nav { flex: none; }
   #stage { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
   #canvas { width: auto; height: auto; max-width: 100%; max-height: 100%; border: 0; outline: none; display: block;
@@ -88,20 +87,17 @@
   <p id="note" hidden></p>
 </div>
 </div>
-<!-- emcc's script tag lands inside a template, where it is inert; the guard below appends a live
-     copy only on a browser that can run the build, so an unsupported one loads no program -->
+<!-- emcc's script tag sits inert in a template; the guard below appends a live copy only where the build can run -->
 <template id="loader">{{{ SCRIPT }}}</template>
 <script>
   // the keys the page would scroll or leave on; the space bar listens and stops, so it stays with the program - the body cannot scroll anyway
   var SCROLL_KEYS = { ArrowUp:1, ArrowDown:1, ArrowLeft:1, ArrowRight:1, PageUp:1, PageDown:1, Home:1, End:1, Tab:1, ' ':1 };
   window.addEventListener('keydown', function (e) { if (SCROLL_KEYS[e.key] && !(e.target && e.target.closest && e.target.closest('input,textarea,[contenteditable]'))) e.preventDefault(); }, { passive: false });
 
-  // the IMAGE_VERSION this page's program was built with - the deploy stamps it (pages.yml, from
-  // modules/dasLLAMA/dasllama/dasllama_image.das); 0 means "not stamped" (a local rig), no check
+  // the program's IMAGE_VERSION, stamped by the deploy (pages.yml); 0 = not stamped (a local rig), no check
   var PAGE_IMAGE_VERSION = /* @image-version */ 0;
 
-  // the -pthread build runs its workers on SharedArrayBuffer, which a page gets only when the
-  // server sent the cross-origin isolation headers
+  // the -pthread build's workers need SharedArrayBuffer, which only a cross-origin-isolated page gets
   var HAS_ISOLATION = !!(self.crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined');
   var FORCE = new URLSearchParams(location.search).get('force');
   var SUPPORTED = FORCE === 'unsupported' ? false : HAS_ISOLATION;
@@ -122,15 +118,9 @@
     return span.innerHTML;
   }
 
-  // a page the browser brings back from its back-forward cache returns with the program's
-  // workers and the audio output frozen mid-frame and out of step with each other, and the
-  // first thing heard is whatever sat in the output ring: such a page starts over instead
   window.addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });
 
-  // iOS mutes Web Audio under the ring/silent switch unless the tab holds a playback session, the
-  // one a media element gets: ask for it through the Audio Session API where it exists - the
-  // play-and-record category here, since a plain playback session refuses the microphone - and on
-  // the first gesture start a silent looping <audio> element, which puts the tab in that session too.
+  // iOS mutes Web Audio under the silent switch unless the tab holds a playback session: ask the Audio Session API for play-and-record (plain playback refuses the microphone), and start a silent looping <audio> on the first gesture
   (function installPlaybackSession() {
     var SILENT_WAV = 'data:audio/wav;base64,UklGRjQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YRAAAAAAAAAAAAAAAAAAAAAAAAAA';
     try { if (navigator.audioSession) navigator.audioSession.type = 'play-and-record'; } catch (e) {}
@@ -138,8 +128,7 @@
     if (!IOS) return;
     var GESTURES = ['pointerdown', 'touchend', 'keydown', 'click'];
     var held = null, pending = false;
-    // a gesture the browser does not count as activation (a touch's pointerdown) has its
-    // play() refused; the arm stays for the next gesture and leaves once a play went through
+    // a gesture the browser does not count as activation (a touch's pointerdown) has play() refused: the arm stays until a play goes through
     var arm = function () {
       if (held || pending) return;
       var a;
@@ -161,9 +150,7 @@
       'over it, and a browser grants it only to a cross-origin-isolated page - one the server ' +
       'sends the Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy headers for.');
   } else {
-    // the probes passed but the program refuses the browser anyway (emcc's own user-agent check
-    // throws "compiled without support for <browser>" at the top of its script): the error
-    // becomes the note while the gate is still up, never a download line that stays forever
+    // emcc's own user-agent check can still throw at the top of its script: the error becomes the note while the gate is up, never a stuck download line
     window.addEventListener('error', function (e) {
       if (!e.message) return;
       showNote('this browser cannot run the build', '<b>This browser cannot run the interpreter.</b><br>' + escapeHtml(e.message));
@@ -173,10 +160,7 @@
 
   function runInterpreter() {
 
-  // the microphone's state in words: the device the browser handed the program, or why it
-  // refused - the program itself hears silence either way. A browser gives a plain-http page
-  // the microphone only on localhost; opened by address it has no microphone API at all, so a
-  // stand-in refuses with that reason instead of the program's request throwing in a callback.
+  // the microphone's state in words; plain http gets a microphone API only on localhost, so elsewhere a stand-in refuses with that reason instead of the program's request throwing in a callback
   var micNote = document.getElementById('micnote');
   function setMicNote(text) { micNote.textContent = text; micNote.hidden = !text; }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -186,8 +170,7 @@
       }
     } });
   }
-  // a stand-in for the microphone on a device that has no usable one (the simulator, a CI box):
-  // ?fakemic=noise, or ?fakemic=<url of a clip> looped - the program's capture path runs unchanged
+  // ?fakemic=noise or ?fakemic=<clip url> (looped) stands in for a missing microphone (a simulator, a CI box); the capture path runs unchanged
   var fakeMic = new URLSearchParams(location.search).get('fakemic');
   async function fakeMicrophone(what) {
     var ac = new (window.AudioContext || window.webkitAudioContext)();
@@ -236,8 +219,6 @@
     document.getElementById('fill').style.width = total ? (100 * done / total) + '%' : '0';
   }
 
-  // the deploy's manifest: the files it minted or copied beside the page, with their sizes, and
-  // the IMAGE_VERSION the images were minted at
   async function fetchManifest() {
     var r = await fetch(modelsBase + 'manifest.json', { cache: 'no-cache' });
     if (!r.ok) throw new Error('manifest.json: HTTP ' + r.status);
@@ -250,8 +231,7 @@
     return m;
   }
 
-  // the fetched bytes' digest, so a wrong body under an HTTP 200 (a proxy's error page) is refused
-  // instead of cached under the manifest's hash; '' where the page cannot hash (no secure context)
+  // the bytes' sha256, so a wrong body under an HTTP 200 (a proxy's error page) is never cached; '' where the page cannot hash (no secure context)
   async function sha256Hex(bytes) {
     if (!(window.crypto && crypto.subtle)) return '';
     var d = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
@@ -260,11 +240,6 @@
     return s;
   }
 
-  // fetch every file with one shared progress bar, sizes from the manifest. A file this origin
-  // already holds in its Cache Storage under its sha256 is read from there instead, so a
-  // revisit fetches nothing and a re-minted set (a new hash) fetches only what changed; a fetched
-  // file is cached only once its bytes hash to the manifest's sha256; a browser without the
-  // store, or one that refuses the bytes, simply fetches every time
   async function fetchModels(manifest, onFile) {
     var total = manifest.files.reduce(function (a, f) { return a + (f.bytes || 0); }, 0), done = 0;
     var store = null;
@@ -298,8 +273,7 @@
       }
       onFile(name, bytes);
     }
-    // this page's files the manifest no longer names leave the store (a sibling page's keys sit
-    // under another path and stay), so a re-mint does not wait on the browser's quota eviction
+    // keys under this page's path the manifest no longer names leave the store, so a re-mint does not wait on quota eviction
     if (store) {
       try {
         var base = new URL(modelsBase, location.href).href, keep = {};
@@ -312,8 +286,6 @@
     }
   }
 
-  // the engine's last lines: an abort after the click shows them, so a declined image or a
-  // missing model reads as text on the page instead of a black canvas
   var lastLines = [];
   function remember(text) {
     text = String(text);
@@ -348,7 +320,7 @@
     onExit: function (code) { if (code) showFailure('exit code ' + code); },
     preRun: [function () {
       // the C environment is built from Module.ENV at startup: knobs set later never reach getenv
-      Module.ENV.DASLLAMA_IMAGE = '0';          // never mint a sidecar into MEMFS: the speech model's q8 image is built in memory at load
+      Module.ENV.DASLLAMA_IMAGE = '0';          // never mint a sidecar into MEMFS: the images arrive prepared
       Module.ENV.DASLLAMA_ALLOW_UNTUNED = '1';  // the portable kernels, no tune sidecar
       Module.FS.mkdir('/models');
       Module.addRunDependency('interpreter-models');
@@ -376,8 +348,7 @@
   var loader = document.getElementById('loader').content.querySelector('script');
   var live = document.createElement('script');
   live.async = true;
-  // a script that never arrives (a partial deploy, a proxy) fires error on the element itself,
-  // with no message and no bubbling - the window listener above never sees it
+  // a script that never arrives (a partial deploy, a proxy) fires error on the element alone, unbubbled and without a message
   live.onerror = function () {
     showNote('the program did not load', '<b>The program script did not load.</b><br>' +
       'Reload the page; if it keeps failing, the deploy is incomplete.');

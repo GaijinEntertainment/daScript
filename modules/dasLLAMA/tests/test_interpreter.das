@@ -39,9 +39,9 @@ def test_utterance_window(t : T?) {
     }
     t |> run("a take with no speech idles out, one with speech open never does") @(t : T?) {
         let idle = int64(LISTEN_IDLE_S * float(LISTEN_RATE))
-        t |> success(take_idles(false, idle), "the quiet take at the idle bound")
-        t |> success(!take_idles(false, idle - 1l), "under it")
-        t |> success(!take_idles(true, idle * 2l), "speech open, however long")
+        t |> success(is_idle_take(false, idle), "the quiet take at the idle bound")
+        t |> success(!is_idle_take(false, idle - 1l), "under it")
+        t |> success(!is_idle_take(true, idle * 2l), "speech open, however long")
     }
 }
 

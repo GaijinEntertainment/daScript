@@ -22,11 +22,10 @@ def utterance_window(start, end, total : int64) : tuple<from : int64; to : int64
     return (from = from, to = to)
 }
 
-//! whether the open speech has run to the cap and is cut now
 def speech_at_cap(start, total : int64) : bool => total - start >= int64(UTTERANCE_CAP_S * float(LISTEN_RATE))
 
 //! whether a take with no speech in it is dropped now, so an hour of quiet holds no audio
-def take_idles(in_speech : bool; total : int64) : bool => !in_speech && total >= int64(LISTEN_IDLE_S * float(LISTEN_RATE))
+def is_idle_take(in_speech : bool; total : int64) : bool => !in_speech && total >= int64(LISTEN_IDLE_S * float(LISTEN_RATE))
 
 //! one turn, as the history shows it: cut from the take and queued, transcribing, translating, speaking (its clip generated or
 //! playing), spoken; or empty, where nothing was transcribed or translated
@@ -42,20 +41,18 @@ enum TurnState {
 struct TurnRow {
     no : int
     state : TurnState
-    seconds : float    //! the utterance heard
+    heard_s : float    //! the utterance heard
     ru : string
     en : string
-    samples : int64    //! the spoken clip's samples
-    start : int64      //! its first sample in the output waveform
+    clip_samples : int64   //! the spoken clip's samples
+    out_start : int64  //! its first sample in the output waveform
     asr_us : int64
     nmt_us : int64
     tts_us : int64
 }
 
-//! a turn still on its way: heard, transcribing, translating or speaking
 def turn_in_flight(state : TurnState) : bool => state != TurnState.spoken && state != TurnState.empty
 
-//! how many turns are still on their way
 def turns_in_flight(turns : array<TurnRow>) : int {
     var n = 0
     for (t in turns) {

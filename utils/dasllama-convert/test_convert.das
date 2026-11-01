@@ -91,7 +91,6 @@ def test_bake_bergamot(t : T?) {
     remove(path_join(dir, "vocab.ruen.spm"))
 }
 
-// -o: the image lands at the named path and the source's directory stays untouched (no lane image, no GC there).
 [test]
 def test_bake_to_destination(t : T?) {
     let src_dir = path_join(models_dir(), "bergamot/ru-en-base-memory")
@@ -122,7 +121,6 @@ def test_bake_to_destination(t : T?) {
     remove(path_join(dir, "vocab.ruen.spm"))
 }
 
-// A quantized GigaAM carrier bakes the kq lane un-pinned - the lane the loader takes - and fp32 pins the exact lane.
 [test]
 def test_bake_gigaam_lanes(t : T?) {
     let src = path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k.gguf")

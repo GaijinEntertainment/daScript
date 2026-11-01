@@ -235,7 +235,7 @@ struct CanaryState {
     out : array<float>        // projected soft tokens [tt × proj_dim]
     xqi : array<int8>         // q8 activation image — one requant shared by q/k/v, per-site otherwise
     xsi : array<float>
-    xbsi : array<int>         // the Q8_K image's per-16 sums (a kq-lane tower's; the FC chain passes it, canary never fills it)
+    xbsi : array<int>         //!< the Q8_K image's per-16 sums (a kq-lane tower's; the FC chain passes it, canary never fills it)
     posq : array<int8>        // pos_emb rows requantized once per encode (layer-invariant input)
     poss : array<float>
 }

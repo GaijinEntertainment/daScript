@@ -1148,8 +1148,7 @@ def private tw_kq_key(fc : TwFc) : uint64 {
     return hash_combine64(planes, tw_q8_key(fc.qblob, fc.qscales))
 }
 
-//! every K-quant member of the lane has a base mul_mm tile on this build
-def private tw_fc_kq_served(fc : TwFc) : bool {
+def private tw_fc_kq_members_have_base_tile(fc : TwFc) : bool {
     for (fmt in range(KQ_FMT_COUNT)) {
         continue if ((fc.kq_fmts & (1u << uint(fmt))) == 0u)
         return false if (!kq_mm_base_tile_on(kq_fmt_of_slot(fmt)))
@@ -1157,8 +1156,6 @@ def private tw_fc_kq_served(fc : TwFc) : bool {
     return true
 }
 
-//! a member's scale rows in the Metal form: k4 and k5's 20-byte rows compacted to the 16-byte disk block, a split-scale
-//! member's folded to [16B strips][d tail], q40 and iq4nl verbatim
 def private tw_kq_metal_scales(fmt : KqFmt; var ks : array<uint8>) {
     if (fmt == KqFmt.k4 || fmt == KqFmt.k5) {
         compact_kq_scale_strip(ks)
@@ -1180,8 +1177,7 @@ def private tw_fc_kq_members(fc : TwFc) : string {
     return join(names, "+")
 }
 
-//! the kq-lane decline, naming the carrier's members and the cause (`REVIEW_KQ_FORMATS.md`'s site rule): planes in the CPU
-//! backend's interleave, which the chain's stamps read no form of, or a member with no mul_mm tile on the build
+//! the kq-lane decline - "a reason naming the site and the member" (REVIEW_KQ_FORMATS.md) - its cause the CPU backend's interleave or a member with no mul_mm tile
 [cold_path]
 def private tw_decline_kq(fc : TwFc) : bool {
     let why = (fc.kq_repacked ? "are in the CPU backend's interleave - a load under the Metal mode (the row-major backend pinned) keeps them in disk order"
@@ -1190,8 +1186,7 @@ def private tw_decline_kq(fc : TwFc) : bool {
     return false
 }
 
-//! one K-quant member's seats staged at `cur` of `staging`: the superblocks in record order, then the scale rows in the Metal
-//! form over the same order, each record's bind set; the cursor past the member
+//! one K-quant member's seats staged at `cur` of `staging` - its superblocks, then its Metal-form scale rows - each record's bind set; returns the cursor past the member
 [cold_path]
 def private tw_kq_stage_member(fc : TwFc; recs : array<Q8Region>; kf : KqFmt; var staging : array<uint8>; cur : int64) : int64 {
     let nrec = long_length(recs)
@@ -1237,8 +1232,7 @@ def private tw_kq_stage_member(fc : TwFc; recs : array<Q8Region>; kf : KqFmt; va
     return past
 }
 
-//! The kq lane's planes on the device, uploaded once a model: the Q8_0 seats into the q8 slab at their seat offsets, each K-quant
-//! member's seats into the kq slab (`tw_kq_stage_member`), every record's bind recorded; false where a buffer cannot be made.
+//! false where a device buffer cannot be made
 [cold_path, arch(at="../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-kq")]
 def private tw_fc_kq_attach(fc : TwFc) : bool {
     assert(!fc.kq_repacked, "the Metal kq slab stages disk-order superblocks alone; the seat declines an interleaved carrier ahead of this")
@@ -1262,7 +1256,6 @@ def private tw_fc_kq_attach(fc : TwFc) : bool {
     }
     g_tw_kq_fc_binds |> reserve(nrec)
     g_tw_kq_fc_binds |> resize(nrec)
-    // the Q8_0 seats: the q8 slab over their compact regions, each record's bind its region's byte offset
     var @exact_size q8rg : array<Q8Region>
     var @exact_size q8rid : array<int64>
     for (rid in range64(nrec)) {
@@ -1278,7 +1271,6 @@ def private tw_fc_kq_attach(fc : TwFc) : bool {
             g_tw_kq_fc_binds[rid].qoff = g_tw_q8_fc_boffs[i]
         }
     }
-    // the K-quant members: one quant run and one scale run a member, the seats at their superblock bases
     var @exact_size staging : array<uint8>
     var cur = 0l
     for (fmt in range(KQ_FMT_COUNT)) {
@@ -1299,8 +1291,6 @@ def private tw_fc_kq_attach(fc : TwFc) : bool {
     return blob != null
 }
 
-//! the family's weights ready on the device for the chain: the kq lane's seats, the q8 slab on the q8 lane, the half tensor
-//! crown where the GEMMs live in the family's halfword plane alone; the f32 blob needs nothing
 def private fc_weights_ready(fc : TwFc) : bool {
     return tw_fc_kq_attach(fc) if (fc.kq_lane)
     return tw_fc_q8_attach(fc) if (fc.q8)
@@ -1836,7 +1826,7 @@ def private tw_fc_seat(fc : TwFc; var x : array<float>; npos, ww : int64; rope_c
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
     }
-    if (fc.kq_lane && (fc.kq_repacked || !tw_fc_kq_served(fc))) {
+    if (fc.kq_lane && (fc.kq_repacked || !tw_fc_kq_members_have_base_tile(fc))) {
         return tw_decline_kq(fc)
     }
     if (fc.q8 && !fc.q8_served) {

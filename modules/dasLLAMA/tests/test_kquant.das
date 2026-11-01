@@ -776,9 +776,7 @@ def test_kq_gemv_rows(t : T?) {
     }
 }
 
-// The disk-order batch GEMM (matmul_kq_batch_disk_at - what a backend with no kq batch tile serves a window on) must
-// bit-match the multi-row GEMV run a token at a time: it walks the weight row once a token, so a token's activation
-// offsets (xq at n, xs at n / 256, xbs at n / 16) and its output row at t * d are what this gate holds.
+//! the disk-order batch GEMM (`matmul_kq_batch_disk_at`) bit-matches the GEMV run a token at a time: a token's activation offsets and its output row are what this gate holds
 def private kq_gemm_disk_gate(t : T?; fmt : int; n : int64 = 512l) {
     let d = 8l
     let ntok = 3l

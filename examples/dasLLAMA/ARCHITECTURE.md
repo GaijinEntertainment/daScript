@@ -48,7 +48,7 @@ checklist is `REVIEW.md` beside this file. The engine these programs drive is do
   wasm` builds it to wasm64 for dasllama.io from the same `main.das` the desktop run uses. The
   checklist's rules about the browser build bind browser examples and nothing else.
 - **A witness line** is a line a browser example logs under its own name (`storyteller: ...`,
-  `storywish: ...`, `parrot: ...`); a smoke test under `modules/dasLLAMA/tests/` matches such
+  `storywish: ...`, `parrot: ...`, `interpreter: ...`); a smoke test under `modules/dasLLAMA/tests/` matches such
   lines as substrings, so their words and order are an interface.
 
 ## 3. Mechanisms

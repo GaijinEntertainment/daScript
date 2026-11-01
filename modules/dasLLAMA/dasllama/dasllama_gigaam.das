@@ -377,8 +377,6 @@ def private gg_dw_f16(m : GGUFMeta; n_layer : int64) : bool {
     return f16
 }
 
-//! Whether the carrier's block GEMMs are quantized planes - the kq lane's carrier, served as its own planes un-pinned. Refuses
-//! a carrier that mixes quantized and float block GEMMs, naming both tensors: one lane serves them.
 [arch(at="../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
 def gg_kq_carrier(m : GGUFMeta; n_layer : int64) : bool {
     var quant = ""
@@ -409,9 +407,6 @@ def private gg_count_layers(m : GGUFMeta) : int64 {
     return n
 }
 
-//! The block GEMMs' plane on the lane: the kq lane's byte planes where `kq`, Q8_0 on the q8 lane; on the exact lane the
-//! carrier's f16 where every block GEMM is f16, else f32 in ``blob``. Refuses a carrier whose block GEMMs mix f16 with
-//! another element type, naming both tensors.
 [arch(at="../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
 def private gg_gemm_plane(m : GGUFMeta; n_layer : int64; q8, kq : bool) : GigaamPlane {
     return GigaamPlane.kq if (kq)
@@ -589,9 +584,9 @@ def private gg_plan(m : GGUFMeta; var e : GigaamModel; q8, kq : bool) : GigaamPl
     gg_conv_job(p, m, "encoder.pre.conv.2.weight", fb, e.c2_w, d, nch, ks)
     gg_job(p, m, "encoder.pre.conv.2.bias", fb, e.c2_b, d)
     let shapes <- gg_gemm_shapes(d, ff)
-    var qo = 0l   // the kq lane's cursors: the Q8_0 seats' elements, the K-quant seats' quant and scale bytes
-    var ko = 0l
-    var so = 0l
+    var q8_elem_cur = 0l
+    var kq_byte_cur = 0l
+    var ks_byte_cur = 0l
     for (l in range64(e.n_layer)) {
         let lo = gigaam_layer_offsets(e, l)
         let lp = "encoder.layers.{l}."
@@ -621,7 +616,7 @@ def private gg_plan(m : GGUFMeta; var e : GigaamModel; q8, kq : bool) : GigaamPl
         gg_job(p, m, "{lp}ff2.linear2.bias", fb, lo.ff2b_b, d)
         let woffs = fixed_array(lo.ff1a_w, lo.ff1b_w, lo.q_w, lo.k_w, lo.v_w, lo.o_w, lo.pw1_w, lo.pw2_w, lo.ff2a_w, lo.ff2b_w)
         if (gplane == GigaamPlane.kq) {
-            gg_kq_gemm_jobs(p, m, lp, shapes, qo, ko, so)
+            gg_kq_gemm_jobs(p, m, lp, shapes, q8_elem_cur, kq_byte_cur, ks_byte_cur)
             continue
         }
         for (g, s, wo in GG_GEMM_NAMES, shapes, woffs) {
@@ -630,9 +625,9 @@ def private gg_plan(m : GGUFMeta; var e : GigaamModel; q8, kq : bool) : GigaamPl
         }
     }
     if (gplane == GigaamPlane.kq) {
-        p.q8_n = qo
-        p.kq_n = ko
-        p.ks_n = so
+        p.q8_n = q8_elem_cur
+        p.kq_n = kq_byte_cur
+        p.ks_n = ks_byte_cur
         e.kq_fmt = gg_kq_fmt(p.seats)
     }
     if (e.head == GigaamHead.ctc) {
@@ -654,9 +649,6 @@ def private gg_plan(m : GGUFMeta; var e : GigaamModel; q8, kq : bool) : GigaamPl
     return <- p
 }
 
-//! The format a kq-lane block GEMM serves in: its disk type's tag on its row (`kq_tag`) where that is a superblock member
-//! the engine's kq kernels serve or Q8_0's own blocks; refused by name otherwise - the per-32 members, NVFP4 (its `.scale`
-//! factor) and a demoted row have no seat here, and a pinned lane dequantizes them.
 [arch(at="../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
 def private gg_kq_seat_fmt(m : GGUFMeta; name : string; width : int64) : KqFmt {
     let gt = gguf_tensor_type(m, name)
@@ -668,11 +660,9 @@ def private gg_kq_seat_fmt(m : GGUFMeta; name : string; width : int64) : KqFmt {
     return f
 }
 
-//! A block's ten GEMM jobs on the kq lane, each at the seat its format takes: a Q8_0 GEMM in ``qblob`` at the element cursor
-//! `qo`, a K-quant GEMM in ``kq``/``ks`` at the byte cursors `ko`/`so`; the seat words pushed in layout order. The attention's
-//! q, k and v read one activation image, so their formats are held to one class.
+//! a block's ten kq-lane GEMM jobs and their seat words, each GEMM at the cursor its format takes (Q8_0 elements, or K-quant quant and scale bytes), advancing it
 [arch(at="../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
-def private gg_kq_gemm_jobs(var p : GigaamPlan; m : GGUFMeta; lp : string; shapes : array<int2>; var qo, ko, so : int64&) {
+def private gg_kq_gemm_jobs(var p : GigaamPlan; m : GGUFMeta; lp : string; shapes : array<int2>; var q8_elem_cur, kq_byte_cur, ks_byte_cur : int64&) {
     var qkv_q8 = fixed_array(false, false, false)
     for (g, s, i in GG_GEMM_NAMES, shapes, count()) {
         let name = "{lp}{g}.weight"
@@ -684,19 +674,19 @@ def private gg_kq_gemm_jobs(var p : GigaamPlan; m : GGUFMeta; lp : string; shape
             qkv_q8[i - 2] = f == KqFmt.q8
         }
         if (f == KqFmt.q8) {
-            p.jobs |> push(GigaamFillJob(name = name, plane = GigaamPlane.q8, off = qo, n = n, width = width, fmt = int(f), soff = qo / KQ_B32_ELEMS))
+            p.jobs |> push(GigaamFillJob(name = name, plane = GigaamPlane.q8, off = q8_elem_cur, n = n, width = width, fmt = int(f), soff = q8_elem_cur / KQ_B32_ELEMS))
             p.seats |> push(int64(int(f)))   // nolint:STYLE012 - one seat's three words appended behind the GEMMs before it
-            p.seats |> push(qo)
-            p.seats |> push(qo / KQ_B32_ELEMS)
-            qo += n
+            p.seats |> push(q8_elem_cur)
+            p.seats |> push(q8_elem_cur / KQ_B32_ELEMS)
+            q8_elem_cur += n
         } else {
             let nsb = n / kq_elems(f)
-            p.jobs |> push(GigaamFillJob(name = name, plane = GigaamPlane.kq, off = ko, n = n, width = width, fmt = int(f), soff = so))
+            p.jobs |> push(GigaamFillJob(name = name, plane = GigaamPlane.kq, off = kq_byte_cur, n = n, width = width, fmt = int(f), soff = ks_byte_cur))
             p.seats |> push(int64(int(f)))   // nolint:STYLE012 - one seat's three words appended behind the GEMMs before it
-            p.seats |> push(ko)
-            p.seats |> push(so)
-            ko += nsb * kq_qsb(f)
-            so += nsb * kq_ssb(f)
+            p.seats |> push(kq_byte_cur)
+            p.seats |> push(ks_byte_cur)
+            kq_byte_cur += nsb * kq_qsb(f)
+            ks_byte_cur += nsb * kq_ssb(f)
         }
     }
     if (qkv_q8[0] != qkv_q8[1] || qkv_q8[0] != qkv_q8[2]) {
@@ -704,8 +694,7 @@ def private gg_kq_gemm_jobs(var p : GigaamPlan; m : GGUFMeta; lp : string; shape
     }
 }
 
-//! the kq lane's one served K-quant member (a `KqFmt` slot) where every K-quant seat shares it, `q8` where every seat is
-//! Q8_0, -1 where the seats mix
+//! the seats' one K-quant member (a `KqFmt` slot), `q8` where every seat is Q8_0, -1 where the K-quant seats mix
 def private gg_kq_fmt(seats : array<int64>) : int {
     var fmt = -2
     for (s in range64(long_length(seats) / TOWER_SEAT_WORDS)) {
@@ -720,9 +709,7 @@ def private gg_kq_fmt(seats : array<int64>) : int {
     return fmt == -2 ? int(KqFmt.q8) : fmt
 }
 
-//! One job's tensor into its plane's array at `at`: f32 rows (a conv permuted tap-major) into `blob`, the carrier's f16 halfwords
-//! into `wblob`, a Q8_0 region into `qblob` (scales at `at / 32` in `qscales`) quantized from the tensor or, on the kq lane, moved
-//! as the file's own blocks, or a K-quant region into `kq` with its scales into `ks` at `sat`; every quantized region repacked where `rep`
+//! one job's tensor into its plane's array at `at` (a K-quant job's scales at `sat`), every quantized region repacked where `rep`
 def private gg_fill(m : GGUFMeta; b : array<uint8> | #; j : GigaamFillJob; at, sat : int64; rep : bool; var blob : array<float>;
                     var wblob : array<uint16>; var qblob : array<int8>; var qscales : array<float>; var kq, ks : array<uint8>;
                     @scratch var wscratch : array<float>) {
@@ -808,7 +795,7 @@ def private gg_stream_plane(m : GGUFMeta; b : array<uint8> | #; plan : GigaamPla
                             var w : ImgWriter; var sections : array<ImgSection>; name : string) : bool {
     let at = w_page(w)
     var mine <- [for (j in plan.jobs); j; where j.plane == plane]
-    mine |> sort() <| cmp_by(_.off)   //! the scale offsets grow with the quant offsets, so one order serves both sections
+    mine |> sort() <| cmp_by(_.off)   // the scale offsets grow with the quant offsets, so one order serves both sections
     var @scratch @exact_size f32s : array<float>
     var @scratch @exact_size halves : array<uint16>
     var @scratch @exact_size q8s : array<int8>
@@ -934,8 +921,7 @@ def private gg_hold_planes(m : GGUFMeta; b : array<uint8> | #; var st : GigaamSt
     delete wscratch
 }
 
-//! whether the quantizing lanes' planes repack for the load's backend - selected here, as the fills need it - with the kq
-//! lane's record of its K-quant planes' layout set on the model the fills serve
+//! whether the quantizing lanes repack for the load's backend - selected here, as the fills need it - with `e.kq_repacked` set beside
 def private gg_repack(var e : GigaamModel) : bool {
     let rep = (e.q8 || e.kq_lane) && select_matmul_backend_for_load_()
     e.kq_repacked = e.kq_lane && rep && kernel_backend_has_kq()
@@ -962,7 +948,7 @@ def gigaam_lane_tag(path : string; q8, pinned : bool) : string {
     return gigaam_image_tag(q8, kq)
 }
 
-//! The kq lane's K-quant members, one name each, joined by `+` - the lane announce's and the GPU declines' words.
+//! The kq lane's members, Q8_0's `q8` among them, each named once in seat order and joined by `+` - the lane announce's words.
 def gigaam_kq_members(m : GigaamModel) : string {
     var seen : array<string>
     for (s in range64(length(m.gemm_seats) / TOWER_SEAT_WORDS)) {
@@ -1032,7 +1018,7 @@ def load_gigaam_model(path : string; q8 : bool = false; pinned : bool = false) :
         return gg_mint(st, out, img)
     }, $ [unused_argument(t)] (t : GigaamModel) => true, $ [unused_argument(t, src)] (t : GigaamModel; src : string) {})
     if (m.kq_lane) {
-        let layout = m.kq_repacked ? "repacked for {active_kernel_backend()}" : "in disk order (the portable GEMV)"
+        let layout = m.kq_repacked ? "repacked for {active_kernel_backend()}" : "in disk order (the portable batch GEMM)"
         to_log(LOG_INFO, "dasLLAMA {GIGAAM_ARCH}: GEMM lane kq ({gigaam_kq_members(m)}) - the block GEMMs as the carrier's own planes, {layout}\n")
     } else {
         announce_lane(GIGAAM_ARCH, m.q8, m.gemm_f16 ? "f16 GEMM planes" : "f32 planes", "set_gigaam_q8", pinned, gigaam_gpu_exact_serves())
