@@ -4221,7 +4221,7 @@ def private vulkan_gemma3v_chain(t : Gemma3vTower; var s : Gemma3vState; planes 
     if (!vt_gate(r, true)) {
         return false
     }
-    return vt_decline(r, VulkanTowerDecline.flavor) if (t.dev_backend != TowerDev.vulkan)
+    return vt_decline(r, VulkanTowerDecline.flavor) if (t.q8 && t.dev_backend != TowerDev.vulkan)   //! the exact lane's planes upload as stored
     let f32w = !t.q8
     let d = t.n_embd
     let ff = t.ff_pad
@@ -4319,11 +4319,9 @@ def private vt_q3v_regions(t : Qwen3vTower) : array<Q8Region> {
     return <- regions
 }
 
-//! qwen3v's Vulkan device block (`#tower-dev-block`): the q8 lane's block GEMMs gathered; the exact lane's planes upload as
-//! stored, so its block is empty
+//! qwen3v's Vulkan device block (`#tower-dev-block`): the q8 lane's block GEMMs gathered
 [cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
 def private vulkan_qwen3v_bake(t : Qwen3vTower; var b : TowerDevBuild) : bool {
-    return true if (!t.q8)
     var inscope regions <- vt_q3v_regions(t)
     vt_bake_q8(b, VT_Q3V_PIECE, t.qblob, t.qscales, regions)
     return true
@@ -4335,7 +4333,7 @@ def private vulkan_qwen3v_chain(t : Qwen3vTower; var s : Qwen3vState; planes : a
     if (!vt_gate(r, true)) {
         return false
     }
-    return vt_decline(r, VulkanTowerDecline.flavor) if (t.dev_backend != TowerDev.vulkan)
+    return vt_decline(r, VulkanTowerDecline.flavor) if (t.q8 && t.dev_backend != TowerDev.vulkan)   //! the exact lane's planes upload as stored
     let f32w = !t.q8
     let q8e = kq_elems(KqFmt.q8)
     let d = t.n_embd
@@ -4832,20 +4830,18 @@ def private vt_g3v_offs(t : Gemma3vTower) {
     }
 }
 
-//! gemma3v's Vulkan device block (`#tower-dev-block`): the q8 lane's block GEMMs gathered; the exact lane's f32 planes upload as
-//! stored, so its block is empty
+//! gemma3v's Vulkan device block (`#tower-dev-block`): the q8 lane's block GEMMs gathered
 [cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
 def private vulkan_gemma3v_bake(t : Gemma3vTower; var b : TowerDevBuild) : bool {
-    return true if (!t.q8)
     vt_g3v_offs(t)
     var inscope regions <- vt_ln_regions(t.n_embd, t.ff_pad, g_vt_ln_offs, -1l, g_vt_no_regions)
     vt_bake_q8(b, VT_G3V_PIECE, t.qblob, t.qscales, regions)
     return true
 }
 
-//! a vision chain serves both lanes where the tower knob is on and the device arms
-[unused_argument(q8)]
-def private vulkan_vision_serves_model(q8 : bool) : bool => g_vt_env_tower && vulkan_tower_arms()
+//! a vision chain's q8 lane takes the Vulkan flavor where the tower knob is on and the device arms; its exact lane's planes upload
+//! as stored, so the CPU image serves it
+def private vulkan_vision_serves_model(q8 : bool) : bool => q8 && g_vt_env_tower && vulkan_tower_arms()
 
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def private vulkan_gemma4v_chain(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>; w, h, npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
