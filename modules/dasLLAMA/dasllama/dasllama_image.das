@@ -1951,6 +1951,21 @@ def private metal_derive_plane(var t : Model; name : string; var w : ImgWriter;
     return name == "qscales" || name == "qscales16" || name == "mblob"
 }
 
+var g_image_destination = ""   //! the one sink a mint under `with_image_destination` writes; "" = the lane's path beside the source
+
+//! Whether a mint writes the file at `img`: the lane's path under the save switch, or the destination the converter named.
+def image_sink_writes(img : string) : bool => img != "" && (image_save_enabled() || img == g_image_destination)
+
+//! Every mint inside `blk` writes its image to `out` and nothing else: no warm map of the lane beside the source, no GC
+//! there. An empty `out` names no destination, and `blk` runs as any load does.
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-destination")]
+def with_image_destination(out : string; blk : block<() : void>) {
+    let prev = g_image_destination
+    g_image_destination = out
+    invoke(blk)
+    g_image_destination = prev
+}
+
 //! The cold half of a cached load, for any carrier: turn the freshly-loaded `m` into its prepared image and put the image-served struct in `out`.
 //! With a target path the FILE is the handoff (`m` is dropped between write and map); without one the image is built in memory. `m` is spent.
 //! True only when the FILE was written: only then may the caller reap its lane.
@@ -1975,7 +1990,7 @@ def cache_via_image_staged(var st; var out; img : string; tag : string = ""; qua
 //! mapping. True only when the FILE was written: only then may the caller reap its lane.
 def cache_via_image_staged_hooked(var st; var out; img : string; extra : uint64; tag : string; quant : string;
                                   plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : bool {
-    if (img != "" && image_save_enabled()) {
+    if (image_sink_writes(img)) {
         let ts = ref_time_ticks()
         if (save_image_to_file(st, img, extra, tag, quant, layout_fingerprint(out), plane)) {
             map_written_image(st, out, img, tag, quant, ts)
@@ -2008,7 +2023,10 @@ def load_through_image(path, tag, who, source : string; carrier : auto(T);
         return <- t
     }
     var img = ""
-    if (g_env_engine.image) {
+    let to_destination = !empty(g_image_destination)
+    if (to_destination) {
+        img = g_image_destination
+    } elif (g_env_engine.image) {
         apply_box_profile_runtime()
         img = image_path_for(path, tag)
         let ts_img = ref_time_ticks()
@@ -2021,7 +2039,7 @@ def load_through_image(path, tag, who, source : string; carrier : auto(T);
         delete t
     }
     var built = T()
-    if (invoke(mint, img, built)) {
+    if (invoke(mint, img, built) && !to_destination) {
         dlim_gc_stale(path, tag)
     }
     invoke(check, built, img != "" ? img : path)
@@ -2071,7 +2089,7 @@ def delete_staging(var st) {
 
 def private cache_via_image_(var m; var out; img : string; tag : string; quant : string;
                              plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : bool {
-    if (img == "" || !image_save_enabled()) {
+    if (!image_sink_writes(img)) {
         if (!chunk_rail(m, out, "", 0ul, tag, quant, plane)) {
             out <- m   // nolint:PERF030 — `out` is the caller's fresh destination (the cache_via_image contract); m is spent
         }

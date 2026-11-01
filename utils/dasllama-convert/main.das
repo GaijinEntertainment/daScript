@@ -183,23 +183,19 @@ def private convert_asr(cfg : ConvertArgs; kind : AsrCarrierKind; qm : QuantMode
         to_log(LOG_ERROR, "dasllama-convert: --trim/--stream apply to decoder GGUFs only\n")
         return 2
     }
-    if (cfg.out != "") {
-        to_log(LOG_ERROR, "dasllama-convert: -o is unsupported for ASR and translation sources - " +
-            "the image lands beside the source under its identity name\n")
-        return 2
-    }
     let q8 = qm == QuantMode.q8
     if (!q8 && qm != QuantMode.fp32) {
         to_log(LOG_ERROR, "dasllama-convert: ASR and translation sources bake q8 or fp32\n")
         return 2
     }
+    let gigaam_pinned = !q8   //! fp32 pins the exact lane; q8 is the loader's un-pinned default - a quantized carrier takes the kq lane
     var tag = ""
     if (kind == AsrCarrierKind.whisper) {
         tag = q8 ? "whisper-q8" : "whisper-f32"
     } elif (kind == AsrCarrierKind.parakeet) {
         tag = q8 ? "parakeet-q8" : "parakeet-f32"
     } elif (kind == AsrCarrierKind.gigaam) {
-        tag = gigaam_image_tag(q8)   // the exact lane keeps the carrier's f16
+        tag = gigaam_lane_tag(cfg.model, q8, gigaam_pinned)
     } elif (kind == AsrCarrierKind.canary) {
         tag = q8 ? "canary-q8" : "canary-f32"
     } elif (kind == AsrCarrierKind.qwen3a) {
@@ -211,7 +207,7 @@ def private convert_asr(cfg : ConvertArgs; kind : AsrCarrierKind; qm : QuantMode
     } else {
         tag = q8 ? "tower-q8" : "tower-f32"
     }
-    let out = image_path_for(cfg.model, tag)
+    let out = cfg.out != "" ? cfg.out : image_path_for(cfg.model, tag)
     to_log(LOG_INFO, "dasllama-convert: {cfg.model} ({kind})\n")
     to_log(LOG_INFO, "dasllama-convert:   -> {out}\n")
     to_log(LOG_INFO, "dasllama-convert:   identity {image_identity(tag)}\n")
@@ -231,28 +227,31 @@ def private convert_asr(cfg : ConvertArgs; kind : AsrCarrierKind; qm : QuantMode
     let ts = ref_time_ticks()
     with_job_que() {
         setup_dasllama_jobque()
-        // the family wrap loads eagerly on the miss and saves the image itself
-        if (kind == AsrCarrierKind.whisper) {
-            var inscope m <- load_whisper_model(cfg.model, q8)
-        } elif (kind == AsrCarrierKind.parakeet) {
-            var inscope m <- load_parakeet_model(cfg.model, q8)
-        } elif (kind == AsrCarrierKind.gigaam) {
-            var inscope m <- load_gigaam_model(cfg.model, q8)
-        } elif (kind == AsrCarrierKind.canary) {
-            var inscope m <- load_canary_encoder(cfg.model, q8)
-        } elif (kind == AsrCarrierKind.qwen3a) {
-            var inscope m <- load_qwen3a_tower(cfg.model)
-        } elif (kind == AsrCarrierKind.gemma4a) {
-            var inscope m <- load_gemma4a_encoder(cfg.model)
-        } elif (kind == AsrCarrierKind.bergamot) {
-            var inscope m <- load_nmt_model(cfg.model, q8)
-        } else {
-            var inscope m <- load_audio_tower(cfg.model, q8)
+        // the family wrap loads eagerly on the miss and saves the image itself - at -o's path where one was named
+        with_image_destination(cfg.out) $ {
+            if (kind == AsrCarrierKind.whisper) {
+                var inscope m <- load_whisper_model(cfg.model, q8)
+            } elif (kind == AsrCarrierKind.parakeet) {
+                var inscope m <- load_parakeet_model(cfg.model, q8)
+            } elif (kind == AsrCarrierKind.gigaam) {
+                var inscope m <- load_gigaam_model(cfg.model, q8, gigaam_pinned)
+            } elif (kind == AsrCarrierKind.canary) {
+                var inscope m <- load_canary_encoder(cfg.model, q8)
+            } elif (kind == AsrCarrierKind.qwen3a) {
+                var inscope m <- load_qwen3a_tower(cfg.model)
+            } elif (kind == AsrCarrierKind.gemma4a) {
+                var inscope m <- load_gemma4a_encoder(cfg.model)
+            } elif (kind == AsrCarrierKind.bergamot) {
+                var inscope m <- load_nmt_model(cfg.model, q8)
+            } else {
+                var inscope m <- load_audio_tower(cfg.model, q8)
+            }
         }
     }
     var st : FStat
     if (!stat(out, st)) {
-        to_log(LOG_ERROR, "dasllama-convert: '{out}' did not land — see the log above (DASLLAMA_IMAGE=0 set?)\n")
+        let hint = cfg.out == "" ? " (DASLLAMA_IMAGE=0 set?)" : ""
+        to_log(LOG_ERROR, "dasllama-convert: '{out}' did not land — see the log above{hint}\n")
         return 1
     }
     let total_ms = int64(get_time_usec(ts)) / 1000l

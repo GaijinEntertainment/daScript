@@ -122,6 +122,17 @@ never a corrupt map. A temp file does not outlive its save: a failed write or a 
 the save and removes it - in the vulkan mint too, where the load then serves the streamed build
 from memory - and the next save of an image removes one a killed process left an hour ago.
 
+### A mint can be pointed at one destination {#image-destination}
+
+A converter minting for another box - the deploy's model set, baked under that build's
+`DlimConfiguration` - names the file the image lands in (`-o`), and `with_image_destination` makes
+that path the mint's one sink for every carrier that loads through `load_through_image`: the
+family's own mint runs unchanged and writes there, whatever the image and save switches say, with
+no warm map of the lane beside the source and no GC there - a save elsewhere proves nothing about
+that lane's siblings, and the lane the host would key is not the one being minted. A decoder's
+streamed mint and the StyleTTS2 bake take their destination as an argument instead, because their
+save is not a load.
+
 ### The image's size is known before the first byte {#image-sizing-exactness}
 
 The image's final size is known before a byte goes out: the meta blob is serialized first, so its

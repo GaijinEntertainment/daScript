@@ -2547,3 +2547,12 @@
     `PERF_LEDGER.md` 2026-11-01). Done = the release re-mint's `performance/gen_bench_records.das -- --legs vulkan` on zen4
     landing the vulkan rows beside the CPU ones, with a `llama-batched-bench` built beside the 9febe63 vulkan reference
     (`benchmarks/setup_lcpp_ref.das --flavor vulkan` builds it) so the reference's tg128@4 row lands too.
+
+277. **The portable kq batch GEMM re-splits every nibble a token, and wasm has no int8 dot.** On the browser build GigaAM's
+    kq lane serves a 7 s utterance in ~1000 ms, the q8 lane's ~930 ms: `kq_rows_batch_kernel` (`dasllama_math_default.das`)
+    runs one `dot_kq` a token over a hot weight row, so each token pays the nibble split and the weight loads again, and
+    `idot4` lowers on wasm to two `extmul`s and two `extadd_pairwise`s a 16 bytes because the build pins relaxed SIMD off
+    (`web/CMakeLists.txt` `DAS_WASM_RELAXED_SIMD`: Safari refuses a module carrying any relaxed opcode, and the i7 operand of
+    `i32x4.relaxed_dot_i8x16_i7x16_add_s` needs a sign fold that wraps at -128). Done = a row x token micro-tile in the
+    portable batch (the nibbles split once a 32-block, four tokens' `idot`s off one load), measured on the interpreter's
+    browser build against this row's numbers, and a relaxed-SIMD build arm raced beside it where a browser serves it.

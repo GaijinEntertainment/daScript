@@ -228,8 +228,8 @@
 
   var modelsBase = new URLSearchParams(location.search).get('models') || 'models/';
   if (!modelsBase.endsWith('/')) modelsBase += '/';
-  // ?asr=<file> and ?tts=<file> pick other GGUFs of the model set (a wider carrier, a bigger voice, to compare) - the set's defaults otherwise
-  var asrModel = new URLSearchParams(location.search).get('asr') || 'gigaam-v3-e2e-rnnt-q4_k.gguf';
+  // ?asr=<file> and ?tts=<file> pick other files of the model set (a wider carrier, a bigger voice, to compare) - the set's defaults otherwise
+  var asrModel = new URLSearchParams(location.search).get('asr') || 'gigaam-v3-e2e-rnnt-q4_k.dlim';
   var ttsModel = new URLSearchParams(location.search).get('tts') || 'pocket-tts-en-18m-stuart-kq.gguf';
 
   function setProgress(done, total) {
