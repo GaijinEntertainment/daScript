@@ -4701,6 +4701,14 @@ def private vulkan_qwen25v_chain(t : Qwen25vTower; var s : Qwen25vState; planes 
 
 [cold_path]
 def private vt_upload_g4v(var r : VtResident; key : uint64; t : Gemma4vTower; ones_n : int64; lay : Q8RepackLayout) : bool {
+    var inscope regions <- vt_g4v_regions(t)
+    return vt_upload(r, key, t.qblob, t.qscales, regions, t.blob, 0l, t.blob.n, ones_n, lay, vt_dev_src(t), VT_G4V_PIECE)   //! the whole f32 blob: the stem's and the tail's rows at their file offsets
+}
+
+let private VT_G4V_PIECE = "vk.g4v"   //! gemma4v's q8 pieces' prefix
+
+//! gemma4v's block GEMM regions
+def private vt_g4v_regions(t : Gemma4vTower) : array<Q8Region> {
     var regions : array<Q8Region>
     regions |> reserve(t.n_layer * GEMMA4V_GEMMS)
     var recs : Q8Region[int(GEMMA4V_GEMMS)]
@@ -4708,9 +4716,15 @@ def private vt_upload_g4v(var r : VtResident; key : uint64; t : Gemma4vTower; on
         gemma4v_block_regions(t, l, recs)
         regions |> push_from(recs)
     }
-    let ok = vt_upload(r, key, t.qblob, t.qscales, regions, t.blob, 0l, t.blob.n, ones_n, lay)   //! the whole f32 blob: the stem's and the tail's rows at their file offsets
-    delete regions
-    return ok
+    return <- regions
+}
+
+//! gemma4v's Vulkan device block (`#tower-dev-block`): the q8 lane's block GEMMs gathered
+[cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
+def private vulkan_gemma4v_bake(t : Gemma4vTower; var b : TowerDevBuild) : bool {
+    var inscope regions <- vt_g4v_regions(t)
+    vt_bake_q8(b, VT_G4V_PIECE, t.qblob, t.qscales, regions)
+    return true
 }
 
 
@@ -4849,6 +4863,7 @@ def private vulkan_gemma4v_chain(t : Gemma4vTower; var s : Gemma4vState; planes 
     if (!vt_gate(r, true)) {
         return false
     }
+    return vt_decline(r, VulkanTowerDecline.flavor) if (t.q8 && t.dev_backend != TowerDev.vulkan)   //! the exact lane's planes upload as stored
     let f32w = !t.q8
     let q8e = kq_elems(KqFmt.q8)
     let d = t.n_embd
@@ -4886,7 +4901,9 @@ def private vulkan_gemma4v_chain(t : Gemma4vTower; var s : Gemma4vState; planes 
         return vt_decline(r, VulkanTowerDecline.device)
     }
     let lay = active_q8_repack_layout(g_active_needs_repack)
-    let key = vt_key_vis_w(f32w ? vt_key_f16(t.wblob, 0l, t.wblob.n, t.blob, 0l, t.blob.n, t.n_layer) : vt_key(t.qblob, t.qscales, t.blob, 0l, t.blob.n, hs, t.n_layer, lay.mr, lay.kgroup, lay.wbias), t, d, pd)
+    let src = vt_dev_src(t)
+    let key = vt_key_vis_w((f32w ? vt_key_f16(t.wblob, 0l, t.wblob.n, t.blob, 0l, t.blob.n, t.n_layer)
+        : (src.on ? vt_key_dev(src, t.blob, 0l, t.blob.n, t.n_layer) : vt_key(t.qblob, t.qscales, t.blob, 0l, t.blob.n, hs, t.n_layer, lay.mr, lay.kgroup, lay.wbias))), t, d, pd)
     let fresh_w = r.key != key
     let ones_n = max(hs, d)
     if (fresh_w && !(f32w ? vt_upload_f32(r, key, t.blob, t.blob.n, t.wblob, t.blk_bf16 ? t.wblob.n : 0l, ones_n) : vt_upload_g4v(r, key, t, ones_n, lay))) {
@@ -6303,6 +6320,7 @@ def dasllama_vulkan_tower_register {
         register_gemma4a_flavor(TowerDev.vulkan, @@vulkan_gemma4a_serves_model, @@vulkan_gemma4a_bake)
         register_gemma3v_flavor(TowerDev.vulkan, @@vulkan_vision_serves_model, @@vulkan_gemma3v_bake)
         register_qwen3v_flavor(TowerDev.vulkan, @@vulkan_vision_serves_model, @@vulkan_qwen3v_bake)
+        register_gemma4v_flavor(TowerDev.vulkan, @@vulkan_vision_serves_model, @@vulkan_gemma4v_bake)
         register_vad_gpu(@@vulkan_vad_chunks)
         register_tower_rows_gen(@@vulkan_tower_fc_gen)
     }
