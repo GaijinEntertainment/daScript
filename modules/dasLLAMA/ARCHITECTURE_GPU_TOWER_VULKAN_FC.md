@@ -64,5 +64,5 @@ cm2 tile - or its KHR twin - decodes the superblocks on the way in, over the f16
 input into. The lane therefore needs the f16 feed as the exact lane does: off it (the sdot4 mode) the chain declines
 `device` and the CPU kq lane serves. A member with no tile on the device (`vt_fc_kq_tiles_ok`, asked at the chain's three
 widths) declines `kq_lane` naming the carrier's members; a carrier the lane refuses at load never reaches the chain. The
-facade's device-lane arm reads the seat's `kq_lane` flag (`register_gigaam_gpu`): the Vulkan driver registers it served,
-the Metal driver does not (`ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary`).
+facade's device-lane arm reads the seat's `kq_lane` flag (`register_gigaam_gpu`), which both drivers register served; the
+Metal chain's form is `ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-kq`.

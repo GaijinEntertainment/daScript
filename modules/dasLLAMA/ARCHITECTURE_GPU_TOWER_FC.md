@@ -43,12 +43,9 @@ form's kernels (`pf_ga_ready`, and `pf_ga_mel_ready` off the samples), its lane'
 (`fc_weights_ready`: the q8 slab, or the half tensor crown under the halfword plane), a scratch buffer it cannot take
 or a failed command buffer; the CPU then cuts the mel and the block seat
 serves behind the CPU front and counts its own declines.
-Both seats serve the q8 and exact weight lanes (`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`): the exact lane's GEMMs on
-the half tensor GEMM over the carrier's halfwords, the q8 lane's on the prefill q8 ladder over the model's q8 slab. The kq
-lane - a quantized carrier's own planes - the Metal chain declines by name (`kq_lane`, `TwFc.kq_lane`, the members in the
-words): no Metal chain GEMM reads the engine's K-quant planes, the encode seat stands down with it, and the seat registers
-no kq lane, so the facade's device-lane arm keeps the CPU kq lane (`followup_metal.md` ledgers the seats); the Vulkan chain
-serves it (`ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-kq`). Canary and
+Both seats serve the three weight lanes (`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`): the exact lane's GEMMs on
+the half tensor GEMM over the carrier's halfwords, the q8 lane's on the prefill q8 ladder over the model's q8 slab, the kq
+lane's - a quantized carrier's own planes - each GEMM on its seat's form (`#tower-fc-kq`). Canary and
 parakeet keep declining their q8 lane (`quant_mode`, `TwFc.q8_served` off).
 
 The chain submits on the timed encoder, which every submission already pays for, so its device time costs the served
@@ -67,3 +64,20 @@ its statistics are per row. Its form runs the depthwise conv as the shared templ
 (`MetalGaDw`, `GkDwConvRows` FORM 3: the bias row first, no epilogue; `MetalGaDwH` over taps the carrier holds in
 f16, the context's `btaps` binding the family's halfword plane), then the row LayerNorm in place, then the SiLU rows. The family's offsets are the chain's offsets record with the LayerNorm's rows in the
 BatchNorm slots (`gigaam_layer_offsets`), which only this form reads.
+
+### The kq lane on the Metal chain {#tower-fc-kq}
+
+A quantized GigaAM carrier serves its block GEMMs as the engine's own planes, one seat a GEMM
+(`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`), and the chain runs each seat on the form its format names. The resident's
+upload (`tw_fc_kq_attach`) puts the Q8_0 seats into the q8 slab at their seat offsets, as the q8 lane's regions go, and
+each K-quant member's seats into the kq slab (`g_tw_kq_fc`): the member's superblocks in layout order, then its scale rows
+over that same order in the Metal form - k4 and k5's rows compacted to the 16-byte disk block, a split-scale member's
+folded to strips and tail (`ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane`) - so a seat binds at its
+superblock base in both runs, and a split member's base is held even for the tail's word bind. Every record keeps its bind
+(`TwKqBind`, found by the chain's virtual offset); `fc_mm` runs a Q8_0 seat through the q8 ladder and a K-quant seat through
+the prefill's dense K-quant site (`pf_enc_kq_mm`: the tensor twins behind their crowns, the dev-W panel keyed by the slab and
+the seat, the split-K form under its knee, the staged base tile otherwise) over the same half feed the q8 lane takes. The
+stamps read disk-order superblocks alone, so the lane serves a carrier loaded under the row-major backend - what the Metal
+mode pins for every load, as the LLM blob needs - and declines `kq_lane` naming the members on one the CPU backend interleaved
+at load (`kq_repacked`), as it does on a member with no base tile on the build; the facade's device-lane arm reads the seat's
+`kq_disk` flag for the same answer. The Vulkan chain's form is `ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-kq`.

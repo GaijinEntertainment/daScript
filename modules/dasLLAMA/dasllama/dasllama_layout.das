@@ -264,7 +264,7 @@ def private metal_blob_materialize(var t : Model) {
 
 // 20B -> 16B in place: keep bytes [0..16) of every superblock strip, then shrink. Forward
 // byte moves are safe — every destination sits below its source (regions can overlap).
-def private compact_kq_scale_strip(var ks : array<uint8>) {
+def compact_kq_scale_strip(var ks : array<uint8>) {
     let nsb = long_length(ks) / 20l
     unsafe {
         var p = addr(ks[0])

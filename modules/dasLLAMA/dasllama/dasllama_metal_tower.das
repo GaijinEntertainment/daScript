@@ -22,6 +22,7 @@ require dasllama/dasllama_gemma4a   // Gemma4aEncoder/Gemma4aState — the Confo
 require dasllama/dasllama_canary    // CanaryEncoder/CanaryState — the FastConformer block loop
 require dasllama/dasllama_parakeet  // ParakeetModel/ParakeetState — the same chain, parakeet's blob layout
 require daslib/cmp   // cmp_by: the q8 slab's regions in offset order
+require daslib/strings_boost   // join - the kq lane members' names in a decline
 require dasllama/dasllama_gigaam
 require dasllama/dasllama_vad   // VadModel/VadState - the silero VAD seat
 require dasllama/dasllama_styletts2
@@ -31,7 +32,8 @@ require dasllama/dasllama_kqformat
 require dasllama/dasllama_gemm_schema   // Q8_BLOCK_ELEMS, Q8_QPB, Q8_SPB - the q8 blob's block shape
 require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_tts_types
-require dasllama/dasllama_layout
+require dasllama/dasllama_layout   // compact_kq_scale_strip - the kq lane's k4/k5 scale planes in the Metal form
+require dasllama/dasllama_load     // kq_split_scale_plane - ... and the split-scale members'
 require dasllama/dasllama_tts_slab
 require daslib/apply
 require daslib/math_bits
@@ -128,6 +130,7 @@ def metal_tower_shutdown {
     st2_slab_free(g_tw_q8)
     st2_slab_free(g_tw_q8_vis)
     st2_slab_free(g_tw_q8_fc)
+    st2_slab_free(g_tw_kq_fc)
     st2_slab_free(g_tw_conv1_pad)
     st2_slab_free(g_tw_cn_conv0_panel)
     st2_slab_free(g_tw_pk_conv0_panel)
@@ -960,6 +963,7 @@ struct private FcGpuCtx : TwGpuCtx {
     wplane : bool           //!< the GEMMs live in the family's halfword plane alone: the f32 blob holds none
     btaps : MetalBuffer?    //!< the depthwise taps' halfword plane (`TwFc.taps`), where the family's taps are f16
     q8 : bool               //!< the GEMMs serve off the q8 slab (`g_tw_q8_fc`)
+    kq : bool               //!< the kq lane: each GEMM off its seat - a Q8_0 seat in the q8 slab, a K-quant seat in the kq slab (`g_tw_kq_fc`)
     dev : FcDevPlanes       //!< the all-heads attention's scratch, in the per-head scratch's place where it serves
     dev_on : bool
     scratch : MetalBufSet
@@ -1031,6 +1035,19 @@ def private fc_twin_attach(blob : PlaneF; bblob : MetalBuffer?) : MetalBuffer? {
 //! one weighted GEMM of the chain: the q8 slab's region on the q8 lane, the half tensor form over the halfwords where it
 //! serves, the f32 tile form otherwise
 def private fc_mm(enc : MetalComputeEncoder?; c : FcGpuCtx; woff : int64; bx, by, bk, bn : MetalBuffer?; rows, nd, kdim : int64) {
+    if (c.kq) {
+        let b = tw_fc_kq_bind(woff)
+        if (c.bxh != null) {
+            tw_half(enc, bx, c.bxh, rows * kdim)
+        }
+        if (b.fmt == KqFmt.q8) {
+            pf_enc_q8_mm(enc, g_tw_q8_fc.buf, b.qoff, bx, c.bxh, by, bk, bn, rows, nd, kdim)
+        } else {
+            pf_enc_kq_mm(enc, b.fmt, int64(b.qoff), (buf = g_tw_kq_fc.buf, qoff = b.qoff), (buf = g_tw_kq_fc.buf, soff = b.soff, doff = b.doff),
+                bx, c.bxh, by, bk, bn, rows, nd, kdim)
+        }
+        return
+    }
     if (c.q8) {
         if (c.bxh != null) {
             tw_half(enc, bx, c.bxh, rows * kdim)
@@ -1097,9 +1114,195 @@ def private tw_fc_q8_attach(fc : TwFc) : bool {
     return ok
 }
 
-//! the family's weights ready on the device for the chain: the q8 slab on the q8 lane, the half tensor crown where the GEMMs
-//! live in the family's halfword plane alone; the f32 blob needs nothing
+//! a kq-lane GEMM record's bind, keyed by the chain's virtual offset: a Q8_0 seat's byte offset in the q8 slab, a K-quant
+//! seat's quant bind and its scale pair (`kq_scales_of`'s form) in the kq slab
+struct private TwKqBind {
+    woff : int64
+    fmt : KqFmt
+    qoff : uint64
+    soff : uint64
+    doff : uint64
+}
+
+var private g_tw_kq_fc : St2SlabBase                     //!< the served kq lane's K-quant members' planes as one device blob: each member's superblocks, then its Metal-form scale plane
+var private @exact_size g_tw_kq_fc_binds : array<TwKqBind>   //!< every GEMM record's bind, by ascending virtual offset (`tw_fc_kq_bind`)
+var private @scratch @exact_size g_tw_fc_gseats : array<TowerGemmSeat>   //!< the kq lane's seat a GEMM record (eleven a block in the chain's order, the rel record empty)
+
+def private tw_fc_kq_bind(woff : int64) : TwKqBind {
+    var lo = 0l
+    var hi = long_length(g_tw_kq_fc_binds)
+    while (lo < hi) {
+        let mid = (lo + hi) / 2l
+        if (g_tw_kq_fc_binds[mid].woff < woff) {
+            lo = mid + 1l
+        } else {
+            hi = mid
+        }
+    }
+    assert(lo < long_length(g_tw_kq_fc_binds) && g_tw_kq_fc_binds[lo].woff == woff, "a FastConformer GEMM names no seat of the kq lane")
+    return g_tw_kq_fc_binds[lo]
+}
+
+def private tw_kq_key(fc : TwFc) : uint64 {
+    let planes = hash_combine64(hash_combine64(intptr(plane_at(fc.kq, 0l)), uint64(fc.kq.n)), hash_combine64(intptr(plane_at(fc.ks, 0l)), uint64(fc.ks.n)))
+    return hash_combine64(planes, tw_q8_key(fc.qblob, fc.qscales))
+}
+
+//! every K-quant member of the lane has a base mul_mm tile on this build
+def private tw_fc_kq_served(fc : TwFc) : bool {
+    for (fmt in range(KQ_FMT_COUNT)) {
+        continue if ((fc.kq_fmts & (1u << uint(fmt))) == 0u)
+        return false if (!kq_mm_base_tile_on(kq_fmt_of_slot(fmt)))
+    }
+    return true
+}
+
+//! a member's scale rows in the Metal form: k4 and k5's 20-byte rows compacted to the 16-byte disk block, a split-scale
+//! member's folded to [16B strips][d tail], q40 and iq4nl verbatim
+def private tw_kq_metal_scales(fmt : KqFmt; var ks : array<uint8>) {
+    if (fmt == KqFmt.k4 || fmt == KqFmt.k5) {
+        compact_kq_scale_strip(ks)
+    } elif (fmt != KqFmt.q40 && fmt != KqFmt.iq4nl && fmt != KqFmt.nv4) {
+        var @exact_size xc : array<uint8>
+        kq_split_scale_plane(fmt, unsafe(addr<uint8 const?>(ks[0])), long_length(ks) / kq_ssb(fmt), xc)
+        delete ks
+        ks <- xc
+    }
+}
+
+//! the kq lane's members by name, `+`-joined in slot order with the Q8_0 seats' `q8` last - the decline's words
+[cold_path]
+def private tw_fc_kq_members(fc : TwFc) : string {
+    var names <- [for (fmt in range(KQ_FMT_COUNT)); "{kq_fmt_of_slot(fmt)}"; where(fc.kq_fmts & (1u << uint(fmt))) != 0u]
+    if (fc.qblob.n > 0l) {
+        names |> push("q8")
+    }
+    return join(names, "+")
+}
+
+//! the kq-lane decline, naming the carrier's members and the cause (`REVIEW_KQ_FORMATS.md`'s site rule): planes in the CPU
+//! backend's interleave, which the chain's stamps read no form of, or a member with no mul_mm tile on the build
+[cold_path]
+def private tw_decline_kq(fc : TwFc) : bool {
+    let why = (fc.kq_repacked ? "are in the CPU backend's interleave - a load under the Metal mode (the row-major backend pinned) keeps them in disk order"
+        : "have a member with no mul_mm tile on this build")
+    note_decline(g_tower_declines, "tower", "{MetalTowerDecline.kq_lane}", words = "the GigaAM block GEMMs ({tw_fc_kq_members(fc)}) {why} - the CPU kq lane serves them")
+    return false
+}
+
+//! one K-quant member's seats staged at `cur` of `staging`: the superblocks in record order, then the scale rows in the Metal
+//! form over the same order, each record's bind set; the cursor past the member
+[cold_path]
+def private tw_kq_stage_member(fc : TwFc; recs : array<Q8Region>; kf : KqFmt; var staging : array<uint8>; cur : int64) : int64 {
+    let nrec = long_length(recs)
+    let qsb = kq_qsb(kf)
+    let ssb = kq_ssb(kf)
+    var nsb_total = 0l
+    for (rid in range64(nrec)) {
+        continue if (recs[rid].rows == 0l || g_tw_fc_gseats[rid].fmt != kf)
+        nsb_total += recs[rid].rows * (recs[rid].n / KQ_SB_ELEMS)
+    }
+    let qbase = round_up(cur, 16l)
+    staging |> reserve_resize(qbase + nsb_total * qsb)
+    var @exact_size ks : array<uint8>
+    ks |> reserve_resize(nsb_total * ssb)
+    var sb = 0l
+    for (rid in range64(nrec)) {
+        continue if (recs[rid].rows == 0l || g_tw_fc_gseats[rid].fmt != kf)
+        let seat = g_tw_fc_gseats[rid]
+        let nsb = recs[rid].rows * (recs[rid].n / KQ_SB_ELEMS)
+        assert(sb % 2l == 0l, "a kq-lane seat's superblock base must be even: the split scale plane's d tail binds on words")
+        unsafe {
+            memcpy(addr(staging[qbase + sb * qsb]), plane_at(fc.kq, seat.qoff), uint64(nsb * qsb))
+            memcpy(addr(ks[sb * ssb]), plane_at(fc.ks, seat.soff), uint64(nsb * ssb))
+        }
+        g_tw_kq_fc_binds[rid].qoff = uint64(qbase + sb * qsb)
+        g_tw_kq_fc_binds[rid].soff = uint64(sb * 16l)
+        g_tw_kq_fc_binds[rid].doff = uint64(kq_scale_doff(kf, nsb_total, sb))
+        sb += nsb
+    }
+    tw_kq_metal_scales(kf, ks)
+    let sbase = round_up(qbase + nsb_total * qsb, 16l)
+    staging |> reserve_resize(sbase + long_length(ks))
+    unsafe {
+        memcpy(addr(staging[sbase]), addr(ks[0]), uint64(long_length(ks)))
+    }
+    for (rid in range64(nrec)) {
+        continue if (recs[rid].rows == 0l || g_tw_fc_gseats[rid].fmt != kf)
+        g_tw_kq_fc_binds[rid].soff += uint64(sbase)
+        g_tw_kq_fc_binds[rid].doff += uint64(sbase)
+    }
+    let past = sbase + long_length(ks)
+    delete ks
+    return past
+}
+
+//! The kq lane's planes on the device, uploaded once a model: the Q8_0 seats into the q8 slab at their seat offsets, each K-quant
+//! member's seats into the kq slab (`tw_kq_stage_member`), every record's bind recorded; false where a buffer cannot be made.
+[cold_path, arch(at="../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-kq")]
+def private tw_fc_kq_attach(fc : TwFc) : bool {
+    assert(!fc.kq_repacked, "the Metal kq slab stages disk-order superblocks alone; the seat declines an interleaved carrier ahead of this")
+    let key = tw_kq_key(fc)
+    return true if (st2_slab_current(g_tw_kq_fc, key) && (fc.qblob.n == 0l || st2_slab_current(g_tw_q8_fc, tw_q8_key(fc.qblob, fc.qscales))))
+    st2_slab_free(g_tw_kq_fc)
+    let nrec = fc.n_layer * 11l
+    var @exact_size recs : array<Q8Region>
+    recs |> reserve(nrec)
+    recs |> resize(nrec)
+    for (l in range64(fc.n_layer)) {
+        let lo = g_tw_fc_offs[l]
+        let d = fc.d
+        let ff = fc.ff
+        let rows = fixed_array(ff, d, d, d, d, 0l, d, 2l * d, d, ff, d)
+        let ns = fixed_array(d, ff, d, d, d, d, d, d, d, d, ff)
+        let woffs = fixed_array(lo.ff1a_w, lo.ff1b_w, lo.q_w, lo.k_w, lo.v_w, -1l, lo.o_w, lo.pw1_w, lo.pw2_w, lo.ff2a_w, lo.ff2b_w)
+        for (g in range64(11l)) {
+            recs[l * 11l + g] = Q8Region(woff = woffs[g], n = ns[g], rows = rows[g])
+        }
+    }
+    g_tw_kq_fc_binds |> reserve(nrec)
+    g_tw_kq_fc_binds |> resize(nrec)
+    // the Q8_0 seats: the q8 slab over their compact regions, each record's bind its region's byte offset
+    var @exact_size q8rg : array<Q8Region>
+    var @exact_size q8rid : array<int64>
+    for (rid in range64(nrec)) {
+        let seat = g_tw_fc_gseats[rid]
+        g_tw_kq_fc_binds[rid] = TwKqBind(woff = recs[rid].woff, fmt = seat.fmt)
+        continue if (recs[rid].rows == 0l || seat.fmt != KqFmt.q8)
+        q8rg |> push(Q8Region(woff = seat.qoff, n = recs[rid].n, rows = recs[rid].rows))
+        q8rid |> push(rid)
+    }
+    if (!empty(q8rg)) {
+        return false if (!tw_q8_attach_slab(g_tw_q8_fc, g_tw_q8_fc_boffs, fc.qblob, fc.qscales, q8rg))
+        for (i, rid in range64(long_length(q8rid)), q8rid) {
+            g_tw_kq_fc_binds[rid].qoff = g_tw_q8_fc_boffs[i]
+        }
+    }
+    // the K-quant members: one quant run and one scale run a member, the seats at their superblock bases
+    var @exact_size staging : array<uint8>
+    var cur = 0l
+    for (fmt in range(KQ_FMT_COUNT)) {
+        continue if ((fc.kq_fmts & (1u << uint(fmt))) == 0u)
+        cur = tw_kq_stage_member(fc, recs, kq_fmt_of_slot(fmt), staging, cur)
+    }
+    g_tw_kq_fc_binds |> sort() <| cmp_by(_.woff)
+    var blob = metal_new_buffer(g_dev, uint64(max(cur, 16l)))
+    if (blob != null && cur > 0l) {
+        unsafe {
+            memcpy(metal_buffer_contents(blob), addr(staging[0]), uint64(cur))
+        }
+    }
+    delete staging
+    delete recs
+    g_tw_kq_fc.buf = blob
+    g_tw_kq_fc.key = blob != null ? key : 0ul
+    return blob != null
+}
+
+//! the family's weights ready on the device for the chain: the kq lane's seats, the q8 slab on the q8 lane, the half tensor
+//! crown where the GEMMs live in the family's halfword plane alone; the f32 blob needs nothing
 def private fc_weights_ready(fc : TwFc) : bool {
+    return tw_fc_kq_attach(fc) if (fc.kq_lane)
     return tw_fc_q8_attach(fc) if (fc.q8)
     return empty(fc.wblob) || (g_tw_env_tower_f16 && pf_hmm_ready())
 }
@@ -1204,8 +1407,9 @@ def private fc_ctx_make(fc : TwFc; npos, ww : int64) : FcGpuCtx {
         c.scratch.short = c.scratch.short || c.btaps == null   //! no f32 taps stand behind the halfword plane
     }
     let bytes_xh = uint64(max(c.mp * max(n_ff, 2l * d), c.wwp * d) * 2l)
-    if (fc.q8) {
-        c.q8 = true
+    if (fc.q8 || fc.kq_lane) {
+        c.q8 = fc.q8
+        c.kq = fc.kq_lane
         c.bxh = pf_q8_mm_half() ? buf_set_take(c.scratch, g_tw_pool, bytes_xh, false) : null
     } elif (!empty(fc.wblob)) {
         c.wplane = true
@@ -1558,8 +1762,11 @@ struct private TwFc {
     mapped : bool
     q8 : bool
     q8_served : bool                //!< the q8 lane's GEMMs serve on the device off the q8 slab; else the lane declines
-    kq_lane : bool                  //!< the block GEMMs are the carrier's own K-quant planes (GigaAM's kq lane): the seat declines by name
-    kq_members : string             //!< ... the members, for the decline's words
+    kq_lane : bool                  //!< the block GEMMs are the carrier's own planes (GigaAM's kq lane): each a seat in `g_tw_fc_gseats`
+    kq_repacked : bool              //!< ... in the CPU backend's interleave, which the chain reads no GEMM over: it declines
+    kq : PlaneU8 = PlaneU8()        //!< ... the K-quant planes the seats index
+    ks : PlaneU8 = PlaneU8()
+    kq_fmts : uint                  //!< ... the K-quant members' format slots, a bit each
     d : int64
     ff : int64
     n_head : int64
@@ -1597,11 +1804,28 @@ def private tw_fc_of_pk(t : ParakeetModel) : TwFc {
 
 def private tw_fc_of_ga(m : GigaamModel) : TwFc {
     tw_fc_offs_size(m.n_layer)
+    g_tw_fc_gseats |> reserve(m.n_layer * 11l)
+    g_tw_fc_gseats |> resize(m.n_layer * 11l)
+    var kq_fmts = 0u
     for (l in range64(m.n_layer)) {
-        g_tw_fc_offs[l] = gigaam_layer_offsets(m, l)
+        let lo = gigaam_layer_offsets(m, l)
+        g_tw_fc_offs[l] = lo
+        continue if (!m.kq_lane)
+        let woffs = fixed_array(lo.ff1a_w, lo.ff1b_w, lo.q_w, lo.k_w, lo.v_w, -1l, lo.o_w, lo.pw1_w, lo.pw2_w, lo.ff2a_w, lo.ff2b_w)
+        for (g in range64(11l)) {
+            var seat = TowerGemmSeat(fmt = KqFmt.q8, qoff = -1l, soff = -1l)
+            if (woffs[g] >= 0l) {
+                seat = tower_gemm_seat(m, woffs[g])
+                if (seat.fmt != KqFmt.q8) {
+                    kq_fmts |= 1u << uint(int(seat.fmt))
+                }
+            }
+            g_tw_fc_gseats[l * 11l + g] = seat
+        }
     }
     return TwFc(blob = m.blob, wblob = m.gemm_f16 ? m.wblob : PlaneU16(), taps = m.dw_f16 ? m.wblob : PlaneU16(), qblob = m.qblob, qscales = m.qscales, mapped = m.image_map != null,
-        q8 = m.q8, q8_served = true, kq_lane = m.kq_lane, kq_members = m.kq_lane ? gigaam_kq_members(m) : "",
+        q8 = m.q8, q8_served = true, kq_lane = m.kq_lane, kq_repacked = m.kq_repacked,
+        kq = m.kq_lane ? m.kq : PlaneU8(), ks = m.kq_lane ? m.ks : PlaneU8(), kq_fmts = kq_fmts,
         d = m.d_model, ff = m.n_ff, n_head = m.n_head, nk = m.conv_kernel, n_layer = m.n_layer, eps = m.eps,
         form = FcForm(tap_major = true, rotary = true, conv_ln = true, holds_rows = true, prof = "ga"))
 }
@@ -1612,9 +1836,8 @@ def private tw_fc_seat(fc : TwFc; var x : array<float>; npos, ww : int64; rope_c
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
     }
-    if (fc.kq_lane) {
-        note_decline(g_tower_declines, "tower", "{MetalTowerDecline.kq_lane}", words = "the GigaAM block GEMMs ({fc.kq_members}) are the carrier's own K-quant planes, which the Metal FastConformer chain has no GEMM for - the CPU kq lane serves them")
-        return false
+    if (fc.kq_lane && (fc.kq_repacked || !tw_fc_kq_served(fc))) {
+        return tw_decline_kq(fc)
     }
     if (fc.q8 && !fc.q8_served) {
         return tw_decline(MetalTowerDecline.quant_mode)
@@ -2104,7 +2327,7 @@ def private tw_ga_encode_off() : bool {
 //! ``st.mel``, then the conv front and the block loop; -1 with nothing counted where the chain cannot serve.
 [hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains"), arch(at="../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary")]
 def private metal_gigaam_encode(m : GigaamModel; var st : GigaamState; samples : float const?; n_in : int64) : int64 {
-    return -1l if (tw_ga_encode_off() || m.kq_lane)   //! the kq lane: the block seat declines by name behind the CPU front
+    return -1l if (tw_ga_encode_off())
     let d = m.d_model
     let k = m.subs_kernel
     let nch = m.n_sub_ch
@@ -6143,6 +6366,7 @@ def private tw_weights_drop {
     st2_slab_free(g_tw_q8)
     st2_slab_free(g_tw_q8_vis)
     st2_slab_free(g_tw_q8_fc)
+    st2_slab_free(g_tw_kq_fc)
     st2_slab_free(g_tw_conv1_pad)
     st2_slab_free(g_tw_cn_conv0_panel)
     st2_slab_free(g_tw_pk_conv0_panel)
@@ -6185,7 +6409,7 @@ def dasllama_metal_tower_register {
     register_canary_front_gpu(@@metal_canary_front)
     register_parakeet_gpu(@@metal_parakeet_blocks, @@metal_tower_serves)
     register_parakeet_gpu_encode(@@metal_parakeet_encode)
-    register_gigaam_gpu(@@metal_gigaam_blocks, @@metal_tower_serves)
+    register_gigaam_gpu(@@metal_gigaam_blocks, @@metal_tower_serves, true, true, true)
     register_gigaam_gpu_encode(@@metal_gigaam_encode)
     register_gigaam_gpu_ctc(@@metal_gigaam_ctc)
     register_tower_rows_gen(@@metal_tower_rows_gen)

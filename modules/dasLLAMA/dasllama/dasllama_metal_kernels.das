@@ -4680,6 +4680,9 @@ struct private B32MmForms {
 //! the base mul_mm builders by format; `[init]` fills them, since a serialized exe restores a global as data and a function value
 //! written by a declaration initializer arrives null
 var private KQ_MM_FORMS : table<KqFmt; KqMmForms>
+
+//! whether `fmt` has a base mul_mm tile (the staged simdgroup form every dense K-quant site falls to): the tower's kq lane serves a member on it
+def kq_mm_base_tile_on(fmt : KqFmt) : bool => key_exists(KQ_MM_FORMS, fmt)
 var private B32_MM_FORMS : table<KqFmt; B32MmForms>
 var private g_base_sk_on = false   //! the base tiles' split-K stamps compiled (`metal_base_split_init`)
 

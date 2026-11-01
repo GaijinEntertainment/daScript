@@ -7530,6 +7530,18 @@ def pf_enc_q8_mm(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint
     enc_gemm_mm(enc, bwblob, wboff, bx, by, bk, bn, mp, d, 0ul, kdim, 0l, bxh)
 }
 
+var private g_pf_no_model = Model()   //! the tower's K-quant sites bind their own planes: the dense site reads its Model for per-32 planes alone, which a superblock site never asks for
+
+//! One K-quant GEMM over a driver's own planes on the prefill ladder, for a driver outside this file: the member's superblocks
+//! at `bq` and its Metal-form scales at `bs` (`kq_scales_of`'s pair), `mp` rows padded to 32, no GEMV tail; `bxh` the caller's
+//! half twin of `bx`, null where `pf_q8_mm_half` says none is read; `site` keys the site's dev-W panel beside its buffer.
+[arch(at="../ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-gemm-ladder")]
+def pf_enc_kq_mm(enc : MetalComputeEncoder?; fmt : KqFmt; site : int64; bq : tuple<buf : MetalBuffer?; qoff : uint64>;
+                 bs : tuple<buf : MetalBuffer?; soff : uint64; doff : uint64>; bx, bxh, by, bk, bn : MetalBuffer?; mp, d, kdim : int64) {
+    verify(kq_sb(fmt) && !kq_dense_b32(fmt), "pf_enc_kq_mm: a superblock format alone")
+    pf_enc_kq_dense_site(enc, g_pf_no_model, fmt, site, d, bq, bs, bx, by, bk, bn, mp, 0ul, bxh, kdim, true, !pf_kq_split_fmt(fmt))
+}
+
 //! kdim feeds the tall/remainder split's X stride; kdim-less callers stay whole-dispatch 32-tile
 [arch(at="../ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-gemm-ladder")]
 def pf_enc_bf16_mm(enc : MetalComputeEncoder?; bw : MetalBuffer?; wboff : uint64;

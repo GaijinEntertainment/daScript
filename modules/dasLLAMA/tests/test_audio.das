@@ -938,6 +938,71 @@ def private ga_q8_cell(t : T?; path : string; mx : GigaamModel; samples : array<
     }
 }
 
+//! the dense K-quant mul_mm dispatches the device counted, every format's stamp and form: on the Q4_K carrier the kq lane's
+//! K-quant seats alone move them (its Q8_0 seats ride the q8 stamps)
+def private kq_mm_count() : int64 {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        var n = 0l
+        var inscope cov <- metal_kernel_coverage()
+        for (k, v in keys(cov), values(cov)) {
+            if (k |> ends_with("_metal_kq_mulmm_t") || k |> ends_with("_metal_kq_mulmm_db") || k |> ends_with("_metal_kq_mulmm_k6_t") || k |> ends_with("_metal_kq_mulmm_iq4xs_t")
+                    || k |> ends_with("_metal_kq_mulmm") || k |> ends_with("_metal_kq_mulmm_sk")) {
+                n += v
+            }
+        }
+        return n
+    } else {
+        return 0l
+    }
+}
+
+//! the kq lane on the Metal chain - the Q4_K carrier's block GEMMs on the K-quant mul_mm stamps over the carrier's own planes,
+//! its Q8_0 conv pointwise GEMMs on the q8 slab - against the CPU kq chain with the exact chain `mx` the reference: the encode,
+//! its log-mel and every block on the device with no `kq_lane` or `quant_mode` decline, the frame count and the token ids the
+//! CPU kq chain's, the device rows' rel_l2 from the exact chain within ``TWIN_SLACK_VK`` x the CPU kq chain's own plus
+//! ``TWIN_REL_L2_FLOOR``, and a K-quant mul_mm stamp counted (`REVIEW_KQ_FORMATS.md`'s served cell: the loader's tag the disk
+//! type, a counter no other plane of the file moves)
+[cold_path, unused_argument(t, kq_path, mx, samples, clip), arch(at = "../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-kq")]   // off-Apple the gated body is empty
+def private ga_kq_cell(t : T?; kq_path : string; mx : GigaamModel; samples : array<float>; clip : string) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        var mk <- mint_ga(kq_path, false, -1l)
+        let tag = "gigaam {clip} kq lane"
+        t |> success(mk.kq_lane, "{tag}: the carrier serves as its own planes")
+        t |> equal(gigaam_exec_fmt(mk), "k4", "{tag}: the loader's tag for the attention and FF planes is the disk type, Q4_K")
+        with_gpu_knobs() {
+            set_metal_tower(false)
+            var inscope ex <- ga_leg(mx, samples)
+            var inscope cpu <- ga_leg(mk, samples)
+            set_metal_tower(true)
+            let q0 = metal_tower_stats()
+            let mel0 = metal_tower_ga_mels()
+            let dk0 = metal_tower_declines()?["kq_lane"] ?? 0l
+            let qd0 = metal_tower_declines()?["quant_mode"] ?? 0l
+            let mm0 = kq_mm_count()
+            var inscope dev <- ga_leg(mk, samples)
+            let q1 = metal_tower_stats()
+            t |> equal(q1.encodes - q0.encodes, 1l, "{tag}: the device served the encode")
+            t |> equal(q1.blocks - q0.blocks, mk.n_layer, "{tag}: every block ran on the driver")
+            t |> equal(metal_tower_ga_mels() - mel0, 1l, "{tag}: the log-mel ran on the device")
+            t |> equal((metal_tower_declines()?["kq_lane"] ?? 0l) - dk0, 0l, "{tag}: no kq_lane decline")
+            t |> equal((metal_tower_declines()?["quant_mode"] ?? 0l) - qd0, 0l, "{tag}: no quant_mode decline")
+            t |> success(kq_mm_count() > mm0, "{tag}: a K-quant mul_mm stamp served the K-quant seats (the census counter rose)")
+            t |> equal(dev.n, cpu.n, "{tag}: the frame count")
+            t |> equal(dev.ids, cpu.ids, "{tag}: the token ids are the CPU kq chain's")
+            to_log(LOG_INFO, "test_audio: {tag} cpu: {cpu.text}\n")
+            to_log(LOG_INFO, "test_audio: {tag} gpu: {dev.text}\n")
+            var kq_ex = TowerParityStats()
+            var dev_ex = TowerParityStats()
+            if (tower_parity_stats(t, "{tag} cpu kq vs exact", ex.x, cpu.x, kq_ex) && tower_parity_stats(t, "{tag} metal vs exact", ex.x, dev.x, dev_ex)) {
+                let bar = double(TWIN_SLACK_VK) * kq_ex.rel_l2 + TWIN_REL_L2_FLOOR
+                to_log(LOG_INFO, "test_audio: {tag}: rel_l2 from the exact chain - cpu kq {kq_ex.rel_l2}, metal {dev_ex.rel_l2}, the bar {bar}\n")
+                t |> success(dev_ex.rel_l2 <= bar, "{tag}: the device rows within {TWIN_SLACK_VK}x the CPU kq chain's rel_l2 from the exact chain ({dev_ex.rel_l2} vs {kq_ex.rel_l2})")
+            }
+        }
+        delete mk
+    }
+}
+
 //! the GigaAM device seats' side arms on one clip: the mel seat's declines (the knob, a clip under one window, a scratch past the
 //! device's largest buffer), the encode off an uploaded mel, the held encoder rows' key, and a scratch the tower cannot take -
 //! the CPU chain transcribing and the `memory` decline counted once, by the block seat; the knobs put back as found
@@ -1051,10 +1116,11 @@ def private ga_prof_legs(t : T?; m : GigaamModel; samples : array<float>) {
 
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary")]
 def test_gigaam_metal_twin(tst : T?) {
-    tst |> run("GigaAM v3 e2e-rnnt: the Metal rotary FastConformer chain vs the CPU exact chain on the FLEURS ru clips") @(t : T?) {
+    tst |> run("GigaAM v3 e2e-rnnt: the Metal rotary FastConformer chain vs the CPU exact chain on the FLEURS ru clips, the q8 lane and the Q4_K carrier's kq lane beside it") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             let path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-f16.gguf")
             return if (!family_on(t, "gigaam") || !model_available(t, path))
+            let kq_path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k.gguf")
             with_dasllama_jobque_() {
                 var inscope stg <- stage_gigaam_model(path, false)
                 var inscope m = GigaamModel()
@@ -1068,6 +1134,15 @@ def test_gigaam_metal_twin(tst : T?) {
                     var inscope samples <- load_audio_16k_mono(wav)
                     ga_clip_cell(t, m, samples, clip)
                     ga_q8_cell(t, path, m, samples, clip)
+                    if (stat(kq_path).is_valid) {
+                        //! the chain reads disk-order planes: the load under the row-major pin, as the Metal mode pins it for every load
+                        let pinned = with_kernel_backend("portable") {
+                            ga_kq_cell(t, kq_path, m, samples, clip)
+                        }
+                        t |> success(pinned, "{clip}: the portable backend pinned for the kq lane cell")
+                    } else {
+                        t |> skip("{clip}: the Q4_K carrier (gigaam-v3-e2e-rnnt-q4_k.gguf) not present - the kq lane cell")
+                    }
                     if (clip == "ru_short") {
                         ga_seat_arms_cell(t, m, samples)
                         ga_prof_cell(t, m, samples)

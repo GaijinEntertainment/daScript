@@ -59,6 +59,7 @@ struct GpuLaneSeat {
     f32_lane : bool = true
     serves : function<() : bool>
     kq_lane : bool = false   //! the driver's chain serves the kq lane - a quantized carrier's own planes (GigaAM's `gemm_seats`)
+    kq_disk : bool = false   //! ... reading them in disk order alone: a load under the CPU backend's interleave declines (the Metal chain)
 }
 
 //! the GPU tower would serve this encode on the file's planes - the lane policy's clause: with it false the policy's default is the q8 image
