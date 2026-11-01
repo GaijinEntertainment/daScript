@@ -255,7 +255,57 @@ def private tw_q8_key(qblob : PlaneI8; qscales : PlaneF) : uint64 {
 }
 
 //! the vision chains' q8 guard: an f32 tower needs no slab, a q8 one its planes on the device (attached once a tower)
-def private tw_q8_vis_ready(t : auto(TT)) : bool => !t.q8 || st2_slab_current(g_tw_q8_vis, tw_q8_key(t.qblob, t.qscales)) || tw_q8_attach_vis(t)
+def private tw_q8_vis_ready(t : auto(TT)) : bool {
+    return true if (!t.q8)
+    return tw_vis_dev_bind(t) if (t.dev_backend == TowerDev.metal)
+    return st2_slab_current(g_tw_q8_vis, tw_q8_key(t.qblob, t.qscales)) || tw_q8_attach_vis(t)
+}
+
+let private TW_VIS_Q8_PIECE = "mt.vis.q8"            //! a vision tower's q8 block GEMM slab in a Metal device block
+let private TW_VIS_Q8_OFFS_PIECE = "mt.vis.q8.offs"  //! ... its regions' byte offsets, a word each
+
+//! a Metal-flavored vision tower's q8 slab wrapping its piece, the region offsets read back from theirs (`#tower-dev-block`)
+[cold_path]
+def private tw_vis_dev_bind(t : auto(TT)) : bool {
+    let key = hash_combine64(intptr(plane_at(t.dev, 0l)), uint64(t.dev.n))
+    return true if (g_tw_q8_vis.buf != null && g_tw_q8_vis.key == key)
+    st2_slab_free(g_tw_q8_vis)
+    var q8 = tw_dev_buffer(t.dev, t.devplan, TW_VIS_Q8_PIECE, t.image_map != null)
+    return false if (q8 == null)
+    g_tw_q8_vis = St2SlabBase(buf = q8, key = key, borrowed = true)
+    var inscope offs <- tw_dev_words(t.dev, t.devplan, TW_VIS_Q8_OFFS_PIECE)
+    g_tw_q8_vis_boffs |> reserve_resize(long_length(offs))
+    for (i in range64(long_length(offs))) {
+        g_tw_q8_vis_boffs[i] = uint64(offs[i])
+    }
+    return true
+}
+
+//! A vision tower's Metal device block (`#tower-dev-block`): the q8 lane's block GEMM slab the attach builds over the CPU-form
+//! tower, and its offsets
+[cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
+def private metal_vision_bake(t : auto(TT); var b : TowerDevBuild) : bool {
+    return false if (!metal_tower_init())
+    g_tw_bake_rowmajor = true
+    let ok = tw_q8_attach_vis(t)
+    g_tw_bake_rowmajor = false
+    return false if (!ok)
+    tw_dev_put_slab(b, TW_VIS_Q8_PIECE, g_tw_q8_vis)
+    var inscope offs : array<int64>
+    for (o in g_tw_q8_vis_boffs) {
+        offs |> push(int64(o))
+    }
+    tw_dev_put_words(b, TW_VIS_Q8_OFFS_PIECE, offs)
+    st2_slab_free(g_tw_q8_vis)   //! the CPU form the slab was keyed by goes away after the bake
+    return true
+}
+
+def private metal_gemma3v_bake(t : Gemma3vTower; var b : TowerDevBuild) : bool => metal_vision_bake(t, b)
+def private metal_qwen3v_bake(t : Qwen3vTower; var b : TowerDevBuild) : bool => metal_vision_bake(t, b)
+def private metal_gemma4v_bake(t : Gemma4vTower; var b : TowerDevBuild) : bool => metal_vision_bake(t, b)
+
+//! a vision chain's q8 lane takes the Metal flavor where the tower knob is on; its exact lane's planes bind as stored
+def private metal_vision_serves_model(q8 : bool) : bool => q8 && g_tw_env_tower
 
 [cold_path]
 def private tw_q8_attach_vis(t : auto(TT)) : bool => tw_q8_attach_slab(g_tw_q8_vis, g_tw_q8_vis_boffs, t.qblob, t.qscales, tw_q8_regions(t))
@@ -2950,6 +3000,7 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; planes 
             || t.patch_dim % 32l != 0l || s.grid_w * s.grid_h != npos) {
         return tw_decline(MetalTowerDecline.shape)
     }
+    return tw_decline(MetalTowerDecline.flavor) if (t.q8 && t.dev_backend != TowerDev.metal)   //! the exact lane's planes bind as stored
     if (!metal_tower_init() || !tw_q8_vis_ready(t)) {   // per-encode: re-arms after any shutdown seat
         return tw_decline(MetalTowerDecline.device)
     }
@@ -3160,6 +3211,7 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; planes 
     if (d % 64l != 0l || ff % 64l != 0l || hs > 128l) {
         return tw_decline(MetalTowerDecline.shape)
     }
+    return tw_decline(MetalTowerDecline.flavor) if (t.q8 && t.dev_backend != TowerDev.metal)   //! the exact lane's planes bind as stored
     if (!metal_tower_init() || !tw_q8_vis_ready(t)) {   // per-encode: re-arms after any shutdown seat
         return tw_decline(MetalTowerDecline.device)
     }
@@ -3342,6 +3394,7 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; planes : a
     if (d % 64l != 0l || ff % 64l != 0l || hs > 128l || hs % 2l != 0l || proj % 64l != 0l || npos % 4l != 0l || t.patch_dim % 64l != 0l) {
         return tw_decline(MetalTowerDecline.shape)
     }
+    return tw_decline(MetalTowerDecline.flavor) if (t.q8 && t.dev_backend != TowerDev.metal)   //! the exact lane's planes bind as stored
     if (!metal_tower_init() || !tw_q8_vis_ready(t)) {   // per-encode: re-arms after any shutdown seat
         return tw_decline(MetalTowerDecline.device)
     }
@@ -6630,6 +6683,9 @@ def dasllama_metal_tower_register {
     register_tower_blocks_tail_gpu(@@metal_tower_blocks_tail)
     register_tower_conv_gpu(@@metal_conv_frontend)
     register_qwen3a_front_gpu(@@metal_q3a_front)
+    register_gemma3v_flavor(TowerDev.metal, @@metal_vision_serves_model, @@metal_gemma3v_bake)
+    register_qwen3v_flavor(TowerDev.metal, @@metal_vision_serves_model, @@metal_qwen3v_bake)
+    register_gemma4v_flavor(TowerDev.metal, @@metal_vision_serves_model, @@metal_gemma4v_bake)
     register_qwen3a_flavor(TowerDev.metal, @@metal_qwen3a_serves_model, @@metal_qwen3a_bake)
     register_qwen3a_proj_gpu(@@metal_q3a_proj)
     register_whisper_mel_gpu(@@metal_q3a_mel)
