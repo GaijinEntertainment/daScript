@@ -4221,6 +4221,7 @@ def private vulkan_gemma3v_chain(t : Gemma3vTower; var s : Gemma3vState; planes 
     if (!vt_gate(r, true)) {
         return false
     }
+    return vt_decline(r, VulkanTowerDecline.flavor) if (t.dev_backend != TowerDev.vulkan)
     let f32w = !t.q8
     let d = t.n_embd
     let ff = t.ff_pad
@@ -4252,15 +4253,14 @@ def private vulkan_gemma3v_chain(t : Gemma3vTower; var s : Gemma3vState; planes 
             || (cm2 && (!cm2_cls_ensure(int(KqFmt.q8), tc_d) || !cm2_cls_ensure(int(KqFmt.q8), tc_ff)))) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
-    g_vt_ln_offs |> reserve(t.n_layer)
-    g_vt_ln_offs |> resize(t.n_layer)
-    for (l in range64(t.n_layer)) {
-        g_vt_ln_offs[l] = gemma3v_ln_offs(t, l)
-    }
+    vt_g3v_offs(t)
     let lay = active_q8_repack_layout(g_active_needs_repack)
     let blob_n = t.blob.n
-    let key = f32w ? vt_key_f16(t.wblob, 0l, 0l, t.blob, 0l, blob_n, t.n_layer) : vt_key(t.qblob, t.qscales, t.blob, 0l, blob_n, 0l, t.n_layer, lay.mr, lay.kgroup, lay.wbias)
-    if (r.key != key && !(f32w ? vt_upload_f32(r, key, t.blob, blob_n, t.wblob, 0l, 0l) : vt_upload_ln(r, key, t.qblob, t.qscales, d, ff, t.blob, 0l, blob_n, lay, g_vt_ln_offs))) {
+    let src = vt_dev_src(t)
+    let key = (f32w ? vt_key_f16(t.wblob, 0l, 0l, t.blob, 0l, blob_n, t.n_layer)
+        : (src.on ? vt_key_dev(src, t.blob, 0l, blob_n, t.n_layer) : vt_key(t.qblob, t.qscales, t.blob, 0l, blob_n, 0l, t.n_layer, lay.mr, lay.kgroup, lay.wbias)))
+    if (r.key != key && !(f32w ? vt_upload_f32(r, key, t.blob, blob_n, t.wblob, 0l, 0l)
+            : vt_upload_ln(r, key, t.qblob, t.qscales, d, ff, t.blob, 0l, blob_n, lay, g_vt_ln_offs, -1l, g_vt_no_regions, src, VT_G3V_PIECE))) {
         return vt_decline(r, VulkanTowerDecline.memory)
     }
     let g_d = cm2 ? cm2_tiles_at(d, npos, tc_d) : vt_gemm_groups(d, npos)
@@ -4801,6 +4801,32 @@ def private vt_vis_slab(r : VtResident; t : auto(TT); d, pd, proj_off : int64) {
         upload_region_at(r.vis_w_dev, proj_off * 4l, addr<uint8 const?>(proj_rows[0]), t.proj_dim * d * 4l)
     }
 }
+
+let private VT_G3V_PIECE = "vk.g3v"   //! gemma3v's q8 pieces' prefix
+
+//! gemma3v's block offsets into `g_vt_ln_offs`
+def private vt_g3v_offs(t : Gemma3vTower) {
+    g_vt_ln_offs |> reserve(t.n_layer)
+    g_vt_ln_offs |> resize(t.n_layer)
+    for (l in range64(t.n_layer)) {
+        g_vt_ln_offs[l] = gemma3v_ln_offs(t, l)
+    }
+}
+
+//! gemma3v's Vulkan device block (`#tower-dev-block`): the q8 lane's block GEMMs gathered; the exact lane's f32 planes upload as
+//! stored, so its block is empty
+[cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
+def private vulkan_gemma3v_bake(t : Gemma3vTower; var b : TowerDevBuild) : bool {
+    return true if (!t.q8)
+    vt_g3v_offs(t)
+    var inscope regions <- vt_ln_regions(t.n_embd, t.ff_pad, g_vt_ln_offs, -1l, g_vt_no_regions)
+    vt_bake_q8(b, VT_G3V_PIECE, t.qblob, t.qscales, regions)
+    return true
+}
+
+//! a vision chain serves both lanes where the tower knob is on and the device arms
+[unused_argument(q8)]
+def private vulkan_vision_serves_model(q8 : bool) : bool => g_vt_env_tower && vulkan_tower_arms()
 
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def private vulkan_gemma4v_chain(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>; w, h, npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
@@ -6260,6 +6286,7 @@ def dasllama_vulkan_tower_register {
         register_canary_flavor(TowerDev.vulkan, @@vulkan_canary_serves_model, @@vulkan_canary_bake)
         register_audio_tower_flavor(TowerDev.vulkan, @@vulkan_audio_tower_serves_model, @@vulkan_audio_tower_bake)
         register_gemma4a_flavor(TowerDev.vulkan, @@vulkan_gemma4a_serves_model, @@vulkan_gemma4a_bake)
+        register_gemma3v_flavor(TowerDev.vulkan, @@vulkan_vision_serves_model, @@vulkan_gemma3v_bake)
         register_vad_gpu(@@vulkan_vad_chunks)
         register_tower_rows_gen(@@vulkan_tower_fc_gen)
     }
