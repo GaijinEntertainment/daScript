@@ -429,6 +429,15 @@ def tower_dev_put(var b : TowerDevBuild; name : string; src : uint8 const?; n : 
     b.plan |> push_from([key, off, n])
 }
 
+//! The first word of the piece `name` of a model's device block, read in place; `none` where the block holds no such piece
+def tower_dev_word(dev : PlaneU8; plan : PlaneI64; name : string; none : int64) : int64 {
+    let p = tower_dev_find(plan, name)
+    return none if (p.off < 0l || p.bytes < 8l)
+    unsafe {
+        return *reinterpret<int64 const?>(plane_at(dev, p.off))
+    }
+}
+
 //! The piece `name` of a model's device block (`devplan`): its byte offset in ``dev`` and its bytes - (-1, 0) where the block
 //! holds none
 def tower_dev_find(plan : PlaneI64; name : string) : tuple<off : int64; bytes : int64> {

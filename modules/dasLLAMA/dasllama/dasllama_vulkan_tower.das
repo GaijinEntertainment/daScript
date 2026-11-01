@@ -53,6 +53,7 @@ enum private VulkanTowerDecline {
     blocks       //! set_vulkan_audio_blocks(false): the whisper-class block hooks pinned off while the stem still serves
     quant_mode   //! the tower's planes are not the lane the driver serves
     kq_lane      //! a kq lane member with no K-quant tile on the device
+    flavor       //! the model is not the Vulkan-flavored image: each backend serves its own (`#tower-dev-block`)
     shape        //! a width, head size, row count or buffer range the stamps do not serve
     device       //! the tier has no device, or a class failed to build
     memory       //! a device or pinned allocation failed: the tower stays on the CPU chain
@@ -1641,6 +1642,9 @@ struct private VtFc {
     ks : PlaneU8 = PlaneU8()
     kq_repacked : bool   //! the K-quant planes in the CPU backend's grp interleave, which the gather un-groups; else disk order
     kq_fmts : uint       //! the K-quant members' format slots, a bit each
+    dev_backend : TowerDev   //! the device block the model's image carries (`#tower-dev-block`): `vulkan` uploads its pieces
+    dev : PlaneU8 = PlaneU8()
+    devplan : PlaneI64 = PlaneI64()
     n_layer : int64
     d : int64
     ff : int64
@@ -1704,16 +1708,17 @@ def private vt_fc_of_ga(m : GigaamModel) : VtFc {
     for (l in range64(m.n_layer)) {
         g_vt_fc_offs[l] = gigaam_layer_offsets(m, l)
     }
-    let nseats = m.kq_lane ? m.n_layer * GIGAAM_FC_RECORDS : 0l
+    let nseats = m.kq_lane && m.dev_backend == TowerDev.none ? m.n_layer * GIGAAM_FC_RECORDS : 0l   // a Vulkan image carries its seats
     g_vt_fc_gseats |> reserve(nseats)
     g_vt_fc_gseats |> resize(nseats)
-    let kq_fmts = gigaam_fc_record_seats(m, g_vt_fc_gseats)
+    let kq_fmts = (nseats > 0l ? gigaam_fc_record_seats(m, g_vt_fc_gseats)
+        : uint(tower_dev_word(m.dev, m.devplan, VT_FC_KQ_FMTS_PIECE, 0l)))
     let f16w = !m.q8 && m.gemm_f16
     return VtFc(family = "gigaam", front_name = "gigaam-front", q8 = m.q8, qblob = m.qblob, qscales = m.qscales, blob = m.blob,
         f16w = f16w, wblob = f16w ? m.wblob : PlaneU16(), w_off = m.gemm_off, w_n = f16w ? m.n_layer * m.gemm_stride : 0l,
         taps = m.dw_f16 ? m.wblob : PlaneU16(), taps_off = m.dw_off, taps_n = m.dw_f16 ? m.n_layer * m.conv_kernel * m.d_model : 0l,
         kq_lane = m.kq_lane, kq = m.kq_lane ? m.kq : PlaneU8(), ks = m.kq_lane ? m.ks : PlaneU8(), kq_repacked = m.kq_repacked,
-        kq_fmts = kq_fmts,
+        kq_fmts = kq_fmts, dev_backend = m.dev_backend, dev = m.dev, devplan = m.devplan,
         n_layer = m.n_layer, d = m.d_model, ff = m.n_ff, n_head = m.n_head, conv_kernel = m.conv_kernel, eps = m.eps,
         biased = true, tap_major = true, device_mel = false, rotary = true, conv_ln = true, n_mel = m.n_mel, n_fft = m.n_fft,
         n_fb = m.n_fft / 2l + 1l, nch = m.n_sub_ch, c0_w = m.c0_w, c0_b = m.c0_b, c2_w = m.c2_w, c2_b = m.c2_b,
@@ -1763,35 +1768,52 @@ def private vt_cn_regions(lo : CanaryLayerOffs; d, ff : int64; var out : Q8Regio
 }
 
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-kq")]
-def private vt_upload_fc_kq(var r : VtResident; key : uint64; fc : VtFc; lay : Q8RepackLayout) : bool {
+//! The kq lane's device plan: every GEMM record's seat in the device planes (`kq_seats`), the Q8_0 seats' regions in ``qblob``,
+//! and each K-quant member's quant and scale bytes
+struct private VtKqPlan {
+    seats : array<VtFcSeat>
+    regions : array<Q8Region>
+    qbytes : table<int; int64>
+    sbytes : table<int; int64>
+}
+
+[cold_path]
+def private vt_fc_kq_plan(fc : VtFc) : VtKqPlan {
     let q8e = kq_elems(KqFmt.q8)
     let nrec = fc.n_layer * VT_CN_GEMMS
-    var regions : array<Q8Region>
-    var qbytes, sbytes : table<int; int64>
-    r.kq_seats |> clear()
-    r.kq_seats |> reserve(nrec)
-    r.kq_seats |> resize(nrec)
+    var p : VtKqPlan
+    p.seats |> reserve(nrec)
+    p.seats |> resize(nrec)
     var recs : Q8Region[int(VT_CN_GEMMS)]
     for (l in range64(fc.n_layer)) {
         vt_cn_regions(g_vt_fc_offs[l], fc.d, fc.ff, recs)
         for (g in range64(VT_CN_GEMMS)) {
             let rid = l * VT_CN_GEMMS + g
             let seat = g_vt_fc_gseats[rid]
-            r.kq_seats[rid] = VtFcSeat(fmt = int(KqFmt.q8), wblk0 = 0l)
+            p.seats[rid] = VtFcSeat(fmt = int(KqFmt.q8), wblk0 = 0l)
             continue if (recs[g].rows == 0l)
             if (seat.fmt == KqFmt.q8) {
-                regions |> push(Q8Region(woff = seat.qoff, n = recs[g].n, rows = recs[g].rows))
-                r.kq_seats[rid] = VtFcSeat(fmt = int(KqFmt.q8), wblk0 = seat.qoff / q8e)
+                p.regions |> push(Q8Region(woff = seat.qoff, n = recs[g].n, rows = recs[g].rows))
+                p.seats[rid] = VtFcSeat(fmt = int(KqFmt.q8), wblk0 = seat.qoff / q8e)
             } else {
                 let fmt = int(seat.fmt)
                 let bytes = dev_rows_bytes(seat.fmt, recs[g].n, recs[g].rows)
-                let q0 = qbytes?[fmt] ?? 0l
-                r.kq_seats[rid] = VtFcSeat(fmt = fmt, wblk0 = q0 / kq_qsb(seat.fmt))
-                qbytes[fmt] = q0 + bytes.q
-                sbytes[fmt] = (sbytes?[fmt] ?? 0l) + bytes.s
+                let q0 = p.qbytes?[fmt] ?? 0l
+                p.seats[rid] = VtFcSeat(fmt = fmt, wblk0 = q0 / kq_qsb(seat.fmt))
+                p.qbytes[fmt] = q0 + bytes.q
+                p.sbytes[fmt] = (p.sbytes?[fmt] ?? 0l) + bytes.s
             }
         }
     }
+    return <- p
+}
+
+def private vt_upload_fc_kq(var r : VtResident; key : uint64; fc : VtFc; lay : Q8RepackLayout) : bool {
+    var inscope p <- vt_fc_kq_plan(fc)
+    var regions <- p.regions
+    var qbytes <- p.qbytes
+    let sbytes <- p.sbytes
+    r.kq_seats <- p.seats
     vt_upload_begin(r, key)
     r.wq_bytes = fc.qblob.n
     r.ws_bytes = fc.qscales.n * 2l
@@ -1829,22 +1851,7 @@ def private vt_upload_fc_kq(var r : VtResident; key : uint64; fc : VtFc; lay : Q
 def private vt_upload_kq_member(r : VtResident; fc : VtFc; fmt : int) {
     let kp = r.kq_planes?[fmt] ?? VtKqPlane()
     var wq, ws : array<uint8>
-    wq |> reserve_resize(kp.q_bytes)
-    ws |> reserve_resize(kp.s_bytes)
-    var recs : Q8Region[int(VT_CN_GEMMS)]
-    for (l in range64(fc.n_layer)) {
-        vt_cn_regions(g_vt_fc_offs[l], fc.d, fc.ff, recs)
-        for (g in range64(VT_CN_GEMMS)) {
-            let rid = l * VT_CN_GEMMS + g
-            let seat = g_vt_fc_gseats[rid]
-            continue if (recs[g].rows == 0l || int(seat.fmt) != fmt)
-            let kf = seat.fmt
-            let base = r.kq_seats[rid].wblk0
-            kq_gather_rows_dev(kf, plane_at(fc.kq, seat.qoff), plane_at(fc.ks, seat.soff), recs[g].n, recs[g].rows, recs[g].rows,
-                fc.kq_repacked, fc.kq_repacked ? active_kq_layout_mr(kq_schema_id(kf)) : 1l,
-                wq, ws, base * kq_qsb(kf), base * kq_dev_ssb(kf), g_vt_no_sbits)
-        }
-    }
+    vt_gather_kq_member(fc, fmt, r.kq_seats, kp.q_bytes, kp.s_bytes, wq, ws)
     unsafe {
         upload_region_at(kp.q_dev, 0l, addr<uint8 const?>(wq[0]), kp.q_bytes)
         upload_region_at(kp.s_dev, 0l, addr<uint8 const?>(ws[0]), kp.s_bytes)
@@ -1853,11 +1860,38 @@ def private vt_upload_kq_member(r : VtResident; fc : VtFc; fmt : int) {
     delete ws
 }
 
+//! one K-quant member's seats gathered in the tier's layout at their block bases (`seats`) into `wq` / `ws`
+[cold_path]
+def private vt_gather_kq_member(fc : VtFc; fmt : int; seats : array<VtFcSeat>; q_bytes, s_bytes : int64; var wq, ws : array<uint8>) {
+    wq |> reserve_resize(q_bytes)
+    ws |> reserve_resize(s_bytes)
+    var recs : Q8Region[int(VT_CN_GEMMS)]
+    for (l in range64(fc.n_layer)) {
+        vt_cn_regions(g_vt_fc_offs[l], fc.d, fc.ff, recs)
+        for (g in range64(VT_CN_GEMMS)) {
+            let rid = l * VT_CN_GEMMS + g
+            let seat = g_vt_fc_gseats[rid]
+            continue if (recs[g].rows == 0l || int(seat.fmt) != fmt)
+            let kf = seat.fmt
+            let base = seats[rid].wblk0
+            kq_gather_rows_dev(kf, plane_at(fc.kq, seat.qoff), plane_at(fc.ks, seat.soff), recs[g].n, recs[g].rows, recs[g].rows,
+                fc.kq_repacked, fc.kq_repacked ? active_kq_layout_mr(kq_schema_id(kf)) : 1l,
+                wq, ws, base * kq_qsb(kf), base * kq_dev_ssb(kf), g_vt_no_sbits)
+        }
+    }
+}
+
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_upload_fc(var r : VtResident; key : uint64; fc : VtFc; lay : Q8RepackLayout) : bool {
     if (fc.kq_lane) {
         return vt_upload_fc_kq(r, key, fc, lay)
     }
+    var inscope regions <- vt_fc_q8_regions(fc)
+    return vt_upload(r, key, fc.qblob, fc.qscales, regions, fc.blob, 0l, fc.blob.n, 0l, lay)
+}
+
+//! the q8 lane's regions of a FastConformer chain: every block GEMM, and a non-rotary family's front GEMMs behind them
+def private vt_fc_q8_regions(fc : VtFc) : array<Q8Region> {
     let d = fc.d
     let ff = fc.ff
     var regions : array<Q8Region>
@@ -1876,9 +1910,7 @@ def private vt_upload_fc(var r : VtResident; key : uint64; fc : VtFc; lay : Q8Re
         regions |> push(Q8Region(woff = fc.c6_w, n = nch, rows = nch))
         regions |> push(Q8Region(woff = fc.pre_w, n = w3 * nch, rows = d))
     }
-    let ok = vt_upload(r, key, fc.qblob, fc.qscales, regions, fc.blob, 0l, fc.blob.n, 0l, lay)
-    delete regions
-    return ok
+    return <- regions
 }
 
 [cold_path]
@@ -2817,6 +2849,10 @@ def private vt_front_arm(var r : VtResident; n_len, cap_floor : int64; classes :
 //! a FastConformer resident's GEMM planes - the halfwords on gigaam's exact lane, else the q8 planes - uploaded where its key
 //! moved; false where the upload will not take
 def private vt_fc_planes(var r : VtResident; fc : VtFc) : bool {
+    if (fc.dev_backend == TowerDev.vulkan && !fc.f16w) {   //! the exact lane's halfwords upload as stored on the f16 path below
+        let kd = vt_fold_taps(vt_fold_int(vt_fold_addr(vt_fold_int(0x6b0dul, fc.dev.n), unsafe(reinterpret<void?>(fc.dev.p))), fc.blob.n), fc)
+        return r.key == kd || (vt_upload_fc_dev(r, kd, fc) && vt_upload_taps(r, fc))
+    }
     if (fc.kq_lane) {
         let lay = active_q8_repack_layout(g_active_needs_repack)
         var kk = vt_fold_taps(vt_key(fc.qblob, fc.qscales, fc.blob, 0l, fc.blob.n, 0l, fc.n_layer, lay.mr, lay.kgroup, lay.wbias), fc)
@@ -2835,6 +2871,151 @@ def private vt_fc_planes(var r : VtResident; fc : VtFc) : bool {
     let lay = active_q8_repack_layout(g_active_needs_repack)
     let key = vt_fold_taps(vt_key(fc.qblob, fc.qscales, fc.blob, 0l, fc.blob.n, 0l, fc.n_layer, lay.mr, lay.kgroup, lay.wbias), fc)
     return r.key == key || (vt_upload_fc(r, key, fc, lay) && vt_upload_taps(r, fc))
+}
+
+let private VT_FC_WQ_PIECE = "vk.fc.wq"            //! the q8 planes gathered: the quants
+let private VT_FC_WS_PIECE = "vk.fc.ws"            //! ... and their halfword scales
+let private VT_FC_KQ_SEATS_PIECE = "vk.fc.kq.seats"  //! the kq lane's record seats, two words each: the format slot, the first block
+let private VT_FC_KQ_FMTS_PIECE = "vk.fc.kq.fmts"    //! the kq lane's K-quant members' format slots, a bit each, one word
+let private VT_GA_FRONT16_PIECE = "vk.ga.front16"  //! GigaAM's conv panels as one f16 slab
+let private VT_GA_TWIN_PIECE = "vk.ga.twin"        //! ... the device mel's twiddles and window
+
+//! a K-quant member's device planes' piece names
+def private vt_kq_piece(fmt : int; scales : bool) : string => scales ? "vk.fc.kq.{fmt}.s" : "vk.fc.kq.{fmt}.q"
+
+//! The FastConformer chain's planes off a Vulkan image's pieces (`#tower-dev-block`): each piece uploaded as it is - the q8
+//! planes, the kq lane's member planes and seats - beside the blob; false where a buffer cannot be made
+[cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
+def private vt_upload_fc_dev(var r : VtResident; key : uint64; fc : VtFc) : bool {
+    let wq = tower_dev_find(fc.devplan, VT_FC_WQ_PIECE)
+    let ws = tower_dev_find(fc.devplan, VT_FC_WS_PIECE)
+    vt_upload_begin(r, key)
+    r.wq_bytes = max(wq.bytes, 0l)
+    r.ws_bytes = max(ws.bytes, 0l)
+    if (r.wq_bytes > 0l) {
+        r.wq_dev = vt_dev_buf(r, r.wq_bytes)
+        r.ws_dev = vt_dev_buf(r, r.ws_bytes)
+    }
+    r.ones_off = fc.blob.n
+    r.norms_bytes = fc.blob.n * 4l
+    r.norms_dev = vt_dev_buf(r, r.norms_bytes)
+    r.kq_seats |> clear()
+    if (fc.kq_lane) {
+        let sp = tower_dev_find(fc.devplan, VT_FC_KQ_SEATS_PIECE)
+        let n = sp.bytes / 16l
+        r.kq_seats |> reserve(n)
+        r.kq_seats |> resize(n)
+        unsafe {
+            let w = reinterpret<int64 const?>(plane_at(fc.dev, sp.off))
+            for (i in range64(n)) {
+                r.kq_seats[i] = VtFcSeat(fmt = int(w[2l * i]), wblk0 = w[2l * i + 1l])
+            }
+        }
+        for (fmt in range(KQ_FMT_COUNT)) {
+            continue if ((fc.kq_fmts & (1u << uint(fmt))) == 0u)
+            let q = tower_dev_find(fc.devplan, vt_kq_piece(fmt, false))
+            let sc = tower_dev_find(fc.devplan, vt_kq_piece(fmt, true))
+            r.kq_planes[fmt] = VtKqPlane(q_dev = vt_dev_buf(r, q.bytes), s_dev = vt_dev_buf(r, sc.bytes), q_bytes = q.bytes, s_bytes = sc.bytes)
+        }
+    }
+    if (r.oom) {
+        vt_release(r)
+        return false
+    }
+    if (r.wq_bytes > 0l) {
+        upload_region_at(r.wq_dev, 0l, plane_at(fc.dev, wq.off), r.wq_bytes)
+        upload_region_at(r.ws_dev, 0l, plane_at(fc.dev, ws.off), r.ws_bytes)
+    }
+    upload_float_ranges(r.norms_dev, [(p = plane_at(fc.blob, 0l), n = fc.blob.n)], 0l)
+    for (fmt, kp in keys(r.kq_planes), values(r.kq_planes)) {
+        upload_region_at(kp.q_dev, 0l, plane_at(fc.dev, tower_dev_find(fc.devplan, vt_kq_piece(fmt, false)).off), kp.q_bytes)
+        upload_region_at(kp.s_dev, 0l, plane_at(fc.dev, tower_dev_find(fc.devplan, vt_kq_piece(fmt, true)).off), kp.s_bytes)
+    }
+    r.cap_rows = 0l
+    vt_unbind_batch_sets(r)
+    return true
+}
+
+//! GigaAM's Vulkan chain serves a carrier on its lane (`e`, the lane's meta): the tower knob on, the device armed with its tiles,
+//! and the f16 GEMM feed where the lane reads it - the kq lane's K-quant tiles and the exact lane's halfwords
+def private vulkan_gigaam_serves_model(e : GigaamModel) : bool {
+    return false if (!g_vt_env_tower || !vulkan_tower_arms() || !vulkan_tower_tiles_on())
+    return e.q8 || vt_cm2_feed()
+}
+
+//! GigaAM's Vulkan device block (`#tower-dev-block`): the gathers the upload ran - the q8 planes, the kq lane's member planes and
+//! seats - and the front's f16 conv slab with its mel tables, each into its piece; the CPU form's planes row-major
+[cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
+def private vulkan_gigaam_bake(m : GigaamModel; var b : TowerDevBuild) : bool {
+    let fc = vt_fc_of_ga(m)
+    let lay = active_q8_repack_layout(false)
+    var wq, ws : array<uint8>
+    if (fc.kq_lane) {
+        var inscope p <- vt_fc_kq_plan(fc)
+        if (fc.qblob.n > 0l) {
+            wq |> reserve_resize(fc.qblob.n)
+            ws |> reserve_resize(fc.qscales.n * 2l)
+            vt_gather_regions(fc.qblob, fc.qscales, p.regions, lay, wq, ws)
+        }
+        var seats : array<int64>
+        for (s in p.seats) {
+            seats |> push_from([int64(s.fmt), s.wblk0])
+        }
+        tower_dev_put(b, VT_FC_KQ_SEATS_PIECE, unsafe(addr<uint8 const?>(seats[0])), long_length(seats) * 8l)
+        delete seats
+        let fmts = [int64(fc.kq_fmts)]
+        tower_dev_put(b, VT_FC_KQ_FMTS_PIECE, unsafe(addr<uint8 const?>(fmts[0])), 8l)
+        for (fmt, qb in keys(p.qbytes), values(p.qbytes)) {
+            var kq, ks : array<uint8>
+            vt_gather_kq_member(fc, fmt, p.seats, qb, p.sbytes?[fmt] ?? 0l, kq, ks)
+            tower_dev_put(b, vt_kq_piece(fmt, false), unsafe(addr<uint8 const?>(kq[0])), long_length(kq))
+            tower_dev_put(b, vt_kq_piece(fmt, true), unsafe(addr<uint8 const?>(ks[0])), long_length(ks))
+            delete kq
+            delete ks
+        }
+    } elif (fc.q8) {
+        var inscope regions <- vt_fc_q8_regions(fc)
+        wq |> reserve_resize(fc.qblob.n)
+        ws |> reserve_resize(fc.qscales.n * 2l)
+        vt_gather_regions(fc.qblob, fc.qscales, regions, lay, wq, ws)
+    }
+    if (!empty(wq)) {
+        tower_dev_put(b, VT_FC_WQ_PIECE, unsafe(addr<uint8 const?>(wq[0])), long_length(wq))
+        tower_dev_put(b, VT_FC_WS_PIECE, unsafe(addr<uint8 const?>(ws[0])), long_length(ws))
+    }
+    delete wq
+    delete ws
+    return vt_ga_front_bake(m, b)
+}
+
+//! GigaAM's front for its Vulkan device block: the conv panels as the f16 slab, the device mel's twiddles and window
+[cold_path]
+def private vt_ga_front_bake(m : GigaamModel; var b : TowerDevBuild) : bool {
+    let k = m.subs_kernel
+    let nch = m.n_sub_ch
+    let d = m.d_model
+    let kd0 = round_up(k * m.n_mel, 64l)
+    let kd2 = round_up(k * nch, 64l)
+    let n_bins = m.n_fft / 2l + 1l
+    let ntw = m.n_fft * 2l * n_bins
+    return false if (long_length(m.tabs.twiddles) < ntw || length(m.window) < m.n_fft || length(m.filters) < m.n_mel * n_bins)
+    var slab : array<float>
+    slab |> reserve_resize(nch * kd0 + d * kd2)
+    tower_stage_f32_pad_row_stride(slab, m.blob, m.c0_w, 0l, nch, k * m.n_mel, kd0)
+    tower_stage_f32_pad_row_stride(slab, m.blob, m.c2_w, nch * kd0, d, k * nch, kd2)
+    var inscope slab16 <- cvt_f32_to_f16_sat_array(slab)
+    delete slab
+    tower_dev_put(b, VT_GA_FRONT16_PIECE, unsafe(addr<uint8 const?>(slab16[0])), long_length(slab16) * 2l)
+    var inscope twin : array<float>
+    twin |> reserve(ntw + m.n_fft)
+    for (i in range64(ntw)) {
+        twin |> push(m.tabs.twiddles[i])
+    }
+    for (j in range64(m.n_fft)) {
+        twin |> push(m.window[j])
+    }
+    tower_dev_put(b, VT_GA_TWIN_PIECE, unsafe(addr<uint8 const?>(twin[0])), long_length(twin) * 4l)
+    return true
 }
 
 //! the resident key with the family's f16 taps folded in: their plane, region and words
@@ -4886,7 +5067,16 @@ def private vt_g4a_front_slab(var r : VtResident; t : Gemma4aEncoder) : bool {
 def private vt_front_upload(var r : VtResident; var slab : array<float>; twiddles : PlaneF; btw : int64; filters : PlaneF; bfil : int64) : bool {
     var slab16 <- cvt_f32_to_f16_sat_array(slab)
     delete slab
-    r.fw16_bytes = long_length(slab16) * 2l
+    let ok = vt_front_upload16(r, unsafe(addr<uint8 const?>(slab16[0])), long_length(slab16) * 2l,
+        twiddles, btw, filters, bfil)
+    delete slab16
+    return ok
+}
+
+//! the front's f16 conv slab (`b16` bytes at `p16`), its twiddles and its filters uploaded as they are
+[cold_path]
+def private vt_front_upload16(var r : VtResident; p16 : uint8 const?; b16 : int64; twiddles : PlaneF; btw : int64; filters : PlaneF; bfil : int64) : bool {
+    r.fw16_bytes = b16
     r.fw16_dev = vt_dev_buf(r, r.fw16_bytes)
     r.front_twiddles_dev = vt_dev_buf(r, max(btw, 64l))   // 64: a stub where the family's mel stays on the CPU (no twiddles)
     r.front_filters_dev = vt_dev_buf(r, bfil)
@@ -4894,11 +5084,9 @@ def private vt_front_upload(var r : VtResident; var slab : array<float>; twiddle
         release_device_buf(r.fw16_dev)
         release_device_buf(r.front_twiddles_dev)
         release_device_buf(r.front_filters_dev)
-        delete slab16
         return false
     }
-    upload_region_at(r.fw16_dev, 0l, unsafe(addr<uint8 const?>(slab16[0])), r.fw16_bytes)
-    delete slab16
+    upload_region_at(r.fw16_dev, 0l, p16, r.fw16_bytes)
     if (btw > 0l) {
         upload_region_at(r.front_twiddles_dev, 0l, unsafe(reinterpret<uint8 const?>(plane_at(twiddles, 0l))), btw)
     }
@@ -5301,6 +5489,13 @@ def private vulkan_canary_front(t : CanaryEncoder; var s : CanaryState) : int64 
 //! taps on the f16 GEMM's 64 lattice (zero past them)
 [cold_path]
 def private vt_ga_front_slab(var r : VtResident; m : GigaamModel) : bool {
+    if (m.dev_backend == TowerDev.vulkan) {
+        let f16 = tower_dev_find(m.devplan, VT_GA_FRONT16_PIECE)
+        let twin = tower_dev_find(m.devplan, VT_GA_TWIN_PIECE)
+        return false if (f16.off < 0l || twin.off < 0l)
+        return vt_front_upload16(r, plane_at(m.dev, f16.off), f16.bytes, PlaneF(p = unsafe(reinterpret<float const?>(plane_at(m.dev, twin.off))),
+            n = twin.bytes / 4l), twin.bytes, m.filters, m.n_mel * (m.n_fft / 2l + 1l) * 4l)
+    }
     let k = m.subs_kernel
     let nch = m.n_sub_ch
     let d = m.d_model
@@ -5532,6 +5727,7 @@ def private vulkan_gigaam_blocks(m : GigaamModel; var st : GigaamState; tt : int
     if (!vt_gate(r, vt_ga_lane_served(m))) {
         return false
     }
+    return vt_decline(r, VulkanTowerDecline.flavor) if (m.dev_backend != TowerDev.vulkan)
     let fc = vt_fc_of_ga(m)
     return vt_fc_blocks(r, fc, st.x, tt, 0l, st.rope_cos, st.rope_sin)
 }
@@ -5553,6 +5749,10 @@ def private vulkan_gigaam_encode(m : GigaamModel; var st : GigaamState; samples 
     }
     if (!vt_ga_lane_served(m)) {
         vt_decline(r, VulkanTowerDecline.quant_mode)
+        return -1l
+    }
+    if (m.dev_backend != TowerDev.vulkan) {
+        vt_decline(r, VulkanTowerDecline.flavor)
         return -1l
     }
     let fc = vt_fc_of_ga(m)
@@ -5781,6 +5981,7 @@ def dasllama_vulkan_tower_register {
         register_parakeet_gpu_encode(@@vulkan_parakeet_encode)
         set_vulkan_gigaam_exact_lane(g_env_vulkan.vk_gigaam_exact)   //! the q8 lane stays the default until the two lanes are timed on a Vulkan box
         register_gigaam_gpu_encode(@@vulkan_gigaam_encode)
+        register_gigaam_flavor(TowerDev.vulkan, @@vulkan_gigaam_serves_model, @@vulkan_gigaam_bake)
         register_vad_gpu(@@vulkan_vad_chunks)
         register_tower_rows_gen(@@vulkan_tower_fc_gen)
     }

@@ -1133,6 +1133,7 @@ enum private VulkanCtcDecline {
     shape    //! d off the f16 GEMM's 64-wide K lattice, no frames, or a buffer past the device's range
     device   //! the tier has no device, a class failed to build, or an f16 head on a device with no f16 GEMM tile
     memory   //! a device or host allocation failed
+    flavor   //! the model is not the Vulkan-flavored image: each backend serves its own (`#tower-dev-block`)
 }
 
 //! the hazard bits of the CTC seat's buffers
@@ -1185,7 +1186,8 @@ def vulkan_ctc_declines : table<string; int64> => <- clone_to_move(g_cv_declines
 def private cv_decline(why : VulkanCtcDecline) : bool {
     let words = (why == VulkanCtcDecline.knob ? VK_DECLINE_WORDS_TOWER_KNOB
         : why == VulkanCtcDecline.shape ? "d off the f16 GEMM's 64-wide lattice, no frames, or a buffer past the device's range"
-        : why == VulkanCtcDecline.memory ? VK_DECLINE_WORDS_MEMORY : VK_DECLINE_WORDS_DEVICE)
+        : why == VulkanCtcDecline.memory ? VK_DECLINE_WORDS_MEMORY
+        : why == VulkanCtcDecline.flavor ? "the model is not the Vulkan-flavored image" : VK_DECLINE_WORDS_DEVICE)
     return g_cv_declines |> note("the CTC head", "{why}", "the head stays on the CPU: {words}")
 }
 
@@ -1320,6 +1322,9 @@ def private cv_announce(nc, d : int64; f16 : bool) {
 def private vulkan_gigaam_ctc(m : GigaamModel; var st : GigaamState; n_frames : int64) : bool {
     if (!vulkan_tower_on()) {
         return cv_decline(VulkanCtcDecline.knob)
+    }
+    if (m.dev_backend != TowerDev.vulkan) {
+        return cv_decline(VulkanCtcDecline.flavor)
     }
     let d = m.d_model
     let nc = m.n_classes
