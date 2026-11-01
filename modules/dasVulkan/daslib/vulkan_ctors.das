@@ -7338,10 +7338,31 @@ def VkPhysicalDeviceShaderSubgroupPartitionedFeaturesEXT() : VkPhysicalDeviceSha
     return self
 }
 
+//! construct a VkTexelBufferDescriptorInfoEXT with sType pre-filled
+def VkTexelBufferDescriptorInfoEXT() : VkTexelBufferDescriptorInfoEXT {
+    var self : VkTexelBufferDescriptorInfoEXT
+    self.sType = VkStructureType.TEXEL_BUFFER_DESCRIPTOR_INFO_EXT
+    return self
+}
+
 //! construct a VkImageDescriptorInfoEXT with sType pre-filled
 def VkImageDescriptorInfoEXT() : VkImageDescriptorInfoEXT {
     var self : VkImageDescriptorInfoEXT
     self.sType = VkStructureType.IMAGE_DESCRIPTOR_INFO_EXT
+    return self
+}
+
+//! construct a VkResourceDescriptorInfoEXT with sType pre-filled
+def VkResourceDescriptorInfoEXT() : VkResourceDescriptorInfoEXT {
+    var self : VkResourceDescriptorInfoEXT
+    self.sType = VkStructureType.RESOURCE_DESCRIPTOR_INFO_EXT
+    return self
+}
+
+//! construct a VkBindHeapInfoEXT with sType pre-filled
+def VkBindHeapInfoEXT() : VkBindHeapInfoEXT {
+    var self : VkBindHeapInfoEXT
+    self.sType = VkStructureType.BIND_HEAP_INFO_EXT
     return self
 }
 
@@ -7419,6 +7440,13 @@ def VkPhysicalDeviceDescriptorHeapFeaturesEXT() : VkPhysicalDeviceDescriptorHeap
 def VkPhysicalDeviceDescriptorHeapPropertiesEXT() : VkPhysicalDeviceDescriptorHeapPropertiesEXT {
     var self : VkPhysicalDeviceDescriptorHeapPropertiesEXT
     self.sType = VkStructureType.PHYSICAL_DEVICE_DESCRIPTOR_HEAP_PROPERTIES_EXT
+    return self
+}
+
+//! construct a VkCommandBufferInheritanceDescriptorHeapInfoEXT with sType pre-filled
+def VkCommandBufferInheritanceDescriptorHeapInfoEXT() : VkCommandBufferInheritanceDescriptorHeapInfoEXT {
+    var self : VkCommandBufferInheritanceDescriptorHeapInfoEXT
+    self.sType = VkStructureType.COMMAND_BUFFER_INHERITANCE_DESCRIPTOR_HEAP_INFO_EXT
     return self
 }
 

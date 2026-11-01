@@ -222,18 +222,22 @@ def private member_type_known(m : VkMember; reg : VkRegistry; em : EmitModel) : 
         return key_exists(em.plain_enums, tn) ? "" : "enum {tn} not emitted"
     }
     if (key_exists(reg.struct_index, tn)) {
-        if (key_exists(em.skipped, tn)) {
-            return "depends on skipped {tn}"
+        let canon = resolve_struct_alias(reg, tn)
+        let spelled = canon == tn ? tn : "{tn} (alias of {canon})"
+        if (key_exists(em.skipped, canon)) {
+            return "depends on skipped {spelled}"
         }
-        if (key_exists(em.struct_emit, tn)) {
+        if (key_exists(em.struct_emit, canon)) {
             return ""
         }
-        return "struct {tn} not emitted"
+        return "struct {spelled} not emitted"
     }
     return "unknown type {tn}"
 }
 
-def private resolve_struct_alias(reg : VkRegistry; name : string) : string {
+//! the struct `name` is an alias of, through up to 8 hops; `name`
+//! itself when it is no alias, "" when it is no struct
+def public resolve_struct_alias(reg : VkRegistry; name : string) : string {
     var cur = name
     var hops = 0
     while (hops < 8) {
@@ -895,7 +899,7 @@ def private map_param(reg : VkRegistry; em : EmitModel; p : VkMember) : MappedPa
     }
     // structs / unions
     if (key_exists(reg.struct_index, tn)) {
-        if (!key_exists(em.struct_emit, tn)) {
+        if (!key_exists(em.struct_emit, resolve_struct_alias(reg, tn))) {
             return MappedParam(ok = false, reason = "param type {tn} not emitted")
         }
         if (np == 1) {

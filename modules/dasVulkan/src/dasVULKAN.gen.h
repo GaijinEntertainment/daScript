@@ -6205,7 +6205,19 @@ MAKE_TYPE_FACTORY(VkHostAddressRangeEXT, VkHostAddressRangeEXT)
 MAKE_TYPE_FACTORY(VkHostAddressRangeConstEXT, VkHostAddressRangeConstEXT)
 #endif
 #if defined(VK_EXT_descriptor_heap)
+MAKE_TYPE_FACTORY(VkTexelBufferDescriptorInfoEXT, VkTexelBufferDescriptorInfoEXT)
+#endif
+#if defined(VK_EXT_descriptor_heap)
 MAKE_TYPE_FACTORY(VkImageDescriptorInfoEXT, VkImageDescriptorInfoEXT)
+#endif
+#if defined(VK_EXT_descriptor_heap)
+MAKE_TYPE_FACTORY(VkResourceDescriptorDataEXT, VkResourceDescriptorDataEXT)
+#endif
+#if defined(VK_EXT_descriptor_heap)
+MAKE_TYPE_FACTORY(VkResourceDescriptorInfoEXT, VkResourceDescriptorInfoEXT)
+#endif
+#if defined(VK_EXT_descriptor_heap)
+MAKE_TYPE_FACTORY(VkBindHeapInfoEXT, VkBindHeapInfoEXT)
 #endif
 #if defined(VK_EXT_descriptor_heap)
 MAKE_TYPE_FACTORY(VkPushDataInfoEXT, VkPushDataInfoEXT)
@@ -6263,6 +6275,9 @@ MAKE_TYPE_FACTORY(VkPhysicalDeviceDescriptorHeapFeaturesEXT, VkPhysicalDeviceDes
 #endif
 #if defined(VK_EXT_descriptor_heap)
 MAKE_TYPE_FACTORY(VkPhysicalDeviceDescriptorHeapPropertiesEXT, VkPhysicalDeviceDescriptorHeapPropertiesEXT)
+#endif
+#if defined(VK_EXT_descriptor_heap)
+MAKE_TYPE_FACTORY(VkCommandBufferInheritanceDescriptorHeapInfoEXT, VkCommandBufferInheritanceDescriptorHeapInfoEXT)
 #endif
 #if defined(VK_EXT_descriptor_heap)
 MAKE_TYPE_FACTORY(VkPhysicalDeviceDescriptorHeapTensorPropertiesARM, VkPhysicalDeviceDescriptorHeapTensorPropertiesARM)

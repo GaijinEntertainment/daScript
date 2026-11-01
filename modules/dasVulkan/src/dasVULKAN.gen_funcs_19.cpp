@@ -23,6 +23,24 @@ static VkResult WRAP_vkWriteSamplerDescriptorsEXT ( VkDevice device, uint32_t sa
 #endif
 
 #if defined(VK_EXT_descriptor_heap)
+static VkResult WRAP_vkWriteResourceDescriptorsEXT ( VkDevice device, uint32_t resourceCount, const VkResourceDescriptorInfoEXT * pResources, const VkHostAddressRangeEXT * pDescriptors ) {
+    return ::vkWriteResourceDescriptorsEXT(device, resourceCount, pResources, pDescriptors);
+}
+#endif
+
+#if defined(VK_EXT_descriptor_heap)
+static void WRAP_vkCmdBindSamplerHeapEXT ( VkCommandBuffer commandBuffer, const VkBindHeapInfoEXT & pBindInfo ) {
+    ::vkCmdBindSamplerHeapEXT(commandBuffer, &pBindInfo);
+}
+#endif
+
+#if defined(VK_EXT_descriptor_heap)
+static void WRAP_vkCmdBindResourceHeapEXT ( VkCommandBuffer commandBuffer, const VkBindHeapInfoEXT & pBindInfo ) {
+    ::vkCmdBindResourceHeapEXT(commandBuffer, &pBindInfo);
+}
+#endif
+
+#if defined(VK_EXT_descriptor_heap)
 static void WRAP_vkCmdPushDataEXT ( VkCommandBuffer commandBuffer, const VkPushDataInfoEXT & pPushDataInfo ) {
     ::vkCmdPushDataEXT(commandBuffer, &pPushDataInfo);
 }
@@ -220,6 +238,18 @@ void das_vulkan_init_funcs_19(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_EXT_descriptor_heap)
     addExtern<DAS_BIND_FUN(WRAP_vkWriteSamplerDescriptorsEXT)>(mod, lib, "vkWriteSamplerDescriptorsEXT", SideEffects::modifyArgumentAndExternal, "WRAP_vkWriteSamplerDescriptorsEXT")
         ->args({"device","samplerCount","pSamplers","pDescriptors"});
+#endif
+#if defined(VK_EXT_descriptor_heap)
+    addExtern<DAS_BIND_FUN(WRAP_vkWriteResourceDescriptorsEXT)>(mod, lib, "vkWriteResourceDescriptorsEXT", SideEffects::modifyArgumentAndExternal, "WRAP_vkWriteResourceDescriptorsEXT")
+        ->args({"device","resourceCount","pResources","pDescriptors"});
+#endif
+#if defined(VK_EXT_descriptor_heap)
+    addExtern<DAS_BIND_FUN(WRAP_vkCmdBindSamplerHeapEXT)>(mod, lib, "vkCmdBindSamplerHeapEXT", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdBindSamplerHeapEXT")
+        ->args({"commandBuffer","pBindInfo"});
+#endif
+#if defined(VK_EXT_descriptor_heap)
+    addExtern<DAS_BIND_FUN(WRAP_vkCmdBindResourceHeapEXT)>(mod, lib, "vkCmdBindResourceHeapEXT", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdBindResourceHeapEXT")
+        ->args({"commandBuffer","pBindInfo"});
 #endif
 #if defined(VK_EXT_descriptor_heap)
     addExtern<DAS_BIND_FUN(WRAP_vkCmdPushDataEXT)>(mod, lib, "vkCmdPushDataEXT", SideEffects::modifyArgumentAndExternal, "WRAP_vkCmdPushDataEXT")

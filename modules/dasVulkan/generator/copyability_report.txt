@@ -3,7 +3,7 @@
 # das MOVES a non-copyable element out of an array literal, zeroing the caller's
 # local, so a struct arriving in this list changes every such call site silently.
 
-== non-copyable boost structs: 173 ==
+== non-copyable boost structs: 177 ==
 AccelerationStructureBuildGeometryInfoKHR: pGeometries : array<AccelerationStructureGeometryKHR>
 AccelerationStructureGeometryMicromapDataKHR: pUsageCounts : array<MicromapUsageKHR>
 AccelerationStructureTrianglesOpacityMicromapEXT: pUsageCounts : array<MicromapUsageEXT>
@@ -24,12 +24,15 @@ CopyDeviceMemoryInfoKHR: pRegions : array<DeviceMemoryCopyKHR>
 CopyImageInfo2: pRegions : array<ImageCopy2>
 CopyImageToBufferInfo2: pRegions : array<BufferImageCopy2>
 CopyImageToImageInfo: pRegions : array<ImageCopy2>
+CopyImageToMemoryInfo: pRegions : array<ImageToMemoryCopy>
 CopyMemoryToImageIndirectInfoKHR: pImageSubresources : array<ImageSubresourceLayers>
+CopyMemoryToImageInfo: pRegions : array<MemoryToImageCopy>
 CopyTensorInfoARM: pRegions : array<TensorCopyARM>
 CuModuleCreateInfoNVX: pData : array<uint8>
 CustomResolveCreateInfoEXT: pColorAttachmentFormats : array<VkFormat>
 DataGraphPipelineCreateInfoARM: pResourceInfos : array<DataGraphPipelineResourceInfoARM>
 DataGraphPipelineIdentifierCreateInfoARM: pIdentifier : array<uint8>
+DataGraphPipelineShaderModuleCreateInfoARM: pConstants : array<DataGraphPipelineConstantARM>
 DataGraphPipelineSingleNodeCreateInfoARM: pConnections : array<DataGraphPipelineSingleNodeConnectionARM>
 DataGraphProcessingEngineCreateInfoARM: pProcessingEngines : array<PhysicalDeviceDataGraphProcessingEngineARM>
 DebugMarkerObjectTagInfoEXT: pTag : array<uint8>
@@ -91,6 +94,7 @@ PhysicalDeviceLayeredApiPropertiesListKHR: pLayeredApis : array<PhysicalDeviceLa
 PhysicalDeviceVulkan14Properties: pCopySrcLayouts : array<VkImageLayout>, pCopyDstLayouts : array<VkImageLayout>
 PipelineBinaryHandlesInfoKHR: pPipelineBinaries : array<PipelineBinaryKHR>
 PipelineBinaryInfoKHR: pPipelineBinaries : array<PipelineBinaryKHR>
+PipelineBinaryKeysAndDataKHR: pPipelineBinaryKeys : array<PipelineBinaryKeyKHR>, pPipelineBinaryData : array<PipelineBinaryDataKHR>
 PipelineCacheCreateInfo: pInitialData : array<uint8>
 PipelineColorBlendStateCreateInfo: pAttachments : array<PipelineColorBlendAttachmentState>
 PipelineColorWriteCreateInfoEXT: pColorWriteEnables : array<uint>

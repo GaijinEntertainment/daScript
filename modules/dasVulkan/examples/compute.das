@@ -3,22 +3,10 @@ options _comment_hygiene = true
 
 require vulkan
 require vulkan/vulkan_boost
-require spirv/spirv_shader
-require spirv/spirv_builtins public
+require compute_example_shaders
 
 let N = 256                 // elements; the shader squares each index
-let GROUP = 64              // local_size_x in the [compute_shader] below
-
-// The compute shader, authored in daslang and lowered to SPIR-V at compile time by dasSpirv's
-// [compute_shader] macro. The emitted blob is the `square_spv : array<uint>` global below,
-// fed straight to create_shader_module -- no GLSL, no glslang, no committed .spv.
-var @ssbo @binding = 0 data : array<uint>
-
-[compute_shader(local_size_x=64, name="square_spv")]
-def square {
-    let i = gl_GlobalInvocationID.x
-    data[i] = i * i
-}
+let GROUP = SQUARE_LOCAL_SIZE_X
 
 def find_mem(phys : VkPhysicalDevice; bits : uint; want : VkMemoryPropertyFlags) : uint =>
     find_memory_type(phys, bits, want)

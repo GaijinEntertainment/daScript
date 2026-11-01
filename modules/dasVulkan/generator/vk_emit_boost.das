@@ -198,6 +198,7 @@ enum FieldKind {
     scalar          //! scalar / enum / flags / nested-POD / fixed-array -- direct copy
     boost_handle    //! handle by value -> boost handle type
     str             //! const char* -> string
+    host_ptr        //! void* with no len, or non-const void* the call writes -> `void?`
     arr_scalar      //! count+ptr of scalar/enum -> array<T>
     arr_handle      //! count+ptr of handle -> array<BoostHandle>
     arr_struct      //! count+ptr of mappable struct -> array<BoostStruct> (recursive vk_view)
@@ -219,11 +220,15 @@ struct BoostField {
     arr_raw_ptr : string    //! for flags-arrays: raw field ptr type (uint?/uint64?), reinterpret target; "" = none
 }
 
+[arch(at="../ARCHITECTURE.md#host-address-fields")]
+def private is_written_host_range(m : VkMember) : bool =>
+    m.type_name == "void" && m.num_ptrs == 1 && !m.is_const && !empty(m.len)
+
 //! names of members that are the count for some array member (len=thatName)
 def private count_members_of(s : VkStructDef) : table<string> {
     var counts : table<string>
     for (m in s.members) {
-        continue if (empty(m.len))
+        continue if (empty(m.len) || is_written_host_range(m))
         // simple identifier len that names another member
         for (other in s.members) {
             if (other.name == m.len) {
@@ -280,9 +285,15 @@ def private is_double_ptr_alt(s : VkStructDef; m : VkMember) : bool {
 //! a len member that denotes a SIZE IN BYTES rather than a count of elements
 def private len_is_bytes(len : string) : bool => len == "size" || len |> ends_with("Size")
 
+//! `tn` with a struct alias resolved to its struct; others unchanged
+def private canon_type(reg : VkRegistry; tn : string) : string {
+    let canon = resolve_struct_alias(reg, tn)
+    return empty(canon) ? tn : canon
+}
+
 def private classify_field(reg : VkRegistry; em : EmitModel; s : VkStructDef; m : VkMember; counts : table<string>; mappable : table<string>) : BoostField {
     var bf = BoostField(name = das_safe_name(m.name), raw_name = m.name)
-    let tn = m.type_name
+    let tn = canon_type(reg, m.type_name)
     if (m.name == "sType" && !empty(m.stype_value)) {
         bf.kind = FieldKind.erase
         return <- bf
@@ -379,6 +390,11 @@ def private classify_field(reg : VkRegistry; em : EmitModel; s : VkStructDef; m 
     if (tn == "char" && m.num_ptrs == 1) {
         bf.kind = FieldKind.str
         bf.boost_type = "string"
+        return <- bf
+    }
+    if (tn == "void" && m.num_ptrs == 1 && (empty(m.len) || is_written_host_range(m))) {
+        bf.kind = FieldKind.host_ptr
+        bf.boost_type = "void?"
         return <- bf
     }
     // optional const ptr to a mappable struct -> `T?`; vk_view clones the pointee into scratch, so the caller's local need only outlive the view call
@@ -657,7 +673,8 @@ def private emit_structs_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
             fprint(f, "def vk_view_create_unsafe({b_create} : {vs.boost}) : {s.name} \{\n")
             fprint(f, "    var vk = {s.name}()\n")
             for (bf in vs.fields) {
-                if (bf.kind == FieldKind.scalar || bf.kind == FieldKind.str) {
+                if (bf.kind == FieldKind.scalar || bf.kind == FieldKind.str
+                        || bf.kind == FieldKind.host_ptr) {
                     fprint(f, "    vk.{bf.name} = b.{bf.name}\n")
                 } elif (bf.kind == FieldKind.boost_handle) {
                     fprint(f, "    vk.{bf.name} = boost_value_to_vk(b.{bf.name})\n")
@@ -701,6 +718,13 @@ def private emit_structs_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
                 } elif (bf.kind == FieldKind.erase) {
                     let auth = count_authoritative_array(vs, bf.raw_name)
                     if (!empty(auth)) {
+                        for (other in vs.fields) {
+                            continue if (!is_array_kind(other.kind) || other.is_optional
+                                || other.count_member != bf.raw_name || other.name == auth)
+                            fprint(f, "    assert(length(b.{other.name}) == length(b.{auth}), "
+                                + "\"{vs.boost}: {other.name} and {auth} share {cm}"
+                                + " and must have the same length\")\n")
+                        }
                         fprint(f, "    vk.{cm} = {count_len_expr(bf.boost_type, auth)}\n")
                     }
                 }
@@ -1041,6 +1065,7 @@ struct CmdArg {
     elem_vktype : string    //! arrays: raw element type
     elem_boost : string     //! arrays: boost element type
     count_for : string      //! erasevkcount: das-safe name of the array param it counts
+    is_optional : bool      //! arrays: optional="true" - may be empty at a non-zero count
 }
 
 struct CmdPlan {
@@ -1074,7 +1099,8 @@ def private boost_is_flags(em : EmitModel; tn : string) : bool {
 def private mappable_value_type(reg : VkRegistry; em : EmitModel; tn : string) : bool {
     let bt = reg.base_types?[tn] ?? ""
     return (!empty(DAS_SCALAR_MAP?[tn] ?? "") || !empty(DAS_SCALAR_MAP?[bt] ?? "") ||
-        key_exists(em.handle_names, tn) || key_exists(em.struct_emit, tn) || key_exists(em.plain_enums, tn))
+        key_exists(em.handle_names, tn) || key_exists(em.struct_emit, canon_type(reg, tn))
+        || key_exists(em.plain_enums, tn))
 }
 
 //! the das type for a by-value/out scalar/enum/flags/handle/struct type name
@@ -1197,6 +1223,7 @@ def private plan_command(reg : VkRegistry; em : EmitModel; c : VkCommandDef; vie
         let hasvkcount = len_is_param && p.is_const && p.num_ptrs == 1
         let member_len = !empty(p.len) && !len_is_param && p.is_const && p.num_ptrs == 1
         let arrayvkcount = len_is_param ? das_safe_name(p.len) : ""
+        a.is_optional = p.optional_attr == "true"
         if ((hasvkcount || member_len) && p.type_name != "void" && p.type_name != "char") {
             if (is_handle) {
                 a.kind = CmdArgKind.in_array_handle
@@ -1216,9 +1243,9 @@ def private plan_command(reg : VkRegistry; em : EmitModel; c : VkCommandDef; vie
                 plan.args |> emplace(a)
                 continue
             }
-            if (key_exists(view_set, p.type_name)) {
+            if (key_exists(view_set, canon_type(reg, p.type_name))) {
                 a.kind = CmdArgKind.in_array_struct
-                a.elem_boost = boost_name(p.type_name)
+                a.elem_boost = boost_name(canon_type(reg, p.type_name))
                 a.elem_vktype = p.type_name
                 a.boost_type = "array<{a.elem_boost}>"
                 a.count_for = arrayvkcount
@@ -1277,7 +1304,30 @@ def private plan_command(reg : VkRegistry; em : EmitModel; c : VkCommandDef; vie
         plan.skip = "{c.name}: out param {plan.out_value_pname} beside an enumerated array"
         return <- plan
     }
-    // link each erasevkcount to the array param it counts (-> uint(length(arr)))
+    plan_link_counts(plan)
+    return <- plan
+}
+
+//! whether the array param `pname` of `plan` is optional
+def private arg_is_optional(plan : CmdPlan; pname : string) : bool {
+    for (a in plan.args) {
+        return a.is_optional if (a.pname == pname)
+    }
+    return false
+}
+
+//! the REQUIRED array params `count_pname` counts: the wrapper
+//! asserts their lengths equal
+def private required_arrays_for_count(plan : CmdPlan; count_pname : string) : array<string> {
+    var out <- [for (a in plan.args); a.pname;
+        where(a.kind == CmdArgKind.in_array_scalar || a.kind == CmdArgKind.in_array_handle
+            || a.kind == CmdArgKind.in_array_struct)
+            && a.count_for == count_pname && !a.is_optional]
+    return <- out
+}
+
+def private plan_link_counts(var plan : CmdPlan) {
+    // link each erasevkcount to its array; a required one beats optional
     for (i in range(length(plan.args))) {
         let ak = plan.args[i].kind
         if (ak == CmdArgKind.in_array_scalar || ak == CmdArgKind.in_array_handle || ak == CmdArgKind.in_array_struct) {
@@ -1285,12 +1335,15 @@ def private plan_command(reg : VkRegistry; em : EmitModel; c : VkCommandDef; vie
             let arr_pname = plan.args[i].pname
             for (j in range(length(plan.args))) {
                 if (plan.args[j].kind == CmdArgKind.erasevkcount && plan.args[j].pname == target) {
-                    plan.args[j].count_for = arr_pname
+                    let linked = plan.args[j].count_for
+                    if (empty(linked)
+                            || !plan.args[i].is_optional && arg_is_optional(plan, linked)) {
+                        plan.args[j].count_for = arr_pname
+                    }
                 }
             }
         }
     }
-    return <- plan
 }
 
 // hand-written in vulkan_boost.das as ergonomic conveniences (defaulted args /
@@ -1388,6 +1441,17 @@ def private emit_plain_commands_boost(reg : VkRegistry; em : EmitModel; out_dir 
                 fprint(f, " : {plan.direct_ret}")
             }
             fprint(f, " {OB}\n")
+            // --- shared counts: arrays on one count match ---
+            for (a in plan.args) {
+                continue if (a.kind != CmdArgKind.erasevkcount)
+                var inscope arrs <- required_arrays_for_count(plan, a.pname)
+                for (other in arrs) {
+                    continue if (other == a.count_for)
+                    fprint(f, "    assert(length({other}) == length({a.count_for}), "
+                        + "\"{plan.fn_name}: {other} and {a.count_for} share {a.pname}"
+                        + " and must have the same length\")\n")
+                }
+            }
             // --- view prep ---
             for (a in plan.args) {
                 if (a.kind == CmdArgKind.in_view) {

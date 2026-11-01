@@ -115,6 +115,23 @@ void VkHostAddressRangeConstEXT_Ann::init() {
 #endif
 
 #if defined(VK_EXT_descriptor_heap)
+struct VkTexelBufferDescriptorInfoEXT_Ann : ManagedStructureAnnotation<VkTexelBufferDescriptorInfoEXT> {
+    VkTexelBufferDescriptorInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkTexelBufferDescriptorInfoEXT", ml, "VkTexelBufferDescriptorInfoEXT") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkTexelBufferDescriptorInfoEXT_Ann * ann_VkTexelBufferDescriptorInfoEXT = nullptr;
+void VkTexelBufferDescriptorInfoEXT_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkTexelBufferDescriptorInfoEXT, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(format)>("format", "format");
+    addField<DAS_BIND_MANAGED_FIELD(addressRange)>("addressRange", "addressRange");
+}
+#endif
+
+#if defined(VK_EXT_descriptor_heap)
 struct VkImageDescriptorInfoEXT_Ann : ManagedStructureAnnotation<VkImageDescriptorInfoEXT> {
     VkImageDescriptorInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkImageDescriptorInfoEXT", ml, "VkImageDescriptorInfoEXT") {}
     virtual bool isLocal() const override { return true; }
@@ -128,6 +145,58 @@ void VkImageDescriptorInfoEXT_Ann::init() {
     addFieldEx("pNext", "pNext", offsetof(VkImageDescriptorInfoEXT, pNext), makeType<void *>(*mlib));
     addFieldEx("pView", "pView", offsetof(VkImageDescriptorInfoEXT, pView), makeType<VkImageViewCreateInfo *>(*mlib));
     addField<DAS_BIND_MANAGED_FIELD(layout)>("layout", "layout");
+}
+#endif
+
+#if defined(VK_EXT_descriptor_heap)
+struct VkResourceDescriptorDataEXT_Ann : ManagedStructureAnnotation<VkResourceDescriptorDataEXT> {
+    VkResourceDescriptorDataEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkResourceDescriptorDataEXT", ml, "VkResourceDescriptorDataEXT") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkResourceDescriptorDataEXT_Ann * ann_VkResourceDescriptorDataEXT = nullptr;
+void VkResourceDescriptorDataEXT_Ann::init() {
+    addFieldEx("pImage", "pImage", offsetof(VkResourceDescriptorDataEXT, pImage), makeType<VkImageDescriptorInfoEXT *>(*mlib));
+    addFieldEx("pTexelBuffer", "pTexelBuffer", offsetof(VkResourceDescriptorDataEXT, pTexelBuffer), makeType<VkTexelBufferDescriptorInfoEXT *>(*mlib));
+    addFieldEx("pAddressRange", "pAddressRange", offsetof(VkResourceDescriptorDataEXT, pAddressRange), makeType<VkDeviceAddressRangeEXT *>(*mlib));
+    addFieldEx("pTensorARM", "pTensorARM", offsetof(VkResourceDescriptorDataEXT, pTensorARM), makeType<VkTensorViewCreateInfoARM *>(*mlib));
+}
+#endif
+
+#if defined(VK_EXT_descriptor_heap)
+struct VkResourceDescriptorInfoEXT_Ann : ManagedStructureAnnotation<VkResourceDescriptorInfoEXT> {
+    VkResourceDescriptorInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkResourceDescriptorInfoEXT", ml, "VkResourceDescriptorInfoEXT") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkResourceDescriptorInfoEXT_Ann * ann_VkResourceDescriptorInfoEXT = nullptr;
+void VkResourceDescriptorInfoEXT_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkResourceDescriptorInfoEXT, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(type)>("type_", "type");
+    addField<DAS_BIND_MANAGED_FIELD(data)>("data", "data");
+}
+#endif
+
+#if defined(VK_EXT_descriptor_heap)
+struct VkBindHeapInfoEXT_Ann : ManagedStructureAnnotation<VkBindHeapInfoEXT> {
+    VkBindHeapInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkBindHeapInfoEXT", ml, "VkBindHeapInfoEXT") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkBindHeapInfoEXT_Ann * ann_VkBindHeapInfoEXT = nullptr;
+void VkBindHeapInfoEXT_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkBindHeapInfoEXT, pNext), makeType<void *>(*mlib));
+    addField<DAS_BIND_MANAGED_FIELD(heapRange)>("heapRange", "heapRange");
+    addField<DAS_BIND_MANAGED_FIELD(reservedRangeOffset)>("reservedRangeOffset", "reservedRangeOffset");
+    addField<DAS_BIND_MANAGED_FIELD(reservedRangeSize)>("reservedRangeSize", "reservedRangeSize");
 }
 #endif
 
@@ -501,6 +570,23 @@ void VkPhysicalDeviceDescriptorHeapPropertiesEXT_Ann::init() {
 #endif
 
 #if defined(VK_EXT_descriptor_heap)
+struct VkCommandBufferInheritanceDescriptorHeapInfoEXT_Ann : ManagedStructureAnnotation<VkCommandBufferInheritanceDescriptorHeapInfoEXT> {
+    VkCommandBufferInheritanceDescriptorHeapInfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkCommandBufferInheritanceDescriptorHeapInfoEXT", ml, "VkCommandBufferInheritanceDescriptorHeapInfoEXT") {}
+    virtual bool isLocal() const override { return true; }
+    virtual bool canCopy() const override { return true; }
+    virtual bool canMove() const override { return true; }
+    void init();
+};
+static VkCommandBufferInheritanceDescriptorHeapInfoEXT_Ann * ann_VkCommandBufferInheritanceDescriptorHeapInfoEXT = nullptr;
+void VkCommandBufferInheritanceDescriptorHeapInfoEXT_Ann::init() {
+    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
+    addFieldEx("pNext", "pNext", offsetof(VkCommandBufferInheritanceDescriptorHeapInfoEXT, pNext), makeType<void *>(*mlib));
+    addFieldEx("pSamplerHeapBindInfo", "pSamplerHeapBindInfo", offsetof(VkCommandBufferInheritanceDescriptorHeapInfoEXT, pSamplerHeapBindInfo), makeType<VkBindHeapInfoEXT *>(*mlib));
+    addFieldEx("pResourceHeapBindInfo", "pResourceHeapBindInfo", offsetof(VkCommandBufferInheritanceDescriptorHeapInfoEXT, pResourceHeapBindInfo), makeType<VkBindHeapInfoEXT *>(*mlib));
+}
+#endif
+
+#if defined(VK_EXT_descriptor_heap)
 struct VkPhysicalDeviceDescriptorHeapTensorPropertiesARM_Ann : ManagedStructureAnnotation<VkPhysicalDeviceDescriptorHeapTensorPropertiesARM> {
     VkPhysicalDeviceDescriptorHeapTensorPropertiesARM_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkPhysicalDeviceDescriptorHeapTensorPropertiesARM", ml, "VkPhysicalDeviceDescriptorHeapTensorPropertiesARM") {}
     virtual bool isLocal() const override { return true; }
@@ -821,97 +907,6 @@ void VkBindVertexBuffer3InfoKHR_Ann::init() {
 }
 #endif
 
-#if defined(VK_KHR_device_address_commands)
-struct VkDrawIndirect2InfoKHR_Ann : ManagedStructureAnnotation<VkDrawIndirect2InfoKHR> {
-    VkDrawIndirect2InfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkDrawIndirect2InfoKHR", ml, "VkDrawIndirect2InfoKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkDrawIndirect2InfoKHR_Ann * ann_VkDrawIndirect2InfoKHR = nullptr;
-void VkDrawIndirect2InfoKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkDrawIndirect2InfoKHR, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(addressRange)>("addressRange", "addressRange");
-    addFieldEx("addressFlags", "addressFlags", offsetof(VkDrawIndirect2InfoKHR, addressFlags), makeVkFlags_VkAddressCommandFlagsKHR());
-    addField<DAS_BIND_MANAGED_FIELD(drawCount)>("drawCount", "drawCount");
-}
-#endif
-
-#if defined(VK_KHR_device_address_commands)
-struct VkDrawIndirectCount2InfoKHR_Ann : ManagedStructureAnnotation<VkDrawIndirectCount2InfoKHR> {
-    VkDrawIndirectCount2InfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkDrawIndirectCount2InfoKHR", ml, "VkDrawIndirectCount2InfoKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkDrawIndirectCount2InfoKHR_Ann * ann_VkDrawIndirectCount2InfoKHR = nullptr;
-void VkDrawIndirectCount2InfoKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkDrawIndirectCount2InfoKHR, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(addressRange)>("addressRange", "addressRange");
-    addFieldEx("addressFlags", "addressFlags", offsetof(VkDrawIndirectCount2InfoKHR, addressFlags), makeVkFlags_VkAddressCommandFlagsKHR());
-    addField<DAS_BIND_MANAGED_FIELD(countAddressRange)>("countAddressRange", "countAddressRange");
-    addFieldEx("countAddressFlags", "countAddressFlags", offsetof(VkDrawIndirectCount2InfoKHR, countAddressFlags), makeVkFlags_VkAddressCommandFlagsKHR());
-    addField<DAS_BIND_MANAGED_FIELD(maxDrawCount)>("maxDrawCount", "maxDrawCount");
-}
-#endif
-
-#if defined(VK_KHR_device_address_commands)
-struct VkDispatchIndirect2InfoKHR_Ann : ManagedStructureAnnotation<VkDispatchIndirect2InfoKHR> {
-    VkDispatchIndirect2InfoKHR_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkDispatchIndirect2InfoKHR", ml, "VkDispatchIndirect2InfoKHR") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkDispatchIndirect2InfoKHR_Ann * ann_VkDispatchIndirect2InfoKHR = nullptr;
-void VkDispatchIndirect2InfoKHR_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkDispatchIndirect2InfoKHR, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(addressRange)>("addressRange", "addressRange");
-    addFieldEx("addressFlags", "addressFlags", offsetof(VkDispatchIndirect2InfoKHR, addressFlags), makeVkFlags_VkAddressCommandFlagsKHR());
-}
-#endif
-
-#if defined(VK_KHR_device_address_commands)
-struct VkBindTransformFeedbackBuffer2InfoEXT_Ann : ManagedStructureAnnotation<VkBindTransformFeedbackBuffer2InfoEXT> {
-    VkBindTransformFeedbackBuffer2InfoEXT_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkBindTransformFeedbackBuffer2InfoEXT", ml, "VkBindTransformFeedbackBuffer2InfoEXT") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkBindTransformFeedbackBuffer2InfoEXT_Ann * ann_VkBindTransformFeedbackBuffer2InfoEXT = nullptr;
-void VkBindTransformFeedbackBuffer2InfoEXT_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkBindTransformFeedbackBuffer2InfoEXT, pNext), makeType<void *>(*mlib));
-    addField<DAS_BIND_MANAGED_FIELD(addressRange)>("addressRange", "addressRange");
-    addFieldEx("addressFlags", "addressFlags", offsetof(VkBindTransformFeedbackBuffer2InfoEXT, addressFlags), makeVkFlags_VkAddressCommandFlagsKHR());
-}
-#endif
-
-#if defined(VK_KHR_device_address_commands)
-struct VkMemoryMarkerInfoAMD_Ann : ManagedStructureAnnotation<VkMemoryMarkerInfoAMD> {
-    VkMemoryMarkerInfoAMD_Ann(ModuleLibrary & ml) : ManagedStructureAnnotation("VkMemoryMarkerInfoAMD", ml, "VkMemoryMarkerInfoAMD") {}
-    virtual bool isLocal() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    void init();
-};
-static VkMemoryMarkerInfoAMD_Ann * ann_VkMemoryMarkerInfoAMD = nullptr;
-void VkMemoryMarkerInfoAMD_Ann::init() {
-    addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
-    addFieldEx("pNext", "pNext", offsetof(VkMemoryMarkerInfoAMD, pNext), makeType<void *>(*mlib));
-    addFieldEx("stage", "stage", offsetof(VkMemoryMarkerInfoAMD, stage), makeVkFlags_VkPipelineStageFlags2());
-    addField<DAS_BIND_MANAGED_FIELD(dstRange)>("dstRange", "dstRange");
-    addFieldEx("dstFlags", "dstFlags", offsetof(VkMemoryMarkerInfoAMD, dstFlags), makeVkFlags_VkAddressCommandFlagsKHR());
-    addField<DAS_BIND_MANAGED_FIELD(marker)>("marker", "marker");
-}
-#endif
-
 void das_vulkan_add_structs_25(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_NV_compute_occupancy_priority)
     ann_VkPhysicalDeviceComputeOccupancyPriorityFeaturesNV = new VkPhysicalDeviceComputeOccupancyPriorityFeaturesNV_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceComputeOccupancyPriorityFeaturesNV);
@@ -935,7 +930,19 @@ void das_vulkan_add_structs_25(Module & mod, ModuleLibrary & lib) {
     ann_VkHostAddressRangeConstEXT = new VkHostAddressRangeConstEXT_Ann(lib); mod.addAnnotation(ann_VkHostAddressRangeConstEXT);
 #endif
 #if defined(VK_EXT_descriptor_heap)
+    ann_VkTexelBufferDescriptorInfoEXT = new VkTexelBufferDescriptorInfoEXT_Ann(lib); mod.addAnnotation(ann_VkTexelBufferDescriptorInfoEXT);
+#endif
+#if defined(VK_EXT_descriptor_heap)
     ann_VkImageDescriptorInfoEXT = new VkImageDescriptorInfoEXT_Ann(lib); mod.addAnnotation(ann_VkImageDescriptorInfoEXT);
+#endif
+#if defined(VK_EXT_descriptor_heap)
+    ann_VkResourceDescriptorDataEXT = new VkResourceDescriptorDataEXT_Ann(lib); mod.addAnnotation(ann_VkResourceDescriptorDataEXT);
+#endif
+#if defined(VK_EXT_descriptor_heap)
+    ann_VkResourceDescriptorInfoEXT = new VkResourceDescriptorInfoEXT_Ann(lib); mod.addAnnotation(ann_VkResourceDescriptorInfoEXT);
+#endif
+#if defined(VK_EXT_descriptor_heap)
+    ann_VkBindHeapInfoEXT = new VkBindHeapInfoEXT_Ann(lib); mod.addAnnotation(ann_VkBindHeapInfoEXT);
 #endif
 #if defined(VK_EXT_descriptor_heap)
     ann_VkPushDataInfoEXT = new VkPushDataInfoEXT_Ann(lib); mod.addAnnotation(ann_VkPushDataInfoEXT);
@@ -995,6 +1002,9 @@ void das_vulkan_add_structs_25(Module & mod, ModuleLibrary & lib) {
     ann_VkPhysicalDeviceDescriptorHeapPropertiesEXT = new VkPhysicalDeviceDescriptorHeapPropertiesEXT_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceDescriptorHeapPropertiesEXT);
 #endif
 #if defined(VK_EXT_descriptor_heap)
+    ann_VkCommandBufferInheritanceDescriptorHeapInfoEXT = new VkCommandBufferInheritanceDescriptorHeapInfoEXT_Ann(lib); mod.addAnnotation(ann_VkCommandBufferInheritanceDescriptorHeapInfoEXT);
+#endif
+#if defined(VK_EXT_descriptor_heap)
     ann_VkPhysicalDeviceDescriptorHeapTensorPropertiesARM = new VkPhysicalDeviceDescriptorHeapTensorPropertiesARM_Ann(lib); mod.addAnnotation(ann_VkPhysicalDeviceDescriptorHeapTensorPropertiesARM);
 #endif
 #if defined(VK_ARM_shader_instrumentation)
@@ -1048,21 +1058,6 @@ void das_vulkan_add_structs_25(Module & mod, ModuleLibrary & lib) {
 #if defined(VK_KHR_device_address_commands)
     ann_VkBindVertexBuffer3InfoKHR = new VkBindVertexBuffer3InfoKHR_Ann(lib); mod.addAnnotation(ann_VkBindVertexBuffer3InfoKHR);
 #endif
-#if defined(VK_KHR_device_address_commands)
-    ann_VkDrawIndirect2InfoKHR = new VkDrawIndirect2InfoKHR_Ann(lib); mod.addAnnotation(ann_VkDrawIndirect2InfoKHR);
-#endif
-#if defined(VK_KHR_device_address_commands)
-    ann_VkDrawIndirectCount2InfoKHR = new VkDrawIndirectCount2InfoKHR_Ann(lib); mod.addAnnotation(ann_VkDrawIndirectCount2InfoKHR);
-#endif
-#if defined(VK_KHR_device_address_commands)
-    ann_VkDispatchIndirect2InfoKHR = new VkDispatchIndirect2InfoKHR_Ann(lib); mod.addAnnotation(ann_VkDispatchIndirect2InfoKHR);
-#endif
-#if defined(VK_KHR_device_address_commands)
-    ann_VkBindTransformFeedbackBuffer2InfoEXT = new VkBindTransformFeedbackBuffer2InfoEXT_Ann(lib); mod.addAnnotation(ann_VkBindTransformFeedbackBuffer2InfoEXT);
-#endif
-#if defined(VK_KHR_device_address_commands)
-    ann_VkMemoryMarkerInfoAMD = new VkMemoryMarkerInfoAMD_Ann(lib); mod.addAnnotation(ann_VkMemoryMarkerInfoAMD);
-#endif
 }
 
 void das_vulkan_fill_structs_25(Module & mod, ModuleLibrary & lib) {
@@ -1088,7 +1083,19 @@ void das_vulkan_fill_structs_25(Module & mod, ModuleLibrary & lib) {
     ann_VkHostAddressRangeConstEXT->mlib = &lib; ann_VkHostAddressRangeConstEXT->init(); ann_VkHostAddressRangeConstEXT->mlib = nullptr;
 #endif
 #if defined(VK_EXT_descriptor_heap)
+    ann_VkTexelBufferDescriptorInfoEXT->mlib = &lib; ann_VkTexelBufferDescriptorInfoEXT->init(); ann_VkTexelBufferDescriptorInfoEXT->mlib = nullptr;
+#endif
+#if defined(VK_EXT_descriptor_heap)
     ann_VkImageDescriptorInfoEXT->mlib = &lib; ann_VkImageDescriptorInfoEXT->init(); ann_VkImageDescriptorInfoEXT->mlib = nullptr;
+#endif
+#if defined(VK_EXT_descriptor_heap)
+    ann_VkResourceDescriptorDataEXT->mlib = &lib; ann_VkResourceDescriptorDataEXT->init(); ann_VkResourceDescriptorDataEXT->mlib = nullptr;
+#endif
+#if defined(VK_EXT_descriptor_heap)
+    ann_VkResourceDescriptorInfoEXT->mlib = &lib; ann_VkResourceDescriptorInfoEXT->init(); ann_VkResourceDescriptorInfoEXT->mlib = nullptr;
+#endif
+#if defined(VK_EXT_descriptor_heap)
+    ann_VkBindHeapInfoEXT->mlib = &lib; ann_VkBindHeapInfoEXT->init(); ann_VkBindHeapInfoEXT->mlib = nullptr;
 #endif
 #if defined(VK_EXT_descriptor_heap)
     ann_VkPushDataInfoEXT->mlib = &lib; ann_VkPushDataInfoEXT->init(); ann_VkPushDataInfoEXT->mlib = nullptr;
@@ -1148,6 +1155,9 @@ void das_vulkan_fill_structs_25(Module & mod, ModuleLibrary & lib) {
     ann_VkPhysicalDeviceDescriptorHeapPropertiesEXT->mlib = &lib; ann_VkPhysicalDeviceDescriptorHeapPropertiesEXT->init(); ann_VkPhysicalDeviceDescriptorHeapPropertiesEXT->mlib = nullptr;
 #endif
 #if defined(VK_EXT_descriptor_heap)
+    ann_VkCommandBufferInheritanceDescriptorHeapInfoEXT->mlib = &lib; ann_VkCommandBufferInheritanceDescriptorHeapInfoEXT->init(); ann_VkCommandBufferInheritanceDescriptorHeapInfoEXT->mlib = nullptr;
+#endif
+#if defined(VK_EXT_descriptor_heap)
     ann_VkPhysicalDeviceDescriptorHeapTensorPropertiesARM->mlib = &lib; ann_VkPhysicalDeviceDescriptorHeapTensorPropertiesARM->init(); ann_VkPhysicalDeviceDescriptorHeapTensorPropertiesARM->mlib = nullptr;
 #endif
 #if defined(VK_ARM_shader_instrumentation)
@@ -1200,21 +1210,6 @@ void das_vulkan_fill_structs_25(Module & mod, ModuleLibrary & lib) {
 #endif
 #if defined(VK_KHR_device_address_commands)
     ann_VkBindVertexBuffer3InfoKHR->mlib = &lib; ann_VkBindVertexBuffer3InfoKHR->init(); ann_VkBindVertexBuffer3InfoKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_device_address_commands)
-    ann_VkDrawIndirect2InfoKHR->mlib = &lib; ann_VkDrawIndirect2InfoKHR->init(); ann_VkDrawIndirect2InfoKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_device_address_commands)
-    ann_VkDrawIndirectCount2InfoKHR->mlib = &lib; ann_VkDrawIndirectCount2InfoKHR->init(); ann_VkDrawIndirectCount2InfoKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_device_address_commands)
-    ann_VkDispatchIndirect2InfoKHR->mlib = &lib; ann_VkDispatchIndirect2InfoKHR->init(); ann_VkDispatchIndirect2InfoKHR->mlib = nullptr;
-#endif
-#if defined(VK_KHR_device_address_commands)
-    ann_VkBindTransformFeedbackBuffer2InfoEXT->mlib = &lib; ann_VkBindTransformFeedbackBuffer2InfoEXT->init(); ann_VkBindTransformFeedbackBuffer2InfoEXT->mlib = nullptr;
-#endif
-#if defined(VK_KHR_device_address_commands)
-    ann_VkMemoryMarkerInfoAMD->mlib = &lib; ann_VkMemoryMarkerInfoAMD->init(); ann_VkMemoryMarkerInfoAMD->mlib = nullptr;
 #endif
 }
 

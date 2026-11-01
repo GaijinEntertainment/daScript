@@ -71,6 +71,11 @@ def document_module_vulkan_boost() {
         group_by_regex("Device queues", mod, %regex~^(set_device_queue_ask|device_queue_count)$%%),
         group_by_regex("Host image copy", mod, %regex~^(host_copy_layout|upload_image_from_host)$%%),
         group_by_regex("Shader objects", mod, %regex~^(spirv_bytes|cmd_bind_graphics_shaders|cmd_set_shader_object_baseline)$%%),
+        group_by_regex("Descriptor heaps", mod,
+            regex_compile("^(descriptor_heap_supported|descriptor_heap_properties|" +
+                "create_device_descriptor_heap|resource_heap_layout|create_resource_heap|" +
+                "bind_info|descriptor_offset|descriptor_host_range|map_bindings_to_heap|" +
+                "create_compute_pipeline_descriptor_heap)$")),
         group_by_regex("Shaders & pipelines", mod,
             regex_compile("^(create_shader_module|create_pipeline_layout|" +
                 "create_graphics_pipeline_simple|create_graphics_pipeline_v3d|" +
