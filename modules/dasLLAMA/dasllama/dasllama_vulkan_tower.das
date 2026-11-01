@@ -3017,6 +3017,7 @@ def private vulkan_gigaam_serves_model(e : GigaamModel) : bool {
 [cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
 def private vulkan_gigaam_bake(m : GigaamModel; var b : TowerDevBuild) : bool {
     vt_fc_bake(vt_fc_of_ga(m), b)
+    gigaam_rnnt_dev_bake(m, b, VK_RNNT_PIECE)
     return vt_ga_front_bake(m, b)
 }
 
@@ -3026,8 +3027,11 @@ def private vulkan_parakeet_bake(m : ParakeetModel; var b : TowerDevBuild) : boo
     let fc = vt_fc_of_pk(m)
     vt_fc_bake(fc, b)
     vt_cn_front_bake(fc, b)
+    parakeet_rnnt_dev_bake(m, b, VK_RNNT_PIECE)
     return true
 }
+
+let VK_RNNT_PIECE = "vk.rnnt"   //! the transducer decoder's halves' and slab's prefix in a Vulkan device block
 
 //! Canary's Vulkan device block (`#tower-dev-block`): the chain's planes with the projector's, then the front's f16 conv panel
 [cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]

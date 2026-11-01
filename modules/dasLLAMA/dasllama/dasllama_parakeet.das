@@ -1189,13 +1189,19 @@ def private pk_rnnt_net(m : ParakeetModel) : RnntNet {
         n_tokens = m.n_vocab + 1l, blank_id = m.blank_id, durations = m.durations, max_symbols = int(m.n_max_tokens),
         embed = m.embed_off, joint_pred_w = m.joint_pred_w, joint_pred_b = m.joint_pred_b,
         joint_net_w = m.joint_net_w, joint_net_b = m.joint_net_b,
-        prof_step = "pk.dec.step", prof_pick = "pk.dec.pick", prof_joint = "pk.dec.joint", dev_only = m.dev_backend != TowerDev.none)
+        prof_step = "pk.dec.step", prof_pick = "pk.dec.pick", prof_joint = "pk.dec.joint", dev_only = m.dev_backend != TowerDev.none,
+        dev = m.dev, devplan = m.devplan)
     for (l in range64(m.n_pred_layers)) {
         net.lstm_ih[l] = m.lstm_ih[l]
         net.lstm_hh[l] = m.lstm_hh[l]
         net.lstm_b[l] = m.lstm_b[l]
     }
     return net
+}
+
+//! The transducer decoder's device halves and slab into a GPU flavor's block under `prefix` (`rnnt_dev_bake`), off the CPU-form model
+def parakeet_rnnt_dev_bake(m : ParakeetModel; var b : TowerDevBuild; prefix : string) {
+    rnnt_dev_bake(pk_rnnt_net(m), RnntEnc(d = m.n_state, w = m.joint_enc_w, b = m.joint_enc_b, q8 = m.q8 && !m.jenc_exact), b, prefix)
 }
 
 // NaN/Inf stage scan (debug rail, pairs with the fast_math x64 investigation): bit-pattern

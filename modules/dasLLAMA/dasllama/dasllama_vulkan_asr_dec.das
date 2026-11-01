@@ -942,10 +942,18 @@ def private rv_attach_build(net : RnntNet; s : RnntState; enc : RnntEnc; key : u
     rv_release()
     r.oom = false
     r.lay = rnnt_dev_layout(net)
-    var inscope wf <- rnnt_dev_slab(net, s, enc, r.lay)
+    let src = VtDevSrc(on = net.devplan.n > 0l, dev = net.dev, devplan = net.devplan)
+    var inscope wf : array<float>
+    if (!src.on) {
+        wf <- rnnt_dev_slab(net, s, enc, r.lay)
+    }
     r.wh_bytes = r.lay.wh_halves * 2l
     r.jw_bytes = r.lay.jw_halves * 2l
-    r.wf_bytes = long_length(wf) * 4l
+    r.wf_bytes = src.on ? vt_piece_bytes(src, "{VK_RNNT_PIECE}.wf") : long_length(wf) * 4l
+    if (src.on && (vt_piece_bytes(src, "{VK_RNNT_PIECE}.wh") != r.wh_bytes || vt_piece_bytes(src, "{VK_RNNT_PIECE}.jw") != r.jw_bytes
+            || r.wf_bytes != r.lay.wf_floats * 4l)) {
+        return rv_decline(VulkanRnntDecline.shape)
+    }
     r.wenc_bytes = enc.q8 ? 0l : net.joint_dim * enc.d * 4l
     if (!vk_range_ok(max(max(r.wh_bytes, r.wf_bytes), max(r.jw_bytes, r.wenc_bytes)))) {
         return rv_decline(VulkanRnntDecline.shape)
@@ -959,9 +967,15 @@ def private rv_attach_build(net : RnntNet; s : RnntState; enc : RnntEnc; key : u
         rv_release()
         return rv_decline(VulkanRnntDecline.memory)
     }
-    upload_region_at(r.wh_dev, 0l, unsafe(addr<uint8 const?>(s.wh[0])), r.wh_bytes)
-    upload_region_at(r.jw_dev, 0l, unsafe(addr<uint8 const?>(s.joint_wt[0])), r.jw_bytes)
-    upload_region_at(r.wf_dev, 0l, unsafe(addr<uint8 const?>(wf[0])), r.wf_bytes)
+    if (src.on) {
+        vt_put_piece(src, "{VK_RNNT_PIECE}.wh", r.wh_dev)
+        vt_put_piece(src, "{VK_RNNT_PIECE}.jw", r.jw_dev)
+        vt_put_piece(src, "{VK_RNNT_PIECE}.wf", r.wf_dev)
+    } else {
+        upload_region_at(r.wh_dev, 0l, unsafe(addr<uint8 const?>(s.wh[0])), r.wh_bytes)
+        upload_region_at(r.jw_dev, 0l, unsafe(addr<uint8 const?>(s.joint_wt[0])), r.jw_bytes)
+        upload_region_at(r.wf_dev, 0l, unsafe(addr<uint8 const?>(wf[0])), r.wf_bytes)
+    }
     if (!enc.q8) {
         upload_region_at(r.wenc_dev, 0l, unsafe(reinterpret<uint8 const?>(plane_at(net.blob, enc.w))), r.wenc_bytes)
     }

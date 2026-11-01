@@ -56,6 +56,8 @@ struct RnntNet {
     prof_pick : string = "rnnt.dec.pick"     //!< the bucket of a row's pick
     prof_joint : string = "rnnt.dec.joint"   //!< the bucket of a blank step's joint
     dev_only : bool                //!< a GPU-flavored image's net: the CPU never runs it, so a device decline panics
+    dev : PlaneU8 = PlaneU8()      //!< ... its image's device block: the seat's halves and slab are pieces of it (`rnnt_dev_bake`)
+    devplan : PlaneI64 = PlaneI64()
 }
 
 //! The decoder's per-session state: the LSTM's h/c, the projected prediction, the halves the session lays
@@ -137,6 +139,7 @@ def private rnnt_reset(net : RnntNet; var s : RnntState) {
         s.h[i] = 0.0
         s.c[i] = 0.0
     }
+    return if (net.dev_only)   //! a GPU-flavored net's halves are its image's pieces: the device seat binds them
     rnnt_pred_halves(net, s)
     ensure_length(s.logits, rnnt_joint_blocks(n_logits) * RNNT_JOINT_BLOCK)   // whole blocks: the joint writes zeros past the last logit
     rnnt_joint_cols(net, s, s.logits, net.joint_dim, n_logits)
@@ -641,6 +644,20 @@ def rnnt_dev_slab(net : RnntNet; s : RnntState; enc : RnntEnc; lay : RnntDevLayo
         memcpy(addr(wf[lay.lb]), addr(s.bias[0]), net.n_layers * 4l * pd * 4l)
     }
     return <- wf
+}
+
+//! A net's device halves and slab into a device block (`#tower-dev-block`) as `<prefix>.wh`, `.jw` and `.wf` - the planes a seat
+//! uploads, laid at mint off the CPU-form net
+[cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
+def rnnt_dev_bake(net : RnntNet; enc : RnntEnc; var b : TowerDevBuild; prefix : string) {
+    var s = RnntState()
+    rnnt_reset(net, s)
+    let lay = rnnt_dev_layout(net)
+    var inscope wf <- rnnt_dev_slab(net, s, enc, lay)
+    tower_dev_put(b, "{prefix}.wh", unsafe(addr<uint8 const?>(s.wh[0])), lay.wh_halves * 2l)
+    tower_dev_put(b, "{prefix}.jw", unsafe(addr<uint8 const?>(s.joint_wt[0])), lay.jw_halves * 2l)
+    tower_dev_put(b, "{prefix}.wf", unsafe(addr<uint8 const?>(wf[0])), long_length(wf) * 4l)
+    delete s
 }
 
 //! The token records a clip of `frames` holds at most.

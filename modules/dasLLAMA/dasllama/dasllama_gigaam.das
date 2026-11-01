@@ -1436,12 +1436,18 @@ def private gg_rnnt_net(m : GigaamModel) : RnntNet {
     var net = RnntNet(blob = m.blob, n_layers = m.pred_layers, pred_dim = m.pred_dim, joint_dim = m.joint_dim,
         n_tokens = m.n_classes, blank_id = m.blank_id, max_symbols = GG_MAX_SYMBOLS, zero_start = true, torch_gates = true, two_biases = true,
         embed = m.embed_w, joint_pred_w = m.jpred_w, joint_pred_b = m.jpred_b, joint_net_w = m.jout_w, joint_net_b = m.jout_b,
-        prof_step = "ga.dec.step", prof_pick = "ga.dec.pick", prof_joint = "ga.dec.joint", dev_only = m.dev_backend != TowerDev.none)
+        prof_step = "ga.dec.step", prof_pick = "ga.dec.pick", prof_joint = "ga.dec.joint", dev_only = m.dev_backend != TowerDev.none,
+        dev = m.dev, devplan = m.devplan)
     net.lstm_ih[0] = m.lstm_ih
     net.lstm_hh[0] = m.lstm_hh
     net.lstm_b[0] = m.lstm_b_ih
     net.lstm_b2[0] = m.lstm_b_hh
     return net
+}
+
+//! The transducer decoder's device halves and slab into a GPU flavor's block under `prefix` (`rnnt_dev_bake`), off the CPU-form model
+def gigaam_rnnt_dev_bake(m : GigaamModel; var b : TowerDevBuild; prefix : string) {
+    rnnt_dev_bake(gg_rnnt_net(m), RnntEnc(d = m.d_model, w = m.jenc_w, b = m.jenc_b), b, prefix)
 }
 
 def private gg_decode_rnnt(m : GigaamModel; var st : GigaamState; n_frames : int64) {
