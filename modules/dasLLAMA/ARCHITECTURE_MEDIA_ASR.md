@@ -111,9 +111,10 @@ exactly into `qblob`/`qscales`. The GEMMs pack compactly, each at its own offset
 virtual element offsets (`gemm_off` 0, the fixed stride) and the model carries one seat a GEMM in the `gemm_seats` plane
 (`TOWER_SEAT_WORDS`: the format slot, the quant offset, the scale offset); `fc_gemm_seat_index` maps a record offset to
 its seat, `tower_gemm_seat` reads it, and `tower_mm` runs a K-quant seat on the backend's batched kq tile over the Q8_K
-activation image (`tower_requant` - the per-superblock scales in `xs`, the per-16 sums in `xbs`), the portable GEMV a row
-where the backend carries no tile or the planes stayed in disk order, and a Q8_0 seat on the q8 batch GEMM over the Q8_0
-image. The attention's q, k and v read one image, so the planner holds their formats to one class; a GEMM's format is
+activation image (`tower_requant` - the per-superblock scales in `xs`, the per-16 sums in `xbs`), the portable disk-order
+batch GEMM (`matmul_kq_batch_disk_at`: the weight row walked once a position while it is hot) where the planes stayed in
+disk order, the repacked GEMV a position where a backend repacked them but carries no batch tile, and a Q8_0 seat on the q8
+batch GEMM over the Q8_0 image. The attention's q, k and v read one image, so the planner holds their formats to one class; a GEMM's format is
 its disk type's tag on its row (`kq_tag`), and a type the lane has no seat for - a per-32 member, NVFP4, a demoted row -
 is refused naming the tensor, the pinned lanes being the way to dequantize it. The lane's name is its one K-quant member
 (`gigaam_exec_fmt`: `k4`), `kq` where the members mix, `q8` where every GEMM is Q8_0 - that carrier serves its blocks

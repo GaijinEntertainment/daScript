@@ -14,7 +14,7 @@ require dasllama/dasllama_par
 require dasllama/dasllama_gguf   // read_clamp reads sidecar scalar tensors
 require dasllama/dasllama_common   // requant_rows_q8_sized: tower_mm_rq's q8 feed
 require dasllama/dasllama_gemm_schema   // Q8K_SUM_ELEMS: the kq lane's Q8_K image
-require dasllama/dasllama_math_default   // matmul_kq_at: the portable K-quant GEMV over disk-order planes
+require dasllama/dasllama_math_default   // matmul_kq_batch_disk_at: the portable K-quant batch GEMM over disk-order planes
 require dasllama/dasllama_repack   // repack_conv_out_tap_in: the conv reader's tap-major order
 require daslib/cmp
 
@@ -408,16 +408,16 @@ def private tower_mm_kq(m : auto(MT); var y : array<float>; s : TowerGemmSeat; x
     unsafe {
         let kqp = plane_at(m.kq, s.qoff)
         let ksp = plane_at(m.ks, s.soff)
-        if (m.kq_repacked && kernel_backend_has_kq_batch()) {
+        if (!m.kq_repacked) {
+            matmul_kq_batch_disk_at(fmt, addr(y[0]), kqp, ksp, addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), addr<int const?>(xbs[0]), n, d, npos)
+            return
+        }
+        if (kernel_backend_has_kq_batch()) {
             matmul_kq_batch_at(fmt, addr(y[0]), kqp, ksp, addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), addr<int const?>(xbs[0]), n, d, npos)
             return
         }
         for (r in range64(npos)) {
-            if (m.kq_repacked) {
-                matmul_kq_active_at(fmt, addr(y[r * d]), kqp, ksp, addr<int8 const?>(xq[r * n]), addr<float const?>(xs[r * nsb]), addr<int const?>(xbs[r * nh]), n, d)
-            } else {
-                matmul_kq_at(fmt, addr(y[r * d]), kqp, ksp, addr<int8 const?>(xq[r * n]), addr<float const?>(xs[r * nsb]), addr<int const?>(xbs[r * nh]), n, d)
-            }
+            matmul_kq_active_at(fmt, addr(y[r * d]), kqp, ksp, addr<int8 const?>(xq[r * n]), addr<float const?>(xs[r * nsb]), addr<int const?>(xbs[r * nh]), n, d)
         }
     }
 }

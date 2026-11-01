@@ -237,9 +237,9 @@ and the thread answers each stage as it lands - the transcript with its wall tim
 with its own, then the clip with the synthesis time - so the history shows a turn as
 transcribing, translating, speaking and spoken in turn, with each stage's milliseconds under it; a
 stage with nothing to pass on (silence transcribed as nothing, nothing to say) ends the turn as
-empty. The worker's lane pin is its own context's: the browser build pins the speech model's q8
-lane there before the load, because the portable backend serves no K-quant plane batched
-(`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`). While a clip plays, and while clips wait to play, the
+empty. The worker's lane pin (`--q8`) is its own context's, set there before the load; un-pinned,
+the hosted Q4_K file serves as its own planes on every build, the browser's portable backend
+included (`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`). While a clip plays, and while clips wait to play, the
 microphone's frames are drained and dropped - the page would otherwise hear its own reply - and
 the take starts over once the last clip ends. Clips play one at a time in turn order, each with its
 own status box (sec.3.7's rule); the output waveform is the session's spoken audio with a tick at

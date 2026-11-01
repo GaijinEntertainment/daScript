@@ -776,6 +776,47 @@ def test_kq_gemv_rows(t : T?) {
     }
 }
 
+// The disk-order batch GEMM (matmul_kq_batch_disk_at - what a backend with no kq batch tile serves a window on) must
+// bit-match the multi-row GEMV run a token at a time: it walks the weight row once a token, so a token's activation
+// offsets (xq at n, xs at n / 256, xbs at n / 16) and its output row at t * d are what this gate holds.
+def private kq_gemm_disk_gate(t : T?; fmt : int; n : int64 = 512l) {
+    let d = 8l
+    let ntok = 3l
+    let nsb = n / 256l
+    let nh = n / Q8K_SUM_ELEMS
+    var inscope kq, ks : array<uint8>
+    synth_kq_region(fmt, kq, ks, d, n, 0x9E3779Bu, 0x85EBCA6Bu)
+    var inscope x <- build_q8k_acts(ntok, n, Wave(a = 1.1, fa = 0.31, b = 0.5, fb = 0.043))
+    var inscope y <- nan_plane(int(d * ntok))
+    unsafe {
+        matmul_kq_batch_disk_at(fmt, addr(y[0]), addr(kq[0]), addr(ks[0]), addr(x.xq[0]), addr(x.xs[0]), addr(x.xbs[0]), n, d, ntok)
+    }
+    var inscope want <- nan_plane(int(d * ntok))
+    for (tk in range64(ntok)) {
+        var inscope row <- nan_plane(int(d))
+        unsafe {
+            matmul_kq_at(fmt, addr(row[0]), addr(kq[0]), addr(ks[0]), addr(x.xq[tk * n]), addr(x.xs[tk * nsb]), addr(x.xbs[tk * nh]), n, d)
+        }
+        for (r in range64(d)) {
+            want[tk * d + r] = row[r]
+        }
+    }
+    let kf = kq_fmt_of_id(fmt, "kq_gemm_disk_gate")
+    check(t, "portable {kf} disk-order batch GEMM against the GEMV a token at a time", y, want, BAR_EXACT, FLAT_SHAPE)
+}
+
+[test]
+def test_kq_gemm_disk_batch(t : T?) {
+    for (fmt in KQ_IDS) {
+        let kf = kq_fmt_of_id(fmt, "test_kq_gemm_disk_batch")
+        for (nn in fixed_array(512l, 1024l, 3072l)) {
+            t |> run("portable {kf} disk-order batch GEMM bit-matches the GEMV a token at a time at n={int(nn)}") @(t : T?) {
+                kq_gemm_disk_gate(t, fmt, nn)
+            }
+        }
+    }
+}
+
 // A bf16 panel holds every weight of `wrow` at its pair-layout slot within `rel` of the weight
 // plus `slack`; the same slots against their pair neighbors' weights must miss. A slot the
 // builder never wrote keeps its NaN and counts as off.

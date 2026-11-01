@@ -798,9 +798,6 @@ def init() {
     g_args <- r |> move_unwrap
     GAIN.value = 1.0
     g_status = "loading the models..."
-    if (get_running_platform_name() == "emscripten") {
-        g_args.q8 = true   // the browser's portable backend serves no K-quant plane batched: the q8 lane is the one that runs
-    }
     if (!empty(g_args.clip)) {
         // decoded before the window and the thread exist, so a clip that is not audio refuses here and the program ends
         delete g_pending_clip
