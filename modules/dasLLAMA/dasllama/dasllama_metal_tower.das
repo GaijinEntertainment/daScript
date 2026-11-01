@@ -988,6 +988,7 @@ def private metal_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos 
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
     }
+    return tw_decline(MetalTowerDecline.flavor) if (!t.q8 && t.dev_backend != TowerDev.metal)
     if (t.q8) {
         return tw_decline(MetalTowerDecline.quant_mode)
     }
@@ -2709,6 +2710,63 @@ def private metal_gigaam_ctc(m : GigaamModel; var st : GigaamState; n_frames : i
     return true
 }
 
+//! gemma4a's front panels as one buffer, at byte offsets on a 256 lattice: the DFT's transposed twiddles [dft_out_pad][n_fft], the
+//! filterbank k-padded [n_mel][mag_k_pad], the first conv's taps [sub_ch0][32], the second conv's rows [cout_pad][9 sub_ch0]
+struct private G4aFrontLay {
+    tw : int64
+    fil : int64
+    w0 : int64
+    w1 : int64
+    total : int64
+}
+
+let private TW_G4A_FRONT_PIECE = "mt.g4a.front"   //! gemma4a's front panels (`G4aFrontLay`) in a Metal device block
+
+def private g4a_front_lay(t : Gemma4aEncoder) : G4aFrontLay {
+    let n_bins = t.n_bins
+    let n_fft = (n_bins - 1l) * 2l
+    let btw = round_up(2l * n_bins, 64l) * n_fft * 4l
+    let bfil = t.n_mel * round_up(n_bins, 32l) * 4l
+    let bw0 = t.sub_ch0 * 32l * 4l
+    let bw1 = round_up(t.sub_ch1, 64l) * t.sub_ch0 * 9l * 4l
+    let fil = round_up(btw, 256l)
+    let w0 = fil + round_up(bfil, 256l)
+    let w1 = w0 + round_up(bw0, 256l)
+    return G4aFrontLay(tw = 0l, fil = fil, w0 = w0, w1 = w1, total = w1 + bw1)
+}
+
+//! gemma4a's Metal device block (`#tower-dev-block`): the front panels the chunk stages, each laid by its own stager into a
+//! scratch buffer and copied to its offset
+[cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
+def private metal_gemma4a_bake(t : Gemma4aEncoder; var b : TowerDevBuild) : bool {
+    return false if (!metal_tower_init())
+    let lay = g4a_front_lay(t)
+    let n_bins = t.n_bins
+    let n_fft = (n_bins - 1l) * 2l
+    var scratch = metal_new_buffer(g_dev, uint64(lay.total))
+    return false if (scratch == null)
+    var host : array<uint8>
+    host |> reserve_resize(lay.total)
+    unsafe {
+        let sp = reinterpret<uint8 const?>(metal_buffer_contents(scratch))
+        tw_twiddle_panel(scratch, plane_at(t.twiddles, 0l), n_bins, n_fft, n_fft, round_up(2l * n_bins, 64l))
+        memcpy(addr(host[lay.tw]), sp, lay.fil - lay.tw)
+        upload_rows_strided(scratch, plane_at(t.filters, 0l), t.n_mel, n_bins, round_up(n_bins, 32l))
+        memcpy(addr(host[lay.fil]), sp, t.n_mel * round_up(n_bins, 32l) * 4l)
+        upload_rows_strided(scratch, plane_at(t.blob, t.c0_w), t.sub_ch0, 9l, 32l)
+        memcpy(addr(host[lay.w0]), sp, t.sub_ch0 * 32l * 4l)
+        upload_rows_padded(scratch, reinterpret<void?>(plane_at(t.blob, t.c1_w)), t.sub_ch1, round_up(t.sub_ch1, 64l), t.sub_ch0 * 9l)
+        memcpy(addr(host[lay.w1]), sp, lay.total - lay.w1)
+    }
+    release_handle(scratch)
+    tower_dev_put(b, TW_G4A_FRONT_PIECE, unsafe(addr<uint8 const?>(host[0])), lay.total)
+    delete host
+    return true
+}
+
+//! gemma4a's Metal chain serves the exact lane: the tower knob on
+def private metal_gemma4a_serves_model(q8 : bool) : bool => !q8 && g_tw_env_tower
+
 //! the DFT's transposed twiddle panel [rows_pad x kstride]: row n (a bin, real rows then imaginary) the twiddles' column n, pads zero
 def private tw_twiddle_panel(var buf : MetalBuffer?; twiddles : float const?; n_bins, n_fft, kstride, rows_pad : int64) {
     unsafe {
@@ -2730,6 +2788,16 @@ def private tw_twiddle_panel(var buf : MetalBuffer?; twiddles : float const?; n_
 [hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def private metal_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len : int64) : int64 {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower || t.q8 || !g4a_shape_ok(t) || n_len < 4l) {
+        return -1l
+    }
+    if (t.dev_backend != TowerDev.metal) {
+        tw_decline(MetalTowerDecline.flavor)
+        return -1l
+    }
+    let lay = g4a_front_lay(t)
+    var bfront = tw_dev_buffer(t.dev, t.devplan, TW_G4A_FRONT_PIECE, t.image_map != null)
+    if (bfront == null) {
+        tw_decline(MetalTowerDecline.device)
         return -1l
     }
     let n_mel = t.n_mel
@@ -2760,34 +2828,22 @@ def private metal_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len 
     var c <- g4a_ctx_make(t, npos)
     var tl <- g4a_tail_make(t, c)
     let bytes_xw = uint64(mpd * n_fft * 4l)
-    let bytes_tw = uint64(dft_out_pad * n_fft * 4l)
     let bytes_reim = uint64(mpd * dft_out_pad * 4l)
     let bytes_mag = uint64(mpd * mag_k_pad * 4l)
-    let bytes_fil = uint64(n_mel * mag_k_pad * 4l)
     let bytes_mel = uint64(mpd * n_mel * 4l)
     let bytes_c0 = uint64(mp0 * conv0_k_pad * 4l)
-    let bytes_w0 = uint64(t.sub_ch0 * conv0_k_pad * 4l)
     let bytes_y0 = uint64(mp0 * t.sub_ch0 * 4l)
     let bytes_c1 = uint64(mp1 * kd1 * 4l)
-    let bytes_w1 = uint64(conv1_cout_pad * kd1 * 4l)
     let bytes_y1p = uint64(mp1 * conv1_cout_pad * 4l)
     var bxw = pool_acquire_pinned(g_tw_pool, g_dev, bytes_xw)
-    var btw = pool_acquire_pinned(g_tw_pool, g_dev, bytes_tw)
     var breim = pool_acquire_pinned(g_tw_pool, g_dev, bytes_reim)
     var bmag = pool_acquire_pinned(g_tw_pool, g_dev, bytes_mag)
-    var bfil = pool_acquire_pinned(g_tw_pool, g_dev, bytes_fil)
     var bmel = pool_acquire_pinned(g_tw_pool, g_dev, bytes_mel)
     var bcol0 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_c0)
-    var bw0 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_w0)
     var by0 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y0)
     var bcol1 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_c1)
-    var bw1 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_w1)
     var by1p = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y1p)
     upload_rows_padded(bxw, unsafe(addr(s.xw[0])), n_len, mpd, n_fft)   // the DFT GEMM walks mpd rows
-    tw_twiddle_panel(btw, plane_at(t.twiddles, 0l), n_bins, n_fft, n_fft, dft_out_pad)
-    upload_rows_strided(bfil, plane_at(t.filters, 0l), n_mel, n_bins, mag_k_pad)   // the mel filterbank [n_mel x mag_k_pad], k-padded
-    upload_rows_strided(bw0, plane_at(t.blob, t.c0_w), t.sub_ch0, 9l, conv0_k_pad)
-    upload_rows_padded(bw1, unsafe(reinterpret<void?>(plane_at(t.blob, t.c1_w))), t.sub_ch1, conv1_cout_pad, kd1)
     var u_kfft = uniform_u32(uint(n_fft))
     var u_dft_out_pad = uniform_u32(uint(dft_out_pad))
     var u_nbins = uniform_u32(uint(n_bins))
@@ -2803,18 +2859,18 @@ def private metal_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len 
     var u_feat = uniform_u32(uint(feat))
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
-        enc_f32_mm(enc, btw, 0ul, bxw, breim, 0ul, u_kfft, u_dft_out_pad, mpd, dft_out_pad)
+        enc_f32_mm(enc, bfront, uint64(lay.tw), bxw, breim, 0ul, u_kfft, u_dft_out_pad, mpd, dft_out_pad)
         enc_g4a_mag(enc, breim, bmag, u_nbins, u_dft_out_pad, u_mag_k_pad, u_totmag, mpd * mag_k_pad)
-        enc_f32_mm(enc, bfil, 0ul, bmag, bmel, 0ul, u_mag_k_pad, u_nmel, mpd, n_mel)
+        enc_f32_mm(enc, bfront, uint64(lay.fil), bmag, bmel, 0ul, u_mag_k_pad, u_nmel, mpd, n_mel)
         enc_g4a_logmel(enc, bmel, u_totmel, u_floor, n_len * n_mel)
         //! subsample conv0 over the mel image [n_len x n_mel x 1]
         enc_im2col2d(enc, bmel, bcol0, GkIm2col2dArgs(iw = uint(n_mel), ih = uint(n_len), cin = 1u, sstride = 1u, kdp = uint(conv0_k_pad), rows = uint(rows0), soff = 0u), rows0 * conv0_k_pad)
-        enc_f32_mm(enc, bw0, 0ul, bcol0, by0, 0ul, u_conv0_k_pad, u_ch0, mp0, t.sub_ch0)
+        enc_f32_mm(enc, bfront, uint64(lay.w0), bcol0, by0, 0ul, u_conv0_k_pad, u_ch0, mp0, t.sub_ch0)
         enc_g4a_lnrelu(enc, by0, by0, c.bblob, GkLnReluRowsArgs(cout = uint(t.sub_ch0), ldin = uint(t.sub_ch0), ldout = uint(t.sub_ch0),
             rows = uint(rows0), woff = uint(t.norm0_w), eps = t.eps), rows0)
         //! subsample conv1 over the y0 image [t1 x w1 x sub_ch0], compact 32-wide out
         enc_im2col2d(enc, by0, bcol1, GkIm2col2dArgs(iw = uint(w1), ih = uint(t1), cin = uint(t.sub_ch0), sstride = uint(t.sub_ch0), kdp = uint(kd1), rows = uint(rows1), soff = 0u), rows1 * kd1)
-        enc_f32_mm(enc, bw1, 0ul, bcol1, by1p, 0ul, u_kd1, u_conv1_cout_pad, mp1, conv1_cout_pad)
+        enc_f32_mm(enc, bfront, uint64(lay.w1), bcol1, by1p, 0ul, u_kd1, u_conv1_cout_pad, mp1, conv1_cout_pad)
         enc_g4a_lnrelu(enc, by1p, c.bxb, c.bblob, GkLnReluRowsArgs(cout = uint(t.sub_ch1), ldin = uint(conv1_cout_pad), ldout = uint(t.sub_ch1),
             rows = uint(rows1), woff = uint(t.norm1_w), eps = t.eps), rows1)
         //! input projection: [npos x feat] -> [npos x d]
@@ -2834,16 +2890,12 @@ def private metal_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len 
         served = true
     }
     pool_release(g_tw_pool, bxw, bytes_xw)
-    pool_release(g_tw_pool, btw, bytes_tw)
     pool_release(g_tw_pool, breim, bytes_reim)
     pool_release(g_tw_pool, bmag, bytes_mag)
-    pool_release(g_tw_pool, bfil, bytes_fil)
     pool_release(g_tw_pool, bmel, bytes_mel)
     pool_release(g_tw_pool, bcol0, bytes_c0)
-    pool_release(g_tw_pool, bw0, bytes_w0)
     pool_release(g_tw_pool, by0, bytes_y0)
     pool_release(g_tw_pool, bcol1, bytes_c1)
-    pool_release(g_tw_pool, bw1, bytes_w1)
     pool_release(g_tw_pool, by1p, bytes_y1p)
     pool_release(g_upool, u_kfft, 4ul)
     pool_release(g_upool, u_dft_out_pad, 4ul)
@@ -6693,6 +6745,7 @@ def dasllama_metal_tower_register {
     register_whisper_mel_gpu(@@metal_q3a_mel)
     register_gemma4a_gpu(@@metal_gemma4a_blocks, @@metal_tower_serves)
     register_gemma4a_chunk_gpu(@@metal_gemma4a_chunk)
+    register_gemma4a_flavor(TowerDev.metal, @@metal_gemma4a_serves_model, @@metal_gemma4a_bake)
     register_canary_gpu(@@metal_canary_blocks, @@metal_tower_serves)
     register_canary_front_gpu(@@metal_canary_front)
     register_parakeet_gpu(@@metal_parakeet_blocks, @@metal_tower_serves)
