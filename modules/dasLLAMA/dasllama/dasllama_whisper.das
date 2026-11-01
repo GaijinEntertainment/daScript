@@ -454,7 +454,7 @@ def load_whisper_model(path : string; q8 : bool = false) : WhisperModel =>
 //! `set_asr_tower_fp32` routes here through the facade.
 def load_whisper_model(path : string; enc_q8, dec_q8 : bool) : WhisperModel {
     let tag = whisper_tag(enc_q8, dec_q8)
-    let dev = path |> ends_with(".dlim") || !enc_q8 || !dec_q8 ? TowerDev.none : tower_dev_flavor(g_wh_flavor, true)
+    let dev = path |> ends_with(".dlim") || !dec_q8 ? TowerDev.none : tower_dev_flavor(g_wh_flavor, enc_q8)
     if (dev != TowerDev.none) {
         return <- load_staged_image_dev(path, tag, "whisper", "source model", type<WhisperModel>, dev, g_wh_flavor.bake, WHISPER_DEV_CONSUMED) {
             return <- stage_whisper_model(path, enc_q8, dec_q8)
@@ -471,9 +471,10 @@ def private register_whisper_image_tags {
     register_image_family_tag("whisper-f32", true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
     register_image_family_tag("whisper-f32-q8")
     register_tower_dev_tags("whisper-q8")
+    register_tower_dev_tags("whisper-f32-q8")
 }
 
-//! A GPU driver's whisper flavor (`#tower-dev-block`): the backend whose image it mints, whether its chains serve the q8 lane,
+//! A GPU driver's whisper flavor (`#tower-dev-block`): the backend whose image it mints, whether its chains serve an encoder lane,
 //! and the bake that converts a CPU-form model into the driver's device block - the encoder's and the decoder's pieces in the
 //! encoder tower's one block
 typedef WhisperServesLaneFn = function<(q8 : bool) : bool>

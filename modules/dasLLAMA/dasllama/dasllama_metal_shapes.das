@@ -77,6 +77,7 @@ enum MetalWdecDecline {
     shape               // a dim violating the GEMM grids or a misaligned plane offset
     device              // metal init failed (no device / PSO build failure)
     gpu_error           // dispatch failed at execution time
+    flavor              // the model is not the Metal-flavored image: each backend serves its own (policy)
 }
 
 // why a prefill declined to the CPU path — the FIRST failing gate clause (the decode enum's

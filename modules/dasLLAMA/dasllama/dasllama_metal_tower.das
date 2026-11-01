@@ -113,7 +113,7 @@ def metal_tower_vis_slab_live() : bool => g_tw_q8_vis.buf != null
 
 [cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
 def private tw_decline(why : MetalTowerDecline) : bool {
-    note_decline(g_tower_declines, "tower", "{why}", policy = why == MetalTowerDecline.knob)
+    note_decline(g_tower_declines, "tower", "{why}", policy = why == MetalTowerDecline.knob || why == MetalTowerDecline.flavor)
     return false
 }
 
@@ -296,11 +296,72 @@ def private tw_q8_attach_slab(var slab : St2SlabBase; var boffs : array<uint64>;
 //! then the stem's second conv. False where the buffer cannot be made.
 [cold_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def private tw_q8_attach(t : AudioTower) : bool {
+    return tw_aud_dev_bind(t) if (t.dev_backend == TowerDev.metal)
     var inscope rg <- tw_q8_regions(t)
     let ok = tw_q8_attach_slab(g_tw_q8, g_tw_q8_boffs, t.qblob, t.qscales, rg)
     g_tw_q8_conv2 = ok ? g_tw_q8_boffs[t.n_layer * TW_Q8_MATS] : 0ul
     return ok
 }
+
+let private TW_AUD_Q8_PIECE = "mt.aud.q8"            //! a whisper-class tower's q8 slab in a Metal device block
+let private TW_AUD_Q8_OFFS_PIECE = "mt.aud.q8.offs"  //! ... its regions' byte offsets, a word each, the stem's second conv last
+let private TW_AUD_CONV1_PIECE = "mt.aud.conv1"      //! ... its stem's first conv padded to the 32 lattice
+
+//! a Metal-flavored whisper-class tower's q8 slab wrapping its piece, the region offsets read back from theirs (`#tower-dev-block`)
+[cold_path]
+def private tw_aud_dev_bind(t : AudioTower) : bool {
+    let key = hash_combine64(intptr(plane_at(t.dev, 0l)), uint64(t.dev.n))
+    return true if (g_tw_q8.buf != null && g_tw_q8.key == key)
+    st2_slab_free(g_tw_q8)
+    var q8 = tw_dev_buffer(t.dev, t.devplan, TW_AUD_Q8_PIECE, t.image_map != null)
+    return false if (q8 == null)
+    g_tw_q8 = St2SlabBase(buf = q8, key = key, borrowed = true)
+    var inscope offs <- tw_dev_words(t.dev, t.devplan, TW_AUD_Q8_OFFS_PIECE)
+    g_tw_q8_boffs |> reserve_resize(long_length(offs))
+    for (i in range64(long_length(offs))) {
+        g_tw_q8_boffs[i] = uint64(offs[i])
+    }
+    g_tw_q8_conv2 = long_length(offs) > t.n_layer * TW_Q8_MATS ? g_tw_q8_boffs[t.n_layer * TW_Q8_MATS] : 0ul
+    return true
+}
+
+//! A whisper-class tower's pieces into a Metal device block (`#tower-dev-block`): the attach's own builders over the CPU-form
+//! tower - the q8 slab and its offsets on the q8 lane, the stem's padded first conv where `stem` and its columns pad
+[cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
+def metal_audio_tower_bake_into(t : AudioTower; stem : bool; var b : TowerDevBuild) : bool {
+    return false if (!metal_tower_init())
+    if (t.q8) {
+        g_tw_bake_rowmajor = true
+        let ok = tw_q8_attach(t)
+        g_tw_bake_rowmajor = false
+        return false if (!ok)
+        tw_dev_put_slab(b, TW_AUD_Q8_PIECE, g_tw_q8)
+        var inscope offs : array<int64>
+        for (o in g_tw_q8_boffs) {
+            offs |> push(int64(o))
+        }
+        tw_dev_put_words(b, TW_AUD_Q8_OFFS_PIECE, offs)
+        st2_slab_free(g_tw_q8)   //! the CPU form the slab was keyed by goes away after the bake
+    }
+    let k1 = round_up(3l * t.n_mel, 32l)
+    if (stem && k1 != 3l * t.n_mel) {
+        return false if (tw_conv1_pad_attach(t, k1) == null)
+        tw_dev_put_slab(b, TW_AUD_CONV1_PIECE, g_tw_conv1_pad)
+        st2_slab_free(g_tw_conv1_pad)
+    }
+    return true
+}
+
+//! the standalone tower's Metal device block: its pieces, the stem's among them
+[cold_path]
+def private metal_audio_tower_bake(t : AudioTower; var b : TowerDevBuild) : bool => metal_audio_tower_bake_into(t, true, b)
+
+//! the standalone tower's Metal chain serves a lane: the tower knob on, the projector tail on the device behind the blocks
+[unused_argument(q8)]
+def private metal_audio_tower_serves_model(q8 : bool) : bool => g_tw_env_tower && g_tw_tail
+
+//! a whisper encoder's Metal chain serves an encoder lane: the tower knob on
+def metal_whisper_tower_serves() : bool => g_tw_env_tower
 
 def private tw_q8_regions(t : AudioTower) : array<Q8Region> {
     var @exact_size rg : array<Q8Region>
@@ -533,6 +594,7 @@ def private metal_tower_blocks_form(t : AudioTower; var s : EncoderState; npos :
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
     }
+    return tw_decline(MetalTowerDecline.flavor) if (t.dev_backend != TowerDev.metal)
     let d = t.d_model
     let hs = d / t.n_head
     if (d % 64l != 0l || t.n_ff % 64l != 0l || hs % 64l != 0l || t.layers_off % 4l != 0l || t.layer_stride % 4l != 0l) {
@@ -3660,9 +3722,15 @@ var private g_tw_conv1_pad : St2SlabBase   //!< the served whisper-class tower's
 //! the im2col pass pads its rows to the same lattice with zeros. Null where the buffer cannot be made.
 [cold_path]
 def private tw_conv1_pad_attach(t : AudioTower; k1 : int64) : MetalBuffer? {
-    let key = hash_combine64(tw_plane_key(t.fblob), uint64(t.conv1_w_off))
+    let key = (t.dev_backend == TowerDev.metal ? hash_combine64(intptr(plane_at(t.dev, 0l)), uint64(t.dev.n))
+        : hash_combine64(tw_plane_key(t.fblob), uint64(t.conv1_w_off)))
     return g_tw_conv1_pad.buf if (st2_slab_current(g_tw_conv1_pad, key))
     st2_slab_free(g_tw_conv1_pad)
+    if (t.dev_backend == TowerDev.metal) {
+        var piece = tw_dev_buffer(t.dev, t.devplan, TW_AUD_CONV1_PIECE, t.image_map != null)
+        g_tw_conv1_pad = St2SlabBase(buf = piece, key = key, borrowed = true)
+        return piece
+    }
     let d = t.d_model
     let k = 3l * t.n_mel
     var pad = metal_new_buffer(g_dev, uint64(d * k1 * 4l))
@@ -3677,6 +3745,7 @@ def private tw_conv1_pad_attach(t : AudioTower; k1 : int64) : MetalBuffer? {
     }
     g_tw_conv1_pad.buf = pad
     g_tw_conv1_pad.key = key
+    g_tw_conv1_pad.bytes = uint64(d * k1 * 4l)
     return pad
 }
 
@@ -3698,7 +3767,7 @@ def private conv2_mm(enc : MetalComputeEncoder?; t : AudioTower; bblob, bx2, bx2
 // silent false (no counter noise — the CPU conv serves and the blocks still ride the GPU).
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelChunk) : bool {
-    if (!g_tw_env_tower) {
+    if (!g_tw_env_tower || t.dev_backend != TowerDev.metal) {
         return false
     }
     let tin = AUDIO_CHUNK_FRAMES
@@ -6506,6 +6575,7 @@ def dasllama_metal_tower_register {
     register_gigaam_gpu_encode(@@metal_gigaam_encode)
     register_gigaam_gpu_ctc(@@metal_gigaam_ctc)
     register_gigaam_flavor(TowerDev.metal, @@metal_gigaam_serves_model, @@metal_gigaam_bake)
+    register_audio_tower_flavor(TowerDev.metal, @@metal_audio_tower_serves_model, @@metal_audio_tower_bake)
     register_tower_rows_gen(@@metal_tower_rows_gen)
     register_vad_gpu(@@metal_vad_chunks)
     register_styletts2_gpu(metal_styletts2_driver())

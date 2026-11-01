@@ -14,6 +14,7 @@ require dasllama/dasllama_layout   // q8_region_to_metal_blob — the 34B-blob u
 require dasllama/dasllama_metal_shapes
 require dasllama/dasllama_whisper
 require dasllama/dasllama_rnnt
+require dasllama/dasllama_tower   // TowerDev and the device block's pieces (`#tower-dev-block`)
 require metal/das_metal_boost
 require dasllama/dasllama_metal_common
 require dasllama/dasllama_metal_lens   // release_handles
@@ -41,6 +42,7 @@ var private g_wd_step_min_d = METAL_WDEC_STEP_MIN_D
 var private g_wd_key = 0ul
 var private g_wd_len = 0l
 var private g_wd_mblob : MetalBuffer?
+var private g_wd_mblob_borrowed = false   //! the blob wraps a Metal image's piece (the region cache owns it): a release drops the view alone
 // driver-chosen DESTINATION offsets (bytes, 16B-aligned per region): the CPU element offsets
 // don't stay bind-aligned for every model (an odd vocab leaves dqlayers_off 128-aligned), so
 // the upload lays regions out itself. Order per layer: q,k,v,o,cq,ck,cv,co,fc1,fc2.
@@ -111,7 +113,7 @@ def set_metal_wdec_step_min_d(n : int64) {
 [cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
 def private wd_decline(why : MetalWdecDecline) : bool {
     // knob/small/step_knob = policy (the enum documents them); capability declines honor required
-    let policy = why == MetalWdecDecline.knob || why == MetalWdecDecline.small || why == MetalWdecDecline.step_knob
+    let policy = why == MetalWdecDecline.knob || why == MetalWdecDecline.small || why == MetalWdecDecline.step_knob || why == MetalWdecDecline.flavor
     note_decline(g_wdec_declines, "wdec", "{why}", policy = policy)
     return false
 }
@@ -164,6 +166,10 @@ def private wd_drop_pending {
 
 def private wd_release_all {
     wd_drop_pending()
+    if (g_wd_mblob_borrowed) {
+        g_wd_mblob = null
+        g_wd_mblob_borrowed = false
+    }
     release_handles(g_wd_mblob, g_wd_bkxr, g_wd_bvxr, g_wd_bkc, g_wd_bvc, g_wd_sx)
     release_handles(g_wd_sxb, g_wd_sxb2, g_wd_sq, g_wd_sk, g_wd_sv, g_wd_sh)
     release_handles(g_wd_slog, g_wd_bpms, g_wd_bpy)
@@ -190,8 +196,9 @@ def private metal_wdec_init : bool =>
 // destinations. ~1.1x the dq plane, one-time.
 [cold_path]
 def private wdec_attach(w : WhisperModel) : bool {
-    let base = intptr(plane_at(w.dqblob, 0l))
-    let blen = length(w.dqblob)
+    let dev = w.enc.dev_backend == TowerDev.metal
+    let base = dev ? intptr(plane_at(w.enc.dev, 0l)) : intptr(plane_at(w.dqblob, 0l))
+    let blen = dev ? w.enc.dev.n : length(w.dqblob)
     if (g_wd_mblob != null && base == g_wd_key && blen == g_wd_len) {
         return true
     }
@@ -199,10 +206,34 @@ def private wdec_attach(w : WhisperModel) : bool {
     let d = w.n_text_state
     let nl = w.n_text_layer
     g_wd_nvpad = (w.n_vocab + 63l) & ~63l
+    if (dev) {
+        return false if (!wd_dev_bind(w))
+    } else {
+        // PURE read (the resident rail's form): re-running selection here desyncs from the load-time repack
+        var inscope staging <- wd_gather(w, active_q8_repack_layout(kernel_backend_needs_repack(active_kernel_backend())))
+        g_wd_mblob = metal_new_buffer(g_dev, uint64(length(staging)))
+        if (g_wd_mblob == null) {
+            return false
+        }
+        unsafe {
+            memcpy(metal_buffer_contents(g_wd_mblob), addr(staging[0]), uint64(length(staging)))
+        }
+    }
+    return wdec_attach_rest(w, base, blen)
+}
+
+let private WD_Q8_PIECE = "mt.wdec.q8"            //! the whisper decoder's 34B blob in the encoder tower's Metal device block
+let private WD_Q8_OFFS_PIECE = "mt.wdec.q8.offs"  //! ... the token table's byte offset, then every layer's matrices'
+
+//! The decoder's dq regions through the 34B transform at `lay` into one blob - the token table zero-padded to the logits' 64 rows,
+//! then every layer's ten matrices - with `g_wd_te_boff` and `g_wd_boffs` set to their byte offsets
+[cold_path]
+def private wd_gather(w : WhisperModel; lay : Q8RepackLayout) : array<uint8> {
+    let d = w.n_text_state
+    let nl = w.n_text_layer
+    let blen = length(w.dqblob)
     var staging : array<uint8>
     staging |> reserve_resize((blen / 32l) * 34l + (g_wd_nvpad - w.n_vocab) * (d / 32l) * 34l + 16l * (nl * WD_MATS + 1l))
-    // PURE read (the resident rail's form): re-running selection here desyncs from the load-time repack
-    let lay = active_q8_repack_layout(kernel_backend_needs_repack(active_kernel_backend()))
     var cur = 0ul
     g_wd_te_boff = q8_region_append(w.dqblob, w.dqscales, w.d_te_q_off, d, w.n_vocab, lay, staging, cur)
     let te_pad = (g_wd_nvpad - w.n_vocab) * (d / 32l) * 34l
@@ -224,15 +255,55 @@ def private wdec_attach(w : WhisperModel) : bool {
         assert(g_wd_boffs[l * WD_MATS + 2l] == g_wd_boffs[l * WD_MATS] + 2ul * uint64((d * d / 32l) * 34l),
             "wdec attach: q/k/v regions are not contiguous")
     }
-    g_wd_mblob = metal_new_buffer(g_dev, cur)
-    if (g_wd_mblob == null) {
-        delete staging
-        return false
-    }
+    staging |> resize(int64(cur))
+    return <- staging
+}
+
+//! the Metal-flavored model's decoder blob wrapping its piece, the offsets read back from theirs (`#tower-dev-block`)
+[cold_path]
+def private wd_dev_bind(w : WhisperModel) : bool {
+    let p = tower_dev_find(w.enc.devplan, WD_Q8_PIECE)
+    let po = tower_dev_find(w.enc.devplan, WD_Q8_OFFS_PIECE)
+    return false if (p.off < 0l || po.off < 0l || po.bytes != (1l + w.n_text_layer * WD_MATS) * 8l)
+    g_wd_mblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(w.enc.dev, p.off))), uint64(p.bytes), w.image_map != null)
+    return false if (g_wd_mblob == null)
+    g_wd_mblob_borrowed = true
+    g_wd_boffs |> resize(w.n_text_layer * WD_MATS)
     unsafe {
-        memcpy(metal_buffer_contents(g_wd_mblob), addr(staging[0]), cur)
+        let wp = reinterpret<int64 const?>(plane_at(w.enc.dev, po.off))
+        g_wd_te_boff = uint64(wp[0])
+        for (i in range64(w.n_text_layer * WD_MATS)) {
+            g_wd_boffs[i] = uint64(wp[1l + i])
+        }
     }
-    delete staging
+    return true
+}
+
+//! whisper's Metal device block (`#tower-dev-block`): the encoder tower's pieces, then the decoder's 34B blob row-major and its
+//! offsets
+[cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
+def private metal_whisper_bake(w : WhisperModel; var b : TowerDevBuild) : bool {
+    return false if (!metal_audio_tower_bake_into(w.enc, true, b))
+    g_wd_nvpad = (w.n_vocab + 63l) & ~63l
+    var inscope staging <- wd_gather(w, active_q8_repack_layout(false))
+    tower_dev_put(b, WD_Q8_PIECE, unsafe(addr<uint8 const?>(staging[0])), long_length(staging))
+    var inscope offs <- [int64(g_wd_te_boff)]
+    for (o in g_wd_boffs) {
+        offs |> push(int64(o))
+    }
+    tower_dev_put(b, WD_Q8_OFFS_PIECE, unsafe(addr<uint8 const?>(offs[0])), long_length(offs) * 8l)
+    return true
+}
+
+//! whisper's Metal chains serve an encoder lane: the tower knob on, both decoder halves on the device
+[unused_argument(q8)]
+def private metal_whisper_serves_model(q8 : bool) : bool => g_wd_env && g_wd_step_env && metal_whisper_tower_serves()
+
+//! the per-model buffers past the decoder blob, the key set last: `base` and `blen` name the planes the blob came from
+[cold_path]
+def private wdec_attach_rest(w : WhisperModel; base : uint64; blen : int64) : bool {
+    let d = w.n_text_state
+    let nl = w.n_text_layer
     let ta = w.enc.n_ctx
     let tmax = w.n_text_ctx
     g_wd_bkxr = metal_new_buffer(g_dev, uint64(nl * d * ta * 2l))    // f16 resident memory
@@ -272,6 +343,9 @@ def private metal_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_
     }
     if (!w.dq8) {
         return wd_decline(MetalWdecDecline.quant_mode)
+    }
+    if (w.enc.dev_backend != TowerDev.metal) {
+        return wd_decline(MetalWdecDecline.flavor)
     }
     let d = w.n_text_state
     let hh = w.n_text_head
@@ -324,7 +398,7 @@ def private metal_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_
         g_wdec_windows++
         g_wd_window_key = intptr(unsafe(addr(ds)))
         g_wd_window_live = true
-        g_wd_window_step = g_wd_step_env && d >= g_wd_step_min_d
+        g_wd_window_step = g_wd_step_env && (d >= g_wd_step_min_d || w.enc.dev_backend == TowerDev.metal)   //! a Metal-flavored model's step serves at any width: the CPU never runs it
         ds.gpu_kv_gen = 0l   // nothing GPU-decoded in this window yet
         if (!g_wd_step_env) {
             wd_decline(MetalWdecDecline.step_knob)   // policy: cross-KV still serves
@@ -761,5 +835,6 @@ def dasllama_metal_asr_dec_register {
     register_reload_prep(@@rd_release_weights)
     register_whisper_cross_kv_gpu(@@metal_whisper_cross_kv)
     register_whisper_decode_gpu(@@metal_whisper_decode)
+    register_whisper_flavor(TowerDev.metal, @@metal_whisper_serves_model, @@metal_whisper_bake)
     register_rnnt_gpu(@@metal_rnnt_greedy, @@metal_rnnt_projects)
 }
