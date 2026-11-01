@@ -155,7 +155,7 @@ def load_asr_model(path : string) : AsrModel {
             pm.pk <- load_parakeet_model(path, tag == "parakeet-q8")
             return <- pm
         }
-        if (tag == "gigaam-q8" || tag == "gigaam-f16") {
+        if (tag == "gigaam-q8" || tag == "gigaam-f16" || tag == GIGAAM_KQ_TAG) {
             var gm = AsrModel(kind = AsrKind.gigaam)
             gm.ga <- load_gigaam_model(path, tag == "gigaam-q8")
             return <- gm
@@ -181,7 +181,8 @@ def load_asr_model(path : string) : AsrModel {
     if (magic == 0x46554747u) {   // "GGUF"
         if (gguf_file_arch(path) == GIGAAM_ARCH) {
             var gm = AsrModel(kind = AsrKind.gigaam)
-            gm.ga <- load_gigaam_model(path, !(g_asr_force_fp32 || g_asr_tower_fp32) && gigaam_serves_q8())
+            let pinned = g_asr_force_fp32 || g_asr_tower_fp32 || gigaam_lane_pinned()
+            gm.ga <- load_gigaam_model(path, !(g_asr_force_fp32 || g_asr_tower_fp32) && gigaam_serves_q8(), pinned)
             return <- gm
         }
         panic("dasLLAMA asr: '{path}' is a GGUF decoder - pass its mmproj too: load_asr_model(path, mmproj_path)")

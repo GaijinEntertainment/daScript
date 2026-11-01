@@ -130,6 +130,13 @@ def test_family_exec_fmt_verbs(t : T?) {
         t |> equal(gigaam_exec_fmt(ga), "f16", "gigaam exact lane names the plane its block GEMMs serve: the carrier's f16")
         ga.gemm_f16 = false
         t |> equal(gigaam_exec_fmt(ga), "f32", "gigaam exact lane over a carrier with no f16 block GEMMs: f32")
+        ga.kq_lane = true
+        ga.kq_fmt = int(KqFmt.k4)
+        t |> equal(gigaam_exec_fmt(ga), "k4", "gigaam kq lane names its one K-quant member")
+        ga.kq_fmt = int(KqFmt.q8)
+        t |> equal(gigaam_exec_fmt(ga), "q8", "gigaam kq lane over a carrier whose every block GEMM is Q8_0: the exact blocks, named q8")
+        ga.kq_fmt = -1
+        t |> equal(gigaam_exec_fmt(ga), "kq", "gigaam kq lane over mixed K-quant members: kq")
         delete ga
         var c = CanaryEncoder()
         c.q8 = true

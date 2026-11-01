@@ -43,8 +43,10 @@ form's kernels (`pf_ga_ready`, and `pf_ga_mel_ready` off the samples), its lane'
 (`fc_weights_ready`: the q8 slab, or the half tensor crown under the halfword plane), a scratch buffer it cannot take
 or a failed command buffer; the CPU then cuts the mel and the block seat
 serves behind the CPU front and counts its own declines.
-Both seats serve both weight lanes (`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`): the exact lane's GEMMs on the half
-tensor GEMM over the carrier's halfwords, the q8 lane's on the prefill q8 ladder over the model's q8 slab. Canary and
+Both seats serve the q8 and exact weight lanes (`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`): the exact lane's GEMMs on
+the half tensor GEMM over the carrier's halfwords, the q8 lane's on the prefill q8 ladder over the model's q8 slab. The kq
+lane - a quantized carrier's own planes - declines by name (`kq_lane`, `TwFc.kq_lane`, the members in the words): no
+chain GEMM reads the engine's K-quant planes, and the encode seat stands down with it. Canary and
 parakeet keep declining their q8 lane (`quant_mode`, `TwFc.q8_served` off).
 
 The chain submits on the timed encoder, which every submission already pays for, so its device time costs the served

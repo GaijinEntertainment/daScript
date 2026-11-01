@@ -277,7 +277,9 @@ box takes q8 and serves a pinned exact tower on its f32 tile; every other box ta
 the Metal tower reads its q8 planes. Each family exposes the same trio over one `GemmLane` pin
 (`lane_serves_q8`, `dasllama_common.das`): `set_*_q8` pins a lane, `reset_*_q8` returns to the
 policy, `*_serves_q8` reports the lane the next load would take. The
-lane picks the image tag, so the two lanes are separate images that coexist.
+lane picks the image tag, so the two lanes are separate images that coexist. A family whose carrier can hold its GEMMs
+quantized (GigaAM) has a third lane the file decides: un-pinned, such a carrier serves the GEMMs as its own planes
+(`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`) whatever the GPU policy says, and a pin dequantizes it into the pinned lane.
 
 Pins exist for the arms that must not follow the box: the parity legs, the CPU board rows, and the
 facade's fp32 rail.

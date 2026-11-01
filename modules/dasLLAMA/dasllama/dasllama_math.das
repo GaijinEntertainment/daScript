@@ -2154,6 +2154,22 @@ def matmul_kq_batch(fmt : int; var y : array<float> | #; kq : array<uint8> | #; 
     }
 }
 
+//! `matmul_kq_batch` over a REPACKED plane pair handed as the region's own base pointers - a borrowed plane's region at a
+//! byte offset (the kq-lane towers); the same guards as the array form.
+def matmul_kq_batch_at(fmt : int; var y : float?; kq, ks : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, d, ntok : int64) {
+    invoke(g_mm_kq_batch, fmt, y, kq, ks, xq, xs, xbs, n, d, ntok)
+}
+
+//! `matmul_kq_active` over a REPACKED plane pair handed as the region's own base pointers.
+def matmul_kq_active_at(fmt : int; var y : float?; kq, ks : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, d : int64) {
+    invoke(g_mm_kq, fmt, y, kq, ks, xq, xs, xbs, n, d)
+}
+
+//! `repack_kq_weight` over the region's own base pointers (the quant plane's and the scale plane's), IN PLACE.
+def repack_kq_weight_at(fmt : int; var kq, ks : uint8?; n, d : int64) {
+    invoke(g_repack_kq, fmt, kq, ks, n, d)
+}
+
 //! Native K-quant GEMV over a REPACKED plane pair at plane-local element offset `woff`
 //! (blob+offset form — the repacked twin of dasllama_math_default's matmul_kq). Dispatches
 //! to the active backend's mm_kq; callers guard with the model's kq_repacked record.

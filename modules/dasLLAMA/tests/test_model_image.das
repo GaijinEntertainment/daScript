@@ -2129,6 +2129,42 @@ def test_gigaam_image_roundtrip(t : T?) {
     }
 }
 
+[test]
+def test_gigaam_kq_image_roundtrip(t : T?) {
+    t |> run("gigaam v3 q4_k: the kq lane's cold load bakes the gigaam-kq image, the .dlim loads back through load_asr_model, transcript-exact") @(t : T?) {
+        if (!family_on(t, "gigaam") || !arm_on(t, "gigaam")) return
+        let path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k.gguf")
+        return if (!jit_model_available(t, path))
+        let wav = asr_clip("ru_short.wav")
+        if (!stat(wav).is_valid) {
+            t |> skip("ru_short.wav not present")
+            return
+        }
+        let samples <- load_audio_16k_mono(wav)
+        with_dasllama_jobque_() {
+            let img = image_path_for(path, GIGAAM_KQ_TAG)
+            remove(img)
+            var inscope truth = AsrModel(kind = AsrKind.gigaam)
+            var inscope stg <- stage_gigaam_model(path, false)
+            mint_gigaam_model(stg, truth.ga, false)
+            t |> success(truth.ga.kq_lane, "the staged read takes the kq lane")
+            let want = asr_text(truth, samples)
+            var inscope cold <- load_asr_model(path)
+            t |> success(cold.ga.kq_lane, "the cold load takes the kq lane")
+            t |> equal(asr_exec_fmt(cold), "k4", "the lane names the carrier's one K-quant member")
+            t |> success(stat(img).is_valid, "the cold load baked the kq image")
+            var inscope mapped <- load_asr_model(img)
+            t |> equal(mapped.kind, AsrKind.gigaam, "the .dlim routes on its family tag")
+            t |> equal(asr_exec_fmt(mapped), "k4", "the mapped image serves the kq lane")
+            t |> equal(mapped.ga.kq_repacked, cold.ga.kq_repacked, "the mapped planes carry the layout the mint repacked them to")
+            to_log(LOG_INFO, "gigaam kq image-roundtrip ru_short eyeball: '{want}'\n")
+            t |> success(!empty(want), "the in-memory mint transcribes")
+            t |> equal(asr_text(cold, samples), want, "the cold-built image's transcript")
+            t |> equal(asr_text(mapped, samples), want, "the mapped image's transcript")
+        }
+    }
+}
+
 //! Every line of `lines` through `m`, one translation a line.
 def private nmt_lines(m : NmtModel; lines : array<string>) : array<string> {
     var inscope st = NmtState()

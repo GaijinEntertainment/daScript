@@ -51,6 +51,7 @@ enum private VulkanTowerDecline {
     ga_front     //! set_vulkan_gigaam_front(false): the GigaAM conv front pinned to the CPU, the block seat serving behind it
     blocks       //! set_vulkan_audio_blocks(false): the whisper-class block hooks pinned off while the stem still serves
     quant_mode   //! the tower's planes are not the lane the driver serves
+    kq_lane      //! the block GEMMs are the carrier's own K-quant planes (GigaAM's kq lane), which the FastConformer chain has no GEMM for
     shape        //! a width, head size, row count or buffer range the stamps do not serve
     device       //! the tier has no device, or a class failed to build
     memory       //! a device or pinned allocation failed: the tower stays on the CPU chain
@@ -466,6 +467,8 @@ def private vt_decline_words(why : VulkanTowerDecline) : string {
         return "the whisper-class block hooks are pinned off (set_vulkan_audio_blocks(false)); the stem still serves"
     } elif (why == VulkanTowerDecline.quant_mode) {
         return "the tower's planes are not the lane the driver serves"
+    } elif (why == VulkanTowerDecline.kq_lane) {
+        return "the block GEMMs are the carrier's own K-quant planes, which the Vulkan FastConformer chain has no GEMM for - the CPU kq lane serves them"
     } elif (why == VulkanTowerDecline.shape) {
         return "a width, head size, row count, window or buffer range the stamps do not serve"
     } elif (why == VulkanTowerDecline.memory) {
@@ -478,6 +481,11 @@ def private vt_decline_words(why : VulkanTowerDecline) : string {
 [cold_path]
 def private vt_decline(r : VtResident; why : VulkanTowerDecline) : bool
     => g_vt_declines |> note("the {r.family} tower", "{why}", "the tower stays on the CPU chain: {vt_decline_words(why)}")
+
+//! the kq-lane decline, naming the site and the carrier's members (`REVIEW_KQ_FORMATS.md`'s site rule)
+[cold_path]
+def private vt_decline_kq(r : VtResident; m : GigaamModel) : bool
+    => g_vt_declines |> note("the {r.family} tower", "{VulkanTowerDecline.kq_lane}", "the tower stays on the CPU chain: the GigaAM block GEMMs ({gigaam_kq_members(m)}) - {vt_decline_words(VulkanTowerDecline.kq_lane)}")
 
 //! a scratch or upload builder's outcome: built, or the reason the seat declines
 enum private VtBuild {
@@ -5299,8 +5307,9 @@ def set_vulkan_gigaam_front(on : bool) : bool {
     return was
 }
 
-//! the lanes the GigaAM chain serves: the q8 planes, and the exact lane where its block GEMMs are the carrier's halfwords
-def private vt_ga_lane_served(m : GigaamModel) : bool => m.q8 || m.gemm_f16
+//! the lanes the GigaAM chain serves: the q8 planes, and the exact lane where its block GEMMs are the carrier's halfwords; the
+//! kq lane declines by name (`vt_decline_kq`)
+def private vt_ga_lane_served(m : GigaamModel) : bool => !m.kq_lane && (m.q8 || m.gemm_f16)
 
 var private g_vt_env_ga_exact = false
 
@@ -5322,6 +5331,9 @@ def set_vulkan_gigaam_exact_lane(on : bool) : bool {
 def private vulkan_gigaam_blocks(m : GigaamModel; var st : GigaamState; tt : int64) : bool {
     var r & = g_vt_ga
     g_vt_fc_out_bytes = 0l
+    if (g_vt_env_tower && m.kq_lane) {
+        return vt_decline_kq(r, m)
+    }
     if (!vt_gate(r, vt_ga_lane_served(m))) {
         return false
     }
@@ -5342,6 +5354,10 @@ def private vulkan_gigaam_encode(m : GigaamModel; var st : GigaamState; samples 
     }
     if (!g_vt_env_ga_front) {
         vt_decline(r, VulkanTowerDecline.ga_front)
+        return -1l
+    }
+    if (m.kq_lane) {
+        vt_decline_kq(r, m)
         return -1l
     }
     if (!vt_ga_lane_served(m)) {

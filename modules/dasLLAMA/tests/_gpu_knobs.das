@@ -109,15 +109,18 @@ def gpu_tower_counters() : GpuTowerCounters {
 //! tower encodes served since the process started, on the serving tower
 def gpu_tower_encodes() : int64 => gpu_tower_counters().encodes
 
-//! the serving tower's `quant_mode` declines since the process started
-def gpu_tower_quant_declines() : int64 {
+//! the serving tower's declines under `reason` (the decline enum's member name) since the process started
+def gpu_tower_declines_of(reason : string) : int64 {
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        return metal_tower_declines()?["quant_mode"] ?? 0l
+        return metal_tower_declines()?[reason] ?? 0l
     } else {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            return vulkan_tower_declines()?["quant_mode"] ?? 0l
+            return vulkan_tower_declines()?[reason] ?? 0l
         } else {
             return 0l
         }
     }
 }
+
+//! the serving tower's `quant_mode` declines since the process started
+def gpu_tower_quant_declines() : int64 => gpu_tower_declines_of("quant_mode")

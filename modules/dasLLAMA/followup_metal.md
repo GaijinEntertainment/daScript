@@ -1017,3 +1017,14 @@ dev-W floor race (`#devw-panel-knees`) scores the 27B gate site at 64 rows a win
 there. Done = a wider K chunk per barrier (or another pipeline shape) raced against the 16-row split stamp, the 27B
 9-31-row windows at decode-step bandwidth, and the floor race's gate site matching the served window, or the
 measurement that bounds each.
+
+## 60. GigaAM's kq lane declines the Metal FastConformer chain, so a quantized carrier encodes on the CPU
+
+The lane serves a Q4_K carrier's block GEMMs as the engine's K-quant planes (`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`),
+and the chain has no GEMM over them (`tw_fc_seat`'s `kq_lane` decline, `TwFc.kq_lane`), while the prefill's K-quant
+`mul_mm` stamps already read those planes a format. The work: seat the prefill kq stamps in the chain as the q8 ladder is
+seated (`tw_fc_q8_attach`'s slab form, one region a seat off `gemm_seats`), the Q8_K feed for the K-quant seats, the
+Q8_0 seats on the q8 ladder as now, and the encode seat (`metal_gigaam_encode`) taking the lane again. Done = the q4_k
+carrier's encode served on the device with the decline gone, `test_gigaam_kq_lane`'s decline assert turned into a
+served-encode assert, the transcript the CPU kq lane's on `ru_short` and `ru_mid`, and a `REVIEW_KQ_FORMATS.md` served
+cell (the loader's tag equal to the disk type, a kq stamp's counter rising).

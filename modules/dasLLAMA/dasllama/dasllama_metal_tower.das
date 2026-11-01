@@ -1558,6 +1558,8 @@ struct private TwFc {
     mapped : bool
     q8 : bool
     q8_served : bool                //!< the q8 lane's GEMMs serve on the device off the q8 slab; else the lane declines
+    kq_lane : bool                  //!< the block GEMMs are the carrier's own K-quant planes (GigaAM's kq lane): the seat declines by name
+    kq_members : string             //!< ... the members, for the decline's words
     d : int64
     ff : int64
     n_head : int64
@@ -1599,15 +1601,20 @@ def private tw_fc_of_ga(m : GigaamModel) : TwFc {
         g_tw_fc_offs[l] = gigaam_layer_offsets(m, l)
     }
     return TwFc(blob = m.blob, wblob = m.gemm_f16 ? m.wblob : PlaneU16(), taps = m.dw_f16 ? m.wblob : PlaneU16(), qblob = m.qblob, qscales = m.qscales, mapped = m.image_map != null,
-        q8 = m.q8, q8_served = true, d = m.d_model, ff = m.n_ff, n_head = m.n_head, nk = m.conv_kernel, n_layer = m.n_layer, eps = m.eps,
+        q8 = m.q8, q8_served = true, kq_lane = m.kq_lane, kq_members = m.kq_lane ? gigaam_kq_members(m) : "",
+        d = m.d_model, ff = m.n_ff, n_head = m.n_head, nk = m.conv_kernel, n_layer = m.n_layer, eps = m.eps,
         form = FcForm(tap_major = true, rotary = true, conv_ln = true, holds_rows = true, prof = "ga"))
 }
 
-//! One FastConformer family's block seat: the knob and quant-mode declines, then the chain over the family's descriptor.
+//! One FastConformer family's block seat: the knob, kq-lane and quant-mode declines, then the chain over the family's descriptor.
 def private tw_fc_seat(fc : TwFc; var x : array<float>; npos, ww : int64; rope_cos, rope_sin : array<float>) : bool {
     tw_rows_drop()
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
+    }
+    if (fc.kq_lane) {
+        note_decline(g_tower_declines, "tower", "{MetalTowerDecline.kq_lane}", words = "the GigaAM block GEMMs ({fc.kq_members}) are the carrier's own K-quant planes, which the Metal FastConformer chain has no GEMM for - the CPU kq lane serves them")
+        return false
     }
     if (fc.q8 && !fc.q8_served) {
         return tw_decline(MetalTowerDecline.quant_mode)
@@ -2097,7 +2104,7 @@ def private tw_ga_encode_off() : bool {
 //! ``st.mel``, then the conv front and the block loop; -1 with nothing counted where the chain cannot serve.
 [hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains"), arch(at="../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary")]
 def private metal_gigaam_encode(m : GigaamModel; var st : GigaamState; samples : float const?; n_in : int64) : int64 {
-    return -1l if (tw_ga_encode_off())
+    return -1l if (tw_ga_encode_off() || m.kq_lane)   //! the kq lane: the block seat declines by name behind the CPU front
     let d = m.d_model
     let k = m.subs_kernel
     let nch = m.n_sub_ch

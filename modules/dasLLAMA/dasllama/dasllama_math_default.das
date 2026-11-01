@@ -1342,6 +1342,11 @@ def matmul_kq(fmt : int; var y : array<float> | #; kq : array<uint8> | #; ks : a
     }
 }
 
+//! `matmul_kq` over DISK-ORDER planes handed as the region's own base pointers (a borrowed plane's region at a byte offset).
+def matmul_kq_at(fmt : int; var y : float?; kq, ks : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, d : int64) {
+    kq_gemv_kernel(fmt, y, kq, ks, xq, xs, xbs, n, d)
+}
+
 //! Region-list K-quant GEMV over DISK-ORDER planes (groupn twin of matmul_kq): `offs` packs
 //! (weight, activation) element-offset pairs; region r's rows land at y[r*d .. r*d+d).
 //! No bias form — the only biased-experts arch (gpt-oss) is mx4.

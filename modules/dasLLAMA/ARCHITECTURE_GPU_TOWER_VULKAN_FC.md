@@ -39,7 +39,8 @@ The encode seat (gigaam's, and parakeet's the same) asks the block chain's admis
 its classes (`vt_fc_admits`) - before the front runs, and counts the front and the mel only once the blocks
 served: a front served ahead of blocks that decline would leave the CPU to cut the same front again, and the
 block seat behind the CPU front counts that decline once.
-The chain serves both of GigaAM's lanes (`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`). The q8 lane runs every
+The chain serves GigaAM's q8 and exact lanes and declines its kq lane by name (`kq_lane`, the carrier's members in the
+words: no GEMM here reads the engine's K-quant planes - `ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`). The q8 lane runs every
 block GEMM on the q8 tiles over its schedule, as parakeet's does. The exact lane uploads the block GEMMs' halfword region
 of `wblob` as the resident's weight plane (`vt_upload_f16`, the qwen25v chain's form) and runs every block GEMM on the f16
 GEMM (`f16_gemm_enc`, the cm2 tile or its KHR twin) over the f16 feed the cm2 route already converts each input into -

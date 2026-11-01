@@ -13,6 +13,8 @@ require dasllama/dasllama_plane public   // PlaneF/PlaneU16 — plane forms of t
 require dasllama/dasllama_par
 require dasllama/dasllama_gguf   // read_clamp reads sidecar scalar tensors
 require dasllama/dasllama_common   // requant_rows_q8_sized: tower_mm_rq's q8 feed
+require dasllama/dasllama_gemm_schema   // Q8K_SUM_ELEMS: the kq lane's Q8_K image
+require dasllama/dasllama_math_default   // matmul_kq_at: the portable K-quant GEMV over disk-order planes
 require dasllama/dasllama_repack   // repack_conv_out_tap_in: the conv reader's tap-major order
 require daslib/cmp
 
@@ -357,9 +359,79 @@ def mm_blob_b(var y : array<float>; blob : PlaneF; woff : int64; x : PlaneF; n, 
     matmul_batch(y, blob, woff, x, n, d, npos)
 }
 
-//! A q8-lane family's weight GEMM over the model `m` (any record carrying ``q8``, ``qblob``/``qscales`` and ``blob``): on the
-//! q8 lane against the activation image (`xq`, `xs`) the caller quantized once for every consumer, else `mm_blob_b` off `x`
-def tower_mm(m : auto(MT); var y : array<float>; woff : int64; x : auto(XT); xq : array<int8>; xs : array<float>; n, d, npos : int64) {
+//! A kq-lane tower's block GEMM seat: the format its weights serve in - `q8` the Q8_0 planes ``qblob``/``qscales`` at the
+//! element offset `qoff`, every other member the byte planes ``kq``/``ks`` at the byte offsets `qoff`/`soff` - three words a
+//! GEMM in the model's ``gemm_seats`` plane, in the block GEMMs' layout order.
+struct TowerGemmSeat {
+    fmt : KqFmt
+    qoff : int64
+    soff : int64
+}
+
+let TOWER_SEAT_WORDS = 3l   //! a seat's words in the ``gemm_seats`` plane: the format slot, the quant offset, the scale offset
+let FC_BLOCK_GEMMS = 10l    //! a FastConformer block's GEMMs, in the layout order `fc_gemm_seat_index` walks
+
+//! The seat index of the FastConformer block GEMM at the chain's virtual element offset `woff` (canary's offsets record over a
+//! `gemm_off` base and a `gemm_stride` a block): the block from the stride, the GEMM from its place among the ten element counts
+//! in layout order - ff1's pair, q, k, v, out, pw1 (2d rows), pw2, ff2's pair.
+def fc_gemm_seat_index(d, ff, gemm_off, gemm_stride, woff : int64) : int64 {
+    let rel = woff - gemm_off
+    let l = rel / gemm_stride
+    var rem = rel - l * gemm_stride
+    let sizes = fixed_array(ff * d, d * ff, d * d, d * d, d * d, d * d, 2l * d * d, d * d, ff * d, d * ff)
+    var i = 0
+    while (i + 1 < int(FC_BLOCK_GEMMS) && rem >= sizes[i]) {
+        rem -= sizes[i]
+        i++
+    }
+    return l * FC_BLOCK_GEMMS + int64(i)
+}
+
+//! The seat of the kq-lane block GEMM at the chain's virtual element offset `woff`.
+def tower_gemm_seat(m : auto(MT); woff : int64) : TowerGemmSeat {
+    let i = fc_gemm_seat_index(m.d_model, m.n_ff, m.gemm_off, m.gemm_stride, woff) * TOWER_SEAT_WORDS
+    return TowerGemmSeat(fmt = kq_fmt_of_slot(int(m.gemm_seats[i])), qoff = m.gemm_seats[i + 1l], soff = m.gemm_seats[i + 2l])
+}
+
+//! the kq lane's GEMM: a Q8_0 seat on the q8 batch GEMM over the Q8_0 image; a K-quant seat on the backend's kq batch tile
+//! over the repacked planes and the Q8_K image, else its GEMV a row at a time - the backend's over repacked planes, the
+//! portable one over disk order
+[arch(at="../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
+def private tower_mm_kq(m : auto(MT); var y : array<float>; s : TowerGemmSeat; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d, npos : int64) {
+    if (s.fmt == KqFmt.q8) {
+        matmul_q8q8_batch(y, m.qblob, m.qscales, s.qoff, xq, xs, n, d, npos)
+        return
+    }
+    let fmt = kq_schema_id(s.fmt)
+    let nsb = n / KQ_SB_ELEMS
+    let nh = n / Q8K_SUM_ELEMS
+    unsafe {
+        let kqp = plane_at(m.kq, s.qoff)
+        let ksp = plane_at(m.ks, s.soff)
+        if (m.kq_repacked && kernel_backend_has_kq_batch()) {
+            matmul_kq_batch_at(fmt, addr(y[0]), kqp, ksp, addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), addr<int const?>(xbs[0]), n, d, npos)
+            return
+        }
+        for (r in range64(npos)) {
+            if (m.kq_repacked) {
+                matmul_kq_active_at(fmt, addr(y[r * d]), kqp, ksp, addr<int8 const?>(xq[r * n]), addr<float const?>(xs[r * nsb]), addr<int const?>(xbs[r * nh]), n, d)
+            } else {
+                matmul_kq_at(fmt, addr(y[r * d]), kqp, ksp, addr<int8 const?>(xq[r * n]), addr<float const?>(xs[r * nsb]), addr<int const?>(xbs[r * nh]), n, d)
+            }
+        }
+    }
+}
+
+//! A tower family's weight GEMM over the model `m` (any record carrying ``q8``, ``qblob``/``qscales`` and ``blob``): on the kq
+//! lane (a record carrying ``kq_lane``) the GEMM's seat decides the planes and the image (`xbs` the Q8_K image's per-16 sums);
+//! on the q8 lane the Q8_0 planes against the image (`xq`, `xs`) the caller quantized once for every consumer; else `mm_blob_b`
+def tower_mm(m : auto(MT); var y : array<float>; woff : int64; x : auto(XT); xq : array<int8>; xs : array<float>; xbs : array<int>; n, d, npos : int64) {
+    static_if (typeinfo has_field<kq_lane>(m)) {
+        if (m.kq_lane) {
+            tower_mm_kq(m, y, tower_gemm_seat(m, woff), xq, xs, xbs, n, d, npos)
+            return
+        }
+    }
     static_if (typeinfo has_field<gemm_f16>(m)) {
         if (m.gemm_f16) {
             mm_f16_b(y, m.wblob, woff, x, n, d, npos)
@@ -373,7 +445,50 @@ def tower_mm(m : auto(MT); var y : array<float>; woff : int64; x : auto(XT); xq 
     }
 }
 
-//! `tower_mm` for a single-consumer activation: the q8 lane requantizes `x` into the scratch pair first
+//! `tower_mm` for a GEMM no kq lane reaches (a position table's, a front's): the Q8_K sums never read
+def tower_mm(m : auto(MT); var y : array<float>; woff : int64; x : auto(XT); xq : array<int8>; xs : array<float>; n, d, npos : int64) {
+    static_if (typeinfo has_field<kq_lane>(m)) {
+        if (m.kq_lane) {
+            panic("dasLLAMA tower: a kq-lane GEMM takes the tower_mm form with the Q8_K sums")
+        }
+    }
+    let none : array<int>
+    tower_mm(m, y, woff, x, xq, xs, none, n, d, npos)
+}
+
+//! The activation image the GEMM at `woff` reads, quantized from `x` into the scratch: the Q8_K form (per-superblock scales in
+//! `xs`, per-16 sums in `xbs`) for a K-quant seat of the kq lane, the Q8_0 form on the q8 lane and for a Q8_0 seat, nothing
+//! for the float planes; the GEMMs that share one image are one format class (the kq-lane planner holds them to it)
+def tower_requant(m : auto(MT); woff : int64; x : array<float>; n, npos : int64; @scratch var xq : array<int8>;
+                  @scratch var xs : array<float>; @scratch var xbs : array<int>) {
+    static_if (typeinfo has_field<kq_lane>(m)) {
+        if (m.kq_lane) {
+            let s = tower_gemm_seat(m, woff)
+            if (s.fmt != KqFmt.q8) {
+                let need = npos * n
+                ensure_length(xq, need)
+                ensure_length(xs, need / KQ_SB_ELEMS)
+                ensure_length(xbs, need / Q8K_SUM_ELEMS)
+                requant_rows_q8k_bs(x, n, npos, xq, xs, xbs)
+                return
+            }
+            requant_rows_q8_sized(x, n, npos, xq, xs)
+            return
+        }
+    }
+    if (m.q8) {
+        requant_rows_q8_sized(x, n, npos, xq, xs)
+    }
+}
+
+//! `tower_mm` for a single-consumer activation: the quantizing lanes requantize `x` into the scratch first
+def tower_mm_rq(m : auto(MT); var y : array<float>; woff : int64; x : array<float>; @scratch var xq : array<int8>;
+                @scratch var xs : array<float>; @scratch var xbs : array<int>; n, d, npos : int64) {
+    tower_requant(m, woff, x, n, npos, xq, xs, xbs)
+    tower_mm(m, y, woff, x, xq, xs, xbs, n, d, npos)
+}
+
+//! `tower_mm_rq` for a GEMM no kq lane reaches
 def tower_mm_rq(m : auto(MT); var y : array<float>; woff : int64; x : array<float>; @scratch var xq : array<int8>;
                 @scratch var xs : array<float>; n, d, npos : int64) {
     if (m.q8) {
@@ -1291,7 +1406,7 @@ def private fc_ffn_half_cpu(m : auto(MT); var st : auto(ST); form : FcCpuForm; p
     layernorm_batch(st.xb, st.x, m.blob, ln_w, ln_b, d, tt, m.eps)
     asr_prof_add(p.ln, tf)
     tf = ref_time_ticks()
-    tower_mm_rq(m, st.h, wa, st.xb, st.xqi, st.xsi, d, ff, tt)
+    tower_mm_rq(m, st.h, wa, st.xb, st.xqi, st.xsi, st.xbsi, d, ff, tt)
     if (form.biased) {
         add_bias_rows(st.h, m.blob, ba, ff, tt)
     }
@@ -1300,7 +1415,7 @@ def private fc_ffn_half_cpu(m : auto(MT); var st : auto(ST); form : FcCpuForm; p
     silu4_batch(st.h, ff, tt)
     asr_prof_add(p.silu, tf)
     tf = ref_time_ticks()
-    tower_mm_rq(m, st.xb, wb, st.h, st.xqi, st.xsi, ff, d, tt)
+    tower_mm_rq(m, st.xb, wb, st.h, st.xqi, st.xsi, st.xbsi, ff, d, tt)
     if (form.biased) {
         add_bias_rows(st.xb, m.blob, bb, d, tt)
     }
@@ -1345,18 +1460,16 @@ def private fc_attention_cpu(m : auto(MT); var st : auto(ST); form : FcCpuForm; 
     layernorm_batch(st.xb, st.x, m.blob, lo.nat_w, lo.nat_b, d, tt, m.eps)
     asr_prof_add(form.prof.proj_ln, tq)
     tq = ref_time_ticks()
-    if (m.q8) {
-        requant_rows_q8_sized(st.xb, d, tt, st.xqi, st.xsi)
-    }
+    tower_requant(m, lo.q_w, st.xb, d, tt, st.xqi, st.xsi, st.xbsi)
     asr_prof_add(form.prof.proj_rq, tq)
     tq = ref_time_ticks()
-    tower_mm(m, st.qq, lo.q_w, st.xb, st.xqi, st.xsi, d, d, tt)
+    tower_mm(m, st.qq, lo.q_w, st.xb, st.xqi, st.xsi, st.xbsi, d, d, tt)
     asr_prof_add(form.prof.proj_q, tq)
     tq = ref_time_ticks()
-    tower_mm(m, st.kk, lo.k_w, st.xb, st.xqi, st.xsi, d, d, tt)
+    tower_mm(m, st.kk, lo.k_w, st.xb, st.xqi, st.xsi, st.xbsi, d, d, tt)
     asr_prof_add(form.prof.proj_k, tq)
     tq = ref_time_ticks()
-    tower_mm(m, st.vv, lo.v_w, st.xb, st.xqi, st.xsi, d, d, tt)
+    tower_mm(m, st.vv, lo.v_w, st.xb, st.xqi, st.xsi, st.xbsi, d, d, tt)
     asr_prof_add(form.prof.proj_v, tq)
     if (form.biased) {
         add_bias_rows(st.qq, m.blob, lo.q_b, d, tt)
@@ -1483,18 +1596,16 @@ def private fc_attention_cpu(m : auto(MT); var st : auto(ST); form : FcCpuForm; 
     rope_neox_tab_rows(st.xr, tt, form.n_head, hs, st.rope_cos, st.rope_sin)
     asr_prof_add(form.prof.proj_pos, tq)
     tq = ref_time_ticks()
-    if (m.q8) {
-        requant_rows_q8_sized(st.xr, d, tt, st.xqi, st.xsi)
-    }
+    tower_requant(m, lo.q_w, st.xr, d, tt, st.xqi, st.xsi, st.xbsi)
     asr_prof_add(form.prof.proj_rq, tq)
     tq = ref_time_ticks()
-    tower_mm(m, st.qq, lo.q_w, st.xr, st.xqi, st.xsi, d, d, tt)
+    tower_mm(m, st.qq, lo.q_w, st.xr, st.xqi, st.xsi, st.xbsi, d, d, tt)
     asr_prof_add(form.prof.proj_q, tq)
     tq = ref_time_ticks()
-    tower_mm(m, st.kk, lo.k_w, st.xr, st.xqi, st.xsi, d, d, tt)
+    tower_mm(m, st.kk, lo.k_w, st.xr, st.xqi, st.xsi, st.xbsi, d, d, tt)
     asr_prof_add(form.prof.proj_k, tq)
     tq = ref_time_ticks()
-    tower_mm_rq(m, st.vv, lo.v_w, st.xb, st.xqi, st.xsi, d, d, tt)
+    tower_mm_rq(m, st.vv, lo.v_w, st.xb, st.xqi, st.xsi, st.xbsi, d, d, tt)
     asr_prof_add(form.prof.proj_v, tq)
     if (form.biased) {
         add_bias_rows(st.qq, m.blob, lo.q_b, d, tt)
@@ -1656,7 +1767,7 @@ def private fc_dw_bn_silu_rows(var o : array<float>; g : array<float>; blob : Pl
 def private fc_conv_module_cpu(m : auto(MT); var st : auto(ST); form : FcCpuForm; lo : auto(LO); tt : int64) {
     let d = form.d
     layernorm_batch(st.xb, st.x, m.blob, lo.ncv_w, lo.ncv_b, d, tt, m.eps)
-    tower_mm_rq(m, st.h, lo.pw1_w, st.xb, st.xqi, st.xsi, d, 2l * d, tt)
+    tower_mm_rq(m, st.h, lo.pw1_w, st.xb, st.xqi, st.xsi, st.xbsi, d, 2l * d, tt)
     if (form.biased) {
         add_bias_rows(st.h, m.blob, lo.pw1_b, 2l * d, tt)
     }
@@ -1677,7 +1788,7 @@ def private fc_conv_module_cpu(m : auto(MT); var st : auto(ST); form : FcCpuForm
         fc_glu_rows(st.ao, st.h, d, tt, form.vec4)
         fc_dw_bn_silu_rows(st.xb, st.ao, m.blob, lo.dw_w, lo.bn_w, lo.bn_b, d, tt, form.nk, form.tap_major, form.vec4)
     }
-    tower_mm_rq(m, st.ao, lo.pw2_w, st.xb, st.xqi, st.xsi, d, d, tt)
+    tower_mm_rq(m, st.ao, lo.pw2_w, st.xb, st.xqi, st.xsi, st.xbsi, d, d, tt)
     if (form.biased) {
         add_bias_rows(st.ao, m.blob, lo.pw2_b, d, tt)
     }
@@ -1696,7 +1807,7 @@ def fc_block_cpu(m : auto(MT); var st : auto(ST); form : FcCpuForm; pos : auto(P
     asr_prof_add(form.prof.ffn, tp)
     fc_attention_cpu(m, st, form, lo, pos, tt)
     tp = ref_time_ticks()
-    tower_mm_rq(m, st.xb, lo.o_w, st.ao, st.xqi, st.xsi, d, d, tt)
+    tower_mm_rq(m, st.xb, lo.o_w, st.ao, st.xqi, st.xsi, st.xbsi, d, d, tt)
     if (form.biased) {
         add_bias_rows(st.xb, m.blob, lo.o_b, d, tt)
     }

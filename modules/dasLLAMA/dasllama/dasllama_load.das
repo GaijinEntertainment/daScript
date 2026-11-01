@@ -1490,8 +1490,9 @@ def private log_load_report(t : Model) {
     to_log(LOG_INFO, "dasLLAMA noisy: plane MB - q8 {float(long_length(t.qblob)) / mb} (+scales {float(long_length(t.qscales) * 4l) / mb}), {join(planes, ", ")}, q51 {float(long_length(t.q51q) + long_length(t.q51s)) / mb}, iq4nl32 {float(long_length(t.iq4nl32q) + long_length(t.iq4nl32s)) / mb}, q4032 {float(long_length(t.q4032q) + long_length(t.q4032s)) / mb}, q5032 {float(long_length(t.q5032q) + long_length(t.q5032s)) / mb}, f32 {float(long_length(t.wblob) * 4l) / mb}\n")
 }
 
-// GGML disk type -> plane format tag (non-K-quant types ride the classic q8 path)
-def private kq_fmt_of(gt : int) : KqFmt {
+//! GGML disk type -> plane format tag (non-K-quant types ride the classic q8 path); the one mapping every site tags a
+//! plane's format through, the towers' kq lanes included
+def kq_fmt_of(gt : int) : KqFmt {
     let native = gguf_kq_fmt_of_type(gt)
     if (native == KqFmt.iq3s && iq3s_serve_lut()) {
         return KqFmt.iq3s4
@@ -1521,8 +1522,10 @@ def private kq_fmt_of(gt : int) : KqFmt {
 }
 
 
+//! The format tensor `name`'s plane serves in on a `rows`-wide row: its disk type's tag where the row admits it, else the
+//! demotion `note_demotion` logs
 [arch(at="../ARCHITECTURE_ENGINE_FORMATS.md#per-32-tables")]
-def private kq_tag(m : GGUFMeta; name : string; rows : int64) : KqFmt {
+def kq_tag(m : GGUFMeta; name : string; rows : int64) : KqFmt {
     let disk_fmt = kq_fmt_of(gguf_tensor_type(m, name))
     let why = kq_block32(disk_fmt) || disk_fmt == KqFmt.iq4nl ? "a {rows}-wide row is no multiple of 32" : "a {rows}-wide row is no multiple of 256"
     return note_demotion(name, disk_fmt, kq_fmt_row_ok(disk_fmt, rows), why)

@@ -420,6 +420,8 @@ let CRISPASR_Q8_RECIPE = "derive: setup_asr_rig.das --refs quantizes it from the
 let PARAKEET_V2_NOTE = "historic nemo-venv conversion (rail retired); present only on boxes that converted it - v3 is the fetched carrier"
 //! the GigaAM v3 carriers' recipe: hosted f16 GGUFs, the top precision offered
 let GIGAAM_RECIPE = "fetched: cstr/gigaam-v3-GGUF, converted by CrispASR's models/convert-gigaam-to-gguf.py from salute-developers/GigaAM v3; Russian only, the e2e heads write cased, punctuated text; THIRD_PARTY_NOTICES.md (module root) carries the attribution"
+//! the hosted Q4_K carrier: the block attention and FF GEMMs Q4_K, the conv pointwise GEMMs Q8_0, the rest the f16 file's - the kq lane's carrier (tests/test_gigaam.das)
+let GIGAAM_Q4K_RECIPE = "fetched: cstr/gigaam-v3-GGUF's q4_k file, CrispASR's crispasr-quantize over the f16 carrier (the attention and FF GEMMs Q4_K, the conv pointwise GEMMs Q8_0, the rest as the f16 file); serves on the kq lane as its own planes; THIRD_PARTY_NOTICES.md (module root) carries the attribution"
 let CANARY_ENC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv; encoder is a repack - sha canonical everywhere)"
 let CANARY_DEC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv), then llama-quantize Q8_0 (a Q8_0 disk embedding lets the tied classifier serve cls_q8 on the Metal rail); bytes are per-arch (fp16 LoRA merge) - gate via asr_bench --text over jfk/jfk3/gb1 vs benchmarks/asr/canary_transcripts.expected"
 let TTS_HF = "{HF}/borisbat/dasllama-tts/resolve/9e6b0aa612bcb1473c5bd4ca129fb47ad1a69bc2"   //! the published set, commit-pinned

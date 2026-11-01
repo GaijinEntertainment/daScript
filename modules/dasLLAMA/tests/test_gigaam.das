@@ -78,6 +78,9 @@ def private stage_ok(t : T?; tag : string; got : array<float>; want : Npy; rows,
 
 def private carrier(kind : string) : string => path_join(models_dir(), "gigaam-v3-{replace(kind, "_", "-")}-f16.gguf")
 
+//! the published Q4_K carrier of the e2e transducer: its attention and FF GEMMs Q4_K, its conv pointwise GEMMs Q8_0 - the kq lane's carrier
+def private kq_carrier() : string => path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k.gguf")
+
 def private dumps_present(t : T?; clip, kind : string) : bool {
     let dir = dump_dir(clip, kind)
     if (!stat("{dir}/tokens.json").is_valid || !stat(asr_clip("{clip}.wav")).is_valid) {
@@ -87,11 +90,23 @@ def private dumps_present(t : T?; clip, kind : string) : bool {
     return true
 }
 
-def private mint(path : string; q8 : bool) : GigaamModel {
-    var inscope st <- stage_gigaam_model(path, q8)
+def private mint(path : string; q8 : bool; pinned : bool = false) : GigaamModel {
+    var inscope st <- stage_gigaam_model(path, q8, false, pinned)
     var m = GigaamModel()
     mint_gigaam_model(st, m, q8)
     return <- m
+}
+
+//! the whole clip's transcript through `m`, one span
+def private transcript_of(m : GigaamModel; samples : array<float>) : string {
+    var st = GigaamState()
+    var text = ""
+    var lang = ""
+    gigaam_transcribe(m, st, samples, $(seg) {
+        text += seg.text
+    }, lang)
+    delete st
+    return text
 }
 
 //! The f16 lane on one clip against the external reference: stage by stage against its dumps, then the decoded ids against
@@ -223,9 +238,9 @@ def private word_agreement(got, want : string) : float {
     return float(prev[nw]) / float(max(max(nw, ng), 1))
 }
 
-def private q8_clip(t : T?; m : GigaamModel; clip, kind : string) {
-    var tk = OracleTokens()
-    t |> success(load_json_file("{dump_dir(clip, kind)}/tokens.json", tk), "{clip}_{kind}: tokens.json read")
+//! A quantized lane's transcript of `clip` against the words of `want` (named `ref`): one segment, Russian detected, the
+//! agreement at the bar, and the control - the clip with its second half silenced reads under it.
+def private lane_clip(t : T?; m : GigaamModel; clip, kind, lane : string; want, ref : string) {
     let samples <- load_audio_16k_mono(asr_clip("{clip}.wav"))
     var st = GigaamState()
     var text = ""
@@ -233,22 +248,24 @@ def private q8_clip(t : T?; m : GigaamModel; clip, kind : string) {
     let nseg = gigaam_transcribe(m, st, samples, $(seg) {
         text += seg.text
     }, lang)
-    t |> equal(nseg, 1, "{clip}_{kind} q8: one segment under the clip cap")
-    t |> equal(lang, "ru", "{clip}_{kind} q8: the detected language")
-    let agree = word_agreement(text, tk.text)
-    to_log(LOG_INFO, "test_gigaam: {clip}_{kind} q8 words {agree}: {text}\n")
-    to_log(LOG_INFO, "test_gigaam: {clip}_{kind} oracle : {tk.text}\n")
-    t |> success(agree >= Q8_WORD_AGREE, "{clip}_{kind} q8: {agree} of the oracle's words")
+    delete st
+    t |> equal(nseg, 1, "{clip}_{kind} {lane}: one segment under the clip cap")
+    t |> equal(lang, "ru", "{clip}_{kind} {lane}: the detected language")
+    let agree = word_agreement(text, want)
+    to_log(LOG_INFO, "test_gigaam: {clip}_{kind} {lane} words {agree}: {text}\n")
+    to_log(LOG_INFO, "test_gigaam: {clip}_{kind} {ref} : {want}\n")
+    t |> success(agree >= Q8_WORD_AGREE, "{clip}_{kind} {lane}: {agree} of the {ref}'s words")
     var inscope half <- [for (v, i in samples, count()); i < length(samples) / 2 ? v : 0.0]
-    var hs = GigaamState()
-    var half_text = ""
-    gigaam_transcribe(m, hs, half, $(seg) {
-        half_text += seg.text
-    }, lang)
-    delete hs
-    let half_agree = word_agreement(half_text, tk.text)
-    to_log(LOG_INFO, "test_gigaam: {clip}_{kind} q8 control (second half silenced) words {half_agree}: {half_text}\n")
-    t |> success(half_agree < Q8_WORD_AGREE, "{clip}_{kind} q8: the control - the clip with its second half silenced reads {half_agree} of the oracle's words, under the bar")
+    let half_agree = word_agreement(transcript_of(m, half), want)
+    to_log(LOG_INFO, "test_gigaam: {clip}_{kind} {lane} control (second half silenced) words {half_agree}\n")
+    t |> success(half_agree < Q8_WORD_AGREE, "{clip}_{kind} {lane}: the control - the clip with its second half silenced reads {half_agree} of the {ref}'s words, under the bar")
+}
+
+//! the q8 lane's transcript of `clip` against the oracle's words
+def private q8_clip(t : T?; m : GigaamModel; clip, kind : string) {
+    var tk = OracleTokens()
+    t |> success(load_json_file("{dump_dir(clip, kind)}/tokens.json", tk), "{clip}_{kind}: tokens.json read")
+    lane_clip(t, m, clip, kind, "q8", tk.text, "oracle")
 }
 
 [cold_path]
@@ -279,6 +296,85 @@ def private variant_cells(tst : T?; kind, clips : string) {
 def test_gigaam_ctc(tst : T?) {
     with_dasllama_jobque_() {
         variant_cells(tst, "ctc", "ru_short,ru_mid")
+    }
+}
+
+//! The kq-lane cells' reference: the f16 carrier's exact-lane transcript of `clip` - the lane the oracle holds stage by stage
+//! (`reference_clip`) - so a box with the two carriers and the clips runs them with no oracle dumps; skips naming what is missing.
+def private exact_reference(t : T?; clip : string; var want : string&) : bool {
+    let f16 = carrier("e2e_rnnt")
+    if (!stat(f16).is_valid || !stat(asr_clip("{clip}.wav")).is_valid) {
+        t |> skip("{clip}: the f16 carrier or the clip not present")
+        return false
+    }
+    var inscope m <- mint(f16, false)
+    want = transcript_of(m, load_audio_16k_mono(asr_clip("{clip}.wav")))
+    return true
+}
+
+//! The kq lane over the published Q4_K carrier - the hosted file whose attention and FF GEMMs are Q4_K and conv pointwise GEMMs
+//! Q8_0: the carrier's own planes serve, named by their one K-quant member; a GPU block seat declines it by name; a pinned lane
+//! dequantizes it into that lane's planes. Every lane's transcript holds the q8 bar against the f16 carrier's exact lane.
+[test]
+def test_gigaam_kq_lane(tst : T?) {
+    with_dasllama_jobque_() {
+        let path = kq_carrier()
+        return if (!model_available(tst, path))
+        tst |> run("e2e_rnnt q4_k: the kq lane serves the carrier's own planes, the GPU block seat declining by name") @(t : T?) {
+            let declines = gpu_tower_declines_of("kq_lane")
+            var inscope m <- mint(path, false)
+            t |> success(m.kq_lane, "the un-pinned load takes the kq lane")
+            t |> equal(gigaam_exec_fmt(m), "k4", "the lane's name: the one K-quant member")
+            t |> equal(gigaam_kq_members(m), "k4+q8", "the carrier's members: Q4_K attention and FF, Q8_0 conv pointwise")
+            t |> success(!gigaam_device_gpu(m), "no device serves the kq lane's encode")
+            for (clip in split("ru_short,ru_mid", ",")) {
+                var want = ""
+                if (exact_reference(t, clip, want)) {
+                    lane_clip(t, m, clip, "e2e_rnnt", "kq", want, "f16 lane")
+                }
+            }
+            if (gigaam_gpu_serves()) {
+                t |> success(gpu_tower_declines_of("kq_lane") > declines, "the GPU block seat declined the kq lane by name")
+            }
+        }
+        tst |> run("e2e_rnnt q4_k: a pinned q8 lane dequantizes the carrier into Q8_0 planes") @(t : T?) {
+            var inscope m <- mint(path, true, true)
+            t |> success(!m.kq_lane, "the pin keeps the carrier off the kq lane")
+            t |> equal(gigaam_exec_fmt(m), "q8", "the pinned lane's name")
+            var want = ""
+            if (exact_reference(t, "ru_short", want)) {
+                lane_clip(t, m, "ru_short", "e2e_rnnt", "q8", want, "f16 lane")
+            }
+        }
+        tst |> run("e2e_rnnt q4_k: a pinned exact lane widens the carrier to f32") @(t : T?) {
+            var inscope m <- mint(path, false, true)
+            t |> success(!m.kq_lane, "the pin keeps the carrier off the kq lane")
+            t |> equal(gigaam_exec_fmt(m), "f32", "the pinned lane's name: no f16 block GEMMs to serve")
+            var want = ""
+            if (exact_reference(t, "ru_short", want)) {
+                lane_clip(t, m, "ru_short", "e2e_rnnt", "f32", want, "f16 lane")
+            }
+        }
+    }
+}
+
+//! The kq lane's seat index over the chain's virtual offsets: every block GEMM of `gigaam_layer_offsets`'s record maps to its
+//! place in layout order, layer by layer - model-free, over the v3 geometry.
+[test]
+def test_gigaam_seat_index(t : T?) {
+    t |> run("the ten block GEMMs' virtual offsets map to their seats in layout order") @(t : T?) {
+        var m = GigaamModel(d_model = 768l, n_ff = 3072l, n_layer = 16l, conv_kernel = 5l)
+        m.gemm_stride = gigaam_gemm_stride(m.d_model, m.n_ff)
+        m.aux_stride = 1l
+        for (l in range64(m.n_layer)) {
+            let lo = gigaam_layer_offsets(m, l)
+            let woffs = fixed_array(lo.ff1a_w, lo.ff1b_w, lo.q_w, lo.k_w, lo.v_w, lo.o_w, lo.pw1_w, lo.pw2_w, lo.ff2a_w, lo.ff2b_w)
+            for (wo, i in woffs, count()) {
+                t |> equal(fc_gemm_seat_index(m.d_model, m.n_ff, m.gemm_off, m.gemm_stride, wo), l * FC_BLOCK_GEMMS + int64(i), "layer {l} GEMM {i}")
+            }
+            t |> equal(fc_gemm_seat_index(m.d_model, m.n_ff, m.gemm_off, m.gemm_stride, lo.ff2b_w + m.d_model * m.n_ff - 1l), l * FC_BLOCK_GEMMS + FC_BLOCK_GEMMS - 1l, "layer {l}: the last GEMM's last element")
+        }
+        delete m
     }
 }
 

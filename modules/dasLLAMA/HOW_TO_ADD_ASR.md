@@ -126,7 +126,8 @@ home, never another family file. In landing order:
   `qblob`/`qscales` and `blob`), another `*_mm*` wrapper, or `mm_blob_b`, every
   activation-by-activation product through `gemm_f32_jo`. Served widths pad up to 64 with zero
   rows and columns (`ARCHITECTURE_MEDIA.md#tower-padded-widths`). The q8 lane transcodes the block
-  GEMMs alone to Q8_0 at stage; a head the carrier holds in f16 serves its own halfwords on both
+  GEMMs alone to Q8_0 at stage; a carrier that holds them quantized serves them as its own planes
+  on the kq lane (GigaAM's `gemm_seats`, `tower_mm`'s seat arm); a head the carrier holds in f16 serves its own halfwords on both
   lanes (`mm_f16_b`), as do f16 depthwise taps (`fc_dw_bias_rows_f16` on the CPU, the TAP_F16
   stamps of `GkDwConvRows` on the devices - permuted at mint as halfwords, never widened into the
   image), and the front and the transducer stay f32 (`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`).

@@ -92,14 +92,33 @@ feeds q and k while v requants the unrotated rows. Rotating q and k after their 
 
 The scores take `attention_bidir` unmasked over the whole clip at scale 1/sqrt(48): a single clip has no padded keys.
 
-### GigaAM serves its block GEMMs as the carrier's halfwords or q8, its taps and CTC head as halfwords, and its front f32 {#gigaam-planes}
+### GigaAM serves its block GEMMs as the carrier's halfwords, q8, or its own quantized planes; its taps and CTC head as halfwords, and its front f32 {#gigaam-planes}
 
-The carrier holds the block GEMMs, the depthwise taps and the head GEMMs in f16 and the two subsample convs, the norms
-and the biases in f32. The ten block GEMMs a layer sit at a fixed per-layer stride in layout order (ff1 pair, q, k, v,
-out, pw1, pw2, ff2 pair), in the plane the lane picks (`gg_gemm_plane`): the exact lane copies the carrier's own f16
-halfwords into `wblob` (`gemm_f16`), the q8 lane quantizes them to Q8_0 into `qblob`/`qscales`, repacked a region at a
-time for the load's backend. A carrier whose block GEMMs hold no f16 serves them f32 in `blob` on the exact lane, and one
-that mixes f16 with another type among them is refused naming both tensors - one plane serves a region. f16 depthwise taps
+The f16 carrier holds the block GEMMs, the depthwise taps and the head GEMMs in f16 and the two subsample convs, the norms
+and the biases in f32; a quantized carrier (the hosted `q4_k`: the attention and FF GEMMs Q4_K, the conv pointwise GEMMs
+Q8_0) holds the block GEMMs in ggml's block formats and the rest as the f16 file. The ten block GEMMs a layer sit at a fixed
+per-layer stride in layout order (ff1 pair, q, k, v, out, pw1, pw2, ff2 pair), in the plane the lane picks (`gg_gemm_plane`):
+the exact lane copies the carrier's own f16 halfwords into `wblob` (`gemm_f16`), the q8 lane quantizes them to Q8_0 into
+`qblob`/`qscales`, repacked a region at a time for the load's backend. A carrier whose block GEMMs hold no f16 serves them
+f32 in `blob` on the exact lane, and one that mixes f16 with another type among them is refused naming both tensors - one
+plane serves a region.
+
+A carrier whose every block GEMM is quantized (`gg_kq_carrier`; a mix of quantized and float GEMMs is refused naming
+both) takes the kq lane un-pinned (`kq_lane`; the image tag `gigaam-kq`), where each GEMM serves as the file's own
+planes: a K-quant tensor transcoded into the byte planes `kq`/`ks` (`gguf_transcode_kq_at`, the engine's superblock
+planes) and repacked for the load's backend where it carries kq kernels (`kq_repacked`), a Q8_0 tensor's blocks moved
+exactly into `qblob`/`qscales`. The GEMMs pack compactly, each at its own offsets, so the chain's record keeps its
+virtual element offsets (`gemm_off` 0, the fixed stride) and the model carries one seat a GEMM in the `gemm_seats` plane
+(`TOWER_SEAT_WORDS`: the format slot, the quant offset, the scale offset); `fc_gemm_seat_index` maps a record offset to
+its seat, `tower_gemm_seat` reads it, and `tower_mm` runs a K-quant seat on the backend's batched kq tile over the Q8_K
+activation image (`tower_requant` - the per-superblock scales in `xs`, the per-16 sums in `xbs`), the portable GEMV a row
+where the backend carries no tile or the planes stayed in disk order, and a Q8_0 seat on the q8 batch GEMM over the Q8_0
+image. The attention's q, k and v read one image, so the planner holds their formats to one class; a GEMM's format is
+its disk type's tag on its row (`kq_tag`), and a type the lane has no seat for - a per-32 member, NVFP4, a demoted row -
+is refused naming the tensor, the pinned lanes being the way to dequantize it. The lane's name is its one K-quant member
+(`gigaam_exec_fmt`: `k4`), `kq` where the members mix, `q8` where every GEMM is Q8_0 - that carrier serves its blocks
+exactly where the q8 lane would requantize them. Pinned (`set_gigaam_q8`, the facade's fp32 rails), a quantized carrier
+dequantizes into the pinned lane's planes, as the f16 carrier would. f16 depthwise taps
 (`dw_f16`) sit in `wblob` on both lanes, behind the block GEMMs where they are there, every layer's [k][d] at `dw_off`; a
 carrier whose taps mix f16 with another type is refused the same way, and one whose taps hold no f16 keeps them f32 in
 `blob`. An f16 CTC head (`ctc_f16`) sits in `wblob` on both lanes behind them: its rows padded with zero rows to
@@ -119,8 +138,10 @@ its halfword GEMM plane and reads it through the half tensor GEMM alone - the f3
 without the half tensor crown, or under `DASLLAMA_METAL_TOWER_F16=0`, declines the chain and the CPU serves; the front's
 conv stays on the f32 tile over `blob`. On the q8 lane the chain uploads every block's Q8_0 regions once a model into one
 device slab (`tw_fc_q8_attach`, the whisper-class towers' slab form) and runs each GEMM on the prefill q8 ladder
-(`pf_enc_q8_mm`); the mel, the front, the CTC head and the transducer decode serve on the device on both lanes. The Vulkan
-FastConformer chain serves both lanes, the exact lane's GEMMs on the f16 GEMM over the uploaded halfwords
+(`pf_enc_q8_mm`); the mel, the front, the CTC head and the transducer decode serve on the device on both lanes. Neither
+GPU chain has a GEMM over the kq lane's planes: each declines that lane by name (`kq_lane`, the members in the words) and
+the CPU serves its blocks, the mel and the heads keeping their device seats. The Vulkan
+FastConformer chain serves both other lanes, the exact lane's GEMMs on the f16 GEMM over the uploaded halfwords
 (`ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-rotary`), the f16 taps uploaded as the resident's own halfword plane
 (`taps_dev`) on both lanes.
 

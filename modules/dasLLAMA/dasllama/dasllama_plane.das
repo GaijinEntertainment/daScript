@@ -33,6 +33,13 @@ struct PlaneU16 {
     n : int64 = 0l
 }
 
+//! A borrowed byte plane — a K-quant quant or scale plane in the engine's own layout (the GigaAM kq lane). Same contract as PlaneF.
+struct PlaneU8 {
+    borrowed_plane : bool = true
+    p : uint8 const? = null
+    n : int64 = 0l
+}
+
 //! A borrowed int plane — small baked tables (parakeet's TDT durations).
 struct PlaneI32 {
     borrowed_plane : bool = true
@@ -108,11 +115,13 @@ def operator [] (pl : PlaneI64; i : int) : int64 {
 def length(pl : PlaneF) : int64 => pl.n
 def length(pl : PlaneI8) : int64 => pl.n
 def length(pl : PlaneU16) : int64 => pl.n
+def length(pl : PlaneU8) : int64 => pl.n
 def length(pl : PlaneI32) : int64 => pl.n
 def length(pl : PlaneI64) : int64 => pl.n
 def empty(pl : PlaneF) : bool => pl.n == 0l
 def empty(pl : PlaneI8) : bool => pl.n == 0l
 def empty(pl : PlaneU16) : bool => pl.n == 0l
+def empty(pl : PlaneU8) : bool => pl.n == 0l
 def empty(pl : PlaneI32) : bool => pl.n == 0l
 def empty(pl : PlaneI64) : bool => pl.n == 0l
 
@@ -133,6 +142,13 @@ def plane_at(pl : PlaneI8; off : int64) : int8 const? {
 }
 
 def plane_at(pl : PlaneU16; off : int64) : uint16 const? {
+    if (uint64(off) > uint64(pl.n)) {
+        panic("dasLLAMA plane: offset {off} outside [0,{pl.n}]")
+    }
+    return unsafe(pl.p + off)
+}
+
+def plane_at(pl : PlaneU8; off : int64) : uint8 const? {
     if (uint64(off) > uint64(pl.n)) {
         panic("dasLLAMA plane: offset {off} outside [0,{pl.n}]")
     }
@@ -168,6 +184,12 @@ def plane_bind(var pl : PlaneU16; base : uint8 const?; off, nbytes : int64) : bo
         pl.p = reinterpret<uint16 const?>(base + off)
     }
     pl.n = nbytes / 2l
+    return true
+}
+
+def plane_bind(var pl : PlaneU8; base : uint8 const?; off, nbytes : int64) : bool {
+    pl.p = unsafe(base + off)
+    pl.n = nbytes
     return true
 }
 
@@ -210,6 +232,11 @@ def plane_release(var pl : PlaneU16) {
     pl.n = 0l
 }
 
+def plane_release(var pl : PlaneU8) {
+    pl.p = null
+    pl.n = 0l
+}
+
 def plane_release(var pl : PlaneI32) {
     pl.p = null
     pl.n = 0l
@@ -232,6 +259,10 @@ def finalize(var pl : PlaneI8) {
 }
 
 def finalize(var pl : PlaneU16) {
+    plane_release(pl)
+}
+
+def finalize(var pl : PlaneU8) {
     plane_release(pl)
 }
 
