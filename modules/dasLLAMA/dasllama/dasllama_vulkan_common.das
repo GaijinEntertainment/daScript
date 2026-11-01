@@ -846,6 +846,25 @@ def soft_host_buf(var oom : bool&; bytes : int64; cached : bool) : HostBuf {
     return hb
 }
 
+//! one memory type as the spill picker reads it: its heap, and whether it is host-visible and host-coherent
+struct public MemTypeRow {
+    heap : int
+    host_visible : bool
+    host_coherent : bool
+}
+
+//! the memory type a spilled buffer takes once an integrated device's device-local heap refused: the first type the
+//! buffer's requirement bits admit that is host-visible and host-coherent on a heap that is NOT device-local - a
+//! device-local type that happens to be host-visible sits on the heap that just refused; -1 where the device exposes none
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-plan-room")]
+def uma_spill_pick(type_bits : uint; types : array<MemTypeRow>; heaps : array<HeapRow>) : int {
+    for (i in range(length(types))) {
+        if ((type_bits & (1u << uint(i))) == 0u) continue
+        if (types[i].host_visible && types[i].host_coherent && !heaps[types[i].heap].device_local) return i
+    }
+    return -1
+}
+
 //! a device allocation that failed: the panic every plain caller expects, or - soft - the buffer shell destroyed, the warning said, 0 back
 [cold_path]
 def private fail_device_buf(buf : uint64; bytes : int64; ares : VkResult; soft : bool) : uint64 {
@@ -855,6 +874,27 @@ def private fail_device_buf(buf : uint64; bytes : int64; ares : VkResult; soft :
     vkDestroyBuffer(dev_raw(), unsafe(reinterpret<VkBuffer>(buf)), null)
     to_log(LOG_WARNING, "dasLLAMA vulkan tier: a {bytes >> 20l} MB device buffer failed with {ares}\n")
     return 0ul
+}
+
+var private g_uma_spill_said = false
+
+//! the memory type a spilled buffer takes on `phys` (`uma_spill_pick` over its heaps and types), -1 where it exposes none
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-plan-room")]
+def uma_spill_type(phys : VkPhysicalDevice; type_bits : uint) : int {
+    var mp : VkPhysicalDeviceMemoryProperties
+    vkGetPhysicalDeviceMemoryProperties(phys, mp)
+    let heaps <- [for (i in range(int(mp.memoryHeapCount))); HeapRow(size = int64(mp.memoryHeaps[i].size), device_local = mp.memoryHeaps[i].flags.device_local)]
+    let types <- [for (i in range(int(mp.memoryTypeCount))); MemTypeRow(heap = int(mp.memoryTypes[i].heapIndex),
+        host_visible = mp.memoryTypes[i].propertyFlags.host_visible, host_coherent = mp.memoryTypes[i].propertyFlags.host_coherent)]
+    return uma_spill_pick(type_bits, types, heaps)
+}
+
+//! the first spill says so once
+[cold_path]
+def private uma_spill_say(bytes : int64) {
+    return if (g_uma_spill_said)
+    g_uma_spill_said = true
+    to_log(LOG_INFO, "dasLLAMA vulkan tier: the device-local heap is full - a {bytes >> 20l} MB device buffer and the ones after it take the integrated device's host heap (one DRAM, the same bandwidth)\n")
 }
 
 [cold_path]   // a device allocation is model setup, never a per-token step
@@ -901,13 +941,31 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false; soft : bool = fal
     }
     var want : VkMemoryPropertyFlags
     want.device_local = true
-    var mai = MemoryAllocateInfo(allocationSize = req.size,
-                                 memoryTypeIndex = find_memory_type(g_gpu.phys, req.memoryTypeBits, want))
+    var ares = device_alloc_bind(b, req, bda, find_memory_type(g_gpu.phys, req.memoryTypeBits, want))
+    if (ares != VkResult.SUCCESS && g_gpu.integrated) {
+        let ti = uma_spill_type(g_gpu.phys, req.memoryTypeBits)
+        if (ti >= 0) {
+            ares = device_alloc_bind(b, req, bda, uint(ti))
+            if (ares == VkResult.SUCCESS) {
+                uma_spill_say(bytes)
+            }
+        }
+    }
+    if (ares != VkResult.SUCCESS) {
+        return fail_device_buf(b._vk, bytes, ares, soft)
+    }
+    return b._vk
+}
+
+//! allocate `req` at memory type `ti` with the bda chain and, on success, bind, note the address and record the bytes
+[cold_path]
+def private device_alloc_bind(var b : Buffer; req : VkMemoryRequirements; var bda : VkMemoryAllocateFlagsInfo; ti : uint) : VkResult {
+    var mai = MemoryAllocateInfo(allocationSize = req.size, memoryTypeIndex = ti)
     mai.next = unsafe(addr<void?>(bda))
     var ares = VkResult.SUCCESS
     var m <- allocate_memory(g_gpu.device, mai, unsafe(addr(ares)))
     if (ares != VkResult.SUCCESS) {
-        return fail_device_buf(b._vk, bytes, ares, soft)
+        return ares
     }
     bind_buffer_memory(g_gpu.device, b, m, 0ul)
     if (g_gpu.has_bda) {
@@ -915,7 +973,7 @@ def make_device_buf(bytes : int64; xfer_shared : bool = false; soft : bool = fal
     }
     g_gpu.dev_mem |> insert(b._vk, m._vk)
     vk_note_dev_bytes(b._vk, int64(req.size))
-    return b._vk
+    return VkResult.SUCCESS
 }
 
 //! a device-local buffer's bytes counted against this context and the process (`vk_shared_device_bytes`)
@@ -1006,13 +1064,47 @@ def resolve_coopmat_mode(has_cm, has_cm2 : bool; subgroup_size : int64) : int {
 }
 
 struct VkHeapInfo {
-    budget : int64   // largest device-local heap's current budget (0 = no VK_EXT_memory_budget)
+    budget : int64   // the room's current budget (0 = no VK_EXT_memory_budget): the largest device-local heap's, every heap's on an integrated device
     used : int64
     size : int64
+    integrated : bool   // the room spans every heap (`heap_room`)
     os_budget : int64   // the OS video memory manager's ceiling for this process (0 = no OS answer: not Windows, no LUID, query failed)
     os_usage : int64    // ... what this process holds now
     os_system : int64   // ... what every process holds on the adapter (the desktop's footprint is system minus usage)
     os_shared : int64   // ... and the system memory the adapter maps for every process (host-visible buffers, demoted planes)
+}
+
+//! one memory heap as the room arithmetic reads it: its size, the live budget and usage where VK_EXT_memory_budget answers (0 otherwise), and whether it is device-local
+struct public HeapRow {
+    size : int64
+    budget : int64
+    used : int64
+    device_local : bool
+}
+
+//! the room a plan sizes against from the device's heaps; all zero on a discrete card with no device-local heap
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-plan-room")]
+def heap_room(integrated, has_budget : bool; heaps : array<HeapRow>) : tuple<size : int64; budget : int64; used : int64> {
+    if (integrated) {
+        var size = 0l
+        var budget = 0l
+        var used = 0l
+        for (h in heaps) {
+            size += h.size
+            budget += h.budget
+            used += h.used
+        }
+        return (size = size, budget = budget, used = used)
+    }
+    var best = -1
+    for (i in range(length(heaps))) {
+        if (!heaps[i].device_local) continue
+        if (best < 0 || (has_budget ? heaps[i].budget > heaps[best].budget : heaps[i].size > heaps[best].size)) {
+            best = i
+        }
+    }
+    if (best < 0) return (size = 0l, budget = 0l, used = 0l)
+    return (size = heaps[best].size, budget = heaps[best].budget, used = heaps[best].used)
 }
 
 def query_heap_info(phys : VkPhysicalDevice) : VkHeapInfo {
@@ -1025,25 +1117,19 @@ def query_heap_info(phys : VkPhysicalDevice) : VkHeapInfo {
         mp2.pNext = unsafe(addr<void?>(mb))
     }
     vkGetPhysicalDeviceMemoryProperties2(phys, mp2)
-    var best = -1
-    for (i in range(int(mp2.memoryProperties.memoryHeapCount))) {
-        if (!mp2.memoryProperties.memoryHeaps[i].flags.device_local) {
-            continue
-        }
-        // rank by live budget when the ext reports it, by raw size otherwise
-        if (best < 0) {
-            best = i
-        } elif (has_budget ? mb.heapBudget[i] > mb.heapBudget[best]
-                : mp2.memoryProperties.memoryHeaps[i].size > mp2.memoryProperties.memoryHeaps[best].size) {
-            best = i
-        }
-    }
-    if (best >= 0) {
-        r.size = int64(mp2.memoryProperties.memoryHeaps[best].size)
-        if (has_budget && mb.heapBudget[best] > 0ul) {
-            r.budget = int64(mb.heapBudget[best])
-            r.used = int64(mb.heapUsage[best])
-        }
+    var pdp : VkPhysicalDeviceProperties
+    vkGetPhysicalDeviceProperties(phys, pdp)
+    r.integrated = pdp.deviceType == VkPhysicalDeviceType.INTEGRATED_GPU
+    let heaps <- [for (i in range(int(mp2.memoryProperties.memoryHeapCount)));
+        HeapRow(size = int64(mp2.memoryProperties.memoryHeaps[i].size),
+            budget = has_budget ? int64(mb.heapBudget[i]) : 0l,
+            used = has_budget ? int64(mb.heapUsage[i]) : 0l,
+            device_local = mp2.memoryProperties.memoryHeaps[i].flags.device_local)]
+    let room = heap_room(r.integrated, has_budget, heaps)
+    r.size = room.size
+    if (room.budget > 0l) {
+        r.budget = room.budget
+        r.used = room.used
     }
     let os = os_video_memory(phys)
     r.os_budget = int64(os.budget)
@@ -1212,7 +1298,9 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
             knob = "DASLLAMA_VK_FULLSG", off = !g_env_vulkan.vk_fullsg,
             rides = "full subgroups on the one-dimensional workgroups, an A/B arm off by default"),
         VkExtEntry(name = "VK_EXT_memory_budget", present = device_extension_available(phys, "VK_EXT_memory_budget"),
-            rides = "the live heap budget and usage the resident plan sizes against; without it the plan reads the heap size"),
+            rides = "the live heap budget and usage the resident plan sizes against - one device-local heap's on a discrete card, every heap's summed on an integrated device; without it the plan reads the heap size"),
+        VkExtEntry(name = "a host-visible, host-coherent memory type on a heap that is not device-local (the integrated device's host heap)", present = uma_spill_type(phys, 0xFFFFFFFFu) >= 0,
+            rides = "a device buffer the device-local heap refuses on an integrated device takes it, the same DRAM; without it such an allocation fails"),
         VkExtEntry(name = "VK_EXT_external_memory_host", present = external_memory_host_supported(phys),
             knob = "DASLLAMA_VK_IMPORT", off = !g_env_vulkan.vk_import,
             rides = "the stream mirrors import the mapped image instead of pinned copies; without it the copy path serves"),
@@ -1447,7 +1535,7 @@ def vk_moe_init : bool {
         if (vram_override && g_gpu.weight_budget > cliff) {
             to_log(LOG_WARNING, "dasLLAMA vulkan tier: DASLLAMA_GPU_VRAM_MB {g_gpu.weight_budget / 1000000l} MB is above the demotion cliff - WDDM will silently demote buffers to SysMem (act-role collapse); lower it to <= {cliff / 1000000l} MB\n")
         }
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: device heap budget {heap.budget / 1000000l} MB (used {heap.used / 1000000l}), weight cap {g_gpu.weight_budget / 1000000l} MB\n")
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: device heap budget {heap.budget / 1000000l} MB (used {heap.used / 1000000l}){heap.integrated ? " over every heap of the integrated device" : ""}, weight cap {g_gpu.weight_budget / 1000000l} MB\n")
     }
 
     let t_heap = get_time_usec(t0)

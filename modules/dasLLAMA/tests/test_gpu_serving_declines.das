@@ -1074,6 +1074,56 @@ def test_plan_room(t : T?) {
 }
 
 [test]
+def test_heap_room(t : T?) {
+    t |> run("the plan's heaps: one device-local heap on a discrete card, every heap on an integrated device") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            let gib = 1_073_741_824l
+            let heaps <- array<HeapRow>(
+                HeapRow(size = 10l * gib, budget = 9l * gib, used = 1l * gib, device_local = false),
+                HeapRow(size = 21l * gib, budget = 20l * gib, used = 2l * gib, device_local = true),
+                HeapRow(size = 8l * gib, budget = 7l * gib, used = 0l, device_local = true))
+            let discrete = heap_room(false, true, heaps)
+            t |> equal(21l * gib, discrete.size, "a discrete card's room is its largest device-local heap")
+            t |> equal(20l * gib, discrete.budget, "at that heap's live budget")
+            t |> equal(2l * gib, discrete.used, "and its usage")
+            let joined = heap_room(true, true, heaps)
+            t |> equal(39l * gib, joined.size, "an integrated device's room is every heap - one DRAM")
+            t |> equal(36l * gib, joined.budget, "their budgets summed")
+            t |> equal(3l * gib, joined.used, "and their usage summed")
+            let sized <- array<HeapRow>(
+                HeapRow(size = 8l * gib, budget = 0l, used = 0l, device_local = true),
+                HeapRow(size = 16l * gib, budget = 0l, used = 0l, device_local = true))
+            t |> equal(16l * gib, heap_room(false, false, sized).size, "no budget extension: the largest device-local heap by size")
+            let hostOnly <- array<HeapRow>(HeapRow(size = 4l * gib, budget = 4l * gib, used = 0l, device_local = false))
+            t |> equal(0l, heap_room(false, true, hostOnly).size, "a discrete card with no device-local heap has no room")
+            let crowded <- array<HeapRow>(
+                HeapRow(size = 24l * gib, budget = 4l * gib, used = 20l * gib, device_local = true),
+                HeapRow(size = 16l * gib, budget = 12l * gib, used = 4l * gib, device_local = true))
+            t |> equal(16l * gib, heap_room(false, true, crowded).size, "with a budget the live budget ranks the heaps, not their size")
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+    t |> run("the spill's memory type: host-visible and coherent on a heap that is not device-local, never the refusing heap's own host-visible type") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            // the 760M's layout: heap 0 the host heap, heap 1 device-local; type 0 device-local, type 1 device-local AND
+            // host-visible (the refusing heap's), type 2 the host heap's coherent type, type 3 host-visible but not coherent
+            let heaps <- array<HeapRow>(HeapRow(device_local = false), HeapRow(device_local = true))
+            let types <- array<MemTypeRow>(
+                MemTypeRow(heap = 1, host_visible = false, host_coherent = false),
+                MemTypeRow(heap = 1, host_visible = true, host_coherent = true),
+                MemTypeRow(heap = 0, host_visible = true, host_coherent = true),
+                MemTypeRow(heap = 0, host_visible = true, host_coherent = false))
+            t |> equal(2, uma_spill_pick(0xFu, types, heaps), "the host heap's coherent type, past the device-local heap's own host-visible type")
+            t |> equal(-1, uma_spill_pick(0x3u, types, heaps), "a requirement that admits only the device-local heap's types spills nowhere")
+            t |> equal(-1, uma_spill_pick(0xBu, types, heaps), "a host-visible type that is not coherent is not a spill target")
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test]
 def test_resident_hot_slots(t : T?) {
     t |> run("the hot expert pool's slots: every slot that fits beside the whole mirror, up to 32 out of the mirror's context, a count asked from the floor's room, none under four") @(t : T?) {
         let mib = 1_048_576l
