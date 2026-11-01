@@ -13,6 +13,7 @@ require dasllama/dasllama_gguf
 require dasllama/dasllama_math
 require dasllama/dasllama_common   // apply_box_profile_runtime for the tower-image identity
 require dasllama/dasllama_image   // the dlim rail: mapped planes, no allocation or work at load
+require dasllama/dasllama_tower_image
 require dasllama/dasllama_plane public
 require dasllama/dasllama_tower   // shared encoder-tower pieces: LN, bias, attention, im2col, the aa resize
 require dasllama/dasllama_rope    // build_rope_tabs_vision — the (h, w) ladder table
@@ -90,6 +91,9 @@ struct Qwen3vTower {
     ds_f_stride : int64
     ds_w : int64         // per-tap GEMM region (mm plane type): fc1 [4d×4d], fc2 [4d×proj]
     ds_w_stride : int64
+    dev_backend : TowerDev    //! the GPU flavor whose device block the image carries (`#tower-dev-block`); `none` on the CPU image
+    dev : PlaneU8 = PlaneU8()
+    devplan : PlaneI64 = PlaneI64()
     image_map : void?
     image_bytes : uint64
 }
@@ -156,7 +160,7 @@ def finalize(var s : Qwen3vState) {
 
 // serialize_image_meta(Qwen3vTower) covers 35 fields; image_map + image_bytes are deliberate
 // skips (the two planes are sections, not meta)
-let private QWEN3V_META_FIELDS = 35 + 2
+let private QWEN3V_META_FIELDS = 36 + 2
 
 def private serialize_image_meta(var arch : Archive; var t : Qwen3vTower) {
     verify(count_meta_fields(t) == QWEN3V_META_FIELDS)   // grew Qwen3vTower? extend this list
@@ -195,6 +199,7 @@ def private serialize_image_meta(var arch : Archive; var t : Qwen3vTower) {
     arch |> serialize_raw(t.ds_f_stride)
     arch |> serialize_raw(t.ds_w)
     arch |> serialize_raw(t.ds_w_stride)
+    arch |> serialize_raw(t.dev_backend)
 }
 
 [unused_argument(t)]
@@ -207,6 +212,8 @@ struct Qwen3vStaging {
     wblob : array<uint16>
     qblob : array<int8>       // q8 lane: the block GEMMs as Q8_0 (repacked for the active backend)
     qscales : array<float>
+    @exact_size dev : array<uint8>       //!< a GPU-flavored mint's device block (`TowerDevBuild`)
+    @exact_size devplan : array<int64>   //!< ... and its plan
 }
 
 def private serialize_image_meta(var arch : Archive; var st : Qwen3vStaging) {
@@ -229,6 +236,8 @@ let private QWEN3V_TAG_Q8 = "qwen3v-q8"
 def private register_qwen3v_image_tags {
     register_image_family_tag(QWEN3V_TAG, true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
     register_image_family_tag(QWEN3V_TAG_Q8)
+    register_tower_dev_tags(QWEN3V_TAG)
+    register_tower_dev_tags(QWEN3V_TAG_Q8)
 }
 
 // the lane policy follows the fastest GEMM path on the box: a serving GPU chain or the armed
@@ -580,11 +589,35 @@ def load_qwen3v_tower(path : string) : Qwen3vTower {
     } else {
         q3v_announce_lane()
     }
+    let dev = path |> ends_with(".dlim") ? TowerDev.none : tower_dev_flavor(g_q3v_flavor, tag == QWEN3V_TAG_Q8)
+    if (dev != TowerDev.none) {
+        return <- load_staged_image_dev(path, tag, "qwen3v-tower", "source mmproj gguf", type<Qwen3vTower>, dev, g_q3v_flavor.bake, QWEN3V_DEV_CONSUMED) {
+            return <- stage_qwen3v_tower(path)
+        }
+    }
     return <- load_staged_image(path, tag, "qwen3v-tower", "source mmproj gguf", type<Qwen3vTower>, $ {
         return <- stage_qwen3v_tower(path)
     }, $ [unused_argument(t)] (t : Qwen3vTower) => true, $(t : Qwen3vTower; src : string) {
         q3v_check_planes(t, src)
     })
+}
+
+//! A GPU driver's qwen3v flavor (`#tower-dev-block`): the backend whose image it mints, whether its chain serves a lane, and
+//! the bake that converts a CPU-form tower into the driver's device block
+typedef Qwen3vServesLaneFn = function<(q8 : bool) : bool>
+typedef Qwen3vBakeFn = function<(t : Qwen3vTower; var b : TowerDevBuild) : bool>
+
+struct Qwen3vFlavor {
+    backend : TowerDev
+    serves : Qwen3vServesLaneFn
+    bake : Qwen3vBakeFn
+}
+
+var private g_q3v_flavor = Qwen3vFlavor()
+let private QWEN3V_DEV_CONSUMED <- ["qblob", "qscales"]   //! the planes a qwen3v bake converts: a GPU flavor carries their device forms instead
+
+def register_qwen3v_flavor(backend : TowerDev; serves : Qwen3vServesLaneFn; bake : Qwen3vBakeFn) {
+    g_q3v_flavor = Qwen3vFlavor(backend = backend, serves = serves, bake = bake)
 }
 
 //! Mint a served tower from a staged read WITHOUT touching disk — the off-rail control for suites.
@@ -823,6 +856,7 @@ def private q3v_scatter_slice(t : Qwen3vTower; src : array<float>; var out : arr
 // the tail: post-LN, then the 2×2 merger MLP (rows are already merge-adjacent, so the ×4
 // reshape is a flat reinterpretation) into out; returns nout
 def private q3v_tail(t : Qwen3vTower; var s : Qwen3vState; npos : int64; var out : array<float>) : int64 {
+    tower_cpu_refuse(t, "dasLLAMA qwen3v", "tail")
     let d = t.n_embd
     let nout = npos / 4l
     layernorm_batch(s.xb, s.x, t.blob, t.post_ln_w, t.post_ln_b, d, npos, t.eps)
@@ -871,6 +905,7 @@ def qwen3v_encode(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w
         gpu_served = invoke(g_q3v_gpu, t, s, planes, w, h, npos)
     }
     if (!gpu_served) {
+        tower_cpu_refuse(t, "dasLLAMA qwen3v", "chain")
         tp = ref_time_ticks()
         if (chain) {
             im2col_rgb_patches(planes, w, h, t.patch, s.x0)
