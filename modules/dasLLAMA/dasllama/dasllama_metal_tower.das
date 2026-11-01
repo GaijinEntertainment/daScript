@@ -407,9 +407,9 @@ def metal_audio_tower_bake_into(t : AudioTower; stem : bool; var b : TowerDevBui
 [cold_path]
 def private metal_audio_tower_bake(t : AudioTower; var b : TowerDevBuild) : bool => metal_audio_tower_bake_into(t, true, b)
 
-//! the standalone tower's Metal chain serves a lane: the tower knob on, the projector tail on the device behind the blocks
-[unused_argument(q8)]
-def private metal_audio_tower_serves_model(q8 : bool) : bool => g_tw_env_tower && g_tw_tail
+//! the standalone tower's Metal chain serves the exact lane: the tower knob on, the projector tail on the device behind the blocks -
+//! the q8 lane's tail has no Metal form
+def private metal_audio_tower_serves_model(q8 : bool) : bool => !q8 && g_tw_env_tower && g_tw_tail
 
 //! a whisper encoder's Metal chain serves an encoder lane: the tower knob on
 def metal_whisper_tower_serves() : bool => g_tw_env_tower
