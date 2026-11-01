@@ -7760,3 +7760,17 @@ records as the expert GEMVs' regions, the act and the combine.
   1.65x, k4 2.9x), and the grp tier's nv4 gap (the entry above, 1.3x-1.9x) is an int8-tile gap only. nrsplit 2 leads
   nrsplit 1 by 1.4x on every format. The x86-amx profile crowns `dot_amx_bf16_width512_mr16_kstep1_nrsplit2` for the three
   tile families.
+- **MEASURED (2026-11-01, the zen4 vulkan rig leg - the Ryzen 7 PRO 8700GE's Radeon 760M, RADV Mesa 25.0.7, subgroup 32
+  pinned - `performance/gen_bench_records.das -- --legs vulkan -w llm -o Qwen3.6-35B-A3B-MTP-UD-Q4_K_M --ref-vulkan
+  <the 9febe63 build-vulkan llama-bench> --store <a scratch store>` under `DASLLAMA_GPU=1`: the released exe (`exe one unit`,
+  10f52ca83, dasllama_version 17, the box's mint of that build) at `-p 512 -n 128 -r 5 -t 8`, the cold run kept; tok/s
+  +/- sd).** das pp512 324.03 +/- 2.40, tg128 19.24 +/- 0.01; tg128@4 42.02 +/- 3.14 summed over four streams (cv 7.5%: VOID,
+  to re-read). The rig's own reference cell, llama.cpp 9febe63 Vulkan: pp512 254.16 +/- 1.68, tg128 17.64 +/- 0.01 (no
+  tg128@4 row - no `llama-batched-bench` sits beside that build). Before the arc the same box, file and bench line read
+  237.60 +/- 3.49 / 17.50 +/- 0.09 as a `-jit` debug row (`debug-jit`, `direction-grade` against this entry; the merged nv4
+  branch tip af4f1f7700, the branch base 730a27e5bd's Vulkan tier): the resident plan read one heap of the APU's two,
+  declined the 21.6 GB of weights and summed 31 routed layers' experts on the CPU one layer a submit, and every attention
+  layer took the chunked pair for want of a gated KHR flash stamp. With the room over every heap the model is resident
+  whole, and the gated head-256 KHR stamps take the ten attention layers (`ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-plan-room`
+  carries the plan lines). zen4 carries no vulkan board row in `records/`; the release re-mint owes it
+  (`followup_general.md` row 276).
