@@ -29,30 +29,81 @@ def tower_dev_image(var cpu : auto(T); var gst : auto(S); var out : T; img, tag 
     gst.e := cpu
     gst.e.image_map = null
     gst.e.image_bytes = 0ul
-    gst.e.dev_backend = dev
+    tower_mark_dev(gst.e, dev)
     tower_copy_planes(cpu, gst, consumed)
-    gst.dev <- b.blob
-    gst.devplan <- b.plan
+    tower_place_block(gst, b)
     delete cpu
     let wrote = cache_via_image_staged(gst, out, img, tag)
     delete gst
     return wrote
 }
 
-//! every array plane of the staging `gst` from the same-named borrowed plane of `cpu`, but the device block's and the `consumed`
+//! the model's flavor set where it carries the device block: on the model, else on the nested tower that does
+def private tower_mark_dev(var e; dev : TowerDev) {
+    static_if (typeinfo safe_has_field < dev_backend > (e)) {
+        e.dev_backend = dev
+    }
+    static_if (!typeinfo safe_has_field < dev_backend > (e)) {
+        apply(e) $ [unused_argument(name)] (name : string; var field) {
+            static_if (typeinfo safe_has_field < dev_backend > (field)) {
+                field.dev_backend = dev
+            }
+        }
+    }
+}
+
+//! the device block into the staging's own arrays, else into its nested tower's byte group
+def private tower_place_block(var gst; var b : TowerDevBuild) {
+    static_if (typeinfo safe_has_field < devplan > (gst)) {
+        gst.dev <- b.blob
+        gst.devplan <- b.plan
+    }
+    static_if (!typeinfo safe_has_field < devplan > (gst)) {
+        apply(gst) $ [unused_argument(name)] (name : string; var field) {
+            static_if (typeinfo safe_has_field < image_planes > (field)) {
+                static_if (typeinfo safe_has_field < devplan > (field)) {
+                    field.dev <- b.blob
+                    field.devplan <- b.plan
+                }
+            }
+        }
+    }
+}
+
+//! every array plane of the staging `gst` - its nested towers' byte groups too, named `<group>.<plane>` - from the same-named
+//! borrowed plane of `cpu`, but the device block's and the `consumed`
 def private tower_copy_planes(cpu : auto(T); var gst : auto(S); consumed : array<string>) {
     apply(gst) $(sname : string; var sfield) {
         static_if (typeinfo is_array(sfield)) {
             static_if (!typeinfo is_string(sfield[0])) {
                 if (sname != "dev" && sname != "devplan" && !has_value(consumed, sname)) {
-                    apply(cpu) $(mname : string; mfield) {
-                        static_if (typeinfo safe_has_field < borrowed_plane > (mfield)) {
-                            if (mname == sname && typeinfo sizeof(*mfield.p) == typeinfo sizeof(sfield[0])) {
-                                plane_copy(mfield, sfield)
+                    tower_copy_named(cpu, sname, sfield)
+                }
+            }
+        } static_elif (typeinfo safe_has_field < image_planes > (sfield)) {
+            apply(sfield) $(iname : string; var ifield) {
+                static_if (typeinfo is_array(ifield)) {
+                    if (iname != "dev" && iname != "devplan" && !has_value(consumed, "{sname}.{iname}")) {
+                        apply(cpu) $(mname : string; mfield) {
+                            static_if (typeinfo safe_has_field < image_map > (mfield)) {
+                                if (mname == sname) {
+                                    tower_copy_named(mfield, iname, ifield)
+                                }
                             }
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+//! the borrowed plane `name` of `m` copied into `dst` where its elements are `dst`'s
+def private tower_copy_named(m; name : string; var dst : array<auto(ET)>) {
+    apply(m) $(mname : string; mfield) {
+        static_if (typeinfo safe_has_field < borrowed_plane > (mfield)) {
+            if (mname == name && typeinfo sizeof(*mfield.p) == typeinfo sizeof(dst[0])) {
+                plane_copy(mfield, dst)
             }
         }
     }

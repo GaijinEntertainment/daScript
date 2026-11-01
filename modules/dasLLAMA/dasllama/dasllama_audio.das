@@ -20,6 +20,7 @@ require dasllama/dasllama_gguf
 require dasllama/dasllama_convert
 require dasllama/dasllama_common   // apply_box_profile_runtime for the tower-image identity
 require dasllama/dasllama_image
+require dasllama/dasllama_tower_image
 
 // Whisper-family audio frontend: 16 kHz mono PCM -> log-mel chunks, in two oracle-exact
 // flavors: the mtmd flavor (log_mel_chunks) pre-extends short input to 31 s, floors at 2^-24;
@@ -656,6 +657,9 @@ struct AudioTower {
     qscales : PlaneF = PlaneF()   // per-32-block scales, indexed at woff/32
     qlayers_off : int64 = 0l  // q8 layout: per-layer GEMM base/stride in the dense qblob
     qlayer_stride : int64 = 0l
+    dev_backend : TowerDev    //! the GPU flavor whose device block the image carries (`#tower-dev-block`); `none` on the CPU image
+    dev : PlaneU8 = PlaneU8()
+    devplan : PlaneI64 = PlaneI64()
     conv1_w_off : int64
     conv1_b_off : int64
     conv2_w_off : int64
@@ -685,7 +689,7 @@ def finalize(var t : AudioTower) {
 
 // the tripwire: serialize_image_meta(AudioTower) covers 31 fields; image_map + image_bytes
 // are deliberate skips. A new non-array AudioTower field trips this until BOTH agree.
-let private TOWER_META_FIELDS = 31 + 2
+let private TOWER_META_FIELDS = 32 + 2
 
 // every non-array AudioTower field, explicitly, both directions (see dasllama_image).
 // Public: WhisperModel's serialize_image_meta reuses it for its nested `enc` tower.
@@ -722,6 +726,7 @@ def serialize_image_meta(var arch : Archive; var t : AudioTower) {
     arch |> serialize_raw(t.mm2_w_off)
     arch |> serialize_raw(t.qlayers_off)
     arch |> serialize_raw(t.qlayer_stride)
+    arch |> serialize_raw(t.dev_backend)
 }
 
 [unused_argument(t)]
@@ -736,6 +741,8 @@ struct AudioTowerPlanes {
     wblob : array<uint16>
     qblob : array<int8>
     qscales : array<float>
+    @exact_size dev : array<uint8>       //!< a GPU-flavored mint's device block (`TowerDevBuild`)
+    @exact_size devplan : array<int64>   //!< ... and its plan
 }
 
 def finalize(var pl : AudioTowerPlanes) {
@@ -750,6 +757,8 @@ struct AudioTowerStaging {
     wblob : array<uint16>
     qblob : array<int8>
     qscales : array<float>
+    @exact_size dev : array<uint8>       //!< a GPU-flavored mint's device block (`TowerDevBuild`)
+    @exact_size devplan : array<int64>   //!< ... and its plan
 }
 
 def private serialize_image_meta(var arch : Archive; var st : AudioTowerStaging) {
@@ -767,6 +776,8 @@ def private image_post_load(var st : AudioTowerStaging) {}
 def private register_tower_image_tags {
     register_image_family_tag("tower-q8")
     register_image_family_tag("tower-f32", true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
+    register_tower_dev_tags("tower-q8")
+    register_tower_dev_tags("tower-f32")
 }
 
 let public ULTRAVOX_NORM_EPS = 1e-6   //! the ultravox projector norms' own eps, not the tower's
@@ -1088,12 +1099,51 @@ def private tw_mm_rq(t : AudioTower; var y : array<float>; woff : int64; x : arr
 //! PREPARED IMAGE for fast reload; ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
 def load_audio_tower(path : string; q8 : bool = false) : AudioTower {
     let tag = q8 ? "tower-q8" : "tower-f32"
+    let dev = path |> ends_with(".dlim") ? TowerDev.none : audio_tower_dev_flavor(q8)
+    if (dev != TowerDev.none) {
+        return <- load_staged_image_dev(path, tag, "audio-tower", "source mmproj gguf", type<AudioTower>, dev, g_tw_flavor.bake, AUDIO_TOWER_DEV_CONSUMED) {
+            return <- stage_audio_tower(path, q8)
+        }
+    }
     return <- load_staged_image(path, tag, "audio-tower", "source mmproj gguf", type<AudioTower>, $ {
         return <- stage_audio_tower(path, q8)
     }, $(t : AudioTower) {
         // an exact-lane image minted before the half twin rode it carries none: where the file's GEMMs are halves, mint again
         return q8 || length(t.wblob) > 0l || !audio_tower_half_gemms(path)
     }, $ [unused_argument(t, src)] (t : AudioTower; src : string) {})
+}
+
+//! A GPU driver's AudioTower flavor (`#tower-dev-block`): the backend whose image it mints, whether its chain serves a lane, and
+//! the bake that converts a CPU-form tower into the driver's device block
+typedef AudioTowerServesLaneFn = function<(q8 : bool) : bool>
+typedef AudioTowerBakeFn = function<(t : AudioTower; var b : TowerDevBuild) : bool>
+
+struct AudioTowerFlavor {
+    backend : TowerDev
+    serves : AudioTowerServesLaneFn
+    bake : AudioTowerBakeFn
+}
+
+var private g_tw_flavor = AudioTowerFlavor()
+let AUDIO_TOWER_DEV_CONSUMED <- ["qblob", "qscales"]   //! the planes an AudioTower bake converts: a GPU flavor carries their device forms instead
+
+def register_audio_tower_flavor(backend : TowerDev; serves : AudioTowerServesLaneFn; bake : AudioTowerBakeFn) {
+    g_tw_flavor = AudioTowerFlavor(backend = backend, serves = serves, bake = bake)
+}
+
+//! The device flavor a standalone tower's load on the `q8` lane takes: the registered driver's where its chain serves the lane,
+//! else `none` - the CPU image
+def audio_tower_dev_flavor(q8 : bool) : TowerDev {
+    return TowerDev.none if (g_tw_flavor.backend == TowerDev.none || !invoke(g_tw_flavor.serves, q8))
+    return g_tw_flavor.backend
+}
+
+//! A GPU-flavored tower reached a CPU path at `stage`: the device seat declined what the load handed it, and the CPU never runs
+//! that image (`#tower-dev-block`)
+def tw_cpu_refuse(t : AudioTower; stage : string) {
+    if (t.dev_backend != TowerDev.none) {
+        panic("dasLLAMA audio tower: the {stage} declined on the {t.dev_backend} device - a {t.dev_backend}-flavored image never runs on the CPU")
+    }
 }
 
 //! whether every block GEMM of a whisper-class mmproj - q, k, v, out, the two FFN matrices of each of `n_layer` blocks - is
@@ -1441,6 +1491,7 @@ def private audio_encode_stem(t : AudioTower; var s : EncoderState; mel : MelChu
         asr_prof_add("enc.conv", tc)
         return
     }
+    tw_cpu_refuse(t, "conv stem")
 
     // conv1 k3 s1 same: im2col column (dk, c) — matches the loader's weight permute
     for (i in range64(tin)) {
@@ -1601,6 +1652,7 @@ def encoder_blocks(t : AudioTower; var s : EncoderState; npos : int64) {
 }
 
 def private encoder_blocks_cpu(t : AudioTower; var s : EncoderState; npos : int64) {
+    tw_cpu_refuse(t, "block loop")
     let tt = npos
     let d = t.d_model
     for (l in range64(t.n_layer)) {
@@ -1715,6 +1767,7 @@ def audio_encode(t : AudioTower; var s : EncoderState; mel : MelChunk) {
 
 //! the projector tail over the blocks' rows in `s.x`, by kind, into `s.out` - the specification the GPU tails mirror
 def audio_projector_tail(t : AudioTower; var s : EncoderState) {
+    tw_cpu_refuse(t, "projector tail")
     let rows = audio_tokens_per_chunk(t)
     let tt = t.n_ctx
     let d = t.d_model

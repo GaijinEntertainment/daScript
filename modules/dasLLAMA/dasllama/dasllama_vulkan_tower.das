@@ -597,6 +597,50 @@ def vt_key(qblob : PlaneI8; qscales : PlaneF; blob : PlaneF; rows_off, rows_n, o
     return k
 }
 
+//! A model's Vulkan device block as an upload reads it (`#tower-dev-block`): `on` where the model is the Vulkan-flavored image
+struct private VtDevSrc {
+    on : bool
+    dev : PlaneU8 = PlaneU8()
+    devplan : PlaneI64 = PlaneI64()
+}
+
+def private vt_dev_src(m) : VtDevSrc => VtDevSrc(on = m.dev_backend == TowerDev.vulkan, dev = m.dev, devplan = m.devplan)
+
+//! the resident key of a Vulkan-flavored model: its block - address, size, plan, sampled words - the rows of `blob` uploaded
+//! beside it and the layer count, every field the resident's extent follows
+def private vt_key_dev(src : VtDevSrc; blob : PlaneF; rows_off, rows_n, n_layer : int64) : uint64 {
+    var k = vt_fold_int(vt_fold_addr(vt_fold_int(0x6b0dul, src.dev.n), unsafe(reinterpret<void?>(src.dev.p))), n_layer)
+    k = vt_fold_words(k, unsafe(reinterpret<uint8 const?>(src.devplan.p)), src.devplan.n * 8l)
+    k = vt_fold_words(k, src.dev.p, src.dev.n)
+    k = vt_fold_addr(k, unsafe(reinterpret<void?>(blob.p)))
+    k = vt_fold_int(k, rows_off)
+    k = vt_fold_int(k, rows_n)
+    return vt_fold_words(k, unsafe(reinterpret<uint8 const?>(plane_at(blob, rows_off))), rows_n * 4l)
+}
+
+//! the q8 regions a chain gathers, as a Vulkan device block carries them: the gather at the row-major layout into `<prefix>.wq` /
+//! `<prefix>.ws`
+[cold_path]
+def private vt_bake_q8(var b : TowerDevBuild; prefix : string; qblob : PlaneI8; qscales : PlaneF; regions : array<Q8Region>) {
+    var wq, ws : array<uint8>
+    wq |> reserve_resize(qblob.n)
+    ws |> reserve_resize(qscales.n * 2l)
+    vt_gather_regions(qblob, qscales, regions, active_q8_repack_layout(false), wq, ws)
+    tower_dev_put(b, "{prefix}.wq", unsafe(addr<uint8 const?>(wq[0])), long_length(wq))
+    tower_dev_put(b, "{prefix}.ws", unsafe(addr<uint8 const?>(ws[0])), long_length(ws))
+    delete wq
+    delete ws
+}
+
+//! a block piece's bytes - 0 where the block holds none
+def private vt_piece_bytes(src : VtDevSrc; name : string) : int64 => max(tower_dev_find(src.devplan, name).bytes, 0l)
+
+//! the piece `name` uploaded as stored into `buf`
+def private vt_put_piece(src : VtDevSrc; name : string; buf : uint64) {
+    let p = tower_dev_find(src.devplan, name)
+    upload_region_at(buf, 0l, plane_at(src.dev, p.off), p.bytes) if (p.off >= 0l && p.bytes > 0l)
+}
+
 //! the soft allocations: a failure marks the resident, and the batch's caller releases what it got and declines `memory`
 [cold_path]
 def private vt_dev_buf(var r : VtResident; bytes : int64) : uint64 => soft_device_buf(r.oom, bytes)
@@ -1131,10 +1175,10 @@ def vt_upload_regions(qblob : PlaneI8; qscales : PlaneF; regions : array<Q8Regio
 
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_upload(var r : VtResident; key : uint64; qblob : PlaneI8; qscales : PlaneF; regions : array<Q8Region>;
-                      blob : PlaneF; rows_off, rows_n, ones_n : int64; lay : Q8RepackLayout) : bool {
+                      blob : PlaneF; rows_off, rows_n, ones_n : int64; lay : Q8RepackLayout; src : VtDevSrc = VtDevSrc(); prefix : string = "") : bool {
     vt_upload_begin(r, key)
-    r.wq_bytes = qblob.n
-    r.ws_bytes = qscales.n * 2l
+    r.wq_bytes = src.on ? vt_piece_bytes(src, "{prefix}.wq") : qblob.n
+    r.ws_bytes = src.on ? vt_piece_bytes(src, "{prefix}.ws") : qscales.n * 2l
     r.wq_dev = vt_dev_buf(r, r.wq_bytes)
     r.ws_dev = vt_dev_buf(r, r.ws_bytes)
     r.ones_off = rows_n
@@ -1144,7 +1188,12 @@ def private vt_upload(var r : VtResident; key : uint64; qblob : PlaneI8; qscales
         vt_release(r)
         return false
     }
-    vt_upload_regions(qblob, qscales, regions, lay, r.wq_dev, r.ws_dev, r.wq_bytes, r.ws_bytes)
+    if (src.on) {
+        vt_put_piece(src, "{prefix}.wq", r.wq_dev)
+        vt_put_piece(src, "{prefix}.ws", r.ws_dev)
+    } else {
+        vt_upload_regions(qblob, qscales, regions, lay, r.wq_dev, r.ws_dev, r.wq_bytes, r.ws_bytes)
+    }
     upload_float_ranges(r.norms_dev, [(p = plane_at(blob, rows_off), n = rows_n)], ones_n)
     r.cap_rows = 0l
     vt_unbind_batch_sets(r)
@@ -2871,7 +2920,7 @@ def private vt_front_arm(var r : VtResident; n_len, cap_floor : int64; classes :
 //! moved; false where the upload will not take
 def private vt_fc_planes(var r : VtResident; fc : VtFc) : bool {
     if (fc.dev_backend == TowerDev.vulkan && !fc.f16w) {   //! the exact lane's halfwords upload as stored on the f16 path below
-        let kd = vt_fold_taps(vt_fold_int(vt_fold_addr(vt_fold_int(0x6b0dul, fc.dev.n), unsafe(reinterpret<void?>(fc.dev.p))), fc.blob.n), fc)
+        let kd = vt_fold_taps(vt_key_dev(VtDevSrc(on = true, dev = fc.dev, devplan = fc.devplan), fc.blob, 0l, fc.blob.n, fc.n_layer), fc)
         return r.key == kd || (vt_upload_fc_dev(r, kd, fc) && vt_upload_taps(r, fc))
     }
     if (fc.kq_lane) {
@@ -3156,7 +3205,13 @@ def private vt_served_from(var r : VtResident; hb : HostBuf; var x : array<float
 [cold_path]
 def private vt_upload_ln(var r : VtResident; key : uint64; qblob : PlaneI8; qscales : PlaneF; d, ff : int64;
                          blob : PlaneF; rows_off, rows_n : int64; lay : Q8RepackLayout; offs : array<LayerOffs>; conv2_w : int64 = -1l;
-                         proj : array<Q8Region> = g_vt_no_regions) : bool {
+                         proj : array<Q8Region> = g_vt_no_regions; src : VtDevSrc = VtDevSrc(); prefix : string = "") : bool {
+    var inscope regions <- vt_ln_regions(d, ff, offs, conv2_w, proj)
+    return vt_upload(r, key, qblob, qscales, regions, blob, rows_off, rows_n, 0l, lay, src, prefix)
+}
+
+//! a pre-LN chain's q8 regions: the projector's, the conv stem's second conv where it has one, then every block's GEMMs
+def private vt_ln_regions(d, ff : int64; offs : array<LayerOffs>; conv2_w : int64; proj : array<Q8Region>) : array<Q8Region> {
     var regions : array<Q8Region>
     regions |> reserve(long_length(offs) * LN_BLOCK_GEMMS + 1l + long_length(proj))
     regions |> push_from(proj)
@@ -3168,9 +3223,7 @@ def private vt_upload_ln(var r : VtResident; key : uint64; qblob : PlaneI8; qsca
         ln_block_regions(o, d, ff, recs)
         regions |> push_from(recs)
     }
-    let ok = vt_upload(r, key, qblob, qscales, regions, blob, rows_off, rows_n, 0l, lay)
-    delete regions
-    return ok
+    return <- regions
 }
 
 //! fc2's map words are counted apart from the d-wide GEMMs': under a split its map stacks every plane's tiles
@@ -3869,6 +3922,9 @@ def private vt_aud_blocks(t : AudioTower; var s : EncoderState; npos : int64; ln
     if (!t.q8) {
         return vt_flush_and_decline(r, VulkanTowerDecline.quant_mode)
     }
+    if (t.dev_backend != TowerDev.vulkan) {
+        return vt_flush_and_decline(r, VulkanTowerDecline.flavor)
+    }
     let d = t.d_model
     let ff = t.n_ff
     let hs = d / t.n_head
@@ -3931,20 +3987,71 @@ def private vt_aud_has_conv(t : AudioTower) : bool => t.qlayers_off > 0l
 
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_aud_attach(var r : VtResident; t : AudioTower) : bool {
+    vt_aud_offs(t)
+    let lay = active_q8_repack_layout(g_active_needs_repack)
+    let norms_plane_n = t.fblob.n - t.layers_off   //! the blocks' rows, the post-norm and the projector tail's f32 rows behind them
+    let src = vt_dev_src(t)
+    let key = (src.on ? vt_key_dev(src, t.fblob, t.layers_off, norms_plane_n, t.n_layer)
+        : vt_key(t.qblob, t.qscales, t.fblob, t.layers_off, norms_plane_n, 0l, t.n_layer, lay.mr, lay.kgroup, lay.wbias))
+    if (r.key == key) {
+        return true
+    }
+    var inscope regions <- vt_aud_regions(t)
+    return vt_upload(r, key, t.qblob, t.qscales, regions, t.fblob, t.layers_off, norms_plane_n, 0l, lay, src, VT_AUD_PIECE)
+}
+
+let private VT_AUD_PIECE = "vk.aud"                //! a whisper-class tower's q8 pieces' prefix
+let private VT_AUD_FRONT16_PIECE = "vk.aud.front16"  //! ... its conv stem's first conv as the f16 slab
+
+//! the tower's block offsets into `g_vt_ln_offs`
+def private vt_aud_offs(t : AudioTower) {
     g_vt_ln_offs |> reserve(t.n_layer)
     g_vt_ln_offs |> resize(t.n_layer)
     for (l in range64(t.n_layer)) {
         g_vt_ln_offs[l] = enc_layer_offsets(t, l)
     }
-    let lay = active_q8_repack_layout(g_active_needs_repack)
-    let norms_plane_n = t.fblob.n - t.layers_off   //! the blocks' rows, the post-norm and the projector tail's f32 rows behind them
-    let key = vt_key(t.qblob, t.qscales, t.fblob, t.layers_off, norms_plane_n, 0l, t.n_layer, lay.mr, lay.kgroup, lay.wbias)
-    if (r.key == key) {
-        return true
-    }
+}
+
+//! a whisper-class tower's q8 regions: the projector tail's, the stem's second conv where it has one, the blocks'
+def private vt_aud_regions(t : AudioTower) : array<Q8Region> {
     var proj : array<Q8Region>
     vt_ct_regions(t, proj)
-    return vt_upload_ln(r, key, t.qblob, t.qscales, t.d_model, t.n_ff, t.fblob, t.layers_off, norms_plane_n, lay, g_vt_ln_offs, vt_aud_has_conv(t) ? t.conv2_w_off : -1l, proj)
+    return <- vt_ln_regions(t.d_model, t.n_ff, g_vt_ln_offs, vt_aud_has_conv(t) ? t.conv2_w_off : -1l, proj)
+}
+
+//! A whisper-class tower's Vulkan device block (`#tower-dev-block`): its q8 regions gathered, the stem's f16 slab where it has a stem
+[cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
+def private vt_aud_bake(t : AudioTower; var b : TowerDevBuild) {
+    vt_aud_offs(t)
+    var inscope regions <- vt_aud_regions(t)
+    vt_bake_q8(b, VT_AUD_PIECE, t.qblob, t.qscales, regions)
+    return if (!vt_aud_has_conv(t))
+    var inscope slab16 <- vt_aud_stem16(t)
+    tower_dev_put(b, VT_AUD_FRONT16_PIECE, unsafe(addr<uint8 const?>(slab16[0])), long_length(slab16) * 2l)
+}
+
+//! the standalone tower's Vulkan device block
+[cold_path]
+def private vulkan_audio_tower_bake(t : AudioTower; var b : TowerDevBuild) : bool {
+    vt_aud_bake(t, b)
+    return true
+}
+
+//! the standalone tower's Vulkan chain serves the lane: the q8 lane, the tower, blocks and tail knobs on, the device armed with
+//! the f16 feed its stem reads
+def private vulkan_audio_tower_serves_model(q8 : bool) : bool
+    => q8 && g_vt_env_tower && g_vt_env_audio_blocks && g_vt_env_tail && vulkan_tower_arms() && vt_cm2_feed()
+
+//! the stem's first conv as its f16 slab: each row's three taps a mel on the f16 GEMM's 64 lattice
+def private vt_aud_stem16(t : AudioTower) : array<uint16> {
+    let kreal = 3l * t.n_mel
+    let kdp = round_up(kreal, 64l)
+    var slab : array<float>
+    slab |> reserve_resize(t.d_model * kdp)
+    tower_stage_f32_pad_row_stride(slab, t.fblob, t.conv1_w_off, 0l, t.d_model, kreal, kdp)
+    var slab16 <- cvt_f32_to_f16_sat_array(slab)
+    delete slab
+    return <- slab16
 }
 
 let private VT_STEM_MEL = 0x1000000u   //! the whisper-class stem's hazard bits: the mel block, conv1's im2col and its rows
@@ -3955,22 +4062,28 @@ let private VTA_CONV2_KEY = 5000
 [cold_path]
 def private vt_aud_front_slab(var r : VtResident; t : AudioTower) : bool {
     let d = t.d_model
-    let kreal = 3l * t.n_mel
-    let kdp = round_up(kreal, 64l)
+    let kdp = round_up(3l * t.n_mel, 64l)
     r.stem_kdp = kdp
-    var slab : array<float>
-    slab |> reserve_resize(d * kdp)
-    tower_stage_f32_pad_row_stride(slab, t.fblob, t.conv1_w_off, 0l, d, kreal, kdp)
-    var slab16 <- cvt_f32_to_f16_sat_array(slab)
-    delete slab
+    let src = vt_dev_src(t)
+    var inscope slab16 : array<uint16>
+    if (!src.on) {
+        slab16 <- vt_aud_stem16(t)
+    }
     let rows = 2l * d + t.n_ctx * d
     r.fw16_bytes = d * kdp * 2l
+    if (src.on && vt_piece_bytes(src, VT_AUD_FRONT16_PIECE) != r.fw16_bytes) {
+        return false
+    }
     r.fw16_dev = vt_dev_buf(r, r.fw16_bytes)
     r.fnorm_bytes = rows * 4l
     r.fnorm_dev = vt_dev_buf(r, r.fnorm_bytes)
     r.front = true
     if (!r.oom) {
-        upload_region_at(r.fw16_dev, 0l, unsafe(addr<uint8 const?>(slab16[0])), r.fw16_bytes)
+        if (src.on) {
+            vt_put_piece(src, VT_AUD_FRONT16_PIECE, r.fw16_dev)
+        } else {
+            upload_region_at(r.fw16_dev, 0l, unsafe(addr<uint8 const?>(slab16[0])), r.fw16_bytes)
+        }
         upload_float_ranges(r.fnorm_dev, [(p = plane_at(t.fblob, t.conv1_b_off), n = d), (p = plane_at(t.fblob, t.conv2_b_off), n = d),
                                           (p = plane_at(t.fblob, t.pos_off), n = t.n_ctx * d)])
     }
@@ -4023,6 +4136,7 @@ def private vulkan_audio_conv_front(t : AudioTower; var s : EncoderState; mel : 
     if (!vt_gate(r, t.q8)) {
         return false
     }
+    return vt_decline(r, VulkanTowerDecline.flavor) if (t.dev_backend != TowerDev.vulkan)
     let tin = AUDIO_CHUNK_FRAMES
     let tt = t.n_ctx
     let d = t.d_model
@@ -6103,6 +6217,7 @@ def dasllama_vulkan_tower_register {
         register_gigaam_flavor(TowerDev.vulkan, @@vulkan_gigaam_serves_model, @@vulkan_gigaam_bake)
         register_parakeet_flavor(TowerDev.vulkan, @@vulkan_parakeet_serves_model, @@vulkan_parakeet_bake)
         register_canary_flavor(TowerDev.vulkan, @@vulkan_canary_serves_model, @@vulkan_canary_bake)
+        register_audio_tower_flavor(TowerDev.vulkan, @@vulkan_audio_tower_serves_model, @@vulkan_audio_tower_bake)
         register_vad_gpu(@@vulkan_vad_chunks)
         register_tower_rows_gen(@@vulkan_tower_fc_gen)
     }
