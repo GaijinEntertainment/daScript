@@ -223,8 +223,10 @@ to record and stop.
 
 ### 3.8 Interpreter's turns {#interpreter-turns}
 
-The microphone is opened at 16 kHz, the rate GigaAM and Silero both hear, so nothing is resampled;
-the frame thread drains it every frame into the take and feeds the new samples to the Silero
+The microphone is opened at parrot's rate (`MIC_RATE`, 24 kHz - the rate the browsers' capture
+serves; a 16 kHz capture context comes up on some page loads and not others) and resampled with
+parrot's resampler (sec.3.6) to the 16 kHz take GigaAM and Silero both hear; the frame thread
+drains the device every frame onto the recording and feeds the take's new samples to the Silero
 iterator. Speech start opens an utterance; speech end cuts it - the speech plus a quarter second at
 each end, never longer than GigaAM's 25 s span cap, which cuts a longer utterance there and hears
 the rest as the next - and the take and the detector start over behind it, as the command line's

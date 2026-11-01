@@ -5,7 +5,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 
 require dasllama/dasllama   // the facade: the ASR model, the translator, the TTS model, and Silero
 require turn                // the pure side: the listen's numbers, the utterance window, the turn ledger
-require ../parrot/take.das  // peaks_append: the waveform columns parrot draws its take and say with
+require ../parrot/take.das  // peaks_append, the waveform columns; MIC_RATE and the resampler parrot hears the microphone through
 require imgui/imgui_harness // the window, the frame, the boost widgets and the draw list
 require imgui/imgui_touch   // whether a finger, not a keyboard, is at the controls
 require daslib/jobque_boost
@@ -45,7 +45,7 @@ struct InterpreterArgs {
     max_frames : int = 0
 }
 
-let PEAK_COLUMN = 160   //! samples per waveform column: 10 ms at the microphone's rate
+let PEAK_COLUMN = 160   //! samples per waveform column: 10 ms at the detector's 16 kHz
 let OUT_PEAK_COLUMN = 240   //! ... and at Pocket's 24 kHz
 
 //! the frame thread's requests to the worker thread, as archived records
@@ -83,7 +83,10 @@ var g_listening = false
 var g_status = ""
 var g_turns : array<TurnRow>         //! every turn of the session, oldest first
 var g_turn_no = 0
-var g_take : array<float>            //! the microphone since the last cut, 16 kHz mono, the gain applied
+var g_raw : array<float>             //! the microphone since the last cut as recorded, MIC_RATE mono, the gain applied
+var g_ears = VadResampler()          //! MIC_RATE to the detector's 16 kHz, one running position across drains
+var g_ears_out : array<float>
+var g_take : array<float>            //! the microphone since the last cut at 16 kHz: what the detector and GigaAM hear
 var g_scratch : array<float>
 var g_take_peaks : array<float2>
 var g_vad_model = VadModel()
@@ -328,11 +331,11 @@ def start_listen() {
         g_status = "the models are still loading"
         return
     }
-    if (!sound_record_start(LISTEN_RATE, 1, LISTEN_RATE * 4, -1)) {
+    if (!sound_record_start(MIC_RATE, 1, MIC_RATE * 4, -1)) {   // parrot's rate: the one the browsers' capture serves
         g_status = "no microphone - is one connected, and allowed?"
         return
     }
-    g_scratch |> resize(LISTEN_RATE)
+    g_scratch |> resize(MIC_RATE)
     flush_take()
     g_last_frames_s = g_elapsed_s
     g_frames_seen = false
@@ -361,6 +364,8 @@ def stop_listen() {
 
 //! everything heard so far dropped and the detector started over: after an utterance, after a reply, after a long quiet
 def flush_take() {
+    g_raw |> clear()
+    g_ears.pos = 0.0lf
     g_take |> clear()
     g_take_peaks |> clear()
     vad_iter_reset(g_vad, default_vad_opts())
@@ -368,16 +373,17 @@ def flush_take() {
     g_speech_start = 0l
 }
 
-//! the frames the device has since delivered, onto the take, through the gain slider
+//! the frames the device has since delivered, through the gain slider onto the recording, and resampled onto the take the
+//! detector hears
 def append_frames(n : int) {
     var ssq = 0.0
-    let base = length(g_take)
+    let base = length(g_raw)
     let gain = GAIN.value
-    g_take |> ensure_capacity(base + n)
-    g_take |> resize(base + n)
+    g_raw |> ensure_capacity(base + n)
+    g_raw |> resize(base + n)
     for (i in range(n)) {
         let v = clamp(g_scratch[i] * gain, -1.0, 1.0)
-        g_take[base + i] = v
+        g_raw[base + i] = v
         ssq += v * v
     }
     let rms = sqrt(ssq / float(n))
@@ -385,7 +391,10 @@ def append_frames(n : int) {
     g_level_peak = max(g_level_peak, rms)
     g_frames_seen = true
     g_last_frames_s = g_elapsed_s
-    peaks_append(g_take_peaks, g_take, int64(base), PEAK_COLUMN)
+    let base16 = long_length(g_take)
+    resample_step(g_ears, g_raw, g_ears_out)
+    g_take |> push_from(g_ears_out)
+    peaks_append(g_take_peaks, g_take, base16, PEAK_COLUMN)
 }
 
 [arch(at = "../ARCHITECTURE.md#interpreter-turns")]
@@ -397,7 +406,7 @@ def drain_listen() {
     } elif (n > 0) {
         let base = long_length(g_take)
         append_frames(n)
-        var inscope fresh <- [for (i in range64(base, long_length(g_take))); g_take[i]]
+        var inscope fresh <- [for (i in range64(base, long_length(g_take))); g_take[i]]   // the 16 kHz samples this drain added
         var end = -1l
         vad_iter_feed(g_vad_model, g_vad, fresh) $(ev : VadEvent) {
             if (ev.kind == VadEventKind.speech_start) {

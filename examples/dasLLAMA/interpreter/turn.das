@@ -7,7 +7,7 @@ require math
 // the screen, so modules/dasLLAMA/tests/test_interpreter.das holds it without a window or a model.
 // main.das drives the devices, the worker thread and the panels.
 
-let LISTEN_RATE = 16000              //! the microphone's rate: GigaAM and Silero both hear 16 kHz, so nothing is resampled
+let LISTEN_RATE = 16000              //! the take's rate: GigaAM and Silero both hear 16 kHz; the microphone opens at parrot's MIC_RATE and is resampled
 let UTTERANCE_PAD_S = 0.25           //! kept around the speech at both ends
 let UTTERANCE_CAP_S = 25.0           //! GigaAM's span cap: speech running past it is cut here and the rest heard as the next utterance
 let LISTEN_IDLE_S = 30.0             //! quiet this long with no speech drops the buffered audio and starts the detector over
