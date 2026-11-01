@@ -598,17 +598,17 @@ def vt_key(qblob : PlaneI8; qscales : PlaneF; blob : PlaneF; rows_off, rows_n, o
 }
 
 //! A model's Vulkan device block as an upload reads it (`#tower-dev-block`): `on` where the model is the Vulkan-flavored image
-struct private VtDevSrc {
+struct VtDevSrc {
     on : bool
     dev : PlaneU8 = PlaneU8()
     devplan : PlaneI64 = PlaneI64()
 }
 
-def private vt_dev_src(m) : VtDevSrc => VtDevSrc(on = m.dev_backend == TowerDev.vulkan, dev = m.dev, devplan = m.devplan)
+def vt_dev_src(m) : VtDevSrc => VtDevSrc(on = m.dev_backend == TowerDev.vulkan, dev = m.dev, devplan = m.devplan)
 
 //! the resident key of a Vulkan-flavored model: its block - address, size, plan, sampled words - the rows of `blob` uploaded
 //! beside it and the layer count, every field the resident's extent follows
-def private vt_key_dev(src : VtDevSrc; blob : PlaneF; rows_off, rows_n, n_layer : int64) : uint64 {
+def vt_key_dev(src : VtDevSrc; blob : PlaneF; rows_off, rows_n, n_layer : int64) : uint64 {
     var k = vt_fold_int(vt_fold_addr(vt_fold_int(0x6b0dul, src.dev.n), unsafe(reinterpret<void?>(src.dev.p))), n_layer)
     k = vt_fold_words(k, unsafe(reinterpret<uint8 const?>(src.devplan.p)), src.devplan.n * 8l)
     k = vt_fold_words(k, src.dev.p, src.dev.n)
@@ -621,7 +621,7 @@ def private vt_key_dev(src : VtDevSrc; blob : PlaneF; rows_off, rows_n, n_layer 
 //! the q8 regions a chain gathers, as a Vulkan device block carries them: the gather at the row-major layout into `<prefix>.wq` /
 //! `<prefix>.ws`
 [cold_path]
-def private vt_bake_q8(var b : TowerDevBuild; prefix : string; qblob : PlaneI8; qscales : PlaneF; regions : array<Q8Region>) {
+def vt_bake_q8(var b : TowerDevBuild; prefix : string; qblob : PlaneI8; qscales : PlaneF; regions : array<Q8Region>) {
     var wq, ws : array<uint8>
     wq |> reserve_resize(qblob.n)
     ws |> reserve_resize(qscales.n * 2l)
@@ -633,10 +633,10 @@ def private vt_bake_q8(var b : TowerDevBuild; prefix : string; qblob : PlaneI8; 
 }
 
 //! a block piece's bytes - 0 where the block holds none
-def private vt_piece_bytes(src : VtDevSrc; name : string) : int64 => max(tower_dev_find(src.devplan, name).bytes, 0l)
+def vt_piece_bytes(src : VtDevSrc; name : string) : int64 => max(tower_dev_find(src.devplan, name).bytes, 0l)
 
 //! the piece `name` uploaded as stored into `buf`
-def private vt_put_piece(src : VtDevSrc; name : string; buf : uint64) {
+def vt_put_piece(src : VtDevSrc; name : string; buf : uint64) {
     let p = tower_dev_find(src.devplan, name)
     upload_region_at(buf, 0l, plane_at(src.dev, p.off), p.bytes) if (p.off >= 0l && p.bytes > 0l)
 }
@@ -4021,6 +4021,15 @@ def private vt_aud_bake(t : AudioTower; var b : TowerDevBuild) {
     var inscope slab16 <- vt_aud_stem16(t)
     tower_dev_put(b, VT_AUD_FRONT16_PIECE, unsafe(addr<uint8 const?>(slab16[0])), long_length(slab16) * 2l)
 }
+
+//! a whisper-class tower's pieces into a Vulkan device block - the whisper model's bake writes its encoder's through it
+def vulkan_audio_tower_bake_into(t : AudioTower; var b : TowerDevBuild) {
+    vt_aud_bake(t, b)
+}
+
+//! a whisper encoder's Vulkan chain serves the q8 lane: the tower and blocks knobs on, the device armed with the f16 feed its stem
+//! reads
+def vulkan_whisper_tower_serves() : bool => g_vt_env_tower && g_vt_env_audio_blocks && vulkan_tower_arms() && vt_cm2_feed()
 
 //! the standalone tower's Vulkan device block
 [cold_path]

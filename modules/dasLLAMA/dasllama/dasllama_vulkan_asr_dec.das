@@ -41,6 +41,7 @@ enum private VulkanWdecDecline {
     device       //! the tier has no device, or a class failed to build
     memory       //! a device or pinned allocation failed
     rows         //! the window's first batch is wider than the step's row cap: the CPU chain serves the window
+    flavor       //! the model is not the Vulkan-flavored image: each backend serves its own (`#tower-dev-block`)
 }
 
 let WD_ROW_CAP = 8l          //! the rows a decode batch may carry: the N-column GEMV's widest form
@@ -190,6 +191,8 @@ def private wd_decline_words(why : VulkanWdecDecline) : string {
         return VK_DECLINE_WORDS_MEMORY
     } elif (why == VulkanWdecDecline.rows) {
         return "the window's first batch is wider than the step's {WD_ROW_CAP}-row cap"
+    } elif (why == VulkanWdecDecline.flavor) {
+        return "the model is not the Vulkan-flavored image"
     }
     return VK_DECLINE_WORDS_DEVICE
 }
@@ -351,24 +354,16 @@ def private wd_ensure_classes(cm2 : bool; tile : VtTile) : bool {
 [cold_path]
 def private wd_upload_weights(w : WhisperModel) {
     var r & = g_wd
-    let d = r.d
     let nl = r.nl
-    r.wq_bytes = w.dqblob.n
-    r.ws_bytes = w.dqscales.n * 2l
+    let src = vt_dev_src(w.enc)
+    r.wq_bytes = src.on ? vt_piece_bytes(src, "{WD_PIECE}.wq") : w.dqblob.n
+    r.ws_bytes = src.on ? vt_piece_bytes(src, "{WD_PIECE}.ws") : w.dqscales.n * 2l
     r.wq_dev = wd_dev_buf(r.wq_bytes)
     r.ws_dev = wd_dev_buf(r.ws_bytes)
     let lay = active_q8_repack_layout(g_active_needs_repack)
-    var regions : array<Q8Region>
-    regions |> reserve(nl * 10l + 1l)
-    regions |> push(Q8Region(woff = w.d_te_q_off, n = d, rows = r.nvocab))
     r.site_meta |> reserve(nl * WD_LAYER_SITES + 1l)
     for (l in range64(nl)) {
         let lo = dec_layer_offsets(w, l)
-        for (woff in fixed_array(lo.q_w, lo.k_w, lo.v_w, lo.o_w, lo.cq_w, lo.ck_w, lo.cv_w, lo.co_w)) {
-            regions |> push(Q8Region(woff = woff, n = d, rows = d))
-        }
-        regions |> push(Q8Region(woff = lo.fc1_w, n = d, rows = 4l * d))
-        regions |> push(Q8Region(woff = lo.fc2_w, n = 4l * d, rows = d))
         r.site_meta |> push(q8_site_meta(r.oom, [lo.q_w, lo.k_w, lo.v_w]))   // nolint:STYLE012 - a layer's sites append to the previous layer's
         r.site_meta |> push(q8_site_meta(r.oom, [lo.o_w]))
         r.site_meta |> push(q8_site_meta(r.oom, [lo.cq_w]))
@@ -377,11 +372,47 @@ def private wd_upload_weights(w : WhisperModel) {
         r.site_meta |> push(q8_site_meta(r.oom, [lo.fc2_w]))
     }
     r.site_meta |> push(q8_site_meta(r.oom, [w.d_te_q_off]))
-    if (!r.oom) {
-        vt_upload_regions(w.dqblob, w.dqscales, regions, lay, r.wq_dev, r.ws_dev, r.wq_bytes, r.ws_bytes)
+    return if (r.oom)
+    if (src.on) {
+        vt_put_piece(src, "{WD_PIECE}.wq", r.wq_dev)
+        vt_put_piece(src, "{WD_PIECE}.ws", r.ws_dev)
+        return
     }
-    delete regions
+    var inscope regions <- wd_regions(w)
+    vt_upload_regions(w.dqblob, w.dqscales, regions, lay, r.wq_dev, r.ws_dev, r.wq_bytes, r.ws_bytes)
 }
+
+let private WD_PIECE = "vk.wdec"   //! the whisper decoder's q8 pieces' prefix, in the encoder tower's device block
+
+//! the whisper decoder's q8 regions: the token table the logits read, then every layer's eight attention GEMMs and its FFN pair
+def private wd_regions(w : WhisperModel) : array<Q8Region> {
+    let d = w.n_text_state
+    let nl = w.n_text_layer
+    var regions : array<Q8Region>
+    regions |> reserve(nl * 10l + 1l)
+    regions |> push(Q8Region(woff = w.d_te_q_off, n = d, rows = w.n_vocab))
+    for (l in range64(nl)) {
+        let lo = dec_layer_offsets(w, l)
+        for (woff in fixed_array(lo.q_w, lo.k_w, lo.v_w, lo.o_w, lo.cq_w, lo.ck_w, lo.cv_w, lo.co_w)) {
+            regions |> push(Q8Region(woff = woff, n = d, rows = d))
+        }
+        regions |> push(Q8Region(woff = lo.fc1_w, n = d, rows = 4l * d))
+        regions |> push(Q8Region(woff = lo.fc2_w, n = 4l * d, rows = d))
+    }
+    return <- regions
+}
+
+//! whisper's Vulkan device block (`#tower-dev-block`): the encoder tower's pieces, then the decoder's q8 regions gathered
+[cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
+def private vulkan_whisper_bake(w : WhisperModel; var b : TowerDevBuild) : bool {
+    vulkan_audio_tower_bake_into(w.enc, b)
+    var inscope regions <- wd_regions(w)
+    vt_bake_q8(b, WD_PIECE, w.dqblob, w.dqscales, regions)
+    return true
+}
+
+//! whisper's Vulkan chains serve the q8 lane: the encoder's and the decoder's knobs on
+def private vulkan_whisper_serves_model(q8 : bool) : bool => q8 && g_wd_env && vulkan_whisper_tower_serves()
 
 [cold_path]
 def private wd_upload_norms(w : WhisperModel) {
@@ -403,7 +434,10 @@ def private wd_upload_norms(w : WhisperModel) {
 def private wd_attach(w : WhisperModel) : bool {
     var r & = g_wd
     let lay = active_q8_repack_layout(g_active_needs_repack)
-    let key = vt_key(w.dqblob, w.dqscales, w.dblob, w.dlayers_off, w.n_text_layer * w.dlayer_stride, 0l, w.n_text_layer, lay.mr, lay.kgroup, lay.wbias)
+    let src = vt_dev_src(w.enc)
+    let rows_n = w.n_text_layer * w.dlayer_stride
+    let key = (src.on ? vt_key_dev(src, w.dblob, w.dlayers_off, rows_n, w.n_text_layer)
+        : vt_key(w.dqblob, w.dqscales, w.dblob, w.dlayers_off, rows_n, 0l, w.n_text_layer, lay.mr, lay.kgroup, lay.wbias))
     if (r.key != 0ul && key == r.key) {
         return true
     }
@@ -433,7 +467,9 @@ def private wd_build(w : WhisperModel; key : uint64) : bool {
     if (!wd_ensure_classes(r.cm2, r.xkv_tile)) {
         return false
     }
-    if (!vk_range_ok(w.dqblob.n) || !vk_range_ok(nl * d * r.ta * 4l) || !vk_range_ok(nl * d * r.tmax * 2l) || !vk_range_ok(2l * nl * d * r.ta * 4l)) {
+    let src = vt_dev_src(w.enc)
+    let wq_n = src.on ? vt_piece_bytes(src, "{WD_PIECE}.wq") : w.dqblob.n
+    if (!vk_range_ok(wq_n) || !vk_range_ok(nl * d * r.ta * 4l) || !vk_range_ok(nl * d * r.tmax * 2l) || !vk_range_ok(2l * nl * d * r.ta * 4l)) {
         return wd_decline(VulkanWdecDecline.shape)
     }
     r.key = key
@@ -547,6 +583,9 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
     }
     if (!w.dq8) {
         return wd_decline(VulkanWdecDecline.quant_mode)
+    }
+    if (w.enc.dev_backend != TowerDev.vulkan) {
+        return wd_decline(VulkanWdecDecline.flavor)
     }
     let d = w.n_text_state
     let hs = d / w.n_text_head
@@ -1405,6 +1444,7 @@ def dasllama_vulkan_asr_dec_register {
     static_if (!typeinfo builtin_module_exists(das_metal)) {
         register_whisper_cross_kv_gpu(@@vulkan_whisper_cross_kv)
         register_whisper_decode_gpu(@@vulkan_whisper_decode)
+        register_whisper_flavor(TowerDev.vulkan, @@vulkan_whisper_serves_model, @@vulkan_whisper_bake)
         register_rnnt_gpu(@@vulkan_rnnt_greedy, @@vulkan_rnnt_projects)
         register_gigaam_gpu_ctc(@@vulkan_gigaam_ctc)
     }

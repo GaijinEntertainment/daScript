@@ -24,6 +24,7 @@ require dasllama/dasllama_audio
 require dasllama/dasllama_tower
 require dasllama/dasllama_common   // apply_box_profile_runtime for the whisper-image identity
 require dasllama/dasllama_image
+require dasllama/dasllama_tower_image
 
 // Whisper-proper ASR: reads ggerganov/whisper.cpp ggml-*.bin models directly (drop-in HF
 // models, no converter), reuses the validated encoder tower from dasllama_audio, adds the
@@ -337,7 +338,7 @@ def whisper_dec_quantize(var st : WhisperStaging) {
     delete st.dblob
     st.dblob <- nf
     st.e.dq8 = true
-    if (!select_matmul_backend_for_load_()) {
+    if (!tower_repack_backend()) {
         return   // row-major backend reads the dense Q8_0 planes as-is
     }
     wm_repack(st.dqblob, st.dqscales, st.e.d_te_q_off, d, st.e.n_vocab)
@@ -453,6 +454,12 @@ def load_whisper_model(path : string; q8 : bool = false) : WhisperModel =>
 //! `set_asr_tower_fp32` routes here through the facade.
 def load_whisper_model(path : string; enc_q8, dec_q8 : bool) : WhisperModel {
     let tag = whisper_tag(enc_q8, dec_q8)
+    let dev = path |> ends_with(".dlim") || !enc_q8 || !dec_q8 ? TowerDev.none : tower_dev_flavor(g_wh_flavor, true)
+    if (dev != TowerDev.none) {
+        return <- load_staged_image_dev(path, tag, "whisper", "source model", type<WhisperModel>, dev, g_wh_flavor.bake, WHISPER_DEV_CONSUMED) {
+            return <- stage_whisper_model(path, enc_q8, dec_q8)
+        }
+    }
     return <- load_through_image(path, tag, "whisper", "source model", type<WhisperModel>, $(img : string; var out : WhisperModel) {
         return stream_whisper_model(path, enc_q8, dec_q8, img, tag, out)
     }, $ [unused_argument(t)] (t : WhisperModel) => true, $ [unused_argument(t, src)] (t : WhisperModel; src : string) {})
@@ -463,6 +470,27 @@ def private register_whisper_image_tags {
     register_image_family_tag("whisper-q8")
     register_image_family_tag("whisper-f32", true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
     register_image_family_tag("whisper-f32-q8")
+    register_tower_dev_tags("whisper-q8")
+}
+
+//! A GPU driver's whisper flavor (`#tower-dev-block`): the backend whose image it mints, whether its chains serve the q8 lane,
+//! and the bake that converts a CPU-form model into the driver's device block - the encoder's and the decoder's pieces in the
+//! encoder tower's one block
+typedef WhisperServesLaneFn = function<(q8 : bool) : bool>
+typedef WhisperBakeFn = function<(w : WhisperModel; var b : TowerDevBuild) : bool>
+
+struct WhisperFlavor {
+    backend : TowerDev
+    serves : WhisperServesLaneFn
+    bake : WhisperBakeFn
+}
+
+var private g_wh_flavor = WhisperFlavor()
+let private WHISPER_DEV_CONSUMED <- ["enc.qblob", "enc.qscales", "dqblob", "dqscales"]   //! the planes a whisper bake converts
+let WHISPER_DEV_CHUNK = 8l   //! the rows a GPU-flavored model's decode hands the device seat at once: every home's step cap covers it
+
+def register_whisper_flavor(backend : TowerDev; serves : WhisperServesLaneFn; bake : WhisperBakeFn) {
+    g_wh_flavor = WhisperFlavor(backend = backend, serves = serves, bake = bake)
 }
 
 // One tensor's place in a destination blob — the SAME list drives staged reader and streamed mint.
@@ -685,7 +713,7 @@ def private stream_whisper_model(path : string; enc_q8, dec_q8 : bool; img, tag 
             whisper_dec_compact_offsets(st.e)
         }
         // no selected backend = flat Q8_0 image, same repack gate the eager quantizers take
-        let bk = select_matmul_backend_for_load_()
+        let bk = tower_repack_backend()
         let rep_enc = enc_q8 && bk
         let rep_dec = dec_q8 && bk
         let enc_twin = !enc_q8 && wenc_gemm_all_f16(recs, encJobs)
@@ -1062,6 +1090,7 @@ def whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_out : array<fl
         ds.n_past = 0l
         return
     }
+    tower_cpu_refuse(w.enc, "dasLLAMA whisper", "cross-attention memory")
     let d = w.n_text_state
     let hh = w.n_text_head
     let hs = d / hh
@@ -1304,10 +1333,23 @@ def whisper_decode_batch(w : WhisperModel; var ds : DecoderState; tokens : array
     if (p0 + n > tmax) {
         panic("whisper_decode_batch: {p0}+{n} tokens exceed n_text_ctx {tmax}")
     }
+    if (w.enc.dev_backend != TowerDev.none && n > WHISPER_DEV_CHUNK) {   // a long first batch rides the device a chunk at a time: the last row's logits are the batch's
+        var c = 0l
+        while (c < n) {
+            let m = min(WHISPER_DEV_CHUNK, n - c)
+            if (!g_wh_decode_gpu_set || !invoke(g_wh_decode_gpu, w, ds, unsafe(addr(tokens[c])), m)) {
+                tower_cpu_refuse(w.enc, "dasLLAMA whisper", "decode")
+            }
+            ds.n_past += m
+            c += m
+        }
+        return
+    }
     if (g_wh_decode_gpu_set && empty(g_audio_ref_dir) && invoke(g_wh_decode_gpu, w, ds, unsafe(addr(tokens[0])), n)) {
         ds.n_past += n
         return
     }
+    tower_cpu_refuse(w.enc, "dasLLAMA whisper", "decode")
 
     whisper_embed_rows(w, unsafe(addr(tokens[0])), n, p0, unsafe(addr(ds.x[0])))
 
