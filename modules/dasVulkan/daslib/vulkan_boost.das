@@ -166,9 +166,7 @@ def public create_instance(application_name : string; api_version : uint; extens
     ci.pApplicationInfo = unsafe(addr(ai))
     var exts <- [for (e in extensions); e]
     if (instance_extension_available("VK_KHR_portability_enumeration")) {
-        if (find_index(exts, "VK_KHR_portability_enumeration") < 0) {
-            exts |> push("VK_KHR_portability_enumeration")
-        }
+        push_extension_once(exts, "VK_KHR_portability_enumeration")
         ci.flags.enumerate_portability_khr = true
     }
     // array<string> is contiguous `const char*` pointers == const char* const* (what
@@ -209,9 +207,8 @@ def public probe_device(application_name : string; api_version : uint; blk : blo
 
 [arch(at="../ARCHITECTURE.md#portability-subset")]
 def private append_portability_subset(phys : VkPhysicalDevice; var exts : array<string>) {
-    if (device_extension_available(phys, "VK_KHR_portability_subset") &&
-            find_index(exts, "VK_KHR_portability_subset") < 0) {
-        exts |> push("VK_KHR_portability_subset")
+    if (device_extension_available(phys, "VK_KHR_portability_subset")) {
+        push_extension_once(exts, "VK_KHR_portability_subset")
     }
 }
 
@@ -227,6 +224,34 @@ def private query_core_features(phys : VkPhysicalDevice; minor : uint; var feat 
     q2.pNext = unsafe(addr<void?>(feat))
     vkGetPhysicalDeviceFeatures2(phys, q2)
     return true
+}
+
+//! Fills `props` through a ``VkPhysicalDeviceProperties2`` pNext
+//! chain - the properties twin of `query_extension_features`.
+def private query_properties2(phys : VkPhysicalDevice; var props : auto(TT)) {
+    var p2 = VkPhysicalDeviceProperties2()
+    p2.pNext = unsafe(addr<void?>(props))
+    vkGetPhysicalDeviceProperties2(phys, p2)
+}
+
+//! Appends the extension `name` to `exts` unless already listed.
+def private push_extension_once(var exts : array<string>; name : string) {
+    if (find_index(exts, name) < 0) {
+        exts |> push(name)
+    }
+}
+
+//! Creates the device from the pNext chain at `head` after hanging
+//! the dynamic-rendering pair behind `tail`, the chain's last block,
+//! when the device reports it; for a chain ending in a fixed block.
+def private create_device_chain_tail(phys : VkPhysicalDevice; queue_family : uint;
+                                     extensions : array<string>; head : void?;
+                                     var tail : auto(TT)) : Device {
+    var f13 : VkPhysicalDeviceVulkan13Features
+    if (request_dynamic_rendering(phys, f13)) {
+        tail.pNext = unsafe(addr<void?>(f13))
+    }
+    return <- create_device_chain(phys, [queue_family], extensions, null, head)
 }
 
 [arch(at="../ARCHITECTURE_RENDERING.md#dynamic-rendering")]
@@ -378,14 +403,12 @@ def public host_copy_layout(phys : VkPhysicalDevice; wanted : VkImageLayout) : V
         panic("host_copy_layout: needs a 1.4 instance and device reporting pushDescriptor / hostImageCopy / dynamicRenderingLocalRead - check vulkan14_supported(phys) first")
     }
     var hic = VkPhysicalDeviceHostImageCopyProperties()
-    var p2 = VkPhysicalDeviceProperties2()
-    p2.pNext = unsafe(addr<void?>(hic))
-    vkGetPhysicalDeviceProperties2(phys, p2)
+    query_properties2(phys, hic)
     var dst : array<VkImageLayout>
     dst |> resize(int(hic.copyDstLayoutCount))
     if (!empty(dst)) {
         hic.pCopyDstLayouts = unsafe(addr(dst[0]))
-        vkGetPhysicalDeviceProperties2(phys, p2)
+        query_properties2(phys, hic)
     }
     let found = find_index(dst, wanted) >= 0
     delete dst
@@ -411,19 +434,16 @@ def public upload_image_from_host(device : Device; image : Image; pixels : array
     var trs : array<HostImageLayoutTransitionInfo>
     trs |> emplace(tr)
     transition_image_layout(device, trs)
-    var region = VkMemoryToImageCopy()
+    var region : MemoryToImageCopy
     region.pHostPointer = unsafe(addr<void?>(pixels[0]))
     region.imageSubresource.aspectMask.color = true
     region.imageSubresource.layerCount = 1u
     region.imageExtent.width = uint(width)
     region.imageExtent.height = uint(height)
     region.imageExtent.depth = 1u
-    var info = VkCopyMemoryToImageInfo()
-    info.dstImage = boost_value_to_vk(image)
-    info.dstImageLayout = layout
-    info.regionCount = 1u
-    info.pRegions = unsafe(addr(region))
-    vk_check(vkCopyMemoryToImage(boost_value_to_vk(device), info), null)
+    var info = CopyMemoryToImageInfo(dstImage = weak_copy(image), dstImageLayout = layout)
+    info.pRegions |> emplace(region)
+    copy_memory_to_image(device, info)
     delete trs
 }
 
@@ -458,6 +478,7 @@ def public device_queue_count(phys : VkPhysicalDevice;
 def private create_device_chain(phys : VkPhysicalDevice; queue_families : array<uint>; extensions : array<string>;
                                 var base_features : VkPhysicalDeviceFeatures?; next : void?) : Device {
     g_latest_device_from_create_device_vulkan14 = false
+    g_latest_device_has_descriptor_heap = false
     var inscope prios : array<float>
     prios |> resize(int(g_device_queue_ask))
     for (p in prios) {
@@ -539,9 +560,7 @@ def public create_device_shader_object(phys : VkPhysicalDevice; queue_family : u
         panic("create_device_shader_object: the instance or the device is below 1.3, or the device lacks VK_EXT_shader_object / shaderObject / dynamicRendering + synchronization2 - check shader_object_supported(phys) first")
     }
     var exts := extensions
-    if (find_index(exts, "VK_EXT_shader_object") < 0) {
-        exts |> push("VK_EXT_shader_object")
-    }
+    push_extension_once(exts, "VK_EXT_shader_object")
     var sof : VkPhysicalDeviceShaderObjectFeaturesEXT
     sof.shaderObject = 1u
     return <- create_device_head(phys, queue_family, exts, sof, VkStructureType.PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT, true)
@@ -550,6 +569,212 @@ def public create_device_shader_object(phys : VkPhysicalDevice; queue_family : u
 def public create_device_shader_object(phys : VkPhysicalDevice; queue_family : uint) : Device {
     let no_ext : array<string>
     return <- create_device_shader_object(phys, queue_family, no_ext)
+}
+
+var private g_latest_device_has_descriptor_heap = false
+
+typedef DescriptorHeapProps = VkPhysicalDeviceDescriptorHeapPropertiesEXT
+typedef ResourceHeapLayout = tuple<reserved : uint64; first : uint64; size : uint64>
+typedef HeapMappings = array<DescriptorSetAndBindingMappingEXT>
+
+//! Whether the effective API - the lower of the instance's and
+//! `phys`'s - is below 1.4, where descriptor heaps need maintenance5.
+def private descriptor_heap_needs_maintenance5(phys : VkPhysicalDevice) : bool {
+    var props : VkPhysicalDeviceProperties
+    vkGetPhysicalDeviceProperties(phys, props)
+    let v14 = make_api_version(1u, 4u, 0u)
+    return g_instance_api_version < v14 || props.apiVersion < v14
+}
+
+def public descriptor_heap_supported(phys : VkPhysicalDevice) : bool {
+    //! True when instance and `phys` are both 1.3+ and `phys` reports
+    //! ``descriptorHeap``, ``shaderUntypedPointers``, buffer device
+    //! address and, below 1.4, ``maintenance5`` - the heap creator's set.
+    var q13 = VkPhysicalDeviceVulkan13Features()
+    if (g_instance_api_version < make_api_version(1u, 3u, 0u)
+            || !query_core_features(phys, 3u, q13)) {
+        return false
+    }
+    var dhf = VkPhysicalDeviceDescriptorHeapFeaturesEXT()
+    var upf = VkPhysicalDeviceShaderUntypedPointersFeaturesKHR()
+    var q12 = VkPhysicalDeviceVulkan12Features()
+    if (!(query_extension_features(phys, "VK_EXT_descriptor_heap", dhf) && dhf.descriptorHeap != 0u
+            && query_extension_features(phys, "VK_KHR_shader_untyped_pointers", upf)
+            && upf.shaderUntypedPointers != 0u
+            && query_core_features(phys, 2u, q12) && q12.bufferDeviceAddress != 0u)) {
+        return false
+    }
+    return true if (!descriptor_heap_needs_maintenance5(phys))
+    var m5f = VkPhysicalDeviceMaintenance5Features()
+    return query_extension_features(phys, "VK_KHR_maintenance5", m5f) && m5f.maintenance5 != 0u
+}
+
+def public descriptor_heap_properties(phys : VkPhysicalDevice) : DescriptorHeapProps {
+    //! The device's heap limits from ``vkGetPhysicalDeviceProperties2``:
+    //! descriptor sizes, alignments, reserved-range minimums, heap caps.
+    //! Panics unless `phys` advertises the extension (limits read 0).
+    if (!device_extension_available(phys, "VK_EXT_descriptor_heap")) {
+        panic("descriptor_heap_properties: the device does not advertise VK_EXT_descriptor_heap"
+            + " - check descriptor_heap_supported(phys) first")
+    }
+    var dhp = VkPhysicalDeviceDescriptorHeapPropertiesEXT()
+    query_properties2(phys, dhp)
+    return dhp
+}
+
+def public create_device_descriptor_heap(phys : VkPhysicalDevice; queue_family : uint;
+                                         extensions : array<string>) : Device {
+    //! A device with ``VK_EXT_descriptor_heap`` on: it, untyped pointers
+    //! and, below 1.4, maintenance5 added to `extensions` with their
+    //! features; dynamic rendering and executable info when reported.
+    if (!descriptor_heap_supported(phys)) {
+        panic("create_device_descriptor_heap: the instance or device is below 1.3, or the device"
+            + " lacks VK_EXT_descriptor_heap / VK_KHR_shader_untyped_pointers / bufferDeviceAddress"
+            + " / VK_KHR_maintenance5 below 1.4 - check descriptor_heap_supported(phys) first")
+    }
+    let with_m5 = descriptor_heap_needs_maintenance5(phys)
+    let with_exec_props = pipeline_exec_props_supported(phys)
+    var exts := extensions
+    push_extension_once(exts, "VK_EXT_descriptor_heap")
+    push_extension_once(exts, "VK_KHR_shader_untyped_pointers")
+    if (with_m5) {
+        push_extension_once(exts, "VK_KHR_maintenance5")
+    }
+    if (with_exec_props) {
+        push_extension_once(exts, "VK_KHR_pipeline_executable_properties")
+    }
+    var dhf = VkPhysicalDeviceDescriptorHeapFeaturesEXT()
+    dhf.descriptorHeap = 1u
+    var m5f = VkPhysicalDeviceMaintenance5Features()
+    m5f.maintenance5 = 1u
+    var fpe = VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR()
+    fpe.pipelineExecutableInfo = 1u
+    var upf = VkPhysicalDeviceShaderUntypedPointersFeaturesKHR()
+    upf.shaderUntypedPointers = 1u
+    var f12 = VkPhysicalDeviceVulkan12Features()
+    f12.bufferDeviceAddress = 1u
+    unsafe {
+        let after_optional = with_exec_props ? addr<void?>(fpe) : addr<void?>(upf)
+        dhf.pNext = with_m5 ? addr<void?>(m5f) : after_optional
+        m5f.pNext = after_optional
+        fpe.pNext = addr<void?>(upf)
+        upf.pNext = addr<void?>(f12)
+    }
+    var dev <- create_device_chain_tail(phys, queue_family, exts, unsafe(addr<void?>(dhf)), f12)
+    g_latest_device_has_descriptor_heap = true
+    return <- dev
+}
+
+def public create_device_descriptor_heap(phys : VkPhysicalDevice; queue_family : uint) : Device {
+    let no_ext : array<string>
+    return <- create_device_descriptor_heap(phys, queue_family, no_ext)
+}
+
+//! A resource descriptor heap: one host-visible, device-addressable
+//! buffer whose first `reserved_size` bytes the driver owns and whose
+//! `capacity` buffer descriptors start at `first_descriptor_offset`.
+struct public ResourceHeap {
+    buffer : AddressBuffer
+    reserved_size : uint64
+    first_descriptor_offset : uint64
+    descriptor_size : uint64
+    capacity : int
+}
+
+[arch(at="../ARCHITECTURE.md#ownership")]
+def public finalize(var rh : ResourceHeap) {
+    delete rh.buffer
+}
+
+def public resource_heap_layout(props : DescriptorHeapProps;
+                                descriptor_count : int) : ResourceHeapLayout {
+    //! The byte layout `create_resource_heap` gives `descriptor_count`
+    //! buffer descriptors: reserved range at 0, first descriptor at the
+    //! next alignment, size rounded to the heap alignment, under its cap.
+    if (descriptor_count < 0 || props.bufferDescriptorSize == 0ul) {
+        panic("resource_heap_layout: {descriptor_count} descriptors of {props.bufferDescriptorSize}"
+            + " bytes - a negative count, or props from a device without VK_EXT_descriptor_heap")
+    }
+    let reserved = props.minResourceHeapReservedRange
+    let first = align_up(reserved, props.bufferDescriptorAlignment)
+    let bytes = first + uint64(descriptor_count) * props.bufferDescriptorSize
+    let size = align_up(bytes, props.resourceHeapAlignment)
+    if (size > props.maxResourceHeapSize) {
+        panic("resource_heap_layout: {descriptor_count} descriptors need a {size}-byte heap,"
+            + " past maxResourceHeapSize {props.maxResourceHeapSize}")
+    }
+    return (reserved = reserved, first = first, size = size)
+}
+
+def public create_resource_heap(device : Device; phys : VkPhysicalDevice;
+                                descriptor_count : int) : ResourceHeap {
+    //! A `ResourceHeap` for `descriptor_count` buffer descriptors, laid
+    //! out by `resource_heap_layout` on host-visible, coherent memory.
+    //! Panics unless the latest device came from the heap creator.
+    if (!g_latest_device_has_descriptor_heap) {
+        panic("create_resource_heap: the most recently created device did not come from"
+            + " create_device_descriptor_heap, so the heap commands are not available")
+    }
+    let props = descriptor_heap_properties(phys)
+    let lay = resource_heap_layout(props, descriptor_count)
+    var usage : VkBufferUsageFlags
+    usage.descriptor_heap_ext = true
+    var rh = ResourceHeap(buffer <- create_address_buffer(device, phys, lay.size, usage, true),
+        reserved_size = lay.reserved, first_descriptor_offset = lay.first,
+        descriptor_size = props.bufferDescriptorSize, capacity = descriptor_count)
+    return <- rh
+}
+
+def public bind_info(rh : ResourceHeap) : BindHeapInfoEXT {
+    //! The ``VkBindHeapInfoEXT`` binding `rh` whole, reserved range at 0.
+    var bi : BindHeapInfoEXT
+    bi.heapRange.address = rh.buffer.address
+    bi.heapRange.size = rh.buffer.size
+    bi.reservedRangeOffset = 0ul
+    bi.reservedRangeSize = rh.reserved_size
+    return bi
+}
+
+def public descriptor_offset(rh : ResourceHeap; slot : int) : uint {
+    //! The heap byte offset of buffer descriptor `slot` - a mapping's
+    //! ``heapOffset``. Panics outside ``[0, capacity)``: below lies the
+    //! driver's reserved range.
+    if (slot < 0 || slot >= rh.capacity) {
+        panic("descriptor_offset: slot {slot} outside the heap's {rh.capacity} descriptors")
+    }
+    return uint(rh.first_descriptor_offset + uint64(slot) * rh.descriptor_size)
+}
+
+def public descriptor_host_range(rh : ResourceHeap; mapped : void?;
+                                 slot : int) : HostAddressRangeEXT {
+    //! The host range of buffer descriptor `slot` inside `mapped`, the
+    //! heap mapped at offset 0 - one ``pDescriptors`` element for the
+    //! resource-descriptor write. Valid only while the mapping is.
+    var r : HostAddressRangeEXT
+    unsafe {
+        let base = reinterpret<uint64>(mapped)
+        r.address = reinterpret<void?>(base + uint64(descriptor_offset(rh, slot)))
+    }
+    r.size = rh.descriptor_size
+    return r
+}
+
+def public map_bindings_to_heap(descriptor_set : uint; first_binding : uint; binding_count : uint;
+                                heap_offset : uint;
+                                heap_array_stride : uint) : DescriptorSetAndBindingMappingEXT {
+    //! A ``HEAP_WITH_CONSTANT_OFFSET`` mapping for the uniform and
+    //! storage BUFFER bindings from `first_binding`: heap byte
+    //! `heap_offset`, then `heap_array_stride` per binding or element.
+    var mask : VkSpirvResourceTypeFlagsEXT
+    mask.uniform_buffer_ext = true
+    mask.read_only_storage_buffer_ext = true
+    mask.read_write_storage_buffer_ext = true
+    var m = DescriptorSetAndBindingMappingEXT(descriptorSet = descriptor_set,
+        firstBinding = first_binding, bindingCount = binding_count, resourceMask = mask,
+        source = VkDescriptorMappingSourceEXT.HEAP_WITH_CONSTANT_OFFSET_EXT)
+    m.sourceData.constantOffset.heapOffset = heap_offset
+    m.sourceData.constantOffset.heapArrayStride = heap_array_stride
+    return m
 }
 
 def public create_device(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>) : Device {
@@ -713,9 +938,7 @@ let private OSVM_ADAPTER_SHARED = 3
 [arch(at="../ARCHITECTURE.md#os-video-memory")]
 def public os_video_memory(phys : VkPhysicalDevice) : tuple<budget : uint64; usage : uint64; adapter_dedicated : uint64; adapter_shared : uint64> {
     var idp = VkPhysicalDeviceIDProperties()
-    var p2 = VkPhysicalDeviceProperties2()
-    p2.pNext = unsafe(addr<void?>(idp))
-    vkGetPhysicalDeviceProperties2(phys, p2)
+    query_properties2(phys, idp)
     if (idp.deviceLUIDValid == 0u) {
         return (budget = 0ul, usage = 0ul, adapter_dedicated = 0ul, adapter_shared = 0ul)
     }
@@ -772,9 +995,7 @@ def public create_device_coopmat_full_subgroups(phys : VkPhysicalDevice; queue_f
 //! AMD, 8 on lavapipe), the stages subgroup ops work in, and the supported operation classes.
 def public subgroup_properties(phys : VkPhysicalDevice) : VkPhysicalDeviceSubgroupProperties {
     var sp = VkPhysicalDeviceSubgroupProperties()
-    var p2 = VkPhysicalDeviceProperties2()
-    p2.pNext = unsafe(addr<void?>(sp))
-    vkGetPhysicalDeviceProperties2(phys, p2)
+    query_properties2(phys, sp)
     return sp
 }
 
@@ -991,9 +1212,7 @@ def public cooperative_matrix2_decode_vector_supported(phys : VkPhysicalDevice) 
 //! shared memory the driver reserves for workgroup-scope staging (subtract from the 48KB budget).
 def public cooperative_matrix2_properties(phys : VkPhysicalDevice) : VkPhysicalDeviceCooperativeMatrix2PropertiesNV {
     var cp = VkPhysicalDeviceCooperativeMatrix2PropertiesNV()
-    var p2 = VkPhysicalDeviceProperties2()
-    p2.pNext = unsafe(addr<void?>(cp))
-    vkGetPhysicalDeviceProperties2(phys, p2)
+    query_properties2(phys, cp)
     return cp
 }
 
@@ -1203,9 +1422,7 @@ def public external_memory_host_min_alignment(phys : VkPhysicalDevice) : uint64 
         return 0ul
     }
     var emh = VkPhysicalDeviceExternalMemoryHostPropertiesEXT()
-    var p2 = VkPhysicalDeviceProperties2()
-    p2.pNext = unsafe(addr<void?>(emh))
-    vkGetPhysicalDeviceProperties2(phys, p2)
+    query_properties2(phys, emh)
     return emh.minImportedHostPointerAlignment
 }
 
@@ -1309,17 +1526,14 @@ def public create_device_ray_tracing(phys : VkPhysicalDevice; queue_family : uin
     asf.accelerationStructure = 1u
     var rtf = VkPhysicalDeviceRayTracingPipelineFeaturesKHR()
     rtf.rayTracingPipeline = 1u
-    var f13 : VkPhysicalDeviceVulkan13Features
     unsafe {
         f12.pNext = addr<void?>(asf)
         asf.pNext = addr<void?>(rtf)
-        if (request_dynamic_rendering(phys, f13)) {
-            rtf.pNext = addr<void?>(f13)
-        }
     }
     var extensions <- ["VK_KHR_acceleration_structure", "VK_KHR_ray_tracing_pipeline", "VK_KHR_deferred_host_operations"]
     extensions |> push_from(extra_extensions)
-    return <- create_device_chain(phys, [queue_family], extensions, null, unsafe(addr<void?>(f12)))
+    let head = unsafe(addr<void?>(f12))
+    return <- create_device_chain_tail(phys, queue_family, extensions, head, rtf)
 }
 
 def public get_device_queue(device : Device; queue_family, index : uint) : VkQueue {
@@ -1942,6 +2156,29 @@ def public pipeline_capture : bool => g_pipeline_capture
 def private build_compute_pipeline(device : Device; layout : PipelineLayout; shader : ShaderModule;
                                    entry : string; full : bool; subgroup : uint;
                                    spec : array<SpecConstantValue>) : Pipeline {
+    let no_mappings : array<DescriptorSetAndBindingMappingEXT>
+    return <- build_compute_pipeline(device, layout, shader, entry, full, subgroup, spec,
+        no_mappings)
+}
+
+//! the builder's full form: a non-empty ``mappings`` makes a
+//! descriptor-heap pipeline - ``DESCRIPTOR_HEAP`` through flags2
+//! (carrying the capture bits), no layout, mappings on the stage
+def private build_compute_pipeline(device : Device; layout : PipelineLayout; shader : ShaderModule;
+                                   entry : string; full : bool; subgroup : uint;
+                                   spec : array<SpecConstantValue>;
+                                   mappings : array<DescriptorSetAndBindingMappingEXT>) : Pipeline {
+    let heap = !empty(mappings)
+    if (heap && !g_latest_device_has_descriptor_heap) {
+        panic("create_compute_pipeline_descriptor_heap: the most recently created device did not"
+            + " come from create_device_descriptor_heap, so a heap pipeline cannot be created")
+    }
+    var map_info : ShaderDescriptorSetAndBindingMappingInfoEXT
+    var vk_map : VkShaderDescriptorSetAndBindingMappingInfoEXT
+    var flags2 = VkPipelineCreateFlags2CreateInfo()
+    flags2.flags.descriptor_heap_ext = true
+    flags2.flags.capture_statistics_khr = g_pipeline_capture
+    flags2.flags.capture_internal_representations_khr = g_pipeline_capture
     var entries : array<VkSpecializationMapEntry>
     var data : array<uint>
     entries |> reserve(length(spec))
@@ -1978,8 +2215,19 @@ def private build_compute_pipeline(device : Device; layout : PipelineLayout; sha
         if (subgroup != 0u) {
             stage.pNext = addr<void?>(rss)
         }
+        if (heap) {
+            map_info.pMappings := mappings
+            map_info.next = stage.pNext
+            vk_map = vk_view_create_unsafe(map_info)
+            stage.pNext = addr<void?>(vk_map)
+            cp.pNext = addr<void?>(flags2)
+            cp.layout = null
+        }
         cp.stage = stage
         vk_check(vkCreateComputePipelines(boost_value_to_vk(device), null, 1u, addr(cp), null, addr(h)), null)
+    }
+    if (heap) {
+        vk_view_destroy(map_info)
     }
     delete entries
     delete data
@@ -1994,6 +2242,18 @@ def private build_compute_pipeline(device : Device; layout : PipelineLayout; sha
 def public create_compute_pipeline(device : Device; layout : PipelineLayout; shader : ShaderModule; entry : string = "main") : Pipeline {
     let no_spec : array<SpecConstantValue>
     return <- build_compute_pipeline(device, layout, shader, entry, false, 0u, no_spec)
+}
+
+def public create_compute_pipeline_descriptor_heap(device : Device; shader : ShaderModule;
+                                                   mappings : HeapMappings;
+                                                   entry : string = "main") : Pipeline {
+    //! A compute pipeline reading its resources from the bound
+    //! descriptor heap: ``DESCRIPTOR_HEAP`` set, no layout, `mappings` on
+    //! the stage, so a set/binding shader runs as is. Heap device only.
+    assert(!empty(mappings), "create_compute_pipeline_descriptor_heap: needs at least one mapping")
+    let no_layout : PipelineLayout
+    let no_spec : array<SpecConstantValue>
+    return <- build_compute_pipeline(device, no_layout, shader, entry, false, 0u, no_spec, mappings)
 }
 
 [arch(at="../ARCHITECTURE_DEVICE_FEATURES.md#subgroup-pair")]
@@ -2021,9 +2281,7 @@ def public subgroup_size_control_range(phys : VkPhysicalDevice) : SubgroupPinRan
         return (lo = 0u, hi = 0u, compute = false)
     }
     var sp = VkPhysicalDeviceSubgroupSizeControlProperties()
-    var p2 = VkPhysicalDeviceProperties2()
-    p2.pNext = unsafe(addr<void?>(sp))
-    vkGetPhysicalDeviceProperties2(phys, p2)
+    query_properties2(phys, sp)
     return (lo = sp.minSubgroupSize, hi = sp.maxSubgroupSize,
         compute = sp.requiredSubgroupSizeStages.compute)
 }
@@ -3029,9 +3287,7 @@ def public upload_bytes(buf : AddressBuffer; device : Device; var data : array<a
 //! SBT layout needs) via the ``vkGetPhysicalDeviceProperties2`` pNext chain.
 def public get_ray_tracing_properties(phys : VkPhysicalDevice) : VkPhysicalDeviceRayTracingPipelinePropertiesKHR {
     var rtp = VkPhysicalDeviceRayTracingPipelinePropertiesKHR()
-    var p2 = VkPhysicalDeviceProperties2()
-    p2.pNext = unsafe(addr<void?>(rtp))
-    vkGetPhysicalDeviceProperties2(phys, p2)
+    query_properties2(phys, rtp)
     rtp.pNext = null   // don't leak the dangling chain pointer to the caller
     return rtp
 }

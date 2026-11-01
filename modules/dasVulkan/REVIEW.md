@@ -13,9 +13,22 @@ function annotated `[spirv_kernel]`, `[metal_kernel]`, or with an annotation who
 
 **A diff that adds a feature bit or a device extension that a `create_device*` creator in
 `daslib/vulkan_boost.das` always enables adds it, in the same change, to that creator's
-`*_supported` probe, together with every feature, extension and API version the addition requires;
-a creator with no probe gets one in that change.** A bit or extension the probe misses either
+`*_supported` probe, with every feature and extension the creator enables because of it; a
+creator with no probe gets one in that change.** A bit or extension the probe misses either
 fails `vkCreateDevice` or lets a kernel use a feature the device never enabled.
+
+**A diff that adds to a `create_device*` creator a feature bit from a
+`VkPhysicalDeviceVulkan1NFeatures` struct, or meets an extension's dependency with core version
+1.N instead of the extension, has that creator's `*_supported` probe check API version 1.N
+against both the version the instance was created with and the device's `apiVersion`.** A
+device-only check answers true under an instance the struct is invalid for.
+
+**A diff that adds a device extension to a `create_device*` creator in `daslib/vulkan_boost.das`
+meets the added extension's `depends` expression in `vendor/Vulkan-Headers/registry/vk.xml` (`,`
+is or, `+` is and) at every API version the creator runs on - its probe's minimum (1.0 when the
+probe checks none) and above - with extensions the creator enables or a core version its probe
+checks.** An unmet dependency makes the `vkCreateDevice` call invalid, even on a driver that
+accepts it.
 
 **A diff that adds a feature bit or a device extension that a `create_device*` creator in
 `daslib/vulkan_boost.das` enables only when the device reports it gates what it adds - the

@@ -395,8 +395,9 @@ def cmd_bind_index_buffer(commandBuffer : CommandBuffer; buffer : Buffer; offset
 }
 
 def cmd_bind_vertex_buffers(commandBuffer : CommandBuffer; firstBinding : uint; pBuffers : array<Buffer>; var pOffsets : array<uint64>) {
+    assert(length(pOffsets) == length(pBuffers), "cmd_bind_vertex_buffers: pOffsets and pBuffers share bindingCount and must have the same length")
     var vkraw_pBuffers <- [for (h in pBuffers); boost_value_to_vk(h)]
-    vkCmdBindVertexBuffers(boost_value_to_vk(commandBuffer), firstBinding, uint(length(pOffsets)), array_addr(vkraw_pBuffers), array_addr(pOffsets))
+    vkCmdBindVertexBuffers(boost_value_to_vk(commandBuffer), firstBinding, uint(length(pBuffers)), array_addr(vkraw_pBuffers), array_addr(pOffsets))
     unsafe { delete vkraw_pBuffers }
 }
 
@@ -1125,13 +1126,14 @@ def get_physical_device_present_rectangles_k_h_r(physicalDevice : PhysicalDevice
 }
 
 def set_hdr_metadata_e_x_t(device : Device; pSwapchains : array<SwapchainKHR>; pMetadata : array<HdrMetadataEXT>) {
+    assert(length(pMetadata) == length(pSwapchains), "set_hdr_metadata_e_x_t: pMetadata and pSwapchains share swapchainCount and must have the same length")
     var vkraw_pSwapchains <- [for (h in pSwapchains); boost_value_to_vk(h)]
     var vkraw_pMetadata : array<VkHdrMetadataEXT>
     vkraw_pMetadata |> resize(length(pMetadata))
     for (vkv, vke in vkraw_pMetadata, pMetadata) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkSetHdrMetadataEXT(boost_value_to_vk(device), uint(length(pMetadata)), array_addr(vkraw_pSwapchains), array_addr(vkraw_pMetadata))
+    vkSetHdrMetadataEXT(boost_value_to_vk(device), uint(length(pSwapchains)), array_addr(vkraw_pSwapchains), array_addr(vkraw_pMetadata))
     unsafe { delete vkraw_pSwapchains }
     for (vkv in pMetadata) { vk_view_destroy(vkv) }
     delete vkraw_pMetadata
@@ -1506,20 +1508,21 @@ def get_queue_checkpoint_data_n_v(queue : Queue) : array<VkCheckpointDataNV> {
 }
 
 def cmd_bind_transform_feedback_buffers_e_x_t(commandBuffer : CommandBuffer; firstBinding : uint; pBuffers : array<Buffer>; var pOffsets : array<uint64>; var pSizes : array<uint64>) {
+    assert(length(pOffsets) == length(pBuffers), "cmd_bind_transform_feedback_buffers_e_x_t: pOffsets and pBuffers share bindingCount and must have the same length")
     var vkraw_pBuffers <- [for (h in pBuffers); boost_value_to_vk(h)]
-    vkCmdBindTransformFeedbackBuffersEXT(boost_value_to_vk(commandBuffer), firstBinding, uint(length(pSizes)), array_addr(vkraw_pBuffers), array_addr(pOffsets), array_addr(pSizes))
+    vkCmdBindTransformFeedbackBuffersEXT(boost_value_to_vk(commandBuffer), firstBinding, uint(length(pBuffers)), array_addr(vkraw_pBuffers), array_addr(pOffsets), array_addr(pSizes))
     unsafe { delete vkraw_pBuffers }
 }
 
 def cmd_begin_transform_feedback_e_x_t(commandBuffer : CommandBuffer; firstCounterBuffer : uint; pCounterBuffers : array<Buffer>; var pCounterBufferOffsets : array<uint64>) {
     var vkraw_pCounterBuffers <- [for (h in pCounterBuffers); boost_value_to_vk(h)]
-    vkCmdBeginTransformFeedbackEXT(boost_value_to_vk(commandBuffer), firstCounterBuffer, uint(length(pCounterBufferOffsets)), array_addr(vkraw_pCounterBuffers), array_addr(pCounterBufferOffsets))
+    vkCmdBeginTransformFeedbackEXT(boost_value_to_vk(commandBuffer), firstCounterBuffer, uint(length(pCounterBuffers)), array_addr(vkraw_pCounterBuffers), array_addr(pCounterBufferOffsets))
     unsafe { delete vkraw_pCounterBuffers }
 }
 
 def cmd_end_transform_feedback_e_x_t(commandBuffer : CommandBuffer; firstCounterBuffer : uint; pCounterBuffers : array<Buffer>; var pCounterBufferOffsets : array<uint64>) {
     var vkraw_pCounterBuffers <- [for (h in pCounterBuffers); boost_value_to_vk(h)]
-    vkCmdEndTransformFeedbackEXT(boost_value_to_vk(commandBuffer), firstCounterBuffer, uint(length(pCounterBufferOffsets)), array_addr(vkraw_pCounterBuffers), array_addr(pCounterBufferOffsets))
+    vkCmdEndTransformFeedbackEXT(boost_value_to_vk(commandBuffer), firstCounterBuffer, uint(length(pCounterBuffers)), array_addr(vkraw_pCounterBuffers), array_addr(pCounterBufferOffsets))
     unsafe { delete vkraw_pCounterBuffers }
 }
 
@@ -1811,6 +1814,12 @@ def get_physical_device_supported_framebuffer_mixed_samples_combinations_n_v(phy
     return <- vklist
 }
 
+def initialize_performance_api_i_n_t_e_l(device : Device; pInitializeInfo : InitializePerformanceApiInfoINTEL; var result : VkResult? = null) {
+    let vkview_pInitializeInfo = vk_view_create_unsafe(pInitializeInfo)
+    defer() { vk_view_destroy(pInitializeInfo) }
+    vk_check(vkInitializePerformanceApiINTEL(boost_value_to_vk(device), vkview_pInitializeInfo), result)
+}
+
 def uninitialize_performance_api_i_n_t_e_l(device : Device) {
     vkUninitializePerformanceApiINTEL(boost_value_to_vk(device))
 }
@@ -2038,8 +2047,9 @@ def cmd_bind_index_buffer2(commandBuffer : CommandBuffer; buffer : Buffer; offse
 }
 
 def cmd_bind_vertex_buffers2(commandBuffer : CommandBuffer; firstBinding : uint; pBuffers : array<Buffer>; var pOffsets : array<uint64>; var pSizes : array<uint64>; var pStrides : array<uint64>) {
+    assert(length(pOffsets) == length(pBuffers), "cmd_bind_vertex_buffers2: pOffsets and pBuffers share bindingCount and must have the same length")
     var vkraw_pBuffers <- [for (h in pBuffers); boost_value_to_vk(h)]
-    vkCmdBindVertexBuffers2(boost_value_to_vk(commandBuffer), firstBinding, uint(length(pStrides)), array_addr(vkraw_pBuffers), array_addr(pOffsets), array_addr(pSizes), array_addr(pStrides))
+    vkCmdBindVertexBuffers2(boost_value_to_vk(commandBuffer), firstBinding, uint(length(pBuffers)), array_addr(vkraw_pBuffers), array_addr(pOffsets), array_addr(pSizes), array_addr(pStrides))
     unsafe { delete vkraw_pBuffers }
 }
 
@@ -2325,13 +2335,14 @@ def cmd_reset_event2(commandBuffer : CommandBuffer; event : Event; stageMask : V
 }
 
 def cmd_wait_events2(commandBuffer : CommandBuffer; pEvents : array<Event>; var pDependencyInfos : array<DependencyInfo>) {
+    assert(length(pDependencyInfos) == length(pEvents), "cmd_wait_events2: pDependencyInfos and pEvents share eventCount and must have the same length")
     var vkraw_pEvents <- [for (h in pEvents); boost_value_to_vk(h)]
     var vkraw_pDependencyInfos : array<VkDependencyInfo>
     vkraw_pDependencyInfos |> resize(length(pDependencyInfos))
     for (vkv, vke in vkraw_pDependencyInfos, pDependencyInfos) {
         vkv = vk_view_create_unsafe(vke)
     }
-    vkCmdWaitEvents2(boost_value_to_vk(commandBuffer), uint(length(pDependencyInfos)), array_addr(vkraw_pEvents), array_addr(vkraw_pDependencyInfos))
+    vkCmdWaitEvents2(boost_value_to_vk(commandBuffer), uint(length(pEvents)), array_addr(vkraw_pEvents), array_addr(vkraw_pDependencyInfos))
     unsafe { delete vkraw_pEvents }
     for (vkv in pDependencyInfos) { vk_view_destroy(vkv) }
     delete vkraw_pDependencyInfos
@@ -2374,6 +2385,18 @@ def get_queue_checkpoint_data2_n_v(queue : Queue) : array<VkCheckpointData2NV> {
         vkGetQueueCheckpointData2NV(boost_value_to_vk(queue), vkcount, unsafe(addr(vklist[0])))
     }
     return <- vklist
+}
+
+def copy_memory_to_image(device : Device; var pCopyMemoryToImageInfo : CopyMemoryToImageInfo; var result : VkResult? = null) {
+    let vkview_pCopyMemoryToImageInfo = vk_view_create_unsafe(pCopyMemoryToImageInfo)
+    defer() { vk_view_destroy(pCopyMemoryToImageInfo) }
+    vk_check(vkCopyMemoryToImage(boost_value_to_vk(device), vkview_pCopyMemoryToImageInfo), result)
+}
+
+def copy_image_to_memory(device : Device; var pCopyImageToMemoryInfo : CopyImageToMemoryInfo; var result : VkResult? = null) {
+    let vkview_pCopyImageToMemoryInfo = vk_view_create_unsafe(pCopyImageToMemoryInfo)
+    defer() { vk_view_destroy(pCopyImageToMemoryInfo) }
+    vk_check(vkCopyImageToMemory(boost_value_to_vk(device), vkview_pCopyImageToMemoryInfo), result)
 }
 
 def copy_image_to_image(device : Device; var pCopyImageToImageInfo : CopyImageToImageInfo; var result : VkResult? = null) {
@@ -2549,7 +2572,8 @@ def cmd_bind_descriptor_buffers_e_x_t(commandBuffer : CommandBuffer; pBindingInf
 }
 
 def cmd_set_descriptor_buffer_offsets_e_x_t(commandBuffer : CommandBuffer; pipelineBindPoint : VkPipelineBindPoint; layout : PipelineLayout; firstSet : uint; var pBufferIndices : array<uint>; var pOffsets : array<uint64>) {
-    vkCmdSetDescriptorBufferOffsetsEXT(boost_value_to_vk(commandBuffer), pipelineBindPoint, boost_value_to_vk(layout), firstSet, uint(length(pOffsets)), array_addr(pBufferIndices), array_addr(pOffsets))
+    assert(length(pOffsets) == length(pBufferIndices), "cmd_set_descriptor_buffer_offsets_e_x_t: pOffsets and pBufferIndices share setCount and must have the same length")
+    vkCmdSetDescriptorBufferOffsetsEXT(boost_value_to_vk(commandBuffer), pipelineBindPoint, boost_value_to_vk(layout), firstSet, uint(length(pBufferIndices)), array_addr(pBufferIndices), array_addr(pOffsets))
 }
 
 def cmd_bind_descriptor_buffer_embedded_samplers_e_x_t(commandBuffer : CommandBuffer; pipelineBindPoint : VkPipelineBindPoint; layout : PipelineLayout; set : uint) {
@@ -2896,6 +2920,12 @@ def cmd_push_descriptor_set2(commandBuffer : CommandBuffer; var pPushDescriptorS
     vkCmdPushDescriptorSet2(boost_value_to_vk(commandBuffer), vkview_pPushDescriptorSetInfo)
 }
 
+def cmd_push_descriptor_set_with_template2(commandBuffer : CommandBuffer; pPushDescriptorSetWithTemplateInfo : PushDescriptorSetWithTemplateInfo) {
+    let vkview_pPushDescriptorSetWithTemplateInfo = vk_view_create_unsafe(pPushDescriptorSetWithTemplateInfo)
+    defer() { vk_view_destroy(pPushDescriptorSetWithTemplateInfo) }
+    vkCmdPushDescriptorSetWithTemplate2(boost_value_to_vk(commandBuffer), vkview_pPushDescriptorSetWithTemplateInfo)
+}
+
 def cmd_set_descriptor_buffer_offsets2_e_x_t(commandBuffer : CommandBuffer; var pSetDescriptorBufferOffsetsInfo : SetDescriptorBufferOffsetsInfoEXT) {
     let vkview_pSetDescriptorBufferOffsetsInfo = vk_view_create_unsafe(pSetDescriptorBufferOffsetsInfo)
     defer() { vk_view_destroy(pSetDescriptorBufferOffsetsInfo) }
@@ -3169,6 +3199,56 @@ def cmd_set_compute_occupancy_priority_n_v(commandBuffer : CommandBuffer; pParam
     let vkview_pParameters = vk_view_create_unsafe(pParameters)
     defer() { vk_view_destroy(pParameters) }
     vkCmdSetComputeOccupancyPriorityNV(boost_value_to_vk(commandBuffer), vkview_pParameters)
+}
+
+def write_sampler_descriptors_e_x_t(device : Device; pSamplers : array<SamplerCreateInfo>; pDescriptors : array<HostAddressRangeEXT>; var result : VkResult? = null) {
+    assert(length(pDescriptors) == length(pSamplers), "write_sampler_descriptors_e_x_t: pDescriptors and pSamplers share samplerCount and must have the same length")
+    var vkraw_pSamplers : array<VkSamplerCreateInfo>
+    vkraw_pSamplers |> resize(length(pSamplers))
+    for (vkv, vke in vkraw_pSamplers, pSamplers) {
+        vkv = vk_view_create_unsafe(vke)
+    }
+    var vkraw_pDescriptors : array<VkHostAddressRangeEXT>
+    vkraw_pDescriptors |> resize(length(pDescriptors))
+    for (vkv, vke in vkraw_pDescriptors, pDescriptors) {
+        vkv = vk_view_create_unsafe(vke)
+    }
+    vk_check(vkWriteSamplerDescriptorsEXT(boost_value_to_vk(device), uint(length(pSamplers)), array_addr(vkraw_pSamplers), array_addr(vkraw_pDescriptors)), result)
+    for (vkv in pSamplers) { vk_view_destroy(vkv) }
+    delete vkraw_pSamplers
+    for (vkv in pDescriptors) { vk_view_destroy(vkv) }
+    delete vkraw_pDescriptors
+}
+
+def write_resource_descriptors_e_x_t(device : Device; pResources : array<ResourceDescriptorInfoEXT>; pDescriptors : array<HostAddressRangeEXT>; var result : VkResult? = null) {
+    assert(length(pDescriptors) == length(pResources), "write_resource_descriptors_e_x_t: pDescriptors and pResources share resourceCount and must have the same length")
+    var vkraw_pResources : array<VkResourceDescriptorInfoEXT>
+    vkraw_pResources |> resize(length(pResources))
+    for (vkv, vke in vkraw_pResources, pResources) {
+        vkv = vk_view_create_unsafe(vke)
+    }
+    var vkraw_pDescriptors : array<VkHostAddressRangeEXT>
+    vkraw_pDescriptors |> resize(length(pDescriptors))
+    for (vkv, vke in vkraw_pDescriptors, pDescriptors) {
+        vkv = vk_view_create_unsafe(vke)
+    }
+    vk_check(vkWriteResourceDescriptorsEXT(boost_value_to_vk(device), uint(length(pResources)), array_addr(vkraw_pResources), array_addr(vkraw_pDescriptors)), result)
+    for (vkv in pResources) { vk_view_destroy(vkv) }
+    delete vkraw_pResources
+    for (vkv in pDescriptors) { vk_view_destroy(vkv) }
+    delete vkraw_pDescriptors
+}
+
+def cmd_bind_sampler_heap_e_x_t(commandBuffer : CommandBuffer; pBindInfo : BindHeapInfoEXT) {
+    let vkview_pBindInfo = vk_view_create_unsafe(pBindInfo)
+    defer() { vk_view_destroy(pBindInfo) }
+    vkCmdBindSamplerHeapEXT(boost_value_to_vk(commandBuffer), vkview_pBindInfo)
+}
+
+def cmd_bind_resource_heap_e_x_t(commandBuffer : CommandBuffer; pBindInfo : BindHeapInfoEXT) {
+    let vkview_pBindInfo = vk_view_create_unsafe(pBindInfo)
+    defer() { vk_view_destroy(pBindInfo) }
+    vkCmdBindResourceHeapEXT(boost_value_to_vk(commandBuffer), vkview_pBindInfo)
 }
 
 def cmd_push_data_e_x_t(commandBuffer : CommandBuffer; pPushDataInfo : PushDataInfoEXT) {

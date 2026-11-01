@@ -39,12 +39,13 @@ tree - nothing to install*, so in-repo example `.das_package` manifests do not d
 `daslib/vulkan_*.das`. Both are committed, following the dasGlfw and dasSQLITE convention, so
 a checkout builds without running the generator.
 
-A full run also writes `generator/skip_report.txt`: every struct and command the emitter could
-not handle, with its reason, sorted. The committed copy is the golden baseline. CI regenerates
-into scratch directories and diffs the fresh report against it, so an emitter change that
-quietly grows the skip tail - dropping bound surface - turns the lane red. The generated
-sources themselves are not byte-diffed, because their churn is large and uninteresting; the
-skip tail is the part whose growth is a loss.
+A full run also writes `generator/skip_report.txt` - every struct and command the emitter could
+not handle, with its reason, sorted - and `generator/copyability_report.txt`, the boost structs
+a caller may not reuse by value because an array literal moves them. The committed copies are
+the golden baseline. CI (`generator/check_generated.cmake`) regenerates into a scratch directory
+and diffs both reports and every generated source against the committed files, so an emitter
+change that quietly grows the skip tail - dropping bound surface - or leaves stale output in
+the tree turns the lane red.
 
 The generated files are lint-clean by construction: the emitter writes conforming code, so a
 lint finding in one of them points at the emitter rather than at the file.
@@ -123,6 +124,21 @@ Two field kinds cannot go in that constructor and are assigned after it:
 Leading with a non-empty constructor is what keeps those residual assignments lint-clean:
 STYLE013 fires on field-by-field filling after an empty or default init, and not after a
 constructor that already initialized something.
+
+## Host-address fields {#host-address-fields}
+
+Every `void?` field other than `next` - `pHostPointer`, `pPlacedAddress`, a
+`HostAddressRangeEXT.address`, a `pUserData` - is a host address the caller owns: a mapped
+range, an imported allocation, an opaque blob handed back to the caller. The view copies the
+pointer, never the bytes, so whatever the pointer names stays the caller's to keep alive for as
+long as the driver may touch it. The generator emits that field for a bare `void*` member with
+no `len`, and for a non-const `void*` with a `len`: the caller sizes that range by hand, so the
+member the `len` names stays a plain settable field instead of a count derived from an array.
+A `const void*` with a byte-count `len` stays an `array<uint8>` the view copies.
+
+Two required arrays that share one count member are asserted equal in length by the view and
+by the command wrapper, which otherwise take the count from the first required array - a
+shorter second array would let the driver read past it.
 
 ## Count fields
 

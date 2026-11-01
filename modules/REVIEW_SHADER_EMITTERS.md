@@ -1,16 +1,18 @@
 # Shader Emitters Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `dasMetal/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE_COOPMAT.md`,
-`dasCUDA/ARCHITECTURE.md`, `dasCUDA/ARCHITECTURE_EMIT.md`. The emitters are `dasSpirv`'s (SPIR-V
-words), `dasMetal`'s (MSL text) and `dasCUDA`'s (CUDA C++ text); this list is the one copy, and
-the rules below refer to it. A kernel is a function carrying `[metal_kernel]`, `[spirv_kernel]`,
-`[cuda_kernel]`, or an annotation from `dasSpirv`, `dasVulkan` or `dasMetal` whose name ends in
-`_shader`. A global-rooted-array read is a read, in a kernel body or a `def` it calls, of a module
-global, a `@workgroup` array or a `self.<member>` resource; slack is an allocation past a region's
-end that the kernel's module-root `ARCHITECTURE*.md` names. A kernel-model capability is a
-construct a kernel body may use - an op, a type, an attribute, a memory class - that an emitter
-lowers. Emitted shape is the structure of the emitted kernel - its signature, its parameter
+docs: `dasMetal/ARCHITECTURE.md`, `dasMetal/ARCHITECTURE_PARITY.md`, `dasSpirv/ARCHITECTURE.md`,
+`dasSpirv/ARCHITECTURE_COOPMAT.md`, `dasCUDA/ARCHITECTURE.md`, `dasCUDA/ARCHITECTURE_EMIT.md`. The
+emitters are `dasSpirv`'s (SPIR-V words), `dasMetal`'s (MSL text) and `dasCUDA`'s (CUDA C++ text);
+this list is the one copy, and the rules below refer to it. A kernel is a function carrying
+`[metal_kernel]`, `[spirv_kernel]`, `[cuda_kernel]`, or an annotation from `dasSpirv`, `dasVulkan`
+or `dasMetal` whose name ends in `_shader`. A global-rooted-array access is a load or a store, in
+a kernel body or any `def` it reaches through a chain of calls, of an element of a module global,
+a `@workgroup` array or a `self.<member>` resource; slack is an allocation past a region's end
+that the kernel's module-root `ARCHITECTURE*.md` names. A kernel-model capability is a construct
+a kernel body may use - an op, a type, an attribute, a memory class - that an emitter lowers.
+Emitted shape is the
+structure of the emitted kernel - its signature, its parameter
 attributes and binding numbers, its statement forms - and the constants that structure carries: a
 tile, an unroll width, a SPIR-V kernel's local size (the `LocalSize` execution mode the SPIR-V
 words carry), a CUDA kernel's block size and `min_blocks` (the `__launch_bounds__` arguments the
@@ -92,16 +94,16 @@ instantiation of a template kernel) whose A operand is float.** A float operand 
 its native fast path, and `float_a_ok=true` turns the MSL emitter's refusal of a float `matmul2d` A
 operand off for every variant of the kernel.
 
-**A diff that adds a global-rooted-array read, changes its index, moves it out from under a guard
-that kept it inside its region, or moves it into a compiled variant it was not in, keeps its
-index inside the region - the elements the code that allocates the buffer sizes for that
+**A diff that adds a global-rooted-array access, changes its index, moves it out from under a
+guard that kept it inside its region, or moves it into a compiled variant it was not in, keeps
+its index inside the region - the elements the code that allocates the buffer sizes for that
 dispatch, not the dispatch's own bound - or inside slack.** A compiled variant is each stamp of a
-kernel; a template several emitters compile is a variant under each, so a read moved onto a
+kernel; a template several emitters compile is a variant under each, so an access moved onto a
 shared template enters every emitter's variants, and a removed gate or a widened gate constant
-moves a read into one. A guard on the read, a clamp into the region, a guard on the store of a
-block the read loads whole, or a `static_if` or `@template_gate` that compiles the read out of a
-variant satisfies the rule.
+moves an access into one. A guard on the access, a clamp into the region, a guard on the store
+of a block the access loads whole, or a `static_if` or `@template_gate` that compiles the access
+out of a variant satisfies the rule.
 
 **A diff that changes the bound a dispatch hands its kernel, or the size a buffer a
-global-rooted-array read indexes is allocated at, keeps every such read's index inside the region
-the allocation sizes for that dispatch, or inside slack.**
+global-rooted-array access indexes is allocated at, keeps every such access's index inside the
+region the allocation sizes for that dispatch, or inside slack.**

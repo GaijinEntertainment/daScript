@@ -273,11 +273,24 @@ the handoff is seamless, then destroys the old one after.
 
 ## The skipped command / struct tail
 
-The struct emitter skips ~182 composites and the command emitter ~124 commands -
-the irregular long tail: structs/commands whose params are flags-output, raw
+The raw emitter skips 125 structs and 8 commands, the boost emitter 24 more structs and 75
+commands - the irregular long tail: structs/commands whose params are flags-output, raw
 `PFN_*` function pointers, foreign/opaque types, or other shapes the uniform
-vk_view / classifier rules don't cover. Each is logged at generation time. Most
+vk_view / classifier rules don't cover. Each is logged in `generator/skip_report.txt`. Most
 are exotic extensions; revisit case-by-case if a consumer needs one.
+
+## Descriptor heaps: the native shader form and the sampler heap
+
+`VK_EXT_descriptor_heap` is bound end to end and `examples/descriptor_heap.das` runs a compute
+dispatch from a resource heap, but through the extension's compatibility path: the shader keeps
+its `set`/`binding` decorations and a `map_bindings_to_heap` mapping on the stage names the heap
+byte each binding reads. The native form - the shader indexes the heap itself through the
+`SPV_EXT_descriptor_heap` built-in heap pointers (`DescriptorHeapEXT` capability), no mapping,
+one pipeline for any number of resources - needs the dasSpirv emitter to grow that capability and
+a `@heap` resource annotation first. The sampler side has the generated
+`write_sampler_descriptors_e_x_t` / `cmd_bind_sampler_heap_e_x_t` but no `create_sampler_heap`
+twin of `create_resource_heap`, and no image-descriptor helper (`ResourceDescriptorInfoEXT.data.pImage`
+takes a `VkImageViewCreateInfo`, not a view handle); both land with the first textured heap example.
 
 ## Class-form render shaders
 

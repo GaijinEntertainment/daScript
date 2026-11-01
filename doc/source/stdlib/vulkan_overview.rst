@@ -122,4 +122,9 @@ The offscreen triangle, in full boost form — no hand-set ``sType``, no user
 The complete, compiling versions live under ``modules/dasVulkan/examples/``
 (``offscreen_triangle_boost.das``, ``compute_boost.das``, ``enumerate.das``,
 ``window_triangle.das``; ``offscreen_triangle.das`` and ``compute.das`` are the
-raw references).
+raw references). ``descriptor_heap.das`` is the ``compute_boost.das`` dispatch
+with no descriptor set, pool or pipeline layout: ``VK_EXT_descriptor_heap`` puts
+the descriptors in a mapped buffer (``create_resource_heap``,
+``write_resource_descriptors_e_x_t``, ``cmd_bind_resource_heap_e_x_t``) and a
+``map_bindings_to_heap`` mapping on the stage lets the unchanged set/binding
+shader read them.

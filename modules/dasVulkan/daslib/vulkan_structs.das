@@ -1995,14 +1995,23 @@ def vk_view_destroy(_b : PushConstantRange) {
 
 struct PipelineBinaryCreateInfoKHR {
     next : void?
+    @do_not_delete pKeysAndDataInfo : PipelineBinaryKeysAndDataKHR?
     pipeline : Pipeline
     @do_not_delete pPipelineCreateInfo : PipelineCreateInfoKHR?
+    _vk_view_pKeysAndDataInfo_vk : VkPipelineBinaryKeysAndDataKHR
+    _vk_view_pKeysAndDataInfo_present : bool
     _vk_view_pPipelineCreateInfo_vk : VkPipelineCreateInfoKHR
     _vk_view_pPipelineCreateInfo_present : bool
 }
 def vk_view_create_unsafe(var b : PipelineBinaryCreateInfoKHR) : VkPipelineBinaryCreateInfoKHR {
     var vk = VkPipelineBinaryCreateInfoKHR()
     vk.pNext = b.next
+    if (b.pKeysAndDataInfo != null) {
+        b._vk_view_pKeysAndDataInfo_vk = vk_view_create_unsafe(*b.pKeysAndDataInfo)
+        b._vk_view_pKeysAndDataInfo_present = true
+        vk.pKeysAndDataInfo = unsafe(addr(b._vk_view_pKeysAndDataInfo_vk))
+        b.pKeysAndDataInfo = null
+    }
     vk.pipeline = boost_value_to_vk(b.pipeline)
     if (b.pPipelineCreateInfo != null) {
         b._vk_view_pPipelineCreateInfo_vk = vk_view_create_unsafe(*b.pPipelineCreateInfo)
@@ -2013,6 +2022,9 @@ def vk_view_create_unsafe(var b : PipelineBinaryCreateInfoKHR) : VkPipelineBinar
     return <- vk
 }
 def vk_view_destroy(var b : PipelineBinaryCreateInfoKHR) {
+    if (b._vk_view_pKeysAndDataInfo_present) {
+        b._vk_view_pKeysAndDataInfo_present = false
+    }
     if (b._vk_view_pPipelineCreateInfo_present) {
         b._vk_view_pPipelineCreateInfo_present = false
     }
@@ -2034,6 +2046,53 @@ def vk_view_create_unsafe(var b : PipelineBinaryHandlesInfoKHR) : VkPipelineBina
 }
 def vk_view_destroy(var b : PipelineBinaryHandlesInfoKHR) {
     unsafe { delete b._vk_view_pPipelineBinaries }
+}
+
+struct PipelineBinaryDataKHR {
+    dataSize : uint64
+    pData : void?
+}
+def vk_view_create_unsafe(b : PipelineBinaryDataKHR) : VkPipelineBinaryDataKHR {
+    var vk = VkPipelineBinaryDataKHR()
+    vk.dataSize = b.dataSize
+    vk.pData = b.pData
+    return <- vk
+}
+def vk_view_destroy(_b : PipelineBinaryDataKHR) {
+    pass
+}
+
+struct PipelineBinaryKeysAndDataKHR {
+    pPipelineBinaryKeys : array<PipelineBinaryKeyKHR>
+    pPipelineBinaryData : array<PipelineBinaryDataKHR>
+    _vk_view_pPipelineBinaryKeys : array<VkPipelineBinaryKeyKHR>
+    _vk_view_pPipelineBinaryData : array<VkPipelineBinaryDataKHR>
+}
+def vk_view_create_unsafe(var b : PipelineBinaryKeysAndDataKHR) : VkPipelineBinaryKeysAndDataKHR {
+    var vk = VkPipelineBinaryKeysAndDataKHR()
+    b._vk_view_pPipelineBinaryKeys |> resize(length(b.pPipelineBinaryKeys))
+    for (vkv, vke in b._vk_view_pPipelineBinaryKeys, b.pPipelineBinaryKeys) {
+        vkv = vk_view_create_unsafe(vke)
+    }
+    vk.pPipelineBinaryKeys = array_addr(b._vk_view_pPipelineBinaryKeys)
+    b._vk_view_pPipelineBinaryData |> resize(length(b.pPipelineBinaryData))
+    for (vkv, vke in b._vk_view_pPipelineBinaryData, b.pPipelineBinaryData) {
+        vkv = vk_view_create_unsafe(vke)
+    }
+    vk.pPipelineBinaryData = array_addr(b._vk_view_pPipelineBinaryData)
+    assert(length(b.pPipelineBinaryData) == length(b.pPipelineBinaryKeys), "PipelineBinaryKeysAndDataKHR: pPipelineBinaryData and pPipelineBinaryKeys share binaryCount and must have the same length")
+    vk.binaryCount = uint(length(b.pPipelineBinaryKeys))
+    return <- vk
+}
+def vk_view_destroy(var b : PipelineBinaryKeysAndDataKHR) {
+    for (vki in range(length(b.pPipelineBinaryKeys))) {
+        vk_view_destroy(b.pPipelineBinaryKeys[vki])
+    }
+    delete b._vk_view_pPipelineBinaryKeys
+    for (vki in range(length(b.pPipelineBinaryData))) {
+        vk_view_destroy(b.pPipelineBinaryData[vki])
+    }
+    delete b._vk_view_pPipelineBinaryData
 }
 
 struct PipelineBinaryKeyKHR {
@@ -3036,6 +3095,7 @@ def vk_view_create_unsafe(var b : SubmitInfo) : VkSubmitInfo {
     vk.pCommandBuffers = array_addr(b._vk_view_pCommandBuffers)
     b._vk_view_pSignalSemaphores <- [for (h in b.pSignalSemaphores); boost_value_to_vk(h)]
     vk.pSignalSemaphores = array_addr(b._vk_view_pSignalSemaphores)
+    assert(length(b.pWaitDstStageMask) == length(b.pWaitSemaphores), "SubmitInfo: pWaitDstStageMask and pWaitSemaphores share waitSemaphoreCount and must have the same length")
     vk.waitSemaphoreCount = uint(length(b.pWaitSemaphores))
     vk.commandBufferCount = uint(length(b.pCommandBuffers))
     vk.signalSemaphoreCount = uint(length(b.pSignalSemaphores))
@@ -3331,6 +3391,7 @@ def vk_view_create_unsafe(var b : PresentInfoKHR) : VkPresentInfoKHR {
     b._vk_view_pResults := b.pResults
     vk.pResults = array_addr(b._vk_view_pResults)
     vk.waitSemaphoreCount = uint(length(b.pWaitSemaphores))
+    assert(length(b.pImageIndices) == length(b.pSwapchains), "PresentInfoKHR: pImageIndices and pSwapchains share swapchainCount and must have the same length")
     vk.swapchainCount = uint(length(b.pSwapchains))
     return <- vk
 }
@@ -4110,6 +4171,7 @@ def vk_view_create_unsafe(var b : IndirectCommandsLayoutTokenNV) : VkIndirectCom
     vk.pIndexTypes = array_addr(b._vk_view_pIndexTypes)
     b._vk_view_pIndexTypeValues := b.pIndexTypeValues
     vk.pIndexTypeValues = array_addr(b._vk_view_pIndexTypeValues)
+    assert(length(b.pIndexTypeValues) == length(b.pIndexTypes), "IndirectCommandsLayoutTokenNV: pIndexTypeValues and pIndexTypes share indexTypeCount and must have the same length")
     vk.indexTypeCount = uint(length(b.pIndexTypes))
     return <- vk
 }
@@ -7815,6 +7877,22 @@ def vk_view_destroy(_b : DeviceMemoryReportCallbackDataEXT) {
     pass
 }
 
+struct ImportMemoryHostPointerInfoEXT {
+    next : void?
+    handleType : VkExternalMemoryHandleTypeFlags
+    pHostPointer : void?
+}
+def vk_view_create_unsafe(b : ImportMemoryHostPointerInfoEXT) : VkImportMemoryHostPointerInfoEXT {
+    var vk = VkImportMemoryHostPointerInfoEXT()
+    vk.pNext = b.next
+    vk.handleType = b.handleType
+    vk.pHostPointer = b.pHostPointer
+    return <- vk
+}
+def vk_view_destroy(_b : ImportMemoryHostPointerInfoEXT) {
+    pass
+}
+
 struct MemoryHostPointerPropertiesEXT {
     next : void?
     memoryTypeBits : uint
@@ -8431,6 +8509,7 @@ def vk_view_create_unsafe(var b : SemaphoreWaitInfo) : VkSemaphoreWaitInfo {
     vk.pSemaphores = array_addr(b._vk_view_pSemaphores)
     b._vk_view_pValues := b.pValues
     vk.pValues = array_addr(b._vk_view_pValues)
+    assert(length(b.pValues) == length(b.pSemaphores), "SemaphoreWaitInfo: pValues and pSemaphores share semaphoreCount and must have the same length")
     vk.semaphoreCount = uint(length(b.pSemaphores))
     return <- vk
 }
@@ -8723,6 +8802,22 @@ def vk_view_create_unsafe(b : QueueFamilyCheckpointPropertiesNV) : VkQueueFamily
     return <- vk
 }
 def vk_view_destroy(_b : QueueFamilyCheckpointPropertiesNV) {
+    pass
+}
+
+struct CheckpointDataNV {
+    next : void?
+    stage : VkPipelineStageFlags
+    pCheckpointMarker : void?
+}
+def vk_view_create_unsafe(b : CheckpointDataNV) : VkCheckpointDataNV {
+    var vk = VkCheckpointDataNV()
+    vk.pNext = b.next
+    vk.stage = b.stage
+    vk.pCheckpointMarker = b.pCheckpointMarker
+    return <- vk
+}
+def vk_view_destroy(_b : CheckpointDataNV) {
     pass
 }
 
@@ -9435,6 +9530,7 @@ struct RayTracingShaderGroupCreateInfoKHR {
     closestHitShader : uint
     anyHitShader : uint
     intersectionShader : uint
+    pShaderGroupCaptureReplayHandle : void?
 }
 def vk_view_create_unsafe(b : RayTracingShaderGroupCreateInfoKHR) : VkRayTracingShaderGroupCreateInfoKHR {
     var vk = VkRayTracingShaderGroupCreateInfoKHR()
@@ -9444,6 +9540,7 @@ def vk_view_create_unsafe(b : RayTracingShaderGroupCreateInfoKHR) : VkRayTracing
     vk.closestHitShader = b.closestHitShader
     vk.anyHitShader = b.anyHitShader
     vk.intersectionShader = b.intersectionShader
+    vk.pShaderGroupCaptureReplayHandle = b.pShaderGroupCaptureReplayHandle
     return <- vk
 }
 def vk_view_destroy(_b : RayTracingShaderGroupCreateInfoKHR) {
@@ -10936,6 +11033,20 @@ def vk_view_destroy(_b : PerformanceValueINTEL) {
     pass
 }
 
+struct InitializePerformanceApiInfoINTEL {
+    next : void?
+    pUserData : void?
+}
+def vk_view_create_unsafe(b : InitializePerformanceApiInfoINTEL) : VkInitializePerformanceApiInfoINTEL {
+    var vk = VkInitializePerformanceApiInfoINTEL()
+    vk.pNext = b.next
+    vk.pUserData = b.pUserData
+    return <- vk
+}
+def vk_view_destroy(_b : InitializePerformanceApiInfoINTEL) {
+    pass
+}
+
 struct QueryPoolPerformanceQueryCreateInfoINTEL {
     next : void?
     performanceCountersSampling : VkQueryPoolSamplingModeINTEL
@@ -11229,6 +11340,28 @@ def vk_view_create_unsafe(b : PipelineExecutableStatisticKHR) : VkPipelineExecut
     return <- vk
 }
 def vk_view_destroy(_b : PipelineExecutableStatisticKHR) {
+    pass
+}
+
+struct PipelineExecutableInternalRepresentationKHR {
+    next : void?
+    name : int8[VK_MAX_DESCRIPTION_SIZE]
+    description : int8[VK_MAX_DESCRIPTION_SIZE]
+    isText : uint
+    dataSize : uint64
+    pData : void?
+}
+def vk_view_create_unsafe(b : PipelineExecutableInternalRepresentationKHR) : VkPipelineExecutableInternalRepresentationKHR {
+    var vk = VkPipelineExecutableInternalRepresentationKHR()
+    vk.pNext = b.next
+    vk.name = b.name
+    vk.description = b.description
+    vk.isText = b.isText
+    vk.dataSize = b.dataSize
+    vk.pData = b.pData
+    return <- vk
+}
+def vk_view_destroy(_b : PipelineExecutableInternalRepresentationKHR) {
     pass
 }
 
@@ -14834,6 +14967,22 @@ def vk_view_destroy(_b : QueueFamilyCheckpointProperties2NV) {
     pass
 }
 
+struct CheckpointData2NV {
+    next : void?
+    stage : VkPipelineStageFlags2
+    pCheckpointMarker : void?
+}
+def vk_view_create_unsafe(b : CheckpointData2NV) : VkCheckpointData2NV {
+    var vk = VkCheckpointData2NV()
+    vk.pNext = b.next
+    vk.stage = b.stage
+    vk.pCheckpointMarker = b.pCheckpointMarker
+    return <- vk
+}
+def vk_view_destroy(_b : CheckpointData2NV) {
+    pass
+}
+
 struct PhysicalDeviceSynchronization2Features {
     next : void?
     synchronization2 : uint
@@ -14905,6 +15054,112 @@ def vk_view_create_unsafe(var b : PhysicalDeviceHostImageCopyProperties) : VkPhy
 def vk_view_destroy(var b : PhysicalDeviceHostImageCopyProperties) {
     delete b._vk_view_pCopySrcLayouts
     delete b._vk_view_pCopyDstLayouts
+}
+
+struct MemoryToImageCopy {
+    next : void?
+    pHostPointer : void?
+    memoryRowLength : uint
+    memoryImageHeight : uint
+    imageSubresource : VkImageSubresourceLayers
+    imageOffset : VkOffset3D
+    imageExtent : VkExtent3D
+}
+def vk_view_create_unsafe(b : MemoryToImageCopy) : VkMemoryToImageCopy {
+    var vk = VkMemoryToImageCopy()
+    vk.pNext = b.next
+    vk.pHostPointer = b.pHostPointer
+    vk.memoryRowLength = b.memoryRowLength
+    vk.memoryImageHeight = b.memoryImageHeight
+    vk.imageSubresource = b.imageSubresource
+    vk.imageOffset = b.imageOffset
+    vk.imageExtent = b.imageExtent
+    return <- vk
+}
+def vk_view_destroy(_b : MemoryToImageCopy) {
+    pass
+}
+
+struct ImageToMemoryCopy {
+    next : void?
+    pHostPointer : void?
+    memoryRowLength : uint
+    memoryImageHeight : uint
+    imageSubresource : VkImageSubresourceLayers
+    imageOffset : VkOffset3D
+    imageExtent : VkExtent3D
+}
+def vk_view_create_unsafe(b : ImageToMemoryCopy) : VkImageToMemoryCopy {
+    var vk = VkImageToMemoryCopy()
+    vk.pNext = b.next
+    vk.pHostPointer = b.pHostPointer
+    vk.memoryRowLength = b.memoryRowLength
+    vk.memoryImageHeight = b.memoryImageHeight
+    vk.imageSubresource = b.imageSubresource
+    vk.imageOffset = b.imageOffset
+    vk.imageExtent = b.imageExtent
+    return <- vk
+}
+def vk_view_destroy(_b : ImageToMemoryCopy) {
+    pass
+}
+
+struct CopyMemoryToImageInfo {
+    next : void?
+    flags : VkHostImageCopyFlags
+    dstImage : Image
+    dstImageLayout : VkImageLayout
+    pRegions : array<MemoryToImageCopy>
+    _vk_view_pRegions : array<VkMemoryToImageCopy>
+}
+def vk_view_create_unsafe(var b : CopyMemoryToImageInfo) : VkCopyMemoryToImageInfo {
+    var vk = VkCopyMemoryToImageInfo()
+    vk.pNext = b.next
+    vk.flags = b.flags
+    vk.dstImage = boost_value_to_vk(b.dstImage)
+    vk.dstImageLayout = b.dstImageLayout
+    b._vk_view_pRegions |> resize(length(b.pRegions))
+    for (vkv, vke in b._vk_view_pRegions, b.pRegions) {
+        vkv = vk_view_create_unsafe(vke)
+    }
+    vk.pRegions = array_addr(b._vk_view_pRegions)
+    vk.regionCount = uint(length(b.pRegions))
+    return <- vk
+}
+def vk_view_destroy(var b : CopyMemoryToImageInfo) {
+    for (vki in range(length(b.pRegions))) {
+        vk_view_destroy(b.pRegions[vki])
+    }
+    delete b._vk_view_pRegions
+}
+
+struct CopyImageToMemoryInfo {
+    next : void?
+    flags : VkHostImageCopyFlags
+    srcImage : Image
+    srcImageLayout : VkImageLayout
+    pRegions : array<ImageToMemoryCopy>
+    _vk_view_pRegions : array<VkImageToMemoryCopy>
+}
+def vk_view_create_unsafe(var b : CopyImageToMemoryInfo) : VkCopyImageToMemoryInfo {
+    var vk = VkCopyImageToMemoryInfo()
+    vk.pNext = b.next
+    vk.flags = b.flags
+    vk.srcImage = boost_value_to_vk(b.srcImage)
+    vk.srcImageLayout = b.srcImageLayout
+    b._vk_view_pRegions |> resize(length(b.pRegions))
+    for (vkv, vke in b._vk_view_pRegions, b.pRegions) {
+        vkv = vk_view_create_unsafe(vke)
+    }
+    vk.pRegions = array_addr(b._vk_view_pRegions)
+    vk.regionCount = uint(length(b.pRegions))
+    return <- vk
+}
+def vk_view_destroy(var b : CopyImageToMemoryInfo) {
+    for (vki in range(length(b.pRegions))) {
+        vk_view_destroy(b.pRegions[vki])
+    }
+    delete b._vk_view_pRegions
 }
 
 struct CopyImageToImageInfo {
@@ -17008,6 +17263,20 @@ def vk_view_destroy(_b : AccelerationStructureCaptureDescriptorDataInfoEXT) {
     pass
 }
 
+struct OpaqueCaptureDescriptorDataCreateInfoEXT {
+    next : void?
+    opaqueCaptureDescriptorData : void?
+}
+def vk_view_create_unsafe(b : OpaqueCaptureDescriptorDataCreateInfoEXT) : VkOpaqueCaptureDescriptorDataCreateInfoEXT {
+    var vk = VkOpaqueCaptureDescriptorDataCreateInfoEXT()
+    vk.pNext = b.next
+    vk.opaqueCaptureDescriptorData = b.opaqueCaptureDescriptorData
+    return <- vk
+}
+def vk_view_destroy(_b : OpaqueCaptureDescriptorDataCreateInfoEXT) {
+    pass
+}
+
 struct PhysicalDeviceShaderIntegerDotProductFeatures {
     next : void?
     shaderIntegerDotProduct : uint
@@ -18954,6 +19223,24 @@ def vk_view_destroy(_b : OpticalFlowSessionCreateInfoNV) {
     pass
 }
 
+struct OpticalFlowSessionCreatePrivateDataInfoNV {
+    next : void?
+    id : uint
+    size : uint
+    pPrivateData : void?
+}
+def vk_view_create_unsafe(b : OpticalFlowSessionCreatePrivateDataInfoNV) : VkOpticalFlowSessionCreatePrivateDataInfoNV {
+    var vk = VkOpticalFlowSessionCreatePrivateDataInfoNV()
+    vk.pNext = b.next
+    vk.id = b.id
+    vk.size = b.size
+    vk.pPrivateData = b.pPrivateData
+    return <- vk
+}
+def vk_view_destroy(_b : OpticalFlowSessionCreatePrivateDataInfoNV) {
+    pass
+}
+
 struct OpticalFlowExecuteInfoNV {
     next : void?
     flags : VkOpticalFlowExecuteFlagsNV
@@ -19048,6 +19335,22 @@ def vk_view_create_unsafe(b : DeviceFaultInfoKHR) : VkDeviceFaultInfoKHR {
     return <- vk
 }
 def vk_view_destroy(_b : DeviceFaultInfoKHR) {
+    pass
+}
+
+struct DeviceFaultDebugInfoKHR {
+    next : void?
+    vendorBinarySize : uint
+    pVendorBinaryData : void?
+}
+def vk_view_create_unsafe(b : DeviceFaultDebugInfoKHR) : VkDeviceFaultDebugInfoKHR {
+    var vk = VkDeviceFaultDebugInfoKHR()
+    vk.pNext = b.next
+    vk.vendorBinarySize = b.vendorBinarySize
+    vk.pVendorBinaryData = b.pVendorBinaryData
+    return <- vk
+}
+def vk_view_destroy(_b : DeviceFaultDebugInfoKHR) {
     pass
 }
 
@@ -19741,6 +20044,20 @@ def vk_view_destroy(var b : MultiviewPerViewRenderAreasRenderPassBeginInfoQCOM) 
     delete b._vk_view_pPerViewRenderAreas
 }
 
+struct QueryLowLatencySupportNV {
+    next : void?
+    pQueriedLowLatencyData : void?
+}
+def vk_view_create_unsafe(b : QueryLowLatencySupportNV) : VkQueryLowLatencySupportNV {
+    var vk = VkQueryLowLatencySupportNV()
+    vk.pNext = b.next
+    vk.pQueriedLowLatencyData = b.pQueriedLowLatencyData
+    return <- vk
+}
+def vk_view_destroy(_b : QueryLowLatencySupportNV) {
+    pass
+}
+
 struct MemoryMapInfo {
     next : void?
     flags : VkMemoryMapFlags
@@ -20174,6 +20491,26 @@ def vk_view_destroy(var b : PushDescriptorSetInfo) {
     delete b._vk_view_pDescriptorWrites
 }
 
+struct PushDescriptorSetWithTemplateInfo {
+    next : void?
+    descriptorUpdateTemplate : DescriptorUpdateTemplate
+    layout : PipelineLayout
+    set : uint
+    pData : void?
+}
+def vk_view_create_unsafe(b : PushDescriptorSetWithTemplateInfo) : VkPushDescriptorSetWithTemplateInfo {
+    var vk = VkPushDescriptorSetWithTemplateInfo()
+    vk.pNext = b.next
+    vk.descriptorUpdateTemplate = boost_value_to_vk(b.descriptorUpdateTemplate)
+    vk.layout = boost_value_to_vk(b.layout)
+    vk.set = b.set
+    vk.pData = b.pData
+    return <- vk
+}
+def vk_view_destroy(_b : PushDescriptorSetWithTemplateInfo) {
+    pass
+}
+
 struct SetDescriptorBufferOffsetsInfoEXT {
     next : void?
     stageFlags : VkShaderStageFlags
@@ -20194,6 +20531,7 @@ def vk_view_create_unsafe(var b : SetDescriptorBufferOffsetsInfoEXT) : VkSetDesc
     vk.pBufferIndices = array_addr(b._vk_view_pBufferIndices)
     b._vk_view_pOffsets := b.pOffsets
     vk.pOffsets = array_addr(b._vk_view_pOffsets)
+    assert(length(b.pOffsets) == length(b.pBufferIndices), "SetDescriptorBufferOffsetsInfoEXT: pOffsets and pBufferIndices share setCount and must have the same length")
     vk.setCount = uint(length(b.pBufferIndices))
     return <- vk
 }
@@ -20947,6 +21285,20 @@ def vk_view_create_unsafe(b : PhysicalDeviceMapMemoryPlacedPropertiesEXT) : VkPh
     return <- vk
 }
 def vk_view_destroy(_b : PhysicalDeviceMapMemoryPlacedPropertiesEXT) {
+    pass
+}
+
+struct MemoryMapPlacedInfoEXT {
+    next : void?
+    pPlacedAddress : void?
+}
+def vk_view_create_unsafe(b : MemoryMapPlacedInfoEXT) : VkMemoryMapPlacedInfoEXT {
+    var vk = VkMemoryMapPlacedInfoEXT()
+    vk.pNext = b.next
+    vk.pPlacedAddress = b.pPlacedAddress
+    return <- vk
+}
+def vk_view_destroy(_b : MemoryMapPlacedInfoEXT) {
     pass
 }
 
@@ -22154,6 +22506,22 @@ def vk_view_destroy(_b : DataGraphPipelineConstantTensorSemiStructuredSparsityIn
     pass
 }
 
+struct DataGraphPipelineConstantARM {
+    next : void?
+    id : uint
+    pConstantData : void?
+}
+def vk_view_create_unsafe(b : DataGraphPipelineConstantARM) : VkDataGraphPipelineConstantARM {
+    var vk = VkDataGraphPipelineConstantARM()
+    vk.pNext = b.next
+    vk.id = b.id
+    vk.pConstantData = b.pConstantData
+    return <- vk
+}
+def vk_view_destroy(_b : DataGraphPipelineConstantARM) {
+    pass
+}
+
 struct DataGraphPipelineResourceInfoARM {
     next : void?
     descriptorSet : uint
@@ -22225,6 +22593,46 @@ def vk_view_destroy(var b : DataGraphPipelineCreateInfoARM) {
         vk_view_destroy(b.pResourceInfos[vki])
     }
     delete b._vk_view_pResourceInfos
+}
+
+struct DataGraphPipelineShaderModuleCreateInfoARM {
+    next : void?
+    module_ : ShaderModule
+    pName : string
+    @do_not_delete pSpecializationInfo : SpecializationInfo?
+    constantCount : uint
+    pConstants : array<DataGraphPipelineConstantARM>
+    _vk_view_pConstants : array<VkDataGraphPipelineConstantARM>
+    _vk_view_pSpecializationInfo_vk : VkSpecializationInfo
+    _vk_view_pSpecializationInfo_present : bool
+}
+def vk_view_create_unsafe(var b : DataGraphPipelineShaderModuleCreateInfoARM) : VkDataGraphPipelineShaderModuleCreateInfoARM {
+    var vk = VkDataGraphPipelineShaderModuleCreateInfoARM()
+    vk.pNext = b.next
+    vk.module_ = boost_value_to_vk(b.module_)
+    vk.pName = b.pName
+    if (b.pSpecializationInfo != null) {
+        b._vk_view_pSpecializationInfo_vk = vk_view_create_unsafe(*b.pSpecializationInfo)
+        b._vk_view_pSpecializationInfo_present = true
+        vk.pSpecializationInfo = unsafe(addr(b._vk_view_pSpecializationInfo_vk))
+        b.pSpecializationInfo = null
+    }
+    b._vk_view_pConstants |> resize(length(b.pConstants))
+    for (vkv, vke in b._vk_view_pConstants, b.pConstants) {
+        vkv = vk_view_create_unsafe(vke)
+    }
+    vk.pConstants = array_addr(b._vk_view_pConstants)
+    vk.constantCount = b.constantCount != 0u ? b.constantCount : uint(length(b.pConstants))
+    return <- vk
+}
+def vk_view_destroy(var b : DataGraphPipelineShaderModuleCreateInfoARM) {
+    if (b._vk_view_pSpecializationInfo_present) {
+        b._vk_view_pSpecializationInfo_present = false
+    }
+    for (vki in range(length(b.pConstants))) {
+        vk_view_destroy(b.pConstants[vki])
+    }
+    delete b._vk_view_pConstants
 }
 
 struct DataGraphPipelineSessionCreateInfoARM {
@@ -22326,6 +22734,26 @@ def vk_view_create_unsafe(b : DataGraphPipelineInfoARM) : VkDataGraphPipelineInf
     return <- vk
 }
 def vk_view_destroy(_b : DataGraphPipelineInfoARM) {
+    pass
+}
+
+struct DataGraphPipelinePropertyQueryResultARM {
+    next : void?
+    property : VkDataGraphPipelinePropertyARM
+    isText : uint
+    dataSize : uint64
+    pData : void?
+}
+def vk_view_create_unsafe(b : DataGraphPipelinePropertyQueryResultARM) : VkDataGraphPipelinePropertyQueryResultARM {
+    var vk = VkDataGraphPipelinePropertyQueryResultARM()
+    vk.pNext = b.next
+    vk.property = b.property
+    vk.isText = b.isText
+    vk.dataSize = b.dataSize
+    vk.pData = b.pData
+    return <- vk
+}
+def vk_view_destroy(_b : DataGraphPipelinePropertyQueryResultARM) {
     pass
 }
 
@@ -22829,6 +23257,20 @@ def vk_view_destroy(_b : PhysicalDeviceShaderSubgroupPartitionedFeaturesEXT) {
     pass
 }
 
+struct HostAddressRangeEXT {
+    address : void?
+    size : uint64
+}
+def vk_view_create_unsafe(b : HostAddressRangeEXT) : VkHostAddressRangeEXT {
+    var vk = VkHostAddressRangeEXT()
+    vk.address = b.address
+    vk.size = b.size
+    return <- vk
+}
+def vk_view_destroy(_b : HostAddressRangeEXT) {
+    pass
+}
+
 struct HostAddressRangeConstEXT {
     address : array<uint8>
     _vk_view_address : array<uint8>
@@ -22842,6 +23284,22 @@ def vk_view_create_unsafe(var b : HostAddressRangeConstEXT) : VkHostAddressRange
 }
 def vk_view_destroy(var b : HostAddressRangeConstEXT) {
     delete b._vk_view_address
+}
+
+struct TexelBufferDescriptorInfoEXT {
+    next : void?
+    format : VkFormat
+    addressRange : VkDeviceAddressRangeEXT
+}
+def vk_view_create_unsafe(b : TexelBufferDescriptorInfoEXT) : VkTexelBufferDescriptorInfoEXT {
+    var vk = VkTexelBufferDescriptorInfoEXT()
+    vk.pNext = b.next
+    vk.format = b.format
+    vk.addressRange = b.addressRange
+    return <- vk
+}
+def vk_view_destroy(_b : TexelBufferDescriptorInfoEXT) {
+    pass
 }
 
 struct ImageDescriptorInfoEXT {
@@ -22867,6 +23325,40 @@ def vk_view_destroy(var b : ImageDescriptorInfoEXT) {
     if (b._vk_view_pView_present) {
         b._vk_view_pView_present = false
     }
+}
+
+struct ResourceDescriptorInfoEXT {
+    next : void?
+    type_ : VkDescriptorType
+    data : VkResourceDescriptorDataEXT
+}
+def vk_view_create_unsafe(b : ResourceDescriptorInfoEXT) : VkResourceDescriptorInfoEXT {
+    var vk = VkResourceDescriptorInfoEXT()
+    vk.pNext = b.next
+    vk.type_ = b.type_
+    vk.data = b.data
+    return <- vk
+}
+def vk_view_destroy(_b : ResourceDescriptorInfoEXT) {
+    pass
+}
+
+struct BindHeapInfoEXT {
+    next : void?
+    heapRange : VkDeviceAddressRangeEXT
+    reservedRangeOffset : uint64
+    reservedRangeSize : uint64
+}
+def vk_view_create_unsafe(b : BindHeapInfoEXT) : VkBindHeapInfoEXT {
+    var vk = VkBindHeapInfoEXT()
+    vk.pNext = b.next
+    vk.heapRange = b.heapRange
+    vk.reservedRangeOffset = b.reservedRangeOffset
+    vk.reservedRangeSize = b.reservedRangeSize
+    return <- vk
+}
+def vk_view_destroy(_b : BindHeapInfoEXT) {
+    pass
 }
 
 struct PushDataInfoEXT {
@@ -23308,6 +23800,41 @@ def vk_view_create_unsafe(b : PhysicalDeviceDescriptorHeapPropertiesEXT) : VkPhy
 }
 def vk_view_destroy(_b : PhysicalDeviceDescriptorHeapPropertiesEXT) {
     pass
+}
+
+struct CommandBufferInheritanceDescriptorHeapInfoEXT {
+    next : void?
+    @do_not_delete pSamplerHeapBindInfo : BindHeapInfoEXT?
+    @do_not_delete pResourceHeapBindInfo : BindHeapInfoEXT?
+    _vk_view_pSamplerHeapBindInfo_vk : VkBindHeapInfoEXT
+    _vk_view_pSamplerHeapBindInfo_present : bool
+    _vk_view_pResourceHeapBindInfo_vk : VkBindHeapInfoEXT
+    _vk_view_pResourceHeapBindInfo_present : bool
+}
+def vk_view_create_unsafe(var b : CommandBufferInheritanceDescriptorHeapInfoEXT) : VkCommandBufferInheritanceDescriptorHeapInfoEXT {
+    var vk = VkCommandBufferInheritanceDescriptorHeapInfoEXT()
+    vk.pNext = b.next
+    if (b.pSamplerHeapBindInfo != null) {
+        b._vk_view_pSamplerHeapBindInfo_vk = vk_view_create_unsafe(*b.pSamplerHeapBindInfo)
+        b._vk_view_pSamplerHeapBindInfo_present = true
+        vk.pSamplerHeapBindInfo = unsafe(addr(b._vk_view_pSamplerHeapBindInfo_vk))
+        b.pSamplerHeapBindInfo = null
+    }
+    if (b.pResourceHeapBindInfo != null) {
+        b._vk_view_pResourceHeapBindInfo_vk = vk_view_create_unsafe(*b.pResourceHeapBindInfo)
+        b._vk_view_pResourceHeapBindInfo_present = true
+        vk.pResourceHeapBindInfo = unsafe(addr(b._vk_view_pResourceHeapBindInfo_vk))
+        b.pResourceHeapBindInfo = null
+    }
+    return <- vk
+}
+def vk_view_destroy(var b : CommandBufferInheritanceDescriptorHeapInfoEXT) {
+    if (b._vk_view_pSamplerHeapBindInfo_present) {
+        b._vk_view_pSamplerHeapBindInfo_present = false
+    }
+    if (b._vk_view_pResourceHeapBindInfo_present) {
+        b._vk_view_pResourceHeapBindInfo_present = false
+    }
 }
 
 struct PhysicalDeviceDescriptorHeapTensorPropertiesARM {
@@ -23784,6 +24311,22 @@ def vk_view_create_unsafe(b : PhysicalDeviceShaderAbortPropertiesKHR) : VkPhysic
     return <- vk
 }
 def vk_view_destroy(_b : PhysicalDeviceShaderAbortPropertiesKHR) {
+    pass
+}
+
+struct DeviceFaultShaderAbortMessageInfoKHR {
+    next : void?
+    messageDataSize : uint64
+    pMessageData : void?
+}
+def vk_view_create_unsafe(b : DeviceFaultShaderAbortMessageInfoKHR) : VkDeviceFaultShaderAbortMessageInfoKHR {
+    var vk = VkDeviceFaultShaderAbortMessageInfoKHR()
+    vk.pNext = b.next
+    vk.messageDataSize = b.messageDataSize
+    vk.pMessageData = b.pMessageData
+    return <- vk
+}
+def vk_view_destroy(_b : DeviceFaultShaderAbortMessageInfoKHR) {
     pass
 }
 
