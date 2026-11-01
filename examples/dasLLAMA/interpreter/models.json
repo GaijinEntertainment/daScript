@@ -1,0 +1,11 @@
+{
+  "files": [
+    { "file": "gigaam-v3-e2e-rnnt-q4_k.gguf", "repo": "cstr/gigaam-v3-GGUF", "sha256": "d7ce1f45afa7b6abf3462310c06d1ace1b017cb0c26e99a9cc9099c9b8e45d6d" },
+    { "file": "pocket-tts-en-18m-stuart-kq.gguf", "repo": "borisbat/dasllama-tts", "sha256": "3678b27db407fa0715feb7c0863c63c1cb00a28f9387fa76f8e4922e30c8f124" },
+    { "file": "model.ruen.intgemm.alphas.bin", "repo": "borisbat/dasllama-nmt", "sha256": "aa0efa194b3dbd2da129ba0b8db8ef139126cb0914e57072f62061294746f1e2" },
+    { "file": "vocab.ruen.spm", "repo": "borisbat/dasllama-nmt", "sha256": "de8af5f87e231ee4016cec4bb482e6b584cb1ca34dcb624fc7b8398f25bb35df" }
+  ],
+  "tree": [
+    { "file": "silero_vad.bin", "path": "modules/dasLLAMA/models/silero_vad.bin", "sha256": "33d2121d08c033eeb08f73ce5b6130c02d2e84c34547f8e9f97aeb408fc5a82a" }
+  ]
+}

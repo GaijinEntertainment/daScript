@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="das-build" content="__DAS_BUILD_STAMP__">
+<title>interpreter — dasllama.io</title>
+<meta name="description" content="Talk in Russian and hear it back in English - GigaAM hears, Bergamot translates, Pocket TTS speaks; dasLLAMA compiled to WebAssembly, running in your browser, and what you say never leaves the tab.">
+<link rel="icon" href="/files/dasllama-favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/files/fonts/fonts.css">
+<link rel="stylesheet" href="/files/forge.css">
+<link rel="stylesheet" href="/files/dasllama-io.css">
+<script src="/files/github-star.js" defer></script>
+<!-- Analytics — site code "dasllama" under the borisbat goatcounter account -->
+<script data-goatcounter="https://dasllama.goatcounter.com/count" async crossorigin="anonymous" src="//gc.zgo.at/count.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; height: 100dvh; background: #12101a; overflow: hidden; }
+  /* a short viewport - a phone held sideways - is all stage: the nav folds to its burger row */
+  @media (max-height: 480px) {
+    .dio-nav .dio-nav__inner { min-height: 0; height: 32px; }
+    .dio-nav__right, .dio-nav .dio-tabs { display: none; }
+    .dio-nav__burger { display: inline-flex; align-items: center; order: -1; }
+    .dio-tabs { position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; gap: 6px; background: var(--bg-2); border-bottom: 1px solid var(--rule); padding: 14px 20px 18px; font-size: 14px; z-index: 40; }
+    .dio-nav.is-open .dio-tabs { display: flex; }
+  }
+  body {
+    display: flex; flex-direction: column;
+    font: 15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; color: #d6cfbf;
+  }
+  /* the site's nav sits above the stage; the stage takes the rest of the viewport */
+  .dio-nav { flex: none; }
+  #stage { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+  #canvas { width: auto; height: auto; max-width: 100%; max-height: 100%; border: 0; outline: none; display: block;
+            touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  #gate { z-index: 2;
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 14px; background: #12101a; cursor: default;
+  }
+  #gate[hidden] { display: none; }
+  #gate h1 { font-weight: 500; font-size: 26px; margin: 0; color: #f4e9d2; letter-spacing: 0.02em; }
+  #gate p { margin: 0; color: #8d8577; }
+  #bar { width: 320px; height: 6px; border-radius: 3px; background: #2a2636; overflow: hidden; }
+  #bar i { display: block; height: 100%; width: 0; background: #f2b955; transition: width 0.15s; }
+  #start {
+    display: none; padding: 10px 28px; border-radius: 22px; border: 1px solid #f2b955;
+    background: transparent; color: #f2b955; font: inherit; font-size: 16px; cursor: pointer;
+  }
+  #start:hover { background: #f2b955; color: #12101a; }
+  #note { max-width: 560px; text-align: center; line-height: 1.6; }
+  #mic { max-width: 520px; text-align: center; line-height: 1.6; font-size: 14px; }
+  /* the microphone's state in words, over the picture's top-right corner */
+  #micnote { position: absolute; right: 14px; top: 8px; font-size: 13px; color: #8d8577; pointer-events: none; }
+  #micnote[hidden] { display: none; }
+  #note b { color: #f4e9d2; font-weight: 500; }
+  #note a { color: #f2b955; }
+  #note code { color: #d6cfbf; font-size: 13px; }
+</style>
+</head>
+<body>
+<!-- The interpreter shell: the dasllama.io nav on top (its css and script come from the site
+     root, /files/), then the stage. The shell checks the page first - the build runs its real
+     Web Workers on SharedArrayBuffer, so it needs a cross-origin-isolated page; a page without
+     it gets the note below and never fetches a byte. Then it reads models/manifest.json - the
+     list the deploy minted, stamped with the IMAGE_VERSION it minted at - and refuses a set
+     minted for another version before fetching a megabyte of it. Otherwise it fetches the
+     speech model, the translator with its vocabulary, the voice and the voice-activity model into
+     MEMFS, then waits for a click - browsers only let audio start from a gesture. Models come
+     from ./models/ beside the page, or ?models=<base url>. ?force=unsupported shows the browser
+     note on a supporting browser, for checking the page. A program that aborts after the click
+     puts its last engine lines back on the page instead of a black canvas. -->
+<nav class="dio-nav" id="nav"><div class="forge-container"><div class="dio-nav__inner">
+<div class="dio-nav__left">
+<button class="dio-nav__burger" onclick="document.getElementById('nav').classList.toggle('is-open')">≡</button>
+<a class="dio-mark" href="/"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="dasllama"><path fill="currentColor" fill-rule="evenodd" d="M24 61 L26 40 L25 24 Q25 20 27 17 L30 12 Q32 8 36 8 L40 8 Q44 8 46 12 L47 17 Q48 20 47 24 L46 40 L48 61 Z M40 8 L42 4 L44 8 Z M36 8 L34 4 L36 8 Z"/></svg><span class="dio-mark__text">dasllama</span></a>
+<div class="dio-tabs"><a class="dio-tab" href="/">home</a><a class="dio-tab is-active" href="/examples.html">examples</a><a class="dio-tab" href="/stories.html">stories</a><a class="dio-tab" href="/ladder.html">ladder</a></div>
+</div>
+<div class="dio-nav__right"><a class="dio-nav__gh" href="https://github.com/GaijinEntertainment/daScript">GitHub <span data-github-star></span></a><a class="dio-nav__back" href="https://daslang.io">daslang.io →</a></div>
+</div></div></nav>
+<div id="stage">
+<canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+<p id="micnote" hidden></p>
+<div id="gate">
+  <h1>interpreter</h1>
+  <p id="status">reading the model list...</p>
+  <div id="bar"><i id="fill"></i></div>
+  <button id="start">start</button>
+  <p id="mic">The page asks for the microphone when you press listen. What you say stays in this tab: the Russian is heard, translated and spoken here, and nothing is uploaded. A phone browser may ask again after every reload unless this site's microphone permission is set to Allow in its site settings.</p>
+  <p id="note" hidden></p>
+</div>
+</div>
+<!-- emcc's script tag lands inside a template, where it is inert; the guard below appends a live
+     copy only on a browser that can run the build, so an unsupported one loads no program -->
+<template id="loader">{{{ SCRIPT }}}</template>
+<script>
+  // the keys the page would scroll or leave on; the space bar listens and stops, so it stays with the program - the body cannot scroll anyway
+  var SCROLL_KEYS = { ArrowUp:1, ArrowDown:1, ArrowLeft:1, ArrowRight:1, PageUp:1, PageDown:1, Home:1, End:1, Tab:1, ' ':1 };
+  window.addEventListener('keydown', function (e) { if (SCROLL_KEYS[e.key] && !(e.target && e.target.closest && e.target.closest('input,textarea,[contenteditable]'))) e.preventDefault(); }, { passive: false });
+
+  // the IMAGE_VERSION this page's program was built with - the deploy stamps it (pages.yml, from
+  // modules/dasLLAMA/dasllama/dasllama_image.das); 0 means "not stamped" (a local rig), no check
+  var PAGE_IMAGE_VERSION = /* @image-version */ 0;
+
+  // the -pthread build runs its workers on SharedArrayBuffer, which a page gets only when the
+  // server sent the cross-origin isolation headers
+  var HAS_ISOLATION = !!(self.crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined');
+  var FORCE = new URLSearchParams(location.search).get('force');
+  var SUPPORTED = FORCE === 'unsupported' ? false : HAS_ISOLATION;
+
+  function setStatus(text) { document.getElementById('status').textContent = text; }
+  function showNote(status, html) {
+    var gate = document.getElementById('gate'), note = document.getElementById('note');
+    gate.hidden = false;
+    note.innerHTML = html + '<br><a href="/examples.html">back to the examples</a>';
+    note.hidden = false;
+    setStatus(status);
+    document.getElementById('bar').hidden = true;
+    document.getElementById('start').style.display = 'none';
+  }
+  function escapeHtml(text) {
+    var span = document.createElement('span');
+    span.textContent = text;
+    return span.innerHTML;
+  }
+
+  // a page the browser brings back from its back-forward cache returns with the program's
+  // workers and the audio output frozen mid-frame and out of step with each other, and the
+  // first thing heard is whatever sat in the output ring: such a page starts over instead
+  window.addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });
+
+  // iOS mutes Web Audio under the ring/silent switch unless the tab holds a playback session, the
+  // one a media element gets: ask for it through the Audio Session API where it exists - the
+  // play-and-record category here, since a plain playback session refuses the microphone - and on
+  // the first gesture start a silent looping <audio> element, which puts the tab in that session too.
+  (function installPlaybackSession() {
+    var SILENT_WAV = 'data:audio/wav;base64,UklGRjQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YRAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    try { if (navigator.audioSession) navigator.audioSession.type = 'play-and-record'; } catch (e) {}
+    var IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (!IOS) return;
+    var GESTURES = ['pointerdown', 'touchend', 'keydown', 'click'];
+    var held = null, pending = false;
+    // a gesture the browser does not count as activation (a touch's pointerdown) has its
+    // play() refused; the arm stays for the next gesture and leaves once a play went through
+    var arm = function () {
+      if (held || pending) return;
+      var a;
+      try { a = new Audio(SILENT_WAV); } catch (e) { return; }
+      a.loop = true;
+      a.setAttribute('playsinline', '');
+      pending = true;
+      a.play().then(function () {
+        held = a;
+        GESTURES.forEach(function (e) { document.removeEventListener(e, arm, true); });
+      }, function () { pending = false; });
+    };
+    GESTURES.forEach(function (e) { document.addEventListener(e, arm, true); });
+  })();
+
+  if (!SUPPORTED) {
+    showNote('needs SharedArrayBuffer',
+      '<b>SharedArrayBuffer is not available on this page.</b><br>The build runs on Web Workers ' +
+      'over it, and a browser grants it only to a cross-origin-isolated page - one the server ' +
+      'sends the Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy headers for.');
+  } else {
+    // the probes passed but the program refuses the browser anyway (emcc's own user-agent check
+    // throws "compiled without support for <browser>" at the top of its script): the error
+    // becomes the note while the gate is still up, never a download line that stays forever
+    window.addEventListener('error', function (e) {
+      if (!e.message) return;
+      showNote('this browser cannot run the build', '<b>This browser cannot run the interpreter.</b><br>' + escapeHtml(e.message));
+    });
+    runInterpreter();
+  }
+
+  function runInterpreter() {
+
+  // the microphone's state in words: the device the browser handed the program, or why it
+  // refused - the program itself hears silence either way. A browser gives a plain-http page
+  // the microphone only on localhost; opened by address it has no microphone API at all, so a
+  // stand-in refuses with that reason instead of the program's request throwing in a callback.
+  var micNote = document.getElementById('micnote');
+  function setMicNote(text) { micNote.textContent = text; micNote.hidden = !text; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {
+      getUserMedia: function () {
+        return Promise.reject(new DOMException('the browser allows the microphone only on localhost or https - this page was opened as ' + location.host, 'NotAllowedError'));
+      }
+    } });
+  }
+  // a stand-in for the microphone on a device that has no usable one (the simulator, a CI box):
+  // ?fakemic=noise, or ?fakemic=<url of a clip> looped - the program's capture path runs unchanged
+  var fakeMic = new URLSearchParams(location.search).get('fakemic');
+  async function fakeMicrophone(what) {
+    var ac = new (window.AudioContext || window.webkitAudioContext)();
+    var dest = ac.createMediaStreamDestination();
+    var src = ac.createBufferSource();
+    if (what === 'noise') {
+      var buf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+      var d = buf.getChannelData(0);
+      for (var i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * 0.3;
+      src.buffer = buf;
+    } else {
+      src.buffer = await ac.decodeAudioData(await (await fetch(what)).arrayBuffer());
+    }
+    src.loop = true;
+    src.connect(dest);
+    src.start();
+    try { await ac.resume(); } catch (e) {}
+    return dest.stream;
+  }
+  var fakeStream = null;
+  var askMicrophone = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+  navigator.mediaDevices.getUserMedia = function (constraints) {
+    if (fakeMic) {
+      setMicNote('microphone: a stand-in, ' + fakeMic);
+      fakeStream = fakeStream || fakeMicrophone(fakeMic);
+      return fakeStream;
+    }
+    setMicNote('asking for the microphone...');
+    return askMicrophone(constraints).then(function (stream) {
+      var track = stream.getAudioTracks()[0];
+      setMicNote('microphone: ' + ((track && track.label) || 'an unnamed device'));
+      return stream;
+    }, function (err) {
+      setMicNote('no microphone: ' + ((err && (err.message || err.name)) || err));
+      throw err;
+    });
+  };
+
+  var modelsBase = new URLSearchParams(location.search).get('models') || 'models/';
+  if (!modelsBase.endsWith('/')) modelsBase += '/';
+  // ?asr=<file> and ?tts=<file> pick other GGUFs of the model set (a wider carrier, a bigger voice, to compare) - the set's defaults otherwise
+  var asrModel = new URLSearchParams(location.search).get('asr') || 'gigaam-v3-e2e-rnnt-q4_k.gguf';
+  var ttsModel = new URLSearchParams(location.search).get('tts') || 'pocket-tts-en-18m-stuart-kq.gguf';
+
+  function setProgress(done, total) {
+    document.getElementById('fill').style.width = total ? (100 * done / total) + '%' : '0';
+  }
+
+  // the deploy's manifest: the files it minted or copied beside the page, with their sizes, and
+  // the IMAGE_VERSION the images were minted at
+  async function fetchManifest() {
+    var r = await fetch(modelsBase + 'manifest.json', { cache: 'no-cache' });
+    if (!r.ok) throw new Error('manifest.json: HTTP ' + r.status);
+    var m = await r.json();
+    if (!m || !Array.isArray(m.files) || !m.files.length) throw new Error('manifest.json lists no files');
+    if (PAGE_IMAGE_VERSION && m.image_version !== PAGE_IMAGE_VERSION) {
+      throw new Error('the model set was minted at IMAGE_VERSION ' + m.image_version +
+        ', this build needs ' + PAGE_IMAGE_VERSION + ' - the deploy did not re-mint it');
+    }
+    return m;
+  }
+
+  // the fetched bytes' digest, so a wrong body under an HTTP 200 (a proxy's error page) is refused
+  // instead of cached under the manifest's hash; '' where the page cannot hash (no secure context)
+  async function sha256Hex(bytes) {
+    if (!(window.crypto && crypto.subtle)) return '';
+    var d = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+    var s = '';
+    for (var i = 0; i < d.length; i++) s += (d[i] < 16 ? '0' : '') + d[i].toString(16);
+    return s;
+  }
+
+  // fetch every file with one shared progress bar, sizes from the manifest. A file this origin
+  // already holds in its Cache Storage under its sha256 is read from there instead, so a
+  // revisit fetches nothing and a re-minted set (a new hash) fetches only what changed; a fetched
+  // file is cached only once its bytes hash to the manifest's sha256; a browser without the
+  // store, or one that refuses the bytes, simply fetches every time
+  async function fetchModels(manifest, onFile) {
+    var total = manifest.files.reduce(function (a, f) { return a + (f.bytes || 0); }, 0), done = 0;
+    var store = null;
+    try { store = (typeof caches !== 'undefined') ? await caches.open('dasllama-models') : null; } catch (e) { store = null; }
+    for (var i = 0; i < manifest.files.length; i++) {
+      var f = manifest.files[i], name = f.name;
+      var key = new URL(modelsBase + name, location.href).href + '?sha256=' + (f.sha256 || '');
+      var cached = null;
+      try { cached = store ? await store.match(key) : null; } catch (e) { cached = null; }
+      var r = cached || await fetch(modelsBase + name);
+      if (!r.ok) throw new Error(name + ': HTTP ' + r.status);
+      var chunks = [], reader = r.body.getReader();
+      for (;;) {
+        var step = await reader.read();
+        if (step.done) break;
+        chunks.push(step.value);
+        done += step.value.length;
+        setProgress(done, total);
+        setStatus((cached ? 'reading ' : 'fetching ') + name + '  ' + (done / 1048576).toFixed(0) + ' / ' + (total / 1048576).toFixed(0) + ' MB');
+      }
+      var bytes = new Uint8Array(chunks.reduce(function (a, c) { return a + c.length; }, 0)), off = 0;
+      chunks.forEach(function (c) { bytes.set(c, off); off += c.length; });
+      if (!cached) {
+        var digest = await sha256Hex(bytes);
+        if (digest && f.sha256 && digest !== f.sha256) {
+          throw new Error(name + ': the fetched bytes do not match the manifest (sha256 ' + digest.slice(0, 12) + ', expected ' + f.sha256.slice(0, 12) + ') - reload the page; nothing was cached');
+        }
+        if (store && digest && digest === f.sha256) {
+          try { await store.put(key, new Response(bytes, { headers: { 'Content-Type': 'application/octet-stream' } })); } catch (e) { /* no room: fetched again next time */ }
+        }
+      }
+      onFile(name, bytes);
+    }
+    // this page's files the manifest no longer names leave the store (a sibling page's keys sit
+    // under another path and stay), so a re-mint does not wait on the browser's quota eviction
+    if (store) {
+      try {
+        var base = new URL(modelsBase, location.href).href, keep = {};
+        manifest.files.forEach(function (g) { keep[new URL(modelsBase + g.name, location.href).href + '?sha256=' + (g.sha256 || '')] = true; });
+        var held = await store.keys();
+        for (var k = 0; k < held.length; k++) {
+          if (held[k].url.indexOf(base) === 0 && !keep[held[k].url]) await store.delete(held[k]);
+        }
+      } catch (e) { /* the store refused the sweep: the next visit tries again */ }
+    }
+  }
+
+  // the engine's last lines: an abort after the click shows them, so a declined image or a
+  // missing model reads as text on the page instead of a black canvas
+  var lastLines = [];
+  function remember(text) {
+    text = String(text);
+    if (/dasLLAMA|interpreter|panic|error/i.test(text)) {
+      lastLines.push(text);
+      if (lastLines.length > 6) lastLines.shift();
+    }
+  }
+  function showFailure(what) {
+    var lines = lastLines.map(function (l) { return '<code>' + escapeHtml(l) + '</code>'; }).join('<br>');
+    showNote('the program stopped', '<b>the interpreter stopped: ' + escapeHtml(what) + '</b>' + (lines ? '<br>' + lines : ''));
+  }
+
+  window.Module = {
+    canvas: (function () {
+      var c = document.getElementById('canvas');
+      c.addEventListener('click', function () { c.focus(); });
+      var origGetContext = c.getContext.bind(c);
+      c.getContext = function (type) {
+        if (/webgl/i.test(String(type))) {
+          try { parent.postMessage({ type: 'canvas-visible', width: c.width, height: c.height }, '*'); } catch (e) { /* no embedder */ }
+        }
+        return origGetContext.apply(c, arguments);
+      };
+      return c;
+    })(),
+    // the translator's vocabulary sits beside its model under the name the file carries, which is how the loader finds it
+    arguments: ['--models', '/models', '--asr-model', asrModel, '--nmt-model', 'model.ruen.intgemm.alphas.bin', '--tts-model', ttsModel, '--vad-model', 'silero_vad.bin'],
+    print: function (text) { console.log(text); remember(text); },
+    printErr: function (text) { console.error(text); remember(text); },
+    onAbort: function (what) { showFailure(what || 'abort'); },
+    onExit: function (code) { if (code) showFailure('exit code ' + code); },
+    preRun: [function () {
+      // the C environment is built from Module.ENV at startup: knobs set later never reach getenv
+      Module.ENV.DASLLAMA_IMAGE = '0';          // never mint a sidecar into MEMFS: the speech model's q8 image is built in memory at load
+      Module.ENV.DASLLAMA_ALLOW_UNTUNED = '1';  // the portable kernels, no tune sidecar
+      Module.FS.mkdir('/models');
+      Module.addRunDependency('interpreter-models');
+      fetchManifest()
+        .then(function (manifest) {
+          return fetchModels(manifest, function (name, bytes) { Module.FS.writeFile('/models/' + name, bytes); });
+        })
+        .then(function () {
+          setStatus('the models are here');
+          setProgress(1, 1);
+          var start = document.getElementById('start');
+          start.style.display = 'block';
+          start.addEventListener('click', function () {
+            document.getElementById('gate').hidden = true;
+            document.getElementById('canvas').focus();
+            Module.removeRunDependency('interpreter-models');
+          });
+        })
+        .catch(function (err) {
+          showNote('could not load the model set', '<b>' + escapeHtml(err.message) + '</b>');
+        });
+    }],
+  };
+  // the program: a live copy of the tag emcc put in the template (a cloned template script stays inert)
+  var loader = document.getElementById('loader').content.querySelector('script');
+  var live = document.createElement('script');
+  live.async = true;
+  // a script that never arrives (a partial deploy, a proxy) fires error on the element itself,
+  // with no message and no bubbling - the window listener above never sees it
+  live.onerror = function () {
+    showNote('the program did not load', '<b>The program script did not load.</b><br>' +
+      'Reload the page; if it keeps failing, the deploy is incomplete.');
+  };
+  if (loader.getAttribute('src')) live.src = loader.getAttribute('src');
+  else live.textContent = loader.textContent;
+  document.body.appendChild(live);
+  }
+</script>
+</body>
+</html>

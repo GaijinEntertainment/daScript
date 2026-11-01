@@ -26,6 +26,12 @@ checklist is `REVIEW.md` beside this file. The engine these programs drive is do
   files, plus `take.das`, the pure side (the take's numbers, the waveform columns, the chunk
   ledger) a test reaches without a window. Nothing leaves the program: the take is cloned in
   memory and never written.
+- `interpreter/` - a browser example: you press listen and talk in Russian; Silero VAD cuts each
+  utterance at the pause, GigaAM transcribes it, Bergamot translates it, Pocket TTS says the
+  English, and the history keeps every turn with its stage times (sec.3.8). Same four files, plus
+  `turn.das`, the pure side (the listen's numbers, the utterance window, the turn ledger) a test
+  reaches without a window; the waveform columns are parrot's `take.das`. Nothing leaves the
+  program.
 - `wasm/dlim_config/` - a wasm-only program: prints the running build's DlimConfiguration JSON.
   `wasm/mint_models.py` - the deploy's staging step for a browser example's model set.
   `wasm/run_node.js` - runs the wasm64 engine host under node.
@@ -215,7 +221,33 @@ output waveform keeps a fixed time scale
 (thirty seconds at least) so the playhead moves at one speed while chunks land. The chords are Ctrl (or Command) with Enter to say and with R
 to record and stop.
 
-### 3.8 The library's two backends {#library-two-backends}
+### 3.8 Interpreter's turns {#interpreter-turns}
+
+The microphone is opened at 16 kHz, the rate GigaAM and Silero both hear, so nothing is resampled;
+the frame thread drains it every frame into the take and feeds the new samples to the Silero
+iterator. Speech start opens an utterance; speech end cuts it - the speech plus a quarter second at
+each end, never longer than GigaAM's 25 s span cap, which cuts a longer utterance there and hears
+the rest as the next - and the take and the detector start over behind it, as the command line's
+`--mic vad` does; a take that holds thirty seconds and no speech is dropped the same way, so an
+hour of quiet holds no audio. The cut is applied outside the iterator's feed, since it resets the
+iterator. An utterance goes to the worker thread as a turn (`Ask` kind 1, the PCM in the record),
+and the thread answers each stage as it lands - the transcript with its wall time, the English
+with its own, then the clip with the synthesis time - so the history shows a turn as
+transcribing, translating, speaking and spoken in turn, with each stage's milliseconds under it; a
+stage with nothing to pass on (silence transcribed as nothing, nothing to say) ends the turn as
+empty. The worker's lane pin is its own context's: the browser build pins the speech model's q8
+lane there before the load, because the portable backend serves no K-quant plane batched
+(`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`). While a clip plays, and while clips wait to play, the
+microphone's frames are drained and dropped - the page would otherwise hear its own reply - and
+the take starts over once the last clip ends. Clips play one at a time in turn order, each with its
+own status box (sec.3.7's rule); the output waveform is the session's spoken audio with a tick at
+each turn's start and the mixer's playhead. The panels are the status strip, the listen window (the
+disc with the level breathing around it, the gain, the take's waveform, the model line), the history
+(three lines a turn: the Russian, the English or the stage it is at, the times in grey, the newest
+kept in view) and the output; a window narrower than 760 px, or taller than wide, stacks the listen
+over the history with the output behind it as a tab. Space listens and stops.
+
+### 3.9 The library's two backends {#library-two-backends}
 
 `library/dasllama_lib.das` is built by both standalone backends from the one source, and the
 difference decides what a host can do with it. `daslang -lib` jits it into a native shared
