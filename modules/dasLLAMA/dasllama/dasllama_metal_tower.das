@@ -353,6 +353,7 @@ def private tw_q8_attach(t : AudioTower) : bool {
     return ok
 }
 
+let MT_RNNT_PIECE = "mt.rnnt"   //! the transducer decoder's halves' and slab's prefix in a Metal device block
 let private TW_AUD_Q8_PIECE = "mt.aud.q8"            //! a whisper-class tower's q8 slab in a Metal device block
 let private TW_AUD_Q8_OFFS_PIECE = "mt.aud.q8.offs"  //! ... its regions' byte offsets, a word each, the stem's second conv last
 let private TW_AUD_CONV1_PIECE = "mt.aud.conv1"      //! ... its stem's first conv padded to the 32 lattice
@@ -1488,6 +1489,7 @@ def private metal_gigaam_bake(m : GigaamModel; var b : TowerDevBuild) : bool {
         }
         tw_dev_put_words(b, TW_FC_Q8_OFFS_PIECE, offs)
     }
+    gigaam_rnnt_dev_bake(m, b, MT_RNNT_PIECE)
     let g = tw_ga_mel_geo(m)
     return false if (tw_ga_mel_panel(m, g) == null)
     tw_dev_put_slab(b, TW_GA_MEL_PIECE, g_tw_ga_mel_panel)

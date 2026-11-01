@@ -660,11 +660,19 @@ def private rd_attach_build(net : RnntNet; s : RnntState; enc : RnntEnc; key : u
     rd_release_weights()
     g_rd_w.lay = rnnt_dev_layout(net)
     let lay = g_rd_w.lay
-    var inscope wf <- rnnt_dev_slab(net, s, enc, lay)
+    if (net.devplan.n > 0l) {   //! a Metal-flavored net's halves and slab are its image's pieces, copied as stored
+        g_rd_w.wh = rd_piece(net, "{MT_RNNT_PIECE}.wh", lay.wh_halves * 2l)
+        g_rd_w.jw = rd_piece(net, "{MT_RNNT_PIECE}.jw", lay.jw_halves * 2l)
+        g_rd_w.wf = rd_piece(net, "{MT_RNNT_PIECE}.wf", lay.wf_floats * 4l)
+    } else {
+        var inscope wf <- rnnt_dev_slab(net, s, enc, lay)
+        unsafe {
+            g_rd_w.wh = metal_buffer_from(g_dev, uint64(lay.wh_halves * 2l), addr<void?>(s.wh[0]))
+            g_rd_w.jw = metal_buffer_from(g_dev, uint64(lay.jw_halves * 2l), addr<void?>(s.joint_wt[0]))
+            g_rd_w.wf = metal_buffer_from(g_dev, uint64(long_length(wf) * 4l), addr<void?>(wf[0]))
+        }
+    }
     unsafe {
-        g_rd_w.wh = metal_buffer_from(g_dev, uint64(lay.wh_halves * 2l), addr<void?>(s.wh[0]))
-        g_rd_w.jw = metal_buffer_from(g_dev, uint64(lay.jw_halves * 2l), addr<void?>(s.joint_wt[0]))
-        g_rd_w.wf = metal_buffer_from(g_dev, uint64(long_length(wf) * 4l), addr<void?>(wf[0]))
         if (!enc.q8) {
             g_rd_w.wenc = metal_buffer_from(g_dev, uint64(net.joint_dim * enc.d * 4l), reinterpret<void?>(plane_at(net.blob, enc.w)))
         }
@@ -676,6 +684,15 @@ def private rd_attach_build(net : RnntNet; s : RnntState; enc : RnntEnc; key : u
     g_rd_w.key = key
     g_rd_uploads++
     return true
+}
+
+//! the device-block piece `name` of a net's image copied into a fresh buffer; null where it is missing or not `bytes` long
+def private rd_piece(net : RnntNet; name : string; bytes : int64) : MetalBuffer? {
+    let p = tower_dev_find(net.devplan, name)
+    return null if (p.off < 0l || p.bytes != bytes)
+    unsafe {
+        return metal_buffer_from(g_dev, uint64(bytes), reinterpret<void?>(plane_at(net.dev, p.off)))
+    }
 }
 
 //! Whether the Metal seat projects a lane's encoder half: the f32 plane's, through the exact f32 GEMM.
