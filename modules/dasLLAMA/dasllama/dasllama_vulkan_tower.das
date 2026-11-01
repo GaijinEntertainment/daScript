@@ -8,7 +8,6 @@ module dasllama_vulkan_tower shared public
 require dasllama/dasllama_lint public
 require vulkan
 require math
-require daslib/strings_boost   // join - the kq lane members' names in a decline
 require dasllama/dasllama_env
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_gemm_schema   // kq_dev_ssb, dev_rows_bytes - the kq lane's device plane strides
@@ -1361,8 +1360,6 @@ def private vt_tail_bufs(var r : VtResident; tail_dim : int64) : bool {
     let cap = r.cap_rows
     let bp = cap * tail_dim * 4l
     let bx = cap * r.d * 4l
-    let bq = cap * max(r.d, r.ff)
-    let bs = bq / kq_elems(KqFmt.q8) * 4l
     r.oom = false
     r.tail_out_dev = vt_dev_buf(r, bp)
     r.tail_proj_dev = vt_dev_buf(r, bp)
@@ -1643,7 +1640,7 @@ struct private VtFc {
     kq : PlaneU8 = PlaneU8()
     ks : PlaneU8 = PlaneU8()
     kq_repacked : bool   //! the K-quant planes in the CPU backend's grp interleave, which the gather un-groups; else disk order
-    kq_fmts : uint       //! the K-quant members' format slots, a bit each (`vt_fc_kq_members` names them)
+    kq_fmts : uint       //! the K-quant members' format slots, a bit each
     n_layer : int64
     d : int64
     ff : int64
@@ -1704,25 +1701,13 @@ def private vt_fc_of_pk(m : ParakeetModel) : VtFc {
 def private vt_fc_of_ga(m : GigaamModel) : VtFc {
     g_vt_fc_offs |> reserve(m.n_layer)
     g_vt_fc_offs |> resize(m.n_layer)
-    g_vt_fc_gseats |> reserve(m.n_layer * VT_CN_GEMMS)
-    g_vt_fc_gseats |> resize(m.n_layer * VT_CN_GEMMS)
-    var kq_fmts = 0u
     for (l in range64(m.n_layer)) {
-        let lo = gigaam_layer_offsets(m, l)
-        g_vt_fc_offs[l] = lo
-        continue if (!m.kq_lane)
-        let woffs = fixed_array(lo.ff1a_w, lo.ff1b_w, lo.q_w, lo.k_w, lo.v_w, -1l, lo.o_w, lo.pw1_w, lo.pw2_w, lo.ff2a_w, lo.ff2b_w)   // the records' order, the rel record empty
-        for (g in range64(VT_CN_GEMMS)) {
-            var seat = TowerGemmSeat(fmt = KqFmt.q8, qoff = -1l, soff = -1l)
-            if (woffs[g] >= 0l) {
-                seat = tower_gemm_seat(m, woffs[g])
-                if (seat.fmt != KqFmt.q8) {
-                    kq_fmts |= 1u << uint(int(seat.fmt))
-                }
-            }
-            g_vt_fc_gseats[l * VT_CN_GEMMS + g] = seat
-        }
+        g_vt_fc_offs[l] = gigaam_layer_offsets(m, l)
     }
+    let nseats = m.kq_lane ? m.n_layer * GIGAAM_FC_RECORDS : 0l
+    g_vt_fc_gseats |> reserve(nseats)
+    g_vt_fc_gseats |> resize(nseats)
+    let kq_fmts = gigaam_fc_record_seats(m, g_vt_fc_gseats)
     let f16w = !m.q8 && m.gemm_f16
     return VtFc(family = "gigaam", front_name = "gigaam-front", q8 = m.q8, qblob = m.qblob, qscales = m.qscales, blob = m.blob,
         f16w = f16w, wblob = f16w ? m.wblob : PlaneU16(), w_off = m.gemm_off, w_n = f16w ? m.n_layer * m.gemm_stride : 0l,
@@ -2055,16 +2040,6 @@ def private vt_fc_lane_ok(fc : VtFc; gemm_khr : bool) : bool {
     return !fc.kq_lane || vt_cm2_feed()
 }
 
-//! the kq lane's members by name, `+`-joined in slot order with the Q8_0 seats' `q8` last - the decline's words
-[cold_path]
-def private vt_fc_kq_members(fc : VtFc) : string {
-    var names <- [for (fmt in range(KQ_FMT_COUNT)); "{kq_fmt_of_slot(fmt)}"; where(fc.kq_fmts & (1u << uint(fmt))) != 0u]
-    if (fc.qblob.n > 0l) {
-        names |> push("q8")
-    }
-    return join(names, "+")
-}
-
 //! asked after `vt_fc_lane_ok`, which holds the f16 feed these tiles read
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-kq")]
 def private vt_fc_kq_tiles_ok(fc : VtFc; npos : int64) : bool {
@@ -2178,7 +2153,7 @@ def private vt_fc_blocks(var r : VtResident; fc : VtFc; var x : array<float>; np
         return vt_decline(r, VulkanTowerDecline.device)
     }
     if (!vt_fc_kq_tiles_ok(fc, npos)) {
-        return vt_decline_kq(r, vt_fc_kq_members(fc))
+        return vt_decline_kq(r, gigaam_kq_members_of(fc.kq_fmts, fc.qblob.n > 0l))
     }
     let mm = VtFcMm(f16w = fc.f16w, gemm_khr = arm.gemm_khr, npos = npos, w_base = fc.w_off)
     let v = vt_tile(cm2, d, npos)
@@ -3480,8 +3455,6 @@ def private vt_ct_bufs(var r : VtResident; hid, gate, out : int64) : bool {
     }
     let cap = r.cap_rows
     let bx = cap * r.d * 4l
-    let bq = cap * max(r.d, r.ff)
-    let bs = bq / kq_elems(KqFmt.q8) * 4l
     let bxh = (cap + TILE_READ_SLACK) * max(r.d, r.ff) * 2l
     let bh = cap * max(hid, 1l) * 4l
     let bg = cap * max(gate, 1l) * 4l

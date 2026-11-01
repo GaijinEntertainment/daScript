@@ -120,9 +120,11 @@ is refused naming the tensor, the pinned lanes being the way to dequantize it. T
 (`gigaam_exec_fmt`: `k4`), `kq` where the members mix, `q8` where every GEMM is Q8_0 - that carrier serves its blocks
 exactly where the q8 lane would requantize them. Pinned (`set_gigaam_q8`, the facade's fp32 rails), a quantized carrier
 dequantizes into the pinned lane's planes, as the f16 carrier would. `REVIEW.das`'s facade-tutorial check licenses
-`gigaam_gemm_stride`, `gigaam_lane_tag`, `gigaam_kq_members` and `gigaam_lane_pinned` beside the family's loader chain:
+`gigaam_gemm_stride`, `gigaam_lane_tag`, `gigaam_kq_members`, `gigaam_lane_pinned`, `gigaam_fc_record_seats` and
+`gigaam_kq_members_of` beside the family's loader chain:
 defs no user program calls - the loader lays the seat index by the stride, the bake tool names the lane's image tag,
-the load log and the tests read the members, the carrier's lane policy reads the pin. f16 depthwise taps
+the load log and the tests read the members, the carrier's lane policy reads the pin, the device chains read the record
+seats and name the members in a decline. f16 depthwise taps
 (`dw_f16`) sit in `wblob` on both lanes, behind the block GEMMs where they are there, every layer's [k][d] at `dw_off`; a
 carrier whose taps mix f16 with another type is refused the same way, and one whose taps hold no f16 keeps them f32 in
 `blob`. An f16 CTC head (`ctc_f16`) sits in `wblob` on both lanes behind them: its rows padded with zero rows to

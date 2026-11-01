@@ -202,18 +202,25 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
     if (!(name |> ends_with("s")) || !kq_fmt_of_name(slice(name, 0, length(name) - 1), f) || !kq_sb(f) || f == KqFmt.q40 || f == KqFmt.iq4nl || f == KqFmt.nv4) {
         return false
     }
-    if (empty(t.kq[int(f)].s)) {
-        return true
+    if (!empty(t.kq[int(f)].s)) {
+        metal_kq_scale_form(f, t.kq[int(f)].s)
     }
-    if (f == KqFmt.k4 || f == KqFmt.k5) {
-        // the 16B verbatim disk scale block per superblock; the 4B pad is repack scratch a blob model never uses
-        compact_kq_scale_strip(t.kq[int(f)].s)
-        return true
-    }
-    var @exact_size xc : array<uint8>
-    kq_split_scale_plane(f, unsafe(addr<uint8 const?>(t.kq[int(f)].s[0])), long_length(t.kq[int(f)].s) / kq_ssb(f), xc)
-    t.kq[int(f)].s <- xc
     return true
+}
+
+//! A K-quant scale plane `ks` of `f` put into its Metal device form in place: k4/k5 the 16-byte disk block a superblock,
+//! q40, iq4nl and nv4 as they are, every other format split into scale and d rows (`kq_split_scale_plane`) - the one
+//! place a format's Metal scale form is decided, for the blob flavor's planes and the tower's kq slab alike.
+[arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
+def metal_kq_scale_form(f : KqFmt; var ks : array<uint8>) {
+    if (f == KqFmt.k4 || f == KqFmt.k5) {
+        compact_kq_scale_strip(ks)
+    } elif (f != KqFmt.q40 && f != KqFmt.iq4nl && f != KqFmt.nv4) {
+        var @exact_size xc : array<uint8>
+        kq_split_scale_plane(f, unsafe(addr<uint8 const?>(ks[0])), long_length(ks) / kq_ssb(f), xc)
+        delete ks
+        ks <- xc
+    }
 }
 
 //! Commit `t` to the metal blob flavor WITHOUT building the big plane: the kq scale strips take
@@ -264,7 +271,7 @@ def private metal_blob_materialize(var t : Model) {
 
 // 20B -> 16B in place: keep bytes [0..16) of every superblock strip, then shrink. Forward
 // byte moves are safe — every destination sits below its source (regions can overlap).
-def compact_kq_scale_strip(var ks : array<uint8>) {
+def private compact_kq_scale_strip(var ks : array<uint8>) {
     let nsb = long_length(ks) / 20l
     unsafe {
         var p = addr(ks[0])

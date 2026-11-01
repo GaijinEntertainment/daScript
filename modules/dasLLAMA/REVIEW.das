@@ -110,7 +110,8 @@ var private FACADE_DEFS_WITHOUT_TUTORIAL <- {
     "rnnt_dev_rounds", "rnnt_dev_shape_ok", "rnnt_dev_slab", "rnnt_dev_state_words",   //! the host half of the device transducer decode the Metal and Vulkan seats call
     "set_rnnt_dev_fault", "set_rnnt_dev_round_budget",    //! probe seams a fixture sets to force a device fault, a round budget or a lane split
     "set_rnnt_trace",   //! the CPU transducer decode's per-frame trace an engine developer flips while bringing a family up
-    "gigaam_gemm_stride", "gigaam_lane_tag", "gigaam_kq_members", "gigaam_lane_pinned"   //! the kq lane's seat geometry a test pins, the lane's image tag the bake tool names, the lane's members the load log and the tests read, the pin the carrier's lane policy reads
+    "gigaam_gemm_stride", "gigaam_lane_tag", "gigaam_kq_members", "gigaam_lane_pinned",
+    "gigaam_fc_record_seats", "gigaam_kq_members_of"   //! the kq lane's seat geometry a test pins, the lane's image tag the bake tool names, the lane's members the load log and the tests read, the pin the carrier's lane policy reads
 }
 
 [arch(at = "ARCHITECTURE_TTS.md#text-to-speech")]

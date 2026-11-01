@@ -948,6 +948,38 @@ def gigaam_lane_tag(path : string; q8, pinned : bool) : string {
     return gigaam_image_tag(q8, kq)
 }
 
+let GIGAAM_FC_RECORDS = 11l   //! the FastConformer chain's GEMM records a block: ff1a, ff1b, q, k, v, the empty rel record, o, pw1, pw2, ff2a, ff2b
+
+//! The kq lane's seat for every GEMM record of the device chains into the driver's reused `seats`, sized by the driver
+//! to GIGAAM_FC_RECORDS a block on the kq lane (the rel record an empty q8 seat); answers the K-quant members' format slots.
+def gigaam_fc_record_seats(m : GigaamModel; var seats : array<TowerGemmSeat>) : uint {
+    var kq_fmts = 0u
+    assert(long_length(seats) == (m.kq_lane ? m.n_layer * GIGAAM_FC_RECORDS : 0l), "the driver sizes the record seats to the chain")
+    for (l in range64(m.kq_lane ? m.n_layer : 0l)) {
+        let lo = gigaam_layer_offsets(m, l)
+        let woffs = fixed_array(lo.ff1a_w, lo.ff1b_w, lo.q_w, lo.k_w, lo.v_w, -1l, lo.o_w, lo.pw1_w, lo.pw2_w, lo.ff2a_w, lo.ff2b_w)
+        for (w, g in woffs, count()) {
+            let seat = w >= 0l ? tower_gemm_seat(m, w) : TowerGemmSeat(fmt = KqFmt.q8, qoff = -1l, soff = -1l)
+            if (seat.fmt != KqFmt.q8) {
+                kq_fmts |= 1u << uint(int(seat.fmt))
+            }
+            seats[l * GIGAAM_FC_RECORDS + int64(g)] = seat
+        }
+    }
+    return kq_fmts
+}
+
+//! The kq lane's members by name from the format slots a chain holds: the K-quant members in slot order, `q8` last where
+//! Q8_0 seats ride beside them, `+`-joined - a decline's words.
+[cold_path]
+def gigaam_kq_members_of(kq_fmts : uint; has_q8 : bool) : string {
+    var names <- [for (fmt in range(KQ_FMT_COUNT)); "{kq_fmt_of_slot(fmt)}"; where(kq_fmts & (1u << uint(fmt))) != 0u]
+    if (has_q8) {
+        names |> push("q8")
+    }
+    return join(names, "+")
+}
+
 //! The kq lane's members, Q8_0's `q8` among them, each named once in seat order and joined by `+` - the lane announce's words.
 def gigaam_kq_members(m : GigaamModel) : string {
     var seen : array<string>

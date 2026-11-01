@@ -77,7 +77,7 @@ def private read_clips(path : string; limit : int) : array<Clip> {
     return <- clips
 }
 
-def private one_line(s : string) : string => replace(replace(replace(s, "\t", " "), "\r", " "), "\n", " ")
+def private one_line(s : string) : string => replace_multiple(s, [(text = "\t", replacement = " "), (text = "\r", replacement = " "), (text = "\n", replacement = " ")])
 
 [export, cold_path]
 def main() : int {

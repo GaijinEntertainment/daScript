@@ -471,11 +471,6 @@ let PANEL = rgba(24, 22, 30, 255)
 let WAVE = rgba(120, 160, 220, 255)
 let WAVE_DIM = rgba(80, 90, 120, 255)
 
-def ms(us : int64) : string => fmt(":.0f", double(us) / 1000.0lf)
-
-//! seconds and speeds to a tenth
-def tenths(x : float) : string => fmt(":.1f", x)
-
 //! the turn the chip speaks for: the newest one still on its way
 def newest_in_flight() : int {
     var found = -1
@@ -538,11 +533,6 @@ def draw_status_bar() {
     with_style((ImGuiCol.Text, empty(g_error) ? (g_listening ? DIM : ACCENT) : RED)) {
         text_wrapped(STATUS_LINE, (text = empty(g_error) ? g_status : g_error))
     }
-}
-
-def with_alpha(color : uint; alpha : float) : uint {
-    let a = uint(clamp(alpha, 0.0, 1.0) * 255.0)
-    return (color & 0x00ffffffu) | (a << 24u)
 }
 
 //! the box spans `span` samples at least, so a picture that grows clip by clip keeps its scale

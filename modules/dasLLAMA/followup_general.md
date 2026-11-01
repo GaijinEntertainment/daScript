@@ -2556,3 +2556,23 @@
     `i32x4.relaxed_dot_i8x16_i7x16_add_s` needs a sign fold that wraps at -128). Done = a row x token micro-tile in the
     portable batch (the nibbles split once a 32-block, four tokens' `idot`s off one load), measured on the interpreter's
     browser build against this row's numbers, and a relaxed-SIMD build arm raced beside it where a browser serves it.
+
+278. **The GPU TTS seats run on a dequantized copy of the weights, not the carrier's own planes.** Metal and Vulkan build
+    every StyleTTS2 (kitten, kokoro) and Pocket device slab at attach by widening the weights into padded f32 rows
+    (`tts_slab_build`, `tts_slab_conv` / `tts_slab_linear` in `dasllama_tts_slab.das`: q8 through `q8_plane_row_f32`,
+    K-quants through `tsw_put_kq`); Vulkan dequantizes every Pocket linear the same way and adds an f16 copy of the
+    StyleTTS2 decoder, and Metal's Pocket frames widen the K-quant linears to f32 and requantize them to Q8_0
+    (`pk_blob_q8`). So the TTS kernels read a converted copy about four times the q8 weights, against the site rule in
+    `REVIEW_KQ_FORMATS.md`, and no TTS family can have a per-backend `.dlim`: its device planes are built at every attach,
+    and baked as they are they would quadruple the file. Done = with the CUDA home's TTS seats, the TTS kernels on CUDA,
+    Metal and Vulkan read the carrier's q8 and K-quant planes in their device forms (the tower tiles' q8 and kq families),
+    the attach keeps only what the image bakes, and each TTS family mints its Metal, Vulkan and CUDA image, bound on load
+    with no conversion like every other tower's.
+
+279. **Vulkan's Gemma-4 vision towers run on an f32 widening of their bf16 weights.** gemma4v's f32 lane widens its bf16
+    block GEMMs in `wblob` to f32 at upload (`vt_upload_f32` over `vt_rows_f32`, `widen_bf16`), and the gemma4v and
+    gemma4uv patch stem and projector slab (`vt_vis_slab`) widens their bf16 rows the same way, so the Vulkan kernels read
+    a copy twice the size of the file's planes while Metal reads the bf16 natively. No per-backend Vulkan image can hold
+    those planes without the doubling, the same defect row 278 states for the TTS seats. Done = with the CUDA home's
+    vision towers, the Vulkan and CUDA Gemma-4 vision kernels read the bf16 planes as the file holds them, and the Vulkan
+    gemma4v and gemma4uv images carry those bytes, uploaded with no conversion.

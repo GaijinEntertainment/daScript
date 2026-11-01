@@ -337,30 +337,18 @@ def test_vad_metal_declines(t : T?) {
     }
 }
 
-//! the build's GPU VAD seat's declines counted under `reason` so far (0 on a build with no driver)
-def private vad_device_declines(reason : string) : int64 {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        return metal_tower_declines()?[reason] ?? 0l
-    } else {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            return vulkan_tower_declines()?[reason] ?? 0l
-        } else {
-            return 0l
-        }
-    }
-}
 
 //! one GPU VAD seat decline: `pin` sets the lever and puts it back; the call must decline as `reason`, step no chunk on the
 //! device and answer the CPU chunk step's probabilities bit for bit
 [cold_path]
 def private vad_decline_leg(t : T?; m : VadModel; sig : array<float>; reason : string; pin : block<(on : bool) : void>) {
     let c0 = vad_device_chunks()
-    let d0 = vad_device_declines(reason)
+    let d0 = gpu_tower_declines_of(reason)
     invoke(pin, true)
     let probs <- vad_probs(m, sig)
     invoke(pin, false)
     t |> equal(vad_device_chunks() - c0, 0l, "{reason}: no chunk stepped on the device")
-    t |> equal(vad_device_declines(reason) - d0, 1l, "{reason}: one decline counted")
+    t |> equal(gpu_tower_declines_of(reason) - d0, 1l, "{reason}: one decline counted")
     let cpu <- vad_probs_cpu(m, sig)
     check_exact(t, "{reason}: the CPU chunk step answered", probs, cpu)
 }

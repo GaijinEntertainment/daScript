@@ -324,7 +324,7 @@ def on_read_out() {
     g_read_out_say = g_says
     if (g_say_silent) {
         g_measure_rtf |> push(say_speed())
-        to_log(LOG_INFO, "parrot: measure {length(g_measure_rtf)} of {MEASURE_RUNS}: {s1(say_speed())}x real time\n")
+        to_log(LOG_INFO, "parrot: measure {length(g_measure_rtf)} of {MEASURE_RUNS}: {tenths(say_speed())}x real time\n")
         if (g_measure_left > 0) {
             g_measure_left--
             say_silent()
@@ -334,7 +334,7 @@ def on_read_out() {
         for (r in g_measure_rtf) {
             sum += r
         }
-        g_status = "measure {g_measure_no}: {s1(sum / double(length(g_measure_rtf)))}x real time over {length(g_measure_rtf)} runs {lanes_label()}"
+        g_status = "measure {g_measure_no}: {tenths(sum / double(length(g_measure_rtf)))}x real time over {length(g_measure_rtf)} runs {lanes_label()}"
         return
     }
     if (g_phase == Phase.idle) {
@@ -342,7 +342,7 @@ def on_read_out() {
     }
     let speech_s = float(length(g_out_pcm)) / float(max(g_mic_rate, 1))
     let playback_s = g_first_play_s < 0.0 ? 0.0 : g_elapsed_s - g_first_play_s
-    to_log(LOG_INFO, "parrot: say {g_says} is read out - {s1(speech_s)} s of speech over {s1(playback_s)} s of playback\n")
+    to_log(LOG_INFO, "parrot: say {g_says} is read out - {tenths(speech_s)} s of speech over {tenths(playback_s)} s of playback\n")
 }
 
 def poll_answers() {
@@ -519,9 +519,9 @@ def stop_take() {
         g_status = (!g_frames_seen
             ? "nothing heard - the microphone gave no audio at all: it was refused, or there is none"
             : g_level_peak < 0.001
-                ? "nothing heard - the microphone gave silence for {s1(seconds)} s: is it allowed for this page, and on?"
-                : "nothing heard - the microphone peaked at {fmt(":.4f", g_level_peak)} over {s1(seconds)} s, too quiet for speech: come closer and talk")
-        to_log(LOG_INFO, "parrot: nothing heard - peak {fmt(":.4f", g_level_peak)} over {s1(seconds)} s\n")
+                ? "nothing heard - the microphone gave silence for {tenths(seconds)} s: is it allowed for this page, and on?"
+                : "nothing heard - the microphone peaked at {fmt(":.4f", g_level_peak)} over {tenths(seconds)} s, too quiet for speech: come closer and talk")
+        to_log(LOG_INFO, "parrot: nothing heard - peak {fmt(":.4f", g_level_peak)} over {tenths(seconds)} s\n")
         return
     }
     let w = clip_window(g_speech_start24, g_speech_end24, long_length(g_take), g_in_speech)
@@ -545,7 +545,7 @@ def drain_rest() {
 
 def clone_clip(var clip : array<float>; rate : int) {
     g_phase = Phase.cloning
-    g_status = "cloning your voice from {s1(float(length(clip)) / float(rate))} seconds..."
+    g_status = "cloning your voice from {tenths(float(length(clip)) / float(rate))} seconds..."
     var a = Ask(kind = 1, gen = g_says, pcm <- clip, rate = rate)
     g_ask |> push_archive(a)
 }
@@ -674,7 +674,7 @@ let WAVE_DIM = rgba(80, 90, 120, 255)
 
 def phase_chip() : tuple<text : string; color : uint> {
     if (g_phase == Phase.recording) {
-        return (text = "recording  {s1(float(length(g_take)) / float(g_mic_rate))} s", color = RED)
+        return (text = "recording  {tenths(float(length(g_take)) / float(g_mic_rate))} s", color = RED)
     }
     if (g_phase == Phase.cloning) {
         return (text = "cloning your voice", color = ACCENT)
@@ -731,12 +731,6 @@ def draw_status_bar() {
     with_style((ImGuiCol.Text, g_phase == Phase.idle ? ACCENT : DIM)) {
         text_wrapped(STATUS_LINE, (text = g_status))
     }
-}
-
-//! a colour at another alpha
-def with_alpha(color : uint; alpha : float) : uint {
-    let a = uint(clamp(alpha, 0.0, 1.0) * 255.0)
-    return (color & 0x00ffffffu) | (a << 24u)
 }
 
 //! min/max columns over a box: the take or the say; the shaded window and the playhead ride on top.
@@ -825,9 +819,9 @@ def draw_voice_panel() {
             slider_float(GAIN, (text = "gain", format = "%.2f"))
         }
         if (g_phase == Phase.recording) {
-            text(TAKE_STATE, (text = g_in_speech ? "speech" : (g_speech_seen ? "quiet {s1(countdown_left(g_speech_seen, g_in_speech, g_elapsed_s - g_quiet_since_s))} s" : "listening")))
+            text(TAKE_STATE, (text = g_in_speech ? "speech" : (g_speech_seen ? "quiet {tenths(countdown_left(g_speech_seen, g_in_speech, g_elapsed_s - g_quiet_since_s))} s" : "listening")))
         } else {
-            text(VOICE_FACT, (text = g_voice_ready ? "you: {s1(g_voice_seconds)} s, cloned in {fmt(":.0f", g_clone_ms)} ms" : "no take yet"))
+            text(VOICE_FACT, (text = g_voice_ready ? "you: {tenths(g_voice_seconds)} s, cloned in {fmt(":.0f", g_clone_ms)} ms" : "no take yet"))
         }
     }
     spacing()
@@ -887,18 +881,11 @@ def draw_text_panel() {
     }
 }
 
-def ms(us : int64) : string => fmt(":.0f", double(us) / 1000.0lf)
-
-//! seconds and speeds to a tenth
-def s1(x : float) : string => fmt(":.1f", x)
-
-def s1(x : double) : string => fmt(":.1f", x)
-
 def draw_output_panel() {
     let ticks <- [for (row in g_chunks); row.start; where row.start > 0l]
     draw_wave(g_out_peaks, float2(GetContentRegionAvail().x, 72.0), 30l * int64(g_mic_rate), 0l, 0l, g_playhead, ticks)
     let seconds = double(long_length(g_out_pcm)) / double(max(g_mic_rate, 1))
-    text("{s1(seconds)} s of speech, generated at {s1(say_speed())}x real time   playhead {s1(double(g_playhead) / double(max(g_mic_rate, 1)))} s")
+    text("{tenths(seconds)} s of speech, generated at {tenths(say_speed())}x real time   playhead {tenths(double(g_playhead) / double(max(g_mic_rate, 1)))} s")
     if (!empty(g_chunks)) {
         data_table(CHUNK_TABLE, (text = "chunks", columns = 7, flags = ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.ScrollY, outer_size = float2(0.0, 0.0), inner_width = 0.0)) {
             table_setup_column("chunk", ImGuiTableColumnFlags.WidthStretch)
@@ -918,7 +905,7 @@ def draw_output_panel() {
                     text(CHUNK_STATE[i], (text = "{row.state}"))
                 }
                 if (table_next_column()) {
-                    text(CHUNK_AUDIO[i], (text = row.samples > 0l ? s1(double(row.samples) / double(max(g_mic_rate, 1))) : "-"))
+                    text(CHUNK_AUDIO[i], (text = row.samples > 0l ? tenths(double(row.samples) / double(max(g_mic_rate, 1))) : "-"))
                 }
                 if (table_next_column()) {
                     text(CHUNK_PROMPT[i], (text = ms(row.us_prompt)))
@@ -967,7 +954,7 @@ def draw_lab_panel() {
         text_wrapped(MEASURE_HINT, (text = "says the text {MEASURE_RUNS} times without playing it, and reports how many times faster than real time each run generated"))
     }
     for (i in range(length(g_measure_rtf))) {
-        text(MEASURE_ROW[i], (text = "measure {g_measure_no}, run {i + 1}  {s1(g_measure_rtf[i])}x real time"))
+        text(MEASURE_ROW[i], (text = "measure {g_measure_no}, run {i + 1}  {tenths(g_measure_rtf[i])}x real time"))
     }
 }
 

@@ -22,7 +22,7 @@ require dasllama/dasllama_gemma4a   // Gemma4aEncoder/Gemma4aState — the Confo
 require dasllama/dasllama_canary    // CanaryEncoder/CanaryState — the FastConformer block loop
 require dasllama/dasllama_parakeet  // ParakeetModel/ParakeetState — the same chain, parakeet's blob layout
 require daslib/cmp   // cmp_by: the q8 slab's regions in offset order
-require daslib/strings_boost   // join - the kq lane members' names in a decline
+require daslib/algorithm   // lower_bound: a GEMM record's region and seat by its offset
 require dasllama/dasllama_gigaam
 require dasllama/dasllama_vad   // VadModel/VadState - the silero VAD seat
 require dasllama/dasllama_styletts2
@@ -32,8 +32,7 @@ require dasllama/dasllama_kqformat
 require dasllama/dasllama_gemm_schema   // Q8_BLOCK_ELEMS, Q8_QPB, Q8_SPB - the q8 blob's block shape
 require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_tts_types
-require dasllama/dasllama_layout   // compact_kq_scale_strip - the kq lane's k4/k5 scale planes in the Metal form
-require dasllama/dasllama_load     // kq_split_scale_plane - ... and the split-scale members'
+require dasllama/dasllama_layout   // metal_kq_scale_form - the kq lane's scale planes in the Metal form
 require dasllama/dasllama_tts_slab
 require daslib/apply
 require daslib/math_bits
@@ -1064,18 +1063,9 @@ var private @exact_size g_tw_q8_fc_woffs : array<int64>   //!< those element off
 
 //! the q8 slab's byte offset of the region at element offset `woff` of the family's ``qblob``
 def private tw_fc_q8_boff(woff : int64) : uint64 {
-    var lo = 0l
-    var hi = long_length(g_tw_q8_fc_woffs)
-    while (lo < hi) {
-        let mid = (lo + hi) / 2l
-        if (g_tw_q8_fc_woffs[mid] < woff) {
-            lo = mid + 1l
-        } else {
-            hi = mid
-        }
-    }
-    assert(lo < long_length(g_tw_q8_fc_woffs) && g_tw_q8_fc_woffs[lo] == woff, "a FastConformer GEMM names no region of the q8 slab")
-    return g_tw_q8_fc_boffs[lo]
+    let i = lower_bound(g_tw_q8_fc_woffs, woff)
+    assert(i < length(g_tw_q8_fc_woffs) && g_tw_q8_fc_woffs[i] == woff, "a FastConformer GEMM names no region of the q8 slab")
+    return g_tw_q8_fc_boffs[i]
 }
 
 //! The family's q8 block GEMM planes on the device, uploaded once a model: every block's GEMM regions, ascending; false where
@@ -1086,7 +1076,7 @@ def private tw_fc_q8_attach(fc : TwFc) : bool {
     let d = fc.d
     let ff = fc.ff
     var @exact_size rg : array<Q8Region>
-    rg |> reserve(fc.n_layer * 11l)
+    rg |> reserve(fc.n_layer * GIGAAM_FC_RECORDS)
     for (l in range64(fc.n_layer)) {
         let lo = g_tw_fc_offs[l]
         rg |> push(Q8Region(woff = lo.ff1a_w, n = d, rows = ff))
@@ -1129,18 +1119,9 @@ var private @exact_size g_tw_kq_fc_binds : array<TwKqBind>   //!< every GEMM rec
 var private @scratch @exact_size g_tw_fc_gseats : array<TowerGemmSeat>   //!< the kq lane's seat a GEMM record (eleven a block in the chain's order, the rel record empty)
 
 def private tw_fc_kq_bind(woff : int64) : TwKqBind {
-    var lo = 0l
-    var hi = long_length(g_tw_kq_fc_binds)
-    while (lo < hi) {
-        let mid = (lo + hi) / 2l
-        if (g_tw_kq_fc_binds[mid].woff < woff) {
-            lo = mid + 1l
-        } else {
-            hi = mid
-        }
-    }
-    assert(lo < long_length(g_tw_kq_fc_binds) && g_tw_kq_fc_binds[lo].woff == woff, "a FastConformer GEMM names no seat of the kq lane")
-    return g_tw_kq_fc_binds[lo]
+    let i = lower_bound(g_tw_kq_fc_binds, woff) $(b : TwKqBind; w : int64) => b.woff < w
+    assert(i < length(g_tw_kq_fc_binds) && g_tw_kq_fc_binds[i].woff == woff, "a FastConformer GEMM names no seat of the kq lane")
+    return g_tw_kq_fc_binds[i]
 }
 
 def private tw_kq_key(fc : TwFc) : uint64 {
@@ -1156,33 +1137,12 @@ def private tw_fc_kq_members_have_base_tile(fc : TwFc) : bool {
     return true
 }
 
-def private tw_kq_metal_scales(fmt : KqFmt; var ks : array<uint8>) {
-    if (fmt == KqFmt.k4 || fmt == KqFmt.k5) {
-        compact_kq_scale_strip(ks)
-    } elif (fmt != KqFmt.q40 && fmt != KqFmt.iq4nl && fmt != KqFmt.nv4) {
-        var @exact_size xc : array<uint8>
-        kq_split_scale_plane(fmt, unsafe(addr<uint8 const?>(ks[0])), long_length(ks) / kq_ssb(fmt), xc)
-        delete ks
-        ks <- xc
-    }
-}
-
-//! the kq lane's members by name, `+`-joined in slot order with the Q8_0 seats' `q8` last - the decline's words
-[cold_path]
-def private tw_fc_kq_members(fc : TwFc) : string {
-    var names <- [for (fmt in range(KQ_FMT_COUNT)); "{kq_fmt_of_slot(fmt)}"; where(fc.kq_fmts & (1u << uint(fmt))) != 0u]
-    if (fc.qblob.n > 0l) {
-        names |> push("q8")
-    }
-    return join(names, "+")
-}
-
 //! the kq-lane decline - "a reason naming the site and the member" (REVIEW_KQ_FORMATS.md) - its cause the CPU backend's interleave or a member with no mul_mm tile
 [cold_path]
 def private tw_decline_kq(fc : TwFc) : bool {
     let why = (fc.kq_repacked ? "are in the CPU backend's interleave - a load under the Metal mode (the row-major backend pinned) keeps them in disk order"
         : "have a member with no mul_mm tile on this build")
-    note_decline(g_tower_declines, "tower", "{MetalTowerDecline.kq_lane}", words = "the GigaAM block GEMMs ({tw_fc_kq_members(fc)}) {why} - the CPU kq lane serves them")
+    note_decline(g_tower_declines, "tower", "{MetalTowerDecline.kq_lane}", words = "the GigaAM block GEMMs ({gigaam_kq_members_of(fc.kq_fmts, fc.qblob.n > 0l)}) {why} - the CPU kq lane serves them")
     return false
 }
 
@@ -1216,7 +1176,7 @@ def private tw_kq_stage_member(fc : TwFc; recs : array<Q8Region>; kf : KqFmt; va
         g_tw_kq_fc_binds[rid].doff = uint64(kq_scale_doff(kf, nsb_total, sb))
         sb += nsb
     }
-    tw_kq_metal_scales(kf, ks)
+    metal_kq_scale_form(kf, ks)
     let sbase = round_up(qbase + nsb_total * qsb, 16l)
     staging |> reserve_resize(sbase + long_length(ks))
     unsafe {
@@ -1239,7 +1199,7 @@ def private tw_fc_kq_attach(fc : TwFc) : bool {
     let key = tw_kq_key(fc)
     return true if (st2_slab_current(g_tw_kq_fc, key) && (fc.qblob.n == 0l || st2_slab_current(g_tw_q8_fc, tw_q8_key(fc.qblob, fc.qscales))))
     st2_slab_free(g_tw_kq_fc)
-    let nrec = fc.n_layer * 11l
+    let nrec = fc.n_layer * GIGAAM_FC_RECORDS
     var @exact_size recs : array<Q8Region>
     recs |> reserve(nrec)
     recs |> resize(nrec)
@@ -1250,8 +1210,8 @@ def private tw_fc_kq_attach(fc : TwFc) : bool {
         let rows = fixed_array(ff, d, d, d, d, 0l, d, 2l * d, d, ff, d)
         let ns = fixed_array(d, ff, d, d, d, d, d, d, d, d, ff)
         let woffs = fixed_array(lo.ff1a_w, lo.ff1b_w, lo.q_w, lo.k_w, lo.v_w, -1l, lo.o_w, lo.pw1_w, lo.pw2_w, lo.ff2a_w, lo.ff2b_w)
-        for (g in range64(11l)) {
-            recs[l * 11l + g] = Q8Region(woff = woffs[g], n = ns[g], rows = rows[g])
+        for (g in range64(GIGAAM_FC_RECORDS)) {
+            recs[l * GIGAAM_FC_RECORDS + g] = Q8Region(woff = woffs[g], n = ns[g], rows = rows[g])
         }
     }
     g_tw_kq_fc_binds |> reserve(nrec)
@@ -1794,25 +1754,13 @@ def private tw_fc_of_pk(t : ParakeetModel) : TwFc {
 
 def private tw_fc_of_ga(m : GigaamModel) : TwFc {
     tw_fc_offs_size(m.n_layer)
-    g_tw_fc_gseats |> reserve(m.n_layer * 11l)
-    g_tw_fc_gseats |> resize(m.n_layer * 11l)
-    var kq_fmts = 0u
     for (l in range64(m.n_layer)) {
-        let lo = gigaam_layer_offsets(m, l)
-        g_tw_fc_offs[l] = lo
-        continue if (!m.kq_lane)
-        let woffs = fixed_array(lo.ff1a_w, lo.ff1b_w, lo.q_w, lo.k_w, lo.v_w, -1l, lo.o_w, lo.pw1_w, lo.pw2_w, lo.ff2a_w, lo.ff2b_w)
-        for (g in range64(11l)) {
-            var seat = TowerGemmSeat(fmt = KqFmt.q8, qoff = -1l, soff = -1l)
-            if (woffs[g] >= 0l) {
-                seat = tower_gemm_seat(m, woffs[g])
-                if (seat.fmt != KqFmt.q8) {
-                    kq_fmts |= 1u << uint(int(seat.fmt))
-                }
-            }
-            g_tw_fc_gseats[l * 11l + g] = seat
-        }
+        g_tw_fc_offs[l] = gigaam_layer_offsets(m, l)
     }
+    let nseats = m.kq_lane ? m.n_layer * GIGAAM_FC_RECORDS : 0l
+    g_tw_fc_gseats |> reserve(nseats)
+    g_tw_fc_gseats |> resize(nseats)
+    let kq_fmts = gigaam_fc_record_seats(m, g_tw_fc_gseats)
     return TwFc(blob = m.blob, wblob = m.gemm_f16 ? m.wblob : PlaneU16(), taps = m.dw_f16 ? m.wblob : PlaneU16(), qblob = m.qblob, qscales = m.qscales, mapped = m.image_map != null,
         q8 = m.q8, q8_served = true, kq_lane = m.kq_lane, kq_repacked = m.kq_repacked,
         kq = m.kq_lane ? m.kq : PlaneU8(), ks = m.kq_lane ? m.ks : PlaneU8(), kq_fmts = kq_fmts,
