@@ -117,6 +117,16 @@ def test_bake_to_destination(t : T?) {
         t |> success(!stat("{model}.bergamot-q8.dlim").is_valid, "nothing landed beside the source")
         remove(out)
     }
+    t |> run("-o naming the source itself is refused, and --force never deletes the source") @(t : T?) {
+        let size = stat(model).size
+        var log = ""
+        let main = path_join(get_this_module_dir(), "main.das")
+        let argv <- [get_host_binary(), "-jit", main, "--", "--model", model, "-o", model, "--force"]
+        let rc = run_and_capture(argv, log, 300.0)
+        t |> equal(rc, 2, "the bake refuses: {log}")
+        t |> success(find(log, "is the source") >= 0, "and says the output is the source: {log}")
+        t |> equal(stat(model).size, size, "the source is intact")
+    }
     remove(path_join(dir, "model.ruen.intgemm.alphas.bin"))
     remove(path_join(dir, "vocab.ruen.spm"))
 }

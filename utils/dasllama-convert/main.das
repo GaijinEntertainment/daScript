@@ -113,6 +113,14 @@ def private sweep_stale_tmp(gguf : string) : int {
 
 // q is a REFERENCE — a plain `var q : QuantMode` is a workhorse-type copy and the caller
 // would never see the write (LINT003 caught exactly that)
+//! An `-o` naming the source itself - the source would read as an image already present, and `--force` would delete it
+def private out_is_source(cfg : ConvertArgs; out : string) : bool {
+    var err = ""
+    return false if (cfg.out == "" || !stat(out).is_valid || !equivalent(out, cfg.model, err))
+    to_log(LOG_ERROR, "dasllama-convert: -o '{out}' is the source - name another path\n")
+    return true
+}
+
 def private quant_from_string(s : string; var q : QuantMode&) : bool {
     if (s == "fp32") {
         q = QuantMode.fp32
@@ -208,6 +216,7 @@ def private convert_asr(cfg : ConvertArgs; kind : AsrCarrierKind; qm : QuantMode
         tag = q8 ? "tower-q8" : "tower-f32"
     }
     let out = cfg.out != "" ? cfg.out : image_path_for(cfg.model, tag)
+    return 2 if (out_is_source(cfg, out))
     to_log(LOG_INFO, "dasllama-convert: {cfg.model} ({kind})\n")
     to_log(LOG_INFO, "dasllama-convert:   -> {out}\n")
     to_log(LOG_INFO, "dasllama-convert:   identity {image_identity(tag)}\n")
@@ -306,6 +315,7 @@ def private convert_tts(cfg : ConvertArgs; family : string; qm : QuantMode) : in
     }
     let tag = q8 ? ST2_IMAGE_TAG_Q8 : ST2_IMAGE_TAG
     let out = cfg.out != "" ? cfg.out : image_path_for(cfg.model, tag)
+    return 2 if (out_is_source(cfg, out))
     to_log(LOG_INFO, "dasllama-convert: {cfg.model} ({family})\n")
     to_log(LOG_INFO, "dasllama-convert:   -> {out}\n")
     to_log(LOG_INFO, "dasllama-convert:   identity {image_identity(tag)}\n")
@@ -504,6 +514,7 @@ def main() : int {
     let tag = flavor_tag(cfg.flavor)
     let qs = "{qm}"
     let out = cfg.out != "" ? cfg.out : image_path_for(cfg.model, tag, qs)
+    return 2 if (out_is_source(cfg, out))
     to_log(LOG_INFO, "dasllama-convert: {cfg.model}\n")
     to_log(LOG_INFO, "dasllama-convert:   -> {out}\n")
     to_log(LOG_INFO, "dasllama-convert:   identity {image_identity(tag, qs)}\n")

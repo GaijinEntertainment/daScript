@@ -58,8 +58,12 @@ class MetalKernel : AstFunctionAnnotation {
         }
         var err : array<string>
         var census : table<string>
-        var cfg = MslEmitConfig(float_a_ok = args |> find_arg("float_a_ok") ?as tBool ?? false,
-            max_threads = args |> find_arg("max_threads") ?as tInt ?? 0)
+        let max_threads = args |> find_arg("max_threads")
+        if (!(max_threads is nothing) && (max_threads ?as tInt ?? 0) <= 0) {
+            errors := "[metal_kernel] `{func.name}`: max_threads must be a positive int - the threadgroup the entry declares"
+            return false
+        }
+        var cfg = MslEmitConfig(float_a_ok = args |> find_arg("float_a_ok") ?as tBool ?? false, max_threads = max_threads ?as tInt ?? 0)
         if (empty(args |> find_arg("name") ?as tString ?? "")) {
             cfg.kernel_name = kernel_derived_name(func)
         }
