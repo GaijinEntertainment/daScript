@@ -329,7 +329,7 @@ def private q3a_cblob_quantize(var t : Qwen3aTower; var cblob : array<float>; va
     delete cblob
     cblob <- nf
     t.cq8 = true
-    if (!select_matmul_backend_for_load_()) {
+    if (!tower_repack_backend()) {
         return   // row-major backend reads the dense Q8_0 planes as-is
     }
     tw_repack(qblob, qscales, t.cout_w_off, feat, d)

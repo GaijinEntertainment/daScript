@@ -21,6 +21,7 @@ require dasllama/dasllama_plane public   // PlaneF — the borrowed weight plane
 require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — the shared ASR floor
 require dasllama/dasllama_audio
 require dasllama/dasllama_tower
+require dasllama/dasllama_tower_image
 require dasllama/dasllama_blocks   // embed_text_rows/eval_embd_ — the ASR turn drives the Qwen3 decoder
 require dasllama/dasllama_common   // apply_box_profile_runtime for the canary-image identity
 require dasllama/dasllama_convert   // quantize_q8_0_into — the q8 load's read-time transcode
@@ -78,6 +79,9 @@ struct CanaryEncoder {
     q8 : bool
     qblob : PlaneI8 = PlaneI8()
     qscales : PlaneF = PlaneF()
+    dev_backend : TowerDev    //! the GPU flavor whose device block the image carries (`#tower-dev-block`); `none` on the CPU image
+    dev : PlaneU8 = PlaneU8()
+    devplan : PlaneI64 = PlaneI64()
     image_map : void?         // non-null when the planes borrow a mapped .dlim (dasllama_image)
     image_bytes : uint64
 }
@@ -127,7 +131,7 @@ def finalize(var t : CanaryEncoder) {
 
 // the tripwire: serialize_image_meta(CanaryEncoder) covers 27 fields; image_map + image_bytes
 // are deliberate skips (the seven planes are sections, not meta).
-let private CANARY_META_FIELDS = 27 + 2
+let private CANARY_META_FIELDS = 28 + 2
 
 // every meta-carried CanaryEncoder field, explicitly, both directions (see dasllama_image)
 def private serialize_image_meta(var arch : Archive; var t : CanaryEncoder) {
@@ -159,6 +163,7 @@ def private serialize_image_meta(var arch : Archive; var t : CanaryEncoder) {
     arch |> serialize_raw(t.proj_w)
     arch |> serialize_raw(t.proj_b)
     arch |> serialize_raw(t.q8)
+    arch |> serialize_raw(t.dev_backend)
 }
 
 [unused_argument(t)]
@@ -176,6 +181,8 @@ struct CanaryStaging {
     layers : array<CanaryLayerOffs>
     qblob : array<int8>       // section names must match the served plane fields (bind-by-name)
     qscales : array<float>
+    @exact_size dev : array<uint8>       //!< a GPU-flavored mint's device block (`TowerDevBuild`)
+    @exact_size devplan : array<int64>   //!< ... and its plan
 }
 
 def private serialize_image_meta(var arch : Archive; var st : CanaryStaging) {
@@ -193,6 +200,8 @@ def private image_post_load(var st : CanaryStaging) {}
 def private register_canary_image_tags {
     register_image_family_tag("canary-q8")
     register_image_family_tag("canary-f32", true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
+    register_tower_dev_tags("canary-q8")
+    register_tower_dev_tags("canary-f32")
 }
 
 //! Every hot-path buffer of the canary encode, so a transcribe allocates nothing per call.
@@ -345,7 +354,7 @@ def private cn_repack(var st : CanaryStaging; woff, n, d : int64) {
 // repack every GEMM region for the active backend's q8q8 kernels; without a selected
 // backend matmul_q8q8_batch reads the flat Q8_0 image as-is
 def private cn_repack_all(var st : CanaryStaging) {
-    if (!select_matmul_backend_for_load_()) {
+    if (!tower_repack_backend()) {
         return
     }
     let d = st.e.d_model
@@ -389,8 +398,42 @@ def private cn_fold_bn(var blob : array<float>; w, b, mean, vr, dwb, d : int64; 
 def load_canary_encoder(path : string; q8 : bool = false) : CanaryEncoder {
     let tag = q8 ? "canary-q8" : "canary-f32"
     announce_lane("canary encoder", q8, "f32 planes", "set_canary_enc_q8", g_cn_pin != GemmLane.unset, canary_gpu_serves())
-    return <- load_staged_image(path, tag, "canary-encoder", "source bin", type<CanaryEncoder>) {
+    let dev = path |> ends_with(".dlim") ? TowerDev.none : canary_dev_flavor(q8)
+    return <- load_staged_image_dev(path, tag, "canary-encoder", "source bin", type<CanaryEncoder>, dev, g_cn_flavor.bake, CANARY_DEV_CONSUMED) {
         return <- stage_canary_encoder(path, q8)
+    }
+}
+
+//! A GPU driver's Canary encoder flavor (`#tower-dev-block`): the backend whose image it mints, whether its chain serves a lane,
+//! and the bake that converts a CPU-form encoder into the driver's device block
+typedef CanaryServesLaneFn = function<(q8 : bool) : bool>
+typedef CanaryBakeFn = function<(m : CanaryEncoder; var b : TowerDevBuild) : bool>
+
+struct CanaryFlavor {
+    backend : TowerDev
+    serves : CanaryServesLaneFn
+    bake : CanaryBakeFn
+}
+
+var private g_cn_flavor = CanaryFlavor()
+let private CANARY_DEV_CONSUMED <- ["qblob", "qscales"]   //! the planes a Canary bake converts: a GPU flavor carries their device forms instead
+
+def register_canary_flavor(backend : TowerDev; serves : CanaryServesLaneFn; bake : CanaryBakeFn) {
+    g_cn_flavor = CanaryFlavor(backend = backend, serves = serves, bake = bake)
+}
+
+//! The device flavor a load on the `q8` lane takes: the registered driver's where its chain serves the lane, else `none` - the
+//! CPU image
+def canary_dev_flavor(q8 : bool) : TowerDev {
+    return TowerDev.none if (g_cn_flavor.backend == TowerDev.none || !invoke(g_cn_flavor.serves, q8))
+    return g_cn_flavor.backend
+}
+
+//! A GPU-flavored encoder reached a CPU path at `stage`: the device seat declined what the load handed it, and the CPU never runs
+//! that image (`#tower-dev-block`)
+def private cn_cpu_refuse(m : CanaryEncoder; stage : string) {
+    if (m.dev_backend != TowerDev.none) {
+        panic("dasLLAMA canary: the {stage} declined on the {m.dev_backend} device - a {m.dev_backend}-flavored image never runs on the CPU")
     }
 }
 
@@ -825,6 +868,7 @@ def canary_encode(m : CanaryEncoder; var st : CanaryState) : int64 {
         }
     }
     if (tt < 0l) {
+        cn_cpu_refuse(m, "front")
         if (!st.mel_ready) {
             canary_mel_spectrum(m, st)
             asr_prof_add("cn.mel", ts)
@@ -841,10 +885,12 @@ def canary_encode(m : CanaryEncoder; var st : CanaryState) : int64 {
         gpu_served = invoke(g_cn_gpu, m, st, tt, ww)
     }
     if (!gpu_served) {
+        cn_cpu_refuse(m, "block loop")
         canary_pos_table(m, st, tt, ww)
         cn_blocks_cpu(m, st, tt, ww)
     }
     asr_prof_add(gpu_served ? "cn.blocks.gpu" : "cn.blocks", ts)
+    return tt if (m.dev_backend != TowerDev.none)   // the device projected the rows into `st.out` behind its blocks
 
     // perception.proj: encoder rows (d) -> decoder embedding (proj_dim)
     ts = ref_time_ticks()

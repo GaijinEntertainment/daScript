@@ -400,6 +400,27 @@ enum TowerDev {
 let TOWER_DEV_PIECE_WORDS = 3l   //! a piece's words in a ``devplan`` plane: its name's key, its byte offset in ``dev``, its bytes
 let TOWER_DEV_ALIGN = 16384l     //! a piece's alignment in ``dev``: the image page, so a mapped piece wraps as a device buffer with no copy
 
+var private g_tower_stage_dev = TowerDev.none   //! the GPU flavor a staging runs for: its planes stay row-major for the driver's bake
+
+//! Run `blk` staging a tower for the GPU flavor `dev` (`#tower-dev-block`): no CPU backend lays the staging's planes - the
+//! driver's bake reads them row-major
+def with_tower_dev_staging(dev : TowerDev; blk : block<() : void>) {
+    let was = g_tower_stage_dev
+    g_tower_stage_dev = dev
+    invoke(blk)
+    g_tower_stage_dev = was
+}
+
+//! the GPU flavor the running staging is for (`with_tower_dev_staging`); `none` on the CPU flavor's
+def tower_staging_dev() : TowerDev => g_tower_stage_dev
+
+//! A staging's quantized planes repack for the CPU backend: never under a GPU flavor's staging (`with_tower_dev_staging`), else
+//! where the load selects a repacking backend
+def tower_repack_backend() : bool => g_tower_stage_dev == TowerDev.none && select_matmul_backend_for_load_()
+
+//! a GPU flavor's image tag: the lane's tag, the driver's name after it; the lane's own on the CPU flavor
+def tower_dev_tag(lane : string; dev : TowerDev) : string => dev == TowerDev.none ? lane : "{lane}-{dev}"
+
 //! A device-block piece's key: its name hashed - a driver names its pieces, the plan carries the keys
 def tower_dev_key(name : string) : int64 => int64(hash(name))
 
@@ -671,7 +692,7 @@ def tower_stage_q8_pad_cols(m : GGUFMeta; b : array<uint8> | #; name : string; v
 def tower_repack_q8_blocks(var qblob : array<int8>; var qscales : array<float>;
                            layer_w, layer_w_stride, n_layer : int64;
                            widths : array<int64>; sizes : array<int64>) {
-    if (!select_matmul_backend_for_load_()) {
+    if (!tower_repack_backend()) {
         return
     }
     for (l in range64(n_layer)) {

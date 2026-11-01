@@ -21,6 +21,7 @@ require dasllama/dasllama_plane public
 require dasllama/dasllama_asr_types public
 require dasllama/dasllama_audio
 require dasllama/dasllama_tower
+require dasllama/dasllama_tower_image   // tower_dev_image: the GPU-flavored image of a CPU-form model
 require dasllama/dasllama_load   // kq_tag: the one mapping a plane's disk type takes to the format it serves in
 require dasllama/dasllama_convert
 require dasllama/dasllama_repack   // repack_conv_out_tap_in: the f16 taps permuted tap-major
@@ -218,6 +219,9 @@ def private register_gigaam_image_tags {
     register_image_family_tag("gigaam-q8")
     register_image_family_tag("gigaam-f16", config_free = true)
     register_image_family_tag(GIGAAM_KQ_TAG)
+    for (lane in ["gigaam-q8", "gigaam-f16", GIGAAM_KQ_TAG]) {
+        register_tower_dev_tags(lane)
+    }
 }
 
 //! The plane a GigaAM fill job lands in.
@@ -929,7 +933,7 @@ def private gg_hold_planes(m : GGUFMeta; b : array<uint8> | #; var st : GigaamSt
 
 //! whether the quantizing lanes repack for the load's backend - selected here, as the fills need it - with `e.kq_repacked` set beside
 def private gg_repack(var e : GigaamModel) : bool {
-    let rep = e.dev_backend == TowerDev.none && (e.q8 || e.kq_lane) && select_matmul_backend_for_load_()   // a GPU flavor's planes are the driver's to lay
+    let rep = (e.q8 || e.kq_lane) && tower_repack_backend()
     e.kq_repacked = e.kq_lane && rep && kernel_backend_has_kq()
     return rep
 }
@@ -1050,6 +1054,7 @@ struct GigaamFlavor {
 }
 
 var private g_ga_flavor = GigaamFlavor()
+let private GIGAAM_DEV_CONSUMED <- ["qblob", "qscales", "kq", "ks", "gemm_seats"]   //! the planes a GigaAM bake converts: a GPU flavor carries their device forms instead
 
 def register_gigaam_flavor(backend : TowerDev; serves : GigaamServesModelFn; bake : GigaamBakeFn) {
     g_ga_flavor = GigaamFlavor(backend = backend, serves = serves, bake = bake)
@@ -1058,12 +1063,9 @@ def register_gigaam_flavor(backend : TowerDev; serves : GigaamServesModelFn; bak
 //! The device flavor a load of a carrier with meta `e` takes: the registered driver's where its knob is on and its chain serves
 //! the carrier, else `none` - the CPU image
 def gigaam_dev_flavor(e : GigaamModel) : TowerDev {
-    return TowerDev.none if (g_ga_flavor.backend == TowerDev.none || !gigaam_gpu_serves() || !invoke(g_ga_flavor.serves, e))
+    return TowerDev.none if (g_ga_flavor.backend == TowerDev.none || !gigaam_gpu_serves() || !rnnt_gpu_projects(RnntEnc()) || !invoke(g_ga_flavor.serves, e))
     return g_ga_flavor.backend
 }
-
-//! a flavor's image tag: the lane's, the driver's name after it on a GPU flavor
-def private gg_flavor_tag(lane : string; dev : TowerDev) : string => dev == TowerDev.none ? lane : "{lane}-{dev}"
 
 //! the lane flags a lane's tag names - the meta a flavor's `serves` reads before the staging exists
 def private gg_lane_meta(lane : string) : GigaamModel => GigaamModel(q8 = lane == "gigaam-q8", kq_lane = lane == GIGAAM_KQ_TAG)
@@ -1082,29 +1084,12 @@ def private gg_cpu_refuse(m : GigaamModel; stage : string) {
 [cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
 def private gg_mint_gpu(var st : GigaamStaging; var out : GigaamModel; img : string; dev : TowerDev) : bool {
     var cpu = GigaamModel()
-    st.e.dev_backend = dev   // the CPU form the bake reads stays in disk order: no CPU backend lays it
-    gg_mint(st, cpu, "")
-    cpu.dev_backend = TowerDev.none   // ... and is the CPU form: the bake's builders read its planes
-    var b : TowerDevBuild
-    if (!invoke(g_ga_flavor.bake, cpu, b)) {
-        panic("{GG_WHO}: the {dev} driver could not bake '{st.src}' - its chain declined a carrier the load handed it")
+    with_tower_dev_staging(dev) {   // the CPU form the bake reads stays in disk order: no CPU backend lays it
+        gg_mint(st, cpu, "")
     }
+    let tag = tower_dev_tag(gigaam_image_tag(cpu.q8, cpu.kq_lane), dev)
     var gst = GigaamStaging(src = st.src)
-    gst.e := cpu
-    gst.e.image_map = null
-    gst.e.image_bytes = 0ul
-    gst.e.dev_backend = dev
-    plane_copy(cpu.filters, gst.filters)
-    plane_copy(cpu.window, gst.window)
-    plane_copy(cpu.blob, gst.blob)
-    plane_copy(cpu.wblob, gst.wblob)
-    gst.dev <- b.blob
-    gst.devplan <- b.plan
-    delete cpu
-    let tag = gg_flavor_tag(gigaam_image_tag(gst.e.q8, gst.e.kq_lane), dev)
-    let wrote = cache_via_image_staged_hooked(gst, out, img, 0ul, tag, "q8") $ [unused_argument(name, w, sections)] (name : string; var w : ImgWriter; var sections : array<ImgSection>) => false
-    delete gst
-    return wrote
+    return tower_dev_image(cpu, gst, out, img, tag, dev, g_ga_flavor.bake, GIGAAM_DEV_CONSUMED, GG_WHO)
 }
 
 //! Mint a served model from a staged read WITHOUT touching disk - the in-memory image rail, the suites' load.
@@ -1121,7 +1106,7 @@ def mint_gigaam_model(var st : GigaamStaging; var out : GigaamModel; q8 : bool =
 def load_gigaam_model(path : string; q8 : bool = false; pinned : bool = false) : GigaamModel {
     let lane = gigaam_lane_tag(path, q8, pinned)
     let dev = path |> ends_with(".dlim") ? TowerDev.none : gigaam_dev_flavor(gg_lane_meta(lane))
-    let tag = gg_flavor_tag(lane, dev)
+    let tag = tower_dev_tag(lane, dev)
     var m <- load_through_image(path, tag, GIGAAM_ARCH, "source model", type<GigaamModel>, $(img : string; var out : GigaamModel) {
         var inscope st <- stage_gigaam_model(path, q8, false, pinned)
         return dev == TowerDev.none ? gg_mint(st, out, img) : gg_mint_gpu(st, out, img, dev)

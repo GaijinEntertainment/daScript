@@ -475,6 +475,9 @@ def register_rnnt_gpu(fn : RnntGpuGreedyFn; projects : RnntGpuProjectsFn) {
     g_rnnt_gpu_set = true
 }
 
+//! A device decode seat is registered and projects the encoder half of `enc` itself - a GPU flavor's decode runs whole on it
+def rnnt_gpu_projects(enc : RnntEnc) : bool => g_rnnt_gpu_set && invoke(g_rnnt_gpu_projects, enc)
+
 //! The greedy decode over the encoder rows `x`: the device hook first, else `project` lays the joint's encoder projection
 //! of every row into `encp` and the CPU loop runs (`rnnt_greedy`). Where the device home does not project the lane, the
 //! family projects first and the hook decodes off the result. Tokens land in `toks`.

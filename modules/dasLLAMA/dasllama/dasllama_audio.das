@@ -1031,7 +1031,7 @@ def private tower_quantize_(var t : AudioTower; var fblob : array<float>; var qb
     delete fblob
     fblob <- nf
     t.q8 = true
-    if (!select_matmul_backend_for_load_()) {
+    if (!tower_repack_backend()) {
         return   // row-major backend reads the dense Q8_0 planes as-is
     }
     if (has_conv) {
