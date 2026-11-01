@@ -333,18 +333,11 @@ def register_gemma4a_flavor(backend : TowerDev; serves : Gemma4aServesLaneFn; ba
 
 //! The device flavor a load on the `q8` lane takes: the registered driver's where its chain serves the lane, else `none` - the
 //! CPU image
-def gemma4a_dev_flavor(q8 : bool) : TowerDev {
-    return TowerDev.none if (g_g4a_flavor.backend == TowerDev.none || !invoke(g_g4a_flavor.serves, q8))
-    return g_g4a_flavor.backend
-}
+def gemma4a_dev_flavor(q8 : bool) : TowerDev => tower_dev_flavor(g_g4a_flavor, q8)
 
 //! A GPU-flavored encoder reached a CPU path at `stage`: the device seat declined what the load handed it, and the CPU never
 //! runs that image (`#tower-dev-block`)
-def private g4a_cpu_refuse(enc : Gemma4aEncoder; stage : string) {
-    if (enc.dev_backend != TowerDev.none) {
-        panic("dasLLAMA gemma4a: the {stage} declined on the {enc.dev_backend} device - a {enc.dev_backend}-flavored image never runs on the CPU")
-    }
-}
+def private g4a_cpu_refuse(enc : Gemma4aEncoder; stage : string) => tower_cpu_refuse(enc, "dasLLAMA gemma4a", stage)
 
 //! Mint a served encoder from a staged read - with no `img`, WITHOUT touching disk: the off-rail control for suites (no `.dlim`
 //! written, no sibling-lane GC); with one, the image written there under this box's identity, whatever the image rail says.

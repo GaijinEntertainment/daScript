@@ -424,18 +424,11 @@ def register_canary_flavor(backend : TowerDev; serves : CanaryServesLaneFn; bake
 
 //! The device flavor a load on the `q8` lane takes: the registered driver's where its chain serves the lane, else `none` - the
 //! CPU image
-def canary_dev_flavor(q8 : bool) : TowerDev {
-    return TowerDev.none if (g_cn_flavor.backend == TowerDev.none || !invoke(g_cn_flavor.serves, q8))
-    return g_cn_flavor.backend
-}
+def canary_dev_flavor(q8 : bool) : TowerDev => tower_dev_flavor(g_cn_flavor, q8)
 
 //! A GPU-flavored encoder reached a CPU path at `stage`: the device seat declined what the load handed it, and the CPU never runs
 //! that image (`#tower-dev-block`)
-def private cn_cpu_refuse(m : CanaryEncoder; stage : string) {
-    if (m.dev_backend != TowerDev.none) {
-        panic("dasLLAMA canary: the {stage} declined on the {m.dev_backend} device - a {m.dev_backend}-flavored image never runs on the CPU")
-    }
-}
+def private cn_cpu_refuse(m : CanaryEncoder; stage : string) => tower_cpu_refuse(m, "dasLLAMA canary", stage)
 
 //! The loaded precision as ``<encoder>/<decoder>`` (the decoder tag comes from the facade,
 //! which owns the shared LLM): the facade's [[asr_exec_fmt]] arm.

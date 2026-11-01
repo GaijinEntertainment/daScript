@@ -1072,11 +1072,7 @@ def private gg_lane_meta(lane : string) : GigaamModel => GigaamModel(q8 = lane =
 
 //! A GPU-flavored model reached a CPU path at `stage`: the device seat declined what the load handed it, and the CPU never runs
 //! that image (`#tower-dev-block`)
-def private gg_cpu_refuse(m : GigaamModel; stage : string) {
-    if (m.dev_backend != TowerDev.none) {
-        panic("{GG_WHO}: the {stage} declined on the {m.dev_backend} device - a {m.dev_backend}-flavored image never runs on the CPU")
-    }
-}
+def private gg_cpu_refuse(m : GigaamModel; stage : string) => tower_cpu_refuse(m, GG_WHO, stage)
 
 //! The GPU-flavored mint (`#tower-dev-block`): the CPU form minted in memory, the driver's bake over it into the device block,
 //! then the image of the planes the driver reads as stored beside the block - the Q8_0 and K-quant planes and their seats the

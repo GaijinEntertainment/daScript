@@ -1133,18 +1133,11 @@ def register_audio_tower_flavor(backend : TowerDev; serves : AudioTowerServesLan
 
 //! The device flavor a standalone tower's load on the `q8` lane takes: the registered driver's where its chain serves the lane,
 //! else `none` - the CPU image
-def audio_tower_dev_flavor(q8 : bool) : TowerDev {
-    return TowerDev.none if (g_tw_flavor.backend == TowerDev.none || !invoke(g_tw_flavor.serves, q8))
-    return g_tw_flavor.backend
-}
+def audio_tower_dev_flavor(q8 : bool) : TowerDev => tower_dev_flavor(g_tw_flavor, q8)
 
 //! A GPU-flavored tower reached a CPU path at `stage`: the device seat declined what the load handed it, and the CPU never runs
 //! that image (`#tower-dev-block`)
-def tw_cpu_refuse(t : AudioTower; stage : string) {
-    if (t.dev_backend != TowerDev.none) {
-        panic("dasLLAMA audio tower: the {stage} declined on the {t.dev_backend} device - a {t.dev_backend}-flavored image never runs on the CPU")
-    }
-}
+def tw_cpu_refuse(t : AudioTower; stage : string) => tower_cpu_refuse(t, "dasLLAMA audio tower", stage)
 
 //! whether every block GEMM of a whisper-class mmproj - q, k, v, out, the two FFN matrices of each of `n_layer` blocks - is
 //! stored as ggml type `gt`: the half twin is baked only off a file whose GEMMs are all one half type

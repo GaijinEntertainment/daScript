@@ -469,17 +469,12 @@ def register_parakeet_flavor(backend : TowerDev; serves : ParakeetServesLaneFn; 
 //! The device flavor a load on the `q8` lane takes: the registered driver's where its chain and the device decode serve the
 //! lane, else `none` - the CPU image
 def parakeet_dev_flavor(q8 : bool) : TowerDev {
-    return TowerDev.none if (g_pk_flavor.backend == TowerDev.none || !rnnt_gpu_projects(RnntEnc()) || !invoke(g_pk_flavor.serves, q8))
-    return g_pk_flavor.backend
+    return rnnt_gpu_projects(RnntEnc()) ? tower_dev_flavor(g_pk_flavor, q8) : TowerDev.none
 }
 
 //! A GPU-flavored model reached a CPU path at `stage`: the device seat declined what the load handed it, and the CPU never runs
 //! that image (`#tower-dev-block`)
-def private pk_cpu_refuse(m : ParakeetModel; stage : string) {
-    if (m.dev_backend != TowerDev.none) {
-        panic("dasLLAMA parakeet: the {stage} declined on the {m.dev_backend} device - a {m.dev_backend}-flavored image never runs on the CPU")
-    }
-}
+def private pk_cpu_refuse(m : ParakeetModel; stage : string) => tower_cpu_refuse(m, "dasLLAMA parakeet", stage)
 
 //! The mint-side carrier: ``e`` holds every scalar the meta blob carries (vocab included), the
 //! arrays beside it hold the plane bytes until the writer has them. Public because reading the

@@ -26,16 +26,40 @@ def tower_dev_image(var cpu : auto(T); var gst : auto(S); var out : T; img, tag 
     if (!invoke(bake, cpu, b)) {
         panic("{who}: the {dev} driver could not bake the model - its chain declined a model the load handed it")
     }
-    gst.e := cpu
-    gst.e.image_map = null
-    gst.e.image_bytes = 0ul
-    tower_mark_dev(gst.e, dev)
+    tower_set_meta(gst, cpu, dev)
     tower_copy_planes(cpu, gst, consumed)
     tower_place_block(gst, b)
     delete cpu
     let wrote = cache_via_image_staged(gst, out, img, tag)
     delete gst
     return wrote
+}
+
+//! the staging's meta field - the one carrying an image mapping - a copy of `cpu` under the flavor `dev`, mapping nothing
+def private tower_set_meta(var gst; cpu : auto(T); dev : TowerDev) {
+    apply(gst) $ [unused_argument(name)] (name : string; var field) {
+        static_if (typeinfo safe_has_field < image_map > (field)) {
+            field := cpu
+            field.image_map = null
+            field.image_bytes = 0ul
+            tower_mark_dev(field, dev)
+        }
+    }
+}
+
+//! A GPU-flavored model reached a CPU path at `stage`: the device seat declined what the load handed it, and the CPU never runs
+//! that image (`#tower-dev-block`)
+def tower_cpu_refuse(m; who, stage : string) {
+    if (m.dev_backend != TowerDev.none) {
+        panic("{who}: the {stage} declined on the {m.dev_backend} device - a {m.dev_backend}-flavored image never runs on the CPU")
+    }
+}
+
+//! The device flavor a load on the `q8` lane takes under a family's flavor record `f` (its `backend` and `serves`): the
+//! registered driver's where its chain serves the lane, else `none` - the CPU image
+def tower_dev_flavor(f; q8 : bool) : TowerDev {
+    return TowerDev.none if (f.backend == TowerDev.none || !invoke(f.serves, q8))
+    return f.backend
 }
 
 //! the model's flavor set where it carries the device block: on the model, else on the nested tower that does
