@@ -284,6 +284,14 @@ def test_cuda_intrinsics(t : T?) {
         has(t, intrin_cuda, "(unsigned)clock()", "clock32")
         has(t, intrin_cuda, "asm volatile(\"membar.cta;\" ::  : \"memory\");", "inline PTX, no operands")
         has(t, intrin_cuda, "unsigned r; asm volatile(\"add.u32 %0, %1, %2;\" : \"=r\"(r) : \"r\"(a0), \"r\"(a1) : \"memory\"); return r;", "inline PTX with a result and two operands")
+        has(t, intrin_cuda, "ldmatrix.sync.aligned.m8n8.x4.trans.shared.b16 \{%0,%1,%2,%3\}, [%4];", "the transposing ldmatrix x4")
+        has(t, intrin_cuda, "__das_ldmt___das_cmB_f16(hb, (sb16 + (", "the B fragment off the lane's k row through the transposing load")
+        has(t, intrin_cuda, "__das_ldmt___das_cmA_f16(ha, (sa16 + (", "the A fragment through it")
+        has(t, intrin_cuda, "__das_cmC_get_f32(f, k)", "the accumulator element read through the cm2 prelude's accessor")
+        has(t, intrin_cuda, "__das_cmC_set_f32(hf, k, float(k))", "the accumulator element write")
+        has(t, intrin_cuda, "(unsigned)__das_cm_row(0, int((lane) >> 2), k)", "the element's row off the prelude's fragment map")
+        has(t, intrin_cuda, "\"r\"(a) : \"memory\"); \}", "the fragment loads carry the memory clobber")
+        has(t, intrin_cuda, "__das_at_uint4(tv, int((lane & 3u)))", "a register vector's lane read by a runtime index takes the select helper, not the store form")
     }
     t |> run("the FP4 tensor rung: e2m1 fragments through ldmatrix, the block-scaled mma, the conversions, the arch marker") <| @(t : T?) {
         has(t, intrin_fp4_cuda, "#define __DAS_ARCH_A__ 1", "the arch-specific target's marker")

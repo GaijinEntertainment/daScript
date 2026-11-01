@@ -635,6 +635,7 @@ def public buf_upload(arr : array<auto(TT)>; stream : void? = null) : uint64 {
 //! fresh device memory holding `nn` copies of `value`, the copy ordered on `stream` as `buf_upload`'s
 def public buf_fill(nn : int; value : auto(TT); stream : void? = null) : uint64 {
     var arr : array<TT -const>
+    arr |> reserve(nn)   // a window's plane passes the unreserved growth cap
     arr |> resize(nn)
     for (v in arr) {
         v = value
@@ -647,6 +648,7 @@ def public buf_fill(nn : int; value : auto(TT); stream : void? = null) : uint64 
 [unused_argument(t)]
 def public buf_download(dptr : uint64; nn : int; t : type<auto(TT)>) : array<TT -const> {
     var res : array<TT -const>
+    res |> reserve(nn)
     res |> resize(nn)
     if (nn > 0) {
         cuda_memcpy_dtoh(unsafe(addr<void?>(res[0])), dptr, uint64(nn) * uint64(typeinfo sizeof(res[0])))

@@ -3117,7 +3117,7 @@ def private atomic_call(var ctx : CudaCtx; ec : ExprCall?; cname : string) : str
 }
 
 //! the CUDA-only intrinsics a body calls as statements
-let private INTRINSIC_STATEMENTS : table<string> <- { "cp_async_16", "cp_async_commit", "cp_async_wait", "ldmatrix", "mma_scale_acc", "mma_block_scaled", "mma_block_scaled_mx", "mma_scale_cols", "bar_sync", "cuda_asm" }
+let private INTRINSIC_STATEMENTS : table<string> <- { "cp_async_16", "cp_async_commit", "cp_async_wait", "ldmatrix", "ldmatrix_trans", "mma_scale_acc", "mma_acc_set", "mma_block_scaled", "mma_block_scaled_mx", "mma_scale_cols", "bar_sync", "cuda_asm" }
 
 [arch(at="../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
 def private need_arch_a(var ctx : CudaCtx) {
@@ -3151,8 +3151,7 @@ def private ptr_space(ctx : CudaCtx; e : Expression?) : string {
 def private c_escape(s : string) : string =>
     s |> replace("\\", "\\\\") |> replace("\"", "\\\"") |> replace("\n", "\\n")
 
-//! the CUDA-only tier (`cuda_intrinsics`): cp.async, ldmatrix, the block-scaled accumulate, named barriers, byte_perm,
-//! clock32 and the inline-PTX floor - "" when `cname` is none of them
+//! the call text of a CUDA-only tier name (`cuda_intrinsics`) - "" when `cname` is none of them
 def private cuda_intrinsic_call(var ctx : CudaCtx; ec : ExprCall?; cname : string) : string {
     let na = length(ec.arguments)
     if (cname == "cp_async_16") {
@@ -3179,17 +3178,46 @@ def private cuda_intrinsic_call(var ctx : CudaCtx; ec : ExprCall?; cname : strin
         census_kind(ctx, "call.cp_async_wait")
         return "__das_cp_async_wait_{n}()"
     }
-    if (cname == "ldmatrix") {
+    if (cname == "ldmatrix" || cname == "ldmatrix_trans") {
+        let tr = cname == "ldmatrix_trans"
         let ci = na == 2 ? coop_type_of(ec.arguments[0]._type) : CoopInfo(ok = false)
-        if (!ci.ok || ci.use == "C" || ptr_space(ctx, ec.arguments[1]) != "shared") {
-            shader_error(ctx, ec.at, "ldmatrix(fragment, p) loads a KHR A or B fragment off a @workgroup array pointer (the lane's 16-byte row)")
-            return "/*ldmatrix*/"
+        if (!ci.ok || ci.use == "C" || (tr && ci.comp != "f16") || ptr_space(ctx, ec.arguments[1]) != "shared") {
+            shader_error(ctx, ec.at, (tr ? "ldmatrix_trans(fragment, p) loads an f16 KHR A or B fragment off a @workgroup array pointer (the lane's 16-byte k row)" :
+                "ldmatrix(fragment, p) loads a KHR A or B fragment off a @workgroup array pointer (the lane's 16-byte row)"))
+            return "/*{cname}*/"
         }
         need_coopmat(ctx)
-        let hname = "__das_ldm_{ci.ctype}"
-        register_helper(ctx, "{HELPER_RANK_INTRINSIC}ldm.{hname}", "__device__ __forceinline__ void {hname}({ci.ctype}& m, const void* p) \{ unsigned a = (unsigned)__cvta_generic_to_shared(p); asm volatile(\"ldmatrix.sync.aligned.m8n8.x4.shared.b16 \{%0,%1,%2,%3\}, [%4];\" : \"=r\"(m.r[0]), \"=r\"(m.r[1]), \"=r\"(m.r[2]), \"=r\"(m.r[3]) : \"r\"(a)); \}")
-        census_kind(ctx, "call.ldmatrix.{ci.use}.{ci.comp}")
+        let hname = "__das_ldm{tr ? "t" : ""}_{ci.ctype}"
+        //! the "memory" clobber keeps the load behind the shared-memory stores before it and ahead of the ones after, barrier or not
+        register_helper(ctx, "{HELPER_RANK_INTRINSIC}ldm.{hname}", "__device__ __forceinline__ void {hname}({ci.ctype}& m, const void* p) \{ unsigned a = (unsigned)__cvta_generic_to_shared(p); asm volatile(\"ldmatrix.sync.aligned.m8n8.x4{tr ? ".trans" : ""}.shared.b16 \{%0,%1,%2,%3\}, [%4];\" : \"=r\"(m.r[0]), \"=r\"(m.r[1]), \"=r\"(m.r[2]), \"=r\"(m.r[3]) : \"r\"(a) : \"memory\"); \}")
+        census_kind(ctx, "call.{cname}.{ci.use}.{ci.comp}")
         return "{hname}({emit_value(ctx, ec.arguments[0])}, {emit_value(ctx, ec.arguments[1])})"
+    }
+    if (cname == "mma_acc_get" || cname == "mma_acc_set") {   //! the cm2 prelude's element accessors serve the lane element
+        let fi = na >= 2 ? coop_type_of(ec.arguments[0]._type) : CoopInfo(ok = false)
+        let set = cname == "mma_acc_set"
+        if (!(fi.ok && fi.comp == "f32" && na == (set ? 3 : 2))) {
+            shader_error(ctx, ec.at, "{cname}(f32 accumulator, k{set ? ", value" : ""}): the lane's element k (0..7)")
+            return "/*{cname}*/"
+        }
+        need_coopmat(ctx)
+        need_cm2(ctx)
+        census_kind(ctx, "call.{cname}")
+        if (set) {
+            return "__das_cmC_set_f32({emit_value(ctx, ec.arguments[0])}, {emit_value(ctx, ec.arguments[1])}, {emit_value(ctx, ec.arguments[2])})"
+        }
+        return "__das_cmC_get_f32({emit_value(ctx, ec.arguments[0])}, {emit_value(ctx, ec.arguments[1])})"
+    }
+    if (cname == "mma_acc_row" || cname == "mma_acc_col") {   //! the cm2 prelude's fragment (row, column) at fragment index 0: the lane's g and t off its lane id
+        if (na != 2) {
+            shader_error(ctx, ec.at, "{cname}(lane, k) takes two arguments, got {na}")
+            return "/*{cname}*/"
+        }
+        need_cm2(ctx)
+        census_kind(ctx, "call.{cname}")
+        let lane = emit_value(ctx, ec.arguments[0])
+        let k = emit_value(ctx, ec.arguments[1])
+        return cname == "mma_acc_row" ? "(unsigned)__das_cm_row(0, int(({lane}) >> 2), {k})" : "(unsigned)__das_cm_col(0, int(({lane}) & 3u), {k})"
     }
     if (cname == "mma_scale_acc") {
         let fi = na == 4 ? coop_type_of(ec.arguments[0]._type) : CoopInfo(ok = false)

@@ -79,10 +79,12 @@ annotation carries `precise=`, which compiles that kernel without it; `textureGr
 `family=` - absent, the module is compute-only, and its dispatch lens is `[cuda_dispatch]` over
 the same bindings the other two lenses read. Its second vocabulary tier, `cuda_intrinsics`
 (`modules/dasCUDA/ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers`: the `cp.async` copies,
-`ldmatrix`, the block-scale fixup `mma_scale_acc`, `bar_sync`, `byte_perm`, the clock and inline
-PTX, and the FP4 tensor rung - the e2m1 fragments, `mma_block_scaled`, `mma_block_scaled_mx`, `mma_scale_cols`,
-`cvt_e2m1x2`, `cvt_ue4m3`, the `__DAS_ARCH_A__` arch suffix a text that uses them takes), is
-CUDA-only by construction - every declaration of the module is a member, a new one included - a
-body that calls one is a CUDA-only kernel, and the dasLLAMA bodies that do (the codebook word
-map's permute and the nv4 GEMV's `Nv4GemvPrmtT`, the int8 MMQ tile `MmqT`, the FP4 leaf `MmqFp4T`
-with its feeds `Fp4FeedT` and `ArRqFp4T`) are the CUDA home's own. Deliberate, target-specific.
+`ldmatrix` and its transposing form `ldmatrix_trans`, the accumulator's lane elements `mma_acc_get` /
+`mma_acc_set` with their map `mma_acc_row` / `mma_acc_col`, the block-scale fixup `mma_scale_acc`,
+`bar_sync`, `byte_perm`, the clock and inline PTX, and the FP4 tensor rung - the e2m1 fragments,
+`mma_block_scaled`, `mma_block_scaled_mx`, `mma_scale_cols`, `cvt_e2m1x2`, `cvt_ue4m3`, the
+`__DAS_ARCH_A__` arch suffix a text that uses them takes), is CUDA-only by construction - every
+declaration of the module is a member, a new one included - a body that calls one is a CUDA-only
+kernel, and the dasLLAMA bodies that do (the codebook word map's permute and the nv4 GEMV's
+`Nv4GemvPrmtT`, the int8 MMQ tile `MmqT`, the FP4 leaf `MmqFp4T` with its feeds `Fp4FeedT` and
+`ArRqFp4T`, the chunked deltanet scan `DnScanChunkCuT`) are the CUDA home's own. Deliberate, target-specific.

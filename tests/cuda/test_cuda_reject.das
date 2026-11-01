@@ -408,7 +408,11 @@ def test_cuda_reject_methods(t : T?) {
             member_arm("_reject_ldmatrix_global", "ldmatrix(fragment, p) loads a KHR A or B fragment off a @workgroup array pointer",
                 "",
                 "    @ssbo @binding = 0 q4 : array<uint4>\n    @ssbo @binding = 1 o : array<float>",
-                "        var fa : coopmatA_f16_16x16\n        ldmatrix(fa, unsafe(addr(q4[0])))\n        o[0] = 1.0")
+                "        var fa : coopmatA_f16_16x16\n        ldmatrix(fa, unsafe(addr(q4[0])))\n        o[0] = 1.0"),
+            member_arm("_reject_ldmatrix_trans_global", "ldmatrix_trans(fragment, p) loads an f16 KHR A or B fragment off a @workgroup array pointer",
+                "",
+                "    @ssbo @binding = 0 q4 : array<uint4>\n    @ssbo @binding = 1 o : array<float>",
+                "        var fb : coopmatB_f16_16x16\n        ldmatrix_trans(fb, unsafe(addr(q4[0])))\n        o[0] = 1.0")
         ])
     }
 }
