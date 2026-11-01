@@ -287,6 +287,9 @@ struct private VtResident {
     host : HostBuf        //! the x readback staging (the tap stashes behind it)
     phost : HostBuf       //! the projector's readback staging, `phost_bytes` long (0: none)
     phost_bytes : int64
+    pj_h_dev : uint64     //! qwen3a's device projector: the hidden rows and the projected ones, `pj_cap` rows each (0: none)
+    pj_y_dev : uint64
+    pj_cap : int64
     oom : bool            //! a soft allocation of the batch under way failed
     bound_d : int         //! the tile key (`vt_tile_key`) the bound d-wide GEMM sets were built for (-1 = none)
     bound_ff : int        //! the tile key of the bound ff-wide sets (gate, up): the tile pick reads the output width
@@ -761,6 +764,11 @@ def private vt_release_scratch(var r : VtResident) {
     if (r.phost_bytes > 0l) {
         release_host_buf(r.phost)
         r.phost_bytes = 0l
+    }
+    if (r.pj_cap > 0l) {
+        release_device_buf(r.pj_h_dev)
+        release_device_buf(r.pj_y_dev)
+        r.pj_cap = 0l
     }
     if (r.meta_bytes > 0l) {
         release_host_buf(r.meta)
@@ -5102,11 +5110,13 @@ var private @scratch @exact_size g_vt_q3a_xin : array<float>   //! the window's 
 //! the cblob span uploaded as norms_dev: [lo, hi) covers the three conv biases, the conv_out bias and the position rows
 def private vt_q3a_norm_span(t : Qwen3aTower) : tuple<lo : int64; hi : int64> {
     let nch = t.n_ch
-    let offs = fixed_array(t.c1_b_off, t.c2_b_off, t.c3_b_off, t.cout_b_off, t.pos_off)
-    let ends = fixed_array(t.c1_b_off + nch, t.c2_b_off + nch, t.c3_b_off + nch, t.cout_b_off + t.core.d_model, t.pos_off + QWEN3A_TOK_PER_CHUNK * t.core.d_model)
+    let d = t.core.d_model
+    let offs = fixed_array(t.c1_b_off, t.c2_b_off, t.c3_b_off, t.cout_b_off, t.pos_off, t.mm1_b_off, t.mm2_b_off)
+    let ends = fixed_array(t.c1_b_off + nch, t.c2_b_off + nch, t.c3_b_off + nch, t.cout_b_off + d, t.pos_off + QWEN3A_TOK_PER_CHUNK * d,
+        t.mm1_b_off + d, t.mm2_b_off + t.proj_dim)
     var lo = offs[0]
     var hi = ends[0]
-    for (i in range(1, 5)) {
+    for (i in range(1, 7)) {
         lo = min(lo, offs[i])
         hi = max(hi, ends[i])
     }
@@ -5130,6 +5140,36 @@ def private vt_q3a_geometry(t : Qwen3aTower) {
 
 [cold_path]
 def private vt_q3a_slab(var r : VtResident; t : Qwen3aTower; key : uint64; lay : Q8RepackLayout) : bool {
+    let src = vt_dev_src(t.core)
+    var inscope slab16 : array<uint16>
+    if (!src.on) {
+        slab16 <- vt_q3a_slab16(t)
+    }
+    let span = vt_q3a_norm_span(t)
+    var inscope regions <- vt_q3a_regions(t, false)
+    if (!vt_upload(r, key, t.qcblob, t.qcscales, regions, t.cblob, span.lo, span.hi - span.lo, 0l, lay, src, VT_Q3A_PIECE)) {
+        return false
+    }
+    r.fw16_bytes = src.on ? vt_piece_bytes(src, VT_Q3A_FRONT16_PIECE) : long_length(slab16) * 2l
+    r.fw16_dev = vt_dev_buf(r, r.fw16_bytes)
+    if (r.oom || r.fw16_bytes == 0l) {
+        vt_release(r)
+        return false
+    }
+    if (src.on) {
+        vt_put_piece(src, VT_Q3A_FRONT16_PIECE, r.fw16_dev)
+    } else {
+        upload_region_at(r.fw16_dev, 0l, unsafe(addr<uint8 const?>(slab16[0])), r.fw16_bytes)
+    }
+    r.front = true
+    return true
+}
+
+let private VT_Q3A_PIECE = "vk.q3a"                  //! qwen3a's own q8 pieces' prefix: the conv-out GEMM and the projector's pair
+let private VT_Q3A_FRONT16_PIECE = "vk.q3a.front16"  //! ... its three convs as the f16 slab
+
+//! qwen3a's three convs as the front's f16 slab, each row's taps on the f16 GEMM's 64 lattice (`vt_q3a_geometry` first)
+def private vt_q3a_slab16(t : Qwen3aTower) : array<uint16> {
     let nch = t.n_ch
     let woffs = fixed_array(t.c1_w_off, t.c2_w_off, t.c3_w_off)
     var total = 0l
@@ -5144,25 +5184,127 @@ def private vt_q3a_slab(var r : VtResident; t : Qwen3aTower; key : uint64; lay :
     }
     var slab16 <- cvt_f32_to_f16_sat_array(slab)
     delete slab
-    let span = vt_q3a_norm_span(t)
-    var regions : array<Q8Region>
-    regions |> push(Q8Region(woff = t.cout_w_off, n = 16l * nch, rows = t.core.d_model))
-    let ok = vt_upload(r, key, t.qcblob, t.qcscales, regions, t.cblob, span.lo, span.hi - span.lo, 0l, lay)
-    delete regions
-    if (!ok) {
-        delete slab16
+    return <- slab16
+}
+
+//! qwen3a's own q8 regions: the conv-out GEMM, and with `proj` the projector's two behind it
+def private vt_q3a_regions(t : Qwen3aTower; proj : bool) : array<Q8Region> {
+    let d = t.core.d_model
+    var regions <- [Q8Region(woff = t.cout_w_off, n = 16l * t.n_ch, rows = d)]
+    if (proj) {
+        regions |> push(Q8Region(woff = t.mm1_w_off, n = d, rows = d))
+        regions |> push(Q8Region(woff = t.mm2_w_off, n = d, rows = t.proj_dim))
+    }
+    return <- regions
+}
+
+//! qwen3a's Vulkan device block (`#tower-dev-block`): the core's q8 regions, then the front's f16 slab and the conv-out and
+//! projector GEMMs gathered
+[cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
+def private vulkan_qwen3a_bake(t : Qwen3aTower; var b : TowerDevBuild) : bool {
+    vulkan_audio_tower_bake_into(t.core, b)
+    vt_q3a_geometry(t)
+    var inscope slab16 <- vt_q3a_slab16(t)
+    tower_dev_put(b, VT_Q3A_FRONT16_PIECE, unsafe(addr<uint8 const?>(slab16[0])), long_length(slab16) * 2l)
+    var inscope regions <- vt_q3a_regions(t, true)
+    vt_bake_q8(b, VT_Q3A_PIECE, t.qcblob, t.qcscales, regions)
+    return true
+}
+
+//! qwen3a's Vulkan chains serve the q8 lane: the front, the blocks with their post-norm and the projector all on the device
+def private vulkan_qwen3a_serves_model(q8 : bool) : bool => q8 && vulkan_whisper_tower_serves()
+
+let private VTF_PJH = 0x1000u   //! the device projector's hidden rows
+let private VTF_PJY = 0x2000u   //! ... and its projected rows
+let private VT_Q3A_PROJ_KEY = 9800   //! the projector's sets in `sets_rel_proj`: the four at this + a stage, the GEMMs' at + 10 + the tile column
+
+//! qwen3a's MLP projector on the device (`#tower-dev-block`), on the front resident whose planes hold its GEMMs: the normed rows
+//! in `s.xb` fed, mm1 with its bias and erf GELU, mm2 with its bias, the rows read back into `s.out`; false with the decline
+//! counted where the front did not run this encode or a class or buffer cannot be made
+[hot_path]
+def private vulkan_q3a_proj(t : Qwen3aTower; var s : EncoderState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
+    var r & = g_vt_q3a_front
+    return vt_decline(r, VulkanTowerDecline.flavor) if (t.core.dev_backend != TowerDev.vulkan)
+    let d = t.core.d_model
+    let pdim = t.proj_dim
+    let featw = 16l * t.n_ch
+    if (r.cap_rows < npos || r.fx_dev == 0ul || d % 64l != 0l || pdim % 64l != 0l || max(d, pdim) > featw || long_length(s.xb) < npos * d) {
+        return vt_decline(r, VulkanTowerDecline.shape)
+    }
+    let tc1 = cm2_tile_cols(d, npos)
+    let tc2 = cm2_tile_cols(pdim, npos)
+    if (!cm2_cls_ensure(int(KqFmt.q8), tc1) || !cm2_cls_ensure(int(KqFmt.q8), tc2) || !ensure_tower_clamp_cvt_cls() || !ensure_tower_bias_act_cls()) {
+        return vt_decline(r, VulkanTowerDecline.device)
+    }
+    if (r.pj_cap < r.cap_rows && !vt_q3a_proj_bufs(r, d, pdim)) {
+        return vt_decline(r, VulkanTowerDecline.memory)
+    }
+    let cap = r.pj_cap
+    let bx = cap * d * 4l
+    let by = cap * pdim * 4l
+    let bfeat = (r.cap_rows + TILE_READ_SLACK) * featw * 2l
+    var s_cvt_x = cached(r.sets_rel_proj, VT_Q3A_PROJ_KEY) $() => set_tower_clamp_cvt_cls(fixed_array(r.fx_dev, r.ffeat_dev), fixed_array(r.cap_rows * d * 4l, bfeat), fixed_array(VTF_X, VTF_FEAT))
+    var s_cvt_h = cached(r.sets_rel_proj, VT_Q3A_PROJ_KEY + 1) $() => set_tower_clamp_cvt_cls(fixed_array(r.pj_h_dev, r.ffeat_dev), fixed_array(bx, bfeat), fixed_array(VTF_PJH, VTF_FEAT))
+    var s_b1 = cached(r.sets_rel_proj, VT_Q3A_PROJ_KEY + 2) $() => set_tower_bias_act_cls(fixed_array(r.pj_h_dev, r.norms_dev), fixed_array(bx, r.norms_bytes), fixed_array(VTF_PJH, 0u))
+    var s_b2 = cached(r.sets_rel_proj, VT_Q3A_PROJ_KEY + 3) $() => set_tower_bias_act_cls(fixed_array(r.pj_y_dev, r.norms_dev), fixed_array(by, r.norms_bytes), fixed_array(VTF_PJY, 0u))
+    var s_mm1 = cached(r.sets_rel_proj, VT_Q3A_PROJ_KEY + 10 + int(tc1)) $() => cm2_cls_set(int(KqFmt.q8), tc1, fixed_array(r.wq_dev, r.ws_dev, r.meta.buf, r.ffeat_dev, r.pj_h_dev),
+        fixed_array(r.wq_bytes, r.ws_bytes, r.meta_bytes, bfeat, bx), fixed_array(0u, 0u, 0u, VTF_FEAT, VTF_PJH))
+    var s_mm2 = cached(r.sets_rel_proj, VT_Q3A_PROJ_KEY + 600 + int(tc2)) $() => cm2_cls_set(int(KqFmt.q8), tc2, fixed_array(r.wq_dev, r.ws_dev, r.meta.buf, r.ffeat_dev, r.pj_y_dev),
+        fixed_array(r.wq_bytes, r.ws_bytes, r.meta_bytes, bfeat, by), fixed_array(0u, 0u, 0u, VTF_FEAT, VTF_PJY))
+    let q8e = kq_elems(KqFmt.q8)
+    let g1 = cm2_tiles_at(d, npos, tc1)
+    let g2 = cm2_tiles_at(pdim, npos, tc2)
+    var mp = unsafe(reinterpret<uint?>(r.meta.mapped))
+    var cur = 8l
+    let map1 = batch_sched_map(mp, cur, 0l, t.mm1_w_off / q8e, npos, g1)
+    let map2 = batch_sched_map(mp, cur, 1l, t.mm2_w_off / q8e, npos, g2)
+    let lo = vt_q3a_norm_span(t).lo
+    upload_region_at(r.fx_dev, 0l, unsafe(addr<uint8 const?>(s.xb[0])), npos * d * 4l)
+    let nh = npos * d
+    let ny = npos * pdim
+    vt_chain_one_shot("qwen3a projector", 2l, npos) $(raw : VkCommandBuffer; var h : VkHaz) {
+        var pc_rq = RqArgs(inbase = 0u, nblk = uint(nh / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
+        vt_feed_enc(raw, h, true, s_cvt_x, pc_rq, nh)
+        var pc_g1 = BatchArgs(n = uint(d), d = uint(d), map_off = map1)
+        cm2_cls_enc(int(KqFmt.q8), tc1, raw, h, s_mm1, pc_g1, g1)
+        vt_pt(raw, VtProfRole.gemm_o)
+        vt_bias_act(raw, h, s_b1, d, nh, t.mm1_b_off - lo, BIAS_ACT_GELU_ERF)
+        vt_pt(raw, VtProfRole.bias)
+        vt_feed_enc(raw, h, true, s_cvt_h, pc_rq, nh)
+        var pc_g2 = BatchArgs(n = uint(d), d = uint(pdim), map_off = map2)
+        cm2_cls_enc(int(KqFmt.q8), tc2, raw, h, s_mm2, pc_g2, g2)
+        vt_pt(raw, VtProfRole.gemm_o)
+        vt_bias_act(raw, h, s_b2, pdim, ny, t.mm2_b_off - lo, BIAS_ACT_NONE)
+        vt_pt(raw, VtProfRole.bias)
+        vhz_dep(raw, h, VTF_PJY, 0u, true)
+        cmd_copy_range(raw, r.pj_y_dev, 0l, r.phost.buf, 0l, ny * 4l)
+        vt_pt(raw, VtProfRole.copy_out)
+    }
+    ensure_length(s.out, ny)
+    host_buf_read(r.phost, unsafe(addr<void?>(s.out[0])), ny * 4l)
+    return true
+}
+
+//! the device projector's planes and readback at the front's row capacity; false with them released where an allocation failed
+[cold_path]
+def private vt_q3a_proj_bufs(var r : VtResident; d, pdim : int64) : bool {
+    if (r.pj_cap > 0l) {
+        release_device_buf(r.pj_h_dev)
+        release_device_buf(r.pj_y_dev)
+        r.pj_cap = 0l
+    }
+    r.sets_rel_proj |> clear()   //! the projector's sets bind these planes
+    r.oom = false
+    let cap = r.cap_rows
+    r.pj_h_dev = vt_dev_buf(r, cap * d * 4l)
+    r.pj_y_dev = vt_dev_buf(r, cap * pdim * 4l)
+    vt_proj_host(r, cap * pdim * 4l)
+    if (r.oom || r.phost_bytes < cap * pdim * 4l) {
+        release_device_buf(r.pj_h_dev)
+        release_device_buf(r.pj_y_dev)
         return false
     }
-    r.fw16_bytes = total * 2l
-    r.fw16_dev = vt_dev_buf(r, r.fw16_bytes)
-    if (r.oom) {
-        delete slab16
-        vt_release(r)
-        return false
-    }
-    upload_region_at(r.fw16_dev, 0l, unsafe(addr<uint8 const?>(slab16[0])), r.fw16_bytes)
-    delete slab16
-    r.front = true
+    r.pj_cap = cap
     return true
 }
 
@@ -5227,6 +5369,7 @@ def private vulkan_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; 
     if (!vt_gate(r, t.cq8)) {
         return false
     }
+    return vt_decline(r, VulkanTowerDecline.flavor) if (t.core.dev_backend != TowerDev.vulkan)
     let nm = t.core.n_mel
     let nch = t.n_ch
     let d = t.core.d_model
@@ -5250,7 +5393,10 @@ def private vulkan_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; 
         return vt_decline(r, VulkanTowerDecline.device)
     }
     let lay = active_q8_repack_layout(g_active_needs_repack)
-    let key = vt_key(t.qcblob, t.qcscales, t.cblob, t.cout_w_off, featw, 0l, 1l, lay.mr, lay.kgroup, lay.wbias)
+    let src = vt_dev_src(t.core)
+    let span = vt_q3a_norm_span(t)
+    let key = (src.on ? vt_key_dev(src, t.cblob, span.lo, span.hi - span.lo, 1l)
+        : vt_key(t.qcblob, t.qcscales, t.cblob, t.cout_w_off, featw, 0l, 1l, lay.mr, lay.kgroup, lay.wbias))
     if (r.key != key) {
         r.d = nch
         r.ff = featw
@@ -6330,6 +6476,8 @@ def dasllama_vulkan_tower_register {
         register_gemma3v_flavor(TowerDev.vulkan, @@vulkan_vision_serves_model, @@vulkan_gemma3v_bake)
         register_qwen3v_flavor(TowerDev.vulkan, @@vulkan_vision_serves_model, @@vulkan_qwen3v_bake)
         register_gemma4v_flavor(TowerDev.vulkan, @@vulkan_vision_serves_model, @@vulkan_gemma4v_bake)
+        register_qwen3a_flavor(TowerDev.vulkan, @@vulkan_qwen3a_serves_model, @@vulkan_qwen3a_bake)
+        register_qwen3a_proj_gpu(@@vulkan_q3a_proj)
         register_vad_gpu(@@vulkan_vad_chunks)
         register_tower_rows_gen(@@vulkan_tower_fc_gen)
     }

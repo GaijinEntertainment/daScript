@@ -1546,6 +1546,19 @@ def audio_encode_blocks_ln_post(t : AudioTower; var s : EncoderState; mel : MelC
     return false
 }
 
+//! The blocks over `npos` rows with the tower's post-norm on the device seat that folds it - true: `s.xb` holds the normed rows;
+//! false where no seat served
+def encoder_blocks_ln_post_gpu(t : AudioTower; var s : EncoderState; npos : int64) : bool {
+    return false if (!g_tw_blocks_ln_post_set || !empty(g_audio_ref_dir))
+    dispatch_phase_encode(npos)
+    let te = ref_time_ticks()
+    let served = invoke(g_tw_blocks_ln_post, t, s, npos)
+    if (served) {
+        asr_prof_add("enc.blocks.gpu", te)
+    }
+    return served
+}
+
 //! What the blocks-with-tail seat served: nothing, the blocks alone (`s.x` holds their rows), or the blocks and the projector
 //! tail behind them (`s.out` holds the soft tokens)
 enum TowerTailServed {
