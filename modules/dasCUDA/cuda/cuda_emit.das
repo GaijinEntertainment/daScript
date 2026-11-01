@@ -2867,7 +2867,7 @@ def private emit_value(var ctx : CudaCtx; e : Expression?) : string {
                     w |> write("v.{VEC_LANES[n - 1]}")
                     w |> write(repeat(")", n - 1))
                 }
-                ctx.helpers[key] = "__device__ __forceinline__ {sc}& __das_at_{vt}({vt}& v, int i) \{ return {pick}; \}\n__device__ __forceinline__ const {sc}& __das_at_{vt}(const {vt}& v, int i) \{ return {pick}; \}"
+                ctx.helpers[key] = "__device__ __forceinline__ const {sc}& __das_at_{vt}(const {vt}& v, int i) \{ return {pick}; \}"
             }
             census_kind(ctx, "expr.index.vector")
             return "__das_at_{vt}({sub}, {idx})"
@@ -3574,7 +3574,27 @@ def private emit_invoke_value(var ctx : CudaCtx; ei : ExprInvoke?) : string {
     return "{ctx.user_fns[ui].name}({join(args, ", ")})"
 }
 
-def private emit_store_target(var ctx : CudaCtx; e : Expression?) : string => emit_value(ctx, e)
+//! an assignment's target: a vector lane by pointer arithmetic over the contiguous lanes (`__das_atw_T`) - a reference picked by a
+//! ternary chain compiles to a jump table on the index, a four-way divergent branch around every lane store; a read keeps the
+//! selects (`__das_at_T`, `emit_value`), which hold a register vector in registers
+def private emit_store_target(var ctx : CudaCtx; e : Expression?) : string {
+    if (e is ExprAt) {
+        let ea = e as ExprAt
+        let st = ea.subexpr._type
+        if (st != null && scalar_class(st.baseType) >= 0 && component_count(st.baseType) > 1) {
+            let vt = shader_type_name(st)
+            let key = "atw.{vt}"
+            if (!key_exists(ctx.helpers, key)) {
+                let sc0 = shader_scalar_name(st)
+                let sc = sc0 == "char" ? "signed char" : sc0
+                ctx.helpers[key] = "__device__ __forceinline__ {sc}& __das_atw_{vt}({vt}& v, int i) \{ return reinterpret_cast<{sc}*>(&v)[i]; \}"
+            }
+            census_kind(ctx, "expr.index.vector.store")
+            return "__das_atw_{vt}({emit_value(ctx, ea.subexpr)}, {emit_value(ctx, ea.index)})"
+        }
+    }
+    return emit_value(ctx, e)
+}
 
 def private local_name(ctx : CudaCtx; name : string) : string {
     let base = safe_name(name)
@@ -3821,7 +3841,7 @@ def private emit_stmt_inner(var ctx : CudaCtx; e : Expression?; indent : string;
             shader_error(ctx, op2.at, "operator `{op}` as a statement is not an assignment")
             return
         }
-        let l = emit_value(ctx, op2.left)
+        let l = emit_store_target(ctx, op2.left)
         let r = emit_value(ctx, op2.right)
         let cls = census_class(op2.left._type)
         census_kind(ctx, "op.{op2_census_name(base)}_assign.{cls}")

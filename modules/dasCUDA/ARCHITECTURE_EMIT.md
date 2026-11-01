@@ -74,8 +74,13 @@ A `[cuda_kernel]` class method lowers to one self-contained CUDA C++ text:
   `__float_as_uint` and kin; `sdot4` is `__dp4a`; `packHalf2x16` / `unpackHalf2x16` are the
   PTX `cvt` pair over a `uint` (lane x in the low half), `unpack8` / `pack32` byte-shift
   helpers per type; a lane of a vector by index (`v[i]`, which CUDA's vector types lack) goes
-  through `__das_at_T`, a pair of overloads over a nested ternary - the const one serves
-  rvalues, the other a written lane; float `%` is `fmodf`; a `let` fixed array of literals is a
+  through two helpers picked by the expression's role, not the operand's constness: a read is
+  `__das_at_T`, a nested ternary over the lanes (three selects, which keep a register vector in
+  registers); an assignment's or compound assignment's target is `__das_atw_T`, pointer arithmetic
+  over the contiguous lanes (an indexed store on a shared or global vector; a reference picked by
+  a ternary chain compiles to a jump table on the index, a four-way divergent branch around every
+  lane store - and a register vector written by a runtime lane goes to local memory, so a hot body
+  masks its lane to a constant); float `%` is `fmodf`; a `let` fixed array of literals is a
   `__constant__` table; a loop hint is `#pragma unroll` (`unroll_disable` and `dont_unroll` ->
   `#pragma unroll 1`, `unroll_count=N` -> `#pragma unroll N`). A generic or `[template]`
   instance keeps its base name: the mangled form carries a decimal (generic) or hex

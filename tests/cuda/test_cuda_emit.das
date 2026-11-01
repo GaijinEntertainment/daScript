@@ -183,9 +183,9 @@ def test_cuda_lifts(t : T?) {
         has(t, blocks_cuda, "acc += float(b.qs[k]);", "fixed-array field by index")
         has(t, blocks_cuda, "Blk m = meta[i].blk;", "nested struct field")
         has(t, blocks_cuda, "__das_at_uint4(w4[i], int((meta[i].pos & 3u)))", "vector lane read")
-        has(t, blocks_cuda, "__das_at_uint4(v, int((meta[i].cnt & 3u))) = tf_scale(lane);", "vector lane written, template instance by base name")
-        has(t, blocks_cuda, "__device__ __forceinline__ uint& __das_at_uint4(uint4& v, int i)", "the written-lane overload")
-        has(t, blocks_cuda, "__device__ __forceinline__ const uint& __das_at_uint4(const uint4& v, int i)", "the read-lane overload")
+        has(t, blocks_cuda, "__das_atw_uint4(v, int((meta[i].cnt & 3u))) = tf_scale(lane);", "vector lane written, template instance by base name")
+        has(t, blocks_cuda, "__device__ __forceinline__ uint& __das_atw_uint4(uint4& v, int i) \{ return reinterpret_cast<uint*>(&v)[i]; \}", "the written lane by pointer arithmetic, no select chain")
+        has(t, blocks_cuda, "__device__ __forceinline__ const uint& __das_at_uint4(const uint4& v, int i) \{ return (i == 0 ? v.x : (i == 1 ? v.y : (i == 2 ? v.z : v.w))); \}", "the read lane by selects")
         has(t, blocks_cuda, "#pragma unroll 1\n", "dont_unroll")
         lacks(t, blocks_cuda, "0x", "no hashed name survives")
     }
