@@ -3851,9 +3851,15 @@ var private g_tw_q3a_wpad : St2SlabBase
 
 [cold_path]
 def private q3a_wpad_attach(t : Qwen3aTower) : bool {
-    let key = tw_plane_key(t.cblob)
+    let dev = t.core.dev_backend == TowerDev.metal
+    let key = dev ? hash_combine64(intptr(plane_at(t.core.dev, 0l)), uint64(t.core.dev.n)) : tw_plane_key(t.cblob)
     return true if (st2_slab_current(g_tw_q3a_wpad, key))
     st2_slab_free(g_tw_q3a_wpad)
+    if (dev) {
+        var piece = tw_dev_buffer(t.core.dev, t.core.devplan, TW_Q3A_WPAD_PIECE, t.image_map != null)
+        g_tw_q3a_wpad = St2SlabBase(buf = piece, key = key, borrowed = true)
+        return piece != null
+    }
     let nch = t.n_ch
     let ncp = round_up(nch, 64l)
     let ka2 = 9l * nch
@@ -3889,7 +3895,67 @@ def private q3a_wpad_attach(t : Qwen3aTower) : bool {
     }
     g_tw_q3a_wpad.buf = wpad
     g_tw_q3a_wpad.key = key
+    g_tw_q3a_wpad.bytes = uint64(total * 4l)
     return true
+}
+
+let private TW_Q3A_WPAD_PIECE = "mt.q3a.wpad"   //! qwen3a's padded conv weights and biases in a Metal device block
+
+//! qwen3a's Metal device block (`#tower-dev-block`): the core's pieces, then the front's padded conv weights the attach builds
+[cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
+def private metal_qwen3a_bake(t : Qwen3aTower; var b : TowerDevBuild) : bool {
+    return false if (!metal_audio_tower_bake_into(t.core, false, b) || !q3a_wpad_attach(t))
+    tw_dev_put_slab(b, TW_Q3A_WPAD_PIECE, g_tw_q3a_wpad)
+    st2_slab_free(g_tw_q3a_wpad)
+    return true
+}
+
+//! qwen3a's Metal chains serve the exact lane: the front, the blocks with their post-norm and the projector on the device; the q8
+//! lane's conv-out trio has no Metal form
+def private metal_qwen3a_serves_model(q8 : bool) : bool => !q8 && g_tw_env_tower
+
+//! qwen3a's MLP projector on the device (`#tower-dev-block`) off the exact lane's f32 planes: the normed rows in `s.xb`, mm1 with
+//! its bias and erf GELU, mm2 with its bias, read back into `s.out`; false with the decline counted where it cannot serve
+[hot_path]
+def private metal_q3a_proj(t : Qwen3aTower; var s : EncoderState; npos : int64) : bool {
+    return tw_decline(MetalTowerDecline.flavor) if (t.core.dev_backend != TowerDev.metal || t.cq8)
+    let d = t.core.d_model
+    let pdim = t.proj_dim
+    if (d % 64l != 0l || pdim % 64l != 0l || long_length(s.xb) < npos * d) {
+        return tw_decline(MetalTowerDecline.shape)
+    }
+    return tw_decline(MetalTowerDecline.device) if (!metal_tower_init())
+    let mp = round_up(npos, 32l)
+    var bcb = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.cblob, 0l))), uint64(length(t.cblob) * 4l), t.image_map != null)
+    let bytes_x = uint64(mp * d * 4l)
+    let bytes_y = uint64(mp * pdim * 4l)
+    var bx = pool_acquire_pinned(g_tw_pool, g_dev, bytes_x)
+    var bh = pool_acquire_pinned(g_tw_pool, g_dev, bytes_x)
+    var by = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y)
+    unsafe {
+        memcpy(metal_buffer_contents(bx), addr<void const?>(s.xb[0]), uint64(npos * d * 4l))
+    }
+    var u_d = uniform_u32(uint(d))
+    var u_p = uniform_u32(uint(pdim))
+    var err = ""
+    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+        enc_f32_mm(enc, bcb, uint64(t.mm1_w_off * 4l), bx, bh, 0ul, u_d, u_d, mp, d)
+        tw_bias(enc, bh, bcb, GkBiasActArgs(d = uint(d), nelem = uint(npos * d), boff = uint(t.mm1_b_off), act = BIAS_ACT_GELU_ERF))
+        enc_f32_mm(enc, bcb, uint64(t.mm2_w_off * 4l), bh, by, 0ul, u_d, u_p, mp, pdim)
+        tw_bias(enc, by, bcb, GkBiasActArgs(d = uint(pdim), nelem = uint(npos * pdim), boff = uint(t.mm2_b_off), act = BIAS_ACT_NONE))
+    }
+    if (ran) {
+        ensure_length(s.out, npos * pdim)
+        unsafe {
+            memcpy(addr(s.out[0]), metal_buffer_contents(by), uint64(npos * pdim * 4l))
+        }
+    }
+    pool_release(g_tw_pool, bx, bytes_x)
+    pool_release(g_tw_pool, bh, bytes_x)
+    pool_release(g_tw_pool, by, bytes_y)
+    pool_release(g_upool, u_d, 4ul)
+    pool_release(g_upool, u_p, 4ul)
+    return ran || tw_decline(MetalTowerDecline.device)
 }
 
 // one conv2d stage: padded im2col + the f32 tile GEMM + padded bias + erf-GELU
@@ -3914,7 +3980,7 @@ def private metal_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; v
     let featw = 16l * nch
     let npos = n_chunks * QWEN3A_TOK_PER_CHUNK
     //! the shape gates run first so a forever-declining tower never mints the padded slab
-    if (k2 % 32l != 0l || featw % 32l != 0l || d % 64l != 0l || t.cq8
+    if (k2 % 32l != 0l || featw % 32l != 0l || d % 64l != 0l || t.cq8 || t.core.dev_backend != TowerDev.metal
             || !g_tw_env_tower || !metal_tower_init() || !pf_q3a_front_ready() || !q3a_wpad_attach(t)) {
         return false
     }
@@ -6564,6 +6630,8 @@ def dasllama_metal_tower_register {
     register_tower_blocks_tail_gpu(@@metal_tower_blocks_tail)
     register_tower_conv_gpu(@@metal_conv_frontend)
     register_qwen3a_front_gpu(@@metal_q3a_front)
+    register_qwen3a_flavor(TowerDev.metal, @@metal_qwen3a_serves_model, @@metal_qwen3a_bake)
+    register_qwen3a_proj_gpu(@@metal_q3a_proj)
     register_whisper_mel_gpu(@@metal_q3a_mel)
     register_gemma4a_gpu(@@metal_gemma4a_blocks, @@metal_tower_serves)
     register_gemma4a_chunk_gpu(@@metal_gemma4a_chunk)

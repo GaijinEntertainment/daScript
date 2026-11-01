@@ -128,6 +128,7 @@ def private register_qwen3a_image_tags {
     register_image_family_tag("qwen3a-f32", true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
     register_image_family_tag("qwen3a-q8")
     register_tower_dev_tags("qwen3a-q8")
+    register_tower_dev_tags("qwen3a-f32")
 }
 
 //! A GPU driver's qwen3a flavor (`#tower-dev-block`): the backend whose image it mints, whether its chains serve the q8 lane, and
