@@ -2319,7 +2319,6 @@ namespace das {
         returnDecl->moveSemantics = true;
         block->list.push_back(returnDecl);
         // and done
-        func->body = block;
         return func;
     }
 

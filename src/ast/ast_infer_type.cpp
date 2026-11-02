@@ -1536,17 +1536,13 @@ namespace das {
                         extra += func->getLocationExtra();
                         atC = func->getConceptLocation(atC);
                     }
-                    if (verbose) {
-                        program->error(message, extra, "", atC, CompilationError::concept_failed);
-                    }
+                    program->error(message, extra, "", atC, CompilationError::concept_failed);
                 } else {
                     string extra;
                     if (func) {
                         extra = func->getLocationExtra();
                     }
-                    if (verbose) {
-                        program->error(message, extra, "", expr->at, CompilationError::static_assert_failed);
-                    }
+                    program->error(message, extra, "", expr->at, CompilationError::static_assert_failed);
                 }
             }
         }
@@ -4250,10 +4246,8 @@ namespace das {
                         error("'" + var->name + "' is ambiguous", tw.str(), "",
                               expr->at, CompilationError::ambiguous_field);
                     } else {
-                        if (verbose) {
-                            error("Don't know what '" + var->name + "' is", "", "",
-                              expr->at, CompilationError::lookup_field);
-                        }
+                        error("Don't know what '" + var->name + "' is", "", "",
+                          expr->at, CompilationError::lookup_field);
                     }
                 }
             }

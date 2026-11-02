@@ -1221,13 +1221,12 @@ namespace das {
 
     vec4f rtti_contextFunctionInfo ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         Context * ctx = cast<Context *>::to(args[0]);
-        int32_t tf = ctx->getTotalFunctions();
         int32_t index = cast<int32_t>::to(args[1]);
-        if ( index<0 || index>=tf ) {
-            context.throw_error_at(call->debugInfo, "function index out of range, %i of %i", index, tf);
+        SimFunction * fn = ctx->getFunction(index);
+        if ( !fn ) {
+            context.throw_error_at(call->debugInfo, "function index out of range, %i of %i", index, ctx->getTotalFunctions());
         }
-        FuncInfo * fi = ctx->getFunction(index)->debugInfo;
-        return cast<FuncInfo *>::from(fi);
+        return cast<FuncInfo *>::from(fn->debugInfo);
     }
 
     vec4f rtti_contextVariableInfo ( Context & context, SimNode_CallBase * call, vec4f * args ) {
@@ -1389,7 +1388,6 @@ namespace das {
             case Type::tUShort2:    case Type::tUShort3:    case Type::tUShort4:    case Type::tUShort8:
             case Type::tByte2:      case Type::tByte3:      case Type::tByte4:      case Type::tByte8:      case Type::tByte16:
             case Type::tUByte2:     case Type::tUByte3:     case Type::tUByte4:     case Type::tUByte8:     case Type::tUByte16:
-                def.index = RttiAny;
                 break;
             default:
                 DAS_VERIFYF(false,"unsupported type %i in rtti_builtin_variable_value for %s. i guess new Type::type has been added",
@@ -1771,21 +1769,21 @@ namespace das {
         Table * tab = (Table *) _table;
         switch ( baseType ) {
             case Type::tBool:           return tableFindValue<bool>        (tab,key,valueTypeSize,context);
-            case Type::tInt8:           return tableFindValue<int8_t>      (tab,key,valueTypeSize,context);
-            case Type::tUInt8:          return tableFindValue<uint8_t>     (tab,key,valueTypeSize,context);
-            case Type::tInt16:          return tableFindValue<int16_t>     (tab,key,valueTypeSize,context);
-            case Type::tUInt16:         return tableFindValue<uint16_t>    (tab,key,valueTypeSize,context);
-            case Type::tInt64:          return tableFindValue<int64_t>     (tab,key,valueTypeSize,context);
-            case Type::tUInt64:         return tableFindValue<uint64_t>    (tab,key,valueTypeSize,context);
-            case Type::tEnumeration:    return tableFindValue<int32_t>     (tab,key,valueTypeSize,context);
+            case Type::tInt8:
             case Type::tEnumeration8:   return tableFindValue<int8_t>      (tab,key,valueTypeSize,context);
-            case Type::tEnumeration16:  return tableFindValue<int16_t>     (tab,key,valueTypeSize,context);
-            case Type::tEnumeration64:  return tableFindValue<int64_t>     (tab,key,valueTypeSize,context);
-            case Type::tBitfield:       return tableFindValue<Bitfield>    (tab,key,valueTypeSize,context);
+            case Type::tUInt8:
             case Type::tBitfield8:      return tableFindValue<uint8_t>     (tab,key,valueTypeSize,context);
+            case Type::tInt16:
+            case Type::tEnumeration16:  return tableFindValue<int16_t>     (tab,key,valueTypeSize,context);
+            case Type::tUInt16:
             case Type::tBitfield16:     return tableFindValue<uint16_t>    (tab,key,valueTypeSize,context);
+            case Type::tInt64:
+            case Type::tEnumeration64:  return tableFindValue<int64_t>     (tab,key,valueTypeSize,context);
+            case Type::tUInt64:
             case Type::tBitfield64:     return tableFindValue<uint64_t>    (tab,key,valueTypeSize,context);
-            case Type::tInt:            return tableFindValue<int32_t>     (tab,key,valueTypeSize,context);
+            case Type::tBitfield:       return tableFindValue<Bitfield>    (tab,key,valueTypeSize,context);
+            case Type::tInt:
+            case Type::tEnumeration:    return tableFindValue<int32_t>     (tab,key,valueTypeSize,context);
             case Type::tInt2:           return tableFindValue<int2>        (tab,key,valueTypeSize,context);
             case Type::tInt3:           return tableFindValue<int3>        (tab,key,valueTypeSize,context);
             case Type::tInt4:           return tableFindValue<int4>        (tab,key,valueTypeSize,context);

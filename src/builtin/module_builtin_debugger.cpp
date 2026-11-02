@@ -1223,7 +1223,6 @@ namespace debugger {
         auto fn = cast<Func>::to(args[1]);
         if ( !fn.PTR ) context.throw_error_at(call->debugInfo, "pnvoke can't invoke null function");
         auto simFn = fn.PTR;
-        if ( !simFn ) context.throw_error_at(call->debugInfo, "pinvoke can't find function #%p", (void *)simFn);
         if ( !invCtx->contextMutex ) context.throw_error_at(call->debugInfo,"threadlock_context is not set");
         if ( simFn->debugInfo->count!=uint32_t(nUserArgs) ) context.throw_error_at(call->debugInfo,
             "pinvoke function expects %u arguments, but %u provided", simFn->debugInfo->count, nUserArgs);

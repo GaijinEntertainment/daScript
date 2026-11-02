@@ -321,7 +321,7 @@ namespace das {
         try {
             try_block();
         } catch ( const dasException & ) {
-            __context__->fastCallDepth = fcd;
+            __context__->fastCallDepth = fcd; //-V1048
             catch_block();
             __context__->abiArg = aa;
             __context__->abiCMRES = acm;
