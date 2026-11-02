@@ -1100,8 +1100,8 @@ namespace das {
         vector<pair<string,Type>> options;
         Module dummyMod;
         ModuleLibrary dummy(&dummyMod);
-        auto cop = new CodeOfPoliciesAnnotation(dummy);
-        for ( auto & f : cop->fields ) {
+        CodeOfPoliciesAnnotation cop(dummy);
+        for ( auto & f : cop.fields ) {
             if ( f.second.decl->isWorkhorseType() ) {
                 auto bT = f.second.decl->baseType;
                 switch ( bT ) {
