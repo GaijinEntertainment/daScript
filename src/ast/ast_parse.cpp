@@ -421,8 +421,11 @@ namespace das {
 
     string getDasRoot ( void );
 
-    static string get_builtin_path() {
-        return getDasRoot() + "/daslib/builtin.das";
+    static string get_builtin_path ( const FileAccessPtr & access ) {
+        string rootPath = getDasRoot() + "/daslib/builtin.das";
+        if ( !access ) return rootPath;
+        string fileName = access->getModuleInfo("daslib/builtin", "").fileName;
+        return fileName.empty() || !access->getFileInfo(fileName) ? rootPath : fileName;
     }
 
     bool getPrerequisits ( const string & fileName,
@@ -2065,7 +2068,7 @@ namespace das {
             TextWriter & logs, ModuleGroup & libGroup, const CodeOfPolicies & policies, bool withExtraModules ) {
         [[maybe_unused]] auto builtinModule = Module::require("$");
         DAS_ASSERTF(builtinModule, "Somehow `builtin` module is missing.");
-        bool allGood = addExtraDependency("builtin", get_builtin_path(), walk.missing, walk.circular, walk.notAllowed, walk.req,
+        bool allGood = addExtraDependency("builtin", get_builtin_path(access), walk.missing, walk.circular, walk.notAllowed, walk.req,
             walk.dependencies, walk.namelessReq, walk.namelessMismatches, access, libGroup, policies, &logs);
         if ( !allGood ) {
             auto res = make_smart<Program>();

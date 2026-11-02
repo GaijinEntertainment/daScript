@@ -512,7 +512,9 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
         }
         if ( jitNoCache ) policies.jit_dll_mode = false;
         policies.jit_emit_prologue = jitStack;
-        access->addExtraModule("just_in_time", getDasRoot() + "/daslib/just_in_time.das");
+        string jitFile = access->getModuleInfo("daslib/just_in_time", "").fileName;
+        if ( jitFile.empty() || !access->getFileInfo(jitFile) ) jitFile = getDasRoot() + "/daslib/just_in_time.das";
+        access->addExtraModule("just_in_time", jitFile);
         policies.jit_output_path = jitOutPath;
         policies.dll_search_paths.emplace_back(getDasRoot() + "/lib");
     }
