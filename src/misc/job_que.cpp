@@ -2,6 +2,7 @@
 
 #include "daScript/misc/job_que.h"
 #include "job_que_spin.h"
+#include "job_que_cpu_budget.h"
 #include "daScript/misc/performance_time.h"
 #include "daScript/simulate/debug_info.h"
 #include "daScript/simulate/aot_builtin_jobque.h"
@@ -10,6 +11,9 @@
 
 #if defined(__APPLE__)
 #include <sys/sysctl.h>
+#endif
+#if defined(__linux__) && !defined(__EMSCRIPTEN__)
+#include <sched.h>
 #endif
 #if defined(__EMSCRIPTEN__)
 #include <emscripten/threading.h>   // emscripten_num_logical_cores
@@ -181,6 +185,22 @@ namespace das {
     int GetPhysicalCoreCountInWindows();   // defined in sysos.cpp under the same _WIN32 gate (incl. mingw)
 #endif
 
+    // src/misc/ARCHITECTURE.md#cpu-budget
+    static int logical_cpu_budget() {
+#if defined(__linux__) && !defined(__EMSCRIPTEN__)
+        static int budget = []{
+            cpu_set_t set;
+            CPU_ZERO(&set);
+            int affinity = sched_getaffinity(0, sizeof(set), &set) == 0 ? CPU_COUNT(&set) : 0;
+            return detail::cpu_budget(int(thread::hardware_concurrency()), affinity,
+                detail::cgroup_cpu_lanes("/sys/fs/cgroup", "/proc/self/cgroup"));
+        }();
+        return budget;
+#else
+        return max(1, (int)thread::hardware_concurrency());
+#endif
+    }
+
     int JobQue::get_num_physical_cores() {
 #if defined(__APPLE__)
         int ncores = 0; size_t len = sizeof(ncores);
@@ -194,10 +214,10 @@ namespace das {
             int got = fscanf(f, "%d", &active);
             fclose(f);
             int logical = max(1, (int)thread::hardware_concurrency());
-            if ( got == 1 ) return active ? max(1, logical / 2) : logical;
+            if ( got == 1 ) return min(active ? max(1, logical / 2) : logical, logical_cpu_budget());
         }
 #endif
-        return max(1, (int)thread::hardware_concurrency());
+        return logical_cpu_budget();
     }
 
 #if defined(_MSC_VER) && !defined(_GAMING_XBOX) && !defined(_DURANGO) && !defined(_M_ARM64)
@@ -221,7 +241,7 @@ namespace das {
         // correct on both wasm32/64.
         int hw = emscripten_num_logical_cores();
 #else
-        int hw = static_cast<int>(thread::hardware_concurrency());
+        int hw = logical_cpu_budget();
 #endif
         return jobque_thread_count(das::max<int>(1, hw));
     }

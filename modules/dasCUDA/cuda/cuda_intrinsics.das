@@ -54,6 +54,21 @@ def public mma_block_scaled_mx(var f : coopmatAcc_f32_16x16; a : coopmatA_e2m1_1
 [unused_argument(f, cs), sideeffects, arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
 def public mma_scale_cols(var f : coopmatAcc_f32_16x16; cs : float4) : void {}
 
+[unused_argument(m, p), sideeffects, arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
+def public ldmatrix_trans(var m : coopmatA_f16_16x16; p : uint4?) : void {}
+[unused_argument(m, p), sideeffects, arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
+def public ldmatrix_trans(var m : coopmatB_f16_16x16; p : uint4?) : void {}
+
+[unused_argument(f, k), sideeffects, arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
+def public mma_acc_get(f : coopmatAcc_f32_16x16; k : int) : float => 0.0
+[unused_argument(f, k, v), sideeffects, arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
+def public mma_acc_set(var f : coopmatAcc_f32_16x16; k : int; v : float) : void {}
+
+[arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
+def public mma_acc_row(lane : uint; k : int) : uint => (lane >> 2u) + ((k & 2) != 0 ? 8u : 0u)
+[arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
+def public mma_acc_col(lane : uint; k : int) : uint => uint(k >> 2) * 8u + (lane & 3u) * 2u + uint(k & 1)
+
 let private E2M1_MAG : float[8] = fixed_array<float>(0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0)
 
 [arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]

@@ -6970,6 +6970,19 @@ def private dn_rows_at(rows : array<float>; lead, w : int) : array<float> {
 
 //! a segmented window's recurrent parts: the conv and the scan dispatched at a row base past zero read and write the part's rows
 //! alone - its src and conv rows, its beta / g rows, its o rows - bit for bit the same rows dispatched at row 0
+
+//! the chunked scan's arms run where the device has the KHR tiles at subgroup 32; there its stamp must compile, so a broken stamp reds the
+//! cell instead of skipping as an absent device
+def private dn_chunk_armed() : bool {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return false if (!khr_kq_tile_on())
+        verify(ensure_dn_scan_chunk_cls(), "the chunked deltanet scan must compile on a device with the KHR tiles at subgroup 32")
+        return true
+    } else {
+        return false
+    }
+}
+
 [test]
 def test_vkd_dn_rows_base(t0 : T?) {
     t0 |> run("dn_conv and dn_scan at a row base past zero == the same rows at row 0, bit for bit, the rows ahead of the base untouched") <| @(t : T?) {
@@ -7067,6 +7080,21 @@ def test_vkd_dn_rows_base(t0 : T?) {
                     if (base == 0) {
                         delete cap_got
                         cap_got <- cp |> plane_run(pcap)
+                    } elif (dn_chunk_armed()) {   //! the chunked scan at the same row base past zero: its rows and state within the bar of the per-token scan's
+                        let pst2 = cp |> io_(sth)
+                        let po2 = cp |> out_((base + npos) * di)
+                        var sc2 = cp |> cls_set(fixed_array(pconv, pst2, psm, po2, pcaps, pcap), @@set_dn_scan_chunk_cls)
+                        cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                            enc_dn_scan_chunk_cls(raw, h, sc2, pcs, dn_scan_chunk_wgs(int64(nvh), int64(ds), DN_CHUNK_VS))
+                        }
+                        var inscope o2 <- cp |> plane_run(po2)
+                        var inscope st2 <- cp |> plane_run(pst2)
+                        var inscope got2 <- [for (i in range(npos * di)); o2[base * di + i]]
+                        got2 |> push_from(st2)
+                        let last = length(scans) - 1
+                        let floor2 = 1e-2 * logits_maxabs(scans[last])
+                        check_rows(t, "dn_scan_chunk at row base {base} within the bar of the per-token scan's rows and state", got2, scans[last],
+                            Bar(rel = 1e-2, abs_floor = floor2, poison_of_max = true, poison_abs = 0.5), ds)
                     }
                 }
                 if (base == 0) {   //! the capture's references over the same fixture: the scan over the first half alone, and the CPU oracle
@@ -7103,6 +7131,71 @@ def test_vkd_dn_rows_base(t0 : T?) {
             var inscope st_whole <- [for (i in range(nvh * ds * ds)); scans[0][npos * di + i]]
             t |> success(all_finite(cap_got) && all_finite(st_whole), "dn_scan capture control: every value it reads is finite")
             t |> success(mismatch_exact(cap_got, st_whole) > 0, "dn_scan capture control: the captured state is not the whole run's")
+            if (dn_chunk_armed()) {   //! the chunked scan over the same rows at row base 0: its capture row cuts the first chunk at {npos / 2}
+                var inscope smv : array<float>
+                smv |> resize(dt_off + nvh)
+                for (i in range(npos * nvh)) {
+                    smv[beta_off + i] = bg[lead * nvh + i]
+                    smv[g_off + i] = bg[i]
+                }
+                for (i in range(nvh)) {
+                    smv[a_off + i] = -0.4 - float(i) * 0.1
+                    smv[dt_off + i] = 0.05 * float(i)
+                }
+                var inscope convh : array<float>
+                convh |> resize(npos * cd)
+                for (i in range(npos * cd)) {   //! the per-token run's rows at base 0
+                    convh[i] = (float((i * 19) % 79) * 0.025 - 0.9) * 0.15
+                }
+                var inscope o_seq <- [for (i in range(npos * di)); scans[0][i]]
+                let o_floor = 1e-2 * logits_maxabs(o_seq)
+                for (withcap in fixed_array(true, false)) {   //! with the capture cutting the first chunk at {npos / 2}, and over whole chunks
+                    var inscope sth <- row_fill(nvh * ds * ds, 13, 0, 0.02, 0.5, 53)
+                    var inscope capw <- [uint(npos / 2), 0u]
+                    var inscope o_chunk, st_chunk, cap_chunk : array<float>
+                    with_cell_planes() $(var cp : CellPlanes) {
+                        let pconv = cp |> in_(convh)
+                        let pst = cp |> io_(sth)
+                        let psm = cp |> in_(smv)
+                        let po = cp |> out_(npos * di)
+                        let pcaps = cp |> in_plain(capw)
+                        let pcap = cp |> out_(nvh * ds * ds)
+                        var sc = cp |> cls_set(fixed_array(pconv, pst, psm, po, pcaps, pcap), @@set_dn_scan_chunk_cls)
+                        var pcs = DnScanArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
+                            beta_off = uint(beta_off), g_off = uint(g_off), a_off = uint(a_off), dt_off = uint(dt_off), o_off = 0u,
+                            di = uint(di), row0 = 0u, cap_n = withcap ? 1u : 0u, cap_rec = 0u, cap_state_off = 0u)
+                        cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                            enc_dn_scan_chunk_cls(raw, h, sc, pcs, dn_scan_chunk_wgs(int64(nvh), int64(ds), DN_CHUNK_VS))
+                        }
+                        delete o_chunk
+                        o_chunk <- cp |> plane_run(po)
+                        delete st_chunk
+                        st_chunk <- cp |> plane_run(pst)
+                        delete cap_chunk
+                        cap_chunk <- cp |> plane_run(pcap)
+                    }
+                    let tag = withcap ? "under the capture" : "over whole chunks"
+                    {   //! the same run against the sequential CPU oracle at its own shape, and the state moved off its input
+                        var inscope st_in <- row_fill(nvh * ds * ds, 13, 0, 0.02, 0.5, 53)
+                        var inscope seq_ref <- dn_delta_ref(convh, st_in, smv, npos, nkh, nvh, ds, beta_off, g_off, a_off, dt_off)
+                        var inscope got_c := o_chunk
+                        got_c |> push_from(st_chunk)
+                        check_rows(t, "dn_scan_chunk {tag} against the sequential CPU oracle (the o rows, then the state)", got_c, seq_ref,
+                            Bar(rel = 1e-2, abs_floor = o_floor, poison_of_max = true, poison_abs = 0.5), ds)
+                        var inscope st_ref_c <- copy_span(seq_ref, npos * di, nvh * ds * ds)
+                        let at = maxdiff_at(st_ref_c, st_in)
+                        t |> success(moved_off(st_chunk, st_in, at, Bar(rel = 1e-2, abs_floor = cap_floor)), "dn_scan_chunk {tag}: the state, written in place, moved off its input at element {at}")
+                    }
+                    check_rows(t, "dn_scan_chunk's o rows {tag} against the per-token scan's", o_chunk, o_seq, Bar(rel = 1e-2, abs_floor = o_floor, poison_of_max = true, poison_abs = 0.5), ds)
+                    check_rows(t, "dn_scan_chunk's state after {npos} rows {tag} against the per-token scan's", st_chunk, st_whole, Bar(rel = 1e-2, abs_floor = cap_floor, poison_of_max = true, poison_abs = 0.5), ds)
+                    if (withcap) {
+                        check_rows(t, "dn_scan_chunk's capture after {npos / 2} rows (a chunk cut at the capture) against the sequential CPU oracle", cap_chunk, cap_ref, Bar(rel = 1e-2, abs_floor = cap_floor, poison_of_max = true, poison_abs = 0.5), ds)
+                        t |> success(mismatch_exact(cap_chunk, st_chunk) > 0, "dn_scan_chunk capture control: the captured state is not the whole run's")
+                    }
+                }
+            } else {
+                t |> skip("dn_scan_chunk at a capture row: no KHR cooperative matrices at subgroup 32 on this device")
+            }
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -7251,9 +7344,11 @@ def test_vkd_dn_family(t0 : T?) {
                 var pc3 = GkDnGateArgs(nvh = uint(nvh), di = uint(di), ds = uint(ds),
                     o_off = uint(o_off), wnorm_off = uint(wnorm_off), eps = eps)
                 //! the scan from the uploaded state, then the out-norm gated by silu(z) and, the second time, by the sigmoid out-gate
-                //! stamp (`dn_scan_p3_sig_cls`, qwen4exp)
+                //! stamp (`dn_scan_p3_sig_cls`, qwen4exp); where the device has the KHR tiles, the chunked scan (`dn_scan_chunk_cls`:
+                //! 70 rows = four whole chunks and a six-row tail) under the silu one
+                let chunk_on = dn_chunk_armed()
                 var inscope outs : array<array<float>>
-                outs |> reserve(2)
+                outs |> reserve(3)
                 with_cell_planes() $(var cp : CellPlanes) {
                     let pconv = cp |> in_(convh)
                     let pz = cp |> in_(zh)
@@ -7263,17 +7358,27 @@ def test_vkd_dn_family(t0 : T?) {
                     var inscope nocap <- [0u, 0u]
                     let pcaps = cp |> in_plain(nocap)
                     let pcap = cp |> out_(16)
-                    var sc1 = cp |> cls_set(fixed_array(pconv, pst, psm, pslab, pcaps, pcap), @@set_dn_scan_cls)
-                    for (sig in fixed_array(false, true)) {
-                        if (sig) {
-                            verify(ensure_dn_scan_p3_sig_cls(), "the sigmoid out-norm stamp must compile on a device that compiled the silu one")
+                    let scan_planes = fixed_array(pconv, pst, psm, pslab, pcaps, pcap)
+                    var sc1 = cp |> cls_set(scan_planes, @@set_dn_scan_cls)
+                    var scc = chunk_on ? cp |> cls_set(scan_planes, @@set_dn_scan_chunk_cls) : sc1
+                    for (form in range(chunk_on ? 3 : 2)) {
+                        let sig = form == 1
+                        let chunk = form == 2
+                        if (form > 0) {
                             cp |> plane_upload(pst, sth)
                             cp |> plane_refill(pslab)
+                        }
+                        if (sig) {
+                            verify(ensure_dn_scan_p3_sig_cls(), "the sigmoid out-norm stamp must compile on a device that compiled the silu one")
                         }
                         let p3 = fixed_array(pz, pslab, psm)
                         var sc3 = sig ? cp |> cls_set(p3, @@set_dn_scan_p3_sig_cls) : cp |> cls_set(p3, @@set_dn_scan_p3_cls)
                         cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
-                            enc_dn_scan_cls(raw, h, sc1, pcs, dn_scan_wgs(int64(nvh), int64(ds)))
+                            if (chunk) {
+                                enc_dn_scan_chunk_cls(raw, h, scc, pcs, dn_scan_chunk_wgs(int64(nvh), int64(ds), DN_CHUNK_VS))
+                            } else {
+                                enc_dn_scan_cls(raw, h, sc1, pcs, dn_scan_wgs(int64(nvh), int64(ds)))
+                            }
                             if (sig) {
                                 enc_dn_scan_p3_sig_cls(raw, h, sc3, pc3, int64(npos))
                             } else {
@@ -7305,6 +7410,20 @@ def test_vkd_dn_family(t0 : T?) {
                 let wids = span_maxdiff(o_cls_sig, o_ref_sig, 0, 0, cmp_n)
                 t |> success(bads == 0, "dn_scan + the sigmoid out-norm stamp matches the CPU oracle at ds {ds} ({bads} of {cmp_n} off, widest {wids.diff} at {wids.at})")
                 t |> success(mismatch_rel("", o_cls_sig, o_ref, 1e-2, floor) > 0, "dn_scan_p3_sig at ds {ds} lands off the silu oracle (the two stamps differ)")
+                if (chunk_on) {   //! the chunked scan's rows and state against the same oracle, and against the per-token scan's
+                    var inscope o_chunk <- outs[2]
+                    let badc = mismatch_rel("", o_chunk, o_ref, 1e-2, floor)
+                    let widc = span_maxdiff(o_chunk, o_ref, 0, 0, cmp_n)
+                    t |> success(badc == 0, "dn_scan_chunk + out-norm matches the CPU oracle at ds {ds} ({badc} of {cmp_n} off, widest {widc.diff} at row {widc.at / ds} col {widc.at % ds})")
+                    let bads2 = mismatch_rel("", o_chunk, o_cls, 1e-2, floor)
+                    let wid2 = span_maxdiff(o_chunk, o_cls, 0, 0, cmp_n)
+                    t |> success(bads2 == 0, "dn_scan_chunk at ds {ds} lands within the bar of the per-token scan ({bads2} of {cmp_n} off, widest {wid2.diff} at row {wid2.at / ds} col {wid2.at % ds})")
+                    var inscope poison_c := o_chunk
+                    poison_c[cmp_n - 1] += 1.0 + 2.0 * logits_maxabs(o_ref)
+                    t |> success(mismatch_rel("", poison_c, o_ref, 1e-2, floor) > 0, "dn_scan_chunk at ds {ds}: the bar reds a poisoned state value")
+                } else {
+                    t |> skip("dn_scan_chunk at ds {ds}: no KHR cooperative matrices at subgroup 32 on this device")
+                }
                 delete o_cls_sig
                 delete o_ref_sig
                 delete convh

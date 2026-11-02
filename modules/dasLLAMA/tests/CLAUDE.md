@@ -1287,7 +1287,10 @@ assert the roped q differs from its input at a rotated index, so the in-place co
 `test_vkd_dn_rows_base` holds the deltanet conv and scan at a row base past zero (a segmented window's part: `DnConvArgs.row0`,
 `DnScanArgs.row0`) bit for bit the same rows at row 0, the rows ahead of the base keeping their sentinel; the row-0 run
 carries one capture after half its rows (`DnScanArgs.cap_n`), its checkpoint state bit for bit a scan over that half alone,
-and the whole run's live state missing it (the control);
+and the whole run's live state missing it (the control); where the device has the KHR tiles the chunked scan
+(`dn_scan_chunk_cls`) runs the same rows with the capture cutting its first chunk - its o rows and end state within the
+peak-floored bar of the per-token scan's, its captured state within the bar of the sequential CPU oracle's, the capture
+missing the whole run's state (the control);
 `test_vkd_qkn_rope_window` holds `qkn_rope_cls`'s window form (three rows past two lead rows, the [k | v] projection rows at
 their stride, positions 7 to 9) bit for bit its token rows' form over the same rows, the q rows and both mirrors, the lead q rows
 untouched; `test_vkd_dn_tail` holds the window chain's ring hand-off (`DnTail`) bit for bit to the per-channel CPU form at 5, 3, 2 and 1
@@ -1298,7 +1301,9 @@ control a continuation's ring must differ from; `test_vkd_dn_cap_tail` holds the
 captures in one dispatch, one past the taps and one under them reading its first row off the entry image - the words between
 the two rows' images keeping their sentinel; `test_vkd_dn_family` holds the deltanet conv, the
 fused step and the two-phase scan to CPU oracles at head sizes 64 and 128 (the step's one-part
-and two-part state columns, the scan's four- and eight-lane clusters), and the sigmoid out-gate stamps
+and two-part state columns, the scan's four- and eight-lane clusters), the chunked scan (`dn_scan_chunk_cls`, where the
+device has the KHR tiles: 70 rows = four whole chunks and a six-row tail, its rows and state within the bar of the oracle
+and of the per-token scan, a poisoned state value the control), and the sigmoid out-gate stamps
 (`dn_step_sig_cls`, `dn_scan_p3_sig_cls`, the qwen4exp form) against the same oracles under sigmoid(z) with
 the silu oracle as the control each stamp must miss; `test_vkd_hc_seams` holds the hyper-connection
 seams to CPU oracles - the grouped rms with the gamma row picked per stream at a site offset (`HcNorm`),
@@ -2351,9 +2356,9 @@ under `DASLLAMA_GPU_MIN_CTX=1024`), the 31B Q4_K_M eight-token agreement cell (a
 format census and perplexity cells (the native-MXFP4 stacks on the mx4 stamps); the same skips. The CUDA kernel cells
 beside them, `test_cuda_kernels.das` (model-free; a CUDA device with NVRTC, else every cell but the leak gate skips;
 the per-format cells - the kq cm2 tiles, the kq and per-32 GEMVs, the token-table gathers, the Q8_K feeds -, the biased
-act twins, the deltanet family and the mx4 FP4 leaf over the expert schedule also skip without dasVulkan, and the routing
-cell's bucket-schedule arms register a skip of their own there; the mx4 FP4 leaf over the expert schedule also skips on a
-card below the FP4 rung): the q8 GEMV and its rate, the MMQ int8 GEMM's leaves against their references - the Q8_0 one and
+act twins, the deltanet family and the mx4 and nv4 FP4 leaves over the expert schedule also skip without dasVulkan, and the
+routing cell's bucket-schedule arms register a skip of their own there; the FP4 leaves also skip on a card below the FP4 rung,
+and the deltanet family's chunked form where its stamp does not compile, which the compile gate reds): the q8 GEMV and its rate, the MMQ int8 GEMM's leaves against their references - the Q8_0 one and
 the superblock ones without a min term (IQ4_XS and IQ4_NL through the codebook, Q4_0's nibbles less eight) per element
 against the block-scaled fold, the Q4_K one (its min terms f16-staged and folded sixteen blocks at a time over four
 superblocks) at the f16 tiles' bar, the NVFP4 one on the FP4 tensor rung (`test_cud_nv4_mmq`: the k4-tiled nv4 plane
@@ -2371,21 +2376,28 @@ plain and gated, the gated rows under the sigmoid of the q panel's gate half, th
 control; `test_cud_fa_h256_softcap`: gemma-2's cap of 50 on the f32 and f16 cap stamps against the capped oracle, the
 uncapped one the control) and 512 on the KHR arm (`test_cud_fa_h512`, gemma-4's global layers) with their f16-out twins, through the driver's own ladder (`cud_fa_enc`), against `fa_oracle` of `_attn_oracle.das`
 (the Vulkan flash cells' oracle too), whole and under a 40-key window, the deltanet family (`test_cud_dn_family`, at heads
-of 64 and 128: the conv, the fused step on its Q8_0, f32 and sigmoid-gated o rows - the state and the ring advanced in place
-and asserted moved off their inputs, the sigmoid stamp off the silu oracle as its control -, the two-phase scan with the
+of 32, 64 and 128: the conv, the fused step on its Q8_0, f32 and sigmoid-gated o rows - the state and the ring advanced in place
+and asserted moved off their inputs, the sigmoid stamp off the silu oracle as its control -, the chunked scan
+(`dn_scan_chunk_cls`: 70 rows = four whole chunks and a six-row tail, under the silu out-norm against the same oracle and bar),
+the two-phase scan with the
 silu and sigmoid out-norm (`dn_gate_ref` of `_kernel_oracles.das`, the Vulkan cell's oracle) and its state moved off its
 input, and the ring tail at 5 and 2 rows bit for bit the per-channel CPU form), the fused q/k norm + rope + K/V store on the f32 and the f16 mirror stamps against the
 oracle the Vulkan cell holds it to (`qkn_rope_rows` of `_kernel_oracles.das`, the rows ahead of the layer's kept at their
 fill), the mx4 expert rail (the GEMV at 704 and gpt-oss's 2880 against the scalar dot in the per-32 GEMV cell, the s and e
-tiles in the cm2 family cell, and the FP4 tensor leaf fed from the expert schedule - `test_cud_mx4_fp4_mmq_moe`: two buckets of
-200 and 300 rows padded to 128-row tiles by the CPU schedule twin, 2880-wide rows on the k tail, a 320-wide plane under the
-store's column guard, two sentinel workgroups past the bound, every real row against the e2m1 x UE8M0 reference on both sides
-(`mx4_fp4_mmq_ref`); the routing cell's schedule arm also holds the padded m-only schedule word for word; the MXFP4 feed kernels
+tiles in the cm2 family cell, and the FP4 tensor leaf fed from the expert schedule - `test_cud_mx4_fp4_mmq_moe`: three buckets of
+20, 150 and 300 rows interleaved and packed by the CPU schedule twin's ladder (the s column alone; one m column and a 22-row s
+piece; three m columns, the last partial, its tile running past the window into a sentinel tail held unwritten - the store's
+row guard - the pieces' row counts asserted, and the m dispatch ahead of the s one, so an s tile's overrun lands on m rows), 2880-wide rows on the k tail, a 320-wide plane under the
+store's column guard, the m dispatch two sentinel workgroups past its bound, every bucket row against the e2m1 x UE8M0 reference
+on both sides (`mx4_fp4_mmq_ref`); its nv4 twin `test_cud_nv4_fp4_mmq_moe`: the same buckets over 768-wide superblock rows (no k
+tail), three expert planes each under its own site scale in its scale rows' fifth word, every row against the e2m1 x UE4M3 reference
+under its expert's factor (`nv4_mmq_ref` at the expert's row offset) - a tile reading another plane's factor, or storing a row past
+its bucket, reds a bucket; the MXFP4 feed kernels
 (`test_cud_mx4_feeds`: `mx4_rows` bit for bit the CPU feed, `mx4_actrows` under the clamped swiglu and its biased twin with each
 row's expert's bias rows, the biased feed landing past the compare's allowance off the unbiased CPU feed as the control,
 every run's planes refilled under their sentinels); the leaf's width admission
-(`test_cud_moe_mmq_fits`: both reduction widths on the 64 lattice serve, a width at 32 past it on either side keeps the cm2
-tiles)), the biased act twins against the CPU act over the host-biased rows (`test_cud_act_biased`: the
+(`test_cud_moe_mmq_fits`: mx4's both reduction widths on the 64 lattice serve, a width at 32 past it on either side keeps the cm2
+tiles; nv4's serve on the 256 lattice alone, a biased nv4 chain and a q40 stack keep the tiles)), the biased act twins against the CPU act over the host-biased rows (`test_cud_act_biased`: the
 Q8_0 and Q8_K requant forms and the f16 form, under silu and the clamped swiglu, the second bias layer's rows bound, the
 unbiased act the control), the h64 flash and the q8_0 decode attention's sink stamps seeded with a per-head sink logit (the
 sink-free oracle the control), the q8_0 decode attention's split form at eight pieces, the last-arriving one combining,

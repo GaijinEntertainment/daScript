@@ -205,7 +205,7 @@ struct CudLayer {
     be1, be3, be2 : int64   //! the expert stacks' arena blocks (expert 0's; `nfe x dim / unit` blocks an expert)
     fe1, fe3, fe2 : int
     xe_own : bool           //! the experts read a feed of their own activation class, requantized off the stored normed row (the shared expert's feed is the other class)
-    moe_mmq : bool          //! the window's expert pieces on the FP4 expert chain (every stack mx4, the MMQ knob on, a card at the rung): the gathered rows as the MXFP4 feed, every bucket on padded 128-row tiles
+    moe_mmq : bool          //! the window's expert pieces on the FP4 expert chain (every stack mx4 or every stack nv4, the MMQ knob on, a card at the rung): the gathered rows as the stacks' FP4 feed over the schedule's s and m columns
     egu : bool              //! the one-row step's gate + up dots, act and requant in one dispatch (`Mx4GemvGuT`): mx4 gate and up stacks over a per-32 down stack
     experts_host : bool     //! a routed layer whose experts serve on the host: the router alone runs here, the command cuts after it and resumes on the host's sum
     moe_g4 : bool           //! the gemma-4 routed form: the layer's own FFN triple as the dense branch, the routed feed x under its own pre norm,
@@ -363,10 +363,10 @@ struct CudRdec {
     pf_mlog, pf_midx, pf_mw, pf_minv, pf_bex : uint64   //! the window's logits [np x ner]; a slot row's expert, weight and bucket row; a bucket row's expert
     pf_msch1, pf_msch3, pf_msch2 : uint64      //! the expert tiles' schedules: records then maps (BATCH_META_BYTES each)
     pf_mxg, pf_mhf, pf_my1, pf_my2, pf_mdn : uint64   //! the gathered rows (f16, bucket order), the hidden rows (f16), the gate and up tiles' outputs, the down tiles' rows
-    pf_mmq_rows : int64      //! the FP4 expert chain's bucket rows with their pads (`CUD_MOE_ROW_PAD` a bucket at most); 0 = its planes not made
+    pf_mmq_rows : int64      //! the FP4 expert chain's bucket rows (the window's slot rows); 0 = its planes not made
     pf_mxf : uint64                                    //! ... the gathered rows as floats
-    pf_mx4q, pf_mx4s, pf_mxrs : uint64                 //! ... their MXFP4 feed: nibble words, code words, row scales
-    pf_mh4q, pf_mh4s, pf_mhrs : uint64                 //! ... the hidden rows' MXFP4 feed
+    pf_mx4q, pf_mx4s, pf_mxrs : uint64                 //! ... their FP4 feed (the stacks' format, mx4 or nv4): nibble words, code words, row scales
+    pf_mh4q, pf_mh4s, pf_mhrs : uint64                 //! ... the hidden rows' FP4 feed
     pf_mmy1, pf_mmy2, pf_mmdn : uint64                 //! ... the gate, up and down MMQ tiles' rows
     bias : uint64            //! the [q | k | v] projection bias rows, a layer's at its `boff` (`cud_rdec_upload_bias`); the rope passes add them
     has_bias, has_obias : bool   //! the q/k/v biases ride the rope passes; the attention output bias rides the norms plane's `RDEC_NORM_OBIAS` row, added at the wo residual step
@@ -1086,17 +1086,19 @@ def cud_rdec_set_moe_experts(l, router_slot, be1, be3, be2 : int64; fe1, fe3, fe
     L.xe_own = L.b1 >= 0l && kq_sb(fe1) != kq_sb(L.f1)
     L.egu = fe1 == int(KqFmt.mx4) && fe3 == int(KqFmt.mx4) && !kq_sb(fe2) && r.nfe % Q8_BLOCK_ELEMS == 0l && ensure_mx4_gemv_gu_cls()
     let knob = r.pf_knob != CUDA_MMQ_UNPINNED ? r.pf_knob : crd_mmq_knob()
-    L.moe_mmq = knob != CUDA_MMQ_OFF && g_cud.sm >= FP4_RUNG_SM && fe1 == int(KqFmt.mx4) && fe3 == int(KqFmt.mx4) && fe2 == int(KqFmt.mx4) && crd_moe_mmq_fits(r.dim, r.nfe)
+    L.moe_mmq = knob != CUDA_MMQ_OFF && g_cud.sm >= FP4_RUNG_SM && fe1 == fe3 && fe3 == fe2 && crd_moe_mmq_fits(fe1, r.dim, r.nfe, r.exps_bias)
     if (L.moe_mmq && r.pf_mmq_rows == 0l && r.pf_nk > 0l) {   // a window already sized: the chain's planes now; else at the window's setup
         crd_pf_moe_mmq_setup(r)
     }
     crd_graphs_drop(r)
 }
 
-//! the FP4 expert leaf serves a routed layer whose two reduction widths (the gate/up's `dim`, the down's `nfe`) sit on the 64 lattice:
-//! the `KTAIL` stamp stages a k64 pair a step, and the MXFP4 feed packs two block codes a k64 word; a width at 32 past a multiple of 64
-//! (a legal mx4 plane) has no half pair, so the layer keeps the cm2 tiles
-def crd_moe_mmq_fits(dim, nfe : int64) : bool => dim % 64l == 0l && nfe % 64l == 0l
+[arch(at="../ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries")]
+def crd_moe_mmq_fits(fmt : int; dim, nfe : int64; exps_bias : bool) : bool {
+    return dim % 64l == 0l && nfe % 64l == 0l if (fmt == int(KqFmt.mx4))
+    return dim % 256l == 0l && nfe % 256l == 0l && !exps_bias if (fmt == int(KqFmt.nv4))
+    return false
+}
 
 //! an attention MoE layer (`install_moe_gpu_resident_moe`'s layer seat); the dense triple is the shared expert's, `b1` < 0 where the layer has none
 def cud_rdec_set_moe_layer(l, mir_idx, router_slot, bq, bk, bv, bo, b1, b3, b2, be1, be3, be2 : int64; fq, fk, fv, fo, f1, f3, f2, fe1, fe3, fe2 : int; g : RdecLayerGeom) {
@@ -3591,6 +3593,25 @@ def public cuda_mmq_pin() : int64 => g_cuda_mmq_pin
 
 def private crd_mmq_knob() : int64 => g_cuda_mmq_pin != CUDA_MMQ_UNPINNED ? g_cuda_mmq_pin : g_env_vulkan.cuda_mmq
 
+var private g_dn_chunk_announced = false
+
+//! the chunked scan serves the window's recurrent layers: the knob on and the class compiled; the form announced once, with why not
+def private crd_dn_chunk_on() : bool {
+    let on = g_env_vulkan.dn_chunk != 0l && ensure_dn_scan_chunk_cls()
+    announce_dn_chunk(on) if (!g_dn_chunk_announced)
+    return on
+}
+
+[cold_path]
+def private announce_dn_chunk(on : bool) {
+    g_dn_chunk_announced = true
+    let form = on ? "the chunked form" : (g_env_vulkan.dn_chunk == 0l ? "a token at a time (DASLLAMA_DN_CHUNK=0)" : "a token at a time (the chunked class did not compile)")
+    to_log(LOG_INFO, "dasLLAMA cuda tier: the window's deltanet scan: {form}\n")
+}
+
+//! the FP4 expert chain serves a window's routed pieces on this box: the MMQ knob (unpinned) on and the card at the rung - the census's witness
+def cuda_fp4_chain_served() : bool => crd_mmq_knob() != CUDA_MMQ_OFF && g_cud.sm >= FP4_RUNG_SM
+
 let CUD_MMQ_S_ROWS = 32l   //! the window rows at or under which the split s column serves in the leaf's place
 
 //! whether a window GEMM site can take its MMQ leaf at all - the knob, the plan's rows, the plane's shape and format: what the
@@ -4040,13 +4061,13 @@ def private crd_pf_moe_setup(var r : CudRdec; np : int64) {
     r.pf_nk = nk
     let bounds = crd_moe_bounds(r, nk)
     verify((MOE_SCHED_MAP_OFF + max(bounds.gu + bounds.mgu, bounds.dn + bounds.mdn)) * 4l <= CUD_MOE_SCHED_BYTES, "cud prefill: the routed block's schedule exceeds its plane")
-    verify(max(bounds.gu, bounds.dn) <= 65535l, "cud prefill: the routed block's s dispatch outgrows the schedule's 16-bit workgroup count")
+    verify(max(max(bounds.gu, bounds.dn), max(bounds.mgu, bounds.mdn)) <= 65535l, "cud prefill: the routed block's s or m dispatch outgrows the schedule's 16-bit workgroup count")
     r.pf_xb = cud_dev_zeroed(np * dim * 4l)
     r.pf_mlog = cud_dev_zeroed(np * r.ner * 4l)
     r.pf_midx = cud_dev_zeroed(nk * 4l)
     r.pf_mw = cud_dev_zeroed(nk * 4l)
     r.pf_minv = cud_dev_zeroed(nk * 4l)
-    r.pf_bex = cud_dev_zeroed(crd_moe_pad_rows(r, nk) * 4l)   // every bucket row, the FP4 expert chain's pads among them
+    r.pf_bex = cud_dev_zeroed(nk * 4l)
     r.pf_msch1 = cud_dev_zeroed(CUD_MOE_SCHED_BYTES)
     r.pf_msch3 = cud_dev_zeroed(CUD_MOE_SCHED_BYTES)
     r.pf_msch2 = cud_dev_zeroed(CUD_MOE_SCHED_BYTES)
@@ -4078,16 +4099,11 @@ def private crd_pf_moe_setup(var r : CudRdec; np : int64) {
     }
 }
 
-let private CUD_MOE_ROW_PAD = int64(MMQ_SCHED_ROW_PAD)   //! the FP4 expert chain's bucket row pad, the MMQ schedule stamp's
-
-//! the bucket rows of a window of `nk` slot rows under the FP4 expert chain's pad: every expert's bucket padded to the tile at most
-def private crd_moe_pad_rows(r : CudRdec; nk : int64) : int64 => nk + r.ne * (CUD_MOE_ROW_PAD - 1l)
-
 //! the FP4 expert chain's planes, once a residency, made on the first routed layer whose stacks take the leaf (`CudLayer.moe_mmq`)
 def private crd_pf_moe_mmq_setup(var r : CudRdec) {
     let dim = r.dim
     let nfe = r.nfe
-    let rows = crd_moe_pad_rows(r, r.pf_nk)
+    let rows = r.pf_nk
     let xrows = rows + TILE_READ_SLACK
     r.pf_mmq_rows = rows
     r.pf_mxf = cud_dev_zeroed(xrows * dim * 4l)
@@ -4100,15 +4116,23 @@ def private crd_pf_moe_mmq_setup(var r : CudRdec) {
     r.pf_mmy1 = cud_dev_zeroed(rows * nfe * 4l)
     r.pf_mmy2 = cud_dev_zeroed(rows * nfe * 4l)
     r.pf_mmdn = cud_dev_zeroed(rows * dim * 4l)
-    to_log(LOG_INFO, "dasLLAMA cuda resident: the routed block's expert pieces on the FP4 expert chain under DASLLAMA_CUDA_MMQ={r.pf_knob != CUDA_MMQ_UNPINNED ? r.pf_knob : crd_mmq_knob()} (set_cuda_mmq_pin under a test's pin; 0 keeps them on the cm2 s and e tiles) - the gathered rows as the MXFP4 feed, every bucket on padded 128-row tiles ({rows} bucket rows a window)\n")
+    to_log(LOG_INFO, "dasLLAMA cuda resident: the routed block's expert pieces on the FP4 expert chain under DASLLAMA_CUDA_MMQ={r.pf_knob != CUDA_MMQ_UNPINNED ? r.pf_knob : crd_mmq_knob()} (set_cuda_mmq_pin under a test's pin; 0 keeps them on the cm2 s and e tiles) - the gathered rows as the stacks' FP4 feed over the schedule's s and m columns ({rows} bucket rows a window)\n")
 }
 
-//! one mx4 expert plane's FP4 tiles over the schedule's m pieces (its map at `map_off`), the rows into `y` [bucket rows x d]
-def private crd_moe_mmq(var s : void?; fmt : int; sched : uint64; map_off, wgs : int64; x4q, x4s, xrs, y : uint64; n, d : int64) {
-    verify(fmt == int(KqFmt.mx4), "cud prefill: the FP4 expert chain serves the mx4 stacks alone")
+//! one expert plane's FP4 tiles over the window's schedule - its m and s pieces, each dispatch at its map - the rows into `y` [bucket rows x d]
+def private crd_moe_mmq(var s : void?; fmt : int; sched : uint64; map_s, map_m, wgs_s, wgs_m : int64; x4q, x4s, xrs, y : uint64; n, d : int64) {
     let a = g_cud_arenas[fmt]
-    var pc = MmqFp4Args(n = uint(n), d = uint(d), rows = 0u, wblk = 0u, map_off = uint(map_off))
-    enc_mx4_fp4_mmq_moe(s, fixed_array(a.wq, a.ws, x4q, x4s, xrs, y, sched), pc, wgs)
+    var pcm = MmqFp4Args(n = uint(n), d = uint(d), rows = 0u, wblk = 0u, map_off = uint(map_m))
+    var pcs = MmqFp4Args(n = uint(n), d = uint(d), rows = 0u, wblk = 0u, map_off = uint(map_s))
+    var bufs = fixed_array(a.wq, a.ws, x4q, x4s, xrs, y, sched)
+    if (fmt == int(KqFmt.mx4)) {
+        enc_mx4_fp4_mmq_moe(s, bufs, pcm, wgs_m)
+        enc_mx4_fp4_mmq_moe_s(s, bufs, pcs, wgs_s)
+    } else {
+        verify(fmt == int(KqFmt.nv4), "cud prefill: the FP4 expert chain serves the mx4 and nv4 stacks alone")
+        enc_nv4_fp4_mmq_moe(s, bufs, pcm, wgs_m)
+        enc_nv4_fp4_mmq_moe_s(s, bufs, pcs, wgs_s)
+    }
 }
 
 def private crd_x_feeds_from(r : CudRdec; var s : void?; src : uint64; wlen : int64; feeds : tuple<mmq : bool; fp4 : bool; f16 : bool>) {
@@ -4189,25 +4213,33 @@ def private crd_window_moe(r : CudRdec; var s : void?; l : int64; var L : CudLay
     let map_m_gu = MOE_SCHED_MAP_OFF + bounds.gu
     let map_m_dn = MOE_SCHED_MAP_OFF + bounds.dn
     var pcs = gk_sched_args(nk, ne, nfe, dim, 128u, false, bounds, L.be1, L.be3, L.be2, L.fe1, L.fe3, L.fe2)
-    cud_moe_sched_enc(ne, L.moe_mmq, s, fixed_array(r.pf_midx, r.pf_minv, r.pf_msch1, r.pf_msch3, r.pf_msch2, r.pf_bex), pcs)
+    cud_moe_sched_enc(ne, s, fixed_array(r.pf_midx, r.pf_minv, r.pf_msch1, r.pf_msch3, r.pf_msch2, r.pf_bex), pcs)
     var pca = ActArgs(nelem = uint(nk * nfe), act = act_code(r.act_oai, r.is_gelu), nblk = uint(nk * nfe / kq_unit(false)), elem0 = 0u,
         bias_on = r.exps_bias ? 1u : 0u, gboff = uint(L.router_slot * ne * nfe), brow = uint(nfe))
     var mdn = r.pf_mdn
     if (L.moe_mmq) {
-        let bucket_rows = crd_moe_pad_rows(r, nk)   // (the planes hold the residency's widest)
-        var pcgp = GatherArgs(n = uint(dim), k = uint(k), r0 = 0u, r1 = uint(bucket_rows))
+        var pcgp = GatherArgs(n = uint(dim), k = uint(k), r0 = 0u, r1 = uint(nk))
         enc_moe_gather_f32_cls(s, fixed_array(r.pf_xb, r.pf_minv, r.pf_mxf), pcgp, nk)
+        let nv4 = L.fe1 == int(KqFmt.nv4)
         var pcx = Fp4RowsArgs(k = uint(dim), inbase = 0u)
-        enc_mx4_rows(s, fixed_array(r.pf_mxf, r.pf_mx4q, r.pf_mx4s, r.pf_mxrs), pcx, bucket_rows + TILE_READ_SLACK)
-        crd_moe_mmq(s, L.fe1, r.pf_msch1, map_m_gu, bounds.mgu, r.pf_mx4q, r.pf_mx4s, r.pf_mxrs, r.pf_mmy1, dim, nfe)
-        crd_moe_mmq(s, L.fe3, r.pf_msch3, map_m_gu, bounds.mgu, r.pf_mx4q, r.pf_mx4s, r.pf_mxrs, r.pf_mmy2, dim, nfe)
-        var pch = Fp4RowsArgs(k = uint(nfe), inbase = 0u, act = pca.act, gboff = pca.gboff)
-        if (r.exps_bias) {
-            enc_mx4_actrows_b(s, fixed_array(r.pf_mmy1, r.pf_mmy2, r.pf_mh4q, r.pf_mh4s, r.pf_mhrs, r.moe_gb, r.moe_ub, r.pf_bex), pch, bucket_rows)
+        var xin = fixed_array(r.pf_mxf, r.pf_mx4q, r.pf_mx4s, r.pf_mxrs)
+        if (nv4) {
+            enc_fp4_rows(s, xin, pcx, nk + TILE_READ_SLACK)
         } else {
-            enc_mx4_actrows(s, fixed_array(r.pf_mmy1, r.pf_mmy2, r.pf_mh4q, r.pf_mh4s, r.pf_mhrs), pch, bucket_rows)
+            enc_mx4_rows(s, xin, pcx, nk + TILE_READ_SLACK)
         }
-        crd_moe_mmq(s, L.fe2, r.pf_msch2, map_m_dn, bounds.mdn, r.pf_mh4q, r.pf_mh4s, r.pf_mhrs, r.pf_mmdn, nfe, dim)
+        crd_moe_mmq(s, L.fe1, r.pf_msch1, MOE_SCHED_MAP_OFF, map_m_gu, bounds.gu, bounds.mgu, r.pf_mx4q, r.pf_mx4s, r.pf_mxrs, r.pf_mmy1, dim, nfe)
+        crd_moe_mmq(s, L.fe3, r.pf_msch3, MOE_SCHED_MAP_OFF, map_m_gu, bounds.gu, bounds.mgu, r.pf_mx4q, r.pf_mx4s, r.pf_mxrs, r.pf_mmy2, dim, nfe)
+        var pch = Fp4RowsArgs(k = uint(nfe), inbase = 0u, act = pca.act, gboff = pca.gboff)
+        var hin = fixed_array(r.pf_mmy1, r.pf_mmy2, r.pf_mh4q, r.pf_mh4s, r.pf_mhrs)
+        if (nv4) {
+            enc_fp4_actrows(s, hin, pch, nk)
+        } elif (r.exps_bias) {
+            enc_mx4_actrows_b(s, fixed_array(r.pf_mmy1, r.pf_mmy2, r.pf_mh4q, r.pf_mh4s, r.pf_mhrs, r.moe_gb, r.moe_ub, r.pf_bex), pch, nk)
+        } else {
+            enc_mx4_actrows(s, hin, pch, nk)
+        }
+        crd_moe_mmq(s, L.fe2, r.pf_msch2, MOE_SCHED_MAP_OFF, map_m_dn, bounds.dn, bounds.mdn, r.pf_mh4q, r.pf_mh4s, r.pf_mhrs, r.pf_mmdn, nfe, dim)
         mdn = r.pf_mmdn
     } else {
         var pcgt = GatherArgs(n = uint(dim), k = uint(k), r0 = 0u, r1 = uint(nk))
@@ -4585,7 +4617,12 @@ def private crd_window_dn(r : CudRdec; var L : CudLayer; wlen : int64; wsegs : a
             cap_n = uint(wc.n), cap_rec = uint(wc.rec), cap_state_off = uint(L.snap_off / 4l))
         let caps = wc.n > 0l ? r.pf_cap_dev : r.dummy
         let capst = wc.n > 0l ? r.snap_dev : r.dummy
-        enc_dn_scan_cls(s, fixed_array(r.pf_dnconv, st.state_dev, smalls, r.pf_dnws, caps, capst), pcs, dn_scan_wgs(nvh, ds))
+        var scan_bufs = fixed_array(r.pf_dnconv, st.state_dev, smalls, r.pf_dnws, caps, capst)
+        if (crd_dn_chunk_on()) {
+            enc_dn_scan_chunk_cls(s, scan_bufs, pcs, dn_scan_chunk_wgs(nvh, ds, DNC_V))
+        } else {
+            enc_dn_scan_cls(s, scan_bufs, pcs, dn_scan_wgs(nvh, ds))
+        }
         if (wc.n > 0l) {   // the capture's conv history: the taps rows before its row, the rows before the part off the entry image
             let cur = uint(r.pf_dn_cur[ws.region])
             var pcx = DnCapTailArgs(cd = uint(cd), taps = uint(taps), row0 = uint(ws.row0), entry_off = uint(st.hist_float_off) + cur * img,

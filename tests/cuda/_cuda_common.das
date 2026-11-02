@@ -1025,17 +1025,22 @@ class Cm2I8 {
 
 //! the CUDA-only tier over one warp: a 16x32 s8 A tile and a [n][k] 16x32 s8 B tile copied into shared memory by
 //! cp.async (one through a pointer local over the shared array), their fragments through ldmatrix, the int8 product
-//! scaled by the row and column scales into an f32 accumulator, byte_perm, a named barrier under clock32, and the
-//! inline-PTX floor both ways
+//! scaled by the row and column scales into an f32 accumulator, byte_perm, a named barrier under clock32, the
+//! inline-PTX floor both ways, the f16 product through each transposing fragment load, and the accumulator's lane elements
 class Intrin {
     @ssbo @binding = 0 a8 : array<uint4>     //! A 16x32 s8 row-major: row r at uint4 2r, 2r + 1
     @ssbo @binding = 1 b8 : array<uint4>     //! B as [n][k]: column n at uint4 2n, 2n + 1
     @ssbo @binding = 2 row_scales : array<float>
     @ssbo @binding = 3 col_scales : array<float>
     @ssbo @binding = 4 o : array<float>
-    @ssbo @binding = 5 misc : array<uint>    //! 32 byte_perm results, 32 clock monotonic flags, 32 asm results
+    @ssbo @binding = 5 misc : array<uint>    //! 32 byte_perm results, 32 clock monotonic flags, 32 asm results, 32 register-vector lane reads
+    @ssbo @binding = 6 a16 : array<uint4>    //! a 16x16 f16 tile, row r at uint4 2r, 2r + 1: A as [m][k], or A^T read as [k][m]
+    @ssbo @binding = 7 b16 : array<uint4>    //! a 16x16 f16 tile: B as [k][n], or read as [n][k]
+    @ssbo @binding = 8 o16 : array<float>    //! four 16x16 landings: A x B (B through the transposing load), A^T x B^T (A through it), the scaled s8 product read back element by element, an accumulator set to its element indices
     @workgroup sa : uint4[32]
     @workgroup sb : uint4[32]
+    @workgroup sa16 : uint4[32]
+    @workgroup sb16 : uint4[32]
 
     [cuda_kernel(name="intrin_cuda", local_size_x = 32), marker(no_coverage)]
     def intrin {
@@ -1067,6 +1072,28 @@ class Intrin {
         misc[32u + lane] = t1 - t0 < 0x80000000u ? 1u : 0u   // the counter moved forward (modulo its wrap)
         cuda_asm("membar.cta;")
         misc[64u + lane] = cuda_asm_value("add.u32 %0, %1, %2;", lane, 5u)
+        let tv = uint4(lane * 4u, lane * 4u + 1u, lane * 4u + 2u, lane * 4u + 3u)   // a register vector read by a runtime lane: the select chain, not the store form
+        misc[96u + lane] = tv[int(lane & 3u)]
+        sa16[lane] = a16[lane]
+        sb16[lane] = b16[lane]
+        barrier()
+        var ha : coopmatA_f16_16x16
+        var hb : coopmatB_f16_16x16
+        ldmatrix(ha, unsafe(addr(sa16[(r + 8u * (mt & 1u)) * 2u + (mt >> 1u)])))
+        ldmatrix_trans(hb, unsafe(addr(sb16[(r + 8u * (mt & 1u)) * 2u + (mt >> 1u)])))
+        var hf : coopmatAcc_f32_16x16
+        hf = coopmatMulAdd(ha, hb, hf)   // nolint:STYLE011 - MulAdd seeds from its own zero-filled tile
+        coopmatStore(hf, o16, 0, 16, 0)
+        ldmatrix_trans(ha, unsafe(addr(sa16[(r + 8u * (mt >> 1u)) * 2u + (mt & 1u)])))
+        ldmatrix(hb, unsafe(addr(sb16[(r + 8u * (mt >> 1u)) * 2u + (mt & 1u)])))
+        var hg : coopmatAcc_f32_16x16
+        hg = coopmatMulAdd(ha, hb, hg)   // nolint:STYLE011 - MulAdd seeds from its own zero-filled tile
+        coopmatStore(hg, o16, 256, 16, 0)
+        for [unroll] (k in range(8)) {
+            o16[512u + mma_acc_row(lane, k) * 16u + mma_acc_col(lane, k)] = mma_acc_get(f, k)
+            mma_acc_set(hf, k, float(k))
+        }
+        coopmatStore(hf, o16, 768, 16, 0)
     }
 }
 
@@ -1243,6 +1270,7 @@ def public declared_cuda_census : table<string> {   // nolint:STYLE038 - one fla
         "decl.elem_struct",
         "expr.field.struct",
         "expr.index.vector",
+        "expr.index.vector.store",
         "param.buffer_alias",
         "param.buffer_alias_const",
         "param.buffer_alias_const_aliased",
@@ -1269,6 +1297,14 @@ def public declared_cuda_census : table<string> {   // nolint:STYLE038 - one fla
         "call.cuda_asm_value.2",
         "call.ldmatrix.A.s8",
         "call.ldmatrix.B.s8",
+        "call.ldmatrix.A.f16",
+        "call.ldmatrix.B.f16",
+        "call.ldmatrix_trans.A.f16",
+        "call.ldmatrix_trans.B.f16",
+        "call.mma_acc_get",
+        "call.mma_acc_set",
+        "call.mma_acc_row",
+        "call.mma_acc_col",
         "call.mma_scale_acc",
         "call.ldmatrix.A.e2m1",
         "call.ldmatrix.B.e2m1",

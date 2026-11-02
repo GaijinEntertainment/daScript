@@ -29,6 +29,7 @@ require dasllama/dasllama_gpu_tier
 require ../tests/_vk_kq_fixtures.das
 require ../tests/_fp4_feed.das   // fp4_feed_rows, fp4_feed_value
 require ../tests/_mmq_ref.das   // the MMQ leaves' CPU references, the kernel cells' own
+require ../tests/_vkd_oracles.das   // sched_shape / sched_oracle: the ladder schedule the FP4 expert chain reads
 require _cuda_probe_fixture
 require daslib/strings_boost
 require daslib/math_bits   // uint_bits_to_float: the nv4 fixture plane's per-tensor factor word
@@ -396,6 +397,127 @@ def fp4_mmq_report(shape : string; p : Planes; k, d : int) : int {
     return report_cuda(shape, row, "bounded vs cpu: max rel err {err} <= {MMQ_REL_BOUND}", "TFLOP/s") $(us) => tflops(k, d, us)
 }
 
+//! the FP4 expert chain's arm (CUDA alone, `--only nv4moe`), timing-only: the nv4 expert stamps over the ladder schedule at Qwen3.6-35B-A3B's 256 experts, `rows_per` rows a bucket (16 spreads a 512-row window, 64 puts a 2048-row window's buckets on the m column alone), the s and m dispatches as one round, then each alone; 1 when the arm measured
+def fp4_moe_report(k, d, rows_per : int) : int {
+    if (!dasllama_cuda_classes::ensure_nv4_fp4_mmq_moe() || !dasllama_cuda_classes::ensure_nv4_fp4_mmq_moe_s()) {
+        print("nv4 moe k {k} d {d} cuda refused: {CU_CLASS_REFUSED}\n")
+        return 0
+    }
+    let ne = 256
+    let nk = ne * rows_per
+    let nsb = k / 256
+    let eblocks = d * nsb
+    let wt = (d + 127) / 128
+    var inscope idx <- [for (r in range(nk)); uint(r % ne)]
+    let sh = sched_shape(nk, ne, wt, wt)
+    let bases = fixed_array(0u, uint(eblocks), 0u, uint(eblocks), 0u, uint(eblocks))
+    var inscope inv, s1, s3, s2 : array<uint>
+    sched_oracle(idx, ne, wt, wt, sh, bases, inv, s1, s3, s2)
+    var inscope p <- moe_planes(int(KqFmt.nv4), k, d, ne, rows_per, 128)   // the planes alone: the ladder schedule above replaces its tile schedule
+    let xn = (nk + int(TILE_READ_SLACK)) * k
+    var inscope xrows : array<float>
+    xrows |> reserve(xn)   // past the comprehension's unreserved growth cap at the 2048-row window's shapes
+    xrows |> resize(xn)
+    for (e in range(xn)) {
+        xrows[e] = unpackHalf2x16(p.xf[e / 2])[e & 1]
+    }
+    var inscope feed <- fp4_feed_rows(xrows, nk + int(TILE_READ_SLACK), k)
+    let cs = g_cud.stream
+    var bufs = fixed_array(buf_upload(p.wq, cs), buf_upload(p.ws, cs), buf_upload(feed.xq, cs), buf_upload(feed.xsw, cs), buf_upload(feed.xrs, cs), buf_fill(nk * d, 0.0, cs), buf_upload(s1, cs))
+    let alt = fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4], buf_fill(nk * d, 0.0, cs), bufs[6])
+    var pcs = MmqFp4Args(n = uint(k), d = uint(d), rows = 0u, wblk = 0u, map_off = uint(sh.map_off))
+    var pcm = MmqFp4Args(n = uint(k), d = uint(d), rows = 0u, wblk = 0u, map_off = uint(sh.map_off_mgu))
+    let wgs_s = int64(sh.bound_gu)
+    let wgs_m = int64(sh.bound_mgu)
+    var measured = 0
+    for (col in ["s+m", "s", "m"]) {
+        let row = cuda_rounds(ROUNDS, WARMUPS, DISPATCHES) $(i) {
+            if (col != "s") {
+                dasllama_cuda_classes::enc_nv4_fp4_mmq_moe(g_cud.stream, (i & 1) == 0 ? bufs : alt, pcm, wgs_m)
+            }
+            if (col != "m") {
+                dasllama_cuda_classes::enc_nv4_fp4_mmq_moe_s(g_cud.stream, (i & 1) == 0 ? bufs : alt, pcs, wgs_s)
+            }
+        }
+        let shape = pad_right("nv4 moe {col} k {k} d {d} x{ne}r{rows_per}", 30, ' ')
+        measured += report_cuda(shape, row, "timing-only", "TFLOP/s") $(us) => tflops(nk, k, d, us)
+    }
+    cuda_mem_free(bufs)
+    cuda_mem_free(alt[5])
+    return measured
+}
+
+//! the window's deltanet scan (CUDA alone, `--only dnscan`), timing-only: the per-token stamp against the chunked one, one layer's scan a dispatch at Qwen3.6-35B-A3B's geometry (16 key heads, 32 value heads of 128), 512 and 2048 rows, unit-scale rows, no captures
+def race_dn_scan_rows() : int {
+    if (!dasllama_cuda_classes::ensure_dn_scan_cls() || !dasllama_cuda_classes::ensure_dn_scan_chunk_cls()) {
+        print("dn scan cuda refused: {CU_CLASS_REFUSED}\n")
+        return 0
+    }
+    print("the window's deltanet scan (CUDA alone): the per-token stamp against the chunked tensor-core one, Qwen3.6-35B-A3B's heads at ds 128 and 64, the two stamps alternated over two passes, the o rows on two alternating planes\n")
+    let nkh = 16
+    let nvh = 32
+    var measured = 0
+    for (cell in [(ds = 128, npos = 512), (ds = 128, npos = 2048), (ds = 64, npos = 512)]) {
+        let ds = cell.ds
+        let npos = cell.npos
+        let kd = nkh * ds
+        let di = nvh * ds
+        let cd = 2 * kd + di
+        var inscope conv : array<float>
+        conv |> resize(npos * cd)
+        for (i in range(npos * cd)) {
+            conv[i] = (float((i * 19) % 79) * 0.025 - 0.9) * 0.15
+        }
+        var inscope st <- [for (i in range(nvh * ds * ds)); (float((i * 7) % 23) - 11.0) * 0.004]
+        let beta_off = 16
+        let g_off = beta_off + npos * nvh
+        let a_off = g_off + npos * nvh
+        let dt_off = a_off + nvh
+        var inscope sm : array<float>
+        sm |> resize(dt_off + nvh)
+        for (i in range(npos * nvh)) {
+            sm[beta_off + i] = float((i * 13) % 17) * 0.06 - 0.5
+            sm[g_off + i] = float((i * 11) % 29) * 0.04 - 0.6
+        }
+        for (i in range(nvh)) {
+            sm[a_off + i] = -0.4 - float(i % 8) * 0.05
+            sm[dt_off + i] = 0.05 * float(i % 4)
+        }
+        let cs = g_cud.stream
+        var inscope nocap <- [0u, 0u]
+        var bufs = fixed_array(buf_upload(conv, cs), buf_upload(st, cs), buf_upload(sm, cs), buf_fill(npos * di, 0.0, cs), buf_upload(nocap, cs), buf_fill(16, 0.0, cs))
+        let alt = fixed_array(bufs[0], bufs[1], bufs[2], buf_fill(npos * di, 0.0, cs), bufs[4], bufs[5])
+        var pcs = DnScanArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
+            beta_off = uint(beta_off), g_off = uint(g_off), a_off = uint(a_off), dt_off = uint(dt_off), o_off = 0u, di = uint(di))
+        for (sweep in range(2)) {
+            for (chunk in fixed_array(false, true)) {
+                let row = cuda_rounds(ROUNDS, WARMUPS, 4) $(i) {
+                    if (chunk) {
+                        dasllama_cuda_classes::enc_dn_scan_chunk_cls(g_cud.stream, (i & 1) == 0 ? bufs : alt, pcs, dn_scan_chunk_wgs(int64(nvh), int64(ds), DNC_V))
+                    } else {
+                        dasllama_cuda_classes::enc_dn_scan_cls(g_cud.stream, (i & 1) == 0 ? bufs : alt, pcs, dn_scan_wgs(int64(nvh), int64(ds)))
+                    }
+                }
+                measured += report_cuda(pad_right("dn scan {chunk ? "chunk" : "token"} ds {ds} rows {npos} p{sweep}", 34, ' '), row, "timing-only", "") $(us) => us
+            }
+        }
+        cuda_mem_free(bufs)
+        cuda_mem_free(alt[3])
+    }
+    return measured
+}
+
+def race_fp4_moe_rows() : int {
+    var measured = 0
+    print("the nv4 expert pieces on the FP4 tensor rung over the ladder schedule (CUDA alone), Qwen3.6-35B-A3B's expert shapes\n")
+    for (site in [(k = 2048, d = 768), (k = 768, d = 2048)]) {
+        for (rows_per in [16, 32, 64, 128]) {   // off and on the s (32) and m (128) tile multiples
+            measured += fp4_moe_report(site.k, site.d, rows_per)
+        }
+    }
+    return measured
+}
+
 struct FaPlanes {
     q : array<float>
     kh : array<uint>   //! the f16 mirror planes as half pairs
@@ -599,6 +721,18 @@ def main {
     let llama8b_shapes = key_exists(only, "8b")
     let shapes <- [(k = llama8b_shapes ? 4096 : 2048, d = llama8b_shapes ? 4096 : 2048), (k = llama8b_shapes ? 4096 : 2048, d = llama8b_shapes ? 14336 : 8192), (k = llama8b_shapes ? 14336 : 8192, d = llama8b_shapes ? 4096 : 2048)]
     var measured = 0
+    if (key_exists(only, "nv4moe")) {
+        measured += race_fp4_moe_rows()
+        cud_shutdown()
+        require_measured(measured)
+        return
+    }
+    if (key_exists(only, "dnscan")) {
+        measured += race_dn_scan_rows()
+        cud_shutdown()
+        require_measured(measured)
+        return
+    }
     if (key_exists(only, "moe")) {
         dasllama_vulkan_classes::ensure_q8_batch_cm2l_cls()   // arms the device the format picks read their mode off
         measured += race_moe_rows(only)

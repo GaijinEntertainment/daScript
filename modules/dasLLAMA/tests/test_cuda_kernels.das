@@ -8,11 +8,11 @@ options stack = 524288
 // [cuda_kernel] / [cuda_dispatch] against the same CPU oracles the Vulkan cells hold them to.
 // Model-free; every cell but the closing leak gate skips without a CUDA device and NVRTC, and the
 // per-format cells (the kq cm2 tiles, the kq and per-32 GEMVs, the token-table gathers, the Q8_K
-// feeds), the biased act twins, the deltanet family and the mx4 FP4 leaf over the expert schedule
-// also skip without the dasVulkan module, whose cells carry their oracles - the routing cell's
-// bucket-schedule arms register a skip of their own there; the mx4 FP4 leaf over the expert
-// schedule also skips on a card below compute capability 120 (`FP4_RUNG_SM`). The leak gate never
-// skips.
+// feeds), the biased act twins, the deltanet family and the mx4 and nv4 FP4 leaves over the expert
+// schedule also skip without the dasVulkan module, whose cells carry their oracles - the routing
+// cell's bucket-schedule arms register a skip of their own there; the FP4 leaves also skip on a card
+// below compute capability 120 (`FP4_RUNG_SM`), and the deltanet family's chunked form where its
+// stamp does not compile (the compile gate reds that). The leak gate never skips.
 
 require dastest/testing_boost public
 require math
@@ -47,7 +47,6 @@ require dasllama/dasllama_common
 
 let Y_SENTINEL = 12345.0   //! a row the GEMV never stores keeps it
 let private Q8_GEMV_BAR = Bar(rel = 1e-3, poison_of_max = true, poison = 2.0, poison_abs = 1.0)   //! the q8 GEMV and MMQ cells' bar: 1e-3 of the larger magnitude floored at 1
-let private MMQ_ROW_PAD = int(MMQ_SCHED_ROW_PAD)   //! the MMQ-fed chain's bucket row pad, the MMQ schedule stamp's
 let private TILE_BAR = Bar(kind = BarKind.rel_of_max, rel = 2e-3, abs_floor = 2e-3, poison_of_max = true, poison = 2.0, poison_abs = 1.0)   //! the f16 tiles reassociate: 2e-3 of the plane's largest magnitude floored at 1
 
 //! `nreg` regions of `d` rows, `nb` blocks a row over the ramp scale plane, the activation scales `(i % 5) x 0.125 - 0.25`
@@ -428,6 +427,36 @@ def private nv4_test_scale_word(i : int) : uint {
     return w
 }
 
+//! `experts` nv4 expert planes' scale rows of `sbs` superblocks each: four test strip words a superblock, the plane's own factor in the fifth
+def private nv4_expert_scale_words(experts, sbs : int; scales : float[3]) : array<uint> {
+    var ws : array<uint>
+    ws |> resize(experts * sbs * 5)
+    for (sb in range(experts * sbs)) {
+        for (j in range(4)) {
+            ws[sb * 5 + j] = nv4_test_scale_word(sb * 4 + j)
+        }
+        ws[sb * 5 + 4] = float_bits_to_uint(scales[sb / sbs])
+    }
+    return <- ws
+}
+
+//! the expert cells' slot rows: the buckets' rows interleaved until each count is spent
+def private fp4_moe_bucket_idx(counts : int[3]) : array<uint> {
+    var left = counts
+    var idx : array<uint>
+    idx |> reserve(counts[0] + counts[1] + counts[2])
+    var r = 0
+    while (length(idx) < counts[0] + counts[1] + counts[2]) {
+        let e = r % 3
+        if (left[e] > 0) {
+            idx |> push(uint(e))
+            left[e]--
+        }
+        r++
+    }
+    return <- idx
+}
+
 //! the NVFP4 leaf on the FP4 tensor rung: the k4-tiled nv4 plane (sixteen UE4M3 strip codes a superblock as four words) against an FP4 feed in the (k, k + 8) pairing, the reference each element's e2m1 x UE4M3 on both sides under the row scale and the site scale
 [test]
 def test_cud_nv4_mmq(t0 : T?) {
@@ -442,14 +471,7 @@ def test_cud_nv4_mmq(t0 : T?) {
         let nsb = k / 256
         let site_scale_v = 0.75
         var wq <- hashed_words(d * nsb * 32, 1u, 23u)
-        var ws : array<uint>
-        ws |> resize(d * nsb * 5)
-        for (sb in range(d * nsb)) {
-            for (j in range(4)) {
-                ws[sb * 5 + j] = nv4_test_scale_word(sb * 4 + j)
-            }
-            ws[sb * 5 + 4] = float_bits_to_uint(site_scale_v)   // the plane's factor rides its scale rows' fifth word
-        }
+        var ws <- nv4_expert_scale_words(1, d * nsb, fixed_array(site_scale_v, 0.0, 0.0))
         var xq <- hashed_words(rows * k / 8, 5u, 7u)
         var xs : array<uint>
         xs |> resize(rows * k / 64)
@@ -602,74 +624,106 @@ def test_cud_b32_mmq(t0 : T?) {
     }
 }
 
-//! buckets of 200 and 300 rows padded to 128-row tiles by the CPU twin, k 2880 (the k tail: 22 full steps and a half), d 320 (a column past `d` stored into the next row reds that row), two sentinel workgroups
+//! the elements of `y` from `from` on that no longer hold `Y_SENTINEL`
+def private sentinel_misses(y : array<float>; from : int) : int {
+    var n = 0
+    for (k in range(from, length(y))) {
+        n += y[k] == Y_SENTINEL ? 0 : 1
+    }
+    return n
+}
+
+//! the FP4 expert leaf on both schedule columns against the CPU reference: buckets of 20, 150, 300 rows packed by the CPU ladder twin (s alone, its tile running into the next bucket; one m and a 22-row s, its tile running into the next bucket; two m and a partial m, the last tile running past the window into a sentinel tail), the pieces' row counts asserted, the m column dispatched before the s one as the window does, so a store past its rows reds the neighbour it lands in or the tail - the store's row guard on both columns; d 320 (its column guard), two sentinel m workgroups; nv4 k 768 under a site scale a plane (a tile reading another plane's factor reds its bucket), mx4 k 2880 (the k tail)
+def private fp4_moe_ladder_cell(t : T?; nv4 : bool) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let stamped = nv4 ? ensure_nv4_fp4_mmq_moe() && ensure_nv4_fp4_mmq_moe_s() : ensure_mx4_fp4_mmq_moe() && ensure_mx4_fp4_mmq_moe_s()
+        if (!stamped) {
+            t |> skip("no CUDA device with NVRTC")
+            return
+        }
+        if (g_cud.sm < FP4_RUNG_SM) {
+            t |> skip("the FP4 tensor rung needs compute capability {FP4_RUNG_SM}: this card is {g_cud.sm}")
+            return
+        }
+        let n = nv4 ? 768 : 2880
+        let nb = n / 32
+        let nsb = n / 256
+        let d = 320
+        let ne = 3
+        let wt = (d + 127) / 128
+        var idx <- fp4_moe_bucket_idx(fixed_array(20, 150, 300))
+        let nk = length(idx)
+        let sh = sched_shape(nk, ne, wt, wt)
+        let expert_blocks = uint(nv4 ? d * nsb : d * nb)   // the schedule's base in the plane's units: superblocks, or 32-blocks
+        let bases = fixed_array(0u, expert_blocks, 0u, expert_blocks, 0u, expert_blocks)
+        var inv, s1, s3, s2 : array<uint>
+        sched_oracle(idx, ne, wt, wt, sh, bases, inv, s1, s3, s2)
+        let piece_rows = "{int(s1[2])} {int(s1[4 + 2])} {int(s1[ne * 4 + 2])} {int(s1[(ne + 1) * 4 + 2])}"
+        t |> equal(piece_rows, "20 22 128 300", "the ladder's pieces: s rows of the first two buckets, then the m rows of the last two")
+        s1 |> push(SCHED_NONE)   // the m map is the plane's last: two workgroups past its bound
+        s1 |> push(SCHED_NONE)
+        let site_scales = fixed_array(0.75, 1.5, 1.0)
+        var wq <- nv4 ? hashed_words(ne * d * nsb * 32, 1u, 23u) : hashed_words(ne * d * nb * 4, 53u, 977u)
+        var ws <- nv4 ? nv4_expert_scale_words(ne, d * nsb, site_scales) : mx4_scale_words(ne * d * nb)
+        let xrows = nk + int(TILE_READ_SLACK)
+        var inscope src <- row_fill(xrows * n, 37, 0, 0.09, 4.2, 101)
+        var inscope feed <- nv4 ? fp4_feed_rows(src, xrows, n) : mx4_feed_rows(src, xrows, n)
+        var s = g_cud.stream
+        var bufs = fixed_array(buf_upload(wq, s), buf_upload(ws, s), buf_upload(feed.xq, s), buf_upload(feed.xsw, s), buf_upload(feed.xrs, s), buf_fill((nk + int(SCHED_M_ROWS)) * d, Y_SENTINEL, s), buf_upload(s1, s))
+        var pcs = MmqFp4Args(n = uint(n), d = uint(d), rows = 0u, wblk = 0u, map_off = uint(sh.map_off))
+        var pcm = MmqFp4Args(n = uint(n), d = uint(d), rows = 0u, wblk = 0u, map_off = uint(sh.map_off_mgu))
+        if (nv4) {
+            enc_nv4_fp4_mmq_moe(s, bufs, pcm, int64(sh.bound_mgu + 2))
+            enc_nv4_fp4_mmq_moe_s(s, bufs, pcs, int64(sh.bound_gu))
+        } else {
+            enc_mx4_fp4_mmq_moe(s, bufs, pcm, int64(sh.bound_mgu + 2))
+            enc_mx4_fp4_mmq_moe_s(s, bufs, pcs, int64(sh.bound_gu))
+        }
+        let tag = nv4 ? "nv4" : "mx4"
+        t |> success(cud_sync(), "{tag} FP4 leaf over the schedule's s and m columns: the launches complete ({cuda_last_error()})")
+        var y <- buf_download(bufs[5], (nk + int(SCHED_M_ROWS)) * d, type<float>)
+        cuda_mem_free(bufs)
+        t |> equal(sentinel_misses(y, nk * d), 0, "{nv4 ? "nv4" : "mx4"} FP4 leaf: the rows past the window's last bucket keep their sentinel (the m tile's row guard)")
+        y |> resize(nk * d)
+        var starts <- [for (e in range(ne)); bucket_start(idx, e)]
+        var want : array<float>
+        want |> reserve(nk * d)
+        for (b in range(nk)) {
+            var e = ne - 1
+            while (e > 0 && b < starts[e]) {
+                e--
+            }
+            for (col in range(d)) {
+                want |> push(nv4 ? nv4_mmq_ref(wq, ws, feed, n, b, e * d + col, site_scales[e]) : mx4_fp4_mmq_ref(wq, ws, feed, e * int(expert_blocks), n, b, col))
+            }
+        }
+        check_rows(t, "{tag} FP4 leaf over the schedule vs the e2m1 x {nv4 ? "UE4M3" : "UE8M0"} reference (every bucket row of the three buckets)", y, want, Q8_GEMV_BAR, d)
+        delete want
+        delete y
+        delete idx
+        delete inv
+        delete s1
+        delete s3
+        delete s2
+        delete wq
+        delete ws
+        delete starts
+    } else {
+        t |> skip("dasVulkan not present: the schedule oracle lives with the Vulkan cells")
+    }
+}
+
+[test]
+def test_cud_nv4_fp4_mmq_moe(t0 : T?) {
+    t0 |> run("CUDA nv4 FP4 leaf over the expert schedule's s and m columns == the e2m1 x UE4M3 reference under each expert's site scale: packed buckets, the row and column guards, sentinel workgroups") <| @(t : T?) {
+        fp4_moe_ladder_cell(t, true)
+    }
+}
+
 [test]
 def test_cud_mx4_fp4_mmq_moe(t0 : T?) {
-    t0 |> run("CUDA mx4 FP4 leaf over the expert schedule == the e2m1 x UE8M0 reference: padded buckets, the k tail at 2880, the column guard at 320, sentinel workgroups") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_mx4_fp4_mmq_moe()) {
-                t |> skip("no CUDA device with NVRTC")
-                return
-            }
-            if (g_cud.sm < FP4_RUNG_SM) {
-                t |> skip("the FP4 tensor rung needs compute capability {FP4_RUNG_SM}: this card is {g_cud.sm}")
-                return
-            }
-            let n = 2880
-            let nb = n / 32
-            let d = 320
-            let ne = 2
-            let wt = (d + 127) / 128
-            let bucket_a = 200
-            let bucket_b = 300
-            var idx <- [for (r in range(bucket_a + bucket_b)); uint(r % 5 < 2 ? 0 : 1)]   // the two buckets' rows interleaved, two of expert 0 to three of expert 1
-            let nk = length(idx)
-            let start_b = bucket_start(idx, 1, MMQ_ROW_PAD)
-            let nk_pad = bucket_start(idx, ne, MMQ_ROW_PAD)
-            let sh = sched_shape(nk, ne, wt, wt)
-            let expert_blocks = uint(d * nb)
-            let bases = fixed_array(0u, expert_blocks, 0u, expert_blocks, 0u, expert_blocks)
-            var inv, s1, s3, s2 : array<uint>
-            sched_oracle(idx, ne, wt, wt, sh, bases, inv, s1, s3, s2, false, MMQ_ROW_PAD, true)
-            s1 |> push(SCHED_NONE)
-            s1 |> push(SCHED_NONE)
-            var wq <- hashed_words(ne * d * nb * 4, 53u, 977u)
-            var ws <- mx4_scale_words(ne * d * nb)
-            let xrows = nk_pad + int(TILE_READ_SLACK)
-            var inscope src <- row_fill(xrows * n, 37, 0, 0.09, 4.2, 101)
-            var inscope feed <- mx4_feed_rows(src, xrows, n)
-            var s = g_cud.stream
-            var bufs = fixed_array(buf_upload(wq, s), buf_upload(ws, s), buf_upload(feed.xq, s), buf_upload(feed.xsw, s), buf_upload(feed.xrs, s), buf_fill(nk_pad * d, Y_SENTINEL, s), buf_upload(s1, s))
-            var pc = MmqFp4Args(n = uint(n), d = uint(d), rows = 0u, wblk = 0u, map_off = uint(sh.map_off_mgu))
-            enc_mx4_fp4_mmq_moe(s, bufs, pc, int64(sh.bound_mgu + 2))
-            t |> success(cud_sync(), "mx4 FP4 leaf over the schedule: the launch completes ({cuda_last_error()})")
-            var y <- buf_download(bufs[5], nk_pad * d, type<float>)
-            cuda_mem_free(bufs)
-            var got, want : array<float>
-            got |> reserve(nk * d)
-            want |> reserve(nk * d)
-            for (b in range(nk_pad)) {
-                let e = b < start_b ? 0 : 1
-                continue if (e == 0 ? b >= bucket_a : b >= start_b + bucket_b)
-                for (col in range(d)) {
-                    got |> push(y[b * d + col])
-                    want |> push(mx4_fp4_mmq_ref(wq, ws, feed, e * int(expert_blocks), n, b, col))
-                }
-            }
-            check_rows(t, "mx4 FP4 leaf over the schedule vs the e2m1 x UE8M0 reference (the real rows of both buckets)", got, want, Q8_GEMV_BAR, d)
-            delete got
-            delete want
-            delete y
-            delete idx
-            delete inv
-            delete s1
-            delete s3
-            delete s2
-            delete wq
-            delete ws
-        } else {
-            t |> skip("dasVulkan not present: the schedule oracle lives with the Vulkan cells")
-        }
+    t0 |> run("CUDA mx4 FP4 leaf over the expert schedule's s and m columns == the e2m1 x UE8M0 reference: packed buckets, the k tail at 2880, the row and column guards, sentinel workgroups") <| @(t : T?) {
+        fp4_moe_ladder_cell(t, false)
     }
 }
 
@@ -1452,15 +1506,23 @@ def test_cud_fp4_feeds(t0 : T?) {
     }
 }
 
-//! the FP4 expert leaf's width admission: both reduction widths on the 64 lattice serve (gpt-oss's 2880 over 2880), a width at 32 past it on either side keeps the cm2 tiles
+//! the FP4 expert leaf's admission: mx4 on the 64 lattice (gpt-oss's 2880 over 2880), nv4 on the 256 lattice with no expert bias rows (the 35B-A3B's 2048 over 768); a width off its lattice, a biased nv4 stack and a q40 stack keep the cm2 tiles
 [test]
 def test_cud_moe_mmq_fits(t : T?) {
-    t |> run("moe_mmq_fits: the gate/up and down reduction widths on the 64 lattice") @(t : T?) {
-        t |> equal(true, crd_moe_mmq_fits(2880l, 2880l))
-        t |> equal(true, crd_moe_mmq_fits(2048l, 768l))
-        t |> equal(false, crd_moe_mmq_fits(2912l, 2880l))
-        t |> equal(false, crd_moe_mmq_fits(2880l, 2912l))
-        t |> equal(false, crd_moe_mmq_fits(2880l, 2896l))
+    t |> run("moe_mmq_fits: the gate/up and down reduction widths on each stamp's lattice") @(t : T?) {
+        let mx4 = int(KqFmt.mx4)
+        let nv4 = int(KqFmt.nv4)
+        t |> equal(true, crd_moe_mmq_fits(mx4, 2880l, 2880l, true))
+        t |> equal(true, crd_moe_mmq_fits(mx4, 2048l, 768l, false))
+        t |> equal(false, crd_moe_mmq_fits(mx4, 2912l, 2880l, false))
+        t |> equal(false, crd_moe_mmq_fits(mx4, 2880l, 2912l, false))
+        t |> equal(false, crd_moe_mmq_fits(mx4, 2880l, 2896l, false))
+        t |> equal(true, crd_moe_mmq_fits(nv4, 2048l, 768l, false))
+        t |> equal(false, crd_moe_mmq_fits(nv4, 2048l, 768l, true))
+        t |> equal(false, crd_moe_mmq_fits(nv4, 2880l, 2880l, false))
+        t |> equal(false, crd_moe_mmq_fits(nv4, 2880l, 768l, false))   // the dim off the 256 lattice alone
+        t |> equal(false, crd_moe_mmq_fits(nv4, 2048l, 1408l, false))
+        t |> equal(false, crd_moe_mmq_fits(int(KqFmt.q40), 2048l, 768l, false))
     }
 }
 
@@ -2393,7 +2455,7 @@ def test_cud_dn_family(t0 : T?) {   // nolint:STYLE038 — the family's four cel
             verify(ensure_dn_conv_cls() && ensure_dn_scan_cls() && ensure_dn_scan_p3_cls() && ensure_dn_scan_p3_sig_cls() && ensure_dn_step_sig_cls() && ensure_dn_tail_cls(),
                 "the dn stamps must compile on a device that compiled the fused step")
             var s = g_cud.stream
-            for (ds in fixed_array(64, 128)) {   // ds 64 keeps a state column in one row part of the fused step; 128, the served hybrids' head size, splits it in two and takes the scan's eight-lane clusters
+            for (ds in fixed_array(32, 64, 128)) {   // ds 32 the narrowest head the geometry admits, ds 64 keeps a state column in one row part of the fused step; 128, the served hybrids' head size, splits it in two and takes the scan's eight-lane clusters
                 let nkh = 2
                 let nvh = 4
                 let kd = nkh * ds
@@ -2517,29 +2579,102 @@ def test_cud_dn_family(t0 : T?) {   // nolint:STYLE038 — the family's four cel
                     var pcs = DnScanArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
                         beta_off = uint(beta_off), g_off = uint(g_off), a_off = uint(a_off), dt_off = uint(dt_off), o_off = 0u, di = uint(di))
                     var pc3 = GkDnGateArgs(nvh = uint(nvh), di = uint(di), ds = uint(ds), o_off = 0u, wnorm_off = uint(wnorm_off), eps = eps)
-                    for (sig in fixed_array(false, true)) {
+                    //! the three forms over one fixture: the per-token scan under the silu out-norm, under the sigmoid one, and the chunked
+                    //! tensor-core scan (`dn_scan_chunk_cls`: 70 rows = four whole chunks and a six-row tail) under the silu one
+                    for (form in range(3)) {
+                        let sig = form == 1
+                        let chunk = form == 2
+                        if (chunk && !ensure_dn_scan_chunk_cls()) {
+                            t |> skip("the chunked scan's stamp did not compile on this device ({cuda_last_error()})")
+                            continue
+                        }
+                        let name = chunk ? "dn_scan_chunk" : (sig ? "dn_scan + sig" : "dn_scan")
                         let bufs = fixed_array(buf_upload(convh, s), buf_upload(sth, s), buf_upload(smh, s), buf_fill(npos * di, Y_SENTINEL, s), buf_upload(nocap, s), buf_fill(16, 0.0, s), buf_upload(zh, s))
-                        enc_dn_scan_cls(s, fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4], bufs[5]), pcs, dn_scan_wgs(int64(nvh), int64(ds)))
+                        if (chunk) {
+                            enc_dn_scan_chunk_cls(s, fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4], bufs[5]), pcs, dn_scan_chunk_wgs(int64(nvh), int64(ds), DNC_V))
+                        } else {
+                            enc_dn_scan_cls(s, fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4], bufs[5]), pcs, dn_scan_wgs(int64(nvh), int64(ds)))
+                        }
                         if (sig) {
                             enc_dn_scan_p3_sig_cls(s, fixed_array(bufs[6], bufs[3], bufs[2]), pc3, int64(npos))
                         } else {
                             enc_dn_scan_p3_cls(s, fixed_array(bufs[6], bufs[3], bufs[2]), pc3, int64(npos))
                         }
-                        t |> success(cud_sync(), "dn_scan{sig ? " + sig" : ""} at ds {ds}: the launches complete ({cuda_last_error()})")
+                        t |> success(cud_sync(), "{name} at ds {ds}: the launches complete ({cuda_last_error()})")
                         var inscope o <- buf_download(bufs[3], npos * di, type<float>)
                         var inscope st_got <- buf_download(bufs[1], nvh * ds * ds, type<float>)
-                        t |> success(moved_off(st_got, sth, st_at, scan_bar), "dn_scan{sig ? " + sig" : ""} at ds {ds}: the state, written in place, moved off its input at element {st_at}")
+                        t |> success(moved_off(st_got, sth, st_at, scan_bar), "{name} at ds {ds}: the state, written in place, moved off its input at element {st_at}")
                         o |> push_from(st_got)
                         let want & = sig ? o_ref_sig : o_ref
-                        check_rows(t, "dn_scan + the {sig ? "sigmoid" : "silu"} out-norm at ds {ds} against the CPU oracle ({cmp_n} elements: the o rows, then the states)", o, want, scan_bar, ds)
+                        check_rows(t, "{name} + the {sig ? "sigmoid" : "silu"} out-norm at ds {ds} against the CPU oracle ({cmp_n} elements: the o rows, then the states)", o, want, scan_bar, ds)
                         if (sig) {
                             check_exceeds(t, "dn_scan_p3_sig at ds {ds} lands off the silu oracle (the two stamps differ)", o, o_ref, Bar(rel = 1e-2, abs_floor = floor))
                         } else {
                             var inscope poison := o   // the bar's control: one normed o value pushed past both bars must red
                             poison[0] += 1.0 + 2.0 * logits_maxabs(o_ref)
-                            check_exceeds(t, "dn_scan + out-norm at ds {ds}: the bar against a poisoned value", poison, o_ref, Bar(rel = 1e-2, abs_floor = floor))
+                            check_exceeds(t, "{name} + out-norm at ds {ds}: the bar against a poisoned value", poison, o_ref, Bar(rel = 1e-2, abs_floor = floor))
                         }
                         cuda_mem_free(bufs)
+                    }
+                    if (ensure_dn_scan_chunk_cls()) {   //! the chunked scan at a row base past zero (a segmented window's part): its raw o rows and state against the oracle's, the rows ahead of the base kept
+                        let lead = 5
+                        var inscope conv2 : array<float>
+                        conv2 |> resize((npos + lead) * cd)
+                        for (i in range(npos * cd)) {
+                            conv2[lead * cd + i] = convh[i]
+                        }
+                        let beta2 = 16
+                        let g2 = beta2 + (npos + lead) * nvh
+                        let a2 = g2 + (npos + lead) * nvh
+                        let dt2 = a2 + nvh
+                        var inscope smh2 : array<float>
+                        smh2 |> resize(dt2 + nvh)
+                        for (i in range(npos * nvh)) {
+                            smh2[beta2 + lead * nvh + i] = smh[beta_off + i]
+                            smh2[g2 + lead * nvh + i] = smh[g_off + i]
+                        }
+                        for (i in range(nvh)) {
+                            smh2[a2 + i] = smh[a_off + i]
+                            smh2[dt2 + i] = smh[dt_off + i]
+                        }
+                        var pcs2 = DnScanArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
+                            beta_off = uint(beta2), g_off = uint(g2), a_off = uint(a2), dt_off = uint(dt2), o_off = 0u, di = uint(di), row0 = uint(lead))
+                        let bufs = fixed_array(buf_upload(conv2, s), buf_upload(sth, s), buf_upload(smh2, s), buf_fill((npos + lead) * di, Y_SENTINEL, s), buf_upload(nocap, s), buf_fill(16, 0.0, s))
+                        enc_dn_scan_chunk_cls(s, bufs, pcs2, dn_scan_chunk_wgs(int64(nvh), int64(ds), DNC_V))
+                        t |> success(cud_sync(), "dn_scan_chunk at row base {lead}, ds {ds}: the launch completes ({cuda_last_error()})")
+                        var inscope o2 <- buf_download(bufs[3], (npos + lead) * di, type<float>)
+                        var inscope st2 <- buf_download(bufs[1], nvh * ds * ds, type<float>)
+                        var lead_kept = 0
+                        for (i in range(lead * di)) {
+                            lead_kept += o2[i] == Y_SENTINEL ? 1 : 0
+                        }
+                        t |> equal(lead_kept, lead * di, "dn_scan_chunk at row base {lead}, ds {ds}: the o rows ahead of the base keep their sentinel")
+                        var inscope got2 <- [for (i in range(npos * di)); o2[lead * di + i]]
+                        got2 |> push_from(st2)
+                        check_rows(t, "dn_scan_chunk at row base {lead} against the CPU oracle at ds {ds} (the raw o rows, then the state)", got2, o_raw, scan_bar, ds)
+                        t |> success(moved_off(st2, sth, st_at, scan_bar), "dn_scan_chunk at row base {lead}, ds {ds}: the state, written in place, moved off its input at element {st_at}")
+                        cuda_mem_free(bufs)
+                    }
+                    if (ensure_dn_scan_chunk_cls()) {   //! the chunked scan with one capture whose row cuts its third chunk: the checkpoint holds the state after that row, the rows and the end state the whole run's
+                        let cr = 37
+                        var inscope caps <- [uint(cr), 0u]
+                        var pcs3 = pcs
+                        pcs3.cap_n = 1u
+                        pcs3.cap_rec = 0u
+                        pcs3.cap_state_off = 0u
+                        let bufs = fixed_array(buf_upload(convh, s), buf_upload(sth, s), buf_upload(smh, s), buf_fill(npos * di, Y_SENTINEL, s), buf_upload(caps, s), buf_fill(nvh * ds * ds, Y_SENTINEL, s))
+                        enc_dn_scan_chunk_cls(s, bufs, pcs3, dn_scan_chunk_wgs(int64(nvh), int64(ds), DNC_V))
+                        t |> success(cud_sync(), "dn_scan_chunk with a capture at row {cr}, ds {ds}: the launch completes ({cuda_last_error()})")
+                        var inscope o3 <- buf_download(bufs[3], npos * di, type<float>)
+                        var inscope st3 <- buf_download(bufs[1], nvh * ds * ds, type<float>)
+                        var inscope cap3 <- buf_download(bufs[5], nvh * ds * ds, type<float>)
+                        cuda_mem_free(bufs)
+                        o3 |> push_from(st3)
+                        check_rows(t, "dn_scan_chunk with a capture at row {cr} against the CPU oracle at ds {ds} (the raw o rows, then the end state)", o3, o_raw, scan_bar, ds)
+                        var inscope o_cap <- dn_delta_ref(convh, sth, smh, cr, nkh, nvh, ds, beta_off, g_off, a_off, dt_off)
+                        var inscope st_cap <- copy_span(o_cap, cr * di, nvh * ds * ds)
+                        check_rows(t, "dn_scan_chunk's checkpoint after row {cr} against the CPU oracle over {cr} rows at ds {ds}", cap3, st_cap, scan_bar, ds)
+                        t |> success(all_finite(cap3) && mismatch_exact(cap3, st_ref) > 0, "dn_scan_chunk's checkpoint at ds {ds} is not the whole run's state (every value finite)")
                     }
                 }
                 {
@@ -2800,7 +2935,7 @@ def private cud_combine_arm(t : T?) {
 }
 
 //! the bucket schedule against its CPU twin, word for word over the whole planes (three empty experts, a sentinel fill); past 256 experts the 512-thread stamp
-def private cud_sched_arm(t : T?; ne : int; pad : bool = false) {
+def private cud_sched_arm(t : T?; ne : int) {
     static_if (typeinfo builtin_module_exists(vulkan)) {   // the schedule oracle lives with the Vulkan cells
         let nk = 4 * MR_NPOS * MR_K
         let wt_gu = 3
@@ -2809,29 +2944,26 @@ def private cud_sched_arm(t : T?; ne : int; pad : bool = false) {
         var idx <- sched_cell_idx(nk, ne)
         let bases = fixed_array(1_000u, 96u, 2_000u, 96u, 3_000u, 48u)
         var winv, w1, w3, w2 : array<uint>
-        sched_oracle(idx, ne, wt_gu, wt_dn, sh, bases, winv, w1, w3, w2, false, pad ? MMQ_ROW_PAD : 0, pad)
+        sched_oracle(idx, ne, wt_gu, wt_dn, sh, bases, winv, w1, w3, w2)
         var s = g_cud.stream
         let nw = length(w1)
-        let row_pad = pad ? MMQ_ROW_PAD : 1
-        let nrows = bucket_start(idx, ne, row_pad)   // the bucket rows, the pads among them
-        var bufs = fixed_array(buf_upload(idx, s), buf_fill(nk, 0xFFFFFFFFu, s), buf_fill(nw, MR_SENT, s), buf_fill(nw, MR_SENT, s), buf_fill(nw, MR_SENT, s), buf_fill(nrows, 0xFFFFFFFFu, s))
+        var bufs = fixed_array(buf_upload(idx, s), buf_fill(nk, 0xFFFFFFFFu, s), buf_fill(nw, MR_SENT, s), buf_fill(nw, MR_SENT, s), buf_fill(nw, MR_SENT, s), buf_fill(nk, 0xFFFFFFFFu, s))
         var pc = SchedArgs(nk = uint(nk), ne = uint(ne), wt_gu = uint(wt_gu), wt_dn = uint(wt_dn),
             map_off = uint(sh.map_off), map_off_mgu = uint(sh.map_off_mgu), map_off_mdn = uint(sh.map_off_mdn),
             bound_gu = uint(sh.bound_gu), bound_dn = uint(sh.bound_dn), bound_mgu = uint(sh.bound_mgu), bound_mdn = uint(sh.bound_mdn),
             base1 = bases[0], stride1 = bases[1], base3 = bases[2], stride3 = bases[3], base2 = bases[4], stride2 = bases[5], s_only = 0u)
-        cud_moe_sched_enc(int64(ne), pad, s, bufs, pc)
-        let pad_tag = pad ? ", padded to {MMQ_ROW_PAD}-row tiles on the m column" : ""
-        t |> success(cud_sync(), "bucket schedule ({ne} experts{pad_tag}): the launch completes ({cuda_last_error()})")
+        cud_moe_sched_enc(int64(ne), s, bufs, pc)
+        t |> success(cud_sync(), "bucket schedule ({ne} experts): the launch completes ({cuda_last_error()})")
         var ginv <- buf_download(bufs[1], nk, type<uint>)
         var g1 <- buf_download(bufs[2], nw, type<uint>)
         var g3 <- buf_download(bufs[3], nw, type<uint>)
         var g2 <- buf_download(bufs[4], nw, type<uint>)
-        var gbex <- buf_download(bufs[5], nrows, type<uint>)
+        var gbex <- buf_download(bufs[5], nk, type<uint>)
         cuda_mem_free(bufs)
-        sched_maps_check(t, idx, ginv, gbex) $(e) => (start = bucket_start(idx, e, row_pad), rows = bucket_rows(idx, e))
-        check_exact(t, "the gate plane's s and m records, maps and sentinel tails against the CPU twin, word for word ({nw} words, {ne} experts{pad_tag})", g1, w1)
-        check_exact(t, "the up plane's schedule against the CPU twin ({ne} experts{pad_tag})", g3, w3)
-        check_exact(t, "the down plane's schedule against the CPU twin (its own tile counts and tails, {ne} experts{pad_tag})", g2, w2)
+        sched_maps_check(t, idx, ginv, gbex) $(e) => (start = bucket_start(idx, e), rows = bucket_rows(idx, e))
+        check_exact(t, "the gate plane's s and m records, maps and sentinel tails against the CPU twin, word for word ({nw} words, {ne} experts)", g1, w1)
+        check_exact(t, "the up plane's schedule against the CPU twin ({ne} experts)", g3, w3)
+        check_exact(t, "the down plane's schedule against the CPU twin (its own tile counts and tails, {ne} experts)", g2, w2)
         w2[sh.map_off_mdn + sh.bound_mdn - 1] = 0u
         t |> success(mismatch_exact(g2, w2) > 0, "schedule control ({ne} experts): the last map's last sentinel word flipped reds the compare")
         delete idx
@@ -2845,7 +2977,7 @@ def private cud_sched_arm(t : T?; ne : int; pad : bool = false) {
         delete g2
         delete gbex
     } else {
-        t |> skip("dasVulkan not present: the bucket schedule's CPU twin lives with the Vulkan cells, so the {ne}-expert{pad ? " padded" : ""} schedule arm does not run")
+        t |> skip("dasVulkan not present: the bucket schedule's CPU twin lives with the Vulkan cells, so the {ne}-expert schedule arm does not run")
     }
 }
 
@@ -2889,7 +3021,7 @@ def private cud_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {
 [test]
 def test_cud_moe_routing(t0 : T?) {
     t0 |> run("CUDA routed-block routing kernels == the CPU oracles: router GEMM, per-row top-k (the one-deep stamp, and the two-deep one over 512 experts), the bucket schedule, the gather as halves and as floats, the per-expert chain's by-row gather and combine, the combine-folded residual step") <| @(t : T?) {
-        if (!(ensure_router_gemm_cls() && ensure_topk_rows_cls() && ensure_moe_sched_cls() && ensure_moe_sched2_cls() && ensure_moe_sched_mmq_cls() && ensure_moe_sched2_mmq_cls() && ensure_cls_ar_comb())) {
+        if (!(ensure_router_gemm_cls() && ensure_topk_rows_cls() && ensure_moe_sched_cls() && ensure_moe_sched2_cls() && ensure_cls_ar_comb())) {
             t |> skip("no CUDA device with NVRTC")
             return
         }
@@ -2910,8 +3042,6 @@ def test_cud_moe_routing(t0 : T?) {
         cud_combine_arm(t)
         cud_sched_arm(t, MR_NE)
         cud_sched_arm(t, 512)   // past 256 experts: the 512-thread stamp, experts past 256 routed
-        cud_sched_arm(t, MR_NE, true)   // the MMQ form: every bucket's rows from a 128-multiple, all on the m column
-        cud_sched_arm(t, 512, true)   // the 512-thread MMQ stamp: the pad and the scan past 256 experts
         cud_ar_comb_arm(t, true, true, false)
         cud_ar_comb_arm(t, false, true, false)
         cud_ar_comb_arm(t, false, false, false)

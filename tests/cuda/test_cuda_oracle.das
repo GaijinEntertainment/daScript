@@ -974,6 +974,9 @@ struct IntrinParams {
     col_scales : uint64
     o : uint64
     misc : uint64
+    a16 : uint64
+    b16 : uint64
+    o16 : uint64
 }
 
 struct IntrinFp4Params {
@@ -1165,11 +1168,20 @@ def test_intrin_gpu(t : T?) {
                 rs |> push(float(i % 3) * 0.5 + 0.25)
                 cs |> push(float(i % 5) * 0.125 + 1.0)
             }
+            var a16, b16 : array<float16>
+            a16 |> resize(256)
+            b16 |> resize(256)
+            for (i in range(256)) {
+                a16[i] = float16(float((i * 11 + 2) % 17 - 8) * 0.25)
+                b16[i] = float16(float((i * 13 + 5) % 15 - 7) * 0.5)
+            }
             var err : string
-            var p = IntrinParams(a8 = buf_upload(a8), b8 = buf_upload(b8), row_scales = buf_upload(rs), col_scales = buf_upload(cs), o = buf_fill(256, 0.0), misc = buf_fill(96, 0.0))
+            var p = IntrinParams(a8 = buf_upload(a8), b8 = buf_upload(b8), row_scales = buf_upload(rs), col_scales = buf_upload(cs), o = buf_fill(256, 0.0), misc = buf_fill(128, 0.0),
+                a16 = buf_upload(a16), b16 = buf_upload(b16), o16 = buf_fill(1024, 0.0))
             t |> success(launch(cc, intrin_cuda, "intrin", intrin_cuda_entry, p, 32u, err, intrin_cuda_smem, 32u), "intrin launch: {err}")
             let go <- buf_download(p.o, 256, type<float>)
-            let gm <- buf_download(p.misc, 96, type<uint>)
+            let gm <- buf_download(p.misc, 128, type<uint>)
+            let g16 <- buf_download(p.o16, 1024, type<float>)
             var bad = 0
             for (r in range(16)) {
                 for (n in range(16)) {
@@ -1186,9 +1198,32 @@ def test_intrin_gpu(t : T?) {
                 badm += gm[l] == byte_perm(0x03020100u + uint(l), 0x8f0e0d0cu, 0x7654u + uint(l) + uint(l & 1) * 0x8000u) ? 0 : 1
                 badm += gm[32 + l] == 1u ? 0 : 1
                 badm += gm[64 + l] == uint(l) + 5u ? 0 : 1
+                badm += gm[96 + l] == uint(l) * 4u + uint(l & 3) ? 0 : 1
             }
-            t |> equal(badm, 0, "byte_perm matches its CPU emulation, clock32 moves forward across the named barrier, the inline-PTX add returns")
-            for (q in [p.a8, p.b8, p.row_scales, p.col_scales, p.o, p.misc]) {
+            t |> equal(badm, 0, "byte_perm matches its CPU emulation, clock32 moves forward across the named barrier, the inline-PTX add returns, a register vector's lane read by a runtime index lands")
+            var badt = 0
+            var badtt = 0
+            var bade = 0
+            var bads = 0
+            for (m in range(16)) {
+                for (n in range(16)) {
+                    var ab = 0.0
+                    var atbt = 0.0
+                    for (kk in range(16)) {
+                        ab += float(a16[m * 16 + kk]) * float(b16[kk * 16 + n])
+                        atbt += float(a16[kk * 16 + m]) * float(b16[n * 16 + kk])
+                    }
+                    badt += g16[m * 16 + n] == ab ? 0 : 1
+                    badtt += g16[256 + m * 16 + n] == atbt ? 0 : 1
+                    bade += g16[512 + m * 16 + n] == go[m * 16 + n] ? 0 : 1
+                    bads += g16[768 + m * 16 + n] == float((m >= 8 ? 2 : 0) | (n >= 8 ? 4 : 0) | (n & 1)) ? 0 : 1
+                }
+            }
+            t |> equal(badt, 0, "the f16 product with B off a [k][n] tile through the transposing ldmatrix matches")
+            t |> equal(badtt, 0, "the f16 product with A off a [k][m] tile through the transposing ldmatrix matches")
+            t |> equal(bade, 0, "every lane element read through mma_acc_get sits at mma_acc_row / mma_acc_col of the stored tile")
+            t |> equal(bads, 0, "an accumulator set element by element to its indices stores them at the same map")
+            for (q in [p.a8, p.b8, p.row_scales, p.col_scales, p.o, p.misc, p.a16, p.b16, p.o16]) {
                 cuda_mem_free(q)
             }
         }

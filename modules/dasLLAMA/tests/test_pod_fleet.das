@@ -56,6 +56,7 @@ def test_fleet_commands(t : T?) {
     let run = run_command(cfg, "20261027-000000", 2, 3)
     t |> success(find(run, "--changed --base origin/master --shard 2/3") >= 0, "the command with the pod's shard")
     t |> success(find(run, "TMPDIR=/workspace/logs/fleet/20261027-000000/pod_2") >= 0, "the children's logs under the run on the volume")
+    t |> success(find(run, "LD_LIBRARY_PATH=/root/daScript/lib ") >= 0, "the children load the pod's own runtime libraries, not the volume tree's")
     t |> success(find(run, "DASLLAMA_MODELS_DIR=/workspace/models DASLLAMA_GPU=1") >= 0, "the children's environment")
     t |> success(find(run, "> /workspace/logs/fleet/20261027-000000/shard_2.log") >= 0, "the runner's log beside them")
     t |> success(find(run, "echo RUN-EXIT=$?") >= 0, "RUN-EXIT closes the log")

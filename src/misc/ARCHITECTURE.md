@@ -3,6 +3,8 @@
 ## 1. File charters
 
 - `job_que.cpp` - compute lanes, OS placement, dispatch and spin/park scheduling.
+- `job_que_cpu_budget.h` - the cgroup quota read and the CPU budget it folds into, over a root
+  a deterministic test supplies.
 - `job_que_spin.h` - spin deadline construction, renewal and expiration; its clock type is
   supplied by the runtime or a deterministic test.
 - `sysos.cpp` - the per-platform core-count probes `job_que.cpp` calls, the das root, and the
@@ -31,6 +33,15 @@ they are directly comparable. The request differs from `set_default_threads_cap`
 cap only lowers the platform default, a request can RAISE past it, which is what a prefill-heavy
 workload needs to reach the slow tier. The cap still bounds an accepted request, so an explicit
 "at most N" - a benchmark's `-t` - beats a standing request from a library `[init]`.
+
+## The platform default counts the CPUs the process may use {#cpu-budget}
+
+On Linux the logical count is the least of the online CPUs, the affinity mask and the cgroup CPU
+quota (`cpu.max` up the process's v2 hierarchy, else v1 `cpu.cfs_quota_us` / `cfs_period_us`).
+A container sees every CPU of its host while the quota grants a share of them, and a pool sized
+to the host spins its workers against the throttle. The quota floors to whole lanes: one lane
+over it throttles every lane of a lockstep `parallel_for` at the end of each period. The physical
+count is capped by the same budget.
 
 ## 3. A second core tier is judged by KIND, not by size
 
