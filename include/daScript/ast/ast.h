@@ -1018,6 +1018,8 @@ namespace das
     class DAS_API BuiltInFunction : public Function {
     public:
         BuiltInFunction ( const char *fn, const char * fnCpp );
+        bool        noFolding = false;
+        FunctionPtr noFold () { noFolding = true; return this; }
         virtual string getAotBasicName() const override {
             return cppName.empty() ? name : cppName;
         }

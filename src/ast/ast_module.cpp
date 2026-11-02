@@ -781,6 +781,7 @@ namespace das {
             fn->neverInline, fn->tempStringResult, fn->needCallerStackFrame, fn->nttp,
         };
         hb.updateString((const char *)traits, sizeof(traits));
+        hb.update(fn->builtIn && static_cast<const BuiltInFunction *>(fn)->noFolding);
         return hb.getHash();
     }
 

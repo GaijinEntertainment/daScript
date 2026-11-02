@@ -8,6 +8,11 @@
 #include "ast_effects.h"
 
 namespace das {
+    static bool foldableBuiltin ( const Function * fn ) {
+        if ( !fn || !fn->builtIn ) return false;
+        return !static_cast<const BuiltInFunction *>(fn)->noFolding;
+    }
+
 
     void PassVisitor::preVisitProgram ( Program * prog ) {
         Visitor::preVisitProgram(prog);
@@ -533,7 +538,8 @@ namespace das {
     }
 
     bool isConstExprFunc ( Function * fun ) {
-        return !fun->hasObservableEffects() && fun->builtIn && fun->result && fun->result->isFoldable();
+        if ( fun->hasObservableEffects() || !fun->builtIn || !fun->result || !fun->result->isFoldable() ) return false;
+        return !static_cast<const BuiltInFunction *>(fun)->noFolding;
     }
 
     // The value of a const is wanted HERE, and its own initializer never folded (lint
@@ -1044,7 +1050,7 @@ namespace das {
             if ( expr->func->hasObservableEffects() ) {
                 return Visitor::visit(expr);
             }
-            if ( expr->subexpr->constexpression && expr->func->builtIn ) {
+            if ( expr->subexpr->constexpression && foldableBuiltin(expr->func) ) {
                 if ( expr->type->isFoldable() && expr->subexpr->type->isFoldable() ) {
                     return evalAndFold(expr);
                 }
@@ -1095,7 +1101,7 @@ namespace das {
             if ( expr->func->hasObservableEffects() ) {
                 return Visitor::visit(expr);
             }
-            if ( expr->left->constexpression && expr->right->constexpression && expr->func->builtIn ) {
+            if ( expr->left->constexpression && expr->right->constexpression && foldableBuiltin(expr->func) ) {
                 if ( expr->type->isFoldable() && expr->left->type->isFoldable() && expr->right->type->isFoldable() ) {
                     return evalAndFold(expr);
                 }
@@ -1313,7 +1319,7 @@ namespace das {
     // op3
         virtual ExpressionPtr visit ( ExprOp3 * expr ) override {
             if ( expr->type->isFoldable() && expr->subexpr->constexpression && expr->left->constexpression && expr->right->constexpression &&
-                (expr->func && expr->func->builtIn) ) {
+                foldableBuiltin(expr->func) ) {
                 return evalAndFold(expr);
             } else if ( expr->type->isFoldable() && droppable(expr->subexpr) && expr->left->constexpression && expr->right->constexpression ) {
                 bool failed;
@@ -1532,7 +1538,7 @@ namespace das {
                     }
                 }
                 if ( allConst && canFold ) {
-                    if ( expr->func->builtIn ) {
+                    if ( foldableBuiltin(expr->func) ) {
                         return evalAndFold(expr);
                     } else {
                         needRun.push_back(expr->func);
