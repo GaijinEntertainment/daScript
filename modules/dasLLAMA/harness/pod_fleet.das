@@ -131,12 +131,14 @@ def prep_command() : string =>
     "mkdir -p {FLEET_LOGS} && rsync -a --delete --exclude .cache --exclude build {VOLUME_TREE}/ {POD_TREE}/ && echo PREP-OK"
 
 //! the remote command that starts shard `index`/`n` of the run: the children's logs under the run's folder on
-//! the volume (TMPDIR), the runner's own log beside them, RUN-EXIT=<rc> as its last line. Non-private:
+//! the volume (TMPDIR), the runner's own log beside them, RUN-EXIT=<rc> as its last line. LD_LIBRARY_PATH puts the
+//! pod's copy of the runtime libraries ahead of the binary's RUNPATH, which names the volume tree's - a rebuild
+//! there mid-run would otherwise kill every child started after it. Non-private:
 //! tests/test_pod_fleet.das reads it
 def run_command(cfg : FleetArgs; run : string; index, n : int) : string {
     let log = "{FLEET_LOGS}/{run}/shard_{index}.log"
     let tmp = "{FLEET_LOGS}/{run}/pod_{index}"
-    let inner = ("cd {POD_TREE} && export TMPDIR={tmp} {cfg.env} && ./bin/daslang -jit -module-cache"
+    let inner = ("cd {POD_TREE} && export LD_LIBRARY_PATH={POD_TREE}/lib TMPDIR={tmp} {cfg.env} && ./bin/daslang -jit -module-cache"
         + " .cache/daslang/module_cache/dastest.dascache modules/dasLLAMA/tests/run.das -- {cfg.args} --shard {index}/{n};"
         + " echo RUN-EXIT=$?")
     //! `;` not `&&` ahead of the detached command: `a && b &` backgrounds a subshell that keeps the ssh session's
