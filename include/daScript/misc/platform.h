@@ -1,5 +1,7 @@
 #pragma once
 
+#include "daScript/misc/arch.h"
+
 #ifndef DAS_VERSION
 #define DAS_VERSION_MAJOR 0
 #define DAS_VERSION_MINOR 6
@@ -193,7 +195,7 @@
         return uint64_t(r);
     }
     __forceinline uint32_t das_popcount(uint32_t x) {
-    #if defined(_M_ARM64)
+    #if defined(DAS_ARCH_ARM64)
         return vaddlv_u8(vcnt_u8(vdup_n_u64(x)));
     #else
         return uint32_t(__popcnt(x));
@@ -202,7 +204,7 @@
     __forceinline uint64_t das_popcount64(uint64_t x) {
     #if defined(__i386__) || defined(_M_IX86)
         return uint64_t(__popcnt(uint32_t(x)) + __popcnt(uint32_t(x >> 32)));
-    #elif defined(_M_ARM64)
+    #elif defined(DAS_ARCH_ARM64)
         return vaddlv_u8(vcnt_u8(vdup_n_u64(x)));
     #else
         return uint64_t(__popcnt64(x));

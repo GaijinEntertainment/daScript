@@ -1728,6 +1728,7 @@ SET(DAS_RELEASE_INCLUDE
 
 SET(DAS_RELEASE_MISC_INCLUDE
     include/daScript/misc/anyhash.h
+    include/daScript/misc/arch.h
     include/daScript/misc/arraytype.h
     include/daScript/misc/callable.h
     include/daScript/misc/crash_handler.h

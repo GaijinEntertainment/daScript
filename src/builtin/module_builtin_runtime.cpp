@@ -33,7 +33,7 @@ extern "C" char __heap_base;
 
 // arm64 CPU-feature detection headers — MUST be at file scope, not inside `namespace das`.
 // Guarded to arm64, so no other target's translation unit is affected by anything here.
-#if defined(__aarch64__) || defined(_M_ARM64)
+#if defined(DAS_ARCH_ARM64)
     #if defined(_WIN32)
         // IsProcessorFeaturePresent + the PF_ARM_* constants; nothing else in this TU's include
         // graph pulls windows.h in, so without this the arm64 Windows build does not compile.
@@ -82,7 +82,7 @@ extern "C" char __heap_base;
     #endif
 #endif
 
-#if defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86)
+#if defined(DAS_ARCH_X64) || defined(DAS_ARCH_X86)
 #if defined(_MSC_VER)
 #include <intrin.h>     // __cpuidex, _xgetbv
 #else
@@ -2206,7 +2206,9 @@ namespace das
 
     // x86, arm, etc
     const char * das_get_architecture_name() {
-        #if defined(__x86_64__) || defined(_M_X64)
+        #if defined(_M_ARM64EC)
+            return "arm64ec";
+        #elif defined(__x86_64__) || defined(_M_X64)
             return "x86_64";
         #elif defined(__i386) || defined(_M_IX86)
             return "x86";
@@ -2238,7 +2240,7 @@ namespace das
         return "unknown";
     }
 
-#if defined(__aarch64__) || defined(_M_ARM64)
+#if defined(DAS_ARCH_ARM64)
     #if defined(__APPLE__)
         static bool das_sysctl_flag ( const char * name ) {
             int val = 0; size_t sz = sizeof(val);
@@ -2288,7 +2290,7 @@ namespace das
     }
 #endif
 
-#if defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86)
+#if defined(DAS_ARCH_X64) || defined(DAS_ARCH_X86)
     static void das_cpuidex ( int leaf, int subleaf, int * regs ) {
         #if defined(_MSC_VER)
             __cpuidex(regs, leaf, subleaf);
@@ -2317,7 +2319,7 @@ namespace das
     // on cpu_supports can never register where its instructions can't execute.
     bool das_cpu_supports ( const char * feature ) {
         if ( !feature ) return false;
-#if defined(__aarch64__) || defined(_M_ARM64)
+#if defined(DAS_ARCH_ARM64)
         // arm64 has no cpuid: macOS answers via sysctl, Linux via the AT_HWCAP auxv words, Windows
         // via IsProcessorFeaturePresent. Names are the LLVM target-feature spellings, so they match
         // what DAS_JIT_ARM64_FORCE_FEATURES and `llc -mattr` take verbatim (same rule as AMX above).
