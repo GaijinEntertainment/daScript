@@ -805,6 +805,8 @@ namespace das {
         vector<tuple<string,int64_t,uint64_t>> savedDeps;
         uint32_t reqCount = 0;
         vector<string> savedReq;
+        uint32_t incCount = 0;
+        AstSerializer::IncludedSources savedIncludes;
         if ( !serializer_read->trySerialize([&](AstSerializer & serializer) {
             serializer << saved_hash;
             serializer << saved_size;
@@ -828,10 +830,22 @@ namespace das {
                     serializer.serializeTemp(req);
                 }
             }
+            serializer << incCount;
+            if ( incCount <= SER_MAX_MACRO_DEPS ) {
+                savedIncludes.resize(incCount);
+                for ( auto & inc : savedIncludes ) {
+                    serializer.serializeTemp(get<0>(inc));
+                    serializer << get<1>(inc);
+                    serializer << get<2>(inc);
+                }
+            }
             serializer << payload_size;
-        }) || depCount > SER_MAX_MACRO_DEPS || reqCount > SER_MAX_MACRO_DEPS ) {
+        }) || depCount > SER_MAX_MACRO_DEPS || reqCount > SER_MAX_MACRO_DEPS
+            || incCount > SER_MAX_MACRO_DEPS ) {
             serializer_read->seenNewModule = true;
-            serializer_read->failed = depCount > SER_MAX_MACRO_DEPS || reqCount > SER_MAX_MACRO_DEPS;
+            serializer_read->failed = depCount > SER_MAX_MACRO_DEPS
+                || reqCount > SER_MAX_MACRO_DEPS
+                || incCount > SER_MAX_MACRO_DEPS;
             if ( !serializer_read->quietCache ) logs << "ser: read failed '" << fileName << "'\n";
             return false;
         }
@@ -849,6 +863,22 @@ namespace das {
                 serializer_read->cutoffFile = fileName;
                 serializer_read->cutoffReason = "macro dependency '" + get<0>(dep) + "' changed";
                 if ( !serializer_read->quietCache ) logs << "ser: macro dependency changed '" << get<0>(dep) << "' (e.g. a re-minted tune sidecar)\n";
+                return false;
+            }
+        }
+        for ( auto & inc : savedIncludes ) {
+            int64_t size = -1;
+            uint64_t hash = 0;
+            stampModuleSource(access, get<0>(inc), size, hash);
+            if ( size < 0 || size != get<1>(inc) || hash != get<2>(inc) ) {
+                serializer_read->seenNewModule = true;
+                serializer_read->failed = true;
+                serializer_read->cutoffFile = fileName;
+                serializer_read->cutoffReason = "included source changed";
+                if ( !serializer_read->quietCache ) {
+                    logs << "ser: included file content mismatch '"
+                         << get<0>(inc) << "'\n";
+                }
                 return false;
             }
         }
@@ -932,7 +962,9 @@ namespace das {
             // must round-trip through the deserialized program or the next write drops them
             program->moduleCacheDependencies = das::move(savedDeps);
             if ( serializer_write != nullptr ) {
-                serializer_write->parsedModules.push_back({fileName, file_hash, file_size, program, program->thisModule.get(), das::move(savedReq)});
+                serializer_write->parsedModules.push_back({fileName,
+                    file_hash, file_size, program, program->thisModule.get(),
+                    das::move(savedReq), das::move(savedIncludes)});
             }
             return true;
         }
@@ -1396,6 +1428,14 @@ namespace das {
             unbindCompilingProgram();
             return program;
         }
+        AstSerializer::IncludedSources sourceIncludes;
+        for ( const auto & inc : parserState.das_already_include ) {
+            int64_t size = -1;
+            uint64_t hash = 0;
+            stampModuleSource(access, inc, size, hash);
+            sourceIncludes.emplace_back(inc, size, hash);
+        }
+        sort(sourceIncludes.begin(), sourceIncludes.end());
         parserState = DasParserState();
         times.parseUsec = get_time_usec(times.startTicks);
         *totParse += times.parseUsec;
@@ -1417,8 +1457,10 @@ namespace das {
             inferAndFinalizeModule(program, fileName, moduleName, access, logs, libGroup, exportAll, isDep, policies, times);
             auto & serializer_write = daScriptEnvironment::getBound()->serializer_write;
             if ( serializer_write != nullptr && !program->failed() ) {    // a failed module is no record (a persistent stream's later writeback would carry it)
-                serializer_write->parsedModules.push_back({fileName, file_hash, file_size, program, program->thisModule.get(),
-                    collectRequireNames(access->getFileInfo(fileName), access)});
+                serializer_write->parsedModules.push_back({fileName,
+                    file_hash, file_size, program, program->thisModule.get(),
+                    collectRequireNames(access->getFileInfo(fileName), access),
+                    das::move(sourceIncludes)});
             }
             return program;
         }
@@ -1811,7 +1853,8 @@ namespace das {
         // from the cursor: a late walk (requireModuleNow) writes back mid-compile, and the host's
         // writeback at its end must not repeat those records
         for ( size_t pi = serializer_write->writtenModules; pi < serializer_write->parsedModules.size(); ++pi ) {
-            auto & [fileName, fileHash, fileSize, program, thisModule, requireNames] = serializer_write->parsedModules[pi];
+            auto & [fileName, fileHash, fileSize, program, thisModule,
+                requireNames, includes] = serializer_write->parsedModules[pi];
             *serializer_write << fileHash;
             *serializer_write << fileSize;
             *serializer_write << const_cast<string &>(fileName);
@@ -1829,6 +1872,13 @@ namespace das {
             *serializer_write << reqCount;
             for ( auto & req : requireNames ) {
                 *serializer_write << req;
+            }
+            uint32_t incCount = uint32_t(includes.size());
+            *serializer_write << incCount;
+            for ( auto & inc : includes ) {
+                *serializer_write << get<0>(inc);
+                *serializer_write << get<1>(inc);
+                *serializer_write << get<2>(inc);
             }
             // record length, backpatched after the payload: lets the reader skip a record
             // that fails to deserialize for an UNCHANGED file and keep serving later ones.

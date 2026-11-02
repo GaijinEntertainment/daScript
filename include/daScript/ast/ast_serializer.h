@@ -203,8 +203,9 @@ namespace das {
         vector<pair<void *, SerializeNodeId>>       pendingRefs;    // storage of a TT * slot, and the number it waits for
         // fieldRefs tuple contains: fieldptr, module, structname, fieldname
         vector<tuple<Structure::FieldDeclarationRef*, Module *, string, string>>       fieldRefs;
-        // parsedModules record: fileName, source content hash, source size, program, thisModule, the collector's require names
-        vector<tuple<string, uint64_t, int64_t, ProgramPtr, Module*, vector<string>>> parsedModules;
+        using IncludedSources = vector<tuple<string, int64_t, uint64_t>>;
+        vector<tuple<string, uint64_t, int64_t, ProgramPtr, Module*,
+            vector<string>, IncludedSources>> parsedModules;
         size_t                                      writtenModules = 0;     // parsedModules already in the stream (writebackModules)
     // tracking for shared modules
         das_hash_set<Module *>                      writingReadyModules;
@@ -362,7 +363,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 238;   // 238: captured return locals retain stack storage
+            return 239;   // 239: module headers stamp included source content
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

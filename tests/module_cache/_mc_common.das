@@ -52,6 +52,14 @@ def run_child(cmd : string; var output : string&) : int {
     }))
 }
 
+def run_argv(args : array<string>; var output : string&) : int {
+    return unsafe(popen_argv(args, 300.0, $(f) {
+        if (f != null) {
+            output = fread(f)
+        }
+    }))
+}
+
 def report_child(t : T?; phase : string; rc : int; out : string; marker : string) : bool {
     let ok = rc == 0 && find(out, marker) >= 0
     if (!ok) {

@@ -23,8 +23,11 @@ The front end parses modules in require order. When a module cache is installed
 (`ModuleFileCache`), each module first tries `trySerializeProgramModule`. The reader stands at
 the next record and checks that the record names this file, that the size and content hash of
 the bytes the compile's `FileAccess` serves for that name match (never a stat, so a file that is
-not on disk under that name is covered, and a rewrite that leaves the bytes alone serves), and
-that every compile-time input the record's macros pinned
+not on disk under that name is covered, and identical rewrites serve).
+The header also stamps every textual include through that same access. Its
+include count is bounded before allocation, and served records retain those
+stamps for writeback. A changed or missing include cuts off the stream.
+The reader checks that every compile-time input the record's macros pinned
 (`add_module_cache_dependency` - a file's bytes, an environment variable's value under
 `env:NAME`, a command-line flag's occurrences under `arg:--flag`; and the builtin module's
 presence under `module:NAME`, which the `builtin_module_exists` fold pins itself, so a build
