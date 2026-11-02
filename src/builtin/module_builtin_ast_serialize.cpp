@@ -3529,6 +3529,7 @@ namespace das {
             ser.buffer->flush();
             return;
         }
+        if ( ser.failed ) failToCompile = true;
         if ( failToCompile ) return;
         // hosts take the program module as the library's last one: plain builtins first, then dependency order
         TopSort ts(library.modules);
