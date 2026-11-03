@@ -495,6 +495,33 @@ def target_upcast_of_rvalue {
     poke_n(cast<WrPlain>(make_wr_kid()))
 }
 
+[export]
+def target_invisible_dependency() : string {
+    var root : string
+    with_auto_inline_visibility_mid() $(value) {
+        root = value
+    }
+    return root
+}
+
+[export]
+def target_invisible_global() : int {
+    var value : int
+    with_auto_inline_visibility_value_mid() $(result) {
+        value = result
+    }
+    return value
+}
+
+[export]
+def target_invisible_private_global() : int {
+    var value : int
+    with_auto_inline_visibility_private_mid() $(result) {
+        value = result
+    }
+    return value
+}
+
 def has(s, sub : string) : bool => find(s, sub, 0) >= 0
 
 [test]
@@ -587,6 +614,21 @@ def test_auto_inline_functions_declines(t : T?) {
             let b = body_of(t, "target_mixed_ternary_stmts")
             t |> success(has(b, "make_node_stmts("), "call stays regular: {b}")
         }
+        t |> run("callee naming an unseen dependency stays a call") @(t : T?) {
+            let b = body_of(t, "target_invisible_dependency")
+            t |> success(has(b, "with_auto_inline_visibility_mid("),
+                "call stays regular: {b}")
+        }
+        t |> run("callee naming an unseen global stays a call") @(t : T?) {
+            let b = body_of(t, "target_invisible_global")
+            t |> success(has(b, "with_auto_inline_visibility_value_mid("),
+                "call stays regular: {b}")
+        }
+        t |> run("unseen private global keeps a call") @(t : T?) {
+            let b = body_of(t, "target_invisible_private_global")
+            t |> success(has(b, "with_auto_inline_visibility_private_mid("),
+                "call stays regular: {b}")
+        }
     }
 }
 
@@ -637,6 +679,9 @@ def test_auto_inline_functions_behavior(t : T?) {
         t |> equal(target_private_twice_1(1), target_private_twice_2(0))
         t |> equal(target_recursive(4), 4)
         t |> equal(target_generic(20, 22), 42)
+        t |> success(!empty(target_invisible_dependency()))
+        t |> equal(target_invisible_global(), 42)
+        t |> equal(target_invisible_private_global(), 43)
     }
     t |> run("impure arguments evaluate in call order") @(t : T?) {
         g_log = ""
