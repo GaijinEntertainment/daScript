@@ -638,6 +638,8 @@ namespace das {
     // reader reject a cache written by a different protocol/version cleanly, instead of
     // desyncing on a layout difference mid-record.
     static constexpr uint32_t SER_MODULE_STREAM_MAGIC = 0x4D534144u;    // 'DASM'
+    // sanity bound on a record's dependency count: real programs register
+    // far fewer inputs; anything past this reads as stream corruption
     static constexpr uint32_t SER_MAX_MACRO_DEPS = 4096u;
     static constexpr uint64_t FNV64A_SEED = 14695981039346656037ull;   // any nonzero constant serves: size (-1 absent vs 0 empty) already separates the states
 
@@ -798,6 +800,9 @@ namespace das {
             serializer << saved_size;
             serializer.serializeTemp(saved_filename);
             serializer << saved_flags;
+            // dependencies (Program::moduleCacheDependencies) ride the
+            // record header, not the payload: they must be validated BEFORE
+            // the payload is trusted
             serializer << depCount;
             if ( depCount <= SER_MAX_MACRO_DEPS ) {
                 savedDeps.resize(depCount);
@@ -823,6 +828,9 @@ namespace das {
             return false;
         }
 
+        // Compare compile-time inputs by CONTENT (size + hash), not mtime:
+        // apps rewrite their sidecar byte-identically on exit, and that
+        // must not churn the cache.
         for ( auto & dep : savedDeps ) {
             int64_t depSize = -1;
             uint64_t depHash = 0;
