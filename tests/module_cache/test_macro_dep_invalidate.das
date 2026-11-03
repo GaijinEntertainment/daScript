@@ -51,9 +51,11 @@ def test_macro_dep_invalidate(t : T?) {
     fwrite(dep, "content v2 - re-minted")
     var changed : string
     let changedRc = env_run(dep, cmd, changed)
+    let registeredDep = (get_platform_name() == "windows"
+        ? get_full_file_name(dep) : dep)
     var chOk = report_child(t, "changed", changedRc, changed, "ser: macro dependency changed")
     chOk = report_child(t, "changed", changedRc, changed,
-        "(macro dependency '{get_full_file_name(dep)}' changed)\n") && chOk
+        "(macro dependency '{registeredDep}' changed)\n") && chOk
     if (find(changed, "deser: clean") >= 0) {
         t |> failure("changed run still served the stale record from the cache")
         chOk = false
