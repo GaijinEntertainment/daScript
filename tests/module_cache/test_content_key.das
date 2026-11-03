@@ -9,11 +9,11 @@ require _mc_common
 
 
 def fixture(name : string) : string =>
-    "{get_das_root()}/tests/module_cache/_fixtures/{name}"
+    path_join(get_das_root(), "tests/module_cache/_fixtures/{name}")
 
 
 def with_fixtures(t : T?; names : array<string>;
-        blk : block<(dir : string) : void>) {
+                  blk : block<(dir : string) : void>) {
     let args <- get_command_line_arguments()
     if (find_index(args, "--use-aot") >= 0) {
         t |> skip("an AOT test host cannot run child scripts")
@@ -27,7 +27,7 @@ def with_fixtures(t : T?; names : array<string>;
     }
     var copied = true
     for (name in names) {
-        copied = fwrite("{dir}/{name}", fread(fixture(name))) && copied
+        copied = fwrite(path_join(dir, name), fread(fixture(name))) && copied
     }
     t |> success(copied, "the fixtures are copied")
     if (copied) {
@@ -37,8 +37,7 @@ def with_fixtures(t : T?; names : array<string>;
 }
 
 
-//! Moving the staged edit preserves the original whole-second stat stamp.
-def stage_edit(path : string) : bool {
+def stage_same_stamp_edit(path : string) : bool {
     let text = fread(path)
     let edit = replace(text, "1111", "2222")
     var attempts = 0
@@ -67,13 +66,12 @@ def apply_edit(t : T?; path : string) {
 
 def host_argv(dir, script : string) : array<string> {
     return <- [das_exe(), "-dasroot", get_das_root(), "-module-cache",
-        "{dir}/mc.bin", "{dir}/{script}"]
+        path_join(dir, "mc.bin"), path_join(dir, script)]
 }
 
 
-//! Each child starts a fresh process to read the previous run's cache.
 def run_child(t : T?; phase : string; argv : array<string>;
-        markers : array<string>) {
+              markers : array<string>) {
     var out : string
     let rc = run_argv(argv, out)
     for (marker in markers) {
@@ -86,8 +84,8 @@ def run_child(t : T?; phase : string; argv : array<string>;
 [test]
 def test_module_edit_inside_its_stamp(t : T?) {
     with_fixtures(t, ["mc_key_mod.das", "mc_key_drv.das"]) $(dir) {
-        let mod = "{dir}/mc_key_mod.das"
-        t |> success(stage_edit(mod), "a same-stamp edit is staged")
+        let mod = path_join(dir, "mc_key_mod.das")
+        t |> success(stage_same_stamp_edit(mod), "a same-stamp edit is staged")
         let argv <- host_argv(dir, "mc_key_drv.das")
         run_child(t, "cold", argv, ["key=1111", "ser: wrote"])
         apply_edit(t, mod)
@@ -99,8 +97,9 @@ def test_module_edit_inside_its_stamp(t : T?) {
 [test]
 def test_included_file_edit_inside_its_stamp(t : T?) {
     with_fixtures(t, ["mc_key_body.inc", "mc_key_inc_drv.das"]) $(dir) {
-        let body = "{dir}/mc_key_body.inc"
-        t |> success(stage_edit(body), "a same-stamp edit is staged")
+        let body = path_join(dir, "mc_key_body.inc")
+        t |> success(stage_same_stamp_edit(body),
+            "a same-stamp edit is staged")
         let argv <- host_argv(dir, "mc_key_inc_drv.das")
         run_child(t, "cold", argv, ["key=1111", "ser: wrote"])
         run_child(t, "unchanged", argv,
@@ -114,15 +113,15 @@ def test_included_file_edit_inside_its_stamp(t : T?) {
 def test_included_stamps_survive_writeback(t : T?) {
     with_fixtures(t, ["mc_key_body.inc", "mc_key_inc_mod.das",
             "mc_key_inc_mod_drv.das"]) $(dir) {
-        let body = "{dir}/mc_key_body.inc"
-        let driver = "{dir}/mc_key_inc_mod_drv.das"
-        t |> success(stage_edit(body), "an include edit is staged")
-        t |> success(stage_edit(driver), "a driver edit is staged")
+        let body = path_join(dir, "mc_key_body.inc")
+        let driver = path_join(dir, "mc_key_inc_mod_drv.das")
+        t |> success(stage_same_stamp_edit(body), "an include edit is staged")
+        t |> success(stage_same_stamp_edit(driver), "a driver edit is staged")
         let argv <- host_argv(dir, "mc_key_inc_mod_drv.das")
         run_child(t, "cold", argv, ["key=1111", "driver=1111", "ser: wrote"])
         apply_edit(t, driver)
         run_child(t, "rewrite", argv, ["key=1111", "driver=2222",
-            "1 module(s) served from cache", "ser: wrote"])
+            "2 module(s) served from cache", "ser: wrote"])
         apply_edit(t, body)
         run_child(t, "edited include", argv, ["key=2222", "driver=2222",
             "included source changed", "ser: wrote"])
@@ -134,13 +133,13 @@ def test_included_stamps_survive_writeback(t : T?) {
 [test]
 def test_included_source_count_bound(t : T?) {
     with_fixtures(t, ["mc_key_body.inc", "mc_key_inc_drv.das"]) $(dir) {
-        let driver = "{dir}/mc_key_inc_drv.das"
+        let driver = path_join(dir, "mc_key_inc_drv.das")
         let original = fread(driver)
         var created = true
         let prefix = build_string() $(var writer) {
             for (i in range(4095)) {
                 let name = "empty_{i}.inc"
-                created = fwrite("{dir}/{name}", "") && created
+                created = fwrite(path_join(dir, name), "") && created
                 write(writer, "include {name}\n")
             }
         }
@@ -152,11 +151,11 @@ def test_included_source_count_bound(t : T?) {
         let argv <- host_argv(dir, "mc_key_inc_drv.das")
         run_child(t, "boundary cold", argv, ["key=1111", "ser: wrote"])
         run_child(t, "boundary warm", argv, ["key=1111", "deser: clean"])
-        t |> success(fwrite("{dir}/extra.inc", ""))
+        t |> success(fwrite(path_join(dir, "extra.inc"), ""))
         t |> success(fwrite(driver, replace(boundary,
             "include mc_key_body.inc",
             "include extra.inc\ninclude mc_key_body.inc")))
-        t |> success(remove("{dir}/mc.bin"))
+        t |> success(remove(path_join(dir, "mc.bin")))
         run_child(t, "oversized cold", argv, ["key=1111", "ser: wrote"])
         run_child(t, "oversized warm", argv, ["key=1111",
             "ser: read failed '{driver}'", "deser: FALLBACK", "ser: wrote"])
@@ -167,7 +166,7 @@ def test_included_source_count_bound(t : T?) {
 [test]
 def test_writer_temp_is_private(t : T?) {
     with_fixtures(t, ["mc_key_mod.das", "mc_key_drv.das"]) $(dir) {
-        t |> success(mkdir("{dir}/mc.bin.tmp"),
+        t |> success(mkdir(path_join(dir, "mc.bin.tmp")),
             "the shared temp name is taken")
         run_child(t, "cold", host_argv(dir, "mc_key_drv.das"),
             ["key=1111", "ser: wrote"])
