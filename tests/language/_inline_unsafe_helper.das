@@ -66,7 +66,7 @@ def auto_inline_visibility_root() : string {
     var error : string
     let root = temp_directory(error)
     if (!empty(error)) {
-        panic("cannot create temporary directory: {error}")
+        panic("cannot query temporary directory: {error}")
     }
     return root
 }
