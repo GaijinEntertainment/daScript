@@ -285,7 +285,7 @@ struct public MetalEnv {
     @clarg_doc = "Serve the non-causal media span on the prefill driver (AttnArgs.uend); 0 declines it to the CPU arm, which then needs declared CPU intent."
     span : bool = true
 
-    @clarg_doc = "Serve tower/embedder encodes on the Metal tower driver - the gemma4uv chain, the gemma4v ViT and gemma3v SigLIP block loops (their exact-plane lanes), the whisper-class block loops, the gemma4a Conformer and the canary / parakeet FastConformer block loops (their f32 lanes), the whole StyleTTS2 (kitten / kokoro) synthesis - PL-BERT, the text and duration encoders, the duration head, prosody, the decoder, the harmonic source, the generator and the inverse STFT - on both weight lanes, the Pocket TTS codec and frame loop, the conv frontends (whisper im2col + the qwen3a conv2d, which serves the q8 default), the GigaAM encode and CTC head (both weight lanes: the f16 halfwords, the q8 slab), and the silero VAD seat; 0 pins the CPU tower."
+    @clarg_doc = "Serve tower/embedder encodes on the Metal tower driver - the gemma4uv chain, the gemma4v ViT and gemma3v SigLIP block loops (their exact-plane lanes), the whisper-class block loops, the gemma4a Conformer and the canary / parakeet FastConformer block loops (their f32 lanes), the whole StyleTTS2 (kitten / kokoro) synthesis - PL-BERT, the text and duration encoders, the duration head, prosody, the decoder, the harmonic source, the generator and the inverse STFT - on both weight lanes, the Pocket TTS codec and frame loop, the conv frontends (whisper im2col + the qwen3a conv2d, which serves the q8 default), the GigaAM encode and CTC head (all three weight lanes: the f16 halfwords, the q8 slab, the kq lane's own planes), and the silero VAD seat; 0 loads each family's CPU image, the lane whole on the CPU."
     tower : bool = true
 
     @clarg_doc = "Serve a tower's weighted GEMMs from a halfword twin of its weights on the crowned tensor mul_mm twins: the image's baked f16 twin plane where the mint bakes one (only for f16-sourced GEMMs, so it holds the file's own values), and the FastConformer chain's device twin of parakeet's f32 blob. Needs a tensor crown - a box without one, or an image without the plane, keeps the f32 route; 0 pins the f32 GEMM route - the A/B rail."
@@ -294,13 +294,16 @@ struct public MetalEnv {
     @clarg_doc = "Serve head-72 tower attention at %64 canvases on the lifted flash kernel (no score slab, no rowstat pass, no head restrides - the gemma3v-geometry ViTs); 0 pins the three-pass slab - the A/B rail."
     tower_flash : bool = true
 
-    @clarg_doc = "Serve the whisper decoder side (cross-KV; the decode step under wdec_step) on the Metal ASR-decoder driver; 0 pins the CPU decoder."
+    @clarg_doc = "Serve the whisper decoder side (cross-KV; the decode step under wdec_step) on the Metal ASR-decoder driver; 0 loads the lane's CPU image, the whole lane on the CPU."
     wdec : bool = true
 
-    @clarg_doc = "Serve the whisper DECODE STEP on the GPU too (needs wdec). Small decoders (n_text_state under the 512 floor; set_metal_wdec_step_min_d) keep the CPU rail - the per-dispatch latency floor beats them."
+    @clarg_doc = "Serve the whisper DECODE STEP on the GPU too (needs wdec); 0 loads the lane's CPU image, the whole lane on the CPU."
     wdec_step : bool = true
 
-    @clarg_doc = "Serve the transducer greedy decode (parakeet, GigaAM's RNNT head) on the Metal ASR-decoder driver: the joint's encoder projection off the encode's device rows and the whole loop in command buffers of rounds, the tokens read back once; 0 pins the CPU decoder - the A/B rail."
+    @clarg_doc = "Bake a whisper decoder narrower than 512 (tiny) into its Metal image with the decode STEP on the CPU - the device step's per-dispatch latency loses at that width; cross-KV stays on the device; that image is its own file (`-cstep`), keyed on the box's CPU configuration. 0 bakes the step onto the device at every width - the A/B rail."
+    wdec_small_cpu : bool = true
+
+    @clarg_doc = "Serve the transducer greedy decode (parakeet, GigaAM's RNNT head) on the Metal ASR-decoder driver: the joint's encoder projection off the encode's device rows and the whole loop in command buffers of rounds, the tokens read back once; 0 pins the CPU decoder on a CPU image - the A/B rail - while a Metal image's decode refuses: the image never runs on the CPU."
     rnnt : bool = true
 
     @clarg_doc = "Fused single-pass decode attention (a head of 64, 96, 128, 256 or 512 on every KV codec; sliding windows, attention sinks, the logit soft cap and a second head class included), on the single row, the speculative verify's rows and the batch; 0 is the A/B rail to the chunked pair."
@@ -500,16 +503,16 @@ struct public VulkanEnv {
     @clarg_doc = "Vulkan flash attention: the decode fa kernel pick AND the cm2 prefill fa tile; 0 falls back to the chunked/scalar paths."
     vk_fa : bool = true
 
-    @clarg_doc = "Serve the vision towers' block loops (gemma4v, gemma3v, qwen3v, qwen25v), the audio towers' (the whisper-class towers, gemma4a, canary) and the TTS seats (the StyleTTS2 families kitten and kokoro, Pocket) on the Vulkan tower and TTS drivers - the announce is `dasLLAMA vulkan tower: <family> serves on the device`, once per model when it first serves; 0 pins the CPU chains, announced once as the knob decline."
+    @clarg_doc = "Serve the vision towers' block loops (gemma4v, gemma3v, qwen3v, qwen25v), the audio towers' (the whisper-class towers, gemma4a, canary) and the TTS seats (the StyleTTS2 families kitten and kokoro, Pocket) on the Vulkan tower and TTS drivers - the announce is `dasLLAMA vulkan tower: <family> serves on the device`, once per model when it first serves; 0 loads every tower lane's CPU image, the whole lane on the CPU."
     vk_tower : bool = true
 
-    @clarg_doc = "GigaAM's lane policy on the Vulkan tower: 1 prefers the exact lane - the block GEMMs on the f16 GEMM over the carrier's own halfwords - over the q8 image for an un-pinned load; 0 (the default, until the two lanes are timed on a Vulkan box) keeps the q8 image. Both lanes serve on the device; the family's lane pin overrides it, `set_vulkan_gigaam_exact_lane` is the in-process lever."
+    @clarg_doc = "GigaAM's lane policy on the Vulkan tower: 1 prefers the exact lane - the block GEMMs on the f16 GEMM over the carrier's own halfwords - over the q8 image for an un-pinned load; 0 (the default, until the two lanes are timed on a Vulkan box) keeps the q8 image. Both lanes serve on the device on the f16 GEMM feed alone (off it, every lane loads the CPU image); the family's lane pin overrides it, `set_vulkan_gigaam_exact_lane` is the in-process lever."
     vk_gigaam_exact : bool = false
 
-    @clarg_doc = "Serve the whisper decoder side (the per-window cross-KV and the decode step) on the Vulkan ASR-decoder driver - the announce is `dasLLAMA vulkan wdec: the whisper decoder serves on the device`, once per model; 0 pins the CPU decoder, announced once as the knob decline."
+    @clarg_doc = "Serve the whisper decoder side (the per-window cross-KV and the decode step) on the Vulkan ASR-decoder driver - the announce is `dasLLAMA vulkan wdec: the whisper decoder serves on the device`, once per model; 0 loads the lane's CPU image, the whole lane on the CPU."
     vk_wdec : bool = true
 
-    @clarg_doc = "Serve the transducer greedy decode (parakeet, GigaAM's RNNT head) on the Vulkan ASR-decoder driver: the joint's encoder projection off the encode's device rows where the lane's projection is f32, and the whole loop in command buffers of rounds, the tokens read back once; 0 pins the CPU decoder - the A/B rail."
+    @clarg_doc = "Serve the transducer greedy decode (parakeet, GigaAM's RNNT head) on the Vulkan ASR-decoder driver: the joint's encoder projection off the encode's device rows where the lane's projection is f32, and the whole loop in command buffers of rounds, the tokens read back once; 0 pins the CPU decoder on a CPU image - the A/B rail - while a Vulkan image's decode refuses: the image never runs on the CPU."
     vk_rnnt : bool = true
 
     @clarg_doc = "Merged k|v prefill GEMM - one dispatch over the adjacent k+v arena planes; 0 pins the split k + v dispatches for a same-build A/B."

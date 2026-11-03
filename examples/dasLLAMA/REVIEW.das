@@ -40,7 +40,8 @@ def private created_stream_name(line : string) : string {
 }
 
 // a stream popped in a loop needs a producer on its books, or the pop answers empty at once
-// and the loop spins (ARCHITECTURE.md sec. 3.2); a thread pops the stream under another name,
+// and the loop spins (ARCHITECTURE.md#speech-thread-stream); a thread pops the stream
+// under another name,
 // so every created stream books one, whichever side pops it
 def private check_created_streams(path : string) {
     let text = fread(path)

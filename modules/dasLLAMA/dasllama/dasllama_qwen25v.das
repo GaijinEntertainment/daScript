@@ -200,7 +200,7 @@ let private Q25V_BLK_GEMM_NAMES <- [ "attn_q", "attn_k", "attn_v", "attn_out", "
 
 // every block/merger GEMM tensor the halfword twin route serves. A sample of two would let a
 // mixed file bake a twin the route reads as one type.
-[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
+[arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane")]
 def private q25v_gemm_types_uniform(m : GGUFMeta; n_layer : int64; gt : int) : bool {
     if (gguf_tensor_type(m, "mm.0.weight") != gt || gguf_tensor_type(m, "mm.2.weight") != gt) {
         return false
@@ -314,7 +314,7 @@ def private q25v_read_planes(m : GGUFMeta; bytes : array<uint8> | #; var st : Qw
 }
 
 //! Read the tower off an mmproj gguf into owned staging arrays — the mint side of the image rail.
-[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
+[arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane")]
 def stage_qwen25v_tower(path : string) : Qwen25vStaging {
     var st = Qwen25vStaging()
     let f = fopen(path, "rb")

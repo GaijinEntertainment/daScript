@@ -178,6 +178,29 @@ is the ASR cells' encode wall. The GPU seats' decline helpers (`rd_decline`, `rv
 `[cold_path]` whole, with no unmarked key check split off ahead of them: each runs only on the call the seat hands back to
 the CPU, and none holds a check a serving call passes through.
 
+### The hot-path checklist's call-graph terms {#hot-path-terms}
+
+`REVIEW_HOT_PATH.md` keeps a short form of each term; the full boundary is here.
+
+- **Calls** - a function calls another when its body names that function in a call, a call
+  written inside a block or lambda literal included; the function that encloses the literal is the
+  caller. An `invoke` through a seat or a function value names no function and calls none.
+- **Reaches** - a function reaches another when it calls it, or calls a function that reaches it.
+- **Serving step** - one unit of work the runtime repeats inside one request it serves: a token, a
+  prefill quantum (one batch of prompt tokens the prefill path processes in a single pass), one
+  encoded media input of that request (an image, a video frame, an audio chunk; a clip one call
+  encodes whole is one input), or one synthesized speech chunk or frame.
+- **Runs under** - a function runs under another when that one reaches it, or reaches the `invoke`
+  that runs it.
+- **Seat** - a module-level variable holding a function, filled through a public setter.
+- **Region entry** - the outermost function the runtime re-enters once per serving step, and any
+  function a serving step runs through a function value - one a seat or a kernel-backend override
+  registration stores, after its declaration, for the runtime to call through - where no
+  `[hot_path]`, contract or `[cold_path]` function reaches the `invoke`.
+- **Interior function** - a function, not itself a region entry, that has at least one caller under
+  `dasllama/` a serving step reaches, and whose every such caller the runtime re-enters once per
+  serving step.
+
 ### The post-CPU-burn GPU ramp and the residency heartbeat {#the-post-cpu-burn-gpu-ramp-and}
 
 After a CPU-only phase, the first Metal submission runs degraded. The cost is paid once per idle

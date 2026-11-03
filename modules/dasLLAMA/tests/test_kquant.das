@@ -739,11 +739,7 @@ def test_kq_dots(t : T?) {
     }
 }
 
-// Portable multi-row GEMV gate: matmul_kq (the disk-order kq_gemv_kernel rail — what a
-// kq-tagged model runs when the backend has no kq stamps) must bit-match the per-row disk
-// dots. Guards the k*_rows_kernel PER-ROW plane strides, which the single-superblock dot
-// gate above never exercises (a k4 scale-row stride miss shipped when K4_SSB went 32 -> 20:
-// row 0 dotted clean, every later row read the wrong scale rows).
+//! matmul_kq at one token (the disk-order kq_gemm_kernel rail) bit-matches the per-row disk dots: it holds the per-row plane strides - a scale-row stride error reads every row past row 0 off the wrong scale rows - which the single-superblock dot gate never exercises
 def private kq_gemv_rows_gate(t : T?; fmt : int; n : int64 = 512l) {
     let d = 8l
     let nsb = n / 256l
@@ -771,6 +767,63 @@ def test_kq_gemv_rows(t : T?) {
         for (nn in fixed_array(512l, 1024l, 3072l)) {
             t |> run("portable {kf} GEMV rows bit-match per-row disk dots at n={int(nn)}") @(t : T?) {
                 kq_gemv_rows_gate(t, fmt, nn)
+            }
+        }
+    }
+}
+
+//! the disk-order batch GEMM (`matmul_kq_rows_at` off unrepacked planes) bit-matches the GEMV run a token at a time: a token's activation offsets and its output row are what this gate holds
+def private kq_gemm_disk_gate(t : T?; fmt : int; n : int64 = 512l) {
+    let d = 8l
+    let ntok = 3l
+    let nsb = n / 256l
+    let nh = n / Q8K_SUM_ELEMS
+    var inscope kq, ks : array<uint8>
+    synth_kq_region(fmt, kq, ks, d, n, 0x9E3779Bu, 0x85EBCA6Bu)
+    var inscope x <- build_q8k_acts(ntok, n, Wave(a = 1.1, fa = 0.31, b = 0.5, fb = 0.043))
+    var inscope y <- nan_plane(int(d * ntok))
+    unsafe {
+        matmul_kq_rows_at(fmt, false, addr(y[0]), addr(kq[0]), addr(ks[0]), addr(x.xq[0]), addr(x.xs[0]), addr(x.xbs[0]), n, d, ntok)
+    }
+    var inscope want <- nan_plane(int(d * ntok))
+    for (tk in range64(ntok)) {
+        var inscope row <- nan_plane(int(d))
+        unsafe {
+            matmul_kq_rows_at(fmt, false, addr(row[0]), addr(kq[0]), addr(ks[0]), addr(x.xq[tk * n]), addr(x.xs[tk * nsb]), addr(x.xbs[tk * nh]), n, d, 1l)
+        }
+        for (r in range64(d)) {
+            want[tk * d + r] = row[r]
+        }
+    }
+    let kf = kq_fmt_of_id(fmt, "kq_gemm_disk_gate")
+    check(t, "portable {kf} disk-order batch GEMM against the GEMV a token at a time", y, want, BAR_EXACT, FLAT_SHAPE)
+    // and against an fp64 dot over the plane dequant, a truth no kernel computes
+    var inscope w <- plane_dequant(kf, kq, ks, d, n)
+    var inscope ref <- [for (o in range64(ntok * d)); kq_disk_ref(w, x, o / d, o % d, n, nsb)]
+    check(t, "portable {kf} disk-order batch GEMM against the fp64 plane-dequant reference", y, ref, KQ_DISK_FP64_BAR, FLAT_SHAPE)
+}
+
+//! The kernel's sub-block dots are exact int32 sums, scaled and added in f32: at most n / 16 = 192 f32 terms at n = 3072, so its
+//! rounding stays within 192 * 2^-24 (1.1e-5) of the terms' magnitude sum - 1e-4 of the reference's largest output leaves the
+//! terms' sum up to nine times that output; the poisoned expectation moves a fifth of that largest output.
+let private KQ_DISK_FP64_BAR = Bar(kind = BarKind.rel_of_max, rel = 1e-4, poison = 0.2, poison_of_max = true)
+
+//! output `r` of token `tk`: the fp64 dot of the dequantized plane row against the token's Q8_K activation
+def private kq_disk_ref(w : array<float>; x : Q8kActs; tk, r, n, nsb : int64) : float {
+    var acc = 0.0lf
+    for (i in range64(n)) {
+        acc += double(w[r * n + i]) * double(x.xq[tk * n + i]) * double(x.xs[tk * nsb + i / KQ_SB_ELEMS])
+    }
+    return float(acc)
+}
+
+[test]
+def test_kq_gemm_disk_batch(t : T?) {
+    for (fmt in KQ_IDS) {
+        let kf = kq_fmt_of_id(fmt, "test_kq_gemm_disk_batch")
+        for (nn in fixed_array(512l, 1024l, 3072l)) {
+            t |> run("portable {kf} disk-order batch GEMM bit-matches the GEMV a token at a time at n={int(nn)}") @(t : T?) {
+                kq_gemm_disk_gate(t, fmt, nn)
             }
         }
     }
@@ -1242,6 +1295,36 @@ def private load_kq_native(t : T?; file : string; pin_portable, q40 : bool; blk 
     delete tr
 }
 
+//! `mm_b_kq` over disk-order planes - the portable batch kernel - bit for bit the per-position GEMV (`mm_at_kq_pre`):
+//! blk.0.attn_q's first 64 rows over four positions
+def private mm_b_kq_disk_cell(t : T?; tr : Model) {
+    let n = tr.config.dim
+    let d = 64l
+    let npos = 4l
+    let fmt = tr.wq_fmt[0]
+    let woff = tr.wq_offs[0]
+    var inscope x <- [for (k in range64(npos * n)); float((k * 37l) % 255l - 127l) * 0.01]
+    var s <- create_session(tr, mirror_kv_dtype())
+    forward_prefill_alloc(tr, s, npos, 0l)
+    var inscope y <- nan_plane(int(npos * d))
+    mm_b_kq(s, y, tr, fmt, woff, x, n, d, npos)
+    delete s
+    var inscope want <- nan_plane(int(npos * d))
+    var inscope xq : array<int8>
+    var inscope xs : array<float>
+    var inscope xbs : array<int>
+    xq |> resize(n)
+    xs |> resize(n / 256l)
+    xbs |> resize(n / 16l)
+    for (p in range64(npos)) {
+        unsafe {
+            quantize_q8_k_into_ptr(addr<float const?>(x[p * n]), n, addr(xq[0]), addr(xs[0]), addr(xbs[0]), 0l, 0l, 0l)
+        }
+        mm_at_kq_pre(want, tr, fmt, woff, xq, xs, xbs, n, d, p * d)
+    }
+    check(t, "{fmt} attn_q rows through mm_b_kq on disk-order planes against the per-position GEMV", y, want, BAR_EXACT, Shape(row_width = int(d)))
+}
+
 //! the per-tensor scale reaches the CPU matmul's epilogue: eight rows of blk.0.ffn_down through `mm_b_kq` against the file
 //! dequant's dot times the site scale, x on the int lattice so the Q8 activation step is exact
 def private check_nv4_site_scale_epilogue(t : T?; tr : Model; fdq : array<float>) {
@@ -1250,6 +1333,7 @@ def private check_nv4_site_scale_epilogue(t : T?; tr : Model; fdq : array<float>
     var y : array<float>
     y |> resize(8l)
     var s <- create_session(tr, mirror_kv_dtype())
+    forward_prefill_alloc(tr, s, 1l, 0l)
     mm_b_kq(s, y, tr, KqFmt.nv4, tr.w2_offs[0], x, cols, 8l, 1l)
     delete s
     let sc = site_scale(tr, KqFmt.nv4, tr.w2_offs[0])
@@ -1300,6 +1384,7 @@ def test_kq_load_layout(t : T?) {
             check(t, "k6 classifier plane against the file dequant", have, fdq6, BAR_EXACT, FLAT_SHAPE)
             delete fdq6
             delete have
+            mm_b_kq_disk_cell(t, tr)
         }
     }
     t |> run("nv4 load tags the NVFP4 planes, reads their per-tensor scales and places them at their cursor offsets (Qwen3.5-0.8B NVFP4)") @(t : T?) {

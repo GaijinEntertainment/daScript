@@ -33,6 +33,7 @@ require daslib/cmp
 
 struct public MslEmitConfig {
     kernel_name : string    // "" -> the method name (class-prefix stripped)
+    max_threads : int       // > 0: the entry's [[max_total_threads_per_threadgroup(N)]]; 0 none
     float_a_ok : bool       // licenses a FLOAT A operand in tmm2d forms (the deliberate f32-X
                             // fallback stamps) — unlicensed float A is a compile error: the half
                             // twin is measured 8-11% faster per GEMM (matmul2d native half path)
@@ -3752,8 +3753,15 @@ def public generate_msl(fn : FunctionPtr; var errors : array<string>; cfg : MslE
             }
         }
     }
+    var entry_attr = ""
+    if (cfg.max_threads > 0) {
+        note(ctx, "kernel.max_threads")
+        entry_attr = "[[max_total_threads_per_threadgroup({cfg.max_threads})]] "
+    }
+    let entry_name = kernel_entry_name(fn, cfg)
     let chunks = [
-        "#include <metal_stdlib>\nusing namespace metal;\n{mpp_include}{helper_text}{user_fn_text}kernel void {kernel_entry_name(fn, cfg)}(",
+        "#include <metal_stdlib>\nusing namespace metal;\n{mpp_include}{helper_text}{user_fn_text}",
+        "{entry_attr}kernel void {entry_name}(",
         join(params, ",\n        "),
         ") \{\n",
         empty(tg_lines) ? "" : join(tg_lines, "\n") + "\n",

@@ -8,9 +8,9 @@ docs: `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_RUNTIME.md`, `ARCHITECTURE_TTS.md`
 `FACADE_FILES` lists - each new overload, and each def a diff adds a parameter to, included - is
 called with that overload's argument types in runnable code (not a comment or a passing mention)
 in a `tutorials/dasLLAMA/*.das` source, and narrated on a
-`doc/source/reference/tutorials/dasLLAMA_*.rst` page.** A def no user program calls - the runtime,
-a loader chain, the scheduler, a server or a bench calls it - is a row of `REVIEW.das`'s
-`FACADE_DEFS_WITHOUT_TUTORIAL`, the gate's ledger.
+`doc/source/reference/tutorials/dasLLAMA_*.rst` page.** A def that only engine code, this module's
+tests, or an in-repo tool calls is a row of `REVIEW.das`'s `FACADE_DEFS_WITHOUT_TUTORIAL`, the
+gate's ledger.
 
 **A diff that adds a `public` require, or makes a require `public`, in `dasllama/dasllama.das`
 or in a file `dasllama/dasllama.das` reaches through `public` requires only, adds the required

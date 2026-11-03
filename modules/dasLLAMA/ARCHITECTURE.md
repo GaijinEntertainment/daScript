@@ -42,6 +42,8 @@ any sibling companion that sends a reader to it.
   only `dim` field (`ARCHITECTURE_ENGINE_FORMATS.md#model-plane-table-dim`).
 - `ARCHITECTURE_ENGINE_FORMATS_NV4.md` - the nv4 member: its planes as NVFP4's disk bytes in the k4
   tiling (`#nv4-planes`) and the per-tensor scale beside them (`#nv4-site-scale`).
+- `ARCHITECTURE_ENGINE_FORMATS_TERMS.md` - the weight-format terms: a site, a lever and a converted
+  copy (`ARCHITECTURE_ENGINE_FORMATS_TERMS.md#kq-format-terms`).
 - `ARCHITECTURE_GPU.md` - the GPU backend role table (`ARCHITECTURE_GPU.md#gpu-backends`).
 - `ARCHITECTURE_GPU_ASYMMETRIES.md` - the closed list of the allowed asymmetries between the
   GPU backends - Metal, Vulkan and CUDA (`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`).
@@ -76,11 +78,15 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   trimmed lane, the walk's decline
 - `ARCHITECTURE_IMAGE_LEDGER.md` - the image rail's ledgered cases: the assistant drafter's non-image lane and the suite
   cells that mint a model image by design
-- `ARCHITECTURE_IMAGE.md` - the prepared-image rail, the baked dev-W f16 plane, the lattice-only
-  per-format plane table both halves of the rail skip around, the baked tower twin-W plane, the
+- `ARCHITECTURE_CELL_BARS.md` - the kernel cells' bars re-derived from a measured cause: the StyleTTS2 source's noise draw
+  floor and the inverse STFT's envelope bar
+- `ARCHITECTURE_IMAGE_GPU_PLANES.md` - the planes a mint bakes for a GPU route: the dev-W f16 panel plane, the tower
+  twin-W plane, a GPU-flavored tower image's device block and the Metal whisper image's decode step baked onto the CPU
+- `ARCHITECTURE_IMAGE.md` - the prepared-image rail, the lattice-only
+  per-format plane table both halves of the rail skip around, the
   layout stamp `REVIEW.das` keeps over the byte-placing code, the meta-field tripwire every
-  struct serializer opens with, the planar-vs-blob flavor rebake, and the per-format slots the
-  interleave identity prints.
+  struct serializer opens with, the planar-vs-blob flavor rebake, the per-format slots the
+  interleave identity prints, and a mint to a user-named destination.
 - `ARCHITECTURE_GPU_RACE_SHAPES.md` - the tensor-GEMM and fused-attention shapes that measured
   out, the retained reference arms beside them, and the sanctioned float-A stamps.
 - `ARCHITECTURE_GPU_TOWER.md` - the Metal tower attention routes, the Metal tower driver's
@@ -100,7 +106,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   and tails of gemma4uv, gemma4v, gemma3v, qwen3v and qwen25v on both weight lanes, and the lane policy's
   Vulkan default.
 - `ARCHITECTURE_GPU_QUANT_PLANES.md` - the Metal kq split scale plane, the iquant GEMV grid read
-  with its f4-slab twin, and the Metal GEMV site abstraction.
+  with its f4-slab twin, the Metal GEMV site abstraction, the per-32 small-batch form, and the
+  form matrix every Metal GEMM stamp family keeps (`ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-form-matrix`).
 - `ARCHITECTURE_GPU_BATCH.md` - the per-layer FFN widths on the Metal drivers and the Vulkan
   whole-model driver, and the Metal batch driver's row shapes - the E-series rows, a MoE's shared
   expert, a deltanet hybrid's recurrent rows, and the split single-pass attention the single row
@@ -210,16 +217,18 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   under, and the decode layer encoder.
 - `ARCHITECTURE_GPU_MTP_DECODE_PICK.md` - the single-row driver's greedy chain and the Metal
   selection landing.
-- `ARCHITECTURE_RUNTIME.md` - kernel shape, caches, lint policy, knobs, coverage, the GPU ramp.
+- `ARCHITECTURE_RUNTIME.md` - kernel shape, caches, lint policy, knobs, hot-path coverage and its
+  call-graph terms, the GPU ramp.
 - `ARCHITECTURE_RUNTIME_JOBQUE.md` - the hybrid worker pool, the MoE region split, the job queue
   the engine dispatches on, and the mode that dispatches to none.
 - `ARCHITECTURE_MEDIA.md` - the padded tower GEMM widths, the family GPU hooks, the tower weight
-  lane, and the plain-Model ASR decoders.
+  lane.
 - `ARCHITECTURE_MEDIA_ASR.md` - the ASR families' mechanisms - the facade's carrier sniff order, the
   oracle a family is specified by, the family's tokens, language and long-form policy, the GigaAM
   Conformer chain's log-mel (`ARCHITECTURE_MEDIA_ASR.md#gigaam-log-mel`), rotary input and planes, and
   the shared transducer's decode step (`ARCHITECTURE_MEDIA_ASR.md#rnnt-decode-step`) and its device loop
-  (`ARCHITECTURE_MEDIA_ASR.md#rnnt-device-decode`).
+  (`ARCHITECTURE_MEDIA_ASR.md#rnnt-device-decode`), and the plain-Model ASR decoders
+  (`ARCHITECTURE_MEDIA_ASR.md#asr-decoder-session`).
 - `ARCHITECTURE_MEASUREMENT.md` - the benchmark rig, the tune gate, the sanctioned
   instrumentation rails, the `[tuned]` perm precedence, the mint wall in the sidecar's provenance,
   the audio outlier rule, the parity fixture's prefix bar, the committed records gate, and the
@@ -232,8 +241,9 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   (`ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs`), the MLX ASR reference, the TTS reference
   instrument (`ARCHITECTURE_MEASUREMENT_AUDIO.md#the-tts-reference-instrument`), and its CUDA
   provider and g2p-venv runs.
-- `ARCHITECTURE_MEASUREMENT_RELEASE.md` - where a between-release kernel change's board rows land
-  (`ARCHITECTURE_MEASUREMENT_RELEASE.md#board-rows-release-boundary`).
+- `ARCHITECTURE_MEASUREMENT_RELEASE.md` - the measurement checklist's vocabulary
+  (`ARCHITECTURE_MEASUREMENT_RELEASE.md#measurement-vocabulary`), and where a between-release kernel
+  change's board rows land (`ARCHITECTURE_MEASUREMENT_RELEASE.md#board-rows-release-boundary`).
 - `ARCHITECTURE_MEASUREMENT_FAT_START.md` - a fat exe's first-start race and its per-user
   sidecar (`ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`), and the per-box runtime
   file a run with no sidecar of its own races into

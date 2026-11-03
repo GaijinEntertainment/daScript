@@ -32,6 +32,9 @@ require dasllama/dasllama_math          // pin_backend_for_bake — bake-side, d
 require dasllama/dasllama_gpu_tier      // moe_gpu_bake_tag — bake-side, deliberately not facade
 require dasllama/dasllama_styletts2     // bake_styletts2_image — the TTS arm, bake-side, deliberately not facade
 require dasllama/dasllama_nmt           // load_nmt_model — the translation arm, bake-side
+require dasllama/dasllama_tower_image   // with_cpu_flavor — the planar bake's CPU image, bake-side
+require dasllama/dasllama_qwen3a        // set_qwen3a_q8 — the lane --quant names, bake-side
+require dasllama/dasllama_gemma4a       // set_gemma4a_q8 — the lane --quant names, bake-side
 require convert_sniff                    // sniff_asr_kind: what a source file carries
 require daslib/clargs
 require daslib/jobque_boost
@@ -113,6 +116,14 @@ def private sweep_stale_tmp(gguf : string) : int {
 
 // q is a REFERENCE — a plain `var q : QuantMode` is a workhorse-type copy and the caller
 // would never see the write (LINT003 caught exactly that)
+//! An `-o` naming the source itself - the source would read as an image already present, and `--force` would delete it
+def private out_is_source(cfg : ConvertArgs; out : string) : bool {
+    var err = ""
+    return false if (cfg.out == "" || !stat(out).is_valid || !equivalent(out, cfg.model, err))
+    to_log(LOG_ERROR, "dasllama-convert: -o '{out}' is the source - name another path\n")
+    return true
+}
+
 def private quant_from_string(s : string; var q : QuantMode&) : bool {
     if (s == "fp32") {
         q = QuantMode.fp32
@@ -183,35 +194,32 @@ def private convert_asr(cfg : ConvertArgs; kind : AsrCarrierKind; qm : QuantMode
         to_log(LOG_ERROR, "dasllama-convert: --trim/--stream apply to decoder GGUFs only\n")
         return 2
     }
-    if (cfg.out != "") {
-        to_log(LOG_ERROR, "dasllama-convert: -o is unsupported for ASR and translation sources - " +
-            "the image lands beside the source under its identity name\n")
-        return 2
-    }
     let q8 = qm == QuantMode.q8
     if (!q8 && qm != QuantMode.fp32) {
         to_log(LOG_ERROR, "dasllama-convert: ASR and translation sources bake q8 or fp32\n")
         return 2
     }
+    let gigaam_pinned = !q8   // fp32 pins the exact lane; q8 is the loader's un-pinned default - a quantized carrier takes the kq lane
     var tag = ""
     if (kind == AsrCarrierKind.whisper) {
         tag = q8 ? "whisper-q8" : "whisper-f32"
     } elif (kind == AsrCarrierKind.parakeet) {
         tag = q8 ? "parakeet-q8" : "parakeet-f32"
     } elif (kind == AsrCarrierKind.gigaam) {
-        tag = gigaam_image_tag(q8)   // the exact lane keeps the carrier's f16
+        tag = gigaam_lane_tag(cfg.model, q8, gigaam_pinned)
     } elif (kind == AsrCarrierKind.canary) {
         tag = q8 ? "canary-q8" : "canary-f32"
     } elif (kind == AsrCarrierKind.qwen3a) {
-        tag = "qwen3a-f32"
+        tag = q8 ? "qwen3a-q8" : "qwen3a-f32"
     } elif (kind == AsrCarrierKind.gemma4a) {
-        tag = "gemma4a-f32"
+        tag = q8 ? "gemma4a-q8" : "gemma4a-f32"
     } elif (kind == AsrCarrierKind.bergamot) {
         tag = nmt_image_tag(q8)
     } else {
         tag = q8 ? "tower-q8" : "tower-f32"
     }
-    let out = image_path_for(cfg.model, tag)
+    let out = cfg.out != "" ? cfg.out : image_path_for(cfg.model, tag)
+    return 2 if (out_is_source(cfg, out))
     to_log(LOG_INFO, "dasllama-convert: {cfg.model} ({kind})\n")
     to_log(LOG_INFO, "dasllama-convert:   -> {out}\n")
     to_log(LOG_INFO, "dasllama-convert:   identity {image_identity(tag)}\n")
@@ -231,28 +239,38 @@ def private convert_asr(cfg : ConvertArgs; kind : AsrCarrierKind; qm : QuantMode
     let ts = ref_time_ticks()
     with_job_que() {
         setup_dasllama_jobque()
-        // the family wrap loads eagerly on the miss and saves the image itself
-        if (kind == AsrCarrierKind.whisper) {
-            var inscope m <- load_whisper_model(cfg.model, q8)
-        } elif (kind == AsrCarrierKind.parakeet) {
-            var inscope m <- load_parakeet_model(cfg.model, q8)
-        } elif (kind == AsrCarrierKind.gigaam) {
-            var inscope m <- load_gigaam_model(cfg.model, q8)
-        } elif (kind == AsrCarrierKind.canary) {
-            var inscope m <- load_canary_encoder(cfg.model, q8)
-        } elif (kind == AsrCarrierKind.qwen3a) {
-            var inscope m <- load_qwen3a_tower(cfg.model)
-        } elif (kind == AsrCarrierKind.gemma4a) {
-            var inscope m <- load_gemma4a_encoder(cfg.model)
-        } elif (kind == AsrCarrierKind.bergamot) {
-            var inscope m <- load_nmt_model(cfg.model, q8)
-        } else {
-            var inscope m <- load_audio_tower(cfg.model, q8)
+        // the family wrap loads eagerly on the miss and saves the image itself - at -o's path where one was named; the planar
+        // flavor is the CPU image whatever the box's GPU drivers serve, and the lane the one --quant names
+        set_qwen3a_q8(q8)
+        set_gemma4a_q8(q8)
+        with_cpu_flavor() $ {
+            with_image_destination(cfg.out) $ {
+            if (kind == AsrCarrierKind.whisper) {
+                var inscope m <- load_whisper_model(cfg.model, q8)
+            } elif (kind == AsrCarrierKind.parakeet) {
+                var inscope m <- load_parakeet_model(cfg.model, q8)
+            } elif (kind == AsrCarrierKind.gigaam) {
+                var inscope m <- load_gigaam_model(cfg.model, q8, gigaam_pinned)
+            } elif (kind == AsrCarrierKind.canary) {
+                var inscope m <- load_canary_encoder(cfg.model, q8)
+            } elif (kind == AsrCarrierKind.qwen3a) {
+                var inscope m <- load_qwen3a_tower(cfg.model)
+            } elif (kind == AsrCarrierKind.gemma4a) {
+                var inscope m <- load_gemma4a_encoder(cfg.model)
+            } elif (kind == AsrCarrierKind.bergamot) {
+                var inscope m <- load_nmt_model(cfg.model, q8)
+            } else {
+                var inscope m <- load_audio_tower(cfg.model, q8)
+            }
+            }
         }
+        reset_qwen3a_q8()
+        reset_gemma4a_q8()
     }
     var st : FStat
     if (!stat(out, st)) {
-        to_log(LOG_ERROR, "dasllama-convert: '{out}' did not land — see the log above (DASLLAMA_IMAGE=0 set?)\n")
+        let hint = cfg.out == "" ? " (DASLLAMA_IMAGE=0 set?)" : ""
+        to_log(LOG_ERROR, "dasllama-convert: '{out}' did not land — see the log above{hint}\n")
         return 1
     }
     let total_ms = int64(get_time_usec(ts)) / 1000l
@@ -307,6 +325,7 @@ def private convert_tts(cfg : ConvertArgs; family : string; qm : QuantMode) : in
     }
     let tag = q8 ? ST2_IMAGE_TAG_Q8 : ST2_IMAGE_TAG
     let out = cfg.out != "" ? cfg.out : image_path_for(cfg.model, tag)
+    return 2 if (out_is_source(cfg, out))
     to_log(LOG_INFO, "dasllama-convert: {cfg.model} ({family})\n")
     to_log(LOG_INFO, "dasllama-convert:   -> {out}\n")
     to_log(LOG_INFO, "dasllama-convert:   identity {image_identity(tag)}\n")
@@ -505,6 +524,7 @@ def main() : int {
     let tag = flavor_tag(cfg.flavor)
     let qs = "{qm}"
     let out = cfg.out != "" ? cfg.out : image_path_for(cfg.model, tag, qs)
+    return 2 if (out_is_source(cfg, out))
     to_log(LOG_INFO, "dasllama-convert: {cfg.model}\n")
     to_log(LOG_INFO, "dasllama-convert:   -> {out}\n")
     to_log(LOG_INFO, "dasllama-convert:   identity {image_identity(tag, qs)}\n")

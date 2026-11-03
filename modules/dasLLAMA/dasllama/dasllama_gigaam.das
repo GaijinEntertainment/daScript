@@ -21,6 +21,8 @@ require dasllama/dasllama_plane public
 require dasllama/dasllama_asr_types public
 require dasllama/dasllama_audio
 require dasllama/dasllama_tower
+require dasllama/dasllama_tower_image   // tower_dev_image: the GPU-flavored image of a CPU-form model
+require dasllama/dasllama_load   // kq_tag: the one mapping a plane's disk type takes to the format it serves in
 require dasllama/dasllama_convert
 require dasllama/dasllama_repack   // repack_conv_out_tap_in: the f16 taps permuted tap-major
 require dasllama/dasllama_par
@@ -64,7 +66,8 @@ struct GigaamMelTabs {
 }
 
 //! A loaded GigaAM v3 model: hparams, the file's filterbank and window, the vocab, and the weight planes. The block GEMMs
-//! serve off ``wblob`` as the carrier's f16 on the exact lane, off ``qblob``/``qscales`` on the q8 lane; the rest is f32 in ``blob``.
+//! serve off ``wblob`` as the carrier's f16 on the exact lane, off ``qblob``/``qscales`` on the q8 lane, and on the kq lane
+//! each as the file's own format at its ``gemm_seats`` seat (K-quant off ``kq``/``ks``, Q8_0 off ``qblob``/``qscales``); the rest is f32 in ``blob``.
 struct GigaamModel {
     n_vocab : int64
     n_classes : int64
@@ -121,6 +124,15 @@ struct GigaamModel {
     q8 : bool
     qblob : PlaneI8 = PlaneI8()
     qscales : PlaneF = PlaneF()
+    kq_lane : bool                  //!< the kq lane: the block GEMMs serve as the file's own quantized planes, each at its ``gemm_seats`` seat
+    kq_repacked : bool              //!< the K-quant planes are in the load's backend layout (`matmul_kq_active`), else disk order (`matmul_kq`)
+    kq_fmt : int                    //!< the kq lane's one served member (a `KqFmt` slot) where every seat shares it, GIGAAM_KQ_MIXED where the seats mix
+    kq : PlaneU8 = PlaneU8()        //!< the kq lane's K-quant quant planes, a GEMM's superblocks at its seat's byte offset
+    ks : PlaneU8 = PlaneU8()        //!< ... and their scale planes
+    gemm_seats : PlaneI64 = PlaneI64()   //!< the kq lane's seats: `TOWER_SEAT_WORDS` words a block GEMM in layout order (`tower_gemm_seat`)
+    dev_backend : TowerDev               //!< the driver whose device block the image carries (`#tower-dev-block`); `none` on a CPU image
+    dev : PlaneU8 = PlaneU8()            //!< ... the device block's bytes
+    devplan : PlaneI64 = PlaneI64()      //!< ... and its plan, `TOWER_DEV_PIECE_WORDS` words a piece
     tabs : GigaamMelTabs = GigaamMelTabs()
     image_map : void?
     image_bytes : uint64
@@ -136,8 +148,8 @@ def finalize(var t : GigaamModel) {
     }
 }
 
-//! serialize_image_meta(GigaamModel) covers 49 fields; tabs (rebuilt at load), image_map and image_bytes are skipped
-let private GIGAAM_META_FIELDS = 49 + 3
+//! serialize_image_meta(GigaamModel) covers 53 fields; tabs (rebuilt at load), image_map and image_bytes are skipped
+let private GIGAAM_META_FIELDS = 53 + 3
 
 def private serialize_image_meta(var arch : Archive; var t : GigaamModel) {
     verify(count_meta_fields(t) == GIGAAM_META_FIELDS)
@@ -190,43 +202,60 @@ def private serialize_image_meta(var arch : Archive; var t : GigaamModel) {
     arch |> serialize_raw(t.jout_w)
     arch |> serialize_raw(t.jout_b)
     arch |> serialize_raw(t.q8)
+    arch |> serialize_raw(t.kq_lane)
+    arch |> serialize_raw(t.kq_repacked)
+    arch |> serialize_raw(t.kq_fmt)
+    arch |> serialize_raw(t.dev_backend)
 }
 
 def private image_post_load(var t : GigaamModel) {
     t.tabs.twiddles <- build_dft_twiddles(t.n_fft)
 }
 
+let GIGAAM_KQ_TAG = "gigaam-kq"   //! the kq lane's image tag: its planes are repacked for the load's backend, so the box keys it like the q8 lane's
+
 [init]
 def private register_gigaam_image_tags {
     register_image_family_tag("gigaam-q8")
     register_image_family_tag("gigaam-f16", config_free = true)
+    register_image_family_tag(GIGAAM_KQ_TAG)
+    for (lane in ["gigaam-q8", "gigaam-f16", GIGAAM_KQ_TAG]) {
+        register_tower_dev_tags(lane)
+    }
 }
 
 //! The plane a GigaAM fill job lands in.
 enum GigaamPlane {
     blob    //!< f32: the front convs, the norms and biases, the heads, and the block GEMMs and depthwise taps of a carrier that holds them in no f16
     wblob   //!< the carrier's f16 halfwords: the block GEMMs, the depthwise taps (permuted tap-major), an f16 CTC head
-    q8      //!< the block GEMMs quantized to Q8_0 into ``qblob``, their scales at ``off / 32`` in ``qscales``
+    q8      //!< the block GEMMs quantized to Q8_0 into ``qblob``, their scales at ``off / 32`` in ``qscales``; on the kq lane a Q8_0 GEMM's own blocks, moved exactly
+    kq      //!< the kq lane's K-quant GEMMs: a tensor's superblocks transcoded into ``kq`` at the byte offset ``off``, its scales into ``ks`` at ``soff``
 }
 
 //! One tensor's place in a GigaAM plane - the plan the held staging and the streamed mint both replay.
 struct GigaamFillJob {
     name : string
     plane : GigaamPlane
-    off : int64           //!< the element offset in its plane
+    off : int64           //!< the element offset in its plane; a ``kq`` job's byte offset in ``kq``
     n : int64
     conv_out : int64      //!< a conv weight's [out][in][k], permuted tap-major on the way in; 0 for none
     conv_in : int64
     conv_k : int64
-    width : int64         //!< a q8 GEMM's input width: the repack's row length
+    width : int64         //!< a GEMM's input width: the repack's row length
+    fmt : int = -1        //!< a kq-lane GEMM's format (a `KqFmt` slot): a ``kq`` job's member, or `q8` for a Q8_0 GEMM moved exactly; -1 on the other lanes
+    soff : int64          //!< a ``kq`` job's byte offset in ``ks``
 }
 
-//! One carrier's fill plan on one lane: every tensor's job and each plane's element count.
+//! One carrier's fill plan on one lane: every tensor's job and each plane's size - elements, or bytes for the kq planes - and
+//! on the kq lane the block GEMMs' seats (`TOWER_SEAT_WORDS` words each, in layout order).
 struct GigaamPlan {
     jobs : array<GigaamFillJob>
     blob_n : int64
     wblob_n : int64
     q8_n : int64
+    kq_n : int64
+    ks_n : int64
+    seats : array<int64>
 }
 
 //! The mint-side carrier: ``e`` holds the scalars the meta blob carries, the arrays beside it the plane bytes. The mel planes
@@ -240,6 +269,11 @@ struct GigaamStaging {
     @exact_size wblob : array<uint16>
     @exact_size qblob : array<int8>
     @exact_size qscales : array<float>
+    @exact_size kq : array<uint8>
+    @exact_size ks : array<uint8>
+    @exact_size gemm_seats : array<int64>   //!< the kq lane's seats, held through the mint: the plan writes them, the image carries them
+    @exact_size dev : array<uint8>          //!< a GPU-flavored mint's device block (`TowerDevBuild`)
+    @exact_size devplan : array<int64>      //!< ... and its plan
     src : string
     plan : GigaamPlan = GigaamPlan()
 }
@@ -262,14 +296,15 @@ def private gg_gemm_shapes(d, ff : int64) : array<int2> {
                int2(int(d), int(ff)), int2(int(ff), int(d))]
 }
 
-def private gg_gemm_stride(d, ff : int64) : int64 => 4l * ff * d + 7l * d * d
+//! a block's GEMM elements - the chains' stride a layer over the block GEMMs' record (`gigaam_layer_offsets`)
+def gigaam_gemm_stride(d, ff : int64) : int64 => 4l * ff * d + 7l * d * d
 
 //! a block's f32 rows: the norms and biases, and the depthwise taps where they are no f16 (`dw_in_aux`)
 def private gg_aux_stride(d, ff, nk : int64; dw_in_aux : bool) : int64 => 22l * d + 2l * ff + (dw_in_aux ? nk * d : 0l)
 
-//! Block `l`'s offsets on the FastConformer chains' record: the ten GEMMs index ``qblob`` on a q8 load, ``wblob`` where
-//! ``gemm_f16`` and ``blob`` otherwise, the depthwise taps ``wblob`` where ``dw_f16`` and ``blob`` otherwise, everything else
-//! ``blob``; the conv module's LayerNorm rows sit in the BatchNorm slots, the slots GigaAM has none of at -1.
+//! Block `l`'s offsets on the FastConformer chains' record: the ten GEMMs index ``qblob`` on a q8 load, ``wblob`` where ``gemm_f16``,
+//! ``blob`` otherwise, and on the kq lane a virtual layout `fc_gemm_seat_index` maps to the seats; the depthwise taps ``wblob``
+//! where ``dw_f16`` and ``blob`` otherwise, everything else ``blob``; the conv LayerNorm rows sit in the BatchNorm slots, GigaAM's absent slots at -1.
 def gigaam_layer_offsets(m : GigaamModel; l : int64) : CanaryLayerOffs {
     let d = m.d_model
     let ff = m.n_ff
@@ -352,23 +387,65 @@ def private gg_dw_f16(m : GGUFMeta; n_layer : int64) : bool {
     return f16
 }
 
-//! The block GEMMs' plane on the lane: Q8_0 on the q8 lane; on the exact lane the carrier's f16 where every block GEMM is
-//! f16, else f32 in ``blob``. Refuses a carrier whose block GEMMs mix f16 with another element type, naming both tensors.
-[arch(at="../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
-def private gg_gemm_plane(m : GGUFMeta; n_layer : int64; q8 : bool) : GigaamPlane {
-    return GigaamPlane.q8 if (q8)
-    var first = ""
-    var first_f16 = false
+//! every block GEMM's tensor name and ggml type, layer by layer in layout order
+def private gg_each_gemm(m : GGUFMeta; n_layer : int64; blk : block<(name : string; gt : int) : void>) {
     for (l in range64(n_layer)) {
         for (g in GG_GEMM_NAMES) {
             let name = "encoder.layers.{l}.{g}.weight"
-            let f16 = gguf_tensor_type(m, name) == GGML_TYPE_F16
-            if (empty(first)) {
-                first = name
-                first_f16 = f16
-            } elif (f16 != first_f16) {
-                panic("{GG_WHO}: the block GEMMs mix element types - '{name}' is {ggml_type_name(gguf_tensor_type(m, name))}, '{first}' is {ggml_type_name(gguf_tensor_type(m, first))}; one plane serves them")
-            }
+            invoke(blk, name, gguf_tensor_type(m, name))
+        }
+    }
+}
+
+//! the block GEMMs' kinds: a quantized one's name ("" where every GEMM is float), and the refusal a carrier mixing quantized
+//! and float GEMMs earns ("" where it does not)
+[arch(at="../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
+def private gg_gemm_kinds(m : GGUFMeta; n_layer : int64) : tuple<quant : string; why : string> {
+    var quant = ""
+    var flt = ""
+    gg_each_gemm(m, n_layer) $(name, gt) {
+        if (gt == GGML_TYPE_F32 || gt == GGML_TYPE_F16 || gt == GGML_TYPE_BF16) {
+            flt = name
+        } else {
+            quant = name
+        }
+    }
+    let mixed = !empty(quant) && !empty(flt)
+    let why = mixed ? "{GG_WHO}: the block GEMMs mix quantized and float tensors - '{quant}' is {ggml_type_name(gguf_tensor_type(m, quant))}, '{flt}' is {ggml_type_name(gguf_tensor_type(m, flt))}; one lane serves them - requantize the file" : ""
+    return (quant = quant, why = why)
+}
+
+//! the carrier's block GEMMs are quantized - the kq lane's carrier; a mix of quantized and float GEMMs panics
+def private gg_is_kq_carrier(m : GGUFMeta; n_layer : int64) : bool {
+    let kinds = gg_gemm_kinds(m, n_layer)
+    if (!empty(kinds.why)) {
+        panic(kinds.why)
+    }
+    return !empty(kinds.quant)
+}
+
+//! the block layers the carrier holds, counted by their first GEMM - the lane peek's layer count, read with no hparams
+def private gg_count_layers(m : GGUFMeta) : int64 {
+    var n = 0l
+    while (gguf_find_tensor(m, "encoder.layers.{n}.{GG_GEMM_NAMES[0]}.weight") >= 0) {
+        n++
+    }
+    return n
+}
+
+[arch(at="../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
+def private gg_gemm_plane(m : GGUFMeta; n_layer : int64; q8, kq : bool) : GigaamPlane {
+    return GigaamPlane.kq if (kq)
+    return GigaamPlane.q8 if (q8)
+    var first = ""
+    var first_f16 = false
+    gg_each_gemm(m, n_layer) $(name, gt) {
+        let f16 = gt == GGML_TYPE_F16
+        if (empty(first)) {
+            first = name
+            first_f16 = f16
+        } elif (f16 != first_f16) {
+            panic("{GG_WHO}: the block GEMMs mix element types - '{name}' is {ggml_type_name(gt)}, '{first}' is {ggml_type_name(gguf_tensor_type(m, first))}; one plane serves them")
         }
     }
     return first_f16 ? GigaamPlane.wblob : GigaamPlane.blob
@@ -479,14 +556,14 @@ def private gg_read_hparams(m : GGUFMeta; b : array<uint8> | #; var e : GigaamMo
 //! then the blocks' aux rows, then (where no other plane takes them) the block GEMMs, then the head; the halfword plane the
 //! block GEMMs where they are f16, then the depthwise taps where they are f16, then an f16 CTC head's padded rows.
 [arch(at="../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
-def private gg_plan(m : GGUFMeta; var e : GigaamModel; q8 : bool) : GigaamPlan {
+def private gg_plan(m : GGUFMeta; var e : GigaamModel; q8, kq : bool) : GigaamPlan {
     var p = GigaamPlan()
     let d = e.d_model
     let ff = e.n_ff
     let nk = e.conv_kernel
     let ks = e.subs_kernel
     let nch = e.n_sub_ch
-    let gplane = gg_gemm_plane(m, e.n_layer, q8)
+    let gplane = gg_gemm_plane(m, e.n_layer, q8, kq)
     e.gemm_f16 = gplane == GigaamPlane.wblob
     e.dw_f16 = gg_dw_f16(m, e.n_layer)
     var ao = 0l
@@ -496,7 +573,7 @@ def private gg_plan(m : GGUFMeta; var e : GigaamModel; q8 : bool) : GigaamPlan {
     e.c2_b = gg_take(ao, d)
     e.aux_stride = gg_aux_stride(d, ff, nk, !e.dw_f16)
     e.aux_off = gg_take(ao, e.n_layer * e.aux_stride)
-    e.gemm_stride = gg_gemm_stride(d, ff)
+    e.gemm_stride = gigaam_gemm_stride(d, ff)
     let gemm_n = e.n_layer * e.gemm_stride
     e.gemm_off = gplane == GigaamPlane.blob ? gg_take(ao, gemm_n) : 0l
     let nc = e.n_classes
@@ -530,6 +607,9 @@ def private gg_plan(m : GGUFMeta; var e : GigaamModel; q8 : bool) : GigaamPlan {
     gg_conv_job(p, m, "encoder.pre.conv.2.weight", fb, e.c2_w, d, nch, ks)
     gg_job(p, m, "encoder.pre.conv.2.bias", fb, e.c2_b, d)
     let shapes <- gg_gemm_shapes(d, ff)
+    var q8_elem_cur = 0l
+    var kq_byte_cur = 0l
+    var ks_byte_cur = 0l
     for (l in range64(e.n_layer)) {
         let lo = gigaam_layer_offsets(e, l)
         let lp = "encoder.layers.{l}."
@@ -558,10 +638,20 @@ def private gg_plan(m : GGUFMeta; var e : GigaamModel; q8 : bool) : GigaamPlan {
         gg_job(p, m, "{lp}ff2.linear1.bias", fb, lo.ff2a_b, ff)
         gg_job(p, m, "{lp}ff2.linear2.bias", fb, lo.ff2b_b, d)
         let woffs = fixed_array(lo.ff1a_w, lo.ff1b_w, lo.q_w, lo.k_w, lo.v_w, lo.o_w, lo.pw1_w, lo.pw2_w, lo.ff2a_w, lo.ff2b_w)
+        if (gplane == GigaamPlane.kq) {
+            gg_kq_gemm_jobs(p, m, lp, shapes, q8_elem_cur, kq_byte_cur, ks_byte_cur)
+            continue
+        }
         for (g, s, wo in GG_GEMM_NAMES, shapes, woffs) {
             gg_job(p, m, "{lp}{g}.weight", gplane, wo, int64(s.x) * int64(s.y))
             p.jobs[length(p.jobs) - 1].width = int64(s.x)
         }
+    }
+    if (gplane == GigaamPlane.kq) {
+        p.q8_n = q8_elem_cur
+        p.kq_n = kq_byte_cur
+        p.ks_n = ks_byte_cur
+        e.kq_fmt = gg_kq_fmt(p.seats)
     }
     if (e.head == GigaamHead.ctc) {
         gg_job(p, m, "head.ctc.weight", e.ctc_f16 ? GigaamPlane.wblob : fb, e.ctc_w, nc * d)
@@ -582,10 +672,75 @@ def private gg_plan(m : GGUFMeta; var e : GigaamModel; q8 : bool) : GigaamPlan {
     return <- p
 }
 
-//! One job's tensor into its plane's array at `at`: f32 rows (a conv permuted tap-major) into `blob`, the carrier's f16
-//! halfwords into `wblob`, or a Q8_0 region into `qblob` - its scales at `at / 32` in `qscales` - repacked where `rep`
-def private gg_fill(m : GGUFMeta; b : array<uint8> | #; j : GigaamFillJob; at : int64; rep : bool; var blob : array<float>;
-                    var wblob : array<uint16>; var qblob : array<int8>; var qscales : array<float>; @scratch var wscratch : array<float>) {
+[arch(at="../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
+def private gg_kq_seat_fmt(m : GGUFMeta; name : string; width : int64) : KqFmt {
+    let gt = gguf_tensor_type(m, name)
+    let f = kq_fmt_row_ok(kq_fmt_of(gt), width)   // the tag kq_tag reads, without its q8-rail demotion note: the lane refuses a demoted row
+    let served = f == KqFmt.q8 ? gt == GGML_TYPE_Q8_0 : (kq_sb(f) && f != KqFmt.nv4)
+    if (!served) {
+        panic("{GG_WHO}: '{name}' is {ggml_type_name(gt)} on a {width}-wide row (tagged {f}), which the block GEMMs' kq lane has no seat for - the superblock formats and Q8_0 serve as their own planes; pin a lane (set_gigaam_q8) to dequantize it")
+    }
+    return f
+}
+
+//! a block's ten kq-lane GEMM jobs and their seat words, each GEMM at the cursor its format takes (Q8_0 elements, or K-quant quant and scale bytes), advancing it
+[arch(at="../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
+def private gg_kq_gemm_jobs(var p : GigaamPlan; m : GGUFMeta; lp : string; shapes : array<int2>; var q8_elem_cur, kq_byte_cur, ks_byte_cur : int64&) {
+    var qkv_q8 = fixed_array(false, false, false)
+    for (g, s, i in GG_GEMM_NAMES, shapes, count()) {
+        let name = "{lp}{g}.weight"
+        let width = int64(s.x)
+        let n = width * int64(s.y)
+        gguf_expect_elems(m, name, n, GG_WHO)
+        let f = gg_kq_seat_fmt(m, name, width)
+        if (i >= 2 && i <= 4) {
+            qkv_q8[i - 2] = f == KqFmt.q8
+        }
+        if (f == KqFmt.q8) {
+            p.jobs |> push(GigaamFillJob(name = name, plane = GigaamPlane.q8, off = q8_elem_cur, n = n, width = width, fmt = int(f), soff = q8_elem_cur / KQ_B32_ELEMS))
+            p.seats |> push(int64(int(f)))   // nolint:STYLE012 - one seat's three words appended behind the GEMMs before it
+            p.seats |> push(q8_elem_cur)
+            p.seats |> push(q8_elem_cur / KQ_B32_ELEMS)
+            q8_elem_cur += n
+        } else {
+            let nsb = n / kq_elems(f)
+            // a seat sits on its own format's strides: a carrier mixing members leaves the cursors off the next one's
+            kq_byte_cur = (kq_byte_cur + kq_qsb(f) - 1l) / kq_qsb(f) * kq_qsb(f)
+            ks_byte_cur = (ks_byte_cur + kq_ssb(f) - 1l) / kq_ssb(f) * kq_ssb(f)
+            p.jobs |> push(GigaamFillJob(name = name, plane = GigaamPlane.kq, off = kq_byte_cur, n = n, width = width, fmt = int(f), soff = ks_byte_cur))
+            p.seats |> push(int64(int(f)))   // nolint:STYLE012 - one seat's three words appended behind the GEMMs before it
+            p.seats |> push(kq_byte_cur)
+            p.seats |> push(ks_byte_cur)
+            kq_byte_cur += nsb * kq_qsb(f)
+            ks_byte_cur += nsb * kq_ssb(f)
+        }
+    }
+    if (qkv_q8[0] != qkv_q8[1] || qkv_q8[0] != qkv_q8[2]) {
+        panic("{GG_WHO}: '{lp}attn.q', '{lp}attn.k' and '{lp}attn.v' mix Q8_0 with a K-quant format - q and k read one activation image (v too, off the rotary form), so the lane holds the three to one class; pin a lane (set_gigaam_q8) to dequantize them")
+    }
+}
+
+let GIGAAM_KQ_MIXED = -1   //! `kq_fmt` where the kq lane's K-quant seats mix
+
+//! the seats' one K-quant member (a `KqFmt` slot), `q8` where every seat is Q8_0, GIGAAM_KQ_MIXED where the K-quant seats mix
+def private gg_kq_fmt(seats : array<int64>) : int {
+    var fmt = int(KqFmt.q8)
+    for (s in range64(long_length(seats) / TOWER_SEAT_WORDS)) {
+        let f = int(seats[s * TOWER_SEAT_WORDS])
+        continue if (f == int(KqFmt.q8))
+        if (fmt == int(KqFmt.q8)) {
+            fmt = f
+        } elif (fmt != f) {
+            return GIGAAM_KQ_MIXED
+        }
+    }
+    return fmt
+}
+
+//! one job's tensor into its plane's array at `at` (a K-quant job's scales at `scale_at`), every quantized region repacked where `rep`
+def private gg_fill(m : GGUFMeta; b : array<uint8> | #; j : GigaamFillJob; at, scale_at : int64; rep : GgRepack; var blob : array<float>;
+                    var wblob : array<uint16>; var qblob : array<int8>; var qscales : array<float>; var kq, ks : array<uint8>;
+                    @scratch var wscratch : array<float>) {
     if (j.plane == GigaamPlane.wblob && j.conv_out != 0l) {
         gg_conv_f16_tap_major(m, b, j, wblob, at)
     } elif (j.plane == GigaamPlane.wblob) {
@@ -594,9 +749,22 @@ def private gg_fill(m : GGUFMeta; b : array<uint8> | #; j : GigaamFillJob; at : 
                 memcpy(addr(wblob[at]), p, int64(nbytes))
             }
         }
+    } elif (j.plane == GigaamPlane.kq) {
+        let f = kq_fmt_of_slot(j.fmt)
+        gguf_transcode_kq_at(m, b, j.name, f, kq, ks, at, scale_at, j.n)
+        if (rep.kq) {
+            unsafe {
+                repack_kq_weight_at(kq_schema_id(f), addr(kq[at]), addr(ks[scale_at]), j.width, j.n / j.width)
+            }
+        }
+    } elif (j.plane == GigaamPlane.q8 && j.fmt >= 0) {
+        gguf_transcode_q8_0(m, b, j.name, qblob, qscales, at, at / KQ_B32_ELEMS, j.n)
+        if (rep.q8) {
+            repack_q8q8_weight(qblob, qscales, at, j.width, j.n / j.width)
+        }
     } elif (j.plane == GigaamPlane.q8) {
         tower_read_gemm_q8(m, b, j.name, qblob, qscales, wscratch, at, j.n, GG_WHO)
-        if (rep) {
+        if (rep.q8) {
             repack_q8q8_weight(qblob, qscales, at, j.width, j.n / j.width)
         }
     } elif (j.conv_out != 0l) {
@@ -627,33 +795,49 @@ def private gg_stream_f16(m : GGUFMeta; b : array<uint8> | #; name : string; sin
     gguf_stream_tensor_raw(m, b, ti, sink)
 }
 
-//! the bytes `n` elements of `plane` take in its image section: f32, halfwords, Q8_0 quants, or with `scales` their scales
-def private gg_plane_bytes(plane : GigaamPlane; scales : bool; n : int64) : int64 {
-    return n * 4l if (plane == GigaamPlane.blob)
-    return n * 2l if (plane == GigaamPlane.wblob)
-    return scales ? (n / 32l) * 4l : n
+//! a job's span in its plane's image section: the byte offset and byte count of its quants, or with `scales` of its scales
+def private gg_job_span(j : GigaamFillJob; scales : bool) : tuple<off : int64; bytes : int64> {
+    return (off = j.off * 4l, bytes = j.n * 4l) if (j.plane == GigaamPlane.blob)
+    return (off = j.off * 2l, bytes = j.n * 2l) if (j.plane == GigaamPlane.wblob)
+    if (j.plane == GigaamPlane.kq) {
+        let f = kq_fmt_of_slot(j.fmt)
+        let nsb = j.n / kq_elems(f)
+        return scales ? (off = j.soff, bytes = nsb * kq_ssb(f)) : (off = j.off, bytes = nsb * kq_qsb(f))
+    }
+    return scales ? (off = (j.off / KQ_B32_ELEMS) * 4l, bytes = (j.n / KQ_B32_ELEMS) * 4l) : (off = j.off, bytes = j.n)
+}
+
+//! a plane's image section's byte count - the quants', or with `scales` the scales'
+def private gg_plane_total(plan : GigaamPlan; plane : GigaamPlane; scales : bool) : int64 {
+    return plan.blob_n * 4l if (plane == GigaamPlane.blob)
+    return plan.wblob_n * 2l if (plane == GigaamPlane.wblob)
+    return (scales ? plan.ks_n : plan.kq_n) if (plane == GigaamPlane.kq)
+    return scales ? (plan.q8_n / KQ_B32_ELEMS) * 4l : plan.q8_n
 }
 
 //! One weight plane of the streamed mint as section `name`: its jobs' tensors in offset order, each read off the mapping into
-//! scratch and appended, a span no job fills - a gap or the plane's tail - written as zeros; `scales` writes a q8 plane's
-//! scales in place of its quants.
+//! scratch and appended, a span no job fills - a gap or the plane's tail - written as zeros; `scales` writes a quantized
+//! plane's scales in place of its quants.
 [arch(at="../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
-def private gg_stream_plane(m : GGUFMeta; b : array<uint8> | #; plan : GigaamPlan; plane : GigaamPlane; scales, rep : bool;
+def private gg_stream_plane(m : GGUFMeta; b : array<uint8> | #; plan : GigaamPlan; plane : GigaamPlane; scales : bool; rep : GgRepack;
                             var w : ImgWriter; var sections : array<ImgSection>; name : string) : bool {
     let at = w_page(w)
     var mine <- [for (j in plan.jobs); j; where j.plane == plane]
-    mine |> sort() <| cmp_by(_.off)
+    mine |> sort() <| cmp_by(_.off)   // the scale offsets grow with the quant offsets, so one order serves both sections
     var @scratch @exact_size f32s : array<float>
     var @scratch @exact_size halves : array<uint16>
     var @scratch @exact_size q8s : array<int8>
     var @scratch @exact_size qss : array<float>
+    var @scratch @exact_size kqs : array<uint8>
+    var @scratch @exact_size kss : array<uint8>
     var @scratch @exact_size wscratch : array<float>
     var cur = 0l
     for (j in mine) {
-        if (j.off > cur) {
-            w_zeros(w, uint64(gg_plane_bytes(plane, scales, j.off - cur)))
+        let span = gg_job_span(j, scales)
+        if (span.off > cur) {
+            w_zeros(w, uint64(span.off - cur))
         }
-        cur = j.off + j.n
+        cur = span.off + span.bytes
         if (plane == GigaamPlane.wblob && j.conv_out == 0l) {
             gg_stream_f16(m, b, j.name) $(p, nbytes) {
                 w_append(w, p, nbytes)
@@ -664,44 +848,52 @@ def private gg_stream_plane(m : GGUFMeta; b : array<uint8> | #; plan : GigaamPla
             ensure_length(halves, j.n)
         } elif (plane == GigaamPlane.blob) {
             ensure_length(f32s, j.n)
+        } elif (plane == GigaamPlane.kq) {
+            ensure_length(kqs, gg_job_span(j, false).bytes)
+            ensure_length(kss, gg_job_span(j, true).bytes)
         } else {
             ensure_length(q8s, j.n)
-            ensure_length(qss, j.n / 32l)
+            ensure_length(qss, j.n / KQ_B32_ELEMS)
         }
-        gg_fill(m, b, j, 0l, rep, f32s, halves, q8s, qss, wscratch)
+        gg_fill(m, b, j, 0l, 0l, rep, f32s, halves, q8s, qss, kqs, kss, wscratch)
         unsafe {
             if (plane == GigaamPlane.wblob) {
-                w_append(w, addr<void?>(halves[0]), uint64(j.n * 2l))
+                w_append(w, addr<void?>(halves[0]), uint64(span.bytes))
             } elif (plane == GigaamPlane.blob) {
-                w_append(w, addr<void?>(f32s[0]), uint64(j.n * 4l))
+                w_append(w, addr<void?>(f32s[0]), uint64(span.bytes))
+            } elif (plane == GigaamPlane.kq && scales) {
+                w_append(w, addr<void?>(kss[0]), uint64(span.bytes))
+            } elif (plane == GigaamPlane.kq) {
+                w_append(w, addr<void?>(kqs[0]), uint64(span.bytes))
             } elif (scales) {
-                w_append(w, addr<void?>(qss[0]), uint64((j.n / 32l) * 4l))
+                w_append(w, addr<void?>(qss[0]), uint64(span.bytes))
             } else {
-                w_append(w, addr<void?>(q8s[0]), uint64(j.n))
+                w_append(w, addr<void?>(q8s[0]), uint64(span.bytes))
             }
         }
     }
-    let total = plane == GigaamPlane.blob ? plan.blob_n : (plane == GigaamPlane.wblob ? plan.wblob_n : plan.q8_n)
+    let total = gg_plane_total(plan, plane, scales)
     if (total > cur) {
-        w_zeros(w, uint64(gg_plane_bytes(plane, scales, total - cur)))
+        w_zeros(w, uint64(total - cur))
     }
     delete mine
     delete f32s
     delete halves
     delete q8s
     delete qss
+    delete kqs
+    delete kss
     delete wscratch
     sections |> push(ImgSection(name = name, off = at, bytes = w.cur - at))
     return w.ok
 }
 
-//! The GGUF reader proper: the scalars into the served model, the mel planes and the fill plan into the staging. With `hold`
-//! every weight plane is read into the staging's arrays too - the form a control that edits a plane before the mint takes,
-//! which holds the carrier widened in RAM; without it the mint streams the weight planes off the carrier one tensor at a time.
+//! The GGUF reader proper: the scalars into the served model, the mel planes and the fill plan into the staging; a quantized
+//! carrier takes the kq lane unless a lane is `pinned`, where `q8` names it. With `hold` every weight plane is read into the
+//! staging's arrays too (a control that edits a plane before the mint; the carrier widened in RAM), else the mint streams them one tensor at a time.
 [arch(at="../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
-def stage_gigaam_model(path : string; q8 : bool = false; hold : bool = false) : GigaamStaging {
+def stage_gigaam_model(path : string; q8 : bool = false; hold : bool = false; pinned : bool = false) : GigaamStaging {
     var st = GigaamStaging(src = path)
-    st.e.q8 = q8
     let f = fopen(path, "rb")
     if (f == null) {
         panic("{GG_WHO}: cannot open model '{path}'")
@@ -713,6 +905,8 @@ def stage_gigaam_model(path : string; q8 : bool = false; hold : bool = false) : 
         var inscope m <- parse_gguf_meta(bytes)
         gigaam_check_arch(gguf_str_or(m, bytes, "general.architecture", ""), path)
         gg_read_hparams(m, bytes, st.e)
+        st.e.kq_lane = !pinned && gg_is_kq_carrier(m, st.e.n_layer)
+        st.e.q8 = q8 && !st.e.kq_lane
         let n_bins = st.e.n_fft / 2l + 1l
         st.filters |> reserve(st.e.n_mel * n_bins)
         st.filters |> resize(st.e.n_mel * n_bins)
@@ -722,7 +916,8 @@ def stage_gigaam_model(path : string; q8 : bool = false; hold : bool = false) : 
         st.window |> resize(st.e.n_fft)
         gguf_expect_elems(m, "preprocessor.window", st.e.n_fft, GG_WHO)
         gguf_read_tensor_f32(m, bytes, "preprocessor.window", st.window, 0l, st.e.n_fft)
-        st.plan <- gg_plan(m, st.e, q8)
+        st.plan <- gg_plan(m, st.e, st.e.q8, st.e.kq_lane)
+        st.gemm_seats := st.plan.seats
         if (hold) {
             gg_hold_planes(m, bytes, st)
         }
@@ -734,41 +929,134 @@ def stage_gigaam_model(path : string; q8 : bool = false; hold : bool = false) : 
 
 //! every weight plane of the plan read whole into the staging's arrays
 def private gg_hold_planes(m : GGUFMeta; b : array<uint8> | #; var st : GigaamStaging) {
-    let rep = st.e.q8 && select_matmul_backend_for_load_()
+    let rep = gg_select_repack(st.e)
     st.blob |> reserve(st.plan.blob_n)
     st.blob |> resize(st.plan.blob_n)
     st.wblob |> reserve(st.plan.wblob_n)
     st.wblob |> resize(st.plan.wblob_n)
     st.qblob |> reserve(st.plan.q8_n)
     st.qblob |> resize(st.plan.q8_n)
-    st.qscales |> reserve(st.plan.q8_n / 32l)
-    st.qscales |> resize(st.plan.q8_n / 32l)
+    st.qscales |> reserve(st.plan.q8_n / KQ_B32_ELEMS)
+    st.qscales |> resize(st.plan.q8_n / KQ_B32_ELEMS)
+    st.kq |> reserve(st.plan.kq_n)
+    st.kq |> resize(st.plan.kq_n)
+    st.ks |> reserve(st.plan.ks_n)
+    st.ks |> resize(st.plan.ks_n)
     var @scratch @exact_size wscratch : array<float>
     for (j in st.plan.jobs) {
-        gg_fill(m, b, j, j.off, rep, st.blob, st.wblob, st.qblob, st.qscales, wscratch)
+        gg_fill(m, b, j, j.off, j.soff, rep, st.blob, st.wblob, st.qblob, st.qscales, st.kq, st.ks, wscratch)
     }
     delete wscratch
 }
 
-//! The ``.dlim`` family tag of a weight lane: ``gigaam-q8``, or ``gigaam-f16`` for the exact lane.
-def gigaam_image_tag(q8 : bool) : string => q8 ? "gigaam-q8" : "gigaam-f16"
+//! the fills' repack decisions: `q8` the Q8_0 regions for the load's backend, `kq` the K-quant members (`GgRepack`)
+typedef GgRepack = tuple<q8 : bool; kq : bool>
+
+//! whether the quantizing lanes repack for the load's backend - selected once here, with `e.kq_repacked` set beside, for every fill
+def private gg_select_repack(var e : GigaamModel) : GgRepack {
+    let rep = (e.q8 || e.kq_lane) && tower_repack_backend()
+    e.kq_repacked = e.kq_lane && rep && kernel_backend_has_kq()
+    return (q8 = rep, kq = e.kq_repacked)
+}
+
+//! The ``.dlim`` family tag of a weight lane: ``gigaam-kq`` for the kq lane, ``gigaam-q8``, or ``gigaam-f16`` for the exact lane.
+def gigaam_image_tag(q8 : bool; kq : bool = false) : string => kq ? GIGAAM_KQ_TAG : (q8 ? "gigaam-q8" : "gigaam-f16")
+
+//! The tag the load of `path` serves: a prepared image's own; a carrier whose block GEMMs are quantized planes the kq lane's
+//! unless a lane is `pinned`; else the lane `q8` names. A pinned lane refuses an image of another lane.
+def gigaam_lane_tag(path : string; q8, pinned : bool) : string {
+    if (path |> ends_with(".dlim")) {
+        let tag = image_family_tag(path)
+        let want = gigaam_image_tag(q8)
+        if (pinned && tag != want && !(tag |> starts_with("{want}-"))) {
+            panic("{GG_WHO}: '{path}' is an image of the {tag} lane, and the load pins the {want} lane - load the source model, or that lane's image")
+        }
+        return tag
+    }
+    var kq = false
+    if (!pinned) {
+        // the header read recovers a panic inside its block: the facts come out, the refusals run after it
+        var arch = ""
+        var kinds = (quant = "", why = "")
+        let read = gguf_header_read(path) $(m; bytes) {
+            arch = gguf_str_or(m, bytes, "general.architecture", "")
+            kinds = gg_gemm_kinds(m, gg_count_layers(m))
+        }
+        if (!read) {
+            panic("{GG_WHO}: cannot read model '{path}'")
+        }
+        gigaam_check_arch(arch, path)
+        if (!empty(kinds.why)) {
+            panic(kinds.why)
+        }
+        kq = !empty(kinds.quant)
+    }
+    return gigaam_image_tag(q8, kq)
+}
+
+//! The kq lane's seat for every GEMM record of the device chains (`fc_gemm_records`) into the driver's reused `seats`, sized by
+//! the driver to FC_GEMM_RECORDS a block on the kq lane (the empty rel record an empty q8 seat); answers the K-quant members'
+//! format slots.
+def gigaam_fc_record_seats(m : GigaamModel; var seats : array<TowerGemmSeat>) : uint {
+    var kq_fmts = 0u
+    assert(long_length(seats) == (m.kq_lane ? m.n_layer * FC_GEMM_RECORDS : 0l), "the driver sizes the record seats to the chain")
+    for (l in range64(m.kq_lane ? m.n_layer : 0l)) {
+        let recs = fc_gemm_records(gigaam_layer_offsets(m, l), m.d_model, m.n_ff)
+        for (r, g in recs, count()) {
+            let seat = r.rows > 0l ? tower_gemm_seat(m, r.woff) : TowerGemmSeat(fmt = KqFmt.q8, qoff = -1l, soff = -1l)
+            if (seat.fmt != KqFmt.q8) {
+                kq_fmts |= 1u << uint(int(seat.fmt))
+            }
+            seats[l * FC_GEMM_RECORDS + int64(g)] = seat
+        }
+    }
+    return kq_fmts
+}
+
+//! The kq lane's members by name from the format slots a chain holds: the K-quant members in slot order, `q8` last where
+//! Q8_0 seats ride beside them, `+`-joined - a decline's words.
+[cold_path]
+def gigaam_kq_members_of(kq_fmts : uint; has_q8 : bool) : string {
+    var names <- [for (fmt in range(KQ_FMT_COUNT)); "{kq_fmt_of_slot(fmt)}"; where(kq_fmts & (1u << uint(fmt))) != 0u]
+    if (has_q8) {
+        names |> push("q8")
+    }
+    return join(names, "+")
+}
+
+//! The kq lane's members off a CPU image's seats, as `gigaam_kq_members_of` names them - the lane announce's words.
+def gigaam_kq_members(m : GigaamModel) : string {
+    var kq_fmts = 0u
+    var has_q8 = false
+    for (s in range64(length(m.gemm_seats) / TOWER_SEAT_WORDS)) {
+        let fmt = int(m.gemm_seats[s * TOWER_SEAT_WORDS])
+        if (fmt == int(KqFmt.q8)) {
+            has_q8 = true
+        } else {
+            kq_fmts |= 1u << uint(fmt)
+        }
+    }
+    return gigaam_kq_members_of(kq_fmts, has_q8)
+}
 
 //! The mint of a staging into `out` through `img` ("" builds the image in memory): a weight plane the staging holds is written
 //! as held, one it leaves empty streams off ``st.src`` one tensor at a time. True only when the file was written.
 [arch(at="../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
 def private gg_mint(var st : GigaamStaging; var out : GigaamModel; img : string) : bool {
-    let tag = gigaam_image_tag(st.e.q8)
-    let rep = st.e.q8 && select_matmul_backend_for_load_()
+    let tag = gigaam_image_tag(st.e.q8, st.e.kq_lane)
+    let rep = gg_select_repack(st.e)
     var plan : GigaamPlan
     plan := st.plan
     let s_blob = empty(st.blob) && plan.blob_n > 0l
     let s_wblob = empty(st.wblob) && plan.wblob_n > 0l
     let s_q8 = empty(st.qblob) && plan.q8_n > 0l
+    let s_kq = empty(st.kq) && plan.kq_n > 0l
     let page = uint64(IMAGE_PAGE)
     var extra = 0ul
-    extra += s_blob ? uint64(gg_plane_bytes(GigaamPlane.blob, false, plan.blob_n)) + page : 0ul
-    extra += s_wblob ? uint64(gg_plane_bytes(GigaamPlane.wblob, false, plan.wblob_n)) + page : 0ul
-    extra += s_q8 ? uint64(gg_plane_bytes(GigaamPlane.q8, false, plan.q8_n) + gg_plane_bytes(GigaamPlane.q8, true, plan.q8_n)) + 2ul * page : 0ul
+    extra += s_blob ? uint64(gg_plane_total(plan, GigaamPlane.blob, false)) + page : 0ul
+    extra += s_wblob ? uint64(gg_plane_total(plan, GigaamPlane.wblob, false)) + page : 0ul
+    extra += s_q8 ? uint64(gg_plane_total(plan, GigaamPlane.q8, false) + gg_plane_total(plan, GigaamPlane.q8, true)) + 2ul * page : 0ul
+    extra += s_kq ? uint64(plan.kq_n + plan.ks_n) + 2ul * page : 0ul
     let f = fopen(st.src, "rb")
     if (f == null) {
         panic("{GG_WHO}: cannot open model '{st.src}'")
@@ -781,6 +1069,8 @@ def private gg_mint(var st : GigaamStaging; var out : GigaamModel; img : string)
             return gg_stream_plane(m, bytes, plan, GigaamPlane.wblob, false, rep, w, sections, name) if (s_wblob && name == "wblob")
             return gg_stream_plane(m, bytes, plan, GigaamPlane.q8, false, rep, w, sections, name) if (s_q8 && name == "qblob")
             return gg_stream_plane(m, bytes, plan, GigaamPlane.q8, true, rep, w, sections, name) if (s_q8 && name == "qscales")
+            return gg_stream_plane(m, bytes, plan, GigaamPlane.kq, false, rep, w, sections, name) if (s_kq && name == "kq")
+            return gg_stream_plane(m, bytes, plan, GigaamPlane.kq, true, rep, w, sections, name) if (s_kq && name == "ks")
             return false
         }
     }
@@ -789,29 +1079,114 @@ def private gg_mint(var st : GigaamStaging; var out : GigaamModel; img : string)
     return wrote
 }
 
-//! Mint a served model from a staged read WITHOUT touching disk - the in-memory image rail, the suites' load.
-def mint_gigaam_model(var st : GigaamStaging; var out : GigaamModel; q8 : bool = false) {
-    if (q8 != st.e.q8) {
-        panic("{GG_WHO}: the staging was read on the {gigaam_image_tag(st.e.q8)} lane, the mint asks {gigaam_image_tag(q8)}")
-    }
-    gg_mint(st, out, "")
+//! A GPU driver's GigaAM flavor (`#tower-dev-block`): the backend whose image it mints, whether its chain serves a carrier of
+//! these hparams and lane (`e`, the staging's meta), and the bake that converts a CPU-form model into the driver's device block
+typedef GigaamServesModelFn = function<(e : GigaamModel) : bool>
+typedef GigaamBakeFn = function<(m : GigaamModel; var b : TowerDevBuild) : bool>
+
+struct GigaamFlavor {
+    backend : TowerDev
+    serves : GigaamServesModelFn
+    bake : GigaamBakeFn
 }
 
-//! Load a GigaAM v3 GGUF (or a prepared ``.dlim`` of one). With ``q8`` the block GEMMs transcode to Q8_0; the exact lane, f16
-//! taps and an f16 CTC head serve the carrier's f16 (`#gigaam-planes`). A missing image is minted streaming the carrier one
-//! tensor at a time. Caches a prepared image like ``load_model``.
-def load_gigaam_model(path : string; q8 : bool = false) : GigaamModel {
-    let tag = gigaam_image_tag(q8)
+var private g_ga_flavor = GigaamFlavor()
+let private GIGAAM_DEV_CONSUMED <- ["qblob", "qscales", "kq", "ks", "gemm_seats"]   //! the planes a GigaAM bake converts: a GPU flavor carries their device forms instead
+
+def register_gigaam_flavor(backend : TowerDev; serves : GigaamServesModelFn; bake : GigaamBakeFn) {
+    g_ga_flavor = GigaamFlavor(backend = backend, serves = serves, bake = bake)
+}
+
+//! The device flavor a load of a carrier with meta `e` takes: the registered driver's where its knob is on and its chain serves
+//! the carrier, else `none` - the CPU image
+def gigaam_dev_flavor(e : GigaamModel) : TowerDev {
+    return TowerDev.none if (!gigaam_gpu_serves() || !rnnt_gpu_projects(RnntEnc()))
+    return tower_dev_flavor(g_ga_flavor, e)
+}
+
+//! the lane flags a lane's tag names - the meta a flavor's `serves` reads before the staging exists
+def private gg_lane_meta(lane : string; gemm_f16 : bool) : GigaamModel => GigaamModel(q8 = lane == "gigaam-q8", kq_lane = lane == GIGAAM_KQ_TAG, gemm_f16 = gemm_f16)
+
+//! every block GEMM of the carrier at `path` is F16 - the exact lane's halfword planes a GPU chain reads; a widened K-quant
+//! carrier's exact lane is f32
+def private gg_carrier_gemm_f16(path : string) : bool {
+    var f16 = true
+    let read = gguf_header_read(path) $(m; _bytes) {
+        gg_each_gemm(m, gg_count_layers(m)) $(_name, gt) {
+            f16 = f16 && gt == GGML_TYPE_F16
+        }
+    }
+    return read && f16
+}
+
+//! the lane's block GEMMs sit in planes a GPU chain reads: the q8 image, the kq lane's own planes, or the exact lane's halfwords
+def gigaam_gpu_lane_planes(e : GigaamModel) : bool => e.q8 || e.kq_lane || e.gemm_f16
+
+//! A GPU-flavored model reached a CPU path at `stage`: the device seat declined what the load handed it, and the CPU never runs
+//! that image (`#tower-dev-block`)
+def private gg_cpu_refuse(m : GigaamModel; stage : string) => tower_cpu_refuse(m, GG_WHO, stage)
+
+[cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
+def private gg_mint_gpu(var st : GigaamStaging; var out : GigaamModel; img : string; dev : TowerDev) : bool {
+    var cpu = GigaamModel()
+    with_tower_dev_staging(dev) {
+        gg_mint(st, cpu, "")
+    }
+    let tag = tower_dev_tag(gigaam_image_tag(cpu.q8, cpu.kq_lane), dev)
+    var gst = GigaamStaging(src = st.src)
+    return tower_dev_image(cpu, gst, out, img, tag, dev, g_ga_flavor.bake, GIGAAM_DEV_CONSUMED, GG_WHO)
+}
+
+//! Mint a served model from a staged read WITHOUT touching disk - the in-memory image rail, the suites' load.
+//! `dev` names the GPU flavor (`#tower-dev-block`), `none` the CPU image; a `dev` no driver registered for GigaAM panics.
+def mint_gigaam_model(var st : GigaamStaging; var out : GigaamModel; q8 : bool = false; dev : TowerDev = TowerDev.none) {
+    if (!st.e.kq_lane && q8 != st.e.q8) {
+        panic("{GG_WHO}: the staging was read on the {gigaam_image_tag(st.e.q8)} lane, the mint asks {gigaam_image_tag(q8)}")
+    }
+    if (dev == TowerDev.none) {
+        gg_mint(st, out, "")
+        return
+    }
+    tower_flavor_registered(g_ga_flavor, dev, GG_WHO)
+    gg_mint_gpu(st, out, "", dev)
+}
+
+//! Load a GigaAM v3 GGUF (or a prepared ``.dlim`` of one). A quantized carrier serves its block GEMMs as its own planes - the kq
+//! lane - unless a lane is `pinned`; then ``q8`` transcodes them to Q8_0, and the exact lane, f16 taps and an f16 CTC head serve
+//! the carrier's f16 (`#gigaam-planes`). A missing image is minted streaming the carrier one tensor at a time; cached like ``load_model``.
+def load_gigaam_model(path : string; q8 : bool = false; facade_fp32_pin : bool = false) : GigaamModel {
+    let pinned = facade_fp32_pin || gigaam_lane_pinned()
+    let lane = gigaam_lane_tag(path, q8, pinned)
+    let exact = lane != GIGAAM_KQ_TAG && lane != gigaam_image_tag(true)
+    let dev = path |> ends_with(".dlim") ? TowerDev.none : gigaam_dev_flavor(gg_lane_meta(lane, exact && gg_carrier_gemm_f16(path)))
+    let tag = tower_dev_tag(lane, dev)
     var m <- load_through_image(path, tag, GIGAAM_ARCH, "source model", type<GigaamModel>, $(img : string; var out : GigaamModel) {
-        var inscope st <- stage_gigaam_model(path, q8)
-        return gg_mint(st, out, img)
+        var inscope st <- stage_gigaam_model(path, q8, false, pinned)
+        return dev == TowerDev.none ? gg_mint(st, out, img) : gg_mint_gpu(st, out, img, dev)
     }, $ [unused_argument(t)] (t : GigaamModel) => true, $ [unused_argument(t, src)] (t : GigaamModel; src : string) {})
-    announce_lane(GIGAAM_ARCH, q8, m.gemm_f16 ? "f16 GEMM planes" : "f32 planes", "set_gigaam_q8", g_ga_pin != GemmLane.unset, gigaam_gpu_exact_serves())
+    if (m.kq_lane) {
+        if (m.dev_backend != TowerDev.none) {   // the seats live in the device block: the image names no member on the host
+            to_log(LOG_INFO, "dasLLAMA {GIGAAM_ARCH}: GEMM lane kq - the block GEMMs as the carrier's own planes, on the {m.dev_backend} image's device block\n")
+        } else {
+            let layout = m.kq_repacked ? "repacked for {active_kernel_backend()}" : "in disk order (the portable batch GEMM)"
+            to_log(LOG_INFO, "dasLLAMA {GIGAAM_ARCH}: GEMM lane kq ({gigaam_kq_members(m)}) - the block GEMMs as the carrier's own planes, {layout}\n")
+        }
+    } else {
+        announce_lane(GIGAAM_ARCH, m.q8, m.gemm_f16 ? "f16 GEMM planes" : "f32 planes", "set_gigaam_q8", pinned, gigaam_gpu_exact_serves())
+    }
     return <- m
 }
 
-//! The loaded lane's name: the facade's exec-format arm.
-def gigaam_exec_fmt(m : GigaamModel) : string => m.q8 ? "q8" : (m.gemm_f16 ? "f16" : "f32")
+//! The loaded lane's name: the facade's exec-format arm - the kq lane's one K-quant member (`k4`), `kq` where its seats mix.
+def gigaam_exec_fmt(m : GigaamModel) : string {
+    if (m.kq_lane) {
+        return m.kq_fmt != GIGAAM_KQ_MIXED ? "{kq_fmt_of_slot(m.kq_fmt)}" : "kq"
+    }
+    return m.q8 ? "q8" : (m.gemm_f16 ? "f16" : "f32")
+}
+
+//! A lane is pinned for the next loads (`set_gigaam_q8`); un-pinned, a quantized carrier takes the kq lane.
+def private gigaam_lane_pinned() : bool => g_ga_pin != GemmLane.unset
 
 //! Every buffer an encode and a decode reuse, so a transcribe allocates nothing past its first call.
 struct GigaamState {
@@ -836,6 +1211,7 @@ struct GigaamState {
     rope_tt : int64                  //!< the frame count the rope tables hold (0 = none)
     @scratch @exact_size xqi : array<int8>
     @scratch @exact_size xsi : array<float>
+    @scratch @exact_size xbsi : array<int>   //!< the kq lane's Q8_K image: its per-16 sums beside `xsi`'s per-superblock scales
     @scratch @exact_size logits : array<float>
     @scratch @exact_size picks : array<int>   //!< the CTC head's per-frame argmax
     @scratch @exact_size plogs : array<float>  //!< ... and its plog, where the device head served
@@ -936,20 +1312,18 @@ def gigaam_encode_block(m : GigaamModel; var st : GigaamState; l, tt : int64) {
 }
 
 //! the GPU block hook: after the CPU front and the rope tables, the conformer blocks on ``st.x``
-typedef GigaamGpuBlocksFn = function<(m : GigaamModel; var st : GigaamState; tt : int64) : bool>
 typedef GigaamServesFn = function<() : bool>
 //! the GPU encode hook: the whole encode into ``st.x`` - off the `n_in` raw samples at `samples`, the mel on the device, or off
 //! ``st.mel`` where `samples` is null; ``st.n_len`` holds the frame count either way. Answers the encoder frames, or -1 to decline
 typedef GigaamGpuEncodeFn = function<(m : GigaamModel; var st : GigaamState; samples : float const?; n_in : int64) : int64>
-var private g_ga_gpu : GigaamGpuBlocksFn
 var private g_ga_seat = GpuLaneSeat()
 var private g_ga_gpu_encode : GigaamGpuEncodeFn
 var private g_ga_gpu_encode_set = false
 
-//! `exact_lane`: the driver's halfword GEMMs are its faster lane, so the policy prefers the exact planes over the q8 image
+//! the driver's lane answers - whether it serves; the whole encode is its one seat. `exact_lane`: the driver's halfword GEMMs are
+//! its faster lane, so the policy prefers the exact planes over the q8 image
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
-def register_gigaam_gpu(fn : GigaamGpuBlocksFn; serves : GigaamServesFn; exact_lane : bool = true) {
-    g_ga_gpu = fn
+def register_gigaam_gpu(serves : GigaamServesFn; exact_lane : bool = true) {
     g_ga_seat = GpuLaneSeat(set = true, f32_lane = exact_lane, serves = serves)
 }
 
@@ -965,13 +1339,13 @@ def gigaam_gpu_serves() : bool => g_ga_seat.set && invoke(g_ga_seat.serves)
 //! Would a GPU driver serve the block loop with the exact planes its faster lane - the lane policy's question.
 def gigaam_gpu_exact_serves() : bool => gpu_exact_serves(g_ga_seat)
 
-//! Would a GPU driver serve the loaded model's encode: the q8 lane or the halfword planes, with a driver whose knob is on - the
-//! facade's device-lane arm.
-def gigaam_device_gpu(m : GigaamModel) : bool => (m.q8 || m.gemm_f16) && gigaam_gpu_serves()
+//! Would a GPU driver serve the loaded model's encode: a GPU-flavored image, its lane picked at load as one the driver's chain
+//! serves (`#tower-dev-block`), with the driver's knob on - the facade's device-lane arm.
+def gigaam_device_gpu(m : GigaamModel) : bool => m.dev_backend != TowerDev.none && gigaam_gpu_serves()
 
 var private g_ga_pin = GemmLane.unset
 
-//! Pin the weight lane for subsequent loads: q8 (the CPU serving lane) or the exact f16 planes.
+//! Pin the weight lane for subsequent loads: q8 or the exact f16 planes - a quantized carrier then dequantizes into them.
 def set_gigaam_q8(on : bool) {
     g_ga_pin = lane_pin(on)
 }
@@ -991,6 +1365,7 @@ def gigaam_encode(m : GigaamModel; var st : GigaamState) : int64 {
     dispatch_phase_encode(gigaam_conv_out(gigaam_conv_out(st.n_len, m.subs_kernel), m.subs_kernel))
     var tt = g_ga_gpu_encode_set ? invoke(g_ga_gpu_encode, m, st, null, 0l) : -1l
     if (tt < 0l) {
+        gg_cpu_refuse(m, "encode")
         tt = gg_encode_cpu_front(m, st)
     }
     st.enc_gen = tower_rows_gen()
@@ -1018,6 +1393,7 @@ def gigaam_encode_span(samples : array<float> | #; s0, s1 : int64; m : GigaamMod
             return served
         }
     }
+    gg_cpu_refuse(m, "encode")
     var tp = ref_time_ticks()
     gg_log_mel_span(samples, s0, s1, m, st)
     asr_prof_add("ga.mel", tp)
@@ -1028,7 +1404,7 @@ def gigaam_encode_span(samples : array<float> | #; s0, s1 : int64; m : GigaamMod
     return tt
 }
 
-//! the encode past a declined encode hook: the CPU front off ``st.mel``, the rope tables, then the block hook or the CPU blocks
+//! the CPU image's encode past a declined encode hook: the CPU front off ``st.mel``, the rope tables, then the CPU blocks
 [hot_path]
 def private gg_encode_cpu_front(m : GigaamModel; var st : GigaamState) : int64 {
     var tp = ref_time_ticks()
@@ -1036,11 +1412,8 @@ def private gg_encode_cpu_front(m : GigaamModel; var st : GigaamState) : int64 {
     gigaam_rope_tables(m, st, tt)
     asr_prof_add("ga.front", tp)
     tp = ref_time_ticks()
-    let served = g_ga_seat.set && invoke(g_ga_gpu, m, st, tt)
-    if (!served) {
-        for (l in range64(m.n_layer)) {
-            gigaam_encode_block(m, st, l, tt)
-        }
+    for (l in range64(m.n_layer)) {
+        gigaam_encode_block(m, st, l, tt)
     }
     asr_prof_add("ga.blocks", tp)
     return tt
@@ -1098,6 +1471,7 @@ def private gg_decode_ctc(m : GigaamModel; var st : GigaamState; n_frames : int6
     ensure_length(st.plogs, n_frames)
     let dev = g_ga_gpu_ctc_set && invoke(g_ga_gpu_ctc, m, st, n_frames)
     if (!dev) {
+        gg_cpu_refuse(m, "CTC head")
         ensure_length(st.logits, n_frames * nc)
         gg_ctc_logits_cpu(m, st, n_frames)
     }
@@ -1116,12 +1490,19 @@ def private gg_rnnt_net(m : GigaamModel) : RnntNet {
     var net = RnntNet(blob = m.blob, n_layers = m.pred_layers, pred_dim = m.pred_dim, joint_dim = m.joint_dim,
         n_tokens = m.n_classes, blank_id = m.blank_id, max_symbols = GG_MAX_SYMBOLS, zero_start = true, torch_gates = true, two_biases = true,
         embed = m.embed_w, joint_pred_w = m.jpred_w, joint_pred_b = m.jpred_b, joint_net_w = m.jout_w, joint_net_b = m.jout_b,
-        prof_step = "ga.dec.step", prof_pick = "ga.dec.pick", prof_joint = "ga.dec.joint")
+        prof_step = "ga.dec.step", prof_pick = "ga.dec.pick", prof_joint = "ga.dec.joint", dev_only = m.dev_backend != TowerDev.none,
+        dev = m.dev, devplan = m.devplan)
     net.lstm_ih[0] = m.lstm_ih
     net.lstm_hh[0] = m.lstm_hh
     net.lstm_b[0] = m.lstm_b_ih
     net.lstm_b2[0] = m.lstm_b_hh
     return net
+}
+
+//! The transducer decoder's device halves and slab into a GPU flavor's block under `prefix` (`rnnt_dev_bake`), off the CPU-form model
+def gigaam_rnnt_dev_bake(m : GigaamModel; var b : TowerDevBuild; prefix : string) {
+    return if (m.head != GigaamHead.rnnt)   // a CTC carrier's head is the CTC seat's, read off the CPU planes
+    rnnt_dev_bake(gg_rnnt_net(m), RnntEnc(d = m.d_model, w = m.jenc_w, b = m.jenc_b), b, prefix)
 }
 
 def private gg_decode_rnnt(m : GigaamModel; var st : GigaamState; n_frames : int64) {

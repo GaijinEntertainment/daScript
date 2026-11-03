@@ -49,6 +49,7 @@ let Q8_BLOCK_ELEMS = KQ_B32_ELEMS
 let Q8_BLOCK_BYTES = Q8_BLOCK_ELEMS + 2l   //! a block's bytes: its quants and the f16 scale
 let Q8_QPB = 32l   // quant bytes per block
 let Q8_SPB = 2l    // scale bytes per block (f16 halfword)
+let Q8K_SUM_ELEMS = 16l   //! the Q8_K activation form's sum block: one int sum a 16 quants beside the per-superblock scale
 
 //! kq superblock element count (the alias of KQ_SB_ELEMS), and the DEVICE scale-row stride the
 //! gathers decode a kq format's scales to (kq_ssb below is the DISK/plane stride, per format);

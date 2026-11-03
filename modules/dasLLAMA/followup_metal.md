@@ -838,9 +838,9 @@ A Metal chain serves every stage of its family on the device (`REVIEW_TOWER.md`)
 Each is a stage and the models it holds for, read off the drivers' own gates:
 
 - **The whisper mel** runs on the CPU on every whisper size.
-- **The whisper decode step** serves on the device from a text width of 512 up
-  (`METAL_WDEC_STEP_MIN_D`); tiny's (384) runs on the CPU, where the device step is the slower
-  one - 21.8 ms a request's decode against 17.8.
+- **The whisper decode step** runs on the CPU under a text width of 512 (tiny), baked so into the
+  Metal image (`ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-step-cpu`): the device step is the slower
+  one there - 21.8 ms a request's decode against 17.8.
 - **The parakeet decode** (the TDT predictor and joint, the pick) and **its mel** run on the CPU: of a
   64 s clip's 78 ms, the decode is 27.0 (260 steps at 78 us) and the mel 7.1, beside 44.9 of encode
   on the device.
@@ -902,15 +902,6 @@ projection GEMMs through `enc_f32_mm` in the command buffer where the halfword c
 serves the block GEMMs. Neither form has been raced on a tail. The work: one in-process race a tail on the half
 tile against the f32 tile (an encode's wall, the rows' distance from the CPU tail), and the tail on whichever
 holds its bar and reads faster.
-
-## 42. The ASR decoder drivers keep a dropped state's id for the process's life
-
-`g_wd_dropped` holds the id of every decoder state whose waiting cross-KV planes were dropped unread, and a
-state leaves it only at its next window (`dasllama/dasllama_metal_asr_dec.das`; the Vulkan driver carries the
-same record in `dasllama_vulkan_asr_dec.das`). A transcription makes a fresh state, so a state whose last
-window was dropped never returns: eight bytes a transcription, for as long as the server runs. The work: the
-pending mark on the state itself (a flag beside `DecoderState.gpu_uid`, the driver's one pending id beside
-it), so nothing outlives the state; both drivers in one change, the Vulkan one on a Vulkan box.
 
 ## 47. A gathered expert form that reads a plane once for an expert's few rows
 
@@ -1017,3 +1008,4 @@ dev-W floor race (`#devw-panel-knees`) scores the 27B gate site at 64 rows a win
 there. Done = a wider K chunk per barrier (or another pipeline shape) raced against the 16-row split stamp, the 27B
 9-31-row windows at decode-step bandwidth, and the floor race's gate site matching the served window, or the
 measurement that bounds each.
+

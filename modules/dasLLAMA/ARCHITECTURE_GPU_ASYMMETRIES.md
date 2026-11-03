@@ -11,7 +11,6 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
 prefill, the FP4 expert rung, the nv4 nibble decode, the MMQ pin) in `ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries`:
 
 - **The chunked deltanet scan is the discrete homes' alone** (`dn_scan_chunk_cls`, `DASLLAMA_DN_CHUNK`: the window's recurrent state advanced once a sixteen-token chunk on the cooperative tiles). Metal's window walks a token at a time over half rows (`#prefill-dn-scan` in `ARCHITECTURE_GPU_PREFILL_WINDOW.md`): a chunked body on the 8 x 8 simdgroup matrices - correct to 1e-7 of the sequential rule - raced 1.64 ms a layer against the walk's 0.97 at the 35B's 2048-row window and read pp512 4% and pp2048 5% under it on Qwen3.5-35B-A3B; a chunk's fixed cost (seven barriers, the gates, the o rows) alone is 0.4 ms.
-- **The whisper-class block-hook pin is Vulkan-only** (`set_vulkan_audio_blocks`: the block hooks pinned off while the conv stem still serves, the stem-flush and lifetime cells' seat; the Metal tower serves stem and blocks as one chain, nothing to pin apart).
 - **`metal_tower_mel_encodes` is Metal's mel counter, a function of its own**: it rises once a mel the device mel seat served (`register_whisper_mel_gpu`), the qwen3a mel and the chat towers' chunked mel alike. Vulkan counts the same seat as the `mels` field of `vulkan_tower_stats()`, where Metal's `metal_tower_stats()` carries no mel field. The caller outside the backend is `test_log_mel_chunks_gpu` (`tests/test_audio.das`).
 - **The streaming lane mint and the trimmed lane are Vulkan-only** (`vulkan_mint_begin` / `vulkan_mint_end`, the lever
   `set_vulkan_trim` / `vulkan_trim` with its `restore_vulkan_trim` form): the Vulkan lane carries a device twin the GPU
@@ -145,6 +144,13 @@ prefill, the FP4 expert rung, the nv4 nibble decode, the MMQ pin) in `ARCHITECTU
   command buffer, which leaves no per-kernel split, so under the asr_prof rail the lever replays the rotary form's head
   restrides and slab trio after the readback (`ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary`); the Vulkan chain
   carries no replay.
+- **The narrow whisper decoder's CPU step is Metal's alone** (`DASLLAMA_METAL_WDEC_SMALL_CPU`,
+  `set_metal_wdec_small_cpu`): a Metal image of a decoder under the width rule bakes its step onto the CPU beside the
+  device cross-KV, its lane folding `-cstep` (`ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-step-cpu`); the Vulkan
+  decoder's step serves on the device at every width it serves, so Vulkan registers no width rule.
+- **Whisper's Vulkan flavor is the q8 lane alone**: the Vulkan tower serves a q8 encoder only, so the `whisper-f32-q8` lane
+  (the f32 encoder beside the q8 decoder) loads its CPU image on a Vulkan box, the whole lane on the CPU, where Metal's
+  tower serves the f32 encoder and flavors that lane (`ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block`).
 - **The tower's decline stand-ins are Metal-only setters** (`set_metal_take_max_probe_`: the device's largest
   buffer under the pooled scratch takes, the seam of the tower's `memory` decline and the translation driver's
   `device` decline; `set_metal_vad_lanes_probe_`: the VAD recurrence pipeline's thread cap, the `device` decline's

@@ -8,8 +8,7 @@ A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, a
 of every helper it calls; a test file is a `.das` dastest runs - one holding a `[test]` function, or
 one whose `cant_`, `failed_` or `invalid_` prefix makes its compile the assertion. A gate function
 is a named function a cell of a `test_*_kernels.das` file calls to compare one kernel against its
-CPU oracle. A kernel class is a class that a GPU dispatch annotation - `[metal_dispatch]`,
-`[vk_dispatch]` or `[cuda_dispatch]` - compiles to a device kernel. A file's `CLAUDE.md` entry is
+CPU oracle. A file's `CLAUDE.md` entry is
 every `CLAUDE.md` clause stating a fact about the file (named with or without its `.das` suffix),
 one of its cells, or one of its gate functions, wherever in `CLAUDE.md` the clause sits; a brace
 list naming several files at once (`test_metal_{prefill,decode}_kernels`) or a suite roster states
@@ -24,17 +23,13 @@ A box fact is a condition one box or run mode meets and another does not: the de
 memory, whether the build carries a module (`typeinfo module_exists` or `typeinfo
 builtin_module_exists`), the value of an environment variable or runner flag the run reads, the
 value a tune companion returns (a function whose body is the winner the `[tune]` framework
-picked for this box), a host toolchain, or a stocked artifact's presence.
+picked for this box), a host toolchain, or a stocked artifact's presence. These definitions bind
+the `REVIEW_*.md` companions beside this file too. A kernel-unit cell, a kernel class and a CPU
+oracle are as `REVIEW_KERNEL_CELLS.md` (beside this file) defines them; an encoder is as
+`REVIEW_MEDIA_CELLS.md` (beside this file) defines it.
 
-**A kernel-unit cell - one in which test code outside a CPU oracle (the cell, a helper in its file
-or a `_*.das` helper module) dispatches a kernel class or calls a `../dasllama/dasllama_math*.das`
-kernel (a function writing an output buffer from operand buffers), directly or through a
-`../dasllama/` router whose only job is to pick which compiled form of that class or kernel runs -
-applies `REVIEW_KERNEL_CELLS.md` (beside this file) too, wherever the diff puts it.** A CPU oracle
-is the same computation written in plain code in this checklist's folder - a cell, or a `_*.das`
-helper module here; only its operands may be built, quantized, widened or read through
-`../dasllama/` functions, and a kernel under `../dasllama/` is never one; a diff that changes this
-definition changes the companion's in the same change.
+**A kernel-unit cell applies `REVIEW_KERNEL_CELLS.md` (beside this file) too, wherever the diff
+puts it.**
 
 **A diff that touches a test file or cell `REVIEW_PINNED_GATES.md` (beside this file) lists, or
 changes which `run.das` suites list one, applies that checklist too.**
@@ -53,9 +48,7 @@ which route or serving lane runs it - a compare of a CPU run against a GPU run a
 
 **A cell that feeds, preprocesses, or asserts on media bytes an encoder consumes - pixels or
 audio samples - compares an encoder's output rows against a second source, or compares ASR
-transcripts, applies `REVIEW_MEDIA_CELLS.md` (beside this file) too.** An encoder is any stage
-of a vision tower, an audio tower or a speech synthesizer - never the language model that reads
-their rows.
+transcripts, applies `REVIEW_MEDIA_CELLS.md` (beside this file) too.**
 
 **Every PR runs `run.das -- --suite model-free`, and `run.das -- --changed` on a box with the
 models stocked (every file its `PLAN` line counts), plus every test here the change reaches -

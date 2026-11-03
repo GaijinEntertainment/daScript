@@ -198,14 +198,14 @@ def test_areas_for_path(t : T?) {
 [test]
 def test_area_plan(t : T?) {
     let tts <- area_plan(["tts"])
-    t |> equal(length(tts.files), 18, "tts plans its seventeen files and the image file its kitten arm rides")
+    t |> equal(length(tts.files), 19, "tts plans its eighteen files and the image file its kitten arm rides")
     t |> equal(tts.image_arms, "kitten", "tts owns the kitten image arm")
     t |> equal(tts.files[length(tts.files) - 1], "{TESTS_DIR}/test_model_image.das", "the image file rides last")
     for (i in range(1, length(tts.files) - 1)) {
         t |> success(tts.files[i - 1] < tts.files[i], "the plan is sorted: {tts.files[i - 1]} < {tts.files[i]}")
     }
     let translate <- area_plan(["translate"])
-    t |> equal(join(translate.files, ","), "{TESTS_DIR}/test_nmt.das,{TESTS_DIR}/test_model_image.das", "translate plans its file and the image file its bergamot arm rides")
+    t |> equal(join(translate.files, ","), "{TESTS_DIR}/test_interpreter.das,{TESTS_DIR}/test_nmt.das,{TESTS_DIR}/test_model_image.das", "translate plans its two files and the image file its bergamot arm rides")
     t |> equal(translate.image_arms, "bergamot", "translate owns the bergamot image arm")
     let infra <- area_plan(["infra"])
     t |> equal(infra.image_arms, "", "infra owns no image arms, so no image file")
@@ -223,7 +223,7 @@ def test_area_plan(t : T?) {
     t |> equal(length(suite.files), 1, "a suite run plans the suite table")
     t |> equal(suite.image_arms, "arm12", "a suite run passes --arm through")
     let area <- plan_files(cfg, ["tts"])
-    t |> equal(length(area.files), 18, "an area run plans the area, whatever --suite says")
+    t |> equal(length(area.files), 19, "an area run plans the area, whatever --suite says")
 }
 
 //! the argument contracts: an area run refuses --arm/--full/--suite and an unknown area; a per-PR

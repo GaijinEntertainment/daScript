@@ -109,7 +109,10 @@ var private FACADE_DEFS_WITHOUT_TUTORIAL <- {
     "rnnt_dev_land_tokens", "rnnt_dev_layer_args", "rnnt_dev_layout", "rnnt_dev_round_budget",   //! the host half of the device transducer decode the Metal and Vulkan seats call
     "rnnt_dev_rounds", "rnnt_dev_shape_ok", "rnnt_dev_slab", "rnnt_dev_state_words",   //! the host half of the device transducer decode the Metal and Vulkan seats call
     "set_rnnt_dev_fault", "set_rnnt_dev_round_budget",    //! probe seams a fixture sets to force a device fault, a round budget or a lane split
-    "set_rnnt_trace"   //! the CPU transducer decode's per-frame trace an engine developer flips while bringing a family up
+    "set_rnnt_trace",   //! the CPU transducer decode's per-frame trace an engine developer flips while bringing a family up
+    "gigaam_gemm_stride", "gigaam_lane_tag", "gigaam_kq_members",   //! the kq lane's seat geometry, image tag and members - the next line's reasons
+    "gigaam_fc_record_seats", "gigaam_kq_members_of",   //! the kq lane's seat geometry a test pins, the lane's image tag the bake tool names, the lane's members the load log and the tests read, the record seats the device chains read
+    "register_gigaam_flavor", "gigaam_dev_flavor", "gigaam_rnnt_dev_bake", "rnnt_gpu_projects", "rnnt_dev_bake", "gigaam_gpu_lane_planes"   //! the GPU flavor a driver registers, the load's and the tests' pick of it, the transducer halves a driver's bake places in its device block (`#tower-dev-block`), the lane's planes a driver's serves predicate asks
 }
 
 [arch(at = "ARCHITECTURE_TTS.md#text-to-speech")]
@@ -123,11 +126,11 @@ def private check_floor_of(path : string; var seen : table<string>; tut_texts, r
         seen |> insert(name)
         if (!word_in_any(tut_texts, name)) {
             gate_finding(path, line_no,
-                "facade def {name} appears in no {TUTORIAL_DIR}/*.das - the facade is the public API, and every facade def is demonstrated in a tutorial, or is a def no user program calls (the runtime, a loader chain, the scheduler, a server or a bench does) that REVIEW.das's FACADE_DEFS_WITHOUT_TUTORIAL lists with its reason")
+                "facade def {name} appears in no {TUTORIAL_DIR}/*.das - the facade is the public API, and every facade def is demonstrated in a tutorial, or is a def no user program calls (the runtime, a loader chain, the scheduler, a server or a bench does) that REVIEW.das's FACADE_DEFS_WITHOUT_TUTORIAL lists with its reason (ARCHITECTURE_TTS.md#text-to-speech)")
         }
         if (!word_in_any(rst_texts, name)) {
             gate_finding(path, line_no,
-                "facade def {name} appears in no {RST_DIR}/dasLLAMA_*.rst - the tutorial pages narrate every facade def (they are hand-written, not includes), or it is a def no user program calls that REVIEW.das's FACADE_DEFS_WITHOUT_TUTORIAL lists with its reason")
+                "facade def {name} appears in no {RST_DIR}/dasLLAMA_*.rst - the tutorial pages narrate every facade def (they are hand-written, not includes), or it is a def no user program calls that REVIEW.das's FACADE_DEFS_WITHOUT_TUTORIAL lists with its reason (ARCHITECTURE_TTS.md#text-to-speech)")
         }
     }
 }
@@ -1385,8 +1388,8 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // the TTS block file's *_prepare mints, the layout helpers and the layout constants' declaration
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
-let private IMAGE_LAYOUT_STAMP_VERSION = 55
-let private IMAGE_LAYOUT_STAMP_HASH = 0x2f4428fbc305df73ul
+let private IMAGE_LAYOUT_STAMP_VERSION = 56
+let private IMAGE_LAYOUT_STAMP_HASH = 0x320ffe2440f950abul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, the header's scalar stores, the lattice
@@ -1398,7 +1401,8 @@ var private LAYOUT_HELPERS <- {
     "w_append", "w_zeros", "w_header", "store_at", "kq_plane_name",
     "blob_push", "weight_slot", "conv1d_weight_row",
     "vk_mint_plane", "vk_mint_walk", "vk_mint_sink_append",
-    "gg_stream_plane"
+    "gg_stream_plane", "gg_job_span", "gg_plane_total", "tower_dev_put",
+    "kq_gather_rows_dev", "wd_gather", "vt_gather_kq_member", "vt_gather_regions", "rnnt_dev_slab"
 }
 
 // The constants those helpers place bytes by, and the bands the two streaming writers stage
@@ -1407,7 +1411,7 @@ var private LAYOUT_HELPERS <- {
 // change that provably moves nothing re-stamps the hash alone.
 var private LAYOUT_CONSTANTS <- {
     "IMAGE_PAGE", "IMAGE_HEADER_BYTES", "SECTION_TABLE_SLACK",
-    "DWRITE_STAGING_BAND", "METAL_BAND_BLOCKS", "BLOB_ALIGN_FLOATS"
+    "DWRITE_STAGING_BAND", "METAL_BAND_BLOCKS", "BLOB_ALIGN_FLOATS", "TOWER_DEV_ALIGN"
 }
 
 def private is_archive_serializer(header : string) : bool =>
@@ -1422,7 +1426,8 @@ def private is_meta_serializer(header : string) : bool =>
 def private is_layout_function(file : string; header : string) : bool {
     return true if (is_archive_serializer(header))
     let name = def_name_of(header)
-    return true if (key_exists(LAYOUT_HELPERS, name))
+    // a bake writes a GPU flavor's device block - bytes the kernels read by layout
+    return true if (key_exists(LAYOUT_HELPERS, name) || name |> ends_with("_bake") || name |> ends_with("_bake_into"))
     return name == "build_image" || name == "parse_image" || (find(name, "_prepare") >= 0 && "{DASLLAMA_DIR}/{file}" == TTS_BLOCKS_FILE)
 }
 
@@ -1572,8 +1577,12 @@ def private check_image_layout_stamp {
     }
     return if (h == IMAGE_LAYOUT_STAMP_HASH && version == IMAGE_LAYOUT_STAMP_VERSION)
     if (version == IMAGE_LAYOUT_STAMP_VERSION) {
+        var inscope helpers <- [for (k in keys(LAYOUT_HELPERS)); k]
+        var inscope consts <- [for (k in keys(LAYOUT_CONSTANTS)); k]
+        helpers |> sort()
+        consts |> sort()
         gate_finding(IMAGE_FILE,
-            "the image layout closure changed (every Archive serializer, build_image, parse_image, every *_prepare mint of dasllama_tts_blocks.das, the layout helpers pad_to_page/w_page/plane_end/image_total_bytes/w_append/w_zeros/w_header/store_at/kq_plane_name/blob_push/weight_slot/conv1d_weight_row, and the layout constants IMAGE_PAGE/IMAGE_HEADER_BYTES/SECTION_TABLE_SLACK/DWRITE_STAGING_BAND/METAL_BAND_BLOCKS/BLOB_ALIGN_FLOATS): re-stamp IMAGE_LAYOUT_STAMP_HASH = {h}ul in modules/dasLLAMA/REVIEW.das; bump IMAGE_VERSION (still {version}) and IMAGE_LAYOUT_STAMP_VERSION with it only if the bytes moved, because a stale image at an unchanged path stays structurally valid and serves different bytes")
+            "the image layout closure changed (every Archive serializer, build_image, parse_image, every *_prepare mint of dasllama_tts_blocks.das, every *_bake / *_bake_into a GPU flavor's device block comes from, the layout helpers {join(helpers, "/")}, and the layout constants {join(consts, "/")}): re-stamp IMAGE_LAYOUT_STAMP_HASH = {h}ul in modules/dasLLAMA/REVIEW.das; bump IMAGE_VERSION (still {version}) and IMAGE_LAYOUT_STAMP_VERSION with it only if the bytes moved, because a stale image at an unchanged path stays structurally valid and serves different bytes")
     } else {
         gate_finding("modules/dasLLAMA/REVIEW.das",
             "the layout stamp is behind IMAGE_VERSION {version} - re-stamp: IMAGE_LAYOUT_STAMP_HASH = {h}ul, IMAGE_LAYOUT_STAMP_VERSION = {version}")
@@ -2440,7 +2449,7 @@ let private GEMM_GEN_FILES = [
     "modules/dasLLAMA/dasllama/dasllama_gemm_gen.das",
     "modules/dasLLAMA/dasllama/dasllama_gemm_schema.das"
 ]
-let private GEMM_GEN_STAMP_HASH = 0xa4ca111635be73b6ul
+let private GEMM_GEN_STAMP_HASH = 0xed575c7c8876ebdeul
 
 [arch(at = "ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers")]
 def private check_gemm_gen_stamp {

@@ -259,7 +259,8 @@ jobs:
             web/output64/examples/physarum_lab/physarum_lab.wasm \
             web/output64/examples/storyteller/storyteller.wasm \
             web/output64/examples/storywish/storywish.wasm \
-            web/output64/examples/parrot/parrot.wasm; do
+            web/output64/examples/parrot/parrot.wasm \
+            web/output64/examples/interpreter/interpreter.wasm; do
             [ -f "$f" ] || MISSING="$MISSING $f"
         done
         if [ -n "$MISSING" ]; then
@@ -512,7 +513,7 @@ jobs:
             rm -rf "_site_dasllama/examples/$1/models"
             printf '%s' "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>$1 - building</title><style>html,body{margin:0;height:100%}body{background:#12101a;color:#d6cfbf;font-family:ui-monospace,Menlo,Consolas,monospace;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}p{max-width:30rem;line-height:1.6}</style></head><body><p>This example is being rebuilt and will be available shortly.</p></body></html>" > "_site_dasllama/examples/$1/$1.html"
         }
-        for ex in storyteller storywish parrot; do
+        for ex in storyteller storywish parrot interpreter; do
             mkdir -p "_site_dasllama/examples/$ex"
             if [ -f "web/output64/examples/$ex/$ex.html" ] \
                && [ -f "web/output64/examples/$ex/$ex.js" ] \

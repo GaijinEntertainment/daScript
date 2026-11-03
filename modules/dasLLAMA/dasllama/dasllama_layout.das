@@ -199,21 +199,32 @@ def metal_blob_fill_blocks(t : Model; b0, nblk : int64; var dst : array<uint8>) 
 [arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def metal_blob_scale_plane(var t : Model; name : string) : bool {
     var f = KqFmt.q8
-    if (!(name |> ends_with("s")) || !kq_fmt_of_name(slice(name, 0, length(name) - 1), f) || !kq_sb(f) || f == KqFmt.q40 || f == KqFmt.iq4nl || f == KqFmt.nv4) {
+    if (!(name |> ends_with("s")) || !kq_fmt_of_name(slice(name, 0, length(name) - 1), f) || !kq_sb(f) || !metal_kq_scale_moves(f)) {
         return false
     }
-    if (empty(t.kq[int(f)].s)) {
-        return true
+    if (!empty(t.kq[int(f)].s)) {
+        metal_kq_scale_form(f, t.kq[int(f)].s)
     }
-    if (f == KqFmt.k4 || f == KqFmt.k5) {
-        // the 16B verbatim disk scale block per superblock; the 4B pad is repack scratch a blob model never uses
-        compact_kq_scale_strip(t.kq[int(f)].s)
-        return true
-    }
-    var @exact_size xc : array<uint8>
-    kq_split_scale_plane(f, unsafe(addr<uint8 const?>(t.kq[int(f)].s[0])), long_length(t.kq[int(f)].s) / kq_ssb(f), xc)
-    t.kq[int(f)].s <- xc
     return true
+}
+
+//! A superblock format's Metal scale form differs from the engine's plane: every format but q40, iq4nl and nv4, which serve as
+//! they are
+def metal_kq_scale_moves(f : KqFmt) : bool => f != KqFmt.q40 && f != KqFmt.iq4nl && f != KqFmt.nv4
+
+//! A K-quant scale plane `ks` of `f` put into its Metal device form in place: k4/k5 the 16-byte disk block a superblock,
+//! a format `metal_kq_scale_moves` leaves as it is, every other format split into scale and d rows (`kq_split_scale_plane`) -
+//! the one place a format's Metal scale form is decided, for the blob flavor's planes and the tower's kq slab alike.
+[arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
+def metal_kq_scale_form(f : KqFmt; var ks : array<uint8>) {
+    if (f == KqFmt.k4 || f == KqFmt.k5) {
+        compact_kq_scale_strip(ks)
+    } elif (metal_kq_scale_moves(f)) {
+        var @exact_size xc : array<uint8>
+        kq_split_scale_plane(f, unsafe(addr<uint8 const?>(ks[0])), long_length(ks) / kq_ssb(f), xc)
+        delete ks
+        ks <- xc
+    }
 }
 
 //! Commit `t` to the metal blob flavor WITHOUT building the big plane: the kq scale strips take
@@ -1064,28 +1075,44 @@ def moe_gpu_gather_stack_mx4(t : Model; woff : int64; n, rows, slice_rows : int6
 // row-major per superblock in the k/k+16 nibble pairing, plus the device scale rows (decoded 20 B, or
 // the codebook formats' two words); grp<mr> interleave or disk-order in, identical device bytes out.
 [arch(at = "../ARCHITECTURE_CPU_KERNELS.md#kq-subblock-planes"), arch(at = "../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
+//! The MoE stack's kq gather: `rows` rows of format `fmt` from the Model's planes at `woff` into the device layout, `wq` and
+//! `ws` grown to hold them; the nv4 rows' site-scale word read a slice off the model's table.
 def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_rows : int64;
                             repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
+    let nsb = n / KQ_SUPERBLOCK_ELEMS
+    let qsb = kq_qsb(fmt)
+    let dssb = kq_ssb(fmt)
+    assert(rows * nsb * qsb <= 2147483647l, "GPU MoE kq stack exceeds the int32 gather-buffer rail")
+    wq |> grow_resize(rows * nsb * qsb)
+    ws |> grow_resize(rows * nsb * kq_dev_ssb(fmt))
+    var slice_site_words <- [for (sl in range64(fmt == KqFmt.nv4 ? rows / slice_rows : 0l)); float_bits_to_uint(site_scale(t.site_scale, fmt, woff + sl * slice_rows * n))]
+    unsafe {
+        let sb0 = woff / KQ_SUPERBLOCK_ELEMS
+        kq_gather_rows_dev(fmt, addr<uint8 const?>(t.kq[int(fmt)].q[sb0 * qsb]), addr<uint8 const?>(t.kq[int(fmt)].s[sb0 * dssb]),
+            n, rows, slice_rows, repacked, mr, wq, ws, 0l, 0l, slice_site_words)
+    }
+    delete slice_site_words
+}
+
+//! The kq gather's core over raw planes: `rows` x `n` prepared K-quant rows at `qp` with their scale rows at `sp` (the CPU backend's
+//! grp<mr> interleave a `slice_rows` slice where `repacked`, else disk order) into the device layout at byte `dst_q` of `wq` and
+//! `dst_s` of `ws`; `slice_site_words` a slice's site-scale word (nv4's), empty elsewhere. The MoE stack gather and the towers gather through it.
+def kq_gather_rows_dev(fmt : KqFmt; qp, sp : uint8 const?; n, rows, slice_rows : int64; repacked : bool; mr : int64;
+                       var wq : array<uint8>; var ws : array<uint8>; dst_q, dst_s : int64; slice_site_words : array<uint>) {
     let nsb = n / KQ_SUPERBLOCK_ELEMS
     let qsb = kq_qsb(fmt)    // quant plane stride per superblock (disk == device for quants)
     let dssb = kq_ssb(fmt)   // disk/plane scale stride; device rows decode to kq_dev_ssb(fmt)
     let dev_ssb = kq_dev_ssb(fmt)
     let two_word_row = kq_two_word_row(fmt)
-    assert(n % KQ_SUPERBLOCK_ELEMS == 0l, "GPU MoE kq gather: row length must be a superblock multiple")
-    assert(rows * nsb * qsb <= 2147483647l, "GPU MoE kq stack exceeds the int32 gather-buffer rail")
-    wq |> grow_resize(rows * nsb * qsb)
-    ws |> grow_resize(rows * nsb * dev_ssb)
+    assert(n % KQ_SUPERBLOCK_ELEMS == 0l, "GPU kq gather: row length must be a superblock multiple")
     let nslices = int(rows / slice_rows)
     let qrow = nsb * qsb
     let srow = nsb * dssb
     let ng = repacked ? slice_rows / mr : 0l
     unsafe {
-        let sb0 = woff / KQ_SUPERBLOCK_ELEMS
-        let qp = addr<uint8 const?>(t.kq[int(fmt)].q[sb0 * qsb])
-        let sp = addr<uint8 const?>(t.kq[int(fmt)].s[sb0 * dssb])
-        var wqp = addr(wq[0])
-        var wsp = addr(ws[0])
-        let site_tab = addr(t.site_scale)
+        var wqp = addr(wq[dst_q])
+        var wsp = addr(ws[dst_s])
+        let site_words = long_length(slice_site_words) > 0l ? addr<uint const?>(slice_site_words[0]) : null
         let nrows = nslices * int(slice_rows)
         let njobs = is_job_que_available() ? min(nrows, 4 * (get_total_hw_jobs() + 1)) : 1
         maybe_parallel_for(0, nrows, njobs) $(rowb, rowe) {   //! a row a unit: one slice alone still spreads over the lanes
@@ -1093,8 +1120,8 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                 for (row in range(rowb, rowe)) {
                     let rr = int64(row)
                     let ri = rr % slice_rows
-                    //! the nv4 row's fifth word: its slice's site scale (a slice is one expert's plane), a const table read a row
-                    let sbits = fmt == KqFmt.nv4 ? float_bits_to_uint(site_scale(*site_tab, fmt, woff + (rr - ri) * n)) : 0u
+                    // the nv4 row's fifth word: its slice's site scale (a slice is one expert's plane)
+                    let site_word = site_words != null ? site_words[(rr - ri) / slice_rows] : 0u
                     let sliceQ = (rr - ri) * qrow
                     let sliceS = (rr - ri) * srow
                     let grouped = repacked && ri < ng * mr
@@ -1183,7 +1210,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                     dsc[blk * 2l + 1l] = gs[blk * 2l * mr + 2l * r + 1l]
                                 }
                                 for (idx in range64(16l, 20l)) {
-                                    dsc[idx] = uint8((sbits >> uint((idx - 16l) * 8l)) & 0xFFu)
+                                    dsc[idx] = uint8((site_word >> uint((idx - 16l) * 8l)) & 0xFFu)
                                 }
                             } elif (fmt == KqFmt.k2) {   // the field-major grp header re-packs to [d][dmin][16 pair bytes]
                                 dsc[0] = gs[16l * mr + 2l * r]
@@ -1242,7 +1269,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
                                     dsc[idx] = rs[idx]
                                 }
                                 for (idx in range64(dssb, KQ_DEV_SSB)) {
-                                    dsc[idx] = uint8((sbits >> uint((idx - 16l) * 8l)) & 0xFFu)
+                                    dsc[idx] = uint8((site_word >> uint((idx - 16l) * 8l)) & 0xFFu)
                                 }
                             } else {
                                 for (idx in range64(4l)) {   // f16 d + f16 dmin verbatim

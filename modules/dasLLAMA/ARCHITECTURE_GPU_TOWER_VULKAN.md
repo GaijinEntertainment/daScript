@@ -51,10 +51,11 @@ and 72 is off every fragment lattice. Per family, both drivers:
 
 ### The Vulkan tower driver's encode chains {#vk-tower-encode-chains}
 
-`dasllama_vulkan_tower.das` fills the vision hook slots (gemma4v, gemma3v, qwen3v, qwen25v, the gemma4uv embedder), the four
-audio blocks seats - the whisper-class block loop (`register_tower_blocks_gpu`), gemma4a's
-(`register_gemma4a_gpu`), canary's (`register_canary_gpu`) and parakeet's (`register_parakeet_gpu`) - and the audio
-front seats (qwen3a's mel and conv front, gemma4a's whole chunk, canary's front, parakeet's whole encode;
+`dasllama_vulkan_tower.das` fills the vision hook slots (gemma4v, gemma3v, qwen3v, qwen25v, the gemma4uv embedder), the two
+audio blocks seats - the whisper-class block loop (`register_tower_blocks_gpu`) and canary's (`register_canary_gpu`), each
+behind its device front - and the audio front seats (qwen3a's mel and conv front, gemma4a's whole chunk, canary's front,
+parakeet's and gigaam's whole encodes; gemma4a, parakeet and gigaam register only their lane answers beside them, a GPU
+image's front and blocks being one seat;
 `ARCHITECTURE_MEDIA.md#tower-gpu-hook`) on a build without das_metal (the Metal driver owns them there). Each
 blocks chain is the Metal encode chain's shape (`ARCHITECTURE_GPU_TOWER.md#tower-encode-chains`): one command buffer per encode walks the blocks dispatch for dispatch
 as the family's CPU loop does, the CPU loop is the specification, and the residual stream comes
@@ -93,7 +94,7 @@ the chain runs it (the vision tails, the projector tails of gemma4a and of the c
   off the arm's feed over the q8 projector planes uploaded beside the block records, qwen2a's bias, the swapped
   gate with its mid rms or voxtral's erf GELU - and reads the soft tokens back in the blocks' rows' place; it
   serves where the GEMMs sit on the tiles' lattice (`vt_ct_shape_ok`), else the blocks alone, answering which
-  (`TowerTailServed`; lever `set_vulkan_tower_tail`, counter `vulkan_tower_tail_encodes`).
+  (`TowerTailServed`; counter `vulkan_tower_tail_encodes`).
   Qwen3-ASR's front takes its own two seats: the mel hook runs the frames' power spectrum and the mel-major log rows
   (the global clamp stays with the caller), and the front hook runs the window's chunk convs (im2col to f16 and the
   f16 GEMM a stage, the bias + activation as a row class), the feature shuffle, `conv_out` on the cm2 q8 tile and
@@ -118,7 +119,7 @@ the chain runs it (the vision tails, the projector tails of gemma4a and of the c
 - **canary and parakeet** share one FastConformer chain over a family descriptor (`VtFc`): canary's biased GEMMs and
   channel-major taps, parakeet's bias-less GEMMs (the seams on the bare stamp, the activations alone) and tap-major
   taps, its CPU mel uploaded where canary's spectrum runs on the device, its whole encode one hook
-  (`register_parakeet_gpu_encode`: the front chain, then the blocks; the lever `set_vulkan_parakeet_front`). The
+  (`register_parakeet_gpu_encode`: the front chain, then the blocks). The
   blocks seat runs the whisper-class row classes (layernorm, the bias class with a silu mode, the layernorm seam
   with the half residual weight) plus two of its own: the full bidirectional Transformer-XL attention with the u/v
   biases and an online softmax, and the centered depthwise conv with the folded BatchNorm and silu. The front seat
@@ -224,8 +225,8 @@ differ from the ones the kernel home stamps (`Q3A_TOK_PER_CHUNK`, qwen3a's 13 po
 `knob` (`DASLLAMA_VK_TOWER`), `device` where the tier's want (`DASLLAMA_GPU`, read before any
 device init) or a class declines, where the device has neither tile family the chains ride
 (`vulkan_tower_tiles_on`: cm2, or the KHR tile at subgroup 32; the twin tests skip off it), or for every front where the f16 GEMM feed is off
-(`vulkan_tower_front_route`: the `DASLLAMA_COOPMAT=sdot4` mode - the block chains ride the q8
-batch tile and the KHR flash tile there and serve), `memory` where an allocation fails (the partial
+(`vulkan_tower_front_route`: the `DASLLAMA_COOPMAT=sdot4` mode - a family whose encode runs a conv front takes its CPU
+image there, its flavor pick asking the feed), `memory` where an allocation fails (the partial
 upload or scratch is released, the CPU chain serves). Each decline is logged once per reason per model.
 Engage is
 `vulkan_tower_stats` and `vulkan_tower_declines` deltas - the stats count encodes, rows and
@@ -252,17 +253,10 @@ device off the tower's plane when the tower landed exactly these rows in the enc
 resident; then the halfword
 store on the cm2 feed, the Q8_0 requant on the mul_mm tiles), then per layer the ck and cv GEMMs on
 the tile the tower chains ride (`VtTile`, the schedule records written as the tower's) and the
-K/V store class (`TowerWdecKv`), which writes a projection's [rows x d] output - a head's hs
-columns a row - into head-major planes, run twice off each projection - the f16 resident plane, and the CPU chain's f32
-layout (kx pre-scaled and transposed, vx with its bias) on device planes of its own. That layout is
-read back into the decoder state only when that state's own CPU reader can need it - the step's
-`rows` decline on a window's first batch, and the step called on it while it is not the live
-window (`wd_flush_cross_kv`, into the state in hand, over a pending mark the cross-KV chain leaves
-naming the state by the driver's own serial, `DecoderState.gpu_uid`, never its address) - so the
-served loop never pays the 61 MB copy a turbo window's layouts make, and a state's next window,
-served or declined, supersedes its pending one unread. The driver stores no pointer into a state and
-never writes into another one, which may already be gone: another state's window, the release and the
-model drop mark the pending owner, whose next decode step panics until it starts a window of its own. The decode step is
+K/V store class (`TowerWdecKv16`), which writes a projection's [rows x d] output - a head's hs
+columns a row - into the head-major f16 resident planes the step reads, cv's bias folded in. Nothing is read back: a
+Vulkan-flavored model's decode never runs on the CPU. The live window names its state by the driver's own serial
+(`DecoderState.gpu_uid`, never its address), and the driver stores no pointer into a state. The decode step is
 one command buffer per batch: the token and position rows summed on the host and uploaded, then
 per layer the LN with its Q8_0 feed in one dispatch (`TowerLnRq`, the first layer), the fused
 q|k|v GEMV (three regions of one dispatch, the N-column form over a batch's rows), the two f16

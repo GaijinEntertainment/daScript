@@ -174,6 +174,7 @@ def greedy_gen(tr : Model; prompt : array<int64>; n_gen : int) : array<int64> {
     var out : array<int64>
     with_dasllama_jobque_() {
         var s = make_run_state(tr.config)
+        delete out
         out <- generate(tr, s, prompt, length(prompt) + n_gen)
         delete s
     }
@@ -250,6 +251,7 @@ def parity_gen_ids(tr : Model; prompt : array<int64>; n_gen : int; dn_chunked : 
     with_pinned_kernels(dn_chunked) {
         let ids <- greedy_gen(tr, prompt, n_gen)
         let echo = length(prompt) - 1
+        delete got
         got <- [for (i in range(n_gen)); ids[echo + i]; where echo + i < length(ids)]
     }
     return <- got
@@ -346,6 +348,9 @@ def tower_parity(t : T?; tag : string; cpu, gpu : array<float>) {
     t |> success(st.norm_dev <= 4e-3lf, "{tag}: norm_dev <= 4e-3")
 }
 
+//! the deep-tower bar on rel_l2 and the norm deviation: 3e-3 scaled by the square root of the depth
+def tower_deep_bar(n_layers : int64) : double => 3e-3lf * sqrt(double(n_layers))
+
 //! The deep-tower form: depth-scaled bars (rel_l2/norm <= 3e-3*sqrt(n_layers), cos within
 //! 1e-4). rel_elem is LOGGED, never asserted — the worst single element rides attention
 //! near-ties, which diverge O(1) under staging noise while the tensor stays structurally
@@ -353,7 +358,7 @@ def tower_parity(t : T?; tag : string; cpu, gpu : array<float>) {
 def tower_parity_deep(t : T?; tag : string; cpu, gpu : array<float>; n_layers : int64) {
     var st = TowerParityStats()
     return if (!tower_parity_stats(t, tag, cpu, gpu, st))
-    let bar = 3e-3lf * sqrt(double(n_layers))
+    let bar = tower_deep_bar(n_layers)
     t |> success(st.rel_l2 <= bar, "{tag}: rel_l2 <= 3e-3*sqrt({n_layers})")
     t |> success(st.cos >= 1.0lf - 1e-4lf, "{tag}: cos >= 1-1e-4")
     t |> success(st.norm_dev <= bar, "{tag}: norm_dev <= 3e-3*sqrt({n_layers})")

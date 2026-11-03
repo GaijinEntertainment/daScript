@@ -8,81 +8,50 @@ docs: `ARCHITECTURE_MEASUREMENT*.md` beside this file. Planned work: `followup_m
 outside `site*/` (repo root), in a commit message, or in its PR body - never one a changed line
 carries unchanged.**
 
-A figure is any number a run produced - a rate, a wall, a count, a byte size, or a ratio or
-percentage of two such numbers, produced by the runs its sides came from - or an error or
-agreement reading (a cosine, a max-abs error) that a test's tolerance, or the bound an
-instrument's bounded-difference compare checks against, is set from, or that a change cites as
-evidence that a tolerance set for another cell, model or tier holds for the one it adds or alters.
-A test suite's pass, fail and skip tally, the count of kernels a compare of two dumps of
-emitted kernel code finds identical or different, and a value inside the `provenance` object of a
-`performance/defaults/<class>.tune-defaults.json` profile or a tune sidecar, where it sits in that
-file, are not figures; the same value written into other text is one.
+The terms below are short forms; each one's full boundary and edge cases are in
+`ARCHITECTURE_MEASUREMENT_RELEASE.md#measurement-vocabulary`.
+
+A figure is any number a run produced, a ratio of two included, or an error reading that a
+tolerance is set from or that is cited to show a tolerance holds; a test suite's tally is not one.
 
 A served-turn leg is prefill, decode, a batched decode row, or a whole served request end to end;
-the wall of one internal stage (one model component's forward pass, one decoder block) is not a
-leg.
+a facade `transcribe` / `synthesize` / `translate` call is a whole served request, so a leg.
 
-An instrument is a file whose printed or returned result is a wall or rate of a run it drove,
-read by its own clock or by timestamps a GPU driver returns, wherever the file sits; a file
-reading a spawned child process's clock, and a profiler-gated report a serving path prints beside
-its served output, are not one. A harness is the `harness/` script that drove
-a run, where one did. A route is the end-to-end code path a served turn takes, including the
-default route - the one a run given no command-line arguments and no environment overrides takes.
+An instrument is a file that reports the wall or rate of a run it drove, timed on its own clock or
+by GPU timestamps. A harness is the `harness/` script that drove a run. A route is the end-to-end
+code path a served turn takes; the default route is the one a run with no arguments or environment
+overrides takes.
 
-The flags of a serving run are the tier (`-jit` or not), the `DAS_TUNE_POLICY` value in force,
-the CPU kernel backend the registry served (the one `DASLLAMA_PIN_BACKEND` pinned, or, with it
-unset, the one the auto-selection picked), the GPU backend where one served with its device, on
-Vulkan the coopmat mode (`DASLLAMA_COOPMAT`), and on CUDA the prefill GEMM form
-(`DASLLAMA_CUDA_MMQ`) and whether a launch overlaps the tail of the one before it
-(`DASLLAMA_CUDA_PDL`). The flags of an instrument run are the tier, the `DAS_TUNE_POLICY` value,
-the device, `DASLLAMA_COOPMAT` on Vulkan or `DASLLAMA_CUDA_MMQ` and `DASLLAMA_CUDA_PDL` on CUDA,
-and the instrument's arguments. A run that serves a model through the engine carries every flag of
-a serving run, whatever drives it.
+The flags of a serving run are the tier (`-jit` or not), `DAS_TUNE_POLICY`, the CPU kernel
+backend served, the GPU backend and device where one served, `DASLLAMA_COOPMAT` on Vulkan, and `DASLLAMA_CUDA_MMQ`
+and `DASLLAMA_CUDA_PDL` on CUDA; any run that serves a model through the engine has them. An
+instrument run's flags are the same less the CPU backend, plus the instrument's arguments. A test
+run's flags are the tier, `DAS_TUNE_POLICY`, the device, both backends, and every environment
+variable and engine setter it uses to pick its path. An unset environment-variable flag is named as
+unset. An environment override is any other env variable that changes what the run compiles, tunes
+or serves.
 
-The flags of a test run - a dastest test whose reading sets or checks a tolerance - are the tier,
-the `DAS_TUNE_POLICY` value, the device, the CPU kernel backend the registry served, the GPU
-backend where one served, and every environment variable it sets and every engine setter it calls
-to choose the code path it checks. An environment-variable flag a serving, instrument or test run
-left unset is named as unset.
+A board cell is a run whose reading lands as a `performance/records/<box>.json` row or a
+`PERF_LEDGER.md` figure. A spawned cell is a run `performance/gen_bench_records.das` spawns into
+such a row; a manual cell is a `benchmarks/lcpp_bench.das` command a `PROFILE.md` section
+documents, run by hand into one. A rig leg is a spawned cell whose row has `engine` `das`, named by
+its `(backend, flavor)` pair.
 
-An environment override is an env variable given to the run that changes what it compiles,
-tunes, or serves, other than the run's flags.
+The `-jit` script is `benchmarks/lcpp_bench.das` run as a script under `-jit`; a `-jit` reading is a
+wall or rate an instrument printed under `-jit`, or a ratio of two such prints.
 
-A board cell is a run whose reading lands as a row of `performance/records/<box>.json` or as a
-figure in `PERF_LEDGER.md`.
+A third-party row is a figure from a third-party program serving the same model on the same input
+size. A cell, script or exe of this repository is a spawned or manual cell, a script in the tree at
+the diff's tip, or an exe built from that tree.
 
-A spawned cell is a run `performance/gen_bench_records.das` spawns whose reading lands as a row of
-`performance/records/<box>.json`; a manual cell is the `benchmarks/lcpp_bench.das` command a
-`PROFILE.md` section documents, run by hand, its reading written as such a row.
-
-The `-jit` script is `benchmarks/lcpp_bench.das` run as a script under `-jit`, not as the released
-exe; a `-jit` reading is a wall or rate that an instrument - the `-jit` script included - printed
-while running under `-jit`, or a ratio of two such prints, whoever computed it.
-
-A rig leg is a child cell `performance/gen_bench_records.das` spawns whose record row has `engine`
-`das`, named by that row's `(backend, flavor)` pair whatever its `workload`.
-
-A third-party row is a figure from a run of a third-party program serving the same model on the
-same input size.
-
-A cell, script or exe of this repository is a spawned or manual cell, a script in the tree at the
-diff's tip, or an exe built from that tree; a script outside the tree is not one, whatever it
-calls.
-
-A box can mint a figure from a spawned cell when a rig leg it neither refuses nor skips drives the
-path the owed figure measures and `performance/gen_bench_records.das --catalog official` carries the
-model; from a manual cell when it runs the documented command's OS and backend and holds its model;
-a figure owed for new code when a rig leg or a documented command reaches that code's input. A
-figure owed for a route that no rig leg drives and no `PROFILE.md` section documents a command for
-is one no box can mint.
+A box can mint a figure when a rig leg it runs, or a `PROFILE.md` command it can run with the
+model, drives the measured path or reaches the new code's input; a figure for a route no rig leg
+drives and no `PROFILE.md` section documents a command for is one no box can mint.
 
 A board box is a box with a `performance/records/<box>.json`. The release re-mint is a diff that
-runs `performance/gen_bench_records.das` with a release's exe on one or more board boxes and writes
-their rows into `performance/records/<box>.json`.
-
-A `held` entry is a `performance/records/annotations.json` entry carrying a board row's `gguf`,
-`box`, `engine`, `backend`, `flavor` and `workload`, whose `held` field names the follow-up ledger
-row that keeps the row off the board.
+runs `performance/gen_bench_records.das` with a release's exe on board boxes and writes their rows.
+A `held` entry is a `performance/records/annotations.json` entry naming a board row and the
+follow-up ledger row that keeps it off the board.
 
 **A diff that owes a figure from every board box of the author's lists the author's board boxes in
 its PR body.**
@@ -184,8 +153,8 @@ spawned cell whose input reaches it, writes the new cell's figures from every bo
 author's that can mint them into a dated `PERF_LEDGER.md` entry, in the same change, and names in
 its PR body the `followup_general.md` row under which the release re-mint owes its rows.**
 
-**A change that owes a ledger figure no box of the author's can mint names instead, in the same
-change, an artifact that shows the new code ran end to end - a record, a gate output, an
+**A change that owes a ledger figure no box of the author's can mint, and that no rule above sends
+to a new spawned cell, names instead, in the same change, an artifact that shows the new code ran end to end - a record, a gate output, an
 instrument's print - or the profile output that shows the change is faster
 (`benchmarks/lcpp_bench.das`'s `forward_profile` rows, or the tier's `DASLLAMA_GPU_PROF=1` token
 ledger), with the flags that run took.**

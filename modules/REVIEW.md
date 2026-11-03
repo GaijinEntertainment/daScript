@@ -1,7 +1,6 @@
 # Modules Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`../CLAUDE.md`.
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.**
 
 **Some module folders carry their own `REVIEW.md`; a diff applies the `REVIEW.md` of every folder
 between this one and each file it changes.** A `.das` or `.cpp` under this folder but outside

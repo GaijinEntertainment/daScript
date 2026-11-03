@@ -1565,7 +1565,7 @@
     here.
 146. **ACCEPTED, not planned: the dev-W bake set follows the minting program, not the box.** The
     split-scale `devwf16` panels bake only where the Metal prefill module registered its CPU
-    mirror (`ARCHITECTURE_IMAGE.md#image-devw-plane`), so a program on the same box built without that
+    mirror (`ARCHITECTURE_IMAGE_GPU_PLANES.md#image-devw-plane`), so a program on the same box built without that
     module mints a thinner image at the SAME identity and every site it skipped serves off the
     runtime dequant until a program carrying the mirror re-mints. Ruled acceptable: a `.dlim` is
     a box-local cache, so the thinner image costs a dequant pass and never a different answer.
@@ -2560,3 +2560,39 @@
     where llama.cpp splits the reduction across blocks (stream-k); `PERF_LEDGER.md`'s 2026-10-31 / 11-01 35B NVFP4 CUDA
     prefill entry measures the k step flat, so the grid is what stays. Done = the FP4 leaf under the cm2 tiles' k split
     (or a stream-k form) where its grid falls short of the card, raced on the 27B's dense shapes, the entry's rows re-read.
+
+278. **The portable kq batch GEMM re-splits every nibble a token, and wasm has no int8 dot.** On the browser build GigaAM's
+    kq lane trails the q8 lane on the same utterance: `kq_rows_batch_kernel` (`dasllama_math_default.das`)
+    runs one `dot_kq` a token over a hot weight row, so each token pays the nibble split and the weight loads again, and
+    `idot4` lowers on wasm to two `extmul`s and two `extadd_pairwise`s a 16 bytes because the build pins relaxed SIMD off
+    (`web/CMakeLists.txt` `DAS_WASM_RELAXED_SIMD`: Safari refuses a module carrying any relaxed opcode, and the i7 operand of
+    `i32x4.relaxed_dot_i8x16_i7x16_add_s` needs a sign fold that wraps at -128). Done = a row x token micro-tile in the
+    portable batch (the nibbles split once a 32-block, four tokens' `idot`s off one load), the two lanes' walls on the
+    interpreter's browser build measured before and after it into `PERF_LEDGER.md`, and a relaxed-SIMD build arm raced
+    beside it where a browser serves it.
+
+279. **The GPU TTS seats run on a dequantized copy of the weights, not the carrier's own planes.** Metal and Vulkan build
+    every StyleTTS2 (kitten, kokoro) and Pocket device slab at attach by widening the weights into padded f32 rows
+    (`tts_slab_build`, `tts_slab_conv` / `tts_slab_linear` in `dasllama_tts_slab.das`: q8 through `q8_plane_row_f32`,
+    K-quants through `tsw_put_kq`); Vulkan dequantizes every Pocket linear the same way and adds an f16 copy of the
+    StyleTTS2 decoder, and Metal's Pocket frames widen the K-quant linears to f32 and requantize them to Q8_0
+    (`pk_blob_q8`). So the TTS kernels read a converted copy about four times the q8 weights - `REVIEW_KQ_FORMATS.md`: "a diff
+    that makes a site read a weight format through a converted copy ... is a defect" - and no TTS family can have a per-backend `.dlim`: its device planes are built at every attach,
+    and baked as they are they would quadruple the file. Done = with the CUDA home's TTS seats, the TTS kernels on CUDA,
+    Metal and Vulkan read the carrier's q8 and K-quant planes in their device forms (the tower tiles' q8 and kq families),
+    the attach keeps only what the image bakes, and each TTS family mints its Metal, Vulkan and CUDA image, bound on load
+    with no conversion like every other tower's.
+
+280. **Vulkan's Gemma-4 vision towers run on an f32 widening of their bf16 weights.** gemma4v's f32 lane widens its bf16
+    block GEMMs in `wblob` to f32 at upload (`vt_upload_f32` over `vt_rows_f32`, `widen_bf16`), and the gemma4v and
+    gemma4uv patch stem and projector slab (`vt_vis_slab`) widens their bf16 rows the same way, so the Vulkan kernels read
+    a copy twice the size of the file's planes while Metal reads the bf16 natively. No per-backend Vulkan image can hold
+    those planes without the doubling, the same defect row 279 states for the TTS seats. Done = with the CUDA home's
+    vision towers, the Vulkan and CUDA Gemma-4 vision kernels read the bf16 planes as the file holds them, and the Vulkan
+    gemma4v and gemma4uv images carry those bytes, uploaded with no conversion.
+281. **The ten `register_<family>_flavor` seats are one shape written ten times.** Each family file (gigaam, parakeet,
+    canary, the whisper-class audio tower, gemma4a, qwen3a, whisper, gemma3v, qwen3v, gemma4v) declares a `<Family>Flavor`
+    record - `backend`, `serves`, `bake` - a private global holding it, and a three-line `register_<family>_flavor(backend,
+    serves, bake)` filling it; `tower_dev_flavor` and `tower_flavor_registered` then read the record generically. The
+    eleventh family copies the shape again. Done = when the next family lands: one macro (or one generic over a record the
+    families share) declares the record, the global and the registrant, and the ten families call it.

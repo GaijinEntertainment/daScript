@@ -755,16 +755,37 @@ def gguf_transcode_kq(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; 
         panic("gguf: tensor '{name}' {fmt} plane offset {eloff} is not block-aligned ({d.elems})")
     }
     let unit0 = eloff / d.elems
+    transcode_kq_units(m, srcbytes, name, fmt, ti, kq, ks, unit0 * d.qsb, unit0 * d.ssb, nb, src_off)
+}
+
+//! `gguf_transcode_kq` into the planes at BYTE offsets `qoff` / `soff` - the form a plane that holds several formats takes,
+//! where one element offset cannot address both planes.
+def gguf_transcode_kq_at(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; fmt : KqFmt; var kq : array<uint8>; var ks : array<uint8>; qoff, soff, expect_n : int64) {
+    let d = kq_desc(fmt)
+    let ti = kq_transcode_check(m, name, d.ggml_type, ggml_type_name(d.ggml_type), 0l, expect_n, d.elems)
+    let nb = expect_n / d.elems
+    if (nb <= 0l) {
+        return
+    }
+    if (qoff % d.qsb != 0l || soff % d.ssb != 0l) {
+        panic("gguf: tensor '{name}' {fmt} plane offsets {qoff} / {soff} are not on the format's stride ({d.qsb} / {d.ssb})")
+    }
+    transcode_kq_units(m, srcbytes, name, fmt, ti, kq, ks, qoff, soff, nb, 0l)
+}
+
+//! the `nb` units of tensor `ti` from element `src_off` into the planes at byte offsets `qoff` / `soff`, threaded over units
+def private transcode_kq_units(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; fmt : KqFmt; ti : int; var kq : array<uint8>; var ks : array<uint8>; qoff, soff, nb, src_off : int64) {
+    let d = kq_desc(fmt)
     let disk = d.disk_bytes
     let qsb = d.qsb
     let ssb = d.ssb
-    guard_dst(name, "quant plane", unit0 * qsb, nb * qsb, long_length(kq))
-    guard_dst(name, "scale plane", unit0 * ssb, nb * ssb, long_length(ks))
+    guard_dst(name, "quant plane", qoff, nb * qsb, long_length(kq))
+    guard_dst(name, "scale plane", soff, nb * ssb, long_length(ks))
     with_tensor_view(m, srcbytes, ti) $(bytes, tbase) {
         unsafe {
             let srcp = addr<uint8 const?>(bytes[tbase + (src_off / d.elems) * disk])
-            var kqp = addr(kq[unit0 * qsb])
-            var ksp = addr(ks[unit0 * ssb])
+            var kqp = addr(kq[qoff])
+            var ksp = addr(ks[soff])
             maybe_parallel_for(0, int(nb), transcode_jobs(nb, disk)) $(rb, re) {
                 kq_transcode_units(fmt, srcp, kqp, ksp, int64(rb), int64(re), disk, qsb, ssb)
             }
