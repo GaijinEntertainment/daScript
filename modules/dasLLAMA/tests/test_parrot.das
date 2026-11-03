@@ -203,7 +203,7 @@ def test_smoke_clones_and_says(t : T?) {
         let root = get_das_root()
         let argv <- [example_daslang(), "-jit", "-dasroot", root, "{root}/examples/dasLLAMA/parrot/main.das", "--",
                      "--models", models_dir(), "--smoke", "--clip", "{root}/examples/dasLLAMA/parrot/models.json"]
-        let rc = run_and_capture(argv, out, 60.0)
+        let rc = run_and_capture(argv, out, 240.0)   // the cap covers a cold JIT of the whole facade, past a minute on a slow box
         t |> success(rc != 0, "a clip that does not decode is a refusal, not a run")
         t |> success(find(out, "did not decode") >= 0, "and it says so by name:\n{example_tail(out)}")
     }

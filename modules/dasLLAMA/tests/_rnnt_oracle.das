@@ -21,7 +21,22 @@ require dasllama/dasllama_rnnt   // RnntToken: the twins' tokens
 require ?das_metal dasllama/dasllama_metal_asr_dec   // the Metal transducer seat's pin and counters
 require ?das_metal dasllama/dasllama_metal_common    // metal_common_init: whether the box has a Metal device
 require ?vulkan dasllama/dasllama_vulkan_asr_dec     // the Vulkan seat's, on a build without das_metal
-require ?vulkan dasllama/dasllama_vulkan_tower       // vulkan_tower_arms: whether the tier serves on this box
+require ?vulkan dasllama/dasllama_vulkan_tower       // vulkan_tower_arms: whether the tier serves on this box; VK_RNNT_PIECE
+require ?das_metal dasllama/dasllama_metal_tower     // MT_RNNT_PIECE: the Metal block's transducer prefix
+
+//! The prefix the build's seat reads a GPU-flavored net's halves and slab under in its device block (`#tower-dev-block`); "" where
+//! the build has no seat
+def rnnt_seat_piece : string {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return MT_RNNT_PIECE
+    } else {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            return VK_RNNT_PIECE
+        } else {
+            return ""
+        }
+    }
+}
 
 //! The build's device transducer seat: Metal, else Vulkan, else none.
 def rnnt_seat_name : string {
@@ -139,20 +154,21 @@ struct RnntTwin {
     dev : array<RnntToken>
 }
 
-//! A family's device-decode twin over one clip's encoder rows `x`: `decode` run with the seat pinned off (the CPU loop - the decode
-//! counter must not move, so a knob that pins nothing reds) and pinned on (counted on the device, `projects` / `handoffs` of
-//! them as the family's lane expects), the tokens alike within `bar`. The control decodes `x` scaled by 1.05 on the CPU loop and
-//! its plogs must land outside `bar` of the device's: a bar the encoder rows cannot move proves nothing. `x` is put back bit for
-//! bit. Answers both decodes for the caller's log. The caller skips through `rnnt_seat_skip` first.
+//! A family's device-decode twin over one clip's encoder rows `x`: `cpu_decode` - the CPU-flavored model's decode of `x` - with
+//! the seat pinned off (the CPU loop - the decode counter must not move, so a knob that pins nothing reds), then `dev_decode` -
+//! the GPU-flavored model's (`#tower-dev-block`) - pinned on (counted on the device, `projects` / `handoffs` of them as the
+//! family's lane expects), the tokens alike within `bar`. The control decodes `x` scaled by 1.05 on the CPU loop and its plogs
+//! must land outside `bar` of the device's: a bar the encoder rows cannot move proves nothing. `x` is put back bit for bit.
+//! Answers both decodes for the caller's log. The caller skips through `rnnt_seat_skip` first.
 def rnnt_device_twin(t : T?; tag : string; bar : float; projects, handoffs : int64; var x : array<float>;
-                     decode : block<(var toks : array<RnntToken>) : void>) : RnntTwin {
+                     cpu_decode : block<(var toks : array<RnntToken>) : void>; dev_decode : block<(var toks : array<RnntToken>) : void>) : RnntTwin {
     var tw : RnntTwin
     let was = rnnt_seat_pin(false)
     let k0 = rnnt_seat_stats()
-    invoke(decode, tw.cpu)
+    invoke(cpu_decode, tw.cpu)
     let k1 = rnnt_seat_stats()
     rnnt_seat_pin(true)
-    invoke(decode, tw.dev)
+    invoke(dev_decode, tw.dev)
     let s1 = rnnt_seat_stats()
     rnnt_seat_pin(false)
     var inscope keep := x
@@ -160,7 +176,7 @@ def rnnt_device_twin(t : T?; tag : string; bar : float; projects, handoffs : int
         v *= 1.05
     }
     var inscope moved : array<RnntToken>
-    invoke(decode, moved)
+    invoke(cpu_decode, moved)
     x := keep
     rnnt_seat_pin(was)
     t |> equal(k1.decodes - k0.decodes, 0l, "{tag}: pinned off, the decode stays on the CPU loop")

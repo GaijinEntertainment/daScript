@@ -3,7 +3,8 @@
 Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document
 carries the split scale plane a Metal blob stores a superblock
 format's scale row in, the iquant GEMV codebook grid read with its per-box f4-slab twin,
-the GEMV site abstraction the decode families share, and the per-32 planes' small-batch form. The GPU
+the GEMV site abstraction the decode families share, the per-32 planes' small-batch form, and
+the form matrix every Metal GEMM stamp family keeps. The GPU
 backend role table these sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
 ### The Metal kq split scale plane {#metal-kq-split-scale-plane}
@@ -98,3 +99,23 @@ copy 3.6 / 4.5 / 8.0 / 14.8), so a plane of 512 rows or fewer always splits; a 2
 one and two rows (the 8192 x 2048 down 34.5 / 35.3 against 27.8 / 28.8) and loses past them (45.9
 against 100.7 at eight); and a one-row read splits wherever K reaches 2048 (the 2048 x 8192 up 27.0
 against 26.3), where an 896 x 4864 plane's short K loses it (6.3 against 10.2).
+
+### The Metal GEMM form matrix {#metal-kq-form-matrix}
+
+A Metal GEMM stamp names itself `stamp = "<family>:<fmt>:<form>"`: the family (`kq_mm` for the
+dense GEMM, `moe_mm` and `moe_mm_split` for the routed experts' GEMM), the `KqFmt` member, and the
+form (`t`, `th`, `th128`, `thdb`, ...). `check_kq_form_matrix` (`REVIEW.das`) reads every such
+stamp in the `dasllama/dasllama_metal_*.das` files and holds each member that stamps in a family
+to three things:
+
+- **The family's whole form set.** The set is every form any member of the family stamps; a
+  member that lacks one is a finding.
+- **Its own race.** The Metal files carry the member's race name - `"kq_mulmm_<fmt>"` in the
+  `kq_mm` family, `"moe_mulmm_<fmt>"` in the two MoE families - so a `metal_tensor_race` verdict
+  picks between the member's tensor twin and its base.
+- **A dev-W dequant pass, in the `kq_mm` family.** The member has an `enc_kq_dq_<fmt>` or an
+  `enc_dequant_<fmt>h` dispatch, so every dense format takes the dev-W arm or none does.
+
+The reason is measurement: two formats that differ in forms, race or dev-W arm dispatch through
+different kernel sequences on one machine, so a timing compared across them measures the
+sequences, not the formats' kernels.

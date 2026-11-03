@@ -1,10 +1,9 @@
 # dasLLAMA tests - Pinned Gates Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`.
+docs: `../ARCHITECTURE.md`, `../ARCHITECTURE_CELL_BARS.md`. Planned work: `../followup_general.md`.
 
-A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the asserts
-of every helper it calls. A pinned test cell is a cell the pinned set lists, or any cell of a file
+A cell is as `REVIEW.md` (beside this file) defines it. A pinned test cell is a cell the pinned set lists, or any cell of a file
 the pinned set lists whole - a file entry, one naming the file and no cell - in the set before the
 diff or after it, and the pinned set is the only test of whether a cell is one; a named-cell entry names a `[test]`
 function and pins every cell that function runs. The pinned set, one entry a line, each with what it
@@ -231,12 +230,15 @@ change; a diff adding a cell to a file with a file entry adds to that entry each
 asserts that the entry does not name.**
 An axis is one distinct behaviour the cell asserts - an output form, a refusal path, an argument's
 order; a new input row is an axis gained only where it runs a kernel stamp, an output form or a
-branch of the kernel or its router that no earlier row of the cell ran.
+branch of the kernel or its router that no earlier row of the cell ran. An assert added inside a
+gate of an entry that holds every kernel gate the cell calls is covered by that clause, and needs
+no item of its own.
 
 **A diff that widens a pinned test cell's tolerance, swaps its comparison for a looser one,
 rewrites an expected value its entry ties to an outside source (a document, a checked-in table, a
 knob list) to a value that source does not state, drops its input, or drops a `run.das` suite
-listing that reaches it is a defect - fix the code that fails the cell instead.**
+listing that reaches it is a defect - fix the code that fails the cell instead; a bar shown
+mis-derived is re-derived and ledgered in `../ARCHITECTURE_CELL_BARS.md#rederived-cell-bars`.**
 
 **A diff that removes a pinned test cell's assert while the code it checks stays adds to the same
 cell, in the same change, an assert that holds the same values to an equal or tighter bound, with
@@ -248,13 +250,14 @@ replacement's output to the deleted assert's bound or tighter, with its control,
 testing the replacement, or names in the old cell's pinned-set entry the pinned cell that already
 asserts the replacement's output to that bound.**
 
-**A diff that adds a cell or an assert whose expected value must be kept in step with something
-maintained outside the cell - a value the cell restates as a literal or a copied condition, or
-reads from an oracle dump, a truth cache or another expected-value file under `models_dir()` that
-it does not build itself, never a value the cell's own claim defines - or
-that a checked-in table (the model table in `../README.md`, or a list of kernel names whose
-coverage note names a test cell as each one's evidence) names as its evidence, adds the cell
+**A diff that adds a cell or an assert whose expected value must keep step with something
+maintained outside the cell - a value an outside source can change while no sha, row or tag in
+this repository changes, restated as a literal or a copied condition or read from an
+expected-value file under `models_dir()` the cell does not build (an oracle dump, a truth cache),
+never a value the cell's own claim defines - or
+that a checked-in table (`../README.md`'s model table, a kernel list whose coverage note names a
+cell as each kernel's evidence) names as its evidence, adds the cell
 carrying it to the pinned set in the same change** - as a named cell, or, when the new cell leaves
 every cell of its file pinned, by replacing the file's named cells with one file entry naming what
-it pins. A new entry in an existing cell's expectation list is not a new assert, and an assert
-comparing against a `../dasllama/` constant by name keeps nothing in step.
+it pins. A new entry in an existing cell's expectation list is not a new assert; a `../dasllama/`
+constant compared by name keeps nothing in step.

@@ -23,6 +23,7 @@ require dasllama/dasllama_convert   // quantize_q8_0_into — the cblob q8 image
 require dasllama/dasllama_common   // apply_box_profile_runtime for the qwen3a-image identity
 require dasllama/dasllama_blocks   // embed_text_rows/eval_embd_ — the ASR turn drives the qwen3 decoder
 require dasllama/dasllama_image
+require dasllama/dasllama_tower_image
 
 // Qwen3-ASR audio encoder (mtmd projector type `qwen3a`): 128-mel input processed in
 // 100-frame chunks — 3 stride-2 conv2d blocks per chunk (100×128×1 -> 13×16×480), features
@@ -126,6 +127,39 @@ def private image_post_load(var st : Qwen3aStaging) {}
 def private register_qwen3a_image_tags {
     register_image_family_tag("qwen3a-f32", true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
     register_image_family_tag("qwen3a-q8")
+    register_tower_dev_tags("qwen3a-q8")
+    register_tower_dev_tags("qwen3a-f32")
+}
+
+//! A GPU driver's qwen3a flavor (`#tower-dev-block`): the backend whose image it mints, whether its chains serve the q8 lane, and
+//! the bake that converts a CPU-form tower into the driver's device block - the core's pieces and the front's and projector's
+//! in the core's one block
+typedef Qwen3aServesLaneFn = function<(q8 : bool) : bool>
+typedef Qwen3aBakeFn = function<(t : Qwen3aTower; var b : TowerDevBuild) : bool>
+
+struct Qwen3aFlavor {
+    backend : TowerDev
+    serves : Qwen3aServesLaneFn
+    bake : Qwen3aBakeFn
+}
+
+var private g_q3a_flavor = Qwen3aFlavor()
+let private QWEN3A_DEV_CONSUMED <- ["core.qblob", "core.qscales", "qcblob", "qcscales"]   //! the planes a qwen3a bake converts
+
+def register_qwen3a_flavor(backend : TowerDev; serves : Qwen3aServesLaneFn; bake : Qwen3aBakeFn) {
+    g_q3a_flavor = Qwen3aFlavor(backend = backend, serves = serves, bake = bake)
+}
+
+//! the GPU projector hook: the MLP projector over the normed rows in `s.xb` into `s.out` - a GPU-flavored tower's, whose planes
+//! the CPU never reads
+typedef Qwen3aProjGpuFn = function<(t : Qwen3aTower; var s : EncoderState; npos : int64) : bool>
+var private g_q3a_proj_gpu : Qwen3aProjGpuFn
+var private g_q3a_proj_gpu_set = false
+
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
+def register_qwen3a_proj_gpu(fn : Qwen3aProjGpuFn) {
+    g_q3a_proj_gpu = fn
+    g_q3a_proj_gpu_set = true
 }
 
 var private g_q3a_pin = GemmLane.unset
@@ -164,6 +198,12 @@ def private q3a_announce_lane() {
 def load_qwen3a_tower(path : string) : Qwen3aTower {
     let tag = q3a_serve_q8() ? "qwen3a-q8" : "qwen3a-f32"
     q3a_announce_lane()
+    let dev = path |> ends_with(".dlim") ? TowerDev.none : tower_dev_flavor(g_q3a_flavor, q3a_serve_q8())
+    if (dev != TowerDev.none) {
+        return <- load_staged_image_dev(path, tag, "qwen3a-tower", "source mmproj gguf", type<Qwen3aTower>, dev, g_q3a_flavor.bake, QWEN3A_DEV_CONSUMED) {
+            return <- stage_qwen3a_tower(path)
+        }
+    }
     return <- load_staged_image(path, tag, "qwen3a-tower", "source mmproj gguf", type<Qwen3aTower>) {
         return <- stage_qwen3a_tower(path)
     }
@@ -171,8 +211,9 @@ def load_qwen3a_tower(path : string) : Qwen3aTower {
 
 //! Mint a served tower from a staged read WITHOUT touching disk — the off-rail control for suites
 //! (no `.dlim` written, no sibling-lane GC); the tag is the staging's own lane.
-def mint_qwen3a_tower(var st : Qwen3aStaging; var out : Qwen3aTower) {
-    cache_via_image_staged(st, out, "", st.e.core.q8 ? "qwen3a-q8" : "qwen3a-f32")
+//! `dev` names the GPU flavor (the staging read under `with_tower_dev_staging(dev)`), `none` the CPU image (`tower_mint_flavor`).
+def mint_qwen3a_tower(var st : Qwen3aStaging; var out : Qwen3aTower; dev : TowerDev = TowerDev.none) {
+    tower_mint_flavor(st, out, st.e.core.q8 ? "qwen3a-q8" : "qwen3a-f32", "qwen3a-tower", dev, g_q3a_flavor, QWEN3A_DEV_CONSUMED)
 }
 
 //! The mmproj-gguf reader proper: scalars land in the served tower, plane bytes in the staging
@@ -329,7 +370,7 @@ def private q3a_cblob_quantize(var t : Qwen3aTower; var cblob : array<float>; va
     delete cblob
     cblob <- nf
     t.cq8 = true
-    if (!select_matmul_backend_for_load_()) {
+    if (!tower_repack_backend()) {
         return   // row-major backend reads the dense Q8_0 planes as-is
     }
     tw_repack(qblob, qscales, t.cout_w_off, feat, d)
@@ -502,6 +543,7 @@ def qwen3a_encode(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConvStat
     var tstage = ref_time_ticks()
     let front_on_gpu = g_q3a_front_gpu_set && invoke(g_q3a_front_gpu, t, win, n_chunks, s)
     if (!front_on_gpu) {
+        tower_cpu_refuse(t.core, "dasLLAMA qwen3a", "conv front")
         cs.xin |> resize(QWEN3A_CHUNK * nm)
         for (ci in range64(n_chunks)) {
             // chunk input as W=100 (frames), H=128 (mel), C=1: x[ih][iw] = mel[ih][ci·100 + iw]
@@ -536,6 +578,13 @@ def qwen3a_encode(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConvStat
     asr_prof_add("q3a.conv", tstage)
     tstage = ref_time_ticks()
 
+    if (t.core.dev_backend != TowerDev.none) {
+        if (!encoder_blocks_ln_post_gpu(t.core, s, npos) || !g_q3a_proj_gpu_set || !invoke(g_q3a_proj_gpu, t, s, npos)) {
+            tower_cpu_refuse(t.core, "dasLLAMA qwen3a", "blocks or projector")
+        }
+        asr_prof_add("q3a.blocks", tstage)
+        return
+    }
     // transformer blocks + post-LN over the window's positions
     encoder_blocks(t.core, s, npos)
     layernorm_batch(s.xb, s.x, t.core.fblob, t.core.lnp_w_off, t.core.lnp_b_off, d, npos, t.core.eps)

@@ -51,7 +51,7 @@ lines of the PR body.
    file carries one.
 5. **Decoder head.** CTC (a linear, a greedy argmax, repeats collapsed, blank dropped), RNN-T or TDT
    on the shared transducer home `dasllama_rnnt.das`, or an LLM session
-   (`ARCHITECTURE_MEDIA.md#asr-decoder-session`). A transducer is `rnnt_decode` over an `RnntNet`
+   (`ARCHITECTURE_MEDIA_ASR.md#asr-decoder-session`). A transducer is `rnnt_decode` over an `RnntNet`
    descriptor of the family's weight offsets and widths, its flags naming the model's form
    (`zero_start`: the first step reads a zero input; `torch_gates`: gate rows i, f, g, o;
    `two_biases`: torch's `b_ih` and `b_hh`), an empty `durations` a plain RNN-T, and an `RnntEnc`
@@ -126,7 +126,8 @@ home, never another family file. In landing order:
   `qblob`/`qscales` and `blob`), another `*_mm*` wrapper, or `mm_blob_b`, every
   activation-by-activation product through `gemm_f32_jo`. Served widths pad up to 64 with zero
   rows and columns (`ARCHITECTURE_MEDIA.md#tower-padded-widths`). The q8 lane transcodes the block
-  GEMMs alone to Q8_0 at stage; a head the carrier holds in f16 serves its own halfwords on both
+  GEMMs alone to Q8_0 at stage; a carrier that holds them quantized serves them as its own planes
+  on the kq lane (GigaAM's `gemm_seats`, `tower_mm`'s seat arm); a head the carrier holds in f16 serves its own halfwords on both
   lanes (`mm_f16_b`), as do f16 depthwise taps (`fc_dw_bias_rows_f16` on the CPU, the TAP_F16
   stamps of `GkDwConvRows` on the devices - permuted at mint as halfwords, never widened into the
   image), and the front and the transducer stay f32 (`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`).
@@ -136,7 +137,7 @@ home, never another family file. In landing order:
   norm. Every buffer reused across encodes is `@scratch`.
 - **The decode.** CTC greedy in the family file; RNN-T/TDT through `dasllama_rnnt.das` with the
   family's weight offsets in its descriptor; an LLM decoder as a `Model` session
-  (`ARCHITECTURE_MEDIA.md#asr-decoder-session`).
+  (`ARCHITECTURE_MEDIA_ASR.md#asr-decoder-session`).
 - **Transcribe, caps, language.** `<family>_transcribe(m, st, samples, blk, detected_lang)` runs
   mel, encode and decode, applies the long-form policy and emits `TranscribeSegment`s in
   centiseconds; `<family>_asr_caps`, `<family>_check_lang` and `<family>_exec_fmt` answer for the
@@ -148,6 +149,14 @@ home, never another family file. In landing order:
   CTC head is a seat on every home - Metal's `metal_gigaam_ctc` and Vulkan's `vulkan_gigaam_ctc`
   over the shared pick `GkCtcPick` - reading the encode's held rows by generation and declining
   by name.
+- **The GPU flavor.** Each backend loads only its own image, so a family a GPU chain serves gets a
+  flavored image per backend (`ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block`): `dev_backend`,
+  `dev` and `devplan` fields on the served struct, serialized, with `<FAMILY>_META_FIELDS` bumped;
+  the flavored tags through `register_tower_dev_tags`; a `<Family>Flavor` slot that
+  `register_<family>_flavor(backend, serves, bake)` fills; `<FAMILY>_DEV_CONSUMED`, the planes the
+  bake converts into the device block and the GPU image drops; the load asking the flavor
+  (`tower_dev_flavor`) and, on a flavor, minting through `load_staged_image_dev`; and
+  `tower_cpu_refuse` at every CPU stage a GPU image could reach, since the CPU never runs one.
 - **The lane pin.** `set_<family>_q8` / `reset_<family>_q8` / `<family>_serves_q8` over one
   `GemmLane` through `lane_serves_q8`, and a LOG_INFO line naming the lane and its reason at load
   (`ARCHITECTURE_MEDIA.md#tower-weight-lane`).
@@ -285,6 +294,10 @@ A tower driver fills the family's seats from its `[init]` (`dasllama_metal_tower
 - **The seats:** `register_<family>_gpu(@@metal_<family>_blocks, @@metal_tower_serves)` and the
   front or whole-encode seat. Whether a seat served reads off its engage counters - the dispatch
   counters a GPU seat moves when it serves (`metal_tower_stats`) - never off the model running.
+- **The flavor:** `register_<family>_flavor(TowerDev.metal, @@<serves>, @@metal_<family>_bake)` - the
+  pick asks the knob, the lane and the driver's pipelines (`metal_tower_init`), so a box whose chain
+  cannot serve maps the CPU image; the bake writes the chain's pieces into the device block from
+  what its own attach wrote, the bake function joining the layout stamp's closure.
 - **Tests:** a kernel cell per new class in `tests/test_metal_prefill_kernels.das` with its
   poisoned input, the class in the coverage census, and the family's `mtower` cell in
   `test_model_image.das` - CPU vs GPU transcript, encoder rows' rel-l2, counter deltas, and a
@@ -304,6 +317,9 @@ The Vulkan tower fills the same seats on a build without das_metal, from
   and the front or whole-encode seat; an LLM decoder runs on the box's decode policy, a
   hand-written decoder on the GPU takes an ASR-decoder driver
   (`ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-asr-decoder`).
+- **The flavor:** `register_<family>_flavor(TowerDev.vulkan, @@<serves>, @@vulkan_<family>_bake)`,
+  the pick asking the knob, the lane, `vulkan_tower_arms()` and the f16 GEMM feed where the chain
+  rides it (`vt_cm2_feed`), the bake gathering the chain's planes into the device block.
 - **Tests:** a cell per new class in `tests/test_vulkan_tower_kernels.das` through `CellPlanes` and
   `check_rows`, each with its poisoned element; the family's three-way twin in `test_audio.das`
   (`test_<family>_vulkan_twin`: the exact tower on the CPU, the q8 tower on the CPU and on the

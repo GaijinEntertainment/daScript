@@ -72,5 +72,7 @@ URL of the lane's green run on the PR's head commit.**
 **A step in `pages.yml` that names more than one id under `examples/games/` spells them as a
 `for g in <ids>; do` loop, never inline.** `examples/games/REVIEW.das` (repo root) reads the
 deployed list from those loops; an inline list beside a surviving loop is one nothing
-cross-checks. An example outside `examples/games/` never goes in that loop - the step names it on
-its own.
+cross-checks.
+
+**A diff never adds an id of an example outside `examples/games/` to a `for g in <ids>; do` loop in
+`pages.yml` - name it outside that loop.**

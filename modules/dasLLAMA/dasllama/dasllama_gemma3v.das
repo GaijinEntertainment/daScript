@@ -13,6 +13,7 @@ require dasllama/dasllama_gguf
 require dasllama/dasllama_math   // matmul_q8q8_batch + the backend repack — the q8 block-GEMM lane
 require dasllama/dasllama_common   // apply_box_profile_runtime for the tower-image identity
 require dasllama/dasllama_image   // the dlim rail: mapped planes, no allocation or work at load
+require dasllama/dasllama_tower_image
 require dasllama/dasllama_plane public   // PlaneF/PlaneI8 — re-exported so requirers can delete a tower
 require dasllama/dasllama_tower   // the shared encoder-tower pieces: layernorm, biases, gelu, attention, pool
 require dasllama/dasllama_vision   // encode_image_: letterbox + normalize ahead of the tower
@@ -66,6 +67,9 @@ struct Gemma3vTower {
     layer_f_stride : int64
     layer_w : int64      // per-block GEMM region base (qblob when q8, else blob); stride layer_w_stride
     layer_w_stride : int64
+    dev_backend : TowerDev    //! the GPU flavor whose device block the image carries (`#tower-dev-block`); `none` on the CPU image
+    dev : PlaneU8 = PlaneU8()
+    devplan : PlaneI64 = PlaneI64()
     image_map : void?         // non-null when the planes borrow a mapped .dlim (dasllama_image)
     image_bytes : uint64
 }
@@ -117,7 +121,7 @@ def finalize(var s : Gemma3vState) {
 
 // the tripwire: serialize_image_meta(Gemma3vTower) covers 23 fields; image_map + image_bytes
 // are deliberate skips (the three planes are sections, not meta).
-let private GEMMA3V_META_FIELDS = 23 + 2
+let private GEMMA3V_META_FIELDS = 24 + 2
 
 // every meta-carried Gemma3vTower field, explicitly, both directions (see dasllama_image)
 def private serialize_image_meta(var arch : Archive; var t : Gemma3vTower) {
@@ -145,6 +149,7 @@ def private serialize_image_meta(var arch : Archive; var t : Gemma3vTower) {
     arch |> serialize_raw(t.layer_f_stride)
     arch |> serialize_raw(t.layer_w)
     arch |> serialize_raw(t.layer_w_stride)
+    arch |> serialize_raw(t.dev_backend)
 }
 
 [unused_argument(t)]
@@ -159,6 +164,8 @@ struct Gemma3vStaging {
     wblob : array<uint16>
     qblob : array<int8>       // q8 lane: the block GEMMs as Q8_0 (repacked for the active backend)
     qscales : array<float>
+    @exact_size dev : array<uint8>       //!< a GPU-flavored mint's device block (`TowerDevBuild`)
+    @exact_size devplan : array<int64>   //!< ... and its plan
 }
 
 def private serialize_image_meta(var arch : Archive; var st : Gemma3vStaging) {
@@ -182,6 +189,7 @@ let private GEMMA3V_TAG_Q8 = "gemma3v-q8"
 def private register_gemma3v_image_tags {
     register_image_family_tag(GEMMA3V_TAG, true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
     register_image_family_tag(GEMMA3V_TAG_Q8)
+    register_tower_dev_tags(GEMMA3V_TAG_Q8)
 }
 
 typedef Gemma3vGpuChainFn = function<(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>; w, h, npos : int64) : bool>   //! the whole chain from the planes
@@ -235,7 +243,7 @@ def private g3v_gemm_names(swapped : bool) : array<string> {
 
 // every GEMM tensor the halfword twin route serves: the block set at every layer, plus the
 // input projection. A sample of two would let a mixed file bake a twin the route reads as one type.
-[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
+[arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane")]
 def private g3v_gemm_types_uniform(m : GGUFMeta; names : array<string>; n_layer : int64; gt : int) : bool {
     if (gguf_tensor_type(m, "mm.input_projection.weight") != gt) {
         return false
@@ -420,7 +428,7 @@ def private g3v_repack_all(var st : Gemma3vStaging; gemm_sizes : array<int64>) {
 //! Read the tower off an mmproj gguf into owned staging arrays — the mint side of the image rail,
 //! the only path that touches the source file. Every plane lands f32 in `blob` (the file's f16
 //! widens exactly); the q8 lane transcodes the block GEMMs to Q8_0 at read.
-[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
+[arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane")]
 def stage_gemma3v_tower(path : string) : Gemma3vStaging {
     var st = Gemma3vStaging()
     st.t.q8 = g3v_serve_q8()
@@ -500,7 +508,7 @@ def load_gemma3v_tower(path : string) : Gemma3vTower {
     // a .dlim named directly: no mmproj to regenerate from, so a wrong identity panics; the lane is
     // the file's (its baked tag), not the pin's - a served tower reads its q8 flag from the meta
     if (path |> ends_with(".dlim")) {
-        let baked = image_family_tag(path)
+        let baked = image_tag_lane(image_family_tag(path))
         if (baked == GEMMA3V_TAG || baked == GEMMA3V_TAG_Q8) {
             tag = baked
         }
@@ -509,6 +517,12 @@ def load_gemma3v_tower(path : string) : Gemma3vTower {
     } else {
         g3v_announce_lane()
     }
+    let dev = path |> ends_with(".dlim") ? TowerDev.none : tower_dev_flavor(g_g3v_flavor, tag == GEMMA3V_TAG_Q8)
+    if (dev != TowerDev.none) {
+        return <- load_staged_image_dev(path, tag, "gemma3v-tower", "source mmproj gguf", type<Gemma3vTower>, dev, g_g3v_flavor.bake, GEMMA3V_DEV_CONSUMED) {
+            return <- stage_gemma3v_tower(path)
+        }
+    }
     return <- load_staged_image(path, tag, "gemma3v-tower", "source mmproj gguf", type<Gemma3vTower>, $ {
         return <- stage_gemma3v_tower(path)
     }, $ [unused_argument(t)] (t : Gemma3vTower) => true, $(t : Gemma3vTower; src : string) {
@@ -516,16 +530,35 @@ def load_gemma3v_tower(path : string) : Gemma3vTower {
     })
 }
 
-//! Mint a served tower from a staged read WITHOUT touching disk — the off-rail control for suites.
-def mint_gemma3v_tower(var st : Gemma3vStaging; var out : Gemma3vTower) {
-    cache_via_image_staged(st, out, "", st.t.q8 ? GEMMA3V_TAG_Q8 : GEMMA3V_TAG)
+//! A GPU driver's gemma3v flavor (`#tower-dev-block`): the backend whose image it mints, whether its chain serves a lane, and
+//! the bake that converts a CPU-form tower into the driver's device block
+typedef Gemma3vServesLaneFn = function<(q8 : bool) : bool>
+typedef Gemma3vBakeFn = function<(t : Gemma3vTower; var b : TowerDevBuild) : bool>
+
+struct Gemma3vFlavor {
+    backend : TowerDev
+    serves : Gemma3vServesLaneFn
+    bake : Gemma3vBakeFn
+}
+
+var private g_g3v_flavor = Gemma3vFlavor()
+let private GEMMA3V_DEV_CONSUMED <- ["qblob", "qscales"]   //! the planes a gemma3v bake converts: a GPU flavor carries their device forms instead
+
+def register_gemma3v_flavor(backend : TowerDev; serves : Gemma3vServesLaneFn; bake : Gemma3vBakeFn) {
+    g_g3v_flavor = Gemma3vFlavor(backend = backend, serves = serves, bake = bake)
+}
+
+//! Mint a served tower from a staged read WITHOUT touching disk — the off-rail control for suites; `dev` names the GPU flavor
+//! (the staging read under `with_tower_dev_staging(dev)`), `none` the CPU image (`tower_mint_flavor`).
+def mint_gemma3v_tower(var st : Gemma3vStaging; var out : Gemma3vTower; dev : TowerDev = TowerDev.none) {
+    tower_mint_flavor(st, out, st.t.q8 ? GEMMA3V_TAG_Q8 : GEMMA3V_TAG, "gemma3v-tower", dev, g_g3v_flavor, GEMMA3V_DEV_CONSUMED)
 }
 
 // the bind walk skips a missing section silently, so the flag=>plane invariant must be checked
 // once the carrier is live, or the kernel derefs null
 def private g3v_check_planes(t : Gemma3vTower; src : string) {
-    if (t.q8 && (empty(t.qblob) || empty(t.qscales))) {
-        panic("dasLLAMA gemma3v: '{src}' declares q8 block GEMMs but carries no qblob/qscales sections - the image is corrupt or hand-edited")
+    if (t.q8 && (t.dev_backend == TowerDev.none ? empty(t.qblob) || empty(t.qscales) : empty(t.dev))) {
+        panic("dasLLAMA gemma3v: '{src}' declares q8 block GEMMs but carries no {t.dev_backend == TowerDev.none ? "qblob/qscales sections" : "device block"} - the image is corrupt or hand-edited")
     }
 }
 
@@ -653,6 +686,7 @@ def private g3v_stem_finish(t : Gemma3vTower; var s : Gemma3vState; npos : int64
 
 // the tail: post-LN → 4×4 mean pool → weighted RMS (soft_emb_norm) → projection into out
 def private g3v_tail(t : Gemma3vTower; var s : Gemma3vState; n_side : int64; var out : array<float>) : int64 {
+    tower_cpu_refuse(t, "dasLLAMA gemma3v", "tail")
     let d = t.n_embd
     let npos = n_side * n_side
     layernorm_batch(s.xb, s.x, t.blob, t.post_ln_w, t.post_ln_b, d, npos, t.eps)
@@ -685,6 +719,7 @@ def gemma3v_encode(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>
         asr_prof_add("g3v.gpu", tp)
     }
     if (!gpu_served) {
+        tower_cpu_refuse(t, "dasLLAMA gemma3v", "block loop")
         tp = ref_time_ticks()
         if (chain) {
             g3v_im2col(t, s, planes, w, h)

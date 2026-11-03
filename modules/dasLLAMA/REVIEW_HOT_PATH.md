@@ -3,22 +3,24 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `ARCHITECTURE_RUNTIME.md`. Planned work: `followup_general.md`.
 
-A function calls another when its body names that function in a call, a call written inside a block
-or lambda literal included; the function that encloses the literal is the caller; an `invoke`
-through a seat or a function value names no function and calls none. A function reaches another when
-it calls it, or calls a function that reaches it. A serving step is one unit of work the runtime
-repeats inside one request it serves: a token, a prefill quantum (one batch of prompt tokens the
-prefill path processes in a single pass), one encoded media input of that request (an image, a
-video frame, an audio chunk; a clip one call encodes whole is one input), or one synthesized speech
-chunk or frame. A function runs under another when that one reaches it, or reaches the `invoke`
-that runs it. A region entry is the outermost function the runtime re-enters once per serving
-step, and any function a serving step runs through a function value - one a seat (a module-level
-variable holding a function, filled through a public setter) or a kernel-backend override
-registration stores, after its declaration, for the runtime to call through - where no
-`[hot_path]`, contract or `[cold_path]` function reaches the `invoke`. An interior function is a
-function, not itself a region entry, that has at least one caller under `dasllama/` a serving step
-reaches, and whose every such caller the runtime re-enters once per serving step
-(`ARCHITECTURE_RUNTIME.md#the-hot-path-coverage-model`).
+The terms below are short forms; each one's full boundary is in
+`ARCHITECTURE_RUNTIME.md#hot-path-terms`, and where the annotations sit and why is
+`ARCHITECTURE_RUNTIME.md#the-hot-path-coverage-model`.
+
+A function calls another when its body, a block or lambda literal in it included, names that
+function in a call; an `invoke` calls none. A function reaches another when it calls it or calls a
+function that reaches it, and runs under any function that reaches it or reaches the `invoke` that
+runs it.
+
+A serving step is one unit of work the runtime repeats inside one served request: a token, a
+prefill batch, one encoded image, video frame or audio chunk, or one synthesized speech chunk.
+
+A seat is a module-level variable holding a function, filled through a public setter. A region
+entry is the outermost function the runtime re-enters once per serving step, or a function a
+serving step runs through a seat or a kernel-backend override where no `[hot_path]`, contract or
+`[cold_path]` function reaches the `invoke`. An interior function is a function, not a region
+entry, with a caller under `dasllama/` a serving step reaches, every such caller re-entered once
+per serving step.
 
 **A diff that adds a kernel dispatch, a loop or a call that the runtime re-enters once per serving
 step makes sure the function that records the dispatch or holds the loop or call is, or runs
@@ -52,6 +54,7 @@ serving step reaches through a call or an `invoke` - it is no region entry; it c
 
 **A non-`[test]` function a diff adds or changes under this module's `tests/`, `harness/`,
 `benchmarks/` or `performance/` that reaches a `[hot_path]`, `[no_alloc]`, `[no_env]` or `[no_io]`
-function puts the one `[cold_path]` of its chain on the outermost non-`[test]` function of those
-four folders that reaches it - no function it reaches under those folders carries another, edited
-by the diff or not.**
+function puts one `[cold_path]` on the outermost non-`[test]` function of those four folders on
+each chain that reaches it, from a `[test]` or from a function nothing in those folders calls; a
+function outermost on no chain - a helper shared by two chains included - carries none, edited by
+the diff or not.**

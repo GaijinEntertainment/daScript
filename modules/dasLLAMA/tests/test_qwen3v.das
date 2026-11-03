@@ -11,6 +11,8 @@ require dasllama/dasllama_math   // with_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/fio
 require _model_tier   // models_dir() + model_available() gate
+require _gpu_knobs   // serving_tower_dev: the q8 lane's GPU image leg
+require dasllama/dasllama_tower   // tower_dev_tag: the GPU image's lane name
 require ?das_metal dasllama/dasllama_metal_tower   // the CPU gates pin the tower knob off
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown - the f16-route cell re-arms crowned PSOs
 require ?vulkan dasllama/dasllama_vulkan_tower
@@ -156,7 +158,7 @@ def test_qwen3v_tier1(t : T?) {
 [cold_path]
 def private q3v_metal_q8_leg(tt : T?; mm4 : string) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        var twq <- mint_tower(mm4, true)   //! in memory: a load under the pin would bake the q8 image beside the serving one
+        var twq <- mint_tower(mm4, true, 0l, -1l, TowerDev.metal)   // in memory: a load under the pin would bake the q8 image beside the serving one
         tt |> success(twq.q8, "the q8 lane minted under the pin")
         var stq = Qwen3vState()
         q8_lane_served(tt, "q8 tower", twq.n_layer) $() : bool {
@@ -174,7 +176,7 @@ let private POISON_BLOCK = 13l   //! the whole-tower input poison's block: a mid
 def private q3v_poison_leg(tt : T?; mm : string; kind : string; w, h : int; logname : string; bar_rms : float) {
     var o = OracleEncode()
     return if (!oracle_dump(tt, "qwen3vl-vision-oracle", logname, "qwen3vl-vision-oracle/mint_4b.sh", o))
-    var twp <- mint_tower(mm, true, 0l, POISON_BLOCK)
+    var twp <- mint_tower(mm, true, 0l, POISON_BLOCK, serving_tower_dev())
     var stp = Qwen3vState()
     dump_poison_leg(tt, "qwen3v", kind, w, h, o, bar_rms, POISON_BLOCK, int(qwen3v_row_width(twp)), TIER1_ABS, twp, stp) $(t; var s; planes; var out) => qwen3v_encode(t, s, planes, int64(w), int64(h), out)
     delete stp
@@ -256,7 +258,7 @@ def test_qwen3v_tier1_metal(t : T?) {
     }
 }
 
-[test, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
+[test, arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane")]
 def test_qwen3v_tier1_metal_f16(t : T?) {
     t |> run("tier-1 on the Metal tower's twin-W route (crowned twins, 4B f16 + Omni bf16)") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -355,9 +357,10 @@ def test_qwen3v_tier1_q8(t : T?) {
             return
         }
         set_qwen3v_q8(true)   // a CPU-lane claim pins the covering knob, never relies on the policy
+        let knobs = gpu_knobs()
+        set_every_gpu_tower(false)   // ... and the knob-off load takes the lane's CPU image (`#tower-dev-block`)
         var tw <- load_qwen3v_tower(mm)
         reset_qwen3v_q8()
-        set_every_gpu_tower(false)
         var st = Qwen3vState()
         tt |> success(tw.q8, "q8 lane loaded")
         tt |> equal(int(tw.ff_pad), 4352, "ffn served at the layout's padded width")
@@ -399,24 +402,41 @@ def test_qwen3v_tier1_q8(t : T?) {
             tt |> equal(vision_family(e), "qwen3v", "the baked q8 tag sniffs to the qwen3v arm")
             tt |> equal(vision_exec_fmt(e), "q8", "the carrier stamps the q8 lane")
         }
-        set_every_gpu_tower(true)
+        set_every_gpu_tower(true)   // the GPU leg's pin
+        let dev = serving_tower_dev()
+        if (serving_tower_device_up()) {   // the q8 lane's GPU image, minted cold into scratch, then loaded by its own path
+            set_qwen3v_q8(true)
+            let imgd = path_join(test_temp_dir(), base_name(image_path_for(mm, tower_dev_tag("qwen3v-q8", dev))))
+            remove(imgd)
+            with_image_destination(imgd) {
+                var inscope cold <- load_qwen3v_tower(mm)
+                tt |> equal(cold.dev_backend, dev, "the cold load of the q8 lane mints the {dev} image where its device stands up")
+            }
+            var inscope byp <- load_qwen3v_tower(imgd)
+            tt |> success(byp.dev_backend == dev && !empty(byp.dev), "the {dev} q8 image loads by its path, its device block bound")
+            reset_qwen3v_q8()
+            remove(imgd)
+        } else {
+            tt |> skip("no GPU device stands up for the serving tower - the GPU image leg")
+        }
+        set_gpu_knobs(knobs)
         delete st
         delete tw
     }
 }
 
 //! a tower minted in memory from the staged planes under the lane pin (pinned, staged, the pin restored): `nl` blocks (0 = the
-//! file's count); `zero_block` >= 0 zeroes that block's q8 GEMM planes - the input poison of the device-side bar (q8 lane).
-//! Never `load_qwen3v_tower`, which bakes a `.dlim` under the pin.
-def private mint_tower(mm : string; q8 : bool; nl : int64 = 0l; zero_block : int64 = -1l) : Qwen3vTower
-    => mint_twin_tower(mm, q8, nl, zero_block, @@set_qwen3v_q8, @@reset_qwen3v_q8, @@stage_qwen3v_tower, @@mint_qwen3v_tower)
+//! file's count); `zero_block` >= 0 zeroes that block's q8 GEMM planes - the input poison of the device-side bar (q8 lane);
+//! `dev` the image flavor (`none` the CPU image). Never `load_qwen3v_tower`, which bakes a `.dlim` under the pin.
+def private mint_tower(mm : string; q8 : bool; nl : int64 = 0l; zero_block : int64 = -1l; dev : TowerDev = TowerDev.none) : Qwen3vTower
+    => mint_twin_tower(mm, q8, nl, zero_block, dev, @@set_qwen3v_q8, @@reset_qwen3v_q8, @@stage_qwen3v_tower, @@mint_qwen3v_tower)
 
 //! one canvas three ways on the shared instrument; `zero_block` >= 0 adds the input poison over a fresh q8 tower
 def private twin_encode(tt : T?; tw : Qwen3vTower; var st : Qwen3vState; tw_exact : Qwen3vTower; var st_exact : Qwen3vState;
                         kind : string; w, h : int; mm : string; zero_block : int64 = -1l) {
     let planes <- make_planes(kind, w, h)
     twin_canvas(tt, "qwen3v", kind, w, h, 16l, ", {tw.n_deepstack} taps", tw, st, tw_exact, st_exact, zero_block,
-        $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb) }) $(t; var s; var out) => qwen3v_encode(t, s, planes, int64(w), int64(h), out)
+        $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb, TowerDev.vulkan) }) $(t; var s; var out) => qwen3v_encode(t, s, planes, int64(w), int64(h), out)
 }
 
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
@@ -474,9 +494,10 @@ def test_qwen3v_tier1_q8_deepstack(t : T?) {
             return
         }
         set_qwen3v_q8(true)   // a CPU-lane claim pins the covering knob, never relies on the policy
+        let knobs = gpu_knobs()
+        set_every_gpu_tower(false)   // ... and the knob-off load takes the lane's CPU image (`#tower-dev-block`)
         var tw <- load_qwen3v_tower(mm)
         reset_qwen3v_q8()
-        set_every_gpu_tower(false)
         var st = Qwen3vState()
         tt |> success(tw.q8, "q8 lane loaded")
         with_reference_f32_tile(tt) {
@@ -509,7 +530,7 @@ def test_qwen3v_tier1_q8_deepstack(t : T?) {
             delete pout
             delete ptw
         }
-        set_every_gpu_tower(true)
+        set_gpu_knobs(knobs)
         delete st
         delete tw
     }

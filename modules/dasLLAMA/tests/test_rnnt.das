@@ -6,6 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_rnnt
 require dasllama/dasllama_plane
+require dasllama/dasllama_tower   // TowerDevBuild: a GPU-flavored net's device block
 require dasllama/dasllama_math   // with_dasllama_jobque_
 require dasllama/dasllama_par    // set_single_thread_ - the decode step's one-lane leg
 require _rnnt_oracle   // rnnt_seat_*: the build's device transducer seat, its pin and counters
@@ -52,6 +53,18 @@ struct private Fixture {
     net : RnntNet = RnntNet()
     x : array<float>      //!< the encoder rows [n_frames][d_enc], where the spec lays the encoder half
     enc_half : RnntEnc    //!< the encoder half's offsets in the plane: `enc` is its projection of `x`, bias included
+    devb : TowerDevBuild  //!< the device block `make_dev` bakes, which a GPU-flavored net reads
+}
+
+//! `f`'s net as a GPU-flavored image carries it (`#tower-dev-block`): its halves and slab baked under the seat's piece prefix into
+//! `f.devb`, the net reading that block and `dev_only` - the form the device seat serves, and whose decline refuses
+def private make_dev(var f : Fixture) {
+    rnnt_dev_bake(f.net, f.enc_half, f.devb, rnnt_seat_piece())
+    unsafe {
+        f.net.dev = PlaneU8(p = addr<uint8 const?>(f.devb.blob[0]), n = long_length(f.devb.blob))
+        f.net.devplan = PlaneI64(p = addr<int64 const?>(f.devb.plan[0]), n = long_length(f.devb.plan))
+    }
+    f.net.dev_only = true
 }
 
 def private next_weight(var seed : uint&) : float {
@@ -516,9 +529,13 @@ def private seat_decode(f : Fixture; var s : RnntState; why : string) : SeatRun 
     return <- r
 }
 
-//! `spec`'s net decoded on the seat pinned `on` with a fresh state, against the reference
+//! `spec`'s net decoded on the seat pinned `on` with a fresh state, against the reference - pinned on, the GPU-flavored net
+//! (`make_dev`); pinned off, the CPU net
 def private seat_leg(spec : NetSpec; on : bool; why : string) : tuple<leg : Leg; run : SeatRun> {
     var f <- build(spec)
+    if (on) {
+        make_dev(f)
+    }
     let was = rnnt_seat_pin(on)
     var s = RnntState()
     var run <- seat_decode(f, s, why)
@@ -584,8 +601,9 @@ struct private DeclineCase {
     budget : int64 = 0l
 }
 
-//! every decline the build's seat counts, each run on its own: the CPU loop decodes the reference's tokens, the device counts
-//! no decode and the one decline of its reason
+//! every decline the build's seat counts, each run on its own: the knob off on the CPU net - the CPU loop decodes the reference's
+//! tokens, no device decode - and every other reason on the GPU-flavored net, whose decline refuses (`#tower-dev-block`); each
+//! counts the one decline of its reason
 def private decline_cases : array<DeclineCase> {
     var cases <- [
         DeclineCase(tag = "the knob off", spec = NetSpec(seed = 31u), why = "knob", on = false),
@@ -602,19 +620,38 @@ def private decline_cases : array<DeclineCase> {
 
 [test]
 def test_rnnt_device_declines(t : T?) {
-    t |> run("each seat decline falls back to the CPU loop and counts its reason") @(t : T?) {
+    t |> run("the knob off keeps a CPU net on the CPU loop; every other seat decline refuses a GPU-flavored net; each counts its reason") @(t : T?) {
         return if (rnnt_seat_skip(t, "declines"))
         with_dasllama_jobque_() {
             for (c in decline_cases()) {
                 let fault_was = set_rnnt_dev_fault(c.fault)
                 let budget_was = set_rnnt_dev_round_budget(c.budget)
-                var inscope r <- seat_leg(c.spec, c.on, c.why)
+                if (!c.on) {
+                    var inscope r <- seat_leg(c.spec, false, c.why)
+                    same_tokens(t, c.tag, r.leg)
+                    t |> equal(r.run.decodes, 0l, "{c.tag}: no device decode")
+                    t |> equal(r.run.why, 1l, "{c.tag}: one {c.why} decline")
+                    t |> equal(r.run.declines, 0l, "{c.tag}: the knob's decline is policy, not counted among the declines")
+                } else {
+                    var f <- build(c.spec)
+                    make_dev(f)
+                    var s = RnntState()
+                    let w0 = rnnt_seat_declines(c.why)
+                    var refused = false
+                    try {
+                        var inscope run <- seat_decode(f, s, c.why)
+                    } recover {
+                        refused = true
+                    }
+                    t |> success(refused, "{c.tag}: the GPU-flavored net's decline refuses - the CPU never runs it")
+                    t |> equal(rnnt_seat_declines(c.why) - w0, 1l, "{c.tag}: one {c.why} decline")
+                    delete s
+                    unsafe {
+                        delete f
+                    }
+                }
                 set_rnnt_dev_fault(fault_was)
                 set_rnnt_dev_round_budget(budget_was)
-                same_tokens(t, c.tag, r.leg)
-                t |> equal(r.run.decodes, 0l, "{c.tag}: no device decode")
-                t |> equal(r.run.why, 1l, "{c.tag}: one {c.why} decline")
-                t |> equal(r.run.declines, c.why == "knob" ? 0l : 1l, "{c.tag}: the declines but the knob's")
             }
             var inscope after <- seat_leg(NetSpec(seed = 31u), true, "")
             same_tokens(t, "after the declines", after.leg)
@@ -629,6 +666,7 @@ def test_rnnt_device_shared_weights(t : T?) {
         return if (rnnt_seat_skip(t, "shared weights"))
         with_dasllama_jobque_() {
             var f <- build(NetSpec(nl = 2l, seed = 41u))
+            make_dev(f)
             var s1 = RnntState()
             var s2 = RnntState()
             var inscope a <- seat_decode(f, s1, "")
@@ -640,6 +678,7 @@ def test_rnnt_device_shared_weights(t : T?) {
                 delete f
             }
             var g <- build(NetSpec(nl = 2l, seed = 41u, tok0_bias = 3.0))
+            make_dev(g)
             var inscope d <- seat_decode(g, s1, "")
             t |> equal(d.uploads, 1l, "a net differing in one joint bias uploads its own, at whatever address it lands")
             delete s1

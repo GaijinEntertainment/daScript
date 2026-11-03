@@ -33,6 +33,13 @@ struct PlaneU16 {
     n : int64 = 0l
 }
 
+//! A borrowed byte plane — a K-quant quant or scale plane in the engine's own layout (the GigaAM kq lane). Same contract as PlaneF.
+struct PlaneU8 {
+    borrowed_plane : bool = true
+    p : uint8 const? = null
+    n : int64 = 0l
+}
+
 //! A borrowed int plane — small baked tables (parakeet's TDT durations).
 struct PlaneI32 {
     borrowed_plane : bool = true
@@ -47,92 +54,24 @@ struct PlaneI64 {
     n : int64 = 0l
 }
 
+//! Every borrowed plane type: one generic body each below serves them all.
+typedef BorrowedPlane = PlaneF | PlaneI8 | PlaneU16 | PlaneU8 | PlaneI32 | PlaneI64
+
 // One unsigned compare catches negative and overrun both. Measured free under -jit against an
 // unchecked pointer read, and faster than the array<T> indexing it replaces.
-def private plane_guard(i, n : int64) {
-    if (uint64(i) >= uint64(n)) {
-        panic("dasLLAMA plane: index {i} outside [0,{n})")
+def operator [] (pl : BorrowedPlane; i : int | int64) {
+    if (uint64(i) >= uint64(pl.n)) {
+        panic("dasLLAMA plane: index {i} outside [0,{pl.n})")
     }
-}
-
-def operator [] (pl : PlaneF; i : int64) : float {
-    plane_guard(i, pl.n)
     return unsafe(pl.p[i])
 }
 
-def operator [] (pl : PlaneF; i : int) : float {
-    plane_guard(int64(i), pl.n)
-    return unsafe(pl.p[i])
-}
-
-def operator [] (pl : PlaneI8; i : int64) : int8 {
-    plane_guard(i, pl.n)
-    return unsafe(pl.p[i])
-}
-
-def operator [] (pl : PlaneI8; i : int) : int8 {
-    plane_guard(int64(i), pl.n)
-    return unsafe(pl.p[i])
-}
-
-def operator [] (pl : PlaneU16; i : int64) : uint16 {
-    plane_guard(i, pl.n)
-    return unsafe(pl.p[i])
-}
-
-def operator [] (pl : PlaneU16; i : int) : uint16 {
-    plane_guard(int64(i), pl.n)
-    return unsafe(pl.p[i])
-}
-
-def operator [] (pl : PlaneI32; i : int64) : int {
-    plane_guard(i, pl.n)
-    return unsafe(pl.p[i])
-}
-
-def operator [] (pl : PlaneI32; i : int) : int {
-    plane_guard(int64(i), pl.n)
-    return unsafe(pl.p[i])
-}
-
-def operator [] (pl : PlaneI64; i : int64) : int64 {
-    plane_guard(i, pl.n)
-    return unsafe(pl.p[i])
-}
-
-def operator [] (pl : PlaneI64; i : int) : int64 {
-    plane_guard(int64(i), pl.n)
-    return unsafe(pl.p[i])
-}
-
-def length(pl : PlaneF) : int64 => pl.n
-def length(pl : PlaneI8) : int64 => pl.n
-def length(pl : PlaneU16) : int64 => pl.n
-def length(pl : PlaneI32) : int64 => pl.n
-def length(pl : PlaneI64) : int64 => pl.n
-def empty(pl : PlaneF) : bool => pl.n == 0l
-def empty(pl : PlaneI8) : bool => pl.n == 0l
-def empty(pl : PlaneU16) : bool => pl.n == 0l
-def empty(pl : PlaneI32) : bool => pl.n == 0l
-def empty(pl : PlaneI64) : bool => pl.n == 0l
+def length(pl : BorrowedPlane) : int64 => pl.n
+def empty(pl : BorrowedPlane) : bool => pl.n == 0l
 
 //! The hot-path form: the plane's base advanced by `off` elements, checked once here so the
 //! loop that follows can index the raw pointer. `off == n` is legal and yields the end pointer.
-def plane_at(pl : PlaneF; off : int64) : float const? {
-    if (uint64(off) > uint64(pl.n)) {
-        panic("dasLLAMA plane: offset {off} outside [0,{pl.n}]")
-    }
-    return unsafe(pl.p + off)
-}
-
-def plane_at(pl : PlaneI8; off : int64) : int8 const? {
-    if (uint64(off) > uint64(pl.n)) {
-        panic("dasLLAMA plane: offset {off} outside [0,{pl.n}]")
-    }
-    return unsafe(pl.p + off)
-}
-
-def plane_at(pl : PlaneU16; off : int64) : uint16 const? {
+def plane_at(pl : BorrowedPlane; off : int64) {
     if (uint64(off) > uint64(pl.n)) {
         panic("dasLLAMA plane: offset {off} outside [0,{pl.n}]")
     }
@@ -141,88 +80,24 @@ def plane_at(pl : PlaneU16; off : int64) : uint16 const? {
 
 //! Point a plane at `nbytes` of a mapped image starting at `base + off`. false = the section
 //! does not divide into whole elements, which is a malformed image and never a recoverable one.
-def plane_bind(var pl : PlaneF; base : uint8 const?; off, nbytes : int64) : bool {
-    if (nbytes % 4l != 0l) {
-        return false
-    }
+def plane_bind(var pl : BorrowedPlane; base : uint8 const?; off, nbytes : int64) : bool {
+    let es = int64(typeinfo sizeof(*pl.p))
+    return false if (nbytes % es != 0l)
     unsafe {
-        pl.p = reinterpret<float const?>(base + off)
+        pl.p = reinterpret<typedecl(pl.p)>(base + off)
     }
-    pl.n = nbytes / 4l
-    return true
-}
-
-def plane_bind(var pl : PlaneI8; base : uint8 const?; off, nbytes : int64) : bool {
-    unsafe {
-        pl.p = reinterpret<int8 const?>(base + off)
-    }
-    pl.n = nbytes
-    return true
-}
-
-def plane_bind(var pl : PlaneU16; base : uint8 const?; off, nbytes : int64) : bool {
-    if (nbytes % 2l != 0l) {
-        return false
-    }
-    unsafe {
-        pl.p = reinterpret<uint16 const?>(base + off)
-    }
-    pl.n = nbytes / 2l
-    return true
-}
-
-def plane_bind(var pl : PlaneI32; base : uint8 const?; off, nbytes : int64) : bool {
-    if (nbytes % 4l != 0l) {
-        return false
-    }
-    unsafe {
-        pl.p = reinterpret<int const?>(base + off)
-    }
-    pl.n = nbytes / 4l
-    return true
-}
-
-def plane_bind(var pl : PlaneI64; base : uint8 const?; off, nbytes : int64) : bool {
-    if (nbytes % 8l != 0l) {
-        return false
-    }
-    unsafe {
-        pl.p = reinterpret<int64 const?>(base + off)
-    }
-    pl.n = nbytes / 8l
+    pl.n = nbytes / es
     return true
 }
 
 //! Drop a plane's view. A plane never owns bytes, so this frees nothing — it exists so a
 //! carrier's teardown reads as an intent rather than as two field writes.
-def plane_release(var pl : PlaneF) {
+def plane_release(var pl : BorrowedPlane) {
     pl.p = null
     pl.n = 0l
 }
 
-def plane_release(var pl : PlaneI8) {
-    pl.p = null
-    pl.n = 0l
-}
-
-def plane_release(var pl : PlaneU16) {
-    pl.p = null
-    pl.n = 0l
-}
-
-def plane_release(var pl : PlaneI32) {
-    pl.p = null
-    pl.n = 0l
-}
-
-def plane_release(var pl : PlaneI64) {
-    pl.p = null
-    pl.n = 0l
-}
-
-// Declaring the teardown says what it is — dropping a view — and nulls the borrowed pointer, so
-// a torn-down carrier cannot dangle. (It does NOT make containing structs safe to delete: a
-// struct holding any plane still takes an unsafe delete, finalize or no finalize.)
+//! one concrete finalize a plane type (`delete` calls no generic finalize): it nulls the borrowed pointer so a torn-down carrier cannot dangle; a struct holding a plane still takes an unsafe delete
 def finalize(var pl : PlaneF) {
     plane_release(pl)
 }
@@ -235,10 +110,25 @@ def finalize(var pl : PlaneU16) {
     plane_release(pl)
 }
 
+def finalize(var pl : PlaneU8) {
+    plane_release(pl)
+}
+
 def finalize(var pl : PlaneI32) {
     plane_release(pl)
 }
 
 def finalize(var pl : PlaneI64) {
     plane_release(pl)
+}
+
+//! The plane's elements copied into `dst` - a staging takes a borrowed plane's bytes as its own
+def plane_copy(pl; var dst : array<auto(ET)>) {
+    dst |> reserve(pl.n)
+    dst |> resize(pl.n)
+    if (pl.n > 0l) {
+        unsafe {
+            memcpy(addr(dst[0]), pl.p, pl.n * int64(typeinfo sizeof(dst[0])))
+        }
+    }
 }

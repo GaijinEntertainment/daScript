@@ -4,10 +4,10 @@
 docs: `../ARCHITECTURE_GPU.md`, `../ARCHITECTURE_CPU_KERNELS.md`. Planned work:
 `../followup_general.md`, `../followup_vulkan.md`, `../followup_metal.md`.
 
-- A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a helper's
-  asserts belong to every cell that calls it.
+- A cell is as `REVIEW.md` (beside this file) defines it.
 - A CPU kernel is a function in `../dasllama/dasllama_math*.das` that writes an output buffer from
-  operand buffers.
+  operand buffers; a function that only invokes an existing kernel-backend slot (a function
+  pointer the active backend fills) is a router, not a CPU kernel.
 - A CPU oracle is the same computation written in plain code in this checklist's folder - a cell,
   or a `_*.das` helper module here; only its operands may be built, quantized, widened or read
   through `../dasllama/` functions, and a kernel under `../dasllama/` is never one.
@@ -22,7 +22,7 @@ docs: `../ARCHITECTURE_GPU.md`, `../ARCHITECTURE_CPU_KERNELS.md`. Planned work:
   by a statement in test code outside a CPU oracle -
   the cell itself, or a helper in its own file or in a `_*.das` test-helper module - itself or
   through a router, a `../dasllama/` function whose only job is to pick which compiled form
-  (stamp) of the dispatched class or the CPU kernel runs; a kernel run inside any other
+  (stamp, or backend slot) of the dispatched class or the CPU kernel runs; a kernel run inside any other
   `../dasllama/` function does not make a cell a kernel-unit cell.
 - A kernel run is a dispatch or a CPU kernel call.
 - A gate is any call site that supplies a kernel's dispatch count or fills its kargs
@@ -38,12 +38,9 @@ docs: `../ARCHITECTURE_GPU.md`, `../ARCHITECTURE_CPU_KERNELS.md`. Planned work:
   function's cells. A branch or regime is a path only where a serving call in `../dasllama/` can
   reach it on some shape that call does not decline, whether or not any model file the box holds
   has that shape.
-- A bound assert is a compare of two computed sides, or a measured quality figure against a
-  tolerance; a floor on a capacity, a configuration or a roster size is not one, a guard that keeps
-  a later index or compare well-defined (a length past the index it reads) is not one, a counter
-  asserted to show a route ran is not one, and an assert a rule of this list requires to show a
-  compare can fail - the in-place cell's output-differs-from-input assert among them - is not a
-  bound assert, and is not the control a bound assert needs.
+- A bound assert is as `REVIEW.md` (beside this file) defines it; in addition, an assert a rule of
+  this list requires to show a compare can fail - the in-place cell's output-differs-from-input
+  assert among them - is not a bound assert, and is not the control a bound assert needs.
 - A sibling stamp is another stamp derived from the same class; it stands in for a stamp only where
   the code a rule asks about is the class's own, neither stamp overrides it - overriding a template
   constant that code reads overrides it - the sibling's cell compiles once the diff is applied, and

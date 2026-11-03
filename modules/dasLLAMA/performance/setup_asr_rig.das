@@ -335,19 +335,20 @@ def private patched_checkout(root, pin, apply : string; p : RefPatch; prepare : 
     return false
 }
 
-//! The q8_0 sibling `dst` of the reference carrier `src` (both under `dir`) through the reference's own quantize tool `quant`;
-//! idempotent - a present sibling, or an absent source, is left alone. False where the run made no sibling.
-def private quantize_sibling(quant, dir, src, dst : string) : bool {
+//! The sibling `dst` of the reference carrier `src` (both under `dir`) through the reference's own quantize tool `quant` at its
+//! quantize arguments `args` (the type, then any per-tensor overrides); idempotent - a present sibling, or an absent source, is
+//! left alone. False where the run made no sibling.
+def private quantize_sibling(quant, dir, src, dst : string; args : string = "q8_0") : bool {
     let src_path = "{dir}{src}"
     let dst_path = "{dir}{dst}"
     return true if (!stat(src_path).is_valid || stat(dst_path).is_valid)
-    to_log(LOG_INFO, "setup_asr_rig: quantizing {src} -> {dst} (q8_0)\n")
+    to_log(LOG_INFO, "setup_asr_rig: quantizing {src} -> {dst} ({args})\n")
     // `call ` so the line never STARTS with a quote — cmd.exe strips a leading one
     // and mangles the rest (the daspkg release_tuner_cmd rule, hit live on zen2)
     let lead = is_windows_box() ? "call " : ""
-    run_capture("{lead}\"{quant}\" \"{src_path}\" \"{dst_path}\" q8_0", false)
+    run_capture("{lead}\"{quant}\" \"{src_path}\" \"{dst_path}\" {args}", false)
     if (!stat(dst_path).is_valid) {
-        to_log(LOG_WARNING, "setup_asr_rig: q8_0 sibling {dst} did not materialize - the {base_name(quant)} run failed\n")
+        to_log(LOG_WARNING, "setup_asr_rig: sibling {dst} ({args}) did not materialize - the {base_name(quant)} run failed\n")
         return false
     }
     return true
@@ -455,26 +456,28 @@ def private setup_crispasr() : bool {
     let built = stat(crispasr_bin(false)).is_valid && (!is_apple_box() || stat(crispasr_bin(true)).is_valid)
     var quantized = true
     let quant = crispasr_bin(false, "crispasr-quantize")
-    for (q in crispasr_q8_siblings()) {
-        quantized = quantize_sibling(quant, q.dir, q.src, q.dst) && quantized
+    for (q in crispasr_siblings()) {
+        quantized = quantize_sibling(quant, q.dir, q.src, q.dst, q.args) && quantized
     }
     return built && quantized
 }
 
-//! A CrispASR-derived q8_0 carrier `dst` beside the f16 GGUF `src` it quantizes, both under `dir`.
-struct private CrispQ8Sibling {
+//! A CrispASR-derived carrier `dst` beside the f16 GGUF `src` it quantizes at `args`, both under `dir`.
+struct private CrispSibling {
     dir : string
     src : string
     dst : string
+    args : string
 }
 
-//! The catalog's `CRISPASR_Q8_RECIPE` companions, each beside its spec's das-side carrier.
-def private crispasr_q8_siblings() : array<CrispQ8Sibling> {
-    var out : array<CrispQ8Sibling>
+//! The catalog's CrispASR-derived companions (`CRISPASR_Q8_RECIPE`, `GIGAAM_KQ_MIX_RECIPE`), each beside its spec's das-side
+//! carrier, with its quantize arguments.
+def private crispasr_siblings() : array<CrispSibling> {
+    var out : array<CrispSibling>
     for (spec in asr_catalog()) {
         out |> push_from([for (c in spec.companions);
-            CrispQ8Sibling(dir = spec.root, src = spec.das_model, dst = c.name);
-            where c.recipe == CRISPASR_Q8_RECIPE])
+            CrispSibling(dir = spec.root, src = spec.das_model, dst = c.name, args = c.recipe == CRISPASR_Q8_RECIPE ? "q8_0" : GIGAAM_KQ_MIX_ARGS);
+            where c.recipe == CRISPASR_Q8_RECIPE || c.recipe == GIGAAM_KQ_MIX_RECIPE])
     }
     return <- out
 }
@@ -626,7 +629,7 @@ def private prewarm_python_refs() : bool {
     return ok
 }
 
-//! The CrispASR builds and the GigaAM q8_0 carrier, logged; an absent one skips its refs, never fails the check.
+//! The CrispASR builds and the GigaAM carriers they derive, logged; an absent one skips its refs, never fails the check.
 def private check_crispasr() {
     for (gpu in [false, true]) {
         continue if (gpu && !is_apple_box())
@@ -634,9 +637,9 @@ def private check_crispasr() {
         let good = stat(bin).is_valid
         to_log(good ? LOG_INFO : LOG_WARNING, "setup_asr_rig: crispasr ({gpu ? "Metal" : "CPU-only"}) - {good ? crispasr_versions() : "MISSING (the GigaAM refs will skip - run --refs)"} ({bin})\n")
     }
-    for (q in crispasr_q8_siblings()) {
+    for (q in crispasr_siblings()) {
         let gq = stat("{q.dir}{q.dst}").is_valid
-        to_log(gq ? LOG_INFO : LOG_WARNING, "setup_asr_rig: q8_0 ref {q.dst} - {gq ? "ok" : "MISSING (run --refs)"}\n")
+        to_log(gq ? LOG_INFO : LOG_WARNING, "setup_asr_rig: CrispASR-derived carrier {q.dst} ({q.args}) - {gq ? "ok" : "MISSING (run --refs)"}\n")
     }
 }
 

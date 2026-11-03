@@ -20,6 +20,7 @@ require dasllama/dasllama_plane public   // PlaneF/PlaneI8/PlaneI32/PlaneI64 —
 require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — the shared ASR floor
 require dasllama/dasllama_audio
 require dasllama/dasllama_tower
+require dasllama/dasllama_tower_image
 require dasllama/dasllama_convert
 require dasllama/dasllama_par
 require dasllama/dasllama_common   // apply_box_profile_runtime for the parakeet-image identity
@@ -128,8 +129,12 @@ struct ParakeetModel {
     // Q8 fast path (default load): Q8_0 image of the GEMM regions at their full-layout
     // offsets, repacked for the active backend; transcoded straight from the mapped file.
     q8 : bool
+    jenc_exact : bool         //! the joint's encoder projection f32 in `blob` on the q8 lane: a GPU flavor's, which the device's exact tile projects
     qblob : PlaneI8 = PlaneI8()
     qscales : PlaneF = PlaneF()
+    dev_backend : TowerDev    //! the GPU flavor whose device block the image carries (`#tower-dev-block`); `none` on the CPU image
+    dev : PlaneU8 = PlaneU8()
+    devplan : PlaneI64 = PlaneI64()
     image_map : void?         // non-null when the planes borrow a .dlim image (dasllama_image)
     image_bytes : uint64
 }
@@ -153,7 +158,7 @@ def finalize(var t : ParakeetModel) {
 // the tripwire: serialize_image_meta(ParakeetModel) covers 40 fields (vocab rides the meta
 // blob — string arrays can't be raw planes); fft (rebuilt at load) + image_map + image_bytes
 // are deliberate skips.
-let private PARAKEET_META_FIELDS = 40 + 3
+let private PARAKEET_META_FIELDS = 42 + 3
 
 // every meta-carried ParakeetModel field, explicitly, both directions (see dasllama_image)
 def private serialize_image_meta(var arch : Archive; var t : ParakeetModel) {
@@ -198,6 +203,8 @@ def private serialize_image_meta(var arch : Archive; var t : ParakeetModel) {
     arch |> serialize_raw(t.joint_net_w)
     arch |> serialize_raw(t.joint_net_b)
     arch |> serialize_raw(t.q8)
+    arch |> serialize_raw(t.jenc_exact)
+    arch |> serialize_raw(t.dev_backend)
 }
 
 def private image_post_load(var t : ParakeetModel) {
@@ -208,6 +215,8 @@ def private image_post_load(var t : ParakeetModel) {
 def private register_parakeet_image_tags {
     register_image_family_tag("parakeet-q8")
     register_image_family_tag("parakeet-f32", true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
+    register_tower_dev_tags("parakeet-q8")
+    register_tower_dev_tags("parakeet-f32")
 }
 
 def pk_layer_offsets(m : ParakeetModel; l : int64) : PkLayerOffs {
@@ -269,7 +278,7 @@ def private pk_repack(var st : ParakeetStaging; woff, n, d : int64) {
 // repack every GEMM region for the active backend's q8q8 kernels; without a selected
 // backend matmul_q8q8_batch reads the flat Q8_0 image as-is
 def private pk_repack_all(var st : ParakeetStaging) {
-    if (!select_matmul_backend_for_load_()) {
+    if (!tower_repack_backend()) {
         return
     }
     let d = st.e.n_state
@@ -294,7 +303,7 @@ def private pk_repack_all(var st : ParakeetStaging) {
         pk_repack(st, lo.ff2a_w, d, ff)
         pk_repack(st, lo.ff2b_w, ff, d)
     }
-    pk_repack(st, st.e.joint_enc_w, d, st.e.n_pred_dim)
+    pk_repack(st, st.e.joint_enc_w, d, st.e.n_pred_dim) if (!st.e.jenc_exact)
 }
 
 // ===== per-session scratch =====
@@ -341,6 +350,7 @@ struct ParakeetState {
     // q8 activation image (q/k/v share one requant; decode reuses it)
     xqi : array<int8>
     xsi : array<float>
+    xbsi : array<int>   //!< the Q8_K image's per-16 sums (a kq-lane tower's; the FC chain passes it, parakeet never fills it)
     // decode
     encp : array<float>
     @scratch toks : array<ParakeetToken>
@@ -432,10 +442,38 @@ def private pk_read_gemm(recs : table<string; PkTensorRec>; b : array<uint8> | #
 def load_parakeet_model(path : string; q8 : bool = false) : ParakeetModel {
     announce_lane("parakeet", q8, "f32 planes", "set_parakeet_q8", g_pk_pin != GemmLane.unset, parakeet_gpu_serves())
     let tag = q8 ? "parakeet-q8" : "parakeet-f32"
-    return <- load_staged_image(path, tag, "parakeet", "source model", type<ParakeetModel>) {
+    let dev = path |> ends_with(".dlim") ? TowerDev.none : parakeet_dev_flavor(q8)
+    return <- load_staged_image_dev(path, tag, "parakeet", "source model", type<ParakeetModel>, dev, g_pk_flavor.bake, PARAKEET_DEV_CONSUMED) {
         return <- stage_parakeet_model(path, q8)
     }
 }
+
+//! A GPU driver's Parakeet flavor (`#tower-dev-block`): the backend whose image it mints, whether its chain serves a lane, and
+//! the bake that converts a CPU-form model into the driver's device block
+typedef ParakeetServesLaneFn = function<(q8 : bool) : bool>
+typedef ParakeetBakeFn = function<(m : ParakeetModel; var b : TowerDevBuild) : bool>
+
+struct ParakeetFlavor {
+    backend : TowerDev
+    serves : ParakeetServesLaneFn
+    bake : ParakeetBakeFn
+}
+
+var private g_pk_flavor = ParakeetFlavor()
+let private PARAKEET_DEV_CONSUMED <- ["qblob", "qscales"]   //! the planes a Parakeet bake converts: a GPU flavor carries their device forms instead
+
+def register_parakeet_flavor(backend : TowerDev; serves : ParakeetServesLaneFn; bake : ParakeetBakeFn) {
+    g_pk_flavor = ParakeetFlavor(backend = backend, serves = serves, bake = bake)
+}
+
+//! The device flavor a load on the `q8` lane takes: the registered driver's where its chain and the device decode serve the
+//! lane, else `none` - the CPU image
+def parakeet_dev_flavor(q8 : bool) : TowerDev =>
+    rnnt_gpu_projects(RnntEnc()) ? tower_dev_flavor(g_pk_flavor, q8) : TowerDev.none
+
+//! A GPU-flavored model reached a CPU path at `stage`: the device seat declined what the load handed it, and the CPU never runs
+//! that image (`#tower-dev-block`)
+def private pk_cpu_refuse(m : ParakeetModel; stage : string) => tower_cpu_refuse(m, "dasLLAMA parakeet", stage)
 
 //! The mint-side carrier: ``e`` holds every scalar the meta blob carries (vocab included), the
 //! arrays beside it hold the plane bytes until the writer has them. Public because reading the
@@ -451,6 +489,8 @@ struct ParakeetStaging {
     lstm_b : array<int64>
     qblob : array<int8>
     qscales : array<float>
+    @exact_size dev : array<uint8>       //!< a GPU-flavored mint's device block (`TowerDevBuild`)
+    @exact_size devplan : array<int64>   //!< ... and its plan
 }
 
 def private serialize_image_meta(var arch : Archive; var st : ParakeetStaging) {
@@ -465,9 +505,10 @@ def finalize(var st : ParakeetStaging) {
 def private image_post_load(var st : ParakeetStaging) {}
 
 //! Mint a served model from a staged read WITHOUT touching disk — the in-memory image rail.
-//! The off-rail control for suites: a live model that came from no `.dlim` file.
-def mint_parakeet_model(var st : ParakeetStaging; var out : ParakeetModel; q8 : bool = false) {
-    cache_via_image_staged(st, out, "", q8 ? "parakeet-q8" : "parakeet-f32")
+//! The off-rail control for suites: a live model that came from no `.dlim` file; `dev` names the GPU flavor (the staging read
+//! under `with_tower_dev_staging(dev)`), `none` the CPU image (`tower_mint_flavor`).
+def mint_parakeet_model(var st : ParakeetStaging; var out : ParakeetModel; q8 : bool = false; dev : TowerDev = TowerDev.none) {
+    tower_mint_flavor(st, out, q8 ? "parakeet-q8" : "parakeet-f32", "parakeet", dev, g_pk_flavor, PARAKEET_DEV_CONSUMED)
 }
 
 //! The ggml-bin reader proper: scalars land in the served model, plane bytes in the staging
@@ -482,7 +523,7 @@ def stage_parakeet_model(path : string; q8 : bool = false) : ParakeetStaging {
     }
     fmap(f) $(var bytes : array<uint8>#) {
         var o = 0l
-        if (rd_u32(bytes, o) != 0x67676d6cu) {
+        if (rd_u32(bytes, o) != ASR_GGML_MAGIC) {
             panic("dasLLAMA parakeet: bad magic in '{path}'")
         }
         o += 4l
@@ -567,6 +608,8 @@ def stage_parakeet_model(path : string; q8 : bool = false) : ParakeetStaging {
         let dh = d / st.e.n_head
         let nch = st.e.n_sub_ch
         let g = q8 ? 0l : 1l
+        let gj = q8 && tower_staging_dev() == TowerDev.none ? 0l : 1l   // a GPU flavor's joint encoder half stays the source's f32
+        st.e.jenc_exact = q8 && gj == 1l
         var bo = 0l
         var ao = 0l
         st.e.c0_w = ao; ao += nch * 9l; bo += nch * 9l
@@ -595,7 +638,7 @@ def stage_parakeet_model(path : string; q8 : bool = false) : ParakeetStaging {
             st.lstm_hh |> push(ao); ao += 4l * pd * pd; bo += 4l * pd * pd
             st.lstm_b |> push(ao); ao += 4l * pd; bo += 4l * pd
         }
-        st.e.joint_enc_w = bo; bo += pd * d; ao += g * pd * d
+        st.e.joint_enc_w = gj == 1l ? ao : bo; bo += pd * d; ao += gj * pd * d
         st.e.joint_enc_b = ao; ao += pd; bo += pd
         st.e.joint_pred_w = ao; ao += pd * pd; bo += pd * pd
         st.e.joint_pred_b = ao; ao += pd; bo += pd
@@ -668,7 +711,11 @@ def stage_parakeet_model(path : string; q8 : bool = false) : ParakeetStaging {
             pk_read(recs, bytes, "decoder.prediction.dec_rnn.lstm.weight_hh_l{l}", st.blob, st.lstm_hh[l], 4l * st.e.n_pred_dim * st.e.n_pred_dim)
             pk_read(recs, bytes, "decoder.prediction.dec_rnn.lstm.bias_h_l{l}", st.blob, st.lstm_b[l], 4l * st.e.n_pred_dim)
         }
-        pk_read_gemm(recs, bytes, "joint.enc.weight", st, wscratch, st.e.joint_enc_w, st.e.n_pred_dim * d)
+        if (st.e.jenc_exact) {
+            pk_read(recs, bytes, "joint.enc.weight", st.blob, st.e.joint_enc_w, st.e.n_pred_dim * d)
+        } else {
+            pk_read_gemm(recs, bytes, "joint.enc.weight", st, wscratch, st.e.joint_enc_w, st.e.n_pred_dim * d)
+        }
         pk_read(recs, bytes, "joint.enc.bias", st.blob, st.e.joint_enc_b, st.e.n_pred_dim)
         pk_read(recs, bytes, "joint.pred.weight", st.blob, st.e.joint_pred_w, st.e.n_pred_dim * st.e.n_pred_dim)
         pk_read(recs, bytes, "joint.pred.bias", st.blob, st.e.joint_pred_b, st.e.n_pred_dim)
@@ -994,6 +1041,7 @@ def private pk_encode_rows(m : ParakeetModel; var st : ParakeetState) : int64 {
         let served = invoke(g_pk_gpu_encode, m, st)
         return served if (served >= 0l)
     }
+    pk_cpu_refuse(m, "encode")
 
     // conv subsampling ([time][mel] rows are already the [ih][iw][c=1] layout)
     var tp = ref_time_ticks()
@@ -1038,34 +1086,24 @@ def private pk_encode_rows(m : ParakeetModel; var st : ParakeetState) : int64 {
     parakeet_pos_table(m, st, tt)
     asr_prof_add("pk.pos_emb", tp)
 
-    var gpu_served = false
-    if (g_pk_gpu_set) {
-        gpu_served = invoke(g_pk_gpu, m, st, tt, ww)
-    }
-    if (!gpu_served) {
-        pk_blocks_cpu(m, st, tt, ww, n_real)
-    }
+    pk_blocks_cpu(m, st, tt, ww, n_real)
     return tt
 }
 
-//! the GPU block hook: after the subsample front + pre-projection + pos table, the 24 conformer blocks on st.x
-typedef ParakeetGpuBlocksFn = function<(m : ParakeetModel; var st : ParakeetState; tt, ww : int64) : bool>
+//! whether a GPU driver would serve the encode - the lane policy's question
 typedef ParakeetServesFn = function<() : bool>
-var private g_pk_gpu : ParakeetGpuBlocksFn
 var private g_pk_serves : ParakeetServesFn
-var private g_pk_gpu_set = false
 var private g_pk_serves_set = false
 
+//! the driver's answer to whether it serves the encode (`parakeet_gpu_serves`): the whole encode is its one seat
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
-def register_parakeet_gpu(fn : ParakeetGpuBlocksFn; serves : ParakeetServesFn) {
-    g_pk_gpu = fn
+def register_parakeet_gpu(serves : ParakeetServesFn) {
     g_pk_serves = serves
-    g_pk_gpu_set = true
     g_pk_serves_set = true
 }
 
 //! the GPU encode hook: the whole encode off `st.mel` - the subsample front, the pre-projection and the blocks - into
-//! `st.x`; answers the frame count, or -1 to leave the CPU front and the block hook to serve
+//! `st.x`; answers the frame count, or -1 where it declined - a CPU image's encode, which the CPU chain then runs whole
 typedef ParakeetGpuEncodeFn = function<(m : ParakeetModel; var st : ParakeetState) : int64>
 var private g_pk_gpu_encode : ParakeetGpuEncodeFn
 var private g_pk_gpu_encode_set = false
@@ -1141,13 +1179,19 @@ def private pk_rnnt_net(m : ParakeetModel) : RnntNet {
         n_tokens = m.n_vocab + 1l, blank_id = m.blank_id, durations = m.durations, max_symbols = int(m.n_max_tokens),
         embed = m.embed_off, joint_pred_w = m.joint_pred_w, joint_pred_b = m.joint_pred_b,
         joint_net_w = m.joint_net_w, joint_net_b = m.joint_net_b,
-        prof_step = "pk.dec.step", prof_pick = "pk.dec.pick", prof_joint = "pk.dec.joint")
+        prof_step = "pk.dec.step", prof_pick = "pk.dec.pick", prof_joint = "pk.dec.joint", dev_only = m.dev_backend != TowerDev.none,
+        dev = m.dev, devplan = m.devplan)
     for (l in range64(m.n_pred_layers)) {
         net.lstm_ih[l] = m.lstm_ih[l]
         net.lstm_hh[l] = m.lstm_hh[l]
         net.lstm_b[l] = m.lstm_b[l]
     }
     return net
+}
+
+//! The transducer decoder's device halves and slab into a GPU flavor's block under `prefix` (`rnnt_dev_bake`), off the CPU-form model
+def parakeet_rnnt_dev_bake(m : ParakeetModel; var b : TowerDevBuild; prefix : string) {
+    rnnt_dev_bake(pk_rnnt_net(m), RnntEnc(d = m.n_state, w = m.joint_enc_w, b = m.joint_enc_b, q8 = m.q8 && !m.jenc_exact), b, prefix)
 }
 
 // NaN/Inf stage scan (debug rail, pairs with the fast_math x64 investigation): bit-pattern
@@ -1201,8 +1245,9 @@ def private pk_scan(tag : string; x : array<float>; n : int64) {
 def parakeet_tdt_decode(m : ParakeetModel; var st : ParakeetState; n_frames : int64) {
     let d = m.n_state
     let pd = m.n_pred_dim
-    let enc = RnntEnc(d = d, w = m.joint_enc_w, b = m.joint_enc_b, q8 = m.q8, gen = st.enc_gen)
+    let enc = RnntEnc(d = d, w = m.joint_enc_w, b = m.joint_enc_b, q8 = m.q8 && !m.jenc_exact, gen = st.enc_gen)
     rnnt_decode(pk_rnnt_net(m), st.dec, enc, st.x, st.encp, n_frames, st.toks) $(var encp) {
+        pk_cpu_refuse(m, "joint's encoder projection")
         let ts_encp = ref_time_ticks()
         ensure_length(encp, n_frames * pd)
         tower_mm_rq(m, encp, m.joint_enc_w, st.x, st.xqi, st.xsi, d, pd, n_frames)

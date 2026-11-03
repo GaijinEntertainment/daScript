@@ -86,8 +86,7 @@ stacked row is the same memory read at the wider row. The tail's GEMMs read the 
 f32 tile, so the tail seat serves it on an f32 tower whose widths sit on that tile's lattice
 (`tw_tail_shape_ok`) and serves the blocks alone otherwise - a q8 tower's projector planes are not
 on the device - answering which it served (`TowerTailServed`), so the CPU tail runs exactly when
-the device one did not. Its engage counter is `metal_tower_tail_encodes`, its lever
-`set_metal_tower_tail`.
+the device one did not. Its engage counter is `metal_tower_tail_encodes`.
 
 The vision chains run their ends on the device too. Every vision chain takes the image planes, not
 the stem's columns: the chain uploads them (`tw_planes_up`) and runs the patch im2col on the device
@@ -153,7 +152,7 @@ compiled the half GEMM (`pf_hmm_ready`): `fc_twin_attach` converts the whole blo
 the device once a blob, at the f32 element offsets, and the half x half tensor GEMM serves each
 site over it with X converted into one shared half panel. The twin holds the halves the f16-staged tile stamp rounds a tile at
 a time, so the route changes the GEMM, not the values it multiplies; the file is f32, so no image
-carries this twin (`ARCHITECTURE_IMAGE.md#image-tower-twin-plane` is the f16-source form) and it
+carries this twin (`ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane` is the f16-source form) and it
 drops with the weights epoch and the tower shutdown. GigaAM's exact lane needs no device twin: its
 block GEMMs are the carrier's own halfwords (`wblob`), bound as the GEMM plane directly, and its q8 lane
 reads the q8 slab (`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`). `DASLLAMA_METAL_TOWER_F16=0` pins the f32
@@ -186,8 +185,9 @@ pad). The rel table is built on the device at the head of every FastConformer co
 (the shared `GkRelSinCos` into the context's zero-padded table, canary's and parakeet's alike), so
 no session table is uploaded. The seat answers -1 with nothing counted on a
 q8 model, a clip whose first conv output passes 1 GB (about five minutes of audio), a shape off
-the lattice, `set_metal_parakeet_front(false)`, a scratch buffer it cannot take or a failed command
-buffer: the CPU front runs then and the block seat serves behind it, counting its own declines. `metal_tower_stats().convs` counts the encodes whose front ran on the device.
+the lattice, a model that is not the Metal-flavored image, a scratch buffer it cannot take or a failed command
+buffer: a CPU image's encode then runs whole on the CPU, and a Metal-flavored image's refuses (`tower_cpu_refuse`).
+`metal_tower_stats().convs` counts the encodes whose front ran on the device.
 
 ### The tower driver's StyleTTS2 synthesis chain {#tower-tts-chain}
 

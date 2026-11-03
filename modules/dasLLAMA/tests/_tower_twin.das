@@ -28,23 +28,14 @@ let TWIN_ABS_VK = 2e-4    //! the tier-1 dumps' absolute floor, the bar's other 
 let TWIN_REL_L2_FLOOR = 1e-4lf   //! the audio twins' absolute floor over rel_l2, a unit-free ratio
 let TWIN_EXACT_REL_L2_VK = 2e-2lf   //! the exact lane's bar over rel_l2 from the exact CPU chain: the f32 tile over the f32 rows, the attention's f16 panels and the tiles' order the distance
 
-//! a front's witness follows its route: on the f16 GEMM feed (cm2 or KHR) the front served every dispatch, off it
-//! (DASLLAMA_COOPMAT=sdot4) the driver declined `device` and served none while the blocks served either way; `declines_delta` is
-//! the DEVICE leg's own (the knob-off legs' declines before it are not its evidence)
+//! a front's witness: the front served every dispatch on the device (an audio twin's seat stands on the f16 GEMM feed alone)
+[unused_argument(declines_delta)]
 def front_served(tt : T?; tag : string; convs_delta, expected, declines_delta : int64) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        if (vulkan_tower_front_route()) {
-            tt |> equal(convs_delta, expected, "{tag}: the front served every dispatch on the device (convs delta = {expected})")
-        } else {
-            tt |> equal(convs_delta, 0l, "{tag}: off the f16 GEMM feed the front stays on the CPU (convs delta)")
-            tt |> success(declines_delta >= 1l && key_exists(vulkan_tower_declines(), "device"), "{tag}: the front recorded the `device` decline off the feed")
-        }
-    }
+    tt |> equal(convs_delta, expected, "{tag}: the front served every dispatch on the device (convs delta = {expected})")
 }
 
 //! a jfk twin cell's seat, each miss a loud skip - the JIT (when `jit_only`), the model at `model_path` and jfk.wav stocked, the
-//! Vulkan twin's seat - then `body` over the clip with the whisper-class block hooks on (every claim here depends on that seat), the
-//! Vulkan tower and ASR-decoder knobs put back after it, the block hooks to their default
+//! Vulkan twin's seat - then `body` over the clip, the Vulkan tower and ASR-decoder knobs put back after it
 [unused_argument(tt, model_path, jit_only, body)]
 def jfk_twin_cell(tt : T?; model_path : string; jit_only : bool; body : block<(samples : array<float>) : void>) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -60,14 +51,10 @@ def jfk_twin_cell(tt : T?; model_path : string; jit_only : bool; body : block<(s
             tt |> skip("jfk.wav not present")
             return
         }
-        if (!vulkan_twin_seat(tt)) {
+        if (!vulkan_audio_twin_seat(tt)) {
             return
         }
         with_gpu_knobs() {
-            defer() {
-                set_vulkan_audio_blocks(true)
-            }
-            set_vulkan_audio_blocks(true)
             invoke(body, samples)
         }
     }
@@ -93,6 +80,19 @@ def vulkan_twin_seat(tt : T?) : bool {
     } else {
         tt |> skip("dasVulkan not present")
         return false
+    }
+}
+
+//! an audio tower's Vulkan twin seat: the Vulkan twin's, and the f16 GEMM feed its conv front rides - off it
+//! (`DASLLAMA_COOPMAT=sdot4`) the load takes the CPU image, so no Vulkan image exists to twin
+def vulkan_audio_twin_seat(tt : T?) : bool {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return false if (!vulkan_twin_seat(tt))
+        return true if (vulkan_tower_front_route())
+        tt |> skip("off the f16 GEMM feed an audio tower serves on its CPU image - no Vulkan image to twin")
+        return false
+    } else {
+        return vulkan_twin_seat(tt)
     }
 }
 
@@ -161,10 +161,11 @@ def q8_lane_served(tt : T?; tag : string; n_layer : int64; encode : block<() : b
     }
 }
 
-//! one input three ways - the exact chain, the CPU q8 chain (both knob off), the device chain - then `counters` over the legs and
-//! the bar by `spec.metric`: the device's distance from the exact chain within `TWIN_SLACK_VK` x the CPU q8 chain's own; `encode`
-//! is the family's encode over a tower and its state, returning its token count
-def twin_three_way(tt : T?; spec : TwinSpec; tw : auto(TW); var st : auto(ST); tw_exact : TW; var st_exact : ST;
+//! one input three ways - the exact chain and the CPU q8 chain (both CPU images, the knob off), the device chain over `tw_dev`,
+//! the lane's Vulkan-flavored image (`#tower-dev-block`) - then `counters` over the legs and the bar by `spec.metric`: the
+//! device's distance from the exact chain within `TWIN_SLACK_VK` x the CPU q8 chain's own; `encode` is the family's encode over
+//! a tower and its state, returning its token count
+def twin_three_way(tt : T?; spec : TwinSpec; tw : auto(TW); var st : auto(ST); tw_dev : TW; var st_dev : ST; tw_exact : TW; var st_exact : ST;
                    encode : block<(t : TW; var s : ST; var out : array<float>) : int64>;
                    counters : block<(legs : TwinLegs) : void>) : TwinResult {
     var r = TwinResult(spec = spec)
@@ -179,7 +180,7 @@ def twin_three_way(tt : T?; spec : TwinSpec; tw : auto(TW); var st : auto(ST); t
             legs.n_cpu = queued_encode(tw, st, cpu, encode)
             legs.cpu = vulkan_tower_stats()
             set_vulkan_tower(true)
-            legs.n_dev = queued_encode(tw, st, dev, encode)
+            legs.n_dev = queued_encode(tw_dev, st_dev, dev, encode)
             legs.dev = vulkan_tower_stats()
         }
         if (legs.dev.encodes == legs.cpu.encodes) {
@@ -241,19 +242,25 @@ def private device_poison_leg(tt : T?; tag : string; twp : auto(TW); var stp : a
     return <- out
 }
 
-//! a vision canvas three ways on the patch grid's counters, then - `zero_block` >= 0 - the input poison over the q8 tower
-//! `mint_poisoned` returns with that block zeroed; `encode` is the family's encode of the canvas
+//! a vision canvas three ways on the patch grid's counters - the device leg over the Vulkan-flavored q8 tower `mint_dev(-1)`
+//! returns (`#tower-dev-block`) - then, `zero_block` >= 0, the input poison over the one `mint_dev` returns with that block
+//! zeroed; `encode` is the family's encode of the canvas
 def twin_canvas(tt : T?; family, kind : string; w, h : int; patch : int64; log_suffix : string; tw : auto(TW); var st : auto(ST);
-                tw_exact : TW; var st_exact : ST; zero_block : int64; mint_poisoned : block<(zb : int64) : TW>;
+                tw_exact : TW; var st_exact : ST; zero_block : int64; mint_dev : block<(zb : int64) : TW>;
                 encode : block<(t : TW; var s : ST; var out : array<float>) : int64>) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let spec = TwinSpec(family = family, tag = "{kind} {w}x{h}", n_layer = tw.n_layer, log_suffix = log_suffix, metric = TwinMetric.rel_l2)
         let npos = (int64(w) / patch) * (int64(h) / patch)
-        let r <- twin_three_way(tt, spec, tw, st, tw_exact, st_exact, encode) $(legs) {
+        var tw_dev <- invoke(mint_dev, -1l)
+        var st_dev = ST()
+        tt |> equal(tw_dev.dev_backend, TowerDev.vulkan, "{spec.tag}: the device leg's tower is the Vulkan-flavored image")
+        let r <- twin_three_way(tt, spec, tw, st, tw_dev, st_dev, tw_exact, st_exact, encode) $(legs) {
             twin_counters(tt, spec.tag, legs, spec.n_layer, npos)
         }
+        delete st_dev
+        delete tw_dev
         if (zero_block >= 0l) {
-            var twp <- invoke(mint_poisoned, zero_block)
+            var twp <- invoke(mint_dev, zero_block)
             var stp = ST()
             twin_poison(tt, r, zero_block, twp, stp, encode)
             delete stp
@@ -301,15 +308,20 @@ def mint_staged_tower(var stg : auto(STG); nl, zero_block : int64; mint : functi
     return <- tw
 }
 
-//! `mint_staged_tower` over the planes `stage` reads from `mm` under the family's lane pin (`pin(q8)`, `unpin` restoring the policy)
-def mint_twin_tower(mm : string; q8 : bool; nl, zero_block : int64; pin : function<(on : bool) : void>; unpin : function<() : void>;
-                    stage : function<(path : string) : auto(STG)>; mint : function<(var s : STG; var t : auto(TW)) : void>) : TW {
+//! a tower minted in memory from the planes `stage` reads from `mm` under the family's lane pin (`pin(q8)`, `unpin` restoring the
+//! policy), cut and poisoned as `mint_staged_tower` cuts it, in the image flavor `dev` (`#tower-dev-block`): `none` the CPU image,
+//! a GPU flavor staged row-major and baked by the family's registered driver - each backend reads only its own
+def mint_twin_tower(mm : string; q8 : bool; nl, zero_block : int64; dev : TowerDev; pin : function<(on : bool) : void>; unpin : function<() : void>;
+                    stage : function<(path : string) : auto(STG)>; mint : function<(var s : STG; var t : auto(TW); dev : TowerDev) : void>) : TW {
     invoke(pin, q8)
     defer() {
         invoke(unpin)
     }
-    var inscope stg <- invoke(stage, mm)
-    return <- mint_staged_tower(stg, nl, zero_block, mint)
+    var inscope stg <- tower_dev_staged(dev) $ { return <- invoke(stage, mm) }
+    truncate_and_poison(stg, nl, zero_block)
+    var tw = TW()
+    invoke(mint, stg, tw, dev)
+    return <- tw
 }
 
 //! the exact-lane tower encoded with the knob on: the driver dispatches nothing - no block, no front - records the `quant_mode`

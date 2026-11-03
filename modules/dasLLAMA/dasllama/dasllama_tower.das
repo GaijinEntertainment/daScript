@@ -10,9 +10,12 @@ require dasllama/dasllama_math
 require dasllama/dasllama_math_gen   // matmul_f16_batch: the f16-plane GEMM under mm_f16_b
 require dasllama/dasllama_gpu_math
 require dasllama/dasllama_plane public   // PlaneF/PlaneU16 — plane forms of the blob helpers
+require dasllama/dasllama_asr_types   // CanaryLayerOffs: the FastConformer block's GEMM records
 require dasllama/dasllama_par
 require dasllama/dasllama_gguf   // read_clamp reads sidecar scalar tensors
 require dasllama/dasllama_common   // requant_rows_q8_sized: tower_mm_rq's q8 feed
+require dasllama/dasllama_gemm_schema   // Q8K_SUM_ELEMS: the kq lane's Q8_K image
+require dasllama/dasllama_math_default   // matmul_kq_rows_at: the kq GEMM over repacked or disk-order planes
 require dasllama/dasllama_repack   // repack_conv_out_tap_in: the conv reader's tap-major order
 require daslib/cmp
 
@@ -48,6 +51,26 @@ struct Q8Region {
     woff : int64
     n : int64
     rows : int64
+}
+
+let FC_GEMM_RECORDS = 11l   //! a FastConformer block's GEMM records, in `fc_gemm_records`' order
+
+//! A FastConformer block's GEMM records over its layer offsets `lo` (`d` wide, `ff` the hidden width), in the order the GPU
+//! chains index them: ff1a, ff1b, q, k, v, the rel-position projection, o, pw1, pw2, ff2a, ff2b. A rotary block has no rel
+//! table: its record is empty - no rows, the offset -1.
+def fc_gemm_records(lo : CanaryLayerOffs; d, ff : int64) : Q8Region[11] {
+    return fixed_array<Q8Region>(
+        Q8Region(woff = lo.ff1a_w, n = d, rows = ff),
+        Q8Region(woff = lo.ff1b_w, n = ff, rows = d),
+        Q8Region(woff = lo.q_w, n = d, rows = d),
+        Q8Region(woff = lo.k_w, n = d, rows = d),
+        Q8Region(woff = lo.v_w, n = d, rows = d),
+        Q8Region(woff = lo.pos_w, n = d, rows = lo.pos_w >= 0l ? d : 0l),
+        Q8Region(woff = lo.o_w, n = d, rows = d),
+        Q8Region(woff = lo.pw1_w, n = d, rows = 2l * d),
+        Q8Region(woff = lo.pw2_w, n = d, rows = d),
+        Q8Region(woff = lo.ff2a_w, n = d, rows = ff),
+        Q8Region(woff = lo.ff2b_w, n = ff, rows = d))
 }
 
 //! a family's GPU tower seat as the lane policy reads it: registered, whether the driver's f32 tiles are its faster lane (the
@@ -357,9 +380,159 @@ def mm_blob_b(var y : array<float>; blob : PlaneF; woff : int64; x : PlaneF; n, 
     matmul_batch(y, blob, woff, x, n, d, npos)
 }
 
-//! A q8-lane family's weight GEMM over the model `m` (any record carrying ``q8``, ``qblob``/``qscales`` and ``blob``): on the
-//! q8 lane against the activation image (`xq`, `xs`) the caller quantized once for every consumer, else `mm_blob_b` off `x`
-def tower_mm(m : auto(MT); var y : array<float>; woff : int64; x : auto(XT); xq : array<int8>; xs : array<float>; n, d, npos : int64) {
+//! A kq-lane tower's block GEMM seat: the format its weights serve in - `q8` the Q8_0 planes ``qblob``/``qscales`` at the
+//! element offset `qoff`, every other member the byte planes ``kq``/``ks`` at the byte offsets `qoff`/`soff` - three words a
+//! GEMM in the model's ``gemm_seats`` plane, in the block GEMMs' layout order.
+struct TowerGemmSeat {
+    fmt : KqFmt
+    qoff : int64
+    soff : int64
+}
+
+let TOWER_SEAT_WORDS = 3l   //! a seat's words in the ``gemm_seats`` plane: the format slot, the quant offset, the scale offset
+let FC_BLOCK_GEMMS = 10l    //! a FastConformer block's GEMMs, in the layout order `fc_gemm_seat_index` walks
+
+//! The seat index of the FastConformer block GEMM at the chain's virtual element offset `woff` (canary's offsets record over a
+//! `gemm_off` base and a `gemm_stride` a block): the block from the stride, the GEMM from its place among the ten element counts
+//! in layout order - ff1's pair, q, k, v, out, pw1 (2d rows), pw2, ff2's pair.
+def fc_gemm_seat_index(d, ff, gemm_off, gemm_stride, woff : int64) : int64 {
+    let rel = woff - gemm_off
+    let l = rel / gemm_stride
+    var rem = rel - l * gemm_stride
+    let sizes = fixed_array(ff * d, d * ff, d * d, d * d, d * d, d * d, 2l * d * d, d * d, ff * d, d * ff)
+    var i = 0
+    while (i + 1 < int(FC_BLOCK_GEMMS) && rem >= sizes[i]) {
+        rem -= sizes[i]
+        i++
+    }
+    return l * FC_BLOCK_GEMMS + int64(i)
+}
+
+//! A tower image's device backend: the driver whose device block it carries - `none` on a CPU image, which no GPU chain
+//! reads, and the GPU flavors, which the CPU never runs
+enum TowerDev {
+    none
+    metal
+    vulkan
+}
+
+let TOWER_DEV_PIECE_WORDS = 3l   //! a piece's words in a ``devplan`` plane: its name's key, its byte offset in ``dev``, its bytes
+let TOWER_DEV_ALIGN = 16384l     //! a piece's alignment in ``dev``: the image page, so a mapped piece wraps as a device buffer with no copy
+
+var private g_tower_stage_dev = TowerDev.none   //! the GPU flavor a staging runs for: its planes stay row-major for the driver's bake
+
+//! Run `blk` staging a tower for the GPU flavor `dev` (`#tower-dev-block`): no CPU backend lays the staging's planes - the
+//! driver's bake reads them row-major
+def with_tower_dev_staging(dev : TowerDev; blk : block<() : void>) {
+    let was = g_tower_stage_dev
+    g_tower_stage_dev = dev
+    invoke(blk)
+    g_tower_stage_dev = was
+}
+
+//! `stage` run under `with_tower_dev_staging(dev)`, the staging it builds handed back
+def tower_dev_staged(dev : TowerDev; stage : block<() : auto(S)>) : S -const {
+    let was = g_tower_stage_dev
+    g_tower_stage_dev = dev
+    var st <- invoke(stage)
+    g_tower_stage_dev = was
+    return <- st
+}
+
+//! the GPU flavor the running staging is for (`with_tower_dev_staging`); `none` on the CPU flavor's
+def tower_staging_dev() : TowerDev => g_tower_stage_dev
+
+//! A staging's quantized planes repack for the CPU backend: never under a GPU flavor's staging (`with_tower_dev_staging`), else
+//! where the load selects a repacking backend
+def tower_repack_backend() : bool => g_tower_stage_dev == TowerDev.none && select_matmul_backend_for_load_()
+
+//! a GPU flavor's image tag: the lane's tag, the driver's name after it; the lane's own on the CPU flavor
+def tower_dev_tag(lane : string; dev : TowerDev) : string => dev == TowerDev.none ? lane : "{lane}-{dev}"
+
+//! A device-block piece's key: its name hashed - a driver names its pieces, the plan carries the keys
+def tower_dev_key(name : string) : int64 => int64(hash(name))
+
+//! The device block a GPU-flavored mint builds: the pieces' bytes and the plan naming them
+struct TowerDevBuild {
+    @exact_size blob : array<uint8>
+    @exact_size plan : array<int64>
+    kept : array<string>   //! the family's consumed planes this bake left in their CPU form: the image stores them beside the block
+}
+
+//! `arr`'s bytes appended to `b` as the piece `name` - an empty array an empty piece
+def tower_dev_put(var b : TowerDevBuild; name : string; arr : array<auto(T)>) {
+    tower_dev_put(b, name, empty(arr) ? null : unsafe(addr<uint8 const?>(arr[0])), long_length(arr) * int64(typeinfo sizeof(type<T>)))
+}
+
+//! Append the `n` bytes at `src` to `b` as the piece `name`, at the next aligned offset; a name the block already holds panics
+[arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
+def tower_dev_put(var b : TowerDevBuild; name : string; src : uint8 const?; n : int64) {
+    let key = tower_dev_key(name)
+    for (i in range64(long_length(b.plan) / TOWER_DEV_PIECE_WORDS)) {
+        if (b.plan[i * TOWER_DEV_PIECE_WORDS] == key) {
+            panic("dasLLAMA tower: the device block already holds a piece named '{name}'")
+        }
+    }
+    let off = (long_length(b.blob) + TOWER_DEV_ALIGN - 1l) / TOWER_DEV_ALIGN * TOWER_DEV_ALIGN
+    b.blob |> reserve(off + n)
+    b.blob |> resize(off + n)
+    if (n > 0l) {
+        unsafe {
+            memcpy(addr(b.blob[off]), src, n)
+        }
+    }
+    b.plan |> push_from([key, off, n])
+}
+
+//! The first word of the piece `name` of a model's device block, read in place; `none` where the block holds no such piece
+def tower_dev_word(dev : PlaneU8; plan : PlaneI64; name : string; none : int64) : int64 {
+    let p = tower_dev_find(plan, name)
+    return none if (p.off < 0l || p.bytes < 8l)
+    unsafe {
+        return *reinterpret<int64 const?>(plane_at(dev, p.off))
+    }
+}
+
+//! The piece `name` of a model's device block (`devplan`): its byte offset in ``dev`` and its bytes - (-1, 0) where the block
+//! holds none
+def tower_dev_find(plan : PlaneI64; name : string) : tuple<off : int64; bytes : int64> {
+    let key = tower_dev_key(name)
+    for (i in range64(plan.n / TOWER_DEV_PIECE_WORDS)) {
+        if (plan[i * TOWER_DEV_PIECE_WORDS] == key) {
+            return (off = plan[i * TOWER_DEV_PIECE_WORDS + 1l], bytes = plan[i * TOWER_DEV_PIECE_WORDS + 2l])
+        }
+    }
+    return (off = -1l, bytes = 0l)
+}
+
+//! The seat of the kq-lane block GEMM at the chain's virtual element offset `woff`.
+def tower_gemm_seat(m : auto(MT); woff : int64) : TowerGemmSeat {
+    let i = fc_gemm_seat_index(m.d_model, m.n_ff, m.gemm_off, m.gemm_stride, woff) * TOWER_SEAT_WORDS
+    return TowerGemmSeat(fmt = kq_fmt_of_slot(int(m.gemm_seats[i])), qoff = m.gemm_seats[i + 1l], soff = m.gemm_seats[i + 2l])
+}
+
+[arch(at="../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
+def private tower_mm_kq(m : auto(MT); var y : array<float>; s : TowerGemmSeat; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d, npos : int64) {
+    if (s.fmt == KqFmt.q8) {
+        matmul_q8q8_batch(y, m.qblob, m.qscales, s.qoff, xq, xs, n, d, npos)
+        return
+    }
+    unsafe {
+        matmul_kq_rows_at(kq_schema_id(s.fmt), m.kq_repacked, addr(y[0]), plane_at(m.kq, s.qoff), plane_at(m.ks, s.soff),
+                          addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), addr<int const?>(xbs[0]), n, d, npos)
+    }
+}
+
+//! A tower family's weight GEMM over the model `m` (any record carrying ``q8``, ``qblob``/``qscales`` and ``blob``): on the kq
+//! lane (a record carrying ``kq_lane``) the GEMM's seat decides the planes and the image (`xbs` the Q8_K image's per-16 sums);
+//! on the q8 lane the Q8_0 planes against the image (`xq`, `xs`) the caller quantized once for every consumer; else `mm_blob_b`
+def tower_mm(m : auto(MT); var y : array<float>; woff : int64; x : auto(XT); xq : array<int8>; xs : array<float>; xbs : array<int>; n, d, npos : int64) {
+    static_if (typeinfo has_field<kq_lane>(m)) {
+        if (m.kq_lane) {
+            tower_mm_kq(m, y, tower_gemm_seat(m, woff), xq, xs, xbs, n, d, npos)
+            return
+        }
+    }
     static_if (typeinfo has_field<gemm_f16>(m)) {
         if (m.gemm_f16) {
             mm_f16_b(y, m.wblob, woff, x, n, d, npos)
@@ -373,7 +546,50 @@ def tower_mm(m : auto(MT); var y : array<float>; woff : int64; x : auto(XT); xq 
     }
 }
 
-//! `tower_mm` for a single-consumer activation: the q8 lane requantizes `x` into the scratch pair first
+//! `tower_mm` for a GEMM no kq lane reaches (a position table's, a front's): the Q8_K sums never read
+def tower_mm(m : auto(MT); var y : array<float>; woff : int64; x : auto(XT); xq : array<int8>; xs : array<float>; n, d, npos : int64) {
+    static_if (typeinfo has_field<kq_lane>(m)) {
+        if (m.kq_lane) {
+            panic("dasLLAMA tower: a kq-lane GEMM takes the tower_mm form with the Q8_K sums")
+        }
+    }
+    let none : array<int>
+    tower_mm(m, y, woff, x, xq, xs, none, n, d, npos)
+}
+
+//! The activation image the GEMM at `woff` reads, quantized from `x` into the scratch: the Q8_K form (per-superblock scales in
+//! `xs`, per-16 sums in `xbs`) for a K-quant seat of the kq lane, the Q8_0 form on the q8 lane and for a Q8_0 seat, nothing
+//! for the float planes; the GEMMs that share one image are one format class (the kq-lane planner holds them to it)
+def tower_requant(m : auto(MT); woff : int64; x : array<float>; n, npos : int64; @scratch var xq : array<int8>;
+                  @scratch var xs : array<float>; @scratch var xbs : array<int>) {
+    static_if (typeinfo has_field<kq_lane>(m)) {
+        if (m.kq_lane) {
+            let s = tower_gemm_seat(m, woff)
+            if (s.fmt != KqFmt.q8) {
+                let need = npos * n
+                ensure_length(xq, need)
+                ensure_length(xs, need / KQ_SB_ELEMS)
+                ensure_length(xbs, need / Q8K_SUM_ELEMS)
+                requant_rows_q8k_bs(x, n, npos, xq, xs, xbs)
+                return
+            }
+            requant_rows_q8_sized(x, n, npos, xq, xs)
+            return
+        }
+    }
+    if (m.q8) {
+        requant_rows_q8_sized(x, n, npos, xq, xs)
+    }
+}
+
+//! `tower_mm` for a single-consumer activation: the quantizing lanes requantize `x` into the scratch first
+def tower_mm_rq(m : auto(MT); var y : array<float>; woff : int64; x : array<float>; @scratch var xq : array<int8>;
+                @scratch var xs : array<float>; @scratch var xbs : array<int>; n, d, npos : int64) {
+    tower_requant(m, woff, x, n, npos, xq, xs, xbs)
+    tower_mm(m, y, woff, x, xq, xs, xbs, n, d, npos)
+}
+
+//! `tower_mm_rq` for a GEMM no kq lane reaches
 def tower_mm_rq(m : auto(MT); var y : array<float>; woff : int64; x : array<float>; @scratch var xq : array<int8>;
                 @scratch var xs : array<float>; n, d, npos : int64) {
     if (m.q8) {
@@ -496,7 +712,7 @@ def tower_stage_q8_pad_cols(m : GGUFMeta; b : array<uint8> | #; name : string; v
 def tower_repack_q8_blocks(var qblob : array<int8>; var qscales : array<float>;
                            layer_w, layer_w_stride, n_layer : int64;
                            widths : array<int64>; sizes : array<int64>) {
-    if (!select_matmul_backend_for_load_()) {
+    if (!tower_repack_backend()) {
         return
     }
     for (l in range64(n_layer)) {
@@ -756,7 +972,7 @@ def geglu_quick_lut_rows(var h : array<float>; gate, up : array<float>; ff, npos
 //! Bake a tower's halfword GEMM twin off its staged f32 blob - the file's own bits (an f16
 //! source round-trips exactly; bf16 = the f32 word's top halfword). Whole-blob at the same
 //! element offsets; ride-along f32 regions clamp on the f16 form and the route never reads them.
-[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
+[arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane")]
 def tower_bake_half_twin(blob : array<float>; var wblob : array<uint16>; bf16 : bool) {
     let n = long_length(blob)
     if (long_length(wblob) < n) {
@@ -1291,7 +1507,7 @@ def private fc_ffn_half_cpu(m : auto(MT); var st : auto(ST); form : FcCpuForm; p
     layernorm_batch(st.xb, st.x, m.blob, ln_w, ln_b, d, tt, m.eps)
     asr_prof_add(p.ln, tf)
     tf = ref_time_ticks()
-    tower_mm_rq(m, st.h, wa, st.xb, st.xqi, st.xsi, d, ff, tt)
+    tower_mm_rq(m, st.h, wa, st.xb, st.xqi, st.xsi, st.xbsi, d, ff, tt)
     if (form.biased) {
         add_bias_rows(st.h, m.blob, ba, ff, tt)
     }
@@ -1300,7 +1516,7 @@ def private fc_ffn_half_cpu(m : auto(MT); var st : auto(ST); form : FcCpuForm; p
     silu4_batch(st.h, ff, tt)
     asr_prof_add(p.silu, tf)
     tf = ref_time_ticks()
-    tower_mm_rq(m, st.xb, wb, st.h, st.xqi, st.xsi, ff, d, tt)
+    tower_mm_rq(m, st.xb, wb, st.h, st.xqi, st.xsi, st.xbsi, ff, d, tt)
     if (form.biased) {
         add_bias_rows(st.xb, m.blob, bb, d, tt)
     }
@@ -1345,18 +1561,16 @@ def private fc_attention_cpu(m : auto(MT); var st : auto(ST); form : FcCpuForm; 
     layernorm_batch(st.xb, st.x, m.blob, lo.nat_w, lo.nat_b, d, tt, m.eps)
     asr_prof_add(form.prof.proj_ln, tq)
     tq = ref_time_ticks()
-    if (m.q8) {
-        requant_rows_q8_sized(st.xb, d, tt, st.xqi, st.xsi)
-    }
+    tower_requant(m, lo.q_w, st.xb, d, tt, st.xqi, st.xsi, st.xbsi)
     asr_prof_add(form.prof.proj_rq, tq)
     tq = ref_time_ticks()
-    tower_mm(m, st.qq, lo.q_w, st.xb, st.xqi, st.xsi, d, d, tt)
+    tower_mm(m, st.qq, lo.q_w, st.xb, st.xqi, st.xsi, st.xbsi, d, d, tt)
     asr_prof_add(form.prof.proj_q, tq)
     tq = ref_time_ticks()
-    tower_mm(m, st.kk, lo.k_w, st.xb, st.xqi, st.xsi, d, d, tt)
+    tower_mm(m, st.kk, lo.k_w, st.xb, st.xqi, st.xsi, st.xbsi, d, d, tt)
     asr_prof_add(form.prof.proj_k, tq)
     tq = ref_time_ticks()
-    tower_mm(m, st.vv, lo.v_w, st.xb, st.xqi, st.xsi, d, d, tt)
+    tower_mm(m, st.vv, lo.v_w, st.xb, st.xqi, st.xsi, st.xbsi, d, d, tt)
     asr_prof_add(form.prof.proj_v, tq)
     if (form.biased) {
         add_bias_rows(st.qq, m.blob, lo.q_b, d, tt)
@@ -1483,18 +1697,16 @@ def private fc_attention_cpu(m : auto(MT); var st : auto(ST); form : FcCpuForm; 
     rope_neox_tab_rows(st.xr, tt, form.n_head, hs, st.rope_cos, st.rope_sin)
     asr_prof_add(form.prof.proj_pos, tq)
     tq = ref_time_ticks()
-    if (m.q8) {
-        requant_rows_q8_sized(st.xr, d, tt, st.xqi, st.xsi)
-    }
+    tower_requant(m, lo.q_w, st.xr, d, tt, st.xqi, st.xsi, st.xbsi)
     asr_prof_add(form.prof.proj_rq, tq)
     tq = ref_time_ticks()
-    tower_mm(m, st.qq, lo.q_w, st.xr, st.xqi, st.xsi, d, d, tt)
+    tower_mm(m, st.qq, lo.q_w, st.xr, st.xqi, st.xsi, st.xbsi, d, d, tt)
     asr_prof_add(form.prof.proj_q, tq)
     tq = ref_time_ticks()
-    tower_mm(m, st.kk, lo.k_w, st.xr, st.xqi, st.xsi, d, d, tt)
+    tower_mm(m, st.kk, lo.k_w, st.xr, st.xqi, st.xsi, st.xbsi, d, d, tt)
     asr_prof_add(form.prof.proj_k, tq)
     tq = ref_time_ticks()
-    tower_mm_rq(m, st.vv, lo.v_w, st.xb, st.xqi, st.xsi, d, d, tt)
+    tower_mm_rq(m, st.vv, lo.v_w, st.xb, st.xqi, st.xsi, st.xbsi, d, d, tt)
     asr_prof_add(form.prof.proj_v, tq)
     if (form.biased) {
         add_bias_rows(st.qq, m.blob, lo.q_b, d, tt)
@@ -1656,7 +1868,7 @@ def private fc_dw_bn_silu_rows(var o : array<float>; g : array<float>; blob : Pl
 def private fc_conv_module_cpu(m : auto(MT); var st : auto(ST); form : FcCpuForm; lo : auto(LO); tt : int64) {
     let d = form.d
     layernorm_batch(st.xb, st.x, m.blob, lo.ncv_w, lo.ncv_b, d, tt, m.eps)
-    tower_mm_rq(m, st.h, lo.pw1_w, st.xb, st.xqi, st.xsi, d, 2l * d, tt)
+    tower_mm_rq(m, st.h, lo.pw1_w, st.xb, st.xqi, st.xsi, st.xbsi, d, 2l * d, tt)
     if (form.biased) {
         add_bias_rows(st.h, m.blob, lo.pw1_b, 2l * d, tt)
     }
@@ -1677,7 +1889,7 @@ def private fc_conv_module_cpu(m : auto(MT); var st : auto(ST); form : FcCpuForm
         fc_glu_rows(st.ao, st.h, d, tt, form.vec4)
         fc_dw_bn_silu_rows(st.xb, st.ao, m.blob, lo.dw_w, lo.bn_w, lo.bn_b, d, tt, form.nk, form.tap_major, form.vec4)
     }
-    tower_mm_rq(m, st.ao, lo.pw2_w, st.xb, st.xqi, st.xsi, d, d, tt)
+    tower_mm_rq(m, st.ao, lo.pw2_w, st.xb, st.xqi, st.xsi, st.xbsi, d, d, tt)
     if (form.biased) {
         add_bias_rows(st.ao, m.blob, lo.pw2_b, d, tt)
     }
@@ -1696,7 +1908,7 @@ def fc_block_cpu(m : auto(MT); var st : auto(ST); form : FcCpuForm; pos : auto(P
     asr_prof_add(form.prof.ffn, tp)
     fc_attention_cpu(m, st, form, lo, pos, tt)
     tp = ref_time_ticks()
-    tower_mm_rq(m, st.xb, lo.o_w, st.ao, st.xqi, st.xsi, d, d, tt)
+    tower_mm_rq(m, st.xb, lo.o_w, st.ao, st.xqi, st.xsi, st.xbsi, d, d, tt)
     if (form.biased) {
         add_bias_rows(st.xb, m.blob, lo.o_b, d, tt)
     }

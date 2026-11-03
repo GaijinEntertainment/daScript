@@ -190,7 +190,7 @@ def main() : int {
         }
         let path = entry_path(e)
         var st = stat(path)
-        let rig_derived = e.recipe == REF_Q8_RECIPE || e.recipe == CRISPASR_Q8_RECIPE
+        let rig_derived = e.recipe == REF_Q8_RECIPE || e.recipe == CRISPASR_Q8_RECIPE || e.recipe == GIGAAM_KQ_MIX_RECIPE
         if (!st.is_valid && empty(e.url) && cfg.convert && !empty(e.recipe) && !rig_derived) {
             try_convert(e, path, canary_done)
             st = stat(path)

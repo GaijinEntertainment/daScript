@@ -57,7 +57,7 @@ endforeach()
 foreach(_ex furier path_tracer_lab physarum_lab)
     release_wasm("examples/graphics/${_ex}" "its examples card will be skipped")
 endforeach()
-foreach(_ex storyteller storywish parrot)
+foreach(_ex storyteller storywish parrot interpreter)
     release_wasm("examples/dasLLAMA/${_ex}" "the dasllama.io ${_ex} page will be a placeholder")
 endforeach()
 

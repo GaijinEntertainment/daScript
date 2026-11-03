@@ -45,7 +45,8 @@ an image contains - the box profile, the knobs, the flavor, a head that rides th
 `image_identity`, the string the header bakes,
 not only into the image path; a mismatch declines loudly.
 
-**An image save deletes its own lane's images whose identity no longer matches, and any image
+**An image save at the `image_path_for` path deletes its own lane's images whose identity no longer
+matches, and any image
 the verdicts prove garbage in any lane - BROKEN, version-stale, or a stale layout of a family
 this process registered.** A lane is the last dot-separated segment of the file name before
 `.dlim`; a hash-named legacy image's lane is its identity's (quant, tag) pair.
@@ -69,9 +70,9 @@ with the meta flags describing the layout - a per-tensor type split is not a sec
 **A plane the target platform or config never reads is not written into the image - the mint
 decides that, not the load.**
 
-**A flavor gets its image file only from `image_path_for`, and every flavor tag is registered
-through `register_image_family_tag`; building a `.dlim` path any other way, or using an unregistered
-tag, is a defect.**
+**The path a load looks up a flavor's image at comes only from `image_path_for`, and every flavor
+tag is registered through `register_image_family_tag`; building that path any other way, or using
+an unregistered tag, is a defect.**
 
 **A family whose plane bytes no box property shapes - no backend pin, no tune state, no lane
 width - registers its tag with `register_image_family_tag(tag, config_free = true)`; a family

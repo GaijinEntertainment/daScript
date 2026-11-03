@@ -110,3 +110,14 @@ def all_spoken(chunks : array<ChunkRow>) : bool {
     }
     return true
 }
+
+def ms(us : int64) : string => fmt(":.0f", double(us) / 1000.0lf)
+
+def tenths(x : float) : string => fmt(":.1f", x)
+
+def tenths(x : double) : string => fmt(":.1f", x)
+
+def with_alpha(color : uint; alpha : float) : uint {
+    let a = uint(clamp(alpha, 0.0, 1.0) * 255.0)
+    return (color & 0x00ffffffu) | (a << 24u)
+}

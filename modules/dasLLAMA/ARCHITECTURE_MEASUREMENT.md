@@ -12,8 +12,9 @@ the ASR board's GPU row pairs (`ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs`
 reference (`ARCHITECTURE_MEASUREMENT_AUDIO.md#mlx-asr-reference`), the TTS reference instrument
 (`ARCHITECTURE_MEASUREMENT_AUDIO.md#the-tts-reference-instrument`), its CUDA provider and g2p-venv
 runs (`ARCHITECTURE_MEASUREMENT_AUDIO.md#tts-ref-g2p-venv`) and the ASR board's CPU references
-(`ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-cpu-references`) are the audio companion's; a board row's
-release boundary is `ARCHITECTURE_MEASUREMENT_RELEASE.md#board-rows-release-boundary`; the llama.cpp
+(`ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-cpu-references`) are the audio companion's; the measurement
+checklist's vocabulary is `ARCHITECTURE_MEASUREMENT_RELEASE.md#measurement-vocabulary`, and a board
+row's release boundary is `ARCHITECTURE_MEASUREMENT_RELEASE.md#board-rows-release-boundary`; the llama.cpp
 rows a GPU home's records read against are `ARCHITECTURE_MEASUREMENT_REFERENCE_ROWS.md#vulkan-reference-rows`
 and `ARCHITECTURE_MEASUREMENT_REFERENCE_ROWS.md#cuda-reference-rows`.
 

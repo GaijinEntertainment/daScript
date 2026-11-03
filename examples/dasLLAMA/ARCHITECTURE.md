@@ -4,12 +4,12 @@ The contract every architecture doc follows is `ARCHITECTURE_COMMON.md` (repo ro
 checklist is `REVIEW.md` beside this file. The engine these programs drive is documented under
 `modules/dasLLAMA/`.
 
-## 1. Charters
+## Charters
 
 - `storyteller/` - a browser example: stories15M writes a children's story a few tokens per
   frame, KittenTTS reads each finished sentence. `main.das` is the whole program, `web_shell.html`
   the page around its canvas, `.das_package` the release, `models.json` its model set. The page
-  is Dear ImGui through the `imgui_harness` (sec.3.7): one undecorated window over the viewport,
+  is Dear ImGui through the `imgui_harness` (`#parrot-panels`): one undecorated window over the viewport,
   the story wrapped to its width, a button that starts a story.
 - `storywish/` - a browser example: the typed words become a request in the TinyStoriesInstruct
   corpus's layout, tinystories-instruct-27M writes the story, Pocket TTS reads it in one baked
@@ -21,11 +21,19 @@ checklist is `REVIEW.md` beside this file. The engine these programs drive is do
   quiet, Pocket TTS clones the voice from the take (a file with its codec encoder and its
   roster, which the picker offers beside the clone), and the text in the editor is read aloud in
   it on the say button; recording again replaces the voice. Its panels are Dear ImGui through
-  the `imgui_harness` (sec.3.7): the take's waveform and level as it records, the say's chunks
+  the `imgui_harness` (`#parrot-panels`): the take's waveform and level as it records, the say's chunks
   as they are generated and spoken, the stage times of each, the job queue's knobs. Same four
   files, plus `take.das`, the pure side (the take's numbers, the waveform columns, the chunk
-  ledger) a test reaches without a window. Nothing leaves the program: the take is cloned in
+  ledger) a test reaches without a window, and `screen.das`, the palette, the waveform box and the
+  status head the interpreter draws too. Nothing leaves the program: the take is cloned in
   memory and never written.
+- `interpreter/` - a browser example: you press listen and talk in Russian; Silero VAD cuts each
+  utterance at the pause, GigaAM transcribes it, Bergamot translates it, Pocket TTS says the
+  English, and the history keeps every turn with its stage times (`#interpreter-turns`). Same four files, plus
+  `turn.das`, the pure side (the listen's numbers, the utterance window, the drain's cut, the turn
+  ledger) a test reaches without a window; the waveform columns are parrot's `take.das` and the
+  screen pieces its `screen.das`. Nothing leaves the
+  program.
 - `wasm/dlim_config/` - a wasm-only program: prints the running build's DlimConfiguration JSON.
   `wasm/mint_models.py` - the deploy's staging step for a browser example's model set.
   `wasm/run_node.js` - runs the wasm64 engine host under node.
@@ -36,18 +44,18 @@ checklist is `REVIEW.md` beside this file. The engine these programs drive is do
 - `chat.das`, `run.das`, `speak.das`, `speak_server.das`, `transcribe.das`, `dictate.das`,
   `audio_chat.das` - desktop-only programs over the facade; nothing here ships them to a page.
 
-## 2. Definitions {#definitions}
+## Definitions {#definitions}
 
 - **A browser example** is a folder with a `web_shell.html`, wherever under `examples/` it sits: `daspkg release
   wasm` builds it to wasm64 for dasllama.io from the same `main.das` the desktop run uses. The
   checklist's rules about the browser build bind browser examples and nothing else.
 - **A witness line** is a line a browser example logs under its own name (`storyteller: ...`,
-  `storywish: ...`, `parrot: ...`); a smoke test under `modules/dasLLAMA/tests/` matches such
+  `storywish: ...`, `parrot: ...`, `interpreter: ...`); a smoke test under `modules/dasLLAMA/tests/` matches such
   lines as substrings, so their words and order are an interface.
 
-## 3. Mechanisms
+## Mechanisms
 
-### 3.1 One source, two builds {#one-source-two-builds}
+### One source, two builds {#one-source-two-builds}
 
 A browser example's `main.das` runs its frame loop through `eval_main_loop`, a blocking loop on
 the desktop and `requestAnimationFrame` in the browser. The `.das_package` disables the GPU tiers
@@ -66,7 +74,7 @@ The claim holds because `main` keeps no collectable local across the loop: the p
 lives in globals that `init()` sets up, and the only local `main` declares, the read-out flag, is
 declared after the loop.
 
-### 3.2 The speech thread and its stream {#speech-thread-stream}
+### The speech thread and its stream {#speech-thread-stream}
 
 Speech runs on its own thread so the frame loop never blocks on synthesis. The frame thread
 pushes its requests into a stream as archived records (a sentence for the story examples; for
@@ -96,9 +104,9 @@ activation scratch back once (`tts_release_scratch`) and waits again, so an idle
 model and the voices and not the last run's rows - the browser tab's budget is what a phone
 runs out of - and the next request grows the scratch back for a few milliseconds of allocation.
 
-### 3.3 Input is polled {#input-is-polled}
+### Input is polled {#input-is-polled}
 
-Every browser example reads its input inside its own frame. One on the imgui harness (sec.3.7),
+Every browser example reads its input inside its own frame. One on the imgui harness (`#parrot-panels`),
 which every example is today, reads ImGui's key and mouse state there - `IsKeyPressed` edge-detects.
 One that draws its own text reads the keyboard with `glfwGetKey` each frame, edge-detected per key
 code. Neither installs a GLFW callback. In the browser build a callback
@@ -116,7 +124,7 @@ that box is the picture - so a shell sizes the canvas element to the letterboxed
 (`max-width`/`max-height` on the replaced element) instead of stretching it over the stage with
 `object-fit`.
 
-### 3.4 The model set is minted for the build that ships it {#model-set-minted}
+### The model set is minted for the build that ships it {#model-set-minted}
 
 Each browser example's `models.json` names its source files by Hugging Face repository, file
 and sha256, in three lists: `images` (a GGUF the build bakes into a `.dlim`), `packs` (a
@@ -139,13 +147,13 @@ models path); a browser without the store fetches every time. The configuration 
 itself: `wasm/dlim_config/` is cross-compiled and run under node in the deploy, because an image
 is keyed by the build's identity and a set minted for a previous build is declined by the next.
 
-### 3.5 The wasm64 build's configuration probe {#dlim-config-probe}
+### The wasm64 build's configuration probe {#dlim-config-probe}
 
 `wasm/dlim_config/main.das` prints `dlim_config_json(dlim_config_current())` and nothing else.
 Its `.das_package` disables the GPU tiers exactly as the browser examples' do, so the
 configuration it prints is the one their programs run with.
 
-### 3.6 Parrot's take {#the-take}
+### Parrot's take {#the-take}
 
 The microphone is opened at the speech model's own rate (the speech thread reports it, with
 whether the file clones, before the first take), mono, and drained on the frame thread every
@@ -164,7 +172,7 @@ frames as they land in the take, before the detector hears them and before the c
 reaches a quiet microphone; the physical input gain is the browser's or the system's, out of the
 program's reach.
 
-### 3.7 Parrot's panels {#parrot-panels}
+### Parrot's panels {#parrot-panels}
 
 Parrot draws with Dear ImGui through `imgui_harness`, the same lifecycle the graphics labs run
 in the browser: a dockspace over the viewport with five dock windows the user can split and
@@ -215,7 +223,39 @@ output waveform keeps a fixed time scale
 (thirty seconds at least) so the playhead moves at one speed while chunks land. The chords are Ctrl (or Command) with Enter to say and with R
 to record and stop.
 
-### 3.8 The library's two backends {#library-two-backends}
+### Interpreter's turns {#interpreter-turns}
+
+The microphone is opened at parrot's rate (`MIC_RATE`, 24 kHz - the rate the browsers' capture
+serves; a 16 kHz capture context comes up on some page loads and not others) and resampled with
+parrot's resampler (`#the-take`) to the 16 kHz take GigaAM and Silero both hear; the frame thread
+drains the device every frame onto the recording and feeds the take's new samples to the Silero
+iterator. Speech start opens an utterance; speech end cuts it - the speech plus a quarter second at
+each end, never longer than GigaAM's 25 s span cap, which cuts a longer utterance there and hears
+the rest as the next - and the take keeps what follows the cut, with speech the detector opened again
+inside the same drain still open there, while the detector's state runs on; a take that holds thirty
+seconds and no speech is dropped, take and detector starting over, so an hour of quiet holds no
+audio. The cut is applied outside the iterator's feed. Stopping drains the device's last frames
+through the detector before the open speech is cut. An utterance goes to the worker thread as a turn
+(`AskKind.hear`, the PCM in the record),
+and the thread answers each stage as it lands - the transcript with its wall time, the English
+with its own, then the clip with the synthesis time - so the history shows a turn as
+transcribing, translating, speaking and spoken in turn, with each stage's milliseconds under it; a
+stage with nothing to pass on (silence transcribed as nothing, nothing to say) ends the turn as
+empty. A load or a serve that panics on the worker comes back as an error answer, which the status
+line shows; every turn still in flight ends as empty, the listen button closes, and a smoke run ends
+on it and exits non-zero. The worker's lane pin (`--q8`) is its own context's, set there before the load; un-pinned,
+the hosted Q4_K file serves as its own planes on every build, the browser's portable backend
+included (`../../modules/dasLLAMA/ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`). While a clip plays, and while clips wait to play, the
+microphone's frames are drained and dropped - the page would otherwise hear its own reply - and
+the take starts over once the last clip ends. Clips play one at a time in turn order, each with its
+own status box (`#parrot-panels`'s rule); the output waveform is the session's spoken audio with a tick at
+each turn's start and the mixer's playhead. The panels are the status strip, the listen window (the
+disc with the level breathing around it, the gain, the take's waveform, the model line), the history
+(three lines a turn: the Russian, the English or the stage it is at, the times in grey, the newest
+kept in view) and the output; a window narrower than 760 px, or taller than wide, stacks the listen
+over the history with the output behind it as a tab. Space listens and stops.
+
+### The library's two backends {#library-two-backends}
 
 `library/dasllama_lib.das` is built by both standalone backends from the one source, and the
 difference decides what a host can do with it. `daslang -lib` jits it into a native shared
@@ -236,6 +276,6 @@ none of its three surfaces holds a model; and the engine's `stats(session)` coun
 by the one-call `generate`, which a caller pulling token by token never runs, so the library times
 its own calls instead.
 
-## 4. Exception ledger
+## Exception ledger
 
 None.

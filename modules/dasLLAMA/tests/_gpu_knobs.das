@@ -8,10 +8,12 @@ module _gpu_knobs shared public
 
 require dasllama/dasllama_lint public
 require daslib/defer
+require dasllama/dasllama_tower public   // TowerDev
 require ?das_metal dasllama/dasllama_metal_tower
 require ?das_metal dasllama/dasllama_metal_asr_dec
 require ?vulkan dasllama/dasllama_vulkan_tower
 require ?vulkan dasllama/dasllama_vulkan_asr_dec
+require ?vulkan dasllama/dasllama_vulkan_common   // vulkan_tower_tiles_on: the device-up box fact
 
 //! Every GPU knob, as a cell found them: false for a driver the build omits.
 struct GpuKnobs {
@@ -89,7 +91,34 @@ def set_serving_gpu_tower(on : bool) {
     }
 }
 
-typedef GpuTowerCounters = tuple<encodes : int64; rows : int64; blocks : int64; declines : int64>   //! the serving tower's counters since the process started
+//! the serving tower's image flavor (`#tower-dev-block`): Metal's where das_metal is built in, else Vulkan's, `none` with neither
+def serving_tower_dev() : TowerDev {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return TowerDev.metal
+    } else {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            return TowerDev.vulkan
+        } else {
+            return TowerDev.none
+        }
+    }
+}
+
+//! a box fact: the serving tower's device stands up with what its chains ride - Metal's pipelines built, Vulkan's tier armed with
+//! its tiles and the f16 GEMM feed - false on a build with neither driver
+def serving_tower_device_up() : bool {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return metal_tower_init()
+    } else {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            return vulkan_tower_arms() && vulkan_tower_tiles_on() && vulkan_tower_front_route()
+        } else {
+            return false
+        }
+    }
+}
+
+typedef GpuTowerCounters = tuple<encodes : int64; rows : int64; blocks : int64; declines : int64>  //! the serving tower's counters since the process started
 
 //! the serving tower's counters: the Metal tower's where das_metal is built in, else the Vulkan tower's, zeros with neither
 def gpu_tower_counters() : GpuTowerCounters {
@@ -109,15 +138,18 @@ def gpu_tower_counters() : GpuTowerCounters {
 //! tower encodes served since the process started, on the serving tower
 def gpu_tower_encodes() : int64 => gpu_tower_counters().encodes
 
-//! the serving tower's `quant_mode` declines since the process started
-def gpu_tower_quant_declines() : int64 {
+//! the serving tower's declines under `reason` (the decline enum's member name) since the process started
+def gpu_tower_declines_of(reason : string) : int64 {
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        return metal_tower_declines()?["quant_mode"] ?? 0l
+        return metal_tower_declines()?[reason] ?? 0l
     } else {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            return vulkan_tower_declines()?["quant_mode"] ?? 0l
+            return vulkan_tower_declines()?[reason] ?? 0l
         } else {
             return 0l
         }
     }
 }
+
+//! the serving tower's `quant_mode` declines since the process started
+def gpu_tower_quant_declines() : int64 => gpu_tower_declines_of("quant_mode")

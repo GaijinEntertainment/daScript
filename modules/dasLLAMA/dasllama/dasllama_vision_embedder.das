@@ -114,10 +114,10 @@ def vision_exec_fmt(e : VisionEmbedder) : string {
     return "f32"
 }
 
-// what the file says it is: the gguf's clip.vision.projector_type, or a .dlim's baked family tag
+// what the file says it is: the gguf's clip.vision.projector_type, or a .dlim's lane tag (its baked tag with a backend flavor folded off)
 def private vision_sniff(path : string) : string {
     if (path |> ends_with(".dlim")) {
-        return image_family_tag(path)
+        return image_tag_lane(image_family_tag(path))
     }
     let f = fopen(path, "rb")
     if (f == null) {

@@ -223,10 +223,11 @@ the format by hand:
 
 - `dasllama_load.das`: `kq_fmt_of` (GGML type -> tag, with the native-knob gates); the bulk
   transcode call (`transcode_kq_tensor`) is generic over the descriptor row.
-- `dasllama_layout.das`: the grouped-row branch of `moe_gpu_gather_stack_kq` - a format whose
-  repack is not the uniform four-byte-column form needs its verbatim arm there; and
-  `metal_blob_scale_plane`, where a format whose scale row already IS the device form (q40,
-  iq4nl) is excluded by name. Bump `PACK_VERSION` with any pack edit: it folds into every image
+- `dasllama_layout.das`: the grouped-row branch of `kq_gather_rows_dev` (reached by the MoE stack
+  gather and the Vulkan tower's kq bake) - a format whose repack is not the uniform four-byte-column
+  form needs its verbatim arm there; and `metal_kq_scale_moves`, where a format whose scale row
+  already IS the Metal device form (q40, iq4nl, nv4) is excluded by name - the blob flavor's planes
+  and the Metal tower's kq slab both read it. Bump `PACK_VERSION` with any pack edit: it folds into every image
   identity, so the next load re-bakes instead of mapping a stale `.dlim`.
 - `dasllama_image.das`: bump `IMAGE_VERSION` when the plane table's shape or the meta order
   moves; the interleaves serialize in enum order, so an appended member lands last.
@@ -264,8 +265,8 @@ resident plan seats the table under).
   side-by-side (perms race each other and the reference, per box). Never leave one of their
   techniques unmeasured.
 - `dot_kq(kqrow, ksrow, xqp, xsp, xbsp, n; _f : KqTag_<fmt>)` - the portable disk-order row
-  dot (exact integer inner sums, one float fold per superblock); the rows walk (`kq_rows_kernel`),
-  the `kq_gemv_kernel` and `matmul_kq_groupn` arms and the gen tier's row tails come from the
+  dot (exact integer inner sums, one float fold per superblock); the rows walk (`kq_rows_batch_kernel`),
+  the `kq_gemm_kernel` and `matmul_kq_groupn` arms and the gen tier's row tails come from the
   stamp. The enum overload `dot_kq(..., fmt : KqFmt)` the gates drive lives in the test fixture
   `tests/_kq_dot.das`, never in `dasllama_math_default`: a stamp there adds sixteen call sites
   to the dots in their own JIT partition, and the inliner's decisions over the leaves follow

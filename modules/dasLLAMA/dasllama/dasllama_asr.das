@@ -83,6 +83,10 @@ struct AsrSession {
 // exact-fp32 knob for oracle rails: flip BEFORE load_asr_model to skip the Q8 fast path
 var private g_asr_force_fp32 = false
 var private g_asr_tower_fp32 = false   // the TOWER half only — the GPU-tower serving mode
+
+//! a facade fp32 rail (the whole model or the tower half) holds the load off its q8 lane
+def private asr_fp32_pinned() : bool => g_asr_force_fp32 || g_asr_tower_fp32
+
 // LLM-decoder ASR sessions' KV dtype. f16 is the DEFAULT (matches the reference KV — format-to-
 // format comparisons; zen2 gb1 -3%, transcripts near-tie-sane); f32 is the oracle/parity rail
 // (frozen-id cells pin it); q8_0 measured slower at ASR depths (decode overhead > bandwidth win)
@@ -144,7 +148,7 @@ def set_asr_tower_q8(on : bool) {
 //! routes on its baked family tag. One loader, no family names.
 def load_asr_model(path : string) : AsrModel {
     if (path |> ends_with(".dlim")) {
-        let tag = image_family_tag(path)
+        let tag = image_tag_lane(image_family_tag(path))
         if (tag == "whisper-q8" || tag == "whisper-f32" || tag == "whisper-f32-q8") {
             var wm = AsrModel(kind = AsrKind.whisper)
             wm.whisper <- load_whisper_model(path, tag == "whisper-q8", tag != "whisper-f32")
@@ -155,7 +159,7 @@ def load_asr_model(path : string) : AsrModel {
             pm.pk <- load_parakeet_model(path, tag == "parakeet-q8")
             return <- pm
         }
-        if (tag == "gigaam-q8" || tag == "gigaam-f16") {
+        if (tag == "gigaam-q8" || tag == "gigaam-f16" || tag == GIGAAM_KQ_TAG) {
             var gm = AsrModel(kind = AsrKind.gigaam)
             gm.ga <- load_gigaam_model(path, tag == "gigaam-q8")
             return <- gm
@@ -181,7 +185,8 @@ def load_asr_model(path : string) : AsrModel {
     if (magic == 0x46554747u) {   // "GGUF"
         if (gguf_file_arch(path) == GIGAAM_ARCH) {
             var gm = AsrModel(kind = AsrKind.gigaam)
-            gm.ga <- load_gigaam_model(path, !(g_asr_force_fp32 || g_asr_tower_fp32) && gigaam_serves_q8())
+            let pinned = asr_fp32_pinned()
+            gm.ga <- load_gigaam_model(path, !pinned && gigaam_serves_q8(), pinned)
             return <- gm
         }
         panic("dasLLAMA asr: '{path}' is a GGUF decoder - pass its mmproj too: load_asr_model(path, mmproj_path)")
@@ -192,7 +197,7 @@ def load_asr_model(path : string) : AsrModel {
     }
     if (ggml == AsrGgmlKind.parakeet) {
         var pm = AsrModel(kind = AsrKind.parakeet)
-        pm.pk <- load_parakeet_model(path, !(g_asr_force_fp32 || g_asr_tower_fp32) && parakeet_serves_q8())
+        pm.pk <- load_parakeet_model(path, !asr_fp32_pinned() && parakeet_serves_q8())
         return <- pm
     }
     // whisper vocabs: 51864 (.en) / 51865 (multilingual) / 51866 (large-v3 family); anything
@@ -201,12 +206,9 @@ def load_asr_model(path : string) : AsrModel {
         panic("dasLLAMA asr: '{path}' has n_vocab {vocab} - matches neither whisper (51864-51866) nor parakeet (~1k)")
     }
     var m = AsrModel(kind = AsrKind.whisper)
-    m.whisper <- load_whisper_model(path, !(g_asr_force_fp32 || g_asr_tower_fp32), !g_asr_force_fp32)
+    m.whisper <- load_whisper_model(path, !asr_fp32_pinned(), !g_asr_force_fp32)
     return <- m
 }
-
-//! The magic a ggml bin opens with - whisper's and parakeet's carriers.
-let ASR_GGML_MAGIC = 0x67676d6cu
 
 //! A ggml ASR bin's family: none for another magic.
 enum AsrGgmlKind {
@@ -239,7 +241,7 @@ def gguf_is_side_file(path : string) : bool {
     return is_asr_carrier_arch(arch) || arch == "clip"
 }
 
-[arch(at="../ARCHITECTURE_MEDIA.md#asr-decoder-session")]
+[arch(at="../ARCHITECTURE_MEDIA_ASR.md#asr-decoder-session")]
 def load_asr_model(path : string; mmproj : string) : AsrModel {
     //! The two-file route: ``path`` is the decoder GGUF, ``mmproj`` its audio front end — sniffed:
     //! ``qwen3a`` mmproj = Qwen3-ASR/Qwen3-Omni AuT tower, ``gemma4a`` = Gemma-4 Conformer, "CNRY"
@@ -247,13 +249,16 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
     var emagic = 0u
     var eproj = ""
     //! the raw-bin default; a .dlim's baked tag overrides it
-    var canary_q8 = !(g_asr_force_fp32 || g_asr_tower_fp32) && canary_enc_serves_q8()
+    var canary_q8 = !asr_fp32_pinned() && canary_enc_serves_q8()
+    var mm_q8 = -1   //! the mmproj image's baked lane: 1 the q8 lane, 0 the exact one; -1 for a raw bin, which follows the facade's pins
     if (mmproj |> ends_with(".dlim")) {
-        let tag = image_family_tag(mmproj)
-        if (tag == "qwen3a-f32") {
+        let tag = image_tag_lane(image_family_tag(mmproj))
+        if (tag == "qwen3a-f32" || tag == "qwen3a-q8") {
             eproj = "qwen3a"
-        } elif (tag == "gemma4a-f32") {
+            mm_q8 = tag |> ends_with("-q8") ? 1 : 0
+        } elif (tag == "gemma4a-f32" || tag == "gemma4a-q8") {
             eproj = "gemma4a"
+            mm_q8 = tag |> ends_with("-q8") ? 1 : 0
         } elif (tag == "canary-q8") {
             emagic = CANARY_MAGIC
             canary_q8 = true
@@ -293,8 +298,8 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
             panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' - the gemma4a audio route expects a Gemma-4 decoder")
         }
         m.dec.config.seq_len = min(m.dec.config.seq_len, ASR_DEC_SEQ_CAP)
-        if (g_asr_force_fp32 || g_asr_tower_fp32) {
-            set_gemma4a_q8(false)
+        if (mm_q8 >= 0 || asr_fp32_pinned()) {   // a named image is its own lane; the fp32 rails pin the exact one
+            set_gemma4a_q8(mm_q8 == 1)
             // a panicking load must not leave the pin standing
             defer() {
                 reset_gemma4a_q8()
@@ -323,8 +328,8 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
         panic("dasLLAMA asr: '{path}' is arch '{m.dec.arch}' - the GGUF ASR route expects a Qwen3-ASR (qwen3/qwen3vl) or Qwen3-Omni (qwen3vlmoe) decoder")
     }
     m.dec.config.seq_len = min(m.dec.config.seq_len, ASR_DEC_SEQ_CAP)
-    if (g_asr_force_fp32 || g_asr_tower_fp32) {
-        set_qwen3a_q8(false)
+    if (mm_q8 >= 0 || asr_fp32_pinned()) {   // a named image is its own lane; the fp32 rails pin the exact one
+        set_qwen3a_q8(mm_q8 == 1)
         // a panicking load must not leave the pin standing
         defer() {
             reset_qwen3a_q8()

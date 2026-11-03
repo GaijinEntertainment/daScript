@@ -55,6 +55,7 @@ enum MetalTowerDecline {
     none                // supported — the tower encode runs on the GPU
     knob                // DASLLAMA_METAL_TOWER=0 — the A/B rail
     quant_mode          // a q8-loaded tower: the f32/bf16 lane only (the q8 tower lane is its own slice)
+    flavor              // the model is not the Metal-flavored image: each backend serves its own (`#tower-dev-block`)
     shape               // a dim violating the GEMM grids (m%32 / ndim%64 / kdim%32) or a misaligned plane offset
     device              // metal init failed (no device / PSO build failure)
     gpu_error           // dispatch failed at execution time
@@ -67,14 +68,15 @@ enum MetalTowerDecline {
 enum MetalWdecDecline {
     none                // supported — the decoder-side work runs on the GPU
     knob                // DASLLAMA_METAL_WDEC=0 — the A/B rail (policy: never panics)
-    small               // the decode STEP only: n_text_state under the serving floor — the
-                        // per-dispatch latency beats small decoders (policy; cross-KV serves)
+    small               // the decode STEP only: the image's step baked onto the CPU (a narrow decoder under
+                        // DASLLAMA_METAL_WDEC_SMALL_CPU; policy - cross-KV serves)
     step_knob           // the decode STEP only: DASLLAMA_METAL_WDEC_STEP=0 (policy; cross-KV
                         // serves — the note is what separates "off by config" from "broken")
     quant_mode          // an f32-loaded decoder: the q8 lane only (f32 is the CPU oracle rail)
     shape               // a dim violating the GEMM grids or a misaligned plane offset
     device              // metal init failed (no device / PSO build failure)
     gpu_error           // dispatch failed at execution time
+    flavor              // the model is not the Metal-flavored image: each backend serves its own (policy)
 }
 
 // why a prefill declined to the CPU path — the FIRST failing gate clause (the decode enum's

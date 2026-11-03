@@ -4,14 +4,14 @@
 doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
 `../followup_metal.md`.
 
-A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a helper's
-asserts belong to every cell that calls it. An encoder is any stage of a vision tower, an audio
-tower or a speech synthesizer - never the language model that reads their rows.
+A cell is as `REVIEW.md` (beside this file) defines it. An encoder is any stage of a vision
+tower, an audio tower or a speech synthesizer - never the language model that reads their rows.
 
 An ASR serving lane is a weight format the family serves, one chain (CPU or device) over one
-format, or one kernel form of one format; an oracle dump of a lane's transcript stands for that
-lane. A crowned kernel form is the one the tuner measured fastest and armed as the serving one;
-its tensor twin is the same kernel written on Metal's tensor primitives, and the twins' rounding
+format, or one kernel form of one format. A transcript an external engine produced (an oracle
+dump's) stands for the lane that serves the same weights at the same precision; to any other lane
+it is a reference text. A crowned kernel form is the one the tuner measured fastest and
+armed as the serving one; its tensor twin is the same kernel written on Metal's tensor primitives, and the twins' rounding
 legitimately flips tokens. The twin bar holds the device chain's distance from the CPU exact
 chain within a stated multiple of the CPU q8 chain's distance from it.
 
@@ -47,6 +47,7 @@ differ where the flipped token carries punctuation or casing alone, with the enc
 held within a tolerance of the other side's; or equal transcript text with the encoder output rows
 held by the twin bar - never a text compare alone.**
 
-**An ASR cell comparing a transcript against a human reference text - one no lane produced -
-asserts a word-agreement floor (the share of words the two share in order: their longest common
-word subsequence over the longer word count), never text equality.**
+**An ASR cell comparing a transcript against a reference text - a human's, or an external
+engine's that does not stand for the cell's lane - asserts a word-agreement floor (the share of
+words the two share in order: their longest common word subsequence over the longer word count),
+never text equality.**

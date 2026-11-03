@@ -5,6 +5,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 
 require dasllama/dasllama   // the facade: the TTS model, its caps, the clone verb, the chunker, the synthesis, and Silero
 require take                // the pure side: the take's numbers, the waveform columns, the chunk ledger
+require screen              // the palette, the waveform box and the status head the interpreter shares
 require imgui/imgui_harness // the window, the frame, the boost widgets and the draw list
 require imgui/imgui_touch   // whether a finger, not a keyboard, is at the controls
 require imgui/imgui_table_builtin
@@ -324,7 +325,7 @@ def on_read_out() {
     g_read_out_say = g_says
     if (g_say_silent) {
         g_measure_rtf |> push(say_speed())
-        to_log(LOG_INFO, "parrot: measure {length(g_measure_rtf)} of {MEASURE_RUNS}: {s1(say_speed())}x real time\n")
+        to_log(LOG_INFO, "parrot: measure {length(g_measure_rtf)} of {MEASURE_RUNS}: {tenths(say_speed())}x real time\n")
         if (g_measure_left > 0) {
             g_measure_left--
             say_silent()
@@ -334,7 +335,7 @@ def on_read_out() {
         for (r in g_measure_rtf) {
             sum += r
         }
-        g_status = "measure {g_measure_no}: {s1(sum / double(length(g_measure_rtf)))}x real time over {length(g_measure_rtf)} runs {lanes_label()}"
+        g_status = "measure {g_measure_no}: {tenths(sum / double(length(g_measure_rtf)))}x real time over {length(g_measure_rtf)} runs {lanes_label()}"
         return
     }
     if (g_phase == Phase.idle) {
@@ -342,7 +343,7 @@ def on_read_out() {
     }
     let speech_s = float(length(g_out_pcm)) / float(max(g_mic_rate, 1))
     let playback_s = g_first_play_s < 0.0 ? 0.0 : g_elapsed_s - g_first_play_s
-    to_log(LOG_INFO, "parrot: say {g_says} is read out - {s1(speech_s)} s of speech over {s1(playback_s)} s of playback\n")
+    to_log(LOG_INFO, "parrot: say {g_says} is read out - {tenths(speech_s)} s of speech over {tenths(playback_s)} s of playback\n")
 }
 
 def poll_answers() {
@@ -519,9 +520,9 @@ def stop_take() {
         g_status = (!g_frames_seen
             ? "nothing heard - the microphone gave no audio at all: it was refused, or there is none"
             : g_level_peak < 0.001
-                ? "nothing heard - the microphone gave silence for {s1(seconds)} s: is it allowed for this page, and on?"
-                : "nothing heard - the microphone peaked at {fmt(":.4f", g_level_peak)} over {s1(seconds)} s, too quiet for speech: come closer and talk")
-        to_log(LOG_INFO, "parrot: nothing heard - peak {fmt(":.4f", g_level_peak)} over {s1(seconds)} s\n")
+                ? "nothing heard - the microphone gave silence for {tenths(seconds)} s: is it allowed for this page, and on?"
+                : "nothing heard - the microphone peaked at {fmt(":.4f", g_level_peak)} over {tenths(seconds)} s, too quiet for speech: come closer and talk")
+        to_log(LOG_INFO, "parrot: nothing heard - peak {fmt(":.4f", g_level_peak)} over {tenths(seconds)} s\n")
         return
     }
     let w = clip_window(g_speech_start24, g_speech_end24, long_length(g_take), g_in_speech)
@@ -545,7 +546,7 @@ def drain_rest() {
 
 def clone_clip(var clip : array<float>; rate : int) {
     g_phase = Phase.cloning
-    g_status = "cloning your voice from {s1(float(length(clip)) / float(rate))} seconds..."
+    g_status = "cloning your voice from {tenths(float(length(clip)) / float(rate))} seconds..."
     var a = Ask(kind = 1, gen = g_says, pcm <- clip, rate = rate)
     g_ask |> push_archive(a)
 }
@@ -663,18 +664,9 @@ def lanes_label() : string => SINGLE.value ? "on one thread" : "at {JOBS.value} 
 
 // ===== the screen =====
 
-let INK = rgba(236, 229, 210, 255)
-let DIM = rgba(141, 133, 119, 255)
-let ACCENT = rgba(242, 185, 85, 255)
-let RED = rgba(226, 84, 74, 255)
-let GREEN = rgba(155, 196, 106, 255)
-let PANEL = rgba(24, 22, 30, 255)
-let WAVE = rgba(120, 160, 220, 255)
-let WAVE_DIM = rgba(80, 90, 120, 255)
-
 def phase_chip() : tuple<text : string; color : uint> {
     if (g_phase == Phase.recording) {
-        return (text = "recording  {s1(float(length(g_take)) / float(g_mic_rate))} s", color = RED)
+        return (text = "recording  {tenths(float(length(g_take)) / float(g_mic_rate))} s", color = RED)
     }
     if (g_phase == Phase.cloning) {
         return (text = "cloning your voice", color = ACCENT)
@@ -698,92 +690,10 @@ def busy() : bool =>
 //! the promise line first, then the state chip - pulsing, with a spinner beside it while something
 //! is going on - and the status line
 def draw_status_bar() {
-    with_font(GetFont(), GetStyle().FontSizeBase * 1.15) {   // the base is the unscaled size: the current one over the style's scale
-        with_style((ImGuiCol.Text, rgba(255, 252, 244, 255))) {
-            text_wrapped(PROMISE_LINE, (text = "Your recording stays in this window: nothing is uploaded, and the voice is gone when you close it."))
-        }
-    }
-    spacing()
-    let chip = phase_chip()
-    let origin = GetCursorScreenPos()
-    let h = GetTextLineHeight() + 12.0
-    let on = busy()
-    let pulse = on ? 0.62 + 0.38 * (0.5 + 0.5 * sin(g_elapsed_s * 4.0)) : 1.0
-    let chip_w = 14.0 + CalcTextSize(chip.text).x + 14.0
-    let spinner_w = on ? 36.0 : 0.0
-    // the whole row is reserved first, so the chip and the spinner sit inside the layout and
-    // nothing drawn after (the separator) lands on them
-    dummy(CHIP_BOX, (size = float2(chip_w + spinner_w, h)))
-    with_window_drawlist() $(var dl) {
-        dl |> add_rect_filled(origin, float2(origin.x + chip_w, origin.y + h), with_alpha(chip.color, pulse), 6.0)
-        if (on) {
-            // a spinner: an open arc turning once a second
-            let c = float2(origin.x + chip_w + 18.0, origin.y + h * 0.5)
-            let a0 = g_elapsed_s * 6.2832
-            dl |> path_clear()
-            dl |> path_arc_to(c, 7.0, a0, a0 + 4.4, 16)
-            dl |> path_stroke(chip.color, ImDrawFlags.None, 2.5)
-        }
-        dl |> add_text(float2(origin.x + 14.0, origin.y + 6.0), rgba(20, 18, 24, 255), chip.text)
-    }
-    same_line((spacing = 14.0))
-    SetCursorScreenPos(float2(origin.x + chip_w + spinner_w + 14.0, origin.y + 6.0))
+    draw_status_head("Your recording stays in this window: nothing is uploaded, and the voice is gone when you close it.", phase_chip(), busy(), g_elapsed_s)
     with_style((ImGuiCol.Text, g_phase == Phase.idle ? ACCENT : DIM)) {
         text_wrapped(STATUS_LINE, (text = g_status))
     }
-}
-
-//! a colour at another alpha
-def with_alpha(color : uint; alpha : float) : uint {
-    let a = uint(clamp(alpha, 0.0, 1.0) * 255.0)
-    return (color & 0x00ffffffu) | (a << 24u)
-}
-
-//! min/max columns over a box: the take or the say; the shaded window and the playhead ride on top.
-//! The box spans `span` samples at least, so a picture that grows chunk by chunk keeps its scale and
-//! the playhead moves at one speed instead of jumping back as the say lengthens
-def draw_wave(peaks : array<float2>; size : float2; span, window_from, window_to, playhead : int64; ticks : array<int64>) {
-    let origin = GetCursorScreenPos()
-    let cols = length(peaks)
-    with_window_drawlist() $(var dl) {
-        dl |> add_rect_filled(origin, float2(origin.x + size.x, origin.y + size.y), PANEL, 4.0)
-        let mid = origin.y + size.y * 0.5
-        dl |> add_line(float2(origin.x, mid), float2(origin.x + size.x, mid), WAVE_DIM, 1.0)
-        if (cols > 0) {
-            let total = max(int64(cols) * int64(PEAK_COLUMN), span)
-            let shown = int(total / int64(PEAK_COLUMN))   // columns the box spans, drawn or not yet
-            let per_px = max(1.0, float(shown) / size.x)
-            let x_of = @(sample : int64) => origin.x + size.x * float(double(sample) / double(max(total, 1l)))
-            if (window_to > window_from) {
-                dl |> add_rect_filled(float2(x_of(window_from), origin.y), float2(x_of(window_to), origin.y + size.y), rgba(242, 185, 85, 40), 0.0)
-            }
-            var px = 0.0
-            let drawn = min(size.x, float(cols) / per_px)   // the pixels the columns reach
-            while (px < drawn) {
-                let c0 = int(px * per_px)
-                let c1 = min(cols, int((px + 1.0) * per_px) + 1)
-                var lo = 1.0
-                var hi = -1.0
-                for (c in range(c0, c1)) {
-                    lo = min(lo, peaks[c].x)
-                    hi = max(hi, peaks[c].y)
-                }
-                if (hi >= lo) {
-                    let y0 = mid - hi * size.y * 0.48
-                    let y1 = mid - lo * size.y * 0.48
-                    dl |> add_line(float2(origin.x + px, y0), float2(origin.x + px, max(y1, y0 + 1.0)), WAVE, 1.0)
-                }
-                px++
-            }
-            for (t in ticks) {
-                dl |> add_line(float2(x_of(t), origin.y), float2(x_of(t), origin.y + size.y), WAVE_DIM, 1.0)
-            }
-            if (playhead > 0l && playhead <= total) {
-                dl |> add_line(float2(x_of(playhead), origin.y), float2(x_of(playhead), origin.y + size.y), ACCENT, 2.0)
-            }
-        }
-    }
-    dummy(WAVE_BOX, (size = size))
 }
 
 //! the record button: a red disc that becomes a square while recording, the silence countdown around it
@@ -825,14 +735,14 @@ def draw_voice_panel() {
             slider_float(GAIN, (text = "gain", format = "%.2f"))
         }
         if (g_phase == Phase.recording) {
-            text(TAKE_STATE, (text = g_in_speech ? "speech" : (g_speech_seen ? "quiet {s1(countdown_left(g_speech_seen, g_in_speech, g_elapsed_s - g_quiet_since_s))} s" : "listening")))
+            text(TAKE_STATE, (text = g_in_speech ? "speech" : (g_speech_seen ? "quiet {tenths(countdown_left(g_speech_seen, g_in_speech, g_elapsed_s - g_quiet_since_s))} s" : "listening")))
         } else {
-            text(VOICE_FACT, (text = g_voice_ready ? "you: {s1(g_voice_seconds)} s, cloned in {fmt(":.0f", g_clone_ms)} ms" : "no take yet"))
+            text(VOICE_FACT, (text = g_voice_ready ? "you: {tenths(g_voice_seconds)} s, cloned in {fmt(":.0f", g_clone_ms)} ms" : "no take yet"))
         }
     }
     spacing()
     let no_ticks : array<int64>
-    draw_wave(g_take_peaks, float2(GetContentRegionAvail().x, 72.0), 10l * int64(g_mic_rate), g_take_window.from, g_take_window.to, 0l, no_ticks)
+    draw_wave(g_take_peaks, float2(GetContentRegionAvail().x, 72.0), PEAK_COLUMN, 10l * int64(g_mic_rate), g_take_window.from, g_take_window.to, 0l, no_ticks)
     spacing()
     if (!empty(g_voice_names)) {
         with_item_width(GetContentRegionAvail().x) {
@@ -887,18 +797,11 @@ def draw_text_panel() {
     }
 }
 
-def ms(us : int64) : string => fmt(":.0f", double(us) / 1000.0lf)
-
-//! seconds and speeds to a tenth
-def s1(x : float) : string => fmt(":.1f", x)
-
-def s1(x : double) : string => fmt(":.1f", x)
-
 def draw_output_panel() {
     let ticks <- [for (row in g_chunks); row.start; where row.start > 0l]
-    draw_wave(g_out_peaks, float2(GetContentRegionAvail().x, 72.0), 30l * int64(g_mic_rate), 0l, 0l, g_playhead, ticks)
+    draw_wave(g_out_peaks, float2(GetContentRegionAvail().x, 72.0), PEAK_COLUMN, 30l * int64(g_mic_rate), 0l, 0l, g_playhead, ticks)
     let seconds = double(long_length(g_out_pcm)) / double(max(g_mic_rate, 1))
-    text("{s1(seconds)} s of speech, generated at {s1(say_speed())}x real time   playhead {s1(double(g_playhead) / double(max(g_mic_rate, 1)))} s")
+    text("{tenths(seconds)} s of speech, generated at {tenths(say_speed())}x real time   playhead {tenths(double(g_playhead) / double(max(g_mic_rate, 1)))} s")
     if (!empty(g_chunks)) {
         data_table(CHUNK_TABLE, (text = "chunks", columns = 7, flags = ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.ScrollY, outer_size = float2(0.0, 0.0), inner_width = 0.0)) {
             table_setup_column("chunk", ImGuiTableColumnFlags.WidthStretch)
@@ -918,7 +821,7 @@ def draw_output_panel() {
                     text(CHUNK_STATE[i], (text = "{row.state}"))
                 }
                 if (table_next_column()) {
-                    text(CHUNK_AUDIO[i], (text = row.samples > 0l ? s1(double(row.samples) / double(max(g_mic_rate, 1))) : "-"))
+                    text(CHUNK_AUDIO[i], (text = row.samples > 0l ? tenths(double(row.samples) / double(max(g_mic_rate, 1))) : "-"))
                 }
                 if (table_next_column()) {
                     text(CHUNK_PROMPT[i], (text = ms(row.us_prompt)))
@@ -967,7 +870,7 @@ def draw_lab_panel() {
         text_wrapped(MEASURE_HINT, (text = "says the text {MEASURE_RUNS} times without playing it, and reports how many times faster than real time each run generated"))
     }
     for (i in range(length(g_measure_rtf))) {
-        text(MEASURE_ROW[i], (text = "measure {g_measure_no}, run {i + 1}  {s1(g_measure_rtf[i])}x real time"))
+        text(MEASURE_ROW[i], (text = "measure {g_measure_no}, run {i + 1}  {tenths(g_measure_rtf[i])}x real time"))
     }
 }
 

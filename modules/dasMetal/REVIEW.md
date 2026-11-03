@@ -11,6 +11,10 @@ the diff puts it.**
 **An emitted-text or fail-closed fixture answers to `tests/msl/REVIEW.md` (repo root), wherever
 the diff puts it.**
 
+The W staging stride is the threadgroup row stride `tmm2d_helper_text` (`metal/msl_emit.das`)
+writes: its `dstp` index and the row stride in the W tensor's `metal::array<int32_t, 2>{1, N}`
+argument.
+
 - **A diff that changes the MSL text any `[metal_kernel]` body can produce, with or without a
   `name=` argument, ships a `tests/msl/` (repo root) fixture asserting the new text, in the same
   change.**
@@ -21,9 +25,9 @@ the diff puts it.**
   emitter records at emit time, declared in `declared_msl_census` (`tests/msl/_msl_common.das`,
   repo root). Two shapes sharing one kind lets either one go untested.
 
-- **A new or changed `[metal_kernel]` annotation argument that declares a module-level global -
-  the kernel MSL text or a compile option - ships a `tests/msl/` (repo root) fixture asserting
-  that global, in the same change.**
+- **A new or changed `[metal_kernel]` annotation argument that declares or sets a module-level
+  global other than the kernel's MSL text - a compile option among them - ships a `tests/msl/`
+  (repo root) fixture asserting that global, in the same change.**
 
 - **A diff that adds an MSL emitter rejection a `[metal_kernel]` body can reach, widens an
   existing one's condition, or changes a rejection's message text ships a
@@ -32,9 +36,9 @@ the diff puts it.**
   construct.
 
 - **A kernel behavioral change ships a CPU-oracle test under `tests/metal/` (repo root).** A
-  kernel behavioral change is a change to what an existing kernel computes, or a diff that
-  makes the emitter produce arithmetic, indexing, or synchronization it did not produce before;
-  a CPU-oracle test compares the GPU result against a CPU-computed expectation.
+  kernel behavioral change is a diff that changes the values any dispatch of an existing kernel
+  writes, or which dispatch sizes it accepts; a CPU-oracle test compares the GPU result against
+  a CPU-computed expectation.
 
 - **Never commit a `.msl` file and never hand-write MSL outside `metal/msl_emit.das`'s emitted
   text - emit it from a `[metal_kernel]` body instead.**
@@ -68,17 +72,13 @@ the diff puts it.**
   CPU body of `tmm2d_tg_step_deva` repeats the emitted tile indexing, so a one-sided change makes
   the CPU run read the wrong f16 elements with no compile error.
 
-- **A diff that changes the threadgroup row stride `tmm2d_helper_text` writes (its `dstp`
-  index and the row stride in the W tensor's `metal::array<int32_t, 2>{1, N}` argument,
-  `metal/msl_emit.das`) changes the `wt` size documented on `tmm2d_q8u_f32`
+- **A diff that changes the W staging stride changes the `wt` size documented on `tmm2d_q8u_f32`
   (`metal/metal_builtins.das`) in the same change.** `wt` is the staged weight tile - the
   dequantized W the emitter stores in threadgroup memory - and the documented size is the
   caller's only statement of the stride.
 
-- **A diff that changes the threadgroup row stride `tmm2d_helper_text` writes (its `dstp`
-  index and the row stride in the W tensor's `metal::array<int32_t, 2>{1, N}` argument,
-  `metal/msl_emit.das`) also resizes every `@workgroup` staging array a `tests/msl/` or
-  `tests/metal/` (repo root) fixture sizes for that stride, in the same change.** Nothing checks
+- **A diff that changes the W staging stride also resizes every `@workgroup` staging array a
+  `tests/msl/` or `tests/metal/` (repo root) fixture sizes for that stride, in the same change.** Nothing checks
   a fixture's allocation against the stride, so a one-sided change overruns it silently.
 
 - **A diff that makes `metal/msl_emit.das` pick a builtin's lowering from anything other than the

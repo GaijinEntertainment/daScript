@@ -24,7 +24,7 @@ def initialize(project_path : string) {
         "dasllama_layout", "dasllama_gpu_resident", "dasllama_load", "dasllama_ple",
         "dasllama_sampling", "dasllama_blocks", "dasllama_moe", "dasllama_batch",
         "dasllama_mtp_gemma", "dasllama_attn_prefill", "dasllama_prefix", "dasllama_asr_types",
-        "dasllama_tower", "dasllama_audio", "dasllama_wav", "dasllama_audio_io", "dasllama_whisper",
+        "dasllama_tower", "dasllama_tower_image", "dasllama_audio", "dasllama_wav", "dasllama_audio_io", "dasllama_whisper",
         "dasllama_qwen3a", "dasllama_rnnt", "dasllama_parakeet", "dasllama_gigaam", "dasllama_nmt", "dasllama_translate", "dasllama_canary", "dasllama_gemma4a",
         "dasllama_vad", "dasllama_asr", "dasllama_textnorm", "dasllama_postag", "dasllama_g2p",
         "dasllama_tts_types", "dasllama_tts_blocks", "dasllama_styletts2", "dasllama_kitten",

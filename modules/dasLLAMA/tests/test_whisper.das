@@ -524,9 +524,10 @@ def private assert_segs_token_identical(tt : T?; a_segs, b_segs : array<Transcri
     tt |> success(f.flips == 0, "{tag}: token-identical ({f.flips}/{f.total} flips)")
 }
 
-//! a served whisper model minted in memory from a staged read (never the `.dlim` rail); `zero_from` >= 0 zeroes the q8 encoder's GEMM planes of every block from that one on
-def private mint_whisper(path : string; enc_q8, dec_q8 : bool; zero_from : int64) : WhisperModel {
-    var inscope stg <- stage_whisper_model(path, enc_q8, dec_q8)
+//! a served whisper model minted in memory from a staged read (never the `.dlim` rail) in the flavor `dev` (`#tower-dev-block`);
+//! `zero_from` >= 0 zeroes the q8 encoder's GEMM planes of every block from that one on
+def private mint_whisper(path : string; enc_q8, dec_q8 : bool; zero_from : int64; dev : TowerDev = TowerDev.none) : WhisperModel {
+    var inscope stg <- tower_dev_staged(dev) $ { return <- stage_whisper_model(path, enc_q8, dec_q8) }
     if (zero_from >= 0l) {
         let qoff = stg.e.enc.qlayers_off
         let qstride = stg.e.enc.qlayer_stride
@@ -537,15 +538,15 @@ def private mint_whisper(path : string; enc_q8, dec_q8 : bool; zero_from : int64
         }
     }
     var w = WhisperModel()
-    mint_whisper_model(stg, w, enc_q8, dec_q8)
+    mint_whisper_model(stg, w, enc_q8, dec_q8, dev)
     return <- w
 }
 
-//! the served whisper model behind the ASR facade, minted in memory on the q8 lanes the Vulkan cells pin - the facade loader would
-//! bake the serving lane's `.dlim` beside the file
-def private mint_asr_whisper(path : string) : AsrModel {
+//! the served whisper model behind the ASR facade, minted in memory on the q8 lanes the Vulkan cells pin in the flavor `dev` - the
+//! facade loader would bake the serving lane's `.dlim` beside the file
+def private mint_asr_whisper(path : string; dev : TowerDev = TowerDev.none) : AsrModel {
     var m = AsrModel(kind = AsrKind.whisper)
-    m.whisper <- mint_whisper(path, true, true, -1l)
+    m.whisper <- mint_whisper(path, true, true, -1l, dev)
     return <- m
 }
 
@@ -555,9 +556,11 @@ def private whisper_rows_encode(enc : AudioTower; var es : EncoderState; win : M
     return long_length(out)
 }
 
-//! the rows are `whisper_encode`'s `xb` over jfk's first 30 s window three ways - the exact f32 encoder minted in memory, `w`'s q8 encoder on the CPU and on the device - then the input poison: a q8 encoder with every block's GEMM planes from the middle one on zeroed, through the device chain, must EXCEED the bar
+//! the rows are `whisper_encode`'s `xb` over jfk's first 30 s window three ways - the exact f32 encoder minted in memory, `w`'s q8
+//! encoder on the CPU and `wd`'s (the Vulkan-flavored image) on the device - then the input poison: a Vulkan-flavored q8 encoder
+//! with every block's GEMM planes from the middle one on zeroed, through the device chain, must EXCEED the bar
 [cold_path]
-def private whisper_rows_twin(tt : T?; name, model_path : string; w : WhisperModel; samples : array<float>) {
+def private whisper_rows_twin(tt : T?; name, model_path : string; w, wd : WhisperModel; samples : array<float>) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = "{name} jfk encoder rows"
         var padded : array<float>
@@ -567,21 +570,23 @@ def private whisper_rows_twin(tt : T?; name, model_path : string; w : WhisperMod
         win.data |> resize(w.enc.n_mel * AUDIO_CHUNK_FRAMES)
         whisper_mel_window(mel, 0l, win)
         var es <- make_encoder_state(w.enc)
+        var esd <- make_encoder_state(wd.enc)
         let spec = TwinSpec(family = "whisper", tag = tag, n_layer = w.enc.n_layer, metric = TwinMetric.rel_l2)
         var wx <- mint_whisper(model_path, false, false, -1l)
         tt |> success(!wx.enc.q8, "{tag}: the exact encoder minted for the compare")
         var esx <- make_encoder_state(wx.enc)
-        var r <- twin_three_way(tt, spec, w.enc, es, wx.enc, esx, $(e; var s; var out) => whisper_rows_encode(e, s, win, out)) $(legs) {
+        var r <- twin_three_way(tt, spec, w.enc, es, wd.enc, esd, wx.enc, esx, $(e; var s; var out) => whisper_rows_encode(e, s, win, out)) $(legs) {
             tt |> equal(legs.dev.encodes - legs.cpu.encodes, 1l, "{tag}: the device encode served")
         }
         delete esx
         delete wx
-        var inscope wz <- mint_whisper(model_path, true, true, w.enc.n_layer / 2l)
+        var inscope wz <- mint_whisper(model_path, true, true, w.enc.n_layer / 2l, TowerDev.vulkan)
         tt |> success(wz.enc.q8, "{tag}: the poisoned encoder is on the q8 lane")
         var esz <- make_encoder_state(wz.enc)
         twin_poison(tt, r, w.enc.n_layer / 2l, wz.enc, esz) $(e; var s; var out) => whisper_rows_encode(e, s, win, out)
         delete esz
         delete r
+        delete esd
         delete es
         delete win
         delete mel
@@ -589,94 +594,71 @@ def private whisper_rows_twin(tt : T?; name, model_path : string; w : WhisperMod
     }
 }
 
+//! The whisper lane whole on each side (`#tower-dev-block`): the CPU image on the CPU with both knobs off, the Vulkan-flavored
+//! image on the device - the encoder's block loop and conv stem, then the decoder's cross-KV and steps off the encoder's device
+//! rows. The counters prove each side (no dispatch and the knob declines on the CPU leg; every chunk's blocks, every window
+//! handed off device to device and no decline on the device leg), the texts are the same, and the encoder rows twin and the f32
+//! decoder's `quant_mode` decline follow.
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def test_whisper_vulkan_twin(t : T?) {
     for (name in ["ggml-tiny.bin", "ggml-large-v3-turbo.bin"]) {
-        t |> run("{name}: the Vulkan block loop vs the CPU q8 chain on jfk, token for token") @(tt : T?) {
+        t |> run("{name}: the Vulkan lane vs the CPU q8 lane on jfk") @(tt : T?) {
             static_if (typeinfo builtin_module_exists(vulkan)) {
                 let model_path = path_join(whisper_dir(), name)
                 jfk_twin_cell(tt, model_path, true) $(samples) {
-                    set_vulkan_wdec(false)   // the decoder rail stays on the CPU so only the encoder varies between the legs
                     set_asr_fp32(false)
                     set_asr_tower_fp32(false)
                     var inscope m <- mint_asr_whisper(model_path)
-                    tt |> success(m.whisper.enc.q8, "the served mint is q8")
+                    var inscope md <- mint_asr_whisper(model_path, TowerDev.vulkan)
+                    tt |> success(m.whisper.enc.q8 && m.whisper.dq8 && md.whisper.enc.dev_backend == TowerDev.vulkan, "the q8 lane's CPU image and its Vulkan-flavored image")
+                    {
+                        var inscope dsd <- make_decoder_state(md.whisper)
+                        var inscope dsc <- make_decoder_state(m.whisper)
+                        tt |> success(empty(dsd.kcache) && empty(dsd.kx) && empty(dsd.h) && empty(dsd.xqi), "the Vulkan image's decoder state carries no CPU chain buffers")
+                        tt |> success(!empty(dsc.kcache) && !empty(dsc.kx) && !empty(dsc.h), "the CPU image's carries them")
+                    }
                     with_dasllama_jobque_() {
                         set_vulkan_tower(false)
+                        set_vulkan_wdec(false)
                         let d0 = vulkan_tower_stats()
+                        let w0 = vulkan_wdec_stats()
                         var inscope cpu_segs <- transcribe_segs(m, samples)
                         let d1 = vulkan_tower_stats()
+                        let w1 = vulkan_wdec_stats()
                         set_vulkan_tower(true)
-                        var inscope dev_segs <- transcribe_segs(m, samples)
+                        set_vulkan_wdec(true)
+                        var inscope dev_segs <- transcribe_segs(md, samples)
                         let d2 = vulkan_tower_stats()
-                        if (d2.encodes == d1.encodes) {
-                            to_log(LOG_INFO, "{name} vulkan twin: the driver declined - {vulkan_tower_declines()}\n")
+                        let w2 = vulkan_wdec_stats()
+                        if (d2.encodes == d1.encodes || w2.windows == w1.windows) {
+                            to_log(LOG_INFO, "{name} vulkan twin: a driver declined - tower {vulkan_tower_declines()}, decoder {vulkan_wdec_declines()}\n")
                         }
                         let n_enc = d2.encodes - d1.encodes
-                        tt |> equal(d1.encodes - d0.encodes, 0l, "the knob-off leg never dispatched")
-                        tt |> success(d1.declines - d0.declines >= 1l, "the knob-off leg recorded the knob decline")
+                        tt |> equal(d1.encodes - d0.encodes, 0l, "the CPU leg's encoder never dispatched")
+                        tt |> success(d1.declines - d0.declines >= 1l, "the CPU leg recorded the tower knob's decline")
+                        tt |> equal(w1.windows - w0.windows, 0l, "the CPU leg's decoder never served a window")
+                        tt |> equal(w1.steps - w0.steps, 0l, "the CPU leg's decoder never served a decode step")
+                        tt |> success(key_exists(vulkan_wdec_declines(), "knob"), "the CPU leg recorded the decoder knob's decline")
                         tt |> success(n_enc >= 1l, "the device served the chunk encodes ({n_enc})")
-                        tt |> equal(d2.blocks - d1.blocks, n_enc * m.whisper.enc.n_layer, "every block of every served encode ran on the driver")
-                        tt |> equal(d2.rows - d1.rows, n_enc * m.whisper.enc.n_ctx, "the rows delta is the chunks' positions")
+                        tt |> equal(d2.blocks - d1.blocks, n_enc * md.whisper.enc.n_layer, "every block of every served encode ran on the driver")
+                        tt |> equal(d2.rows - d1.rows, n_enc * md.whisper.enc.n_ctx, "the rows delta is the chunks' positions")
                         front_served(tt, "{name} jfk conv stem", d2.convs - d1.convs, n_enc, d2.declines - d1.declines)
+                        tt |> success(w2.windows - w1.windows >= 1l, "the device served the window's cross-KV ({w2.windows - w1.windows})")
+                        tt |> success(w2.steps - w1.steps >= 20l, "the decode batches served on the device ({w2.steps - w1.steps})")
+                        tt |> success(w2.tokens - w1.tokens >= w2.steps - w1.steps, "the token rows cover the steps")
+                        tt |> equal(w2.declines, w1.declines, "the device leg's decoder recorded no decline")
+                        tt |> equal(w2.handoffs - w1.handoffs, w2.windows - w1.windows, "every served window took the encoder rows off the tower's plane, device to device")
+                        tt |> equal(w1.handoffs, w0.handoffs, "and the CPU leg took none")
                         let cpu_text = segs_text(cpu_segs)
                         let dev_text = segs_text(dev_segs)
                         let f = segs_token_flips(cpu_segs, dev_segs)
                         to_log(LOG_INFO, "{name} cpu q8 jfk: '{cpu_text}'\n")
-                        to_log(LOG_INFO, "{name} vulkan jfk: '{dev_text}' ({f.flips}/{f.total} token flips against the CPU q8 chain)\n")
+                        to_log(LOG_INFO, "{name} vulkan jfk: '{dev_text}' ({f.flips}/{f.total} token flips against the CPU q8 lane)\n")
                         tt |> equal(length(cpu_segs), length(dev_segs), "{name} jfk: segment count")
                         tt |> success(cpu_text == dev_text, "{name} jfk cpu q8 / vulkan: the same text (two q8 chains, the device's summation order its own: a near-tie token may flip, the words do not)")
-                        whisper_rows_twin(tt, name, model_path, m.whisper, samples)
+                        whisper_rows_twin(tt, name, model_path, m.whisper, md.whisper, samples)
                     }
-                    delete m
-                    vulkan_tower_shutdown()
-                }
-            } else {
-                tt |> skip("dasVulkan not present")
-            }
-        }
-    }
-}
-
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-asr-decoder")]
-def test_whisper_vulkan_wdec(t : T?) {
-    for (name in ["ggml-tiny.bin", "ggml-large-v3-turbo.bin"]) {
-        t |> run("{name}: the Vulkan decoder vs the CPU q8 decoder on jfk, token for token") @(tt : T?) {
-            static_if (typeinfo builtin_module_exists(vulkan)) {
-                let model_path = path_join(whisper_dir(), name)
-                jfk_twin_cell(tt, model_path, true) $(samples) {
-                    set_vulkan_tower(true)   // the tower serves the encoder on both legs, so only the decoder varies
-                    set_asr_fp32(false)
-                    set_asr_tower_fp32(false)
-                    var inscope m <- mint_asr_whisper(model_path)
-                    tt |> success(m.whisper.dq8, "the served mint carries the q8 decoder")
-                    with_dasllama_jobque_() {
-                        set_vulkan_wdec(false)
-                        let d0 = vulkan_wdec_stats()
-                        var inscope cpu_segs <- transcribe_segs(m, samples)
-                        let d1 = vulkan_wdec_stats()
-                        tt |> equal(d1.windows - d0.windows, 0l, "the knob-off leg never served a window")
-                        tt |> equal(d1.steps - d0.steps, 0l, "the knob-off leg never served a decode step")
-                        tt |> success(key_exists(vulkan_wdec_declines(), "knob"), "the knob-off leg recorded the knob decline")
-                        set_vulkan_wdec(true)
-                        var inscope dev_segs <- transcribe_segs(m, samples)
-                        let d2 = vulkan_wdec_stats()
-                        if (d2.windows == d1.windows) {
-                            to_log(LOG_INFO, "{name} vulkan wdec: the driver declined - {vulkan_wdec_declines()}\n")
-                        }
-                        tt |> success(d2.windows - d1.windows >= 1l, "the device served the window's cross-KV ({d2.windows - d1.windows})")
-                        tt |> success(d2.steps - d1.steps >= 20l, "the decode batches served on the device ({d2.steps - d1.steps})")
-                        tt |> success(d2.tokens - d1.tokens >= d2.steps - d1.steps, "the token rows cover the steps")
-                        tt |> equal(d2.declines, d1.declines, "the device leg recorded no decline")
-                        tt |> equal(d2.handoffs - d1.handoffs, d2.windows - d1.windows, "every served window took the encoder rows off the tower's plane, device to device")
-                        tt |> equal(d1.handoffs, d0.handoffs, "and the knob-off leg took none")
-                        let cpu_text = segs_text(cpu_segs)
-                        let dev_text = segs_text(dev_segs)
-                        let f = segs_token_flips(cpu_segs, dev_segs)
-                        to_log(LOG_INFO, "{name} cpu q8 decoder jfk: '{cpu_text}'\n")
-                        to_log(LOG_INFO, "{name} vulkan decoder jfk: '{dev_text}' ({f.flips}/{f.total} token flips against the CPU q8 decoder)\n")
-                        assert_segs_token_identical(tt, cpu_segs, dev_segs, "{name} jfk cpu q8 / vulkan decoder")
-                    }
+                    delete md
                     delete m
                     wdec_f32_declines(tt, name, model_path, samples)
                     vulkan_wdec_shutdown()
@@ -685,111 +667,6 @@ def test_whisper_vulkan_wdec(t : T?) {
             } else {
                 tt |> skip("dasVulkan not present")
             }
-        }
-    }
-}
-
-[test]
-def test_whisper_vulkan_stem_flush(t : T?) {
-    t |> run("ggml-tiny.bin: the stem's pending readback lands at the block hooks' decline; the CPU blocks over it match the all-CPU chain") @(tt : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
-            jfk_twin_cell(tt, model_path, true) $(samples) {
-                set_vulkan_wdec(false)
-                set_asr_fp32(false)
-                set_asr_tower_fp32(false)
-                var inscope m <- mint_asr_whisper(model_path)
-                with_dasllama_jobque_() {
-                    set_vulkan_tower(false)
-                    var inscope cpu_segs <- transcribe_segs(m, samples)
-                    set_vulkan_tower(true)
-                    set_vulkan_audio_blocks(false)
-                    let s0 = vulkan_tower_stats()
-                    let blocks0 = vulkan_tower_declines()?["blocks"] ?? 0l
-                    var inscope stem_segs <- transcribe_segs(m, samples)
-                    let s1 = vulkan_tower_stats()
-                    tt |> success(s1.convs > s0.convs, "the stem served on the device ({s1.convs - s0.convs} dispatches)")
-                    tt |> equal(s1.encodes, s0.encodes, "the block hooks served nothing")
-                    tt |> equal((vulkan_tower_declines()?["blocks"] ?? 0l) - blocks0, s1.convs - s0.convs, "and recorded one `blocks` decline a window, the one the stem's rows landed at")
-                    to_log(LOG_INFO, "ggml-tiny.bin stem flush: all-CPU '{segs_text(cpu_segs)}' / device stem + CPU blocks '{segs_text(stem_segs)}'\n")
-                    assert_segs_token_identical(tt, cpu_segs, stem_segs, "ggml-tiny.bin jfk all-CPU / device stem + CPU blocks")
-                }
-                delete m
-                vulkan_tower_shutdown()
-            }
-        } else {
-            tt |> skip("dasVulkan not present")
-        }
-    }
-}
-
-let private WDEC_FLUSH_LOGIT_BAR = 0.05   //! the flushed memory's logits within this fraction of the knob-off chain's peak: the device's cross-KV planes are the f16 feed's GEMM, the knob-off chain's the q8 dot; the reading is `PERF_LEDGER.md`'s
-
-//! the same token and logits within `WDEC_FLUSH_LOGIT_BAR` of the peak; `cpu_moved` - the knob-off chain over the batch with its last
-//! token changed - is the bar's control: the changed input must land outside it
-def private wdec_flush_compare(tt : T?; w : WhisperModel; cpu, dev, cpu_moved : array<float>) {
-    tt |> equal(long_length(dev), long_length(cpu), "both chains landed the last row's logits")
-    let maxc = logits_maxabs(cpu)
-    let max_diff = logits_maxdiff(dev, cpu)
-    let top_cpu = int(parallel_argmax(cpu, long_length(cpu)))
-    let top_dev = int(parallel_argmax(dev, long_length(dev)))
-    let bar = WDEC_FLUSH_LOGIT_BAR * maxc
-    let moved = logits_maxdiff(cpu_moved, cpu)
-    to_log(LOG_INFO, "ggml-tiny.bin wdec flush: the CPU chain over the flushed memory vs the knob-off chain - max diff {max_diff} of {maxc} (bar {bar}), argmax '{w.vocab[top_dev]}' ({top_dev}) vs '{w.vocab[top_cpu]}' ({top_cpu}); the changed last token moves the knob-off logits by {moved}\n")
-    tt |> equal(top_dev, top_cpu, "the CPU chain over the flushed memory picks the knob-off chain's token")
-    tt |> success(max_diff <= bar, "and its logits sit within the bar ({max_diff} vs {bar})")
-    tt |> success(moved > bar, "the bar's control: the batch with its last token changed lands outside it ({moved} vs {bar})")
-}
-
-[test]
-def test_whisper_vulkan_wdec_flush(t : T?) {
-    t |> run("ggml-tiny.bin: the pending cross-KV readback lands at the step's rows decline; the CPU chain over it matches the knob-off chain") @(tt : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
-            jfk_twin_cell(tt, model_path, true) $(samples) {
-                set_vulkan_tower(true)
-                set_asr_fp32(false)
-                set_asr_tower_fp32(false)
-                var inscope m <- mint_asr_whisper(model_path)
-                let batch <- [for (i in range(int(WD_ROW_CAP) + 1)); m.whisper.tok_sot + i]   // one past the step's cap, the first batch of a window
-                var batch_moved := batch
-                batch_moved[length(batch_moved) - 1]++
-                var cpu_logits, cpu_moved, dev_logits : array<float>
-                with_dasllama_jobque_() {
-                    set_vulkan_wdec(false)
-                    var inscope sc <- create_session(m)
-                    transcribe(m, sc, samples) $(_seg) {}
-                    sc.w.ds.n_past = 0l
-                    whisper_decode_batch(m.whisper, sc.w.ds, batch)
-                    cpu_logits := sc.w.ds.logits
-                    sc.w.ds.n_past = 0l
-                    whisper_decode_batch(m.whisper, sc.w.ds, batch_moved)
-                    cpu_moved := sc.w.ds.logits
-                    set_vulkan_wdec(true)
-                    let d0 = vulkan_wdec_stats()
-                    var inscope sg <- create_session(m)
-                    transcribe(m, sg, samples) $(_seg) {}
-                    let d1 = vulkan_wdec_stats()
-                    tt |> success(d1.windows - d0.windows >= 1l, "the device served the window's cross-KV ({d1.windows - d0.windows})")
-                    let rows0 = vulkan_wdec_declines()?["rows"] ?? 0l
-                    sg.w.ds.n_past = 0l
-                    sg.w.ds.gpu_kv_gen = 0l
-                    whisper_decode_batch(m.whisper, sg.w.ds, batch)
-                    let rows1 = vulkan_wdec_declines()?["rows"] ?? 0l
-                    tt |> equal(rows1 - rows0, 1l, "a first batch past the row cap declined `rows`")
-                    tt |> equal(vulkan_wdec_stats().steps, d1.steps, "and the device served no step: the CPU chain decoded it over the flushed memory")
-                    dev_logits := sg.w.ds.logits
-                    wdec_flush_compare(tt, m.whisper, cpu_logits, dev_logits, cpu_moved)   // inside the queue: the argmax is the parallel one
-                }
-                delete cpu_logits
-                delete cpu_moved
-                delete dev_logits
-                delete m
-                vulkan_wdec_shutdown()
-                vulkan_tower_shutdown()
-            }
-        } else {
-            tt |> skip("dasVulkan not present")
         }
     }
 }
@@ -861,7 +738,8 @@ def test_parakeet_q8_0_file(t : T?) {
 }
 
 //! The Metal tower fills the whisper blocks-with-post-norm seat: the post-norm runs behind the blocks on the device and the
-//! normed rows land in `xb`, where the CPU chain's post-norm would put them.
+//! normed rows land in `xb`, where the CPU chain's post-norm would put them. The CPU leg runs the exact lane's CPU image, the
+//! device legs its Metal-flavored image (`#tower-dev-block`).
 [test]
 def test_whisper_metal_ln_post(t : T?) {
     t |> run("ggml-tiny.bin: the encoder's post-norm on the Metal tower lands the CPU chain's normed rows") @(tt : T?) {
@@ -874,6 +752,7 @@ def test_whisper_metal_ln_post(t : T?) {
                 return
             }
             var inscope w <- mint_whisper(model_path, false, false, -1l)
+            var inscope wd <- mint_whisper(model_path, false, true, -1l, TowerDev.metal)
             with_dasllama_jobque_() {
                 var padded : array<float>
                 var mel = WhisperMel()
@@ -888,20 +767,21 @@ def test_whisper_metal_ln_post(t : T?) {
                 whisper_encode(w.enc, es, win)
                 var cpu := es.xb
                 set_metal_tower(true)
+                var esd <- make_encoder_state(wd.enc)
                 let s0 = metal_tower_stats()
-                tt |> success(audio_encode_blocks_ln_post(w.enc, es, win), "tower on: the seat served the blocks and the post-norm")
+                tt |> success(audio_encode_blocks_ln_post(wd.enc, esd, win), "tower on: the seat served the blocks and the post-norm")
                 tt |> equal(metal_tower_stats().encodes - s0.encodes, 1l, "one device encode")
                 // a NaN on either side reads infinite in the difference, and in the scale where it is the reference's: the
                 // ratio is then infinite or NaN, outside the bar
-                let off = logits_maxdiff(es.xb, cpu) / logits_maxabs(cpu)
-                let unnormed = logits_maxdiff(es.xb, raw) / logits_maxabs(raw)
-                var normed := es.xb
+                let off = logits_maxdiff(esd.xb, cpu) / logits_maxabs(cpu)
+                let unnormed = logits_maxdiff(esd.xb, raw) / logits_maxabs(raw)
+                var normed := esd.xb
                 // the post-norm is the unit: the blocks seat alone gives the device's own block rows, the CPU norms THOSE, and the
                 // device's normed rows must be that image - the block chain's device-vs-CPU distance stays out of the bar
-                audio_encode_blocks(w.enc, es, win)
+                audio_encode_blocks(wd.enc, esd, win)
                 var want : array<float>
-                want |> resize(length(es.x))
-                layernorm_batch(want, es.x, w.enc.fblob, w.enc.lnp_w_off, w.enc.lnp_b_off, w.enc.d_model, w.enc.n_ctx, w.enc.eps)
+                want |> resize(length(esd.x))
+                layernorm_batch(want, esd.x, w.enc.fblob, w.enc.lnp_w_off, w.enc.lnp_b_off, w.enc.d_model, w.enc.n_ctx, w.enc.eps)
                 let ln_off = logits_maxdiff(normed, want) / logits_maxabs(want)
                 to_log(LOG_INFO, "whisper tiny ln_post: device norm vs the CPU norm of the device's block rows {ln_off}; vs the CPU chain {off}; vs the un-normed rows {unnormed}\n")
                 tt |> success(ln_off < 1e-4, "the device's post-norm is the CPU post-norm of the same rows ({ln_off})")
@@ -910,6 +790,7 @@ def test_whisper_metal_ln_post(t : T?) {
                 delete normed
                 delete raw
                 delete cpu
+                delete esd
                 delete es
                 delete win
                 delete mel
@@ -922,69 +803,8 @@ def test_whisper_metal_ln_post(t : T?) {
     }
 }
 
-//! The Metal decoder leaves a window's cross-KV layouts on the device while its step serves; a first batch past the step's
-//! 32-row cap hands the window to the CPU chain, and the layouts land first.
-[test]
-def test_whisper_metal_wdec_flush(t : T?) {
-    t |> run("ggml-tiny.bin: the waiting cross-KV readback lands when the step declines; the CPU chain over it matches the knob-off chain") @(tt : T?) {
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
-            return if (!jit_model_available(tt, model_path))
-            let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
-            if (empty(samples)) {
-                tt |> skip("jfk.wav not present")
-                return
-            }
-            set_asr_fp32(false)
-            set_asr_tower_fp32(false)
-            var inscope m <- mint_asr_whisper(model_path)
-            let batch <- [for (i in range(33)); m.whisper.tok_sot + i]   // one past the step's cap, the first batch of a window
-            var batch_moved := batch
-            batch_moved[length(batch_moved) - 1]++
-            var cpu_logits, cpu_moved, dev_logits : array<float>
-            with_dasllama_jobque_() {
-                set_metal_wdec(false)
-                var inscope sc <- create_session(m)
-                transcribe(m, sc, samples) $(_seg) {}
-                sc.w.ds.n_past = 0l
-                whisper_decode_batch(m.whisper, sc.w.ds, batch)
-                cpu_logits := sc.w.ds.logits
-                sc.w.ds.n_past = 0l
-                whisper_decode_batch(m.whisper, sc.w.ds, batch_moved)
-                cpu_moved := sc.w.ds.logits
-                set_metal_wdec(true)
-                set_metal_wdec_step(true)
-                set_metal_wdec_step_min_d(0l)   // tiny sits under the step's serving floor: with it lifted the step serves and the layouts wait
-                let d0 = metal_wdec_stats()
-                var inscope sg <- create_session(m)
-                transcribe(m, sg, samples) $(_seg) {}
-                let d1 = metal_wdec_stats()
-                tt |> success(d1.windows - d0.windows >= 1l && d1.steps > d0.steps, "the device served the window's cross-KV and its steps ({d1.windows - d0.windows}, {d1.steps - d0.steps})")
-                for (i in range(length(sg.w.ds.kx))) {   // the host layouts are stale by construction: only a flush makes the CPU chain right
-                    sg.w.ds.kx[i] = 0.0
-                }
-                sg.w.ds.n_past = 0l
-                sg.w.ds.gpu_kv_gen = 0l
-                whisper_decode_batch(m.whisper, sg.w.ds, batch)
-                tt |> equal(metal_wdec_stats().steps, d1.steps, "the device served no step of the wide batch: the CPU chain decoded it over the flushed memory")
-                dev_logits := sg.w.ds.logits
-                wdec_flush_compare(tt, m.whisper, cpu_logits, dev_logits, cpu_moved)   // inside the queue: the argmax is the parallel one
-                set_metal_wdec_step_min_d(METAL_WDEC_STEP_MIN_D)
-            }
-            delete cpu_logits
-            delete cpu_moved
-            delete dev_logits
-            delete m
-            metal_wdec_shutdown()
-            metal_tower_shutdown()
-        } else {
-            tt |> skip("dasMetal not present")
-        }
-    }
-}
-
-//! a lifetime cell's seat: tiny on jfk, both drivers on, the q8 default load, one session created for `body` the way a serving
-//! worker reuses one - the decoder's window lifetime across that session's transcriptions is the claim
+//! a lifetime cell's seat: tiny on jfk, both drivers on, the q8 lane's Vulkan-flavored image, one session created for `body` the way
+//! a serving worker reuses one - the decoder's window lifetime across that session's transcriptions is the claim
 def private wdec_lifetime_cell(tt : T?; body : block<(m : AsrModel; var s : AsrSession; samples : array<float>) : void>) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
@@ -993,7 +813,7 @@ def private wdec_lifetime_cell(tt : T?; body : block<(m : AsrModel; var s : AsrS
             set_vulkan_wdec(true)
             set_asr_fp32(false)
             set_asr_tower_fp32(false)
-            var inscope m <- mint_asr_whisper(model_path)
+            var inscope m <- mint_asr_whisper(model_path, TowerDev.vulkan)
             with_dasllama_jobque_() {
                 var inscope s <- create_session(m)
                 invoke(body, m, s, samples)
@@ -1019,39 +839,6 @@ def test_whisper_vulkan_wdec_lifetime(t : T?) {
                 let d1 = vulkan_wdec_stats()
                 tt |> success(d1.windows - d0.windows >= 1l, "the device served the window again after the drop ({d1.windows - d0.windows})")
                 assert_segs_token_identical(tt, first, again, "ggml-tiny.bin jfk before / after the drop")
-            }
-        }
-    }
-    t |> run("ggml-tiny.bin: the decoder knob turned off between two transcriptions of one session - the second reads as a fresh knob-off session") @(tt : T?) {
-        wdec_lifetime_cell(tt) $(m; var s; samples) {
-            static_if (typeinfo builtin_module_exists(vulkan)) {
-                var inscope served <- session_segs(m, s, samples)
-                let d0 = vulkan_wdec_stats()
-                set_vulkan_wdec(false)
-                var inscope again <- session_segs(m, s, samples)
-                let d1 = vulkan_wdec_stats()
-                tt |> equal(d1.windows, d0.windows, "the knob-off transcription served no window")
-                var inscope fresh <- transcribe_segs(m, samples)
-                tt |> equal(length(served), length(again), "ggml-tiny.bin jfk served / knob-off on one session: segment count")
-                assert_segs_token_identical(tt, fresh, again, "ggml-tiny.bin jfk a fresh knob-off session / the served session turned off")
-            }
-        }
-    }
-    t |> run("ggml-tiny.bin: the block hooks pinned off after a served window of one session - no stale handoff, the text of the CPU-encoder chain") @(tt : T?) {
-        wdec_lifetime_cell(tt) $(m; var s; samples) {
-            static_if (typeinfo builtin_module_exists(vulkan)) {
-                var inscope served <- session_segs(m, s, samples)
-                let d0 = vulkan_wdec_stats()
-                tt |> success(d0.handoffs >= 1l, "the served transcription took its encoder rows device to device ({d0.handoffs})")
-                set_vulkan_audio_blocks(false)
-                var inscope again <- session_segs(m, s, samples)
-                let d1 = vulkan_wdec_stats()
-                tt |> equal(d1.handoffs, d0.handoffs, "the CPU-encoded windows took no handoff: the served window's plane is not theirs")
-                tt |> success(d1.windows > d0.windows, "the decoder still served the windows over the host-uploaded rows ({d1.windows - d0.windows})")
-                set_vulkan_audio_blocks(true)
-                set_vulkan_tower(false)
-                var inscope cpu_enc <- transcribe_segs(m, samples)
-                assert_segs_token_identical(tt, cpu_enc, again, "ggml-tiny.bin jfk the CPU-encoder chain / the served session with the blocks pinned off")
             }
         }
     }
@@ -1254,10 +1041,11 @@ def test_whisper_crowned_word_level(t : T?) {
             // attention may not take the tensor QK route at all
             let tower_was = metal_tower_knob()
             let wdec_was = metal_wdec_knob()
+            let small_was = metal_wdec_small_cpu()
             set_metal_tower(true)
             set_metal_wdec(true)
             set_metal_wdec_step(true)
-            set_metal_wdec_step_min_d(0l)   // tiny sits under the step's serving floor - the census's same seat
+            set_metal_wdec_small_cpu(false)   // the crowned step on the device: tiny's default bake runs it on the CPU
             let prev_crowns = get_metal_tensor_crowns()
             pin_metal_tensor_crowns("attn_qkmm,mulmm_bf16,mulmm_q8,gemmb_q8,gemmb_sk_q8,gemm64b_q8,kq_mulmm_k4,kq_mulmm_k5,kq_mulmm_k6")
             metal_tower_shutdown()
@@ -1306,7 +1094,7 @@ def test_whisper_crowned_word_level(t : T?) {
             set_metal_tower(tower_was)
             set_metal_wdec(wdec_was)
             set_metal_wdec_step(true)
-            set_metal_wdec_step_min_d(METAL_WDEC_STEP_MIN_D)   // the measured serving floor (the declaration default)
+            set_metal_wdec_small_cpu(small_was)
             delete m
             delete mm
         } else {

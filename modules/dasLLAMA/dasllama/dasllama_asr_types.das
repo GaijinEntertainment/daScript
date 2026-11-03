@@ -10,6 +10,9 @@ module dasllama_asr_types shared public
 require dasllama/dasllama_lint public
 require strings
 
+//! The magic a ggml bin opens with - whisper's and parakeet's carriers.
+let ASR_GGML_MAGIC = 0x67676d6cu
+
 //! Timestamp granularity an ASR backend can produce.
 enum AsrTimestamps {
     none

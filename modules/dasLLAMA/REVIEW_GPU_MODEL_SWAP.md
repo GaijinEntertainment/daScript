@@ -4,17 +4,17 @@
 docs: `ARCHITECTURE_GPU_ASYMMETRIES.md`, `ARCHITECTURE_GPU_TOWER_VULKAN.md`. Planned work:
 `followup_metal.md`, `followup_vulkan.md`.
 
-**A diff that adds to a GPU driver file a module-level variable whose value derives from a loaded
-model's weights, or names, sizes or points at device content built from that model, or measures how
-a call served that model (a rate later calls size work by) - the decline reasons already logged for
-it included - and which a later call reads before that call writes it, returns it to its no-model
-value in the same change, in its backend's discharge: a Vulkan file
+**A diff that adds to a GPU driver file a module-level variable, or a field of one, whose value
+derives from a loaded model's weights, or names, sizes or points at device content built from that
+model, or measures how a call served that model (a rate later calls size work by) - the decline
+reasons already logged for it included - and which a later call reads before that call writes it,
+returns it to its no-model value in the same change, in its backend's discharge: a Vulkan file
 (`dasllama/dasllama_*vulkan*.das`, `dasllama/dasllama_gpu*.das`) in `moe_gpu_model_marks_restore_`
 or `moe_gpu_drop_model_` (`dasllama/dasllama_gpu_resident.das`), a function either calls, or a
 `register_vk_drop_hook` listener; a Metal file (`dasllama/dasllama_metal*.das`) in a function the
 file registers with `register_reload_prep` (`dasllama/dasllama_metal_common.das`); a CUDA file
-(`dasllama/dasllama_*cuda*.das`) in `cud_drop_model` or a function it calls.** These sites are what
-each backend's unload or reload runs; a global reset elsewhere survives the swap.
+(`dasllama/dasllama_*cuda*.das`) in `cud_drop_model` or a function it calls.** Unload and reload
+run only these; a reset elsewhere survives the swap.
 
 **A module-level variable in a Vulkan driver file (`dasllama/dasllama_*vulkan*.das`,
 `dasllama/dasllama_gpu*.das`) whose value derives from, or names, sizes or points at device content
