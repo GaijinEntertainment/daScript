@@ -124,7 +124,8 @@ def test_included_stamps_survive_writeback(t : T?) {
             "2 module(s) served from cache", "ser: wrote"])
         apply_edit(t, body)
         run_child(t, "edited include", argv, ["key=2222", "driver=2222",
-            "included source changed", "ser: wrote"])
+            "ser: included source changed '{body}'\n",
+            "(included source '{body}' changed)\n", "ser: wrote"])
         run_child(t, "rewritten cache", argv, ["key=2222", "deser: clean"])
     }
 }

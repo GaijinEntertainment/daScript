@@ -638,8 +638,6 @@ namespace das {
     // reader reject a cache written by a different protocol/version cleanly, instead of
     // desyncing on a layout difference mid-record.
     static constexpr uint32_t SER_MODULE_STREAM_MAGIC = 0x4D534144u;    // 'DASM'
-    // sanity bound on a record's macro-dependency count: a real program registers a handful
-    // (one per consumed sidecar/config); anything past this reads as stream corruption
     static constexpr uint32_t SER_MAX_MACRO_DEPS = 4096u;
     static constexpr uint64_t FNV64A_SEED = 14695981039346656037ull;   // any nonzero constant serves: size (-1 absent vs 0 empty) already separates the states
 
@@ -839,7 +837,7 @@ namespace das {
                 serializer_read->failed = true;
                 serializer_read->cutoffFile = fileName;
                 serializer_read->cutoffReason = isSource
-                    ? "included source changed"
+                    ? "included source '" + get<0>(dep) + "' changed"
                     : "macro dependency '" + get<0>(dep) + "' changed";
                 if ( !serializer_read->quietCache ) {
                     logs << "ser: " << (isSource ? "included source"
