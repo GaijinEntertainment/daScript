@@ -1223,7 +1223,6 @@ namespace debugger {
         auto fn = cast<Func>::to(args[1]);
         if ( !fn.PTR ) context.throw_error_at(call->debugInfo, "pnvoke can't invoke null function");
         auto simFn = fn.PTR;
-        if ( !simFn ) context.throw_error_at(call->debugInfo, "pinvoke can't find function #%p", (void *)simFn);
         if ( !invCtx->contextMutex ) context.throw_error_at(call->debugInfo,"threadlock_context is not set");
         if ( simFn->debugInfo->count!=uint32_t(nUserArgs) ) context.throw_error_at(call->debugInfo,
             "pinvoke function expects %u arguments, but %u provided", simFn->debugInfo->count, nUserArgs);
@@ -1302,12 +1301,13 @@ namespace debugger {
     vec4f invokeInDebugAgent ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         if ( call->nArguments>=MAX_DEBUG_AGENT_ARGS-3 ) context.throw_error_at(call->debugInfo, "too many arguments");
         const char * category = cast<char *>::to(args[0]);
+        if ( !category ) category = "";
         const char * function_name = cast<char *>::to(args[1]);
         if ( !function_name ) context.throw_error_at(call->debugInfo, "need to specify method name");
         g_DebugAgentMutex.lock();
         Context * invCtx = nullptr;
         DebugAgentAdapter * adapter = nullptr;
-        if ( !category || category[0] == '\0' ) {
+        if ( !*category ) {
             if ( *daScriptEnvironment::g_threadLocalDebugAgent && (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent ) {
                 invCtx = (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgentContext.get();
                 adapter = (DebugAgentAdapter *)(*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent.get();
@@ -1357,12 +1357,13 @@ namespace debugger {
     vec4f invokeInDebugAgent2 ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         if ( call->nArguments>=MAX_DEBUG_AGENT_ARGS-3 ) context.throw_error_at(call->debugInfo, "too many arguments");
         const char * category = cast<char *>::to(args[0]);
+        if ( !category ) category = "";
         const char * function_name = cast<char *>::to(args[1]);
         if ( !function_name ) context.throw_error_at(call->debugInfo, "need to specify function name");
         g_DebugAgentMutex.lock();
         Context * invCtx = nullptr;
         DebugAgentAdapter * adapter = nullptr;
-        if ( !category || category[0] == '\0' ) {
+        if ( !*category ) {
             if ( *daScriptEnvironment::g_threadLocalDebugAgent && (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent ) {
                 invCtx = (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgentContext.get();
                 adapter = (DebugAgentAdapter *)(*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent.get();

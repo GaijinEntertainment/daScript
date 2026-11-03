@@ -229,6 +229,7 @@ namespace das
         thisProgram = ctx.thisProgram;
         thisHelper = ctx.thisHelper;
         category.value = ctx.category.value;
+        maxFastCallDepth = ctx.maxFastCallDepth;
 
         // globals (on condition that all context globals are read-only)
         globals = ctx.globals;

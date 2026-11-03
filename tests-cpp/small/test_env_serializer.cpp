@@ -1,6 +1,5 @@
-// Regression tests for the daScriptEnvironment serializer rail (module cache):
-// serializer_read / serializer_write installed by the embedder, consumed by
-// compileDaScript / parseDaScript, and force-disabled by
+// Regression tests for the module-cache stream (ModuleCacheStream): a reader and a
+// writer the embedder passes to compileDaScript, and force-disabled by
 // disableSerializationOnDebugger when daslib/debug.das is in the require chain.
 // The dastest --ser/--deser lane covers Program::serialize only — this rail had
 // no coverage at all, which is how the disable ended up broken (write pointer
@@ -14,19 +13,10 @@ using namespace das;
 
 namespace {
 
-// exception-safe restore: an escaped exception must not leave a dangling
-// serializer installed for every later compile in the process
-struct EnvSerializerGuard {
-    ~EnvSerializerGuard() {
-        auto & env = *daScriptEnvironment::getBound();
-        env.serializer_read = nullptr;
-        env.serializer_write = nullptr;
-    }
-};
-
-ProgramPtr compileFixture ( const char * relPath, TextWriter & logs, ModuleGroup & libGroup ) {
+ProgramPtr compileFixture ( const char * relPath, TextWriter & logs, ModuleGroup & libGroup,
+        ModuleCacheStream stream = ModuleCacheStream() ) {
     auto fAccess = make_smart<FsFileAccess>();
-    auto program = compileDaScript(getDasRoot() + relPath, fAccess, logs, libGroup);
+    auto program = compileDaScript(getDasRoot() + relPath, fAccess, logs, libGroup, CodeOfPolicies(), stream);
     if ( program && program->failed() ) {
         for ( auto & err : program->errors ) {
             MESSAGE(reportError(err.at, err.what, err.extra, err.fixme, err.cerr));
@@ -85,10 +75,6 @@ vector<uint64_t> positionCensus ( const ProgramPtr & program ) {
 } // namespace
 
 TEST_CASE("env serializer: module cache round trip") {
-    auto & env = *daScriptEnvironment::getBound();
-    EnvSerializerGuard envGuard;
-    REQUIRE(env.serializer_read == nullptr);
-    REQUIRE(env.serializer_write == nullptr);
     warmUp("/tests-cpp/small/test_env_serializer.das");
     SerializationStorageVector storage;
     vector<uint64_t> coldPositions;
@@ -97,9 +83,7 @@ TEST_CASE("env serializer: module cache round trip") {
         TextWriter logs;
         ModuleGroup libGroup;
         AstSerializer writer(&storage, true);
-        env.serializer_write = &writer;
-        auto program = compileFixture("/tests-cpp/small/test_env_serializer.das", logs, libGroup);
-        env.serializer_write = nullptr;
+        auto program = compileFixture("/tests-cpp/small/test_env_serializer.das", logs, libGroup, ModuleCacheStream { nullptr, &writer });
         writer.moduleLibrary = nullptr;
         REQUIRE(program != nullptr);
         REQUIRE_FALSE(program->failed());
@@ -112,9 +96,7 @@ TEST_CASE("env serializer: module cache round trip") {
         TextWriter logs;
         ModuleGroup libGroup;
         AstSerializer reader(&storage, false);
-        env.serializer_read = &reader;
-        auto program = compileFixture("/tests-cpp/small/test_env_serializer.das", logs, libGroup);
-        env.serializer_read = nullptr;
+        auto program = compileFixture("/tests-cpp/small/test_env_serializer.das", logs, libGroup, ModuleCacheStream { &reader, nullptr });
         REQUIRE(program != nullptr);
         REQUIRE_FALSE(program->failed());
         CHECK_FALSE(reader.failed);                              // no fallback to reparse
@@ -134,19 +116,13 @@ TEST_CASE("env serializer: module cache round trip") {
 }
 
 TEST_CASE("env serializer: corrupt cache stream falls back to parsing") {
-    auto & env = *daScriptEnvironment::getBound();
-    EnvSerializerGuard envGuard;
-    REQUIRE(env.serializer_read == nullptr);
-    REQUIRE(env.serializer_write == nullptr);
     SerializationStorageVector storage;
     storage.buffer = { 0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03 };  // garbage, not a cache stream
     {
         TextWriter logs;
         ModuleGroup libGroup;
         AstSerializer reader(&storage, false);
-        env.serializer_read = &reader;
-        auto program = compileFixture("/tests-cpp/small/test_env_serializer.das", logs, libGroup);
-        env.serializer_read = nullptr;
+        auto program = compileFixture("/tests-cpp/small/test_env_serializer.das", logs, libGroup, ModuleCacheStream { &reader, nullptr });
         reader.moduleLibrary = nullptr;
         REQUIRE(program != nullptr);
         REQUIRE_FALSE(program->failed());   // fell back to parsing — no exception escaped
@@ -156,20 +132,14 @@ TEST_CASE("env serializer: corrupt cache stream falls back to parsing") {
 }
 
 TEST_CASE("env serializer: non-debugger program keeps serializers installed") {
-    auto & env = *daScriptEnvironment::getBound();
-    EnvSerializerGuard envGuard;
-    REQUIRE(env.serializer_read == nullptr);
-    REQUIRE(env.serializer_write == nullptr);
     warmUp("/tests-cpp/small/test_env_serializer.das");
     SerializationStorageVector storage;
     {
         TextWriter logs;
         ModuleGroup libGroup;
         AstSerializer writer(&storage, true);
-        env.serializer_write = &writer;
-        auto program = compileFixture("/tests-cpp/small/test_env_serializer.das", logs, libGroup);
-        CHECK(env.serializer_write == &writer);  // no debugger in the chain — stays installed
-        env.serializer_write = nullptr;
+        auto program = compileFixture("/tests-cpp/small/test_env_serializer.das", logs, libGroup, ModuleCacheStream { nullptr, &writer });
+        CHECK(storage.writingSize() > 0);  // no debugger in the chain — the writer stays on
         writer.moduleLibrary = nullptr;
         REQUIRE(program != nullptr);
         REQUIRE_FALSE(program->failed());
@@ -177,17 +147,13 @@ TEST_CASE("env serializer: non-debugger program keeps serializers installed") {
 }
 
 TEST_CASE("env serializer: a changed builtin module is not served from the cache") {
-    auto & env = *daScriptEnvironment::getBound();
-    EnvSerializerGuard envGuard;
     warmUp("/tests-cpp/small/test_env_serializer.das");
     SerializationStorageVector storage;
     {
         TextWriter logs;
         ModuleGroup libGroup;
         AstSerializer writer(&storage, true);
-        env.serializer_write = &writer;
-        auto program = compileFixture("/tests-cpp/small/test_env_serializer.das", logs, libGroup);
-        env.serializer_write = nullptr;
+        auto program = compileFixture("/tests-cpp/small/test_env_serializer.das", logs, libGroup, ModuleCacheStream { nullptr, &writer });
         writer.moduleLibrary = nullptr;
         REQUIRE(program != nullptr);
         REQUIRE_FALSE(program->failed());
@@ -198,9 +164,7 @@ TEST_CASE("env serializer: a changed builtin module is not served from the cache
         TextWriter logs;
         ModuleGroup libGroup;
         AstSerializer reader(&storage, false);
-        env.serializer_read = &reader;
-        auto program = compileFixture("/tests-cpp/small/test_env_serializer.das", logs, libGroup);
-        env.serializer_read = nullptr;
+        auto program = compileFixture("/tests-cpp/small/test_env_serializer.das", logs, libGroup, ModuleCacheStream { &reader, nullptr });
         reader.moduleLibrary = nullptr;
         REQUIRE(program != nullptr);
         REQUIRE_FALSE(program->failed());
@@ -228,14 +192,10 @@ TEST_CASE("env serializer: a changed builtin module is not served from the cache
 #ifndef ENV_SER_SKIP_DEBUGGER_TEST
 // MUST BE THE LAST TEST CASE IN THIS FILE: compiling the debugger promotes
 // daslib/debug into the environment, and from then on every compile in this
-// process runs with env serialization force-disabled (that's the semantic —
+// process runs with module-cache serialization force-disabled (that's the semantic —
 // the debugger installs into the environment). Any case after this one would
-// see its serializers cleared.
+// see its stream dropped.
 TEST_CASE("env serializer: debugger requirement disables read AND write") {
-    auto & env = *daScriptEnvironment::getBound();
-    EnvSerializerGuard envGuard;
-    REQUIRE(env.serializer_read == nullptr);
-    REQUIRE(env.serializer_write == nullptr);
     SerializationStorageVector writeStorage;
     SerializationStorageVector readStorage;
     // both installed, debugger listed in req (cold environment): the filename match
@@ -244,15 +204,10 @@ TEST_CASE("env serializer: debugger requirement disables read AND write") {
         ModuleGroup libGroup;
         AstSerializer writer(&writeStorage, true);
         AstSerializer reader(&readStorage, false);
-        env.serializer_write = &writer;
-        env.serializer_read = &reader;
-        auto program = compileFixture("/tests-cpp/small/test_env_serializer_debug.das", logs, libGroup);
+        auto program = compileFixture("/tests-cpp/small/test_env_serializer_debug.das", logs, libGroup, ModuleCacheStream { &reader, &writer });
         // disableSerializationOnDebugger must clear BOTH pointers; the original
         // copy-paste bug aliased write to read and left writes enabled
-        CHECK(env.serializer_read == nullptr);
-        CHECK(env.serializer_write == nullptr);
-        env.serializer_read = nullptr;
-        env.serializer_write = nullptr;
+        CHECK_FALSE(reader.checkedStreamHeader);
         writer.moduleLibrary = nullptr;
         reader.moduleLibrary = nullptr;
         REQUIRE(program != nullptr);
@@ -266,10 +221,7 @@ TEST_CASE("env serializer: debugger requirement disables read AND write") {
         TextWriter logs;
         ModuleGroup libGroup;
         AstSerializer writer(&coldStorage, true);
-        env.serializer_write = &writer;
-        auto program = compileFixture("/tests-cpp/small/test_env_serializer_debug.das", logs, libGroup);
-        CHECK(env.serializer_write == nullptr);
-        env.serializer_write = nullptr;
+        auto program = compileFixture("/tests-cpp/small/test_env_serializer_debug.das", logs, libGroup, ModuleCacheStream { nullptr, &writer });
         writer.moduleLibrary = nullptr;
         REQUIRE(program != nullptr);
         REQUIRE_FALSE(program->failed());

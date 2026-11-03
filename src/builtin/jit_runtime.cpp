@@ -729,7 +729,7 @@ extern "C" {
                 context->throwBuf = JB;
                 context->abiArg = aa;
                 context->abiCMRES = acm;
-                context->fastCallDepth = fcd;
+                context->fastCallDepth = fcd; //-V1048
                 context->stack.pop(EP,SP);
                 context->stopFlags = 0;
                 context->last_exception = context->exception;

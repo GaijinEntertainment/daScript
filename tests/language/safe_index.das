@@ -222,3 +222,16 @@ def test_safe_index_read(t : T?) {
         t |> equal(val, 42)
     }
 }
+
+[never_inline]
+def private take_fallback(b : block<(v : float) : float>) : float => invoke(b, 1.0)
+
+[never_inline]
+def private coalesce_const(p : float const?) : float => take_fallback() $(v : float) => p ?? v
+
+[test]
+def test_null_coalescing_const_pointer_const_value(t : T?) {
+    t |> equal(coalesce_const(null), 1.0)
+    let x = 2.0
+    t |> equal(coalesce_const(unsafe(addr(x))), 2.0)
+}

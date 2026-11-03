@@ -10,13 +10,13 @@
 namespace das {
 
 	wstring string_to_wstring ( const string& utf8String ) {
-		wstring_convert<codecvt_utf8<wchar_t>> convert;
-		return convert.from_bytes(utf8String);
+		std::wstring_convert<std::codecvt_utf8<wchar_t>> convert;
+		return convert.from_bytes(utf8String.c_str()).c_str();
 	}
 
 	string wstring_to_string ( const wstring & wideString ) {
-		wstring_convert<codecvt_utf8<wchar_t>> convert;
-		return convert.to_bytes(wideString);
+		std::wstring_convert<std::codecvt_utf8<wchar_t>> convert;
+		return convert.to_bytes(wideString.c_str()).c_str();
 	}
 
 	vector<string> split ( const char * str, const char * delim );

@@ -512,7 +512,9 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
         }
         if ( jitNoCache ) policies.jit_dll_mode = false;
         policies.jit_emit_prologue = jitStack;
-        access->addExtraModule("just_in_time", getDasRoot() + "/daslib/just_in_time.das");
+        string jitFile = access->getModuleInfo("daslib/just_in_time", "").fileName;
+        if ( jitFile.empty() || !access->getFileInfo(jitFile) ) jitFile = getDasRoot() + "/daslib/just_in_time.das";
+        access->addExtraModule("just_in_time", jitFile);
         policies.jit_output_path = jitOutPath;
         policies.dll_search_paths.emplace_back(getDasRoot() + "/lib");
     }
@@ -564,12 +566,10 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
         cacheQuiet = true;
     }
     moduleCache.install(cacheReadPath, cacheWritePath, cacheQuiet);
+    policies.module_cache = moduleCache.requested;
     auto compile0 = ref_time_ticks();
-    auto program = compileDaScript(fn,access,tout,dummyGroup,policies);
+    auto program = compileDaScript(fn,access,tout,dummyGroup,policies,moduleCache.stream());
     startupCompileUsec += get_time_usec(compile0);
-    // the cache stays armed through simulate: a require issued from a simulate macro or an
-    // [init] (the JIT's emitter) is this compile's, so its records join this stream
-    // (src/ast/ARCHITECTURE.md sec.3)
     bool cacheFinished = false;
     auto finishModuleCache = [&]() {
         if ( cacheFinished ) return;

@@ -610,7 +610,7 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | failed_auto_infer.das | Auto type inference failures - missing overloads, wrong types | **expect** `31101` `31102:8` `30304:2` `30105:1` `30102:2` `30106` `30113` `31300` |
 | auto_infer_success.das | Successful auto type inference - generics, dim, static_if, variants | |
 | auto_ref_and_move_ret.das | Auto ref alias and move return of array | |
-| bin_serializer.das | `binary_save`/`binary_load` - struct with bool, int, float, array, fixed_array fields | |
+| bin_serializer.das | `binary_save`/`binary_load` - struct with bool, int, float, array, fixed_array fields; a null lambda field round-trips unset | |
 | bitfields.das | Bitfield operations - 32-bit and 64-bit, operators, `typeinfo` | |
 | block.das | Block creation and invocation | |
 | block_invoke.das | Block invocation - twice, nested chaining, value capture, ref passing | |

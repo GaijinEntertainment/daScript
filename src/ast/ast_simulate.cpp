@@ -716,9 +716,7 @@ namespace das
             int bytes = stride;
             SimNode * init0;
             if ( mkv->useCMRES ) {
-                if ( bytes==0 ) {
-                    init0 = nullptr;
-                } else if ( bytes <= 32 ) {
+                if ( bytes <= 32 ) {
                     init0 = context.code->makeNodeUnrollNZ<SimNode_InitLocalCMResN>(bytes, mkv->at, mkv->extraOffset);
                 } else {
                     init0 = context.code->makeNode<SimNode_InitLocalCMRes>(mkv->at, mkv->extraOffset, bytes);
@@ -728,7 +726,7 @@ namespace das
             } else {
                 init0 = context.code->makeNode<SimNode_InitLocal>(mkv->at, mkv->stackTop + mkv->extraOffset, bytes);
             }
-            if (init0) simlist.push_back(init0);
+            simlist.push_back(init0);
         }
         // now fields
         for ( const auto & decl : mkv->variants ) {
@@ -3139,18 +3137,11 @@ namespace das
                         expr->sources[t]->at,
                         getE(expr->sources[t]));
                 } else if ( expr->sources[t]->type->isHandle() ) {
-                    if ( !result ) {
-                        context.thisProgram->error("integration error, simulateGetIterator returned null", "", "",
-                                                   at, CompilationError::internal_expression );
-                        setE(expr, nullptr);
-                        return expr;
-                    } else {
-                        result->source_iterators[t] = expr->sources[t]->type->annotation->simulateGetIterator(
-                            context,
-                            expr->sources[t]->at,
-                            expr->sources[t]
-                        );
-                    }
+                    result->source_iterators[t] = expr->sources[t]->type->annotation->simulateGetIterator(
+                        context,
+                        expr->sources[t]->at,
+                        expr->sources[t]
+                    );
                 } else if ( expr->sources[t]->type->baseType==Type::tFixedArray ) {
                     result->source_iterators[t] = context.code->makeNode<SimNode_FixedArrayIterator>(
                         expr->sources[t]->at,

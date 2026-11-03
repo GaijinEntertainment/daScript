@@ -91,19 +91,6 @@ namespace das {
         auto fileInfo = make_unique<TextFileInfo>((char *) str, uint32_t(str_len), false);
         access->setFileInfo(modName, das::move(fileInfo));
         ModuleGroup dummyLibGroup;
-        // the stream stays hidden here - src/ast/ARCHITECTURE.md#module-cache-read
-        struct HiddenStream {
-            daScriptEnvironment * env;
-            AstSerializer * read, * write;
-            HiddenStream ( daScriptEnvironment * e ) : env(e), read(e->serializer_read), write(e->serializer_write) {
-                env->serializer_read = nullptr;
-                env->serializer_write = nullptr;
-            }
-            ~HiddenStream () {
-                env->serializer_read = read;
-                env->serializer_write = write;
-            }
-        } hidden(daScriptEnvironment::getBound());
         auto program = parseDaScript(modName, "", access, issues, dummyLibGroup, true);
         module->ownFileInfo = access->letGoOfFileInfo(modName);
         DAS_ASSERTF(module->ownFileInfo,"something went wrong and FileInfo for builtin module can not be obtained");
@@ -421,8 +408,11 @@ namespace das {
 
     string getDasRoot ( void );
 
-    static string get_builtin_path() {
-        return getDasRoot() + "/daslib/builtin.das";
+    static string get_builtin_path ( const FileAccessPtr & access ) {
+        string rootPath = getDasRoot() + "/daslib/builtin.das";
+        if ( !access ) return rootPath;
+        string fileName = access->getModuleInfo("daslib/builtin", "").fileName;
+        return fileName.empty() || !access->getFileInfo(fileName) ? rootPath : fileName;
     }
 
     bool getPrerequisits ( const string & fileName,
@@ -761,9 +751,9 @@ namespace das {
             const FileAccessPtr & access,
             const string        & fileName,
             ModuleGroup         & libGroup,
-            TextWriter & logs ) {
-        auto & serializer_read = daScriptEnvironment::getBound()->serializer_read;
-        auto & serializer_write = daScriptEnvironment::getBound()->serializer_write;
+            TextWriter & logs,
+            const ModuleCacheStream & stream ) {
+        auto [serializer_read, serializer_write] = stream;
 
         if ( serializer_read == nullptr || serializer_read->seenNewModule ) {
             return false;
@@ -1218,35 +1208,20 @@ namespace das {
         }
     };
 
-    // src/ast/ARCHITECTURE.md#require-after-walk - what a nested compile rebinds on the environment, put back on every exit;
-    // a walk nested in a parse or a record read also hides the stream for its duration
+    // src/ast/ARCHITECTURE.md#require-after-walk - what a nested compile rebinds on the environment, put back on every exit
     struct CompileEnvScope {
         daScriptEnvironment *   env;
         ProgramPtr              program;
         TextWriter *            log;
         const char *            fileName;
         const char *            moduleName;
-        AstSerializer *         read = nullptr;
-        AstSerializer *         write = nullptr;
-        bool                    streamHidden = false;
         CompileEnvScope ( daScriptEnvironment * e ) : env(e), program(e->g_Program), log(e->g_compilerLog),
             fileName(e->g_compilingFileName), moduleName(e->g_compilingModuleName) {}
-        void hideStream () {
-            read = env->serializer_read;
-            write = env->serializer_write;
-            env->serializer_read = nullptr;
-            env->serializer_write = nullptr;
-            streamHidden = true;
-        }
         ~CompileEnvScope () {
             env->g_Program = program;
             env->g_compilerLog = log;
             env->g_compilingFileName = fileName;
             env->g_compilingModuleName = moduleName;
-            if ( streamHidden ) {
-                env->serializer_read = read;
-                env->serializer_write = write;
-            }
         }
     };
 
@@ -1297,17 +1272,18 @@ namespace das {
                               bool exportAll,
                               bool isDep,
                               CodeOfPolicies policies,
-                              bool inferAfterParse ) {
+                              bool inferAfterParse,
+                              const ModuleCacheStream & stream = ModuleCacheStream() ) {
         verifyCodeOfPoliciesStamp(policies);
         ModuleCompileScope scope(moduleName, fileName, logs, policies, isDep);
         auto & program = scope.program;
         auto & times = scope.times;
 
         // src/ast/ARCHITECTURE.md#module-cache-read
-        auto & serializer_read = daScriptEnvironment::getBound()->serializer_read;
+        auto serializer_read = stream.read;
         uint64_t macroSim0 = serializer_read ? serializer_read->totMacroTime : 0;
         uint64_t finalize0 = serializer_read ? serializer_read->totFinalizeTime : 0;
-        if ( trySerializeProgramModule(program, access, fileName, libGroup, logs) ) {
+        if ( trySerializeProgramModule(program, access, fileName, libGroup, logs, stream) ) {
             program->access = access;   // the read replaced the program object
             auto readT = get_time_usec(times.startTicks);
             auto macroSimT = int64_t(serializer_read->totMacroTime - macroSim0);
@@ -1415,7 +1391,7 @@ namespace das {
             return program;
         } else {
             inferAndFinalizeModule(program, fileName, moduleName, access, logs, libGroup, exportAll, isDep, policies, times);
-            auto & serializer_write = daScriptEnvironment::getBound()->serializer_write;
+            auto serializer_write = stream.write;
             if ( serializer_write != nullptr && !program->failed() ) {    // a failed module is no record (a persistent stream's later writeback would carry it)
                 serializer_write->parsedModules.push_back({fileName, file_hash, file_size, program, program->thisModule.get(),
                     collectRequireNames(access->getFileInfo(fileName), access)});
@@ -1798,8 +1774,7 @@ namespace das {
         return !regFromShar;
     }
 
-    void writebackModules ( ModuleGroup & libGroup ) {
-        auto & serializer_write = daScriptEnvironment::getBound()->serializer_write;
+    void writebackModules ( ModuleGroup & libGroup, AstSerializer * serializer_write ) {
         // stream header once, at the head of the storage (a persistent serializer appends
         // several compiles into one stream - only the first one carries the header)
         if ( serializer_write->buffer->writingSize() == 0 ) {
@@ -1984,9 +1959,8 @@ namespace das {
         return program;
     }
 
-    void disableSerializationOnDebugger ( vector<ModuleInfo> & req ) {
-        auto & serializer_read = daScriptEnvironment::getBound()->serializer_read;
-        auto & serializer_write = daScriptEnvironment::getBound()->serializer_write;
+    void disableSerializationOnDebugger ( vector<ModuleInfo> & req, ModuleCacheStream & stream ) {
+        auto & [serializer_read, serializer_write] = stream;
         if ( serializer_read == nullptr && serializer_write == nullptr )
             return;
         // the debugger installs into the environment: once daslib/debug is promoted
@@ -2065,7 +2039,7 @@ namespace das {
             TextWriter & logs, ModuleGroup & libGroup, const CodeOfPolicies & policies, bool withExtraModules ) {
         [[maybe_unused]] auto builtinModule = Module::require("$");
         DAS_ASSERTF(builtinModule, "Somehow `builtin` module is missing.");
-        bool allGood = addExtraDependency("builtin", get_builtin_path(), walk.missing, walk.circular, walk.notAllowed, walk.req,
+        bool allGood = addExtraDependency("builtin", get_builtin_path(access), walk.missing, walk.circular, walk.notAllowed, walk.req,
             walk.dependencies, walk.namelessReq, walk.namelessMismatches, access, libGroup, policies, &logs);
         if ( !allGood ) {
             auto res = make_smart<Program>();
@@ -2093,14 +2067,14 @@ namespace das {
     }
 
     static ProgramPtr parseRequiredModules ( const vector<ModuleInfo> & req, const FileAccessPtr & access, TextWriter & logs,
-            ModuleGroup & libGroup, CodeOfPolicies & policies, bool promoteShared ) {
+            ModuleGroup & libGroup, CodeOfPolicies & policies, bool promoteShared, const ModuleCacheStream & stream = ModuleCacheStream() ) {
         for ( auto & mod : req ) {
             auto maybeMod = libGroup.findModule(mod.moduleName);
             if ( maybeMod ) {
                 maybeMod->fromExtraDependency &= mod.extraDepModule;
                 continue;
             }
-            auto program = parseDaScript(mod.fileName, mod.moduleName, access, logs, libGroup, true, true, policies);
+            auto program = parseDaScriptEx(mod.fileName, mod.moduleName, access, logs, libGroup, true, true, policies, true, stream);
             policies.threadlock_context |= program->options.getBoolOption("threadlock_context",false);
             if ( program->failed() ) {
                 return program;
@@ -2178,10 +2152,12 @@ namespace das {
             return nullptr;
         }
         CompileEnvScope envScope(env);
-        // src/ast/ARCHITECTURE.md#require-after-walk - a walk nested in a parse or a record read leaves the stream alone
-        bool nested = (env->g_Program && env->g_Program->isCompiling)
-            || (env->serializer_read && env->serializer_read->readingRecord > 0);
-        if ( nested ) envScope.hideStream();
+        ModuleFileCache lateCache;
+        if ( policies.module_cache ) {
+            auto path = ModuleFileCache::embeddedPath(info.fileName, policies);
+            lateCache.install(path, path, true);
+        }
+        ModuleCacheStream stream = lateCache.stream();
         Module * result = nullptr;
         {
             gc_guard compile_gc_scope;
@@ -2207,14 +2183,14 @@ namespace das {
                 ok = false;
             }
             if ( ok ) {
-                disableSerializationOnDebugger(walk.req);
-                if ( auto failed = parseRequiredModules(walk.req, access, logs, libGroup, policies, true) ) {
+                disableSerializationOnDebugger(walk.req, stream);
+                if ( auto failed = parseRequiredModules(walk.req, access, logs, libGroup, policies, true, stream) ) {
                     logProgramErrors(failed, logs);
                     ok = false;
                 }
             }
             if ( ok ) {
-                auto program = parseDaScript(info.fileName, modName, access, logs, libGroup, true, true, policies);
+                auto program = parseDaScriptEx(info.fileName, modName, access, logs, libGroup, true, true, policies, true, stream);
                 if ( program->failed() ) {
                     logProgramErrors(program, logs);
                 } else if ( !program->promoteToBuiltin ) {
@@ -2230,12 +2206,13 @@ namespace das {
                     program->thisModule->promoteToBuiltin(access, requireName);
                     result = program->thisModule.get();
                     addNewModules(libGroup, program);
-                    if ( env->serializer_write != nullptr
-                        && (!env->serializer_read || env->serializer_read->failed || env->serializer_read->resumedCorrupt != 0) ) {
-                        writebackModules(libGroup);
+                    if ( stream.write != nullptr
+                        && (!stream.read || stream.read->failed || stream.read->resumedCorrupt != 0) ) {
+                        writebackModules(libGroup, stream.write);
                     }
                 }
             }
+            lateCache.finish();
         }
         return result;
     }
@@ -2289,7 +2266,6 @@ namespace das {
         if ( auto failed = addDefaultDependencies("", walk, access, logs, libGroup, policies, true) ) {
             return failed;
         }
-        disableSerializationOnDebugger(walk.req);
         if ( auto failed = checkModuleNamesUnique(walk.req, logs) ) {
             return failed;
         }
@@ -2340,7 +2316,8 @@ namespace das {
                                 const FileAccessPtr & access,
                                 TextWriter & logs,
                                 ModuleGroup & libGroup,
-                                CodeOfPolicies policies ) {
+                                CodeOfPolicies policies,
+                                ModuleCacheStream stream ) {
         verifyCodeOfPoliciesStamp(policies);
         DAS_ASSERTF(policies.no_init_check || (daScriptEnvironment::getBound() && daScriptEnvironment::getBound()->g_modulesInitialized),
             "compileDaScript on an environment that never called Module::Initialize(); "
@@ -2370,7 +2347,7 @@ namespace das {
         if ( getPrerequisits(fileName, access, modName, walk.req, walk.missing, walk.circular, walk.notAllowed, chain,
                 walk.dependencies, walk.namelessReq, walk.namelessMismatches, libGroup, nullptr, 1, !policies.ignore_shared_modules) ) {
             preqT = get_time_usec(time0);
-            disableSerializationOnDebugger(walk.req);
+            disableSerializationOnDebugger(walk.req, stream);
             if ( auto failed = checkModuleNamesUnique(walk.req, logs) ) {
                 return failed;
             }
@@ -2385,23 +2362,20 @@ namespace das {
                 }
             }
             // src/ast/ARCHITECTURE_SHARED.md#shared-promotion
-            if ( auto failed = parseRequiredModules(walk.req, access, logs, libGroup, policies, !policies.no_optimizations || policies.promote_shared_unoptimized) ) {
+            if ( auto failed = parseRequiredModules(walk.req, access, logs, libGroup, policies, !policies.no_optimizations || policies.promote_shared_unoptimized, stream) ) {
                 return failed;
             }
-            auto & serializer_read = daScriptEnvironment::getBound()->serializer_read;
-            if ( serializer_read && !policies.serialize_main_module ) serializer_read->seenNewModule = true;
-            auto res = parseDaScript(fileName, modName, access, logs, libGroup, exportAll, false, policies);
+            if ( stream.read && !policies.serialize_main_module ) stream.read->seenNewModule = true;
+            auto res = parseDaScriptEx(fileName, modName, access, logs, libGroup, exportAll, false, policies, true, stream);
             compile_gc_collect.prog = res.get();
             // writeback all parsed modules from serializer_write - but never from a FAILED
             // compile: a syntax error must not overwrite a good cache with a broken graph.
             // Fires when the stream went stale (failed), or when a resumed record failed
             // the THROWING way (resumedCorrupt) - that stream is damaged and self-heals
             // here; drift-flavored resumes (dasbind) deliberately do not rewrite
-            if ( daScriptEnvironment::getBound()->serializer_write != nullptr && !res->failed()
-                && (!daScriptEnvironment::getBound()->serializer_read
-                    || daScriptEnvironment::getBound()->serializer_read->failed
-                    || daScriptEnvironment::getBound()->serializer_read->resumedCorrupt != 0) ) {
-                writebackModules(libGroup);
+            if ( stream.write != nullptr && !res->failed()
+                && (!stream.read || stream.read->failed || stream.read->resumedCorrupt != 0) ) {
+                writebackModules(libGroup, stream.write);
             }
             finalizeCompiledProgram(res, fileName, access, logs, policies);
             if ( res->options.getBoolOption("log_require",false) ) {

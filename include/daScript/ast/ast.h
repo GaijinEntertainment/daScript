@@ -1018,6 +1018,8 @@ namespace das
     class DAS_API BuiltInFunction : public Function {
     public:
         BuiltInFunction ( const char *fn, const char * fnCpp );
+        bool        noFolding = false;
+        FunctionPtr noFold () { noFolding = true; return this; }
         virtual string getAotBasicName() const override {
             return cppName.empty() ? name : cppName;
         }
@@ -1777,9 +1779,15 @@ namespace das
     DAS_CC_API ProgramPtr parseDaScriptWithPrerequisits ( const string & fileName, const FileAccessPtr & access,
         TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies() );
 
+    struct ModuleCacheStream {
+        AstSerializer * read = nullptr;
+        AstSerializer * write = nullptr;
+    };
+
     // this one collectes dependencies and compiles with modules
     DAS_CC_API ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access,
-        TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies() );
+        TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies(),
+        ModuleCacheStream stream = ModuleCacheStream() );
     DAS_CC_API ProgramPtr compileDaScriptSerialize ( const string & fileName, const FileAccessPtr & access,
         TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies() );
     // src/ast/ARCHITECTURE_BUILT.md#built-programs
@@ -1873,8 +1881,6 @@ namespace das
         const char *    g_compilingFileName = nullptr;
         const char *    g_compilingModuleName = nullptr;
         int64_t         macroTimeTicks = 0;
-        AstSerializer * serializer_read = nullptr;
-        AstSerializer * serializer_write = nullptr;
 
         vector<DynamicModuleInfo> *g_dyn_modules_resolve = nullptr;
         inline static DAS_THREAD_LOCAL(DebugAgentInstance *) g_threadLocalDebugAgent;

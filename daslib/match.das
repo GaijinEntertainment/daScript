@@ -1,6 +1,7 @@
 options gen2
 options indenting = 4
 options strict_smart_pointers = true
+options stack = 65536
 
 module match shared private
 

@@ -93,6 +93,23 @@ def test_binary_save_reclaims_buffer_when_callback_panics(t : T?) {
     delete source
 }
 
+struct WithLambda {
+    fn : lambda<(x : int) : int>
+    v : int
+}
+
+[test]
+def test_bin_serializer_null_lambda(t : T?) {
+    var w : WithLambda
+    w.v = 13
+    var loaded : WithLambda
+    binary_save(w) $(data) {
+        binary_load(loaded, data)
+    }
+    t |> equal(loaded.v, 13)
+    t |> equal(loaded.fn == null, true)
+}
+
 struct BinaryEmptyStrings {
     null_text : string
     empty_text : string
