@@ -42,7 +42,7 @@ def test_cpu_supports(t : T?) {
                     t |> success(cpu_supports("amx-tile"), "{ext} implies amx-tile")
                 }
             }
-        } elif (arch == "arm64") {
+        } elif (arch == "arm64" || arch == "arm64ec") {
             // neon and fp-armv8 are mandatory in every arm64 profile, so these are ISA facts
             t |> success(cpu_supports("neon"), "neon is baseline on arm64")
             t |> success(cpu_supports("fp-armv8"), "fp-armv8 is baseline on arm64")

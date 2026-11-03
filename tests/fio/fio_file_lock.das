@@ -17,7 +17,9 @@ def file_lock_is_exclusive_and_released_by_close(t : T?) {
             t |> success(try_lock_file(first))
             t |> success(!try_lock_file(second), "another open handle cannot take the lock")
             var output : string
-            let blocked = run_and_capture([get_host_binary(), "{get_das_root()}/tests/fio/_fixture_file_lock.das", "--", "{root}/owner.lock"], output, 60.0)
+            let blocked = run_and_capture([get_host_binary(), "-dasroot", get_das_root(),
+                    "{get_das_root()}/tests/fio/_fixture_file_lock.das",
+                    "--", "{root}/owner.lock"], output, 60.0)
             t |> equal(3, blocked, "another process is excluded: {output}")
             fclose(first); first = null
             t |> success(try_lock_file(second), "close releases ownership")
@@ -26,7 +28,9 @@ def file_lock_is_exclusive_and_released_by_close(t : T?) {
             fclose(second)
         }
         var output : string
-        let acquired = run_and_capture([get_host_binary(), "{get_das_root()}/tests/fio/_fixture_file_lock.das", "--", "{root}/owner.lock"], output, 60.0)
+        let acquired = run_and_capture([get_host_binary(), "-dasroot", get_das_root(),
+                "{get_das_root()}/tests/fio/_fixture_file_lock.das",
+                "--", "{root}/owner.lock"], output, 60.0)
         t |> equal(0, acquired, "a later process acquires after close: {output}")
         t |> success(!try_lock_file(null))
     } finally { rmdir_rec(root) }

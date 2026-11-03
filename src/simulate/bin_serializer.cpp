@@ -16,6 +16,7 @@ namespace das {
         uint32_t bytesAllocated = 0;
         uint32_t bytesWritten = 0;
         uint32_t bytesGrow = 1024;
+        bool nullLambda = false;
     // writer
         BinDataSerialize ( Context & ctx, LineInfo * at ) {
             DEBUG_BIN_DATA("writing\n");
@@ -251,6 +252,10 @@ namespace das {
             serialize(data);
         }
         virtual void Null ( TypeInfo * ) override {
+            if ( nullLambda ) {
+                nullLambda = false;
+                return;
+            }
             error("binary serialization of null pointers is not supported");
         }
         virtual void VoidPtr ( void * & ) override {
@@ -277,6 +282,11 @@ namespace das {
             if ( reading ) {
                 uint64_t hash = 0;
                 serialize(hash);
+                if ( hash == 0 ) {
+                    lambda->capture = nullptr;
+                    nullLambda = true;
+                    return;
+                }
                 info = context->debugInfo->lookup[hash];    // TODO: verify if there is capture, all that
                 DAS_ASSERTF(info,"type info not found. how did we get type, which is not in the typeinfo hash?");
                 uint32_t size = getTypeSize(info) + 16;
@@ -288,7 +298,9 @@ namespace das {
                 lambda->capture = ptr;
             } else {
                 info = lambda->getTypeInfo();
-                serialize(info->hash);
+                uint64_t hash = info ? info->hash : 0;
+                serialize(hash);
+                nullLambda = info == nullptr;
             }
         }
     };

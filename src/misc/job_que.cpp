@@ -19,9 +19,9 @@
 #include <emscripten/threading.h>   // emscripten_num_logical_cores
 #endif
 
-#if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
+#if defined(_MSC_VER) && (defined(DAS_ARCH_X64) || defined(DAS_ARCH_X86))
 #include <emmintrin.h>  // _mm_pause
-#elif defined(_MSC_VER) && defined(_M_ARM64)
+#elif defined(_MSC_VER) && defined(DAS_ARCH_ARM64)
 #include <intrin.h>     // __yield
 #endif
 
@@ -29,9 +29,9 @@ namespace das {
     // A single CPU spin-wait hint — the poll-loop relax (one PAUSE/YIELD, the ggml
     // ggml_thread_cpu_relax shape; the loop itself is a counted number of these).
     static inline void jobque_spin_relax() {
-#if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
+#if defined(_MSC_VER) && (defined(DAS_ARCH_X64) || defined(DAS_ARCH_X86))
         _mm_pause();
-#elif defined(_MSC_VER) && defined(_M_ARM64)
+#elif defined(_MSC_VER) && defined(DAS_ARCH_ARM64)
         __yield();
 #elif defined(__x86_64__) || defined(__i386__)
         __builtin_ia32_pause();
@@ -45,9 +45,9 @@ namespace das {
     // One short burst of the CPU's spin-wait hint (worker spin-before-park, see JobQue::job).
     // src/misc/ARCHITECTURE.md#spin-window-clock-stride
     static inline void jobque_spin_pause() {
-#if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
+#if defined(_MSC_VER) && (defined(DAS_ARCH_X64) || defined(DAS_ARCH_X86))
         for ( int i = 0; i != 64; ++i ) _mm_pause();
-#elif defined(_MSC_VER) && defined(_M_ARM64)
+#elif defined(_MSC_VER) && defined(DAS_ARCH_ARM64)
         for ( int i = 0; i != 64; ++i ) __yield();
 #elif defined(__x86_64__) || defined(__i386__)
         for ( int i = 0; i != 64; ++i ) __builtin_ia32_pause();

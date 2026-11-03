@@ -70,8 +70,26 @@ def late_probe {
 }
 
 //! a late require from the driver's [init], with the fixture's compile logged per module
-def late_driver() : string =>
-    "options gen2\nrequire daslib/cross_context\n\nvar answer = 0\n\n[init]\ndef late_init \{\n    var inscope no_access : smart_ptr<FileAccess>\n    using() $(var cop : CodeOfPolicies) \{\n        cop.log_module_compile_time = true\n        require_module_now(\"{fixture("mc_late_mod")}\", no_access, cop) $(var mod : Module?; issues : das_string) \{\n            print(\"LATE LOG \{issues\}\\n\")\n            if (mod != null) \{\n                unsafe \{\n                    invoke_in_context(addr(find_macro_context(mod)), \"late_answer\", addr(answer))\n                \}\n            \}\n        \}\n    \}\n\}\n\n[export]\ndef main \{\n    print(\"LATE \{answer\}\\n\")\n\}\n"
+def late_driver() : string {
+    return ("options gen2\nrequire daslib/cross_context\n\nvar answer = 0\n\n[init]\n"
+        + "def late_init \{\n    var inscope no_access : smart_ptr<FileAccess>\n"
+        + "    using() $(var cop : CodeOfPolicies) \{\n"
+        + "        cop.log_module_compile_time = true\n"
+        + "        cop.module_cache = compiling_program().policies.module_cache\n"
+        + "        require_module_now(\"{fixture("mc_late_mod")}\", no_access, cop) "
+        + "$(var mod : Module?; issues : das_string) \{\n"
+        + "            print(\"LATE LOG \{issues\}\\n\")\n"
+        + "            if (mod != null) \{\n                unsafe \{\n"
+        + "                    invoke_in_context(addr(find_macro_context(mod)), "
+        + "\"late_answer\", addr(answer))\n"
+        + "                \}\n            \}\n        \}\n    \}\n\}\n\n"
+        + "[export]\ndef main \{\n    print(\"LATE \{answer\}\\n\")\n\}\n")
+}
+
+def child_cmd(tmp, flags, script : string) : string {
+    let enter = get_platform_name() == "windows" ? "cd /d {tmp} &&" : "cd {tmp} &&"
+    return "{enter} {get_full_file_name(das_exe())} -dasroot {get_das_root()} {flags} \"{script}\""
+}
 
 //! the wrapper called from a running script
 def running_driver() : string =>
@@ -129,7 +147,7 @@ def test_require_module_now(t : T?) {
 
 [test]
 def test_require_module_now_children(t : T?) {
-    t |> run("a late require's modules are records of the host's module cache; a running script's call panics") @(t : T?) {
+    t |> run("a late require keeps its own cache file; a running script's call panics") @(t : T?) {
         var terr : string
         let tmp = create_temp_directory("das_late_require", terr)
         if (empty(tmp)) {
@@ -139,16 +157,20 @@ def test_require_module_now_children(t : T?) {
         let script = path_join(tmp, "use_late.das")
         fwrite(script, late_driver())
         let cacheFile = path_join(tmp, "late.dascache")
-        let cached = "{das_exe()} -dasroot {get_das_root()} -module-cache \"{cacheFile}\" \"{script}\""
+        let cached = child_cmd(tmp, "-module-cache \"{cacheFile}\"", script)
         var out : string
         t |> success(run_child_reported(t, "cold", cached, out, "LATE 42"), "the cold run answers through the late module")
         t |> success(find(out, "compiler took") >= 0 && find(out, "mc_late_mod") >= 0, "the cold run compiles the fixture:\n{out}")
-        t |> equal(count_prefix(tmp, "late~"), 0, "no cache of the late walk's own sits beside the host's")
+        let lateDir = path_join(tmp, ".cache/daslang/module_cache")
+        let lateFiles = count_prefix(lateDir, "mc_late_mod-")
+        t |> equal(lateFiles, 1, "the late walk has a cache file of its own")
         let coldSize = long_length(fread(cacheFile))
         t |> success(run_child_reported(t, "warm", cached, out, "LATE 42"), "the warm run answers through the late module")
-        t |> success(find(out, "cache read took") >= 0 && find(out, "mc_late_mod") >= 0 && find(out, "compiler took") < 0, "the warm run serves the fixture from the host's cache:\n{out}")
+        let warmServed = (find(out, "cache read took") >= 0 && find(out, "mc_late_mod") >= 0
+            && find(out, "compiler took") < 0)
+        t |> success(warmServed, "the warm run serves the fixture from its own cache:\n{out}")
         t |> equal(long_length(fread(cacheFile)), coldSize, "the warm run rewrites nothing")
-        let uncached = "{das_exe()} -dasroot {get_das_root()} -no-module-cache \"{script}\""
+        let uncached = child_cmd(tmp, "-no-module-cache", script)
         t |> success(run_child_reported(t, "no cache", uncached, out, "LATE 42"), "the run with no module cache answers too")
         t |> success(find(out, "compiler took") >= 0 && find(out, "cache read took") < 0, "with no module cache the late walk compiles:\n{out}")
         let running = path_join(tmp, "use_running.das")
@@ -172,7 +194,7 @@ def test_require_module_now_children(t : T?) {
         let script = path_join(tmp, "use_macro.das")
         fwrite(script, macro_driver(""))
         let cacheFile = path_join(tmp, "nested.dascache")
-        let cached = "{das_exe()} -dasroot {get_das_root()} -module-cache \"{cacheFile}\" \"{script}\""
+        let cached = child_cmd(tmp, "-module-cache \"{cacheFile}\"", script)
         var out : string
         t |> success(run_child_reported(t, "cold", cached, out, "LATE 42"), "the macro's late require answers on the cold run")
         let coldSize = long_length(fread(cacheFile))

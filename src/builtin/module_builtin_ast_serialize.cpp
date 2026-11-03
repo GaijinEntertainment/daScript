@@ -3529,6 +3529,7 @@ namespace das {
             ser.buffer->flush();
             return;
         }
+        if ( ser.failed ) failToCompile = true;
         if ( failToCompile ) return;
         // hosts take the program module as the library's last one: plain builtins first, then dependency order
         TopSort ts(library.modules);
@@ -3706,11 +3707,16 @@ namespace das {
         return key;
     }
 
+    string ModuleFileCache::embeddedPath ( const string & scriptPath, const CodeOfPolicies & policies ) {
+        char exePath[4096];
+        size_t exeLen = getExecutablePathName(exePath, sizeof(exePath));
+        return defaultPath(scriptPath, exeLen ? string(exePath, exeLen) : string(), embeddedHostOptions(policies));
+    }
+
     void ModuleFileCache::install ( const string & readFrom, const string & writeTo, bool quiet ) {
         requested = !readFrom.empty() || !writeTo.empty();
 #if !DAS_NO_FILEIO
         writePath = writeTo;
-        auto & env = *daScriptEnvironment::getBound();
         if ( !readFrom.empty() ) {
             if ( FILE * f = fopen(readFrom.c_str(), "rb") ) {
                 // 64-bit tell: plain ftell returns long (32-bit on Windows), where an
@@ -3731,14 +3737,12 @@ namespace das {
             if ( !readStorage.buffer.empty() ) {
                 reader = make_unique<AstSerializer>(&readStorage, false);
                 reader->quietCache = quiet;
-                env.serializer_read = reader.get();
                 touchFile(readFrom);    // a record in use is the newest for the eviction's LRU
             }
         }
         if ( !writePath.empty() ) {
             writer = make_unique<AstSerializer>(&writeStorage, true);
             writer->quietCache = quiet;
-            env.serializer_write = writer.get();
         }
 #else
         (void) quiet;
@@ -3752,11 +3756,6 @@ namespace das {
         // from source - answer 'unavailable' rather than a silent 'none'
         if ( requested ) res.verdict = ReadVerdict::unavailable;
 #else
-        auto & env = *daScriptEnvironment::getBound();
-        // the debugger path (disableSerializationOnDebugger) may have cleared these
-        // mid-compile; clearing again is harmless, leaving them dangling is not
-        env.serializer_read = nullptr;
-        env.serializer_write = nullptr;
         if ( reader ) {
 #if DAS_SERIALIZE_PROFILE
             if ( !reader->quietCache ) { LOG tw(LogLevel::info); reader->profReport(tw); }

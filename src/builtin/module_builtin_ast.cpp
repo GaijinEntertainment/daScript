@@ -1404,29 +1404,11 @@ namespace das {
         invokeProgramBlock("rtti_parse_file", program, issues, true, block, context, at);
     }
 
-    struct SerializerSlotsHidden {
-        daScriptEnvironment *   env;
-        AstSerializer *         read;
-        AstSerializer *         write;
-        SerializerSlotsHidden () : env(daScriptEnvironment::getBound()), read(env->serializer_read), write(env->serializer_write) {
-            env->serializer_read = nullptr;
-            env->serializer_write = nullptr;
-        }
-        ~SerializerSlotsHidden () {
-            env->serializer_read = read;
-            env->serializer_write = write;
-        }
-    };
-
     void rtti_builtin_parse_file_no_prerequisites ( char * fileName, smart_ptr<FileAccess> access, ModuleGroup* module_group, const CodeOfPolicies & cop,
             const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at ) {
         TextWriter issues;
         if ( !access ) access = make_smart<FsFileAccess>();
-        ProgramPtr program;
-        {
-            SerializerSlotsHidden hidden;
-            program = parseDaScriptNoInfer(fileName, "", access, issues, *module_group, cop.export_all, false, cop);
-        }
+        auto program = parseDaScriptNoInfer(fileName, "", access, issues, *module_group, cop.export_all, false, cop);
         invokeProgramBlock("rtti_parse_file_no_prerequisites", program, issues, true, block, context, at);
     }
 #else
@@ -1441,32 +1423,22 @@ namespace das {
 #endif
 
 #if !DAS_NO_FILEIO
-    static string scriptModuleCachePath ( const char * modName,
-            const CodeOfPolicies & cop ) {
-        char exePath[4096];
-        size_t exeLen = getExecutablePathName(exePath, sizeof(exePath));
-        return ModuleFileCache::defaultPath(modName ? modName : "",
-            exeLen ? string(exePath, exeLen) : string(),
-            ModuleFileCache::embeddedHostOptions(cop));
-    }
-
     char * rtti_builtin_module_cache_path ( char * modName,
             const CodeOfPolicies & cop, Context * context,
             LineInfoArg * at ) {
-        auto path = scriptModuleCachePath(modName, cop);
+        auto path = ModuleFileCache::embeddedPath(modName ? modName : "", cop);
         return context->allocateString(path, at);
     }
 
     // src/builtin/ARCHITECTURE.md#default-module-cache-path
     struct ScriptModuleCache {
-        unique_ptr<SerializerSlotsHidden>   hidden;
         ModuleFileCache                     cache;
         string                              path;
         bool                                armed = false;
         bool                                finished = false;
         ScriptModuleCache ( const CodeOfPolicies & cop, const char * modName ) {
             if ( !cop.module_cache ) return;
-            path = scriptModuleCachePath(modName, cop);
+            path = ModuleFileCache::embeddedPath(modName ? modName : "", cop);
             install(true);
         }
         ScriptModuleCache ( const string & cachePath ) : path(cachePath) {
@@ -1474,7 +1446,6 @@ namespace das {
         }
         void install ( bool quiet ) {
             armed = true;
-            hidden = make_unique<SerializerSlotsHidden>();
             cache.install(path, path, quiet);
         }
         ModuleFileCache::Result finish () {
@@ -1482,7 +1453,6 @@ namespace das {
             if ( armed && !finished ) {
                 finished = true;
                 res = cache.finish();
-                hidden.reset();
             }
             return res;
         }
@@ -1494,7 +1464,7 @@ namespace das {
         TextWriter issues;
         if ( !access ) access = make_smart<FsFileAccess>();
         ScriptModuleCache moduleCache(cop, modName);
-        auto program = compileDaScript(modName, access, issues, *module_group, cop);
+        auto program = compileDaScript(modName, access, issues, *module_group, cop, moduleCache.cache.stream());
         auto cres = moduleCache.finish();
         if ( cres.saveFailed ) issues << "ser: cannot write '" << moduleCache.path << "'\n";
         invokeProgramBlock("rtti_compile", program, issues, program && !program->failed(), block, context, at);
@@ -1528,7 +1498,7 @@ namespace das {
         const string cachePath = moduleCache ? moduleCache : "";
         ScriptModuleCache fileCache(cachePath);
         auto program = compileDaScript(modName, access, issues,
-            *module_group, cop);
+            *module_group, cop, fileCache.cache.stream());
         auto result = fileCache.finish();
         auto verdict = moduleCacheVerdict(result.verdict);
         if ( result.saveFailed ) {
@@ -1609,7 +1579,6 @@ namespace das {
             scope.access = make_smart<FsFileAccess>();
             scope.policies = cop;
             scope.outer = *builtProgramScope;
-            SerializerSlotsHidden hidden;
             gc_guard program_gc_scope;
             scope.firstFailure = requireDefaultModules(scope.access, scope.logs, scope.libGroup, scope.policies);
             flushBuildLogs(scope, context, at);

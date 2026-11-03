@@ -666,10 +666,14 @@ namespace das {
 
     template <typename TT>
     struct das_null_coalescing {
-        static __forceinline TT & get ( const TT * ptr, TT & value ) {
+        typedef remove_const_t<TT> VT;
+        static __forceinline TT & get ( const TT * ptr, VT & value ) {
             return ptr ? *((TT *)ptr) : value;
         }
-        static __forceinline TT get ( const TT * ptr, TT && value ) {
+        static __forceinline TT get ( const TT * ptr, VT && value ) {
+            return ptr ? *((TT *)ptr) : value;
+        }
+        static __forceinline TT get ( const TT * ptr, const VT & value ) {
             return ptr ? *((TT *)ptr) : value;
         }
         template <typename LPTRX>
@@ -4674,7 +4678,7 @@ namespace das {
         r *= b;
         a = static_cast<uint64_t>(r);
         b = static_cast<uint64_t>(r >> 64U);
-    #elif defined(_MSC_VER) && defined(_M_X64)
+    #elif defined(_MSC_VER) && defined(DAS_ARCH_X64)
         a = _umul128(a, b, &b);
     #else
         uint64_t ha = a >> 32U;

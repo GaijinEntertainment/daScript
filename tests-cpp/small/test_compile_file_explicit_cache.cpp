@@ -47,29 +47,6 @@ struct ExplicitCacheFixture {
     }
 };
 
-struct OuterSerializers {
-    daScriptEnvironment & env = *daScriptEnvironment::getBound();
-    AstSerializer * read = env.serializer_read;
-    AstSerializer * write = env.serializer_write;
-    SerializationStorageVector readStorage, writeStorage;
-    AstSerializer reader { &readStorage, false };
-    AstSerializer writer { &writeStorage, true };
-    OuterSerializers () {
-        env.serializer_read = &reader;
-        env.serializer_write = &writer;
-    }
-    ~OuterSerializers () {
-        env.serializer_read = read;
-        env.serializer_write = write;
-    }
-    void check () {
-        CHECK(env.serializer_read == &reader);
-        CHECK(env.serializer_write == &writer);
-        CHECK(readStorage.buffer.empty());
-        CHECK(writeStorage.buffer.empty());
-    }
-};
-
 struct ThrowingFileAccess : FsFileAccess {
     FileInfo * getNewFileInfo ( const string & ) override {
         throw std::runtime_error("explicit cache compile failure");
@@ -126,11 +103,10 @@ FileInfo * checkLocation ( const ProgramPtr & program,
 
 }
 
-TEST_CASE("explicit compile_file cache restores outer serializer slots") {
+TEST_CASE("explicit compile_file cache: verdicts, failed writes and nested compiles") {
     ExplicitCacheFixture fixture;
     auto file = getDasRoot() + "/tests-cpp/small/test_env_serializer.das";
     auto cache = fixture.dir + "/cache.bin";
-    OuterSerializers outer;
     ModuleGroup group;
     auto access = make_smart<FsFileAccess>();
     bool called = false;
@@ -138,16 +114,15 @@ TEST_CASE("explicit compile_file cache restores outer serializer slots") {
         called = true;
         REQUIRE_MESSAGE(ok, issues);
         REQUIRE(program != nullptr);
-        outer.check();
     };
-    SUBCASE("empty explicit path hides the outer streams") {
+    SUBCASE("an empty explicit path caches nothing") {
         CHECK(fixture.compile(file, "", access, group, callback) == "none");
     }
     SUBCASE("a null file access uses the filesystem") {
         CHECK(fixture.compile(file, cache, nullptr, group,
             callback) == "none");
     }
-    SUBCASE("cold and warm explicit paths restore both slots") {
+    SUBCASE("cold and warm explicit paths") {
         CHECK(fixture.compile(file, cache, access, group, callback) == "none");
         ModuleGroup warmGroup;
         CHECK(fixture.compile(file, cache, make_smart<FsFileAccess>(),
@@ -170,10 +145,9 @@ TEST_CASE("explicit compile_file cache restores outer serializer slots") {
                 CHECK(ok);
                 CHECK(issues.find("ser: cannot write '") != string::npos);
                 CHECK(issues.find(blocked) != string::npos);
-                outer.check();
             });
     }
-    SUBCASE("nested compilation failure restores before its callback") {
+    SUBCASE("a nested compilation failure reaches its own callback") {
         fixture.compile(file, cache, access, group,
             [&](bool ok, ProgramPtr, const string issues) {
                 REQUIRE_MESSAGE(ok, issues);
@@ -182,29 +156,25 @@ TEST_CASE("explicit compile_file cache restores outer serializer slots") {
                     [&](bool nestedOk, ProgramPtr, const string) {
                         called = true;
                         CHECK_FALSE(nestedOk);
-                        outer.check();
                     });
-                outer.check();
             });
     }
-    SUBCASE("a callback exception leaves the outer slots installed") {
-        auto boundProgram = outer.env.g_Program;
+    SUBCASE("a callback exception escapes the compile") {
+        auto boundProgram = daScriptEnvironment::getBound()->g_Program;
         CHECK_THROWS_AS(fixture.compile(file, cache, access, group,
             [&](bool ok, ProgramPtr, const string issues) {
                 REQUIRE_MESSAGE(ok, issues);
                 called = true;
-                outer.check();
                 throw std::runtime_error("explicit callback failure");
             }), std::runtime_error);
-        outer.env.g_Program = boundProgram;
+        daScriptEnvironment::getBound()->g_Program = boundProgram;
     }
-    SUBCASE("an escaped compile exception restores both slots") {
+    SUBCASE("an escaped compile exception") {
         auto throwing = make_smart<ThrowingFileAccess>();
         CHECK_THROWS_AS(fixture.compile(file, cache, throwing, group,
             callback), std::runtime_error);
         called = true;
     }
-    outer.check();
     CHECK(called);
 }
 

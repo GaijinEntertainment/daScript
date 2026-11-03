@@ -115,7 +115,8 @@ def test_rst_comment_reads_distinct_typedef(t : T?) {
     let exe = get_command_line_arguments()[0]
     let driver = "{get_das_root()}/tests/daslib/_rst_comment_driver.das"
     var output : string
-    let exit_code = run_and_capture([exe, "-no-module-cache", driver, "--", "--detail_output", root], output)
+    let exit_code = run_and_capture([exe, "-no-module-cache", "-dasroot", get_das_root(),
+            driver, "--", "--detail_output", root], output)
     t |> run("the trailing //! of a distinct typedef reaches its typedef topic") @(t : T?) {
         t |> equal(exit_code, 0, output)
         let detail = fread("{root}/detail/typedef-_rst_distinct_mod-RstMeters.rst")

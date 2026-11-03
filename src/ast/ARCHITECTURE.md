@@ -132,20 +132,10 @@ twice by two callers. The call saves and restores the environment's bound progra
 and compiling names around the walk in a scope object, since it may run mid-parse of another
 module and an unwind must put them back; the symbol state its passes compute lives on its own
 `Program` (`#program-scoped-symbol-state`), so the caller's - which may be mid-simulate with a JIT reading it - is
-untouched. One recursive mutex serializes every late require in the process. The late walk has
-no module cache of its own: a stream holds many compiles in order, shared modules written once
-(a persistent serializer, dastest's `--ser`), read at a parse's start and written at its end.
-A late require issued after the compile - a simulate macro, an `[init]` of the program - finds
-the reader between records, so its modules are the next records of that compile, read from the
-environment's bound serializer and written back through the same writer from its cursor
-(`writtenModules`), and the host's writeback at its end repeats nothing; the hosts keep their
-cache armed through `simulate` (`utils/daslang`, `utils/daslang-live`), where that case lands -
-the JIT's emitter is it. A late require nested in a compile - a macro during a parse (the bound
-program's `isCompiling`), a macro module's `[init]` during its record's read (the reader's
-`readingRecord`) - would write its records ahead of the requirer's, which the reader meets at
-the requirer's position, or read mid-record; so a nested walk hides the stream for its duration
-(`CompileEnvScope`), parses its modules from source, once per process, and pushes no
-record. A module whose parse failed pushes no record either, whatever the walk.
+untouched. One recursive mutex serializes every late require in the process. The late walk is
+a compile of its own and never joins another compile's stream: under `CodeOfPolicies::module_cache`
+it reads and writes its own `ModuleFileCache` at the default path keyed by the target's file, as a
+script's `compile_file` does. A module whose parse failed pushes no record.
 
 ## Program-scoped symbol state (`ast.h`, `ast_export.cpp`, `ast_allocate_stack.cpp`) {#program-scoped-symbol-state}
 

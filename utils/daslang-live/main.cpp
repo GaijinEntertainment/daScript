@@ -219,8 +219,8 @@ static CompileResult compile_script(const string & fn) {
         cacheQuiet = true;
     }
     result.moduleCache.install(cachePath, cachePath, cacheQuiet);
-    result.program = compileDaScript(fn, result.access, tout, *result.moduleGroup, policies);
-    // armed through simulate: a late require from a simulate macro or an [init] joins this stream
+    policies.module_cache = result.moduleCache.requested;
+    result.program = compileDaScript(fn, result.access, tout, *result.moduleGroup, policies, result.moduleCache.stream());
     auto finishModuleCache = [&]() {
         auto cres = result.moduleCache.finish();
         if (!cacheQuiet) {

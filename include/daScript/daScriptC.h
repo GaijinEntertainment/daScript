@@ -1,5 +1,6 @@
 #pragma once
 
+#include "daScript/misc/arch.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -34,7 +35,7 @@
         #define _TARGET_SIMD_SSE 4
     #elif __SSSE3__
         #define _TARGET_SIMD_SSE 3
-    #elif defined(__SSE2__) || defined(_M_AMD64) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP>=1)
+    #elif defined(__SSE2__) || defined(DAS_ARCH_X64) || (defined(_M_IX86_FP) && _M_IX86_FP>=1)
         #define _TARGET_SIMD_SSE 2
     #endif
 #endif

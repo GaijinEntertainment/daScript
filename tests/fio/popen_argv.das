@@ -60,7 +60,8 @@ def test_help_after_separator_reaches_the_script(t : T?) {
     t |> run("--help and -h after -- are script arguments, not the driver's") @(t : T?) {
         let fixture = path_join(get_das_root(), "tests/fio/_fixture_echo_args.das")
         var output : string
-        let rc = run_argv([das_exe(), fixture, "--", "--help", "-h"], output)
+        let rc = run_argv([das_exe(), "-dasroot", get_das_root(), fixture, "--", "--help", "-h"],
+            output)
         t |> equal(rc, 0)
         t |> success(find(output, "--help\n") >= 0, "the script should see --help: {output}")
         t |> success(find(output, "-h\n") >= 0, "the script should see -h: {output}")
