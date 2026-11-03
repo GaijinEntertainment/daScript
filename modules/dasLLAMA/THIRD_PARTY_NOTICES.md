@@ -61,6 +61,15 @@ The voice-activity-detection implementation and the shipped `models/silero_vad.b
 derive from the Silero VAD project (https://github.com/snakers4/silero-vad), Copyright (c)
 2020-present Silero Team, MIT License - see `LICENSE.SILERO`.
 
+## Firefox Translations (MPL-2.0)
+
+The Bergamot translation students the engine serves (`model.<pair>.intgemm.alphas.bin` with the
+`vocab.<pair>.spm` beside it) are Mozilla's Firefox Translations models
+(https://github.com/mozilla/firefox-translations-models, https://github.com/mozilla/translations),
+Copyright Mozilla Foundation, Mozilla Public License 2.0. The files are fetched from Mozilla's
+translation-model bucket byte for byte; the ru-en student the interpreter example ships is mirrored
+at https://huggingface.co/borisbat/dasllama-nmt with the licence text beside it.
+
 ## Text-to-speech front end
 
 The TTS front end and the three TTS families reimplement, and pack data from, the following

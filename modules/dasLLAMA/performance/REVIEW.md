@@ -151,12 +151,6 @@ defect - `--fetch` downloads only.** Each has its own home: a conversion recipe 
 under `--convert`, a timing runs under `gen_bench_records.das` or a
 `../benchmarks/lcpp_bench.das` cell, and a tune sidecar is written under a `--tune` run.
 
-**A diff that adds a row or a `companions` entry, or changes a `bytes`, `sha256` or `recipe`
-value, in `model_specs.das` or `profile_common.das` records its settling evidence in the PR
-description: one `fetch_models.das -- -o <name>` run per entry it adds or changes (`<name>` the
-entry's local file name), on a box holding that entry's model file, ending `0 pending, 0 failed`
-with the entry `ok`.**
-
 **A diff that adds a `recipe` row carrying no `sha256`, or changes such a row's `recipe`,
 records, in the PR description, the conversion command as run and the produced file's
 identity - its byte size, or a `file_identity` hash.** `fetch_models` reports such a row `ok`
@@ -164,9 +158,11 @@ on presence alone, so its run cannot tell a re-mint from the stale file the old 
 
 **A diff that adds a row or a `companions` entry, or changes a `bytes`, `sha256` or `recipe`
 value, in `model_specs.das` or `profile_common.das`, or changes `fetch_models.das` beyond its
-comments, records in the PR description one unscoped `fetch_models.das --` run - in which no entry
-the diff touched is `pending`, and which ends `0 failed` when the diff changes `fetch_models.das`.**
-A box stocks only some rows, so an unscoped run's `pending` count is the box's.
+comments, records two runs in the PR description: `fetch_models.das -- -o <name>` per entry it
+adds or changes (`<name>` its local file name), on a box holding its model file, ending `0
+pending, 0 failed` with the entry `ok`; and an unscoped `fetch_models.das --` with no touched
+entry `pending` (an untouched row the box lacks may be), ending `0 failed` when
+`fetch_models.das` changed.**
 
 **A diff that adds or re-points a `url` on a `model_specs.das` or `profile_common.das` row, or
 on one of that row's `companions` entries, records in the PR description a fetch through that

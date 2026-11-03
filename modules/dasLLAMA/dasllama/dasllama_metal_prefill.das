@@ -362,7 +362,7 @@ class MetalDequantK6H {
     @ssbo @binding = 3 @role = "write" wh : array<float16>
     @uniform @binding = 4 ka : CvtArgs
 
-    [metal_kernel(name="metal_dequant_k6h_msl"), arch(at="../ARCHITECTURE_IMAGE.md#image-devw-plane")]
+    [metal_kernel(name="metal_dequant_k6h_msl"), arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-devw-plane")]
     def metal_dequant_k6h {
         let gid = gl_GlobalInvocationID.x
         if (gid >= ka.total) {
@@ -695,7 +695,7 @@ class template MetalKqMulMmSplitTensorBase : MetalMoeTileWalkT {
     }
 
     //! the double-buffered walk over the tile's K - under `SK` the z-th share of it, stored into the z-th partial plane
-    [arch(at="../ARCHITECTURE_IMAGE.md#image-devw-plane")]
+    [arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-devw-plane")]
     def db_shell {
         let mBase = gl_WorkGroupID.x * MT
         let nBase = gl_WorkGroupID.y * 64u
@@ -5177,7 +5177,7 @@ class MetalVadEnc : GkVadEnc {
 class MetalVadLstm : GkVadLstm {
     override PTR_LOADS = true
 
-    [metal_kernel(name="metal_vad_lstm_msl")]
+    [metal_kernel(name="metal_vad_lstm_msl", max_threads=1024)]
     def metal_vad_lstm {
         vad_lstm_body()
     }
@@ -6925,7 +6925,7 @@ def pf_tw_tail_ready() : bool => psos_ready(fixed_array(g_pf_pso_tw_pool2, g_pf_
 def pf_g4a_ready() : bool => psos_ready(fixed_array(g_pf_pso_g4a_attn, g_pf_pso_g4a_glu, g_pf_pso_g4a_dw, g_pf_pso_g4a_axpy))
 
 //! The gemma4a mel/front kernel set compiled — the whole-chunk driver's extra device gate.
-def pf_g4a_front_ready() : bool => psos_ready(fixed_array(g_pf_pso_g4a_mag, g_pf_pso_g4a_logmel, g_pf_pso_g4a_lnrelu, g_pso_im2col2d))
+def pf_g4a_front_ready() : bool => psos_ready(fixed_array(g_pf_pso_g4a_mag, g_pf_pso_g4a_logmel, g_pf_pso_g4a_lnrelu, g_pso_im2col2d, g_pso_f32_exact_mm))
 
 //! The qwen3a conv-frontend tail kernels compiled — its front driver's extra device gate.
 def pf_q3a_front_ready() : bool => psos_ready(fixed_array(g_pf_pso_q3a_shuffle))
@@ -7527,6 +7527,18 @@ def pf_q8_mm_half() : bool => (g_pf_mm_tensor && g_pf_pso_mm_th != null) || (g_p
 [arch(at="../ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-gemm-ladder")]
 def pf_enc_q8_mm(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64; bx, bxh, by, bk, bn : MetalBuffer?; mp, d, kdim : int64) {
     enc_gemm_mm(enc, bwblob, wboff, bx, by, bk, bn, mp, d, 0ul, kdim, 0l, bxh)
+}
+
+var private g_pf_no_model = Model()   //! the tower's K-quant sites bind their own planes: the dense site reads its Model for per-32 planes alone, which a superblock site never asks for
+
+//! One K-quant GEMM over a driver's own planes on the prefill ladder, for a driver outside this file: the member's superblocks
+//! at `bq` and its Metal-form scales at `bs` (`kq_scales_of`'s pair), `mp` rows padded to 32, no GEMV tail; `bxh` the caller's
+//! half twin of `bx`, null where `pf_q8_mm_half` says none is read; `site` keys the site's dev-W panel beside its buffer.
+[arch(at="../ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-gemm-ladder")]
+def pf_enc_kq_mm(enc : MetalComputeEncoder?; fmt : KqFmt; site : int64; bq : tuple<buf : MetalBuffer?; qoff : uint64>;
+                 bs : tuple<buf : MetalBuffer?; soff : uint64; doff : uint64>; bx, bxh, by, bk, bn : MetalBuffer?; mp, d, kdim : int64) {
+    verify(kq_sb(fmt) && !kq_dense_b32(fmt), "pf_enc_kq_mm: a superblock format alone")
+    pf_enc_kq_dense_site(enc, g_pf_no_model, fmt, site, d, bq, bs, bx, by, bk, bn, mp, 0ul, bxh, kdim, true, !pf_kq_split_fmt(fmt))
 }
 
 //! kdim feeds the tall/remainder split's X stride; kdim-less callers stay whole-dispatch 32-tile

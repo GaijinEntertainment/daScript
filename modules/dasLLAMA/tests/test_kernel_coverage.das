@@ -21,6 +21,7 @@ require ?vulkan dasllama/dasllama_vulkan_tower   // set_vulkan_tower - the servi
 require daslib/defer
 require dasllama/dasllama_gpu_resident  // moe_gpu_drop_model_ — the census's model-switch drops
 require dasllama/dasllama_whisper   // the cov_tower whisper row
+require dasllama/dasllama_tower     // nolint:STYLE030,LINT019 - TowerDev, tower_dev_staged: the cov_tower rows mint the Metal flavor, inside the das_metal half
 require dasllama/dasllama_audio     // load_audio_tower — the cov_tower erf-GELU carrier
 require dasllama/dasllama_gemma4uv  // the cov_tower embedder row
 require dasllama/dasllama_gemma4v   // the cov_tower ViT row
@@ -548,9 +549,9 @@ def private cov_tower_gemma4a(t : T?; samples : array<float>) {
         let gpath = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
         if (family_on(t, "gemma4a") && model_available(t, gpath) && !empty(samples)) {
             set_gemma4a_q8(false)   // pinned for the census — the box's lane policy must not pick the row's kernel set
-            var inscope gstg <- stage_gemma4a_encoder(gpath)   // stage+mint: no .dlim written, no sibling-lane GC
+            var inscope gstg <- tower_dev_staged(TowerDev.metal) $ { return <- stage_gemma4a_encoder(gpath) }   // stage+mint: no .dlim written
             var inscope genc = Gemma4aEncoder()
-            mint_gemma4a_encoder(gstg, genc)
+            mint_gemma4a_encoder(gstg, genc, "", TowerDev.metal)
             reset_gemma4a_q8()
             var gst = Gemma4aState()
             var grows : array<float>
@@ -570,9 +571,9 @@ def private cov_tower_canary(t : T?; samples : array<float>) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let cnpath = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
         if (family_on(t, "canary") && model_available(t, cnpath) && !empty(samples)) {
-            var inscope cstg <- stage_canary_encoder(cnpath)   // stage+mint: no .dlim written, no sibling-lane GC
+            var inscope cstg <- tower_dev_staged(TowerDev.metal) $ { return <- stage_canary_encoder(cnpath) }   // stage+mint: no .dlim written
             var inscope cenc = CanaryEncoder()
-            mint_canary_encoder(cstg, cenc)
+            mint_canary_encoder(cstg, cenc, TowerDev.metal)
             var cst = CanaryState()
             with_dasllama_jobque() {
                 canary_log_mel(cenc, samples, cst)
@@ -589,9 +590,9 @@ def private cov_tower_parakeet(t : T?; samples : array<float>) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let pkpath = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v2-f32.bin")
         if (family_on(t, "parakeet") && model_available(t, pkpath) && !empty(samples)) {
-            var inscope pstg <- stage_parakeet_model(pkpath, false)
+            var inscope pstg <- tower_dev_staged(TowerDev.metal) $ { return <- stage_parakeet_model(pkpath, false) }
             var inscope pm = ParakeetModel()
-            mint_parakeet_model(pstg, pm, false)
+            mint_parakeet_model(pstg, pm, false, TowerDev.metal)
             var pst = ParakeetState()
             with_dasllama_jobque() {
                 parakeet_log_mel(samples, pm, pst)
@@ -610,9 +611,9 @@ def private cov_tower_gigaam(t : T?; samples : array<float>) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let gpath = path_join(models_dir(), "gigaam-v3-e2e-rnnt-f16.gguf")
         if (family_on(t, "gigaam") && model_available(t, gpath) && !empty(samples)) {
-            var inscope gstg <- stage_gigaam_model(gpath, false)
+            var inscope gstg <- tower_dev_staged(TowerDev.metal) $ { return <- stage_gigaam_model(gpath, false) }
             var inscope gm = GigaamModel()
-            mint_gigaam_model(gstg, gm, false)
+            mint_gigaam_model(gstg, gm, false, TowerDev.metal)
             var gst = GigaamState()
             with_dasllama_jobque() {
                 let tt = gigaam_encode_span(samples, 0l, long_length(samples), gm, gst)
@@ -685,20 +686,25 @@ def private cov_tower(t : T?) {
         set_metal_tower(true)
         set_metal_wdec(true)
         set_metal_wdec_step(true)
-        set_metal_wdec_step_min_d(0l)   // the census carrier is tiny — under the serving floor
         let wpath = path_join(whisper_dir(), "ggml-tiny.bin")
         var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
         if (model_available(t, wpath) && !empty(samples)) {
-            var inscope w = WhisperModel()
-            var inscope stg <- stage_whisper_model(wpath, false, true)
-            mint_whisper_model(stg, w, false, true)
-            with_dasllama_jobque() {
-                var ws <- create_session(w)
-                transcribe(w, ws, samples) $(_seg) {
-                    pass
+            // tiny's two Metal bakes: the default's step on the CPU (the cross-KV's f32 store), the knob off's on the device
+            let small_was = metal_wdec_small_cpu()
+            for (small_cpu in [true, false]) {
+                set_metal_wdec_small_cpu(small_cpu)
+                var inscope w = WhisperModel()
+                var inscope stg <- tower_dev_staged(TowerDev.metal) $ { return <- stage_whisper_model(wpath, false, true) }
+                mint_whisper_model(stg, w, false, true, TowerDev.metal)
+                with_dasllama_jobque() {
+                    var ws <- create_session(w)
+                    transcribe(w, ws, samples) $(_seg) {
+                        pass
+                    }
+                    delete ws
                 }
-                delete ws
             }
+            set_metal_wdec_small_cpu(small_was)
         }
         // the erf-GELU carrier (whisper is the LUT flavor): one qwen2audio chunk on varied mel
         let apath = path_join(models_dir(), "qwen2audio-mmproj-f32.gguf")

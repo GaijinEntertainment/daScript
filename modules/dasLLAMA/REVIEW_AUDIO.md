@@ -16,8 +16,9 @@ licensed namer is a file that drives a family past the facade's verbs: the GPU f
 `utils/dasllama-convert/main.das` (repo root).
 
 **In `dasllama/dasllama_asr.das` and `dasllama/dasllama_audio_embedder.das` - the union
-carriers that route each facade function to one family - a family arm that does anything but
-one forwarding call is a defect; the work goes in the family file.** The loader's format or
+carriers that route each facade function to one family - a family arm computes nothing beyond the
+carrier's own state and forwards it in one call; any other work is a defect and goes in the family
+file.** The loader's format or
 family check that picks the arm is the dispatch, not an arm.
 
 **A diff that adds a family to a union carrier changes the carrier, for that family, only at its

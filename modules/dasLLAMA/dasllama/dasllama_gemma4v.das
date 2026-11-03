@@ -13,6 +13,7 @@ require dasllama/dasllama_gguf
 require dasllama/dasllama_math   // matmul_q8q8_batch + the backend repack — the q8 block-GEMM lane
 require dasllama/dasllama_common   // apply_box_profile_runtime for the tower-image identity
 require dasllama/dasllama_image   // the dlim rail: mapped planes, no allocation or work at load
+require dasllama/dasllama_tower_image
 require dasllama/dasllama_plane public   // PlaneF/PlaneU16 — re-exported so requirers can delete a tower
 require dasllama/dasllama_tower   // the shared encoder-tower pieces: clamp, row norms, attention, 2-axis rope, im2col, pool
 require dasllama/dasllama_rope    // build_rope_tabs_rows — the per-axis rope tables
@@ -76,6 +77,9 @@ struct Gemma4vTower {
     layer_f_stride : int64
     layer_w : int64      // per-block GEMM region base (qblob when q8, else wblob when blk_bf16, else blob); stride layer_w_stride
     layer_w_stride : int64
+    dev_backend : TowerDev    //! the GPU flavor whose device block the image carries (`#tower-dev-block`); `none` on the CPU image
+    dev : PlaneU8 = PlaneU8()
+    devplan : PlaneI64 = PlaneI64()
     image_map : void?         // non-null when the planes borrow a mapped .dlim (dasllama_image)
     image_bytes : uint64
 }
@@ -141,7 +145,7 @@ def finalize(var s : Gemma4vState) {
 
 // the tripwire: serialize_image_meta(Gemma4vTower) covers 25 fields; image_map + image_bytes
 // are deliberate skips (the four planes are sections, not meta).
-let private GEMMA4V_META_FIELDS = 25 + 2
+let private GEMMA4V_META_FIELDS = 26 + 2
 
 // every meta-carried Gemma4vTower field, explicitly, both directions (see dasllama_image)
 def private serialize_image_meta(var arch : Archive; var t : Gemma4vTower) {
@@ -171,6 +175,7 @@ def private serialize_image_meta(var arch : Archive; var t : Gemma4vTower) {
     arch |> serialize_raw(t.layer_f_stride)
     arch |> serialize_raw(t.layer_w)
     arch |> serialize_raw(t.layer_w_stride)
+    arch |> serialize_raw(t.dev_backend)
 }
 
 [unused_argument(t)]
@@ -185,6 +190,8 @@ struct Gemma4vStaging {
     wblob : array<uint16>
     qblob : array<int8>       // q8 lane: the block GEMMs as Q8_0 (repacked for the active backend)
     qscales : array<float>
+    @exact_size dev : array<uint8>       //!< a GPU-flavored mint's device block (`TowerDevBuild`)
+    @exact_size devplan : array<int64>   //!< ... and its plan
 }
 
 def private serialize_image_meta(var arch : Archive; var st : Gemma4vStaging) {
@@ -208,6 +215,7 @@ let private GEMMA4V_TAG_Q8 = "gemma4v-q8"
 def private register_gemma4v_image_tags {
     register_image_family_tag(GEMMA4V_TAG, true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
     register_image_family_tag(GEMMA4V_TAG_Q8)
+    register_tower_dev_tags(GEMMA4V_TAG_Q8)
 }
 
 // the GPU chain hook (dasllama_metal_tower or dasllama_vulkan_tower registers it at [init]; requires-back): the whole chain
@@ -457,12 +465,18 @@ def load_gemma4v_tower(path : string) : Gemma4vTower {
     // a .dlim named directly: no mmproj to regenerate from, so a wrong identity panics; the lane is
     // the file's (its baked tag), not the pin's - a served tower reads its q8 flag from the meta
     if (path |> ends_with(".dlim")) {
-        let baked = image_family_tag(path)
+        let baked = image_tag_lane(image_family_tag(path))
         if (baked == GEMMA4V_TAG || baked == GEMMA4V_TAG_Q8) {
             tag = baked
         }
     } else {
         g4v_announce_lane()
+    }
+    let dev = path |> ends_with(".dlim") ? TowerDev.none : tower_dev_flavor(g_g4v_flavor, tag == GEMMA4V_TAG_Q8)
+    if (dev != TowerDev.none) {
+        return <- load_staged_image_dev(path, tag, "gemma4v-tower", "source mmproj gguf", type<Gemma4vTower>, dev, g_g4v_flavor.bake, GEMMA4V_DEV_CONSUMED) {
+            return <- stage_gemma4v_tower(path)
+        }
     }
     return <- load_staged_image(path, tag, "gemma4v-tower", "source mmproj gguf", type<Gemma4vTower>, $ {
         return <- stage_gemma4v_tower(path)
@@ -471,10 +485,29 @@ def load_gemma4v_tower(path : string) : Gemma4vTower {
     })
 }
 
+//! A GPU driver's gemma4v flavor (`#tower-dev-block`): the backend whose image it mints, whether its chain serves a lane, and
+//! the bake that converts a CPU-form tower into the driver's device block
+typedef Gemma4vServesLaneFn = function<(q8 : bool) : bool>
+typedef Gemma4vBakeFn = function<(t : Gemma4vTower; var b : TowerDevBuild) : bool>
+
+struct Gemma4vFlavor {
+    backend : TowerDev
+    serves : Gemma4vServesLaneFn
+    bake : Gemma4vBakeFn
+}
+
+var private g_g4v_flavor = Gemma4vFlavor()
+let private GEMMA4V_DEV_CONSUMED <- ["qblob", "qscales"]   //! the planes a gemma4v bake converts: a GPU flavor carries their device forms instead
+
+def register_gemma4v_flavor(backend : TowerDev; serves : Gemma4vServesLaneFn; bake : Gemma4vBakeFn) {
+    g_g4v_flavor = Gemma4vFlavor(backend = backend, serves = serves, bake = bake)
+}
+
 //! Mint a served tower from a staged read WITHOUT touching disk — the off-rail control for suites
 //! (a knockout edits the staging planes, then serves the result through the same image walk).
-def mint_gemma4v_tower(var st : Gemma4vStaging; var out : Gemma4vTower) {
-    cache_via_image_staged(st, out, "", st.t.q8 ? GEMMA4V_TAG_Q8 : GEMMA4V_TAG)
+//! `dev` names the GPU flavor (the staging read under `with_tower_dev_staging(dev)`), `none` the CPU image (`tower_mint_flavor`).
+def mint_gemma4v_tower(var st : Gemma4vStaging; var out : Gemma4vTower; dev : TowerDev = TowerDev.none) {
+    tower_mint_flavor(st, out, st.t.q8 ? GEMMA4V_TAG_Q8 : GEMMA4V_TAG, "gemma4v-tower", dev, g_g4v_flavor, GEMMA4V_DEV_CONSUMED)
 }
 
 // the bind walk skips a missing section silently (a pure-fp32 image legitimately has no wblob),
@@ -483,8 +516,8 @@ def private g4v_check_planes(t : Gemma4vTower; src : string) {
     if ((t.patch_bf16 || (t.blk_bf16 && !t.q8) || t.proj_bf16) && empty(t.wblob)) {
         panic("dasLLAMA gemma4v: '{src}' declares bf16 planes but carries no wblob section - the image is corrupt or hand-edited")
     }
-    if (t.q8 && (empty(t.qblob) || empty(t.qscales))) {
-        panic("dasLLAMA gemma4v: '{src}' declares q8 block GEMMs but carries no qblob/qscales sections - the image is corrupt or hand-edited")
+    if (t.q8 && (t.dev_backend == TowerDev.none ? empty(t.qblob) || empty(t.qscales) : empty(t.dev))) {
+        panic("dasLLAMA gemma4v: '{src}' declares q8 block GEMMs but carries no {t.dev_backend == TowerDev.none ? "qblob/qscales sections" : "device block"} - the image is corrupt or hand-edited")
     }
 }
 
@@ -589,6 +622,18 @@ def gemma4v_block_offs(t : Gemma4vTower; l : int64) : Gemma4vBlockOffs {
         o.clamp[g] = clamps + g * GEMMA4V_CLAMP_F
     }
     return o
+}
+
+//! every block's q8 GEMM regions in GEMM order, the whole tower - the list both tower drivers gather
+def gemma4v_all_regions(t : Gemma4vTower) : array<Q8Region> {
+    var @exact_size regions : array<Q8Region>
+    regions |> reserve(t.n_layer * GEMMA4V_GEMMS)
+    var recs : Q8Region[int(GEMMA4V_GEMMS)]
+    for (l in range64(t.n_layer)) {
+        gemma4v_block_regions(t, l, recs)
+        regions |> push_from(recs)
+    }
+    return <- regions
 }
 
 //! the block's q8 GEMM regions in GEMM order - the site order both tower drivers read
@@ -699,6 +744,7 @@ def private g4v_stem_finish(t : Gemma4vTower; var s : Gemma4vState; npos, n_cols
 // the tail: Gemma4VisionPooler (merge×merge mean, ×√d), the std guard, then the
 // Gemma4MultimodalEmbedder (weightless rms → clamped projection) into out; returns nout
 def private g4v_tail(t : Gemma4vTower; var s : Gemma4vState; n_cols, n_rows : int64; var out : array<float>) : int64 {
+    tower_cpu_refuse(t, "dasLLAMA gemma4v", "tail")
     let d = t.n_embd
     let nout = avg_pool2d_rows(s.pooled, s.x, n_cols, n_rows, d, t.merge)
     unsafe {
@@ -753,6 +799,7 @@ def gemma4v_encode(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>
         asr_prof_add("g4v.gpu", tp)
     }
     if (!gpu_served) {
+        tower_cpu_refuse(t, "dasLLAMA gemma4v", "chain")
         tp = ref_time_ticks()
         if (chain) {
             g4v_im2col(t, s, planes, w, h)

@@ -148,7 +148,8 @@ load orchestration - lands in the file whose charter line names that shared conc
 `dasllama/dasllama_audio.das`, `dasllama/dasllama_vision.das`, or a family file declares - the
 shared shape lands in `dasllama/dasllama_asr_types.das`.**
 
-**A `dasllama/dasllama_tower.das` helper with one calling family lands in that family's file.**
+**A `dasllama/dasllama_tower.das` helper that only one family's carrier data reaches lands in that
+family's file.**
 
 **Tool wire text (the text of a model's tool/function call, built or parsed) is produced only
 in `dasllama/dasllama_tools.das`.**

@@ -58,7 +58,8 @@ at Y's time - is a ratio.
 **A diff that adds, removes, or moves a `##` or `###` heading of an `ARCHITECTURE_*.md` companion
 updates every text that lists the companion's contents - its own opening, any other
 `ARCHITECTURE*.md` sentence that lists its subjects - so that it names each added heading's
-subject and no removed one's, in the same change.**
+subject and no removed one's, in the same change; a listing under an umbrella term counts only
+where the term names the subject.**
 
 **A diff that moves or removes a heading of an `ARCHITECTURE_*.md` companion leaves no citation
 that names the companion file alone for that heading's subject - it repoints the citation to the

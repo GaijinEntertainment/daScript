@@ -4764,11 +4764,7 @@ def private kq_batch_kernel_gen(fmt : int; var yp : float?; kqp : uint8 const?; 
     }
     let kf = kq_fmt_of_id(fmt, "kq_batch_kernel_gen")
     kq_fmt_stamp(kf) $(F) {
-        unsafe {
-            for (tk in range64(ntok)) {   // row tails (d % mr): disk-order per token
-                kq_rows_kernel(F, kf, myp + tk * d, kqp, ksp, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * (n / 16l), n, ng * mr, d)
-            }
-        }
+        kq_rows_batch_kernel(F, kf, myp, kqp, ksp, xqp, xsp, xbsp, n, d, ntok, ng * mr, d)   // row tails (d % mr): disk-order
     }
 }
 
@@ -4787,9 +4783,7 @@ def kq_expert_batch_core(fmt : int; var yp : float?; kqp : uint8 const?; ksp : u
             for (tk in range64(t4, ntok)) {
                 kq_gemv_gen(yp + tk * d, kqp, ksp, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * (n / 16l), n, 0l, ng * mr, F)
             }
-            for (tk in range64(ntok)) {
-                kq_rows_kernel(F, kf, yp + tk * d, kqp, ksp, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * (n / 16l), n, ng * mr, d)
-            }
+            kq_rows_batch_kernel(F, kf, yp, kqp, ksp, xqp, xsp, xbsp, n, d, ntok, ng * mr, d)
         }
     }
 }
@@ -4839,9 +4833,7 @@ def private kq_batch_groupn_gen(fmt : int; var yp : float?; kqp : uint8 const?; 
                 let sb = offs[r * 3l] / 256l
                 let row0 = offs[r * 3l + 1l]
                 let cnt = offs[r * 3l + 2l]
-                for (tk in range64(row0, row0 + cnt)) {
-                    kq_rows_kernel(F, kf, myp + tk * d, kqp + sb * qsb, ksp + sb * ssb, xqp + tk * n, xsp + tk * (n / 256l), xbsp + tk * nb16, n, ng * mr, d)
-                }
+                kq_rows_batch_kernel(F, kf, myp + row0 * d, kqp + sb * qsb, ksp + sb * ssb, xqp + row0 * n, xsp + row0 * (n / 256l), xbsp + row0 * nb16, n, d, cnt, ng * mr, d)
             }
         }
     }

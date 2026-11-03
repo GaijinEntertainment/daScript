@@ -1557,11 +1557,12 @@ module) is independent and can land any time - it is pure structure.
     -c 4096 -b 2048 -ub 512 -npp 512 -ntg 128 -fa on -ngl 99`, the same hour); and a server that
     pins no context still plans at the binding cap's share a region, so a session-count-aware
     pin from the scheduler is the other half of the first rung.
-82. **The device gather's grouped-row branch is a per-format ladder.** `moe_gpu_gather_stack_kq`
-    (`dasllama/dasllama_layout.das`) reads its plane pair off `Model.kq[]` through the descriptor
-    row now, but its grouped-row (interleaved) branch still spells each format's stride by hand
-    where every other lookup walks `kq_desc`. Done looks like: a grouped-row stride column on the
-    descriptor row and the branch reading it, the resident MoE files bit for bit before and after.
+82. **The device gather's grouped-row branch is a per-format ladder.** `kq_gather_rows_dev`
+    (`dasllama/dasllama_layout.das`, the core `moe_gpu_gather_stack_kq` and the Vulkan tower's kq bake
+    reach) reads its planes through the descriptor row, but its grouped-row (interleaved) branch still
+    spells each format's stride by hand where every other lookup walks `kq_desc`. Done looks like: a
+    grouped-row stride column on the descriptor row and the branch reading it, the resident MoE files
+    bit for bit before and after.
 
 84. **The workgroup argmax fold has two kernel-side spellings.** `ClsArgmaxBase.fold`
     (`dasllama_vulkan_classes.das`) and the k-loop's inner fold of `GkTopKRow.select_row` are the

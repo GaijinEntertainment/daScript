@@ -10,6 +10,28 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-11-02, `direction-grade`, `debug-jit`) - GigaAM's kq lane on the Vulkan chain against the q8 lane
+  (`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`).** Box zen2 (AMD Ryzen Threadripper 3990X, Windows 11, RTX 5060 Ti 16 GB,
+  driver 616.56), branch `bbatkin/gigaam-kq-lane` at 2d75f01bc3, `bin/Release/daslang.exe -jit` with `DASLLAMA_GPU=1`,
+  `DAS_JOBQUE_THREADS=16`, `DASLLAMA_ALLOW_UNTUNED=1` (the box's sidecar is stale: the CPU kernels on the x86-avx2 class
+  profile - the encode is the device's, the transducer step the CPU's). Instrument `harness/asr_stage_probe.das -- -m
+  <carrier> -w <clip> --lang ru -r 5 --e2e --warm 10`, one process a row, the lane the build's own: the hosted
+  `gigaam-v3-e2e-rnnt-q4_k.gguf` serves its kq lane (`exec k4`: Q4_K attention and FF, Q8_0 conv pointwise, on the
+  K-quant tiles), `gigaam-v3-e2e-rnnt-f16.gguf` the q8 lane the lane policy picks on this card (`exec q8`). The
+  `lcpp_bench --asr` cell cannot time the q4_k file: its catalog row is the f16 carrier, the q4_k one a companion.
+
+  | clip (audio) | kq lane (q4_k) | q8 lane (f16 carrier) | kq / q8 |
+  |---|---|---|---|
+  | ru_short (7.08 s) | 13.02 ms, cv 2.18% | 11.77 ms, cv 1.66% | 1.106 |
+  | ru_mid (18.84 s) | 18.09 ms, cv 2.23% | 17.90 ms, cv 0.28% | 1.011 |
+  | ru_long (77.26 s) | 80.32 ms, cv 1.34% | 79.28 ms, cv 1.18% | 1.013 |
+
+  End-to-end mean walls (`create_session` + `transcribe`) over 5 reps. The ru_short pair is the re-take run back to back
+  (the first pass read the kq lane VOID at cv 3.54%, 14.30 ms, and a second pass's kq run VOID at cv 23.4%); the mid and
+  long rows are the first pass. On the clips the device's GEMMs dominate the kq lane holds the q8 lane's wall within 1.3%
+  at a third of the file's bytes (154 MB against 452 MB). The short clip's tenth is unprofiled: a window of a few hundred
+  rows, where a fixed per-dispatch cost weighs most, is the hypothesis a device-timestamp pass of the two lanes would settle.
+
 - **MEASURED (2026-10-28, `debug-jit`) - the Vulkan embedding window's bars and lasting allocations
   (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-scratch`).** Box: the RunPod RTX PRO 4500 Blackwell 32 GB (Linux, 48
   vCPU), branch `bbatkin/embed-speed` at 4588f21a08 plus the pre-PR fix batch, `bin/daslang -jit` with `DASLLAMA_GPU=1`,

@@ -80,8 +80,8 @@ family, backend arm or session shape with a batched decode step; calls `create_d
 `dasllama/dasllama_gpu*.das`); adds an `RdecPass` value; changes `trim_model_planes`; stores
 into, gathers from or releases a device buffer holding K or V rows; adds or changes a resident
 override (a decode/prefill hook the resident driver registers) or a byte copy of mirror rows (the
-device copy of the K/V cache); or adds or changes a GPU path that runs a recurrent forward,
-applies `REVIEW_GPU_RESIDENT.md` too.**
+device copy of the K/V cache); or adds or changes a GPU path that runs a recurrent (deltanet)
+forward, applies `REVIEW_GPU_RESIDENT.md` too.**
 
 **A diff that adds a module-level variable to a GPU driver file (`dasllama/dasllama_metal*.das`,
 `dasllama/dasllama_*{vulkan,cuda}*.das`, `dasllama/dasllama_gpu*.das`) whose value derives from a
@@ -155,8 +155,9 @@ body.** The small-work regression hides behind the big-work win.
 authoritative site its kind has, in the same change.** The sites per kind: the generated `*_msl`
 global for a Metal in-body tile, the `@workgroup` declaration or `local_size_x` for a Vulkan or
 CUDA one; a `@template_constant`'s default and each stamp's `override` for a constant a template
-stamps; the `grid=` spec (a CEIL divide), or the `wgs` decode plus its host helper, for a grid;
-the `tg=` / `local_size_x` spec for a threadgroup; the single writer for a uniform.
+stamps; the `grid=` spec (a CEIL divide) or the `wgs` decode plus its host helper for a grid; the
+`tg=` / `local_size_x` spec and a `[metal_kernel(max_threads=)]` argument for a threadgroup; the
+single writer for a uniform.
 
 **A diff that adds a `grid = "wgs"` kernel class, changes how such a body decodes its workgroup
 index, or changes how the host computes that class's `wgs`, shows in the same change that the

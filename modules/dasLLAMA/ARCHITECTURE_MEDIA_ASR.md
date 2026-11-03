@@ -92,14 +92,40 @@ feeds q and k while v requants the unrotated rows. Rotating q and k after their 
 
 The scores take `attention_bidir` unmasked over the whole clip at scale 1/sqrt(48): a single clip has no padded keys.
 
-### GigaAM serves its block GEMMs as the carrier's halfwords or q8, its taps and CTC head as halfwords, and its front f32 {#gigaam-planes}
+### GigaAM serves its block GEMMs as the carrier's halfwords, q8, or its own quantized planes; its taps and CTC head as halfwords, and its front f32 {#gigaam-planes}
 
-The carrier holds the block GEMMs, the depthwise taps and the head GEMMs in f16 and the two subsample convs, the norms
-and the biases in f32. The ten block GEMMs a layer sit at a fixed per-layer stride in layout order (ff1 pair, q, k, v,
-out, pw1, pw2, ff2 pair), in the plane the lane picks (`gg_gemm_plane`): the exact lane copies the carrier's own f16
-halfwords into `wblob` (`gemm_f16`), the q8 lane quantizes them to Q8_0 into `qblob`/`qscales`, repacked a region at a
-time for the load's backend. A carrier whose block GEMMs hold no f16 serves them f32 in `blob` on the exact lane, and one
-that mixes f16 with another type among them is refused naming both tensors - one plane serves a region. f16 depthwise taps
+The f16 carrier holds the block GEMMs, the depthwise taps and the head GEMMs in f16 and the two subsample convs, the norms
+and the biases in f32; a quantized carrier (the hosted `q4_k`: the attention and FF GEMMs Q4_K, the conv pointwise GEMMs
+Q8_0) holds the block GEMMs in ggml's block formats and the rest as the f16 file. The ten block GEMMs a layer sit at a fixed
+per-layer stride in layout order (ff1 pair, q, k, v, out, pw1, pw2, ff2 pair), in the plane the lane picks (`gg_gemm_plane`):
+the exact lane copies the carrier's own f16 halfwords into `wblob` (`gemm_f16`), the q8 lane quantizes them to Q8_0 into
+`qblob`/`qscales`, repacked a region at a time for the load's backend. A carrier whose block GEMMs hold no f16 serves them
+f32 in `blob` on the exact lane, and one that mixes f16 with another type among them is refused naming both tensors - one
+plane serves a region.
+
+A carrier whose every block GEMM is quantized (`gg_is_kq_carrier`; a mix of quantized and float GEMMs is refused naming
+both) takes the kq lane un-pinned (`kq_lane`; the image tag `gigaam-kq`), where each GEMM serves as the file's own
+planes: a K-quant tensor transcoded into the byte planes `kq`/`ks` (`gguf_transcode_kq_at`, the engine's superblock
+planes) and repacked for the load's backend where it carries kq kernels (`kq_repacked`), a Q8_0 tensor's blocks moved
+exactly into `qblob`/`qscales`. The GEMMs pack compactly, each at its own offsets, so the chain's record keeps its
+virtual element offsets (`gemm_off` 0, the fixed stride) and the model carries one seat a GEMM in the `gemm_seats` plane
+(`TOWER_SEAT_WORDS`: the format slot, the quant offset, the scale offset); `fc_gemm_seat_index` maps a record offset to
+its seat, `tower_gemm_seat` reads it, and `tower_mm` runs a K-quant seat through `matmul_kq_rows_at` over the Q8_K
+activation image (`tower_requant` - the per-superblock scales in `xs`, the per-16 sums in `xbs`): the backend's batched kq
+tile over repacked planes - a backend that repacks them carries the tile - and the portable disk-order batch GEMM (the
+weight row walked once a position while it is hot) where the planes stayed in disk order; a Q8_0 seat on the q8 batch GEMM over the Q8_0 image. The attention's q and k read one image, and v reads it too off the rotary form, so the planner holds the three formats to one class; a GEMM's format is
+its disk type's tag on its row (`kq_tag`), and a type the lane has no seat for - a per-32 member, NVFP4 (a seat carries no `.scale` factor, the per-plane dequant factor NVFP4 stores beside its blocks), a demoted row -
+is refused naming the tensor, the pinned lanes being the way to dequantize it. The lane's name is its one K-quant member
+(`gigaam_exec_fmt`: `k4`), `kq` where the members mix, `q8` where every GEMM is Q8_0 - that carrier serves its blocks
+exactly where the q8 lane would requantize them. Pinned (`set_gigaam_q8`, the facade's fp32 rails), a quantized carrier
+dequantizes into the pinned lane's planes, as the f16 carrier would. `REVIEW.das`'s facade-tutorial check licenses
+`gigaam_gemm_stride`, `gigaam_lane_tag`, `gigaam_kq_members`, `gigaam_fc_record_seats` and `gigaam_kq_members_of` beside
+the family's loader chain: defs no user program calls - the loader lays the seat index by the stride, the bake tool names
+the lane's image tag, the load log and the tests read the members, the device chains read the record seats and name the
+members in a decline. It licenses the GPU flavor's names too - `register_gigaam_flavor`, `gigaam_dev_flavor`,
+`gigaam_rnnt_dev_bake`, `rnnt_gpu_projects`, `rnnt_dev_bake` and `gigaam_gpu_lane_planes`: a driver registers the flavor,
+the load and the tests pick it, a driver's bake places the transducer halves in its device block
+(`ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block`), and a driver's serves predicate asks the lane's planes. f16 depthwise taps
 (`dw_f16`) sit in `wblob` on both lanes, behind the block GEMMs where they are there, every layer's [k][d] at `dw_off`; a
 carrier whose taps mix f16 with another type is refused the same way, and one whose taps hold no f16 keeps them f32 in
 `blob`. An f16 CTC head (`ctc_f16`) sits in `wblob` on both lanes behind them: its rows padded with zero rows to
@@ -114,20 +140,23 @@ the f32 plane's to the bit at half the weight bytes, and the exact lane is the u
 fp32 rounding. The CPU CTC head reads its halfwords through the same GEMM. The
 CPU depthwise conv over f16 taps (`fc_dw_bias_rows_f16`) widens a layer's [k][d] taps once a call into a scratch the call drops,
 then runs the f32 loop, so its rows are the f32 taps' to the bit; the GPU stamps read the halfwords in the kernel
-(`GkDwConvRows` TAP_F16: `MetalGaDwH`, `TowerGaDwH`), the bias row staying in the f32 plane. The Metal FastConformer chain binds `wblob` as
-its halfword GEMM plane and reads it through the half tensor GEMM alone - the f32 blob holds no block GEMM, so a box
-without the half tensor crown, or under `DASLLAMA_METAL_TOWER_F16=0`, declines the chain and the CPU serves; the front's
-conv stays on the f32 tile over `blob`. On the q8 lane the chain uploads every block's Q8_0 regions once a model into one
-device slab (`tw_fc_q8_attach`, the whisper-class towers' slab form) and runs each GEMM on the prefill q8 ladder
-(`pf_enc_q8_mm`); the mel, the front, the CTC head and the transducer decode serve on the device on both lanes. The Vulkan
-FastConformer chain serves both lanes, the exact lane's GEMMs on the f16 GEMM over the uploaded halfwords
-(`ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-rotary`), the f16 taps uploaded as the resident's own halfword plane
-(`taps_dev`) on both lanes.
+(`GkDwConvRows` TAP_F16: `MetalGaDwH`, `TowerGaDwH`), the bias row staying in the f32 plane. A load the box's GPU chain
+serves maps that driver's image (`gigaam_dev_flavor`, `ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block`), its device
+block baked at mint, and the whole encode - the mel, the front, the blocks, the CTC head and the transducer decode - serves
+on the device. The Metal FastConformer chain reads the exact lane's `wblob` through the half tensor GEMM alone, so the Metal
+flavor serves that lane only under the half tensor crown; the q8 lane's Q8_0 regions sit in the block as one 34-byte slab the
+prefill q8 ladder (`pf_enc_q8_mm`) reads. Both chains serve the kq lane on their own K-quant tiles over the members' device
+forms (`ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-kq`, `ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-kq`). The Vulkan chain's
+exact and kq lanes read the f16 GEMM feed (`ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-rotary`), and its conv front
+rides that feed on every lane, so a device off the feed (`DASLLAMA_COOPMAT=sdot4`) serves no lane: the load maps the CPU
+image. A flavor serves a lane only over block GEMM planes its chain reads (`gigaam_gpu_lane_planes`: the q8 image, the kq
+lane's own planes, the exact lane's halfwords) - a K-quant carrier widened to f32 by a pin takes the CPU image. A load no
+flavor serves maps the CPU image and runs whole on the CPU.
 
 The un-pinned lane follows the device's faster lane (`ARCHITECTURE_MEDIA.md#tower-weight-lane`): the Metal driver
 registers the exact lane as its faster one; the Vulkan driver registers the q8 image as its faster one until the two lanes
-are timed on a Vulkan box, `DASLLAMA_VK_GIGAAM_EXACT` (`set_vulkan_gigaam_exact_lane`) flipping it. Both lanes serve on
-both devices, so the device-lane report (`gigaam_device_gpu`) names the device on either.
+are timed on a Vulkan box, `DASLLAMA_VK_GIGAAM_EXACT` (`set_vulkan_gigaam_exact_lane`) flipping it. The device-lane report
+(`gigaam_device_gpu`) names the device for a GPU-flavored image, whatever its lane.
 
 The mint streams (`gg_mint`): `stage_gigaam_model` reads the hparams, the mel planes and one fill job a tensor
 (`GigaamFillJob`: its plane, offset and count), and the mint writes each weight plane off the mapped carrier one tensor
@@ -206,3 +235,12 @@ its window or ends the clip, so a clip takes at most n_frames x (`max_symbols` +
 clip not done declines (`overrun`) and the CPU loop decodes, as it does after a failed command buffer. The pick's argmax keeps the CPU's first index of a tie, and its duration argmax
 compares exp(logit - max) as the CPU's float rounds it, the subnormal range a tier of its own, so a duration the CPU flushes to
 zero ties at index 0 on both.
+
+### An ASR decoder that is a plain Model session rides the box decode policy {#asr-decoder-session}
+
+The gemma4a, canary and qwen3a routes drive their decoders as ordinary `Model` sessions - embed
+rows, then eval - so they load with no planar pin and take whatever decode form the box has armed,
+the Metal blob included. The canary serving artifact is Q8_0 for exactly this reason: its tied
+classifier serves the q8 plane, while the f16 parity carrier still mints planar on its own because
+the blob drivers decline a tied-fp32 classifier at mint. Whisper and parakeet stay planar - their
+decoders are hand-written CPU loops that read planes directly.

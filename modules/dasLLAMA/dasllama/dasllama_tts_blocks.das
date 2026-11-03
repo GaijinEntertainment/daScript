@@ -15,6 +15,7 @@ require dasllama/dasllama_convert
 require dasllama/dasllama_tower
 require dasllama/dasllama_gpu_math   // sigmoid_f32 and the STFT scalars: the one form the CPU chain and the kernel homes share
 require dasllama/dasllama_common
+require dasllama/dasllama_gemm_schema   // Q8K_SUM_ELEMS - the Q8_K activation form's sum block
 require dasllama/dasllama_image   // count_meta_fields - the leaf serializers' field tripwire
 
 //! The StyleTTS2-lineage block home: every operator the TTS families assemble, on f32
@@ -1151,23 +1152,20 @@ def private kq_gemv_row(l : TtsLinear; x : array<float>; xoff : int64; var y : a
 }
 
 // The K-quant lane of linear_rows: the rows requantized to the Q8_K form at once and one batched
-// kq GEMM where the backend carries the tile, else the GEMV per row; then the bias.
+// kq GEMM over the repacked or the disk-order planes; then the bias.
 [arch(at = "../ARCHITECTURE_POCKET.md#pocket-q8-file")]
 def private linear_rows_kq(l : TtsLinear; x : array<float>; t : int64; var y : array<float>) {
     let nin = l.nin
-    if (l.kq_repacked && kernel_backend_has_kq_batch()) {
-        var xq & = g_kq_xq
-        var xs & = g_kq_xs
-        var xbs & = g_kq_xbs
-        xq |> reserve_resize(t * nin)
-        xs |> reserve_resize(t * nin / 256l)
-        xbs |> reserve_resize(t * nin / 16l)
-        requant_rows_q8k_bs(x, nin, t, xq, xs, xbs, t * nin >= g_requant_par_threshold)
-        matmul_kq_batch(l.kq_fmt, y, l.kq, l.ks, 0l, xq, xs, xbs, nin, l.nout, t)
-    } else {
-        for (r in range64(t)) {
-            kq_gemv_row(l, x, r * nin, y, r * l.nout)
-        }
+    var xq & = g_kq_xq
+    var xs & = g_kq_xs
+    var xbs & = g_kq_xbs
+    xq |> reserve_resize(t * nin)
+    xs |> reserve_resize(t * nin / KQ_SB_ELEMS)
+    xbs |> reserve_resize(t * nin / Q8K_SUM_ELEMS)
+    requant_rows_q8k_bs(x, nin, t, xq, xs, xbs, t * nin >= g_requant_par_threshold)
+    unsafe {
+        matmul_kq_rows_at(l.kq_fmt, l.kq_repacked, addr(y[0]), addr<uint8 const?>(l.kq[0]), addr<uint8 const?>(l.ks[0]),
+                          addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), addr<int const?>(xbs[0]), nin, l.nout, t)
     }
     linear_rows_add_bias(l, t, y)
 }

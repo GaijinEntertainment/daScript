@@ -409,10 +409,13 @@ let HF = "https://huggingface.co"   // shared with profile_common's asr_catalog 
 
 //! The q8 reference-carrier recipe: derived on-box by setup_asr_rig --refs (whisper.cpp
 //! quantize over the fp bin beside it); size varies with the quantize tool's build, so
-//! presence-gated, not sha-gated. fetch_models' --convert arm skips this string and
-//! CRISPASR_Q8_RECIPE: setup_asr_rig --refs derives both.
+//! presence-gated, not sha-gated. fetch_models' --convert arm skips this string,
+//! CRISPASR_Q8_RECIPE and GIGAAM_KQ_MIX_RECIPE: setup_asr_rig --refs derives them.
 let REF_Q8_RECIPE = "derive: setup_asr_rig.das --refs quantizes it from the fp bin beside it (whisper.cpp quantize q8_0); reference-side carrier, presence-gated"
 let CRISPASR_Q8_RECIPE = "derive: setup_asr_rig.das --refs quantizes it from the f16 GGUF beside it (CrispASR crispasr-quantize q8_0: the ten block GEMMs a layer, the rest copied); reference-side carrier, presence-gated"
+//! the quantize arguments of the GigaAM kq lane's mixed-member carrier: q4_k with the FF GEMMs overridden to Q6_K
+let GIGAAM_KQ_MIX_ARGS = "q4_k --tensor-type \"ff[12]\\.linear[12]\\.weight=q6_k\""
+let GIGAAM_KQ_MIX_RECIPE = "derive: setup_asr_rig.das --refs quantizes it from the f16 GGUF beside it (CrispASR crispasr-quantize {GIGAAM_KQ_MIX_ARGS}: Q4_K attention, Q6_K FF, Q8_0 conv pointwise) - the kq lane's mixed-member carrier (tests/test_gigaam.das, tests/test_audio.das); presence-gated"
 
 // The parakeet conversion rail is retired: ggml-org/parakeet-GGUF hosts the v3 bin
 // byte-identical to the canonical conversion (sha-verified), so v3 fetches like any
@@ -420,6 +423,7 @@ let CRISPASR_Q8_RECIPE = "derive: setup_asr_rig.das --refs quantizes it from the
 let PARAKEET_V2_NOTE = "historic nemo-venv conversion (rail retired); present only on boxes that converted it - v3 is the fetched carrier"
 //! the GigaAM v3 carriers' recipe: hosted f16 GGUFs, the top precision offered
 let GIGAAM_RECIPE = "fetched: cstr/gigaam-v3-GGUF, converted by CrispASR's models/convert-gigaam-to-gguf.py from salute-developers/GigaAM v3; Russian only, the e2e heads write cased, punctuated text; THIRD_PARTY_NOTICES.md (module root) carries the attribution"
+let GIGAAM_Q4K_RECIPE = "fetched: cstr/gigaam-v3-GGUF's q4_k file, CrispASR's crispasr-quantize over the f16 carrier (the attention and FF GEMMs Q4_K, the conv pointwise GEMMs Q8_0, the rest as the f16 file); serves on the kq lane as its own planes; THIRD_PARTY_NOTICES.md (module root) carries the attribution"
 let CANARY_ENC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv; encoder is a repack - sha canonical everywhere)"
 let CANARY_DEC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv), then llama-quantize Q8_0 (a Q8_0 disk embedding lets the tied classifier serve cls_q8 on the Metal rail); bytes are per-arch (fp16 LoRA merge) - gate via asr_bench --text over jfk/jfk3/gb1 vs benchmarks/asr/canary_transcripts.expected"
 let TTS_HF = "{HF}/borisbat/dasllama-tts/resolve/9e6b0aa612bcb1473c5bd4ca129fb47ad1a69bc2"   //! the published set, commit-pinned

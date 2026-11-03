@@ -40,7 +40,7 @@ require dasllama/dasllama_gemm_schema   // the q8 block geometry the mint's zero
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 55   // the meta carries the nv4 stacks' per-expert site scales (exps_scale)
+let IMAGE_VERSION = 56   // the towers' meta carries a GPU flavor's device block (dev_backend, dev, devplan) and the GigaAM meta the kq lane (kq_lane, kq_repacked, kq_fmt)
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -279,6 +279,26 @@ def register_image_family_tag(tag : string; config_free : bool = false) {
     if (config_free && !has_value(g_config_free_tags, tag)) {
         g_config_free_tags |> push(tag)
     }
+}
+
+var private g_flavor_lane : table<string; string>   //! a GPU flavor's image tag -> the lane it serves (`#tower-dev-block`)
+
+//! Register `tag` as a GPU flavor of the lane `lane` (`#tower-dev-block`): a family tag of its own - config-free, unless a CPU
+//! backend lays planes of its image - and a named image baked under it serves wherever `lane` is asked for
+def register_image_flavor_tag(tag, lane : string; config_free : bool = true) {
+    register_image_family_tag(tag, config_free)
+    g_flavor_lane |> insert(tag, lane)
+}
+
+//! The lane a baked family tag serves: a GPU flavor's lane, else the tag itself (`#tower-dev-block`)
+def image_tag_lane(tag : string) : string => g_flavor_lane?[tag] ?? tag
+
+//! The tag a named `.dlim` at `path` loads under where the caller asks for the lane `lane`: its baked tag where that is `lane` or
+//! one of `lane`'s GPU flavors, else `lane` - whose identity check then names the mismatch
+def named_image_tag(path, lane : string) : string {
+    let baked = image_family_tag(path)
+    return baked if (image_tag_lane(baked) == lane)
+    return lane
 }
 
 //! The same registration with a function answering ``layout_fingerprint`` of the family's
@@ -1951,6 +1971,20 @@ def private metal_derive_plane(var t : Model; name : string; var w : ImgWriter;
     return name == "qscales" || name == "qscales16" || name == "mblob"
 }
 
+var g_image_destination = ""   //! the one sink a mint under `with_image_destination` writes; "" = the lane's path beside the source
+
+//! Whether a mint writes the file at `img`: the lane's path under the save switch, or the destination the converter named.
+def image_sink_writes(img : string) : bool => img != "" && (image_save_enabled() || img == g_image_destination)
+
+//! Every mint inside `blk` writes its image to `out` alone; an empty `out` names no destination, and `blk` runs as any load does.
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-destination")]
+def with_image_destination(out : string; blk : block<() : void>) {
+    let prev = g_image_destination
+    g_image_destination = out
+    invoke(blk)
+    g_image_destination = prev
+}
+
 //! The cold half of a cached load, for any carrier: turn the freshly-loaded `m` into its prepared image and put the image-served struct in `out`.
 //! With a target path the FILE is the handoff (`m` is dropped between write and map); without one the image is built in memory. `m` is spent.
 //! True only when the FILE was written: only then may the caller reap its lane.
@@ -1975,7 +2009,7 @@ def cache_via_image_staged(var st; var out; img : string; tag : string = ""; qua
 //! mapping. True only when the FILE was written: only then may the caller reap its lane.
 def cache_via_image_staged_hooked(var st; var out; img : string; extra : uint64; tag : string; quant : string;
                                   plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : bool {
-    if (img != "" && image_save_enabled()) {
+    if (image_sink_writes(img)) {
         let ts = ref_time_ticks()
         if (save_image_to_file(st, img, extra, tag, quant, layout_fingerprint(out), plane)) {
             map_written_image(st, out, img, tag, quant, ts)
@@ -2000,15 +2034,19 @@ def load_through_image(path, tag, who, source : string; carrier : auto(T);
         apply_box_profile_runtime()
         let ts_img = ref_time_ticks()
         var t = T()
-        if (!load_image(path, t, tag)) {
-            panic("dasLLAMA: '{path}' is not a prepared {who} image for this box/knobs (identity {image_identity(tag)}) - regenerate it from the {source}")
+        let named = named_image_tag(path, tag)
+        if (!load_image(path, t, named)) {
+            panic("dasLLAMA: '{path}' is not a prepared {who} image for this box/knobs (identity {image_identity(named)}) - regenerate it from the {source}")
         }
         to_log(LOG_INFO, "dasLLAMA: prepared {who} image mapped in {get_time_usec(ts_img) / 1000} ms - {path}\n")
         invoke(check, t, path)
         return <- t
     }
     var img = ""
-    if (g_env_engine.image) {
+    let to_destination = !empty(g_image_destination)
+    if (to_destination) {
+        img = g_image_destination
+    } elif (g_env_engine.image) {
         apply_box_profile_runtime()
         img = image_path_for(path, tag)
         let ts_img = ref_time_ticks()
@@ -2021,7 +2059,7 @@ def load_through_image(path, tag, who, source : string; carrier : auto(T);
         delete t
     }
     var built = T()
-    if (invoke(mint, img, built)) {
+    if (invoke(mint, img, built) && !to_destination) {
         dlim_gc_stale(path, tag)
     }
     invoke(check, built, img != "" ? img : path)
@@ -2071,7 +2109,7 @@ def delete_staging(var st) {
 
 def private cache_via_image_(var m; var out; img : string; tag : string; quant : string;
                              plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : bool {
-    if (img == "" || !image_save_enabled()) {
+    if (!image_sink_writes(img)) {
         if (!chunk_rail(m, out, "", 0ul, tag, quant, plane)) {
             out <- m   // nolint:PERF030 — `out` is the caller's fresh destination (the cache_via_image contract); m is spent
         }

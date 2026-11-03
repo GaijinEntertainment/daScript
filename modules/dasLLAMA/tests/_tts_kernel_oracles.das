@@ -17,9 +17,7 @@ require daslib/jobque_boost
 def f16_at(seed : int; scale, bias : float) : float => float(float16(scale * float(seed) + bias))
 
 //! `n` f16-exact patterned values: seed (i * seed_mul) % 47 through `f16_at`
-def f16_fill(n, seed_mul : int; scale, bias : float) : array<float> {
-    return <- [for (i in range(n)); f16_at((i * seed_mul) % 47, scale, bias)]
-}
+def f16_fill(n, seed_mul : int; scale, bias : float) : array<float> => <- [for (i in range(n)); f16_at((i * seed_mul) % 47, scale, bias)]
 
 let TTS_SRC_NH = 3          //! the harmonics the source cells mix
 let TTS_SRC_SR = 24000.0
@@ -125,6 +123,7 @@ def stft_ref(signal, wre, wim : array<float>; n, k, hop, pad, bins : int; reflec
 //! the inverse STFT's samples and how many of them carry a negligible envelope
 struct TtsIstftRef {
     want : array<float>
+    terms : array<float>   //! each sample's sum of its terms' magnitudes, the envelope divided out as `want` has it: the scale a cancelling sum's f32 rounding rides
     undivided : int     //! the samples whose envelope is negligible, left undivided
 }
 
@@ -133,9 +132,11 @@ def istft_ref(y, wre, wim, window : array<float>; frames, stride, bins, k, hop, 
     let n = (frames - 1) * hop + k - 2 * pad
     var r : TtsIstftRef
     r.want |> resize(n)
+    r.terms |> resize(n)
     for (i in range(n)) {
         let m = i + pad
         var acc = 0.0lf
+        var tsum = 0.0lf
         var env = 0.0lf
         for (tap in range(k)) {
             continue if (m < tap || (m - tap) % hop != 0)
@@ -144,12 +145,17 @@ def istft_ref(y, wre, wim, window : array<float>; frames, stride, bins, k, hop, 
             for (b in range(bins)) {
                 let mag = exp(y[q * stride + b])
                 let ph = sin(y[q * stride + bins + b])
-                acc += double(mag * cos(ph) * wre[tap * bins + b]) - double(mag * sin(ph) * wim[tap * bins + b])
+                let tre = double(mag * cos(ph) * wre[tap * bins + b])
+                let tim = double(mag * sin(ph) * wim[tap * bins + b])
+                acc += tre - tim
+                tsum += abs(tre) + abs(tim)
             }
             env += double(window[tap] * window[tap])
         }
         r.undivided += env > 1e-11lf ? 0 : 1
-        r.want[i] = float((divide_envelope && env > 1e-11lf) ? acc / env : acc)
+        let divide = divide_envelope && env > 1e-11lf
+        r.want[i] = float(divide ? acc / env : acc)
+        r.terms[i] = float(divide ? tsum / env : tsum)
     }
     return <- r
 }

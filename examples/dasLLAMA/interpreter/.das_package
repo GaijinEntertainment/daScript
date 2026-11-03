@@ -1,0 +1,19 @@
+options gen2
+
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("interpreter")
+    package_description("Interpreter: speak Russian, hear it back in English - GigaAM hears, Bergamot translates, Pocket TTS speaks, with every turn's transcript, translation and stage times on the panels - Dear ImGui + dasAudio over dasLLAMA")
+}
+
+[export]
+def release() {
+    release_main("main.das")
+    release_web_shell("web_shell.html")
+    release_wasm_disable_module("dasvulkan")
+    release_wasm_disable_module("dascuda")
+    release_wasm_disable_module("dasmetal")
+    release_wasm_disable_module("dasaccelerate")
+}

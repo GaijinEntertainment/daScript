@@ -828,18 +828,11 @@ def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xs
     return 0.0
 }
 
-//! Rows [rb, re) of a kq region off the DISK-ORDER planes through the format's dot: y[i] = the
-//! dot of row i, the row strides off the descriptor. Generic in the tag; the gen tier's row tails
-//! and the fused chains thread it.
+//! Rows [rb, re) of a kq region off the DISK-ORDER planes through the format's dot against one Q8_K activation row: y[i] =
+//! the dot of row i - `kq_rows_batch_kernel` at one token. Generic in the tag; the gen tier's row tails and the fused chains
+//! thread it.
 def kq_rows_kernel(f : auto(TT); fmt : KqFmt; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) {
-    let nsb = n / 256l
-    let qsb = kq_qsb(fmt)
-    let ssb = kq_ssb(fmt)
-    unsafe {
-        for (i in range64(rb, re)) {
-            yp[i] = dot_kq(kqp + i * nsb * qsb, ksp + i * nsb * ssb, xqp, xsp, xbsp, n, f)
-        }
-    }
+    kq_rows_batch_kernel(f, fmt, yp, kqp, ksp, xqp, xsp, xbsp, n, 0l, 1l, rb, re)
 }
 
 [unused_argument(xbsp)]
@@ -931,12 +924,32 @@ def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : 
     return acc
 }
 
-def private kq_gemv_kernel(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
-    let kf = kq_fmt_of_id(fmt, "kq_gemv_kernel")
+//! The disk-order kq rows kernel: rows [rb, re) against every one of `ntok` Q8_K activation rows, the weight
+//! row walked once a token while it is hot - the loop order the q8 batch kernel takes; token t's outputs land at `yp[t * d]`.
+def kq_rows_batch_kernel(f : auto(TT); fmt : KqFmt; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, ntok, rb, re : int64) {
+    let nsb = n / KQ_SB_ELEMS
+    let nh = n / Q8K_SUM_ELEMS
+    let qsb = kq_qsb(fmt)
+    let ssb = kq_ssb(fmt)
+    unsafe {
+        for (i in range64(rb, re)) {
+            let wrow = kqp + i * nsb * qsb
+            let srow = ksp + i * nsb * ssb
+            for (t in range64(ntok)) {
+                yp[t * d + i] = dot_kq(wrow, srow, xqp + t * n, xsp + t * nsb, xbsp + t * nh, n, f)
+            }
+        }
+    }
+}
+
+//! the disk-order GEMM over `ntok` Q8_K activation rows, the rows split over the pool - the GEMV's chunking at one token
+def private kq_gemm_kernel(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, ntok : int64) {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
+    let kf = kq_fmt_of_id(fmt, "kq_gemm_kernel")
     var myp = yp
+    let chunks = ntok == 1l ? matmul_chunks_gemv(int(d), 1, n * d) : matmul_chunks(int(d), 1, n * d * ntok)
     kq_fmt_stamp(kf) $(F) {
-        maybe_parallel_for(0, int(d), matmul_chunks_gemv(int(d), 1, n * d)) $(rb, re) {
-            kq_rows_kernel(F, kf, myp, kqp, ksp, xqp, xsp, xbsp, n, int64(rb), int64(re))
+        maybe_parallel_for(0, int(d), chunks) $(rb, re) {
+            kq_rows_batch_kernel(F, kf, myp, kqp, ksp, xqp, xsp, xbsp, n, d, ntok, int64(rb), int64(re))
         }
     }
 }
@@ -1337,8 +1350,20 @@ def matmul_kq(fmt : int; var y : array<float> | #; kq : array<uint8> | #; ks : a
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
     unsafe {
-        kq_gemv_kernel(fmt, addr(y[yoff]), addr(kq[sb * qsb]), addr(ks[sb * ssb]),
-                       addr(xq[0]), addr(xs[0]), addr(xbs[0]), n, d)
+        kq_gemm_kernel(fmt, addr(y[yoff]), addr(kq[sb * qsb]), addr(ks[sb * ssb]),
+                       addr(xq[0]), addr(xs[0]), addr(xbs[0]), n, d, 1l)
+    }
+}
+
+//! The kq GEMM over `ntok` Q8_K activation rows (`xq` at `n` a row, `xs` at `n / 256`, `xbs` at `n / 16`) off a plane pair
+//! handed as the region's own base pointers, token t's `d` outputs at `y[t * d]`: a repacked plane on the active backend's
+//! batch tile - the one repacking backend carries it -, a disk-order plane on the portable batch kernel.
+def matmul_kq_rows_at(fmt : int; repacked : bool; var y : float?; kq, ks : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, d, ntok : int64) {
+    if (repacked) {
+        verify(kernel_backend_has_kq_batch(), "the kq planes are repacked for a backend with no kq batch tile")
+        matmul_kq_batch_at(fmt, y, kq, ks, xq, xs, xbs, n, d, ntok)
+    } else {
+        kq_gemm_kernel(fmt, y, kq, ks, xq, xs, xbs, n, d, ntok)
     }
 }
 

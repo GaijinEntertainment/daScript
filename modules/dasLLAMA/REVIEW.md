@@ -67,20 +67,18 @@ gives it a `MODULE_AREAS` row naming those areas and a `MODULE_WITNESSES` row na
 `model-free` or `stocked` `llm` test file that runs its code, in the same change.** A module with
 no row runs every area, one with `llm` and no witness row the core set: safe, and slower each PR.
 
-**A diff after which an area's tests, or a `model-free` or `stocked` `llm` test file, run an
-existing module's code that its `MODULE_AREAS` or `MODULE_WITNESSES` row omits adds the area or
-the file to the row in the same change.** A new caller counts, wherever it sits, and so does an
-existing test file that starts loading a GGUF it did not load before: the module it now runs is
-the `dasllama/dasllama_arch_*.das` file that registers that GGUF's `general.architecture` string;
-a row missing an area or a file makes `run.das -- --changed` skip those tests, so a regression
-there goes unrun.
+**A diff after which a test file runs an existing module's code, where that module's
+`MODULE_AREAS` row reaches the file through none of its areas and its `MODULE_WITNESSES` row does
+not name it - so `tests/run.das -- --changed` does not plan the file for that module - adds one
+area or the file to the row in the same change.** A test file that starts loading an LLM GGUF
+runs the `dasllama/dasllama_arch_*.das` file registering that GGUF's `general.architecture`.
 
 **A `[test]` file with a `require dasllama/...` line of its own, wherever the diff puts it, and
 every `dasllama/` change answer to this folder's `tests/REVIEW.md`.**
 
-**A diff that changes the body, parameters or return type of a CPU kernel - a function in
-`dasllama/dasllama_math*.das` that runs on the CPU and writes an output buffer from operand
-buffers - applies `tests/REVIEW_KERNEL_CELLS.md`.**
+**A diff that adds a CPU kernel, or changes the body, parameters or return type of one - a
+function in `dasllama/dasllama_math*.das` that runs on the CPU and writes an output buffer from
+operand buffers - applies `tests/REVIEW_KERNEL_CELLS.md`.**
 
 **A diff that adds, moves or removes a `[test]` file outside this folder's `tests/` with a
 `require dasllama/...` line of its own adds, corrects or drops its row, with the reason it lives
@@ -188,13 +186,19 @@ Every recorded row, tune sidecar and exchange entry carries the release, so a bu
 `REVIEW_IMAGE.md`.**
 
 **A diff that adds or changes a `dasllama/dasllama_common.das` function that reaches, or reports
-on, another module's hook (a function-typed global another module's `[init]` sets), moves a
-`dasllama/` stage's work onto a GPU hook (a hook a GPU driver module's `[init]` sets), calls a
-`set_*_q8` lane setter under `dasllama/` or `harness/`, or adds or changes an override (an environment knob,
-a non-private `dasllama/` setter a file outside `tests/` calls, or an on-disk state file a run
-writes or a user places, any of them moving a gate, policy or threshold off its default) or its
-announce (the line a run prints where the override changes the outcome) applies
+on, another module's hook (a function-typed global another module's `[init]` sets) applies
 `REVIEW_OVERRIDES.md` (beside this file) too.**
+
+**A diff that moves a `dasllama/` stage's work onto a GPU hook (a hook a GPU driver module's
+`[init]` sets) applies `REVIEW_OVERRIDES.md` too.**
+
+**A diff that calls a `set_*_q8` lane setter under `dasllama/` or `harness/` applies
+`REVIEW_OVERRIDES.md` too.**
+
+**A diff that adds or changes an override - an environment knob, a non-private `dasllama/` setter
+a file outside `tests/` calls, or an on-disk state file a run writes or a user places, any of them
+moving a gate, policy or threshold off its default - or an override's announce (the line a run
+prints where the override changes the outcome) applies `REVIEW_OVERRIDES.md` too.**
 
 **A call site a diff adds - not a call it moved from another site - of a CPU or GPU matrix
 multiply whose weight operand is an f32 plane, outside a correctness-comparison path (one only
@@ -205,11 +209,12 @@ site that must stay f32 for another reason is ledgered on its file's charter lin
 the companion `ARCHITECTURE.md#file-charters` routes to, saying what the file holds); a call-site
 comment does not discharge this.
 
-**A caller and a callee whose every caller sits under this folder never both check one guard: the
-caller keeps the check and the callee drops it when the callee is `[cold_path]`; where the caller's
-check also gates its own work, the caller computes the decision once and passes it to the callee;
-otherwise the caller's copy goes.**
-An edit to either copy leaves the caller testing a condition the callee no longer applies.
+**One decision computed twice along a call chain under this folder - a helper the caller calls
+counting as the caller - is a defect: compute it once and pass it.** An edit to one copy leaves
+the other testing a condition the first no longer applies.
+
+**Where a guard sits in both a caller and a `[cold_path]` callee whose every caller is under this
+folder, the caller keeps it and the callee drops it.**
 
 **Logic or a named constant that two files in one folder both use, and that neither the language nor
 the test contract forces them to restate (a test's CPU reference copy of the arithmetic it checks is
@@ -273,10 +278,10 @@ of this module compares with this module's own), or names that build, its binari
 wherever the diff puts it - and the commit message or PR body of such a diff - applies
 `REVIEW_UPSTREAM.md`.**
 
-**A diff that changes the work a `HOW_TO_*.md` tells its author to do - a step added or dropped, a
-file the author must touch, a table, fixture or probe entry the work must supply, or a gate it must
-pass - updates that HOW_TO in the same change.** A how-to is the next author's whole brief: a step
-dropped there is a step the next author skips without knowing.
+**A diff that adds a step, a file to touch, a table, fixture or probe entry, or a gate to the work
+a `HOW_TO_*.md` covers, where that HOW_TO does not name it, names it there in the same change.** A
+how-to is the next author's whole brief: a step missing there is a step the next author skips
+without knowing.
 
 **Legal attribution - a third party's copyright line, licence name, or licence text - lives in
 a model card (the provenance-and-licence page beside a released model or pack), this folder's

@@ -18,7 +18,10 @@ carriers name, and no TTS family file (`dasllama_kitten`, `dasllama_kokoro`, `da
 - **`dasllama_tower.das`** - the family-neutral encoder-tower home, composed by every audio AND vision tower: the
   oracle-exact activations (erf / tanh-LUT / quick-LUT gelu, swiglu, geglu), the LayerNorm/RMS row forms, bias and
   residual row adds and the fused bias + ReLU (`bias_relu_rows`), the `mm_blob_b`/`mm_bf16_b`/`mm_plane_b` GEMM wrappers
-  and the q8-lane families' generic pair `tower_mm`/`tower_mm_rq`, the GGUF conv reader `tower_read_conv_tap_major` (its reorder is `dasllama_repack`'s), the
+  and the q8-lane families' generic pair `tower_mm`/`tower_mm_rq` (with the kq lane's GEMM seats - `TowerGemmSeat`,
+  `tower_gemm_seat`, `fc_gemm_seat_index`, `tower_requant` - where a family serves a carrier's own quantized planes),
+  the GPU flavors' device block (`TowerDev`, `TowerDevBuild`, `tower_dev_put` / `tower_dev_find` / `tower_dev_word`,
+  `ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block`), the GGUF conv reader `tower_read_conv_tap_major` (its reorder is `dasllama_repack`'s), the
   load's lane line `announce_lane`, `Clamp`/`read_clamp` (`read_clamp` returns the four scalars the projector file
   stores beside a weight tensor - `<base>.input_min` / `.input_max` / `.output_min` / `.output_max` - or an inactive
   +/-FLT_MAX clamp where the file carries none), `im2col_rgb_patches`, the Transformer-XL rel-position table
@@ -31,6 +34,11 @@ carriers name, and no TTS family file (`dasllama_kitten`, `dasllama_kokoro`, `da
   `FcCpuForm` flags alone - `biased` (off for parakeet), `tap_major` (off for canary), `conv_ln` (gigaam's LayerNorm
   conv module) and `vec4` (off for canary) - and on its position type, `FcRelPos` or `FcRotary`. The one home: a family
   file that re-implements one of these is a defect, and nothing here names a family type.
+- **`dasllama_tower_image.das`** - a GPU-flavored tower image's mint and staged load (`#tower-dev-block`): the flavor pick
+  (`tower_dev_flavor`), the CPU refusal of a GPU image (`tower_cpu_refuse`), the flavor tags (`register_tower_dev_tags`),
+  the mint that bakes a driver's device block over the CPU form and copies every unconsumed plane beside it
+  (`tower_dev_image`, `tower_mint_dev`, `tower_mint_flavor`) and the staged load that takes a flavor
+  (`load_staged_image_dev`). Generic over a family's staging and carrier; nothing here names a family type.
 - **`dasllama_audio.das`** - the audio encoder tower: the mel front-ends (mtmd and whisper.cpp flavors, and the canary,
   gemma4a, qwen3a and gigaam flavors - each a `MelForm` over the one `mel_spectrum_rows`, whose branches are the form's
   `MelSum` sum order and `MelLog` log law), `AudioTower` with its staging, q8-quantize, and image rails, `EncoderState`,
@@ -144,7 +152,7 @@ carriers name, and no TTS family file (`dasllama_kitten`, `dasllama_kokoro`, `da
   quantize fine at 0.007 x rms, and a float-activation q8 GEMM wins nothing on these
   compute-bound shapes since the CPU speedup IS the int8xint8 dot). It stages every GEMM
   f32-in-blob at the served padded widths (`ARCHITECTURE_MEDIA.md#tower-padded-widths`) whatever the file's element type, and
-  bakes the halfword twin (`ARCHITECTURE_IMAGE.md#image-tower-twin-plane`) when the block and merger GEMMs
+  bakes the halfword twin (`ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane`) when the block and merger GEMMs
   share one halfword type; the Metal tower serves stem, blocks and merger tail off `s.x0`
   through `register_qwen25v_gpu`.
 - **`dasllama_vision_embedder.das`** - the vision carrier: `VisionEmbedder` / `VisionState`, the
@@ -250,7 +258,7 @@ armed (`set_audio_encode_ref_dir`), the whisper-class tower skips its conv and b
 the CPU forms: the witness diffs the CPU stages' rows against reference dumps, and a stage the
 device served leaves nothing to diff.
 
-A hook that serves past its seat - the gemma4a blocks hook running the projector tail - says so
+A hook that serves past its seat - the gemma4a whole-chunk hook running the projector tail - says so
 on the state it filled (`Gemma4aState.out_ready`), and the family's CPU tail reads the flag before
 it runs; the flag is cleared before every hook call, so a hook that stops at its seat leaves the
 CPU tail in force.
@@ -277,7 +285,9 @@ box takes q8 and serves a pinned exact tower on its f32 tile; every other box ta
 the Metal tower reads its q8 planes. Each family exposes the same trio over one `GemmLane` pin
 (`lane_serves_q8`, `dasllama_common.das`): `set_*_q8` pins a lane, `reset_*_q8` returns to the
 policy, `*_serves_q8` reports the lane the next load would take. The
-lane picks the image tag, so the two lanes are separate images that coexist.
+lane picks the image tag, so the two lanes are separate images that coexist. A family whose carrier can hold its GEMMs
+quantized (GigaAM) has a third lane the file decides: un-pinned, such a carrier serves the GEMMs as its own planes
+(`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`) whatever the GPU policy says, and a pin dequantizes it into the pinned lane.
 
 Pins exist for the arms that must not follow the box: the parity legs, the CPU board rows, and the
 facade's fp32 rail.
@@ -286,12 +296,3 @@ Every family load logs its GEMM lane and the reason at LOG_INFO - the pin, the s
 lane, the accelerate tier, or the CPU default - because the lane changes what the load mints and serves. Where the
 caller hands the lane in (parakeet, canary), the line names the caller's pick beside the reason
 the policy gives, so a caller that overrides the policy shows as a pick its reason does not match.
-
-### An ASR decoder that is a plain Model session rides the box decode policy {#asr-decoder-session}
-
-The gemma4a, canary and qwen3a routes drive their decoders as ordinary `Model` sessions - embed
-rows, then eval - so they load with no planar pin and take whatever decode form the box has armed,
-the Metal blob included. The canary serving artifact is Q8_0 for exactly this reason: its tied
-classifier serves the q8 plane, while the f16 parity carrier still mints planar on its own because
-the blob drivers decline a tied-fp32 classifier at mint. Whisper and parakeet stay planar - their
-decoders are hand-written CPU loops that read planes directly.

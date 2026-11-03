@@ -40,7 +40,7 @@ enum private VulkanWdecDecline {
     shape        //! a width off the tile's lattice, or a head width other than the family's 64
     device       //! the tier has no device, or a class failed to build
     memory       //! a device or pinned allocation failed
-    rows         //! the window's first batch is wider than the step's row cap: the CPU chain serves the window
+    flavor       //! the model is not the Vulkan-flavored image: each backend serves its own (`#tower-dev-block`)
 }
 
 let WD_ROW_CAP = 8l          //! the rows a decode batch may carry: the N-column GEMV's widest form
@@ -68,8 +68,6 @@ let private WD_LOGITS = 0x2000u
 let private WD_XIN = 0x4000u
 let private WD_XFEED = 0x8000u
 let private WD_TMP = 0x10000u
-let private WD_KX = 0x20000u
-let private WD_VX = 0x40000u
 
 struct private WdResident {
     key : uint64
@@ -105,18 +103,15 @@ struct private WdResident {
     pms_dev : uint64
     py_dev : uint64
     logits_dev : uint64      //! [nvocab]: the last row's logits
-    xin_dev : uint64      //! the cross-KV chain: the encoder rows, their feed, the projection output, the CPU-layout planes
+    xin_dev : uint64      //! the cross-KV chain: the encoder rows, their feed, the projection output
     xh_dev : uint64
     xkv_q_dev : uint64
     xkv_s_dev : uint64
     xkv_proj_dev : uint64
     ta_tile_rows : int64           //! the cross-KV GEMM record's rows: `ta` rounded up to the tile's token column (`vt_tile_rows`); the projection plane holds them
-    kx_dev : uint64
-    vx_dev : uint64
     xkv_meta : HostBuf
     xkv_meta_bytes : int64
     xhost : HostBuf       //! the step's rows in, the logits out
-    kvhost : HostBuf
     @scratch @exact_size site_meta : array<HostBuf>   //! a GEMV site's region pairs: [l x WD_LAYER_SITES], the tied embedding last
     @scratch @exact_size s_site : array<VkDescriptorSet>
     s_kv_k : VkDescriptorSet
@@ -129,9 +124,7 @@ struct private WdResident {
     s_post_rq : VkDescriptorSet
     s_bias_h_rq : VkDescriptorSet
     s_comb_rq : VkDescriptorSet
-    s_kvx_k : VkDescriptorSet
-    s_kvx_v : VkDescriptorSet
-    s_kvx_k16 : VkDescriptorSet   //! the resident f16 twins of the cross stores
+    s_kvx_k16 : VkDescriptorSet   //! the cross stores: the resident f16 planes the step reads
     s_kvx_v16 : VkDescriptorSet
     oom : bool
     served_said : bool
@@ -141,14 +134,11 @@ struct private WdResident {
 var private g_wd : WdResident
 var private g_wd_window_uid = 0ul     //! the live window: ONE DecoderState at a time, claimed by a served cross-KV
 var private g_wd_window_live = false
-var private g_wd_pend_uid = 0ul       //! the state whose cross-KV CPU layouts wait on the device, `g_wd_pend_bytes` a plane's bytes (0 = none)
-var private g_wd_pend_bytes = 0l
-var private g_wd_dropped : table<uint64>   //! the states whose waiting layouts were lost unread (another state's window, a release, a model drop); a state leaves it at its next window
 var private g_wd_uid_next = 1ul
 var private @scratch @exact_size g_wd_maps : array<uint>
 
 //! the driver's identity for a decoder state, minted at its first window: an address is not identity - a state freed and
-//! re-created at the same address inherits no window, no pending layouts and no mark
+//! re-created at the same address inherits no window
 def private wd_uid(var ds : DecoderState) : uint64 {
     if (ds.gpu_uid == 0ul) {
         ds.gpu_uid = g_wd_uid_next++
@@ -188,15 +178,15 @@ def private wd_decline_words(why : VulkanWdecDecline) : string {
         return "a width or head size the stamps do not serve"
     } elif (why == VulkanWdecDecline.memory) {
         return VK_DECLINE_WORDS_MEMORY
-    } elif (why == VulkanWdecDecline.rows) {
-        return "the window's first batch is wider than the step's {WD_ROW_CAP}-row cap"
+    } elif (why == VulkanWdecDecline.flavor) {
+        return "the model is not the Vulkan-flavored image"
     }
     return VK_DECLINE_WORDS_DEVICE
 }
 
 [cold_path]
 def private wd_decline(why : VulkanWdecDecline) : bool
-    => g_wd_declines |> note("the whisper decoder", "{why}", "the decoder stays on the CPU chain: {wd_decline_words(why)}")
+    => g_wd_declines |> note("the whisper decoder", "{why}", "the decoder leaves the device - a CPU image decodes on the CPU chain, a Vulkan image refuses: {wd_decline_words(why)}")
 
 [cold_path]
 def private wd_dev_buf(bytes : int64) : uint64 => soft_device_buf(g_wd.oom, bytes)
@@ -207,46 +197,19 @@ def private wd_call_buf(bytes : int64) : uint64 => soft_call_buf(g_wd.oom, bytes
 [cold_path]
 def private wd_host_buf(bytes : int64; cached : bool) : HostBuf => soft_host_buf(g_wd.oom, bytes, cached)
 
-//! the waiting cross-KV layouts of `ds`, where they are its own, landed in its `kx` / `vx` - the state in hand, so the write lands in
-//! live memory
-[cold_path]
-def private wd_flush_cross_kv(var ds : DecoderState) {
-    if (g_wd_pend_bytes == 0l || g_wd_pend_uid != ds.gpu_uid) {
-        return
-    }
-    let r & = g_wd
-    var kxp = unsafe(addr(ds.kx[0]))
-    var vxp = unsafe(addr(ds.vx[0]))
-    readback_range(r.kx_dev, WD_KX, r.kvhost, kxp, g_wd_pend_bytes)
-    readback_range(r.vx_dev, WD_VX, r.kvhost, vxp, g_wd_pend_bytes)
-    g_wd_pend_bytes = 0l
-}
-
-//! the waiting layouts lost unread (their planes released, or another window's about to overwrite them): the owner is marked,
-//! and its next decode step panics until it starts a window of its own
-[cold_path]
-def private wd_drop_pending {
-    if (g_wd_pend_bytes > 0l) {
-        g_wd_dropped |> insert(g_wd_pend_uid)
-        g_wd_pend_bytes = 0l
-    }
-}
-
 [cold_path]
 def private wd_release {
     var r & = g_wd
-    wd_drop_pending()
     if (r.key != 0ul) {
         for (b in fixed_array(r.wq_dev, r.ws_dev, r.norms_dev, r.kxr_dev, r.vxr_dev, r.kc_dev, r.vc_dev, r.x_dev, r.xq_dev, r.xs_dev,
                               r.qkv_dev, r.cq_dev, r.yo_dev, r.h_dev, r.pms_dev, r.py_dev, r.logits_dev, r.xin_dev, r.xh_dev, r.xkv_q_dev,
-                              r.xkv_s_dev, r.xkv_proj_dev, r.kx_dev, r.vx_dev)) {
+                              r.xkv_s_dev, r.xkv_proj_dev)) {
             if (b != 0ul) {
                 destroy_device_buf(b)
             }
         }
         destroy_host_buf(r.xkv_meta)
         destroy_host_buf(r.xhost)
-        destroy_host_buf(r.kvhost)
         for (hb in r.site_meta) {
             destroy_host_buf(hb)
         }
@@ -254,12 +217,10 @@ def private wd_release {
     wd_forget()
 }
 
-//! the handles forgotten (the model drop's sweep destroys the objects, the waiting layouts with them); the next served window
-//! uploads again
+//! the handles forgotten (the model drop's sweep destroys the objects); the next served window uploads again
 [cold_path]
 def private wd_forget {
     var r & = g_wd
-    wd_drop_pending()
     r.key = 0ul
     r.oom = false
     r.served_said = false
@@ -285,14 +246,14 @@ def private wd_xkv_set : VkDescriptorSet {
 }
 
 //! the decoder's buffer sizes in bytes from its geometry: the row-cap planes (`bx` floats, `bq` / `bs` their Q8_0 quants and
-//! scales, `bh` the FFN's), the self K/V planes (`bkc`), the cross K/V planes as halves and floats (`bkx`, `bkxf`), the
-//! encoder rows (`bt`) and the attention's chunk partials (`bpms`, `bpy`)
-def private wd_sizes(r : WdResident) : tuple<bx : int64; bq : int64; bs : int64; bh : int64; bkc : int64; bkx : int64; bkxf : int64; bt : int64; bpms : int64; bpy : int64> {
+//! scales, `bh` the FFN's), the self K/V planes (`bkc`), the cross K/V planes as halves (`bkx`), the encoder rows (`bt`) and
+//! the attention's chunk partials (`bpms`, `bpy`)
+def private wd_sizes(r : WdResident) : tuple<bx : int64; bq : int64; bs : int64; bh : int64; bkc : int64; bkx : int64; bt : int64; bpms : int64; bpy : int64> {
     let d = r.d
     let bq = WD_ROW_CAP * 4l * d
     let nch_cap = (max(r.ta, r.tmax) + int64(WDEC_CHUNK) - 1l) / int64(WDEC_CHUNK)
     return (bx = WD_ROW_CAP * d * 4l, bq = bq, bs = bq / kq_elems(KqFmt.q8) * 4l, bh = WD_ROW_CAP * 4l * d * 4l,
-        bkc = r.nl * d * r.tmax * 2l, bkx = r.nl * d * r.ta * 2l, bkxf = r.nl * d * r.ta * 4l, bt = r.ta * d * 4l,
+        bkc = r.nl * d * r.tmax * 2l, bkx = r.nl * d * r.ta * 2l, bt = r.ta * d * 4l,
         bpms = nch_cap * r.hh * WD_ROW_CAP * 2l * 4l, bpy = nch_cap * r.hh * WD_ROW_CAP * r.hs * 4l)
 }
 
@@ -301,7 +262,7 @@ def private wd_sets {
     var r & = g_wd
     let d = r.d
     let q8e = kq_elems(KqFmt.q8)
-    let (bx, bq, bs, bh, bkc, bkx, bkxf, bt, bpms, bpy) = wd_sizes(r)
+    let (bx, bq, bs, bh, bkc, bkx, bt, bpms, bpy) = wd_sizes(r)
     r.s_kv_k = set_tower_wdec_kv16_cls(fixed_array(r.qkv_dev, r.kc_dev, r.norms_dev), fixed_array(3l * bx, bkc, r.norms_bytes), fixed_array(WD_QKV, WD_KC, 0u))
     r.s_kv_v = set_tower_wdec_kv16_cls(fixed_array(r.qkv_dev, r.vc_dev, r.norms_dev), fixed_array(3l * bx, bkc, r.norms_bytes), fixed_array(WD_QKV, WD_VC, 0u))
     r.s_attn_self = set_tower_wdec_attn_part_cls(fixed_array(r.qkv_dev, r.kc_dev, r.vc_dev, r.pms_dev, r.py_dev, r.norms_dev),
@@ -319,9 +280,7 @@ def private wd_sets {
     }
     r.s_xkv = wd_xkv_set()
     r.s_kvx_k16 = set_tower_wdec_kv16_cls(fixed_array(r.xkv_proj_dev, r.kxr_dev, r.norms_dev), fixed_array(bt, bkx, r.norms_bytes), fixed_array(WD_TMP, WD_KXR, 0u))
-    r.s_kvx_k = set_tower_wdec_kv_cls(fixed_array(r.xkv_proj_dev, r.kx_dev, r.norms_dev), fixed_array(bt, bkxf, r.norms_bytes), fixed_array(WD_TMP, WD_KX, 0u))
     r.s_kvx_v16 = set_tower_wdec_kv16_cls(fixed_array(r.xkv_proj_dev, r.vxr_dev, r.norms_dev), fixed_array(bt, bkx, r.norms_bytes), fixed_array(WD_TMP, WD_VXR, 0u))
-    r.s_kvx_v = set_tower_wdec_kv_cls(fixed_array(r.xkv_proj_dev, r.vx_dev, r.norms_dev), fixed_array(bt, bkxf, r.norms_bytes), fixed_array(WD_TMP, WD_VX, 0u))
     let f = Q8GemvFeed(planes = (wq = r.wq_dev, ws = r.ws_dev, wqb = r.wq_bytes, wsb = r.ws_bytes), xq = r.xq_dev, xs = r.xs_dev,
         x_elems = WD_ROW_CAP * 4l * r.d, xbit = WD_XQ)
     r.s_site |> reserve(r.nl * WD_LAYER_SITES + 1l)
@@ -351,24 +310,15 @@ def private wd_ensure_classes(cm2 : bool; tile : VtTile) : bool {
 [cold_path]
 def private wd_upload_weights(w : WhisperModel) {
     var r & = g_wd
-    let d = r.d
     let nl = r.nl
-    r.wq_bytes = w.dqblob.n
-    r.ws_bytes = w.dqscales.n * 2l
+    let src = vt_dev_src(w.enc)
+    r.wq_bytes = vt_piece_bytes(src, "{WD_PIECE}.wq")
+    r.ws_bytes = vt_piece_bytes(src, "{WD_PIECE}.ws")
     r.wq_dev = wd_dev_buf(r.wq_bytes)
     r.ws_dev = wd_dev_buf(r.ws_bytes)
-    let lay = active_q8_repack_layout(g_active_needs_repack)
-    var regions : array<Q8Region>
-    regions |> reserve(nl * 10l + 1l)
-    regions |> push(Q8Region(woff = w.d_te_q_off, n = d, rows = r.nvocab))
     r.site_meta |> reserve(nl * WD_LAYER_SITES + 1l)
     for (l in range64(nl)) {
         let lo = dec_layer_offsets(w, l)
-        for (woff in fixed_array(lo.q_w, lo.k_w, lo.v_w, lo.o_w, lo.cq_w, lo.ck_w, lo.cv_w, lo.co_w)) {
-            regions |> push(Q8Region(woff = woff, n = d, rows = d))
-        }
-        regions |> push(Q8Region(woff = lo.fc1_w, n = d, rows = 4l * d))
-        regions |> push(Q8Region(woff = lo.fc2_w, n = 4l * d, rows = d))
         r.site_meta |> push(q8_site_meta(r.oom, [lo.q_w, lo.k_w, lo.v_w]))   // nolint:STYLE012 - a layer's sites append to the previous layer's
         r.site_meta |> push(q8_site_meta(r.oom, [lo.o_w]))
         r.site_meta |> push(q8_site_meta(r.oom, [lo.cq_w]))
@@ -377,11 +327,42 @@ def private wd_upload_weights(w : WhisperModel) {
         r.site_meta |> push(q8_site_meta(r.oom, [lo.fc2_w]))
     }
     r.site_meta |> push(q8_site_meta(r.oom, [w.d_te_q_off]))
-    if (!r.oom) {
-        vt_upload_regions(w.dqblob, w.dqscales, regions, lay, r.wq_dev, r.ws_dev, r.wq_bytes, r.ws_bytes)
-    }
-    delete regions
+    return if (r.oom)
+    vt_put_piece(src, "{WD_PIECE}.wq", r.wq_dev)
+    vt_put_piece(src, "{WD_PIECE}.ws", r.ws_dev)
 }
+
+let private WD_PIECE = "vk.wdec"   //! the whisper decoder's q8 pieces' prefix, in the encoder tower's device block
+
+//! the whisper decoder's q8 regions: the token table the logits read, then every layer's eight attention GEMMs and its FFN pair
+def private wd_regions(w : WhisperModel) : array<Q8Region> {
+    let d = w.n_text_state
+    let nl = w.n_text_layer
+    var regions : array<Q8Region>
+    regions |> reserve(nl * 10l + 1l)
+    regions |> push(Q8Region(woff = w.d_te_q_off, n = d, rows = w.n_vocab))
+    for (l in range64(nl)) {
+        let lo = dec_layer_offsets(w, l)
+        for (woff in fixed_array(lo.q_w, lo.k_w, lo.v_w, lo.o_w, lo.cq_w, lo.ck_w, lo.cv_w, lo.co_w)) {
+            regions |> push(Q8Region(woff = woff, n = d, rows = d))
+        }
+        regions |> push(Q8Region(woff = lo.fc1_w, n = d, rows = 4l * d))
+        regions |> push(Q8Region(woff = lo.fc2_w, n = 4l * d, rows = d))
+    }
+    return <- regions
+}
+
+//! whisper's Vulkan device block (`#tower-dev-block`): the encoder tower's pieces, then the decoder's q8 regions gathered
+[cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
+def private vulkan_whisper_bake(w : WhisperModel; var b : TowerDevBuild) : bool {
+    vulkan_audio_tower_bake_into(w.enc, b)
+    var inscope regions <- wd_regions(w)
+    vt_bake_q8(b, WD_PIECE, w.dqblob, w.dqscales, regions)
+    return true
+}
+
+//! whisper's Vulkan chains serve the q8 lane: the encoder's and the decoder's knobs on
+def private vulkan_whisper_serves_model(q8 : bool) : bool => q8 && g_wd_env && vulkan_whisper_tower_serves()
 
 [cold_path]
 def private wd_upload_norms(w : WhisperModel) {
@@ -402,8 +383,9 @@ def private wd_upload_norms(w : WhisperModel) {
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-asr-decoder")]
 def private wd_attach(w : WhisperModel) : bool {
     var r & = g_wd
-    let lay = active_q8_repack_layout(g_active_needs_repack)
-    let key = vt_key(w.dqblob, w.dqscales, w.dblob, w.dlayers_off, w.n_text_layer * w.dlayer_stride, 0l, w.n_text_layer, lay.mr, lay.kgroup, lay.wbias)
+    let src = vt_dev_src(w.enc)
+    assert(src.on, "the whisper decoder's attach reads a Vulkan image's pieces - the flavor decline runs ahead of it")
+    let key = vt_key_dev(src, w.dblob, w.dlayers_off, w.n_text_layer * w.dlayer_stride, w.n_text_layer)
     if (r.key != 0ul && key == r.key) {
         return true
     }
@@ -433,7 +415,9 @@ def private wd_build(w : WhisperModel; key : uint64) : bool {
     if (!wd_ensure_classes(r.cm2, r.xkv_tile)) {
         return false
     }
-    if (!vk_range_ok(w.dqblob.n) || !vk_range_ok(nl * d * r.ta * 4l) || !vk_range_ok(nl * d * r.tmax * 2l) || !vk_range_ok(2l * nl * d * r.ta * 4l)) {
+    let src = vt_dev_src(w.enc)
+    let wq_n = vt_piece_bytes(src, "{WD_PIECE}.wq")
+    if (!vk_range_ok(wq_n) || !vk_range_ok(nl * d * r.ta * 4l) || !vk_range_ok(nl * d * r.tmax * 2l) || !vk_range_ok(2l * nl * d * r.ta * 4l)) {
         return wd_decline(VulkanWdecDecline.shape)
     }
     r.key = key
@@ -465,13 +449,10 @@ def private wd_build(w : WhisperModel; key : uint64) : bool {
         r.xkv_s_dev = wd_dev_buf(r.ta * d / q8e * 4l)
     }
     r.xkv_proj_dev = wd_dev_buf(r.ta_tile_rows * d * 4l)
-    r.kx_dev = wd_dev_buf(z.bkxf)
-    r.vx_dev = wd_dev_buf(z.bkxf)
     let groups = vt_tile_groups(r.xkv_tile, d, r.ta)
     r.xkv_meta_bytes = max((2l * nl * 4l + 2l * nl * groups) * 4l, BATCH_META_BYTES)
     r.xkv_meta = wd_host_buf(r.xkv_meta_bytes, false)
     r.xhost = wd_host_buf(max(z.bx, r.nvocab * 4l), true)
-    r.kvhost = wd_host_buf(2l * z.bkxf, true)
     if (r.oom) {
         wd_release()
         return false
@@ -517,36 +498,32 @@ def private wd_gemv_post(raw : VkCommandBuffer; var h : VkHaz; site : int; n_in,
     vt_pt(raw, VtProfRole.post_add)
 }
 
-//! one side of a layer's cross K/V: its GEMM over the encoder rows (the schedule map at `map_off`), then its f16-plane and
-//! f32-row stores at element `off`, the bias row at `boff`
+//! one side of a layer's cross K/V: its GEMM over the encoder rows (the schedule map at `map_off`), then its f16-plane store at
+//! element `off`, the bias row at `boff`
 def private wd_xkv_side(raw : VkCommandBuffer; var h : VkHaz; var pc_g : BatchArgs; map_off : uint; groups : int64; gemm_role : VtProfRole;
-                        var s_kv16, s_kvx : VkDescriptorSet; var pc16, pcx : GkWdecKvArgs; off, boff : uint; wg_kv : int64) {
+                        var s_kv16 : VkDescriptorSet; var pc16 : GkWdecKvArgs; off, boff : uint; wg_kv : int64) {
     pc_g.map_off = map_off
     vt_tile_enc(raw, h, g_wd.xkv_tile, g_wd.s_xkv, pc_g, groups)
     vt_pt(raw, gemm_role)
     pc16.dst_off = off
     pc16.boff = boff
     enc_tower_wdec_kv16_cls(raw, h, s_kv16, pc16, wg_kv)
-    pcx.dst_off = off
-    pcx.boff = boff
-    enc_tower_wdec_kv_cls(raw, h, s_kvx, pcx, wg_kv)
     vt_pt(raw, VtProfRole.kv_store)
 }
 
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-asr-decoder")]
-def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_out : array<float>) : bool {   // nolint:STYLE038 - the dispatch chain is the shape
+def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_out : array<float>) : bool {
     let uid = wd_uid(ds)
     g_wd_window_live = false
-    g_wd_dropped |> erase(uid)
-    if (g_wd_pend_uid == uid) {
-        g_wd_pend_bytes = 0l   // this window supersedes the state's waiting one, served or not: the CPU chain recomputes on a decline
-    }
     ds.gpu_kv_gen = 0l
     if (!g_wd_env) {
         return wd_decline(VulkanWdecDecline.knob)
     }
     if (!w.dq8) {
         return wd_decline(VulkanWdecDecline.quant_mode)
+    }
+    if (w.enc.dev_backend != TowerDev.vulkan) {
+        return wd_decline(VulkanWdecDecline.flavor)
     }
     let d = w.n_text_state
     let hs = d / w.n_text_head
@@ -566,8 +543,6 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
     let hh = r.hh
     let z = wd_sizes(r)
     let bt = z.bt
-    assert(long_length(ds.kx) >= nl * d * ta && long_length(ds.vx) >= nl * d * ta)
-    wd_drop_pending()
     let groups = vt_tile_groups(r.xkv_tile, d, ta)
     vt_sched_walk(g_wd_maps, r.xkv_meta, 2l * nl) $(rid : int64) : VtSchedRec {
         let lo = dec_layer_offsets(w, rid / 2l)
@@ -588,12 +563,8 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
     let wg_kv = (total + 255l) / 256l
     var pc_k16 = GkWdecKvArgs(rows = uint(ta), sstride = uint(d), soff = 0u, nheads = uint(hh), tstride = uint(ta), p0 = 0u,
         dst_off = 0u, boff = 0u, bias_on = 0u, mode = WDEC_KV_F16, hs = uint(hs), kscale = wdec_kscale(hs))
-    var pc_kx = pc_k16
-    pc_kx.mode = WDEC_KV_KX
     var pc_v16 = pc_k16
     pc_v16.bias_on = 1u
-    var pc_vx = pc_v16
-    pc_vx.mode = WDEC_KV_VX
     vt_chain_one_shot("whisper cross-kv", nl, ta) $(raw : VkCommandBuffer; var h : VkHaz) {
         if (enc_dev != 0ul) {
             vhz_dep(raw, h, 0u, WD_XIN, true)
@@ -605,12 +576,10 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
         for (l in range64(nl)) {
             let lo = dec_layer_offsets(w, l)
             let off = uint(l * d * ta)
-            wd_xkv_side(raw, h, pc_g, g_wd_maps[l * 2l], groups, VtProfRole.gemm_k, r.s_kvx_k16, r.s_kvx_k, pc_k16, pc_kx, off, 0u, wg_kv)
-            wd_xkv_side(raw, h, pc_g, g_wd_maps[l * 2l + 1l], groups, VtProfRole.gemm_v, r.s_kvx_v16, r.s_kvx_v, pc_v16, pc_vx, off, uint(lo.cv_b - r.norms_base), wg_kv)
+            wd_xkv_side(raw, h, pc_g, g_wd_maps[l * 2l], groups, VtProfRole.gemm_k, r.s_kvx_k16, pc_k16, off, 0u, wg_kv)
+            wd_xkv_side(raw, h, pc_g, g_wd_maps[l * 2l + 1l], groups, VtProfRole.gemm_v, r.s_kvx_v16, pc_v16, off, uint(lo.cv_b - r.norms_base), wg_kv)
         }
     }
-    g_wd_pend_uid = uid
-    g_wd_pend_bytes = z.bkxf
     g_wd_windows++
     g_wd_window_uid = uid
     g_wd_window_live = true
@@ -623,23 +592,15 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-asr-decoder")]
 def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks : int const?; n : int64) : bool {   // nolint:STYLE038 - the dispatch chain is the shape
     let uid = ds.gpu_uid
-    if (uid != 0ul && key_exists(g_wd_dropped, uid)) {
-        panic("dasLLAMA vulkan wdec: this decoder window's cross-attention memory was lost before it was read back - another state's window, a release or a model drop took its device planes; ONE live decoder window per process, and a state decodes only a window it started after the loss")
-    }
     if (!g_wd_window_live || g_wd_window_uid != uid) {
-        wd_flush_cross_kv(ds)
         if (ds.gpu_kv_gen != 0l && ds.n_past > 0l) {
             panic("dasLLAMA vulkan wdec: the device decoder window was evicted mid-window - ONE live decoder window per process (a second DecoderState may not interleave whisper_cross_kv/whisper_decode_batch)")
         }
         return false
     }
+    static_assert(WHISPER_DEV_CHUNK <= WD_ROW_CAP, "the decode's device chunk fits the N-column GEMV")
     if (n > WD_ROW_CAP) {
-        if (ds.n_past == 0l) {
-            g_wd_window_live = false
-            wd_flush_cross_kv(ds)
-            return wd_decline(VulkanWdecDecline.rows)
-        }
-        panic("dasLLAMA vulkan wdec: decode batch of {n} exceeds the {WD_ROW_CAP}-row step cap mid-window")
+        panic("dasLLAMA vulkan wdec: decode batch of {n} exceeds the {WD_ROW_CAP}-row step cap - a Vulkan-flavored model's decode hands the seat {WHISPER_DEV_CHUNK} rows at most")
     }
     var r & = g_wd
     let q8e = kq_elems(KqFmt.q8)   // nolint:LINT021 - the block counts divide in 64-bit ahead of the push constants' narrowing
@@ -737,6 +698,7 @@ def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks 
 
 enum private VulkanRnntDecline {
     knob     //! DASLLAMA_VK_RNNT=0, or set_vulkan_rnnt(false)
+    flavor   //! a CPU-flavored net (`#tower-dev-block`): its image carries no device halves, the CPU decodes the lane whole
     shape    //! a predictor or joint past the bodies' staged widths, a third layer, a duration table past the state's
     device   //! the tier has no device, or a class failed to build
     memory   //! a device or host allocation failed
@@ -833,6 +795,7 @@ def set_vulkan_rnnt(on : bool) : bool {
 [cold_path]
 def private rv_decline(why : VulkanRnntDecline) : bool {
     let words = (why == VulkanRnntDecline.knob ? "the transducer knob is off (DASLLAMA_VK_RNNT=0 or set_vulkan_rnnt(false))"
+        : why == VulkanRnntDecline.flavor ? "the model is not the Vulkan-flavored image"
         : why == VulkanRnntDecline.shape ? "a predictor, joint or duration table past the stamps' staged widths, or a buffer past the device's range"
         : why == VulkanRnntDecline.memory ? VK_DECLINE_WORDS_MEMORY
         : why == VulkanRnntDecline.overrun ? "the rounds ran past the clip's budget with the clip not done" : VK_DECLINE_WORDS_DEVICE)
@@ -890,23 +853,28 @@ def vulkan_rnnt_shutdown {
 }
 
 //! the weights laid once a weight plane, as the Metal seat lays them
-def private rv_attach(net : RnntNet; s : RnntState; enc : RnntEnc) : bool {
+def private rv_attach(net : RnntNet; enc : RnntEnc) : bool {
     let key = rnnt_dev_key(net, enc)
     return true if (g_rv.key == key && g_rv.wh_dev != 0ul)
-    return rv_attach_build(net, s, enc, key)
+    return rv_attach_build(net, enc, key)
 }
 
-//! a new net's weights uploaded under `key`, the old seat released and its said declines forgotten
+//! a new net's weights uploaded under `key` - its halves and slab the Vulkan image's pieces as stored (`#tower-dev-block`) - the
+//! old seat released and its said declines forgotten
 [cold_path]
-def private rv_attach_build(net : RnntNet; s : RnntState; enc : RnntEnc; key : uint64) : bool {
+def private rv_attach_build(net : RnntNet; enc : RnntEnc; key : uint64) : bool {
     var r & = g_rv
     rv_release()
     r.oom = false
     r.lay = rnnt_dev_layout(net)
-    var inscope wf <- rnnt_dev_slab(net, s, enc, r.lay)
+    let src = VtDevSrc(on = true, dev = net.dev, devplan = net.devplan)
     r.wh_bytes = r.lay.wh_halves * 2l
     r.jw_bytes = r.lay.jw_halves * 2l
-    r.wf_bytes = long_length(wf) * 4l
+    r.wf_bytes = vt_piece_bytes(src, "{VK_RNNT_PIECE}.wf")
+    if (vt_piece_bytes(src, "{VK_RNNT_PIECE}.wh") != r.wh_bytes || vt_piece_bytes(src, "{VK_RNNT_PIECE}.jw") != r.jw_bytes
+            || r.wf_bytes != r.lay.wf_floats * 4l) {
+        return rv_decline(VulkanRnntDecline.shape)
+    }
     r.wenc_bytes = enc.q8 ? 0l : net.joint_dim * enc.d * 4l
     if (!vk_range_ok(max(max(r.wh_bytes, r.wf_bytes), max(r.jw_bytes, r.wenc_bytes)))) {
         return rv_decline(VulkanRnntDecline.shape)
@@ -920,9 +888,9 @@ def private rv_attach_build(net : RnntNet; s : RnntState; enc : RnntEnc; key : u
         rv_release()
         return rv_decline(VulkanRnntDecline.memory)
     }
-    upload_region_at(r.wh_dev, 0l, unsafe(addr<uint8 const?>(s.wh[0])), r.wh_bytes)
-    upload_region_at(r.jw_dev, 0l, unsafe(addr<uint8 const?>(s.joint_wt[0])), r.jw_bytes)
-    upload_region_at(r.wf_dev, 0l, unsafe(addr<uint8 const?>(wf[0])), r.wf_bytes)
+    vt_put_piece(src, "{VK_RNNT_PIECE}.wh", r.wh_dev)
+    vt_put_piece(src, "{VK_RNNT_PIECE}.jw", r.jw_dev)
+    vt_put_piece(src, "{VK_RNNT_PIECE}.wf", r.wf_dev)
     if (!enc.q8) {
         upload_region_at(r.wenc_dev, 0l, unsafe(reinterpret<uint8 const?>(plane_at(net.blob, enc.w))), r.wenc_bytes)
     }
@@ -1038,12 +1006,13 @@ def private vulkan_rnnt_projects(enc : RnntEnc) : bool => g_rv_env && !enc.q8
 //! The transducer's greedy decode on the device, the Metal seat's form on the Vulkan stamps: the joint's encoder projection off
 //! the encode's own device rows (the exact f32 tile) or the family's projection uploaded, then command buffers of rounds until
 //! the pick marks the clip done; the state words read back a command buffer, the token records once.
-[hot_path, arch(at="../ARCHITECTURE_MEDIA_ASR.md#rnnt-device-decode")]
+[hot_path, unused_argument(s), arch(at="../ARCHITECTURE_MEDIA_ASR.md#rnnt-device-decode")]
 def private vulkan_rnnt_greedy(net : RnntNet; var s : RnntState; enc : RnntEnc; x, encp : array<float>; n_frames : int64;   // nolint:STYLE038 — the dispatch chain is the shape
                                @scratch var toks : array<RnntToken>) : bool {
     if (!g_rv_env) {
         return rv_decline(VulkanRnntDecline.knob)
     }
+    return rv_decline(VulkanRnntDecline.flavor) if (!net.dev_only)
     let jd = net.joint_dim
     let d = enc.d
     let n_logits = rnnt_n_logits(net)
@@ -1055,7 +1024,7 @@ def private vulkan_rnnt_greedy(net : RnntNet; var s : RnntState; enc : RnntEnc; 
             || (projects && !ensure_f32_gemm_cls()) || rnnt_dev_faulted(RnntDevFault.device)) {
         return rv_decline(VulkanRnntDecline.device)
     }
-    if (!rv_attach(net, s, enc) || !rv_scratch(net, max(n_frames, 1l), n_logits, d)) {
+    if (!rv_attach(net, enc) || !rv_scratch(net, max(n_frames, 1l), n_logits, d)) {
         return false
     }
     if (n_frames <= 0l) {
@@ -1133,6 +1102,7 @@ enum private VulkanCtcDecline {
     shape    //! d off the f16 GEMM's 64-wide K lattice, no frames, or a buffer past the device's range
     device   //! the tier has no device, a class failed to build, or an f16 head on a device with no f16 GEMM tile
     memory   //! a device or host allocation failed
+    flavor   //! the model is not the Vulkan-flavored image: each backend serves its own (`#tower-dev-block`)
 }
 
 //! the hazard bits of the CTC seat's buffers
@@ -1185,7 +1155,8 @@ def vulkan_ctc_declines : table<string; int64> => <- clone_to_move(g_cv_declines
 def private cv_decline(why : VulkanCtcDecline) : bool {
     let words = (why == VulkanCtcDecline.knob ? VK_DECLINE_WORDS_TOWER_KNOB
         : why == VulkanCtcDecline.shape ? "d off the f16 GEMM's 64-wide lattice, no frames, or a buffer past the device's range"
-        : why == VulkanCtcDecline.memory ? VK_DECLINE_WORDS_MEMORY : VK_DECLINE_WORDS_DEVICE)
+        : why == VulkanCtcDecline.memory ? VK_DECLINE_WORDS_MEMORY
+        : why == VulkanCtcDecline.flavor ? "the model is not the Vulkan-flavored image" : VK_DECLINE_WORDS_DEVICE)
     return g_cv_declines |> note("the CTC head", "{why}", "the head stays on the CPU: {words}")
 }
 
@@ -1321,6 +1292,9 @@ def private vulkan_gigaam_ctc(m : GigaamModel; var st : GigaamState; n_frames : 
     if (!vulkan_tower_on()) {
         return cv_decline(VulkanCtcDecline.knob)
     }
+    if (m.dev_backend != TowerDev.vulkan) {
+        return cv_decline(VulkanCtcDecline.flavor)
+    }
     let d = m.d_model
     let nc = m.n_classes
     let ncp = round_up(nc, GIGAAM_CTC_ROW_TILE)
@@ -1400,6 +1374,7 @@ def dasllama_vulkan_asr_dec_register {
     static_if (!typeinfo builtin_module_exists(das_metal)) {
         register_whisper_cross_kv_gpu(@@vulkan_whisper_cross_kv)
         register_whisper_decode_gpu(@@vulkan_whisper_decode)
+        register_whisper_flavor(TowerDev.vulkan, @@vulkan_whisper_serves_model, @@vulkan_whisper_bake)
         register_rnnt_gpu(@@vulkan_rnnt_greedy, @@vulkan_rnnt_projects)
         register_gigaam_gpu_ctc(@@vulkan_gigaam_ctc)
     }

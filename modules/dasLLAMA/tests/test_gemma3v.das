@@ -157,7 +157,7 @@ def test_gemma3v_tier1_gpu(t : T?) {
             set_gpu_knobs(knobs_pinned)
             delete st
             delete tw
-            var twq <- mint_tower(mm, true, 0l, -1l)   //! in memory: a load under the pin would bake the q8 image beside the serving one
+            var twq <- mint_tower(mm, true, 0l, -1l, TowerDev.metal)   // in memory: a load under the pin would bake the q8 image beside the serving one
             var stq = Gemma3vState()
             tt |> success(twq.q8, "the q8 lane minted under the pin")
             q8_lane_served(tt, "q8 tower", twq.n_layer) $() : bool {
@@ -192,8 +192,9 @@ def test_gemma3v_tier1_gpu(t : T?) {
     }
 }
 
-// The projector tail on the device against the CPU tail over the SAME device block rows (the tail lever off): the soft
-// tokens within 1e-3 rel-l2, the tail counter up by the device leg alone, another canvas outside the bar (the control).
+// The Metal chain with the projector tail behind its blocks against the CPU chain on the exact lane's image (the CPU image,
+// which the device reads as stored): the soft tokens within `tower_parity_deep`'s bar, the tail counter up by the device leg
+// alone, another canvas outside the bar (the control).
 [test]
 def test_gemma3v_tail_gpu(t : T?) {
     t |> run("the post-norm, grid pool, soft norm and projection ride the device behind the blocks") @(tt : T?) {
@@ -206,31 +207,28 @@ def test_gemma3v_tail_gpu(t : T?) {
             var inscope cb <- make_planes("cb", px, px)
             var inscope green <- make_planes("green", px, px)
             let tower_was = metal_tower_knob()
-            let tail_was = metal_tower_tail_knob()
-            set_metal_tower(true)
             with_dasllama_jobque_() {
-                var inscope cpu_tail, dev_tail, other : array<float>
-                set_metal_tower_tail(false)
+                var inscope cpu_out, dev_out, other : array<float>
+                set_metal_tower(false)
                 let e0 = metal_tower_stats().encodes
                 let t0 = metal_tower_tail_encodes()
-                let n = gemma3v_encode(tw, st, cb, tw.image_px, tw.image_px, cpu_tail)
-                tt |> equal(metal_tower_stats().encodes - e0, 1l, "lever off: the blocks still ride the device")
-                tt |> equal(metal_tower_tail_encodes() - t0, 0l, "lever off: the tail stays on the CPU")
-                set_metal_tower_tail(true)
-                tt |> equal(gemma3v_encode(tw, st, cb, tw.image_px, tw.image_px, dev_tail), n, "the same row count")
-                tt |> equal(metal_tower_tail_encodes() - t0, 1l, "lever on: the tail rides the device behind the blocks")
+                let n = gemma3v_encode(tw, st, cb, tw.image_px, tw.image_px, cpu_out)
+                tt |> equal(metal_tower_stats().encodes - e0, 0l, "the tower off: the CPU chain, no dispatch")
+                set_metal_tower(true)
+                tt |> equal(gemma3v_encode(tw, st, cb, tw.image_px, tw.image_px, dev_out), n, "the same row count")
+                tt |> equal(metal_tower_stats().encodes - e0, 1l, "the tower on: the blocks ride the device")
+                tt |> equal(metal_tower_tail_encodes() - t0, 1l, "the tower on: the tail rides the device behind the blocks")
                 gemma3v_encode(tw, st, green, tw.image_px, tw.image_px, other)
-                var inscope a <- copy_span(cpu_tail, 0l, n * tw.proj_dim)
-                var inscope b <- copy_span(dev_tail, 0l, n * tw.proj_dim)
+                var inscope a <- copy_span(cpu_out, 0l, n * tw.proj_dim)
+                var inscope b <- copy_span(dev_out, 0l, n * tw.proj_dim)
                 var inscope c <- copy_span(other, 0l, n * tw.proj_dim)
-                var got = TowerParityStats()
+                tower_parity_deep(tt, "gemma3v {tw.n_layer}L", a, b, tw.n_layer)
                 var ctl = TowerParityStats()
-                if (tower_parity_stats(tt, "gemma3v tail", a, b, got) && tower_parity_stats(tt, "gemma3v tail control", a, c, ctl)) {
-                    tt |> success(got.rel_l2 <= 1e-3lf, "device tail vs CPU tail rel_l2 {got.rel_l2}")
-                    tt |> success(ctl.rel_l2 > 1e-3lf, "another canvas lands outside the bar (rel_l2 {ctl.rel_l2}) - the control")
+                if (tower_parity_stats(tt, "gemma3v control", a, c, ctl)) {
+                    let bar = tower_deep_bar(tw.n_layer)
+                    tt |> success(is_finite(ctl.rel_l2) && ctl.rel_l2 > bar, "another canvas lands outside the bar (rel_l2 {ctl.rel_l2}) - the control")
                 }
             }
-            set_metal_tower_tail(tail_was)
             set_metal_tower(tower_was)
             delete st
             delete tw
@@ -288,16 +286,16 @@ def test_gemma3v_tier1_q8(t : T?) {
 let private POISON_BLOCK = 13l   //! the whole-tower input poison's block: mid-stack, so the zero rides the residual through half the chain
 
 //! a tower minted in memory from the staged planes under the lane pin (pinned, staged, the pin restored): `nl` blocks (0 = the
-//! file's count); `zero_block` >= 0 zeroes that block's q8 GEMM planes - the input poison of the device-side bars (q8 lane).
-//! Never `load_gemma3v_tower`, which bakes a `.dlim` under the pin.
-def private mint_tower(mm : string; q8 : bool; nl : int64 = 0l; zero_block : int64 = -1l) : Gemma3vTower
-    => mint_twin_tower(mm, q8, nl, zero_block, @@set_gemma3v_q8, @@reset_gemma3v_q8, @@stage_gemma3v_tower, @@mint_gemma3v_tower)
+//! file's count); `zero_block` >= 0 zeroes that block's q8 GEMM planes - the input poison of the device-side bars (q8 lane);
+//! `dev` the image flavor (`none` the CPU image). Never `load_gemma3v_tower`, which bakes a `.dlim` under the pin.
+def private mint_tower(mm : string; q8 : bool; nl : int64 = 0l; zero_block : int64 = -1l; dev : TowerDev = TowerDev.none) : Gemma3vTower
+    => mint_twin_tower(mm, q8, nl, zero_block, dev, @@set_gemma3v_q8, @@reset_gemma3v_q8, @@stage_gemma3v_tower, @@mint_gemma3v_tower)
 
 //! the fixed canvas's device-side dump bar poisoned: the q8 tower with `POISON_BLOCK` zeroed must exceed the bar `logname` holds
 def private g3v_poison_leg(tt : T?; mm : string; kind : string; logname : string; bar_rms : float) {
     var o = OracleEncode()
     return if (!oracle_dump(tt, "gemma3-vision-oracle", logname, "gemma3-vision-oracle/mint_gemma3.sh", o))
-    var twp <- mint_tower(mm, true, 0l, POISON_BLOCK)
+    var twp <- mint_tower(mm, true, 0l, POISON_BLOCK, serving_tower_dev())
     var stp = Gemma3vState()
     let px = int(twp.image_px)
     dump_poison_leg(tt, "gemma3v", kind, px, px, o, bar_rms, POISON_BLOCK, int(twp.proj_dim), TIER1_ABS, twp, stp) $(t; var s; planes; var out) => gemma3v_encode(t, s, planes, t.image_px, t.image_px, out)
@@ -311,7 +309,7 @@ def private twin_encode(tt : T?; tw : Gemma3vTower; var st : Gemma3vState; tw_ex
     let px = int(tw.image_px)
     let planes <- make_planes(kind, px, px)
     twin_canvas(tt, "gemma3v", kind, px, px, tw.patch, "", tw, st, tw_exact, st_exact, zero_block,
-        $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb) }) $(t; var s; var out) => gemma3v_encode(t, s, planes, tw.image_px, tw.image_px, out)
+        $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb, TowerDev.vulkan) }) $(t; var s; var out) => gemma3v_encode(t, s, planes, tw.image_px, tw.image_px, out)
 }
 
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]

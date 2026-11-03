@@ -5095,26 +5095,16 @@ def private mm_kq(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x 
     mm_at_kq_pre(y, t, fmt, woff, xq, xs, xbs, n, d)
 }
 
-// Batched K-quant matmul. Repacked loads with a kq batch kernel run the native tile: one threaded
-// bs-requant, then ONE weight-stationary GEMM (bit-for-bit npos x the per-position GEMV).
-// Otherwise positions run serially, each bs-quantized then a full row GEMV.
+// Batched K-quant matmul: one threaded bs-requant into the Q8_K-form image, then ONE weight-stationary GEMM
+// (bit-for-bit npos x the per-position GEMV) - the device's dense GEMM where it takes a repacked site.
 [arch(at="../ARCHITECTURE_ENGINE_FORMATS_NV4.md#nv4-site-scale")]
 def mm_b_kq(var s : Session; var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x : array<float>; n, d, npos : int64) {
-    if (t.kq_repacked && kernel_backend_has_kq_batch()) {
-        requant_rows_q8k_bs(x, n, npos, s.xqb, s.xsb, s.xbsb)   // kq v2: Q8_K-form image
-        if (npos >= 32l && moe_gpu_dense_on_gpu(int(fmt), woff)) {
-            matmul_gpu_dense(y, woff, s.xqb, s.xsb, n, d, npos, int(fmt))   // in-kernel bsums, xbsb unused
-            return
-        }
-        mm_b_kq_pre(y, t, fmt, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
+    requant_rows_q8k_bs(x, n, npos, s.xqb, s.xsb, s.xbsb)
+    if (t.kq_repacked && npos >= 32l && moe_gpu_dense_on_gpu(int(fmt), woff)) {
+        matmul_gpu_dense(y, woff, s.xqb, s.xsb, n, d, npos, int(fmt))   // in-kernel bsums, xbsb unused
         return
     }
-    unsafe {
-        for (p in range64(npos)) {
-            quantize_q8_k_into_ptr(addr(x[p * n]), n, addr(s.xq[0]), addr(s.xs[0]), addr(s.xbs[0]), 0l, 0l, 0l)
-            mm_at_kq_pre(y, t, fmt, woff, s.xq, s.xs, s.xbs, n, d, p * d)
-        }
-    }
+    mm_b_kq_pre(y, t, fmt, woff, s.xqb, s.xsb, s.xbsb, n, d, npos)
 }
 
 // Region-list kq GEMV over the model's planes (the MoE expert dispatch's kq twin of
@@ -5147,12 +5137,15 @@ def mm_b_kq_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs : array<in
 }
 
 // Batched kq GEMM off PRE-quantized activation rows (the grouped MoE prefill's kq twin of
-// mm_b_q8_pre). Callers guard with kq_repacked && kernel_backend_has_kq_batch() — the prefill
-// gate routes kq-expert layers to the per-position reference path otherwise.
+// mm_b_q8_pre), on the repacked planes' batch tile or the disk-order planes' portable kernel.
 def mm_b_kq_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d, ntok : int64) {
     let i = kq_slot("mm_b_kq_pre", fmt)
     let ts_gemm = prof_ticks()
-    matmul_kq_batch(kq_schema_id(fmt), y, t.kq[i].q, t.kq[i].s, woff, xq, xs, xbs, n, d, ntok)
+    let sb = woff / kq_elems(fmt)
+    unsafe {
+        matmul_kq_rows_at(kq_schema_id(fmt), t.kq_repacked, addr(y[0]), addr<uint8 const?>(t.kq[i].q[sb * kq_qsb(fmt)]), addr<uint8 const?>(t.kq[i].s[sb * kq_ssb(fmt)]),
+                          addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), addr<int const?>(xbs[0]), n, d, ntok)
+    }
     apply_site_scale(y, t, fmt, woff, 0l, ntok * d)
     prof_add("mm_gemm", ts_gemm)
 }
@@ -5244,7 +5237,7 @@ def mm_pre_f(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : ar
 def fmt_reads_q8k(fmt : KqFmt) : bool => kq_sb(fmt)
 
 // Batched format router: q8 weights ride the batch tile; kq weights take the native kq tile
-// (repacked loads) or the serial-per-position fallback (see mm_b_kq); a per-32 plane its own batch kernel, or the tier's
+// (repacked loads) or the portable disk-order batch kernel (see mm_b_kq); a per-32 plane its own batch kernel, or the tier's
 // batch tile where the dense rail holds it.
 def mm_b_f(var s : Session; var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x : array<float>; n, d, npos : int64) {
     if (fmt == KqFmt.q8) {

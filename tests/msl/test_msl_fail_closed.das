@@ -59,6 +59,7 @@ def test_fail_closed_rejections(t : T?) {
         check_rejects(t, "_fc_texture_grad", "call `textureGrad`")
         check_rejects(t, "_fc_uniform_written", "@uniform member `n` is written")
         check_rejects(t, "_fc_nan_literal", "non-finite float literal has no MSL form")
+        check_rejects(t, "_fc_max_threads_nonpositive", "max_threads must be a positive int")
         check_rejects(t, "_fc_math_mad_int", "mad lowers for float classes only")
         check_rejects(t, "_fc_math_ternary_class", "clamp lowers for numeric classes only")
         check_rejects(t, "_fc_math_binary_class", "pow lowers for numeric classes only")

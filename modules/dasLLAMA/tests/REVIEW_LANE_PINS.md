@@ -4,10 +4,9 @@
 doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
 `../followup_metal.md`.
 
-A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a helper's
-asserts belong to every cell that calls it. A family is one model architecture's loader and
-kernels (`../dasllama/dasllama_<family>.das`); its serving lane is the weight form - q8 or float -
-the family runs a model's weights in; the blob form is a model after `convert_model_to_metal_blob`,
+A cell is as `REVIEW.md` (beside this file) defines it. A family is one model architecture's
+loader and kernels (`../dasllama/dasllama_<family>.das`); its serving lane is the weight form - q8
+or float - the family runs a model's weights in; the blob form is a model after `convert_model_to_metal_blob`,
 the only form the Metal drivers serve. A lane setter is a call that writes the value a family's
 loader or its `*_serves_q8` accessor reads to choose the family's serving lane (`set_<name>_q8`,
 the ASR facade's `set_asr_fp32` / `set_asr_tower_fp32`), or a facade call that makes that call.
@@ -62,9 +61,10 @@ driver setter that is not a `register_*` call and has no getter, or whose getter
 value written, adds in the same change a getter in `../dasllama/` that returns it.**
 
 **A cell asserting the unpinned default lane of a family that has a `*_serves_q8` accessor
-compares against the predicates that accessor reads for its unpinned default (whatever its body
-calls), or against the accessor's own answer read before the load, never against a hardcoded
-lane.** The default lane differs per box.
+compares the q8/float choice against the predicates that accessor reads for its unpinned default
+(whatever its body calls), or against the accessor's own answer read before the load, never
+against a hardcoded lane; a lane the loader picks from the carrier's content (the file's weight
+formats) is asserted by the loaded model's own lane field.** The default lane differs per box.
 
 **A cell of `test_model_image*.das` whose subject is a lane pin's effect on the image identity
 loads through `load_model_image` (`../dasllama/dasllama_image.das`), the loader that bakes the

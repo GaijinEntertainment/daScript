@@ -17,6 +17,8 @@ require ../../modules/dasLLAMA/tests/_model_tier.das
 require daslib/fio
 require daslib/clargs                    // get_host_binary: the child bake runs under this daslang
 require daslib/module_path               // get_this_module_dir: main.das sits beside this test
+require dasllama/dasllama_image         // image_family_tag: the baked image's lane, read off its header
+require daslib/env_registry             // env_value_of: the child bake's knobs, read the sanctioned way
 
 def private sniff_cell(t : T?; name : string; want : AsrCarrierKind) {
     let path = path_join(models_dir(), name)
@@ -88,4 +90,92 @@ def test_bake_bergamot(t : T?) {
     }
     remove(path_join(dir, "model.ruen.intgemm.alphas.bin"))
     remove(path_join(dir, "vocab.ruen.spm"))
+}
+
+[test]
+def test_bake_to_destination(t : T?) {
+    let src_dir = path_join(models_dir(), "bergamot/ru-en-base-memory")
+    let src = path_join(src_dir, "model.ruen.intgemm.alphas.bin")
+    return if (!model_available(t, src))
+    let dir = path_join(test_temp_dir(), "ru-en-dest")
+    let model = path_join(dir, "model.ruen.intgemm.alphas.bin")
+    var err = ""
+    t |> success(mkdir_rec(dir), "made the copy's directory")
+    for (name in ["model.ruen.intgemm.alphas.bin", "vocab.ruen.spm"]) {
+        let copied = copy_file(path_join(src_dir, name), path_join(dir, name), true, err)
+        t |> success(copied, "copied {name}: {err}")
+    }
+    t |> run("a Marian student bakes to -o, and no image lands beside the source") @(t : T?) {
+        let out = path_join(test_temp_dir(), "ru-en-dest-out.dlim")
+        remove(out)
+        var log = ""
+        let main = path_join(get_this_module_dir(), "main.das")
+        let argv <- [get_host_binary(), "-jit", main, "--", "--model", model, "-o", out]
+        let rc = run_and_capture(argv, log, 300.0)
+        t |> equal(rc, 0, "the bake exits 0: {log}")
+        t |> success(stat(out).is_valid, "{base_name(out)} landed: {log}")
+        t |> equal(image_family_tag(out), "bergamot-q8", "the image carries the q8 lane's tag")
+        t |> success(!stat("{model}.bergamot-q8.dlim").is_valid, "nothing landed beside the source")
+        remove(out)
+    }
+    t |> run("-o naming the source itself is refused, and --force never deletes the source") @(t : T?) {
+        let size = stat(model).size
+        var log = ""
+        let main = path_join(get_this_module_dir(), "main.das")
+        let argv <- [get_host_binary(), "-jit", main, "--", "--model", model, "-o", model, "--force"]
+        let rc = run_and_capture(argv, log, 300.0)
+        t |> equal(rc, 2, "the bake refuses: {log}")
+        t |> success(find(log, "is the source") >= 0, "and says the output is the source: {log}")
+        t |> equal(stat(model).size, size, "the source is intact")
+    }
+    remove(path_join(dir, "model.ruen.intgemm.alphas.bin"))
+    remove(path_join(dir, "vocab.ruen.spm"))
+}
+
+[test]
+def test_bake_gigaam_lanes(t : T?) {
+    let src = path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k.gguf")
+    return if (!model_available(t, src))
+    for (lane in [("q8", "gigaam-kq"), ("fp32", "gigaam-f16")]) {
+        t |> run("the q4_k carrier at -q {lane._0} bakes the {lane._1} image to -o") @(t : T?) {
+            let out = path_join(test_temp_dir(), "gigaam-{lane._0}.dlim")
+            remove(out)
+            var log = ""
+            let main = path_join(get_this_module_dir(), "main.das")
+            let argv <- [get_host_binary(), "-jit", main, "--", "--model", src, "--quant", lane._0, "-o", out]
+            let gpu_was = env_value_of("DASLLAMA_GPU")
+            set_env_variable("DASLLAMA_GPU", "1")   // the child's GPU tier armed: the planar bake is the CPU image whatever the box serves
+            let rc = run_and_capture(argv, log, 600.0)
+            set_env_variable("DASLLAMA_GPU", gpu_was)
+            t |> equal(rc, 0, "the bake exits 0: {log}")
+            t |> success(stat(out).is_valid, "{base_name(out)} landed: {log}")
+            t |> equal(image_family_tag(out), lane._1, "the image carries the lane's tag")
+            remove(out)
+        }
+    }
+    t |> run("-o writes with the image rail off, and the source's stale lane images stay - a destination mint reaps nothing") @(t : T?) {
+        let dir = path_join(test_temp_dir(), "gigaam-dest")
+        let copy = path_join(dir, "gigaam-v3-e2e-rnnt-q4_k.gguf")
+        var err = ""
+        t |> success(mkdir_rec(dir) && copy_file(src, copy, true, err), "copied the carrier: {err}")
+        let stale = "{copy}.gigaam-kq.dlim"
+        fopen(stale, "wb") $(f) {
+            fwrite(f, "not an image")
+        }
+        let out = path_join(test_temp_dir(), "gigaam-dest.dlim")
+        remove(out)
+        var log = ""
+        let main = path_join(get_this_module_dir(), "main.das")
+        let argv <- [get_host_binary(), "-jit", main, "--", "--model", copy, "--quant", "q8", "-o", out]
+        let was = env_value_of("DASLLAMA_IMAGE")
+        set_env_variable("DASLLAMA_IMAGE", "0")   // the child's image rail off: only the destination may sink the mint
+        let rc = run_and_capture(argv, log, 600.0)
+        set_env_variable("DASLLAMA_IMAGE", was)
+        t |> equal(rc, 0, "the bake exits 0: {log}")
+        t |> success(stat(out).is_valid, "the image landed at -o with the rail off: {log}")
+        t |> success(stat(stale).is_valid && stat(stale).size == 12ul, "the stale lane image beside the source survived untouched")
+        remove(out)
+        remove(stale)
+        remove(copy)
+    }
 }

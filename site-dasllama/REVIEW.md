@@ -53,22 +53,23 @@ describes as it stands at publish time: the tool's current code, the page's mark
 **A diff that falsifies standing page copy - a masthead, section prose, a meta tag - or an
 entry dated on or after the publish day of this change, fixes it in the same change.**
 
-**A PR whose copy describes something the linked download does not yet contain refreshes that
-artifact at its published location - a GitHub release, a Hugging Face repository - before the
-PR merges, or holds the copy until it does** - the copy is judged against the artifact reachable at that
-link at publish time, and an artifact republishes on its own trigger, never on a page's merge.
+**A PR whose copy describes something a linked download does not yet contain, where that
+download is an artifact published outside this repository's deploy, refreshes that artifact at
+its published location before the PR merges, or holds the copy until it does** - such an
+artifact republishes on its own trigger, never on a page's merge. Copy describing a page the
+deploy builds is checked like any other claim, against that page as it stands at publish time.
 
-**An entry for something not yet shipped is a defect.** Shipped
-means a reader can have it at publish time: the code the entry describes is merged to this
-repository's `master`, and any artifact the entry points a reader at is downloadable from where
-it points.
+**An entry for something not yet shipped is a defect.** Shipped means a reader can have it at
+publish time: the code the entry describes is merged to this repository's `master`.
 
 **A PR that adds or changes copy describing what a downloadable artifact contains names, in
-the PR body, the URL it fetched for each artifact the copy points at and what the fetch
-returned.**
+the PR body, the URL it fetched and what the fetch returned for each artifact the copy points at
+that is reachable before merge; for a page the deploy builds, it names instead the local build
+of that page it checked and what that build showed.**
 
-**A measurement result in an entry - a figure, or words about
-what a run measured: speed, error rate, footprint, size - that does not name the date and the
+**A measurement result in an entry - a figure a run produced (an artifact's byte size read off
+the file is not one), or words about what a run measured: speed, error rate, footprint, size -
+that does not name the date and the
 build sha of that run, in the entry's own text or in its `<!-- figures: ... -->` comment, is a
 defect, and a sha the entry marks as unconfirmed does not count as named** - a result without
 its date reads as a standing claim.

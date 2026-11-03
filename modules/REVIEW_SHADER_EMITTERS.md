@@ -10,14 +10,7 @@ or `dasMetal` whose name ends in `_shader`. A global-rooted-array access is a lo
 a kernel body or any `def` it reaches through a chain of calls, of an element of a module global,
 a `@workgroup` array or a `self.<member>` resource; slack is an allocation past a region's end
 that the kernel's module-root `ARCHITECTURE*.md` names. A kernel-model capability is a construct
-a kernel body may use - an op, a type, an attribute, a memory class - that an emitter lowers.
-Emitted shape is the
-structure of the emitted kernel - its signature, its parameter
-attributes and binding numbers, its statement forms - and the constants that structure carries: a
-tile, an unroll width, a SPIR-V kernel's local size (the `LocalSize` execution mode the SPIR-V
-words carry), a CUDA kernel's block size and `min_blocks` (the `__launch_bounds__` arguments the
-CUDA text carries), the extent of a local or `@workgroup` array; a grid and a Metal threadgroup
-size are dispatch arguments, read at the encoder call site, and are not emitted shape. The
+a kernel body may use - an op, a type, an attribute, a memory class - that an emitter lowers. The
 reduction width (K) is the length of the loop a matmul kernel accumulates over; it does not fix
 tiling, so it is not a shape constant.
 
@@ -37,9 +30,10 @@ or pointer argument.** A kernel's CPU run is the reference its device output is 
 a body that computes nothing leaves that reference reading storage only the device fills.
 
 **A diff that changes what an emitter lowers - an emitter's emit code, or
-`daslib/shader_emit_common.das` - never lets a construct the emitter cannot lower, or would lower
-to text or words that do not compute it, produce a kernel or a crash - the emitter reports a
-compile error that names the construct instead.**
+`daslib/shader_emit_common.das` - never lets a construct in a kernel body, or a value of a kernel
+annotation argument, that the emitter cannot lower, or would lower to text or words that do not
+compute it, produce a kernel or a crash - the emitter reports a compile error that names the
+construct or the argument instead.**
 
 **Never pass a shape constant to a kernel as a runtime argument where a call-site constant can
 carry it - pass it as a call-site constant.** A shape constant is a value the emitter requires as

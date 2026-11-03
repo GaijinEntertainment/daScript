@@ -18,9 +18,9 @@ pointer into CPU memory) a later dispatch reads, puts every piece of state the f
 and every such cached set or address, where the model drop clears it, in the same change: in
 `vk_drop_model_state`'s sweep, or in a listener registered through `register_vk_drop_hook`
 (`dasllama/dasllama_vulkan_common.das`).** To clear is
-to zero the state or leave it unreachable to every later read. A `make_device_buf` result and any
-field of `RDec` - the resident decode driver's state struct - are swept already, a `*_ready` latch
-and a profiler accumulator are not; pipelines are device-lifetime state that survives the drop.
+to zero the state or leave it unreachable to every later read. The sweep frees a `make_device_buf`
+result and clears `RDec` (the resident decode driver's state), but not a driver's own handle to
+such a buffer, a `*_ready` latch or a profiler accumulator; pipelines survive the drop.
 
 **A diff that adds to `dasllama/dasllama_vulkan_classes.das` a host-side ensure/set/enc pick
 ladder over a family's class stamps - the stamps of one `[vk_dispatch]` class template, picked by a

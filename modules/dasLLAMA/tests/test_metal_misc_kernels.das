@@ -2355,13 +2355,17 @@ def private wg_kernel_method(kann, mname : string) : string {
 //! global of that kernel onto the given stem; `twins` gives the class a second kernel method of
 //! the stamp family's prefix.
 def private spawn_wg_fixture(with_tgmem : bool; tag : string; extra : string = ""; stamp : string = "";
-                             kname : string = ""; twins : bool = false; params : string = "n : int64") : tuple<rc : int; out : string> {
+                             kname : string = ""; twins : bool = false; params : string = "n : int64";
+                             kargs : string = "") : tuple<rc : int; out : string> {
     let tgarg = (with_tgmem ? "tgmem = \"wg_fixture_msl_tgmem\", " : "") + extra
     let attr = (empty(stamp)
         ? "[metal_dispatch(name = \"enc_wg_fixture\", pso = \"g_wg_fixture_pso\", {tgarg}tg = 64, grid = \"n/64\", params = \"{params}\")]"
         : "[metal_dispatch(stamp = \"{stamp}\", pso = \"g_wg_fixture_pso\")]")
     let kernname = !empty(kname) ? kname : (empty(stamp) ? "wg_fixture_msl" : "")
-    let kann = empty(kernname) ? "    [metal_kernel]" : "    [metal_kernel(name = \"{kernname}\")]"
+    let more = empty(kargs) ? "" : ", " + kargs
+    let kann = (empty(kernname)
+        ? (empty(kargs) ? "    [metal_kernel]" : "    [metal_kernel({kargs})]")
+        : "    [metal_kernel(name = \"{kernname}\"{more})]")
     let kmethods = (twins
         ? wg_kernel_method(kann, "metal_moe_mulmm_one") + "\n" + wg_kernel_method(kann, "metal_moe_mulmm_two")
         : wg_kernel_method(kann, "kmain"))
@@ -2556,6 +2560,23 @@ def test_lens_tgmem_gate(t : T?) {
             // and a builder binding the derived spelling cannot resolve it
             let named = spawn_wg_fixture(false, "stamp_named", "", "kq_mm:wgfix:t", "wgf_named")
             t |> equal(0, named.rc, "a stamped class with a named kernel binds <name>_tgmem: {named.out}")
+        } else {
+            t |> skip("das_metal is not built on this platform")
+        }
+    }
+}
+
+[test]
+def test_lens_max_threads_gate(t : T?) {
+    t |> run("[metal_kernel] max_threads= takes a positive int, the threadgroup the entry declares") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            for (arg in ["max_threads = 0", "max_threads = \"wide\""]) {
+                let bad = spawn_wg_fixture(true, "mt_bad", "", "", "", false, "n : int64", arg)
+                t |> success(bad.rc != 0, "`{arg}` must not compile")
+                t |> success(find(bad.out, "max_threads must be a positive int") >= 0, "the refusal names the knob: {bad.out}")
+            }
+            let good = spawn_wg_fixture(true, "mt_ok", "", "", "", false, "n : int64", "max_threads = 64")
+            t |> equal(0, good.rc, "`max_threads = 64` compiles (the control): {good.out}")
         } else {
             t |> skip("das_metal is not built on this platform")
         }
