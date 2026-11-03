@@ -52,9 +52,8 @@ def run_child(cmd : string; var output : string&) : int {
     }))
 }
 
-def run_argv(args : array<string>; var output : string&) : int {
-    return run_and_capture(args, output, 300.0)
-}
+def run_argv(args : array<string>; var output : string&) : int =>
+    run_and_capture(args, output, 300.0)
 
 def report_child(t : T?; phase : string; rc : int; out : string; marker : string) : bool {
     let ok = rc == 0 && find(out, marker) >= 0
