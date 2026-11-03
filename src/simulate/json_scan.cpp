@@ -41,6 +41,28 @@ namespace das {
             return cur < end ? *cur : 0;
         }
 
+        bool readNonFinite(double & out) {
+            const char * word = cur < end && *cur == '-' ? cur + 1 : cur;
+            const char * next;
+            double value;
+            if (end - word >= 8 && memcmp(word, "Infinity", 8) == 0) {
+                value = word == cur ? double(INFINITY) : -double(INFINITY);
+                next = word + 8;
+            } else if (word == cur && end - word >= 3 &&
+                    memcmp(word, "NaN", 3) == 0) {
+                value = double(NAN);
+                next = word + 3;
+            } else {
+                return false;
+            }
+            if (next < end && *next != ',' && *next != ']' && *next != '}'
+                    && *next != ' ' && *next != '\t' && *next != '\n'
+                    && *next != '\r') return false;
+            out = value;
+            cur = next;
+            return true;
+        }
+
         // ---- skip any JSON value (for unknown keys) ----
 
         bool skipValue() {
@@ -53,6 +75,8 @@ namespace das {
             if (ch == 't') { if (end - cur >= 4 && memcmp(cur,"true",4)==0) { cur+=4; return true; } return false; }
             if (ch == 'f') { if (end - cur >= 5 && memcmp(cur,"false",5)==0) { cur+=5; return true; } return false; }
             if (ch == 'n') { if (end - cur >= 4 && memcmp(cur,"null",4)==0) { cur+=4; return true; } return false; }
+            double real;
+            if (readNonFinite(real)) return true;
             if (ch == '-' || (ch >= '0' && ch <= '9')) return skipNumber();
             return false;
         }
@@ -213,6 +237,7 @@ namespace das {
         bool readDouble(double & out) {
             skipWS();
             if (cur >= end) return false;
+            if (readNonFinite(out)) return true;
             const char * start = cur;
             if (*cur == '-') cur++;
             if (cur >= end || *cur < '0' || *cur > '9') { cur = start; return false; }
