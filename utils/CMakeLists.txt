@@ -270,14 +270,16 @@ add_custom_target(das_shipped_exes ALL
     COMMENT "Copying daslang beside itself as each shipped tool exe")
 
 if(NOT DAS_TESTS_DISABLED)
-    set(_lint_project_tests
-        ${PROJECT_SOURCE_DIR}/utils/lint/tests/module_cache)
-    add_test(NAME lint_project_resolution COMMAND daslang
-        -no-module-cache ${PROJECT_SOURCE_DIR}/dastest/dastest.das --
-        --test ${_lint_project_tests}/project_resolution.das
-        --failures-only)
-    set_tests_properties(lint_project_resolution PROPERTIES LABELS "small"
-        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    file(GLOB _lint_project_tests CONFIGURE_DEPENDS
+        ${PROJECT_SOURCE_DIR}/utils/lint/tests/module_cache/project_*.das)
+    foreach(_test ${_lint_project_tests})
+        get_filename_component(_name ${_test} NAME_WE)
+        add_test(NAME lint_${_name} COMMAND daslang
+            -no-module-cache ${PROJECT_SOURCE_DIR}/dastest/dastest.das --
+            --test ${_test} --failures-only)
+        set_tests_properties(lint_${_name} PROPERTIES LABELS "small"
+            WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    endforeach()
     add_dependencies(test-small daslang)
 endif()
 
