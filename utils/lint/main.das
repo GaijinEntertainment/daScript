@@ -84,7 +84,7 @@ struct Config {
     json : bool
     @clarg_doc = "Skip the result cache: compile and lint every file, record nothing"
     no_cache : bool
-    @clarg_doc = "Compile each file's modules in its own group; the default shares them"
+    @clarg_doc = "Compile each file's modules in its own group"
     no_shared_modules : bool
     @clarg_doc = "Leave every file and folder under this path out of the run. Repeatable"
     exclude : array<string>
@@ -97,6 +97,9 @@ struct Config {
 
     @clarg_doc = "Worker mode: read newline-delimited file paths and emit one JSON-wrapped LintResult per file on stdout. Internal — used by parallel driver. Skips positional args, banner, summary."
     paths_from : string
+
+    @clarg_doc = "Resolve requires through this .das_project module map"
+    project : string
 
     @clarg_short = "d"
     @clarg_doc = "Disable rule(s). Repeatable or comma-separated. Codes only (e.g. PERF001,STYLE024). On overlap with --enable, --disable wins."
@@ -934,19 +937,24 @@ def private note_compile_failure(issue_str : string; var result : LintResult) {
     }
 }
 
-def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
-              disabled_codes, enabled_codes : table<string>) : LintResult {
+def lint_file(file : string; run_paranoid, run_perf, run_style,
+              comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
+              disabled_codes, enabled_codes : table<string>;
+              project : string = "") : LintResult {
     var result = LintResult(file = file)
     if (set_skip_reason(file, lint_fixtures, result)) {
         return <- result
     }
-    let entry = !empty(lint_cache_dir) ? lint_cache_entry(file, run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths, disabled_codes, enabled_codes) : ""
+    let entry = (!empty(lint_cache_dir) && empty(project)
+        ? lint_cache_entry(file, run_paranoid, run_perf, run_style,
+            comment_hygiene, lint_fixtures, lint_excluded_paths,
+            disabled_codes, enabled_codes) : "")
     if (!empty(entry) && lint_cache_hit(entry)) {
         result.cached = true
         return <- result
     }
     var inputs : array<string>
-    var inscope access <- make_file_access("")
+    var inscope access <- make_file_access(project)
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
             lint_policies(cop)
@@ -995,9 +1003,14 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene,
     return <- result
 }
 
-def lint_file_fixing(file : string; run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
-                     disabled_codes, enabled_codes : table<string>; fix : bool) : LintResult {
-    var result <- lint_file(file, run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths, disabled_codes, enabled_codes)
+def lint_file_fixing(file : string; run_paranoid, run_perf, run_style,
+                     comment_hygiene, lint_fixtures,
+                     lint_excluded_paths : bool;
+                     disabled_codes, enabled_codes : table<string>;
+                     fix : bool; project : string = "") : LintResult {
+    var result <- lint_file(file, run_paranoid, run_perf, run_style,
+        comment_hygiene, lint_fixtures, lint_excluded_paths,
+        disabled_codes, enabled_codes, project)
     return <- result if (!fix || result.failed || !empty(result.skip_reason))
     var fixed = 0
     var rows : array<string>
@@ -1005,7 +1018,7 @@ def lint_file_fixing(file : string; run_paranoid, run_perf, run_style, comment_h
     for (_ in range(max_passes)) {
         var after <- lint_fix_pass(file, result, run_paranoid, run_perf, run_style,
                                    comment_hygiene, lint_fixtures, lint_excluded_paths,
-                                   disabled_codes, enabled_codes)
+                                   disabled_codes, enabled_codes, project)
         let applied = after.fixed
         rows |> push_from(after.fixed_rows)
         delete result
@@ -1029,7 +1042,8 @@ def private fixed_finding_rows(text : string; issue : LintIssue) : array<string>
 
 def lint_fix_pass(file : string; result : LintResult; run_paranoid, run_perf, run_style,
                   comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
-                  disabled_codes, enabled_codes : table<string>) : LintResult {
+                  disabled_codes, enabled_codes : table<string>;
+                  project : string = "") : LintResult {
     var fixable <- [for (issue in result.issues); issue; where issue.fix.line > 0
         && (empty(issue.file) || normalize(issue.file) == normalize(file))]
     var fixes <- [for (issue in fixable); issue.fix]
@@ -1042,9 +1056,11 @@ def lint_fix_pass(file : string; result : LintResult; run_paranoid, run_perf, ru
     let original = fread(file)
     var patched = apply_lint_fixes(original, fixes)
     fwrite(file, patched.text)
-    var after <- lint_file(file, run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths, disabled_codes, enabled_codes)
+    var after <- lint_file(file, run_paranoid, run_perf, run_style,
+        comment_hygiene, lint_fixtures, lint_excluded_paths,
+        disabled_codes, enabled_codes, project)
     var kept_idx <- [for (k in range(length(fixes))); k]
-    if (after.failed) {
+    if (after.failed || !empty(after.skip_reason)) {
         kept_idx |> clear()
         var kept : array<LintFix>
         kept |> reserve(length(fixes))
@@ -1054,8 +1070,10 @@ def lint_fix_pass(file : string; result : LintResult; run_paranoid, run_perf, ru
             patched = apply_lint_fixes(original, kept)
             fwrite(file, patched.text)
             delete after
-            after <- lint_file(file, run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths, disabled_codes, enabled_codes)
-            if (after.failed) {
+            after <- lint_file(file, run_paranoid, run_perf, run_style,
+                comment_hygiene, lint_fixtures, lint_excluded_paths,
+                disabled_codes, enabled_codes, project)
+            if (after.failed || !empty(after.skip_reason)) {
                 kept |> pop()
                 kept_idx |> pop()
             }
@@ -1063,7 +1081,9 @@ def lint_fix_pass(file : string; result : LintResult; run_paranoid, run_perf, ru
         patched = apply_lint_fixes(original, kept)
         fwrite(file, patched.text)
         delete after
-        after <- lint_file(file, run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths, disabled_codes, enabled_codes)
+        after <- lint_file(file, run_paranoid, run_perf, run_style,
+            comment_hygiene, lint_fixtures, lint_excluded_paths,
+            disabled_codes, enabled_codes, project)
     }
     after.fixed = patched.applied
     let kept_fixes <- [for (k in kept_idx); fixes[k]]
@@ -1163,13 +1183,16 @@ def maybe_collect(var since_collect : int&) {
 // LintResult per file between `##lint##\n` markers. Caller (driver)
 // parses the stream and aggregates.
 [unsafe_heap_collect]
-def run_worker(paths : array<string>; run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
-               disabled_codes, enabled_codes : table<string>; fix : bool) {
+def run_worker(paths : array<string>; run_paranoid, run_perf, run_style,
+               comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
+               disabled_codes, enabled_codes : table<string>;
+               fix : bool; project : string = "") {
     var since_collect = 0
     var inscope order <- lint_order(paths)
     for (idx in order) {
-        let result = lint_file_fixing(paths[idx], run_paranoid, run_perf, run_style,
-            comment_hygiene, lint_fixtures, lint_excluded_paths, disabled_codes, enabled_codes, fix)
+        let result = lint_file_fixing(paths[idx], run_paranoid, run_perf,
+            run_style, comment_hygiene, lint_fixtures, lint_excluded_paths,
+            disabled_codes, enabled_codes, fix, project)
         print("{JSON_PREFIX}{write_json(JV(result))}\n{JSON_PREFIX}")
         maybe_collect(since_collect)
     }
@@ -1222,6 +1245,9 @@ def build_worker_argv(spawn_prefix : array<string>; chunk_path : string; cfg : C
     if (!empty(cfg.enable)) {
         argv |> push("--enable")
         argv |> push(cfg.enable |> join(","))
+    }
+    if (!empty(cfg.project)) {
+        argv |> push("--project={cfg.project}")
     }
     return <- argv
 }
@@ -1299,7 +1325,9 @@ def run_parallel_lint(files : array<string>; cfg : Config) : array<LintResult> {
 // Parse one worker's stdout — alternating JSON_PREFIX-delimited blocks — into LintResult records.
 def parse_worker_output(cr : parallel_workers::ChunkResult; var results : array<LintResult>) : void {
     if (cr.exit_code != 0) {
-        print("error: worker {cr.index} exited with code {cr.exit_code}\n")
+        results |> emplace(LintResult(file = "worker {cr.index}",
+            failed = true,
+            compile_errors = "exit code {cr.exit_code}\n{cr.stdout}"))
     }
     // Normalize CRLF → LF: on Windows the popen pipe text-mode reader
     // translates child `\n` to `\r\n`, which prevents `split(JSON_PREFIX)`
@@ -1353,7 +1381,8 @@ def resolve_rule_filters(cfg : Config; var disabled_codes : table<string>&; var 
 // exit code, or -1 to proceed.
 def collect_input_files(var files : array<string>&; var dirs : array<string>&) : int {
     let cli_args <- get_user_args()
-    let paths <- [for (arg in cli_args); arg; where !starts_with(arg, "-")]
+    let paths <- collect_positional_args(cli_args,
+        get_command_info(type<Config>))
     if (empty(paths)) {
         print("Error: no files or directories specified\n\n")
         return print_lint_help(1)
@@ -1537,6 +1566,18 @@ def private release_order(var nodes : array<RequireNode>) : array<int> {
 def private lint_order(files : array<string>) : array<int> =>
     <- lint_shared_modules ? require_order(files) : [for (i in range(length(files))); i]
 
+def private configure_lint(cfg : Config) {
+    lint_cache_dir = (cfg.no_cache || is_standalone_exe() || jit_enabled()
+        ? "" : cfg.cache_dir)
+    lint_shared_modules = !cfg.no_shared_modules && empty(cfg.project)
+    lint_exclude_roots |> reserve(length(cfg.exclude))
+    for (x in cfg.exclude) {
+        let full = get_full_file_name(x)
+        lint_exclude_roots |> push(
+            to_generic_path(empty(full) ? x : full))
+    }
+}
+
 //! Lints ``files`` - on workers when there are enough - and prints
 //! each file's result as it lands unless ``cfg.json`` asks for the
 //! one JSON document at the end.
@@ -1571,7 +1612,7 @@ def lint_files(files : array<string>; cfg : Config; run_paranoid, run_perf, run_
             }
             var result <- lint_file_fixing(file, run_paranoid, run_perf, run_style,
                 cfg.comment_hygiene, cfg.lint_fixtures, cfg.lint_excluded_paths, disabled_codes,
-                enabled_codes, cfg.fix)
+                enabled_codes, cfg.fix, cfg.project)
             tally_result(result, report.totals)
             if (cfg.json) {
                 report.results |> emplace(result)
@@ -1617,13 +1658,7 @@ def main() : int {
 
     var disabled_codes, enabled_codes : table<string>
     if (!resolve_rule_filters(cfg, disabled_codes, enabled_codes)) return 1
-    lint_cache_dir = cfg.no_cache || is_standalone_exe() || jit_enabled() ? "" : cfg.cache_dir
-    lint_shared_modules = !cfg.no_shared_modules
-    lint_exclude_roots |> reserve(length(cfg.exclude))
-    for (x in cfg.exclude) {
-        let full = get_full_file_name(x)
-        lint_exclude_roots |> push(to_generic_path(empty(full) ? x : full))
-    }
+    configure_lint(cfg)
 
     // Worker mode: lint a pre-resolved list from a paths-from file and emit
     // JSON-wrapped results. No banner, no summary, no exit-code derivation.
@@ -1633,7 +1668,9 @@ def main() : int {
             print("error: cannot read paths-from file: {cfg.paths_from}\n")
             return 1
         }
-        run_worker(paths, run_paranoid, run_perf, run_style, cfg.comment_hygiene, cfg.lint_fixtures, cfg.lint_excluded_paths, disabled_codes, enabled_codes, cfg.fix)
+        run_worker(paths, run_paranoid, run_perf, run_style,
+            cfg.comment_hygiene, cfg.lint_fixtures, cfg.lint_excluded_paths,
+            disabled_codes, enabled_codes, cfg.fix, cfg.project)
         return 0
     }
 
