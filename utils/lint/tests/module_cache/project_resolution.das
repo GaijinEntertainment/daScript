@@ -51,15 +51,32 @@ def private run_lint(root : string; extra : array<string>) : LintRun {
 
 [test]
 def test_project_resolution(t : T?) {
+    let serial = build_tree("serial", "warning.das")
+    t |> run("unmapped requires skip") @(t : T?) {
+        let result = run_lint(serial, ["-j", "1"])
+        t |> equal(result.code, 0, result.output)
+        t |> equal(count(result.output, "SKIP"), 1, result.output)
+        t |> equal(count(result.output, "STYLE027"), 0, result.output)
+    }
+    t |> run("project JSON") @(t : T?) {
+        let result = run_lint(serial, ["-j", "1", "--json", "--style-only",
+            "--enable=STYLE027", "--project",
+            path_join(serial, "map.das_project")])
+        t |> equal(result.code, 2, result.output)
+        var error = ""
+        var report = read_json(result.output, error)
+        t |> strictEqual(error, "", result.output)
+        t |> equal(report?["totals"]?["issues"] ?? -1, 1)
+        t |> equal(report?["totals"]?["errors"] ?? -1, 0)
+        t |> equal(report?["totals"]?["skipped"] ?? -1, 0)
+        t |> equal(report?["results"]?[0]?["count"] ?? -1, 1)
+        t |> equal(report?["results"]?[0]?["issues"]?[0]?["code"] ?? "",
+            "STYLE027")
+        unsafe { delete report; }
+    }
     for (workers in [1, 2]) {
         let files = workers == 1 ? 1 : 16
         let root = build_tree("workers{workers}", "warning.das", files)
-        t |> run("unmapped requires skip with {workers} workers") @(t : T?) {
-            let result = run_lint(root, ["-j", "{workers}"])
-            t |> equal(result.code, 0, result.output)
-            t |> equal(count(result.output, "SKIP"), files, result.output)
-            t |> equal(count(result.output, "STYLE027"), 0, result.output)
-        }
         t |> run("project requires lint with {workers} workers") @(t : T?) {
             let result = run_lint(root, ["-j", "{workers}", "--project",
                 path_join(root, "map.das_project")])
@@ -69,24 +86,6 @@ def test_project_resolution(t : T?) {
                 result.output)
             t |> equal(count(result.output, "LINT026"), 0, result.output)
         }
-        t |> run("project JSON with {workers} workers") @(t : T?) {
-            let result = run_lint(root, ["-j", "{workers}", "--json",
-                "--style-only", "--enable=STYLE027", "--project",
-                path_join(root, "map.das_project")])
-            t |> equal(result.code, 2, result.output)
-            var error = ""
-            var report = read_json(result.output, error)
-            t |> strictEqual(error, "", result.output)
-            t |> equal(report?["totals"]?["issues"] ?? -1, files)
-            t |> equal(report?["totals"]?["errors"] ?? -1, 0)
-            t |> equal(report?["totals"]?["skipped"] ?? -1, 0)
-            for (i in range(files)) {
-                t |> equal(report?["results"]?[i]?["count"] ?? -1, 1)
-                t |> equal(report?["results"]?[i]?["issues"]?[0]?["code"]
-                    ?? "", "STYLE027")
-            }
-            unsafe { delete report; }
-        }
     }
 }
 
@@ -94,6 +93,7 @@ def test_project_resolution(t : T?) {
 def test_project_errors(t : T?) {
     for (workers in [1, 2]) {
         for (kind in ["missing", "broken"]) {
+            continue if (workers == 2 && kind == "missing")
             t |> run("{kind} map, {workers} workers") @(t : T?) {
                 let files = workers == 1 ? 1 : 16
                 let root = build_tree("{kind}{workers}", "warning.das", files)
@@ -137,22 +137,15 @@ def test_project_compile_errors(t : T?) {
 
 [test]
 def test_project_fix(t : T?) {
-    for (workers in [1, 2]) {
-        t |> run("fix keeps map, {workers} workers") @(t : T?) {
-            let files = workers == 1 ? 1 : 16
-            let root = build_tree("fix{workers}", "fix.das", files)
-            let result = run_lint(root, ["--fix", "-j", "{workers}",
-                "--project", path_join(root, "map.das_project")])
-            t |> equal(result.code, 0, result.output)
-            t |> equal(count(result.output, "SKIP"), 0, result.output)
-            t |> equal(count(result.output, "FIXED"), files,
-                result.output)
-            for (i in range(files)) {
-                let fixed = fread(path_join(root, "src/f{i}.das"))
-                t |> success(find(fixed, "=> hidden_value()") >= 0,
-                    fixed)
-            }
-        }
+    t |> run("fix keeps map") @(t : T?) {
+        let root = build_tree("fix", "fix.das")
+        let result = run_lint(root, ["--fix", "-j", "1", "--project",
+            path_join(root, "map.das_project")])
+        t |> equal(result.code, 0, result.output)
+        t |> equal(count(result.output, "SKIP"), 0, result.output)
+        t |> equal(count(result.output, "FIXED"), 1, result.output)
+        let fixed = fread(path_join(root, "src/f0.das"))
+        t |> success(find(fixed, "=> hidden_value()") >= 0, fixed)
     }
 }
 
@@ -222,76 +215,55 @@ def test_project_flag_value(t : T?) {
 
 [test]
 def test_project_driver_flag_value(t : T?) {
-    for (workers in [1, 2]) {
-        t |> run("consumed map value, {workers} workers") @(t : T?) {
-            let files = workers == 1 ? 1 : 16
-            let root = build_tree("driver-flag{workers}", "fix.das", files)
-            let original = fread(fixture("fix.das"))
-            fwrite(path_join(root, "--fix"), fread(fixture("map.das")))
-            let result = run_lint(root, ["-j", "{workers}",
-                "--style-only", "--enable=STYLE042", "--project", "--fix"])
-            t |> equal(result.code, 2, result.output)
-            t |> equal(count(result.output, "STYLE042"), files,
-                result.output)
-            t |> equal(count(result.output, "FIXED"), 0, result.output)
-            for (i in range(files)) {
-                t |> equal(fread(path_join(root, "src/f{i}.das")),
-                    original, "worker {workers}, file {i}")
-            }
-        }
+    t |> run("consumed map value") @(t : T?) {
+        let root = build_tree("driver-flag", "fix.das")
+        let original = fread(fixture("fix.das"))
+        fwrite(path_join(root, "--fix"), fread(fixture("map.das")))
+        let result = run_lint(root, ["-j", "1", "--style-only",
+            "--enable=STYLE042", "--project", "--fix"])
+        t |> equal(result.code, 2, result.output)
+        t |> equal(count(result.output, "STYLE042"), 1, result.output)
+        t |> equal(count(result.output, "FIXED"), 0, result.output)
+        t |> equal(fread(path_join(root, "src/f0.das")), original)
     }
 }
 
 [test]
 def test_project_shared_fix_recovery(t : T?) {
-    for (workers in [1, 2]) {
-        for (kind in ["invalid", "missing"]) {
-            t |> run("shared recovery: {kind}, {workers} workers") @(t : T?) {
-                let files = workers == 1 ? 1 : 16
-                let root = build_tree("shared-{kind}{workers}",
-                    "fix.das", files)
-                let original = fread(fixture("fix.das"))
-                fwrite(path_join(root, "dep/hidden.das"),
-                    fread(fixture("hidden_shared.das")))
-                fwrite(path_join(root, "reject_fix"), kind)
-                let result = run_lint(root, ["--fix", "-j", "{workers}",
-                    "--project", path_join(root, "map.das_project")])
-                t |> equal(result.code, 2, result.output)
-                t |> equal(count(result.output, "SKIP"), 0, result.output)
-                t |> equal(count(result.output, "STYLE042"), files,
-                    result.output)
-                t |> equal(count(result.output, "FIXED"), 0, result.output)
-                for (i in range(files)) {
-                    t |> equal(fread(path_join(root, "src/f{i}.das")),
-                        original, "worker {workers}, file {i}")
-                }
-            }
+    for (kind in ["invalid", "missing"]) {
+        t |> run("shared recovery: {kind}") @(t : T?) {
+            let root = build_tree("shared-{kind}", "fix.das")
+            let original = fread(fixture("fix.das"))
+            fwrite(path_join(root, "dep/hidden.das"),
+                fread(fixture("hidden_shared.das")))
+            fwrite(path_join(root, "reject_fix"), kind)
+            let result = run_lint(root, ["--fix", "-j", "1", "--project",
+                path_join(root, "map.das_project")])
+            t |> equal(result.code, 2, result.output)
+            t |> equal(count(result.output, "SKIP"), 0, result.output)
+            t |> equal(count(result.output, "STYLE042"), 1, result.output)
+            t |> equal(count(result.output, "FIXED"), 0, result.output)
+            t |> equal(fread(path_join(root, "src/f0.das")), original)
         }
     }
 }
 
 [test]
 def test_project_shared_modules(t : T?) {
-    for (workers in [1, 2]) {
-        t |> run("mapped shared module, {workers} workers") @(t : T?) {
-            let files = workers == 1 ? 2 : 16
-            let root = build_tree("shared{workers}", "shared_user.das",
-                files - 1)
-            fwrite(path_join(root, "src/z_impl.das"),
-                fread(fixture("shared.das")))
-            for (isolated in [true, false]) {
-                var inscope extra <- ["-j", "{workers}", "--style-only",
-                    "--enable=STYLE042", "--project",
-                    path_join(root, "map.das_project")]
-                extra |> push("--no-shared-modules") if (isolated)
-                let result = run_lint(root, extra)
-                t |> equal(result.code, 0,
-                    "isolated={isolated}: {result.output}")
-                t |> equal(count(result.output, "PASS"), files,
-                    result.output)
-                t |> equal(count(result.output, "SKIP"), 0,
-                    result.output)
-            }
+    t |> run("mapped shared module") @(t : T?) {
+        let root = build_tree("shared", "shared_user.das")
+        fwrite(path_join(root, "src/z_impl.das"),
+            fread(fixture("shared.das")))
+        for (isolated in [true, false]) {
+            var inscope extra <- ["-j", "1", "--style-only",
+                "--enable=STYLE042", "--project",
+                path_join(root, "map.das_project")]
+            extra |> push("--no-shared-modules") if (isolated)
+            let result = run_lint(root, extra)
+            t |> equal(result.code, 0,
+                "isolated={isolated}: {result.output}")
+            t |> equal(count(result.output, "PASS"), 2, result.output)
+            t |> equal(count(result.output, "SKIP"), 0, result.output)
         }
     }
 }

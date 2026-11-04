@@ -277,7 +277,7 @@ if(NOT DAS_TESTS_DISABLED)
         --test ${_lint_project_tests}/project_resolution.das
         --failures-only)
     set_tests_properties(lint_project_resolution PROPERTIES LABELS "small"
-        TIMEOUT 1800 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     add_dependencies(test-small daslang)
 endif()
 
