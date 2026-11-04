@@ -21,8 +21,10 @@ require _tower_twin   // set_every_gpu_tower, the Vulkan twin's seat and instrum
 // Reference arm: the f32-widened mmproj, CPU, -fa off (qwen3vl-vision-oracle/mint_25o.sh).
 // Fixtures: pre-resized [0,1] float canvases - no preprocessing, so a diff isolates the tower
 // math; cb448 = four full windows, cb112 = the single-window arm, cb616x336 = ragged windows.
-// The Vulkan twin skips on a build with das_metal - the Metal driver owns the tower hooks there - and
-// without a Vulkan device under DASLLAMA_GPU=1.
+// The twin runs on the serving discrete home: under the CUDA ask (DASLLAMA_CUDA=1 or set_gpu_home("cuda")) on the CUDA
+// tower, skipping without a CUDA device there (`cuda_twin_seat`); else on the Vulkan tower, skipping on a build with
+// das_metal - the Metal driver owns the tower hooks there -, without a Vulkan device under DASLLAMA_GPU=1 and without the
+// tower's tile family (`vulkan_twin_seat`).
 
 let private TIER1_ABS = 2e-4
 // x token rms; one GELU-LUT chain (the merger) rides the qwen3v Omni floor
@@ -106,19 +108,24 @@ def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind 
         var cpu, dev : array<float>
         var n_cpu = 0l
         var n_dev = 0l
-        set_vulkan_tower(false)
-        let d0 = vulkan_tower_stats()
-        with_dasllama_jobque_() {
-            n_cpu = qwen25v_encode(tw, st, planes, int64(w), int64(h), cpu)
+        var d0 = GpuTowerCounters()
+        var d1 = d0
+        var d2 = d0
+        with_gpu_knobs() {
+            set_serving_gpu_tower(false, true)
+            d0 = gpu_tower_counters(true)
+            with_dasllama_jobque_() {
+                n_cpu = qwen25v_encode(tw, st, planes, int64(w), int64(h), cpu)
+            }
+            d1 = gpu_tower_counters(true)
+            set_serving_gpu_tower(true, true)
+            with_dasllama_jobque_() {
+                n_dev = qwen25v_encode(tw, st, planes, int64(w), int64(h), dev)
+            }
+            d2 = gpu_tower_counters(true)
         }
-        let d1 = vulkan_tower_stats()
-        set_vulkan_tower(true)
-        with_dasllama_jobque_() {
-            n_dev = qwen25v_encode(tw, st, planes, int64(w), int64(h), dev)
-        }
-        let d2 = vulkan_tower_stats()
         if (d2.encodes == d1.encodes) {
-            to_log(LOG_INFO, "qwen25v vulkan twin {kind} {w}x{h}: the driver declined - {vulkan_tower_declines()}\n")
+            to_log(LOG_INFO, "qwen25v {serving_tower_dev(true)} twin {kind} {w}x{h}: the driver declined - {gpu_tower_declines(true)}\n")
         }
         twin_counters(tt, "{kind} {w}x{h}", TwinLegs(exact = d0, cpu = d1, dev = d2, n_cpu = n_cpu, n_dev = n_dev), tw.n_layer, int64(w / 14) * int64(h / 14))
         let rms = rms(cpu)
@@ -148,12 +155,12 @@ def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind 
                 worst_tok = tok
             }
         }
-        to_log(LOG_INFO, "qwen25v vulkan twin {kind} {w}x{h} ({tw.n_layer} blocks, full every {tw.n_wa_pattern}): rms {rms}; device vs exact {dev_ex} ({dev_ex / rms} x rms); NaNs {nans}, worst token {worst_tok} of {length(cpu) / pd}, {over} tokens past the bar\n")
+        to_log(LOG_INFO, "qwen25v {serving_tower_dev(true)} twin {kind} {w}x{h} ({tw.n_layer} blocks, full every {tw.n_wa_pattern}): rms {rms}; device vs exact {dev_ex} ({dev_ex / rms} x rms); NaNs {nans}, worst token {worst_tok} of {length(cpu) / pd}, {over} tokens past the bar\n")
         tt |> success(dev_ex <= bar, "{kind} {w}x{h}: the device chain holds to the exact chain within {rel} x rms ({dev_ex / rms} x rms)")
         if (zero_block >= 0l) {
             var twp <- mint_tower(mm, tw.n_layer, -1l, zero_block)
             var stp = Qwen25vState()
-            var r = TwinResult(spec = TwinSpec(family = "qwen25v", tag = "{kind} {w}x{h}", n_layer = tw.n_layer, metric = TwinMetric.maxdiff), rms = rms, bar = double(bar))
+            var r = TwinResult(spec = TwinSpec(family = "qwen25v", tag = "{kind} {w}x{h}", n_layer = tw.n_layer, metric = TwinMetric.maxdiff, vision = true), rms = rms, bar = double(bar))
             r.reference <- cpu
             twin_poison(tt, r, zero_block, twp, stp) $(t; var s; var out) => qwen25v_encode(t, s, planes, int64(w), int64(h), out)
             delete stp
@@ -166,10 +173,12 @@ let private SHALLOW_ABS_BAR = 0.1   //! one layer of GPU noise measures ~2.6e-2 
 let private WA_WINDOW_ONLY = 99l   //! the one-block tower's full-attention period: (0 + 1) % 99 != 0 puts the block on the window arm
 let private WA_FULL_ONLY = 1l      //! the one-block tower's full-attention period: (0 + 1) % 1 == 0 puts the block on the full-attention arm
 
-//! the one-block `backend` chain (`set_on` its knob, `encodes` its counter) against the CPU chain on quad within `SHALLOW_ABS_BAR`; `poison`: a zeroed block must EXCEED it
+//! the one-block `backend` chain (`set_on` its knob, `encodes` its counter) against the CPU chain on quad within `SHALLOW_ABS_BAR`;
+//! `poison`: a zeroed block must EXCEED it; every GPU knob put back as the cell found it
 [cold_path]
 def private shallow_routing_cell(t : T?; mm, name, backend : string; wa : int64; poison : bool; set_on : block<(on : bool) : void>;
                                  encodes : block<() : int64>) {
+    let knobs = gpu_knobs()
     var tw <- mint_tower(mm, 1l, wa)
     let planes <- make_planes("quad", 448, 448)
     var sg = Qwen25vState()
@@ -214,14 +223,15 @@ def private shallow_routing_cell(t : T?; mm, name, backend : string; wa : int64;
     delete sg
     delete sc
     delete tw
+    set_gpu_knobs(knobs)
 }
 
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def test_qwen25v_vulkan_twin(t : T?) {
-    t |> run("the Vulkan block loop vs the exact CPU chain, and the window routing") @(tt : T?) {
+    t |> run("the serving discrete home's block loop ({serving_tower_dev(true)}) vs the exact CPU chain, and the window routing") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let mm = path_join(models_dir(), "mmproj-Qwen2.5-Omni-3B-f16.gguf")
-            if (!model_available(tt, mm) || !vulkan_twin_seat(tt)) {
+            if (!model_available(tt, mm) || !discrete_twin_seat(tt)) {
                 return
             }
             for (nl in [1l, 2l, 8l]) {   // the shallow twins first, on the tight bar: a drift names its depth before the deep mix re-rolls it
@@ -240,13 +250,13 @@ def test_qwen25v_vulkan_twin(t : T?) {
             twin_encode(tt, tw, st, "cb", 616, 336, mm)
             delete st
             delete tw
-            shallow_routing_cell(tt, mm, "window", "device", WA_WINDOW_ONLY, true, $(on) { set_vulkan_tower(on) }) $ {
-                return vulkan_tower_stats().encodes
+            shallow_routing_cell(tt, mm, "window", "device", WA_WINDOW_ONLY, true, $(on) { set_serving_gpu_tower(on, true) }) $ {
+                return gpu_tower_counters(true).encodes
             }
-            shallow_routing_cell(tt, mm, "full", "device", WA_FULL_ONLY, true, $(on) { set_vulkan_tower(on) }) $ {
-                return vulkan_tower_stats().encodes
+            shallow_routing_cell(tt, mm, "full", "device", WA_FULL_ONLY, true, $(on) { set_serving_gpu_tower(on, true) }) $ {
+                return gpu_tower_counters(true).encodes
             }
-            vulkan_tower_shutdown()
+            serving_tower_shutdown(true)
         } else {
             tt |> skip("dasVulkan not present")
         }

@@ -35,7 +35,8 @@ require _tower_twin
 // transcription tests need a whisper.cpp ggml-tiny.bin (gitignored) and skip without it.
 // Oracle constants come from whisper-cli (CPU, greedy: -bs 1 -bo 1 -nf -ng). The Vulkan twin
 // needs ggml-tiny.bin and ggml-large-v3-turbo.bin plus jfk.wav, and skips without a Vulkan
-// device under DASLLAMA_GPU=1, on a build with das_metal, and when interpreted.
+// device under DASLLAMA_GPU=1, under the CUDA ask (DASLLAMA_CUDA=1 or set_gpu_home("cuda"), where the Vulkan
+// tower's seats stand down - `vulkan_twin_seat`), on a build with das_metal, and when interpreted.
 
 [test]
 def test_f32_to_f16(t : T?) {

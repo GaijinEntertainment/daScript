@@ -100,9 +100,14 @@ struct private CudaCtx {
     global_view_tiles : table<string>           //! f16 B tile locals that tensor loads from 16-bit sources write under the transposed view and products alone read: a per-warp global view, never a shared tile
     kperm : bool                                //! the kernel has a global view: every f16 A tile and shared B tile stores its k permuted (WG_KPERM_PRELUDE)
     precise : bool                              //! the kernel's scalar f32 arithmetic emits as the correctly rounded intrinsics (`CudaEmitConfig.precise`)
-    tiles : table<string; TileLife>             //! the shared tile locals by name: where each is declared and last read, how it is written - the slot reuse and the ones peephole read them
+    tiles : table<string; TileLife>             //! the shared tile locals by name: where each is declared and last read, how it is written and read
     loops : array<LoopSpan>                     //! every loop's span the scan walked: a tile declared ahead of a loop and read inside it lives to the loop's end
     scan_at : SrcPos                            //! the furthest position the scan reached
+    if_depth : int                              //! the ifs open at the scan's point
+    open_loop_ids : array<int>                       //! the loops open at the scan's point, innermost last, each by its id
+    open_loop_if_depths : array<int>                       //! the if depth at each open loop's entry
+    next_loop_id : int
+    loop_exits : table<int>                     //! the loops (by id) whose body holds a break, continue or return at any depth - no fixed count of products a trip
     ones_sum : table<string>                    //! B tiles filled with 1.0 and read by products alone: the product is its A rows' sum in the warp, the tile never carved
     slots : array<SmemSlot>                     //! the tile slots carved so far, each with the tile that holds it
     reduce_sites : int                          //! coopmatReduce sites emitted, each with its own shared scratch
@@ -116,6 +121,7 @@ struct private CudaCtx {
     flush_after : array<string>                 //! statement text to emit right after the statement being emitted
     hoisted : array<string>                     //! declarations at kernel scope: a pipelined tile's slot pointer and prediction registers outlive the loop its local sits in
     raw_s8_tiles : table<string>                //! the s8 tiles on a cp.async ring: their deferred copies share one block barrier past the product
+    prefetch_count : int                        //! the prefetched f16 tiles of the kernel
     @do_not_delete kcls : StructurePtr
 }
 
@@ -838,7 +844,8 @@ struct private LoopSpan {
     end : SrcPos
 }
 
-//! a shared tile local's life: declared at `decl`, last read at `last` (a loop a read sits in extends it to the loop's end);
+//! a shared tile local's life: declared at `decl`, last read at `last` (a loop a read sits in extends it to the loop's end; a
+//! register A tile's `last` is its convert, after which the staging is dead);
 //! a convert target is written under a warp sync and so never takes another tile's slot; `ones` = filled with 1.0 and never
 //! loaded, `other_use` = read anywhere but as a product's B; a name two declarations share is `ambiguous` and gets neither form
 struct private TileLife {
@@ -854,6 +861,27 @@ struct private TileLife {
     read_whole_by_row_owner : bool  //! a product over it lands in an accumulator whose fragment rows equal the warps
     decoded : bool                  //! a decode-in-load of the pipelined form writes it: two f16 slots behind a pointer, its blocks through the raw slot
     raw_s8 : bool                   //! an s8 tile a tensor load fills off an int8 plane: three slots behind a pointer, the windows ahead copied by cp.async
+    load16_writes : int           //! the tensor loads from a 16-bit source writing it
+    load16_ushort : bool
+    prod_a_acc_f32 : bool           //! every product reading it as the A operand lands in an f32 accumulator
+    convert_src_f32 : bool          //! every convert writing it reads an f32 accumulator
+    convert_loop : int              //! the loop holding the last convert writing it (its id, `NO_LOOP` outside every loop)
+    convert_writes : int
+    convert_at : SrcPos
+    prod_a_read : bool              //! a product reads it as the A operand
+    prod_a_row_owned : bool         //! every such product lands in an accumulator a warp owns the rows of
+    nonprod_use : bool              //! anything but a convert, a 16-bit tensor load or a product touches it
+    prod_b_reads : int              //! how many products read it as the B operand
+    prod_b_at : SrcPos              //! where the last of them sits
+    prod_b_loop : int                 //! the loop holding that product (its id, `NO_LOOP` outside every loop)
+    prod_b_ifs : int                  //! the ifs of that loop over the product
+    load16_at : SrcPos              //! where the last 16-bit tensor load writing it sits
+    load_loop : int                 //! the loop holding that load (its id, `NO_LOOP` outside every loop)
+    load_ifs : int                  //! the ifs of that loop over the load
+    prefetch_pending : int             //! the cp.async groups the prefetched tile's load leaves in flight
+    prefetch : bool                 //! the prefetched f16 tile: one slot, the next window's chunks in flight by cp.async past the product over it
+    areg : bool                     //! the register A tile: its fragments in the warps' registers off the staging the one convert writes
+    tile_type : string              //! the coopmatWg* type name
 }
 
 //! a carved shared slot and the tile holding it
@@ -865,9 +893,44 @@ struct private SmemSlot {
 
 def private before(a, b : SrcPos) : bool => a.line < b.line || (a.line == b.line && a.column < b.column)
 
+//! the smallest pool slot of at least `need` bytes whose holder's last read sits before `at` (an index into `slots`), -1 with none
+def private smallest_dead_slot(var ctx : CudaCtx; need : uint64; at : SrcPos) : int {
+    var best = -1
+    for (i in range(length(ctx.slots))) {
+        let sl = ctx.slots[i]
+        continue if (sl.bytes < need || !key_exists(ctx.tiles, sl.owner))
+        let holder = ctx.tiles[sl.owner]
+        continue if (holder.ambiguous || !before(holder.last, at))
+        if (best < 0 || sl.bytes < ctx.slots[best].bytes) {
+            best = i
+        }
+    }
+    return best
+}
+
+[arch(at="../ARCHITECTURE_EMIT_TILES.md#cuda-prefetched-f16-tile")]
+def private can_prefetch_in_loop(ctx : CudaCtx; tl : TileLife) : bool {
+    return (tl.load_loop != NO_LOOP && tl.load_loop == tl.prod_b_loop && tl.load_ifs == 0 && tl.prod_b_ifs == 0
+        && !key_exists(ctx.loop_exits, tl.load_loop) && before(tl.load16_at, tl.prod_b_at))
+}
+
+[arch(at="../ARCHITECTURE_EMIT_TILES.md#cuda-prefetched-f16-tile")]
+def private prefetch_pending_of(var ctx : CudaCtx; name : string; prefetched : array<string>) : int {
+    let me = ctx.tiles[name]
+    var pending = 0
+    for (o in prefetched) {
+        continue if (o == name || ctx.tiles[o].load_loop != me.load_loop)
+        let p = ctx.tiles[o].prod_b_at
+        if (before(me.prod_b_at, p) || before(p, me.load16_at)) {
+            pending++
+        }
+    }
+    return pending
+}
+
 //! whether a decode-in-load call takes the pipelined form (`raw_decode_text`): an f16 A tile, the layout's block size a
 //! compile-time (1, b1) with b1 a multiple of sixteen dividing the tile's k, a block of one byte an element
-[arch(at="../ARCHITECTURE_EMIT.md#cuda-decoded-tile-pipeline")]
+[arch(at="../ARCHITECTURE_EMIT_TILES.md#cuda-decoded-tile-pipeline")]
 def private can_pipeline_decode(var ctx : CudaCtx; ecs : ExprCall?) : bool {
     return false if (length(ecs.arguments) < 9)
     let wi = wg_type_of(ctx, ecs.arguments[0]._type)
@@ -1441,7 +1504,11 @@ def private emit_wg_tensor_stmt(var ctx : CudaCtx; ec : ExprCall?; is_store : bo
     register_helper(ctx, key, is_store ? wg_stt_helper(wi, elemT, trans, ctx.warps) : wg_ldt_helper(wi, elemT, trans, ctx.warps, kp))
     census_kind(ctx, "call.{cname}.{wi.use}.{wi.comp}.{elemT}{trans ? ".t" : (wi.k_major ? ".kn" : "")}{kp ? ".kp" : ""}")
     let fn = "__das_wg_{is_store ? "stt" : "ldt"}_{wi.ctype}_{elemT}_{trans ? "t" : "n"}{kp ? "_kp" : ""}"
-    return "{fn}({tile}, {buf} + ({base}), {tl}, uint({r0}), uint({c0}));"
+    let plain_call = "{fn}({tile}, {buf} + ({base}), {tl}, uint({r0}), uint({c0}));"
+    if (!is_store && wi.in_smem && wi.comp == "f16" && (ctx.tiles?[tile_var_name(ec.arguments[0])] ?? TileLife()).prefetch) {
+        return prefetch16_text(ctx, ec, wi, elemT, trans, buf, base, tl, r0, c0, plain_call)
+    }
+    return plain_call
 }
 
 //! coopmatConvert on workgroup tiles: accumulator widths both ways by fragment, an accumulator into a shared A tile by its lanes
@@ -1461,6 +1528,11 @@ def private emit_wg_convert_stmt(var ctx : CudaCtx; ec : ExprCall?; di, si : WgI
     }
     if (di.use == "A" && di.comp == "f16" && si.use == "C" && si.comp != "s32") {
         let walk = wg_walk(si, ctx.warps, "{dst}.e[{WG_ROW} * {di.row_stride} + {wg_k_at(ctx.kperm, WG_COL)}] = (ushort)__das_f2h(__das_cmC_get_{si.comp}({src}.fr[__s], __k));")
+        if ((ctx.tiles?[tile_var_name(ec.arguments[0])] ?? TileLife()).areg) {
+            register_helper(ctx, "{HELPER_RANK_COOPMAT_OPS}ldm", WG_LDMATRIX_PRELUDE)
+            census_kind(ctx, "call.coopmatConvert.wg.{si.comp}.A.reg")
+            return "__syncwarp(); " + walk + " __syncwarp(); _Pragma(\"unroll\") for (int __kk = 0; __kk < {di.cols / 16}; ++__kk) \{ __das_wg_ldm_A({dst}_fr[__kk], &{dst}.e[(__das_warp() * 16) * {di.row_stride} + __kk * 16], {di.row_stride}); \}"
+        }
         if (warp_owns_row(si, ctx.warps)) {   // a warp writes its own fragment row of the tile and the product reads that row alone: a warp sync
             census_kind(ctx, "call.coopmatConvert.wg.{si.comp}.A.warp")
             return "__syncwarp(); " + walk + " __syncwarp();"
@@ -1550,6 +1622,11 @@ def private emit_wg_elementwise_stmt(var ctx : CudaCtx; ec : ExprCall?; cname : 
     }
     let a = emit_value(ctx, ec.arguments[1])
     let b = emit_value(ctx, ec.arguments[2])
+    if (wi.comp == "f16") {
+        let packed_op = cname == "coopmatAdd" ? "add" : (cname == "coopmatSub" ? "sub" : "mul")
+        census_kind(ctx, "call.{cname}.wg.f16x2")
+        return "\{ {wg_slot_loop_head(wi, ctx.warps)} _Pragma(\"unroll\") for (int __q = 0; __q < 4; ++__q) \{ asm(\"{packed_op}.f16x2 %0, %1, %2;\" : \"=r\"({m}.fr[__s].r[__q]) : \"r\"({a}.fr[__s].r[__q]), \"r\"({b}.fr[__s].r[__q])); \} \} \}"
+    }
     let op = cname == "coopmatAdd" ? "+" : (cname == "coopmatSub" ? "-" : "*")
     census_kind(ctx, "call.{cname}.wg.{wi.comp}")
     return wg_walk(wi, ctx.warps, "{setv}({m}.fr[__s], __k, {getv}({a}.fr[__s], __k) {op} {getv}({b}.fr[__s], __k));")
@@ -1709,8 +1786,15 @@ def private emit_wg_mul_add(var ctx : CudaCtx; ec : ExprCall?; ai, bi, ci : WgIn
         register_helper(ctx, "{HELPER_RANK_COOPMAT_OPS}ldm_s8", WG_LDMATRIX_S8_PRELUDE)
     }
     register_helper(ctx, "{HELPER_RANK_COOPMAT_OPS}mma_{ai.comp}_{ci.comp}", coop_mma_helper(fa, fc))
-    register_helper(ctx, "{HELPER_RANK_WG_MMA}mma.{ai.ctype}.{bi.ctype}.{ci.ctype}", wg_mma_helper(ai, bi, ci, ctx.warps))
-    census_kind(ctx, "call.coopmatMulAdd.wg.{ai.comp}.{ci.comp}")
+    let a_name = tile_var_name(ec.arguments[0])
+    let areg = (ctx.tiles?[a_name] ?? TileLife()).areg
+    if (areg) {
+        register_helper(ctx, "{HELPER_RANK_WG_MMA}mma_areg.{bi.ctype}.{ci.ctype}", wg_mma_areg_helper(ai, bi, ci))
+        census_kind(ctx, "call.coopmatMulAdd.wg.{ai.comp}.{ci.comp}.areg")
+    } else {
+        register_helper(ctx, "{HELPER_RANK_WG_MMA}mma.{ai.ctype}.{bi.ctype}.{ci.ctype}", wg_mma_helper(ai, bi, ci, ctx.warps))
+        census_kind(ctx, "call.coopmatMulAdd.wg.{ai.comp}.{ci.comp}")
+    }
     var bars, posts : array<string>
     for (operand in range(2)) {   // a pipelined operand's next-step decode or copy runs past this product, under its mma stream
         let tn = tile_var_name(ec.arguments[operand])
@@ -1728,7 +1812,16 @@ def private emit_wg_mul_add(var ctx : CudaCtx; ec : ExprCall?; ai, bi, ci : WgIn
         ctx.flush_after |> push("if ({join(bars, " || ")}) __syncthreads();")
         ctx.flush_after |> push_from(posts)
     }
+    if (areg) {
+        return "__das_wg_mma_areg_{bi.ctype}_{ci.ctype}({tile_base_name(ctx, a_name)}_fr, {emit_value(ctx, ec.arguments[1])}, {emit_value(ctx, ec.arguments[2])})"
+    }
     return "__das_wg_mma_{ai.ctype}_{bi.ctype}_{ci.ctype}({emit_value(ctx, ec.arguments[0])}, {emit_value(ctx, ec.arguments[1])}, {emit_value(ctx, ec.arguments[2])})"
+}
+
+[arch(at="../ARCHITECTURE_EMIT_TILES.md#cuda-prefetched-f16-tile")]
+def private wg_mma_areg_helper(a, b, c : WgInfo) : string {
+    let ldB = b.k_major ? "__das_wg_ldm_Bt(fb, &b.e[(kk * 16) * {b.row_stride} + __j * 16], {b.row_stride});" : "__das_wg_ldm_B(fb, &b.e[(__j * 16) * {b.row_stride} + kk * 16], {b.row_stride});"
+    return "__device__ __forceinline__ {c.ctype} __das_wg_mma_areg_{b.ctype}_{c.ctype}(const __das_cmA_f16* fa, const {b.ctype}& b, {c.ctype} c) \{ _Pragma(\"unroll\") for (int kk = 0; kk < {a.cols / 16}; ++kk) \{ _Pragma(\"unroll\") for (int __j = 0; __j < {c.frag_cols}; ++__j) \{ __das_cmB_f16 fb; {ldB} c.fr[__j] = __das_mma_f16_{c.comp}(fa[kk], fb, c.fr[__j]); \} \} return c; \}"
 }
 
 //! the `self.<method>` form of a callback argument: the method's name, "" for any other shape
@@ -1853,10 +1946,39 @@ def private need_cp_async_wait(var ctx : CudaCtx; pending : int) {
 }
 
 let private RAW_S8_RING = 6   //! an s8 tile's ring slots: RAW_S8_RING - 2 windows ahead in flight at the ring's barrier, the wait leaves RAW_S8_RING - 4 pending
+let private AREG_MAX_FRAGS = 8   //! a register A tile's k fragments at most: four registers each, past eight the flash tile spills at three blocks an SM
+let private NO_LOOP = -1         //! the loop id of a point outside every loop
+let private PREFETCH_MAX_TILES = 8   //! the prefetched tiles a loop admits: cp.async queues eight outstanding groups, so a load waits at seven at most
+
+[arch(at="../ARCHITECTURE_EMIT_TILES.md#cuda-prefetched-f16-tile")]
+def private prefetch16_text(var ctx : CudaCtx; ec : ExprCall?; wi : WgInfo; srcT : string; trans : bool; buf, base, tl, r0, c0, plain_call : string) : string {
+    let tname = tile_var_name(ec.arguments[0])
+    let tile = tile_base_name(ctx, tname)
+    let pname = "__p_{tile}"
+    let pending = ctx.tiles[tname].prefetch_pending
+    need_cp_async_wait(ctx, 0)
+    need_cp_async_wait(ctx, pending)
+    census_kind(ctx, "call.coopmatLoadTensor.{wi.use}.f16.{srcT}{trans ? ".t" : (wi.k_major ? ".kn" : "")}.prefetch")
+    let walk = trans ? "int c = e / {wi.rows}, r = e % {wi.rows};" : "int r = e / {wi.cols}, c = e % {wi.cols};"
+    let kv = wi.use == "A" ? "c" : "r"
+    let ov = wi.use == "A" ? "r" : "c"
+    let sr = trans ? "__rr + uint(c)" : "__rr + uint(r)"
+    let sc = trans ? "__rc + uint(r)" : "__rc + uint(c)"
+    let copy = wg_grid_loop(wi.rows * wi.cols, 8, ctx.warps,
+        "{walk} uint sr = {sr}, sc = {sc}; char* __d = (char*)&{tile}.e[{wg_tile_at(wi, kv, ov)}]; if (sr < {tl}.d0 && sc + 8u <= {tl}.d1) \{ __das_cp_async_16(__d, (const char*)&{buf}[__rb + sr * {tl}.s0 + sc]); \} else \{ *(uint4*)__d = make_uint4(0u, 0u, 0u, 0u); \}")
+    ctx.deferred[tname] = "__syncthreads(); if ({pname}_n == 1 && {pname}_v && ({pname}_step_c & 7u) == 0u && {tl}.s1 == 1u && ({tl}.s0 & 7u) == 0u && ({tl}.d1 & 7u) == 0u) \{ uint __rb = {pname}_b; uint __rr = {pname}_r + {pname}_step_r; uint __rc = {pname}_c + {pname}_step_c; {copy} {pname}_r = __rr; {pname}_c = __rc; {pname}_p = (const void*)({buf}); {pname}_d0 = {tl}.d0; {pname}_d1 = {tl}.d1; {pname}_s0 = {tl}.s0; {pname}_inflight = true; \} __das_cp_async_commit();"
+    return build_string() $(var w) {
+        w |> write("\{ uint __rb = uint({base}); uint __rr = uint({r0}); uint __rc = uint({c0}); bool __v = ({tl}.s1 == 1u && ({tl}.s0 & 7u) == 0u && ({tl}.d1 & 7u) == 0u && (__rc & 7u) == 0u && ((((size_t)({buf} + __rb)) & 15) == 0)); ")
+        w |> write("if ({pname}_inflight && {pname}_b == __rb && {pname}_r == __rr && {pname}_c == __rc && {pname}_p == (const void*)({buf}) && {pname}_d0 == {tl}.d0 && {pname}_d1 == {tl}.d1 && {pname}_s0 == {tl}.s0 && {tl}.s1 == 1u) \{ __das_cp_async_wait_{pending}(); __syncthreads(); \} else \{ ")
+        w |> write("if ({pname}_n >= 0 && {pname}_b == __rb) \{ {pname}_step_r = __rr - {pname}_r; {pname}_step_c = __rc - {pname}_c; {pname}_n = 1; \} else \{ {pname}_n = 0; \} ")
+        w |> write("__das_cp_async_wait_0(); __syncthreads(); if (__v) \{ {copy} __das_cp_async_commit(); __das_cp_async_wait_0(); __syncthreads(); \} else \{ {plain_call} \} ")
+        w |> write("{pname}_b = __rb; {pname}_r = __rr; {pname}_c = __rc; \} {pname}_v = __v; {pname}_inflight = false; \}")
+    }
+}
 
 //! an s8 tile's pipelined tensor load on its cp.async ring, "" where the scan did not ring the tile; the source's contiguous
 //! direction is the tile's k, a row stride and the origin at 16-byte multiples
-[arch(at="../ARCHITECTURE_EMIT.md#cuda-decoded-tile-pipeline")]
+[arch(at="../ARCHITECTURE_EMIT_TILES.md#cuda-decoded-tile-pipeline")]
 def private raw_s8_text(var ctx : CudaCtx; ec : ExprCall?; wi : WgInfo; srcT : string; trans : bool; src, base, tl, r0, c0 : string) : string {
     let tname = tile_var_name(ec.arguments[0])
     let kx = wi.use == "A" ? wi.cols : wi.rows   // the k extent: a window's width along the source's contiguous direction
@@ -1912,7 +2034,7 @@ def private raw_s8_text(var ctx : CudaCtx; ec : ExprCall?; wi : WgInfo; srcT : s
 }
 
 //! the decode-in-load's pipelined form, "" where it does not apply (the scan's `can_pipeline_decode` admits the tile)
-[arch(at="../ARCHITECTURE_EMIT.md#cuda-decoded-tile-pipeline")]
+[arch(at="../ARCHITECTURE_EMIT_TILES.md#cuda-decoded-tile-pipeline")]
 def private raw_decode_text(var ctx : CudaCtx; ec : ExprCall?; wi : WgInfo; blkT, src, base, tl, r0, c0, call_run, call_v4, retT, cv : string; run0 : int) : string {
     return "" if (wi.use != "A")
     let tname = tile_var_name(ec.arguments[0])
@@ -2085,7 +2207,7 @@ def private discover_user_fn(var ctx : CudaCtx; fn : FunctionPtr; at : LineInfo)
     let prev_self = ctx.self_name
     ctx.cur_user_fn = idx
     ctx.self_name = ""
-    scan_body(ctx, fn.body)
+    scan_callee_body(ctx, fn.body)
     ctx.self_name = prev_self
     ctx.cur_user_fn = prev
     ctx.scan_stack |> pop()
@@ -2142,11 +2264,52 @@ def private discover_method(var ctx : CudaCtx; mfn : FunctionPtr; mname : string
     let prev_self = ctx.self_name
     ctx.cur_user_fn = idx
     ctx.self_name = !empty(mfn.arguments) ? string(mfn.arguments[0].name) : ""
-    scan_body(ctx, mfn.body)
+    scan_callee_body(ctx, mfn.body)
     ctx.self_name = prev_self
     ctx.cur_user_fn = prev
     ctx.scan_stack |> pop()
     return idx
+}
+
+[arch(at="../ARCHITECTURE_EMIT_TILES.md#cuda-prefetched-f16-tile")]
+def private scan_loop_body(var ctx : CudaCtx; body : Expression?) {
+    ctx.open_loop_ids |> push(ctx.next_loop_id)
+    ctx.open_loop_if_depths |> push(ctx.if_depth)
+    ctx.next_loop_id++
+    scan_body(ctx, body)
+    ctx.open_loop_ids |> pop()
+    ctx.open_loop_if_depths |> pop()
+}
+
+//! the innermost loop open at this point of the scan (`NO_LOOP` outside every loop) and the ifs of that loop over the point
+def private scan_loop_here(ctx : CudaCtx) : tuple<loop : int; ifs : int> {
+    return (loop = NO_LOOP, ifs = 0) if (empty(ctx.open_loop_ids))
+    return (loop = ctx.open_loop_ids[length(ctx.open_loop_ids) - 1], ifs = ctx.if_depth - ctx.open_loop_if_depths[length(ctx.open_loop_if_depths) - 1])
+}
+
+//! a callee's body under its own loop and if bookkeeping: its returns, breaks and ifs are its own, not the caller's loop's
+def private scan_callee_body(var ctx : CudaCtx; body : Expression?) {
+    var saved_ids <- ctx.open_loop_ids
+    var saved_depths <- ctx.open_loop_if_depths
+    let saved_if_depth = ctx.if_depth
+    ctx.if_depth = 0
+    scan_body(ctx, body)
+    ctx.open_loop_ids <- saved_ids
+    ctx.open_loop_if_depths <- saved_depths
+    ctx.if_depth = saved_if_depth
+}
+
+//! a break or continue met inside a loop body leaves the innermost loop with no fixed count of products a trip; a return
+//! (`every`) leaves every open loop so
+def private scan_loop_exit(var ctx : CudaCtx; every : bool) {
+    return if (empty(ctx.open_loop_ids))
+    if (every) {
+        for (id in ctx.open_loop_ids) {
+            ctx.loop_exits |> insert(id)
+        }
+    } else {
+        ctx.loop_exits |> insert(ctx.open_loop_ids[length(ctx.open_loop_ids) - 1])
+    }
 }
 
 def private scan_body(var ctx : CudaCtx; e : Expression?) {
@@ -2183,7 +2346,8 @@ def private scan_body(var ctx : CudaCtx; e : Expression?) {
                 if (key_exists(ctx.tiles, tn)) {
                     ctx.tiles[tn].ambiguous = true
                 } else {
-                    ctx.tiles[tn] = TileLife(decl = pos_of(v.at), last = pos_of(v.at), ones_feeds_row_owned = true, global_view_blocked = !(twi.use == "B" && twi.comp == "f16"))
+                    ctx.tiles[tn] = TileLife(decl = pos_of(v.at), last = pos_of(v.at), ones_feeds_row_owned = true, prod_a_row_owned = true, prod_a_acc_f32 = true, convert_src_f32 = true, convert_loop = NO_LOOP, global_view_blocked = !(twi.use == "B" && twi.comp == "f16"),
+                        tile_type = string(v._type.structType.name))
                 }
             }
             if (v.init != null && v.init is ExprRef2Ptr && (v.init as ExprRef2Ptr).subexpr is ExprAt) {
@@ -2231,17 +2395,19 @@ def private scan_body(var ctx : CudaCtx; e : Expression?) {
         }
     } elif (e is ExprIfThenElse) {
         scan_body(ctx, (e as ExprIfThenElse).cond)
+        ctx.if_depth++
         scan_body(ctx, (e as ExprIfThenElse).if_true)
         scan_body(ctx, (e as ExprIfThenElse).if_false)
+        ctx.if_depth--
     } elif (e is ExprWhile) {
         scan_body(ctx, (e as ExprWhile).cond)
-        scan_body(ctx, (e as ExprWhile).body)
+        scan_loop_body(ctx, (e as ExprWhile).body)
         ctx.loops |> push(LoopSpan(start = pos_of(e.at), end = ctx.scan_at))
     } elif (e is ExprFor) {
         for (src in (e as ExprFor).sources) {
             scan_body(ctx, src)
         }
-        scan_body(ctx, (e as ExprFor).body)
+        scan_loop_body(ctx, (e as ExprFor).body)
         ctx.loops |> push(LoopSpan(start = pos_of(e.at), end = ctx.scan_at))
     } elif (e is ExprCall) {
         let ecs = e as ExprCall
@@ -2257,6 +2423,13 @@ def private scan_body(var ctx : CudaCtx; e : Expression?) {
             if (scn == "coopmatConvert" && ai == 0) {
                 ctx.tiles[tn].convert_target = true
                 ctx.tiles[tn].global_view_blocked = true
+                ctx.tiles[tn].convert_writes++
+                ctx.tiles[tn].convert_at = pos_of(ecs.at)
+                ctx.tiles[tn].convert_loop = scan_loop_here(ctx).loop
+                let srcw = wg_info_of(length(ecs.arguments) > 1 && ecs.arguments[1]._type != null && ecs.arguments[1]._type.structType != null ? string(ecs.arguments[1]._type.structType.name) : "", ctx.warps, false)
+                if (!(srcw.ok && srcw.comp == "f32")) {
+                    ctx.tiles[tn].convert_src_f32 = false
+                }
             } elif (scn == "coopmatFill" && ai == 0 && length(ecs.arguments) == 2) {
                 let cf = ecs.arguments[1] ?as ExprConstFloat
                 if (cf != null && cf.value == 1.0) {
@@ -2265,6 +2438,7 @@ def private scan_body(var ctx : CudaCtx; e : Expression?) {
                     ctx.tiles[tn].other_use = true
                 }
                 ctx.tiles[tn].global_view_blocked = true
+                ctx.tiles[tn].nonprod_use = true
             } elif (scn == "coopmatMulAdd" && ai == 1 && length(ecs.arguments) == 3) {
                 let ci = wg_info_of(ecs.arguments[2]._type != null && ecs.arguments[2]._type.structType != null ? string(ecs.arguments[2]._type.structType.name) : "", ctx.warps, false)
                 if (!(ci.ok && ci.use == "C" && row_per_warp(ci, ctx.warps) && ci.comp != "s32")) {
@@ -2273,13 +2447,38 @@ def private scan_body(var ctx : CudaCtx; e : Expression?) {
                 if (ci.ok && ci.use == "C" && row_per_warp(ci, ctx.warps)) {
                     ctx.tiles[tn].read_whole_by_row_owner = true
                 }
+                ctx.tiles[tn].prod_b_reads++
+                ctx.tiles[tn].prod_b_at = here
+                let pl = scan_loop_here(ctx)
+                ctx.tiles[tn].prod_b_loop = pl.loop
+                ctx.tiles[tn].prod_b_ifs = pl.ifs
+            } elif (scn == "coopmatMulAdd" && ai == 0 && length(ecs.arguments) == 3) {
+                let ci = wg_info_of(ecs.arguments[2]._type != null && ecs.arguments[2]._type.structType != null ? string(ecs.arguments[2]._type.structType.name) : "", ctx.warps, false)
+                ctx.tiles[tn].other_use = true
+                ctx.tiles[tn].global_view_blocked = true
+                ctx.tiles[tn].prod_a_read = true
+                if (!(ci.ok && ci.use == "C" && row_per_warp(ci, ctx.warps))) {
+                    ctx.tiles[tn].prod_a_row_owned = false
+                }
+                if (!(ci.ok && ci.comp == "f32")) {
+                    ctx.tiles[tn].prod_a_acc_f32 = false
+                }
             } elif (scn == "coopmatLoadTensor" && ai == 0 && length(ecs.arguments) >= 8) {
                 ctx.tiles[tn].other_use = true
                 let st = tensor_buf_elem(ecs.arguments[1]._type)
                 if (st == "half" || st == "ushort") {
                     ctx.tiles[tn].global_view_written = true
+                    ctx.tiles[tn].load16_writes++
+                    ctx.tiles[tn].load16_at = here
+                    let ll = scan_loop_here(ctx)
+                    ctx.tiles[tn].load_loop = ll.loop
+                    ctx.tiles[tn].load_ifs = ll.ifs
+                    if (st == "ushort") {
+                        ctx.tiles[tn].load16_ushort = true
+                    }
                 } else {
                     ctx.tiles[tn].global_view_blocked = true
+                    ctx.tiles[tn].nonprod_use = true
                     let swi = wg_type_of(ctx, ecs.arguments[0]._type)
                     if (swi.ok && swi.in_smem && swi.comp == "s8" && (st == "char" || st == "uchar")) {
                         ctx.tiles[tn].raw_s8 = true
@@ -2288,6 +2487,7 @@ def private scan_body(var ctx : CudaCtx; e : Expression?) {
             } else {
                 ctx.tiles[tn].other_use = true
                 ctx.tiles[tn].global_view_blocked = true
+                ctx.tiles[tn].nonprod_use = true
                 if (scn == "coopmatLoadTensorDecode" && ai == 0 && can_pipeline_decode(ctx, ecs)) {
                     ctx.tiles[tn].decoded = true
                 }
@@ -2403,7 +2603,10 @@ def private scan_body(var ctx : CudaCtx; e : Expression?) {
         for (i in range(2, length(ei.arguments))) {
             scan_body(ctx, ei.arguments[i])
         }
+    } elif (e is ExprBreak || e is ExprContinue) {
+        scan_loop_exit(ctx, false)
     } elif (e is ExprReturn) {
+        scan_loop_exit(ctx, true)
         scan_body(ctx, (e as ExprReturn).subexpr)
     } elif (e is ExprRef2Ptr) {
         scan_body(ctx, (e as ExprRef2Ptr).subexpr)
@@ -3714,7 +3917,7 @@ def private emit_stmt(var ctx : CudaCtx; e : Expression?; indent : string; var l
     }
 }
 
-[arch(at="../ARCHITECTURE_EMIT.md#cuda-tile-slot-reuse"), arch(at="../ARCHITECTURE_EMIT.md#cuda-decoded-tile-pipeline")]
+[arch(at="../ARCHITECTURE_EMIT.md#cuda-tile-slot-reuse"), arch(at="../ARCHITECTURE_EMIT_TILES.md#cuda-decoded-tile-pipeline")]
 def private emit_stmt_inner(var ctx : CudaCtx; e : Expression?; indent : string; var lines : array<string>) {
     if (e == null) {
         return
@@ -3809,18 +4012,27 @@ def private emit_stmt_inner(var ctx : CudaCtx; e : Expression?; indent : string;
                     ctx.hoisted |> push("    uint {pname}_b = 0u, {pname}_r = 0u, {pname}_c = 0u; int {pname}_s = -1; bool {pname}_bar = false;")
                     continue
                 }
-                var best = -1
-                if (!life.ambiguous && !life.convert_target) {
-                    for (i in range(length(ctx.slots))) {
-                        let sl = ctx.slots[i]
-                        continue if (sl.bytes < need || !key_exists(ctx.tiles, sl.owner))
-                        let holder = ctx.tiles[sl.owner]
-                        continue if (holder.ambiguous || !before(holder.last, pos_of(v.at)))
-                        if (best < 0 || sl.bytes < ctx.slots[best].bytes) {
-                            best = i
-                        }
+                if (life.prefetch) {   // the slot leaves the pool for good: a speculative copy may land in it past the tile's last read
+                    let taken = smallest_dead_slot(ctx, need, pos_of(v.at))
+                    var poff = 0ul
+                    if (taken >= 0) {
+                        poff = ctx.slots[taken].off
+                        ctx.slots |> erase(taken)
+                    } else {
+                        poff = smem_carve(ctx, need)
                     }
+                    let pname = "__p_{ctx.renames[sname0]}"
+                    census_kind(ctx, "stmt.var.wg_shared.prefetch")
+                    // the window in the slot, the stride the base's windows walk, whether a copy is in flight for it - uniform values at kernel scope
+                    ctx.hoisted |> push("    uint {pname}_b = 0u, {pname}_r = 0u, {pname}_c = 0u, {pname}_step_r = 0u, {pname}_step_c = 0u, {pname}_d0 = 0u, {pname}_d1 = 0u, {pname}_s0 = 0u; const void* {pname}_p = 0; int {pname}_n = -1; bool {pname}_v = false, {pname}_inflight = false;")
+                    lines |> push("{indent}{wgi.ctype}& {ctx.renames[sname0]} = *({wgi.ctype}*)(__das_smem + {int(poff)});")
+                    continue
                 }
+                if (life.areg) {
+                    census_kind(ctx, "stmt.var.wg_areg")
+                    ctx.hoisted |> push("    __das_cmA_f16 {ctx.renames[sname0]}_fr[{wgi.cols / 16}] = \{\};")
+                }
+                let best = !life.ambiguous && !life.convert_target ? smallest_dead_slot(ctx, need, pos_of(v.at)) : -1
                 var off = 0ul
                 if (best >= 0) {
                     ctx.slots[best].owner = sname0
@@ -4281,6 +4493,28 @@ def public generate_cuda(fn : FunctionPtr; var errors : array<string>; cfg : Cud
         }
     }
     ctx.kperm = !empty(ctx.global_view_tiles)
+    // after `kperm` and the global-view tiles: both admissions read them
+    var prefetched : array<string>
+    var prefetched_per_loop : table<int; int>
+    for (name, tl in keys(ctx.tiles), values(ctx.tiles)) {
+        let wi = wg_info_of(tl.tile_type, ctx.warps, false)
+        continue if (!wi.ok || !wi.in_smem || wi.comp != "f16" || tl.ambiguous || ctx.kperm)
+        if (wi.use == "A" && tl.convert_writes == 1 && tl.convert_src_f32 && tl.convert_loop == NO_LOOP && tl.load16_writes == 0 && !tl.nonprod_use
+                && tl.prod_a_read && tl.prod_a_row_owned && tl.prod_a_acc_f32 && ctx.row_own && wi.rows == 16 * ctx.warps && wi.cols / 16 <= AREG_MAX_FRAGS) {
+            tl.areg = true
+            tl.last = tl.convert_at
+        } elif (wi.use == "B" && tl.load16_writes == 1 && !tl.load16_ushort && tl.convert_writes == 0 && !tl.nonprod_use
+                && tl.prod_b_reads == 1 && !key_exists(ctx.global_view_tiles, name) && can_prefetch_in_loop(ctx, tl)
+                && (prefetched_per_loop?[tl.load_loop] ?? 0) < PREFETCH_MAX_TILES) {
+            tl.prefetch = true
+            ctx.prefetch_count++
+            prefetched |> push(name)
+            prefetched_per_loop[tl.load_loop] = (prefetched_per_loop?[tl.load_loop] ?? 0) + 1
+        }
+    }
+    for (name in prefetched) {
+        ctx.tiles[name].prefetch_pending = prefetch_pending_of(ctx, name, prefetched)
+    }
     if (!empty(ctx.errors)) {
         errors |> push_from(ctx.errors)
         return ""
@@ -4402,7 +4636,7 @@ def public generate_cuda(fn : FunctionPtr; var errors : array<string>; cfg : Cud
         empty(builtin_lines) ? "" : join(builtin_lines, "\n") + "\n",
         empty(ctx.hoisted) ? "" : join(ctx.hoisted, "\n") + "\n",
         join(body_lines, "\n"),
-        empty(ctx.raw_rings) ? "" : "\n    __das_cp_async_wait_0();",   // a ring's last speculative copies land before the block leaves
+        empty(ctx.raw_rings) && ctx.prefetch_count == 0 ? "" : "\n    __das_cp_async_wait_0();",
         "\n\}\n"
     ]
     for (kind in keys(ctx.census)) {

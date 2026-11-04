@@ -20,6 +20,7 @@ require dasllama/dasllama_gpu_kernels_common   // GkRnntArgs and the transducer 
 require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_vulkan_tower
+require dasllama/dasllama_tower_image   // tower_bake_q8: the decoder's q8 block pieces
 require dasllama/dasllama_tower
 
 //! The whisper ASR-decoder Vulkan driver, q8-native: the per-window cross-KV and the decode step
@@ -357,7 +358,7 @@ def private wd_regions(w : WhisperModel) : array<Q8Region> {
 def private vulkan_whisper_bake(w : WhisperModel; var b : TowerDevBuild) : bool {
     vulkan_audio_tower_bake_into(w.enc, b)
     var inscope regions <- wd_regions(w)
-    vt_bake_q8(b, WD_PIECE, w.dqblob, w.dqscales, regions)
+    tower_bake_q8(b, WD_PIECE, w.dqblob, w.dqscales, regions)
     return true
 }
 
@@ -557,7 +558,7 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
     } else {
         g_wd_handoffs++
     }
-    var pc_rq = RqArgs(inbase = 0u, nblk = uint(ta * d / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
+    var pc_rq = RqArgs(inbase = 0u, nblk = uint(ta * d / q8e), lo = -NO_CLAMP, hi = NO_CLAMP)
     var pc_g = BatchArgs(n = uint(d), d = uint(d), map_off = 0u)
     let total = ta * hh * hs
     let wg_kv = (total + 255l) / 256l

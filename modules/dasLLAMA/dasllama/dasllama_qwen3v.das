@@ -701,6 +701,18 @@ def qwen3v_block_regions(t : Qwen3vTower; l : int64; var out : Q8Region[int(QWEN
     out[QWEN3V_GEMM_DOWN] = Q8Region(woff = o.w[QWEN3V_GEMM_DOWN], n = t.ff_pad, rows = d)
 }
 
+//! every block's q8 GEMM regions in GEMM order, the whole tower - the list both tower drivers gather
+def qwen3v_all_regions(t : Qwen3vTower) : array<Q8Region> {
+    var @exact_size regions : array<Q8Region>
+    regions |> reserve(t.n_layer * QWEN3V_GEMMS)
+    var recs : Q8Region[int(QWEN3V_GEMMS)]
+    for (l in range64(t.n_layer)) {
+        qwen3v_block_regions(t, l, recs)
+        regions |> push_from(recs)
+    }
+    return <- regions
+}
+
 // one block GEMM on the lane the load picked: requant + the q8q8 batch kernel when q8, the
 // file's bf16/f32 plane otherwise
 def private q3v_gemm_blk(var y : array<float>; t : Qwen3vTower; var s : Qwen3vState; off : int64;

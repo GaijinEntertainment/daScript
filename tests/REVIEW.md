@@ -3,24 +3,22 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`.
 
-**A test of lint suppression or lint configuration, wherever the diff puts it, answers to
+**A test of lint suppression or lint configuration, wherever under this folder the diff puts it, answers to
 `lint/REVIEW.md`.**
 
 **A test that runs a class carrying a `[metal_kernel]` method or creates any Metal object,
 wherever under this folder the diff puts it, answers to `metal/REVIEW.md`.**
 
 **An MSL emitter fixture (a test that compiles a kernel and checks the emitted MSL), wherever
-under this folder the diff puts it, or a change to `msl/test_msl_census.das` answers to
-`msl/REVIEW.md`.**
+under this folder the diff puts it, answers to `msl/REVIEW.md`.**
 
 **A SPIR-V emitter fixture (a test holding a `*_words` function that compiles a shader and
-returns its emitted words), wherever under this folder the diff puts it, or a change to
-`spirv/test_census.das` answers to `spirv/REVIEW.md`.**
+returns its emitted words), wherever under this folder the diff puts it, answers to
+`spirv/REVIEW.md`.**
 
 **A test that runs a class carrying a `[cuda_kernel]` method or calls `with_cuda_context`, or a
 CUDA C emitter fixture (a test that compiles a kernel and checks the emitted CUDA C), wherever
-under this folder the diff puts it, or a change to `cuda/test_cuda_census.das` answers to
-`cuda/REVIEW.md`.**
+under this folder the diff puts it, answers to `cuda/REVIEW.md`.**
 
 **A test that calls `tick_debug_agent`, wherever under this folder the diff puts it, answers to
 `debug_agent/REVIEW.md`.**
@@ -54,7 +52,7 @@ in - the JIT never takes that path - so coverage lost there reports green on eve
 `--target run_tests_aot` build, or a CI job link.** Per-PR CI builds only the AOT subset binary
 (the test_aot_subset target), so the PR's own checks do not prove `test_aot`.
 
-**A diff that marks a `.das` file under `tests/` `options no_aot`, or filters one out of an
+**A diff that marks a `.das` file under this folder `options no_aot`, or filters one out of an
 `AOT_*_FILES` variable of `tests/aot/CMakeLists.txt`, states in a comment beside the option or
 the filter what stops `test_aot` compiling or running the file, why an AOT build of it tests
 nothing, or which `AOT_*_FILES` variable compiles it instead.** Without a stated reason no later

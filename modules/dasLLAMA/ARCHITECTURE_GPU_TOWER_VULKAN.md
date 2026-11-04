@@ -145,12 +145,12 @@ table, and the Conformer sets are bound per tile. The f16 feed (`xh_dev`) keeps 
 the encode's live count by design: the feed's rows past the live count reach no live row, because
 every restride reads `rows` and the GEMM output rows past npos those stale rows produce are dead.
 Each block family lists its GEMM regions once, in record order (`vt_g4a_regions`,
-`vt_cn_regions`, and the lists both drivers read: `ln_block_regions`, `qwen3v_block_regions`,
-`gemma4v_block_regions`): the upload gathers the regions in that order,
+`vt_cn_regions`, and the lists the drivers share: `gemma3v_all_regions`, `qwen3v_all_regions`,
+`gemma4v_all_regions`, each over its family's block list): the upload gathers the regions in that order,
 and the schedule walk maps its records in the same order beside a per-record tile or group list,
 so a record's index names one region in both walks.
 A GEMM record on the l column carries the encode's rows rounded up to 256 (`vt_tile_rows`), and
-the scratch's row cap is a multiple of the l column (`vt_cap_rows`, so every plane the scratch
+the scratch's row cap is a multiple of the l column (`tower_cap_rows`, so every plane the scratch
 sizes holds a record's rounded rows), so the l stamp's last column is whole and takes its fast path: a partial column runs its clamped edge path at a third of the
 rate (whisper's 1500-row chunk read q/k/v/o 95 us against 52 at 1536, fc2 357 against 185, on the
 RTX PRO 4500 - `debug-jit`, the whisper parity pass's bullet in `PERF_LEDGER.md`). A record on the
@@ -240,7 +240,7 @@ and ASR cells print them around their timed turns.
 Metal ASR-decoder driver's twin, q8-native: the f32 decoder rail declines `quant_mode` and the CPU
 chain serves it. The decoder attaches once per model, its residency key `vt_key` over the
 decoder's planes (the tower's key, so an address alone is never the identity): the tied embedding
-and every layer's ten GEMM regions gather row-major with f16 scales through `vt_gather_regions`,
+and every layer's ten GEMM regions gather row-major with f16 scales through `tower_gather_q8_regions`,
 the gather the tower drivers use, at their own plane offsets (one weight buffer, every GEMV site addressing it
 by its first block), the layers' f32 rows and the final norm upload as one norms plane the row
 classes read at rebased offsets, and the K/V planes and the step scratch are sized to the model -

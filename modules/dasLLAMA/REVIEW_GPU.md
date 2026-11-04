@@ -20,13 +20,13 @@ kernel-unit cell (a test cell that dispatches the class itself, not through a se
 it at, or adding a `[vk_dispatch]`, `[metal_dispatch]` or `[cuda_dispatch]` class, applies the
 `tests/` subfolder's `REVIEW_KERNEL_CELLS.md` too.**
 
-**A diff touching a tower driver (`dasllama/dasllama_metal_tower.das`,
-`dasllama/dasllama_vulkan_tower.das`, `dasllama/dasllama_vulkan_tts.das`), a kernel class or
-builder a tower dispatches, or a kernel-argument struct a tower fills for a dispatch, wherever the
-struct is declared, applies `REVIEW_TOWER.md` too.**
+**A diff touching a tower driver (`dasllama/dasllama_metal_tower.das`, `dasllama/dasllama_vulkan_tower.das`,
+`dasllama/dasllama_vulkan_tts.das`, `dasllama/dasllama_cuda_tower.das`), a kernel class or builder a
+tower dispatches, or a kernel-argument struct a tower fills for a dispatch, wherever the struct is
+declared, applies `REVIEW_TOWER.md` too.**
 
 **A diff touching the `[metal_dispatch]` emission that tower builders are generated from
-(`dasllama/dasllama_metal_lens.das`), a module-level `g_tw_*` seat outside the three tower driver
+(`dasllama/dasllama_metal_lens.das`), a module-level `g_tw_*` seat outside the tower driver
 files, or `dasllama/dasllama_metal_common.das` applies `REVIEW_TOWER.md` too.**
 
 **A diff touching an ASR decoder (`dasllama/dasllama_metal_asr_dec.das`,
@@ -34,10 +34,10 @@ files, or `dasllama/dasllama_metal_common.das` applies `REVIEW_TOWER.md` too.**
 borrows applies `REVIEW_TOWER.md` too.**
 
 **A diff touching a `register_*` function that `dasllama_metal_tower_register`,
-`dasllama_vulkan_tower_register` or `dasllama_vulkan_tts_register` calls with a hook - a stage
-seat (a hook slot the CPU chain calls to hand a model family's encoder or synthesis stage to the
-GPU), a drop hook, or a reload or weights-epoch listener - or a site that calls the hook such a
-function stores, applies `REVIEW_TOWER.md` too.**
+`dasllama_vulkan_tower_register`, `dasllama_vulkan_tts_register` or `dasllama_cuda_tower_register`
+calls with a hook - a stage seat (a hook slot the CPU chain calls to hand a model family's encoder
+or synthesis stage to the GPU), a drop hook, or a reload or weights-epoch listener - or a site that
+calls the hook such a function stores, applies `REVIEW_TOWER.md` too.**
 
 **A diff touching the Vulkan tier - `dasllama/dasllama_*vulkan*.das`,
 `dasllama/dasllama_gpu_math.das`, `dasllama/dasllama_gpu_kernels_common.das`,
@@ -183,8 +183,8 @@ other than the one that owns its kernel class** - it goes through that file's ow
 
 **A function that decides whether a GPU seat or driver declines a call, wherever the diff puts
 it, counts a decline - where it counts one - only through a `DeclineCounter`
-(`dasllama/dasllama_metal_common.das`) or `VkDeclineCounter` (`dasllama/dasllama_vulkan_common.das`)
-and the `note_decline` / `note` call its common file declares on it, or, in
+(`dasllama/dasllama_metal_common.das`) and its `note_decline`, or a `GpuDeclineCounter`
+(`dasllama/dasllama_gpu_tier.das`; the Vulkan drivers' `VkDeclineCounter`) and its `note`, or, in
 `dasllama/dasllama_gpu_resident.das`, through `note_gpu_cpu_pass` (`dasllama/dasllama_gpu_tier.das`)
 over an `RdecPass` value, and builds the counter key - `note_decline`'s `why`, `note`'s `reason` -
 from a value of the decline enum of the driver it declines for, and from nothing else; a key held
@@ -274,15 +274,15 @@ are.** A base off the format's own block grid is gathered under a layout that is
 `DEVICE_CREATION_CALLS` in `REVIEW.das` does not list, adds that spelling to the list in the same
 change.** The gate finds only the spellings it lists, so a new one passes it silently.
 
-**Never make a call that reaches the CUDA driver from `dasllama_math_cuda_register`
-(`dasllama/dasllama_math_cuda.das`), or from anything it runs, before `cud_init()`
-(`dasllama/dasllama_cuda_common.das`) returns true.** A box without the driver loads the module
-too, and its first driver call would fault.
+**Never make a call that reaches the CUDA driver from an `[init]` in a CUDA file
+(`dasllama_math_cuda_register`, `dasllama_cuda_tower_register`), or from anything it runs, before
+`cud_init()` (`dasllama/dasllama_cuda_common.das`) returns true.** A box without the driver loads
+the module too, and its first driver call would fault.
 
-**`dasllama_math_cuda_register` calls `cuda_install_seats` only after `gpu_want_cuda()` returns
-true - a seat the home does not want is installed by `set_gpu_home("cuda")` instead.** The seats
-replace the current home's hooks, so installing them unconditionally hands a box that asked for
-another home over to CUDA.
+**An `[init]` in a CUDA file calls its seat installer (`cuda_install_seats`,
+`cuda_tower_install_vision`) only after `gpu_want_cuda()` returns true - a seat the home does not
+want is installed by `set_gpu_home("cuda")` instead.** The seats replace the current home's hooks,
+so installing them unconditionally hands a box that asked for another home over to CUDA.
 
 **Weakening `check_shared_file_spelling` in `REVIEW.das` is a defect.** It holds a shared kernel
 file - `dasllama/dasllama_gpu_kernels_common.das` or `dasllama/dasllama_gpu_kernels_discrete.das` -

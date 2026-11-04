@@ -355,7 +355,12 @@ def test_cuda_compile_gate(t : T?) {
             }
             let base = cuda_live_object_count()
             let cache_dir = path_join(test_temp_dir(), "cubin")
+            let device_cc = cuda_device_compute_capability(cc)
             for (k in all_cuda_texts()) {
+                if (device_cc < k.min_cc) {
+                    to_log(LOG_WARNING, "{k.name} needs compute capability {k.min_cc}, the device has {device_cc}; compile skipped\n")
+                    continue
+                }
                 var err : string
                 var mod : CudaModule?
                 let fn = function_from_source(cc, k.text, k.name, k.entry, mod, err, cache_dir = cache_dir)

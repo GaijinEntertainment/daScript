@@ -6,10 +6,13 @@ docs: `ARCHITECTURE_GPU_TOWER.md`, `ARCHITECTURE_GPU_TOWER_VULKAN.md`,
 `ARCHITECTURE_MEDIA.md`, `ARCHITECTURE_GPU_ASYMMETRIES.md`. Planned work: `followup_metal.md`,
 `followup_vulkan.md`.
 
-A tower is the Metal or the Vulkan GPU driver set that runs a family's encoder or synthesis stages
-through hooks - stage seats the CPU chain calls, drop hooks, reload or weights-epoch listeners -
-registered by `dasllama_metal_tower_register` (Metal) or by `dasllama_vulkan_tower_register` and
-`dasllama_vulkan_tts_register` (Vulkan) (`ARCHITECTURE_GPU_TOWER.md#tower-reach`). A hook
+A tower is the Metal, the Vulkan or the CUDA GPU driver set that runs a family's encoder or
+synthesis stages through hooks - stage seats the CPU chain calls, drop hooks, reload or
+weights-epoch listeners - registered by `dasllama_metal_tower_register` (Metal), by
+`dasllama_vulkan_tower_register` with the `vulkan_tower_install_vision` it registers with
+`register_gpu_home` and `dasllama_vulkan_tts_register` (Vulkan), or by `dasllama_cuda_tower_register`
+with the `cuda_tower_install_vision` it registers with `register_gpu_home` (CUDA)
+(`ARCHITECTURE_GPU_TOWER.md#tower-reach`). A hook
 `dasllama_metal_asr_dec_register` or `dasllama_vulkan_asr_dec_register` registers is an ASR-decoder
 seat of the same backend's tower. A diff reaches a tower when a function it touches is one of those
 hooks, calls one directly, or is reachable from one through any chain of calls, or when it touches a
@@ -24,7 +27,9 @@ and `test_kitten_oracle` in `tests/test_tts_kitten.das`, `test_kokoro_synthesis_
 `test_pocket_frames_after_model_drop`, `test_pocket_synthesis_metal`, `test_pocket_small_models` and
 `test_pocket_small_refl` in `tests/test_tts_pocket.das`.
 
-**A non-comment diff routed here that reaches neither tower says so in the PR body.**
+**A non-comment diff routed here that reaches no tower says so in the PR body.**
+
+**A cell any run list in this checklist names that skips for a missing model counts as not run.**
 
 **A diff reaching the Metal tower runs the vision gates `tests/test_gemma4uv.das`,
 `tests/test_gemma4v.das`, `tests/test_gemma3v.das`, `test_qwen3v_tier1_metal` and
@@ -35,12 +40,11 @@ and `test_kitten_oracle` in `tests/test_tts_kitten.das`, `test_kokoro_synthesis_
 seat cells; `test_metal_prefill_kernels` in `tests/test_metal_prefill_kernels.das`, the gate of
 the kernels the tower chains share; and the audio-tower run, `tests/test_model_image.das` with the
 `mtower` arm and no `--family` filter (`DASLLAMA_TEST_FAMILY` unset), with `metal_tower_stats()`'s
-encode count rising across the run.** A cell skipped for a missing model does not discharge this.
-A family filter skips other families' cells; a shared path or borrowed kernel reaches the ASR
-decoder with its file untouched.
+encode count rising across the run.** A family filter skips other families' cells; a shared path
+or borrowed kernel reaches the ASR decoder with its file untouched.
 
-**A diff reaching the Vulkan tower runs, on a build without the Metal module,
-`test_gemma4v_tier1_vulkan` and `test_gemma4v_vulkan_twin` in `tests/test_gemma4v.das`,
+**A diff reaching the Vulkan tower runs, on a build without the Metal module and with
+`DASLLAMA_CUDA` unset, `test_gemma4v_tier1_vulkan` and `test_gemma4v_vulkan_twin` in `tests/test_gemma4v.das`,
 `test_gemma3v_vulkan_twin` in `tests/test_gemma3v.das`, `test_qwen3v_vulkan_twin` in
 `tests/test_qwen3v.das`, `test_qwen25v_vulkan_twin` in `tests/test_qwen25v.das`,
 `test_gemma4uv_tier1_vulkan` in `tests/test_gemma4uv.das`, `test_whisper_vulkan_twin` in
@@ -52,12 +56,22 @@ decoder with its file untouched.
 `tests/test_vulkan_tts_pocket_kernels.das`, and the TTS seat cells; each named `test_*` cell sees
 the counter of every hook it covers rise.**
 
+**A diff reaching the CUDA tower runs, on a build carrying dasCUDA on a machine with a CUDA
+device and with `DASLLAMA_GPU=1` and `DASLLAMA_CUDA=1` set, `test_gemma4v_tier1_vulkan` and
+`test_gemma4v_vulkan_twin` in `tests/test_gemma4v.das`, `test_gemma3v_vulkan_twin` in
+`tests/test_gemma3v.das`, `test_qwen3v_vulkan_twin` in `tests/test_qwen3v.das`,
+`test_qwen25v_vulkan_twin` in `tests/test_qwen25v.das`, `test_gemma4uv_tier1_vulkan` and
+`test_gemma4uv_device_twin` in `tests/test_gemma4uv.das`, and `test_vision_chat_e2b`,
+`test_vision_chat_gemma3`, `test_vision_chat_deepstack` and `test_vision_chat_qwen25o` in
+`tests/test_vision_chat.das`; each of the twin and device-twin cells sees
+`cuda_tower_stats().encodes` rise; the two tier-1 cells need the mtmd dumps.** With `DASLLAMA_CUDA=1` set,
+`discrete_twin_seat` (`tests/_tower_twin.das`) seats those Vulkan-named cells on the CUDA tower.
+
 **A change to `dasllama/dasllama_vulkan_asr_dec.das`, to a kernel class it dispatches, or to a
 function it calls that another file defines runs, on a build without the Metal module,
 `test_whisper_vulkan_wdec_lifetime` (`tests/test_whisper.das`), `test_rnnt_device_twin`
 (`tests/test_rnnt.das`), `test_parakeet_device_decode_twin` (`tests/test_audio.das`) and
-`test_gigaam_device_decode_twin` (`tests/test_gigaam.das`); a cell that skips for a missing model
-counts as not run.** Their CPU-vs-GPU cells are the Vulkan ASR-decoder driver's parity
+`test_gigaam_device_decode_twin` (`tests/test_gigaam.das`).** Their CPU-vs-GPU cells are the Vulkan ASR-decoder driver's parity
 instrument, and a shared function reaches the driver with no line of its own file touched.
 
 **A diff that registers a hook into a tower seat from a driver's `[init]`, or changes which hook
@@ -128,10 +142,10 @@ pick leaves out turns a box that cannot serve the lane into that refusal, where 
 mapped the CPU image.
 
 **A diff that changes a block region list (`ln_block_regions`, `gemma4v_block_regions`,
-`qwen3v_block_regions`, a `vt_*_regions` list) or a driver's mapping of one (the `tw_q8_regions`
-overloads) changes, in the same change, every site index a Metal chain passes to `wt_mm` and every
-record index a Vulkan chain passes to `vt_mm_lane`; weakening the cells that red on a misindexed
-site - the Metal q8-lane cells of `tests/test_gemma3v.das`, `tests/test_gemma4v.das` and
-`tests/test_qwen3v.das`, the families' Vulkan twins - is a defect.** A Metal site index is the
-region's position in the driver's list; a Vulkan record index is its position in the family's list,
-a layer.
+`qwen3v_block_regions`, a family's `*_all_regions`, a `vt_*_regions` list) or a driver's mapping of one
+(the `tw_q8_regions` overloads) changes, in the same change, every index a tower chain passes to
+its GEMM dispatch - `wt_mm` (Metal), `vt_mm_lane` (Vulkan), `cut_mm_q8` (CUDA); weakening the
+cells that go red on a misindexed site - the Metal q8-lane cells of `tests/test_gemma3v.das`,
+`tests/test_gemma4v.das` and `tests/test_qwen3v.das`, the families' `*_vulkan_twin` cells with
+and without `DASLLAMA_CUDA=1` - is a defect.** A Metal site index is the region's position in the
+driver's list; a Vulkan or CUDA record index is its position in the family's list, a layer.

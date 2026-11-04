@@ -18,8 +18,7 @@ exactly one `modules/<M>/` folder, answers to `modules/<M>/REVIEW.md` too, when 
 `utils/internal/review-md/scan.das` does not apply this route, so the reviewer does.
 
 **A guard on the `dasCUDA` package in a file outside `modules/dasCUDA/` tests for the `cuda`
-module - the module `modules/dasCUDA/src/dasCUDA.cpp` registers, built only when the build
-configures the package - through `require ?cuda <target>`, `has_module("cuda")` or
+builtin module through `require ?cuda <target>`, `has_module("cuda")` or
 `builtin_module_exists(cuda)`, never through a `cuda/` path.** The `cuda/` files of the package
 are on disk in a build configured without it, so a path guard reads that build as having CUDA.
 

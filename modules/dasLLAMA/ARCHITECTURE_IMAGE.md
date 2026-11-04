@@ -194,7 +194,7 @@ layout helpers `pad_to_page`, `w_page`, `plane_end`, `image_total_bytes`, `w_app
 `vk_mint_sink_append`, GigaAM's streamed weight-plane writer `gg_stream_plane` and its plan's spans `gg_job_span` and
 `gg_plane_total`, every `*_bake` / `*_bake_into` a GPU flavor's device block (`ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block`)
 comes from - a CPU repack bake among them - with the block's piece writer `tower_dev_put` and the device gathers the bakes call
-(`kq_gather_rows_dev`, `wd_gather`, `vt_gather_kq_member`, `vt_gather_regions`, `rnnt_dev_slab`), and the declaration lines
+(`kq_gather_rows_dev`, `wd_gather`, `vt_gather_kq_member`, `tower_gather_q8_regions`, `rnnt_dev_slab`), and the declaration lines
 of the layout constants `IMAGE_PAGE`, `IMAGE_HEADER_BYTES`, `SECTION_TABLE_SLACK`, `DWRITE_STAGING_BAND`,
 `METAL_BAND_BLOCKS`, `BLOB_ALIGN_FLOATS` and `TOWER_DEV_ALIGN`. Comments are stripped first, so re-wording one moves nothing, and CRLF
 line ends fold to LF before anything is hashed, so a checkout under `autocrlf` stamps as the

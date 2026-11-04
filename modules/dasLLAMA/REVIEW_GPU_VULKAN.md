@@ -67,8 +67,8 @@ is reachable other than through a hook `install_vk_moe_hooks` installs, makes th
 false.** `vk_moe_init` reads no knob, so a caller that skips the test serves on a box whose
 `DASLLAMA_GPU` says no.
 
-**A serving hook - a hook slot the CPU chain calls to hand work to the GPU - that keeps a
-`VkDeclineCounter` counts a decline on a false `gpu_want_arms_tier()` under its decline enum's
+**A serving hook - a hook slot the CPU chain calls to hand work to the GPU - in a Vulkan driver
+file (`dasllama/dasllama_vulkan_*.das`) that keeps a `VkDeclineCounter` counts a decline on a false `gpu_want_arms_tier()` under its decline enum's
 `device` member, with `VK_DECLINE_WORDS_DEVICE` as the reason text.**
 
 **A diff that changes what a device limit decides for the tier - which path serves, how much it

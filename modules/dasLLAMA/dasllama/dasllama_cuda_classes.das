@@ -4098,10 +4098,19 @@ def cud_fa_cap_ok(hs : int64; cap : float) : bool => cap == 0.0 || hs == 256l
 
 //! the flash stamp of head size `hs` (64, 96, 128, 256 or 512) with the f32 or the f16 O store; the gate arm and the softcap arm
 //! (`pc.cap` past zero) are the h256 stamps' alone, and `sink` takes the h64 sink stamps over the per-head sink plane `sinks` (the
-//! sink upload holds the head size to 64)
-def cud_fa_enc(var s : void?; hs : int64; gated, f16out, sink : bool; bufs : uint64 const[4]; sinks : uint64; var pc : FaArgs; wgs : int64) {
+//! sink upload holds the head size to 64); `bidir` takes the bidirectional stamps (64 or 128), the vision towers' attention over
+//! the padded panels
+def cud_fa_enc(var s : void?; hs : int64; gated, f16out, sink : bool; bufs : uint64 const[4]; sinks : uint64; var pc : FaArgs; wgs : int64; bidir : bool = false) {
     assert(cud_fa_cap_ok(hs, pc.cap), "cud flash: a softcap off head 256 - the cap stamps are the h256 tile's")
-    if (sink) {
+    if (bidir) {
+        if (hs == 64l) {
+            enc_fa_cm2_h64_bidir_cls(s, bufs, pc, wgs)
+        } elif (hs == 128l) {
+            enc_fa_cm2_h128_bidir_cls(s, bufs, pc, wgs)
+        } else {
+            panic("cud flash bidir: head size {hs} - the tower tiles are the h64 and h128 stamps")
+        }
+    } elif (sink) {
         let sbufs = fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], sinks)
         if (f16out) {
             enc_fa_cm2_h64_sink_f16_cls(s, sbufs, pc, wgs)
@@ -5008,5 +5017,387 @@ def cud_moe_sched_enc(ne : int64; var s : void?; bufs : uint64 const[6]; var pc 
         enc_moe_sched2_cls(s, bufs, pc, 1l)
     } else {
         enc_moe_sched_cls(s, bufs, pc, 1l)
+    }
+}
+
+
+//! the vision stems' patch im2col on the template every home stamps (`GkPatchIm2col`)
+[cuda_dispatch(name = "tower_patch_im2col_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerPatchIm2col : GkPatchIm2col {
+    [cuda_kernel(local_size_x = 256, name = "tower_patch_im2col_cls_cuda")]
+    def run {
+        patch_im2col_body()
+    }
+}
+
+//! the gemma-4 towers' 2-axis position add (`GkPosAdd2D`)
+[cuda_dispatch(name = "tower_pos_add_2d_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerPosAdd2d : GkPosAdd2D {
+    [cuda_kernel(local_size_x = 256, name = "tower_pos_add_2d_cls_cuda")]
+    def run {
+        pos_add_2d_body()
+    }
+}
+
+//! qwen3v's stem assemble (`GkStemAsm`)
+[cuda_dispatch(name = "tower_stem_asm_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerStemAsm : GkStemAsm {
+    [cuda_kernel(local_size_x = 256, name = "tower_stem_asm_cls_cuda")]
+    def run {
+        stem_asm_body()
+    }
+}
+
+//! the gemma towers' grid pool (`GkPool2d`)
+[cuda_dispatch(name = "tower_pool_2d_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerPool2d : GkPool2d {
+    [cuda_kernel(local_size_x = 256, name = "tower_pool_2d_cls_cuda")]
+    def run {
+        pool_2d_body()
+    }
+}
+
+//! gemma4v's scale-and-standardize rows (`GkAffineRows`)
+[cuda_dispatch(name = "tower_affine_rows_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerAffineRows : GkAffineRows {
+    [cuda_kernel(local_size_x = 256, name = "tower_affine_rows_cls_cuda")]
+    def run {
+        affine_rows_body()
+    }
+}
+
+//! GEGLU-quick with the gemma4v bounds (`GkGeglu`)
+[cuda_dispatch(name = "tower_geglu_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerGeglu : GkGeglu {
+    [cuda_kernel(local_size_x = 256, name = "tower_geglu_cls_cuda")]
+    def run {
+        geglu_body()
+    }
+}
+
+//! qwen25v's biased silu gate as the f16 tile's halves (`GkBiasGate`)
+[cuda_dispatch(name = "tower_bias_gate16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerBiasGate16 : GkBiasGate {
+    override OUT16 = true
+
+    [cuda_kernel(local_size_x = 256, name = "tower_bias_gate16_cls_cuda")]
+    def run {
+        bias_gate_body()
+    }
+}
+
+//! qwen25v's window attention over the compact rows, a workgroup a window and head (`GkWinAttn`)
+[cuda_dispatch(name = "tower_win_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerWinAttn : GkWinAttn {
+    override HS = 80u
+
+    [cuda_kernel(local_size_x = 256, name = "tower_win_attn_cls_cuda")]
+    def run {
+        win_attn_body()
+    }
+}
+
+//! the vision towers' full-head NEOX rope off one table row a position (`GkRopeTab`)
+[cuda_dispatch(name = "tower_rope_tab_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerRopeTab : GkRopeTab {
+    override NEOX = true
+
+    [cuda_kernel(local_size_x = 256, name = "tower_rope_tab_cls_cuda")]
+    def run {
+        rope_tab_body()
+    }
+}
+
+//! gemma4v's 2D neox rope in place (`GkRope2d`)
+[cuda_dispatch(name = "tower_rope2d_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerRope2d : GkRope2d {
+    [cuda_kernel(local_size_x = 256, name = "tower_rope2d_cls_cuda")]
+    def run {
+        rope2d_body()
+    }
+}
+
+//! rows clamped in place, a gemma4v ClippableLinear's output bounds (`GkClampRows`)
+[cuda_dispatch(name = "tower_clamp_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerClamp : GkClampRows {
+    [cuda_kernel(local_size_x = 256, name = "tower_clamp_cls_cuda")]
+    def run {
+        clamp_rows_body()
+    }
+}
+
+//! the f32 copy of a clamped GEMM input, the exact lane's tile feed (`GkClampRows`)
+[cuda_dispatch(name = "tower_clamp_copy_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerClampCopy : GkClampRows {
+    override COPY = true
+
+    [cuda_kernel(local_size_x = 256, name = "tower_clamp_copy_cls_cuda")]
+    def run {
+        clamp_rows_body()
+    }
+}
+
+//! the row-broadcast bias and activation (`GkBiasAct`)
+[cuda_dispatch(name = "tower_bias_act_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerBiasAct : GkBiasAct {
+    [cuda_kernel(local_size_x = 256, name = "tower_bias_act_cls_cuda")]
+    def run {
+        bias_act_body()
+    }
+}
+
+//! the bias and activation stored as the cm2 tile's f16 feed (`GkBiasAct`)
+[cuda_dispatch(name = "tower_bias_act_cvt16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerBiasActCvt16 : GkBiasAct {
+    override OUT16 = true
+
+    [cuda_kernel(local_size_x = 256, name = "tower_bias_act_cvt16_cls_cuda")]
+    def run {
+        bias_act_body()
+    }
+}
+
+//! the activation alone (`GkBiasAct`)
+[cuda_dispatch(name = "tower_act_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerAct : GkBiasAct {
+    override BIAS = false
+
+    [cuda_kernel(local_size_x = 256, name = "tower_act_cls_cuda")]
+    def run {
+        bias_act_body()
+    }
+}
+
+//! the head restride onto the flash tile's padded width (`GkRestride`)
+[cuda_dispatch(name = "tower_hpad_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerHpad : GkRestride {
+    [cuda_kernel(local_size_x = 256, name = "tower_hpad_cls_cuda")]
+    def run {
+        restride_body()
+    }
+}
+
+//! the restride's padded rows as the flash tile's f16 k / v panels (`GkRestride`)
+[cuda_dispatch(name = "tower_hpad16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerHpad16 : GkRestride {
+    override OUT16 = true
+
+    [cuda_kernel(local_size_x = 256, name = "tower_hpad16_cls_cuda")]
+    def run {
+        restride_body()
+    }
+}
+
+//! the restride with the q / k / v bias row folded in (`GkRestride`)
+[cuda_dispatch(name = "tower_hpad_b_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerHpadB : GkRestride {
+    override BIAS = true
+
+    [cuda_kernel(local_size_x = 256, name = "tower_hpad_b_cls_cuda")]
+    def run {
+        restride_body()
+    }
+}
+
+//! the f16 panels with the k / v bias row folded in (`GkRestride`)
+[cuda_dispatch(name = "tower_hpad16_b_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerHpad16B : GkRestride {
+    override OUT16 = true
+    override BIAS = true
+
+    [cuda_kernel(local_size_x = 256, name = "tower_hpad16_b_cls_cuda")]
+    def run {
+        restride_body()
+    }
+}
+
+//! the attention rows back onto the compact width (`GkRestride`)
+[cuda_dispatch(name = "tower_hunpad_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerHunpad : GkRestride {
+    override PAD = false
+
+    [cuda_kernel(local_size_x = 256, name = "tower_hunpad_cls_cuda")]
+    def run {
+        restride_body()
+    }
+}
+
+//! the compact attention rows as the cm2 tile's f16 feed (`GkRestride`)
+[cuda_dispatch(name = "tower_hunpad16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerHunpad16 : GkRestride {
+    override PAD = false
+    override OUT16 = true
+
+    [cuda_kernel(local_size_x = 256, name = "tower_hunpad16_cls_cuda")]
+    def run {
+        restride_body()
+    }
+}
+
+//! the residual seam and the next layernorm, a workgroup a row (`GkPostAddLn`)
+[cuda_dispatch(name = "tower_post_add_ln_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerPostAddLn : GkPostAddLn {
+    [cuda_kernel(local_size_x = 256, name = "tower_post_add_ln_cls_cuda")]
+    def run {
+        post_add_ln_body()
+    }
+}
+
+//! the seam with the normed rows as the cm2 tile's f16 feed (`GkPostAddLn`)
+[cuda_dispatch(name = "tower_post_add_ln16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerPostAddLn16 : GkPostAddLn {
+    override OUT16 = true
+    override OUT32 = false
+
+    [cuda_kernel(local_size_x = 256, name = "tower_post_add_ln16_cls_cuda")]
+    def run {
+        post_add_ln_body()
+    }
+}
+
+//! the rms rows alone over the weight row at lnoff (`GkPostAddLn`)
+[cuda_dispatch(name = "tower_rms_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerRms : GkPostAddLn {
+    override ADD = false
+    override RMS = true
+
+    [cuda_kernel(local_size_x = 256, name = "tower_rms_cls_cuda")]
+    def run {
+        post_add_ln_body()
+    }
+}
+
+//! the gemma4v seam: the branch's post-norm, the add, the next rms (`GkPostAddLn`)
+[cuda_dispatch(name = "tower_post_add_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerPostAdd : GkPostAddLn {
+    override RMS = true
+    override POST_NORM = true
+    override BIAS = false
+
+    [cuda_kernel(local_size_x = 256, name = "tower_post_add_cls_cuda")]
+    def run {
+        post_add_ln_body()
+    }
+}
+
+//! the qwen25v seam: the biased add, the next rms (`GkPostAddLn`)
+[cuda_dispatch(name = "tower_post_add_rms_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerPostAddRms : GkPostAddLn {
+    override RMS = true
+
+    [cuda_kernel(local_size_x = 256, name = "tower_post_add_rms_cls_cuda")]
+    def run {
+        post_add_ln_body()
+    }
+}
+
+//! layernorm rows alone (`GkPostAddLn`)
+[cuda_dispatch(name = "tower_ln_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerLn : GkPostAddLn {
+    override ADD = false
+
+    [cuda_kernel(local_size_x = 256, name = "tower_ln_cls_cuda")]
+    def run {
+        post_add_ln_body()
+    }
+}
+
+//! layernorm rows alone as the cm2 tile's f16 feed (`GkPostAddLn`)
+[cuda_dispatch(name = "tower_ln16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerLn16 : GkPostAddLn {
+    override ADD = false
+    override OUT16 = true
+    override OUT32 = false
+
+    [cuda_kernel(local_size_x = 256, name = "tower_ln16_cls_cuda")]
+    def run {
+        post_add_ln_body()
+    }
+}
+
+//! the f32 tile on the template both discrete homes stamp (`F32GemmT`): the vision stems, tails and exact lanes
+[cuda_dispatch(name = "f32_gemm_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuF32Gemm : F32GemmT {
+    [cuda_kernel(local_size_x = 256, name = "f32_gemm_cls_cuda")]
+    def run {
+        f32_gemm_body()
+    }
+}
+
+//! the f32 tile with the bias row added at the store (`F32GemmT`)
+[cuda_dispatch(name = "f32_gemm_b_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuF32GemmB : F32GemmT {
+    override BIAS = true
+
+    [cuda_kernel(local_size_x = 256, name = "f32_gemm_b_cls_cuda")]
+    def run {
+        f32_gemm_body()
+    }
+}
+
+//! the f32 tile over the file's bf16 rows as stored (`F32GemmT`)
+[cuda_dispatch(name = "f32_gemm_bf16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuF32GemmBf16 : F32GemmT {
+    override BF16W = true
+
+    [cuda_kernel(local_size_x = 256, name = "f32_gemm_bf16_cls_cuda")]
+    def run {
+        f32_gemm_body()
+    }
+}
+
+//! the f32 tile over the file's bf16 rows with the bias row added at the store (`F32GemmT`)
+[cuda_dispatch(name = "f32_gemm_bf16_b_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuF32GemmBf16B : F32GemmT {
+    override BIAS = true
+    override BF16W = true
+
+    [cuda_kernel(local_size_x = 256, name = "f32_gemm_bf16_b_cls_cuda")]
+    def run {
+        f32_gemm_body()
+    }
+}
+
+//! the vision towers' bidirectional flash tile at head 64 (`FaH64T`), the o rows as f32
+[cuda_dispatch(name = "fa_cm2_h64_bidir_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaCm2H64Bidir : FaH64T {
+    typedef OT = float
+    override CAUSAL = false
+
+    [cuda_kernel(local_size_x = 128, name = "fa_cm2_h64_bidir_cls_cuda")]
+    def run {
+        fa_body()
+    }
+}
+
+//! the bidirectional flash tile at head 128 (`FaH128T`)
+[cuda_dispatch(name = "fa_cm2_h128_bidir_cls", kernel = "run", family = "fa_cm2_cls", grid = "wgs", params = "wgs : int64")]
+class CuFaCm2H128Bidir : FaH128T {
+    typedef OT = float
+    override CAUSAL = false
+
+    [cuda_kernel(local_size_x = 128, name = "fa_cm2_h128_bidir_cls_cuda")]
+    def run {
+        fa_body()
+    }
+}
+
+//! the f16 x f16 GEMM over the halfword plane's rows at `pa.woff` (`F16GemmCm2T` with its weight offset): the qwen25v chain's block GEMMs
+[cuda_dispatch(name = "f16_gemm_cm2_w_cls", grid = "wgs", params = "wgs : int64")]
+class CuF16GemmCm2W : F16GemmCm2T {
+    override KSPLIT = false
+
+    [cuda_kernel(local_size_x = 256, name = "f16_gemm_cm2_w_cls_cuda")]
+    def run {
+        f16_gemm_body()
+    }
+}
+
+//! the window-sort row gather of qwen25v's stem on the template every home stamps (`GkRowGather`)
+[cuda_dispatch(name = "tts_row_gather_cls", kernel = "run", grid = "total/256", params = "total : int64")]
+class CuTtsRowGather : GkRowGather {
+    [cuda_kernel(local_size_x = 256, name = "tts_row_gather_cls_cuda")]
+    def run {
+        row_gather_body()
     }
 }

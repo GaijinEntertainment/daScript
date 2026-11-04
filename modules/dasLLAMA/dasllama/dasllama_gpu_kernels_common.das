@@ -2009,7 +2009,7 @@ class template GkWdecAttnComb : GkQ8BlockStore {
 
 struct GkRestrideArgs {
     rows : uint
-    rows_pad : uint //! the padded panel's row cap (the scratch's, a multiple of the l column - `vt_cap_rows`): PAD writes zero rows past `rows` up to it, the unpad reads `rows`
+    rows_pad : uint //! the padded panel's row cap (the scratch's, a multiple of the l column - `tower_cap_rows`): PAD writes zero rows past `rows` up to it, the unpad reads `rows`
     nheads : uint
     hs : uint
     hsp : uint

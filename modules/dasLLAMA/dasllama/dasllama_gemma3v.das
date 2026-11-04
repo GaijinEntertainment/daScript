@@ -610,6 +610,18 @@ def gemma3v_ln_offs(t : Gemma3vTower; l : int64) : LayerOffs {
         fc1_w = o.w[GEMMA3V_GEMM_UP], fc1_b = o.b[GEMMA3V_GEMM_UP], fc2_w = o.w[GEMMA3V_GEMM_DOWN], fc2_b = o.b[GEMMA3V_GEMM_DOWN])
 }
 
+//! every block's q8 GEMM regions in `ln_block_regions`' order, the whole tower - the list the tower drivers gather
+def gemma3v_all_regions(t : Gemma3vTower) : array<Q8Region> {
+    var @exact_size regions : array<Q8Region>
+    regions |> reserve(t.n_layer * LN_BLOCK_GEMMS)
+    var recs : Q8Region[int(LN_BLOCK_GEMMS)]
+    for (l in range64(t.n_layer)) {
+        ln_block_regions(gemma3v_ln_offs(t, l), t.n_embd, t.ff_pad, recs)
+        regions |> push_from(recs)
+    }
+    return <- regions
+}
+
 // one pre-norm block over the residual stream s.x (npos rows)
 def private g3v_block(t : Gemma3vTower; var s : Gemma3vState; l, npos : int64) {
     let d = t.n_embd

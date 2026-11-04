@@ -5,7 +5,14 @@ carries the vision chains the Vulkan tower driver serves whole off the image pla
 qwen3v, qwen25v and the gemma4uv embedder - on both weight lanes. The encode chain's shape and the
 residency every chain shares are `ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains`, the Metal twin
 of every chain `ARCHITECTURE_GPU_TOWER.md#tower-encode-chains`, and the CPU chain is the specification,
-dispatch for dispatch.
+dispatch for dispatch. The CUDA tower driver (`dasllama_cuda_tower.das`) runs these five chains dispatch for
+dispatch over the stamps the two discrete homes share (the `tower_*_cls` stems under the `[cuda_dispatch]`
+lens, the cm2 q8 tiles, the bidirectional flash stamps, the f32 tile `F32GemmT`) on the `cud_` rail: no
+descriptor sets and no hazard rail, the chain's kernels queued on the home's stream and the soft tokens
+read back behind one synchronize; its q8 lane reads the family's CUDA image (`cu.<family>.wq` / `.ws`,
+`ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block`) and its exact lanes the file's planes as stored, the
+bf16 rows of the gemma-4 towers through the f32 tile's bf16 arm (`BF16W`), as this driver's chains read
+them; the q8 lane always takes the cm2 f16 feed, the home having no other GEMM feed.
 
 ### The vision chains on Vulkan {#vk-vision-chains}
 
@@ -17,10 +24,10 @@ registered, and runs it only after a decline (`stem_cols(..., im2col)`).
 **The stem.** The patch im2col (`TowerPatchIm2col`, one element an invocation, the pad rows and
 columns zero, gemma4v's [0, 1] -> [-1, 1] map as its scale and shift) writes the column plane
 `vis_col` at the scratch's row capacity; the patch conv is the f32 tile over the stem rows - gemma3v's
-and qwen3v's off the norms plane (the blob whole), gemma4v's and gemma4uv's off the stem slab
-`vis_w` (`vt_g4v_slab`, `vt_uv_slab`: the bf16 patch and projection rows widened on the host, the f32
-ones copied), which the family uploads again whenever a fresh tower or a rebuilt buffer asks
-(`vis_w_fresh`, raised by the rebuild and never read off the bytes the old buffer held). The position
+and qwen3v's off the norms plane (the blob whole), gemma4v's and gemma4uv's off the plane the file holds them in:
+the f32 rows off the norms plane, the bf16 rows off the halfword plane uploaded as stored (`wb_dev`,
+`vt_upload_wb`) through the f32 tile's bf16 arm (`F32GemmBf16`, the set picked by `vt_set_f32`), so no
+row is widened on the host and the image carries the file's bytes. The position
 rows follow: gemma4v's and gemma4uv's 2-axis add (`TowerPosAdd2d`, (row + x-table row) + y-table row),
 qwen3v's stem assemble (`TowerStemAsm`: the merge-adjacent walk gathering each row's natural-order
 conv row, the conv bias and its position row, the resized position plane bound as `vis_aux` where the
@@ -31,9 +38,9 @@ loop reads (gemma3v's pre-LN chain through `x_ready`, the others in the same com
 **The blocks on both lanes.** A q8 tower's block GEMMs ride the q8 tile over its repacked plane as the
 audio chains' do - the schedule records, the Q8_0 feeds, qwen3v's fused qkv row, gemma4v's clamped
 sites through `vt_mm_clamped`. An exact tower's ride the f32 tile over the whole blob uploaded as the
-norms plane (`vt_upload_f32`; gemma4v's bf16 block rows widened behind the blob, the block offsets
-read at `wbase`), straight off the f32 rows the norms and seams land: no feed, no schedule
-(`vt_mm_lane`, the pre-LN chain's `f32w` arm). gemma4v's input bounds apply on the way in: the
+norms plane (`vt_upload_f32`; gemma4v's bf16 block rows off the halfword plane through the bf16 arm, the
+resident's `blk_bf16` picking the stamp), straight off the f32 rows the norms and seams land: no feed, no
+schedule (`vt_mm_lane`, the pre-LN chain's `f32w` arm). gemma4v's input bounds apply on the way in: the
 clamped sites that read `xb` copy it under their bounds into `xc` (`TowerClampCopy`, so `xb` stays
 whole for the next site's own bounds) and the sites that read `att` or `hg` clamp in place
 (`vt_mm_clamped32`). qwen25v, which has no q8 lane, rides its baked halfword twin through the f16
@@ -47,7 +54,7 @@ exact serves on the f32 tile instead of falling to the CPU chain; Metal's chains
 as served, its f32 tiles being the faster route there. The audio towers keep the q8 lane.
 
 **The tails.** gemma3v's grid pool (`TowerPool2d`), soft rms and projection behind the pre-LN chain
-(`vt_vis_tail_enc` over `VtVisTail`); gemma4v's pool, the sqrt(d) scale with the standardize in one row
+(`vt_vis_tail_enc` over `TowerVisTail`); gemma4v's pool, the sqrt(d) scale with the standardize in one row
 pass (`TowerAffineRows`, the scale alone where the file has no standardize rows), the weightless rms
 off the norms plane's ones row - sized to the widest rms the chain runs, the tail's d, not the head's
 hs - and the projection between its clamps; qwen3v's and qwen25v's mergers over the rows as [nout x 4d]
@@ -56,7 +63,7 @@ the slices of one projected plane; gemma4uv's layernorms around the patch linear
 the weightless rms and the projection - no pool. The tail rows ride
 `tail_out` / `tail_proj` at the tail's widest width (`vt_tail_bufs`, rebuilt with the scratch).
 
-**The buffers.** `vt_vis_bufs` holds the planes at the canvas's bytes, the column plane, the stem
-slab, the index and aux planes and the tail rows at the scratch's row capacity; a canvas that grows
+**The buffers.** `vt_vis_bufs` holds the planes at the canvas's bytes, the column plane, the
+index and aux planes and the tail rows at the scratch's row capacity; a canvas that grows
 past any of them rebuilds them all and bumps `vis_gen`, so the family builds its sets again over the
 new buffers (`vis_sets_gen`). One resident a family, released with the model drop's sweep.

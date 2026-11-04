@@ -1,7 +1,7 @@
 # dasCUDA Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md`, `ARCHITECTURE_EMIT.md`. Planned work: `LEDGER.md`.
+docs: `ARCHITECTURE.md`, `ARCHITECTURE_EMIT.md`, `ARCHITECTURE_EMIT_TILES.md`. Planned work: `LEDGER.md`.
 
 **Every change under this folder applies `modules/REVIEW_SHADER_EMITTERS.md` too** - the rules
 binding a kernel body, a launch of an emitted kernel and an emitter's lowering live there.
@@ -20,10 +20,9 @@ unsuffixed export is an older entry point the library may stop exporting.
 **A diff that adds an extern to `cuda/cuda_driver.das` gives it the same `windows_library` and
 `linux_library` candidate lists as the other externs of the same library.**
 
-**Never add a C++ source under this module beside `src/dasCUDA.cpp` - the source that registers
-the `cuda` module, built only when the build configures the package
-(`ARCHITECTURE.md#cuda-witness-module`) - and never bind a function in it; a driver or toolkit
-entry point binds through a dasbind `[extern(late)]` instead.**
+**Never add a C++ source under this module beside `src/dasCUDA.cpp`
+(`ARCHITECTURE.md#cuda-witness-module`), and never bind a function in `src/dasCUDA.cpp` - bind a
+driver or toolkit entry point through a dasbind `[extern(late)]` instead.**
 
 **Never bind managed memory (`cuMemAllocManaged`) and never return a device address as a host
 pointer - bytes move through `cuda_memcpy_*` and `cuda_memset_d8`, and a host-visible block is
@@ -38,9 +37,13 @@ that layout.
 input and why a cubin compiled before the change cannot be served after it.**
 
 **A diff that makes `cuda/cuda_emit.das` write a new text form - a construct, an operand type, or
-a new spelling of an existing construct - records a census kind of its own for that form through
-`census_kind` and adds the kind to `declared_cuda_census` (`tests/cuda/_cuda_common.das`, repo
-root) in the same change.** Two forms sharing one kind let either go untested.
+a new spelling of an existing construct - records that form through `census_kind` under a kind no
+other form records.** Two forms sharing one kind let either go untested.
+
+**A diff that adds or changes a `census_kind` call in `cuda/cuda_emit.das` adds every kind that
+call can produce for a kernel the emitter accepts to `declared_cuda_census`
+(`tests/cuda/_cuda_common.das`, repo root) in the same change.** The census test fails a declared
+kind no fixture emits, so declaring every reachable kind forces a fixture for each one.
 
 **A diff that adds an emitter rejection a `[cuda_kernel]` body can reach, or changes a
 rejection's text, adds a case to `tests/cuda/test_cuda_reject.das` (repo root) asserting a
@@ -51,8 +54,8 @@ makes it write a new such form, adds a case to `tests/cuda/test_cuda_oracle.das`
 comparing the device run of a kernel using the form with its CPU run - or, when a name the kernel
 calls has an empty daslang body, with a reference the test computes.**
 
-**Never hand-write a kernel text under this module, in a string or a `.cu` file - emit it from a
-`[cuda_kernel]` body instead.**
+**Never hand-write a `__global__` entry point under this module, in a string or a `.cu` file - emit
+it from a `[cuda_kernel]` body instead.**
 
 **A diff that adds a name a `[cuda_kernel]` body can call puts it in
 `modules/dasSpirv/spirv/spirv_builtins.das` when SPIR-V has an op or a GLSL builtin that computes

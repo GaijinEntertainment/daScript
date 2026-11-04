@@ -402,7 +402,7 @@ def private nv_announce {
 
 //! `nelem` floats of the set's source as the GEMVs' Q8_0 feed
 def private nv_rq(raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; nelem : int64) {
-    var pc = RqArgs(inbase = 0u, nblk = uint(nelem / kq_elems(KqFmt.q8)), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
+    var pc = RqArgs(inbase = 0u, nblk = uint(nelem / kq_elems(KqFmt.q8)), lo = -NO_CLAMP, hi = NO_CLAMP)
     enc_tower_clamp_rq_cls(raw, h, s, pc, rq_wgs(false, nelem))
 }
 

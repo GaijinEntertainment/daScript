@@ -7857,3 +7857,57 @@ records as the expert GEMVs' regions, the act and the combine.
   whole, and the gated head-256 KHR stamps take the ten attention layers (`ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-plan-room`
   carries the plan lines). zen4 carries no vulkan board row in `records/`; the release re-mint owes it
   (`followup_general.md` row 276).
+
+### From the vision towers on the CUDA home (2026-11-03, the reference box: Threadripper 3990X, RTX 5060 Ti 16 GB, driver 616.56, Windows, the GPU clock locked at 2400 MHz by `nvidia-smi -lgc 2400,2400`)
+
+The instrument: `harness/vision_lane_probe.das` under `DASLLAMA_IMAGE=0 DASLLAMA_GPU=1` with `DAS_TUNE_POLICY` unset
+and `DASLLAMA_COOPMAT` unset (the cm2 arm), one process a lane and a home - the `cuda` arm under `DASLLAMA_CUDA=1`
+(the CUDA tower driver), the `vulkan` arm without it (the Vulkan tower) - the tower staged and minted in memory in the
+home's flavor, the encode called thirteen times on the checkerboard canvas, the median of the last ten in ms, the four
+families run cuda, then vulkan, then cuda again so the first arm's repeat bounds the drift (the clock locked, the
+thermal drift under the lock still moves a row by up to 3%: the two cuda arms of each row stand side by side).
+Provenance: `bin/Release/daslang.exe -jit modules/dasLLAMA/harness/vision_lane_probe.das -- <family> <lane> <mmproj> <w> <h>`
+on the `-jit` tier under `DASLLAMA_MODELS_DIR=F:/models DAS_JOBQUE_THREADS=8 DASLLAMA_GPU=1 DASLLAMA_IMAGE=0`, the cuda arm with
+`DASLLAMA_CUDA=1`, `DASLLAMA_CUDA_MMQ`, `DASLLAMA_CUDA_PDL` and `DAS_TUNE_POLICY` unset. Every CUDA-against-Vulkan ratio and
+every before-against-after figure below is `direction-grade`: two processes, and the before arm is the tree with
+`modules/dasCUDA/cuda/cuda_emit.das` at origin/master 898bccd728 (the rest of this change in place).
+
+- **The four families, CUDA against Vulkan, encode ms (the two cuda arms / the vulkan arm):** gemma-3-4b (gemma3v q8, the
+  fixed 896 canvas, 4096 rows) **173.4 / 176.3** against 201.7 (CUDA 1.15x); gemma-4-E2B (gemma4v q8, 672x336) **23.1 / 22.5**
+  against 38.8 (1.7x); Qwen3-VL-4B (qwen3v q8, 448) **37.1 / 37.3** against 61.7 (1.66x); Qwen2.5-Omni-3B (qwen25v on the
+  exact lane, 448) **80.8 / 81.2** against 88.8 (1.09x). The cv of every cuda row sits under 3%, the vulkan gemma4v row at 5.4%.
+- **The gemma3v row, before and after the flash tile's CUDA lowering (the same locked clock, one session):** CUDA 235.1 against
+  Vulkan 195.5 before (0.83x, the one row CUDA trailed), 170.7 right after, 172-176 at the end of the pass. The gap was the
+  h128 bidirectional flash tile alone, read `external` on two profilers: `nsys --cuda-graph-trace=node` over one encode put it
+  at 144 of 234 ms (62%), the Vulkan tower's `fa` role (`DASLLAMA_GPU_PROF=1`) at 97 ms, while the GEMMs already ran ahead on
+  CUDA (60.7 against 66 ms); `ncu` on the tile read 0.25 eligible warps a scheduler, the L1TEX scoreboard the top stall, the
+  tensor pipe at 43% - the emitted text copied K and V global-to-shared synchronously, four barriers a step. The lowering now in
+  `dasCUDA` (`../dasCUDA/ARCHITECTURE_EMIT_TILES.md#cuda-prefetched-f16-tile`: the next window's K and V by cp.async behind the product over the
+  tile, the scaled Q held as register fragments so the prefetched tiles take its dead slot, the f16 accumulator's rescale as
+  packed `f16x2`) is picked on the probe's encode reading above; a scratch harness outside the tree timed the tile alone at
+  5.41 before and 2.93 ms a call after at 4096 rows (a hand-tuned text 2.77), bit-identical output, three blocks an SM on both
+  texts; the Vulkan text is untouched. The chain's picks on this card stay the l column on every site and no k split on fc2.
+- **The LLM side of the same lowering (every `fa_cm2_*` stamp takes it), `bin/Release/daslang.exe -jit -no-module-cache
+  modules/dasLLAMA/benchmarks/lcpp_bench.das -- --for-debug-purposes -m <gguf> -p <N> -n 0 -r 3 -t 8` on the CUDA home
+  (`DASLLAMA_GPU=1 DASLLAMA_CUDA=1 DASLLAMA_ALLOW_UNTUNED=1`, the sidecar stale so the rows carry the bench's debug-jit stamp and
+  are not record-grade; `DASLLAMA_CUDA_MMQ`, `DASLLAMA_CUDA_PDL`, `DAS_TUNE_POLICY` unset), tok/s, before / after / after again:** Qwen3-4B-Instruct Q8_0 pp512 6667.6 +/- 16.9 / 6771.6 +/- 35.0 / 6729.6 +/- 29.6,
+  pp2048 6286.8 +/- 333.8 / 7094.8 +/- 19.2 / 7095.8 +/- 24.5; gemma-3-4b Q8_0 pp512 6832.3 +/- 525.2 / 7335.9 +/- 92.8 / 7271.7 +/- 57.4,
+  pp2048 7253.7 +/- 15.2 / 7668.8 +/- 7.7 / 7888.2 +/- 30.8. The short window gains a percent or two, the long one six to ten; the
+  two wide before-arm spreads make their deltas soft.
+- **The upstream reference on this card, `external`: `llama-mtmd-cli` at b10660 (the local CUDA build `build-cuda`, the Vulkan
+  build `build-vulkan-357` against the pinned SDK 1.4.357) over gemma-3-4b-it Q8_0 with the F16 mmproj, one single-turn run
+  with `--image coco-val2017-000000039769.jpg` passed three times and the prompt "describe the image", the `mtmd batch encoding
+  done` lines in ms, warm (cold):** the CUDA build 468-477 (522-527), the Vulkan build 228-229 (8004, the shader compile).
+  Ours: CUDA 173-176, Vulkan 196-202. The reference rows above the vision rows of this ledger had no image-encode column before
+  this entry.
+- **The device chain's distance from the exact CPU chain, the twins at the tip, rel_l2** (`test_<family>_vulkan_twin` under
+  `DASLLAMA_CUDA=1`, the serving home's chain; the CPU q8 chain's own beside where the family has one): gemma3v 27 blocks
+  0.026 against 0.041 (the device chain sits closer to the exact chain than the CPU q8 chain does; 1 and 2 blocks 0.005 /
+  0.007); gemma4v 16 blocks 0.0107 / 0.0103 / 0.0125 / 0.0109 (cb96, cb336, green 672x336, cb768x384) against the Vulkan
+  chain's 0.0171 / - / 0.0388 / 0.0234 read the same evening after its bf16 rows moved onto the f32 tile's bf16 arm, the
+  exact lane 0.0012 (Vulkan 0.0011); qwen3v 24 blocks 0.0099 / 0.0092 (cb96, cb448); qwen25v 32 blocks 0.017 / 0.071 / 0.098
+  x rms (cb112, cb448, cb616x336 - the Vulkan band); gemma4uv 8e-7 on both homes (`test_gemma4uv_device_twin`, the exact
+  lane over the bf16 rows as stored); every reading is its cell's log line from `tests/run.das -- --area vision` under
+  `DASLLAMA_GPU=1 DASLLAMA_CUDA=1` on this box, the Vulkan figures from the same run without the CUDA ask. The image
+  round trips (`tests/test_model_image.das`, the `gemma3v`, `gemma4v` and `gemma4uv` arms, both homes) hold the mapped
+  image's device block to the in-memory mint's, plan and bytes - a driver-against-itself compare.

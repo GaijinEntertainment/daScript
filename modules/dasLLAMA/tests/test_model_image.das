@@ -2494,7 +2494,7 @@ def test_gemma4v_tower_image_roundtrip(t : T?) {
         return if (!jit_model_available(t, path))
         gemma4v_cpu_roundtrip(t, path)
         // the q8 lane's GPU flavor, where the box's driver serves it
-        let dev = serving_tower_dev()
+        let dev = serving_tower_dev(true)
         return if (dev == TowerDev.none)
         set_gemma4v_q8(true)
         let imgd = image_path_for(path, tower_dev_tag("gemma4v-q8", dev))
@@ -2581,7 +2581,7 @@ def test_gemma3v_tower_image_roundtrip(t : T?) {
         return if (!jit_model_available(t, path))
         gemma3v_cpu_roundtrip(t, path)
         // the q8 lane's GPU flavor, where the box's driver serves it
-        let dev = serving_tower_dev()
+        let dev = serving_tower_dev(true)
         return if (dev == TowerDev.none)
         set_gemma3v_q8(true)
         let imgd = image_path_for(path, tower_dev_tag("gemma3v-q8", dev))

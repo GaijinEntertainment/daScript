@@ -2122,36 +2122,7 @@ def private arena_drop_shells {
 
 var private g_vk_drop_hooks : array<function<() : void>>
 
-//! The Vulkan drivers' decline counter: `counts` by reason name (the gates read deltas on them), `total` over every reason,
-//! and the log said once per (who, reason) in the words the caller passes - `who` names the driver and its model family.
-struct VkDeclineCounter {
-    counts : table<string; int64>
-    total : int64
-    said : table<string>
-}
-
-//! Count `reason` for `who`, say it once in `words` (the reason name when empty); answers false so a decline site returns it.
-[cold_path]
-def note(var c : VkDeclineCounter; who, reason : string; words : string = "") : bool {
-    c.counts[reason] = (c.counts?[reason] ?? 0l) + 1l
-    c.total++
-    let key = "{who}/{reason}"
-    if (!key_exists(c.said, key)) {
-        c.said |> insert(key)
-        to_log(LOG_INFO, "dasLLAMA vulkan: {who} declined - {empty(words) ? reason : words}\n")
-    }
-    return false
-}
-
-//! Forget what was said for `who`: the next decline of each reason logs again (a driver calls it as a new model arrives).
-[cold_path]
-def unsay(var c : VkDeclineCounter; who : string) {
-    let prefix = "{who}/"
-    var gone <- [for (k in keys(c.said)); k; where starts_with(k, prefix)]
-    for (k in gone) {
-        c.said |> erase(k)
-    }
-}
+typedef VkDeclineCounter = GpuDeclineCounter   //! the Vulkan drivers' spelling of the tier's decline counter
 
 //! A driver whose device objects the model drop sweeps (every buffer and descriptor set is model-owned) registers a hook
 //! that forgets its handles; the sweep runs it before the objects die, and the driver rebuilds on its next use.

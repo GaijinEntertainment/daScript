@@ -84,14 +84,23 @@ def private gpu_ready(cc : CudaContext?) : bool {
     return true
 }
 
-//! `gpu_ready` and the FP4 tensor rung: the block-scaled mma needs compute capability 120
-def private gpu_fp4_ready(cc : CudaContext?) : bool {
+//! `gpu_ready` and a compute-capability floor: `what` needs `min_cc`, below it the GPU compare skips
+def private gpu_cc_ready(cc : CudaContext?; min_cc : int; what : string) : bool {
     return false if (!gpu_ready(cc))
-    if (cuda_device_compute_capability(cc) < 120) {
-        feint("the FP4 tensor rung needs compute capability 120 (the block-scaled mma); GPU compare skipped\n")
+    if (cuda_device_compute_capability(cc) < min_cc) {
+        feint("{what} needs compute capability {min_cc}; GPU compare skipped\n")
         return false
     }
     return true
+}
+
+//! `gpu_cc_ready` at the `min_cc` of the `all_cuda_texts` entry named `name`
+def private gpu_text_ready(cc : CudaContext?; name : string) : bool {
+    for (k in all_cuda_texts()) {
+        return gpu_cc_ready(cc, k.min_cc, "the {name} text") if (k.name == name)
+    }
+    panic("no all_cuda_texts entry named {name}")
+    return false
 }
 
 [test]
@@ -709,7 +718,7 @@ def test_packs_gpu_vs_cpu(t : T?) {
             o->packs()
         }
         with_cuda_context() $(cc : CudaContext?) {
-            return if (!gpu_ready(cc))
+            return if (!gpu_text_ready(cc, "packs"))
             var err : string
             var p = Bufs5(a = buf_upload(o.f), b = buf_upload(o.u), c = buf_fill(N, float2(0.0)), d = buf_fill(N, 0), e = buf_fill(N, 0u))
             t |> success(launch(cc, packs_cuda, "packs", packs_cuda_entry, p, uint(N), err), "packs launch: {err}")
@@ -749,7 +758,7 @@ struct CoopParams {
 def test_coop_gpu(t : T?) {
     t |> run("the KHR tiles: GPU == a CPU reference GEMM, every layout, every accumulator") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
-            return if (!gpu_ready(cc))
+            return if (!gpu_text_ready(cc, "coop"))
             // integer operands, |AB| <= 96, |A8 B8| <= 640: every sum exact
             var a, b : array<float16>
             var a8, b8, a8t, b8r : array<int8>
@@ -861,7 +870,7 @@ def private cm2_dot(a, bt : array<float16>; r, n : int) : float {
 def test_cm2_gpu(t : T?) {
     t |> run("the workgroup tiles: GPU == a CPU reference through every form") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
-            return if (!gpu_ready(cc))
+            return if (!gpu_text_ready(cc, "cm2"))
             var a, bt : array<float16>
             cm2_inputs(a, bt)
             var err : string
@@ -928,7 +937,7 @@ def test_cm2_gpu(t : T?) {
 def test_cm2w8_gpu(t : T?) {
     t |> run("the workgroup tiles over eight warps (column-owned accumulators): the row reduce through scratch and the block-wide convert == the CPU reference") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
-            return if (!gpu_ready(cc))
+            return if (!gpu_text_ready(cc, "cm2w8"))
             var a, bt : array<float16>
             cm2_inputs(a, bt)
             var err : string
@@ -1023,7 +1032,7 @@ def private fp4_cvt_inputs() : array<float> {
 def test_intrin_fp4_gpu(t : T?) {
     t |> run("the FP4 tensor rung: the block-scaled e2m1 product through cp.async + ldmatrix == the CPU sum, the conversions == their CPU bodies") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
-            return if (!gpu_fp4_ready(cc))
+            return if (!gpu_text_ready(cc, "intrin_fp4"))
             var a8, b8 : array<uint8>
             var a_scale_words, b_scale_words : array<uint>
             a8 |> resize(16 * 32)
@@ -1111,7 +1120,7 @@ struct Cm2I8Params {
 def test_cm2i8_gpu(t : T?) {
     t |> run("the int8 workgroup tiles: the s32 products of two k windows scaled per row and column off shared arrays == the CPU reference") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
-            return if (!gpu_ready(cc))
+            return if (!gpu_text_ready(cc, "cm2i8"))
             var a8, b8 : array<int8>
             var rs, cs : array<float>
             a8 |> resize(64 * 64)
@@ -1155,7 +1164,7 @@ def test_cm2i8_gpu(t : T?) {
 def test_intrin_gpu(t : T?) {
     t |> run("the CUDA-only tier: cp.async into shared, ldmatrix fragments, the block-scaled int8 product, byte_perm, a named barrier under clock32, inline PTX == the CPU reference") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
-            return if (!gpu_ready(cc))
+            return if (!gpu_text_ready(cc, "intrin"))
             var a8, b8 : array<uint8>
             var rs, cs : array<float>
             a8 |> resize(16 * 32)
@@ -1235,7 +1244,7 @@ def test_intrin_gpu(t : T?) {
 def test_cm2deck_gpu(t : T?) {
     t |> run("the decode-in-load form over two k windows, the view B tile reloaded a window at a time == the CPU reference") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
-            return if (!gpu_ready(cc))
+            return if (!gpu_text_ready(cc, "cm2deck"))
             var a, bt : array<float16>
             cm2_inputs(a, bt)
             var wq : array<DecBlk>
@@ -1275,7 +1284,7 @@ def test_cm2deck_gpu(t : T?) {
 def test_cm2raw_gpu(t : T?) {
     t |> run("the pipelined decode-in-load over two k windows: the first synchronous, the second decoded past the first product == the CPU reference") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
-            return if (!gpu_ready(cc))
+            return if (!gpu_text_ready(cc, "cm2raw"))
             var a, bt : array<float16>
             cm2_inputs(a, bt)
             var wq : array<RawBlk>
@@ -1315,7 +1324,7 @@ def test_cm2raw_gpu(t : T?) {
 def test_cm2dec_gpu(t : T?) {
     t |> run("the decode-in-load form: GPU == a CPU reference through the block decode") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
-            return if (!gpu_ready(cc))
+            return if (!gpu_text_ready(cc, "cm2dec"))
             var a, bt : array<float16>
             cm2_inputs(a, bt)
             var wq : array<DecBlk>
@@ -1470,5 +1479,149 @@ def test_tables_lattice_ptrs_gpu_vs_cpu(t : T?) {
             delete la
             delete pt
         }
+    }
+}
+
+struct Cm2FlashLoadsFirstParams {
+    q : uint64
+    kh : uint64
+    vh : uint64
+    o : uint64
+    ka : FlashArgs
+}
+
+struct Cm2FlashInputs {
+    q : array<float>
+    kh : array<float16>
+    vh : array<float16>
+}
+
+//! the flash cells' integer operands - Q over its first 16 columns alone, K and V in {-1, 0, 1}: |s| <= 16, |o| <= 4096, the
+//! f16 stages under 2048, so every device value is exact and the cells compare with ==
+def private cm2flash_inputs() : Cm2FlashInputs {
+    var inp : Cm2FlashInputs
+    inp.q |> resize(4096)
+    inp.kh |> resize(16384)
+    inp.vh |> resize(16384)
+    for (r in range(64)) {
+        for (k in range(64)) {
+            inp.q[r * 64 + k] = k < 16 ? float((r + k) % 3 - 1) : 0.0
+        }
+    }
+    for (key in range(256)) {
+        for (k in range(64)) {
+            inp.kh[key * 64 + k] = float16(float((key * 5 + k) % 3 - 1))
+            inp.vh[key * 64 + k] = float16(float((key + k * 7) % 3 - 1))
+        }
+    }
+    return <- inp
+}
+
+//! the device product at a key extent of `kw` columns == the CPU reference with the columns past `kw` read as zero
+//! the reference (Q K^T) V over the 256 keys at a key extent of `key_cols` columns (the columns past it read as zero), 64x64 row-major
+def private cm2flash_ref_o(inp : Cm2FlashInputs; key_cols : int) : array<float> {
+    var o : array<float>
+    o |> resize(4096)
+    for (r in range(64)) {
+        for (n in range(64)) {
+            var acc = 0.0
+            for (key in range(256)) {
+                var s = 0.0
+                for (k in range(min(16, key_cols))) {
+                    s += inp.q[r * 64 + k] * float(inp.kh[key * 64 + k])
+                }
+                acc += n < key_cols ? s * float(inp.vh[key * 64 + n]) : 0.0
+            }
+            o[r * 64 + n] = acc
+        }
+    }
+    return <- o
+}
+
+def private cm2flash_loads_first_cell(t : T?; cc : CudaContext?; key_cols : int) {
+    var inp <- cm2flash_inputs()
+    var err : string
+    var p = Cm2FlashLoadsFirstParams(q = buf_upload(inp.q), kh = buf_upload(inp.kh), vh = buf_upload(inp.vh), o = buf_fill(4096, 0.0), ka = FlashArgs(key_cols = uint(key_cols)))
+    let launched = launch(cc, cm2flash_loads_first_cuda, "cm2flash_loads_first", cm2flash_loads_first_cuda_entry, p, 128u, err, cm2flash_loads_first_cuda_smem, 128u)
+    t |> success(launched, "cm2flash_loads_first launch at a key extent of {key_cols}: {err}")
+    let go <- buf_download(p.o, 4096, type<float>)
+    let ref <- cm2flash_ref_o(inp, key_cols)
+    var bad = 0
+    for (i in range(4096)) {
+        bad += go[i] == ref[i] ? 0 : 1
+    }
+    t |> equal(bad, 0, "every element matches the reference at a key extent of {key_cols}")
+    for (b in [p.q, p.kh, p.vh, p.o]) {
+        cuda_mem_free(b)
+    }
+}
+
+[test]
+def test_cm2flash_loads_first_gpu(t : T?) {
+    t |> run("the prefetched f16 tiles with both loads ahead of both products: the trip's last product leaves no group in flight, and a 60-wide extent keeps the plain copy") <| @(t : T?) {
+        with_cuda_context() $(cc : CudaContext?) {
+            return if (!gpu_text_ready(cc, "cm2flash_loads_first"))
+            cm2flash_loads_first_cell(t, cc, 64)
+            cm2flash_loads_first_cell(t, cc, 60)
+        }
+        t |> equal(cuda_log_leaks_if_any(), 0l)
+    }
+}
+
+struct Cm2FlashParams {
+    q : uint64
+    kh : uint64
+    vh : uint64
+    o : uint64
+    s16 : uint64
+    rmax : uint64
+}
+
+[test]
+def test_cm2flash_gpu(t : T?) {
+    t |> run("the flash tile's forms: the register A tile, the prefetched f16 tiles, the packed f16 accumulator == a CPU reference") <| @(t : T?) {
+        with_cuda_context() $(cc : CudaContext?) {
+            return if (!gpu_text_ready(cc, "cm2flash"))
+            var inp <- cm2flash_inputs()
+            var err : string
+            var p = Cm2FlashParams(q = buf_upload(inp.q), kh = buf_upload(inp.kh), vh = buf_upload(inp.vh), o = buf_fill(4096, 0.0),
+                s16 = buf_fill(4096, float16(0.0)), rmax = buf_fill(4096, 0.0))
+            t |> success(launch(cc, cm2flash_cuda, "cm2flash", cm2flash_cuda_entry, p, 128u, err, cm2flash_cuda_smem, 128u), "cm2flash launch: {err}")
+            let go <- buf_download(p.o, 4096, type<float>)
+            let gs16 <- buf_download(p.s16, 4096, type<float16>)
+            let grmax <- buf_download(p.rmax, 4096, type<float>)
+            var scores_key_major : array<float>
+            scores_key_major |> resize(16384)
+            for (key in range(256)) {
+                for (r in range(64)) {
+                    var s = 0.0
+                    for (k in range(16)) {
+                        s += inp.q[r * 64 + k] * float(inp.kh[key * 64 + k])
+                    }
+                    scores_key_major[key * 64 + r] = s
+                }
+            }
+            var bad = 0
+            for (r in range(64)) {
+                var rmax = -1e30
+                for (c in range(64)) {
+                    rmax = max(rmax, scores_key_major[(192 + c) * 64 + r])
+                }
+                for (c in range(64)) {
+                    let h = scores_key_major[(192 + c) * 64 + r] * 0.5
+                    bad += float(gs16[r * 64 + c]) == ((h + h) - h) * h ? 0 : 1
+                    bad += grmax[r * 64 + c] == rmax ? 0 : 1
+                }
+            }
+            let ref <- cm2flash_ref_o(inp, 64)
+            for (i in range(4096)) {
+                bad += go[i] == ref[i] ? 0 : 1
+            }
+            t |> equal(bad, 0, "every element matches the reference (the product over the key windows, the last window's row max and its packed f16 forms)")
+            for (b in [p.q, p.kh, p.vh, p.o, p.s16, p.rmax]) {
+                cuda_mem_free(b)
+            }
+        }
+        t |> equal(cuda_log_leaks_if_any(), 0l)
     }
 }

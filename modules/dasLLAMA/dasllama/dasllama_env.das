@@ -129,7 +129,7 @@ struct public GpuTierEnv {
     @clarg_doc = "One switch for the measured-best GPU rail set; any DASLLAMA_GPU_* knob still overrides individually. On a Vulkan build it is also the want the tower driver reads before any device init: the vision and audio towers' block loops serve on the device only while it is on, and decline `device` otherwise."
     gpu : Option<bool>
 
-    @clarg_doc = "The environment's spelling of the GPU home (the program's is `set_gpu_home`, dasllama-server's its `--gpu vulkan | cuda` key): on, the CUDA home takes the GPU tier's seats in place of the Vulkan home (with DASLLAMA_GPU on) - the whole-model driver for a dense q8 model on an NVIDIA card through the driver API and NVRTC, no Vulkan call made. Off, the Vulkan home holds the seats until a program moves them. A build without dasCUDA (`DAS_CUDA_DISABLED`, or a 32-bit host) has no CUDA home: the knob is ignored with one warning and the Vulkan home keeps the tier."
+    @clarg_doc = "The environment's spelling of the GPU home (the program's is `set_gpu_home`, dasllama-server's its `--gpu vulkan | cuda` key): on, the CUDA home takes the GPU tier's seats in place of the Vulkan home (with DASLLAMA_GPU on) - the whole-model driver for a dense q8 model on an NVIDIA card through the driver API and NVRTC, no Vulkan call made, and the vision towers (gemma3v, gemma4v, gemma4uv, qwen3v, qwen25v) on the CUDA tower driver; the audio towers stay the Vulkan tower's. Off, the Vulkan home holds the seats until a program moves them. A build without dasCUDA (`DAS_CUDA_DISABLED`, or a 32-bit host) has no CUDA home: the knob is ignored with one warning and the Vulkan home keeps the tier."
     cuda : bool = false
 
     @clarg_default_doc = "-1 (auto)"
