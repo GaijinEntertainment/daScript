@@ -8,15 +8,6 @@ require daslib/fio
 require _mc_common
 
 
-def run_argv(args : array<string>; var output : string&) : int {
-    return unsafe(popen_argv(args, 300.0, $(f) {
-        if (f != null) {
-            output = fread(f)
-        }
-    }))
-}
-
-
 // A generic instance restored from the module cache must keep its origin generic
 // (Function::fromGeneric). The child host restores its own module graph from the cache and
 // then compiles a fresh program in the same process - a null origin on any restored

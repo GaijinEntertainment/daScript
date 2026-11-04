@@ -1745,11 +1745,12 @@ namespace das
         CodeOfPolicies              policies;
         vector<tuple<Module *,string,string,bool,LineInfo>> allRequireDecl;
         das_hash_map<uint64_t,TypeDecl *> astTypeInfo;
-        // compile-time inputs a macro pinned via add_module_cache_dependency: (path, byte size,
-        // content hash) - a file, or a virtual `env:NAME` / `arg:--flag` input. The module cache
-        // stores and re-validates them, so a changed input invalidates the cached record instead
-        // of serving what a compile folded from the old value.
-        vector<tuple<string,int64_t,uint64_t>> moduleCacheDependencies;
+        // compile-time inputs: (path, byte size, content hash, is source).
+        // True marks textual includes read through the compile's FileAccess;
+        // false marks file and virtual inputs a compile-time consumer pins.
+        // The module cache stores and re-validates them, so a changed input
+        // invalidates the cached record instead of serving old folded values.
+        vector<tuple<string,int64_t,uint64_t,bool>> moduleCacheDependencies;
         UpdateAliasMapCallback      updateAliasMapCallback;
         bool                        accessFlagsValid = false;
     };
