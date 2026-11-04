@@ -283,6 +283,22 @@ draws nothing and a tester reads which build answered from the page source, or f
 lacks the placeholder ships unstamped, and so does a page the release cannot read; the release
 is silent about both.
 
+### Wasm link defaults {#wasm-link-defaults}
+
+`release wasm` links every app with `-O2` and `-sMAXIMUM_MEMORY=1GB`. Without an `-O` level
+the emcc link is `-O0`: no wasm-opt pass, so the `-sMEMORY64=2` lowering stays unoptimized and
+the engine compiles about a fifth more code, plus runtime assertions and unminified JS. A
+`-pthread` module's memory is shared, and a shared memory reserves its maximum up front, before
+the code compiles - emscripten's default maximum of 2GB is address space a constrained browser
+does not have. The link line puts the defaults first, then each module's flags, then the app's
+`release_emcc_arg` lines, and emcc keeps the last `-O` level and the last value of each `-s`
+setting it reads. So an app overrides either default from its own `release()`:
+
+```das
+release_emcc_arg("-sMAXIMUM_MEMORY=2GB")    // an app that needs more than 1GB of heap
+release_emcc_arg("-O0")                     // or -O1, -O3, -Os
+```
+
 ## Tests
 
 Review gates live in [REVIEW.md](REVIEW.md) - run the unit suite on every change.
@@ -367,11 +383,14 @@ during cross-compilation and `-g3 --emit-symbol-map` during linking. The deploye
 WASM retains generated debug information and function names, with an adjacent
 `.html.symbols` map. Prebuilt archives contribute only their existing debug data.
 Runtime assertions and heap instrumentation remain explicit `release_emcc_arg`
-choices, so requesting symbols alone does not silently enable those checks.
+choices, so requesting symbols alone does not silently enable those checks. The
+optimization level and memory cap the link uses by default are in
+[Wasm link defaults](#wasm-link-defaults).
 
-With emsdk active, `node utils/daspkg/test_wasm_external.cjs` checks external-file
-staging and failure propagation through real WASM releases. Set `DASLANG_BIN` and
-`DASLANG_WASM_LIB` to override the local compiler and `web/output64/lib` defaults.
+With emsdk active, `node utils/daspkg/test_wasm_external.cjs` checks the link defaults
+and an app's override of them, external-file staging, and failure propagation through
+real WASM releases. Set `DASLANG_BIN` and `DASLANG_WASM_LIB` to override the local
+compiler and `web/output64/lib` defaults.
 
 Optional manifest hooks may be absent. A hook that exists but throws is a failure;
 its partial declarations are not returned to the caller. The diagnostic identifies
