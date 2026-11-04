@@ -243,6 +243,79 @@ TEST_CASE("explicit compile_file cache retains restored source locations") {
     CHECK(cast<int32_t>::to(result) == 7);
 }
 
+TEST_CASE("explicit compile_file cache stamps virtual includes") {
+    ExplicitCacheFixture fixture;
+    auto file = fixture.dir + "/root.das";
+    auto included = fixture.dir + "/body.inc";
+    auto cache = fixture.dir + "/cache.bin";
+    const char * body = "[export] def probe() : int { return 1111 }\n";
+    int expected = 1111;
+    bool present = true;
+    bool pinSameName = false;
+    auto makeAccess = [&]() {
+        auto access = make_smart<FsFileAccess>();
+        static const char source[] = "options gen2\ninclude body.inc\n";
+        access->setFileInfo(file, make_unique<TextFileInfo>(
+            const_cast<char *>(source), uint32_t(sizeof(source) - 1), false));
+        if ( present ) {
+            access->setFileInfo(included, make_unique<TextFileInfo>(
+                const_cast<char *>(body), uint32_t(strlen(body)), false));
+        }
+        return access;
+    };
+    auto compile = [&]() {
+        ModuleGroup group;
+        bool called = false;
+        auto verdict = fixture.compile(file, cache, makeAccess(), group,
+            [&](bool ok, ProgramPtr program, const string issues) {
+                called = true;
+                if ( !present ) {
+                    CHECK_FALSE(ok);
+                    return;
+                }
+                REQUIRE_MESSAGE(ok, issues);
+                TextPrinter logs;
+                Context context(program->getContextStackSize());
+                REQUIRE(program->simulate(context, logs));
+                auto probe = context.findFunction("probe");
+                REQUIRE(probe != nullptr);
+                auto result = context.evalWithCatch(probe, nullptr);
+                CHECK(context.getException() == nullptr);
+                CHECK(cast<int32_t>::to(result) == expected);
+                if ( pinSameName ) {
+                    pinModuleCacheDependency(program.get(), included);
+                    pinModuleCacheDependency(program.get(), included);
+                    size_t count = 0;
+                    for ( auto & dep : program->moduleCacheDependencies ) {
+                        if ( get<0>(dep) == included ) ++count;
+                    }
+                    CHECK(count == 2);
+                }
+            });
+        CHECK(called);
+        return verdict;
+    };
+    CHECK(compile() == "none");
+    CHECK(compile() == "clean");
+    SUBCASE("same-size include edits invalidate the record") {
+        body = "[export] def probe() : int { return 2222 }\n";
+        expected = 2222;
+        CHECK(compile() == "fallback");
+        CHECK(compile() == "clean");
+    }
+    SUBCASE("unchanged include bytes keep serving") {
+        CHECK(compile() == "clean");
+    }
+    SUBCASE("macro inputs keep a separate entry with the same name") {
+        pinSameName = true;
+        CHECK(compile() == "clean");
+    }
+    SUBCASE("missing include bytes reject the record") {
+        present = false;
+        CHECK(compile() == "fallback");
+    }
+}
+
 #else
 
 TEST_CASE("explicit compile_file cache reports unavailable file IO") {

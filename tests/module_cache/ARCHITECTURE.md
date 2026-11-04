@@ -147,8 +147,7 @@ this document states what the folder is and why its tests take the shape they do
   the failure report that echoes the child's output (`report_child`), and the two joined
   (`run_child_reported`): the order a call's arguments are evaluated in is not defined
   (LINT030), and a `run_child(cmd, out)` nested beside `out` in one argument list reads that
-  output before the child wrote it on some tiers and after on others. A test whose child needs
-  a different spawn shape - an argv spawn, an environment variable - keeps that one helper local.
+  output before the child wrote it on some tiers and after on others.
 
 ## Why every case is a spawned process {#process-startup}
 

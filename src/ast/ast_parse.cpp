@@ -638,8 +638,8 @@ namespace das {
     // reader reject a cache written by a different protocol/version cleanly, instead of
     // desyncing on a layout difference mid-record.
     static constexpr uint32_t SER_MODULE_STREAM_MAGIC = 0x4D534144u;    // 'DASM'
-    // sanity bound on a record's macro-dependency count: a real program registers a handful
-    // (one per consumed sidecar/config); anything past this reads as stream corruption
+    // sanity bound on a record's dependency count: real programs register
+    // far fewer inputs; anything past this reads as stream corruption
     static constexpr uint32_t SER_MAX_MACRO_DEPS = 4096u;
     static constexpr uint64_t FNV64A_SEED = 14695981039346656037ull;   // any nonzero constant serves: size (-1 absent vs 0 empty) already separates the states
 
@@ -654,13 +654,13 @@ namespace das {
         uint64_t hash = 0;
         statAndHashFileDependency(path, size, hash);
         for ( auto & dep : program->moduleCacheDependencies ) {
-            if ( get<0>(dep) == path ) {
+            if ( get<0>(dep) == path && !get<3>(dep) ) {
                 get<1>(dep) = size;
                 get<2>(dep) = hash;
                 return;
             }
         }
-        program->moduleCacheDependencies.emplace_back(path, size, hash);
+        program->moduleCacheDependencies.emplace_back(path, size, hash, false);
     }
 
     void statAndHashFileDependency ( const string & path, int64_t & size, uint64_t & hash ) {
@@ -792,7 +792,7 @@ namespace das {
         uint8_t saved_flags = 0;
         uint64_t payload_size = 0;
         uint32_t depCount = 0;
-        vector<tuple<string,int64_t,uint64_t>> savedDeps;
+        decltype(program->moduleCacheDependencies) savedDeps;
         uint32_t reqCount = 0;
         vector<string> savedReq;
         if ( !serializer_read->trySerialize([&](AstSerializer & serializer) {
@@ -800,8 +800,9 @@ namespace das {
             serializer << saved_size;
             serializer.serializeTemp(saved_filename);
             serializer << saved_flags;
-            // macro file dependencies (Program::moduleCacheDependencies) ride the record
-            // header, not the payload: they must be validated BEFORE the payload is trusted
+            // dependencies (Program::moduleCacheDependencies) ride the
+            // record header, not the payload: they must be validated BEFORE
+            // the payload is trusted
             serializer << depCount;
             if ( depCount <= SER_MAX_MACRO_DEPS ) {
                 savedDeps.resize(depCount);
@@ -809,6 +810,7 @@ namespace das {
                     serializer.serializeTemp(get<0>(dep));
                     serializer << get<1>(dep);
                     serializer << get<2>(dep);
+                    serializer << get<3>(dep);
                 }
             }
             serializer << reqCount;
@@ -826,19 +828,30 @@ namespace das {
             return false;
         }
 
-        // a compile-time input a macro consumed (a tune sidecar) changed since this record was
-        // written, so its cached stamps are stale. Compared by CONTENT (size + hash), not mtime:
-        // apps rewrite their sidecar byte-identically on exit, and that must not churn the cache.
+        // Compare compile-time inputs by CONTENT (size + hash), not mtime:
+        // apps rewrite their sidecar byte-identically on exit, and that
+        // must not churn the cache.
         for ( auto & dep : savedDeps ) {
             int64_t depSize = -1;
             uint64_t depHash = 0;
-            statAndHashFileDependency(get<0>(dep), depSize, depHash);
+            bool isSource = get<3>(dep);
+            if ( isSource ) {
+                stampModuleSource(access, get<0>(dep), depSize, depHash);
+            } else {
+                statAndHashFileDependency(get<0>(dep), depSize, depHash);
+            }
             if ( depSize != get<1>(dep) || depHash != get<2>(dep) ) {
                 serializer_read->seenNewModule = true;
                 serializer_read->failed = true;
                 serializer_read->cutoffFile = fileName;
-                serializer_read->cutoffReason = "macro dependency '" + get<0>(dep) + "' changed";
-                if ( !serializer_read->quietCache ) logs << "ser: macro dependency changed '" << get<0>(dep) << "' (e.g. a re-minted tune sidecar)\n";
+                serializer_read->cutoffReason = isSource
+                    ? "included source '" + get<0>(dep) + "' changed"
+                    : "macro dependency '" + get<0>(dep) + "' changed";
+                if ( !serializer_read->quietCache ) {
+                    logs << "ser: " << (isSource ? "included source"
+                        : "macro dependency") << " changed '"
+                         << get<0>(dep) << "'\n";
+                }
                 return false;
             }
         }
@@ -1372,6 +1385,13 @@ namespace das {
             unbindCompilingProgram();
             return program;
         }
+        for ( const auto & inc : parserState.das_already_include ) {
+            int64_t size = -1;
+            uint64_t hash = 0;
+            stampModuleSource(access, inc, size, hash);
+            program->moduleCacheDependencies.emplace_back(inc, size, hash,
+                true);
+        }
         parserState = DasParserState();
         times.parseUsec = get_time_usec(times.startTicks);
         *totParse += times.parseUsec;
@@ -1798,6 +1818,7 @@ namespace das {
                 *serializer_write << get<0>(dep);
                 *serializer_write << get<1>(dep);
                 *serializer_write << get<2>(dep);
+                *serializer_write << get<3>(dep);
             }
             // src/ast/ARCHITECTURE.md#module-cache-read
             uint32_t reqCount = uint32_t(requireNames.size());
