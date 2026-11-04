@@ -4,10 +4,8 @@
 `modules/dasCUDA/ARCHITECTURE.md`. A diff that touches a `[cuda_kernel]` method under this folder
 applies `modules/REVIEW_SHADER_EMITTERS.md` too.
 
-**A diff that removes or weakens an assert in `test_cuda_census.das` is a defect.** That test is
-the only coverage measure: emitted text cannot be read back into constructs, so the emitter records
-a kind - a construct label - for each fixture (a `[cuda_kernel]` method in `_cuda_common.das`) it
-writes, and the test checks those kinds against `declared_cuda_census` in both directions.
+**A diff that removes or weakens an assert in `test_cuda_census.das` is a defect.** It is the
+emitter's only coverage measure.
 
 **A diff that adds a fixture - a `[cuda_kernel]` method in `_cuda_common.das` - adds its
 `<name>_cuda_census` global to `all_cuda_censuses` and its `<name>_cuda` global (the CUDA C the
@@ -37,9 +35,17 @@ last `with_cuda_context` call.** Driver objects and device memory are invisible 
 detector; the live-object counter in `das_cuda_boost` is the only witness.
 
 **A `[test]` that calls `with_cuda_context` calls `feint` (the dastest skip) when `cuda_available()`
-is false or the context handed to its block is null, and - for each kernel text it compiles - when
-`cuda_nvrtc_available()` is false or the device's compute capability is below what that text
-needs.** Every CI lane runs the file, and a lane whose GPU cannot run the test must not fail.
+is false or the context handed to its block is null, and one that compiles a kernel text also when
+`cuda_nvrtc_available()` is false.** Every CI lane runs the file, and a lane without a CUDA driver,
+device or NVRTC must not fail.
+
+**A diff that adds an entry to `all_cuda_texts` sets its `min_cc` - the lowest compute capability
+whose NVRTC target compiles that text - in the same change.** A test reads the floor from the
+entry; a text whose `min_cc` is too low fails, instead of skipping, on an older GPU.
+
+**A `[test]` that compiles an `all_cuda_texts` text skips it when `cuda_device_compute_capability`
+is below that entry's `min_cc` - by `feint` when it is the test's only text, by leaving it out of
+its loop otherwise.** A lane whose GPU lacks an instruction the text uses must skip it, not fail.
 
 **A diff that removes or weakens `test_cuda_no_include` (`test_cuda_emit.das`), the check that no
 emitted CUDA text carries an `#include`, is a defect.**

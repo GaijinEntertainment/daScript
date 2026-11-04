@@ -791,6 +791,110 @@ class Cm2 {
     }
 }
 
+//! the flash tile's operand forms over four warps: an accumulator converted into an A tile ahead of the key loop (the
+//! register A tile), f16 B tiles a tensor load fills a window a step inside it under both views (the prefetched f16 tiles),
+//! the row reduce that makes the accumulators row-owned, and the f16 accumulator's scale and its packed add, sub and Hadamard
+class Cm2Flash {
+    @ssbo @binding = 0 q : array<float>      //! Q 64x64 row-major f32: (r, k) at r * 64 + k
+    @ssbo @binding = 1 kh : array<float16>   //! K 256 keys x 64: (key, k) at key * 64 + k
+    @ssbo @binding = 2 vh : array<float16>   //! V 256 keys x 64: (key, n) at key * 64 + n
+    @ssbo @binding = 3 o : array<float>      //! (Q K^T) V over the 256 keys, 64x64 f32
+    @ssbo @binding = 4 s16 : array<float16>  //! ((s / 2 + s / 2) - s / 2) x (s / 2) over the last window's scores, as an f16 accumulator
+    @ssbo @binding = 5 rmax : array<float>   //! the last window's row max, broadcast over its 64x64
+
+    [cuda_kernel(name="cm2flash_cuda", local_size_x = 128), marker(no_coverage)]
+    def cm2flash {
+        var tlq : tensorLayout2DPad
+        tensorLayoutCreate(tlq)
+        tensorLayoutSetDimension(tlq, 64u, 64u)
+        tensorLayoutSetStride(tlq, 64u, 1u)
+        var tlk : tensorLayout2DPad
+        tensorLayoutCreate(tlk)
+        tensorLayoutSetDimension(tlk, 256u, 64u)
+        tensorLayoutSetStride(tlk, 64u, 1u)
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        var qacc : coopmatWgAcc_f32_64x64
+        coopmatLoadTensor(qacc, q, 0u, tlq, 0u, 64u, 0u, 64u)
+        var qf : coopmatWgA_f16_64x64
+        coopmatConvert(qf, qacc)
+        var acc, s : coopmatWgAcc_f32_64x64
+        var j = 0u
+        while [dont_unroll] (j < 256u) {
+            var kt : coopmatWgB_f16_64x64
+            coopmatLoadTensor(kt, kh, 0u, tlk, j, 64u, 0u, 64u, tv)
+            var sj : coopmatWgAcc_f32_64x64
+            sj = coopmatMulAdd(qf, kt, sj)   // nolint:STYLE011 - MulAdd seeds from its own zero-filled tile
+            coopmatCopy(s, sj)
+            var pf : coopmatWgA_f16_64x64
+            coopmatConvert(pf, sj)
+            var vt : coopmatWgB_f16_64x64
+            coopmatLoadTensor(vt, vh, 0u, tlk, j, 64u, 0u, 64u)
+            acc = coopmatMulAdd(pf, vt, acc)
+            j += 64u
+        }
+        var rm : coopmatWgAcc_f32_64x64
+        coopmatReduce(rm, s, COOPMAT_REDUCE_ROW, @@cm2_max)
+        coopmatStoreTensor(rm, rmax, 0u, tlq, 0u, 64u, 0u, 64u)
+        var h : coopmatWgAcc_f16_64x64
+        coopmatConvert(h, s)
+        coopmatScale(h, 0.5)
+        var t : coopmatWgAcc_f16_64x64
+        coopmatAdd(t, h, h)
+        coopmatSub(t, t, h)
+        coopmatMulElem(t, t, h)
+        coopmatStoreTensor(t, s16, 0u, tlq, 0u, 64u, 0u, 64u)
+        coopmatStoreTensor(acc, o, 0u, tlq, 0u, 64u, 0u, 64u)
+    }
+}
+
+struct FlashArgs {
+    key_cols : uint   //! the key planes' column extent: 64 fills every 16-byte chunk, 60 leaves the prefetch's vector copy out
+}
+
+//! the flash tile's prefetched tiles in the other body order - both windows loaded ahead of both products, so V's load
+//! leaves no group in flight (its product is the trip's last commit) - over a key extent the arguments set
+class Cm2FlashLoadsFirst {
+    @ssbo @binding = 0 q : array<float>      //! Q 64x64 row-major f32
+    @ssbo @binding = 1 kh : array<float16>   //! K 256 keys x 64 at stride 64, `kw` columns of it in the layout
+    @ssbo @binding = 2 vh : array<float16>   //! V the same
+    @ssbo @binding = 3 o : array<float>      //! (Q K^T) V over the 256 keys, 64x64 f32
+    @kargs ka : FlashArgs
+
+    [cuda_kernel(name="cm2flash_loads_first_cuda", local_size_x = 128), marker(no_coverage)]
+    def cm2flash_loads_first {
+        var tlq : tensorLayout2DPad
+        tensorLayoutCreate(tlq)
+        tensorLayoutSetDimension(tlq, 64u, 64u)
+        tensorLayoutSetStride(tlq, 64u, 1u)
+        var tlk : tensorLayout2DPad
+        tensorLayoutCreate(tlk)
+        tensorLayoutSetDimension(tlk, 256u, ka.key_cols)
+        tensorLayoutSetStride(tlk, 64u, 1u)
+        var tv : tensorView2Dt
+        tensorViewCreate(tv)
+        var qacc : coopmatWgAcc_f32_64x64
+        coopmatLoadTensor(qacc, q, 0u, tlq, 0u, 64u, 0u, 64u)
+        var qf : coopmatWgA_f16_64x64
+        coopmatConvert(qf, qacc)
+        var acc : coopmatWgAcc_f32_64x64
+        var j = 0u
+        while [dont_unroll] (j < 256u) {
+            var kt : coopmatWgB_f16_64x64
+            coopmatLoadTensor(kt, kh, 0u, tlk, j, 64u, 0u, 64u, tv)
+            var vt : coopmatWgB_f16_64x64
+            coopmatLoadTensor(vt, vh, 0u, tlk, j, 64u, 0u, 64u)
+            var sj : coopmatWgAcc_f32_64x64
+            sj = coopmatMulAdd(qf, kt, sj)   // nolint:STYLE011 - MulAdd seeds from its own zero-filled tile
+            var pf : coopmatWgA_f16_64x64
+            coopmatConvert(pf, sj)
+            acc = coopmatMulAdd(pf, vt, acc)
+            j += 64u
+        }
+        coopmatStoreTensor(acc, o, 0u, tlq, 0u, 64u, 0u, 64u)
+    }
+}
+
 //! the same 64x64 tiles over eight warps: more warps than fragment rows, so the accumulators stay column-owned - the row
 //! reduce through its shared scratch and the accumulator-to-A convert under block barriers (the four-warp twin above runs
 //! both warp-locally); its `bs` tile is a global view, so every A and shared B tile of this kernel stores k permuted
@@ -1191,9 +1295,11 @@ def public declared_cuda_census : table<string> {   // nolint:STYLE038 - one fla
         "call.unpack8.ushort.uchar2",
         "call.unpackHalf2x16",
         "call.coopmatAdd.wg.f32",
+        "call.coopmatAdd.wg.f16x2",
         "call.coopmatClamp.wg.f32",
         "call.coopmatConvert.wg.f16.f32",
         "call.coopmatConvert.wg.f32.A",
+        "call.coopmatConvert.wg.f32.A.reg",
         "call.coopmatConvert.wg.f32.A.warp",
         "call.coopmatConvert.wg.f32.f16",
         "call.coopmatCopy.wg",
@@ -1208,23 +1314,30 @@ def public declared_cuda_census : table<string> {   // nolint:STYLE038 - one fla
         "call.coopmatLoadTensor.B.f16.half.kn.kp",
         "call.coopmatLoadTensor.B.f16.half.t",
         "call.coopmatLoadTensor.B.f16.half.t.kp",
+        "call.coopmatLoadTensor.B.f16.half.t.prefetch",
+        "call.coopmatLoadTensor.B.f16.half.kn.prefetch",
+        "call.coopmatLoadTensor.C.f32.float",
         "call.coopmatLoadTensorDecode.A",
         "call.coopmatLoadTensorDecode.A.raw",
         "call.coopmatLoadTensorDecode.v4",
         "call.coopmatMulAdd.wg.f16.f16",
         "call.coopmatMulAdd.wg.f16.f32",
+        "call.coopmatMulAdd.wg.f16.f32.areg",
         "call.coopmatMulAdd.wg.rowsum",
         "call.coopmatMulAdd.wg.s8.s32",
         "call.coopmatMulElem.wg.f32",
+        "call.coopmatMulElem.wg.f16x2",
         "call.coopmatPerElement.wg.f32",
         "call.coopmatReduce.wg.col.f32",
         "call.coopmatReduce.wg.row.f32",
         "call.coopmatReduce.wg.row.f32.warp",
         "call.coopmatScale.wg.f32",
+        "call.coopmatScale.wg.f16",
         "call.coopmatScaleAcc.wg",
         "call.coopmatStoreTensor.C.f16.half",
         "call.coopmatStoreTensor.C.f32.float",
         "call.coopmatSub.wg.f32",
+        "call.coopmatSub.wg.f16x2",
         "call.tensorLayoutCreate",
         "call.tensorLayoutCreate.pad",
         "call.tensorLayoutSetBlockSize",
@@ -1236,8 +1349,10 @@ def public declared_cuda_census : table<string> {   // nolint:STYLE038 - one fla
         "cvt.i16.i32",
         "prelude.cm2",
         "stmt.var.wg_ones",
+        "stmt.var.wg_areg",
         "stmt.var.wg_shared",
         "stmt.var.wg_shared.dbl",
+        "stmt.var.wg_shared.prefetch",
         "stmt.var.wg_shared.ring",
         "stmt.var.wg_shared.reuse",
         "stmt.var.wg_view",
@@ -1588,40 +1703,43 @@ def public all_cuda_censuses : array<string> {
     return <- [mul_ab_cuda_census, axpy_cuda_census, uarith_cuda_census, iarith_cuda_census, farith_cuda_census,
         precise_cuda_census, vecarith_cuda_census, control_cuda_census, mathcalls_cuda_census, reduce_cuda_census, halfarith_cuda_census,
         userfns_cuda_census, atomics_cuda_census, consttab_cuda_census, lattice_cuda_census, ptrs_cuda_census,
-        alias_cuda_census, blocks_cuda_census, packs_cuda_census, coop_cuda_census, cm2_cuda_census, cm2w8_cuda_census,
+        alias_cuda_census, blocks_cuda_census, packs_cuda_census, coop_cuda_census, cm2_cuda_census, cm2flash_cuda_census, cm2flash_loads_first_cuda_census, cm2w8_cuda_census,
         cm2dec_cuda_census, cm2deck_cuda_census, cm2raw_cuda_census, cm2i8_cuda_census, intrin_cuda_census, intrin_fp4_cuda_census,
         diverge_cuda_census, pins_cuda_census]
 }
 
-def public all_cuda_texts : array<tuple<name : string; text : string; entry : string>> {
-    return <- [(name = "mul_ab", text = mul_ab_cuda, entry = mul_ab_cuda_entry),
-        (name = "axpy", text = axpy_cuda, entry = axpy_cuda_entry),
-        (name = "uarith", text = uarith_cuda, entry = uarith_cuda_entry),
-        (name = "iarith", text = iarith_cuda, entry = iarith_cuda_entry),
-        (name = "farith", text = farith_cuda, entry = farith_cuda_entry),
-        (name = "precise", text = precise_cuda, entry = precise_cuda_entry),
-        (name = "vecarith", text = vecarith_cuda, entry = vecarith_cuda_entry),
-        (name = "control", text = control_cuda, entry = control_cuda_entry),
-        (name = "mathcalls", text = mathcalls_cuda, entry = mathcalls_cuda_entry),
-        (name = "reduce", text = reduce_cuda, entry = reduce_cuda_entry),
-        (name = "halfarith", text = halfarith_cuda, entry = halfarith_cuda_entry),
-        (name = "userfns", text = userfns_cuda, entry = userfns_cuda_entry),
-        (name = "atomics", text = atomics_cuda, entry = atomics_cuda_entry),
-        (name = "consttab", text = consttab_cuda, entry = consttab_cuda_entry),
-        (name = "lattice", text = lattice_cuda, entry = lattice_cuda_entry),
-        (name = "ptrs", text = ptrs_cuda, entry = ptrs_cuda_entry),
-        (name = "alias", text = alias_cuda, entry = alias_cuda_entry),
-        (name = "blocks", text = blocks_cuda, entry = blocks_cuda_entry),
-        (name = "packs", text = packs_cuda, entry = packs_cuda_entry),
-        (name = "coop", text = coop_cuda, entry = coop_cuda_entry),
-        (name = "cm2", text = cm2_cuda, entry = cm2_cuda_entry),
-        (name = "cm2w8", text = cm2w8_cuda, entry = cm2w8_cuda_entry),
-        (name = "cm2dec", text = cm2dec_cuda, entry = cm2dec_cuda_entry),
-        (name = "cm2deck", text = cm2deck_cuda, entry = cm2deck_cuda_entry),
-        (name = "cm2raw", text = cm2raw_cuda, entry = cm2raw_cuda_entry),
-        (name = "cm2i8", text = cm2i8_cuda, entry = cm2i8_cuda_entry),
-        (name = "intrin", text = intrin_cuda, entry = intrin_cuda_entry),
-        (name = "intrin_fp4", text = intrin_fp4_cuda, entry = intrin_fp4_cuda_entry),
-        (name = "diverge", text = diverge_cuda, entry = diverge_cuda_entry),
-        (name = "pins", text = pins_cuda, entry = pins_cuda_entry)]
+//! `min_cc`: the lowest compute capability whose NVRTC target compiles the text, 0 for every card
+def public all_cuda_texts : array<tuple<name : string; text : string; entry : string; min_cc : int>> {
+    return <- [(name = "mul_ab", text = mul_ab_cuda, entry = mul_ab_cuda_entry, min_cc = 0),
+        (name = "axpy", text = axpy_cuda, entry = axpy_cuda_entry, min_cc = 0),
+        (name = "uarith", text = uarith_cuda, entry = uarith_cuda_entry, min_cc = 0),
+        (name = "iarith", text = iarith_cuda, entry = iarith_cuda_entry, min_cc = 0),
+        (name = "farith", text = farith_cuda, entry = farith_cuda_entry, min_cc = 0),
+        (name = "precise", text = precise_cuda, entry = precise_cuda_entry, min_cc = 0),
+        (name = "vecarith", text = vecarith_cuda, entry = vecarith_cuda_entry, min_cc = 0),
+        (name = "control", text = control_cuda, entry = control_cuda_entry, min_cc = 0),
+        (name = "mathcalls", text = mathcalls_cuda, entry = mathcalls_cuda_entry, min_cc = 0),
+        (name = "reduce", text = reduce_cuda, entry = reduce_cuda_entry, min_cc = 0),
+        (name = "halfarith", text = halfarith_cuda, entry = halfarith_cuda_entry, min_cc = 0),
+        (name = "userfns", text = userfns_cuda, entry = userfns_cuda_entry, min_cc = 0),
+        (name = "atomics", text = atomics_cuda, entry = atomics_cuda_entry, min_cc = 0),
+        (name = "consttab", text = consttab_cuda, entry = consttab_cuda_entry, min_cc = 0),
+        (name = "lattice", text = lattice_cuda, entry = lattice_cuda_entry, min_cc = 0),
+        (name = "ptrs", text = ptrs_cuda, entry = ptrs_cuda_entry, min_cc = 0),
+        (name = "alias", text = alias_cuda, entry = alias_cuda_entry, min_cc = 0),
+        (name = "blocks", text = blocks_cuda, entry = blocks_cuda_entry, min_cc = 0),
+        (name = "packs", text = packs_cuda, entry = packs_cuda_entry, min_cc = 80),
+        (name = "coop", text = coop_cuda, entry = coop_cuda_entry, min_cc = 80),
+        (name = "cm2", text = cm2_cuda, entry = cm2_cuda_entry, min_cc = 80),
+        (name = "cm2flash", text = cm2flash_cuda, entry = cm2flash_cuda_entry, min_cc = 80),
+        (name = "cm2flash_loads_first", text = cm2flash_loads_first_cuda, entry = cm2flash_loads_first_cuda_entry, min_cc = 80),
+        (name = "cm2w8", text = cm2w8_cuda, entry = cm2w8_cuda_entry, min_cc = 80),
+        (name = "cm2dec", text = cm2dec_cuda, entry = cm2dec_cuda_entry, min_cc = 80),
+        (name = "cm2deck", text = cm2deck_cuda, entry = cm2deck_cuda_entry, min_cc = 80),
+        (name = "cm2raw", text = cm2raw_cuda, entry = cm2raw_cuda_entry, min_cc = 80),
+        (name = "cm2i8", text = cm2i8_cuda, entry = cm2i8_cuda_entry, min_cc = 80),
+        (name = "intrin", text = intrin_cuda, entry = intrin_cuda_entry, min_cc = 80),
+        (name = "intrin_fp4", text = intrin_fp4_cuda, entry = intrin_fp4_cuda_entry, min_cc = 120),
+        (name = "diverge", text = diverge_cuda, entry = diverge_cuda_entry, min_cc = 0),
+        (name = "pins", text = pins_cuda, entry = pins_cuda_entry, min_cc = 0)]
 }

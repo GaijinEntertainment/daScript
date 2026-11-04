@@ -2,7 +2,7 @@
 
 Contract: `ARCHITECTURE_COMMON.md` (repo root). Rules binding a diff: `REVIEW.md`. What the emitter
 writes - the emitted kernel, the decoded tile's pipeline, the kernel vocabulary's two tiers - is the
-companion `ARCHITECTURE_EMIT.md`.
+companions `ARCHITECTURE_EMIT.md` and `ARCHITECTURE_EMIT_TILES.md`.
 
 ## Why
 
@@ -125,7 +125,7 @@ kernel without the wait would read its predecessor's output early.
 | `cuda/das_cuda_boost.das` | Host sugar over the externs: `cuda_available` / `cuda_nvrtc_available`, `with_cuda_context`, the error text and the last-error slot, the live-object registry and its gate (`cuda_log_leaks_if_any`), `cuda_compile`, the shared cubin cache (`cubin_cached`, `module_from_source`, `function_from_source` - the entry point with its dynamic-shared opt-in), device buffer helpers, `cuda_launch` / `run_compute_1d`, the graph verbs (`cuda_graph_capture` captures a block's launches on a stream into one executable graph, `cuda_graph_launch` replays it as one launch with the parameters as captured, so a step's inputs ride buffers the captured launches read; `cuda_graph_destroy`). |
 | `cuda/cuda_types.das` | The CUDA side of the type rail over `daslib/shader_emit_common` (the lattice spellings) and `daslib/shader_block_layout` (the classes): the half-family predicate and a shared element's byte size. |
 | `cuda/cuda_builtins.das` | The kernel vocabulary: a public re-export of `spirv/spirv_builtins` (the compute IDs, barriers, atomics and the subgroup set), so a class the Vulkan home stamps stamps here unchanged. |
-| `cuda/cuda_emit.das` | The text emitter: `generate_cuda(fn, var errors, cfg, var census, var smem) : string`. Manual recursion (`emit_value` / `emit_stmt`), the member and body scans, the prelude generators, the census at every emit site. What it writes: `ARCHITECTURE_EMIT.md`. |
+| `cuda/cuda_emit.das` | The text emitter: `generate_cuda(fn, var errors, cfg, var census, var smem) : string`. Manual recursion (`emit_value` / `emit_stmt`), the member and body scans, the prelude generators, the census at every emit site. What it writes: `ARCHITECTURE_EMIT.md` and its companion `ARCHITECTURE_EMIT_TILES.md`. |
 | `cuda/cuda_intrinsics.das` | The CUDA-only tier of the kernel vocabulary (the table under "The kernel vocabulary's two tiers" in `ARCHITECTURE_EMIT.md`): AST markers the emitter lowers by name, spelled as PTX/CUDA spells them, with CPU bodies that emulate the pure lane functions and stand in for the rest. A body that calls one is a CUDA-only kernel by construction. |
 | `cuda/cuda_kernel.das` | `[cuda_kernel]` function-macro on a class method (`name=`, `entry=`, `local_size_x/y/z=`, `min_blocks=`, `precise=`). `apply` declares the companion globals - the text, `_entry`, `_census`, `_smem`, `_block` - and `fixup` fills them with constant nodes; `patch` pins the module's reachable functions against the CPU inliner. The companion-global scaffolding is `daslib/shader_emit_common`'s, shared with `[metal_kernel]`. |
 | `CMakeLists.txt` | `ADD_MODULE_DAS_FROM_DESCRIPTOR(cuda cuda)` and the install rule; nothing is compiled. |

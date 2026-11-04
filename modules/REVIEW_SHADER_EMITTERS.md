@@ -2,13 +2,15 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `dasMetal/ARCHITECTURE.md`, `dasMetal/ARCHITECTURE_PARITY.md`, `dasSpirv/ARCHITECTURE.md`,
-`dasSpirv/ARCHITECTURE_COOPMAT.md`, `dasCUDA/ARCHITECTURE.md`, `dasCUDA/ARCHITECTURE_EMIT.md`. The
+`dasSpirv/ARCHITECTURE_COOPMAT.md`, `dasCUDA/ARCHITECTURE.md`, `dasCUDA/ARCHITECTURE_EMIT.md`,
+`dasCUDA/ARCHITECTURE_EMIT_TILES.md`. The
 emitters are `dasSpirv`'s (SPIR-V words), `dasMetal`'s (MSL text) and `dasCUDA`'s (CUDA C++ text);
 this list is the one copy, and the rules below refer to it. A kernel is a function carrying
 `[metal_kernel]`, `[spirv_kernel]`, `[cuda_kernel]`, or an annotation from `dasSpirv`, `dasVulkan`
 or `dasMetal` whose name ends in `_shader`. A global-rooted-array access is a load or a store, in
 a kernel body or any `def` it reaches through a chain of calls, of an element of a module global,
-a `@workgroup` array or a `self.<member>` resource; slack is an allocation past a region's end
+a `@workgroup` array or a `self.<member>` resource - a tensor load or store accesses every element
+it covers; slack is an allocation past a region's end
 that the kernel's module-root `ARCHITECTURE*.md` names. A kernel-model capability is a construct
 a kernel body may use - an op, a type, an attribute, a memory class - that an emitter lowers. The
 reduction width (K) is the length of the loop a matmul kernel accumulates over; it does not fix
@@ -31,9 +33,13 @@ a body that computes nothing leaves that reference reading storage only the devi
 
 **A diff that changes what an emitter lowers - an emitter's emit code, or
 `daslib/shader_emit_common.das` - never lets a construct in a kernel body, or a value of a kernel
-annotation argument, that the emitter cannot lower, or would lower to text or words that do not
-compute it, produce a kernel or a crash - the emitter reports a compile error that names the
-construct or the argument instead.**
+annotation argument, that the emitter has no lowering for produce a kernel or a crash - the
+emitter reports a compile error that names the construct or the argument instead.**
+
+**A diff that adds another lowering form for a construct an emitter already lowers - a different
+emitted shape for the same construct - admits the new form only where it computes what the
+construct's existing lowering computes; everywhere else the construct keeps its existing
+lowering.**
 
 **Never pass a shape constant to a kernel as a runtime argument where a call-site constant can
 carry it - pass it as a call-site constant.** A shape constant is a value the emitter requires as
@@ -45,15 +51,11 @@ template constant or a typedef - so the emitter bakes it in; a kernel whose sour
 once and dispatched for differently shaped inputs cannot carry a shape that varies per input that
 way.
 
-**A kernel that loads its operands with `coopmatLoadTensor*` and takes a run-time-only matmul
-reduction width takes it through a `tensorLayout2D` or `tensorLayout2DPad` whose dimension
-`tensorLayoutSetDimension` sets; the load never reads the width from anywhere else - only the
-accumulation loop's bound may read it from the kernel's run-time arguments.**
-
-**A Metal kernel that loads its operands with the `tmm2d_*` family and takes a run-time-only
-matmul reduction width takes it through a `matmul2d_descriptor` whose K extent is
-`dynamic_extent`; a run-time K reaches the load only as that extent or as the row stride of the A
-operand's panel, and only the accumulation loop's bound may read it from the kernel's
+**A diff that makes a matmul kernel's reduction width run-time-only, or changes an operand load
+of a kernel whose width already is, passes the width to the loads only as a layout value -
+`tensorLayoutSetDimension` on the `tensorLayout2D` or `tensorLayout2DPad` a `coopmatLoadTensor*`
+load takes, or, for a `tmm2d_*` call, the `dynamic_extent` K of its `matmul2d_descriptor` or the A
+operand's row stride (`lda`); only the accumulation loop's bound reads it from the kernel's
 arguments.**
 
 **A diff that makes a kernel need a shape constant known only at run time ships a
@@ -66,8 +68,9 @@ module it ships in.**
 kernel's emitted output did not change, reads the claim from the emitted artifact - the words or
 text the opening names for the kernel's emitter - never from the das source, and names in its PR
 body the artifact read and the value read there, or, for a no-change claim, that the artifacts
-before and after the diff matched.** A claim about a das construct alone, or about where the
-driver keeps a value (registers, spills), names nothing an emitted artifact shows; a section moved
+before and after the diff matched.** A claim about a das construct alone, or about a later
+compiler's or the driver's output - registers, spills, occupancy - names nothing an emitted
+artifact shows; the `@workgroup` memory the text declares is in the artifact; a section moved
 between architecture docs unchanged makes no new claim.
 
 **A diff that teaches one emitter a kernel-model capability another lacks, or adds a kernel body
@@ -97,6 +100,10 @@ shared template enters every emitter's variants, and a removed gate or a widened
 moves an access into one. A guard on the access, a clamp into the region, a guard on the store
 of a block the access loads whole, or a `static_if` or `@template_gate` that compiles the access
 out of a variant satisfies the rule.
+
+**A diff that changes what an emitter lowers so the emitted text reads an element the kernel
+source does not name keeps that element inside the extent the kernel source's tensor layout or
+guard sets.** A speculative window a lowering adds is a read the source never guarded.
 
 **A diff that changes the bound a dispatch hands its kernel, or the size a buffer a
 global-rooted-array access indexes is allocated at, keeps every such access's index inside the
