@@ -3182,6 +3182,7 @@ def private ensure_external_wasm_archives(pkg_dir, wasm_lib_dir : string; var bu
 }
 
 // Build one app: cross-compile → discover modules → emcc-link → stage assets.
+[arch(at="README.md#wasm-link-defaults")]
 def private release_one_wasm_app(root, out_dir, app_name, main_script : string; // nolint:STYLE037,STYLE038 — flat per-app wasm release steps + their error arms
                                  wasm_lib_dir, runtime_archive, shell_path : string;
                                  include_globs, exclude_globs, disabled_modules, app_emcc_args : array<string>; include_symbols : bool) : int {
@@ -3338,7 +3339,14 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
         // EXPORTED_RUNTIME_METHODS=FS,ENV,wasmMemory: a custom shell stages files into MEMFS and sets the
         // program's environment knobs in Module.preRun (the C environment is built from Module.ENV at startup);
         // wasmMemory: a page reads the linear memory's size (the dev rig's devlog tick) without an aborting getter.
-        w |> write(" -sMEMORY64=2 -sFULL_ES3 -sMAX_WEBGL_VERSION=2 -sGL_ENABLE_GET_PROC_ADDRESS=1 -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=4MB -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -sEXIT_RUNTIME=0 -sFORCE_FILESYSTEM=1 -sEXPORTED_RUNTIME_METHODS=FS,ENV,wasmMemory -pthread -sPTHREAD_POOL_SIZE=16 -sAUDIO_WORKLET=1 -sWASM_WORKERS=1 -Wl,--wrap=emscripten_futex_wait")
+        w |> write(" -O2 -sMEMORY64=2 -sFULL_ES3 -sMAX_WEBGL_VERSION=2")
+        w |> write(" -sGL_ENABLE_GET_PROC_ADDRESS=1")
+        w |> write(" -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=1GB -sSTACK_SIZE=4MB")
+        w |> write(" -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0")
+        w |> write(" -sEXIT_RUNTIME=0 -sFORCE_FILESYSTEM=1")
+        w |> write(" -sEXPORTED_RUNTIME_METHODS=FS,ENV,wasmMemory")
+        w |> write(" -pthread -sPTHREAD_POOL_SIZE=16 -sAUDIO_WORKLET=1 -sWASM_WORKERS=1")
+        w |> write(" -Wl,--wrap=emscripten_futex_wait")
         if (include_symbols) {w |> write(" -g3 --emit-symbol-map")}
         for (a in emcc_args) {
             w |> write(" {a}")

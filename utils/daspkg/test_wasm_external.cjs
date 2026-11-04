@@ -23,7 +23,7 @@ const temporary = fs.mkdtempSync(
 const input = path.join(temporary, "source"),
   output = path.join(temporary, "out");
 fs.mkdirSync(input);
-function manifest(source) {
+function manifest(source, extra = "") {
   fs.writeFileSync(
     path.join(input, ".das_package"),
     `options gen2
@@ -34,7 +34,7 @@ def package() { package_name("external_fixture") }
 def release() {
     release_main("main.das")
     release_include_from("${source}", "nested/readme.txt")
-}
+${extra}}
 `,
   );
 }
@@ -85,6 +85,20 @@ try {
     fs.readFileSync(path.join(sdk, "README.md")),
   );
   assert.ok(fs.existsSync(path.join(bundle, "external_fixture.wasm")));
+  const loader = path.join(bundle, "external_fixture.js");
+  const linked = fs.readFileSync(loader, "utf8");
+  assert.match(linked, /"?maximum"?:\s*16384\b/, "default maximum is 1GB");
+  assert.doesNotMatch(linked, /\bassert\(/, "default link is -O2");
+
+  manifest(
+    "README.md",
+    '    release_emcc_arg("-O0")\n    release_emcc_arg("-sMAXIMUM_MEMORY=2GB")\n',
+  );
+  const overridden = build("override");
+  assert.equal(overridden.status, 0, `release failed; see ${logs}`);
+  const relinked = fs.readFileSync(loader, "utf8");
+  assert.match(relinked, /"?maximum"?:\s*32768\b/, "app raises the maximum");
+  assert.match(relinked, /\bassert\(/, "app lowers the -O level");
 
   manifest("missing-external-fixture-source.txt");
   const missing = build("missing-source");
@@ -107,7 +121,9 @@ try {
     !fs.existsSync(copied),
     "external staging runs only after a successful build",
   );
-  console.log("PASS: WASM external staging and build/copy failure propagation");
+  console.log(
+    "PASS: WASM link defaults and app overrides, external staging, build/copy failure propagation",
+  );
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true });
 }
