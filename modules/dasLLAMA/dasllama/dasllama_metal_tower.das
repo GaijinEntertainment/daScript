@@ -437,16 +437,7 @@ def private wt_mm(enc : MetalComputeEncoder?; vis, q8 : bool; site : int64; f16w
     }
 }
 
-def private tw_q8_regions(t : Gemma3vTower) : array<Q8Region> {
-    var @exact_size rg : array<Q8Region>
-    rg |> reserve(t.n_layer * TW_Q8_VIS_SITES)
-    var recs : Q8Region[int(LN_BLOCK_GEMMS)]
-    for (l in range64(t.n_layer)) {
-        ln_block_regions(gemma3v_ln_offs(t, l), t.n_embd, t.ff_pad, recs)
-        rg |> push_from(recs)
-    }
-    return <- rg
-}
+def private tw_q8_regions(t : Gemma3vTower) : array<Q8Region> => <- gemma3v_all_regions(t)
 
 //! the family's list with the fused qkv region split three ways - q, then k at d x d, v at 2d x d - the chain's three GEMMs
 def private tw_q8_regions(t : Qwen3vTower) : array<Q8Region> {

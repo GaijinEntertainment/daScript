@@ -22,8 +22,11 @@ require _tower_twin   // set_every_gpu_tower, the Vulkan twin's seat and instrum
 // Reference arm: the f32-widened gemma-3-4b mmproj, CPU, --no-mmproj-offload, -fa off.
 // The canvas is FIXED 896² (learned position table), so the fixture axis is content, not
 // geometry. Dumps: beside the models in gemma3-vision-oracle/ (mint_gemma3.sh regenerates).
-// The Vulkan cells (the q8 cell's Vulkan rung, the twin) skip on a build with das_metal - the Metal
-// driver owns the tower hooks there - and without a Vulkan device under DASLLAMA_GPU=1.
+// The discrete-home cells (the q8 cell's device rung, the twin) run on the serving discrete home: under the CUDA ask
+// (DASLLAMA_CUDA=1 or set_gpu_home("cuda")) on the CUDA tower, else on the Vulkan tower. The twin skips under the ask
+// without a CUDA device (`cuda_twin_seat`), else on a build with das_metal - the Metal driver owns the tower hooks there -,
+// without a Vulkan device under DASLLAMA_GPU=1 and without the tower's tile family (`vulkan_twin_seat`); the q8 cell's
+// device rung has no seat on a das_metal build and skips where the serving home's device does not stand up.
 
 let private TIER1_ABS = 2e-4
 let private TIER1_REL = 4e-3   // × token rms - f32 planes vs the f32 oracle: summation order only
@@ -247,6 +250,7 @@ def test_gemma3v_tier1_q8(t : T?) {
             return
         }
         set_gemma3v_q8(true)
+        let knobs = gpu_knobs()
         set_every_gpu_tower(false)
         var tw <- load_gemma3v_tower(mm)
         var inscope via_carrier <- load_vision_embedder(mm)
@@ -264,20 +268,22 @@ def test_gemma3v_tier1_q8(t : T?) {
             static_if (typeinfo builtin_module_exists(das_metal)) {
                 to_log(LOG_INFO, "gemma3v q8: das_metal on this build owns the tower hooks - the Vulkan rung has no seat\n")
             } else {
-                if (vulkan_tower_arms()) {
-                    set_vulkan_tower(true)
+                if (serving_tower_device_up(true)) {
+                    set_serving_gpu_tower(true, true)
                     for (fx in [(kind = "cb", log = "g3.encode.cb896.log"), (kind = "green", log = "g3.encode.green896.log")]) {
-                        let v0 = vulkan_tower_stats()
+                        let v0 = gpu_tower_counters(true)
                         let ran = gate_encode(tt, tw, st, fx.kind, fx.log, TIER1_REL_Q8)
                         if (ran) {
-                            device_leg_served(tt, fx.kind, v0, vulkan_tower_stats(), tw.n_layer, -1l)
+                            device_leg_served(tt, fx.kind, v0, gpu_tower_counters(true), tw.n_layer, -1l)
                         }
                     }
                     g3v_poison_leg(tt, mm, "cb", "g3.encode.cb896.log", TIER1_REL_Q8)
+                } else {
+                    tt |> skip("no device stands up for the serving discrete home's tower ({serving_tower_dev(true)}) - the q8 lane's device rung")
                 }
             }
         }
-        set_every_gpu_tower(true)
+        set_gpu_knobs(knobs)
         delete st
         delete tw
     }
@@ -295,7 +301,7 @@ def private mint_tower(mm : string; q8 : bool; nl : int64 = 0l; zero_block : int
 def private g3v_poison_leg(tt : T?; mm : string; kind : string; logname : string; bar_rms : float) {
     var o = OracleEncode()
     return if (!oracle_dump(tt, "gemma3-vision-oracle", logname, "gemma3-vision-oracle/mint_gemma3.sh", o))
-    var twp <- mint_tower(mm, true, 0l, POISON_BLOCK, serving_tower_dev())
+    var twp <- mint_tower(mm, true, 0l, POISON_BLOCK, serving_tower_dev(true))
     var stp = Gemma3vState()
     let px = int(twp.image_px)
     dump_poison_leg(tt, "gemma3v", kind, px, px, o, bar_rms, POISON_BLOCK, int(twp.proj_dim), TIER1_ABS, twp, stp) $(t; var s; planes; var out) => gemma3v_encode(t, s, planes, t.image_px, t.image_px, out)
@@ -309,15 +315,15 @@ def private twin_encode(tt : T?; tw : Gemma3vTower; var st : Gemma3vState; tw_ex
     let px = int(tw.image_px)
     let planes <- make_planes(kind, px, px)
     twin_canvas(tt, "gemma3v", kind, px, px, tw.patch, "", tw, st, tw_exact, st_exact, zero_block,
-        $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb, TowerDev.vulkan) }) $(t; var s; var out) => gemma3v_encode(t, s, planes, tw.image_px, tw.image_px, out)
+        $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb, serving_tower_dev(true)) }) $(t; var s; var out) => gemma3v_encode(t, s, planes, tw.image_px, tw.image_px, out)
 }
 
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def test_gemma3v_vulkan_twin(t : T?) {
-    t |> run("the Vulkan chain vs the CPU q8 chain, and the exact lane served") @(tt : T?) {
+    t |> run("the serving discrete home's chain ({serving_tower_dev(true)}) vs the CPU q8 chain, and the exact lane served") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let mm = path_join(models_dir(), "mmproj-gemma-3-4b-it-F16.gguf")
-            if (!model_available(tt, mm) || !vulkan_twin_seat(tt)) {
+            if (!model_available(tt, mm) || !discrete_twin_seat(tt)) {
                 return
             }
             var tw_exact <- mint_tower(mm, false)
@@ -350,7 +356,7 @@ def test_gemma3v_vulkan_twin(t : T?) {
             delete twxp
             delete st_exact
             delete tw_exact
-            vulkan_tower_shutdown()
+            serving_tower_shutdown(true)
         } else {
             tt |> skip("dasVulkan not present")
         }

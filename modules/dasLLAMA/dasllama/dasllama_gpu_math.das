@@ -522,6 +522,14 @@ let ROUTER_LD = ROUTER_K4 + 1u   //! the stage's row stride in float4: the step 
 //! the router GEMM's workgroups over `npos` rows and `ne` router rows: one per 64 rows x 32 router rows
 def router_gemm_wgs(npos, ne : int64) : int64 => ((npos + int64(ROUTER_TP) - 1l) / int64(ROUTER_TP)) * ((ne + int64(ROUTER_TE) - 1l) / int64(ROUTER_TE))
 
+let F32G_TP = 64u            //! the f32 tile's positions per workgroup
+let F32G_TD = 64u            //! the f32 tile's weight rows per workgroup
+let F32G_BK = 32u            //! the K step staged per pass
+let F32G_LD = F32G_BK + 1u   //! the stage row stride: the step plus one of pad, so a column read spreads the banks
+
+//! the f32 tile's workgroup count over rows x d
+def f32_gemm_wgs(rows, d : int64) : int64 => ((rows + int64(F32G_TP) - 1l) / int64(F32G_TP)) * ((d + int64(F32G_TD) - 1l) / int64(F32G_TD))
+
 let DN_MAX_DS = 128l
 let DN_MAX_HEADS = 64l
 let DN_MAX_CD = 16_384l

@@ -7005,3 +7005,156 @@ class template DnScanP3T : GkDnGate {
     }
 }
 
+struct F32GemmArgs {
+    n : uint        //! K: the columns multiplied, a 32-multiple (the slab pads a row to 32 with zeros)
+    d : uint        //! M: the weight rows, the output width
+    rows : uint     //! N: the positions
+    woff : uint     //! the weight rows' element base in w
+    wstride : uint  //! the weight row stride (elements)
+    boff : uint     //! the bias row's element base in b (the BIAS stamp)
+    xoff : uint     //! the x rows' element base
+    xstride : uint  //! the x row stride (elements)
+    yoff : uint     //! the y rows' element base
+    ystride : uint  //! the y row stride (elements)
+}
+
+//! y[rows x d] = x[rows x n] w[d x n]^T in f32 with every product carried by one mad in k order - the exact
+//! feed the TTS front end needs (its outputs round to integer durations, its F0 drives a phase) and the
+//! vision towers' exact lanes ride on both discrete homes: no
+//! coopmat, no f16 staging, workgroup tiles of 64 positions x 64 rows, each invocation four positions by
+//! four rows; the BIAS stamp adds the bias row at the store
+[ |> template_struct_instance]
+class template F32GemmT {
+    @template_constant BIAS : bool = false
+    @template_constant BF16W : bool = false   //! the weight rows as bf16 pairs a word - the file's bf16 planes read as stored, each widened by its bit shift
+    @ssbo @binding = 0 @role = "weight" @template_gate = "!BF16W" w : array<float>
+    @ssbo @binding = 0 @role = "weight" @template_gate = BF16W ww : array<uint>
+    @ssbo @binding = 1 x : array<float>
+    @ssbo @binding = 2 y : array<float>
+    @ssbo @binding = 3 @role = "weight" @template_gate = BIAS b : array<float>
+    @push_constant pa : F32GemmArgs
+    @workgroup xs : float[int(F32G_TP * F32G_LD)]
+    @workgroup ws : float[int(F32G_TD * F32G_LD)]
+
+    // stage slot `s` (row s / BK, k s % BK) of the x rows from `p0` at step `kb`; zero past the rows or past n
+    def stage_x(p0, kb, s : uint) {
+        let row = s / F32G_BK
+        let kk = s % F32G_BK
+        var v = 0.0
+        if (p0 + row < pa.rows && kb + kk < pa.n) {
+            v = x[pa.xoff + (p0 + row) * pa.xstride + kb + kk]
+        }
+        xs[row * F32G_LD + kk] = v
+    }
+
+    def stage_w(o0, kb, s : uint) {
+        let row = s / F32G_BK
+        let kk = s % F32G_BK
+        var v = 0.0
+        if (o0 + row < pa.d && kb + kk < pa.n) {
+            let i = pa.woff + (o0 + row) * pa.wstride + kb + kk
+            static_if (BF16W) {
+                v = gk_bf16_at(ww[i / 2u], i % 2u != 0u)
+            } else {
+                v = w[i]
+            }
+        }
+        ws[row * F32G_LD + kk] = v
+    }
+
+    def stage(p0, o0, kb, tid : uint) {
+        var s = tid
+        while (s < F32G_TP * F32G_BK) {
+            stage_x(p0, kb, s)
+            stage_w(o0, kb, s)
+            s += 256u
+        }
+    }
+
+    def store(p, o : uint; v : float) {
+        if (p < pa.rows && o < pa.d) {
+            var out = v
+            static_if (BIAS) {
+                out += b[pa.boff + o]
+            }
+            y[pa.yoff + p * pa.ystride + o] = out
+        }
+    }
+
+    def store4(p, o : uint; v0, v1, v2, v3 : float) {
+        store(p, o, v0)
+        store(p, o + 1u, v1)
+        store(p, o + 2u, v2)
+        store(p, o + 3u, v3)
+    }
+
+    def f32_gemm_body {
+        let tid = gl_LocalInvocationID.x
+        let dgroups = max((pa.d + F32G_TD - 1u) / F32G_TD, 1u)
+        let p0 = (gl_WorkGroupID.x / dgroups) * F32G_TP
+        let o0 = (gl_WorkGroupID.x % dgroups) * F32G_TD
+        let tp = (tid / 16u) * 4u
+        let to = (tid % 16u) * 4u
+        var a00 = 0.0
+        var a01 = 0.0
+        var a02 = 0.0
+        var a03 = 0.0
+        var a10 = 0.0
+        var a11 = 0.0
+        var a12 = 0.0
+        var a13 = 0.0
+        var a20 = 0.0
+        var a21 = 0.0
+        var a22 = 0.0
+        var a23 = 0.0
+        var a30 = 0.0
+        var a31 = 0.0
+        var a32 = 0.0
+        var a33 = 0.0
+        var kb = 0u
+        while (kb < pa.n) {
+            stage(p0, o0, kb, tid)
+            barrier()
+            var kk = 0u
+            while (kk < F32G_BK) {
+                let x0 = xs[tp * F32G_LD + kk]
+                let x1 = xs[(tp + 1u) * F32G_LD + kk]
+                let x2 = xs[(tp + 2u) * F32G_LD + kk]
+                let x3 = xs[(tp + 3u) * F32G_LD + kk]
+                let w0 = ws[to * F32G_LD + kk]
+                let w1 = ws[(to + 1u) * F32G_LD + kk]
+                let w2 = ws[(to + 2u) * F32G_LD + kk]
+                let w3 = ws[(to + 3u) * F32G_LD + kk]
+                a00 = mad(x0, w0, a00)
+                a01 = mad(x0, w1, a01)
+                a02 = mad(x0, w2, a02)
+                a03 = mad(x0, w3, a03)
+                a10 = mad(x1, w0, a10)
+                a11 = mad(x1, w1, a11)
+                a12 = mad(x1, w2, a12)
+                a13 = mad(x1, w3, a13)
+                a20 = mad(x2, w0, a20)
+                a21 = mad(x2, w1, a21)
+                a22 = mad(x2, w2, a22)
+                a23 = mad(x2, w3, a23)
+                a30 = mad(x3, w0, a30)
+                a31 = mad(x3, w1, a31)
+                a32 = mad(x3, w2, a32)
+                a33 = mad(x3, w3, a33)
+                kk++
+            }
+            barrier()
+            kb += F32G_BK
+        }
+        let p = p0 + tp
+        let o = o0 + to
+        store4(p, o, a00, a01, a02, a03)
+        store4(p + 1u, o, a10, a11, a12, a13)
+        store4(p + 2u, o, a20, a21, a22, a23)
+        store4(p + 3u, o, a30, a31, a32, a33)
+    }
+}
+
+//! the f32 tile's arguments over [rows x n] -> [rows x dout]: the weight rows at `woff` with a stride of n, the bias row at `boff`, the output rows at `yoff`
+def f32_gemm_args(n, dout, rows : int64; woff : int64 = 0l; boff : int64 = 0l; yoff : int64 = 0l) : F32GemmArgs
+    => F32GemmArgs(n = uint(n), d = uint(dout), rows = uint(rows), woff = uint(woff), wstride = uint(n), boff = uint(boff), xoff = 0u, xstride = uint(n), yoff = uint(yoff), ystride = uint(dout))

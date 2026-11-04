@@ -21,7 +21,7 @@ Planned work: `followup_metal.md`, `followup_vulkan.md`, `followup_general.md`.
 - A serving call is a decode, a prefill, or an encoder or synthesis stage a GPU driver fills; a
   tower driver is the driver filling a family's encoder or synthesis stages
   (`dasllama/dasllama_metal_tower.das`, `dasllama/dasllama_vulkan_tower.das`,
-  `dasllama/dasllama_vulkan_tts.das`).
+  `dasllama/dasllama_vulkan_tts.das`, `dasllama/dasllama_cuda_tower.das`).
 - A bar is the largest difference a continuous compare accepts - a constant, or a constant times
   a statistic of the reference; for a tally of rows whose ids match, the most mismatched rows it
   accepts.

@@ -44,7 +44,8 @@ require _tower_twin
 // their carriers (the qwen2audio / voxtral / omni-3b f32 mmprojs, the E2B bf16 mmproj, the
 // canary f32 encoder, the parakeet f32 encoder, the ultravox f16 mmproj, the Qwen3-ASR bf16 mmproj), without jfk.wav,
 // without a Vulkan device under
-// DASLLAMA_GPU=1, and on a build with das_metal; the qwen3a front also skips when interpreted.
+// DASLLAMA_GPU=1, under the CUDA ask (DASLLAMA_CUDA=1 or set_gpu_home("cuda"), where the Vulkan tower's seats stand
+// down - `vulkan_twin_seat`), and on a build with das_metal; the qwen3a front also skips when interpreted.
 
 [test]
 def test_gelu_erf(t : T?) {
@@ -649,9 +650,9 @@ def private short_clip_cell(t : T?; tag : string; tw : auto(TW); var st : auto(S
             var cpu, dev : array<float>
             var n_cpu = 0l
             var n_dev = 0l
-            var s0 = VtStats()
-            var s1 = VtStats()
-            var s2 = VtStats()
+            var s0 = GpuTowerCounters()
+            var s1 = GpuTowerCounters()
+            var s2 = GpuTowerCounters()
             with_gpu_knobs() {
                 with_dasllama_jobque_() {
                     set_vulkan_tower(true)

@@ -13,6 +13,7 @@ full-suite run turns a one-arm fix into an afternoon.
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked           # every model-gated file, no --arm; a core-module change reaches every one of them through --changed
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked --exclude test_ple_modes   # the iteration form - drops the PLE file
 DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --only cuda,segments,regions,resident_moe,embeddings   # the CUDA home's pass: the run's CUDA files, the segmented window, the regions rig and the resident MoE files
+DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area vision --only gemma4uv,gemma4v,gemma3v,qwen3v,qwen25v   # the CUDA home's vision run: the five vision family files, whose discrete-home cells the first run's --only tokens do not reach
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --shard 1/3             # one of three boxes: every third file of the same run, from the first
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area audio            # one area: audio | vision | tts | translate | llm | infra (comma list)
 ```
@@ -51,15 +52,21 @@ Every suite but `model-free` and `stocked` needs `--arm`. `--full` parses and is
 whole gate; `--exclude <substr,...>` drops the files whose name contains a token and names each
 on an `EXCLUDED` line, so a trimmed run cannot read as full; `--only <substr,...>` keeps the files
 whose name contains a token and drops the rest, each kept file on an `ONLY` line and the tokens on
-the `REPORT` line - the CUDA home's pass is `--changed --only cuda,segments,regions,resident_moe,embeddings` (the CUDA files, the segmented
-window, the regions rig and the resident MoE files, whose fixtures read the armed home's witnesses) under
-`DASLLAMA_GPU=1 DASLLAMA_CUDA=1`, beside the Vulkan home's whole run, never in its place (the
-other files run the Vulkan home's tests on a home that serves the dense slice alone, and red on
-its declines). `--shard i/n` splits one run over n
-boxes: each box runs the same command with its own `i` and takes every n-th file of the run's
-sorted list from the i-th, so the shards partition the run and spread its costly neighbours; the
-`SHARD` line counts the shard's files, the `REPORT` line carries `shard i/n`, and the `NEXT` line
-names the shards still owed - a run is whole only when every shard's `REPORT` is in hand.
+the `REPORT` line. The CUDA home's pass runs under `DASLLAMA_GPU=1` and the CUDA ask -
+`DASLLAMA_CUDA=1` or `set_gpu_home("cuda")` on a dasCUDA build (`cuda_tower_asked`) - beside the
+Vulkan home's whole run, never in its place, as two runs. The first is
+`--changed --only cuda,segments,regions,resident_moe,embeddings` (the CUDA files, the segmented
+window, the regions rig and the resident MoE files, whose fixtures read the armed home's
+witnesses); the second is `--area vision --only gemma4uv,gemma4v,gemma3v,qwen3v,qwen25v`, the run
+that reaches the five vision family files (`test_gemma4uv`, `test_gemma4v`, `test_gemma3v`,
+`test_qwen3v`, `test_qwen25v`), whose discrete-home cells run on the CUDA tower under the ask. Beyond those five, the CUDA pass's `--only`
+tokens must match every file holding a cell that runs on the CUDA home. Under the ask every other
+file runs the Vulkan home's tests on a home that serves the dense slice alone, and reds on its
+declines. `--shard i/n` splits one run over n boxes: each box runs the same command with its own
+`i` and takes every n-th file of the run's sorted list from the i-th, so the shards partition the
+run and spread its costly neighbours; the `SHARD` line counts the shard's files, the `REPORT` line
+carries `shard i/n`, and the `NEXT` line names the shards still owed - a run is whole only when
+every shard's `REPORT` is in hand.
 `--no-tune` composes with any suite:
 every child runs with `DAS_TUNE_POLICY=reference`, so the `[tune]` families and the `[tuned]`
 hints fall to their reference bodies - the portable tier's arm of the gate. That arm also runs
@@ -1168,7 +1175,7 @@ exceed the bar). Every tower but the whisper twins' is
 staged and minted in memory (the qwen3a pair through `stage_qwen3a_tower`); the whisper cells mint
 the served model in memory behind the ASR facade (`mint_asr_whisper`), as do their rows compare
 and the f32-decoder leg. The three-way twins skip without their carriers, without a Vulkan device under
-`DASLLAMA_GPU=1` and on a das_metal build; the jfk-driven cells (gemma4a, canary, parakeet, qwen3a, whisper)
+`DASLLAMA_GPU=1`, under the CUDA ask and on a das_metal build; the jfk-driven cells (gemma4a, canary, parakeet, qwen3a, whisper)
 also skip without jfk.wav, and the whisper twin and the qwen3a front when interpreted. Off the f16
 GEMM feed (`DASLLAMA_COOPMAT=sdot4`) every front declines `device` by design while the block chains
 serve, so each twin's front witness follows the route (`front_served` in `_tower_twin.das` over
@@ -3767,8 +3774,16 @@ On Apple builds the CPU gate pins the tower knob off, and a second test gates th
 encode against the same dumps on a scale-relative bar (2e-4 + 4e-3*token-rms) - exceeding it is a
 red, the bar each fixture actually held is logged either way, and engage is proven per fixture by
 the encodes counter. On a Vulkan build `test_gemma4uv_tier1_vulkan` runs the same four dumps
-through the Vulkan embedder whole off the planes (the embedder minted in memory), the stem's
-im2col counted on the device beside the encode, the knobs put back through `with_gpu_knobs`.
+through the embedder of the serving discrete home - the CUDA tower under the CUDA ask, else the
+Vulkan tower - whole off the planes, the embedder minted in memory, the stem's im2col counted on the
+device beside the encode, the knobs put back through `with_gpu_knobs`.
+`test_gemma4uv_device_twin` is the dump-free instrument on either discrete home: the device
+embedder (the serving tower's vision knob on, `set_serving_gpu_tower(true, true)`) against the CPU
+chain (that knob off) on cb336 and cb672x336 within `TWIN_EXACT_REL_L2_VK`, engage by the encodes
+and convs counters, and the patch-zeroed control through the device past the bar. Both discrete
+cells skip without the mmproj and without the serving discrete home's twin seat
+(`discrete_twin_seat`); `test_gemma4uv_tier1_vulkan` needs a dasVulkan build, the device twin a
+build with dasVulkan or dasCUDA.
 `test_gemma4v.das` - stocked suite; the gemma4v ViT tower (E-series) tier-1 parity vs the `-p
 encode` dumps minted on the f32-widened mmproj, CPU, `-fa off` (`mint_e2b.sh` / `mint_e4b.sh`):
 eight E2B fixtures (96^2 cb through 672x336) on the scale-relative bar 2e-4 + 4e-3*token-rms, the
@@ -3780,24 +3795,26 @@ CPU-lane claim pins BOTH GPU tower knobs off (`set_every_gpu_tower`). On Apple b
 gates the fixtures through the Metal chain - the stem, the blocks and the tail on the device - with the engage
 counters, the knob-off decline leg, and the q8 lane on the device: a q8 tower minted under the pin serves off
 its q8 planes on the q8 lane's bar, every block counted, no `quant_mode` decline. On a Vulkan build two more cells:
-`test_gemma4v_tier1_vulkan` runs four dumps through the Vulkan block loop over the q8 image (minted
-in memory under the lane pin, the pin restored) on the q8 lane's bar with the engage counters per
-fixture, then the input poison - a q8 tower with block 8's planes zeroed, served by the driver, must
-EXCEED the bar on cb336; and `test_gemma4v_vulkan_twin` needs no dump - cb96 and cb336 three ways
-(the exact CPU chain, the CPU q8 chain, the device chain) on one- and two-block truncated towers,
-then cb96, cb336, green 672x336 and cb768x384 (1152 rows, the aligned tile variant's canvas) on the
-whole tower, every tower staged and minted in memory (never `load_gemma4v_tower`, which bakes a
-`.dlim` under the pin), the counters proving which served, the device's distance from the exact
-chain held within 1.5x the CPU q8 chain's own (the gate's reading: the device chain is the same or
-better), the residual rows logged per 64-row tile, the input poison on the one-block cb96 leg (a
-fresh q8 tower with its block zeroed through the device chain must EXCEED the bar the clean chains
-set), then the exact lane served - the exact tower through the device chain at cb336 on the f32 tile over the
-bf16 block rows widened: one encode, every block, the grid's rows, no `quant_mode` decline, the device within the
-exact lane's rel_l2 bar (`TWIN_EXACT_REL_L2_VK`) of the exact CPU chain with the moved-expectation control, and a
-fresh exact tower with block 8 zeroed through the device chain EXCEEDING it; the E4B cell's q8 leg re-runs its dump
-through the driver and runs the same zeroed-block poison against it. All three skip without a
-Vulkan device under `DASLLAMA_GPU=1`, and on a build with das_metal, where the Metal driver owns
-the tower hooks.
+`test_gemma4v_tier1_vulkan` runs four dumps through the serving discrete home's block loop over
+the q8 image (minted in memory under the lane pin, the pin restored) on the q8 lane's bar with the
+engage counters per fixture, then the input poison - a q8 tower with block 8's planes zeroed,
+served by the driver, must EXCEED the bar on cb336; and `test_gemma4v_vulkan_twin` needs no dump -
+cb96 and cb336 three ways (the exact CPU chain, the CPU q8 chain, the device chain) on one- and
+two-block truncated towers, then cb96, cb336, green 672x336 and cb768x384 (1152 rows, the aligned
+tile variant's canvas) on the whole tower, every tower staged and minted in memory (never
+`load_gemma4v_tower`, which bakes a `.dlim` under the pin), the counters proving which served, the
+device's distance from the exact chain held within 1.5x the CPU q8 chain's own (the gate's
+reading: the device chain is the same or better), the residual rows logged per 64-row tile, the
+input poison on the one-block cb96 leg (a fresh q8 tower with its block zeroed through the device
+chain must EXCEED the bar the clean chains set), then the exact lane served - the exact tower
+through the device chain at cb336 on the f32 tile over the bf16 block rows widened: one encode,
+every block, the grid's rows, no `quant_mode` decline, the device within the exact lane's rel_l2
+bar (`TWIN_EXACT_REL_L2_VK`) of the exact CPU chain with the moved-expectation control, and a fresh
+exact tower with block 8 zeroed through the device chain EXCEEDING it; the E4B cell's q8 leg re-runs
+its dump through the serving discrete home's chain and runs the same zeroed-block poison against
+it. The two cells skip without the serving discrete home's twin seat (`discrete_twin_seat`), the
+E4B leg runs only where that home's device is up (`serving_tower_device_up`), and none of the three
+runs on a build with das_metal, where the Metal driver owns the tower hooks.
 `test_gemma3v.das` - stocked suite; the gemma3 SigLIP tower (gemma-3-4b mmproj) tier-1 parity vs the
 `-p encode` dumps minted on the f32-widened f16 mmproj, CPU, `-fa off`
 (`gemma3-vision-oracle/mint_gemma3.sh`): the canvas is FIXED 896^2 (learned position table), so
@@ -3814,20 +3831,21 @@ slab, on the q8 lane's bar: one encode and every block counted, no `quant_mode` 
 (`set_metal_tensor_crowns("mulmm_q8")` + `set_metal_tower_f16(true)`, the lane pinned exact so
 the twin is baked), witnessed by the `metal_tower_f16_encodes` delta. Skips honestly without
 the mmproj or dumps. The CPU-lane claims pin both GPU tower knobs off (`set_every_gpu_tower`); on a
-Vulkan build the q8 cell re-runs its two dumps through the Vulkan block loop with the engage
-counters and the input poison (a q8 tower with block 13's planes zeroed, served by the driver, must
-EXCEED the q8 bar on cb896), and `test_gemma3v_vulkan_twin` is the dump-free instrument - the fixed
-canvas three ways (the exact CPU chain, the CPU q8 chain, the device chain) on one- and two-block
-truncated towers and the whole tower, every tower staged and minted in memory (never
-`load_gemma3v_tower`), the device's distance from the exact chain held within 1.5x the CPU q8
-chain's own, the input poison on the one-block leg (a fresh q8 tower with its block zeroed through
-the device chain must EXCEED the bar), then the exact lane served on the fixed canvas - the exact tower
-through the device chain on the f32 tile over the blob: the counters, no `quant_mode` decline, the device
-within `TWIN_EXACT_REL_L2_VK` of the exact CPU chain with the moved-expectation control, and a fresh exact
-tower with block 13 zeroed through the device chain EXCEEDING it; one deep canvas only, since the exact chain
-at 4096 rows x 27 blocks is the cell's cost. The Vulkan rung and
-the twin skip without a Vulkan device under `DASLLAMA_GPU=1`, and on a build with das_metal, where
-the Metal driver owns the tower hooks.
+Vulkan build the q8 cell re-runs its two dumps through the serving discrete home's block loop with
+the engage counters and the input poison (a q8 tower with block 13's planes zeroed, served by the
+driver, must EXCEED the q8 bar on cb896), and `test_gemma3v_vulkan_twin` is the dump-free
+instrument - the fixed canvas three ways (the exact CPU chain, the CPU q8 chain, the device chain)
+on one- and two-block truncated towers and the whole tower, every tower staged and minted in
+memory (never `load_gemma3v_tower`), the device's distance from the exact chain held within 1.5x
+the CPU q8 chain's own, the input poison on the one-block leg (a fresh q8 tower with its block
+zeroed through the device chain must EXCEED the bar), then the exact lane served on the fixed
+canvas - the exact tower through the device chain on the f32 tile over the blob: the counters, no
+`quant_mode` decline, the device within `TWIN_EXACT_REL_L2_VK` of the exact CPU chain with the
+moved-expectation control, and a fresh exact tower with block 13 zeroed through the device chain
+EXCEEDING it; one deep canvas only, since the exact chain at 4096 rows x 27 blocks is the cell's
+cost. The twin skips without the serving discrete home's twin seat (`discrete_twin_seat`), the
+Vulkan rung runs only where that home's device is up (`serving_tower_device_up`), and neither runs
+on a build with das_metal, where the Metal driver owns the tower hooks.
 `test_gemma3v_tail_gpu` holds the device tail, dump-free: the soft tokens of the Metal chain with the tail behind its
 blocks against the CPU chain on the exact lane's image (the CPU image, which the device reads as stored) on
 `tower_parity_deep`'s bar, the tail counter up by the device leg alone, another canvas outside the bar.
@@ -3863,26 +3881,35 @@ bf16-sourced tower, one fixture, its own f16-encodes delta, which is what proves
 bake covers bf16 files and not just f16 ones); and a model-free lane-knob cell. The CPU-lane
 claims pin both GPU tower knobs off (`set_every_gpu_tower`). On a Vulkan build `test_qwen3v_vulkan_twin`
 (Qwen3-VL 4B, the deepstack carrier) is the dump-free instrument: the exact CPU chain, the CPU
-q8 chain and the Vulkan chain over the q8 image (the stem, the blocks, every tap's merger and the
-tail on the device, the projected plane's slices read back) on one-, two- and six-block truncated towers (the six-block one reaches the first tap) and
-the whole tower, three canvases, every tower staged and minted in memory (never
+q8 chain and the serving discrete home's chain over the q8 image (the stem, the blocks, every
+tap's merger and the tail on the device, the projected plane's slices read back) on one-, two- and
+six-block truncated towers (the six-block one reaches the first tap) and the whole tower, three
+canvases, every tower staged and minted in memory (never
 `load_qwen3v_tower`), the device's distance from the exact chain held within 1.5x the CPU q8
 chain's own, the input poison on the one-block cb96 leg (a fresh q8 tower with its block zeroed
 through the device chain must EXCEED the bar), then the exact lane served at cb448 - the exact tower
 through the device chain on the f32 tile over the blob, the taps' mergers on the device too: the counters,
 no `quant_mode` decline, the device within `TWIN_EXACT_REL_L2_VK` of the exact CPU chain with the
 moved-expectation control, and a fresh exact tower with block 13 zeroed through the device chain
-EXCEEDING it. Skips without the mmproj, without a Vulkan device under `DASLLAMA_GPU=1`, and on
-a build with das_metal, where the Metal driver owns the tower hooks. The vision and audio families'
-Vulkan twins share one instrument, `_tower_twin.das`: the seat guard (the tier's want and the device,
-`vulkan_tower_arms`) and the jfk cells' seat, the three-way encode with the family's counters and
-the bar by metric (rel_l2 wherever a CPU q8 chain is the control - the vision canvases and the
-audio towers alike, since a deep tower's worst element is one tail element - qwen25v's maxdiff
-against the exact chain), the input
-poison, the audio towers' exact-lane decline and the vision towers' exact lane served, the vision canvas
-and dump-poison legs, and the staged tower's truncate-and-zero (every plane that spans the block: a q8
-tower's qblob, an exact tower's blob and halfword plane) and in-memory mint. The GPU knobs it pins (both towers, the ASR decoder) are
-captured and put back through `_gpu_knobs.das`, the record the TTS rail shares.
+EXCEEDING it. Skips without the mmproj, without the serving discrete home's twin seat
+(`discrete_twin_seat`), and on a build with das_metal, where the Metal driver owns the tower hooks.
+The vision and audio families' Vulkan twins share one instrument, `_tower_twin.das`: the seat
+guard - a vision twin takes `discrete_twin_seat`, under the CUDA ask the CUDA tower's seat
+(`cuda_twin_seat`: the tier's want and `cuda_tower_arms`), else the Vulkan tower's
+(`vulkan_twin_seat`: no CUDA ask, `vulkan_tower_arms` - the tier's want and the device - and
+`vulkan_tower_tiles_on`); an audio twin takes
+`vulkan_audio_twin_seat`, the Vulkan seat plus the f16 GEMM feed, and so skips under the CUDA ask -
+and the jfk cells' seat, the three-way encode with the family's counters and the bar by metric
+(rel_l2 wherever a CPU q8 chain is the control - the vision canvases and the audio towers alike,
+since a deep tower's worst element is one tail element - qwen25v's maxdiff against the exact
+chain), the input poison, the audio towers' exact-lane decline and the vision towers' exact lane
+served, the vision canvas and dump-poison legs, and the staged tower's truncate-and-zero (every
+plane that spans the block: a q8 tower's qblob, an exact tower's blob and halfword plane) and
+in-memory mint. The GPU knobs it pins - every GPU tower knob and ASR-decoder knob the build
+carries (`GpuKnobs`) - are captured and put back through `_gpu_knobs.das`, the record the TTS rail
+shares. Every serving helper of `_gpu_knobs.das` that takes a `vision` flag picks the CUDA tower
+for a vision call under the CUDA ask, else the Vulkan tower, and every one but the discrete homes'
+release (`serving_tower_shutdown`) picks the Metal tower first on a das_metal build.
 The model-gated cells skip honestly without the mmprojs or dumps (the metal cell counts its
 gated fixtures and skips when the dumps are absent).
 `test_qwen25v.das` - stocked suite; the qwen25v tower (Qwen2.5-Omni's window-attention ViT,
@@ -3902,19 +3929,20 @@ planes, and the SHALLOW routing cells - 1-layer truncated towers (pure-window an
 quad content, GPU vs the CPU chain at 0.1 abs, the chaos-free window discrimination for the DRIVER
 (the kernel's own block-diagonal strictness is the kernels-suite `tower_win` gate). Skips honestly
 without the mmproj or dumps. The CPU-lane claims pin both GPU tower knobs off (`set_every_gpu_tower`). On a
-Vulkan build `test_qwen25v_vulkan_twin` holds the Vulkan block loop over the baked halfword twin
-(this family has no q8 lane, so the exact CPU chain is the reference) to 1e-2*rms on one-, two- and
-eight-block truncated towers and to 0.15*rms on the whole tower (the f16 GEMM feed's re-roll at
-depth, the Metal rung's order; the window layers attend in f32 so their noise does not compound)
-on the single-window, four-window and ragged-edge fixtures with the engage counters and the
-knob-off decline, every tower staged and minted in memory (never `load_qwen25v_tower`), the input
-poison on the one-block cb448 leg (a fresh tower with its block zeroed through BOTH staging planes,
-served by the driver, must EXCEED the bar), then the shallow routing cells on the driver - the
-one-block pure-window and all-full towers on quad content against the CPU chain at 0.1 abs, the
-measured maxdiff logged, each with its own poison (the device over the zeroed one-block tower
-against the clean CPU chain must EXCEED the bar); quad content stays off the deep numeric set as on
-the Metal rung. Skips without the mmproj, without a Vulkan device under `DASLLAMA_GPU=1`, and on a
-build with das_metal, where the Metal driver owns the tower hooks.
+Vulkan build `test_qwen25v_vulkan_twin` holds the serving discrete home's block loop over the
+baked halfword twin (this family has no q8 lane, so the exact CPU chain is the reference) to
+1e-2*rms on one-, two- and eight-block truncated towers and to 0.15*rms on the whole tower (the
+f16 GEMM feed's re-roll at depth, the Metal rung's order; the window layers attend in f32 so their
+noise does not compound) on the single-window, four-window and ragged-edge fixtures with the
+engage counters and the knob-off decline, every tower staged and minted in memory (never
+`load_qwen25v_tower`), the input poison on the one-block cb448 leg (a fresh tower with its block
+zeroed through BOTH staging planes, served by the driver, must EXCEED the bar), then the shallow
+routing cells on the driver - the one-block pure-window and all-full towers on quad content against
+the CPU chain at 0.1 abs, the measured maxdiff logged, each with its own poison (the device over
+the zeroed one-block tower against the clean CPU chain must EXCEED the bar); quad content stays off
+the deep numeric set as on the Metal rung. Skips without the mmproj, without the serving discrete
+home's twin seat (`discrete_twin_seat`), and on a build with das_metal, where the Metal driver owns
+the tower hooks.
 `_vision_oracle.das` is the shared dump parser / fixture generator / per-token compare /
 over-bar scorer (the must-EXCEED half of a poison leg) / dump gate (`oracle_gate`: the dump, the
 encode, the token count, the compare) all vision tier-1 tests use (the `quad` generator and the

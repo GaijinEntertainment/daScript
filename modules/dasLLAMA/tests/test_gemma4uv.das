@@ -23,9 +23,12 @@ require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown â
 // here isolates the embedder math. Oracle per-token lines live beside the models in gemma4-vision-oracle/
 // (mint.sh regenerates); both the mmproj and the dumps gate this test with explicit skips. On an Apple build the
 // GPU cell runs the same dumps through the Metal embedder, on a Vulkan build through the Vulkan one, each off the
-// planes with the stem on the device and engage proven per fixture by the encodes counter. The Vulkan cell skips on
-// a das_metal build (its tower hooks own the seats) and without a Vulkan device under DASLLAMA_GPU=1; its control
-// zeroes the patch weights and must miss the bar.
+// planes with the stem on the device and engage proven per fixture by the encodes counter. The discrete-home cells (the
+// device twin, the tier-1 rung on the serving discrete home) seat on the serving discrete home: under the CUDA ask
+// (DASLLAMA_CUDA=1 or set_gpu_home("cuda")) on the CUDA tower, skipping without a CUDA device there (`cuda_twin_seat`);
+// else on the Vulkan tower, skipping on a das_metal build (its tower hooks own the seats), without a Vulkan device under
+// DASLLAMA_GPU=1 and without the tower's tile family (`vulkan_twin_seat`). The twin's control zeroes the patch weights
+// and must miss the bar.
 
 // the tier-1 gate: encode a fixture, compare per-token mean/v0..v3 against the oracle dump.
 // %.6f print rounding is Â±5e-7 and the measured accumulation-order noise is ~2e-5 (logged per
@@ -135,13 +138,91 @@ def test_gemma4uv_tier1_gpu(t : T?) {
     }
 }
 
-//! the embedder whole on the Vulkan device off the planes holds the CPU bar on the mtmd dumps; engage evidence: the encodes counter, per fixture
+//! the embedder with the patch weights zeroed in every plane the chain reads them from: the device twin's input poison
+def private mint_patch_zeroed(mm : string) : Gemma4uvEmbedder {
+    var inscope stgp <- stage_gemma4uv_embedder(mm)
+    let n = stgp.e.n_embd * stgp.e.patch_dim
+    for (i in range64(long_length(stgp.blob) >= stgp.e.patch_w + n ? n : 0l)) {
+        stgp.blob[stgp.e.patch_w + i] = 0.0
+    }
+    for (i in range64(long_length(stgp.wblob) >= stgp.e.patch_w + n ? n : 0l)) {
+        stgp.wblob[stgp.e.patch_w + i] = uint16(0)
+    }
+    var embp = Gemma4uvEmbedder()
+    mint_gemma4uv_embedder(stgp, embp)
+    return <- embp
+}
+
+[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
+def test_gemma4uv_device_twin(t : T?) {
+    t |> run("the device embedder vs the CPU chain, dump-free, and the patch-zeroed control") @(tt : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
+            let mm = path_join(models_dir(), "mmproj-gemma-4-12B-it-BF16.gguf")
+            if (!model_available(tt, mm) || !discrete_twin_seat(tt)) {
+                return
+            }
+            var inscope stg <- stage_gemma4uv_embedder(mm)
+            var emb = Gemma4uvEmbedder()
+            mint_gemma4uv_embedder(stg, emb)
+            var st = Gemma4uvState()
+            var inscope embp <- mint_patch_zeroed(mm)
+            var stp = Gemma4uvState()
+            let home = serving_tower_dev(true)
+            for (fx in [(w = 336, h = 336), (w = 672, h = 336)]) {
+                let tag = "gemma4uv {home} cb {fx.w}x{fx.h}"
+                var inscope planes <- make_planes("cb", fx.w, fx.h)
+                var cpu, dev, poisoned : array<float>
+                var n_cpu = 0l
+                var n_dev = 0l
+                let pre = gpu_tower_counters(true)
+                var s0 = pre
+                var s1 = pre
+                var s2 = pre
+                with_gpu_knobs() {
+                    set_serving_gpu_tower(false, true)
+                    with_dasllama_jobque_() {
+                        n_cpu = gemma4uv_encode(emb, st, planes, int64(fx.w), int64(fx.h), cpu)
+                    }
+                    s0 = gpu_tower_counters(true)
+                    set_serving_gpu_tower(true, true)
+                    with_dasllama_jobque_() {
+                        n_dev = gemma4uv_encode(emb, st, planes, int64(fx.w), int64(fx.h), dev)
+                    }
+                    s1 = gpu_tower_counters(true)
+                    with_dasllama_jobque_() {
+                        gemma4uv_encode(embp, stp, planes, int64(fx.w), int64(fx.h), poisoned)
+                    }
+                    s2 = gpu_tower_counters(true)
+                }
+                tt |> equal(s0.encodes - pre.encodes, 0l, "{tag}: the knob-off leg never dispatched (encodes delta)")
+                tt |> equal(s0.convs - pre.convs, 0l, "{tag}: the knob-off leg never ran the stem on the device (convs delta)")
+                tt |> equal(n_cpu, n_dev, "{tag}: token count on both chains")
+                tt |> equal(s1.encodes - s0.encodes, 1l, "{tag}: device-served (encodes delta)")
+                tt |> equal(s1.convs - s0.convs, 1l, "{tag}: the stem ran on the device (convs delta)")
+                tt |> equal(s2.encodes - s1.encodes, 1l, "{tag} patch-zeroed: device-served (encodes delta)")
+                tower_twin_held(tt, tag, cpu, dev, TWIN_EXACT_REL_L2_VK)
+                tower_twin_poisoned(tt, "{tag} patch-zeroed", cpu, poisoned, TWIN_EXACT_REL_L2_VK)
+                delete cpu
+                delete dev
+                delete poisoned
+            }
+            serving_tower_shutdown(true)
+            delete stp
+            delete st
+            delete emb
+        } else {
+            tt |> skip("no discrete GPU home (dasVulkan or dasCUDA) in this build")
+        }
+    }
+}
+
+//! the embedder whole on the serving device off the planes holds the CPU bar on the mtmd dumps; engage evidence: the encodes counter, per fixture
 [test]
 def test_gemma4uv_tier1_vulkan(t : T?) {
-    t |> run("tier-1 Vulkan encode vs the mtmd encode dumps") @(tt : T?) {
+    t |> run("tier-1 encode on the serving discrete home's tower ({serving_tower_dev(true)}) vs the mtmd encode dumps") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let mm = path_join(models_dir(), "mmproj-gemma-4-12B-it-BF16.gguf")
-            if (!model_available(tt, mm) || !vulkan_twin_seat(tt)) {
+            if (!model_available(tt, mm) || !discrete_twin_seat(tt)) {
                 return
             }
             var inscope stg <- stage_gemma4uv_embedder(mm)
@@ -149,43 +230,33 @@ def test_gemma4uv_tier1_vulkan(t : T?) {
             mint_gemma4uv_embedder(stg, emb)   //! in memory: the loader would bake the image beside the model
             var st = Gemma4uvState()
             with_gpu_knobs() {
-                set_vulkan_tower(true)
+                set_serving_gpu_tower(true, true)
                 let fixtures = [(kind = "gray", w = 480, h = 480, log = "encode.gray480.log"),
                                 (kind = "cb", w = 336, h = 336, log = "encode.cb336.log"),
                                 (kind = "red", w = 336, h = 336, log = "encode.red336.log"),
                                 (kind = "cb", w = 672, h = 336, log = "encode.cb672x336.log")]
                 for (fx in fixtures) {
-                    let s0 = vulkan_tower_stats()
+                    let s0 = gpu_tower_counters(true)
                     let ran = gate_encode(tt, emb, st, fx.kind, fx.w, fx.h, fx.log, false)
                     if (ran) {
-                        tt |> equal(vulkan_tower_stats().encodes - s0.encodes, 1l, "{fx.kind} {fx.w}x{fx.h}: device-served (encodes delta)")
-                        tt |> equal(vulkan_tower_stats().convs - s0.convs, 1l, "{fx.kind} {fx.w}x{fx.h}: the stem ran on the device (convs delta)")
+                        tt |> equal(gpu_tower_counters(true).encodes - s0.encodes, 1l, "{fx.kind} {fx.w}x{fx.h}: device-served (encodes delta)")
+                        tt |> equal(gpu_tower_counters(true).convs - s0.convs, 1l, "{fx.kind} {fx.w}x{fx.h}: the stem ran on the device (convs delta)")
                     }
                 }
                 var o = OracleEncode()
                 if (oracle_dump(tt, "gemma4-vision-oracle", "encode.cb336.log", "gemma4-vision-oracle/mint.sh", o)) {
-                    var inscope stgp <- stage_gemma4uv_embedder(mm)   //! the control: the patch weights zeroed in every plane the chain reads them from
-                    let n = stgp.e.n_embd * stgp.e.patch_dim
-                    for (i in range64(long_length(stgp.blob) >= stgp.e.patch_w + n ? n : 0l)) {
-                        stgp.blob[stgp.e.patch_w + i] = 0.0
-                    }
-                    for (i in range64(long_length(stgp.wblob) >= stgp.e.patch_w + n ? n : 0l)) {
-                        stgp.wblob[stgp.e.patch_w + i] = uint16(0)
-                    }
-                    var embp = Gemma4uvEmbedder()
-                    mint_gemma4uv_embedder(stgp, embp)
+                    var inscope embp <- mint_patch_zeroed(mm)
                     var stp = Gemma4uvState()
                     dump_poison_leg(tt, "gemma4uv", "cb", 336, 336, o, 0.0, 0l, int(embp.proj_dim), TIER1_TOL, embp, stp) $(t; var s; planes; var out) => gemma4uv_encode(t, s, planes, 336l, 336l, out)
                     delete stp
-                    delete embp
                 }
                 vk_drop_model_state()   //! the drop forgets the vision marks: the next encode regrows its buffers and uploads the stem off a fresh key
-                let sd = vulkan_tower_stats()
+                let sd = gpu_tower_counters(true)
                 if (gate_encode(tt, emb, st, "cb", 336, 336, "encode.cb336.log", false)) {
-                    tt |> equal(vulkan_tower_stats().encodes - sd.encodes, 1l, "after the model drop: device-served again (encodes delta)")
+                    tt |> equal(gpu_tower_counters(true).encodes - sd.encodes, 1l, "after the model drop: device-served again (encodes delta)")
                 }
             }
-            vulkan_tower_shutdown()
+            serving_tower_shutdown(true)
             delete st
             delete emb
         } else {

@@ -2583,16 +2583,30 @@
     the attach keeps only what the image bakes, and each TTS family mints its Metal, Vulkan and CUDA image, bound on load
     with no conversion like every other tower's.
 
-280. **Vulkan's Gemma-4 vision towers run on an f32 widening of their bf16 weights.** gemma4v's f32 lane widens its bf16
-    block GEMMs in `wblob` to f32 at upload (`vt_upload_f32` over `vt_rows_f32`, `widen_bf16`), and the gemma4v and
-    gemma4uv patch stem and projector slab (`vt_vis_slab`) widens their bf16 rows the same way, so the Vulkan kernels read
-    a copy twice the size of the file's planes while Metal reads the bf16 natively. No per-backend Vulkan image can hold
-    those planes without the doubling, the same defect row 279 states for the TTS seats. Done = with the CUDA home's
-    vision towers, the Vulkan and CUDA Gemma-4 vision kernels read the bf16 planes as the file holds them, and the Vulkan
-    gemma4v and gemma4uv images carry those bytes, uploaded with no conversion.
 281. **The ten `register_<family>_flavor` seats are one shape written ten times.** Each family file (gigaam, parakeet,
     canary, the whisper-class audio tower, gemma4a, qwen3a, whisper, gemma3v, qwen3v, gemma4v) declares a `<Family>Flavor`
     record - `backend`, `serves`, `bake` - a private global holding it, and a three-line `register_<family>_flavor(backend,
     serves, bake)` filling it; `tower_dev_flavor` and `tower_flavor_registered` then read the record generically. The
     eleventh family copies the shape again. Done = when the next family lands: one macro (or one generic over a record the
     families share) declares the record, the global and the registrant, and the ten families call it.
+
+282. **The CUDA vision tower driver is the Vulkan tower's vision half on another rail.** `dasllama_cuda_tower.das` runs
+    each vision chain dispatch for dispatch as `dasllama_vulkan_tower.das` does, one body a home: the chains
+    (`cuda_gemma3v_chain` + `cut_ln_chain`, `cuda_gemma4v_chain`, `cuda_gemma4uv_encode`, `cuda_qwen3v_chain`,
+    `cuda_qwen25v_chain` against `vulkan_gemma3v_chain` + `vt_ln_chain`, `vulkan_gemma4v_chain`, `vulkan_gemma4uv_encode`,
+    `vulkan_qwen3v_chain`, `vulkan_qwen25v_chain`), the tails (`cut_vis_tail_enc`, `cut_merger` against `vt_vis_tail_enc`,
+    `vt_merger_enc`), the GEMM helpers (`cut_mm_clamped32`, `cut_mm_clamped_q8`, `cut_mm32`, `cut_vis_im2col`,
+    `cut_planes_up`, `cut_cvt16`, `cut_served`, `cut_upload_q8` against `vt_mm_clamped32`, `vt_mm_clamped`, `vt_set_f32` /
+    `vt_enc_f32`, `vt_vis_im2col`, `vt_planes_up`, `vt_cvt16`, `vt_served_from`, `vt_put_piece`), the decline, announce and
+    gate (`cut_decline` / `cut_decline_words`, `cut_announce`, `cut_vis_gate` against `vt_decline` / `vt_decline_words`,
+    `vt_announce`, `vt_vis_gate`), `cut_each_resident`
+    against `vt_each_resident`, and `cut_f32_ensure` against `vt_f32_ensure`. The pairs differ on the encode rail alone: a
+    command buffer, its hazard bits and a descriptor set a binding tuple on Vulkan, a stream and a buffer array on CUDA -
+    and on the residency record that follows the rail (`VtResident` with its sets and hazard marks, `CutResident` with its
+    `CutBuf`s). The args, the stamps, the shape gates and the tail record (`TowerVisTail`) are already shared. Done = one
+    chain body a family in a shared module, generic over a rail record whose `enc(stamp, bufs, pc, wgs)` the Vulkan home
+    meets through its set cache and hazard bits and the CUDA home through its stream, per row 274's rail-parameter form;
+    the helper pairs fold with it, each `ensure_*` binding staying the home's. The fold is the first step of the ASR pass -
+    the audio towers (the whisper-class, canary, parakeet, gigaam, qwen3a and gemma4a encoders, the audio embedders and the
+    ASR-decoder seats) coming to the CUDA home - so the rail-generic body is written once with both halves in hand; TTS
+    stays on the Vulkan tower until its own pass.

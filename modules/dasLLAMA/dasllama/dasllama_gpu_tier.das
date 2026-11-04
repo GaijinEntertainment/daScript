@@ -6,6 +6,7 @@ module dasllama_gpu_tier shared public
 
 require dasllama/dasllama_lint public
 require dasllama/dasllama_boot_restore
+require daslib/strings_boost   // starts_with: the decline counter's unsay walk
 require dasllama/dasllama_env      // env-driven route defaults + noisy gate
 require dasllama/dasllama_config   // DlimVulkanConfig — the dry-bake seam's config argument
 require daslib/fio                 // describe_pending_dynamic_modules — the absent-backend diagnostic
@@ -656,6 +657,40 @@ def private gpu_home_default : string {
             to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_CUDA asks for the CUDA home, which this build does not carry (DAS_CUDA_DISABLED, or a 32-bit host) - the Vulkan home keeps the GPU tier\n")
         }
         return "vulkan"
+    }
+}
+
+//! A GPU driver's decline counter (the Vulkan and CUDA homes' alike): `counts` by reason name (the gates read deltas on them), `total` over every reason,
+//! and the log said once per (who, reason) in the words the caller passes - `who` names the driver and its model family.
+struct GpuDeclineCounter {
+    home : string   //! the home the log line names; empty reads as the Vulkan home, whose counters declare no field
+    counts : table<string; int64>
+    total : int64
+    said : table<string>
+}
+
+//! Count `reason` for `who`, say it once in `words` (the reason name when empty); answers false so a decline site returns it.
+[cold_path]
+def note(var c : GpuDeclineCounter; who, reason : string; words : string = "") : bool {
+    c.counts[reason] = (c.counts?[reason] ?? 0l) + 1l
+    c.total++
+    let key = "{who}/{reason}"
+    if (!key_exists(c.said, key)) {
+        c.said |> insert(key)
+        let home = empty(c.home) ? "vulkan" : c.home
+        let why = empty(words) ? reason : words
+        to_log(LOG_INFO, "dasLLAMA {home}: {who} declined - {why}\n")
+    }
+    return false
+}
+
+//! Forget what was said for `who`: the next decline of each reason logs again (a driver calls it as a new model arrives).
+[cold_path]
+def unsay(var c : GpuDeclineCounter; who : string) {
+    let prefix = "{who}/"
+    var gone <- [for (k in keys(c.said)); k; where starts_with(k, prefix)]
+    for (k in gone) {
+        c.said |> erase(k)
     }
 }
 

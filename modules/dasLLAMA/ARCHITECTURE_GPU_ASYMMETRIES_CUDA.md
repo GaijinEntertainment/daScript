@@ -122,6 +122,16 @@ prefill, the MXFP4 expert pieces on the FP4 tensor rung, the nv4 nibble decode a
 - **`set_cuda_mmq_pin` is a CUDA-only setter.** It pins the MMQ knob's answer ahead of a load, so one process can hold a
   carrier to the leaves and then to the tiles (the resident cells' knob-off control, the W4A4 instrument). The Vulkan
   window's form follows the device's coopmat mode and Metal has one window form, so neither home has a pin to set.
+- **The CUDA tower serves the vision families alone** (`dasllama_cuda_tower`: gemma3v, gemma4v, gemma4uv, qwen3v,
+  qwen25v - `ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains`). Under the CUDA ask the audio, ASR-decoder,
+  translation and TTS seats stay the Vulkan tower's, so a process serving an audio tower beside the CUDA home holds
+  both APIs - the Vulkan device armed for the tower, the CUDA context for the decoder - and the Vulkan tower's vision
+  seats stand down there (`vulkan_tower_install_vision` is the Vulkan home's installer,
+  `ARCHITECTURE_GPU_TOWER.md#tower-reach`). The CUDA tower keeps no hazard rail and no descriptor sets (the `cud_`
+  rail's launches are stream-ordered), carries no per-role GPU profile (`DASLLAMA_GPU_PROF` is the Vulkan tower's -
+  its encode is timed by the lane probe's wall), declines no tile family (the home has one feed, cm2), and takes its
+  f16 x f16 GEMM through `CuF16GemmCm2W` - the `F16GemmCm2T` stamp with the weight offset, beside the E-series seat's
+  `CuF16GemmCm2`, which pins the offset off - where the Vulkan tower's one `F16GemmCm2` stamp serves both sites.
 
 ### The CUDA home binds its context to the calling thread at every entry {#cuda-thread-binding}
 

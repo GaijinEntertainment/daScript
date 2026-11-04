@@ -20,9 +20,14 @@ A tower driver is a GPU driver file that serves a family's encoder or synthesis 
 hook seats - stage slots the CPU chain calls and the driver fills. Every hook a tower serves
 through is registered by an `[init]` of that tower's driver files: a seat, a drop hook, or a
 reload or weights-epoch listener. The registrations run in `dasllama_metal_tower_register` (the
-Metal tower), `dasllama_vulkan_tower_register` (the Vulkan tower) and
-`dasllama_vulkan_tts_register` (the Vulkan TTS driver, the Vulkan tower's TTS seats), so the
-hooks a function can reach are the ones those three register.
+Metal tower), `dasllama_vulkan_tower_register` (the Vulkan tower), `dasllama_vulkan_tts_register`
+(the Vulkan TTS driver, the Vulkan tower's TTS seats) and `dasllama_cuda_tower_register` (the CUDA
+tower), so the hooks a function can reach are the ones those four register. The vision seats
+follow the GPU home: the Vulkan tower's `vulkan_tower_install_vision` and the CUDA tower's
+`cuda_tower_install_vision` are each registered under their home's name (`register_gpu_home`), run at
+`[init]` only where that home is asked for (`gpu_want_cuda`), and run again when `set_gpu_home`
+moves the tier; the audio, ASR-decoder, translation and TTS seats stay the Vulkan tower's under
+either home (`ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries`).
 
 A gate covers a hook when it asserts the hook's counter rising on a leg where that hook is the
 only reachable hook raising it; `REVIEW_TOWER.md` names the counter each hook kind raises.
@@ -106,8 +111,8 @@ two clamps (`g4v_tail_body`). With the tail on the device the soft tokens alone 
 rows stay there. The vision chains serve both weight lanes: an exact tower's block GEMMs ride the f32
 tiles over the blob (the crowned halfword twin where the crown compiles it), a q8 tower's the prefill
 ladder's q8 GEMM over the vision q8 slab (`g_tw_q8_vis`: the family's block regions repacked once a
-tower beside the audio slab, `tw_q8_attach_vis` over the family's block list - `ln_block_regions` over
-`gemma3v_ln_offs`, `qwen3v_block_regions` with the fused qkv split three ways, `gemma4v_block_regions` -
+tower beside the audio slab, `tw_q8_attach_vis` over the family's block list - `gemma3v_all_regions`,
+`qwen3v_block_regions` with the fused qkv split three ways, `gemma4v_all_regions` -
 keyed by the tower's q8 planes and their scales) with the half feed where the ladder reads one (`pf_q8_mm_half`), so a pinned q8 tower
 serves on the driver and declines nothing; the families register the f32 lane as served, so the policy
 prefers the file's planes under the tower.

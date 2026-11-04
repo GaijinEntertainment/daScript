@@ -414,6 +414,7 @@ enum TowerDev {
     none
     metal
     vulkan
+    cuda
 }
 
 let TOWER_DEV_PIECE_WORDS = 3l   //! a piece's words in a ``devplan`` plane: its name's key, its byte offset in ``dev``, its bytes
@@ -840,11 +841,59 @@ def tower_read_conv_tap_major(m : GGUFMeta; b : array<uint8> | #; name : string;
 //! disk, which means ±FLT_MAX — an identity clamp, so callers may skip the pass.
 [safe_when_uninitialized]
 struct Clamp {
-    imin : float = -3.4028235e38
-    imax : float = 3.4028235e38
-    omin : float = -3.4028235e38
-    omax : float = 3.4028235e38
+    imin : float = -NO_CLAMP
+    imax : float = NO_CLAMP
+    omin : float = -NO_CLAMP
+    omax : float = NO_CLAMP
     active : bool = false
+}
+
+let NO_CLAMP = 3.4028235e38   //! an inactive ClippableLinear bound: the CPU chain skips the clamp, a GPU tower clamps to the float range
+
+//! a GPU tower's lower bound for `c`'s input (`input`) or output side: the float range where `c` is inactive
+def clamp_lo(c : Clamp; input : bool) : float => c.active ? (input ? c.imin : c.omin) : -NO_CLAMP
+
+//! a GPU tower's upper bound for `c`'s input (`input`) or output side: the float range where `c` is inactive
+def clamp_hi(c : Clamp; input : bool) : float => c.active ? (input ? c.imax : c.omax) : NO_CLAMP
+
+let TOWER_KEY_SAMPLE_WORDS = 64l   //! words sampled from each plane region folded into a GPU tower's residency key beside its address and size
+
+//! `k` folded with `TOWER_KEY_SAMPLE_WORDS` words sampled evenly over the `bytes` at `p`
+def tower_fold_words(k : uint64; p : uint8 const?; bytes : int64) : uint64 {
+    var h = k
+    let n = bytes / 4l
+    let step = max(n / TOWER_KEY_SAMPLE_WORDS, 1l)
+    let wp = unsafe(reinterpret<uint const?>(p))
+    var i = 0l
+    while (i < n) {
+        h = hash_combine64(h, uint64(unsafe(wp[i])))
+        i += step
+    }
+    return h
+}
+
+//! a GPU tower scratch's row capacity for `rows`
+[arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+def tower_cap_rows(rows : int64) : int64 => round_up(rows, 256l)
+
+//! the vision tail behind a GPU tower chain's blocks: the post-normed rows pooled over the patch grid, normed by the soft-token
+//! rms row at `soft_norm_w`, projected by the f32 rows at `proj_w`; the zero record (`nout` 0) is no tail
+struct TowerVisTail {
+    nout : int64          //! the soft tokens, (gw / merge) x (gh / merge)
+    gw : int64            //! the patch grid's width in rows
+    merge : int64         //! the pool's side
+    d : int64
+    proj : int64          //! the soft-token width
+    soft_norm_w : int64   //! the soft rms's weight row in the norms plane, -1 for the weightless rms off the ones row (gemma4v)
+    proj_w : int64        //! the projection's rows: in the norms plane, or in the halfword plane as stored (`proj_bf16`)
+    proj_bf16 : bool
+    eps : float           //! the soft rms's eps, the tower's
+    affine : bool         //! gemma4v: the sqrt(d) scale with the standardize rows between the pool and the rms
+    scale : float
+    std : bool
+    std_bias : int64
+    std_scale : int64
+    clamp : Clamp         //! gemma4v: the projection's input and output bounds (inactive elsewhere)
 }
 
 def private read_scalar_tensor(m : GGUFMeta; bytes : array<uint8> | #; name : string) : float {

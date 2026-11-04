@@ -38,7 +38,7 @@ carriers name, and no TTS family file (`dasllama_kitten`, `dasllama_kokoro`, `da
   (`tower_dev_flavor`), the CPU refusal of a GPU image (`tower_cpu_refuse`), the flavor tags (`register_tower_dev_tags`),
   the mint that bakes a driver's device block over the CPU form and copies every unconsumed plane beside it
   (`tower_dev_image`, `tower_mint_dev`, `tower_mint_flavor`) and the staged load that takes a flavor
-  (`load_staged_image_dev`). Generic over a family's staging and carrier; nothing here names a family type.
+  (`load_staged_image_dev`), and the q8 gather both discrete homes bake their blocks with (`tower_gather_q8_regions`, `tower_bake_q8`: the regions in the row-major device layout under a driver's piece prefix). Generic over a family's staging and carrier; nothing here names a family type.
 - **`dasllama_audio.das`** - the audio encoder tower: the mel front-ends (mtmd and whisper.cpp flavors, and the canary,
   gemma4a, qwen3a and gigaam flavors - each a `MelForm` over the one `mel_spectrum_rows`, whose branches are the form's
   `MelSum` sum order and `MelLog` log law), `AudioTower` with its staging, q8-quantize, and image rails, `EncoderState`,
@@ -158,10 +158,10 @@ carriers name, and no TTS family file (`dasllama_kitten`, `dasllama_kokoro`, `da
 - **`dasllama_vision_embedder.das`** - the vision carrier: `VisionEmbedder` / `VisionState`, the
   `AsrModel` shape for vision - one union through every seam, the family sniffed from the mmproj
   (`clip.vision.projector_type`, or a `.dlim`'s baked tag) at load, one-line arms. Outside a
-  family's own file, a family type is named only here, in the two tower drivers' family hooks
-  (`dasllama_metal_tower.das`, `dasllama_vulkan_tower.das`), and in files under `tests/` - the
+  family's own file, a family type is named only here, in the three tower drivers' family hooks
+  (`dasllama_metal_tower.das`, `dasllama_vulkan_tower.das`, `dasllama_cuda_tower.das`), and in files under `tests/` - the
   set `REVIEW.das`'s `check_family_seams` enforces, its licensed namers (`VISION_SEAM_EXEMPT`)
-  being those two driver files and `harness/vision_lane_probe.das`, the lane probe, which pins a
+  being those three driver files and `harness/vision_lane_probe.das`, the lane probe, which pins a
   family's lane and mints its tower in memory - the carrier exposes neither.
 - **`dasllama_audio_embedder.das`** - the audio carrier: `AudioEmbedder` / `AudioState`, the
   vision carrier's audio twin - one union through every seam (server media worker, facade
@@ -223,7 +223,7 @@ blocks and merger alike - because the Metal tower reads f32 planes or the baked 
 
 A family file owns the hook SLOT for a stage the GPU can serve - a `var private` function pointer
 plus a `register_*` entry - and a tower driver fills it at `[init]`: the Metal driver on a Metal
-build, the Vulkan driver (`dasllama_vulkan_tower.das`) on a build without das_metal, for the
+build, the Vulkan driver (`dasllama_vulkan_tower.das`) on a build without das_metal - its vision seats under the Vulkan home alone, the CUDA driver (`dasllama_cuda_tower.das`) filling them under the CUDA home (`ARCHITECTURE_GPU_TOWER.md#tower-reach`) - for the
 blocks seats it serves and the front seats it fills (the whisper preprocessor's mel
 `register_whisper_mel_gpu`, which Qwen3-ASR's mel and the chat towers' chunked mel both ask;
 qwen3a's conv front, gemma4a's
@@ -280,7 +280,7 @@ A tower serves its GEMMs on one of two lanes: q8 planes (the CPU serving format)
 exact f32 planes. Un-pinned, the lane follows the fastest GEMM path on the box: a GPU tower registered
 with the f32 lane served (`register_<family>_gpu`'s `f32_lane` - the Metal vision chains, whose f32
 tiles are the faster lane) and answering `*_gpu_serves` true flips the default to exact
-(`*_gpu_exact_serves`); the Vulkan vision chains register the q8 lane as the faster one, so a Vulkan
+(`*_gpu_exact_serves`); the Vulkan and CUDA vision chains register the q8 lane as the faster one, so a Vulkan or CUDA
 box takes q8 and serves a pinned exact tower on its f32 tile; every other box takes q8. Whisper carries no lane policy and serves q8 everywhere:
 the Metal tower reads its q8 planes. Each family exposes the same trio over one `GemmLane` pin
 (`lane_serves_q8`, `dasllama_common.das`): `set_*_q8` pins a lane, `reset_*_q8` returns to the

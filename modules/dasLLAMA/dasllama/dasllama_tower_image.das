@@ -11,6 +11,9 @@ require dasllama/dasllama_tower
 require dasllama/dasllama_image
 require dasllama/dasllama_env      // nolint:STYLE030 - `load_through_image` instances here: its body's names resolve in this module
 require dasllama/dasllama_common
+require dasllama/dasllama_kqformat   // kq_elems: the q8 block
+require dasllama/dasllama_layout   // q8_gather_rows: the discrete homes' row-major gather
+require dasllama/dasllama_math   // active_q8_repack_layout: the gather's plain layout
 require strings                    // nolint:STYLE030 - ... `ends_with` among them
 require daslib/strings_boost       // nolint:STYLE030 - ... the instances' string helpers
 require daslib/fio                 // nolint:STYLE030 - ... `stat` / `remove` on the image path
@@ -155,10 +158,35 @@ def private tower_copy_named(m; name : string; var dst : array<auto(ET)>) {
     }
 }
 
+//! the q8 planes' regions gathered into the discrete homes' device layout (`wq` the quants, `ws` the halfword scales)
+[cold_path]
+def tower_gather_q8_regions(qblob : PlaneI8; qscales : PlaneF; regions : array<Q8Region>; lay : Q8RepackLayout; var wq, ws : array<uint8>) {
+    let q8e = kq_elems(KqFmt.q8)
+    for (reg in regions) {
+        q8_gather_rows(plane_at(qblob, reg.woff), null, plane_at(qscales, reg.woff / q8e), reg.n, reg.rows, q8_gather_slice(reg.rows, lay.mr), lay.mr, lay.kgroup, lay.wbias,
+            wq, ws, reg.woff, reg.woff / q8e)
+    }
+}
+
+//! the regions gathered at the row-major layout into the pieces `<prefix>.wq` / `<prefix>.ws`
+[cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
+def tower_bake_q8(var b : TowerDevBuild; prefix : string; qblob : PlaneI8; qscales : PlaneF; regions : array<Q8Region>) {
+    var @exact_size wq : array<uint8>
+    var @exact_size ws : array<uint8>
+    wq |> reserve_resize(qblob.n)
+    ws |> reserve_resize(qscales.n * 2l)
+    tower_gather_q8_regions(qblob, qscales, regions, active_q8_repack_layout(false), wq, ws)
+    tower_dev_put(b, "{prefix}.wq", wq)
+    tower_dev_put(b, "{prefix}.ws", ws)
+    delete wq
+    delete ws
+}
+
 //! Register a lane's GPU-flavored image tags, one a driver, config-free: no CPU backend's property shapes their bytes
 def register_tower_dev_tags(lane : string) {
     register_image_flavor_tag(tower_dev_tag(lane, TowerDev.metal), lane)
     register_image_flavor_tag(tower_dev_tag(lane, TowerDev.vulkan), lane)
+    register_image_flavor_tag(tower_dev_tag(lane, TowerDev.cuda), lane)
 }
 
 //! `load_staged_image` taking a GPU flavor (`#tower-dev-block`): `dev` `none` loads the lane's CPU image; a driver's flavor

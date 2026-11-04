@@ -149,8 +149,7 @@ let private AUDIO_CARRIER = "modules/dasLLAMA/dasllama/dasllama_audio_embedder.d
 let private VISION_CARRIER = "modules/dasLLAMA/dasllama/dasllama_vision_embedder.das"
 let private ASR_CARRIER = "modules/dasLLAMA/dasllama/dasllama_asr.das"
 
-// The licensed family namers per modality - the ARCHITECTURE_MEDIA.md carrier charters (§1.7,
-// §1.7b) ledger each with its reason.
+// The licensed family namers per modality - the ARCHITECTURE_MEDIA.md carrier charters ledger each with its reason.
 var private AUDIO_SEAM_EXEMPT <- {
     "modules/dasLLAMA/dasllama/dasllama_asr.das",
     "modules/dasLLAMA/dasllama/dasllama_metal_tower.das",
@@ -179,6 +178,7 @@ var private ASR_KIND_FILES <- { "dasllama_qwen3omni" => "dasllama_qwen3a" }
 var private VISION_SEAM_EXEMPT <- {
     "modules/dasLLAMA/dasllama/dasllama_metal_tower.das",
     "modules/dasLLAMA/dasllama/dasllama_vulkan_tower.das",
+    "modules/dasLLAMA/dasllama/dasllama_cuda_tower.das",
     "modules/dasLLAMA/harness/vision_lane_probe.das"   //! the lane probe pins a family's lane and mints its tower in memory - neither reaches the carrier
 }
 
@@ -232,16 +232,14 @@ def private collect_das_files(folder : string; var out : array<string>; prune_pr
     }
 }
 
-def private check_family_seams(carrier, kind_enum : string; exempt : table<string>; route_hint : string) {
+def private check_family_seams(carrier, kind_enum : string; exempt : table<string>; charter, licensed_why, route_hint : string) {
     var inscope kind_files : table<string; string>
-    check_family_seams(carrier, kind_enum, exempt, kind_files, "ARCHITECTURE_MEDIA.md's carrier charter", route_hint)
+    check_family_seams(carrier, kind_enum, exempt, kind_files, charter, licensed_why, route_hint)
 }
 
+//! `licensed_why` is the property every licensed namer in `exempt` shares, the test a new name meets
 def private check_family_seams(carrier, kind_enum : string; exempt : table<string>; kind_files : table<string; string>;
-                               charter, route_hint : string) {
-    var licensed <- [for (k in keys(exempt)); k]
-    licensed |> sort()
-    let licensed_text = join(licensed, ", ")
+                               charter, licensed_why, route_hint : string) {
     var inscope fams <- carried_families(carrier, kind_enum)
     for (fam in fams) {
         let owner = kind_files?[fam] ?? fam
@@ -268,7 +266,7 @@ def private check_family_seams(carrier, kind_enum : string; exempt : table<strin
             let text = strip_line_comments(fread(p))
             for (n in names) {
                 if (contains_word(text, n)) {
-                    gate_finding(p, "names {n}, which the {fam} family owns - outside the family's own file a family type is named only in the carrier, in the licensed namers {charter} ledgers ({licensed_text}) and under tests/; route through the carrier ({route_hint})")
+                    gate_finding(p, "names {n}, which the {fam} family owns - outside the family's own file a family type is named only in the carrier, in the licensed namers {charter} ledgers ({licensed_why}) and under tests/; route through the carrier ({route_hint})")
                 }
             }
         }
@@ -287,7 +285,7 @@ var private GPU_ROLES_VULKAN <- {
 }
 
 var private GPU_ROLES_CUDA <- {
-    "classes", "common", "dispatch", "decode", "stream", "mtp_gemma"
+    "classes", "common", "dispatch", "decode", "stream", "tower", "mtp_gemma"
 }
 
 // the fastmath default, mechanically: a [metal_kernel] declaring fastmath=false reds unless
@@ -1389,7 +1387,7 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
 let private IMAGE_LAYOUT_STAMP_VERSION = 56
-let private IMAGE_LAYOUT_STAMP_HASH = 0x320ffe2440f950abul
+let private IMAGE_LAYOUT_STAMP_HASH = 0x65b9df97037a2d04ul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, the header's scalar stores, the lattice
@@ -1402,7 +1400,7 @@ var private LAYOUT_HELPERS <- {
     "blob_push", "weight_slot", "conv1d_weight_row",
     "vk_mint_plane", "vk_mint_walk", "vk_mint_sink_append",
     "gg_stream_plane", "gg_job_span", "gg_plane_total", "tower_dev_put",
-    "kq_gather_rows_dev", "wd_gather", "vt_gather_kq_member", "vt_gather_regions", "rnnt_dev_slab"
+    "kq_gather_rows_dev", "wd_gather", "vt_gather_kq_member", "tower_gather_q8_regions", "rnnt_dev_slab"
 }
 
 // The constants those helpers place bytes by, and the bands the two streaming writers stage
@@ -3742,11 +3740,13 @@ def main() : int {
     read_rst(RST_DIR, "dasLLAMA_", rst_texts)
     check_tutorial_floor(tut_texts, rst_texts)
     gate_descriptor_census("modules/dasLLAMA/.das_module", ["modules/dasLLAMA/dasllama"])
-    check_family_seams(AUDIO_CARRIER, "AudioKind", AUDIO_SEAM_EXEMPT,
+    check_family_seams(AUDIO_CARRIER, "AudioKind", AUDIO_SEAM_EXEMPT, "ARCHITECTURE_MEDIA.md#tower-audio-charters",
+        "the ASR carrier, a GPU driver's family hooks, the ASR bench's serving pin, or the per-family bake tool",
         "load_audio_embedder / encode_audio / audio_probe_proj_dim")
-    check_family_seams(VISION_CARRIER, "VisionKind", VISION_SEAM_EXEMPT,
-        "load_vision_embedder / encode_image / vision_proj_dim")
-    check_family_seams(ASR_CARRIER, "AsrKind", ASR_SEAM_EXEMPT, ASR_KIND_FILES,
-        "ARCHITECTURE_MEDIA.md#tower-audio-charters", "dasllama_asr.das's public functions")
+    check_family_seams(VISION_CARRIER, "VisionKind", VISION_SEAM_EXEMPT, "ARCHITECTURE_MEDIA.md#tower-audio-charters",
+        "a GPU tower driver's family hooks, or the lane probe", "load_vision_embedder / encode_image / vision_proj_dim")
+    check_family_seams(ASR_CARRIER, "AsrKind", ASR_SEAM_EXEMPT, ASR_KIND_FILES, "ARCHITECTURE_MEDIA.md#tower-audio-charters",
+        "a file driving a family past the facade's verbs - the audio carrier, a GPU driver's family hooks, the ASR bench, a parity or race harness, or the per-family bake tool",
+        "dasllama_asr.das's public functions")
     return gate_verdict("dasllama")
 }

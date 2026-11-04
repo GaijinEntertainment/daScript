@@ -95,14 +95,15 @@ closure already takes it in.** What the stamp covers is
 that places no image bytes.**
 
 **A diff that re-stamps the layout-stamp hash, and does none of these - bump `IMAGE_VERSION`,
-move the image path, add or drop a field of a struct the image meta serializes, add a family whose
-images live at new paths - carries in the PR body the proof that no byte moved: a byte compare of
+move the image path, add or drop a field of a struct the image meta serializes, add a family or a
+flavor whose images live at new paths - carries in the PR body the proof that no byte moved: a byte compare of
 the `.dlim` minted before and after the change, for each family and lane the changed functions
 mint.**
 
-**A diff that adds a family whose images live at new paths and re-stamps the layout-stamp hash
-changes the stamp's closure only by the serializers it adds, and names them in the PR body; any
-other closure change in it carries the byte compare for the existing families it reaches.**
+**A diff that adds a family or a flavor whose images live at new paths and re-stamps the
+layout-stamp hash changes the stamp's closure only by the serializers and bakes it adds, and names
+them in the PR body; any other closure change in it carries the byte compare for the existing
+families and lanes it reaches.**
 
 **Weakening a meta field-count tripwire - `IMAGE_META_FIELDS` and every `*_META_FIELDS`
 constant in a `dasllama/` file - is a defect.** Raising the constant

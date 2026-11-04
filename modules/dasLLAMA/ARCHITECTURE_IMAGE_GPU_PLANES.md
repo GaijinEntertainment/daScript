@@ -70,15 +70,16 @@ without it the f16 arm silently stays unavailable and every encode takes the f32
 
 ### A GPU-flavored tower image carries its driver's device block {#tower-dev-block}
 
-Each GPU backend loads its own tower image and converts nothing on load: a tower family's Metal and Vulkan images hold the
-bytes that driver's kernels read, and the CPU never runs either. The image carries them as one device block - ``dev``, the
+Each GPU backend loads its own tower image and converts nothing on load: a tower family's Metal, Vulkan and CUDA images hold
+the bytes that driver's kernels read, and the CPU never runs any of them. The image carries them as one device block - ``dev``, the
 pieces' bytes, and ``devplan``, `TOWER_DEV_PIECE_WORDS` words a piece (the key of its name, its byte offset in ``dev``, its
 bytes) - and a ``dev_backend`` meta field (`TowerDev`) naming the driver. A GPU-flavored mint builds the family's CPU form in
 memory, runs the driver's bake over it - the conversions the attach ran before: the q8 re-lay or gather, the K-quant device
 forms, the padded panels, the f16 halves - into a `TowerDevBuild` (`tower_dev_put`, each piece at `TOWER_DEV_ALIGN`, the image
 page, so a mapped piece wraps as a device buffer with no copy), and writes the planes the driver reads as stored beside the
 block, the planes the bake consumed dropped. The attach finds each piece by name (`tower_dev_find`) and binds it: zero-copy on
-Metal, a byte-for-byte upload on Vulkan.
+Metal, a byte-for-byte upload on Vulkan and on CUDA (the two discrete homes gather the same row-major q8 layout through
+`tower_bake_q8`, each under its own piece prefix - `vk.<family>` / `cu.<family>` - and its own image tag).
 
 A flavor's image is tagged `{lane}-{dev}` (`tower_dev_tag`), registered as a flavor of its lane (`register_image_flavor_tag`):
 a `.dlim` named by path routes on the lane its baked tag serves (`image_tag_lane`), and loads under that baked tag wherever its

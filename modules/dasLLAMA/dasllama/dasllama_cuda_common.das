@@ -42,8 +42,13 @@ def cud_bind() {
 //! the tier's device, made ready once a context and bound to the calling thread at every entry
 [arch(at="../ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-thread-binding")]
 def cud_init() : bool {
-    return cuda_bind_context(g_cud.cc) if (g_cud.ready)
+    return cuda_bind_context(g_cud.cc) if (g_cud.ready)   // nolint:PERF026,LINT019 — cu_ok's text is built on its failure arm alone; the walk fires from the seats
     return false if (g_cud.tried)
+    return cud_init_first()
+}
+
+[cold_path]
+def private cud_init_first() : bool {
     g_cud.tried = true
     if (!cuda_available()) {
         to_log(LOG_INFO, "dasLLAMA cuda tier: no CUDA driver on this box\n")
@@ -137,6 +142,7 @@ def cud_fn_made(c : CudClass; ord : int) : bool =>
     c.ready && c.epoch == g_cud_epoch && ord < length(c.fns) && c.fns[ord] != null
 
 //! the kernel's function loaded from its cached cubin into slot `ord`; false with the reason logged when it does not compile or load
+[cold_path]
 def cud_class_fn(var c : CudClass; ord : int; text, entry : string; smem : uint64; blk : uint3; kernel : string) : bool {
     if (c.epoch != g_cud_epoch) {
         c.fns |> clear()
@@ -166,7 +172,7 @@ def cud_class_fn(var c : CudClass; ord : int; text, entry : string; smem : uint6
     return true
 }
 
-var private g_cud_blob : array<uint8>   //! the launch's parameter blob, rebuilt a launch; the driver copies it at the launch call
+var private @scratch g_cud_blob : array<uint8>   //! the launch's parameter blob, rebuilt a launch; the driver copies it at the launch call
 
 //! one launch of the class's kernel `ord`: `bufs` the device addresses in binding order, `pc` the args struct, `groups` blocks
 def cud_launch(c : CudClass; ord : int; stream : void?; bufs : uint64 const[]; var pc : auto(PT)&; groups : uint) {
@@ -184,10 +190,10 @@ def cud_launch(c : CudClass; ord : int; stream : void?; bufs : uint64 const[]; v
     for (i in range(nb * 8 + pbytes, len)) {
         g_cud_blob[i] = 0u8
     }
-    if (!cuda_launch(c.fns[ord], uint3(groups, 1u, 1u), c.blocks[ord], c.smem[ord], stream, unsafe(addr<void?>(g_cud_blob[0])), uint64(len))) {
+    if (!cuda_launch(c.fns[ord], uint3(groups, 1u, 1u), c.blocks[ord], c.smem[ord], stream, unsafe(addr<void?>(g_cud_blob[0])), uint64(len))) {   // nolint:PERF026 — cu_ok's text is built on its failure arm alone
         panic("dasLLAMA cuda tier: {c.names[ord]} launch failed: {cuda_last_error()}")
     }
-    g_cud_census[c.names[ord]] = (g_cud_census?[c.names[ord]] ?? 0) + 1
+    g_cud_census[c.names[ord]] = (g_cud_census?[c.names[ord]] ?? 0) + 1   // nolint:PERF026 — a kernel's key inserts at its first launch, a count after
 }
 
 var private g_cud_census : table<string; int>

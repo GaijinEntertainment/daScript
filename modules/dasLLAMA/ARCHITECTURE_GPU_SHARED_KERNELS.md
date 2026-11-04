@@ -65,7 +65,7 @@ key it has on that home.
   over the region rail `MoeCmBase` (`BatchArgs`, `SCHED_NONE`: `KqCm2BatchT` -> the twenty
   `<Fmt>Cm2T` block decodes, `MmBatchT`, `Blk32BatchT`, the KHR f16 shell
   `CmF16Base`), the small f16 x f16 GEMM on the cm2 tile (`F16GemmCm2T`: the E-series projection's
-  window form on both homes, the MoE router's logits on Vulkan) and the flash attention (`FaT` -> the `FaH<hs>T` fragment shapes with the `facm2_*`
+  window form on both homes, the MoE router's logits on Vulkan, the qwen25v tower's blocks), the f32 tile (`F32GemmT`: the vision towers' stems, tails and exact lanes on both homes, the TTS front end on Vulkan; its `BF16W` arm reads the file's bf16 rows as stored) and the flash attention (`FaT` -> the `FaH<hs>T` fragment shapes with the `facm2_*`
   per-element laws, `AtAttnTileT` -> the batched mirror pass `DaAttnBT` and the wide `DaAttnBWT`). Every class
   there is a `class template` under the same contract as
   this file's `Gk*` ones - but for the plain classes a chain roots in: `KqGemvBase`, the kq

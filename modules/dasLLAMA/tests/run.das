@@ -418,6 +418,7 @@ let MODULE_AREAS <- {
     "dasllama_tower_image" => "audio,vision",   // the audio and vision families mint and pick their GPU flavors through it
     "dasllama_metal_tower" => "audio,vision,tts",
     "dasllama_vulkan_tower" => "audio,vision,tts,translate",   // the Vulkan TTS and translation drivers ride the tower's classes
+    "dasllama_cuda_tower" => "audio,vision,tts",   // the GPU knobs fixture the audio and TTS cells require reads its knob
     "dasllama_tts_slab" => "audio,vision,tts",   // the Metal tower requires it for every seat
     "dasllama_vulkan_tts" => "tts",
     "dasllama_gpu_kernels_common" => "audio,vision,tts,translate,llm",   // the kernels both GPU homes stamp: the TTS chains', the depthwise rows and rope the audio and vision towers stamp, the Bergamot step's
