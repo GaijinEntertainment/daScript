@@ -190,7 +190,7 @@ size, the GGUF arch, the mmproj pair (`ARCHITECTURE_MEDIA_ASR.md#asr-carrier-sni
 
 ## 4. The bake tool - `utils/dasllama-convert/`
 
-The tool bakes a family's `.dlim`; `ARCHITECTURE_ENGINE.md#instrumentation-and-support` says why
+The tool bakes a family's `.dlim`; `ARCHITECTURE_ENGINE_SUPPORT.md#instrumentation-and-support` says why
 it sets `options _dasllama_internal`. Three edits:
 
 - `convert_sniff.das`: an `AsrCarrierKind` member and its arm in `sniff_asr_kind`, in the
@@ -246,7 +246,7 @@ the way `tests/CLAUDE.md` says.
 
 - **The provenance pin** in `performance/model_specs.das`: exact Hugging Face repo, revision and
   sha256 per carrier, or the on-box conversion recipe
-  (`ARCHITECTURE_ENGINE.md#instrumentation-and-support`). `performance/fetch_models.das` verifies
+  (`ARCHITECTURE_ENGINE_SUPPORT.md#instrumentation-and-support`). `performance/fetch_models.das` verifies
   it; a converted carrier adds its `--convert` arm there.
 - **The board row** in `asr_catalog()` (`performance/profile_common.das`): display name, das model,
   the provenance pin, the other heads' carriers as `companions`, the clip `buckets`, `lang` (read

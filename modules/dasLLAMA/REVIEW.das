@@ -276,7 +276,7 @@ def private check_family_seams(carrier, kind_enum : string; exempt : table<strin
 // The backend-role partition, mechanically: every dasllama_<gpu>_*.das file's suffix is a role
 // ARCHITECTURE_GPU.md#gpu-backends's role table carries — a new role file adds its role to BOTH.
 var private GPU_ROLES_METAL <- {
-    "kernels", "common", "decode", "prefill", "gemm", "shapes", "tower", "asr_dec", "nmt", "lens", "mtp_gemma"
+    "kernels", "common", "decode", "prefill", "gemm", "shapes", "tower", "asr_dec", "nmt", "lens", "mtp_gemma", "dflash"
 }
 
 var private GPU_ROLES_VULKAN <- {
@@ -311,10 +311,23 @@ var private FASTMATH_OFF_EXEMPT <- {
     "metal_kq_gemv_q4032_ks_msl" => "b32_mvb_gate",
     "metal_kq_gemv_q5032_msl" => "b32_mvb_gate",
     "metal_kq_gemv_q5032_ks_msl" => "b32_mvb_gate",
+    "metal_kq_gemv_mlx4_msl" => "b32_mvb_gate",
+    "metal_kq_gemv_mlx4_ks_msl" => "b32_mvb_gate",
+    "metal_kq_gemv_mlx8_msl" => "b32_mvb_gate",
+    "metal_kq_gemv_mlx8_ks_msl" => "b32_mvb_gate",
+    "metal_kq_gemv_mlx4b_msl" => "b32_mvb_gate",
+    "metal_kq_gemv_mlx4b_ks_msl" => "b32_mvb_gate",
+    "metal_kq_gemv_mlx8b_msl" => "b32_mvb_gate",
+    "metal_kq_gemv_mlx8b_ks_msl" => "b32_mvb_gate",
+    "metal_kq_gemv_mlx6b_msl" => "b32_mvb_gate",
+    "metal_kq_gemv_mlx6b_ks_msl" => "b32_mvb_gate",
     "metal_b32_mvb" => "b32_mvb_gate",
     //! the classifier tail's selection: under fast math a NaN lane passes the ordered compare that floors it, and
     //! `cls_select_gate` in tests/test_metal_misc_kernels.das reds the recent window's landed NaN against the floor
-    "metal_cls_select_msl" => "cls_select_gate"
+    "metal_cls_select_msl" => "cls_select_gate",
+    //! the DFlash2 selector's sampled walk: under fast math its softmax parts from the host's by 1e-5, and `df_walk_soft_gate`
+    //! in tests/test_metal_misc_kernels.das reds q against the host walk's 1e-6 bar
+    "metal_dflash_walk_soft_msl" => "df_walk_soft_gate"
 }
 
 //! The `name="..."` a [metal_kernel] line declares, or "" where the line carries none.
@@ -1386,8 +1399,8 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // the TTS block file's *_prepare mints, the layout helpers and the layout constants' declaration
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
-let private IMAGE_LAYOUT_STAMP_VERSION = 56
-let private IMAGE_LAYOUT_STAMP_HASH = 0x65b9df97037a2d04ul
+let private IMAGE_LAYOUT_STAMP_VERSION = 60
+let private IMAGE_LAYOUT_STAMP_HASH = 0xda308a4c0917ee20ul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, the header's scalar stores, the lattice
@@ -2029,6 +2042,51 @@ def private check_kq_gemv_grid_literals {
     }
 }
 
+let private METAL_PREFILL = "modules/dasLLAMA/dasllama/dasllama_metal_prefill.das"
+
+//! a rows8 format's strides: k4's superblock and its 144 bytes, k6's 210 bytes and 48 quant words, q8's 34-byte block and its 17 halves
+def private rows8_format_strides : array<string> => <- ["256u", "144u", "210u", "48u", "34u", "17u"]
+
+//! a `MetalRows8*` class that is no template and declares its own `[metal_kernel]` body carries none of a format's strides: the
+//! formats differ only in `MetalRows8T`'s hooks, so such a body is a format-free stamp (the prep, the probe)
+[arch(at = "ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#rows8-matrix-unit")]
+def private check_rows8_kernel_strides {
+    var inscope strides <- rows8_format_strides()
+    var cls = ""
+    var in_cls = false
+    var kernel = false
+    var classes = 0
+    var line_no = 0
+    let text = strip_line_comments(fread(METAL_PREFILL))
+    return if (empty(text))
+    for (line in split(text, "\n")) {
+        line_no++
+        let hdr = class_header(line)
+        if (!empty(hdr.name)) {
+            in_cls = (hdr.name |> starts_with("MetalRows8")) && !hdr.is_template
+            classes += in_cls ? 1 : 0
+            cls = hdr.name
+            kernel = false
+            continue
+        }
+        if (line |> starts_with("}")) {
+            in_cls = false
+            continue
+        }
+        continue if (!in_cls)
+        kernel ||= find(line, "[metal_kernel") >= 0
+        continue if (!kernel)
+        for (lit in strides) {
+            if (contains_word(line, lit)) {
+                gate_finding(METAL_PREFILL, line_no, "{cls} carries the format stride {lit} in its own `[metal_kernel]` body - a rows8 format is an arm of `MetalRows8T` (its scale words, codes, slot law and scale law are the template's hooks), never a kernel body of its own (ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#rows8-matrix-unit)")
+            }
+        }
+    }
+    if (classes == 0) {
+        gate_finding(METAL_PREFILL, "no `class MetalRows8*` found - the rows8 stride rule has no classes to walk; keep the spelling or move this check with it (ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#rows8-matrix-unit)")
+    }
+}
+
 def private check_cm2_stamp_tiles {
     var inscope templates <- cm2_format_templates(CM2_NO_EXEMPT)
     var inscope base_lines <- class_lines(DISCRETE_KERNELS, "class template KqCm2BatchT")
@@ -2447,7 +2505,7 @@ let private GEMM_GEN_FILES = [
     "modules/dasLLAMA/dasllama/dasllama_gemm_gen.das",
     "modules/dasLLAMA/dasllama/dasllama_gemm_schema.das"
 ]
-let private GEMM_GEN_STAMP_HASH = 0xed575c7c8876ebdeul
+let private GEMM_GEN_STAMP_HASH = 0x49b0d144965e29feul
 
 [arch(at = "ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers")]
 def private check_gemm_gen_stamp {
@@ -2815,7 +2873,7 @@ def private check_shared_file_cites {
     }
 }
 
-[arch(at = "ARCHITECTURE_ENGINE.md#instrumentation-and-support")]
+[arch(at = "ARCHITECTURE_ENGINE_SUPPORT.md#instrumentation-and-support")]
 def private check_harness_dashv {
     var files : array<string>
     collect_das_files("modules/dasLLAMA/harness", files, true)
@@ -2826,7 +2884,7 @@ def private check_harness_dashv {
         }
         continue if (!speaks_http)
         if (find(read_lf(path), "dasllama.io") >= 0) {
-            gate_finding(path, "requires dashv and names dasllama.io - a harness tool reaches the sidecar exchange through dasllama/dasllama_exchange, never with its own HTTP call (ARCHITECTURE_ENGINE.md#instrumentation-and-support)")
+            gate_finding(path, "requires dashv and names dasllama.io - a harness tool reaches the sidecar exchange through dasllama/dasllama_exchange, never with its own HTTP call (ARCHITECTURE_ENGINE_SUPPORT.md#instrumentation-and-support)")
         }
     }
 }
@@ -3708,6 +3766,7 @@ def main() : int {
     check_cm2_ladder_sets()
     check_cm2_stamp_tiles()
     check_kq_gemv_grid_literals()
+    check_rows8_kernel_strides()
     check_kq_form_matrix()
     check_vk_extension_roster()
     check_cuda_stream_discipline()

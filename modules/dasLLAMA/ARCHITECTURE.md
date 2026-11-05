@@ -26,8 +26,10 @@ A companion's sections are listed in three places: its line in this document's r
 (under `File charters` or `Mechanisms`), the companion's own opening, and the routing sentence of
 any sibling companion that sends a reader to it.
 
-- `ARCHITECTURE_ENGINE.md` - the engine core, arch-registration and support charters, and the gates that hold the
+- `ARCHITECTURE_ENGINE.md` - the engine core and arch-registration charters, and the gates that hold the
   test folder's documents to its files (`ARCHITECTURE_ENGINE.md#test-folder-gates`).
+- `ARCHITECTURE_ENGINE_SUPPORT.md` - the instrumentation and support charters: the parity caches, the bench rows, the
+  facade lint, the model-set table, the box tag and the sidecar exchange (`ARCHITECTURE_ENGINE_SUPPORT.md#instrumentation-and-support`).
 - `ARCHITECTURE_ENGINE_MECHANISMS.md` - the RoPE scaling the loader folds into the `Model` once
   (`ARCHITECTURE_ENGINE_MECHANISMS.md#rope-scaling-bake`), and the decode pick tape a parity cell
   pins one arm's routing on another with (`ARCHITECTURE_ENGINE_MECHANISMS.md#moe-pick-tape`).
@@ -42,9 +44,12 @@ any sibling companion that sends a reader to it.
   only `dim` field (`ARCHITECTURE_ENGINE_FORMATS.md#model-plane-table-dim`).
 - `ARCHITECTURE_ENGINE_FORMATS_NV4.md` - the nv4 member: its planes as NVFP4's disk bytes in the k4
   tiling (`#nv4-planes`) and the per-tensor scale beside them (`#nv4-site-scale`).
+- `ARCHITECTURE_ENGINE_FORMATS_MLX.md` - a safetensors snapshot directory as a synthesized GGUF meta (`#mlx-snapshot-source`), the routed (`#mlx-moe-snapshot`) and qwen4_exp (`#mlx-qwen4exp-snapshot`) snapshot families, the affine members' planes (`#mlx-affine-planes`) and their Metal forms (`#mlx-metal-forms`).
 - `ARCHITECTURE_ENGINE_FORMATS_TERMS.md` - the weight-format terms: a site, a lever and a converted
   copy (`ARCHITECTURE_ENGINE_FORMATS_TERMS.md#kq-format-terms`).
 - `ARCHITECTURE_GPU.md` - the GPU backend role table (`ARCHITECTURE_GPU.md#gpu-backends`).
+- `ARCHITECTURE_GPU_METAL_LIFECYCLE.md` - the Metal family's shared device and queue, its PSO sets, device memory, race
+  code and decline reasons (`ARCHITECTURE_GPU_METAL_LIFECYCLE.md#metal-family-lifecycle`).
 - `ARCHITECTURE_GPU_ASYMMETRIES.md` - the closed list of the allowed asymmetries between the
   GPU backends - Metal, Vulkan and CUDA (`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`).
 - `ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md` - the entries of that list that are the CUDA home's alone: the
@@ -105,9 +110,7 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
 - `ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md` - the Vulkan tower's vision chains: the stems, blocks, taps
   and tails of gemma4uv, gemma4v, gemma3v, qwen3v and qwen25v on both weight lanes, and the lane policy's
   Vulkan default.
-- `ARCHITECTURE_GPU_QUANT_PLANES.md` - the Metal kq split scale plane, the iquant GEMV grid read
-  with its f4-slab twin, the Metal GEMV site abstraction, the per-32 small-batch form, and the
-  form matrix every Metal GEMM stamp family keeps (`ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-form-matrix`).
+- `ARCHITECTURE_GPU_QUANT_PLANES.md` - the Metal kq split scale plane (`#metal-kq-split-scale-plane`), the iquant GEMV grid read with its f4-slab twin (`#metal-iquant-gemv-grid`), the Metal GEMV site abstraction (`#metal-gemv-site`), the fat iq4xs GEMV (`#metal-kq-fat-gemv`), the per-32 small-batch form (`#metal-b32-small-batch`), the wide (`#metal-b32-wide-gemv`) and fused gate|up (`#metal-b32-glu`) per-32 GEMVs, and the form matrix every Metal GEMM stamp family keeps (`ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-form-matrix`).
 - `ARCHITECTURE_GPU_BATCH.md` - the per-layer FFN widths on the Metal drivers and the Vulkan
   whole-model driver, and the Metal batch driver's row shapes - the E-series rows, a MoE's shared
   expert, a deltanet hybrid's recurrent rows, and the split single-pass attention the single row
@@ -203,20 +206,18 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   block of the prefill window with its Q8-fed chain, and the whole-model driver's MoE token
   command - the select that reaches 512 experts two logits a thread, and the gemma-4 form both
   eras take.
-- `ARCHITECTURE_GPU_MTP.md` - the Metal speculative round over the batch driver's same-slab
-  verify, and the box knob that sets the depth a round drafts.
-- `ARCHITECTURE_GPU_MTP_ACCEPT.md` - what a sampled stream's round does with its drafts on both homes:
-  the three acceptances, the sampler's seams, the drafter distribution a rejection round records,
-  and the chain cut.
+- `ARCHITECTURE_GPU_MTP.md` - the Metal speculative round over the batch driver's same-slab verify, and the box knob that sets the depth a round drafts.
+- `ARCHITECTURE_GPU_MTP_ROUND.md` - the round's two seams on the device: the verify encoded ahead of the pass's wait (`#verify-ahead`) and the n-gram commit as one stage (`#commit-one`).
+- `ARCHITECTURE_GPU_MTP_ACCEPT.md` - what a sampled stream's round does with its drafts on both homes: the three acceptances (`#mtp-accept-modes`), the sampler's seams, the drafter distribution a rejection round records, the DFlash2 drafter's drafts under each (`ARCHITECTURE_GPU_MTP_ACCEPT.md#dflash-sampled-drafts`), the drafter's draw temperature (`#nextn-draft-temp`), the hyper-connection stream-mean capture (`#dflash-hc-capture`), and the chain cut.
 - `ARCHITECTURE_GPU_KV_RING.md` - both homes' sliding-layer K/V ring: a sliding layer's mirror rows as a ring of its
   window and one command's rows (`ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`).
 - `ARCHITECTURE_GPU_MTP_ASSISTANT.md` - the gemma-4 assistant drafter on both GPU homes: one
   drafter step, the sidecar and the attach, and the rounds of a scheduler tick.
-- `ARCHITECTURE_GPU_MTP_DECODE.md` - the kernel argument-alignment contract enforced at every
-  dispatch, the K-quant small-batch crown and the row-buffer pad a multi-row verify dispatches
-  under, and the decode layer encoder.
-- `ARCHITECTURE_GPU_MTP_DECODE_PICK.md` - the single-row driver's greedy chain and the Metal
-  selection landing.
+- `ARCHITECTURE_GPU_MTP_DECODE.md` - the kernel argument-alignment contract enforced at every dispatch (`#metal-dispatch-requires`), the row-buffer pad a multi-row verify dispatches under (`#verify-row-pad`), the batch pre-encode (`#batch-pre-encode`), the decode layer encoder (`#metal-layer-enc`), the fat chain (`#metal-fat-chain`), the MoE union (`#moe-union`), the replay form (`#mtp-replay-form`) and the RoPE store rotation (`#metal-rope-store-rot`).
+- `ARCHITECTURE_GPU_MTP_DECODE_ROWS.md` - the K-quant small-batch crown and the rows8 matrix-unit form a multi-row verify's rows sites take.
+- `ARCHITECTURE_GPU_MTP_DECODE_PICK.md` - the single-row driver's greedy (`#greedy-chain`) and sampled (`#sampled-chain`) chains and the Metal selection landing (`#metal-selection-landing`).
+- `ARCHITECTURE_GPU_MTP_DECODE_HC.md` - the hyper-connection mixer's five-to-eight-row form on the
+  matrix unit.
 - `ARCHITECTURE_RUNTIME.md` - kernel shape, caches, lint policy, knobs, hot-path coverage and its
   call-graph terms, the GPU ramp.
 - `ARCHITECTURE_RUNTIME_JOBQUE.md` - the hybrid worker pool, the MoE region split, the job queue

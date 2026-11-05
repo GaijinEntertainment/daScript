@@ -438,7 +438,10 @@ def test_dasllama_cite_require_gates(t : T?) {
                     "dasllama_tower.das: requires `dasllama_kokoro` - {tower_ban}",
                     "dasllama_audio_probe.das: requires `audio` - only dasllama_audio_io.das decodes audio containers (ARCHITECTURE_MEDIA.md#tower-audio-charters)",
                     "dasllama_vision_probe.das: requires `stbimage` - only dasllama_vision_io.das decodes images (ARCHITECTURE_MEDIA.md#tower-audio-charters)",
-                    "exchange_probe.das: requires dashv and names dasllama.io - a harness tool reaches the sidecar exchange through dasllama/dasllama_exchange, never with its own HTTP call (ARCHITECTURE_ENGINE.md#instrumentation-and-support)"]) {
+                    "exchange_probe.das: requires dashv and names dasllama.io - a harness tool " +
+                    "reaches the sidecar exchange through dasllama/dasllama_exchange, never with " +
+                    "its own HTTP call " +
+                    "(ARCHITECTURE_ENGINE_SUPPORT.md#instrumentation-and-support)"]) {
         t |> success(find(red.out, needle) >= 0, "finding fired: {needle}")
     }
     for (quiet in ["ARCHITECTURE_CONTROL.md", "cite_ok.das", "dasllama_audio_io.das:", "dasllama_vision_io.das:", "exchange_ok.das", "site_ok.das"]) {
