@@ -1103,34 +1103,19 @@ namespace das {
         return false;
     }
 
-    // `Function::lookup` keys cache entries by `intptr_t(structType)` via
-    // `getLookupHash(types)`. After gc sweep, freed Structure addresses can be
-    // reused by later allocations — a stale cached `false` then poisons the
-    // lookup for the new Structure at the same address, surfacing as a flaky
-    // "no matching functions or generics" on legitimate calls. Clear every
-    // function/generic cache before gc_guard sweeps.
-    static void clearAllFunctionLookups() {
-        Module::foreach([](Module * m) -> bool {
-            m->functions.foreach([](auto & fn) { fn->lookup.clear(); });
-            m->generics.foreach([](auto & fn) { fn->lookup.clear(); });
-            return true;
-        });
-    }
-
     // compileDaScript runs its top-level post-parse steps (deriveAliases/allocateStack/...)
     // on a transient gc_guard root; on exit this merges that scratch into the program's
-    // module root, then clears the function/generic lookup caches before the gc_guard
-    // sweeps the rest (see clearAllFunctionLookups above for why). Only the top program
-    // sets prog; per-module parse uses ModuleGcFinalize instead.
+    // module root, and drops the program's overload cache before the gc_guard sweeps the
+    // rest. Only the top program sets prog; per-module parse uses ModuleGcFinalize instead.
     struct GcCollectOnExit {
         gc_guard & scope;
         Program * prog = nullptr;
         explicit GcCollectOnExit ( gc_guard & s ) : scope(s) {}
         ~GcCollectOnExit() {
-            if ( prog && prog->thisModule ) {
-                prog->thisModule->gc_collect(&scope.guard_root);
+            if ( prog ) {
+                prog->functionLookups.clear();
+                if ( prog->thisModule ) prog->thisModule->gc_collect(&scope.guard_root);
             }
-            clearAllFunctionLookups();
         }
         GcCollectOnExit ( const GcCollectOnExit & ) = delete;
         GcCollectOnExit & operator = ( const GcCollectOnExit & ) = delete;
@@ -1167,7 +1152,7 @@ namespace das {
                 gc_root::gc_get_active_root() = liveRoot;   // repoint active before the move frees oldRoot
                 m->module_gc_root = das::move(fresh);        // deletes oldRoot -> sweeps garbage
             }
-            clearAllFunctionLookups();
+            if ( prog ) prog->functionLookups.clear();
         }
         ModuleGcFinalize ( const ModuleGcFinalize & ) = delete;
         ModuleGcFinalize & operator = ( const ModuleGcFinalize & ) = delete;

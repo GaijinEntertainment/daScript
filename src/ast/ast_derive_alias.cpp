@@ -632,14 +632,11 @@ namespace das {
         bool logAliasing = options.getBoolOption("log_aliasing", false);
         if ( logAliasing ) logs << "ALIASING:\n";
 
-        library.foreach([&](Module * mod){
-            if ( logAliasing ) logs << "module " << mod->name << ":\n";
-            mod->functions.foreach([&](const FunctionPtr & func){
-                if ( func->builtIn || !isUsed(func) || func->isTemplate ) return;
-                deriveAliasing(func, logs, logAliasing);
-            });
-            return true;
-        },"*");
+        if ( logAliasing ) logs << "module " << thisModule->name << ":\n";
+        thisModule->functions.foreach([&](const FunctionPtr & func){
+            if ( func->builtIn || func->isTemplate ) return;
+            deriveAliasing(func, logs, logAliasing);
+        });
         AliasMarker marker(this, permanent, everything, logs);
         visit(marker);
         if ( logAliasing ) logs << "\n";

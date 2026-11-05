@@ -1076,6 +1076,7 @@ namespace das
         for ( auto & t : argTypes ) gc_collect_type(t, target, from);
         if ( target->typeRemap && !fixedDimExpr && typeMacroExpr.empty() ) {
             target->typeRemap->nodes.insert(this);
+            computeAliasCache();
         }
         if ( fixedDimExpr ) fixedDimExpr->gc_collect(target, from);
         for ( auto & de : typeMacroExpr ) if ( de ) de->gc_collect(target, from);

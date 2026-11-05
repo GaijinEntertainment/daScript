@@ -36,8 +36,8 @@ module-cache writer read them. Two finalizes do not remap. The main program's mo
 (`parseDaScriptNoInfer`) is inferred later.
 
 A replaced node is freed with the old root, so a pointer to it that the collect walk does not
-see dangles - a lookup cache, or a macro's global. `clearAllFunctionLookups` runs at the same
-point for the lookup caches. A type slot the walk collects with a plain `gc_collect` stays
+see dangles - a lookup cache, or a macro's global. The program's overload cache
+(`Program::functionLookups`) is dropped at the same point. A type slot the walk collects with a plain `gc_collect` stays
 correct: its node survives, it is just not shared. `ExprTypeInfo::typeexpr` is collected that
 way: `typeinfo ast_typedecl` bakes that exact node into the simulated macro code
 (`SimNode_AstGetTypeDecl`) and into `Program::astTypeInfo`, and the macro reads it after its

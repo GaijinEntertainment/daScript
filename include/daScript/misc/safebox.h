@@ -16,6 +16,18 @@ namespace das {
         fragile_bit_set() {
             mask = 63;
         }
+        fragile_bit_set ( const fragile_bit_set & ) = delete;
+        fragile_bit_set & operator = ( const fragile_bit_set & ) = delete;
+        fragile_bit_set ( fragile_bit_set && o ) noexcept : objects(o.objects), mask(o.mask), occupancy(o.occupancy) {
+            o.objects = nullptr;
+            o.occupancy = 0;
+        }
+        fragile_bit_set & operator = ( fragile_bit_set && o ) noexcept {
+            swap(objects, o.objects);
+            swap(mask, o.mask);
+            swap(occupancy, o.occupancy);
+            return *this;
+        }
         ~fragile_bit_set() {
             if ( objects ) delete [] objects;
         }

@@ -389,13 +389,13 @@ namespace das {
             if ( !workFn.empty() ) {
                 auto f = workFn.back();
                 workFn.pop_back();
-                f->visit(vis);
+                if ( f->module == thisModule.get() ) f->visit(vis);
                 for ( auto df : f->useFunctions ) pushFn(df);
                 for ( auto dv : f->useGlobalVariables ) pushVar(dv);
             } else {
                 auto v = workVar.back();
                 workVar.pop_back();
-                visitGlobalVariable(bvis, v);
+                if ( v->module == thisModule.get() ) visitGlobalVariable(bvis, v);
                 for ( auto df : v->useFunctions ) pushFn(df);
                 for ( auto dv : v->useGlobalVariables ) pushVar(dv);
             }

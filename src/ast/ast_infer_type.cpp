@@ -6671,11 +6671,7 @@ namespace das {
             gc_root * live = fresh.get();
             gc_root::gc_get_active_root() = live;
             program->thisModule->module_gc_root = das::move(fresh);   // deletes cur -> sweeps the garbage
-            program->library.foreach([](Module * mod) -> bool {
-                mod->functions.foreach([](auto & fn) { fn->lookup.clear(); });
-                mod->generics.foreach([](auto & fn) { fn->lookup.clear(); });
-                return true;
-            }, "*");
+            program->functionLookups.clear();
             return live->gc_count;
         };
         for (pass = 0; pass < maxInferPasses; ++pass) {
@@ -6709,7 +6705,7 @@ namespace das {
                 auto mnh = fn->getMangledNameHash();
                 if ( hash != mnh ) {
                     refreshFunctions.emplace_back(make_tuple(fn, hash, mnh));
-                    fn->lookup.clear();
+                    program->functionLookups.erase(fn);
                     fn->notInferred();
                 } });
             for (auto rfn : refreshFunctions) {
