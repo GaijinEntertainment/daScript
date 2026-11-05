@@ -19,6 +19,7 @@ def kq_dq_kernel(f) => kq_form_ladder(f, "kernel_of", "enc_kq_dq_%")   //! gener
 //! the dense kq mul_mm tensor twin of a format by form: t (f32 X), th, th128, thdb and thdb128 (f16 X)
 def kq_mm_form_kernel(f; form : string) {
     if (form == "t") return kq_mm_t_kernel(f)
+    if (form == "t8") return kq_mm_t8_kernel(f)
     if (form == "th") return kq_mm_th_kernel(f)
     if (form == "th128") return kq_mm_th128_kernel(f)
     if (form == "thdb") return kq_mm_thdb_kernel(f)
@@ -29,6 +30,9 @@ def kq_mm_form_kernel(f; form : string) {
 def kq_mm_base_stamp(f) => kq_form_ladder(f, "stamp_of", "enc_kq_mm_%_c", "!b32")
 
 def private kq_mm_t_kernel(f) => kq_form_ladder(f, "kernel_of", "enc_kq_mm_%_t_c")
+
+//! the eight-row whole-K stamp (f32 X): the rows sites' panel of five to eight rows
+def private kq_mm_t8_kernel(f) => kq_form_ladder(f, "kernel_of", "enc_kq_mm_%_t8_c")
 
 def private kq_mm_th_kernel(f) => kq_form_ladder(f, "kernel_of", "enc_kq_mm_%_th_c")
 
@@ -43,6 +47,9 @@ def kq_mm_split_kernel(f; half : bool) => half ? kq_form_ladder(f, "kernel_of", 
 
 //! the dense kq 16-row split-K stamp of a format: thsk16 (f16 X) or tsk16 (f32 X) - a window of 16 rows or fewer
 def kq_mm_split16_kernel(f; half : bool) => half ? kq_form_ladder(f, "kernel_of", "enc_kq_mm_%_thsk16_c") : kq_form_ladder(f, "kernel_of", "enc_kq_mm_%_tsk16_c")
+
+//! the dense kq eight-row split-K stamp of a format (tsk8, f32 X): the rows sites' panel
+def kq_mm_split8_kernel(f) => kq_form_ladder(f, "kernel_of", "enc_kq_mm_%_tsk8_c")
 
 //! the simdgroup base mul_mm split-K stamp of a superblock format (the per-32 base stamps bind no strip view: `kq_mm_b32_split_stamp`)
 def kq_mm_base_split_stamp(f) => kq_form_ladder(f, "stamp_of", "enc_kq_mm_%_sk_c", "!b32")

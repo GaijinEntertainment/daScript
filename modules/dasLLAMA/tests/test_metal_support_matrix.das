@@ -22,6 +22,8 @@ require _model_tier
 require _format_census   // census_cell: the qwen35 rows' every site in its own format
 require dasllama/dasllama_ple   // ple_cpu_pre_rows - the E-series rows' CPU pre-step witness
 require dasllama/dasllama_image   // nolint:STYLE030,LINT019 - load_model_cached, the qwen4exp row's served image, inside the das_metal half
+require dasllama/dasllama_common   // nolint:STYLE030,LINT019 - eval_, argmax: the qwen4exp row's encoded-ahead walk, inside the Apple static_if half
+require _compares   // nolint:STYLE030,LINT019 - logits_of, logits_maxdiff: the same walk's rows
 require dasllama/dasllama_gguf   // nolint:STYLE030,LINT019 - set_mtp_head_path, the qwen4exp row's split head, inside the das_metal half
 require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting_prompt, read only inside the Apple static_if halves
 
@@ -805,6 +807,49 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
     }
 }
 
+//! the one-row walk with its next step encoded ahead against the same walk with nothing encoded ahead: the held step reads
+//! and writes the session's n-gram ring where the slow path does, so the two walks' logits are the same row for row
+[unused_argument(t, trg, steps)]   // off-Apple the gated body is empty
+def private qwen4exp_ahead_cell(t : T?; trg : Model; steps : int64) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let vocab = trg.config.vocab_size
+        var inscope prompt <- encode(trg, "Write a complete, well-commented Python module that implements an LRU cache with TTL expiry, a thread-safe wrapper around it, and a pytest test suite.", true)
+        var a = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+        var b = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+        var inscope picks : array<int64>
+        var inscope rows : array<array<float>>
+        var inscope one <- [0l]
+        picks |> reserve(steps)
+        rows |> reserve(steps)
+        eval_(trg, a, prompt)
+        for (_j in range64(steps)) {
+            one[0] = argmax(a, vocab)
+            picks |> push(one[0])
+            rows |> emplace <| logits_of(a, vocab)
+            eval_(trg, a, one)
+        }
+        eval_(trg, b, prompt)
+        var worst = 0.0
+        var flips = 0l
+        var first = -1l
+        for (j in range64(steps)) {
+            mirror_quiesce()   //! nothing encoded ahead: this walk's every step takes the slow path
+            var inscope lb <- logits_of(b, vocab)
+            worst = max(worst, logits_maxdiff(rows[j], lb) / max(logits_maxabs(rows[j]), 1.0))
+            if (argmax(b, vocab) != picks[j]) {
+                flips++
+                first = first < 0l ? j : first
+            }
+            one[0] = picks[j]
+            eval_(trg, b, one)
+        }
+        t |> success(flips == 0l, "qwen4exp ahead: the walk encoded ahead and the walk with nothing encoded ahead pick the same token at every step ({flips} of {steps} differ, the first at {first})")
+        t |> success(worst <= 2e-3, "qwen4exp ahead: the two walks' logits agree row for row (worst {worst} of the row's scale, bar 2e-3)")
+        delete a
+        delete b
+    }
+}
+
 //! qwen4exp (Qwen3.8-Flash-Next): the hyper-connection hybrid MoE with the n-gram side input, served-only - the planar file and
 //! its image do not fit the box together, so the CPU truth is the file's frozen counting fixture (`../performance/model_specs.das`,
 //! the upstream oracle's ids the CPU chain matches). The served image (the trunk with its split head, speculation off) prefills
@@ -833,6 +878,7 @@ def private qwen4exp_row(t : T?; file, head : string) {
         let n_prompt = length(fx.prompt)
         let pf0 = metal_prefill_stats().prefills
         let de0 = metal_decode_stats().decodes
+        let pk0 = metal_decode_spec_stats().poked
         var inscope pdecl0 <- metal_prefill_declines()
         var inscope ddecl0 <- metal_decode_declines()
         var got : array<int64>
@@ -853,10 +899,20 @@ def private qwen4exp_row(t : T?; file, head : string) {
         t |> success(ids_equal(fx.gen, got), "qwen4exp: the Metal prefill and decode continue the counting prompt token for token the CPU truth ({length(got)} tokens)")
         t |> equal(metal_prefill_stats().prefills - pf0, 1l, "qwen4exp prefill: the Metal driver served the prompt")
         t |> success(metal_decode_stats().decodes - de0 >= int64(length(fx.gen) - 1), "qwen4exp decode: the Metal driver served every step ({metal_decode_stats().decodes - de0})")
+        t |> success(metal_decode_spec_stats().poked - pk0 >= int64(length(fx.gen) - 2), "qwen4exp decode: every step after the first was encoded ahead and committed on the poked token ({metal_decode_spec_stats().poked - pk0} of {length(fx.gen) - 1})")
         var inscope pdecl1 <- metal_prefill_declines()
         var inscope ddecl1 <- metal_decode_declines()
         t |> equal("{pdecl1}", "{pdecl0}", "qwen4exp prefill: no decline")
         t |> equal("{ddecl1}", "{ddecl0}", "qwen4exp decode: no decline")
+        with_dasllama_jobque() {   //! the counting row's counts are read; the encoded-ahead walks prefill twice more
+            select_prefill_override("metal")
+            select_decode_override("metal")
+            set_metal_prefill_min_npos(1l)
+            qwen4exp_ahead_cell(t, trg, 96l)
+            set_metal_prefill_min_npos(64l)
+            select_decode_override("")
+            select_prefill_override("")
+        }
         delete got
         metal_decode_shutdown()
         metal_prefill_shutdown()
@@ -1126,8 +1182,9 @@ def private depth_cell(t : T?; tr, trg : Model; tag : string; bar : float; stamp
 
 //! the residual step's seam stamps (`GkAddRmsRows`) the device ran, and the split chain's norm pass
 def private seam_counts : int4 {
-    return int4(int(kernels_sum(["metal_pre_add_rms", "metal_pre_add_rms_hx"])), int(kernels_sum(["metal_pre_add"])),
-        int(kernels_sum(["metal_add_rms", "metal_add_rms_hx"])), int(kernels_sum(["MetalRmsNorm_metal_rmsnorm", "MetalRmsNormHX_metal_rmsnorm"])))
+    return int4(int(kernels_sum(["metal_pre_add_rms", "metal_pre_add_rms_hx", "metal_pre_add_rms_hxt"])), int(kernels_sum(["metal_pre_add"])),
+        int(kernels_sum(["metal_add_rms", "metal_add_rms_hx", "metal_add_rms_hxt"])),
+        int(kernels_sum(["MetalRmsNorm_metal_rmsnorm", "MetalRmsNormHX_metal_rmsnorm", "MetalRmsNormHXT_metal_rmsnorm"])))
 }
 
 //! past the 4096-float slab (`ADD_RMS_MAX_DIM`) the residual seams of the blob twin `trg`'s decode, two single steps and a batched

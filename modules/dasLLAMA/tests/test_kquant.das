@@ -1,4 +1,4 @@
-//! The K-quant and grid formats: plane dequants, dots, the grp repack, the bf16 panel, tiles and GEMVs against in-test references, and the model-gated load cells. Skips: an interpreted run and a missing stocked model (the model cells), no gen backend registered (batch groupn), a backend with no kq slots (the repacked-plane serve cell), and a format whose stamp is a bf16 tile (the 4-token tile cells).
+//! The K-quant and grid formats: plane dequants, dots, the grp repack, the bf16 panel, tiles and GEMVs against in-test references, and the model-gated load cells. Skips: an interpreted run and a missing stocked model (the model cells), no gen backend registered (batch groupn), a backend with no kq slots (the repacked-plane serve cell), a format whose stamp is a bf16 tile (the 4-token tile cells), and a build without dasLLVM (the affine members' row-major cells).
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options persistent_heap   // the layout arm loads a multi-GB model; explicit delete below
@@ -675,6 +675,187 @@ def private p32_dense_gate(t : T?; f : auto(TT)) {
     check(t, "mm_b_f over the {kf} plane against the scalar row dots", y3, want, BAR_EXACT, Shape(row_width = int(d)))
     delete s
     delete m
+}
+
+//! the code of element k of synthetic affine block `blk` at `bits` - a pattern no nibble pairing reproduces by accident
+def private mlx_code_pat(blk, k, bits : int) : int => (k * 7 + blk * 3 + (k >> 3) * 5) & ((1 << bits) - 1)
+
+//! group g's (scale, bias): exact in both F16 and BF16, scales of both signs (the quantizer signs them)
+def private mlx_scale_pat(g : int) : float => (g % 2 == 0 ? 1.0 : -1.0) * 0.0078125 * float(1 + g % 3)
+def private mlx_bias_pat(g : int) : float => -0.0625 * float(g % 5) + 0.03125
+
+def private half_bits(v : float; bf16 : bool) : uint => bf16 ? (float_bits_to_uint(v) >> 16u) : f32_to_f16(v)
+
+//! the quant bytes of synthetic block `blk` packed in the triplet's order (`q40_order`: the Q4_0 k / k + 16 pairing instead)
+def private mlx_pack_block(blk, bits : int; q40_order : bool) : array<uint8> {
+    if (bits == 8) {
+        return <- [for (k in range(32)); uint8(mlx_code_pat(blk, k, 8))]
+    }
+    if (bits == 6) {   //! four codes a 3-byte triple, code k at bits 6k of the triple's little-endian 24 bits (`q40_order`: the triple's bytes reversed)
+        var out : array<uint8>
+        out |> reserve(24)
+        for (tq in range(8)) {
+            var v = 0
+            for (i in range(4)) {
+                v += mlx_code_pat(blk, tq * 4 + i, 6) << (6 * i)
+            }
+            for (j in range(3)) {
+                out |> push(uint8((v >> (8 * (q40_order ? 2 - j : j))) & 255))
+            }
+        }
+        return <- out
+    }
+    return <- [for (j in range(16)); uint8((q40_order ? mlx_code_pat(blk, j, 4) : mlx_code_pat(blk, 2 * j, 4))
+        | ((q40_order ? mlx_code_pat(blk, j + 16, 4) : mlx_code_pat(blk, 2 * j + 1, 4)) << 4))]
+}
+
+def private mlx_bits_of(f : KqFmt) : int => f == KqFmt.mlx8 || f == KqFmt.mlx8b ? 8 : (f == KqFmt.mlx6b ? 6 : 4)
+def private mlx_bf16_of(f : KqFmt) : bool => f == KqFmt.mlx4b || f == KqFmt.mlx8b || f == KqFmt.mlx6b
+
+//! `rows` affine plane rows of n: block b of row r is synthetic block r * nb + b, its group's pair the pattern's
+def private mlx_fill_planes(var kq : array<uint8>; var ks : array<uint8>; rows, n : int64; kf : KqFmt; q40_order : bool) {
+    let nb = n / 32l
+    kq |> clear()
+    ks |> clear()
+    ks |> reserve(rows * nb * MLX_SB)
+    for (blk in range64(rows * nb)) {
+        var inscope pb <- mlx_pack_block(int(blk), mlx_bits_of(kf), q40_order)
+        kq |> push_from(pb)
+        if (blk % 2l == 0l) {
+            let g = int(blk / 2l)
+            for (h in [half_bits(mlx_scale_pat(g), mlx_bf16_of(kf)), half_bits(mlx_bias_pat(g), mlx_bf16_of(kf))]) {
+                ks |> push(uint8(h & 0xFFu))
+                ks |> push(uint8(h >> 8u))
+            }
+        }
+    }
+}
+
+def private p32_fmt(_f : KqTag_mlx4) : KqFmt => KqFmt.mlx4
+def private p32_fmt(_f : KqTag_mlx8) : KqFmt => KqFmt.mlx8
+def private p32_fmt(_f : KqTag_mlx4b) : KqFmt => KqFmt.mlx4b
+def private p32_fmt(_f : KqTag_mlx8b) : KqFmt => KqFmt.mlx8b
+def private p32_fmt(_f : KqTag_mlx6b) : KqFmt => KqFmt.mlx6b
+def private p32_n(_f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) : int64 => 1408l   // 22 groups: % 64, NOT % 256
+def private p32_fill_planes(var kq : array<uint8>; var ks : array<uint8>; rows, n : int64; f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) {
+    mlx_fill_planes(kq, ks, rows, n, p32_fmt(f), false)
+}
+def private p32_dequant(kq : array<uint8>; ko : int64; ks : array<uint8>; so : int64; var w : array<float>; wo : int64; f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) => dequant_mlx_plane_block(kq, ko, ks, so, w, wo, f)
+def private p32_dot(wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) : float => dot_mlxq8_scalar(wq, ws, xq, xs, n, f)
+def private p32_expand_grp_row(gq : uint8 const?; r, mr : int64; var qe : int8?; nb : int64; f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) => expand_mlx_grp_row(gq, r, mr, qe, nb, f)
+def private p32_grp_scales(gs : uint8 const?; r, mr : int64; var ss : uint8?; nb : int64; _f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) => gather_iq4nl32_grp_scales(gs, r, mr, ss, nb)
+def private p32_expand_row(wq : uint8 const?; var qe : int8?; nb : int64; f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) => expand_mlx_row(wq, qe, nb, f)
+def private p32_dot_e(qe : int8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) : float => dot_mlxe(qe, ws, xq, xs, n, f)
+//! the affine grp row: the row's codes off the interleave and its pairs gathered, through the expanded MAC (no gen-tier walk exists)
+def private p32_grp_row_dot(qg : uint8 const?; sg : uint8 const?; r, mr : int64; xq : int8 const?; xs : float const?; _xbs : int const?; n : int64; f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) : float {
+    var qe : array<int8>
+    qe |> resize(n)
+    var sc : array<uint8>
+    sc |> resize(n / 32l * MLX_SB)
+    unsafe {
+        expand_mlx_grp_row(qg, r, mr, addr(qe[0]), n / 32l, f)
+        gather_iq4nl32_grp_scales(sg, r, mr, addr(sc[0]), n / 32l)
+        return dot_mlxe(addr(qe[0]), addr(sc[0]), xq, xs, n, f)
+    }
+}
+
+//! every row-major perm of the member - the gemv over `d` rows of one token, the four-token tile - against the scalar row
+//! dots over the same disk-order planes (the device layout: no repack interleaves an affine plane); a generated perm folds
+//! in vector order, so the bar is relative to the rows' largest magnitude
+def private mlx_rm_gate(t : T?; f : auto(TT)) {
+    let n = p32_n(f)
+    let kf = p32_fmt(f)
+    let d = 12l
+    static_if (!typeinfo builtin_module_exists(llvm)) {
+        t |> skip("{kf}: no dasLLVM in this build - the row-major registry has no generated rows")
+        return
+    }
+    var regs <- kq_registries(f)
+    if (empty(regs.rm_gemv)) {
+        t |> failure("{kf}: the build carries dasLLVM and the row-major registry holds no rows")
+        delete regs
+        return
+    }
+    var inscope kq, ks : array<uint8>
+    p32_fill_planes(kq, ks, d, n, f)
+    var inscope xq : array<int8>
+    var inscope xs : array<float>
+    q51_fill_acts(xq, xs, 4l, n)
+    var inscope want <- p32_row_dots(kq, ks, xq, xs, n, 4l * d, $(i) => i % d, $(i) => i / d, f)
+    var inscope want0 <- copy_span(want, 0l, d)
+    let bar = Bar(kind = BarKind.rel_of_max, rel = 5.0e-5, abs_floor = 1.0e-4, poison = 1.0e-3, poison_of_max = true, poison_abs = 1.0e-2)
+    var emitted = 0
+    for (row, wit in regs.rm_gemv, regs.rm_witness) {
+        var inscope y <- nan_plane(int(d))
+        unsafe {
+            invoke(row._1, addr(y[0]), addr<uint8 const?>(kq[0]), addr<uint8 const?>(ks[0]), addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), null, n, 0l, d)
+        }
+        check(t, "{kf}q8_rm_gemv_gen {row._0} against the scalar row dots", y, want0, bar, Shape(row_width = int(d)))
+        emitted += invoke(wit._1) ? 1 : 0
+    }
+    for (row in regs.rm_tile4) {
+        var inscope y <- nan_plane(int(4l * d))
+        unsafe {
+            invoke(row._1, addr(y[0]), addr<uint8 const?>(kq[0]), addr<uint8 const?>(ks[0]), addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), null, n, d)
+        }
+        check(t, "{kf}q8_rm_tile4_gen {row._0} against the scalar row dots", y, want, bar, Shape(row_width = int(d)))
+    }
+    to_log(LOG_INFO, "{kf}: {length(regs.rm_gemv)} row-major rows, {emitted} of them generated on this box\n")
+    delete regs
+}
+
+//! the affine members' per-32 cells: the plane gates of `p32_cells` but the GPU gather (no GPU home stamps them)
+def private mlx_cells(t : T?; f : auto(TT)) {
+    let kf = p32_fmt(f)
+    t |> run("the {kf} planes dequant the hand-packed triplet order to scale x q + bias exactly; the Q4_0 pairing misses") @(t : T?) {
+        let n = 128l
+        var inscope kq, ks : array<uint8>
+        mlx_fill_planes(kq, ks, 1l, n, kf, false)
+        var inscope w <- nan_plane(int(n))
+        for (b in range64(n / 32l)) {
+            dequant_b32_plane_block(kf, kq, ks, b, w, b * 32l)
+        }
+        var inscope want <- formula_row(int(n)) $(k) => mlx_scale_pat(k / 64) * float(mlx_code_pat(k / 32, k % 32, mlx_bits_of(kf))) + mlx_bias_pat(k / 64)
+        check(t, "{kf} plane dequant against the hand-packed values", w, want, BAR_EXACT, FLAT_SHAPE)
+        if (mlx_bits_of(kf) != 8) {
+            var inscope kq4, ks4 : array<uint8>
+            mlx_fill_planes(kq4, ks4, 1l, n, kf, true)
+            var inscope w4 <- nan_plane(int(n))
+            for (b in range64(n / 32l)) {
+                dequant_b32_plane_block(kf, kq4, ks4, b, w4, b * 32l)
+            }
+            t |> success(mismatch_exact(w4, want) > 0, "control: a block packed in another order (4-bit: the Q4_0 k / k + 16 pairing; 6-bit: each triple's bytes reversed) must miss the triplet's order")
+        }
+        var inscope wrong <- formula_row(int(n)) $(k) => mlx_scale_pat(k / 32) * float(mlx_code_pat(k / 32, k % 32, mlx_bits_of(kf))) + mlx_bias_pat(k / 32)
+        t |> success(mismatch_exact(w, wrong) > 0, "control: a pair a 32-block (not a 64-group) must miss the plane dequant")
+    }
+    t |> run("dot_mlxq8_scalar ({kf}) matches the fp64 plane-dequant reference") @(t : T?) {
+        p32_dot_gate(t, f)
+    }
+    t |> run("{kf} groupn bit-matches scalar row dots") @(t : T?) {
+        p32_groupn_gate(t, f)
+    }
+    t |> run("{kf} grp<mr> planes bit-match disk (repack + grp expand + gathered pairs + tails)") @(t : T?) {
+        p32_grp_gate(t, f)
+    }
+    t |> run("{kf} batch + batch-groupn bit-match scalar row dots") @(t : T?) {
+        p32_batch_gate(t, f)
+    }
+    t |> run("the dense routers over a {kf} plane (mm_f, mm_pre_f, mm_b_f) bit-match the scalar row dots") @(t : T?) {
+        p32_dense_gate(t, f)
+    }
+    t |> run("every {kf} row-major perm (gemv and four-token tile) matches the scalar row dots") @(t : T?) {
+        mlx_rm_gate(t, f)
+    }
+}
+
+[test]
+def test_mlx_affine_kernels(t : T?) {
+    mlx_cells(t, KqTag_mlx4())
+    mlx_cells(t, KqTag_mlx8())
+    mlx_cells(t, KqTag_mlx4b())
+    mlx_cells(t, KqTag_mlx8b())
+    mlx_cells(t, KqTag_mlx6b())
 }
 
 [test]

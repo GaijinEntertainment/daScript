@@ -16,7 +16,7 @@ require ?das_metal metal/das_metal_boost  // metal_live_object_count for the lea
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
 require math   // nolint:STYLE030,LINT019 - min/max inside the das_metal halves
-require daslib/strings_boost   // split / join: the crown list a cell narrows
+require daslib/strings_boost   // nolint:STYLE030,LINT019 - split / join of the crown list, inside the das_metal half
 require _model_tier
 require _compares   // nolint:STYLE030,LINT019 — logits_maxdiff / logits_maxabs, the short-window cells' bar, inside the das_metal half
 require daslib/algorithm   // nolint:STYLE030,LINT019 — max_element, the short-window cells' argmax, inside the das_metal half
@@ -36,13 +36,6 @@ let private ATTN_DEV_COUNT_TO = 260   //! past 684 llama-3 BPE tokens
 let private ATTN_DEV_W1 = 300         //! pads to 320 query rows: off the 128-row stamps
 let private ATTN_DEV_W2 = 384         //! a whole number of 128-row tiles
 let private ATTN_DEV_BAR = 0.004      //! of the row's largest logit: the two forms round P apart, one before the 1/sum and one after (reads 5e-4, one token off 0.8)
-
-//! the comma list `crowns` with `drop`'s names left out
-def private crowns_without(crowns : string; drop : array<string>) : string {
-    var inscope parts <- split(crowns, ",")
-    var inscope kept <- [for (c in parts); c; where find_index(drop, c) < 0]
-    return join(kept, ",")
-}
 
 //! the last row's logits after two prefill windows on one f16 session - and one decode step of `step_tok` after them when
 //! it is a token (-1 = none)

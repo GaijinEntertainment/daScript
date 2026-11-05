@@ -57,6 +57,47 @@ def test_kqfmt_enum_values(t : T?) {
         t |> equal(int(KqFmt.q4032), 18)
         t |> equal(int(KqFmt.q5032), 19)
         t |> equal(int(KqFmt.nv4), 20)
+        t |> equal(int(KqFmt.mlx4), 21)
+        t |> equal(int(KqFmt.mlx8), 22)
+        t |> equal(int(KqFmt.mlx4b), 23)
+        t |> equal(int(KqFmt.mlx8b), 24)
+        t |> equal(int(KqFmt.mlx6b), 25)
+    }
+}
+
+[test]
+def test_kqfmt_affine_rows(t : T?) {
+    t |> run("the affine members' rows: per-32 planes, the codes verbatim, a 2-byte scale unit a block (a 64-group pair a block pair)") @(t : T?) {
+        for (f in [KqFmt.mlx4, KqFmt.mlx8, KqFmt.mlx4b, KqFmt.mlx8b, KqFmt.mlx6b]) {
+            t |> success(!kq_sb(f) && kq_block32(f) && kq_dense_b32(f) && kq_dense_b32(int(f)) && kq_mlx_affine(f), "{f} is a per-32 affine member")
+            t |> equal(kq_ssb(f), 2l, "{f}: half of the group's 4-byte (scale, bias) pair a block")
+            t |> equal(kq_elems(f), 32l)
+            t |> equal(kq_desc(f).schema_id, -1, "{f}: no kq kernel takes it by id")
+            t |> success(kq_discrete_unstamped(f), "{f}: the Vulkan and CUDA homes stamp none of it")
+            t |> equal(kq_fmt_row_ok(f, 2048l), f, "{f} keeps its tag on a whole-group row")
+        }
+        t |> equal(kq_qsb(KqFmt.mlx4), 16l)
+        t |> equal(kq_qsb(KqFmt.mlx8), 32l)
+        t |> equal(kq_qsb(KqFmt.mlx4b), 16l)
+        t |> equal(kq_qsb(KqFmt.mlx8b), 32l)
+        t |> equal(kq_qsb(KqFmt.mlx6b), 24l)
+        t |> equal(kq_ggml_type(KqFmt.mlx6b), GGML_TYPE_MLX6B)
+        t |> equal(kq_desc(KqFmt.mlx6b).disk_bytes, 24l)
+        t |> equal(mlx_affine_bits(GGML_TYPE_MLX6B), 6l)
+        t |> equal(mlx_affine_ggml_type(6, 64, true), GGML_TYPE_MLX6B)
+        t |> equal(mlx_affine_ggml_type(6, 64, false), -1, "6-bit codes under F16 scales have no member")
+        t |> equal(kq_ggml_type(KqFmt.mlx4), GGML_TYPE_MLX4)
+        t |> equal(kq_ggml_type(KqFmt.mlx8), GGML_TYPE_MLX8)
+        t |> equal(kq_ggml_type(KqFmt.mlx4b), GGML_TYPE_MLX4B)
+        t |> equal(kq_ggml_type(KqFmt.mlx8b), GGML_TYPE_MLX8B)
+        t |> equal(kq_desc(KqFmt.mlx4).disk_bytes, 16l)
+        t |> equal(kq_desc(KqFmt.mlx8).disk_bytes, 32l)
+        t |> equal(MLX_PAIR_BYTES, 4l)
+        t |> equal(mlx_affine_ggml_type(4, 64, false), GGML_TYPE_MLX4)
+        t |> equal(mlx_affine_ggml_type(8, 64, true), GGML_TYPE_MLX8B)
+        t |> equal(mlx_affine_ggml_type(4, 32, false), -1, "a 32-group has no member")
+        t |> equal(mlx_affine_ggml_type(3, 64, false), -1, "3-bit codes have no member")
+        t |> success(!kq_discrete_unstamped(KqFmt.q5032), "a stamped per-32 member is not on the unstamped list (the control)")
     }
 }
 
@@ -326,6 +367,11 @@ def test_kqfmt_elems_and_stream(t : T?) {   // nolint:STYLE038 - one pin per KqF
         t |> equal(kq_stream_code(KqFmt.q4032), 47)
         t |> equal(kq_stream_code(KqFmt.q5032), 48)
         t |> equal(kq_stream_code(KqFmt.nv4), 49)
+        t |> equal(kq_stream_code(KqFmt.mlx4), 50)
+        t |> equal(kq_stream_code(KqFmt.mlx8), 51)
+        t |> equal(kq_stream_code(KqFmt.mlx4b), 52)
+        t |> equal(kq_stream_code(KqFmt.mlx8b), 53)
+        t |> equal(kq_stream_code(KqFmt.mlx6b), 54)
     }
 }
 
@@ -370,7 +416,7 @@ def test_b32_plane_words(t : T?) {
         t |> equal(B5_QH_BYTES, 4l, "the qh word after them")
         t |> equal(B32_NIB_BYTES + B5_QH_BYTES, kq_qsb(KqFmt.q51), "q51's quant block")
         t |> equal(B32_NIB_BYTES + B5_QH_BYTES, kq_qsb(KqFmt.q5032), "q5032's quant block")
-        for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032]) {
+        for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.mlx4, KqFmt.mlx8, KqFmt.mlx4b, KqFmt.mlx8b, KqFmt.mlx6b]) {
             t |> success(kq_qsb(f) <= int64(B32_MAX_QB) && kq_ssb(f) <= int64(B32_MAX_SB),
                 "{f}: one block fits the one-block scratch")
         }

@@ -13,6 +13,7 @@ require ?das_metal dasllama/dasllama_metal_common   // the pipeline globals the 
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require ?das_metal _metal_kernel_common   // the MetalCell record, check_buf, the device shell, kq plane builders
 require ?das_metal _metal_kq_kernels   // kq_mm_form_kernel / kq_dq_kernel: the dense kq kernel pickers
+require ?das_metal _rows8_probe   // rows8_probe_ok: the rows8 cells' layout skip
 require dasllama/dasllama_convert         // devw_dequant_*_core — the image mint's dev-W bake mirrors
 require dasllama/dasllama_gemm_schema     // kq_qsb — the ONE per-format quant-plane stride source
 require dasllama/dasllama_kqformat        // KqFmt: the per-format stamp tables' key
@@ -33,16 +34,17 @@ require strings
 // the mul_mm grid contract: m % 32, ndim % 64, kdim % 256 (kq) or % 32, y token-major
 // [m x ndim]. A tensor twin skips only when the CAPABILITY probe says the toolchain has no
 // Metal-4 tensor support (metal4_tensor_available); with the toolchain proven, a PSO that
-// fails to compile is a RED, and the simdgroup bases always assert. Without das_metal in the
-// build, or with no Metal device, every check skips.
+// fails to compile is a RED, and the simdgroup bases always assert. A rows8 cell skips where the
+// rows8 layout probe finds the matrix unit's cooperative layout another generation's (the engine
+// keeps the form off). Without das_metal in the build, or with no Metal device, every check skips.
 
-def private kq_mulmm_gate(t : T?; var dev, queue; fmt : int; tensor : bool; m, kdim, ndim : int; halfx : bool = false; tall : bool = false) {
-    let tag = "kq_mulmm_k{fmt}{tensor ? "t" : ""}{tall ? " tall" : ""}{halfx ? " halfx" : ""} m={m} k={kdim} n={ndim}"
+def private kq_mulmm_gate(t : T?; var dev, queue; fmt : int; tensor : bool; m, kdim, ndim : int; halfx : bool = false; tall : bool = false; m8 : bool = false) {
+    let tag = "kq_mulmm_k{fmt}{tensor ? "t" : ""}{tall ? " tall" : ""}{m8 ? " m8" : ""}{halfx ? " halfx" : ""} m={m} k={kdim} n={ndim}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let f = kq_fmt_of_id(fmt, "kq_mulmm_gate")
         let sb = kq_mm_base_stamp(f)
-        let kt = tall ? kq_mm_form_kernel(f, "th128") : kq_mm_form_kernel(f, halfx ? "th" : "t")
+        let kt = tall ? kq_mm_form_kernel(f, "th128") : kq_mm_form_kernel(f, m8 ? "t8" : (halfx ? "th" : "t"))   //! m8: the eight-row stamp over an eight-row panel
         var pso = tensor ? (mc |> keep_stamp(kt, err)) : (mc |> keep_stamp(sb, err))
         return if (!(tensor ? tensor_pso_or_skip(t, tag, pso, dev, err) : pso_ok(t, tag, pso, err)))
         let nb = kdim / 256
@@ -105,6 +107,7 @@ def private q8_mulmm_t_gate(t : T?; var dev, queue; m, kdim, ndim : int; halfx :
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let kt = (mt == 128 ? (halfx ? kernel_of(@@enc_gemm_mm_th128_c) : kernel_of(@@enc_gemm_mm_t128_c))
+            : mt == 8 ? kernel_of(@@enc_gemm_mm_t8_c)   //! the eight-row stamp (f32 X) over an eight-row panel
             : (halfx ? kernel_of(@@enc_gemm_mm_th_c) : kernel_of(@@enc_gemm_mm_t_c)))
         var pso = mc |> keep_stamp(kt, err)
         return if (!tensor_pso_or_skip(t, tag, pso, dev, err))
@@ -472,6 +475,7 @@ def private q8_split_gate(t : T?; var dev, queue; m, kdim, ndim, nsk : int; half
         var err : string
         //! m = 16: the short window's 16-row stamps
         let kt = (m == 16 ? (halfx ? kernel_of(@@enc_gemm_mm_thsk16_c) : kernel_of(@@enc_gemm_mm_tsk16_c))
+            : m == 8 ? kernel_of(@@enc_gemm_mm_tsk8_c)   //! the eight-row split stamp (f32 X)
             : (halfx ? kernel_of(@@enc_gemm_mm_thsk_c) : kernel_of(@@enc_gemm_mm_tsk_c)))
         var pso = mc |> keep_stamp(kt, err)
         return if (!tensor_pso_or_skip(t, tag, pso, dev, err))
@@ -521,7 +525,7 @@ def private kq_split_gate(t : T?; var dev, queue; fmt : int; m, kdim, ndim, nsk 
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let f = kq_fmt_of_id(fmt, "kq_split_gate")
-        let kt = m == 16 ? kq_mm_split16_kernel(f, halfx) : kq_mm_split_kernel(f, halfx)   //! m = 16: the short window's 16-row stamps
+        let kt = m == 16 ? kq_mm_split16_kernel(f, halfx) : (m == 8 ? kq_mm_split8_kernel(f) : kq_mm_split_kernel(f, halfx))   //! m = 16: the short window's 16-row stamps; m = 8: the rows sites' eight-row stamp
         var pso = mc |> keep_stamp(kt, err)
         return if (!tensor_pso_or_skip(t, tag, pso, dev, err))
         var inscope fx <- kq_split_fixture(fmt, m, kdim, ndim) $(i) => float(float16(0.05 * float(i % 41) - 0.9))   //! f16 round-trip: the oracle dot stays exact
@@ -1191,9 +1195,31 @@ def private moe_split_twin(f; form : MoeSplitForm) {   //! generic, as the gates
 //! one split-format expert twin dispatch of stamp `k` over the contiguous fixtures: the dense binding layout (weights, X,
 //! y, the kdim/ndim uniforms) plus the bucket counts and bases at 7/8, `tiles` M-tiles over `mp` padded rows
 def private moe_split_dispatch(enc; fmt : int; k; pso;
-                               bks, bkq, bxh, by, bk, bn, bcnt, bbase; nsb : int; mp, tiles, ndim, ne : int) {
-    invoke(k.enc, enc, pso, bks, kq_split_doff(fmt, nsb), bks, 0ul, bkq, 0ul, bxh, 0ul, by, 0ul, bk, bn, bcnt, bbase,
+                               bks, bkq, bxh, by, bk, bn, bcnt, bbase, bgact, bhout, bgu; nsb : int; mp, tiles, ndim, ne : int) {
+    invoke(k.enc, enc, pso, bks, kq_split_doff(fmt, nsb), bks, 0ul, bkq, 0ul, bxh, 0ul, by, 0ul, bk, bn, bcnt, bbase, bgact, bhout, bgu,
         int64(mp), int64(ndim), int64(ne), int64(tiles))
+}
+
+//! the gated store's gate rows: a fixed pattern inside [-0.08, 0.06], where silu is a twentieth off its linear part (so a
+//! store that forgot the gate's curve misses the bar) and the product of the fixtures' largest sums still fits a half
+def private gated_gate(n : int) : array<float> => [for (i in range(n)); float((i * 7 + 3) % 8) * 0.02 - 0.08]
+
+//! the gated store's truth over the plain store's: silu(gate) * y as halves where the plain run wrote y, the half sentinel
+//! where `want` holds the NaN mark of a row the tile leaves (a value no sum lands on, where a finite sentinel can); its
+//! envelope is the f32 truth's through the gate's value plus the half rounding (2.5 x the magnitude at the bar's 2e-4)
+def private gated_truth(want, env, gate : array<float>; hsentinel : float; var want_h, env_h : array<float>) {
+    want_h |> resize(length(want))
+    env_h |> resize(length(want))
+    for (w, e, g, wh, eh in want, env, gate, want_h, env_h) {
+        if (w != w) {   // nolint:LINT007 — the NaN mark
+            wh = hsentinel
+            eh = 0.0
+        } else {
+            let s = g / (1.0 + exp(-g))
+            wh = float(float16(s * w))
+            eh = e * abs(s) + abs(wh) * 2.5 + 1.0
+        }
+    }
 }
 
 // the split-format expert twins against the same per-expert oracle as the K-quant MoE gate: the
@@ -1242,14 +1268,33 @@ def private moe_mulmm_split_gate(t : T?; var dev, queue; fmt : int; kdim, ndim :
         let bn = mc |> in_plain([uint(ndim)])
         let bcnt = mc |> in_plain(fx.cnt)
         let bbase = mc |> in_plain(fx.basep)
+        let bg0 = mc |> in_plain([0u])
+        let bg1 = mc |> in_plain([1u])
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            moe_split_dispatch(enc, fmt, th, tw_pso, mc.buf[bks], mc.buf[bkq], mc.buf[bxh], mc.buf[by], mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase], nsb, fx.pad, fx.maxtiles, ndim, ne)
+            moe_split_dispatch(enc, fmt, th, tw_pso, mc.buf[bks], mc.buf[bkq], mc.buf[bxh], mc.buf[by], mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase],
+                mc.buf[by], mc.buf[bxh], mc.buf[bg0], nsb, fx.pad, fx.maxtiles, ndim, ne)
         }
         var inscope want_t := want
         var inscope env_t := env
         adapt_pad_truth(fx, ndim, -500.0, want_t, env_t)
         if (ran) {
             check_buf(t, tag, mc.buf[by], want_t, env_bar(2e-4, env_t), Shape(row_width = ndim), env_t)
+        }
+        var inscope gate <- gated_gate(fx.pad * ndim)
+        let bgate = mc |> in_plain(gate)
+        let bh = mc |> out_words(fx.pad * ndim, float16(-1000.0))
+        let rang = mc |> cell_record(t, "{tag} gated store") $(enc : MetalComputeEncoder?) {
+            moe_split_dispatch(enc, fmt, th, tw_pso, mc.buf[bks], mc.buf[bkq], mc.buf[bxh], mc.buf[by], mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase],
+                mc.buf[bgate], mc.buf[bh], mc.buf[bg1], nsb, fx.pad, fx.maxtiles, ndim, ne)
+        }
+        if (rang) {
+            var inscope want_m := want
+            var inscope env_m := env
+            adapt_pad_truth(fx, ndim, uint_bits_to_float(0x7fc00000u), want_m, env_m)
+            var inscope want_h, env_h : array<float>
+            gated_truth(want_m, env_m, gate, -1000.0, want_h, env_h)
+            check_buf_h(t, "{tag} gated store", mc.buf[bh], want_h, env_bar(2e-4, env_h), Shape(row_width = ndim), env_h)
+            check_buf(t, "{tag} gated store leaves y", mc.buf[by], want_t, env_bar(2e-4, env_t), Shape(row_width = ndim), env_t)
         }
         var maxce = 0
         for (c in fx.cnt) {
@@ -1264,14 +1309,30 @@ def private moe_mulmm_split_gate(t : T?; var dev, queue; fmt : int; kdim, ndim :
         return if (tl_pso == null || rm_pso == null)
         let by_p = mc |> out_words(fx.pad * ndim, -700.0)
         let ranp = mc |> cell_record(t, "{tag} tall pair") $(enc : MetalComputeEncoder?) {
-            moe_split_dispatch(enc, fmt, tl, tl_pso, mc.buf[bks], mc.buf[bkq], mc.buf[bxh], mc.buf[by_p], mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase], nsb, fx.pad, (maxce + 127) / 128, ndim, ne)
-            moe_split_dispatch(enc, fmt, rm, rm_pso, mc.buf[bks], mc.buf[bkq], mc.buf[bxh], mc.buf[by_p], mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase], nsb, fx.pad, 4, ndim, ne)
+            moe_split_dispatch(enc, fmt, tl, tl_pso, mc.buf[bks], mc.buf[bkq], mc.buf[bxh], mc.buf[by_p], mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase],
+                mc.buf[by_p], mc.buf[bxh], mc.buf[bg0], nsb, fx.pad, (maxce + 127) / 128, ndim, ne)
+            moe_split_dispatch(enc, fmt, rm, rm_pso, mc.buf[bks], mc.buf[bkq], mc.buf[bxh], mc.buf[by_p], mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase],
+                mc.buf[by_p], mc.buf[bxh], mc.buf[bg0], nsb, fx.pad, 4, ndim, ne)
         }
         return if (!ranp)
         var inscope want_p := want
         var inscope env_p := env
         adapt_pad_truth(fx, ndim, -700.0, want_p, env_p)
         check_buf(t, "{tag} tall pair", mc.buf[by_p], want_p, env_bar(2e-4, env_p), Shape(row_width = ndim), env_p)
+        let bh_p = mc |> out_words(fx.pad * ndim, float16(-1000.0))
+        let rangp = mc |> cell_record(t, "{tag} tall pair gated store") $(enc : MetalComputeEncoder?) {
+            moe_split_dispatch(enc, fmt, tl, tl_pso, mc.buf[bks], mc.buf[bkq], mc.buf[bxh], mc.buf[by_p], mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase],
+                mc.buf[bgate], mc.buf[bh_p], mc.buf[bg1], nsb, fx.pad, (maxce + 127) / 128, ndim, ne)
+            moe_split_dispatch(enc, fmt, rm, rm_pso, mc.buf[bks], mc.buf[bkq], mc.buf[bxh], mc.buf[by_p], mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase],
+                mc.buf[bgate], mc.buf[bh_p], mc.buf[bg1], nsb, fx.pad, 4, ndim, ne)
+        }
+        return if (!rangp)
+        var inscope want_mp := want
+        var inscope env_mp := env
+        adapt_pad_truth(fx, ndim, uint_bits_to_float(0x7fc00000u), want_mp, env_mp)
+        var inscope want_hp, env_hp : array<float>
+        gated_truth(want_mp, env_mp, gate, -1000.0, want_hp, env_hp)
+        check_buf_h(t, "{tag} tall pair gated store", mc.buf[bh_p], want_hp, env_bar(2e-4, env_hp), Shape(row_width = ndim), env_hp)
     }
 }
 
@@ -1757,6 +1818,539 @@ def test_q8_mulmm_stamp_widths(t : T?) {
     }
 }
 
+
+//! the reference a rows8 cell checks y against: `ref`'s `live` token rows at the cell's row stride `ys`, the gap past each row's
+//! `ndim` the y fill's sentinel
+def private rows8_y_ref(ref : DenseRef; ndim, ys, live : int) : DenseRef => <- strided_ref(ref, ndim, ys, live, -1000.0)
+
+//! the k4 rows8 kernel over an eight-row panel: the x-table prep, then the kernel writing y at row stride `ys` (the site's rows, or
+//! wider: the gap past each row stays the fill), against the dense reference over the f16-rounded panel; skips where the box's
+//! layout probe says the form is another generation's
+def private rows8_k4_gate(t : T?; var dev, queue; kdim, ndim, ys : int) {
+    let tag = "rows8 k4 k={kdim} n={ndim} ys={ys}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kp = kernel_of(@@enc_rows8_prep_c)
+        let kg = kernel_of(@@enc_rows8_k4_c)
+        var ppso = mc |> keep_stamp(kp, err)
+        var gpso = mc |> keep_stamp(kg, err)
+        return if (!tensor_pso_or_skip(t, tag, gpso, dev, err) || !pso_ok(t, tag, ppso, err))
+        if (!rows8_probe_ok(t, mc, err)) {
+            t |> skip("{tag}: the matrix unit's cooperative layout is not the rows8 kernels' on this box - the engine keeps the form off")
+            return
+        }
+        let nb = kdim / 256
+        let nsb = ndim * nb
+        var inscope kq, ks : array<uint8>
+        kq_fill_planes(4, nsb, kq, ks)
+        var inscope xf : array<float>
+        xf |> resize(8 * kdim)
+        for (i in range(8 * kdim)) {
+            xf[i] = float(float16(0.07 * float(i % 39) - 1.3))   //! the kernel reads the panel as halves: the oracle's panel is the same lattice
+        }
+        var inscope ref <- dense_ref_env(8, kdim, ndim, xf) $(j; var wrow) {
+            kq_row_ref(4, j * nb, nb, nsb, kq, ks, wrow)
+        }
+        let bks = mc |> in_plain(ks)
+        let bkq = mc |> in_plain(kq)
+        let bx = mc |> in_(xf)
+        let bxt = mc |> out_words(8 * kdim, float16(0.0))
+        let bxs = mc |> out_words(kdim / 32 * 8, 0.0)
+        let by = mc |> out_words(8 * ys, -1000.0)
+        let bk = mc |> in_plain([uint(kdim)])
+        let bys = mc |> in_plain([uint(ys)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            invoke(kp.enc, enc, ppso, mc.buf[bx], 0ul, mc.buf[bxt], mc.buf[bxs], mc.buf[bk], int64(kdim / 32 * 8))
+            invoke(kg.enc, enc, gpso, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bxt], mc.buf[by], 0ul, mc.buf[bxs], mc.buf[bk], mc.buf[bys], int64(ndim), int64(7 * ys + ndim))
+        }
+        return if (!ran)
+        var inscope yref <- rows8_y_ref(ref, ndim, ys, 8)
+        check_buf(t, tag, mc.buf[by], yref.want, env_bar(2e-4, yref.env), Shape(row_width = ys), yref.env)
+    }
+}
+
+//! the q8 rows8 kernel over an eight-row panel, the same shape over the 34-byte blob; at `ndim` 96 a plane of six threadgroups,
+//! off every 64-row grid
+def private rows8_q8_gate(t : T?; var dev, queue; kdim, ndim, ys : int) {
+    let tag = "rows8 q8 k={kdim} n={ndim} ys={ys}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kp = kernel_of(@@enc_rows8_prep_c)
+        let kg = kernel_of(@@enc_rows8_q8_c)
+        var ppso = mc |> keep_stamp(kp, err)
+        var gpso = mc |> keep_stamp(kg, err)
+        return if (!tensor_pso_or_skip(t, tag, gpso, dev, err) || !pso_ok(t, tag, ppso, err))
+        if (!rows8_probe_ok(t, mc, err)) {
+            t |> skip("{tag}: the matrix unit's cooperative layout is not the rows8 kernels' on this box - the engine keeps the form off")
+            return
+        }
+        let nkb = kdim / 32
+        var inscope blob : array<uint8>
+        var inscope wdeq : array<float>
+        q8_blob_fill(ndim, nkb, blob, wdeq)
+        var inscope xf : array<float>
+        q8_x_fill(8 * kdim, xf)
+        for (v in xf) {
+            v = float(float16(v))
+        }
+        var inscope ref <- dense_ref_rows(wdeq, xf, 8, kdim, ndim)
+        let bw = mc |> in_plain(blob)
+        let bx = mc |> in_(xf)
+        let bxt = mc |> out_words(8 * kdim, float16(0.0))
+        let bxs = mc |> out_words(kdim / 32 * 8, 0.0)
+        let by = mc |> out_words(8 * ys, -1000.0)
+        let bk = mc |> in_plain([uint(kdim)])
+        let bys = mc |> in_plain([uint(ys)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            invoke(kp.enc, enc, ppso, mc.buf[bx], 0ul, mc.buf[bxt], mc.buf[bxs], mc.buf[bk], int64(kdim / 32 * 8))
+            invoke(kg.enc, enc, gpso, mc.buf[bw], 0ul, mc.buf[bw], mc.buf[bxt], mc.buf[by], 0ul, mc.buf[bxs], mc.buf[bk], mc.buf[bys], int64(ndim), int64(7 * ys + ndim))
+        }
+        return if (!ran)
+        var inscope yref <- rows8_y_ref(ref, ndim, ys, 8)
+        check_buf(t, tag, mc.buf[by], yref.want, env_bar(2e-3, yref.env), Shape(row_width = ys), yref.env)
+    }
+}
+
+//! a split-plane format's rows8 kernel: k6's (kq 6) or iq4xs's (kq 44); `fmt` untyped: the stamps sit behind the optional das_metal require
+def private rows8_split_kernel(fmt) {
+    return kernel_of(@@enc_rows8_k6_c) if (fmt == 6)
+    return kernel_of(@@enc_rows8_iq4xs_c)
+}
+
+//! A split-plane format's rows8 kernel (k6, kq 6; iq4xs, kq 44) over an eight-row panel writing y at row stride `ys`, against the
+//! dense reference: `fed` off, the half conversion of the f32 panel (`enc_half_rows`, the site's own prep) feeds it, the reference
+//! over the f16-rounded panel; `fed` on, the norm's f16 twin of `nrows` live rows (`enc_rms_bhx`, the pad rows NaN) feeds it, the
+//! live rows against the reference over the twin's halves. The fixture's int8 sub-scales take both signs and differ block to block,
+//! asserted. At `ndim` 96 a plane of six threadgroups, off every 64-row grid.
+def private rows8_split_gate(t : T?; var dev, queue; fmt, kdim, ndim, ys : int; fed : bool; nrows : int = 8) {
+    let feed = fed ? "twin-fed rows={nrows}" : "prep"
+    let tag = "rows8 kq{fmt} k={kdim} n={ndim} ys={ys} {feed}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kh = kernel_of(@@enc_half_rows)
+        let kn = stamp_of(@@enc_rms_bhx)
+        let kg = rows8_split_kernel(fmt)
+        var hpso = mc |> keep_stamp(kh, err)
+        var npso = mc |> keep_stamp(kn, err)
+        var gpso = mc |> keep_stamp(kg, err)
+        return if (!tensor_pso_or_skip(t, tag, gpso, dev, err) || !pso_ok(t, tag, hpso, err) || !pso_ok(t, tag, npso, err))
+        if (!rows8_probe_ok(t, mc, err)) {
+            t |> skip("{tag}: the matrix unit's cooperative layout is not the rows8 kernels' on this box - the engine keeps the form off")
+            return
+        }
+        let nb = kdim / 256
+        let nsb = ndim * nb
+        var inscope kq, ks : array<uint8>
+        kq_fill_planes(fmt, nsb, kq, ks)
+        let nsc = fmt == 6 ? 16 : 8   //! the strip's live sub-scales: k6 sixteen, iq4xs eight
+        var neg = 0
+        var blocks_differ = false
+        for (b in range(nsb)) {
+            for (s in range(nsc)) {
+                let i = b * 16 + s
+                neg += int(ks[i]) >= 128 ? 1 : 0
+                blocks_differ = blocks_differ || (b > 0 && ks[i] != ks[i - 16])
+            }
+        }
+        t |> success(neg > 0 && neg < nsb * nsc && blocks_differ, "{tag}: the sub-scales take both signs ({neg} of {nsb * nsc} negative) and differ block to block")
+        let live = fed ? nrows : 8
+        let nan = uint_bits_to_float(0x7FC00000u)
+        var inscope xf, w : array<float>
+        xf |> resize(8 * kdim)
+        w |> resize(kdim)
+        for (i in range(8 * kdim)) {
+            xf[i] = float(float16(0.07 * float(i % 39) - 1.3))   //! the prep reads the panel as halves: the oracle's panel is the same lattice
+        }
+        for (i in range(kdim)) {
+            w[i] = 0.5 + 0.04 * float(i % 13)
+        }
+        let bks = mc |> in_plain(ks)
+        let bkq = mc |> in_plain(kq)
+        let bx = mc |> in_(xf)
+        let bw = mc |> in_(w)
+        let by0 = mc |> out_words(8 * kdim, -1000.0)
+        let bxh = mc |> out_words(8 * kdim, float16(nan))
+        let by = mc |> out_words(8 * ys, -1000.0)
+        let bk = mc |> in_plain([uint(kdim)])
+        let bys = mc |> in_plain([uint(ys)])
+        let beps = mc |> in_plain([1.0e-5])
+        let doff = kq_split_doff(fmt, nsb)
+        var ha = GkClampArgs(nelem = uint(8 * kdim), lo = -65504.0, hi = 65504.0, scale = 1.0, hoff = 0u)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            if (fed) {
+                stamp_run(kn, npso) {
+                    invoke(kn.enc, enc, mc.buf[bx], 0ul, mc.buf[bw], mc.buf[by0], mc.buf[bk], mc.buf[beps], mc.buf[bxh], int64(nrows))
+                }
+            } else {
+                invoke(kh.enc, enc, hpso, mc.buf[bx], mc.buf[bxh], ha, int64(8 * kdim / 4))
+            }
+            invoke(kg.enc, enc, gpso, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bxh], mc.buf[by], 0ul, mc.buf[bkq], 0ul, mc.buf[bk], mc.buf[bys], int64(ndim), int64(7 * ys + ndim))
+        }
+        return if (!ran)
+        var inscope halves <- buf_download(mc.buf[bxh], live * kdim, type<float16>)
+        var inscope xr <- [for (i in range(live * kdim)); fed ? float(halves[i]) : xf[i]]
+        var inscope ref <- dense_ref_env(live, kdim, ndim, xr) $(j; var wrow) {
+            kq_row_ref(fmt, j * nb, nb, nsb, kq, ks, wrow)
+        }
+        var inscope yref <- rows8_y_ref(ref, ndim, ys, live)
+        check_buf(t, tag, mc.buf[by], yref.want, env_bar(2e-4, yref.env), Shape(row_width = ys), yref.env)
+    }
+}
+
+//! the producers whose table mode writes the rows8 x table and token sums beside the f16 twin (`XT`)
+enum private TabProducer {
+    rms           //! the norm into bxb (`enc_rms_bhxt`)
+    add_rms       //! the residual step's norm, 256 lanes
+    add_rms_wide  //! ... its 1024-lane builders past the slab
+    pre           //! the sandwich seam's norm, 256 lanes
+    pre_wide      //! ... its 1024-lane builders
+    swiglu        //! the gate panel's activation
+    geglu
+}
+
+//! The rows8 x table and token sums a twin's `nrows` live rows of `width` (whole 32-blocks) make, in the prep's own slot law: slot
+//! 4 kq + i of a 32-block from physical 8 kq + i, slot 16 + 4 kq + i from 8 kq + 4 + i; each block's sum of its halves; the rows
+//! past `nrows` of the eight the sentinels
+struct private Rows8Table {
+    xt : array<float>   //! [8][width] halves widened, in k-slot order
+    xs : array<float>   //! [width / 32][8]
+}
+
+def private rows8_table_of(h : array<float16>; nrows, width : int; tsent, ssent : float) : Rows8Table {
+    var out : Rows8Table
+    out.xt |> resize(8 * width)
+    out.xs |> resize(width / 32 * 8)
+    for (r in range(8)) {
+        for (b in range(width / 32)) {
+            var sum = 0.0lf
+            for (s in range(32)) {
+                let kq = (s & 15) >> 2
+                let i = s & 3
+                let phys = s < 16 ? 8 * kq + i : 8 * kq + 4 + i
+                let at = r * width + b * 32
+                if (r < nrows) {
+                    out.xt[at + s] = float(h[at + phys])
+                    sum += double(float(h[at + phys]))
+                } else {
+                    out.xt[at + s] = tsent
+                }
+            }
+            out.xs[b * 8 + r] = r < nrows ? float(sum) : ssent
+        }
+    }
+    return <- out
+}
+
+//! A producer's table mode against its HX stamp on the same inputs: the f32 rows and the twin bit for bit the HX stamp's, the
+//! table the twin's halves at their k-slots bit for bit, the sums within 1e-5 of the double sum of each block's halves, the pad
+//! rows past `nrows` untouched; the table read as the plain twin is the control the slot order must miss
+def private rows8_table_gate(t : T?; var dev, queue; p : TabProducer; width, nrows : int) {
+    let tag = "rows8 table {p} width={width} rows={nrows}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let rh = stamp_of(@@enc_rms_bhx)
+        let rt = stamp_of(@@enc_rms_bhxt)
+        let ah = stamp_of(@@enc_add_rms_bhx_c)
+        let at = stamp_of(@@enc_add_rms_bhxt_c)
+        let awh = stamp_of(@@enc_add_rms_bhxw_c)
+        let awt = stamp_of(@@enc_add_rms_bhxtw_c)
+        let ph = stamp_of(@@enc_preaddrms_bhx_c)
+        let pt = stamp_of(@@enc_preaddrms_bhxt_c)
+        let pwh = stamp_of(@@enc_preaddrms_bhxw_c)
+        let pwt = stamp_of(@@enc_preaddrms_bhxtw_c)
+        let sh = stamp_of(@@enc_swiglu_hx)
+        let st = stamp_of(@@enc_swiglu_hxt)
+        let gh = stamp_of(@@enc_geglu_hx)
+        let gt = stamp_of(@@enc_geglu_hxt)
+        var hpso, tpso : MetalComputePipeline?
+        if (p == TabProducer.rms) {
+            hpso = mc |> keep_stamp(rh, err)
+            tpso = mc |> keep_stamp(rt, err)
+        } elif (p == TabProducer.add_rms) {
+            hpso = mc |> keep_stamp(ah, err)
+            tpso = mc |> keep_stamp(at, err)
+        } elif (p == TabProducer.add_rms_wide) {
+            hpso = mc |> keep_stamp(awh, err)
+            tpso = mc |> keep_stamp(awt, err)
+        } elif (p == TabProducer.pre) {
+            hpso = mc |> keep_stamp(ph, err)
+            tpso = mc |> keep_stamp(pt, err)
+        } elif (p == TabProducer.pre_wide) {
+            hpso = mc |> keep_stamp(pwh, err)
+            tpso = mc |> keep_stamp(pwt, err)
+        } elif (p == TabProducer.swiglu) {
+            hpso = mc |> keep_stamp(sh, err)
+            tpso = mc |> keep_stamp(st, err)
+        } else {
+            hpso = mc |> keep_stamp(gh, err)
+            tpso = mc |> keep_stamp(gt, err)
+        }
+        return if (!pso_ok(t, tag, hpso, err) || !pso_ok(t, tag, tpso, err))
+        let total = nrows * width
+        let sent = -1000.0
+        var inscope xv, av, w : array<float>
+        xv |> resize(total)
+        av |> resize(total)
+        w |> resize(2 * width)   //! [post norm | norm] on a sandwich stamp; the others read the first row
+        for (i in range(total)) {
+            xv[i] = 0.11 * float(i % 43) - 2.3
+            av[i] = 0.07 * float(i % 31) - 1.1
+        }
+        for (i in range(2 * width)) {
+            w[i] = 0.4 + 0.05 * float(i % 11)
+        }
+        let ew = p == TabProducer.swiglu || p == TabProducer.geglu
+        let bx1 = mc |> io_(xv)
+        let bx2 = mc |> io_(xv)
+        let ba = mc |> in_(av)
+        let bw = mc |> in_(w)
+        let by1 = mc |> out_words(total, sent)
+        let by2 = mc |> out_words(total, sent)
+        let bh1 = mc |> out_words(total, float16(sent))
+        let bh2 = mc |> out_words(total, float16(sent))
+        let bxt = mc |> out_words(8 * width, float16(sent))
+        let bxs = mc |> out_words(width / 32 * 8, sent)
+        let bdim = mc |> in_plain([uint(width)])
+        let beps = mc |> in_plain([1.0e-5])
+        let btot = mc |> in_plain([uint(total)])
+        var ka = GkAddRmsArgs(dim = uint(width), add_on = 1u, eps = 1.0e-5, ascale = 0.75)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            let (x1, x2, a, wn, y1, y2, h1, h2, yt, ys) = (mc.buf[bx1], mc.buf[bx2], mc.buf[ba], mc.buf[bw], mc.buf[by1], mc.buf[by2],
+                mc.buf[bh1], mc.buf[bh2], mc.buf[bxt], mc.buf[bxs])
+            let n = int64(nrows)
+            if (p == TabProducer.rms) {
+                stamp_run(rh, hpso) {
+                    invoke(rh.enc, enc, x1, 0ul, wn, y1, mc.buf[bdim], mc.buf[beps], h1, n)
+                }
+                stamp_run(rt, tpso) {
+                    invoke(rt.enc, enc, x2, 0ul, wn, y2, mc.buf[bdim], mc.buf[beps], h2, yt, ys, n)
+                }
+            } elif (p == TabProducer.add_rms) {
+                stamp_run(ah, hpso) {
+                    invoke(ah.enc, enc, x1, a, wn, y1, h1, ka, n)
+                }
+                stamp_run(at, tpso) {
+                    invoke(at.enc, enc, x2, a, wn, y2, h2, yt, ys, ka, n)
+                }
+            } elif (p == TabProducer.add_rms_wide) {
+                stamp_run(awh, hpso) {
+                    invoke(awh.enc, enc, x1, a, wn, y1, h1, ka, n)
+                }
+                stamp_run(awt, tpso) {
+                    invoke(awt.enc, enc, x2, a, wn, y2, h2, yt, ys, ka, n)
+                }
+            } elif (p == TabProducer.pre) {
+                stamp_run(ph, hpso) {
+                    invoke(ph.enc, enc, x1, a, wn, y1, h1, ka, n)
+                }
+                stamp_run(pt, tpso) {
+                    invoke(pt.enc, enc, x2, a, wn, y2, h2, yt, ys, ka, n)
+                }
+            } elif (p == TabProducer.pre_wide) {
+                stamp_run(pwh, hpso) {
+                    invoke(pwh.enc, enc, x1, a, wn, y1, h1, ka, n)
+                }
+                stamp_run(pwt, tpso) {
+                    invoke(pwt.enc, enc, x2, a, wn, y2, h2, yt, ys, ka, n)
+                }
+            } elif (p == TabProducer.swiglu) {
+                stamp_run(sh, hpso) {
+                    invoke(sh.enc, enc, x1, 0ul, a, 0ul, mc.buf[btot], h1, int64(total))
+                }
+                stamp_run(st, tpso) {
+                    invoke(st.enc, enc, x2, 0ul, a, 0ul, mc.buf[btot], h2, mc.buf[bdim], yt, ys, int64(total))
+                }
+            } else {
+                stamp_run(gh, hpso) {
+                    invoke(gh.enc, enc, x1, 0ul, a, 0ul, mc.buf[btot], h1, int64(total))
+                }
+                stamp_run(gt, tpso) {
+                    invoke(gt.enc, enc, x2, 0ul, a, 0ul, mc.buf[btot], h2, mc.buf[bdim], yt, ys, int64(total))
+                }
+            }
+        }
+        return if (!ran)
+        var inscope x1v <- buf_download(mc.buf[bx1], total, type<float>)
+        check_buf_exact(t, "{tag} x", mc.buf[bx2], x1v)
+        if (!ew) {
+            var inscope y1v <- buf_download(mc.buf[by1], total, type<float>)
+            check_buf_exact(t, "{tag} y", mc.buf[by2], y1v)
+        }
+        var inscope h1v <- buf_download(mc.buf[bh1], total, type<float16>)
+        var inscope h1f <- [for (v in h1v); float(v)]
+        check_buf_h(t, "{tag} twin", mc.buf[bh2], h1f, BAR_EXACT, Shape(row_width = width))
+        var inscope tab <- rows8_table_of(h1v, nrows, width, float(float16(sent)), sent)
+        check_buf_h(t, "{tag} table", mc.buf[bxt], tab.xt, BAR_EXACT, Shape(row_width = width))
+        check_buf(t, "{tag} sums", mc.buf[bxs], tab.xs, Bar(rel = 1e-5), Shape(row_width = 8))
+        var inscope plain <- [for (k in range(8 * width)); k < total ? h1f[k] : float(float16(sent))]
+        var inscope got <- buf_download(mc.buf[bxt], 8 * width, type<float16>)
+        var inscope gotf <- [for (v in got); float(v)]
+        t |> success(check_count(gotf, plain, BAR_EXACT) > 0, "{tag}: the table reads off the plain twin (the k-slot order)")
+    }
+}
+
+//! the k4 rows8 kernel fed by a producer's table: the norm's table mode writes the table and sums of `nrows` live rows of eight
+//! (the pad rows' table columns and sums NaN, as stale as a pool buffer may hold), the kernel reads them and writes y at row stride
+//! `ys`; the live rows against the dense reference over the norm's own halves
+def private rows8_k4_fed_gate(t : T?; var dev, queue; kdim, ndim, ys, nrows : int) {
+    let tag = "rows8 k4 table-fed k={kdim} n={ndim} ys={ys} rows={nrows}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kn = stamp_of(@@enc_rms_bhxt)
+        let kg = kernel_of(@@enc_rows8_k4_c)
+        var npso = mc |> keep_stamp(kn, err)
+        var gpso = mc |> keep_stamp(kg, err)
+        return if (!tensor_pso_or_skip(t, tag, gpso, dev, err) || !pso_ok(t, tag, npso, err))
+        if (!rows8_probe_ok(t, mc, err)) {
+            t |> skip("{tag}: the matrix unit's cooperative layout is not the rows8 kernels' on this box - the engine keeps the form off")
+            return
+        }
+        let nb = kdim / 256
+        let nsb = ndim * nb
+        var inscope kq, ks : array<uint8>
+        kq_fill_planes(4, nsb, kq, ks)
+        var inscope xv, w : array<float>
+        xv |> resize(nrows * kdim)
+        w |> resize(kdim)
+        for (i in range(nrows * kdim)) {
+            xv[i] = 0.07 * float(i % 39) - 1.3
+        }
+        for (i in range(kdim)) {
+            w[i] = 0.5 + 0.04 * float(i % 13)
+        }
+        let nan = uint_bits_to_float(0x7FC00000u)
+        let bks = mc |> in_plain(ks)
+        let bkq = mc |> in_plain(kq)
+        let bx = mc |> in_(xv)
+        let bw = mc |> in_(w)
+        let by0 = mc |> out_words(nrows * kdim, -1000.0)
+        let bh = mc |> out_words(nrows * kdim, float16(-1000.0))
+        let bxt = mc |> out_words(8 * kdim, float16(nan))
+        let bxs = mc |> out_words(kdim / 32 * 8, nan)
+        let by = mc |> out_words(8 * ys, -1000.0)
+        let bk = mc |> in_plain([uint(kdim)])
+        let bys = mc |> in_plain([uint(ys)])
+        let beps = mc |> in_plain([1.0e-5])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(kn, npso) {
+                invoke(kn.enc, enc, mc.buf[bx], 0ul, mc.buf[bw], mc.buf[by0], mc.buf[bk], mc.buf[beps], mc.buf[bh], mc.buf[bxt], mc.buf[bxs], int64(nrows))
+            }
+            invoke(kg.enc, enc, gpso, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bxt], mc.buf[by], 0ul, mc.buf[bxs], mc.buf[bk], mc.buf[bys], int64(ndim), int64(7 * ys + ndim))
+        }
+        return if (!ran)
+        var inscope halves <- buf_download(mc.buf[bh], nrows * kdim, type<float16>)
+        var inscope xh <- [for (v in halves); float(v)]
+        var inscope ref <- dense_ref_env(nrows, kdim, ndim, xh) $(j; var wrow) {
+            kq_row_ref(4, j * nb, nb, nsb, kq, ks, wrow)
+        }
+        var inscope yref <- rows8_y_ref(ref, ndim, ys, nrows)
+        check_buf(t, tag, mc.buf[by], yref.want, env_bar(2e-4, yref.env), Shape(row_width = ys), yref.env)
+    }
+}
+
+//! an affine member's rows8 kernel
+def private rows8_aff_kernel(f) {   //! generic, as the gates are: the Apple half alone instantiates it
+    return kernel_of(@@enc_rows8_mlx4_c) if (f == KqFmt.mlx4)
+    return kernel_of(@@enc_rows8_mlx8_c) if (f == KqFmt.mlx8)
+    return kernel_of(@@enc_rows8_mlx4b_c) if (f == KqFmt.mlx4b)
+    return kernel_of(@@enc_rows8_mlx6b_c) if (f == KqFmt.mlx6b)
+    return kernel_of(@@enc_rows8_mlx8b_c)
+}
+
+//! An affine member's rows8 kernel over an eight-row panel writing y at row stride `ys`, against the dense reference: `fed` off,
+//! the x-table prep over the f16-lattice panel, the reference over that panel; `fed` on, the norm's table mode (`enc_rms_bhxt`)
+//! over `nrows` live rows, the pad rows' table and sums NaN, the live rows against the reference over the norm's own halves. At
+//! `ndim` 96 a plane of six threadgroups, off every 64-row grid.
+def private rows8_aff_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim, ys : int; fed : bool; nrows : int = 8) {
+    let feed = fed ? "table-fed rows={nrows}" : "prep"
+    let tag = "rows8 {fmt} k={kdim} n={ndim} ys={ys} {feed}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kp = kernel_of(@@enc_rows8_prep_c)
+        let kn = stamp_of(@@enc_rms_bhxt)
+        let kg = rows8_aff_kernel(fmt)
+        var ppso = mc |> keep_stamp(kp, err)
+        var npso = mc |> keep_stamp(kn, err)
+        var gpso = mc |> keep_stamp(kg, err)
+        return if (!tensor_pso_or_skip(t, tag, gpso, dev, err) || !pso_ok(t, tag, ppso, err) || !pso_ok(t, tag, npso, err))
+        if (!rows8_probe_ok(t, mc, err)) {
+            t |> skip("{tag}: the matrix unit's cooperative layout is not the rows8 kernels' on this box - the engine keeps the form off")
+            return
+        }
+        var inscope qp, sp : array<uint8>
+        var inscope wref : array<float>
+        mlx_test_planes(fmt, ndim, kdim, qp, sp, wref)
+        let live = fed ? nrows : 8
+        let nan = uint_bits_to_float(0x7FC00000u)
+        var inscope xf, w : array<float>
+        xf |> resize(8 * kdim)
+        w |> resize(kdim)
+        for (i in range(8 * kdim)) {
+            xf[i] = float(float16(0.07 * float(i % 39) - 1.3))   //! the kernel reads the panel as halves: the oracle's panel is the same lattice
+        }
+        for (i in range(kdim)) {
+            w[i] = 0.5 + 0.04 * float(i % 13)
+        }
+        let bsp = mc |> in_plain(sp)
+        let bqp = mc |> in_plain(qp)
+        let bx = mc |> in_(xf)
+        let bw = mc |> in_(w)
+        let by0 = mc |> out_words(8 * kdim, -1000.0)
+        let bh = mc |> out_words(8 * kdim, float16(-1000.0))
+        let bxt = mc |> out_words(8 * kdim, float16(nan))
+        let bxs = mc |> out_words(kdim / 32 * 8, nan)
+        let by = mc |> out_words(8 * ys, -1000.0)
+        let bk = mc |> in_plain([uint(kdim)])
+        let bys = mc |> in_plain([uint(ys)])
+        let beps = mc |> in_plain([1.0e-5])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            if (fed) {
+                stamp_run(kn, npso) {
+                    invoke(kn.enc, enc, mc.buf[bx], 0ul, mc.buf[bw], mc.buf[by0], mc.buf[bk], mc.buf[beps], mc.buf[bh], mc.buf[bxt], mc.buf[bxs], int64(nrows))
+                }
+            } else {
+                invoke(kp.enc, enc, ppso, mc.buf[bx], 0ul, mc.buf[bxt], mc.buf[bxs], mc.buf[bk], int64(kdim / 32 * 8))
+            }
+            invoke(kg.enc, enc, gpso, mc.buf[bsp], 0ul, mc.buf[bqp], 0ul, mc.buf[bxt], mc.buf[by], 0ul, mc.buf[bxs], mc.buf[bk], mc.buf[bys], int64(ndim), int64(7 * ys + ndim))
+        }
+        return if (!ran)
+        var inscope halves <- buf_download(mc.buf[bh], live * kdim, type<float16>)
+        var inscope xr <- [for (i in range(live * kdim)); fed ? float(halves[i]) : xf[i]]
+        var inscope ref <- dense_ref_env(live, kdim, ndim, xr) $(j; var wrow) {
+            for (k in range(kdim)) {
+                wrow[k] = wref[j * kdim + k]
+            }
+        }
+        var inscope yref <- rows8_y_ref(ref, ndim, ys, live)
+        check_buf(t, tag, mc.buf[by], yref.want, env_bar(2e-4, yref.env), Shape(row_width = ys), yref.env)
+    }
+}
+
+//! the rows8 grid rule (`rows8_grid_of`) over the 27B's sites, each format's K block, rows off whole 16-row tiles and an empty
+//! plane - device-free
+[test]
+def test_rows8_grid_rule(t : T?) {
+    t |> run("rows8 grid: one threadgroup a 16-row tile, K whole blocks of the format, else no site") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            t |> equal(rows8_grid_of(KqFmt.mlx4b, 17408l, 5120l), 1088l, "gate / up: 17408 rows, 1088 threadgroups")
+            t |> equal(rows8_grid_of(KqFmt.mlx4b, 5120l, 17408l), 320l, "down: 5120 rows")
+            t |> equal(rows8_grid_of(KqFmt.mlx4b, 1024l, 5120l), 64l, "attention k / v: 1024 rows")
+            t |> equal(rows8_grid_of(KqFmt.mlx4b, 248320l, 5120l), 15520l, "the head: 248320 rows")
+            t |> equal(rows8_grid_of(KqFmt.q8, 96l, 5120l), 6l, "the q8 [beta | alpha] site's 96 rows")
+            t |> equal(rows8_grid_of(KqFmt.k4, 17408l, 5120l), 1088l, "k4 gate / up")
+            t |> equal(rows8_grid_of(KqFmt.k6, 6144l, 5120l), 384l, "k6 wo")
+            t |> equal(rows8_grid_of(KqFmt.q8, 64l, 96l), 4l, "q8: K whole 32-blocks")
+            t |> equal(rows8_grid_of(KqFmt.mlx8, 64l, 192l), 4l, "an affine member: K whole 64-groups")
+            t |> equal(rows8_grid_of(KqFmt.k4, 64l, 384l), 0l, "k4: K off whole superblocks declines")
+            t |> equal(rows8_grid_of(KqFmt.mlx4, 64l, 96l), 0l, "an affine member: K off whole 64-groups declines")
+            t |> equal(rows8_grid_of(KqFmt.k6, 72l, 5120l), 0l, "rows off whole 16-row tiles decline")
+            t |> equal(rows8_grid_of(KqFmt.q8, 0l, 5120l), 0l, "an empty plane declines")
+        } else {
+            t |> skip("no dasMetal in this build; the grid rule lives in the Metal prefill module")
+        }
+    }
+}
+
 [test]
 def test_metal_gemm_kernels(t : T?) {
     t |> run("prefill GEMM corpus (kq mul_mm trio + bf16 + Metal-4 tensor twins) == CPU references") <| @(t : T?) {
@@ -1770,6 +2364,43 @@ def test_metal_gemm_kernels(t : T?) {
                     // tall 128-row stamp: the deep-class in-kernel-dequant form (m = two tall tiles)
                     kq_mulmm_gate(t, dev, queue, fmt, true, 256, 512, 64, halfx = true, tall = true)
                     kq_mulmm_gate(t, dev, queue, fmt, true, 320, 512, 64, halfx = true, tall = true)   // off the 128 floor: the remainder pair at nonzero x/y offsets
+                    kq_mulmm_gate(t, dev, queue, fmt, true, 8, 512, 64, m8 = true)   // the rows sites' eight-row stamp
+                    kq_mulmm_gate(t, dev, queue, fmt, true, 8, 3840, 128, m8 = true)
+                }
+                // the rows sites' matrix-unit form over an eight-row panel: y at the site's own row stride and at a wider one
+                for (wide in [0, 48]) {
+                    rows8_k4_gate(t, dev, queue, 512, 64, 64 + wide)
+                    rows8_k4_gate(t, dev, queue, 3840, 128, 128 + wide)
+                    rows8_q8_gate(t, dev, queue, 512, 64, 64 + wide)
+                    rows8_q8_gate(t, dev, queue, 3840, 128, 128 + wide)
+                    rows8_k4_fed_gate(t, dev, queue, 3840, 128, 128 + wide, 8)
+                    rows8_k4_fed_gate(t, dev, queue, 512, 64, 64 + wide, 5)
+                    rows8_q8_gate(t, dev, queue, 5120, 96, 96 + wide)   // the [beta | alpha] site's 96 rows: six threadgroups
+                    for (fs in [6, 44]) {   //! the split-plane arms: k6, iq4xs
+                        rows8_split_gate(t, dev, queue, fs, 512, 64, 64 + wide, false)
+                        rows8_split_gate(t, dev, queue, fs, 3840, 128, 128 + wide, false)
+                        rows8_split_gate(t, dev, queue, fs, 5120, 96, 96 + wide, false)
+                        rows8_split_gate(t, dev, queue, fs, 3840, 128, 128 + wide, true, 8)
+                        rows8_split_gate(t, dev, queue, fs, 512, 64, 64 + wide, true, 5)
+                    }
+                    for (fa in [KqFmt.mlx4, KqFmt.mlx8, KqFmt.mlx4b, KqFmt.mlx8b, KqFmt.mlx6b]) {   //! the affine members, each its own stamp
+                        rows8_aff_gate(t, dev, queue, fa, 512, 64, 64 + wide, false)
+                        rows8_aff_gate(t, dev, queue, fa, 3840, 128, 128 + wide, false)
+                        rows8_aff_gate(t, dev, queue, fa, 5120, 96, 96 + wide, false)
+                        rows8_aff_gate(t, dev, queue, fa, 3840, 128, 128 + wide, true, 8)
+                        rows8_aff_gate(t, dev, queue, fa, 512, 64, 64 + wide, true, 5)
+                    }
+                }
+                // the producers' table mode against their HX stamps: a narrow width, the 27B's 5120 past the add-rms slab, the FFN width
+                for (nrows in [5, 8]) {
+                    rows8_table_gate(t, dev, queue, TabProducer.rms, 512, nrows)
+                    rows8_table_gate(t, dev, queue, TabProducer.rms, 5120, nrows)
+                    rows8_table_gate(t, dev, queue, TabProducer.add_rms, 2304, nrows)
+                    rows8_table_gate(t, dev, queue, TabProducer.add_rms_wide, 5120, nrows)
+                    rows8_table_gate(t, dev, queue, TabProducer.pre, 2304, nrows)
+                    rows8_table_gate(t, dev, queue, TabProducer.pre_wide, 5120, nrows)
+                    rows8_table_gate(t, dev, queue, TabProducer.swiglu, 17408, nrows)
+                    rows8_table_gate(t, dev, queue, TabProducer.geglu, 1536, nrows)
                 }
                 // the gemma-4 dense site width: kdim 3840 is 15 superblocks per row - an odd,
                 // non-power-of-two superblock count, off every other cell's 256/512 K. The K-quant
@@ -1824,6 +2455,8 @@ def test_metal_gemm_kernels(t : T?) {
                 q8_mulmm_t_gate(t, dev, queue, 64, 160, 64, halfx = true)
                 q8_mulmm_t_gate(t, dev, queue, 128, 256, 64, mt = 128)   // tall M-tile stamps
                 q8_mulmm_t_gate(t, dev, queue, 256, 256, 64, halfx = true, mt = 128)
+                q8_mulmm_t_gate(t, dev, queue, 8, 256, 64, mt = 8)   // the rows sites' eight-row stamp
+                q8_mulmm_t_gate(t, dev, queue, 8, 160, 128, mt = 8)
                 q8_devw_gate(t, dev, queue, 64, 256, 64)
                 q8_devw_gate(t, dev, queue, 32, 288, 128)   // non-256-multiple block count arms the dequant tail guard
                 q8_devw_gate(t, dev, queue, 32, 512, 128)   //! the tiled chain's split leg: two 256-deep shares
@@ -1850,12 +2483,20 @@ def test_metal_gemm_kernels(t : T?) {
                     q8_split_gate(t, dev, queue, 64, 1024, 96, 8, halfx)   //! two M tiles, three 32-column tiles, eight 4-block shares
                     q8_split_gate(t, dev, queue, 16, 1024, 64, 1, halfx)   //! the 16-row stamps, whole and split
                     q8_split_gate(t, dev, queue, 16, 1024, 64, 4, halfx)
+                    if (!halfx) {   //! the eight-row split stamp has the f32 X form alone
+                        q8_split_gate(t, dev, queue, 8, 1024, 64, 1, false)
+                        q8_split_gate(t, dev, queue, 8, 1024, 96, 4, false)
+                    }
                     bf16_split_gate(t, dev, queue, 32, 512, 64, 1, halfx)
                     bf16_split_gate(t, dev, queue, 64, 512, 128, 4, halfx)
                     for (fmt in [4, 5, 6, 44, 35, 45, 40, 49, 3, 33, 34, 2, 23, 24, 25]) {
                         kq_split_gate(t, dev, queue, fmt, 32, 1024, 64, 1, halfx)
                         kq_split_gate(t, dev, queue, fmt, 64, 1024, 128, 4, halfx)   //! a 256-K share: one superblock a split
                         kq_split_gate(t, dev, queue, fmt, 16, 1024, 64, 2, halfx)   //! the 16-row stamp
+                        if (!halfx) {
+                            kq_split_gate(t, dev, queue, fmt, 8, 1024, 64, 1, false)   //! the eight-row stamp, whole and split
+                            kq_split_gate(t, dev, queue, fmt, 8, 1024, 128, 4, false)
+                        }
                     }
                 }
                 //! the simdgroup base tiles' split-K stamps, every superblock format and the q8 blob

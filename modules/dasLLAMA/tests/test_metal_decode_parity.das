@@ -27,7 +27,8 @@ require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting
 // modes (CPU-prefill→GPU-decode, Metal-prefill→GPU-decode), the f16/f32 single-step logits + KV
 // row tolerance gates (GPU decode is NOT bit-exact: f32-X GEMVs vs the CPU's q8 activations,
 // online GPU softmax), the paged multi-run gather arm, session churn under the LRU cap, the
-// rewind (n_past = 0 reuse) arm, and the leak gate. Skips cleanly without the model, off-Apple,
+// rewind (n_past = 0 reuse) arm, the leak gate, and the single row's sampled selection landing on both of its alternating
+// slots (arm16: the stream's own temperature and recent window every step). Skips cleanly without the model, off-Apple,
 // or with no Metal device.
 
 // n greedy steps from the session's current state (the prompt is already evaluated); the decode
@@ -896,8 +897,8 @@ def test_metal_batch_mixed_sites(t : T?) {
     }
 }
 
-//! one tag array's per-32 planes (q51, iq4nl32)
-def private per32_in(a : array<KqFmt>) : int64 => long_length([for (f in a); f; where f == KqFmt.q51 || f == KqFmt.iq4nl32])
+//! one tag array's per-32 planes (`kq_dense_b32`: q51, iq4nl32, q4032, q5032 and the affine members)
+def private per32_in(a : array<KqFmt>) : int64 => long_length([for (f in a); f; where kq_dense_b32(f)])
 
 //! a dense model's planes tagged with a per-32 format
 def private per32_planes(m : Model) : int64 {
@@ -910,13 +911,19 @@ def private per32_planes(m : Model) : int64 {
 //! the streams the GPU single-row step's token for token
 [test]
 def test_metal_batch_per32_sites(t : T?) {
-    for (spec in [(file = "Llama-3.2-1B-Instruct-Q5_1-local.gguf", fam = "llama"), (file = "Qwen2.5-0.5B-Instruct-IQ4_NL-local.gguf", fam = "qwen2")]) {
-        t |> run("GPU batched decode on per-32 dense planes == the GPU single-row step ({spec.file})") <| @(t : T?) {
+    //! a `repo` row is a stocked safetensors snapshot (the affine members' carriers), a `file` row a GGUF under the models root
+    for (spec in [(file = "Llama-3.2-1B-Instruct-Q5_1-local.gguf", repo = "", fam = "llama"), (file = "Qwen2.5-0.5B-Instruct-IQ4_NL-local.gguf", repo = "", fam = "qwen2"),
+                  (file = "", repo = "mlx-community/Llama-3.2-1B-Instruct-8bit", fam = "llama"), (file = "", repo = "mlx-community/Llama-3.2-3B-Instruct-4bit", fam = "llama")]) {
+        t |> run("GPU batched decode on per-32 dense planes == the GPU single-row step ({spec.file}{spec.repo})") <| @(t : T?) {
             if (!family_on(t, spec.fam)) return
             static_if (typeinfo builtin_module_exists(das_metal)) {
                 return if (!jit_only(t) || !arm_on(t, "batch-per32"))
-                let path = path_join(models_dir(), spec.file)
-                return if (!model_available(t, path))
+                let path = empty(spec.repo) ? path_join(models_dir(), spec.file) : hf_snapshot_dir(spec.repo)
+                if (!empty(spec.repo) && empty(path)) {
+                    t |> skip("{spec.repo} not stocked")
+                    return
+                }
+                return if (empty(spec.repo) && !model_available(t, path))
                 let prior_wscale = get_wscale_f16()
                 let prior_backend = active_kernel_backend()
                 set_wscale_f16(false)
@@ -947,7 +954,10 @@ def test_metal_batch_per32_sites(t : T?) {
                     t |> equal(rows, disp * int64(nb), "B={nb}: every small-batch dispatch carried all {nb} rows ({disp} dispatches, {rows} rows)")
                     if (nb <= 8) {
                         t |> success(disp >= 12l * np32, "B={nb}: the per-32 sites rode the small-batch form ({disp} dispatches, {12l * np32} planes x steps)")
-                        t |> success(ks > 0l, "B={nb}: the narrow per-32 planes rode the K-split stamps ({ks} dispatches)")
+                        let kv_rows = tr.config.n_kv_heads * tr.config.head_size
+                        if (b32_narrow(kv_rows, tr.config.dim, int64(nb))) {   //! a k/v plane narrow at this row count: the K-split stamps' carrier
+                            t |> success(ks > 0l, "B={nb}: the narrow per-32 planes rode the K-split stamps ({ks} dispatches)")
+                        }
                     } else {
                         t |> equal(disp, 0l, "B={nb}: past eight rows the per-32 sites ride the mul_mm tile")
                     }
@@ -1368,7 +1378,6 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                 }
             }
 
-            // arm 15: the greedy chain stands down for a decode sampled at temp > 0 and rides for a greedy one
             if (arm_on(t, "arm15-spec-hint")) {
                 with_dasllama_jobque() {
                     let prev_spec = metal_decode_spec_mode()
@@ -1376,17 +1385,48 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                     select_prefill_override("metal")   // the blob twin has no CPU prefill
                     set_metal_prefill_min_npos(1l)
                     select_decode_override("metal")
-                    var ss = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
-                    set_seed_(ss, 7)
-                    let sp0 = metal_decode_spec_stats()
-                    let sampled = SamplingParams(temp = 0.8)
-                    let n_sampled = generate_(trg, ss, prompt2, sampled, 24l) $(_id : int64; _piece : string) : bool {
+                    var sampled = SamplingParams(temp = 0.8, top_k = 40l, top_p = 0.95)
+                    var sampled_ids : array<array<int64>>
+                    sampled_ids |> resize(2)
+                    var hits_on = 0l
+                    for (chain in range(2)) {   //! the chain on (adaptive), then off: the same seed must walk the same tokens
+                        set_metal_decode_speculate(chain == 0 ? -1 : 0)
+                        var ss = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+                        set_seed_(ss, 7)
+                        ss.spec_params = unsafe(addr(sampled))   //! the served stream's ask: the step lands its selection for the sampler
+                        let sp0 = metal_decode_spec_stats()
+                        let sel0 = sel_selections()
+                        let n_sampled = generate_(trg, ss, prompt2, sampled, 24l) $(id : int64; _piece : string) : bool {
+                            sampled_ids[chain] |> push(id)
+                            return true
+                        }
+                        let sp1 = metal_decode_spec_stats()
+                        ss.spec_params = null
+                        t |> success(n_sampled == 24l, "arm15: the sampled generation ran 24 tokens (chain {chain == 0 ? "on" : "off"})")
+                        t |> success(sel_selections() > sel0, "arm15: the sampled steps landed their selection (chain {chain == 0 ? "on" : "off"})")
+                        if (chain == 0) {
+                            hits_on = sp1.hits - sp0.hits
+                            t |> success(hits_on > 0l && sp1.misses == sp0.misses, "arm15: a decode sampled at temp 0.8 / top-k 40 rides the sampled chain ({hits_on} hits, {sp1.misses - sp0.misses} misses)")
+                        } else {
+                            t |> success(sp1.hits == sp0.hits && sp1.misses == sp0.misses, "arm15: the chain pinned off chains nothing")
+                        }
+                        delete ss
+                    }
+                    t |> equal(sampled_ids[0], sampled_ids[1], "arm15: the sampled chain's stream is the chain-off stream token for token")
+                    to_log(LOG_INFO, "arm15 sampled chain: {decode(trg, sampled_ids[0])}\n")
+                    set_metal_decode_speculate(-1)
+                    var sp = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+                    set_seed_(sp, 7)
+                    var penalized = SamplingParams(temp = 0.8, top_k = 40l, penalty = 1.1)
+                    sp.spec_params = unsafe(addr(penalized))
+                    let spp0 = metal_decode_spec_stats()
+                    generate_(trg, sp, prompt2, penalized, 24l) $(_id : int64; _piece : string) : bool {
                         return true
                     }
-                    let sp1 = metal_decode_spec_stats()
-                    t |> success(n_sampled == 24l, "arm15: the sampled generation ran 24 tokens")
-                    t |> success(sp1.hits == sp0.hits && sp1.misses == sp0.misses, "arm15: a decode sampled at temp 0.8 leaves the greedy chain alone ({sp1.hits - sp0.hits} hits, {sp1.misses - sp0.misses} misses)")
-                    delete ss
+                    let spp1 = metal_decode_spec_stats()
+                    sp.spec_params = null
+                    t |> success(spp1.hits == spp0.hits && spp1.misses == spp0.misses, "arm15: a penalized sampled decode leaves the chain alone ({spp1.hits - spp0.hits} hits, {spp1.misses - spp0.misses} misses)")
+                    delete sp
                     var sg = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
                     let greedy = SamplingParams()
                     let sp2 = metal_decode_spec_stats()
@@ -1395,7 +1435,7 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                     }
                     let sp3 = metal_decode_spec_stats()
                     t |> success(sp3.hits > sp2.hits, "arm15: a greedy decode rides the chain ({sp3.hits - sp2.hits} hits, {sp3.misses - sp2.misses} misses)")
-                    to_log(LOG_INFO, "arm15 eyeball: sampled {sp1.hits - sp0.hits} hits / {sp1.misses - sp0.misses} misses, greedy {sp3.hits - sp2.hits} hits / {sp3.misses - sp2.misses} misses\n")
+                    to_log(LOG_INFO, "arm15 eyeball: sampled chain {hits_on} hits, greedy {sp3.hits - sp2.hits} hits / {sp3.misses - sp2.misses} misses\n")
                     delete sg
                     set_metal_decode_speculate(prev_spec)
                     select_decode_override("")
@@ -1523,6 +1563,101 @@ def test_metal_prefill_poison(t : T?) {
             set_wscale_f16(prior_wscale)
         } else {
             feint("das_metal is not built on this platform; nothing to compare\n")
+        }
+    }
+}
+
+let private SEL_STEPS = 12
+let private SEL_LANDED_MIN = 8   //! the steps the window's compares cover: every landed tail moves the single row's slot
+
+//! the softmax denominator of `logits` at `temp` as the selection kernel sums it: every lane against the row's max, floored at -80
+def private host_sel_den(logits : array<float>; temp : float) : float {
+    var mx = -3.4e38
+    for (v in logits) {
+        mx = max(mx, v)
+    }
+    var den = 0.0
+    for (v in logits) {
+        den += exp(max((v - mx) / temp, -80.0))
+    }
+    return den
+}
+
+//! the single-row tail alternates its landing slot step by step (`enc_sel_tail`) while the ask words sit at the dispatch row,
+//! so every step's selection reads the stream's own temperature and recent window: the landed denominator is the host's over
+//! the step's rows at temp 0.5 (top-k off, so the top-p cut reads it), never the temp-1 one a slot-indexed read takes (the
+//! bar's control), and every recent id's landed raw logit is the row's
+[test]
+def test_metal_sel_single_row_ask(t : T?) {
+    t |> run("consecutive single-row sampled steps on Metal land the denominator at the stream's temperature and the recent window's raw logits on either landing slot (Llama-3.2-1B Q8)") <| @(t : T?) {
+        if (!family_on(t, "llama") || !arm_on(t, "arm16-sel-ask")) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let path = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf")
+            return if (!jit_model_available(t, path))
+            let prior_mode = get_metal_mode()
+            let prior_landing = get_select_landing()
+            let prior_spec = metal_decode_spec_mode()
+            set_metal_mode(MetalMode.when_available)
+            set_select_landing(true)
+            set_metal_decode_speculate(0)   //! the plain single-row step: each forward encodes its own tail
+            var trg <- blob_twin(t, path, 512l)
+            with_dasllama_jobque_() {
+                var prompt <- encode(trg, "Write a short poem about the sea.", true, false)
+                var sp = SamplingParams(temp = 0.5, top_k = 0l, top_p = 0.9, presence_penalty = 1.5)
+                var s <- create_session(trg)
+                set_seed(s, 7)
+                eval_(trg, s, prompt)
+                s.spec_params = unsafe(addr(sp))   //! the served stream's ask: the step lands its selection for the sampler
+                var tok = sample(s, sp)
+                s.recent |> push(tok)
+                var landed, at_temp, at_one : array<float>
+                var toks : array<int64>
+                for (step in range(SEL_STEPS)) {
+                    forward(trg, s, tok, s.n_past)
+                    s.n_past++
+                    if (!sel_landed(s, 0l)) {
+                        to_log(LOG_INFO, "arm16 step {step}: no selection landed (the driver's first steps land their rows)\n")
+                    } else {
+                        let row = sel_row_of(s, 0l)
+                        let hden = uint_bits_to_float(unsafe(g_sel_landing.hdr[row * SEL_HDR + SEL_HDR_DEN]))
+                        let den_temp = host_sel_den(s.logits, sp.temp)
+                        let den_one = host_sel_den(s.logits, 1.0)
+                        landed |> push(hden)
+                        at_temp |> push(den_temp)
+                        at_one |> push(den_one)
+                        let nrec = length(g_sel_ask_ids)
+                        var rec_off = 0
+                        for (id, j in g_sel_ask_ids, count()) {
+                            if (unsafe(g_sel_landing.rec[row * g_sel_landing.recent_cap + int64(j)]) != s.logits[id]) {
+                                rec_off++
+                            }
+                        }
+                        to_log(LOG_INFO, "arm16 step {step}: landed den {hden}, host den at temp {sp.temp} {den_temp}, at temp 1 {den_one}; {nrec} recent ids, {rec_off} landed raw logits off the row's\n")
+                        t |> success(nrec > 0 && rec_off == 0, "step {step}: the ask listed {nrec} recent ids and the step landed every one's raw logit ({rec_off} off)")
+                    }
+                    tok = sample(s, sp)
+                    toks |> push(tok)
+                    s.recent |> push(tok)   //! generate's window: the stream's own tokens, which the ask lists under the penalty
+                }
+                s.spec_params = null
+                to_log(LOG_INFO, "arm16 sampled text: {eyeball_text(trg, toks)}\n")
+                t |> success(length(landed) >= SEL_LANDED_MIN, "arm16: {length(landed)} of {SEL_STEPS} steps landed their selection (at least {SEL_LANDED_MIN})")
+                let bar = Bar(rel = 1e-3, poison_rel = 0.5)
+                check_rows(t, "arm16: the landed denominators against the host's at temp 0.5", landed, at_temp, bar, FLAT_ROWS)
+                check_exceeds(t, "arm16 control: the landed denominators against the host's at temp 1", landed, at_one, bar)
+                delete toks
+                delete at_one
+                delete at_temp
+                delete landed
+                delete s
+                delete prompt
+            }
+            set_metal_decode_speculate(prior_spec)
+            set_select_landing(prior_landing)
+            set_metal_mode(prior_mode)
+            delete trg
+        } else {
+            t |> skip("dasMetal not built")
         }
     }
 }

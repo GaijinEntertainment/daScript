@@ -19,6 +19,7 @@ require daslib/strings_boost   // split: a stamp= family's fields
 require dasllama/dasllama_convert   // dequant_k{4,5,6}_plane_superblock — the kq reference dequant
 require dasllama/dasllama_gemm_schema  // kq_qsb — the ONE per-format quant-plane stride source
 require daslib/f16_cvt              // f32_to_f16 — packing synthetic scale planes
+require daslib/math_bits            // float_bits_to_uint — the affine fixture's BF16 pair halves
 require dastest/testing_boost
 require _compares
 require _metal4_probe   // metal4_tensor_available: the tensor stamps' skip rule
@@ -540,6 +541,65 @@ def kq_hash_byte(i : int) : uint8 {
 
 let KQ_SAFE_SCALES = fixed_array(0.25, 0.5, 1.0, 0.125, 2.0, 0.75, 1.5, 0.375)
 
+//! Build an affine member's plane pairs (mlx4 / mlx8 / mlx4b / mlx8b / mlx6b) for `rows` rows of n elements: patterned codes
+//! (every 4-bit code, the 6- and 8-bit ranges across), a 64-group's pow2 scale and quarter-valued bias in the member's half
+//! type, the codes packed as the disk lays them (4-bit element k at bits 4k, 6-bit element k at bits 6k of the block's stream,
+//! 8-bit element k byte k) - scale * q + bias is f32-exact, so the CPU float reference is BIT-exact under any GPU reduction order
+def mlx_test_planes(fmt : KqFmt; rows, n : int; var qp : array<uint8>; var sp : array<uint8>; var wref : array<float>) {
+    let nb = n / 32
+    let qb = int(kq_qsb(fmt))
+    let a8 = fmt == KqFmt.mlx8 || fmt == KqFmt.mlx8b
+    let a6 = fmt == KqFmt.mlx6b
+    let bf = fmt == KqFmt.mlx4b || fmt == KqFmt.mlx8b || a6
+    let slut = a8 ? fixed_array(0.0625, 0.125, 0.25, 0.5) : (a6 ? fixed_array(0.125, 0.25, 0.5, 1.0) : fixed_array(0.25, 0.5, 1.0, 2.0))
+    let blut = fixed_array(-1.0, 0.5, 1.25, -0.25)
+    qp |> resize(rows * nb * qb)
+    sp |> resize(rows * nb * 2)
+    wref |> resize(rows * n)
+    for (g in range(rows * nb / 2)) {
+        let s = slut[(g / 3) % 4]
+        let bias = blut[(g * 5 + 1) % 4]
+        let sbits = bf ? float_bits_to_uint(s) >> 16u : f32_to_f16(s)
+        let bbits = bf ? float_bits_to_uint(bias) >> 16u : f32_to_f16(bias)
+        sp[g * 4] = uint8(sbits & 0xFF)
+        sp[g * 4 + 1] = uint8(sbits >> 8u)
+        sp[g * 4 + 2] = uint8(bbits & 0xFF)
+        sp[g * 4 + 3] = uint8(bbits >> 8u)
+        for (i in range(64)) {
+            let b = g * 2 + i / 32
+            let k = i % 32
+            let q = a8 ? (b * 37 + k * 29 + k / 3) % 256 : (a6 ? (b * 13 + k * 23 + k / 3) % 64 : (b * 11 + k * 7 + k / 3) % 16)
+            wref[g * 64 + i] = s * float(q) + bias
+            if (a8) {
+                qp[b * qb + k] = uint8(q)
+            } elif (a6) {
+                let bit = k * 6
+                let o = b * qb + bit / 8
+                qp[o] = uint8(uint(qp[o]) | ((uint(q) << uint(bit % 8)) & 255u))
+                if (bit % 8 > 2) {
+                    qp[o + 1] = uint8(uint(qp[o + 1]) | (uint(q) >> uint(8 - bit % 8)))
+                }
+            } else {
+                qp[b * qb + k / 2] = uint8(uint(qp[b * qb + k / 2]) | (uint(q) << uint((k % 2) * 4)))
+            }
+        }
+    }
+}
+
+//! a BF16 affine plane pair scaled by the power of two `f`: every group's scale and bias halves and the weights, exact
+def mlx_bf16_scale_planes(var sp : array<uint8>; var wref : array<float>; f : float) {
+    for (hi in range(length(sp) / 2)) {
+        let o = 2 * hi
+        let v = uint_bits_to_float((uint(sp[o]) | (uint(sp[o + 1]) << 8u)) << 16u) * f
+        let bits = float_bits_to_uint(v) >> 16u
+        sp[o] = uint8(bits & 0xFFu)
+        sp[o + 1] = uint8(bits >> 8u)
+    }
+    for (v in wref) {
+        v *= f
+    }
+}
+
 // quant plane = hash bytes (any bit pattern is valid); scale plane K4/K5 = [d f16][dmin f16]
 // [12 packed 6-bit bytes] per superblock, K6 = [16B sub-scales] x nsb + f16 d tail, IQ4_XS (44) =
 // the same split form with [8 signed sub-scales in -31..31][8 zero] strips, Q3_K (3) = the k6 form over 96B quants
@@ -599,6 +659,32 @@ def kq_fill_planes(fmt, nsb : int; var kq : array<uint8>; var ks : array<uint8>)
             ks[b * 16 + 3] = uint8(mbits >> 8u)
             for (i in range(12)) {
                 ks[b * 16 + 4 + i] = kq_hash_byte(b * 31 + i * 5 + 7)
+            }
+        }
+    }
+}
+
+//! Build iq4nl32-form plane pairs for `rows` rows of n elements under the codebook `lut` (iq4nl's, or q4032's linear one):
+//! patterned nibbles (position-dependent, every codebook slot reached), pow2 f16 d - d*LUT[q] is an f16-exact value, so the
+//! CPU float reference is BIT-exact under any GPU reduction order.
+def iq4nl32_test_planes(rows, n : int; var qp : array<uint8>; var sp : array<uint8>; var wref : array<float>; lut : int8[16]) {
+    let nb = n / 32
+    let dlut = fixed_array(0.25, 0.5, 1.0, 2.0)
+    qp |> resize(rows * nb * 16)
+    sp |> resize(rows * nb * 2)
+    wref |> resize(rows * n)
+    for (b in range(rows * nb)) {
+        let d = dlut[(b / 3) % 4]
+        let dbits = f32_to_f16(d)
+        sp[b * 2] = uint8(dbits & 0xFF)
+        sp[b * 2 + 1] = uint8(dbits >> 8u)
+        for (i in range(32)) {
+            let q = (b * 11 + i * 7 + i / 3) % 16
+            wref[b * 32 + i] = d * float(int(lut[q]))
+            if (i < 16) {
+                qp[b * 16 + i] = uint8(q)
+            } else {
+                qp[b * 16 + i - 16] = uint8(uint(qp[b * 16 + i - 16]) | (uint(q) << 4u))
             }
         }
     }

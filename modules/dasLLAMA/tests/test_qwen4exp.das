@@ -116,7 +116,7 @@ def test_hc_mixer(t : T?) {
         }
         var want_mixed, want_inject : array<float>
         hc_mix_reference(m, s.hc_res, want_mixed, want_inject)
-        hc_mix_row(m, s, s.hc_res, 0l, 0l, 0l, LR * HCD, HCD)
+        hc_mix_row(m, s, s.hc_res, 0l, 0l, 0l, LR * HCD, HCD, 0l)
         let dm = maxdiff(s.xb, want_mixed, DIM)
         let di = maxdiff(s.hc_inject, want_inject, HC)
         t |> success(dm < 1.0e-5, "mixed row within 1e-5 of the reference (maxdiff {dm})")
@@ -130,7 +130,7 @@ def test_hc_mixer(t : T?) {
         t |> success(int64(nz) > DIM / 2l, "the mixed row is not degenerate ({nz} of {DIM} live)")
         // the head mixer (no inject) leaves the scatter logits alone
         s.hc_inject[0] = 123.0
-        hc_mix_row(m, s, s.hc_res, 0l, 0l, 0l, LR * HCD, -1l)
+        hc_mix_row(m, s, s.hc_res, 0l, 0l, 0l, LR * HCD, -1l, hc_head_site(m.config))
         t |> equal(s.hc_inject[0], 123.0)
         delete want_mixed
         delete want_inject
@@ -171,6 +171,83 @@ def test_hc_mixer(t : T?) {
     }
 }
 
+def private bf16_bits(x : float) : uint => unsafe(reinterpret<uint>(x)) >> 16u
+
+def private bf16_val(h : uint) : float => unsafe(reinterpret<float>(h << 16u))
+
+//! the fixture's down plane [LR x HCD] as an mlx8b triplet in the member's planes at element 0, tagged on site 0: each 64-group
+//! affine over its span (BF16 scale and bias), and the f32 down region overwritten with the planes' exact weights, so the
+//! scalar reference reads what the member serves; with `zero_scales` every scale is 0 (the control)
+def private hc_down_affine(var m : Model; zero_scales : bool) {
+    let groups = HCD / 64l
+    m.hc_down_fmt <- [KqFmt.mlx8b, KqFmt.q8, KqFmt.q8, KqFmt.q8]
+    m.hc_up_fmt <- [KqFmt.q8, KqFmt.q8, KqFmt.q8, KqFmt.q8]
+    kq_plane_pair(m, KqFmt.mlx8b) $(var q : array<uint8>; var s : array<uint8>) {
+        q |> resize(LR * HCD)
+        s |> resize(LR * groups * 4l)
+        for (r in range64(LR)) {
+            for (g in range64(groups)) {
+                let base = r * HCD + g * 64l
+                var lo = m.wblob[base]
+                var hi = lo
+                for (k in range64(64l)) {
+                    lo = min(lo, m.wblob[base + k])
+                    hi = max(hi, m.wblob[base + k])
+                }
+                let sh = zero_scales ? 0u : bf16_bits((hi - lo) / 255.0)
+                let bh = bf16_bits(lo)
+                let sc = bf16_val(sh)
+                let bi = bf16_val(bh)
+                for (k in range64(64l)) {
+                    let code = sc > 0.0 ? clamp(int(round((m.wblob[base + k] - bi) / sc)), 0, 255) : 0
+                    q[base + k] = uint8(code)
+                    m.wblob[base + k] = sc * float(code) + bi
+                }
+                let p = (r * groups + g) * 4l
+                s[p] = uint8(sh & 255u)
+                s[p + 1l] = uint8(sh >> 8u)
+                s[p + 2l] = uint8(bh & 255u)
+                s[p + 3l] = uint8(bh >> 8u)
+            }
+        }
+    }
+}
+
+[test]
+def test_hc_mixer_tagged(t : T?) {
+    t |> run("hc_mix_row on an mlx8b-tagged down plane: the member's planes serve the site, within the activations' Q8_0 rounding of the reference") @(t : T?) {
+        for (zero_scales in [false, true]) {
+            var m = Model()
+            hc_fixture(m)
+            var want_mixed, want_inject : array<float>
+            var s <- make_run_state(m.config)
+            var seed = 777u
+            for (i in range64(HCD)) {
+                s.hc_res[i] = lcg(seed) * 4.0
+            }
+            t |> equal(hc_planes_unserved_by(m) $(f : KqFmt; _k, _r : int64) => f == KqFmt.q8, "", "untagged mixers are q8 throughout")
+            hc_down_affine(m, false)
+            t |> equal(hc_planes_unserved_by(m) $(f : KqFmt; _k, _r : int64) => f == KqFmt.q8, "mixer site 0's down plane is mlx8b",
+                "a tagged plane names its site to a home's gate that refuses the member")
+            hc_mix_reference(m, s.hc_res, want_mixed, want_inject)
+            if (zero_scales) {
+                hc_down_affine(m, true)
+            }
+            hc_mix_row(m, s, s.hc_res, 0l, 0l, 0l, LR * HCD, HCD, 0l)
+            let dm = maxdiff(s.xb, want_mixed, DIM)
+            if (zero_scales) {
+                t |> success(dm > 1.0e-2, "the control - the planes' scales zeroed - lands outside the bar ({dm})")
+            } else {
+                t |> success(dm < 1.0e-2, "the mixed row within 1e-2 of the reference over the planes' own weights ({dm})")
+            }
+            delete want_mixed
+            delete want_inject
+            delete s
+            delete m
+        }
+    }
+}
+
 let private NPOS = 2048l   //! HCD x NPOS past g_norm_par_threshold: the batched mixer and scatter split over positions
 let private HC_ROWS_SEED = 4242u   //! the seed both the batched run and the scalar reference fill the wide rows from
 
@@ -198,7 +275,7 @@ def private hc_batch_run(m : Model) : HcBatch {
     }
     var out_b <- [for (_i in range64(NPOS * DIM)); lcg(seed)]
     let d0 = get_disp_count()
-    hc_mix_b(m, s, 0l, 0l, LR * HCD, HCD, NPOS)
+    hc_mix_b(m, s, 0l, 0l, LR * HCD, HCD, 0l, NPOS)
     let d1 = get_disp_count()
     var r = HcBatch(mixed := s.xb_b, inject := s.hc_inject_b, mix_dispatches = d1 - d0)
     block_resid_b(m, s, out_b, NPOS)

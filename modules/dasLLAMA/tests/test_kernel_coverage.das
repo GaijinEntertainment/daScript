@@ -74,6 +74,9 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // the classifier tail's selection (compiled on every Metal arm, dispatched only for a sampled stream's step; the zoo's rows
     // step greedy); its coverage is cls_select_gate in test_metal_misc_kernels.das
     "metal_cls_select",
+    // the sampled chain's draw over the landing rides a sampled single-row stream (the zoo steps greedy); its coverage is
+    // sel_draw_gate in test_metal_misc_kernels.das and arm15 in test_metal_decode_parity.das
+    "metal_sel_draw",
     // the MoE expert mul_mm tall M-tile pair (128-row floor + remainder) in q5_K: the zoo
     // stocks no Q5_K MoE carrier, where every other format's pair rides a census row's
     // window. Its coverage is the tall-pair kernel-unit gate in test_metal_gemm_kernels.das
@@ -104,6 +107,24 @@ let private CENSUS_NEVER_DISPATCHED <- [
     "metal_kq_gemv_k2", "MetalKqMvB2K2", "MetalKqMvB4K2", "MetalKqMvB8K2", "MetalKqMulMmK2",
     "metal_kq_gemv_k3", "MetalKqMvB2K3", "MetalKqMvB4K3", "MetalKqMvB8K3", "MetalKqMulMmK3",
     "MetalKqGemvIq4xs", "MetalKqMvB2Iq4xs", "MetalKqMvB4Iq4xs", "MetalKqMvB8Iq4xs", "MetalKqMulMmIq4xs",
+    // the iq4xs fat-threadgroup family, the fused chain's routed pair and its normed router: iq4xs planes again, the chain's
+    // carrier Qwen3.6-35B-A3B (large tier). Their coverage is kq_fat_gate and moe_fused_gate in test_metal_gemv_kernels.das
+    // and the 35B's census-iq4xs arm in test_metal_format_census.das
+    "MetalKqFatIq4xs", "MetalKqFatIq4xsN", "MetalKqFatIq4xsA", "MetalKqFatIq4xsNX",
+    "metal_moe_gemv_gu_iq4xs", "metal_moe_down2_iq4xs", "metal_moe_router_n",
+    // the iq4xs rows8 matrix-unit stamp: a five-to-eight-row step over iq4xs dense planes, and no census row holds an iq4xs
+    // plane at a batched step. The stocked carrier is Qwen3.6-35B-A3B-MTP-IQ4_XS-pure (the mtp-ffk-35b-iq4xs arm of
+    // test_metal_mtp_parity.das, its depth-4 verify's five rows); the model-free coverage is rows8_split_gate (kq 44) in
+    // test_metal_gemm_kernels.das
+    "MetalRows8Iq4xs",
+    // the rows' expert union - its table, the gate/up and down over each entry's rows and the combine over partial rows - serves
+    // only under DASLLAMA_METAL_MOE_UNION (off by default); carrier the 35B file's mtp-ffk-35b-iq4xs arm under the knob, the
+    // model-free coverage moe_union_gate in test_metal_gemv_kernels.das
+    "MetalMoeUnion", "metal_moe_gu_union_iq4xs", "metal_moe_dn_union_iq4xs", "metal_moe_down2p_iq4xs",
+    // ... the pair's Flash-Next stamps (the iq3s grid gate/up, the iq4nl32 down with the q8 or iq4nl32 shared down, the row and
+    // the hyper-connection landings): carrier Qwen3.8-Flash-Next (large tier); their cell is moe_fused_fn_gate in the same file
+    "metal_moe_gemv_gu_iq3s_f4", "metal_moe_down2_iq4nl32", "metal_moe_down2_iq4nl32_hc", "metal_moe_down2_iq4nl32_shq8",
+    "metal_moe_down2_iq4nl32_shq8_hc",
     "MetalKqGemvIq4nl", "MetalKqMvB2Iq4nl", "MetalKqMvB4Iq4nl", "MetalKqMvB8Iq4nl", "MetalKqMulMmIq4nl",
     "metal_kq_gemv_iq3s", "MetalKqMvB2Iq3s", "MetalKqMvB4Iq3s", "MetalKqMvB8Iq3s", "MetalKqMulMmIq3s",
     "metal_kq_gemv_iq3xxs", "MetalKqMvB2Iq3xxs", "MetalKqMvB4Iq3xxs", "MetalKqMvB8Iq3xxs", "MetalKqMulMmIq3xxs",
@@ -137,6 +158,10 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // prefix (the stamp is the f32 class's name plus H)
     "MetalKqMvW2K4H", "MetalKqMvW4K4H", "MetalKqMvW8K4H",
     "MetalKqMvB2K5H", "MetalKqMvB4K5H", "MetalKqMvB8K5H", "MetalKqMvB2K6H", "MetalKqMvB4K6H", "MetalKqMvB8K6H",
+    // the twin producers' rows8 table mode: a step of five to eight rows that carries the half-x twins (a box-crowned
+    // `kq_rows_half_<fmt>`) on a box whose rows8 layout probe passed. Their coverage is rows8_table_gate and
+    // rows8_k4_fed_gate in test_metal_gemm_kernels.das
+    "MetalRmsNormHXT", "metal_add_rms_hxt", "metal_pre_add_rms_hxt", "MetalSwigluHXT", "MetalGegluHXT",
     // the Q4_0 small-batch twins: the gemma4moe row reaches every other q40 dense stamp, but its
     // decode steps are single rows, so the B2/B4/B8 tiles need a batched carrier no zoo row runs.
     // The simdgroup dense mul_mm loses the box race to its own tensor stamp, so it never serves
@@ -251,6 +276,39 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // (`kq_fmt_row_ok`), and no stocked census carrier holds one - the census-q51 / census-iq4nl32 arms mint
     // theirs locally. Their coverage is b32_gemv_gate and b32_mm_gate in test_metal_prefill_kernels.das
     "metal_kq_gemv_q51", "metal_kq_gemv_iq4nl32", "MetalKqMulMmQ51", "MetalKqMulMmIq4nl32",
+    // ... and their wide one-row stamps; coverage b32_gemv_wide_gate in test_metal_prefill_kernels.das
+    "MetalKqGemvQ51W", "MetalKqGemvIq4nl32W",
+    // the expert-indexed wide stamps of q51 and q5032: their routed stacks load off the census-moe-q51 / census-moe-q5032 local
+    // mints, which no zoo row loads. Their coverage is moe_gemv_gate's wide rows in test_metal_prefill_kernels.das
+    "MetalMoeGemvQ51W", "MetalMoeGemvQ5032W",
+    // the affine members' every form (mlx4 / mlx8 / mlx4b / mlx8b - the GEMV, its K split, its wide form and its expert-indexed twin, the
+    // small-batch stamps, the token-table gather, the base tile and its split, the dense tensor twins under their
+    // kq_mulmm_<member> crowns, the dev-W passes, the routed base tile, its four twins, the expert-indexed wide form and the rows8
+    // matrix-unit stamps): their planes load off a safetensors snapshot, and the census zoo loads GGUF files alone. The stocked
+    // carriers are the mlx-community snapshots (the metal-mlx8 / metal-mlx4 / metal-27b / metal-35b arms of test_mlx_snapshot.das -
+    // the 35B-A3B's routed stacks the routed forms' -, the batch-per32 arm of test_metal_decode_parity.das, the dflash-27b-mlx-metal
+    // and dflash-27b-mlx-sampled arms of test_dflash_drafter.das the rows8 stamps'); the model-free coverage is the affine rows of
+    // the per-32 gates in test_metal_prefill_kernels.das, embed_b32_gate in test_metal_misc_kernels.das and rows8_aff_gate in
+    // test_metal_gemm_kernels.das
+    "metal_kq_gemv_mlx", "MetalKqGemvMlx", "metal_moe_gemv_mlx", "MetalB32MvB2Mlx", "MetalB32MvB4Mlx", "MetalB32MvB8Mlx", "MetalEmbedB32Mlx", "MetalKqMulMmMlx",
+    "MetalRows8Mlx",
+    "MetalKqDequantMlx", "metal_moe_mulmm_mlx", "MetalMoeMulMmMlx", "MetalMoeGemvMlx",
+    "MetalKqMulMmMlx4T", "MetalKqMulMmMlx4TH", "MetalKqMulMmMlx4TH128", "MetalKqMulMmMlx4THDb", "MetalKqMulMmMlx4THDb128",
+    "MetalKqMulMmMlx8T", "MetalKqMulMmMlx8TH", "MetalKqMulMmMlx8TH128", "MetalKqMulMmMlx8THDb", "MetalKqMulMmMlx8THDb128",
+    "MetalKqMulMmMlx4bT", "MetalKqMulMmMlx4bTH", "MetalKqMulMmMlx4bTH128", "MetalKqMulMmMlx4bTHDb", "MetalKqMulMmMlx4bTHDb128",
+    "MetalKqMulMmMlx8bT", "MetalKqMulMmMlx8bTH", "MetalKqMulMmMlx8bTH128", "MetalKqMulMmMlx8bTHDb", "MetalKqMulMmMlx8bTHDb128",
+    "MetalKqMulMmMlx4THSk16_metal_kq_mulmm_db", "MetalKqMulMmMlx4TSk16_metal_kq_mulmm_db", "MetalKqMulMmMlx8THSk16_metal_kq_mulmm_db",
+    "MetalKqMulMmMlx8TSk16_metal_kq_mulmm_db", "MetalKqMulMmMlx4bTHSk16_metal_kq_mulmm_db", "MetalKqMulMmMlx4bTSk16_metal_kq_mulmm_db",
+    "MetalKqMulMmMlx8bTHSk16_metal_kq_mulmm_db", "MetalKqMulMmMlx8bTSk16_metal_kq_mulmm_db",
+    // the 6-bit member mlx6b's dense forms (the prefixes above take its GEMV, small-batch, gather, base tile, dev-W and rows8
+    // stamps): no stocked carrier holds a 6-bit plane yet - the Qwen3.8-Flash-Next pack's attention planes are its first; the
+    // model-free coverage is the mlx6b rows of the same three files' gates
+    "MetalKqMulMmMlx6bT", "MetalKqMulMmMlx6bTH", "MetalKqMulMmMlx6bTH128", "MetalKqMulMmMlx6bTHDb", "MetalKqMulMmMlx6bTHDb128",
+    "MetalKqMulMmMlx6bTHSk16_metal_kq_mulmm_db", "MetalKqMulMmMlx6bTSk16_metal_kq_mulmm_db",
+    // the fused mixer pair's affine arms and the routed pair's affine stamps: no stocked carrier holds an affine mixer or routed
+    // stack the census loads; the coverage is gemv_hcn_aff_gate / gemv_sg_lo_aff_gate in test_metal_misc_kernels.das and
+    // moe_fused_aff_gate in test_metal_gemv_kernels.das
+    "MetalGemvHcNMlx", "MetalGemvSgLoMlx", "metal_moe_down2_mlx", "MetalMoeGuMlx",
     // the 16-deep router select stamp: it serves past 256 experts, and the stocked MoE carriers top
     // out at 128 (Qwen3-30B-A3B), 60 (Qwen1.5-MoE) and 32 (gpt-oss-20b). Its coverage is
     // moe_select_gate's ne=512 and ne=300 cases in test_metal_prefill_kernels.das
@@ -267,8 +325,14 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // (qwen4exp): the one carrier is Qwen3.8-Flash-Next (94 GB, the large tier), which no census
     // row loads. Their coverage is the hc_*/ple_* gates in test_metal_misc_kernels.das and the
     // sigmoid leg of dn_chain_gate in test_metal_prefill_kernels.das
-    "metal_hc_norm", "MetalHcLo", "metal_hc_init", "metal_hc_mix", "metal_hc_combine", "metal_ple_gate", "metal_ple_conv",
-    "MetalDnGateSig",
+    "metal_hc_norm", "MetalHcLo", "metal_hc_init", "metal_hc_mix", "metal_hc_combine", "metal_hc_stream_mean", "metal_ple_gate",
+    "metal_ple_conv", "MetalDnGateSig",
+    // ... and the single row's fused seams (the mixer's opening and up, the out projections' scatter, the routed combine's
+    // scatter): the gemv_hcn / gemv_sg_lo / gemv_hc / combine_sh_hc gates in test_metal_misc_kernels.das
+    "MetalQ8GemvHcN", "MetalQ8GemvSgLo", "MetalQ8GemvHc", "metal_moe_combine_sh_hc",
+    // ... and the five-to-eight-row mixer's four (the prep, the stream-split down, the finish, the up with the mix): hc_mix8_gate
+    // in test_metal_misc_kernels.das
+    "MetalHcPrep8", "MetalHcFin8", "MetalRows8Q8Hc", "MetalRows8Q8HcMix",
     // the device attention pair's 128-row stamps: they serve a window whose padded row count is a
     // multiple of 128, and the census prompt pads to 608 rows, which the 32-row stamps take. Their
     // coverage is attn_qk_mm_gate's pair arms and attn_dev_pair_gate in test_metal_gemm_kernels.das and the
@@ -893,6 +957,11 @@ let private CENSUS_CROWN_CONDITIONAL : table<string; string> <- {
     "MetalKqMulMmQ51T" => "kq_mulmm_q51", "MetalKqMulMmQ51TH" => "kq_mulmm_q51", "MetalKqMulMmQ51TH128" => "kq_mulmm_q51", "MetalKqMulMmQ51THDb" => "kq_mulmm_q51", "MetalKqMulMmQ51THDb128" => "kq_mulmm_q51",
     "MetalKqMulMmIq4nl32T" => "kq_mulmm_iq4nl32", "MetalKqMulMmIq4nl32TH" => "kq_mulmm_iq4nl32", "MetalKqMulMmIq4nl32TH128" => "kq_mulmm_iq4nl32", "MetalKqMulMmIq4nl32THDb" => "kq_mulmm_iq4nl32", "MetalKqMulMmIq4nl32THDb128" => "kq_mulmm_iq4nl32",
     "MetalKqMulMmQ4032T" => "kq_mulmm_q4032", "MetalKqMulMmQ4032TH" => "kq_mulmm_q4032", "MetalKqMulMmQ4032TH128" => "kq_mulmm_q4032", "MetalKqMulMmQ4032THDb" => "kq_mulmm_q4032", "MetalKqMulMmQ4032THDb128" => "kq_mulmm_q4032",
+    "MetalKqMulMmMlx4T" => "kq_mulmm_mlx4", "MetalKqMulMmMlx4TH" => "kq_mulmm_mlx4", "MetalKqMulMmMlx4TH128" => "kq_mulmm_mlx4", "MetalKqMulMmMlx4THDb" => "kq_mulmm_mlx4", "MetalKqMulMmMlx4THDb128" => "kq_mulmm_mlx4",
+    "MetalKqMulMmMlx8T" => "kq_mulmm_mlx8", "MetalKqMulMmMlx8TH" => "kq_mulmm_mlx8", "MetalKqMulMmMlx8TH128" => "kq_mulmm_mlx8", "MetalKqMulMmMlx8THDb" => "kq_mulmm_mlx8", "MetalKqMulMmMlx8THDb128" => "kq_mulmm_mlx8",
+    "MetalKqMulMmMlx4bT" => "kq_mulmm_mlx4b", "MetalKqMulMmMlx4bTH" => "kq_mulmm_mlx4b", "MetalKqMulMmMlx4bTH128" => "kq_mulmm_mlx4b", "MetalKqMulMmMlx4bTHDb" => "kq_mulmm_mlx4b", "MetalKqMulMmMlx4bTHDb128" => "kq_mulmm_mlx4b",
+    "MetalKqMulMmMlx8bT" => "kq_mulmm_mlx8b", "MetalKqMulMmMlx8bTH" => "kq_mulmm_mlx8b", "MetalKqMulMmMlx8bTH128" => "kq_mulmm_mlx8b", "MetalKqMulMmMlx8bTHDb" => "kq_mulmm_mlx8b", "MetalKqMulMmMlx8bTHDb128" => "kq_mulmm_mlx8b",
+    "MetalKqMulMmMlx6bT" => "kq_mulmm_mlx6b", "MetalKqMulMmMlx6bTH" => "kq_mulmm_mlx6b", "MetalKqMulMmMlx6bTH128" => "kq_mulmm_mlx6b", "MetalKqMulMmMlx6bTHDb" => "kq_mulmm_mlx6b", "MetalKqMulMmMlx6bTHDb128" => "kq_mulmm_mlx6b",
     "MetalKqMulMmQ5032T" => "kq_mulmm_q5032", "MetalKqMulMmQ5032TH" => "kq_mulmm_q5032", "MetalKqMulMmQ5032TH128" => "kq_mulmm_q5032", "MetalKqMulMmQ5032THDb" => "kq_mulmm_q5032", "MetalKqMulMmQ5032THDb128" => "kq_mulmm_q5032",
     // the split-K pair behind each format's own kq_mulmm crown
     // ... and the 16-row stamps behind the same crowns (the q8 blob's behind mulmm_q8)
@@ -934,6 +1003,16 @@ let private CENSUS_CROWN_CONDITIONAL : table<string; string> <- {
     "MetalKqMulMmQ4032TSk16_metal_kq_mulmm_db" => "kq_mulmm_q4032",
     "MetalKqMulMmQ5032THSk16_metal_kq_mulmm_db" => "kq_mulmm_q5032",
     "MetalKqMulMmQ5032TSk16_metal_kq_mulmm_db" => "kq_mulmm_q5032",
+    "MetalKqMulMmMlx4THSk16_metal_kq_mulmm_db" => "kq_mulmm_mlx4",
+    "MetalKqMulMmMlx4TSk16_metal_kq_mulmm_db" => "kq_mulmm_mlx4",
+    "MetalKqMulMmMlx8THSk16_metal_kq_mulmm_db" => "kq_mulmm_mlx8",
+    "MetalKqMulMmMlx8TSk16_metal_kq_mulmm_db" => "kq_mulmm_mlx8",
+    "MetalKqMulMmMlx4bTHSk16_metal_kq_mulmm_db" => "kq_mulmm_mlx4b",
+    "MetalKqMulMmMlx4bTSk16_metal_kq_mulmm_db" => "kq_mulmm_mlx4b",
+    "MetalKqMulMmMlx8bTHSk16_metal_kq_mulmm_db" => "kq_mulmm_mlx8b",
+    "MetalKqMulMmMlx8bTSk16_metal_kq_mulmm_db" => "kq_mulmm_mlx8b",
+    "MetalKqMulMmMlx6bTHSk16_metal_kq_mulmm_db" => "kq_mulmm_mlx6b",
+    "MetalKqMulMmMlx6bTSk16_metal_kq_mulmm_db" => "kq_mulmm_mlx6b",
     "MetalQ8MulMmTHSk16_metal_q8_mulmm_t" => "mulmm_q8",
     "MetalQ8MulMmTSk16_metal_q8_mulmm_t" => "mulmm_q8",
     "MetalKqMulMmIq4xsTHSk_metal_kq_mulmm_db" => "kq_mulmm_iq4xs",
@@ -964,6 +1043,11 @@ let private CENSUS_CROWN_CONDITIONAL : table<string; string> <- {
     "MetalKqMvW2K4H" => "kq_rows_half_k4",
     "MetalKqMvW4K4H" => "kq_rows_half_k4",
     "MetalKqMvW8K4H" => "kq_rows_half_k4",
+    "MetalRmsNormHXT" => "kq_rows_half_k4",
+    "metal_add_rms_hxt" => "kq_rows_half_k4",
+    "metal_pre_add_rms_hxt" => "kq_rows_half_k4",
+    "MetalSwigluHXT" => "kq_rows_half_k4",
+    "MetalGegluHXT" => "kq_rows_half_k4",
     "MetalKqMvB2K5H" => "kq_rows_half_k5",
     "MetalKqMvB4K5H" => "kq_rows_half_k5",
     "MetalKqMvB8K5H" => "kq_rows_half_k5",

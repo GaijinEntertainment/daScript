@@ -18,6 +18,7 @@ require ?das_metal dasllama/dasllama_metal_common   // the pipeline globals the 
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require ?das_metal _metal_kernel_common   // the MetalCell record, check_buf, the device shell, fixtures
 require ?das_metal _metal_kq_kernels   // kq_mm_form_kernel / kq_dq_kernel: the dense kq kernel pickers
+require ?das_metal _rows8_probe   // rows8_probe_ok: the affine eight-row mixer cell's layout skip
 require daslib/f16_cvt  // f32_to_f16: the q51 gates hand-pack f16 d/m scale halfwords
 require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_gpu_math   // nolint:STYLE030,LINT019 — tts_tanh, tts_hash_normal, sigmoid_f32: the StyleTTS2 gates' CPU forms, inside the Apple half alone
@@ -43,7 +44,8 @@ require math
 // exp vs the CPU's exp/exp4 — all inside 1e-4 relative); the residual add is bit-exact (one
 // fadd both sides); the blob GEMV gets exact-arithmetic data (pow2 scales). Without das_metal in
 // the build, or with no Metal device, every check skips; a Metal-4 twin leg also skips without
-// the Metal-4 tensor toolchain.
+// the Metal-4 tensor toolchain, and the affine eight-row mixer cell where the rows8 layout probe
+// finds the matrix unit's cooperative layout another generation's (the engine keeps the form off).
 
 // attention shape: GQA with 2 queries per kv head, small enough to hand-oracle; NPOS is
 // deliberately NOT a 32-multiple (np32 = 64) so the padded-slab rails are exercised
@@ -3873,6 +3875,13 @@ def test_metal_prefill_kernels(t : T?) {
                 moe_gemv_gate(t, dev, queue, KqFmt.q51, 64, 24, 5, 3, 3, true)    // batch streams, down form
                 b32_gemv_gate(t, dev, queue, KqFmt.q51, 96, 24)   // the dense site: 3 blocks a row
                 b32_gemv_gate(t, dev, queue, KqFmt.q51, 160, 7)   // 5 blocks - one lane group past the 4-block stride; a row-pair tail
+                for (fw in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.mlx4, KqFmt.mlx8, KqFmt.mlx4b, KqFmt.mlx8b, KqFmt.mlx6b]) {   //! the wide one-row form
+                    b32_gemv_wide_gate(t, dev, queue, fw, 192, 7)    //! six blocks, under one 32-block stride; the odd row's partner clamped
+                    b32_gemv_wide_gate(t, dev, queue, fw, 1024, 12)  //! one whole stride
+                    b32_gemv_wide_gate(t, dev, queue, fw, 2176, 5)   //! two strides and a two-block tail
+                    b32_glu_gate(t, dev, queue, fw, 192, 7, 0u)      //! the fused gate|up form: silu, the odd row clamped
+                    b32_glu_gate(t, dev, queue, fw, 2176, 6, 1u)     //! ... the tanh GELU past two strides
+                }
                 for (fb in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032]) {   //! the small-batch stamps bit for bit the GEMV, a row at a time
                     for (ks in [false, true]) {   //! the two-row stamps and the K-split narrow-plane ones
                         b32_mvb_gate(t, dev, queue, fb, 96, 24, 2, 2, 24, ks)
@@ -3930,6 +3939,69 @@ def test_metal_prefill_kernels(t : T?) {
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.q5032, 96, 128, [8, 96])
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.q5032, 64, 64, [136, 32])
 
+                // ===== the affine members (the mlx-community snapshots' planes): the per-32 gates at whole 64-groups a row =====
+                for (fa in [KqFmt.mlx4, KqFmt.mlx8, KqFmt.mlx4b, KqFmt.mlx8b]) {
+                    mlx_fixture_gate(t, fa, 24, 192)
+                    moe_gemv_gate(t, dev, queue, fa, 128, 24, 5, 3, 1, false)   //! the expert-indexed twin: a routed gate/up site (shared x)
+                    moe_gemv_gate(t, dev, queue, fa, 128, 32, 7, 4, 1, true)    //! ... the down site (per-slot x)
+                    moe_gemv_gate(t, dev, queue, fa, 64, 48, 1, 1, 6, false)    //! ... as the deltanet β/α window binds it: one expert, every row a stream
+                    moe_b32_rows_gate(t, dev, queue, fa, 128, 24, 5, 3, 4)
+                    moe_b32_rows_gate(t, dev, queue, fa, 192, 12, 6, 2, 3)
+                    moe_mulmm_b32_gate(t, dev, queue, fa, 128, 64, [32, 40, 64])   //! the routed base and twins: a padded tail on expert 1
+                    moe_mulmm_b32_gate(t, dev, queue, fa, 192, 128, [8, 96])       //! 2 col tiles, a tiny run and a multi-tile one
+                    moe_mulmm_b32_gate(t, dev, queue, fa, 128, 64, [136, 32])      //! counts crossing 128 - both tall-pair stamps live
+                    b32_gemv_gate(t, dev, queue, fa, 128, 24)
+                    b32_gemv_gate(t, dev, queue, fa, 192, 7)   // 6 blocks - one lane group past the 4-block stride; a row-pair tail
+                    for (ks in [false, true]) {
+                        b32_mvb_gate(t, dev, queue, fa, 128, 24, 2, 2, 24, ks)
+                        b32_mvb_gate(t, dev, queue, fa, 192, 7, 3, 4, 9, ks)
+                        b32_mvb_gate(t, dev, queue, fa, 192, 7, 4, 4, 9, ks)
+                        b32_mvb_gate(t, dev, queue, fa, 128, 24, 5, 8, 26, ks)
+                        b32_mvb_gate(t, dev, queue, fa, 192, 7, 8, 8, 9, ks)
+                        b32_mvb_gate(t, dev, queue, fa, 128, 24, 9, 8, 24, ks)
+                        b32_mvb_gate(t, dev, queue, fa, 2048, 12, 2, 2, 12, ks)
+                    }
+                    b32_mm_gate(t, dev, queue, fa, 128, 128, 64)
+                    b32_mm_gate(t, dev, queue, fa, 192, 64, 32)
+                    b32_dense_twins(t, dev, queue, fa)
+                }
+
+                // ===== the 6-bit affine member: its dense forms (no routed form is stamped; the member declines a routed stack) =====
+                mlx_fixture_gate(t, KqFmt.mlx6b, 24, 192)
+                b32_gemv_gate(t, dev, queue, KqFmt.mlx6b, 128, 24)
+                b32_gemv_gate(t, dev, queue, KqFmt.mlx6b, 192, 7)
+                for (ks in [false, true]) {
+                    b32_mvb_gate(t, dev, queue, KqFmt.mlx6b, 128, 24, 2, 2, 24, ks)
+                    b32_mvb_gate(t, dev, queue, KqFmt.mlx6b, 192, 7, 3, 4, 9, ks)
+                    b32_mvb_gate(t, dev, queue, KqFmt.mlx6b, 192, 7, 4, 4, 9, ks)
+                    b32_mvb_gate(t, dev, queue, KqFmt.mlx6b, 128, 24, 5, 8, 26, ks)
+                    b32_mvb_gate(t, dev, queue, KqFmt.mlx6b, 192, 7, 8, 8, 9, ks)
+                    b32_mvb_gate(t, dev, queue, KqFmt.mlx6b, 2048, 12, 2, 2, 12, ks)
+                }
+                b32_mm_gate(t, dev, queue, KqFmt.mlx6b, 128, 128, 64)
+                b32_mm_gate(t, dev, queue, KqFmt.mlx6b, 192, 64, 32)
+                b32_dense_twins(t, dev, queue, KqFmt.mlx6b)
+
+                // ===== the hyper-connection mixers and the n-gram projections over affine planes (Flash-Next's 6- and 8-bit sites) =====
+                for (nr in [1, 4, 8, 5]) {   //! the single row's GEMVs, the small-batch stamps, the eight-row form full and with pad tokens
+                    hc_mix_aff_gate(t, dev, queue, KqFmt.mlx6b, KqFmt.mlx6b, nr)   //! the trunk mixers
+                    hc_mix_aff_gate(t, dev, queue, KqFmt.mlx8b, KqFmt.mlx8b, nr)   //! the head mixers' planes
+                }
+                ple_proj_aff_gate(t, dev, queue, KqFmt.mlx8b, 4096, 1)    //! a key-class plane's one row (the key's 10240 rows past the fixture's array cap)
+                ple_proj_aff_gate(t, dev, queue, KqFmt.mlx8b, 2560, 1)    //! the value's
+                ple_proj_aff_gate(t, dev, queue, KqFmt.mlx8b, 4096, 4)
+                ple_proj_aff_gate(t, dev, queue, KqFmt.mlx8b, 2560, 8)
+                b32_mm_gate(t, dev, queue, KqFmt.mlx6b, 10240, 320, 32)   //! the window mixer's down tile
+                b32_mm_gate(t, dev, queue, KqFmt.mlx6b, 320, 10240, 32)   //! ... its up tile
+                b32_mm_gate(t, dev, queue, KqFmt.mlx8b, 2560, 2560, 32)   //! the window's value projection
+
+                // ===== the expert-indexed wide stamps (`B32_MOE_WIDE_FMTS`): a whole block a lane, one expert row a simdgroup =====
+                for (fw in [KqFmt.q51, KqFmt.q5032, KqFmt.mlx4, KqFmt.mlx8, KqFmt.mlx4b, KqFmt.mlx8b]) {
+                    moe_gemv_gate(t, dev, queue, fw, 128, 24, 5, 3, 1, false, false, true)   //! a gate/up site (shared x)
+                    moe_gemv_gate(t, dev, queue, fw, 128, 33, 7, 4, 1, true, false, true)    //! the down site, an odd row past the last pair
+                    moe_gemv_gate(t, dev, queue, fw, 1152, 12, 5, 3, 3, true, false, true)   //! one 32-block stride and a four-block tail, batch streams
+                }
+
                 // ===== mx4 expert GEMV (reworked to the q51 shape — gpt-oss's decode kernel) =====
                 moe_gemv_gate(t, dev, queue, KqFmt.mx4, 96, 24, 5, 3, 1, false)          // gate/up (shared x)
                 moe_gemv_gate(t, dev, queue, KqFmt.mx4, 64, 32, 7, 4, 1, true, true)     // down site + bias rows
@@ -3953,6 +4025,9 @@ def test_metal_prefill_kernels(t : T?) {
                 dn_scan_half_gate(t, dev, queue, 2, 4, 5)
                 dn_scan_half_gate(t, dev, queue, 4, 4, 1)
                 dn_scan_half_gate(t, dev, queue, 2, 2, 37)   // npos x nvh off the prepare pass's 64-wide groups
+                // the fused deltanet step: two kv heads under four value heads, silu gate; one under three, sigmoid gate, state in plane two
+                dn_step_fused_gate(t, dev, queue, 2, 4, false, false)
+                dn_step_fused_gate(t, dev, queue, 1, 3, true, true)
                 dn_deint_sigmul_gate(t, dev, queue, 3, 64, 2)
                 combine_sh_gate(t, dev, queue, 1, 96, 8, 257, 256)   // the decode shape: the gate logit the router's row ne
                 combine_sh_gate(t, dev, queue, 5, 64, 4, 1, 0)       // ... and the window's: a gate logit a position
@@ -4146,16 +4221,11 @@ def private csr_ref(sel : array<uint>; npos, ne, nk : int) : tuple<cnt : array<u
     return <- (cnt = cnt, base = base, bkt = bkt, inv = inv, pad = pad)
 }
 
-// the atomics-free CSR pair (MetalMoeCount -> MetalMoeBucket) chained as production dispatches
-// them: cnt, then padded-prefix basep + serial-order bkt/inv — all four outputs checked exactly
-// (the kernel must STAMP pad bkt slots to 0xFFFFFFFF — the gather-x sentinel — so the
-// gate seeds bkt with a different poison)
+//! `MetalMoeBucket` as production dispatches it, all four outputs exact; bkt seeded off the 0xFFFFFFFF pad sentinel it must stamp
 def private moe_csr_gate(t : T?; var dev, queue; npos, ne, nk : int) {
     let tag = "moe_csr np={npos} ne={ne} nk={nk}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        var psoC = mc |> keep_stamp(kernel_of(@@pf_enc_moe_count), err)
-        return if (!pso_ok(t, "{tag} count", psoC, err))
         var psoB = mc |> keep_stamp(kernel_of(@@pf_enc_moe_bucket), err)
         return if (!pso_ok(t, "{tag} bucket", psoB, err))
         let total = npos * nk
@@ -4177,7 +4247,6 @@ def private moe_csr_gate(t : T?; var dev, queue; npos, ne, nk : int) {
         let bnk = mc |> in_plain([uint(nk)])
         let bne = mc |> in_plain([uint(ne)])
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            pf_enc_moe_count_pso(enc, psoC, mc.buf[bsel], mc.buf[bcnt], mc.buf[btot], mc.buf[bnk], int64(ne))
             pf_enc_moe_bucket_pso(enc, psoB, mc.buf[bsel], mc.buf[bbase], mc.buf[bbkt], mc.buf[binv], mc.buf[btot], mc.buf[bnk], mc.buf[bcnt], mc.buf[bne], int64(ne + 1))   // + the total's threadgroup
         }
         return if (!ran)
@@ -4874,6 +4943,8 @@ def private moe_gemv_planes(fmt : KqFmt; rows, n) : tuple<p0 : array<uint8>; p1 
         iq4nl32_test_planes(rows, n, p0, p1, wref, q40_lut())
     } elif (fmt == KqFmt.q5032) {
         q5032_test_planes(rows, n, p0, p1, wref)
+    } elif (kq_mlx_affine(fmt)) {
+        mlx_test_planes(fmt, rows, n, p0, p1, wref)
     } else {
         let nb = n / 32
         p0 |> resize(rows * nb * 16)
@@ -4895,17 +4966,19 @@ def private moe_gemv_planes(fmt : KqFmt; rows, n) : tuple<p0 : array<uint8>; p1 
     return <- (p0 = p0, p1 = p1, wref = wref)
 }
 
-//! The expert-indexed GEMV BIT-exact over a net-expert stack in `fmt`, sel picking k planes a stream; `perslot` the down site's x stride, nst > 1 the batch strides.
-def private moe_gemv_gate(t : T?; var dev, queue; fmt : KqFmt; n, d, net, k, nst : int; perslot : bool; bias : bool = false) {
-    let tag = "moe gemv {fmt} n={n} d={d} net={net} k={k} nst={nst}{bias ? " bias" : ""}"
+//! The expert-indexed GEMV BIT-exact over a net-expert stack in `fmt`, sel picking k planes a stream; `perslot` the down site's x stride, nst > 1 the batch strides;
+//! `wide` the expert-indexed wide stamp (`B32_MOE_WIDE_FMTS`)
+def private moe_gemv_gate(t : T?; var dev, queue; fmt : KqFmt; n, d, net, k, nst : int; perslot : bool; bias : bool = false; wide : bool = false) {
+    let tag = "moe gemv{wide ? " wide" : ""} {fmt} n={n} d={d} net={net} k={k} nst={nst}{bias ? " bias" : ""}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let sq8 = stamp_of(@@enc_moe_gemv_q8_c)
         let sq51 = stamp_of(@@enc_moe_gemv_q51_c)
-        let siq = b32_moe_gemv_stamp(fmt)
+        let siq = wide ? b32_moe_gemv_w_stamp(fmt) : b32_moe_gemv_stamp(fmt)
         let smx = stamp_of(@@enc_moe_gemv_mx4_c)
-        let nl = fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032 || fmt == KqFmt.q5032
-        var pso = (fmt == KqFmt.q8 ? mc |> keep_stamp(sq8, err) : (fmt == KqFmt.q51 ? mc |> keep_stamp(sq51, err)
+        let nl = wide || fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032 || fmt == KqFmt.q5032 || kq_mlx_affine(fmt)
+        let q51n = fmt == KqFmt.q51 && !wide
+        var pso = (fmt == KqFmt.q8 ? mc |> keep_stamp(sq8, err) : (q51n ? mc |> keep_stamp(sq51, err)
             : (nl ? mc |> keep_stamp(siq, err) : mc |> keep_stamp(smx, err))))
         return if (!pso_ok(t, tag, pso, err))
         let nb = n / 32
@@ -4960,7 +5033,7 @@ def private moe_gemv_gate(t : T?; var dev, queue; fmt : KqFmt; n, d, net, k, nst
                 stamp_run(sq8, pso) {
                     invoke(sq8.enc, enc, mc.buf[bw], 0ul, mc.buf[bw], mc.buf[bx], mc.buf[by], 0ul, ka, mc.buf[bsel], dr, kk, ns)
                 }
-            } elif (fmt == KqFmt.q51) {
+            } elif (q51n) {
                 stamp_run(sq51, pso) {
                     invoke(sq51.enc, enc, mc.buf[bw], 0ul, mc.buf[bs], 0ul, mc.buf[bx], mc.buf[by], 0ul, ka, mc.buf[bsel], dr, kk, ns)
                 }
@@ -5027,6 +5100,137 @@ def private b32_gemv_gate(t : T?; var dev, queue; fmt : KqFmt; n, d : int) {
     }
 }
 
+//! the per-32 wide one-row GEMV stamp of a format
+def private b32_gemv_w_stamp(f) {   //! generic, as the gates are: the Apple half alone instantiates it
+    return stamp_of(@@enc_kq_q51_w_c) if (f == KqFmt.q51)
+    return stamp_of(@@enc_kq_q4032_w_c) if (f == KqFmt.q4032)
+    return stamp_of(@@enc_kq_q5032_w_c) if (f == KqFmt.q5032)
+    return stamp_of(@@enc_kq_mlx4_w_c) if (f == KqFmt.mlx4)
+    return stamp_of(@@enc_kq_mlx8_w_c) if (f == KqFmt.mlx8)
+    return stamp_of(@@enc_kq_mlx4b_w_c) if (f == KqFmt.mlx4b)
+    return stamp_of(@@enc_kq_mlx8b_w_c) if (f == KqFmt.mlx8b)
+    return stamp_of(@@enc_kq_mlx6b_w_c) if (f == KqFmt.mlx6b)
+    return stamp_of(@@enc_kq_iq4nl32_w_c)
+}
+
+//! The per-32 wide one-row GEMV (`MetalB32GemvWideT`) BIT-exact over `d` rows of the exact-arithmetic planes - the affine
+//! members' in-place masked codes against x scaled by powers of two keep every product exact - x bound at an offset row, the
+//! odd row count's last threadgroup reading its partner row off the plane's last; then the same dispatch over x with one
+//! element moved by 7 (the poisoned input), which must leave the oracle's rows
+def private b32_gemv_wide_gate(t : T?; var dev, queue; fmt : KqFmt; n, d : int) {
+    let tag = "dense wide gemv {fmt} n={n} d={d}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let sw = b32_gemv_w_stamp(fmt)
+        var pso = mc |> keep_stamp(sw, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope(p0, p1, wref) <- moe_gemv_planes(fmt, d, n)
+        var inscope xv : array<float>
+        xv |> resize(2 * n)
+        for (i in range(2 * n)) {
+            xv[i] = float((i * 5) % 9 - 4)
+        }
+        var inscope xp := xv
+        xp[n + 1] += 7.0
+        var inscope want : array<float>
+        want |> resize(d + 1)
+        for (r in range(d)) {
+            var acc = 0.0
+            for (c in range(n)) {
+                acc += wref[r * n + c] * xv[n + c]
+            }
+            want[r] = acc
+        }
+        want[d] = -1000.0
+        let bw = mc |> in_plain(p0)
+        let bs = mc |> in_plain(p1)
+        let bx = mc |> in_(xv)
+        let bxp = mc |> in_(xp)
+        let by = mc |> out_words(d + 1, -1000.0)
+        let byp = mc |> out_words(d + 1, -1000.0)
+        let bn = mc |> in_plain([uint(n)])
+        let bd = mc |> in_plain([uint(d)])
+        let xoff = uint64(n * 4)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(sw, pso) {
+                invoke(sw.enc, enc, mc.buf[bw], 0ul, mc.buf[bs], 0ul, mc.buf[bx], xoff, mc.buf[by], 0ul, mc.buf[bn], mc.buf[bd], int64(d), int64(n))
+                invoke(sw.enc, enc, mc.buf[bw], 0ul, mc.buf[bs], 0ul, mc.buf[bxp], xoff, mc.buf[byp], 0ul, mc.buf[bn], mc.buf[bd], int64(d), int64(n))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], want, BAR_EXACT, Shape(row_width = d + 1))
+        var inscope gotp <- buf_download(mc.buf[byp], d + 1, type<float>)
+        check_exceeds(t, "{tag}: the poisoned x row leaves the oracle", gotp, want, BAR_EXACT)
+    }
+}
+
+//! the per-32 fused gate|up stamp of a format
+def private b32_glu_stamp(f) {   //! generic, as the gates are: the Apple half alone instantiates it
+    return stamp_of(@@enc_kq_q51_glu_c) if (f == KqFmt.q51)
+    return stamp_of(@@enc_kq_q4032_glu_c) if (f == KqFmt.q4032)
+    return stamp_of(@@enc_kq_q5032_glu_c) if (f == KqFmt.q5032)
+    return stamp_of(@@enc_kq_mlx4_glu_c) if (f == KqFmt.mlx4)
+    return stamp_of(@@enc_kq_mlx8_glu_c) if (f == KqFmt.mlx8)
+    return stamp_of(@@enc_kq_mlx4b_glu_c) if (f == KqFmt.mlx4b)
+    return stamp_of(@@enc_kq_mlx8b_glu_c) if (f == KqFmt.mlx8b)
+    return stamp_of(@@enc_kq_mlx6b_glu_c) if (f == KqFmt.mlx6b)
+    return stamp_of(@@enc_kq_iq4nl32_glu_c)
+}
+
+//! The per-32 fused gate|up GEMV (`MetalB32GemvGluT`): one plane of `2d` rows bound once, its last `d` rows the gate (`e1`)
+//! and its first `d` the up plane (`e3`) - the up plane bound below the gate, as `enc_b32_glu` binds a pair whose up plane sits
+//! first -, `act(gate) * up` against the activation over the exact gate and up dots in double (silu at `act` 0, the tanh GELU at
+//! 1) within 1e-5 of each value's magnitude: the dots are exact by the planes' construction, so the bar holds the activation's
+//! f32 evaluation alone; the row past `d` under its sentinel; then x with one element moved by 7 (the poisoned input)
+def private b32_glu_gate(t : T?; var dev, queue; fmt : KqFmt; n, d : int; act : uint) {
+    let tag = "dense fused gate|up {fmt} n={n} d={d} act={act}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let sg = b32_glu_stamp(fmt)
+        var pso = mc |> keep_stamp(sg, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope(p0, p1, wref) <- moe_gemv_planes(fmt, 2 * d, n)
+        var inscope xv : array<float>
+        xv |> resize(n)
+        for (i in range(n)) {
+            xv[i] = float((i * 5) % 9 - 4) * 0.125
+        }
+        var inscope xp := xv
+        xp[1] += 7.0
+        var inscope want : array<double>
+        want |> resize(d + 1)
+        for (r in range(d)) {
+            var g, u : double
+            for (c in range(n)) {
+                g += double(wref[(d + r) * n + c]) * double(xv[c])
+                u += double(wref[r * n + c]) * double(xv[c])
+            }
+            want[r] = (act == 1u ? double(tts_gelu_tanh(float(g))) : silu_d(g)) * u
+        }
+        want[d] = -1000.0lf
+        let bw = mc |> in_plain(p0)
+        let bs = mc |> in_plain(p1)
+        let bx = mc |> in_(xv)
+        let bxp = mc |> in_(xp)
+        let by = mc |> out_words(d + 1, -1000.0)
+        let byp = mc |> out_words(d + 1, -1000.0)
+        let bn = mc |> in_plain([uint(n)])
+        let bd = mc |> in_plain([uint(d)])
+        var gu = B32GluArgs(e1 = uint(d * n / 32), e3 = 0u, act = act)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(sg, pso) {
+                invoke(sg.enc, enc, mc.buf[bw], 0ul, mc.buf[bs], 0ul, mc.buf[bx], 0ul, mc.buf[by], 0ul, mc.buf[bn], mc.buf[bd], gu, int64(d), int64(n))
+                invoke(sg.enc, enc, mc.buf[bw], 0ul, mc.buf[bs], 0ul, mc.buf[bxp], 0ul, mc.buf[byp], 0ul, mc.buf[bn], mc.buf[bd], gu, int64(d), int64(n))
+            }
+        }
+        return if (!ran)
+        let bar = Bar(rel = 1e-5, abs_floor = 1e-4)
+        check_buf(t, tag, mc.buf[by], want, bar, Shape(row_width = d + 1))
+        var inscope gotp <- buf_download(mc.buf[byp], d + 1, type<float>)
+        check_exceeds(t, "{tag}: the poisoned x row leaves the oracle", gotp, want, bar)
+    }
+}
+
 //! the per-32 small-batch stamp of a format at a column width
 def private b32_mvb_stamp(f; w : int; ks : bool) {   //! generic, as the gates are: the Apple half alone instantiates it
     if (f == KqFmt.q51) {
@@ -5044,6 +5248,31 @@ def private b32_mvb_stamp(f; w : int; ks : bool) {   //! generic, as the gates a
         if (w == 4) return ks ? stamp_of(@@enc_b32_mvb4_q5032_ks_c) : stamp_of(@@enc_b32_mvb4_q5032_c)
         return ks ? stamp_of(@@enc_b32_mvb8_q5032_ks_c) : stamp_of(@@enc_b32_mvb8_q5032_c)
     }
+    if (f == KqFmt.mlx4) {
+        if (w == 2) return ks ? stamp_of(@@enc_b32_mvb2_mlx4_ks_c) : stamp_of(@@enc_b32_mvb2_mlx4_c)
+        if (w == 4) return ks ? stamp_of(@@enc_b32_mvb4_mlx4_ks_c) : stamp_of(@@enc_b32_mvb4_mlx4_c)
+        return ks ? stamp_of(@@enc_b32_mvb8_mlx4_ks_c) : stamp_of(@@enc_b32_mvb8_mlx4_c)
+    }
+    if (f == KqFmt.mlx8) {
+        if (w == 2) return ks ? stamp_of(@@enc_b32_mvb2_mlx8_ks_c) : stamp_of(@@enc_b32_mvb2_mlx8_c)
+        if (w == 4) return ks ? stamp_of(@@enc_b32_mvb4_mlx8_ks_c) : stamp_of(@@enc_b32_mvb4_mlx8_c)
+        return ks ? stamp_of(@@enc_b32_mvb8_mlx8_ks_c) : stamp_of(@@enc_b32_mvb8_mlx8_c)
+    }
+    if (f == KqFmt.mlx4b) {
+        if (w == 2) return ks ? stamp_of(@@enc_b32_mvb2_mlx4b_ks_c) : stamp_of(@@enc_b32_mvb2_mlx4b_c)
+        if (w == 4) return ks ? stamp_of(@@enc_b32_mvb4_mlx4b_ks_c) : stamp_of(@@enc_b32_mvb4_mlx4b_c)
+        return ks ? stamp_of(@@enc_b32_mvb8_mlx4b_ks_c) : stamp_of(@@enc_b32_mvb8_mlx4b_c)
+    }
+    if (f == KqFmt.mlx8b) {
+        if (w == 2) return ks ? stamp_of(@@enc_b32_mvb2_mlx8b_ks_c) : stamp_of(@@enc_b32_mvb2_mlx8b_c)
+        if (w == 4) return ks ? stamp_of(@@enc_b32_mvb4_mlx8b_ks_c) : stamp_of(@@enc_b32_mvb4_mlx8b_c)
+        return ks ? stamp_of(@@enc_b32_mvb8_mlx8b_ks_c) : stamp_of(@@enc_b32_mvb8_mlx8b_c)
+    }
+    if (f == KqFmt.mlx6b) {
+        if (w == 2) return ks ? stamp_of(@@enc_b32_mvb2_mlx6b_ks_c) : stamp_of(@@enc_b32_mvb2_mlx6b_c)
+        if (w == 4) return ks ? stamp_of(@@enc_b32_mvb4_mlx6b_ks_c) : stamp_of(@@enc_b32_mvb4_mlx6b_c)
+        return ks ? stamp_of(@@enc_b32_mvb8_mlx6b_ks_c) : stamp_of(@@enc_b32_mvb8_mlx6b_c)
+    }
     if (w == 2) return ks ? stamp_of(@@enc_b32_mvb2_iq4nl32_ks_c) : stamp_of(@@enc_b32_mvb2_iq4nl32_c)
     if (w == 4) return ks ? stamp_of(@@enc_b32_mvb4_iq4nl32_ks_c) : stamp_of(@@enc_b32_mvb4_iq4nl32_c)
     return ks ? stamp_of(@@enc_b32_mvb8_iq4nl32_ks_c) : stamp_of(@@enc_b32_mvb8_iq4nl32_c)
@@ -5060,10 +5289,25 @@ def private b32_gemv_stamp(f; ks : bool) {
     if (f == KqFmt.q5032) {
         return ks ? stamp_of(@@enc_kq_q5032_ks_c) : stamp_of(@@enc_kq_q5032_c)
     }
+    if (f == KqFmt.mlx4) {
+        return ks ? stamp_of(@@enc_kq_mlx4_ks_c) : stamp_of(@@enc_kq_mlx4_c)
+    }
+    if (f == KqFmt.mlx8) {
+        return ks ? stamp_of(@@enc_kq_mlx8_ks_c) : stamp_of(@@enc_kq_mlx8_c)
+    }
+    if (f == KqFmt.mlx4b) {
+        return ks ? stamp_of(@@enc_kq_mlx4b_ks_c) : stamp_of(@@enc_kq_mlx4b_c)
+    }
+    if (f == KqFmt.mlx8b) {
+        return ks ? stamp_of(@@enc_kq_mlx8b_ks_c) : stamp_of(@@enc_kq_mlx8b_c)
+    }
+    if (f == KqFmt.mlx6b) {
+        return ks ? stamp_of(@@enc_kq_mlx6b_ks_c) : stamp_of(@@enc_kq_mlx6b_c)
+    }
     return ks ? stamp_of(@@enc_kq_iq4nl32_ks_c) : stamp_of(@@enc_kq_iq4nl32_c)
 }
 
-//! the routed GEMV stamp of a per-32 format on the codebook bind (iq4nl32, q4032, q5032)
+//! the expert-indexed GEMV stamp of a per-32 format on the plain pair bind (iq4nl32, q4032, q5032, the affine members)
 def private b32_moe_gemv_stamp(f) {   //! generic, as the gates are: the Apple half alone instantiates it
     if (f == KqFmt.q4032) {
         return stamp_of(@@enc_moe_gemv_q4032_c)
@@ -5071,7 +5315,24 @@ def private b32_moe_gemv_stamp(f) {   //! generic, as the gates are: the Apple h
     if (f == KqFmt.q5032) {
         return stamp_of(@@enc_moe_gemv_q5032_c)
     }
+    return stamp_of(@@enc_moe_gemv_mlx4_c) if (f == KqFmt.mlx4)
+    return stamp_of(@@enc_moe_gemv_mlx8_c) if (f == KqFmt.mlx8)
+    return stamp_of(@@enc_moe_gemv_mlx4b_c) if (f == KqFmt.mlx4b)
+    return stamp_of(@@enc_moe_gemv_mlx8b_c) if (f == KqFmt.mlx8b)
     return stamp_of(@@enc_moe_gemv_iq4nl32_c)
+}
+
+//! the expert-indexed wide stamp of a `B32_MOE_WIDE_FMTS` member
+def private b32_moe_gemv_w_stamp(f) {   //! generic, as the gates are: the Apple half alone instantiates it
+    return stamp_of(@@enc_moe_gemv_q51_w_c) if (f == KqFmt.q51)
+    return stamp_of(@@enc_moe_gemv_q5032_w_c) if (f == KqFmt.q5032)
+    return stamp_of(@@enc_moe_gemv_mlx4_w_c) if (f == KqFmt.mlx4)
+    return stamp_of(@@enc_moe_gemv_mlx8_w_c) if (f == KqFmt.mlx8)
+    return stamp_of(@@enc_moe_gemv_mlx4b_w_c) if (f == KqFmt.mlx4b)
+    if (f != KqFmt.mlx8b) {
+        panic("b32_moe_gemv_w_stamp: {f} takes no expert-indexed wide stamp")
+    }
+    return stamp_of(@@enc_moe_gemv_mlx8b_w_c)
 }
 
 //! x rows off the dyadic lattice: a reordered sum rounds apart, so a bit-for-bit compare sees it
@@ -5135,7 +5396,7 @@ def private moe_b32_rows_gate(t : T?; var dev, queue; fmt : KqFmt; n, d, net, k,
         let sq51 = stamp_of(@@enc_moe_gemv_q51_c)
         let siq = b32_moe_gemv_stamp(fmt)
         let smx = stamp_of(@@enc_moe_gemv_mx4_c)
-        let nl = fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032 || fmt == KqFmt.q5032
+        let nl = fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032 || fmt == KqFmt.q5032 || kq_mlx_affine(fmt)
         var pso = fmt == KqFmt.q51 ? mc |> keep_stamp(sq51, err) : (nl ? mc |> keep_stamp(siq, err) : mc |> keep_stamp(smx, err))
         return if (!pso_ok(t, tag, pso, err))
         let nb = n / 32
@@ -5339,9 +5600,8 @@ def private b32_mm_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim, mp : in
     let tag = "dense mul_mm {fmt} k={kdim} n={ndim} mp={mp}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let sq = stamp_of(@@enc_kq_mm_q51_c)
-        let si = fmt == KqFmt.q4032 ? stamp_of(@@enc_kq_mm_q4032_c) : (fmt == KqFmt.q5032 ? stamp_of(@@enc_kq_mm_q5032_c) : stamp_of(@@enc_kq_mm_iq4nl32_c))
-        var pso = fmt == KqFmt.q51 ? mc |> keep_stamp(sq, err) : mc |> keep_stamp(si, err)
+        let s = b32_mm_stamp(fmt)
+        var pso = mc |> keep_stamp(s, err)
         return if (!pso_ok(t, tag, pso, err))
         var inscope(p0, p1, wref) <- moe_gemv_planes(fmt, ndim, kdim)
         var inscope w <- b32_mm_want(wref, kdim, ndim, mp)
@@ -5352,19 +5612,26 @@ def private b32_mm_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim, mp : in
         let bk = mc |> in_plain([uint(kdim)])
         let bn = mc |> in_plain([uint(ndim)])
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            if (fmt == KqFmt.q51) {
-                stamp_run(sq, pso) {
-                    invoke(sq.enc, enc, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bx], mc.buf[by], 0ul, mc.buf[bk], mc.buf[bn], int64(mp), int64(ndim))
-                }
-            } else {
-                stamp_run(si, pso) {
-                    invoke(si.enc, enc, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bx], mc.buf[by], 0ul, mc.buf[bk], mc.buf[bn], int64(mp), int64(ndim))
-                }
+            stamp_run(s, pso) {
+                invoke(s.enc, enc, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bx], mc.buf[by], 0ul, mc.buf[bk], mc.buf[bn], int64(mp), int64(ndim))
             }
         }
         return if (!ran)
         check_buf(t, tag, mc.buf[by], w.want, BAR_EXACT, Shape(row_width = ndim))
     }
+}
+
+//! the per-32 dense mul_mm base tile of a format
+def private b32_mm_stamp(f) {   //! generic, as the gates are: the Apple half alone instantiates it
+    return stamp_of(@@enc_kq_mm_q51_c) if (f == KqFmt.q51)
+    return stamp_of(@@enc_kq_mm_q4032_c) if (f == KqFmt.q4032)
+    return stamp_of(@@enc_kq_mm_q5032_c) if (f == KqFmt.q5032)
+    return stamp_of(@@enc_kq_mm_mlx4_c) if (f == KqFmt.mlx4)
+    return stamp_of(@@enc_kq_mm_mlx8_c) if (f == KqFmt.mlx8)
+    return stamp_of(@@enc_kq_mm_mlx4b_c) if (f == KqFmt.mlx4b)
+    return stamp_of(@@enc_kq_mm_mlx8b_c) if (f == KqFmt.mlx8b)
+    return stamp_of(@@enc_kq_mm_mlx6b_c) if (f == KqFmt.mlx6b)
+    return stamp_of(@@enc_kq_mm_iq4nl32_c)
 }
 
 // Build q51 plane pairs for `rows` rows of n elements: patterned 5-bit quants (position-
@@ -5439,29 +5706,305 @@ def private q5032_test_planes(rows, n : int; var qp : array<uint8>; var sp : arr
     }
 }
 
-//! Build iq4nl32-form plane pairs for `rows` rows of n elements under the codebook `lut` (iq4nl's, or q4032's linear one):
-//! patterned nibbles (position-dependent, every codebook slot reached), pow2 f16 d - d*LUT[q] is an f16-exact value, so the
-//! CPU float reference is BIT-exact under any GPU reduction order.
-def private iq4nl32_test_planes(rows, n : int; var qp : array<uint8>; var sp : array<uint8>; var wref : array<float>; lut : int8[16]) {
-    let nb = n / 32
-    let dlut = fixed_array(0.25, 0.5, 1.0, 2.0)
-    qp |> resize(rows * nb * 16)
-    sp |> resize(rows * nb * 2)
-    wref |> resize(rows * n)
-    for (b in range(rows * nb)) {
-        let d = dlut[(b / 3) % 4]
-        let dbits = f32_to_f16(d)
-        sp[b * 2] = uint8(dbits & 0xFF)
-        sp[b * 2 + 1] = uint8(dbits >> 8u)
-        for (i in range(32)) {
-            let q = (b * 11 + i * 7 + i / 3) % 16
-            wref[b * 32 + i] = d * float(int(lut[q]))
-            if (i < 16) {
-                qp[b * 16 + i] = uint8(q)
-            } else {
-                qp[b * 16 + i - 16] = uint8(uint(qp[b * 16 + i - 16]) | (uint(q) << 4u))
+//! the affine fixture's weights are the format's: every row of `mlx_test_planes` bit for bit the engine's own block dequant;
+//! `rows`, `n` untyped: the planes helpers sit behind the optional das_metal require
+def private mlx_fixture_gate(t : T?; fmt : KqFmt; rows, n) {
+    var inscope(qp, sp, wref) <- moe_gemv_planes(fmt, rows, n)
+    var inscope got : array<float>
+    got |> resize(rows * n)
+    for (b in range(rows * n / 32)) {
+        dequant_b32_plane_block(fmt, qp, sp, int64(b), got, int64(b * 32))
+    }
+    var miss = 0
+    for (a, w in got, wref) {
+        miss += a == w ? 0 : 1
+    }
+    t |> equal(miss, 0, "{fmt} fixture: every weight the engine's dequant of the planes")
+}
+
+//! The hyper-connection mixer's staged chain over affine planes - the grouped norm, the inject router, the down site, silu(lo / hc),
+//! the up site, the gated stream mean - at Flash-Next's shape (4 streams of 2560, low rank 320), its two sites the stamps the staged
+//! chain picks (`hc_mix_rows`; one row of an affine pair takes the fused pair, `gemv_hcn_aff_gate`): one row the down's K-split
+//! GEMV and the up's wide one, two to four rows the small-batch
+//! stamps (the down's K split). Against a double reference over the planes' own weights at the shared 1e-4 bar of the row's
+//! magnitude; the planes' pow2 rescale keeps the gates off the sigmoid's saturation, which the cell checks before it compares
+def private hc_mix_aff_gate(t : T?; var dev, queue; fdown, fup : KqFmt; nrows : int) {
+    let dim = 2560
+    let hc = 4
+    let lr = 320
+    let hcd = dim * hc
+    let tag = "hc mixer staged {fdown}/{fup} nrows={nrows}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let w = nrows <= 2 ? 2 : 4
+        let sgd = b32_gemv_stamp(fdown, true)
+        let sgu = b32_gemv_w_stamp(fup)
+        let smd = b32_mvb_stamp(fdown, w, true)
+        let smu = b32_mvb_stamp(fup, w, false)
+        let snorm = stamp_of(@@enc_hc_norm)
+        let srt = stamp_of(@@enc_moe_router)
+        let slo = stamp_of(@@enc_hc_lo)
+        let smix = stamp_of(@@enc_hc_mix)
+        var pgd = mc |> keep_stamp(sgd, err)
+        var pgu = mc |> keep_stamp(sgu, err)
+        var pmd = mc |> keep_stamp(smd, err)
+        var pmu = mc |> keep_stamp(smu, err)
+        var pnorm = mc |> keep_stamp(snorm, err)
+        var prt = mc |> keep_stamp(srt, err)
+        var plo = mc |> keep_stamp(slo, err)
+        var pmix = mc |> keep_stamp(smix, err)
+        return if ((!pso_ok(t, tag, pgd, err) || !pso_ok(t, tag, pgu, err) || !pso_ok(t, tag, pmd, err) || !pso_ok(t, tag, pmu, err))
+            || (!pso_ok(t, tag, pnorm, err) || !pso_ok(t, tag, prt, err) || !pso_ok(t, tag, plo, err) || !pso_ok(t, tag, pmix, err)))
+        let mix8 = nrows >= 5   //! five to eight rows: the eight-row mixer's four dispatches, the engine's pick on a scatter site
+        let kpr = kernel_of(@@enc_hc_prep8_c)
+        let kfn = kernel_of(@@enc_hc_fin8_c)
+        let kd6 = kernel_of(@@enc_rows8_mlx6b_hc_c)
+        let kd8 = kernel_of(@@enc_rows8_mlx8b_hc_c)
+        let ku6 = kernel_of(@@enc_rows8_mlx6b_hcmix_c)
+        let ku8 = kernel_of(@@enc_rows8_mlx8b_hcmix_c)
+        var ppr = mc |> keep_stamp(kpr, err)
+        var pfn = mc |> keep_stamp(kfn, err)
+        var pd6 = mc |> keep_stamp(kd6, err)
+        var pd8 = mc |> keep_stamp(kd8, err)
+        var pu6 = mc |> keep_stamp(ku6, err)
+        var pu8 = mc |> keep_stamp(ku8, err)
+        if (mix8) {
+            return if (!tensor_pso_or_skip(t, tag, pd6, dev, err))
+            if (!rows8_probe_ok(t, mc, err)) {
+                t |> skip("{tag}: the matrix unit's cooperative layout is not the rows8 kernels' on this box - the engine keeps the form off")
+                return
+            }
+            return if (!pso_ok(t, tag, ppr, err) || !pso_ok(t, tag, pfn, err) || !pso_ok(t, tag, pd8, err) || !pso_ok(t, tag, pu6, err) || !pso_ok(t, tag, pu8, err))
+        }
+        var inscope res <- [for (i in range(nrows * hcd)); 0.23 * float((i * 7 + i / 97) % 41) - 4.1 + 0.3 * float(i / hcd)]
+        var inscope wn <- [for (i in range(hcd)); 0.6 + 0.03 * float(i % 13) + 0.1 * float(i / dim)]
+        var inscope wi <- [for (i in range(hc * hcd)); 0.004 * float((i * 3) % 19 - 9)]
+        var inscope dq, ds, uq, us : array<uint8>
+        var inscope dref, uref : array<float>
+        mlx_test_planes(fdown, lr, hcd, dq, ds, dref)
+        mlx_test_planes(fup, hcd, lr, uq, us, uref)
+        // the double reference: the grouped norm (the engine's float rmsnorm), then the two sites and the landing in double
+        var inscope xn, want, wantj : array<float>
+        xn |> resize(nrows * hcd)
+        want |> resize(nrows * dim)
+        wantj |> resize(nrows * hc)
+        for (r in range(nrows)) {
+            unsafe {
+                for (c in range(hc)) {
+                    let o = r * hcd + c * dim
+                    rmsnorm(addr(xn[o]), addr<float const?>(res[o]), addr<float const?>(wn[c * dim]), int64(dim), EPS)
+                }
             }
         }
+        // the planes' pow2 rescale off row 0: the down's largest lo / hc near 2, then the up's largest gate near 2
+        var lmax = 0.0lf
+        var los0 : array<double>
+        los0 |> resize(lr)
+        for (j in range(lr)) {
+            var s = 0.0lf
+            for (k in range(hcd)) {
+                s += double(dref[j * hcd + k]) * double(xn[k])
+            }
+            los0[j] = s / double(hc)
+            lmax = max(lmax, abs(los0[j]))
+        }
+        let fd = exp2(floor(log2(2.0 / float(lmax))))
+        var gmax = 0.0lf
+        for (i in range(hcd)) {
+            var s = 0.0lf
+            for (j in range(lr)) {
+                s += double(uref[i * lr + j]) * silu_d(los0[j] * double(fd))
+            }
+            gmax = max(gmax, abs(s))
+        }
+        let fu = exp2(floor(log2(2.0 / float(gmax))))
+        delete los0
+        mlx_bf16_scale_planes(ds, dref, fd)
+        mlx_bf16_scale_planes(us, uref, fu)
+        var live = 0
+        for (r in range(nrows)) {
+            var los : array<double>
+            los |> resize(lr)
+            for (j in range(lr)) {
+                var s = 0.0lf
+                for (k in range(hcd)) {
+                    s += double(dref[j * hcd + k]) * double(xn[r * hcd + k])
+                }
+                los[j] = silu_d(s / double(hc))
+            }
+            for (c in range(hc)) {
+                var s = 0.0lf
+                for (k in range(hcd)) {
+                    s += double(wi[c * hcd + k]) * double(xn[r * hcd + k])
+                }
+                wantj[r * hc + c] = float(s)
+            }
+            var gate : array<double>
+            gate |> resize(hcd)
+            for (i in range(hcd)) {
+                var s = 0.0lf
+                for (j in range(lr)) {
+                    s += double(uref[i * lr + j]) * los[j]
+                }
+                gate[i] = s
+                live += abs(s) < 4.0lf ? 1 : 0
+            }
+            for (i in range(dim)) {
+                var s = 0.0lf
+                for (c in range(hc)) {
+                    s += double(xn[r * hcd + c * dim + i]) * sigmoid_d(gate[c * dim + i])
+                }
+                want[r * dim + i] = float(s / double(hc))
+            }
+            delete los
+            delete gate
+        }
+        t |> success(live * 2 > nrows * hcd, "{tag}: {live} of {nrows * hcd} gates under |4| - the planes' scales keep the sigmoid off saturation")
+        let bres = mc |> in_(res)
+        let bwn = mc |> in_(wn)
+        let bwi = mc |> in_(wi)
+        let bdq = mc |> in_plain(dq)
+        let bds = mc |> in_plain(ds)
+        let buq = mc |> in_plain(uq)
+        let bus = mc |> in_plain(us)
+        let bu_hcd = mc |> in_plain([uint(hcd)])
+        let bu_lr = mc |> in_plain([uint(lr)])
+        let bu_hc = mc |> in_plain([uint(hc)])
+        let bu_tot = mc |> in_plain([uint(nrows * lr)])
+        let brb = mc |> in_([0.0])
+        let bxn = mc |> out_words(nrows * hcd, -1000.0)
+        let binj = mc |> out_words(nrows * hc, -1000.0)
+        let blo = mc |> out_words(nrows * lr, -1000.0)
+        let bgate = mc |> out_words(nrows * hcd, -1000.0)
+        let by = mc |> out_words(nrows * dim, -1000.0)
+        var nka = GkHcNormArgs(dim = uint(dim), hc = uint(hc), woff = 0u, row0 = 0u, eps = EPS)
+        var rka = moe_router_args(int64(hc), int64(hcd), int64(nrows))
+        var mka = GkHcMixArgs(dim = uint(dim), hc = uint(hc), rows = uint(nrows))
+        var mvd = KqMvArgs(ndim = uint(hcd), ddim = uint(lr), ys = uint(lr), nr = uint(nrows))
+        var mvu = KqMvArgs(ndim = uint(lr), ddim = uint(hcd), ys = uint(hcd), nr = uint(nrows))
+        let gcols = int64((nrows + w - 1) / w)
+        let nan = uint_bits_to_float(0x7FC00000u)
+        let fxt = mc |> out_words(8 * hcd, float16(nan))
+        let fxs = mc |> out_words(hcd / 32 * 8, nan)
+        let finv = mc |> out_words(8 * hc, nan)
+        let fip = mc |> out_words(hc * 8 * hc, nan)
+        let fpart = mc |> out_words(hc * 8 * lr, nan)
+        let fxt2 = mc |> out_words(8 * lr, float16(nan))
+        let fxs2 = mc |> out_words(lr / 32 * 8, nan)
+        let bu_kseg = mc |> in_plain([uint(dim / 64)])
+        var ka = Rows8HcMix(dim = uint(dim), hc = uint(hc), lr = uint(lr), rows = uint(nrows), eps = EPS)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            if (mix8) {
+                invoke(kpr.enc, enc, ppr, mc.buf[bres], mc.buf[bwn], mc.buf[bwi], mc.buf[fxt], mc.buf[fxs], mc.buf[finv], mc.buf[fip], ka, int64(hc), int64(nrows))
+                if (fdown == KqFmt.mlx6b) {
+                    invoke(kd6.enc, enc, pd6, mc.buf[bds], 0ul, mc.buf[bdq], 0ul, mc.buf[fxt], mc.buf[fpart], 0ul, mc.buf[fxs], mc.buf[bu_hcd], mc.buf[bu_lr], mc.buf[bu_kseg],
+                        int64(lr), int64(hc * 8 * lr), int64(hc))
+                } else {
+                    invoke(kd8.enc, enc, pd8, mc.buf[bds], 0ul, mc.buf[bdq], 0ul, mc.buf[fxt], mc.buf[fpart], 0ul, mc.buf[fxs], mc.buf[bu_hcd], mc.buf[bu_lr], mc.buf[bu_kseg],
+                        int64(lr), int64(hc * 8 * lr), int64(hc))
+                }
+                invoke(kfn.enc, enc, pfn, mc.buf[fpart], mc.buf[fip], mc.buf[binj], mc.buf[fxt2], mc.buf[fxs2], ka, int64(lr / 32))
+                if (fup == KqFmt.mlx6b) {
+                    invoke(ku6.enc, enc, pu6, mc.buf[bus], 0ul, mc.buf[buq], 0ul, mc.buf[fxt2], mc.buf[by], 0ul, mc.buf[fxs2], mc.buf[bu_lr], mc.buf[bu_lr],
+                        mc.buf[bres], mc.buf[bwn], mc.buf[finv], ka, int64(dim), int64(nrows * dim))
+                } else {
+                    invoke(ku8.enc, enc, pu8, mc.buf[bus], 0ul, mc.buf[buq], 0ul, mc.buf[fxt2], mc.buf[by], 0ul, mc.buf[fxs2], mc.buf[bu_lr], mc.buf[bu_lr],
+                        mc.buf[bres], mc.buf[bwn], mc.buf[finv], ka, int64(dim), int64(nrows * dim))
+                }
+                return
+            }
+            stamp_run(snorm, pnorm) {
+                invoke(snorm.enc, enc, mc.buf[bres], mc.buf[bxn], mc.buf[bwn], nka, int64(nrows * hc))
+            }
+            stamp_run(srt, prt) {
+                invoke(srt.enc, enc, mc.buf[bwi], mc.buf[bxn], mc.buf[binj], mc.buf[brb], rka, int64(hc), int64(nrows))
+            }
+            if (nrows == 1) {
+                stamp_run(sgd, pgd) {
+                    invoke(sgd.enc, enc, mc.buf[bdq], 0ul, mc.buf[bds], 0ul, mc.buf[bxn], 0ul, mc.buf[blo], 0ul, mc.buf[bu_hcd], mc.buf[bu_lr], int64(lr), int64(hcd))
+                }
+            } else {
+                stamp_run(smd, pmd) {
+                    invoke(smd.enc, enc, mc.buf[bdq], 0ul, mc.buf[bds], 0ul, mc.buf[bxn], 0ul, mc.buf[blo], 0ul, mc.buf[bu_hcd], mc.buf[bu_lr], mvd, int64(lr), gcols)
+                }
+            }
+            stamp_run(slo, plo) {
+                invoke(slo.enc, enc, mc.buf[blo], 0ul, mc.buf[bu_tot], mc.buf[bu_hc], int64(nrows * lr))
+            }
+            if (nrows == 1) {
+                stamp_run(sgu, pgu) {
+                    invoke(sgu.enc, enc, mc.buf[buq], 0ul, mc.buf[bus], 0ul, mc.buf[blo], 0ul, mc.buf[bgate], 0ul, mc.buf[bu_lr], mc.buf[bu_hcd], int64(hcd), int64(lr))
+                }
+            } else {
+                stamp_run(smu, pmu) {
+                    invoke(smu.enc, enc, mc.buf[buq], 0ul, mc.buf[bus], 0ul, mc.buf[blo], 0ul, mc.buf[bgate], 0ul, mc.buf[bu_lr], mc.buf[bu_hcd], mvu, int64(hcd), gcols)
+                }
+            }
+            stamp_run(smix, pmix) {
+                invoke(smix.enc, enc, mc.buf[bxn], mc.buf[bgate], mc.buf[by], mka, int64(nrows * dim))
+            }
+        }
+        return if (!ran)
+        var m = 0.0
+        for (v in want) {
+            m = max(m, abs(v))
+        }
+        var mj = 0.0
+        for (v in wantj) {
+            mj = max(mj, abs(v))
+        }
+        var inscope got <- buf_download(mc.buf[by], nrows * dim, type<float>)
+        var dmax = 0.0
+        for (a, b in got, want) {
+            dmax = max(dmax, nan_wide_diff(a, b))
+        }
+        to_log(LOG_INFO, "{tag}: max |device - reference| {dmax} against the row magnitude {m} ({dmax / m}), {live} of {nrows * hcd} gates under |4|\n")
+        check_buf(t, "{tag} xb", mc.buf[by], want, Bar(rel = 1e-4, abs_floor = 1e-4 * m), Shape(row_width = dim))
+        check_buf(t, "{tag} inj", mc.buf[binj], wantj, Bar(rel = 1e-4, abs_floor = 1e-4 * mj), FLAT_SHAPE)
+    }
+}
+
+//! The n-gram side input's projection over an affine plane at Flash-Next's shapes (K 2560; the key's 10240 rows, the value's
+//! 2560): the engine's one-row pick (`b32_gemv_form` - the wide stamp past 512 rows) and its small-batch stamp against a double
+//! dot over the planes' own weights at the 2e-4 envelope bar
+def private ple_proj_aff_gate(t : T?; var dev, queue; fmt : KqFmt; rows, nrows : int) {
+    let n = 2560
+    let tag = "n-gram projection {fmt} n={n} rows={rows} nrows={nrows}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let w = nrows <= 2 ? 2 : (nrows <= 4 ? 4 : 8)
+        let sg = b32_gemv_w_stamp(fmt)
+        let sm = b32_mvb_stamp(fmt, w, false)
+        var pg = mc |> keep_stamp(sg, err)
+        var pm = mc |> keep_stamp(sm, err)
+        return if (!pso_ok(t, tag, pg, err) || !pso_ok(t, tag, pm, err))
+        var inscope(p0, p1, wref) <- moe_gemv_planes(fmt, rows, n)
+        var inscope xv <- b32_off_lattice_x(nrows * n)
+        var inscope ref <- dense_ref_env(nrows, n, rows, xv) $(r; var wrow) {
+            for (c in range(n)) {
+                wrow[c] = wref[r * n + c]
+            }
+        }
+        let bw = mc |> in_plain(p0)
+        let bs = mc |> in_plain(p1)
+        let bx = mc |> in_(xv)
+        let by = mc |> out_words(nrows * rows, -1000.0)
+        let bn = mc |> in_plain([uint(n)])
+        let bd = mc |> in_plain([uint(rows)])
+        var mv = KqMvArgs(ndim = uint(n), ddim = uint(rows), ys = uint(rows), nr = uint(nrows))
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            if (nrows == 1) {
+                stamp_run(sg, pg) {
+                    invoke(sg.enc, enc, mc.buf[bw], 0ul, mc.buf[bs], 0ul, mc.buf[bx], 0ul, mc.buf[by], 0ul, mc.buf[bn], mc.buf[bd], int64(rows), int64(n))
+                }
+            } else {
+                stamp_run(sm, pm) {
+                    invoke(sm.enc, enc, mc.buf[bw], 0ul, mc.buf[bs], 0ul, mc.buf[bx], 0ul, mc.buf[by], 0ul, mc.buf[bn], mc.buf[bd], mv, int64(rows), int64((nrows + w - 1) / w))
+                }
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], ref.want, env_bar(2e-4, ref.env), Shape(row_width = rows), ref.env)
     }
 }
 
@@ -5478,6 +6021,22 @@ def private b32_mm_kernels(f) {   //! generic, as the gates are: the Apple half 
     if (f == KqFmt.q5032) {
         return (base = kernel_of(@@pf_enc_moe_mm_q5032_c), t = kernel_of(@@pf_enc_moe_mm_q5032_t_c), th = kernel_of(@@pf_enc_moe_mm_q5032_th_c),
             th128 = kernel_of(@@pf_enc_moe_mm_q5032_th128_c), thr = kernel_of(@@pf_enc_moe_mm_q5032_thr_c))
+    }
+    if (f == KqFmt.mlx4) {
+        return (base = kernel_of(@@pf_enc_moe_mm_mlx4_c), t = kernel_of(@@pf_enc_moe_mm_mlx4_t_c), th = kernel_of(@@pf_enc_moe_mm_mlx4_th_c),
+            th128 = kernel_of(@@pf_enc_moe_mm_mlx4_th128_c), thr = kernel_of(@@pf_enc_moe_mm_mlx4_thr_c))
+    }
+    if (f == KqFmt.mlx8) {
+        return (base = kernel_of(@@pf_enc_moe_mm_mlx8_c), t = kernel_of(@@pf_enc_moe_mm_mlx8_t_c), th = kernel_of(@@pf_enc_moe_mm_mlx8_th_c),
+            th128 = kernel_of(@@pf_enc_moe_mm_mlx8_th128_c), thr = kernel_of(@@pf_enc_moe_mm_mlx8_thr_c))
+    }
+    if (f == KqFmt.mlx4b) {
+        return (base = kernel_of(@@pf_enc_moe_mm_mlx4b_c), t = kernel_of(@@pf_enc_moe_mm_mlx4b_t_c), th = kernel_of(@@pf_enc_moe_mm_mlx4b_th_c),
+            th128 = kernel_of(@@pf_enc_moe_mm_mlx4b_th128_c), thr = kernel_of(@@pf_enc_moe_mm_mlx4b_thr_c))
+    }
+    if (f == KqFmt.mlx8b) {
+        return (base = kernel_of(@@pf_enc_moe_mm_mlx8b_c), t = kernel_of(@@pf_enc_moe_mm_mlx8b_t_c), th = kernel_of(@@pf_enc_moe_mm_mlx8b_th_c),
+            th128 = kernel_of(@@pf_enc_moe_mm_mlx8b_th128_c), thr = kernel_of(@@pf_enc_moe_mm_mlx8b_thr_c))
     }
     if (f != KqFmt.iq4nl32) {
         panic("b32_mm_kernels: {f} is not a per-32 expert mul_mm format")
@@ -5666,13 +6225,15 @@ def private moe_mulmm_b32_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim :
         //! bases, their grid the whole-tile count of the fullest expert
         let bk = mc |> in_plain([uint(kdim)])
         let bn = mc |> in_plain([uint(ndim)])
+        let bg0 = mc |> in_plain([0u])   //! the gated store off: its gate and half planes bound unread (the y plane, the X halves)
         var maxce = 0
         for (c in csr.cnt) {
             maxce = max(maxce, int(c))
         }
         let tiles = int64((maxce + 31) / 32)
         let rant = mc |> cell_record(t, "{tag} twin") $(enc : MetalComputeEncoder?) {
-            invoke(ks.th.enc, enc, tw_pso, mc.buf[bs], 0ul, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bxh], 0ul, mc.buf[by_t], 0ul, mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase], int64(pad), int64(ndim), int64(ne), tiles)
+            invoke(ks.th.enc, enc, tw_pso, mc.buf[bs], 0ul, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bxh], 0ul, mc.buf[by_t], 0ul, mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase],
+                mc.buf[by_t], mc.buf[bxh], mc.buf[bg0], int64(pad), int64(ndim), int64(ne), tiles)
         }
         if (rant) {
             check_buf(t, "{tag} twin", mc.buf[by_t], want_t, BAR_EXACT, Shape(row_width = ndim))
@@ -5683,7 +6244,8 @@ def private moe_mulmm_b32_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim :
         if (pso_ok(t, "{tag} T stamp", tf_pso, terr)) {
             let by_f = mc |> out_words(pad * ndim, -600.0)
             let ranf = mc |> cell_record(t, "{tag} T stamp") $(enc : MetalComputeEncoder?) {
-                invoke(ks.t.enc, enc, tf_pso, mc.buf[bs], 0ul, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bx], 0ul, mc.buf[by_f], 0ul, mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase], int64(pad), int64(ndim), int64(ne), tiles)
+                invoke(ks.t.enc, enc, tf_pso, mc.buf[bs], 0ul, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bx], 0ul, mc.buf[by_f], 0ul, mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase],
+                    mc.buf[by_f], mc.buf[bxh], mc.buf[bg0], int64(pad), int64(ndim), int64(ne), tiles)
             }
             if (ranf) {
                 check_buf(t, "{tag} T stamp", mc.buf[by_f], want_f, BAR_EXACT, Shape(row_width = ndim))
@@ -5697,8 +6259,10 @@ def private moe_mulmm_b32_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim :
         return if (tl_pso == null || rm_pso == null || maxce < 128)   //! the tall pair serves an expert of whole 128-row tiles; a shorter run takes the 32-row twin
         let by_p = mc |> out_words(pad * ndim, -700.0)
         let ranp = mc |> cell_record(t, "{tag} tall pair") $(enc : MetalComputeEncoder?) {
-            invoke(ks.th128.enc, enc, tl_pso, mc.buf[bs], 0ul, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bxh], 0ul, mc.buf[by_p], 0ul, mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase], int64(pad), int64(ndim), int64(ne), int64(maxce / 128))
-            invoke(ks.thr.enc, enc, rm_pso, mc.buf[bs], 0ul, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bxh], 0ul, mc.buf[by_p], 0ul, mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase], int64(pad), int64(ndim), int64(ne), 4l)
+            invoke(ks.th128.enc, enc, tl_pso, mc.buf[bs], 0ul, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bxh], 0ul, mc.buf[by_p], 0ul, mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase],
+                mc.buf[by_p], mc.buf[bxh], mc.buf[bg0], int64(pad), int64(ndim), int64(ne), int64(maxce / 128))
+            invoke(ks.thr.enc, enc, rm_pso, mc.buf[bs], 0ul, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bxh], 0ul, mc.buf[by_p], 0ul, mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase],
+                mc.buf[by_p], mc.buf[bxh], mc.buf[bg0], int64(pad), int64(ndim), int64(ne), 4l)
         }
         if (ranp) {
             check_buf(t, "{tag} tall pair", mc.buf[by_p], want_p, BAR_EXACT, Shape(row_width = ndim))
@@ -5819,6 +6383,91 @@ def private dn_rule_oracle(cv, braw, graw, aa, dtb, st0 : array<float>; nkh, nvh
 }
 
 //! MetalDnPrep + MetalDnScanH vs the sequential rule on f16-lattice rows (so the f32 bar); gates compared alone; a rerun on the left state must miss
+//! the single row's fused deltanet step (`MetalDnStepFused`: conv + SiLU + L2, the delta rule, the gated out-norm, one dispatch
+//! a head) against the three dispatches it fuses over the same planes - the o row and the state bit for bit, under either gate
+//! activation; `split` lands the state in the second plane and leaves the first as it was
+def private dn_step_fused_gate(t : T?; var dev, queue; nkh, nvh : int; zsig, split : bool) {
+    let ds = 128
+    let kd = nkh * ds
+    let di = nvh * ds
+    let cd = 2 * kd + di
+    let dconv = 4
+    let tag = "dn step fused nkh={nkh} nvh={nvh}{zsig ? " sigmoid" : ""}{split ? " split" : ""}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let sconv = stamp_of(@@enc_dn_conv_n)
+        let sscan = stamp_of(@@enc_dn_scan)
+        let sgate = zsig ? stamp_of(@@enc_dn_gate_sig) : stamp_of(@@enc_dn_gate)
+        let sfused = stamp_of(@@enc_dn_step_fused_c)
+        var pconv = mc |> keep_stamp(sconv, err)
+        return if (!pso_ok(t, "{tag} conv", pconv, err))
+        var pscan = mc |> keep_stamp(sscan, err)
+        return if (!pso_ok(t, "{tag} scan", pscan, err))
+        var pgate = mc |> keep_stamp(sgate, err)
+        return if (!pso_ok(t, "{tag} gate", pgate, err))
+        var pfused = mc |> keep_stamp(sfused, err)
+        return if (!pso_ok(t, "{tag} fused", pfused, err))
+        var inscope xr <- [for (k in range(cd)); float((k * 7 + 3) % 29 - 14) / 64.0]
+        var inscope hist <- [for (k in range(cd * (dconv - 1))); float((k * 5 + 1) % 23 - 11) / 64.0]
+        var inscope wtaps <- [for (k in range(cd * dconv)); 0.05 * float(k % 9) - 0.2]
+        var inscope zr <- [for (k in range(di)); 0.3 * float(k % 17) - 2.4]
+        var inscope wn <- [for (k in range(ds)); 0.5 + 0.03 * float(k % 13)]
+        var inscope braw <- [for (k in range(nvh)); 0.3 * float(k % 11) - 1.5]
+        var inscope graw <- [for (k in range(nvh)); 0.2 * float(k % 13) - 1.0]
+        var inscope aa <- [for (k in range(nvh)); -(0.4 + 0.15 * float(k))]
+        var inscope dtb <- [for (k in range(nvh)); 0.1 * float(k) - 0.2]
+        var inscope st0 <- [for (k in range(nvh * ds * ds)); 0.01 * float(k % 37) - 0.18]
+        var ka = DnArgs(cd = uint(cd), dconv = uint(dconv), npos = 1u, kd = uint(kd), ds = uint(ds),
+            nvh = uint(nvh), nkh = uint(nkh), di = uint(di), eps = EPS, qscale = 0.5, bstr = uint(nvh), split = split ? 1u : 0u, zsig = zsig ? 1u : 0u)
+        var gka = GkDnGateArgs(nvh = uint(nvh), di = uint(di), ds = uint(ds), eps = EPS)
+        var inscope grp0 <- [0u, 1u, 0u, 0u, 0u, 0u, 0u, 0u]
+        let bgrp = mc |> in_plain(grp0)
+        let bx = mc |> in_(xr)
+        let bhist = mc |> in_(hist)
+        let bw = mc |> in_(wtaps)
+        let bz = mc |> in_(zr)
+        let bwn = mc |> in_(wn)
+        let bbr = mc |> in_(braw)
+        let bgr = mc |> in_(graw)
+        let baa = mc |> in_(aa)
+        let bdt = mc |> in_(dtb)
+        let bcv = mc |> out_(cd)
+        let bst = mc |> io_(st0)
+        let bstm = mc |> out_(nvh * ds * ds)
+        let bo = mc |> out_(di)
+        let bst2 = mc |> io_(st0)
+        let bstm2 = mc |> out_(nvh * ds * ds)
+        let bo2 = mc |> out_(di)
+        let ran = mc |> cell_record(t, "{tag} reference") $(enc : MetalComputeEncoder?) {
+            stamp_run(sconv, pconv) {
+                invoke(sconv.enc, enc, mc.buf[bx], mc.buf[bcv], mc.buf[bhist], mc.buf[bw], mc.buf[bgrp], dn_conv_args(ka), dn_conv_n_wgs(int64(cd), 1l), 1l)
+            }
+            stamp_run(sscan, pscan) {
+                invoke(sscan.enc, enc, mc.buf[bcv], 0ul, mc.buf[bst], mc.buf[bbr], 0ul, mc.buf[bgr], 0ul, mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bstm], mc.buf[bgrp], ka, mc.buf[bst], int64(ds), int64(nvh), 1l)
+            }
+            stamp_run(sgate, pgate) {
+                invoke(sgate.enc, enc, mc.buf[bz], mc.buf[bo], mc.buf[bwn], gka, int64(nvh), 1l)
+            }
+        }
+        return if (!ran)
+        let ran2 = mc |> cell_record(t, "{tag} fused") $(enc : MetalComputeEncoder?) {
+            stamp_run(sfused, pfused) {
+                invoke(sfused.enc, enc, mc.buf[bx], mc.buf[bhist], mc.buf[bw], mc.buf[bst2], mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo2], mc.buf[bstm2], mc.buf[bgrp], ka,
+                    mc.buf[bst2], mc.buf[bz], mc.buf[bwn], int64(ds), int64(nvh), 1l)
+            }
+        }
+        return if (!ran2)
+        check_buf_exact(t, "{tag} o row", mc.buf[bo2], mc |> plane_run(bo))
+        if (split) {
+            check_buf_exact(t, "{tag} state in the second plane", mc.buf[bstm2], mc |> plane_run(bstm))
+            check_buf_exact(t, "{tag} the first plane as it was", mc.buf[bst2], st0)
+        } else {
+            check_buf_exact(t, "{tag} state", mc.buf[bst2], mc |> plane_run(bst))
+            t |> success(moved_off(mc |> plane_run(bst2), st0, 0, BAR_EXACT), "{tag}: the state moved off its input")
+        }
+    }
+}
+
 def private dn_scan_half_gate(t : T?; var dev, queue; nkh, nvh, npos : int) {
     let ds = 128
     let kd = nkh * ds
@@ -5859,7 +6508,7 @@ def private dn_scan_half_gate(t : T?; var dev, queue; nkh, nvh, npos : int) {
                 invoke(sprep.enc, enc, mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], ka, int64((npos * nvh + 63) / 64 * 64))
             }
             stamp_run(sscan, pso_scan) {
-                invoke(sscan.enc, enc, mc.buf[bcv], mc.buf[bst], mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bst], mc.buf[bgrp], ka, mc.buf[bst], int64(ds), int64(nvh), 1l)
+                invoke(sscan.enc, enc, mc.buf[bcv], 0ul, mc.buf[bst], mc.buf[bbr], 0ul, mc.buf[bgr], 0ul, mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bst], mc.buf[bgrp], ka, mc.buf[bst], int64(ds), int64(nvh), 1l)
             }
         }
         return if (!ran)
@@ -5883,7 +6532,7 @@ def private dn_scan_half_gate(t : T?; var dev, queue; nkh, nvh, npos : int) {
                     invoke(sprep.enc, enc, mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], kmid, prep_total)
                 }
                 stamp_run(sscan, pso_scan) {
-                    invoke(sscan.enc, enc, mc.buf[bcv], mc.buf[bst], mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bstm], mc.buf[bgrp], kmid, mc.buf[bst], int64(ds), int64(nvh), 1l)
+                    invoke(sscan.enc, enc, mc.buf[bcv], 0ul, mc.buf[bst], mc.buf[bbr], 0ul, mc.buf[bgr], 0ul, mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bstm], mc.buf[bgrp], kmid, mc.buf[bst], int64(ds), int64(nvh), 1l)
                 }
             }
             check_buf(t, "{tag} mid out", mc.buf[bo], owant, BAR_FP, Shape(row_width = di, head_width = ds))
@@ -5902,12 +6551,34 @@ def private dn_scan_half_gate(t : T?; var dev, queue; nkh, nvh, npos : int) {
                 invoke(sprep.enc, enc, mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], ksplit, prep_total)
             }
             stamp_run(sscan, pso_scan) {
-                invoke(sscan.enc, enc, mc.buf[bcv], mc.buf[bst], mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bstm], mc.buf[bgrp], ksplit, mc.buf[bst], int64(ds), int64(nvh), 1l)
+                invoke(sscan.enc, enc, mc.buf[bcv], 0ul, mc.buf[bst], mc.buf[bbr], 0ul, mc.buf[bgr], 0ul, mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bstm], mc.buf[bgrp], ksplit, mc.buf[bst], int64(ds), int64(nvh), 1l)
             }
         }
         check_buf(t, "{tag} split out", mc.buf[bo], owant, BAR_FP, Shape(row_width = di, head_width = ds))
         check_buf(t, "{tag} split: the last state lands in the second plane", mc.buf[bstm], stw, BAR_FP, Shape(row_width = ds))
         check_buf_exact(t, "{tag} split: the first plane is left as it was", mc.buf[bst], st0)
+        // the one-site [beta | alpha] rows (DnStages.ba_rows): one plane at stride 2 nvh, the decay at goff = nvh, bound at both slots
+        let nvh2 = 2 * nvh
+        var inscope baw <- [for (k in range(npos * nvh2)); k % nvh2 < nvh ? braw[k / nvh2 * nvh + k % nvh2] : graw[k / nvh2 * nvh + k % nvh2 - nvh]]
+        var inscope bawant <- [for (k in range(npos * nvh2)); k % nvh2 < nvh ? bwant[k / nvh2 * nvh + k % nvh2] : gwant[k / nvh2 * nvh + k % nvh2 - nvh]]
+        let bba = mc |> io_(baw)
+        mc |> plane_upload(bst, st0)
+        mc |> plane_refill(bo)
+        var kwide = ka
+        kwide.bstr = uint(nvh2)
+        kwide.goff = uint(nvh)
+        mc |> cell_record(t, "{tag} ba rows") $(enc : MetalComputeEncoder?) {
+            stamp_run(sprep, pso_prep) {
+                invoke(sprep.enc, enc, mc.buf[bba], mc.buf[bba], mc.buf[baa], mc.buf[bdt], kwide, prep_total)
+            }
+            stamp_run(sscan, pso_scan) {
+                invoke(sscan.enc, enc, mc.buf[bcv], 0ul, mc.buf[bst], mc.buf[bba], 0ul, mc.buf[bba], 0ul, mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bst], mc.buf[bgrp], kwide, mc.buf[bst], int64(ds), int64(nvh), 1l)
+            }
+        }
+        check_buf(t, "{tag} ba rows: the gates", mc.buf[bba], bawant, BAR_FP, Shape(row_width = nvh2))
+        check_buf(t, "{tag} ba rows out", mc.buf[bo], owant, BAR_FP, Shape(row_width = di, head_width = ds))
+        check_buf(t, "{tag} ba rows state", mc.buf[bst], stw, BAR_FP, Shape(row_width = ds))
+        mc |> plane_upload(bst, st0)   // the row arm below walks from the initial state
         var inscope cvh1 <- [for (k in range((npos + 1) * cd)); k < cd ? float16(100.0) : cvh[k - cd]]
         var inscope braw1 <- [for (k in range((npos + 1) * nvh)); k < nvh ? 50.0 : braw[k - nvh]]
         var inscope graw1 <- [for (k in range((npos + 1) * nvh)); k < nvh ? 50.0 : graw[k - nvh]]
@@ -5924,7 +6595,7 @@ def private dn_scan_half_gate(t : T?; var dev, queue; nkh, nvh, npos : int) {
                 invoke(sprep.enc, enc, mc.buf[bbr1], mc.buf[bgr1], mc.buf[baa], mc.buf[bdt], krow, prep_total)
             }
             stamp_run(sscan, pso_scan) {
-                invoke(sscan.enc, enc, mc.buf[bcv1], mc.buf[bst], mc.buf[bbr1], mc.buf[bgr1], mc.buf[baa], mc.buf[bdt], mc.buf[bo1], mc.buf[bst], mc.buf[bgrp1], krow, mc.buf[bst], int64(ds), int64(nvh), 1l)
+                invoke(sscan.enc, enc, mc.buf[bcv1], 0ul, mc.buf[bst], mc.buf[bbr1], 0ul, mc.buf[bgr1], 0ul, mc.buf[baa], mc.buf[bdt], mc.buf[bo1], mc.buf[bst], mc.buf[bgrp1], krow, mc.buf[bst], int64(ds), int64(nvh), 1l)
             }
         }
         check_buf(t, "{tag} row: beta, the row before the offset as it was", mc.buf[bbr1], bwant1, BAR_FP, Shape(row_width = nvh))
@@ -5944,7 +6615,7 @@ def private dn_scan_half_gate(t : T?; var dev, queue; nkh, nvh, npos : int) {
                 invoke(sprep.enc, enc, mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], ka, int64((npos * nvh + 63) / 64 * 64))
             }
             stamp_run(sscan, pso_scan) {
-                invoke(sscan.enc, enc, mc.buf[bcv], mc.buf[bst], mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bst], mc.buf[bgrp], ka, mc.buf[bst], int64(ds), int64(nvh), 1l)
+                invoke(sscan.enc, enc, mc.buf[bcv], 0ul, mc.buf[bst], mc.buf[bbr], 0ul, mc.buf[bgr], 0ul, mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bst], mc.buf[bgrp], ka, mc.buf[bst], int64(ds), int64(nvh), 1l)
             }
         }
         t |> success(mc |> rerun_mismatches(bo, owant, 1e-4, 0.0, "{tag} CONTROL(expected-red)") > 0, "{tag} control: gates prepared twice over a moved state must miss")
@@ -6041,10 +6712,10 @@ def private dn_groups_gate(t : T?; var dev, queue) {
                 invoke(sconv.enc, enc, mc.buf[bx], mc.buf[by], mc.buf[bpool], mc.buf[bw], mc.buf[bgrp], dn_conv_args(ka), dn_conv_n_wgs(int64(cd), 3l), 2l)
             }
             stamp_run(shist, pso_hist) {
-                invoke(shist.enc, enc, mc.buf[bx], mc.buf[bpool], mc.buf[bpool], mc.buf[bgrp], ka, mc.buf[bcap], int64(cd), 2l)
+                invoke(shist.enc, enc, mc.buf[bx], 0ul, mc.buf[bpool], mc.buf[bpool], mc.buf[bgrp], ka, mc.buf[bcap], int64(cd), 2l)
             }
             stamp_run(sscan, pso_scan) {
-                invoke(sscan.enc, enc, mc.buf[by], mc.buf[bpool], mc.buf[bba], mc.buf[bba], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bpool], mc.buf[bgrp], ka, mc.buf[bcap], int64(ds), int64(nvh), 2l)
+                invoke(sscan.enc, enc, mc.buf[by], 0ul, mc.buf[bpool], mc.buf[bba], 0ul, mc.buf[bba], 0ul, mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bpool], mc.buf[bgrp], ka, mc.buf[bcap], int64(ds), int64(nvh), 2l)
             }
         }
         return if (!ran)
@@ -6254,10 +6925,32 @@ def private dn_chain_gate(t : T?; var dev, queue; nkh, nvh, dconv, npos : int; c
             }
         }
         check_buf(t, "dn conv + L2 npos={npos} dconv={dconv} pb={conv_pb}", mc.buf[by], cv, BAR_FP, Shape(row_width = cd, head_width = ds))
+        if (conv_pb != 1 && conv_pb != 4) {
+            // the twin stamps: the conv and the norm also store each plain f32 row's halves, the norm's over the conv's on the q/k heads
+            let sconvh = stamp_of(@@enc_dn_conv_hx)
+            let sl2h = stamp_of(@@enc_dn_l2norm_hx)
+            var pso_convh = mc |> keep_stamp(sconvh, err)
+            var pso_l2h = mc |> keep_stamp(sl2h, err)
+            t |> success(pso_convh != null && pso_l2h != null, "dn conv + L2 twin stamps: pipeline: {err}")
+            if (pso_convh != null && pso_l2h != null) {
+                let byh = mc |> out_(npos * cd)
+                let bhh = mc |> out_words(npos * cd, float16(-1000.0))
+                mc |> cell_record(t, "dn conv + L2 twin npos={npos} dconv={dconv}") $(enc : MetalComputeEncoder?) {
+                    stamp_run(sconvh, pso_convh) {
+                        invoke(sconvh.enc, enc, mc.buf[bx], mc.buf[bh], mc.buf[bw], mc.buf[byh], mc.buf[bgrp], ka, mc.buf[bhh], int64(cd), int64(npos), 1l)
+                    }
+                    stamp_run(sl2h, pso_l2h) {
+                        invoke(sl2h.enc, enc, mc.buf[byh], ka, mc.buf[bhh], int64(2 * nkh), int64(npos))
+                    }
+                }
+                check_buf(t, "dn conv + L2 twin npos={npos} dconv={dconv}: the f32 rows", mc.buf[byh], cv, BAR_FP, Shape(row_width = cd, head_width = ds))
+                check_hx_narrow(t, "dn conv + L2 twin npos={npos} dconv={dconv}: the halves", mc.buf[bhh], mc.buf[byh], npos * cd, npos * cd)
+            }
+        }
         let bhm = npos >= 2 ? (mc |> out_words(cd * taps, -1000.0)) : bh
         mc |> cell_record(t, "dn hist npos={npos}") $(enc : MetalComputeEncoder?) {
             stamp_run(shist, pso_hist) {
-                invoke(shist.enc, enc, mc.buf[bx], mc.buf[bh], mc.buf[bhm], mc.buf[bgrp], ka, mc.buf[bh], int64(cd), 1l)
+                invoke(shist.enc, enc, mc.buf[bx], 0ul, mc.buf[bh], mc.buf[bhm], mc.buf[bgrp], ka, mc.buf[bh], int64(cd), 1l)
             }
         }
         check_buf(t, "dn hist npos={npos}", mc.buf[bh], hwant, BAR_FP, Shape(row_width = taps))
@@ -6275,7 +6968,7 @@ def private dn_chain_gate(t : T?; var dev, queue; nkh, nvh, dconv, npos : int; c
         let bstm = npos >= 2 ? (mc |> out_words(nvh * ds * ds, -1000.0)) : bst
         mc |> cell_record(t, "dn scan npos={npos} nkh={nkh} nvh={nvh}") $(enc : MetalComputeEncoder?) {
             stamp_run(sscan, pso_scan) {
-                invoke(sscan.enc, enc, mc.buf[by], mc.buf[bst], mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bstm], mc.buf[bgrp], ka, mc.buf[bst], int64(ds), int64(nvh), 1l)
+                invoke(sscan.enc, enc, mc.buf[by], 0ul, mc.buf[bst], mc.buf[bbr], 0ul, mc.buf[bgr], 0ul, mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bstm], mc.buf[bgrp], ka, mc.buf[bst], int64(ds), int64(nvh), 1l)
             }
         }
         check_buf(t, "dn scan npos={npos} out", mc.buf[bo], owant, BAR_FP, Shape(row_width = di, head_width = ds))
@@ -6307,6 +7000,21 @@ def private dn_chain_gate(t : T?; var dev, queue; nkh, nvh, dconv, npos : int; c
             }
         }
         check_buf(t, "dn gate npos={npos}", mc.buf[bo], gwant, BAR_FP, Shape(row_width = di, head_width = ds))
+        // the twin stamp: the gate over the scan oracle's raw rows again, its f32 rows the plain stamp's and its halves theirs
+        let sgateh = stamp_of(@@enc_dn_gate_hx)
+        var pso_gateh = mc |> keep_stamp(sgateh, err)
+        t |> success(pso_gateh != null, "dn gate twin stamp: pipeline: {err}")
+        if (pso_gateh != null) {
+            let boh2 = mc |> io_(owant)
+            let bohh = mc |> out_words(npos * di, float16(-1000.0))
+            mc |> cell_record(t, "dn gate twin npos={npos}") $(enc : MetalComputeEncoder?) {
+                stamp_run(sgateh, pso_gateh) {
+                    invoke(sgateh.enc, enc, mc.buf[bz], mc.buf[boh2], mc.buf[bwn], mc.buf[bohh], gka, int64(nvh), int64(npos))
+                }
+            }
+            check_buf(t, "dn gate twin npos={npos}: the f32 rows", mc.buf[boh2], gwant, BAR_FP, Shape(row_width = di, head_width = ds))
+            check_hx_narrow(t, "dn gate twin npos={npos}: the halves", mc.buf[bohh], mc.buf[boh2], npos * di, npos * di)
+        }
         // the σ(z) stamp (qwen4exp) on the scan oracle's rows, so its leg stands without the scan: the
         // same norm, the gate a sigmoid; the silu form's oracle is the control it must miss
         var inscope gsig : array<float>

@@ -13,20 +13,26 @@ require dasllama/dasllama_rope      // build_rope_tabs_rows — the rope2d gate'
 require dasllama/dasllama_qwen3v   // q3v_reorder_src - the stem assemble gate's merge walk
 require _kernel_oracles   // pos_add_2d_ref
 require _sel_oracle   // select_rows_oracle, sel_words: the selection landing's CPU reading, the Vulkan cell's own
+require dasllama/dasllama_sampling   // sample_: the draw gate's oracle, the host sampler over the same row, rng and params
+require daslib/random   // random_seed: the LCG state the draw gate pokes
 require dasllama/dasllama_gpu_tier   // the SEL_* landing layout the selection gate reads its planes by
 require ?das_metal dasllama/dasllama_metal_kernels  // the decode elementwise/misc kernel set (Apple builds)
 require ?das_metal dasllama/dasllama_metal_common   // the pipeline globals the generated builders read
 require dasllama/dasllama_common   // bump_weights_epoch: the region and ring-slack drops; the layout shell's Model
 require ?das_metal dasllama/dasllama_kqformat   // kq_fmt_of_id - the token-table gather gates name their format
-require ?das_metal dasllama/dasllama_convert    // dequant_b32_plane_block - the per-32 gather gate's rows
+require dasllama/dasllama_convert    // dequant_b32_plane_block - the per-32 gather gate's rows; dequant_kq_plane_sb - the drafter's codebook rows
 require ?das_metal dasllama/dasllama_metal_prefill  // metal_moe_kq_twin_pick + its knee knob - the K-quant MoE twins' pick cell
+require dasllama/dasllama_dflash   // DflashDrafter, dflash_top_k_row, dflash_walk: the device selector's host twins
+require ?das_metal dasllama/dasllama_metal_dflash   // the device selector's top-k and walk stamps
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require ?das_metal _metal_kernel_common   // the MetalCell record, check_buf, the device shell
+require ?das_metal _rows8_probe   // rows8_probe_ok: the eight-row mixer cell's layout skip
 require _attn_oracle
 require _compares   // Bar: the cells' bars
 require ?das_metal _mtl_toy               // the [metal_dispatch] multi-kernel fixture
 require ?das_metal dasllama/dasllama_metal_lens   // the requires= tripwire observer: captured, set, restored
 require daslib/f16_cvt              // f32_to_f16 — packing the synthetic scale planes
+require daslib/math_bits            // float_bits_to_uint — packing the BF16 scale planes
 require math
 require strings
 require daslib/strings_boost
@@ -38,7 +44,9 @@ require dasllama/dasllama_gpu_math   // nolint:STYLE030,LINT019 - the row stamps
 // reassociates -> the shared 1e-4 bar), per-head QK-norm in both its in-place and V-fusion
 // binding shapes, geglu, and the logit suppress/softcap pins. Outputs sit in sentinel-padded
 // buffers compared WHOLE, so a write outside the target span is a red. Without das_metal in the
-// build, or with no Metal device, every check skips.
+// build, or with no Metal device, every check skips; a Metal-4 tensor stamp's cell also skips
+// without the Metal-4 tensor toolchain, and the eight-row mixer cell where the rows8 layout probe
+// finds the matrix unit's cooperative layout another generation's (the engine keeps the form off).
 
 let private EPS = 1.0e-5
 let private PAD_SENTINEL = -1000.0   //! the fill of an output's pad slots: the compare holds it unmoved
@@ -145,6 +153,677 @@ def private cls_select_gate(t : T?; var dev, queue; vocab : int) {
     return if (long_length(got) != f.rows)
     var inscope want <- select_rows_oracle(f.y, f.temps, f.recent, int64(vocab), f.rows, SEL_K, SEL_CAP)
     sel_gate_compare(t, tag, got, want, int64(vocab))
+}
+
+let private DF_NONE = 0xFFFFFFFFu   //! the top-k's empty slot
+let private DF_OUT_SENTINEL = 0xFFFFFFFEu   //! an id no run writes
+
+def private df_hash(i : int) : int => ((i * 1103515245 + 12345) >> 8) & 0x7fffffff
+
+//! `rows` logits rows of `vocab`: values on a 0.25 grid, so ties fill the k-th boundary, the ids `top_a` < `top_b` tied at the
+//! row's maximum
+def private df_logits(rows, vocab, top_a, top_b : int) : array<float> {
+    var lg <- [for (i in range(rows * vocab)); float(df_hash(i) % 64) * 0.25 - 8.0]
+    for (r in range(rows)) {
+        if (top_b < vocab) {
+            lg[r * vocab + top_a] = 9.0
+            lg[r * vocab + top_b] = 9.0
+        }
+    }
+    return <- lg
+}
+
+//! the oracle's list of the run lg[base + lo .. base + hi): its ids sorted by (logit desc, id asc), the first `k` appended,
+//! the empty slot (DF_NONE / -3.4e38) past the run's ids
+def private df_topk_append(lg : array<float>; base, lo, hi, k : int; ids_desc : bool; var ids : array<uint>; var vals : array<float>) {
+    var order <- [for (i in range(lo, hi)); i]
+    sort(order) $(a, b) {
+        let va = lg[base + a]
+        let vb = lg[base + b]
+        return va > vb || (va == vb && (ids_desc ? a > b : a < b))
+    }
+    ids |> reserve(length(ids) + k)
+    vals |> reserve(length(vals) + k)
+    for (j in range(k)) {
+        ids |> push(j < length(order) ? uint(order[j]) : DF_NONE)
+        vals |> push(j < length(order) ? lg[base + order[j]] : -3.4e38)
+    }
+    delete order
+}
+
+//! the oracle's top-k of every row: a list a row
+def private df_topk_oracle(lg : array<float>; rows, vocab, k : int; ids_desc : bool) : tuple<ids : array<uint>; vals : array<float>> {
+    var ids : array<uint>
+    ids |> reserve(rows * k)
+    var vals : array<float>
+    vals |> reserve(rows * k)
+    for (r in range(rows)) {
+        df_topk_append(lg, r * vocab, 0, vocab, k, ids_desc, ids, vals)
+    }
+    return (ids <- ids, vals <- vals)
+}
+
+//! `got` against `want` as lists of `k`, list i's first `live[i]` slots through the exact compare - its poisoned-expectation
+//! control landing on a slot a run fills - and its empty slots compared apart
+def private df_check_lists(t : T?; tag : string; got, want : array<auto(TT)>; live : array<int>; k : int) {
+    var inscope g_live, w_live : array<TT -const>
+    g_live |> reserve(length(got))
+    w_live |> reserve(length(got))
+    var empty_bad = 0
+    for (l, i in live, count()) {
+        for (j in range(k)) {
+            let x = i * k + j
+            if (j < l) {
+                g_live |> push(got[x])
+                w_live |> push(want[x])
+            } elif (got[x] != want[x]) {
+                empty_bad++
+            }
+        }
+    }
+    check_exact(t, tag, g_live, w_live)
+    t |> equal(empty_bad, 0, "{tag}: every empty slot past a list's ids holds the empty slot")
+}
+
+//! one selector codebook of `vocab` rows `rank` wide appended to `dr` in format `f`, behind a lead of foreign bytes (two, so a Q8_0
+//! codebook sits two bytes off a word) or two foreign superblocks; quants hashed off `salt`, every half scale a sane magnitude
+def private df_codebook(var dr : DflashDrafter; f : KqFmt; vocab, rank, salt : int) : DflashW {
+    if (f == KqFmt.q8) {
+        let lead = length(dr.blob)
+        let off = lead + 2
+        let nb = vocab * rank / 32
+        dr.blob |> resize(off + nb * 34)
+        dr.blob[lead] = uint8(0x5a)
+        dr.blob[lead + 1] = uint8(0xa5)
+        for (b in range(nb)) {
+            let h = f32_to_f16(0.01 + 0.0003 * float(df_hash(b + salt) % 100) * ((b & 1) == 0 ? 1.0 : -1.0))
+            let bo = off + b * 34
+            dr.blob[bo] = uint8(h & 0xffu)
+            dr.blob[bo + 1] = uint8(h >> 8u)
+            for (k in range(32)) {
+                dr.blob[bo + 2 + k] = uint8(df_hash(b * 32 + k + salt * 7) & 0xff)
+            }
+        }
+        return DflashW(fmt = f, off = int64(off))
+    }
+    let fi = int(f)
+    let qsb = int(kq_qsb(f))
+    let ssb = int(kq_ssb(f))
+    let sb_lead = length(dr.kq[fi].q) / qsb
+    let sb0 = sb_lead + 2
+    let nsb = vocab * rank / 256
+    dr.kq[fi].q |> resize((sb0 + nsb) * qsb)
+    dr.kq[fi].s |> resize((sb0 + nsb) * ssb)
+    for (i in range(sb_lead * qsb, (sb0 + nsb) * qsb)) {
+        dr.kq[fi].q[i] = uint8(df_hash(i + salt * 13) & 0xff)
+    }
+    for (i in range(sb_lead * ssb, (sb0 + nsb) * ssb)) {
+        dr.kq[fi].s[i] = uint8(df_hash(i + salt * 29) & 0xff)
+    }
+    for (sb in range(sb_lead, sb0 + nsb)) {
+        let d = f32_to_f16(0.002 + 0.00005 * float(df_hash(sb + salt) % 100))
+        let dmin = f32_to_f16(0.001 + 0.00003 * float(df_hash(sb * 3 + salt) % 100))
+        let at = f == KqFmt.k6 ? sb * ssb + 16 : sb * ssb
+        dr.kq[fi].s[at] = uint8(d & 0xffu)
+        dr.kq[fi].s[at + 1] = uint8(d >> 8u)
+        if (f != KqFmt.k6) {
+            dr.kq[fi].s[at + 2] = uint8(dmin & 0xffu)
+            dr.kq[fi].s[at + 3] = uint8(dmin >> 8u)
+        }
+    }
+    return DflashW(fmt = f, off = int64(sb0 * 256))
+}
+
+//! codebook row `src`'s bytes copied over row `dst`'s: two candidates whose successor rows, and so whose scores, tie exactly
+def private df_copy_row(var dr : DflashDrafter; w : DflashW; rank, src, dst : int) {
+    if (w.fmt == KqFmt.q8) {
+        let rowb = rank / 32 * 34
+        for (i in range(rowb)) {
+            dr.blob[int(w.off) + dst * rowb + i] = dr.blob[int(w.off) + src * rowb + i]
+        }
+        return
+    }
+    let fi = int(w.fmt)
+    let qsb = int(kq_qsb(w.fmt))
+    let ssb = int(kq_ssb(w.fmt))
+    let sb0 = int(w.off) / 256
+    let per = rank / 256
+    for (i in range(per * qsb)) {
+        dr.kq[fi].q[(sb0 + dst * per) * qsb + i] = dr.kq[fi].q[(sb0 + src * per) * qsb + i]
+    }
+    for (i in range(per * ssb)) {
+        dr.kq[fi].s[(sb0 + dst * per) * ssb + i] = dr.kq[fi].s[(sb0 + src * per) * ssb + i]
+    }
+}
+
+//! codebook row `row` of `w` read as the oracle reads it: a Q8_0 block's q * d, a K-quant superblock through the engine's dequant
+def private df_book_row(dr : DflashDrafter; w : DflashW; rank, row : int) : array<float> {
+    var out : array<float>
+    out |> resize(rank)
+    if (w.fmt == KqFmt.q8) {
+        let rowb = rank / 32 * 34
+        for (b in range(rank / 32)) {
+            let bo = int(w.off) + row * rowb + b * 34
+            let d = f16_to_f32(uint(dr.blob[bo]) | (uint(dr.blob[bo + 1]) << 8u))
+            for (k in range(32)) {
+                let q = int(dr.blob[bo + 2 + k])
+                out[b * 32 + k] = float(q >= 128 ? q - 256 : q) * d
+            }
+        }
+        return <- out
+    }
+    let sb0 = (w.off + int64(row * rank)) / 256l
+    for (b in range64(int64(rank / 256))) {
+        dequant_kq_plane_sb(w.fmt, dr.kq[int(w.fmt)].q, dr.kq[int(w.fmt)].s, sb0 + b, false, out, b * 256l)
+    }
+    return <- out
+}
+
+//! the oracle's walk: position r's candidates scored logit + sum_i (A[pred][i] * h_r[i]) * B[cand][i] in ascending i, the first
+//! best slot the pick (`last_best` the last one, `unary` the logit alone - the controls); the anchor at 0, then the picks
+def private df_walk_oracle(dr : DflashDrafter; tok, nd, k, rank : int; cid : array<uint>; cval, hsel : array<float>; last_best, unary : bool) : array<uint> {
+    var ids : array<uint>
+    ids |> reserve(nd + 1)
+    ids |> push(uint(tok))
+    var pred = tok
+    for (r in range(nd)) {
+        var inscope arow <- df_book_row(dr, dr.sel_prev, rank, pred)
+        var best = 0
+        var bests = -3.0e38
+        for (j in range(k)) {
+            let cand = cid[r * k + j]
+            continue if (cand == DF_NONE)
+            var sc = cval[r * k + j]
+            if (!unary) {
+                var inscope brow <- df_book_row(dr, dr.sel_next, rank, int(cand))
+                for (i in range(rank)) {
+                    let ah = arow[i] * hsel[r * rank + i]
+                    sc += ah * brow[i]
+                }
+            }
+            if (sc > bests || (last_best && sc == bests)) {
+                bests = sc
+                best = j
+            }
+        }
+        pred = int(cid[r * k + best])
+        ids |> push(uint(pred))
+    }
+    return <- ids
+}
+
+//! `n` written elements of plane `p` read back, and the count of the 8 past them that left the sentinel (`sentinel`, or NaN)
+def private df_plane_and_past(mc : MetalCell; p, n : int; sentinel : auto(TT)) : tuple<run : array<TT -const>; moved : int> {
+    var inscope whole <- mc |> plane_as(p, sentinel, n + 8)
+    var moved = 0
+    for (i in range(n, n + 8)) {
+        if (!(whole[i] == sentinel || (sentinel != sentinel && whole[i] != whole[i]))) {
+            moved++
+        }
+    }
+    return (run <- [for (i in range(n)); whole[i]], moved = moved)
+}
+
+//! the two-stage top-k over `rows` rows of `vocab` at `k`, `span` logits a slice: the slice stamp's lists against the oracle's
+//! list of each slice, the merge stamp's rows against the oracle's and the engine's host top-k, ids and logits bit for bit, the
+//! slots past every run at their sentinel; the ids-descending tie rule the control the merged ids must miss where the fixture ties
+//! at the k-th
+def private df_topk_gate(t : T?; var dev, queue; rows, vocab, k, span : int) {
+    let tag = "dflash topk rows={rows} vocab={vocab} k={k} span={span}"
+    let nsl = (vocab + span - 1) / span
+    var inscope lg <- df_logits(rows, vocab, 3, 5)
+    var inscope want <- df_topk_oracle(lg, rows, vocab, k, false)
+    var inscope flipped <- df_topk_oracle(lg, rows, vocab, k, true)
+    var inscope row_live <- [for (_r in range(rows)); min(k, vocab)]
+    var inscope part_ids : array<uint>
+    var inscope part_vals : array<float>
+    var inscope part_live : array<int>
+    part_live |> reserve(rows * nsl)
+    for (r in range(rows)) {
+        for (s in range(nsl)) {
+            let lo = s * span
+            let hi = min(lo + span, vocab)
+            df_topk_append(lg, r * vocab, lo, hi, k, false, part_ids, part_vals)
+            part_live |> push(min(k, hi - lo))
+        }
+    }
+    var inscope host_ids : array<int64>
+    host_ids |> resize(rows * k)
+    var inscope host_vals : array<float>
+    host_vals |> resize(rows * k)
+    for (r in range(rows)) {
+        dflash_top_k_row(lg, int64(r * vocab), int64(vocab), int64(k), host_ids, host_vals, int64(r * k))
+    }
+    var inscope host_u <- [for (v in host_ids); v < 0l ? DF_NONE : uint(v)]
+    df_check_lists(t, "{tag}: the engine's host top-k ids", host_u, want.ids, row_live, k)
+    df_check_lists(t, "{tag}: the engine's host top-k logits", host_vals, want.vals, row_live, k)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let ks = kernel_of(@@enc_dflash_topk_slices)
+        let km = kernel_of(@@enc_dflash_topk_merge)
+        var pso_s = mc |> keep_stamp(ks, err)
+        return if (!pso_ok(t, "{tag} slices", pso_s, err))
+        var pso_m = mc |> keep_stamp(km, err)
+        return if (!pso_ok(t, "{tag} merge", pso_m, err))
+        let np = rows * nsl * k
+        let plg = mc |> in_(lg)
+        let ppid = mc |> out_words(np + 8, DF_OUT_SENTINEL)
+        let ppv = mc |> out_(np, 0, 8)
+        let pid = mc |> out_words(rows * k + 8, DF_OUT_SENTINEL)
+        let pv = mc |> out_(rows * k, 0, 8)
+        var ska = DflashTopkArgs(vocab = uint(vocab), k = uint(k), span = uint(span), nsl = uint(nsl))
+        var mka = DflashTopkArgs(vocab = uint(nsl * k), k = uint(k), span = 0u, nsl = 1u)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            invoke(ks.enc, enc, pso_s, mc.buf[plg], mc.buf[plg], mc.buf[ppid], mc.buf[ppv], ska, int64(nsl), int64(rows))
+            invoke(km.enc, enc, pso_m, mc.buf[ppv], mc.buf[ppid], mc.buf[pid], mc.buf[pv], mka, int64(rows))
+        }
+        return if (!ran)
+        var inscope pids <- df_plane_and_past(mc, ppid, np, DF_OUT_SENTINEL)
+        var inscope pvals <- df_plane_and_past(mc, ppv, np, NAN_SENTINEL)
+        df_check_lists(t, "{tag}: the {nsl} slices' ids", pids.run, part_ids, part_live, k)
+        df_check_lists(t, "{tag}: the {nsl} slices' logits", pvals.run, part_vals, part_live, k)
+        var inscope ids <- df_plane_and_past(mc, pid, rows * k, DF_OUT_SENTINEL)
+        var inscope vals <- df_plane_and_past(mc, pv, rows * k, NAN_SENTINEL)
+        df_check_lists(t, "{tag}: ids", ids.run, want.ids, row_live, k)
+        df_check_lists(t, "{tag}: logits", vals.run, want.vals, row_live, k)
+        t |> equal(pids.moved + pvals.moved + ids.moved + vals.moved, 0, "{tag}: the slots past every run keep their sentinel")
+        if (vocab > k) {
+            t |> success(mismatch_exact(ids.run, flipped.ids) > 0, "{tag}: the control - the ids-descending tie rule picks other ids, so the fixture ties at the k-th")
+        }
+    }
+}
+
+//! a walk stamp's input planes in a cell: the anchor, the selector rows, the candidates and their logits, and the codebooks' -
+//! the predecessor's quant and scale planes, then the successor's, each side's quant offset and in-word byte offset
+struct private DfWalkBinds {
+    tok : int
+    hsel : int
+    cid : int
+    cval : int
+    books : array<int>
+    qoff : uint64[2]
+    q0 : uint[2]
+}
+
+def private df_walk_binds(var mc; dr : DflashDrafter; tok : int; hsel : array<float>; cid : array<uint>; cval : array<float>) : DfWalkBinds {
+    var b = DfWalkBinds(tok = mc |> in_plain([uint(tok), uint(1), uint(2)]), hsel = mc |> in_(hsel), cid = mc |> in_plain(cid), cval = mc |> in_(cval))
+    for (side in range(2)) {
+        let w = side == 0 ? dr.sel_prev : dr.sel_next
+        if (w.fmt == KqFmt.q8) {
+            let pb = mc |> in_plain(dr.blob)
+            b.books |> push_from([pb, pb])
+            b.qoff[side] = uint64(w.off & ~3l)
+            b.q0[side] = uint(w.off & 3l)
+        } else {
+            let sb0 = w.off / 256l
+            b.books |> push(mc |> in_plain(dr.kq[int(w.fmt)].q))
+            var inscope srows <- [for (i in range64(sb0 * kq_ssb(w.fmt), long_length(dr.kq[int(w.fmt)].s))); dr.kq[int(w.fmt)].s[i]]
+            b.books |> push(mc |> in_plain(srows))
+            b.qoff[side] = uint64(sb0 * kq_qsb(w.fmt))
+        }
+    }
+    return <- b
+}
+
+//! the walk stamp over `nd` positions, the predecessor codebook in `pf` and the successor in `nf`, `rank` wide, `k` candidates of
+//! `vocab` ids: the picks the oracle's and the engine's host walk's, id for id, the slots past them at their sentinel; position 0's
+//! selector row is zero, so its two top candidates tie on the score and the first slot's wins - the last-best rule the control
+//! that must miss, the logit-alone walk another
+let private DF_WALK_ND = 7    //! the walk gates' positions
+let private DF_WALK_TOK = 4   //! ... and anchor
+
+//! the walk gates' fixture: a drafter holding the two codebooks (successor rows 3 and 5 equal, so they tie), DF_WALK_ND rows of
+//! logits and their top-k, the selector rows (position 0's zero)
+struct private DfWalkFixture {
+    dr : DflashDrafter
+    top : tuple<ids : array<uint>; vals : array<float>>
+    hsel : array<float>
+    cids : array<int64>   //! the top-k's ids as the host walk reads them, an empty slot -1
+}
+
+def private df_walk_fixture(pf, nf : KqFmt; rank, vocab, k : int) : DfWalkFixture {
+    var fx : DfWalkFixture
+    fx.dr.rank = int64(rank)
+    fx.dr.topk = int64(k)
+    fx.dr.vocab = int64(vocab)
+    fx.dr.sel_prev = df_codebook(fx.dr, pf, vocab, rank, 11)
+    fx.dr.sel_next = df_codebook(fx.dr, nf, vocab, rank, 23)
+    if (vocab > 5) {
+        df_copy_row(fx.dr, fx.dr.sel_next, rank, 3, 5)
+    }
+    var inscope lg <- df_logits(DF_WALK_ND, vocab, 3, 5)
+    fx.top <- df_topk_oracle(lg, DF_WALK_ND, vocab, k, false)
+    fx.hsel <- [for (i in range(DF_WALK_ND * rank)); i < rank ? 0.0 : float(df_hash(i + 77) % 400) * 0.01 - 2.0]
+    fx.cids <- [for (v in fx.top.ids); v == DF_NONE ? -1l : int64(v)]
+    return <- fx
+}
+
+def private df_walk_gate(t : T?; var dev, queue; pf, nf : KqFmt; rank, vocab, k : int) {
+    let tag = "dflash walk {pf}/{nf} rank={rank} vocab={vocab} k={k}"
+    let nd = DF_WALK_ND
+    let tok = DF_WALK_TOK
+    var inscope fx <- df_walk_fixture(pf, nf, rank, vocab, k)
+    let dr & = fx.dr
+    let top & = fx.top
+    let hsel & = fx.hsel
+    let cids & = fx.cids
+    var inscope want <- df_walk_oracle(dr, tok, nd, k, rank, top.ids, top.vals, hsel, false, false)
+    var inscope picks : array<int64>
+    picks |> resize(nd + 1)
+    picks[0] = int64(tok)
+    dflash_walk(dr, int64(tok), int64(nd), cids, top.vals, hsel, picks)
+    var inscope host <- [for (v in picks); v < 0l ? DF_NONE : uint(v)]
+    check_exact(t, "{tag}: the engine's host walk", host, want)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kw = kernel_of(@@enc_dflash_walk)
+        var pso = mc |> keep_stamp(kw, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope b <- df_walk_binds(mc, dr, tok, hsel, top.ids, top.vals)
+        t |> success(pf != KqFmt.q8 || b.q0[0] == 2u, "{tag}: a Q8_0 predecessor codebook sits two bytes off its four-aligned bind")
+        let pid = mc |> out_words(nd + 1 + 4, DF_OUT_SENTINEL)
+        var ka = DflashWalkArgs(rank = uint(rank), k = uint(k), nd = uint(nd), pfmt = uint(df_fmt_code(pf)), nfmt = uint(df_fmt_code(nf)),
+            pq0 = b.q0[0], nq0 = b.q0[1])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            invoke(kw.enc, enc, pso, mc.buf[b.tok], mc.buf[b.hsel], mc.buf[b.cid], mc.buf[b.cval], mc.buf[b.books[0]], b.qoff[0], mc.buf[b.books[0]],
+                mc.buf[b.books[1]], mc.buf[b.books[1]], mc.buf[b.books[2]], b.qoff[1], mc.buf[b.books[2]], mc.buf[b.books[3]], mc.buf[b.books[3]],
+                mc.buf[pid], ka)
+        }
+        return if (!ran)
+        var inscope ids <- mc |> plane_as(pid, type<uint>, nd + 1 + 4)
+        var inscope got <- [for (i in range(nd + 1)); ids[i]]
+        check_exact(t, "{tag}: picks", got, want)
+        let past = length([for (i in range(nd + 1, nd + 5)); i; where ids[i] != DF_OUT_SENTINEL])
+        t |> equal(past, 0, "{tag}: the slots past the {nd} picks keep their sentinel")
+        if (vocab > 5) {
+            var inscope last <- df_walk_oracle(dr, tok, nd, k, rank, top.ids, top.vals, hsel, true, false)
+            t |> success(mismatch_exact(got, last) > 0, "{tag}: the control - the last-best rule picks another id at the tied position")
+            var inscope unary <- df_walk_oracle(dr, tok, nd, k, rank, top.ids, top.vals, hsel, false, true)
+            t |> success(mismatch_exact(got, unary) > 0, "{tag}: the control - the logit alone picks other ids, so the codebook term moves the walk")
+        }
+    }
+}
+
+let private DF_SOFT_STATES = 2000   //! the sampled walk gate's LCG states, one dispatch each
+let private DF_SOFT_BAR = 0.05      //! a draw frequency's bar against its q: four standard deviations at DF_SOFT_STATES draws
+let private DF_SOFT_Q_BAR = 1.0e-6  //! a q entry's bar against the host's: the device's exp and the host's part by an ulp or two
+
+//! The sampled walk stamp over the walk gate's fixture at `temp`, once an LCG state for DF_SOFT_STATES states, against the engine's
+//! host walk (`dflash_walk_sampled`) from the same state: the picks id for id, the stepped state bit for bit, every position's q
+//! within DF_SOFT_Q_BAR. Position 0's q is one table under every state (its predecessor is the anchor), so the device's picks there are draws from
+//! it: each candidate's frequency within DF_SOFT_BAR of its q and of the host's frequency. The controls: two candidates or more
+//! drawn at position 0 (no point mass), and some state's picks off the greedy walk's
+def private df_walk_soft_gate(t : T?; var dev, queue; pf, nf : KqFmt; rank, vocab, k : int; temp : float) {
+    let tag = "dflash soft walk {pf}/{nf} rank={rank} vocab={vocab} k={k} temp={temp}"
+    let nd = DF_WALK_ND
+    let tok = DF_WALK_TOK
+    var inscope fx <- df_walk_fixture(pf, nf, rank, vocab, k)
+    var inscope greedy : array<int64>
+    greedy |> resize(nd + 1)
+    greedy[0] = int64(tok)
+    dflash_walk(fx.dr, int64(tok), int64(nd), fx.cids, fx.top.vals, fx.hsel, greedy)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kw = kernel_of(@@enc_dflash_walk_soft)
+        var pso = mc |> keep_stamp(kw, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope b <- df_walk_binds(mc, fx.dr, tok, fx.hsel, fx.top.ids, fx.top.vals)
+        let pid = mc |> out_words(nd + 1, DF_OUT_SENTINEL)
+        let pq = mc |> out_(nd * k)
+        let prng = mc |> in_plain([0u, 0u, 0u, 0u])
+        var ka = DflashWalkArgs(rank = uint(rank), k = uint(k), nd = uint(nd), pfmt = uint(df_fmt_code(pf)), nfmt = uint(df_fmt_code(nf)),
+            pq0 = b.q0[0], nq0 = b.q0[1], temp = temp)
+        var picks_off = 0
+        var q_err = 0.0
+        var rng_off = 0
+        var off_greedy = 0
+        var inscope dev_counts : array<int>
+        dev_counts |> resize(k)
+        var inscope host_counts : array<int>
+        host_counts |> resize(k)
+        var inscope host_picks : array<int64>
+        host_picks |> resize(nd + 1)
+        host_picks[0] = int64(tok)
+        var inscope host_q, q0 : array<float>
+        q0 |> resize(k)
+        for (si in range(DF_SOFT_STATES)) {
+            let st = draw_state(si * 7919 + 13)
+            mc |> plane_upload(prng, [uint(st.x), uint(st.y), uint(st.z), uint(st.w)])
+            let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+                invoke(kw.enc, enc, pso, mc.buf[b.tok], mc.buf[b.hsel], mc.buf[b.cid], mc.buf[b.cval], mc.buf[b.books[0]], b.qoff[0], mc.buf[b.books[0]],
+                    mc.buf[b.books[1]], mc.buf[b.books[1]], mc.buf[b.books[2]], b.qoff[1], mc.buf[b.books[2]], mc.buf[b.books[3]], mc.buf[b.books[3]],
+                    mc.buf[pid], ka, mc.buf[pq], mc.buf[prng])
+            }
+            return if (!ran)
+            var hrng = st
+            dflash_walk_sampled(fx.dr, int64(tok), int64(nd), fx.cids, fx.top.vals, fx.hsel, temp, hrng, host_picks, host_q)
+            var inscope ids <- mc |> plane_as(pid, type<uint>, nd + 1)
+            var inscope q <- mc |> plane_as(pq, type<float>, nd * k)
+            var inscope rng <- mc |> plane_as(prng, type<int>, 1)
+            var inscope host_u <- [for (v in host_picks); v < 0l ? DF_NONE : uint(v)]
+            picks_off += mismatch_exact(ids, host_u) > 0 ? 1 : 0
+            for (j in range(nd * k)) {
+                q_err = max(q_err, nan_wide_diff(q[j], host_q[j]))
+            }
+            rng_off += rng[0] != hrng.x ? 1 : 0
+            off_greedy += !empty([for (r in range(1, nd + 1)); r; where int64(ids[r]) != greedy[r]]) ? 1 : 0
+            for (j in range(k)) {
+                dev_counts[j] += fx.top.ids[j] == ids[1] ? 1 : 0
+                host_counts[j] += fx.cids[j] == host_picks[1] ? 1 : 0
+            }
+            if (si == 0) {
+                for (j in range(k)) {
+                    q0[j] = q[j]
+                }
+            }
+        }
+        t |> equal(picks_off, 0, "{tag}: the picks the host walk's from every one of {DF_SOFT_STATES} states")
+        t |> success(q_err <= DF_SOFT_Q_BAR, "{tag}: every position's q within {DF_SOFT_Q_BAR} of the host walk's (worst {q_err})")
+        t |> equal(rng_off, 0, "{tag}: the stepped LCG state the host walk's")
+        var far = 0
+        var drawn = 0
+        for (j in range(k)) {
+            let f = float(dev_counts[j]) / float(DF_SOFT_STATES)
+            far += abs(f - q0[j]) > DF_SOFT_BAR || abs(f - float(host_counts[j]) / float(DF_SOFT_STATES)) > DF_SOFT_BAR ? 1 : 0
+            drawn += dev_counts[j] > 0 ? 1 : 0
+        }
+        t |> equal(far, 0, "{tag}: position 0's draw frequencies within {DF_SOFT_BAR} of its q and of the host's frequencies")
+        t |> success(drawn >= 2, "{tag}: the control - {drawn} candidates drawn at position 0, no point mass")
+        t |> success(off_greedy > 0, "{tag}: the control - {off_greedy} states draw picks off the greedy walk's")
+    }
+}
+
+//! the accept's CPU form over `nr` rows of `vocab`: each row's pick the first id at its maximum, the count n the leading run where
+//! pick[r] == ids[r + 1]; the landing [n, pick[n], every pick] and row n
+def private df_accept_oracle(lg : array<float>; ids : array<uint>; nr, vocab : int) : tuple<words : array<uint>; row : array<float>> {
+    var picks : array<uint>
+    picks |> reserve(nr)
+    for (r in range(nr)) {
+        var best = 0
+        for (i in range(1, vocab)) {
+            if (lg[r * vocab + i] > lg[r * vocab + best]) {
+                best = i
+            }
+        }
+        picks |> push(uint(best))
+    }
+    var n = 0
+    while (n + 1 < nr && picks[n] == ids[n + 1]) {
+        n++
+    }
+    var words <- [uint(n), picks[n]]
+    words |> push_from(picks)
+    var row <- [for (i in range(vocab)); lg[n * vocab + i]]
+    delete picks
+    return (words <- words, row <- row)
+}
+
+//! the device accept over `nr` verify rows of `vocab` whose drafts match the rows' picks for the first `m` and, past a
+//! mismatched draft (the empty id where `none`), again: the rows' argmax stamp then the accept stamp in one command buffer,
+//! the landing words and the committed row bit for bit the CPU form's, the slots past both at their sentinel; the controls are
+//! the ties a row's maximum carries at a higher id, the count of every matching row past the mismatch, and row n + 1's logits
+def private df_accept_gate(t : T?; var dev, queue; nr, vocab, m : int; none : bool) {
+    let tag = "dflash accept nr={nr} vocab={vocab} m={m}{none ? " empty-id" : ""}"
+    var inscope lg <- [for (i in range(nr * vocab)); float(df_hash(i + 5) % 32) * 0.25 - 4.0]
+    for (r in range(nr)) {
+        let hi = (r * 7919 + 13) % vocab
+        lg[r * vocab + hi] = 9.0
+        if (hi + 3 < vocab) {
+            lg[r * vocab + hi + 3] = 9.0
+        }
+    }
+    var inscope ids : array<uint>
+    ids |> reserve(nr)
+    ids |> push(17u)
+    for (r in range(nr - 1)) {
+        let hi = uint((r * 7919 + 13) % vocab)
+        ids |> push(r == m ? (none ? DF_NONE : hi + 1u) : hi)
+    }
+    var inscope want <- df_accept_oracle(lg, ids, nr, vocab)
+    t |> equal(want.words[0], uint(m), "{tag}: the fixture's drafts match the picks for the leading {m}")
+    let ties = length([for (r in range(nr)); r; where(r * 7919 + 13) % vocab + 3 < vocab])
+    t |> success(ties > 0, "{tag}: the control - {ties} rows tie their maximum at a higher id, so the lower-id rule picks")
+    let all_matches = length([for (r in range(nr - 1)); r; where want.words[2 + r] == ids[r + 1]])
+    if (m + 2 < nr) {
+        t |> success(all_matches > m, "{tag}: the control - {all_matches} rows match their drafts, past the leading run of {m}")
+    }
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let sa = stamp_of(@@enc_argmax_rows)
+        var pso_a = mc |> keep_stamp(sa, err)
+        return if (!pso_ok(t, "{tag} argmax", pso_a, err))
+        let kc = kernel_of(@@enc_dflash_accept)
+        var pso_c = mc |> keep_stamp(kc, err)
+        return if (!pso_ok(t, "{tag} accept", pso_c, err))
+        let plg = mc |> in_(lg)
+        let pn = mc |> in_plain([uint(vocab)])
+        let pids = mc |> in_plain(ids)
+        let ppick = mc |> out_words(nr + 4, DF_OUT_SENTINEL)
+        let prow = mc |> out_(vocab, 0, 8)
+        let pw = mc |> out_words(nr + 2 + 8, DF_OUT_SENTINEL)
+        var ka = DflashAcceptArgs(nr = uint(nr), vocab = uint(vocab))
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(sa, pso_a) {
+                invoke(sa.enc, enc, mc.buf[plg], mc.buf[ppick], mc.buf[pn], int64(nr))
+            }
+            invoke(kc.enc, enc, pso_c, mc.buf[plg], mc.buf[ppick], mc.buf[pids], mc.buf[prow], mc.buf[pw], ka, int64(vocab))
+        }
+        return if (!ran)
+        var inscope words <- df_plane_and_past(mc, pw, nr + 2, DF_OUT_SENTINEL)
+        var inscope row <- df_plane_and_past(mc, prow, vocab, NAN_SENTINEL)
+        check_exact(t, "{tag}: the count, the next anchor and every row's pick", words.run, want.words)
+        check_exact(t, "{tag}: the committed row's logits", row.run, want.row)
+        t |> equal(words.moved + row.moved, 0, "{tag}: the slots past the landing and the row keep their sentinel")
+        if (m + 1 < nr) {
+            var inscope next_row <- [for (i in range(vocab)); lg[(m + 1) * vocab + i]]
+            t |> success(mismatch_exact(row.run, next_row) > 0, "{tag}: the control - row {m + 1}'s logits differ from the landed row")
+        }
+    }
+}
+
+//! the walk's code for a codebook format (`MetalDflashWalkArgs.pfmt`)
+def private df_fmt_code(f : KqFmt) : int => f == KqFmt.q8 ? 0 : f == KqFmt.k4 ? 4 : f == KqFmt.k5 ? 5 : 6
+
+//! a logits row the draw gate samples: a slow wave over the ids with a hashed ripple, a few sharp peaks, one exact tie
+def private draw_row_fixture(vocab, salt : int) : array<float> {
+    var row <- [for (i in range(vocab)); 3.0 * sin(float(i + salt) * 0.0173) + 0.004 * float((i * 7919 + salt * 131) % 1000) - 2.0]
+    for (p in range(6)) {
+        row[(p * 977 + salt * 53) % vocab] = 6.0 + 0.25 * float(p)
+    }
+    row[(3 * 977 + salt * 53) % vocab + 1] = row[(3 * 977 + salt * 53) % vocab]
+    return <- row
+}
+
+//! the device draw over a landed row against the host sampler: the landing by the selection kernel, then `MetalSelDraw` under
+//! `params` and the LCG state at `seed`, its id the host's `sample_` over the same row with the same state and params
+def private sel_draw_run(t : T?; var dev, queue; row : array<float>; params : SamplingParams; seed : int; tag : string) : int64 {
+    var got = -1l
+    let vocab = length(row)
+    let cap = int(SEL_CAP)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let ssel = stamp_of(@@enc_cls_select)
+        let sdraw = stamp_of(@@enc_sel_draw)
+        var pso_sel = mc |> keep_stamp(ssel, err)
+        return if (!pso_ok(t, "{tag} select", pso_sel, err))
+        var pso_draw = mc |> keep_stamp(sdraw, err)
+        return if (!pso_ok(t, "{tag} draw", pso_draw, err))
+        var inscope no_recent : array<array<int64>>
+        no_recent |> resize(1)
+        var inscope words <- sel_words([params.temp], no_recent)
+        let py = mc |> in_(row)
+        let ps = mc |> in_plain(words)
+        let ph = mc |> out_words(int(SEL_HDR), 0xFFFFFFFFu)
+        let pi = mc |> out_words(cap, 0xFFFFFFFFu)
+        let pv = mc |> out_(cap)
+        let pr = mc |> out_(int(SEL_RECENT))
+        let st = draw_state(seed)
+        let prng = mc |> in_plain([uint(st.x), uint(st.y), uint(st.z), uint(st.w)])
+        let ptok = mc |> out_words(1, 0xFFFFFFFFu)
+        var ka = GkClsSelArgs(vocab = uint(vocab))
+        var kd = GkSelDrawArgs(row = 0u, top_k = uint(params.top_k), temp = params.temp, top_p = params.top_p, min_p = params.min_p)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(ssel, pso_sel) {
+                invoke(ssel.enc, enc, mc.buf[py], mc.buf[ps], mc.buf[ph], mc.buf[pi], mc.buf[pv], mc.buf[pr], ka, 1l)
+            }
+            stamp_run(sdraw, pso_draw) {
+                invoke(sdraw.enc, enc, mc.buf[ph], mc.buf[pi], mc.buf[pv], mc.buf[prng], mc.buf[ptok], kd)
+            }
+        }
+        return if (!ran)
+        var inscope tk <- mc |> plane_as(ptok, type<uint>, 1)
+        got = int64(tk[0])
+    }
+    return got
+}
+
+//! the LCG state at `seed` a few draws in: the first draw off a fresh small seed reads near zero, so the gate samples a stream's
+//! later state, as a session does
+def private draw_state(seed : int) : int4 {
+    var st = random_seed(seed)
+    for (_k in range(seed % 7 + 3)) {
+        let _r = random_int(st)
+    }
+    return st
+}
+
+//! the host's draw over `row` at `seed` under `params`: `sample_` on a bare session, the fast candidate path (no landing in this process)
+def private host_draw(row : array<float>; params : SamplingParams; seed : int) : int64 {
+    var s : Session
+    s.rng = draw_state(seed)
+    s.logits := row
+    return sample_(s, params)
+}
+
+//! the draw gate: four sampler shapes at three seeds over two rows, the device's id the host's every time; the controls are a
+//! poisoned seed moving the device's draw off the host's on some case, and an overflowed row (every id tied) landing its lowest id
+def private sel_draw_gate(t : T?; var dev, queue; vocab : int) {
+    let shapes <- [SamplingParams(temp = 0.6, top_k = 20l, top_p = 0.95),
+                   SamplingParams(temp = 1.0, top_k = 40l, min_p = 0.05),
+                   SamplingParams(temp = 0.8, top_k = 1024l, top_p = 0.9),
+                   SamplingParams(temp = 0.7, top_k = 1l)]
+    var moved = 0
+    for (salt in range(2)) {
+        var inscope row <- draw_row_fixture(vocab, salt)
+        for (sh, si in shapes, count()) {
+            for (seed in [3, 11, 29]) {
+                let tag = "sel_draw vocab={vocab} row={salt} shape={si} seed={seed}"
+                let got = sel_draw_run(t, dev, queue, row, sh, seed, tag)
+                continue if (got < 0l)
+                let want = host_draw(row, sh, seed)
+                t |> equal(got, want, "{tag}: the device's draw is the host sampler's")
+                if (host_draw(row, sh, seed + 1) != want) {
+                    moved++
+                }
+            }
+        }
+    }
+    t |> success(moved > 0, "sel_draw vocab={vocab}: the control - another seed draws another id on {moved} of the cases")
+    var inscope flat <- [for (_i in range(vocab)); 1.5]
+    let ov = sel_draw_run(t, dev, queue, flat, shapes[0], 3, "sel_draw vocab={vocab} overflow")
+    if (ov >= 0l) {
+        t |> success(ov < int64(vocab), "sel_draw vocab={vocab}: an overflowed row lands an id of the row ({ov}), the host's redraw to refute")
+    }
 }
 
 def private argmax_rows_gate(t : T?; var dev, queue; nrows, n : int) {
@@ -295,12 +974,8 @@ def private embed_b32_gate(t : T?; var dev, queue; f : KqFmt; dim, vocab, lead :
     let tag = "embed_b32 {f} dim={dim} vocab={vocab} lead={lead}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let sq = stamp_of(@@enc_q51_embed_b32)
-        let si = stamp_of(@@enc_iq4nl32_embed_b32)
-        let s4 = stamp_of(@@enc_q4032_embed_b32)
-        let s5 = stamp_of(@@enc_q5032_embed_b32)
-        var pso = f == KqFmt.q51 ? mc |> keep_stamp(sq, err) : (f == KqFmt.iq4nl32 ? mc |> keep_stamp(si, err)
-            : (f == KqFmt.q5032 ? mc |> keep_stamp(s5, err) : mc |> keep_stamp(s4, err)))
+        let s = embed_b32_stamp(f)
+        var pso = mc |> keep_stamp(s, err)
         return if (!pso_ok(t, tag, pso, err))
         let nb = dim / int(KQ_B32_ELEMS)
         let nblk = lead + vocab * nb
@@ -313,7 +988,7 @@ def private embed_b32_gate(t : T?; var dev, queue; f : KqFmt; dim, vocab, lead :
             kq[i] = uint8((i * 37 + 11) & 255)
         }
         for (b in range(nblk)) {
-            let d = f32_to_f16(0.0625 * float(1 + (b * 7) % 13))
+            let d = scale_half_bits(f, 0.0625 * float(1 + (b * 7) % 13))   //! an affine table's even block holds its group's scale, the odd one its bias
             ks[b * sb] = uint8(d & 255u)
             ks[b * sb + 1] = uint8(d >> 8u)
             if (sb == 4) {
@@ -348,28 +1023,30 @@ def private embed_b32_gate(t : T?; var dev, queue; f : KqFmt; dim, vocab, lead :
         let qoff = uint64(bind.off / KQ_B32_ELEMS * int64(qb))
         t |> success(soff % 16ul == 0ul && qoff % 16ul == 0ul, "{tag}: the binds sit on the 16-byte grid (scale {soff}, quant {qoff})")
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            if (f == KqFmt.q51) {
-                stamp_run(sq, pso) {
-                    invoke(sq.enc, enc, mc.buf[bks], soff, mc.buf[bkq], qoff, mc.buf[btok], 4ul, mc.buf[bxo], uint64(dim * 4), ka, int64(dim / 16), 3l)
-                }
-            } elif (f == KqFmt.iq4nl32) {
-                stamp_run(si, pso) {
-                    invoke(si.enc, enc, mc.buf[bks], soff, mc.buf[bkq], qoff, mc.buf[btok], 4ul, mc.buf[bxo], uint64(dim * 4), ka, int64(dim / 16), 3l)
-                }
-            } elif (f == KqFmt.q5032) {
-                stamp_run(s5, pso) {
-                    invoke(s5.enc, enc, mc.buf[bks], soff, mc.buf[bkq], qoff, mc.buf[btok], 4ul, mc.buf[bxo], uint64(dim * 4), ka, int64(dim / 16), 3l)
-                }
-            } else {
-                stamp_run(s4, pso) {
-                    invoke(s4.enc, enc, mc.buf[bks], soff, mc.buf[bkq], qoff, mc.buf[btok], 4ul, mc.buf[bxo], uint64(dim * 4), ka, int64(dim / 16), 3l)
-                }
+            stamp_run(s, pso) {
+                invoke(s.enc, enc, mc.buf[bks], soff, mc.buf[bkq], qoff, mc.buf[btok], 4ul, mc.buf[bxo], uint64(dim * 4), ka, int64(dim / 16), 3l)
             }
         }
         return if (!ran)
         check_buf(t, tag, mc.buf[bxo], want, BAR_BITS, FLAT_SHAPE)
     }
 }
+
+//! the per-32 token-table gather stamp of a format
+def private embed_b32_stamp(f) {   //! generic, as the gates are: the Apple half alone instantiates it
+    return stamp_of(@@enc_q51_embed_b32) if (f == KqFmt.q51)
+    return stamp_of(@@enc_iq4nl32_embed_b32) if (f == KqFmt.iq4nl32)
+    return stamp_of(@@enc_q5032_embed_b32) if (f == KqFmt.q5032)
+    return stamp_of(@@enc_mlx4_embed_b32) if (f == KqFmt.mlx4)
+    return stamp_of(@@enc_mlx8_embed_b32) if (f == KqFmt.mlx8)
+    return stamp_of(@@enc_mlx4b_embed_b32) if (f == KqFmt.mlx4b)
+    return stamp_of(@@enc_mlx8b_embed_b32) if (f == KqFmt.mlx8b)
+    return stamp_of(@@enc_mlx6b_embed_b32) if (f == KqFmt.mlx6b)
+    return stamp_of(@@enc_q4032_embed_b32)
+}
+
+//! a scale-plane half of `v` in format `f`'s half type: BF16 (the float's high half) on mlx4b / mlx8b / mlx6b, F16 on every other
+def private scale_half_bits(f : KqFmt; v : float) : uint => (f == KqFmt.mlx4b || f == KqFmt.mlx8b || f == KqFmt.mlx6b) ? (float_bits_to_uint(v) >> 16u) : f32_to_f16(v)
 
 //! the residual step's Metal stamps (`GkAddRmsRows`): which builder a cell dispatches
 enum private ArStamp {
@@ -1741,6 +2418,47 @@ def private hc_mix_gate(t : T?; var dev, queue; dim, hc, nrows : int) {
     }
 }
 
+//! the drafter's capture: the plain hc stream mean landed at a float offset (the image's slot stride) into a sentinel-padded slot
+def private hc_stream_mean_gate(t : T?; var dev, queue; dim, hc, nrows : int) {
+    let tag = "hc_stream_mean dim={dim} hc={hc} nrows={nrows}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_hc_stream_mean)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let hcd = hc * dim
+        let lead = 16
+        var inscope res, want : array<float>
+        res |> resize(nrows * hcd)
+        want |> resize(lead + nrows * dim + lead)
+        for (i in range(nrows * hcd)) {
+            res[i] = 0.11 * float(i % 43) - 2.2
+        }
+        for (i in range(length(want))) {
+            want[i] = PAD_SENTINEL
+        }
+        for (p in range(nrows)) {
+            for (i in range(dim)) {
+                var acc = 0.0lf
+                for (c in range(hc)) {
+                    acc += double(res[(p * hc + c) * dim + i])
+                }
+                want[lead + p * dim + i] = float(acc / double(hc))
+            }
+        }
+        let bres = mc |> in_(res)
+        let bd = mc |> out_words(length(want), PAD_SENTINEL)
+        var ka = GkHcMixArgs(dim = uint(dim), hc = uint(hc), rows = uint(nrows))
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bres], mc.buf[bd], uint64(lead * 4), ka, int64(nrows * dim))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bd], want, hc_bar(BAR_TIGHT, lead + nrows * dim - 1), FLAT_SHAPE)
+    }
+}
+
 // the scatter in place over nrows rows: res[p][c] += o[p] * 2 σ(inj[p][c] / hc); row 0's stream 1 carries a zero logit (the plain add)
 def private hc_combine_gate(t : T?; var dev, queue; dim, hc, nrows : int) {
     let tag = "hc_combine dim={dim} hc={hc} nrows={nrows}"
@@ -1786,6 +2504,529 @@ def private hc_combine_gate(t : T?; var dev, queue; dim, hc, nrows : int) {
         check_buf(t, tag, mc.buf[bres], want, hc_bar(BAR_TIGHT, nrows * hcd - 1), Shape(row_width = hcd, head_width = dim))
         let g1 = (mc |> plane_run(bres))[dim]
         t |> success(abs(g1 - res[dim]) > 0.4, "{tag}: stream 1 moved off its input at [0] ({g1} from {res[dim]})")
+    }
+}
+
+//! `MetalQ8GemvHcN`: the normed streams as `hc_norm` stores them, the low-rank row, the inject logits (`with_inj` off: their sentinel)
+def private gemv_hcn_gate(t : T?; var dev, queue; dim, hc, lr : int; with_inj : bool) {
+    let tag = "gemv_hcn dim={dim} hc={hc} lr={lr} inj={with_inj}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_gemv_hcn_c)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let hcd = hc * dim
+        var inscope x, w, xn, wi : array<float>
+        x |> resize(hcd)
+        w |> resize(hcd)
+        xn |> resize(hcd)
+        wi |> resize(hc * hcd)
+        for (i in range(hcd)) {
+            x[i] = 0.23 * float(i % 41) - 3.1 + 0.7 * float(i / dim)
+            w[i] = 0.4 + 0.02 * float(i % 11) + 0.1 * float(i / dim)
+        }
+        for (i in range(hc * hcd)) {
+            wi[i] = 0.05 * float(i % 19) - 0.4 + 0.01 * float(i / hcd)
+        }
+        unsafe {
+            for (c in range(hc)) {
+                rmsnorm(addr(xn[c * dim]), addr<float const?>(x[c * dim]), addr<float const?>(w[c * dim]), int64(dim), EPS)
+            }
+        }
+        var inscope blob : array<uint8>
+        var inscope wdeq : array<float>
+        q8_blob_fill(lr, hcd / 32, blob, wdeq)
+        var inscope ref <- dense_ref_rows(wdeq, xn, 1, hcd, lr)
+        var inscope iref <- dense_ref_rows(wi, xn, 1, hcd, hc)
+        let bw = mc |> in_plain(blob)
+        let bx = mc |> in_(x)
+        let bwn = mc |> in_(w)
+        let bwi = mc |> in_(wi)
+        let bxn = mc |> out_words(hcd, PAD_SENTINEL)
+        let blo = mc |> out_words(lr, PAD_SENTINEL)
+        let binj = mc |> out_words(hc, PAD_SENTINEL)
+        let bn = mc |> in_plain([uint(hcd)])
+        let bd = mc |> in_plain([uint(lr)])
+        var ka = Q8HcArgs(dim = uint(dim), hc = uint(hc), eps = EPS)
+        let tgs = lr / 2 + (with_inj ? (hc + 1) / 2 : 0)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bw], 0ul, mc.buf[bw], mc.buf[bx], mc.buf[blo], mc.buf[bn], mc.buf[bd], mc.buf[bwn], mc.buf[bxn],
+                    mc.buf[bwi], mc.buf[binj], ka, int64(tgs), int64(lr))
+            }
+        }
+        return if (!ran)
+        check_buf(t, "{tag} xn", mc.buf[bxn], xn, hc_bar(BAR_TIGHT, hcd - 1), Shape(row_width = hcd, head_width = dim))
+        check_buf(t, "{tag} lo", mc.buf[blo], ref.want, env_bar(2e-4, ref.env), FLAT_SHAPE, ref.env)
+        if (with_inj) {
+            check_buf(t, "{tag} inj", mc.buf[binj], iref.want, env_bar(2e-4, iref.env), FLAT_SHAPE, iref.env)
+        } else {
+            let got <- mc |> plane_run(binj)
+            t |> success(got[0] == PAD_SENTINEL && got[hc - 1] == PAD_SENTINEL, "{tag}: no inject row written without the inject threadgroups")
+        }
+    }
+}
+
+//! `MetalQ8GemvSgLo`: the up over silu(lo / hc) landed as the gated stream mean; the bar the up rows' envelope through the sigmoid's slope
+def private gemv_sg_lo_gate(t : T?; var dev, queue; lr, dim, hc : int) {
+    let d = dim * hc
+    let tag = "gemv_sg_lo lr={lr} dim={dim} hc={hc}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_gemv_sg_lo_c)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope x, xs, xn : array<float>
+        x |> resize(lr)
+        xs |> resize(lr)
+        xn |> resize(d)
+        for (i in range(lr)) {
+            x[i] = 0.37 * float(i % 29) - 5.0
+            xs[i] = float(silu_d(double(x[i]) / double(hc)))
+        }
+        for (i in range(d)) {
+            xn[i] = 0.11 * float(i % 23) - 1.2 + 0.3 * float(i / dim)
+        }
+        var inscope blob : array<uint8>
+        var inscope wdeq : array<float>
+        q8_blob_fill(d, lr / 32, blob, wdeq)
+        var inscope ref <- dense_ref_rows(wdeq, xs, 1, lr, d)
+        var inscope want, env : array<float>
+        want |> resize(dim)
+        env |> resize(dim)
+        for (i in range(dim)) {
+            var s = 0.0lf
+            var e = 0.0lf
+            for (c in range(hc)) {
+                let k = c * dim + i
+                s += double(xn[k]) * sigmoid_d(double(ref.want[k]))
+                e += abs(double(xn[k])) * 0.25lf * double(ref.env[k])
+            }
+            want[i] = float(s / double(hc))
+            env[i] = float(e / double(hc))
+        }
+        let bw = mc |> in_plain(blob)
+        let bx = mc |> in_(x)
+        let bxn = mc |> in_(xn)
+        let by = mc |> out_words(dim, PAD_SENTINEL)
+        let bn = mc |> in_plain([uint(lr)])
+        let bd = mc |> in_plain([uint(d)])
+        let bhc = mc |> in_plain([uint(hc)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bw], 0ul, mc.buf[bw], mc.buf[bx], mc.buf[bxn], mc.buf[bn], mc.buf[bd], mc.buf[by], mc.buf[bhc],
+                    int64(d), int64(dim))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], want, env_bar(2e-4, env), FLAT_SHAPE, env)
+    }
+}
+
+//! the fused mixer down's stamp for an affine member (the q8 stamp is `enc_gemv_hcn_c`)
+def private hcn_aff_stamp(f) {   //! generic, as the gates are: the Apple half alone instantiates it
+    return stamp_of(@@enc_gemv_hcn_mlx4b_c) if (f == KqFmt.mlx4b)
+    return stamp_of(@@enc_gemv_hcn_mlx6b_c) if (f == KqFmt.mlx6b)
+    return stamp_of(@@enc_gemv_hcn_mlx8b_c)
+}
+
+//! the fused mixer up's stamp for an affine member (the q8 stamp is `enc_gemv_sg_lo_c`)
+def private sg_lo_aff_stamp(f) {   //! generic, as the gates are: the Apple half alone instantiates it
+    return stamp_of(@@enc_gemv_sg_lo_mlx4b_c) if (f == KqFmt.mlx4b)
+    return stamp_of(@@enc_gemv_sg_lo_mlx6b_c) if (f == KqFmt.mlx6b)
+    return stamp_of(@@enc_gemv_sg_lo_mlx8b_c)
+}
+
+//! `MetalGemvHcNT` over an affine member's planes: the q8 gate's three outputs against the double reference at 1e-4 of their magnitude
+def private gemv_hcn_aff_gate(t : T?; var dev, queue; fmt : KqFmt; dim, hc, lr : int; with_inj : bool) {
+    let tag = "gemv_hcn {fmt} dim={dim} hc={hc} lr={lr} inj={with_inj}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = hcn_aff_stamp(fmt)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let hcd = hc * dim
+        var inscope x, w, xn, wi : array<float>
+        x |> resize(hcd)
+        w |> resize(hcd)
+        xn |> resize(hcd)
+        wi |> resize(hc * hcd)
+        for (i in range(hcd)) {
+            x[i] = 0.23 * float(i % 41) - 3.1 + 0.7 * float(i / dim)
+            w[i] = 0.4 + 0.02 * float(i % 11) + 0.1 * float(i / dim)
+        }
+        for (i in range(hc * hcd)) {
+            wi[i] = 0.05 * float(i % 19) - 0.4 + 0.01 * float(i / hcd)
+        }
+        unsafe {
+            for (c in range(hc)) {
+                rmsnorm(addr(xn[c * dim]), addr<float const?>(x[c * dim]), addr<float const?>(w[c * dim]), int64(dim), EPS)
+            }
+        }
+        var inscope qp, sp : array<uint8>
+        var inscope wdeq : array<float>
+        mlx_test_planes(fmt, lr, hcd, qp, sp, wdeq)
+        var lmax = 0.0
+        {   //! the planes' pow2 rescale: the low-rank row near the unit, so the bar's control (a half-unit poison) stays past it
+            var inscope r0 <- dense_ref_rows(wdeq, xn, 1, hcd, lr)
+            for (v in r0.want) {
+                lmax = max(lmax, abs(v))
+            }
+        }
+        mlx_bf16_scale_planes(sp, wdeq, exp2(floor(log2(1.0 / lmax))))
+        var inscope ref <- dense_ref_rows(wdeq, xn, 1, hcd, lr)
+        var inscope iref <- dense_ref_rows(wi, xn, 1, hcd, hc)
+        let bs = mc |> in_plain(sp)
+        let bq = mc |> in_plain(qp)
+        let bx = mc |> in_(x)
+        let bwn = mc |> in_(w)
+        let bwi = mc |> in_(wi)
+        let bxn = mc |> out_words(hcd, PAD_SENTINEL)
+        let blo = mc |> out_words(lr, PAD_SENTINEL)
+        let binj = mc |> out_words(hc, PAD_SENTINEL)
+        let bn = mc |> in_plain([uint(hcd)])
+        let bd = mc |> in_plain([uint(lr)])
+        var ka = Q8HcArgs(dim = uint(dim), hc = uint(hc), eps = EPS)
+        let tgs = lr / 2 + (with_inj ? (hc + 1) / 2 : 0)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bs], 0ul, mc.buf[bq], 0ul, mc.buf[bx], mc.buf[blo], mc.buf[bn], mc.buf[bd], mc.buf[bwn], mc.buf[bxn],
+                    mc.buf[bwi], mc.buf[binj], ka, int64(tgs), int64(lr))
+            }
+        }
+        return if (!ran)
+        var m = 0.0
+        for (v in ref.want) {
+            m = max(m, abs(v))
+        }
+        check_buf(t, "{tag} xn", mc.buf[bxn], xn, hc_bar(BAR_TIGHT, hcd - 1), Shape(row_width = hcd, head_width = dim))
+        check_buf(t, "{tag} lo", mc.buf[blo], ref.want, hc_bar(Bar(rel = 1e-4, abs_floor = 1e-4 * m), lr - 1), FLAT_SHAPE)
+        if (with_inj) {
+            check_buf(t, "{tag} inj", mc.buf[binj], iref.want, env_bar(2e-4, iref.env), FLAT_SHAPE, iref.env)
+        }
+    }
+}
+
+//! `MetalGemvSgLoT` over an affine member's planes against the double reference at 1e-4; the gates checked off saturation first
+def private gemv_sg_lo_aff_gate(t : T?; var dev, queue; fmt : KqFmt; lr, dim, hc : int) {
+    let d = dim * hc
+    let tag = "gemv_sg_lo {fmt} lr={lr} dim={dim} hc={hc}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = sg_lo_aff_stamp(fmt)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope x, xs, xn : array<float>
+        x |> resize(lr)
+        xs |> resize(lr)
+        xn |> resize(d)
+        for (i in range(lr)) {
+            x[i] = 0.37 * float(i % 29) - 5.0
+            xs[i] = float(silu_d(double(x[i]) / double(hc)))
+        }
+        for (i in range(d)) {
+            xn[i] = 0.11 * float(i % 23) - 1.2 + 0.3 * float(i / dim)
+        }
+        var inscope qp, sp : array<uint8>
+        var inscope wdeq : array<float>
+        mlx_test_planes(fmt, d, lr, qp, sp, wdeq)
+        var gmax = 0.0lf
+        for (r in range(d)) {
+            var s = 0.0lf
+            for (k in range(lr)) {
+                s += double(wdeq[r * lr + k]) * double(xs[k])
+            }
+            gmax = max(gmax, abs(s))
+        }
+        mlx_bf16_scale_planes(sp, wdeq, exp2(floor(log2(2.0 / float(gmax)))))
+        var inscope ref <- dense_ref_rows(wdeq, xs, 1, lr, d)
+        var live = 0
+        for (g in ref.want) {
+            live += abs(g) < 4.0 ? 1 : 0
+        }
+        t |> success(live * 2 > d, "{tag}: {live} of {d} gates under |4| - the planes' scales keep the sigmoid off saturation")
+        var inscope want : array<float>
+        want |> resize(dim)
+        var m = 0.0
+        for (i in range(dim)) {
+            var s = 0.0lf
+            for (c in range(hc)) {
+                let k = c * dim + i
+                s += double(xn[k]) * sigmoid_d(double(ref.want[k]))
+            }
+            want[i] = float(s / double(hc))
+            m = max(m, abs(want[i]))
+        }
+        let bs = mc |> in_plain(sp)
+        let bq = mc |> in_plain(qp)
+        let bx = mc |> in_(x)
+        let bxn = mc |> in_(xn)
+        let by = mc |> out_words(dim, PAD_SENTINEL)
+        let bn = mc |> in_plain([uint(lr)])
+        let bd = mc |> in_plain([uint(d)])
+        let bhc = mc |> in_plain([uint(hc)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bs], 0ul, mc.buf[bq], 0ul, mc.buf[bx], mc.buf[bxn], mc.buf[bn], mc.buf[bd], mc.buf[by], mc.buf[bhc],
+                    int64(d), int64(dim))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], want, hc_bar(Bar(rel = 1e-4, abs_floor = 1e-4 * m), dim - 1), FLAT_SHAPE)
+    }
+}
+
+//! a q8 blob of `nrows` x `nkb` blocks at scales d0 x (0.5, 1, 2) and codes -8..7: the eight-row mixer cell's planes, scaled so
+//! its low-rank rows and gates sit near the unit, off the sigmoid's saturation
+def private hc8_q8_blob(nrows, nkb : int; d0 : float) : array<uint8> {
+    let lut = fixed_array(0.5, 1.0, 2.0)
+    var blob : array<uint8>
+    blob |> resize(nrows * nkb * 34)
+    for (b in range(nrows * nkb)) {
+        let dbits = f32_to_f16(d0 * lut[(b * 7 + 1) % 3])
+        blob[b * 34] = uint8(dbits & 0xFFu)
+        blob[b * 34 + 1] = uint8(dbits >> 8u)
+        for (c in range(32)) {
+            blob[b * 34 + 2 + c] = uint8(((b * 5 + c * 11 + b / 7) % 16 - 8) & 0xFF)
+        }
+    }
+    return <- blob
+}
+
+//! the four mix8 dispatches against the rows chain at 1e-4 of the row's magnitude; NaN-opened scratch reds a pad row that lands; gates unsaturated
+[arch(at="../ARCHITECTURE_GPU_MTP_DECODE_HC.md#metal-hc-mix8")]
+def private hc_mix8_gate(t : T?; var dev, queue; nrows : int) {
+    let dim = 2560
+    let hc = 4
+    let lr = 320
+    let hcd = dim * hc
+    let tag = "hc_mix8 dim={dim} hc={hc} lr={lr} nrows={nrows}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kpb = kernel_of(@@enc_rows8_prep_c)
+        let kq8 = kernel_of(@@enc_rows8_q8_c)
+        let kpr = kernel_of(@@enc_hc_prep8_c)
+        let kdn = kernel_of(@@enc_rows8_q8_hc_c)
+        let kfn = kernel_of(@@enc_hc_fin8_c)
+        let kup = kernel_of(@@enc_rows8_q8_hcmix_c)
+        let snorm = stamp_of(@@enc_hc_norm)
+        let srt = stamp_of(@@enc_moe_router)
+        let slo = stamp_of(@@enc_hc_lo)
+        let smix = stamp_of(@@enc_hc_mix)
+        var pq8 = mc |> keep_stamp(kq8, err)
+        return if (!tensor_pso_or_skip(t, tag, pq8, dev, err))
+        if (!rows8_probe_ok(t, mc, err)) {
+            t |> skip("{tag}: the matrix unit's cooperative layout is not the rows8 kernels' on this box - the engine keeps the form off")
+            return
+        }
+        var ppb = mc |> keep_stamp(kpb, err)
+        var ppr = mc |> keep_stamp(kpr, err)
+        var pdn = mc |> keep_stamp(kdn, err)
+        var pfn = mc |> keep_stamp(kfn, err)
+        var pup = mc |> keep_stamp(kup, err)
+        var pnorm = mc |> keep_stamp(snorm, err)
+        var prt = mc |> keep_stamp(srt, err)
+        var plo = mc |> keep_stamp(slo, err)
+        var pmix = mc |> keep_stamp(smix, err)
+        return if (!pso_ok(t, tag, ppb, err) || !pso_ok(t, tag, ppr, err) || !pso_ok(t, tag, pdn, err) || !pso_ok(t, tag, pfn, err) || !pso_ok(t, tag, pup, err) || !pso_ok(t, tag, pnorm, err) || !pso_ok(t, tag, prt, err) || !pso_ok(t, tag, plo, err) || !pso_ok(t, tag, pmix, err))
+        var inscope res <- [for (i in range(nrows * hcd)); 0.23 * float((i * 7 + i / 97) % 41) - 4.1 + 0.3 * float(i / hcd)]
+        var inscope wn <- [for (i in range(hcd)); 0.6 + 0.03 * float(i % 13) + 0.1 * float(i / dim)]
+        var inscope wi <- [for (i in range(hc * hcd)); 0.004 * float((i * 3) % 19 - 9)]
+        var inscope dblob <- hc8_q8_blob(lr, hcd / 32, 1.0 / 256.0)
+        var inscope ublob <- hc8_q8_blob(hcd, lr / 32, 1.0 / 16.0)
+        let nan = uint_bits_to_float(0x7FC00000u)
+        let bres = mc |> in_(res)
+        let bwn = mc |> in_(wn)
+        let bwi = mc |> in_(wi)
+        let bdn = mc |> in_plain(dblob)
+        let bup = mc |> in_plain(ublob)
+        let bu_hcd = mc |> in_plain([uint(hcd)])
+        let bu_lr = mc |> in_plain([uint(lr)])
+        let bu_hc = mc |> in_plain([uint(hc)])
+        let bu_tot = mc |> in_plain([uint(nrows * lr)])
+        let bu_kseg = mc |> in_plain([uint(dim / 32)])
+        let brb = mc |> in_([0.0])
+        // the chain's buffers: the normed rows, the logits, the table, the low-rank rows, the gates, the block input rows
+        let cxn = mc |> out_words(8 * hcd, 0.0)
+        let cinj = mc |> out_words(nrows * hc, PAD_SENTINEL)
+        let cxt = mc |> out_words(8 * hcd, float16(0.0))
+        let cxs = mc |> out_words(hcd / 32 * 8, 0.0)
+        let clo = mc |> out_words(8 * lr, 0.0)
+        let cgt = mc |> out_words(8 * hcd, 0.0)
+        let cy = mc |> out_words(nrows * dim, PAD_SENTINEL)
+        // the fused form's
+        let fxt = mc |> out_words(8 * hcd, float16(nan))
+        let fxs = mc |> out_words(hcd / 32 * 8, nan)
+        let finv = mc |> out_words(8 * hc, nan)
+        let fip = mc |> out_words(hc * 8 * hc, nan)
+        let fpart = mc |> out_words(hc * 8 * lr, nan)
+        let fxt2 = mc |> out_words(8 * lr, float16(nan))
+        let fxs2 = mc |> out_words(lr / 32 * 8, nan)
+        let finj = mc |> out_words(nrows * hc, PAD_SENTINEL)
+        let fy = mc |> out_words(nrows * dim, PAD_SENTINEL)
+        var nka = GkHcNormArgs(dim = uint(dim), hc = uint(hc), woff = 0u, row0 = 0u, eps = EPS)
+        var rka = moe_router_args(int64(hc), int64(hcd), int64(nrows))
+        var mka = GkHcMixArgs(dim = uint(dim), hc = uint(hc), rows = uint(nrows))
+        var ka = Rows8HcMix(dim = uint(dim), hc = uint(hc), lr = uint(lr), rows = uint(nrows), eps = EPS)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(snorm, pnorm) {
+                invoke(snorm.enc, enc, mc.buf[bres], mc.buf[cxn], mc.buf[bwn], nka, int64(nrows * hc))
+            }
+            stamp_run(srt, prt) {
+                invoke(srt.enc, enc, mc.buf[bwi], mc.buf[cxn], mc.buf[cinj], mc.buf[brb], rka, int64(hc), int64(nrows))
+            }
+            invoke(kpb.enc, enc, ppb, mc.buf[cxn], 0ul, mc.buf[cxt], mc.buf[cxs], mc.buf[bu_hcd], int64(hcd / 32 * 8))
+            invoke(kq8.enc, enc, pq8, mc.buf[bdn], 0ul, mc.buf[bdn], mc.buf[cxt], mc.buf[clo], 0ul, mc.buf[cxs], mc.buf[bu_hcd], mc.buf[bu_lr], int64(lr), int64(8 * lr))
+            stamp_run(slo, plo) {
+                invoke(slo.enc, enc, mc.buf[clo], 0ul, mc.buf[bu_tot], mc.buf[bu_hc], int64(nrows * lr))
+            }
+            invoke(kpb.enc, enc, ppb, mc.buf[clo], 0ul, mc.buf[cxt], mc.buf[cxs], mc.buf[bu_lr], int64(lr / 32 * 8))
+            invoke(kq8.enc, enc, pq8, mc.buf[bup], 0ul, mc.buf[bup], mc.buf[cxt], mc.buf[cgt], 0ul, mc.buf[cxs], mc.buf[bu_lr], mc.buf[bu_hcd], int64(hcd), int64(8 * hcd))
+            stamp_run(smix, pmix) {
+                invoke(smix.enc, enc, mc.buf[cxn], mc.buf[cgt], mc.buf[cy], mka, int64(nrows * dim))
+            }
+            invoke(kpr.enc, enc, ppr, mc.buf[bres], mc.buf[bwn], mc.buf[bwi], mc.buf[fxt], mc.buf[fxs], mc.buf[finv], mc.buf[fip], ka, int64(hc), int64(nrows))
+            invoke(kdn.enc, enc, pdn, mc.buf[bdn], 0ul, mc.buf[bdn], mc.buf[fxt], mc.buf[fpart], 0ul, mc.buf[fxs], mc.buf[bu_hcd], mc.buf[bu_lr], mc.buf[bu_kseg],
+                int64(lr), int64(hc * 8 * lr), int64(hc))
+            invoke(kfn.enc, enc, pfn, mc.buf[fpart], mc.buf[fip], mc.buf[finj], mc.buf[fxt2], mc.buf[fxs2], ka, int64(lr / 32))
+            invoke(kup.enc, enc, pup, mc.buf[bup], 0ul, mc.buf[bup], mc.buf[fxt2], mc.buf[fy], 0ul, mc.buf[fxs2], mc.buf[bu_lr], mc.buf[bu_lr],
+                mc.buf[bres], mc.buf[bwn], mc.buf[finv], ka, int64(dim), int64(nrows * dim))
+        }
+        return if (!ran)
+        var inscope gates <- mc |> plane_run(cgt)
+        var live = 0
+        for (i in range(nrows * hcd)) {
+            live += abs(gates[i]) < 4.0 ? 1 : 0
+        }
+        t |> success(live * 2 > nrows * hcd, "{tag}: {live} of {nrows * hcd} chain gates under |4| - the planes' scales keep the sigmoid off saturation")
+        var inscope want <- mc |> plane_run(cy)
+        var inscope wantj <- mc |> plane_run(cinj)
+        var m = 0.0
+        for (v in want) {
+            m = max(m, abs(v))
+        }
+        var mj = 0.0
+        for (v in wantj) {
+            mj = max(mj, abs(v))
+        }
+        check_buf(t, "{tag} xb", mc.buf[fy], want, hc_bar(Bar(rel = 1e-4, abs_floor = 1e-4 * m), nrows * dim - 1), Shape(row_width = dim))
+        check_buf(t, "{tag} inj", mc.buf[finj], wantj, hc_bar(Bar(rel = 1e-4, abs_floor = 1e-4 * mj), nrows * hc - 1), FLAT_SHAPE)
+    }
+}
+
+//! `MetalQ8GemvHc`: res[c][row] += y[row] x 2 σ(inj[c] / hc), exact over the dyadic rows; stream 1's zero logit is the plain add
+def private gemv_hc_gate(t : T?; var dev, queue; dim, n, hc : int) {
+    let tag = "gemv_hc dim={dim} n={n} hc={hc}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_gemv_hc_c)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let hcd = hc * dim
+        var inscope blob : array<uint8>
+        var inscope wdeq : array<float>
+        q8_blob_fill(dim, n / 32, blob, wdeq)
+        var inscope xf : array<float>
+        q8_x_fill(n, xf)
+        var inscope ref <- dense_ref_rows(wdeq, xf, 1, n, dim)
+        var inscope res, inj, want : array<float>
+        res |> resize(hcd)
+        inj |> resize(hc)
+        want |> resize(hcd)
+        for (i in range(hcd)) {
+            res[i] = 0.17 * float(i % 37) - 3.0
+        }
+        for (c in range(hc)) {
+            inj[c] = c == 1 ? 0.0 : 1.7 * float(c) - 2.6
+        }
+        for (c in range(hc)) {
+            let wgt = 2.0lf * sigmoid_d(double(inj[c]) / double(hc))
+            for (i in range(dim)) {
+                want[c * dim + i] = float(double(res[c * dim + i]) + double(ref.want[i]) * wgt)
+            }
+        }
+        let bw = mc |> in_plain(blob)
+        let bx = mc |> in_(xf)
+        let bres = mc |> io_(res)
+        let binj = mc |> in_(inj)
+        let bn = mc |> in_plain([uint(n)])
+        let bd = mc |> in_plain([uint(dim)])
+        var ka = Q8HcArgs(dim = uint(dim), hc = uint(hc), eps = 0.0)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bw], 0ul, mc.buf[bw], mc.buf[bx], mc.buf[bres], mc.buf[bn], mc.buf[bd], mc.buf[binj], ka, int64(dim), int64(hc))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bres], want, hc_bar(BAR_TIGHT, hcd - 1), Shape(row_width = hcd, head_width = dim))
+        let g1 = (mc |> plane_run(bres))[dim]
+        t |> success(abs(g1 - res[dim]) > 0.01, "{tag}: stream 1 moved off its input at [0] ({g1} from {res[dim]})")
+    }
+}
+
+//! `MetalMoeCombineShHc`: the weighted k slots plus the gated shared row, scattered in place at 2 σ(inj[c] / hc); gate logit at gs + go
+def private combine_sh_hc_gate(t : T?; var dev, queue; dim, k, gs, go, hc : int) {
+    let tag = "moe_combine_sh_hc dim={dim} k={k} gs={gs} go={go} hc={hc}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_moe_combine_sh_hc)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let hcd = hc * dim
+        var inscope sel, dn, sh, gv, res, inj, want : array<float>
+        sel |> resize(2 * k)
+        dn |> resize(k * dim)
+        sh |> resize(dim)
+        gv |> resize(gs)
+        res |> resize(hcd)
+        inj |> resize(hc)
+        want |> resize(hcd)
+        for (i in range(2 * k)) {
+            sel[i] = 0.11 * float(i % 7) + 0.05
+        }
+        for (i in range(k * dim)) {
+            dn[i] = 0.03 * float(i % 53) - 0.8
+        }
+        for (i in range(dim)) {
+            sh[i] = 0.07 * float(i % 41) - 1.3
+        }
+        for (i in range(gs)) {
+            gv[i] = 0.6 * float(i % 11) - 3.0
+        }
+        for (i in range(hcd)) {
+            res[i] = 0.17 * float(i % 37) - 3.0
+        }
+        for (c in range(hc)) {
+            inj[c] = c == 1 ? 0.0 : 1.7 * float(c) - 2.6
+        }
+        for (c in range(hc)) {
+            let wgt = 2.0lf * sigmoid_d(double(inj[c]) / double(hc))
+            for (i in range(dim)) {
+                var acc = 0.0lf
+                for (j in range(k)) {
+                    acc += double(sel[k + j]) * double(dn[j * dim + i])
+                }
+                acc += double(sh[i]) * sigmoid_d(double(gv[go]))
+                want[c * dim + i] = float(double(res[c * dim + i]) + acc * wgt)
+            }
+        }
+        let bres = mc |> io_(res)
+        let bsel = mc |> in_(sel)
+        let bdn = mc |> in_(dn)
+        let bsh = mc |> in_(sh)
+        let bg = mc |> in_(gv)
+        let binj = mc |> in_(inj)
+        let bhc = mc |> in_plain([uint(hc)])
+        var ka = moe_comb_args(int64(dim), int64(k), int64(gs), int64(go))
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bres], mc.buf[bsel], mc.buf[bdn], mc.buf[bsh], mc.buf[bg], mc.buf[binj], mc.buf[bhc], ka, int64(dim), 1l)
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bres], want, hc_bar(BAR_TIGHT, hcd - 1), Shape(row_width = hcd, head_width = dim))
+        let g1 = (mc |> plane_run(bres))[dim]
+        t |> success(abs(g1 - res[dim]) > 0.01, "{tag}: stream 1 moved off its input at [0] ({g1} from {res[dim]})")
     }
 }
 
@@ -2165,6 +3406,26 @@ def test_metal_misc_kernels(t : T?) {
                 cls_select_gate(t, dev, queue, 262144)
                 cls_select_gate(t, dev, queue, 1000)
                 cls_select_gate(t, dev, queue, 248320)   //! the served vocab: a tail stride under a whole subgroup's worth
+                df_topk_gate(t, dev, queue, 7, 248320, 16, 4096)   //! the 27B drafter's shape: seven rows, the served vocab, top-16, a tail slice
+                df_topk_gate(t, dev, queue, 3, 3000, 7, 1000)      //! whole slices
+                df_topk_gate(t, dev, queue, 2, 50000, 32, 4096)    //! the deepest list a lane keeps
+                df_topk_gate(t, dev, queue, 2, 10, 16, 4096)       //! a row narrower than the list: lanes with no id, empty slots
+                df_topk_gate(t, dev, queue, 2, 4100, 16, 4096)     //! a tail slice of four, narrower than the list
+                df_walk_gate(t, dev, queue, KqFmt.q8, KqFmt.q8, 64, 300, 16)
+                df_walk_gate(t, dev, queue, KqFmt.k4, KqFmt.k6, 256, 300, 16)
+                df_walk_gate(t, dev, queue, KqFmt.k5, KqFmt.k4, 512, 200, 7)    //! two superblocks a row, the products under the 4096 a position stages
+                df_walk_gate(t, dev, queue, KqFmt.k6, KqFmt.k5, 256, 200, 16)
+                df_walk_gate(t, dev, queue, KqFmt.q8, KqFmt.k4, 256, 10, 16)   //! a candidate list past the row's ids: empty slots skipped
+                df_walk_soft_gate(t, dev, queue, KqFmt.q8, KqFmt.q8, 64, 300, 16, 1.0)
+                df_walk_soft_gate(t, dev, queue, KqFmt.k4, KqFmt.k6, 256, 300, 16, 0.7)   //! the drafter's planes, the stream's temperature
+                df_walk_soft_gate(t, dev, queue, KqFmt.q8, KqFmt.k4, 256, 10, 16, 1.0)    //! empty slots: no mass, never drawn
+                df_accept_gate(t, dev, queue, 8, 248320, 3, false)   //! the 27B round's shape: eight rows of the served vocab
+                df_accept_gate(t, dev, queue, 8, 248320, 0, false)
+                df_accept_gate(t, dev, queue, 8, 248320, 7, false)   //! every draft accepted: the last row committed
+                df_accept_gate(t, dev, queue, 5, 300, 2, true)       //! a draft slot the walk left empty
+                df_accept_gate(t, dev, queue, 2, 1000, 1, false)
+                sel_draw_gate(t, dev, queue, 1000)
+                sel_draw_gate(t, dev, queue, 248320)
                 embed_q8_gate(t, dev, queue, 512, 3, 2)
                 for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032]) {
                     embed_b32_gate(t, dev, queue, f, 96, 5, 0)
@@ -2172,6 +3433,12 @@ def test_metal_misc_kernels(t : T?) {
                     embed_b32_gate(t, dev, queue, f, 96, 5, 3, 3)       //! a table off a superblock: three blocks past the bind
                     //! ... and a row of nine blocks past a bind every four blocks (q51's 20- and 4-byte blocks) or eight (the 2-byte scales)
                     embed_b32_gate(t, dev, queue, f, 288, 4, 7 * 64 + 13, f == KqFmt.q51 ? 1 : 5)
+                }
+                for (f in [KqFmt.mlx4, KqFmt.mlx8, KqFmt.mlx4b, KqFmt.mlx8b, KqFmt.mlx6b]) {   //! the affine tables: whole 64-groups, so a table and its rows start on an even block
+                    embed_b32_gate(t, dev, queue, f, 128, 5, 0)
+                    embed_b32_gate(t, dev, queue, f, 2048, 7, 7 * 64)
+                    embed_b32_gate(t, dev, queue, f, 192, 5, 6, 6)                //! three groups a row, six blocks past the bind
+                    embed_b32_gate(t, dev, queue, f, 320, 4, 7 * 64 + 14, 6)      //! five groups a row past a bind every eight blocks
                 }
                 embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_k4), 4, 512, 5)
                 embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_k5), 5, 512, 5)
@@ -2299,6 +3566,28 @@ def test_metal_misc_kernels(t : T?) {
                 hc_mix_gate(t, dev, queue, 100, 3, 5)
                 hc_combine_gate(t, dev, queue, 2560, 4, 1)
                 hc_combine_gate(t, dev, queue, 100, 3, 5)
+                hc_stream_mean_gate(t, dev, queue, 2560, 4, 1)
+                hc_stream_mean_gate(t, dev, queue, 100, 3, 8)
+                gemv_hcn_gate(t, dev, queue, 2560, 4, 320, true)   // the served mixer shape
+                gemv_hcn_gate(t, dev, queue, 64, 3, 64, true)      // three streams: the inject pair's second row guarded off
+                gemv_hcn_gate(t, dev, queue, 64, 3, 64, false)     // the head mixer: no inject rows
+                gemv_sg_lo_gate(t, dev, queue, 320, 2560, 4)   // the served mixer shape
+                gemv_sg_lo_gate(t, dev, queue, 64, 52, 2)      // two streams: four columns a threadgroup
+                gemv_sg_lo_gate(t, dev, queue, 64, 96, 1)      // one stream: the mean is the gated row itself
+                for (fa in [KqFmt.mlx4b, KqFmt.mlx6b, KqFmt.mlx8b]) {   //! the fused pair's affine arms: the pack's 6-bit trunk and 8-bit head mixers
+                    gemv_hcn_aff_gate(t, dev, queue, fa, 2560, 4, 320, true)   // the served mixer shape
+                    gemv_hcn_aff_gate(t, dev, queue, fa, 64, 3, 64, true)      // three streams: the inject pair's second row guarded off
+                    gemv_hcn_aff_gate(t, dev, queue, fa, 64, 3, 64, false)     // the head mixer: no inject rows
+                    gemv_sg_lo_aff_gate(t, dev, queue, fa, 320, 2560, 4)
+                    gemv_sg_lo_aff_gate(t, dev, queue, fa, 64, 64, 2)          // two streams: four columns a threadgroup
+                    gemv_sg_lo_aff_gate(t, dev, queue, fa, 64, 128, 1)         // one stream
+                }
+                hc_mix8_gate(t, dev, queue, 8)   // the eight-row mixer at Flash-Next's shape, the verify's eight rows
+                hc_mix8_gate(t, dev, queue, 5)   // five live rows: the pad tokens' NaN table rows stay off the landing
+                gemv_hc_gate(t, dev, queue, 2560, 3072, 4)   // wo's shape
+                gemv_hc_gate(t, dev, queue, 101, 1664, 3)    // an odd row count: the pair's second row guarded off
+                combine_sh_hc_gate(t, dev, queue, 2560, 10, 513, 512, 4)
+                combine_sh_hc_gate(t, dev, queue, 300, 3, 5, 4, 3)
                 ple_gate_gate(t, dev, queue, 2560, 4, 10, 17, 3, 1, false)   // the decode form: the ring bound three rows in, slot 7
                 ple_gate_gate(t, dev, queue, 100, 4, 10, 0, 0, 1, false)     // slot 0 at offset 0, under a stride
                 ple_gate_gate(t, dev, queue, 100, 4, 10, 30, 2, 6, true)     // the window form: six rows into the panel
@@ -2619,6 +3908,21 @@ def test_lens_params_gate(t : T?) {
 }
 
 [test]
+def test_lens_tgmem_param_gate(t : T?) {
+    t |> run("[metal_dispatch] tgmem_param= sizes the threadgroup memory off a params= name") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let named = spawn_wg_fixture(false, "tgmem_param_ok", "tgmem_param = \"tgb\", ", "", "", false, "n : int64, tgb : int64")
+            t |> equal(0, named.rc, "@workgroup members under a tgmem_param= naming a param compile with no tgmem=: {named.out}")
+            let missing = spawn_wg_fixture(false, "tgmem_param_missing", "tgmem_param = \"zz\", ", "", "", false, "n : int64, tgb : int64")
+            t |> success(missing.rc != 0, "a tgmem_param= naming no param must not compile")
+            t |> success(find(missing.out, "is not a params= name") >= 0, "the refusal names the missing param: {missing.out}")
+        } else {
+            t |> skip("das_metal is not built on this platform")
+        }
+    }
+}
+
+[test]
 def test_lens_stamp_gate(t : T?) {
     t |> run("[metal_dispatch] stamp= takes a three-token spec naming a served family and form") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -2675,7 +3979,7 @@ def test_lens_call_macro_gates(t : T?) {
     }
 }
 
-[test, arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#kq-rows-crown")]
+[test, arch(at="../ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#kq-rows-crown")]
 def test_kq_rows_race_verdicts(t : T?) {
     t |> run("the decode race returns a small-batch verdict per K-quant format") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {

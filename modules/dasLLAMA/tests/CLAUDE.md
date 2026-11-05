@@ -117,14 +117,18 @@ never mask a red.
 
 Arm names - decode parity: `arm1-basic arm2-hybrid arm3-step arm4-paged arm5-rewind
 arm6-churn arm6b-capfit arm6c-capfit-refuse arm7-q8kv arm7b-tq4kv arm8-s16 arm9-reload arm10-kq arm11-depth arm12-dim
-arm13-conc arm14-poison arm15-spec-hint` (arm14 = the shared-region collision gate: a foreign GPU
+arm13-conc arm14-poison arm15-spec-hint arm16-sel-ask` (arm16 = twelve single-row steps sampled at temp 0.5, top-k off and
+top-p 0.9 under a presence penalty, the decode chain pinned off, its own `[test]` block: every landed step - at least eight,
+the single row's landing slot alternating between them - holds its denominator within 1e-3 of the host's at temp 0.5, the
+host's at temp 1 outside that bar as the control, and every recent id's landed raw logit the row's; arm14 = the shared-region collision gate: a foreign GPU
 prefill must not degrade a later forced-feed decode - Qwen2.5-0.5B, its own `[test]` block; arm6b = two streams whose K/V passes a 1 MiB idle mirror cap many times
 over still take the batched GPU step, token for token with the CPU control, the cap put back as found, and with the device up the room `device_kv_max_rows`
 answers is the model's own context; arm6c = the device's largest buffer stood in for at 1 MiB by the probe seam
 (`set_metal_mirror_device_max_probe_`): the batched step declines by name, the refusal said once and cleared by the
 mirrors' reset, the streams still the CPU control's off the declined step; arm15 =
-the single-row driver's greedy chain stands down for a decode sampled at temp > 0 and rides for a
-greedy one; arm11 = the 2030-token depth cell, which also holds the single row's attention form by
+a decode sampled at temp > 0 rides the single-row driver's sampled chain where the landing serves its
+sampler - the device's draw the host's, token for token the chain-off stream - a penalized sampled
+decode stands the chain down, and a greedy one rides it; arm11 = the 2030-token depth cell, which also holds the single row's attention form by
 the kernel census - the fused single-pass stamp once a layer a step on the f16 mirror and its q8_0
 twin on the q8_0 mirror, no chunked dispatch on either; the same deep steps with the lever off
 (`set_metal_attn_d(false)`) are the control: the chunked pair serves every deep step and the fused
@@ -142,11 +146,27 @@ qkv planes, at B=3, B=9 and B=12 every one of twelve steps the batched driver's 
 for token the GPU single-row step's, the batched leg first since it grows the recurrent mirror pool to the batch; nine
 and twelve rows ride the GEMM tier, whose 32-row M pad the recurrent row planes hold); `batch-per32` (its own test,
 `test_metal_batch_per32_sites`, families `llama` / `qwen2`: Llama-3.2-1B Q5_1 and Qwen2.5-0.5B IQ4_NL, the `-local` mints of
-`../performance/model_specs.das`, whose dense planes load as q51 / iq4nl32, at B=2, 3, 5, 8, 9 and 12 every one of twelve
+`../performance/model_specs.das`, whose dense planes load as q51 / iq4nl32, and the Llama-3.2-1B 8-bit and 3B 4-bit
+mlx-community snapshots, whose dense planes load as mlx8 / mlx4, at B=2, 3, 5, 8, 9 and 12 every one of twelve
 steps the batched driver's with no batch decline, each per-32 small-batch dispatch carrying all B rows
 (`metal_b32_mvb_stats`) and at least one a per-32 plane a step to eight rows, none past them, the narrow planes on the K-split
-stamps to eight rows (`metal_b32_ks_count`), the streams token for token
-the GPU single-row step's). The whole test is gated on
+stamps to eight rows where a k/v plane is narrow at that row count (`metal_b32_ks_count`), the streams token for token
+the GPU single-row step's). The snapshot carriers' Metal arms sit in `test_mlx_snapshot.das`: `metal-mlx8` / `metal-mlx4`
+(family `llama`) - the blob twin's prefill window and sixteen greedy steps the CPU rails' ids token for token, the window one
+device prefill on the member's stamps, every step a device decode reading every affine plane through its GEMV, the token table
+gathered on the device; `metal-prefill-mlx8` / `metal-prefill-mlx4` - a counting window's last row within 4.0 of the CPU
+rails' on the base leg (no crown) and with the member's `kq_mulmm_<member>` crown pinned (the tensor twins), the prompt one
+token short outside the bar; `metal-27b` (family `qwen35`, large tier: the Qwen3.8-27B 4-bit snapshot, mlx4b) - the
+teacher-forced logits on the Metal rails against mlx-lm's top-2 oracle, every position a device decode, then the window and
+eight greedy steps the CPU rails' ids; `metal-35b` (family `qwen35moe`, large tier: the Qwen3.6-35B-A3B 4-bit snapshot, mlx4b
+routed stacks) - the teacher-forced logits on the Metal rails against mlx-lm's oracle at the snapshot bar (0.4; reads 0.24),
+then a counting window twice, every routed site on the member's tensor twins and then, the twin knee pinned to 0, on its base
+tile, each window's last row within 3.0 of the CPU rails' (reads 1.69 / 1.70, the prompt one token short outside), and eight
+greedy device steps from the base leg the CPU rails' ids with every routed stack read through the member's routed stamps -
+the routed pair's affine arms where the pair's knob is on, the expert-indexed GEMV's wide stamp otherwise. The CPU
+cell beside them (`test_mlx_qwen36_35b_a3b_4bit`, the same tier) holds the expert geometry, the mlx4b routed and shared planes,
+the teacher-forced CPU logits within 0.4 of mlx-lm's (reads 0.25; each row against the next position's oracle as the control)
+and a greedy count. The whole test is gated on
 `batch` first, and a filter token matches an arm name as a substring OF THE NAME, so `--arm batchB8-kq`
 alone skips the whole test (`batchB8-kq` is not a substring of `batch`); `--arm batch` runs every batch
 arm, and is the way to reach a sub-arm.
@@ -278,6 +298,59 @@ arm's gates and the served arms' GPU home: the file's entry below), its arms:
 
 Every served walk logs both streams decoded. On the Metal home every served arm loads its target through
 `load_model_cached`, so the file mints a `.dlim` for it - ledgered at `../ARCHITECTURE_IMAGE_LEDGER.md#suite-image-mints`.
+
+The `mtp` suite also carries `test_dflash_drafter.das` (the DFlash2 block drafter, also in the stocked suite; every trunk
+loads off the image rail - `load_model_`, the Metal arms' blob form converted in RAM - and every `dflash-27b-*` arm carries
+the family tag `qwen35`), its arms:
+- `dflash-refuse` - the loader's no-panic refusal contract (a missing path, a file with no GGUF magic), and a synthesized
+  one-layer `dflash` header whose fc.weight is IQ4_XS refused naming the tensor, the disk type and the `KqFmt` member - the
+  same header with a Q4_K fc.weight, tagged k4, refusing on the next, absent tensor the control;
+- `dflash-27b-cpu` - the lossless gate on the CPU arm: the planar Qwen3.8-27B Q4_K_M (large tier, PARITY_FULL-gated) with
+  its DFlash2 Q8_0 drafter under `drafters/`, a 24-token greedy speculative walk equal to the plain walk token for token with
+  drafts accepted, both walks decoded in the log;
+- `dflash-27b-metal` - the same gate on the Metal home's device arm over the served trunk (the box profile applied), the
+  pass's q8 sites counted (`metal_dflash_sites`) and, where the box runs the rows8 form (the file's own layout probe,
+  `rows8_probe_ok`, passes and `DASLLAMA_METAL_ROWS_MT` is on - the engine's `metal_rows8_on` asserted to that same
+  answer), its sites on it, each counted
+  format among them (`metal_dflash_rows8_sites`, `metal_dflash_rows8_sites_of`), every pass's selector on the device and
+  held for the verify unwaited (`metal_dflash_selected`) and every held verify's accept on the device
+  (`metal_dflash_accepted`); then the same walk with `set_metal_dflash_accept(false)` - every row's logits landed for the
+  host's accept, no accept on the device - drafting the same ids round for round and accepting the same count; then the same
+  walk with `set_metal_dflash_select(false)` - the
+  host's walk over the device pass's landed logits, no pass on the device selector - drafting the same ids round for round
+  (`set_dflash_record` / `dflash_recorded_drafts`) and accepting the same count; then the CPU arm fed by the device's
+  captures, the two arms accepting the same count; then the device arm's walk round by round at `set_mtp_depth(3)`, every
+  drafting round drafting three and verifying four rows (`metal_verify_split().rows`), and with no depth set, every round
+  drafting past three and verifying one row more (the control), both walks the plain walk's token for token; skips without
+  das_metal;
+- `dflash-27b-k4-cpu` / `dflash-27b-k4-metal` - the two arms again with the drafter's Q4_K_M file (Q4_K planes, Q6_K at some
+  layers' v and down), every one of its weight planes first asserted tagged with its disk type's format; the device arm
+  counts both the k4 and the k6 sites, and where the box runs the rows8 form, both formats' sites on it;
+- `dflash-27b-sampled-cpu` / `dflash-27b-sampled-metal` - the three acceptances at temperature 0.7, seeded, 64 tokens
+  (`generate_mtp_sampled` against `generate_`): the exact walk equal to the plain sampled walk token for token with drafts
+  accepted, and again with the plain stream's 33rd id as a stop id, ending on that id's first occurrence (the stopless
+  walk's full length the control); rejection with point-mass drafts (`set_dflash_draft_temp(0)`) and with drafts drawn at the stream's temperature (the knob's default, `set_dflash_draft_temp(-1)`) each accepting some
+  drafts and rejecting some (a rejection stream parts from the plain one at its first rejection, so its rate is not the
+  exact walk's to compare; the closed form is `test_mtp_accept_walks.das`'s), the three rates logged, both streams
+  decoded in the log; on the device arm the exact walk's passes ending on the device selector and the drawn drafts' none
+  (the control);
+- `dflash-27b-mlx-metal` / `dflash-27b-mlx-sampled` - `dflash-27b-metal` and `dflash-27b-sampled-metal` again over the same
+  model's mlx-community 4-bit snapshot (mlx4b planes, no NextN head; large tier, the directory through `hf_snapshot_dir` as
+  `test_mlx_snapshot.das`'s 27B cell) with the Q8_0 drafter: the lossless arm also counts the trunk's verify sites on the
+  rows8 form over mlx4b planes (`metal_rows8_sites_of`) where the box runs the form; the sampled arm runs the host-judged
+  rounds over a trunk with no head, whose drawn drafts read the verify scratch the session carries.
+
+The block drafter's sampled drafts have model-free cells in `test_mtp_accept_walks.das`: `dflash_soft_pick`'s q against the
+scores' softmax and its pick against the closed form's draw at 200 seeds (one draw a pick, the same pick again at the same
+seed, the empty slot never picked, temperature 0 a point mass with no draw); `dflash_record_q` id ascending with the empty
+slot dropped; and the rejection walk over a recorded q on an 8-token vocabulary, every one of 400 seeds' verdict and token
+the closed form's (accept where u < p / q, else the residual max(0, p - q)'s draw), the rate at min(1, p / q) within 0.08,
+the point-mass closed form misreading some seed (the control). The NextN head's drafts have theirs beside them: a sampled
+stream drafting through the draw seam under rejection alone, at every head temperature (`set_mtp_draft_temp`), and under
+neither exact nor a greedy stream; the head's temperature 0 a point mass on the argmax with no draw, 0.5 the head row's
+softmax at 0.5 with the draft the closed form's draw at 50 seeds, below 0 the stream's own softmax (the control); and the
+rejection walk at the head's temperature 0 accepting a quarter-mass draft on about a quarter of 400 seeds, the stream's own
+half-mass q accepting about half (the control).
 
 Prefill parity: `lastrow-g` (its own test, `test_metal_prefill_lastrow_sandwich`, families `gemma3` / `gemma4` / `gemma4e`:
 gemma-3-1b, gemma-4-E2B Q8_0 and, large tier, gemma-4-12B Q8_0 - the last layer's FFN tail narrowed to the final row on the gemma
@@ -432,7 +505,8 @@ the Llama-3.2-1B NVFP4 mint with every dense plane nv4, its table mint with the 
 Qwen3.5-0.8B-MTP `--pure` mint with the deltanet planes, the NextN eh_proj, the table and the classifier nv4, and the
 Qwen3-30B-A3B `--pure` mint - large tier, family `qwen3moe` - with every routed stack nv4) and the per-32 mints `census-q51 census-iq4nl32
 census-iq4nl32-table census-q4032 census-q5032 census-q51-table census-moe-q51 census-moe-q4032
-census-moe-q5032`. Vulkan format census (`test_gpu_resident_format_census.das`, entry below):
+census-moe-q5032`, and the affine routed mint `census-moe-mlx4b` (the Qwen3.6-35B-A3B 4-bit snapshot's served image,
+large tier). Vulkan format census (`test_gpu_resident_format_census.das`, entry below):
 `vk-census vk-gather vk-perop-ffn vk-per32-iq4nl32 vk-per32-q4032 vk-per32-q5032 vk-per32-q51`;
 `vk-per32-moe` is `test_gpu_resident_moe.das`'s per-32 MoE carriers. A filter token matches by
 substring, so `--arm census-q51` also runs `census-q51-table`, and `--arm vk-per32` runs every
@@ -474,7 +548,13 @@ bakes, a 384-wide one and a 32-row one do not - and expert exclusion - an `*_exp
 slice bakes nothing, a shared-expert site and a mis-spelt suffix still bake - are pure taxonomy
 over a job list, plus the split-scale transform's idempotence over one carrier) `smol untied metal metal-untied gemma tower whisper voxtral
 parakeet gigaam qwen3a canary canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v gemma3v gemma4e
-mtower kitten bergamot mx4-stream b32-stream`; `bergamot` (family `bergamot`) is the translate area's arm - ru-en tiny's two lanes, each image baked by the `.bin`'s cold load and loaded back by its own path, three Russian lines translated as the in-memory mint translates them, every side through `nmt_translate` with the device seat pinned off and put back (one entry point, one lane), each side logged; `mx4-stream` (families `gemma4moe` / `gptoss`, large tier: gemma-4-26B-A4B's MXFP4_MOE mint and
+mtower kitten bergamot mx4-stream b32-stream mlx mlx-metal mlx-metal-35b`; `mlx` (family `llama`: the Llama-3.2-1B 8-bit
+safetensors snapshot) is the snapshot's planar lane minted beside the directory, the mapped affine planes and logits the eager
+load's; `mlx-metal` (the same snapshot) is its metal lane - a cold Metal-mode load mints `<snapshot>.metal.dlim` beside it and
+serves the device steps, the mint, the warm map and the CPU rails picking the same sixteen greedy ids and the teacher-forced
+device logits within 4.0 of the CPU's; `mlx-metal-35b` (family `qwen35moe`, large tier: the Qwen3.6-35B-A3B 4-bit snapshot)
+is the routed snapshot's metal lane, the same cell with the mint and the warm map token for token and the device held to the
+CPU on the teacher-forced logits within 3.0 alone - its walk flips at a near tie ("nine, ten" / "nine, and ten"); `bergamot` (family `bergamot`) is the translate area's arm - ru-en tiny's two lanes, each image baked by the `.bin`'s cold load and loaded back by its own path, three Russian lines translated as the in-memory mint translates them, every side through `nmt_translate` with the device seat pinned off and put back (one entry point, one lane), each side logged; `mx4-stream` (families `gemma4moe` / `gptoss`, large tier: gemma-4-26B-A4B's MXFP4_MOE mint and
 gpt-oss-20b mxfp4) is the native-MXFP4 cold mint's streamed fill - a child (`_mx4_mint_root.das`) mints the planar image under
 `/usr/bin/time -l` and its peak memory footprint sits under the mxq + mxs bytes the image holds (macOS; elsewhere the leg skips
 loudly), then the mapped planes are the eager load's byte for byte; `b32-stream` (family `qwen2`, small tier: Qwen2.5-0.5B's
@@ -684,7 +764,22 @@ float and the block-codec (q8_0, tq4) stamps, with the route table bound past fo
 count is 1 - the offset a kernel reading the table from its start would miss the bar on - and
 under a sliding window (inside one slice, cutting a slice, wider than every stream), a sink
 logit that differs head to head and the logit cap, on the float, quantized and wide stamps. The
-gemm file's device pair arms (`attn_qk_mm_gate` with `pair_mt`, `attn_dev_pair_gate`) run both
+gemm file's `rows8_k4_gate` / `rows8_q8_gate` cells run the rows8 matrix-unit kernels - the x-table prep, then the
+kernel writing y at the site's own row stride and at a wider one, the gap past each row the fill - against the dense
+reference over the f16-rounded panel, after `rows8_probe_ok`, the layout probe the engine runs at init, which skips the
+cells where the matrix unit's cooperative layout is another generation's - the q8 cell also at 96 rows, six threadgroups;
+`rows8_split_gate` runs
+the split-plane kernels (k6, kq 6; iq4xs, kq 44) the same way over the panel's natural halves, fed by the half conversion of
+the f32 panel (also at 96 rows) and by the norm's f16 twin (`enc_rms_bhx`) at eight live rows and at five with the pad rows
+NaN, their synthetic sub-scales asserted to take both signs and differ block to block; `rows8_aff_gate` runs each affine member's stamp (mlx4, mlx8,
+mlx4b, mlx8b) the same way over `mlx_test_planes` - fed by the x-table prep (also at 96 rows) and by the norm's table mode
+(`enc_rms_bhxt`) at eight live rows and at five with the pad rows' table and sums NaN; `test_rows8_grid_rule` holds the
+grid rule (a threadgroup a 16-row tile, K whole blocks of the format) device-free; `rows8_k4_fed_gate` runs the k4 kernel over the table and sums the norm's table mode
+wrote (`enc_rms_bhxt`) at eight live rows and at five with the pad rows' table and sums NaN, the live rows against the
+dense reference over the norm's own halves, and `rows8_table_gate` holds every producer's table mode (the norm, the
+residual step's plain and sandwich builders at 256 and 1024 lanes, swiglu, geglu) to its HX stamp on the same inputs -
+the rows and twin bit for bit, the table the twin's halves in the prep's slot law, the sums within 1e-5, the pad rows
+untouched, the plain twin's order the control the table must miss; its device pair arms (`attn_qk_mm_gate` with `pair_mt`, `attn_dev_pair_gate`) run both
 tile heights at a head of 96 too - QK's reduction width is the head, AV's 64-wide tiles plus the
 32-column tail stamp - and the misc file's `embed_kq_gate` the token-table gather of every K-quant format the Metal tier serves (three rows off the engine's own plane-row dequant, bit for bit), `embed_b32_gate` the per-32 gather (q51, iq4nl32, q4032, q5032; three rows against `dequant_b32_plane_block`, bit for bit, at 96 wide and at 2048 wide past a whole other table's blocks - an untied table's offset - and at 96 and 288 wide off the 16-byte grid, bound on the grid below as `enc_embed_table` binds it, the blocks past the bind asserted and both binds asserted on 16 bytes) and `embed_f32_gate` the greedy chain's fp32-table gather (the
 row gather at one row under the embed scale) at a 96-wide row and past a lead of foreign floats. The gemv file's
@@ -703,7 +798,19 @@ against the dot in double, the poisoned lead element the control; `f32_rows_gate
 the float4 router stamps on the lattice, with and without the bias row, the element-walk stamps off it (dim 66, base 2, dim 515 on an odd base, the one-column
 walk past whole strides) - NaN past both row ends, exact against the dot in double, the poisoned lead element the control; `geglu_side_gate`, `ple_finish_gate` - the finish's `XSCALE` stamp (`GkPleFinish`), the finish without the
 prescale its control); the side rows' gather rides the token-table family, the misc file's embed gates. The misc file's `cls_select_gate` runs the selection kernel on the template both homes stamp (`GkClsSelect`) over the Vulkan cell's
-six rows at a 262144 and a 1000 vocab against `_sel_oracle.das`'s reading. The prefill file's `qk_rope_gate`
+six rows at a 262144 and a 1000 vocab against `_sel_oracle.das`'s reading. Its `df_topk_gate` and `df_walk_gate` hold the
+DFlash2 device selector to an in-test oracle and to the engine's host twins (`dflash_top_k_row`, `dflash_walk`) id for id:
+the two-stage top-k (`MetalDflashTopkSlices`'s lists a slice against the oracle's list of each slice, `MetalDflashTopkMerge`'s rows
+against the oracle's and the host's) at the 27B drafter's seven rows of 248320, at top-7 over whole slices, top-32, a row and a
+tail slice narrower than the list, logits on a 0.25 grid so ties fill the k-th, every compare's poison on a filled slot and the
+empty slots compared apart, the ids-descending tie rule the control; the walk (`MetalDflashWalk`) over
+Q8_0 (two bytes off its bind), Q4_K, Q5_K and Q6_K codebooks synthesized in the CPU form, position 0's zero selector row
+tying two candidates whose successor rows are copies, the last-best rule and the logit-alone walk the controls. Its
+`df_accept_gate` runs the rows' argmax stamp then the device accept (`MetalDflashAccept`) in one command buffer over eight rows
+of the served vocab (none, three and every draft accepted), five rows with an empty draft slot and two rows, each row's maximum
+tied at a higher id: the landing words (the count, the next anchor, every row's pick) and the committed row bit for bit an
+in-test form whose argmax takes the first id at the maximum, the slots past both at their sentinel, the drafts matching again past
+the mismatch (the leading-run rule's control) and row n + 1's logits differing from the landed row the controls. The prefill file's `qk_rope_gate`
 carries the window's V arms (V off the pre-norm k rows, the v-norm in place, the V panel bit for bit untouched with neither), and
 the misc file's `add_rms_gate` every residual stamp (`GkAddRmsRows`: the plain step, the sandwich seam, the seam with no norm
 stored, the f16 twins) through its one-row, rows and window builders and the decode rows' 1024-lane builders, at widths within the
@@ -1737,8 +1844,9 @@ state on a counting tail. `test_scheduler_capture_stops_ngram` (family `qwen4exp
 das_metal build): the served Qwen3.8-Flash-Next UD-IQ4_XS image with its split head (`load_model_cached` under
 `set_mtp_head_path`, `MetalMode.required` for the load, speculation off, the Metal prefill and decode overrides selected) runs
 the same one-window and window-ending-on-96 legs on 60 numbers (240 tokens); the n-gram side input captured at 96 holds the
-last tokens bit for bit and the conv history within a thousandth of its largest magnitude (reads 3e-4: the projection GEMM
-rounds the two window shapes apart) of the window ending there, the stop at 48's history outside the bar the control; the
+last tokens bit for bit and the conv history within a hundredth of its largest magnitude (reads 5e-3 on a magnitude of 12:
+the Metal window's tiles and scan groups round a 240-row window apart from a 96-row one) of the window ending there, the
+stop at 48's history outside the bar the control (reads 3.5); the
 recurrent state's distance is logged (0.24 against the control's 2.0).
 `test_gpu_home.das` - model-free, device-free (a switch installs seats, nothing arms): the GPU home as a contract
 (`../ARCHITECTURE_GPU.md#gpu-backends`) - the home is the environment's spelling (`DASLLAMA_CUDA`) and among the homes the
@@ -2551,7 +2659,12 @@ so rounds cross page boundaries, and a Metal-served model's `chunk_defaults` rea
 runs the pre-encode cell: four greedy streams through the scheduler with the batched driver's
 pre-encoded step off (the reference, its taken count pinned at zero) and on (the taken count at
 sixteen or more; the shipped default reads off), token for token per stream, then the rail's
-retire under a parked step and the drivers' shutdown against the Metal live-object count; the
+retire under a parked step and the drivers' shutdown against the Metal live-object count, and the per-row tick cell
+(`test_metal_per_row_tick_sampled`): two sampled streams (temp 0.8, top-k 40) through twelve two-row ticks the batched driver
+declines (the probe seam `set_metal_mirror_device_max_probe_` at one and a half sessions' mirrors), every tick a per-row step
+by `batch_step_census` and every row's selection landed, each stream token for token what it emits sampling right after its
+own forward - the landing is one a process, so each row's lands into its own logits before the next row's forward - with
+the device's own bound (no per-row tick) and the landing off (no selection) as the controls; the
 deltanet carrier also runs the greedy chain cell (`test_metal_deltanet_greedy_chain`): 24 steps with the single-row
 chain off and forced on, fed the greedy pick and then fed off the pick every third step - the chain's hits counted
 on both feeds and its misses on the off-pick one, every step a device decode, the tokens and every step's logits
@@ -2663,7 +2776,14 @@ and GEMV stamps, the six steps' per-32 GEMV count covering every plane a step, a
 table, classifier and (on the hybrid) deltanet planes and NextN eh_proj are per-32 too - the same cell with the window and
 every step gathering the table off `MetalEmbedB32<Fmt>`. Arms `census-moe-q51`, `census-moe-q4032` and `census-moe-q5032` (family
 `qwen2moe`, large tier): the Qwen1.5-MoE Q5_1, Q4_0 and Q5_0 `--pure` mints, every site native, the routed per-32 stacks on
-the routed stamps through the window and every step, at the plain-MoE bar (2.0; read 0.62-1.07 and 0.97-1.74). Its model-free cell holds the classifier predicates
+the routed stamps through the window and every step, at the plain-MoE bar (2.0; read 0.62-1.07 and 0.97-1.74). Arm
+`census-moe-mlx4b` (family `qwen35moe`, large tier): the mlx-community Qwen3.6-35B-A3B 4-bit snapshot, its census read off the
+synthesized meta, every site but the router native in mlx4b (the router is the format's one converted plane and no census
+site), the routed stacks on the member's routed stamps through the window and every step - the steps' on the routed pair's
+affine arms (the fused gate-and-up stamp and its down) where the pair's knob is on, on the expert-indexed wide stamp
+otherwise -, at 3.0 (reads 1.51-2.01, the one-step-off rows 10.9 and up). The per-32 MoE arms count a step's routed stacks
+as the two-row GEMV stamp plus the wide one, plus the pair's stamps where its arms serve the member - the gate-and-up two
+stacks a dispatch, the down one (`routed_gemv_dispatches`, `routed_steps_form_cell` in `_metal_blob_twin.das`). Its model-free cell holds the classifier predicates
 on Model shells (`cls_tied_f32`, `cls_q8_copy`, `emb_kq_plane_off`).
 `_resident_regions.das` - the cells the `test_gpu_resident_regions*.das` files run, one model a file (the entries below): the
 resident driver's mirror regions and the device-home sessions over them. A carrier loads at two regions through
@@ -3974,6 +4094,19 @@ family tag, the 48 px align, the 3840 projection width.
 rows at the ends and the middle against the scalar mixer at 1e-5 / 1e-4 with the next row's reference
 as the control on both bars), and the n-gram side input's gather, window and row decoders
 (`test_ngram_gather`, `test_ngram_window`, `test_ngram_row_decoders`).
+`test_safetensors.das` - model-free: the safetensors snapshot source on synthetic directories under the scratch root
+(`write_safetensors` of `_gguf_writer`) - `test_safetensors_snapshot`: a llama snapshot's config, index and shards read
+into a synthesized GGUF meta (the KVs, the rope factors' low and high entries, the F16/BF16 tensors located by shard and
+offset off an unaligned data start, an affine triplet's codes, scales and biases as one mlx8 plane with its two-row
+window read, the refusal of a tensor no family rule maps, naming it); `test_safetensors_moe_snapshot`: a routed
+qwen3_5_moe snapshot's expert-major stacks and shared expert.
+`test_mlx_qwen4exp.das` - model-free cells over a synthetic qwen4_exp snapshot (`test_qwen4exp_snapshot_meta`: the
+family's KVs, the I64 hash constants, the per-tensor quantization entry, the zero-centred gains, the indexer's row split,
+the draft head's column concat, the refuse-or-map rule under the head's prefix, the n-gram table's row shards and the
+`ngram_row_a4g32` decoder, `hc_planes_unserved` as a function), then the stocked Flash-Next pack against its GGUF
+oracles (`test_qwen4exp_pack_kvs`, `test_qwen4exp_pack_tensors`) tensor by tensor through small windows - never a model
+load: the BF16 shards for the trunk, the shared-head Q8_0 sidecar for the draft head, the served IQ4_XS file for the
+KVs; the pack cells skip where the pack or its oracles are not stocked.
 `test_ple_check.das` - model-free: the gemma4 router input's row identity (`gemma4_router` over
 npos rows against the npos = 1 decode call, bit for bit, on a synthetic scale row) and the PLE go-live tripwire (`ple_check_table`) on synthetic
 Model shells - short plane trips per format arm (the per-32 q51 / q5032 arms one byte short included), full plane passes, non-PLE exempt; and the per-layer planes' tags off the file's types (`test_ple_plane_formats`,
@@ -4523,7 +4656,7 @@ model blocks tagged with a listed family run - `family_on(t, name)` in
 carry no tag and always run. Family tokens: `llama` (`--suite decode`, `prefill`, `matrix` and
 `coverage`, plus the image `smol`, `untied`, `metal` and `metal-untied` arms and the `image-vulkan` `vulkan` arm),
 `qwen2`, `qwen3`, `phi3`,
-`gemma2`, `gemma3`, `gemma4`, `qwen3moe`, `gemma4moe`, `gptoss`, `qwen35`, `qwen35moe`, `qwen2moe`, `qwen4exp` (the support-matrix family cells; `qwen35` also tags `test_vulkan_mint.das` and `test_metal_batched_row.das`), `gemma`,
+`gemma2`, `gemma3`, `gemma4`, `qwen3moe`, `gemma4moe`, `gptoss`, `qwen35`, `qwen35moe`, `qwen2moe`, `qwen4exp` (the support-matrix family cells; `qwen35` also tags `test_vulkan_mint.das`, `test_metal_batched_row.das` and the `dflash-27b-*` arms of `test_dflash_drafter.das`), `gemma`,
 `ultravox`, `whisper`, `voxtral`, `parakeet`, `gigaam`, `qwen3a`, `canary`, `gemma4a` (image suite arms),
 `gemma3v`, `qwen25v`, `qwen3v` (the coverage census tower rows), `kitten` (the image suite's
 kitten arm), `kokoro`, `pocket` (the coverage census TTS rows), `vad` (the coverage census silero VAD row), `bergamot` (the image suite's

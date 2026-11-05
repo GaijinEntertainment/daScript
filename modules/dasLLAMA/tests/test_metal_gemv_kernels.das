@@ -406,6 +406,744 @@ def private moe_kq_gemv_gate(t : T?; var dev, queue; fmt, n, d, net, k, nst : in
     }
 }
 
+//! the fat chain's two routed dispatches against the chain they replace, bit for bit: gate + up + act (`MetalMoeGemvGuIq4xs`)
+//! against the gathered gate and up dispatches and the swiglu pass; down + shared down + combine onto the stream
+//! (`MetalMoeDown2Iq4xs`) against the gathered down a slot, the plain GEMV over the shared row, the shared-expert combine and the
+//! add - `net` experts, `k` picks a stream, `nst` streams, the x rows `n` wide, the hidden `d` wide (the down's reduction), the
+//! stream `dd` wide
+def private moe_fused_gate(t : T?; var dev, queue; n, d, dd, net, k, nst : int) {
+    let tag = "moe_fused_iq4xs n={n} d={d} dd={dd} net={net} k={k} nst={nst}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let sgu = stamp_of(@@enc_moe_gemv_gu_iq4xs_c)
+        let sd2 = stamp_of(@@enc_moe_down2_iq4xs_c)
+        let sm = moe_gemv_stamp(KqFmt.iq4xs)
+        let sw = stamp_of(@@enc_swiglu)
+        let sg = stamp_of(@@enc_kq_iq4xs_c)
+        let sc = stamp_of(@@enc_moe_combine_sh)
+        var pgu = mc |> keep_stamp(sgu, err)
+        return if (!pso_ok(t, tag, pgu, err))
+        var pd2 = mc |> keep_stamp(sd2, err)
+        return if (!pso_ok(t, tag, pd2, err))
+        var pm = mc |> keep_stamp(sm, err)
+        return if (!pso_ok(t, tag, pm, err))
+        var pw = mc |> keep_stamp(sw, err)
+        return if (!pso_ok(t, tag, pw, err))
+        var pg = mc |> keep_stamp(sg, err)
+        return if (!pso_ok(t, tag, pg, err))
+        var pc = mc |> keep_stamp(sc, err)
+        return if (!pso_ok(t, tag, pc, err))
+        let nb = n / 256
+        let nbd = d / 256
+        let nsb_gu = net * d * nb      //! the gate and up stacks' superblocks
+        let nsb_dn = net * dd * nbd    //! the down stack's
+        let nsb_sh = dd * nbd          //! the shared expert's down plane's
+        var inscope kq1, ks1, kq3, ks3, kq2, ks2, kqs, kss : array<uint8>
+        kq_fill_planes(44, nsb_gu, kq1, ks1)
+        kq_fill_planes(44, nsb_gu, kq3, ks3)
+        for (i in range(length(kq3))) {   //! the up stack's bytes off the gate stack's
+            kq3[i] = uint8(uint(kq3[i]) ^ 0xA5u)
+        }
+        kq_fill_planes(44, nsb_dn, kq2, ks2)
+        kq_fill_planes(44, nsb_sh, kqs, kss)
+        for (i in range(length(kqs))) {
+            kqs[i] = uint8(uint(kqs[i]) ^ 0x3Cu)
+        }
+        var inscope sel : array<uint>
+        sel |> resize(nst * 2 * k)
+        for (s in range(nst)) {
+            for (j in range(k)) {
+                sel[s * 2 * k + j] = uint((s + j * 3 + net - 1) % net)
+                let w = 0.15 + 0.1 * float((s * k + j) % 5)
+                sel[s * 2 * k + k + j] = unsafe(reinterpret<uint>(w))
+            }
+        }
+        var inscope xv, shv, lgv, resv : array<float>
+        xv |> resize(nst * n)
+        for (i in range(nst * n)) {   //! x small enough that the down's sums stay under 1e6: the exact compare's poison is one unit
+            xv[i] = (0.07 * float(i % 37) - 1.2) * 3e-4
+        }
+        shv |> resize(nst * d)
+        for (i in range(nst * d)) {
+            shv[i] = (0.05 * float(i % 29) - 0.7) * 1e-2
+        }
+        lgv |> resize(nst * (net + 1))
+        for (i in range(nst * (net + 1))) {
+            lgv[i] = 0.3 * float(i % 7) - 0.9
+        }
+        resv |> resize(nst * dd)
+        for (i in range(nst * dd)) {
+            resv[i] = 0.2 * float(i % 11) - 1.0
+        }
+        let bks1 = mc |> in_plain(ks1)
+        let bkq1 = mc |> in_plain(kq1)
+        let bks3 = mc |> in_plain(ks3)
+        let bkq3 = mc |> in_plain(kq3)
+        let bks2 = mc |> in_plain(ks2)
+        let bkq2 = mc |> in_plain(kq2)
+        let bkss = mc |> in_plain(kss)
+        let bkqs = mc |> in_plain(kqs)
+        let bsel = mc |> in_plain(sel)
+        let bx = mc |> in_(xv)
+        let bsh = mc |> in_(shv)
+        let blg = mc |> in_(lgv)
+        let bres = mc |> io_(resv)
+        let bn = mc |> in_plain([uint(d)])
+        let bdd = mc |> in_plain([uint(dd)])
+        let bg_ref = mc |> out_words(nst * k * d, -1000.0)
+        let bu_ref = mc |> out_words(nst * k * d, -1000.0)
+        let bh_ref = mc |> out_words(nst * k * d, -1000.0)
+        let bdn_ref = mc |> out_words(nst * k * dd, -1000.0)
+        let bsh_ref = mc |> out_words(nst * dd, -1000.0)
+        let bacc = mc |> out_words(nst * dd, -1000.0)
+        let bh = mc |> out_words(nst * k * d, -1000.0)
+        let bst = mc |> out_words(nst * dd, -1000.0)
+        let btot = mc |> in_plain([uint(nst * k * d)])
+        let doff1 = kq_split_doff(44, nsb_gu)
+        let doff2 = kq_split_doff(44, nsb_dn)
+        let doffs = kq_split_doff(44, nsb_sh)
+        var ka_gu = MoeGemvArgs(ndim = uint(n), ddim = uint(d), eplane = uint(d * nb), xs = 0u, ss = uint(2 * k), bxs = uint(n), bys = uint(k * d), hasb = 0u)
+        var ka_dn = MoeGemvArgs(ndim = uint(d), ddim = uint(dd), eplane = uint(dd * nbd), xs = uint(d), ss = uint(2 * k), bxs = uint(k * d), bys = uint(k * dd), hasb = 0u)
+        var ka_d2 = ka_dn
+        ka_d2.bys = uint(dd)   //! the fused down's `bys` is the stream's residual row stride
+        ka_d2.nsh = uint(d)
+        ka_d2.gstr = uint(net + 1)
+        ka_d2.goff = uint(net)
+        ka_d2.yadd = 1u
+        var ka_d2s = ka_d2   //! the store form: the sum as the panel's rows
+        ka_d2s.yadd = 0u
+        var ka_c = moe_comb_args(int64(dd), int64(k), int64(net + 1), int64(net))
+        let ran = mc |> cell_record(t, "{tag} reference") $(enc : MetalComputeEncoder?) {
+            stamp_run(sm, pm) {
+                invoke(sm.enc, enc, mc.buf[bks1], doff1, mc.buf[bks1], 0ul, mc.buf[bkq1], 0ul, mc.buf[bx], mc.buf[bg_ref], 0ul, ka_gu, mc.buf[bsel], int64(d), int64(k), int64(nst))
+                invoke(sm.enc, enc, mc.buf[bks3], doff1, mc.buf[bks3], 0ul, mc.buf[bkq3], 0ul, mc.buf[bx], mc.buf[bu_ref], 0ul, ka_gu, mc.buf[bsel], int64(d), int64(k), int64(nst))
+            }
+        }
+        return if (!ran)
+        mc |> plane_upload(bh_ref, mc |> plane_run(bg_ref))
+        let ran2 = mc |> cell_record(t, "{tag} reference act and down") $(enc : MetalComputeEncoder?) {
+            stamp_run(sw, pw) {
+                invoke(sw.enc, enc, mc.buf[bh_ref], 0ul, mc.buf[bu_ref], 0ul, mc.buf[btot], int64(nst * k * d))
+            }
+            stamp_run(sm, pm) {
+                invoke(sm.enc, enc, mc.buf[bks2], doff2, mc.buf[bks2], 0ul, mc.buf[bkq2], 0ul, mc.buf[bh_ref], mc.buf[bdn_ref], 0ul, ka_dn, mc.buf[bsel], int64(dd), int64(k), int64(nst))
+            }
+            stamp_run(sg, pg) {
+                for (s in range(nst)) {
+                    invoke(sg.enc, enc, mc.buf[bkss], doffs, mc.buf[bkss], 0ul, mc.buf[bkqs], 0ul, mc.buf[bsh], uint64(s * d * 4), mc.buf[bsh_ref], uint64(s * dd * 4), mc.buf[bn], mc.buf[bdd], int64(dd), int64(d))
+                }
+            }
+            stamp_run(sc, pc) {
+                invoke(sc.enc, enc, mc.buf[bacc], mc.buf[bsel], mc.buf[bdn_ref], mc.buf[bsh_ref], mc.buf[blg], ka_c, int64(dd), int64(nst))
+            }
+        }
+        return if (!ran2)
+        var inscope acc <- mc |> plane_run(bacc)
+        var inscope want_res <- [for (i in range(nst * dd)); resv[i] + acc[i]]
+        let ran3 = mc |> cell_record(t, "{tag} fused") $(enc : MetalComputeEncoder?) {
+            stamp_run(sgu, pgu) {
+                invoke(sgu.enc, enc, mc.buf[bks1], doff1, mc.buf[bks1], 0ul, mc.buf[bkq1], 0ul, mc.buf[bx], mc.buf[bh], 0ul, ka_gu, mc.buf[bsel],
+                    mc.buf[bks3], doff1, mc.buf[bks3], 0ul, mc.buf[bkq3], 0ul, int64(d), int64(k), int64(nst))
+            }
+            stamp_run(sd2, pd2) {
+                invoke(sd2.enc, enc, mc.buf[bks2], doff2, mc.buf[bks2], 0ul, mc.buf[bkq2], 0ul, mc.buf[bh_ref], mc.buf[bres], 0ul, ka_d2, mc.buf[bsel],
+                    mc.buf[bkss], doffs, mc.buf[bkss], 0ul, mc.buf[bkqs], 0ul, mc.buf[bsh], mc.buf[blg], mc.buf[bsel], int64(dd), int64(nst))
+                invoke(sd2.enc, enc, mc.buf[bks2], doff2, mc.buf[bks2], 0ul, mc.buf[bkq2], 0ul, mc.buf[bh_ref], mc.buf[bst], 0ul, ka_d2s, mc.buf[bsel],
+                    mc.buf[bkss], doffs, mc.buf[bkss], 0ul, mc.buf[bkqs], 0ul, mc.buf[bsh], mc.buf[blg], mc.buf[bsel], int64(dd), int64(nst))
+            }
+        }
+        return if (!ran3)
+        check_buf_exact(t, "{tag} gate + up + act", mc.buf[bh], mc |> plane_run(bh_ref))
+        check_buf_exact(t, "{tag} down + shared down + combine onto the stream", mc.buf[bres], want_res)
+        check_buf_exact(t, "{tag} down + shared down + combine stored", mc.buf[bst], acc)
+        t |> success(moved_off(want_res, resv, 0, BAR_EXACT), "{tag}: the stream moved off its input")
+    }
+}
+
+//! The rows' expert union against the fused pair, bit for bit: the table (`MetalMoeUnion`: the count the distinct picks, the entries
+//! ascending, each (row, slot) its entry, the shared expert closing the list over every row), then the union's gate + up + act
+//! (`MetalMoeGuUnionIq4xs`) against `MetalMoeGemvGuIq4xs`, and its down into the partial rows with the combine over them
+//! (`MetalMoeDnUnionIq4xs`, `MetalMoeDown2PIq4xs`) against `MetalMoeDown2Iq4xs`'s store form - `nst` rows of `k` picks over
+//! `net` experts, neighbouring rows sharing most of their picks
+def private moe_union_gate(t : T?; var dev, queue; n, d, dd, net, k, nst : int) {
+    let tag = "moe_union_iq4xs n={n} d={d} dd={dd} net={net} k={k} nst={nst}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let sgu = stamp_of(@@enc_moe_gemv_gu_iq4xs_c)
+        let sd2 = stamp_of(@@enc_moe_down2_iq4xs_c)
+        let sun = stamp_of(@@enc_moe_union_c)
+        let sgv = stamp_of(@@enc_moe_gu_union_iq4xs_c)
+        let sdv = stamp_of(@@enc_moe_dn_union_iq4xs_c)
+        let sdp = stamp_of(@@enc_moe_down2p_iq4xs_c)
+        var pgu = mc |> keep_stamp(sgu, err)
+        return if (!pso_ok(t, tag, pgu, err))
+        var pd2 = mc |> keep_stamp(sd2, err)
+        return if (!pso_ok(t, tag, pd2, err))
+        var pun = mc |> keep_stamp(sun, err)
+        return if (!pso_ok(t, tag, pun, err))
+        var pgv = mc |> keep_stamp(sgv, err)
+        return if (!pso_ok(t, tag, pgv, err))
+        var pdv = mc |> keep_stamp(sdv, err)
+        return if (!pso_ok(t, tag, pdv, err))
+        var pdp = mc |> keep_stamp(sdp, err)
+        return if (!pso_ok(t, tag, pdp, err))
+        let nb = n / 256
+        let nbd = d / 256
+        let nsb_gu = net * d * nb
+        let nsb_dn = net * dd * nbd
+        let nsb_sh = dd * nbd
+        var inscope kq1, ks1, kq3, ks3, kq2, ks2, kqs, kss : array<uint8>
+        kq_fill_planes(44, nsb_gu, kq1, ks1)
+        kq_fill_planes(44, nsb_gu, kq3, ks3)
+        for (i in range(length(kq3))) {
+            kq3[i] = uint8(uint(kq3[i]) ^ 0xA5u)
+        }
+        kq_fill_planes(44, nsb_dn, kq2, ks2)
+        kq_fill_planes(44, nsb_sh, kqs, kss)
+        for (i in range(length(kqs))) {
+            kqs[i] = uint8(uint(kqs[i]) ^ 0x3Cu)
+        }
+        var inscope sel : array<uint>
+        sel |> resize(nst * 2 * k)
+        var picked : table<uint; bool>
+        for (s in range(nst)) {
+            for (j in range(k)) {
+                let e = uint((s + j * 3 + net - 1) % net)
+                sel[s * 2 * k + j] = e
+                picked |> insert(e, true)
+                let w = 0.15 + 0.1 * float((s * k + j) % 5)
+                sel[s * 2 * k + k + j] = unsafe(reinterpret<uint>(w))
+            }
+        }
+        let distinct = length(picked)
+        delete picked
+        t |> success(distinct < nst * k, "{tag}: the rows share picks ({distinct} distinct of {nst * k})")
+        var inscope xv, shv, lgv : array<float>
+        xv |> resize(nst * n)
+        for (i in range(nst * n)) {
+            xv[i] = (0.07 * float(i % 37) - 1.2) * 3e-4
+        }
+        shv |> resize(nst * d)
+        for (i in range(nst * d)) {
+            shv[i] = (0.05 * float(i % 29) - 0.7) * 1e-2
+        }
+        lgv |> resize(nst * (net + 1))
+        for (i in range(nst * (net + 1))) {
+            lgv[i] = 0.3 * float(i % 7) - 0.9
+        }
+        let bks1 = mc |> in_plain(ks1)
+        let bkq1 = mc |> in_plain(kq1)
+        let bks3 = mc |> in_plain(ks3)
+        let bkq3 = mc |> in_plain(kq3)
+        let bks2 = mc |> in_plain(ks2)
+        let bkq2 = mc |> in_plain(kq2)
+        let bkss = mc |> in_plain(kss)
+        let bkqs = mc |> in_plain(kqs)
+        let bsel = mc |> in_plain(sel)
+        let bx = mc |> in_(xv)
+        let bsh = mc |> in_(shv)
+        let blg = mc |> in_(lgv)
+        let bh_ref = mc |> out_words(nst * k * d, -1000.0)
+        let bst_ref = mc |> out_words(nst * dd, -1000.0)
+        let bh = mc |> out_words(nst * k * d, -1000.0)
+        let bst = mc |> out_words(nst * dd, -1000.0)
+        let bun = mc |> out_words(515 + 16 * 16, 0xFFFFFFFFu)
+        let bpart = mc |> out_words(nst * k * dd, -1000.0)
+        let doff1 = kq_split_doff(44, nsb_gu)
+        let doff2 = kq_split_doff(44, nsb_dn)
+        let doffs = kq_split_doff(44, nsb_sh)
+        var ka_gu = MoeGemvArgs(ndim = uint(n), ddim = uint(d), eplane = uint(d * nb), xs = 0u, ss = uint(2 * k), bxs = uint(n), bys = uint(k * d), hasb = 0u)
+        var ka_dn = MoeGemvArgs(ndim = uint(d), ddim = uint(dd), eplane = uint(dd * nbd), xs = uint(d), ss = uint(2 * k), bxs = uint(k * d), bys = uint(k * dd), hasb = 0u)
+        var ka_d2 = ka_dn
+        ka_d2.bys = uint(dd)
+        ka_d2.nsh = uint(d)
+        ka_d2.gstr = uint(net + 1)
+        ka_d2.goff = uint(net)
+        ka_d2.yadd = 0u
+        let ue = int64(min(nst * k, net))
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(sgu, pgu) {
+                invoke(sgu.enc, enc, mc.buf[bks1], doff1, mc.buf[bks1], 0ul, mc.buf[bkq1], 0ul, mc.buf[bx], mc.buf[bh_ref], 0ul, ka_gu, mc.buf[bsel],
+                    mc.buf[bks3], doff1, mc.buf[bks3], 0ul, mc.buf[bkq3], 0ul, int64(d), int64(k), int64(nst))
+            }
+            stamp_run(sun, pun) {
+                invoke(sun.enc, enc, mc.buf[bsel], mc.buf[bun], MoeUnionArgs(ne = uint(net), nr = uint(nst), k = uint(k), ss = uint(2 * k)))
+            }
+            stamp_run(sgv, pgv) {
+                invoke(sgv.enc, enc, mc.buf[bks1], doff1, mc.buf[bks1], 0ul, mc.buf[bkq1], 0ul, mc.buf[bx], mc.buf[bh], 0ul, ka_gu, mc.buf[bsel],
+                    mc.buf[bks3], doff1, mc.buf[bks3], 0ul, mc.buf[bkq3], 0ul, mc.buf[bun], int64(d), ue)
+            }
+        }
+        return if (!ran)
+        check_buf_exact(t, "{tag} union gate + up + act", mc.buf[bh], mc |> plane_run(bh_ref))
+        var inscope tab <- buf_download(mc.buf[bun], 515 + nst * k, type<uint>)
+        let nu = int(tab[0])
+        var ascending = nu == distinct && tab[1 + nu] == uint(net) && tab[258 + nu] == (1u << uint(nst)) - 1u
+        for (u in range(1, nu)) {
+            ascending = ascending && tab[1 + u - 1] < tab[1 + u]
+        }
+        var inv_ok = true
+        for (i in range(nst * k)) {
+            let u = int(tab[515 + i])
+            inv_ok = inv_ok && u < nu && tab[1 + u] == sel[(i / k) * 2 * k + i % k] && ((tab[258 + u] >> uint(i / k)) & 1u) != 0u
+        }
+        t |> success(ascending, "{tag}: the table counts {nu} entries, the distinct picks ascending, the shared expert closing them over every row")
+        t |> success(inv_ok, "{tag}: every (row, slot) names the entry of its pick, its row in the entry's mask")
+        let ran2 = mc |> cell_record(t, "{tag} down") $(enc : MetalComputeEncoder?) {
+            stamp_run(sd2, pd2) {
+                invoke(sd2.enc, enc, mc.buf[bks2], doff2, mc.buf[bks2], 0ul, mc.buf[bkq2], 0ul, mc.buf[bh_ref], mc.buf[bst_ref], 0ul, ka_d2, mc.buf[bsel],
+                    mc.buf[bkss], doffs, mc.buf[bkss], 0ul, mc.buf[bkqs], 0ul, mc.buf[bsh], mc.buf[blg], mc.buf[bsel], int64(dd), int64(nst))
+            }
+            stamp_run(sdv, pdv) {
+                invoke(sdv.enc, enc, mc.buf[bks2], doff2, mc.buf[bks2], 0ul, mc.buf[bkq2], 0ul, mc.buf[bh_ref], mc.buf[bpart], 0ul, ka_dn, mc.buf[bsel], mc.buf[bun],
+                    int64(dd), ue)
+            }
+            stamp_run(sdp, pdp) {
+                invoke(sdp.enc, enc, mc.buf[bks2], doff2, mc.buf[bks2], 0ul, mc.buf[bkq2], 0ul, mc.buf[bh_ref], mc.buf[bst], 0ul, ka_d2, mc.buf[bsel],
+                    mc.buf[bkss], doffs, mc.buf[bkss], 0ul, mc.buf[bkqs], 0ul, mc.buf[bsh], mc.buf[blg], mc.buf[bsel], mc.buf[bpart], int64(dd), int64(nst))
+            }
+        }
+        return if (!ran2)
+        check_buf_exact(t, "{tag} union down + shared down + combine stored", mc.buf[bst], mc |> plane_run(bst_ref))
+        t |> success(moved_off(mc |> plane_run(bst_ref), [for (_i in range(nst * dd)); -1000.0], 0, BAR_EXACT), "{tag}: the combine wrote its rows")
+    }
+}
+
+//! the Flash-Next routed pair: gate + up + act on the iq3s grid stacks (`MetalMoeGemvGuIq3sF4`) bit for bit the gathered iq3s_f4
+//! gate and up dispatches and the swiglu pass; the iq4nl32 down with the shared down - iq4nl32, or a q8 blob (`sh_q8`) - and the
+//! combine landed on the stream rows (`hc` 0) or scattered into `hc` streams: with the shared gate shut, the routed part bit for
+//! bit the gathered iq4nl32 down a slot and the plain combine; the whole within the double form's envelope - `net` experts, `k`
+//! picks a stream, `nst` streams, x `n` wide, the hidden `d` wide, the stream `dd` wide
+def private moe_fused_fn_gate(t : T?; var dev, queue; sh_q8 : bool; hc, n, d, dd, net, k, nst : int) {
+    let tag = "moe_fused_fn sh={sh_q8 ? "q8" : "iq4nl32"} hc={hc} n={n} d={d} dd={dd} net={net} k={k} nst={nst}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let sgu = stamp_of(@@enc_moe_gemv_gu_iq3s_f4_c)
+        let sm3 = stamp_of(@@enc_moe_gemv_iq3s_f4_c)
+        let sw = stamp_of(@@enc_swiglu)
+        let smd = stamp_of(@@enc_moe_gemv_iq4nl32_c)
+        let sc = stamp_of(@@enc_moe_combine)
+        let sd8 = stamp_of(@@enc_moe_down2_iq4nl32_shq8_c)
+        let sdn = stamp_of(@@enc_moe_down2_iq4nl32_c)
+        let sdh8 = stamp_of(@@enc_moe_down2_iq4nl32_shq8_hc_c)
+        let sdhn = stamp_of(@@enc_moe_down2_iq4nl32_hc_c)
+        var pgu = mc |> keep_stamp(sgu, err)
+        return if (!pso_ok(t, tag, pgu, err))
+        var pm3 = mc |> keep_stamp(sm3, err)
+        return if (!pso_ok(t, tag, pm3, err))
+        var pw = mc |> keep_stamp(sw, err)
+        return if (!pso_ok(t, tag, pw, err))
+        var pmd = mc |> keep_stamp(smd, err)
+        return if (!pso_ok(t, tag, pmd, err))
+        var pc = mc |> keep_stamp(sc, err)
+        return if (!pso_ok(t, tag, pc, err))
+        var pd = sh_q8 ? mc |> keep_stamp(sd8, err) : mc |> keep_stamp(sdn, err)
+        return if (!pso_ok(t, tag, pd, err))
+        var pdh = sh_q8 ? mc |> keep_stamp(sdh8, err) : mc |> keep_stamp(sdhn, err)
+        return if (!pso_ok(t, tag, pdh, err))
+        let nb = n / 256
+        let nbd = d / 32
+        let nsb_gu = net * d * nb
+        var inscope kq1, ks1, kq3, ks3, dq, ds, sq, ss, sblob : array<uint8>
+        var inscope dref, sref : array<float>
+        kq_fill_planes(33, nsb_gu, kq1, ks1)
+        kq_fill_planes(33, nsb_gu, kq3, ks3)
+        for (i in range(length(kq3))) {   //! the up stack's bytes off the gate stack's
+            kq3[i] = uint8(uint(kq3[i]) ^ 0xA5u)
+        }
+        iq4nl32_test_planes(net * dd, d, dq, ds, dref, iq4nl_lut())
+        let sqoff = uint64(length(dq))   //! the iq4nl32 shared plane sits behind the expert stack in the format's one plane pair, bound at an offset
+        let ssoff = uint64(length(ds))
+        if (sh_q8) {
+            q8_blob_fill(dd, nbd, sblob, sref)
+        } else {
+            iq4nl32_test_planes(dd, d, sq, ss, sref, iq4nl_lut())
+            dq |> push_from(sq)
+            ds |> push_from(ss)
+        }
+        var inscope sel : array<uint>
+        var inscope selw : array<float>
+        sel |> resize(nst * 2 * k)
+        selw |> resize(nst * k)
+        for (s in range(nst)) {
+            for (j in range(k)) {
+                sel[s * 2 * k + j] = uint((s + j * 3 + net - 1) % net)
+                let w = 0.15 + 0.1 * float((s * k + j) % 5)
+                selw[s * k + j] = w
+                sel[s * 2 * k + k + j] = unsafe(reinterpret<uint>(w))
+            }
+        }
+        let hcw = max(hc, 1)
+        var inscope xv, shv, lgv, lgs, resv, injv : array<float>
+        xv |> resize(nst * n)
+        for (i in range(nst * n)) {   //! x small enough that the down's sums stay under 1e6: the exact compare's poison is one unit
+            xv[i] = (0.07 * float(i % 37) - 1.2) * 3e-4
+        }
+        shv |> resize(nst * d)
+        for (i in range(nst * d)) {
+            shv[i] = (0.05 * float(i % 29) - 0.7) * 1e-2
+        }
+        lgv |> resize(nst * (net + 1))
+        lgs |> resize(nst * (net + 1))
+        for (i in range(nst * (net + 1))) {
+            lgv[i] = 0.3 * float(i % 7) - 0.9
+            lgs[i] = -1e9   //! the shared gate shut: the fused dispatch's sum is the routed part alone
+        }
+        resv |> resize(nst * hcw * dd)
+        for (i in range(nst * hcw * dd)) {
+            resv[i] = 0.2 * float(i % 11) - 1.0
+        }
+        injv |> resize(nst * hcw)
+        for (i in range(nst * hcw)) {
+            injv[i] = 0.4 * float(i % 5) - 0.7
+        }
+        let bks1 = mc |> in_plain(ks1)
+        let bkq1 = mc |> in_plain(kq1)
+        let bks3 = mc |> in_plain(ks3)
+        let bkq3 = mc |> in_plain(kq3)
+        let bdq = mc |> in_plain(dq)
+        let bds = mc |> in_plain(ds)
+        let bsq = mc |> in_plain(sh_q8 ? sblob : sq)
+        let bss = mc |> in_plain(sh_q8 ? sblob : ss)
+        let bsel = mc |> in_plain(sel)
+        let bx = mc |> in_(xv)
+        let bsh = mc |> in_(shv)
+        let blg = mc |> in_(lgv)
+        let blgs = mc |> in_(lgs)
+        let bres = mc |> io_(resv)
+        let binj = mc |> in_(injv)
+        let bhc = mc |> in_plain([uint(hcw)])
+        let bg_ref = mc |> out_words(nst * k * d, -1000.0)
+        let bu_ref = mc |> out_words(nst * k * d, -1000.0)
+        let bh_ref = mc |> out_words(nst * k * d, -1000.0)
+        let bdn_ref = mc |> out_words(nst * k * dd, -1000.0)
+        let bacc = mc |> out_words(nst * dd, -1000.0)
+        let bh = mc |> out_words(nst * k * d, -1000.0)
+        let bst = mc |> out_words(nst * dd, -1000.0)
+        let btot = mc |> in_plain([uint(nst * k * d)])
+        let doff1 = kq_split_doff(33, nsb_gu)
+        var ka_gu = MoeGemvArgs(ndim = uint(n), ddim = uint(d), eplane = uint(d * nb), xs = 0u, ss = uint(2 * k), bxs = uint(n), bys = uint(k * d), hasb = 0u)
+        var ka_dn = MoeGemvArgs(ndim = uint(d), ddim = uint(dd), eplane = uint(dd * nbd), xs = uint(d), ss = uint(2 * k), bxs = uint(k * d), bys = uint(k * dd), hasb = 0u)
+        var ka_d2 = ka_dn
+        ka_d2.bys = uint(dd)   //! the fused down's `bys` is the stream's row stride
+        ka_d2.nsh = uint(d)
+        ka_d2.gstr = uint(net + 1)
+        ka_d2.goff = uint(net)
+        ka_d2.yadd = 0u
+        var ka_d2a = ka_d2
+        ka_d2a.yadd = 1u
+        var ka_c = moe_comb_args(int64(dd), int64(k))
+        let ran = mc |> cell_record(t, "{tag} reference gate and up") $(enc : MetalComputeEncoder?) {
+            stamp_run(sm3, pm3) {
+                invoke(sm3.enc, enc, mc.buf[bks1], doff1, mc.buf[bks1], 0ul, mc.buf[bkq1], 0ul, mc.buf[bx], mc.buf[bg_ref], 0ul, ka_gu, mc.buf[bsel], int64(d), int64(k), int64(nst))
+                invoke(sm3.enc, enc, mc.buf[bks3], doff1, mc.buf[bks3], 0ul, mc.buf[bkq3], 0ul, mc.buf[bx], mc.buf[bu_ref], 0ul, ka_gu, mc.buf[bsel], int64(d), int64(k), int64(nst))
+            }
+        }
+        return if (!ran)
+        mc |> plane_upload(bh_ref, mc |> plane_run(bg_ref))
+        let ran2 = mc |> cell_record(t, "{tag} reference act, down and combine") $(enc : MetalComputeEncoder?) {
+            stamp_run(sw, pw) {
+                invoke(sw.enc, enc, mc.buf[bh_ref], 0ul, mc.buf[bu_ref], 0ul, mc.buf[btot], int64(nst * k * d))
+            }
+            stamp_run(smd, pmd) {
+                invoke(smd.enc, enc, mc.buf[bdq], 0ul, mc.buf[bds], 0ul, mc.buf[bh_ref], mc.buf[bdn_ref], 0ul, ka_dn, mc.buf[bsel], int64(dd), int64(k), int64(nst))
+            }
+            stamp_run(sc, pc) {
+                invoke(sc.enc, enc, mc.buf[bacc], mc.buf[bsel], mc.buf[bdn_ref], ka_c, int64(dd), int64(nst))
+            }
+        }
+        return if (!ran2)
+        let ran3 = mc |> cell_record(t, "{tag} fused") $(enc : MetalComputeEncoder?) {
+            stamp_run(sgu, pgu) {
+                invoke(sgu.enc, enc, mc.buf[bks1], doff1, mc.buf[bks1], 0ul, mc.buf[bkq1], 0ul, mc.buf[bx], mc.buf[bh], 0ul, ka_gu, mc.buf[bsel],
+                    mc.buf[bks3], doff1, mc.buf[bks3], 0ul, mc.buf[bkq3], 0ul, int64(d), int64(k), int64(nst))
+            }
+            //! the shut gate: the routed part alone, stored; then the whole landed on the rows, or scattered into the streams
+            if (sh_q8) {
+                stamp_run(sd8, pd) {
+                    invoke(sd8.enc, enc, mc.buf[bdq], 0ul, mc.buf[bds], 0ul, mc.buf[bh_ref], mc.buf[bst], 0ul, ka_d2, mc.buf[bsel],
+                        mc.buf[bsq], 0ul, mc.buf[bsq], mc.buf[bsh], mc.buf[blgs], mc.buf[bsel], int64(dd), int64(nst))
+                    if (hc == 0) {
+                        invoke(sd8.enc, enc, mc.buf[bdq], 0ul, mc.buf[bds], 0ul, mc.buf[bh_ref], mc.buf[bres], 0ul, ka_d2a, mc.buf[bsel],
+                            mc.buf[bsq], 0ul, mc.buf[bsq], mc.buf[bsh], mc.buf[blg], mc.buf[bsel], int64(dd), int64(nst))
+                    }
+                }
+                if (hc > 0) {
+                    stamp_run(sdh8, pdh) {
+                        invoke(sdh8.enc, enc, mc.buf[bdq], 0ul, mc.buf[bds], 0ul, mc.buf[bh_ref], mc.buf[bres], 0ul, ka_d2a, mc.buf[bsel],
+                            mc.buf[bsq], 0ul, mc.buf[bsq], mc.buf[bsh], mc.buf[blg], mc.buf[bsel], mc.buf[binj], mc.buf[bhc], int64(dd), int64(nst), int64(hc))
+                    }
+                }
+            } else {
+                stamp_run(sdn, pd) {
+                    invoke(sdn.enc, enc, mc.buf[bdq], 0ul, mc.buf[bds], 0ul, mc.buf[bh_ref], mc.buf[bst], 0ul, ka_d2, mc.buf[bsel],
+                        mc.buf[bdq], sqoff, mc.buf[bds], ssoff, mc.buf[bsh], mc.buf[blgs], mc.buf[bsel], int64(dd), int64(nst))
+                    if (hc == 0) {
+                        invoke(sdn.enc, enc, mc.buf[bdq], 0ul, mc.buf[bds], 0ul, mc.buf[bh_ref], mc.buf[bres], 0ul, ka_d2a, mc.buf[bsel],
+                            mc.buf[bdq], sqoff, mc.buf[bds], ssoff, mc.buf[bsh], mc.buf[blg], mc.buf[bsel], int64(dd), int64(nst))
+                    }
+                }
+                if (hc > 0) {
+                    stamp_run(sdhn, pdh) {
+                        invoke(sdhn.enc, enc, mc.buf[bdq], 0ul, mc.buf[bds], 0ul, mc.buf[bh_ref], mc.buf[bres], 0ul, ka_d2a, mc.buf[bsel],
+                            mc.buf[bdq], sqoff, mc.buf[bds], ssoff, mc.buf[bsh], mc.buf[blg], mc.buf[bsel], mc.buf[binj], mc.buf[bhc], int64(dd), int64(nst), int64(hc))
+                    }
+                }
+            }
+        }
+        return if (!ran3)
+        check_buf_exact(t, "{tag} gate + up + act", mc.buf[bh], mc |> plane_run(bh_ref))
+        check_buf_exact(t, "{tag} routed down stored, the shared gate shut", mc.buf[bst], mc |> plane_run(bacc))
+        var inscope hv <- mc |> plane_run(bh_ref)
+        var inscope want, env : array<float>
+        want |> resize(nst * hcw * dd)
+        env |> resize(nst * hcw * dd)
+        for (s in range(nst)) {
+            let g = 1.0lf / (1.0lf + exp(-double(lgv[s * (net + 1) + net])))
+            for (row in range(dd)) {
+                var acc = 0.0lf
+                var ae = 0.0lf
+                for (j in range(k)) {
+                    let e = int(sel[s * 2 * k + j])
+                    var dsum = 0.0lf
+                    var dabs = 0.0lf
+                    for (i in range(d)) {
+                        let p = double(dref[(e * dd + row) * d + i]) * double(hv[(s * k + j) * d + i])
+                        dsum += p
+                        dabs += abs(p)
+                    }
+                    acc += double(selw[s * k + j]) * dsum
+                    ae += abs(double(selw[s * k + j])) * dabs
+                }
+                var ssum = 0.0lf
+                var sabs = 0.0lf
+                for (i in range(d)) {
+                    let p = double(sref[row * d + i]) * double(shv[s * d + i])
+                    ssum += p
+                    sabs += abs(p)
+                }
+                let tot = acc + g * ssum
+                let te = ae + g * sabs
+                if (hc > 0) {
+                    for (c in range(hc)) {
+                        let w = 2.0lf / (1.0lf + exp(-double(injv[s * hc + c]) / double(hc)))
+                        let yi = (s * hc + c) * dd + row
+                        want[yi] = float(double(resv[yi]) + tot * w)
+                        env[yi] = float(te * w)
+                    }
+                } else {
+                    want[s * dd + row] = float(double(resv[s * dd + row]) + tot)
+                    env[s * dd + row] = float(te)
+                }
+            }
+        }
+        check_buf(t, "{tag} down + shared down + combine landed", mc.buf[bres], want, env_bar(2e-4, env), Shape(row_width = dd), env)
+        t |> success(moved_off(want, resv, 0, BAR_EXACT), "{tag}: the stream moved off its input")
+    }
+}
+
+//! the routed pair's per-32 stamps for an affine member: gate + up + act, the wide gathered GEMV, the down with its shared
+//! down, and the down's scatter twin
+def private aff_gu_stamp(f) => f == KqFmt.mlx4b ? stamp_of(@@enc_moe_gu_mlx4b_c) : stamp_of(@@enc_moe_gu_mlx8b_c)
+def private aff_gemv_stamp(f) => f == KqFmt.mlx4b ? stamp_of(@@enc_moe_gemv_mlx4b_w_c) : stamp_of(@@enc_moe_gemv_mlx8b_w_c)
+def private aff_down_stamp(f) => f == KqFmt.mlx4b ? stamp_of(@@enc_moe_down2_mlx4b_c) : stamp_of(@@enc_moe_down2_mlx8b_c)
+def private aff_down_hc_stamp(f) => f == KqFmt.mlx4b ? stamp_of(@@enc_moe_down2_mlx4b_hc_c) : stamp_of(@@enc_moe_down2_mlx8b_hc_c)
+
+//! the routed pair over an affine member's stacks (the Flash-Next pack's mlx4b experts and shared expert, the draft head's
+//! mlx8b): gate + up + act (`MetalB32GuT`) bit for bit the wide gathered GEMV twice and the swiglu pass; the down with its
+//! shared down in the same member and the combine, stored with the shared gate shut, bit for bit the wide gathered down a slot and
+//! the plain combine; the whole landed (or scattered into `hc` streams) within the double form's envelope
+def private moe_fused_aff_gate(t : T?; var dev, queue; fmt : KqFmt; hc, n, d, dd, net, k, nst : int) {
+    let tag = "moe_fused {fmt} hc={hc} n={n} d={d} dd={dd} net={net} k={k} nst={nst}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let sgu = aff_gu_stamp(fmt)
+        let smg = aff_gemv_stamp(fmt)
+        let sw = stamp_of(@@enc_swiglu)
+        let sc = stamp_of(@@enc_moe_combine)
+        let sdn = aff_down_stamp(fmt)
+        let sdh = aff_down_hc_stamp(fmt)
+        var pgu = mc |> keep_stamp(sgu, err)
+        var pmg = mc |> keep_stamp(smg, err)
+        var pw = mc |> keep_stamp(sw, err)
+        var pc = mc |> keep_stamp(sc, err)
+        var pd = mc |> keep_stamp(sdn, err)
+        var pdh = mc |> keep_stamp(sdh, err)
+        return if (!pso_ok(t, tag, pgu, err) || !pso_ok(t, tag, pmg, err) || !pso_ok(t, tag, pw, err) || !pso_ok(t, tag, pc, err)
+            || !pso_ok(t, tag, pd, err) || !pso_ok(t, tag, pdh, err))
+        var inscope gq, gs, uq, us, dq, ds, sq, ss : array<uint8>
+        var inscope gref, uref, dref, sref : array<float>
+        mlx_test_planes(fmt, net * d, n, gq, gs, gref)
+        mlx_test_planes(fmt, net * d, n, uq, us, uref)
+        for (i in range(length(uq))) {   //! the up stack's codes off the gate stack's
+            uq[i] = uint8(uint(uq[i]) ^ 0xA5u)
+        }
+        mlx_test_planes(fmt, net * dd, d, dq, ds, dref)
+        mlx_test_planes(fmt, dd, d, sq, ss, sref)
+        let sqoff = uint64(length(dq))   //! the shared plane behind the expert stack in the member's one plane pair, bound at an offset
+        let ssoff = uint64(length(ds))
+        dq |> push_from(sq)
+        ds |> push_from(ss)
+        var inscope sel : array<uint>
+        var inscope selw : array<float>
+        sel |> resize(nst * 2 * k)
+        selw |> resize(nst * k)
+        for (s in range(nst)) {
+            for (j in range(k)) {
+                sel[s * 2 * k + j] = uint((s + j * 3 + net - 1) % net)
+                let w = 0.15 + 0.1 * float((s * k + j) % 5)
+                selw[s * k + j] = w
+                sel[s * 2 * k + k + j] = unsafe(reinterpret<uint>(w))
+            }
+        }
+        let hcw = max(hc, 1)
+        var inscope xv, shv, lgv, lgs, resv, injv : array<float>
+        xv |> resize(nst * n)
+        for (i in range(nst * n)) {
+            xv[i] = (0.07 * float(i % 37) - 1.2) * 3e-4
+        }
+        shv |> resize(nst * d)
+        for (i in range(nst * d)) {
+            shv[i] = (0.05 * float(i % 29) - 0.7) * 1e-2
+        }
+        lgv |> resize(nst * (net + 1))
+        lgs |> resize(nst * (net + 1))
+        for (i in range(nst * (net + 1))) {
+            lgv[i] = 0.3 * float(i % 7) - 0.9
+            lgs[i] = -1e9
+        }
+        resv |> resize(nst * hcw * dd)
+        for (i in range(nst * hcw * dd)) {
+            resv[i] = 0.2 * float(i % 11) - 1.0
+        }
+        injv |> resize(nst * hcw)
+        for (i in range(nst * hcw)) {
+            injv[i] = 0.4 * float(i % 5) - 0.7
+        }
+        let bgq = mc |> in_plain(gq)
+        let bgs = mc |> in_plain(gs)
+        let buq = mc |> in_plain(uq)
+        let bus = mc |> in_plain(us)
+        let bdq = mc |> in_plain(dq)
+        let bds = mc |> in_plain(ds)
+        let bsel = mc |> in_plain(sel)
+        let bx = mc |> in_(xv)
+        let bsh = mc |> in_(shv)
+        let blg = mc |> in_(lgv)
+        let blgs = mc |> in_(lgs)
+        let bres = mc |> io_(resv)
+        let binj = mc |> in_(injv)
+        let bhc = mc |> in_plain([uint(hcw)])
+        let bg_ref = mc |> out_words(nst * k * d, -1000.0)
+        let bu_ref = mc |> out_words(nst * k * d, -1000.0)
+        let bh_ref = mc |> out_words(nst * k * d, -1000.0)
+        let bdn_ref = mc |> out_words(nst * k * dd, -1000.0)
+        let bacc = mc |> out_words(nst * dd, -1000.0)
+        let bh = mc |> out_words(nst * k * d, -1000.0)
+        let bst = mc |> out_words(nst * dd, -1000.0)
+        let btot = mc |> in_plain([uint(nst * k * d)])
+        var ka_gu = MoeGemvArgs(ndim = uint(n), ddim = uint(d), eplane = uint(d * n / 32), xs = 0u, ss = uint(2 * k), bxs = uint(n), bys = uint(k * d), hasb = 0u)
+        var ka_dn = MoeGemvArgs(ndim = uint(d), ddim = uint(dd), eplane = uint(dd * d / 32), xs = uint(d), ss = uint(2 * k), bxs = uint(k * d), bys = uint(k * dd), hasb = 0u)
+        var ka_d2 = ka_dn
+        ka_d2.bys = uint(dd)
+        ka_d2.nsh = uint(d)
+        ka_d2.gstr = uint(net + 1)
+        ka_d2.goff = uint(net)
+        ka_d2.yadd = 0u
+        var ka_d2a = ka_d2
+        ka_d2a.yadd = 1u
+        var ka_c = moe_comb_args(int64(dd), int64(k))
+        let ran = mc |> cell_record(t, "{tag} reference gate and up") $(enc : MetalComputeEncoder?) {
+            stamp_run(smg, pmg) {
+                invoke(smg.enc, enc, mc.buf[bgq], 0ul, mc.buf[bgs], 0ul, mc.buf[bx], mc.buf[bg_ref], 0ul, ka_gu, mc.buf[bsel], int64(d), int64(k), int64(nst))
+                invoke(smg.enc, enc, mc.buf[buq], 0ul, mc.buf[bus], 0ul, mc.buf[bx], mc.buf[bu_ref], 0ul, ka_gu, mc.buf[bsel], int64(d), int64(k), int64(nst))
+            }
+        }
+        return if (!ran)
+        mc |> plane_upload(bh_ref, mc |> plane_run(bg_ref))
+        let ran2 = mc |> cell_record(t, "{tag} reference act, down and combine") $(enc : MetalComputeEncoder?) {
+            stamp_run(sw, pw) {
+                invoke(sw.enc, enc, mc.buf[bh_ref], 0ul, mc.buf[bu_ref], 0ul, mc.buf[btot], int64(nst * k * d))
+            }
+            stamp_run(smg, pmg) {
+                invoke(smg.enc, enc, mc.buf[bdq], 0ul, mc.buf[bds], 0ul, mc.buf[bh_ref], mc.buf[bdn_ref], 0ul, ka_dn, mc.buf[bsel], int64(dd), int64(k), int64(nst))
+            }
+            stamp_run(sc, pc) {
+                invoke(sc.enc, enc, mc.buf[bacc], mc.buf[bsel], mc.buf[bdn_ref], ka_c, int64(dd), int64(nst))
+            }
+        }
+        return if (!ran2)
+        let ran3 = mc |> cell_record(t, "{tag} fused") $(enc : MetalComputeEncoder?) {
+            stamp_run(sgu, pgu) {
+                invoke(sgu.enc, enc, mc.buf[bgq], 0ul, mc.buf[bgs], 0ul, mc.buf[bx], mc.buf[bh], 0ul, ka_gu, mc.buf[bsel],
+                    mc.buf[buq], 0ul, mc.buf[bus], 0ul, int64(d), int64(k), int64(nst))
+            }
+            stamp_run(sdn, pd) {
+                invoke(sdn.enc, enc, mc.buf[bdq], 0ul, mc.buf[bds], 0ul, mc.buf[bh_ref], mc.buf[bst], 0ul, ka_d2, mc.buf[bsel],
+                    mc.buf[bdq], sqoff, mc.buf[bds], ssoff, mc.buf[bsh], mc.buf[blgs], mc.buf[bsel], int64(dd), int64(nst))
+                if (hc == 0) {
+                    invoke(sdn.enc, enc, mc.buf[bdq], 0ul, mc.buf[bds], 0ul, mc.buf[bh_ref], mc.buf[bres], 0ul, ka_d2a, mc.buf[bsel],
+                        mc.buf[bdq], sqoff, mc.buf[bds], ssoff, mc.buf[bsh], mc.buf[blg], mc.buf[bsel], int64(dd), int64(nst))
+                }
+            }
+            if (hc > 0) {
+                stamp_run(sdh, pdh) {
+                    invoke(sdh.enc, enc, mc.buf[bdq], 0ul, mc.buf[bds], 0ul, mc.buf[bh_ref], mc.buf[bres], 0ul, ka_d2a, mc.buf[bsel],
+                        mc.buf[bdq], sqoff, mc.buf[bds], ssoff, mc.buf[bsh], mc.buf[blg], mc.buf[bsel], mc.buf[binj], mc.buf[bhc], int64(dd), int64(nst), int64(hc))
+                }
+            }
+        }
+        return if (!ran3)
+        check_buf_exact(t, "{tag} gate + up + act", mc.buf[bh], mc |> plane_run(bh_ref))
+        check_buf_exact(t, "{tag} routed down stored, the shared gate shut", mc.buf[bst], mc |> plane_run(bacc))
+        var inscope hv <- mc |> plane_run(bh_ref)
+        var inscope want, env : array<float>
+        want |> resize(nst * hcw * dd)
+        env |> resize(nst * hcw * dd)
+        for (s in range(nst)) {
+            let g = 1.0lf / (1.0lf + exp(-double(lgv[s * (net + 1) + net])))
+            for (row in range(dd)) {
+                var acc = 0.0lf
+                var ae = 0.0lf
+                for (j in range(k)) {
+                    let e = int(sel[s * 2 * k + j])
+                    var dsum = 0.0lf
+                    var dabs = 0.0lf
+                    for (i in range(d)) {
+                        let p = double(dref[(e * dd + row) * d + i]) * double(hv[(s * k + j) * d + i])
+                        dsum += p
+                        dabs += abs(p)
+                    }
+                    acc += double(selw[s * k + j]) * dsum
+                    ae += abs(double(selw[s * k + j])) * dabs
+                }
+                var ssum = 0.0lf
+                var sabs = 0.0lf
+                for (i in range(d)) {
+                    let p = double(sref[row * d + i]) * double(shv[s * d + i])
+                    ssum += p
+                    sabs += abs(p)
+                }
+                let tot = acc + g * ssum
+                let te = ae + g * sabs
+                if (hc > 0) {
+                    for (c in range(hc)) {
+                        let w = 2.0lf / (1.0lf + exp(-double(injv[s * hc + c]) / double(hc)))
+                        let yi = (s * hc + c) * dd + row
+                        want[yi] = float(double(resv[yi]) + tot * w)
+                        env[yi] = float(te * w)
+                    }
+                } else {
+                    want[s * dd + row] = float(double(resv[s * dd + row]) + tot)
+                    env[s * dd + row] = float(te)
+                }
+            }
+        }
+        check_buf(t, "{tag} down + shared down + combine landed", mc.buf[bres], want, env_bar(2e-4, env), Shape(row_width = dd), env)
+        t |> success(moved_off(want, resv, 0, BAR_EXACT), "{tag}: the stream moved off its input")
+    }
+}
+
 // ===== the fused QKV rope-store pair (MetalQ8GemvQkvRsF16/F32) =====
 
 // One dispatch = q8 GEMV over all three QKV segments + rope + segment stores: q rows to qo
@@ -696,6 +1434,173 @@ def private q8_mv_b_gate(t : T?; var dev, queue; bwidth, ndim, ddim, nrows, xs4,
     }
 }
 
+//! a fat slot over the cell's planes `ks` / `kq` (bound at 0, the d tail `doff` bytes in), `rows` rows into `by` at column `ycol`
+let private FAT_EPS = 1e-5   //! the fat cell's norm epsilon
+//! the fat prologue's normed row against the seam kernel's: the same column order and spelling, but two kernel bodies round
+//! `w * (x * inv)` apart under the compiler's math mode by one ulp on a third of the columns - a few ulps, a 1e-3 poison the control
+let private BAR_FAT_NORM = Bar(rel = 5e-7, abs_floor = 1e-7, poison = 1e-3, poison_at = 0)
+let private FAT_NORM_ENV_REL = 1e-6   //! ... and a dot over that row: those ulps times the row's envelope (the truth bar is 2e-4 of it)
+
+//! `mc` untyped: the cell and the segment record sit behind the optional das_metal require
+def private fat_seg(var mc; ks, kq : int; doff : uint64; rows, ycol : int)
+    => KqFatSeg(bq = mc.buf[kq], qoff = 0ul, bs = mc.buf[ks], soff = 0ul, doff = doff, yoff = uint64(ycol * 4), rows = int64(rows))
+
+//! the fat-threadgroup iq4xs family against the plain stamp and the seam kernels it fuses: three planes in one plain dispatch
+//! bit for bit the plain GEMV's rows (plane 0 within the double dot's envelope too), the normed-prologue dispatch within ulps of
+//! the residual seam's norm followed by the plain GEMV, the add epilogue bit for bit resid + the plain row - a separate y and in
+//! place - and the gate/up act dispatch within ulps of the seam's norm, two plain GEMVs and the swiglu pass, its stored x the seam's norm
+def private kq_fat_gate(t : T?; var dev, queue; n, d0, d1, d2 : int) {
+    let tag = "kq_fat_iq4xs n={n} d={d0},{d1},{d2}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let sf = stamp_of(@@enc_kq_fat_iq4xs_c)
+        let sn = stamp_of(@@enc_kq_fat_iq4xs_n_c)
+        let sa = stamp_of(@@enc_kq_fat_iq4xs_a_c)
+        let sx = stamp_of(@@enc_kq_fat_iq4xs_nx_c)
+        let sg = stamp_of(@@enc_kq_iq4xs_c)
+        let sr = stamp_of(@@enc_addrms_c)
+        let sw = stamp_of(@@enc_swiglu)
+        var pf = mc |> keep_stamp(sf, err)
+        return if (!pso_ok(t, tag, pf, err))
+        var pn = mc |> keep_stamp(sn, err)
+        return if (!pso_ok(t, tag, pn, err))
+        var pa_ = mc |> keep_stamp(sa, err)
+        return if (!pso_ok(t, tag, pa_, err))
+        var px = mc |> keep_stamp(sx, err)
+        return if (!pso_ok(t, tag, px, err))
+        var pg = mc |> keep_stamp(sg, err)
+        return if (!pso_ok(t, tag, pg, err))
+        var pr = mc |> keep_stamp(sr, err)
+        return if (!pso_ok(t, tag, pr, err))
+        var pw = mc |> keep_stamp(sw, err)
+        return if (!pso_ok(t, tag, pw, err))
+        let nb = n / 256
+        let ds = fixed_array(d0, d1, d2, d0)   //! the fourth plane: the act dispatch's up rows, as many as plane 0's
+        var ks, kq : array<int>
+        var doffs : array<uint64>
+        var inscope pqs, pss : array<array<uint8>>
+        var inscope xv, nw, rv, zero : array<float>
+        xv |> resize(n)
+        nw |> resize(n)
+        zero |> resize(n)
+        rv |> resize(d0)
+        for (i in range(n)) {
+            xv[i] = 0.11 * float(i % 41) - 2.2
+            nw[i] = 0.4 + 0.05 * float(i % 11)
+        }
+        for (i in range(d0)) {
+            rv[i] = 0.3 * float(i % 7) - 1.0
+        }
+        var inscope ref <- dense_ref_env(1, n, d0, xv) $(r; var wrow) {
+            var inscope pq, ps : array<uint8>
+            kq_fill_planes(44, d0 * nb, pq, ps)
+            kq_row_ref(44, r * nb, nb, d0 * nb, pq, ps, wrow)
+        }
+        for (p in range(4)) {
+            var inscope pq, ps : array<uint8>
+            kq_fill_planes(44, ds[p] * nb, pq, ps)
+            if (p == 3) {   //! the up plane: the gate plane's bytes with every quant byte flipped, so the act's two inputs differ
+                for (i in range(length(pq))) {
+                    pq[i] = uint8(uint(pq[i]) ^ 0x5Au)
+                }
+            }
+            doffs |> push(kq_split_doff(44, ds[p] * nb))
+            ks |> push(mc |> in_plain(ps))
+            kq |> push(mc |> in_plain(pq))
+            pqs |> emplace(pq)
+            pss |> emplace(ps)
+        }
+        let bx = mc |> in_(xv)
+        let bxs = mc |> io_(xv)   //! the seam's own row: x + 0 written back as x
+        let bzero = mc |> in_(zero)
+        let bnw = mc |> in_(nw)
+        let bres = mc |> in_(rv)
+        let bres2 = mc |> io_(rv)
+        let bn = mc |> in_plain([uint(n)])
+        let bxn_ref = mc |> out_words(n, -1000.0)
+        let bxn = mc |> out_words(n, -1000.0)
+        let btot = mc |> in_plain([uint(d0)])
+        var yp, yn, yf, yfn, bd : array<int>
+        for (p in range(4)) {
+            yp |> push(mc |> out_words(ds[p], -1000.0))
+            yn |> push(mc |> out_words(ds[p], -1000.0))
+            yf |> push(mc |> out_words(ds[p], -1000.0))
+            yfn |> push(mc |> out_words(ds[p], -1000.0))
+            bd |> push(mc |> in_plain([uint(ds[p])]))
+        }
+        let bya = mc |> out_words(d0, -1000.0)
+        let bh = mc |> out_words(d0, -1000.0)
+        let bg = mc |> out_words(d0, -1000.0)
+        var ka = GkAddRmsArgs(dim = uint(n), add_on = 1u, eps = FAT_EPS, ascale = 1.0)
+        let ran = mc |> cell_record(t, "{tag} reference") $(enc : MetalComputeEncoder?) {
+            stamp_run(sr, pr) {
+                invoke(sr.enc, enc, mc.buf[bxs], mc.buf[bzero], mc.buf[bnw], mc.buf[bxn_ref], ka)
+            }
+            stamp_run(sg, pg) {
+                for (p in range(4)) {
+                    invoke(sg.enc, enc, mc.buf[ks[p]], doffs[p], mc.buf[ks[p]], 0ul, mc.buf[kq[p]], 0ul, mc.buf[bx], 0ul, mc.buf[yp[p]], 0ul, mc.buf[bn], mc.buf[bd[p]], int64(ds[p]), int64(n))
+                    invoke(sg.enc, enc, mc.buf[ks[p]], doffs[p], mc.buf[ks[p]], 0ul, mc.buf[kq[p]], 0ul, mc.buf[bxn_ref], 0ul, mc.buf[yn[p]], 0ul, mc.buf[bn], mc.buf[bd[p]], int64(ds[p]), int64(n))
+                }
+            }
+        }
+        return if (!ran)
+        check_buf(t, "{tag} plain plane 0 vs cpu", mc.buf[yp[0]], ref.want, env_bar(2e-4, ref.env), FLAT_SHAPE, ref.env)
+        //! the normed rows' envelopes: a dot over the seam's normed x amplifies its ulps by the row's sum of |w x|
+        var inscope xn_cpu <- mc |> plane_run(bxn_ref)
+        var inscope envs : array<array<float>>
+        for (p in range(4)) {
+            var inscope rp <- dense_ref_env(1, n, ds[p], xn_cpu) $(r; var wrow) {
+                kq_row_ref(44, r * nb, nb, ds[p] * nb, pqs[p], pss[p], wrow)
+            }
+            envs |> emplace(rp.env)
+        }
+        var inscope gref <- mc |> plane_run(yn[0])
+        mc |> plane_upload(bg, gref)
+        let ran2 = mc |> cell_record(t, "{tag} act reference") $(enc : MetalComputeEncoder?) {
+            stamp_run(sw, pw) {
+                invoke(sw.enc, enc, mc.buf[bg], 0ul, mc.buf[yn[3]], 0ul, mc.buf[btot], int64(d0))
+            }
+        }
+        return if (!ran2)
+        var segs : KqFatSeg[3]
+        for (p in range(3)) {
+            segs[p] = fat_seg(mc, ks[p], kq[p], doffs[p], ds[p], 0)
+        }
+        var sega = fat_seg(mc, ks[0], kq[0], doffs[0], d0, 0)
+        var segu = fat_seg(mc, ks[3], kq[3], doffs[3], d0, 0)
+        let ran3 = mc |> cell_record(t, "{tag} fat") $(enc : MetalComputeEncoder?) {
+            stamp_run(sf, pf) {
+                enc_kq_fat(enc, segs, 3, mc.buf[bx], int64(n), mc.buf[yf[0]], mc.buf[yf[1]], mc.buf[yf[2]])
+            }
+            stamp_run(sn, pn) {
+                enc_kq_fat_norm(enc, segs, 3, mc.buf[bx], int64(n), mc.buf[bnw], FAT_EPS, mc.buf[yfn[0]], mc.buf[yfn[1]], mc.buf[yfn[2]])
+            }
+            stamp_run(sa, pa_) {
+                enc_kq_fat_add(enc, sega, mc.buf[bx], int64(n), mc.buf[bres], mc.buf[bya])
+                enc_kq_fat_add(enc, sega, mc.buf[bx], int64(n), mc.buf[bres2], mc.buf[bres2])
+            }
+            stamp_run(sx, px) {
+                enc_kq_fat_act(enc, sega, segu, mc.buf[bx], int64(n), mc.buf[bnw], FAT_EPS, mc.buf[bxn], mc.buf[bh])
+            }
+        }
+        return if (!ran3)
+        for (p in range(3)) {
+            check_buf_exact(t, "{tag} plain slot {p}", mc.buf[yf[p]], mc |> plane_run(yp[p]))
+            check_buf(t, "{tag} normed slot {p}", mc.buf[yfn[p]], mc |> plane_run(yn[p]), env_bar(FAT_NORM_ENV_REL, envs[p]), FLAT_SHAPE, envs[p])
+        }
+        var inscope yp0 <- mc |> plane_run(yp[0])
+        var inscope want_add <- [for (i in range(d0)); rv[i] + yp0[i]]
+        check_buf_exact(t, "{tag} add epilogue", mc.buf[bya], want_add)
+        check_buf_exact(t, "{tag} add epilogue in place", mc.buf[bres2], want_add)
+        //! the act's envelope: the gate row's ulps under |up| and the up row's under |silu(gate)|
+        var inscope uref <- mc |> plane_run(yn[3])
+        var inscope env_h <- [for (i in range(d0)); envs[0][i] * abs(uref[i]) + envs[3][i] * abs(float(silu_d(double(gref[i]))))]
+        check_buf(t, "{tag} act epilogue", mc.buf[bh], mc |> plane_run(bg), env_bar(FAT_NORM_ENV_REL, env_h), FLAT_SHAPE, env_h)
+        check_buf(t, "{tag} stored normed x", mc.buf[bxn], xn_cpu, BAR_FAT_NORM, FLAT_SHAPE)
+        t |> success(length(xn_cpu) == n, "{tag}: the normed row read back whole")
+    }
+}
+
 [test]
 def test_metal_kq_gemv_kernels(t : T?) {
     t |> run("kq GEMV / KqMv / MoeGemv-kq kernels == the plane-dequant CPU reference") <| @(t : T?) {
@@ -738,6 +1643,27 @@ def test_metal_kq_gemv_kernels(t : T?) {
                 kq_gemv_gate(t, dev, queue, "iq2xxs", 512, 30)
                 kq_gemv_gate(t, dev, queue, "iq2xxsf4", 1280, 11)
                 kq_gemv_gate(t, dev, queue, "iq2xxsf4", 512, 30)
+                // the fat-threadgroup family: row tails past the 16-row threadgroup, a one-row slot, K 2048, 512 and the stash's widest 6144
+                kq_fat_gate(t, dev, queue, 2048, 40, 16, 5)
+                kq_fat_gate(t, dev, queue, 512, 17, 32, 1)
+                kq_fat_gate(t, dev, queue, 6144, 33, 16, 2)
+                // the fat chain's routed pair: a stream tail past the row pair (dd = 500), then the 35B's widths at eight picks
+                moe_fused_gate(t, dev, queue, 512, 512, 500, 5, 3, 2)
+                moe_fused_gate(t, dev, queue, 2048, 512, 2048, 6, 8, 1)
+                moe_fused_gate(t, dev, queue, 2048, 512, 2048, 16, 8, 8)   //! the verify's eight rows, picks shared across rows
+                moe_union_gate(t, dev, queue, 512, 512, 512, 12, 4, 8)   //! eight rows, 32 picks over 12 experts
+                moe_union_gate(t, dev, queue, 2048, 512, 2048, 40, 8, 5)
+                // the Flash-Next pair: iq3s grid gate/up, iq4nl32 down, a q8 or iq4nl32 shared down; landed on the rows or into four streams
+                moe_fused_fn_gate(t, dev, queue, true, 4, 512, 640, 96, 5, 3, 2)
+                moe_fused_fn_gate(t, dev, queue, false, 4, 512, 640, 96, 5, 3, 2)
+                moe_fused_fn_gate(t, dev, queue, true, 0, 512, 640, 100, 5, 3, 2)
+                moe_fused_fn_gate(t, dev, queue, false, 0, 2560, 640, 2560, 6, 10, 1)
+                for (fa in [KqFmt.mlx4b, KqFmt.mlx8b]) {   //! the affine arms: the pack's 4-bit routed stacks, the draft head's 8-bit
+                    moe_fused_aff_gate(t, dev, queue, fa, 4, 512, 640, 128, 5, 3, 2)
+                    moe_fused_aff_gate(t, dev, queue, fa, 0, 512, 640, 128, 5, 3, 2)
+                    moe_fused_aff_gate(t, dev, queue, fa, 0, 2560, 640, 256, 6, 10, 1)
+                    moe_fused_aff_gate(t, dev, queue, fa, 4, 512, 1088, 98, 5, 3, 2)   //! a 34-block down: a lane's second block
+                }
                 // the small-batch twins: nr = 2 / 3 (b4 col guard) / 6 (b8 pad), ys > d
                 for (fmt in [4, 5, 6, 44, 35, 3, 33, 34, 45, 40, 49, 2, 23, 24, 25]) {
                     kq_mvb_gate(t, dev, queue, fmt, 2, 768, 17, 2, 22)

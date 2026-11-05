@@ -27,7 +27,8 @@ require _resident_feed   // batched_logits_rows: the batched gather cell's sessi
 // dispatch - the llama carrier, the E-series (PLE rows form), the shared-expert MoE (rows site),
 // the deltanet hybrid (recurrent rows against per-session mirrors) and the NextN carrier (GPU
 // logits, the carry landed per row) each serve at a rate; the self-speculative streams tick through
-// their own rounds, token-exact against each stream alone. Skips off the JIT, without dasMetal,
+// their own rounds, token-exact against each stream alone; a two-row sampled tick the driver declines steps its rows one at a
+// time, each stream token-exact against sampling right after its own forward. Skips off the JIT, without dasMetal,
 // without the carrier under models_dir(), and on the large-tier shexp carrier unless
 // DASLLAMA_PARITY_FULL=1; the refusal contract lives in test_batch_decode.das.
 
@@ -577,14 +578,9 @@ def test_metal_batched_row_mtp_joint_staggered(t : T?) {
 }
 
 //! the recurrent scan's dispatches on both stamps since the census reset; 0 before the drivers compiled them
-def private dn_scan_dispatches() : int64 {   // nolint:LINT012,LINT019 — the body is the das_metal half
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        var inscope cov <- metal_kernel_coverage()
-        return (cov?["MetalDnScan_metal_dn_scan"] ?? 0l) + (cov?["MetalDnScanH_metal_dn_scan"] ?? 0l)
-    } else {
-        return 0l
-    }
-}
+//! the recurrent stage's dispatches: every stamp of the scan template (`MetalDnScanT`, the f32 and half forms) and the fat
+//! chain's fused step (`MetalDnStepFused`: conv, scan and gate as one dispatch over the step's groups)
+def private dn_scan_dispatches() : int64 => metal_kernel_count_prefix("MetalDnScan") + metal_kernel_count_prefix("MetalDnStepFused")
 
 [test]
 def test_metal_batched_row_deltanet(t : T?) {
@@ -1474,5 +1470,127 @@ def test_metal_batched_row_pre_encode_deltanet(t : T?) {
     t |> run("four greedy streams on a deltanet hybrid emit the same tokens with the batched step pre-encoded under the one before (Qwen3.5-0.8B Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
         pre_encode_cell(t, "Qwen3.5-0.8B-Q8_0.gguf")
+    }
+}
+
+let private PAIR_STEPS = 12l
+
+//! one f16 session's K/V mirror on `tr`: both planes of every layer that keeps rows of its own, a row each of its context
+def private session_mirror_bytes(tr : Model) : int64 {
+    var row_bytes = 0l
+    for (l in range64(tr.config.n_layers)) {
+        if (layer_kv_source(tr.config, l) == l) {
+            row_bytes += 2l * kv_row_bytes(KVDtype.f16, layer_kv_dim(tr.config, l))
+        }
+    }
+    return row_bytes * tr.config.seq_len
+}
+
+//! two sampled f16 streams over `prompts`, `PAIR_STEPS` steps each on the Metal decode override: each row samples right after
+//! its own forward, or - `batched` - both rows step through one `eval_batch_` call and sample after it, the device's largest
+//! buffer stood in for by `device_max` around the tick (0 = the device's own)
+def private sampled_pair(tr : Model; prompts : array<array<int64>>; var sp : SamplingParams; batched : bool; device_max : uint64) : array<array<int64>> {   // nolint:LINT012,LINT019 — the body is the das_metal half
+    var got : array<array<int64>>
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        var flat : array<int64>   //! step-major: both rows' tokens a step
+        flat |> reserve(2l * PAIR_STEPS)
+        var sa <- create_session(tr)
+        var sb <- create_session(tr)
+        set_seed(sa, 11)
+        set_seed(sb, 22)
+        eval_(tr, sa, prompts[0])
+        eval_(tr, sb, prompts[1])
+        sa.spec_params = unsafe(addr(sp))   //! the served stream's ask: each row's step lands its selection for the sampler
+        sb.spec_params = unsafe(addr(sp))
+        var ws <- create_batch_workspace_(tr)
+        var both <- [unsafe(addr(sa)), unsafe(addr(sb))]
+        var toks <- [sample(sa, sp), sample(sb, sp)]
+        for (_ in range64(PAIR_STEPS)) {
+            if (batched) {
+                let prior_max = get_metal_mirror_device_max_probe_()
+                set_metal_mirror_device_max_probe_(device_max)
+                eval_batch_(tr, ws, both, toks)
+                set_metal_mirror_device_max_probe_(prior_max)
+                for (i in range(2)) {
+                    toks[i] = sample(*both[i], sp)
+                }
+            } else {
+                for (i in range(2)) {
+                    forward(tr, *both[i], toks[i], both[i].n_past)
+                    both[i].n_past++
+                    toks[i] = sample(*both[i], sp)
+                }
+            }
+            flat |> push_from(toks)
+        }
+        got <- [for (i in range64(2l)); [for (st in range64(PAIR_STEPS)); flat[st * 2l + i]]]
+        sa.spec_params = null
+        sb.spec_params = null
+        both |> clear()   //! borrowed pointers: the sessions are this function's locals
+        delete flat
+        delete ws
+        delete sa
+        delete sb
+    }
+    return <- got
+}
+
+//! the selection landing is one a process: a two-row tick the batched driver declines (both rows' mirrors past the device's
+//! largest buffer, stood in for by the probe seam at one and a half sessions' mirrors - one row's alone fits) steps its rows one
+//! at a time (`batch_rows_one_at_a_time`) and lands each row's selection into its own logits before the next row's forward
+//! overwrites it. Both sides run each row through the one `forward` entry point on the same session state, so their logits are
+//! bit-identical and the streams token-exact; the device's own bound (the batched driver serves the tick) and the landing off
+//! are the census's and the selection count's controls
+[test]
+def test_metal_per_row_tick_sampled(t : T?) {
+    t |> run("a two-row tick stepped one row at a time on Metal: each sampled stream emits what it emits sampling right after its own forward (Llama-3.2-1B Q8)") <| @(t : T?) {
+        if (!family_on(t, "llama")) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let path = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf")
+            return if (!jit_model_available(t, path))
+            let prior_mode = get_metal_mode()
+            let prior_landing = get_select_landing()
+            set_metal_mode(MetalMode.when_available)
+            set_select_landing(true)
+            var tr <- blob_twin(t, path, 256l)
+            with_dasllama_jobque_() {
+                var prompts <- [ <- encode(tr, "Once upon a time", true, false),
+                                 <- encode(tr, "The capital of France is", true, false)]
+                var sp = SamplingParams(temp = 0.8, top_k = 40l)
+                let one = session_mirror_bytes(tr)
+                let one_fits = uint64(one + one / 2l)
+                var solo <- sampled_pair(tr, prompts, sp, false, 0ul)
+                let census0 = batch_step_census()
+                let sel0 = sel_selections()
+                var rows <- sampled_pair(tr, prompts, sp, true, one_fits)
+                let census1 = batch_step_census()
+                let landed = sel_selections() - sel0
+                t |> equal(census1.per_row - census0.per_row, PAIR_STEPS, "every two-row tick stepped its rows one at a time")
+                t |> success(landed >= 2l * PAIR_STEPS, "every row's step landed its selection ({landed} landings over {2l * PAIR_STEPS} row steps)")
+                for (i in range(2)) {
+                    log_gen_texts(tr, "stream {i} (the CPU line sampled after its own forward, the GPU line the per-row tick; both on Metal)", solo[i], rows[i])
+                    t |> success(ids_equal(rows[i], solo[i]), "stream {i}: the per-row tick's tokens == the tokens sampled right after its own forward")
+                }
+                set_select_landing(false)
+                let sel1 = sel_selections()
+                var unlanded <- sampled_pair(tr, prompts, sp, true, one_fits)
+                t |> equal(sel_selections() - sel1, 0l, "with the landing off no step landed a selection: the count's control")
+                set_select_landing(true)
+                let census2 = batch_step_census()
+                var device <- sampled_pair(tr, prompts, sp, true, 0ul)
+                let census3 = batch_step_census()
+                t |> equal(census3.per_row - census2.per_row, 0l, "under the device's own bound no tick stepped a row at a time: the census's control")
+                delete device
+                delete unlanded
+                delete rows
+                delete solo
+                delete prompts
+            }
+            set_select_landing(prior_landing)
+            set_metal_mode(prior_mode)
+            delete tr
+        } else {
+            t |> skip("dasMetal not built")
+        }
     }
 }

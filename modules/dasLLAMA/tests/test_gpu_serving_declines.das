@@ -426,7 +426,7 @@ def test_dn_metal_plane_formats(t : T?) {
         t |> success(dn_ba_metal_window_ok(m), "... and the expert-form GEMV the window's rows read")
         m.dnbeta_fmt[1] = KqFmt.iq3s4
         t |> success(dn_metal_ok(m) && dn_ba_metal_window_ok(m), "a lut-form IQ3_S beta plane has both forms")
-        for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032]) {
+        for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.mlx4, KqFmt.mlx8, KqFmt.mlx4b, KqFmt.mlx8b]) {
             m.dnbeta_fmt[1] = f
             m.dnalpha_fmt[1] = f
             m.dnout_fmt[1] = f
@@ -447,9 +447,24 @@ def test_dn_metal_plane_formats(t : T?) {
 }
 
 [test]
+def test_discrete_unstamped_routed_planes(t : T?) {
+    t |> run("the discrete homes' decline names a routed or shared-expert plane in a member they stamp no kernel for") @(t : T?) {
+        var m <- moe_shell(KqFmt.k4)
+        t |> equal(discrete_unstamped_plane(m), "", "k4 stacks are stamped (the control)")
+        m.we2_fmt[1] = KqFmt.mlx4b
+        t |> equal(discrete_unstamped_plane(m), "the expert stack down plane of layer 1 is mlx4b")
+        m.we2_fmt[1] = KqFmt.k4
+        m.wsh3_fmt <- [KqFmt.k4, KqFmt.mlx8]
+        t |> equal(discrete_unstamped_plane(m), "the shared expert up plane of layer 1 is mlx8")
+        delete m
+    }
+}
+
+[test]
 def test_moe_metal_expert_formats(t : T?) {
     t |> run("the Metal routed block admits exactly the expert plane formats it has kernels for; every other format declines") @(t : T?) {
-        for (f in [KqFmt.q8, KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.k2, KqFmt.q40, KqFmt.nv4, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3s4]) {
+        for (f in [KqFmt.q8, KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.k2, KqFmt.q40, KqFmt.nv4, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3s4,
+                   KqFmt.mlx4, KqFmt.mlx8, KqFmt.mlx4b, KqFmt.mlx8b]) {
             var m <- moe_shell(f)
             t |> success(moe_metal_ok(m), "{f} expert planes are served")
             delete m
@@ -457,6 +472,10 @@ def test_moe_metal_expert_formats(t : T?) {
         var mx <- moe_shell(KqFmt.mx4)
         t |> success(!moe_metal_ok(mx), "an mx4 expert plane tag declines the routed block (the mx4 stacks key off `experts_mx4`)")
         delete mx
+        var m6 <- moe_shell(KqFmt.mlx6b)
+        t |> success(!moe_metal_ok(m6), "an mlx6b expert stack declines the routed block: the 6-bit member stamps no routed form")
+        t |> success(!moe_site_ok(KqFmt.mlx6b, 0l, 64l), "... and moe_site_ok agrees")
+        delete m6
         var mixed <- moe_shell(KqFmt.k4)
         mixed.we2_fmt[1] = KqFmt.mx4
         t |> success(!moe_metal_ok(mixed), "one mx4-tagged down plane declines a q4_K model")

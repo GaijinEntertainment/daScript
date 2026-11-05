@@ -401,6 +401,72 @@ def test_repack_q51(t : T?) {
     }
 }
 
+def private bytes_differ(a, b : array<uint8>) : int64 {
+    var n = 0l
+    for (x, y in a, b) {
+        n += x != y ? 1l : 0l
+    }
+    return n
+}
+
+[test]
+def test_repack_mlx_affine(t : T?) {
+    for (f in [KqFmt.mlx4, KqFmt.mlx8b, KqFmt.mlx6b]) {
+        t |> run("{f}: mr=1 is the identity, mr=2 the documented inverse map") @(t : T?) {
+            let n = 128l
+            let d = 8l
+            let nb = n / 32l
+            let qb = kq_qsb(f)
+            let sb = kq_ssb(f)
+            var rng = Rng(state = 0x6d6c7834ul)
+            var q0, s0 : array<uint8>
+            q0 |> resize(d * nb * qb)
+            s0 |> resize(d * nb * sb)
+            fill_bytes(q0, rng)
+            fill_bytes(s0, rng)
+            var q1 := q0
+            var s1 := s0
+            unsafe {
+                repack_kq_grp(f, addr(q1[0]), addr(s1[0]), n, d, 1l)
+            }
+            t |> equal(bytes_differ(q1, q0) + bytes_differ(s1, s0), 0l, "grp1 must be the disk order byte-for-byte")
+            let mr = 2l
+            var q := q0
+            var s := s0
+            unsafe {
+                repack_kq_grp(f, addr(q[0]), addr(s[0]), n, d, mr)
+            }
+            var ok = true
+            for (g in range64(d / mr)) {
+                for (bi in range64(nb)) {
+                    for (r in range64(mr)) {
+                        let src = ((g * mr + r) * nb + bi) * qb
+                        let dst = g * mr * nb * qb + bi * qb * mr
+                        for (j in range64(qb / 4l)) {
+                            for (b in range64(4l)) {
+                                ok &&= q[int(dst + j * 4l * mr + r * 4l + b)] == q0[int(src + j * 4l + b)]
+                            }
+                        }
+                        let ds = g * mr * nb * sb + bi * sb * mr + r * sb
+                        let ss = ((g * mr + r) * nb + bi) * sb
+                        for (b in range64(sb)) {
+                            ok &&= s[int(ds + b)] == s0[int(ss + b)]
+                        }
+                    }
+                }
+            }
+            t |> success(ok, "{f} grp bytes must match the inverse map")
+            t |> success(bytes_differ(q, q0) > 0l, "the repack moved bytes (the map is not the identity at mr=2)")
+            delete q0
+            delete s0
+            delete q1
+            delete s1
+            delete q
+            delete s
+        }
+    }
+}
+
 // ===== iq4nl32: identity at mr=1, inverse map at mr=2 (16 nibble bytes as 4 dwords, a 2B scale) =====
 
 [test]
