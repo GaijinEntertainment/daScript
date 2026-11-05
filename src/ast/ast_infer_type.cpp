@@ -6671,6 +6671,11 @@ namespace das {
             gc_root * live = fresh.get();
             gc_root::gc_get_active_root() = live;
             program->thisModule->module_gc_root = das::move(fresh);   // deletes cur -> sweeps the garbage
+            program->library.foreach([](Module * mod) -> bool {
+                mod->functions.foreach([](auto & fn) { fn->lookup.clear(); });
+                mod->generics.foreach([](auto & fn) { fn->lookup.clear(); });
+                return true;
+            }, "*");
             return live->gc_count;
         };
         for (pass = 0; pass < maxInferPasses; ++pass) {

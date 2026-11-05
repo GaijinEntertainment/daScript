@@ -1229,6 +1229,7 @@ namespace das
         }
     public:
         smart_ptr<Context>                          macroContext;
+        bool                                        frozen = false;
         safebox<TypeDecl, TypeDeclPtr>                           aliasTypes;
         das_insert_only_hash_map<uint64_t, Annotation *>    handleTypes;
         safebox<Structure, StructurePtr>             structures;
