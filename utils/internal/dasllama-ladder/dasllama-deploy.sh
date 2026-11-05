@@ -5,7 +5,7 @@
 # root shell). Verbs:
 #
 #   provision                  one-time: service user, dirs, systemd unit, restic snapshot line
-#   caddy                      splice caddy.snippet into the dasllama.io vhost, validate, reload
+#   caddy                      bring the dasllama.io vhost in line with caddy.snippet, validate, reload
 #   install <sha> <tarball>    per-release: unpack, carry operator files, flip current, restart, health
 #   open-submit | close-submit flip the public-submission gate (loopback admin call)
 #   sidecars                   list stored sidecars + the gate state (loopback admin listing)
@@ -97,115 +97,86 @@ EOF
     echo "provisioned: user=$SVCUSER data=$DATA unit=$UNIT; restic snapshot line added"
 }
 
-vhost_has() {
-    # true when the dasllama.io block of the shared Caddyfile carries $1 - the other vhosts
-    # (daslang.io) may spell the same directive, so a whole-file grep is not the question
-    awk '/^dasllama\.io \{/ { b = 1 } b { print } b && /^\}/ { b = 0 }' "$CADDYFILE" | grep -q "$1"
+REGION_OPEN="# >>> caddy.snippet (dasllama-deploy.sh caddy rewrites to <<<)"
+REGION_CLOSE="# <<< caddy.snippet"
+
+snippet_directive_keys() {
+    awk '/^[ \t]*#/ || !NF { next }
+         !depth { print $1 " " $2 }
+         { depth += gsub(/\{/, "{") - gsub(/\}/, "}") }' "$snippet"
 }
 
-examples_block() {
-    # the `header /examples/* { ... }` block of $1, one directive per line, indentation stripped
-    awk '/^[ \t]*header \/examples\/\*/ { b = 1 } b { sub(/^[ \t]+/, ""); print } b && /^\}/ { b = 0 }' "$1"
+snippet_region() {
+    printf '\t%s\n' "$REGION_OPEN"
+    awk '/^[ \t]*#/ || !NF { next } { print "\t" $0 }' "$snippet"
+    printf '\t%s\n' "$REGION_CLOSE"
 }
 
-examples_block_vhost() {
-    # the same block as the dasllama.io vhost of the shared Caddyfile carries it today
-    awk '/^dasllama\.io \{/ { b = 1 } b { print } b && /^\}/ { b = 0 }' "$CADDYFILE" | examples_block /dev/stdin
-}
-
-splice_vhost_line() {
-    # one top-level directive line ($1) into the dasllama.io vhost, right after its opening brace;
-    # validated before reload, restored from the timestamped backup on any failure
-    ts=$(date +%Y%m%d-%H%M%S)
-    cp "$CADDYFILE" "$CADDYFILE.bak-$ts"
-    awk -v line="$1" '
-        /^dasllama\.io \{/ && !done { print; print "\t" line; done=1; next }
-        { print }
-    ' "$CADDYFILE.bak-$ts" > "$CADDYFILE"
-    if ! vhost_has "$1"; then
-        echo "caddy: line splice inserted nothing (dasllama.io vhost not matched) - restoring $CADDYFILE.bak-$ts"; cp "$CADDYFILE.bak-$ts" "$CADDYFILE"; exit 1
-    fi
-    if ! caddy validate --config "$CADDYFILE" --adapter caddyfile >/dev/null 2>&1; then
-        echo "caddy validate FAILED - restoring $CADDYFILE.bak-$ts"; cp "$CADDYFILE.bak-$ts" "$CADDYFILE"; exit 1
-    fi
-    systemctl reload caddy
-    echo "caddy: '$1' spliced + reloaded (backup $CADDYFILE.bak-$ts)"
+vhost_region() {
+    # the marked region of the dasllama.io vhost in file $1; nothing when the vhost has no opening marker
+    awk -v opener="$REGION_OPEN" -v closer="$REGION_CLOSE" '
+        /^dasllama\.io \{/ { invhost = 1; next }
+        invhost && /^\}/ { exit }
+        invhost && index($0, opener) { inregion = 1 }
+        inregion { print }
+        inregion && index($0, closer) { exit }
+    ' "$1"
 }
 
 caddy_apply() {
-    # Splice caddy.snippet (from the installed release) into the dasllama.io vhost, ahead of
-    # root/file_server. Idempotent, validated before reload, with a timestamped Caddyfile backup.
+    # Make the dasllama.io vhost carry caddy.snippet (from the installed release) as written: the
+    # snippet's directives open the vhost in a marked region this verb owns, and nothing else in
+    # the vhost repeats one - a top-level copy outside the region, or a second region, is dropped.
+    # A directive the snippet changed, dropped or renamed therefore follows it. Idempotent,
+    # validated before reload, with a timestamped Caddyfile backup.
     snippet="$APP/current/caddy.snippet"
     [ -f "$snippet" ] || { echo "no $snippet - install a release first"; exit 1; }
-    if vhost_has "reverse_proxy 127.0.0.1:$PORT"; then
-        # the routes are in; a later snippet may still carry something the vhost lacks, so each
-        # such piece splices on its own: first the one-line vhost directives (encode, redir) ...
-        lines=$(mktemp)
-        grep -E '^(encode|redir) ' "$snippet" > "$lines" || true
-        spliced=0
-        while IFS= read -r line; do
-            [ -n "$line" ] || continue
-            vhost_has "$line" && continue
-            splice_vhost_line "$line"
-            spliced=1
-        done < "$lines"
-        rm -f "$lines"
-        # ... then the `header /examples/*` isolation block: spliced when the vhost lacks it,
-        # replaced when the vhost's copy differs from the snippet's (a header value the snippet
-        # changed - the COEP value - never reaches the box on presence alone)
-        if grep -q "header /examples/\*" "$snippet" && [ "$(examples_block "$snippet")" != "$(examples_block_vhost)" ]; then
-            ts=$(date +%Y%m%d-%H%M%S)
-            cp "$CADDYFILE" "$CADDYFILE.bak-$ts"
-            awk -v snip="$snippet" '
-                function emit_block(   line, inblock) {
-                    inblock = 0
-                    while ((getline line < snip) > 0) {
-                        if (line ~ /^header \/examples\/\*/) inblock = 1
-                        if (inblock) print "\t" line
-                        if (inblock && line ~ /^\}/) inblock = 0
-                    }
-                    close(snip)
-                }
-                /^dasllama\.io \{/ && !invhost { invhost = 1; print; next }
-                invhost && /^\}/ { if (!done) { emit_block(); done = 1 }; invhost = 0; print; next }
-                invhost && /^[ \t]*header \/examples\/\*/ { emit_block(); done = 1; skipping = 1; next }
-                skipping { if ($0 ~ /^[ \t]*\}/) skipping = 0; next }
-                { print }
-            ' "$CADDYFILE.bak-$ts" > "$CADDYFILE"
-            if [ "$(examples_block "$snippet")" != "$(examples_block_vhost)" ]; then
-                echo "caddy: header splice inserted nothing (dasllama.io vhost not matched) - restoring $CADDYFILE.bak-$ts"; cp "$CADDYFILE.bak-$ts" "$CADDYFILE"; exit 1
-            fi
-            if ! caddy validate --config "$CADDYFILE" --adapter caddyfile >/dev/null 2>&1; then
-                echo "caddy validate FAILED - restoring $CADDYFILE.bak-$ts"; cp "$CADDYFILE.bak-$ts" "$CADDYFILE"; exit 1
-            fi
-            systemctl reload caddy
-            echo "caddy: /examples/* isolation headers spliced + reloaded (backup $CADDYFILE.bak-$ts)"
-            return 0
-        fi
-        [ "$spliced" -eq 1 ] || echo "caddy: /api already spliced - nothing to do"
+    want=$(mktemp); have=$(mktemp); keys=$(mktemp); next=$(mktemp)
+    snippet_region > "$want"
+    snippet_directive_keys > "$keys"
+    unpaired=$(awk -v opener="$REGION_OPEN" -v closer="$REGION_CLOSE" '
+        /^dasllama\.io \{/ { invhost = 1; next }
+        invhost && /^\}/ { exit }
+        invhost && index($0, opener) { opened++ }
+        invhost && index($0, closer) { if (opened) opened--; else stray++ }
+        END { print opened + stray }' "$CADDYFILE")
+    if [ "$unpaired" != "0" ]; then
+        rm -f "$want" "$have" "$keys" "$next"
+        echo "caddy: the caddy.snippet markers of the dasllama.io vhost do not pair up - fix them by hand"; exit 1
+    fi
+    awk -v want="$want" -v keys="$keys" -v opener="$REGION_OPEN" -v closer="$REGION_CLOSE" '
+        function braces() { return $0 ~ /^[ \t]*#/ ? 0 : gsub(/\{/, "{") - gsub(/\}/, "}") }
+        function emit(   line) { while ((getline line < want) > 0) print line; close(want) }
+        BEGIN { while ((getline key < keys) > 0) owned[key] = 1; close(keys) }
+        /^dasllama\.io \{/ && !invhost { invhost = 1; depth = 0; print; emit(); next }
+        invhost && /^\}/ { invhost = 0; inregion = 0; skipping = 0; print; next }
+        inregion { if (index($0, closer)) inregion = 0; next }
+        invhost && index($0, opener) { inregion = 1; next }
+        skipping { skip += braces(); if (skip <= 0) skipping = 0; next }
+        invhost && depth == 0 && (($1 " " $2) in owned) { skip = braces(); skipping = skip > 0; next }
+        invhost { depth += braces() }
+        { print }
+    ' "$CADDYFILE" > "$next"
+    vhost_region "$next" > "$have"
+    if ! cmp -s "$want" "$have"; then
+        rm -f "$want" "$have" "$keys" "$next"
+        echo "caddy: found no dasllama.io vhost to write caddy.snippet into - nothing changed"; exit 1
+    fi
+    if cmp -s "$next" "$CADDYFILE"; then
+        rm -f "$want" "$have" "$keys" "$next"
+        echo "caddy: the dasllama.io vhost carries caddy.snippet as written - nothing to do"
         return 0
     fi
-    ts=$(date +%Y%m%d-%H%M%S)
-    cp "$CADDYFILE" "$CADDYFILE.bak-$ts"
-    awk -v snip="$snippet" '
-        /^dasllama\.io \{/ && !done {
-            print
-            while ((getline line < snip) > 0) if (line !~ /^[ \t]*#/ && line !~ /^[ \t]*$/) print "\t" line
-            close(snip); done=1; next
-        }
-        { print }
-    ' "$CADDYFILE.bak-$ts" > "$CADDYFILE"
-    # The awk match is exact (`dasllama.io {`); if the vhost is ever reformatted (shared address,
-    # renamed) it matches nothing, validate still passes on the unchanged file, and we would
-    # wrongly report success. Confirm the proxy line actually landed before reloading.
-    if ! vhost_has "reverse_proxy 127.0.0.1:$PORT"; then
-        echo "caddy: splice inserted nothing (dasllama.io vhost not matched) - restoring $CADDYFILE.bak-$ts"; cp "$CADDYFILE.bak-$ts" "$CADDYFILE"; exit 1
-    fi
+    backup="$CADDYFILE.bak-$(date +%Y%m%d-%H%M%S)"
+    [ ! -e "$backup" ] || backup="$backup-$$"
+    cp "$CADDYFILE" "$backup"
+    cat "$next" > "$CADDYFILE"
+    rm -f "$want" "$have" "$keys" "$next"
     if ! caddy validate --config "$CADDYFILE" --adapter caddyfile >/dev/null 2>&1; then
-        echo "caddy validate FAILED - restoring $CADDYFILE.bak-$ts"; cp "$CADDYFILE.bak-$ts" "$CADDYFILE"; exit 1
+        echo "caddy validate FAILED - restoring $backup"; cp "$backup" "$CADDYFILE"; exit 1
     fi
     systemctl reload caddy
-    echo "caddy: /api spliced + reloaded (backup $CADDYFILE.bak-$ts)"
+    echo "caddy: caddy.snippet written into the dasllama.io vhost + reloaded (backup $backup)"
 }
 
 install_release() {

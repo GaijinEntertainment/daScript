@@ -189,7 +189,7 @@ endforeach()
 das_lane_dastest_target(run_tests_dasweb_playground COMMENT "Testing dasweb-playground" FILES ${_ci_dasweb_playground})
 
 set(_ci_dasllama_ladder)
-foreach(_s test_ladder_store test_ladder_config test_ladder_server)
+foreach(_s test_ladder_store test_ladder_config test_ladder_server test_deploy_caddy)
     list(APPEND _ci_dasllama_ladder utils/internal/dasllama-ladder/${_s}.das)
 endforeach()
 das_lane_dastest_target(run_tests_dasllama_ladder COMMENT "Testing dasllama-ladder" FILES ${_ci_dasllama_ladder})

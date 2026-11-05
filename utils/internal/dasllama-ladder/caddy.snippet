@@ -3,11 +3,22 @@
 # deployed Caddyfile is edited to match it, never the other way round, so a
 # route change is reviewable in the same diff as the code it exposes.
 #
-# Paste inside the `dasllama.io { ... }` block, ahead of `root`/`file_server`.
+# `dasllama-deploy.sh caddy` writes these directives into the `dasllama.io { ... }` block,
+# between its two marker comments.
 
-# Every response leaves compressed: the pages ship JSON record stores and the css/js
-# beside them uncompressed on disk, and a text asset compresses 5-15x on the wire.
-encode zstd gzip
+# Caddy's default encode match list plus application/wasm*.
+encode zstd gzip {
+	match {
+		header Content-Type text/*
+		header Content-Type application/json*
+		header Content-Type application/javascript*
+		header Content-Type application/xhtml+xml*
+		header Content-Type application/atom+xml*
+		header Content-Type application/rss+xml*
+		header Content-Type application/wasm*
+		header Content-Type image/svg+xml*
+	}
+}
 
 # Keep the home page on one canonical URL. The static file remains index.html,
 # but requests that name explicitly are permanently redirected to the site root.
