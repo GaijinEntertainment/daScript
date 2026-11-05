@@ -666,6 +666,7 @@ def private plain_batch_step(m : Model; var sch : Scheduler; var events : array<
             sch.gen_tokens ++
         }
         sch.streams[sch.batch_idx[bi]].session.pick_asked = false   //! the ask is a step's
+        sch.streams[sch.batch_idx[bi]].session.spec_params = null
     }
     prof_add("sched_sample", ts_sample)
 }
@@ -865,10 +866,12 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         if (sch.mtp && (sch.streams[i].constraint.constraint != null || !empty(sch.streams[i].forced))) {
             continue   // a constrained stream, or one with a forced close pending, decodes plain, after the speculative round (below)
         }
+        //! the stream's sampler at the step: the selection ask and the sampled chain read it on the plain tick, the round on its own;
+        //! the pointer aims into `streams`, which admission and reaping move, so every tick clears it after the step
+        sch.streams[i].session.spec_params = unsafe(addr(sch.streams[i].params))
         if (sch.mtp) {
             // self-spec tick: the stream trades its cross-stream batch row for the round's positions per
             // tick, every stream's round verified together below.
-            sch.streams[i].session.spec_params = unsafe(addr(sch.streams[i].params))
             sch.streams[i].session.spec_stops = unsafe(addr(sch.streams[i].stop_ids))
             sch.streams[i].session.pick_asked = sampler_is_argmax(sch.streams[i].params)
             sch.streams[i].session.mtp_depth_cap = round_depth_cap(sch.streams[i])
@@ -903,7 +906,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                     sch.gen_tokens ++
                 }
             }
-            sch.streams[i].session.spec_params = null   // the pointers aim into `streams`, which admission and reaping move
+            sch.streams[i].session.spec_params = null
             sch.streams[i].session.spec_stops = null
             sch.streams[i].session.pick_asked = false
         }

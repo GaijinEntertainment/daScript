@@ -5,10 +5,11 @@ carries the Metal seats of the common speculative round, the box knob that sets 
 draft chain and the verify that commits it, and the recurrent layer's stages over groups of rows
 with the mirror pool they read; the assistant drafter on both homes is `ARCHITECTURE_GPU_MTP_ASSISTANT.md`,
 and a sampled stream's three acceptances, the drafter distribution a rejection-sampling round records
-and the chain cut are `ARCHITECTURE_GPU_MTP_ACCEPT.md`.
-`ARCHITECTURE_GPU_MTP_DECODE.md` beside it carries the decode driver's layer encoder, the kernel forms and row-buffer pad a
+and the chain cut are `ARCHITECTURE_GPU_MTP_ACCEPT.md`; the DFlash2 round's host seams are `ARCHITECTURE_GPU_MTP_ROUND.md`.
+`ARCHITECTURE_GPU_MTP_DECODE.md` beside it carries the decode driver's layer encoder, the row-buffer pad a
 multi-row verify dispatches under, the argument-alignment contract a kernel declares on its `[metal_dispatch]`, and the rotated
-prefix a rope-store kernel takes; the single-row driver's greedy chain and the Metal selection landing are
+prefix a rope-store kernel takes; the kernel forms a multi-row verify's rows sites take are
+`ARCHITECTURE_GPU_MTP_DECODE_ROWS.md`; the single-row driver's greedy chain and the Metal selection landing are
 `ARCHITECTURE_GPU_MTP_DECODE_PICK.md`. The GPU backend role table these
 sections build on, the assistant-drafter driver's role row included, stays in
 `ARCHITECTURE_GPU.md#gpu-backends`.
@@ -46,6 +47,29 @@ session's mirror to the seam first: a new session's mirror is adopted or built b
 an attached one stands at its whole pages, and the rows to the seam come up from the cache as a
 step's would. A seam the seat declines on a blob model stays stale and dents the window's first
 draft (`mtp_seam_declines` counts them).
+
+**The DFlash2 drafter's round on Metal is two command buffers behind one host wait, which lands a count and one row.** The pass's command buffer
+(`dasllama_metal_dflash`'s `df_select`) ends in the device selector: the top-k of every draft row's logits in two stages
+(`MetalDflashTopkSlices`, a threadgroup a 4096-logit slice, then `MetalDflashTopkMerge`, a threadgroup a row over the slices'
+lists - a total order, (logit desc, id asc), so any split yields the same list) and the selector's walk (`MetalDflashWalk`, one
+threadgroup staging every candidate's products, the codebook rows dequantized in the host's per-block arithmetic and summed in its
+order, so the picks are `dflash_walk`'s id for id) into a device id list, the anchor at 0. It is committed with no wait, and the verify's
+command buffer, committed after it on the same queue, embeds its rows off that list (`metal_verify_rows_on_device`); queue order
+and the tracked list order the read, since a hazard tracker starts fresh a command buffer. A greedy round with no stop ids and
+no forced reject (`mtp_seat_accept_asked`) ends the verify in the device accept (`MetalDflashAccept`, after `enc_argmax_rows`):
+the count n of the leading rows whose pick equals the id the next row verified, row n's pick and every row's pick land in a
+word buffer, and row n's logits in a row buffer, selected on the device by n. The host waits the verify alone and reads those
+words and the one row (`s.logits`), never the rows' logits; the round's land (`MtpBlockSeams.land`) reads the picks into
+`s.mtp_vbatch`, the host walk takes its count off the same picks and must equal the seat's (`mtp_seat_accept_landed`). The host
+then encodes what needs the count: the recurrent replay over rows 0..n on a reject (`encode_dn_replay`, its own waited command
+buffer: the scan stages take their row count as encode-time state) and the drafter's commit of those rows, staged at the head
+of the next pass - the drafter's ring slot and context position are host arithmetic, so the next pass is encoded after the
+words land. A round the host must see first - a selection ask listing the drafts, an n-gram side input, hyper-connection carries
+(`metal_verify_takes_device_rows`) - waits the pass and lands the picks before the verify, unless the verify is encoded ahead
+(`ARCHITECTURE_GPU_MTP_ROUND.md#verify-ahead`); a sampled round lands every row's
+logits, and one drafting above the drafter's temperature 0 ends its pass in the selector's sampled walk, whose candidates and q
+land beside the picks (`ARCHITECTURE_GPU_MTP_ACCEPT.md#dflash-sampled-drafts`); `DASLLAMA_METAL_DFLASH_SELECT=0` lands the logits and walks them on the host, the reference the device selector is
+held to, and `DASLLAMA_METAL_DFLASH_ACCEPT=0` lands every row's logits for the host's accept, the device accept's reference.
 
 **The accept walk and the commit.** Row i of the verify is the truth for draft i+1, so the walk
 takes `a` = the length of the leading run where a row's argmax equals the draft it verifies. The
@@ -154,6 +178,7 @@ at `bcat` row `nr`, and `h_i` is verify post-norm row `i-1`. It norms the embeds
 and the hiddens with `mtp_hnorm`, interleaves `[enorm(embed_i) ; hnorm(h_i)]` per row into the cat
 image, runs `mtp_ehproj`, and encodes the verify layer once more at `l == n_layers`. The head
 therefore enters the next round on rows the trunk actually committed, not on the chain's own drafts.
+A block drafter's round (`mtp_block_attached`) encodes no head, since nothing it runs reads the head's rows or K/V.
 The prefill window warms the same slab from the prompt as one more layer past the trunk: the
 shifted embeds and the trunk's final hiddens through the norms and eh_proj, then the head layer's
 attention norm, K/V projections, k-norm, rope and store alone - its query, attention, output
@@ -169,20 +194,19 @@ head's block opens on a wide residual of its own; the head mixer's own weights
 
 ### A recurrent verify writes a shadow region and replays into it {#mtp-dn-shadow-replay}
 
-**Recurrent layers under a verify never touch their live state, so a partial accept costs one
-replay instead of a re-forward.** When `r.dn_split` is set, every deltanet store of the verify - the
-conv-history store and the scan's final state - lands in the DnMirror's alias (shadow) region
-(`dn_state_alt` / `dn_conv_alt`, the kernels' `split = 1`), and the live region keeps the pre-verify
-state. The same pass tapes each recurrent layer's scan inputs into `btape` as `[cv rows | qkv rows |
-beta rows | alpha rows]`, `tape_slot` bytes per taped layer. The verify seat flips the shadow live at
-`pos + k + 1` as it lands (`dn_mirror_flip`) and parks the step; when the walk accepted a < k, the rollback seat's
-`encode_dn_replay` re-runs the history and scan kernels over rows 0..a of the tape, reading the pre-verify state
-in the region the flip left behind and writing the live region again - the same kernels over the same inputs, so the
-boundary state is bit for bit what the verify produced for that prefix - and moves the live position to
-`pos + a + 1` (`dn_mirror_set_pos`). An n-gram model's conv ring is copied whole before the verify's rows commit into
-it and put back whole by the rollback seat, which commits rows 0..a again and re-advances the host window
-(`mtp_ple_window_restore`, `mtp_ple_window_commit`). A verify whose dispatch failed mid-scan leaves the mirror
-neither live nor re-derivable, so the seat drops the mirror and declines the round.
+**Recurrent layers under a verify never touch their live state, so a partial accept costs one replay instead of a re-forward.** When
+`r.dn_split` is set, every deltanet store of the verify - the conv-history store and the scan's final state - lands in the
+DnMirror's alias (shadow) region (`dn_state_alt` / `dn_conv_alt`, the kernels' `split = 1`), and the live region keeps the
+pre-verify state. The same pass tapes each recurrent layer's scan inputs into `btape` as `[cv rows | qkv rows | beta rows | alpha
+rows]`, `tape_slot` bytes per taped layer. The verify seat flips the shadow live at `pos + k + 1` as it lands (`dn_mirror_flip`) and
+parks the step; when the walk accepted a < k, the rollback seat's `encode_dn_replay` re-runs the history and scan kernels over rows
+0..a of the tape, reading the pre-verify state in the region the flip left behind and writing the live region again - the same
+kernels over the same inputs, so the boundary state is bit for bit what the verify produced for that prefix - and moves the live
+position to `pos + a + 1` (`dn_mirror_set_pos`); how the replay binds the tape and queues is
+`ARCHITECTURE_GPU_MTP_DECODE.md#mtp-replay-form`. An n-gram model's conv ring is
+copied whole before the verify's rows commit into it and put back whole by the rollback seat, which commits rows 0..a again and
+re-advances the host window (`mtp_ple_window_restore`, `mtp_ple_window_commit`). A verify whose dispatch failed mid-scan leaves the
+mirror neither live nor re-derivable, so the seat drops the mirror and declines the round.
 
 ### The batch driver's same-slab mode {#batch-same-slab}
 

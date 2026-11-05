@@ -3,7 +3,7 @@
 Companion to `ARCHITECTURE_GPU_MTP.md`; a section is cited by its anchor. This document carries
 what a sampled stream's speculative round does with its drafts on both GPU homes: the three
 acceptance modes, the seams the sampler installs for them, the drafter distribution a
-rejection-sampling round records, and the chain cut. The round itself and the greedy walk every
+rejection-sampling round records, the DFlash2 block drafter's and the NextN head's drafts under each mode, and the chain cut. The round itself and the greedy walk every
 stream shares are `ARCHITECTURE_GPU_MTP.md#mtp-round-one-join`; the sampler's own cuts and draws
 are the sampling file's charter in `ARCHITECTURE_ENGINE.md`.
 
@@ -61,3 +61,70 @@ round's draw), but no draft is chained behind it, so a round spends its verify r
 is confident. The floor is read on every acceptance; on the exact walk at depth 3 on the 35B it
 buys a few percent where the uncut depth-3 round loses to depth 2 (`PERF_LEDGER.md`, the MTP
 section).
+
+### The block drafter's drafts under the three acceptances {#dflash-sampled-drafts}
+
+**The DFlash2 round judges its block's drafts with the same walk, and only rejection sampling changes what the drafter
+does.** The verify's rows are the trunk's, so row i's p is the sampler's post-cut distribution (temperature, top-k, the
+nucleus, min-p, penalties) whatever drafted; the drafter decides only which d each row is judged against and what q the
+judge reads.
+
+- **greedy** (a bare argmax sampler): the draft is accepted while it equals the row's argmax - the walk the device
+  selector and the device accept serve.
+- **exact** (`set_mtp_accept(MtpAccept.exact)`): the drafter walks greedy and records no q; each row is drawn through
+  the sampler with the session's rng and the draft accepted while the draw equals it, the first miss's draw committed.
+  The draws are one a committed token in stream order, the drafter draws none, so a seeded speculative stream is the seeded
+  plain sampled stream (`generate_mtp_sampled` against `generate_`) token for token wherever the verify's rows and the plain
+  steps' rows give the draw the same distribution. Acceptance is p(d) for the greedy d.
+- **rejection** (the default): draft d is accepted with probability min(1, p(d) / q(d)); a miss draws from the normalized
+  max(0, p - q) over the row's survivors, which never lands on d. The drafter's temperature (`set_dflash_draft_temp`)
+  defaults to the stream's own sampler temperature; pinned at 0 the drafts stay greedy and the land records each as a
+  point mass q = 1 at d, so a row accepts with probability p(d) - the exact walk's rate - and the residual is p with d
+  removed. Above 0 the drafter samples: position r's q is the softmax at that temperature over its top-k candidates'
+  selector scores
+  (`dflash_scores`: logit + sum_i A[pred][i] H[r][i] B[cand][i]), the draft is one draw of the session's rng from it
+  (`dflash_soft_pick`, the host's; `MetalDflashWalkSoft`, the device's), and the pick is the next position's predecessor as on
+  the greedy walk (`dflash_walk_sampled`).
+  q is nonzero on the top-k candidates alone, so the residual is p with those masses reduced and renormalized. A row
+  accepts with probability sum_x min(p(x), q(x)), which beats the point mass's p(d) where q spreads its mass over the
+  candidates p holds and loses where q leans on tokens p does not; the drafter's temperature is the lever. The stream is
+  distributed as the sampler's under every temperature, but its draws are not the plain stream's, so a seeded rejection
+  stream is not token-equal to the plain one.
+
+**The device selector draws the sampled drafts; the judge stays the host's.** A sampled round asks no device accept
+(`mtp_seat_accept_asked`), so its verify rows land - their logits, or the selection landing - and the judge reads them on
+the host; its pass holds for the verify as the greedy one does (`ARCHITECTURE_GPU_MTP_ROUND.md#verify-ahead`). A
+round drafting above temperature 0 ends its pass in the sampled walk stamp (`MetalDflashWalkSoft`, under
+`DASLLAMA_METAL_DFLASH_SOFT_PICK`): the session's LCG state rides in a word buffer, each drawn position steps it once as
+`random_float` does, and the round lands the picks, every position's candidates and q, and the stepped state, so the host
+records q exactly as its own walk does and the judge's draws follow on the same stream. The scores are the greedy walk's
+bit for bit and the draw is the host's integer arithmetic, so the device and host drafts are the same ids from the same
+state; q parts from the host's by the transcendental's ulp alone. The knob off takes the pass with no selector on the device
+(`DflashDeviceSeams.draft_pass`, its rows' logits landed), the top-k and the walk on the host - the reference the device draw
+is held to. A round at 0 keeps the greedy selector, whose picks land before the walk and are recorded as point masses then.
+
+### The NextN head's drafts under the three acceptances {#nextn-draft-temp}
+
+**The NextN head drafts as the block drafter does under greedy and exact; under rejection its temperature is its own
+knob, defaulting to the stream's.** Under greedy and exact the head's chain is its argmax and records no q - exact
+draws each verify row and accepts while the draw equals the draft. Under rejection every draft goes through the
+drafter's draw seam (`mtp_draft_sample`), which records q, so the walk never meets a sampled stream's draft without
+one. `set_mtp_draft_temp` picks q: 0 drafts the head's penalized argmax as a point mass, the exact walk's acceptance
+p(d) with the residual draw; above 0 the stream's chain (penalties, top-k, the nucleus, min-p) at that temperature
+over the head's row; below 0, the default, at the stream's own temperature - the rejection round of
+`#mtp-accept-modes`. The block drafter's default is the point mass instead (`set_dflash_draft_temp`). A constrained
+stream's draft records a point mass whatever the knob; the scheduler keeps a constrained stream out of the round.
+
+### The block drafter's captures off a hyper-connection trunk {#dflash-hc-capture}
+
+**A hyper-connection trunk hands the block drafter the plain mean of its streams, because that is the layer output its
+draft was trained on.** The drafter's context is the concatenation of its target layers' output rows through `fc`; a
+trunk with one residual stream captures the row as it stands after the layer's FFN add (`s.x`, the window's `s.x_b`, the
+device step's `bx`). Under hyper-connections a layer's output is its wide residual - `hc_count` streams of `dim` after the
+FFN's scatter (`hc_res`, `hc_res_b`, the device's `bhc`), before the next layer's side input and mixer - and the row the
+drafter reads is the arithmetic mean over the streams, the sum scaled once by 1 / hc_count: on the CPU `stream_mean_row`,
+on the device `MetalHcStreamMean` into the capture image's slot at the decode step's and the window's layer-end seams.
+The gated means the mixers form (`GkHcMix`, the head mixer) are not it: they weight each stream by its sigmoid gate, and
+the Flash-Next draft (`Qwen3.8-Flash-Next-DFlash2`) was distilled against the unweighted mean. The drafter's width stays
+the trunk's `dim`, so the same `fc`, ring and selector serve; the carry the NextN head reads stays the wide row
+(`mtp_h_dim`).

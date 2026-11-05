@@ -661,10 +661,28 @@ def private draw_q_(var s : Session; qi : int64) : int64 {
     return s.mtp_q[base + at].id
 }
 
+var private g_mtp_draft_temp = -1.0   //! a rejection-sampling round's head temperature; below 0 = the stream's own
+
+//! The temperature the head's rejection-sampling drafts draw at: 0 drafts the head's argmax as a point-mass q, above 0
+//! draws through the stream's chain at that temperature, below 0 (the default) at the stream's own
+[arch(at="../ARCHITECTURE_GPU_MTP_ACCEPT.md#nextn-draft-temp")]
+def set_mtp_draft_temp(temp : float) {
+    g_mtp_draft_temp = temp
+    to_log(LOG_INFO, "dasLLAMA: set_mtp_draft_temp({temp}) - a rejection-sampling round's head drafts {temp < 0.0 ? "draw at the stream's temperature" : (temp == 0.0 ? "are the head's argmax, each a point-mass q" : "draw through the stream's chain at the set temperature")}\n")
+}
+
+def get_mtp_draft_temp() : float => g_mtp_draft_temp
+
 [hot_path, arch(at="../ARCHITECTURE_GPU_MTP_ACCEPT.md#mtp-accept-modes")]   //! the rejection-sampling round's drafter, reached through the registry once per draft
 def private mtp_draft_draw(var s : Session; var logits : array<float>; vocab, qi : int64) : int64 {
-    let params = deref(s.spec_params)
+    var params = deref(s.spec_params)
+    if (g_mtp_draft_temp >= 0.0) {
+        params.temp = g_mtp_draft_temp
+    }
     if (params.temp <= 0.0 || s.constrain != null) {
+        if (sel_landed(s, 0l)) {
+            sel_fallback_(s, logits, vocab)
+        }
         let d = sample_logits_row(s, params, logits, 0l, vocab)
         s.cand |> clear()
         s.cand |> push(SampleCand(id = d, v = 1.0))
@@ -785,6 +803,73 @@ def generate_embd_(t : Model; var s : Session; embd : array<float>; npos : int64
     s.stat_gen_us = int64(get_time_usec(t_gen))
     s.stat_n_gen = nout
     return nout
+}
+
+//! What a speculative sampled decode returns: the stream, the drafts drafted and accepted, the rounds, and the decode's time
+struct MtpSampledWalk {
+    ids : array<int64>   //! the generated ids, the prompt not echoed (generate_'s convention)
+    drafted : int64
+    accepted : int64
+    rounds : int64
+    gen_us : int64       //! the decode after the prompt's prefill
+}
+
+//! generate_'s speculative twin: prefill `prompt`, then `steps` ids drawn through `params` on the session's rng, a speculative
+//! round (`mtp_spec_round`) after every drawn id, its accepted drafts committed in order. A sampled stream's rounds walk under
+//! the process-wide acceptance (`set_mtp_accept`); under `exact` the stream is a seeded generate_'s token for token
+def generate_mtp_sampled(t : Model; var s : Session; prompt : array<int64>; params : SamplingParams; steps : int64) : MtpSampledWalk {
+    var none : array<int64>
+    return <- generate_mtp_sampled(t, s, prompt, params, steps, none)
+}
+
+//! the same, the stream ending on the first id among `stops` (kept as its last id): a round's walk ends on a draft among them
+[arch(at="../ARCHITECTURE_GPU_MTP_ACCEPT.md#dflash-sampled-drafts")]
+def generate_mtp_sampled(t : Model; var s : Session; prompt : array<int64>; params : SamplingParams; steps : int64; var stops : array<int64>) : MtpSampledWalk {
+    var w : MtpSampledWalk
+    let np = long_length(prompt)
+    return <- w if (steps <= 0l || np <= 0l)
+    w.ids |> reserve(steps)
+    s.recent |> clear()
+    var sp = params
+    let spec0 = get_mtp_spec()
+    set_mtp_spec(true)
+    forward_prefill(t, s, prompt, np, 0l)
+    s.n_past = np
+    s.spec_params = unsafe(addr(sp))
+    if (!empty(stops)) {
+        s.spec_stops = unsafe(addr(stops))
+    }
+    let d0 = s.mtp_drafted
+    let a0 = s.mtp_accepted
+    let t_gen = ref_time_ticks()
+    var tok = sample_(s, sp)
+    var stopped = false
+    while (tok >= 0l && long_length(w.ids) < steps && !stopped) {
+        w.ids |> push(tok)
+        s.recent |> push(tok)
+        stopped = find_index(stops, tok) >= 0
+        break if (long_length(w.ids) >= steps || stopped)
+        let a = mtp_spec_round(t, s, tok)
+        w.rounds++
+        for (i in range64(a)) {
+            break if (long_length(w.ids) >= steps || stopped)
+            w.ids |> push(s.mtp_vbatch[i + 1l])
+            s.recent |> push(s.mtp_vbatch[i + 1l])
+            stopped = find_index(stops, s.mtp_vbatch[i + 1l]) >= 0
+        }
+        break if (long_length(w.ids) >= steps || stopped)
+        tok = sample_(s, sp)
+    }
+    if (s.mtp_pre_drawn) {   //! the budget ended inside a round: its parked draw is the next stream's to make again
+        s.mtp_pre_drawn = false
+    }
+    w.gen_us = int64(get_time_usec(t_gen))
+    w.drafted = s.mtp_drafted - d0
+    w.accepted = s.mtp_accepted - a0
+    s.spec_params = null
+    s.spec_stops = null
+    set_mtp_spec(spec0)
+    return <- w
 }
 
 // ===== Generation stats =====

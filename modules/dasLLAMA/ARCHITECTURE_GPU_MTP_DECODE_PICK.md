@@ -29,7 +29,12 @@ linear copy (`MetalEmbedQ8`), the table's K-quant plane in its own format, tied 
 single-row step, off the token `forward()` pokes, and the MTP round's depth-1 chain takes every table
 (`ARCHITECTURE_GPU_MTP.md#mtp-nextn-chain`). A recurrent model chains on its mirror's three regions: a chained step reads the
 region the step in flight writes and writes the next, so a miss lands the region it read live again (`dn_mirror_land`) and
-the rerun steps from the state the chain never touched; an n-gram ring has one copy, so its models never chain.
+the rerun steps from the state the chain never touched. An n-gram model's step is encoded ahead and held, never chained
+(`StepRes.png`): its heads are the host's hash gather, poked with the token like the embed row, and the held step writes
+its one ring slot on the confirmed token alone, so the ring needs no second copy. The held step binds the session's ring
+at the mirror's base (`dn_mirror_ple_off`) exactly as the slow path does: every step a session takes, held or slow,
+reads the conv taps the previous step wrote. A device gather off the picked token would open the chain to it
+(`followup_metal.md`).
 
 **The step wait spins on the GPU end time, then blocks.** `finish_step` polls the command
 buffer's `GPUEndTime` until it is set and only then enters `waitUntilCompleted`, because a
@@ -47,6 +52,27 @@ the blocking wait that reports it.
 The GPU argmax reproduces the CPU sampler's tie-break exactly: a lane keeps the earliest of equal values
 (strict `>`), and the cross-lane fold takes the lower index on a tie, so the lowest index wins - what lets
 the chain predict a bare-argmax sampler's pick bit for bit.
+
+### A sampled caller chains on the device's draw {#sampled-chain}
+
+**A sampled session chains like a greedy one when the device can draw its token.** The chained
+step opens on `MetalSelDraw` over the step in flight's selection landing instead of the argmax
+(`r.spec_draw`): the kernel reproduces the host sampler's candidate path over the landing - the
+k-th largest survivor's cut with its ties, the temperature, the softmax summed in id order, the
+nucleus walk over the numerators largest first, the min-p floor, one step of the session's LCG
+(`daslib/random`'s `random_int` on the first component) and the cdf walk in id order - element by
+element in the host's float order, so the id it lands is the one `sample_` draws over the same
+landing, and the host's own draw is the verdict: `finish_step`'s compare against the caller's token
+stands as it does for the greedy chain, and a miss - a row the landing cannot serve (an overflow,
+more ties at the cut than the id sort's half) or an `exp` a unit apart between the two libraries -
+reruns the step through the slow path. The LCG state rides a per-step buffer (`r.brng`) poked at
+the pre-encode, which runs before the host draws for the step in flight, so both sides draw from one
+state. `sampled_chain_ok` admits the sampler the landing's candidate path serves - a temperature, a
+top-k within the landing's survivors and under the vocabulary, no penalty, no constraint - on a
+session whose step in flight landed a selection; the penalized and the constrained keep the
+unchained path. The single row's landing alternates between two slots (`GkClsSelArgs.row0`,
+`g_msel_slot_next`), because the chained step's tail lands its row while the host still reads the
+step in flight's, and `metal_sel_landing` answers the landed slot's planes.
 
 ### A sampled caller's step lands its selection beside its rows {#metal-selection-landing}
 
