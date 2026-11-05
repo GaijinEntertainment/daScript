@@ -1443,7 +1443,7 @@ namespace das {
         }
         if ( !program->failed() ) {
             program->buildAccessFlags(logs);    // this is used by the lint pass
-            if ( program->patchAnnotations() ) {
+            if ( program->patchAnnotations() || (!program->failed() && program->patchInline()) ) {
                 // A patchAnnotations() pass can both mutate the AST (astChanged) AND record a
                 // deliberate error -- either a patch() returning false or a macro_error() raised
                 // inside it. Re-inferring would clear program->errors at the top of the next infer

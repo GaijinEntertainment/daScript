@@ -1070,6 +1070,12 @@ namespace das {
                     }
                 }
             }
+            if ( fn->mustInline ) {
+                string err;
+                if ( !canFunctionInline(fn, err) || !isInlineRecursionFree(fn, err) ) {
+                    program->error("function annotation lint failed\n", err, "", fn->at, CompilationError::runtime_function_annotation );
+                }
+            }
             if ( (fn->init | fn->shutdown) && disableInit ) { // we double-check here. we check in the infer first, but this here is for the case where macro does it later
                 program->error("[init] is disabled in the options or CodeOfPolicies",  "", "",
                     fn->at, CompilationError::cant_function);

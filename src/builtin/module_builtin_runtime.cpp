@@ -242,7 +242,7 @@ namespace das
 
     // [inline] - a contract, not a hint: every direct call site gets the body spliced in
     // (Program::patchInline, ast_inline.cpp), and a shape the inliner can't handle is a
-    // compilation error reported here at lint (post-infer, so generics check per-instantiation)
+    // compilation error reported by the lint pass (post-infer, so generics check per-instantiation)
     struct InlineFunctionAnnotation : MarkFunctionAnnotation {
         InlineFunctionAnnotation() : MarkFunctionAnnotation("inline") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &, string & err) override {
@@ -253,10 +253,6 @@ namespace das
             func->mustInline = true;
             return true;
         };
-        virtual bool lint(const FunctionPtr & func, ModuleGroup &, AnnotationArgumentList &,
-                const AnnotationArgumentList &, string & err) override {
-            return canFunctionInline(func, err) && isInlineRecursionFree(func, err);
-        }
     };
 
     // [never_inline] - keep this function, or this block literal, out of best-effort (auto) inlining

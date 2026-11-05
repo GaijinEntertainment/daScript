@@ -28,13 +28,13 @@ namespace das {
     }
 
     // ===== [inline] splicing, auto inlining, invoke-block inlining =====
-    // runs in the patch slot (Program::patchAnnotations -> patchInline), after infer and
+    // runs in the patch slot (parseDaScript, once patchAnnotations is quiet), after infer and
     // buildAccessFlags, before lint and optimize. splices are syntax-level: cloned callee
     // statements land in the caller, the pass reports astChanged, and the restarted infer
     // re-resolves every name and legalizes types. three site kinds, two contracts:
     //  1. MustCall - a call to an [inline] function. fail-closed: a shape or position the
     //     splicer can't host is a compile error (bad callee shapes report at the
-    //     declaration through the annotation lint hook)
+    //     declaration through the lint pass)
     //  2. AutoCall - best-effort, optimized builds only, declines silently (counted,
     //     logged under log_optimization): calls passing a block LITERAL, plus - behind
     //     `options auto_inline_functions` - plain calls and operator sites whose callee
