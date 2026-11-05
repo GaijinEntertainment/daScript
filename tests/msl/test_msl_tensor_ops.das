@@ -95,10 +95,79 @@ def test_tmm2d_staged_protocol(t : T?) {
         t |> success(contains(tmmdevab_msl, "auto __B = __tgta_acc((device half *)((wh + (0))), dextents<int32_t, 2>(int(48u), 16), metal::array<int32_t, 2>\{1, int(64u)\});"), "devab B is [n][kk] at stride ldb")
         t |> success(contains(tmmdevabnt_msl, "auto __B = __tgta_acc((device half *)((wh + (0))), dextents<int32_t, 2>(16, int(48u)), metal::array<int32_t, 2>\{1, int(20u)\});"), "devabnt B is [kk][n] at stride ldb")
     }
+}
+
+[test]
+def test_tmm2d_rx_protocol(t : T?) {
+    t |> run("rx: a register-filled left operand against a sliced device half table") <| @(t : T?) {
+        t |> success(contains(tmmrx_msl, "matmul2d_descriptor(16, 8, 32, false, true, true, " +
+                "matmul2d_descriptor::mode::multiply)"),
+            "rx is a fixed-depth overwrite product, transpose_right = true")
+        t |> success(contains(tmmrx_msl, "matmul2d<__tgd_acc, execution_simdgroup> __tgop_acc;"),
+            "one simdgroup runs the op")
+        t |> success(contains(tmmrx_msl, "auto __tgl_acc = __tgop_acc.template " +
+                "get_left_input_cooperative_tensor<half, half, float>();"),
+            "the left operand is a cooperative half tensor")
+        t |> success(contains(tmmrx_msl,
+                "auto __tgx_acc = tensor<device half, dextents<int32_t, 2>, tensor_inline>" +
+                "((device half *)((xah + (0))), dextents<int32_t, 2>(int(64u), 8));"),
+            "the right operand is the device half table, k inner")
+        t |> success(contains(tmmrx_msl,
+                "get_destination_cooperative_tensor<decltype(__tgl_acc), " +
+                "decltype(__tgs_acc), float>()"),
+            "the destination is typed by the left operand and a slice")
+        t |> success(contains(tmmrx_msl, "__tgl_acc[i] = half(as_type<half>(ushort(15360u)));"),
+            "a left element is a lane's own write")
+        t |> success(contains(tmmrx_msl, "half2 __h2 = as_type<half2>(uint(1006648320u));") &&
+                contains(tmmrx_msl, "__tgl_acc[0u] = __h2.x;") &&
+                contains(tmmrx_msl, "__tgl_acc[2u] = __h2.y;"),
+            "a packed word lands as two elements")
+        t |> success(contains(tmmrx_msl,
+                "auto __B = __tgx_acc.template slice<32, 8>(int(32u), 0);"),
+            "a run slices the table at its k offset")
+        t |> success(contains(tmmrx_msl, "__tgop_acc.run(__tgl_acc, __B, __tgf_acc);"),
+            "each run overwrites the held product")
+        t |> success(contains(tmmrx_msl, "if (__tgf_acc.is_valid_element(i))"),
+            "a pad column reads invalid")
+        t |> success(contains(tmmrx_msl, "= __tgf_acc[i];"),
+            "a destination element is a lane's own read")
+        t |> success(contains(tmmrx_msl, "uint(__tgl_acc.get_capacity())") &&
+                contains(tmmrx_msl, "uint(__tgf_acc.get_capacity())"),
+            "the counts are the tensors' capacities")
+        t |> success(!contains(tmmrx_msl, "__tgt_acc") &&
+                !contains(tmmrx_msl, "threadgroup_barrier"),
+            "no threadgroup tile, no barrier")
+    }
+    t |> run("rx8: int8 left elements four from a word against the half table") <| @(t : T?) {
+        t |> success(contains(tmmrx8_msl, "matmul2d_descriptor(16, 8, 16, false, true, true, " +
+                "matmul2d_descriptor::mode::multiply)"),
+            "rx8 is the rx product, 16 deep")
+        t |> success(contains(tmmrx8_msl, "auto __tgl_acc = __tgop_acc.template " +
+                "get_left_input_cooperative_tensor<int8_t, half, float>();"),
+            "the left operand is a cooperative int8 tensor")
+        t |> success(!contains(tmmrx8_msl, "get_left_input_cooperative_tensor<half, half, float>"),
+            "no half left operand (the half flavor's spelling is the control)")
+        t |> success(contains(tmmrx8_msl, "char4 __c4 = as_type<char4>(uint(4278321536u));"),
+            "a packed word reads as four signed bytes")
+        t |> success(contains(tmmrx8_msl, "__tgl_acc[0u] = __c4.x;") &&
+                contains(tmmrx8_msl, "__tgl_acc[(0u) + 3u] = __c4.w;"),
+            "the bytes land at i0 .. i0 + 3, lowest first")
+        t |> success(contains(tmmrx8_msl, "__tgl_acc[(4u) + 1u] = __c4.y;"),
+            "the second word lands at 4 .. 7")
+        t |> success(contains(tmmrx8_msl,
+                "auto __B = __tgx_acc.template slice<16, 8>(int(16u), 0);"),
+            "a run slices the table at its k offset, 16 deep")
+        t |> success(!contains(tmmrx8_msl, "__tgt_acc") &&
+                !contains(tmmrx8_msl, "threadgroup_barrier"),
+            "no threadgroup tile, no barrier")
+    }
     t |> run("rowscale + stores: each lane edits only the elements it owns") <| @(t : T?) {
         t |> success(contains(tmmdeva_msl, "__tgf_acc[__i] *= (trow)[__ids[1]];"), "rowscale multiplies by the per-ROW factor")
         t |> success(contains(tmmdeva_msl, "= half(__tgf_acc[__i]);"), "store_half narrows per owned element")
         t |> success(!contains(tmmdeva_msl, "__tgf_acc.store(__C);"), "the half store bypasses the same-type cooperative store")
+        t |> success(contains(tmmdevbar_msl,
+                "__tgf_acc.store(__C);\n    }\n    threadgroup_barrier(mem_flags::mem_device);"),
+            "memoryBarrierBuffer lowers to the device rendezvous after the cooperative store")
         t |> success(contains(tmmdevaf_msl, "__tgf_acc[__i] += (bp)[__ids[0]];"), "store_bias folds the per-COLUMN bias first")
         t |> success(contains(tmmdevaf_msl, "__tgf_acc.store(__C);"), "store_bias still lands through the cooperative store")
     }

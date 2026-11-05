@@ -979,6 +979,33 @@ class TmmTensor {
         tmm2d_tg_store_half(acc, cp, 8u, 16u, 16u)
     }
 
+    // the device rendezvous after a cooperative store: the tile's own
+    // rows read back by the threadgroup's other lanes
+    [metal_kernel(name="tmmdevbar_msl"), marker(no_coverage)]
+    def tmm_devbar {
+        var acc : float[128]
+        var cp = unsafe(addr(oc[0]))
+        tmm2d_tg_begin_deva(acc, unsafe(addr(xah[0])), 8u, 16u, 2u, 32u)
+        let lid = gl_LocalInvocationID.x
+        var kb = 0u
+        while (kb < 2u) {
+            var i = lid
+            while (i < 512u) {
+                tgb[i] = wh[(i / 32u) * 64u + kb * 32u + i % 32u]
+                i += gl_WorkGroupSize.x
+            }
+            barrier()
+            tmm2d_tg_step_deva(acc, unsafe(addr(xah[kb * 32u])), 64u, tgb, 8u, 16u, 32u)
+            barrier()
+            kb++
+        }
+        tmm2d_tg_store(acc, cp, 8u, 16u, 16u)
+        memoryBarrierBuffer()
+        if (lid < 128u) {
+            oc[lid] = oc[lid] + oc[(lid + 1u) & 127u]
+        }
+    }
+
     // the licensed float-A deva twin: same protocol, a f32 witness types the operand tensor
     [metal_kernel(name="tmmdevaf_msl", float_a_ok=true), marker(no_coverage)]
     def tmm_devaf {
@@ -1074,6 +1101,47 @@ class TmmTensor {
         tmm2d_tg_store(acc, cp, 8u, 16u, 16u)
     }
 
+    // the rx flavor: a register-filled left operand of 16 x 32 against
+    // the 8-row half table, two runs over K = 64
+    [metal_kernel(name="tmmrx_msl"), marker(no_coverage)]
+    def tmm_rx {
+        var acc : float[128]
+        tmm2d_rx_begin(acc, unsafe(addr(xah[0])), 64u, 16u, 8u, 32u)
+        var i = 0u
+        while (i < tmm2d_rx_left_count(acc)) {
+            tmm2d_rx_left(acc, i, ushort_bits_to_half(0x3C00u))
+            i++
+        }
+        tmm2d_rx_left2(acc, 0u, 2u, 0x3C003C00u)
+        tmm2d_rx_run(acc, 0u)
+        tmm2d_rx_run(acc, 32u)
+        i = 0u
+        while (i < tmm2d_rx_dest_count(acc)) {
+            if (tmm2d_rx_dest_valid(acc, i)) {
+                oc[gl_LocalInvocationID.x * 8u + i] = tmm2d_rx_dest(acc, i)
+            }
+            i++
+        }
+    }
+
+    // the rx flavor over int8 left elements: four codes a word against
+    // the 8-row half table, one 16-deep run
+    [metal_kernel(name="tmmrx8_msl"), marker(no_coverage)]
+    def tmm_rx8 {
+        var acc : float[128]
+        tmm2d_rx_begin_i8(acc, unsafe(addr(xah[0])), 64u, 16u, 8u, 16u)
+        tmm2d_rx_left4(acc, 0u, 0xFF020180u)
+        tmm2d_rx_left4(acc, 4u, 0x7F00FE01u)
+        tmm2d_rx_run(acc, 16u)
+        var i = 0u
+        while (i < tmm2d_rx_dest_count(acc)) {
+            if (tmm2d_rx_dest_valid(acc, i)) {
+                oc[gl_LocalInvocationID.x * 8u + i] = tmm2d_rx_dest(acc, i)
+            }
+            i++
+        }
+    }
+
     [metal_kernel(name="tmmdevabnt_msl"), marker(no_coverage)]
     def tmm_devabnt {
         var acc : float[128]
@@ -1128,6 +1196,7 @@ def public declared_msl_census : table<string> {   // nolint:STYLE038 — one fl
         "param.shmem",
         "call.barrier",
         "call.memory_barrier_shared",
+        "call.memory_barrier_buffer",
         // atomics
         "call.atomic_add.dev.i32",
         "call.atomic_add.dev.u32",
@@ -1338,6 +1407,19 @@ def public declared_msl_census : table<string> {   // nolint:STYLE038 — one fl
         "call.tmm2d_tg_step_devab",
         "call.tmm2d_tg_begin_devabnt",
         "call.tmm2d_tg_step_devabnt",
+        // the rx flavor: a register-filled left operand, a device half table
+        // sliced per run, lane-owned reads
+        "call.tmm2d_rx_begin",
+        "call.tmm2d_rx_left",
+        "call.tmm2d_rx_left2",
+        "call.tmm2d_rx_begin_i8",
+        "call.tmm2d_rx_left4",
+        "call.tmm2d_rx_run",
+        "call.tmm2d_rx_dest",
+        "call.tmm2d_rx_dest_valid",
+        "call.tmm2d_rx_left_count",
+        "call.tmm2d_rx_dest_count",
+        "call.ushort_bits_to_half",
         "call.tmm2d_tile_tg",
         "call.tmm2d_tg_rowscale",
         "call.tmm2d_tg_store",
@@ -1469,7 +1551,9 @@ def public all_msl_censuses : array<string> {
         consttab_msl_census,
         statearr_msl_census,
         tmmhw_msl_census, tmmhwh_msl_census, tmmq8u_msl_census, tmmq8uh_msl_census,
-        tmmq8uh64_msl_census, tmmq8uh128_msl_census, tmmdeva_msl_census, tmmdevaf_msl_census,
-        tmmnt_msl_census, tmmdevant_msl_census, tmmdevab_msl_census, tmmdevabnt_msl_census, sgmathalf_msl_census, sgmat_store_tg_msl_census,
+        tmmq8uh64_msl_census, tmmq8uh128_msl_census, tmmdeva_msl_census, tmmdevbar_msl_census,
+        tmmdevaf_msl_census, tmmnt_msl_census, tmmdevant_msl_census, tmmdevab_msl_census,
+        tmmdevabnt_msl_census, tmmrx_msl_census, tmmrx8_msl_census, sgmathalf_msl_census,
+        sgmat_store_tg_msl_census,
         DerivedName_dkern_msl_census]
 }

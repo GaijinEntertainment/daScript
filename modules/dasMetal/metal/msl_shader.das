@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options stack = 8388608
 
 // [metal_kernel] — lowers a class method to MSL text (mirrors dasGlsl's shader annotations; the
 // module-global surface mirrors dasSpirv's). `apply` DECLARES the companion globals (consumer code
