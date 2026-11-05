@@ -549,6 +549,335 @@ class AstVisitor {
     def abstract canVisitMakeArrayIndex(expr : ExprMakeArray?; index : int; init : ExpressionPtr; last : bool) : bool
 }
 
+[macro_interface]
+class AstConstVisitor {
+    def abstract preVisitTypeDecl(typ : TypeDecl const?) : void
+    def abstract visitTypeDecl(typ : TypeDecl const?) : void
+    def abstract preVisitExpression(expr : Expression const?) : void
+    def abstract visitExpression(expr : Expression const?) : void
+    def abstract preVisitExprBlockArgument(blk : ExprBlock const?; arg : Variable const?;
+                                           lastArg : bool) : void
+    def abstract visitExprBlockArgument(blk : ExprBlock const?; arg : Variable const?;
+                                        lastArg : bool) : void
+    def abstract preVisitExprBlockArgumentInit(blk : ExprBlock const?; arg : Variable const?;
+                                               expr : Expression const?) : void
+    def abstract visitExprBlockArgumentInit(blk : ExprBlock const?; arg : Variable const?;
+                                            expr : Expression const?) : void
+    def abstract preVisitExprBlockExpression(blk : ExprBlock const?;
+                                             expr : Expression const?) : void
+    def abstract visitExprBlockExpression(blk : ExprBlock const?; expr : Expression const?) : void
+    def abstract preVisitExprBlockFinal(blk : ExprBlock const?) : void
+    def abstract visitExprBlockFinal(blk : ExprBlock const?) : void
+    def abstract preVisitExprBlockFinalExpression(blk : ExprBlock const?;
+                                                  expr : Expression const?) : void
+    def abstract visitExprBlockFinalExpression(blk : ExprBlock const?;
+                                               expr : Expression const?) : void
+    def abstract preVisitExprLetVariable(expr : ExprLet const?; arg : Variable const?;
+                                         lastArg : bool) : void
+    def abstract visitExprLetVariable(expr : ExprLet const?; arg : Variable const?;
+                                      lastArg : bool) : void
+    def abstract preVisitExprLetVariableInit(blk : ExprLet const?; arg : Variable const?;
+                                             expr : Expression const?) : void
+    def abstract visitExprLetVariableInit(blk : ExprLet const?; arg : Variable const?;
+                                          expr : Expression const?) : void
+    def abstract preVisitExprStringBuilderElement(expr : ExprStringBuilder const?;
+                                                  elem : Expression const?; last : bool) : void
+    def abstract visitExprStringBuilderElement(expr : ExprStringBuilder const?;
+                                               elem : Expression const?; last : bool) : void
+    def abstract preVisitExprNewArgument(expr : ExprNew const?; arg : Expression const?;
+                                         last : bool) : void
+    def abstract visitExprNewArgument(expr : ExprNew const?; arg : Expression const?;
+                                      last : bool) : void
+    def abstract preVisitExprNamedCallArgument(expr : ExprNamedCall const?;
+                                               arg : MakeFieldDecl const?; last : bool) : void
+    def abstract visitExprNamedCallArgument(expr : ExprNamedCall const?; arg : MakeFieldDecl const?;
+                                            last : bool) : void
+    def abstract canVisitExprLooksLikeCallArgument(expr : ExprLooksLikeCall const?;
+                                                   arg : Expression const?; last : bool) : bool
+    def abstract preVisitExprLooksLikeCallArgument(expr : ExprLooksLikeCall const?;
+                                                   arg : Expression const?; last : bool) : void
+    def abstract visitExprLooksLikeCallArgument(expr : ExprLooksLikeCall const?;
+                                                arg : Expression const?; last : bool) : void
+    def abstract canVisitCall(expr : ExprCall const?) : bool
+    def abstract canVisitNamedCall(expr : ExprNamedCall const?) : bool
+    def abstract canVisitLooksLikeCall(expr : ExprLooksLikeCall const?) : bool
+    def abstract preVisitExprCallArgument(expr : ExprCall const?; arg : Expression const?;
+                                          last : bool) : void
+    def abstract visitExprCallArgument(expr : ExprCall const?; arg : Expression const?;
+                                       last : bool) : void
+    def abstract preVisitExprNullCoalescingDefault(expr : ExprNullCoalescing const?;
+                                                   defval : Expression const?) : void
+    def abstract preVisitExprAtIndex(expr : ExprAt const?; index : Expression const?) : void
+    def abstract preVisitExprSafeAtIndex(expr : ExprSafeAt const?; index : Expression const?) : void
+    def abstract preVisitExprIsType(expr : ExprIs const?; typeDecl : TypeDecl const?) : void
+    def abstract preVisitExprOp2Right(expr : ExprOp2 const?; right : Expression const?) : void
+    def abstract preVisitExprOp3Left(expr : ExprOp3 const?; left : Expression const?) : void
+    def abstract preVisitExprOp3Right(expr : ExprOp3 const?; right : Expression const?) : void
+    def abstract isRightFirstExprCopy(expr : ExprCopy const?) : bool
+    def abstract preVisitExprCopyRight(expr : ExprCopy const?; right : Expression const?) : void
+    def abstract isRightFirstExprMove(expr : ExprMove const?) : bool
+    def abstract preVisitExprMoveRight(expr : ExprMove const?; right : Expression const?) : void
+    def abstract isRightFirstExprClone(expr : ExprClone const?) : bool
+    def abstract preVisitExprCloneRight(expr : ExprClone const?; right : Expression const?) : void
+    def abstract canVisitWithAliasSubexpression(expr : ExprAssume const?) : bool
+    def abstract preVisitExprWithBody(expr : ExprWith const?; right : Expression const?) : void
+    def abstract preVisitExprWhileBody(expr : ExprWhile const?; right : Expression const?) : void
+    def abstract preVisitExprTryCatchCatch(expr : ExprTryCatch const?;
+                                           right : Expression const?) : void
+    def abstract preVisitExprIfThenElseIfBlock(expr : ExprIfThenElse const?;
+                                               ifBlock : Expression const?) : void
+    def abstract preVisitExprIfThenElseElseBlock(expr : ExprIfThenElse const?;
+                                                 elseBlock : Expression const?) : void
+    def abstract preVisitExprForVariable(expr : ExprFor const?; svar : Variable const?;
+                                         last : bool) : void
+    def abstract visitExprForVariable(expr : ExprFor const?; svar : Variable const?;
+                                      last : bool) : void
+    def abstract preVisitExprForSource(expr : ExprFor const?; source : Expression const?;
+                                       last : bool) : void
+    def abstract visitExprForSource(expr : ExprFor const?; source : Expression const?;
+                                    last : bool) : void
+    def abstract preVisitExprForStack(expr : ExprFor const?) : void
+    def abstract preVisitExprForBody(expr : ExprFor const?; body : Expression const?) : void
+    def abstract preVisitExprMakeVariantField(expr : ExprMakeVariant const?; index : int;
+                                              decl : MakeFieldDecl const?; last : bool) : void
+    def abstract visitExprMakeVariantField(expr : ExprMakeVariant const?; index : int;
+                                           decl : MakeFieldDecl const?; last : bool) : void
+    def abstract canVisitExprMakeStructBody(expr : ExprMakeStruct const?) : bool
+    def abstract canVisitExprMakeStructBlock(expr : ExprMakeStruct const?;
+                                             blk : Expression const?) : bool
+    def abstract preVisitExprMakeStructIndex(expr : ExprMakeStruct const?; index : int;
+                                             last : bool) : void
+    def abstract visitExprMakeStructIndex(expr : ExprMakeStruct const?; index : int;
+                                          last : bool) : void
+    def abstract preVisitExprMakeStructField(expr : ExprMakeStruct const?; index : int;
+                                             decl : MakeFieldDecl const?; last : bool) : void
+    def abstract visitExprMakeStructField(expr : ExprMakeStruct const?; index : int;
+                                          decl : MakeFieldDecl const?; last : bool) : void
+    def abstract preVisitMakeStructureBlock(expr : ExprMakeStruct const?;
+                                            blk : Expression const?) : void
+    def abstract visitMakeStructureBlock(expr : ExprMakeStruct const?;
+                                         blk : Expression const?) : void
+    def abstract preVisitExprMakeArrayIndex(expr : ExprMakeArray const?; index : int;
+                                            init : Expression const?; last : bool) : void
+    def abstract visitExprMakeArrayIndex(expr : ExprMakeArray const?; index : int;
+                                         init : Expression const?; last : bool) : void
+    def abstract preVisitExprMakeTupleIndex(expr : ExprMakeTuple const?; index : int;
+                                            init : Expression const?; last : bool) : void
+    def abstract visitExprMakeTupleIndex(expr : ExprMakeTuple const?; index : int;
+                                         init : Expression const?; last : bool) : void
+    def abstract preVisitExprArrayComprehensionSubexpr(expr : ExprArrayComprehension const?;
+                                                       subexpr : Expression const?) : void
+    def abstract preVisitExprArrayComprehensionWhere(expr : ExprArrayComprehension const?;
+                                                     filter : Expression const?) : void
+    def abstract canVisitExprTypeInfo(expr : ExprTypeInfo const?;
+                                      subexpr : Expression const?) : bool
+    def abstract canVisitQuoteSubexpression(expr : ExprQuote const?) : bool
+    def abstract preVisitExprDeleteSizeExpression(expr : ExprDelete const?;
+                                                  size : Expression const?) : void
+    def abstract preVisitExprTagValue(expr : ExprTag const?; value : Expression const?) : void
+    def abstract canVisitMakeBlockBody(expr : ExprMakeBlock const?) : bool
+    def abstract canVisitTryCatchBody(expr : ExprTryCatch const?) : bool
+    def abstract canVisitMakeArray(expr : ExprMakeArray const?) : bool
+    def abstract canVisitMakeArrayIndex(expr : ExprMakeArray const?; index : int;
+                                        init : Expression const?; last : bool) : bool
+    def abstract preVisitExprStringBuilder(expr : ExprStringBuilder const?) : void
+    def abstract visitExprStringBuilder(expr : ExprStringBuilder const?) : void
+    def abstract preVisitExprCallMacro(expr : ExprCallMacro const?) : void
+    def abstract visitExprCallMacro(expr : ExprCallMacro const?) : void
+    def abstract preVisitExprUnsafe(expr : ExprUnsafe const?) : void
+    def abstract visitExprUnsafe(expr : ExprUnsafe const?) : void
+    def abstract preVisitExprReader(expr : ExprReader const?) : void
+    def abstract visitExprReader(expr : ExprReader const?) : void
+    def abstract preVisitExprLabel(expr : ExprLabel const?) : void
+    def abstract visitExprLabel(expr : ExprLabel const?) : void
+    def abstract preVisitExprGoto(expr : ExprGoto const?) : void
+    def abstract visitExprGoto(expr : ExprGoto const?) : void
+    def abstract preVisitExprRef2Value(expr : ExprRef2Value const?) : void
+    def abstract visitExprRef2Value(expr : ExprRef2Value const?) : void
+    def abstract preVisitExprRef2Ptr(expr : ExprRef2Ptr const?) : void
+    def abstract visitExprRef2Ptr(expr : ExprRef2Ptr const?) : void
+    def abstract preVisitExprPtr2Ref(expr : ExprPtr2Ref const?) : void
+    def abstract visitExprPtr2Ref(expr : ExprPtr2Ref const?) : void
+    def abstract preVisitExprAddr(expr : ExprAddr const?) : void
+    def abstract visitExprAddr(expr : ExprAddr const?) : void
+    def abstract preVisitExprNullCoalescing(expr : ExprNullCoalescing const?) : void
+    def abstract visitExprNullCoalescing(expr : ExprNullCoalescing const?) : void
+    def abstract preVisitExprAssert(expr : ExprAssert const?) : void
+    def abstract visitExprAssert(expr : ExprAssert const?) : void
+    def abstract preVisitExprStaticAssert(expr : ExprStaticAssert const?) : void
+    def abstract visitExprStaticAssert(expr : ExprStaticAssert const?) : void
+    def abstract preVisitExprQuote(expr : ExprQuote const?) : void
+    def abstract visitExprQuote(expr : ExprQuote const?) : void
+    def abstract preVisitExprDebug(expr : ExprDebug const?) : void
+    def abstract visitExprDebug(expr : ExprDebug const?) : void
+    def abstract preVisitExprInvoke(expr : ExprInvoke const?) : void
+    def abstract visitExprInvoke(expr : ExprInvoke const?) : void
+    def abstract preVisitExprErase(expr : ExprErase const?) : void
+    def abstract visitExprErase(expr : ExprErase const?) : void
+    def abstract preVisitExprSetInsert(expr : ExprSetInsert const?) : void
+    def abstract visitExprSetInsert(expr : ExprSetInsert const?) : void
+    def abstract preVisitExprFind(expr : ExprFind const?) : void
+    def abstract visitExprFind(expr : ExprFind const?) : void
+    def abstract preVisitExprKeyExists(expr : ExprKeyExists const?) : void
+    def abstract visitExprKeyExists(expr : ExprKeyExists const?) : void
+    def abstract preVisitExprAscend(expr : ExprAscend const?) : void
+    def abstract visitExprAscend(expr : ExprAscend const?) : void
+    def abstract preVisitExprCast(expr : ExprCast const?) : void
+    def abstract visitExprCast(expr : ExprCast const?) : void
+    def abstract preVisitExprNew(expr : ExprNew const?) : void
+    def abstract visitExprNew(expr : ExprNew const?) : void
+    def abstract preVisitExprDelete(expr : ExprDelete const?) : void
+    def abstract visitExprDelete(expr : ExprDelete const?) : void
+    def abstract preVisitExprAt(expr : ExprAt const?) : void
+    def abstract visitExprAt(expr : ExprAt const?) : void
+    def abstract preVisitExprSafeAt(expr : ExprSafeAt const?) : void
+    def abstract visitExprSafeAt(expr : ExprSafeAt const?) : void
+    def abstract preVisitExprBlock(expr : ExprBlock const?) : void
+    def abstract visitExprBlock(expr : ExprBlock const?) : void
+    def abstract preVisitExprVar(expr : ExprVar const?) : void
+    def abstract visitExprVar(expr : ExprVar const?) : void
+    def abstract preVisitExprSwizzle(expr : ExprSwizzle const?) : void
+    def abstract visitExprSwizzle(expr : ExprSwizzle const?) : void
+    def abstract preVisitExprField(expr : ExprField const?) : void
+    def abstract visitExprField(expr : ExprField const?) : void
+    def abstract preVisitExprSafeField(expr : ExprSafeField const?) : void
+    def abstract visitExprSafeField(expr : ExprSafeField const?) : void
+    def abstract preVisitExprIsVariant(expr : ExprIsVariant const?) : void
+    def abstract visitExprIsVariant(expr : ExprIsVariant const?) : void
+    def abstract preVisitExprAsVariant(expr : ExprAsVariant const?) : void
+    def abstract visitExprAsVariant(expr : ExprAsVariant const?) : void
+    def abstract preVisitExprSafeAsVariant(expr : ExprSafeAsVariant const?) : void
+    def abstract visitExprSafeAsVariant(expr : ExprSafeAsVariant const?) : void
+    def abstract preVisitExprOp1(expr : ExprOp1 const?) : void
+    def abstract visitExprOp1(expr : ExprOp1 const?) : void
+    def abstract preVisitExprOp2(expr : ExprOp2 const?) : void
+    def abstract visitExprOp2(expr : ExprOp2 const?) : void
+    def abstract preVisitExprOp3(expr : ExprOp3 const?) : void
+    def abstract visitExprOp3(expr : ExprOp3 const?) : void
+    def abstract preVisitExprCopy(expr : ExprCopy const?) : void
+    def abstract visitExprCopy(expr : ExprCopy const?) : void
+    def abstract preVisitExprMove(expr : ExprMove const?) : void
+    def abstract visitExprMove(expr : ExprMove const?) : void
+    def abstract preVisitExprClone(expr : ExprClone const?) : void
+    def abstract visitExprClone(expr : ExprClone const?) : void
+    def abstract preVisitExprTryCatch(expr : ExprTryCatch const?) : void
+    def abstract visitExprTryCatch(expr : ExprTryCatch const?) : void
+    def abstract preVisitExprReturn(expr : ExprReturn const?) : void
+    def abstract visitExprReturn(expr : ExprReturn const?) : void
+    def abstract preVisitExprYield(expr : ExprYield const?) : void
+    def abstract visitExprYield(expr : ExprYield const?) : void
+    def abstract preVisitExprBreak(expr : ExprBreak const?) : void
+    def abstract visitExprBreak(expr : ExprBreak const?) : void
+    def abstract preVisitExprContinue(expr : ExprContinue const?) : void
+    def abstract visitExprContinue(expr : ExprContinue const?) : void
+    def abstract preVisitExprConst(expr : ExprConst const?) : void
+    def abstract visitExprConst(expr : ExprConst const?) : void
+    def abstract preVisitExprFakeContext(expr : ExprFakeContext const?) : void
+    def abstract visitExprFakeContext(expr : ExprFakeContext const?) : void
+    def abstract preVisitExprFakeLineInfo(expr : ExprFakeLineInfo const?) : void
+    def abstract visitExprFakeLineInfo(expr : ExprFakeLineInfo const?) : void
+    def abstract preVisitExprConstPtr(expr : ExprConstPtr const?) : void
+    def abstract visitExprConstPtr(expr : ExprConstPtr const?) : void
+    def abstract preVisitExprConstEnumeration(expr : ExprConstEnumeration const?) : void
+    def abstract visitExprConstEnumeration(expr : ExprConstEnumeration const?) : void
+    def abstract preVisitExprConstBitfield(expr : ExprConstBitfield const?) : void
+    def abstract visitExprConstBitfield(expr : ExprConstBitfield const?) : void
+    def abstract preVisitExprConstInt8(expr : ExprConstInt8 const?) : void
+    def abstract visitExprConstInt8(expr : ExprConstInt8 const?) : void
+    def abstract preVisitExprConstInt16(expr : ExprConstInt16 const?) : void
+    def abstract visitExprConstInt16(expr : ExprConstInt16 const?) : void
+    def abstract preVisitExprConstInt64(expr : ExprConstInt64 const?) : void
+    def abstract visitExprConstInt64(expr : ExprConstInt64 const?) : void
+    def abstract preVisitExprConstInt(expr : ExprConstInt const?) : void
+    def abstract visitExprConstInt(expr : ExprConstInt const?) : void
+    def abstract preVisitExprConstInt2(expr : ExprConstInt2 const?) : void
+    def abstract visitExprConstInt2(expr : ExprConstInt2 const?) : void
+    def abstract preVisitExprConstInt3(expr : ExprConstInt3 const?) : void
+    def abstract visitExprConstInt3(expr : ExprConstInt3 const?) : void
+    def abstract preVisitExprConstInt4(expr : ExprConstInt4 const?) : void
+    def abstract visitExprConstInt4(expr : ExprConstInt4 const?) : void
+    def abstract preVisitExprConstUInt8(expr : ExprConstUInt8 const?) : void
+    def abstract visitExprConstUInt8(expr : ExprConstUInt8 const?) : void
+    def abstract preVisitExprConstUInt16(expr : ExprConstUInt16 const?) : void
+    def abstract visitExprConstUInt16(expr : ExprConstUInt16 const?) : void
+    def abstract preVisitExprConstUInt64(expr : ExprConstUInt64 const?) : void
+    def abstract visitExprConstUInt64(expr : ExprConstUInt64 const?) : void
+    def abstract preVisitExprConstUInt(expr : ExprConstUInt const?) : void
+    def abstract visitExprConstUInt(expr : ExprConstUInt const?) : void
+    def abstract preVisitExprConstUInt2(expr : ExprConstUInt2 const?) : void
+    def abstract visitExprConstUInt2(expr : ExprConstUInt2 const?) : void
+    def abstract preVisitExprConstUInt3(expr : ExprConstUInt3 const?) : void
+    def abstract visitExprConstUInt3(expr : ExprConstUInt3 const?) : void
+    def abstract preVisitExprConstUInt4(expr : ExprConstUInt4 const?) : void
+    def abstract visitExprConstUInt4(expr : ExprConstUInt4 const?) : void
+    def abstract preVisitExprConstRange(expr : ExprConstRange const?) : void
+    def abstract visitExprConstRange(expr : ExprConstRange const?) : void
+    def abstract preVisitExprConstURange(expr : ExprConstURange const?) : void
+    def abstract visitExprConstURange(expr : ExprConstURange const?) : void
+    def abstract preVisitExprConstRange64(expr : ExprConstRange64 const?) : void
+    def abstract visitExprConstRange64(expr : ExprConstRange64 const?) : void
+    def abstract preVisitExprConstURange64(expr : ExprConstURange64 const?) : void
+    def abstract visitExprConstURange64(expr : ExprConstURange64 const?) : void
+    def abstract preVisitExprConstBool(expr : ExprConstBool const?) : void
+    def abstract visitExprConstBool(expr : ExprConstBool const?) : void
+    def abstract preVisitExprConstFloat(expr : ExprConstFloat const?) : void
+    def abstract visitExprConstFloat(expr : ExprConstFloat const?) : void
+    def abstract preVisitExprConstFloat16(expr : ExprConstFloat16 const?) : void
+    def abstract visitExprConstFloat16(expr : ExprConstFloat16 const?) : void
+    def abstract preVisitExprConstFloat2(expr : ExprConstFloat2 const?) : void
+    def abstract visitExprConstFloat2(expr : ExprConstFloat2 const?) : void
+    def abstract preVisitExprConstFloat3(expr : ExprConstFloat3 const?) : void
+    def abstract visitExprConstFloat3(expr : ExprConstFloat3 const?) : void
+    def abstract preVisitExprConstFloat4(expr : ExprConstFloat4 const?) : void
+    def abstract visitExprConstFloat4(expr : ExprConstFloat4 const?) : void
+    def abstract preVisitExprConstString(expr : ExprConstString const?) : void
+    def abstract visitExprConstString(expr : ExprConstString const?) : void
+    def abstract preVisitExprConstDouble(expr : ExprConstDouble const?) : void
+    def abstract visitExprConstDouble(expr : ExprConstDouble const?) : void
+    def abstract preVisitExprLet(expr : ExprLet const?) : void
+    def abstract visitExprLet(expr : ExprLet const?) : void
+    def abstract preVisitExprFor(expr : ExprFor const?) : void
+    def abstract visitExprFor(expr : ExprFor const?) : void
+    def abstract preVisitExprLooksLikeCall(expr : ExprLooksLikeCall const?) : void
+    def abstract visitExprLooksLikeCall(expr : ExprLooksLikeCall const?) : void
+    def abstract preVisitExprMakeBlock(expr : ExprMakeBlock const?) : void
+    def abstract visitExprMakeBlock(expr : ExprMakeBlock const?) : void
+    def abstract preVisitExprMakeGenerator(expr : ExprMakeGenerator const?) : void
+    def abstract visitExprMakeGenerator(expr : ExprMakeGenerator const?) : void
+    def abstract preVisitExprTypeInfo(expr : ExprTypeInfo const?) : void
+    def abstract visitExprTypeInfo(expr : ExprTypeInfo const?) : void
+    def abstract preVisitExprIs(expr : ExprIs const?) : void
+    def abstract visitExprIs(expr : ExprIs const?) : void
+    def abstract preVisitExprCall(expr : ExprCall const?) : void
+    def abstract visitExprCall(expr : ExprCall const?) : void
+    def abstract preVisitExprNamedCall(expr : ExprNamedCall const?) : void
+    def abstract visitExprNamedCall(expr : ExprNamedCall const?) : void
+    def abstract preVisitExprIfThenElse(expr : ExprIfThenElse const?) : void
+    def abstract visitExprIfThenElse(expr : ExprIfThenElse const?) : void
+    def abstract preVisitExprWith(expr : ExprWith const?) : void
+    def abstract visitExprWith(expr : ExprWith const?) : void
+    def abstract preVisitExprAssume(expr : ExprAssume const?) : void
+    def abstract visitExprAssume(expr : ExprAssume const?) : void
+    def abstract preVisitExprWhile(expr : ExprWhile const?) : void
+    def abstract visitExprWhile(expr : ExprWhile const?) : void
+    def abstract preVisitExprMakeStruct(expr : ExprMakeStruct const?) : void
+    def abstract visitExprMakeStruct(expr : ExprMakeStruct const?) : void
+    def abstract preVisitExprMakeVariant(expr : ExprMakeVariant const?) : void
+    def abstract visitExprMakeVariant(expr : ExprMakeVariant const?) : void
+    def abstract preVisitExprMakeArray(expr : ExprMakeArray const?) : void
+    def abstract visitExprMakeArray(expr : ExprMakeArray const?) : void
+    def abstract preVisitExprMakeTuple(expr : ExprMakeTuple const?) : void
+    def abstract visitExprMakeTuple(expr : ExprMakeTuple const?) : void
+    def abstract preVisitExprArrayComprehension(expr : ExprArrayComprehension const?) : void
+    def abstract visitExprArrayComprehension(expr : ExprArrayComprehension const?) : void
+    def abstract preVisitExprMemZero(expr : ExprMemZero const?) : void
+    def abstract visitExprMemZero(expr : ExprMemZero const?) : void
+    def abstract preVisitExprTypeDecl(expr : ExprTypeDecl const?) : void
+    def abstract visitExprTypeDecl(expr : ExprTypeDecl const?) : void
+    def abstract preVisitExprTag(expr : ExprTag const?) : void
+    def abstract visitExprTag(expr : ExprTag const?) : void
+}
+
 var private gc_root_AstFunctionAnnotation : array<AstFunctionAnnotation?>
 
 [macro_function]
@@ -611,6 +940,18 @@ def make_visitor(someClass; blk : block<(var adapter : VisitorAdapter?) : void>)
             let classPtr = addr(someClass)
             let classInfo = class_info(someClass)
             make_visitor(classPtr, classInfo, blk)
+        }
+    } else {
+        concept_assert(false, "can't make visitor of non-class")
+    }
+}
+
+def make_const_visitor(someClass; blk : block<(var adapter : ConstVisitorAdapter?) : void>) {
+    static_if (typeinfo is_class(someClass)) {
+        unsafe {
+            let classPtr = addr(someClass)
+            let classInfo = class_info(someClass)
+            make_const_visitor(classPtr, classInfo, blk)
         }
     } else {
         concept_assert(false, "can't make visitor of non-class")

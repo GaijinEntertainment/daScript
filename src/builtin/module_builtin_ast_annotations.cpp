@@ -17,6 +17,7 @@ using namespace das;
 
 namespace das {
     class VisitorAdapter;
+    class ConstVisitorAdapter;
 };
 
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(TypeDecl,TypeDecl)
@@ -30,6 +31,7 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(BuiltInFunction,BuiltInFunction)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(InferHistory, InferHistory)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(Variable,Variable)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(VisitorAdapter,VisitorAdapter)
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(ConstVisitorAdapter,ConstVisitorAdapter)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(FunctionAnnotation,FunctionAnnotation)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(StructureAnnotation,StructureAnnotation)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(EnumerationAnnotation,EnumerationAnnotation)

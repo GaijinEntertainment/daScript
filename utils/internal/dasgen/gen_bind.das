@@ -31,6 +31,8 @@ def main {
             log_cpp_class_adapter(cpp_file, "AstCallMacro_Adapter", typeinfo ast_typedecl(type<AstCallMacro>))
             log_cpp_class_adapter(cpp_file, "AstTypeInfoMacro_Adapter", typeinfo ast_typedecl(type<AstTypeInfoMacro>))
             log_cpp_class_adapter(cpp_file, "AstVisitor_Adapter", typeinfo ast_typedecl(type<AstVisitor>))
+            log_cpp_class_adapter(cpp_file, "AstConstVisitor_Adapter",
+                                  typeinfo ast_typedecl(type<AstConstVisitor>))
         }
     })
     fwrite_if_changed(root + "debugapi_gen.inc", build_string() $(var cpp_file) {

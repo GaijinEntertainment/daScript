@@ -4475,3 +4475,3061 @@ public:
   }
 };
 
+class AstConstVisitor_Adapter {
+protected:
+  enum {
+    __fn_preVisitTypeDecl = 0,
+    __fn_visitTypeDecl = 1,
+    __fn_preVisitExpression = 2,
+    __fn_visitExpression = 3,
+    __fn_preVisitExprBlockArgument = 4,
+    __fn_visitExprBlockArgument = 5,
+    __fn_preVisitExprBlockArgumentInit = 6,
+    __fn_visitExprBlockArgumentInit = 7,
+    __fn_preVisitExprBlockExpression = 8,
+    __fn_visitExprBlockExpression = 9,
+    __fn_preVisitExprBlockFinal = 10,
+    __fn_visitExprBlockFinal = 11,
+    __fn_preVisitExprBlockFinalExpression = 12,
+    __fn_visitExprBlockFinalExpression = 13,
+    __fn_preVisitExprLetVariable = 14,
+    __fn_visitExprLetVariable = 15,
+    __fn_preVisitExprLetVariableInit = 16,
+    __fn_visitExprLetVariableInit = 17,
+    __fn_preVisitExprStringBuilderElement = 18,
+    __fn_visitExprStringBuilderElement = 19,
+    __fn_preVisitExprNewArgument = 20,
+    __fn_visitExprNewArgument = 21,
+    __fn_preVisitExprNamedCallArgument = 22,
+    __fn_visitExprNamedCallArgument = 23,
+    __fn_canVisitExprLooksLikeCallArgument = 24,
+    __fn_preVisitExprLooksLikeCallArgument = 25,
+    __fn_visitExprLooksLikeCallArgument = 26,
+    __fn_canVisitCall = 27,
+    __fn_canVisitNamedCall = 28,
+    __fn_canVisitLooksLikeCall = 29,
+    __fn_preVisitExprCallArgument = 30,
+    __fn_visitExprCallArgument = 31,
+    __fn_preVisitExprNullCoalescingDefault = 32,
+    __fn_preVisitExprAtIndex = 33,
+    __fn_preVisitExprSafeAtIndex = 34,
+    __fn_preVisitExprIsType = 35,
+    __fn_preVisitExprOp2Right = 36,
+    __fn_preVisitExprOp3Left = 37,
+    __fn_preVisitExprOp3Right = 38,
+    __fn_isRightFirstExprCopy = 39,
+    __fn_preVisitExprCopyRight = 40,
+    __fn_isRightFirstExprMove = 41,
+    __fn_preVisitExprMoveRight = 42,
+    __fn_isRightFirstExprClone = 43,
+    __fn_preVisitExprCloneRight = 44,
+    __fn_canVisitWithAliasSubexpression = 45,
+    __fn_preVisitExprWithBody = 46,
+    __fn_preVisitExprWhileBody = 47,
+    __fn_preVisitExprTryCatchCatch = 48,
+    __fn_preVisitExprIfThenElseIfBlock = 49,
+    __fn_preVisitExprIfThenElseElseBlock = 50,
+    __fn_preVisitExprForVariable = 51,
+    __fn_visitExprForVariable = 52,
+    __fn_preVisitExprForSource = 53,
+    __fn_visitExprForSource = 54,
+    __fn_preVisitExprForStack = 55,
+    __fn_preVisitExprForBody = 56,
+    __fn_preVisitExprMakeVariantField = 57,
+    __fn_visitExprMakeVariantField = 58,
+    __fn_canVisitExprMakeStructBody = 59,
+    __fn_canVisitExprMakeStructBlock = 60,
+    __fn_preVisitExprMakeStructIndex = 61,
+    __fn_visitExprMakeStructIndex = 62,
+    __fn_preVisitExprMakeStructField = 63,
+    __fn_visitExprMakeStructField = 64,
+    __fn_preVisitMakeStructureBlock = 65,
+    __fn_visitMakeStructureBlock = 66,
+    __fn_preVisitExprMakeArrayIndex = 67,
+    __fn_visitExprMakeArrayIndex = 68,
+    __fn_preVisitExprMakeTupleIndex = 69,
+    __fn_visitExprMakeTupleIndex = 70,
+    __fn_preVisitExprArrayComprehensionSubexpr = 71,
+    __fn_preVisitExprArrayComprehensionWhere = 72,
+    __fn_canVisitExprTypeInfo = 73,
+    __fn_canVisitQuoteSubexpression = 74,
+    __fn_preVisitExprDeleteSizeExpression = 75,
+    __fn_preVisitExprTagValue = 76,
+    __fn_canVisitMakeBlockBody = 77,
+    __fn_canVisitTryCatchBody = 78,
+    __fn_canVisitMakeArray = 79,
+    __fn_canVisitMakeArrayIndex = 80,
+    __fn_preVisitExprStringBuilder = 81,
+    __fn_visitExprStringBuilder = 82,
+    __fn_preVisitExprCallMacro = 83,
+    __fn_visitExprCallMacro = 84,
+    __fn_preVisitExprUnsafe = 85,
+    __fn_visitExprUnsafe = 86,
+    __fn_preVisitExprReader = 87,
+    __fn_visitExprReader = 88,
+    __fn_preVisitExprLabel = 89,
+    __fn_visitExprLabel = 90,
+    __fn_preVisitExprGoto = 91,
+    __fn_visitExprGoto = 92,
+    __fn_preVisitExprRef2Value = 93,
+    __fn_visitExprRef2Value = 94,
+    __fn_preVisitExprRef2Ptr = 95,
+    __fn_visitExprRef2Ptr = 96,
+    __fn_preVisitExprPtr2Ref = 97,
+    __fn_visitExprPtr2Ref = 98,
+    __fn_preVisitExprAddr = 99,
+    __fn_visitExprAddr = 100,
+    __fn_preVisitExprNullCoalescing = 101,
+    __fn_visitExprNullCoalescing = 102,
+    __fn_preVisitExprAssert = 103,
+    __fn_visitExprAssert = 104,
+    __fn_preVisitExprStaticAssert = 105,
+    __fn_visitExprStaticAssert = 106,
+    __fn_preVisitExprQuote = 107,
+    __fn_visitExprQuote = 108,
+    __fn_preVisitExprDebug = 109,
+    __fn_visitExprDebug = 110,
+    __fn_preVisitExprInvoke = 111,
+    __fn_visitExprInvoke = 112,
+    __fn_preVisitExprErase = 113,
+    __fn_visitExprErase = 114,
+    __fn_preVisitExprSetInsert = 115,
+    __fn_visitExprSetInsert = 116,
+    __fn_preVisitExprFind = 117,
+    __fn_visitExprFind = 118,
+    __fn_preVisitExprKeyExists = 119,
+    __fn_visitExprKeyExists = 120,
+    __fn_preVisitExprAscend = 121,
+    __fn_visitExprAscend = 122,
+    __fn_preVisitExprCast = 123,
+    __fn_visitExprCast = 124,
+    __fn_preVisitExprNew = 125,
+    __fn_visitExprNew = 126,
+    __fn_preVisitExprDelete = 127,
+    __fn_visitExprDelete = 128,
+    __fn_preVisitExprAt = 129,
+    __fn_visitExprAt = 130,
+    __fn_preVisitExprSafeAt = 131,
+    __fn_visitExprSafeAt = 132,
+    __fn_preVisitExprBlock = 133,
+    __fn_visitExprBlock = 134,
+    __fn_preVisitExprVar = 135,
+    __fn_visitExprVar = 136,
+    __fn_preVisitExprSwizzle = 137,
+    __fn_visitExprSwizzle = 138,
+    __fn_preVisitExprField = 139,
+    __fn_visitExprField = 140,
+    __fn_preVisitExprSafeField = 141,
+    __fn_visitExprSafeField = 142,
+    __fn_preVisitExprIsVariant = 143,
+    __fn_visitExprIsVariant = 144,
+    __fn_preVisitExprAsVariant = 145,
+    __fn_visitExprAsVariant = 146,
+    __fn_preVisitExprSafeAsVariant = 147,
+    __fn_visitExprSafeAsVariant = 148,
+    __fn_preVisitExprOp1 = 149,
+    __fn_visitExprOp1 = 150,
+    __fn_preVisitExprOp2 = 151,
+    __fn_visitExprOp2 = 152,
+    __fn_preVisitExprOp3 = 153,
+    __fn_visitExprOp3 = 154,
+    __fn_preVisitExprCopy = 155,
+    __fn_visitExprCopy = 156,
+    __fn_preVisitExprMove = 157,
+    __fn_visitExprMove = 158,
+    __fn_preVisitExprClone = 159,
+    __fn_visitExprClone = 160,
+    __fn_preVisitExprTryCatch = 161,
+    __fn_visitExprTryCatch = 162,
+    __fn_preVisitExprReturn = 163,
+    __fn_visitExprReturn = 164,
+    __fn_preVisitExprYield = 165,
+    __fn_visitExprYield = 166,
+    __fn_preVisitExprBreak = 167,
+    __fn_visitExprBreak = 168,
+    __fn_preVisitExprContinue = 169,
+    __fn_visitExprContinue = 170,
+    __fn_preVisitExprConst = 171,
+    __fn_visitExprConst = 172,
+    __fn_preVisitExprFakeContext = 173,
+    __fn_visitExprFakeContext = 174,
+    __fn_preVisitExprFakeLineInfo = 175,
+    __fn_visitExprFakeLineInfo = 176,
+    __fn_preVisitExprConstPtr = 177,
+    __fn_visitExprConstPtr = 178,
+    __fn_preVisitExprConstEnumeration = 179,
+    __fn_visitExprConstEnumeration = 180,
+    __fn_preVisitExprConstBitfield = 181,
+    __fn_visitExprConstBitfield = 182,
+    __fn_preVisitExprConstInt8 = 183,
+    __fn_visitExprConstInt8 = 184,
+    __fn_preVisitExprConstInt16 = 185,
+    __fn_visitExprConstInt16 = 186,
+    __fn_preVisitExprConstInt64 = 187,
+    __fn_visitExprConstInt64 = 188,
+    __fn_preVisitExprConstInt = 189,
+    __fn_visitExprConstInt = 190,
+    __fn_preVisitExprConstInt2 = 191,
+    __fn_visitExprConstInt2 = 192,
+    __fn_preVisitExprConstInt3 = 193,
+    __fn_visitExprConstInt3 = 194,
+    __fn_preVisitExprConstInt4 = 195,
+    __fn_visitExprConstInt4 = 196,
+    __fn_preVisitExprConstUInt8 = 197,
+    __fn_visitExprConstUInt8 = 198,
+    __fn_preVisitExprConstUInt16 = 199,
+    __fn_visitExprConstUInt16 = 200,
+    __fn_preVisitExprConstUInt64 = 201,
+    __fn_visitExprConstUInt64 = 202,
+    __fn_preVisitExprConstUInt = 203,
+    __fn_visitExprConstUInt = 204,
+    __fn_preVisitExprConstUInt2 = 205,
+    __fn_visitExprConstUInt2 = 206,
+    __fn_preVisitExprConstUInt3 = 207,
+    __fn_visitExprConstUInt3 = 208,
+    __fn_preVisitExprConstUInt4 = 209,
+    __fn_visitExprConstUInt4 = 210,
+    __fn_preVisitExprConstRange = 211,
+    __fn_visitExprConstRange = 212,
+    __fn_preVisitExprConstURange = 213,
+    __fn_visitExprConstURange = 214,
+    __fn_preVisitExprConstRange64 = 215,
+    __fn_visitExprConstRange64 = 216,
+    __fn_preVisitExprConstURange64 = 217,
+    __fn_visitExprConstURange64 = 218,
+    __fn_preVisitExprConstBool = 219,
+    __fn_visitExprConstBool = 220,
+    __fn_preVisitExprConstFloat = 221,
+    __fn_visitExprConstFloat = 222,
+    __fn_preVisitExprConstFloat16 = 223,
+    __fn_visitExprConstFloat16 = 224,
+    __fn_preVisitExprConstFloat2 = 225,
+    __fn_visitExprConstFloat2 = 226,
+    __fn_preVisitExprConstFloat3 = 227,
+    __fn_visitExprConstFloat3 = 228,
+    __fn_preVisitExprConstFloat4 = 229,
+    __fn_visitExprConstFloat4 = 230,
+    __fn_preVisitExprConstString = 231,
+    __fn_visitExprConstString = 232,
+    __fn_preVisitExprConstDouble = 233,
+    __fn_visitExprConstDouble = 234,
+    __fn_preVisitExprLet = 235,
+    __fn_visitExprLet = 236,
+    __fn_preVisitExprFor = 237,
+    __fn_visitExprFor = 238,
+    __fn_preVisitExprLooksLikeCall = 239,
+    __fn_visitExprLooksLikeCall = 240,
+    __fn_preVisitExprMakeBlock = 241,
+    __fn_visitExprMakeBlock = 242,
+    __fn_preVisitExprMakeGenerator = 243,
+    __fn_visitExprMakeGenerator = 244,
+    __fn_preVisitExprTypeInfo = 245,
+    __fn_visitExprTypeInfo = 246,
+    __fn_preVisitExprIs = 247,
+    __fn_visitExprIs = 248,
+    __fn_preVisitExprCall = 249,
+    __fn_visitExprCall = 250,
+    __fn_preVisitExprNamedCall = 251,
+    __fn_visitExprNamedCall = 252,
+    __fn_preVisitExprIfThenElse = 253,
+    __fn_visitExprIfThenElse = 254,
+    __fn_preVisitExprWith = 255,
+    __fn_visitExprWith = 256,
+    __fn_preVisitExprAssume = 257,
+    __fn_visitExprAssume = 258,
+    __fn_preVisitExprWhile = 259,
+    __fn_visitExprWhile = 260,
+    __fn_preVisitExprMakeStruct = 261,
+    __fn_visitExprMakeStruct = 262,
+    __fn_preVisitExprMakeVariant = 263,
+    __fn_visitExprMakeVariant = 264,
+    __fn_preVisitExprMakeArray = 265,
+    __fn_visitExprMakeArray = 266,
+    __fn_preVisitExprMakeTuple = 267,
+    __fn_visitExprMakeTuple = 268,
+    __fn_preVisitExprArrayComprehension = 269,
+    __fn_visitExprArrayComprehension = 270,
+    __fn_preVisitExprMemZero = 271,
+    __fn_visitExprMemZero = 272,
+    __fn_preVisitExprTypeDecl = 273,
+    __fn_visitExprTypeDecl = 274,
+    __fn_preVisitExprTag = 275,
+    __fn_visitExprTag = 276,
+  };
+protected:
+  int _das_class_method_offset[277];
+public:
+  AstConstVisitor_Adapter ( const StructInfo * info ) {
+      _das_class_method_offset[__fn_preVisitTypeDecl] = info->fields[2]->offset;
+      _das_class_method_offset[__fn_visitTypeDecl] = info->fields[3]->offset;
+      _das_class_method_offset[__fn_preVisitExpression] = info->fields[4]->offset;
+      _das_class_method_offset[__fn_visitExpression] = info->fields[5]->offset;
+      _das_class_method_offset[__fn_preVisitExprBlockArgument] = info->fields[6]->offset;
+      _das_class_method_offset[__fn_visitExprBlockArgument] = info->fields[7]->offset;
+      _das_class_method_offset[__fn_preVisitExprBlockArgumentInit] = info->fields[8]->offset;
+      _das_class_method_offset[__fn_visitExprBlockArgumentInit] = info->fields[9]->offset;
+      _das_class_method_offset[__fn_preVisitExprBlockExpression] = info->fields[10]->offset;
+      _das_class_method_offset[__fn_visitExprBlockExpression] = info->fields[11]->offset;
+      _das_class_method_offset[__fn_preVisitExprBlockFinal] = info->fields[12]->offset;
+      _das_class_method_offset[__fn_visitExprBlockFinal] = info->fields[13]->offset;
+      _das_class_method_offset[__fn_preVisitExprBlockFinalExpression] = info->fields[14]->offset;
+      _das_class_method_offset[__fn_visitExprBlockFinalExpression] = info->fields[15]->offset;
+      _das_class_method_offset[__fn_preVisitExprLetVariable] = info->fields[16]->offset;
+      _das_class_method_offset[__fn_visitExprLetVariable] = info->fields[17]->offset;
+      _das_class_method_offset[__fn_preVisitExprLetVariableInit] = info->fields[18]->offset;
+      _das_class_method_offset[__fn_visitExprLetVariableInit] = info->fields[19]->offset;
+      _das_class_method_offset[__fn_preVisitExprStringBuilderElement] = info->fields[20]->offset;
+      _das_class_method_offset[__fn_visitExprStringBuilderElement] = info->fields[21]->offset;
+      _das_class_method_offset[__fn_preVisitExprNewArgument] = info->fields[22]->offset;
+      _das_class_method_offset[__fn_visitExprNewArgument] = info->fields[23]->offset;
+      _das_class_method_offset[__fn_preVisitExprNamedCallArgument] = info->fields[24]->offset;
+      _das_class_method_offset[__fn_visitExprNamedCallArgument] = info->fields[25]->offset;
+      _das_class_method_offset[__fn_canVisitExprLooksLikeCallArgument] = info->fields[26]->offset;
+      _das_class_method_offset[__fn_preVisitExprLooksLikeCallArgument] = info->fields[27]->offset;
+      _das_class_method_offset[__fn_visitExprLooksLikeCallArgument] = info->fields[28]->offset;
+      _das_class_method_offset[__fn_canVisitCall] = info->fields[29]->offset;
+      _das_class_method_offset[__fn_canVisitNamedCall] = info->fields[30]->offset;
+      _das_class_method_offset[__fn_canVisitLooksLikeCall] = info->fields[31]->offset;
+      _das_class_method_offset[__fn_preVisitExprCallArgument] = info->fields[32]->offset;
+      _das_class_method_offset[__fn_visitExprCallArgument] = info->fields[33]->offset;
+      _das_class_method_offset[__fn_preVisitExprNullCoalescingDefault] = info->fields[34]->offset;
+      _das_class_method_offset[__fn_preVisitExprAtIndex] = info->fields[35]->offset;
+      _das_class_method_offset[__fn_preVisitExprSafeAtIndex] = info->fields[36]->offset;
+      _das_class_method_offset[__fn_preVisitExprIsType] = info->fields[37]->offset;
+      _das_class_method_offset[__fn_preVisitExprOp2Right] = info->fields[38]->offset;
+      _das_class_method_offset[__fn_preVisitExprOp3Left] = info->fields[39]->offset;
+      _das_class_method_offset[__fn_preVisitExprOp3Right] = info->fields[40]->offset;
+      _das_class_method_offset[__fn_isRightFirstExprCopy] = info->fields[41]->offset;
+      _das_class_method_offset[__fn_preVisitExprCopyRight] = info->fields[42]->offset;
+      _das_class_method_offset[__fn_isRightFirstExprMove] = info->fields[43]->offset;
+      _das_class_method_offset[__fn_preVisitExprMoveRight] = info->fields[44]->offset;
+      _das_class_method_offset[__fn_isRightFirstExprClone] = info->fields[45]->offset;
+      _das_class_method_offset[__fn_preVisitExprCloneRight] = info->fields[46]->offset;
+      _das_class_method_offset[__fn_canVisitWithAliasSubexpression] = info->fields[47]->offset;
+      _das_class_method_offset[__fn_preVisitExprWithBody] = info->fields[48]->offset;
+      _das_class_method_offset[__fn_preVisitExprWhileBody] = info->fields[49]->offset;
+      _das_class_method_offset[__fn_preVisitExprTryCatchCatch] = info->fields[50]->offset;
+      _das_class_method_offset[__fn_preVisitExprIfThenElseIfBlock] = info->fields[51]->offset;
+      _das_class_method_offset[__fn_preVisitExprIfThenElseElseBlock] = info->fields[52]->offset;
+      _das_class_method_offset[__fn_preVisitExprForVariable] = info->fields[53]->offset;
+      _das_class_method_offset[__fn_visitExprForVariable] = info->fields[54]->offset;
+      _das_class_method_offset[__fn_preVisitExprForSource] = info->fields[55]->offset;
+      _das_class_method_offset[__fn_visitExprForSource] = info->fields[56]->offset;
+      _das_class_method_offset[__fn_preVisitExprForStack] = info->fields[57]->offset;
+      _das_class_method_offset[__fn_preVisitExprForBody] = info->fields[58]->offset;
+      _das_class_method_offset[__fn_preVisitExprMakeVariantField] = info->fields[59]->offset;
+      _das_class_method_offset[__fn_visitExprMakeVariantField] = info->fields[60]->offset;
+      _das_class_method_offset[__fn_canVisitExprMakeStructBody] = info->fields[61]->offset;
+      _das_class_method_offset[__fn_canVisitExprMakeStructBlock] = info->fields[62]->offset;
+      _das_class_method_offset[__fn_preVisitExprMakeStructIndex] = info->fields[63]->offset;
+      _das_class_method_offset[__fn_visitExprMakeStructIndex] = info->fields[64]->offset;
+      _das_class_method_offset[__fn_preVisitExprMakeStructField] = info->fields[65]->offset;
+      _das_class_method_offset[__fn_visitExprMakeStructField] = info->fields[66]->offset;
+      _das_class_method_offset[__fn_preVisitMakeStructureBlock] = info->fields[67]->offset;
+      _das_class_method_offset[__fn_visitMakeStructureBlock] = info->fields[68]->offset;
+      _das_class_method_offset[__fn_preVisitExprMakeArrayIndex] = info->fields[69]->offset;
+      _das_class_method_offset[__fn_visitExprMakeArrayIndex] = info->fields[70]->offset;
+      _das_class_method_offset[__fn_preVisitExprMakeTupleIndex] = info->fields[71]->offset;
+      _das_class_method_offset[__fn_visitExprMakeTupleIndex] = info->fields[72]->offset;
+      _das_class_method_offset[__fn_preVisitExprArrayComprehensionSubexpr] = info->fields[73]->offset;
+      _das_class_method_offset[__fn_preVisitExprArrayComprehensionWhere] = info->fields[74]->offset;
+      _das_class_method_offset[__fn_canVisitExprTypeInfo] = info->fields[75]->offset;
+      _das_class_method_offset[__fn_canVisitQuoteSubexpression] = info->fields[76]->offset;
+      _das_class_method_offset[__fn_preVisitExprDeleteSizeExpression] = info->fields[77]->offset;
+      _das_class_method_offset[__fn_preVisitExprTagValue] = info->fields[78]->offset;
+      _das_class_method_offset[__fn_canVisitMakeBlockBody] = info->fields[79]->offset;
+      _das_class_method_offset[__fn_canVisitTryCatchBody] = info->fields[80]->offset;
+      _das_class_method_offset[__fn_canVisitMakeArray] = info->fields[81]->offset;
+      _das_class_method_offset[__fn_canVisitMakeArrayIndex] = info->fields[82]->offset;
+      _das_class_method_offset[__fn_preVisitExprStringBuilder] = info->fields[83]->offset;
+      _das_class_method_offset[__fn_visitExprStringBuilder] = info->fields[84]->offset;
+      _das_class_method_offset[__fn_preVisitExprCallMacro] = info->fields[85]->offset;
+      _das_class_method_offset[__fn_visitExprCallMacro] = info->fields[86]->offset;
+      _das_class_method_offset[__fn_preVisitExprUnsafe] = info->fields[87]->offset;
+      _das_class_method_offset[__fn_visitExprUnsafe] = info->fields[88]->offset;
+      _das_class_method_offset[__fn_preVisitExprReader] = info->fields[89]->offset;
+      _das_class_method_offset[__fn_visitExprReader] = info->fields[90]->offset;
+      _das_class_method_offset[__fn_preVisitExprLabel] = info->fields[91]->offset;
+      _das_class_method_offset[__fn_visitExprLabel] = info->fields[92]->offset;
+      _das_class_method_offset[__fn_preVisitExprGoto] = info->fields[93]->offset;
+      _das_class_method_offset[__fn_visitExprGoto] = info->fields[94]->offset;
+      _das_class_method_offset[__fn_preVisitExprRef2Value] = info->fields[95]->offset;
+      _das_class_method_offset[__fn_visitExprRef2Value] = info->fields[96]->offset;
+      _das_class_method_offset[__fn_preVisitExprRef2Ptr] = info->fields[97]->offset;
+      _das_class_method_offset[__fn_visitExprRef2Ptr] = info->fields[98]->offset;
+      _das_class_method_offset[__fn_preVisitExprPtr2Ref] = info->fields[99]->offset;
+      _das_class_method_offset[__fn_visitExprPtr2Ref] = info->fields[100]->offset;
+      _das_class_method_offset[__fn_preVisitExprAddr] = info->fields[101]->offset;
+      _das_class_method_offset[__fn_visitExprAddr] = info->fields[102]->offset;
+      _das_class_method_offset[__fn_preVisitExprNullCoalescing] = info->fields[103]->offset;
+      _das_class_method_offset[__fn_visitExprNullCoalescing] = info->fields[104]->offset;
+      _das_class_method_offset[__fn_preVisitExprAssert] = info->fields[105]->offset;
+      _das_class_method_offset[__fn_visitExprAssert] = info->fields[106]->offset;
+      _das_class_method_offset[__fn_preVisitExprStaticAssert] = info->fields[107]->offset;
+      _das_class_method_offset[__fn_visitExprStaticAssert] = info->fields[108]->offset;
+      _das_class_method_offset[__fn_preVisitExprQuote] = info->fields[109]->offset;
+      _das_class_method_offset[__fn_visitExprQuote] = info->fields[110]->offset;
+      _das_class_method_offset[__fn_preVisitExprDebug] = info->fields[111]->offset;
+      _das_class_method_offset[__fn_visitExprDebug] = info->fields[112]->offset;
+      _das_class_method_offset[__fn_preVisitExprInvoke] = info->fields[113]->offset;
+      _das_class_method_offset[__fn_visitExprInvoke] = info->fields[114]->offset;
+      _das_class_method_offset[__fn_preVisitExprErase] = info->fields[115]->offset;
+      _das_class_method_offset[__fn_visitExprErase] = info->fields[116]->offset;
+      _das_class_method_offset[__fn_preVisitExprSetInsert] = info->fields[117]->offset;
+      _das_class_method_offset[__fn_visitExprSetInsert] = info->fields[118]->offset;
+      _das_class_method_offset[__fn_preVisitExprFind] = info->fields[119]->offset;
+      _das_class_method_offset[__fn_visitExprFind] = info->fields[120]->offset;
+      _das_class_method_offset[__fn_preVisitExprKeyExists] = info->fields[121]->offset;
+      _das_class_method_offset[__fn_visitExprKeyExists] = info->fields[122]->offset;
+      _das_class_method_offset[__fn_preVisitExprAscend] = info->fields[123]->offset;
+      _das_class_method_offset[__fn_visitExprAscend] = info->fields[124]->offset;
+      _das_class_method_offset[__fn_preVisitExprCast] = info->fields[125]->offset;
+      _das_class_method_offset[__fn_visitExprCast] = info->fields[126]->offset;
+      _das_class_method_offset[__fn_preVisitExprNew] = info->fields[127]->offset;
+      _das_class_method_offset[__fn_visitExprNew] = info->fields[128]->offset;
+      _das_class_method_offset[__fn_preVisitExprDelete] = info->fields[129]->offset;
+      _das_class_method_offset[__fn_visitExprDelete] = info->fields[130]->offset;
+      _das_class_method_offset[__fn_preVisitExprAt] = info->fields[131]->offset;
+      _das_class_method_offset[__fn_visitExprAt] = info->fields[132]->offset;
+      _das_class_method_offset[__fn_preVisitExprSafeAt] = info->fields[133]->offset;
+      _das_class_method_offset[__fn_visitExprSafeAt] = info->fields[134]->offset;
+      _das_class_method_offset[__fn_preVisitExprBlock] = info->fields[135]->offset;
+      _das_class_method_offset[__fn_visitExprBlock] = info->fields[136]->offset;
+      _das_class_method_offset[__fn_preVisitExprVar] = info->fields[137]->offset;
+      _das_class_method_offset[__fn_visitExprVar] = info->fields[138]->offset;
+      _das_class_method_offset[__fn_preVisitExprSwizzle] = info->fields[139]->offset;
+      _das_class_method_offset[__fn_visitExprSwizzle] = info->fields[140]->offset;
+      _das_class_method_offset[__fn_preVisitExprField] = info->fields[141]->offset;
+      _das_class_method_offset[__fn_visitExprField] = info->fields[142]->offset;
+      _das_class_method_offset[__fn_preVisitExprSafeField] = info->fields[143]->offset;
+      _das_class_method_offset[__fn_visitExprSafeField] = info->fields[144]->offset;
+      _das_class_method_offset[__fn_preVisitExprIsVariant] = info->fields[145]->offset;
+      _das_class_method_offset[__fn_visitExprIsVariant] = info->fields[146]->offset;
+      _das_class_method_offset[__fn_preVisitExprAsVariant] = info->fields[147]->offset;
+      _das_class_method_offset[__fn_visitExprAsVariant] = info->fields[148]->offset;
+      _das_class_method_offset[__fn_preVisitExprSafeAsVariant] = info->fields[149]->offset;
+      _das_class_method_offset[__fn_visitExprSafeAsVariant] = info->fields[150]->offset;
+      _das_class_method_offset[__fn_preVisitExprOp1] = info->fields[151]->offset;
+      _das_class_method_offset[__fn_visitExprOp1] = info->fields[152]->offset;
+      _das_class_method_offset[__fn_preVisitExprOp2] = info->fields[153]->offset;
+      _das_class_method_offset[__fn_visitExprOp2] = info->fields[154]->offset;
+      _das_class_method_offset[__fn_preVisitExprOp3] = info->fields[155]->offset;
+      _das_class_method_offset[__fn_visitExprOp3] = info->fields[156]->offset;
+      _das_class_method_offset[__fn_preVisitExprCopy] = info->fields[157]->offset;
+      _das_class_method_offset[__fn_visitExprCopy] = info->fields[158]->offset;
+      _das_class_method_offset[__fn_preVisitExprMove] = info->fields[159]->offset;
+      _das_class_method_offset[__fn_visitExprMove] = info->fields[160]->offset;
+      _das_class_method_offset[__fn_preVisitExprClone] = info->fields[161]->offset;
+      _das_class_method_offset[__fn_visitExprClone] = info->fields[162]->offset;
+      _das_class_method_offset[__fn_preVisitExprTryCatch] = info->fields[163]->offset;
+      _das_class_method_offset[__fn_visitExprTryCatch] = info->fields[164]->offset;
+      _das_class_method_offset[__fn_preVisitExprReturn] = info->fields[165]->offset;
+      _das_class_method_offset[__fn_visitExprReturn] = info->fields[166]->offset;
+      _das_class_method_offset[__fn_preVisitExprYield] = info->fields[167]->offset;
+      _das_class_method_offset[__fn_visitExprYield] = info->fields[168]->offset;
+      _das_class_method_offset[__fn_preVisitExprBreak] = info->fields[169]->offset;
+      _das_class_method_offset[__fn_visitExprBreak] = info->fields[170]->offset;
+      _das_class_method_offset[__fn_preVisitExprContinue] = info->fields[171]->offset;
+      _das_class_method_offset[__fn_visitExprContinue] = info->fields[172]->offset;
+      _das_class_method_offset[__fn_preVisitExprConst] = info->fields[173]->offset;
+      _das_class_method_offset[__fn_visitExprConst] = info->fields[174]->offset;
+      _das_class_method_offset[__fn_preVisitExprFakeContext] = info->fields[175]->offset;
+      _das_class_method_offset[__fn_visitExprFakeContext] = info->fields[176]->offset;
+      _das_class_method_offset[__fn_preVisitExprFakeLineInfo] = info->fields[177]->offset;
+      _das_class_method_offset[__fn_visitExprFakeLineInfo] = info->fields[178]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstPtr] = info->fields[179]->offset;
+      _das_class_method_offset[__fn_visitExprConstPtr] = info->fields[180]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstEnumeration] = info->fields[181]->offset;
+      _das_class_method_offset[__fn_visitExprConstEnumeration] = info->fields[182]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstBitfield] = info->fields[183]->offset;
+      _das_class_method_offset[__fn_visitExprConstBitfield] = info->fields[184]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstInt8] = info->fields[185]->offset;
+      _das_class_method_offset[__fn_visitExprConstInt8] = info->fields[186]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstInt16] = info->fields[187]->offset;
+      _das_class_method_offset[__fn_visitExprConstInt16] = info->fields[188]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstInt64] = info->fields[189]->offset;
+      _das_class_method_offset[__fn_visitExprConstInt64] = info->fields[190]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstInt] = info->fields[191]->offset;
+      _das_class_method_offset[__fn_visitExprConstInt] = info->fields[192]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstInt2] = info->fields[193]->offset;
+      _das_class_method_offset[__fn_visitExprConstInt2] = info->fields[194]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstInt3] = info->fields[195]->offset;
+      _das_class_method_offset[__fn_visitExprConstInt3] = info->fields[196]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstInt4] = info->fields[197]->offset;
+      _das_class_method_offset[__fn_visitExprConstInt4] = info->fields[198]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstUInt8] = info->fields[199]->offset;
+      _das_class_method_offset[__fn_visitExprConstUInt8] = info->fields[200]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstUInt16] = info->fields[201]->offset;
+      _das_class_method_offset[__fn_visitExprConstUInt16] = info->fields[202]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstUInt64] = info->fields[203]->offset;
+      _das_class_method_offset[__fn_visitExprConstUInt64] = info->fields[204]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstUInt] = info->fields[205]->offset;
+      _das_class_method_offset[__fn_visitExprConstUInt] = info->fields[206]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstUInt2] = info->fields[207]->offset;
+      _das_class_method_offset[__fn_visitExprConstUInt2] = info->fields[208]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstUInt3] = info->fields[209]->offset;
+      _das_class_method_offset[__fn_visitExprConstUInt3] = info->fields[210]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstUInt4] = info->fields[211]->offset;
+      _das_class_method_offset[__fn_visitExprConstUInt4] = info->fields[212]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstRange] = info->fields[213]->offset;
+      _das_class_method_offset[__fn_visitExprConstRange] = info->fields[214]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstURange] = info->fields[215]->offset;
+      _das_class_method_offset[__fn_visitExprConstURange] = info->fields[216]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstRange64] = info->fields[217]->offset;
+      _das_class_method_offset[__fn_visitExprConstRange64] = info->fields[218]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstURange64] = info->fields[219]->offset;
+      _das_class_method_offset[__fn_visitExprConstURange64] = info->fields[220]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstBool] = info->fields[221]->offset;
+      _das_class_method_offset[__fn_visitExprConstBool] = info->fields[222]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstFloat] = info->fields[223]->offset;
+      _das_class_method_offset[__fn_visitExprConstFloat] = info->fields[224]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstFloat16] = info->fields[225]->offset;
+      _das_class_method_offset[__fn_visitExprConstFloat16] = info->fields[226]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstFloat2] = info->fields[227]->offset;
+      _das_class_method_offset[__fn_visitExprConstFloat2] = info->fields[228]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstFloat3] = info->fields[229]->offset;
+      _das_class_method_offset[__fn_visitExprConstFloat3] = info->fields[230]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstFloat4] = info->fields[231]->offset;
+      _das_class_method_offset[__fn_visitExprConstFloat4] = info->fields[232]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstString] = info->fields[233]->offset;
+      _das_class_method_offset[__fn_visitExprConstString] = info->fields[234]->offset;
+      _das_class_method_offset[__fn_preVisitExprConstDouble] = info->fields[235]->offset;
+      _das_class_method_offset[__fn_visitExprConstDouble] = info->fields[236]->offset;
+      _das_class_method_offset[__fn_preVisitExprLet] = info->fields[237]->offset;
+      _das_class_method_offset[__fn_visitExprLet] = info->fields[238]->offset;
+      _das_class_method_offset[__fn_preVisitExprFor] = info->fields[239]->offset;
+      _das_class_method_offset[__fn_visitExprFor] = info->fields[240]->offset;
+      _das_class_method_offset[__fn_preVisitExprLooksLikeCall] = info->fields[241]->offset;
+      _das_class_method_offset[__fn_visitExprLooksLikeCall] = info->fields[242]->offset;
+      _das_class_method_offset[__fn_preVisitExprMakeBlock] = info->fields[243]->offset;
+      _das_class_method_offset[__fn_visitExprMakeBlock] = info->fields[244]->offset;
+      _das_class_method_offset[__fn_preVisitExprMakeGenerator] = info->fields[245]->offset;
+      _das_class_method_offset[__fn_visitExprMakeGenerator] = info->fields[246]->offset;
+      _das_class_method_offset[__fn_preVisitExprTypeInfo] = info->fields[247]->offset;
+      _das_class_method_offset[__fn_visitExprTypeInfo] = info->fields[248]->offset;
+      _das_class_method_offset[__fn_preVisitExprIs] = info->fields[249]->offset;
+      _das_class_method_offset[__fn_visitExprIs] = info->fields[250]->offset;
+      _das_class_method_offset[__fn_preVisitExprCall] = info->fields[251]->offset;
+      _das_class_method_offset[__fn_visitExprCall] = info->fields[252]->offset;
+      _das_class_method_offset[__fn_preVisitExprNamedCall] = info->fields[253]->offset;
+      _das_class_method_offset[__fn_visitExprNamedCall] = info->fields[254]->offset;
+      _das_class_method_offset[__fn_preVisitExprIfThenElse] = info->fields[255]->offset;
+      _das_class_method_offset[__fn_visitExprIfThenElse] = info->fields[256]->offset;
+      _das_class_method_offset[__fn_preVisitExprWith] = info->fields[257]->offset;
+      _das_class_method_offset[__fn_visitExprWith] = info->fields[258]->offset;
+      _das_class_method_offset[__fn_preVisitExprAssume] = info->fields[259]->offset;
+      _das_class_method_offset[__fn_visitExprAssume] = info->fields[260]->offset;
+      _das_class_method_offset[__fn_preVisitExprWhile] = info->fields[261]->offset;
+      _das_class_method_offset[__fn_visitExprWhile] = info->fields[262]->offset;
+      _das_class_method_offset[__fn_preVisitExprMakeStruct] = info->fields[263]->offset;
+      _das_class_method_offset[__fn_visitExprMakeStruct] = info->fields[264]->offset;
+      _das_class_method_offset[__fn_preVisitExprMakeVariant] = info->fields[265]->offset;
+      _das_class_method_offset[__fn_visitExprMakeVariant] = info->fields[266]->offset;
+      _das_class_method_offset[__fn_preVisitExprMakeArray] = info->fields[267]->offset;
+      _das_class_method_offset[__fn_visitExprMakeArray] = info->fields[268]->offset;
+      _das_class_method_offset[__fn_preVisitExprMakeTuple] = info->fields[269]->offset;
+      _das_class_method_offset[__fn_visitExprMakeTuple] = info->fields[270]->offset;
+      _das_class_method_offset[__fn_preVisitExprArrayComprehension] = info->fields[271]->offset;
+      _das_class_method_offset[__fn_visitExprArrayComprehension] = info->fields[272]->offset;
+      _das_class_method_offset[__fn_preVisitExprMemZero] = info->fields[273]->offset;
+      _das_class_method_offset[__fn_visitExprMemZero] = info->fields[274]->offset;
+      _das_class_method_offset[__fn_preVisitExprTypeDecl] = info->fields[275]->offset;
+      _das_class_method_offset[__fn_visitExprTypeDecl] = info->fields[276]->offset;
+      _das_class_method_offset[__fn_preVisitExprTag] = info->fields[277]->offset;
+      _das_class_method_offset[__fn_visitExprTag] = info->fields[278]->offset;
+  }
+  __forceinline Func get_preVisitTypeDecl ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitTypeDecl]);
+  }
+  __forceinline void invoke_preVisitTypeDecl ( Context * __context__, Func __funcCall__, void * self, TypeDecl const  * const  typ ) const {
+    das_invoke_function<void>::invoke
+      <void *,TypeDecl const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,typ);
+  }
+  __forceinline Func get_visitTypeDecl ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitTypeDecl]);
+  }
+  __forceinline void invoke_visitTypeDecl ( Context * __context__, Func __funcCall__, void * self, TypeDecl const  * const  typ ) const {
+    das_invoke_function<void>::invoke
+      <void *,TypeDecl const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,typ);
+  }
+  __forceinline Func get_preVisitExpression ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExpression]);
+  }
+  __forceinline void invoke_preVisitExpression ( Context * __context__, Func __funcCall__, void * self, Expression const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExpression ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExpression]);
+  }
+  __forceinline void invoke_visitExpression ( Context * __context__, Func __funcCall__, void * self, Expression const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprBlockArgument ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprBlockArgument]);
+  }
+  __forceinline void invoke_preVisitExprBlockArgument ( Context * __context__, Func __funcCall__, void * self, ExprBlock const  * const  blk, Variable const  * const  arg, bool lastArg ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprBlock const  * const ,Variable const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,blk,arg,lastArg);
+  }
+  __forceinline Func get_visitExprBlockArgument ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprBlockArgument]);
+  }
+  __forceinline void invoke_visitExprBlockArgument ( Context * __context__, Func __funcCall__, void * self, ExprBlock const  * const  blk, Variable const  * const  arg, bool lastArg ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprBlock const  * const ,Variable const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,blk,arg,lastArg);
+  }
+  __forceinline Func get_preVisitExprBlockArgumentInit ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprBlockArgumentInit]);
+  }
+  __forceinline void invoke_preVisitExprBlockArgumentInit ( Context * __context__, Func __funcCall__, void * self, ExprBlock const  * const  blk, Variable const  * const  arg, Expression const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprBlock const  * const ,Variable const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,blk,arg,expr);
+  }
+  __forceinline Func get_visitExprBlockArgumentInit ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprBlockArgumentInit]);
+  }
+  __forceinline void invoke_visitExprBlockArgumentInit ( Context * __context__, Func __funcCall__, void * self, ExprBlock const  * const  blk, Variable const  * const  arg, Expression const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprBlock const  * const ,Variable const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,blk,arg,expr);
+  }
+  __forceinline Func get_preVisitExprBlockExpression ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprBlockExpression]);
+  }
+  __forceinline void invoke_preVisitExprBlockExpression ( Context * __context__, Func __funcCall__, void * self, ExprBlock const  * const  blk, Expression const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprBlock const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,blk,expr);
+  }
+  __forceinline Func get_visitExprBlockExpression ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprBlockExpression]);
+  }
+  __forceinline void invoke_visitExprBlockExpression ( Context * __context__, Func __funcCall__, void * self, ExprBlock const  * const  blk, Expression const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprBlock const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,blk,expr);
+  }
+  __forceinline Func get_preVisitExprBlockFinal ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprBlockFinal]);
+  }
+  __forceinline void invoke_preVisitExprBlockFinal ( Context * __context__, Func __funcCall__, void * self, ExprBlock const  * const  blk ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprBlock const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,blk);
+  }
+  __forceinline Func get_visitExprBlockFinal ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprBlockFinal]);
+  }
+  __forceinline void invoke_visitExprBlockFinal ( Context * __context__, Func __funcCall__, void * self, ExprBlock const  * const  blk ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprBlock const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,blk);
+  }
+  __forceinline Func get_preVisitExprBlockFinalExpression ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprBlockFinalExpression]);
+  }
+  __forceinline void invoke_preVisitExprBlockFinalExpression ( Context * __context__, Func __funcCall__, void * self, ExprBlock const  * const  blk, Expression const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprBlock const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,blk,expr);
+  }
+  __forceinline Func get_visitExprBlockFinalExpression ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprBlockFinalExpression]);
+  }
+  __forceinline void invoke_visitExprBlockFinalExpression ( Context * __context__, Func __funcCall__, void * self, ExprBlock const  * const  blk, Expression const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprBlock const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,blk,expr);
+  }
+  __forceinline Func get_preVisitExprLetVariable ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprLetVariable]);
+  }
+  __forceinline void invoke_preVisitExprLetVariable ( Context * __context__, Func __funcCall__, void * self, ExprLet const  * const  expr, Variable const  * const  arg, bool lastArg ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprLet const  * const ,Variable const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,arg,lastArg);
+  }
+  __forceinline Func get_visitExprLetVariable ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprLetVariable]);
+  }
+  __forceinline void invoke_visitExprLetVariable ( Context * __context__, Func __funcCall__, void * self, ExprLet const  * const  expr, Variable const  * const  arg, bool lastArg ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprLet const  * const ,Variable const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,arg,lastArg);
+  }
+  __forceinline Func get_preVisitExprLetVariableInit ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprLetVariableInit]);
+  }
+  __forceinline void invoke_preVisitExprLetVariableInit ( Context * __context__, Func __funcCall__, void * self, ExprLet const  * const  blk, Variable const  * const  arg, Expression const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprLet const  * const ,Variable const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,blk,arg,expr);
+  }
+  __forceinline Func get_visitExprLetVariableInit ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprLetVariableInit]);
+  }
+  __forceinline void invoke_visitExprLetVariableInit ( Context * __context__, Func __funcCall__, void * self, ExprLet const  * const  blk, Variable const  * const  arg, Expression const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprLet const  * const ,Variable const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,blk,arg,expr);
+  }
+  __forceinline Func get_preVisitExprStringBuilderElement ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprStringBuilderElement]);
+  }
+  __forceinline void invoke_preVisitExprStringBuilderElement ( Context * __context__, Func __funcCall__, void * self, ExprStringBuilder const  * const  expr, Expression const  * const  elem, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprStringBuilder const  * const ,Expression const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,elem,last);
+  }
+  __forceinline Func get_visitExprStringBuilderElement ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprStringBuilderElement]);
+  }
+  __forceinline void invoke_visitExprStringBuilderElement ( Context * __context__, Func __funcCall__, void * self, ExprStringBuilder const  * const  expr, Expression const  * const  elem, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprStringBuilder const  * const ,Expression const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,elem,last);
+  }
+  __forceinline Func get_preVisitExprNewArgument ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprNewArgument]);
+  }
+  __forceinline void invoke_preVisitExprNewArgument ( Context * __context__, Func __funcCall__, void * self, ExprNew const  * const  expr, Expression const  * const  arg, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprNew const  * const ,Expression const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,arg,last);
+  }
+  __forceinline Func get_visitExprNewArgument ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprNewArgument]);
+  }
+  __forceinline void invoke_visitExprNewArgument ( Context * __context__, Func __funcCall__, void * self, ExprNew const  * const  expr, Expression const  * const  arg, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprNew const  * const ,Expression const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,arg,last);
+  }
+  __forceinline Func get_preVisitExprNamedCallArgument ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprNamedCallArgument]);
+  }
+  __forceinline void invoke_preVisitExprNamedCallArgument ( Context * __context__, Func __funcCall__, void * self, ExprNamedCall const  * const  expr, MakeFieldDecl const  * const  arg, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprNamedCall const  * const ,MakeFieldDecl const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,arg,last);
+  }
+  __forceinline Func get_visitExprNamedCallArgument ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprNamedCallArgument]);
+  }
+  __forceinline void invoke_visitExprNamedCallArgument ( Context * __context__, Func __funcCall__, void * self, ExprNamedCall const  * const  expr, MakeFieldDecl const  * const  arg, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprNamedCall const  * const ,MakeFieldDecl const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,arg,last);
+  }
+  __forceinline Func get_canVisitExprLooksLikeCallArgument ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitExprLooksLikeCallArgument]);
+  }
+  __forceinline bool invoke_canVisitExprLooksLikeCallArgument ( Context * __context__, Func __funcCall__, void * self, ExprLooksLikeCall const  * const  expr, Expression const  * const  arg, bool last ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,ExprLooksLikeCall const  * const ,Expression const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,arg,last);
+  }
+  __forceinline Func get_preVisitExprLooksLikeCallArgument ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprLooksLikeCallArgument]);
+  }
+  __forceinline void invoke_preVisitExprLooksLikeCallArgument ( Context * __context__, Func __funcCall__, void * self, ExprLooksLikeCall const  * const  expr, Expression const  * const  arg, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprLooksLikeCall const  * const ,Expression const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,arg,last);
+  }
+  __forceinline Func get_visitExprLooksLikeCallArgument ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprLooksLikeCallArgument]);
+  }
+  __forceinline void invoke_visitExprLooksLikeCallArgument ( Context * __context__, Func __funcCall__, void * self, ExprLooksLikeCall const  * const  expr, Expression const  * const  arg, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprLooksLikeCall const  * const ,Expression const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,arg,last);
+  }
+  __forceinline Func get_canVisitCall ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitCall]);
+  }
+  __forceinline bool invoke_canVisitCall ( Context * __context__, Func __funcCall__, void * self, ExprCall const  * const  expr ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,ExprCall const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_canVisitNamedCall ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitNamedCall]);
+  }
+  __forceinline bool invoke_canVisitNamedCall ( Context * __context__, Func __funcCall__, void * self, ExprNamedCall const  * const  expr ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,ExprNamedCall const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_canVisitLooksLikeCall ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitLooksLikeCall]);
+  }
+  __forceinline bool invoke_canVisitLooksLikeCall ( Context * __context__, Func __funcCall__, void * self, ExprLooksLikeCall const  * const  expr ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,ExprLooksLikeCall const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprCallArgument ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprCallArgument]);
+  }
+  __forceinline void invoke_preVisitExprCallArgument ( Context * __context__, Func __funcCall__, void * self, ExprCall const  * const  expr, Expression const  * const  arg, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprCall const  * const ,Expression const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,arg,last);
+  }
+  __forceinline Func get_visitExprCallArgument ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprCallArgument]);
+  }
+  __forceinline void invoke_visitExprCallArgument ( Context * __context__, Func __funcCall__, void * self, ExprCall const  * const  expr, Expression const  * const  arg, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprCall const  * const ,Expression const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,arg,last);
+  }
+  __forceinline Func get_preVisitExprNullCoalescingDefault ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprNullCoalescingDefault]);
+  }
+  __forceinline void invoke_preVisitExprNullCoalescingDefault ( Context * __context__, Func __funcCall__, void * self, ExprNullCoalescing const  * const  expr, Expression const  * const  defval ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprNullCoalescing const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,defval);
+  }
+  __forceinline Func get_preVisitExprAtIndex ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprAtIndex]);
+  }
+  __forceinline void invoke_preVisitExprAtIndex ( Context * __context__, Func __funcCall__, void * self, ExprAt const  * const  expr, Expression const  * const  index ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprAt const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,index);
+  }
+  __forceinline Func get_preVisitExprSafeAtIndex ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprSafeAtIndex]);
+  }
+  __forceinline void invoke_preVisitExprSafeAtIndex ( Context * __context__, Func __funcCall__, void * self, ExprSafeAt const  * const  expr, Expression const  * const  index ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprSafeAt const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,index);
+  }
+  __forceinline Func get_preVisitExprIsType ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprIsType]);
+  }
+  __forceinline void invoke_preVisitExprIsType ( Context * __context__, Func __funcCall__, void * self, ExprIs const  * const  expr, TypeDecl const  * const  typeDecl ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprIs const  * const ,TypeDecl const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,typeDecl);
+  }
+  __forceinline Func get_preVisitExprOp2Right ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprOp2Right]);
+  }
+  __forceinline void invoke_preVisitExprOp2Right ( Context * __context__, Func __funcCall__, void * self, ExprOp2 const  * const  expr, Expression const  * const  right ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprOp2 const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,right);
+  }
+  __forceinline Func get_preVisitExprOp3Left ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprOp3Left]);
+  }
+  __forceinline void invoke_preVisitExprOp3Left ( Context * __context__, Func __funcCall__, void * self, ExprOp3 const  * const  expr, Expression const  * const  left ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprOp3 const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,left);
+  }
+  __forceinline Func get_preVisitExprOp3Right ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprOp3Right]);
+  }
+  __forceinline void invoke_preVisitExprOp3Right ( Context * __context__, Func __funcCall__, void * self, ExprOp3 const  * const  expr, Expression const  * const  right ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprOp3 const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,right);
+  }
+  __forceinline Func get_isRightFirstExprCopy ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_isRightFirstExprCopy]);
+  }
+  __forceinline bool invoke_isRightFirstExprCopy ( Context * __context__, Func __funcCall__, void * self, ExprCopy const  * const  expr ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,ExprCopy const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprCopyRight ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprCopyRight]);
+  }
+  __forceinline void invoke_preVisitExprCopyRight ( Context * __context__, Func __funcCall__, void * self, ExprCopy const  * const  expr, Expression const  * const  right ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprCopy const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,right);
+  }
+  __forceinline Func get_isRightFirstExprMove ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_isRightFirstExprMove]);
+  }
+  __forceinline bool invoke_isRightFirstExprMove ( Context * __context__, Func __funcCall__, void * self, ExprMove const  * const  expr ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,ExprMove const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprMoveRight ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprMoveRight]);
+  }
+  __forceinline void invoke_preVisitExprMoveRight ( Context * __context__, Func __funcCall__, void * self, ExprMove const  * const  expr, Expression const  * const  right ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMove const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,right);
+  }
+  __forceinline Func get_isRightFirstExprClone ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_isRightFirstExprClone]);
+  }
+  __forceinline bool invoke_isRightFirstExprClone ( Context * __context__, Func __funcCall__, void * self, ExprClone const  * const  expr ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,ExprClone const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprCloneRight ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprCloneRight]);
+  }
+  __forceinline void invoke_preVisitExprCloneRight ( Context * __context__, Func __funcCall__, void * self, ExprClone const  * const  expr, Expression const  * const  right ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprClone const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,right);
+  }
+  __forceinline Func get_canVisitWithAliasSubexpression ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitWithAliasSubexpression]);
+  }
+  __forceinline bool invoke_canVisitWithAliasSubexpression ( Context * __context__, Func __funcCall__, void * self, ExprAssume const  * const  expr ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,ExprAssume const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprWithBody ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprWithBody]);
+  }
+  __forceinline void invoke_preVisitExprWithBody ( Context * __context__, Func __funcCall__, void * self, ExprWith const  * const  expr, Expression const  * const  right ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprWith const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,right);
+  }
+  __forceinline Func get_preVisitExprWhileBody ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprWhileBody]);
+  }
+  __forceinline void invoke_preVisitExprWhileBody ( Context * __context__, Func __funcCall__, void * self, ExprWhile const  * const  expr, Expression const  * const  right ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprWhile const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,right);
+  }
+  __forceinline Func get_preVisitExprTryCatchCatch ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprTryCatchCatch]);
+  }
+  __forceinline void invoke_preVisitExprTryCatchCatch ( Context * __context__, Func __funcCall__, void * self, ExprTryCatch const  * const  expr, Expression const  * const  right ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprTryCatch const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,right);
+  }
+  __forceinline Func get_preVisitExprIfThenElseIfBlock ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprIfThenElseIfBlock]);
+  }
+  __forceinline void invoke_preVisitExprIfThenElseIfBlock ( Context * __context__, Func __funcCall__, void * self, ExprIfThenElse const  * const  expr, Expression const  * const  ifBlock ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprIfThenElse const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,ifBlock);
+  }
+  __forceinline Func get_preVisitExprIfThenElseElseBlock ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprIfThenElseElseBlock]);
+  }
+  __forceinline void invoke_preVisitExprIfThenElseElseBlock ( Context * __context__, Func __funcCall__, void * self, ExprIfThenElse const  * const  expr, Expression const  * const  elseBlock ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprIfThenElse const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,elseBlock);
+  }
+  __forceinline Func get_preVisitExprForVariable ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprForVariable]);
+  }
+  __forceinline void invoke_preVisitExprForVariable ( Context * __context__, Func __funcCall__, void * self, ExprFor const  * const  expr, Variable const  * const  svar, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprFor const  * const ,Variable const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,svar,last);
+  }
+  __forceinline Func get_visitExprForVariable ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprForVariable]);
+  }
+  __forceinline void invoke_visitExprForVariable ( Context * __context__, Func __funcCall__, void * self, ExprFor const  * const  expr, Variable const  * const  svar, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprFor const  * const ,Variable const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,svar,last);
+  }
+  __forceinline Func get_preVisitExprForSource ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprForSource]);
+  }
+  __forceinline void invoke_preVisitExprForSource ( Context * __context__, Func __funcCall__, void * self, ExprFor const  * const  expr, Expression const  * const  source, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprFor const  * const ,Expression const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,source,last);
+  }
+  __forceinline Func get_visitExprForSource ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprForSource]);
+  }
+  __forceinline void invoke_visitExprForSource ( Context * __context__, Func __funcCall__, void * self, ExprFor const  * const  expr, Expression const  * const  source, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprFor const  * const ,Expression const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,source,last);
+  }
+  __forceinline Func get_preVisitExprForStack ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprForStack]);
+  }
+  __forceinline void invoke_preVisitExprForStack ( Context * __context__, Func __funcCall__, void * self, ExprFor const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprFor const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprForBody ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprForBody]);
+  }
+  __forceinline void invoke_preVisitExprForBody ( Context * __context__, Func __funcCall__, void * self, ExprFor const  * const  expr, Expression const  * const  body ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprFor const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,body);
+  }
+  __forceinline Func get_preVisitExprMakeVariantField ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprMakeVariantField]);
+  }
+  __forceinline void invoke_preVisitExprMakeVariantField ( Context * __context__, Func __funcCall__, void * self, ExprMakeVariant const  * const  expr, int32_t index, MakeFieldDecl const  * const  decl, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeVariant const  * const ,int32_t,MakeFieldDecl const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,index,decl,last);
+  }
+  __forceinline Func get_visitExprMakeVariantField ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprMakeVariantField]);
+  }
+  __forceinline void invoke_visitExprMakeVariantField ( Context * __context__, Func __funcCall__, void * self, ExprMakeVariant const  * const  expr, int32_t index, MakeFieldDecl const  * const  decl, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeVariant const  * const ,int32_t,MakeFieldDecl const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,index,decl,last);
+  }
+  __forceinline Func get_canVisitExprMakeStructBody ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitExprMakeStructBody]);
+  }
+  __forceinline bool invoke_canVisitExprMakeStructBody ( Context * __context__, Func __funcCall__, void * self, ExprMakeStruct const  * const  expr ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,ExprMakeStruct const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_canVisitExprMakeStructBlock ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitExprMakeStructBlock]);
+  }
+  __forceinline bool invoke_canVisitExprMakeStructBlock ( Context * __context__, Func __funcCall__, void * self, ExprMakeStruct const  * const  expr, Expression const  * const  blk ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,ExprMakeStruct const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,blk);
+  }
+  __forceinline Func get_preVisitExprMakeStructIndex ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprMakeStructIndex]);
+  }
+  __forceinline void invoke_preVisitExprMakeStructIndex ( Context * __context__, Func __funcCall__, void * self, ExprMakeStruct const  * const  expr, int32_t index, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeStruct const  * const ,int32_t,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,index,last);
+  }
+  __forceinline Func get_visitExprMakeStructIndex ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprMakeStructIndex]);
+  }
+  __forceinline void invoke_visitExprMakeStructIndex ( Context * __context__, Func __funcCall__, void * self, ExprMakeStruct const  * const  expr, int32_t index, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeStruct const  * const ,int32_t,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,index,last);
+  }
+  __forceinline Func get_preVisitExprMakeStructField ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprMakeStructField]);
+  }
+  __forceinline void invoke_preVisitExprMakeStructField ( Context * __context__, Func __funcCall__, void * self, ExprMakeStruct const  * const  expr, int32_t index, MakeFieldDecl const  * const  decl, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeStruct const  * const ,int32_t,MakeFieldDecl const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,index,decl,last);
+  }
+  __forceinline Func get_visitExprMakeStructField ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprMakeStructField]);
+  }
+  __forceinline void invoke_visitExprMakeStructField ( Context * __context__, Func __funcCall__, void * self, ExprMakeStruct const  * const  expr, int32_t index, MakeFieldDecl const  * const  decl, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeStruct const  * const ,int32_t,MakeFieldDecl const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,index,decl,last);
+  }
+  __forceinline Func get_preVisitMakeStructureBlock ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitMakeStructureBlock]);
+  }
+  __forceinline void invoke_preVisitMakeStructureBlock ( Context * __context__, Func __funcCall__, void * self, ExprMakeStruct const  * const  expr, Expression const  * const  blk ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeStruct const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,blk);
+  }
+  __forceinline Func get_visitMakeStructureBlock ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitMakeStructureBlock]);
+  }
+  __forceinline void invoke_visitMakeStructureBlock ( Context * __context__, Func __funcCall__, void * self, ExprMakeStruct const  * const  expr, Expression const  * const  blk ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeStruct const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,blk);
+  }
+  __forceinline Func get_preVisitExprMakeArrayIndex ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprMakeArrayIndex]);
+  }
+  __forceinline void invoke_preVisitExprMakeArrayIndex ( Context * __context__, Func __funcCall__, void * self, ExprMakeArray const  * const  expr, int32_t index, Expression const  * const  init, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeArray const  * const ,int32_t,Expression const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,index,init,last);
+  }
+  __forceinline Func get_visitExprMakeArrayIndex ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprMakeArrayIndex]);
+  }
+  __forceinline void invoke_visitExprMakeArrayIndex ( Context * __context__, Func __funcCall__, void * self, ExprMakeArray const  * const  expr, int32_t index, Expression const  * const  init, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeArray const  * const ,int32_t,Expression const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,index,init,last);
+  }
+  __forceinline Func get_preVisitExprMakeTupleIndex ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprMakeTupleIndex]);
+  }
+  __forceinline void invoke_preVisitExprMakeTupleIndex ( Context * __context__, Func __funcCall__, void * self, ExprMakeTuple const  * const  expr, int32_t index, Expression const  * const  init, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeTuple const  * const ,int32_t,Expression const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,index,init,last);
+  }
+  __forceinline Func get_visitExprMakeTupleIndex ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprMakeTupleIndex]);
+  }
+  __forceinline void invoke_visitExprMakeTupleIndex ( Context * __context__, Func __funcCall__, void * self, ExprMakeTuple const  * const  expr, int32_t index, Expression const  * const  init, bool last ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeTuple const  * const ,int32_t,Expression const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,index,init,last);
+  }
+  __forceinline Func get_preVisitExprArrayComprehensionSubexpr ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprArrayComprehensionSubexpr]);
+  }
+  __forceinline void invoke_preVisitExprArrayComprehensionSubexpr ( Context * __context__, Func __funcCall__, void * self, ExprArrayComprehension const  * const  expr, Expression const  * const  subexpr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprArrayComprehension const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,subexpr);
+  }
+  __forceinline Func get_preVisitExprArrayComprehensionWhere ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprArrayComprehensionWhere]);
+  }
+  __forceinline void invoke_preVisitExprArrayComprehensionWhere ( Context * __context__, Func __funcCall__, void * self, ExprArrayComprehension const  * const  expr, Expression const  * const  filter ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprArrayComprehension const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,filter);
+  }
+  __forceinline Func get_canVisitExprTypeInfo ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitExprTypeInfo]);
+  }
+  __forceinline bool invoke_canVisitExprTypeInfo ( Context * __context__, Func __funcCall__, void * self, ExprTypeInfo const  * const  expr, Expression const  * const  subexpr ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,ExprTypeInfo const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,subexpr);
+  }
+  __forceinline Func get_canVisitQuoteSubexpression ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitQuoteSubexpression]);
+  }
+  __forceinline bool invoke_canVisitQuoteSubexpression ( Context * __context__, Func __funcCall__, void * self, ExprQuote const  * const  expr ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,ExprQuote const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprDeleteSizeExpression ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprDeleteSizeExpression]);
+  }
+  __forceinline void invoke_preVisitExprDeleteSizeExpression ( Context * __context__, Func __funcCall__, void * self, ExprDelete const  * const  expr, Expression const  * const  size ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprDelete const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,size);
+  }
+  __forceinline Func get_preVisitExprTagValue ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprTagValue]);
+  }
+  __forceinline void invoke_preVisitExprTagValue ( Context * __context__, Func __funcCall__, void * self, ExprTag const  * const  expr, Expression const  * const  value ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprTag const  * const ,Expression const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr,value);
+  }
+  __forceinline Func get_canVisitMakeBlockBody ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitMakeBlockBody]);
+  }
+  __forceinline bool invoke_canVisitMakeBlockBody ( Context * __context__, Func __funcCall__, void * self, ExprMakeBlock const  * const  expr ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,ExprMakeBlock const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_canVisitTryCatchBody ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitTryCatchBody]);
+  }
+  __forceinline bool invoke_canVisitTryCatchBody ( Context * __context__, Func __funcCall__, void * self, ExprTryCatch const  * const  expr ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,ExprTryCatch const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_canVisitMakeArray ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitMakeArray]);
+  }
+  __forceinline bool invoke_canVisitMakeArray ( Context * __context__, Func __funcCall__, void * self, ExprMakeArray const  * const  expr ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,ExprMakeArray const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_canVisitMakeArrayIndex ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitMakeArrayIndex]);
+  }
+  __forceinline bool invoke_canVisitMakeArrayIndex ( Context * __context__, Func __funcCall__, void * self, ExprMakeArray const  * const  expr, int32_t index, Expression const  * const  init, bool last ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,ExprMakeArray const  * const ,int32_t,Expression const  * const ,bool>
+        (__context__,nullptr,__funcCall__,
+          self,expr,index,init,last);
+  }
+  __forceinline Func get_preVisitExprStringBuilder ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprStringBuilder]);
+  }
+  __forceinline void invoke_preVisitExprStringBuilder ( Context * __context__, Func __funcCall__, void * self, ExprStringBuilder const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprStringBuilder const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprStringBuilder ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprStringBuilder]);
+  }
+  __forceinline void invoke_visitExprStringBuilder ( Context * __context__, Func __funcCall__, void * self, ExprStringBuilder const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprStringBuilder const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprCallMacro ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprCallMacro]);
+  }
+  __forceinline void invoke_preVisitExprCallMacro ( Context * __context__, Func __funcCall__, void * self, ExprCallMacro const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprCallMacro const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprCallMacro ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprCallMacro]);
+  }
+  __forceinline void invoke_visitExprCallMacro ( Context * __context__, Func __funcCall__, void * self, ExprCallMacro const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprCallMacro const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprUnsafe ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprUnsafe]);
+  }
+  __forceinline void invoke_preVisitExprUnsafe ( Context * __context__, Func __funcCall__, void * self, ExprUnsafe const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprUnsafe const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprUnsafe ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprUnsafe]);
+  }
+  __forceinline void invoke_visitExprUnsafe ( Context * __context__, Func __funcCall__, void * self, ExprUnsafe const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprUnsafe const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprReader ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprReader]);
+  }
+  __forceinline void invoke_preVisitExprReader ( Context * __context__, Func __funcCall__, void * self, ExprReader const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprReader const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprReader ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprReader]);
+  }
+  __forceinline void invoke_visitExprReader ( Context * __context__, Func __funcCall__, void * self, ExprReader const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprReader const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprLabel ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprLabel]);
+  }
+  __forceinline void invoke_preVisitExprLabel ( Context * __context__, Func __funcCall__, void * self, ExprLabel const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprLabel const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprLabel ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprLabel]);
+  }
+  __forceinline void invoke_visitExprLabel ( Context * __context__, Func __funcCall__, void * self, ExprLabel const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprLabel const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprGoto ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprGoto]);
+  }
+  __forceinline void invoke_preVisitExprGoto ( Context * __context__, Func __funcCall__, void * self, ExprGoto const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprGoto const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprGoto ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprGoto]);
+  }
+  __forceinline void invoke_visitExprGoto ( Context * __context__, Func __funcCall__, void * self, ExprGoto const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprGoto const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprRef2Value ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprRef2Value]);
+  }
+  __forceinline void invoke_preVisitExprRef2Value ( Context * __context__, Func __funcCall__, void * self, ExprRef2Value const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprRef2Value const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprRef2Value ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprRef2Value]);
+  }
+  __forceinline void invoke_visitExprRef2Value ( Context * __context__, Func __funcCall__, void * self, ExprRef2Value const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprRef2Value const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprRef2Ptr ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprRef2Ptr]);
+  }
+  __forceinline void invoke_preVisitExprRef2Ptr ( Context * __context__, Func __funcCall__, void * self, ExprRef2Ptr const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprRef2Ptr const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprRef2Ptr ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprRef2Ptr]);
+  }
+  __forceinline void invoke_visitExprRef2Ptr ( Context * __context__, Func __funcCall__, void * self, ExprRef2Ptr const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprRef2Ptr const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprPtr2Ref ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprPtr2Ref]);
+  }
+  __forceinline void invoke_preVisitExprPtr2Ref ( Context * __context__, Func __funcCall__, void * self, ExprPtr2Ref const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprPtr2Ref const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprPtr2Ref ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprPtr2Ref]);
+  }
+  __forceinline void invoke_visitExprPtr2Ref ( Context * __context__, Func __funcCall__, void * self, ExprPtr2Ref const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprPtr2Ref const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprAddr ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprAddr]);
+  }
+  __forceinline void invoke_preVisitExprAddr ( Context * __context__, Func __funcCall__, void * self, ExprAddr const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprAddr const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprAddr ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprAddr]);
+  }
+  __forceinline void invoke_visitExprAddr ( Context * __context__, Func __funcCall__, void * self, ExprAddr const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprAddr const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprNullCoalescing ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprNullCoalescing]);
+  }
+  __forceinline void invoke_preVisitExprNullCoalescing ( Context * __context__, Func __funcCall__, void * self, ExprNullCoalescing const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprNullCoalescing const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprNullCoalescing ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprNullCoalescing]);
+  }
+  __forceinline void invoke_visitExprNullCoalescing ( Context * __context__, Func __funcCall__, void * self, ExprNullCoalescing const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprNullCoalescing const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprAssert ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprAssert]);
+  }
+  __forceinline void invoke_preVisitExprAssert ( Context * __context__, Func __funcCall__, void * self, ExprAssert const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprAssert const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprAssert ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprAssert]);
+  }
+  __forceinline void invoke_visitExprAssert ( Context * __context__, Func __funcCall__, void * self, ExprAssert const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprAssert const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprStaticAssert ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprStaticAssert]);
+  }
+  __forceinline void invoke_preVisitExprStaticAssert ( Context * __context__, Func __funcCall__, void * self, ExprStaticAssert const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprStaticAssert const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprStaticAssert ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprStaticAssert]);
+  }
+  __forceinline void invoke_visitExprStaticAssert ( Context * __context__, Func __funcCall__, void * self, ExprStaticAssert const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprStaticAssert const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprQuote ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprQuote]);
+  }
+  __forceinline void invoke_preVisitExprQuote ( Context * __context__, Func __funcCall__, void * self, ExprQuote const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprQuote const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprQuote ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprQuote]);
+  }
+  __forceinline void invoke_visitExprQuote ( Context * __context__, Func __funcCall__, void * self, ExprQuote const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprQuote const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprDebug ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprDebug]);
+  }
+  __forceinline void invoke_preVisitExprDebug ( Context * __context__, Func __funcCall__, void * self, ExprDebug const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprDebug const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprDebug ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprDebug]);
+  }
+  __forceinline void invoke_visitExprDebug ( Context * __context__, Func __funcCall__, void * self, ExprDebug const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprDebug const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprInvoke ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprInvoke]);
+  }
+  __forceinline void invoke_preVisitExprInvoke ( Context * __context__, Func __funcCall__, void * self, ExprInvoke const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprInvoke const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprInvoke ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprInvoke]);
+  }
+  __forceinline void invoke_visitExprInvoke ( Context * __context__, Func __funcCall__, void * self, ExprInvoke const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprInvoke const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprErase ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprErase]);
+  }
+  __forceinline void invoke_preVisitExprErase ( Context * __context__, Func __funcCall__, void * self, ExprErase const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprErase const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprErase ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprErase]);
+  }
+  __forceinline void invoke_visitExprErase ( Context * __context__, Func __funcCall__, void * self, ExprErase const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprErase const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprSetInsert ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprSetInsert]);
+  }
+  __forceinline void invoke_preVisitExprSetInsert ( Context * __context__, Func __funcCall__, void * self, ExprSetInsert const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprSetInsert const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprSetInsert ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprSetInsert]);
+  }
+  __forceinline void invoke_visitExprSetInsert ( Context * __context__, Func __funcCall__, void * self, ExprSetInsert const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprSetInsert const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprFind ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprFind]);
+  }
+  __forceinline void invoke_preVisitExprFind ( Context * __context__, Func __funcCall__, void * self, ExprFind const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprFind const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprFind ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprFind]);
+  }
+  __forceinline void invoke_visitExprFind ( Context * __context__, Func __funcCall__, void * self, ExprFind const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprFind const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprKeyExists ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprKeyExists]);
+  }
+  __forceinline void invoke_preVisitExprKeyExists ( Context * __context__, Func __funcCall__, void * self, ExprKeyExists const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprKeyExists const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprKeyExists ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprKeyExists]);
+  }
+  __forceinline void invoke_visitExprKeyExists ( Context * __context__, Func __funcCall__, void * self, ExprKeyExists const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprKeyExists const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprAscend ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprAscend]);
+  }
+  __forceinline void invoke_preVisitExprAscend ( Context * __context__, Func __funcCall__, void * self, ExprAscend const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprAscend const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprAscend ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprAscend]);
+  }
+  __forceinline void invoke_visitExprAscend ( Context * __context__, Func __funcCall__, void * self, ExprAscend const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprAscend const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprCast ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprCast]);
+  }
+  __forceinline void invoke_preVisitExprCast ( Context * __context__, Func __funcCall__, void * self, ExprCast const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprCast const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprCast ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprCast]);
+  }
+  __forceinline void invoke_visitExprCast ( Context * __context__, Func __funcCall__, void * self, ExprCast const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprCast const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprNew ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprNew]);
+  }
+  __forceinline void invoke_preVisitExprNew ( Context * __context__, Func __funcCall__, void * self, ExprNew const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprNew const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprNew ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprNew]);
+  }
+  __forceinline void invoke_visitExprNew ( Context * __context__, Func __funcCall__, void * self, ExprNew const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprNew const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprDelete ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprDelete]);
+  }
+  __forceinline void invoke_preVisitExprDelete ( Context * __context__, Func __funcCall__, void * self, ExprDelete const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprDelete const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprDelete ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprDelete]);
+  }
+  __forceinline void invoke_visitExprDelete ( Context * __context__, Func __funcCall__, void * self, ExprDelete const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprDelete const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprAt ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprAt]);
+  }
+  __forceinline void invoke_preVisitExprAt ( Context * __context__, Func __funcCall__, void * self, ExprAt const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprAt const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprAt ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprAt]);
+  }
+  __forceinline void invoke_visitExprAt ( Context * __context__, Func __funcCall__, void * self, ExprAt const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprAt const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprSafeAt ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprSafeAt]);
+  }
+  __forceinline void invoke_preVisitExprSafeAt ( Context * __context__, Func __funcCall__, void * self, ExprSafeAt const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprSafeAt const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprSafeAt ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprSafeAt]);
+  }
+  __forceinline void invoke_visitExprSafeAt ( Context * __context__, Func __funcCall__, void * self, ExprSafeAt const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprSafeAt const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprBlock ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprBlock]);
+  }
+  __forceinline void invoke_preVisitExprBlock ( Context * __context__, Func __funcCall__, void * self, ExprBlock const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprBlock const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprBlock ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprBlock]);
+  }
+  __forceinline void invoke_visitExprBlock ( Context * __context__, Func __funcCall__, void * self, ExprBlock const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprBlock const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprVar ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprVar]);
+  }
+  __forceinline void invoke_preVisitExprVar ( Context * __context__, Func __funcCall__, void * self, ExprVar const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprVar const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprVar ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprVar]);
+  }
+  __forceinline void invoke_visitExprVar ( Context * __context__, Func __funcCall__, void * self, ExprVar const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprVar const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprSwizzle ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprSwizzle]);
+  }
+  __forceinline void invoke_preVisitExprSwizzle ( Context * __context__, Func __funcCall__, void * self, ExprSwizzle const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprSwizzle const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprSwizzle ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprSwizzle]);
+  }
+  __forceinline void invoke_visitExprSwizzle ( Context * __context__, Func __funcCall__, void * self, ExprSwizzle const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprSwizzle const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprField ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprField]);
+  }
+  __forceinline void invoke_preVisitExprField ( Context * __context__, Func __funcCall__, void * self, ExprField const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprField const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprField ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprField]);
+  }
+  __forceinline void invoke_visitExprField ( Context * __context__, Func __funcCall__, void * self, ExprField const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprField const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprSafeField ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprSafeField]);
+  }
+  __forceinline void invoke_preVisitExprSafeField ( Context * __context__, Func __funcCall__, void * self, ExprSafeField const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprSafeField const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprSafeField ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprSafeField]);
+  }
+  __forceinline void invoke_visitExprSafeField ( Context * __context__, Func __funcCall__, void * self, ExprSafeField const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprSafeField const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprIsVariant ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprIsVariant]);
+  }
+  __forceinline void invoke_preVisitExprIsVariant ( Context * __context__, Func __funcCall__, void * self, ExprIsVariant const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprIsVariant const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprIsVariant ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprIsVariant]);
+  }
+  __forceinline void invoke_visitExprIsVariant ( Context * __context__, Func __funcCall__, void * self, ExprIsVariant const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprIsVariant const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprAsVariant ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprAsVariant]);
+  }
+  __forceinline void invoke_preVisitExprAsVariant ( Context * __context__, Func __funcCall__, void * self, ExprAsVariant const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprAsVariant const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprAsVariant ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprAsVariant]);
+  }
+  __forceinline void invoke_visitExprAsVariant ( Context * __context__, Func __funcCall__, void * self, ExprAsVariant const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprAsVariant const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprSafeAsVariant ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprSafeAsVariant]);
+  }
+  __forceinline void invoke_preVisitExprSafeAsVariant ( Context * __context__, Func __funcCall__, void * self, ExprSafeAsVariant const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprSafeAsVariant const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprSafeAsVariant ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprSafeAsVariant]);
+  }
+  __forceinline void invoke_visitExprSafeAsVariant ( Context * __context__, Func __funcCall__, void * self, ExprSafeAsVariant const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprSafeAsVariant const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprOp1 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprOp1]);
+  }
+  __forceinline void invoke_preVisitExprOp1 ( Context * __context__, Func __funcCall__, void * self, ExprOp1 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprOp1 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprOp1 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprOp1]);
+  }
+  __forceinline void invoke_visitExprOp1 ( Context * __context__, Func __funcCall__, void * self, ExprOp1 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprOp1 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprOp2 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprOp2]);
+  }
+  __forceinline void invoke_preVisitExprOp2 ( Context * __context__, Func __funcCall__, void * self, ExprOp2 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprOp2 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprOp2 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprOp2]);
+  }
+  __forceinline void invoke_visitExprOp2 ( Context * __context__, Func __funcCall__, void * self, ExprOp2 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprOp2 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprOp3 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprOp3]);
+  }
+  __forceinline void invoke_preVisitExprOp3 ( Context * __context__, Func __funcCall__, void * self, ExprOp3 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprOp3 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprOp3 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprOp3]);
+  }
+  __forceinline void invoke_visitExprOp3 ( Context * __context__, Func __funcCall__, void * self, ExprOp3 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprOp3 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprCopy ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprCopy]);
+  }
+  __forceinline void invoke_preVisitExprCopy ( Context * __context__, Func __funcCall__, void * self, ExprCopy const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprCopy const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprCopy ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprCopy]);
+  }
+  __forceinline void invoke_visitExprCopy ( Context * __context__, Func __funcCall__, void * self, ExprCopy const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprCopy const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprMove ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprMove]);
+  }
+  __forceinline void invoke_preVisitExprMove ( Context * __context__, Func __funcCall__, void * self, ExprMove const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMove const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprMove ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprMove]);
+  }
+  __forceinline void invoke_visitExprMove ( Context * __context__, Func __funcCall__, void * self, ExprMove const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMove const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprClone ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprClone]);
+  }
+  __forceinline void invoke_preVisitExprClone ( Context * __context__, Func __funcCall__, void * self, ExprClone const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprClone const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprClone ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprClone]);
+  }
+  __forceinline void invoke_visitExprClone ( Context * __context__, Func __funcCall__, void * self, ExprClone const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprClone const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprTryCatch ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprTryCatch]);
+  }
+  __forceinline void invoke_preVisitExprTryCatch ( Context * __context__, Func __funcCall__, void * self, ExprTryCatch const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprTryCatch const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprTryCatch ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprTryCatch]);
+  }
+  __forceinline void invoke_visitExprTryCatch ( Context * __context__, Func __funcCall__, void * self, ExprTryCatch const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprTryCatch const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprReturn ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprReturn]);
+  }
+  __forceinline void invoke_preVisitExprReturn ( Context * __context__, Func __funcCall__, void * self, ExprReturn const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprReturn const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprReturn ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprReturn]);
+  }
+  __forceinline void invoke_visitExprReturn ( Context * __context__, Func __funcCall__, void * self, ExprReturn const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprReturn const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprYield ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprYield]);
+  }
+  __forceinline void invoke_preVisitExprYield ( Context * __context__, Func __funcCall__, void * self, ExprYield const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprYield const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprYield ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprYield]);
+  }
+  __forceinline void invoke_visitExprYield ( Context * __context__, Func __funcCall__, void * self, ExprYield const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprYield const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprBreak ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprBreak]);
+  }
+  __forceinline void invoke_preVisitExprBreak ( Context * __context__, Func __funcCall__, void * self, ExprBreak const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprBreak const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprBreak ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprBreak]);
+  }
+  __forceinline void invoke_visitExprBreak ( Context * __context__, Func __funcCall__, void * self, ExprBreak const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprBreak const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprContinue ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprContinue]);
+  }
+  __forceinline void invoke_preVisitExprContinue ( Context * __context__, Func __funcCall__, void * self, ExprContinue const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprContinue const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprContinue ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprContinue]);
+  }
+  __forceinline void invoke_visitExprContinue ( Context * __context__, Func __funcCall__, void * self, ExprContinue const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprContinue const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConst ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConst]);
+  }
+  __forceinline void invoke_preVisitExprConst ( Context * __context__, Func __funcCall__, void * self, ExprConst const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConst const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConst ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConst]);
+  }
+  __forceinline void invoke_visitExprConst ( Context * __context__, Func __funcCall__, void * self, ExprConst const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConst const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprFakeContext ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprFakeContext]);
+  }
+  __forceinline void invoke_preVisitExprFakeContext ( Context * __context__, Func __funcCall__, void * self, ExprFakeContext const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprFakeContext const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprFakeContext ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprFakeContext]);
+  }
+  __forceinline void invoke_visitExprFakeContext ( Context * __context__, Func __funcCall__, void * self, ExprFakeContext const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprFakeContext const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprFakeLineInfo ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprFakeLineInfo]);
+  }
+  __forceinline void invoke_preVisitExprFakeLineInfo ( Context * __context__, Func __funcCall__, void * self, ExprFakeLineInfo const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprFakeLineInfo const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprFakeLineInfo ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprFakeLineInfo]);
+  }
+  __forceinline void invoke_visitExprFakeLineInfo ( Context * __context__, Func __funcCall__, void * self, ExprFakeLineInfo const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprFakeLineInfo const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstPtr ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstPtr]);
+  }
+  __forceinline void invoke_preVisitExprConstPtr ( Context * __context__, Func __funcCall__, void * self, ExprConstPtr const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstPtr const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstPtr ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstPtr]);
+  }
+  __forceinline void invoke_visitExprConstPtr ( Context * __context__, Func __funcCall__, void * self, ExprConstPtr const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstPtr const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstEnumeration ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstEnumeration]);
+  }
+  __forceinline void invoke_preVisitExprConstEnumeration ( Context * __context__, Func __funcCall__, void * self, ExprConstEnumeration const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstEnumeration const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstEnumeration ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstEnumeration]);
+  }
+  __forceinline void invoke_visitExprConstEnumeration ( Context * __context__, Func __funcCall__, void * self, ExprConstEnumeration const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstEnumeration const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstBitfield ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstBitfield]);
+  }
+  __forceinline void invoke_preVisitExprConstBitfield ( Context * __context__, Func __funcCall__, void * self, ExprConstBitfield const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstBitfield const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstBitfield ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstBitfield]);
+  }
+  __forceinline void invoke_visitExprConstBitfield ( Context * __context__, Func __funcCall__, void * self, ExprConstBitfield const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstBitfield const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstInt8 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstInt8]);
+  }
+  __forceinline void invoke_preVisitExprConstInt8 ( Context * __context__, Func __funcCall__, void * self, ExprConstInt8 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstInt8 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstInt8 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstInt8]);
+  }
+  __forceinline void invoke_visitExprConstInt8 ( Context * __context__, Func __funcCall__, void * self, ExprConstInt8 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstInt8 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstInt16 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstInt16]);
+  }
+  __forceinline void invoke_preVisitExprConstInt16 ( Context * __context__, Func __funcCall__, void * self, ExprConstInt16 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstInt16 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstInt16 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstInt16]);
+  }
+  __forceinline void invoke_visitExprConstInt16 ( Context * __context__, Func __funcCall__, void * self, ExprConstInt16 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstInt16 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstInt64 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstInt64]);
+  }
+  __forceinline void invoke_preVisitExprConstInt64 ( Context * __context__, Func __funcCall__, void * self, ExprConstInt64 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstInt64 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstInt64 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstInt64]);
+  }
+  __forceinline void invoke_visitExprConstInt64 ( Context * __context__, Func __funcCall__, void * self, ExprConstInt64 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstInt64 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstInt ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstInt]);
+  }
+  __forceinline void invoke_preVisitExprConstInt ( Context * __context__, Func __funcCall__, void * self, ExprConstInt const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstInt const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstInt ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstInt]);
+  }
+  __forceinline void invoke_visitExprConstInt ( Context * __context__, Func __funcCall__, void * self, ExprConstInt const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstInt const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstInt2 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstInt2]);
+  }
+  __forceinline void invoke_preVisitExprConstInt2 ( Context * __context__, Func __funcCall__, void * self, ExprConstInt2 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstInt2 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstInt2 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstInt2]);
+  }
+  __forceinline void invoke_visitExprConstInt2 ( Context * __context__, Func __funcCall__, void * self, ExprConstInt2 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstInt2 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstInt3 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstInt3]);
+  }
+  __forceinline void invoke_preVisitExprConstInt3 ( Context * __context__, Func __funcCall__, void * self, ExprConstInt3 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstInt3 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstInt3 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstInt3]);
+  }
+  __forceinline void invoke_visitExprConstInt3 ( Context * __context__, Func __funcCall__, void * self, ExprConstInt3 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstInt3 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstInt4 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstInt4]);
+  }
+  __forceinline void invoke_preVisitExprConstInt4 ( Context * __context__, Func __funcCall__, void * self, ExprConstInt4 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstInt4 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstInt4 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstInt4]);
+  }
+  __forceinline void invoke_visitExprConstInt4 ( Context * __context__, Func __funcCall__, void * self, ExprConstInt4 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstInt4 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstUInt8 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstUInt8]);
+  }
+  __forceinline void invoke_preVisitExprConstUInt8 ( Context * __context__, Func __funcCall__, void * self, ExprConstUInt8 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstUInt8 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstUInt8 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstUInt8]);
+  }
+  __forceinline void invoke_visitExprConstUInt8 ( Context * __context__, Func __funcCall__, void * self, ExprConstUInt8 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstUInt8 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstUInt16 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstUInt16]);
+  }
+  __forceinline void invoke_preVisitExprConstUInt16 ( Context * __context__, Func __funcCall__, void * self, ExprConstUInt16 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstUInt16 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstUInt16 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstUInt16]);
+  }
+  __forceinline void invoke_visitExprConstUInt16 ( Context * __context__, Func __funcCall__, void * self, ExprConstUInt16 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstUInt16 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstUInt64 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstUInt64]);
+  }
+  __forceinline void invoke_preVisitExprConstUInt64 ( Context * __context__, Func __funcCall__, void * self, ExprConstUInt64 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstUInt64 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstUInt64 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstUInt64]);
+  }
+  __forceinline void invoke_visitExprConstUInt64 ( Context * __context__, Func __funcCall__, void * self, ExprConstUInt64 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstUInt64 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstUInt ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstUInt]);
+  }
+  __forceinline void invoke_preVisitExprConstUInt ( Context * __context__, Func __funcCall__, void * self, ExprConstUInt const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstUInt const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstUInt ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstUInt]);
+  }
+  __forceinline void invoke_visitExprConstUInt ( Context * __context__, Func __funcCall__, void * self, ExprConstUInt const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstUInt const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstUInt2 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstUInt2]);
+  }
+  __forceinline void invoke_preVisitExprConstUInt2 ( Context * __context__, Func __funcCall__, void * self, ExprConstUInt2 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstUInt2 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstUInt2 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstUInt2]);
+  }
+  __forceinline void invoke_visitExprConstUInt2 ( Context * __context__, Func __funcCall__, void * self, ExprConstUInt2 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstUInt2 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstUInt3 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstUInt3]);
+  }
+  __forceinline void invoke_preVisitExprConstUInt3 ( Context * __context__, Func __funcCall__, void * self, ExprConstUInt3 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstUInt3 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstUInt3 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstUInt3]);
+  }
+  __forceinline void invoke_visitExprConstUInt3 ( Context * __context__, Func __funcCall__, void * self, ExprConstUInt3 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstUInt3 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstUInt4 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstUInt4]);
+  }
+  __forceinline void invoke_preVisitExprConstUInt4 ( Context * __context__, Func __funcCall__, void * self, ExprConstUInt4 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstUInt4 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstUInt4 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstUInt4]);
+  }
+  __forceinline void invoke_visitExprConstUInt4 ( Context * __context__, Func __funcCall__, void * self, ExprConstUInt4 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstUInt4 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstRange ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstRange]);
+  }
+  __forceinline void invoke_preVisitExprConstRange ( Context * __context__, Func __funcCall__, void * self, ExprConstRange const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstRange const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstRange ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstRange]);
+  }
+  __forceinline void invoke_visitExprConstRange ( Context * __context__, Func __funcCall__, void * self, ExprConstRange const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstRange const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstURange ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstURange]);
+  }
+  __forceinline void invoke_preVisitExprConstURange ( Context * __context__, Func __funcCall__, void * self, ExprConstURange const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstURange const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstURange ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstURange]);
+  }
+  __forceinline void invoke_visitExprConstURange ( Context * __context__, Func __funcCall__, void * self, ExprConstURange const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstURange const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstRange64 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstRange64]);
+  }
+  __forceinline void invoke_preVisitExprConstRange64 ( Context * __context__, Func __funcCall__, void * self, ExprConstRange64 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstRange64 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstRange64 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstRange64]);
+  }
+  __forceinline void invoke_visitExprConstRange64 ( Context * __context__, Func __funcCall__, void * self, ExprConstRange64 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstRange64 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstURange64 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstURange64]);
+  }
+  __forceinline void invoke_preVisitExprConstURange64 ( Context * __context__, Func __funcCall__, void * self, ExprConstURange64 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstURange64 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstURange64 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstURange64]);
+  }
+  __forceinline void invoke_visitExprConstURange64 ( Context * __context__, Func __funcCall__, void * self, ExprConstURange64 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstURange64 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstBool ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstBool]);
+  }
+  __forceinline void invoke_preVisitExprConstBool ( Context * __context__, Func __funcCall__, void * self, ExprConstBool const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstBool const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstBool ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstBool]);
+  }
+  __forceinline void invoke_visitExprConstBool ( Context * __context__, Func __funcCall__, void * self, ExprConstBool const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstBool const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstFloat ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstFloat]);
+  }
+  __forceinline void invoke_preVisitExprConstFloat ( Context * __context__, Func __funcCall__, void * self, ExprConstFloat const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstFloat const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstFloat ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstFloat]);
+  }
+  __forceinline void invoke_visitExprConstFloat ( Context * __context__, Func __funcCall__, void * self, ExprConstFloat const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstFloat const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstFloat16 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstFloat16]);
+  }
+  __forceinline void invoke_preVisitExprConstFloat16 ( Context * __context__, Func __funcCall__, void * self, ExprConstFloat16 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstFloat16 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstFloat16 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstFloat16]);
+  }
+  __forceinline void invoke_visitExprConstFloat16 ( Context * __context__, Func __funcCall__, void * self, ExprConstFloat16 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstFloat16 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstFloat2 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstFloat2]);
+  }
+  __forceinline void invoke_preVisitExprConstFloat2 ( Context * __context__, Func __funcCall__, void * self, ExprConstFloat2 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstFloat2 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstFloat2 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstFloat2]);
+  }
+  __forceinline void invoke_visitExprConstFloat2 ( Context * __context__, Func __funcCall__, void * self, ExprConstFloat2 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstFloat2 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstFloat3 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstFloat3]);
+  }
+  __forceinline void invoke_preVisitExprConstFloat3 ( Context * __context__, Func __funcCall__, void * self, ExprConstFloat3 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstFloat3 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstFloat3 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstFloat3]);
+  }
+  __forceinline void invoke_visitExprConstFloat3 ( Context * __context__, Func __funcCall__, void * self, ExprConstFloat3 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstFloat3 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstFloat4 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstFloat4]);
+  }
+  __forceinline void invoke_preVisitExprConstFloat4 ( Context * __context__, Func __funcCall__, void * self, ExprConstFloat4 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstFloat4 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstFloat4 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstFloat4]);
+  }
+  __forceinline void invoke_visitExprConstFloat4 ( Context * __context__, Func __funcCall__, void * self, ExprConstFloat4 const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstFloat4 const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstString ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstString]);
+  }
+  __forceinline void invoke_preVisitExprConstString ( Context * __context__, Func __funcCall__, void * self, ExprConstString const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstString const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstString ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstString]);
+  }
+  __forceinline void invoke_visitExprConstString ( Context * __context__, Func __funcCall__, void * self, ExprConstString const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstString const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprConstDouble ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprConstDouble]);
+  }
+  __forceinline void invoke_preVisitExprConstDouble ( Context * __context__, Func __funcCall__, void * self, ExprConstDouble const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstDouble const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprConstDouble ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprConstDouble]);
+  }
+  __forceinline void invoke_visitExprConstDouble ( Context * __context__, Func __funcCall__, void * self, ExprConstDouble const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprConstDouble const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprLet ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprLet]);
+  }
+  __forceinline void invoke_preVisitExprLet ( Context * __context__, Func __funcCall__, void * self, ExprLet const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprLet const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprLet ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprLet]);
+  }
+  __forceinline void invoke_visitExprLet ( Context * __context__, Func __funcCall__, void * self, ExprLet const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprLet const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprFor ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprFor]);
+  }
+  __forceinline void invoke_preVisitExprFor ( Context * __context__, Func __funcCall__, void * self, ExprFor const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprFor const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprFor ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprFor]);
+  }
+  __forceinline void invoke_visitExprFor ( Context * __context__, Func __funcCall__, void * self, ExprFor const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprFor const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprLooksLikeCall ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprLooksLikeCall]);
+  }
+  __forceinline void invoke_preVisitExprLooksLikeCall ( Context * __context__, Func __funcCall__, void * self, ExprLooksLikeCall const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprLooksLikeCall const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprLooksLikeCall ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprLooksLikeCall]);
+  }
+  __forceinline void invoke_visitExprLooksLikeCall ( Context * __context__, Func __funcCall__, void * self, ExprLooksLikeCall const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprLooksLikeCall const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprMakeBlock ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprMakeBlock]);
+  }
+  __forceinline void invoke_preVisitExprMakeBlock ( Context * __context__, Func __funcCall__, void * self, ExprMakeBlock const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeBlock const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprMakeBlock ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprMakeBlock]);
+  }
+  __forceinline void invoke_visitExprMakeBlock ( Context * __context__, Func __funcCall__, void * self, ExprMakeBlock const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeBlock const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprMakeGenerator ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprMakeGenerator]);
+  }
+  __forceinline void invoke_preVisitExprMakeGenerator ( Context * __context__, Func __funcCall__, void * self, ExprMakeGenerator const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeGenerator const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprMakeGenerator ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprMakeGenerator]);
+  }
+  __forceinline void invoke_visitExprMakeGenerator ( Context * __context__, Func __funcCall__, void * self, ExprMakeGenerator const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeGenerator const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprTypeInfo ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprTypeInfo]);
+  }
+  __forceinline void invoke_preVisitExprTypeInfo ( Context * __context__, Func __funcCall__, void * self, ExprTypeInfo const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprTypeInfo const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprTypeInfo ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprTypeInfo]);
+  }
+  __forceinline void invoke_visitExprTypeInfo ( Context * __context__, Func __funcCall__, void * self, ExprTypeInfo const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprTypeInfo const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprIs ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprIs]);
+  }
+  __forceinline void invoke_preVisitExprIs ( Context * __context__, Func __funcCall__, void * self, ExprIs const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprIs const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprIs ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprIs]);
+  }
+  __forceinline void invoke_visitExprIs ( Context * __context__, Func __funcCall__, void * self, ExprIs const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprIs const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprCall ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprCall]);
+  }
+  __forceinline void invoke_preVisitExprCall ( Context * __context__, Func __funcCall__, void * self, ExprCall const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprCall const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprCall ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprCall]);
+  }
+  __forceinline void invoke_visitExprCall ( Context * __context__, Func __funcCall__, void * self, ExprCall const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprCall const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprNamedCall ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprNamedCall]);
+  }
+  __forceinline void invoke_preVisitExprNamedCall ( Context * __context__, Func __funcCall__, void * self, ExprNamedCall const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprNamedCall const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprNamedCall ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprNamedCall]);
+  }
+  __forceinline void invoke_visitExprNamedCall ( Context * __context__, Func __funcCall__, void * self, ExprNamedCall const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprNamedCall const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprIfThenElse ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprIfThenElse]);
+  }
+  __forceinline void invoke_preVisitExprIfThenElse ( Context * __context__, Func __funcCall__, void * self, ExprIfThenElse const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprIfThenElse const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprIfThenElse ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprIfThenElse]);
+  }
+  __forceinline void invoke_visitExprIfThenElse ( Context * __context__, Func __funcCall__, void * self, ExprIfThenElse const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprIfThenElse const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprWith ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprWith]);
+  }
+  __forceinline void invoke_preVisitExprWith ( Context * __context__, Func __funcCall__, void * self, ExprWith const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprWith const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprWith ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprWith]);
+  }
+  __forceinline void invoke_visitExprWith ( Context * __context__, Func __funcCall__, void * self, ExprWith const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprWith const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprAssume ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprAssume]);
+  }
+  __forceinline void invoke_preVisitExprAssume ( Context * __context__, Func __funcCall__, void * self, ExprAssume const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprAssume const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprAssume ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprAssume]);
+  }
+  __forceinline void invoke_visitExprAssume ( Context * __context__, Func __funcCall__, void * self, ExprAssume const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprAssume const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprWhile ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprWhile]);
+  }
+  __forceinline void invoke_preVisitExprWhile ( Context * __context__, Func __funcCall__, void * self, ExprWhile const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprWhile const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprWhile ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprWhile]);
+  }
+  __forceinline void invoke_visitExprWhile ( Context * __context__, Func __funcCall__, void * self, ExprWhile const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprWhile const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprMakeStruct ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprMakeStruct]);
+  }
+  __forceinline void invoke_preVisitExprMakeStruct ( Context * __context__, Func __funcCall__, void * self, ExprMakeStruct const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeStruct const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprMakeStruct ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprMakeStruct]);
+  }
+  __forceinline void invoke_visitExprMakeStruct ( Context * __context__, Func __funcCall__, void * self, ExprMakeStruct const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeStruct const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprMakeVariant ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprMakeVariant]);
+  }
+  __forceinline void invoke_preVisitExprMakeVariant ( Context * __context__, Func __funcCall__, void * self, ExprMakeVariant const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeVariant const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprMakeVariant ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprMakeVariant]);
+  }
+  __forceinline void invoke_visitExprMakeVariant ( Context * __context__, Func __funcCall__, void * self, ExprMakeVariant const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeVariant const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprMakeArray ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprMakeArray]);
+  }
+  __forceinline void invoke_preVisitExprMakeArray ( Context * __context__, Func __funcCall__, void * self, ExprMakeArray const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeArray const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprMakeArray ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprMakeArray]);
+  }
+  __forceinline void invoke_visitExprMakeArray ( Context * __context__, Func __funcCall__, void * self, ExprMakeArray const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeArray const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprMakeTuple ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprMakeTuple]);
+  }
+  __forceinline void invoke_preVisitExprMakeTuple ( Context * __context__, Func __funcCall__, void * self, ExprMakeTuple const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeTuple const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprMakeTuple ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprMakeTuple]);
+  }
+  __forceinline void invoke_visitExprMakeTuple ( Context * __context__, Func __funcCall__, void * self, ExprMakeTuple const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMakeTuple const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprArrayComprehension ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprArrayComprehension]);
+  }
+  __forceinline void invoke_preVisitExprArrayComprehension ( Context * __context__, Func __funcCall__, void * self, ExprArrayComprehension const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprArrayComprehension const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprArrayComprehension ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprArrayComprehension]);
+  }
+  __forceinline void invoke_visitExprArrayComprehension ( Context * __context__, Func __funcCall__, void * self, ExprArrayComprehension const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprArrayComprehension const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprMemZero ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprMemZero]);
+  }
+  __forceinline void invoke_preVisitExprMemZero ( Context * __context__, Func __funcCall__, void * self, ExprMemZero const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMemZero const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprMemZero ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprMemZero]);
+  }
+  __forceinline void invoke_visitExprMemZero ( Context * __context__, Func __funcCall__, void * self, ExprMemZero const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprMemZero const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprTypeDecl ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprTypeDecl]);
+  }
+  __forceinline void invoke_preVisitExprTypeDecl ( Context * __context__, Func __funcCall__, void * self, ExprTypeDecl const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprTypeDecl const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprTypeDecl ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprTypeDecl]);
+  }
+  __forceinline void invoke_visitExprTypeDecl ( Context * __context__, Func __funcCall__, void * self, ExprTypeDecl const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprTypeDecl const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_preVisitExprTag ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprTag]);
+  }
+  __forceinline void invoke_preVisitExprTag ( Context * __context__, Func __funcCall__, void * self, ExprTag const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprTag const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+  __forceinline Func get_visitExprTag ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprTag]);
+  }
+  __forceinline void invoke_visitExprTag ( Context * __context__, Func __funcCall__, void * self, ExprTag const  * const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,ExprTag const  * const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
+  }
+};
+
