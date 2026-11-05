@@ -1214,6 +1214,27 @@ def dequant_q5032_plane_block(kq : array<uint8> | #; kqo : int64; ks : array<uin
     dequant_b5_plane_block(kq, kqo, ks, kso, dst, doff, KqTag_q5032())
 }
 
+//! the affine planes ride `gguf_transcode_mlx`: their disk form is three tensors, never one block stream
+def kq_transcode_p(_src : uint8 const?; var _kq : uint8?; var _ks : uint8?; _f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) {
+    panic("an affine plane transcodes off its code, scale and bias tensors (gguf_transcode_mlx), not one block stream")
+}
+
+//! the (scale, bias) pair of the block whose scale-plane bytes start at `ks[kso]` (its group's pair: the even block's offset)
+def mlx_pair(ks : array<uint8> | #; kso : int64; f : auto(TT)) : float2 {
+    let po = kso & ~(MLX_PAIR_BYTES - 1l)
+    return float2(mlx_half(ks[po], ks[po + 1l], f), mlx_half(ks[po + 2l], ks[po + 3l], f))
+}
+
+//! Reference dequant of one affine-plane 32-block: w = scale * q + bias, q unsigned, the group's pair shared by its two blocks
+def dequant_mlx_plane_block(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64;
+                            f : auto(TT)) {
+    let sb = mlx_pair(ks, kso, f)
+    let qp = unsafe(addr<uint8 const?>(kq[kqo]))
+    for (k in range64(KQ_B32_ELEMS)) {
+        dst[doff + k] = sb.x * float(mlx_code(qp, k, f)) + sb.y
+    }
+}
+
 //! Reference dequant of one q4032-plane 32-block: w = d * (q - 8), `dequantize_row_q4_0`'s order - the codebook block under
 //! the linear table.
 def dequant_q4032_plane_block(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
@@ -1260,6 +1281,13 @@ def private dequant_b5_plane_block(kq : array<uint8> | #; kqo : int64; ks : arra
     }
 }
 
+//! one affine block of format `f` dequantized through its member's tag
+def private dequant_mlx_block_of(f : KqFmt; kq : array<uint8> | #; qo : int64; ks : array<uint8> | #; so : int64; var dst : array<float> | #; doff : int64) {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
+    kq_fmt_stamp(f) $(F) {
+        dequant_mlx_plane_block(kq, qo, ks, so, dst, doff, F)
+    }
+}
+
 //! block `bi` of a per-32 plane pair dequantized into dst[doff..]:
 //! the format's verbatim block form
 def dequant_b32_plane_block(f : KqFmt; kq : array<uint8> | #; ks : array<uint8> | #; bi : int64;
@@ -1274,6 +1302,8 @@ def dequant_b32_plane_block(f : KqFmt; kq : array<uint8> | #; ks : array<uint8> 
         dequant_q4032_plane_block(kq, qo, ks, so, dst, doff)
     } elif (f == KqFmt.q5032) {
         dequant_q5032_plane_block(kq, qo, ks, so, dst, doff)
+    } elif (kq_mlx_affine(f)) {
+        dequant_mlx_block_of(f, kq, qo, ks, so, dst, doff)
     } else {
         panic("dequant_b32_plane_block: '{f}' has no per-32 plane pair")
     }
@@ -1285,6 +1315,9 @@ def dequant_b32_plane_block(f : KqFmt; kq : array<uint8> | #; ks : array<uint8> 
 def private b32_plane_row_f32(f : KqFmt; kq, ks : array<uint8>; nin, nout, mr, r : int64;
                               var dst : array<float>; doff : int64; blk0 : int64) {
     let nb = nin / KQ_B32_ELEMS
+    if (kq_mlx_affine(f) && mr > 1l) {
+        panic("b32_plane_row_f32: the {f} planes sit in disk order - no grp<{mr}> interleave carries their shared group pairs")
+    }
     if (mr <= 1l || r >= (nout / mr) * mr) {
         for (bi in range64(nb)) {
             dequant_b32_plane_block(f, kq, ks, blk0 + r * nb + bi, dst, doff + bi * KQ_B32_ELEMS)

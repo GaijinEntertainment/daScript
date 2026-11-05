@@ -15,6 +15,7 @@ require dasllama/dasllama_ple   // ple_check_table — the E-series table go-liv
 require dasllama/dasllama_common
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_gguf
+require dasllama/dasllama_safetensors   // with_hf_snapshot - a snapshot directory loads through a synthesized meta
 require dasllama/dasllama_convert
 require dasllama/dasllama_math
 require dasllama/dasllama_rope   // rope_factor_tensor - the LongRoPE set the file's context picks
@@ -40,7 +41,7 @@ struct private LayoutSizes {
     wblob_n : int64   // element count of the big-weight region
     mx_n : int64      // element count of the native-MXFP4 expert planes (0 unless experts_mx4)
     bf16_n : int64    // halfword count of the native-BF16 region (0 unless ple_model_bf16)
-    @safe_when_uninitialized kq_n : int64[KQ_FMT_COUNT]   // element count per lattice plane pair, by int(KqFmt) (0 unless kquant_native)
+    @safe_when_uninitialized kq_n : int64[KQ_FMT_COUNT]   //! element count per lattice or affine plane pair, by int(KqFmt) (0 unless kquant_native)
     q51_n : int64
     iq4nl32_n : int64
     q4032_n : int64
@@ -60,7 +61,7 @@ struct private KqCursors {
 }
 
 def private kq_take(var cur : KqCursors; f : KqFmt; n : int64) : int64 {
-    if (kq_sb(f)) {
+    if (kq_sb(f) || kq_mlx_affine(f)) {   //! the affine pairs' cursors share the slot table: their slots are no lattice plane's
         let o = cur.kq[int(f)]
         cur.kq[int(f)] += n
         return o
@@ -304,9 +305,11 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
         t.dngate_offs |> clear(); t.dngate_offs |> reserve(layers)
         for (l in range64(layers)) { t.dngate_offs |> push(layer_is_recurrent(c, l) ? kq_take(cur, fmt_at(t.dngate_fmt, l), dim * c.ssm_d_inner) : -1l) }
         t.dnbeta_offs |> clear(); t.dnbeta_offs |> reserve(layers)
-        for (l in range64(layers)) { t.dnbeta_offs |> push(layer_is_recurrent(c, l) && !t.dn_ba_f32 ? kq_take(cur, fmt_at(t.dnbeta_fmt, l), dim * c.ssm_dt_rank) : -1l) }
         t.dnalpha_offs |> clear(); t.dnalpha_offs |> reserve(layers)
-        for (l in range64(layers)) { t.dnalpha_offs |> push(layer_is_recurrent(c, l) && !t.dn_ba_f32 ? kq_take(cur, fmt_at(t.dnalpha_fmt, l), dim * c.ssm_dt_rank) : -1l) }
+        for (l in range64(layers)) {   //! a layer's alpha plane right after its beta plane: one 2 x dt_rank-row site where their formats agree
+            t.dnbeta_offs |> push(layer_is_recurrent(c, l) && !t.dn_ba_f32 ? kq_take(cur, fmt_at(t.dnbeta_fmt, l), dim * c.ssm_dt_rank) : -1l)
+            t.dnalpha_offs |> push(layer_is_recurrent(c, l) && !t.dn_ba_f32 ? kq_take(cur, fmt_at(t.dnalpha_fmt, l), dim * c.ssm_dt_rank) : -1l)
+        }
         t.dnout_offs |> clear(); t.dnout_offs |> reserve(layers)
         for (l in range64(layers)) { t.dnout_offs |> push(layer_is_recurrent(c, l) ? kq_take(cur, fmt_at(t.dnout_fmt, l), c.ssm_d_inner * dim) : -1l) }
     }
@@ -404,13 +407,11 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
         t.hc_head_norm_off = fo
         fo += hcd
         t.hc_down_offs |> clear(); t.hc_down_offs |> reserve(sites)
-        for (_si in range64(sites)) { t.hc_down_offs |> push(cur.wo); cur.wo += hcd * lr }
+        for (si in range64(sites)) { t.hc_down_offs |> push(kq_take(cur, hc_site_fmts(t, si).down, hcd * lr)) }
         t.hc_up_offs |> clear(); t.hc_up_offs |> reserve(sites)
-        for (_si in range64(sites)) { t.hc_up_offs |> push(cur.wo); cur.wo += lr * hcd }
-        t.hc_head_down_off = cur.wo
-        cur.wo += hcd * lr
-        t.hc_head_up_off = cur.wo
-        cur.wo += lr * hcd
+        for (si in range64(sites)) { t.hc_up_offs |> push(kq_take(cur, hc_site_fmts(t, si).up, lr * hcd)) }
+        t.hc_head_down_off = kq_take(cur, hc_site_fmts(t, hc_head_site(c)).down, hcd * lr)
+        t.hc_head_up_off = kq_take(cur, hc_site_fmts(t, hc_head_site(c)).up, lr * hcd)
     }
     if (has_ple_ngram(c)) {   // qwen4exp n-gram side input: three grouped norms + the conv taps f32, key/value q8 (the table is its own byte array)
         let hcd = hc_dim(c)
@@ -423,10 +424,8 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
         fo += hcd
         t.ple_conv_off = fo
         fo += hcd * c.ple_conv_kernel
-        t.ple_key_off = cur.wo
-        cur.wo += ind * hcd
-        t.ple_val_off = cur.wo
-        cur.wo += ind * dim
+        t.ple_key_off = kq_take(cur, ple_kv_fmts(t).key, ind * hcd)
+        t.ple_val_off = kq_take(cur, ple_kv_fmts(t).val, ind * dim)
     }
     if (c.indexer_n_head > 0l) {   // qwen4exp QSA indexer: f32 projections + norms on the attention layers (-1 on recurrent ones)
         let hs = c.indexer_head_size
@@ -458,10 +457,8 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
             let hcd = hc_dim(c)
             t.mtp_hc_head_norm_off = fo
             fo += hcd
-            t.mtp_hc_head_down_off = cur.wo
-            cur.wo += hcd * c.hc_low_rank
-            t.mtp_hc_head_up_off = cur.wo
-            cur.wo += c.hc_low_rank * hcd
+            t.mtp_hc_head_down_off = kq_take(cur, hc_site_fmts(t, hc_head_site(c) + 1l).down, hcd * c.hc_low_rank)
+            t.mtp_hc_head_up_off = kq_take(cur, hc_site_fmts(t, hc_head_site(c) + 1l).up, c.hc_low_rank * hcd)
         }
     }
     return LayoutSizes(fblob_n = fo, wblob_n = cur.wo, mx_n = mx, bf16_n = bf16, kq_n = cur.kq, q51_n = cur.q51, iq4nl32_n = cur.iq4nl32, q4032_n = cur.q4032, q5032_n = cur.q5032, pleq8_n = pleq8)
@@ -848,6 +845,8 @@ def stream_field_of(t : Model; fmt : KqFmt) : string {
         return "q4032q"
     } elif (fmt == KqFmt.q5032) {
         return "q5032q"
+    } elif (kq_mlx_affine(fmt)) {
+        return "{fmt}q"
     } elif (fmt == KqFmt.mx4) {
         return "mxq"
     } elif (t.quant == QuantMode.q8) {
@@ -1372,6 +1371,12 @@ def private load_big(m : GGUFMeta; bytes : array<uint8> | #; name : string; var 
         kind = transcode_kq_tensor(m, bytes, name, fmt, t.q4032q, t.q4032s, woff, n, src_off)
     } elif (fmt == KqFmt.q5032) {
         kind = transcode_kq_tensor(m, bytes, name, fmt, t.q5032q, t.q5032s, woff, n, src_off)
+    } elif (kq_mlx_affine(fmt)) {
+        kq_plane_pair(t, fmt) $(var q : array<uint8>; var s : array<uint8>) {
+            kind = transcode_kq_tensor(m, bytes, name, fmt, q, s, woff, n, src_off)
+        }
+    } elif (mlx_affine_bits(gguf_tensor_type(m, name)) > 0l) {
+        panic("dasLLAMA load: {name} is {ggml_type_name(gguf_tensor_type(m, name))} - an affine plane serves on its own planes alone (a q8-mode load with native planes), never a converted copy")
     } elif (t.quant == QuantMode.q8) {
         kind = transcode_q8_tensor(m, bytes, name, t.qblob, t.qscales, woff, woff / 32l, n, src_off, scratch)
     } elif (t.quant == QuantMode.q4_0) {
@@ -1541,6 +1546,33 @@ def private note_demotion(name : string; disk_fmt, tag_fmt : KqFmt; why : string
     return tag_fmt
 }
 
+//! the hyper-connection mixers' and the n-gram projections' tags off the file: every layer's two mixer sites (the NextN
+//! block's included), the head mixer, the draft head's; true when any is not q8
+def private detect_hc_formats(var t : Model; m : GGUFMeta) : bool {
+    let c = t.config
+    return false if (!c.hyper_conn)
+    let hcd = hc_dim(c)
+    let head = hc_head_site(c)
+    t.hc_down_fmt |> resize(head + 2l)
+    t.hc_up_fmt |> resize(head + 2l)
+    for (si in range64(head + 2l)) {
+        let stem = si < head ? "blk.{si / 2l}.hc_{si % 2l == 0l ? "attn" : "ffn"}_" : (si == head ? "output_hc_" : "blk.{c.n_layers}.nextn.hc_head_")
+        t.hc_down_fmt[si] = kq_tag(m, "{stem}down.weight", hcd)
+        t.hc_up_fmt[si] = kq_tag(m, "{stem}up.weight", c.hc_low_rank)
+    }
+    if (has_ple_ngram(c)) {
+        t.ple_kv_fmt <- [kq_tag(m, "blk.{c.ple_layer}.ple_key.weight", ple_in_dim(c)), kq_tag(m, "blk.{c.ple_layer}.ple_value.weight", ple_in_dim(c))]
+    }
+    var any = false
+    for (a, b in t.hc_down_fmt, t.hc_up_fmt) {
+        any = any || a != KqFmt.q8 || b != KqFmt.q8
+    }
+    for (f in t.ple_kv_fmt) {
+        any = any || f != KqFmt.q8
+    }
+    return any
+}
+
 // Fill the per-kind weight format tags from the file's tensor types (q8-mode loads with the
 // kquant_native knob on). Fused-projection arches (Phi3) split attn_qkv/ffn_up at row-aligned
 // slice offsets, so every slice stays superblock-aligned; one disk tensor = one tag for its slices.
@@ -1628,6 +1660,8 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
         t.mtp_ehproj_fmt = kq_tag(m, "blk.{t.config.n_layers}.nextn.eh_proj.weight", 2l * t.config.dim)
         any ||= t.mtp_ehproj_fmt != KqFmt.q8
     }
+    let hc_kq = detect_hc_formats(t, m)   //! its own statement: `||=` would skip the tags once `any` holds
+    any ||= hc_kq
     let dn_kq = detect_dn_formats(t, m, layers)
     any ||= dn_kq
     if (has_ple(t.config)) {
@@ -1655,6 +1689,9 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
         delete t.dnout_fmt
         delete t.dnbeta_fmt
         delete t.dnalpha_fmt
+        delete t.hc_down_fmt
+        delete t.hc_up_fmt
+        delete t.ple_kv_fmt
         delete t.ple_gate_fmt
         delete t.ple_proj_fmt
     }
@@ -1906,6 +1943,18 @@ def load_gguf_streaming(path : string; mode : QuantMode; var t : Model; var jobs
     }
     let ts_load = ref_time_ticks()
     let lmode0 = mode
+    if (hf_snapshot(path)) {
+        var hok = false
+        with_hf_snapshot(path, false) $(m, bytes) {
+            fill_plan_begin()
+            load_gguf_parsed(t, m, bytes, lmode0, ts_load)
+            fill_plan_take(jobs)
+            t.tok <- load_tokenizer_auto(path)
+            hok = invoke(blk, m, bytes)
+        }
+        g_stream_want_blob = false
+        return hok
+    }
     var shards <- gguf_shard_paths(path)
     if (length(shards) > 1) {
         // split gguf: every shard mapping stays alive across the plan-load AND the blk-save
@@ -1985,6 +2034,12 @@ def private load_gguf_impl(path : string; var mode : QuantMode) : Model {
         set_conv_profile(true)
     }
     let ts_load = ref_time_ticks()
+    if (hf_snapshot(path)) {
+        with_hf_snapshot(path, false) $(m, bytes) {
+            load_gguf_parsed(t, m, bytes, mode, ts_load)
+        }
+        return <- t
+    }
     let shards <- gguf_shard_paths(path)
     if (length(shards) > 1) {
         to_log(LOG_INFO, "dasLLAMA: split gguf - {length(shards)} shards\n")
@@ -2046,6 +2101,60 @@ def private mx4_transcode_at(m : GGUFMeta; bytes : array<uint8> | #; name : stri
     gguf_transcode_mx4(m, bytes, name, t.mxq, t.mxs, blk * MX4_QB, blk * MX4_SB, n, src)
 }
 
+//! the snapshot's sharded n-gram table `m.tensors[ti]` as `t.ngram_tab`: a view over its bytes in a mapping of its file the
+//! model holds for its life (`ngram_map`, closed by the finalizer) - no copy - read ahead at map, since the gather's rows are
+//! random pages of it
+def map_ngram_table(var t : Model; m : GGUFMeta; ti : int) {
+    let rows = m.ngram_shard_rows
+    if (rows <= 0l || t.ngram_rows % rows != 0l || empty(m.ngram_path)) {
+        panic("dasLLAMA: the sharded n-gram table names no file or {rows} rows a shard over its {t.ngram_rows} rows")
+    }
+    var msize = 0ul
+    var base : void?
+    unsafe {
+        base = fmap_open(m.ngram_path, addr(msize))
+    }
+    let off = m.shard_data_off[m.tensors[ti].shard] + m.tensors[ti].offset
+    let nbytes = ggml_type_bytes(t.ngram_type, m.tensors[ti].n_elem)
+    if (base == null || off + nbytes > int64(msize)) {
+        if (base != null) {
+            unsafe(fmap_close(base, msize))
+        }
+        panic("dasLLAMA: cannot map the n-gram table's {nbytes >> 20l} MB at {off} of '{m.ngram_path}'")
+    }
+    t.ngram_map = base
+    t.ngram_map_bytes = msize
+    t.ngram_shard_rows = rows
+    let ts_tab = ref_time_ticks()
+    var tab : void?
+    unsafe {
+        tab = reinterpret<void?>(reinterpret<uint8?>(base) + off)
+        _builtin_make_temp_array_i64(t.ngram_tab, tab, nbytes)
+    }
+    let read = unsafe(prefetch_map(tab, uint64(nbytes)))
+    to_log(LOG_INFO, "dasLLAMA: PLE n-gram table {t.ngram_rows} rows x {t.config.ple_head_dim} in {t.ngram_rows / rows} row shards, {nbytes >> 20l} MB mapped in place{read ? ", read ahead" : ""}: {get_time_usec(ts_tab) / 1000} ms\n")
+}
+
+//! the first hyper-connection-carrier plane this load cannot serve, named; "" when it serves every one: off the `native` q8
+//! rail (no plane tags) the mixers and the n-gram projections ride q8 planes, which an affine triplet never converts to; on it
+//! each rides its tag's planes. The n-gram table must be a tensor either way
+def hc_planes_unserved(m : GGUFMeta; native : bool) : string {
+    var names <- ["blk.0.hc_attn_down.weight", "output_hc_down.weight"]
+    var ple = false
+    for (tn in m.tensors) {
+        if (tn.name |> ends_with(".ple_key.weight")) {
+            names |> push(tn.name)
+            ple = true
+            break
+        }
+    }
+    for (name in names) {
+        let gt = gguf_tensor_type(m, name)
+        return "'{name}' is {ggml_type_name(gt)}: off the native q8 rail the hyper-connection mixers and the n-gram projections serve on q8 planes only" if (!native && mlx_affine_bits(gt) > 0l)
+    }
+    return ple && gguf_find_tensor(m, "per_layer_token_embd.weight") < 0 ? "the n-gram table per_layer_token_embd.weight is missing" : ""
+}
+
 // The load once metadata is parsed and the byte view carrying the KVs (shard 0 for splits) is
 // mapped — config, vocab, plane sizing, tensor reads/transcodes, repack, wscale.
 def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> | #; var mode : QuantMode; ts_load : int64) {   // nolint:STYLE037,STYLE038 — the load pipeline: ordered phases over one shared cursor; splitting it needs its own pass
@@ -2054,6 +2163,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
     {
         let arch = gguf_str(m, bytes, "general.architecture")
         resolve_arch(t, arch)   // registry lookup: apply config flags + bind the arch's block kernels
+        t.config.rope_neox ||= m.hf_rope_halves
         if (gguf_has(m, "tokenizer.chat_template")) {
             t.chat_template_str = gguf_str(m, bytes, "tokenizer.chat_template")
         }
@@ -2188,6 +2298,10 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             t.config.hc_low_rank = gguf_int(m, bytes, "{arch}.hyper_connection.low_rank")
             if (t.config.hc_count < 2l || t.config.hc_low_rank <= 0l || t.config.hc_low_rank % 32l != 0l) {
                 panic("dasLLAMA: unsupported hyper-connection geometry (count {t.config.hc_count}, low_rank {t.config.hc_low_rank} - the low rank rides the q8 GEMV, a multiple of 32)")
+            }
+            let unserved = hc_planes_unserved(m, t.quant == QuantMode.q8 && get_kquant_native())
+            if (!empty(unserved)) {
+                panic("dasLLAMA: {unserved} - the load declines before it reads a weight")
             }
             if (gguf_has(m, "{arch}.attention.indexer.head_count")) {
                 t.config.indexer_n_head = gguf_int(m, bytes, "{arch}.attention.indexer.head_count")
@@ -2632,8 +2746,8 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         // streaming covers the q8-mode load_big rails and the native-MXFP4 expert stacks; models with direct-write
         // loaders (grouped deltanet, bf16 PLE) disarm HERE — before sizing — so the eager path proceeds with fully
         // materialized planes and an empty job list
-        if (g_fill_plan_mode && (mode != QuantMode.q8 || t.dn_grouped || t.ple_model_bf16)) {
-            to_log(LOG_INFO, "dasLLAMA: streaming plan disarmed - unstreamed rail (mode {mode}, dn-grouped {t.dn_grouped}, bf16-ple {t.ple_model_bf16}); converting eagerly\n")
+        if (g_fill_plan_mode && (mode != QuantMode.q8 || t.dn_grouped || t.ple_model_bf16 || m.hf_snapshot)) {
+            to_log(LOG_INFO, "dasLLAMA: streaming plan disarmed - unstreamed rail (mode {mode}, dn-grouped {t.dn_grouped}, bf16-ple {t.ple_model_bf16}, snapshot {m.hf_snapshot}); converting eagerly\n")
             g_fill_plan_mode = false
         }
         let sz = layout_offsets(t)
@@ -2684,8 +2798,9 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 reserve_resize(t.kq[int(f)].s, nsb * kq_ssb(f))
             }
         }
-        for (f, ne in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.mx4],
-                [sz.q51_n, sz.iq4nl32_n, sz.q4032_n, sz.q5032_n, sz.mx_n]) {
+        for (f, ne in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.mx4, KqFmt.mlx4, KqFmt.mlx8, KqFmt.mlx4b, KqFmt.mlx8b, KqFmt.mlx6b],
+                [sz.q51_n, sz.iq4nl32_n, sz.q4032_n, sz.q5032_n, sz.mx_n, sz.kq_n[int(KqFmt.mlx4)], sz.kq_n[int(KqFmt.mlx8)],
+                 sz.kq_n[int(KqFmt.mlx4b)], sz.kq_n[int(KqFmt.mlx8b)], sz.kq_n[int(KqFmt.mlx6b)]]) {
             continue if (ne <= 0l)
             let nb = ne / KQ_B32_ELEMS
             kq_plane_pair(t, f) $(var q : array<uint8>; var s : array<uint8>) {
@@ -2972,8 +3087,9 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 let hcd = hc_dim(t.config)
                 let lr = t.config.hc_low_rank
                 gguf_read_tensor_f32(m, bytes, "blk.{layers}.nextn.hc_head_norm.weight", t.fblob, t.mtp_hc_head_norm_off, hcd)
-                load_big(m, bytes, "blk.{layers}.nextn.hc_head_down.weight", t, t.mtp_hc_head_down_off, hcd * lr, scratch, 0l, KqFmt.q8)
-                load_big(m, bytes, "blk.{layers}.nextn.hc_head_up.weight", t, t.mtp_hc_head_up_off, lr * hcd, scratch, 0l, KqFmt.q8)
+                let hf = hc_site_fmts(t, hc_head_site(t.config) + 1l)
+                load_big(m, bytes, "blk.{layers}.nextn.hc_head_down.weight", t, t.mtp_hc_head_down_off, hcd * lr, scratch, 0l, hf.down)
+                load_big(m, bytes, "blk.{layers}.nextn.hc_head_up.weight", t, t.mtp_hc_head_up_off, lr * hcd, scratch, 0l, hf.up)
             }
             if (gguf_find_tensor(m, "blk.{layers}.nextn.shared_head_norm.weight") >= 0) {
                 gguf_read_tensor_f32(m, bytes, "blk.{layers}.nextn.shared_head_norm.weight", t.fblob, t.mtp_headnorm_off, dim)
@@ -2993,13 +3109,14 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                     let si = l * 2l + site
                     gguf_read_tensor_f32(m, bytes, "blk.{l}.hc_{nm}_norm.weight", t.fblob, t.hc_norm_off + si * hcd, hcd)
                     gguf_read_tensor_f32(m, bytes, "blk.{l}.hc_{nm}_inject.weight", t.fblob, t.hc_inject_off + si * hcd * nh, hcd * nh)
-                    load_big(m, bytes, "blk.{l}.hc_{nm}_down.weight", t, t.hc_down_offs[si], hcd * lr, scratch, 0l, KqFmt.q8)
-                    load_big(m, bytes, "blk.{l}.hc_{nm}_up.weight", t, t.hc_up_offs[si], lr * hcd, scratch, 0l, KqFmt.q8)
+                    load_big(m, bytes, "blk.{l}.hc_{nm}_down.weight", t, t.hc_down_offs[si], hcd * lr, scratch, 0l, hc_site_fmts(t, si).down)
+                    load_big(m, bytes, "blk.{l}.hc_{nm}_up.weight", t, t.hc_up_offs[si], lr * hcd, scratch, 0l, hc_site_fmts(t, si).up)
                 }
             }
             gguf_read_tensor_f32(m, bytes, "output_hc_norm.weight", t.fblob, t.hc_head_norm_off, hcd)
-            load_big(m, bytes, "output_hc_down.weight", t, t.hc_head_down_off, hcd * lr, scratch, 0l, KqFmt.q8)
-            load_big(m, bytes, "output_hc_up.weight", t, t.hc_head_up_off, lr * hcd, scratch, 0l, KqFmt.q8)
+            let hf = hc_site_fmts(t, hc_head_site(t.config))
+            load_big(m, bytes, "output_hc_down.weight", t, t.hc_head_down_off, hcd * lr, scratch, 0l, hf.down)
+            load_big(m, bytes, "output_hc_up.weight", t, t.hc_head_up_off, lr * hcd, scratch, 0l, hf.up)
         }
         if (has_ple_ngram(t.config)) {   // qwen4exp n-gram side input: the layer's norms, taps and projections + the raw hash table
             let hcd = hc_dim(t.config)
@@ -3009,8 +3126,8 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             gguf_read_tensor_f32(m, bytes, "blk.{l}.ple_norm_query.weight", t.fblob, t.ple_nquery_off, hcd)
             gguf_read_tensor_f32(m, bytes, "blk.{l}.ple_norm_conv.weight", t.fblob, t.ple_nconv_off, hcd)
             gguf_read_tensor_f32(m, bytes, "blk.{l}.ple_conv1d.weight", t.fblob, t.ple_conv_off, hcd * t.config.ple_conv_kernel)
-            load_big(m, bytes, "blk.{l}.ple_key.weight", t, t.ple_key_off, ind * hcd, scratch, 0l, KqFmt.q8)
-            load_big(m, bytes, "blk.{l}.ple_value.weight", t, t.ple_val_off, ind * dim, scratch, 0l, KqFmt.q8)
+            load_big(m, bytes, "blk.{l}.ple_key.weight", t, t.ple_key_off, ind * hcd, scratch, 0l, ple_kv_fmts(t).key)
+            load_big(m, bytes, "blk.{l}.ple_value.weight", t, t.ple_val_off, ind * dim, scratch, 0l, ple_kv_fmts(t).val)
             let ti = gguf_find_tensor(m, "per_layer_token_embd.weight")
             if (ti < 0) {
                 panic("dasLLAMA: per_layer_token_embd.weight (the PLE n-gram hash table) is missing")
@@ -3020,11 +3137,12 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 panic("dasLLAMA: per_layer_token_embd.weight is not [{hd} x rows]")
             }
             t.ngram_type = m.tensors[ti].ggml_type
+            let sharded = t.ngram_type == GGML_TYPE_NGRAM_A4G32
             if (t.ngram_type != GGML_TYPE_IQ4_NL && t.ngram_type != GGML_TYPE_Q8_0 && t.ngram_type != GGML_TYPE_F16
-                    && t.ngram_type != GGML_TYPE_BF16 && t.ngram_type != GGML_TYPE_F32) {
-                panic("dasLLAMA: per_layer_token_embd.weight type {t.ngram_type} has no row decoder (IQ4_NL / Q8_0 / F16 / BF16 / F32)")
+                    && t.ngram_type != GGML_TYPE_BF16 && t.ngram_type != GGML_TYPE_F32 && !sharded) {
+                panic("dasLLAMA: per_layer_token_embd.weight type {t.ngram_type} has no row decoder (IQ4_NL / Q8_0 / F16 / BF16 / F32 / the affine row shards)")
             }
-            if ((t.ngram_type == GGML_TYPE_IQ4_NL || t.ngram_type == GGML_TYPE_Q8_0) && hd % 32l != 0l) {   //! a block-typed row decodes in whole blocks of 32
+            if ((t.ngram_type == GGML_TYPE_IQ4_NL || t.ngram_type == GGML_TYPE_Q8_0 || sharded) && hd % 32l != 0l) {   //! a block-typed row decodes in whole blocks of 32
                 panic("dasLLAMA: per_layer_token_embd.weight rows of {hd} are not whole blocks of 32 for type {t.ngram_type}")
             }
             t.ngram_rows = m.tensors[ti].dims[1]
@@ -3034,7 +3152,9 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                     panic("dasLLAMA: PLE head {h} rows [{t.ple_head_off[h]}, +{t.ple_head_vocab[h]}) exceed the table's {t.ngram_rows} rows")
                 }
             }
-            if (g_fill_plan_mode) {
+            if (sharded) {
+                map_ngram_table(t, m, ti)
+            } elif (g_fill_plan_mode) {
                 g_ngram_stream = (ti = ti, bytes = ggml_type_bytes(t.ngram_type, m.tensors[ti].n_elem))
                 to_log(LOG_INFO, "dasLLAMA: PLE n-gram table {t.ngram_rows} rows x {hd}, {g_ngram_stream.bytes >> 20l} MB raw: streamed to the image\n")
             } else {

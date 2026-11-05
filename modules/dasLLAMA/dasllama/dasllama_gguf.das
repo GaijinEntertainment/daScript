@@ -64,7 +64,8 @@ def ggml_type_bytes(gt : int; n : int64) : int64 {
     if (gt == GGML_TYPE_IQ2_S) return n / 256l * 82l
     if (gt == GGML_TYPE_IQ3_XXS) return n / 256l * 98l
     if (gt == GGML_TYPE_IQ4_XS) return n / 256l * 136l
-    return 0l
+    if (gt == GGML_TYPE_NGRAM_A4G32) return n / 32l * NGRAM_A4G32_BLOCK
+    return n * mlx_affine_bits(gt) / 8l
 }
 
 //! the bytes a tensor of ggml type `ttype` takes in a whisper-style bin: f32, f16, or Q8_0 blocks
@@ -85,7 +86,10 @@ let private GGML_TYPE_NAMES <- {
     GGML_TYPE_Q2_K => "Q2_K", GGML_TYPE_Q3_K => "Q3_K", GGML_TYPE_Q4_K => "Q4_K", GGML_TYPE_Q5_K => "Q5_K", GGML_TYPE_Q6_K => "Q6_K",
     GGML_TYPE_IQ2_XXS => "IQ2_XXS", GGML_TYPE_IQ2_XS => "IQ2_XS", GGML_TYPE_IQ2_S => "IQ2_S",
     GGML_TYPE_IQ3_XXS => "IQ3_XXS", GGML_TYPE_IQ3_S => "IQ3_S", GGML_TYPE_IQ4_NL => "IQ4_NL", GGML_TYPE_IQ4_XS => "IQ4_XS",
-    GGML_TYPE_Q4_1 => "Q4_1", GGML_TYPE_IQ1_S => "IQ1_S", GGML_TYPE_IQ1_M => "IQ1_M", GGML_TYPE_TQ1_0 => "TQ1_0", GGML_TYPE_TQ2_0 => "TQ2_0"
+    GGML_TYPE_Q4_1 => "Q4_1", GGML_TYPE_IQ1_S => "IQ1_S", GGML_TYPE_IQ1_M => "IQ1_M", GGML_TYPE_TQ1_0 => "TQ1_0", GGML_TYPE_TQ2_0 => "TQ2_0",
+    GGML_TYPE_MLX4 => "affine4 (F16 scales)", GGML_TYPE_MLX8 => "affine8 (F16 scales)",
+    GGML_TYPE_MLX4B => "affine4 (BF16 scales)", GGML_TYPE_MLX8B => "affine8 (BF16 scales)", GGML_TYPE_MLX6B => "affine6 (BF16 scales)",
+    GGML_TYPE_NGRAM_A4G32 => "affine4 group-32 row shards (BF16 scales)"
 }
 
 //! The ggml type's upstream spelling for logs ("Q4_K", "IQ3_S"); "type N" for one the loader does not know.
@@ -159,6 +163,106 @@ struct GGUFMeta {
     shard_size : array<int64>
     shard_data_off : array<int64>              // per-shard data-blob offset (each shard pads independently)
     nextn_sidecar : int64                      // nextn_predict_layers carried by a head shard (0 = the trunk's own KVs rule)
+    hf_snapshot : bool                         //! synthesized from a safetensors snapshot: its KVs and synthetic tensors live in the last shard
+    hf_rope_halves : bool                      //! the checkpoint's q/k rows pair rotary dims i and i + head/2 (the converter's un-permuted order)
+    permutes : table<string; GGUFRowPermute>   //! the planes whose stored row order is not the order the loader reads (`gguf_transcode_mlx` reads it)
+    ngram_path : string                        //! the file holding an `GGML_TYPE_NGRAM_A4G32` n-gram table, which the model maps for its life
+    ngram_shard_rows : int64                   //! that table's rows a shard
+}
+
+//! a plane whose stored rows the loader reads in another order: logical row `r` reads stored row `rows[r]` where `r` is
+//! below `length(rows)` (later rows keep their place), and in every row the `seg_cols`-wide column segment `s` reads
+//! stored segment `segs[s]`
+struct GGUFRowPermute {
+    rows : array<int64>
+    seg_cols : int64
+    segs : array<int64>
+}
+
+def private gguf_put_le(var b : array<uint8>; v : uint64; nbytes : int) {
+    let at = length(b)
+    b |> resize(at + nbytes)
+    for (i in range(nbytes)) {
+        b[at + i] = uint8((v >> uint64(i * 8)) & 0xFFul)
+    }
+}
+
+def private gguf_put_str(var b : array<uint8>; s : string) {
+    gguf_put_le(b, uint64(long_length(s)), 8)
+    peek_data(s) $(d) {
+        for (c in d) {
+            b |> push(c)
+        }
+    }
+}
+
+//! a KV entry whose value bytes `put` appends to `buf` - the KV table a synthesized meta reads through its getters
+def private gguf_kv_put(var m : GGUFMeta; var buf : array<uint8>; key : string; loc : GGUFKVLoc; put : block<(var b : array<uint8>) : void>) {
+    var at = loc
+    at.data_off = long_length(buf)
+    invoke(put, buf)
+    m.kv |> insert(key, at)
+}
+
+def gguf_kv_put_int(var m : GGUFMeta; var buf : array<uint8>; key : string; v : int64) {
+    gguf_kv_put(m, buf, key, GGUFKVLoc(gtype = GT_I64, count = 1l)) $(var b) {
+        gguf_put_le(b, uint64(v), 8)
+    }
+}
+
+def gguf_kv_put_bool(var m : GGUFMeta; var buf : array<uint8>; key : string; v : bool) {
+    gguf_kv_put(m, buf, key, GGUFKVLoc(gtype = GT_BOOL, count = 1l)) $(var b) {
+        b |> push(v ? 1u8 : 0u8)
+    }
+}
+
+def gguf_kv_put_f32(var m : GGUFMeta; var buf : array<uint8>; key : string; v : float) {
+    gguf_kv_put(m, buf, key, GGUFKVLoc(gtype = GT_F32, count = 1l)) $(var b) {
+        gguf_put_le(b, uint64(unsafe(reinterpret<uint>(v))), 4)
+    }
+}
+
+def gguf_kv_put_str(var m : GGUFMeta; var buf : array<uint8>; key : string; v : string) {
+    gguf_kv_put(m, buf, key, GGUFKVLoc(gtype = GT_STRING, count = 1l)) $(var b) {
+        gguf_put_str(b, v)
+    }
+}
+
+def gguf_kv_put_str_array(var m : GGUFMeta; var buf : array<uint8>; key : string; v : array<string>) {
+    gguf_kv_put(m, buf, key, GGUFKVLoc(gtype = GT_ARRAY, arr_type = GT_STRING, count = long_length(v))) $(var b) {
+        for (s in v) {
+            gguf_put_str(b, s)
+        }
+    }
+}
+
+def gguf_kv_put_i32_array(var m : GGUFMeta; var buf : array<uint8>; key : string; v : array<int64>) {
+    gguf_kv_put(m, buf, key, GGUFKVLoc(gtype = GT_ARRAY, arr_type = GT_I32, count = long_length(v))) $(var b) {
+        for (x in v) {
+            gguf_put_le(b, uint64(x) & 0xFFFFFFFFul, 4)
+        }
+    }
+}
+
+def gguf_kv_put_i64_array(var m : GGUFMeta; var buf : array<uint8>; key : string; v : array<int64>) {
+    gguf_kv_put(m, buf, key, GGUFKVLoc(gtype = GT_ARRAY, arr_type = GT_I64, count = long_length(v))) $(var b) {
+        for (x in v) {
+            gguf_put_le(b, uint64(x), 8)
+        }
+    }
+}
+
+//! an f32 tensor whose values a synthesized meta carries in its own shard `shard` (its bytes appended to `buf`, 4-aligned)
+def gguf_synth_tensor_f32(var m : GGUFMeta; var buf : array<uint8>; shard : int; name : string; dims : array<int64>; v : array<float>) {
+    while ((long_length(buf) & 3l) != 0l) {
+        buf |> push(0u8)
+    }
+    var ti = GGUFTensorInfo(name = name, ggml_type = GGML_TYPE_F32, offset = long_length(buf), n_elem = long_length(v), shard = shard)
+    ti.dims := dims
+    for (x in v) {
+        gguf_put_le(buf, uint64(unsafe(reinterpret<uint>(x))), 4)
+    }
+    m.tensors |> emplace(ti)
 }
 
 def private gguf_scalar_size(gtype : int) : int64 {
@@ -304,9 +408,26 @@ def public clear_mtp_head_path() {
 //! the pinned head path and whether one is pinned at all (an empty pin turns the environment's `DASLLAMA_MTP_HEAD` off)
 def public mtp_head_path_pin() : tuple<set : bool; path : string> => (set = g_mtp_head_override_set, path = g_mtp_head_override)
 
-//! The split NextN/MTP head that rides `path`'s shard walk: the override / `DASLLAMA_MTP_HEAD` when
-//! set, else the `mtp-<trunk basename>` sibling beside the trunk (the published split-head layout),
-//! else "". An assistant drafter is never a head - its weights ride their own lane.
+//! the stem before the trailing quant token, `-Q<digit>` or `-IQ<digit>` ("...-it-Q4_K_M" and "...-it-UD-IQ3_XXS" -> "...-it" and
+//! "...-it-UD"); no token = the whole stem - the sidecar rules' key, the split head's and the assistant drafter's alike
+def quant_stem(stem : string) : string {
+    var cut = -1
+    peek_data(stem) $(d : array<uint8> const#) {
+        let n = length(d)
+        for (i in range(n)) {
+            continue if (int(d[i]) != '-')
+            let q = i + 1 < n && int(d[i + 1]) == 'I' ? i + 2 : i + 1
+            if (q + 1 < n && int(d[q]) == 'Q' && int(d[q + 1]) >= '0' && int(d[q + 1]) <= '9') {
+                cut = i
+            }
+        }
+    }
+    return cut < 0 ? stem : slice(stem, 0, cut)
+}
+
+//! The split NextN/MTP head that rides `path`'s shard walk: the override / `DASLLAMA_MTP_HEAD` when set, else beside the trunk
+//! the `mtp-<trunk basename>` sibling, then `mtp-<stem>-Q8_0.gguf` for the quant stem and for it without `-UD` (one published
+//! head quant beside several trunk quants), else "". An assistant drafter is never a head - its weights ride their own lane.
 def mtp_head_sidecar(path : string) : string {
     let name = base_name(path)
     if (name |> starts_with("mtp-")) {   // a head loaded on its own never recurses onto itself
@@ -319,7 +440,15 @@ def mtp_head_sidecar(path : string) : string {
         }
         return head_file_or_empty(over)
     }
-    return head_file_or_empty(path_join(dir_name(path), "mtp-{name}"))
+    let dir = dir_name(path)
+    let exact = head_file_or_empty(path_join(dir, "mtp-{name}"))
+    return exact if (!empty(exact))
+    let stem = quant_stem(trim_suffix(name, ".gguf"))
+    for (head in [stem, trim_suffix(stem, "-UD")]) {
+        let side = head_file_or_empty(path_join(dir, "mtp-{head}-Q8_0.gguf"))
+        return side if (!empty(side))
+    }
+    return ""
 }
 
 def private head_file_or_empty(side : string) : string =>
@@ -745,6 +874,10 @@ def private kq_transcode_check(m : GGUFMeta; name : string; want_type : int; typ
 //! (256-weight superblocks; q51's 32-blocks) - into the format's planes at plane-local element
 //! offset `eloff`: kq_transcode_p per unit, threaded over units (~1MB of disk bytes per job).
 def gguf_transcode_kq(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; fmt : KqFmt; var kq : array<uint8>; var ks : array<uint8>; eloff, expect_n : int64; src_off : int64 = 0l) {
+    if (kq_mlx_affine(fmt)) {
+        gguf_transcode_mlx(m, srcbytes, name, fmt, kq, ks, eloff, expect_n, src_off)
+        return
+    }
     let d = kq_desc(fmt)
     let ti = kq_transcode_check(m, name, d.ggml_type, ggml_type_name(d.ggml_type), src_off, expect_n, d.elems)
     let nb = expect_n / d.elems
@@ -756,6 +889,83 @@ def gguf_transcode_kq(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; 
     }
     let unit0 = eloff / d.elems
     transcode_kq_units(m, srcbytes, name, fmt, ti, kq, ks, unit0 * d.qsb, unit0 * d.ssb, nb, src_off)
+}
+
+//! the whole rows [src_off, +expect_n) of affine tensor `name` (its codes, `.scales` and `.biases`) into the format's planes
+//! at element `eloff`: each row's code bytes verbatim, its (scale, bias) halves interleaved a pair a 64-group; a plane the meta
+//! permutes (`GGUFRowPermute`) reads each logical row - and each column segment of it - off its stored place
+[arch(at="../ARCHITECTURE_ENGINE_FORMATS_MLX.md#mlx-affine-planes")]
+def gguf_transcode_mlx(m : GGUFMeta; srcbytes : array<uint8> | #; name : string; fmt : KqFmt; var kq : array<uint8>; var ks : array<uint8>; eloff, expect_n, src_off : int64) {
+    let d = kq_desc(fmt)
+    let ti = gguf_find_tensor(m, name)
+    let base = ends_with(name, ".weight") ? slice(name, 0, length(name) - length(".weight")) : name
+    let si = gguf_find_tensor(m, "{base}.scales")
+    let bi = gguf_find_tensor(m, "{base}.biases")
+    if (ti < 0 || si < 0 || bi < 0 || m.tensors[ti].ggml_type != d.ggml_type) {
+        panic("gguf: '{name}' is no {fmt} triplet (codes, .scales, .biases) of this meta")
+    }
+    let cols = m.tensors[ti].dims[0]
+    if (cols % MLX_GROUP != 0l || src_off % cols != 0l || expect_n % cols != 0l || eloff % MLX_GROUP != 0l
+            || src_off + expect_n > m.tensors[ti].n_elem) {
+        panic("gguf: affine '{name}' slice [{src_off}, +{expect_n}) at plane element {eloff} is not whole {cols}-wide rows of the tensor at a group-aligned plane offset")
+    }
+    let rows = expect_n / cols
+    let row0 = src_off / cols
+    let qrow = cols / KQ_B32_ELEMS * d.qsb
+    let groups = cols / MLX_GROUP
+    let qoff = eloff / KQ_B32_ELEMS * d.qsb
+    let soff = eloff / KQ_B32_ELEMS * d.ssb
+    guard_dst(name, "quant plane", qoff, rows * qrow, long_length(kq))
+    guard_dst(name, "scale plane", soff, rows * groups * MLX_PAIR_BYTES, long_length(ks))
+    var prows, psegs : array<int64>
+    var seg = cols
+    get(m.permutes, name) $(p) {
+        prows := p.rows
+        psegs := p.segs
+        seg = p.seg_cols > 0l ? p.seg_cols : cols
+    }
+    if (cols % seg != 0l || seg % MLX_GROUP != 0l || (seg != cols && long_length(psegs) != cols / seg)) {
+        panic("gguf: affine '{name}' column segment {seg} does not tile its {cols}-wide rows in whole groups")
+    }
+    let nseg = cols / seg
+    let segq = seg / KQ_B32_ELEMS * d.qsb
+    let segg = seg / MLX_GROUP
+    let nprows = long_length(prows)
+    let prp = nprows > 0l ? unsafe(addr<int64 const?>(prows[0])) : null
+    let psp = seg != cols ? unsafe(addr<int64 const?>(psegs[0])) : null
+    with_tensor_view(m, srcbytes, ti) $(wbytes, wbase) {
+        with_tensor_view(m, srcbytes, si) $(sbytes, sbase) {
+            with_tensor_view(m, srcbytes, bi) $(bbytes, bbase) {
+                unsafe {
+                    let wp = addr<uint8 const?>(wbytes[wbase])
+                    let sp = addr<uint8 const?>(sbytes[sbase])
+                    let bp = addr<uint8 const?>(bbytes[bbase])
+                    var kqp = addr(kq[qoff])
+                    var ksp = addr(ks[soff])
+                    maybe_parallel_for(0, int(rows), transcode_jobs(rows, qrow)) $(rb, re) {
+                        unsafe {
+                            for (r in range64(int64(rb), int64(re))) {
+                                let lr = row0 + r
+                                let sr = lr < nprows ? prp[lr] : lr
+                                for (s in range64(nseg)) {
+                                    let ss = psp != null ? psp[s] : s
+                                    memcpy(kqp + r * qrow + s * segq, wp + sr * qrow + ss * segq, segq)
+                                    var pd = ksp + (r * groups + s * segg) * MLX_PAIR_BYTES
+                                    let gs = (sr * groups + ss * segg) * 2l
+                                    for (g in range64(segg)) {
+                                        pd[g * MLX_PAIR_BYTES] = sp[gs + g * 2l]
+                                        pd[g * MLX_PAIR_BYTES + 1l] = sp[gs + g * 2l + 1l]
+                                        pd[g * MLX_PAIR_BYTES + 2l] = bp[gs + g * 2l]
+                                        pd[g * MLX_PAIR_BYTES + 3l] = bp[gs + g * 2l + 1l]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 //! `gguf_transcode_kq` into the planes at BYTE offsets `qoff` / `soff` - the form a plane that holds several formats takes,
@@ -805,6 +1015,11 @@ def gguf_kq_fmt_of_type(gtype : int) : KqFmt {
     if (gtype == GGML_TYPE_IQ2_XS) return KqFmt.iq2xs
     if (gtype == GGML_TYPE_IQ2_XXS) return KqFmt.iq2xxs
     if (gtype == GGML_TYPE_NVFP4) return KqFmt.nv4
+    if (gtype == GGML_TYPE_MLX4) return KqFmt.mlx4
+    if (gtype == GGML_TYPE_MLX8) return KqFmt.mlx8
+    if (gtype == GGML_TYPE_MLX4B) return KqFmt.mlx4b
+    if (gtype == GGML_TYPE_MLX8B) return KqFmt.mlx8b
+    if (gtype == GGML_TYPE_MLX6B) return KqFmt.mlx6b
     return KqFmt.q8
 }
 
@@ -821,6 +1036,10 @@ def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : strin
     // (256-aligned for the K-quant superblock types — those arms check).
     if (src_off + expect_n > nelem) {
         panic("gguf: tensor '{name}' slice [{src_off}, {src_off + expect_n}) exceeds {nelem} elems")
+    }
+    if (key_exists(m.permutes, name)) {
+        //! only the affine transcode reads a plane's stored row order; a plain-dtype read would keep the checkpoint's order
+        panic("gguf: tensor '{name}' is stored in another row order (a snapshot's grouped heads) and is not an affine triplet - the loader reorders affine planes alone")
     }
     let gtype = m.tensors[ti].ggml_type
     guard_dst(name, "f32 dst", dst_off, expect_n, long_length(dst))
@@ -994,6 +1213,19 @@ def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : strin
                 kq_transcode_p(src, addr(kq[0]), addr(ks[0]), KqTag_iq4nl32())
             }
             dequant_iq4nl32_plane_block(kq, 0l, ks, 0l, dst, dst_off + blk * KQ_B32_ELEMS)
+        }
+        delete kq
+        delete ks
+    } elif (mlx_affine_bits(gtype) > 0l) {
+        //! whole affine rows: the member's own transcode into scratch planes, then its block dequant
+        let fmt = gguf_kq_fmt_of_type(gtype)
+        let nb = expect_n / KQ_B32_ELEMS
+        var kq, ks : array<uint8>
+        kq |> resize(nb * kq_qsb(fmt))
+        ks |> resize(nb * kq_ssb(fmt))
+        gguf_transcode_mlx(m, srcbytes, name, fmt, kq, ks, 0l, expect_n, src_off)
+        for (bi in range64(nb)) {
+            dequant_b32_plane_block(fmt, kq, ks, bi, dst, dst_off + bi * KQ_B32_ELEMS)
         }
         delete kq
         delete ks

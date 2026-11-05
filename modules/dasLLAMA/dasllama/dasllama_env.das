@@ -114,7 +114,7 @@ struct public EngineEnv {
     @clarg_doc = "Advisory source-mapping readahead at gguf load (cold-conversion fix); =0 restores on-demand faulting."
     prefetch : bool = true
 
-    @clarg_doc = "Readahead of the prepared image at its map (madvise WILLNEED, synchronous on macOS): a purged page cache then reads the whole image at the SSD's rate before the first token - 103 GB in 15 s on the M5 - instead of paying 2.5x on the routed expert stacks over the first 128 tokens, and a WARM map pays ~2.5 s for the page walk in place of 65 ms. A serving process that runs for hours wants it; a bench, a test or a short session does not."
+    @clarg_doc = "Readahead of the prepared image at its map (madvise WILLNEED, synchronous on macOS): a purged page cache then reads the whole image at the SSD's rate before the first token - 103 GB in 15 s on the M5 - instead of paying 2.5x on the routed expert stacks over the first 128 tokens, and a WARM map pays ~2.5 s for the page walk in place of 65 ms. A serving process that runs for hours wants it; a bench, a test or a short session does not. An n-gram model's hash table is read ahead either way: its rows are random pages of the whole table, so an unread table hard-faults every token."
     prefetch_image : bool = false
 
     @clarg_doc = "The streaming silero VAD (`vad_iter_feed`, the live-mic callers) runs each feed's whole chunks through the GPU driver's VAD seat (Metal, or Vulkan where it serves) instead of the CPU chunk step; off, the measured-faster form for one 32 ms chunk. The batch VAD (`vad_probs`, `find_speech_timestamps`) takes the seat whatever this says; `set_vad_stream_gpu` is the in-process twin."
@@ -321,6 +321,54 @@ struct public MetalEnv {
     @clarg_doc = "The K-quant rows sites (two to eight rows: the verify, the batch step, the prefill's short window) read x as the f16 twin the row producer stores beside it, for every format whose half-x route the box crowned (kq_rows_half_<fmt>); 0 keeps the f32 forms under every crown (the A/B rail)."
     kq_half : bool = true
 
+    @clarg_doc = "The per-32 planes' one-row GEMV (q5_1, iq4nl32, q4032, q5032 and the affine members) takes its wide form - a whole block a lane, x prescaled so an affine code decodes in place, one scale fold a block - on every plane of 512 rows or more; 0 pins the two-row and K-split forms (the A/B rail)."
+    b32_wide : bool = true
+
+    @clarg_doc = "The single row's dense FFN on a per-32 member (gate and up planes of one member in one buffer, 512 rows or more, the wide form on) reads both planes in one dispatch that stores act(gate) * up - no activation pass, no gate and up rows written; off by default - the 27B step measures it slower than the two GEMVs and the activation pass it replaces; 1 is the experiment rail."
+    b32_glu : bool = false
+
+    @clarg_doc = "The per-32 routed stacks' expert-indexed GEMV (q5_1, q5032 and the affine members; the codebook-table members iq4nl32 and q4032 keep the two-row form) takes the wide form - a whole block a lane, one expert row a simdgroup - on every expert of 512 rows or more; 0 pins the two-row form (the A/B rail)."
+    b32_moe_wide : bool = true
+
+    @clarg_doc = "The rows sites of five to eight rows (the verify, the batch step's rows tier) take the eight-row tensor stamps - a K-quant plane's where the box crowned its tensor tile (kq_mulmm_<fmt>), a q8 plane's under mulmm_q8: W streamed and decoded once for the panel on the tensor op, where the row forms stream it twice or decode it once a column; 0 keeps the row forms (the A/B rail)."
+    rows_mm8 : bool = true
+
+    @clarg_doc = "The rows sites of five to eight rows take the matrix-unit form where the box's layout probe passed: a 16 x 8 product a weight group with the codes filled from registers as exact halves and the scale applied once in fp32, K split over a threadgroup's eight simdgroups and met in threadgroup memory, no reduce dispatch; a k4, k6, iq4xs or q8 plane's and an affine member's (DASLLAMA_METAL_PREFILL_SKIP=rows8nomlx keeps the members on the small-batch forms, rows8noiq4xs the iq4xs planes on the eight-row stamps). 0 keeps the eight-row stamps (the A/B rail)."
+    rows_mt : bool = true
+
+    @clarg_doc = "A step of two to sixteen rows reads each distinct routed expert once over the rows that picked it (the rows' expert union) instead of once a (row, slot), over iq4xs stacks: the fused pair's per-row arithmetic over each expert's rows, its values the pair's bit for bit. 1 is the oracle rail, never a serving default - it measures slower on the 35B's verify, whose repeated expert reads already hit in the cache; 0 keeps the fused pair."
+    moe_union : bool = false
+
+    @clarg_doc = "The hyper-connection mixer of a five-to-eight-row step over four streams runs as four dispatches on the matrix unit: the grouped norm into the rows8 x table with the inverse norms and the inject rows' stream partials, the q8 down split by stream, the partials' finish through silu(lo / hc) into the up's table with the scatter logits, and the q8 up with the gated stream mean in its landing; 0 keeps the eight-dispatch chain (the A/B rail)."
+    hc_mix8 : bool = true
+
+    @clarg_doc = "The one-row hyper-connection mixer over an affine member's planes (mlx4b, mlx6b, mlx8b) runs as the fused pair - the down under the grouped norm with the inject rows, the up over silu(lo / hc) with the gated stream mean - on the member's fill; 0 keeps those sites on the staged chain (the norm, the down GEMV, silu, the up GEMV, the mean), a q8 pair keeps the fused pair either way (the A/B rail)."
+    hc_fused_aff : bool = true
+
+    @clarg_doc = "The routed block's fused pair (gate + up + act, down + shared down + combine) takes mlx4b and mlx8b expert stacks on the per-32 family's stamps, the wide gathered GEMV's lane map; 0 keeps those stacks on the per-stack route (the A/B rail)."
+    moe_aff_pair : bool = true
+
+    @clarg_doc = "The DFlash2 drafter's selector on the device: its pass's command buffer ends in the top-k over the draft rows' logits and the selector's walk, and the verify embeds its rows off the walk's picks, committed after the pass with no host wait between; 0 lands the logits and walks them on the host after a waited pass (the A/B rail)."
+    dflash_select : bool = true
+
+    @clarg_doc = "The DFlash2 drafter's device selector also draws a rejection-sampling round's drafts: each position's pick one draw of the stream's rng from the softmax of its top-k selector scores at the drafter's temperature, the candidates, their q and the stepped rng landed beside the picks instead of every draft row's logits; 0 lands the logits and draws on the host (the A/B rail)."
+    dflash_soft_pick : bool = true
+
+    @clarg_doc = "A rejected speculative round's recurrent replay is committed with no host wait: the next pass and verify queue behind it on the device while the host goes on, and the replay is waited when the parked verify it reads is released - by the next verify, a plain step, a quiesce; 0 waits it in the rollback seat (the A/B rail). An n-gram model's rollback waits regardless."
+    replay_unwaited : bool = true
+
+    @clarg_doc = "A rejected speculative round's recurrent replay binds the verify's tape slot as its stage inputs - the conv rows, the projections, beta and alpha at their offsets in the slot - so a recurrent layer replays as the history advance and the scan alone; 0 copies the slot back into the stage planes first, four copies a layer (the A/B rail)."
+    replay_tape : bool = true
+
+    @clarg_doc = "The DFlash2 drafter's greedy accept on the device: the verify a held pass feeds ends in the accept over its rows' picks and the drafted ids, landing the count, every row's pick and the committed row's logits for the host instead of every row's logits; 0 lands every row's logits and takes the committed row on the host (the A/B rail)."
+    dflash_accept : bool = true
+
+    @clarg_doc = "The DFlash2 round's verify encoded while its pass runs. 2 (default): a round whose verify reads no drafted id on the host before its join holds its pass unwaited under every acceptance, not only the greedy one - a sampled round's verify (the selection landing asking no penalty window over the drafts) is encoded and committed behind the pass, embedding its rows off the selector's picks, and the picks, with a drawing pass's candidates, q and stepped rng, land after the verify - and a hyper-connection or n-gram side-input model's round has its verify encoded while the pass runs, then the pass waited, the picks landed, the side rows gathered and poked, and the verify committed; 1 leaves the side-input model's verify encoded after its pass; 0 holds the greedy round of a model with neither alone (the A/B rails)."
+    verify_ahead : int = 2
+
+    @clarg_doc = "An n-gram side-input model's speculative commit stage as two buffers instead of five waited ones: the conv ring's save and the verify's rows into the ring encoded at the verify's tail, and a rejected round's ring restore and committed rows encoded after the recurrent replay in its buffer, which then commits unwaited like any model's replay; 0 runs the five waited buffers (the A/B rail)."
+    commit_one : bool = true
+
     @clarg_doc = "Apply the box profile's tensor-lane crowns (its runtime.metal_tensor set), so every family the box's race crowned serves its tensor twin; 0 leaves the set empty and every family on its base form past the routed twins' knee (`set_metal_moe_kq_twin_avg`) and the dev-W route, which ride the toolchain probe - what a GPU without the tensor lane (the M4 class) serves - the arm that proves a change, and the base kernel set, on that class from an M5."
     tensor : bool = true
 
@@ -377,6 +425,9 @@ struct public MetalEnv {
 
     @clarg_doc = "Single-pass B8 twin for K-quant small-batch mv at B=5..8; 0 is the A/B rail."
     kq_b8 : bool = true
+
+    @clarg_doc = "The decode step's fused dispatches: 0 the plain chain, 1 the fat-threadgroup iq4xs GEMV shape at every single-row site it serves and the deltanet conv + scan + gate as one dispatch wherever a group holds one row (the single row, the batch's rows), 2 the single row's fused chain as well - the layer norms in the GEMV prologues, the residual adds in the wo / deltanet-out epilogues, the router under its own norm, the routed gate, up and act in one dispatch and the routed down with the shared expert's and the combine onto the residual in one, no seam dispatch (a model every layer of which the chain serves; the plain chain elsewhere)."
+    kq_fat : int = 2
 
     @clarg_doc = "The device-side KV mirror's idle budget in MiB: the bytes idle mirrors evict down to once a step is served. A live step's demand is bounded by the device's largest buffer alone (unified memory: what fits, serves), and a step past that takes the CPU rails with one logged line."
     kv_mirror_mb : int = 4096
@@ -645,6 +696,36 @@ struct public HarnessEnv {
 
     @clarg_doc = "Model filename (inside the models dir) the image-turn attribution probe loads."
     probe_model : string = "Qwen3VL-8B-Instruct-Q8_0.gguf"
+
+    @clarg_doc = "harness/rows8_mt_race.das: a comma list of the arm names to race; empty races every arm."
+    rows8_arms : string = ""
+
+    @clarg_doc = "harness/rows8_mt_race.das: a comma list of words, a shape racing where its tag holds one; empty races every shape."
+    rows8_shapes : string = ""
+
+    @clarg_doc = "harness/rows8_mt_race.das: the rounds of the in-threadgroup split race, each timing every arm once."
+    rows8_rounds : int = 3
+
+    @clarg_doc = "harness/rows8_mt_race.das: race the in-threadgroup K split arms against the split-K form and its reduce."
+    rows8_tg : bool = false
+
+    @clarg_doc = "harness/moe_pair_race.das: a comma list of the arm names to race; empty races every arm (the two bases always run)."
+    moe_pair_arms : string = ""
+
+    @clarg_doc = "harness/moe_pair_race.das: per mille of a later row's picks drawn from the earlier rows' experts (450 reads ~38 distinct of 64 at eight rows)."
+    moe_pair_reuse : int = 450
+
+    @clarg_doc = "harness/moe_pair_race.das: the rows (streams), 1 to 8."
+    moe_pair_rows : int = 8
+
+    @clarg_doc = "harness/moe_pair_race.das: mlx4b races the engine's affine stamps on the Flash-Next MLX pack's routed block (the per-stack route against the fused pair, at one row and at eight) in place of the iq4xs raw-MSL forms."
+    moe_pair_fmt : string = "iq4xs"
+
+    @clarg_doc = "harness/hc_mix_race.das: a comma list of the arm names to race; empty races every arm (the two bases always run)."
+    hc_mix_arms : string = ""
+
+    @clarg_doc = "harness/rows8_tensor_probe.das: probe only the cooperative layout of this name; empty probes every one."
+    rows8_probe : string = ""
 
     @clarg_doc = "Use the 2D batch grid in the parity probe."
     batch_grid_2d : Option<int>

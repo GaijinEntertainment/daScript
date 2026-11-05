@@ -7,6 +7,7 @@ module dasllama_tokenizer shared public
 require dasllama/dasllama_lint public
 require daslib/fio
 require dasllama/dasllama_gguf
+require dasllama/dasllama_safetensors   // a snapshot directory's tokenizer.json through its synthesized meta
 require dasllama/dasllama_spm public
 require dasllama/dasllama_bpe public
 require strings
@@ -32,6 +33,15 @@ struct Tokenizer {
 //! else -> SentencePiece (Llama-2, Phi-3, Gemma).
 def load_tokenizer_auto(path : string) : Tokenizer {
     var tk = Tokenizer()
+    if (hf_snapshot(path)) {
+        let ts_snap = ref_time_ticks()
+        with_hf_snapshot(path, true) $(m, bytes) {
+            tk.kind = TokKind.bpe
+            tk.bpe <- bpe_tokenizer_of_meta(m, bytes)
+        }
+        to_log(LOG_INFO, "dasLLAMA: snapshot tokenizer build {get_time_usec(ts_snap) / 1000} ms\n")
+        return <- tk
+    }
     let ts_sniff = ref_time_ticks()
     let f = fopen(path, "rb")
     if (f == null) {

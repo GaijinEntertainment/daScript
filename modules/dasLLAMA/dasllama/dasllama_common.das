@@ -578,7 +578,7 @@ def register_mtp_draft_override(name : string; fn : MtpDraftOverrideFn) {
 
 //! The MTP verify seat, the CPU verify's GPU twin over one stream's `n` rows `toks` at `pos`, leaving the session as `forward_prefill`,
 //! `mtp_prefill_warm` and `mtp_verify_logits` do: every row's pick in `s.mtp_picks` and hidden in `s.mtp_hrows`, the logits in `s.mtp_logits_b`,
-//! `s.mtp_logits` (row 0) and `s.logits` (the last) unless `pick_only`, where none land and the round publishes the committed row's pick (`land_pick`); the head re-warmed from `s.mtp_xb_save`; false declines, the session untouched. Consulted under `mtp_seats_own`
+//! `s.mtp_logits` (row 0) and `s.logits` (the last) unless `pick_only`, where none land and the round publishes the committed row's pick (`land_pick`) or the seat landed the accept (`mtp_seat_accept_landed`); the head re-warmed from `s.mtp_xb_save`; false declines, the session untouched. Consulted under `mtp_seats_own`
 typedef MtpVerifyOverrideFn = function<(t : Model; var s : Session; toks : array<int64>; n, pos : int64; pick_only : bool) : bool>
 var private g_mtp_verify_overrides : table<string; MtpVerifyOverrideFn>
 
@@ -594,6 +594,103 @@ var private g_mtp_rollback_overrides : table<string; MtpRollbackOverrideFn>
 
 def register_mtp_rollback_override(name : string; fn : MtpRollbackOverrideFn) {
     g_mtp_rollback_overrides[name] = fn
+}
+
+//! The block drafter's seams (DFlash2), one a process: `captured` lands a `layers` trunk layer's rows (a step's `s.x`, a window's
+//! `s.x_b` from `pos0`); `draft` fills `s.mtp_vbatch[1 .. n]` from the anchor at `pos` (n = 0: the round steps plain) or leaves them
+//! on the device as the verify's rows, for `land` to put there before the host reads them; `commit` rows `pos0 ..` into its context
+struct MtpBlockSeams {
+    attached : function<(t : Model) : bool>
+    captured : function<(var s : Session; l, rows, pos0 : int64; window : bool) : void>
+    captured_rows : function<(var s : Session; img : array<float>; rows, pos0 : int64) : void>   //! a device step's whole image, [rows][layer slot][dim]
+    draft : function<(t : Model; var s : Session; tok, pos, k : int64) : int64>
+    land : function<(var s : Session) : void>
+    commit : function<(var s : Session; pos0, rows : int64) : void>
+    layers : array<int64>
+    drafts : int64
+}
+var private g_mtp_block : MtpBlockSeams
+var private g_mtp_block_set = false
+
+def register_mtp_block_drafter(var seams : MtpBlockSeams) {
+    delete g_mtp_block
+    g_mtp_block <- seams
+    g_mtp_block_set = true
+}
+
+def unregister_mtp_block_drafter() {
+    g_mtp_block_set = false
+    delete g_mtp_block
+}
+
+//! a block drafter is attached and drafts for `t`
+def mtp_block_attached(t : Model) : bool => g_mtp_block_set && invoke(g_mtp_block.attached, t)
+
+//! the block drafter's slot for trunk layer `l`'s output (its index among the layers it reads), -1 = not captured
+def mtp_block_layer_slot(l : int64) : int64 {
+    return -1l if (!g_mtp_block_set)
+    for (i in range64(long_length(g_mtp_block.layers))) {
+        return i if (g_mtp_block.layers[i] == l)
+    }
+    return -1l
+}
+
+//! the layers the block drafter captures
+def mtp_block_ncap() : int64 => g_mtp_block_set ? long_length(g_mtp_block.layers) : 0l
+
+//! a device step's captured layer outputs for the block drafter: `img` [rows][slot][dim] of positions `pos0 ..`
+def mtp_block_land_rows(var s : Session; img : array<float>; rows, pos0 : int64) {
+    if (g_mtp_block_set) {
+        invoke(g_mtp_block.captured_rows, s, img, rows, pos0)
+    }
+}
+
+//! The trunk's two tables a block drafter reads on a device home whose image carries no CPU planes: the token rows of `toks`
+//! into `dst` ([n][dim]), and the classifier over `n` normed rows into `logits` ([n][vocab]); false = the home declined
+struct MtpBlockDeviceSeams {
+    embed_rows : function<(t : Model; toks : array<int64>; var dst : array<float>) : bool>
+    cls_rows : function<(t : Model; rows : array<float>; n : int64; var logits : array<float>) : bool>
+}
+var private g_mtp_block_dev : table<string; MtpBlockDeviceSeams>
+
+def register_mtp_block_device(name : string; seams : MtpBlockDeviceSeams) {
+    g_mtp_block_dev[name] = seams
+}
+
+//! the active decode override's device seams for the block drafter, where it registered them
+def mtp_block_device_embed(t : Model; toks : array<int64>; var dst : array<float>) : bool {
+    return false if (empty(g_decode_override_name) || !key_exists(g_mtp_block_dev, g_decode_override_name))
+    return invoke(g_mtp_block_dev[g_decode_override_name].embed_rows, t, toks, dst)
+}
+
+def mtp_block_device_cls(t : Model; rows : array<float>; n : int64; var logits : array<float>) : bool {
+    return false if (empty(g_decode_override_name) || !key_exists(g_mtp_block_dev, g_decode_override_name))
+    return invoke(g_mtp_block_dev[g_decode_override_name].cls_rows, t, rows, n, logits)
+}
+
+//! the forward in flight landed trunk layer `l`'s output rows: the block drafter captures the layers it reads
+def private mtp_block_capture(t : Model; var s : Session; l, rows, pos0 : int64; window : bool) {
+    return if (!g_mtp_block_set || !invoke(g_mtp_block.attached, t))
+    for (cl in g_mtp_block.layers) {
+        if (cl == l) {
+            invoke(g_mtp_block.captured, s, l, rows, pos0, window)
+            return
+        }
+    }
+}
+
+//! the block drafter's drafts in `s.mtp_vbatch`, wherever its draft left them
+def private mtp_block_land(var s : Session) {
+    if (g_mtp_block_set) {
+        invoke(g_mtp_block.land, s)
+    }
+}
+
+//! the rows of positions `pos0 ..` the forward committed reach the block drafter's context
+def private mtp_block_commit(t : Model; var s : Session; pos0, rows : int64) {
+    if (g_mtp_block_set && invoke(g_mtp_block.attached, t)) {
+        invoke(g_mtp_block.commit, s, pos0, rows)
+    }
 }
 
 //! whether the MTP seats registered under a decode override's name serve model `t`: the override that owns `t`'s
@@ -649,6 +746,18 @@ def mtp_verify_rows_cap(t : Model) : int64 {
 def private mtp_draft_seat(t : Model; var s : Session; token, pos : int64; pick_only : bool) : int64 {
     return -1l if (!mtp_seated(t, g_mtp_draft_overrides))
     return invoke(g_mtp_draft_overrides[g_decode_override_name], t, s, token, pos, pick_only)   // nolint:PERF026 — key_exists guards the index, so it cannot insert
+}
+
+var private g_mtp_accept_asked = false   //! the round in flight walks greedy over a block drafter's drafts with no stop ids or forced reject
+var private g_mtp_accept_landed = -1l    //! ... the count its verify seat landed, -1 = none
+
+//! the verify seat may land the round's greedy accept itself, as `mtp_seat_accept_landed` says
+def mtp_seat_accept_asked() : bool => g_mtp_accept_asked
+
+//! the verify seat landed the round's accepted count `a`: every row's pick in `s.mtp_picks`, row a's logits in `s.logits` unless
+//! the round asked picks alone, no row in `s.mtp_logits_b`
+def mtp_seat_accept_landed(a : int64) {
+    g_mtp_accept_landed = a
 }
 
 //! the verify seat took the round's `n` rows `toks` at `pos` (the caller asked `mtp_seated(t, g_mtp_verify_overrides)` first)
@@ -756,6 +865,10 @@ def sel_wanted(s : Session) : bool {
     }
     return true
 }
+
+//! the selection ask of `s`'s verify lists the round's drafts (a penalty window over them): the host reads the drafted ids before
+//! the verify is encoded
+def sel_ask_reads_drafts(s : Session) : bool => sel_wanted(s) && !penalties_off(deref(s.spec_params))
 
 //! the ids the last ask listed, in the order their logits land in the recent-window plane ([[sel_ask_words]])
 var @scratch g_sel_ask_ids : array<int64>
@@ -1299,7 +1412,35 @@ def register_gpu_upload_resident(fn : GpuUploadResidentFn) {
     g_gpu_upload_resident = fn
 }
 
+//! the first weight plane of `t` whose format the discrete GPU homes stamp no kernel for (`kq_discrete_unstamped`), named by
+//! site and `KqFmt` member; "" where every plane has a stamp
+def discrete_unstamped_plane(t : Model) : string {
+    return "the token table is {t.emb_fmt}" if (kq_discrete_unstamped(t.emb_fmt))
+    return "the classifier is {t.wcls_fmt}" if (!t.config.shared_weights && kq_discrete_unstamped(t.wcls_fmt))
+    var why = ""
+    for (l in range64(t.config.n_layers)) {
+        for (site, f in ["attention q", "attention k", "attention v", "attention o", "FFN gate", "FFN down", "FFN up",
+                         "deltanet qkv", "deltanet gate", "deltanet out", "deltanet beta", "deltanet alpha",
+                         "expert stack gate", "expert stack up", "expert stack down", "shared expert gate", "shared expert up", "shared expert down"],
+                [fmt_at(t.wq_fmt, l), fmt_at(t.wk_fmt, l), fmt_at(t.wv_fmt, l), fmt_at(t.wo_fmt, l), fmt_at(t.w1_fmt, l),
+                 fmt_at(t.w2_fmt, l), fmt_at(t.w3_fmt, l), fmt_at(t.dnqkv_fmt, l), fmt_at(t.dngate_fmt, l),
+                 fmt_at(t.dnout_fmt, l), fmt_at(t.dnbeta_fmt, l), fmt_at(t.dnalpha_fmt, l),
+                 fmt_at(t.we1_fmt, l), fmt_at(t.we3_fmt, l), fmt_at(t.we2_fmt, l), fmt_at(t.wsh1_fmt, l), fmt_at(t.wsh3_fmt, l), fmt_at(t.wsh2_fmt, l)]) {
+            if (empty(why) && kq_discrete_unstamped(f)) {
+                why = "the {site} plane of layer {l} is {f}"
+            }
+        }
+        return why if (!empty(why))
+    }
+    return ""
+}
+
 def gpu_upload_resident(t : Model) {
+    let unstamped = moe_gpu_tier_installed() ? discrete_unstamped_plane(t) : ""
+    if (!empty(unstamped)) {
+        to_log(LOG_WARNING, "dasLLAMA: the GPU tier declines the model - {unstamped}, a format the Vulkan and CUDA homes stamp no kernels for; the CPU serves it\n")
+        return
+    }
     if (g_gpu_upload_resident == null) {
         // A tier CAN arm without the rail — a program may require dasllama/dasllama_math_vulkan
         // directly without the umbrella (which carries both the tier and the rail). Silently skipping
@@ -1666,6 +1807,16 @@ struct Model {
     q4032s : array<uint8>
     q5032q : array<uint8>
     q5032s : array<uint8>
+    mlx4q : array<uint8>
+    mlx4s : array<uint8>
+    mlx8q : array<uint8>
+    mlx8s : array<uint8>
+    mlx4bq : array<uint8>
+    mlx4bs : array<uint8>
+    mlx8bq : array<uint8>
+    mlx8bs : array<uint8>
+    mlx6bq : array<uint8>
+    mlx6bs : array<uint8>
     kquant_native : bool = false
     // kq stage 4: the kq planes were repacked at load into the active backend's grp<mr> layout.
     // From then on every kq matmul MUST run the backend slots — disk-order portable kernels would
@@ -1822,6 +1973,9 @@ struct Model {
     hc_head_norm_off : int64 = -1   // fblob: hc x dim
     hc_head_down_off : int64 = -1   // q8: [low_rank x hc_dim]
     hc_head_up_off : int64 = -1     // q8: [hc_dim x low_rank]
+    hc_down_fmt : array<KqFmt>      //! the down planes' tags by site (`hc_site_fmts`); empty = q8 throughout
+    hc_up_fmt : array<KqFmt>        //! the up planes' tags by site
+    ple_kv_fmt : array<KqFmt>       //! the n-gram key and value projections' tags; empty = q8
     // qwen4exp PLE n-gram side input (config.ple_layer >= 0): the hash table stays in its DISK
     // block form and is gathered per token (ple_head_dim elements per row); the two projections
     // ride the q8 plane, the three grouped norms and the conv taps are fblob
@@ -1829,6 +1983,9 @@ struct Model {
     ngram_type : int = 0            // the table's GGML type (IQ4_NL / Q8_0 / F16 / BF16 / F32 decode)
     ngram_rows : int64 = 0
     ngram_row_bytes : int64 = 0
+    ngram_shard_rows : int64 = 0    //! an `GGML_TYPE_NGRAM_A4G32` table's rows a shard (each shard its codes, scales, biases)
+    ngram_map : void?               //! the mapped file a snapshot's table views for the model's life; null where the table is owned or the image's
+    ngram_map_bytes : uint64
     ple_mult : array<uint64>        // ple.layer_multipliers: one per n-gram position
     ple_head_off : array<int64>     // ple.head_offsets: first row of head h
     ple_head_vocab : array<int64>   // ple.head_vocab_sizes: rows of head h (the modulus)
@@ -1950,6 +2107,11 @@ def finalize(var t : Model) {
         t.image_map = null
         t.image_bytes = 0ul
     }
+    if (t.ngram_map != null) {
+        image_backing_release(t.ngram_map, t.ngram_map_bytes)
+        t.ngram_map = null
+        t.ngram_map_bytes = 0ul
+    }
 }
 
 //! Resident weight bytes across every plane family (only the loaded quant's planes are
@@ -1977,6 +2139,7 @@ def model_weights_bytes(t : Model) : int64 {
         + long_length(t.iq4nl32q) + long_length(t.iq4nl32s)
         + long_length(t.q4032q) + long_length(t.q4032s)
         + long_length(t.q5032q) + long_length(t.q5032s)
+        + mlx_plane_bytes(t).q + mlx_plane_bytes(t).s
         + long_length(t.mblob) + long_length(t.vkblob)
         + long_length(t.embq) + long_length(t.embs))
 }
@@ -2111,6 +2274,31 @@ def cls_tied_f32(t : Model) : bool => t.config.shared_weights && !t.cls_q8 && !t
 
 // Format tag for layer l of a per-kind tag array; empty array (non-kq load) = q8.
 def fmt_at(a : array<KqFmt>; l : int64) : KqFmt => empty(a) ? KqFmt.q8 : a[l]
+
+//! the head mixer's site: after every layer's two (the NextN block's included); the draft head's own head mixer is the next
+def hc_head_site(c : Config) : int64 => 2l * (c.n_layers + c.n_layer_nextn)
+
+//! a hyper-connection mixer's two plane tags at `site` (a layer's 2l / 2l + 1, the head mixer's `hc_head_site`, the draft
+//! head's one past it)
+def hc_site_fmts(t : Model; site : int64) : tuple<down : KqFmt; up : KqFmt> => (down = fmt_at(t.hc_down_fmt, site), up = fmt_at(t.hc_up_fmt, site))
+
+//! the n-gram side input's key and value projection tags
+def ple_kv_fmts(t : Model) : tuple<key : KqFmt; val : KqFmt> => (key = fmt_at(t.ple_kv_fmt, 0l), val = fmt_at(t.ple_kv_fmt, 1l))
+
+//! the first mixer or n-gram projection plane whose tag fails `served(f, kdim, rows)` - the plane's format, its K and its rows -
+//! named by site and member; "" where every one passes (a home's gate supplies the predicate)
+def hc_planes_unserved_by(t : Model; served : block<(f : KqFmt; kdim, rows : int64) : bool>) : string {
+    let c = t.config
+    let hcd = hc_dim(c)
+    for (si, d, u in count(), t.hc_down_fmt, t.hc_up_fmt) {
+        return "mixer site {si}'s down plane is {d}" if (!invoke(served, d, hcd, c.hc_low_rank))
+        return "mixer site {si}'s up plane is {u}" if (!invoke(served, u, c.hc_low_rank, hcd))
+    }
+    for (f, what, rows in t.ple_kv_fmt, ["key", "value"], [hcd, c.dim]) {
+        return "the n-gram {what} projection is {f}" if (!invoke(served, f, ple_in_dim(c), rows))
+    }
+    return ""
+}
 
 //! The shared expert's plane of `kind` (1 gate, 3 up, 2 down) on layer l: the plane in the file's format where the loader kept one,
 //! else the q8 transcode the CPU chain reads (dasllama_moe.das's and dasllama_blocks.das's shared-expert sites read only it).
@@ -2690,10 +2878,26 @@ def kq_plane_pair(var t : Model; f : KqFmt;
         invoke(blk, t.q5032q, t.q5032s)
     } elif (f == KqFmt.mx4) {
         invoke(blk, t.mxq, t.mxs)
+    } elif (f == KqFmt.mlx4) {
+        invoke(blk, t.mlx4q, t.mlx4s)
+    } elif (f == KqFmt.mlx8) {
+        invoke(blk, t.mlx8q, t.mlx8s)
+    } elif (f == KqFmt.mlx4b) {
+        invoke(blk, t.mlx4bq, t.mlx4bs)
+    } elif (f == KqFmt.mlx8b) {
+        invoke(blk, t.mlx8bq, t.mlx8bs)
+    } elif (f == KqFmt.mlx6b) {
+        invoke(blk, t.mlx6bq, t.mlx6bs)
     } else {
         return false
     }
     return true
+}
+
+//! the affine members' plane bytes, quant and scale planes summed
+def mlx_plane_bytes(t : Model) : tuple<q : int64; s : int64> {
+    return (q = long_length(t.mlx4q) + long_length(t.mlx8q) + long_length(t.mlx4bq) + long_length(t.mlx8bq) + long_length(t.mlx6bq),
+            s = long_length(t.mlx4s) + long_length(t.mlx8s) + long_length(t.mlx4bs) + long_length(t.mlx8bs) + long_length(t.mlx6bs))
 }
 
 //! the read-only twin: `f`'s plane pair in a const `t`
@@ -2712,6 +2916,16 @@ def kq_plane_pair(t : Model; f : KqFmt;
         invoke(blk, t.q5032q, t.q5032s)
     } elif (f == KqFmt.mx4) {
         invoke(blk, t.mxq, t.mxs)
+    } elif (f == KqFmt.mlx4) {
+        invoke(blk, t.mlx4q, t.mlx4s)
+    } elif (f == KqFmt.mlx8) {
+        invoke(blk, t.mlx8q, t.mlx8s)
+    } elif (f == KqFmt.mlx4b) {
+        invoke(blk, t.mlx4bq, t.mlx4bs)
+    } elif (f == KqFmt.mlx8b) {
+        invoke(blk, t.mlx8bq, t.mlx8bs)
+    } elif (f == KqFmt.mlx6b) {
+        invoke(blk, t.mlx6bq, t.mlx6bs)
     } else {
         return false
     }
@@ -2722,6 +2936,12 @@ def kq_plane_pair(t : Model; f : KqFmt;
 def kq_fmt_row_ok(f : KqFmt; n : int64) : KqFmt {
     let on32 = n % KQ_B32_ELEMS == 0l
     let off256 = n % KQ_SB_ELEMS != 0l
+    if (kq_mlx_affine(f)) {
+        if (n % MLX_GROUP != 0l) {   //! the disk form is whole 64-groups: no row of the format can fall off them, and no q8 copy is made
+            panic("dasLLAMA: a {n}-wide {f} row is not whole {MLX_GROUP}-weight groups")
+        }
+        return f
+    }
     if (f == KqFmt.q51 || f == KqFmt.q5032) return on32 ? f : KqFmt.q8
     if (f == KqFmt.iq4nl && off256) return on32 ? KqFmt.iq4nl32 : KqFmt.q8
     if (f == KqFmt.q40 && off256) return on32 ? KqFmt.q4032 : KqFmt.q8
@@ -2855,8 +3075,9 @@ def footprint(t : Model) : MemFootprint {
     let mx4 = long_length(t.mxq)                  // uint8 (two nibbles) -> 1 byte each
     let mx4s = long_length(t.mxs)                 // raw E8M0 -> 1 byte per 32-block
     let kqb = kq_plane_bytes(t)
-    let kq = kqb.q + long_length(t.q51q) + long_length(t.iq4nl32q) + long_length(t.q4032q) + long_length(t.q5032q)
-    let kqs = kqb.s + long_length(t.q51s) + long_length(t.iq4nl32s) + long_length(t.q4032s) + long_length(t.q5032s)
+    let mlx = mlx_plane_bytes(t)
+    let kq = kqb.q + long_length(t.q51q) + long_length(t.iq4nl32q) + long_length(t.q4032q) + long_length(t.q5032q) + mlx.q
+    let kqs = kqb.s + long_length(t.q51s) + long_length(t.iq4nl32s) + long_length(t.q4032s) + long_length(t.q5032s) + mlx.s
     return MemFootprint(aux_fp32_bytes = aux, weight_fp32_bytes = wf, q8_bytes = q8, q8_scale_bytes = q8s,
                         q4_bytes = q4, q4_scale_bytes = q4s, mx4_bytes = mx4, mx4_scale_bytes = mx4s,
                         kq_bytes = kq, kq_scale_bytes = kqs,
@@ -3463,13 +3684,15 @@ def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDt
         s.dn_qg |> resize(2l * qd)
         s.dn_qgate |> resize(qd)
     }
-    if (c.n_layer_nextn > 0l) {   // MTP/NextN: h_nextn handoff + eh_proj concat input + verify row-0 outputs
+    if (c.n_layer_nextn > 0l) {   // MTP/NextN: h_nextn handoff
         s.mtp_h |> reserve_resize(mtp_h_dim(c))
         s.mtp_h0 |> reserve_resize(mtp_h_dim(c))
-        s.mtp_cat |> reserve_resize(max(2l * MTP_MAX_ROWS * c.dim, c.hc_count * 2l * c.dim))   // the verify's embeds (row per verify row), the warm's cat image, the per-stream cat rows
-        s.mtp_logits |> resize(c.vocab_size)
-        s.mtp_vbatch |> resize(MTP_MAX_ROWS)
     }
+    //! the verify's scratch - its embeds (a row a verify row), the warm's cat image, the per-stream cat rows, row 0's logits
+    //! and the row ids - sized on every trunk: a block or assistant drafter attaches to a trunk with no NextN head
+    s.mtp_cat |> reserve_resize(max(2l * MTP_MAX_ROWS * c.dim, c.hc_count * 2l * c.dim))
+    s.mtp_logits |> resize(c.vocab_size)
+    s.mtp_vbatch |> resize(MTP_MAX_ROWS)
     if (c.hyper_conn) {   // hyper-connections: the wide residual + the mixer's four scratch rows
         s.hc_res |> resize(hc_dim(c))
         s.hc_xn |> resize(hc_dim(c))
@@ -3922,21 +4145,23 @@ def hc_mix_tail(var xn : float?; gate : float const?; inj_w : float const?; var 
 }
 
 //! One mixer over the wide row res[roff..]: xb <- the mean of the normed streams, each sigmoid-gated by a
-//! low-rank projection; s.hc_inject <- the scatter logits (inject_off < 0 = the head mixer, no scatter)
-def hc_mix_row(t : Model; var s : Session; res : array<float>; roff, norm_off, down_off, up_off, inject_off : int64) {
+//! low-rank projection; s.hc_inject <- the scatter logits (inject_off < 0 = the head mixer, no scatter); the planes in the
+//! tags of mixer `site`
+def hc_mix_row(t : Model; var s : Session; res : array<float>; roff, norm_off, down_off, up_off, inject_off, site : int64) {
     let c = t.config
     let hcd = hc_dim(c)
     let lr = c.hc_low_rank
     let inv = 1.0 / float(c.hc_count)
+    let f = hc_site_fmts(t, site)
     unsafe {
         hc_grouped_norm(addr(s.hc_xn[0]), addr < float const? >(res[roff]), addr < float const? >(t.fblob[norm_off]), c.dim, c.hc_count, c.norm_eps)
     }
-    mm_f(s.hc_lo, t, KqFmt.q8, down_off, s.hc_xn, s.xq, s.xs, s.xbs, hcd, lr)
+    mm_f(s.hc_lo, t, f.down, down_off, s.hc_xn, s.xq, s.xs, s.xbs, hcd, lr)
     for (j in range64(lr)) {
         let v = s.hc_lo[j] * inv
         s.hc_lo[j] = silu_f32(v)
     }
-    mm_f(s.hc_gate, t, KqFmt.q8, up_off, s.hc_lo, s.xq, s.xs, s.xbs, lr, hcd)
+    mm_f(s.hc_gate, t, f.up, up_off, s.hc_lo, s.xq, s.xs, s.xbs, lr, hcd)
     unsafe {
         let inj_w = inject_off >= 0l ? addr < float const? >(t.fblob[inject_off]) : null
         hc_mix_tail(addr(s.hc_xn[0]), addr < float const? >(s.hc_gate[0]), inj_w, addr(s.hc_inject[0]), addr(s.xb[0]), c.dim, c.hc_count)
@@ -3944,14 +4169,15 @@ def hc_mix_row(t : Model; var s : Session; res : array<float>; roff, norm_off, d
 }
 
 //! The mixer over the decode residual (s.hc_res) into xb
-def hc_mix(t : Model; var s : Session; norm_off, down_off, up_off, inject_off : int64) {
-    hc_mix_row(t, s, s.hc_res, 0l, norm_off, down_off, up_off, inject_off)
+def hc_mix(t : Model; var s : Session; norm_off, down_off, up_off, inject_off, site : int64) {
+    hc_mix_row(t, s, s.hc_res, 0l, norm_off, down_off, up_off, inject_off, site)
 }
 
 //! The mixer over every row of the prefill residual (s.hc_res_b) into xb_b, the scatter logits into hc_inject_b;
 //! the per-row passes split over positions, each row the decode mixer's arithmetic
-def hc_mix_b(t : Model; var s : Session; norm_off, down_off, up_off, inject_off, npos : int64) {
+def hc_mix_b(t : Model; var s : Session; norm_off, down_off, up_off, inject_off, site, npos : int64) {
     let c = t.config
+    let f = hc_site_fmts(t, site)
     let dim = c.dim
     let hcd = hc_dim(c)
     let nh = c.hc_count
@@ -3972,12 +4198,12 @@ def hc_mix_b(t : Model; var s : Session; norm_off, down_off, up_off, inject_off,
             }
         }
     }
-    mm_b_f(s, s.hc_lo_b, t, KqFmt.q8, down_off, s.hc_xn_b, hcd, lr, npos)
+    mm_b_f(s, s.hc_lo_b, t, f.down, down_off, s.hc_xn_b, hcd, lr, npos)
     for (j in range64(npos * lr)) {
         let v = s.hc_lo_b[j] * inv
         s.hc_lo_b[j] = silu_f32(v)
     }
-    mm_b_f(s, s.hc_gate_b, t, KqFmt.q8, up_off, s.hc_lo_b, lr, hcd, npos)
+    mm_b_f(s, s.hc_gate_b, t, f.up, up_off, s.hc_lo_b, lr, hcd, npos)
     unsafe {
         var xnp = addr(s.hc_xn_b[0])
         let gp = addr < float const? >(s.hc_gate_b[0])
@@ -5927,8 +6153,10 @@ def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE0
             let ts_blk_ffn = prof_ticks()
             t.blocks.ffn_decode(t, s, l)
             prof_add("blk_ffn", ts_blk_ffn)
+            mtp_block_capture(t, s, l, 1l, pos, false)
         }
     }
+    mtp_block_commit(t, s, pos, 1l)   //! the row's captures: the CPU stack's through the layer hook, a device step's landed by its driver
 
     return if (stack_done && g_decode_logits_done)   // the override already produced s.logits
 
@@ -6207,7 +6435,7 @@ def private forward_mtp_cpu(t : Model; var s : Session; token, pos : int64; want
     if (c.hyper_conn) {
         // the head's own h_nextn is its wide residual BEFORE the head mixer - the chain's next input
         copy_floats(s.hc_res, 0l, s.mtp_h, 0l, hc_dim(c))
-        hc_mix_row(t, s, s.hc_res, 0l, t.mtp_hc_head_norm_off, t.mtp_hc_head_down_off, t.mtp_hc_head_up_off, -1l)
+        hc_mix_row(t, s, s.hc_res, 0l, t.mtp_hc_head_norm_off, t.mtp_hc_head_down_off, t.mtp_hc_head_up_off, -1l, hc_head_site(c) + 1l)
     } else {
         // head norm (shared_head_norm when shipped, else output_norm) + the trunk classifier
         rms_at(s.xb, t, t.mtp_headnorm_off >= 0l ? t.mtp_headnorm_off : t.rms_final_off, s.x, dim)
@@ -6248,6 +6476,12 @@ def mtp_verify_prep_n(t : Model; var s : Session; toks : array<int64>; n, pos : 
     if (c.embed_scale != 1.0) {
         scale_inplace(unsafe(addr(s.mtp_cat[0])), c.embed_scale, n * c.dim)
     }
+    mtp_verify_rope_n(t, s, n, pos)
+}
+
+//! the verify batch's rope tables over its n positions pos..pos+n-1 alone: a verify whose rows the device embeds off device ids
+def mtp_verify_rope_n(t : Model; var s : Session; n, pos : int64) {
+    let c = t.config
     build_rope_table(s.rope_cos, s.rope_sin, t, c.rope_freq_base, c.rope_freq_scale, pos, n,
                      c.rope_dim > 0l ? c.rope_dim : c.head_size, true)
 }
@@ -6763,6 +6997,7 @@ def private mtp_verify_rows(t : Model; var s : Session; seated : bool; n, pos : 
             mtp_snapshot_timed(s)
         }
     }
+    mtp_block_land(s)
     let ts_verify = prof_ticks()
     let batch_cls = mtp_cls_batch_ok(t)   //! the per-row classifier serves the two-row round alone (`mtp_spec_round_k` caps the depth at 1 without the batch)
     g_mtp_verify_window_uid = s.uid
@@ -6824,10 +7059,13 @@ def private mtp_round_reject(t : Model; var s : Session; tok, pos, a : int64; se
 }
 
 [arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
-def mtp_spec_round_k(t : Model; var s : Session; tok : int64; k_req : int64) : int64 {
+def mtp_spec_round_k(t : Model; var s : Session; tok : int64; k_req : int64) : int64 {   // nolint:STYLE037,STYLE038 - the one round over the head's chain and the block drafter's pass
     let c = t.config
     let seated = mtp_seated(t, g_mtp_verify_overrides)
-    var k = mtp_depth_for(s, clamp(k_req, 1l, MTP_MAX_ROWS - 1l))
+    let blockd = mtp_block_attached(t)
+    let k_ask = clamp(k_req, 1l, MTP_MAX_ROWS - 1l)
+    let k_block = g_mtp_depth_explicit ? min(g_mtp_block.drafts, k_ask) : min(g_mtp_block.drafts, MTP_MAX_ROWS - 1l)   //! the drafter's whole block unless a depth is set
+    var k = mtp_depth_for(s, blockd ? k_block : k_ask)
     if (!seated && !mtp_cls_batch_ok(t)) {
         k = 1l   //! the per-row CPU classifier lands row 0 and the last row alone
     }
@@ -6838,14 +7076,16 @@ def mtp_spec_round_k(t : Model; var s : Session; tok : int64; k_req : int64) : i
         }
     }
     k = min(k, c.seq_len - s.n_past - 1l)
-    let drafts_sampled = mtp_drafts_sampled(s) && (seated || mtp_cls_batch_ok(t))
-    if (k <= 1l && !(k == 1l && drafts_sampled)) {
+    let drafts_sampled = !blockd && mtp_drafts_sampled(s) && (seated || mtp_cls_batch_ok(t))
+    if (k <= 1l && !(k == 1l && drafts_sampled) && !blockd) {
         var d = 0l
         return mtp_spec_eval(t, s, tok, d) ? 1l : 0l
     }
     let pos = s.n_past
     mtp_round_begin(s)
-    if (c.n_layer_nextn <= 0l || mtp_round_cold_host(t, s, pos, k, mtp_h_dim(c)) || !empty(mtp_round_cold_seat(t, s, pos, k))) {
+    if (blockd) {
+        mtp_block_prepare(s, c)
+    } elif (c.n_layer_nextn <= 0l || mtp_round_cold_host(t, s, pos, k, mtp_h_dim(c)) || !empty(mtp_round_cold_seat(t, s, pos, k))) {
         forward(t, s, tok, pos)
         s.n_past = pos + 1l
         return 0l
@@ -6864,9 +7104,18 @@ def mtp_spec_round_k(t : Model; var s : Session; tok : int64; k_req : int64) : i
     s.mtp_vbatch[0] = tok
     let chain_min_p = g_mtp_chain_min_p
     var drafted = 0l
+    if (blockd) {
+        drafted = k <= 0l ? 0l : invoke(g_mtp_block.draft, t, s, tok, pos, k)
+        if (drafted <= 0l) {   //! the drafter's context does not reach this position: the plain step, which commits its row
+            prof_add("mtp.draft", ts_draft)
+            forward(t, s, tok, pos)
+            s.n_past = pos + 1l
+            return 0l
+        }
+    }
     var prev = tok
     let n0 = length(s.recent)
-    while (drafted < k) {
+    while (drafted < k && !blockd) {
         var d = mtp_draft(t, s, prev, pos - 1l + drafted, !sampled && chain_min_p <= 0.0)
         if (drafts_sampled) {   //! the head's own draw, its earlier drafts in the penalty window as the walk will see them
             d = mtp_draft_sample(s, s.logits, vocab, drafted)
@@ -6880,11 +7129,19 @@ def mtp_spec_round_k(t : Model; var s : Session; tok : int64; k_req : int64) : i
     s.recent |> resize(n0)   // nolint:PERF026,LINT019 — fires from the [hot_path] round's compile; back to the caller's window
     s.mtp_drafted += drafted
     prof_add("mtp.draft", ts_draft)
+    g_mtp_accept_asked = blockd && !sampled && !mtp_reject_forced(s) && (s.spec_stops == null || empty(*s.spec_stops))
+    g_mtp_accept_landed = -1l
     let served = mtp_verify_rows(t, s, seated, drafted + 1l, pos, asked)
+    g_mtp_accept_asked = false
+    if (blockd) {
+        mtp_block_land(s)
+    }
     let landed_picks_only = served && asked
+    let seat_a = served ? g_mtp_accept_landed : -1l
     let ts_walk = prof_ticks()
     let walk_k = mtp_reject_forced(s) ? 0l : drafted
-    let a = mtp_accept_walk(s, walk_k, vocab, $(row : int64) : int64 => mtp_row_truth(s, served, row, vocab), landed_picks_only)
+    let a = mtp_accept_walk(s, walk_k, vocab, $(row : int64) : int64 => mtp_row_truth(s, served, row, vocab), landed_picks_only || seat_a >= 0l)
+    verify(seat_a < 0l || a == seat_a, "dasLLAMA: the verify seat's accepted count differs from the walk's over the same picks - engine bug")
     prof_add("mtp.walk", ts_walk)
     if (landed_picks_only) {
         land_pick(s, s.mtp_picks[a])
@@ -6893,7 +7150,23 @@ def mtp_spec_round_k(t : Model; var s : Session; tok : int64; k_req : int64) : i
         mtp_round_reject(t, s, tok, pos, a, served)
     }
     mtp_round_commit_host(s, pos, drafted, a)
+    if (blockd) {
+        invoke(g_mtp_block.commit, s, pos, a + 1l)   //! the verify's rows 0 .. a stand as the context's next positions
+    }
     return a
+}
+
+//! a block drafter's round on a trunk with no NextN head: the rows the verify and the reject land - the committed row's
+//! carry, the draft head's seed, row 0's logits - sized once, as a NextN session sizes them at its start
+def private mtp_block_prepare(var s : Session; c : Config) {
+    let hd = mtp_h_dim(c)
+    if (long_length(s.mtp_h) < hd) {
+        s.mtp_h |> reserve_resize(hd)   // nolint:PERF026,LINT019 — once per session
+        s.mtp_h0 |> reserve_resize(hd)   // nolint:PERF026,LINT019 — once per session
+    }
+    if (long_length(s.mtp_logits) < c.vocab_size) {
+        s.mtp_logits |> reserve_resize(c.vocab_size)   // nolint:PERF026,LINT019 — once per session
+    }
 }
 
 //! Greedy decode with MTP/NextN self-speculation at the configured depth (set_mtp_depth). Mirrors
@@ -6902,7 +7175,7 @@ def mtp_spec_round_k(t : Model; var s : Session; tok : int64; k_req : int64) : i
 def generate_mtp_greedy(t : Model; var s : Session; prompt : array<int64>; total : int64;
                         var n_drafted, n_accepted : int64&) : array<int64> {
     let c = t.config
-    assert(c.n_layer_nextn > 0l)
+    verify(c.n_layer_nextn > 0l || mtp_block_attached(t), "dasLLAMA: the speculative walk needs a NextN head or a block drafter")
     let np = long_length(prompt)
     var ids : array<int64>
     if (total <= 0l || np <= 0l) {
@@ -7531,6 +7804,7 @@ def forward_prefill_segments(t : Model; var segs : array<PrefillSeg>; toks : arr
             if (!g_prefill_logits_done) {
                 prefill_cpu_logits(t, *sg.s, sg.npos, sg.start_pos, skip_logits)
             }
+            mtp_block_commit(t, *sg.s, sg.start_pos, sg.npos)   //! the device window landed each segment's captures as it closed
         }
     } else {
         for (sg in segs) {
@@ -7830,6 +8104,9 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
         to_log(LOG_INFO, "dasLLAMA: deepstack image quantum ({npos} rows) declined to the CPU prefill loop - the `{g_prefill_override_name}` override has no per-layer slice-add arm\n")   // nolint:PERF026,PERF028 — once per image quantum, never per token
     } elif (!empty(g_prefill_override_name)) {
         stack_done = invoke(g_prefill_override, t, s, npos, start_pos)
+        if (stack_done && g_mtp_verify_window_uid != s.uid) {
+            mtp_block_commit(t, s, start_pos, npos)   //! the device window landed its captures as it closed
+        }
     }
     if (!stack_done) {
         if (s.embed_gpu_pending) {
@@ -7858,6 +8135,10 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
             if (s.ds_active && l < c.n_deepstack) {   // qwen3vl deepstack: slice l adds to every row (text slices are zero)
                 ds_add_slice(s.x_b, s.ds_embd, l, c.n_deepstack, dim, npos)
             }
+            mtp_block_capture(t, s, l, npos, start_pos, true)
+        }
+        if (g_mtp_verify_window_uid != s.uid) {   //! a verify's rows commit at the round's accepted count, not here
+            mtp_block_commit(t, s, start_pos, npos)
         }
     }
 

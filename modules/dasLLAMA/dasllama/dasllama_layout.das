@@ -42,7 +42,7 @@ def private metal_blob_off_ok(off : int64; fmt : KqFmt) : bool {
     if (fmt == KqFmt.q8) return off % 256l == 0l
     if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.iq3s4 || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) return off % 512l == 0l
     if (fmt == KqFmt.q51) return off % 128l == 0l   // (off/32)*20 and (off/32)*4 both 16B-aligned
-    if (fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032 || fmt == KqFmt.q5032) return off % 256l == 0l   // (off/32)*16 or *20, and (off/32)*2, all 16B-aligned
+    if (fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032 || fmt == KqFmt.q5032 || kq_mlx_affine(fmt)) return off % 256l == 0l   // (off/32)*16, *20 or *32, and (off/32)*2, all 16B-aligned
     return true
 }
 
@@ -111,18 +111,21 @@ def private metal_blob_layout_ok(t : Model) : bool {
             }
         }
     }
-    if (c.hyper_conn) {   // qwen4exp: the mixers' q8 down/up planes bind per site, the head pair once
+    if (c.hyper_conn) {
         for (si in range64(long_length(t.hc_down_offs))) {
-            if (!metal_blob_off_ok(t.hc_down_offs[si], KqFmt.q8) || !metal_blob_off_ok(t.hc_up_offs[si], KqFmt.q8)) {
+            let f = hc_site_fmts(t, si)
+            if (!metal_blob_off_ok(t.hc_down_offs[si], f.down) || !metal_blob_off_ok(t.hc_up_offs[si], f.up)) {
                 return false
             }
         }
-        if (!metal_blob_off_ok(t.hc_head_down_off, KqFmt.q8) || !metal_blob_off_ok(t.hc_head_up_off, KqFmt.q8)
-                || (c.n_layer_nextn > 0l && (!metal_blob_off_ok(t.mtp_hc_head_down_off, KqFmt.q8) || !metal_blob_off_ok(t.mtp_hc_head_up_off, KqFmt.q8)))) {
+        let hf = hc_site_fmts(t, hc_head_site(c))
+        let mf = hc_site_fmts(t, hc_head_site(c) + 1l)
+        if (!metal_blob_off_ok(t.hc_head_down_off, hf.down) || !metal_blob_off_ok(t.hc_head_up_off, hf.up)
+                || (c.n_layer_nextn > 0l && (!metal_blob_off_ok(t.mtp_hc_head_down_off, mf.down) || !metal_blob_off_ok(t.mtp_hc_head_up_off, mf.up)))) {
             return false
         }
     }
-    if (has_ple_ngram(c) && (!metal_blob_off_ok(t.ple_key_off, KqFmt.q8) || !metal_blob_off_ok(t.ple_val_off, KqFmt.q8))) {
+    if (has_ple_ngram(c) && (!metal_blob_off_ok(t.ple_key_off, ple_kv_fmts(t).key) || !metal_blob_off_ok(t.ple_val_off, ple_kv_fmts(t).val))) {
         return false
     }
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
@@ -213,10 +216,11 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
 def metal_kq_scale_moves(f : KqFmt) : bool => f != KqFmt.q40 && f != KqFmt.iq4nl && f != KqFmt.nv4
 
 //! A K-quant scale plane `ks` of `f` put into its Metal device form in place: k4/k5 the 16-byte disk block a superblock,
-//! a format `metal_kq_scale_moves` leaves as it is, every other format split into scale and d rows (`kq_split_scale_plane`) -
-//! the one place a format's Metal scale form is decided, for the blob flavor's planes and the tower's kq slab alike.
+//! a non-superblock or empty plane and a format `metal_kq_scale_moves` leaves as they are, every other format split into
+//! scale and d rows (`kq_split_scale_plane`) - the one place a format's Metal scale form is decided, for every caller.
 [arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def metal_kq_scale_form(f : KqFmt; var ks : array<uint8>) {
+    return if (!kq_sb(f) || empty(ks))
     if (f == KqFmt.k4 || f == KqFmt.k5) {
         compact_kq_scale_strip(ks)
     } elif (metal_kq_scale_moves(f)) {
@@ -491,22 +495,24 @@ def private collect_q8_regions(t : Model; var regs : array<StreamReg>) {
     if (c.n_layer_nextn > 0l && t.mtp_ehproj_fmt == KqFmt.q8) {   // NextN eh_proj: 2*dim -> dim
         push_repack(regs, 0, t.mtp_ehproj_off, 2l * dim, dim)
     }
-    if (c.hyper_conn) {   // qwen4exp mixers: per (layer, site) down [low_rank x hc_dim] + up [hc_dim x low_rank], and the head pair
+    if (c.hyper_conn) {
         let hcd = hc_dim(c)
         for (si in range64(long_length(t.hc_down_offs))) {
-            push_repack(regs, 0, t.hc_down_offs[si], hcd, c.hc_low_rank)
-            push_repack(regs, 0, t.hc_up_offs[si], c.hc_low_rank, hcd)
+            push_q8_repack(regs, hc_site_fmts(t, si).down, t.hc_down_offs[si], hcd, c.hc_low_rank)
+            push_q8_repack(regs, hc_site_fmts(t, si).up, t.hc_up_offs[si], c.hc_low_rank, hcd)
         }
-        push_repack(regs, 0, t.hc_head_down_off, hcd, c.hc_low_rank)
-        push_repack(regs, 0, t.hc_head_up_off, c.hc_low_rank, hcd)
+        let hf = hc_site_fmts(t, hc_head_site(c))
+        push_q8_repack(regs, hf.down, t.hc_head_down_off, hcd, c.hc_low_rank)
+        push_q8_repack(regs, hf.up, t.hc_head_up_off, c.hc_low_rank, hcd)
         if (c.n_layer_nextn > 0l) {   // the draft head's own head mixer pair
-            push_repack(regs, 0, t.mtp_hc_head_down_off, hcd, c.hc_low_rank)
-            push_repack(regs, 0, t.mtp_hc_head_up_off, c.hc_low_rank, hcd)
+            let mf = hc_site_fmts(t, hc_head_site(c) + 1l)
+            push_q8_repack(regs, mf.down, t.mtp_hc_head_down_off, hcd, c.hc_low_rank)
+            push_q8_repack(regs, mf.up, t.mtp_hc_head_up_off, c.hc_low_rank, hcd)
         }
     }
     if (has_ple_ngram(c)) {   // qwen4exp n-gram side input: key [hc_dim x in] + value [dim x in] (the hash table is raw bytes, never repacked)
-        push_repack(regs, 0, t.ple_key_off, ple_in_dim(c), hc_dim(c))
-        push_repack(regs, 0, t.ple_val_off, ple_in_dim(c), dim)
+        push_q8_repack(regs, ple_kv_fmts(t).key, t.ple_key_off, ple_in_dim(c), hc_dim(c))
+        push_q8_repack(regs, ple_kv_fmts(t).val, t.ple_val_off, ple_in_dim(c), dim)
     }
 }
 
@@ -519,6 +525,13 @@ def private repack_q8_weights(var t : Model) {
 }
 
 // route one kq-tagged tensor to its format's plane pair (q8 tags no-op — those live in qblob)
+//! a q8-tagged plane's repack regions; a plane in another member's tag rides its own planes, which the q8 repack never reads
+def private push_q8_repack(var regs : array<StreamReg>; fmt : KqFmt; off, n, d : int64) {
+    if (fmt == KqFmt.q8) {
+        push_repack(regs, 0, off, n, d)
+    }
+}
+
 def private push_repack_kq(var regs : array<StreamReg>; fmt : KqFmt; woff, n, d : int64) {
     if (kq_sb(fmt)) {
         push_repack(regs, kq_stream_code(fmt), woff, n, d)
