@@ -121,8 +121,34 @@ namespace das {
         return Expression::autoDereference(e);
     }
 
+    ExprConstBool * makeConstBool ( const LineInfo & at, bool value ) {
+        auto c = new ExprConstBool(at, value);
+        c->type = new TypeDecl(Type::tBool, at);
+        c->type->constant = true;
+        return c;
+    }
+
     ExprOp1 * makeNot ( const LineInfo & at, Function * notFn, Expression * cond ) {
         cond->markNoDiscard();
         return makeTypedOp1(at, "!", notFn, makeValue(cond), new TypeDecl(Type::tBool, at));
+    }
+
+    ExprIfThenElse * makeIf ( const LineInfo & at, Expression * cond, Expression * ifTrue, Expression * ifFalse ) {
+        cond->markNoDiscard();
+        return new ExprIfThenElse(at, makeValue(cond), ifTrue, ifFalse);
+    }
+
+    ExprCopy * makeCopy ( const LineInfo & at, Expression * left, Expression * right ) {
+        right->markNoDiscard();
+        auto c = new ExprCopy(at, left, right, true);
+        c->type = new TypeDecl();
+        return c;
+    }
+
+    ExprMove * makeMove ( const LineInfo & at, Expression * left, Expression * right ) {
+        right->markNoDiscard();
+        auto m = new ExprMove(at, left, right, true);
+        m->type = new TypeDecl();
+        return m;
     }
 }

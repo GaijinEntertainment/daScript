@@ -18,5 +18,9 @@ namespace das {
     void setLetVisibility ( ExprLet * let, ExprBlock * scope );
     void setLetEarlyOut ( ExprLet * let, bool hasEarlyOut );
     Expression * makeValue ( Expression * e );
+    ExprConstBool * makeConstBool ( const LineInfo & at, bool value );
     ExprOp1 * makeNot ( const LineInfo & at, Function * notFn, Expression * cond );
+    ExprIfThenElse * makeIf ( const LineInfo & at, Expression * cond, Expression * ifTrue, Expression * ifFalse );
+    ExprCopy * makeCopy ( const LineInfo & at, Expression * left, Expression * right );
+    ExprMove * makeMove ( const LineInfo & at, Expression * left, Expression * right );
 }

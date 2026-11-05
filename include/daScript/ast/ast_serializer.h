@@ -362,7 +362,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 244;   // 244: a folded static_if arm and typeinfo constant are inferred in the same pass
+            return 245;   // 245: inline splices are typed and no infer pass follows them
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

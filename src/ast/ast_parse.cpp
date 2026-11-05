@@ -1443,7 +1443,7 @@ namespace das {
         }
         if ( !program->failed() ) {
             program->buildAccessFlags(logs);    // this is used by the lint pass
-            if ( program->patchAnnotations() || (!program->failed() && program->patchInline()) ) {
+            if ( program->patchAnnotations() ) {
                 // A patchAnnotations() pass can both mutate the AST (astChanged) AND record a
                 // deliberate error -- either a patch() returning false or a macro_error() raised
                 // inside it. Re-inferring would clear program->errors at the top of the next infer
@@ -1457,6 +1457,11 @@ namespace das {
                     });
                     goto restartInfer;
                 }
+            }
+        }
+        if ( !program->failed() ) {
+            while ( !program->failed() && program->patchInline() ) {
+                program->buildAccessFlags(logs);
             }
         }
         // escape analysis after buildAccessFlags so callee sideEffectFlags (rws) are final, but
