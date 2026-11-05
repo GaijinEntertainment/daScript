@@ -3339,7 +3339,7 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
         // EXPORTED_RUNTIME_METHODS=FS,ENV,wasmMemory: a custom shell stages files into MEMFS and sets the
         // program's environment knobs in Module.preRun (the C environment is built from Module.ENV at startup);
         // wasmMemory: a page reads the linear memory's size (the dev rig's devlog tick) without an aborting getter.
-        w |> write(" -O2 -sMEMORY64=2 -sFULL_ES3 -sMAX_WEBGL_VERSION=2")
+        w |> write(" -O2 -sMINIFY_HTML=0 -sMEMORY64=2 -sFULL_ES3 -sMAX_WEBGL_VERSION=2")
         w |> write(" -sGL_ENABLE_GET_PROC_ADDRESS=1")
         w |> write(" -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=1GB -sSTACK_SIZE=4MB")
         w |> write(" -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0")

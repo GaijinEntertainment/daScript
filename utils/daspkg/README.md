@@ -287,7 +287,10 @@ is silent about both.
 
 `release wasm` links every app with `-O2` and `-sMAXIMUM_MEMORY=1GB`. Without an `-O` level
 the emcc link is `-O0`: no wasm-opt pass, so the `-sMEMORY64=2` lowering stays unoptimized and
-the engine compiles about a fifth more code, plus runtime assertions and unminified JS. A
+the engine compiles about a fifth more code, plus runtime assertions and unminified JS. At
+`-O1` and above emcc also minifies the page shell, which strips the comments a shell carries
+as slots for a later step to fill (the dasLLAMA examples' `/* @image-version */ 0`), so the
+link adds `-sMINIFY_HTML=0`: the shell ships as written, and only the JS and wasm shrink. A
 `-pthread` module's memory is shared, and a shared memory reserves its maximum up front, before
 the code compiles - emscripten's default maximum of 2GB is address space a constrained browser
 does not have. The link line puts the defaults first, then each module's flags, then the app's

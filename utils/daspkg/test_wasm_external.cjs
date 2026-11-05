@@ -33,6 +33,7 @@ def package() { package_name("external_fixture") }
 [export]
 def release() {
     release_main("main.das")
+    release_web_shell("shell.html")
     release_include_from("${source}", "nested/readme.txt")
 ${extra}}
 `,
@@ -75,6 +76,11 @@ try {
     path.join(input, "main.das"),
     'options gen2\n[export]\ndef main() { print("external fixture\\n") }\n',
   );
+  const slot = "/* @fixture-slot */ 0";
+  fs.writeFileSync(
+    path.join(input, "shell.html"),
+    `<!doctype html><html><body><script>var FIXTURE = ${slot};</script>{{{ SCRIPT }}}</body></html>\n`,
+  );
   manifest("README.md");
   const success = build("success");
   assert.equal(success.status, 0, `release failed; see ${logs}`);
@@ -89,6 +95,8 @@ try {
   const linked = fs.readFileSync(loader, "utf8");
   assert.match(linked, /"?maximum"?:\s*16384\b/, "default maximum is 1GB");
   assert.doesNotMatch(linked, /\bassert\(/, "default link is -O2");
+  const page = fs.readFileSync(path.join(bundle, "external_fixture.html"), "utf8");
+  assert.ok(page.includes(slot), "the shell's comment slots survive the -O2 link");
 
   manifest(
     "README.md",
