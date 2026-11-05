@@ -193,6 +193,16 @@
         if (!spare) spare = makeFrame();
     }
 
+    // engineReason only: the coi service worker isolates this page after load, and each run frame asks reason() itself.
+    function gateRefusal() {
+        var gate = window.dasWasmGate;
+        if (!gate) return "the browser gate (files/wasm-gate.js) did not load - the runtime does not start without it";
+        var reason = gate.engineReason();
+        if (!reason) return "";
+        var refusal = gate.refusal(reason);
+        return refusal.title + " " + refusal.text;
+    }
+
     // ── fps badge ────────────────────────────────────────────────────────────
     // One badge for both engines. The number is measured inside whichever frame is
     // running (run-frame.html interpreted, the artifact shell in wasm mode) and
@@ -322,6 +332,12 @@
             host = hostEl;
             onOutput = outputFn;
             onExit = exitFn || null;
+            var refusal = gateRefusal();
+            if (refusal) {
+                if (onOutput) onOutput(refusal, "#ff2d2d");
+                reportProgress("dead", 0);
+                return;
+            }
             // Start the one compile now — the spare is about to ask for it.
             // Errors surface through the frame protocol, not here.
             compileRuntime().catch(function () {});
@@ -353,8 +369,11 @@
         // false means a spare is already standing (loading or ready), or a
         // revive just ran — the cooldown keeps a click storm on a structurally
         // dead page (no runtime to fetch at all) from stacking abort budgets.
+        // The gate's refusal, "" when there is none. A retry never changes it: show it, do not revive.
+        refusal: gateRefusal,
+
         revive: function () {
-            if (!host || spare) return false;
+            if (!host || spare || gateRefusal()) return false;
             var now = Date.now();
             if (now - lastReviveAt < REVIVE_COOLDOWN_MS) return false;
             lastReviveAt = now;

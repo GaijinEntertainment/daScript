@@ -242,18 +242,25 @@ EXAMPLE_SHELLS = {
     "storyteller": (REPO_ROOT / "examples" / "dasLLAMA" / "storyteller" / "web_shell.html", "runStoryteller"),
     "storywish": (REPO_ROOT / "examples" / "dasLLAMA" / "storywish" / "web_shell.html", "runStorywish"),
     "parrot": (REPO_ROOT / "examples" / "dasLLAMA" / "parrot" / "web_shell.html", "runParrot"),
+    "interpreter": (REPO_ROOT / "examples" / "dasLLAMA" / "interpreter" / "web_shell.html", "runInterpreter"),
 }
 
 
 class ExampleShellTest(unittest.TestCase):
     """Each browser example's page (examples/dasLLAMA/<id>/web_shell.html, served at
     /examples/<id>/) guards the browser before it loads the program: emcc's script tag lands in
-    an inert template and only a cross-origin-isolated page gets a live copy. A shell that moved
+    an inert template and only a browser the shared gate (site/files/wasm-gate.js) passes - a
+    cross-origin-isolated page, the wasm features the build emits, a user agent that does not mark
+    a 32-bit build - gets a live copy. A shell that moved
     the placeholder out of the template would run emcc's own user-agent check before the note and
     leave the download line up forever. Each shell also reads the
     deploy's models/manifest.json and carries the IMAGE_VERSION slot the deploy stamps
     (examples/dasLLAMA/wasm/mint_models.py --stamp-page), so a set minted for another version is
     refused before it is fetched, and routes a program abort back onto the page."""
+
+    def test_every_browser_example_shell_is_in_the_census(self):
+        on_disk = sorted((REPO_ROOT / "examples" / "dasLLAMA").glob("*/web_shell.html"))
+        self.assertEqual(on_disk, sorted(path for path, runner in EXAMPLE_SHELLS.values()))
 
     def shells(self):
         return [(name, path.read_text(encoding="utf-8"), runner) for name, (path, runner) in EXAMPLE_SHELLS.items()]
@@ -265,10 +272,10 @@ class ExampleShellTest(unittest.TestCase):
             start = text.index('<template id="loader">')
             end = text.index("</template>", start)
             self.assertIn(placeholder, text[start:end], "the placeholder sits inside the loader template")
-            # the guard is the only path to a live program tag: it copies the template's src
-            self.assertIn("document.getElementById('loader').content.querySelector('script')", text)
-            self.assertLess(text.index("self.crossOriginIsolated"), text.index(f"function {runner}()"),
-                            "the isolation probe is decided before the program path")
+            self.assertEqual(text.count("dasWasmGate.loadProgram("), 1, "one program load, through the gate")
+            self.assertNotIn("createElement('script')", text, "the shell appends no script tag of its own")
+            self.assertLess(text.index("dasWasmGate.reason()"), text.index(f"function {runner}()"),
+                            "the gate is decided before the program path")
 
     def test_the_build_stamp_sits_in_the_head_and_draws_nothing(self):
         # daspkg release wasm replaces the placeholder wherever the shell puts it; the shells put it
@@ -311,10 +318,42 @@ class ExampleShellTest(unittest.TestCase):
 
     def test_the_notes_name_what_the_browser_lacks(self):
         for name, text, runner in self.shells():
-            for needle in ("SharedArrayBuffer", "back to the examples", "force=unsupported"):
-                self.assertIn(needle, text, f"the shell names {needle!r}")
-            for stale in ("memory64", "Safari", "iPhone"):
-                self.assertNotIn(stale, text, f"the shell no longer gates on {stale!r}: the lowered build runs on every engine")
+            for needle in ("back to the examples", "force=unsupported",
+                           "<!-- @wasm-gate -->", "dasWasmGate.reason()", "dasWasmGate.refusal(reason)", "dasWasmGate.explain(what)",
+                           "escapeHtml(refusal.title)", "escapeHtml(refusal.text)", "escapeHtml(explanation)"):
+                self.assertIn(needle, text, f"the shell carries {needle!r}")
+            self.assertEqual(text.count("<!-- @wasm-gate -->"), 1, "exactly one gate marker for the release to inline")
+            self.assertLess(text.index("<!-- @wasm-gate -->"), text.index("dasWasmGate.reason()"), "the gate is inlined before the page asks it")
+            for stale in ("memory64", "WebAssembly.validate", "HAS_ISOLATION", "crossOriginIsolated", "Safari", "iPhone"):
+                self.assertNotIn(stale, text, f"the shell carries no gate of its own ({stale!r}): the shared script is the one gate")
+            self.assertNotRegex(text, r"Version/\d|Firefox/\d|Chrome/\d|OS \d+_\d", "a feature is probed, never read off a browser version")
+
+    def test_the_shared_gate_probes_what_the_build_emits(self):
+        text = (REPO_ROOT / "site" / "files" / "wasm-gate.js").read_text(encoding="utf-8")
+        for needle in ("WebAssembly.validate",
+                       "TYPE_SECTION_RETURNING_EXNREF = [1, 5, 1, 0x60, 0, 1, 0x69]", "hasExnref: accepts(TYPE_SECTION_RETURNING_EXNREF)",
+                       "TYPE_SECTION_TAKING_V128 = [1, 5, 1, 0x60, 1, 0x7b, 0]", "hasSimd: accepts(TYPE_SECTION_TAKING_V128)",
+                       "is32bit", "crossOriginIsolated", "/out of memory/i", "/CompileError/i",
+                       "SharedArrayBuffer is not available on this page.", "This browser is a 32-bit build.",
+                       "document.getElementById('loader').content.querySelector('script')",
+                       "Safari 18.4, Firefox 131 and Chrome 137", "window.dasWasmGate = gate"):
+            self.assertIn(needle, text, f"the gate carries {needle!r}")
+        self.assertNotIn("<!-- @wasm-gate -->", text, "the inlined gate leaves no marker behind in the page")
+        self.assertNotRegex(text, r"Version/\d|Firefox/\d|Chrome/\d|OS \d+_\d", "a feature is probed, never read off a browser version")
+
+    def test_every_wasm_page_asks_the_shared_gate(self):
+        for page, needles in (
+            ("web/templates/wasm_canvas_shell.html", ("<!-- @wasm-gate -->", "dasWasmGate.reason()", "dasWasmGate.loadProgram(function () {")),
+            ("site/playground/run-frame.html", ('src="../files/wasm-gate.js"', "!window.dasWasmGate", "dasWasmGate.reason()")),
+            ("site/examples/_interp.html", ('src="../files/wasm-gate.js"', "window.dasWasmGate ? dasWasmGate.reason() : 'no-gate'")),
+            ("site/playground/playground-runner.js", ("window.dasWasmGate", "gate.engineReason()")),
+            ("site/playground/index.html", ('src="../files/wasm-gate.js"',)),
+            ("site/files/runner.js", ("gate.engineReason()", "'no-gate'")),
+            ("site/index.html", ('src="files/wasm-gate.js"',)),
+        ):
+            page_text = (REPO_ROOT / page).read_text(encoding="utf-8")
+            for needle in needles:
+                self.assertIn(needle, page_text, f"{page} carries {needle!r}")
 
     def test_the_model_set_is_read_from_the_manifest_and_version_checked(self):
         for name, text, runner in self.shells():

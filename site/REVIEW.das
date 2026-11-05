@@ -64,7 +64,7 @@ def private css_blocks(text : string; var out : table<string; string>) {
             break if (cb < 0)
             let body = slice(d, ob + 1, cb)
             // normalize: collapse whitespace runs so formatting differences do not read as drift
-            let parts <- [for (p in split_by_chars(body, " \t\r\n")); p; where !empty(p)]
+            var inscope parts <- [for (p in split_by_chars(body, " \t\r\n")); p; where !empty(p)]
             if (!empty(sel) && (sel |> find(".dl-") >= 0)) {
                 out[sel] = join(parts, " ")
             }
@@ -90,8 +90,7 @@ def private check_dl_selector_parity {
     let s0 = html |> find("<style>")
     let s1 = html |> find("</style>")
     return if (s0 < 0 || s1 < 0)
-    var css_map : table<string; string>
-    var html_map : table<string; string>
+    var css_map, html_map : table<string; string>
     css_blocks(css, css_map)
     css_blocks(slice(html, s0 + length("<style>"), s1), html_map)
     for (sel, body in keys(html_map), values(html_map)) {
@@ -210,8 +209,8 @@ def private check_bench_cell_parity(record_path, results_path : string) {
         return
     }
     for (section, arm in ["INTERP", "JIT"], ["interp", "jit"]) {
-        var header : array<string>
-        var by_family : table<string; array<string>>
+        var inscope header : array<string>
+        var inscope by_family : table<string; array<string>>
         if (!load_results_table(md, section, header, by_family)) {
             gate_finding(results_path, "has no `## {section}` table for {record_path} to agree with")
             continue
@@ -222,7 +221,7 @@ def private check_bench_cell_parity(record_path, results_path : string) {
                 gate_finding(record_path, "family {name} has no `## {section}` row in {results_path}")
                 continue
             }
-            let md_row := by_family[name]
+            var inscope md_row := by_family[name]
             let cells = fam?[arm]
             if (cells == null || !(cells.value is _array)) {
                 gate_finding(record_path, "{name} / {arm}: no cell array - the parity check compared nothing for this family; regenerate the pair")
@@ -352,6 +351,42 @@ def private find_first_error_line(output : string) : string {
     return "(no error line captured)"
 }
 
+def private site_scripts_under(root : string; var out : array<string>) {
+    dir(root) $(name) {
+        let skipped = name == "node_modules" || name == "tests" || name == "wasm"
+        return if (skipped || name |> starts_with("."))
+        let path = "{root}/{name}"
+        let st = stat(path)
+        if (st.is_valid && st.is_dir) {
+            site_scripts_under(path, out)
+        } elif (name |> ends_with(".html") || name |> ends_with(".js")) {
+            out |> push(path)
+        }
+    }
+}
+
+def private check_runtime_starts_past_the_gate {
+    let readme = fread("site/README.md")
+    let section = find(readme, "\{#runtime-gate\}")
+    let ledger = section < 0 ? "" : slice(readme, section, find(readme, "\n## ", section))
+    var files : array<string>
+    site_scripts_under("site", files)
+    files |> sort
+    for (path in files) {
+        continue if (path == "site/files/wasm-gate.js")
+        let text = fread(path)
+        let names_js = find(text, "daslang_static.js") >= 0
+        let names_wasm = find(text, "daslang_static.wasm") >= 0
+        if ((names_js || names_wasm) && find(text, "dasWasmGate") < 0) {
+            gate_finding(path, "names the daslang wasm runtime and never asks `dasWasmGate` first")
+        }
+        if (find(text, "engineReason(") >= 0 && find(ledger, "\n- `{slice(path, 5)}` - ") < 0) {
+            gate_finding(path, find_line(text, "engineReason("),
+                "asks `engineReason()` and no bullet of site/README.md#runtime-gate names the file")
+        }
+    }
+}
+
 [export]
 def main() : int {
     if (!fexist(TABLE_CSS)) {
@@ -361,6 +396,7 @@ def main() : int {
     check_dl_selector_parity()
     check_dl_names_are_defined()
     check_embedded_samples()
+    check_runtime_starts_past_the_gate()
     check_published_records_no_home_paths(RECORDS_DIR)
     check_record_receipts()
     check_bench_cell_parity("site/files/performance_bench.json", "benchmarks/sql/results.md")

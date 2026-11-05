@@ -86,6 +86,7 @@
 <!-- emcc's script tag lands inside a template, where it is inert; the guard below appends a live
      copy only on a browser that can run the build, so an unsupported one loads no program -->
 <template id="loader">{{{ SCRIPT }}}</template>
+<!-- @wasm-gate -->
 <script>
   var SCROLL_KEYS = { ArrowUp:1, ArrowDown:1, ArrowLeft:1, ArrowRight:1, ' ':1, Spacebar:1, PageUp:1, PageDown:1, Home:1, End:1 };
   window.addEventListener('keydown', function (e) { if (SCROLL_KEYS[e.key] && !(e.target && e.target.closest && e.target.closest('input,textarea,[contenteditable]'))) e.preventDefault(); }, { passive: false });
@@ -94,11 +95,7 @@
   // modules/dasLLAMA/dasllama/dasllama_image.das); 0 means "not stamped" (a local rig), no check
   var PAGE_IMAGE_VERSION = /* @image-version */ 0;
 
-  // the -pthread build runs its workers on SharedArrayBuffer, which a page gets only when the
-  // server sent the cross-origin isolation headers
-  var HAS_ISOLATION = !!(self.crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined');
-  var FORCE = new URLSearchParams(location.search).get('force');
-  var SUPPORTED = FORCE === 'unsupported' ? false : HAS_ISOLATION;
+  var reason = dasWasmGate.reason();
 
   function setStatus(text) { document.getElementById('status').textContent = text; }
   function showNote(status, html) {
@@ -148,11 +145,9 @@
     GESTURES.forEach(function (e) { document.addEventListener(e, arm, true); });
   })();
 
-  if (!SUPPORTED) {
-    showNote('needs SharedArrayBuffer',
-      '<b>SharedArrayBuffer is not available on this page.</b><br>The build runs on Web Workers ' +
-      'over it, and a browser grants it only to a cross-origin-isolated page - one the server ' +
-      'sends the Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy headers for.');
+  if (reason) {
+    var refusal = dasWasmGate.refusal(reason);
+    showNote(refusal.status, '<b>' + escapeHtml(refusal.title) + '</b><br>' + escapeHtml(refusal.text));
   } else {
     // the probes passed but the program refuses the browser anyway (emcc's own user-agent check
     // throws "compiled without support for <browser>" at the top of its script): the error
@@ -262,7 +257,8 @@
   }
   function showFailure(what) {
     var lines = lastLines.map(function (l) { return '<code>' + escapeHtml(l) + '</code>'; }).join('<br>');
-    showNote('the program stopped', '<b>the storyteller stopped: ' + escapeHtml(what) + '</b>' + (lines ? '<br>' + lines : ''));
+    var explanation = dasWasmGate.explain(what);
+    showNote('the program stopped', '<b>the storyteller stopped: ' + escapeHtml(what) + '</b>' + (explanation ? '<br>' + escapeHtml(explanation) : '') + (lines ? '<br>' + lines : ''));
   }
 
   window.Module = {
@@ -309,19 +305,11 @@
         });
     }],
   };
-  // the program: a live copy of the tag emcc put in the template (a cloned template script stays inert)
-  var loader = document.getElementById('loader').content.querySelector('script');
-  var live = document.createElement('script');
-  live.async = true;
-  // a script that never arrives (a partial deploy, a proxy) fires error on the element itself,
-  // with no message and no bubbling - the window listener above never sees it
-  live.onerror = function () {
+  // a script that never arrives (a partial deploy, a proxy) fires error on the element alone, unbubbled and without a message
+  dasWasmGate.loadProgram(function () {
     showNote('the program did not load', '<b>The program script did not load.</b><br>' +
       'Reload the page; if it keeps failing, the deploy is incomplete.');
-  };
-  if (loader.getAttribute('src')) live.src = loader.getAttribute('src');
-  else live.textContent = loader.textContent;
-  document.body.appendChild(live);
+  });
   }
 </script>
 </body>

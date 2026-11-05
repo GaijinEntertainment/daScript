@@ -642,7 +642,10 @@ function selectedEngine() {
 // that second state showed the first state's message forever, on a page no
 // amount of waiting or reloading would fix.
 function reportNotReady() {
-    if (typeof PlaygroundRunner !== 'undefined' && PlaygroundRunner.revive && PlaygroundRunner.revive()) {
+    const refusal = typeof PlaygroundRunner !== 'undefined' && PlaygroundRunner.refusal ? PlaygroundRunner.refusal() : '';
+    if (refusal) {
+        printOutput(refusal, '#ff2d2d');
+    } else if (typeof PlaygroundRunner !== 'undefined' && PlaygroundRunner.revive && PlaygroundRunner.revive()) {
         printOutput('the daslang runtime failed to start — retrying now, run again in a moment…', '#ff9393');
     } else {
         printOutput('daslang is still loading, please wait…', '#ff9393');

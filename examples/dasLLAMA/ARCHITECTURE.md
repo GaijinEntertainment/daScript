@@ -55,6 +55,24 @@ checklist is `REVIEW.md` beside this file. The engine these programs drive is do
 
 ## Mechanisms
 
+### The browser gate {#browser-gate}
+
+One script, `site/files/wasm-gate.js` (repo root), is the gate of every daslang wasm page: the shells here,
+the default canvas shell, and the daslang.io playground pages. `daspkg release wasm` inlines it at a shell's
+`<!-- @wasm-gate -->` marker (`utils/daspkg` README, the web gate section); a page outside a release loads it
+from the site's `files/`. A shell asks `reason()` - `''` when the build can run, else `isolation`, `wasm` or
+`32bit` - shows `refusal(reason)`, words a failure that reached `onAbort` with `explain(what)`, and starts
+through `loadProgram()`, the live copy of the script tag emcc put in the inert `loader` template.
+
+Each answer comes from the thing it is about. Isolation is the page's (`crossOriginIsolated`,
+`SharedArrayBuffer`): the `-pthread` build's workers share the linear memory. The features are the engine's:
+`WebAssembly.validate` over a type section that uses one - a function type returning `exnref`, which
+`-fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0` emits (Safari 18.4, Firefox 131, Chrome 137), and one taking
+`v128` for the SIMD kernels. The address space is the user agent's, because no API reports it: a 32-bit
+browser (`Windows NT` without `Win64`/`x64`, `Linux i686`) runs out of memory compiling tens of megabytes of
+wasm, before the linear memory matters, so `INITIAL_MEMORY` and `MAXIMUM_MEMORY` cannot help it. `?force=run`
+skips every check, `?force=unsupported` shows the isolation note.
+
 ### One source, two builds {#one-source-two-builds}
 
 A browser example's `main.das` runs its frame loop through `eval_main_loop`, a blocking loop on

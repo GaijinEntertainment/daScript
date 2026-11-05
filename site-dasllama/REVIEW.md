@@ -85,10 +85,9 @@ string landing in `href`/`src` or fed to `fetch` goes through `safeApiHref()` (a
 allow-list, `#` for anything else) and nothing else; any other string landing as text or as a
 quoted-attribute value is `esc()`-escaped (`< > & " '`).**
 
-**A diff to `test_metadata.py` that leaves any page or browser example shell
-(`examples/dasLLAMA/*/web_shell.html`, repo root) proved less than it was before - a shell
-dropped from a census the file iterates, an assertion deleted, a required property no longer
-asserted anywhere in the file - is a defect.**
+**A diff to `test_metadata.py` after which a property of a page or of a browser example shell
+(`examples/dasLLAMA/*/web_shell.html`, repo root) that an assertion in the file checked before
+the diff is checked by none is a defect.**
 
 **Weakening `REVIEW.das`'s page census - the gate that reports a served file, or a generated
 directory, missing from the dasllama.io deploy step (`.github/workflows/pages.yml`, repo root),

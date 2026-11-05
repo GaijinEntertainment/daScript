@@ -88,6 +88,18 @@ settles gen2 - the toolchain accepts no other syntax. A `language-daslang` block
 sample, which requires `dasllama/dasllama` - the wasm build has no dasLLAMA, so the
 playground cannot run it.
 
+## Runtime gate {#runtime-gate}
+
+Every file here that starts the daslang wasm runtime asks the browser gate first
+(`files/wasm-gate.js`, `window.dasWasmGate`), shows the gate's refusal in place of the runtime,
+and starts nothing when the gate script did not load. `playground/run-frame.html` and
+`examples/_interp.html` ask `reason()`. Two scripts ask `engineReason()`, the same answer
+without the isolation check:
+
+- `playground/playground-runner.js` - `coi-serviceworker.js` isolates the playground only after
+  a reload, and each run frame asks `reason()` itself.
+- `files/runner.js` - the home page is not served isolated.
+
 ## Quick start (landing only)
 
 ```bash

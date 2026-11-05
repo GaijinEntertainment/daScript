@@ -83,3 +83,10 @@ separator or `..` splits the command or reads outside the directory the path was
 `.das_package` supplies is a defect when it does so outside `commands.das`, or before
 `is_safe_pkg_name` accepts every segment; only a `release_program` script path and a
 `release_include_from` source path may also carry `..` segments, which reach another tree.**
+
+**A diff that changes what the `release wasm` emcc link line in `commands.das` requires of a
+browser - its exception-handling flags (`-fwasm-exceptions`, `-sWASM_LEGACY_EXCEPTIONS`),
+`-pthread`, or `-sMEMORY64` - makes `site/files/wasm-gate.js` (repo root) test for exactly the
+WebAssembly features and page isolation the released page then requires, in the same change.** A gate that tests less lets the page fail with
+the engine's raw error text; one that tests more refuses a browser that could run the build
+(`README.md#web-gate`).

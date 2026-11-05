@@ -15,5 +15,7 @@ stays red until the rebuilt artifact ships.** Without the statement, the first p
 nightly reads as a mystery regression to whoever is on it.
 
 **A diff that makes a test - or a whole `*.spec.js` file - skip itself or change its assertions
-based on what the browser engine supports is a defect.** The shipped artifacts run on every
-engine: stub `/api/build/info` to say whether the wasm engine is available.
+based on what the browser engine supports is a defect.** A spec that skips hides a red: stub
+`/api/build/info` to say whether the wasm engine is available, and stub what the browser gate
+reads - `WebAssembly.validate`, the user agent, the page's isolation - to drive a refusal, as
+`wasm-gate.spec.js` does.

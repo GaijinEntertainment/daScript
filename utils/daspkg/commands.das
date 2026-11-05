@@ -3390,6 +3390,13 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
     return 0
 }
 
+def private replace_page_marker(html_path, marker, text : string) : bool {
+    let html = fread(html_path)
+    return false if (find(html, marker) < 0)
+    fwrite(html_path, replace(html, marker, text))
+    return true
+}
+
 [arch(at="README.md#web-build-stamp")]
 def private stamp_web_build(root, html_path : string) {
     var rev = ""
@@ -3397,20 +3404,26 @@ def private stamp_web_build(root, html_path : string) {
         rev = "unknown"
     }
     let stamp = "{strip(rev)} {format_time(get_clock(), "%Y-%m-%d %H:%M %z")}"     // the zone rides along, so two boxes' stamps order
-    var html = ""
-    fopen(html_path, "rb") $(f) {
-        if (f != null) {
-            html = fread(f)
-        }
+    if (replace_page_marker(html_path, "__DAS_BUILD_STAMP__", stamp)) {
+        log("  build stamp: {stamp}\n")
     }
-    return if (empty(html) || find(html, "__DAS_BUILD_STAMP__") < 0)
-    let stamped = replace(html, "__DAS_BUILD_STAMP__", stamp)
-    fopen(html_path, "wb") $(f) {
-        if (f != null) {
-            fwrite(f, stamped)
-        }
+}
+
+let WASM_GATE_MARKER = "<!-- @wasm-gate -->"
+
+[arch(at="README.md#web-gate")]
+def inline_wasm_gate(html_path, gate_path : string) : bool {
+    let gate = fread(gate_path)
+    if (empty(gate)) {
+        return true if (find(fread(html_path), WASM_GATE_MARKER) < 0)
+        to_log(LOG_ERROR, "release wasm: no browser gate at {gate_path}\n")
+        to_log(LOG_ERROR, "  {html_path} carries the gate marker and cannot start without it\n")
+        return false
     }
-    log("  build stamp: {stamp}\n")
+    if (replace_page_marker(html_path, WASM_GATE_MARKER, "<script>\n{gate}</script>")) {
+        log("  browser gate inlined from {gate_path}\n")
+    }
+    return true
 }
 
 // `daspkg release wasm` entry. Releases the single app the package's .das_package
@@ -3469,7 +3482,9 @@ def cmd_release_wasm(root : string; out_dir : string; wasm_lib_dir_override : st
     let app_out_dir = path_join(out_dir, bundle_name)
     let staged = ship_external_files(bundle_name, app_out_dir, spec.external_files, shipped)
     if (staged != 0) { return staged }
-    stamp_web_build(root, path_join(app_out_dir, "{bundle_name}.html"))      // after the external files land: one of them could be the page itself
+    let page = path_join(app_out_dir, "{bundle_name}.html")
+    stamp_web_build(root, page)     // after the external files land: one could be the page itself
+    return 1 if (!inline_wasm_gate(page, "{get_das_root()}/site/files/wasm-gate.js"))
     log("  released {bundle_name} -> {app_out_dir} ({bundle_name}.html / .js / .wasm)\n")
     return 0
 }
