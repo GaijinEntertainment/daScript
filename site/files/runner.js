@@ -32,6 +32,12 @@
     function loadRuntime() {
         if (runtimePromise) return runtimePromise;
         runtimePromise = new Promise((resolve, reject) => {
+            const gate = window.dasWasmGate;
+            const reason = gate ? gate.engineReason() : 'no-gate';
+            if (reason) {
+                runtimeBroken = true;
+                return reject(new Error(gate ? gate.refusal(reason).title : 'the browser gate (files/wasm-gate.js) did not load'));
+            }
             const s = document.createElement('script');
             s.src = WASM_DIR + 'daslang_static.js';
             s.async = true;

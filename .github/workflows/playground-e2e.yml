@@ -53,6 +53,8 @@ jobs:
           cp site/examples.html _site/      # examples-phone.spec.js opens the phone player on it
           cp site/nightly.html _site/       # nightly-page.spec.js routes /bench/ to the checked-in viewer
           cp -r site/files _site/files
+          mkdir -p _site/examples
+          cp site/examples/_interp.html _site/examples/   # wasm-gate.spec.js opens the interpreted-example page
 
           # Playground: vendor web/examples/ui IDE (no WASM artifacts)
           cp -r web/examples/ui/src/* _site/playground/

@@ -58,6 +58,52 @@ def private check_created_streams(path : string) {
     }
 }
 
+let private GATE_MARKER = "<!-- @wasm-gate -->"
+
+def private web_shells() : array<string> {
+    var shells : array<string>
+    dir(EXAMPLES_DIR) $(name) {
+        let shell = "{EXAMPLES_DIR}/{name}/web_shell.html"
+        if (fexist(shell)) {
+            shells |> push(shell)
+        }
+    }
+    shells |> sort
+    return <- shells
+}
+
+def private check_browser_gate(path : string) {
+    let text = fread(path)
+    let marker = find(text, GATE_MARKER)
+    let first_call = find(text, "dasWasmGate.")
+    if (marker < 0 || find(text, GATE_MARKER, marker + 1) >= 0) {
+        let how = marker < 0 ? "nowhere" : "more than once"
+        gate_finding(path,
+            "carries `{GATE_MARKER}` {how} - the release inlines the browser gate at one marker")
+    } elif (first_call >= 0 && first_call < marker) {
+        gate_finding(path, find_line(text, "dasWasmGate."),
+            "calls `dasWasmGate` above `{GATE_MARKER}`, where the release inlines it - too early")
+    }
+    for (needle in ["dasWasmGate.reason()", "dasWasmGate.loadProgram(", "dasWasmGate.explain("]) {
+        if (find(text, needle) < 0) {
+            gate_finding(path, "never calls `{needle}` - a shell asks and starts through the gate")
+        }
+    }
+    for (own in ["WebAssembly.validate", "crossOriginIsolated"]) {
+        if (find(text, own) >= 0) {
+            gate_finding(path, find_line(text, own),
+                "tests `{own}` itself - a shell refuses a browser on the shared gate alone")
+        }
+    }
+    let loader = find(text, "<template id=\"loader\">")
+    let loader_end = loader < 0 ? -1 : find(text, "</template>", loader)
+    let program = find(text, "\{\{\{ SCRIPT \}\}\}")
+    if (loader < 0 || program < loader || program > loader_end) {
+        gate_finding(path,
+            "emcc's SCRIPT placeholder is outside the `loader` template - it loads ungated")
+    }
+}
+
 [export]
 def main : int {
     var files : array<string>
@@ -65,6 +111,9 @@ def main : int {
     files |> sort
     for (f in files) {
         check_created_streams(f)
+    }
+    for (shell in web_shells()) {
+        check_browser_gate(shell)
     }
     return gate_verdict("examples/dasLLAMA")
 }

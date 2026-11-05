@@ -283,6 +283,18 @@ draws nothing and a tester reads which build answered from the page source, or f
 lacks the placeholder ships unstamped, and so does a page the release cannot read; the release
 is silent about both.
 
+### Web gate {#web-gate}
+
+`release wasm` inlines the browser gate into the page it releases. Where the shell's markup
+carries the `<!-- @wasm-gate -->` marker, the release replaces it with a `<script>` holding
+`site/files/wasm-gate.js` (repo root), after the stamp: the page then refuses a browser that
+cannot run the build with the reason in words (a WebAssembly feature the link line emits and the
+engine lacks, a 32-bit browser, a page without cross-origin isolation) before it loads a byte of
+the program, and explains an abort the engine words as `out of memory` or `CompileError`. The
+default canvas shell carries the marker, and so do the dasllama.io shells. A shell without the
+marker ships without the gate, silently. A shell with the marker asks the gate before it starts
+anything, so a tree without the gate script fails the release of that page.
+
 ### Wasm link defaults {#wasm-link-defaults}
 
 `release wasm` links every app with `-O2` and `-sMAXIMUM_MEMORY=1GB`. Without an `-O` level

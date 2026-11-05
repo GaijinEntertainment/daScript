@@ -34,3 +34,10 @@ running slower.
 **A diff that changes a `-m` feature flag in this folder's `CMakeLists.txt`
 `add_compile_options` makes the matching change to `modules/dasImgui/CMakeLists.txt`'s
 `IMGUI_WASM_FLAGS` in the same change.** Neither build inherits the other's flags.
+
+**A diff that changes a `-m` feature flag, an exception-handling flag (`-fwasm-exceptions`,
+`-sWASM_LEGACY_EXCEPTIONS`), `-pthread`, or `-sMEMORY64` in this folder's `CMakeLists.txt` makes
+`site/files/wasm-gate.js` (repo root) test for exactly the WebAssembly features and page
+isolation the build then requires, in the same change.** A gate that tests less lets the page
+fail with the engine's raw error text; one that tests more refuses a browser that could run the
+build.

@@ -3305,6 +3305,39 @@ def test_release_platform_gate(t : T?) {
 }
 
 [test]
+def test_release_inlines_wasm_gate(t : T?) {
+    let MARKED = "<body>\n<!-- @wasm-gate -->\n<script>x()</script>\n</body>\n"
+    let BARE = "<body>\n<script>x()</script>\n</body>\n"
+    let GATE = "window.dasWasmGate = 1;\n"
+    let GATED = "<body>\n<script>\n{GATE}</script>\n<script>x()</script>\n</body>\n"
+    t |> run("the gate script replaces the shell's marker") @(t : T?) {
+        let gate = path_join(test_temp_dir(), "wasmgate_gate.js")
+        let page = path_join(test_temp_dir(), "wasmgate_page.html")
+        fwrite(gate, GATE)
+        fwrite(page, MARKED)
+        t |> success(inline_wasm_gate(page, gate))
+        t |> equal(GATED, fread(page))
+    }
+    t |> run("a shell without the marker is left alone, gate script or not") @(t : T?) {
+        let gate = path_join(test_temp_dir(), "wasmgate_gate.js")
+        let page = path_join(test_temp_dir(), "wasmgate_bare.html")
+        fwrite(gate, GATE)
+        fwrite(page, BARE)
+        t |> success(inline_wasm_gate(page, gate))
+        t |> equal(BARE, fread(page))
+        let missing = path_join(test_temp_dir(), "wasmgate_missing.js")
+        t |> success(inline_wasm_gate(page, missing), "no marker, so no gate is needed")
+        t |> equal(BARE, fread(page))
+    }
+    t |> run("a marker with no gate script to put there fails the release") @(t : T?) {
+        let page = path_join(test_temp_dir(), "wasmgate_orphan.html")
+        fwrite(page, MARKED)
+        t |> success(!inline_wasm_gate(page, path_join(test_temp_dir(), "wasmgate_missing.js")))
+        t |> equal(MARKED, fread(page), "the page keeps its marker")
+    }
+}
+
+[test]
 def test_index_sweep_skips_other_platforms(t : T?) {
     t |> run("an index entry declaring other platforms only is a skip row, never an install") @(t : T?) {
         var cmake_out : string

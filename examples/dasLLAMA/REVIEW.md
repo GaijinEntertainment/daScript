@@ -5,7 +5,7 @@
 
 A browser example is a folder with a `web_shell.html`, wherever under `examples/` it sits
 (`ARCHITECTURE.md#definitions`); the rules below bind browser examples; a rule naming
-`library/` binds that folder instead.
+`library/` or `REVIEW.das` binds that folder or file instead.
 
 **A `glfwSet*Callback` written in `.das` in a browser example is a defect - the example polls
 inside its own frame instead.** In the browser build a callback lambda fires outside any frame of
@@ -26,10 +26,21 @@ back-forward cache - a `pageshow` handler that reloads when `persisted` is set.*
 comes back with its workers and audio output frozen out of step
 (`ARCHITECTURE.md#one-source-two-builds`).
 
-**A browser example's `web_shell.html` never refuses a browser on a WebAssembly feature probe -
-it gates on the page's cross-origin isolation (`crossOriginIsolated`, `SharedArrayBuffer`)
-alone.** The build runs on every engine, so a feature gate only refuses browsers that would have
-run it.
+**Weakening `REVIEW.das`'s browser-gate check is a defect.**
+
+**A browser example's `web_shell.html` refuses a browser - shows a refusal note in place of
+calling `dasWasmGate.loadProgram()` - only when `dasWasmGate.reason()` returns a non-empty
+reason, never on a check of its own (a feature test, the user agent, a browser name or
+version).** A second check in a shell gives a different answer from the shared one once either
+changes (`ARCHITECTURE.md#browser-gate`).
+
+**A browser example's `web_shell.html` shows, in its failure note, the text
+`dasWasmGate.explain(what)` returns for the `what` its `onAbort` handler receives.** The
+engine's text alone names neither the 32-bit address space nor the missing feature.
+
+**A browser example's `web_shell.html` puts text it did not write into `innerHTML` only through
+its `escapeHtml`, or sets that text with `textContent`.** The gate's answers, abort messages and
+engine lines are plain text, and markup inside them would be read as HTML.
 
 **A diff that attaches a status box to a sound (`set_status_update`) attaches a fresh box and
 releases it (`unset_status_update`) when that sound ends - never reuse a box across sounds.** The

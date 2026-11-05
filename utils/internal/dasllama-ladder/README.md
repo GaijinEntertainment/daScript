@@ -128,7 +128,7 @@ On the box, in order - `provision` before `install` before `caddy` (install need
 ```
 sudo dasllama-deploy.sh provision                                  # user, dirs, systemd unit, restic snapshot line
 sudo dasllama-deploy.sh install $SHA /tmp/dasllama-ladder-$SHA.tar.gz
-sudo dasllama-deploy.sh caddy                                      # splice /api into the dasllama.io vhost, validate, reload
+sudo dasllama-deploy.sh caddy                                      # bring the dasllama.io vhost in line with caddy.snippet, validate, reload
 ```
 
 `caddy` also carries the `header /examples/*` block: the browser examples served there are
@@ -136,9 +136,14 @@ sudo dasllama-deploy.sh caddy                                      # splice /api
 grants only to a cross-origin-isolated page - one whose responses carry
 `Cross-Origin-Opener-Policy same-origin` and `Cross-Origin-Embedder-Policy require-corp`. The
 COEP value is `require-corp` because Safari implements no other; under it the page's only
-cross-origin subresource, the analytics script, loads with `crossorigin`. A later `caddy` run
-replaces the deployed block when the snippet's text differs, so a header value changed in the
-snippet reaches the box.
+cross-origin subresource, the analytics script, loads with `crossorigin`. The snippet's
+directives sit in the vhost between two marker comments (`# >>> caddy.snippet ...` and
+`# <<< caddy.snippet`), a region `caddy` owns and rewrites whole, so a directive the snippet
+changed, dropped or renamed follows it on the next run. A vhost without the markers has its
+copies of the snippet's top-level directives gathered into the region on the first run; the
+vhost's own directives (`root`, `file_server`) stay outside it. A run that changes nothing
+writes nothing; one that changes the vhost takes one backup, one `caddy validate` and one
+reload. `test_deploy_caddy.das` drives the verb against scratch Caddyfiles.
 
 The unit `provision` writes is **sandboxed** (`ProtectSystem=strict`, all capabilities dropped,
 loopback-only, `ReadWritePaths` limited to the data dir + release tree) - it contains a

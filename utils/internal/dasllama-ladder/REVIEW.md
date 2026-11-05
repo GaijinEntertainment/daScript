@@ -38,11 +38,16 @@ change as its handler.**
 **A diff that changes `caddy.snippet` never does so to match the deployed Caddyfile - the
 deployed Caddyfile is edited to match `caddy.snippet`, through `dasllama-deploy.sh caddy`.**
 
-**A diff that adds or changes a directive at `caddy.snippet`'s top level - a line or block
-sitting directly inside the `dasllama.io { }` block, not nested in another block - also makes
-`dasllama-deploy.sh`'s `caddy_apply` reconcile that directive on the box in the same change:
-splice it when the deployed `dasllama.io` block lacks it, replace it when its deployed text
-differs from the snippet's.** Presence alone leaves a changed value on the box.
+**Weakening `test_caddy_region` (`test_deploy_caddy.das`) - the check that
+`dasllama-deploy.sh caddy` leaves the `dasllama.io` vhost with `caddy.snippet`'s lines, as
+written, between the `# >>> caddy.snippet` and `# <<< caddy.snippet` marker comments, and no
+top-level copy of a snippet directive outside them - is a defect.** The verb rewrites everything
+between the markers on each run, so a route the snippet drops stops being proxied.
+
+**Weakening `test_snippet_compresses_wasm` (`test_deploy_caddy.das`) - the check that
+`caddy.snippet`'s `encode` keeps a `match` list containing `application/wasm*` - is a defect.**
+A `match` list is the whole set of types Caddy compresses, so an example's wasm leaves
+compressed only while the list names it.
 
 **On a route that serves board data, mutates the store, or refuses a caller, a response path
 that does not log one `ladder.req` line through `log_request` is a defect.**
@@ -160,3 +165,5 @@ its line here, with its tests, in the same change.**
 - `test_ladder_server.das` - the HTTP suite: routes through `with_ladder_server` on port 19015, the
   startup import of an official dir with its `annotations.json`, and the `admin.das` CLI as a child.
 - `test_ladder_config.das` - the config suite: the defaults/toml/CLI merge and its provenance.
+- `test_deploy_caddy.das` - the deploy suite: `dasllama-deploy.sh caddy` as written against
+  scratch Caddyfiles with `caddy` and `systemctl` stubbed, and the snippet's `encode` list.

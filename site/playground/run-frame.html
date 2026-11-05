@@ -44,6 +44,7 @@
     }
 </style>
 <canvas id="canvas" width="640" height="480" tabindex="-1"></canvas>
+<script src="../files/wasm-gate.js"></script>
 <script>
 (function () {
     "use strict";
@@ -191,7 +192,10 @@
         // without the wasm MIME type degrades to a warning, not a dead frame.
         instantiateWasm: function (imports, done) {
             var settled = false, acked = false;
-            function fail(message) { post({ type: "aborted", message: message }); }
+            function fail(message) {
+                var explanation = dasWasmGate.explain(message);
+                post({ type: "aborted", message: message + (explanation ? " - " + explanation : "") });
+            }
             function onModuleMsg(ev) {
                 if (ev.origin !== window.location.origin) return;
                 var m = ev.data;
@@ -342,6 +346,16 @@
     });
 
     // Load the runtime. `ready` fires from onRuntimeInitialized once wasm is live.
+    if (!window.dasWasmGate) {
+        post({ type: "aborted", message: "the browser gate (files/wasm-gate.js) did not load - the runtime does not start without it" });
+        return;
+    }
+    var reason = dasWasmGate.reason();
+    if (reason) {
+        var refusal = dasWasmGate.refusal(reason);
+        post({ type: "aborted", message: refusal.title + " " + refusal.text });
+        return;
+    }
     var s = document.createElement("script");
     s.src = "daslang_static.js";
     s.async = true;

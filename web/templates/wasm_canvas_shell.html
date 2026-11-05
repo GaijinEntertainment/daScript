@@ -23,6 +23,11 @@
     border: 0; outline: none; display: block;
     touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
   }
+  #wasm-gate-note {
+    margin: 0; padding: 24px; max-width: 32rem; text-align: center; color: #cfc8bb;
+    font: 15px/1.6 -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  #wasm-gate-note[hidden] { display: none; }
 </style>
 </head>
 <body>
@@ -30,6 +35,10 @@
      this artifact in an iframe; override with release_web_shell(<path>) for a
      custom frame. -->
 <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+<p id="wasm-gate-note" hidden></p>
+<!-- emcc's script tag sits inert in a template; the gate below appends a live copy only where the build can run -->
+<template id="loader">{{{ SCRIPT }}}</template>
+<!-- @wasm-gate -->
 <script>
   // The app owns the keyboard: stop arrow/space/page keys from scrolling the
   // embedding page. emscripten GLFW reads them for input but does not
@@ -144,7 +153,26 @@
       requestAnimationFrame(tick);
     })();
   })();
+
+  function refuse(title, text) {
+    var note = document.getElementById('wasm-gate-note');
+    note.textContent = title + ' ' + text;
+    note.hidden = false;
+    document.getElementById('canvas').style.display = 'none';
+  }
+  var reason = dasWasmGate.reason();
+  if (reason) {
+    var refusal = dasWasmGate.refusal(reason);
+    refuse(refusal.title, refusal.text);
+  } else {
+    Module.onAbort = function (what) {
+      var explanation = dasWasmGate.explain(what);
+      if (explanation) refuse('The program stopped: ' + what + '.', explanation);
+    };
+    dasWasmGate.loadProgram(function () {
+      refuse('The program script did not load.', 'Reload the page; if it keeps failing, the deploy is incomplete.');
+    });
+  }
 </script>
-{{{ SCRIPT }}}
 </body>
 </html>

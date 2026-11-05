@@ -9,6 +9,18 @@ visitor types into the playground or hero editor, and the sample bundles the pla
 into that editor - and not the generated Sphinx output under `doc/` (this folder), whose
 `.rst` sources answer to `doc/REVIEW.md` (repo root).
 
+**A file under this folder loads `daslang_static.js`, or fetches or compiles
+`daslang_static.wasm`, only after the browser gate answers `''` - `dasWasmGate.reason()`, or
+`dasWasmGate.engineReason()` in a file `README.md#runtime-gate` names; on any other answer the
+file shows `dasWasmGate.refusal(answer)`, and when no `dasWasmGate` exists it says the gate did
+not load and starts nothing.** The gate (`files/wasm-gate.js`) names why a browser cannot run
+the runtime; a runtime started without it fails with the engine's raw error text.
+
+**Weakening `REVIEW.das`'s runtime-gate check - the gate that reports an `.html` or `.js` under
+this folder, outside `tests/` and `wasm/`, that spells `daslang_static.js` or
+`daslang_static.wasm` but never `dasWasmGate`, and one calling `engineReason()` that no bullet
+of `README.md#runtime-gate` names - is a defect.**
+
 **Never show on a page a hand-written shell command, flag, or output line invented for
 illustration - show only a command the run actually executed.** A rendered `cmd` identifies the
 RUN, not the row: where one run produced several rendered rows (an ASR run's per-clip rows), each
@@ -66,10 +78,11 @@ post) - is a defect.**
 **A diff that marks a sample `data-playground="none"` also ledgers the block in `README.md`,
 in the same change.** The gate still compiles such a block; it owes no link.
 
-**A PR whose diff changes `playground/` (this folder) or `examples/_interp.html` (this folder)
-beyond comments states, in the PR body, a run of the Playwright suite (`tests/playground/`,
-this folder) against the branch tip, naming the passes and any failures; a later edit to those
-files restates the run.** The no-WASM lane cannot see a broken runtime path, and a run
+**A PR whose diff changes, beyond comments, a file under `playground/` (this folder),
+`files/wasm-gate.js`, or any other file under this folder that loads `daslang_static.js` or
+fetches or compiles `daslang_static.wasm`, states in the PR body a run of the Playwright suite
+(`tests/playground/`, this folder) against the branch tip, naming the passes and any failures;
+a later edit to any of those files restates the run.** The no-WASM lane cannot see a broken runtime path, and a run
 recorded mid-branch describes a tree that no longer ships.
 
 **A stated Playwright run names every playground sample the diff changed - a `.das` under

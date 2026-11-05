@@ -20,6 +20,7 @@
 <body>
   <canvas id="canvas" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
   <div id="ex-load">loading interpreter…</div>
+  <script src="../files/wasm-gate.js"></script>
   <script>
     // Interpreted runner for the /examples player's ?force=interp path.
     // Loads daslang_static.wasm (the universal wasm32 interpreter the playground
@@ -73,7 +74,22 @@
       },
     };
     window.addEventListener('click', function () { var c = document.getElementById('canvas'); if (c) c.focus(); });
+
+    var reason = window.dasWasmGate ? dasWasmGate.reason() : 'no-gate';
+    if (reason === 'no-gate') {
+      note('the browser gate (files/wasm-gate.js) did not load - the interpreter does not start without it');
+    } else if (reason) {
+      var refusal = dasWasmGate.refusal(reason);
+      note(refusal.title + ' ' + refusal.text);
+    } else {
+      Module.onAbort = function (what) {
+        var explanation = dasWasmGate.explain(what);
+        note('error: ' + what + (explanation ? ' - ' + explanation : ''));
+      };
+      var live = document.createElement('script');
+      live.src = WASM_DIR + 'daslang_static.js';
+      document.body.appendChild(live);
+    }
   </script>
-  <script src="../files/wasm/daslang_static.js"></script>
 </body>
 </html>
