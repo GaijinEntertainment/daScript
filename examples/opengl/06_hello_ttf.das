@@ -2,7 +2,7 @@ options gen2
 options persistent_heap
 options gc
 require glfw/glfw_boost
-require opengl/opengl_boost
+require opengl/opengl
 require opengl/opengl_ttf
 require math
 require daslib/strings_convert

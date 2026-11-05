@@ -2,7 +2,7 @@ options gen2
 options persistent_heap
 options gc
 require glfw/glfw_boost
-require opengl/opengl_boost
+require opengl/opengl
 require gltf/gltf_boost
 require gltf/gltf_gl
 require gltf/gltf_pbr

@@ -638,7 +638,7 @@ namespace das {
     }
 
     bool AstSerializer::isInThisModule ( Function * & ptr ) {
-        return ptr->module == thisModule;
+        return ptr->module == thisModule && !ptr->builtIn;
     }
 
     // A module-less struct/enum (e.g. a local/anonymous type reached through a
@@ -2881,8 +2881,11 @@ namespace das {
 
     void serializeFunctions ( AstSerializer & ser, safebox<Function, FunctionPtr> & functions ) {
         if ( ser.writing ) {
-            uint64_t size = functions.unlocked_size(); ser << size;
+            uint64_t size = 0;
+            functions.foreach ( [&] ( FunctionPtr g ) { if ( !g->builtIn ) size ++; } );
+            ser << size;
             functions.foreach ( [&] ( FunctionPtr g ) {
+                if ( g->builtIn ) return;
                 string name = g->getMangledName();
                 {
                     DAS_SER_PROFILE(ser, "Functions.mangledName");
@@ -3071,6 +3074,7 @@ namespace das {
 
         DAS_SER_PROFILE(ser, "Module.useSets");
         functions.foreach ([&] ( FunctionPtr f ) {
+            if ( f->builtIn ) return;
             if ( ser.writing ) {
                 ser << f->name;
             } else {

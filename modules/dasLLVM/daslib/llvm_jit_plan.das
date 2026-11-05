@@ -386,7 +386,7 @@ def public jit_log_report(funcs : array<FunctionPtr>; recompiled : bool; opt_lev
 
 // Check if a function is a late-bound dasbind function (null builtin address, resolvable at runtime)
 def public is_dasbind_late(func : Function?) : bool {
-    if (func == null || !func.flags.builtIn || func._module.name != "dasbind") return false
+    if (func == null || !func.flags.builtIn) return false
     var hit = false
     peek(func.name) $(s) {
         hit = starts_with(s, "__dasbind__")

@@ -161,7 +161,7 @@ namespace das {
             mod.functionsByName.clear();
             // mod.globals.clear();
             for ( auto & fn : functions.each() ) {
-                if ( program->isUsed(fn) ) {
+                if ( fn->builtIn || program->isUsed(fn) ) {
                     if ( !mod.addFunction(fn, true) ) {
                         program->error("internal error, failed to add function " + fn->name,"","", fn->at, CompilationError::internal_function );
                     }

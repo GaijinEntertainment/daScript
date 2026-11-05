@@ -3,7 +3,7 @@ options persistent_heap
 options gc
 
 require live/glfw_live
-require opengl/opengl_boost
+require opengl/opengl
 require live/live_commands
 require live/live_api_stdio // load-bearing for stdio JSON-RPC transport agent
 require daslib/json

@@ -15,7 +15,7 @@ options rtti = true
 
 require imgui
 require imgui_app
-require opengl/opengl_boost
+require opengl/opengl
 require opengl/opengl
 require live/glfw_live
 require live/live_api

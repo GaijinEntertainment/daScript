@@ -3,7 +3,7 @@ options persistent_heap
 options gc
 
 require live/glfw_live
-require opengl/opengl_boost
+require opengl/opengl
 require live/live_commands
 require live/live_api
 require daslib/json

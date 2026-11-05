@@ -1,7 +1,7 @@
 options gen2
 options gc
 require imgui/imgui_harness
-require opengl/opengl_boost
+require opengl/opengl
 require daslib/safe_addr
 var actual_samples = -1
 [export]
