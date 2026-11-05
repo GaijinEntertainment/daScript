@@ -13,6 +13,10 @@ namespace das {
     bool markSafeTableLookupInit ( Expression * init );
     Expression * makeTypeWitnessZero ( const LineInfo & at, TypeDecl * witnessT );
     void markUnderClone ( Expression * left );
+    void markScopesEarlyOut ( const vector<ExprBlock *> & scopes );
+    void resetBlockFlow ( ExprBlock * block );
+    void setLetVisibility ( ExprLet * let, ExprBlock * scope );
+    void setLetEarlyOut ( ExprLet * let, bool hasEarlyOut );
     Expression * makeValue ( Expression * e );
     ExprOp1 * makeNot ( const LineInfo & at, Function * notFn, Expression * cond );
 }

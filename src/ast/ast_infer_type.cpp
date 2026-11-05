@@ -3771,9 +3771,7 @@ namespace das {
                 ++it;
             }
         }
-        block->hasEarlyOut = false;
-        block->hasReturn = false;
-        block->forLoop = false;
+        resetBlockFlow(block);
         if (block->isClosure) {
             if (block->returnType) {
                 blocks.push_back(block);
@@ -4698,13 +4696,7 @@ namespace das {
         return Visitor::visit(expr);
     }
     void InferTypes::markEarlyOut() {
-        auto i = scopes.size();
-        while (i > 0) {
-            i--;
-            scopes[i]->hasEarlyOut = true;
-            if (scopes[i]->isClosure)
-                break;
-        }
+        markScopesEarlyOut(scopes);
     }
     void InferTypes::preVisit(ExprReturn *expr) {
         Visitor::preVisit(expr);
@@ -5519,12 +5511,7 @@ namespace das {
             }
         }
         DAS_ASSERT(!scopes.empty());
-        auto scope = scopes.back();
-        expr->visibility.fileInfo = expr->at.fileInfo;
-        expr->visibility.column = expr->atInit.last_column;
-        expr->visibility.line = expr->atInit.last_line;
-        expr->visibility.last_column = scope->at.last_column;
-        expr->visibility.last_line = scope->at.last_line;
+        setLetVisibility(expr, scopes.back());
         // macro generated invisible variable
         // DAS_ASSERTF(expr->visibility.line,"visiblity failed at %s",expr->at.describe().c_str());
     }
@@ -5871,11 +5858,7 @@ namespace das {
             return blk;
         }
         if (scopes.size()) {
-            auto hasEarlyOut = scopes.back()->hasEarlyOut;
-            expr->hasEarlyOut = hasEarlyOut;
-            for (auto &var : expr->variables) {
-                var->early_out = hasEarlyOut;
-            }
+            setLetEarlyOut(expr, scopes.back()->hasEarlyOut);
         }
         if (expr->isTupleExpansion) {
             for (auto &var : expr->variables) {

@@ -90,6 +90,33 @@ namespace das {
         else if ( left->rtti_isAt() ) static_cast<ExprAt *>(left)->underClone = true;
     }
 
+    void markScopesEarlyOut ( const vector<ExprBlock *> & scopes ) {
+        for ( auto i = scopes.size(); i>0; ) {
+            --i;
+            scopes[i]->hasEarlyOut = true;
+            if ( scopes[i]->isClosure ) break;
+        }
+    }
+
+    void resetBlockFlow ( ExprBlock * block ) {
+        block->hasEarlyOut = false;
+        block->hasReturn = false;
+        block->forLoop = false;
+    }
+
+    void setLetVisibility ( ExprLet * let, ExprBlock * scope ) {
+        let->visibility.fileInfo = let->at.fileInfo;
+        let->visibility.column = let->atInit.last_column;
+        let->visibility.line = let->atInit.last_line;
+        let->visibility.last_column = scope->at.last_column;
+        let->visibility.last_line = scope->at.last_line;
+    }
+
+    void setLetEarlyOut ( ExprLet * let, bool hasEarlyOut ) {
+        let->hasEarlyOut = hasEarlyOut;
+        for ( auto & var : let->variables ) var->early_out = hasEarlyOut;
+    }
+
     Expression * makeValue ( Expression * e ) {
         return Expression::autoDereference(e);
     }
