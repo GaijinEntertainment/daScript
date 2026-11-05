@@ -40,6 +40,13 @@ shell, or - where the value that selects the difference is a run-time count - as
 body reads the count from its kargs; a twin's own body holds only what the selecting value
 changes, the shared guard and index arithmetic living in the template or the shell.**
 
+**A diff that adds a fused kernel - a GEMV or tile whose body carries a prologue or epilogue beyond
+the product (a norm, a residual add, an activation, a gated mix, a combine, a scatter) over a weight
+plane - writes its body so the `KqFmt` member is a template constant selecting the fill (a stamp of
+a `class template` whose hooks carry the member, an existing one or a new one); a fused kernel whose
+body reads one member's codes directly is a defect.** A fusion written on one member's kernel leaves
+every other member's site on the staged kernels it replaced.
+
 **A diff that adds a bit-for-bit compare, or changes text on the path one covers - two kernel
 bodies that compile to separate shader modules, which a cell under `modules/dasLLAMA/tests/`
 holds bit for bit against each other - spells as `mad` every floating-point multiply on that path

@@ -260,6 +260,14 @@ let ACT_SILU = 0u
 let ACT_GELU = 1u   //! tanh-gelu
 let ACT_OAI = 2u    //! gpt-oss's clamped swiglu (`swiglu_oai`): the clamps and the +1 are the trained activation, not a guard
 
+//! the rows8 x table's index of row-major panel element `i` of a panel whose width is whole 32-blocks: physical column p of
+//! a block lands at k-slot 16 ((p >> 2) & 1) + 4 (p >> 3) + (p & 3), the inverse of the table's slot 4 kq + i at 8 kq + i,
+//! slot 16 + 4 kq + i at 8 kq + 4 + i
+def rows8_slot_at(i : uint) : uint => (i & 0xFFFFFFE0u) | (((i >> 2u) & 1u) << 4u) | (((i >> 3u) & 3u) << 2u) | (i & 3u)
+
+//! the rows8 token sums' index of column `col`'s 32-block in token row `row` ([blocks][8])
+def rows8_sum_at(col, row : uint) : uint => (col >> 5u) * 8u + row
+
 //! the act kernels' `act` word from a model's flags
 def act_code(oai, gelu : bool) : uint => oai ? ACT_OAI : (gelu ? ACT_GELU : ACT_SILU)
 

@@ -415,7 +415,18 @@ class private AccessVisitor : AstVisitor {
             }
             return
         }
+        if (cname |> ends_with("tmm2d_rx_begin") || cname |> ends_with("tmm2d_rx_begin_i8")) {   // arg 1 = the x table the runs read; the rest are the lanes' registers
+            if (length(expr.arguments) == 6) {
+                let bn = claim_ptr_operand(expr.arguments[1])
+                if (!empty(bn)) {
+                    reads |> insert(bn)
+                }
+            }
+            return
+        }
         if (cname == "coopmatLoad" || cname == "simdgroup_load"
+                || cname |> ends_with("tmm2d_rx_left") || cname |> ends_with("tmm2d_rx_left2") || cname |> ends_with("tmm2d_rx_left4") || cname |> ends_with("tmm2d_rx_run") || cname |> ends_with("tmm2d_rx_dest")
+                || cname |> ends_with("tmm2d_rx_dest_valid") || cname |> ends_with("tmm2d_rx_left_count") || cname |> ends_with("tmm2d_rx_dest_count")
                 || cname == "coopmatLoadTensor" || cname == "coopmatLoadTensorDecode"
                 || cname |> ends_with("tmm2d_tg_begin") || cname |> ends_with("tmm2d_tg_step")
                 || cname |> ends_with("tmm2d_tg_begin_deva")

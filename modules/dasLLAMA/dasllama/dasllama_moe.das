@@ -25,6 +25,8 @@ require daslib/cmp
 // the hot-expert decode cache (only cross-token reuse pays; per-token streaming loses).
 
 let private REUSE_CAPS = fixed_array(8l, 16l, 32l, 64l)   // simulated per-layer LRU capacities
+let private REUSE_WINS = fixed_array(2l, 4l, 8l)   //! consecutive-token windows whose distinct experts are counted: a k+1-row verify's rows
+let private REUSE_RING = 8l
 
 struct private ReuseLayer {
     @scratch freq : array<int64>    // per-expert pick count (static-pinning oracle input)
@@ -36,6 +38,10 @@ struct private ReuseLayer {
     consec : int64         // picks already picked at the previous token
     accesses : int64
     tokens : int64
+    @scratch ring : array<int64>    //! the last REUSE_RING tokens' picks, k a token, a circular slot a token
+    ringn : int64
+    win_distinct : int64[3]   //! distinct experts summed over every full window of REUSE_WINS tokens
+    win_n : int64[3]
 }
 
 var private g_reuse_on = -1
@@ -227,6 +233,42 @@ def private expert_reuse_note(l : int64; idx : array<int64>; k, ne : int64) {
     }
     r.prevn = k
     r.tokens++
+    reuse_note_windows(r, idx, k)
+}
+
+//! the token's picks into the layer's ring, then every full window's distinct count (a verify of w rows reads the union)
+[cold_path]
+def private reuse_note_windows(var r : ReuseLayer; idx : array<int64>; k : int64) {
+    if (length(r.ring) < int(REUSE_RING * k)) {
+        r.ring |> resize(REUSE_RING * k)
+    }
+    let slot = (r.tokens - 1l) % REUSE_RING
+    for (j in range64(k)) {
+        r.ring[slot * k + j] = idx[j]
+    }
+    r.ringn = min(r.ringn + 1l, REUSE_RING)
+    for (wi in range(3)) {
+        let w = REUSE_WINS[wi]
+        continue if (r.ringn < w)
+        var distinct = 0l
+        for (a in range64(w * k)) {   //! the last w tokens' picks: an id counts where no earlier pick in the window is it
+            let ta = (slot + REUSE_RING - a / k) % REUSE_RING
+            let id = r.ring[ta * k + a % k]
+            var seen = false
+            for (b in range64(a)) {
+                let tb = (slot + REUSE_RING - b / k) % REUSE_RING
+                if (r.ring[tb * k + b % k] == id) {
+                    seen = true
+                    break
+                }
+            }
+            if (!seen) {
+                distinct++
+            }
+        }
+        r.win_distinct[wi] += distinct
+        r.win_n[wi]++
+    }
 }
 
 //! Print the decode expert-reuse report accumulated under ``DASLLAMA_EXPERT_REUSE=1``: per layer
@@ -240,6 +282,8 @@ def expert_reuse_report(verbose : bool = true) {
         }
     }
     var sum_hits, sum_cov : int64[4]
+    var sum_win_distinct, sum_win_n : int64[3]
+    var kk = 0l
     var sum_consec = 0l
     var sum_acc = 0l
     var toks = 0l
@@ -272,6 +316,11 @@ def expert_reuse_report(verbose : bool = true) {
         for (ci in range(4)) {
             sum_hits[ci] += r.hits[ci]
         }
+        for (wi in range(3)) {
+            sum_win_distinct[wi] += r.win_distinct[wi]
+            sum_win_n[wi] += r.win_n[wi]
+        }
+        kk = r.prevn
         sum_consec += r.consec
         sum_acc += r.accesses
     }
@@ -281,6 +330,12 @@ def expert_reuse_report(verbose : bool = true) {
     }
     let a = double(sum_acc)
     to_log(LOG_INFO, "MEAN lru {double(sum_hits[0]) * 100.0lf / a:.1f}/{double(sum_hits[1]) * 100.0lf / a:.1f}/{double(sum_hits[2]) * 100.0lf / a:.1f}/{double(sum_hits[3]) * 100.0lf / a:.1f}%  top {double(sum_cov[0]) * 100.0lf / a:.1f}/{double(sum_cov[1]) * 100.0lf / a:.1f}/{double(sum_cov[2]) * 100.0lf / a:.1f}/{double(sum_cov[3]) * 100.0lf / a:.1f}%  consec {double(sum_consec) * 100.0lf / a:.1f}%  (caps {REUSE_CAPS[0]}/{REUSE_CAPS[1]}/{REUSE_CAPS[2]}/{REUSE_CAPS[3]}, tokens {toks}, layers-with-data {nl})\n")
+    for (wi in range(3)) {   //! a verify of w rows reads the union of their experts: the distinct count against w * k slots
+        continue if (sum_win_n[wi] == 0l)
+        let d = double(sum_win_distinct[wi]) / double(sum_win_n[wi])
+        let slots = double(REUSE_WINS[wi] * kk)
+        to_log(LOG_INFO, "window {REUSE_WINS[wi]} rows: {d:.2f} distinct experts of {REUSE_WINS[wi] * kk} slots ({d * 100.0lf / slots:.1f}%, {d / double(kk):.2f} steps' worth)\n")
+    }
     // the transfer-budget view: cache misses per token per layer at each capacity
     let tl = double(sum_acc) / (toks > 0l ? double(toks) : 1.0lf)
     to_log(LOG_INFO, "miss/tok/layer lru {(a - double(sum_hits[0])) / a * tl / double(nl > 0 ? nl : 1):.2f}/{(a - double(sum_hits[1])) / a * tl / double(nl > 0 ? nl : 1):.2f}/{(a - double(sum_hits[2])) / a * tl / double(nl > 0 ? nl : 1):.2f}/{(a - double(sum_hits[3])) / a * tl / double(nl > 0 ? nl : 1):.2f}\n")

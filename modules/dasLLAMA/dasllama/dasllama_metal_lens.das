@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options stack = 8388608   //! the macro context this module hosts: the kernel emitter run interpreted (an edited source, no JIT DLL yet) recurses past the default stack on the largest kernels
 options _dasllama_internal = true
 
 module dasllama_metal_lens shared private
@@ -103,6 +104,17 @@ def private mk_kn_tgmem(at : LineInfo; tgmem : string) : ExpressionPtr {
     var c = new ExprCall(at = at, name := "kn_tgmem")
     c.arguments |> emplace_new <| new ExprVar(at = at, name := "enc")
     c.arguments |> emplace_new <| new ExprVar(at = at, name := tgmem)
+    c.arguments |> emplace_new <| new ExprConstInt(at = at, value = 0)
+    return c
+}
+
+//! `kn_tgmem(enc, uint64(<param>), 0)`: the threadgroup memory length a caller sizes per dispatch (`tgmem_param=`)
+def private mk_kn_tgmem_param(at : LineInfo; pname : string) : ExpressionPtr {
+    var c = new ExprCall(at = at, name := "kn_tgmem")
+    c.arguments |> emplace_new <| new ExprVar(at = at, name := "enc")
+    var cv = new ExprCall(at = at, name := "uint64")
+    cv.arguments |> emplace_new <| new ExprVar(at = at, name := pname)
+    c.arguments |> emplace_new <| cv
     c.arguments |> emplace_new <| new ExprConstInt(at = at, value = 0)
     return c
 }
@@ -271,7 +283,7 @@ def private stamp_tall(form : string) : bool => form |> ends_with("128")
 
 def private stamp_form_ok(form : string; rem : bool) : bool {
     return (form == "t" || form == "th" || form == "th128"
-        || (rem ? form == "thr" : (form == "thdb" || form == "thdb128" || form == "thsk" || form == "tsk" || form == "thsk16" || form == "tsk16")))
+        || (rem ? form == "thr" : (form == "t8" || form == "tsk8" || form == "thdb" || form == "thdb128" || form == "thsk" || form == "tsk" || form == "thsk16" || form == "tsk16")))
 }
 
 //! an empty `name` back is an unknown family or an unserved form - the caller refuses the compile
@@ -280,8 +292,10 @@ def private stamp_spec(family, fmt, form : string) : StampSpec {
     s.tg = 128
     if (family == "kq_mm" && stamp_form_ok(form, false)) {
         s.name = "enc_kq_mm_{fmt}_{form}_c"   // pso: the dense globals carry a legacy format code
-        let split = form == "thsk" || form == "tsk" || form == "thsk16" || form == "tsk16"
-        s.grid = split ? (form |> ends_with("16") ? "mp/16, rows/64, nsk" : "mp/32, rows/64, nsk") : (stamp_tall(form) ? "mp/128, rows/64" : "mp/32, rows/64")
+        let split = form == "thsk" || form == "tsk" || form == "thsk16" || form == "tsk16" || form == "tsk8"
+        let whole = stamp_tall(form) ? "mp/128, rows/64" : (form == "t8" ? "mp/8, rows/64" : "mp/32, rows/64")
+        let parts = form == "tsk8" ? "mp/8, rows/64, nsk" : (form |> ends_with("16") ? "mp/16, rows/64, nsk" : "mp/32, rows/64, nsk")
+        s.grid = split ? parts : whole
         s.params = split ? "mp : int64, rows : int64, nsk : int64" : "mp : int64, rows : int64"
     } elif ((family == "moe_mm" || family == "moe_mm_split") && stamp_form_ok(form, true)) {
         let split = family == "moe_mm_split"
@@ -323,6 +337,7 @@ class MetalDispatch : AstStructureAnnotation {
         var fn_name = find_arg(args, "name") ?as tString ?? ""
         var pso = find_arg(args, "pso") ?as tString ?? ""
         var tgmem = find_arg(args, "tgmem") ?as tString ?? ""
+        let tgmem_param = find_arg(args, "tgmem_param") ?as tString ?? ""   //! a params= name: the caller's threadgroup memory length, the layout's last member sized to the dispatch
         var tgi = find_arg(args, "tg") ?as tInt ?? -1
         let tgs = find_arg(args, "tg") ?as tString ?? ""
         var grid = find_arg(args, "grid") ?as tString ?? ""
@@ -341,7 +356,7 @@ class MetalDispatch : AstStructureAnnotation {
             }
             let spec <- stamp_spec(strip(parts[0]), strip(parts[1]), strip(parts[2]))
             if (empty(spec.name)) {
-                errors := "[metal_dispatch] {st.name}: stamp '{stamp}' names no family+form (kq_mm: t/th/th128/thdb/thdb128/thsk/tsk/thsk16/tsk16; moe_mm and moe_mm_split: t/th/th128/thr)"
+                errors := "[metal_dispatch] {st.name}: stamp '{stamp}' names no family+form (kq_mm: t/th/t8/th128/thdb/thdb128/thsk/tsk/thsk16/tsk16/tsk8; moe_mm and moe_mm_split: t/th/th128/thr)"
                 return false
             }
             fn_name = empty(fn_name) ? spec.name : fn_name
@@ -450,12 +465,16 @@ class MetalDispatch : AstStructureAnnotation {
         if (!accessForce || !empty(stamp)) {
             kfn = find_kernel_fn(st, compiling_module(), "metal_kernel", kern, nmatch)
         }
-        if (has_wg && empty(tgmem)) {
+        if (has_wg && empty(tgmem) && empty(tgmem_param)) {
             if (empty(stamp) || kfn == null) {
                 errors := "[metal_dispatch] {fn_name}: '{st.name}' has @workgroup members but no tgmem= - the generated builder would bind ZERO threadgroup memory and the kernel reads whatever length the encoder last had (garbage, or worse: right by luck). Pass tgmem = \"<msl global>_tgmem\" (the emitter's generated byte-size constant for this kernel's source)"
                 return false
             }
             tgmem = "{msl_global_of(kfn)}_tgmem"
+        }
+        if (!empty(tgmem_param) && name_column(params, tgmem_param, -1) < 0) {
+            errors := "[metal_dispatch] {fn_name}: tgmem_param '{tgmem_param}' is not a params= name"
+            return false
         }
 
         // @default = name (bare identifier): a sibling field's name resolves to its builder
@@ -597,7 +616,9 @@ class MetalDispatch : AstStructureAnnotation {
         }
         let pipe_at = length(body)
         body |> push(mk_kn_pipeline(at, pso))
-        if (!empty(tgmem)) {
+        if (!empty(tgmem_param)) {
+            body |> push(mk_kn_tgmem_param(at, tgmem_param))
+        } elif (!empty(tgmem)) {
             body |> push(mk_kn_tgmem(at, tgmem))
         }
         for (bf in bufs) {
@@ -648,7 +669,7 @@ class MetalDispatch : AstStructureAnnotation {
             }
             if (!params_from_stamp) {   //! a stamp's params are its family's shared builder signature - a form reading fewer is not refused
                 let readers = build_string() $(var w) {
-                    w |> write("{grid} {tgs} {requires}")
+                    w |> write("{grid} {tgs} {requires} {tgmem_param}")
                     for (bf in bufs) {
                         w |> write(" {bf.rng}")
                     }

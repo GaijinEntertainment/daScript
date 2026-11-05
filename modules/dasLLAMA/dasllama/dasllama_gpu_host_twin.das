@@ -91,6 +91,7 @@ def private host_kq_new(_t : KqTag_iq4nl32) : KqGemvBase? => null
 def private host_kq_new(_t : KqTag_q4032) : KqGemvBase? => null
 def private host_kq_new(_t : KqTag_q5032) : KqGemvBase? => null
 def private host_kq_new(_t : KqTag_nv4) : KqGemvBase? => new HostKqGemvNv4()
+def private host_kq_new(_t : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) : KqGemvBase? => null
 
 def private host_kq_cls(f : KqFmt) : KqGemvBase? {   // nolint:STYLE037 - kq_fmt_stamp's generated arms, one a format
     var k : KqGemvBase?
@@ -135,7 +136,7 @@ def private host_b32_new(var tw : HostTwin; _t : auto) {}
 //! seat's serves predicate)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena")]
 def host_twin(fmt : int) : void? {   // nolint:STYLE037 - kq_fmt_stamp's generated arms, one a format
-    return null if (!expert_chain_slot_ok(fmt))
+    return null if (!expert_chain_slot_ok(fmt) || kq_discrete_unstamped(kq_fmt_of_slot(fmt)))
     let f = kq_fmt_of_slot(fmt)
     var tw = new HostTwin()
     tw.fmt = f

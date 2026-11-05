@@ -28,12 +28,23 @@ query values a lane. Four lanes share a state column, each holding a quarter of 
 head of 128) in registers; a column's reductions are a pairwise tree inside each lane, then two
 lane shuffles. Three things follow.
 
-- **The window's stamp reads half rows** (`MetalDnScanH`). The conv rows convert to halves once a
-  layer and the walk reads half the bytes. The state stays f32. The decode step's stamp
-  (`MetalDnScan`) keeps f32 rows: one row is no stream.
+- **The window's stamp reads half rows** (`MetalDnScanH`). The conv and the q/k norm store the
+  rows' halves beside their f32 rows (`MetalDnConvHX`, `MetalDnL2NormHX`: the norm's halves over
+  the conv's on the q/k heads), so the walk reads half the bytes and no pass converts the rows -
+  the convert cost the 35B's 4096-token window 12 ms, the twin stores 6; the fused short-row forms
+  store f32 alone and the window converts after them. The state stays f32. The decode step's
+  stamp (`MetalDnScan`) keeps f32 rows: one row is no stream.
 - **The gates are prepared, not walked.** `MetalDnPrep` writes beta and the decay over the raw
   projections once a (position, value head); the decode stamp computes them in every lane of
-  every state column, where one row makes that free.
+  every state column, where one row makes that free. The raw projections come as ONE site
+  where the window can make them one (`pf_dn_ba_one`): the beta and alpha planes of one format
+  taken adjacently at the load, or the f32 slabs concatenated under the exact f32 tile, project
+  into a `[beta | alpha]` row plane that the prep and the walk read at `DnArgs.bstr` = 2 x
+  dt_rank with the decay `goff` = dt_rank past each row's beta (`DnStages.ba_rows`, the decode
+  step's own layout) - a 64-row site on the dense twin where two 32-row planes each ran a
+  one-expert GEMV stream a row (the 35B's 11 ms a window to 1.8). The adjacent take moved the
+  planes' bytes, so `IMAGE_VERSION` pins it: an image minted under the earlier order declines
+  and re-mints, and `pf_dn_ba_one` still reads the adjacency off the layer's offsets.
 - **Two simdgroups a threadgroup.** The walk shares nothing across simdgroups; four a threadgroup
   read slower than two or one.
 - **A capture is one more store.** After each row the walk compares the row against its group's capture records

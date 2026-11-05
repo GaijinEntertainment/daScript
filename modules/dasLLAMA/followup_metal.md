@@ -941,7 +941,7 @@ halves the x bytes and lands the wide forms at 1.26, 1.8 and 2.8 passes for two,
 0.61 of the production time at eight columns on the M5 (`PERF_LEDGER.md`, the 2026-10-09 race tables). Every format's
 half-x route serves under its own `kq_rows_half_<fmt>` crown off the rows norm's and the activation's dual-store twins -
 k4 through the wide forms, the rest through the half stamps of their small-batch forms, one x mixin for all
-(`ARCHITECTURE_GPU_MTP_DECODE.md#kq-rows-crown`). The work left: a twin for wo's x - the attention output has no
+(`ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#kq-rows-crown`). The work left: a twin for wo's x - the attention output has no
 dual-store stamp, so wo keeps the f32 forms - and for the MTP head's projection rows; the prefill's wo and QKV peel
 sites under `CVT_MIN_ROWS`, whose twin only a dual-store writes; and a cheaper nibble decode for the ALU-bound boxes.
 
@@ -1009,3 +1009,215 @@ there. Done = a wider K chunk per barrier (or another pipeline shape) raced agai
 9-31-row windows at decode-step bandwidth, and the floor race's gate site matching the served window, or the
 measurement that bounds each.
 
+## 60. The n-gram model's single-row step is held, never chained
+
+Flash-Next's step is encoded ahead and committed on the poked token (`ARCHITECTURE_GPU_MTP_DECODE_PICK.md#greedy-chain`):
+its heads come from the host's hash gather over the 26 GB table, and the chain's picked token is on the device. The chain
+buys the commit turnaround and the host tail's overlap, about 2% of a 14 ms step, plus the sampled chain's draw. A device
+gather needs the hash in the kernel - a 64-bit multiply, XOR and modulo per head, and a 64-bit row address into the table
+plane - and the MSL rail (`daslib/shader_emit_common`) carries no 64-bit integer; the table rows (IQ4_NL, Q8_0, F16, BF16,
+F32) decode as the per-32 token gather does. Done = the rail's `ulong` (or a 32-bit decomposition of the hash and a
+16-byte-element view of the plane), one gather class with its kernel cell bit for bit against `ngram_gather`, `r.png`
+dropped from the chain gate, and `mtp-count-3.8fn`'s chained-round control re-ruled.
+
+## 61. Flash-Next's decode step is body-bound: the kernels, not the chain
+
+On the M5 Max the UD-IQ4_XS step runs 13.7 ms of GPU with the kernels summed alone at 16.4 ms, so folding the
+hyper-connection seams away (1408 -> 1022 dispatches a step) moved nothing, where the 35B's chain gained 3% a link.
+Per step (`prefill_window_probe --dec-kprof`): the dn qkv 1.96 ms and z 1.19 at 475 GB/s, the out projection 1.61 at
+340, the routed iq3s_f4 gate and up 1.95 at 250 GB/s (the grid dequant's ALU), the iq4nl32 down 0.96 at 340, the
+classifier 0.89 at peak, the mixers 3.2 (the fused down 19 us a dispatch for 3.3 MB, the up 11, the tail 3.4; a
+32-simdgroup split of the down's K measured slower, so the cost is not the walk), the router 0.63 and select 0.37
+(11 us for 512 logits), the dn step 0.5. The step reads 5.7 GB a token (418 GB/s over the 13.7 ms wall); Kapitsa's
+4-bit pack reads 4.1 GB (its dense sites are 4- and 6-bit where the UD files keep Q8_0 and an F32 router) in 11.6 ms
+(356 GB/s), so the 2 ms gap is the file's bytes, not the kernels. The knockout ladder (`DASLLAMA_METAL_DECODE_SKIP`,
+the served probe) attributes the wall: every GEMV skipped leaves 2.0 ms of the 13.85, the routed experts alone hold
+2.3, so the dense q8 GEMVs hold ~9.5 ms over 4.5 GB a token - 475 GB/s, within 15% of the peak; the per-kernel profile
+(each node alone, caches cold between nodes) overstates latency-bound tails and is not the wall's instrument. The routed
+pair over the file's expert formats (the iq3s grid gate and up, the iq4nl down with the shared down and the
+hyper-connection scatter) left the UD file where it was: 5.7 GB a token at 412 GB/s end to end is its floor. The same
+model minted with 4-bit dense sites (IQ4_XS-pure, 4.1 GB a token) serves at 82 sampled / 84 greedy against Kapitsa's
+85.9 / 86.4 (`harness/fat_mode_ab_probe.das` holds its two walks equal and its fused chain within 1.2e-3 of the plain
+one). Done = the pure file's own per-kernel ledger and knockout ladder, and whatever they put above the bytes.
+
+## 62. The MoE verify pays a step's experts per row, where the rows' experts overlap
+
+On the M5 Max the NextN round on the 35B pure costs, in plain steps, 2.1 at depth 1 and about one more per depth (3.3,
+3.9, 4.8, 7.2 at depths 2, 3, 4, 7; `lcpp_bench --mtp-ab --mtp-depth k`, the round's cost read as (1 + accepted a
+round) over its rate), so every depth loses to the plain step (0.83x at depth 1, 75% accepted) where the dense 27B's
+2-row verify costs 1.15 steps and its round wins 1.35x. The routed experts are 70% of the 35B step's bytes, each verify
+row routes its own eight, and the rows path (`routed_experts_fused`, the per-row GEMV forms before it) streams every
+(row, slot) plane apart - adjacent positions pick many of the same experts, and the union is what the bytes should
+be. The form is row 47's: the per-format GEMV body over a bucket's rows with the plane read once, here over the k+1
+rows' selections (a bucket table off `bmoe_sel`, the down's partial rows into the combine's panel so the combine's order
+stands); the prefill's short-window route is the same per-(row, slot) read and no help. The overlap is measured
+(`PERF_LEDGER.md`, the 35B eight-row entry): eight consecutive rows route 34.3 distinct experts of 64 slots, and the
+traced step already serves the repeats from the cache - the routed block reads 4.2 one-row passes at eight rows, not 8 -
+so the union was worth at most ~1 ms of the eight-row step, which stands at 11.5 ms (2.04 one-row steps; 2.42 before
+the IQ4_XS rows8 arm took the dense sites, row 69) and the DFlash2 greedy round at 260 tok/s against 203 plain. The
+union verify is built and refuted (`PERF_LEDGER.md`, the 35B entry; `DASLLAMA_METAL_MOE_UNION`, shipped at 0,
+`ARCHITECTURE_GPU_MTP_DECODE.md#moe-union`): the exact per-entry form reads 14.4 ms at eight rows and the masked rows8
+form 13.8 against the pair's 11.5, because the pair's repeated picks already hit in the cache (its routed block streams
+the union's bytes at ~434 GB/s) and the union's per-expert planes (512 rows of K 2048, 2048 of K 512) are latency-bound
+shapes. The pair's own dispatch shape was then raced (`PERF_LEDGER.md`, the same entry: four rows a simdgroup, the
+dedupe shapes, the grid order, the slot loop's forms) and reads 536 GB/s on the distinct bytes against the box's 565-581,
+the repeated picks ~7% over them, and nothing beat it in the step. The routed block of a multi-row verify is at the
+floor its bytes set on this engine; the row closes as measured, and the eight-row verify's remaining levers are the
+dense side's (row 69) and the round's host seam (row 70).
+
+## 64. The block drafter's round on an M4-class box: the depth and the four-row verify
+
+The eight-row verify's figures are the M5's: the matrix-unit form (`rows8`) serves five to eight rows at 1.12-1.3 one-row
+passes. A box with no Metal 4 tensor ops (the M4 family; on the M5 the manifest with every tensor crown removed stands in
+for it - the M4 record `records/m4.tune.2b2e79baf8ab.json` predates the half-x rows forms and would send the K4 sites to
+per-row GEMVs) has no eight-row stamps either, so its eight-row sites fall to the half-x rows forms (ALU-bound, 3-3.5 passes
+at eight columns) and the fixed-B4 q8 ladder. The other engine keeps its eight-row block at depth 7 on that family and
+serves the sites on 8 x 8 x 8 `simdgroup_matrix` products - the weights the A operand as exact integer codes, the eight tokens
+B from a device table in the fragments' lane order with the groups' sums, read into registers - at about 79 ms a 27B cycle
+on an M4 Pro (65-69 tok/s against ~15 plain). The form to build is that one for the K4, q8 and K6 sites (the rows8
+kernels' derivation on the legacy matrix ops: a register tile on them read 1.38 one-row passes on the M5), with the
+producers' table already written for the matrix-unit form. Done = that form raced in the harness and landed, the eight-row
+step under the tensor-free manifest read against the one-row step the way the M5's is. The depth series is ledgered
+(`PERF_LEDGER.md`, the engineering entry): on the M5 depth 7 wins at every count (the verify costs the same from four to
+eight rows); on the tensor-free forms depth 3 on a four-row verify beats depth 7 by 14% and five or six rows are the
+worst case, so until the simdgroup-matrix form lands an M4-class box runs the round at depth 3 - the per-box depth
+belongs in the box profile beside the crowns, not in a knob a user sets.
+
+## 63. The block drafter's round: the verify's remaining forms, the pass, the acceptance
+
+On the 27B the DFlash2 round is 53-54 ms on the GPU and 60 ms wall (74 tok/s on the other engine's prompt, 512
+generated tokens, the plain step 34.6 ms): the pass 5.6 and the verify 46.7 back to back on the queue, the selector on
+the device; the other engine's cycle on the same prompt is 36 ms GPU with a 3.4 ms pass (130 tok/s). Under rejection
+sampling with the drafts drawn at the stream's temperature the same round reads 80 tok/s at 4.97 tokens a round
+(`PERF_LEDGER.md`): the honest sampled round is the faster one, and its selector runs on the host above the drafter's
+temperature 0 - the soft pick on the device (a draw from the softmax over the 16 candidates' scores a position) is the
+lever there. The acceptance is the same on both (48% pooled over five prompts, `PERF_LEDGER.md`): its 54% on
+that prompt is its MLX pack's text, its selector is ours pick for pick, and its tokens a cycle past ours are the tree
+verify (5.16 against the chain's 4.78) and a reduced draft head - the levers on the round's count, after its time. The verify is the five-to-eight-row step on the rows8 matrix-unit form
+(`ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#rows8-matrix-unit`): its K4 and q8 sites hold at 1.12-1.2 one-row passes (37.6 of
+the 46.7) - the load pattern and the fill and epilogue ALU, not the matrix unit, by the race's split arms (a uint8
+operand, depth 32 or 128, block-diagonal products, subnormal halves and a pipelined fill all tie within 2%) - the K6
+sites run a scale block deep at 1.13, the split-K reduces stand at every site but the FFN gate and up (a consumer sums
+the planes only where its grid matches the reduce's), ~1200 dispatch gaps cost 2.4 ms, and the turnaround lands 8 MB of
+logits for the host's accept and runs the commit from the host (2.7 ms). The pass reads the drafter's K-quant planes on
+the rows8 form (its floor the classifier over seven rows, ~1 GB of K6, 2.4 ms) where the other engine's 3.4 ms reads
+4-bit projections and a head of 98k ids - a reduced head is the lever left there; device-side acceptance (the verify's
+argmax against the drafted ids on the device, the accepted count and the needed logits alone landed, the commit's row
+count read from a device word) is the turnaround's. The pass's
+arithmetic is the reference implementation's step for step (the conv projection off the normed input and its two sides
+around each sublayer, q/k norm then rope, the non-causal attention over the ring and the block, the final norm feeding
+the head and the selector's gate alike, the greedy walk per position over unary + successor . (predecessor * gate)), so
+the acceptance is the drafter's ranking (the right token in the top-16 but not at the top in 65 of 90 first misses), a
+lever of the drafter's weights or of a tree verify, not of the selector. Done = the round's verify at the batch step's
+cost (through the batch rail's same-slab step, as the assistant round rides it, or the decode driver's verify brought to
+it), the pass under 5 ms; the 35B round stands at 260 greedy / 222 lossless against 203 plain and the Flash-Next round at
+135 / 114 against 82 (`PERF_LEDGER.md`), the Flash-Next eight-row verify row 70's; the tree verify is row 65's own
+exercise.
+
+## 65. The tree verify: the block's rows as a lattice of candidates
+
+The chain verifies one path of seven drafts; where the selector's walk is uncertain at a position (near-tie scores among
+its top candidates) a second candidate in the same verify recovers part of what the chain loses there, since the
+per-position acceptance falls .85 .73 .68 .56 .48 .42 .34 along the block. The other engine's tree fills the same batched
+step with branching paths - an 8-row tree reads 4.9-5.3 tokens a cycle against the chain's 4.78 on an M4 Pro, a 16-row
+tree 6.1-6.8 at 44.5 ms against 4.78 at 36 on an M5 Max, about a tenth more tokens a millisecond - so its value rises with
+a verify whose cost per row falls with rows. Ours needs the verify to take a tree: per-row ancestor masks over the slab in
+place of consecutive positions, the K/V rows laid out per path, the accept walking the tree for the longest agreed path,
+and the lattice built from the selector's scores by the expected accepted length. A separate exercise after the rounds'
+time (row 63) and the honest accept modes. Done = the tree against the chain on the pooled prompts, tokens a round and
+tokens a second, at 8 and at 16 rows.
+
+## 66. The grammar as a drafter: forced tokens free, choice points the tree's nodes
+
+A stream under a token constraint (`TokenConstraint`: the tool-call EBNF, the JSON schema) knows at every position which
+tokens the grammar admits. The block drafter's walk scores sixteen named candidates a position, so admitting only the
+constraint's survivors costs nothing and spends no verify row on a token the sampler would refuse; a position with one
+admitted token needs no model at all - the drafter writes it and the constrained trunk picks it by construction, so
+structured regions fill the block with guaranteed tokens and the round pays the batched step alone (a long forced run
+is a prefill chunk, not rounds); a position with a few admitted tokens is a tree node (row 65) whose width the grammar
+fixes, the drafter ranking inside it. The research part is a grammar for the code the stream writes - token-granular
+lexing (terminals split across tokens, lexer modes, indentation) - and a constraint state the walk can fork and unwind
+per candidate per position (about a hundred probes a round; the constraint today admits and commits, nothing forks).
+The prerequisite stands before any of it: a constrained stream speculates not at all today - the scheduler keeps it
+out of the rounds, `TokenConstraint` has no mark and rewind, and the row judge applies the constraint at row 0 alone -
+so a speculative round under a grammar is the engine change that admits and commits the drafts, judges every verify
+row under the constraint and rewinds the constraint on a rejection (a sampled rejection draft under a constraint would
+otherwise draw at random and record a point mass). The measurement is in hand: twenty tool calls on the 27B with no
+grammar (`PERF_LEDGER.md`, the NextN entry's tool-call table) read 98-100% acceptance for the NextN head and 81-84% for
+the block drafter at 6.7-6.9 tokens a round, so the forced run's gain on this workload is the rounds the grammar's
+guaranteed tokens remove from the block drafter's five, not acceptance.
+Done = the constrained round admitted (the rewind, every row judged), the masked walk and the forced-run accept
+measured on constrained streams (tool calls, JSON) against the unconstrained round, then the code grammar's
+feasibility read on one language.
+
+## 67. The drafter itself: a reduced head by frequency, and a drafter tuned on real data
+
+The pass spends 2.4 of its 5.6 ms scoring 248,320 ids a mask row through the trunk's head when the walk keeps sixteen;
+the other engine's draft head is a 98,304-id subset in frequency order and drafts, by its note, as the full head does -
+a subset touches acceptance alone (a rare token it lacks cannot be drafted; the verify's full head still decides every
+row), so the pass falls toward 4 ms at a measured, pooled acceptance cost. The same corpus that orders the ids is the one
+that tunes the drafter: a drafter imitates its target on some distribution, and the shipped weights were trained on
+the vendor's mix, so self-distillation on in-domain prompts (the trunk writes the labels: its greedy or sampled
+continuation; the pass's five-layer captures are the inputs) moves the per-position acceptance curve that limits the
+round (.85 .73 .68 .56 .48 .42 .34 today), with the frequency table a by-product of the same walk. Both wait for deployment
+data; the instruments exist (the capture dump through the pass, `dflash_probe` on pooled prompts). Done = the head
+subset built from a corpus and its acceptance cost measured pooled; the tuning rail (captures and targets dumped, a
+training script outside the engine, the tuned drafter loaded through the same loader) run once on a held-out set and
+its per-position curve read against the shipped drafter's.
+
+## 68. The one-row step on the affine per-32 members: the fusions the other engine's GEMVs carry
+
+On the M5 Max the Qwen3.8-27B mlx-community 4-bit snapshot steps in 27.7 ms on the mlx4b member with the per-32 wide
+form against the other engine's 28.7 on the same weights (`PERF_LEDGER.md`, the same-weights entry: 30.6 before the
+form; our UD-IQ4_XS 28.2, Q4_K_M 34.4), its 512-token prefill reads 744 tok/s against 682, and its DFlash2 round 40.5 ms
+greedy (121 tok/s on the affine rows8 arm with the K split inside the threadgroup,
+`ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#rows8-affine`; the default round with drawn drafts 42.8 ms, 105 tok/s) against the
+other engine's 36.6 (130 greedy): the eight-row step at 1.15 one-row steps where theirs reads 1.13, the rest the pass
+~5 ms against its 3.4 and the pass's own seam (the same-weights entry's ranked table). Before the wide form the
+FFN GEMVs, 61% of the step, tied; the rest of the gap is the kernels the other engine folds into its GEMVs (the RMS norm into the projection
+that consumes the row, the residual add into the epilogue of the projection that produces it, the swiglu into the
+gate/up epilogue, the matrices over one input as segments of one dispatch: 1.1 ms of 129 norm and residual dispatches,
+the four-kernel deltanet mixer, a 64 us argmax) and the bandwidth of the narrower projections (the deltanet in and out
+projections 498 and 409 GB/s against 540 and 486, the attention q/k/v 490 against 525, the head 541 against 583), whose
+one-row form is one row a 128-thread threadgroup with four simdgroups splitting K and x re-read a row where theirs
+holds x in registers across four rows a simdgroup with 8-byte lane loads. Done = a several-rows-a-simdgroup one-row
+form as an arm of the per-32 templates (every per-32 member, not the affine ones alone) raced on the 27B's shapes, the
+norm fold and the residual epilogue so the step runs no `metal_add_rms`, one dispatch for the matrices over one input
+with silu(gate)*up in the epilogue, the out-projection and the head on the new form, each behind its knob with a census
+counter, and the per-site table re-read against the other engine's.
+
+## 69. The rows8 matrix-unit arm as one template over every format
+
+The five-to-eight-row register-left form (`ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#rows8-matrix-unit`) is one template,
+`MetalRows8T`, with K4, q8, K6, IQ4_XS and the four affine g64 members as its arms and the K split inside the
+threadgroup (the `REVIEW.das` gate `check_rows8_kernel_strides` holds the per-format stride literals to the template);
+every other format's five-to-eight-row site still runs the eight-row tensor stamps at 1.9 one-row passes (the 35B's
+routed IQ4_XS experts, K5, the per-32 q51 / q4032 / q5032 / iq4nl32 planes, the K3, K2, IQ3 and IQ2 families). An arm
+is four hooks and nothing else: the left fill (the exact half of the code with its offset, or the int8 code: IQ4_XS
+and IQ4_NL their kvalues through a 256-entry byte table, the dense 35B planes at 1.16-1.21 one-row passes and the
+small ones latency-bound at 1.3-1.9, `PERF_LEDGER.md`'s 35B entry), the product depth (one scale block: 32 on the g32
+per-32 members and IQ4_XS), the epilogue (the format's scale law over the producers' per-block sums), and the slot law
+(the member's nibble order into the x table). K5 does not take the exact half: its code times its scale reaches 1953,
+past the half's mantissa, so its arm is int8 codes at depth 32 with the token sums carrying the mins. Done = K5 and the
+per-32 members as arms each raced on its carrier, the routed IQ4_XS expert stacks on the arm through row 62's union
+verify, each arm's gate and census row.
+
+## 70. The Flash-Next eight-row verify reads 2.35 plain steps, the routed pair 11 ms of its 17 over one
+
+On the M5 Max the DFlash2 round on the pure IQ4_XS Flash-Next runs 135 tok/s greedy against 82 plain (`PERF_LEDGER.md`,
+the Flash-Next entry's trace): a 37.8 ms round = the pass 2.5, the verify 29.1, the commit 0.6 and 5.6 ms of host
+between the buffers; the verify is 2.35 plain steps of 12.4 against the 35B's 2.04 and the 27B's 1.15. Its dense
+IQ4_XS planes all ride the rows8 arm at 0.9-1.4 of one row; the excess is the routed experts - the fused pair reads
+each (row, slot) plane apart at 4.8 one-row passes, 11.1 ms of the 15.2 ms of extra kernel time (gate and up 169 us a
+dispatch against 35, the down 122 against 25) - then the hyper-connection mixers at 2.0 ms (five kernels a site over
+eight rows, 196 `MetalRows8Q8` dispatches with their x-table prep, where the one-row site fuses norm, low-rank down
+and mix into two q8 GEMVs) and the router pair 0.8. The same-slab step probe cannot read this model (the batch rail
+declines the hyper-connection graph), so the trace is the instrument. The pair's shape is at the fabric's rate for its
+distinct bytes (row 62), so the 11 ms is the bytes eight rows route on a 512-expert file. The host between the round's
+buffers (the same entry's seam table) is 3.1 ms with no GPU work - 2.8 of it between the pass's end and the verify's
+commit, where the verify's ~1600 dispatches are encoded after the drafts land - and 1.1 ms of wait-and-resubmit around
+the commit stage's five serial buffers, against the plain step's 0.3 ms seam. The mixer site is fused (four
+dispatches a site, `DASLLAMA_METAL_HC_MIX8`; the round 35.0 -> 33.4 ms, 135 -> 153 tok/s greedy with the walk's text
+moved along - the same entry), so the verify stands near 2.2 plain steps and the round at ~33 ms = pass 2.5 + verify
+~27 + the seams. Done = the verify's buffer encoded while the pass runs (the ids and the side input's rows poked on the
+drafts' landing), the commit stage as one buffer, and the verify re-read against the 35B's ratio.

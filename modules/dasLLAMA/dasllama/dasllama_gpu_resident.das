@@ -445,6 +445,7 @@ def kq_plane_pair_names(f : KqFmt) : tuple<q : string; s : string> {
     if (f == KqFmt.q4032) return (q = "q4032q", s = "q4032s")
     if (f == KqFmt.q5032) return (q = "q5032q", s = "q5032s")
     if (f == KqFmt.mx4) return (q = "mxq", s = "mxs")
+    if (kq_mlx_affine(f)) return (q = "{f}q", s = "{f}s")
     return (q = "", s = "")
 }
 
@@ -848,10 +849,13 @@ def private rdec_verify_rows_want(t : Model) : int64 => (resident_head_on(t) && 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
 def private resident_host_experts(c : Config) : bool => c.hyper_conn && c.n_expert > 0l && rdec_hc_installed()
 
-//! one mixer site's q8 pair at offsets `down_off` [lr x hc_dim] and `up_off` [hc_dim x lr], under the roles `down` / `up` at `l`
-def private push_hc_mixer_planes(c : Config; var planes : array<ResidentPlane>; down_off, up_off : int64; down, up : ResidentRole; l : int64) {
-    planes |> push(ResidentPlane(n = hc_dim(c), rows = c.hc_low_rank, f = KqFmt.q8, off = down_off, role = down, l = l))
-    planes |> push(ResidentPlane(n = c.hc_low_rank, rows = hc_dim(c), f = KqFmt.q8, off = up_off, role = up, l = l))
+//! mixer `site`'s pair at offsets `down_off` [lr x hc_dim] and `up_off` [hc_dim x lr] in its tags, under the roles `down` / `up`
+//! at `l`
+def private push_hc_mixer_planes(t : Model; var planes : array<ResidentPlane>; down_off, up_off, site : int64; down, up : ResidentRole; l : int64) {
+    let c = t.config
+    let f = hc_site_fmts(t, site)
+    planes |> push(ResidentPlane(n = hc_dim(c), rows = c.hc_low_rank, f = f.down, off = down_off, role = down, l = l))
+    planes |> push(ResidentPlane(n = c.hc_low_rank, rows = hc_dim(c), f = f.up, off = up_off, role = up, l = l))
 }
 
 //! the hyper-connection planes after the classifier: every mixer site's pair (the NextN head's two sites where `head` rides),
@@ -859,15 +863,16 @@ def private push_hc_mixer_planes(c : Config; var planes : array<ResidentPlane>; 
 def private push_hc_planes(t : Model; var planes : array<ResidentPlane>; head : bool) {
     let c = t.config
     for (site in range64(2l * (c.n_layers + (head ? 1l : 0l)))) {
-        push_hc_mixer_planes(c, planes, t.hc_down_offs[site], t.hc_up_offs[site], ResidentRole.hc_down, ResidentRole.hc_up, site)
+        push_hc_mixer_planes(t, planes, t.hc_down_offs[site], t.hc_up_offs[site], site, ResidentRole.hc_down, ResidentRole.hc_up, site)
     }
-    push_hc_mixer_planes(c, planes, t.hc_head_down_off, t.hc_head_up_off, ResidentRole.hc_head_down, ResidentRole.hc_head_up, -1l)
+    push_hc_mixer_planes(t, planes, t.hc_head_down_off, t.hc_head_up_off, hc_head_site(c), ResidentRole.hc_head_down, ResidentRole.hc_head_up, -1l)
     if (head) {
-        push_hc_mixer_planes(c, planes, t.mtp_hc_head_down_off, t.mtp_hc_head_up_off, ResidentRole.hc_head_down, ResidentRole.hc_head_up, c.n_layers)
+        push_hc_mixer_planes(t, planes, t.mtp_hc_head_down_off, t.mtp_hc_head_up_off, hc_head_site(c) + 1l, ResidentRole.hc_head_down, ResidentRole.hc_head_up, c.n_layers)
     }
     if (has_ple_ngram(c)) {
-        planes |> push(ResidentPlane(n = ple_in_dim(c), rows = hc_dim(c), f = KqFmt.q8, off = t.ple_key_off, role = ResidentRole.ngram_key))
-        planes |> push(ResidentPlane(n = ple_in_dim(c), rows = c.dim, f = KqFmt.q8, off = t.ple_val_off, role = ResidentRole.ngram_val))
+        let pf = ple_kv_fmts(t)
+        planes |> push(ResidentPlane(n = ple_in_dim(c), rows = hc_dim(c), f = pf.key, off = t.ple_key_off, role = ResidentRole.ngram_key))
+        planes |> push(ResidentPlane(n = ple_in_dim(c), rows = c.dim, f = pf.val, off = t.ple_val_off, role = ResidentRole.ngram_val))
     }
 }
 
@@ -1577,6 +1582,10 @@ def resident_decline_reason(t : Model) : string {
     let c = t.config
     if (!moe_gpu_resident_installed()) return "the tier installed no resident-driver seams"
     if (t.quant != QuantMode.q8) return "weights are not in the q8 serving mode ({t.quant})"
+    let unstamped = discrete_unstamped_plane(t)
+    if (!empty(unstamped)) return "{unstamped}, a format the Vulkan and CUDA homes stamp no kernels for"
+    let hc = hc_planes_unserved_by(t) $(f : KqFmt; _kdim, _rows : int64) => f == KqFmt.q8
+    if (!empty(hc)) return "{hc}: the resident driver serves the hyper-connection mixers and the n-gram projections on q8 planes only"
     if (c.n_expert > 0l && !rdec_moe_installed()) return "routed experts ({c.n_expert}) - the tier installed no MoE seats; the per-op tier's expert rails serve"
     let run = resident_run_mode_decline()
     if (!empty(run)) return run
