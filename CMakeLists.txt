@@ -1363,6 +1363,7 @@ SET(LIBDASCRIPT_COMPILER_SRC
     src/ast/ast_dse.cpp
     src/ast/ast_cse.cpp
     src/ast/ast_inline.cpp
+    src/ast/ast_generate_typed.cpp
 
     src/builtin/module_builtin_ast.cpp
     src/builtin/module_builtin_ast_flags.cpp

@@ -3,6 +3,7 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_generate.h"
+#include "daScript/ast/ast_generate_typed.h"
 #include "daScript/ast/ast_simulate.h"
 #include "daScript/simulate/debug_print.h"
 #include "ast_effects.h"
@@ -869,43 +870,17 @@ namespace das {
         bool valueChangeOk ( Type bt ) const {
             return isFPFamily(bt) ? fastMath : true;
         }
-        // builtin, side-effect-free operator with these exact argument types (t1 null → unary)
-        Function * findBuiltinOperator ( const char * opName, TypeDecl * t0, TypeDecl * t1 = nullptr ) {
-            if ( !t0 ) return nullptr;
-            Function * result = nullptr;
-            uint64_t hName = hash64z(opName);
-            size_t nArgs = t1 ? 2 : 1;
-            program->library.foreach([&](Module * mod) -> bool {
-                if ( auto kv = mod->functionsByName.find(hName) ) {
-                    for ( auto fn : kv->second ) {
-                        if ( !fn->builtIn || fn->hasObservableEffects() || fn->isTemplate ) continue;
-                        if ( fn->arguments.size()!=nArgs ) continue;
-                        if ( !fn->arguments[0]->type->isSameType(*t0, RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) continue;
-                        if ( t1 && !fn->arguments[1]->type->isSameType(*t1, RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) continue;
-                        result = fn;
-                        return false;
-                    }
-                }
-                return true;
-            }, "*");
-            return result;
-        }
         ExpressionPtr makeZeroConst ( Expression * expr ) {
-            auto sim = Program::makeConst(expr->at, expr->type, v_zero());
+            auto sim = makeTypedConst(expr->at, new TypeDecl(*expr->type), v_zero());
             if ( !sim ) return nullptr;
-            sim->type = new TypeDecl(*expr->type);
-            sim->type->ref = false;
             sim->constexpression = true;
             ((ExprConst *)sim)->foldedNonConst = !expr->type->constant;
             return sim;
         }
         ExpressionPtr makeNegate ( Expression * host, Expression * sub ) {
-            auto negFn = findBuiltinOperator("-", sub->type);
+            auto negFn = findBuiltinOperator(program->library, "-", sub->type);
             if ( !negFn ) return nullptr;
-            auto neg = new ExprOp1(host->at, "-", sub);
-            neg->func = negFn;
-            neg->type = new TypeDecl(*host->type);
-            neg->type->ref = false;
+            auto neg = makeTypedOp1(host->at, "-", negFn, sub, new TypeDecl(*host->type));
             neg->type->constant = false;
             return neg;
         }
@@ -954,10 +929,8 @@ namespace das {
             }
             default: return nullptr;
             }
-            auto sim = Program::makeConst(c->at, c->type, rv);
+            auto sim = makeTypedConst(c->at, new TypeDecl(*c->type), rv);
             if ( !sim ) return nullptr;
-            sim->type = new TypeDecl(*c->type);
-            sim->type->ref = false;
             sim->constexpression = true;
             return sim;
         }
@@ -1083,7 +1056,7 @@ namespace das {
                             bool fpCompare = ( cmp->left->type && isFPFamily(cmp->left->type->baseType) )
                                 || ( cmp->right->type && isFPFamily(cmp->right->type->baseType) );
                             if ( !fpCompare || fastMath ) {
-                                if ( auto flipFn = findBuiltinOperator(flip, cmp->left->type, cmp->right->type) ) {
+                                if ( auto flipFn = findBuiltinOperator(program->library, flip, cmp->left->type, cmp->right->type) ) {
                                     cmp->op = flip;
                                     cmp->func = flipFn;
                                     reportFolding();
@@ -1186,7 +1159,7 @@ namespace das {
                     // x / C → x * (1/C): the reciprocal rounds → fast_math, FP only
                     if ( fastMath && isFPFamily(bt) && R->rtti_isConstant() ) {
                         if ( auto rec = makeReciprocalConst(R) ) {
-                            if ( auto mulFn = findBuiltinOperator("*", L->type, rec->type) ) {
+                            if ( auto mulFn = findBuiltinOperator(program->library, "*", L->type, rec->type) ) {
                                 expr->op = "*";
                                 expr->func = mulFn;
                                 expr->right = rec;
@@ -1252,7 +1225,7 @@ namespace das {
                     };
                     if ( isVecOfBt(L) ) {
                         if ( auto s = trySplat(expr->right) ) {
-                            if ( auto fn = findBuiltinOperator(expr->op.c_str(), L->type, s->type) ) {
+                            if ( auto fn = findBuiltinOperator(program->library, expr->op.c_str(), L->type, s->type) ) {
                                 expr->right = s;
                                 expr->func = fn;
                                 reportFolding();
@@ -1264,7 +1237,7 @@ namespace das {
                     // only when neither side can observe the other's effects
                     if ( expr->op=="*" && isVecOfBt(R) && R->noSideEffects && L->noSideEffects ) {
                         if ( auto s = trySplat(expr->left) ) {
-                            if ( auto fn = findBuiltinOperator("*", R->type, s->type) ) {
+                            if ( auto fn = findBuiltinOperator(program->library, "*", R->type, s->type) ) {
                                 expr->left = R;
                                 expr->right = s;
                                 expr->func = fn;
@@ -1346,10 +1319,8 @@ namespace das {
                     return expr->subexpr;
                 }
                 if ( isConstBoolValue(expr->left,false) && isConstBoolValue(expr->right,true) ) {
-                    if ( auto notFn = findBuiltinOperator("!", expr->subexpr->type) ) {
-                        auto notE = new ExprOp1(expr->at, "!", expr->subexpr);
-                        notE->func = notFn;
-                        notE->type = new TypeDecl(Type::tBool, notE->at);
+                    if ( auto notFn = findBuiltinOperator(program->library, "!", expr->subexpr->type) ) {
+                        auto notE = makeNot(expr->at, notFn, expr->subexpr);
                         reportFolding();
                         return notE;
                     }

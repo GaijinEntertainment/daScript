@@ -2,6 +2,7 @@
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_generate.h"
+#include "daScript/ast/ast_generate_typed.h"
 #include "daScript/ast/ast_infer_type.h"
 #include "daScript/ast/ast_pass_macros.h"
 #include "daScript/ast/ast_visitor.h"
@@ -591,21 +592,11 @@ namespace das {
         if (!var->init->type)
             return Visitor::visitGlobalLetInit(var, init);
         if (var->type->isAuto()) {
-            auto varT = TypeDecl::inferGenericInitType(var->type, var->init->type);
-            if (!varT || varT->isAlias()) {
+            auto varT = inferLetInitType(var->type, var->init->type, var->init_via_clone, relaxedPointerConst);
+            if (!varT) {
                 error("global variable '" + var->name + "' initialization type can't be inferred, " + describeType(var->type) + " = " + describeType(var->init->type), "", "",
                       var->at, CompilationError::invalid_global_init_type);
             } else {
-                varT->ref = false;
-                if (var->init_via_clone && varT->isString()) {
-                    varT->temporary = false;
-                }
-                TypeDecl::applyAutoContracts(varT, var->type);
-                if (!relaxedPointerConst) { // var a = Foo? const -> var a : Foo const? = Foo? const
-                    if (varT->isPointer() && !varT->constant && var->init->type->constant && varT->firstType) {
-                        varT->firstType->constant = true;
-                    }
-                }
                 var->type = varT;
                 if ( !var->type->at.fileInfo ) var->type->at = var->at;
                 var->type->sanitize();
@@ -1161,23 +1152,11 @@ namespace das {
         // infer r2v(type<Foo...>)
         if (expr->subexpr->rtti_isTypeDecl()) {
             reportAstChanged();
-            if (expr->subexpr->type->isEnum()) {
-                auto ewsType = new TypeDecl(*(expr->subexpr->type));
-                ewsType->ref = false;
-                auto anyEnumValue = expr->subexpr->type->enumType->list.size() ? expr->subexpr->type->enumType->list[0].name : "";
-                auto ews = new ExprConstEnumeration(expr->at, anyEnumValue, ewsType);
-                ews->type = ewsType;
+            if (auto ews = makeTypeWitnessZero(expr->at, expr->subexpr->type)) {
                 return ews;
             } else if (expr->subexpr->type->isWorkhorseType()) {
-                auto ewsType = new TypeDecl(*(expr->subexpr->type));
-                ewsType->ref = false;
-                auto ews = Program::makeConst(expr->at, ewsType, v_zero());
-                if (!ews) {
-                    // 16/8-bit lattice vectors have no const nodes — lower to the zero ctor call
-                    return new ExprCall(expr->at, das_to_string(ewsType->baseType));
-                }
-                ews->type = ewsType;
-                return ews;
+                // 16/8-bit lattice vectors have no const nodes — lower to the zero ctor call
+                return new ExprCall(expr->at, das_to_string(expr->subexpr->type->baseType));
             } else {
                 auto mks = new ExprMakeStruct(expr->at);
                 mks->makeType = expr->subexpr->type;
@@ -5751,19 +5730,7 @@ namespace das {
             }
         }
         if (unsafeTableLookup && var->init && var->type && !var->type->ref) { // we are looking for tab[at] to make it safe
-            auto pInit = var->init;
-            if (pInit->rtti_isR2V()) {
-                pInit = static_cast<ExprRef2Value *>(pInit)->subexpr;
-            }
-            if (pInit->rtti_isAt()) {
-                auto pAt = static_cast<ExprAt *>(pInit);
-                if (pAt->subexpr->type && pAt->subexpr->type->isGoodTableType()) {
-                    if (!pAt->alwaysSafe) {
-                        pAt->alwaysSafe = true;
-                        reportAstChanged();
-                    }
-                }
-            }
+            if (markSafeTableLookupInit(var->init)) reportAstChanged();
         }
         // we are looking into initialization with empty table or array to replace with nada
         if (isEmptyInit(var)) {
@@ -5781,24 +5748,14 @@ namespace das {
         }
         markNoDiscard(var->init);
         if (var->type->isAuto()) {
-            auto varT = TypeDecl::inferGenericInitType(var->type, var->init->type);
-            if (!varT || varT->isAlias()) {
+            auto varT = inferLetInitType(var->type, var->init->type, var->init_via_clone, relaxedPointerConst);
+            if (!varT) {
                 error("local variable " + var->name + " initialization type can't be inferred, " + describeType(var->type) + " = " + describeType(var->init->type), "", "",
                       var->at, CompilationError::invalid_local_init_type);
             } else if (varT->isVoid()) {
                 error("local variable " + var->name + " initialization can't be void, " + describeType(var->type), "", "",
                       var->at, CompilationError::invalid_local_init_type);
             } else {
-                varT->ref = false;
-                if (var->init_via_clone && varT->isString()) {
-                    varT->temporary = false;
-                }
-                TypeDecl::applyAutoContracts(varT, var->type);
-                if (!relaxedPointerConst) { // var a = Foo? const -> var a : Foo const? = Foo? const
-                    if (varT->isPointer() && varT->firstType && !varT->constant && var->init->type->constant) {
-                        varT->firstType->constant = true;
-                    }
-                }
                 var->type = varT;
                 if ( !var->type->at.fileInfo ) var->type->at = var->at;
                 var->type->sanitize();
