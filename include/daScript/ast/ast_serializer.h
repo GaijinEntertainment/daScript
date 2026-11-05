@@ -116,7 +116,7 @@ namespace das {
         bool operator != ( const SerializeNodeId & o ) const noexcept { return index != o.index; }
     };
 
-    struct DAS_API AstSerializer {
+    struct DAS_CC_API AstSerializer {
         ~AstSerializer ();
         AstSerializer ( SerializationStorage * storage, bool isWriting );
 
@@ -362,7 +362,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 241;   // 241: every function carries its own alias summary
+            return 242;   // 242: a file record carries only its name and tab size
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
@@ -518,7 +518,7 @@ namespace das {
     #define DAS_SER_PROFILE(ser, name)
 #endif
 
-    struct DAS_API ModuleFileCache {
+    struct DAS_CC_API ModuleFileCache {
         enum class ReadVerdict {
             none,       // no reader installed, or nothing was ever read (e.g. debugger disabled the rail)
             clean,      // every module came from the cache

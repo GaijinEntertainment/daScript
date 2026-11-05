@@ -2,6 +2,7 @@ options gen2
 options no_aot
 
 require dastest/testing_boost
+require daslib/ast
 require daslib/module_path
 require _llvm_cache_common
 

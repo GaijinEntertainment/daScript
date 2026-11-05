@@ -22,7 +22,7 @@ namespace das {
     public:
         StackAllocator(const StackAllocator &) = delete;
         StackAllocator & operator = (const StackAllocator &) = delete;
-        StackAllocator(uint32_t size, void *mem = nullptr);
+        DAS_API StackAllocator(uint32_t size, void *mem = nullptr);
 
         void strip () {
             if ( stack ) {
@@ -374,7 +374,7 @@ namespace das {
     void das_track_string_breakpoint ( uint64_t id );
 #endif
 
-    class ConstStringAllocator : public LinearChunkAllocator {
+    class DAS_API ConstStringAllocator : public LinearChunkAllocator {
     public:
         ConstStringAllocator() { alignMask = 3; }
         char * impl_allocateString ( const char * text, uint64_t length );

@@ -8,6 +8,7 @@
 #include "daScript/misc/rangetype.h"
 #include "daScript/simulate/data_walker.h"
 #include "daScript/simulate/debug_info.h"
+#include "daScript/ast/ast_file_access.h"
 #include "daScript/simulate/code_of_policies.h"
 #include "daScript/ast/ast_serialize_macro.h"
 #include "daScript/ast/compilation_errors.h"
@@ -72,8 +73,8 @@ namespace das
     typedef AnnotationDeclaration * AnnotationDeclarationPtr;
 
     enum class LogicAnnotationOp { And, Or, Xor, Not };
-    DAS_API AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op );
-    DAS_API AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op,
+    DAS_CC_API AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op );
+    DAS_CC_API AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op,
         const AnnotationDeclarationPtr & arg0, const AnnotationDeclarationPtr & arg1 );
 
 
@@ -1013,9 +1014,9 @@ namespace das
 
     DAS_API uint64_t getFunctionHash ( Function * fun, SimNode * node, Context * context );
 
-    DAS_API uint64_t getFunctionAotHash ( Function * fun );
-    DAS_API string getAotHashComment ( const Function * fun );
-    uint64_t getVariableListAotHash ( const vector<const Variable *> & globs, uint64_t initHash );
+    DAS_CC_API uint64_t getFunctionAotHash ( Function * fun );
+    DAS_CC_API string getAotHashComment ( const Function * fun );
+    DAS_CC_API uint64_t getVariableListAotHash ( const vector<const Variable *> & globs, uint64_t initHash );
 
     class DAS_API BuiltInFunction : public Function {
     public:
@@ -1642,6 +1643,7 @@ namespace das
         void updateSemanticHash();
         void updateKeepAliveFlags();
         bool simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack = nullptr );
+        bool simulateImpl ( Context & context, TextWriter & logs, StackAllocator * sharedStack );
         uint64_t getInitSemanticHashWithDep( uint64_t initHash );
         void error ( const string & str, const string & extra, const string & fixme, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
         // for malformed-AST reports on a tree that gets repaired in place: survives the per-pass
@@ -1672,6 +1674,7 @@ namespace das
         bool getProfiler() const;
         Module *getThisModule() const { return thisModule.get(); }
         void makeMacroModule( TextWriter & logs );
+        void makeMacroModuleImpl( TextWriter & logs );
         vector<ReaderMacro*> getReaderMacro ( const string & markup ) const;
         void serialize ( AstSerializer & ser );
     protected:

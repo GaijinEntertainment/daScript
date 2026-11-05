@@ -1,5 +1,5 @@
 #include <daScript/misc/platform.h>             // DAS_API
-#include <daScript/simulate/debug_info.h>       // FileAccess
+#include <daScript/ast/ast_file_access.h>     // FileAccess
 
 namespace das {
 

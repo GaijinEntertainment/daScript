@@ -3691,28 +3691,14 @@ The RTTI module exposes runtime type information and program introspection facil
 - `this_context` - Returns a pointer to the current `Context` in which the calling code is executing.
 - `type_info` - Returns the `TypeInfo` object for the specified local variable or expression, resolved at compile time via the `[typeinfo(...)]` macro.
 
-### Program access
+### Module registry
 
 - `get_module` - Returns a `Module` pointer looked up by module name `string`, or null if no such module is registered.
-- `get_this_module` - Returns the `Module` pointer for the module currently being compiled or inferred, retrieved from the `Program`.
 - `has_module` - Returns `true` if a module with the given name is registered, or waits in a `.das_module.manifest` row for the first `require` that names it, `false` otherwise.
-- `module_group_for_each_member` - Calls `block` once per module registered under `group` - the require paths a `require [group]` expands to, sorted by member path - and not at all for a group nothing joined.
-- `program_for_each_module` - Iterates through all modules referenced by the given `Program` (including transitive dependencies), yielding a `Module` pointer for each.
 - `program_for_each_registered_module` - Iterates through all modules registered in the daslang runtime (globally, not per-program), yielding a `Module` pointer for each.
-
-### Module access
-
-- `module_for_each_annotation` - Iterates through each annotation (handled type) in the given `Module`, yielding an `Annotation` pointer for each registered annotation.
-- `module_for_each_dependency` - Iterates through each module dependency of the given `Module`, yielding the dependent `Module` pointer for each required module.
-- `module_for_each_enumeration` - Iterates through each enumeration declared in the given `Module`, yielding an `EnumInfo` pointer for each enum.
-- `module_for_each_function` - Iterates through each function declared in the given `Module`, yielding a `FuncInfo` pointer for each function.
-- `module_for_each_generic` - Iterates through each generic (template) function declared in the given `Module`, yielding a `FuncInfo` pointer for each generic.
-- `module_for_each_global` - Iterates through each global variable declared in the given `Module`, yielding a `VarInfo` pointer for each variable.
-- `module_for_each_structure` - Iterates through each structure declaration in the given `Module`, yielding a `StructInfo` pointer for each struct.
 
 ### Annotation access
 
-- `add_annotation_argument` - Appends an annotation argument (name-value pair) to the given `AnnotationArgumentList`, used when constructing annotations programmatically.
 - `each_annotation`
 - `each_annotation_argument`
 - `get_annotation` - Returns the AnnotationInfo at the given index for a `StructInfo`, `FuncInfo`, or `EnumInfo`.
@@ -3720,30 +3706,8 @@ The RTTI module exposes runtime type information and program introspection facil
 - `get_annotation_argument_value` - Returns an `RttiValue` variant representing the value of a specific named argument from an `AnnotationArgumentList`.
 - `resolve_annotation` - Resolves an `AnnotationInfo` to the live `Annotation` object by looking up its module and name among the registered modules.
 
-### Compilation and simulation
-
-- `ast_serializer_finalize_usec` - Microseconds the reads through `deserialize_program` on this deserializer spent inside finalizeModule - the annotations, the macro-module re-simulation and the gc_collect of every program it restored; the decode is the read minus this and `ast_serializer_setup_usec`.
-- `ast_serializer_get_data` - Returns content of serializer.
-- `ast_serializer_setup_usec` - Microseconds the reads through `deserialize_program` on this deserializer spent in the program setup that follows the stream - symbol marking and stack allocation - over every program it restored.
-- `create_ast_deserializer` - Creates deserializer.
-- `create_ast_serializer` - Creates serializer object.
-- `delete_ast_serializer` - Frees memory for ast_serializer.
-- `deserialize_program` - Deserializes the next program from the stream and calls `block` with it, the way the three-argument form does, and gives the restored program `access` as its own: a stream carries no file access, and a `require_module_now` issued from the program's macros or `[init]` walks through its program's access, so a reader that restores programs whose code requires modules late passes the access it would have compiled them with.
-- `for_each_expected_error` - Iterates through each expected compilation error declared in the `Program` (via `expect`), yielding the error code for each.
-- `for_each_require_declaration` - Iterates through each `require` declaration of the compiled `Program`, yielding the module name, public/private flag, and source `LineInfo`.
-- `serialize_program` - Serializes program to serializer object.
-- `simulate` - Simulates (links and initializes) a compiled `Program`, returning a `Context` pointer ready for function execution, or null on failure.
-
-### File access
-
-- `add_extra_module` - Adds extra module to `FileAccess`.
-- `add_file_access_root` - Adds an extra root directory (search path) to the given `FileAccess` object, expanding where `require` resolves files from.
-- `set_file_source` - Registers a source code `string` for the given file name inside the `FileAccess` object, allowing in-memory compilation without disk files.
-
 ### Structure access
 
-- `basic_struct_for_each_field` - Iterates through each field of a `BasicStructureAnnotation`, yielding the field name, C++ name, `TypeInfo`, and byte offset for each field.
-- `basic_struct_for_each_parent` - Iterates through each parent (base class) of a `BasicStructureAnnotation`, yielding the parent `TypeInfo` for each ancestor.
 - `rtti_builtin_structure_for_each_annotation` - Iterates through each annotation attached to a `StructInfo`, yielding the annotation name and its `AnnotationArgumentList` for each.
 - `structure_for_each_annotation` - Iterates through each annotation attached to a `StructInfo`, yielding the annotation name and `AnnotationArgumentList` — an alias of `rtti_builtin_structure_for_each_annotation`.
 
@@ -4170,13 +4134,45 @@ The AST module provides access to the abstract syntax tree representation of das
 
 ### Compilation and file access
 
+- `add_extra_module` - Adds extra module to `FileAccess`.
+- `add_file_access_root` - Adds an extra root directory (search path) to the given `FileAccess` object, expanding where `require` resolves files from.
 - `compile` - Compiles a daslang program from a source code string using the provided `FileAccess` and `ModuleGroup`, returning a `ProgramPtr` (null on failure).
 - `compile_file` - Compiles a file through `FileAccess` and invokes the block with a success flag, program and diagnostics.
+- `for_each_expected_error` - Iterates through each expected compilation error declared in the `Program` (via `expect`), yielding the error code for each.
+- `for_each_require_declaration` - Iterates through each `require` declaration of the compiled `Program`, yielding the module name, public/private flag, and source `LineInfo`.
 - `make_file_access` - Creates and returns a new `FileAccessPtr` (`smart_ptr<FileAccess>`) initialized as a default file-system-backed project.
 - `module_cache_path` - Returns the default AST module-cache path for a file and compile policies.
 - `parse_file` - Parses a daslang file and stops there — no type inference, no optimization, no simulation.
 - `parse_file_no_prerequisites` - Parses one file alone and stops there: no prerequisite walk, no type inference, no macro run, and the host's module-cache stream is hidden for the duration.
 - `require_module_now` - Compiles `module_name` - a `shared` module, named by its file - and its prerequisites into the process at the point of the call, or answers the module already there, under `codeOfPolicies`; a null `fileAccess` means the compiling program's own.
+- `set_file_source` - Registers a source code `string` for the given file name inside the `FileAccess` object, allowing in-memory compilation without disk files.
+- `simulate` - Simulates (links and initializes) a compiled `Program`, returning a `Context` pointer ready for function execution, or null on failure.
+
+### AST serialization
+
+- `ast_serializer_finalize_usec` - Microseconds the reads through `deserialize_program` on this deserializer spent inside finalizeModule - the annotations, the macro-module re-simulation and the gc_collect of every program it restored; the decode is the read minus this and `ast_serializer_setup_usec`.
+- `ast_serializer_get_data` - Returns content of serializer.
+- `ast_serializer_setup_usec` - Microseconds the reads through `deserialize_program` on this deserializer spent in the program setup that follows the stream - symbol marking and stack allocation - over every program it restored.
+- `create_ast_deserializer` - Creates deserializer.
+- `create_ast_serializer` - Creates serializer object.
+- `delete_ast_serializer` - Frees memory for ast_serializer.
+- `deserialize_program` - Deserializes the next program from the stream and calls `block` with it, the way the three-argument form does, and gives the restored program `access` as its own: a stream carries no file access, and a `require_module_now` issued from the program's macros or `[init]` walks through its program's access, so a reader that restores programs whose code requires modules late passes the access it would have compiled them with.
+- `serialize_program` - Serializes program to serializer object.
+
+### Program and module iteration
+
+- `basic_struct_for_each_field` - Iterates through each field of a `BasicStructureAnnotation`, yielding the field name, C++ name, `TypeInfo`, and byte offset for each field.
+- `basic_struct_for_each_parent` - Iterates through each parent (base class) of a `BasicStructureAnnotation`, yielding the parent `TypeInfo` for each ancestor.
+- `get_this_module` - Returns the `Module` pointer for the module currently being compiled or inferred, retrieved from the `Program`.
+- `module_for_each_annotation` - Iterates through each annotation (handled type) in the given `Module`, yielding an `Annotation` pointer for each registered annotation.
+- `module_for_each_dependency` - Iterates through each module dependency of the given `Module`, yielding the dependent `Module` pointer for each required module.
+- `module_for_each_enumeration` - Iterates through each enumeration declared in the given `Module`, yielding an `EnumInfo` pointer for each enum.
+- `module_for_each_function` - Iterates through each function declared in the given `Module`, yielding a `FuncInfo` pointer for each function.
+- `module_for_each_generic` - Iterates through each generic (template) function declared in the given `Module`, yielding a `FuncInfo` pointer for each generic.
+- `module_for_each_global` - Iterates through each global variable declared in the given `Module`, yielding a `VarInfo` pointer for each variable.
+- `module_for_each_structure` - Iterates through each structure declaration in the given `Module`, yielding a `StructInfo` pointer for each struct.
+- `module_group_for_each_member` - Calls `block` once per module registered under `group` - the require paths a `require [group]` expands to, sorted by member path - and not at all for a group nothing joined.
+- `program_for_each_module` - Iterates through all modules referenced by the given `Program` (including transitive dependencies), yielding a `Module` pointer for each.
 
 ### Building programs from AST nodes
 
@@ -4280,6 +4276,7 @@ The AST module provides access to the abstract syntax tree representation of das
 ### Adding objects to objects
 
 - `add_alias` - Adds a type alias to the specified module.
+- `add_annotation_argument` - Appends an annotation argument (name-value pair) to the given `AnnotationArgumentList`, used when constructing annotations programmatically.
 - `add_enumeration_entry` - Adds a new entry with the given name to the specified enumeration.
 - `add_function` - Adds a function to the specified module.
 - `add_generic` - Adds a generic (template) function to the specified module.

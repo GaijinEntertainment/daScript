@@ -364,7 +364,7 @@ compilation entirely on subsequent loads:
 
    // Save
    AstSerializer ser;
-   program->serialize(ser);
+   ser.serializeScript(program);
    // ser.buffer contains the binary data
 
    // Load
