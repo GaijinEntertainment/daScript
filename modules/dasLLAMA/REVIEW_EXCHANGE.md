@@ -1,7 +1,7 @@
 # dasLLAMA Sidecar-Exchange Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `ARCHITECTURE_ENGINE.md`.
+doc: `ARCHITECTURE_ENGINE_SUPPORT.md`.
 
 A `dashv` call under `harness/` answers to `harness/REVIEW.md`; the gate that keeps the engine to
 one exchange client answers to `performance/REVIEW.md`.

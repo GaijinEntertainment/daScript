@@ -33,6 +33,7 @@ require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower/metal_towe
 require ?das_metal dasllama/dasllama_metal_prefill  // metal_prefill_shutdown — the mtower re-arm leg
 require ?das_metal dasllama/dasllama_metal_asr_dec  // set_metal_wdec/metal_wdec_stats — the cross-KV gate + the tower cell's pin
 require ?das_metal dasllama/dasllama_metal_decode   // metal_decode_shutdown — same
+require ?das_metal metal/das_metal_boost   // metal_create_system_default_device: the mlx-metal arms' device skip
 require dasllama/dasllama_gemm_schema // Q8_BLOCK_ELEMS/Q8_QPB/Q8_SPB — the dev-W bake key arithmetic
 require dasllama/dasllama_gpu_tier    // moe_gpu_bake_tag — the lane a cold load under an armed tier mints
 require dasllama/dasllama_layout // convert_model_to_metal_blob — the derive cell's in-RAM control
@@ -57,10 +58,12 @@ require _child_run   // run_child / das_exe - the mx4-stream arm's mint child
 // re-saves the image from cold on every run by design. Drive through modules/dasLLAMA/tests/run.das
 // (--suite image); model arms follow the suite's presence/tier gates. A model arm skips when its
 // `--arm` token or its family is filtered out, when its carrier is absent from DASLLAMA_MODELS_DIR
-// or is large-tier without DASLLAMA_PARITY_FULL=1, when interpreted (`jit_model_available`), with
-// the image rail off (DASLLAMA_IMAGE=0), and without its clip (the ASR corpus clips under
-// benchmarks/asr/corpus/, `asr_clip`); the Metal arms (gemma4uv-metal, mtower, the whisper cross-KV
-// decoder) skip on a build without das_metal, and mx4-stream's footprint leg off macOS.
+// (a snapshot arm's: from the HF cache, `hf_snapshot_dir`) or is large-tier without
+// DASLLAMA_PARITY_FULL=1, when interpreted (`jit_model_available`), with the image rail off
+// (DASLLAMA_IMAGE=0), and without its clip (the ASR corpus clips under benchmarks/asr/corpus/,
+// `asr_clip`); the Metal arms (gemma4uv-metal, mtower, the whisper cross-KV decoder, mlx-metal,
+// mlx-metal-35b) skip on a build without das_metal, the mlx-metal pair also on a box with no Metal
+// device, and mx4-stream's footprint leg off macOS.
 
 // element-exact plane compare: -1 = length mismatch, else the number of differing elements
 // the staged (owned array) side against the served (borrowed plane) side — the only comparison
@@ -321,6 +324,12 @@ struct ImgTableProbe {
     q51s : array<uint8>
     iq4nl32q : array<uint8>
     iq4nl32s : array<uint8>
+    mlx4q : array<uint8>
+    mlx4s : array<uint8>
+    mlx8bq : array<uint8>
+    mlx8bs : array<uint8>
+    mlx6bq : array<uint8>
+    mlx6bs : array<uint8>
     image_map : void?
     image_bytes : uint64
 }
@@ -383,6 +392,14 @@ def test_image_table_slot_names(t : T?) {
         fill_bytes(p.iq4nl32q, 1024, 6)
         fill_bytes(p.iq4nl32s, 128, 7)
         fill_bytes(p.kq[int(KqFmt.iq4nl32)].q, 555, 8)
+        fill_bytes(p.mlx4q, 512, 9)
+        fill_bytes(p.mlx4s, 64, 10)
+        fill_bytes(p.kq[int(KqFmt.mlx4)].q, 333, 11)
+        fill_bytes(p.mlx8bq, 1024, 12)
+        fill_bytes(p.mlx8bs, 64, 13)
+        fill_bytes(p.mlx6bq, 768, 14)
+        fill_bytes(p.mlx6bs, 64, 15)
+        fill_bytes(p.kq[int(KqFmt.mlx6b)].q, 222, 16)
         t |> success(save_image(p, path, "img-table"), "save")
         var m = ImgTableProbe()
         t |> success(load_image(path, m, "img-table"), "the image maps back (no two sections share a name)")
@@ -394,6 +411,14 @@ def test_image_table_slot_names(t : T?) {
         t |> equal(count_mismatch(m.kq[int(KqFmt.k4)].q, p.kq[int(KqFmt.k4)].q), 0l, "the k4 slot's q plane element-exact")
         t |> equal(count_mismatch(m.kq[int(KqFmt.k4)].s, p.kq[int(KqFmt.k4)].s), 0l, "the k4 slot's s plane element-exact")
         t |> equal(long_length(m.kq[int(KqFmt.q51)].q), 0l, "the q51 slot rode no section")
+        t |> equal(count_mismatch(m.mlx4q, p.mlx4q), 0l, "mlx4q element-exact from the top-level pair")
+        t |> equal(count_mismatch(m.mlx4s, p.mlx4s), 0l, "mlx4s element-exact")
+        t |> equal(count_mismatch(m.mlx8bq, p.mlx8bq), 0l, "mlx8bq element-exact from the top-level pair")
+        t |> equal(count_mismatch(m.mlx8bs, p.mlx8bs), 0l, "mlx8bs element-exact")
+        t |> equal(long_length(m.kq[int(KqFmt.mlx4)].q), 0l, "the mlx4 slot rode no section")
+        t |> equal(count_mismatch(m.mlx6bq, p.mlx6bq), 0l, "mlx6bq element-exact from the top-level pair")
+        t |> equal(count_mismatch(m.mlx6bs, p.mlx6bs), 0l, "mlx6bs element-exact")
+        t |> equal(long_length(m.kq[int(KqFmt.mlx6b)].q), 0l, "the mlx6b slot rode no section")
         delete m
         t |> success(remove(path), "probe image removed")
         delete p
@@ -1259,6 +1284,107 @@ def test_b32_streamed_mint(t : T?) {
     }
 }
 
+[test]
+def test_mlx_snapshot_mint(t : T?) {
+    t |> run("the Llama-3.2-1B 8-bit snapshot directory: the planar image beside it serves the eager load's affine planes and logits") @(t : T?) {
+        if (!family_on(t, "llama") || !arm_on(t, "mlx")) return
+        let snap = hf_snapshot_dir("mlx-community/Llama-3.2-1B-Instruct-8bit")
+        if (empty(snap)) {
+            t |> skip("the 1B snapshot not present")
+            return
+        }
+        return if (!jit_only(t))
+        with_dasllama_jobque_() {
+            t |> success(ends_with(image_path_for(snap, ""), ".dlim") && dir_name(image_path_for(snap, "")) == dir_name(snap), "the lane file lands beside the snapshot directory")
+            b32_streamed_mint(t, snap)
+        }
+    }
+}
+
+//! a snapshot's metal lane: a cold Metal-mode load mints `<snapshot>.metal.dlim` beside the directory, its affine planes verbatim
+//! (the per-32 family rebakes no scale plane), and serves it; the mint and the warm map pick the same greedy ids, the teacher-forced
+//! device logits sit within the spec's bar of the CPU's - the dense bar on the 1B 8-bit snapshot, the routed census bar on the
+//! 35B-A3B (large tier: its routed stacks ride the member's routed forms out of the lane) - and the 1B's walk is the CPU rails'
+//! token for token, where the 35B-A3B's flips at a near tie ("nine, ten" / "nine, and ten") and stands on the forced logits
+[test]
+def test_mlx_snapshot_metal_image(tst : T?) {
+    for (spec in [(repo = "mlx-community/Llama-3.2-1B-Instruct-8bit", fam = "llama", arm = "mlx-metal", f = KqFmt.mlx8, bar = 4.0, large = false, walk = true),
+                  (repo = "mlx-community/Qwen3.6-35B-A3B-4bit", fam = "qwen35moe", arm = "mlx-metal-35b", f = KqFmt.mlx4b, bar = 3.0, large = true, walk = false)]) {
+        mlx_metal_lane(tst, spec.repo, spec.fam, spec.arm, spec.f, spec.bar, spec.large, spec.walk)
+    }
+}
+
+[unused_argument(tst, repo, fam, arm, f, bar, large, exact_walk)]
+def private mlx_metal_lane(tst : T?; repo, fam, arm : string; f : KqFmt; bar : float; large, exact_walk : bool) {
+    tst |> run("{repo}: the metal lane mints beside it and serves the device steps") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            return if (!family_on(t, fam) || !arm_on(t, arm) || !jit_only(t))
+            var dev = metal_create_system_default_device()
+            if (dev == null) {
+                t |> skip("no Metal device on this box")
+                return
+            }
+            metal_release(dev)
+            if (!has_decode_override("metal")) {
+                t |> failure("a das_metal build on a Metal box registers the metal decode override, and it is absent")
+                return
+            }
+            let snap = hf_snapshot_dir(repo)
+            if (empty(snap)) {
+                t |> skip("{repo} not present")
+                return
+            }
+            if (large && !parity_full_mode()) {
+                t |> skip("{repo} is large-tier - set DASLLAMA_PARITY_FULL=1 to run")
+                return
+            }
+            let prior_backend = active_kernel_backend()
+            let prior_mode = get_metal_mode()
+            pin_kernel_backend("portable")
+            set_metal_mode(MetalMode.off)
+            var tc <- load_model(snap, QuantMode.q8)
+            t |> success(!tc.metal_blob, "CPU-mode load stays planar")
+            var prompt <- counting_ids(tc)
+            var g_cpu <- greedy_gen(tc, prompt, 16)
+            delete tc
+            let img_m = image_path_for(snap, METAL_IMAGE_TAG)
+            t |> success(ends_with(img_m, ".metal.dlim") && dir_name(img_m) == dir_name(snap), "the metal lane lands beside the snapshot directory")
+            remove(img_m)
+            set_metal_mode(MetalMode.when_available)
+            var tm <- load_model(snap, QuantMode.q8)
+            t |> success(tm.metal_blob, "metal-mode load is blob-form")
+            t |> success(tm.image_map != null, "cold metal load serves the image it built")
+            t |> success(stat(img_m).is_valid, "cold metal load saved the metal-lane image")
+            t |> equal(tm.emb_fmt, f, "the image keeps the affine token table")
+            var g_mint <- greedy_gen(tm, prompt, 16)
+            log_gen_texts(tm, "{arm} lane", g_cpu, g_mint)
+            if (exact_walk) {
+                t |> success(count_mismatch(g_cpu, g_mint) == 0l, "the minted lane's device steps pick the CPU rails' ids")
+            }
+            var tp <- load_model_(snap, QuantMode.q8)
+            let np = long_length(prompt)
+            var teach <- [for (i in range64(np - 1l, long_length(g_cpu))); g_cpu[i]]
+            let maxd = forced_logits_maxd(tp, tm, prompt, teach, "{f} metal forced")
+            t |> success(maxd < bar, "teacher-forced device logits within {bar} of the CPU control (maxd {maxd})")
+            delete teach
+            delete tp
+            delete tm
+            var tw <- load_model(snap, QuantMode.q8)
+            t |> success(tw.image_map != null && tw.metal_blob, "warm metal load maps the lane")
+            var g_map <- greedy_gen(tw, prompt, 16)
+            t |> success(count_mismatch(g_mint, g_map) == 0l, "mint vs mapped tokens")
+            delete tw
+            delete g_cpu
+            delete g_mint
+            delete g_map
+            delete prompt
+            set_metal_mode(prior_mode)
+            clear_kernel_backend_pin()
+            select_kernel_backend(prior_backend)
+        }
+    }
+}
+
 //! A cold planar mint of a native-MXFP4 MoE file streams the expert planes: the minting process's peak physical footprint
 //! (`/usr/bin/time -l`, the kernel's high-water mark) stays under the mxq + mxs bytes the image holds, and the mapped planes
 //! are the eager load's byte for byte
@@ -1274,7 +1400,11 @@ def private mx4_streamed_mint(t : T?; path : string) {
         let planes = at >= 0 ? to_int64(slice(out, at + length(marker), find(out, "\n", at)), false) : 0l
         to_log(LOG_INFO, "mx4-stream {base_name(path)}: the mint's peak footprint {peak >> 20l} MB against {planes >> 20l} MB of expert planes\n")
         t |> success(code == 0 && at >= 0, "the child minted the planar image and mapped it back, the expert stacks native-MXFP4 (exit {code})")
-        t |> success(planes > 0l && peak > 0l && peak < planes,
+        //! a save the disk cannot hold is declined and the whole image is built in RAM (`image_from_model_streaming`), so the
+        //! footprint below would read that chunk, not the stream: the file on disk is the streamed fill's first witness
+        let saved = stat(img).is_valid
+        t |> success(saved, "the child's mint landed {base_name(img)} on disk - a declined save (a full disk) builds the image in RAM instead")
+        t |> success(!saved || (planes > 0l && peak > 0l && peak < planes),
             "the mint's peak footprint {peak >> 20l} MB sits under the {planes >> 20l} MB of expert planes it minted")
         if (at < 0 || peak <= 0l) {
             to_log(LOG_ERROR, "the mint child's output:\n{out}\n")

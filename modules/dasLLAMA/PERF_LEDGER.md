@@ -10,6 +10,611 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-11-05, `direction-grade`) - the round's seams on the 27B and the 35B, the NextN ladder on three
+  carriers, and the Flash-Next prefill (the M5 Max, `bbatkin/mlx-loader` at 57370cab0a, `m5.mlx.tune.json`, the box to
+  one process, a clean tree, 70 s between processes, three interleaved reps of every row - every row's reps within 1.5%,
+  the plain walk of each process the sentinel).** `harness/dflash_probe.das -- --metal --prompt-ids code_27b.txt
+  --steps 512 --seed 4242 --trace`; the DFlash2 rows the Q4_K_M drafters, the NextN rows the trunk's head (no `-r`).
+
+  **The seams (`DASLLAMA_METAL_VERIFY_AHEAD` 1 and `DASLLAMA_METAL_COMMIT_ONE` 0 against the shipped 2 and 1), the
+  27B snapshot and the 35B pure IQ4_XS:** a tie, as the trace said - their greedy pass was already held.
+
+    | carrier, mode | old seams tok/s | shipped seams tok/s | plain tok/s | tokens a round |
+    | :--- | ---: | ---: | ---: | ---: |
+    | 27B snapshot, greedy | 118.8, 120.1, 120.1 | 119.7, 120.4, 122.5 | 35.7-35.8 | 4.93 (413 of 735) |
+    | 27B snapshot, rejection at 0.7 | 106.3, 106.4, 106.5 | 106.2, 106.2, 106.6 | 35.1 | 4.50 (399 of 798) |
+    | 35B, greedy | 259.8, 260.0, 260.1 | 259.9, 260.0, 260.1 | 203.4-204.1 | 3.94 (385 of 917) |
+    | 35B, rejection at 0.7 | 229.8, 230.0, 230.4 | 230.1, 230.3, 230.5 | 185.3-187.2 | 3.95 (386 of 920) |
+
+  **The NextN ladder** (the trunk's own head drafts; `--depth`; the 27B Q4_K_M with its split Q8_0 head, the 35B pure
+  IQ4_XS with the head in its file, the Flash-Next UD-IQ4_XS with its split `shared` Q8_0 head - the UD because the
+  head's image lane exists for it alone; every walk's text read, plain and speculative alike):
+
+    | carrier, depth | speculative tok/s | plain tok/s | over plain | tokens a round | accepted |
+    | :--- | ---: | ---: | ---: | ---: | ---: |
+    | 27B Q4_K_M, d1 greedy | 41.6, 41.8, 42.5 | 29.1-29.3 | 1.43 | 1.88 | 239 of 272 |
+    | 27B Q4_K_M, d2 greedy | 43.6, 43.7, 43.7 | 29.3 | 1.49 | 2.53 | 309 of 404 |
+    | 27B Q4_K_M, d3 greedy | 47.6, 47.7, 47.8 | 29.3 | 1.63 | 2.87 | 333 of 510 |
+    | 27B Q4_K_M, d1 / d2 rejection at 0.7 | 40.4-40.7 / 42.1-42.2 | 28.9 | 1.40 / 1.46 | 1.89 / 2.56 | - |
+    | 35B, d1 / d2 / d3 greedy | 179.5 / 184.5 / 182.3 | 205.1-205.9 | 0.87 / 0.90 / 0.89 | 1.86 / 2.50 / 2.95 | - |
+    | Flash-Next UD, d1 greedy | 86.6, 86.9, 86.9 | 68.2-70.6 | 1.23 | 1.93 | 246 of 262 |
+    | Flash-Next UD, d2 greedy | 97.5, 97.5, 97.7 | 70.3-70.5 | 1.38 | 2.68 | 321 of 370 |
+    | Flash-Next UD, d3 greedy | 111.3, 111.4, 111.6 | 70.3-70.5 | 1.58 | 3.39 | 361 of 438 |
+
+  Depth 3 is the best NextN row on both heads that win (the 27B's, the Flash-Next's), and the second and third drafts
+  still pay (the head's acceptance at the third position 65% on the 27B, 82% on Flash-Next); the 35B's NextN round loses
+  to its plain walk at every depth, as before - its serve row keeps NextN off. The M5 box record's `runtime.mtp_depth_nextn`
+  moves to 3 with this entry's mint. The DFlash2 rows of the same carriers stand far above: 120 / 260 / 161 greedy against
+  48 / off / 111 NextN. The 27B's NextN ladder could not run on the MLX snapshot - the split GGUF head attaches on the
+  GGUF loader path alone, the snapshot loader reads the trunk as headless (`followup_general.md` row 283) - so its NextN
+  reference is the Q4_K_M file (plain 29.3) where its DFlash2 reference is the snapshot (plain 35.7).
+
+  **Flash-Next prefill, the pure IQ4_XS file** (`benchmarks/lcpp_bench.das -- -p 512 -n 128 -r 3 --ngl 99`, three
+  processes): pp512 1456 +- 35, 1530 +- 20, 1536 +- 8 tok/s (the first process cold on the image's pages), tg128 84.2-84.3.
+  The other engine's own pack through its own serve read 83 plain on this box.
+- **MEASURED (2026-11-04, `direction-grade`) - the Qwen3.8-Flash-Next DFlash2 round on the pure IQ4_XS file (the M5 Max,
+  `bbatkin/mlx-loader` at 1da0d57a85, `m5.mlx.tune.json`, the box to one process).** The round admits the
+  hyper-connection trunk once the capture hands the drafter the plain mean of the four streams at each target layer
+  (`ARCHITECTURE_GPU_MTP_ACCEPT.md#dflash-hc-capture`: the draft `Qwen3.8-Flash-Next-DFlash2`, hidden 2560 = the trunk's
+  dim, target layers 6/16/26/36/46 of 48 in GGUF numbering, is distilled against that mean; the gated means the mixers
+  form are not it). `harness/dflash_probe.das -- --metal --prompt-ids code_27b.txt --steps 512 --seed 4242 --trace`, the
+  Q4_K_M drafter, 75 s between processes, the image re-minted once before the series:
+
+    | mode | speculative tok/s | plain tok/s | tokens a round | drafts accepted |
+    | :--- | ---: | ---: | ---: | ---: |
+    | greedy (three runs) | 134.7, 135.4, 135.3 | 82.1, 82.3, 82.3 | 4.75 over 108 rounds | 405 of 756 (54%) |
+    | rejection, drafts drawn at 0.7 (two runs) | 113.7, 113.6 | 81.3, 81.4 | 4.22 over 122 rounds | 393 of 854 (46%) |
+
+  The greedy round is 1.64 of plain, the lossless default 1.40; the greedy walk parts from the plain one at token 33 and
+  stays apart (the batched kernels' rounding, as on the 35B's 173 of 512). A round is ~35 ms wall (512 tokens over 108
+  rounds at 134.7 tok/s), the pass with its greedy select 3 ms on the device, so the eight-row verify reads ~32 ms = 2.7
+  plain steps of 11.85 (the 35B's 2.04, the 27B's 1.15): the dense IQ4_XS planes ride the rows8 arm, the routed experts
+  the per-(row, slot) pair, the mixers and the side input their own eight-row forms, none traced yet. The same-slab step
+  probe cannot read the ratio on this model: the batch rail declines the hyper-connection graph (`batch decode declined:
+  graph`), so the verify runs on the decode driver's rows alone. The other engine's pack ships no DFlash2 draft for this
+  model; its engine takes a draft folder and reduces the streams the same way, so the comparison is its plain against its
+  chain over the incoai folder - which panicked the box (the watchdog timeout, nine minutes in, `ni_run` at 60 GB
+  resident, an hour after our last image session; the second such panic on its Flash-Next pack), so that comparison
+  stays untaken on this box. The 512-token prefill on this tree (`lcpp_bench -p 512 -n 128 -r 3 --ngl 99`, three
+  processes 60 s apart, the box idle): 1552, 1528, 1544 tok/s (the in-process reps' spread under 1.2%; tg128 84.1-84.3,
+  the probe's plain walk 82); the other engine's served whole-prompt 512 row read 944-1431 on 2026-11-02 and our served
+  row 1188-1356, one band.
+
+  The round traced (Instruments, the Metal System Trace template with the shader profiler on, `--steps 64`: 13 rounds
+  after a 63-step plain walk; the last 8 rounds and the last 32 plain steps averaged; a dispatch's cost its sampled
+  interval, counts good to one): the plain step 12.40 ms start to start (its command buffer 11.70, busy 10.52, ~0.7 ms
+  of one-row kernels overlapping); the round 37.8 ms = the pass 2.50 (busy 2.2; the drafter's 248k classifier row
+  0.73 on `MetalRows8Iq4xs`) + the verify 29.13 (busy 26.45, nothing overlapping) + the commit 0.64 (the recurrent
+  replay, 72 dispatches) + 5.6 ms idle between the buffers. The verify is 2.35 plain steps; its 16.7 ms over one step is
+  15.2 ms of kernel time and 1.5 of dispatch gaps (1583 gaps of 1.7 us against 623 of 1.9):
+
+    | site class | 1-row dispatches / us | 8-row dispatches / us | 8 / 1 | the eight-row kernels |
+    | :--- | ---: | ---: | ---: | :--- |
+    | routed gate + up | 48 / 1695 | 48 / 8106 | 4.78 | `metal_moe_gemv_gu_iq4xs`, one dispatch a layer at both counts |
+    | routed down + combine | 48 / 1205 | 48 / 5856 | 4.86 | `metal_moe_down2_iq4nl32` (the `_hc` landing at one row) |
+    | hyper-connection mixers | 236 / 2107 | 590 / 4065 | 1.93 | `hc_norm`, `moe_router` as the mixer's down, `MetalRows8Q8` x 196 with a `Rows8Prep` each, `hc_mix`, `hc_combine` (one row: `Q8GemvHcN` / `Q8GemvSgLo` fused) |
+    | router + select | 96 / 725 | 96 / 1537 | 2.12 | `moe_router`, `MoeSelect512` |
+    | x-table prep | 0 | 303 / 507 | - | `Rows8Prep` 196, `half_rows` 107 |
+    | deltanet mixer | 71 / 427 | 140 / 733 | 1.72 | `dn_conv_n4` + `DnScan` + `DnGateSig` (one row: `DnStepFused`) |
+    | shared expert | 64 / 379 | 106 / 600 | 1.58 | `MetalRows8Iq4xs` gate and up (one row: `KqFatIq4xs`) |
+    | classifier | 1 / 625 | 2 / 802 | 1.28 | `MetalRows8Iq4xs` 733 + `argmax_rows` 69 |
+    | attention q / k / v | 12 / 442 | 36 / 602 | 1.36 | `MetalRows8Iq4xs`, three a layer (one row: one fat dispatch) |
+    | deltanet in | 72 / 2136 | 108 / 2207 | 1.03 | `MetalRows8Iq4xs` two a layer + the f32 beta/alpha GEMV |
+    | deltanet out | 37 / 1002 | 36 / 923 | 0.92 | `MetalRows8Iq4xs` |
+    | attention o | 12 / 201 | 12 / 238 | 1.18 | `MetalRows8Iq4xs` |
+    | attention core, side input, capture, copies | ~44 / 280 | ~72 / 272 | ~1.0 | `SqAttnDWF16`, `ple_gate` + `ple_conv`, `hc_stream_mean` (5 us a step) |
+    | the step | ~740 / 11226 | ~1630 / 26449 | 2.36 | |
+
+  Every dense IQ4_XS plane rides the rows8 arm at eight rows (253 `MetalRows8Iq4xs` a step; no eight-row tensor stamp,
+  no per-row GEMV) and sits at 0.9-1.4 of one row - the 35B's picture. The excess is the routed experts, 11.1 of the
+  15.2 ms: the fused pair reads each (row, slot) plane apart at 4.8 one-row passes (169 and 122 us a dispatch against
+  35 and 25), where the 35B's pair read 4.2 - the same shape, a heavier file (IQ4_XS gate and up, IQ4_NL down, 512
+  experts); then the hyper-connection mixers at 2.0 ms over one row (the eight-row mixer runs five kernels a site where
+  the one-row site fuses the norm, the low-rank down and the mix into two q8 GEMVs) with 0.5 of x-table prep feeding
+  their 196 `MetalRows8Q8` dispatches, and the router pair 0.8. Beside the verify, the 5.6 ms a round between the
+  command buffers is the host (the accept, the commit staging, the next round's n-gram gather on the CPU) - 15% of the
+  round, the 27B's host side was 1.5 ms after its leg. The pair's dispatch shape was raced on the 35B's shapes and
+  found at the fabric's rate for its distinct bytes (the 35B entry's second refutation), so on this file - 512 experts,
+  far less overlap among eight rows' picks than the 35B's 64 - the 11 ms is the bytes eight rows route, not the kernel.
+  The same trace's driver tables (one "Driver Processing" row a command buffer, the completion stamps; the template
+  sampled the launching shell, not the engine, so the host's own frames are unread) split the round's 6.1 ms outside
+  the GPU's busy time, the last eight rounds averaged:
+
+    | seam | us | of which |
+    | :--- | ---: | :--- |
+    | pass GPU end to the verify's GPU start | 3511 | completion seen 110; host with no GPU work 2770 (the verify's ~1600 dispatches encoded after the drafts land, the verify rows built); the verify's driver processing 207; its queue 424 |
+    | verify GPU end to the next pass's GPU start | 2629 | completion seen 77; host 338; the commit stage's five buffers: 621 GPU busy, 878 driver and queue and completion, 185 host between them, each waiting on the one before; host to the pass's commit 397; the pass's driver and queue 133 |
+    | a plain step's seam (step end to the next step's start, 32 seams) | 710 | completion 79; host 308; driver 226; queue 96 |
+
+  So a round carries ~3.1 ms of host with no GPU work against the plain step's 0.3, and ~1.1 ms of wait-and-resubmit
+  around 0.6 ms of commit work (`DASLLAMA_METAL_REPLAY_UNWAITED` and `_TAPE` are on; the copies around the replay still
+  serialize). The re-record with the engine as the sampled process (1 ms samples of running threads only; the
+  engine's main thread is the one holding the JIT frames, the encoder calls and the commits; the two threads on the
+  driver rows are Metal's own submission threads) reads the seams the same way (seam A 3.19 ms: 2.50 host, 0.61 the
+  verify's commit to its GPU start; seam B 2.79: 1.01 host, 1.57 the commit stage's 4-5 buffers in flight one after
+  another; the plain seam 0.70) and says what the host does: during the verify's 28 ms and the pass's 2.5 ms the main
+  thread has no sample at all - it is blocked on the completion and encodes nothing ahead - while in the plain walk it
+  polls the clock through the step (346 of 376 samples `mach_continuous_time` under `GPUEndTime`) with its next step
+  pre-encoded; seam A's samples are the verify's encode (`dispatchThreadgroups`, `metal_set_bytes`) and the JIT's walk,
+  so the ~1600-dispatch verify is encoded only after the pass completes; seam B's are `memmove` and JIT; no jobque
+  worker runs in a round. Round 0 spends 4 ms zeroing an array (`array_resize`) and 6.4 ms off-CPU between its pass and
+  its verify's commit. Done = the eight-row mixer site fused as the one-row site is; the verify encoded while the pass
+  runs (the pass lands the drafted ids on the device, the verify's embed reads them there; the side input's rows are
+  the one host poke, gathered in microseconds once the ids land) and committed behind it on the queue, the commit stage
+  one buffer with no host wait - ~4 ms of the 37.8 ms round, the 27B's round sharing all but the side input; and the
+  routed bytes a round as tokens a round (the acceptance) rather than as a kernel.
+
+  **The one-row Metal walk on this model was wrong until the held step bound the n-gram ring.** Read side by side,
+  the plain one-row greedy walk degraded after 30-60 tokens on both files (a wrong "(TLL)", then "- pytest / - pytest"
+  or `"""` repeated to the end) while the eight-row speculative walk over the same weights stayed clean; the probe
+  `harness/rows_vs_one_probe.das` (one teacher-forced continuation through the one-row step and through the eight-row
+  verify rows) read the two apart by 2e-4 at the first decode step, 7e-3 at the second and 0.1-0.5 from the seventh,
+  with the CPU one-row route agreeing with the eight-row path, and a rung that retires the step encoded ahead before
+  every step (`mirror_quiesce`) reading 0 splits in 64 rows: the step the driver encodes ahead (`pre_encode_next`) never
+  set `StepRes.ple_ring_base`, so its side input ran at byte 0 of the recurrent pool - the wrong conv taps, its conv row
+  written over the pool's start - where the slow, verify and batch paths set it from the mirror. Fixed with the held
+  step binding the mirror's ring base (`dn_mirror_ple_off`, `ARCHITECTURE_GPU_MTP_DECODE_PICK.md#greedy-chain`); the
+  cell `qwen4exp ahead` in the matrix row (96 steps encoded ahead against the same walk with nothing encoded ahead:
+  18 of 96 tokens apart and a 1.1 logit gap before, equal after). Every plain Flash-Next text read before the fix came
+  through this bug, the "4-bit quality artifact" reading of the pure file's loops included; the plain tok/s rows stand
+  as timings (the step's work is the same), the acceptance figures of the rounds stand (the verify path was right), and
+  the walks' texts are re-read on the fixed tree below. The counting fixture the row already held did not catch it: a
+  short numeric continuation survives the wrong taps.
+
+  **On the fixed tree (682cfc1d31), every walk's text read, plain and speculative, head and tail - all coherent to the
+  last token on the 35B, the pure GGUF and the pack; the series the box ran with nothing else on it, the sentinels
+  beside each row:**
+
+    | run | speculative tok/s | plain tok/s | tokens a round |
+    | :--- | ---: | ---: | ---: |
+    | GGUF greedy, verify-ahead 1 | 153.9, 154.1, 153.9 | 83.0, 83.0, 81.7 | 5.18 (418 of 700) |
+    | GGUF greedy, verify-ahead 2 | 156.8, 156.7, 156.8 | 83.0, 82.5, 83.1 | 5.18 |
+    | GGUF greedy, verify-ahead 2 + commit-one | 161.4, 157.1, 161.1 | 82.9, 79.9, 81.7 | 5.18 |
+    | GGUF rejection at 0.7, verify-ahead 2 + commit-one | 128.7 | 81.1 | 4.37 (394 of 904) |
+    | 35B greedy / rejection at 0.7 | 258.5 / 229.3 | 202.0 / 186.6 | 3.94 / 3.95 |
+    | the pack greedy, verify-ahead 2 + commit-one (three reps) | 137.7, 137.7, 137.7 | 75.2, 75.2, 75.2 | 4.89 (412 of 742) |
+
+  The two seam knobs together take the GGUF's greedy round from 154 to ~160 tok/s (33.4 -> ~32 ms) and the lossless
+  round from 114 to 129, with tokens a round, accepted counts and the speculative text byte-identical across knobs;
+  both ship on for a side-input model next. The pack's one-row walk, now on the fused mixer pair's affine arms and the
+  routed pair's affine arms (a9d4f0eb28, 00cc9eb639), reads 75.2 plain where it read 82.8 on the staged chain and the
+  per-stack route - the GGUF, which takes neither arm, is flat - while its round gained (129.3 -> 137.7, the seam knobs'
+  share ~5%) and its plain and speculative walks now agree for 286 of 512 ids (33 before the ring fix). The loader
+  test over the pack's tensors (`test_mlx_qwen4exp`, the stocked suite) 5 of 5. The arms' A/B (66797cc629's knobs
+  `DASLLAMA_METAL_HC_FUSED_AFF` and `DASLLAMA_METAL_MOE_AFF_PAIR`, one 512-token run a cell, the base twice):
+
+    | mixer pair / routed pair | plain tok/s | greedy round tok/s | tokens a round; ids equal to plain |
+    | :--- | ---: | ---: | :--- |
+    | on / on | 72.9, 75.2 | 126.3, 136.6 | 4.89; 286 |
+    | off / on | 74.5 | 129.5 | 4.89; 286 |
+    | on / off | 83.8 | 135.1 | 4.82; 249 |
+    | off / off | 83.2 | 135.3 | 4.82; 249 |
+
+  The regression is the routed pair's affine arms, 11% of the plain step with the round a wash, not the mixer pair
+  (neutral, kept on); the routed arms also sum in another order than the per-stack route (the walk's text moves). The
+  routed pair's affine arms were taken off and rebuilt on the wide gathered GEMV's lane map - one row a simdgroup, a
+  whole block a lane, x read once for both stacks (97565577be; the raw race at the pack's shapes, us a step: the
+  routed block 86.4 old pair / 63.5 per-stack route / 57.6 new pair at one row, 386.9 / 355.9 / 314.3 at eight; the
+  borrowed two-row lane map had cost the gate+up 12 us a layer and the down 8). On the pack, the pair on against off
+  (one run a cell, the base twice): plain 83.2, 83.2 against 83.4; the greedy round 137.4, 140.8 against 137.4; the
+  round sums in its own order (4.72 tokens a round and 286 ids equal to the plain walk against the route's 4.82 and
+  249, both walks coherent to the last token), so the pair ships on as a tie on the plain step and a small gain on the
+  round. The pack's plain step stands at 83 against the other engine's 86 on the same bytes.
+
+  **The eight-row mixer site fused (35e3456a86, `DASLLAMA_METAL_HC_MIX8`, ships on;
+  `ARCHITECTURE_GPU_MTP_DECODE_HC.md#metal-hc-mix8`):** four dispatches a site in place of eight - the grouped norm
+  written straight into the rows8 x table with the inverse norms and the inject partials, the q8 low-rank down with
+  its K split by stream, the stream partials summed through silu into the up's x table, the q8 up landing the gated
+  stream mean in place (two new stamps of `MetalRows8T`, the plain `MetalRows8Q8` byte-identical). The raw race at
+  the Flash-Next shapes: 27.5-28.0 us a site against the eight-kernel chain's 50.3 and the one-row pair's 41-43, within
+  9.1e-6 of the chain (the norm first is what makes it exact; the SIMT forms with x in registers lose, 1.1-1.7 of the
+  chain); the cell `hc_mix8_gate` reads x_b bit-equal and the logits within 4.8e-7 at five and eight rows. The round
+  on the pure file, knob 0 and 1 alternating, three each, 75 s apart, the plain sentinel 81.5-82.8 throughout:
+
+    | knob | speculative tok/s | tokens a round | rounds for 512 | ms a round | the third round's mixer dispatches |
+    | :--- | ---: | ---: | ---: | ---: | ---: |
+    | 0, the eight-kernel chain | 130.9, 135.5, 135.5 | 4.75 (405 of 756) | 108 | 35.0 | ~680 (norm 97, router-as-down 96, prep 196, q8 196, mix 97) |
+    | 1, the fused site | 153.4, 154.0, 153.5 | 5.18 (418 of 700) | 100 | 33.4 | 384 (96 x prep, down, finish, up-and-mix) |
+
+  **The round's seams (f5529c3484; `ARCHITECTURE_GPU_MTP_ROUND.md#verify-ahead`, `#commit-one`).** Read on the 27B
+  snapshot and the 35B before any change: their greedy rounds already encode the verify while the pass runs - the pass
+  is held and the GPU idles 0.0005 ms between pass and verify - so the greedy seam there is the 0.75 ms from the
+  verify's end to the next pass, all host, and the residual round's largest seam is the host's rejection walk, 1.64 ms
+  a round. The rounds that waited for the pass were the sampled ones and every Flash-Next round (the hyper-connection
+  trunk with its side input was excluded from the hold). `DASLLAMA_METAL_VERIFY_AHEAD` 1 (the default) holds a sampled
+  round's pass as a greedy round's unless its selection ask lists the drafts (a penalty window), the picks, candidates,
+  q and rng state landing after the verify - the 27B residual round keeps its 399 of 798 accepted and its 4.50 tokens a
+  round, within noise on time (one rep a knob: 104.5 against 104.4-105.5 tok/s, the seat's wait for the previous replay
+  absorbing the overlap); 2 is the side-input path: the verify encoded while the pass runs, the host waits the pass,
+  lands the ids, gathers and writes the side rows, then commits. `DASLLAMA_METAL_COMMIT_ONE` (ships off, unrun) folds
+  a side-input model's ring save and row copies into the verify's buffer and its restore and committed rows into the
+  replay's, five awaited buffers to two. Neither path has run on a side-input model yet - the Flash-Next A/B
+  (`VERIFY_AHEAD` 1 against 2, then `COMMIT_ONE` 0 against 1, the greedy ids compared across knobs since 2 gives the
+  greedy Flash-Next round the device accept for the first time) is owed, with the 27B and 35B three-rep series the
+  writer's tree broke under. The next lever the trace names is the next pass committed as soon as the device accept's
+  words land, before the walk's bookkeeping - the 0.75 greedy / ~2 ms residual seam on every model.
+
+  **The other engine's own pack through the snapshot loader (`ARCHITECTURE_ENGINE_FORMATS_MLX.md#mlx-qwen4exp-snapshot`;
+  d03bb56962, afdb3101da, f113aac36e, the `mlx6b` member 7a77cba9ae / 4ff1a425e7):** its mixed-bit layout (experts,
+  deltanet, shared expert and head 4-bit g64; router, indexer, n-gram projections, embed and the draft head 8-bit g64;
+  the hyper-connection mixes and attention projections 6-bit g64; the n-gram table 4-bit g32 in 128 row shards)
+  loads with every synthesized tensor checked against the BF16 GGUF, the table mapped in place and gathered by
+  shard, and the mixer and n-gram projection planes carrying format tags. The first full load, the CPU route with no
+  image (`dflash_probe` without `--metal`, the Q4_K_M drafter, the code prompt, 24 tokens): three minutes to load
+  and walk, 39% of the box's memory at the peak, the greedy text the GGUF file's opening word for word, the DFlash2
+  round lossless (24 of 24 ids equal, 19 of 35 drafts accepted, 4.8 a round), 4.89 plain / 6.05 speculative tok/s on
+  the CPU - a reference, not a figure. With the mixers and n-gram projections served in their tags on Metal
+  (275e497507: the one-row 6- and 8-bit mixer sites as a staged chain of five dispatches where the q8 site runs a
+  fused pair, the five-to-eight-row sites on the four-dispatch form's affine arms), the pack's first Metal serve
+  (`dflash_probe --metal`, the same prompt and drafter, 512 tokens, one run, the planes in RAM and the table mapped,
+  the box at 37% free at the lowest): plain 82.8 tok/s against the other engine's 86 on these same bytes, the DFlash2
+  greedy round 129.3 tok/s at 4.82 tokens a round (409 of 749 accepted), the walk parting from the plain one at token 33
+  as the GGUF's does. The pure GGUF reads 82 plain and 153 on the round on this tree: the plain steps match, and the
+  round's 24 tok/s gap is unattributed - not the staged one-row mixer chain (the verify's five-to-eight-row sites take
+  the fused four-dispatch form's affine arms); the candidates are the routed experts, whose fused Metal pair serves
+  IQ4_XS and IQ4_NL stacks and leaves the pack's 4-bit affine stacks to the per-stack route (`moe_gu_fused_serves`,
+  `moe_down_fused_serves`), the dense affine planes' eight-row arms and the group-32 table gather; the round's kernel
+  census (`--census`) decides. Done = that census and the lever it names (the routed pair's affine fill, or the fused
+  one-row pair's 6- and 8-bit fills for the plain step), the three-rep series on the pack, the 6-bit prefill crown
+  raced into the box profile (`kq_mulmm_mlx6b` has none, so its window tiles run the base tile).
+
+  The round is 1.6 ms shorter - the lever's size, the 2 ms of mixer excess less the form's own time - and the
+  rest of the 13% is the walk's text: the fused site's f32 order moves the verify's logits by ulps, the greedy walk
+  parts from the chain's text after some tokens, and this prompt's new path accepts 5.18 drafts a round where the old
+  one accepted 4.75 (both walks part from the plain walk at token 33, as before). The verify's ratio on this file reads
+  2.35 -> ~2.2 plain steps by the round's arithmetic; the batch rail still declines the graph, so the step probe cannot
+  confirm it.
+
+- **MEASURED (2026-11-04, `direction-grade`) - the Qwen3.6-35B-A3B eight-row verify step and the experts it reads
+  (the pure IQ4_XS file, `bbatkin/mlx-loader` at c468159aa7, the M5 Max, `m5.mlx.tune.json`).** The same-slab step
+  (`harness/batch_rows_probe.das -- --sameslab --bs 1,4,8 --steps 16`, two reps 90 s apart, the box idle; the first
+  rep re-minted the image under itself and agrees with the second within 0.3%): one row 5.43 ms (the single-row driver
+  4.81), four rows 11.42 (2.09 of one; 2.86 a row), eight rows 13.19 (2.42; 1.65 a row). The routed experts over
+  consecutive rows (`harness/expert_overlap_probe.das -- --steps 256`, the CPU chain, a code prompt, 40 layers):
+
+    | window | distinct experts of the slots routed | one-row steps' worth of expert bytes |
+    | :--- | ---: | ---: |
+    | 2 rows | 13.2 of 16 (83%) | 1.65 |
+    | 4 rows | 21.6 of 32 (67%) | 2.70 |
+    | 8 rows | 34.3 of 64 (54%) | 4.28 |
+
+  Per layer the eight-row union runs 60-90% of the slots in the early layers and ~50% from layer 7 on; an LRU of 8/16/
+  32/64 experts hits 24/46/63/81% of the reads, consecutive tokens share 35% of their experts. An eight-row verify
+  that reads each distinct expert once (`followup_metal.md` row 62) has its floor near 1.7 one-row steps at U 34
+  against today's 2.42, the dense IQ4_XS sites on the eight-row tensor stamps (no rows8 arm for the format, row 69)
+  the other half of the excess.
+
+  The two steps traced (Instruments, the Shader Timeline, the last eight steps of each; occupancy = the interval plus
+  the idle to the next, the split-K reduces folded into their site; us a step):
+
+    | site class | dispatches 8 / 1 rows | occ 8 rows | occ 1 row | 8 / 1 |
+    | :--- | ---: | ---: | ---: | ---: |
+    | routed gate + up + act (`metal_moe_gemv_gu_iq4xs`) | 41 / 40 | 2948 | 418 | 7.06 |
+    | routed down + shared down + combine | 40 / 40 | 2165 | 526 | 4.12 |
+    | deltanet in: qkv / z / beta-alpha (eight-row stamps + reduces) | 149 / 30 | 1877 | 860 | 2.18 |
+    | shared expert gate + up (two stamps + reduces) | 155 / 26 | 1058 | 532 | 1.99 |
+    | deltanet out | 59 / 30 | 812 | 355 | 2.28 |
+    | classifier (eight-row stamp) | 1 / 1 | 759 | 489 | 1.55 |
+    | deltanet mixer (four kernels at eight rows, one fused at one) | 121 / 60 | 739 | 306 | 2.42 |
+    | router | 40 / 40 | 546 | 274 | 1.99 |
+    | attention q / k / v | 53 / 10 | 525 | 235 | 2.23 |
+    | norm and residual | 81 / 82 | 512 | 459 | 1.12 |
+    | attention o | 20 / 10 | 271 | 115 | 2.36 |
+    | attention core | 29 / 30 | 199 | 154 | 1.29 |
+    | select, head select, swiglu, embed | 52 / 56 | 264 | 253 | 1.04 |
+    | the step | 842 / 454 | 12674 | 4975 | 2.55 |
+
+  The idle inside the command buffers is 1.53 ms at eight rows against 0.65 at one (the deltanet out stamp to its
+  reduce 239 us a step, the deltanet in stamps to theirs ~275, attention o to its reduce 81, the mixer's split kernels
+  142). The dense IQ4_XS sites (deltanet in and out, attention q/k/v/o, the classifier) read 4244 us at eight rows
+  against 2054 at one - 2.07 one-row passes with the reduces and their idle - so a rows8 arm at 1.2 passes is worth
+  ~1.8 ms a step, the shared expert's two stamps on the same arm another ~0.4. The routed experts with the shared one
+  read 6.17 ms at eight rows against 1.48 at one - 4.2 one-row passes, not 8: the repeated experts are served from the
+  cache already - and a union over 35.3 entries (the shared expert one more) streams 2.36 GB a step, ~4.3 ms at 550
+  GB/s, ~4.9 at the masked form's 1.15, so the union verify is worth ~1.3 ms, less than the overlap probe's count
+  suggests; the one-row MoE runs at ~410 GB/s, dispatch-bound. Prediction on record: the arm takes the eight-row step
+  to 11.0-11.4 ms (2.05-2.1 plain steps), the union on top to 9.7-10.1 (1.8-1.85). Done = the IQ4_XS rows8 arm, the
+  union verify, each measured on this step with distinct tokens a row.
+
+  **The IQ4_XS arm of `MetalRows8T` (bcce9e1270, `ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#rows8-matrix-unit`): one
+  16 x 8 x 32 product a 32-element sub-block, the codebook's int8 values the left operand, the x table in natural order,
+  y += d * ls * dot; the knob `rows8noiq4xs`, a census entry, the stride gate green.** The codebook lookup raced three
+  ways in the raw-MSL harness (three rounds, us; the one-row column the harness's own GEMV):
+
+    | shape K x rows (its sites) | one row | register select | 16-entry table | 256-entry table |
+    | :--- | ---: | ---: | ---: | ---: |
+    | 2048 x 8192 (deltanet qkv, attention q) | 18.0 | 30.5 | 22.8 | 21.8 |
+    | 2048 x 4096 (deltanet z) | 7.3 | 17.0 | 12.6 | 12.1 |
+    | 2048 x 512 (attention k/v, shared gate/up) | 3.5 | 5.3 | 4.7 | 4.6 |
+    | 4096 x 2048 (deltanet out, attention o) | 7.7 | 20.0 | 15.4 | 14.7 |
+    | 2048 x 248320 (classifier) | 485 | 774 | 568 | 565 |
+
+  The 256-entry byte table with the sub-block as the slices' unit ships; the 16-entry table over whole superblocks ties
+  it summed over a step (2847 against 2848 us), and a per-shape mix would save ~100 us a step, not built. The two large
+  planes land at 1.16-1.21 of one row; the 4 MB and 0.5 MB planes at 1.3-1.9, latency-bound at 128 or 32 threadgroups,
+  still under the stamps with their reduce and ~8 us of idle before it. The arm engages at 241 sites a step (the
+  deltanet input planes and out, attention q/k/v/o, the shared expert's gate and up, the classifier); the deltanet
+  inputs, the shared expert and the batch step's classifier now take the norm's f16 copy of the panel in place of a
+  conversion dispatch each (which also moved the four-row step 11.37 -> 11.03), deltanet out and attention o still
+  convert their own, 40 conversions a step. Before and after on the pure file, three valid reps each, cv under 1%, the
+  one-row sentinel within 0.3%, the probe's plain tok/s within 0.4%
+  (`dflash_probe -- --metal --prompt-ids code_27b.txt --steps 512 --seed 4242 --trace`, the Q4_K_M drafter; this
+  model's tokenizer takes the code prompt):
+
+    | | before (009bc966c3) | after the arm |
+    | :--- | ---: | ---: |
+    | plain step / one-row step | 4.76 / 5.45 | 4.76 / 5.45 |
+    | four rows same-slab | 11.37 | 11.03 |
+    | eight rows same-slab | 13.17 (2.42 one-row steps) | 11.11 (2.04) |
+    | greedy round: spec / plain tok/s | 234.5 / 203.8 | 259.9 / 203.1 |
+    | greedy round ms (generation over rounds; traced) | 16.93; 16.20 | 15.04; 14.36 |
+    | greedy verify / pass GPU ms | 13.19 / 3.05 | 11.45 / 2.90 |
+    | greedy tokens a round; accepted of drafted | 3.96; 382 / 903 | 3.94; 385 / 917 |
+    | residual (temp 0.7): spec / plain tok/s | 205.5 / 186.7 | 222.5 / 186.3 |
+    | residual round ms; tokens a round; accepted | 19.62; 4.06; 389 / 889 | 17.57; 3.95; 386 / 917 |
+
+  The eight-row step landed inside the prediction (11.0-11.4); the greedy walk matches the plain walk at 173 of 512 ids
+  before and after. The 27B snapshot stands at 28.0 one row and 32.3 eight rows after the arm. The K5 arm did not
+  follow: 31 x 63 = 1953 overflows the half's mantissa, so K5 needs int8 codes at depth 32 with token sums for the mins,
+  not the exact-half trick. The probe's same-slab rows never carry the same ids (each row a different prompt token, the
+  windows shifted by one between steps), but the routes are not a continuation's: `--rows-feed greedy` (a999ed22de)
+  feeds the prompt's greedy continuation and reads 0.36 ms slower at eight rows (11.47 against 11.11), the base the
+  union verify measures against.
+
+  **REFUTED - the union verify (378fe5ba7f, `DASLLAMA_METAL_MOE_UNION`, ships at 0;
+  `ARCHITECTURE_GPU_MTP_DECODE.md#moe-union`).** Two forms over a bookkeeping kernel that builds the rows' expert
+  union (the ascending list, a 16-bit row mask an entry, the inverse index, the shared expert the last entry): form A
+  (knob 1) runs the fused pair's own per-row arithmetic once an entry over its rows - bit-identical to the pair (the
+  model-free cell `moe_union_gate` 0 of 16384 and 0 of 10240 elements apart; the 35B parity arms read the same maxd as
+  knob 0); form B (knob 2) runs five to eight rows on a union stamp of the IQ4_XS rows8 arm, an entry's gate and up one
+  dispatch storing the picking rows alone, an act kernel building the down's table, the down's partial rows into the
+  same combine (k4 maxd 1.347 under the MoE bar 2.0 on `mtp-ffk-35b-iq4xs`; declines under five rows). The step under
+  the greedy feed, three reps each in rotated order, 60 s apart, cv under 0.6%:
+
+    | knob | one row (sentinel) | four rows | eight rows |
+    | :--- | ---: | ---: | ---: |
+    | 0, the fused pair (ships) | 5.45 | 11.44 | 11.46 |
+    | 1, form A | 5.43 | 12.86 | 14.39 |
+    | 2, form B | 5.45 | 11.44 (declines) | 13.77 |
+
+  The round on the shipped path is item 1's (greedy 15.05 ms, 259.6 tok/s, plain 204.3; residual 17.58, 222.3, plain
+  186.5). Why the pair wins: its routed block reads 5.34 ms a step under the trace (gate/up 3.13, down with the shared
+  down 2.21) - the union's ~2.3 GB at ~434 GB/s, because a repeated expert's picks land in neighbouring threadgroups of
+  one dispatch and hit in the cache - so the ceiling over it was ~1 ms, and form B's union stamps take 6.88 ms: 100 us a
+  layer for gate and up (~390 GB/s) and 69 for the down (~280), latency-bound shapes (512 rows of K 2048; 2048 rows of
+  K 512, two blocks a slice) plus three dispatches a layer; form A runs an entry's rows serially in one threadgroup and
+  adds two dispatches a layer. The 9.7-10.1 ms prediction did not hold. Form B has no model-free cell (the parity arms
+  gate it) and no harness race at U 8/24/40/64; form A stays as the plumbing oracle. The 27B snapshot after the leg:
+  one row 28.05, eight rows 32.3.
+
+  **REFUTED - the routed pair's eight-row dispatch shape (a5c6e4a8f0; `harness/moe_pair_race.das` + `moe_pair.metal`;
+  `DASLLAMA_METAL_MOE_ROWS4`, ships at 0).** The raw race over the 35B's expert shapes (256 experts' planes over six
+  layer copies, the step's overlap of 38.5 distinct experts of 64 picks, us a layer; `bw_read` streams 565-581 GB/s):
+  the shipped gate/up 86.0 = 536 GB/s on the distinct bytes, the shipped down 52.9; four rows a simdgroup with gate and
+  up in one loop (`R4`, bit-exact) 81.6 (564 GB/s) and 52.4; the dedupe shapes - the first picking stream decoding for
+  every picker (97.3), one row block over every stream with the distinct experts decoded once (82.7-151.9), the (stream,
+  slot) pairs as the fastest grid dimension (a tie) - all lose; the slot loop unrolled or split over simdgroups a tie or
+  a loss; removing the cross-lane reduce or the codebook moves the down not at all. Without overlap (58 distinct) the
+  pair streams 578 / 521 GB/s; all-repeated (8 distinct) 80.4 / 50.9 - so the repeated picks cost ~7% over the distinct
+  bytes, and the pair runs at the fabric's rate for the bytes it must read. In the step (greedy feed, three reps,
+  rotated): eight rows 11.43-11.47 shipped against 11.49-11.52 on `R4`, four rows 11.41-11.45 against 11.56-11.60, the
+  sentinels 4.76-4.84 - the race's 4 us a layer does not survive the step (its trace is unread), so the form ships off.
+  The routed block of the eight-row verify is at the floor its bytes set; what is left on the 35B step is the dense
+  side's and the host's. Done = the deltanet gate and the attention combine writing the f16 copy themselves (the 40
+  conversions a step), the K5 arm at depth 32.
+
+  The 512-token prefill on this tree (4e9c33a7b8) beside the other engine's catalog pack (its experts 5-bit g64, not
+  our bytes), the same 512 ids, three processes each in alternating order 60 s apart, the box idle (ours
+  `lcpp_bench -p 512 -n 128 -r 3 --ngl 99`, the in-process reps' spread 2.5-2.9%; theirs `ni_run <pack> @<512 ids> 1 0`,
+  one prompt a process):
+
+    | 35B | pp512 tok/s | tg128 tok/s |
+    | :--- | ---: | ---: |
+    | ours, the pure IQ4_XS file | 4119, 4102, 4103 | 191.8, 192.0, 191.6 (the bench's clock; the probe's step is the decode instrument) |
+    | the other engine, its 4-bit pack | 3580, 3652, 3712 | - |
+
+  The served 4K row (ours 4367 against their 5870-6137 through the two engines' servers) remains the window plan's -
+  2048 + 2048 + a tail where one cold window runs the prompt in 708 ms - not the kernels'.
+
+- **MEASURED (2026-11-03, `debug-jit`, `direction-grade`) - the one-row decode step on the SAME weights as the other
+  engine: Qwen3.8-27B mlx-community 4-bit (the mlx4b member, `ARCHITECTURE_ENGINE_FORMATS_MLX.md`) on the M5 Max.** Ours:
+  `harness/batch_rows_probe.das -- -m <snapshot> --bs 1 --steps 8` (`DASLLAMA_ALLOW_UNTUNED=1`, this tree without the
+  tune framework and with no box profile - the one-row path takes no tensor crown), one process a box, three alternating
+  reps; Kapitsa: `ni_run <its import of the same snapshot> @code_27b.txt 512 0 --ignore-eos`, its decode clock after the
+  prefill. The step: ours 30.62 ms (cv 0.3%), Kapitsa 28.71 (cv 0.5%), ours on the GGUF Q4_K_M twin 34.75 (cv 1.7%). The
+  gap on the same bytes is 1.9 ms; the affine member reads 4.1 ms under our K4 form on this box. The weight bytes a step
+  are 14.4 GB: 470 GB/s ours, 502 theirs.
+
+  Instruments' shader timeline over one step of each (the Metal System Trace template with the Shader Timeline on,
+  `gpu-shader-profiler-interval`; a site's cost = its interval plus the idle to the next interval, the column the other
+  engine's isolated per-call times (`NI_PROFILE=2`) agree with; bytes = rows x K x 0.5625):
+
+    | site | MB | ours us | ours GB/s | theirs us | theirs GB/s |
+    | :--- | ---: | ---: | ---: | ---: | ---: |
+    | FFN gate + up (64) | 100.3 | 12467 | 515 | 12367 | 519 |
+    | FFN down (64) | 50.1 | 6579 | 488 | 6595 | 487 |
+    | deltanet qkv + z + b + a (48) | 47.5 | 4574 | 498 | 4216 | 540 |
+    | deltanet out (48) | 17.7 | 2077 | 409 | 1746 | 486 |
+    | attention q + k + v (16) | 41.3 | 1349 | 490 | 1258 | 525 |
+    | attention o (16) | 17.7 | 619 | 458 | 578 | 489 |
+    | lm head | 715.2 | 1321 | 541 | 1227 | 583 |
+    | norm and residual kernels (129.6 `metal_add_rms` and rms dispatches a step at 4.7 us + 1.5 idle) | | 802 | | 0 | |
+    | deltanet mixer (ours conv_n, conv_hist, scan, gate; theirs prep, step) | | 856 | | 659 | |
+    | attention core (ours at ~40 positions, theirs at ~90) | | 228 | | 352 | |
+    | argmax / top-k and sample | | 64 | | 6 | |
+    | swiglu (ours a dispatch; theirs in the gate/up epilogue) | | 57 | | 0 | |
+    | the step | | 30997 | | 29008 | |
+
+  Dispatches a step: ours 631 intervals (the probe cannot count dispatches; a group of GEMVs over one input reads as one
+  interval), theirs 404 (6 a deltanet layer, 7 an attention layer, 4 outside). Idle inside the command buffer: ours 610
+  gaps of 1.8 us (1.08 ms), theirs 382 of 6.5 us (2.48 ms) - the other engine's GEMVs carry 8-16 us behind each as part
+  of their cost. The partition of the 1.99 ms: the separate norm, residual, mixer, swiglu and argmax kernels the other
+  engine folds into its GEMVs 1.11 ms; GEMV bandwidth outside the FFN 0.92 (the deltanet projections 0.69 of it, the
+  out-projection at 409 GB/s the worst site); the FFN GEMVs - 61% of the step - a tie; the attention core 0.12 in our
+  favour at the shorter context. Their one-row form, in our words: 64 threads, 8 rows a threadgroup, 4 rows a simdgroup,
+  16 values a lane a row a step as one 8-byte load, x in registers across the simdgroup's rows (and across gate and up),
+  the norm's sum of squares gathered from the x already loaded and the rsqrt applied to the finished dot, the residual
+  added in the epilogue, the matrices sharing an input as segments of one dispatch; ours one row a 128-thread threadgroup
+  with four simdgroups splitting K, a lane's u32 load serving 16 bits, x re-read a row.
+
+  The per-32 wide one-row form (`DASLLAMA_METAL_B32_WIDE`: a lane takes a whole 32-block as one 16-byte load, decodes
+  the codes in place by a mask with the power of two divided out of x, folds the scale pair once a block; planes of 512
+  rows and more, every per-32 member; `ARCHITECTURE_GPU_QUANT_PLANES.md`) on the same step, three interleaved reps,
+  the box minted for this binary (`m5.mlx.tune.json`, the crowns raced) and idle: 30.57 ms with the form off, 27.70 on
+  (spread under 0.1%) - the step is under the other engine's 28.71 on the same bytes. The race behind it (one busy
+  snapshot, the quiet re-race void - a GPU job started during it): gate/up 507 -> 572 GB/s, down 497 -> 550, the
+  deltanet out-projection 464 -> 540, the head 551 -> 598; the other engine's several-rows-a-simdgroup form with x in
+  registers raced slower here (four rows 513, eight 492 against one row's 540 at the out-projection), so the lever is
+  the whole-block lane and the in-place decode, not x reuse. A fused gate|up arm (`DASLLAMA_METAL_B32_GLU`) wins in
+  isolation (171 against 176 us) and loses 0.15 ms in the step, so it ships off.
+
+  The three 27B files on this binary, the same manifest, one process a row, the box idle (`lcpp_bench --ngl 1 -p 512
+  -n 128 -r 3` for the prefill row; the step probe `--bs 1 --steps 8`, two reps, for the decode - the bench's tg128 row
+  read cv 4-11% on every file, the probe's spread under 0.3%; the other engine `ni_run <its 27B import> @<512 ids> 1 0`,
+  its Neural Engine FFN split on by default):
+
+    | 27B file | bytes a step | pp512 tok/s | step ms | decode tok/s |
+    | :--- | ---: | ---: | ---: | ---: |
+    | MLX 4-bit snapshot (mlx4b, the wide form) | 14.4 GB | 743.5 +- 3.1 | 27.70 | 36.1 |
+    | UD-IQ4_XS | ~13.8 GB | 744.6 +- 7.6 | 28.16 | 35.5 |
+    | Q4_K_M (its deltanet projections Q8_0) | 16.4 GB | 963.8 +- 13.8 | 34.4 | 29.1 |
+    | the other engine on the MLX snapshot | 14.4 GB | 682 (two reps 682.8, 681.7) | 28.71 | 34.8 |
+
+  The affine member and the IQ4_XS file step alike at their byte counts (520 and 490 GB/s), the Q4_K_M at 477; the
+  Q4_K_M's prefill leads because its Q8_0 projections ride the q8 tensor tiles, the fastest prefill kernels, where the
+  other two files ride their formats' tiles. Done = the step's remaining 1.1 ms of norm, residual, mixer and argmax
+  kernels folded (`followup_metal.md` row 68).
+
+  The DFlash2 round on the snapshot (the Kapitsa arc's branch merged in; `dflash_probe --metal`, the Q8_0 drafter, the
+  other engine's prompt, 512 generated tokens, seed 4242, one quiet run each; the Q4_K_M beside it in the same hour on
+  the main tree's binary):
+
+    | round | tokens a round | accepted | a round, wall | speculative tok/s | plain tok/s |
+    | :--- | ---: | ---: | ---: | ---: | ---: |
+    | snapshot, greedy | 4.89 | 412 of 742 (56%) | 109 ms | 44.1 | 35.7 |
+    | snapshot, rejection with drafts drawn at 0.7 | 4.58 | 401 of 784 (51%) | 116 | 39.5 | 35.1 |
+    | Q4_K_M, greedy | 4.41 | 395 of 812 (49%) | 58 | 76.4 | 29.1 |
+
+  The acceptance on the snapshot's text is the other engine's 54% on its MLX pack (the text, not the drafter: the
+  same-weights pooled rate stands at 48%), and 4.89 tokens a round is its chain's 4.78. The round costs twice the
+  Q4_K_M's because the affine member has no rows8 matrix-unit arm: its five-to-eight-row verify sites run the eight-row
+  tensor stamps (1.9 one-row passes) where the K4 and q8 sites run the register-left form (1.12-1.2).
+
+  The affine rows8 arm (`MetalRows8AffT`, `ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#rows8-affine`: one 16 x 8 x 64 product
+  a 64-group, the left operand each code as an exact half off the k4 x table unchanged - lane kq's codes are elements
+  8kq..8kq+7 of each 32-block - and y += s dot + b sum_x in fp32 over the two per-32 sums; knockout
+  `DASLLAMA_METAL_PREFILL_SKIP=rows8nomlx`). The race (synthetic planes past the SLC, three reps, the ways
+  `rows8_ways_of` picks, against the wide one-row form's pass): gate/up 1.08, down 1.06-1.07, deltanet in 1.08, deltanet
+  out 1.01-1.02, attention q 1.05-1.06, the narrow k/v plane 1.22, the head ~1.3 (cv past 3%, void); int8 and uint8 left
+  operands and a contiguous one-load table all tie or lose - the kernel is load-bound, as the K4 form's was. The step
+  and the round on the snapshot, the box idle, one process a row:
+
+    | snapshot | before (`rows8nomlx`) | after |
+    | :--- | ---: | ---: |
+    | eight-row step (`--sameslab --bs 8`, two reps) | 85.5 ms | 38.3 (1.36 of the one-row 28.05; the Q4_K_M's 46 of 34) |
+    | greedy round, 512 tokens | 109 ms, 44.1 tok/s | 49.3 ms, 99.1 tok/s (4.89 a round, 412 of 742) |
+    | rejection with drafts drawn at 0.7 | 116 ms, 39.5 | 62.2 ms, 73.7 (4.58 a round, 401 of 784) - VOID, a drifting series |
+
+  The drawn-drafts figure in that row ran after the greedy walks in one unbroken series and is void (the series drift
+  below): re-read alone with cool-downs it sits 2.3 ms a round over the greedy round, not 13 - the host selector it was
+  charged with costs 1.5 ms. The greedy walk parts from the plain
+  stream at generated token 178 (ids 364 against 314) with the arm on and off alike: a near-tie between the eight-row
+  and one-row kernels, as the Q4_K_M's token 234.
+
+  The round beside the other engine's cycle on these bytes, both traced (Instruments, the Shader Timeline; ours 37
+  rounds, theirs 40 cycles under `NI_KFLASH=0`; occupancy = an interval plus the idle to the next, so the classes
+  partition the span): ours 48.4 ms a round (wall 47.4-49.6), theirs 36.2 (wall 36.4). The race figures above were
+  taken against the older one-row form; against the wide one-row pass the rows8 kernel reads 1.17-1.27 at gate/up,
+  deltanet in and the head (the in-step ratios agree: gate+up 1.22, down 1.10, head 1.21), where the other engine's
+  eight-row tile reads 1.03-1.18 of its own one-row with no K split at all; its verify is 1.13 of its one-row step,
+  ours 1.39. The eight-row step's 10.07 ms over the one-row step: the rows8 GEMVs 5.0 (gate+up 2.5, deltanet in 1.5),
+  the split-K reduces 2.46 (315 dispatches, 3.5 ms busy, a third overlapped), the swiglu over the split planes 0.94,
+  the deltanet mixer 0.58 (four kernels where the one-row step runs one fused), the preps 0.27, norm and attention
+  0.17; the idle inside the command buffer grows 1.18 ms (459 more gaps). Knockouts: `rows8nosplit` 41.3 (+3.1: the K
+  split earns its reduces), `rows8reduce` 38.8 (+0.5: the swiglu's planes fold pays), `rows8prep` 37.9 (-0.3).
+
+    | the 12.2 ms, ranked | ms a round | kind |
+    | :--- | ---: | :--- |
+    | the split-K reduces (321 dispatches; the other engine's tile needs no split) | 3.20 | kernel form, dispatch count |
+    | the Q8_0 drafter's layers against its 4-bit drafter (pass 2.19, commit 0.26) | 2.45 | the drafter's bytes |
+    | the rows8 GEMVs against its tile on the same bytes (gate+up +1.0, deltanet in +0.54 - three sites against one fused qkv|z|b|a dispatch -, out +0.23, head +0.16, qkv +0.12, down -0.32) | 1.74 | kernel form, segment fusion |
+    | two host seams a round (0.78 + 0.48): three command buffers where it queues two back to back | 1.26 | host seam |
+    | the trunk's deltanet state replay after the accept (144 dispatches; its verify keeps the per-row states) | 0.95 | fusion |
+    | the full-vocabulary draft head (1.52) against its 98,304-id head (0.58) | 0.94 | head form |
+    | the swiglu reading the split planes | 0.85 | follows the split |
+    | the pass's top-k and walk (0.29 against 0.03), the drafter's attention (0.38 against 0.14), the pass's idle | 0.64 | dispatch count |
+    | the verify's preps, the mixer's extra dispatches, norm, argmax | 0.55 | dispatch count |
+
+  The idle inside the verify ties (2.28 against 2.18 ms; it has half the gaps at 1.7x the length). The drafter's bytes
+  taken (the Q4_K_M drafter file beside the Q8_0 one, the same prompt, back to back, `--trace`): the pass 5.2 ms a
+  round against 7.1, the round 46.4 against 50.5, the walk 105.0 tok/s against 96.6 at 4.93 against 4.89 tokens a
+  round (413 of 735 against 412 of 742 accepted) - the 4-bit drafter is the one to pair with the 27B.
+
+  The K split inside the threadgroup (`ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#rows8-matrix-unit`: one threadgroup owns a
+  16-row tile, its eight simdgroups take K's blocks interleaved, the slices sum in threadgroup memory and y is written
+  once - no partial planes, no reduce dispatch, the swiglu back on y; the seven rows8 bodies first folded bit for bit
+  into one `MetalRows8T` template, within 1% of the old bodies). The race (`harness/rows8_mt_race.das`, `DASLLAMA_ROWS8_TG=1`,
+  three rounds in one process, cv under 1%; each figure the arm over the shipped form plus its reduce): one tile with
+  eight interleaved slices gate/up 0.94, down 1.02, deltanet in 0.95, deltanet out 0.93, attention q 0.97, the narrow
+  k/v plane 0.58, the head 0.79, the mlx8 planes 0.82-0.87, the K4 planes 0.93-1.01; sixteen slices within 2% of it
+  everywhere, two or four tiles a threadgroup 1.01-1.36 (lose everywhere), a second outer way over planes within 2% and
+  needing the reduce back. The downs' 1.01-1.02 is in isolation - the race times the reduce kernel, not its dispatch gap
+  in the step. The step and the round, before (the fold alone) and after, three reps each, spread under 0.5%, the box
+  idle:
+
+    | | before | after |
+    | :--- | ---: | ---: |
+    | snapshot, eight-row step (`--sameslab --bs 8`) | 38.3-38.5 ms | 32.25-32.27 (1.15 of the one-row 28.0) |
+    | Q4_K_M, eight-row step | 46.3-46.4 | 39.9-40.1 (1.14 of 35.2) |
+    | greedy round, the Q4_K_M drafter, 512 tokens | 46.2 ms, verify 39.4 GPU, 103.8 tok/s | 40.0, verify 33.7, 119.8 (4.93 a round in both) |
+
+  The eight-row step now reads 1.15 of the one-row step where the other engine's verify reads 1.13 of its step; the
+  greedy walk parts from the plain stream at token 178 as before.
+
+  Segment fusion (`DASLLAMA_METAL_ROWS8_SEG`: the deltanet qkv|z and beta|alpha, the attention q|k|v, each one
+  `MetalRows8<arm>Seg` dispatch over a segment table of up to three weight bases and outputs; `metal_rows8_seg_stats`
+  counts the fused dispatches and the declines by reason - on both 27B files every layer fuses, 6720 dispatches a
+  512-token walk, no declines) wins the race (one dispatch against separate ones: deltanet 0.87, attention 0.92) and
+  ships OFF: in the eight-row step, knob 0 and 1 alternating, three reps each, the box idle, the snapshot ties (32.47
+  against 32.32 ms) and the Q4_K_M loses 1.65 ms (39.94 against 41.59); a segment stamp running one segment costs
+  1.03-1.04 of the plain stamp on k4 and q8 with the weights in cache, and the plain stamps are the previous commit's
+  bit for bit (0.99-1.01). The round A/B is void: six consecutive 512-token rounds on the snapshot read 40.1, 42.0,
+  42.2, 47.6, 51.6, 53.0 ms a round with no CPU load showing, more than the effect measured, and an earlier series
+  slowed the same way - a round series reads the probe's plain walk as its sentinel (a run more than 2% off the quiet
+  plain figure is void), cools down between processes and alternates the A/B order.
+
+  The round's host side (`ARCHITECTURE_GPU_MTP_ACCEPT.md#dflash-sampled-drafts`, `ARCHITECTURE_GPU_MTP_DECODE.md#mtp-replay-form`):
+  the device selector draws a sampled round's drafts from the stream's random state (`MetalDflashWalkSoft`,
+  `DASLLAMA_METAL_DFLASH_SOFT_PICK`; the stream and the accept counts identical to the host selector's, q within 1e-6,
+  the kernel outside fast math for it), a rejected round's recurrent replay commits with no host wait and the next pass
+  and verify queue behind it (`DASLLAMA_METAL_REPLAY_UNWAITED`), and the replay reads the verify's tape in place, two
+  dispatches a recurrent layer where four copies a layer stood (`DASLLAMA_METAL_REPLAY_TAPE`; a state kept per verify
+  row would write ~1.06 GB a verify, ~2 ms of bandwidth against a 1 ms replay, so it is not kept). Each knob alone, the
+  probe's built-in prompt, 512 tokens, seed 4242, the Q4_K_M drafter, three valid reps, order alternated, 60 s
+  cool-downs, cv under 1.3%, the plain sentinel inside 2%:
+
+    | round, built-in prompt | greedy (3.95 a round) | drawn drafts at the stream's 0.7 (4.02 a round) |
+    | :--- | ---: | ---: |
+    | before | 41.92 ms, 94.0 tok/s | 44.61 ms, 90.4 |
+    | the soft pick on the device | 41.93 | 43.07 (-1.54) |
+    | the replay unwaited | 41.04 (-0.92) | 42.61 (-0.55) |
+    | the replay on the tape | 41.07 (tie) | 42.47 (tie) |
+
+  The same tree on the other engine's prompt (the entry's prompt; four greedy and three drawn-drafts runs, cool-downs,
+  sentinels 35.7-35.8 and 35.1 - the sampled plain walk reads 1.8% under the greedy one in every series):
+
+    | round, the other engine's prompt | tokens a round | accepted | a round | speculative tok/s |
+    | :--- | ---: | ---: | ---: | ---: |
+    | greedy | 4.93 | 413 of 735 | 40.5 ms (105 rounds) | 120.9 / 122.0 / 120.9 / 119.8 |
+    | rejection with drafts drawn at 0.7 (the default) | 4.50 | 399 of 798 | 42.8 (114 rounds) | 105.0 / 105.1 / 104.8 |
+    | the other engine, greedy, its 4-bit drafter and reduced head | 4.78 | | 36.6 | 130.5 |
+
+  A two-command-buffer round with the accepted count read on the device by the next pass is a redesign (the drafter's
+  positions, ring offsets and anchor are host arithmetic, and its context captures cross to the host and back) and is
+  not built; the host seam left is the pass's own submit and wait. Done = the reduced draft head (`followup_metal.md`
+  row 67), the pass's top-k and attention, the verify's four tape copies a recurrent layer written straight into the
+  tape slot.
+
 - **MEASURED (2026-11-02, `direction-grade`, `debug-jit`) - GigaAM's kq lane on the Vulkan chain against the q8 lane
   (`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`).** Box zen2 (AMD Ryzen Threadripper 3990X, Windows 11, RTX 5060 Ti 16 GB,
   driver 616.56), branch `bbatkin/gigaam-kq-lane` at 2d75f01bc3, `bin/Release/daslang.exe -jit` with `DASLLAMA_GPU=1`,
@@ -798,6 +1403,235 @@ half-width dot); the whole bf16 tower set shares that gap.
   heads' is 2: an assistant drafter trained for the task against a head that shares the trunk's hidden. The 26B's 4B active
   parameters decode at 147 whole against the 35B's 193 on the same card - the sliding and global attention layers' K/V
   rows and the 262k vocabulary's classifier are the difference, not the experts.
+- **MEASURED (2026-11-02, `debug-jit`, `direction-grade`) - the DFlash2 block drafter's round on the 27B on the M5 Max: the
+  eight-row verify's forms, the round's split, and a 511-token walk against another engine's DFlash2 on the same prompt.**
+  Qwen3.8-27B Q4_K_M (48 deltanet layers whose projections are Q8_0, 16 attention layers on K-quants) with its DFlash2 Q8_0
+  drafter, greedy, the box's crowns, one process a box. The same-slab step's cost by rows (`harness/batch_rows_probe.das
+  --sameslab --bs 8 --steps 16`, each row count measured in a process of its own: an arm run after a knockout arm in the
+  same process inherits the state the knockout left - the pool's slots, the mirrors - and the same dispatch census then
+  read 38 ms where the clean step reads 61, and the ladder's attention-knockout arm hung twice at eight rows; the probe
+  now shuts both drivers down between arms):
+
+    | same-slab step | 1 row | 4 rows | 8 rows |
+    | :--- | ---: | ---: | ---: |
+    | the row forms (the half-x K-quant forms, the fixed-B4 q8 ladder) | 34.2 ms | 45.9 (1.34x) | 78.1 (2.28x) |
+    | the eight-row tensor stamps (`DASLLAMA_METAL_ROWS_MM8`, on by default) | 34.2 ms | 42.2 (1.23x) | 60.7 (1.78x) |
+
+  With the drivers reset before every arm the ladder reads the same (35.1 / 42.2 / 61.5) and its GEMV knockout attributes
+  the eight-row step to its GEMV stage almost whole: 56 ms of 61.5 (1.59 steps; 31 of 35 at one row, 37 of 42 at four).
+  The attention, elementwise and routed knockouts are dead levers on this hybrid's same-slab step (the attention is a
+  sliver at these contexts; the elementwise knockout unfuses the gate and costs more than it removes), so the rows ladder
+  is a GEMV story: a K-quant or q8 plane at eight rows on the split eight-row stamps still costs 1.8 of its one-row pass.
+
+  The round (`harness/dflash_probe.das --metal --trace --prompt-ids <the other engine's token file>`, 24 tokens): 95 ms on
+  the row forms, 86 with the K-quant sites on the stamps, 81 with the q8 sites too, 73 with the q8 split stamp under the
+  K-quant knee, 71 with the pass's own GEMVs on the stamps (the pass 13 -> 8 ms); the profile splits the round as the pass
+  and the verify's command buffer (the walk, the landing and the commit under 2 ms together). The 511-token walk on the chat-templated 85-token prompt (`--steps 512`): 396 of 805
+  drafts accepted (49%), 4.44 tokens a round, 47.0 tok/s against the plain walk's 27.2 (1.7x; 39.3 on the row forms; every
+  walk rate in this entry and the next is the 512 generated tokens over the decode time - the probe of the day counted the
+  84 echoed prompt ids as generated, and the figures were restated over the generated tokens when it was fixed); the
+  speculative walk and the plain one part at token 318 of the plain walk's 323 on both forms with identical drafts - the
+  multi-row forms stage x or W in half and flip one near-tie the single-row f32 GEMV does not. The other engine (Kapitsa,
+  `ni_run <27B 4-bit affine> @code_27b.txt 512 0 --dflash auto --ignore-eos`, its drafter's 4-bit projections over a
+  98k-id reduced head, the same drafter geometry and target layers): the chain (`NI_KFLASH=0`) 4.78 tokens a cycle (54%),
+  36.1 ms GPU a cycle of which the drafting pass 3.4, 130.5 tok/s; its tree variant 5.16 a cycle at 139.4. The gap is the
+  round, not the acceptance: the pass (8 against 3.4) and the verify (about 60 against about 33), the eight-row step
+  itself (`followup_metal.md` row 63).
+
+- **MEASURED (2026-11-03, `debug-jit`, `direction-grade`) - the rows8 matrix-unit form on the 27B's eight-row sites on the
+  M5 Max: the eight-row stamps' anatomy, the register-left kernel's race, and the step.** The kernel race
+  (`harness/rows8_mt_race.das` and the stamp probes it grew from, synthetic planes past the SLC, one process a box; the
+  one-row K4 GEMV pass reads 87 us on the 27B's gate/up plane, 575 GB/s, the byte floor):
+
+    | gate/up plane, 5120 x 17408 k4, one-row pass = 1.00 | passes |
+    | :--- | ---: |
+    | the shipped eight-row split stamp | 1.9 |
+    | its stage alone (decode into the threadgroup tile, no tensor op) | 1.4 |
+    | its tensor op alone (no stage) | 0.75 |
+    | stage and op on specialized simdgroups (4 + 4) | 1.65 |
+    | the stage a superblock deep (every weight line touched once) | 1.07 |
+    | the register-left matrix-unit kernel, 16 x 8 x 32, uint8 codes, 8 ways | 1.28 |
+    | the same at 64 deep, half codes 1024 + q sc, 8 ways (the shipped form) | 1.17 |
+    | the shipped form, the engine's generated source | 1.18 |
+
+  The down plane (17408 x 5120) reads 1.24 at 16-32 ways, the deltanet q8 planes 1.09-1.21 at 16 ways. A register-tile
+  kernel on the legacy simdgroup matrix ops reads 1.38 at best: those ops run at the shader ALUs' FMA peak on this GPU,
+  the matrix unit at about twice that for a 16-row product. The step (`harness/batch_rows_probe.das --sameslab --bs
+  1,4,8 --steps 8`, drivers reset between arms): one row 35.1 ms, four rows 42.2, eight rows 54.5 (1.55; the stamps
+  61.5, 1.75). The x-table preps cost about 1.5 ms of it (one a site, 336 a step; `DASLLAMA_METAL_PREFILL_SKIP=rows8prep`
+  - a table shared between sites on a panel's pointer served stale rows, the DFlash2 lossless gate caught it), the split
+  4.4 ms net against one way (`rows8nosplit`: 58.7). What stands between 54 and the race's figure is the step's other
+  eight-row forms: the 192 narrow deltanet planes a step on two B4 dispatches each, the 16 K6 attention sites on the
+  eight-row stamps, and 670 small serial dispatches of prep and reduce.
+
+- **MEASURED (2026-11-03, `debug-jit`, `direction-grade`) - the eight-row step's engineering after the rows8 form, on the
+  M5 Max: the per-kernel trace, the dispatch economy, and the DFlash2 walk.** Instruments' shader timeline over the same-slab
+  step (`xctrace record` with the Metal System Trace template's Shader Timeline on; the `gpu-shader-profiler-interval` table
+  keyed to the kernel list; back-to-back dispatches of one kernel read as one interval), B = 8 on the rows8 commit:
+
+    | kernel | ms a step | dispatches |
+    | :--- | ---: | ---: |
+    | MetalRows8K4 (gate, up, down) | 21.6 | 192 |
+    | MetalRows8Q8 (deltanet qkv, z, out) | 12.6 | 144 |
+    | MetalQ8GemmB (attention q, k, v: the batch tier's use_gemm kept them off the rows8 gate) | 6.5 | 48 |
+    | split-K reduce | 2.8 | 352 |
+    | the classifier (K6 stamp) | 2.6 | 1 |
+    | wo (K6 split stamps) | 1.2 | 16 |
+    | MetalGemvB4 (beta, alpha at 48 rows) | 1.0 | 192 |
+    | the x-table preps | 0.5 | 336 |
+    | gaps between dispatches (2.8 us each) and between the four command buffers | 5.0 | 1717 |
+
+  The kernel time is 50.8 of the 55.5 ms step; the one-row step reads 33.7 of 35.9 (kq_gemv_k4 16.5, GemvB2 10.9, the
+  K6 GEMVs 2.5, q8_mv_b2 2.2). Four changes, each measured by the 8-step same-slab probe on a quiet box (a writer's module
+  compile running beside the probe reads 3 ms high on the step - the compile takes the unified memory's bandwidth):
+
+    | the eight-row step | ms | of one row |
+    | :--- | ---: | ---: |
+    | the rows8 commit | 54.5 | 1.55 |
+    | the twin producers write the rows8 table (272 preps gone), q/k/v on the rows8 gate, [beta or alpha] one site | 49.0 (traced) | 1.39 |
+    | the ways rule (a divisor of the superblocks: gate/up 10, down 34), the swiglu summing its sites' planes | 49.4 | 1.41 |
+    | the 96-row [beta or alpha] site split over its two threadgroups (one way ran its K serially, 50 us a layer) | 47.2 | 1.34 |
+    | the K6 sites (wo, the classifier) on the rows8 form, a product a scale block (`rows8nok6`: 47.0) | 46.2 | 1.32 |
+
+  The rows8 kernels themselves hold at 1.12-1.15 one-row passes with even ways (the race: a uint8 left operand at depth
+  32, the block-diagonal 16 x 16 product, subnormal halves and a software-pipelined fill all tie the shipped kernel
+  within 1%; its loads alone read 1.03-1.06 of a pass, the op alone 0.71, so the gap is the load pattern and the fill
+  and epilogue ALU beside it, not the matrix unit - which runs a uint8 left 35% faster than a half one and depth 16 at
+  depth 64's rate). A consumer that sums a site's partial planes pays only where its grid matches the reduce's: the
+  residual (eight threadgroups) and the deltanet gate (48) summing them cost 3.9 ms more than the reduces they replaced,
+  the swiglu (2000+) 0.5 less. The 512-token DFlash2 walk on the other engine's prompt: 512 generated ids in 7.78 s, 65.8 tok/s
+  (47.0 at the rows8 commit), 396 of 805 drafts accepted, the plain walk 27.8. The round by the probe's trace
+  (`--trace`, seven drafts a round): ~61 ms = the verify ~51 (the eight-row step and ~4 ms of encode, landing and
+  rollback) + the pass 8 on the eight-row tensor stamps. With the pass's sites on the rows8 form the walk reads 68.3
+  tok/s; the Q4_K_M drafter file (45 Q4_K, 4 Q6_K planes, half the bytes) through the loader brings the pass to 6-7 ms
+  and the round to ~59, and drafts 395 of 812 accepted - level with the Q8_0 drafter's walk (65.5 tok/s, within the
+  run-to-run spread): what the pass gains the acceptance gives back. The round by Instruments (30 rounds, the K6 sites
+  on the rows8 form): 61.9 ms wall = the pass 5.9 (its kernels 5.6: the classifier over seven rows 2.4, the drafter's
+  K4 planes 1.9) + the verify 50.4 (kernels 48.0) + the commit 1.0 + 7.5 idle, of which 2.9 between the pass's end and
+  the verify's start (the logits landed, the selector on the host, the verify encoded after the wait), 2.7 from the
+  verify's end to the next pass (8 MB of logits landed, the commit), 2.4 inside the verify's 1215 dispatch gaps; and
+  the NextN head's layer encoded after the lm head in a round it did not drive (1.4 ms). With the selector on the
+  device (a sliced top-16 a threadgroup and one merge a row, the walk's rank-wide products in parallel: ~0.3 ms), the
+  verify committed behind the pass with no host wait and the head skipped, the round reads 53-54 ms on a quiet box
+  (the pass 5.6 + the verify 46.7, the verify starting 0.5 us after the pass) against 55-57 with the host selector in
+  the same session; the 512-token walk reads 71.6 tok/s with the Q8_0 drafter (395 of 812 drafts) and 71.5 with the
+  Q4_K_M one (396 of 840), from 47.0 at the rows8 commit and 65.8 before the pass work; the same walk on a quiet box the
+  next evening (the probe reporting generated ids a second, decode alone) 74.5 against the plain walk's 28.9 (34.6 ms a
+  step), 116 rounds in 6.9 s = 60 ms a round wall, the speculative and plain streams parting at generated token 234 on
+  an indentation near-tie (the eight-row verify's kernels round apart from the one-row step's). What stands: the verify's
+  kernels (the K4 and q8 sites at 1.12-1.2 one-row passes, 37.6 of the 46.7), the in-verify dispatch gaps, and the
+  turnaround's 8 MB logits landing for the host's accept.
+
+  The acceptance gap is the text, not the drafter. The other engine's 54% on the code prompt runs its own MLX 4-bit pack
+  of the 27B, whose greedy text parts from the Q4_K_M's at the sixth generated token; with our Q4_K_M imported into it
+  (`kapitsa import`, the Q4_K codes kept) and the same drafter it reads 46.0% (4.22 tokens a cycle) where we read 48.3%
+  (4.38). Its selector is ours - top-16 over the head's raw logits ordered by value then lower id, the pair score
+  `sum_r A[pred][r] H[r] B[cand][r]` added to the raw logit, the first argmax, no temperature (`src/kernels/spec_dflash.metal`) -
+  on five target layers' post-MLP residuals, the same mask token and anchor row, seven drafts a round; on the first 234
+  tokens the two engines share, 334 of 385 draft slots pick the same token and every disagreement is a near-tie under one
+  logit. Our first miss a round has the right token in the top-16 but not at the top 65 times of 90 (the pair score
+  rescues a wrong top-1 25 times and spoils a right one 12; the other engine 68, 24 and 11), outside the top-16 13 times,
+  and never from numerics (the device pass and the CPU reference arm pick identically over 116 rounds, the logits' spread
+  0.009). Pooled over five coding prompts: ours 48.3%, the other engine on our Q4_K_M 48.2%, on its MLX pack 48.5%; by
+  prompt 39-61%, so a rate is a pool over prompts, never one prompt. Its tokens a cycle past ours come from the tree
+  verify (5.16 a cycle against the chain's 4.78) and a 98,304-id reduced draft head that it notes drafts as the full
+  head does (its pass 3.4 ms against our 5.6, of which the classifier over seven rows 2.4).
+
+  The round by depth and by crown set (one quiet series, the box ~12% slower than the morning's rounds after a day of
+  load, so the series compares within itself; `dflash_probe --depth k`, the Q8_0 drafter, 512 tokens, the other
+  engine's prompt):
+
+    | crowns | depth 7 | depth 5 | depth 4 | depth 3 |
+    | :--- | ---: | ---: | ---: | ---: |
+    | the M5's (rows8 at 5-8 rows), the round 60-61 ms at every depth | 7.54 s | 8.05 | 8.50 | 9.84 |
+    | the M5's, the host accept (`DASLLAMA_METAL_DFLASH_ACCEPT=0`): 63-65 ms a round | 8.48 s | | | |
+    | the tensor-free set (every Metal 4 crown off, rows8 and the stamps off: the half-x rows forms, the B4 ladder) | 16.3 s (136 ms) | 18.1 (143) | 19.2 (143) | 14.0 s (86 ms) |
+
+  On the matrix-unit form the verify costs the same from four to eight rows, so the deeper block always wins, and the
+  device accept is 3-4 ms a round (12% of the walk). On the tensor-free forms the four-row verify at depth 3 beats the
+  eight-row one by 14% and five or six rows are the worst case (padded onto the eight-column forms): an M4-class box
+  wants either the depth-3 round on today's forms or the eight-row simdgroup-matrix form (`followup_metal.md` row 64).
+
+  The round under the honest acceptances (`dflash_probe --mode greedy|sample|residual`, one quiet box, the Q8_0 drafter,
+  the other engine's prompt, 512 generated tokens, the sampler at temperature 0.7 with no cut, seed 4242; every rate the
+  generated tokens over the decode time, the plain walk of the same sampler beside it,
+  `ARCHITECTURE_GPU_MTP_ACCEPT.md#dflash-sampled-drafts`):
+
+    | acceptance | tokens a round | drafts accepted | a round, wall | speculative tok/s | plain tok/s | over plain |
+    | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+    | greedy, the argmax match | 4.41 | 395 of 812 (49%) | 60 ms | 74.5 | 28.9 | 2.58 |
+    | exact: a draw a row, accepted while it equals the greedy draft | 4.05 | 387 of 889 (44%) | 61 | 65.9 | 28.4 | 2.32 |
+    | rejection, the drafts greedy (a point mass, accept at p(d)) | 4.53 | 402 of 798 (50%) | 64 | 69.6 | 28.2 | 2.47 |
+    | rejection, the drafts drawn at 0.7 from the selector's softmax (accept at min(1, p/q)) | 4.97 | 409 of 721 (57%) | 62 | 80.2 | 28.4 | 2.82 |
+
+  The honest round beats the greedy one: drafts drawn from the drafter's own softmax accept 57% where the greedy drafts
+  accept 49%, and the sampled stream is the sampler's own distribution (the exact walk reproduces the seeded plain stream
+  for 198 tokens before a near-tie draw parts them; a rejection stream parts at its first rejection by construction).
+  The drawn-draft round pays its selector on the host (the device selector stands down above temperature 0: the pass's
+  logits land, the top-16 and the walk run on the host) and still lands 2 ms under the point-mass round; the selector's
+  soft pick on the device is the lever left. The exact walk's draws cost a round nothing (61 against 60 ms) - its rate
+  is the acceptance alone.
+
+  The NextN head's round under the same acceptances (`dflash_probe` with no `-r`: the trunk's own head drafts;
+  `set_mtp_draft_temp` the head's temperature under rejection, `ARCHITECTURE_GPU_MTP_ACCEPT.md#nextn-draft-temp`; the
+  27B with its split Q8_0 head, the code prompt, 512 tokens, seed 4242, temperature 0.7, three interleaved reps on a
+  quiet box, cv under 1.7%; the box ran 8-10% slower than the DFlash2 table's hour, so the speedup over the plain walk
+  of the same block - 27.5 tok/s - is the reading):
+
+    | drafter, depth, acceptance | tokens a round | accepted | over plain |
+    | :--- | ---: | ---: | ---: |
+    | NextN d1 greedy / exact / rejection point-mass / rejection drawn at 0.7 | 1.88 / 1.88 / 1.84 / 1.89 | 89 / 89 / 85 / 90% | 1.36 / 1.35 / 1.32 / 1.33 |
+    | NextN d2 greedy / exact / rejection point-mass / rejection drawn at 0.7 | 2.53 / 2.60 / 2.72 / 2.56 | 77 / 81 / 87 / 79% | 1.36 / 1.41 / 1.47 / 1.35 |
+    | DFlash2 greedy / rejection drawn at 0.7 | 4.41 / 4.97 | 49 / 57% | 2.48 / 2.64 |
+
+  A NextN round costs about 1.37 plain steps (the head's own layer and its 248k classifier a draft), so 1.9 tokens a
+  round buys 1.35x and the second draft - fed on the head's first guess - adds little; the greedy chain pinned off
+  (`--chain 0`) reads the same. On the 35B pure IQ4_XS the NextN round LOSES to the plain walk in every mode (d1 greedy
+  151 against 182 tok/s, d2 greedy 177 against 205, d2 rejection at 0.7 130 against 187): the routed experts a round
+  reads cost more than the one draft pays.
+
+  Twenty tool-call and classifier prompts over six generic tools (`harness/tool_call_prompts.txt`,
+  `harness/tool_call_tools.jsonl`; `--prompts` / `--tools`, each walk ending on the turn's stop, up to 32 tokens, pooled),
+  the 27B, one quiet run each, no grammar (the scheduler keeps constrained streams out of speculative rounds):
+
+    | config | tokens a round | accepted | ms a request, speculative / plain | over plain |
+    | :--- | ---: | ---: | ---: | ---: |
+    | NextN d1 greedy | 2.00 | 100% | 694 / 1012 | 1.46 |
+    | NextN d2 greedy | 2.97 | 98% | 728 / 1017 | 1.40 |
+    | NextN d1 / d2 rejection drawn at 0.7 | 2.00 / 2.95 | 100 / 98% | 778 / 783 against ~1035 | 1.33 / 1.32 |
+    | DFlash2 greedy | 6.66 | 81% | 430 / 1109 | 2.58 |
+    | DFlash2 rejection drawn at 0.7 | 6.86 | 84% | 440 / 1134 | 2.58 |
+
+  Acceptance on a tool call is near total for every drafter, and the short output moves the ratio toward NextN
+  (1.46 against 1.36 on code), but the round's fixed cost caps it; DFlash2 at 6.7-6.9 tokens a round turns a 32-token
+  call into five rounds. On the 35B the same calls read NextN slower than plain (d1 155 against 144 ms a request).
+  Behind 3000 tokens of context (`--context-text`, the macros reference) the 27B's NextN d1 reads 1.45x (91%
+  accepted) and DFlash2 2.72x (5.06 a round, 58%, ids equal for all 512): longer context favours both, DFlash2 more.
+  Two findings beside the numbers: a constrained sampled stream under rejection would draw its draft and record it
+  as a point mass (no served path reaches it - the scheduler excludes constrained streams - and a speculative round
+  under a grammar needs the drafts admitted, committed and rolled back under the constraint); and the NextN
+  speculative walk's time a request grows from 587 to 789 ms over twenty fresh sessions while the plain walk and the
+  DFlash2 round stay flat - per-session state the head's round leaves behind, to find.
+
+- **MEASURED (2026-11-02, `debug-jit`, `direction-grade`) - the NextN round on Metal against the plain step, by depth, on
+  the M5 Max.** `lcpp_bench --mtp-ab --mtp-depth k -p 0 -n 128 -r 3` (the tg-real row, 8 prompts, greedy), the 35B pure
+  (`Qwen3.6-35B-A3B-MTP-IQ4_XS-pure`) and the 27B Q4_K_M with its split Q8_0 head, the box throttling across the run (the
+  35B's plain arm read 204 at depth 1 and 160-175 after), so the within-run ratio is the reading. The round's cost in plain
+  steps is (1 + drafts accepted a round) over the on rate, over the step:
+
+    | depth | 35B on/off | 35B accepted p1..pk | 35B round, steps | 27B on/off | 27B accepted p1..pk | 27B round, steps |
+    | ---: | ---: | :--- | ---: | ---: | :--- | ---: |
+    | 1 | 0.83 | 75 | 2.1 | 1.35 | 81 | 1.34 |
+    | 2 | 0.69 | 74 / 55 | 3.3 | | | |
+    | 3 | 0.66 | 71 / 50 / 37 | 3.9 | 1.40 | 75 / 54 / 38 | 1.9 |
+    | 4 | 0.57 | 68 / 46 / 33 / 26 | 4.8 | | | |
+    | 7 | 0.44 | 67 / 46 / 32 / 25 / 20 / 14 / 10 | 7.2 | 0.94 | 74 / 48 / 33 / 24 / 17 / 12 / 10 | 3.4 |
+
+  The 35B pays about one step per verify row (its routed experts, 70% of the step's bytes, read per row - `followup_metal.md`
+  row 62); the 27B's dense rows hold to four and fall off at eight. The served harness on Kapitsa's LRU-cache prompt (3
+  sampled T0.6 / 3 greedy, medians) reads the same: 35B pure plain 195 / 203, depth 1 166 / 182, depth 2 155 / 179, depth 3
+  113 / 123; 27B Q4_K_M plain 22 / 21, depth 1 31 / 32, depth 2 32 / 34, depth 3 40 / 41 (`--mtp-depth`, the server flag).
+
 - **MEASURED (2026-10-19, `debug-jit`, `direction-grade`) - the speculative round on Qwen3.6-35B-A3B-MTP IQ4_XS-pure at the
   served shape: the context asked whole at 32768.** zen2, `lcpp_bench --mtp-ab -n 64 -r 2 -t 16` under `DASLLAMA_GPU=1
   DASLLAMA_IMAGE=0 DASLLAMA_GPU_CTX_STRICT=1 DASLLAMA_GPU_CTX_MAX=32768`, the planar load (the file's lane was baked under the

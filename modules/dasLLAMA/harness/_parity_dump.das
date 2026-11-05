@@ -94,6 +94,7 @@ def parity_dump_read(path : string) : ParityDump {
         }
         let n = read_word(f)
         var bytes : array<uint8>
+        bytes |> reserve(n)
         bytes |> resize(n)
         verify(long_fread(f, bytes) == n, "parity dump: the file ends inside the record")
         binary_load(d, bytes)

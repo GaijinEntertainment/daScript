@@ -50,7 +50,7 @@ def private box_from_cpu(cpu : string) : string {
 }
 
 //! argv spawn (no shell), stdout+stderr merged by popen_argv, the whole output trimmed; "" where the program is missing
-[arch(at="../ARCHITECTURE_ENGINE.md#instrumentation-and-support")]
+[arch(at="../ARCHITECTURE_ENGINE_SUPPORT.md#instrumentation-and-support")]
 def public run_capture_argv(args : array<string>) : string {
     var acc = ""
     unsafe(popen_argv(args, 0.0, $(f) {
@@ -93,7 +93,7 @@ def public cim_script(cls : string; props : string) : string {
 }
 
 //! a Windows WMI class's `Key=value` lines for `props`, one block per instance; empty where nothing answers
-[arch(at="../ARCHITECTURE_ENGINE.md#instrumentation-and-support")]
+[arch(at="../ARCHITECTURE_ENGINE_SUPPORT.md#instrumentation-and-support")]
 def public wmi_lines(cls : string; props : string) : array<string> {
     var lines <- wmi_lines_of(run_capture_argv(["wmic", "path", cls, "get", props, "/value"]))
     if (empty(lines)) {
@@ -172,7 +172,7 @@ def public linux_ram_gb(meminfo, cgroup_v2, cgroup_v1 : string) : int {
     return cap > 0 && (total == 0 || cap < total) ? cap : total
 }
 
-[arch(at="../ARCHITECTURE_ENGINE.md#instrumentation-and-support")]
+[arch(at="../ARCHITECTURE_ENGINE_SUPPORT.md#instrumentation-and-support")]
 def public box_ram_gb() : int {
     //! the box's RAM in GiB, 0 where no probe answers: the physical memory, or the container's limit where a cgroup
     //! caps this process under it (a RunPod pod reads the host's 251 GB off /proc/meminfo and holds 62)

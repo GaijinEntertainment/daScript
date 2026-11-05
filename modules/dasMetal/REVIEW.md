@@ -81,6 +81,10 @@ argument.
   `tests/msl/` or `tests/metal/` (repo root) fixture sizes for that stride, in the same change.** Nothing checks
   a fixture's allocation against the stride, so a one-sided change overruns it silently.
 
+- **A diff that drops or lowers `options stack` in `metal/msl_shader.das` or `metal/msl_emit.das` is a defect.** The
+  macro context takes the hosting module's stack, and the emitter interpreted - the first compile after an edit, before
+  a JIT image exists - recurses past the default on the largest engine kernels (`stack overflow while calling emit_value`).
+
 - **A diff that makes `metal/msl_emit.das` pick a builtin's lowering from anything other than the
   das function name and, for a pointer operand, its pointee type is a defect.** Nothing else
   tells the builtins apart, and the generic parameters of the builtins let the compiler accept

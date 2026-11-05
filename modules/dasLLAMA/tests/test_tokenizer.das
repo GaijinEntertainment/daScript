@@ -14,7 +14,9 @@ require _tokenizer_corpus
 // encode/decode) so BOTH backends are covered: byte-level BPE (llama-bpe, qwen2, qwen35, gpt-2),
 // SPM-style BPE (gemma-4), and SentencePiece (phi-3, llama-spm). The vocab fixtures are
 // machine-local (gitignored model dir), so each case skips cleanly when absent - the file rides
-// the runner's model-free suite and reports SKIPPED where the vocab fixtures are not stocked.
+// the runner's model-free suite and reports SKIPPED where the vocab fixtures are not stocked. A
+// snapshot twin case also skips where its HF-cache snapshot or its GGUF twin is not stocked, and
+// where the twin is large-tier (the Qwen3.8-27B one) without DASLLAMA_PARITY_FULL=1.
 
 // Run the .inp/.out corpus for one vocab: every input must encode to the reference ids, and
 // decode(encode(x)) must round-trip losslessly. The first divergence of each kind is carried in
@@ -79,6 +81,64 @@ def test_tokenizer_llama_bpe(t : T?) {
 [test]
 def test_tokenizer_qwen35(t : T?) {
     corpus_case(t, "qwen35 BPE (mark-absorbing letter runs) vs the llama.cpp corpus", "ggml-vocab-qwen35.gguf")
+}
+
+//! a snapshot's tokenizer.json against its GGUF twin's tokenizer: the same ids over the corpus `corpus` (a vocab fixture's
+//! .inp beside the models), the same specials and the same token table
+def private snapshot_twin_case(t : T?; title, repo, twin, corpus : string) {
+    t |> run(title) @(t : T?) {
+        let snap = hf_snapshot_dir(repo)
+        let twin_path = path_join(models_dir(), twin)
+        let inp = path_join(models_dir(), corpus)
+        if (empty(snap) || !fexist(inp)) {
+            t |> skip("{repo} snapshot or {inp} not present")
+            return
+        }
+        return if (!model_available(t, twin_path))
+        var a <- load_tokenizer_auto(snap)
+        var b <- load_tokenizer_auto(twin_path)
+        t |> equal(a.bpe.pre, b.bpe.pre, "the split regex names the twin's pre-tokenizer")
+        t |> equal(a.bpe.bos_id, b.bpe.bos_id, "bos")
+        t |> equal(a.bpe.eos_id, b.bpe.eos_id, "eos")
+        t |> equal(a.bpe.add_bos, b.bpe.add_bos, "add_bos")
+        t |> equal(length(a.bpe.vocab), length(b.bpe.vocab), "the token table's rows")
+        var piece_diff = -1
+        for (pa, pb, i in a.bpe.vocab, b.bpe.vocab, count()) {
+            if (pa != pb) {
+                piece_diff = i
+                break
+            }
+        }
+        t |> equal(piece_diff, -1, "the token table's pieces (first differing row)")
+        t |> success(ids_equal(a.bpe.token_type, b.bpe.token_type), "the token types")
+        t |> equal(length(a.bpe.merge_rank), length(b.bpe.merge_rank), "the merges")
+        var inputs <- split(fread(inp), "\n__ggml_vocab_test__\n")
+        drop_trailing_empty(inputs)
+        var npass = 0
+        var first_bad = ""
+        for (s in inputs) {
+            var inscope x <- encode(a, s, true)
+            var inscope y <- encode(b, s, true)
+            if (ids_equal(x, y)) {
+                npass++
+            } elif (empty(first_bad)) {
+                first_bad = "first mismatch on '{s}': snapshot {x}, twin {y}"
+            }
+        }
+        t |> success(!empty(inputs), "the corpus is present")
+        t |> equal(npass, length(inputs), first_bad)
+        delete inputs
+        delete a
+        delete b
+    }
+}
+
+[test]
+def test_tokenizer_snapshot_twins(t : T?) {
+    snapshot_twin_case(t, "Llama-3.2 tokenizer.json vs its GGUF twin over the llama-bpe corpus", "mlx-community/Llama-3.2-1B-Instruct-8bit",
+        "Llama-3.2-1B-Instruct-Q8_0.gguf", "ggml-vocab-llama-bpe.gguf.inp")
+    snapshot_twin_case(t, "Qwen3.8 tokenizer.json vs its GGUF twin over the qwen35 corpus", "mlx-community/Qwen3.8-27B-4bit",
+        "Qwen3.8-27B-Q4_K_M.gguf", "ggml-vocab-qwen35.gguf.inp")
 }
 
 [test]

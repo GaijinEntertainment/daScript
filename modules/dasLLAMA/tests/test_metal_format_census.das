@@ -11,6 +11,7 @@ require _metal_blob_twin   // nolint:STYLE030,LINT019 - blob_twin and the kernel
 require ?das_metal dasllama/dasllama_metal_common   // nolint:STYLE030,LINT019 - the kernel coverage census, inside the das_metal halves
 require ?das_metal dasllama/dasllama_metal_decode   // nolint:STYLE030,LINT019 - metal_decode_stats and shutdown, inside the das_metal halves
 require ?das_metal dasllama/dasllama_metal_prefill   // nolint:STYLE030,LINT019 - metal_prefill_stats and shutdown, inside the das_metal halves
+require ?das_metal dasllama/dasllama_metal_kernels   // nolint:STYLE030,LINT019 - the wide form's knob and rule, inside the das_metal halves
 require ?das_metal metal/das_metal_boost   // nolint:STYLE030,LINT019 - metal_live_object_count for the leak gate, inside the das_metal halves
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 - path_join and fmap, inside the das_metal halves
@@ -92,9 +93,11 @@ def test_metal_format_census_iq4xs_pure(t : T?) {
                     nrec++
                 }
             }
+            let ba_one0 = metal_prefill_dn_ba_one_sites()
             window_and_steps_cell(t, tr, trg, HYBRID_MOE_BAR, "MetalEmbedIq4xs_metal_embed_kq", "census") $ {
-                let ba_n = metal_kernel_count("metal_moe_gemv_iq4xs")
-                t |> success(ba_n >= 2l * nrec, "the window's beta/alpha planes rode the IQ4_XS expert-form GEMV ({ba_n} dispatches, {2l * nrec} planes)")
+                //! the IQ4_XS beta and alpha planes, adjacent in the image, project as one [beta | alpha] dense site a layer
+                t |> equal(metal_prefill_dn_ba_one_sites() - ba_one0, nrec, "the window's beta/alpha planes ran as one site a recurrent layer ({nrec} layers)")
+                t |> equal(metal_kernel_count("metal_moe_gemv_iq4xs"), 0l, "and none rode the IQ4_XS expert-form GEMV")
                 t |> equal(metal_kernel_count("MetalDnBa_metal_q8_gemv"), 0l, "and the q8 narrow-projection GEMV read none of them")
                 let rt_n = metal_kernel_count("metal_f32_exact_mulmm")
                 t |> success(rt_n >= c.n_layers, "the window's routers rode the f32 tile over their own F32 rows ({rt_n} dispatches, {c.n_layers} routed layers)")
@@ -102,8 +105,12 @@ def test_metal_format_census_iq4xs_pure(t : T?) {
             //! the coverage counts below are the steps' (the cell resets them after the window)
             {
                 let gv_n = metal_kernel_count("MetalKqGemvIq4xs_metal_kq_gemv_iq4")
-                let planes = 5l * nrec + 3l * c.n_layers   //! every recurrent layer's five deltanet planes and every layer's shared-expert triple
-                t |> success(gv_n >= DECODE_STEPS * planes, "the steps read the deltanet and shared-expert planes through the IQ4_XS single-row GEMV ({gv_n} dispatches, {DECODE_STEPS * planes} planes)")
+                let fat_n = (metal_kernel_count("MetalKqFatIq4xs_metal_kq_fat_iq4") + metal_kernel_count("MetalKqFatIq4xsN_metal_kq_fat_iq4")
+                    + metal_kernel_count("MetalKqFatIq4xsA_metal_kq_fat_iq4") + metal_kernel_count("MetalKqFatIq4xsNX_metal_kq_fat_iq4"))
+                //! the fused chain reads a recurrent layer's deltanet planes as two fat dispatches (the projections, the out) and every
+                //! layer's shared expert as one (its down rides the routed down); the plain chain reads five and three single-row GEMVs
+                let fat_sites = 2l * nrec + c.n_layers
+                t |> success(gv_n + fat_n >= DECODE_STEPS * fat_sites, "the steps read the deltanet and shared-expert planes through the IQ4_XS forms - the single-row GEMV or the fat family ({gv_n} + {fat_n} dispatches, {DECODE_STEPS * fat_sites} sites)")
                 t |> equal(metal_kernel_count("MetalQ8GemvW13Sw_metal_q8_gemv_w13sw16") + metal_kernel_count("MetalQ8GemvW13SwSg_metal_q8_gemv_w13sw16"), 0l,
                     "and the q8 fused gate+up form read no shared expert")
             }
@@ -230,11 +237,12 @@ def test_metal_format_census_iq3s4(t : T?) {
     }
 }
 
-//! a model's per-32 dense planes (q51, iq4nl32, q4032, q5032)
+//! a model's per-32 dense planes (q51, iq4nl32, q4032, q5032 and the affine members)
 def private per32_planes(m : Model) : int64 => (planes_tagged(m, KqFmt.q51) + planes_tagged(m, KqFmt.iq4nl32) + planes_tagged(m, KqFmt.q4032)
-    + planes_tagged(m, KqFmt.q5032))
+    + planes_tagged(m, KqFmt.q5032) + planes_tagged(m, KqFmt.mlx4) + planes_tagged(m, KqFmt.mlx8) + planes_tagged(m, KqFmt.mlx4b)
+    + planes_tagged(m, KqFmt.mlx8b) + planes_tagged(m, KqFmt.mlx6b))
 
-let private PER32_STEMS = fixed_array("Q51", "Iq4nl32", "Q4032", "Q5032")
+let private PER32_STEMS = fixed_array("Q51", "Iq4nl32", "Q4032", "Q5032", "Mlx4", "Mlx8", "Mlx4b", "Mlx8b", "Mlx6b")
 
 //! the window's per-32 GEMM, small-batch and GEMV dispatches (the kernel coverage census since its last reset)
 def private per32_window_dispatches() : int64 {
@@ -257,11 +265,30 @@ def private per32_window_dispatches() : int64 {
     return n + per32_gemv_dispatches()
 }
 
-//! the per-32 one-row GEMV dispatches, the two-row stamps and the K-split ones
+//! the per-32 one-row GEMV planes read: the two-row stamps, the K-split ones, the wide ones, and twice each fused gate|up
+//! dispatch - it reads two planes
 def private per32_gemv_dispatches() : int64 {
     var n = 0l
-    for (f in ["q51", "iq4nl32", "q4032", "q5032"]) {
+    for (f in ["q51", "iq4nl32", "q4032", "q5032", "mlx4", "mlx8", "mlx4b", "mlx8b", "mlx6b"]) {
         n += metal_kernel_count("metal_kq_gemv_{f}") + metal_kernel_count("metal_kq_gemv_{f}_ks")
+    }
+    return n + per32_wide_dispatches() + 2l * per32_glu_dispatches()
+}
+
+//! the per-32 wide one-row GEMV dispatches
+def private per32_wide_dispatches() : int64 {
+    var n = 0l
+    for (f in PER32_STEMS) {
+        n += metal_kernel_count("MetalKqGemv{f}W_metal_b32_gemv_w")
+    }
+    return n
+}
+
+//! the per-32 fused gate|up dispatches
+def private per32_glu_dispatches() : int64 {
+    var n = 0l
+    for (f in PER32_STEMS) {
+        n += metal_kernel_count("MetalKqGemv{f}Glu_metal_b32_gemv_w")
     }
     return n
 }
@@ -306,9 +333,14 @@ def test_metal_format_census_per32(t : T?) {
                     t |> success(w >= np32, "{spec.arm}: the window's per-32 sites rode the per-32 stamps ({w} dispatches, {np32} planes)")
                 }
                 let gv = per32_gemv_dispatches()
-                t |> success(metal_kernel_count("metal_kq_gemv_q51_ks") + metal_kernel_count("metal_kq_gemv_iq4nl32_ks") + metal_kernel_count("metal_kq_gemv_q4032_ks")
-                        + metal_kernel_count("metal_kq_gemv_q5032_ks") > 0l,
-                    "{spec.arm}: the narrow planes rode the K-split GEMV")
+                let kv_rows = tr.config.n_kv_heads * tr.config.head_size
+                if (!get_metal_b32_wide() || !b32_wide_fits(kv_rows)) {   //! a k/v plane under the wide form's rows: the K-split's carrier
+                    t |> success(metal_kernel_count("metal_kq_gemv_q51_ks") + metal_kernel_count("metal_kq_gemv_iq4nl32_ks") + metal_kernel_count("metal_kq_gemv_q4032_ks")
+                            + metal_kernel_count("metal_kq_gemv_q5032_ks") > 0l,
+                        "{spec.arm}: the narrow planes rode the K-split GEMV (DASLLAMA_METAL_B32_WIDE={get_metal_b32_wide()}, k/v rows {kv_rows})")
+                }
+                t |> success(per32_wide_dispatches() > 0l || !get_metal_b32_wide(),
+                    "{spec.arm}: the planes of 512 rows or more rode the wide GEMV (DASLLAMA_METAL_B32_WIDE={get_metal_b32_wide()})")
                 t |> success(gv >= DECODE_STEPS * np32, "{spec.arm}: the steps read every per-32 plane through its GEMV ({gv} dispatches, {DECODE_STEPS * np32} planes)")
                 metal_decode_shutdown()
                 metal_prefill_shutdown()
@@ -463,13 +495,13 @@ def test_metal_format_census_per32_moe(t : T?) {
                 let cls = spec.f == KqFmt.q51 ? "Q51" : (spec.f == KqFmt.q4032 ? "Q4032" : "Q5032")
                 let tbody = "metal_moe_mulmm_b32_t"   //! every per-32 routed twin stages on the split scaffold's per-32 body
                 window_and_steps_cell(t, tr, trg, PLAIN_MOE_BAR, spec.emb, spec.arm) $ {
-                    var mm = metal_kernel_count("metal_moe_mulmm_{stem}") + metal_kernel_count("metal_moe_gemv_{stem}")
+                    var mm = metal_kernel_count("metal_moe_mulmm_{stem}") + routed_gemv_dispatches(spec.f, cls)
                     for (v in ["T", "TH", "TH128", "THR"]) {
                         mm += metal_kernel_count("MetalMoeMulMm{cls}{v}_{tbody}")
                     }
                     t |> success(mm >= nexp, "{spec.arm}: the window's {stem} expert stacks rode the {stem} routed stamps ({mm} dispatches, {nexp} stacks)")
                 }
-                let gv = metal_kernel_count("metal_moe_gemv_{stem}")
+                let gv = routed_gemv_dispatches(spec.f, cls)
                 t |> success(gv >= DECODE_STEPS * nexp, "{spec.arm}: the steps read every {stem} expert stack through the routed GEMV ({gv} dispatches, {DECODE_STEPS * nexp} stacks)")
                 metal_decode_shutdown()
                 metal_prefill_shutdown()
@@ -480,6 +512,61 @@ def test_metal_format_census_per32_moe(t : T?) {
             } else {
                 t |> skip("dasMetal not built")
             }
+        }
+    }
+}
+
+//! the routed affine carrier's bar against the CPU chain: the window and six steps read 1.51-2.01 on the M5 Max (the hybrid's
+//! deltanet drift under a 4-bit routed stack's near-ties), the one-step-off rows 10.9 and up
+let private MLX_MOE_BAR = 3.0
+
+//! the routed affine carrier (large tier): the mlx-community Qwen3.6-35B-A3B 4-bit snapshot - every site but the router in its
+//! own mlx4b member, the routed stacks among them - each site's census asserted native, the window and the steps on the member's
+//! routed stamps against the CPU chain
+[test]
+def test_metal_format_census_mlx_moe(t : T?) {
+    t |> run("mlx-community/Qwen3.6-35B-A3B-4bit: the mlx4b routed stacks serve their own bytes on Metal - census, window and steps") <| @(t : T?) {
+        if (!family_on(t, "qwen35moe") || !arm_on(t, "census-moe-mlx4b")) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            return if (!jit_only(t))
+            let path = hf_snapshot_dir("mlx-community/Qwen3.6-35B-A3B-4bit")
+            if (empty(path)) {
+                t |> skip("the 35B-A3B snapshot not stocked")
+                return
+            }
+            if (!parity_full_mode()) {
+                t |> skip("the 35B-A3B snapshot is large-tier - set DASLLAMA_PARITY_FULL=1 to run")
+                return
+            }
+            let pins = census_pin()
+            var tr <- load_model_(path, QuantMode.q8)
+            tr.config.seq_len = min(tr.config.seq_len, 512l)
+            let nexp = (long_count(tr.we1_fmt, $(x) => x == KqFmt.mlx4b)
+                + long_count(tr.we2_fmt, $(x) => x == KqFmt.mlx4b)
+                + long_count(tr.we3_fmt, $(x) => x == KqFmt.mlx4b))
+            t |> success(nexp >= 3l * tr.config.n_layers, "census-moe-mlx4b: every routed stack loads as mlx4b ({nexp} stacks)")
+            let want <- ["attention q/k/v/o", "routed experts", "shared expert", "deltanet qkv/gate/out", "deltanet beta/alpha", "token table", "classifier"]
+            census_cell(t, tr, path, "planar", want)
+            var trg <- blob_twin(t, path, 512l)
+            census_cell(t, trg, path, "blob twin", want)
+            window_and_steps_cell(t, tr, trg, MLX_MOE_BAR, "MetalEmbedB32Mlx4b_metal_embed_b32", "census-moe-mlx4b") $ {
+                var mm = metal_kernel_count("metal_moe_mulmm_mlx4b") + routed_gemv_dispatches(KqFmt.mlx4b, "Mlx4b")
+                for (v in ["T", "TH", "TH128", "THR"]) {
+                    mm += metal_kernel_count("MetalMoeMulMmMlx4b{v}_metal_moe_mulmm_b32_t")
+                }
+                t |> success(mm >= nexp, "census-moe-mlx4b: the window's mlx4b expert stacks rode the mlx4b routed stamps ({mm} dispatches, {nexp} stacks)")
+            }
+            routed_steps_form_cell(t, KqFmt.mlx4b, "Mlx4b", "census-moe-mlx4b", DECODE_STEPS, tr.config.n_layers)
+            let gv = routed_gemv_dispatches(KqFmt.mlx4b, "Mlx4b")
+            t |> success(gv >= DECODE_STEPS * nexp, "census-moe-mlx4b: the steps read every mlx4b expert stack through the routed GEMV ({gv} dispatches, {DECODE_STEPS * nexp} stacks)")
+            metal_decode_shutdown()
+            metal_prefill_shutdown()
+            delete trg
+            delete tr
+            t |> equal(metal_live_object_count(), 0l, "no leaked Metal objects after shutdown")
+            census_unpin(pins)
+        } else {
+            t |> skip("dasMetal not built")
         }
     }
 }
@@ -563,16 +650,6 @@ def test_metal_tied_classifier_reads(t : T?) {
         t |> equal(emb_kq_plane_off(m), 4096l, "untied, the table keeps a plane of its own")
         m.config.shared_weights = true
         t |> equal(emb_kq_plane_off(m), 64l, "tied, the table is the classifier's plane")
-    }
-}
-
-//! "1, 2, ..., n," - the confident counting prompt
-def private counting_text(n : int) : string {
-    return build_string() $(var w) {
-        for (i in range(1, n + 1)) {
-            w |> write(i)
-            w |> write(", ")
-        }
     }
 }
 

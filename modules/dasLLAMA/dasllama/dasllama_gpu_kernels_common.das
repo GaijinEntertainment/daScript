@@ -1877,10 +1877,13 @@ class template GkAddRmsRows : GkResidualRow {
     @ssbo @binding = 10 @role = "write" @template_gate = OUT_Q8 outs : array<float>   //! past every combine family's own bindings
     @ssbo @binding = 12 @role = "write" @template_gate = HX yh : array<float16>       //! the f32 row's f16 twin
     @ssbo @binding = 13 @role = "write" @template_gate = OUT_SUM outsum : array<float>   //! the blocks' scale x quant sum
+    @ssbo @binding = 14 @role = "write" @template_gate = XT yt : array<float16>       //! the twin in the rows8 x table's k-slot order
+    @ssbo @binding = 15 @role = "write" @template_gate = XT ys : array<float>         //! the rows8 token sums of the twin's halves
     @kargs pa : GkAddRmsArgs
     @template_constant OUT_F32 : bool = false
     @template_constant OUT_F16 : bool = false
     @template_constant HX : bool = false
+    @template_constant XT : bool = false   //!< the rows8 table mode: an HX stamp at LANES 0 over a width of whole 32-blocks, at most eight rows
 
     def override width : uint => pa.dim
     def override xin(i : uint) : float => xs[i]
@@ -1902,7 +1905,31 @@ class template GkAddRmsRows : GkResidualRow {
             static_if (OUT_F32 || OUT_F16) {
                 var inv = 0.0
                 row_inv_into(ss, inv)
-                store_out(base, inv)
+                static_if (XT) {
+                    store_table_rows(r, base, inv)
+                } else {
+                    store_out(base, inv)
+                }
+            }
+        }
+    }
+
+    //! `store_rows` over row `r` at `base` with the rows8 table beside: a subgroup's 32 lanes one aligned 32-block a step, the
+    //! block's halves at their k-slots and their sum at the block's token slot
+    def store_table_rows(r, base : uint; inv : float) {
+        static_if (XT) {
+            let tg = gl_WorkGroupSize.x
+            var j = gl_LocalInvocationID.x
+            while (j < pa.dim) {
+                let v = normed_at(j, 0.0, inv)
+                put_out(base + j, v)
+                let h = float16(v)
+                yt[rows8_slot_at(base + j)] = h
+                let s = gk_subgroup_add(float(h))
+                if (gl_SubgroupInvocationID == 0u) {
+                    ys[rows8_sum_at(j, r)] = s
+                }
+                j += tg
             }
         }
     }
@@ -2862,7 +2889,17 @@ class template GkRouterGemv {
     [spirv_inline]
     def word_dot_into(wv : KT; xb, i : uint; var d : float&) {
         static_if (VW == 4u) {
-            d = dot4_seq(wv, x[xb / 4u + i])
+            static_if (NORM) {
+                let xv = x[xb / 4u + i]
+                if (pa.norm_on != 0u) {
+                    let e = pa.nwoff + 4u * i
+                    d = dot4_seq(wv, xv * float4(wn[e], wn[e + 1u], wn[e + 2u], wn[e + 3u]))
+                } else {
+                    d = dot4_seq(wv, xv)
+                }
+            } else {
+                d = dot4_seq(wv, x[xb / 4u + i])
+            }
         } else {
             static_if (VW == 2u) {
                 static_if (BF16) {
@@ -2934,9 +2971,17 @@ class template GkRouterGemv {
         static_if (NORM) {
             var a = 0.0
             var j = lane
-            while (j < pa.dim) {
-                a += x[xb + j] * x[xb + j]
-                j += nl
+            static_if (VW == 4u) {
+                while (j < pa.dim / 4u) {
+                    let v = x[xb / 4u + j]
+                    a += dot4_seq(v, v)
+                    j += nl
+                }
+            } else {
+                while (j < pa.dim) {
+                    a += x[xb + j] * x[xb + j]
+                    j += nl
+                }
             }
             s = a
         }
@@ -4141,6 +4186,7 @@ class template GkClsEpilogue {
 
 struct GkClsSelArgs {
     vocab : uint
+    row0 : uint     //! the landing row the dispatch's first row lands in (the single row's alternating slot; the rows dispatch at 0)
 }
 
 //! the workgroup exclusive scan over `WG` threads (`scan` one slot a thread) on the shared reduce base: the Vulkan row kernels
@@ -4250,10 +4296,9 @@ class template GkClsSelect : GkWgScan {
     }
 
     def select_row {
-        let row = gl_WorkGroupID.x
         let tid = gl_LocalInvocationID.x
-        let base = row * pa.vocab
-        let temp = uint_bits_to_float(sel[row * WORDS])
+        let base = gl_WorkGroupID.x * pa.vocab
+        let temp = uint_bits_to_float(sel[gl_WorkGroupID.x * WORDS])   //! the ask words sit at the dispatch row; `row0` moves the landing slot alone
         let inv = temp > 0.0 ? 1.0 / temp : 1.0
         let need = min(K, pa.vocab)
         hist_clear()
@@ -4322,9 +4367,9 @@ class template GkClsSelect : GkWgScan {
     }
 
     def land(thr : uint; rmax, rden : float) {
-        let row = gl_WorkGroupID.x
+        let row = gl_WorkGroupID.x + pa.row0
         let tid = gl_LocalInvocationID.x
-        let base = row * pa.vocab
+        let base = gl_WorkGroupID.x * pa.vocab
         if (tid == 0u) {
             slots_used[0] = 0u
         }
@@ -4345,9 +4390,10 @@ class template GkClsSelect : GkWgScan {
             }
             i += WG
         }
-        let nrec = min(sel[row * WORDS + 1u], RECENT)
+        let ask = gl_WorkGroupID.x * WORDS
+        let nrec = min(sel[ask + 1u], RECENT)
         if (tid < nrec) {
-            let id = sel[row * WORDS + 4u + tid]
+            let id = sel[ask + 4u + tid]
             var rv = -3.4e38
             if (id < pa.vocab) {
                 let yr = y[base + id]
@@ -4722,9 +4768,11 @@ class template GkDnGate {
     @ssbo @binding = 0 @role = "read" zrows : array<float>        //! the z gate rows [rows x di]
     @ssbo @binding = 1 @role = "readwrite" orows : array<float>   //! the raw o rows [rows x di], gated in place
     @ssbo @binding = 2 @role = "weight" wn : array<float>         //! the shared out-norm weight row [ds]
+    @ssbo @binding = 3 @template_gate = HX oh : array<float16>    //! the gated rows as halves (the Metal window's out projection reads them)
     @kargs pa : GkDnGateArgs
     @template_constant ZSIG : bool = false
     @template_constant RSQRT : bool = false
+    @template_constant HX : bool = false
 
     def dn_gate_head(h, p : uint) {
         //! a lane holds four elements: a head of up to four times the subgroup's width
@@ -4742,7 +4790,11 @@ class template GkDnGate {
         for [unroll_full] (c in range(4)) {
             let e = lane + uint(c) * gl_SubgroupSize
             if (e < pa.ds) {
-                orows[ob + e] = ((v[c] * inv) * wn[pa.wnorm_off + e]) * dn_zgate(zrows[zb + e], ZSIG)
+                let g = ((v[c] * inv) * wn[pa.wnorm_off + e]) * dn_zgate(zrows[zb + e], ZSIG)
+                orows[ob + e] = g
+                static_if (HX) {
+                    oh[ob + e] = half_sat(g)
+                }
             }
         }
     }

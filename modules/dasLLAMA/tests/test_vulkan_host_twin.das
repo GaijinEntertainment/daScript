@@ -8,7 +8,8 @@ options _dasllama_internal = true
 // planar kernels, every expert format the tier streams, model-free and device-free: a planar disk-order stack in a Model
 // shell, the engine's own gather into the device layout, the planar dispatcher's rows and the twin's rows within the
 // summation bar, the poisoned expectation the control. The twin is the shared module's (`dasllama_gpu_host_twin`), registered by
-// the home a build arms; a build with neither discrete home registers none and skips.
+// the home a build arms; a build with neither discrete home registers none and skips. The row-major tile cell skips a format
+// the discrete homes stamp none of (`kq_discrete_unstamped`): the one-copy rail has no device layout of it.
 
 require dastest/testing_boost public
 require math
@@ -420,6 +421,10 @@ def private rm_tile4_rows(m : Model; f : KqFmt; xs4 : array<float>; n, rows : in
 def test_host_rm_tile4(t : T?) {
     for (f in type<KqFmt>) {
         t |> run("the row-major tile over a {f} expert stack") <| @(ct : T?) {
+            if (kq_discrete_unstamped(f)) {
+                ct |> skip("{f}: the discrete homes stamp none of it, so the one-copy rail has no device layout of it (rm_dev_serves declines it)")
+                return
+            }
             let n = kq_sb(f) ? N_SB : N_B32
             var inscope m <- planar_shell(f, n)
             var xs4, want : array<float>

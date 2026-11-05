@@ -40,9 +40,39 @@ def register_arch_qwen4exp() {
 //! the mixer site index of layer l: attention first, ffn second
 def private hc_site(l : int64; ffn : bool) : int64 => l * 2l + (ffn ? 1l : 0l)
 
+//! row `row` of a sharded affine table (`GGML_TYPE_NGRAM_A4G32`, `n` elements a row in 32-groups, `shard_rows` rows a shard)
+//! decoded off `tab` into dst: the shard `row / shard_rows`, then its local row in the shard's codes, scales and biases; element
+//! k is the low nibble of code byte k / 2 for even k, the high one for odd, as scale x q + bias of its 32-group
+def ngram_row_a4g32(tab : uint8 const?; row, shard_rows, n : int64; var dst : float?) {
+    let groups = n / 32l
+    let code_row = n / 2l
+    let pair_row = groups * 2l
+    let shard = row / shard_rows
+    let lr = row % shard_rows
+    unsafe {
+        let sbase = tab + shard * shard_rows * (code_row + 2l * pair_row)
+        let cp = sbase + lr * code_row
+        let sp = sbase + shard_rows * code_row + lr * pair_row
+        let bp = sp + shard_rows * pair_row
+        for (g in range64(groups)) {
+            let sc = reinterpret<float>((uint(sp[2l * g]) | (uint(sp[2l * g + 1l]) << 8u)) << 16u)
+            let bi = reinterpret<float>((uint(bp[2l * g]) | (uint(bp[2l * g + 1l]) << 8u)) << 16u)
+            for (k in range64(16l)) {
+                let b = int(cp[g * 16l + k])
+                dst[g * 32l + 2l * k] = sc * float(b & 15) + bi
+                dst[g * 32l + 2l * k + 1l] = sc * float(b >> 4) + bi
+            }
+        }
+    }
+}
+
 //! Decode one hash-table row (ple_head_dim elements, the disk block form) into dst
 def private ngram_row(t : Model; row : int64; var dst : float?) {
     let n = t.config.ple_head_dim
+    if (t.ngram_type == GGML_TYPE_NGRAM_A4G32) {
+        ngram_row_a4g32(unsafe(addr<uint8 const?>(t.ngram_tab[0])), row, t.ngram_shard_rows, n, dst)
+        return
+    }
     let bo = row * t.ngram_row_bytes
     let ty = t.ngram_type
     unsafe {
@@ -247,8 +277,9 @@ def private pre_stack_prefill_qwen4exp(t : Model; var s : Session; tokens : arra
 def private ple_step_decode(t : Model; var s : Session; pos : int64) {
     let c = t.config
     let ind = ple_in_dim(c)
-    mm_f(s.ple_key, t, KqFmt.q8, t.ple_key_off, s.ple_emb, s.xq, s.xs, s.xbs, ind, hc_dim(c))
-    mm_f(s.ple_val, t, KqFmt.q8, t.ple_val_off, s.ple_emb, s.xq, s.xs, s.xbs, ind, c.dim)
+    let f = ple_kv_fmts(t)
+    mm_f(s.ple_key, t, f.key, t.ple_key_off, s.ple_emb, s.xq, s.xs, s.xbs, ind, hc_dim(c))
+    mm_f(s.ple_val, t, f.val, t.ple_val_off, s.ple_emb, s.xq, s.xs, s.xbs, ind, c.dim)
     unsafe {
         ple_apply_row(t, s, s.hc_res, 0l, addr(s.ple_key[0]), addr < float const? >(s.ple_val[0]), pos)
     }
@@ -258,8 +289,9 @@ def private ple_step_prefill(t : Model; var s : Session; npos, start_pos : int64
     let c = t.config
     let ind = ple_in_dim(c)
     let hcd = hc_dim(c)
-    mm_b_f(s, s.ple_key_b, t, KqFmt.q8, t.ple_key_off, s.ple_emb_b, ind, hcd, npos)
-    mm_b_f(s, s.ple_val_b, t, KqFmt.q8, t.ple_val_off, s.ple_emb_b, ind, c.dim, npos)
+    let f = ple_kv_fmts(t)
+    mm_b_f(s, s.ple_key_b, t, f.key, t.ple_key_off, s.ple_emb_b, ind, hcd, npos)
+    mm_b_f(s, s.ple_val_b, t, f.val, t.ple_val_off, s.ple_emb_b, ind, c.dim, npos)
     unsafe {
         for (p in range64(npos)) {   // in order: the conv ring reads the rows this loop wrote
             ple_apply_row(t, s, s.hc_res_b, p * hcd, addr(s.ple_key_b[p * hcd]), addr < float const? >(s.ple_val_b[p * c.dim]), start_pos + p)
@@ -274,13 +306,13 @@ def private ple_step_prefill(t : Model; var s : Session; npos, start_pos : int64
 def private mix_decode(t : Model; var s : Session; l : int64; ffn : bool) {
     let site = hc_site(l, ffn)
     let hcd = hc_dim(t.config)
-    hc_mix(t, s, t.hc_norm_off + site * hcd, t.hc_down_offs[site], t.hc_up_offs[site], t.hc_inject_off + site * hcd * t.config.hc_count)
+    hc_mix(t, s, t.hc_norm_off + site * hcd, t.hc_down_offs[site], t.hc_up_offs[site], t.hc_inject_off + site * hcd * t.config.hc_count, site)
 }
 
 def private mix_prefill(t : Model; var s : Session; l, npos : int64; ffn : bool) {
     let site = hc_site(l, ffn)
     let hcd = hc_dim(t.config)
-    hc_mix_b(t, s, t.hc_norm_off + site * hcd, t.hc_down_offs[site], t.hc_up_offs[site], t.hc_inject_off + site * hcd * t.config.hc_count, npos)
+    hc_mix_b(t, s, t.hc_norm_off + site * hcd, t.hc_down_offs[site], t.hc_up_offs[site], t.hc_inject_off + site * hcd * t.config.hc_count, site, npos)
 }
 
 [no_alloc, no_env, no_io]
@@ -328,9 +360,9 @@ def private ffn_qwen4exp_prefill(t : Model; var s : Session; l : int64; npos : i
 //! the head mixer stands where output_norm would: the classifier's row into xb
 def private final_norm_qwen4exp(t : Model; var s : Session; row : int64; batched : bool) {
     if (batched) {
-        hc_mix_row(t, s, s.hc_res_b, row * hc_dim(t.config), t.hc_head_norm_off, t.hc_head_down_off, t.hc_head_up_off, -1l)
+        hc_mix_row(t, s, s.hc_res_b, row * hc_dim(t.config), t.hc_head_norm_off, t.hc_head_down_off, t.hc_head_up_off, -1l, hc_head_site(t.config))
     } else {
-        hc_mix_row(t, s, s.hc_res, 0l, t.hc_head_norm_off, t.hc_head_down_off, t.hc_head_up_off, -1l)
+        hc_mix_row(t, s, s.hc_res, 0l, t.hc_head_norm_off, t.hc_head_down_off, t.hc_head_up_off, -1l, hc_head_site(t.config))
     }
 }
 

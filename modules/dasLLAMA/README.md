@@ -116,7 +116,8 @@ modules/dasLLAMA/
   .das_module                 # registers the dasllama/ namespace — both binaries (static rows derive from it)
   CMakeLists.txt              # ADD_MODULE_DAS_FROM_DESCRIPTOR + install rules
   ARCHITECTURE.md             # what-goes-where ledger — which module owns which concern
-  ARCHITECTURE_ENGINE.md      # companion: the engine, arch-registration, support and serving charters
+  ARCHITECTURE_ENGINE.md      # companion: the engine, arch-registration and serving charters
+  ARCHITECTURE_ENGINE_SUPPORT.md # companion: the instrumentation and support charters
   ARCHITECTURE_ENGINE_FORMATS.md # companion: the format, load-rail and CPU-kernel-tier charters
   ARCHITECTURE_GPU.md         # companion: the GPU backend role table, the backend asymmetries
   ARCHITECTURE_GPU_RACE_SHAPES.md # companion: the refuted kernel shapes and the sanctioned float-A stamps

@@ -7,6 +7,9 @@ options _dasllama_internal = true
 // (the batch driver, one session per row) on a served model - what a k-row speculative verify pays
 // against a plain step, and on an MoE model the price of the expert union. ATTRIBUTION SWEEP under
 // --knockouts: the arms attribute the step across the Metal decode stages gemv / attn / ew / moe_rt.
+// Every arm starts from shut-down Metal drivers: an arm run on the pools, mirrors and pre-encoded
+// steps an earlier arm left (a knockout arm's garbage among them) reads another time for the same
+// dispatches, and a knockout arm after it could hang.
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require dasllama/dasllama_common
 require dasllama/dasllama_batch   // eval_batch_ + create_batch_workspace_
@@ -44,8 +47,14 @@ struct Args {
     @clarg_doc = "The plain step's token feed: text (real-text tokens, the default - the single-row driver's greedy chain misses every attempt), greedy (each step feeds its own argmax - the chain hits, the production greedy shape), or second:K (the argmax except every K-th step, which feeds the runner-up - a sampler agreeing with the argmax (K-1)/K of the time)"
     feed : string = "text"
 
+    @clarg_doc = "The same-slab rows' token feed: text (the prompt's tokens shifted a step, the default) or greedy (consecutive tokens of the prompt's greedy continuation, each row its own position's token, so the rows route as a verify's would)"
+    rows_feed : string = "text"
+
     @clarg_doc = "The single-row driver's speculative greedy chain: -1 adaptive (the default), 0 off (the poked step, encode overlapped, one commit per step), 1 forced"
     spec : int = -1
+
+    @clarg_doc = "print the Metal kernel census of each row count's timed steps (every kernel dispatched, with its count)"
+    census : bool
 
     @clarg_short = "?"
     @clarg_name = "show-help"
@@ -70,7 +79,54 @@ def private runner_up(s : Session; vocab : int64) : int64 {
 let FEED_TEXT = -1l
 let FEED_ARGMAX = 0l
 
-def private time_rows(t : Model; prompt : array<int64>; nb, steps : int64; sameslab : bool; runner_up_every : int64 = FEED_TEXT) : double {
+var private g_census = false
+
+//! the timed steps' kernel census under --census: every kernel dispatched since the reset, with its count
+def private print_census(nb : int64) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return if (!g_census)
+        var inscope cov <- metal_kernel_coverage()
+        var inscope names <- [for (k, v in keys(cov), values(cov)); k; where v > 0l]
+        sort(names)
+        for (k in names) {
+            print("  census B={nb}: {k} {cov[k]}\n")
+        }
+    }
+}
+
+//! the prompt's greedy continuation of `n` tokens on the Metal decode driver: the same-slab rows' `greedy` feed
+def private greedy_continuation(t : Model; prompt : array<int64>; n : int64) : array<int64> {
+    var cont : array<int64>
+    cont |> reserve(n)
+    var s <- make_run_state(t.config, KVDtype.f16, KVDtype.f16)
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        select_prefill_override("metal")
+        set_metal_prefill_min_npos(1l)
+    }
+    eval_(t, s, prompt)
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        select_prefill_override("")
+        set_metal_prefill_min_npos(64l)
+        select_decode_override("metal")
+    }
+    for (_i in range64(n)) {
+        let tok = argmax(s, t.config.vocab_size)
+        cont |> push(tok)
+        forward(t, s, tok, s.n_past)
+        s.n_past++
+    }
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        finish_pending_step()
+        select_decode_override("")
+    }
+    delete s
+    return <- cont
+}
+
+//! `cont` empty: the rows carry the prompt's tokens shifted a step (the text feed); else consecutive tokens of `cont`, row i of a
+//! same-slab step the token of its own position
+def private time_rows(t : Model; prompt : array<int64>; nb, steps : int64; sameslab : bool; runner_up_every : int64 = FEED_TEXT;
+                      cont : array<int64>) : double {
     let c = t.config
     var sess : array<Session>
     sess |> reserve(nb)
@@ -104,11 +160,14 @@ def private time_rows(t : Model; prompt : array<int64>; nb, steps : int64; sames
         if (step == 2l) {
             static_if (typeinfo builtin_module_exists(das_metal)) {
                 finish_pending_step()
+                if (g_census) {
+                    metal_kernel_coverage_reset()
+                }
             }
             t0 = ref_time_ticks()
         }
         for (i in range64(nb)) {
-            cur[i] = prompt[(step + i) % plen]   // real-text tokens, deterministic - the routing stays realistic
+            cur[i] = (sameslab && !empty(cont)) ? cont[(step * nb + i) % long_length(cont)] : prompt[(step + i) % plen]   // real-text tokens, deterministic - the routing stays realistic
         }
         if (nb == 1l && !sameslab) {
             var tok = cur[0]
@@ -129,6 +188,7 @@ def private time_rows(t : Model; prompt : array<int64>; nb, steps : int64; sames
     }
     static_if (typeinfo builtin_module_exists(das_metal)) {
         finish_pending_step()
+        print_census(nb)
     }
     let ms = double(get_time_usec(t0)) / double(steps) / 1000.0lf
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -169,7 +229,7 @@ def private print_batch_stages(steps : int64) {   // nolint:LINT012,LINT019 — 
 
 var private g_dead_levers = 0   // knockout arms that left the step's time unchanged: the lever did not engage
 
-def private run_ladder(t : Model; prompt : array<int64>; cfg : Args; arms : array<string>; var base : double&; runner_up_every : int64) : int {
+def private run_ladder(t : Model; prompt : array<int64>; cfg : Args; arms : array<string>; var base : double&; runner_up_every : int64; cont : array<int64>) : int {
     var measured = 0
     for (bstr in split(cfg.bs, ",")) {
         let nb = to_int64(strip(bstr), false)
@@ -181,9 +241,11 @@ def private run_ladder(t : Model; prompt : array<int64>; cfg : Args; arms : arra
         for (arm in arms) {
             reset_batch_stages()
             static_if (typeinfo builtin_module_exists(das_metal)) {
+                metal_decode_shutdown()   //! the arm's drivers from zero: no state from the arm before it
+                metal_prefill_shutdown()
                 set_metal_decode_skip(arm)
             }
-            let ms = time_rows(t, prompt, nb, int64(cfg.steps), cfg.sameslab, runner_up_every)
+            let ms = time_rows(t, prompt, nb, int64(cfg.steps), cfg.sameslab, runner_up_every, cont)
             if (empty(arm)) {
                 full = ms
                 if (nb == 1l && !cfg.sameslab) {
@@ -236,6 +298,7 @@ def main() : int {
     let runner_up_every = cfg.feed == "greedy" ? FEED_ARGMAX : (length(feed_parts) == 2 ? to_int64(feed_parts[1], false) : FEED_TEXT)
     static_if (typeinfo builtin_module_exists(das_metal)) {
         set_metal_decode_speculate(cfg.spec)
+        g_census = cfg.census
     }
     let tk <- load_tokenizer_auto(cfg.model)
     var measured = 0
@@ -245,14 +308,23 @@ def main() : int {
         var prompt <- encode(tk, "The old lighthouse keeper watched the storm roll in from the west, counting the seconds between each flash and the thunder that followed, while the village below slept through it.", false)
         var base = 0.0lf
         let arms <- cfg.knockouts ? [ "", "gemv", "attn", "ew", "moe_rt" ] : [ "" ]
+        let greedy_rows = cfg.sameslab && cfg.rows_feed == "greedy"   //! every step of every row count reads from the continuation's start
+        var maxb = 1l
+        for (bstr in split(cfg.bs, ",")) {
+            maxb = max(maxb, to_int64(strip(bstr), false))
+        }
+        var inscope cont <- greedy_rows ? greedy_continuation(t, prompt, (int64(cfg.steps) + 2l) * maxb) : array<int64>()
+        if (greedy_rows) {
+            print("rows feed: the prompt's greedy continuation, {length(cont)} tokens\n")
+        }
         if (cfg.sameslab) {   //! the denominator is the one-row BATCH step, so every row count shares one driver; the plain single-row step prints beside it as a labelled reference
-            let plain = time_rows(t, prompt, 1l, int64(cfg.steps), false, runner_up_every)
+            let plain = time_rows(t, prompt, 1l, int64(cfg.steps), false, runner_up_every, cont)
             print("plain step (single-row driver): {plain:.2f} ms\n")
             print_chain_stats(cfg.feed, cfg.spec)
-            base = time_rows(t, prompt, 1l, int64(cfg.steps), true)
+            base = time_rows(t, prompt, 1l, int64(cfg.steps), true, FEED_TEXT, cont)
             print("one-row step (batch driver): {base:.2f} ms - the ratio column's denominator\n")
         }
-        measured = run_ladder(t, prompt, cfg, arms, base, runner_up_every)
+        measured = run_ladder(t, prompt, cfg, arms, base, runner_up_every, cont)
         static_if (typeinfo builtin_module_exists(das_metal)) {
             metal_decode_shutdown()
             metal_prefill_shutdown()

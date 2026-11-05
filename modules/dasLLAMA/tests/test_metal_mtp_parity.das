@@ -392,7 +392,7 @@ def private any_rows_site(t : Model; every_site : bool; pred : block<(f : KqFmt)
 def private has_kq_rows_planes(t : Model) : bool => any_rows_site(t, false, $(f) => f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6)
 
 //! a superblock plane the box leaves on the small-batch forms past eight rows: a format whose `kq_rows_<fmt>` crown the box
-//! minted takes single passes at every row count (`ARCHITECTURE_GPU_MTP_DECODE.md#kq-rows-crown`)
+//! minted takes single passes at every row count (`ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#kq-rows-crown`)
 def private rides_small_batch(f : KqFmt) : bool {
     var rides = kq_sb(f)
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -405,7 +405,7 @@ def private rides_small_batch(f : KqFmt) : bool {
 def private has_wide_rows_sites(t : Model) : bool => any_rows_site(t, true, $(f) => rides_small_batch(f))
 
 //! whether a verify of two to eight rows reads x in half at some rows site: the format's half-x forms serve on the box
-//! (`ARCHITECTURE_GPU_MTP_DECODE.md#kq-rows-crown`)
+//! (`ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#kq-rows-crown`)
 def private has_half_x_rows_sites(t : Model) : bool {   // nolint:LINT012,LINT019 — the body is the das_metal half
     static_if (typeinfo builtin_module_exists(das_metal)) {
         return any_rows_site(t, true, $(f) => kq_sb(f) && metal_kq_half_on(f))
@@ -760,7 +760,7 @@ def private restore_knobs(prior_backend : string; prior_wscale : bool) {
     set_wscale_f16(prior_wscale)
 }
 
-def private run_fixture(t : T?; file, tag : string) {   // nolint:LINT012,LINT019 — the body is the das_metal half
+def private run_fixture(t : T?; file, tag : string; tol : float = FF_TOL) {   // nolint:LINT012,LINT019 — the body is the das_metal half
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let path = path_join(models_dir(), file)
         if (!model_available(t, path)) {
@@ -796,7 +796,7 @@ def private run_fixture(t : T?; file, tag : string) {   // nolint:LINT012,LINT01
         var prose_a <- encode(tr, PROSE_A, true, false)
         var prose_b <- encode(tr, PROSE_B, true, false)
         var count <- encode(tr, counting_prompt(1, 40), true, false)
-        run_arms(t, tr, trg, tag, prose_a, prose_b, count)
+        run_arms(t, tr, trg, tag, prose_a, prose_b, count, tol)
         metal_decode_shutdown()
         metal_prefill_shutdown()   // the pairs prefill on the GPU - its panels release here too
         set_mtp_spec(false)
@@ -958,11 +958,13 @@ def test_metal_mtp_parity_35b(t : T?) {
     }
 }
 
-//! the format census's carrier: every big plane IQ4_XS on disk, the routed NextN head's eh_proj and expert stacks among them
+//! the format census's carrier: every big plane IQ4_XS on disk, the routed NextN head's eh_proj and expert stacks among them; the
+//! MoE bar, since its plain step (the fat chain) and the verify's rows (the routed pair) sum the routed experts in two fused
+//! orders - prose-b reads 0.65 with zero argmax flips
 [test]
 def test_metal_mtp_parity_35b_iq4xs(t : T?) {
     t |> run("metal MTP rail vs plain GPU decode - Qwen3.6-35B-A3B-MTP-IQ4_XS-pure (large tier)") <| @(t : T?) {
-        run_fixture(t, "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf", "35b-iq4xs")
+        run_fixture(t, "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf", "35b-iq4xs", MOE_FF_TOL)
     }
 }
 

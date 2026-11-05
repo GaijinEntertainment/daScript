@@ -113,5 +113,19 @@ def test_fail_closed_rejections(t : T?) {
         check_rejects(t, "_fc_tmm2d_deva_witness", "begin_deva's witness typed")
         check_rejects(t, "_fc_tmm2d_devab_untyped", "tmm2d devab: the B operand is a device float16 stream, not an untyped pointer")
         check_rejects(t, "_fc_tmm2d_devab_argc", "tmm2d_tg_step_devab takes exactly 8 arguments")
+        check_rejects(t, "_fc_tmm2d_rx8_left2",
+            "tmm2d_rx_left2: `acc` was begun with int8 left elements")
+        check_rejects(t, "_fc_tmm2d_rx_left_i8",
+            "tmm2d_rx_left: `acc` was begun with int8 left elements")
+        check_rejects(t, "_fc_tmm2d_rx_left4_half",
+            "tmm2d_rx_left4: `acc` was not begun by tmm2d_rx_begin_i8")
+        check_rejects(t, "_fc_tmm2d_rx_unbegun",
+            "tmm2d_rx_left: `acc` was not begun by tmm2d_rx_begin")
+        check_rejects(t, "_fc_tmm2d_rx_dest_unbegun",
+            "tmm2d_rx_dest: `acc` was not begun by tmm2d_rx_begin")
+        check_rejects(t, "_fc_tmm2d_rx_run_unbegun",
+            "tmm2d_rx_run: `acc` was not begun by tmm2d_rx_begin")
+        check_rejects(t, "_fc_tmm2d_rx_zero",
+            "tmm2d_rx_begin: m, n and kk must be non-zero compile-time uint constants")
     }
 }

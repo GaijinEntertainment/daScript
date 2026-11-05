@@ -3,10 +3,11 @@
 Companion to `ARCHITECTURE_GPU_MTP.md`; a section is cited by its anchor. This document
 carries the argument-alignment contract a kernel declares on
 its `[metal_dispatch]` - the contract the batch driver's fixed-B mul_mv forms carry - the
-K-quant small-batch form and the row-buffer pad a multi-row verify dispatches under, the
-batch driver's pre-encoded step, the decode layer encoder, and the rotated prefix a rope-store
-kernel takes; the single-row driver's greedy chain and the Metal selection landing are
-`ARCHITECTURE_GPU_MTP_DECODE_PICK.md`. The speculative round these
+row-buffer pad a multi-row verify dispatches under, the
+batch driver's pre-encoded step, the decode layer encoder, the fused fat chain, the rows' expert union, the recurrent replay's form, and the rotated
+prefix a rope-store kernel takes; the K-quant small-batch form and the rows8 matrix-unit form are
+`ARCHITECTURE_GPU_MTP_DECODE_ROWS.md`; the single-row driver's greedy chain and the Metal selection landing are
+`ARCHITECTURE_GPU_MTP_DECODE_PICK.md`; the multi-row mixer form `ARCHITECTURE_GPU_MTP_DECODE_HC.md`. The speculative round these
 forms serve is `ARCHITECTURE_GPU_MTP.md`. The GPU backend role table these sections build on
 stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
@@ -31,76 +32,6 @@ meanwhile - the one contract these forms hold that the builder does not yet chec
 tensor twins and the MoE split stamps declare their `rows % 64` beside their own mp divisor.
 A contract on a value that reaches the builder only as a bound uniform BUFFER (the mul_mm's K)
 stays with the caller: the dispatch never pays a readback.
-
-### The K-quant small-batch form is a per-box crown {#kq-rows-crown}
-
-**A verify row on a K-quant plane costs what the box says, not what the kernel comment says.**
-At two to eight rows `enc_kq_site_b` dispatches either the small-batch twin (one weight pass per
-row group) or B single-row GEMV passes. The K-quant GEMV is ALU-bound, so sharing the weight pass
-pays only where ALU is plentiful: on the M5 Max the two-row twin costs 0.52-0.89 of two passes,
-on the M4 Pro 1.35-1.5 for k4 while k6's twin still wins. The mint races the production wrappers
-per format (`race_kq_rows`, twin against two passes) and crowns `kq_rows_<fmt>` where the passes
-win; `metal_decode_init` reads the crowns once into `g_kq_rows_crowned` and the dispatcher takes
-the passes exactly there. An unraced box keeps the twin. The M4 Pro's Qwen3.8-27B round paid
-about two steps for its two verify rows under the twin (the round clocks, `PERF_LEDGER.md`'s MTP
-section) - the reason its depth-1 speculation lost.
-
-The k4 twin itself has two forms, and the form is the box's too. The ext twin gives a thread one
-weight row and two x columns; the two-row register tile (`MetalKqMvB2K4R2`) gives it two weight
-rows and both columns, so every x float4 load feeds two rows - fewer loads per FMA, twice the
-live registers. The tile wins where ALU is short (M4 Pro: 0.74-0.96 of two passes against the ext
-twin's 1.36-1.49) and loses where it is not (M5 Max: 0.63-1.07 against 0.52-0.89). The mint races
-the two production twins first (`race_kq_k4_form`) and crowns `kq_mvb2_k4_r2` where the tile
-wins; `enc_kq_mvb` takes the tile at two rows exactly there, and the k4 rows race that follows
-meets the box's twin form. An unraced box keeps the ext twin. Where the tile is crowned, three to
-eight k4 rows never take the four- or eight-column forms either: `enc_kq_mvb_k4_pairs` walks the
-tile over the column pairs and gives an odd tail one single-row pass. The wide forms are the ext
-algorithm at more columns, and on the box that crowned the tile they cost more than B single
-passes while two tiles do four rows in well under the four-column kernel's time; a third verify
-row under the four-column form cost that box's Qwen3.8-27B round more than two extra steps (the
-round clocks and the row ladder, `PERF_LEDGER.md`'s MTP section). In both races the
-first arm is the incumbent and the second is the "tensor" side whose win crowns: `race_kq_rows`
-times the twin against B single passes (the passes are "tensor"), `race_kq_k4_form` the ext twin
-against the tile (the tile is "tensor").
-
-**The k4 rows forms read x as halves where the box crowned it.** Every f32 form above is bound by
-the x vector, not the weights: each decoded weight is dotted against a float4 of x fetched per
-column, two bytes of x a weight against 0.56 of weight, so on the M1 class every form costs 0.65
-to 0.8 of a single pass per column whatever its lane map. The half-x forms read x as `half4` and
-halve that traffic. Every small-batch form shares one x mixin (`MetalKqXT`: the f32 rows or the
-f16 twin at the same slot, `XHALF` picking), so a format's half stamp is its f32 form's class plus
-`override XHALF = true`, and the dispatcher (`enc_kq_mvb`, a table of each format's six builders)
-swaps the stamp and binds the twin. k4 alone rides wide forms instead (`MetalKqMvWK4T`: the
-single-row GEMV's lane map over two, four or eight x columns), which land at 1.26, 1.8 and 2.8
-passes for two, four and eight columns on the M1 Max, and under the f32 forms on the M5 Max too.
-Their x is the f16 twin the row producer stores beside its f32 rows - the dual-store stamps of
-the rows norm (`MetalAddRmsHX`, `MetalRmsNormHX`) and of the activation (`MetalSwigluHX`,
-`MetalGegluHX`) - never a conversion dispatch: `StepRes.bxh` twins `bxb` and `StepRes.bfgh` the
-gate panel, each eight rows deep because a form reads every one of its columns, and `xh_ok` /
-`fgh_ok` say the twin is the panel's current rows (the norm sets it, attention and the w2 site
-clear it; wo's x, the attention output, has no twin and keeps the f32 forms). The step writes the
-twins only where `kq_half_rows` holds - two to eight rows, and a plane whose format's crown is on
-at a site the forms serve. `enc_kq_rows_half` routes a format: k4 to the wide form of its row
-count (two rows the two-column, three or four the four-column, five to eight the eight-column),
-the rest to `enc_kq_mvb` with the twin; the prefill's short-window peel hands its own dual-stored
-twin through `pf_enc_kq_site_mm`. One crown a format, `kq_rows_half_<fmt>`: the race
-(`race_kq_half`, the last of the decode races, once per format of `KQ_ROWS_RACE_FORMATS`) times
-the box's f32 route - `enc_kq_rows_f32` under the rows verdicts before it - against the half
-route at two, four and eight rows in one timed encoder, on a 27B-class FFN plane past the
-last-level cache (the half route is "tensor"); `DASLLAMA_METAL_KQ_HALF=0` keeps the f32 forms
-under every crown. The numerics are the prefill tiles' f16 X, already inside every parity bar;
-the kernel cells hold every format's route at every row count (`test_metal_kq_half_forms`) and
-the rows parity cell holds k4 and k6 token for token (`test_metal_decode_parity.das`, the
-`batchB8-kq` arm's half-x leg).
-
-Past eight rows the form is the panel's. The kq mul_mm twins dispatch `mp / 32` threadgroups along M, so `enc_kq_site_b` takes
-them only over a panel padded to that tile (`mp` a multiple of 32) - the batch driver's at nine rows and up. The verify's panel
-is padded to the GEMV forms' 4-row tile (`#verify-row-pad`), so its nine rows (`MTP_MAX_ROWS`, depth 8) ride the small-batch
-forms in ONE dispatch: the eight- and four-column forms carry a column-group grid axis (`ceil(rows / 8)`, `ceil(rows / 4)`
-groups), the eight-column form restaging its last live row in a group's columns past the live rows, so its x needs no pad
-(`metal_kq_mvb_wide_count` counts the dispatches past eight rows); a box crowned to single passes keeps them past eight rows
-too. An unpadded nine-row panel handed to the mul_mm dispatches no threadgroup at all; the twins' `mp % 32` contract names
-that site instead of leaving the output unwritten.
 
 ### The verify's row buffers are padded to the GEMV form's row tile {#verify-row-pad}
 
@@ -171,9 +102,6 @@ to avoid.
 The rail is neutral on the board rows because the step's command buffers already commit
 progressively (`DASLLAMA_METAL_BATCH_NCB`), so the GPU runs under the encode either way; what the
 rows pay is the GPU's idle between the landing and the next commit (`followup_metal.md` row 23).
-The rail is the scaffold for the rows twin of the greedy chain (`ARCHITECTURE_GPU_MTP_DECODE_PICK.md#greedy-chain`): a pre-encoded step
-that opens with the GPU's argmax over the running step's logits and the rows' gathers commits at
-once, and the poke disappears.
 
 ### The decode driver's layer encoder {#metal-layer-enc}
 
@@ -200,7 +128,19 @@ q8 down and up GEMVs around `silu(lo / hc)`, the sigmoid-gated stream mean into 
 output in `bxb2` (wo, or the recurrent layer's ssm_out) scatters into the streams under those
 logits (`hc_combine_step`), the ffn site's mixer makes the next block input and the FFN's output
 scatters under the ffn site's logits; the head mixer with no scatter stands where the final norm
-would (`encode_cls_tail`). The n-gram side input runs before layer `ple_layer`'s attention mixer
+would (`encode_cls_tail`). The single row folds those seams into its q8 GEMVs under
+`DASLLAMA_METAL_KQ_FAT` 1 or more (`hc_mixer_fused_serves`, `hc_gemv_scatter_serves`,
+`hc_moe_scatters`; 0 keeps the seams' own dispatches): the mixer's down takes the grouped norm
+and the inject rows in one dispatch (`MetalQ8GemvHcN` - a lane sums its x chunks' squares a stream
+beside the dot, so the stream's inverse norm scales the row's per-stream partial at the reduce
+and no pass reads the row ahead; each threadgroup stores its slice of the normed streams the up reads), the up
+applies `silu(lo / hc)` as it reads the low-rank row and lands the gated stream mean itself - a
+threadgroup's simdgroups own one column's rows across the streams (`MetalQ8GemvSgLo`), the out projection
+(wo, or the recurrent layer's ssm_out past `GEMV_SG_MAX_N`) scatters each row into the streams
+in its epilogue (`MetalQ8GemvHc`), and the routed block's combine scatters the routed sum with
+the gated shared row (`MetalMoeCombineShHc`), so a layer's chain loses six dispatches. The folds
+move no time on Flash-Next: its step is body-bound (the kernels summed alone run past the step),
+not link-bound as the 35B's chain was. The n-gram side input runs before layer `ple_layer`'s attention mixer
 (`ple_side_step`): the key and value GEMVs read the heads the arch's CPU pre-stack hook gathered
 and poked (`StepRes.bple_emb`), the per-stream gate writes the gated rows and the ring's slot, the
 dilated conv adds its row. The conv history ring sits once in the session's `DnMirror` past every
@@ -244,6 +184,101 @@ both parts, so `GEMV_SG_MAX_N` is a constant, not a crown. The pick reads n alon
 crossover moves on n and d, which is why the M5 classifier takes the slower form
 (`followup_metal.md` sec.12).
 
+### The fused fat chain {#metal-fat-chain}
+
+**On a model whose every trunk layer the fat family serves, the single row's layer has no seam
+dispatch: the norms ride the GEMV prologues, the adds the GEMV epilogues.** `fat_chain_ok`
+(`dasllama/dasllama_metal_decode.das`) admits a model when every layer's dense sites are iq4xs
+planes within the fat stash - the attention's q, k, v and wo, the deltanet's qkv, z, out and a
+[beta | alpha] pair stored contiguously (one slot of twice the rank's rows, `StepRes.dn_ba_rows`
+set so the recurrent stages read alpha past beta), the shared expert's or the dense FFN's three
+under the silu act - on a plain pre-norm layer: no sandwich norms, hyper-connections, per-layer
+embeddings, gemma-4 dense branch, output bias or scale, and a routed block only with a gated
+shared expert. `StepRes.fat` holds the verdict for a one-row, non-draft step with no knockout under
+`DASLLAMA_METAL_KQ_FAT` at 2 (`ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-fat-gemv`). The layer
+then runs: q, k and v (or qkv, z and [beta | alpha]) as one `N` dispatch over the residual stream
+under the attention norm; the attention stages as before, the deltanet's conv, delta rule and
+gated out-norm as one dispatch a value head (`MetalDnStepFused`: 4 ds lanes, the head's q, k
+and v channels convolved, activated and L2-normed into the stash with `GkDnConv`'s arithmetic,
+the scan's lane map over the stash, the gate over the stash's o column - each phase's values the
+separate kernels' bit for bit; the history advance stays beside it); wo (or the deltanet out)
+as one `A` dispatch adding onto the stream in place; the router over the stream under the FFN
+norm in its own prologue (`MetalMoeRouterN`, `GkRouterGemv` under `NORM` - the weighted row,
+the inverse at the store) beside - not after - the shared expert's gate and up, one `NX` dispatch
+under the same norm whose act lands in the shared panel and whose normed row lands in the norm
+scratch the routed gather reads; the select; the routed gate and up with the act in one dispatch
+(`MetalMoeGemvGuIq4xs`: a simdgroup's row pair of both stacks, silu(gate) x up into the gate
+rows' place); and the routed down with the shared expert's down and the combine in one dispatch
+(`MetalMoeDown2Iq4xs`: a simdgroup's row pair walks the k slots in order, each slot's row under
+its weight, then the shared down row under its gate logit's sigmoid, the sum added onto the
+stream - the combine's own order, so the rows are the separate dispatches' bit for bit; its
+`MoeGemvArgs.bys` is the stream's residual row stride, where the gathered stamps' is a stream's
+slot rows). A dense
+FFN runs gate and up as the `NX` dispatch and w2 as the `A` one. The step's own layer-0 norm and
+both residual seams stand down; the classifier tail norms the stream as it always did. The chain's
+rows are the plain chain's within the prologue norm's ulp (the kernel cell's bar).
+
+**Two of the chain's pieces serve every row shape, outside the chain.** The deltanet step
+runs as the one fused dispatch wherever a group holds one row - the single row of any model and
+the batched step's rows - since it touches no weight format (`recurrent_layer`, mode 1 and up).
+The routed pair serves any step whose expert stacks and shared expert its stamps carry
+(`StepRes.moe_rt_fused`, `moe_rt_fused_ok` over `moe_gu_fused_serves` and `moe_down_fused_serves`:
+iq4xs gate and up, or iq3s through the staged grid under the box's `kq_gemv_iq3s_f4` crown
+(`MetalMoeGemvGuIq3sF4`); an iq4xs down with an iq4xs shared plane, or the 640-wide experts'
+iq4nl32 down with an iq4nl32 or q8 shared plane (`MetalB32Down2T`'s four stamps)): the single
+row of a model the chain declines, the batched step's rows and the verify's rows, through
+`routed_experts_fused` - the routed gate, up and act into `bh12`, the shared expert's gate, up and
+act into `bh12s` on every row shape (the rows chain's shared panel is `bh12` only after the routed
+down has read it; here the routed activations still sit there), then the fused down in its
+store form (`MoeGemvArgs.yadd` 0: the sum as the FFN-out panel's rows, which the layer's seam adds
+and norms as it always did), so a rows chain keeps its seams and loses the act and the combine.
+The single hyper-connection row's iq4nl32 or affine down lands the sum itself, scattered into the streams
+under the ffn site's logits (`hc_moe_lands`, the `HC` stamps), and that layer's last seam stands
+down.
+
+**What the chain buys is links, not kernel time.** The step's wall is its GPU envelope, and that
+envelope is the dependent-dispatch chain: a layer's serial dispatches at the per-link latency
+(roughly 10 us on the M5 Max at Qwen3.6-35B's shapes) whatever their bodies weigh. Two
+milliseconds of summed kernel time left the envelope where it was while the chain stayed twelve
+links a layer; each link the fused stamps remove - the seam, the act, the combine, the router's
+wait on the shared expert - is worth its latency times the layer count.
+
+### The rows' expert union reads a routed expert once over the rows that picked it {#moe-union}
+
+**A step of two to sixteen rows can serve its routed block over the union of the rows' picks; off by default, because the
+fused pair already reads a shared expert near the union's bytes.** `MetalMoeUnion` (one threadgroup, a thread an expert)
+writes the table the union's consumers read: the count, the picked experts ascending, each entry's 16-bit mask of the rows
+that picked it, each (row, slot)'s entry, and the shared expert closing the list over every row. A consumer dispatches a
+threadgroup an entry up to min(rows k, experts) and the entries past the count exit, since dasMetal has no indirect dispatch.
+`routed_experts_fused` takes the union where `moe_union_serves` holds (`DASLLAMA_METAL_MOE_UNION`, the iq4xs stacks and
+shared down the fused pair carries, no hyper-connection landing); `metal_moe_union_sites` counts the routed blocks it served.
+
+**The union form is the oracle of the plumbing.** It runs the fused pair's arithmetic over each entry's rows - the gate and up
+with the act into each (row, slot)'s gate rows (`MetalMoeGuUnionIq4xs`), the down into partial rows a (row, slot)
+(`MetalMoeDnUnionIq4xs`), and the fused down's combine over them (`MetalMoeDown2PIq4xs`: the slots under their weights in slot
+order, then the shared expert's down row under its gate's sigmoid) - every value the pair's bit for bit. A masked form over the
+rows8 matrix unit was raced against it and lost.
+
+**Why the fused pair stays the default.** The pair reads an expert once a (row, slot), but the rows' repeated picks land in
+neighbouring threadgroups of one dispatch and hit in the cache, so its routed block already streams close to the union's
+bytes; the union pays its table and its extra dispatches on top, and measures slower than the pair on the 35B's verify
+(`PERF_LEDGER.md`, the 35B entry).
+
+### The recurrent replay reads the tape in place and queues unwaited {#mtp-replay-form}
+
+**A rejected round's replay (`ARCHITECTURE_GPU_MTP.md#mtp-dn-shadow-replay`) is two dispatches a recurrent layer in one command
+buffer the host does not wait.** Its stages bind the parked verify's tape slot where it lies - the conv rows, the projections, beta
+and alpha at their byte offsets in the slot (`DnStages.cv_off`, `qkv_off`, `b_off`, `g_off`, the history advance's and the scan's
+`@off` binds) - so a layer replays as the history advance and the scan alone, with no copy back into the stage planes
+(`DASLLAMA_METAL_REPLAY_TAPE`; 0 copies). A state kept a verify row instead would select the accepted row's state with no replay,
+but it writes k copies of every recurrent layer's state a verify - more bytes than the replay's scans read and write - and holds k
+mirror-pool slots besides, so the round replays. The replay's command buffer is committed with no host wait
+(`DASLLAMA_METAL_REPLAY_UNWAITED`): the next pass and verify queue behind it on the device while the host encodes them, and the spent
+parked step stays parked - its tape is what the replay reads, so its buffers must not return to the pool - until the next seat, plain
+step, quiesce or shutdown unparks it, which waits the replay first; a host read or write of a mirror slot runs that quiesce. An
+n-gram model's rollback waits its replay, since the ring's restore follows it on the host, unless the restore rides the replay's
+buffer (`ARCHITECTURE_GPU_MTP_ROUND.md#commit-one`).
+
 ### A rope-store kernel rotates a partial carrier's prefix alone {#metal-rope-store-rot}
 
 **A rope-store kernel takes the rotated prefix `rot`, and `rot` alone rotates.** `rot` is 0 or the
@@ -252,4 +287,4 @@ the NEOX pairs `(j, j + rot/2)` of the head's first `rot` dims and passes `[rot,
 unchanged - still adding the bias there - which is the CPU leaf `rope_scaled_neox_tab_part`'s rule,
 and a partial carrier takes the pair form whatever `neox` says. The cos/sin table row is `rot / 2`
 wide on a partial carrier and `hs / 2` otherwise, so a batched kernel strides its per-row table by
-that width. The f16 mirror carried the arm first; the q8_0 and tq4 mirrors take the same one.
+that width. The f16, q8_0 and tq4 mirrors take the same arm.

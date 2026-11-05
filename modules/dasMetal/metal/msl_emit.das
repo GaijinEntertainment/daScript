@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options stack = 8388608
 options _cyclomatic_complexity = 0   // MSL emitter: exact-type is-ladders over the AST node classes — one arm per construct, and the census gate wants them all in one place
 options _function_length = 0         // same ladders, measured by line
 
@@ -486,8 +487,9 @@ def private scan_state_ptr_assign(var ctx : MslCtx; left, right : Expression?) {
 // functions (their CPU stub bodies are not MSL); C++ builtIns and ctor spellings need no
 // entry (the builtIn flag and the reserved type names already exclude them)
 let private MSL_LADDER_OWNED : table<string> <- {
-    "barrier", "memoryBarrierShared", "simdgroup_load", "simdgroup_store", "tg_store_half4",
-    "tg_store_float4", "simdgroup_multiply", "simdgroup_multiply_accumulate", "sgmat_to_half",
+    "barrier", "memoryBarrierShared", "memoryBarrierBuffer", "simdgroup_load", "simdgroup_store",
+    "tg_store_half4", "tg_store_float4", "simdgroup_multiply", "simdgroup_multiply_accumulate",
+    "sgmat_to_half",
     "make_filled_simdgroup_float8x8", "make_filled_simdgroup_half8x8",
     "simd_sum", "simd_max", "simd_shuffle", "simd_shuffle_up", "simd_shuffle_down", "simd_shuffle_xor",
     "sdot4", "usdot4", "i_das_ptr_add",
@@ -496,6 +498,10 @@ let private MSL_LADDER_OWNED : table<string> <- {
     "tmm2d_tg_begin_deva", "tmm2d_tg_step_deva", "tmm2d_tile_tg", "tmm2d_tg_rowscale",
     "tmm2d_tg_begin_nt", "tmm2d_tg_step_nt", "tmm2d_tg_begin_devant", "tmm2d_tg_step_devant",
     "tmm2d_tg_begin_devab", "tmm2d_tg_step_devab", "tmm2d_tg_begin_devabnt", "tmm2d_tg_step_devabnt",
+    "tmm2d_rx_begin", "tmm2d_rx_begin_i8", "tmm2d_rx_left", "tmm2d_rx_left2", "tmm2d_rx_left4",
+    "tmm2d_rx_run", "tmm2d_rx_dest", "tmm2d_rx_dest_valid", "tmm2d_rx_left_count",
+    "tmm2d_rx_dest_count",
+    "ushort_bits_to_half",
     "uint_bits_to_float", "int_bits_to_float", "float_bits_to_uint", "float_bits_to_int",
     "atomicAdd"
 }
@@ -711,6 +717,8 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
         }
         if (((scn == "tmm2d_tg_begin" || scn == "tmm2d_tg_begin_nt" || scn == "tmm2d_tg_begin_devant") && length(ecs.arguments) == 5)
                 || (scn == "tmm2d_tg_begin_deva" && length(ecs.arguments) == 6)
+                || ((scn == "tmm2d_rx_begin" || scn == "tmm2d_rx_begin_i8")
+                    && length(ecs.arguments) == 6)
                 || ((scn == "tmm2d_tg_begin_devab" || scn == "tmm2d_tg_begin_devabnt") && length(ecs.arguments) == 4)) {
             var acc0 = ecs.arguments[0]
             if (acc0 is ExprRef2Value) {
@@ -1182,6 +1190,37 @@ def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
         let v = emit_value(ctx, ec.arguments[0])
         note(ctx, "call.bitcast.{census_class(ec.arguments[0]._type)}.{census_class(ec._type)}")
         return "as_type<{shader_type_name(ec._type)}>({v})"
+    }
+    if (cname == "ushort_bits_to_half") {
+        if (na != 1) {
+            shader_error(ctx, ec.at, "ushort_bits_to_half takes exactly one argument")
+            return "/*call {cname}*/"
+        }
+        let v = emit_value(ctx, ec.arguments[0])
+        note(ctx, "call.ushort_bits_to_half")
+        return "as_type<half>(ushort({v}))"
+    }
+    if (cname == "tmm2d_rx_dest" || cname == "tmm2d_rx_dest_valid") {
+        if (na != 2) {
+            shader_error(ctx, ec.at, "{cname} takes exactly two arguments")
+            return "/*call {cname}*/"
+        }
+        return "/*call {cname}*/" if (!rx_begun_ok(ctx, ec, cname))
+        let acc = tg_acc_name(ctx, ec.arguments[0])
+        let i = emit_value(ctx, ec.arguments[1])
+        note(ctx, "call.{cname}")
+        return cname == "tmm2d_rx_dest" ? "__tgf_{acc}[{i}]" : "__tgf_{acc}.is_valid_element({i})"
+    }
+    if (cname == "tmm2d_rx_left_count" || cname == "tmm2d_rx_dest_count") {
+        if (na != 1) {
+            shader_error(ctx, ec.at, "{cname} takes exactly one argument")
+            return "/*call {cname}*/"
+        }
+        return "/*call {cname}*/" if (!rx_begun_ok(ctx, ec, cname))
+        let acc = tg_acc_name(ctx, ec.arguments[0])
+        note(ctx, "call.{cname}")
+        let tens = cname == "tmm2d_rx_left_count" ? "__tgl_{acc}" : "__tgf_{acc}"
+        return "uint({tens}.get_capacity())"
     }
     if (key_exists(MSL_DOT_HELPERS, cname)) {
         if (na != 2) {
@@ -2774,6 +2813,172 @@ def private emit_tmm2d_tg_step_devab(var ctx : MslCtx; ec : ExprCall?; indent : 
     lines |> push("{indent}\}")
 }
 
+[arch(at="../ARCHITECTURE.md#tmm2d-register-left")]
+def private emit_tmm2d_rx_begin(var ctx : MslCtx; ec : ExprCall?; indent : string;
+                                var lines : array<string>; int8_left : bool) {
+    let cname = int8_left ? "tmm2d_rx_begin_i8" : "tmm2d_rx_begin"
+    if (length(ec.arguments) != 6) {
+        shader_error(ctx, ec.at, "{cname} takes exactly 6 arguments")
+        return
+    }
+    let acc = tg_acc_name(ctx, ec.arguments[0])
+    tmm2d_devab_half(ctx, ec.arguments[1], "x table")
+    let xp = emit_value(ctx, ec.arguments[1])
+    let kd = emit_value(ctx, ec.arguments[2])
+    let m = tmm2d_const_uint(ctx, ec.arguments[3], "m (tile rows)")
+    let n = tmm2d_const_uint(ctx, ec.arguments[4], "n (tile cols)")
+    let kk = tmm2d_const_uint(ctx, ec.arguments[5], "kk (product depth)")
+    if (m == 0u || n == 0u || kk == 0u) {
+        shader_error(ctx, ec.at,
+            "{cname}: m, n and kk must be non-zero compile-time uint constants")
+        return
+    }
+    var a0 = ec.arguments[0]
+    if (a0 is ExprRef2Value) {
+        a0 = (a0 as ExprRef2Value).subexpr
+    }
+    if (a0 is ExprVar) {
+        let flavor = int8_left ? "rx8" : "rx"
+        ctx.tg_accs[string((a0 as ExprVar).name)] = "{int(m)}|{int(n)}|{int(kk)}|{flavor}"
+    }
+    note(ctx, "call.{cname}")
+    let left_t = int8_left ? "int8_t" : "half"
+    let mode = "matmul2d_descriptor::mode::multiply"
+    let desc = "matmul2d_descriptor({int(m)}, {int(n)}, {int(kk)}, false, true, true, {mode})"
+    lines |> push("{indent}constexpr auto __tgd_{acc} = {desc};")
+    lines |> push("{indent}matmul2d<__tgd_{acc}, execution_simdgroup> __tgop_{acc};")
+    lines |> push("{indent}auto __tgl_{acc} = __tgop_{acc}.template " +
+        "get_left_input_cooperative_tensor<{left_t}, half, float>();")
+    lines |> push("{indent}auto __tgx_{acc} = tensor<device half, dextents<int32_t, 2>, " +
+        "tensor_inline>((device half *)({xp}), dextents<int32_t, 2>(int({kd}), {int(n)}));")
+    lines |> push("{indent}auto __tgs_{acc} = __tgx_{acc}.template " +
+        "slice<{int(kk)}, {int(n)}>(0, 0);")
+    lines |> push("{indent}auto __tgf_{acc} = __tgop_{acc}.template " +
+        "get_destination_cooperative_tensor<decltype(__tgl_{acc}), " +
+        "decltype(__tgs_{acc}), float>();")
+}
+
+//! the begin witness of the rx product `a`: its "m|n|kk|flavor"
+//! fields, empty where no rx begin opened it
+def private rx_witness(ctx : MslCtx; a : Expression?) : array<string> {
+    var a0 = a
+    if (a0 is ExprRef2Value) {
+        a0 = (a0 as ExprRef2Value).subexpr
+    }
+    let witness = a0 is ExprVar ? (ctx.tg_accs?[string((a0 as ExprVar).name)] ?? "") : ""
+    var parts <- split(witness, "|")
+    if (length(parts) != 4 || (parts[3] != "rx" && parts[3] != "rx8")) {
+        parts |> clear()
+    }
+    return <- parts
+}
+
+//! false, after a shader error, where `cname`'s accumulator was not
+//! begun by an rx begin (`tmm2d_rx_begin` / `_i8`)
+def private rx_begun_ok(var ctx : MslCtx; ec : ExprCall?; cname : string) : bool {
+    var inscope parts <- rx_witness(ctx, ec.arguments[0])
+    if (length(parts) != 4) {
+        let acc0 = tg_acc_name(ctx, ec.arguments[0])
+        shader_error(ctx, ec.at, "{cname}: `{acc0}` was not begun by tmm2d_rx_begin")
+        return false
+    }
+    return true
+}
+
+//! false, after a shader error, where the fill `cname`'s rx product
+//! was not begun, or was begun with left elements other than `flavor`
+//! ("rx" half, "rx8" int8)
+def private rx_fill_flavor_ok(var ctx : MslCtx; ec : ExprCall?; cname, flavor : string) : bool {
+    return false if (!rx_begun_ok(ctx, ec, cname))
+    var inscope parts <- rx_witness(ctx, ec.arguments[0])
+    if (parts[3] != flavor) {
+        let begun = parts[3] == "rx8" ? "int8" : "half"
+        let acc0 = tg_acc_name(ctx, ec.arguments[0])
+        shader_error(ctx, ec.at, "{cname}: `{acc0}` was begun with {begun} left elements")
+        return false
+    }
+    return true
+}
+
+def private emit_tmm2d_rx_left(var ctx : MslCtx; ec : ExprCall?; indent : string;
+                               var lines : array<string>) {
+    if (length(ec.arguments) != 3) {
+        shader_error(ctx, ec.at, "tmm2d_rx_left takes exactly 3 arguments")
+        return
+    }
+    return if (!rx_fill_flavor_ok(ctx, ec, "tmm2d_rx_left", "rx"))
+    let acc = tg_acc_name(ctx, ec.arguments[0])
+    let i = emit_value(ctx, ec.arguments[1])
+    let v = emit_value(ctx, ec.arguments[2])
+    note(ctx, "call.tmm2d_rx_left")
+    lines |> push("{indent}__tgl_{acc}[{i}] = half({v});")
+}
+
+def private emit_tmm2d_rx_left2(var ctx : MslCtx; ec : ExprCall?; indent : string;
+                                var lines : array<string>) {
+    if (length(ec.arguments) != 4) {
+        shader_error(ctx, ec.at, "tmm2d_rx_left2 takes exactly 4 arguments")
+        return
+    }
+    return if (!rx_fill_flavor_ok(ctx, ec, "tmm2d_rx_left2", "rx"))
+    let acc = tg_acc_name(ctx, ec.arguments[0])
+    let i0 = emit_value(ctx, ec.arguments[1])
+    let i1 = emit_value(ctx, ec.arguments[2])
+    let u = emit_value(ctx, ec.arguments[3])
+    note(ctx, "call.tmm2d_rx_left2")
+    lines |> push("{indent}\{")
+    lines |> push("{indent}    half2 __h2 = as_type<half2>(uint({u}));")
+    lines |> push("{indent}    __tgl_{acc}[{i0}] = __h2.x;")
+    lines |> push("{indent}    __tgl_{acc}[{i1}] = __h2.y;")
+    lines |> push("{indent}\}")
+}
+
+def private emit_tmm2d_rx_left4(var ctx : MslCtx; ec : ExprCall?; indent : string;
+                                var lines : array<string>) {
+    if (length(ec.arguments) != 3) {
+        shader_error(ctx, ec.at, "tmm2d_rx_left4 takes exactly 3 arguments")
+        return
+    }
+    var inscope parts <- rx_witness(ctx, ec.arguments[0])
+    if (length(parts) != 4 || parts[3] != "rx8") {
+        let acc0 = tg_acc_name(ctx, ec.arguments[0])
+        shader_error(ctx, ec.at, "tmm2d_rx_left4: `{acc0}` was not begun by tmm2d_rx_begin_i8")
+        return
+    }
+    let acc = tg_acc_name(ctx, ec.arguments[0])
+    let i0 = emit_value(ctx, ec.arguments[1])
+    let u = emit_value(ctx, ec.arguments[2])
+    note(ctx, "call.tmm2d_rx_left4")
+    lines |> push("{indent}\{")
+    lines |> push("{indent}    char4 __c4 = as_type<char4>(uint({u}));")
+    lines |> push("{indent}    __tgl_{acc}[{i0}] = __c4.x;")
+    lines |> push("{indent}    __tgl_{acc}[({i0}) + 1u] = __c4.y;")
+    lines |> push("{indent}    __tgl_{acc}[({i0}) + 2u] = __c4.z;")
+    lines |> push("{indent}    __tgl_{acc}[({i0}) + 3u] = __c4.w;")
+    lines |> push("{indent}\}")
+}
+
+def private emit_tmm2d_rx_run(var ctx : MslCtx; ec : ExprCall?; indent : string;
+                              var lines : array<string>) {
+    if (length(ec.arguments) != 2) {
+        shader_error(ctx, ec.at, "tmm2d_rx_run takes exactly 2 arguments")
+        return
+    }
+    let acc = tg_acc_name(ctx, ec.arguments[0])
+    var inscope parts <- rx_witness(ctx, ec.arguments[0])
+    if (length(parts) != 4) {
+        shader_error(ctx, ec.at, "tmm2d_rx_run: `{acc}` was not begun by tmm2d_rx_begin")
+        return
+    }
+    let koff = emit_value(ctx, ec.arguments[1])
+    note(ctx, "call.tmm2d_rx_run")
+    lines |> push("{indent}\{")
+    lines |> push("{indent}    auto __B = __tgx_{acc}.template slice<{parts[2]}, {parts[1]}>" +
+        "(int({koff}), 0);")
+    lines |> push("{indent}    __tgop_{acc}.run(__tgl_{acc}, __B, __tgf_{acc});")
+    lines |> push("{indent}\}")
+}
+
 def private emit_tmm2d_tg_step(var ctx : MslCtx; ec : ExprCall?; indent : string; var lines : array<string>) {
     if (length(ec.arguments) != 6) {
         shader_error(ctx, ec.at, "tmm2d_tg_step takes exactly 6 arguments")
@@ -3218,6 +3423,15 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
             }
             note(ctx, cname == "barrier" ? "call.barrier" : "call.memory_barrier_shared")
             lines |> push("{indent}threadgroup_barrier(mem_flags::mem_threadgroup);")
+        } elif (cname == "memoryBarrierBuffer") {
+            // the device-memory rendezvous: a threadgroup's own device writes
+            // (a cooperative store among them) read back by its other threads
+            if (!empty(ec.arguments)) {
+                shader_error(ctx, ec.at, "{cname}() takes no arguments")
+                return
+            }
+            note(ctx, "call.memory_barrier_buffer")
+            lines |> push("{indent}threadgroup_barrier(mem_flags::mem_device);")
         } elif (cname == "simdgroup_load" || cname == "simdgroup_store") {
             emit_sgmat_load_store(ctx, ec, indent, lines)
         } elif (cname == "sgmat_to_half") {
@@ -3244,6 +3458,16 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
             emit_tmm2d_tg_begin_devab(ctx, ec, indent, lines, cname == "tmm2d_tg_begin_devabnt")
         } elif (cname == "tmm2d_tg_step_devab" || cname == "tmm2d_tg_step_devabnt") {
             emit_tmm2d_tg_step_devab(ctx, ec, indent, lines, cname == "tmm2d_tg_step_devabnt")
+        } elif (cname == "tmm2d_rx_begin" || cname == "tmm2d_rx_begin_i8") {
+            emit_tmm2d_rx_begin(ctx, ec, indent, lines, cname == "tmm2d_rx_begin_i8")
+        } elif (cname == "tmm2d_rx_left") {
+            emit_tmm2d_rx_left(ctx, ec, indent, lines)
+        } elif (cname == "tmm2d_rx_left2") {
+            emit_tmm2d_rx_left2(ctx, ec, indent, lines)
+        } elif (cname == "tmm2d_rx_left4") {
+            emit_tmm2d_rx_left4(ctx, ec, indent, lines)
+        } elif (cname == "tmm2d_rx_run") {
+            emit_tmm2d_rx_run(ctx, ec, indent, lines)
         } elif (cname == "tmm2d_tg_step_nt") {
             emit_tmm2d_tg_step_nt(ctx, ec, indent, lines)
         } elif (cname == "tmm2d_tg_step") {

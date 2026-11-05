@@ -124,7 +124,7 @@ prefill, the FP4 expert rung, the nv4 nibble decode, the MMQ pin) in `ARCHITECTU
   Vulkan's N-row token command records once and resubmits, so it has no encode to move.
 - **The K-quant rows sites' half-x rail is Metal-only** (`DASLLAMA_METAL_KQ_HALF`, `set_metal_kq_half`): under a
   `kq_rows_half_<fmt>` crown the decode's two-to-eight-row K-quant sites read x as the f16 twin the row producer stores
-  beside it (`ARCHITECTURE_GPU_MTP_DECODE.md#kq-rows-crown`), and the knob keeps the f32 forms for an A/B; Vulkan's rows
+  beside it (`ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#kq-rows-crown`), and the knob keeps the f32 forms for an A/B; Vulkan's rows
   sites read f32 x alone.
 - **The short window's split-K lever is Metal-only** (`DASLLAMA_METAL_SPLIT_K`, `set_metal_prefill_split_k`): `0` keeps every
   prefill tile whole - the split sums a tile's K in another f32 order, so the window's numerics move with it
@@ -266,3 +266,31 @@ prefill, the FP4 expert rung, the nv4 nibble decode, the MMQ pin) in `ARCHITECTU
   into each slice's device scale rows; the Metal routed block binds the compact scale row, which carries no word for it,
   so `moe_fmts_unserved` and `shexp_fmts_unserved` decline such a stack by layer, site and member and the CPU serves the
   call (`followup_general.md` row 246 (3) is the Metal gap).
+- **The single row's form levers are Metal-only** (`DASLLAMA_METAL_B32_WIDE` / `set_metal_b32_wide`,
+  `DASLLAMA_METAL_B32_MOE_WIDE` / `set_metal_b32_moe_wide`, `DASLLAMA_METAL_B32_GLU` / `set_metal_b32_glu`,
+  `ARCHITECTURE_GPU_QUANT_PLANES.md#metal-b32-wide-gemv`, `#metal-b32-glu`; `DASLLAMA_METAL_KQ_FAT` / `set_metal_kq_fat`,
+  `ARCHITECTURE_GPU_MTP_DECODE.md#metal-fat-chain`): each picks between one-row forms the Metal decode carries side by side
+  and that round apart - the per-32 wide form folds a block's scale once where the K-split form folds every quad, the fused
+  gate|up stores `act(gate) * up` with no panel between, the fat chain's prologue norms hold its rows within 1.2e-3 of the
+  plain chain's; the discrete homes' one-row GEMVs carry one form a format (Vulkan's fused tail its own pin, `DASLLAMA_VK_FUSE`).
+- **The affine members' fused levers are Metal-only** (`DASLLAMA_METAL_HC_FUSED_AFF`, `DASLLAMA_METAL_MOE_AFF_PAIR`): the
+  one-row hyper-connection mixer's fused pair and the routed fused pair over mlx4b / mlx8b stacks, each against its staged
+  chain in another sum order; the discrete homes stamp no affine member (`ARCHITECTURE_ENGINE_FORMATS_MLX.md`), so they serve none.
+- **The five-to-eight-row forms' levers are Metal-only** (`DASLLAMA_METAL_ROWS_MM8`, `DASLLAMA_METAL_ROWS_MT`,
+  `DASLLAMA_METAL_HC_MIX8`, `DASLLAMA_METAL_MOE_UNION`; `ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#rows8-matrix-unit`,
+  `ARCHITECTURE_GPU_MTP_DECODE_HC.md#metal-hc-mix8`, `ARCHITECTURE_GPU_MTP_DECODE.md#moe-union`): the verify's and the batch
+  step's rows take the eight-row tensor stamps, the matrix-unit form with exact-half codes and an fp32 scale, the four-dispatch
+  mixer, or - bit for bit the fused pair - the rows' expert union, each over the row forms it would replace; the discrete
+  homes' N-row commands carry one form a site, so there is no twin to pick.
+- **The block drafter's device arm and its levers are Metal-only** (`set_dflash_device`, `register_dflash_device`'s one
+  registrant; `DASLLAMA_METAL_DFLASH_SELECT` / `set_metal_dflash_select`, `DASLLAMA_METAL_DFLASH_SOFT_PICK` /
+  `set_metal_dflash_soft_pick`, `DASLLAMA_METAL_DFLASH_ACCEPT` / `set_metal_dflash_accept`, `DASLLAMA_METAL_VERIFY_AHEAD` /
+  `set_metal_verify_ahead`; `ARCHITECTURE_GPU_MTP_ACCEPT.md#dflash-sampled-drafts`, `ARCHITECTURE_GPU_MTP_ROUND.md#verify-ahead`):
+  the pass, its top-k selector, a sampled round's draw off the stream's rng and the greedy accept run on the device, and the verify
+  is encoded behind the pass; the discrete homes register no device arm, so their drafter's pass, selection and accept run on the CPU.
+- **The speculative rollback's buffer levers are Metal-only** (`DASLLAMA_METAL_REPLAY_UNWAITED` / `set_metal_replay_unwaited`,
+  `DASLLAMA_METAL_REPLAY_TAPE` / `set_metal_replay_tape`, `DASLLAMA_METAL_COMMIT_ONE` / `set_metal_commit_one`;
+  `ARCHITECTURE_GPU_MTP_DECODE.md#mtp-replay-form`, `ARCHITECTURE_GPU_MTP_ROUND.md#commit-one`): a rejected Metal round replays
+  its recurrent layers off the verify's tape, so the replay can read the tape in place and queue unwaited and an n-gram commit
+  can fold into the buffers it follows; the discrete homes' verify copies each row's state into rollback rows
+  (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`) and replays nothing.

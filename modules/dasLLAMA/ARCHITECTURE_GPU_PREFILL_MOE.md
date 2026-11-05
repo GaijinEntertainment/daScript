@@ -12,15 +12,20 @@ live in `ARCHITECTURE_GPU_PREFILL_GEMM.md`.
 
 ### The prefill MoE bucket rail {#prefill-moe-buckets}
 
-Routing is atomics-free: a router GEMV and a select pass, then a per-expert count kernel, then
-one bucket kernel that computes the padded prefix and fills the buckets. Each expert's bucket
-PADS to a whole 32-row tile, every threadgroup computes the same padded prefix, and threadgroup
-`e` publishes `basep[e]` for the mm and activation consumers. The bucket fill splits the entry
-range into contiguous ascending per-lane chunks and scans the chunk counts, which reproduces the
-serial entry order exactly, so the ordered weighted reduce is bit-stable against the CPU path
-that parks each routed expert's rows and reduces them in entry order. The selection is read
-GPU-side by the kernels; nothing reads back to the CPU, so encode-ahead and speculation stay
-compatible.
+Routing touches no device atomic: a router GEMV and a select pass, then one bucket kernel - a
+threadgroup of 256 an expert, and one past them - that counts, places and fills. Every thread
+walks a contiguous chunk of the selection once, tallying every expert into a threadgroup
+histogram and its own expert in chunk order; the histogram gives the padded prefix of the
+experts before this one (`basep[e]`, each expert's bucket PADDED to a whole 32-row tile; the
+threadgroup past the experts publishes the padded total) and this expert's count (`cnt[e]`), the
+chunk counts' exclusive scan - a simdgroup prefix, the eight simdgroup totals through
+threadgroup memory - each thread's first bucket row, and a second walk of the same chunk lands
+the rows, which reproduces the serial entry order exactly, so the ordered weighted reduce is
+bit-stable against the CPU path that parks each routed expert's rows and reduces them in entry
+order. The form before it - a 32-lane count kernel an expert, then a 32-lane bucket kernel
+rescanning the counts - was latency-bound at 1024 serial loads a lane: 23 ms of a 4096-token
+window on the 35B against this kernel's 4. The selection is read GPU-side by the kernels;
+nothing reads back to the CPU, so encode-ahead and speculation stay compatible.
 
 The router's logits are one f32 tile GEMM (`pf_enc_router_mm`, the `MetalF32ExactMm` stamp): the
 routed rows against the layer's router rows in their own F32 bytes, staged as floats - no half copy
@@ -62,6 +67,23 @@ size - the in-kernel gather is the slower form from a 17-token window up; the pa
 minted once per layer and shared by both sites. An X read through the bucket index can never
 form a tensor view, which is why every tensor twin of the MoE family serves contiguous rows
 only.
+
+The up site's split twin carries the routed activation in its own store (`gu`, the split
+scaffold's gated store): the tile lands its f32 rows through the cooperative store as every tile
+does, a device-memory rendezvous (`memoryBarrierBuffer`) follows, and the threadgroup walks those
+rows once more in coalesced quads - silu of the gate tile's element times its own, as halves into
+the hidden panel the down site reads (`hout`, the panel `pf_twin_panel` mints ahead of the
+dispatch). The window then runs no activation pass over the padded bucket panel and writes no
+f32 hidden plane that nothing reads. An element-wise epilogue off the cooperative tensor is the
+wrong form here: its gate reads and half stores land scattered, and on the 35B's 4096-token
+window it cost the expert tiles 28 ms where the pass it replaced cost 20; the row walk after the
+plain store takes the window from 694 to 643 ms (512 tokens: 131 to 102), the pass no longer an
+ordering point between the up and the down tiles. The store serves where the gate panel exists,
+the model's activation is SwiGLU, the up and down sites' twins are both live and the panel's row
+count clears `CVT_MIN_ROWS` (`gu_ok`, `metal_prefill_window`); the q8 and mx4 scaffolds and the
+simdgroup base keep the pass, and `pf_enc_moe_mm` answers whether the store was taken so the pass
+runs exactly where it was not. The gate site binds the gated store's planes unread (`gu` 0: the
+y plane at the gate slot, the X halves at the hidden slot), as every hand-binding race arm does.
 
 A routed site rides one of two ladders over an expert's rows. Below a mean of 32 rows an expert
 (`set_metal_moe_tall_avg`) the 32-row stamp serves every tile. From that mean up the tall pair

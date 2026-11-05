@@ -161,7 +161,12 @@ var @scratch g_arena_free : array<tuple<off : uint64; size : uint64>>   // sorte
 // dispatch; compile_pso() assignments + shutdown releases stay in kernels' metal_decode_init) =====
 var g_pso_gemv : MetalComputePipeline?
 var g_pso_gemv_sg : MetalComputePipeline?    // the row-per-simdgroup q8 GEMV (n <= GEMV_SG_MAX_N sites)
-var g_gemv_rows = 4l                      // rows (simdgroups) per MoE router/expert GEMV threadgroup (the dense GEMV geometry is fixed)
+var g_pso_gemv_hc : MetalComputePipeline?      //! the reduction-split q8 GEMV scattering its rows into the hyper-connection streams
+var g_pso_gemv_hcn : MetalComputePipeline?     //! ... the mixer's down under the grouped norm, the normed streams stored
+var g_pso_gemv_sg_lo : MetalComputePipeline?   //! the row-per-simdgroup q8 GEMV over silu(lo / hc) of its x row (the mixer's up)
+var g_pso_gemv_hcn_mlx4b, g_pso_gemv_hcn_mlx6b, g_pso_gemv_hcn_mlx8b : MetalComputePipeline?            //! the mixer's down over an affine member's planes
+var g_pso_gemv_sg_lo_mlx4b, g_pso_gemv_sg_lo_mlx6b, g_pso_gemv_sg_lo_mlx8b : MetalComputePipeline?      //! ... and its up
+var g_gemv_rows = 4l                     // rows (simdgroups) per MoE router/expert GEMV threadgroup (the dense GEMV geometry is fixed)
 var g_pso_rms : MetalComputePipeline?
 var g_pso_rms_hx : MetalComputePipeline?   // dual-store stamp: + the f16 twin panel
 var g_pso_add : MetalComputePipeline?
@@ -186,6 +191,7 @@ var g_pso_ple_proj_bf16_hw_one : MetalComputePipeline?   //!< ... its decode col
 var g_pso_f32_rows_one : MetalComputePipeline?   //!< the f32 rows' GEMV a lane an element: a dim off the float4 lattice, one column a row
 var g_pso_f32_rows_b : MetalComputePipeline?     //!< ... its position-blocked stamp
 var g_pso_geglu_hx : MetalComputePipeline?    // dual-store stamp
+var g_pso_rms_hxt, g_pso_addrms_hxt, g_pso_preaddrms_hxt, g_pso_swiglu_hxt, g_pso_geglu_hxt : MetalComputePipeline?   //! the HX stamps with the rows8 x table and token sums beside
 // ===== tower primitives (compiled in the tower driver's init) =====
 var g_pso_ln : MetalComputePipeline?
 var g_pso_bias_act : MetalComputePipeline?   //! the bias + activation rows, the template both homes stamp
@@ -207,8 +213,10 @@ var g_pso_wdec_attn_comb : MetalComputePipeline?  // the log-sum-exp chunk merge
 var g_pso_bias_add_res : MetalComputePipeline?   // whisper decode: bias + residual add
 var g_pso_cls_epi : MetalComputePipeline?   //! the classifier epilogue (`MetalClsEpilogue`): the final softcap, the suppressed ids
 var g_pso_cls_select : MetalComputePipeline?   //! the classifier tail's selection (`MetalClsSelect`): a sampled stream's survivors, max, denominator and recent logits
+var g_pso_sel_draw : MetalComputePipeline?     //! the draw over a landed row (`MetalSelDraw`): the sampled chain's token, the host sampler's bit for bit
 var g_one : MetalBuffer?                    // persistent 1.0f — the rms oscale default bind
 var g_zero : MetalBuffer?                   // persistent 0u — the sink/hass identity bind
+var g_one_u : MetalBuffer?                  //! persistent 1u — the routed twins' gated-store switch
 var g_pso_attn16 : MetalComputePipeline?
 var g_pso_attn32 : MetalComputePipeline?
 var g_pso_attn_q8 : MetalComputePipeline?   // q8_0-mirror twin (dual-view block reads)
@@ -254,7 +262,13 @@ var g_pso_emb_b32_q51 : MetalComputePipeline?       //! the per-32 token-table g
 var g_pso_emb_b32_iq4nl32 : MetalComputePipeline?
 var g_pso_emb_b32_q4032 : MetalComputePipeline?
 var g_pso_emb_b32_q5032 : MetalComputePipeline?
+var g_pso_emb_b32_mlx4 : MetalComputePipeline?
+var g_pso_emb_b32_mlx8 : MetalComputePipeline?
+var g_pso_emb_b32_mlx4b : MetalComputePipeline?
+var g_pso_emb_b32_mlx8b : MetalComputePipeline?
+var g_pso_emb_b32_mlx6b : MetalComputePipeline?
 var g_pso_moe_router : MetalComputePipeline?   // MoE (Wave C): router GEMV over the fp32 slab
+var g_pso_moe_router_n : MetalComputePipeline?   //! ... over the residual stream, x normed in the prologue (the fat chain's router)
 var g_pso_moe_select : MetalComputePipeline?   // softmax + top-k + renorm (one simdgroup)
 var g_pso_moe_select_512 : MetalComputePipeline?   // the 16-deep ladder past 256 experts
 var g_pso_moe_select_ds : MetalComputePipeline?   //! the select with the per-expert down scales (gemma-4)
@@ -264,11 +278,21 @@ var g_pso_moe_kq_k4 : MetalComputePipeline?
 var g_pso_moe_kq_k3 : MetalComputePipeline?
 var g_pso_moe_kq_iq3s : MetalComputePipeline?
 var g_pso_moe_kq_iq3s_f4 : MetalComputePipeline?   //!< the gathered iq3s f4-slab twin, compiled only behind the crown "kq_gemv_iq3s_f4"
+var g_pso_moe_gu_iq3s_f4 : MetalComputePipeline?   //!< ... and the routed gate + up + act over two iq3s stacks, behind the same crown
 var g_pso_moe_kq_iq3xxs : MetalComputePipeline?
 var g_pso_moe_kq_iq2s : MetalComputePipeline?
 var g_pso_moe_kq_iq2xs : MetalComputePipeline?
 var g_pso_moe_kq_iq2xxs : MetalComputePipeline?
 var g_pso_moe_kq_iq4xs : MetalComputePipeline?
+var g_pso_moe_gu_iq4xs : MetalComputePipeline?     //! the fat chain's routed gate + up + act
+var g_pso_moe_down2_iq4xs : MetalComputePipeline?  //! ... and its routed down + shared down + combine onto the stream
+var g_pso_moe_union, g_pso_moe_gu_union_iq4xs, g_pso_moe_dn_union_iq4xs, g_pso_moe_down2p_iq4xs : MetalComputePipeline?   //! the rows' expert union and its pair
+var g_pso_moe_down2_iq4nl32 : MetalComputePipeline?          //! the iq4nl32 routed down's four stamps: the shared down iq4nl32 or q8, landed on the row or into the hc streams
+var g_pso_moe_down2_iq4nl32_hc : MetalComputePipeline?
+var g_pso_moe_down2_iq4nl32_shq8 : MetalComputePipeline?
+var g_pso_moe_down2_iq4nl32_shq8_hc : MetalComputePipeline?
+var g_pso_moe_down2_mlx4b, g_pso_moe_down2_mlx4b_hc, g_pso_moe_down2_mlx8b, g_pso_moe_down2_mlx8b_hc : MetalComputePipeline?   //! the routed pair's down over affine stacks
+var g_pso_moe_gu_mlx4b, g_pso_moe_gu_mlx8b : MetalComputePipeline?   //! ... and its gate and up
 var g_pso_moe_kq_iq3s4 : MetalComputePipeline?
 var g_pso_moe_kq_q40 : MetalComputePipeline?
 var g_pso_moe_kq_nv4 : MetalComputePipeline?
@@ -278,6 +302,7 @@ var g_pso_moe_kq_k5 : MetalComputePipeline?
 var g_pso_moe_kq_k6 : MetalComputePipeline?
 var g_pso_moe_combine : MetalComputePipeline?  // weighted top-k reduce into the w2 write shape
 var g_pso_moe_combine_sh : MetalComputePipeline?   //! ... with the gated shared expert's rows added
+var g_pso_moe_combine_sh_hc : MetalComputePipeline?   //! ... scattered into the hyper-connection streams
 var g_pso_moe_comb_g4 : MetalComputePipeline?   //! the gemma-4 MoE step (`MetalMoeCombG4`), its f16-twin and window stamps
 var g_pso_moe_comb_g4_hx : MetalComputePipeline?
 var g_pso_moe_comb_g4_pf : MetalComputePipeline?
@@ -322,8 +347,82 @@ var g_pso_b32_mvb2_q5032_ks : MetalComputePipeline?
 var g_pso_b32_mvb4_q5032_ks : MetalComputePipeline?
 var g_pso_b32_mvb8_q5032_ks : MetalComputePipeline?
 var g_pso_kq_mm_b5032 : MetalComputePipeline?
+var g_pso_moe_gemv_mlx4 : MetalComputePipeline?   //! the affine members' stamps: codes verbatim under the 64-group (scale, bias) pair
+var g_pso_moe_gemv_mlx8 : MetalComputePipeline?
+var g_pso_moe_gemv_mlx4b : MetalComputePipeline?
+var g_pso_moe_gemv_mlx8b : MetalComputePipeline?
+var g_pso_moe_gemv_q51_w : MetalComputePipeline?   //! the expert-indexed wide stamps, one a `B32_MOE_WIDE_FMTS` member
+var g_pso_moe_gemv_q5032_w : MetalComputePipeline?
+var g_pso_moe_gemv_mlx4_w : MetalComputePipeline?
+var g_pso_moe_gemv_mlx8_w : MetalComputePipeline?
+var g_pso_moe_gemv_mlx4b_w : MetalComputePipeline?
+var g_pso_moe_gemv_mlx8b_w : MetalComputePipeline?
+var g_pso_kq_mm_mlx4 : MetalComputePipeline?
+var g_pso_kq_mm_mlx8 : MetalComputePipeline?
+var g_pso_kq_mm_mlx4b : MetalComputePipeline?
+var g_pso_kq_mm_mlx8b : MetalComputePipeline?
+var g_pso_kq_mm_mlx6b : MetalComputePipeline?
+var g_pso_kq_mlx4 : MetalComputePipeline?
+var g_pso_kq_mlx4_ks : MetalComputePipeline?
+var g_pso_b32_mvb2_mlx4 : MetalComputePipeline?
+var g_pso_b32_mvb4_mlx4 : MetalComputePipeline?
+var g_pso_b32_mvb8_mlx4 : MetalComputePipeline?
+var g_pso_b32_mvb2_mlx4_ks : MetalComputePipeline?
+var g_pso_b32_mvb4_mlx4_ks : MetalComputePipeline?
+var g_pso_b32_mvb8_mlx4_ks : MetalComputePipeline?
+var g_pso_kq_mlx8 : MetalComputePipeline?
+var g_pso_kq_mlx8_ks : MetalComputePipeline?
+var g_pso_b32_mvb2_mlx8 : MetalComputePipeline?
+var g_pso_b32_mvb4_mlx8 : MetalComputePipeline?
+var g_pso_b32_mvb8_mlx8 : MetalComputePipeline?
+var g_pso_b32_mvb2_mlx8_ks : MetalComputePipeline?
+var g_pso_b32_mvb4_mlx8_ks : MetalComputePipeline?
+var g_pso_b32_mvb8_mlx8_ks : MetalComputePipeline?
+var g_pso_kq_mlx4b : MetalComputePipeline?
+var g_pso_kq_mlx4b_ks : MetalComputePipeline?
+var g_pso_b32_mvb2_mlx4b : MetalComputePipeline?
+var g_pso_b32_mvb4_mlx4b : MetalComputePipeline?
+var g_pso_b32_mvb8_mlx4b : MetalComputePipeline?
+var g_pso_b32_mvb2_mlx4b_ks : MetalComputePipeline?
+var g_pso_b32_mvb4_mlx4b_ks : MetalComputePipeline?
+var g_pso_b32_mvb8_mlx4b_ks : MetalComputePipeline?
+var g_pso_kq_mlx8b : MetalComputePipeline?
+var g_pso_kq_mlx8b_ks : MetalComputePipeline?
+var g_pso_b32_mvb2_mlx8b : MetalComputePipeline?
+var g_pso_b32_mvb4_mlx8b : MetalComputePipeline?
+var g_pso_b32_mvb8_mlx8b : MetalComputePipeline?
+var g_pso_b32_mvb2_mlx8b_ks : MetalComputePipeline?
+var g_pso_b32_mvb4_mlx8b_ks : MetalComputePipeline?
+var g_pso_b32_mvb8_mlx8b_ks : MetalComputePipeline?
+var g_pso_kq_q51_w : MetalComputePipeline?
+var g_pso_kq_iq4nl32_w : MetalComputePipeline?
+var g_pso_kq_q4032_w : MetalComputePipeline?
+var g_pso_kq_q5032_w : MetalComputePipeline?
+var g_pso_kq_mlx4_w : MetalComputePipeline?
+var g_pso_kq_mlx8_w : MetalComputePipeline?
+var g_pso_kq_mlx4b_w : MetalComputePipeline?
+var g_pso_kq_mlx8b_w : MetalComputePipeline?
+var g_pso_kq_q51_glu : MetalComputePipeline?
+var g_pso_kq_iq4nl32_glu : MetalComputePipeline?
+var g_pso_kq_q4032_glu : MetalComputePipeline?
+var g_pso_kq_q5032_glu : MetalComputePipeline?
+var g_pso_kq_mlx4_glu : MetalComputePipeline?
+var g_pso_kq_mlx8_glu : MetalComputePipeline?
+var g_pso_kq_mlx4b_glu : MetalComputePipeline?
+var g_pso_kq_mlx8b_glu : MetalComputePipeline?
+var g_pso_kq_mlx6b : MetalComputePipeline?
+var g_pso_kq_mlx6b_ks : MetalComputePipeline?
+var g_pso_kq_mlx6b_w : MetalComputePipeline?
+var g_pso_kq_mlx6b_glu : MetalComputePipeline?
+var g_pso_b32_mvb2_mlx6b : MetalComputePipeline?
+var g_pso_b32_mvb4_mlx6b : MetalComputePipeline?
+var g_pso_b32_mvb8_mlx6b : MetalComputePipeline?
+var g_pso_b32_mvb2_mlx6b_ks : MetalComputePipeline?
+var g_pso_b32_mvb4_mlx6b_ks : MetalComputePipeline?
+var g_pso_b32_mvb8_mlx6b_ks : MetalComputePipeline?
 var g_mx4_vtab : MetalBuffer?                   // [16] signed doubled-e2m1 values
 var g_pso_dn_conv : MetalComputePipeline?      // deltanet (Wave D): causal conv + SiLU
+var g_pso_dn_conv_hx : MetalComputePipeline?   //! the same storing the rows' f16 twin (the window's half-row walk)
 var g_pso_dn_conv_n : MetalComputePipeline?    //! ... and the q/k L2 norm in one pass (`GkDnConv`)
 var g_pso_dn_conv_n4 : MetalComputePipeline?
 var g_pso_dn_hist : MetalComputePipeline?      // conv-history advance
@@ -380,10 +479,13 @@ var g_pso_pk_gemv_q8_gate : MetalComputePipeline?
 var g_pso_pk_gemv_q8_add_silu : MetalComputePipeline?
 var g_pso_pk_gemv_q8_tail : MetalComputePipeline?
 var g_pso_dn_l2 : MetalComputePipeline?        // q/k per-head L2 norm + q pre-scale
+var g_pso_dn_l2_hx : MetalComputePipeline?     //! the same storing the normed rows' f16 twin
 var g_pso_dn_scan : MetalComputePipeline?      // the fused sequential delta rule
+var g_pso_dn_step_fused : MetalComputePipeline?   //! the single row's conv + scan + gate in one dispatch (the fat chain)
 var g_pso_dn_scan_h : MetalComputePipeline?    // its stamp over half rows and prepared gates
 var g_pso_dn_prep : MetalComputePipeline?      // the gates' prepare pass
 var g_pso_dn_gate : MetalComputePipeline?      // z-gated out-norm
+var g_pso_dn_gate_hx : MetalComputePipeline?   //! the same storing the gated rows' f16 twin
 var g_pso_dn_gate_sig : MetalComputePipeline?  // ... its σ(z) twin (qwen4exp)
 var g_pso_dn_deint : MetalComputePipeline?     // 2x-wide [q|gate] deinterleave
 var g_pso_hc_norm : MetalComputePipeline?      // hyper-connections: the grouped stream norm
@@ -392,9 +494,11 @@ var g_pso_hc_init : MetalComputePipeline?      // ... the wide residual rows as 
 var g_pso_cat2 : MetalComputePipeline?         //! the MTP head's [a ; b] eh_proj input rows
 var g_pso_hc_mix : MetalComputePipeline?       // ... the sigmoid-gated stream mean
 var g_pso_hc_combine : MetalComputePipeline?   // ... the scatter of a block output into the streams
+var g_pso_hc_stream_mean : MetalComputePipeline?   //! ... the streams' plain mean: the layer output rows the block drafter reads
 var g_pso_ple_gate : MetalComputePipeline?     // the n-gram side input's per-stream gate + conv-input row
 var g_pso_ple_conv : MetalComputePipeline?     // ... its dilated causal conv + residual add
 var g_pso_sigmul : MetalComputePipeline?       // x ⊙ σ(g) — the gated-attention out-gate
+var g_pso_sigmul_hx : MetalComputePipeline?    //! the same storing the gated rows' f16 twin (the window's out projection reads it)
 var g_pso_qkvrs16 : MetalComputePipeline?   // fused QKV+rope+store (s16 path)
 var g_pso_qkvrs32 : MetalComputePipeline?
 var g_pso_w13sw : MetalComputePipeline?
@@ -404,6 +508,10 @@ var g_pso_kq_k5 : MetalComputePipeline?
 var g_pso_kq_k5c : MetalComputePipeline?   // the select-form nr0=1 twin — n < 3072 / small-d sites
 var g_pso_kq_k6 : MetalComputePipeline?
 var g_pso_kq_iq4xs : MetalComputePipeline?
+var g_pso_kq_fat_iq4xs : MetalComputePipeline?      //! the fat-threadgroup family: plain, normed prologue, add epilogue, normed + act + the x store
+var g_pso_kq_fat_iq4xs_n : MetalComputePipeline?
+var g_pso_kq_fat_iq4xs_a : MetalComputePipeline?
+var g_pso_kq_fat_iq4xs_nx : MetalComputePipeline?
 var g_pso_kq_iq3s4 : MetalComputePipeline?
 var g_pso_kq_mvb2_iq3s4 : MetalComputePipeline?
 var g_pso_kq_mvb4_iq3s4 : MetalComputePipeline?
@@ -558,6 +666,11 @@ var g_pso_kq_mm_b51_sk : MetalComputePipeline?
 var g_pso_kq_mm_b4n32_sk : MetalComputePipeline?
 var g_pso_kq_mm_b4032_sk : MetalComputePipeline?
 var g_pso_kq_mm_b5032_sk : MetalComputePipeline?
+var g_pso_kq_mm_mlx4_sk : MetalComputePipeline?
+var g_pso_kq_mm_mlx8_sk : MetalComputePipeline?
+var g_pso_kq_mm_mlx4b_sk : MetalComputePipeline?
+var g_pso_kq_mm_mlx8b_sk : MetalComputePipeline?
+var g_pso_kq_mm_mlx6b_sk : MetalComputePipeline?
 var g_pso_attnb16 : MetalComputePipeline?
 var g_pso_attnb32 : MetalComputePipeline?
 var g_pso_attnb_q8 : MetalComputePipeline?
@@ -729,6 +842,7 @@ var g_spec_cooldown = 0     // adaptive: served steps left before the next attem
 var g_spec_backoff = 1      // the next cooldown length
 var g_spec_hits = 0l
 var g_spec_misses = 0l
+var g_pre_poked = 0l
 
 //! Speculative greedy chaining rail: -1 adaptive (default), 0 off, 1 forced-on (tests/A-B).
 def public set_metal_decode_speculate(v : int) {
@@ -740,9 +854,9 @@ def public set_metal_decode_speculate(v : int) {
 //! The chaining rail's current mode (-1 adaptive, 0 off, 1 forced) - a test captures it to restore.
 def public metal_decode_spec_mode() : int => g_spec_mode
 
-//! (speculative steps verified correct, mispredicted-and-rerun) since load.
-def public metal_decode_spec_stats() : tuple<hits : int64; misses : int64> =>
-    (hits = g_spec_hits, misses = g_spec_misses)
+//! (speculative steps verified correct, mispredicted-and-rerun, steps encoded ahead and committed on the poked token) since load.
+def public metal_decode_spec_stats() : tuple<hits : int64; misses : int64; poked : int64> =>
+    (hits = g_spec_hits, misses = g_spec_misses, poked = g_pre_poked)
 
 def spec_armed() : bool {
     if (g_spec_mode == 0) {
@@ -1315,8 +1429,16 @@ def kq_quants_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
     kq_planes_of(t, fmt, kq, ks)
     unsafe {
         return (buf = plane_buffer(dev, addr<void?>((*kq)[0]), uint64(long_length(*kq)), t.image_map != null),
-                qoff = uint64((off / 256l) * kq_qsb(fmt)))
+                qoff = kq_bind_offs(fmt, 0l, off).qoff)
     }
+}
+
+//! A kq tensor's bind offsets at element offset `off` of a plane pair of `plane_sb` superblocks in the device form: its quants,
+//! its scale strips, and its packed d row (0 for the compact formats) - the binds `kq_quants_of` / `kq_scales_of` hand back
+[arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
+def kq_bind_offs(fmt : KqFmt; plane_sb, off : int64) : tuple<qoff : uint64; soff : uint64; doff : uint64> {
+    let sb0 = off / 256l
+    return (qoff = uint64(sb0 * kq_qsb(fmt)), soff = uint64(sb0 * 16l), doff = uint64(kq_scale_doff(fmt, plane_sb, sb0)))
 }
 
 //! One kq tensor's GPU-form scale bind (the gemv lab's layouts, pre-baked by the blob transform):
@@ -1325,13 +1447,12 @@ def kq_quants_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
 [arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def kq_scales_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tuple<buf : MetalBuffer?; soff : uint64; doff : uint64> {
     assert(t.metal_blob)
-    let sb0 = off / 256l
     var kq, ks : array<uint8> const?
     kq_planes_of(t, fmt, kq, ks)
-    let plane_sb = long_length(*ks) / (16l + kq_scale_d_tail(fmt))
+    let at = kq_bind_offs(fmt, long_length(*ks) / (16l + kq_scale_d_tail(fmt)), off)
     return (buf = plane_buffer(dev, unsafe(addr<void?>((*ks)[0])), uint64(long_length(*ks)), t.image_map != null),
-            soff = uint64(sb0 * 16l),
-            doff = uint64(kq_scale_doff(fmt, plane_sb, sb0)))
+            soff = at.soff,
+            doff = at.doff)
 }
 
 //! A superblock's packed d-tail bytes in a kq format's split scale plane: 0 for the compact formats (k4/k5/q40/iq4nl/nv4 -
@@ -1382,6 +1503,11 @@ def scalar_buffer(var buf : MetalBuffer?; v : auto(TT)) : MetalBuffer? {
 def uniform_u32(v : uint) : MetalBuffer? => scalar_buffer(pool_acquire_untracked(g_upool, g_dev, 4ul), v)
 
 def uniform_f32(v : float) : MetalBuffer? => scalar_buffer(pool_acquire_untracked(g_upool, g_dev, 4ul), v)
+
+//! a 4-byte uniform the caller owns (no pool): a driver's long-lived constant
+def ubuf_u32(v : uint) : MetalBuffer? => scalar_buffer(metal_new_buffer_untracked(g_dev, 4ul), v)
+
+def ubuf_f32(v : float) : MetalBuffer? => scalar_buffer(metal_new_buffer_untracked(g_dev, 4ul), v)
 
 // only the llama-family std shape is wired — the same decline set as prefill_decline minus the
 // npos window (the model/config half, shared by the single-stream and batched drivers). Returns
@@ -1565,6 +1691,9 @@ def private mirror_device_max_bytes : uint64 {
 def public set_metal_mirror_device_max_probe_(bytes : uint64) {
     g_mirror_device_max_probe = bytes
 }
+
+//! the stand-in as set: 0 = the device's own bound
+def public get_metal_mirror_device_max_probe_ : uint64 => g_mirror_device_max_probe
 
 //! whether the device-bound refusal has been said since the mirrors' last reset
 def public metal_mirror_refusal_said : bool => g_mirror_refusal_said
@@ -1991,6 +2120,12 @@ def dn_mirror_region_offs(uid : uint64; region : int64) : tuple<state_off : uint
     let mr = g_dn_mirrors[uid]
     let base = dn_slot_base(mr) + uint64(region) * mr.region_bytes
     return (state_off = base, conv_off = base + mr.conv_off)
+}
+
+//! the n-gram ring's base in the pool for `uid`'s mirror: past its regions, where `dn_mirror_prepare` places it
+def dn_mirror_ple_off(uid : uint64) : uint64 {
+    let mr = g_dn_mirrors[uid]
+    return dn_slot_base(mr) + mr.region_bytes * uint64(mr.regions)
 }
 
 //! `uid`'s live region, while its mirror is resident at `pos` with both regions; -1 otherwise

@@ -334,6 +334,10 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
      -
      - *engine*
      - The sampled speculative round's acceptance, process-wide: ``rejection`` (the engine's default --- each draft accepted with the probability the verify row gives it over the drafter's recorded q, a rejected draft replaced by one draw over the residual), ``typical`` (a draft accepted wherever the sampler's own cuts admit it on its row, the first cut draft replaced by one draw over the survivors) or ``exact`` (sample-and-match: a draft accepted only where the row's seeded draw lands on it). A greedy stream is unchanged. Unset keeps the engine's default.
+   * - ``--mtp-depth``
+     -
+     - *0*
+     - Drafts per speculative round, process-wide (the verify runs depth+1 rows); 0 = the box profile's depth for the round kind (``runtime.mtp_depth_nextn`` / ``mtp_depth_assistant``, 1 when unminted).
    * - ``--rope-scaling``
      -
      - *file*

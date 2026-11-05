@@ -115,23 +115,6 @@ struct private DrPlan {
 
 // ===== sidecar discovery =====
 
-//! the stem before the trailing quant token, `-Q<digit>` or `-IQ<digit>` ("...-it-Q4_K_M" and "...-it-UD-IQ3_XXS" -> "...-it" and
-//! "...-it-UD"); no token = the whole stem
-def private quant_stem(stem : string) : string {
-    var cut = -1
-    peek_data(stem) $(d : array<uint8> const#) {
-        let n = length(d)
-        for (i in range(n)) {
-            continue if (int(d[i]) != '-')
-            let q = i + 1 < n && int(d[i + 1]) == 'I' ? i + 2 : i + 1
-            if (q + 1 < n && int(d[q]) == 'Q' && int(d[q + 1]) >= '0' && int(d[q + 1]) <= '9') {
-                cut = i
-            }
-        }
-    }
-    return cut < 0 ? stem : slice(stem, 0, cut)
-}
-
 //! The gemma-4 drafter sidecar beside `model_path` - `mtp-<stem>-Q8_0.gguf` for the quant stem, then for it without `-UD`,
 //! then the exact-name `mtp-<basename>`, each only an assistant's file (never a split NextN head), else "" - and never for a
 //! path naming a head

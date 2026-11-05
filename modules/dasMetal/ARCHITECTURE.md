@@ -253,6 +253,29 @@ tile, no barrier, the reduction width a run-time extent. `devab` reads B in the 
 row an output column; `devabnt` reads B in its natural layout, one row a reduction step. A float
 operand is refused, since the pair exists for the native half x half path.
 
+## 11. tmm2d register-left products {#tmm2d-register-left}
+
+The `rx` flavor hands `matmul2d` a LEFT operand the lanes fill from registers - a cooperative input tensor of half,
+`tmm2d_rx_left(acc, i, v)` an element a call - and a right operand that is a device half table of `n` rows, read
+`kk` deep a run (`tmm2d_rx_run(acc, koff)`, a slice at k offset `koff`), each run overwriting the product
+(`mode::multiply`), which the lanes read back by owned element (`tmm2d_rx_dest`, `tmm2d_rx_dest_valid`, the counts
+`tmm2d_rx_left_count` / `tmm2d_rx_dest_count`). Nothing is staged and no barrier runs: a weight that decodes to a few
+exact halves per lane goes straight from its bytes into the matrix unit, the form a small-M GEMM (the eight-row
+verify) takes, where a staged tile pays the threadgroup memory round trip for every weight.
+
+`tmm2d_rx_begin_i8` opens the same product over a LEFT operand of int8 elements, filled four signed bytes a word
+(`tmm2d_rx_left4(acc, i0, u)`, elements `i0` .. `i0 + 3`, lowest byte first): a code that is an exact small integer
+but whose product with its scale is not an exact half enters as the code, and the kernel applies the scale to the
+product. The two fills are each other's refusal - a half fill on an int8 product, or the reverse, is a shader
+error, since the packed word would land converted into elements of the other type.
+
+Which (row, k) a lane's left element `i` is, and which (row, column) its destination element, is the DEVICE's
+layout, not the API's: the index is `get_multidimensional_index`'s answer on that GPU, and another Apple generation
+answers differently. A kernel on this flavor assumes a layout, and the engine that dispatches it probes the layout on
+the box first and keeps the kernel off where the probe disagrees. The destination pads `n` to 16 columns; a lane's
+element in a pad column reads `tmm2d_rx_dest_valid` false. The CPU twins are inert - a kernel on this flavor is
+GPU-only, its oracle a plain CPU product.
+
 ## Shim autorelease pools {#shim-autorelease-pools}
 
 Every Objective-C property read in `src/dasMetal.mm` - `obj.prop`, or `[obj prop]` with no

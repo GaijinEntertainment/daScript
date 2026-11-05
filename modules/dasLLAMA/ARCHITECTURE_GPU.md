@@ -10,7 +10,7 @@ driver's row shapes, its split single-pass attention included); `ARCHITECTURE_GP
 round, the depth a round drafts, and the verify and batch-driver mechanics); `ARCHITECTURE_GPU_MTP_ASSISTANT.md` (the assistant drafter on both homes);
 `ARCHITECTURE_GPU_KV_RING.md` (both homes' sliding-layer K/V ring); `ARCHITECTURE_GPU_SHARED_KERNELS.md` (the
 kernels more than one home stamps: the template mechanism and the pair ledger); `ARCHITECTURE_GPU_SHARED_READINGS.md` (what
-the shared stamps read on their homes); `ARCHITECTURE_GPU_SHARED_GEMM.md` (the GEMM tiles and GEMVs both discrete homes stamp); `ARCHITECTURE_GPU_SHARED_ROWS.md` (the row kernels of the token step and the routed block the homes share); `ARCHITECTURE_GPU_SHARED_ATTN.md` (the attention kernels and K/V block codecs both discrete homes stamp); `ARCHITECTURE_GPU_VULKAN.md` (the Vulkan resident driver).
+the shared stamps read on their homes); `ARCHITECTURE_GPU_SHARED_GEMM.md` (the GEMM tiles and GEMVs both discrete homes stamp); `ARCHITECTURE_GPU_SHARED_ROWS.md` (the row kernels of the token step and the routed block the homes share); `ARCHITECTURE_GPU_SHARED_ATTN.md` (the attention kernels and K/V block codecs both discrete homes stamp); `ARCHITECTURE_GPU_VULKAN.md` (the Vulkan resident driver); `ARCHITECTURE_GPU_METAL_LIFECYCLE.md` (the Metal family's shared device and queue, its device memory, race code and decline reasons).
 
 ### GPU backends {#gpu-backends}
 
@@ -57,6 +57,7 @@ tier, not the backend serving it. The roles:
 | the translation driver<br>`dasllama_metal_nmt`, `dasllama_vulkan_nmt` | the Bergamot family on the GPU: the q8 lane's block GEMMs and classifier as the home's q8 weight blob, a sentence's encode and cross keys and values in one command buffer, then command buffers of greedy steps - the argmax and the state words on the device (`GkNmtPick`) - until the end token; the step's embed and SSRU rows are the shared templates `GkNmtEmbed` / `GkNmtSsru`, its attention the whisper decoder's (`GkWdecAttnPart` / `GkWdecAttnComb`) and its GEMMs the tower's q8 ladder; registers `register_nmt_gpu`, the seat `dasllama_nmt` declares (`ARCHITECTURE_TRANSLATE.md#nmt-charter`), its declines counted by reason | kernel bodies, LLM session state |
 | the TTS driver<br>`dasllama_vulkan_tts` (Vulkan; the Metal tower driver's own row carries the TTS seats on an Apple build) | the StyleTTS2 synthesis seats and the Pocket codec, frames and prompt seats on the tower's knob - the f32 weight slabs the shared host writer (`dasllama_tts_slab`) lays out, the front end on the f32-exact tile GEMM, the seats registered through `register_styletts2_gpu` and `register_pocket_gpu` on a build without das_metal; the seats serve only while the tier's want arms the device (`DASLLAMA_GPU=1`, off by default), so a run with no flags and no environment overrides synthesizes on the CPU chain on a Vulkan build, where on an Apple build the Metal tower driver's TTS seats serve by default (`DASLLAMA_METAL_TOWER` on) | kernel bodies, the CPU chain's arithmetic (the CPU chain is the specification), LLM or ASR session state |
 | the assistant-drafter driver<br>`dasllama_metal_mtp_gemma`, `dasllama_vulkan_mtp_gemma`, `dasllama_cuda_mtp_gemma` | the gemma-4 assistant drafter on the GPU: the sidecar's q8 weights on the device (Metal's 34-byte blob as it lies, the discrete homes' quant and scale planes), the Q-only layer chain reading the TARGET mirror at the two capture layers with the decode's own attention kernels, the speculative rounds of a tick's streams over one verify (Metal's batch driver in same-slab groups, the discrete homes' N-row token command); registers the backend's `MtpAssistantSeams` (`register_mtp_assistant`), the sidecar resolver and the CPU oracle staying in the backend-free `dasllama_mtp_gemma` | kernel bodies, mirror ownership |
+| the block-drafter driver<br>`dasllama_metal_dflash` | the DFlash2 block drafter's device arm (`DflashDeviceSeams`, the engine charter in `ARCHITECTURE_ENGINE.md`): the drafter's Q8_0 planes as the 34-byte blob they already are and its K-quant planes as quant and scale buffers of its own in the trunk blob's device form (`metal_kq_scale_form`), a session's context ring as f32 K and V slabs a layer, the commit's fc, norm and K/V rows written into the ring by the trunk's weight-site forms (`ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#rows8-matrix-unit`, the drafter's sites) and a norm-and-rope kernel of its own, and the pass - the trunk's table gather, the rows' weight sites on the same forms, three kernels of the drafter's own (the dynamic two-tap convolution, the per-head norm and rope, the bidirectional block attention over the ring), the trunk's classifier rows - in one command buffer with the staged commit at its head, ending in the device selector whose picks the verify embeds (`ARCHITECTURE_GPU_MTP.md#mtp-round-one-join`) |
 | the kernel-access lens<br>`dasllama_metal_lens` (Metal), `dasllama_vulkan_dispatch` (Vulkan - the `[vk_dispatch]` macro derives access per class), `dasllama_cuda_dispatch` (CUDA - `[cuda_dispatch]`, the same derived access over a `[cuda_kernel]` class, generating `ensure_<name>` and `enc_<name>` over the `cud_` rail) | the kernel-access macro and its dispatch-support macros (`compile_stamp`, `release_handles`) | anything else |
 
 - **Vulkan additionally has an ENTRY, `dasllama_math_vulkan.das`** - capability probe/arm, `.dlim`
@@ -78,7 +79,7 @@ tier, not the backend serving it. The roles:
   (`metal_tensor_race`, `metal_tensor_race_decode`, `metal_split_knee_race`) - the entries the mint and a fat exe's first
   start race before any driver inits, so no family's device exists yet to share.
 - **`REVIEW.das`'s `check_gpu_role_partition` licenses this table's roles** - Metal's `kernels`,
-  `common`, `decode`, `prefill`, `gemm`, `shapes`, `tower`, `asr_dec`, `nmt`, `lens`, `mtp_gemma`;
+  `common`, `decode`, `prefill`, `gemm`, `shapes`, `tower`, `asr_dec`, `nmt`, `lens`, `mtp_gemma`, `dflash`;
   Vulkan's `classes`, `common`, `decode`, `prefill`, `seams`, `dispatch`, `tower`, `asr_dec`,
   `nmt`, `tts`, `mtp_gemma`; CUDA's `classes`, `common`, `dispatch`, `decode`, `stream`, `tower`, `mtp_gemma` - and finds a
   `dasllama_<backend>_<role>.das` with any other role.
@@ -266,35 +267,5 @@ tier, not the backend serving it. The roles:
   SPIR-V dump (`DASLLAMA_VK_SPV_DUMP=<dir>` writes every class kernel's words). Grid constant: the class's `[metal_dispatch]` / `[vk_dispatch]`
   `grid=` spec (`"n/c"` is a CEIL-divide); a `grid = "wgs"` class carries no number there - its grid is the kernel body's workgroup-index
   decode with the host helper that computes `wgs`. Threadgroup constant: Metal's `tg=` spec or Vulkan's `[spirv_kernel(local_size_x=)]`. Uniform: the single writer that fills its buffer. A kernel class's compile-time constants - its `@template_constant`s, its literals and the module `let`s its body reads - are stamps: a module `let` is a stamp; a module `var` is not, because its value at stamp time is whatever the host last wrote.
-
-**PSO lifecycle - the family shares ONE device and queue** (`metal_common_init`; the tune-time
-race arms' transient queue is `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity`'s). The decode
-PSO set lives as `g_pso_*` in `dasllama_metal_common`, is compiled by `metal_decode_init` in
-`dasllama_metal_kernels` and released by `metal_kernels_release` there - the kernels module owns
-its set's lifecycle even though the vars live with the device state. Prefill's `g_pf_pso_*` set
-is prefill-private end to end: `metal_prefill_init` compiles, `metal_prefill_shutdown` releases.
-
-**Metal device memory is the drivers', never the model's.** A model's weight regions, whole-plane buffers and concat
-regions sit in `dasllama_metal_common`'s address-keyed tables, and a `Model` holds no Metal handle, so `delete` of a model
-frees its host planes and leaves its regions cached until the weights epoch moves (the next load drops them,
-`ARCHITECTURE_RUNTIME.md#weights-epoch-on-load`) or the drivers shut down. The KV mirror arena (grown up to its ceiling,
-`DASLLAMA_METAL_KV_MIRROR_MB`), the deltanet mirror pool and the buffer pools live until `metal_decode_shutdown` /
-`metal_prefill_shutdown`, bounded by the largest shape the process served; a boundary that must hand the device back calls
-both. A released buffer leaves the process footprint because the binding reads `contents` inside an autorelease pool
-(`../dasMetal/ARCHITECTURE.md`), and the footprint (`metal_footprint_settled`), not the live-object count, witnesses it -
-the support matrix's release row (`metal_release_row`) holds three load-serve-delete cycles of E2B to their first close.
-
-**Race and tune code for a kernel family lives beside the family.** The shared scaffolding
-(`race_buf`, `race_envelope_ok`, `race_pair_ms`, `MetalTensorRaceResult`) is `<gpu>_common`'s;
-each module races its OWN families (`metal_tensor_race_decode` in kernels, `metal_tensor_race`
-in prefill) and the tuner calls those public entries.
-
-**Decline REASONS are enum values in the shapes module** (`MetalDecodeDecline`, `MetalPrefillDecline`);
-decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for both paths. A reason a plane format decided
-(`kquant_native`; `graph` on a routed stack, a shared expert or a deltanet plane) keeps its enum value in the
-declines-by-reason table; the shapes module's `metal_fmt_decline_say` logs the site and `KqFmt` member beside it once
-per line and hands the same words to the decline, whose required-mode panic prints them in place of the bare reason.
-Each driver has one decline enum: Metal's live in `dasllama/dasllama_metal_shapes.das`, and a Vulkan driver's lives in
-that driver's own file.
 
 Vulkan is the deliberately-designed model of this shape; Metal converges as it is touched.

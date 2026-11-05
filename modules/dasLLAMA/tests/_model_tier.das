@@ -65,6 +65,21 @@ def root_or(set, dflt : string) : string => empty(set) ? dflt : set
 // Machine-local model root; override with DASLLAMA_MODELS_DIR (e.g. the x64 handoff box).
 def models_dir() : string => root_or(g_env_harness.models_dir, "/Users/borisbatkin/Work/llama.cpp/models/")
 
+//! the snapshot directory of hub repo `org/name` in the Hugging Face cache (HF_HOME, else HOME's default); "" where it is not stocked
+def hf_snapshot_dir(repo : string) : string {
+    let hub = !empty(g_env_core.hf_home) ? "{g_env_core.hf_home}/hub" : "{g_env_core.home}/.cache/huggingface/hub"
+    let snaps = path_join(hub, "models--{replace(repo, "/", "--")}/snapshots")
+    var found = ""
+    if (stat(snaps).is_dir) {
+        dir(snaps) $(name) {
+            if (empty(found) && name != "." && name != ".." && fexist(path_join(path_join(snaps, name), "config.json"))) {
+                found = path_join(snaps, name)
+            }
+        }
+    }
+    return found
+}
+
 //! the ASR corpus: the clips `../performance/setup_asr_rig.das --corpus` fetches and `benchmarks/asr/corpus.sha256` pins;
 //! override with DASLLAMA_CORPUS_DIR
 def corpus_dir() : string => root_or(g_env_test.corpus_dir, "{get_das_root()}/modules/dasLLAMA/benchmarks/asr/corpus/")
@@ -408,6 +423,26 @@ def model_available(t : T?; path : string) : bool {
     }
     if (!parity_full_mode() && total > LARGE_TIER_BYTES) {
         t |> skip("{base_name(path)} is large-tier ({int64(total / (1024ul * 1024ul * 1024ul))} GB) - set DASLLAMA_PARITY_FULL=1 to run")
+        return false
+    }
+    return true
+}
+
+//! `model_available` for a snapshot directory (an HF-cache snapshot, a pack): `dir` holds a `config.json`, and its files total
+//! under `LARGE_TIER_BYTES` unless DASLLAMA_PARITY_FULL=1 is set; else a loud skip on `t` and false
+def snapshot_available(t : T?; snap : string) : bool {
+    if (!fexist(path_join(snap, "config.json"))) {
+        t |> skip("snapshot {snap} not present")
+        return false
+    }
+    var total = 0ul
+    dir(snap) $(name) {
+        if (name != "." && name != "..") {
+            total += stat(path_join(snap, name)).size
+        }
+    }
+    if (!parity_full_mode() && total > LARGE_TIER_BYTES) {
+        t |> skip("snapshot {base_name(snap)} is large-tier ({int64(total / (1024ul * 1024ul * 1024ul))} GB) - set DASLLAMA_PARITY_FULL=1 to run")
         return false
     }
     return true

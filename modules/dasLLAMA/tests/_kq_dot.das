@@ -1,5 +1,6 @@
 options gen2
 options _dasllama_internal = true
+options _cyclomatic_complexity = 0   // every function here is a kq_fmt_stamp ladder: one arm a KqFmt member
 
 require dasllama/dasllama_math_default
 require dasllama/dasllama_math_gen
@@ -44,7 +45,7 @@ def kq_grp_row_dot_rt(kf : KqFmt; kqg : uint8 const?; ksg : uint8 const?; r, mr 
 }
 
 //! The formats with no superblock grp planes: the stamp binds every `KqFmt` member, and a call on one of these panics.
-def private grp_row_dot(_kqg : uint8 const?; _ksg : uint8 const?; _r, _mr : int64; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64; _f : KqTag_q8 | KqTag_q51 | KqTag_iq4nl32 | KqTag_q4032 | KqTag_q5032 | KqTag_mx4) : float {
+def private grp_row_dot(_kqg : uint8 const?; _ksg : uint8 const?; _r, _mr : int64; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64; _f : KqTag_q8 | KqTag_q51 | KqTag_iq4nl32 | KqTag_q4032 | KqTag_q5032 | KqTag_mx4 | KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) : float {
     panic("{typeinfo stripped_typename(_f)} has no superblock grp row dot")
     return 0.0
 }

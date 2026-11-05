@@ -2610,3 +2610,82 @@
     the audio towers (the whisper-class, canary, parakeet, gigaam, qwen3a and gemma4a encoders, the audio embedders and the
     ASR-decoder seats) coming to the CUDA home - so the rail-generic body is written once with both halves in hand; TTS
     stays on the Vulkan tower until its own pass.
+
+283. **A split GGUF NextN head does not attach to a safetensors snapshot trunk.** `DASLLAMA_MTP_HEAD` / `set_mtp_head_path`
+    ride the GGUF loader path alone: a snapshot load (`ARCHITECTURE_ENGINE_FORMATS_MLX.md`) synthesizes its GGUF meta and
+    reads the trunk as headless, so the 27B MLX snapshot - the DFlash2 reference, the same bits as the other engine's -
+    has no NextN row (`PERF_LEDGER.md`, the 2026-11-05 entry: its NextN reference is the Q4_K_M file). The attach reads
+    the head's tensors by name once the trunk is up, so the snapshot path owes the same step after its meta exists, the
+    head's image lane minted beside the snapshot's as beside a GGUF's.
+
+284. **The parity file's pinned-greedy cell for the planar Flash-Next does not fit a 137 GB box.** `test_parity.das` loads
+    every carrier planar in one process; the 89 GB UD-IQ4_XS shards plus the converted planes exceed the M5 Max's memory
+    and the process is killed (exit 137) even with the file alone in the models directory, so the cell has never run on
+    this box - the support matrix's `fam-qwen4exp` row is served-image-only for the same reason. Either the cell skips a
+    planar carrier past the box's memory with a loud reason, or Flash-Next's parity rides its served image as the matrix
+    row does.
+
+285. **The Metal eight-row verify's findings that translate to the discrete homes (Vulkan and CUDA).** The Metal leg took
+    the 27B's eight-row same-slab step from 1.78 plain steps to 1.34 and the DFlash2 round from 71 to ~60 ms
+    (`PERF_LEDGER.md`, the rows8 and engineering entries; `ARCHITECTURE_GPU_MTP_DECODE_ROWS.md`). The mechanisms are
+    Metal-measured but mostly shape-free; each is a row of work on the discrete homes once measured there:
+    - **Fill the matrix-unit operand from registers, never through a staged tile.** The eight-row stamps' stage into
+      threadgroup memory alone cost 1.4 one-row passes (a 64-deep chunk touches every weight line four times) while the
+      matrix op cost 0.75 and the two never overlapped; the register-filled form reads 1.12-1.15. On Vulkan the KHR
+      cooperative matrix takes its A operand from registers through `coopMatLoad` of a per-lane array or the lowered
+      per-lane layout; on CUDA an `mma` fragment is filled from registers by construction. Race the staged tile against
+      a register fill on one K4 plane first.
+    - **Exact integer-code operands, scales in the epilogue.** K4: half 1024 + q sc (q sc <= 945, exact), epilogue
+      y += d (dot - 1024 sum_x) - dmin (mn_0 sum_0 + mn_1 sum_1); q8: 1024 + q + 128; K5: q sc <= 1953 exact at depth 64
+      with no offset; K6: a code times its int8 sub-scale is not half-exact, so the product is one scale block deep
+      (16) with the int8 q - 32 as the operand and d sc in the epilogue - and product depth is free on the matrix unit
+      (half at 16 and at 64 run at one rate). On a home with int8 cooperative matrices the q8 and K6 forms take int8 x
+      int8 with int32 accumulation (x quantized to a block's int8 with its scale in the epilogue) - a form Metal lacks.
+    - **The activations as a device half table in the product's k-slot order with per-block token sums, written by the
+      producer.** The norm and activation kernels that already write the f16 twin write the table and sums beside it, so
+      a site dispatches no prep; the sums are over the HALF-rounded values the kernels read. Translate to any home whose
+      consumer wants a permuted or pre-summed x: the producer owns the layout.
+    - **Split K over a divisor of the block count, two blocks a way or more, ~2000+ workgroups.** An even way count ran
+      5-8% faster than the power of two (gate/up 10 ways, down 34). A plane whose grid is a few workgroups splits too:
+      at one way its workgroups run the whole K serially (a 96-row plane cost 50 us a site over two workgroups).
+    - **A consumer sums a site's partial planes only where its grid matches the reduce's.** The swiglu (thousands of
+      workgroups) summing the gate and up planes saved the two reduces; the residual (a workgroup a row) and the gate
+      kernel summing them cost 3.9 ms more than the reduces they replaced. Count workgroups before folding a reduce.
+    - **Routing gates leave sites on slow forms.** A tier flag (`use_gemm`) kept the attention q/k/v sites on a tile GEMM
+      at a third of the bandwidth; a per-kernel GPU timeline found it in one read. Audit every 5-8-row site's form on the
+      discrete homes by the same timeline (Vulkan timestamp queries sample at dispatch granularity, which Apple's GPUs
+      cannot; `DASLLAMA_GPU_PROF` is the hook), and count dispatches a step: on Metal each costs 2.4-2.8 us of gap and a
+      step had 1600.
+    - **Two narrow planes with one source are one site.** [beta | alpha] sits contiguous in the blob and serves as one
+      2 nvh-row site under `dn_ba_rows` on Metal's drivers; the discrete decode drivers project them apart.
+    - **The deltanet step folded.** The single row's recurrent layer runs conv, L2 norm, gate and scan as one dispatch
+      (`MetalDnStepFused`, one row a group) and the fat chain projects qkv, z and [beta | alpha] off the normed input in
+      one dispatch (`enc_kq_fat_norm`); the rows forms run the group stages (`enc_dn_front` / `enc_dn_back`) with the
+      conv's half twin written by the front. The discrete scan is still the one-column-a-group shape
+      (`ARCHITECTURE_GPU_VULKAN.md`); the Metal step's packed scan (half rows, prepared gates, two simdgroups a
+      threadgroup, pointer loads) read 0.97 -> 0.63 ms a 512-token window on the 35B.
+    - **The DFlash2 round's seams are host work.** Pass to verify 2.9 ms (logits landed, the selector on the host, the
+      verify encoded after the wait), verify to the next pass 2.7 (8 MB of logits landed for the accept, the commit);
+      the drafter's own sites ran the slow eight-row form and its loader took Q8_0 planes alone; the NextN head's layer
+      was encoded in a round it did not drive. The fixes (the selector on the device, one submission, device-side
+      accept, the head skipped) are driver logic the discrete MTP rounds share in shape.
+    - **The block stays eight rows, and eight is the fragment.** The marginal acceptance by draft position reads .85 .73
+      .68 .56 .48 .42 .34 on the 27B, so nothing past eight pays; on NVIDIA the eight-row site is one fragment - KHR
+      cooperative matrix 16 x 8 x 16 (f16) and 16 x 8 x 32 (int8), `mma.sync` m16n8k16 / m16n8k32, cooperative matrix 2
+      at an N of 8 - the same 16 rows x 8 tokens the Metal kernels fill; RDNA's KHR shapes are 16 x 16 x 16 only, so
+      there the eight tokens pad to sixteen or swap sides with the weight rows.
+    - **The kernel's remaining 12-15% is not the matrix unit.** Loads alone read 1.03-1.06 of a pass (an 8-byte-per-lane
+      pattern puts eight rows' 32-byte runs in one load instruction), fill and epilogue ALU the rest; a uint8 operand,
+      depth changes, block-diagonal tricks, software pipelining and 16-byte loads all tie within 2%. On the discrete homes
+      the equivalent question is the load width per lane against the coalescing unit - measure before redesigning.
+    - **The one-row GEMV's lever is the whole block a lane, not x reuse across rows.** On the per-32 affine planes
+      (the MLX 4-bit member, one row at a time) a lane taking a whole 32-block as one 16-byte load, decoding the codes
+      in place by a mask with the power of two divided out of x, and folding the scale pair once a block took the
+      27B's gate/up from 507 to 572 GB/s, the deltanet out-projection 464 to 540, the head 551 to 598, and the step from
+      30.6 to 27.7 ms on the same bytes the other engine steps in 28.7; the other engine's several-rows-a-simdgroup form
+      with x in registers raced SLOWER on this GPU (four rows 513, eight 492 against one row's 540). On the discrete
+      homes the decode GEMV lane already owns a block; the question there is the one load a block and the in-place
+      decode against the lane's current shift-and-convert - race it on q51 / iq4nl32 / the affine members first.
+    Done = each item raced on the RTX PRO 4500 pod and on a CUDA box with the Metal figure beside it, the ones that pay
+    landed with their kernel cells, and the eight-row step on the discrete homes read against its one-row step the way
+    `harness/batch_rows_probe.das --sameslab` reads it on Metal.

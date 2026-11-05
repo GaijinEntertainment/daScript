@@ -223,6 +223,20 @@ def repack_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64; _f : KqTag_q5
     repack_unit_form(qp, sp, n / KQ_B32_ELEMS, d, mr, Q5032_QB, Q5032_SB, verbatim_unit_field(Q5032_SB, 1l))
 }
 
+//! the affine planes repack as four (4-bit), six (6-bit) or eight (8-bit) four-byte code columns under 2-byte scale units - a
+//! row's units in order are its group pairs, so the grp row gather hands them back verbatim
+def repack_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64; _f : KqTag_mlx4 | KqTag_mlx4b) {
+    repack_unit_form(qp, sp, n / KQ_B32_ELEMS, d, mr, MLX4_QB, MLX_SB, verbatim_unit_field(MLX_SB, 1l))
+}
+
+def repack_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64; _f : KqTag_mlx8 | KqTag_mlx8b) {
+    repack_unit_form(qp, sp, n / KQ_B32_ELEMS, d, mr, MLX8_QB, MLX_SB, verbatim_unit_field(MLX_SB, 1l))
+}
+
+def repack_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64; _f : KqTag_mlx6b) {
+    repack_unit_form(qp, sp, n / KQ_B32_ELEMS, d, mr, MLX6_QB, MLX_SB, verbatim_unit_field(MLX_SB, 1l))
+}
+
 //! the k4/k5 scale row: d and dmin verbatim, then the 12 packed 6-bit sc/mn bytes DECODED into the two 8-strip fields
 def private repack_k45_scales(var ks : uint8?; tsp : uint8 const?; nsb, d, mr : int64) {
     repack_fields(ks, tsp, nsb, K4_SSB, d, mr, [RepackField(src = 0l, width = 2l, count = 1l), RepackField(src = 2l, width = 2l, count = 1l)])

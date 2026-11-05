@@ -60,6 +60,22 @@ def private companion_of(p : ProvEntry) : CatalogCompanion => CatalogCompanion(f
 //! entry `e`'s companion of kind `kind`
 def public catalog_companion(e : CatalogEntry; kind : CatalogCompanionKind) : CatalogCompanion => kind == CatalogCompanionKind.vision ? e.vision : e.drafter
 
+[arch(at="README.md#catalog-head-pin")]
+def public pin_catalog_head(path : string) : bool {
+    return false if (mtp_head_path_pin().set || !empty(g_env_engine.mtp_head))
+    var inscope spec <- spec_by_file(base_name(path))
+    return false if (empty(spec.serve_drafter) || !(path |> ends_with(spec.file)))
+    let head = path_join(trim_suffix(path, spec.file), spec.serve_drafter)
+    return false if (!fexist(head) || gguf_is_assistant(head))
+    set_mtp_head_path(head)
+    return true
+}
+
+//! the pin `pin_catalog_head` set, cleared once the slot loaded
+def public unpin_catalog_head() {
+    clear_mtp_head_path()
+}
+
 def private catalog_entry_of(s : ModelSpec) : CatalogEntry {
     let tower <- serve_companion(s.serve_vision)
     let drafter <- serve_companion(s.serve_drafter)

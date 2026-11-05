@@ -1,8 +1,8 @@
 # dasLLAMA Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEASUREMENT.md`. Planned work:
-`followup_general.md`, `followup_vulkan.md`, `followup_metal.md`. `tests/`, `benchmarks/`,
+docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_ENGINE_SUPPORT.md`, `ARCHITECTURE_MEASUREMENT.md`.
+Planned work: `followup_general.md`, `followup_vulkan.md`, `followup_metal.md`. `tests/`, `benchmarks/`,
 `performance/` and `harness/` carry their own `REVIEW.md`.
 
 **A change to the tokenizer - `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
@@ -258,16 +258,16 @@ checklist routed this diff here, updates that text in the same change** - no lin
 consumer requires only this module's public entry modules, matched by the resolved file's
 path under `modules/dasLLAMA/` - is a defect:** the path match dropped or narrowed, an error
 text that no longer names the facade to require instead, or a module added to its allowed set
-without both halves of the pair that makes it an entry module - the `ARCHITECTURE_ENGINE.md`
+without both halves of the pair that makes it an entry module - the `ARCHITECTURE_ENGINE_SUPPORT.md`
 charter line naming it a sanctioned public entry point, and the DASLLAMA001 error text
 naming it beside the facade. The allowed set is the table in the lint.
 
 **`options _dasllama_internal` belongs only in a file whose job is to reach engine internals: an
 engine file under `dasllama/`, a test, harness, benchmark, or rig this module owns, or a consumer
-`ARCHITECTURE_ENGINE.md#instrumentation-and-support` names as ruled** - a symbol the facade lacks is
+`ARCHITECTURE_ENGINE_SUPPORT.md#instrumentation-and-support` names as ruled** - a symbol the facade lacks is
 added to `dasllama/dasllama.das`, not obtained by adding this option to the consumer.
 
-**A file whose entry under `ARCHITECTURE_ENGINE.md#instrumentation-and-support` rules its
+**A file whose entry under `ARCHITECTURE_ENGINE_SUPPORT.md#instrumentation-and-support` rules its
 `options _dasllama_internal` re-exports an engine module with `require ... public` only where
 that entry names the re-export; any other re-export is a defect - the file's own requirers reach
 the symbol through `dasllama/dasllama.das` instead.**

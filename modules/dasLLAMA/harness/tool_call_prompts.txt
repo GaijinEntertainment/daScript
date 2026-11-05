@@ -1,0 +1,20 @@
+What is the weather in Paris right now?
+How cold is it in Oslo, in fahrenheit please?
+Set a timer for 12 minutes for the pasta.
+Start a 3 minute timer.
+Turn off the lights in the kitchen.
+Dim the living room lights to 30 percent.
+Switch the bedroom lights on.
+Text Maria that I will be ten minutes late.
+Send a message to Tom saying the meeting moved to Friday.
+Add dentist appointment on 2026-12-04 at 09:30 to my calendar.
+Put lunch with Alex on 2026-11-20 at 12:00 in the calendar.
+Is it raining in Seattle?
+Classify this request: my order arrived broken and nobody answers the phone.
+Classify this request: what year did the Berlin wall fall?
+Classify this request: lock the front door.
+Classify this request: good morning, how are you?
+Set an 8 minute timer called tea.
+Turn the office lights on at full brightness.
+What is the temperature in Tokyo in celsius?
+Tell Sam the keys are under the mat.

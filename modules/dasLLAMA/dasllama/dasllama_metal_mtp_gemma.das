@@ -77,10 +77,6 @@ var g_gemma_ws : BatchWorkspace
 var g_gemma_ws_ok = false
 var g_gemma_stats : MtpAssistantStats   //! the rounds since the attach
 
-def private ubuf_u32(v : uint) : MetalBuffer? => scalar_buffer(metal_new_buffer_untracked(g_dev, 4ul), v)
-
-def private ubuf_f32(v : float) : MetalBuffer? => scalar_buffer(metal_new_buffer_untracked(g_dev, 4ul), v)
-
 def private gemma_slot_release(var sl : GemmaStreamIn) {
     release_handles(sl.bh, sl.bcos, sl.bsin, sl.bcos_sw, sl.bsin_sw)
     sl.rope_pos = -1l

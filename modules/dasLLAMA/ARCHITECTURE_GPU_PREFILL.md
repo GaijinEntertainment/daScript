@@ -69,9 +69,16 @@ residual-stream copy waits for the LAST chunk.
 ### The f16 twin dual-store {#prefill-twin-dual-store}
 
 A producer kernel that already holds a panel's rows in registers writes the f16 twin beside its
-f32 output, and the consumer GEMM reads that twin instead of running a conversion pass. Two
-producers carry a dual-store stamp: the fused qk_norm+rope pass writes the q panel's twin, and
-the residual-add+RMS and RMS stamps of the FFN spine write the FFN input's twin. The consumer
+f32 output, and the consumer GEMM reads that twin instead of running a conversion pass. The
+producers that carry a dual-store stamp: the fused qk_norm+rope pass writes the q panel's twin;
+the residual-add+RMS and RMS stamps of the FFN spine write the FFN input's twin; the layer's last
+seam adds the FFN branch and norms the next layer's attention input in the same dispatch
+(`enc_residual` with a next-norm seam, the normed rows and their twin over the branch panel - the
+seam reads a row whole before it stores), so a layer opens on a plain norm only where the layer
+before it could not store one (the first layer, the deepstack layers, a hyper-connection trunk);
+the gated attention's sigmoid epilogue (`MetalSigmulHX`) and the deltanet out-gate
+(`MetalDnGateHX`) write the out projection's twin; the deltanet conv and q/k norm write the scan's
+half rows (`ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-dn-scan`). The consumer
 takes the twin directly through `pf_twin_panel`, so `pf_cvt_panel` and its row floor never run
 for that site. The dual store is one conversion, not a second computation: the twin is bit-equal
 to `float16` of the f32 panel at every element. Rows past the live row count are PAD - their f32

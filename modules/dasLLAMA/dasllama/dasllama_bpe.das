@@ -55,6 +55,16 @@ def load_bpe_tokenizer_gguf(path : string) : BpeTokenizer {
     }
     fmap(f) $(var bytes : array<uint8>#) {
         var inscope m <- parse_gguf_meta(bytes)
+        tk <- bpe_tokenizer_of_meta(m, bytes)   // nolint:PERF030 - tk is fresh (declared empty above); the mapping block runs once
+    }
+    fclose(f)
+    return <- tk
+}
+
+//! The BPE tokenizer a meta's tokenizer KVs describe, `bytes` the view its getters read.
+def bpe_tokenizer_of_meta(m : GGUFMeta; bytes : array<uint8> | #) : BpeTokenizer {
+    var tk : BpeTokenizer
+    {
         var inscope toks <- gguf_str_array(m, bytes, "tokenizer.ggml.tokens")
         var inscope merges <- gguf_str_array(m, bytes, "tokenizer.ggml.merges")
         let n = length(toks)
@@ -89,7 +99,6 @@ def load_bpe_tokenizer_gguf(path : string) : BpeTokenizer {
             }
         }
     }
-    fclose(f)
     build_bpe_derived(tk)
     return <- tk
 }

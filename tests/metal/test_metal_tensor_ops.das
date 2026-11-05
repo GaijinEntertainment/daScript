@@ -803,6 +803,240 @@ def private devab_replay(var o : TmmDevabKernels?; natural : bool) : array<float
     return <- clone_to_move(o.oc)
 }
 
+let RX_K = 64
+let RX_LANES = 32
+
+class TmmRxKernels {
+    @ssbo @binding = 0 xah : array<float16>   // the table: 8 token rows, RX_K long
+    @ssbo @binding = 1 oc : array<float>      // a lane's 8 destination slots, pads at the sentinel
+    @ssbo @binding = 2 lv : array<float16>    // the one value every left element takes
+
+    [metal_kernel(name="tmm_rx_msl"), marker(no_coverage)]
+    def tmm_rx_k {
+        var acc : float[128]
+        tmm2d_rx_begin(acc, unsafe(addr(xah[0])), 64u, 16u, 8u, 32u)
+        var i = 0u
+        while (i < tmm2d_rx_left_count(acc)) {
+            tmm2d_rx_left(acc, i, lv[0])
+            i++
+        }
+        tmm2d_rx_run(acc, 0u)
+        var part : float[8]
+        i = 0u
+        while (i < 8u) {
+            part[i] = tmm2d_rx_dest_valid(acc, i) ? tmm2d_rx_dest(acc, i) : 0.0
+            i++
+        }
+        tmm2d_rx_run(acc, 32u)
+        i = 0u
+        while (i < 8u) {
+            if (tmm2d_rx_dest_valid(acc, i)) {
+                oc[gl_LocalInvocationID.x * 8u + i] = part[i] + tmm2d_rx_dest(acc, i)
+            }
+            i++
+        }
+    }
+}
+
+class TmmRx8Kernels {
+    @ssbo @binding = 0 xah : array<float16>   // the table: 8 token rows, RX_K long
+    @ssbo @binding = 1 oc : array<float>      // a lane's 8 destination slots, pads at the sentinel
+    @ssbo @binding = 2 lw : array<uint>       // the word every left element takes a signed byte of
+
+    [metal_kernel(name="tmm_rx8_msl"), marker(no_coverage)]
+    def tmm_rx8_k {
+        var acc : float[128]
+        tmm2d_rx_begin_i8(acc, unsafe(addr(xah[0])), 64u, 16u, 8u, 16u)
+        var i = 0u
+        while (i < tmm2d_rx_left_count(acc)) {
+            tmm2d_rx_left4(acc, i, lw[0])
+            i += 4u
+        }
+        var part : float[8]
+        i = 0u
+        while (i < 8u) {
+            part[i] = 0.0
+            i++
+        }
+        var koff = 0u
+        while (koff < 64u) {
+            tmm2d_rx_run(acc, koff)
+            i = 0u
+            while (i < 8u) {
+                part[i] += tmm2d_rx_dest_valid(acc, i) ? tmm2d_rx_dest(acc, i) : 0.0
+                i++
+            }
+            koff += 16u
+        }
+        i = 0u
+        while (i < 8u) {
+            if (tmm2d_rx_dest_valid(acc, i)) {
+                oc[gl_LocalInvocationID.x * 8u + i] = part[i]
+            }
+            i++
+        }
+    }
+}
+
+//! the table's integer rows: x[t][k]
+def private rx_x(t, k : int) : float => float((t * 7 + k * 3) % 11 - 5)
+
+//! every valid destination value a lane wrote, sorted - layout-free
+def private rx_values(oc : array<float>) : array<float> {
+    var vs <- [for (v in oc); v; where v > -900.0]
+    vs |> sort()
+    return <- vs
+}
+
+//! sixteen copies of each token row's sum times the left value
+def private rx_expected(xs : array<float16>; lv : float) : array<float> {
+    var vs : array<float>
+    vs |> reserve(128)
+    for (t in range(8)) {
+        var sum = 0.0
+        for (k in range(RX_K)) {
+            sum += float(xs[t * RX_K + k])
+        }
+        for (_r in range(16)) {
+            vs |> push(sum * lv)
+        }
+    }
+    vs |> sort()
+    return <- vs
+}
+
+// untyped: instantiated only inside the Apple half
+def private rx_gpu(t : T?; dev; queue; var bxah, blv; src, entry : string) : array<float> {
+    var got : array<float>
+    var perr : string
+    var pso = pipeline_from_source(dev, src, entry, false, perr)
+    t |> success(pso != null, "pipeline {entry}: {perr}")
+    if (pso == null) {
+        return <- got
+    }
+    var boc = buf_fill(dev, RX_LANES * 8, -1000.0)
+    var bufs <- [bxah, boc, blv]
+    var rerr : string
+    let ran = run_compute_1d(queue, pso, bufs, uint(RX_LANES), uint(RX_LANES), rerr)
+    t |> success(ran, "dispatch {entry}: {rerr}")
+    if (ran) {
+        got <- buf_download(boc, RX_LANES * 8, type<float>)
+    }
+    bufs |> clear()
+    unsafe {
+        delete bufs
+    }
+    metal_release(boc)
+    metal_release(pso)
+    return <- got
+}
+
+//! the int8 flavor over the table `xs` (uploaded as `bxah`): every
+//! left element one signed code, -3 then 5, four runs 16 deep;
+//! untyped: instantiated only inside the Apple half
+def private rx8_arm(t : T?; dev; queue; var bxah; xs : array<float16>) {
+    for (code in [-3, 5]) {
+        let byte = uint(code) & 0xFFu
+        var inscope lws <- [byte * 0x01010101u]
+        var blw = buf_upload(dev, lws)
+        var inscope got <- rx_gpu(t, dev, queue, bxah, blw, tmm_rx8_msl, tmm_rx8_msl_entry)
+        metal_release(blw)
+        var inscope vals <- rx_values(got)
+        var inscope want <- rx_expected(xs, float(code))
+        var inscope unsigned <- rx_expected(xs, float(byte))
+        t |> equal(length(vals), 128,
+            "int8 code {code}: 16 rows x 8 tokens of valid destination elements")
+        t |> equal(diff_count(vals, want), 0,
+            "int8 code {code}: the valid elements are the token rows' sums times the signed code")
+        if (code < 0) {
+            t |> success(diff_count(vals, unsigned) > 0,
+                "int8 code {code}: the byte read unsigned is the control the sign must miss")
+        }
+    }
+}
+
+//! layout-free: every valid destination element is a token row's sum
+//! times the left value or int8 code, sixteen a row, whatever the
+//! device's layout
+[test]
+def test_tmm2d_rx(t : T?) {
+    t |> run("tmm2d rx: register-filled left operand x device half table, layout-free") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            with_metal_device() $(dev : MetalDevice?) {
+                if (dev == null) {
+                    feint("no Metal device on this box; GPU compare skipped\n")
+                    return
+                }
+                if (!metal4_available(dev)) {
+                    feint("Metal-4 tensor ops unavailable (needs macOS 26 / MSL 4.0); " +
+                        "GPU compare skipped\n")
+                    return
+                }
+                var perr0 : string
+                var pso0 = pipeline_from_source(dev, tmm_rx_msl, tmm_rx_msl_entry, false, perr0)
+                if (pso0 == null && find(perr0, "deferred-static-alloca-size") >= 0) {
+                    feint("Metal-4 cooperative tensors unsupported by this device " +
+                        "(paravirtual runner); GPU compare skipped\n")
+                    return
+                }
+                if (pso0 != null) {
+                    metal_release(pso0)
+                }
+                var queue = metal_new_command_queue(dev)
+                var xs : array<float16>
+                xs |> resize(8 * RX_K)
+                for (tk in range(8)) {
+                    for (k in range(RX_K)) {
+                        xs[tk * RX_K + k] = float16(rx_x(tk, k))
+                    }
+                }
+                var bxah = buf_upload(dev, xs)
+                for (lvv in [1.0, 2.0]) {
+                    var inscope lvs <- [float16(lvv)]
+                    var blv = buf_upload(dev, lvs)
+                    var inscope got <- rx_gpu(t, dev, queue, bxah, blv, tmm_rx_msl,
+                        tmm_rx_msl_entry)
+                    metal_release(blv)
+                    var inscope vals <- rx_values(got)
+                    var inscope want <- rx_expected(xs, lvv)
+                    t |> equal(length(vals), 128,
+                        "left value {lvv}: 16 rows x 8 tokens of valid destination elements")
+                    t |> equal(diff_count(vals, want), 0,
+                        "left value {lvv}: the valid elements are the token rows' sums, 16 each")
+                }
+                rx8_arm(t, dev, queue, bxah, xs)
+                metal_release(bxah)
+                var xsp := xs
+                xsp[3 * RX_K + 17] = float16(float(xsp[3 * RX_K + 17]) + 5.0)
+                var bxp = buf_upload(dev, xsp)
+                let lvs1 <- [float16(1.0)]
+                var blv1 = buf_upload(dev, lvs1)
+                var inscope gotp <- rx_gpu(t, dev, queue, bxp, blv1, tmm_rx_msl, tmm_rx_msl_entry)
+                metal_release(blv1)
+                metal_release(bxp)
+                var inscope valsp <- rx_values(gotp)
+                var inscope wantp <- rx_expected(xsp, 1.0)
+                t |> equal(diff_count(valsp, wantp), 0, "the poisoned table's products follow it")
+                var moved = 0
+                for (tk in range(8)) {
+                    var s0 = 0.0
+                    var s1 = 0.0
+                    for (k in range(RX_K)) {
+                        s0 += float(xs[tk * RX_K + k])
+                        s1 += float(xsp[tk * RX_K + k])
+                    }
+                    moved += s0 != s1 ? 1 : 0
+                }
+                t |> equal(moved, 1,
+                    "the poison moves one token row's sum, so the two expectations differ")
+                metal_release(queue)
+            }
+        } else {
+            feint("das_metal is not built on this platform; GPU-only flavor\n")
+        }
+    }
+}
+
 //! the whole-tile CPU replay OVERWRITES its scratch - the one tmm2d form that takes no begin
 [test]
 def test_tmm2d_tile_tg_replay(t : T?) {

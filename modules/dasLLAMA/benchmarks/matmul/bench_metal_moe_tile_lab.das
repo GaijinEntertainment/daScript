@@ -235,6 +235,7 @@ def main {
                 for (p in patterns) {
                     let bcnt = mc |> in_plain(p.cnt)
                     let bbase = mc |> in_plain(p.basep)
+                    let bgu0 = mc |> in_plain([0u])   //! the twins' gated store off: the plain f32 store the lab times
                     var inscope ys <- [for (_i in range(NDISP)); mc |> out_words(p.mpad * NDIM, 0.0)]
                     var ka = MoeMmArgs(kdim = uint(KDIM), ndim = uint(NDIM), eplane = uint(KDIM * NDIM / 256), nk = uint(NK), gather = 0u, hasb = 0u)
                     var inscope best : array<double>
@@ -250,7 +251,7 @@ def main {
                                     let by = mc.buf[ys[d]]
                                     if (ai != BASE_ARM) {
                                         invoke(fmt == 44 ? kiq.enc : kk4.enc, enc, ps, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bxf], 0ul, by, 0ul,
-                                            mc.buf[bkd], mc.buf[bnd], mc.buf[bcnt], mc.buf[bbase], int64(p.mpad), int64(NDIM), int64(NE), int64(NPOS / 32))
+                                            mc.buf[bkd], mc.buf[bnd], mc.buf[bcnt], mc.buf[bbase], by, mc.buf[bxf], mc.buf[bgu0], int64(p.mpad), int64(NDIM), int64(NE), int64(NPOS / 32))
                                     } else {
                                         invoke(kb4.enc, enc, ps, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bx32], by, ka,
                                             mc.buf[bcnt], mc.buf[bbase], mc.buf[bbkt], int64(NDIM), int64(NPOS), int64(NE))
@@ -277,7 +278,7 @@ def main {
                         with_compute_encoder_timed(queue, err, gpu_ms) $(enc : MetalComputeEncoder?) {
                             if (ai != BASE_ARM) {
                                 invoke(fmt == 44 ? kiq.enc : kk4.enc, enc, ps, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bxf], 0ul, mc.buf[yi], 0ul,
-                                    mc.buf[bkd], mc.buf[bnd], mc.buf[bcnt], mc.buf[bbase], int64(p.mpad), int64(NDIM), int64(NE), int64(NPOS / 32))
+                                    mc.buf[bkd], mc.buf[bnd], mc.buf[bcnt], mc.buf[bbase], mc.buf[yi], mc.buf[bxf], mc.buf[bgu0], int64(p.mpad), int64(NDIM), int64(NE), int64(NPOS / 32))
                             } else {
                                 invoke(kb4.enc, enc, ps, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bx32], mc.buf[yi], ka,
                                     mc.buf[bcnt], mc.buf[bbase], mc.buf[bbkt], int64(NDIM), int64(NPOS), int64(NE))

@@ -158,7 +158,7 @@ struct ModelSpec {
     serve_vram_gb : float = 0.0     // advertised working-set hint, not a fit check
     serve_default : bool = false    // the one the getting-started path recommends
     serve_vision : string           // vision-tower companion NAME ("" = text only); [[serve_companion]] resolves it
-    serve_drafter : string          //! the assistant drafter companion NAME the server attaches beside the file ("" = none); [[serve_companion]] resolves it
+    serve_drafter : string          //! the drafter companion NAME the server serves the file with ("" = none): an assistant drafter it attaches beside the trunk, or a split NextN head it pins for the load where no adjacency rule names it; [[serve_companion]] resolves it
     serve_tts : bool = false        // a speech model of the served text-to-speech set ([[serve_tts_set]]); its packs ride the companions
     serve_mtp : string              //! the platforms ("metal", "vulkan", comma list) where the model's self-speculation measured a win at one stream (PERF_LEDGER.md); "" = the server's unset `mtp` decodes plain
     mlx_repo : string               //! the MLX checkpoint (HF repo) of the same model the board's mlx-lm reference leg runs on Apple boxes; "" = no MLX leg
@@ -872,6 +872,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             mlx_repo = "mlx-community/Qwen3.8-27B-4bit", mlx_fmt = "4bit",
             url = "{HF}/ggml-org/Qwen3.8-27B-GGUF/resolve/0669b98607d47046c7c2b3f801011d54a08cfccf/Qwen3.8-27B-Q4_K_M.gguf",
             bytes = 18973870432l, sha256 = "31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34",
+            serve_drafter = "mtp-Qwen3.8-27B-Q8_0.gguf",
             // the split NextN head rides as a companion: the mtp suite's 3.8-27b fixture and the ruler load it as the trunk's last shard
             companions <- [
                 ProvEntry(name = "mtp-Qwen3.8-27B-Q8_0.gguf", root = "llm",
@@ -925,11 +926,23 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // (ARCHITECTURE_GPU_VULKAN_HC.md), so the two homes measure different forms
         ModelSpec(file = "Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf",
             display = "Qwen3.8-Flash-Next-iq4xs", quant_label = "iq4_xs", serve_mtp = "vulkan",
+            serve_drafter = "Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf",
             // the split NextN head (`shared`: its own Q8_0 routed experts inside) rides as a companion: the hc cells pin it as the trunk's head
             companions <- [
                 ProvEntry(name = "Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf", root = "llm",
                     url = "{HF}/unsloth/Qwen3.8-Flash-Next-GGUF/resolve/main/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf",
                     bytes = 2786568256l, sha256 = "5ff54097406a905cf3a724c709124ceb0e3e10235ee862298969e91c96fa96e6")],
+            parity <- ev_qwen_count([dn_chunked = true, moe_reference = true])),
+        // the UD file's single-format twin, 4.1 GB a token against 5.7 - the bandwidth-bound decode floor; the pack cell opens it beside the split NextN head
+        ModelSpec(file = "Qwen3.8-Flash-Next-GGUF/IQ4_XS-pure/Qwen3.8-Flash-Next-IQ4_XS-pure.gguf",
+            display = "Qwen3.8-Flash-Next-iq4xs-pure", quant_label = "iq4_xs", serve_mtp = "vulkan",
+            serve_drafter = "Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf",
+            companions <- [
+                ProvEntry(name = "Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf", root = "llm",
+                    url = "{HF}/unsloth/Qwen3.8-Flash-Next-GGUF/resolve/main/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf",
+                    bytes = 2786568256l, sha256 = "5ff54097406a905cf3a724c709124ceb0e3e10235ee862298969e91c96fa96e6")],
+            recipe = "llama-quantize --pure --tensor-type 'hc_(attn|ffn)_(down|up)=q8_0' --tensor-type 'output_hc_(down|up)=q8_0' --tensor-type 'ple_(key|value)=q8_0' --tensor-type 'indexer\\.(k|q)_proj=bf16' --tensor-type 'ssm_(alpha|beta)=f32' Qwen3.8-Flash-Next-GGUF/BF16/Qwen3.8-Flash-Next-BF16-00001-of-00008.gguf Qwen3.8-Flash-Next-GGUF/IQ4_XS-pure/Qwen3.8-Flash-Next-IQ4_XS-pure.gguf IQ4_XS",
+            bytes = 97515364448l, sha256 = "266607cefd0e10717ae4132c1ba069f39b82458b95ec476d8b2999d8af4e7086",
             parity <- ev_qwen_count([dn_chunked = true, moe_reference = true])),
         // the hyper-connection chain's micro carrier (Lynxpda's random-weight qwen4exp: hc 4, the PLE 3-gram side input,
         // 8 experts top-2, a NextN head) tests/test_gpu_resident_hc_micro.das holds whole; the published head rides as a

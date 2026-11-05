@@ -6,9 +6,11 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_common
 require dasllama/dasllama_sampling
+require dasllama/dasllama_dflash   // dflash_soft_pick, dflash_record_q: the block drafter's sampled drafts and their q
 require daslib/random
 require math
 require _mtp_walk_fixture   // bare_session, same_rng
+require _compares   // nan_wide_diff
 
 // The non-exact acceptances are host arithmetic over the verify rows. Typical: a draft is accepted
 // where the session's sampler admits it on its row - the token survives the cuts the sampler would
@@ -412,5 +414,274 @@ def test_rejection_without_q_records_walks_typical(t : T?) {
     set_mtp_accept(knob)
     delete head
     delete wide
+    delete s
+}
+
+[test]
+def test_nextn_drafts_sampled_by_mode(t : T?) {
+    let knob = get_mtp_accept()
+    let temp0 = get_mtp_draft_temp()
+    var s <- bare_session(VOCAB, DRAFTS)
+    var sampled = SamplingParams(temp = 0.7)
+    var greedy = SamplingParams()
+    s.spec_params = unsafe(addr(sampled))
+    set_mtp_accept(MtpAccept.exact)
+    t |> success(!mtp_drafts_sampled(s), "exact: the head drafts its argmax, no q")
+    set_mtp_accept(MtpAccept.rejection)
+    t |> success(mtp_drafts_sampled(s), "rejection: the head drafts through the draw seam")
+    set_mtp_draft_temp(0.0)
+    t |> success(mtp_drafts_sampled(s), "rejection at head temperature 0: still the draw seam, so the point mass is recorded")
+    s.spec_params = unsafe(addr(greedy))
+    t |> success(!mtp_drafts_sampled(s), "control: a greedy stream under rejection drafts no q")
+    s.spec_params = null
+    set_mtp_draft_temp(temp0)
+    set_mtp_accept(knob)
+    delete s
+}
+
+[test]
+def test_nextn_draft_temp_records_q(t : T?) {
+    let temp0 = get_mtp_draft_temp()
+    var s <- bare_session(VOCAB, DRAFTS)
+    var head <- [2.0, 1.0, 0.0, NO_MASS, NO_MASS, NO_MASS, NO_MASS, NO_MASS]
+    var sp = SamplingParams(temp = 1.0)
+    set_mtp_draft_temp(0.0)
+    var row <- [for (x in head); x]
+    s.rng = random_seed(5)
+    s.spec_params = unsafe(addr(sp))
+    let rng0 = s.rng
+    let d0 = mtp_draft_sample(s, row, VOCAB, 0l)
+    t |> equal(d0, 0l, "temperature 0: the head's argmax")
+    t |> success(s.mtp_qn[0] == 1l && mtp_q_of(s, 0l, 0l) == 1.0, "... recorded as a point mass")
+    t |> success(same_rng(s.rng, rng0), "... with no draw")
+    set_mtp_draft_temp(-1.0)
+    let own = draft_draw(s, head, sp, 5, 1l)
+    t |> success(own.qn > 1l && abs(mtp_q_of(s, 1l, 0l) - soft_ref(head, 1.0)[0]) < 1.0e-6,
+        "control: below 0 the stream's temperature records its softmax, no point mass ({own.qn} entries, q(0) {mtp_q_of(s, 1l, 0l)})")
+    set_mtp_draft_temp(0.5)
+    var q_ref <- soft_ref(head, 0.5)
+    for (seed in range(1, 51)) {
+        let r = draft_draw(s, head, sp, seed, 2l)
+        var q_off = 0.0
+        for (k in range64(VOCAB)) {
+            q_off = max(q_off, nan_wide_diff(mtp_q_of(s, 2l, k), q_ref[k]))
+        }
+        t |> success(r.qn > 1l && q_off < 1.0e-6, "seed {seed}: q is the head's softmax at 0.5 (max off {q_off})")
+        var probe = random_seed(seed)
+        t |> equal(r.d, cdf_at(q_ref, random_float(probe) * sum_of(q_ref)), "seed {seed}: the draft is the closed form's draw")
+    }
+    var q_one <- soft_ref(head, 1.0)
+    t |> success(abs(q_one[0] - q_ref[0]) > 1.0e-3, "control: the stream's temperature gives another q ({q_one[0]} against {q_ref[0]})")
+    s.spec_params = null
+    set_mtp_draft_temp(temp0)
+    delete q_one
+    delete q_ref
+    delete row
+    delete head
+    delete s
+}
+
+[test]
+def test_nextn_point_mass_rejection_rate(t : T?) {
+    let temp0 = get_mtp_draft_temp()
+    var heads <- half_q_heads()
+    var rows <- quarter_p_rows()
+    var sp = SamplingParams(temp = 1.0, top_p = 0.99)
+    set_mtp_draft_temp(0.0)
+    let point = accept_census(rows, heads, sp)
+    t |> success(point.accepted >= 70 && point.accepted <= 130, "head temperature 0: p = 1/4 accepts about a quarter of 400 seeds ({point.accepted})")
+    t |> equal(point.residual_on_1, 400 - point.accepted, "every reject's residual draw lands on token 1")
+    set_mtp_draft_temp(-1.0)
+    let own = accept_census(rows, heads, sp)
+    t |> success(own.accepted >= 160 && own.accepted <= 240, "control: the stream's q at p = q / 2 accepts about half ({own.accepted}), outside the quarter bound")
+    set_mtp_draft_temp(temp0)
+    delete heads
+    delete rows
+}
+
+let DF_EMPTY = -3.4e38   //! an empty candidate slot's score, as `dflash_top_k_row` fills a slot past the row's ids
+let DF_IDS <- [5l, 2l, 7l, -1l]   //! the toy position's candidate ids, an empty slot last
+let DF_SCORES <- [1.0, 2.0, 0.0, DF_EMPTY]
+
+//! the softmax of `v` at `temp` over its entries above DF_EMPTY, the others 0
+def private soft_ref(v : array<float>; temp : float) : array<float> {
+    var mx = DF_EMPTY
+    for (x in v) {
+        mx = max(mx, x)
+    }
+    var q <- [for (x in v); x > DF_EMPTY ? exp((x - mx) / temp) : 0.0]
+    var sum = 0.0
+    for (x in q) {
+        sum += x
+    }
+    for (x in q) {
+        x /= sum
+    }
+    return <- q
+}
+
+//! the index a cdf walk over `w` in index order lands at for the draw `r` (already scaled to the walk's total): the first it
+//! crosses, else the last positive
+def private cdf_at(w : array<float>; r : float) : int64 {
+    var cdf = 0.0
+    var last = 0l
+    for (x, i in w, count()) {
+        continue if (x <= 0.0)
+        last = int64(i)
+        cdf += x
+        return int64(i) if (r < cdf)
+    }
+    return last
+}
+
+def private sum_of(w : array<float>) : float {
+    var total = 0.0
+    for (x in w) {
+        total += x
+    }
+    return total
+}
+
+[test]
+def test_dflash_soft_pick_closed_form(t : T?) {
+    var q_ref <- soft_ref(DF_SCORES, 1.0)
+    var q : array<float>
+    q |> resize(4)
+    var empty_picks = 0
+    for (seed in range(1, 201)) {
+        var rng = seeded_rng(seed)
+        var probe = seeded_rng(seed)
+        let j = dflash_soft_pick(DF_SCORES, 4l, 1.0, rng, q, 0l)
+        var q_off = 0.0
+        for (k in range(4)) {
+            q_off = max(q_off, nan_wide_diff(q[k], q_ref[k]))
+        }
+        t |> success(q_off < 1.0e-6, "seed {seed}: q is the scores' softmax at 1 (max off {q_off})")
+        t |> equal(j, cdf_at(q_ref, random_float(probe)), "seed {seed}: the pick is the closed form's draw")
+        t |> success(same_rng(rng, probe), "seed {seed}: one draw a pick")
+        var again = seeded_rng(seed)
+        t |> equal(dflash_soft_pick(DF_SCORES, 4l, 1.0, again, q, 0l), j, "seed {seed}: the same seed picks again")
+        empty_picks += j == 3l ? 1 : 0
+    }
+    t |> equal(empty_picks, 0, "the empty slot is never picked")
+    var hot <- soft_ref(DF_SCORES, 0.5)
+    t |> success(abs(hot[1] - q_ref[1]) > 1.0e-3, "control: the temperature moves q ({hot[1]} at 0.5 against {q_ref[1]} at 1)")
+    for (seed in range(1, 21)) {
+        var rng = seeded_rng(seed)
+        var probe = seeded_rng(seed)
+        let j = dflash_soft_pick(DF_SCORES, 4l, 0.5, rng, q, 0l)
+        var q_off = 0.0
+        for (k in range(4)) {
+            q_off = max(q_off, nan_wide_diff(q[k], hot[k]))
+        }
+        t |> success(q_off < 1.0e-6, "seed {seed}: q is the scores' softmax at 0.5 (max off {q_off})")
+        t |> equal(j, cdf_at(hot, random_float(probe)), "seed {seed}: the pick at 0.5 is the closed form's draw")
+    }
+    let tied <- [1.0, 3.0, 3.0, DF_EMPTY]
+    var rng = seeded_rng(9)
+    let rng0 = rng
+    t |> equal(dflash_soft_pick(tied, 4l, 0.0, rng, q, 0l), 1l, "temperature 0: the first best of a tie")
+    t |> success(q[1] == 1.0 && q[0] == 0.0 && q[2] == 0.0 && q[3] == 0.0, "... recorded as a point mass")
+    t |> success(same_rng(rng, rng0), "... with no draw")
+    delete hot
+    delete q
+    delete q_ref
+}
+
+[test]
+def test_dflash_record_q(t : T?) {
+    var s <- bare_session(VOCAB, DRAFTS)
+    var q <- soft_ref(DF_SCORES, 1.0)
+    dflash_record_q(s, 0l, DF_IDS, 0l, q, 0l, 4l)
+    t |> equal(s.mtp_qn[0], 3l, "three candidates recorded, the empty slot not")
+    t |> success(s.mtp_q[0].id == 2l && s.mtp_q[1].id == 5l && s.mtp_q[2].id == 7l, "id ascending")
+    t |> success(abs(mtp_q_of(s, 0l, 5l) - q[0]) < 1.0e-7 && abs(mtp_q_of(s, 0l, 2l) - q[1]) < 1.0e-7 && abs(mtp_q_of(s, 0l, 7l) - q[2]) < 1.0e-7,
+        "every id at its own mass")
+    let one <- [1.0]
+    dflash_record_q(s, 1l, DF_IDS, 1l, one, 0l, 1l)
+    t |> success(s.mtp_qn[1] == 1l && mtp_q_of(s, 1l, 2l) == 1.0, "a greedy draft recorded as a point mass")
+    delete q
+    delete s
+}
+
+//! the rejection walk of one draft (id 2) against `rows`, the draft's q recorded off the toy position's scores at temperature 1,
+//! the rng seeded at `seed`: the accepted count and the parked token
+def private df_residual_walk(rows : array<array<float>>; seed : int) : tuple<a : int64; next : int64> {
+    var s <- bare_session(VOCAB, 1l)
+    var q <- soft_ref(DF_SCORES, 1.0)
+    dflash_record_q(s, 0l, DF_IDS, 0l, q, 0l, 4l)
+    for (i in range64(2l)) {
+        for (j in range64(VOCAB)) {
+            s.mtp_logits_b[i * VOCAB + j] = rows[i][j]
+        }
+    }
+    s.mtp_vbatch[0] = 0l
+    s.mtp_vbatch[1] = 2l
+    var sp = SamplingParams(temp = 1.0)
+    s.spec_params = unsafe(addr(sp))
+    s.rng = seeded_rng(seed)
+    let a = mtp_walk_rejection(s, 1l, VOCAB)
+    let next = s.mtp_pre_tok
+    s.spec_params = null
+    delete q
+    delete s
+    return (a = a, next = next)
+}
+
+[test]
+def test_dflash_residual_closed_form(t : T?) {
+    var rows <- [[0.0, 0.0, log(2.0), 0.0, 0.0, log(3.0), 0.0, NO_MASS],
+                 [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]]
+    var p0 <- [0.1, 0.1, 0.2, 0.1, 0.1, 0.3, 0.1, 0.0]
+    var p1 <- soft_ref(rows[1], 1.0)
+    let qs <- soft_ref(DF_SCORES, 1.0)
+    var q_of_id <- [0.0, 0.0, qs[1], 0.0, 0.0, qs[0], 0.0, qs[2]]   //! the candidates' masses by id (DF_IDS' slots 1, 0, 2)
+    var residual <- [for (i in range(8)); max(0.0, p0[i] - q_of_id[i])]
+    let total_res = sum_of(residual)
+    var accepts = 0
+    var point_mass_misreads = 0
+    for (seed in range(1, 401)) {
+        let r = df_residual_walk(rows, seed)
+        var probe = seeded_rng(seed)
+        let u1 = random_float(probe)
+        let u2 = random_float(probe)
+        let accept = u1 * q_of_id[2] < p0[2]
+        point_mass_misreads += (u1 < p0[2]) != (r.a == 1l) ? 1 : 0
+        if (accept) {
+            accepts++
+            t |> equal(r.a, 1l, "seed {seed}: u {u1} under p / q accepts the draft")
+            t |> equal(r.next, cdf_at(p1, u2 * sum_of(p1)), "seed {seed}: the row past the draft is the closed form's draw")
+        } else {
+            t |> equal(r.a, 0l, "seed {seed}: u {u1} at or past p / q rejects the draft")
+            t |> equal(r.next, cdf_at(residual, u2 * total_res), "seed {seed}: the residual draw is the closed form's")
+            t |> success(r.next != 2l && residual[r.next] > 0.0, "seed {seed}: the residual never lands on the draft or a token q covers")
+        }
+        let again = df_residual_walk(rows, seed)
+        t |> success(again.a == r.a && again.next == r.next, "seed {seed}: the same seed walks the same verdict and token")
+    }
+    let rate = float(accepts) / 400.0
+    let closed = p0[2] / q_of_id[2]
+    t |> success(abs(rate - closed) <= 0.08, "the accept rate {rate} sits at min(1, p / q) = {closed}")
+    t |> success(point_mass_misreads > 0, "control: the point-mass closed form (accept where u < p) misreads {point_mass_misreads} of 400 seeds")
+    delete residual
+    delete q_of_id
+    delete p1
+    delete p0
+    delete rows
+}
+
+//! a trunk with no NextN head still carries the verify's scratch: a block or assistant drafter's host-judged round embeds
+//! its verify rows into mtp_cat and reads row 0's logits and the row ids off the session (the mlx-community 27B snapshot
+//! ships no head; the drawn-drafts round indexed past an empty mtp_cat there)
+[test]
+def test_verify_scratch_sized_on_a_headless_trunk(t : T?) {
+    let c = Config(dim = 64l, hidden_dim = 128l, n_layers = 2l, n_heads = 2l, n_kv_heads = 2l, vocab_size = 100l,
+        seq_len = 16l, head_size = 32l, kv_dim = 64l, rope_freq_base = 10000.0)
+    t |> equal(c.n_layer_nextn, 0l, "the synthetic trunk has no NextN head")
+    var s <- make_run_state(c)
+    t |> success(long_length(s.mtp_cat) >= 2l * MTP_MAX_ROWS * c.dim, "mtp_cat holds {MTP_MAX_ROWS} verify rows' embeds ({length(s.mtp_cat)} floats)")
+    t |> equal(long_length(s.mtp_vbatch), MTP_MAX_ROWS, "the verify's row ids are sized to the row cap")
+    t |> equal(long_length(s.mtp_logits), c.vocab_size, "row 0's logits are sized to the vocabulary")
+    t |> equal(length(s.mtp_h), 0, "control: the NextN handoff stays unsized without a head")
     delete s
 }

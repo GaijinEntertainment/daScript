@@ -2213,3 +2213,4 @@ module) is independent and can land any time - it is pure structure.
     the code). The arms share one `run` because the SPIR-V emitter emits a method call as an
     `OpFunction` it never inlines; once the emitter inlines device-side calls, each arm becomes a
     method on its own template and the constant moves with it.
+

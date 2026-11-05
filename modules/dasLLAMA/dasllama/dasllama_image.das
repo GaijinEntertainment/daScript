@@ -40,7 +40,7 @@ require dasllama/dasllama_gemm_schema   // the q8 block geometry the mint's zero
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 56   // the towers' meta carries a GPU flavor's device block (dev_backend, dev, devplan) and the GigaAM meta the kq lane (kq_lane, kq_repacked, kq_fmt)
+let IMAGE_VERSION = 60   // the n-gram table's rows a shard (ngram_shard_rows) beside its type
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -883,6 +883,7 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.ngram_type)
     arch |> serialize_raw(t.ngram_rows)
     arch |> serialize_raw(t.ngram_row_bytes)
+    arch |> serialize_raw(t.ngram_shard_rows)
     arch |> serialize_raw(t.ple_key_off)
     arch |> serialize_raw(t.ple_val_off)
     arch |> serialize_raw(t.ple_nkey_off)
@@ -891,8 +892,9 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.ple_conv_off)
 }
 
-//! the 4 deliberate skips: blocks, blob_scaled, image_map, image_bytes; the plane table counts as ONE field.
-let IMAGE_META_FIELDS = 86 + 4
+//! the 6 deliberate skips: blocks, blob_scaled, image_map, image_bytes, ngram_map, ngram_map_bytes (the image holds the table
+//! itself); the plane table counts as ONE field.
+let IMAGE_META_FIELDS = 87 + 6
 
 // the tokenizer's tripwires: the SentencePiece backend's six serialized meta fields + its three
 // derived tables (lookup, pair_merge, bkey_id); the BPE backend's eight (merge_rank rides as the
@@ -1265,6 +1267,7 @@ def private streamed_q_planes() : array<string> {
     names |> push("q4032q")
     names |> push("q5032q")
     names |> push("mxq")
+    names |> push_from([for (f in [KqFmt.mlx4, KqFmt.mlx8, KqFmt.mlx4b, KqFmt.mlx8b, KqFmt.mlx6b]); "{f}q"])
     return <- names
 }
 
@@ -1409,7 +1412,7 @@ def private vk_mint_zero_view(f : KqFmt; woff, n : int64) {
 def private vk_mint_extra_bytes(t : Model; jobs : array<FillJob>) : uint64 {
     var planar = 0l
     if (empty(jobs)) {   // no streaming plan: the quant halves are whole in RAM
-        planar += long_length(t.qblob) + long_length(t.q51q) + long_length(t.iq4nl32q) + long_length(t.q4032q) + long_length(t.q5032q) + long_length(t.mxq)
+        planar += long_length(t.qblob) + long_length(t.q51q) + long_length(t.iq4nl32q) + long_length(t.q4032q) + long_length(t.q5032q) + long_length(t.mxq) + mlx_plane_bytes(t).q
         for (p in t.kq) {
             planar += long_length(p.q)
         }
@@ -1418,7 +1421,7 @@ def private vk_mint_extra_bytes(t : Model; jobs : array<FillJob>) : uint64 {
             planar += max(stream_plane_bytes(t, jobs, fname), 0l)
         }
     }
-    planar += long_length(t.qscales) * 4l + long_length(t.qscales16) * 2l + long_length(t.q51s) + long_length(t.iq4nl32s) + long_length(t.q4032s) + long_length(t.q5032s) + long_length(t.mxs)
+    planar += long_length(t.qscales) * 4l + long_length(t.qscales16) * 2l + long_length(t.q51s) + long_length(t.iq4nl32s) + long_length(t.q4032s) + long_length(t.q5032s) + long_length(t.mxs) + mlx_plane_bytes(t).s
     for (p in t.kq) {
         planar += long_length(p.s)
     }
@@ -1809,6 +1812,18 @@ def load_image(path : string; var t; tag : string = ""; quant : string = "q8") :
     }
     if (parse_image(base, msize, path, t, tag, quant)) {
         vk_image_source_set(path, int64(g_parsed_vkblob.off), int64(g_parsed_vkblob.bytes))
+        static_if (typeinfo safe_has_field < ngram_tab > (t)) {
+            if (!g_env_engine.prefetch_image && long_length(t.ngram_tab) > 0l) {   //! the n-gram rows are random pages of the table: unread, each hard-faults
+                let ts_ng = ref_time_ticks()
+                var read = false
+                unsafe {
+                    read = prefetch_map(addr<void?>(t.ngram_tab[0]), uint64(long_length(t.ngram_tab)))
+                }
+                if (read) {
+                    to_log(LOG_INFO, "dasLLAMA image: n-gram table read ahead, {long_length(t.ngram_tab) >> 20l} MB in {get_time_usec(ts_ng) / 1000} ms\n")
+                }
+            }
+        }
         return true
     }
     unsafe(fmap_close(base, msize))

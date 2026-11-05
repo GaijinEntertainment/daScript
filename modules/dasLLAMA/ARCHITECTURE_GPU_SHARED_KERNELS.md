@@ -118,7 +118,7 @@ struct and the body; a stamp sets the template constants its home needs and maps
 | `GkQkRms` | `MetalQkNorm` (the q and k heads of one buffer, `kwd` the no-wv V fill) | `QkRms` | the grid decode |
 | `GkTopKRow` | `MetalMoeSelect` / `512` (32 lanes, DEPTH 8 / 16, `raw` the gpt-oss form), their `Ds` twins (`DSCALE`: gemma-4's per-expert down scales, the layer's row bound) | the discrete file's `TopKRecords`: `TopKN` / `TopKN2` / `TopKRows` / `TopKRows2` on Vulkan, `CuTopKN` / `CuTopKN2` / `CuTopKRows` / `CuTopKRows2` on CUDA (256 lanes, DEPTH 1 / 2, `DSCALE`, the row named at run time) | `LANES`, `DEPTH`, `DSCALE`, `DSOFF_SWITCH` |
 | `GkMoeCombine` | `MetalMoeCombine`, `MetalMoeReduce` (`GATHERED`) | `MoeCombine` (`WINDOW`: the chunk window, the accumulate, the zero-weight skip), `MoeCombineRow` (`BYROW`: a bundle's region rows) | `GATHERED`, `WINDOW`, `BYROW`, `SLOT_X4` |
-| `GkDnGate` | `MetalDnGate` / `Sig` (`rsqrt`) | `DnScanP3` / `Sig` | `ZSIG`, `RSQRT` |
+| `GkDnGate` | `MetalDnGate` / `Sig` (`rsqrt`), `MetalDnGateHX` (the window: the out projection's twin beside the rows) | `DnScanP3` / `Sig` | `ZSIG`, `RSQRT`, `HX` |
 | `GkQknRopeKv` | `MetalQknRope16` / `32` (one row), `MetalQknRopeB16` / `B32` (rows), `MetalPfQkn` / `HX` (the window, the q twin) | `QknRopeKv` / `F16` | `KT`, `CLAMP16`, `V_WG`, `LANES` / `EPT`, `HX` |
 | `GkRouterGemv` | one Metal shell (`MetalRouterGemvT`: the grid onto the rows under `ROW_WG`) under two formats - the f32 rows (`MetalMoeRouterT`: `MetalMoeRouter`, a workgroup a row, the decode column; `MetalMoeRouterB`, a subgroup a row, `COL_CLAMP`, 8 columns) and the E-series side rows' projection's bf16 words (`MetalPleProjBf16T`: `MetalPleProjBf16One`, `MetalPleProjBf16`, the same two shapes; `MetalPleProjBf16HwT`: `MetalPleProjBf16HwOne`, `MetalPleProjBf16Hw`, a bf16 halfword a lane), and the f32 rows a lane an element (`MetalF32RowsT`: `MetalF32RowsOne`, `MetalF32RowsB`, the same two shapes) | `RouterGemv` (a workgroup a row, `NORM`), `RouterGemvBf16` (the bf16 words under `YSCALE`), `RouterGemvBf16Hw` (the same rows a bf16 halfword a lane) | `ROW_WG`, `VW`, `NC`, `COL_CLAMP`, `NORM`, `BIAS`, `BF16`, `YSCALE` |
 | `GkPkGemv` | `MetalPkGemv*` (f32 rows), `MetalPkGemvQ8*` | `TtsPkGemv*` (`QUAD`) | the epilogues, `QUAD`, `RSQRT` |
@@ -181,7 +181,7 @@ stores keeps the deinterleave and the epilogue - the two dispatches the row abov
   projections, eh_proj, `MetalHcLo` / `HcLoRq`): Metal dots f32 x, Vulkan a requantized Q8 feed.
 - The expert, router and dense GEMM tiles (`MetalMoeMulMm*` / `*Cm2*` and the KHR tiles, `pf_enc_router_mm` / `F16GemmCm2`):
   each home builds its tiles on its own matrix primitives.
-- `MetalMoeCount` / `MetalMoeBucket` / `MoeSched`: an ordered atomics-free schedule against an atomic ladder; and with it the
+- `MetalMoeBucket` / `MoeSched`: an ordered schedule (a threadgroup histogram, a chunk scan, the rows in entry order) against an atomic ladder; and with it the
   expert-row gather (`MetalMoeGatherX` gathers a bucket row off its slot, `MoeGatherF16` scatters a slot into its bucket row:
   the Vulkan schedule writes no bucket-to-slot map). Both clamp into the half range (`half_sat`).
 - `MetalMoeMulMmQ8TensorT` off the kq scaffold, the ADAPT walks, `MetalG4RouterNorm`'s compensated sum, the gate-up fusion

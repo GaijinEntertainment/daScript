@@ -92,7 +92,7 @@ that never ships. `REVIEW.das`'s `check_bench_stamps` holds each to that (the co
 the nearest winning), and licenses no names; a probe stamp naming no shipped stamp - another form on purpose - is outside it.
 
 A race arm owns a transient command queue for its timed pairs and releases it before returning -
-the one exception to the family's shared device and queue (`ARCHITECTURE_GPU.md#gpu-backends`) - so
+the one exception to the family's shared device and queue (`ARCHITECTURE_GPU_METAL_LIFECYCLE.md#metal-family-lifecycle`) - so
 the tune-time race never queues behind served work.
 
 Even a race meeting all three can be structurally blind. `kq_gemv_iq2xxs_f4` is the standing
@@ -146,15 +146,15 @@ and is a perm this box can run, else from the tile's.
 
 ### The row-major families race on the streamed shape alone {#rm-family-race}
 
-The twenty-one `<fmt>q8_rm_gemv_gen` families (the one-copy rare rail's GEMVs over the device
+The twenty-six `<fmt>q8_rm_gemv_gen` families (the one-copy rare rail's GEMVs over the device
 planes, `ARCHITECTURE_GPU_VULKAN_STREAM.md`) have one serving regime: an expert's rows read once
 from DRAM by every lane. So `gen_tune_probe` races each on one streamed fixture - the rail's
 width, a stack past the cache - best-of `ROUNDS`, no screen, no hot shape and no seat of its
 own; the four-token tile follows the crown as a companion. The fixture is the family's own
 planes in the layout the rail reads: the generator fixture's disk-order planes on a Model shell,
 gathered by the engine's own gather (`layout_gather_dispatch` under `disk`, as the host twin's
-cells gather theirs) - a superblock format's decoded scale rows, the per-32 and mx4 planes as
-they lie on disk, the q8 scales narrowed to binary16. Before any number the family's reference
+cells gather theirs) - a superblock format's decoded scale rows, the per-32 (the affine
+members' among them) and mx4 planes as they lie on disk, the q8 scales narrowed to binary16. Before any number the family's reference
 row - the device-plane scalar decode, the registry's first row - is held to the generator
 fixture's own scalar oracle over the token row (a wrong gather or a wrong reference decode fails
 here, not in every perm at once; the q8 oracle sums over the narrowed scales the rows read),

@@ -828,6 +828,11 @@ def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xs
     return 0.0
 }
 
+def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64; _f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) : float {
+    panic("an affine member rides the per-32 planes, not the kq lattice dot")
+    return 0.0
+}
+
 //! Rows [rb, re) of a kq region off the DISK-ORDER planes through the format's dot against one Q8_K activation row: y[i] =
 //! the dot of row i - `kq_rows_batch_kernel` at one token. Generic in the tag; the gen tier's row tails and the fused chains
 //! thread it.
@@ -1879,8 +1884,155 @@ def gather_q51_grp_scales(gs : uint8 const?; r, mr : int64; var ss : uint8?; nb 
     }
 }
 
+//! an affine member's half off its two little-endian bytes: F16 on mlx4 / mlx8, BF16 on mlx4b / mlx8b
+def mlx_half(lo, hi : uint8; _f : KqTag_mlx4 | KqTag_mlx8) : float => f16_to_f32(uint(lo) | (uint(hi) << 8u))
+def mlx_half(lo, hi : uint8; _f : KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) : float => unsafe(reinterpret<float>((uint(lo) | (uint(hi) << 8u)) << 16u))
+def mlx_half(_lo, _hi : uint8; _f : auto(TT)) : float {
+    panic("mlx_half: {typeinfo stripped_typename(type<TT>)} is no affine member")
+    return 0.0
+}
+
+//! an affine member's code width
+def mlx_bits(_f : KqTag_mlx4 | KqTag_mlx4b) : int => 4
+def mlx_bits(_f : KqTag_mlx8 | KqTag_mlx8b) : int => 8
+def mlx_bits(_f : KqTag_mlx6b) : int => 6
+def mlx_bits(_f : auto(TT)) : int {
+    panic("mlx_bits: {typeinfo stripped_typename(type<TT>)} is no affine member")
+    return 0
+}
+
+//! code `k` of an affine block at `q`: 4-bit codes at bits 4k..4k+3 of the little-endian words (byte k/2, low nibble first),
+//! 6-bit codes at bits 6k..6k+5 of the block's little-endian bit stream (a code past a byte's bit 2 takes the next byte's low
+//! bits; the block's last code ends its last byte), 8-bit codes a byte each - unsigned
+def mlx_code(q : uint8 const?; k : int64; f : auto(TT)) : int {
+    if (mlx_bits(f) == 4) {
+        return (int(unsafe(q[k >> 1l])) >> int((k & 1l) * 4l)) & 15
+    }
+    if (mlx_bits(f) == 6) {
+        let bit = k * 6l
+        let byte = bit >> 3l
+        let sh = int(bit & 7l)
+        let lo = int(unsafe(q[byte]))
+        let v = sh > 2 ? lo | (int(unsafe(q[byte + 1l])) << 8) : lo
+        return (v >> sh) & 63
+    }
+    return int(unsafe(q[k]))
+}
+
+//! the int8 level an affine code expands to (`expand_mlx_row`): the 4- or 6-bit code itself, the 8-bit code - 128
+def mlx_level_bias(f : auto(TT)) : int => mlx_bits(f) == 8 ? 128 : 0
+
+//! an affine block's float fold off its group pair at `ps` over the level sum `isum` and the activation sum `asum`: scale x
+//! (isum + bias_level x asum) + bias x asum - the integer term is the code sum exactly, whatever level the row expanded to
+def mlx_fold(ps : uint8 const?; isum, asum, level_bias : int; f : auto(TT)) : float {
+    let s = mlx_half(unsafe(ps[0]), unsafe(ps[1]), f)
+    let b = mlx_half(unsafe(ps[2]), unsafe(ps[3]), f)
+    return s * float(isum + level_bias * asum) + b * float(asum)
+}
+
+//! Affine·Q8 dot, scalar reference - THE affine float-order contract: per 32-block isum = Σ q·a (q unsigned), asum = Σ a,
+//! f += (scale·isum + bias·asum)·xs[b], the pair the block's 64-group's
+[hint(unsafe_range_check, noalias = wq, noalias = ws, noalias = xq, noalias = xs)]
+def dot_mlxq8_scalar(wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; f : auto(TT)) : float {
+    let nb = n / KQ_B32_ELEMS
+    let qb = b32_qb(f)
+    var acc = 0.0
+    unsafe {
+        for (bi in range64(nb)) {
+            let qp = wq + bi * qb
+            let xb = bi * KQ_B32_ELEMS
+            var isum = 0
+            var asum = 0
+            for (k in range64(KQ_B32_ELEMS)) {
+                let a = int(xq[xb + k])
+                isum += mlx_code(qp, k, f) * a
+                asum += a
+            }
+            acc += mlx_fold(ws + (bi >> 1l) * MLX_PAIR_BYTES, isum, asum, 0, f) * xs[bi]
+        }
+    }
+    return acc
+}
+
+//! one affine row's codes to int8 levels in `qe` (the code, or the 8-bit code - 128) - the row the MAC runs over, exact
+[hint(unsafe_range_check, noalias = wq, noalias = qe)]
+def expand_mlx_row(wq : uint8 const?; var qe : int8?; nb : int64; f : auto(TT)) {
+    let qb = b32_qb(f)
+    let lb = mlx_level_bias(f)
+    unsafe {
+        for (bi in range64(nb)) {
+            let qp = wq + bi * qb
+            for (k in range64(KQ_B32_ELEMS)) {
+                qe[bi * KQ_B32_ELEMS + k] = int8(mlx_code(qp, k, f) - lb)
+            }
+        }
+    }
+}
+
+//! expand_mlx_row's grp<mr> twin: row r of an mr-row group, the code words at j·4·mr + r·4
+def expand_mlx_grp_row(gq : uint8 const?; r, mr : int64; var qe : int8?; nb : int64; f : auto(TT)) {
+    let qb = b32_qb(f)
+    let lb = mlx_level_bias(f)
+    var blk : uint8[B32_MAX_QB]
+    unsafe {
+        for (bi in range64(nb)) {
+            let base = bi * qb * mr
+            for (j in range64(qb)) {
+                blk[j] = gq[base + (j / 4l) * 4l * mr + r * 4l + j % 4l]
+            }
+            for (k in range64(KQ_B32_ELEMS)) {
+                qe[bi * KQ_B32_ELEMS + k] = int8(mlx_code(addr<uint8 const?>(blk[0]), k, f) - lb)
+            }
+        }
+    }
+}
+
+//! the affine MAC over an expanded row: per block the exact level sums, the group pair's fold - bit-identical to
+//! dot_mlxq8_scalar (the same integer terms, the same float order)
+[hint(unsafe_range_check, noalias = qe, noalias = ws, noalias = xq, noalias = xs)]
+def dot_mlxe(qe : int8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; f : auto(TT)) : float {
+    let nb = n / KQ_B32_ELEMS
+    let lb = mlx_level_bias(f)
+    var acc = 0.0
+    unsafe {
+        for (bi in range64(nb)) {
+            let xb = bi * KQ_B32_ELEMS
+            var isum = 0
+            var asum = 0
+            for (k in range64(KQ_B32_ELEMS)) {
+                let a = int(xq[xb + k])
+                isum += int(qe[xb + k]) * a
+                asum += a
+            }
+            acc += mlx_fold(ws + (bi >> 1l) * MLX_PAIR_BYTES, isum, asum, lb, f) * xs[bi]
+        }
+    }
+    return acc
+}
+
 // A per-32 format expands a row to int8 once and MACs over it; the
 // tag picks strides, expand and fold - the three shapes are one body.
+
+def b32_qb(_f : KqTag_mlx4 | KqTag_mlx4b) : int64 => MLX4_QB
+def b32_qb(_f : KqTag_mlx8 | KqTag_mlx8b) : int64 => MLX8_QB
+def b32_qb(_f : KqTag_mlx6b) : int64 => MLX6_QB
+def b32_sb(_f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) : int64 => MLX_SB
+//! the affine planes sit in disk order on every backend: no repack interleaves a block pair's shared group pair
+def private b32_layout_mr(_f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) : int64 => 1l
+def private b32_expand_row(wq : uint8 const?; var qe : int8?; nb : int64; f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) {
+    expand_mlx_row(wq, qe, nb, f)
+}
+def private b32_expand_grp_row(gq : uint8 const?; r, mr : int64; var qe : int8?; nb : int64;
+                               f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) {
+    expand_mlx_grp_row(gq, r, mr, qe, nb, f)
+}
+//! the affine planes' 2-byte scale unit a block gathers as iq4nl32's: a row's units in order are its group pairs verbatim
+def private b32_gather_grp_scales(gs : uint8 const?; r, mr : int64; var ss : uint8?; nb : int64;
+                                  _f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) {
+    gather_iq4nl32_grp_scales(gs, r, mr, ss, nb)
+}
+def private b32_dot_e(qe : int8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?;
+                      n : int64; f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) : float => dot_mlxe(qe, ws, xq, xs, n, f)
 
 def b32_qb(_f : KqTag_q51) : int64 => Q51_QB
 def b32_qb(_f : KqTag_iq4nl32) : int64 => IQ4NL32_QB
@@ -2131,6 +2283,53 @@ def private q5032q8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws :
     b32_batch_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_q5032())
 }
 
+//! the affine members' portable kernels: the shapes stamped per tag
+def private mlx4q8_batch_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
+    b32_batch_kernel(yp, wq, ws, xqp, xsp, n, d, ntok, KqTag_mlx4())
+}
+def private mlx4q8_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
+    b32_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_mlx4())
+}
+def private mlx4q8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
+    b32_batch_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_mlx4())
+}
+def private mlx8q8_batch_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
+    b32_batch_kernel(yp, wq, ws, xqp, xsp, n, d, ntok, KqTag_mlx8())
+}
+def private mlx8q8_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
+    b32_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_mlx8())
+}
+def private mlx8q8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
+    b32_batch_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_mlx8())
+}
+def private mlx4bq8_batch_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
+    b32_batch_kernel(yp, wq, ws, xqp, xsp, n, d, ntok, KqTag_mlx4b())
+}
+def private mlx4bq8_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
+    b32_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_mlx4b())
+}
+def private mlx4bq8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
+    b32_batch_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_mlx4b())
+}
+def private mlx8bq8_batch_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
+    b32_batch_kernel(yp, wq, ws, xqp, xsp, n, d, ntok, KqTag_mlx8b())
+}
+def private mlx8bq8_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
+    b32_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_mlx8b())
+}
+def private mlx8bq8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
+    b32_batch_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_mlx8b())
+}
+def private mlx6bq8_batch_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
+    b32_batch_kernel(yp, wq, ws, xqp, xsp, n, d, ntok, KqTag_mlx6b())
+}
+def private mlx6bq8_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
+    b32_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_mlx6b())
+}
+def private mlx6bq8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
+    b32_batch_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_mlx6b())
+}
+
 //! Register the portable Q8·Q8 backend (row-major, no repack). Lowest priority — a platform ISA backend
 //! out-ranks it in the auto-select where available; it stays the fallback everywhere else.
 //! The per-32 portable kernels register first: unset slots take them.
@@ -2144,6 +2343,16 @@ def dasllama_math_default_register() {
         groupn = @@q4032q8_groupn_kernel, batch_groupn = @@q4032q8_batch_groupn_kernel))
     register_b32_portable(KqFmt.q5032, B32Slots(batch = @@q5032q8_batch_kernel,
         groupn = @@q5032q8_groupn_kernel, batch_groupn = @@q5032q8_batch_groupn_kernel))
+    register_b32_portable(KqFmt.mlx4, B32Slots(batch = @@mlx4q8_batch_kernel,
+        groupn = @@mlx4q8_groupn_kernel, batch_groupn = @@mlx4q8_batch_groupn_kernel))
+    register_b32_portable(KqFmt.mlx8, B32Slots(batch = @@mlx8q8_batch_kernel,
+        groupn = @@mlx8q8_groupn_kernel, batch_groupn = @@mlx8q8_batch_groupn_kernel))
+    register_b32_portable(KqFmt.mlx4b, B32Slots(batch = @@mlx4bq8_batch_kernel,
+        groupn = @@mlx4bq8_groupn_kernel, batch_groupn = @@mlx4bq8_batch_groupn_kernel))
+    register_b32_portable(KqFmt.mlx8b, B32Slots(batch = @@mlx8bq8_batch_kernel,
+        groupn = @@mlx8bq8_groupn_kernel, batch_groupn = @@mlx8bq8_batch_groupn_kernel))
+    register_b32_portable(KqFmt.mlx6b, B32Slots(batch = @@mlx6bq8_batch_kernel,
+        groupn = @@mlx6bq8_groupn_kernel, batch_groupn = @@mlx6bq8_batch_groupn_kernel))
     register_kernel_backend(KernelBackend(name = "portable", mm = @@q8q8_kernel, batch = @@q8q8_batch_kernel,
         group3 = @@q8q8_group3_kernel, repack = @@repack_q8q8_identity, mm_mx4 = @@mx4q8_kernel,
         mx4_batch = @@mx4q8_batch_kernel, mx4_batch_groupn = @@mx4q8_batch_groupn_kernel,

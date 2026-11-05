@@ -42,6 +42,11 @@ def private batch_rows_one_at_a_time(t : Model; var sessions : array<Session?>; 
         var sp = sessions[i]
         forward(t, *sp, tokens[i], sp.n_past)
         sp.n_past++
+        if (nrows > 1l && sel_landed(*sp, 0l)) {
+            //! the landing is one a process: the next row's forward would overwrite this row's selection before it samples
+            sel_land_rows(sel_row_of(*sp, 0l), 1l, sp.logits)
+            sp.sel_row1 = 0l
+        }
     }
 }
 

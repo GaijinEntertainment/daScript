@@ -11,8 +11,10 @@ require dastest/testing_boost public
 require dasllama/dasllama_common   // Model, fmt_at
 require dasllama/dasllama_ple   // ple_plane
 require dasllama/dasllama_gguf   // GGUFMeta, parse_gguf_meta, gguf_tensor_type, ggml_type_name
+require dasllama/dasllama_safetensors   // hf_snapshot, with_hf_snapshot: a snapshot directory's synthesized meta
 require dasllama/dasllama_kqformat   // kq_ggml_type, GGML_TYPE_F32, GGML_TYPE_MXFP4
 require daslib/fio
+require strings
 
 //! one site's tally: how many of its planes the file carries and how many the load serves in another form
 struct SiteCensus {
@@ -100,8 +102,15 @@ def census_cell(t : T?; tr : Model; path, tag : string; want : array<string>) {
 }
 
 //! the same census binding the own-format duty to the sites `bound` names alone (every site when empty): a carrier whose
-//! other sites the tier serves off a converted form by design - a BF16 plane as q8 - holds its own-bytes sites to the duty
+//! other sites the tier serves off a converted form by design - a BF16 plane as q8 - holds its own-bytes sites to the duty; a
+//! safetensors snapshot directory is read through its synthesized meta
 def census_cell(t : T?; tr : Model; path, tag : string; want, bound : array<string>) {
+    if (hf_snapshot(path)) {
+        with_hf_snapshot(path, false) $(m, _bytes) {
+            census_report(t, tr, m, tag, want, bound)
+        }
+        return
+    }
     let f = fopen(path, "rb")
     if (f == null) {
         t |> failure("{tag}: cannot open {path}")
@@ -109,8 +118,15 @@ def census_cell(t : T?; tr : Model; path, tag : string; want, bound : array<stri
     }
     fmap(f) $(var bytes : array<uint8>#) {
         var inscope m <- parse_gguf_meta(bytes)
-        var inscope sites <- format_census(tr, m)
-        var copies = ""
+        census_report(t, tr, m, tag, want, bound)
+    }
+    fclose(f)
+}
+
+//! the census of `tr` against the file's meta `m`, asserted and logged as `census_cell` says
+def private census_report(t : T?; tr : Model; m : GGUFMeta; tag : string; want, bound : array<string>) {
+    var inscope sites <- format_census(tr, m)
+    let copies = build_string() $(var w) {
         for (s in sites) {
             if (want |> has_value(s.site)) {
                 t |> success(s.planes > 0, "{tag} {s.site}: the file carries the site")
@@ -118,10 +134,9 @@ def census_cell(t : T?; tr : Model; path, tag : string; want, bound : array<stri
             continue if (s.planes == 0 || (!empty(bound) && !(bound |> has_value(s.site))))
             t |> success(s.copies == 0, "{tag} {s.site}: {s.copies} of {s.planes} planes read through a converted copy ({s.first})")
             if (s.copies > 0) {
-                copies = "{copies} [{s.site}: {s.copies}/{s.planes}]"
+                w |> write(" [{s.site}: {s.copies}/{s.planes}]")
             }
         }
-        to_log(LOG_INFO, "{tag}: sites still on a converted copy:{empty(copies) ? " none" : copies}\n")
     }
-    fclose(f)
+    to_log(LOG_INFO, "{tag}: sites still on a converted copy:{empty(copies) ? " none" : copies}\n")
 }

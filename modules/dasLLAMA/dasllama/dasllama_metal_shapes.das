@@ -184,6 +184,15 @@ def kq_fmt_gpu_supported(f : KqFmt) : bool =>
         || f == KqFmt.iq4nl || f == KqFmt.q40 || f == KqFmt.nv4 || f == KqFmt.k2 || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs || f == KqFmt.iq3s4
         || kq_dense_b32(f))
 
+//! the first mixer or n-gram projection plane no Metal form reads, named by site and member; "" where every one has its form: a
+//! q8 plane the mixers' own fused forms, any other the staged chain's dense sites - the tag's one-row GEMV over the plane's K, and
+//! at the window its dense tile over whole 64-row tiles
+[arch(at="../ARCHITECTURE_ENGINE_FORMATS_MLX.md#mlx-metal-forms")]
+def hc_planes_metal_unserved(t : Model) : string {
+    return "" if (!t.config.hyper_conn)
+    return hc_planes_unserved_by(t) $(f : KqFmt; kdim, rows : int64) => f == KqFmt.q8 || (kq_fmt_one_row_gemv(f, kdim) && rows % 64l == 0l)
+}
+
 //! the formats the K-quant token-table gather has a stamp for: every
 //! served plane format but q8
 def emb_kq_gather_fmt(f : KqFmt) : bool => f != KqFmt.q8 && kq_fmt_gpu_supported(f)
@@ -383,6 +392,9 @@ def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
     if (fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032 || fmt == KqFmt.q5032) {   // per-32 planes: off % 256 keeps the 16B (20B on q5032) / 2B binds 16B-aligned
         return off >= 0l && (off % 256l) == 0l && (ege % 32l) == 0l
     }
+    if (kq_mlx_affine(fmt) && fmt != KqFmt.mlx6b) {   // the affine members: off % 256 keeps the 16B / 32B quant and the 2B scale binds 16B-aligned, an expert whole 64-groups
+        return off >= 0l && (off % 256l) == 0l && (ege % 64l) == 0l
+    }
     return false
 }
 
@@ -391,7 +403,7 @@ def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
 def moe_fmt_metal_served(f : KqFmt) : bool {
     return (f == KqFmt.q8 || f == KqFmt.q51 || f == KqFmt.iq4nl32 || f == KqFmt.q4032 || f == KqFmt.q5032 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.k3 || f == KqFmt.q40
         || f == KqFmt.nv4 || f == KqFmt.iq4xs || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs
-        || f == KqFmt.k2 || f == KqFmt.iq4nl || f == KqFmt.iq3s4)
+        || f == KqFmt.k2 || f == KqFmt.iq4nl || f == KqFmt.iq3s4 || (kq_mlx_affine(f) && f != KqFmt.mlx6b))
 }
 
 //! layer `l`'s first routed stack (gate `f1`, up `f3`, down `f2`) whose format the Metal routed block has no kernel for, named by
@@ -454,7 +466,8 @@ def metal_fmt_decline_words(kind, why : string; t : Model) : string {
     if (why == "kquant_native") {
         site = kq_load_gpu_unserved(t)
     } elif (why == "graph") {
-        site = moe_fmts_unserved(t)
+        site = hc_planes_metal_unserved(t)
+        site = empty(site) ? moe_fmts_unserved(t) : site
         site = empty(site) ? shexp_fmts_unserved(t) : site
         site = empty(site) ? dn_fmts_unserved(t) : site
         site = empty(site) && kind == "prefill" ? dn_ba_window_fmts_unserved(t) : site
@@ -626,7 +639,7 @@ def decode_shape_decline(t : Model; needs_ok : MetalNeed; allow_moe : bool = fal
     }
     // non-std graphs decline; MoE (Wave C) + deltanet hybrid (Wave D) serve when their kernels cover it;
     // the hyper-connection residual (qwen4exp) has the single row's form alone (allow_hc)
-    if ((t.config.hyper_conn && !allow_hc) ||
+    if ((t.config.hyper_conn && (!allow_hc || !empty(hc_planes_metal_unserved(t)))) ||
             (!t.blocks.attn_is_std && !(t.config.hybrid_deltanet && dn_metal_ok(t))) ||
             (!t.blocks.ffn_is_dense && !(allow_moe && moe_metal_ok(t)))) {
         return MetalDecodeDecline.graph

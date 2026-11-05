@@ -1610,6 +1610,16 @@ def iq2xsq8_rm_witness_gen() : bool => false
 
 def iq2xxsq8_rm_witness_gen() : bool => false
 
+def mlx4q8_rm_witness_gen() : bool => false
+
+def mlx8q8_rm_witness_gen() : bool => false
+
+def mlx4bq8_rm_witness_gen() : bool => false
+
+def mlx8bq8_rm_witness_gen() : bool => false
+
+def mlx6bq8_rm_witness_gen() : bool => false
+
 //! the four-token tile of the row-major q8 kernel (the q8q8_rm_gemv_gen family's companion): token t's row at yp + t * d
 [hint(unsafe_range_check, noalias = wp, noalias = sp, noalias = xqp, noalias = xsp)]
 def q8q8_rm_tile4_gen(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, d : int64) : void {
@@ -1840,6 +1850,158 @@ def mx4q8_rm_gemv_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp
             yp[r] = dot_mx4q8_scalar(addr(lut[0]), qp + r * nb * MX4_QB, sp + r * nb * MX4_SB, xqp, xsp, n)
         }
     }
+}
+
+//! the affine row-major families' reference rows over the disk-order planes (the device layout: no repack interleaves an
+//! affine plane): rows [rb, re) against activation row `xqp`, a row's `dot_mlxq8_scalar`
+[hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp)]
+def private mlx_rm_rows_ref(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64; f : auto(TT)) {
+    let nb = n / 32l
+    for (r in range64(rb, re)) {
+        unsafe {
+            yp[r] = dot_mlxq8_scalar(qp + r * nb * b32_qb(f), sp + r * nb * MLX_SB, xqp, xsp, n, f)
+        }
+    }
+}
+
+//! the affine four-token tile's reference: token t's rows at yp + t * d, each `mlx_rm_rows_ref` over activation row t
+def private mlx_rm_tile4_ref(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; n, d : int64; f : auto(TT)) {
+    let nb = n / 32l
+    for (t in range64(4l)) {
+        unsafe {
+            mlx_rm_rows_ref(yp + t * d, qp, sp, xqp + t * n, xsp + t * nb, n, 0l, d, f)
+        }
+    }
+}
+
+[unused_argument(xbsp), hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
+def mlx4q8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) : void {
+    mlx_rm_tile4_ref(yp, qp, sp, xqp, xsp, n, d, KqTag_mlx4())
+}
+
+[tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
+ tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_perm(mr = 4),
+ tune_perm(dot = "maddubs", width = 256, mr = 8, accs = 1, requires = "avx2"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 8, accs = 1, requires = "avxvnni|avx512vnni"),
+ tune_perm(dot = "vpdpbusd", width = 512, mr = 16, accs = 1, requires = "avx512vnni,avx512bw"),
+ tune_perm(mr = 4, accs = 1),
+ tune_perm(dot = "maddubs", width = 256, mr = 8, accs = 2, requires = "avx2"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 8, accs = 2, requires = "avxvnni|avx512vnni"),
+ tune_perm(dot = "vpdpbusd", width = 512, mr = 16, accs = 2, requires = "avx512vnni,avx512bw"),
+ tune_perm(mr = 4, accs = 2),
+ tune_companion(fn = "mlx4q8_rm_tile4_gen", gen = "dasllama_gemm_gen::mlx4_rm_tile4"),
+ tune_companion(fn = "mlx4q8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
+ tune(gen = "dasllama_gemm_gen::mlx4_rm_gemv",
+      fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
+ unused_argument(xbsp), hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
+def mlx4q8_rm_gemv_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) : void {
+    mlx_rm_rows_ref(yp, qp, sp, xqp, xsp, n, rb, re, KqTag_mlx4())
+}
+
+[unused_argument(xbsp), hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
+def mlx8q8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) : void {
+    mlx_rm_tile4_ref(yp, qp, sp, xqp, xsp, n, d, KqTag_mlx8())
+}
+
+[tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
+ tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_perm(mr = 4),
+ tune_perm(dot = "maddubs", width = 256, mr = 8, accs = 1, requires = "avx2"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 8, accs = 1, requires = "avxvnni|avx512vnni"),
+ tune_perm(dot = "vpdpbusd", width = 512, mr = 16, accs = 1, requires = "avx512vnni,avx512bw"),
+ tune_perm(mr = 4, accs = 1),
+ tune_perm(dot = "maddubs", width = 256, mr = 8, accs = 2, requires = "avx2"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 8, accs = 2, requires = "avxvnni|avx512vnni"),
+ tune_perm(dot = "vpdpbusd", width = 512, mr = 16, accs = 2, requires = "avx512vnni,avx512bw"),
+ tune_perm(mr = 4, accs = 2),
+ tune_companion(fn = "mlx8q8_rm_tile4_gen", gen = "dasllama_gemm_gen::mlx8_rm_tile4"),
+ tune_companion(fn = "mlx8q8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
+ tune(gen = "dasllama_gemm_gen::mlx8_rm_gemv",
+      fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
+ unused_argument(xbsp), hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
+def mlx8q8_rm_gemv_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) : void {
+    mlx_rm_rows_ref(yp, qp, sp, xqp, xsp, n, rb, re, KqTag_mlx8())
+}
+
+[unused_argument(xbsp), hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
+def mlx4bq8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) : void {
+    mlx_rm_tile4_ref(yp, qp, sp, xqp, xsp, n, d, KqTag_mlx4b())
+}
+
+[tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
+ tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_perm(mr = 4),
+ tune_perm(dot = "maddubs", width = 256, mr = 8, accs = 1, requires = "avx2"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 8, accs = 1, requires = "avxvnni|avx512vnni"),
+ tune_perm(dot = "vpdpbusd", width = 512, mr = 16, accs = 1, requires = "avx512vnni,avx512bw"),
+ tune_perm(mr = 4, accs = 1),
+ tune_perm(dot = "maddubs", width = 256, mr = 8, accs = 2, requires = "avx2"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 8, accs = 2, requires = "avxvnni|avx512vnni"),
+ tune_perm(dot = "vpdpbusd", width = 512, mr = 16, accs = 2, requires = "avx512vnni,avx512bw"),
+ tune_perm(mr = 4, accs = 2),
+ tune_companion(fn = "mlx4bq8_rm_tile4_gen", gen = "dasllama_gemm_gen::mlx4b_rm_tile4"),
+ tune_companion(fn = "mlx4bq8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
+ tune(gen = "dasllama_gemm_gen::mlx4b_rm_gemv",
+      fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
+ unused_argument(xbsp), hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
+def mlx4bq8_rm_gemv_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) : void {
+    mlx_rm_rows_ref(yp, qp, sp, xqp, xsp, n, rb, re, KqTag_mlx4b())
+}
+
+[unused_argument(xbsp), hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
+def mlx8bq8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) : void {
+    mlx_rm_tile4_ref(yp, qp, sp, xqp, xsp, n, d, KqTag_mlx8b())
+}
+
+[tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
+ tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_perm(mr = 4),
+ tune_perm(dot = "maddubs", width = 256, mr = 8, accs = 1, requires = "avx2"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 8, accs = 1, requires = "avxvnni|avx512vnni"),
+ tune_perm(dot = "vpdpbusd", width = 512, mr = 16, accs = 1, requires = "avx512vnni,avx512bw"),
+ tune_perm(mr = 4, accs = 1),
+ tune_perm(dot = "maddubs", width = 256, mr = 8, accs = 2, requires = "avx2"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 8, accs = 2, requires = "avxvnni|avx512vnni"),
+ tune_perm(dot = "vpdpbusd", width = 512, mr = 16, accs = 2, requires = "avx512vnni,avx512bw"),
+ tune_perm(mr = 4, accs = 2),
+ tune_companion(fn = "mlx8bq8_rm_tile4_gen", gen = "dasllama_gemm_gen::mlx8b_rm_tile4"),
+ tune_companion(fn = "mlx8bq8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
+ tune(gen = "dasllama_gemm_gen::mlx8b_rm_gemv",
+      fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
+ unused_argument(xbsp), hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
+def mlx8bq8_rm_gemv_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) : void {
+    mlx_rm_rows_ref(yp, qp, sp, xqp, xsp, n, rb, re, KqTag_mlx8b())
+}
+
+[unused_argument(xbsp), hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
+def mlx6bq8_rm_tile4_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d : int64) : void {
+    mlx_rm_tile4_ref(yp, qp, sp, xqp, xsp, n, d, KqTag_mlx6b())
+}
+
+[tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
+ tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_perm(mr = 4),
+ tune_perm(dot = "maddubs", width = 256, mr = 8, accs = 1, requires = "avx2"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 8, accs = 1, requires = "avxvnni|avx512vnni"),
+ tune_perm(dot = "vpdpbusd", width = 512, mr = 16, accs = 1, requires = "avx512vnni,avx512bw"),
+ tune_perm(mr = 4, accs = 1),
+ tune_perm(dot = "maddubs", width = 256, mr = 8, accs = 2, requires = "avx2"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 8, accs = 2, requires = "avxvnni|avx512vnni"),
+ tune_perm(dot = "vpdpbusd", width = 512, mr = 16, accs = 2, requires = "avx512vnni,avx512bw"),
+ tune_perm(mr = 4, accs = 2),
+ tune_companion(fn = "mlx6bq8_rm_tile4_gen", gen = "dasllama_gemm_gen::mlx6b_rm_tile4"),
+ tune_companion(fn = "mlx6bq8_rm_witness_gen", gen = "dasllama_gemm_gen::kq_witness"),
+ tune(gen = "dasllama_gemm_gen::mlx6b_rm_gemv",
+      fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr4"),
+ unused_argument(xbsp), hint(unsafe_range_check, noalias = qp, noalias = sp, noalias = xqp, noalias = xsp, noalias = xbsp)]
+def mlx6bq8_rm_gemv_gen(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) : void {
+    mlx_rm_rows_ref(yp, qp, sp, xqp, xsp, n, rb, re, KqTag_mlx6b())
 }
 
 //! the row-major K-quant kernels' reference: a row's dot over the DEVICE planes decoded a weight at a time - the k / k+16
@@ -3783,6 +3945,11 @@ def rm_gemv_gen(var yp : float?; dq, ds : uint8 const?; xq : int8 const?; xs : f
 def rm_gemv_gen(var yp : float?; dq, ds : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, rb, re : int64; _f : KqTag_q4032) => q4032q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
 def rm_gemv_gen(var yp : float?; dq, ds : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, rb, re : int64; _f : KqTag_q5032) => q5032q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
 def rm_gemv_gen(var yp : float?; dq, ds : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, rb, re : int64; _f : KqTag_nv4) => nv4q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+def rm_gemv_gen(var yp : float?; dq, ds : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, rb, re : int64; _f : KqTag_mlx4) => mlx4q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+def rm_gemv_gen(var yp : float?; dq, ds : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, rb, re : int64; _f : KqTag_mlx8) => mlx8q8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+def rm_gemv_gen(var yp : float?; dq, ds : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, rb, re : int64; _f : KqTag_mlx4b) => mlx4bq8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+def rm_gemv_gen(var yp : float?; dq, ds : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, rb, re : int64; _f : KqTag_mlx8b) => mlx8bq8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
+def rm_gemv_gen(var yp : float?; dq, ds : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, rb, re : int64; _f : KqTag_mlx6b) => mlx6bq8_rm_gemv_gen(yp, dq, ds, xq, xs, xbs, n, rb, re)
 
 def rm_tile4_gen(var yp : float?; dq, ds : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, d : int64; _f : KqTag_k4) => k4q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
 def rm_tile4_gen(var yp : float?; dq, ds : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, d : int64; _f : KqTag_k5) => k5q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
@@ -3804,6 +3971,11 @@ def rm_tile4_gen(var yp : float?; dq, ds : uint8 const?; xq : int8 const?; xs : 
 def rm_tile4_gen(var yp : float?; dq, ds : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, d : int64; _f : KqTag_q4032) => q4032q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
 def rm_tile4_gen(var yp : float?; dq, ds : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, d : int64; _f : KqTag_q5032) => q5032q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
 def rm_tile4_gen(var yp : float?; dq, ds : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, d : int64; _f : KqTag_nv4) => nv4q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+def rm_tile4_gen(var yp : float?; dq, ds : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, d : int64; _f : KqTag_mlx4) => mlx4q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+def rm_tile4_gen(var yp : float?; dq, ds : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, d : int64; _f : KqTag_mlx8) => mlx8q8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+def rm_tile4_gen(var yp : float?; dq, ds : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, d : int64; _f : KqTag_mlx4b) => mlx4bq8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+def rm_tile4_gen(var yp : float?; dq, ds : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, d : int64; _f : KqTag_mlx8b) => mlx8bq8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
+def rm_tile4_gen(var yp : float?; dq, ds : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, d : int64; _f : KqTag_mlx6b) => mlx6bq8_rm_tile4_gen(yp, dq, ds, xq, xs, xbs, n, d)
 
 def kq_gemv_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64; _f : KqTag_iq4xs) {
     iq4xsq8_gemv_gen(yp, kqp, ksp, xqp, xsp, xbsp, n, rb, re)
@@ -4257,6 +4429,63 @@ def kq_registries(_f : KqTag_q4032) : KqRegistries {
     } else {
         return <- KqRegistries()
     }
+}
+
+//! the affine members' registries: the row-major family alone - their dense planes serve on the portable per-32 kernels,
+//! and no kq-lattice or panel stamp exists for them
+def kq_registries(_f : KqTag_mlx4) : KqRegistries {
+    static_if (typeinfo module_exists(llvm_tune)) {
+        return <- KqRegistries(rm_gemv <- mlx4q8_rm_gemv_gen_variants(), rm_tile4 <- mlx4q8_rm_tile4_gen_variants(), rm_witness <- mlx4q8_rm_witness_gen_variants())
+    } else {
+        return <- KqRegistries()
+    }
+}
+
+def kq_registries(_f : KqTag_mlx8) : KqRegistries {
+    static_if (typeinfo module_exists(llvm_tune)) {
+        return <- KqRegistries(rm_gemv <- mlx8q8_rm_gemv_gen_variants(), rm_tile4 <- mlx8q8_rm_tile4_gen_variants(), rm_witness <- mlx8q8_rm_witness_gen_variants())
+    } else {
+        return <- KqRegistries()
+    }
+}
+
+def kq_registries(_f : KqTag_mlx4b) : KqRegistries {
+    static_if (typeinfo module_exists(llvm_tune)) {
+        return <- KqRegistries(rm_gemv <- mlx4bq8_rm_gemv_gen_variants(), rm_tile4 <- mlx4bq8_rm_tile4_gen_variants(), rm_witness <- mlx4bq8_rm_witness_gen_variants())
+    } else {
+        return <- KqRegistries()
+    }
+}
+
+def kq_registries(_f : KqTag_mlx8b) : KqRegistries {
+    static_if (typeinfo module_exists(llvm_tune)) {
+        return <- KqRegistries(rm_gemv <- mlx8bq8_rm_gemv_gen_variants(), rm_tile4 <- mlx8bq8_rm_tile4_gen_variants(), rm_witness <- mlx8bq8_rm_witness_gen_variants())
+    } else {
+        return <- KqRegistries()
+    }
+}
+
+def kq_registries(_f : KqTag_mlx6b) : KqRegistries {
+    static_if (typeinfo module_exists(llvm_tune)) {
+        return <- KqRegistries(rm_gemv <- mlx6bq8_rm_gemv_gen_variants(), rm_tile4 <- mlx6bq8_rm_tile4_gen_variants(), rm_witness <- mlx6bq8_rm_witness_gen_variants())
+    } else {
+        return <- KqRegistries()
+    }
+}
+
+def private kq_tileform(_f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) : int => 0
+def private kq_amx_arm(_f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) {}
+def kq_gemv_gen(var _yp : float?; _kqp : uint8 const?; _ksp : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n, _rb, _re : int64; _f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) {
+    panic("an affine member has no kq gemv stamp")
+}
+def kq_tile_gen(var _yp : float?; _kqg : uint8 const?; _ksg : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n, _d, _g, _tk : int64; _f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) {
+    panic("an affine member has no kq tile stamp")
+}
+def private kq_tile4_gen(var _yp : float?; _kqg : uint8 const?; _ksg : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n, _d, _g, _tk : int64; _f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) {
+    panic("an affine member has no kq tile4 stamp")
+}
+def private kq_panel_gen(_kqg : uint8 const?; _ksg : uint8 const?; _mr, _nsb, _n, _ngr : int64; var _dst : uint16?; _f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) {
+    panic("an affine member has no bf16 panel")
 }
 
 def kq_registries(_f : KqTag_q5032) : KqRegistries {

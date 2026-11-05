@@ -62,6 +62,13 @@ must keep holding:
   - `b32_mm_split_gate` on every per-32 format's split-K tensor stamps (half and f32 activations, one
     and four 64-wide shares, the 16-row stamp) and `b32_mm_base_split_gate` on its simdgroup base
     split stamp, each through the partial-plane reduce and bit for bit against the CPU product.
+  - the affine members' rows (mlx4, mlx8, mlx4b, mlx8b, mlx6b) on the fixture the engine's own block dequant
+    reads back bit for bit: `moe_gemv_gate` (the shared-x and the per-slot forms), `b32_gemv_gate`,
+    `b32_mm_gate` and `moe_mulmm_b32_gate` (the routed base, the split twins and the tall pair) exact
+    against the CPU product, `moe_b32_rows_gate` and `b32_mvb_gate` (two-row and K-split) bit for bit
+    the one-stream / one-row dispatches, and `b32_dense_twins`; and `moe_gemv_gate`'s wide rows exact on
+    every `B32_MOE_WIDE_FMTS` member (shared-x, per-slot with an odd row past the last pair, a stride
+    and a tail under batch streams).
 - `test_metal_prefill_parity.das`'s `test_metal_prefill_kq_tail` cell must hold every stocked
   K-quant, grid and per-32 short window's served form - the row-batched GEMV peel past the whole
   tiles and the split stamps of a window under one tile, the 16-row split stamps on a window of 16
@@ -73,7 +80,8 @@ must keep holding:
   calls, at the bar each gate sets; and by name: its token-table gathers bit for bit:
   `embed_q8_gate`, `embed_b32_gate` on q51, iq4nl32, q4032 and q5032 at 96 wide, at 2048 wide
   past a whole other table's blocks, and at a lead off a superblock boundary (the bind's block
-  skip), `embed_kq_gate` on every K-quant format it lists, and `embed_f32_gate` past a lead of
+  skip), and on the affine members at whole 64-groups (128 and 2048 wide, a lead six blocks past
+  the bind), `embed_kq_gate` on every K-quant format it lists, and `embed_f32_gate` past a lead of
   foreign floats; the residual seam's `add_rms_gate` on every stamp at every shipped width, 5376
   and 8192 past the slab among them; and `cls_select_gate` at a wide, a narrow and the served
   vocab: the ids at or above the row's K-th largest logit and their logits exact against the host

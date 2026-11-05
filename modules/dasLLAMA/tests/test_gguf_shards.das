@@ -85,13 +85,30 @@ def test_shard_mtp_head_sidecar(t : T?) {
         t |> equal(length(sh), 1, "just the head")
         delete sh
     }
-    t |> run("no sibling, no override: the plain single path") @(t : T?) {
+    t |> run("no same-named sibling: the quant stem's Q8_0 head rides as the last shard") @(t : T?) {
         remove(head)
+        var sh <- gguf_shard_paths(trunk)
+        t |> equal(length(sh), 2, "trunk + the stem head")
+        t |> equal(base_name(sh[1]), base_name(other), "mtp-<stem>-Q8_0.gguf, the upstream head named after the plain trunk")
+        delete sh
+    }
+    t |> run("no sibling, no override: the plain single path") @(t : T?) {
+        remove(other)
         var sh <- gguf_shard_paths(trunk)
         t |> equal(length(sh), 1, "trunk alone")
         delete sh
     }
+    t |> run("a -UD trunk: the stem head without -UD rides as the last shard") @(t : T?) {
+        let ud_trunk = path_join(dir, "dasllama_sidecar_ud_toy-UD-Q4_K_M.gguf")
+        let plain_head = path_join(dir, "mtp-dasllama_sidecar_ud_toy-Q8_0.gguf")
+        t |> success(fwrite(ud_trunk, "x") && fwrite(plain_head, "x"), "toy -UD trunk + plain-stem head written")
+        var sh <- gguf_shard_paths(ud_trunk)
+        t |> equal(length(sh), 2, "trunk + the plain-stem head")
+        t |> equal(base_name(sh[length(sh) - 1]), base_name(plain_head), "mtp-<stem minus -UD>-Q8_0.gguf, one head beside several trunk quants")
+        delete sh
+        remove(plain_head)
+        remove(ud_trunk)
+    }
     clear_mtp_head_path()
     remove(trunk)
-    remove(other)
 }

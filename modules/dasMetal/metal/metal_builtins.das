@@ -560,6 +560,59 @@ def public tmm2d_tg_step_devabnt(var acc; a : float16 const?; lda : uint; b : fl
     tmm2d_acc_step(acc, a, lda, b, ldb, true, true, m, n, kk)
 }
 
+//! begin, rx flavor: lanes fill the LEFT operand (`tmm2d_rx_left`)
+//! against the device half table `xt`, `n` rows `kdim` long, read
+//! `kk` deep a run - GPU-only
+[unused_argument(xt, kdim, kk), sideeffects]
+def public tmm2d_rx_begin(var acc; xt : float16 const?; kdim : uint; m, n, kk : uint) {
+    tmm2d_zero_acc(acc, m, n)
+}
+
+//! begin, rx flavor over int8 LEFT elements filled four a word
+//! (`tmm2d_rx_left4`): an exact small-integer code, its scale the
+//! caller's to apply
+[unused_argument(xt, kdim, kk), sideeffects]
+def public tmm2d_rx_begin_i8(var acc; xt : float16 const?; kdim : uint; m, n, kk : uint) {
+    tmm2d_zero_acc(acc, m, n)
+}
+
+[unused_argument(acc, i, v), sideeffects]
+def public tmm2d_rx_left(var acc; i : uint; v : float16) {}
+
+//! the four int8 left elements `i0` .. `i0 + 3` of a
+//! `tmm2d_rx_begin_i8` product from the bytes of `u`, lowest first
+[unused_argument(acc, i0, u), sideeffects]
+def public tmm2d_rx_left4(var acc; i0 : uint; u : uint) {}
+
+//! the two left elements `i0` and `i1` from one packed word: its low
+//! half's bits and its high half's
+[unused_argument(acc, i0, i1, u), sideeffects]
+def public tmm2d_rx_left2(var acc; i0, i1 : uint; u : uint) {}
+
+[unused_argument(acc, koff), sideeffects]
+def public tmm2d_rx_run(var acc; koff : uint) {}
+
+[unused_argument(acc, i)]
+def public tmm2d_rx_dest(acc; i : uint) : float => 0.0
+
+[unused_argument(acc, i)]
+def public tmm2d_rx_dest_valid(acc; i : uint) : bool => false
+
+[unused_argument(acc)]
+def public tmm2d_rx_left_count(acc) : uint => 0u
+
+[unused_argument(acc)]
+def public tmm2d_rx_dest_count(acc) : uint => 0u
+
+//! the half whose bits are the low sixteen of `u` - a lane building
+//! half operands from packed integer fields
+def public ushort_bits_to_half(u : uint) : float16 {
+    var bits = uint16(u & 0xFFFFu)
+    unsafe {
+        return addr<float16?>(bits)[0]
+    }
+}
+
 //! store with per-output-column bias: C[r][j] = acc[r][j] + bias[j] (overwrite, row stride ldc).
 [sideeffects]
 def public tmm2d_tg_store_bias(acc; var c : float?; bias : float const?; m, n, ldc : uint) {

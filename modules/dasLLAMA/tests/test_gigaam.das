@@ -1129,7 +1129,8 @@ def test_gigaam_facade_refusals(tst : T?) {
             t |> success(find(why, "is not a prepared gigaam image") >= 0, "refused: '{why}'")
             let taken = panic_text() ${
                 var inscope cold <- load_gigaam_model(ga)
-                var inscope warm <- load_gigaam_model("{ga}.gigaam-f16.dlim")
+                //! the image the cold load prepared on this box: the exact lane on the device the tower serves, not the CPU lane's name
+                var inscope warm <- load_gigaam_model(image_path_for(ga, tower_dev_tag(gigaam_image_tag(false), cold.dev_backend)))
                 t |> equal(warm.n_layer, cold.n_layer, "the carrier's own image maps")
             }
             t |> equal(taken, "", "the carrier's own image: no refusal")

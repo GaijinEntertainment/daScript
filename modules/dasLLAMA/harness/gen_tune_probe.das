@@ -23,7 +23,7 @@ options _dasllama_internal = true
 //         either) — real generator bugs (wrong stride/lane/scale) are orders louder and
 //         still die here. Declining perms (mr8_budget, and every ISA-gated row the box
 //         fails) run the reference bodies.
-//   The twenty-one row-major families (<fmt>q8_rm_gemv_gen) race on one streamed shape: the baseline
+//   The twenty-six row-major families (<fmt>q8_rm_gemv_gen) race on one streamed shape: the baseline
 //         arm is the registry's first row, `reference`, held to the generator fixture's scalar
 //         oracle; the compare region is the d outputs of the one token row; every perm is held
 //         to the reference row over it; the report row is each arm's best of ROUNDS, no warmup
@@ -791,16 +791,33 @@ struct B32Fixture {
     yref : array<float>
 }
 
+//! an affine member's scalar disk-order dot
+def private mlx_scalar_dot(fmt : KqFmt; wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    if (fmt == KqFmt.mlx4) return dot_mlxq8_scalar(wq, ws, xq, xs, n, KqTag_mlx4())
+    if (fmt == KqFmt.mlx8) return dot_mlxq8_scalar(wq, ws, xq, xs, n, KqTag_mlx8())
+    if (fmt == KqFmt.mlx4b) return dot_mlxq8_scalar(wq, ws, xq, xs, n, KqTag_mlx4b())
+    if (fmt == KqFmt.mlx8b) return dot_mlxq8_scalar(wq, ws, xq, xs, n, KqTag_mlx8b())
+    return dot_mlxq8_scalar(wq, ws, xq, xs, n, KqTag_mlx6b())
+}
+
 //! the format's scalar disk-order dot - the oracle every per-32 variant is held to
-def b32_scalar_dot(fmt : KqFmt; wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float =>
-    fmt == KqFmt.q51 ? dot_q51q8_scalar(wq, ws, xq, xs, n) : (fmt == KqFmt.q4032 ? dot_q4032q8_scalar(wq, ws, xq, xs, n)
-        : (fmt == KqFmt.q5032 ? dot_q5032q8_scalar(wq, ws, xq, xs, n) : dot_iq4nl32q8_scalar(wq, ws, xq, xs, n)))
+def b32_scalar_dot(fmt : KqFmt; wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float {
+    return mlx_scalar_dot(fmt, wq, ws, xq, xs, n) if (kq_mlx_affine(fmt))
+    return (fmt == KqFmt.q51 ? dot_q51q8_scalar(wq, ws, xq, xs, n) : (fmt == KqFmt.q4032 ? dot_q4032q8_scalar(wq, ws, xq, xs, n)
+        : (fmt == KqFmt.q5032 ? dot_q5032q8_scalar(wq, ws, xq, xs, n) : dot_iq4nl32q8_scalar(wq, ws, xq, xs, n))))
+}
+
+//! scale-plane half `bits` (an f16 pattern) as the format's half: BF16 on the affine BF16 members, the f16 pattern otherwise
+def private b32_half_bits(fmt : KqFmt; bits : int) : int {
+    return bits if (fmt != KqFmt.mlx4b && fmt != KqFmt.mlx8b && fmt != KqFmt.mlx6b)
+    return int(unsafe(reinterpret<uint>(f16_to_f32(uint(bits)))) >> 16u)
+}
 
 def build_b32_fixture(fmt : KqFmt; n, d : int64) : B32Fixture {
     var fx = B32Fixture(fmt = fmt, n = n, d = d, nb = n / 32l, qb = kq_qsb(fmt), sb = kq_ssb(fmt))
     fx.qq |> resize(d * fx.nb * fx.qb)
     fx.qs |> resize(d * fx.nb * fx.sb)
-    // valid small f16 scale bit patterns (d, then m where the row holds one) cycled per block; quant bytes an LCG walk
+    // valid small f16 scale patterns cycled a block (d, then m where the row holds one; an affine group's two blocks its scale, then its bias); codes an LCG walk
     let f16s = fixed_array(0x2E66, 0x3266, 0xB18F, 0x2C00, 0x3000, 0xB266, 0x2A8F, 0x3400)
     var seed = 0x12345
     for (i in range64(length(fx.qq))) {
@@ -810,7 +827,7 @@ def build_b32_fixture(fmt : KqFmt; n, d : int64) : B32Fixture {
     for (r in range64(d)) {
         for (bi in range64(fx.nb)) {
             let sb = (r * fx.nb + bi) * fx.sb
-            let dv = f16s[int(r * 3l + bi) % 8]
+            let dv = b32_half_bits(fmt, int(f16s[int(r * 3l + bi) % 8]))
             fx.qs[sb] = uint8(dv & 255)
             fx.qs[sb + 1l] = uint8(dv >> 8)
             if (fx.sb >= 4l) {

@@ -30,7 +30,10 @@ require daslib/strings_boost
 //! q5032 = native Q5_0 per-32 planes on any 32-multiple row
 //! (q51's quant plane - 16 nibble bytes + the qh word - under one f16 d, weight d x (q - 16)); nv4 = native NVFP4 superblock
 //! planes (four 64-weight disk blocks a superblock: e2m1 nibbles re-paired into the k4 tiling, sixteen UE4M3 scales - one a
-//! 16-weight sub-block - verbatim). New members append — the int value is the device stack tag and the image plane id.
+//! 16-weight sub-block - verbatim); mlx4 / mlx8 / mlx4b / mlx8b / mlx6b = a safetensors affine triplet's per-32 planes (4-,
+//! 8- or 6-bit unsigned codes verbatim, the 64-group's F16 or BF16 (scale, bias) pair shared by its two blocks, w = scale x q +
+//! bias; mlx6b is the 6-bit codes under BF16).
+//! New members append — the int value is the device stack tag and the image plane id.
 enum KqFmt : uint8 {
     q8
     k4
@@ -53,6 +56,11 @@ enum KqFmt : uint8 {
     q4032
     q5032
     nv4
+    mlx4
+    mlx8
+    mlx4b
+    mlx8b
+    mlx6b
 }
 
 //! One empty tag type per KqFmt member - the overload key of every per-format function family
@@ -79,6 +87,11 @@ struct KqTag_iq3s4 {}
 struct KqTag_q4032 {}
 struct KqTag_q5032 {}
 struct KqTag_nv4 {}
+struct KqTag_mlx4 {}
+struct KqTag_mlx8 {}
+struct KqTag_mlx4b {}
+struct KqTag_mlx8b {}
+struct KqTag_mlx6b {}
 
 [call_macro(name = "kq_fmt_stamp")]
 class KqFmtStamp : AstCallMacro {
@@ -166,7 +179,8 @@ def kq_cm2e_aliases_m(fmt_name : string) : bool => word_in(KQ_CM2E_ALIASES_M, fm
 //! the stem of a format's stamp functions in a stamp family - `batch` (the batch tiles) or `gemv` (the decode GEMVs):
 //! `<verb>_<stem>_<tail>`, the stem `<fmt>_<family>` on q8 and the per-32 formats, `kq_<family>_<fmt>` on a kq format
 def kq_tile_stem(fmt_name : string; family : string = "batch") : string =>
-    fmt_name == "q8" || fmt_name == "q51" || fmt_name == "mx4" || fmt_name == "iq4nl32" || fmt_name == "q4032" || fmt_name == "q5032" ? "{fmt_name}_{family}" : "kq_{family}_{fmt_name}"
+    (fmt_name == "q8" || fmt_name == "q51" || fmt_name == "mx4" || fmt_name == "iq4nl32" || fmt_name == "q4032" || fmt_name == "q5032"
+        || word_in(KQ_DISCRETE_UNSTAMPED, fmt_name)) ? "{fmt_name}_{family}" : "kq_{family}_{fmt_name}"
 
 //! a `<prefix><verb>[_<tail>]` placeholder -> `<verb>_<stem>_<tail>`, the tail the placeholder's or, where it names none, `arm_tail`
 def private stamp_target(placeholder, prefix, stem, arm_tail : string) : string {
@@ -236,8 +250,17 @@ def private word_in(list, word : string) : bool {
     return false
 }
 
-//! whether a stamp macro's skip words drop member `f`: the member named, or `!b32` and `f` no per-32 format
-def private stamp_skips(skip : string; f : KqFmt) : bool => word_in(skip, "{f}") || (word_in(skip, "!b32") && !kq_dense_b32(f))
+//! the members the discrete GPU homes (Vulkan, CUDA) stamp no kernel for - Metal stamps them: those homes' loads decline
+//! their planes by name (`kq_discrete_unstamped`)
+let KQ_DISCRETE_UNSTAMPED = "mlx4 mlx8 mlx4b mlx8b mlx6b"
+
+//! a member the discrete GPU homes stamp no kernel for
+def kq_discrete_unstamped(f : KqFmt) : bool => word_in(KQ_DISCRETE_UNSTAMPED, "{f}")
+
+//! whether a stamp macro's skip words drop member `f`: the member named, `!b32` and `f` no per-32 format, or - on a ladder
+//! whose words do not name the `metal` home - a member the discrete homes do not stamp
+def private stamp_skips(skip : string; f : KqFmt) : bool => (word_in(skip, "{f}") || (word_in(skip, "!b32") && !kq_dense_b32(f))
+    || (kq_discrete_unstamped(f) && !word_in(skip, "metal")))
 
 //! a stamp macro's word list: a string literal, or a module `let` of one in the module the call compiles in
 def private macro_words(prog : ProgramPtr; arg : ExpressionPtr) : string {
@@ -273,7 +296,7 @@ def private stamp_block(prog : ProgramPtr; var expr : ExprCallMacro?; what : str
 class KqTileStamp : AstCallMacro {
     //! ``kq_tile_stamp(fmt[, skip[, family[, tail, tails]]]) <| $() { ... tile_<verb>_<tail>(...) ... }``: the block once per KqFmt member
     //! on a ladder over ``fmt``, each placeholder renamed by ``kq_tile_target``; ``skip`` members (``!b32``: all but the per-32 ones) get
-    //! no arm. With ``tail``/``tails`` a ``tile_<verb>`` placeholder takes arm ``j``'s word from ``tails`` on an inner ladder over ``tail``, ``<fmt>/<tail>`` skips a pair
+    //! no arm, nor do the members the discrete homes do not stamp unless ``skip`` names the ``metal`` home. With ``tail``/``tails`` a ``tile_<verb>`` placeholder takes arm ``j``'s word from ``tails`` on an inner ladder over ``tail``, ``<fmt>/<tail>`` skips a pair
     def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
         let nargs = length(expr.arguments)
         macro_verify((nargs >= 2 && nargs <= 4 || nargs == 6) && expr.arguments[nargs - 1] is ExprMakeBlock, prog, expr.at,
@@ -408,6 +431,44 @@ let GGML_TYPE_IQ1_S = 19
 let GGML_TYPE_IQ1_M = 29
 let GGML_TYPE_TQ1_0 = 34
 let GGML_TYPE_TQ2_0 = 35
+//! the loader's own type ids for a safetensors affine triplet (u32 codes, the 64-group scale and bias planes beside them),
+//! outside ggml's id range: 4- and 8-bit codes under F16 or BF16 scales; a tensor of one counts its code bytes
+let GGML_TYPE_MLX4 = 1004
+let GGML_TYPE_MLX8 = 1008
+let GGML_TYPE_MLX4B = 1104
+let GGML_TYPE_MLX8B = 1108
+let GGML_TYPE_MLX6B = 1106   //! 6-bit codes under BF16 scales: no F16 6-bit member exists
+//! the n-gram table's sharded affine rows: 4-bit codes in 32-groups under BF16 pairs, each row shard its codes, then its scales,
+//! then its biases; no member serves it - only the n-gram row gather reads it
+let GGML_TYPE_NGRAM_A4G32 = 1132
+//! the bytes one 32-group of an n-gram table row takes across the three planes: 16 code bytes, a BF16 scale, a BF16 bias
+let NGRAM_A4G32_BLOCK = 20l
+//! the weights one affine scale and bias pair covers
+let MLX_GROUP = 64l
+
+//! the code width of an affine triplet's loader type; 0 for any other type
+def mlx_affine_bits(gt : int) : int64 {
+    return 4l if (gt == GGML_TYPE_MLX4 || gt == GGML_TYPE_MLX4B)
+    return 8l if (gt == GGML_TYPE_MLX8 || gt == GGML_TYPE_MLX8B)
+    return 6l if (gt == GGML_TYPE_MLX6B)
+    return 0l
+}
+
+//! the loader type of an affine triplet of `bits`-bit codes in `group`-weight groups under BF16 (`bf16`) or F16 scales; -1
+//! for a geometry no member serves
+def mlx_affine_ggml_type(bits, group : int; bf16 : bool) : int {
+    return -1 if (int64(group) != MLX_GROUP)
+    if (bits == 4) {
+        return bf16 ? GGML_TYPE_MLX4B : GGML_TYPE_MLX4
+    }
+    if (bits == 8) {
+        return bf16 ? GGML_TYPE_MLX8B : GGML_TYPE_MLX8
+    }
+    if (bits == 6) {
+        return bf16 ? GGML_TYPE_MLX6B : -1
+    }
+    return -1
+}
 
 //! One format's descriptor row - every per-format number a consumer keys off. The stride unit is
 //! one 256-weight superblock on the kq lattice and one 32-weight block for q8/q51/mx4; `qsb` is 0
@@ -503,6 +564,18 @@ def kq_desc(f : KqFmt) : KqDesc {   // nolint:STYLE037 - one arm per KqFmt membe
     if (f == KqFmt.nv4) {
         return KqDesc(fmt = f, qsb = NV4_QSB, ssb = NV4_SSB, elems = KQ_SB_ELEMS, disk_bytes = 144l, ggml_type = GGML_TYPE_NVFP4, schema_id = 49, stream_code = 49)
     }
+    if (f == KqFmt.mlx4 || f == KqFmt.mlx4b) {
+        return KqDesc(fmt = f, qsb = MLX4_QB, ssb = MLX_SB, elems = KQ_B32_ELEMS, disk_bytes = 16l, ggml_type = f == KqFmt.mlx4 ? GGML_TYPE_MLX4 : GGML_TYPE_MLX4B,
+            schema_id = -1, stream_code = f == KqFmt.mlx4 ? MLX4_STREAM_TAG : MLX4B_STREAM_TAG)
+    }
+    if (f == KqFmt.mlx8 || f == KqFmt.mlx8b) {
+        return KqDesc(fmt = f, qsb = MLX8_QB, ssb = MLX_SB, elems = KQ_B32_ELEMS, disk_bytes = 32l, ggml_type = f == KqFmt.mlx8 ? GGML_TYPE_MLX8 : GGML_TYPE_MLX8B,
+            schema_id = -1, stream_code = f == KqFmt.mlx8 ? MLX8_STREAM_TAG : MLX8B_STREAM_TAG)
+    }
+    if (f == KqFmt.mlx6b) {
+        return KqDesc(fmt = f, qsb = MLX6_QB, ssb = MLX_SB, elems = KQ_B32_ELEMS, disk_bytes = 24l, ggml_type = GGML_TYPE_MLX6B,
+            schema_id = -1, stream_code = MLX6B_STREAM_TAG)
+    }
     return KqDesc(fmt = KqFmt.q8, qsb = 0l, ssb = 0l, elems = KQ_B32_ELEMS, disk_bytes = 34l, ggml_type = GGML_TYPE_Q8_0, schema_id = -1, stream_code = 0)
 }
 
@@ -549,7 +622,7 @@ def kq_blocks_for(n, rows : int64; fmt : int) : int64 {
 }
 
 //! the KqFmt slot count of a per-format table (int(KqFmt) indexes it; members append, so the last is the bound)
-let KQ_FMT_COUNT = int(KqFmt.nv4) + 1
+let KQ_FMT_COUNT = int(KqFmt.mlx6b) + 1
 
 //! the format an `int(KqFmt)` slot names - the per-format slot the GPU drivers and the image's plane tables index by; the caller holds the slot inside the enum's range
 def kq_fmt_of_slot(slot : int) : KqFmt => unsafe(reinterpret<KqFmt>(uint8(slot)))
@@ -580,7 +653,10 @@ def kq_mmq_min(f : KqFmt) : bool => f == KqFmt.k4 || f == KqFmt.q51
 //! served off its own plane pair at the 32-block reduction, never a
 //! superblock plane bind
 def kq_dense_b32(fmt : KqFmt) : bool => (fmt == KqFmt.q51 || fmt == KqFmt.iq4nl32
-    || fmt == KqFmt.q4032 || fmt == KqFmt.q5032)
+    || fmt == KqFmt.q4032 || fmt == KqFmt.q5032 || kq_mlx_affine(fmt))
+
+//! an affine member: per-32 planes whose block pair shares one 64-group (scale, bias) pair
+def kq_mlx_affine(fmt : KqFmt) : bool => fmt == KqFmt.mlx4 || fmt == KqFmt.mlx8 || fmt == KqFmt.mlx4b || fmt == KqFmt.mlx8b || fmt == KqFmt.mlx6b
 
 //! The same predicate over the int slot space the GPU drivers carry.
 def kq_dense_b32(fmt : int) : bool => (fmt >= 0 && fmt < KQ_FMT_COUNT
@@ -648,14 +724,19 @@ let Q4032_QB = 16l     // Q4_0 quant plane PER 32-BLOCK: 16 nibble bytes (elemen
 let Q4032_SB = 2l      // Q4_0 scale plane PER 32-BLOCK: f16 d
 let Q5032_QB = 20l     // Q5_0 quant plane PER 32-BLOCK: q51's form - 16 nibble bytes (element j low, j + 16 high), then the qh word
 let Q5032_SB = 2l      // Q5_0 scale plane PER 32-BLOCK: f16 d
+let MLX4_QB = 16l      //! affine 4-bit quant plane PER 32-BLOCK: the codes' four u32 words verbatim (element k at bits 4k..4k+3)
+let MLX8_QB = 32l      //! affine 8-bit quant plane PER 32-BLOCK: one code byte an element, in order
+let MLX6_QB = 24l      //! affine 6-bit quant plane PER 32-BLOCK: the codes' six u32 words verbatim (element k at bits 6k..6k+5 of the little-endian stream)
+let MLX_SB = 2l        //! affine scale plane PER 32-BLOCK: half of the 64-group's (scale, bias) half pair, which its two blocks share
+let MLX_PAIR_BYTES = 4l   //! one 64-group's (scale, bias) pair: two halves, scale first
 let NV4_QSB = 128l     //! NVFP4 quant plane: 128 nibble bytes a superblock, in the k4 tiling
 let NV4_SSB = 16l      //! NVFP4 scale plane: 16 UE4M3 bytes a superblock, one a 16-weight sub-block
 //! a per-32 block's nibble bytes: elem j low in byte j, j + 16 high
 let B32_NIB_BYTES = int64(KQ_B32_QWORDS) * 4l
 //! q51's and q5032's qh word after the nibbles: elem k's bit 4 at k
 let B5_QH_BYTES = Q5032_QB - B32_NIB_BYTES
-//! the widest per-32 block's bytes (q51's): a one-block scratch
-let B32_MAX_QB = int(Q51_QB)
+//! the widest per-32 block's bytes (mlx8's quant block, q51's scale block): a one-block scratch
+let B32_MAX_QB = int(MLX8_QB)
 let B32_MAX_SB = int(Q51_SB)
 let IQ4XS_QSB = 128l   // IQ4_XS quant plane: 128 nibble bytes, the disk k/k+16 pairing (q40 tiling)
 let IQ4XS_SSB = 20l    // IQ4_XS scale plane: f16 d, 2 pad, 8 x int8 (ls - 32), 8 pad — the k4 decoded-row shape
@@ -1442,6 +1523,13 @@ let Q4032_STREAM_TAG = 47
 
 //! q5032's stream tag: the next code no kernel id claims
 let Q5032_STREAM_TAG = 48
+
+//! the affine members' stream tags: the next codes no kernel id claims (49 is nv4's)
+let MLX4_STREAM_TAG = 50
+let MLX8_STREAM_TAG = 51
+let MLX4B_STREAM_TAG = 52
+let MLX8B_STREAM_TAG = 53
+let MLX6B_STREAM_TAG = 54
 
 def kq_stream_code(f : KqFmt) : int => kq_desc(f).stream_code
 
