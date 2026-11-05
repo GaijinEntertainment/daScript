@@ -3603,6 +3603,8 @@ namespace das
         });
     }
 
+    void linkProgram ( Program * program, TextWriter & logs );
+
     bool Program::simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
         CompilationCallbackGuard callbackGuard("", thisModule->fileName, "simulation");
         auto time0 = ref_time_ticks();
@@ -3615,6 +3617,7 @@ namespace das
         if ( policies.keep_alive ) {
             updateKeepAliveFlags();
         }
+        linkProgram(this, logs);
         isSimulating = true;
         // the simulate is this program's compile: its init script and its simulate macros run with it bound
         auto bound_env = daScriptEnvironment::getBound();

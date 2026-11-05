@@ -10,10 +10,14 @@ using namespace das;
 TEST_CASE("symbol use and context slots are per program, not per shared function") {
     TextPrinter tout;
     auto fAccess = make_smart<FsFileAccess>();
+    CodeOfPolicies policies;
+    policies.keep_symbol_tables = true;
     ModuleGroup groupA;
-    auto a = compileDaScript(getDasRoot() + PROGRAM_A_PATH, fAccess, tout, groupA);
+    auto a = compileDaScript(getDasRoot() + PROGRAM_A_PATH, fAccess, tout, groupA, policies);
     REQUIRE(a);
     REQUIRE_FALSE(a->failed());
+    Context ctxA(a->getContextStackSize());
+    REQUIRE(a->simulate(ctxA, tout));
     auto shared = Module::require("test_symbol_state_shared");
     REQUIRE(shared);
     auto usedByA = shared->findUniqueFunction("used_by_a");
@@ -26,9 +30,11 @@ TEST_CASE("symbol use and context slots are per program, not per shared function
     CHECK_EQ(a->indexOf(usedByB), -2);
 
     ModuleGroup groupB;
-    auto b = compileDaScript(getDasRoot() + PROGRAM_B_PATH, fAccess, tout, groupB);
+    auto b = compileDaScript(getDasRoot() + PROGRAM_B_PATH, fAccess, tout, groupB, policies);
     REQUIRE(b);
     REQUIRE_FALSE(b->failed());
+    Context ctxB(b->getContextStackSize());
+    REQUIRE(b->simulate(ctxB, tout));
     CHECK(b->isUsed(usedByB));
     CHECK_FALSE(b->isUsed(usedByA));
     CHECK_GE(b->indexOf(usedByB), 0);

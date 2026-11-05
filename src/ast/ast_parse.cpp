@@ -1405,6 +1405,17 @@ namespace das {
         }
     }
 
+    static int32_t countUsedFunctions ( const Program * program ) {
+        int32_t count = 0;
+        program->library.foreach([&](Module * pm) -> bool {
+            for ( auto & func : pm->functions.each() ) {
+                if ( program->isUsed(func) && !func->builtIn && !func->isTemplate ) count ++;
+            }
+            return true;
+        }, "*");
+        return count;
+    }
+
     static void inferAndFinalizeModule ( const ProgramPtr & program, const string & fileName, const string & moduleName,
             const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool exportAll, bool isDep,
             const CodeOfPolicies & policies, ModuleCompileTimes & times ) {
@@ -1576,7 +1587,7 @@ namespace das {
         if ( logModule && isDep ) {
             auto dt = get_time_usec(times.startTicks) / 1000000.;
             auto macroDelta = ref_time_delta_to_usec(daScriptEnvironment::getBound()->macroTimeTicks - times.macroStartTicks);
-            logs << "compiler took " << dt << ", " << program->thisModule->name << " (" << fileName << ") -- " << program->totalFunctions << " functions\n"
+            logs << "compiler took " << dt << ", " << program->thisModule->name << " (" << fileName << ") -- " << countUsedFunctions(program.get()) << " functions\n"
                  << "\tparse    " << (times.parseUsec    / 1000000.) << "\n"
                  << "\tinfer    " << (times.inferUsec    / 1000000.) << " (" << program->inferPassesUsed << " passes)\n"
                  << "\toptimize " << (times.optUsec      / 1000000.) << "\n"
@@ -2394,7 +2405,7 @@ namespace das {
             if ( res->options.getBoolOption("log_total_compile_time",policies.log_total_compile_time)
                  || res->options.getBoolOption("log_module_compile_time",policies.log_module_compile_time) ) {
                 auto totT = get_time_usec(time0);
-                logs << "total compile took " << (totT  / 1000000.) << ", " << fileName << " -- " << res->totalFunctions << " functions\n"
+                logs << "total compile took " << (totT  / 1000000.) << ", " << fileName << " -- " << countUsedFunctions(res.get()) << " functions\n"
                      << "\trequire  " << (preqT    / 1000000.) << "\n"
                      << "\tcache read " << (*totCacheRead / 1000000.) << " (" << *cntCacheRead << " modules, decode " << ((*totCacheRead - *totCacheFinalize) / 1000000.) << ", finalize " << (*totCacheFinalize / 1000000.) << " of which macro simulate " << (*totCacheMacroSim / 1000000.) << ")\n"
                      << "\tparse    " << (*totParse / 1000000.) << "\n"
