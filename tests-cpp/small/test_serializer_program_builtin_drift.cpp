@@ -46,11 +46,14 @@ TEST_CASE("a whole-program stream is not read back once a builtin module it name
     written.flush();
 
     CHECK(readProgram(written));
-    auto builtin = Module::require("$");
-    addConstant(*builtin, "test_serializer_program_drift", 1);
+    uint64_t builtinHash = Module::require("$")->getOwnSemanticHash();
+    int patched = 0;
+    for ( size_t i = 0; i + sizeof(builtinHash) <= written.buffer.size(); ++i ) {
+        if ( memcmp(written.buffer.data() + i, &builtinHash, sizeof(builtinHash)) == 0 ) {
+            written.buffer[i] ^= 1;
+            patched ++;
+        }
+    }
+    REQUIRE(patched > 0);
     CHECK_FALSE(readProgram(written));
-
-    auto drift = builtin->findVariable("test_serializer_program_drift");
-    builtin->globals.remove(drift->name);
-    for ( gc_node * node : { (gc_node *)drift->init->type, (gc_node *)drift->init, (gc_node *)drift->type, (gc_node *)drift } ) gc_free_now(node);
 }

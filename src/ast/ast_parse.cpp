@@ -1754,7 +1754,7 @@ namespace das {
     }
 
     void addNewModules ( ModuleGroup & libGroup, ProgramPtr program ) {
-        program->thisModule->frozen = true;
+        program->thisModule->freeze();
         libGroup.addModule(program->thisModule.release());
         program->library.foreach([&](Module * pm) -> bool {
             if ( !pm->name.empty() && pm->name!="$" ) {

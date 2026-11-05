@@ -223,6 +223,20 @@ namespace das {
         return members;
     }
 
+    static void fillGcFlags ( Module * mod ) {
+        for ( auto & [key, ann] : mod->handleTypes ) {
+            if ( ann && ann->rtti_isHandledTypeAnnotation() ) {
+                TypeDecl probe(Type::tHandle, LineInfo());
+                probe.annotation = static_cast<TypeAnnotation *>(ann);
+                probe.gcFlags();
+            }
+        }
+        mod->structures.foreach([](Structure * st) {
+            TypeDecl probe(st);
+            probe.gcFlags();
+        });
+    }
+
     void Module::Initialize() {
         daScriptEnvironment::ensure();
         static bool atexit_registered = (atexit(daslang_atexit_audit), true);
@@ -247,6 +261,9 @@ namespace das {
             m->gc_collect(&threadRoot);
         }
         threadRoot.gc_sweep();
+        for ( auto m = daScriptEnvironment::getBound()->modules; m ; m = m->next ) {
+            m->freeze();
+        }
         daScriptEnvironment::getBound()->g_modulesInitialized = true;
     }
 
@@ -418,6 +435,17 @@ namespace das {
         }
         isModule = !n.empty();
         isPublic = true;
+    }
+
+    void Module::freeze() {
+        fillGcFlags(this);
+        frozen = true;
+        aliasTypes.freeze();
+        structures.freeze();
+        enumerations.freeze();
+        globals.freeze();
+        functions.freeze();
+        generics.freeze();
     }
 
     void Module::promoteToBuiltin(const FileAccessPtr & access, const string & requireName) {

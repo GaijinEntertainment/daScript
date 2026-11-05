@@ -1680,7 +1680,10 @@ namespace das
                 for ( auto fld : structType->fields ) {
                     gcf |= fld.type->gcFlags(dep,depA);
                 }
-                if ( topLevel ) structType->cachedGcFlags = gcf;
+                if ( topLevel ) {
+                    DAS_VERIFYF(!structType->module || !structType->module->frozen, "gc flags of a frozen module's structure are filled before it freezes");
+                    structType->cachedGcFlags = gcf;
+                }
             }
         } else if ( baseType==Type::tTuple || baseType==Type::tVariant || baseType == Type::option ) {
             for ( const auto & arg : argTypes ) {
@@ -1701,7 +1704,10 @@ namespace das
             bool topLevel = dep.empty() && depA.empty();
             depA.insert(annotation);
             gcf |= ann->getGcFlags(dep,depA);
-            if ( topLevel ) ann->cachedGcFlags = gcf;
+            if ( topLevel ) {
+                DAS_VERIFYF(!ann->module || !ann->module->frozen, "gc flags of a frozen module's handled type are filled before it freezes");
+                ann->cachedGcFlags = gcf;
+            }
         } else if ( baseType==Type::tString ) {
             gcf |= gcFlag_stringHeap;
         } else if ( baseType==Type::tPointer ) {

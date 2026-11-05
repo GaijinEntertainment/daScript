@@ -158,8 +158,15 @@ TEST_CASE("env serializer: a changed builtin module is not served from the cache
         REQUIRE(program != nullptr);
         REQUIRE_FALSE(program->failed());
     }
-    auto builtin = Module::require("$");
-    addConstant(*builtin, "test_env_serializer_drift", 1);
+    uint64_t builtinHash = Module::require("$")->getOwnSemanticHash();
+    int patched = 0;
+    for ( size_t i = 0; i + sizeof(builtinHash) <= storage.buffer.size(); ++i ) {
+        if ( memcmp(storage.buffer.data() + i, &builtinHash, sizeof(builtinHash)) == 0 ) {
+            storage.buffer[i] ^= 1;
+            patched ++;
+        }
+    }
+    REQUIRE(patched > 0);
     {
         TextWriter logs;
         ModuleGroup libGroup;
@@ -171,9 +178,6 @@ TEST_CASE("env serializer: a changed builtin module is not served from the cache
         CHECK(reader.resumedModules != 0);
         CHECK(reader.resumedCorrupt != 0);
     }
-    auto drift = builtin->findVariable("test_env_serializer_drift");
-    builtin->globals.remove(drift->name);
-    for ( gc_node * node : { (gc_node *)drift->init->type, (gc_node *)drift->init, (gc_node *)drift->type, (gc_node *)drift } ) gc_free_now(node);
 }
 
 // Compiling daslib/debug installs the debug agent on its own thread (dap), whose

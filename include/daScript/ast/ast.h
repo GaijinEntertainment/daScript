@@ -1132,6 +1132,7 @@ namespace das
     public:
         Module ( const string & n = "" );
         void promoteToBuiltin(const FileAccessPtr & access, const string & requireName = string());
+        void freeze();
         virtual ~Module();
         virtual void addPrerequisits ( ModuleLibrary & ) const {}
         virtual ModuleAotType aotRequire ( TextWriter & ) const { return ModuleAotType::no_aot; }
