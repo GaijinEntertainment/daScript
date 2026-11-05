@@ -2320,6 +2320,13 @@ namespace das {
         return Visitor::visit(expr);
     }
     ExpressionPtr InferTypes::visit(ExprTypeInfo *expr) {
+        auto res = foldTypeInfo(expr);
+        if (res && res != expr && res->rtti_isConstant() && !res->type) {
+            return res->visit(*this);
+        }
+        return res;
+    }
+    ExpressionPtr InferTypes::foldTypeInfo(ExprTypeInfo *expr) {
         expr->macro = nullptr;
         if (expr->typeexpr && expr->typeexpr->isExprType()) {
             return Visitor::visit(expr);
@@ -4979,11 +4986,11 @@ namespace das {
                         dropped->visit(mark);
                     }
                 }
-                if (condR) {
-                    return expr->if_true;
-                } else {
-                    return expr->if_false;
+                ExpressionPtr survivor = condR ? expr->if_true : expr->if_false;
+                if (expr->isStatic && survivor) {
+                    return survivor->visit(*this);
                 }
+                return survivor;
             } else if (expr->isStatic) {
                 error("static_if must resolve to constant", "", "",
                       expr->at, CompilationError::invalid_static_if_condition);

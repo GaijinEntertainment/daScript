@@ -362,7 +362,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 243;   // 243: a dead static_if arm marks the lets of its enclosing blocks
+            return 244;   // 244: a folded static_if arm and typeinfo constant are inferred in the same pass
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
