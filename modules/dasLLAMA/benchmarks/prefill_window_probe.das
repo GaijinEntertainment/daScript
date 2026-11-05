@@ -49,6 +49,8 @@ struct Args {
     kprof : string = ""
     @clarg_doc = "kernel rows to print per profiled window (default 24)"
     top : int = 24
+    @clarg_doc = "per-kernel profile of this many decode steps after the decode row, GPU ms a step (default 0: none)"
+    dec_kprof : int = 0
     @clarg_doc = "the routed block's gathered-route knee in tokens (default -1: the box profile's)"
     gemv_max : int = -1
     @clarg_doc = "an interleaved A/B over every window size, one process: `knee` = the gathered route (knee 512) against the tiles (knee 0), `tail` = the K-quant GEMV-tail peel on against off, `devw` = the dev-W route on against off (the K-quant sites' scratch f16 panels against their own bytes), `split` = the short window's split-K tiles on against off, `split16` = the 16-row split stamps against the 32-row ones; reps a window per arm, alternating"
@@ -93,6 +95,28 @@ def private kernel_profile(m : Model; var s : Session; pool : array<int64>; var 
         }
         sort(rows) <| cmp_by(-_.ms)
         print("\n--- per-kernel profile, npos={n}: {length(rows)} distinct dispatch shapes, {total} ms summed (each node alone)\n")
+        for (i in range(min(top, length(rows)))) {
+            print("{rows[i].ms}  {rows[i].name}\n")
+        }
+    }
+}
+
+//! `n` decode steps off the pool at `cursor` with every captured node timed alone, the top rows printed as GPU ms a step
+def private decode_kernel_profile(m : Model; var s : Session; pool : array<int64>; cursor, n, top : int) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        metal_kernel_profile(true)
+        for (i in range(n)) {
+            eval(m, s, [pool[cursor + i]])
+        }
+        var inscope prof <- metal_kernel_profile_ms()
+        metal_kernel_profile(false)
+        var inscope rows <- [for (k, v in keys(prof), values(prof)); (name = k, ms = v / double(n))]
+        var total = 0.0lf
+        for (r in rows) {
+            total += r.ms
+        }
+        sort(rows) <| cmp_by(-_.ms)
+        print("\n--- per-kernel decode profile, {n} steps from pos {s.n_past - int64(n)}: {length(rows)} distinct dispatch shapes, {total} ms a step summed (each node alone)\n")
         for (i in range(min(top, length(rows)))) {
             print("{rows[i].ms}  {rows[i].name}\n")
         }
@@ -148,7 +172,7 @@ def private sweep(a : Args) : int {   // nolint:STYLE038 — one flat sweep: the
         with_dasllama_jobque() {   // nolint:STYLE037,LINT019 — the sweep's one block: the ladder and its A/B arms
             var m <- load_model(a.model, QuantMode.q8)
             var s <- create_session(m)
-            let pool <- token_pool(m, a.cold ? widest + 16 : a.prefix + 6000)   //! the decode row reads twelve tokens past the last window
+            let pool <- token_pool(m, (a.cold ? widest + 16 : a.prefix + 6000) + a.dec_kprof)   //! the decode row reads twelve tokens past the last window, the decode profile its steps past them
             print("model {m.config.dim}d x {m.config.n_layers}L vocab {m.config.vocab_size}; metal mode {get_metal_mode()}; gathered-route knee {pf_moe_gemv_knee()} tokens\n")
             if (!a.cold) {
                 var prefix <- [for (i in range(a.prefix)); pool[i]]
@@ -259,6 +283,9 @@ def private sweep(a : Args) : int {   // nolint:STYLE038 — one flat sweep: the
                 }
             }
             decode_reference(m, s, pool, cursor)
+            if (a.dec_kprof > 0) {
+                decode_kernel_profile(m, s, pool, cursor + 12, a.dec_kprof, a.top)
+            }
             delete s
             delete m
         }
