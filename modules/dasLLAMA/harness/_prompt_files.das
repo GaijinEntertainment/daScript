@@ -1,0 +1,28 @@
+options gen2
+options indenting = 4
+
+module _prompt_files shared public
+
+//! The harness's comma lists of numbers, inline or a file's, and its files of lines.
+
+require daslib/fio
+require daslib/strings_convert   // try_to_int64: a part that is not a number is dropped, never a 0
+require ../../../utils/common/text_lines.das   // split_trimmed, non_empty_lines
+
+//! the numbers of a comma list, each part stripped; an empty part or one that is not a number is dropped
+def id_list(s : string) : array<int64> {
+    var out : array<int64>
+    for (t in split_trimmed(s, ",")) {
+        let n = try_to_int64(t)
+        if (is_ok(n)) {
+            out |> push(unwrap(n))
+        }
+    }
+    return <- out
+}
+
+//! the ids of a file of comma-separated token ids; an absent file holds none
+def read_ids(path : string) : array<int64> => <- id_list(fread(path))
+
+//! the non-empty lines of a text file, stripped; an absent file holds none
+def read_lines(path : string) : array<string> => <- non_empty_lines(fread(path))

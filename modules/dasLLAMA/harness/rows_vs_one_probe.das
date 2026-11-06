@@ -14,6 +14,7 @@ require ?das_metal dasllama/dasllama_metal_common   // nolint:STYLE030,LINT019 -
 require ?das_metal dasllama/dasllama_metal_decode   // nolint:STYLE030,LINT019 - set_metal_decode_concurrent, set_metal_decode_fuse, inside the das_metal half
 require ../performance/profile_common.das   // nolint:STYLE029,LINT019 - tune_gate, inside the das_metal half
 require _parity_dump   // ParityDump: an arm's rows to a file and back
+require _prompt_files   // read_ids
 require ../tests/_compares.das   // logits_maxdiff, logits_of, top2_margin
 require ../tests/_model_tier.das   // live_maxabs: a row's scale without the suppressed ids
 require daslib/clargs
@@ -112,21 +113,6 @@ def private attach_forced(layers : array<int64>) {
 
 //! the trunk layers the attached drafter captures
 def private drafter_layers(c : Config) : array<int64> => <- [for (l in range64(c.n_layers + 1l)); l; where mtp_block_layer_slot(l) >= 0l]
-
-def private read_ids(path : string) : array<int64> {
-    var ids : array<int64>
-    fopen(path, "rb") $(f) {
-        if (f != null) {
-            for (tok in split(fread(f), ",")) {
-                let t = strip(tok)
-                if (!empty(t)) {
-                    ids |> push(to_int64(t, false))
-                }
-            }
-        }
-    }
-    return <- ids
-}
 
 def private shown_piece(m : Model; id : int64) : string => replace(piece(m, id), "\n", "\\n")
 

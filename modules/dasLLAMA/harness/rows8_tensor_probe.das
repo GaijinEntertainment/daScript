@@ -15,19 +15,9 @@ require ?das_metal das_metal
 require dasllama/dasllama_metal_common
 require dasllama/dasllama_env
 
-def private read_msl(path : string) : string {
-    var src = ""
-    fopen(path, "rb") $(f) {
-        if (f != null) {
-            src = fread(f)
-        }
-    }
-    return src
-}
-
 def private dump(dev : MetalDevice?; queue : MetalCommandQueue?; entry : string) {
     var err = ""
-    var pso = pso_from_source(dev, read_msl("modules/dasLLAMA/harness/rows8_tensor_probe.metal"), entry, false, err)
+    var pso = pso_from_source(dev, fread("modules/dasLLAMA/harness/rows8_tensor_probe.metal"), entry, false, err)
     if (pso == null) {
         print("{entry}: pso - {err}\n")
         return

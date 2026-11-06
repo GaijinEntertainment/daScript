@@ -13,6 +13,7 @@ require ?das_metal dasllama/dasllama_metal_kernels   // nolint:STYLE030,LINT019 
 require ?das_metal dasllama/dasllama_metal_dflash   // nolint:STYLE030,LINT019 - the drafter's device pass registers at init
 require ?das_metal dasllama/dasllama_metal_common   // nolint:STYLE030,LINT019 - set_metal_decode_speculate, inside the das_metal half
 require ../performance/profile_common.das   // nolint:STYLE029,LINT019 - tune_gate, inside the das_metal half
+require _prompt_files   // read_ids, read_lines
 require daslib/clargs
 require daslib/fio
 require math
@@ -166,51 +167,12 @@ def private arm_mode(a : Args) : bool {
 //! the decode rate of `n` ids over `us` microseconds
 def private tok_per_s(n, us : int64) : double => us > 0l ? double(n) * 1.0e6lf / double(us) : 0.0lf
 
-//! a prompt file of comma-separated token ids (the walks echo the prompt from its second token, so none is lost)
-def private read_prompt_ids(path : string) : array<int64> {
-    var ids : array<int64>
-    fopen(path, "rb") $(f) {
-        if (f != null) {
-            for (tok in split(fread(f), ",")) {
-                let t = strip(tok)
-                if (!empty(t)) {
-                    ids |> push(to_int64(t, false))
-                }
-            }
-        }
-    }
-    return <- ids
-}
-
 def private argmax_row(v : array<float>) : int64 => parallel_argmax(v, long_length(v))
-
-//! the non-empty lines of a text file, stripped
-def private read_lines(path : string) : array<string> {
-    var lines : array<string>
-    fopen(path, "rb") $(f) {
-        if (f != null) {
-            for (l in split(fread(f), "\n")) {
-                let t = strip(l)
-                if (!empty(t)) {
-                    lines |> push(t)
-                }
-            }
-        }
-    }
-    return <- lines
-}
 
 //! the context every prompt carries ahead of it: --context-ids, else the first --context-tokens tokens of --context-text
 def private context_of(a : Args; m : Model) : array<int64> {
-    return <- read_prompt_ids(a.context_ids) if (!empty(a.context_ids))
-    var text = ""
-    if (!empty(a.context_text)) {
-        fopen(a.context_text, "rb") $(f) {
-            if (f != null) {
-                text = fread(f)
-            }
-        }
-    }
+    return <- read_ids(a.context_ids) if (!empty(a.context_ids))
+    let text = empty(a.context_text) ? "" : fread(a.context_text)
     var ids <- empty(text) ? array<int64>() : encode(m, text, false)
     if (long_length(ids) > int64(a.context_tokens)) {
         ids |> resize(a.context_tokens)
@@ -373,7 +335,7 @@ def private walk_both(a : Args; m : Model) : int {
     var inscope ctx <- context_of(a, m)
     return walk_pool(a, m, ctx) if (!empty(a.prompts))
     var prompt := ctx
-    var body <- empty(a.prompt_ids) ? encode(m, PROMPT, true) : read_prompt_ids(a.prompt_ids)
+    var body <- empty(a.prompt_ids) ? encode(m, PROMPT, true) : read_ids(a.prompt_ids)
     prompt |> push_from(body)
     let rc = walk_one(a, m, prompt)
     delete body
@@ -437,7 +399,7 @@ def private run(a : Args) : int {
     return rc
 }
 
-[export]
+[export, cold_path]
 def main : int {
     var parsed <- parse_args(type<Args>)
     if (parsed |> is_err) {

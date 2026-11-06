@@ -9,6 +9,7 @@ module _race_fixture shared public
 //! tally that decides the exit code.
 
 require math
+require daslib/strings_boost
 require ../tests/_compares.das   // nan_fill: the suites' NaN sentinel, an element the walk leaves reading outside every bound
 require _row_stats   // spread_of: the row statistic the served bench shares
 
@@ -31,6 +32,22 @@ def race_fill(count, salt : int; amp, bias : float; stir : uint = 0u) : array<fl
         xa[i] = (float(int((st >> 9u) & 0xffffu)) / 65536.0 - 0.5) * amp + bias
     }
     return <- xa
+}
+
+//! `s` stepped by the 1664525 / 1013904223 LCG; answers its top 24 bits
+def race_lcg(var s : uint&) : uint {
+    s = s * 1664525u + 1013904223u
+    return s >> 8u
+}
+
+//! whether `name` races under the comma list `list` (an arms or shapes knob): a listed word equal to it, or with `within`
+//! a listed word inside it; an empty list races every name
+def arm_wanted(list : string; name : string; within : bool = false) : bool {
+    return true if (empty(list))
+    for (w in split(list, ",")) {
+        return true if (within ? find(name, w) >= 0 : w == name)
+    }
+    return false
 }
 
 //! `y` refilled with the NaN sentinel before an arm's walk

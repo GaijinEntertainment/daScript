@@ -8,12 +8,12 @@ options _dasllama_internal = true
 // model run filled - the engine's own generated kernels. Light on purpose: no engine kernel module, so an edit to the
 // .metal reruns in seconds. DASLLAMA_ROWS8_ARMS (comma list of arm names) and DASLLAMA_ROWS8_SHAPES (comma list of tag words)
 // narrow a run; DASLLAMA_ROWS8_TG=1 races the in-threadgroup K split arms against the split-K form and its reduce.
+// A timed figure drops warmup chains until 150 ms of them have run (at most 256) and is the best of the seven chains after
+// them; a TG-mode row is the mean and cv of DASLLAMA_ROWS8_ROUNDS such figures, refused where a chain failed.
 //
 //   bin/daslang -jit modules/dasLLAMA/harness/rows8_mt_race.das
 
 require daslib/fio
-require daslib/strings_boost
-require daslib/strings_convert
 require daslib/math_bits
 require math
 require metal/das_metal_boost
@@ -21,7 +21,11 @@ require ?das_metal das_metal
 require dasllama/dasllama_metal_common
 require dasllama/dasllama_env
 require dasllama/dasllama_kqformat
+require dasllama/dasllama_gemm_schema   // Q8_BLOCK_ELEMS, Q8_BLOCK_BYTES
 require dasllama/dasllama_math
+require _race_fixture   // arm_wanted
+require _metal_race_fixture   // chain_ms
+require _row_stats   // spread_of
 
 let CH = 8
 let REF_ROWS = 64
@@ -92,43 +96,20 @@ def private enc_engine(enc : MetalComputeEncoder?; pso : MetalComputePipeline?; 
     metal_dispatch_threadgroups(enc, uint3(uint(d / 64l), 1u, uint(nsk)), uint3(128u, 1u, 1u))
 }
 
-def private read_msl(path : string) : string {
-    var src = ""
-    fopen(path, "rb") $(f) {
-        if (f != null) {
-            src = fread(f)
-        }
-    }
-    return src
-}
-
-def private chain_ms(queue : MetalCommandQueue?; step : block<(enc : MetalComputeEncoder?; i : int) : void>) : double {
-    var err = ""
-    var gpu = 0.0lf
-    let ok = with_compute_encoder_timed(queue, err, gpu) $(enc) {
-        for (i in range(CH)) {
-            invoke(step, enc, i)
-            metal_memory_barrier(enc)
-        }
-    }
-    if (!ok) {
-        print("chain: {err}\n")
-    }
-    return ok ? gpu : -1.0lf
-}
-
-def private site_us(queue : MetalCommandQueue?; step : block<(enc : MetalComputeEncoder?; i : int) : void>) : double {
+//! us a site: the best of seven chains after at least 150 ms of burn; -1 where any chain failed
+def private site_best_us(queue : MetalCommandQueue?; step : block<(enc : MetalComputeEncoder?; i : int) : void>) : double {
     var burn = 0.0lf
     var rounds = 0
     while (burn < 150.0lf && rounds < 256) {
-        let ms = chain_ms(queue, step)
+        let ms = chain_ms(queue, CH, step)
         return -1.0lf if (ms < 0.0lf)
         burn += ms
         rounds++
     }
     var best = -1.0lf
     for (_r in range(7)) {
-        let ms = chain_ms(queue, step)
+        let ms = chain_ms(queue, CH, step)
+        return -1.0lf if (ms < 0.0lf)
         best = best < 0.0lf ? ms : min(best, ms)
     }
     return best * 1000.0lf / double(CH)
@@ -199,209 +180,101 @@ def private mlx_planes(dev : MetalDevice?; d, n : int64; a8 : bool) : Planes {
     return (bq = bq, bs = bs, doff = 0ul)
 }
 
-//! y[t][n] for the first REF_ROWS rows of affine planes (mlx_planes) off the plane bytes and the f16-rounded x
-def private cpu_ref_mlx(pl : Planes; xa : array<float>; n : int64; a8 : bool) : array<float> {
-    var ref : array<float>
-    ref |> resize(8 * REF_ROWS)
+//! weight (row, k) of affine planes (mlx_planes) `n` wide
+def private mlx_weight(pl : Planes; n : int64; a8 : bool; row, k : int) : float {
     let ng = int(n / 64l)
     let rowb = int(n) / (a8 ? 1 : 2)
     unsafe {
         let qs = reinterpret<uint8?>(metal_buffer_contents(pl.bq))
-        let ss = reinterpret<uint?>(metal_buffer_contents(pl.bs))
-        for (row in range(REF_ROWS)) {
-            var acc : float[8]
-            for (g in range(ng)) {
-                let p = ss[row * ng + g]
-                let s = uint_bits_to_float(p << 16u)
-                let b = uint_bits_to_float(p & 0xFFFF0000u)
-                for (e in range(64)) {
-                    let k = 64 * g + e
-                    let q = a8 ? int(qs[row * rowb + k]) : (int(qs[row * rowb + k / 2]) >> (4 * (k & 1))) & 15
-                    let w = s * float(q) + b
-                    for (t in range(8)) {
-                        acc[t] += w * float(float16(xa[t * int(n) + k]))
-                    }
-                }
-            }
-            for (t in range(8)) {
-                ref[t * REF_ROWS + row] = acc[t]
-            }
-        }
+        let p = reinterpret<uint?>(metal_buffer_contents(pl.bs))[row * ng + k / 64]
+        let s = uint_bits_to_float(p << 16u)
+        let b = uint_bits_to_float(p & 0xFFFF0000u)
+        let q = a8 ? int(qs[row * rowb + k]) : (int(qs[row * rowb + k / 2]) >> (4 * (k & 1))) & 15
+        return s * float(q) + b
     }
-    return <- ref
 }
 
-//! y[t][n] for the first REF_ROWS rows of a q8_0 blob (34-byte blocks, row-major)
-def private cpu_ref_q8(pl : Planes; xa : array<float>; n : int64) : array<float> {
-    var ref : array<float>
-    ref |> resize(8 * REF_ROWS)
-    let nkb = int(n / 32l)
+//! weight (row, k) of a q8_0 blob `n` wide (34-byte blocks, row-major)
+def private q8_weight(pl : Planes; n : int64; row, k : int) : float {
     unsafe {
-        let blob = reinterpret<uint8?>(metal_buffer_contents(pl.bq))
-        for (row in range(REF_ROWS)) {
-            var acc : float[8]
-            for (kb in range(nkb)) {
-                let bp = blob + (row * nkb + kb) * 34
-                let dd = float(reinterpret<float16?>(bp)[0])
-                for (l in range(32)) {
-                    let q = float(reinterpret<int8?>(bp + 2)[l])
-                    let k = 32 * kb + l
-                    for (t in range(8)) {
-                        acc[t] += dd * q * float(float16(xa[t * int(n) + k]))
-                    }
-                }
-            }
-            for (t in range(8)) {
-                ref[t * REF_ROWS + row] = acc[t]
-            }
-        }
+        let qe = int(Q8_BLOCK_ELEMS)
+        let bp = reinterpret<uint8?>(metal_buffer_contents(pl.bq)) + (row * int(n / Q8_BLOCK_ELEMS) + k / qe) * int(Q8_BLOCK_BYTES)
+        let dd = float(reinterpret<float16?>(bp)[0])
+        return dd * float(reinterpret<int8?>(bp + 2)[k % qe])
     }
-    return <- ref
 }
 
-//! deterministic q8_0 blob, 34-byte blocks: int8 codes of both signs, pow2 f16 scales
+//! the races' deterministic q8_0 blob (race_q8_blob) on the device, one buffer as both planes
 def private q8_blob(dev : MetalDevice?; nblk : int) : Planes {
-    var blob : array<int8>
-    blob |> resize(nblk * 34)
-    for (blk in range(nblk)) {
-        for (k in range(32)) {
-            blob[blk * 34 + 2 + k] = int8((blk * 7 + k * 3) % 19 - 9)
-        }
-    }
-    unsafe {
-        var p8 = addr(blob[0])
-        for (blk in range(nblk)) {
-            var ph = reinterpret<float16?>(p8 + blk * 34)
-            ph[0] = float16(0.5 * float(1 << (blk % 3)))
-        }
-    }
-    let b = metal_buffer_from(dev, uint64(nblk * 34), unsafe(addr<void?>(blob[0])))
+    var blob <- race_q8_blob(nblk)
+    let b = metal_buffer_from(dev, uint64(nblk) * uint64(Q8_BLOCK_BYTES), unsafe(addr<void?>(blob[0])))
+    delete blob
     return (bq = b, bs = b, doff = 0ul)
 }
 
-//! deterministic Q6_K planes in the engine's split form: 192-byte quant blocks of pseudo-random bits, the scale plane's
-//! 16-byte strips of signed int8 scales varying by block and slot, then the f16 d tail (pow2, varying by block)
-def private k6_planes(dev : MetalDevice?; nblk : int) : Planes {
+//! deterministic split planes in the engine's form: quant blocks of pseudo-random bits, 16-byte scale strips of signed int8
+//! scales varying by block and slot (zero past `nscales`), then the f16 d tail (`dscale` times a power of two)
+def private split_planes(dev : MetalDevice?; nblk, qbytes, nscales : int; dscale : float) : Planes {
+    let qwords = nblk * qbytes / 4
     var qplane : array<uint>
-    qplane |> reserve_resize(nblk * 48)
-    for (i in range(nblk * 48)) {
+    qplane |> reserve_resize(qwords)
+    for (i in range(qwords)) {
         qplane[i] = uint(i) * 2654435761u
     }
     var splane : array<int8>
     splane |> reserve_resize(nblk * 18)
     for (blk in range(nblk)) {
         for (j in range(16)) {
-            splane[blk * 16 + j] = int8((blk * 5 + j * 3) % 23 - 11)
+            splane[blk * 16 + j] = int8(j < nscales ? (blk * 5 + j * 3) % 23 - 11 : 0)
         }
     }
     unsafe {
         var ph = addr<float16?>(splane[nblk * 16])
         for (blk in range(nblk)) {
-            ph[blk] = float16(0.125 * float(1 << (blk % 3)))
+            ph[blk] = float16(dscale * float(1 << (blk % 3)))
         }
     }
-    let bq = metal_buffer_from(dev, uint64(nblk) * 192ul, unsafe(addr<void?>(qplane[0])))
+    let bq = metal_buffer_from(dev, uint64(nblk) * uint64(qbytes), unsafe(addr<void?>(qplane[0])))
     let bs = metal_buffer_from(dev, uint64(nblk) * 18ul, unsafe(addr<void?>(splane[0])))
     delete qplane
     delete splane
     return (bq = bq, bs = bs, doff = uint64(nblk) * 16ul)
 }
 
-//! y[t][n] for the first REF_ROWS rows of Q6_K planes (k6_planes) off the plane bytes and the f16-rounded x
-def private cpu_ref_k6(pl : Planes; xa : array<float>; n, d : int64) : array<float> {
-    var ref : array<float>
-    ref |> resize(8 * REF_ROWS)
-    let nsb = int(n / 256l)
+//! weight (row, k) of Q6_K split planes (split_planes) `n` wide over `d` rows
+def private k6_weight(pl : Planes; n, d : int64; row, k : int) : float {
+    let sbe = int(KQ_SB_ELEMS)
+    let nsb = int(n / KQ_SB_ELEMS)
+    let blk = row * nsb + k / sbe
+    let kk = k % sbe
+    let h = kk / 128
+    let g = (kk % 128) / 32
+    let l = kk % 32
     unsafe {
-        let qs = reinterpret<uint8?>(metal_buffer_contents(pl.bq))
         let ss = reinterpret<int8?>(metal_buffer_contents(pl.bs))
-        let dt = reinterpret<float16?>(ss + d * int64(nsb) * 16l)
-        for (row in range(REF_ROWS)) {
-            var acc : float[8]
-            for (sb in range(nsb)) {
-                let blk = row * nsb + sb
-                let dd = float(dt[blk])
-                let ql = qs + blk * 192
-                let qh = ql + 128
-                for (k in range(256)) {
-                    let h = k / 128
-                    let g = (k % 128) / 32
-                    let l = k % 32
-                    let lo = (int(ql[64 * h + 32 * (g & 1) + l]) >> (4 * (g >> 1))) & 15
-                    let hb = (int(qh[32 * h + l]) >> (2 * g)) & 3
-                    let w = dd * float(ss[blk * 16 + 8 * h + 2 * g + l / 16]) * float((lo | (hb << 4)) - 32)
-                    for (t in range(8)) {
-                        acc[t] += w * float(float16(xa[t * int(n) + 256 * sb + k]))
-                    }
-                }
-            }
-            for (t in range(8)) {
-                ref[t * REF_ROWS + row] = acc[t]
-            }
-        }
+        let dd = float(reinterpret<float16?>(ss + d * int64(nsb) * 16l)[blk])
+        let ql = reinterpret<uint8?>(metal_buffer_contents(pl.bq)) + blk * int(K6_QSB)
+        let qh = ql + 128
+        let lo = (int(ql[64 * h + 32 * (g & 1) + l]) >> (4 * (g >> 1))) & 15
+        let hb = (int(qh[32 * h + l]) >> (2 * g)) & 3
+        return dd * float(ss[blk * 16 + 8 * h + 2 * g + l / 16]) * float((lo | (hb << 4)) - 32)
     }
-    return <- ref
 }
 
-//! deterministic IQ4_XS planes in the engine's split form: 128-byte quant blocks of pseudo-random bits, the scale plane's
-//! 16-byte strips (the eight signed sub-scales ls - 32 in bytes 0..7, varying by block and slot), then the f16 d tail
-def private iq4_planes(dev : MetalDevice?; nblk : int) : Planes {
-    var qplane : array<uint>
-    qplane |> reserve_resize(nblk * 32)
-    for (i in range(nblk * 32)) {
-        qplane[i] = uint(i) * 2654435761u
-    }
-    var splane : array<int8>
-    splane |> reserve_resize(nblk * 18)
-    for (blk in range(nblk)) {
-        for (j in range(16)) {
-            splane[blk * 16 + j] = int8(j < 8 ? (blk * 5 + j * 3) % 23 - 11 : 0)
-        }
-    }
-    unsafe {
-        var ph = addr<float16?>(splane[nblk * 16])
-        for (blk in range(nblk)) {
-            ph[blk] = float16(0.0078125 * float(1 << (blk % 3)))
-        }
-    }
-    let bq = metal_buffer_from(dev, uint64(nblk) * 128ul, unsafe(addr<void?>(qplane[0])))
-    let bs = metal_buffer_from(dev, uint64(nblk) * 18ul, unsafe(addr<void?>(splane[0])))
-    delete qplane
-    delete splane
-    return (bq = bq, bs = bs, doff = uint64(nblk) * 16ul)
-}
-
-//! y[t][n] for the first REF_ROWS rows of IQ4_XS planes (iq4_planes) off the plane bytes and the f16-rounded x
-def private cpu_ref_iq4(pl : Planes; xa : array<float>; n, d : int64) : array<float> {
-    var ref : array<float>
-    ref |> resize(8 * REF_ROWS)
-    let nsb = int(n / 256l)
+//! weight (row, k) of IQ4_XS split planes (split_planes) `n` wide over `d` rows
+def private iq4_weight(pl : Planes; n, d : int64; row, k : int) : float {
+    let sbe = int(KQ_SB_ELEMS)
+    let nsb = int(n / KQ_SB_ELEMS)
+    let blk = row * nsb + k / sbe
+    let js = (k % sbe) / 32
+    let i = k % 32
     let lut = iq4nl_lut()
     unsafe {
-        let qs = reinterpret<uint8?>(metal_buffer_contents(pl.bq))
         let ss = reinterpret<int8?>(metal_buffer_contents(pl.bs))
-        let dt = reinterpret<float16?>(ss + d * int64(nsb) * 16l)
-        for (row in range(REF_ROWS)) {
-            var acc : float[8]
-            for (sb in range(nsb)) {
-                let blk = row * nsb + sb
-                let dd = float(dt[blk])
-                for (k in range(256)) {
-                    let js = k / 32
-                    let i = k % 32
-                    let q = (int(qs[blk * 128 + 16 * js + (i & 15)]) >> (4 * (i >> 4))) & 15
-                    let w = dd * float(ss[blk * 16 + js]) * float(lut[q])
-                    for (t in range(8)) {
-                        acc[t] += w * float(float16(xa[t * int(n) + 256 * sb + k]))
-                    }
-                }
-            }
-            for (t in range(8)) {
-                ref[t * REF_ROWS + row] = acc[t]
-            }
-        }
+        let dd = float(reinterpret<float16?>(ss + d * int64(nsb) * 16l)[blk])
+        let q = (int(reinterpret<uint8?>(metal_buffer_contents(pl.bq))[blk * int(IQ4XS_QSB) + 16 * js + (i & 15)]) >> (4 * (i >> 4))) & 15
+        return dd * float(ss[blk * 16 + js]) * float(lut[q])
     }
-    return <- ref
 }
 
 //! q4_K sc / min of sub-block js from the 12 kmask bytes
@@ -417,41 +290,38 @@ def private kmask(q : uint8?; js : int; var sc, mn : int&) {
     }
 }
 
-//! y[t][n] for the first REF_ROWS rows, off the plane bytes and the f16-rounded x
-def private cpu_ref(pl : Planes; xa : array<float>; n : int64) : array<float> {
+//! weight (row, k) of q4_K compact planes (race_kq_planes) `n` wide
+def private k4_weight(pl : Planes; n : int64; row, k : int) : float {
+    let sbe = int(KQ_SB_ELEMS)
+    let blk = row * int(n / KQ_SB_ELEMS) + k / sbe
+    let s = (k % sbe) / 32
+    let l = k % 32
+    unsafe {
+        let sp = reinterpret<uint8?>(metal_buffer_contents(pl.bs)) + blk * 16
+        let dd = float(reinterpret<float16?>(sp)[0])
+        let dm = float(reinterpret<float16?>(sp)[1])
+        var sc = 0
+        var mn = 0
+        kmask(sp + 4, s, sc, mn)
+        let q = (int((reinterpret<uint8?>(metal_buffer_contents(pl.bq)) + blk * int(K4_QSB))[32 * (s / 2) + l]) >> (4 * (s & 1))) & 15
+        return (dd * float(sc)) * float(q) - dm * float(mn)
+    }
+}
+
+//! y[t][n] for the first REF_ROWS rows: `weight(row, k)` against the f16-rounded x, k ascending
+def private cpu_ref(xa : array<float>; n : int; weight : block<(row, k : int) : float>) : array<float> {
     var ref : array<float>
     ref |> resize(8 * REF_ROWS)
-    let nsb = int(n / 256l)
-    unsafe {
-        let qs = reinterpret<uint8?>(metal_buffer_contents(pl.bq))
-        let ss = reinterpret<uint8?>(metal_buffer_contents(pl.bs))
-        for (row in range(REF_ROWS)) {
-            var acc : float[8]
-            for (sb in range(nsb)) {
-                let blk = row * nsb + sb
-                let sp = ss + blk * 16
-                let dd = float(reinterpret<float16?>(sp)[0])
-                let dm = float(reinterpret<float16?>(sp)[1])
-                let qp = qs + blk * 128
-                for (s in range(8)) {
-                    var sc = 0
-                    var mn = 0
-                    kmask(sp + 4, s, sc, mn)
-                    let dsc = dd * float(sc)
-                    let dmn = dm * float(mn)
-                    for (l in range(32)) {
-                        let q = (int(qp[32 * (s / 2) + l]) >> (4 * (s & 1))) & 15
-                        let w = dsc * float(q) - dmn
-                        let k = 256 * sb + 32 * s + l
-                        for (t in range(8)) {
-                            acc[t] += w * float(float16(xa[t * int(n) + k]))
-                        }
-                    }
-                }
-            }
+    for (row in range(REF_ROWS)) {
+        var acc : float[8]
+        for (k in range(n)) {
+            let w = invoke(weight, row, k)
             for (t in range(8)) {
-                ref[t * REF_ROWS + row] = acc[t]
+                acc[t] += w * float(float16(xa[t * n + k]))
             }
+        }
+        for (t in range(8)) {
+            ref[t * REF_ROWS + row] = acc[t]
         }
     }
     return <- ref
@@ -597,29 +467,19 @@ struct ShapeBufs {
     bd : MetalBuffer?
 }
 
-def private wanted(list : string; name : string) : bool {
-    return true if (empty(list))
-    for (w in split(list, ",")) {
-        return true if (w == name)
-    }
-    return false
-}
-
-def private shape_wanted(list : string; tag : string) : bool {
-    return true if (empty(list))
-    for (w in split(list, ",")) {
-        return true if (find(tag, w) >= 0)
-    }
-    return false
-}
 
 //! the shape's CPU reference on the first rows
 def private cpu_ref_of(sh : Shape; pl : Planes; xa : array<float>) : array<float> {
-    return <- cpu_ref_q8(pl, xa, sh.n) if (sh.fmt == Fmt.q8)
-    return <- cpu_ref_k6(pl, xa, sh.n, sh.d) if (sh.fmt == Fmt.k6)
-    return <- cpu_ref_iq4(pl, xa, sh.n, sh.d) if (sh.fmt == Fmt.iq4xs)
-    return <- cpu_ref(pl, xa, sh.n) if (sh.fmt == Fmt.k4)
-    return <- cpu_ref_mlx(pl, xa, sh.n, sh.fmt == Fmt.mlx8b)
+    let n = sh.n
+    let d = sh.d
+    let a8 = sh.fmt == Fmt.mlx8b
+    return <- cpu_ref(xa, int(n)) $(row, k) {
+        return q8_weight(pl, n, row, k) if (sh.fmt == Fmt.q8)
+        return k6_weight(pl, n, d, row, k) if (sh.fmt == Fmt.k6)
+        return iq4_weight(pl, n, d, row, k) if (sh.fmt == Fmt.iq4xs)
+        return k4_weight(pl, n, row, k) if (sh.fmt == Fmt.k4)
+        return mlx_weight(pl, n, a8, row, k)
+    }
 }
 
 //! every kernel at one way against the CPU reference on the first rows
@@ -631,7 +491,7 @@ def private check_shape(dev : MetalDevice?; queue : MetalCommandQueue?; r : Race
     var inscope ref <- cpu_ref_of(sh, pl, xa)
     for (v, vi in r.variants, range(length(r.variants))) {
         let ps = r.psos[NFMT * vi + int(sh.fmt)]
-        continue if (ps == null || v.diag || !wanted(arms, v.name))
+        continue if (ps == null || v.diag || !arm_wanted(arms, v.name))
         poison(sbf.y, d)
         var gms = 0.0lf
         with_compute_encoder_timed(queue, err, gms) $(enc) {
@@ -672,11 +532,11 @@ def private make_bufs(dev : MetalDevice?; sh : Shape; xa : array<float>) : Shape
     sbf.ring |> reserve(copies)
     for (_c in range(copies)) {
         if (sh.fmt == Fmt.q8) {
-            sbf.ring |> push(q8_blob(dev, int(d * n / 32l)))
+            sbf.ring |> push(q8_blob(dev, int(d * n / Q8_BLOCK_ELEMS)))
         } elif (sh.fmt == Fmt.k6) {
-            sbf.ring |> push(k6_planes(dev, int(d * n / 256l)))
+            sbf.ring |> push(split_planes(dev, int(d * n / KQ_SB_ELEMS), int(K6_QSB), 16, 0.125))
         } elif (sh.fmt == Fmt.iq4xs) {
-            sbf.ring |> push(iq4_planes(dev, int(d * n / 256l)))
+            sbf.ring |> push(split_planes(dev, int(d * n / KQ_SB_ELEMS), int(IQ4XS_QSB), 8, 0.0078125))
         } elif (sh.fmt == Fmt.mlx4b || sh.fmt == Fmt.mlx8b) {
             sbf.ring |> push(mlx_planes(dev, d, n, sh.fmt == Fmt.mlx8b))
         } else {
@@ -744,12 +604,12 @@ def private race_shape(dev : MetalDevice?; queue : MetalCommandQueue?; r : Race;
     for (round in range(2)) {
         for (v, vi in r.variants, range(length(r.variants))) {
             let ps = r.psos[NFMT * vi + int(sh.fmt)]
-            continue if (ps == null || v.one_row != (round == 0) || !wanted(arms, v.name))
+            continue if (ps == null || v.one_row != (round == 0) || !arm_wanted(arms, v.name))
             let tab = sbf.tabs[int(v.tab)]
             for (nsk in sh.ways) {
                 continue if (nsk == 0l || (v.diag && nsk != sh.ways[2]) || (v.one_row && nsk != sh.ways[0]))
                 var bnsk = race_uniform_u32(dev, uint(nsk))
-                let us = site_us(queue) $(enc; i) {
+                let us = site_best_us(queue) $(enc; i) {
                     enc_mt(enc, ps, sbf.ring[i % nring], tab, sbf.part, sbf.bk, sbf.bd, bnsk, sbf.bxs, d, nsk, v.one_row, v.rs, v.ks)
                 }
                 if (v.one_row && ref_us <= 0.0lf) {
@@ -763,7 +623,7 @@ def private race_shape(dev : MetalDevice?; queue : MetalCommandQueue?; r : Race;
     let peng = sh.fmt == Fmt.q8 ? r.p_eng_q8 : (sh.fmt == Fmt.k4 ? r.p_eng_k4 : null)
     if (peng != null) {
         for (nsk in [8l, 16l]) {
-            print_arm("engine@{nsk}", site_us(queue) $(enc; i) {
+            print_arm("engine@{nsk}", site_best_us(queue) $(enc; i) {
                 enc_engine(enc, peng, sbf.ring[i % nring], sbf.tabs[int(XTable.kslot)], sbf.part, sbf.bk, sbf.bd, sbf.bxs, d, nsk)
             }, bytes, ref_us)
         }
@@ -790,14 +650,14 @@ def private race_shape_tg(dev : MetalDevice?; queue : MetalCommandQueue?; r : Ra
     var arms_at : array<tuple<vi : int; nsk : int64>>
     arms_at |> reserve(2 * length(r.variants))
     for (v, vi in r.variants, range(length(r.variants))) {
-        continue if (r.psos[NFMT * vi + int(sh.fmt)] == null || !(v.one_row || v.name == shipped || v.ks > 1) || !wanted(arms, v.name))
+        continue if (r.psos[NFMT * vi + int(sh.fmt)] == null || !(v.one_row || v.name == shipped || v.ks > 1) || !arm_wanted(arms, v.name))
         var inscope outer <- v.one_row ? [1l] : (v.ks > 1 ? [1l, 2l] : [ways])
         for (nsk in outer) {
             arms_at |> push((vi = vi, nsk = nsk))
         }
     }
     let rounds = max(1, g_env_harness.rows8_rounds)
-    var times : array<array<double>>
+    var times : array<array<float>>
     times |> resize(length(arms_at))
     for (tv in times) {
         tv |> resize(rounds)
@@ -807,13 +667,13 @@ def private race_shape_tg(dev : MetalDevice?; queue : MetalCommandQueue?; r : Ra
             let v = r.variants[a.vi]
             let ps = r.psos[NFMT * a.vi + int(sh.fmt)]
             var bnsk = race_uniform_u32(dev, uint(a.nsk))
-            times[ai][round] = site_us(queue) $(enc; i) {
+            times[ai][round] = float(site_best_us(queue) $(enc; i) {
                 enc_mt(enc, ps, sbf.ring[i % nring], sbf.tabs[int(v.tab)], a.nsk > 1l ? part : sbf.y, sbf.bk, sbf.bd, bnsk, sbf.bxs, d, a.nsk, v.one_row, v.rs, v.ks)
                 if (a.nsk > 1l) {
                     metal_memory_barrier(enc)
                     enc_reduce(enc, p_red, part, sbf.y, btot, bnsk, d)
                 }
-            }
+            })
             metal_release(bnsk)
         }
     }
@@ -821,16 +681,13 @@ def private race_shape_tg(dev : MetalDevice?; queue : MetalCommandQueue?; r : Ra
     var ship_us = 0.0lf
     for (a, ai in arms_at, range(length(arms_at))) {
         let v = r.variants[a.vi]
-        var sum = 0.0lf
-        for (us in times[ai]) {
-            sum += us
+        let s = spread_of(times[ai])
+        if (s.best < 0.0) {   //! a round's figure is negative where one of its chains failed
+            refused_row("  {v.name}@{a.nsk}")
+            continue
         }
-        let mean = sum / double(rounds)
-        var dev2 = 0.0lf
-        for (us in times[ai]) {
-            dev2 += (us - mean) * (us - mean)
-        }
-        let cv = mean > 0.0lf ? sqrt(dev2 / double(rounds)) / mean * 100.0lf : 0.0lf
+        let mean = double(s.mean)
+        let cv = mean > 0.0lf ? double(s.cv) : 0.0lf
         if (v.one_row) {
             ref_us = mean
         } elif (v.name == shipped) {
@@ -939,7 +796,7 @@ def main() : int {
         var dev = metal_create_system_default_device()
         var queue = metal_new_command_queue(dev)
         var err = ""
-        let src = read_msl("modules/dasLLAMA/harness/rows8_mt.metal")
+        let src = fread("modules/dasLLAMA/harness/rows8_mt.metal")
         if (empty(src)) {
             print("rows8_mt_race: run from the repo root\n")
             return 1
@@ -949,8 +806,8 @@ def main() : int {
         r.variants <- race_variants()
         //! the engine arm: the sources the engine wrote under DASLLAMA_METAL_MSL_DUMP (a model run with it set), raced as they are
         let dump = g_env_metal.msl_dump
-        let eng_k4 = empty(dump) ? "" : read_msl(path_join(dump, "MetalRows8K4_metal_rows8.metal"))
-        let eng_q8 = empty(dump) ? "" : read_msl(path_join(dump, "MetalRows8Q8_metal_rows8.metal"))
+        let eng_k4 = empty(dump) ? "" : fread(path_join(dump, "MetalRows8K4_metal_rows8.metal"))
+        let eng_q8 = empty(dump) ? "" : fread(path_join(dump, "MetalRows8Q8_metal_rows8.metal"))
         if (!empty(eng_k4)) {
             r.p_eng_k4 = pso_from_source(dev, eng_k4, "MetalRows8K4_metal_rows8", true, err)
         }
@@ -964,8 +821,8 @@ def main() : int {
         r.psos |> reserve(NFMT * length(r.variants))
         for (v in r.variants) {
             for (entry in [v.entry, v.entry_q8, v.entry_k6, v.entry_mlx4, v.entry_mlx8, v.entry_iq4]) {
-                var pso = empty(entry) || !wanted(arms, v.name) ? null : pso_from_source(dev, v.flags + src, entry, true, err)
-                if (pso == null && !empty(entry) && wanted(arms, v.name)) {
+                var pso = empty(entry) || !arm_wanted(arms, v.name) ? null : pso_from_source(dev, v.flags + src, entry, true, err)
+                if (pso == null && !empty(entry) && arm_wanted(arms, v.name)) {
                     print("{v.name}: pso - {err}\n")
                     return 1
                 }
@@ -981,7 +838,7 @@ def main() : int {
             return 1
         }
         for (sh in shapes) {
-            if (!shape_wanted(tags, sh.tag)) {
+            if (!arm_wanted(tags, sh.tag, true)) {
                 continue
             } elif (!tg_mode) {
                 race_shape(dev, queue, r, sh, arms)

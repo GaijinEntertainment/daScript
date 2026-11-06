@@ -11,7 +11,7 @@ options stack = 524288
 options _dasllama_internal = true
 
 require daslib/clargs
-require dasllama/dasllama   // nolint:STYLE029,LINT019 - used only under static_if das_metal
+require dasllama/dasllama   // nolint:STYLE029,STYLE030,LINT019 - used only under static_if das_metal
 require dasllama/dasllama_common   // nolint:STYLE030,LINT019 - eval_, make_run_state, eval_segments_
 require dasllama/dasllama_math     // with_dasllama_jobque_
 require ../tests/_metal_blob_twin.das // nolint:STYLE030,LINT019 - blob_twin, used only under static_if das_metal
@@ -19,6 +19,7 @@ require ../tests/_compares.das     // nolint:STYLE030,LINT019 - logits_maxdiff
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_segment_windows, metal_prefill_shutdown
 require dastest/testing_boost
 require _window_race_fixture   // nolint:STYLE030,LINT019 - used only under static_if das_metal
+require _prompt_files   // nolint:STYLE030,LINT019 - id_list, used only under static_if das_metal
 
 [CommandLineArgs]
 struct RaceArgs {
@@ -42,8 +43,8 @@ def main : int {
         return 2
     }
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        var lens <- int_list(args.lens)
-        var streams <- int_list(args.streams)
+        var lens <- id_list(args.lens)
+        var streams <- id_list(args.streams)
         set_metal_mode(MetalMode.when_available)
         var t = new T(name = "seg_window_race")
         var tr <- blob_twin(t, args.model, 20000l)

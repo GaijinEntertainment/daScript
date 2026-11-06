@@ -6,13 +6,13 @@ options _dasllama_internal = true
 // the grouped norm, the q8 down (K 10240, 320 rows), the f32 inject rows, silu(lo / hc), the q8 up (K 320, 10240 rows) and the
 // sigmoid-gated stream mean, NL site copies of the planes so a site's bytes stream past the SLC. The raw MSL (hc_mix.metal)
 // holds the engine's one-row pair and today's eight-row chain as generated, and the raced eight-row forms; every form is
-// checked against the chain (the max difference over the max magnitude) and timed as a chain of CH sites.
+// checked against the chain (the max difference over the max magnitude) and timed as a chain of CH sites. A timed row drops
+// 40 warmup chains and reports the mean and cv of the ROUNDS chains after them; a failed chain refuses the row.
 // DASLLAMA_HC_MIX_ARMS (comma list of arm names) narrows a run.
 //
 //   bin/daslang -jit modules/dasLLAMA/harness/hc_mix_race.das
 
 require daslib/fio
-require daslib/strings_boost
 require daslib/math_bits
 require math
 require metal/das_metal_boost
@@ -20,6 +20,8 @@ require ?das_metal das_metal
 require dasllama/dasllama_metal_common
 require dasllama/dasllama_env
 require dasllama/dasllama_math
+require _race_fixture   // race_lcg, arm_wanted
+require _metal_race_fixture   // the chain clock, the bandwidth reference, the read-back compare
 
 let DIM = 2560
 let HC = 4
@@ -30,6 +32,7 @@ let NL = 12
 let CH = 12
 let ROUNDS = 5
 let EPS = 1.0e-6
+let CLOCK = RaceClock(sites = CH, rounds = ROUNDS, burn = 40)
 var g_half = 0   //! the halves a form encodes: 0 both, 1 the down half alone, 2 the up half alone (the per-half timings)
 
 struct HcMix8Args {
@@ -65,11 +68,6 @@ struct Bench {
     ka : MetalBuffer?
 }
 
-def private lcg(var s : uint&) : uint {
-    s = s * 1664525u + 1013904223u
-    return s >> 8u
-}
-
 //! NL q8 planes of `rows` x `k`, each `scale` (a power of two) times int8 codes off a hash; the plane stride rounded to 4 KiB
 def private make_q8(dev : MetalDevice?; rows, k : int; scale : float; seed : uint; var stride : uint64&) : MetalBuffer? {
     let nblk = rows * k / 32
@@ -81,10 +79,10 @@ def private make_q8(dev : MetalDevice?; rows, k : int; scale : float; seed : uin
         let base = int64(l) * int64(stride)
         for (b in range(nblk)) {
             let o = base + int64(b) * 34l
-            let sc = float16(scale * float(1 << int(lcg(h) % 3u)))
+            let sc = float16(scale * float(1 << int(race_lcg(h) % 3u)))
             *unsafe(addr<float16?>(blob[o])) = sc
             for (j in range(32)) {
-                blob[o + 2l + int64(j)] = uint8(int(lcg(h) % 255u) & 255)
+                blob[o + 2l + int64(j)] = uint8(int(race_lcg(h) % 255u) & 255)
             }
         }
     }
@@ -95,7 +93,7 @@ def private make_q8(dev : MetalDevice?; rows, k : int; scale : float; seed : uin
 
 def private f32_buf(dev : MetalDevice?; n : int; seed : uint; lo, span : float) : MetalBuffer? {
     var h = seed
-    var inscope a <- [for (_i in range(n)); lo + span * float(lcg(h) % 10007u) / 10007.0]
+    var inscope a <- [for (_i in range(n)); lo + span * float(race_lcg(h) % 10007u) / 10007.0]
     return metal_buffer_from(dev, uint64(n * 4), unsafe(addr<void?>(a[0])))
 }
 
@@ -355,83 +353,16 @@ def private enc_arm_up(enc : MetalComputeEncoder?; ap : ArmPsos; a : Arm; b : Be
     grid1(enc, DIM / (8 * a.cols), 256)
 }
 
-def private chain_ms(queue : MetalCommandQueue?; step : block<(enc : MetalComputeEncoder?; i : int) : void>) : double {
-    var err = ""
-    var gpu = 0.0lf
-    let ok = with_compute_encoder_timed(queue, err, gpu) $(enc) {
-        for (i in range(CH)) {
-            invoke(step, enc, i)
-            metal_memory_barrier(enc)
-        }
-    }
-    if (!ok) {
-        print("chain: {err}\n")
-    }
-    return ok ? gpu : -1.0lf
-}
-
 let HALF_TAG = fixed_array<string>("", " dn", " up")
 
 //! the read-bandwidth reference over one site's down plane
 def private print_bw(dev : MetalDevice?; queue : MetalCommandQueue?; b : Bench; src : string) {
-    var err = ""
-    var pbw = pso_from_source(dev, src, "bw_read", true, err)
-    var bn4 = race_uniform_u32(dev, uint(b.dstride / 16ul))
-    let tbw = site_us(queue) $(enc; i) {
-        metal_set_pipeline(enc, pbw)
-        metal_set_buffer(enc, b.down, uint64(i % NL) * b.dstride, 2)
-        metal_set_buffer(enc, b.y, 0ul, 4)
-        metal_set_buffer(enc, bn4, 0ul, 6)
-        metal_dispatch_threadgroups(enc, uint3(1024u, 1u, 1u), uint3(256u, 1u, 1u))
+    let tbw = bw_read_us(dev, queue, CLOCK, src, b.down, b.dstride, NL, b.y, 1024u)
+    if (!tbw.ok) {
+        refused_row("bw_read")
+        return
     }
     print("bw_read\t{tbw.us:7.2f} us a {int64(b.dstride) / 1024l} KB plane  {double(b.dstride) / (tbw.us * 1000.0lf):6.1f} GB/s; a site's q8 bytes {int64(b.dstride + b.ustride) / 1024l} KB\n")
-}
-
-//! us a site: the mean of ROUNDS chains after a burn, and the chains' cv
-def private site_us(queue : MetalCommandQueue?; step : block<(enc : MetalComputeEncoder?; i : int) : void>) : tuple<us : double; cv : double> {
-    for (_w in range(40)) {
-        chain_ms(queue, step)
-    }
-    var t <- [for (_r in range(ROUNDS)); chain_ms(queue, step) * 1000.0lf / double(CH)]
-    var sum = 0.0lf
-    for (v in t) {
-        sum += v
-    }
-    let mean = sum / double(ROUNDS)
-    var d2 = 0.0lf
-    for (v in t) {
-        d2 += (v - mean) * (v - mean)
-    }
-    return (us = mean, cv = sqrt(d2 / double(ROUNDS)) / mean * 100.0lf)
-}
-
-def private copy_f(by : MetalBuffer?; n : int) : array<float> {
-    var r : array<float>
-    r |> resize(n)
-    unsafe(memcpy(unsafe(addr(r[0])), metal_buffer_contents(by), uint64(n * 4)))
-    return <- r
-}
-
-//! the largest difference of `by`'s first floats from `a`, over a's largest magnitude
-def private rel_of(a : array<float>; by : MetalBuffer?) : float {
-    var maxd = 0.0
-    var maxa = 0.0
-    unsafe {
-        let p = reinterpret<float?>(metal_buffer_contents(by))
-        for (i in range(length(a))) {
-            maxd = max(maxd, abs(a[i] - p[i]))
-            maxa = max(maxa, abs(a[i]))
-        }
-    }
-    return maxd / max(maxa, 1e-30)
-}
-
-def private wanted(list : string; name : string) : bool {
-    return true if (empty(list))
-    for (w in split(list, ",")) {
-        return true if (w == name)
-    }
-    return false
 }
 
 def private arms() : array<Arm> {
@@ -484,28 +415,36 @@ def private race_bases(dev : MetalDevice?; queue : MetalCommandQueue?; p : Psos;
     with_compute_encoder_timed(queue, err, gms) $(enc) {
         enc_chain(enc, p, b, 0)
     }
-    r.xb <- copy_f(b.xb, NR * DIM)
-    r.inj <- copy_f(b.inj, NR * HC)
+    r.xb <- buf_download(b.xb, NR * DIM, type<float>)
+    r.inj <- buf_download(b.inj, NR * HC, type<float>)
     with_compute_encoder_timed(queue, err, gms) $(enc) {
         enc_one(enc, p, b, 0)
     }
     var inscope row0 <- [for (i in range(DIM)); r.xb[i]]
     var inscope inj0 <- [for (i in range(HC)); r.inj[i]]
-    r.one_xb <- copy_f(b.xb, DIM)
+    r.one_xb <- buf_download(b.xb, DIM, type<float>)
     print("one-row pair vs the chain's row 0: xb {rel_of(row0, b.xb)}, inj {rel_of(inj0, b.inj)}\n")
     print_bw(dev, queue, b, src)
     for (h in range(3)) {
         g_half = h
-        let t = site_us(queue) $(enc; i) {
+        let t = site_us(queue, CLOCK) $(enc; i) {
             enc_one(enc, p, b, i % NL)
+        }
+        if (!t.ok) {
+            refused_row("one_row{HALF_TAG[h]}")
+            continue
         }
         r.tone[h] = t.us
         print("one_row{HALF_TAG[h]}\t{t.us:7.2f} us a site  cv {t.cv:4.1f}%{t.cv > 3.0lf ? "  VOID" : ""}\n")
     }
     for (h in range(3)) {
         g_half = h
-        let t = site_us(queue) $(enc; i) {
+        let t = site_us(queue, CLOCK) $(enc; i) {
             enc_chain(enc, p, b, i % NL)
+        }
+        if (!t.ok || r.tone[h] <= 0.0lf) {   //! the row's ratio reads the one-row base's figure
+            refused_row("chain8{HALF_TAG[h]}")
+            continue
         }
         r.tch[h] = t.us
         print("chain8{HALF_TAG[h]}\t{t.us:7.2f} us a site  cv {t.cv:4.1f}%  {t.us / r.tone[h]:5.2f} of one row{t.cv > 3.0lf ? "  VOID" : ""}\n")
@@ -536,8 +475,12 @@ def private race_arm(dev : MetalDevice?; queue : MetalCommandQueue?; b : Bench; 
     let r1 = rel_of(refs.one_xb, b.y)
     for (h in range(3)) {
         g_half = h
-        let t = site_us(queue) $(enc; i) {
+        let t = site_us(queue, CLOCK) $(enc; i) {
             enc_arm(enc, ap, a, b, i % NL)
+        }
+        if (!t.ok || refs.tone[h] <= 0.0lf || refs.tch[h] <= 0.0lf) {   //! the row's ratios read both bases' figures
+            refused_row("{a.name}{HALF_TAG[h]}")
+            continue
         }
         print("{a.name}{HALF_TAG[h]}\t{t.us:7.2f} us a site  cv {t.cv:4.1f}%  {t.us / refs.tone[h]:5.2f} of one row  {t.us / refs.tch[h]:5.2f} of the chain")
         if (h == 0) {
@@ -552,12 +495,7 @@ def main() : int {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var dev = metal_create_system_default_device()
         var queue = metal_new_command_queue(dev)
-        var src = ""
-        fopen("modules/dasLLAMA/harness/hc_mix.metal", "rb") $(f) {
-            if (f != null) {
-                src = fread(f)
-            }
-        }
+        let src = fread("modules/dasLLAMA/harness/hc_mix.metal")
         if (empty(src)) {
             print("hc_mix_race: run from the repo root\n")
             return 1
@@ -568,7 +506,7 @@ def main() : int {
         let refs <- race_bases(dev, queue, p, b, src)
         var inscope all <- arms()
         for (a in all) {
-            if (wanted(g_env_harness.hc_mix_arms, a.name)) {
+            if (arm_wanted(g_env_harness.hc_mix_arms, a.name)) {
                 race_arm(dev, queue, b, src, a, refs)
             }
         }
