@@ -743,13 +743,28 @@ def set_gpu_home_(name : string) : bool {
         to_log(LOG_WARNING, "dasLLAMA: set_gpu_home(\"{name}\") after the tier armed on {gpu_home_()} - a home switch runs before the first arm (the environment armed it at [init]: spell the home there, DASLLAMA_CUDA=1, or leave DASLLAMA_GPU unset and arm from the program)\n")
         return false
     }
+    g_gpu_home = name
+    return reinstall_gpu_home_seats()
+}
+
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def public reset_gpu_home_seats() : bool {
+    if (g_moe_gpu_installed) {
+        to_log(LOG_WARNING, "dasLLAMA: reset_gpu_home_seats() after the tier armed on {gpu_home_()} - the seats stay\n")
+        return false
+    }
     gpu_home_reset_fn_slots()
     gpu_home_reset_flags()
-    g_gpu_home = name
     for (install in g_gpu_home_shared_installers) {
         invoke(install)
     }
-    for (install in g_gpu_home_installers[name]) {
+    return true
+}
+
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def public reinstall_gpu_home_seats() : bool {
+    return false if (!reset_gpu_home_seats())
+    for (install in g_gpu_home_installers?[gpu_home_()] ?? default<array<function<() : void>>>) {
         invoke(install)
     }
     return true

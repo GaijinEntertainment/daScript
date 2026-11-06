@@ -477,6 +477,11 @@ def test_release_and_cap_on_a_model(t : T?) {
                 set_styletts2_source_window(win0)
             }
             set_styletts2_source_window(SOURCE_WINDOW_FRAMES)
+            // the carrier claims below are the CPU generator's: the empty driver holds the device seat off, the defer puts it back
+            register_styletts2_gpu(St2GpuDriver())
+            defer() {
+                unregister_styletts2_gpu()
+            }
             var inscope m <- load_tts_model(gguf)
             let text = "The first sentence is short. The second one is a little longer than the first! Is the third a question?"
             var inscope default_chunks <- tts_chunks(m, tts_normalize(text))

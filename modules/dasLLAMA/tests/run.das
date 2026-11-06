@@ -12,6 +12,7 @@ options _dasllama_internal = true
 require daslib/clargs
 require daslib/fio
 require daslib/strings_boost
+require dastest/fs
 require strings
 require math
 require dasllama/dasllama_env
@@ -61,6 +62,10 @@ struct RunArgs {
     @clarg_short = "n"
     @clarg_doc = "Repeat count — explicit only (default 1, never best-of-N)"
     nreps : int = 1
+
+    @clarg_short = "b"
+    @clarg_doc = "Files per child (default 10): past 1 the child compiles its files as ONE program (dastest --together), so the engine's parse and JIT are paid once a batch and each file still reports as its own; a batch that dies before every file's verdict reruns the files without one, one child each. The image suite's child always runs alone; 1 = one child a file"
+    batch : int = 10
     @clarg_name = "no-tune"
     @clarg_doc = "Short-circuit the [tune] framework in every child (DAS_TUNE_POLICY=reference): the reference bodies run — the portable tier's arm"
     no_tune : bool
@@ -764,27 +769,36 @@ def shard_files(files : array<string>; shard : string) : tuple<kept : array<stri
 // Non-private: test_run_summary.das gates it.
 def log_summary(log_path : string) : string {
     var summary = ""
-    fopen(log_path, "rb") $(f) {
-        if (f != null) {
-            let text = fread(f)
-            peek_data(text) $(bytes) {
-                let n = length(bytes)
-                var at = 0
-                var line_start = 0
-                while (at <= n) {   // at == n closes the final line even when no newline does
-                    if (at == n || bytes[at] == uint8('\n')) {
-                        let line = slice(bytes, line_start, at)
-                        if (find(line, " tests, ") >= 0) {
-                            summary = clone_string(line)
-                        }
-                        line_start = at + 1
-                    }
-                    at++
-                }
-            }
+    for (line in non_empty_lines(fread(log_path))) {
+        if (find(line, " tests, ") >= 0) {
+            summary = clone_string(line)
         }
     }
     return summary
+}
+
+//! the PASS and FAIL file sets of a dastest log, by base name - a tty color code may sit ahead of the word - and
+//! whether the together root itself failed (its compile, its simulate, its refusal): then every FAIL is the root's,
+//! not a file's
+def log_verdicts(log_path : string) : tuple<passed : array<string>; failed : array<string>; root_failed : bool> {
+    var passed, failed : array<string>
+    var root_failed = false
+    for (line in non_empty_lines(fread(log_path))) {
+        root_failed ||= find(line, "the together root") >= 0 || find(line, "] together: ") >= 0
+        for (word in ["PASS ", "FAIL "]) {
+            // a per-test line reads `--- PASS 'name'`: only a line start or a color code may sit ahead of a verdict
+            let p = find(line, word)
+            continue if (p < 0 || p > 8 || (p > 0 && !(line |> starts_with("\x1b"))))
+            var inscope words <- split(line, " ")
+            continue if (length(words) < 2)
+            if (word == "PASS ") {
+                passed |> push(base_name(words[1]))
+            } else {
+                failed |> push(base_name(words[1]))
+            }
+        }
+    }
+    return <- (passed <- passed, failed <- failed, root_failed = root_failed)
 }
 
 // CPU_PREFILL: the suites' CPU truth halves and parity controls prefill on the CPU by intent.
@@ -1065,12 +1079,15 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
     to_log(LOG_INFO, empty(cache_dir) ? "CACHE none - the binary could not be stat'd, every child parses the engine\n" : "CACHE {cache_dir}\n")
     var tally : RunTally
     for (rep in range(reps)) {
-        for (file in files) {
-            let tag = base_name(file)
+        let rep_tag = reps > 1 ? " rep {rep + 1}/{reps}" : ""
+        var inscope retry : array<string>
+        for (chunk in child_chunks(files, max(cfg.batch, 1), area_run)) {
+            let n = length(chunk)
+            let tag = n == 1 ? base_name(chunk[0]) : "{base_name(chunk[0])}+{n - 1}"
             let log_path = path_join(tmp, "dasllama_run_{tag}_{rep}_{ref_time_ticks()}.log")
             let file_envs = (area_run && tag == "test_model_image.das") ? image_envs : envs
-            let cmd = "{file_envs}\"{das_exe}\" -jit -module-cache {MODULE_CACHE} dastest/dastest.das -- --test \"{file}\" --timeout {tmo}{cache_flag} > \"{log_path}\" 2>&1"
-            let rep_tag = reps > 1 ? " rep {rep + 1}/{reps}" : ""
+            let file_args = n == 1 ? " --test \"{chunk[0]}\"" : join([for (f in chunk); " --together \"{f}\""], "")
+            let cmd = "{file_envs}\"{das_exe}\" -jit -module-cache {MODULE_CACHE} dastest/dastest.das --{file_args} --timeout {tmo * n}{cache_flag} > \"{log_path}\" 2>&1"
             to_log(LOG_INFO, "START {tag}{rep_tag}: {cmd}\n")
             let t0 = ref_time_ticks()
             let rc = unsafe(popen(cmd) $(f) {
@@ -1081,13 +1098,73 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
             let verdict = !empty(summary) ? summary : "no dastest summary - the run died early (read the log)"
             to_log(rc == 0 ? LOG_INFO : LOG_ERROR, "DONE {tag}: exit={rc} {verdict} elapsed={secs}s log={log_path}\n")
             tally.skipped += skipped_cells(summary)
-            if (rc != 0) {
+            continue if (rc == 0)
+            if (n == 1) {
                 tally.failures++
                 tally.failed_tags |> push(tag)
+                continue
             }
+            let verdicts <- log_verdicts(log_path)
+            if (verdicts.root_failed) {
+                // the root failed to compile or to simulate, or refused the list: no file ran, every file reruns alone
+                to_log(LOG_WARNING, "RETRY {tag}: the batch's root failed - its {n} files run one child each\n")
+                retry |> push_from(chunk)
+                continue
+            }
+            tally.failures += length(verdicts.failed)
+            tally.failed_tags |> push_from(verdicts.failed)
+            if (empty(verdicts.failed) && length(verdicts.passed) == n) {
+                // every file passed and the child still exited red - a crash at its shutdown: the batch's own red
+                tally.failures++
+                tally.failed_tags |> push("{tag} (exit {rc} after every verdict)")
+            }
+            for (f in chunk) {
+                let b = base_name(f)
+                if (find_index(verdicts.passed, b) < 0 && find_index(verdicts.failed, b) < 0) {
+                    to_log(LOG_WARNING, "RETRY {b}: the batch {tag} ended without its verdict - it runs alone\n")
+                    retry |> push(f)
+                }
+            }
+        }
+        if (!empty(retry)) {
+            var single := cfg
+            single.batch = 1
+            single.nreps = 1
+            tally += run_files(single, retry, image_arms, area_run)
         }
     }
     return <- tally
+}
+
+def operator +=(var a : RunTally; b : RunTally) {
+    a.failures += b.failures
+    a.skipped += b.skipped
+    a.failed_tags |> push_from(b.failed_tags)
+}
+
+//! `per` files a child, in order; alone: an area run's image file, and a cant_/failed_/invalid_ file (a root requiring it fails whole)
+def child_chunks(files : array<string>; per : int; area_run : bool) : array<array<string>> {
+    var chunks : array<array<string>>
+    chunks |> reserve(length(files) / max(per, 1) + 1)
+    var cur : array<string>
+    for (f in files) {
+        let b = base_name(f)
+        let alone = (area_run && b == "test_model_image.das") || is_expected_failure_test(f)
+        if (alone && !empty(cur)) {
+            chunks |> emplace(cur)
+        }
+        if (empty(cur)) {
+            cur |> reserve(per)
+        }
+        cur |> push(f)
+        if (alone || length(cur) >= per) {
+            chunks |> emplace(cur)
+        }
+    }
+    if (!empty(cur)) {
+        chunks |> emplace(cur)
+    }
+    return <- chunks
 }
 
 //! the run tells the next step itself: what ran, what a missing model skipped, what is still owed

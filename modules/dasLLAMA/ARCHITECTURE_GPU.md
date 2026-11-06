@@ -30,7 +30,11 @@ own under one home - the CUDA assistant drafter's seams - registers its installe
 too. A driver whose seats read the same under every home - the whole-model driver's slice-window
 and stream-source providers, the Metal mirror's K/V-room and dn-room hooks - registers its
 installer as shared (`register_gpu_home_shared`) and runs it at `[init]`; a switch runs the shared
-installers right after the reset, before the named home's. On macOS the Vulkan home
+installers right after the reset, before the named home's. The two halves of a switch stand alone
+for a test that shares its process with other files: `reset_gpu_home_seats` is the reset and the
+shared installers (the seats as no home's entry ever filled them, the tier's contract test's
+baseline), `reinstall_gpu_home_seats` that and the current home's entry installers (the seats as
+the program's `[init]` left them); both refuse once the tier armed. On macOS the Vulkan home
 declines before any probe (`vulkan_host_decline`, read by the arm's witness and by `vk_moe_init`
 after its dry-bake branch: a dry bake touches no device, so a GPU-less bake runs on any host, macOS
 included) unless `DASLLAMA_VK_MAC` asks: MoltenVK is not a serving home, the Mac

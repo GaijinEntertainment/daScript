@@ -11,6 +11,8 @@ ONLY through `tests/run.das`).
 
 ## Test workflow
 
+Every run hands ten files to a child as one program (`--batch N`, default 10; `--batch 1` is one
+child a file): the engine's parse and JIT are paid once a batch, each file in a fresh context.
 After an edit: `./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed` runs the tests
 the changed files reach, by file: a test file itself, a fixture the tests requiring it, an engine
 module its `MODULE_WITNESSES` row or - a core module - every model-free `llm` file and one

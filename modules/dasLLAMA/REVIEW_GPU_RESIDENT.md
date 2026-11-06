@@ -5,7 +5,7 @@ docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_GPU_VULKAN
 `followup_metal.md`, `followup_vulkan.md`, `followup_general.md` (the CUDA rows).
 
 **A diff never hands a whole GPU decode or prefill call that the device served before the diff to
-the CPU path - the shape it cannot serve on the device declines by name instead.** A call that
+the CPU path silently - the shape it cannot serve on the device declines by name instead.** A call that
 runs on the CPU gives the user who selected the GPU a fraction of its speed.
 
 **A diff that lands or changes a model family, a backend arm or a session shape so that, for any
@@ -36,13 +36,15 @@ host-cached sessions when none is.** The driver panics on a device-home session 
 `reset_gpu_*` functions of `dasllama/dasllama_core.das`, `set_pf_window_rows_pin`,
 `set_expert_cache_mb`, `set_gpu_want_pf_stream`, `set_cuda_mmq_pin`, `set_resident_upload_fault`,
 `set_moe_gpu_streams`, `vk_rdec_chain_mode_set`, `cud_rdec_chain_mode_set`,
-`install_moe_gpu_resident_site_feeds`, `install_moe_gpu_resident_kv_ring` and
-`install_moe_gpu_resident_kv_share`; this list is the trigger.** The load reads these values once,
+`install_moe_gpu_resident_site_feeds`, `install_moe_gpu_resident_kv_ring`,
+`install_moe_gpu_resident_kv_share`, and the home's seat switchers `set_gpu_home_`,
+`reset_gpu_home_seats` and `reinstall_gpu_home_seats`; this list is the trigger.** The load reads these values once,
 to decide what the whole-model GPU driver holds on the device; a value set after the load never
 reaches that decision.
 
-**A diff that defines a setter - a function whose stored value the next load reads to plan what
-the device holds, a `set_*` knob or an `install_*` declaration alike - adds its name to the list
+**A diff that defines a setter - a function that stores, in a module or process global, a value
+the next load reads to plan what the device holds: a `set_*` knob, an `install_*` declaration, or
+a function that fills or empties the home's seats alike - adds its name to the list
 that opens "the `set_gpu_*` and `reset_gpu_*` functions of `dasllama/dasllama_core.das`", in the
 same change.** The list is the trigger a reviewer reads; an unlisted setter reaches no call-order
 check.

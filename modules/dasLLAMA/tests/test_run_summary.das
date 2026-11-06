@@ -5,6 +5,7 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 require dastest/testing_boost public
 require run   // the suite runner's own helper — bare same-dir require; run.das is [export] main only, no [init]
 require _scratch_dir   // scratch_file / scratch_path: the log fixtures' files
+require daslib/strings_boost
 
 // The runner's log scraper, model-free: log_summary walks a dastest log line by line and keeps the
 // LAST line carrying " tests, ". End-of-file closes a line just like a newline does, so a run
@@ -80,5 +81,47 @@ def test_log_summary_no_match(t : T?) {
     }
     t |> run("a missing file returns empty") @(t : T?) {
         t |> equal(log_summary(scratch_path("no_such_file_xyz.log")), "")
+    }
+}
+
+[test]
+def test_log_verdicts(t : T?) {
+    t |> run("plain verdict lines land in their sets, in order, by base name") @(t : T?) {
+        let p = scratch_file("verdicts.log",
+            "=== RUN 'a'\nPASS modules/dasLLAMA/tests/test_a.das (1.5s)\nFAIL modules/dasLLAMA/tests/test_b.das (0.2s)\nPASS /abs/dir/test_c.das (3s)\n3 tests, 2 passed, 1 failed\n")
+        let v <- log_verdicts(p)
+        t |> equal(join(v.passed, ","), "test_a.das,test_c.das")
+        t |> equal(join(v.failed, ","), "test_b.das")
+    }
+    t |> run("a color code glued ahead of the word still reads as the verdict") @(t : T?) {
+        let p = scratch_file("colored.log", "\x1b[32mPASS tests/test_a.das (1s)\x1b[0m\n\x1b[31mFAIL tests/test_b.das (1s)\x1b[0m\n")
+        let v <- log_verdicts(p)
+        t |> equal(join(v.passed, ","), "test_a.das")
+        t |> equal(join(v.failed, ","), "test_b.das")
+    }
+    t |> run("a root that failed to compile or refused the list marks every FAIL the root's, not a file's") @(t : T?) {
+        let p = scratch_file("rootfail.log",
+            "[E] Failed to compile the together root /tmp/x/dastest_together_1.das\nerror[20605]: missing prerequisite\nFAIL tests/test_a.das (0.000000s)\nFAIL tests/test_b.das (0.000000s)\n2 tests, 0 passed, 2 failed\n")
+        let v <- log_verdicts(p)
+        t |> success(v.root_failed, "the compile failure is the root's")
+        t |> equal(length(v.failed), 2, "the synthetic verdicts are still read, the caller decides")
+        let q = scratch_file("rootrefuse.log", "[E] together: the files' options disagree - a.das: `options stack = 1` against `options stack = 2`\nFAIL a.das (0s)\n")
+        t |> success((log_verdicts(q)).root_failed, "a refusal is the root's too")
+        let clean = scratch_file("rootok.log", "PASS tests/test_a.das (1s)\nFAIL tests/test_b.das (1s)\n2 tests, 1 passed, 1 failed\n")
+        t |> success(!(log_verdicts(clean)).root_failed, "a file's own FAIL is not the root's")
+    }
+    t |> run("dastest's colored per-test line is no verdict either") @(t : T?) {
+        let p = scratch_file("colored_per_test.log", "\x1b[32m--- PASS 'test_one'\x1b[0m\n\x1b[31m--- FAIL 'test_two'\x1b[0m\n\x1b[32mPASS tests/test_a.das (1s)\x1b[0m\n")
+        let v <- log_verdicts(p)
+        t |> equal(join(v.passed, ","), "test_a.das")
+        t |> equal(length(v.failed), 0, "the per-test FAIL names a test, not a file")
+    }
+    t |> run("the word mid-line, a bare word and a missing file are no verdict") @(t : T?) {
+        let p = scratch_file("noverdict.log", "the cell PASS tests/test_a.das rode\nPASS\n--- PASS 'arm12' (1s)\n")
+        let v <- log_verdicts(p)
+        t |> equal(length(v.passed), 0)
+        t |> equal(length(v.failed), 0)
+        let none <- log_verdicts(scratch_path("no_such_verdicts.log"))
+        t |> equal(length(none.passed) + length(none.failed), 0)
     }
 }

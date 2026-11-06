@@ -605,6 +605,9 @@ def private p32_gather_gate(t : T?; f : auto(TT)) {
 def private p32_cells(t : T?; f : auto(TT)) {
     let kf = p32_fmt(f)
     let n = p32_n(f)
+    // the cells hold the portable slots' disk-order contract; an earlier model load pins the box's grp<mr> backend
+    let seat = kernel_backend_seat()
+    pin_kernel_backend("portable")
     t |> run("dot_{kf}q8_scalar matches the fp64 plane-dequant reference at n={int(n)}") @(t : T?) {
         p32_dot_gate(t, f)
     }
@@ -623,6 +626,7 @@ def private p32_cells(t : T?; f : auto(TT)) {
     t |> run("the dense routers over a {kf} plane (mm_f, mm_pre_f, mm_b_f) bit-match the scalar row dots") @(t : T?) {
         p32_dense_gate(t, f)
     }
+    restore_kernel_backend(seat)
 }
 
 //! the dense routers a {q51, iq4nl32}-tagged attention or FFN plane takes on the CPU, over a Model shell's planes at a

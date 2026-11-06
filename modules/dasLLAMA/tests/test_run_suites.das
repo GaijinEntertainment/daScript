@@ -7,6 +7,7 @@ require run
 require daslib/fio
 require daslib/strings_boost
 require strings
+require math
 
 // The runner's per-PR suite split, model-free: `model-free` holds only files that reach no
 // machine-local fixture root, `stocked` holds every file that does, the two never share a file,
@@ -286,9 +287,15 @@ def test_runner_dry_run(t : T?) {
     let image_line_end = find(out, "\n", image_start)
     let image_line = slice(out, image_start, image_line_end)
     t |> success(find(image_line, "DASLLAMA_TEST_ARMS='whisper,") >= 0 && find(image_line, "gemma3v") >= 0, "the image child gets the union of the areas' arms:\n{image_line}")
-    let audio_start = find(out, "START test_audio.das: ")
+    t |> success(find(image_line, " --test \"") >= 0 && find(image_line, "--together") < 0, "the image child runs alone, under --test:\n{image_line}")
+    let audio_cmd = find(out, "--together \"{TESTS_DIR}/test_audio.das\"")
+    t |> success(audio_cmd >= 0, "the audio file rides a --together batch:\n{out}")
+    let audio_start = rfind(slice(out, 0, max(audio_cmd, 0)), "START ")
     let audio_line = slice(out, audio_start, find(out, "\n", audio_start))
     t |> success(find(audio_line, "DASLLAMA_TEST_ARMS=''") >= 0, "every other child gets no arm filter:\n{audio_line}")
+    var single : string
+    t |> equal(run_runner("--area audio --das /usr/bin/true --batch 1", single), 0, "a dry area run at --batch 1 exits clean:\n{single}")
+    t |> success(find(single, "START test_audio.das: ") >= 0 && find(single, "--together") < 0, "at --batch 1 every file is its own --test child:\n{single}")
     t |> success(find(out, "REPORT areas audio,vision: ") >= 0, "the REPORT line names the scope")
     t |> success(find(out, "NEXT before the PR") >= 0, "the NEXT line names the per-PR suites")
     var llm : string
@@ -304,6 +311,37 @@ def test_runner_dry_run(t : T?) {
     var no_base : string
     let no_base_rc = run_runner("--changed --base no-such-ref-here --das /usr/bin/true", no_base)
     t |> equal(no_base_rc, 2, "a base git cannot resolve is refused, never read as nothing changed:\n{no_base}")
+}
+
+//! the `--timeout` value a START line's command carries
+def start_timeout(out : string; tag : string) : int {
+    let at = find(out, "START {tag}: ")
+    return -1 if (at < 0)
+    let line = slice(out, at, find(out, "\n", at))
+    let t = find(line, "--timeout ")
+    return -1 if (t < 0)
+    let v = slice(line, t + length("--timeout "))
+    return to_int(slice(v, 0, find(v, " ")))
+}
+
+//! a batch whose child ends before any verdict reruns its files one child each, each red single child a failure of its
+//! own; a batch's timeout is its file count times the single's
+[test]
+def test_runner_retries_a_verdictless_batch(t : T?) {
+    return if (get_platform_name() == "windows")   //! the child binary stands in a POSIX one, as test_runner_dry_run's
+    var out : string
+    let rc = run_runner("--area infra --only test_box --das /usr/bin/false", out)
+    t |> success(rc != 0, "a run whose every child exits red exits red:\n{out}")
+    t |> success(find(out, "START test_box_ident.das+1: ") >= 0, "the two files ride one batch:\n{out}")
+    t |> success(find(out, "RETRY test_box_ident.das: ") >= 0 && find(out, "RETRY test_box_profile.das: ") >= 0, "a child red before any verdict retries every file:\n{out}")
+    t |> success(find(out, "START test_box_ident.das: ") >= 0 && find(out, "START test_box_profile.das: ") >= 0, "each retried file runs alone:\n{out}")
+    t |> success(find(out, "2 file(s), 2 failed") >= 0, "a red single child is a failure of its own:\n{out}")
+    let single = start_timeout(out, "test_box_ident.das")
+    t |> success(single > 0, "the single child carries a timeout:\n{out}")
+    t |> equal(start_timeout(out, "test_box_ident.das+1"), 2 * single, "the batch's timeout is its file count times the single's")
+    var clean : string
+    t |> equal(run_runner("--area infra --only test_box --das /usr/bin/true", clean), 0, "a green child with no verdict is no retry:\n{clean}")
+    t |> success(find(clean, "RETRY") < 0, "nothing retried:\n{clean}")
 }
 
 [test]
@@ -458,4 +496,30 @@ def test_child_cache_dir(t : T?) {
     if (find(out, "CACHE none") < 0) {
         t |> success(find(out, " --module-cache-dir {CHILD_CACHE_ROOT}/") >= 0, "every child command carries the cache folder:\n{out}")
     }
+}
+
+[test]
+def test_child_chunks(t : T?) {
+    let files <- [for (i in range(7)); "{TESTS_DIR}/test_{i}.das"]
+    let threes <- child_chunks(files, 3, false)
+    t |> equal(length(threes), 3, "seven files three a child: three children")
+    t |> equal(join(threes[0], ","), "{TESTS_DIR}/test_0.das,{TESTS_DIR}/test_1.das,{TESTS_DIR}/test_2.das", "the first child takes the first three in order")
+    t |> equal(length(threes[2]), 1, "the tail child takes the one left")
+    let ones <- child_chunks(files, 1, false)
+    t |> equal(length(ones), 7, "one a child is one child a file")
+    var with_image <- [for (i in range(2)); "{TESTS_DIR}/test_{i}.das"]
+    with_image |> push("{TESTS_DIR}/test_model_image.das")
+    with_image |> push("{TESTS_DIR}/test_9.das")
+    let area <- child_chunks(with_image, 10, true)
+    t |> equal(length(area), 3, "an area run cuts the image file out: the files before it, the image file, the files after")
+    t |> equal(join(area[1], ","), "{TESTS_DIR}/test_model_image.das", "the image file's child carries it alone")
+    t |> equal(join(area[2], ","), "{TESTS_DIR}/test_9.das", "the files after it start a child of their own")
+    let suite <- child_chunks(with_image, 10, false)
+    t |> equal(length(suite), 1, "a suite run batches the image file like any other")
+    var with_failed <- [for (i in range(2)); "{TESTS_DIR}/test_{i}.das"]
+    with_failed |> push("{TESTS_DIR}/failed_lint.das")
+    with_failed |> push("{TESTS_DIR}/test_9.das")
+    let expected_failure <- child_chunks(with_failed, 10, false)
+    t |> equal(length(expected_failure), 3, "an expected-failure compile test cuts the batch: the files before it, itself, the files after")
+    t |> equal(join(expected_failure[1], ","), "{TESTS_DIR}/failed_lint.das", "it runs alone, where dastest reads its expected errors")
 }
