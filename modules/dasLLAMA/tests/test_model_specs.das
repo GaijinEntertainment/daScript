@@ -140,11 +140,14 @@ def test_model_spec_views(t : T?) {
         }
         t |> success(pinned, "{bench_image_fixture()} rides a companion list, so every box provisions it")
         var inscope specs <- model_specs()
-        var seen : table<string>
+        // a row whose cell consumes a companion pinned on another row names it too, so two rows may pin one file; both carry one provenance
+        var seen : table<string; string>
         for (s in specs) {
             for (c in s.companions) {
-                t |> success(!key_exists(seen, c.name), "a companion rides exactly one row's companions: {c.name}")
-                seen |> insert(c.name)
+                let prov = "{c.url}|{c.bytes}|{c.sha256}"
+                let prev = seen?[c.name] ?? ""
+                t |> success(empty(prev) || prev == prov, "a companion pinned on two rows carries the same provenance on both: {c.name}")
+                seen[c.name] = prov
             }
         }
         delete seen
@@ -193,6 +196,7 @@ def test_models_provenance_invariants(t : T?) {
             }
         }
         var inscope specs <- model_specs()
+        var inscope counted : table<string>   // a companion two rows pin is one entry of the view
         for (s in specs) {
             if (!empty(s.url) || !empty(s.recipe)) {
                 want++
@@ -201,7 +205,10 @@ def test_models_provenance_invariants(t : T?) {
                 t |> success(!key_exists(names, s.file), "an unpinned text row stays out of the view: {s.file}")
             }
             for (c in s.companions) {
-                want++
+                if (!key_exists(counted, c.name)) {
+                    counted |> insert(c.name)
+                    want++
+                }
                 t |> success(key_exists(names, c.name), "a text companion is in the view: {c.name}")
             }
         }

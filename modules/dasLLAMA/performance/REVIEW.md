@@ -157,7 +157,8 @@ identity - its byte size, or a `file_identity` hash.** `fetch_models` reports su
 on presence alone, so its run cannot tell a re-mint from the stale file the old recipe made.
 
 **A diff that adds a row or a `companions` entry, or changes a `bytes`, `sha256` or `recipe`
-value, in `model_specs.das` or `profile_common.das`, or changes `fetch_models.das` beyond its
+value, in `model_specs.das` or `profile_common.das`, changes what `models_provenance()` or
+`board_provenance()` (`profile_common.das`) return, or changes `fetch_models.das` beyond its
 comments, records two runs in the PR description: `fetch_models.das -- -o <name>` per entry it
 adds or changes (`<name>` its local file name), on a box holding its model file, ending `0
 pending, 0 failed` with the entry `ok`; and an unscoped `fetch_models.das --` with no touched
