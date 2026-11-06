@@ -16,6 +16,18 @@ namespace das {
         fragile_bit_set() {
             mask = 63;
         }
+        fragile_bit_set ( const fragile_bit_set & ) = delete;
+        fragile_bit_set & operator = ( const fragile_bit_set & ) = delete;
+        fragile_bit_set ( fragile_bit_set && o ) noexcept : objects(o.objects), mask(o.mask), occupancy(o.occupancy) {
+            o.objects = nullptr;
+            o.occupancy = 0;
+        }
+        fragile_bit_set & operator = ( fragile_bit_set && o ) noexcept {
+            swap(objects, o.objects);
+            swap(mask, o.mask);
+            swap(occupancy, o.occupancy);
+            return *this;
+        }
         ~fragile_bit_set() {
             if ( objects ) delete [] objects;
         }
@@ -247,10 +259,17 @@ namespace das {
         }
         void clear() {
             DAS_ASSERT(!locked);
+            DAS_VERIFYF(!frozen, "clear of a frozen safebox");
             objects.clear();
             objectsInOrder.clear();
             postponed.clear();
         }
+        void freeze() {
+            DAS_ASSERT(!locked);
+            tryResolve();
+            frozen = true;
+        }
+        bool isFrozen() const { return frozen; }
         void tryResolve() {
             if ( !locked && !postponed.empty() ) {
                 // note - the reason for the 'neworder', as oppose to regular push_back into objectsInOrder
@@ -272,6 +291,10 @@ namespace das {
         }
         template <typename TT>
         __forceinline void foreach ( TT && closure ) {
+            if ( frozen ) {
+                for ( auto & obj : objectsInOrder ) closure(obj);
+                return;
+            }
             auto saveLock = locked;
             locked = true;
             for ( auto & obj : objectsInOrder ) {
@@ -282,6 +305,10 @@ namespace das {
         }
         template <typename TT>
         __forceinline void foreach ( TT && closure ) const {
+            if ( frozen ) {
+                for ( auto & obj : objectsInOrder ) closure(obj);
+                return;
+            }
             auto saveLock = locked;
             locked = true;
             for ( auto & obj : objectsInOrder ) {
@@ -291,6 +318,10 @@ namespace das {
         }
         template <typename TT>
         __forceinline void foreach_with_hash ( TT && closure ) {
+            if ( frozen ) {
+                for ( auto & obj : objects ) closure(obj.second, obj.first);
+                return;
+            }
             auto saveLock = locked;
             locked = true;
             for ( auto & obj : objects ) {
@@ -301,6 +332,12 @@ namespace das {
         }
         template <typename TT>
         __forceinline void find_first ( TT && closure ) {
+            if ( frozen ) {
+                for ( auto & obj : objectsInOrder ) {
+                    if ( closure(obj) ) break;
+                }
+                return;
+            }
             auto saveLock = locked;
             locked = true;
             for ( auto & obj : objectsInOrder ) {
@@ -313,6 +350,7 @@ namespace das {
             return insert(hash64z(key.c_str()),value);
         }
         bool insert ( uint64_t key, const ValueType & value ) {
+            DAS_VERIFYF(!frozen, "insert into a frozen safebox - a finished module never changes");
             if ( locked ) {
                 if ( objects.find(key)!=objects.end() ) {
                     return false;
@@ -362,6 +400,7 @@ namespace das {
         }
         bool remove ( uint64_t key ) {
             DAS_ASSERT(!locked);
+            DAS_VERIFYF(!frozen, "remove from a frozen safebox");
             auto it = objects.find(key);
             if ( it != objects.end() ) {
                 auto pObj = it->second;
@@ -381,6 +420,7 @@ namespace das {
         }
         bool refresh_key ( uint64_t oldKey, uint64_t newKey ) {
             DAS_ASSERT(!locked);
+            DAS_VERIFYF(!frozen, "refresh_key in a frozen safebox");
             auto it = objects.find(oldKey);
             if ( it != objects.end() ) {
                 auto pObj = it->second;
@@ -396,5 +436,6 @@ namespace das {
         vector<ValueType>                objectsInOrder;
         vector<pair<uint64_t,ValueType>> postponed;
         mutable bool                     locked = false;
+        bool                             frozen = false;
     };
 }

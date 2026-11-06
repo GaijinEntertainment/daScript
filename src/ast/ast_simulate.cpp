@@ -147,7 +147,7 @@ namespace das
         return keyStr;
     }
 
-    struct SimulateVisitor : Visitor {
+    struct SimulateVisitor : ConstVisitor {
         Context & context;
         das_hash_map<const Expression*, SimNode*> e2v;
         das_hash_map<const Expression*, vector<SimNode*>> makeLocalInits;
@@ -155,8 +155,8 @@ namespace das
 
         SimulateVisitor ( Context & ctx ) : context(ctx) {}
 
-        virtual bool canVisitLabel ( ExprLabel * ) override { return false; }
-        virtual bool canVisitReader ( ExprReader * ) override { return false; }
+        virtual bool canVisitLabel ( const ExprLabel * ) override { return false; }
+        virtual bool canVisitReader ( const ExprReader * ) override { return false; }
 
         void setE ( const Expression * e, SimNode * n ) {
             e2v[e] = n;
@@ -171,14 +171,13 @@ namespace das
         }
 
         // All expression types must be handled by explicit visit() overrides.
-        virtual ExpressionPtr visitExpression ( Expression * expr ) override {
+        virtual void visitExpression ( const Expression * expr ) override {
             DAS_ASSERTF(0, "SimulateVisitor: unhandled expression type %s", expr->__rtti);
             setE(expr, nullptr);
-            return expr;
         }
 
         // Simulate an expression subtree via the visitor walk
-        SimNode * simulateExpression ( Expression * expr ) {
+        SimNode * simulateExpression ( const Expression * expr ) {
             expr->visit(*this);
             return getE(expr);
         }
@@ -216,13 +215,12 @@ namespace das
 
         // All ExprConstXxx types simulate identically: ConstValue(at, value)
 #define SV_CONST_VISIT(ExprType) \
-        ExpressionPtr visit(ExprType * expr) override { \
+        void visit(const ExprType * expr) override { \
             setE(expr, context.code->makeNode<SimNode_ConstValue>(expr->at, expr->value)); \
-            return expr; \
         }
         // ExprConst is called as final dispatch after specific ExprConstXxx visitors.
         // Those already set e2v, so this is a no-op passthrough.
-        ExpressionPtr visit(ExprConst * expr) override { return expr; }
+        void visit(const ExprConst *) override {}
         SV_CONST_VISIT(ExprFakeContext)
         SV_CONST_VISIT(ExprFakeLineInfo)
         SV_CONST_VISIT(ExprConstPtr)
@@ -255,79 +253,79 @@ namespace das
         SV_CONST_VISIT(ExprConstDouble)
 #undef SV_CONST_VISIT
 
-        ExpressionPtr visit(ExprConstString * expr) override;
-        ExpressionPtr visit(ExprLooksLikeCall * expr) override { return expr; }
-        ExpressionPtr visit(ExprVar * expr) override;
-        ExpressionPtr visit(ExprAddr * expr) override;
-        ExpressionPtr visit(ExprTypeDecl * expr) override;
-        ExpressionPtr visit(ExprBreak * expr) override;
-        ExpressionPtr visit(ExprContinue * expr) override;
-        ExpressionPtr visit(ExprAssume * expr) override;
-        ExpressionPtr visit(ExprStaticAssert * expr) override;
+        void visit(const ExprConstString * expr) override;
+        void visit(const ExprLooksLikeCall *) override {}
+        void visit(const ExprVar * expr) override;
+        void visit(const ExprAddr * expr) override;
+        void visit(const ExprTypeDecl * expr) override;
+        void visit(const ExprBreak * expr) override;
+        void visit(const ExprContinue * expr) override;
+        void visit(const ExprAssume * expr) override;
+        void visit(const ExprStaticAssert * expr) override;
 
-        ExpressionPtr visit(ExprReader * expr) override;
-        ExpressionPtr visit(ExprLabel * expr) override;
-        ExpressionPtr visit(ExprTag * expr) override;
-        ExpressionPtr visit(ExprIs * expr) override;
-        ExpressionPtr visit(ExprMakeGenerator * expr) override;
-        ExpressionPtr visit(ExprYield * expr) override;
-        ExpressionPtr visit(ExprArrayComprehension * expr) override;
+        void visit(const ExprReader * expr) override;
+        void visit(const ExprLabel * expr) override;
+        void visit(const ExprTag * expr) override;
+        void visit(const ExprIs * expr) override;
+        void visit(const ExprMakeGenerator * expr) override;
+        void visit(const ExprYield * expr) override;
+        void visit(const ExprArrayComprehension * expr) override;
 
-        ExpressionPtr visit(ExprRef2Value * expr) override;
-        ExpressionPtr visit(ExprRef2Ptr * expr) override;
-        ExpressionPtr visit(ExprPtr2Ref * expr) override;
-        ExpressionPtr visit(ExprCast * expr) override;
-        ExpressionPtr visit(ExprAscend * expr) override;
-        ExpressionPtr visit(ExprDelete * expr) override;
-        ExpressionPtr visit(ExprMemZero * expr) override;
-        ExpressionPtr visit(ExprUnsafe * expr) override;
-        ExpressionPtr visit(ExprWith * expr) override;
+        void visit(const ExprRef2Value * expr) override;
+        void visit(const ExprRef2Ptr * expr) override;
+        void visit(const ExprPtr2Ref * expr) override;
+        void visit(const ExprCast * expr) override;
+        void visit(const ExprAscend * expr) override;
+        void visit(const ExprDelete * expr) override;
+        void visit(const ExprMemZero * expr) override;
+        void visit(const ExprUnsafe * expr) override;
+        void visit(const ExprWith * expr) override;
 
-        ExpressionPtr visit(ExprNullCoalescing * expr) override;
-        ExpressionPtr visit(ExprGoto * expr) override;
-        ExpressionPtr visit(ExprOp1 * expr) override;
-        ExpressionPtr visit(ExprOp2 * expr) override;
-        ExpressionPtr visit(ExprOp3 * expr) override;
-        ExpressionPtr visit(ExprCopy * expr) override;
-        ExpressionPtr visit(ExprMove * expr) override;
-        ExpressionPtr visit(ExprClone * expr) override;
-        ExpressionPtr visit(ExprTryCatch * expr) override;
+        void visit(const ExprNullCoalescing * expr) override;
+        void visit(const ExprGoto * expr) override;
+        void visit(const ExprOp1 * expr) override;
+        void visit(const ExprOp2 * expr) override;
+        void visit(const ExprOp3 * expr) override;
+        void visit(const ExprCopy * expr) override;
+        void visit(const ExprMove * expr) override;
+        void visit(const ExprClone * expr) override;
+        void visit(const ExprTryCatch * expr) override;
 
-        ExpressionPtr visit(ExprAssert * expr) override;
-        ExpressionPtr visit(ExprQuote * expr) override;
-        ExpressionPtr visit(ExprDebug * expr) override;
-        ExpressionPtr visit(ExprInvoke * expr) override;
-        ExpressionPtr visit(ExprErase * expr) override;
-        ExpressionPtr visit(ExprSetInsert * expr) override;
-        ExpressionPtr visit(ExprFind * expr) override;
-        ExpressionPtr visit(ExprKeyExists * expr) override;
-        ExpressionPtr visit(ExprTypeInfo * expr) override;
-        ExpressionPtr visit(ExprCall * expr) override;
-        ExpressionPtr visit(ExprNamedCall * expr) override;
-        ExpressionPtr visit(ExprNew * expr) override;
+        void visit(const ExprAssert * expr) override;
+        void visit(const ExprQuote * expr) override;
+        void visit(const ExprDebug * expr) override;
+        void visit(const ExprInvoke * expr) override;
+        void visit(const ExprErase * expr) override;
+        void visit(const ExprSetInsert * expr) override;
+        void visit(const ExprFind * expr) override;
+        void visit(const ExprKeyExists * expr) override;
+        void visit(const ExprTypeInfo * expr) override;
+        void visit(const ExprCall * expr) override;
+        void visit(const ExprNamedCall * expr) override;
+        void visit(const ExprNew * expr) override;
 
-        ExpressionPtr visit(ExprAt * expr) override;
-        ExpressionPtr visit(ExprSafeAt * expr) override;
-        ExpressionPtr visit(ExprSwizzle * expr) override;
-        ExpressionPtr visit(ExprField * expr) override;
-        ExpressionPtr visit(ExprSafeField * expr) override;
-        ExpressionPtr visit(ExprIsVariant * expr) override;
-        ExpressionPtr visit(ExprAsVariant * expr) override;
-        ExpressionPtr visit(ExprSafeAsVariant * expr) override;
-        ExpressionPtr visit(ExprStringBuilder * expr) override;
+        void visit(const ExprAt * expr) override;
+        void visit(const ExprSafeAt * expr) override;
+        void visit(const ExprSwizzle * expr) override;
+        void visit(const ExprField * expr) override;
+        void visit(const ExprSafeField * expr) override;
+        void visit(const ExprIsVariant * expr) override;
+        void visit(const ExprAsVariant * expr) override;
+        void visit(const ExprSafeAsVariant * expr) override;
+        void visit(const ExprStringBuilder * expr) override;
 
-        ExpressionPtr visit(ExprReturn * expr) override;
-        ExpressionPtr visit(ExprIfThenElse * expr) override;
-        ExpressionPtr visit(ExprWhile * expr) override;
-        ExpressionPtr visit(ExprFor * expr) override;
+        void visit(const ExprReturn * expr) override;
+        void visit(const ExprIfThenElse * expr) override;
+        void visit(const ExprWhile * expr) override;
+        void visit(const ExprFor * expr) override;
 
-        ExpressionPtr visit(ExprBlock * expr) override;
-        ExpressionPtr visit(ExprLet * expr) override;
-        ExpressionPtr visit(ExprMakeBlock * expr) override;
-        ExpressionPtr visit(ExprMakeVariant * expr) override;
-        ExpressionPtr visit(ExprMakeStruct * expr) override;
-        ExpressionPtr visit(ExprMakeArray * expr) override;
-        ExpressionPtr visit(ExprMakeTuple * expr) override;
+        void visit(const ExprBlock * expr) override;
+        void visit(const ExprLet * expr) override;
+        void visit(const ExprMakeBlock * expr) override;
+        void visit(const ExprMakeVariant * expr) override;
+        void visit(const ExprMakeStruct * expr) override;
+        void visit(const ExprMakeArray * expr) override;
+        void visit(const ExprMakeTuple * expr) override;
     };
 
     // Free function wrapper for SimulateVisitor — usable from other translation units.
@@ -784,7 +782,7 @@ namespace das
         return simlist;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprMakeVariant * expr) {
+    void SimulateVisitor::visit(const ExprMakeVariant * expr) {
         const auto &at = expr->at;
         SimNode_Block * block;
         if ( expr->useCMRES ) {
@@ -798,7 +796,6 @@ namespace das
         for ( uint32_t i=0, is=block->total; i!=is; ++i )
             block->list[i] = simlist[i];
         setE(expr, block);
-        return expr;
     }
 
     vector<SimNode *> SimulateVisitor::simulateExprMakeStruct(const ExprMakeStruct *mks) {
@@ -994,7 +991,7 @@ namespace das
         return simlist;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprMakeStruct * expr) {
+    void SimulateVisitor::visit(const ExprMakeStruct * expr) {
         const auto &at = expr->at;
         SimNode_Block * blk;
         if ( expr->useCMRES ) {
@@ -1008,7 +1005,6 @@ namespace das
         for ( uint32_t i=0, is=blk->total; i!=is; ++i )
             blk->list[i] = simlist[i];
         setE(expr, blk);
-        return expr;
     }
 
 
@@ -1072,7 +1068,7 @@ namespace das
         return simlist;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprMakeArray * expr) {
+    void SimulateVisitor::visit(const ExprMakeArray * expr) {
         const auto &at = expr->at;
         SimNode_Block * block;
         if ( expr->makeArrayOnHeap ) {
@@ -1092,7 +1088,6 @@ namespace das
         for ( uint32_t i=0, is=block->total; i!=is; ++i )
             block->list[i] = simlist[i];
         setE(expr, block);
-        return expr;
     }
 
     vector<SimNode *> SimulateVisitor::simulateExprMakeTuple(const ExprMakeTuple *mkt) {
@@ -1154,7 +1149,7 @@ namespace das
         return simlist;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprMakeTuple * expr) {
+    void SimulateVisitor::visit(const ExprMakeTuple * expr) {
         const auto &at = expr->at;
         SimNode_Block * block;
         if ( expr->useCMRES ) {
@@ -1168,28 +1163,25 @@ namespace das
         for ( uint32_t i=0, is=block->total; i!=is; ++i )
             block->list[i] = simlist[i];
         setE(expr, block);
-        return expr;
     }
 
     // reader
 
-    ExpressionPtr SimulateVisitor::visit(ExprReader * expr) {
+    void SimulateVisitor::visit(const ExprReader * expr) {
         context.thisProgram->error("internal compilation error, calling 'simulate' on reader", "", "", expr->at, CompilationError::internal_macro);
         setE(expr, nullptr);
-        return expr;
     }
 
     // label
 
-    ExpressionPtr SimulateVisitor::visit(ExprLabel * expr) {
+    void SimulateVisitor::visit(const ExprLabel * expr) {
         context.thisProgram->error("internal compilation error, calling 'simulate' on label", "", "", expr->at, CompilationError::internal_label);
         setE(expr, nullptr);
-        return expr;
     }
 
     // goto
 
-    ExpressionPtr SimulateVisitor::visit(ExprGoto * expr) {
+    void SimulateVisitor::visit(const ExprGoto * expr) {
         const auto &at = expr->at;
         SimNode * result = nullptr;
         if ( expr->subexpr ) {
@@ -1203,7 +1195,6 @@ namespace das
         }
 #endif
         setE(expr, result);
-        return expr;
     }
 
     // r2v
@@ -1216,22 +1207,21 @@ namespace das
         }
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprRef2Value * expr) {
+    void SimulateVisitor::visit(const ExprRef2Value * expr) {
         const auto &at = expr->at;
         setE(expr, GetR2V(context, at, expr->type, getE(expr->subexpr)));
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprAddr * expr) {
+    void SimulateVisitor::visit(const ExprAddr * expr) {
         const auto &at = expr->at;
         if ( !expr->func ) {
             context.thisProgram->error("internal compilation error, ExprAddr func is null", "", "", at, CompilationError::internal_function);
             setE(expr, nullptr);
-            return expr;
+            return;
         } else if ( programIndexOf(context,expr->func)<0 ) {
             context.thisProgram->error("internal compilation error, ExprAddr func->index is unused", "", "", at, CompilationError::internal_function);
             setE(expr, nullptr);
-            return expr;
+            return;
 
         }
         union {
@@ -1248,10 +1238,9 @@ namespace das
             temp.mnh = expr->func->getMangledNameHash();
             setE(expr, context.code->makeNode<SimNode_FuncConstValueMnh>(at,temp.cval));
         }
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprPtr2Ref * expr) {
+    void SimulateVisitor::visit(const ExprPtr2Ref * expr) {
         const auto &at = expr->at;
         if ( expr->subexpr->type && expr->subexpr->type->isDistinct() ) {
             setE(expr, getE(expr->subexpr));    // distinct deref is a compile-time relabel
@@ -1261,15 +1250,13 @@ namespace das
             auto errorMessage = context.code->allocateName(", "+expr->subexpr->describe()+" is null");
             setE(expr, context.code->makeNode<SimNode_Ptr2Ref>(at, getE(expr->subexpr), errorMessage));
         }
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprRef2Ptr * expr) {
+    void SimulateVisitor::visit(const ExprRef2Ptr * expr) {
         setE(expr, getE(expr->subexpr));
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprNullCoalescing * expr) {
+    void SimulateVisitor::visit(const ExprNullCoalescing * expr) {
         const auto &at = expr->at;
         if ( expr->type->isRef() ) {
             setE(expr, context.code->makeNode<SimNode_NullCoalescingRef>(at, getE(expr->subexpr), getE(expr->defaultValue)));
@@ -1282,10 +1269,9 @@ namespace das
         } else {
             setE(expr, context.code->makeValueNode<SimNode_NullCoalescing>(expr->type->getR2VType(), at, getE(expr->subexpr), getE(expr->defaultValue)));
         }
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprConstString * expr) {
+    void SimulateVisitor::visit(const ExprConstString * expr) {
         const auto &at = expr->at;
         if ( !expr->text.empty() ) {
             char* str = context.constStringHeap->impl_allocateString(expr->text);
@@ -1293,22 +1279,19 @@ namespace das
         } else {
             setE(expr, context.code->makeNode<SimNode_ConstString>(at, nullptr));
         }
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprStaticAssert * expr) {
+    void SimulateVisitor::visit(const ExprStaticAssert * expr) {
         setE(expr, nullptr);
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprAssert * expr) {
+    void SimulateVisitor::visit(const ExprAssert * expr) {
         const auto &at = expr->at;
         string message;
         if ( expr->arguments.size()==2 && expr->arguments[1]->rtti_isStringConstant() )
             message = static_cast<ExprConstString*>(expr->arguments[1])->getValue();
         setE(expr, context.code->makeNode<SimNode_Assert>(at, getE(expr->arguments[0]),
             context.constStringHeap->impl_allocateString(message)));
-        return expr;
     }
 
     struct SimNode_AstGetExpression : SimNode_CallBase {
@@ -1337,7 +1320,7 @@ namespace das
         char *        descr;
     };
 
-    ExpressionPtr SimulateVisitor::visit(ExprQuote * expr) {
+    void SimulateVisitor::visit(const ExprQuote * expr) {
         const auto &at = expr->at;
         DAS_ASSERTF(expr->arguments.size()==1,"Quote expects to return only one ExpressionPtr."
         "We should not be here, since typeinfer should catch the mismatch.");
@@ -1345,10 +1328,9 @@ namespace das
         ss << *expr->arguments[0];
         char * descr = context.code->allocateName(ss.str());
         setE(expr, context.code->makeNode<SimNode_AstGetExpression>(at, expr->arguments[0], descr));
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprDebug * expr) {
+    void SimulateVisitor::visit(const ExprDebug * expr) {
         const auto &at = expr->at;
         TypeInfo * pTypeInfo = context.thisHelper->makeTypeInfo(nullptr, expr->arguments[0]->type);
         string message;
@@ -1356,42 +1338,37 @@ namespace das
             message = static_cast<ExprConstString*>(expr->arguments[1])->getValue();
         setE(expr, context.code->makeNode<SimNode_Debug>(at, getE(expr->arguments[0]),
             pTypeInfo, context.constStringHeap->impl_allocateString(message)));
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprMemZero * expr) {
+    void SimulateVisitor::visit(const ExprMemZero * expr) {
         const auto &at = expr->at;
         const auto & subexpr = expr->arguments[0];
         uint32_t dataSize = subexpr->type->getSizeOf();
         setE(expr, context.code->makeNode<SimNode_MemZero>(at, getE(subexpr), dataSize));
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprMakeGenerator * expr) {
+    void SimulateVisitor::visit(const ExprMakeGenerator * expr) {
         const auto &at = expr->at;
         DAS_ASSERTF(0, "we should not be here ever, ExprMakeGenerator should completly fold during type inference.");
         context.thisProgram->error("internal compilation error, generating node for ExprMakeGenerator", "", "", at, CompilationError::internal_generator);
         setE(expr, nullptr);
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprYield * expr) {
+    void SimulateVisitor::visit(const ExprYield * expr) {
         const auto &at = expr->at;
         DAS_ASSERTF(0, "we should not be here ever, ExprYield should completly fold during type inference.");
         context.thisProgram->error("internal compilation error, generating node for ExprYield", "", "", at, CompilationError::internal_generator);
         setE(expr, nullptr);
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprArrayComprehension * expr) {
+    void SimulateVisitor::visit(const ExprArrayComprehension * expr) {
         const auto &at = expr->at;
         DAS_ASSERTF(0, "we should not be here ever, ExprArrayComprehension should completly fold during type inference.");
         context.thisProgram->error("internal compilation error, generating node for ExprArrayComprehension", "", "", at, CompilationError::internal_array);
         setE(expr, nullptr);
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprMakeBlock * expr) {
+    void SimulateVisitor::visit(const ExprMakeBlock * expr) {
         const auto &at = expr->at;
         gc_guard gc_scope;
         auto blk = static_cast<ExprBlock*>(expr->block);
@@ -1405,7 +1382,6 @@ namespace das
             context.thisHelper->appendLocalVariables(info, (Expression *)expr);
         }
         setE(expr, context.code->makeNode<SimNode_MakeBlock>(at, getE(expr->block), argSp, expr->stackTop, info));
-        return expr;
     }
 
     bool ExprInvoke::isCopyOrMove() const {
@@ -1413,7 +1389,7 @@ namespace das
         return blockT->firstType && blockT->firstType->isRefType() && !blockT->firstType->ref;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprInvoke * expr) {
+    void SimulateVisitor::visit(const ExprInvoke * expr) {
         const auto &at = expr->at;
         auto blockT = expr->arguments[0]->type;
         SimNode_CallBase * pInvoke;
@@ -1435,7 +1411,7 @@ namespace das
             if (!foundOffset) {
                 context.thisProgram->error("internal compilation error, invoke method expects field", "", "", at, CompilationError::internal_field);
                 setE(expr, nullptr);
-                return expr;
+                return;
             }
         }
         {
@@ -1500,10 +1476,9 @@ namespace das
             pInvoke->nArguments = 0;
         }
         setE(expr, sv_keepAlive(at, pInvoke));
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprErase * expr) {
+    void SimulateVisitor::visit(const ExprErase * expr) {
         const auto &at = expr->at;
         auto cont = getE(expr->arguments[0]);
         auto val = getE(expr->arguments[1]);
@@ -1519,10 +1494,9 @@ namespace das
             context.thisProgram->error("internal compilation error, generating erase for non-table type", "", "", at, CompilationError::internal_table);
             setE(expr, nullptr);
         }
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprSetInsert * expr) {
+    void SimulateVisitor::visit(const ExprSetInsert * expr) {
         const auto &at = expr->at;
         auto cont = getE(expr->arguments[0]);
         auto val = getE(expr->arguments[1]);
@@ -1538,10 +1512,9 @@ namespace das
             context.thisProgram->error("internal compilation error, generating set insert for non-table type", "", "", at, CompilationError::internal_table);
             setE(expr, nullptr);
         }
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprFind * expr) {
+    void SimulateVisitor::visit(const ExprFind * expr) {
         const auto &at = expr->at;
         auto cont = getE(expr->arguments[0]);
         if ( expr->arguments[0]->type->isGoodTableType() ) {
@@ -1563,10 +1536,9 @@ namespace das
             context.thisProgram->error("internal compilation error, generating find for non-table type", "", "", at, CompilationError::internal_table);
             setE(expr, nullptr);
         }
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprKeyExists * expr) {
+    void SimulateVisitor::visit(const ExprKeyExists * expr) {
         const auto &at = expr->at;
         auto cont = getE(expr->arguments[0]);
         if ( expr->arguments[0]->type->isGoodTableType() ) {
@@ -1588,24 +1560,21 @@ namespace das
             context.thisProgram->error("internal compilation error, generating find for non-table type", "", "", at, CompilationError::internal_table);
             setE(expr, nullptr);
         }
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprIs * expr) {
+    void SimulateVisitor::visit(const ExprIs * expr) {
         const auto &at = expr->at;
         DAS_ASSERTF(0, "we should not even be here. 'is' should resolve to const during infer pass.");
         context.thisProgram->error("internal compilation error, generating 'is'", "", "", at, CompilationError::internal_expression);
         setE(expr, nullptr);
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprTypeDecl * expr) {
+    void SimulateVisitor::visit(const ExprTypeDecl * expr) {
         const auto &at = expr->at;
         setE(expr, context.code->makeNode<SimNode_ConstValue>(at, v_zero()));
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprTypeInfo * expr) {
+    void SimulateVisitor::visit(const ExprTypeInfo * expr) {
         const auto &at = expr->at;
         if ( !expr->macro ) {
             DAS_ASSERTF(0, "we should not even be here. typeinfo should resolve to const during infer pass.");
@@ -1620,10 +1589,9 @@ namespace das
             }
             setE(expr, node);
         }
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprDelete * expr) {
+    void SimulateVisitor::visit(const ExprDelete * expr) {
         const auto &at = expr->at;
         uint32_t total = uint32_t(expr->subexpr->type->getCountOf());
         DAS_ASSERTF(total==1,"we should not be deleting more than one at a time");
@@ -1687,25 +1655,23 @@ namespace das
             context.thisProgram->error("internal compiler error: generating node for unsupported ExprDelete", "", "", at, CompilationError::internal_expression);
             setE(expr, nullptr);
         }
-        return expr;
     }
 
     SimNode * SimulateVisitor::sv_trySimulate_Cast(const ExprCast * expr, uint32_t extraOffset, const TypeDeclPtr & r2vType) {
         return sv_trySimulate(expr->subexpr, extraOffset, r2vType);
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprCast * expr) {
+    void SimulateVisitor::visit(const ExprCast * expr) {
         setE(expr, getE(expr->subexpr));
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprAscend * expr) {
+    void SimulateVisitor::visit(const ExprAscend * expr) {
         const auto &at = expr->at;
         auto se = getE(expr->subexpr);
         if ( expr->allocate_on_stack && !expr->needTypeInfo ) {
             // the make-local sub-expression already builds into the frame slot and returns sp+stackTop
             setE(expr, se);
-            return expr;
+            return;
         }
         auto bytes = expr->subexpr->type->getSizeOf();
         TypeInfo * typeInfo = nullptr;
@@ -1731,10 +1697,9 @@ namespace das
             }
         }
         setE(expr, result);
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprNew * expr) {
+    void SimulateVisitor::visit(const ExprNew * expr) {
         const auto &at = expr->at;
         SimNode * newNode;
         auto newBaseT = expr->typeexpr;     // element view - may be a fixed-array chain
@@ -1750,7 +1715,7 @@ namespace das
                                             at, CompilationError::internal_expression );
                 }
                 setE(expr, pCall);
-                return expr;
+                return;
             } else {
                 newNode = newBaseT->annotation->simulateGetNew(context, at);
                 if ( !newNode ) {
@@ -1785,7 +1750,6 @@ namespace das
         } else {
             setE(expr, newNode);
         }
-        return expr;
     }
 
     SimNode * SimulateVisitor::sv_trySimulate_At(const ExprAt * expr, uint32_t extraOffset, const TypeDeclPtr & r2vType) {
@@ -1933,7 +1897,7 @@ namespace das
         }
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprAt * expr) {
+    void SimulateVisitor::visit(const ExprAt * expr) {
         const auto &at = expr->at;
         if ( expr->subexpr->type->isVectorType() ) {
             auto prv = getE(expr->subexpr);
@@ -2025,10 +1989,9 @@ namespace das
                 setE(expr, sv_trySimulate(expr, 0, noneType));
             }
         }
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprSafeAt * expr) {
+    void SimulateVisitor::visit(const ExprSafeAt * expr) {
         const auto &at = expr->at;
         if ( expr->subexpr->type->isPointer() ) {
             const auto & seT = expr->subexpr->type->firstType;
@@ -2132,7 +2095,6 @@ namespace das
                 setE(expr, nullptr);
             }
         }
-        return expr;
     }
 
     vector<SimNode *> SimulateVisitor::sv_collectExpressions ( const vector<ExpressionPtr> & lis,
@@ -2196,14 +2158,14 @@ namespace das
         }
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprBlock * expr) {
+    void SimulateVisitor::visit(const ExprBlock * expr) {
         das_map<int32_t,uint32_t> ofsmap;
         const auto &at = expr->at;
         vector<SimNode *> simlist = sv_collectExpressions(expr->list, &ofsmap);
         // wow, such empty
         if ( expr->finalList.size()==0 && simlist.size()==0 && !expr->annotationDataSid ) {
             setE(expr, context.code->makeNode<SimNode_NOP>(at));
-            return expr;
+            return;
         }
         // we memzero block's stack memory, if there is a finally section
         // bad scenario we fight is ( in scope X ; return ; in scope Y )
@@ -2282,7 +2244,6 @@ namespace das
         } else {
             setE(expr, simlist[0]);
         }
-        return expr;
     }
 
     SimNode * SimulateVisitor::sv_trySimulate_Swizzle(const ExprSwizzle * expr, uint32_t extraOffset, const TypeDeclPtr & r2vType) {
@@ -2306,7 +2267,7 @@ namespace das
         }
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprSwizzle * expr) {
+    void SimulateVisitor::visit(const ExprSwizzle * expr) {
         const auto &at = expr->at;
         if ( !expr->type->ref ) {
             bool seq = TypeDecl::isSequencialMask(expr->fields);
@@ -2346,10 +2307,9 @@ namespace das
                 setE(expr, sv_trySimulate(expr, 0, noneType));
             }
         }
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprField * expr) {
+    void SimulateVisitor::visit(const ExprField * expr) {
         const auto &at = expr->at;
         if ( expr->value->type->isBitfield() ) {
             auto simV = getE(expr->value);
@@ -2363,7 +2323,6 @@ namespace das
                 setE(expr, sv_trySimulate(expr, 0, noneType));
             }
         }
-        return expr;
     }
 
     SimNode * SimulateVisitor::sv_trySimulate_Field(const ExprField * expr, uint32_t extraOffset, const TypeDeclPtr & r2vType) {
@@ -2424,14 +2383,13 @@ namespace das
         }
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprIsVariant * expr) {
+    void SimulateVisitor::visit(const ExprIsVariant * expr) {
         const auto &at = expr->at;
         DAS_ASSERT(expr->fieldIndex != -1);
         setE(expr, context.code->makeNode<SimNode_IsVariant>(at, getE(expr->value), expr->fieldIndex));
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprAsVariant * expr) {
+    void SimulateVisitor::visit(const ExprAsVariant * expr) {
         const auto &at = expr->at;
         int fieldOffset = expr->value->type->getVariantFieldOffset(expr->fieldIndex);
         auto simV = getE(expr->value);
@@ -2441,10 +2399,9 @@ namespace das
         } else {
             setE(expr, context.code->makeNode<SimNode_VariantFieldDeref>(at, simV, fieldOffset, expr->fieldIndex, errorMessage));
         }
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprSafeAsVariant * expr) {
+    void SimulateVisitor::visit(const ExprSafeAsVariant * expr) {
         const auto &at = expr->at;
         int fieldOffset = expr->value->type->isPointer() ?
             expr->value->type->firstType->getVariantFieldOffset(expr->fieldIndex) :
@@ -2455,10 +2412,9 @@ namespace das
         } else {
             setE(expr, context.code->makeNode<SimNode_SafeVariantFieldDeref>(at, simV, fieldOffset, expr->fieldIndex));
         }
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprSafeField * expr) {
+    void SimulateVisitor::visit(const ExprSafeField * expr) {
         const auto &at = expr->at;
         int fieldOffset = -1;
         if ( !expr->annotation ) {
@@ -2479,10 +2435,9 @@ namespace das
         } else {
             setE(expr, context.code->makeNode<SimNode_SafeFieldDeref>(at, getE(expr->value), fieldOffset));
         }
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprStringBuilder * expr) {
+    void SimulateVisitor::visit(const ExprStringBuilder * expr) {
         const auto &at = expr->at;
         SimNode_StringBuilder * pSB = context.code->makeNode<SimNode_StringBuilder>(expr->isTempString, at);
         if ( int nArg = (int) expr->elements.size() ) {
@@ -2499,7 +2454,6 @@ namespace das
             pSB->nArguments = 0;
         }
         setE(expr, pSB);
-        return expr;
     }
 
 
@@ -2554,7 +2508,7 @@ namespace das
         return nullptr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprVar * expr) {
+    void SimulateVisitor::visit(const ExprVar * expr) {
         const auto &at = expr->at;
         if ( expr->block ) {
             auto blk = expr->pBlock;
@@ -2620,7 +2574,7 @@ namespace das
             if ( programIndexOf(context,expr->variable) < 0 && expr->variable->init
                  && expr->variable->init->rtti_isConstant() ) {
                 setE(expr, simulateExpression(expr->variable->init));
-                return expr;
+                return;
             }
             DAS_ASSERT(programIndexOf(context,expr->variable) >= 0 && "using variable which is not used. how?");
             uint64_t mnh = expr->variable->getMangledNameHash();
@@ -2655,10 +2609,9 @@ namespace das
                 }
             }
         }
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprOp1 * expr) {
+    void SimulateVisitor::visit(const ExprOp1 * expr) {
         const auto &at = expr->at;
         vector<ExpressionPtr> sarguments = { expr->subexpr };
         if ( expr->func->builtIn && !expr->func->callBased ) {
@@ -2676,7 +2629,6 @@ namespace das
             pCall->cmresEval = context.code->makeNode<SimNode_GetLocal>(at, expr->stackTop);
             setE(expr, pCall);
         }
-        return expr;
     }
 
     // we flatten or(or(or(a,b),c),d) into a single vector {a,b,c,d}
@@ -2693,7 +2645,7 @@ namespace das
         }
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprOp2 * expr) {
+    void SimulateVisitor::visit(const ExprOp2 * expr) {
         const auto &at = expr->at;
         // special case for logical operator sequence
         if ( expr->func->builtIn && expr->func->module->name=="$" && expr->func->arguments[0]->type->isBool() ) {
@@ -2709,7 +2661,7 @@ namespace das
                     } else {
                         DAS_ASSERTF(0, "unknown logical operator");
                         setE(expr, nullptr);
-                        return expr;
+                        return;
                     }
                     pSimNode->nArguments = (uint32_t) flat.size();
                     pSimNode->arguments = (SimNode **) context.code->allocate((uint32_t)(flat.size() * sizeof(SimNode *)));
@@ -2717,7 +2669,7 @@ namespace das
                         pSimNode->arguments[i] = getE(flat[i]);
                     }
                     setE(expr, pSimNode);
-                    return expr;
+                    return;
                 }
             }
         }
@@ -2739,24 +2691,21 @@ namespace das
             pCall->cmresEval = context.code->makeNode<SimNode_GetLocal>(at, expr->stackTop);
             setE(expr, pCall);
         }
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprOp3 * expr) {
+    void SimulateVisitor::visit(const ExprOp3 * expr) {
         const auto &at = expr->at;
         setE(expr, context.code->makeNode<SimNode_IfThenElse>(at,
             getE(expr->subexpr), getE(expr->left), getE(expr->right)));
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprTag * expr) {
+    void SimulateVisitor::visit(const ExprTag * expr) {
         const auto &at = expr->at;
         context.thisProgram->error("internal compilation error, trying to simulate a tag", "", "", at, CompilationError::internal_macro);
         setE(expr, nullptr);
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprMove * expr) {
+    void SimulateVisitor::visit(const ExprMove * expr) {
         const auto &at = expr->at;
         if ( expr->takeOverRightStack ) {
             auto sl = getE(expr->left);
@@ -2769,10 +2718,9 @@ namespace das
             }
             setE(expr, retN);
         }
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprClone * expr) {
+    void SimulateVisitor::visit(const ExprClone * expr) {
         const auto &at = expr->at;
         SimNode * retN = nullptr;
         if ( expr->left->type->isHandle() ) {
@@ -2790,10 +2738,9 @@ namespace das
             context.thisProgram->error("internal compilation error, can't generate clone", "", "", at, CompilationError::internal_expression);
         }
         setE(expr, retN);
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprCopy * expr) {
+    void SimulateVisitor::visit(const ExprCopy * expr) {
         const auto &at = expr->at;
         if ( expr->takeOverRightStack ) {
             auto sl = getE(expr->left);
@@ -2806,10 +2753,9 @@ namespace das
             }
             setE(expr, retN);
         }
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprTryCatch * expr) {
+    void SimulateVisitor::visit(const ExprTryCatch * expr) {
         const auto &at = expr->at;
 #if DAS_DEBUGGER
         if ( context.debugger ) {
@@ -2819,10 +2765,9 @@ namespace das
         {
             setE(expr, context.code->makeNode<SimNode_TryCatch>(at, getE(expr->try_block), getE(expr->catch_block)));
         }
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprReturn * expr) {
+    void SimulateVisitor::visit(const ExprReturn * expr) {
         const auto &at = expr->at;
         // return string is its own thing
         if (expr->subexpr && expr->subexpr->type && expr->subexpr->rtti_isConstant()) {
@@ -2830,7 +2775,7 @@ namespace das
                 auto cVal = static_cast<ExprConstString*>(expr->subexpr);
                 char * str = context.constStringHeap->impl_allocateString(cVal->text);
                 setE(expr, context.code->makeNode<SimNode_ReturnConstString>(at, str));
-                return expr;
+                return;
             }
         }
         // now, lets do the standard everything
@@ -2843,15 +2788,15 @@ namespace das
         SimNode * simSubE = (expr->subexpr && !skipIt) ? getE(expr->subexpr) : nullptr;
         if ( expr->subexpr && !skipIt && !simSubE ) {
             setE(expr, nullptr);
-            return expr;
+            return;
         }
         if (!expr->subexpr) {
             setE(expr, context.code->makeNode<SimNode_ReturnNothing>(at));
-            return expr;
+            return;
         } else if ( expr->subexpr->rtti_isConstant() ) {
             auto cVal = static_cast<ExprConst*>(expr->subexpr);
             setE(expr, context.code->makeNode<SimNode_ReturnConst>(at, cVal->value));
-            return expr;
+            return;
         }
         if ( expr->returnReference ) {
             if ( expr->returnInBlock ) {
@@ -2896,7 +2841,7 @@ namespace das
                         for ( uint32_t i=0, is=blockT->total; i!=is; ++i )
                             blockT->list[i] = simlist[i];
                         setE(expr, blockT);
-                        return expr;
+                        return;
                     }
                 }
                 DAS_VERIFYF(simSubE, "internal error. can't be zero");
@@ -2916,7 +2861,7 @@ namespace das
             if ( !simSubE ) {
                 // this is when subexpr produces no expression worth simulating (meaning its internal reported error or internal error)
                 setE(expr, nullptr);
-                return expr;
+                return;
             }
             if ( expr->moveSemantics ) {
                 if ( expr->subexpr->type->isRef() ) {
@@ -2928,22 +2873,19 @@ namespace das
                 setE(expr, context.code->makeNode<SimNode_Return>(at, simSubE));
             }
         }
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprBreak * expr) {
+    void SimulateVisitor::visit(const ExprBreak * expr) {
         const auto &at = expr->at;
         setE(expr, context.code->makeNode<SimNode_Break>(at));
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprContinue * expr) {
+    void SimulateVisitor::visit(const ExprContinue * expr) {
         const auto &at = expr->at;
         setE(expr, context.code->makeNode<SimNode_Continue>(at));
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprIfThenElse * expr) {
+    void SimulateVisitor::visit(const ExprIfThenElse * expr) {
         const auto &at = expr->at;
         ExpressionPtr zeroCond = nullptr;
         bool condIfZero = false;
@@ -3010,17 +2952,14 @@ namespace das
                 }
             }
         }
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprWith * expr) {
+    void SimulateVisitor::visit(const ExprWith * expr) {
         setE(expr, getE(expr->body));
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprAssume * expr) {
+    void SimulateVisitor::visit(const ExprAssume * expr) {
         setE(expr, nullptr);
-        return expr;
     }
 
     void SimulateVisitor::sv_whileSimulateFinal ( ExpressionPtr bod, SimNode_Block * blk ) {
@@ -3033,7 +2972,7 @@ namespace das
         }
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprWhile * expr) {
+    void SimulateVisitor::visit(const ExprWhile * expr) {
         const auto &at = expr->at;
         SimNode_Block * whileNode = nullptr;
 #if DAS_DEBUGGER
@@ -3051,15 +2990,13 @@ namespace das
         }
         sv_whileSimulateFinal(expr->body, whileNode);
         setE(expr, whileNode);
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprUnsafe * expr) {
+    void SimulateVisitor::visit(const ExprUnsafe * expr) {
         setE(expr, getE(expr->body));
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprFor * expr) {
+    void SimulateVisitor::visit(const ExprFor * expr) {
         const auto &at = expr->at;
         // determine iteration types
         bool nativeIterators = false;
@@ -3152,7 +3089,7 @@ namespace das
                     DAS_ASSERTF(0, "we should not be here. we are doing iterator for on an unsupported type.");
                     context.thisProgram->error("internal compilation error, generating for-with-iterator", "", "", at, CompilationError::internal_expression);
                     setE(expr, nullptr);
-                    return expr;
+                    return;
                 }
                 result->stackTop[t] = expr->iteratorVariables[t]->stackTop;
             }
@@ -3186,7 +3123,7 @@ namespace das
                 }
                 if ( pureSources ) {
                     setE(expr, nullptr);
-                    return expr;
+                    return;
                 }
             }
 #if DAS_DEBUGGER
@@ -3222,7 +3159,7 @@ namespace das
                     DAS_ASSERTF(0, "we should not be here yet. logic above assumes optimized for path of some kind.");
                     context.thisProgram->error("internal compilation error, generating for", "", "", at, CompilationError::internal_expression);
                     setE(expr, nullptr);
-                    return expr;
+                    return;
                 }
             } else
 #endif
@@ -3259,7 +3196,7 @@ namespace das
                     DAS_ASSERTF(0, "we should not be here yet. logic above assumes optimized for path of some kind.");
                     context.thisProgram->error("internal compilation error, generating for", "", "", at, CompilationError::internal_expression);
                     setE(expr, nullptr);
-                    return expr;
+                    return;
                 }
             } else
 #endif
@@ -3295,7 +3232,7 @@ namespace das
                     DAS_ASSERTF(0, "we should not be here yet. logic above assumes optimized for path of some kind.");
                     context.thisProgram->error("internal compilation error, generating for", "", "", at, CompilationError::internal_expression);
                     setE(expr, nullptr);
-                    return expr;
+                    return;
                 }
             }
             result->allocateFor(context.code.get(), total);
@@ -3318,7 +3255,6 @@ namespace das
             result->totalFinal = forBody.totalFinal;
             setE(expr, result);
         }
-        return expr;
     }
 
     vector<SimNode *> SimulateVisitor::sv_simulateLetInits(const ExprLet * pLet) {
@@ -3424,7 +3360,7 @@ namespace das
         }
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprLet * expr) {
+    void SimulateVisitor::visit(const ExprLet * expr) {
         const auto &at = expr->at;
         auto let = context.code->makeNode<SimNode_Let>(at);
         let->total = (uint32_t) expr->variables.size();
@@ -3433,7 +3369,6 @@ namespace das
         letInitVec[expr] = simList;
         copy(simList.data(), simList.data() + simList.size(), let->list);
         setE(expr, let);
-        return expr;
     }
 
     SimNode * SimulateVisitor::sv_keepAlive ( const LineInfo & at, SimNode * result ) {
@@ -3529,7 +3464,7 @@ namespace das
         return vector<SimNode*>();
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprCall * expr) {
+    void SimulateVisitor::visit(const ExprCall * expr) {
         const auto &at = expr->at;
         auto pCall = static_cast<SimNode_CallBase *>(expr->func->makeSimNode(context, expr->arguments));
         sv_simulateCall(expr->func, expr, pCall);
@@ -3543,13 +3478,11 @@ namespace das
         } else {
             setE(expr, sv_keepAlive(at, pCall));
         }
-        return expr;
     }
 
-    ExpressionPtr SimulateVisitor::visit(ExprNamedCall * expr) {
+    void SimulateVisitor::visit(const ExprNamedCall * expr) {
         DAS_ASSERTF(false, "we should not be here. named call should be promoted to regular call");
         setE(expr, nullptr);
-        return expr;
     }
 
     void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
@@ -3670,6 +3603,8 @@ namespace das
         });
     }
 
+    void linkProgram ( Program * program, TextWriter & logs );
+
     bool Program::simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
         CompilationCallbackGuard callbackGuard("", thisModule->fileName, "simulation");
         auto time0 = ref_time_ticks();
@@ -3682,6 +3617,7 @@ namespace das
         if ( policies.keep_alive ) {
             updateKeepAliveFlags();
         }
+        linkProgram(this, logs);
         isSimulating = true;
         // the simulate is this program's compile: its init script and its simulate macros run with it bound
         auto bound_env = daScriptEnvironment::getBound();

@@ -8,6 +8,7 @@
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_generate.h"
 #include "daScript/ast/ast_visitor.h"
+#include "daScript/ast/ast_const_visitor.h"
 #include "daScript/simulate/aot_builtin_ast.h"
 #include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/misc/performance_time.h"
@@ -2654,6 +2655,169 @@ namespace das {
         return res;
     }
 
+    class ConstVisitorAdapter : public ConstVisitor, AstConstVisitor_Adapter {
+    public:
+        ConstVisitorAdapter ( char * pClass, const StructInfo * info, Context * ctx )
+            : AstConstVisitor_Adapter(info), classPtr(pClass), context(ctx) {}
+#define DAS_CONST_ADAPT_VOID(DasName, Method, Params, ...) \
+        virtual void Method Params override { \
+            if ( auto fn = get_##DasName(classPtr) ) { \
+                runMacroFunction(context, #DasName, [&]() { \
+                    invoke_##DasName(context,fn,classPtr,__VA_ARGS__); \
+                }); \
+            } \
+        }
+#define DAS_CONST_ADAPT_BOOL(DasName, Method, Params, ...) \
+        virtual bool Method Params override { \
+            if ( auto fn = get_##DasName(classPtr) ) { \
+                bool result = true; \
+                runMacroFunction(context, #DasName, [&]() { \
+                    result = invoke_##DasName(context,fn,classPtr,__VA_ARGS__); \
+                }); \
+                return result; \
+            } \
+            return ConstVisitor::Method(__VA_ARGS__); \
+        }
+        DAS_CONST_ADAPT_VOID(preVisitTypeDecl, preVisit, (const TypeDecl * td), td)
+        DAS_CONST_ADAPT_VOID(visitTypeDecl, visit, (const TypeDecl * td), td)
+        DAS_CONST_ADAPT_VOID(preVisitExpression, preVisitExpression, (const Expression * expr), expr)
+        DAS_CONST_ADAPT_VOID(visitExpression, visitExpression, (const Expression * expr), expr)
+        DAS_CONST_ADAPT_VOID(preVisitExprBlockArgument, preVisitBlockArgument, (const ExprBlock * block, const Variable * var, bool lastArg), block,var,lastArg)
+        DAS_CONST_ADAPT_VOID(visitExprBlockArgument, visitBlockArgument, (const ExprBlock * block, const Variable * var, bool lastArg), block,var,lastArg)
+        DAS_CONST_ADAPT_VOID(preVisitExprBlockArgumentInit, preVisitBlockArgumentInit, (const ExprBlock * block, const Variable * var, const Expression * init), block,var,init)
+        DAS_CONST_ADAPT_VOID(visitExprBlockArgumentInit, visitBlockArgumentInit, (const ExprBlock * block, const Variable * var, const Expression * init), block,var,init)
+        DAS_CONST_ADAPT_VOID(preVisitExprBlockExpression, preVisitBlockExpression, (const ExprBlock * block, const Expression * expr), block,expr)
+        DAS_CONST_ADAPT_VOID(visitExprBlockExpression, visitBlockExpression, (const ExprBlock * block, const Expression * expr), block,expr)
+        DAS_CONST_ADAPT_VOID(preVisitExprBlockFinal, preVisitBlockFinal, (const ExprBlock * block), block)
+        DAS_CONST_ADAPT_VOID(visitExprBlockFinal, visitBlockFinal, (const ExprBlock * block), block)
+        DAS_CONST_ADAPT_VOID(preVisitExprBlockFinalExpression, preVisitBlockFinalExpression, (const ExprBlock * block, const Expression * expr), block,expr)
+        DAS_CONST_ADAPT_VOID(visitExprBlockFinalExpression, visitBlockFinalExpression, (const ExprBlock * block, const Expression * expr), block,expr)
+        DAS_CONST_ADAPT_VOID(preVisitExprLetVariable, preVisitLet, (const ExprLet * let, const Variable * var, bool last), let,var,last)
+        DAS_CONST_ADAPT_VOID(visitExprLetVariable, visitLet, (const ExprLet * let, const Variable * var, bool last), let,var,last)
+        DAS_CONST_ADAPT_VOID(preVisitExprLetVariableInit, preVisitLetInit, (const ExprLet * let, const Variable * var, const Expression * init), let,var,init)
+        DAS_CONST_ADAPT_VOID(visitExprLetVariableInit, visitLetInit, (const ExprLet * let, const Variable * var, const Expression * init), let,var,init)
+        DAS_CONST_ADAPT_VOID(preVisitExprStringBuilderElement, preVisitStringBuilderElement, (const ExprStringBuilder * sb, const Expression * expr, bool last), sb,expr,last)
+        DAS_CONST_ADAPT_VOID(visitExprStringBuilderElement, visitStringBuilderElement, (const ExprStringBuilder * sb, const Expression * expr, bool last), sb,expr,last)
+        DAS_CONST_ADAPT_VOID(preVisitExprNewArgument, preVisitNewArg, (const ExprNew * call, const Expression * arg, bool last), call,arg,last)
+        DAS_CONST_ADAPT_VOID(visitExprNewArgument, visitNewArg, (const ExprNew * call, const Expression * arg, bool last), call,arg,last)
+        DAS_CONST_ADAPT_VOID(preVisitExprNamedCallArgument, preVisitNamedCallArg, (const ExprNamedCall * call, const MakeFieldDecl * arg, bool last), call,arg,last)
+        DAS_CONST_ADAPT_VOID(visitExprNamedCallArgument, visitNamedCallArg, (const ExprNamedCall * call, const MakeFieldDecl * arg, bool last), call,arg,last)
+        DAS_CONST_ADAPT_BOOL(canVisitExprLooksLikeCallArgument, canVisitLooksLikeCallArg, (const ExprLooksLikeCall * call, const Expression * arg, bool last), call,arg,last)
+        DAS_CONST_ADAPT_VOID(preVisitExprLooksLikeCallArgument, preVisitLooksLikeCallArg, (const ExprLooksLikeCall * call, const Expression * arg, bool last), call,arg,last)
+        DAS_CONST_ADAPT_VOID(visitExprLooksLikeCallArgument, visitLooksLikeCallArg, (const ExprLooksLikeCall * call, const Expression * arg, bool last), call,arg,last)
+        DAS_CONST_ADAPT_BOOL(canVisitCall, canVisitCall, (const ExprCall * expr), expr)
+        DAS_CONST_ADAPT_BOOL(canVisitNamedCall, canVisitNamedCall, (const ExprNamedCall * expr), expr)
+        DAS_CONST_ADAPT_BOOL(canVisitLooksLikeCall, canVisitLooksLikeCall, (const ExprLooksLikeCall * expr), expr)
+        DAS_CONST_ADAPT_VOID(preVisitExprCallArgument, preVisitCallArg, (const ExprCall * call, const Expression * arg, bool last), call,arg,last)
+        DAS_CONST_ADAPT_VOID(visitExprCallArgument, visitCallArg, (const ExprCall * call, const Expression * arg, bool last), call,arg,last)
+        DAS_CONST_ADAPT_VOID(preVisitExprNullCoalescingDefault, preVisitNullCoaelescingDefault, (const ExprNullCoalescing * expr, const Expression * defval), expr,defval)
+        DAS_CONST_ADAPT_VOID(preVisitExprAtIndex, preVisitAtIndex, (const ExprAt * expr, const Expression * index), expr,index)
+        DAS_CONST_ADAPT_VOID(preVisitExprSafeAtIndex, preVisitSafeAtIndex, (const ExprSafeAt * expr, const Expression * index), expr,index)
+        DAS_CONST_ADAPT_VOID(preVisitExprIsType, preVisitType, (const ExprIs * expr, const TypeDecl * typeDecl), expr,typeDecl)
+        DAS_CONST_ADAPT_VOID(preVisitExprOp2Right, preVisitRight, (const ExprOp2 * expr, const Expression * right), expr,right)
+        DAS_CONST_ADAPT_VOID(preVisitExprOp3Left, preVisitLeft, (const ExprOp3 * expr, const Expression * left), expr,left)
+        DAS_CONST_ADAPT_VOID(preVisitExprOp3Right, preVisitRight, (const ExprOp3 * expr, const Expression * right), expr,right)
+        DAS_CONST_ADAPT_BOOL(isRightFirstExprCopy, isRightFirst, (const ExprCopy * expr), expr)
+        DAS_CONST_ADAPT_VOID(preVisitExprCopyRight, preVisitRight, (const ExprCopy * expr, const Expression * right), expr,right)
+        DAS_CONST_ADAPT_BOOL(isRightFirstExprMove, isRightFirst, (const ExprMove * expr), expr)
+        DAS_CONST_ADAPT_VOID(preVisitExprMoveRight, preVisitRight, (const ExprMove * expr, const Expression * right), expr,right)
+        DAS_CONST_ADAPT_BOOL(isRightFirstExprClone, isRightFirst, (const ExprClone * expr), expr)
+        DAS_CONST_ADAPT_VOID(preVisitExprCloneRight, preVisitRight, (const ExprClone * expr, const Expression * right), expr,right)
+        DAS_CONST_ADAPT_BOOL(canVisitWithAliasSubexpression, canVisitWithAliasSubexpression, (const ExprAssume * expr), expr)
+        DAS_CONST_ADAPT_VOID(preVisitExprWithBody, preVisitWithBody, (const ExprWith * expr, const Expression * body), expr,body)
+        DAS_CONST_ADAPT_VOID(preVisitExprWhileBody, preVisitWhileBody, (const ExprWhile * expr, const Expression * body), expr,body)
+        DAS_CONST_ADAPT_VOID(preVisitExprTryCatchCatch, preVisitCatch, (const ExprTryCatch * expr, const Expression * body), expr,body)
+        DAS_CONST_ADAPT_VOID(preVisitExprIfThenElseIfBlock, preVisitIfBlock, (const ExprIfThenElse * expr, const Expression * body), expr,body)
+        DAS_CONST_ADAPT_VOID(preVisitExprIfThenElseElseBlock, preVisitElseBlock, (const ExprIfThenElse * expr, const Expression * body), expr,body)
+        DAS_CONST_ADAPT_VOID(preVisitExprForVariable, preVisitFor, (const ExprFor * expr, const Variable * var, bool last), expr,var,last)
+        DAS_CONST_ADAPT_VOID(visitExprForVariable, visitFor, (const ExprFor * expr, const Variable * var, bool last), expr,var,last)
+        DAS_CONST_ADAPT_VOID(preVisitExprForSource, preVisitForSource, (const ExprFor * expr, const Expression * source, bool last), expr,source,last)
+        DAS_CONST_ADAPT_VOID(visitExprForSource, visitForSource, (const ExprFor * expr, const Expression * source, bool last), expr,source,last)
+        DAS_CONST_ADAPT_VOID(preVisitExprForStack, preVisitForStack, (const ExprFor * expr), expr)
+        DAS_CONST_ADAPT_VOID(preVisitExprForBody, preVisitForBody, (const ExprFor * expr, const Expression * body), expr,body)
+        DAS_CONST_ADAPT_VOID(preVisitExprMakeVariantField, preVisitMakeVariantField, (const ExprMakeVariant * expr, int index, const MakeFieldDecl * decl, bool last), expr,index,decl,last)
+        DAS_CONST_ADAPT_VOID(visitExprMakeVariantField, visitMakeVariantField, (const ExprMakeVariant * expr, int index, const MakeFieldDecl * decl, bool last), expr,index,decl,last)
+        DAS_CONST_ADAPT_BOOL(canVisitExprMakeStructBody, canVisitMakeStructureBody, (const ExprMakeStruct * expr), expr)
+        DAS_CONST_ADAPT_BOOL(canVisitExprMakeStructBlock, canVisitMakeStructureBlock, (const ExprMakeStruct * expr, const Expression * blk), expr,blk)
+        DAS_CONST_ADAPT_VOID(preVisitExprMakeStructIndex, preVisitMakeStructureIndex, (const ExprMakeStruct * expr, int index, bool last), expr,index,last)
+        DAS_CONST_ADAPT_VOID(visitExprMakeStructIndex, visitMakeStructureIndex, (const ExprMakeStruct * expr, int index, bool last), expr,index,last)
+        DAS_CONST_ADAPT_VOID(preVisitExprMakeStructField, preVisitMakeStructureField, (const ExprMakeStruct * expr, int index, const MakeFieldDecl * decl, bool last), expr,index,decl,last)
+        DAS_CONST_ADAPT_VOID(visitExprMakeStructField, visitMakeStructureField, (const ExprMakeStruct * expr, int index, const MakeFieldDecl * decl, bool last), expr,index,decl,last)
+        DAS_CONST_ADAPT_VOID(preVisitMakeStructureBlock, preVisitMakeStructureBlock, (const ExprMakeStruct * expr, const Expression * blk), expr,blk)
+        DAS_CONST_ADAPT_VOID(visitMakeStructureBlock, visitMakeStructureBlock, (const ExprMakeStruct * expr, const Expression * blk), expr,blk)
+        DAS_CONST_ADAPT_VOID(preVisitExprMakeArrayIndex, preVisitMakeArrayIndex, (const ExprMakeArray * expr, int index, const Expression * init, bool last), expr,index,init,last)
+        DAS_CONST_ADAPT_VOID(visitExprMakeArrayIndex, visitMakeArrayIndex, (const ExprMakeArray * expr, int index, const Expression * init, bool last), expr,index,init,last)
+        DAS_CONST_ADAPT_VOID(preVisitExprMakeTupleIndex, preVisitMakeTupleIndex, (const ExprMakeTuple * expr, int index, const Expression * init, bool last), expr,index,init,last)
+        DAS_CONST_ADAPT_VOID(visitExprMakeTupleIndex, visitMakeTupleIndex, (const ExprMakeTuple * expr, int index, const Expression * init, bool last), expr,index,init,last)
+        DAS_CONST_ADAPT_VOID(preVisitExprArrayComprehensionSubexpr, preVisitArrayComprehensionSubexpr, (const ExprArrayComprehension * expr, const Expression * subexpr), expr,subexpr)
+        DAS_CONST_ADAPT_VOID(preVisitExprArrayComprehensionWhere, preVisitArrayComprehensionWhere, (const ExprArrayComprehension * expr, const Expression * filter), expr,filter)
+        DAS_CONST_ADAPT_BOOL(canVisitExprTypeInfo, canVisitExpr, (const ExprTypeInfo * expr, const Expression * subexpr), expr,subexpr)
+        DAS_CONST_ADAPT_BOOL(canVisitQuoteSubexpression, canVisitQuoteSubexpression, (const ExprQuote * expr), expr)
+        DAS_CONST_ADAPT_VOID(preVisitExprDeleteSizeExpression, preVisitDeleteSizeExpression, (const ExprDelete * expr, const Expression * size), expr,size)
+        DAS_CONST_ADAPT_VOID(preVisitExprTagValue, preVisitTagValue, (const ExprTag * expr, const Expression * value), expr,value)
+        DAS_CONST_ADAPT_BOOL(canVisitMakeBlockBody, canVisitMakeBlockBody, (const ExprMakeBlock * expr), expr)
+        DAS_CONST_ADAPT_BOOL(canVisitTryCatchBody, canVisitTryCatchBody, (const ExprTryCatch * expr), expr)
+        DAS_CONST_ADAPT_BOOL(canVisitMakeArray, canVisitMakeArray, (const ExprMakeArray * expr), expr)
+        DAS_CONST_ADAPT_BOOL(canVisitMakeArrayIndex, canVisitMakeArrayIndex, (const ExprMakeArray * expr, int index, const Expression * init, bool last), expr,index,init,last)
+#define DAS_CONST_ADAPT_EXPR(ExprType) \
+        virtual void preVisit ( const ExprType * that ) override { \
+            preVisitExpression(that); \
+            if ( auto fn = get_preVisit##ExprType(classPtr) ) { \
+                runMacroFunction(context, "preVisit", [&]() { \
+                    invoke_preVisit##ExprType(context,fn,classPtr,that); \
+                }); \
+            } \
+        } \
+        virtual void visit ( const ExprType * that ) override { \
+            visitExpression(that); \
+            if ( auto fn = get_visit##ExprType(classPtr) ) { \
+                runMacroFunction(context, "visit", [&]() { \
+                    invoke_visit##ExprType(context,fn,classPtr,that); \
+                }); \
+            } \
+        }
+        DAS_CONST_ADAPT_EXPR(ExprStringBuilder)
+        DAS_CONST_VISIT_EXPR_LIST(DAS_CONST_ADAPT_EXPR)
+#undef DAS_CONST_ADAPT_EXPR
+#undef DAS_CONST_ADAPT_BOOL
+#undef DAS_CONST_ADAPT_VOID
+    protected:
+        void *      classPtr;
+        Context *   context;
+    };
+
+    struct AstConstVisitorAdapterAnnotation : ManagedStructureAnnotation<ConstVisitorAdapter,false,false> {
+        AstConstVisitorAdapterAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("ConstVisitorAdapter", ml) {
+        }
+    };
+
+    void makeConstVisitor ( const void * pClass, const StructInfo * info,
+            const TBlock<void,ConstVisitorAdapter*> & blk, Context * context, LineInfoArg * at ) {
+        ConstVisitorAdapter adapter((char *)pClass,info,context);
+        vec4f args[1];
+        args[0] = cast<ConstVisitorAdapter*>::from(&adapter);
+        context->invoke(blk, args, nullptr, at);
+    }
+
+    void astConstVisitExpression ( const Expression * expr, ConstVisitorAdapter * adapter, Context * context, LineInfoArg * line_info ) {
+        if (!adapter)
+            context->throw_error_at(line_info, "adapter is required");
+        if (!expr)
+            context->throw_error_at(line_info, "expr is required");
+        expr->visit(*adapter);
+    }
+
+    void astConstVisitFunction ( const Function * func, ConstVisitorAdapter * adapter, Context * context, LineInfoArg * line_info ) {
+        if (!adapter)
+            context->throw_error_at(line_info, "adapter is required");
+        if (!func)
+            context->throw_error_at(line_info, "function is required");
+        if ( func->body ) {
+            func->body->visit(*adapter);
+        }
+    }
+
     void astVisitBlockFinally ( ExprBlock * expr, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
             context->throw_error_at(line_info, "adapter is required");
@@ -2701,6 +2865,16 @@ namespace das {
         addExtern<DAS_BIND_FUN(astVisitTypeDecl)>(*this, lib,  "visit",
             SideEffects::accessExternal, "astVisitTypeDecl")
                 ->args({"expression","adapter","context","line"});
+        addAnnotation(new AstConstVisitorAdapterAnnotation(lib));
+        addExtern<DAS_BIND_FUN(makeConstVisitor)>(*this, lib,  "make_const_visitor",
+            SideEffects::modifyExternal, "makeConstVisitor")
+                ->args({"class","info","blk","context","at"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(astConstVisitExpression)>(*this, lib,  "visit",
+            SideEffects::accessExternal, "astConstVisitExpression")
+                ->args({"expression","adapter","context","line"});
+        addExtern<DAS_BIND_FUN(astConstVisitFunction)>(*this, lib,  "visit",
+            SideEffects::accessExternal, "astConstVisitFunction")
+                ->args({"function","adapter","context","line"});
         addExtern<DAS_BIND_FUN(astVisitBlockFinally)>(*this, lib,  "visit_finally",
             SideEffects::accessExternal, "astVisitBlockFinally")
                 ->args({"expression","adapter","context","line"});

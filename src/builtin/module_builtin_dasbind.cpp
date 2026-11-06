@@ -499,9 +499,9 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
     };
 
     static DemangledFunction demangleFunction(const char * mangledName) {
-        const char * prefix = "@dasbind::__dasbind__";
-        if ( strncmp(mangledName, prefix, 21) != 0 ) return {};
-        const char * symbolStart = mangledName + 21;
+        const char * prefix = strstr(mangledName, "__dasbind__");
+        if ( !prefix ) return {};
+        const char * symbolStart = prefix + 11;
         const char * sep = strstr(symbolStart, "@@");
         if ( !sep ) return {};
         string symbol(symbolStart, sep - symbolStart);
@@ -659,11 +659,14 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             if ( !is_ok ) {
                 return false;
             }
-            // src/ast/ARCHITECTURE.md#module-cache-read
-            if ( auto program = daScriptEnvironment::getBound()->g_Program ) {
-                if ( program->thisModule ) program->thisModule->noteRegistrationAtCompile();
+            auto program = daScriptEnvironment::getBound()->g_Program;
+            if ( !program || !program->thisModule ) {
+                err = "[extern] applies only while its module compiles";
+                return false;
             }
-            return !registerProxy(fun, ba, err).empty();
+            // src/ast/ARCHITECTURE.md#module-cache-read
+            program->thisModule->noteRegistrationAtCompile();
+            return !registerProxy(fun, ba, program->thisModule.get(), err).empty();
         }
 
         // the proxy outlives the registrar's program: its types are clones, with no location
@@ -680,7 +683,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         }
 
         // registers the proxy a call to `fun` is retargeted to; the bind name, empty on failure
-        string registerProxy ( Function * fun, const ExternBindArgs & ba, string & err ) {
+        string registerProxy ( Function * fun, const ExternBindArgs & ba, Module * target, string & err ) {
             // resolve DLL and create a BuiltInFunction proxy for JIT
             void * funptr = nullptr;
             string bindName = mangleFunction(ba.fn_name, ba.library, ba.api);
@@ -711,10 +714,10 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
                 }
             }
             // and collect it
-            bif->gc_collect(module->module_gc_root.get(), gc_root::gc_get_active_root());
+            bif->gc_collect(target->module_gc_root.get(), gc_root::gc_get_active_root());
             // and now try to add or replace the function in the module
-            if ( !module->addFunction(bif, true) ) {
-                module->replaceFunction(bif);
+            if ( !target->addFunction(bif, true) ) {
+                target->replaceFunction(bif);
             }
             return bindName;
         }
@@ -737,14 +740,20 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
                 auto [is_ok, ba] = parseExternArgs(decl->arguments, err);
                 if ( !is_ok ) return string();
                 string bindName = mangleFunction(ba.fn_name, ba.library, ba.api);
+                auto owner = fun->module;
+                string callName = owner->name.empty() ? bindName : owner->name + "::" + bindName;
                 // one bind name per native symbol, one proxy per das signature
-                if ( auto proxies = module->functionsByName.find(hash64z(bindName.c_str())) ) {
+                if ( auto proxies = owner->functionsByName.find(hash64z(bindName.c_str())) ) {
                     for ( auto * proxy : proxies->second ) {
-                        if ( sameSignature(proxy, fun) ) return bindName;
+                        if ( sameSignature(proxy, fun) ) return callName;
                     }
                 }
+                if ( owner->frozen ) {
+                    err = "module " + owner->name + " has no proxy for [extern] " + fun->name;
+                    return string();
+                }
                 if ( !verifyCallCorrect(fun, decl->arguments, err) ) return string();
-                return registerProxy(fun, ba, err);
+                return registerProxy(fun, ba, owner, err).empty() ? string() : callName;
             }
             return string();
         }

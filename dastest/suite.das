@@ -551,7 +551,7 @@ def test_module(var mod : rtti::Module; var context : rtti::Context; var suite_c
         context.alwaysStackWalkOnException = true
     }
     modPtr |> module_for_each_function() $(f) {
-        if (f.hash == 0ul) return
+        if (f.hash == 0ul || (f.flags & FUNCINFO_BUILTIN) != 0u) return
         let func = context |> get_function_by_mnh(f.hash)
         // a required module's unused function has no sim function; a
         // `[test]` exports itself, so none is skipped

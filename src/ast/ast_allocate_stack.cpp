@@ -1031,36 +1031,6 @@ namespace das {
 
     };
 
-    class AllocateConstString : public Visitor {
-    public:
-        AllocateConstString ( Program * prog ) : program(prog) {}
-        Program * program = nullptr;
-        uint32_t bytesTotal = 0;
-        das_hash_set<string>    uniStr;
-    public:
-        virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
-        virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
-        virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
-        virtual bool canVisitGlobalVariable ( Variable * var ) override { return program->isUsed(var); }
-        virtual bool canVisitFunction ( Function * fun ) override {
-            return !fun->isTemplate && program->isUsed(fun);
-        }
-        void allocateString ( const string & message ) {
-            if ( !message.empty() ) {
-                if ( uniStr.find(message)==uniStr.end() ) {
-                    uniStr.insert(message);
-                    uint32_t allocSize = uint32_t(message.length()) + 1;
-                    allocSize = (allocSize + 3) & ~3;
-                    bytesTotal += allocSize;
-                }
-            }
-        }
-        virtual void preVisit ( ExprConstString * expr ) override {
-            Visitor::preVisit(expr);
-            allocateString(expr->text);
-        }
-    };
-
     // Temp-string reclaim: pick ONE queue site per consuming call and route it through the
     // 1-slot dispose queue - a marked string builder (allocates, then queues itself) or a
     // [temp_string_result] call wrapped in _temp_string_result (frees the previously queued
@@ -1366,90 +1336,12 @@ namespace das {
                 visit(wlt);
             }
         }
-        // string heap
-        AllocateConstString vstr(this);
-        for (auto & pm : library.modules) {
-            for ( auto & var : pm->globals.each() ) {
-                if (isUsed(var) && var->init) {
-                    var->init->visit(vstr);
-                }
-            }
-            for ( auto & func : pm->functions.each() ) {
-                if (isUsed(func)) {
-                    func->visit(vstr);
-                }
-            }
-        }
-        globalStringHeapSize = vstr.bytesTotal;
         // move some variables to CMRES
         VarCMRes vcm(this, everything);
         visit(vcm);
         // allocate stack for the rest of them
         AllocateStack context(this, permanent, everything, logs);
         visit(context);
-        // adjust stack size for all the used variables
-        for (auto & pm : library.modules) {
-            for ( auto & var : pm->globals.each() ) {
-                if ( isUsed(var) ) {
-                    globalInitStackSize = das::max(globalInitStackSize, var->initStackSize);
-                }
-            }
-        }
-        // allocate used variables and functions indices - per pass, so -1 means this pass never saw it
-        functionIndices.clear();
-        variableIndices.clear();
-        totalVariables = 0;
-        totalFunctions = 0;
-        auto log = options.getBoolOption("log_stack");
-        if ( log ) {
-            logs << "INIT STACK SIZE:\t" << globalInitStackSize << "\n";
-            logs << "FUNCTION TABLE:\n";
-        }
-        for (auto & pm : library.modules) {
-            for ( auto & func : pm->functions.each() ) {
-                if ( isUsed(func) && !func->builtIn && !func->isTemplate ) {
-                    auto index = totalFunctions++;
-                    setIndex(func, index);
-                    if ( log ) {
-                        logs << "\t" << index << "\t" << func->totalStackSize << "\t" << func->getMangledName();
-                        if ( func->init ) {
-                            logs << " [init";
-                            if (func->lateInit ) logs << "(late)";
-                            logs << "]";
-                        }
-                        if ( func->shutdown ) {
-                            logs << " [finalize";
-                            if (func->lateShutdown ) logs << "(late)";
-                            logs << "]";
-                        }
-                        logs << " // " << HEX << func->getMangledNameHash() << DEC;
-                        logs << "\n";
-                    }
-                }
-                else {
-                    setIndex(func, -2);
-                }
-            }
-        }
-        if ( log ) {
-            logs << "VARIABLE TABLE:\n";
-        }
-        library.foreach_in_order([&](Module * pm){
-            for ( auto & var : pm->globals.each() ) {
-                if (isUsed(var)) {
-                    auto index = totalVariables++;
-                    setIndex(var, index);
-                    if ( log ) {
-                        logs << "\t" << index << "\t"  << var->stackTop << "\t"
-                            << var->type->getSizeOf() << "\t" << var->getMangledName() << "\n";
-                    }
-                }
-                else {
-                    setIndex(var, -2);
-                }
-            }
-            return true;
-        }, thisModule.get());
     }
 
     class RenameVariables : public Visitor {

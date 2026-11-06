@@ -959,7 +959,7 @@ namespace das {
                                     if ( !argHash ) {
                                         argHash = fragile_bit_set::key(getLookupHash(types));
                                     }
-                                    auto itLook = pFn->lookup.find_and_reserve(argHash);    // if found in lookup
+                                    auto itLook = program->functionLookup(pFn).find_and_reserve(argHash);    // if found in lookup
                                     if ( *itLook ) {
                                         if ( fragile_bit_set::is_true(*itLook) ) {
                                             result.push_back(pFn);
@@ -1087,7 +1087,7 @@ namespace das {
                             if ( funcVis ) {
                                 if ( !pFn->fromGeneric || modVisFromThis ) {
                                     if ( !visCheck || canCallPrivate(pFn,inWhichModule,thisModule) ) {
-                                        auto itLook = pFn->lookup.find_and_reserve(argHash);    // if found in lookup
+                                        auto itLook = program->functionLookup(pFn).find_and_reserve(argHash);    // if found in lookup
                                         if ( *itLook ) {
                                             if ( fragile_bit_set::is_true(*itLook) ) {
                                                 resultFunctions.push_back(pFn);
@@ -1118,7 +1118,7 @@ namespace das {
                                               : isVisibleInstanceFunc(inWhichModule, pFn);
                             if ( funcVis ) {
                                 if ( !visCheck || canCallPrivate(pFn,inWhichModule,thisModule) ) {
-                                    auto itLook = pFn->lookup.find_and_reserve(argHash);    // if found in lookup
+                                    auto itLook = program->functionLookup(pFn).find_and_reserve(argHash);    // if found in lookup
                                     if ( *itLook ) {
                                         if ( fragile_bit_set::is_true(*itLook) ) {
                                             resultGenerics.push_back(pFn);

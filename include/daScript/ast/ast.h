@@ -23,6 +23,7 @@ namespace das
 {
     struct AstSerializer;
     class Visitor;
+    class ConstVisitor;
 
     class Function;
     typedef Function * FunctionPtr;
@@ -616,6 +617,7 @@ namespace das
         virtual ~Expression() {}
         friend DAS_API StringWriter& operator<< (StringWriter& stream, const Expression & func);
         virtual ExpressionPtr visit(Visitor & /*vis*/ )  { DAS_ASSERT(0); return this; };
+        virtual void visit ( ConstVisitor & vis ) const;
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const;
         static ExpressionPtr autoDereference ( ExpressionPtr expr );
         virtual void markNoDiscard() { }
@@ -764,6 +766,7 @@ namespace das
             return cexpr;
         }
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual void visit ( ConstVisitor & vis ) const override;
         TT getValue() const { return cast<TT>::to(value); }
     };
 
@@ -872,7 +875,6 @@ namespace das
         int32_t             totalGenLabel = 0;
         LineInfo            at, atDecl;
         Module *            module = nullptr;
-        AstFuncLookup       lookup;
         das_set<Function *>     useFunctions;
         das_set<Variable *>     useGlobalVariables;
         Structure *         classParent = nullptr;
@@ -1133,6 +1135,7 @@ namespace das
     public:
         Module ( const string & n = "" );
         void promoteToBuiltin(const FileAccessPtr & access, const string & requireName = string());
+        void freeze();
         virtual ~Module();
         virtual void addPrerequisits ( ModuleLibrary & ) const {}
         virtual ModuleAotType aotRequire ( TextWriter & ) const { return ModuleAotType::no_aot; }
@@ -1712,6 +1715,8 @@ namespace das
         __forceinline int32_t indexOf ( const Variable * var ) const { auto it = variableIndices.find(var); return it != variableIndices.end() ? it->second : -1; }
         __forceinline void setIndex ( const Function * fn, int32_t index ) { functionIndices[fn] = index; }
         __forceinline void setIndex ( const Variable * var, int32_t index ) { variableIndices[var] = index; }
+        das_hash_map<const Function *, AstFuncLookup> functionLookups;
+        AstFuncLookup & functionLookup ( const Function * fn );
         das_hash_set<const Function *>          jitSelected;
         __forceinline bool isJitSelected ( const Function * fn ) const { return jitSelected.find(fn) != jitSelected.end(); }
         __forceinline void setJitSelected ( const Function * fn, bool selected ) { if ( selected ) jitSelected.insert(fn); else jitSelected.erase(fn); }

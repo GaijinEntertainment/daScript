@@ -1,0 +1,1 @@
+Read-only counterpart of `AstVisitor`: every callback takes a const node and returns nothing, so a visitor can inspect the tree but neither write into it nor replace a node.

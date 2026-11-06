@@ -476,6 +476,7 @@ extern "C" {
     DAS_API void jit_init_extern_function ( const char * moduleName,
                                             const char * funcMangledName,
                                             void ** dllGlobal ) {
+        if ( !moduleName ) moduleName = "";
         bool found = false;
         Module::foreach([&](Module * module) -> bool {
             if ( module->name != moduleName ) return true;
@@ -487,7 +488,7 @@ extern "C" {
             }
             return true;
         });
-        if ( !found && strcmp(moduleName, "dasbind") == 0 && strncmp(funcMangledName, "@dasbind::__dasbind__", 21) == 0 ) {
+        if ( !found && strstr(funcMangledName, "__dasbind__") ) {
             Module::foreach([&](Module * module) -> bool {
                 if ( module->name != "dasbind" ) return true;
                 auto resolverFn = module->findUniqueFunction("__dasbind_resolve");

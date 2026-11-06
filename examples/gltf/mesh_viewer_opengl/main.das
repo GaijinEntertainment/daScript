@@ -7,7 +7,7 @@ options _allow_glfw_calls = true
 require imgui/imgui_harness
 require imgui/imgui_live
 require imgui/imgui_file_dialog
-require opengl/opengl_boost
+require opengl/opengl
 require live/glfw_live
 require gltf/gltf_boost
 require gltf/gltf_gl

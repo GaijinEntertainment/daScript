@@ -1103,34 +1103,19 @@ namespace das {
         return false;
     }
 
-    // `Function::lookup` keys cache entries by `intptr_t(structType)` via
-    // `getLookupHash(types)`. After gc sweep, freed Structure addresses can be
-    // reused by later allocations — a stale cached `false` then poisons the
-    // lookup for the new Structure at the same address, surfacing as a flaky
-    // "no matching functions or generics" on legitimate calls. Clear every
-    // function/generic cache before gc_guard sweeps.
-    static void clearAllFunctionLookups() {
-        Module::foreach([](Module * m) -> bool {
-            m->functions.foreach([](auto & fn) { fn->lookup.clear(); });
-            m->generics.foreach([](auto & fn) { fn->lookup.clear(); });
-            return true;
-        });
-    }
-
     // compileDaScript runs its top-level post-parse steps (deriveAliases/allocateStack/...)
     // on a transient gc_guard root; on exit this merges that scratch into the program's
-    // module root, then clears the function/generic lookup caches before the gc_guard
-    // sweeps the rest (see clearAllFunctionLookups above for why). Only the top program
-    // sets prog; per-module parse uses ModuleGcFinalize instead.
+    // module root, and drops the program's overload cache before the gc_guard sweeps the
+    // rest. Only the top program sets prog; per-module parse uses ModuleGcFinalize instead.
     struct GcCollectOnExit {
         gc_guard & scope;
         Program * prog = nullptr;
         explicit GcCollectOnExit ( gc_guard & s ) : scope(s) {}
         ~GcCollectOnExit() {
-            if ( prog && prog->thisModule ) {
-                prog->thisModule->gc_collect(&scope.guard_root);
+            if ( prog ) {
+                prog->functionLookups.clear();
+                if ( prog->thisModule ) prog->thisModule->gc_collect(&scope.guard_root);
             }
-            clearAllFunctionLookups();
         }
         GcCollectOnExit ( const GcCollectOnExit & ) = delete;
         GcCollectOnExit & operator = ( const GcCollectOnExit & ) = delete;
@@ -1167,7 +1152,7 @@ namespace das {
                 gc_root::gc_get_active_root() = liveRoot;   // repoint active before the move frees oldRoot
                 m->module_gc_root = das::move(fresh);        // deletes oldRoot -> sweeps garbage
             }
-            clearAllFunctionLookups();
+            if ( prog ) prog->functionLookups.clear();
         }
         ModuleGcFinalize ( const ModuleGcFinalize & ) = delete;
         ModuleGcFinalize & operator = ( const ModuleGcFinalize & ) = delete;
@@ -1420,6 +1405,17 @@ namespace das {
         }
     }
 
+    static int32_t countUsedFunctions ( const Program * program ) {
+        int32_t count = 0;
+        program->library.foreach([&](Module * pm) -> bool {
+            for ( auto & func : pm->functions.each() ) {
+                if ( program->isUsed(func) && !func->builtIn && !func->isTemplate ) count ++;
+            }
+            return true;
+        }, "*");
+        return count;
+    }
+
     static void inferAndFinalizeModule ( const ProgramPtr & program, const string & fileName, const string & moduleName,
             const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool exportAll, bool isDep,
             const CodeOfPolicies & policies, ModuleCompileTimes & times ) {
@@ -1591,7 +1587,7 @@ namespace das {
         if ( logModule && isDep ) {
             auto dt = get_time_usec(times.startTicks) / 1000000.;
             auto macroDelta = ref_time_delta_to_usec(daScriptEnvironment::getBound()->macroTimeTicks - times.macroStartTicks);
-            logs << "compiler took " << dt << ", " << program->thisModule->name << " (" << fileName << ") -- " << program->totalFunctions << " functions\n"
+            logs << "compiler took " << dt << ", " << program->thisModule->name << " (" << fileName << ") -- " << countUsedFunctions(program.get()) << " functions\n"
                  << "\tparse    " << (times.parseUsec    / 1000000.) << "\n"
                  << "\tinfer    " << (times.inferUsec    / 1000000.) << " (" << program->inferPassesUsed << " passes)\n"
                  << "\toptimize " << (times.optUsec      / 1000000.) << "\n"
@@ -1769,7 +1765,7 @@ namespace das {
     }
 
     void addNewModules ( ModuleGroup & libGroup, ProgramPtr program ) {
-        program->thisModule->frozen = true;
+        program->thisModule->freeze();
         libGroup.addModule(program->thisModule.release());
         program->library.foreach([&](Module * pm) -> bool {
             if ( !pm->name.empty() && pm->name!="$" ) {
@@ -2409,7 +2405,7 @@ namespace das {
             if ( res->options.getBoolOption("log_total_compile_time",policies.log_total_compile_time)
                  || res->options.getBoolOption("log_module_compile_time",policies.log_module_compile_time) ) {
                 auto totT = get_time_usec(time0);
-                logs << "total compile took " << (totT  / 1000000.) << ", " << fileName << " -- " << res->totalFunctions << " functions\n"
+                logs << "total compile took " << (totT  / 1000000.) << ", " << fileName << " -- " << countUsedFunctions(res.get()) << " functions\n"
                      << "\trequire  " << (preqT    / 1000000.) << "\n"
                      << "\tcache read " << (*totCacheRead / 1000000.) << " (" << *cntCacheRead << " modules, decode " << ((*totCacheRead - *totCacheFinalize) / 1000000.) << ", finalize " << (*totCacheFinalize / 1000000.) << " of which macro simulate " << (*totCacheMacroSim / 1000000.) << ")\n"
                      << "\tparse    " << (*totParse / 1000000.) << "\n"

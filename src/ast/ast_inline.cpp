@@ -2,6 +2,7 @@
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
+#include "daScript/ast/ast_const_visitor.h"
 #include "daScript/ast/ast_expressions.h"
 
 namespace das {
@@ -55,27 +56,27 @@ namespace das {
         // ----- tiny callback walk (visitor without the boilerplate) -----
 
         template <typename TT>
-        class LookupVisitor : public Visitor {
+        class LookupVisitor : public ConstVisitor {
         public:
             LookupVisitor ( const TT & cb ) : callback(cb) {}
         protected:
             const TT & callback;
-            virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
-            virtual void preVisitExpression ( Expression * expr ) override {
-                Visitor::preVisitExpression(expr);
+            virtual bool canVisitQuoteSubexpression ( const ExprQuote * ) override { return false; }
+            virtual void preVisitExpression ( const Expression * expr ) override {
+                ConstVisitor::preVisitExpression(expr);
                 callback(expr);
             }
         };
 
         template <typename TT>
-        void lookupExpressions ( Expression * root, const TT & cb ) {
+        void lookupExpressions ( const Expression * root, const TT & cb ) {
             LookupVisitor<TT> vis(cb);
             root->visit(vis);
         }
 
         // ----- callee shape -----
 
-        class CanInlineScan : public Visitor {
+        class CanInlineScan : public ConstVisitor {
         public:
             CanInlineScan ( bool blockLiteral = false ) : forBlockLiteral(blockLiteral) {}
             string reason;
@@ -84,28 +85,28 @@ namespace das {
             bool forBlockLiteral;
             int makeBlockDepth = 0;
             int loopDepth = 0;
-            virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
+            virtual bool canVisitQuoteSubexpression ( const ExprQuote * ) override { return false; }
             void flag ( const char * why ) { if ( !bad ) { bad = true; reason = why; } }
-            virtual void preVisit ( ExprGoto * expr ) override { Visitor::preVisit(expr); flag("body contains goto"); }
-            virtual void preVisit ( ExprLabel * expr ) override { Visitor::preVisit(expr); flag("body contains a label"); }
-            virtual void preVisit ( ExprTryCatch * expr ) override { Visitor::preVisit(expr); flag("body contains try/recover"); }
-            virtual void preVisit ( ExprYield * expr ) override { Visitor::preVisit(expr); flag("body contains yield"); }
-            virtual void preVisit ( ExprFor * expr ) override { Visitor::preVisit(expr); loopDepth ++; }
-            virtual ExpressionPtr visit ( ExprFor * expr ) override { loopDepth --; return Visitor::visit(expr); }
-            virtual void preVisit ( ExprWhile * expr ) override { Visitor::preVisit(expr); loopDepth ++; }
-            virtual ExpressionPtr visit ( ExprWhile * expr ) override { loopDepth --; return Visitor::visit(expr); }
+            virtual void preVisit ( const ExprGoto * expr ) override { ConstVisitor::preVisit(expr); flag("body contains goto"); }
+            virtual void preVisit ( const ExprLabel * expr ) override { ConstVisitor::preVisit(expr); flag("body contains a label"); }
+            virtual void preVisit ( const ExprTryCatch * expr ) override { ConstVisitor::preVisit(expr); flag("body contains try/recover"); }
+            virtual void preVisit ( const ExprYield * expr ) override { ConstVisitor::preVisit(expr); flag("body contains yield"); }
+            virtual void preVisit ( const ExprFor * expr ) override { ConstVisitor::preVisit(expr); loopDepth ++; }
+            virtual void visit ( const ExprFor * expr ) override { loopDepth --; ConstVisitor::visit(expr); }
+            virtual void preVisit ( const ExprWhile * expr ) override { ConstVisitor::preVisit(expr); loopDepth ++; }
+            virtual void visit ( const ExprWhile * expr ) override { loopDepth --; ConstVisitor::visit(expr); }
             // splicing a block body inline dissolves the block boundary; a break/continue
             // not bound to a loop inside the body would re-bind to the invoke site's loop
-            virtual void preVisit ( ExprBreak * expr ) override {
-                Visitor::preVisit(expr);
+            virtual void preVisit ( const ExprBreak * expr ) override {
+                ConstVisitor::preVisit(expr);
                 if ( forBlockLiteral && !makeBlockDepth && !loopDepth ) flag("body breaks out of the block");
             }
-            virtual void preVisit ( ExprContinue * expr ) override {
-                Visitor::preVisit(expr);
+            virtual void preVisit ( const ExprContinue * expr ) override {
+                ConstVisitor::preVisit(expr);
                 if ( forBlockLiteral && !makeBlockDepth && !loopDepth ) flag("body continues out of the block");
             }
-            virtual void preVisit ( ExprMakeBlock * expr ) override {
-                Visitor::preVisit(expr);
+            virtual void preVisit ( const ExprMakeBlock * expr ) override {
+                ConstVisitor::preVisit(expr);
                 // a plain block literal clones with the body; lambda/local-function
                 // literals lowered to generated functions - cloning those post-infer is not safe
                 if ( expr->isLambda || expr->isLocalFunction || !expr->capture.empty() ) {
@@ -113,14 +114,14 @@ namespace das {
                 }
                 makeBlockDepth ++;
             }
-            virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override {
+            virtual void visit ( const ExprMakeBlock * expr ) override {
                 makeBlockDepth --;
-                return Visitor::visit(expr);
+                ConstVisitor::visit(expr);
             }
-            virtual void preVisit ( ExprMakeGenerator * expr ) override { Visitor::preVisit(expr); flag("body contains a generator"); }
+            virtual void preVisit ( const ExprMakeGenerator * expr ) override { ConstVisitor::preVisit(expr); flag("body contains a generator"); }
             // assume aliases are function-scoped by name and not renamed by the splice -
             // two spliced bodies declaring the same alias collide (30700)
-            virtual void preVisit ( ExprAssume * expr ) override { Visitor::preVisit(expr); flag("body contains an assume expression"); }
+            virtual void preVisit ( const ExprAssume * expr ) override { ConstVisitor::preVisit(expr); flag("body contains an assume expression"); }
         };
 
 
@@ -167,7 +168,7 @@ namespace das {
             das_hash_set<Variable *>        readAsRefArg;   // handed onward to a REF parameter - needs real storage, not a value
         };
 
-        class ParamReadScan : public Visitor {
+        class ParamReadScan : public ConstVisitor {
         public:
             ParamReadScan ( const vector<VariablePtr> & paramVars, ParamReadStats & into ) : stats(into) {
                 for ( auto & arg : paramVars ) params.insert(arg);
@@ -176,37 +177,37 @@ namespace das {
             das_hash_set<Variable *> params;
             ParamReadStats & stats;
             int loopDepth = 0;
-            virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
-            virtual void preVisit ( ExprFor * expr ) override { Visitor::preVisit(expr); loopDepth ++; }
-            virtual ExpressionPtr visit ( ExprFor * expr ) override { loopDepth --; return Visitor::visit(expr); }
-            virtual void preVisit ( ExprWhile * expr ) override { Visitor::preVisit(expr); loopDepth ++; }
-            virtual ExpressionPtr visit ( ExprWhile * expr ) override { loopDepth --; return Visitor::visit(expr); }
+            virtual bool canVisitQuoteSubexpression ( const ExprQuote * ) override { return false; }
+            virtual void preVisit ( const ExprFor * expr ) override { ConstVisitor::preVisit(expr); loopDepth ++; }
+            virtual void visit ( const ExprFor * expr ) override { loopDepth --; ConstVisitor::visit(expr); }
+            virtual void preVisit ( const ExprWhile * expr ) override { ConstVisitor::preVisit(expr); loopDepth ++; }
+            virtual void visit ( const ExprWhile * expr ) override { loopDepth --; ConstVisitor::visit(expr); }
             // a block literal's body may run any number of times - reads inside count as under-loop
-            virtual void preVisit ( ExprMakeBlock * expr ) override { Visitor::preVisit(expr); loopDepth ++; }
-            virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override { loopDepth --; return Visitor::visit(expr); }
-            virtual void preVisit ( ExprVar * expr ) override {
-                Visitor::preVisit(expr);
+            virtual void preVisit ( const ExprMakeBlock * expr ) override { ConstVisitor::preVisit(expr); loopDepth ++; }
+            virtual void visit ( const ExprMakeBlock * expr ) override { loopDepth --; ConstVisitor::visit(expr); }
+            virtual void preVisit ( const ExprVar * expr ) override {
+                ConstVisitor::preVisit(expr);
                 if ( expr->variable && params.find(expr->variable)!=params.end() ) {
                     stats.readCount[expr->variable] ++;
                     if ( loopDepth ) stats.readUnderLoop.insert(expr->variable);
                 }
             }
-            void notePos ( ExprCallFunc * call ) {
+            void notePos ( const ExprCallFunc * call ) {
                 if ( !call->func ) return;
                 for ( size_t i=0, is=call->arguments.size(); i!=is && i!=call->func->arguments.size(); ++i ) {
                     auto & fa = call->func->arguments[i];
                     if ( !fa->type || !fa->type->isRef() ) continue;
-                    Expression * a = call->arguments[i];
-                    if ( a && a->rtti_isR2V() ) a = static_cast<ExprRef2Value *>(a)->subexpr;
+                    const Expression * a = call->arguments[i];
+                    if ( a && a->rtti_isR2V() ) a = static_cast<const ExprRef2Value *>(a)->subexpr;
                     if ( a && a->rtti_isVar() ) {
-                        auto v = static_cast<ExprVar *>(a)->variable;
+                        auto v = static_cast<const ExprVar *>(a)->variable;
                         if ( v && params.find(v)!=params.end() ) stats.readAsRefArg.insert(v);
                     }
                 }
             }
-            virtual void preVisit ( ExprCall * expr ) override { Visitor::preVisit(expr); notePos(expr); }
-            virtual void preVisit ( ExprOp1 * expr ) override { Visitor::preVisit(expr); notePos(expr); }
-            virtual void preVisit ( ExprOp2 * expr ) override { Visitor::preVisit(expr); notePos(expr); }
+            virtual void preVisit ( const ExprCall * expr ) override { ConstVisitor::preVisit(expr); notePos(expr); }
+            virtual void preVisit ( const ExprOp1 * expr ) override { ConstVisitor::preVisit(expr); notePos(expr); }
+            virtual void preVisit ( const ExprOp2 * expr ) override { ConstVisitor::preVisit(expr); notePos(expr); }
         };
 
         // ----- cross-module reference scan (splice gate) -----
@@ -219,7 +220,7 @@ namespace das {
             string scope;       // symbol that needs the with (module) wrapper
         };
 
-        class PrivateUseScan : public Visitor {
+        class PrivateUseScan : public ConstVisitor {
         public:
             PrivateUseScan ( Module * calleeModule, Module * destModule, bool programOwnsBody )
                 : mod(calleeModule), dest(destModule), underscoreExempt(programOwnsBody) {}
@@ -274,29 +275,29 @@ namespace das {
                     scopeNeed(origin->name);
                 }
             }
-            virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
-            virtual void preVisit ( ExprCall * expr ) override {
-                Visitor::preVisit(expr);
+            virtual bool canVisitQuoteSubexpression ( const ExprQuote * ) override { return false; }
+            virtual void preVisit ( const ExprCall * expr ) override {
+                ConstVisitor::preVisit(expr);
                 checkFunc(expr->func, expr->name, expr->generated);
             }
-            virtual void preVisit ( ExprOp1 * expr ) override {
-                Visitor::preVisit(expr);
+            virtual void preVisit ( const ExprOp1 * expr ) override {
+                ConstVisitor::preVisit(expr);
                 checkFunc(expr->func, "", true);
             }
-            virtual void preVisit ( ExprOp2 * expr ) override {
-                Visitor::preVisit(expr);
+            virtual void preVisit ( const ExprOp2 * expr ) override {
+                ConstVisitor::preVisit(expr);
                 checkFunc(expr->func, "", true);
             }
-            virtual void preVisit ( ExprOp3 * expr ) override {
-                Visitor::preVisit(expr);
+            virtual void preVisit ( const ExprOp3 * expr ) override {
+                ConstVisitor::preVisit(expr);
                 checkFunc(expr->func, "", true);
             }
-            virtual void preVisit ( ExprAddr * expr ) override {
-                Visitor::preVisit(expr);
+            virtual void preVisit ( const ExprAddr * expr ) override {
+                ConstVisitor::preVisit(expr);
                 checkFunc(expr->func, expr->target, expr->generated);
             }
-            virtual void preVisit ( ExprVar * expr ) override {
-                Visitor::preVisit(expr);
+            virtual void preVisit ( const ExprVar * expr ) override {
+                ConstVisitor::preVisit(expr);
                 if ( !expr->variable || !verdict.hard.empty() ) return;
                 checkName(expr->name, expr->generated, nullptr);
                 if ( expr->variable->private_variable ) {
@@ -318,46 +319,46 @@ namespace das {
         // every declaration name in the caller. infer resolves LOCALS BEFORE BLOCK
         // ARGUMENTS, so a spliced can_shadow argument loses to any same-named caller
         // declaration - reads inside the block would silently bind the caller's variable
-        class DeclNameCollect : public Visitor {
+        class DeclNameCollect : public ConstVisitor {
         public:
             DeclNameCollect ( das_hash_set<string> & nn ) : names(nn) {}
         protected:
             das_hash_set<string> & names;
-            virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
-            void add ( const VariablePtr & var ) {
+            virtual bool canVisitQuoteSubexpression ( const ExprQuote * ) override { return false; }
+            void add ( const Variable * var ) {
                 names.insert(var->name);
                 if ( !var->aka.empty() ) names.insert(var->aka);
             }
-            virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
-                Visitor::preVisitLet(let, var, last);
+            virtual void preVisitLet ( const ExprLet * let, const Variable * var, bool last ) override {
+                ConstVisitor::preVisitLet(let, var, last);
                 add(var);
             }
-            virtual void preVisit ( ExprFor * expr ) override {
-                Visitor::preVisit(expr);
+            virtual void preVisit ( const ExprFor * expr ) override {
+                ConstVisitor::preVisit(expr);
                 for ( auto & var : expr->iteratorVariables ) add(var);
             }
-            virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
-                Visitor::preVisitBlockArgument(block, var, lastArg);
+            virtual void preVisitBlockArgument ( const ExprBlock * block, const Variable * var, bool lastArg ) override {
+                ConstVisitor::preVisitBlockArgument(block, var, lastArg);
                 add(var);
             }
         };
 
         // free variable names of an expression (the can_shadow capture-check input)
-        class FreeNameCollect : public Visitor {
+        class FreeNameCollect : public ConstVisitor {
         public:
             FreeNameCollect ( das_hash_set<string> & nn ) : names(nn) {}
         protected:
             das_hash_set<string> & names;
-            virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
-            virtual void preVisit ( ExprVar * expr ) override {
-                Visitor::preVisit(expr);
+            virtual bool canVisitQuoteSubexpression ( const ExprQuote * ) override { return false; }
+            virtual void preVisit ( const ExprVar * expr ) override {
+                ConstVisitor::preVisit(expr);
                 names.insert(expr->name);
             }
         };
 
         // the callee's local declarations, so reads can be renamed by name
         // (infer re-resolves every ExprVar by name; consistent renaming is all it takes)
-        class LocalNameCollect : public Visitor {
+        class LocalNameCollect : public ConstVisitor {
         public:
             LocalNameCollect ( das_hash_map<string, string> & r, das_hash_set<string> & cs, const string & p )
                 : rename(r), canShadowArgs(cs), prefix(p) {}
@@ -367,23 +368,23 @@ namespace das {
             // argument name) - never renamed; colliding sites decline instead
             das_hash_set<string> & canShadowArgs;
             string prefix;
-            virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
+            virtual bool canVisitQuoteSubexpression ( const ExprQuote * ) override { return false; }
             void renameVar ( const string & name, const string & aka ) {
                 if ( rename.find(name)==rename.end() ) rename[name] = joinInlineName(prefix, name);
                 if ( !aka.empty() && rename.find(aka)==rename.end() ) rename[aka] = joinInlineName(prefix, name);
             }
-            virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
-                Visitor::preVisitLet(let, var, last);
+            virtual void preVisitLet ( const ExprLet * let, const Variable * var, bool last ) override {
+                ConstVisitor::preVisitLet(let, var, last);
                 renameVar(var->name, var->aka);
             }
-            virtual void preVisit ( ExprFor * expr ) override {
-                Visitor::preVisit(expr);
+            virtual void preVisit ( const ExprFor * expr ) override {
+                ConstVisitor::preVisit(expr);
                 for ( auto & var : expr->iteratorVariables ) renameVar(var->name, var->aka);
             }
             // block-literal arguments rename too: after the splice they sit in the caller's
             // scope chain, and an unrenamed argument could shadow a caller local (an error)
-            virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
-                Visitor::preVisitBlockArgument(block, var, lastArg);
+            virtual void preVisitBlockArgument ( const ExprBlock * block, const Variable * var, bool lastArg ) override {
+                ConstVisitor::preVisitBlockArgument(block, var, lastArg);
                 // a plain argument must rename: after the splice it can shadow a caller-side
                 // name, which is 30701. a can_shadow argument keeps its (semantic) name.
                 if ( var->can_shadow ) {
@@ -608,11 +609,11 @@ namespace das {
 
         BodyCost bodyCost ( Expression * body ) {
             BodyCost bc;
-            lookupExpressions(body, [&](Expression * e) {
+            lookupExpressions(body, [&](const Expression * e) {
                 bc.nodes ++;
                 if ( e->rtti_isFor() || e->rtti_isWhile() ) bc.hasLoop = true;
                 if ( e->rtti_isLet() ) {
-                    auto let = static_cast<ExprLet *>(e);
+                    auto let = static_cast<const ExprLet *>(e);
                     for ( auto & v : let->variables ) {
                         if ( v->type && !v->type->isAutoOrAlias() ) bc.stackBytes += v->type->getSizeOf64();
                     }
@@ -659,7 +660,7 @@ namespace das {
             return fitsAutoInlineBudget(fn, cfg);
         }
 
-        bool autoEligibleCall ( ExprCall * call, const AutoInlineCfg & cfg ) {
+        bool autoEligibleCall ( const ExprCall * call, const AutoInlineCfg & cfg ) {
             if ( !call->func || call->func->mustInline || call->func->builtIn ) return false;
             if ( !call->func->body || call->func->isTemplate ) return false;
             if ( call->func->neverInline ) return false;    // explicit opt-out, both tiers
@@ -674,10 +675,10 @@ namespace das {
         // the func behind a call-like splice edge: a direct call or an ExprOp1/2/3 site.
         // rtti_isOp2 is true for copy/move/clone too - their func never passes the
         // eligibility gates, so the over-approximation is harmless
-        Function * callLikeFunc ( Expression * expr ) {
-            if ( expr->rtti_isCall() ) return static_cast<ExprCall *>(expr)->func;
+        Function * callLikeFunc ( const Expression * expr ) {
+            if ( expr->rtti_isCall() ) return static_cast<const ExprCall *>(expr)->func;
             if ( expr->rtti_isOp1() || expr->rtti_isOp2() || expr->rtti_isOp3() ) {
-                return static_cast<ExprCallFunc *>(expr)->func;
+                return static_cast<const ExprCallFunc *>(expr)->func;
             }
             return nullptr;
         }
@@ -1560,7 +1561,7 @@ namespace das {
     static bool inlineGraphReaches ( Function * target, Function * cur, das_hash_set<Function *> & visited ) {
         if ( !cur->body ) return false;
         bool found = false;
-        lookupExpressions(cur->body, [&](Expression * expr) {
+        lookupExpressions(cur->body, [&](const Expression * expr) {
             if ( found ) return;
             Function * fn = callLikeFunc(expr);
             if ( !fn || !fn->mustInline ) return;
@@ -1587,9 +1588,9 @@ namespace das {
         // manufactured argument references of an earlier splice round
         bool bindsLocalRef ( Expression * root ) {
             bool found = false;
-            lookupExpressions(root, [&](Expression * e) {
+            lookupExpressions(root, [&](const Expression * e) {
                 if ( found || !e->rtti_isLet() ) return;
-                auto let = static_cast<ExprLet *>(e);
+                auto let = static_cast<const ExprLet *>(e);
                 for ( auto & v : let->variables ) {
                     if ( v->type && v->type->ref ) { found = true; return; }
                 }
@@ -1601,10 +1602,10 @@ namespace das {
         // node, but spliced, the temp's lifetime is no longer fenced by the call boundary
         bool hasTempArgumentMismatch ( Expression * root ) {
             bool mismatch = false;
-            lookupExpressions(root, [&](Expression * e) {
+            lookupExpressions(root, [&](const Expression * e) {
                 if ( mismatch ) return;
                 if ( e->rtti_isCall() ) {
-                    auto c = static_cast<ExprCall *>(e);
+                    auto c = static_cast<const ExprCall *>(e);
                     if ( !c->func ) return;
                     size_t n = das::min(c->arguments.size(), c->func->arguments.size());
                     for ( size_t i=0; i!=n; ++i ) {
@@ -1616,7 +1617,7 @@ namespace das {
                         }
                     }
                 } else if ( e->rtti_isInvoke() ) {
-                    auto inv = static_cast<ExprInvoke *>(e);
+                    auto inv = static_cast<const ExprInvoke *>(e);
                     if ( inv->arguments.empty() ) return;
                     auto & bt = inv->arguments[0]->type;
                     if ( !bt || bt->argTypes.empty() ) return;
@@ -1667,13 +1668,13 @@ namespace das {
                 das_hash_set<Function *> & visited ) {
             if ( !cur->body ) return false;
             bool found = false;
-            lookupExpressions(cur->body, [&](Expression * expr) {
+            lookupExpressions(cur->body, [&](const Expression * expr) {
                 if ( found ) return;
                 Function * fn = callLikeFunc(expr);
                 if ( !fn ) return;
                 if ( !fn->mustInline ) {
                     bool eligible = expr->rtti_isCall()
-                        ? autoEligibleCall(static_cast<ExprCall *>(expr), cfg)
+                        ? autoEligibleCall(static_cast<const ExprCall *>(expr), cfg)
                         : autoEligibleFn(fn, cfg);
                     if ( !eligible ) return;
                 }
@@ -1736,7 +1737,7 @@ namespace das {
                 while ( !work.empty() && !found ) {
                     Function * cur = work.back();
                     work.pop_back();
-                    lookupExpressions(cur->body, [&](Expression * e) {
+                    lookupExpressions(cur->body, [&](const Expression * e) {
                         if ( found ) return;
                         Function * callee = callLikeFunc(e);
                         if ( !callee ) return;
@@ -1776,9 +1777,9 @@ namespace das {
                     ok = false;
                 } else {
                     string genericAlias;    // type<TT> naming the generic's own alias
-                    lookupExpressions(fn->body, [&](Expression * expr) {
+                    lookupExpressions(fn->body, [&](const Expression * expr) {
                         if ( !genericAlias.empty() || !expr->rtti_isTypeDecl() ) return;
-                        auto td = static_cast<ExprTypeDecl *>(expr);
+                        auto td = static_cast<const ExprTypeDecl *>(expr);
                         if ( td->typeexpr && td->typeexpr->isAutoOrAlias() ) genericAlias = td->typeexpr->describe();
                     });
                     if ( !genericAlias.empty() ) {
@@ -2735,11 +2736,11 @@ namespace das {
             if ( !fn->body || fn->isTemplate || fn->stub ) return;
             if ( fn->module != thisMod ) return;
             if ( !seen.insert(fn).second ) return;
-            lookupExpressions(fn->body, [&](Expression * expr) {
+            lookupExpressions(fn->body, [&](const Expression * expr) {
                 Function * callee = callLikeFunc(expr);
                 if ( !callee ) return;
                 bool eligible = callee->mustInline || (expr->rtti_isCall()
-                    ? autoEligibleCall(static_cast<ExprCall *>(expr), cfg)
+                    ? autoEligibleCall(static_cast<const ExprCall *>(expr), cfg)
                     : autoEligibleFn(callee, cfg));
                 if ( eligible ) {
                     orderInlineFunctions(thisMod, callee, cfg, order, seen);
@@ -2870,7 +2871,7 @@ namespace das {
             // goto can target a label in a tail this pass would move into an else arm; the
             // feature is rare enough that any use opts the whole function out
             bool hasGotoOrLabel = false;
-            lookupExpressions(fn->body, [&](Expression * e) {
+            lookupExpressions(fn->body, [&](const Expression * e) {
                 if ( hasGotoOrLabel ) return;
                 if ( e->rtti_isGoto() || e->rtti_isLabel() ) hasGotoOrLabel = true;
             });
@@ -2929,14 +2930,14 @@ namespace das {
                     && !f->macroFunction;
             };
             auto scanRefs = [&](Expression * root, bool inBody) {
-                lookupExpressions(root, [&](Expression * e) {
+                lookupExpressions(root, [&](const Expression * e) {
                     Function * f = nullptr;
                     bool plainCall = false;
-                    if ( e->rtti_isCall() ) { f = static_cast<ExprCall *>(e)->func; plainCall = true; }
-                    else if ( e->rtti_isOp1() ) f = static_cast<ExprOp1 *>(e)->func;
-                    else if ( e->rtti_isOp2() ) f = static_cast<ExprOp2 *>(e)->func;
-                    else if ( e->rtti_isOp3() ) f = static_cast<ExprOp3 *>(e)->func;
-                    else if ( e->rtti_isAddr() ) f = static_cast<ExprAddr *>(e)->func;
+                    if ( e->rtti_isCall() ) { f = static_cast<const ExprCall *>(e)->func; plainCall = true; }
+                    else if ( e->rtti_isOp1() ) f = static_cast<const ExprOp1 *>(e)->func;
+                    else if ( e->rtti_isOp2() ) f = static_cast<const ExprOp2 *>(e)->func;
+                    else if ( e->rtti_isOp3() ) f = static_cast<const ExprOp3 *>(e)->func;
+                    else if ( e->rtti_isAddr() ) f = static_cast<const ExprAddr *>(e)->func;
                     if ( !f || !exemptCandidate(f) ) return;
                     refs[f] ++;
                     if ( inBody && plainCall ) callSites[f] ++;

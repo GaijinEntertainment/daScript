@@ -451,6 +451,11 @@ namespace das {
     DAS_CC_API Expression * astVisitExpression ( Expression * expr, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info);
     DAS_CC_API TypeDecl * astVisitTypeDecl ( TypeDecl * type, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info);
     DAS_CC_API void astVisitBlockFinally ( ExprBlock * expr, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info );
+    class ConstVisitorAdapter;
+    DAS_CC_API void makeConstVisitor ( const void * pClass, const StructInfo * info,
+            const TBlock<void,ConstVisitorAdapter*> & blk, Context * context, LineInfoArg * at );
+    DAS_CC_API void astConstVisitExpression ( const Expression * expr, ConstVisitorAdapter * adapter, Context * context, LineInfoArg * line_info );
+    DAS_CC_API void astConstVisitFunction ( const Function * func, ConstVisitorAdapter * adapter, Context * context, LineInfoArg * line_info );
     DAS_CC_API PassMacroPtr makePassMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     DAS_CC_API void makeVisitor ( const void * pClass, const StructInfo * info,
             const TBlock<void,VisitorAdapter*> & blk, Context * context, LineInfoArg * at );

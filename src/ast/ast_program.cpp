@@ -235,6 +235,10 @@ namespace das {
         }
     }
 
+    AstFuncLookup & Program::functionLookup ( const Function * fn ) {
+        return functionLookups[fn];
+    }
+
     Program::Program() {
         ref_count_magic = TRACK_PTR_PROGRAM;
         thisModule = make_unique<ModuleDas>();

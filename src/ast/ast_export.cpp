@@ -161,7 +161,7 @@ namespace das {
             mod.functionsByName.clear();
             // mod.globals.clear();
             for ( auto & fn : functions.each() ) {
-                if ( program->isUsed(fn) ) {
+                if ( fn->builtIn || program->isUsed(fn) ) {
                     if ( !mod.addFunction(fn, true) ) {
                         program->error("internal error, failed to add function " + fn->name,"","", fn->at, CompilationError::internal_function );
                     }
@@ -389,13 +389,13 @@ namespace das {
             if ( !workFn.empty() ) {
                 auto f = workFn.back();
                 workFn.pop_back();
-                f->visit(vis);
+                if ( f->module == thisModule.get() ) f->visit(vis);
                 for ( auto df : f->useFunctions ) pushFn(df);
                 for ( auto dv : f->useGlobalVariables ) pushVar(dv);
             } else {
                 auto v = workVar.back();
                 workVar.pop_back();
-                visitGlobalVariable(bvis, v);
+                if ( v->module == thisModule.get() ) visitGlobalVariable(bvis, v);
                 for ( auto df : v->useFunctions ) pushFn(df);
                 for ( auto dv : v->useGlobalVariables ) pushVar(dv);
             }

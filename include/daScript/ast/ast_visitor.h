@@ -2,6 +2,7 @@
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_expressions.h"
+#include "daScript/ast/ast_const_visitor.h"
 
 namespace das {
 

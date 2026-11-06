@@ -1,0 +1,1 @@
+Invokes a read-only AST visitor on the body of the given function.

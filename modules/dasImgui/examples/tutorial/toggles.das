@@ -5,7 +5,7 @@ options gc
 require math
 require imgui
 require imgui_app
-require opengl/opengl_boost
+require opengl/opengl
 require live/glfw_live
 require live/live_api
 require live/live_commands
