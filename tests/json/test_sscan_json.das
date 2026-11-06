@@ -3,6 +3,7 @@ options rtti
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 require dastest/testing_boost public
+require math
 
 // ============================================================
 //  shared types
@@ -116,6 +117,93 @@ def test_basic_scalars(t : T?) {
         t |> equal(v.i16, int16(-1000))
         t |> equal(v.u16, uint16(65000))
     }
+}
+
+let private pos_inf = 1.0lf / 0.0lf // nolint:LINT006 - non-finite input
+let private quiet_nan = 0.0lf / 0.0lf // nolint:LINT006 - non-finite input
+
+struct NonFiniteReals {
+    low : double
+    high : float
+    nan : double
+    point : float2
+    half : float16
+}
+
+[test]
+def test_non_finite_reals(t : T?) {
+    t |> run("round-trip through sprint_json") @(t : T?) {
+        let src = NonFiniteReals(low = -pos_inf, high = float(pos_inf),
+            nan = quiet_nan, point = float2(-float(pos_inf), 1.5),
+            half = float16(-float(pos_inf)))
+        var dst : NonFiniteReals
+        t |> success(sscan_json(sprint_json(src, false), dst))
+        t |> equal(dst.low, -pos_inf)
+        t |> equal(dst.high, float(pos_inf))
+        t |> success(is_nan(dst.nan))
+        t |> equal(dst.point.x, -float(pos_inf))
+        t |> equal(dst.point.y, 1.5)
+        t |> equal(float(dst.half), -float(pos_inf))
+    }
+    t |> run("unknown nested fields skip non-finite reals") @(t : T?) {
+        var dst : Inner
+        let text = ("\{\"a\":-Infinity,\"b\":NaN,\"c\":Infinity," +
+            "\"nested\":[NaN,\{\"deep\":[Infinity,-Infinity,1.5]\}]," +
+            "\"x\":3,\"y\":2.5\}")
+        t |> success(sscan_json(text, dst))
+        t |> equal(dst.x, 3)
+        t |> equal(dst.y, 2.5)
+    }
+    t |> run("complete input") @(t : T?) {
+        for (text in ["NaN", "Infinity", "-Infinity"]) {
+            check_scan_complete(t, text, 0.0lf)
+        }
+    }
+    t |> run("malformed tokens are refused") @(t : T?) {
+        for (value in ["inf", "-inf", "nan", "-NaN", "+Infinity",
+                "N", "Na", "I", "In", "Inf", "Infi", "Infin", "Infini",
+                "Infinit", "-", "-I", "-In", "-Inf", "-Infi", "-Infin",
+                "-Infini", "-Infinit", "NaNx", "Infinityx", "-Infinityx",
+                "NaN0", "Infinity0", "-Infinity0", "NaN.", "Infinitye1"]) {
+            var scalar : double
+            t |> success(!sscan_json(value, scalar), value)
+            var dst : NonFiniteReals
+            t |> success(!sscan_json("\{\"low\":{value}\}", dst), value)
+            var unknown : Inner
+            t |> success(!sscan_json("\{\"other\":[{value}]\}", unknown),
+                value)
+        }
+    }
+}
+
+def private check_scan_real_scalar(t : T?; witness : auto(TT)) {
+    for ((text, expected) in [("Infinity", pos_inf),
+            ("-Infinity", -pos_inf), ("NaN", quiet_nan),
+            ("1.5", 1.5lf)]) {
+        for (space in ["", " ", "\t", "\n", "\r"]) {
+            var value : TT
+            t |> success(sscan_json("{space}{text}{space}", value), text)
+            t |> numericEqual(double(float(value)), expected)
+        }
+    }
+}
+
+[test]
+def test_scan_non_finite_scalars(t : T?) {
+    check_scan_real_scalar(t, 0.0lf)
+    check_scan_real_scalar(t, 0.0)
+    var integers : array<int>
+    t |> success(!sscan_json("[Infinity]", integers))
+    var values : array<array<double>>
+    t |> strictEqual(sscan_json("[[NaN,Infinity],[-Infinity,1.5]]", values),
+        true)
+    t |> numericEqual(values[0][0], quiet_nan)
+    t |> equal(values[0][1], pos_inf)
+    t |> equal(values[1][0], -pos_inf)
+    t |> equal(values[1][1], 1.5lf)
+    var keyed : table<float2; int>
+    t |> success(sscan_json("\{\"[Infinity,-Infinity]\":7\}", keyed))
+    t |> equal(keyed?[float2(float(pos_inf), -float(pos_inf))] ?? 0, 7)
 }
 
 // ============================================================
@@ -243,6 +331,35 @@ def test_edge_cases(t : T?) {
         t |> success(!sscan_json("not json", v), "bad json 1")
         t |> success(!sscan_json("\{broken", v), "bad json 2")
         t |> success(!sscan_json("", v), "bad json 3")
+    }
+}
+
+def private check_scan_complete(t : T?; text : string;
+                                witness : auto(TT)) {
+    var value : TT
+    for (space in ["", " \t\r\n"]) {
+        t |> success(sscan_json("{space}{text}{space}", value), text)
+    }
+    for (suffix in ["x", ",", ",,,,,", "]", "}", " 0", " true"]) {
+        t |> success(!sscan_json("{text}{suffix}", value),
+            "{text}{suffix}")
+    }
+}
+
+[test]
+def test_scan_complete_input(t : T?) {
+    check_scan_complete(t, "1.5", 0.0lf)
+    check_scan_complete(t, "42", 0)
+    check_scan_complete(t, "true", false)
+    check_scan_complete(t, "\"hello\"", "")
+    check_scan_complete(t, "\{\"x\":123,\"y\":2.5\}", Inner())
+    var inscope values : array<int>
+    t |> success(sscan_json(" \t[1,2]\r\n", values))
+    t |> equal(values, [1, 2])
+    t |> success(!sscan_json("[1,2]aaaaa", values))
+    for (text in ["", " ", "[", "\{"]) {
+        var value : double
+        t |> success(!sscan_json(text, value), text)
     }
 }
 
@@ -489,6 +606,38 @@ def test_vector_types(t : T?) {
         t |> success(dst.f4.w > 3.9 && dst.f4.w < 4.1, "f4 w")
         t |> equal(dst.u2.x, 100u)
         t |> equal(dst.u2.y, 200u)
+    }
+}
+
+//! halves ride in fields: a direct half breaks the LLVM-AOT link
+struct NonFiniteVectors {
+    f2 : float2
+    f3 : float3
+    f4 : float4
+    h2 : half2
+    h3 : half3
+    h4 : half4
+    h8 : half8
+}
+
+[test]
+def test_scan_non_finite_vectors(t : T?) {
+    let pair = "\{\"x\":Infinity,\"y\":-Infinity\}"
+    let triple = "\{\"x\":Infinity,\"y\":-Infinity,\"z\":NaN\}"
+    let quad = "\{\"x\":Infinity,\"y\":-Infinity,\"z\":NaN,\"w\":1.5\}"
+    let wide = "[Infinity,-Infinity,NaN,1.5,0,NaN,-Infinity,Infinity]"
+    let objects = ("\{\"f2\":{pair},\"f3\":{triple},\"f4\":{quad}," +
+        "\"h2\":{pair},\"h3\":{triple},\"h4\":{quad},\"h8\":{wide}\}")
+    let pair_array = "[Infinity,-Infinity]"
+    let triple_array = "[Infinity,-Infinity,NaN]"
+    let quad_array = "[Infinity,-Infinity,NaN,1.5]"
+    let arrays = ("\{\"f2\":{pair_array},\"f3\":{triple_array}," +
+        "\"f4\":{quad_array},\"h2\":{pair_array},\"h3\":{triple_array}," +
+        "\"h4\":{quad_array},\"h8\":{wide}\}")
+    for (text in [objects, arrays]) {
+        var value : NonFiniteVectors
+        t |> success(sscan_json(text, value), text)
+        t |> equal(sprint_json(value, false), objects)
     }
 }
 
