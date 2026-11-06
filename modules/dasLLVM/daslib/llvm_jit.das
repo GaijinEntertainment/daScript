@@ -249,6 +249,10 @@ class public LlvmJitVisitor : AstVisitor {
     v2v : table<Variable?; LLVMOpaqueValue?>
     g2v : table<Variable?; LLVMOpaqueValue?>    //! a solid-context global's entry-block pointer, cleared per LLVM function
     di_globals : table<Variable?; bool>         //! the globals this function already describes, cleared with g2v
+    //! a nested literal's byte offset in the parent literal's storage,
+    //! set by the parent's field visit; the AST's extraOffset stays the
+    //! interpreter's
+    mkl_extra : table<ExprMakeLocal?; uint>
     v2t : table<LLVMOpaqueValue?; LLVMOpaqueType?>
     call2cmres : table<Expression?; LLVMOpaqueValue?>
     ffunc, wfunc : LLVMOpaqueValue?
@@ -967,6 +971,7 @@ class public LlvmJitVisitor : AstVisitor {
         uid.reset(fun)
         g2v |> clear()
         di_globals |> clear()
+        mkl_extra |> clear()
         ldu_hint = LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS
         let fnmna = uid.get_dll_fn_name(fun)
         ffunc = LLVMGetNamedFunction(g_mod, fnmna.impl())
@@ -4373,14 +4378,21 @@ class public LlvmJitVisitor : AstVisitor {
         }
     }
 
+    //! where a literal lands in its parent's storage: the offset the
+    //! parent's field visit set this run, else the AST's own
+    def nested_extra_offset(expr : ExprMakeLocal?) : uint =>
+        mkl_extra?[expr] ?? expr.extraOffset
+
 // ExprMakeVariant
     def override preVisitExprMakeVariant(expr : ExprMakeVariant?) : void {
         var mkv_ptr : LLVMOpaqueValue?
+        let eo = nested_extra_offset(unsafe(reinterpret<ExprMakeLocal?>(expr)))
+        var eo_c = types.ConstI32(uint64(eo))
         if (return_by_cmres(expr)) {
             mkv_ptr = get_cmres_param()
             mkv_ptr = LLVMBuildPointerCast(g_builder, mkv_ptr, LLVMPointerType(types.t_int8, 0u), "")
-            if (expr.extraOffset != 0u) {
-                mkv_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mkv_ptr, types.ConstI32(uint64(expr.extraOffset)), "")
+            if (eo != 0u) {
+                mkv_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mkv_ptr, eo_c, "")
             }
         } else {
             mkv_ptr = tryE(expr) {
@@ -4393,8 +4405,9 @@ class public LlvmJitVisitor : AstVisitor {
                 }
                 return s_ptr
             }
-            if (expr.extraOffset != 0u) {
-                mkv_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mkv_ptr, types.ConstI32(uint64(expr.extraOffset)), "mkv_local_sp_{expr.stackTop}_eo_{expr.extraOffset}")
+            if (eo != 0u) {
+                mkv_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mkv_ptr, eo_c,
+                    "mkv_local_sp_{expr.stackTop}_eo_{eo}")
             }
         }
         let stride = expr.makeType.stride
@@ -4423,9 +4436,9 @@ class public LlvmJitVisitor : AstVisitor {
         if (decl.value == null) return
         let field_ptr = LLVMBuildGEP2(g_builder, types.t_int8, v_ptr, types.ConstI32(uint64(offset + field_offset)), "")
         if (decl.value |> isMakeLocal) {
-            var val = unsafe(reinterpret<ExprMakeLocal?>(decl.value))
+            let val = unsafe(reinterpret<ExprMakeLocal?>(decl.value))
             if (!expr.makeFlags.useCMRES) {
-                val.extraOffset = uint(offset + field_offset) // + expr.extraOffset
+                mkl_extra[val] = uint(offset + field_offset)
                 setE(decl.value, v_ptr)
             }
         } elif (make_call_to_cmres(decl.value, field_ptr)) {
@@ -4497,11 +4510,13 @@ class public LlvmJitVisitor : AstVisitor {
 
     def override preVisitExprMakeStruct(expr : ExprMakeStruct?) : void {
         var mks_ptr : LLVMOpaqueValue?
+        let eo = nested_extra_offset(unsafe(reinterpret<ExprMakeLocal?>(expr)))
+        var eo_c = types.ConstI32(uint64(eo))
         if (return_by_cmres(expr)) {
             mks_ptr = get_cmres_param()
             mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(types.t_int8, 0u), "")
-            if (expr.extraOffset != 0u) {
-                mks_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mks_ptr, types.ConstI32(uint64(expr.extraOffset)), "")
+            if (eo != 0u) {
+                mks_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mks_ptr, eo_c, "")
             }
         } else {
             mks_ptr = tryE(expr) {
@@ -4514,8 +4529,9 @@ class public LlvmJitVisitor : AstVisitor {
                     // s_ptr = LLVMBuildPointerCast(g_builder, s_ptr, LLVMPointerType(types.t_int8,0u), "mks_local_sp_{expr.stackTop}")
                 return s_ptr
             }
-            if (expr.extraOffset != 0u) {
-                mks_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mks_ptr, types.ConstI32(uint64(expr.extraOffset)), "mks_local_sp_{expr.stackTop}_eo_{expr.extraOffset}")
+            if (eo != 0u) {
+                mks_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mks_ptr, eo_c,
+                    "mks_local_sp_{expr.stackTop}_eo_{eo}")
             }
         }
         let stride = expr.makeType.stride
@@ -4620,9 +4636,9 @@ class public LlvmJitVisitor : AstVisitor {
         v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(types.t_int8, 0u), "")
         let field_ptr = LLVMBuildGEP2(g_builder, types.t_int8, v_ptr, types.ConstI32(uint64(offset)), "mks_{decl.name}")
         if (decl.value |> isMakeLocal) {
-            var val = unsafe(reinterpret<ExprMakeLocal?>(decl.value))
+            let val = unsafe(reinterpret<ExprMakeLocal?>(decl.value))
             if (!expr.makeFlags.useCMRES) {
-                val.extraOffset = uint(offset) // + expr.extraOffset
+                mkl_extra[val] = uint(offset)
                 setE(decl.value, v_ptr)
             }
         } elif (make_call_to_cmres(decl.value, field_ptr)) {
@@ -4750,11 +4766,14 @@ class public LlvmJitVisitor : AstVisitor {
         // makeArrayOnHeap: the Array struct lives in the make-array's own stack slot (interp's
         // SimNode_MakeArrayHeap returns stackTop, not the function cmres). The cmres flag set in
         // allocate_stack only directs element writes — handled here via heapMkaData. So always alloca.
+        let eo = nested_extra_offset(unsafe(reinterpret<ExprMakeLocal?>(expr)))
+        var eo_c = types.ConstI32(uint64(eo))
         if (return_by_cmres(expr) && !expr.makeArrayOnHeap) {
             mks_ptr = get_cmres_param()
             mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(types.t_int8, 0u), "")
-            if (expr.extraOffset != 0u) {
-                mks_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mks_ptr, types.ConstI32(uint64(expr.extraOffset)), "ema_{expr.at.line}")
+            if (eo != 0u) {
+                mks_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mks_ptr, eo_c,
+                    "ema_{expr.at.line}")
             }
         } else {
             mks_ptr = tryE(expr) {
@@ -4767,8 +4786,9 @@ class public LlvmJitVisitor : AstVisitor {
                 }
                 return s_ptr
             }
-            if (expr.extraOffset != 0u) {
-                mks_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mks_ptr, types.ConstI32(uint64(expr.extraOffset)), "mka_local_sp_{expr.stackTop}_eo_{expr.extraOffset}_at_{int(expr.at.line)}_")
+            if (eo != 0u) {
+                mks_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mks_ptr, eo_c,
+                    "mka_local_sp_{expr.stackTop}_eo_{eo}_at_{int(expr.at.line)}_")
             }
         }
         if (expr.makeArrayOnHeap) {
@@ -4804,12 +4824,12 @@ class public LlvmJitVisitor : AstVisitor {
         verify(v_ptr != null && LLVMIsUndef(v_ptr) == 0, "make array index, but no pointer")
         let record_ptr = LLVMBuildGEP2(g_builder, types.t_int8, v_ptr, types.ConstI32(uint64(offset)), "ema_ind_{index}_{expr.at.line}")
         if (init |> isMakeLocal) {
-            var val = unsafe(reinterpret<ExprMakeLocal?>(init))
+            let val = unsafe(reinterpret<ExprMakeLocal?>(init))
             // heap literals set useCMRES (allocate_stack) but, like interp's per-element
             // extraLocalOffset, the element make-local must write at arr.data+offset — so use the
             // same extraOffset+setE placement the non-CMRES path uses instead of a cmres redirect.
             if (!expr.makeFlags.useCMRES || expr.makeArrayOnHeap) {
-                val.extraOffset = uint(offset) // + expr.extraOffset
+                mkl_extra[val] = uint(offset)
                 setE(init, v_ptr)
             }
         } elif (make_call_to_cmres(init, record_ptr)) {
@@ -4857,11 +4877,13 @@ class public LlvmJitVisitor : AstVisitor {
 // ExprMakeTuple
     def override preVisitExprMakeTuple(expr : ExprMakeTuple?) : void {
         var mks_ptr : LLVMOpaqueValue?
+        let eo = nested_extra_offset(unsafe(reinterpret<ExprMakeLocal?>(expr)))
+        var eo_c = types.ConstI32(uint64(eo))
         if (return_by_cmres(expr)) {
             mks_ptr = get_cmres_param()
             mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(types.t_int8, 0u), "")
-            if (expr.extraOffset != 0u) {
-                mks_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mks_ptr, types.ConstI32(uint64(expr.extraOffset)), "")
+            if (eo != 0u) {
+                mks_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mks_ptr, eo_c, "")
             }
         } else {
             mks_ptr = tryE(expr) {
@@ -4874,8 +4896,9 @@ class public LlvmJitVisitor : AstVisitor {
                 }
                 return s_ptr
             }
-            if (expr.extraOffset != 0u) {
-                mks_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mks_ptr, types.ConstI32(uint64(expr.extraOffset)), "mkt_local_sp_{expr.stackTop}_eo_{expr.extraOffset}")
+            if (eo != 0u) {
+                mks_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mks_ptr, eo_c,
+                    "mkt_local_sp_{expr.stackTop}_eo_{eo}")
             }
         }
         let stride = expr.makeType.stride
@@ -4892,9 +4915,9 @@ class public LlvmJitVisitor : AstVisitor {
         verify(v_ptr != null && LLVMIsUndef(v_ptr) == 0, "make tuple index, but no pointer")
         let field_ptr = LLVMBuildGEP2(g_builder, types.t_int8, v_ptr, types.ConstI32(uint64(offset)), "")
         if (init |> isMakeLocal) {
-            var val = unsafe(reinterpret<ExprMakeLocal?>(init))
+            let val = unsafe(reinterpret<ExprMakeLocal?>(init))
             if (!expr.makeFlags.useCMRES) {
-                val.extraOffset = uint(offset) // + expr.extraOffset
+                mkl_extra[val] = uint(offset)
                 setE(init, v_ptr)
             }
         } elif (make_call_to_cmres(init, field_ptr)) {

@@ -122,19 +122,16 @@ def private tw_seat_gate(lane_ok : bool; dev : TowerDev) : bool {
 //! their homes; lazily re-initializes on the next served encode.
 def metal_tower_shutdown {
     residency_reset()   // the set references pooled buffers the drain below releases
-    tw_rows_drop()
+    tw_weights_drop()
     release_handle(g_tw_ones)
-    st2_slab_free(g_tw_q3a_wpad)
-    st2_slab_free(g_tw_q8)
-    st2_slab_free(g_tw_q8_vis)
-    st2_slab_free(g_tw_q8_fc)
-    st2_slab_free(g_tw_kq_fc)
-    st2_slab_free(g_tw_conv1_pad)
-    st2_slab_free(g_tw_ga_mel_panel)
-    st2_slab_drop()
-    tw_vad_release()
     pool_drain(g_tw_pool)
     g_tw_failed = false
+}
+
+//! this context's tower down at its end, as the decode and prefill drivers' `metal_context_shutdown`
+[finalize, arch(at="../ARCHITECTURE_GPU_METAL_LIFECYCLE.md#metal-family-lifecycle")]
+def private metal_tower_context_shutdown {
+    metal_tower_shutdown()
 }
 
 [cold_path]   // per-encode bring-up: the registry/prefill inits are latched-flag cheap
