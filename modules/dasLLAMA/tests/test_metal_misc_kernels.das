@@ -32,7 +32,8 @@ require _compares   // Bar: the cells' bars
 require ?das_metal _mtl_toy               // the [metal_dispatch] multi-kernel fixture
 require ?das_metal dasllama/dasllama_metal_lens   // the requires= tripwire observer: captured, set, restored
 require daslib/f16_cvt              // f32_to_f16 — packing the synthetic scale planes
-require daslib/math_bits            // float_bits_to_uint — packing the BF16 scale planes
+require daslib/math_bits            // uint_bits_to_float — a quiet-NaN bit pattern
+require _gguf_writer                // half_bits — packing the per-32 tables' F16 and BF16 scale halves
 require math
 require strings
 require daslib/strings_boost
@@ -988,7 +989,7 @@ def private embed_b32_gate(t : T?; var dev, queue; f : KqFmt; dim, vocab, lead :
             kq[i] = uint8((i * 37 + 11) & 255)
         }
         for (b in range(nblk)) {
-            let d = scale_half_bits(f, 0.0625 * float(1 + (b * 7) % 13))   //! an affine table's even block holds its group's scale, the odd one its bias
+            let d = half_bits(0.0625 * float(1 + (b * 7) % 13), kq_mlx_bf16(f))   //! an affine table's even block holds its group's scale, the odd one its bias
             ks[b * sb] = uint8(d & 255u)
             ks[b * sb + 1] = uint8(d >> 8u)
             if (sb == 4) {
@@ -1033,20 +1034,7 @@ def private embed_b32_gate(t : T?; var dev, queue; f : KqFmt; dim, vocab, lead :
 }
 
 //! the per-32 token-table gather stamp of a format
-def private embed_b32_stamp(f) {   //! generic, as the gates are: the Apple half alone instantiates it
-    return stamp_of(@@enc_q51_embed_b32) if (f == KqFmt.q51)
-    return stamp_of(@@enc_iq4nl32_embed_b32) if (f == KqFmt.iq4nl32)
-    return stamp_of(@@enc_q5032_embed_b32) if (f == KqFmt.q5032)
-    return stamp_of(@@enc_mlx4_embed_b32) if (f == KqFmt.mlx4)
-    return stamp_of(@@enc_mlx8_embed_b32) if (f == KqFmt.mlx8)
-    return stamp_of(@@enc_mlx4b_embed_b32) if (f == KqFmt.mlx4b)
-    return stamp_of(@@enc_mlx8b_embed_b32) if (f == KqFmt.mlx8b)
-    return stamp_of(@@enc_mlx6b_embed_b32) if (f == KqFmt.mlx6b)
-    return stamp_of(@@enc_q4032_embed_b32)
-}
-
-//! a scale-plane half of `v` in format `f`'s half type: BF16 (the float's high half) on mlx4b / mlx8b / mlx6b, F16 on every other
-def private scale_half_bits(f : KqFmt; v : float) : uint => (f == KqFmt.mlx4b || f == KqFmt.mlx8b || f == KqFmt.mlx6b) ? (float_bits_to_uint(v) >> 16u) : f32_to_f16(v)
+def private embed_b32_stamp(f) => kq_form_ladder(f, "stamp_of", "enc_%_embed_b32", "b32")   //! generic, as the gates are: the Apple half alone instantiates it
 
 //! the residual step's Metal stamps (`GkAddRmsRows`): which builder a cell dispatches
 enum private ArStamp {
@@ -2624,18 +2612,10 @@ def private gemv_sg_lo_gate(t : T?; var dev, queue; lr, dim, hc : int) {
 }
 
 //! the fused mixer down's stamp for an affine member (the q8 stamp is `enc_gemv_hcn_c`)
-def private hcn_aff_stamp(f) {   //! generic, as the gates are: the Apple half alone instantiates it
-    return stamp_of(@@enc_gemv_hcn_mlx4b_c) if (f == KqFmt.mlx4b)
-    return stamp_of(@@enc_gemv_hcn_mlx6b_c) if (f == KqFmt.mlx6b)
-    return stamp_of(@@enc_gemv_hcn_mlx8b_c)
-}
+def private hcn_aff_stamp(f) => kq_form_ladder(f, "stamp_of", "enc_gemv_hcn_%_c", "b32")   //! generic, as the gates are: the Apple half alone instantiates it
 
 //! the fused mixer up's stamp for an affine member (the q8 stamp is `enc_gemv_sg_lo_c`)
-def private sg_lo_aff_stamp(f) {   //! generic, as the gates are: the Apple half alone instantiates it
-    return stamp_of(@@enc_gemv_sg_lo_mlx4b_c) if (f == KqFmt.mlx4b)
-    return stamp_of(@@enc_gemv_sg_lo_mlx6b_c) if (f == KqFmt.mlx6b)
-    return stamp_of(@@enc_gemv_sg_lo_mlx8b_c)
-}
+def private sg_lo_aff_stamp(f) => kq_form_ladder(f, "stamp_of", "enc_gemv_sg_lo_%_c", "b32")   //! generic, as the gates are: the Apple half alone instantiates it
 
 //! `MetalGemvHcNT` over an affine member's planes: the q8 gate's three outputs against the double reference at 1e-4 of their magnitude
 def private gemv_hcn_aff_gate(t : T?; var dev, queue; fmt : KqFmt; dim, hc, lr : int; with_inj : bool) {

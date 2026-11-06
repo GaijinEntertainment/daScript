@@ -14,6 +14,7 @@ require dasllama/dasllama_math     // reserve_resize
 require dasllama/dasllama_math_default   // matmul_kq: the CPU decode's K-quant plane GEMV over disk-order planes
 require dasllama/dasllama_convert   // quantize_q8_k_into_ptr, dequant_kq_plane_sb: the K-quant planes' activation rows and codebook rows
 require dasllama/dasllama_par      // maybe_parallel_for: the q8 rows thread when a jobque is up
+require dasllama/dasllama_gemm_schema   // Q8_BLOCK_ELEMS / Q8_BLOCK_BYTES: the q8 planes' block strides
 require daslib/enum_trait   // the refusal names the KqFmt member a disk type is
 require daslib/fio
 require daslib/strings_boost
@@ -22,8 +23,6 @@ require strings
 require math
 
 let DFLASH_ARCH = "dflash"
-let private Q8B = 34l   //! a Q8_0 block's bytes: an f16 scale and 32 quants
-let private Q8E = 32l
 let private DFLASH_FMTS = fixed_array(KqFmt.q8, KqFmt.k4, KqFmt.k5, KqFmt.k6)   //! the plane formats both arms of the pass serve
 
 //! a weight plane in its own format: a Q8_0 plane at a byte offset into `blob`, a K-quant plane at an element offset into
@@ -493,30 +492,10 @@ def private rms_w(var o : array<float>; ooff : int64; x : array<float>; xoff : i
     }
 }
 
-//! the dot of a q8 row at `bp` (`n` inputs in 34-byte blocks) with the `n` floats at `xp`
-def private dot_q8p(bp : uint8 const?; n : int64; xp : float const?) : float {
-    let nb = n / Q8E
-    var acc = 0.0
-    unsafe {
-        for (b in range64(nb)) {
-            let bo = b * Q8B
-            let sc = f16_to_f32(uint(bp[bo]) | (uint(bp[bo + 1l]) << 8u))
-            let qp = reinterpret<int8 const?>(bp + bo + 2l)
-            let xo = b * Q8E
-            var sub = 0.0
-            for (k in range64(Q8E)) {
-                sub += float(qp[k]) * xp[xo + k]
-            }
-            acc += sub * sc
-        }
-    }
-    return acc
-}
-
 //! y rows = W . x rows: W `d` rows of `n` at `boff`, `rows` input rows `n` apart at xoff, output rows `d` apart at yoff
 def private mm_q8(var y : array<float>; yoff : int64; blob : array<uint8>; boff : int64; x : array<float>; xoff, n, d, rows : int64) {
     let jobs = int(clamp(d / 256l, 1l, 64l))
-    let rowb = (n / Q8E) * Q8B
+    let rowb = (n / Q8_BLOCK_ELEMS) * Q8_BLOCK_BYTES
     unsafe {
         let bp = addr<uint8 const?>(blob[boff])
         let xp = addr<float const?>(x[xoff])
@@ -525,7 +504,7 @@ def private mm_q8(var y : array<float>; yoff : int64; blob : array<uint8>; boff 
             unsafe {
                 for (r in range(rb, re)) {
                     for (t in range64(rows)) {
-                        yp[t * d + int64(r)] = dot_q8p(bp + int64(r) * rowb, n, xp + t * n)
+                        yp[t * d + int64(r)] = dot_q8_blocks(bp + int64(r) * rowb, n / Q8_BLOCK_ELEMS, xp + t * n)
                     }
                 }
             }
@@ -562,7 +541,8 @@ def private mm_w(var y : array<float>; yoff : int64; dr : DflashDrafter; w : Dfl
     }
 }
 
-//! NEOX rope of a head's `hs` values at `off` for position `pos`: the pair (i, i + hs/2)
+//! NEOX rope of a head's `hs` values at `off` for position `pos`: the pair (i, i + hs/2); pow(theta, -2i/hs) is the device
+//! pass's invf table bit for bit, which rope_scaled_neox's 1/pow(theta, 2i/hs) is not
 def private rope_head(var v : array<float>; off, hs, pos : int64; theta : float) {
     let half = hs / 2l
     for (i in range64(half)) {
@@ -934,17 +914,9 @@ def private codebook_row(dr : DflashDrafter; w : DflashW; tok : int64; var out :
         }
         return
     }
-    let nb = dr.rank / Q8E
+    let nb = dr.rank / Q8_BLOCK_ELEMS
     unsafe {
-        let bp = addr<uint8 const?>(dr.blob[w.off + tok * nb * Q8B])
-        for (b in range64(nb)) {
-            let bo = b * Q8B
-            let sc = f16_to_f32(uint(bp[bo]) | (uint(bp[bo + 1l]) << 8u))
-            let qp = reinterpret<int8 const?>(bp + bo + 2l)
-            for (k in range64(Q8E)) {
-                out[ooff + b * Q8E + k] = float(qp[k]) * sc
-            }
-        }
+        dequant_q8_blocks(addr<uint8 const?>(dr.blob[w.off + tok * nb * Q8_BLOCK_BYTES]), nb, addr(out[ooff]))
     }
 }
 

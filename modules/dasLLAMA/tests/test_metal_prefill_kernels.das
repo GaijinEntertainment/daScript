@@ -5101,17 +5101,7 @@ def private b32_gemv_gate(t : T?; var dev, queue; fmt : KqFmt; n, d : int) {
 }
 
 //! the per-32 wide one-row GEMV stamp of a format
-def private b32_gemv_w_stamp(f) {   //! generic, as the gates are: the Apple half alone instantiates it
-    return stamp_of(@@enc_kq_q51_w_c) if (f == KqFmt.q51)
-    return stamp_of(@@enc_kq_q4032_w_c) if (f == KqFmt.q4032)
-    return stamp_of(@@enc_kq_q5032_w_c) if (f == KqFmt.q5032)
-    return stamp_of(@@enc_kq_mlx4_w_c) if (f == KqFmt.mlx4)
-    return stamp_of(@@enc_kq_mlx8_w_c) if (f == KqFmt.mlx8)
-    return stamp_of(@@enc_kq_mlx4b_w_c) if (f == KqFmt.mlx4b)
-    return stamp_of(@@enc_kq_mlx8b_w_c) if (f == KqFmt.mlx8b)
-    return stamp_of(@@enc_kq_mlx6b_w_c) if (f == KqFmt.mlx6b)
-    return stamp_of(@@enc_kq_iq4nl32_w_c)
-}
+def private b32_gemv_w_stamp(f) => kq_form_ladder(f, "stamp_of", "enc_kq_%_w_c", "b32")   //! generic, as the gates are: the Apple half alone instantiates it
 
 //! The per-32 wide one-row GEMV (`MetalB32GemvWideT`) BIT-exact over `d` rows of the exact-arithmetic planes - the affine
 //! members' in-place masked codes against x scaled by powers of two keep every product exact - x bound at an offset row, the
@@ -5165,17 +5155,7 @@ def private b32_gemv_wide_gate(t : T?; var dev, queue; fmt : KqFmt; n, d : int) 
 }
 
 //! the per-32 fused gate|up stamp of a format
-def private b32_glu_stamp(f) {   //! generic, as the gates are: the Apple half alone instantiates it
-    return stamp_of(@@enc_kq_q51_glu_c) if (f == KqFmt.q51)
-    return stamp_of(@@enc_kq_q4032_glu_c) if (f == KqFmt.q4032)
-    return stamp_of(@@enc_kq_q5032_glu_c) if (f == KqFmt.q5032)
-    return stamp_of(@@enc_kq_mlx4_glu_c) if (f == KqFmt.mlx4)
-    return stamp_of(@@enc_kq_mlx8_glu_c) if (f == KqFmt.mlx8)
-    return stamp_of(@@enc_kq_mlx4b_glu_c) if (f == KqFmt.mlx4b)
-    return stamp_of(@@enc_kq_mlx8b_glu_c) if (f == KqFmt.mlx8b)
-    return stamp_of(@@enc_kq_mlx6b_glu_c) if (f == KqFmt.mlx6b)
-    return stamp_of(@@enc_kq_iq4nl32_glu_c)
-}
+def private b32_glu_stamp(f) => kq_form_ladder(f, "stamp_of", "enc_kq_%_glu_c", "b32")   //! generic, as the gates are: the Apple half alone instantiates it
 
 //! The per-32 fused gate|up GEMV (`MetalB32GemvGluT`): one plane of `2d` rows bound once, its last `d` rows the gate (`e1`)
 //! and its first `d` the up plane (`e3`) - the up plane bound below the gate, as `enc_b32_glu` binds a pair whose up plane sits
@@ -5233,106 +5213,23 @@ def private b32_glu_gate(t : T?; var dev, queue; fmt : KqFmt; n, d : int; act : 
 
 //! the per-32 small-batch stamp of a format at a column width
 def private b32_mvb_stamp(f; w : int; ks : bool) {   //! generic, as the gates are: the Apple half alone instantiates it
-    if (f == KqFmt.q51) {
-        if (w == 2) return ks ? stamp_of(@@enc_b32_mvb2_q51_ks_c) : stamp_of(@@enc_b32_mvb2_q51_c)
-        if (w == 4) return ks ? stamp_of(@@enc_b32_mvb4_q51_ks_c) : stamp_of(@@enc_b32_mvb4_q51_c)
-        return ks ? stamp_of(@@enc_b32_mvb8_q51_ks_c) : stamp_of(@@enc_b32_mvb8_q51_c)
-    }
-    if (f == KqFmt.q4032) {
-        if (w == 2) return ks ? stamp_of(@@enc_b32_mvb2_q4032_ks_c) : stamp_of(@@enc_b32_mvb2_q4032_c)
-        if (w == 4) return ks ? stamp_of(@@enc_b32_mvb4_q4032_ks_c) : stamp_of(@@enc_b32_mvb4_q4032_c)
-        return ks ? stamp_of(@@enc_b32_mvb8_q4032_ks_c) : stamp_of(@@enc_b32_mvb8_q4032_c)
-    }
-    if (f == KqFmt.q5032) {
-        if (w == 2) return ks ? stamp_of(@@enc_b32_mvb2_q5032_ks_c) : stamp_of(@@enc_b32_mvb2_q5032_c)
-        if (w == 4) return ks ? stamp_of(@@enc_b32_mvb4_q5032_ks_c) : stamp_of(@@enc_b32_mvb4_q5032_c)
-        return ks ? stamp_of(@@enc_b32_mvb8_q5032_ks_c) : stamp_of(@@enc_b32_mvb8_q5032_c)
-    }
-    if (f == KqFmt.mlx4) {
-        if (w == 2) return ks ? stamp_of(@@enc_b32_mvb2_mlx4_ks_c) : stamp_of(@@enc_b32_mvb2_mlx4_c)
-        if (w == 4) return ks ? stamp_of(@@enc_b32_mvb4_mlx4_ks_c) : stamp_of(@@enc_b32_mvb4_mlx4_c)
-        return ks ? stamp_of(@@enc_b32_mvb8_mlx4_ks_c) : stamp_of(@@enc_b32_mvb8_mlx4_c)
-    }
-    if (f == KqFmt.mlx8) {
-        if (w == 2) return ks ? stamp_of(@@enc_b32_mvb2_mlx8_ks_c) : stamp_of(@@enc_b32_mvb2_mlx8_c)
-        if (w == 4) return ks ? stamp_of(@@enc_b32_mvb4_mlx8_ks_c) : stamp_of(@@enc_b32_mvb4_mlx8_c)
-        return ks ? stamp_of(@@enc_b32_mvb8_mlx8_ks_c) : stamp_of(@@enc_b32_mvb8_mlx8_c)
-    }
-    if (f == KqFmt.mlx4b) {
-        if (w == 2) return ks ? stamp_of(@@enc_b32_mvb2_mlx4b_ks_c) : stamp_of(@@enc_b32_mvb2_mlx4b_c)
-        if (w == 4) return ks ? stamp_of(@@enc_b32_mvb4_mlx4b_ks_c) : stamp_of(@@enc_b32_mvb4_mlx4b_c)
-        return ks ? stamp_of(@@enc_b32_mvb8_mlx4b_ks_c) : stamp_of(@@enc_b32_mvb8_mlx4b_c)
-    }
-    if (f == KqFmt.mlx8b) {
-        if (w == 2) return ks ? stamp_of(@@enc_b32_mvb2_mlx8b_ks_c) : stamp_of(@@enc_b32_mvb2_mlx8b_c)
-        if (w == 4) return ks ? stamp_of(@@enc_b32_mvb4_mlx8b_ks_c) : stamp_of(@@enc_b32_mvb4_mlx8b_c)
-        return ks ? stamp_of(@@enc_b32_mvb8_mlx8b_ks_c) : stamp_of(@@enc_b32_mvb8_mlx8b_c)
-    }
-    if (f == KqFmt.mlx6b) {
-        if (w == 2) return ks ? stamp_of(@@enc_b32_mvb2_mlx6b_ks_c) : stamp_of(@@enc_b32_mvb2_mlx6b_c)
-        if (w == 4) return ks ? stamp_of(@@enc_b32_mvb4_mlx6b_ks_c) : stamp_of(@@enc_b32_mvb4_mlx6b_c)
-        return ks ? stamp_of(@@enc_b32_mvb8_mlx6b_ks_c) : stamp_of(@@enc_b32_mvb8_mlx6b_c)
-    }
-    if (w == 2) return ks ? stamp_of(@@enc_b32_mvb2_iq4nl32_ks_c) : stamp_of(@@enc_b32_mvb2_iq4nl32_c)
-    if (w == 4) return ks ? stamp_of(@@enc_b32_mvb4_iq4nl32_ks_c) : stamp_of(@@enc_b32_mvb4_iq4nl32_c)
-    return ks ? stamp_of(@@enc_b32_mvb8_iq4nl32_ks_c) : stamp_of(@@enc_b32_mvb8_iq4nl32_c)
+    if (w == 2) return ks ? kq_form_ladder(f, "stamp_of", "enc_b32_mvb2_%_ks_c", "b32") : kq_form_ladder(f, "stamp_of", "enc_b32_mvb2_%_c", "b32")
+    if (w == 4) return ks ? kq_form_ladder(f, "stamp_of", "enc_b32_mvb4_%_ks_c", "b32") : kq_form_ladder(f, "stamp_of", "enc_b32_mvb4_%_c", "b32")
+    return ks ? kq_form_ladder(f, "stamp_of", "enc_b32_mvb8_%_ks_c", "b32") : kq_form_ladder(f, "stamp_of", "enc_b32_mvb8_%_c", "b32")
 }
 
 //! the per-32 one-row GEMV stamp of a format, the two-row form or the K-split narrow-plane one
-def private b32_gemv_stamp(f; ks : bool) {
-    if (f == KqFmt.q51) {
-        return ks ? stamp_of(@@enc_kq_q51_ks_c) : stamp_of(@@enc_kq_q51_c)
-    }
-    if (f == KqFmt.q4032) {
-        return ks ? stamp_of(@@enc_kq_q4032_ks_c) : stamp_of(@@enc_kq_q4032_c)
-    }
-    if (f == KqFmt.q5032) {
-        return ks ? stamp_of(@@enc_kq_q5032_ks_c) : stamp_of(@@enc_kq_q5032_c)
-    }
-    if (f == KqFmt.mlx4) {
-        return ks ? stamp_of(@@enc_kq_mlx4_ks_c) : stamp_of(@@enc_kq_mlx4_c)
-    }
-    if (f == KqFmt.mlx8) {
-        return ks ? stamp_of(@@enc_kq_mlx8_ks_c) : stamp_of(@@enc_kq_mlx8_c)
-    }
-    if (f == KqFmt.mlx4b) {
-        return ks ? stamp_of(@@enc_kq_mlx4b_ks_c) : stamp_of(@@enc_kq_mlx4b_c)
-    }
-    if (f == KqFmt.mlx8b) {
-        return ks ? stamp_of(@@enc_kq_mlx8b_ks_c) : stamp_of(@@enc_kq_mlx8b_c)
-    }
-    if (f == KqFmt.mlx6b) {
-        return ks ? stamp_of(@@enc_kq_mlx6b_ks_c) : stamp_of(@@enc_kq_mlx6b_c)
-    }
-    return ks ? stamp_of(@@enc_kq_iq4nl32_ks_c) : stamp_of(@@enc_kq_iq4nl32_c)
-}
+def private b32_gemv_stamp(f; ks : bool) => ks ? kq_form_ladder(f, "stamp_of", "enc_kq_%_ks_c", "b32") : kq_form_ladder(f, "stamp_of", "enc_kq_%_c", "b32")
 
 //! the expert-indexed GEMV stamp of a per-32 format on the plain pair bind (iq4nl32, q4032, q5032, the affine members)
-def private b32_moe_gemv_stamp(f) {   //! generic, as the gates are: the Apple half alone instantiates it
-    if (f == KqFmt.q4032) {
-        return stamp_of(@@enc_moe_gemv_q4032_c)
-    }
-    if (f == KqFmt.q5032) {
-        return stamp_of(@@enc_moe_gemv_q5032_c)
-    }
-    return stamp_of(@@enc_moe_gemv_mlx4_c) if (f == KqFmt.mlx4)
-    return stamp_of(@@enc_moe_gemv_mlx8_c) if (f == KqFmt.mlx8)
-    return stamp_of(@@enc_moe_gemv_mlx4b_c) if (f == KqFmt.mlx4b)
-    return stamp_of(@@enc_moe_gemv_mlx8b_c) if (f == KqFmt.mlx8b)
-    return stamp_of(@@enc_moe_gemv_iq4nl32_c)
-}
+def private b32_moe_gemv_stamp(f) => kq_form_ladder(f, "stamp_of", "enc_moe_gemv_%_c", "b32")   //! generic, as the gates are: the Apple half alone instantiates it
 
 //! the expert-indexed wide stamp of a `B32_MOE_WIDE_FMTS` member
 def private b32_moe_gemv_w_stamp(f) {   //! generic, as the gates are: the Apple half alone instantiates it
-    return stamp_of(@@enc_moe_gemv_q51_w_c) if (f == KqFmt.q51)
-    return stamp_of(@@enc_moe_gemv_q5032_w_c) if (f == KqFmt.q5032)
-    return stamp_of(@@enc_moe_gemv_mlx4_w_c) if (f == KqFmt.mlx4)
-    return stamp_of(@@enc_moe_gemv_mlx8_w_c) if (f == KqFmt.mlx8)
-    return stamp_of(@@enc_moe_gemv_mlx4b_w_c) if (f == KqFmt.mlx4b)
-    if (f != KqFmt.mlx8b) {
+    if (find_index(B32_MOE_WIDE_FMTS, f) < 0) {
         panic("b32_moe_gemv_w_stamp: {f} takes no expert-indexed wide stamp")
     }
-    return stamp_of(@@enc_moe_gemv_mlx8b_w_c)
+    return kq_form_ladder(f, "stamp_of", "enc_moe_gemv_%_w_c", "b32")
 }
 
 //! x rows off the dyadic lattice: a reordered sum rounds apart, so a bit-for-bit compare sees it
@@ -5622,17 +5519,7 @@ def private b32_mm_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim, mp : in
 }
 
 //! the per-32 dense mul_mm base tile of a format
-def private b32_mm_stamp(f) {   //! generic, as the gates are: the Apple half alone instantiates it
-    return stamp_of(@@enc_kq_mm_q51_c) if (f == KqFmt.q51)
-    return stamp_of(@@enc_kq_mm_q4032_c) if (f == KqFmt.q4032)
-    return stamp_of(@@enc_kq_mm_q5032_c) if (f == KqFmt.q5032)
-    return stamp_of(@@enc_kq_mm_mlx4_c) if (f == KqFmt.mlx4)
-    return stamp_of(@@enc_kq_mm_mlx8_c) if (f == KqFmt.mlx8)
-    return stamp_of(@@enc_kq_mm_mlx4b_c) if (f == KqFmt.mlx4b)
-    return stamp_of(@@enc_kq_mm_mlx8b_c) if (f == KqFmt.mlx8b)
-    return stamp_of(@@enc_kq_mm_mlx6b_c) if (f == KqFmt.mlx6b)
-    return stamp_of(@@enc_kq_mm_iq4nl32_c)
-}
+def private b32_mm_stamp(f) => kq_form_ladder(f, "stamp_of", "enc_kq_mm_%_c", "b32")   //! generic, as the gates are: the Apple half alone instantiates it
 
 // Build q51 plane pairs for `rows` rows of n elements: patterned 5-bit quants (position-
 // dependent), pow2 f16 d + quarter-value f16 m — every product/sum dyadic, so the CPU float
@@ -6010,39 +5897,12 @@ def private ple_proj_aff_gate(t : T?; var dev, queue; fmt : KqFmt; rows, nrows :
 
 //! one per-32 format's expert mul_mm kernels: the simdgroup base and the four tensor twins
 def private b32_mm_kernels(f) {   //! generic, as the gates are: the Apple half alone instantiates it
-    if (f == KqFmt.q51) {
-        return (base = kernel_of(@@pf_enc_moe_mm_q51_c), t = kernel_of(@@pf_enc_moe_mm_q51_t_c), th = kernel_of(@@pf_enc_moe_mm_q51_th_c),
-            th128 = kernel_of(@@pf_enc_moe_mm_q51_th128_c), thr = kernel_of(@@pf_enc_moe_mm_q51_thr_c))
-    }
-    if (f == KqFmt.q4032) {
-        return (base = kernel_of(@@pf_enc_moe_mm_q4032_c), t = kernel_of(@@pf_enc_moe_mm_q4032_t_c), th = kernel_of(@@pf_enc_moe_mm_q4032_th_c),
-            th128 = kernel_of(@@pf_enc_moe_mm_q4032_th128_c), thr = kernel_of(@@pf_enc_moe_mm_q4032_thr_c))
-    }
-    if (f == KqFmt.q5032) {
-        return (base = kernel_of(@@pf_enc_moe_mm_q5032_c), t = kernel_of(@@pf_enc_moe_mm_q5032_t_c), th = kernel_of(@@pf_enc_moe_mm_q5032_th_c),
-            th128 = kernel_of(@@pf_enc_moe_mm_q5032_th128_c), thr = kernel_of(@@pf_enc_moe_mm_q5032_thr_c))
-    }
-    if (f == KqFmt.mlx4) {
-        return (base = kernel_of(@@pf_enc_moe_mm_mlx4_c), t = kernel_of(@@pf_enc_moe_mm_mlx4_t_c), th = kernel_of(@@pf_enc_moe_mm_mlx4_th_c),
-            th128 = kernel_of(@@pf_enc_moe_mm_mlx4_th128_c), thr = kernel_of(@@pf_enc_moe_mm_mlx4_thr_c))
-    }
-    if (f == KqFmt.mlx8) {
-        return (base = kernel_of(@@pf_enc_moe_mm_mlx8_c), t = kernel_of(@@pf_enc_moe_mm_mlx8_t_c), th = kernel_of(@@pf_enc_moe_mm_mlx8_th_c),
-            th128 = kernel_of(@@pf_enc_moe_mm_mlx8_th128_c), thr = kernel_of(@@pf_enc_moe_mm_mlx8_thr_c))
-    }
-    if (f == KqFmt.mlx4b) {
-        return (base = kernel_of(@@pf_enc_moe_mm_mlx4b_c), t = kernel_of(@@pf_enc_moe_mm_mlx4b_t_c), th = kernel_of(@@pf_enc_moe_mm_mlx4b_th_c),
-            th128 = kernel_of(@@pf_enc_moe_mm_mlx4b_th128_c), thr = kernel_of(@@pf_enc_moe_mm_mlx4b_thr_c))
-    }
-    if (f == KqFmt.mlx8b) {
-        return (base = kernel_of(@@pf_enc_moe_mm_mlx8b_c), t = kernel_of(@@pf_enc_moe_mm_mlx8b_t_c), th = kernel_of(@@pf_enc_moe_mm_mlx8b_th_c),
-            th128 = kernel_of(@@pf_enc_moe_mm_mlx8b_th128_c), thr = kernel_of(@@pf_enc_moe_mm_mlx8b_thr_c))
-    }
-    if (f != KqFmt.iq4nl32) {
+    if (!kq_dense_b32(f) || f == KqFmt.mlx6b) {
         panic("b32_mm_kernels: {f} is not a per-32 expert mul_mm format")
     }
-    return (base = kernel_of(@@pf_enc_moe_mm_iq4nl32_c), t = kernel_of(@@pf_enc_moe_mm_iq4nl32_t_c), th = kernel_of(@@pf_enc_moe_mm_iq4nl32_th_c),
-        th128 = kernel_of(@@pf_enc_moe_mm_iq4nl32_th128_c), thr = kernel_of(@@pf_enc_moe_mm_iq4nl32_thr_c))
+    return (base = kq_form_ladder(f, "kernel_of", "pf_enc_moe_mm_%_c", "b32"), t = kq_form_ladder(f, "kernel_of", "pf_enc_moe_mm_%_t_c", "b32"),
+        th = kq_form_ladder(f, "kernel_of", "pf_enc_moe_mm_%_th_c", "b32"), th128 = kq_form_ladder(f, "kernel_of", "pf_enc_moe_mm_%_th128_c", "b32"),
+        thr = kq_form_ladder(f, "kernel_of", "pf_enc_moe_mm_%_thr_c", "b32"))
 }
 
 // The gathered per-32 mul_mm (q51, iq4nl32): ne experts with padded-CSR row runs (gather = 0

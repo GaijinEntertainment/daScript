@@ -15,6 +15,9 @@ options _dasllama_internal = true
 // wide gathered GEMVs, the act, the shared down, the combine) against the fused pair (`MetalB32GuT`, `MetalB32Down2T`), each
 // stage timed alone as a chain of CH steps whose picks rotate over NLS selection sets so the experts stream from DRAM.
 //
+// A timed row drops 10 warmup chains and reports the mean and cv of the ROUNDS chains after them; the mlx4b mode first runs
+// three untimed block_stack figures to bring the clocks up. A failed chain refuses the row.
+//
 //   bin/daslang -jit modules/dasLLAMA/harness/moe_pair_race.das
 
 require daslib/fio
@@ -27,6 +30,8 @@ require dasllama/dasllama_metal_common
 require dasllama/dasllama_metal_kernels
 require dasllama/dasllama_math
 require dasllama/dasllama_env
+require _race_fixture   // race_lcg, arm_wanted
+require _metal_race_fixture   // the chain clock, the bandwidth reference, the read-back compare
 
 let NE = 256
 let KP = 8
@@ -38,6 +43,7 @@ let NSH = 512
 let NL = 6
 let CH = 12
 let ROUNDS = 5
+let CLOCK = RaceClock(sites = CH, rounds = ROUNDS, burn = 10)
 
 //! one expert stack over the NL layers: the quant plane (128 B a superblock), the 16-byte strips, the f16 d plane
 struct Stack {
@@ -56,11 +62,6 @@ struct Arm {
     tg : int = 64
     flat : bool = false   //! one grid dimension, the kernel derives (stream, slot, row block) - `FLAT`
     one : bool = false    //! a threadgroup a row block over every stream
-}
-
-def private lcg(var s : uint&) : uint {
-    s = s * 1664525u + 1013904223u
-    return s >> 8u
 }
 
 def private make_stack(dev : MetalDevice?; lblk : int64; seed : uint) : Stack {
@@ -104,10 +105,10 @@ def private make_sel(var sel : array<uint>; l : int; reuse : uint) : int {
         for (j in range(KP)) {
             var e = 0u
             while (true) {
-                if (r > 0 && lcg(h) % 1000u < reuse && !empty(seen)) {
-                    e = seen[int(lcg(h) % uint(length(seen)))]
+                if (r > 0 && race_lcg(h) % 1000u < reuse && !empty(seen)) {
+                    e = seen[int(race_lcg(h) % uint(length(seen)))]
                 } else {
-                    e = lcg(h) % uint(NE)
+                    e = race_lcg(h) % uint(NE)
                 }
                 var dup = false
                 for (j2 in range(j)) {
@@ -182,46 +183,6 @@ def private enc_arm(enc : MetalComputeEncoder?; pso : MetalComputePipeline?; b :
     }
 }
 
-def private chain_ms(queue : MetalCommandQueue?; step : block<(enc : MetalComputeEncoder?; i : int) : void>) : double {
-    var err = ""
-    var gpu = 0.0lf
-    let ok = with_compute_encoder_timed(queue, err, gpu) $(enc) {
-        for (i in range(CH)) {
-            invoke(step, enc, i)
-            metal_memory_barrier(enc)
-        }
-    }
-    if (!ok) {
-        print("chain: {err}\n")
-    }
-    return ok ? gpu : -1.0lf
-}
-
-//! us a layer: the mean of ROUNDS chains after a burn, and the chains' cv
-def private site_us(queue : MetalCommandQueue?; step : block<(enc : MetalComputeEncoder?; i : int) : void>) : tuple<us : double; cv : double> {
-    for (_w in range(10)) {
-        chain_ms(queue, step)
-    }
-    var t <- [for (_r in range(ROUNDS)); chain_ms(queue, step) * 1000.0lf / double(CH)]
-    var sum = 0.0lf
-    for (v in t) {
-        sum += v
-    }
-    let mean = sum / double(ROUNDS)
-    var d2 = 0.0lf
-    for (v in t) {
-        d2 += (v - mean) * (v - mean)
-    }
-    return (us = mean, cv = sqrt(d2 / double(ROUNDS)) / mean * 100.0lf)
-}
-
-def private copy_f(by : MetalBuffer?; n : int) : array<float> {
-    var r : array<float>
-    r |> resize(n)
-    unsafe(memcpy(unsafe(addr(r[0])), metal_buffer_contents(by), uint64(n * 4)))
-    return <- r
-}
-
 def private diff_of(a : array<float>; by : MetalBuffer?) : tuple<bad : int; maxd : float> {
     var bad = 0
     var maxd = 0.0
@@ -235,14 +196,6 @@ def private diff_of(a : array<float>; by : MetalBuffer?) : tuple<bad : int; maxd
         }
     }
     return (bad = bad, maxd = maxd)
-}
-
-def private wanted(list : string; name : string) : bool {
-    return true if (empty(list))
-    for (w in split(list, ",")) {
-        return true if (w == name)
-    }
-    return false
 }
 
 def private arms() : array<Arm> {
@@ -301,15 +254,10 @@ def private make_bench(dev : MetalDevice?; reuse : uint) : Bench {
 
 //! the read-bandwidth reference over one layer's gate quant plane
 def private print_bw(dev : MetalDevice?; queue : MetalCommandQueue?; b : Bench; src : string) {
-    var err = ""
-    var pbw = pso_from_source(dev, src, "bw_read", true, err)
-    var bn4 = race_uniform_u32(dev, uint(b.gate.lblk * 8l))
-    let tbw = site_us(queue) $(enc; i) {
-        metal_set_pipeline(enc, pbw)
-        metal_set_buffer(enc, b.gate.q, uint64(i % NL) * uint64(b.gate.lblk) * 128ul, 2)
-        metal_set_buffer(enc, b.ydn, 0ul, 4)
-        metal_set_buffer(enc, bn4, 0ul, 6)
-        metal_dispatch_threadgroups(enc, uint3(2048u, 1u, 1u), uint3(256u, 1u, 1u))
+    let tbw = bw_read_us(dev, queue, CLOCK, src, b.gate.q, uint64(b.gate.lblk) * 128ul, NL, b.ydn, 2048u)
+    if (!tbw.ok) {
+        refused_row("bw_read")
+        return
     }
     print("bw_read\t{tbw.us:7.2f} us a {b.gate.lblk * 128l / 1048576l} MB layer plane  {double(b.gate.lblk * 128l) / (tbw.us * 1000.0lf):6.1f} GB/s\n")
 }
@@ -328,14 +276,14 @@ def private race_arms(queue : MetalCommandQueue?; b : Bench; all : array<Arm>; p
             metal_memory_barrier(enc)
             enc_arm(enc, psos[1], b, all[1], l, b.ygu, b.ydn)
         }
-        ref_gu |> emplace(copy_f(b.act[l], NST * KP * NFE))
-        ref_dn |> emplace(copy_f(b.ydn, NST * DIM))
+        ref_gu |> emplace(buf_download(b.act[l], NST * KP * NFE, type<float>))
+        ref_dn |> emplace(buf_download(b.ydn, NST * DIM, type<float>))
     }
     let per = double(b.distinct) / double(NL)
     let gu_bytes = per * double(2 * NFE * DIM / 256 * 146)
     let dn_bytes = per * double(DIM * NFE / 256 * 146) + double(DIM * NSH / 256 * 146)
     for (a, ai in all, range(length(all))) {
-        continue if (psos[ai] == null || !wanted(g_env_harness.moe_pair_arms, a.name))
+        continue if (psos[ai] == null || !arm_wanted(g_env_harness.moe_pair_arms, a.name))
         var bad = 0
         var maxd = 0.0
         for (l in range(NL)) {
@@ -347,8 +295,12 @@ def private race_arms(queue : MetalCommandQueue?; b : Bench; all : array<Arm>; p
             bad += dd.bad
             maxd = max(maxd, dd.maxd)
         }
-        let t = site_us(queue) $(enc; i) {
+        let t = site_us(queue, CLOCK) $(enc; i) {
             enc_arm(enc, psos[ai], b, a, i % NL, b.ygu, b.ydn)
+        }
+        if (!t.ok) {
+            refused_row(a.name)
+            continue
         }
         let gbs = (a.gu ? gu_bytes : dn_bytes) / (t.us * 1000.0lf)
         print("{a.name}\t{t.us:7.2f} us a layer  cv {t.cv:4.1f}%  {gbs:6.1f} GB/s (distinct bytes)  vs base: {bad} floats differ, max {maxd}{t.cv > 3.0lf ? "  VOID" : ""}\n")
@@ -401,7 +353,7 @@ def private aff_sel(dev : MetalDevice?; nst, l : int; reuse : uint) : tuple<b : 
         for (j in range(AFF_K)) {
             var e = 0u
             while (true) {
-                e = (r > 0 && lcg(h) % 1000u < reuse) ? seen[int(lcg(h) % uint(length(seen)))] : lcg(h) % uint(AFF_NE)
+                e = (r > 0 && race_lcg(h) % 1000u < reuse) ? seen[int(race_lcg(h) % uint(length(seen)))] : race_lcg(h) % uint(AFF_NE)
                 var dup = false
                 for (j2 in range(j)) {
                     dup = dup || sel[r * ss + j2] == e
@@ -616,20 +568,6 @@ def private aff_step(enc : MetalComputeEncoder?; p : AffPsos; st : AffStacks; b 
     }
 }
 
-//! `by`'s first `n` floats against `ref`: the largest difference over the largest magnitude
-def private rel_diff(ref : array<float>; by : MetalBuffer?; n : int) : float {
-    var maxd = 0.0
-    var mag = 0.0
-    unsafe {
-        let p = reinterpret<float?>(metal_buffer_contents(by))
-        for (i in range(n)) {
-            maxd = max(maxd, abs(ref[i] - p[i]))
-            mag = max(mag, abs(ref[i]))
-        }
-    }
-    return maxd / max(mag, 1e-30)
-}
-
 //! the arms at `nst` rows: each stage's per-stack forms and the pair's, its outputs held against the route's, then timed
 def private aff_race_rows(queue : MetalCommandQueue?; dev : MetalDevice?; p : AffPsos; st : AffStacks; nst : int) {
     var b <- aff_bench(dev, nst, uint(clamp(g_env_harness.moe_pair_reuse, 0, 1000)))
@@ -643,24 +581,28 @@ def private aff_race_rows(queue : MetalCommandQueue?; dev : MetalDevice?; p : Af
     with_compute_encoder_timed(queue, err, gms) $(enc) {
         aff_gu_stack(enc, p, st, b, b.sel[0], true)
     }
-    var ref_gu <- copy_f(b.bg, nst * AFF_K * AFF_NFE)
+    var ref_gu <- buf_download(b.bg, nst * AFF_K * AFF_NFE, type<float>)
     for (_w in range(3)) {   //! the clocks up before the first timed arm
-        site_us(queue) $(enc; i) {
+        site_us(queue, CLOCK) $(enc; i) {
             aff_step(enc, p, st, b, "block_stack", i)
         }
     }
     for (arm in ["gu_stack_w", "gu_stack_2r", "gu_pair", "dn_stack_w", "dn_stack_2r", "dn_pair", "dn_pair_hc", "block_stack", "block_pair"]) {
-        continue if (!wanted(g_env_harness.moe_pair_arms, arm))
+        continue if (!arm_wanted(g_env_harness.moe_pair_arms, arm))
         let gu = starts_with(arm, "gu")
         var rd = 0.0
         if (gu) {
             with_compute_encoder_timed(queue, err, gms) $(enc) {
                 aff_step(enc, p, st, b, arm, 0)
             }
-            rd = rel_diff(ref_gu, b.bg, nst * AFF_K * AFF_NFE)
+            rd = rel_of(ref_gu, b.bg)
         }
-        let t = site_us(queue) $(enc; i) {
+        let t = site_us(queue, CLOCK) $(enc; i) {
             aff_step(enc, p, st, b, arm, i)
+        }
+        if (!t.ok) {
+            refused_row(arm)
+            continue
         }
         let gbs = (gu ? gu_bytes : dn_bytes) / (t.us * 1000.0lf)
         let held = gu ? "  vs the wide route: rel {rd}" : ""
@@ -693,12 +635,7 @@ def main() : int {
             return aff_race(dev, queue)
         }
         var err = ""
-        var src = ""
-        fopen("modules/dasLLAMA/harness/moe_pair.metal", "rb") $(f) {
-            if (f != null) {
-                src = fread(f)
-            }
-        }
+        let src = fread("modules/dasLLAMA/harness/moe_pair.metal")
         if (empty(src)) {
             print("moe_pair_race: run from the repo root\n")
             return 1
@@ -710,7 +647,7 @@ def main() : int {
         psos |> reserve(length(all))
         for (a in all) {
             var p : MetalComputePipeline? = null
-            if (wanted(g_env_harness.moe_pair_arms, a.name) || a.name == "gu_base" || a.name == "dn_base") {   //! the bases at 0 and 1 make the reference
+            if (arm_wanted(g_env_harness.moe_pair_arms, a.name) || a.name == "gu_base" || a.name == "dn_base") {   //! the bases at 0 and 1 make the reference
                 p = pso_from_source(dev, a.flags + src, a.entry, true, err)
                 if (p == null) {
                     print("{a.name}: pso - {err}\n")

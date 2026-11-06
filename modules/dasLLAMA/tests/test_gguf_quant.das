@@ -12,7 +12,7 @@ require daslib/fio
 require math
 require strings
 require daslib/enum_trait
-require _gguf_writer   // gguf_header, gguf_push_le, gguf_push_str: the synthetic file's bytes
+require _gguf_writer   // gguf_header, gguf_tensor_info, gguf_pad_data: the synthetic file's bytes
 
 // Byte-level GGUF quant-format gates on a synthetic in-memory file: the dequant arm must match an
 // independently hand-rolled reference, and the exact-transcode rails must be bit-exact against
@@ -38,14 +38,8 @@ def private q5_ref(blk, k : int) : float {
 def private synth_gguf(gtype : int; n_elem : int64; data : array<uint8>) : array<uint8> {
     var b : array<uint8>
     gguf_header(b, 1ul, 0ul)
-    gguf_push_str(b, "t")
-    gguf_push_le(b, 1ul, 4)   // n_dims
-    gguf_push_le(b, uint64(n_elem), 8)
-    gguf_push_le(b, uint64(gtype), 4)
-    gguf_push_le(b, 0ul, 8)   // offset in data blob
-    while ((long_length(b) % 32l) != 0l) {
-        b |> push(uint8(0))
-    }
+    gguf_tensor_info(b, "t", [uint64(n_elem)], gtype, 0ul)
+    gguf_pad_data(b)
     b |> push_from(data)
     return <- b
 }
@@ -54,8 +48,8 @@ def private synth_q5_0_bytes : array<uint8> {
     var data : array<uint8>
     data |> reserve(3 * 22)
     for (blk in range(3)) {
-        gguf_push_le(data, uint64(Q5_D_BITS[blk]), 2)   // fp16 d
-        gguf_push_le(data, uint64(Q5_QH[blk]), 4)       // 32 high bits
+        gguf_put_le(data, uint64(Q5_D_BITS[blk]), 2)   // fp16 d
+        gguf_put_le(data, uint64(Q5_QH[blk]), 4)       // 32 high bits
         for (j in range(16)) {
             data |> push(uint8(q5_qs_byte(blk, j)))
         }

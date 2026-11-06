@@ -18,8 +18,8 @@ anchor.
   home's per-member pick ladders over the enum (with `kq_tile_stem`, the per-32 formats' stamp
   spelling) and its format-free twin `stamp_ladder`, which stamps a ladder over any word list
   keyed by ordinal (the flash and decode attention stamps), the `[grid_words]` annotation that bakes a codebook table into a kernel home's word
-  accessor, and the `KQ_CM2E_ALIASES_M` roster of the formats whose expert column the m stamp
-  serves - the format-keyed facts every kernel home reads. It requires nothing else in
+  accessor, the `[b32_portable_slots]` annotation that generates each `kq_dense_b32` member's three portable CPU kernels and their `register_b32_portable` calls
+  (here, not in `dasllama_math_default.das` where it is used, because a macro and its use site need separate modules), and the `KQ_CM2E_ALIASES_M` roster of the formats whose expert column the m stamp serves - the format-keyed facts every kernel home reads. It requires nothing else in
   dasllama, because it is the taxonomy everything keys off. ONE id space - the enum; integer ids
   exist only at the IR/kernel-param boundary. `kq_sb` is the superblock-lattice predicate: a
   `fmt != q8` test does not imply the lattice, so branch on the predicate.

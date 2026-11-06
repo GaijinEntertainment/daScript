@@ -229,3 +229,13 @@ check licenses no names:
   file entry pins, or a gate a pinned cell calls.
 - `check_running_max_nan` - no tests file keeps a running largest difference as `max(m, abs(a - b))`: `max` drops a
   NaN a later finite element follows, and `nan_wide_diff(a, b)` reads a NaN on either side as infinite.
+
+### A Metal kernel cell's stamp picker reads the builders {#metal-cell-stamp-pickers}
+
+A Metal kernel cell picks a format's pipeline through `kq_form_ladder(f, kind, "<builder with %>", filter)`
+(`tests/_metal_kernel_common.das`). At compile time the macro walks `KqFmt` - the per-32 members alone under `"b32"`,
+all but them under `"!b32"` - splices each member's name at `%`, and makes an arm for every member whose
+`[metal_dispatch]` builder of that name exists in `dasllama_metal_prefill` or `dasllama_metal_kernels`: `stamp_of`'s
+value for it, or `kernel_of`'s. A format that adds its builders adds its arms with no edit to the picker. A format with
+no builder of the name gets the first member's arm, so a picker whose callers must never pass one names the formats it
+serves in a panic guard ahead of the ladder (`b32_moe_gemv_w_stamp`, `b32_mm_kernels`).

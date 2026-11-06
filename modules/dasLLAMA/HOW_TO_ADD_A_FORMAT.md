@@ -207,7 +207,10 @@ Every conversion lives in `dasllama_convert.das`; the GGUF container finds bytes
   no one-block codec: its `kq_transcode_p` panics, `gguf_transcode_kq` routes the member to its own
   whole-row transcode (`gguf_transcode_mlx`), and the meta carries the companion planes under
   `<name>.scales` / `<name>.biases` beside a loader type id outside ggml's range
-  (`ARCHITECTURE_ENGINE_FORMATS_MLX.md#mlx-affine-planes`). Its hand-packed cell builds the planes in
+  (`ARCHITECTURE_ENGINE_FORMATS_MLX.md#mlx-affine-planes`). A new affine member joins the three
+  `dasllama_kqformat.das` tables that name the affine members: `kq_mlx_affine`, `mlx_affine_bits`
+  (its code width by loader type; `kq_mlx_bits` reads it through the descriptor row) and
+  `kq_mlx_bf16` (the members whose scale and bias halves are BF16). Its hand-packed cell builds the planes in
   the disk order directly, with a control block packed in another member's pairing that must miss. An expert stack is a
   rank-3 triplet whose rows run expert after expert, so the whole-row transcode serves it unchanged; a site whose engine
   form is f32 on every backend (the router, a gate vector) reads the member through `gguf_read_tensor_f32`'s arm for its
@@ -377,11 +380,12 @@ one-line overloads, never a kernel shape:
   bodies through the tag's `b5_level` / `b5_fold` / `b5_bytes` overloads (`dot_b5q8_scalar`,
   `expand_b5_row`, `expand_b5_grp_row`, `dequant_b5_plane_block` in `dasllama_convert.das`,
   `b5_grp_row_dot` in `dasllama_math_gen.das`).
-- **Around them:** the three portable stamps `<fmt>q8_batch_kernel` / `<fmt>q8_groupn_kernel` /
-  `<fmt>q8_batch_groupn_kernel` and the format's `register_b32_portable` row in
-  `dasllama_math_default_register` - the kernels every backend's unset `B32Slots` entry takes;
-  the `repack_grp(..., KqTag_<fmt>)` overload (`repack_columns` at colw 4 + `repack_fields` with a
-  verbatim scale unit); the panic overloads of `dot_kq` / `kq_gemv_gen` / `kq_tile_gen` on the tag
+- **Around them:** the member in `kq_dense_b32` (`dasllama_kqformat.das`) - `[b32_portable_slots]`
+  generates the three portable stamps `<fmt>q8_batch_kernel` / `<fmt>q8_groupn_kernel` /
+  `<fmt>q8_batch_groupn_kernel` and their `register_b32_portable` row off that predicate, the
+  kernels every backend's unset `B32Slots` entry takes; the tag in the union of the one per-32
+  `repack_grp` overload (`dasllama_repack.das`), which repacks on the tag's `b32_qb` / `b32_sb`
+  overloads; the panic overloads of `dot_kq` / `kq_gemv_gen` / `kq_tile_gen` on the tag
   and the tag in the tag list of `tests/_kq_dot.das`'s panic `grp_row_dot` (the stamps bind every
   member).
 - **The dispatch** is the slot table's and takes no arm: `KernelBackend.b32` and the active
@@ -794,9 +798,11 @@ against `b32_mvb_gate`, and its name on the licensed set's line in
 Tests:
 
 - in `tests/test_metal_prefill_kernels.das`: `<fmt>_test_planes` (exact arithmetic - pow2 d,
-  int x) with its arm in `moe_gemv_planes`, the format's arm in each stamp picker that spells
-  the generated names (`b32_gemv_stamp`, `b32_gemv_w_stamp`, `b32_glu_stamp`, `b32_mvb_stamp`,
-  `b32_moe_gemv_stamp`, `b32_mm_kernels`), and the `moe_gemv_gate` / `moe_mulmm_b32_gate` /
+  int x) with its arm in `moe_gemv_planes` - the stamp pickers (`b32_gemv_stamp`, `b32_mvb_stamp`,
+  `b32_moe_gemv_stamp`, `b32_mm_kernels`, ...) are `kq_form_ladder` calls that find the new
+  builders themselves, and a picker's guard naming the formats it serves widens with them
+  (`ARCHITECTURE_ENGINE.md#metal-cell-stamp-pickers`) - and the
+  `moe_gemv_gate` / `moe_mulmm_b32_gate` /
   `b32_gemv_wide_gate` / `b32_glu_gate` rows;
 - the four twin rows in the census's declared blind list (`CENSUS_NEVER_DISPATCHED`,
   `tests/test_kernel_coverage.das`);

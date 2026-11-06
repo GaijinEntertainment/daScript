@@ -7,22 +7,13 @@ require dasllama/dasllama_safetensors
 require dasllama/dasllama_gguf
 require dasllama/dasllama_kqformat
 require daslib/fio
-require daslib/f16_cvt
 require strings
 require math
-require _gguf_writer   // gguf_push_le: the synthetic files' little-endian words
+require _gguf_writer   // write_safetensors, half_bytes: the synthetic files and their F16 planes
 
 // The safetensors snapshot reader on a synthetic two-file snapshot the cells write: the index's files sorted, a header whose
 // data section starts off a 4-byte boundary, the checkpoint names renamed to the GGUF ones, an affine triplet read as one
 // logical tensor, an unread vision tensor dropped, and the config's geometry as the KVs the GGUF loader reads.
-
-def private f16_bytes(v : array<float>) : array<uint8> {
-    var b : array<uint8>
-    for (x in v) {
-        gguf_push_le(b, uint64(f32_to_f16(x)), 2)
-    }
-    return <- b
-}
 
 def private ramp(n : int; scale : float) : array<float> => <- [for (i in range(n)); float(i) * scale]
 
@@ -37,14 +28,14 @@ def private write_snapshot() : string {
     return "" if (!empty(err))
     var codes <- [for (i in range(4 * 64)); uint8(i & 255)]
     let a <- [(name = "model.embed_tokens.weight", dtype = "U32", shape = "[4,16]", data <- codes),
-        (name = "model.embed_tokens.scales", dtype = "F16", shape = "[4,1]", data <- f16_bytes([0.5, 0.25, 1.0, 2.0])),
-        (name = "model.embed_tokens.biases", dtype = "F16", shape = "[4,1]", data <- f16_bytes([-1.0, 0.0, 1.0, -2.0])),
-        (name = "vision_tower.patch.weight", dtype = "F16", shape = "[2]", data <- f16_bytes([7.0, 8.0])),
+        (name = "model.embed_tokens.scales", dtype = "F16", shape = "[4,1]", data <- half_bytes([0.5, 0.25, 1.0, 2.0], false)),
+        (name = "model.embed_tokens.biases", dtype = "F16", shape = "[4,1]", data <- half_bytes([-1.0, 0.0, 1.0, -2.0], false)),
+        (name = "vision_tower.patch.weight", dtype = "F16", shape = "[2]", data <- half_bytes([7.0, 8.0], false)),
         (name = "model.layers.0.mlp.down_proj.weight", dtype = "U32", shape = "[2,32]", data <- [for (i in range(2 * 128)); uint8((i * 7) & 255)]),
-        (name = "model.layers.0.mlp.down_proj.scales", dtype = "F16", shape = "[2,2]", data <- f16_bytes([0.5, -0.25, 2.0, 0.125])),
-        (name = "model.layers.0.mlp.down_proj.biases", dtype = "F16", shape = "[2,2]", data <- f16_bytes([1.0, -3.0, 0.5, 4.0]))]
-    let b <- [(name = "model.norm.weight", dtype = "F16", shape = "[64]", data <- f16_bytes(ramp(64, 0.125))),
-        (name = "model.layers.0.input_layernorm.weight", dtype = "F16", shape = "[64]", data <- f16_bytes(ramp(64, -0.5)))]
+        (name = "model.layers.0.mlp.down_proj.scales", dtype = "F16", shape = "[2,2]", data <- half_bytes([0.5, -0.25, 2.0, 0.125], false)),
+        (name = "model.layers.0.mlp.down_proj.biases", dtype = "F16", shape = "[2,2]", data <- half_bytes([1.0, -3.0, 0.5, 4.0], false))]
+    let b <- [(name = "model.norm.weight", dtype = "F16", shape = "[64]", data <- half_bytes(ramp(64, 0.125), false)),
+        (name = "model.layers.0.input_layernorm.weight", dtype = "F16", shape = "[64]", data <- half_bytes(ramp(64, -0.5), false))]
     let ok = (write_safetensors(path_join(dir, "model-00001-of-00002.safetensors"), a, 2)
         && write_safetensors(path_join(dir, "model-00002-of-00002.safetensors"), b, 1)
         && fwrite(path_join(dir, "config.json"), CONFIG) && fwrite(path_join(dir, "model.safetensors.index.json"), INDEX))
@@ -122,8 +113,8 @@ def private moe_triplets(specs : array<tuple<base : string; lead : int; rows : i
         let n = sp.lead > 0 ? sp.lead * sp.rows : sp.rows
         let pre = sp.lead > 0 ? "{sp.lead}," : ""
         out |> emplace((name = "{sp.base}.weight", dtype = "U32", shape = "[{pre}{sp.rows},16]", data <- [for (i in range(n * 64)); uint8(i & 255)]))
-        out |> emplace((name = "{sp.base}.scales", dtype = "F16", shape = "[{pre}{sp.rows},1]", data <- f16_bytes([for (r in range(n)); 0.5 + float(r)])))
-        out |> emplace((name = "{sp.base}.biases", dtype = "F16", shape = "[{pre}{sp.rows},1]", data <- f16_bytes([for (r in range(n)); float(r) - 1.0])))
+        out |> emplace((name = "{sp.base}.scales", dtype = "F16", shape = "[{pre}{sp.rows},1]", data <- half_bytes([for (r in range(n)); 0.5 + float(r)], false)))
+        out |> emplace((name = "{sp.base}.biases", dtype = "F16", shape = "[{pre}{sp.rows},1]", data <- half_bytes([for (r in range(n)); float(r) - 1.0], false)))
     }
     return <- out
 }

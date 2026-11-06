@@ -19,7 +19,8 @@ require daslib/strings_boost   // split: a stamp= family's fields
 require dasllama/dasllama_convert   // dequant_k{4,5,6}_plane_superblock — the kq reference dequant
 require dasllama/dasllama_gemm_schema  // kq_qsb — the ONE per-format quant-plane stride source
 require daslib/f16_cvt              // f32_to_f16 — packing synthetic scale planes
-require daslib/math_bits            // float_bits_to_uint — the affine fixture's BF16 pair halves
+require daslib/math_bits            // uint_bits_to_float — the affine fixture's BF16 pair halves read back
+require _gguf_writer   // half_bits: the affine fixture's scale and bias halves
 require dastest/testing_boost
 require _compares
 require _metal4_probe   // metal4_tensor_available: the tensor stamps' skip rule
@@ -548,9 +549,9 @@ let KQ_SAFE_SCALES = fixed_array(0.25, 0.5, 1.0, 0.125, 2.0, 0.75, 1.5, 0.375)
 def mlx_test_planes(fmt : KqFmt; rows, n : int; var qp : array<uint8>; var sp : array<uint8>; var wref : array<float>) {
     let nb = n / 32
     let qb = int(kq_qsb(fmt))
-    let a8 = fmt == KqFmt.mlx8 || fmt == KqFmt.mlx8b
-    let a6 = fmt == KqFmt.mlx6b
-    let bf = fmt == KqFmt.mlx4b || fmt == KqFmt.mlx8b || a6
+    let a8 = kq_mlx_bits(fmt) == 8
+    let a6 = kq_mlx_bits(fmt) == 6
+    let bf = kq_mlx_bf16(fmt)
     let slut = a8 ? fixed_array(0.0625, 0.125, 0.25, 0.5) : (a6 ? fixed_array(0.125, 0.25, 0.5, 1.0) : fixed_array(0.25, 0.5, 1.0, 2.0))
     let blut = fixed_array(-1.0, 0.5, 1.25, -0.25)
     qp |> resize(rows * nb * qb)
@@ -559,8 +560,8 @@ def mlx_test_planes(fmt : KqFmt; rows, n : int; var qp : array<uint8>; var sp : 
     for (g in range(rows * nb / 2)) {
         let s = slut[(g / 3) % 4]
         let bias = blut[(g * 5 + 1) % 4]
-        let sbits = bf ? float_bits_to_uint(s) >> 16u : f32_to_f16(s)
-        let bbits = bf ? float_bits_to_uint(bias) >> 16u : f32_to_f16(bias)
+        let sbits = half_bits(s, bf)
+        let bbits = half_bits(bias, bf)
         sp[g * 4] = uint8(sbits & 0xFF)
         sp[g * 4 + 1] = uint8(sbits >> 8u)
         sp[g * 4 + 2] = uint8(bbits & 0xFF)
@@ -591,7 +592,7 @@ def mlx_bf16_scale_planes(var sp : array<uint8>; var wref : array<float>; f : fl
     for (hi in range(length(sp) / 2)) {
         let o = 2 * hi
         let v = uint_bits_to_float((uint(sp[o]) | (uint(sp[o + 1]) << 8u)) << 16u) * f
-        let bits = float_bits_to_uint(v) >> 16u
+        let bits = half_bits(v, true)
         sp[o] = uint8(bits & 0xFFu)
         sp[o + 1] = uint8(bits >> 8u)
     }

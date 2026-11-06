@@ -25,9 +25,9 @@ require _compares   // nan_wide_diff: a NaN probability reads as outside the bar
 require _rnnt_oracle   // rnnt_seat_*: the build's device transducer seat, its pin and counters
 require _gpu_knobs   // with_gpu_knobs / set_serving_gpu_tower: the device decode's tower pin
 require dasllama/dasllama_load   // load_gguf: the foreign family's image the loader refuses
-require dasllama/dasllama_gguf   // parse_gguf_meta: the Q8_0 seats' disk blocks
+require dasllama/dasllama_gguf   // parse_gguf_meta: the Q8_0 seats' disk blocks; gguf_put_*: the retyped carriers' bytes
 require daslib/f16_cvt           // f16_to_f32: a disk block's scale
-require _gguf_writer             // gguf_header / gguf_push_*: the retyped carriers the planner refuses
+require _gguf_writer             // gguf_header: the retyped carriers the planner refuses
 require dasllama/dasllama_image   // save_model_image
 require dasllama/dasllama_common   // QuantMode
 require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower: the Metal CTC cell's pin
@@ -623,7 +623,7 @@ def private ga_retyped_carrier(src, dst : string; retype : table<string; int>) {
             kv_last = max(kv_last, loc.data_off)
         }
         var rec : array<uint8>
-        gguf_push_str(rec, m.tensors[0].name)
+        gguf_put_str(rec, m.tensors[0].name)
         var table_at = -1l
         for (o in range64(kv_last, long_length(bytes) - long_length(rec))) {
             var hit = true
@@ -648,13 +648,13 @@ def private ga_retyped_carrier(src, dst : string; retype : table<string; int>) {
         var off = 0l
         for (ti in m.tensors) {
             let gt = retype?[ti.name] ?? ti.ggml_type
-            gguf_push_str(out, ti.name)
-            gguf_push_le(out, uint64(long_length(ti.dims)), 4)
+            gguf_put_str(out, ti.name)
+            gguf_put_le(out, uint64(long_length(ti.dims)), 4)
             for (dim in ti.dims) {
-                gguf_push_le(out, uint64(dim), 8)
+                gguf_put_le(out, uint64(dim), 8)
             }
-            gguf_push_le(out, uint64(gt), 4)
-            gguf_push_le(out, uint64(off), 8)
+            gguf_put_le(out, uint64(gt), 4)
+            gguf_put_le(out, uint64(off), 8)
             off = (off + ggml_type_bytes(gt, ti.n_elem) + m.alignment - 1l) / m.alignment * m.alignment
         }
         let data_at = (long_length(out) + m.alignment - 1l) / m.alignment * m.alignment

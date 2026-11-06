@@ -4,9 +4,10 @@
 doc: `../ARCHITECTURE_MEASUREMENT.md`. Planned work: `../followup_general.md`,
 `../followup_metal.md`, `../followup_vulkan.md`.
 
-**In `tune_kernels.das`, never time a CPU kernel after `pin_kernel_backend` (called directly or
-through a helper) and before `restore_kernel_backend` - pin inside `with_kernel_backend` instead,
-or move the pin after every CPU race and bench.** `clear_kernel_backend_pin` alone leaves the
+**In `tune_kernels.das`, never time a CPU kernel after any call that pins a kernel backend
+(`pin_kernel_backend`, `pin_kernel_backend_env`, or a helper that calls either) and before
+`restore_kernel_backend` - pin inside `with_kernel_backend` instead, or move the pin after every
+CPU race and bench.** `clear_kernel_backend_pin` alone leaves the
 pinned backend active, so every CPU timing after it still measures that backend.
 
 **Weakening `check_last_bench_row` (`REVIEW.das` beside this file) is a defect.**

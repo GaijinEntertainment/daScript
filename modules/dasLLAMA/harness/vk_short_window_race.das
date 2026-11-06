@@ -17,7 +17,8 @@ require dasllama/dasllama_math          // with_dasllama_jobque_
 require dasllama/dasllama_gpu_resident  // moe_gpu_resident_active, moe_gpu_resident_peels, the peel's lever
 require dasllama/dasllama_gpu_tier      // gpu_device_session_dtype_, rdec_token_n_rows
 require ../tests/_compares.das          // nolint:STYLE030,LINT019 - logits_maxdiff
-require _window_race_fixture   // int_list, counting_tokens
+require _window_race_fixture   // counting_tokens
+require _prompt_files   // id_list
 
 [CommandLineArgs]
 struct RaceArgs {
@@ -56,7 +57,7 @@ def main : int {
         return 2
     }
     allow_cpu_prefill()
-    var rows <- int_list(args.rows)
+    var rows <- id_list(args.rows)
     var tr <- load_model_(args.model, QuantMode.q8)
     if (!moe_gpu_resident_active()) {
         to_log(LOG_ERROR, "vk_short_window_race: the resident driver did not arm on {args.model} (the load log names why)\n")

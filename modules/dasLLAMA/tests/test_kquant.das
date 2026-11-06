@@ -10,6 +10,7 @@ require dasllama/dasllama_layout   // moe_gpu_gather_stack_kq - the device-plane
 require _model_tier
 require _format_census   // census_cell - the per-32 table carriers' sites
 require _kq_fixtures   // the synthetic superblocks and plane regions; dot_kq and the kernel stamps on the run-time format
+require _gguf_writer   // half_bits: the affine planes' scale and bias halves
 require dasllama/dasllama_gguf
 require dasllama/dasllama_common   // dequant_kq_plane_sb - the carrier-form dispatcher; mm_b_kq - the site-scale epilogue cell's matmul
 require dasllama/dasllama_core   // create_session - the session that matmul takes
@@ -688,8 +689,6 @@ def private mlx_code_pat(blk, k, bits : int) : int => (k * 7 + blk * 3 + (k >> 3
 def private mlx_scale_pat(g : int) : float => (g % 2 == 0 ? 1.0 : -1.0) * 0.0078125 * float(1 + g % 3)
 def private mlx_bias_pat(g : int) : float => -0.0625 * float(g % 5) + 0.03125
 
-def private half_bits(v : float; bf16 : bool) : uint => bf16 ? (float_bits_to_uint(v) >> 16u) : f32_to_f16(v)
-
 //! the quant bytes of synthetic block `blk` packed in the triplet's order (`q40_order`: the Q4_0 k / k + 16 pairing instead)
 def private mlx_pack_block(blk, bits : int; q40_order : bool) : array<uint8> {
     if (bits == 8) {
@@ -713,9 +712,6 @@ def private mlx_pack_block(blk, bits : int; q40_order : bool) : array<uint8> {
         | ((q40_order ? mlx_code_pat(blk, j + 16, 4) : mlx_code_pat(blk, 2 * j + 1, 4)) << 4))]
 }
 
-def private mlx_bits_of(f : KqFmt) : int => f == KqFmt.mlx8 || f == KqFmt.mlx8b ? 8 : (f == KqFmt.mlx6b ? 6 : 4)
-def private mlx_bf16_of(f : KqFmt) : bool => f == KqFmt.mlx4b || f == KqFmt.mlx8b || f == KqFmt.mlx6b
-
 //! `rows` affine plane rows of n: block b of row r is synthetic block r * nb + b, its group's pair the pattern's
 def private mlx_fill_planes(var kq : array<uint8>; var ks : array<uint8>; rows, n : int64; kf : KqFmt; q40_order : bool) {
     let nb = n / 32l
@@ -723,11 +719,11 @@ def private mlx_fill_planes(var kq : array<uint8>; var ks : array<uint8>; rows, 
     ks |> clear()
     ks |> reserve(rows * nb * MLX_SB)
     for (blk in range64(rows * nb)) {
-        var inscope pb <- mlx_pack_block(int(blk), mlx_bits_of(kf), q40_order)
+        var inscope pb <- mlx_pack_block(int(blk), kq_mlx_bits(kf), q40_order)
         kq |> push_from(pb)
         if (blk % 2l == 0l) {
             let g = int(blk / 2l)
-            for (h in [half_bits(mlx_scale_pat(g), mlx_bf16_of(kf)), half_bits(mlx_bias_pat(g), mlx_bf16_of(kf))]) {
+            for (h in [half_bits(mlx_scale_pat(g), kq_mlx_bf16(kf)), half_bits(mlx_bias_pat(g), kq_mlx_bf16(kf))]) {
                 ks |> push(uint8(h & 0xFFu))
                 ks |> push(uint8(h >> 8u))
             }
@@ -819,9 +815,9 @@ def private mlx_cells(t : T?; f : auto(TT)) {
         for (b in range64(n / 32l)) {
             dequant_b32_plane_block(kf, kq, ks, b, w, b * 32l)
         }
-        var inscope want <- formula_row(int(n)) $(k) => mlx_scale_pat(k / 64) * float(mlx_code_pat(k / 32, k % 32, mlx_bits_of(kf))) + mlx_bias_pat(k / 64)
+        var inscope want <- formula_row(int(n)) $(k) => mlx_scale_pat(k / 64) * float(mlx_code_pat(k / 32, k % 32, kq_mlx_bits(kf))) + mlx_bias_pat(k / 64)
         check(t, "{kf} plane dequant against the hand-packed values", w, want, BAR_EXACT, FLAT_SHAPE)
-        if (mlx_bits_of(kf) != 8) {
+        if (kq_mlx_bits(kf) != 8) {
             var inscope kq4, ks4 : array<uint8>
             mlx_fill_planes(kq4, ks4, 1l, n, kf, true)
             var inscope w4 <- nan_plane(int(n))
@@ -830,7 +826,7 @@ def private mlx_cells(t : T?; f : auto(TT)) {
             }
             t |> success(mismatch_exact(w4, want) > 0, "control: a block packed in another order (4-bit: the Q4_0 k / k + 16 pairing; 6-bit: each triple's bytes reversed) must miss the triplet's order")
         }
-        var inscope wrong <- formula_row(int(n)) $(k) => mlx_scale_pat(k / 32) * float(mlx_code_pat(k / 32, k % 32, mlx_bits_of(kf))) + mlx_bias_pat(k / 32)
+        var inscope wrong <- formula_row(int(n)) $(k) => mlx_scale_pat(k / 32) * float(mlx_code_pat(k / 32, k % 32, kq_mlx_bits(kf))) + mlx_bias_pat(k / 32)
         t |> success(mismatch_exact(w, wrong) > 0, "control: a pair a 32-block (not a 64-group) must miss the plane dequant")
     }
     t |> run("dot_mlxq8_scalar ({kf}) matches the fp64 plane-dequant reference") @(t : T?) {

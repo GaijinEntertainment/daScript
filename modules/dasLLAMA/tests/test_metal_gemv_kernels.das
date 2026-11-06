@@ -944,10 +944,10 @@ def private moe_fused_fn_gate(t : T?; var dev, queue; sh_q8 : bool; hc, n, d, dd
 
 //! the routed pair's per-32 stamps for an affine member: gate + up + act, the wide gathered GEMV, the down with its shared
 //! down, and the down's scatter twin
-def private aff_gu_stamp(f) => f == KqFmt.mlx4b ? stamp_of(@@enc_moe_gu_mlx4b_c) : stamp_of(@@enc_moe_gu_mlx8b_c)
-def private aff_gemv_stamp(f) => f == KqFmt.mlx4b ? stamp_of(@@enc_moe_gemv_mlx4b_w_c) : stamp_of(@@enc_moe_gemv_mlx8b_w_c)
-def private aff_down_stamp(f) => f == KqFmt.mlx4b ? stamp_of(@@enc_moe_down2_mlx4b_c) : stamp_of(@@enc_moe_down2_mlx8b_c)
-def private aff_down_hc_stamp(f) => f == KqFmt.mlx4b ? stamp_of(@@enc_moe_down2_mlx4b_hc_c) : stamp_of(@@enc_moe_down2_mlx8b_hc_c)
+def private aff_gu_stamp(f) => kq_form_ladder(f, "stamp_of", "enc_moe_gu_%_c", "b32")
+def private aff_gemv_stamp(f) => kq_form_ladder(f, "stamp_of", "enc_moe_gemv_%_w_c", "b32")
+def private aff_down_stamp(f) => kq_form_ladder(f, "stamp_of", "enc_moe_down2_%_c", "b32")
+def private aff_down_hc_stamp(f) => kq_form_ladder(f, "stamp_of", "enc_moe_down2_%_hc_c", "b32")
 
 //! the routed pair over an affine member's stacks (the Flash-Next pack's mlx4b experts and shared expert, the draft head's
 //! mlx8b): gate + up + act (`MetalB32GuT`) bit for bit the wide gathered GEMV twice and the swiglu pass; the down with its

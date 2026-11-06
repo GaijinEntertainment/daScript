@@ -15,6 +15,7 @@ require dasllama/dasllama_gpu_tier   // the device-cooperation seam (hooks the l
 require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs and false-flags this as unused
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_math
+require dasllama/dasllama_gemm_schema   // Q8_BLOCK_ELEMS / Q8_BLOCK_BYTES: the Q8_0 blob rows' block strides
 require dasllama/dasllama_gpu_knee   // the Vulkan short window's knee the runtime section applies
 require daslib/jobque_profile  // JOBQUE_PROFILING_ENABLED — the compile-time gate on prof_ticks/prof_add
 require dasllama/dasllama_kv_codec public  // the KV-cache codec families — kv_store_row/kv_load_row/kv_dot/kv_axpy dispatch into them
@@ -5869,18 +5870,7 @@ def has_dual_rope(c : Config) : bool => (c.sliding_window > 0l
 // fp32 table this replaces.
 def dequant_q8_row(t : Model; off, n : int64; var dst : float?) {
     if (t.metal_blob) {
-        // blob layout: f16 scale + 32 int8 per 34-byte block at (off/32)*34
-        unsafe {
-            let bp = addr < uint8 const? >(t.mblob[(off / 32l) * 34l])
-            for (b in range64(n / 32l)) {
-                let sc = f16_to_f32(uint(bp[b * 34l]) | (uint(bp[b * 34l + 1l]) << 8u))
-                let qp = reinterpret<int8 const?>(bp + b * 34l + 2l)
-                let base = b * 32l
-                for (k in range64(32l)) {
-                    dst[base + k] = float(qp[k]) * sc
-                }
-            }
-        }
+        dequant_q8_blocks(unsafe(addr<uint8 const?>(t.mblob[(off / Q8_BLOCK_ELEMS) * Q8_BLOCK_BYTES])), n / Q8_BLOCK_ELEMS, dst)
         return
     }
     // Fail closed loudly (a bare bounds trip burned two sessions); guards the qblob path — metal returned above.
@@ -5911,20 +5901,9 @@ def dequant_q8_row(t : Model; off, n : int64; var dst : float?) {
     }
 }
 
-// trimmed-flavor q8 embedding read: embq holds the emb region as mblob-style 34B interleaved
-// blocks (f16 scale + 32 int8), region-rebased — same loop as dequant_q8_row's mblob arm
+// trimmed-flavor q8 embedding read: embq holds the emb region as mblob-style Q8_0 blocks, region-rebased
 def private dequant_embq_row(t : Model; off, n : int64; var dst : float?) {
-    unsafe {
-        let bp = addr < uint8 const? >(t.embq[(off / 32l) * 34l])
-        for (b in range64(n / 32l)) {
-            let sc = f16_to_f32(uint(bp[b * 34l]) | (uint(bp[b * 34l + 1l]) << 8u))
-            let qp = reinterpret<int8 const?>(bp + b * 34l + 2l)
-            let base = b * 32l
-            for (k in range64(32l)) {
-                dst[base + k] = float(qp[k]) * sc
-            }
-        }
-    }
+    dequant_q8_blocks(unsafe(addr<uint8 const?>(t.embq[(off / Q8_BLOCK_ELEMS) * Q8_BLOCK_BYTES])), n / Q8_BLOCK_ELEMS, dst)
 }
 
 // Copy token `token`'s embedding row into dst — from fp32 fblob, or (emb_q8) dequanted from the

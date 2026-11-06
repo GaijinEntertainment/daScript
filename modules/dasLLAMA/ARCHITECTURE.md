@@ -26,8 +26,9 @@ A companion's sections are listed in three places: its line in this document's r
 (under `File charters` or `Mechanisms`), the companion's own opening, and the routing sentence of
 any sibling companion that sends a reader to it.
 
-- `ARCHITECTURE_ENGINE.md` - the engine core and arch-registration charters, and the gates that hold the
-  test folder's documents to its files (`ARCHITECTURE_ENGINE.md#test-folder-gates`).
+- `ARCHITECTURE_ENGINE.md` - the engine core and arch-registration charters, the gates that hold the
+  test folder's documents to its files (`ARCHITECTURE_ENGINE.md#test-folder-gates`), and the Metal kernel
+  cells' stamp pickers (`ARCHITECTURE_ENGINE.md#metal-cell-stamp-pickers`).
 - `ARCHITECTURE_ENGINE_SUPPORT.md` - the instrumentation and support charters: the parity caches, the bench rows, the
   facade lint, the model-set table, the box tag and the sidecar exchange (`ARCHITECTURE_ENGINE_SUPPORT.md#instrumentation-and-support`).
 - `ARCHITECTURE_ENGINE_MECHANISMS.md` - the RoPE scaling the loader folds into the `Model` once

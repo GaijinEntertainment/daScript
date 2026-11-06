@@ -4062,13 +4062,13 @@ def compile_pso(source, entry : string; fastmath : bool; var ok : bool&) : Metal
 //! the decode's environment overrides off their defaults, one line each as the decode comes up
 [cold_path]
 def private metal_decode_env_announce {
-    if (!g_b32_wide_set && !g_b32_wide_env) {
+    if (!g_b32_wide_knob.pinned && !g_b32_wide_knob.on) {
         to_log(LOG_WARNING, "dasLLAMA metal decode: DASLLAMA_METAL_B32_WIDE=0 - the per-32 one-row GEMVs take the two-row and K-split forms (numerics move with the form)\n")
     }
-    if (!g_b32_glu_set && g_b32_glu_env) {
+    if (!g_b32_glu_knob.pinned && g_b32_glu_knob.on) {
         to_log(LOG_WARNING, "dasLLAMA metal decode: DASLLAMA_METAL_B32_GLU=1 - the per-32 single-row FFN reads gate and up in one dispatch (numerics move with the form)\n")
     }
-    if (!g_b32_moe_wide_set && !g_b32_moe_wide_env) {
+    if (!g_b32_moe_wide_knob.pinned && !g_b32_moe_wide_knob.on) {
         to_log(LOG_WARNING, "dasLLAMA metal decode: DASLLAMA_METAL_B32_MOE_WIDE=0 - the per-32 routed GEMVs take the two-row form (numerics move with the form)\n")
     }
     if (!g_env_metal.rows_mm8) {
@@ -4633,19 +4633,11 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
         g_kq_rows_crowned[int(f.fmt)] = metal_tensor_crowned("kq_rows_{f.fmt}")
     }
     g_kq_k4_r2_crowned = metal_tensor_crowned("kq_mvb2_k4_r2")
-    if (!g_kq_half_set) {   //! a setter's value outlives a shutdown and re-init; the environment's is read only until one speaks
-        g_kq_half_env = g_env_metal.kq_half
-    }
-    if (!g_b32_wide_set) {
-        g_b32_wide_env = g_env_metal.b32_wide
-    }
-    if (!g_b32_glu_set) {
-        g_b32_glu_env = g_env_metal.b32_glu
-    }
-    if (!g_b32_moe_wide_set) {
-        g_b32_moe_wide_env = g_env_metal.b32_moe_wide
-    }
-    if (!g_kq_half_env) {
+    g_kq_half_knob |> knob_reinit(g_env_metal.kq_half)
+    g_b32_wide_knob |> knob_reinit(g_env_metal.b32_wide)
+    g_b32_glu_knob |> knob_reinit(g_env_metal.b32_glu)
+    g_b32_moe_wide_knob |> knob_reinit(g_env_metal.b32_moe_wide)
+    if (!g_kq_half_knob.on) {
         to_log(LOG_WARNING, "dasLLAMA metal decode: DASLLAMA_METAL_KQ_HALF=0 - the K-quant rows sites take the f32 forms under every half-x crown (numerics move with the form)\n")
     }
     metal_decode_env_announce()
@@ -4818,8 +4810,28 @@ def b32_stamp_index(fmt : KqFmt) : int {
 //! the GEMV stamps by `enc_b32_gemv`'s key: the format (`B32_STAMP_FMTS`) major, then the form (two-row, K split, wide)
 let B32_GEMV_STEMS = "kq_q51 kq_q51_ks kq_q51_w kq_iq4nl32 kq_iq4nl32_ks kq_iq4nl32_w kq_q4032 kq_q4032_ks kq_q4032_w kq_q5032 kq_q5032_ks kq_q5032_w kq_mlx4 kq_mlx4_ks kq_mlx4_w kq_mlx8 kq_mlx8_ks kq_mlx8_w kq_mlx4b kq_mlx4b_ks kq_mlx4b_w kq_mlx8b kq_mlx8b_ks kq_mlx8b_w kq_mlx6b kq_mlx6b_ks kq_mlx6b_w"
 
-var private g_b32_wide_env = true   //! `DASLLAMA_METAL_B32_WIDE` and its setter - 0 pins the two-row and K-split one-row forms
-var private g_b32_wide_set = false  //! the setter spoke: a decode re-init keeps its value
+//! an A/B form knob: its environment variable's value until its setter speaks, the setter's from then on
+struct private MetalKnob {
+    on : bool    //! the form the knob picks
+    pinned : bool
+}
+
+//! true where `v` moves it
+def private knob_pin(var k : MetalKnob; v : bool) : bool {
+    let moved = v != k.on
+    k.pinned = true
+    k.on = v
+    return moved
+}
+
+//! a decode init's half of a knob: the environment's value `env`, unless a setter spoke
+def private knob_reinit(var k : MetalKnob; env : bool) {
+    if (!k.pinned) {
+        k.on = env
+    }
+}
+
+var private g_b32_wide_knob = MetalKnob(on = true)   //! `DASLLAMA_METAL_B32_WIDE` - 0 pins the two-row and K-split one-row forms
 var private g_b32_wide = 0l         //! per-32 wide-form dispatches since load
 
 //! the per-32 wide one-row dispatches since load - the wide form's witness
@@ -4827,19 +4839,17 @@ def metal_b32_wide_count() : int64 => g_b32_wide
 
 //! A/B seat: the per-32 wide one-row form vs the two-row and K-split forms - `DASLLAMA_METAL_B32_WIDE`'s setter twin. Default on.
 def public set_metal_b32_wide(v : bool) {
-    g_b32_wide_set = true
-    if (v != g_b32_wide_env) {
+    if (g_b32_wide_knob |> knob_pin(v)) {
         to_log(LOG_WARNING, "dasLLAMA metal decode: set_metal_b32_wide({v}) - the per-32 one-row GEMVs take {v ? "the wide form" : "the two-row and K-split forms"} (numerics move with the form)\n")
     }
-    g_b32_wide_env = v
 }
 
-def public get_metal_b32_wide : bool => g_b32_wide_env
+def public get_metal_b32_wide : bool => g_b32_wide_knob.on
 
 //! the one-row form a per-32 plane of `rows` x `n` takes: 0 two-row, 1 K split, 2 wide
 [arch(at="../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-b32-wide-gemv")]
 def b32_gemv_form(rows, n : int64) : int {
-    return 2 if (g_b32_wide_env && b32_wide_fits(rows))
+    return 2 if (g_b32_wide_knob.on && b32_wide_fits(rows))
     return b32_narrow(rows, n, 1l) ? 1 : 0
 }
 
@@ -4858,8 +4868,7 @@ def enc_b32_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows,
 //! the fused gate|up stamps by format (`B32_STAMP_FMTS`)
 let B32_GLU_STEMS = "kq_q51_glu kq_iq4nl32_glu kq_q4032_glu kq_q5032_glu kq_mlx4_glu kq_mlx8_glu kq_mlx4b_glu kq_mlx8b_glu kq_mlx6b_glu"
 
-var private g_b32_glu_env = false  //! `DASLLAMA_METAL_B32_GLU` and its setter - off keeps the two GEMVs and the activation pass
-var private g_b32_glu_set = false  //! the setter spoke: a decode re-init keeps its value
+var private g_b32_glu_knob = MetalKnob(on = false)   //! `DASLLAMA_METAL_B32_GLU` - off keeps the two GEMVs and the activation pass
 var private g_b32_glu = 0l         //! per-32 fused gate|up dispatches since load
 
 //! the per-32 fused gate|up dispatches since load - the fused form's witness
@@ -4867,21 +4876,19 @@ def metal_b32_glu_count() : int64 => g_b32_glu
 
 //! A/B seat: the per-32 fused gate|up form vs two GEMVs and the activation - `DASLLAMA_METAL_B32_GLU`'s setter twin. Default off.
 def public set_metal_b32_glu(v : bool) {
-    g_b32_glu_set = true
-    if (v != g_b32_glu_env) {
+    if (g_b32_glu_knob |> knob_pin(v)) {
         to_log(LOG_WARNING, "dasLLAMA metal decode: set_metal_b32_glu({v}) - the per-32 single-row FFN {v ? "reads gate and up in one dispatch" : "keeps the two GEMVs and the activation pass"} (numerics move with the form)\n")
     }
-    g_b32_glu_env = v
 }
 
-def public get_metal_b32_glu : bool => g_b32_glu_env
+def public get_metal_b32_glu : bool => g_b32_glu_knob.on
 
 //! One row of a gate plane at `w1off` and an up plane at `w3off` of one dense per-32 member, `act(gate) * up` into `by`, in
 //! one dispatch on the wide form; false - nothing encoded - where the knob is off, the planes are narrower than the wide form
 //! serves, or they sit in different buffers
 [arch(at="../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-b32-glu")]
 def enc_b32_glu(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; w1off, w3off, rows, n : int64; bx, by, bn, bd : MetalBuffer?; act : uint) : bool {
-    return false if (!g_b32_glu_env || !g_b32_wide_env || !b32_wide_fits(rows))
+    return false if (!g_b32_glu_knob.on || !g_b32_wide_knob.on || !b32_wide_fits(rows))
     let p1 = b32_planes_of(g_dev, t, fmt, w1off)
     let p3 = b32_planes_of(g_dev, t, fmt, w3off)
     return false if (p1.qbuf != p3.qbuf || p1.sbuf != p3.sbuf)
@@ -5406,8 +5413,7 @@ def enc_site_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows
 var private g_kq_rows_crowned : bool[KQ_FMT_COUNT]
 var private g_kq_k4_r2_crowned : bool
 var private g_kq_half_crowned : bool[KQ_FMT_COUNT]   //! per format: the box crowned its half-x forms (`kq_half_crown(fmt)`)
-var private g_kq_half_env = true           //! `DASLLAMA_METAL_KQ_HALF` and its setter - 0 keeps the f32 forms under every crown (the A/B rail)
-var private g_kq_half_set = false          //! the setter spoke: a decode re-init keeps its value instead of reading the environment again
+var private g_kq_half_knob = MetalKnob(on = true)   //! `DASLLAMA_METAL_KQ_HALF` - 0 keeps the f32 forms under every crown (the A/B rail)
 
 let KQ_HALF_CROWN_PREFIX = "kq_rows_half_"
 
@@ -5415,14 +5421,14 @@ let KQ_HALF_CROWN_PREFIX = "kq_rows_half_"
 def kq_half_crown(fmt : KqFmt) : string => "{KQ_HALF_CROWN_PREFIX}{fmt}"
 
 //! the half-x forms serve this format's rows sites on the box: its crown is minted and the rail is on
-def metal_kq_half_on(fmt : KqFmt) : bool => g_kq_half_env && g_kq_half_crowned[int(fmt)]
+def metal_kq_half_on(fmt : KqFmt) : bool => g_kq_half_knob.on && g_kq_half_crowned[int(fmt)]
 
 //! the rows verdict the process holds for a format: its `kq_rows_<fmt>` crown, as the sidecar or the race left it
 def metal_kq_rows_crowned(fmt : KqFmt) : bool => g_kq_rows_crowned[int(fmt)]
 
 //! some format's half-x forms are on - the row producers store the f16 twin beside x
 def metal_kq_half_any : bool {
-    return false if (!g_kq_half_env)
+    return false if (!g_kq_half_knob.on)
     for (c in g_kq_half_crowned) {
         return true if (c)
     }
@@ -5431,14 +5437,12 @@ def metal_kq_half_any : bool {
 
 //! A/B seat: the half-x forms under their crowns vs the f32 forms - `DASLLAMA_METAL_KQ_HALF`'s setter twin. Default on.
 def public set_metal_kq_half(v : bool) {
-    g_kq_half_set = true
-    if (v != g_kq_half_env) {
+    if (g_kq_half_knob |> knob_pin(v)) {
         to_log(LOG_WARNING, "dasLLAMA metal decode: set_metal_kq_half({v}) - the K-quant rows sites take the {v ? "half-x forms under their crowns" : "f32 forms under every half-x crown"} (numerics move with the form)\n")
     }
-    g_kq_half_env = v
 }
 
-def public get_metal_kq_half : bool => g_kq_half_env
+def public get_metal_kq_half : bool => g_kq_half_knob.on
 
 //! B >= 9 over a panel padded to the mul_mm's 32-row tile takes the kq mul_mm twin; any other row count
 //! (the verify's nine-row panel) rides the f32 rows route, one small-batch dispatch over every row;
@@ -5739,8 +5743,7 @@ def enc_embed_kq_rows(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?
 // prefill classes (the selection buffer's idx/w views are the seli/selw fields — callers pass
 // the same buffer twice)
 
-var private g_b32_moe_wide_env = true   //! `DASLLAMA_METAL_B32_MOE_WIDE` and its setter - 0 pins the two-row expert-indexed form
-var private g_b32_moe_wide_set = false  //! the setter spoke: a decode re-init keeps its value
+var private g_b32_moe_wide_knob = MetalKnob(on = true)   //! `DASLLAMA_METAL_B32_MOE_WIDE` - 0 pins the two-row expert-indexed form
 var private g_b32_moe_wide = 0l         //! per-32 expert-indexed wide dispatches since load
 
 //! the per-32 expert-indexed wide dispatches since load - the routed wide form's witness
@@ -5748,14 +5751,12 @@ def metal_b32_moe_wide_count() : int64 => g_b32_moe_wide
 
 //! A/B seat: the per-32 expert-indexed wide form vs its two-row form - `DASLLAMA_METAL_B32_MOE_WIDE`'s setter twin. Default on.
 def public set_metal_b32_moe_wide(v : bool) {
-    g_b32_moe_wide_set = true
-    if (v != g_b32_moe_wide_env) {
+    if (g_b32_moe_wide_knob |> knob_pin(v)) {
         to_log(LOG_WARNING, "dasLLAMA metal decode: set_metal_b32_moe_wide({v}) - the per-32 routed GEMVs take {v ? "the wide form" : "the two-row form"} (numerics move with the form)\n")
     }
-    g_b32_moe_wide_env = v
 }
 
-def public get_metal_b32_moe_wide : bool => g_b32_moe_wide_env
+def public get_metal_b32_moe_wide : bool => g_b32_moe_wide_knob.on
 
 //! the per-32 members whose routed GEMV takes the wide form: the arithmetic decodes - the codebook-table members (iq4nl32,
 //! q4032) keep the two-row form, which their race wins
@@ -5775,7 +5776,7 @@ def b32_moe_wide_index(fmt : KqFmt) : int {
 def private enc_moe_gemv_b32(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; stack_off, rows, k, nst : int64;
                              bx, by, bsel : MetalBuffer?; var ka : MoeGemvArgs; yoff : uint64) {
     let qp = b32_planes_of(g_dev, t, fmt, stack_off)
-    let wi = g_b32_moe_wide_env && b32_wide_fits(rows) ? b32_moe_wide_index(fmt) : -1
+    let wi = g_b32_moe_wide_knob.on && b32_wide_fits(rows) ? b32_moe_wide_index(fmt) : -1
     if (wi >= 0) {
         g_b32_moe_wide++
         stamp_ladder(wi, B32_MOE_GEMV_W_STEMS) <| $() {
