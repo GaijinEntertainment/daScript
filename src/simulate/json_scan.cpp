@@ -53,6 +53,9 @@ namespace das {
             if (ch == 't') { if (end - cur >= 4 && memcmp(cur,"true",4)==0) { cur+=4; return true; } return false; }
             if (ch == 'f') { if (end - cur >= 5 && memcmp(cur,"false",5)==0) { cur+=5; return true; } return false; }
             if (ch == 'n') { if (end - cur >= 4 && memcmp(cur,"null",4)==0) { cur+=4; return true; } return false; }
+            if (ch == 'N') { if (end - cur >= 3 && memcmp(cur,"NaN",3)==0) { cur+=3; return true; } return false; }
+            if (ch == 'I') { if (end - cur >= 8 && memcmp(cur,"Infinity",8)==0) { cur+=8; return true; } return false; }
+            if (ch == '-' && end - cur >= 9 && memcmp(cur,"-Infinity",9)==0) { cur+=9; return true; }
             if (ch == '-' || (ch >= '0' && ch <= '9')) return skipNumber();
             return false;
         }
@@ -214,7 +217,18 @@ namespace das {
             skipWS();
             if (cur >= end) return false;
             const char * start = cur;
-            if (*cur == '-') cur++;
+            bool neg = *cur == '-';
+            if (neg) cur++;
+            if (end - cur >= 8 && memcmp(cur, "Infinity", 8) == 0) {
+                cur += 8;
+                out = neg ? -double(INFINITY) : double(INFINITY);
+                return true;
+            }
+            if (!neg && end - cur >= 3 && memcmp(cur, "NaN", 3) == 0) {
+                cur += 3;
+                out = double(NAN);
+                return true;
+            }
             if (cur >= end || *cur < '0' || *cur > '9') { cur = start; return false; }
             while (cur < end && *cur >= '0' && *cur <= '9') cur++;
             if (cur < end && *cur == '.') {
