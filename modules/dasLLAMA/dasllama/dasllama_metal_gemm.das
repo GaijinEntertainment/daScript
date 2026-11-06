@@ -276,6 +276,13 @@ def public metal_gemm_shutdown {
     g_failed = false
 }
 
+//! this context's GEMM driver down at its end, as the decode and prefill drivers' `metal_context_shutdown`
+[finalize, arch(at="../ARCHITECTURE_GPU_METAL_LIFECYCLE.md#metal-family-lifecycle")]
+def private metal_gemm_context_shutdown {
+    return if (g_dev == null)
+    metal_gemm_shutdown()
+}
+
 def private metal_gemm_init : bool {
     if (g_pso != null) {
         return true

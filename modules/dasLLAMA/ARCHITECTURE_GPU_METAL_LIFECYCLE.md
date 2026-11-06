@@ -19,7 +19,10 @@ frees its host planes and leaves its regions cached until the weights epoch move
 `ARCHITECTURE_RUNTIME.md#weights-epoch-on-load`) or the drivers shut down. The KV mirror arena (grown up to its ceiling,
 `DASLLAMA_METAL_KV_MIRROR_MB`), the deltanet mirror pool and the buffer pools live until `metal_decode_shutdown` /
 `metal_prefill_shutdown`, bounded by the largest shape the process served; a boundary that must hand the device back calls
-both. A released buffer leaves the process footprint because the binding reads `contents` inside an autorelease pool
+both, and a context's end calls both for it (`metal_context_shutdown`, a `[finalize]`, where the device came up; the
+GEMM driver's `metal_gemm_context_shutdown` is its twin for that driver's own device, pipelines and caches): device
+state a context left alive would outlive it in the process - dastest's `--together` runs a file a context, a host may hold
+several - and the next context's leak gate would count it. A released buffer leaves the process footprint because the binding reads `contents` inside an autorelease pool
 (`../dasMetal/ARCHITECTURE.md`), and the footprint (`metal_footprint_settled`), not the live-object count, witnesses it -
 the support matrix's release row (`metal_release_row`) holds three load-serve-delete cycles of E2B to their first close.
 
