@@ -193,6 +193,44 @@ namespace das {
 }
 
 
+#if defined(_WIN32)
+    #ifndef WIN32_LEAN_AND_MEAN
+        #define WIN32_LEAN_AND_MEAN
+    #endif
+    #include <windows.h>
+#endif
+
+namespace das {
+#if defined(_WIN32)
+    std::wstring das_utf8_to_wide ( const char * path ) {
+        if ( !path || !*path ) return std::wstring();
+        const int count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+            path, -1, nullptr, 0);
+        if ( count <= 0 ) return std::wstring();
+        std::wstring result(size_t(count), L'\0');
+        if ( MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+                path, -1, result.data(), count) != count ) {
+            return std::wstring();
+        }
+        result.resize(size_t(count - 1));
+        return result;
+    }
+
+    string das_wide_to_utf8 ( const wchar_t * path ) {
+        if ( !path || !*path ) return string();
+        const int count = WideCharToMultiByte(CP_UTF8, 0, path, -1, nullptr, 0, nullptr, nullptr);
+        if ( count <= 0 ) return string();
+        string result;
+        result.resize(size_t(count));
+        if ( WideCharToMultiByte(CP_UTF8, 0, path, -1, &result[0], count, nullptr, nullptr) != count ) {
+            return string();
+        }
+        result.resize(size_t(count - 1));
+        return result;
+    }
+#endif
+}
+
 #if DAS_NO_FILEIO
 
 namespace das {
@@ -203,6 +241,11 @@ namespace das {
     bool builtin_try_fflush ( const FILE * ) { return false; }
     bool builtin_try_lock_file ( const FILE * ) { return false; }
     FILE * das_fopen_regular_read_utf8 ( const char *, uint64_t & size ) { size = 0; return nullptr; }
+    FILE * das_fopen_utf8 ( const char *, const char * ) { return nullptr; }
+    bool das_file_stat_utf8 ( const char *, uint64_t &, int64_t &, bool & ) { return false; }
+    bool das_remove_utf8 ( const char * ) { return false; }
+    bool das_rename_utf8 ( const char *, const char * ) { return false; }
+    void das_each_directory_entry ( const char *, void (*)(const char *, bool, void *), void * ) {}
     void builtin_map_file(const FILE* f, const TBlock<void, TTemporary<TArray<uint8_t>>>& blk, Context* context, LineInfoArg * at) GENERATE_IO_STUB
     void * builtin_fmap_open ( const char * name, uint64_t * size, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     void * builtin_fmap_open_rw ( const char * name, uint64_t * size, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
@@ -388,34 +431,8 @@ namespace das {
     }
 
 #if defined(_WIN32)
-    static std::wstring utf8_file_path_to_wide ( const char * path ) {
-        if ( !path || !*path ) return std::wstring();
-        const int count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
-            path, -1, nullptr, 0);
-        if ( count <= 0 ) return std::wstring();
-        std::wstring result(size_t(count), L'\0');
-        if ( MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
-                path, -1, result.data(), count) != count ) {
-            return std::wstring();
-        }
-        result.resize(size_t(count - 1));
-        return result;
-    }
-
-    static std::string wide_file_path_to_utf8 ( const wchar_t * path ) {
-        if ( !path || !*path ) return std::string();
-        const int count = WideCharToMultiByte(CP_UTF8, 0, path, -1, nullptr, 0, nullptr, nullptr);
-        if ( count <= 0 ) return std::string();
-        std::string result(size_t(count), '\0');
-        if ( WideCharToMultiByte(CP_UTF8, 0, path, -1, result.data(), count, nullptr, nullptr) != count ) {
-            return std::string();
-        }
-        result.resize(size_t(count - 1));
-        return result;
-    }
-
     FILE * das_fopen_utf8 ( const char * name, const char * mode ) {
-        auto wideName = utf8_file_path_to_wide(name);
+        auto wideName = das_utf8_to_wide(name);
         if ( wideName.empty() ) return nullptr;
         wchar_t wideMode[8] = {};
         size_t index = 0;
@@ -431,11 +448,55 @@ namespace das {
     }
 #endif
 
+    static int das_stat64 ( const char * path, das_filestat & st );
+
+    bool das_file_stat_utf8 ( const char * fileName, uint64_t & size, int64_t & mtime, bool & isDirectory ) {
+        das_filestat st;
+        if ( !fileName || das_stat64(fileName, st) != 0 ) return false;
+        size = uint64_t(st.st_size);
+        mtime = int64_t(st.st_mtime);
+        isDirectory = (st.st_mode & S_IFDIR) != 0;
+        return true;
+    }
+
+    bool das_remove_utf8 ( const char * fileName ) {
+        return builtin_remove_file(fileName);
+    }
+
+    bool das_rename_utf8 ( const char * from, const char * to ) {
+        return builtin_rename_file(from, to);
+    }
+
+    void das_each_directory_entry ( const char * dir, void (*fn)(const char * name, bool isDirectory, void * user), void * user ) {
+#if defined(_WIN32)
+        _wfinddata_t entry;
+        auto pattern = das_utf8_to_wide((string(dir ? dir : "") + "/*").c_str());
+        intptr_t handle = pattern.empty() ? -1L : _wfindfirst(pattern.c_str(), &entry);
+        if ( handle == -1L ) return;
+        do {
+            if ( wcscmp(entry.name, L".")==0 || wcscmp(entry.name, L"..")==0 ) continue;
+            fn(das_wide_to_utf8(entry.name).c_str(), (entry.attrib & _A_SUBDIR)!=0, user);
+        } while ( _wfindnext(handle, &entry)==0 );
+        _findclose(handle);
+#else
+        DIR * d = opendir(dir ? dir : "");
+        if ( !d ) return;
+        while ( dirent * entry = readdir(d) ) {
+            if ( strcmp(entry->d_name, ".")==0 || strcmp(entry->d_name, "..")==0 ) continue;
+            bool isDirectory = false;
+            uint64_t size; int64_t mtime;
+            das_file_stat_utf8((string(dir ? dir : "") + "/" + entry->d_name).c_str(), size, mtime, isDirectory);
+            fn(entry->d_name, isDirectory, user);
+        }
+        closedir(d);
+#endif
+    }
+
     // src/builtin/ARCHITECTURE_FIO.md#regular-file-buffered-read
     FILE * das_fopen_regular_read_utf8 ( const char * name, uint64_t & size ) {
         size = 0;
 #if defined(_WIN32)
-        auto wideName = utf8_file_path_to_wide(name);
+        auto wideName = das_utf8_to_wide(name);
         if (wideName.empty()) return nullptr;
         HANDLE handle = CreateFileW(wideName.c_str(), GENERIC_READ,
             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
@@ -476,7 +537,7 @@ namespace das {
     // un-pairable UTF-16 in on-disk names degrades to U+FFFD instead of throwing.
     static std::filesystem::path das_to_path ( const char * path ) {
 #if defined(_WIN32)
-        return std::filesystem::path(utf8_file_path_to_wide(path));
+        return std::filesystem::path(das_utf8_to_wide(path));
 #else
         return std::filesystem::path(path ? path : "");
 #endif
@@ -484,7 +545,7 @@ namespace das {
 
     static std::string path_to_das ( const std::filesystem::path & p ) {
 #if defined(_WIN32)
-        return wide_file_path_to_utf8(p.c_str());
+        return das_wide_to_utf8(p.c_str());
 #else
         return p.string();
 #endif
@@ -578,7 +639,7 @@ namespace das {
 
     bool builtin_feof(const FILE* _f) {
         FILE* f = (FILE*)_f;
-        return feof(f);
+        return !f || feof(f);
     }
 
     bool builtin_fpoll(const FILE* _f, int timeout_ms) {
@@ -626,7 +687,7 @@ namespace das {
     // stat/fstat truncate st_size to 32 bits and FAIL outright past 2GB.
     static int das_stat64 ( const char * path, das_filestat & st ) {
 #if defined(_WIN32)
-        auto widePath = utf8_file_path_to_wide(path);
+        auto widePath = das_utf8_to_wide(path);
         return widePath.empty() ? -1 : _wstat64(widePath.c_str(), &st);
 #else
         return stat(path, &st);
@@ -1029,10 +1090,10 @@ namespace das {
 #if defined(_WIN32)
         _wfinddata_t c_file;
         intptr_t hFile;
-        auto findPath = utf8_file_path_to_wide((string(path ? path : "") + "/*").c_str());
+        auto findPath = das_utf8_to_wide((string(path ? path : "") + "/*").c_str());
         if (!findPath.empty() && (hFile = _wfindfirst(findPath.c_str(), &c_file)) != -1L) {
             do {
-                auto name8 = wide_file_path_to_utf8(c_file.name);
+                auto name8 = das_wide_to_utf8(c_file.name);
                 char * fname = context->allocateString(name8.data(), uint32_t(name8.size()),at);
                 vec4f args[1] = {
                     cast<char *>::from(fname)
@@ -1063,7 +1124,7 @@ namespace das {
 #else
         if ( path ) {
 #if defined(_WIN32)
-            auto widePath = utf8_file_path_to_wide(path);
+            auto widePath = das_utf8_to_wide(path);
             return !widePath.empty() && _wchdir(widePath.c_str()) == 0;
 #else
             return chdir(path) == 0;
@@ -1081,7 +1142,7 @@ namespace das {
 #if defined(_WIN32)
         wchar_t * buf = _wgetcwd(nullptr, 0);
         if ( buf ) {
-            auto cwd8 = wide_file_path_to_utf8(buf);
+            auto cwd8 = das_wide_to_utf8(buf);
             free(buf);
             return context->allocateString(cwd8.data(), uint32_t(cwd8.size()), at);
         } else {
@@ -1103,7 +1164,7 @@ namespace das {
     bool builtin_mkdir ( const char * path ) {
         if ( path ) {
 #if defined(_WIN32)
-            auto widePath = utf8_file_path_to_wide(path);
+            auto widePath = das_utf8_to_wide(path);
             return !widePath.empty() && _wmkdir(widePath.c_str()) == 0;
 #elif defined(_EMSCRIPTEN_VER)
             return mkdir(path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0;
@@ -1217,7 +1278,7 @@ namespace das {
                 JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_BREAKAWAY_OK;
             SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &jeli, sizeof(jeli));
         }
-        STARTUPINFOA si;
+        STARTUPINFOW si;
         memset(&si, 0, sizeof(si));
         si.cb = sizeof(si);
         si.hStdOutput = hWritePipe;
@@ -1225,8 +1286,8 @@ namespace das {
         si.dwFlags = STARTF_USESTDHANDLES;
         PROCESS_INFORMATION pi;
         memset(&pi, 0, sizeof(pi));
-        string cmdLine = string("cmd.exe /c ") + cmd;
-        BOOL created = CreateProcessA(NULL, (LPSTR)cmdLine.c_str(), NULL, NULL, TRUE,
+        std::wstring cmdLine = das_utf8_to_wide((string("cmd.exe /c ") + cmd).c_str());
+        BOOL created = !cmdLine.empty() && CreateProcessW(NULL, &cmdLine[0], NULL, NULL, TRUE,
             CREATE_NO_WINDOW | CREATE_SUSPENDED, NULL, NULL, &si, &pi);
         CloseHandle(hWritePipe);
         if ( !created ) {
@@ -1415,7 +1476,7 @@ namespace das {
             if ( hError != INVALID_HANDLE_VALUE ) CloseHandle(hError);
             return false;
         }
-        STARTUPINFOEXA si;
+        STARTUPINFOEXW si;
         memset(&si, 0, sizeof(si));
         si.StartupInfo.cb = sizeof(si);
         si.StartupInfo.hStdInput = hNullInput;
@@ -1436,9 +1497,9 @@ namespace das {
                 sizeof(inheritedHandles), NULL, NULL);
         PROCESS_INFORMATION pi;
         memset(&pi, 0, sizeof(pi));
-        string cmdLine = winBuildCommandLine(argv, args_arr.size);
-        BOOL created = attributesReady && CreateProcessA(NULL,
-            (LPSTR)cmdLine.c_str(), NULL, NULL, TRUE,
+        std::wstring cmdLine = das_utf8_to_wide(winBuildCommandLine(argv, args_arr.size).c_str());
+        BOOL created = attributesReady && !cmdLine.empty() && CreateProcessW(NULL,
+            &cmdLine[0], NULL, NULL, TRUE,
             CREATE_NEW_PROCESS_GROUP | EXTENDED_STARTUPINFO_PRESENT,
             NULL, NULL, &si.StartupInfo, &pi);
         if ( attributeListInitialized ) {
@@ -1525,29 +1586,29 @@ namespace das {
     }
 
 #ifdef _WIN32
-    static string winBuildEnvBlock ( const Array & env ) {
-        vector<string> entries;
-        LPCH base = GetEnvironmentStringsA();
+    static std::wstring winBuildEnvBlock ( const Array & env ) {
+        vector<std::wstring> entries;
+        LPWCH base = GetEnvironmentStringsW();
         if ( base ) {
-            for ( LPCH e = base; *e; e += strlen(e) + 1 ) entries.emplace_back(e);
-            FreeEnvironmentStringsA(base);
+            for ( LPWCH e = base; *e; e += wcslen(e) + 1 ) entries.emplace_back(e);
+            FreeEnvironmentStringsW(base);
         }
         char ** ov = (char **) env.data;
         for ( uint64_t i = 0; i < env.size; ++i ) {
             if ( !ov[i] ) continue;
-            string entry = ov[i];
-            size_t eq = entry.find('=');
-            string key = eq == string::npos ? entry : entry.substr(0, eq);
+            std::wstring entry = das_utf8_to_wide(ov[i]);
+            size_t eq = entry.find(L'=');
+            std::wstring key = eq == std::wstring::npos ? entry : entry.substr(0, eq);
             for ( auto & e : entries ) {           // replace an existing key (case-insensitive)
-                size_t k = e.find('=');
-                string ek = k == string::npos ? e : e.substr(0, k);
-                if ( ek.size() == key.size() && _stricmp(ek.c_str(), key.c_str()) == 0 ) { e.clear(); break; }
+                size_t k = e.find(L'=');
+                std::wstring ek = k == std::wstring::npos ? e : e.substr(0, k);
+                if ( ek.size() == key.size() && _wcsicmp(ek.c_str(), key.c_str()) == 0 ) { e.clear(); break; }
             }
             entries.push_back(entry);
         }
-        string block;
-        for ( auto & e : entries ) { if ( e.empty() ) continue; block.append(e); block.push_back('\0'); }
-        block.push_back('\0');                      // the block ends in a second NUL
+        std::wstring block;
+        for ( auto & e : entries ) { if ( e.empty() ) continue; block.append(e); block.push_back(L'\0'); }
+        block.push_back(L'\0');                     // the block ends in a second NUL
         return block;
     }
 #else
@@ -1646,7 +1707,7 @@ namespace das {
         HANDLE hNullInput = CreateFileA("NUL", GENERIC_READ,
             FILE_SHARE_READ | FILE_SHARE_WRITE, &sa,
             OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-        STARTUPINFOA si;
+        STARTUPINFOW si;
         memset(&si, 0, sizeof(si));
         si.cb = sizeof(si);
         si.hStdInput = (hNullInput == INVALID_HANDLE_VALUE) ? NULL : hNullInput;
@@ -1656,14 +1717,15 @@ namespace das {
         PROCESS_INFORMATION pi;
         memset(&pi, 0, sizeof(pi));
         // CreateProcess wants a writable buffer for lpCommandLine.
-        string cmdLine = winBuildCommandLine(argv, args_arr.size);
-        DWORD createFlags = CREATE_NO_WINDOW;
+        std::wstring cmdLine = das_utf8_to_wide(winBuildCommandLine(argv, args_arr.size).c_str());
+        DWORD createFlags = CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT;
         if ( timeout_sec > 0.0f ) createFlags |= CREATE_SUSPENDED;
-        string envBlock;
+        std::wstring envBlock;
         LPVOID lpEnv = NULL;
         if ( env && env->size ) { envBlock = winBuildEnvBlock(*env); lpEnv = (LPVOID)&envBlock[0]; }
-        BOOL created = CreateProcessA(NULL, (LPSTR)cmdLine.c_str(), NULL, NULL, TRUE,
-            createFlags, lpEnv, (cwd && *cwd) ? cwd : NULL, &si, &pi);
+        std::wstring wcwd = (cwd && *cwd) ? das_utf8_to_wide(cwd) : std::wstring();
+        BOOL created = !cmdLine.empty() && CreateProcessW(NULL, &cmdLine[0], NULL, NULL, TRUE,
+            createFlags, lpEnv, wcwd.empty() ? NULL : wcwd.c_str(), &si, &pi);
         CloseHandle(hWritePipe);
         if ( hNullInput != INVALID_HANDLE_VALUE ) CloseHandle(hNullInput);
         if ( !created ) {
@@ -1838,7 +1900,7 @@ namespace das {
         // Parent ends must not be inherited by the child.
         SetHandleInformation(hStdinW, HANDLE_FLAG_INHERIT, 0);
         SetHandleInformation(hStdoutR, HANDLE_FLAG_INHERIT, 0);
-        STARTUPINFOA si;
+        STARTUPINFOW si;
         memset(&si, 0, sizeof(si));
         si.cb = sizeof(si);
         si.hStdInput = hStdinR;
@@ -1847,8 +1909,8 @@ namespace das {
         si.dwFlags = STARTF_USESTDHANDLES;
         PROCESS_INFORMATION pi;
         memset(&pi, 0, sizeof(pi));
-        string cmdLine = winBuildCommandLine(argv, args_arr.size);
-        BOOL created = CreateProcessA(NULL, (LPSTR)cmdLine.c_str(), NULL, NULL, TRUE,
+        std::wstring cmdLine = das_utf8_to_wide(winBuildCommandLine(argv, args_arr.size).c_str());
+        BOOL created = !cmdLine.empty() && CreateProcessW(NULL, &cmdLine[0], NULL, NULL, TRUE,
             CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
         // Close child-side pipe ends in parent.
         CloseHandle(hStdinR);
@@ -2034,23 +2096,22 @@ namespace das {
             jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
             SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &jeli, sizeof(jeli));
         }
-        STARTUPINFOA si;
+        STARTUPINFOW si;
         memset(&si, 0, sizeof(si));
         si.cb = sizeof(si);
         si.dwFlags = STARTF_USESTDHANDLES;
         si.hStdInput = (hNull == INVALID_HANDLE_VALUE) ? NULL : hNull;
         si.hStdOutput = hWrite;
         si.hStdError = hWrite;
-        string cmdLine = winBuildCommandLine(argv, argv_arr.size);
-        string envBlock;
+        std::wstring cmdLine = das_utf8_to_wide(winBuildCommandLine(argv, argv_arr.size).c_str());
+        std::wstring envBlock;
         LPVOID lpEnv = NULL;
         if ( env.size ) { envBlock = winBuildEnvBlock(env); lpEnv = (LPVOID)&envBlock[0]; }
         PROCESS_INFORMATION pi;
         memset(&pi, 0, sizeof(pi));
-        vector<char> cmdBuf(cmdLine.begin(), cmdLine.end());   // CreateProcess may write into the command line
-        cmdBuf.push_back('\0');
-        BOOL ok = CreateProcessA(NULL, cmdBuf.data(), NULL, NULL, TRUE,
-            CREATE_NO_WINDOW | CREATE_SUSPENDED, lpEnv, hasCwd ? cwd : NULL, &si, &pi);
+        std::wstring wcwd = hasCwd ? das_utf8_to_wide(cwd) : std::wstring();
+        BOOL ok = !cmdLine.empty() && CreateProcessW(NULL, &cmdLine[0], NULL, NULL, TRUE,
+            CREATE_NO_WINDOW | CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT, lpEnv, wcwd.empty() ? NULL : wcwd.c_str(), &si, &pi);
         CloseHandle(hWrite);
         if ( hNull != INVALID_HANDLE_VALUE ) CloseHandle(hNull);
         if ( !ok ) {
@@ -2280,7 +2341,7 @@ namespace das {
     bool builtin_remove_file ( const char * path ) {
         if ( !path ) return false;
 #if defined(_WIN32)
-        auto widePath = utf8_file_path_to_wide(path);
+        auto widePath = das_utf8_to_wide(path);
         return !widePath.empty() && _wremove(widePath.c_str()) == 0;
 #else
         return remove(path) == 0;
@@ -2290,8 +2351,8 @@ namespace das {
     bool builtin_rename_file ( const char * old_path, const char * new_path ) {
         if ( !old_path || !new_path ) return false;
 #if defined(_WIN32)
-        auto wideOldPath = utf8_file_path_to_wide(old_path);
-        auto wideNewPath = utf8_file_path_to_wide(new_path);
+        auto wideOldPath = das_utf8_to_wide(old_path);
+        auto wideNewPath = das_utf8_to_wide(new_path);
         return !wideOldPath.empty() && !wideNewPath.empty()
             && MoveFileExW(wideOldPath.c_str(), wideNewPath.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
 #else
@@ -2302,7 +2363,7 @@ namespace das {
     bool builtin_rmdir ( const char * path ) {
         if ( !path ) return false;
 #if defined(_WIN32)
-        auto widePath = utf8_file_path_to_wide(path);
+        auto widePath = das_utf8_to_wide(path);
         return !widePath.empty() && _wrmdir(widePath.c_str()) == 0;
 #else
         return rmdir(path) == 0;
@@ -2378,7 +2439,7 @@ namespace das {
     bool builtin_rmdir_rec ( const char * path ) {
         if ( !path ) return false;
 #if defined(_WIN32)
-        auto widePath = utf8_file_path_to_wide(path);
+        auto widePath = das_utf8_to_wide(path);
         return !widePath.empty() && rmdir_rec_impl(widePath);
 #else
         return rmdir_rec_impl(string(path));
@@ -2403,7 +2464,7 @@ namespace das {
         error = nullptr;
         if ( !path ) { error = empty_path_error(ctx, at); return false; }
 #if defined(_WIN32)
-        auto widePath = utf8_file_path_to_wide(path);
+        auto widePath = das_utf8_to_wide(path);
         if ( widePath.empty() || _wremove(widePath.c_str()) != 0 ) { error = errno_to_string(ctx, at); return false; }
 #else
         if ( remove(path) != 0 ) { error = errno_to_string(ctx, at); return false; }
@@ -2415,8 +2476,8 @@ namespace das {
         error = nullptr;
         if ( !old_path || !new_path ) { error = empty_path_error(ctx, at); return false; }
 #if defined(_WIN32)
-        auto wideOld = utf8_file_path_to_wide(old_path);
-        auto wideNew = utf8_file_path_to_wide(new_path);
+        auto wideOld = das_utf8_to_wide(old_path);
+        auto wideNew = das_utf8_to_wide(new_path);
         if ( wideOld.empty() || wideNew.empty() ) { error = errno_to_string(ctx, at); return false; }
         if ( !MoveFileExW(wideOld.c_str(), wideNew.c_str(), MOVEFILE_REPLACE_EXISTING) ) {
             error = ec_to_string(std::error_code((int)GetLastError(), std::system_category()), ctx, at);
@@ -2432,7 +2493,7 @@ namespace das {
         error = nullptr;
         if ( !path ) { error = empty_path_error(ctx, at); return false; }
 #if defined(_WIN32)
-        auto widePath = utf8_file_path_to_wide(path);
+        auto widePath = das_utf8_to_wide(path);
         if ( widePath.empty() || _wmkdir(widePath.c_str()) != 0 ) { error = errno_to_string(ctx, at); return false; }
 #elif defined(_EMSCRIPTEN_VER)
         if ( mkdir(path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) != 0 ) { error = errno_to_string(ctx, at); return false; }
@@ -2446,7 +2507,7 @@ namespace das {
         error = nullptr;
         if ( !path ) { error = empty_path_error(ctx, at); return false; }
 #if defined(_WIN32)
-        auto widePath = utf8_file_path_to_wide(path);
+        auto widePath = das_utf8_to_wide(path);
         if ( widePath.empty() || _wrmdir(widePath.c_str()) != 0 ) { error = errno_to_string(ctx, at); return false; }
 #else
         if ( rmdir(path) != 0 ) { error = errno_to_string(ctx, at); return false; }
@@ -4150,7 +4211,7 @@ int64_t das_dread_at ( void * hh, uint64_t off, void * dstp, uint64_t bytes ) {
 
 void * das_dread_open ( const char * path, uint64_t band_bytes ) {
     if ( !path ) return nullptr;
-    std::wstring wpath = das::utf8_file_path_to_wide(path);
+    std::wstring wpath = das::das_utf8_to_wide(path);
     if ( wpath.empty() ) return nullptr;
     DWORD sector = das_direct_sector_size(wpath.c_str());
     HANDLE h = CreateFileW(wpath.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,

@@ -412,12 +412,30 @@ jobs:
           if [ -d wheel_venv/Scripts ]; then VB=wheel_venv/Scripts; else VB=wheel_venv/bin; fi
           "$VB/python" -m pip install --disable-pip-version-check artifacts/*.whl
           "$VB/daslang" --version
-          for shim in benchctl dascov das-fmt daspkg dastest detect-dupe lint; do
-            "$VB/$shim" --help > /dev/null
+          # every command is the bundle's own executable, byte for byte - never a shim of any kind
+          SDK="$VB/../daslang_sdk"
+          [ -d "$SDK" ] || { echo "no daslang_sdk beside the scripts directory"; exit 1; }
+          [ -f "$VB/daslang.root" ] || { echo "no daslang.root beside the commands"; exit 1; }
+          same_bytes() {
+            f="$VB/$1"; [ -f "$f" ] || f="$VB/$1.exe"
+            [ -f "$f" ] || { echo "command $1 missing"; exit 1; }
+            b="$SDK/bin/$2"; [ -f "$b" ] || b="$SDK/bin/$2.exe"
+            cmp -s "$f" "$b" || { echo "$1 is not the bundle's $2"; exit 1; }
+          }
+          same_bytes daslang daslang
+          same_bytes daslang-live daslang-live
+          same_bytes daslang-watchdog watchdog
+          for tool in benchctl dascov das-fmt daspkg dastest detect-dupe lint; do
+            same_bytes "$tool" "$tool.exe"
+            "$VB/$tool" --help > /dev/null
           done
+          "$VB/daslang-live" --help > /dev/null
+          "$VB/daslang-watchdog" --help > /dev/null
           printf '[export]\ndef main() {\n    return 3\n}\n' > wheel_rc3.das
           rc=0; "$VB/daslang" wheel_rc3.das || rc=$?
-          [ "$rc" -eq 3 ] || { echo "shim lost the exit code: got $rc, want 3"; exit 1; }
+          [ "$rc" -eq 3 ] || { echo "daslang lost the exit code: got $rc, want 3"; exit 1; }
+          rc=0; "$VB/python" -m daslang wheel_rc3.das || rc=$?
+          [ "$rc" -eq 3 ] || { echo "python -m daslang lost the exit code: got $rc, want 3"; exit 1; }
           "$VB/python" -c "import daslang; print(daslang.__version__, daslang.tool_path('daslang'))"
       - name: "Upload wheel for the PyPI publish job"
         if: matrix.cmake_preset == 'Release'

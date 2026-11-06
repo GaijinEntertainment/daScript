@@ -1,4 +1,5 @@
 #include "daScript/misc/platform.h"
+#include "daScript/misc/sysos.h"
 
 #include "daScript/misc/job_que.h"
 #include "job_que_spin.h"
@@ -388,7 +389,7 @@ namespace das {
             for ( uint32_t i = 0; i != L.n; ++i ) tmin = das::min(tmin, L.ev[i].t0);
         }
         if ( tmin == ~0ull ) return false;
-        FILE * f = fopen(path, "wb");
+        FILE * f = das_fopen_utf8(path, "wb");
         if ( !f ) return false;
         vector<TraceCategory> cats;
         vector<string> markerNames;

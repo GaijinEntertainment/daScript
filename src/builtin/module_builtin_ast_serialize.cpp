@@ -3589,28 +3589,15 @@ namespace das {
     };
 
     static void listCacheRecords ( const string & dir, vector<CacheRecordInfo> & out ) {
-#ifdef _WIN32
-        struct _finddata_t c_file;
-        string findPath = dir + "*.dascache";
-        intptr_t hFile = _findfirst(findPath.c_str(), &c_file);
-        if ( hFile != -1L ) {
-            do {
-                out.push_back({dir + c_file.name, uint64_t(c_file.size), int64_t(c_file.time_write)});
-            } while ( _findnext(hFile, &c_file) == 0 );
-            _findclose(hFile);
-        }
-#else
-        if ( DIR * d = opendir(dir.c_str()) ) {
-            while ( dirent * e = readdir(d) ) {
-                string name = e->d_name;
-                if ( name.size() < 9 || name.compare(name.size() - 9, 9, ".dascache") != 0 ) continue;
-                string p = dir + name;
-                struct stat st;
-                if ( stat(p.c_str(), &st) == 0 ) out.push_back({p, uint64_t(st.st_size), int64_t(st.st_mtime)});
-            }
-            closedir(d);
-        }
-#endif
+        struct Walk { const string * dir; vector<CacheRecordInfo> * out; } walk { &dir, &out };
+        das_each_directory_entry(dir.c_str(), [](const char * entry, bool isDirectory, void * user) {
+            auto & w = *(Walk *) user;
+            string name = entry;
+            if ( isDirectory || name.size() < 9 || name.compare(name.size() - 9, 9, ".dascache") != 0 ) return;
+            string p = *w.dir + name;
+            uint64_t size; int64_t mtime; bool dirFlag;
+            if ( das_file_stat_utf8(p.c_str(), size, mtime, dirFlag) ) w.out->push_back({p, size, mtime});
+        }, &walk);
     }
 
     static long long das_process_id () {
@@ -3648,7 +3635,7 @@ namespace das {
         for ( auto & r : recs ) {
             if ( total <= limit ) break;
             if ( r.path == justWrote ) continue;
-            if ( remove(r.path.c_str()) == 0 ) total -= r.size;
+            if ( das_remove_utf8(r.path.c_str()) ) total -= r.size;
         }
     }
 #endif
@@ -3659,10 +3646,10 @@ namespace das {
         string stem = slash == string::npos ? norm : norm.substr(slash + 1);
         size_t dot = stem.rfind('.');
         if ( dot != string::npos && dot != 0 ) stem = stem.substr(0, dot);
-        struct stat bst;
         char host[64];
-        if ( !hostBinary.empty() && stat(hostBinary.c_str(), &bst) == 0 ) {
-            snprintf(host, sizeof(host), "\n%lld:%lld", (long long) bst.st_mtime, (long long) bst.st_size);
+        uint64_t hostSize; int64_t hostMtime; bool hostIsDir;
+        if ( !hostBinary.empty() && das_file_stat_utf8(hostBinary.c_str(), hostSize, hostMtime, hostIsDir) ) {
+            snprintf(host, sizeof(host), "\n%lld:%lld", (long long) hostMtime, (long long) hostSize);
         } else {
             host[0] = 0;
         }
@@ -3722,7 +3709,7 @@ namespace das {
 #if !DAS_NO_FILEIO
         writePath = writeTo;
         if ( !readFrom.empty() ) {
-            if ( FILE * f = fopen(readFrom.c_str(), "rb") ) {
+            if ( FILE * f = das_fopen_utf8(readFrom.c_str(), "rb") ) {
                 // 64-bit tell: plain ftell returns long (32-bit on Windows), where an
                 // oversized cache would read back negative and silently count as absent
 #ifdef _MSC_VER
@@ -3799,17 +3786,14 @@ namespace das {
                 static atomic<uint64_t> writebackSeq { 0 };
                 string tmpPath = writePath + "." + to_string(das_process_id()) + "." + to_string(writebackSeq.fetch_add(1)) + ".tmp";
                 ensureParentDirectories(writePath);
-                if ( FILE * f = fopen(tmpPath.c_str(), "wb") ) {
+                if ( FILE * f = das_fopen_utf8(tmpPath.c_str(), "wb") ) {
                     res.wroteBytes = uint64_t(fwrite(writeStorage.buffer.data(), 1, writeStorage.buffer.size(), f));
                     fclose(f);
                     res.wrote = res.wroteBytes == uint64_t(writeStorage.buffer.size());
                     if ( res.wrote ) {
-#ifdef _WIN32
-                        remove(writePath.c_str());
-#endif
-                        res.wrote = rename(tmpPath.c_str(), writePath.c_str()) == 0;
+                        res.wrote = das_rename_utf8(tmpPath.c_str(), writePath.c_str());
                     }
-                    if ( !res.wrote ) remove(tmpPath.c_str());   // never leave a corpse
+                    if ( !res.wrote ) das_remove_utf8(tmpPath.c_str());   // never leave a corpse
                     res.saveFailed = !res.wrote;
                     if ( res.wrote ) evictModuleCache(writePath);
                 } else {

@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/misc/sysos.h"
+#include "daScript/misc/das_root.h"
 
 #if !defined(DAS_NO_FILEIO) && !defined(_EMSCRIPTEN_VER) && (defined(__linux__) || defined(__APPLE__) || defined(__HAIKU__))
     #include <filesystem>
@@ -16,7 +17,31 @@
 // throws on getExecutablePathName().
     #define WIN32_LEAN_AND_MEAN
     #include <windows.h>
+    #include <shellapi.h>
+    #if defined(_MSC_VER)
+        #pragma comment(lib, "shell32.lib")
+    #endif
     namespace das {
+
+        int runMainWithUtf8Arguments ( int (*entry)(int, char **), int argc, char * argv[] ) {
+            int wargc = 0;
+            wchar_t ** wargv = CommandLineToArgvW(GetCommandLineW(), &wargc);
+            if ( !wargv ) return entry(argc, argv);
+            vector<string> utf8(wargc);
+            vector<char *> uargv(wargc + 1, nullptr);
+            for ( int i=0; i < wargc; ++i ) {
+                int n = WideCharToMultiByte(CP_UTF8, 0, wargv[i], -1, nullptr, 0, nullptr, nullptr);
+                if ( n > 0 ) {
+                    utf8[i].resize(n);
+                    if ( WideCharToMultiByte(CP_UTF8, 0, wargv[i], -1, &utf8[i][0], n, nullptr, nullptr) != n ) {
+                        utf8[i].clear();
+                    }
+                }
+                uargv[i] = const_cast<char *>(utf8[i].c_str());
+            }
+            LocalFree(wargv);
+            return entry(wargc, uargv.data());
+        }
 
         __forceinline void setBits ( DWORD64 & dw, int lowBit, int bits, int newValue ) {
             DWORD64 mask = (DWORD64(1) << bits) - 1;
@@ -148,26 +173,39 @@
         bool hwBreakpointClear(int) { return false; }
 #endif
 
+        static string module_file_name_utf8 ( HMODULE module ) {
+            wchar_t wide[4096];
+            DWORD len = GetModuleFileNameW(module, wide, 4096);
+            if ( !len || len >= 4096 ) return "";
+            return das_wide_to_utf8(std::wstring(wide, len).c_str());
+        }
         size_t getExecutablePathName(char* pathName, size_t pathNameCapacity) {
-            return GetModuleFileNameA(NULL, pathName, (DWORD)pathNameCapacity);
+            string utf8 = module_file_name_utf8(NULL);
+            if ( utf8.empty() || utf8.size() + 1 > pathNameCapacity ) {
+                if ( pathNameCapacity ) pathName[0] = '\0';
+                return 0;
+            }
+            memcpy(pathName, utf8.data(), utf8.size() + 1);
+            return utf8.size();
+        }
+        string getModuleFileNameOf ( const void * address ) {
+            HMODULE module = NULL;
+            if ( !GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)address, &module) ) return "";
+            return module_file_name_utf8(module);
         }
         string getExecutablePathUtf8() {
-            wchar_t wide[4096];
-            DWORD len = GetModuleFileNameW(NULL, wide, 4096);
-            if ( !len || len >= 4096 ) return "";
-            char utf8[4096 * 4];
-            int n = WideCharToMultiByte(CP_UTF8, 0, wide, int(len), utf8, int(sizeof(utf8)), nullptr, nullptr);
-            return n > 0 ? string(utf8, n) : string();
+            return module_file_name_utf8(NULL);
         }
         void * loadDynamicLibrary ( const char * fileName ) {
             // src/misc/ARCHITECTURE.md#bare-library-name
-            const char * loadPath = fileName;
-            char fullPath[MAX_PATH];
+            std::wstring wideName = das_utf8_to_wide(fileName);
+            const wchar_t * loadPath = wideName.c_str();
+            wchar_t fullPath[MAX_PATH];
             const bool hasPath = fileName && (strchr(fileName, '/') || strchr(fileName, '\\'));
             if ( !hasPath ) {
-                return LoadLibraryA(fileName);
+                return LoadLibraryW(loadPath);
             }
-            DWORD got = GetFullPathNameA(fileName, MAX_PATH, fullPath, nullptr);
+            DWORD got = GetFullPathNameW(loadPath, MAX_PATH, fullPath, nullptr);
             if ( got > 0 && got < MAX_PATH ) loadPath = fullPath;
             // LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR  — also search the loaded DLL's own dir
             //                                     for its imports (lets bundles ship a
@@ -176,9 +214,10 @@
             // LOAD_LIBRARY_SEARCH_APPLICATION_DIR — preserves the legacy behavior
             //                                       (deps next to the .exe still resolve).
             // LOAD_LIBRARY_SEARCH_DEFAULT_DIRS — system32 / safe defaults.
-            return LoadLibraryExA(loadPath, NULL,
+            return LoadLibraryExW(loadPath, NULL,
                 LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
                 LOAD_LIBRARY_SEARCH_APPLICATION_DIR |
+                LOAD_LIBRARY_SEARCH_USER_DIRS |
                 LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
         }
         void * getFunctionAddress ( void * module, const char * func ) {
@@ -240,9 +279,10 @@
             if (pathNameCapacity > 0) pathName[0] = '\0';
             return 0;
 #else
-            size_t pathNameSize = readlink("/proc/self/exe", pathName, pathNameCapacity - 1);
+            ssize_t pathNameSize = readlink("/proc/self/exe", pathName, pathNameCapacity - 1);
+            if ( pathNameSize < 0 ) pathNameSize = 0;
             pathName[pathNameSize] = '\0';
-            return pathNameSize;
+            return size_t(pathNameSize);
 #endif
         }
         void * loadDynamicLibrary ( const char * lib ) {
@@ -654,32 +694,32 @@ namespace das {
     }
 
 #if !(defined(_WIN32) && !defined(_GAMING_XBOX) && !defined(_DURANGO))
+    int runMainWithUtf8Arguments ( int (*entry)(int, char **), int argc, char * argv[] ) {
+        return entry(argc, argv);
+    }
     string getExecutablePathUtf8 ( void ) {
         return getExecutableFileName();
+    }
+    string getModuleFileNameOf ( const void * address ) {
+#if !defined(DAS_NO_FILEIO) && !defined(_EMSCRIPTEN_VER) && (defined(__linux__) || defined(__APPLE__) || defined(__HAIKU__))
+        Dl_info info;
+        if ( dladdr(address, &info) && info.dli_fname ) return info.dli_fname;
+#endif
+        return "";
     }
 #endif
 
     string get_prefix ( const string & req ) {
-        auto np = req.find_last_of("\\/");
-        if ( np != string::npos ) {
-            return req.substr(0,np);
-        } else {
-            return req;
-        }
+        return dasPathPrefix(req);
     }
 
     string get_suffix ( const string & req ) {
-        auto np = req.find_last_of("\\/");
-        if ( np != string::npos ) {
-            return req.substr(np+1);
-        } else {
-            return req;
-        }
+        return dasPathSuffix(req);
     }
 
     string g_dasRoot;
 
-    // src/misc/ARCHITECTURE.md#das-root-absolute
+    // src/misc/ARCHITECTURE_DAS_ROOT.md#das-root-absolute
     static string absolute_das_root ( const string & dr ) {
         if ( dr.empty() ) return dr;
 #if defined(_WIN32) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
@@ -708,20 +748,16 @@ namespace das {
             auto np = efp.find_last_of("\\/");
             if ( np != string::npos ) {
                 auto ep = get_prefix(efp);          // remove file name
-                auto suffix = get_suffix(ep);
-                if ( suffix != "bin" ) {
-                    ep = get_prefix(ep);            // remove debug
+                g_dasRoot = readDasRootSidecar(ep);     // src/misc/ARCHITECTURE_DAS_ROOT.md#root-sidecar
+                if ( g_dasRoot.empty() ) {
+                    auto layout = dasBinLayoutOf(ep);
+                    g_dasRoot = layout.underBin ? layout.root : ".";
+                    #ifdef DAS_INSTALL_BINDIR
+                    if ( layout.underBin && layout.bin == DAS_INSTALL_BINDIR ) {
+                        g_dasRoot = DAS_INSTALL_DATADIR;
+                    }
+                    #endif
                 }
-                if ( get_suffix(ep)!="bin" ) {
-                    g_dasRoot = ".";
-                } else {
-                    g_dasRoot = get_prefix(ep);     // remove bin
-                }
-                #ifdef DAS_INSTALL_BINDIR
-                if ( ep == DAS_INSTALL_BINDIR ) {
-                    g_dasRoot = DAS_INSTALL_DATADIR;
-                }
-                #endif
             } else {
                 g_dasRoot = ".";
             }

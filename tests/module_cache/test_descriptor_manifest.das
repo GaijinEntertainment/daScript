@@ -245,7 +245,8 @@ def arms_targets(t : T?; fx : Fixture) {
     }
 }
 
-//! one das root under several spellings is one manifest key (src/misc/ARCHITECTURE.md#das-root-absolute)
+//! one das root under several spellings is one manifest key
+//! (src/misc/ARCHITECTURE_DAS_ROOT.md#das-root-absolute)
 def arms_root_spellings(t : T?; fx : Fixture) {
     let root = get_das_root()
     var spellings <- [

@@ -156,31 +156,37 @@ class WheelBuildTest(BundleFixture):
 
     # --- the wheel itself -----------------------------------------------------
 
-    def test_wheel_layout_entry_points_and_exec_bits(self):
+    def test_native_wheel_layout(self):
         self.stage_minimal({"lib/libDaScript.lib": b"x" * 10, "include/a.h": b"//",
-                      "bin/daslang-live": b"\x7fELF"})
+                      "bin/daslang-live.exe": b"MZ", "bin/watchdog.exe": b"MZ"})
         whl = wb.build(self.bundle, "v0.6.4-RC1", self.out, platform_tag="win_amd64")
         self.assertTrue(whl.endswith("daslang-0.6.4rc1-py3-none-win_amd64.whl"))
         names = self.zip_names(whl)
-        for n in ("daslang/__init__.py", "daslang/_cli.py", "daslang/__main__.py",
-                  "daslang/_sdk/bin/daslang.exe", "daslang/_sdk/daslib/strings.das",
+        data_dir = "daslang-0.6.4rc1.data"
+        for n in ("daslang/__init__.py", "daslang/__main__.py",
+                  f"{data_dir}/scripts/daslang.exe", f"{data_dir}/scripts/lint.exe", f"{data_dir}/scripts/dastest.exe",
+                  f"{data_dir}/scripts/daslang-live.exe", f"{data_dir}/scripts/daslang-watchdog.exe",
+                  f"{data_dir}/scripts/daslang.root",
+                  f"{data_dir}/data/daslang_sdk/bin/daslang.exe", f"{data_dir}/data/daslang_sdk/daslib/strings.das",
                   "daslang-0.6.4rc1.dist-info/METADATA", "daslang-0.6.4rc1.dist-info/WHEEL",
-                  "daslang-0.6.4rc1.dist-info/RECORD", "daslang-0.6.4rc1.dist-info/LICENSE",
-                  "daslang-0.6.4rc1.dist-info/entry_points.txt"):
+                  "daslang-0.6.4rc1.dist-info/RECORD", "daslang-0.6.4rc1.dist-info/LICENSE"):
             self.assertIn(n, names)
-        self.assertNotIn("daslang/_sdk/lib/libDaScript.lib", names)
-        self.assertNotIn("daslang/_sdk/include/a.h", names)
+        for n in ("daslang/_cli.py", "daslang-0.6.4rc1.dist-info/entry_points.txt",
+                  f"{data_dir}/data/daslang_sdk/lib/libDaScript.lib", f"{data_dir}/data/daslang_sdk/include/a.h"):
+            self.assertNotIn(n, names)
         with zipfile.ZipFile(whl) as z:
-            ep = z.read("daslang-0.6.4rc1.dist-info/entry_points.txt").decode()
-            for tool in wb.TOOLS:
-                self.assertIn(f"{tool} = daslang._cli:{tool.replace('-', '_')}", ep)
+            self.assertEqual(z.read(f"{data_dir}/scripts/daslang.root"), b"../daslang_sdk\n../../daslang_sdk\n",
+                             "one candidate per pip layout, the venv's first")
+            self.assertEqual(z.read(f"{data_dir}/scripts/daslang-watchdog.exe"), b"MZ", "the watchdog's bytes under the package's command name")
+            self.assertEqual(z.read(f"{data_dir}/scripts/lint.exe"), z.read(f"{data_dir}/data/daslang_sdk/bin/lint.exe"))
             wheel = z.read("daslang-0.6.4rc1.dist-info/WHEEL").decode()
             self.assertIn("Tag: py3-none-win_amd64", wheel)
             self.assertIn("Root-Is-Purelib: false", wheel)
             meta = z.read("daslang-0.6.4rc1.dist-info/METADATA").decode()
             self.assertIn("Version: 0.6.4rc1", meta)
             self.assertIn("# daslang", meta)
-            for name in ("daslang/_sdk/bin/daslang.exe", "daslang/_sdk/bin/daslang-live"):
+            for name in (f"{data_dir}/scripts/daslang.exe", f"{data_dir}/scripts/lint.exe",
+                         f"{data_dir}/data/daslang_sdk/bin/daslang.exe", f"{data_dir}/data/daslang_sdk/bin/daslang-live.exe"):
                 mode = (z.getinfo(name).external_attr >> 16) & 0o777
                 self.assertTrue(mode & 0o111, f"{name} not executable: {oct(mode)}")
             record = z.read("daslang-0.6.4rc1.dist-info/RECORD").decode().splitlines()
@@ -190,15 +196,36 @@ class WheelBuildTest(BundleFixture):
                 name, digest, size = line.split(",")
                 if name.endswith("/RECORD"):
                     continue
-                data = z.read(name)
-                self.assertEqual(int(size), len(data), name)
-                self.assertEqual(digest, wb.urlsafe_sha256(data), name)
-            compile(z.read("daslang/_cli.py"), "_cli.py", "exec")
+                payload = z.read(name)
+                self.assertEqual(int(size), len(payload), name)
+                self.assertEqual(digest, wb.urlsafe_sha256(payload), name)
+            compile(z.read("daslang/__main__.py"), "__main__.py", "exec")
             compile(z.read("daslang/__init__.py"), "__init__.py", "exec")
             init = z.read("daslang/__init__.py").decode()
+            self.assertIn('LAUNCH = "native"', init)
             self.assertIn("'daslang-watchdog': ['bin/watchdog', 'bin/watchdog.exe']", init,
                           "the watchdog keeps its bundle name behind the package's command")
             self.assertIn("'lint': ['bin/lint.exe']", init, "a tool's exe keeps .exe on every platform")
+            main = z.read("daslang/__main__.py").decode()
+            self.assertIn('run("daslang")', main, "python -m daslang hands over to the bundle's daslang")
+            self.assertNotIn("_cli", main)
+            self.assertIn("def run(name):", init, "the hand-over lives in the package, shared with the shim layout")
+
+    def test_native_posix_scripts_drop_the_exe_suffix(self):
+        """A tool copy named `lint` dispatches as the lint tool: daslang strips .exe from its own
+        name, so the POSIX script is the bare command."""
+        self.stage_minimal({"bin/daslang": elf_with("2.34"), "bin/daslang-live": elf_with("2.34"),
+                            "bin/watchdog": elf_with("2.34")})
+        whl = wb.build(self.bundle, "v0.6.4", self.out, system="Linux", machine="x86_64")
+        names = self.zip_names(whl)
+        data_dir = "daslang-0.6.4.data"
+        for n in (f"{data_dir}/scripts/daslang", f"{data_dir}/scripts/lint", f"{data_dir}/scripts/das-fmt",
+                  f"{data_dir}/scripts/daslang-live", f"{data_dir}/scripts/daslang-watchdog", f"{data_dir}/scripts/daslang.root"):
+            self.assertIn(n, names)
+        self.assertNotIn(f"{data_dir}/scripts/lint.exe", names)
+        with zipfile.ZipFile(whl) as z:
+            self.assertEqual(z.read(f"{data_dir}/scripts/lint"), z.read(f"{data_dir}/data/daslang_sdk/bin/lint.exe"))
+            self.assertEqual(z.read(f"{data_dir}/scripts/daslang"), elf_with("2.34"))
 
     def test_missing_license_is_fatal(self):
         self.stage(self.windows_exes())
@@ -229,6 +256,67 @@ class WheelBuildTest(BundleFixture):
             wb.build(self.bundle, "v0.6.4", self.out, platform_tag="win_amd64")
 
 
+class InstalledLayoutTest(BundleFixture):
+    """The native wheel, installed by pip: the sidecar beside the commands names the tree pip
+    unpacked, and the package finds that tree through pip's own record of the install."""
+
+    def setUp(self):
+        super().setUp()
+        self.stage({"LICENSE": b"BSD", "README.md": b"# daslang", "daslib/strings.das": b"// das",
+                    "bin/daslang": b"#!/bin/sh\necho stub\n", "bin/daslang-live": b"#!/bin/sh\n",
+                    "bin/watchdog": b"#!/bin/sh\n",
+                    **{f"bin/{t}.exe": b"#!/bin/sh\n" for t in wb.profile("daslang")["commands"]}})
+        self.whl = wb.build(self.bundle, "v0.6.4", self.out, platform_tag="manylinux_2_34_x86_64"
+                            if sys.platform.startswith("linux") else ("macosx_11_0_arm64" if sys.platform == "darwin" else "win_amd64"))
+
+    def venv(self, name):
+        import subprocess
+        venv = os.path.join(self.tmp, name)
+        r = subprocess.run([sys.executable, "-m", "venv", venv], capture_output=True)
+        if r.returncode != 0:
+            self.skipTest("no venv module on this host")
+        bindir = os.path.join(venv, "Scripts" if os.name == "nt" else "bin")
+        py = os.path.join(bindir, "python.exe" if os.name == "nt" else "python")
+        return venv, bindir, py
+
+    def pip(self, py, *args):
+        import subprocess
+        r = subprocess.run([py, "-m", "pip", "install", "--disable-pip-version-check", "-q", *args], capture_output=True, text=True)
+        if r.returncode != 0 and "No module named pip" in r.stderr:
+            self.skipTest("no pip in the venv")
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_venv_install_resolves_the_sidecar_and_the_record(self):
+        import subprocess
+        venv, bindir, py = self.venv("venv")
+        self.pip(py, self.whl)
+        sidecar = os.path.join(bindir, "daslang.root")
+        self.assertTrue(os.path.isfile(sidecar), "pip put the sidecar beside the commands")
+        first = open(sidecar).read().splitlines()[0]
+        resolved = os.path.normpath(os.path.join(bindir, first))
+        self.assertEqual(resolved, os.path.join(venv, "daslang_sdk"), "the first sidecar line names the venv's tree")
+        self.assertTrue(os.path.isfile(os.path.join(resolved, "bin", "daslang")), "the tree pip unpacked is the bundle")
+        for cmd in ("daslang", "lint", "daslang-watchdog"):
+            self.assertTrue(os.path.isfile(os.path.join(bindir, cmd + (".exe" if os.name == "nt" else ""))), cmd)
+        got = subprocess.run([py, "-c", "import daslang, os; print(os.path.normpath(daslang.sdk_root()))"],
+                             capture_output=True, text=True)
+        self.assertEqual(got.returncode, 0, got.stderr)
+        self.assertEqual(os.path.realpath(got.stdout.strip()), os.path.realpath(resolved), "sdk_root() finds the same tree")
+
+    def test_target_install_resolves_through_the_record(self):
+        import subprocess
+        venv, bindir, py = self.venv("venv_t")
+        target = os.path.join(self.tmp, "target")
+        self.pip(py, "--target", target, self.whl)
+        self.assertTrue(os.path.isdir(os.path.join(target, "daslang_sdk")), "--target unpacks the tree under the target")
+        env = dict(os.environ, PYTHONPATH=target)
+        got = subprocess.run([py, "-c", "import daslang, os; print(os.path.normpath(daslang.sdk_root()))"],
+                             capture_output=True, text=True, env=env)
+        self.assertEqual(got.returncode, 0, got.stderr)
+        self.assertEqual(os.path.realpath(got.stdout.strip()), os.path.realpath(os.path.join(target, "daslang_sdk")),
+                         "a --target tree sits beside the package; pip's record points elsewhere there")
+
+
 class DasllamaWheelTest(BundleFixture):
     """The dasllama profile: a flat bundle (or the mac .app), the repo LICENSE, no trimming."""
     BUNDLE_DIR = "dist"
@@ -255,6 +343,9 @@ class DasllamaWheelTest(BundleFixture):
         self.assertIn("dasllama-server = dasllama._cli:dasllama_server", eps)
         self.assertTrue(mode & 0o111, "an extensionless executable keeps its exec bit")
         self.assertIn("'dasllama-watchdog': ['watchdog'", init)
+        self.assertIn('LAUNCH = "shim"', init)
+        self.assertIn("dasllama/_cli.py", names)
+        self.assertNotIn("dasllama-0.6.5rc1.data/scripts/dasllama-cli", names)
         self.assertIn('run("dasllama-cli")', main, "python -m dasllama runs the profile's main command")
         self.assertIn(wb.profile("dasllama")["description"], meta, "no README: the summary and the description")
 

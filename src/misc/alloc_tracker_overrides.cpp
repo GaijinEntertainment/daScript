@@ -32,6 +32,22 @@
 #include <cstdint>
 #include <new>
 
+#ifdef DAS_STUB
+#include <dlfcn.h>
+static void (*g_track_alloc_hook)(void *, size_t) noexcept = nullptr;
+static void (*g_track_free_hook)(void *) noexcept = nullptr;
+static void track_alloc(void *p, size_t size) noexcept { if (g_track_alloc_hook) g_track_alloc_hook(p, size); }
+static void track_free(void *p) noexcept { if (g_track_free_hook) g_track_free_hook(p); }
+//! binds this stub's operator new/delete to the hooks the loaded runtime exports; until then they track nothing
+void das_stub_bind_alloc_tracker(void *lib) {
+    typedef void (*hooks_fn)(void (**)(void *, size_t) noexcept, void (**)(void *) noexcept);
+    if (auto hooks = (hooks_fn) dlsym(lib, "das_alloc_tracker_hooks")) hooks(&g_track_alloc_hook, &g_track_free_hook);
+}
+#else
+static void track_alloc(void *p, size_t size) noexcept { das::track_alloc_hook(p, size); }
+static void track_free(void *p) noexcept { das::track_free_hook(p); }
+#endif
+
 // -----------------------------------------------------------------------------
 // Aligned allocation helper. std::aligned_alloc is POSIX-only and requires size
 // to be a multiple of alignment. On MSVC we use _aligned_malloc / _aligned_free.
@@ -42,13 +58,13 @@
 
 static void * track_new_impl(size_t size) {
     void *p = std::malloc(size ? size : 1);
-    das::track_alloc_hook(p, size);
+    track_alloc(p, size);
     return p;
 }
 
 static void track_delete_impl(void *p) noexcept {
     if (!p) return;
-    das::track_free_hook(p);
+    track_free(p);
     std::free(p);
 }
 
@@ -58,12 +74,12 @@ static void * track_new_aligned_impl(size_t size, size_t alignment) {
     if (size == 0) size = 1;
     if (alignment < sizeof(void*)) alignment = sizeof(void*);
     void *p = _aligned_malloc(size, alignment);
-    das::track_alloc_hook(p, size);
+    track_alloc(p, size);
     return p;
 }
 static void track_delete_aligned_impl(void *p) noexcept {
     if (!p) return;
-    das::track_free_hook(p);
+    track_free(p);
     _aligned_free(p);
 }
 #else
@@ -75,12 +91,12 @@ static void * track_new_aligned_impl(size_t size, size_t alignment) {
     // aligned_alloc requires size to be a multiple of alignment.
     size_t rounded = (size + alignment - 1) & ~(alignment - 1);
     void *p = std::aligned_alloc(alignment, rounded);
-    das::track_alloc_hook(p, size);
+    track_alloc(p, size);
     return p;
 }
 static void track_delete_aligned_impl(void *p) noexcept {
     if (!p) return;
-    das::track_free_hook(p);
+    track_free(p);
     std::free(p);
 }
 #endif

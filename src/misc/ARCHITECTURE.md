@@ -7,8 +7,9 @@
   a deterministic test supplies.
 - `job_que_spin.h` - spin deadline construction, renewal and expiration; its clock type is
   supplied by the runtime or a deterministic test.
-- `sysos.cpp` - the per-platform core-count probes `job_que.cpp` calls, the das root, and the
-  dynamic-library loader.
+- `sysos.cpp` - the per-platform core-count probes `job_que.cpp` calls, the das root
+  (`ARCHITECTURE_DAS_ROOT.md`; the path helpers it shares with the daslang stub are
+  `include/daScript/misc/das_root.h`), and the dynamic-library loader.
 - `network.cpp` - the single-client TCP `Server` the DAP debugger and `daslib/network` sit on,
   the `Client` end beside it, `probe_local_port`, and the two helpers every socket error passes
   through.
@@ -219,7 +220,7 @@ every tier sees the same heap. Without ASan every hook compiles to nothing.
   quarantine - a GC sweep frees what it finds dead the same way, so a collector that swept a live
   object is a `heap-use-after-free` report rather than a wrong value. Every freed das object waits in
   that quarantine - the compiler's macro contexts run on the persistent heap too - so `daslang` caps
-  it at 32 MB (`__asan_default_options`, `utils/daslang/main.cpp`, which `ASAN_OPTIONS` overrides key
+  it at 32 MB (`__asan_default_options`, `utils/daslang/asan_options.h`, which `ASAN_OPTIONS` overrides key
   by key): at ASan's default 256 MB one compile holds about twice its memory. ASan bounds the block at its
   rounded size, so a read inside the rounding padding goes unreported. `bytesAllocated` still counts the
   rounded request, which keeps an exact heap count the same with ASan on and off. With no deck reserve
@@ -244,30 +245,7 @@ every tier sees the same heap. Without ASan every hook compiles to nothing.
   (`gate_array_push_back`, `modules/dasLLVM/daslib/llvm_jit_lower.das`).
 
 
-## 11. The das root is a place, not a spelling {#das-root-absolute}
-
-`setDasRoot` stores the root as an absolute path with forward slashes, no `.` or `..` segment
-and, below a filesystem root, no trailing slash, so `-dasroot .`, `-dasroot build/..` and the
-full path name one root when they point at one folder. A relative root is joined to the working
-directory the process has at that call. The form is lexical: a symlink in the path stays as
-written. The root `getDasRoot` derives from the executable's path goes through the same call,
-the `.` it answers for a binary outside a `bin` folder included. `get_das_root()` therefore
-answers the same string from every such start, and so does everything built on it - the module
-scan's descriptor folders and manifest key (`src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest`), the
-paths a descriptor registers, the file names a compile reports.
-
-The reason is the manifest key. A descriptor's rows carry the root as the descriptor read it, so
-the key has to compare the same string the rows were built from; were the root kept as typed, two
-starts that spell one tree differently would each find the other's manifest stale and rewrite
-it, on every start, and a start reading mid-rewrite would compile cold beside replayed
-descriptors.
-
-Windows resolves the path with `normalizeFileName`; Linux, macOS and Haiku with
-`std::filesystem`. The root stays as given on every other target (the web build, a console, a
-`DAS_NO_FILEIO` build), and wherever the resolve fails - a path past `MAX_PATH`, a working
-directory that cannot be read.
-
-## 12. A sweep gives a dead deck back; the head of its class stays {#empty-deck-release}
+## 11. A sweep gives a dead deck back; the head of its class stays {#empty-deck-release}
 
 A size class in `MemoryModel` is a chain of decks, newest at the head, and a request walks the
 chain from the head for a free slot. Growth is geometric - each new deck is twice the head it

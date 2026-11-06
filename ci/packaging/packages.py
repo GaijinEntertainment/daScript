@@ -18,7 +18,8 @@ DASLANG_COMMANDS = ["daslang", "daslang-live", *DASLANG_TOOLS, "daslang-watchdog
 
 # A command maps its user-facing name to the candidate paths of its executable, relative
 # to the directory the builder is handed; the first one present wins. The linux packages
-# link each command into /usr/bin, the wheel gets one console_scripts shim per command.
+# link each command into /usr/bin; the wheel puts the executables themselves on PATH, or one
+# console_scripts shim per command for a `launch: "shim"` profile.
 PROFILES = {
     "daslang": {
         "summary": "High-performance statically-typed scripting language for games and real-time applications",
@@ -37,6 +38,9 @@ PROFILES = {
             "daslang-watchdog": ["bin/watchdog", "bin/watchdog.exe"],
         },
         "main_command": "daslang",
+        # the commands are the bundle's own executables, told their root by a sidecar
+        # (src/misc/ARCHITECTURE_DAS_ROOT.md#root-sidecar)
+        "launch": "native",
         "license": "bundle",
         "probe_prefixes": ("bin/", "lib/"),
         "classifiers": ["Topic :: Software Development :: Compilers",
@@ -67,6 +71,8 @@ PROFILES = {
             "dasllama-watchdog": ["watchdog", "watchdog.exe", "dasllama-server.app/Contents/MacOS/watchdog"],
         },
         "main_command": "dasllama-cli",
+        # -exe programs that read their files from beside themselves: console_scripts shims
+        "launch": "shim",
         "license": "repo",
         "probe_prefixes": ("",),
         "classifiers": ["Topic :: Scientific/Engineering :: Artificial Intelligence",

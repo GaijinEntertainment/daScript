@@ -863,7 +863,15 @@ static void disable_app_nap_macos() {
 }
 #endif
 
-int main(int argc, char * argv[]) {
+#ifdef DAS_MAIN_LIBRARY
+extern "C" DAS_EXPORT_DLL int daslang_live_main ( int argc, char * argv[] ) {
+#else
+static int daslang_live_main ( int argc, char * argv[] );
+int main ( int argc, char * argv[] ) {
+    return das::runMainWithUtf8Arguments(daslang_live_main, argc, argv);
+}
+static int daslang_live_main ( int argc, char * argv[] ) {
+#endif
 #if defined(_WIN32) && defined(_DEBUG)
     _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
@@ -886,9 +894,11 @@ int main(int argc, char * argv[]) {
     bool dumpLeaks = true;
 
     // Parse args
-    char exePath[4096];
-    size_t exeLen = getExecutablePathName(exePath, sizeof(exePath));
-    hostBinary = exeLen ? string(exePath, exeLen) : string(argv[0]);
+#ifdef DAS_MAIN_LIBRARY
+    hostBinary = getModuleFileNameOf((const void *) &daslang_live_main);
+#endif
+    if ( hostBinary.empty() ) hostBinary = getExecutableFileName();
+    if ( hostBinary.empty() ) hostBinary = argv[0];
     for (int i = 1; i < argc && strcmp(argv[i], "--") != 0; i++) {
         hostOptions += argv[i];
         hostOptions += '\n';

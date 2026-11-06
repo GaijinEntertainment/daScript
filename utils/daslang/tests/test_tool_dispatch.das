@@ -5,65 +5,7 @@ require daslib/fio
 require daslib/clargs
 require daslib/strings_boost
 require strings
-
-def tests_dir() : string => path_join(get_das_root(), "utils/daslang/tests")
-
-def exe_name(name : string) : string => get_platform_name() == "windows" ? "{name}.exe" : name
-
-struct Captured {
-    rc : int
-    out : string
-}
-
-//! `argv` from `cwd` ("" inherits), stdout and stderr merged
-def run_daslang(argv : array<string>; cwd : string = "") : Captured {
-    var res : Captured
-    let noenv : array<string>
-    res.rc = run_and_capture(argv, cwd, noenv, res.out, 300.0)
-    return res
-}
-
-def copy_into(t : T?; src, dst : string) {
-    mkdir_rec(dir_name(dst))
-    var err : string
-    let copied = copy_file(src, dst, true, err)
-    t |> success(copied, "copied {src} to {dst}: {err}")
-}
-
-//! a scratch SDK root: daslib/builtin.das, which every compile reads; utils/echo/main.das, a tool
-//! that prints its host binary and its arguments; and, when `copies` names any, copies of this
-//! suite's daslang under bin/ with the runtime libraries a Windows exe loads from beside itself
-def make_sdk(t : T?; name : string; copies : array<string>) : string {
-    let root = path_join(test_temp_dir(), name)
-    copy_into(t, path_join(get_das_root(), "daslib/builtin.das"), path_join(root, "daslib/builtin.das"))
-    copy_into(t, path_join(tests_dir(), "_echo_tool.das"), path_join(root, "utils/echo/main.das"))
-    let daslang = get_host_binary()
-    for (c in copies) {
-        copy_into(t, daslang, path_join(root, "bin/{c}"))
-    }
-    if (!empty(copies) && get_platform_name() == "windows") {
-        let host_dir = dir_name(daslang)
-        dir(host_dir) $(f) {
-            if (starts_with(f, "libDaScriptDyn") && ends_with(f, ".dll")) {
-                copy_into(t, path_join(host_dir, f), path_join(root, "bin/{f}"))
-            }
-        }
-    }
-    return root
-}
-
-def lines_of(out : string) : array<string> =>
-    <- [for (ln in split(out, "\n")); strip(ln); where !empty(strip(ln))]
-
-def args_of(out : string) : array<string> =>
-    <- [for (ln in lines_of(out)); slice(ln, 4); where starts_with(ln, "arg=")]
-
-def host_of(out : string) : string {
-    for (ln in lines_of(out)) {
-        if (starts_with(ln, "host=")) return to_generic_path(slice(ln, 5))
-    }
-    return ""
-}
+require _host_fixture
 
 [test]
 def test_tool_names(t : T?) {

@@ -2855,8 +2855,9 @@ def private release_in_workspace(root, out_dir, workspace : string; paranoid, qu
     // codegen binary's own dir non-recursively pins the matching pair. On Unix the .so/.dylib
     // live in a single lib/, so the recursive walk there is safe.
     let daslang_dir = dir_name(replace(get_daslang_path(), "\\", "/"))
+    let dll_beside_daslang = fexist("{daslang_dir}/libDaScriptDyn.dll")
     let runtime_lib_dir = (platform == "windows"
-        ? daslang_dir
+        ? (dll_beside_daslang ? daslang_dir : "{get_das_root()}/bin")
         : "{get_das_root()}/lib")
     let runtime_glob = (platform == "windows" ? "libDaScriptDyn*.dll"
         : platform == "darwin" ? "**/*libDaScriptDyn*.dylib"

@@ -3,6 +3,7 @@
 
 #include "daScript/misc/performance_time.h"
 #include "daScript/misc/sysos.h"
+#include "daScript/misc/das_root.h"
 
 #ifdef DAS_ENABLE_DYN_INCLUDES
 #include "daScript/ast/dyn_modules.h"
@@ -116,7 +117,7 @@ namespace das {
     }
 
     bool check_file_present ( const char * filename ) {
-        if ( FILE * file = fopen(filename, "r"); file == NULL ) {
+        if ( FILE * file = das_fopen_utf8(filename, "r"); file == NULL ) {
             return false;
         } else {
             fclose(file);
@@ -129,6 +130,14 @@ namespace das {
         string runtimeLibrary;  // always needed
         string compilerLibrary; // non-empty when linkWholeLib — exe also needs compiler lib
     };
+
+#if defined(_WIN32)
+    //! "<config>/" for a build tree's bin/<config>/ exe, whose import libraries sit in lib/<config>/; "" anywhere else
+    static string windows_config_folder () {
+        const auto config = dasBinLayoutOf(get_prefix(getExecutableFileName())).config;
+        return config.empty() ? config : config + "/";
+    }
+#endif
 
     // Resolve a linker / tool path. Lookup order:
     //   1. `custom` — explicit override (non-null, non-empty)
@@ -205,9 +214,7 @@ namespace das {
                         result.linker = find_linker(nullptr, "lld-link.exe", "lld-link");
                     }
                     if (result.runtimeLibrary.empty()) {
-                        const auto path = get_prefix(getExecutableFileName());
-                        const auto winCfg = path.substr(path.find_last_of("\\/") + 1);
-                        const auto windowsConfig = (winCfg == "bin" ? "" : (winCfg + "/"));
+                        const auto windowsConfig = windows_config_folder();
                         result.runtimeLibrary = getDasRoot() + "/lib/" + windowsConfig + "libDaScriptDyn_runtime.lib";
                         if (linkWholeLib) {
                             result.compilerLibrary = getDasRoot() + "/lib/" + windowsConfig + "libDaScriptDyn.lib";
@@ -222,9 +229,7 @@ namespace das {
                         result.linker = "clang";
                     }
                     if (result.runtimeLibrary.empty()) {
-                        const auto path = get_prefix(getExecutableFileName());
-                        const auto winCfg = path.substr(path.find_last_of("\\/") + 1);
-                        const auto windowsConfig = (winCfg == "bin" ? "" : (winCfg + "/"));
+                        const auto windowsConfig = windows_config_folder();
                         result.runtimeLibrary = getDasRoot() + "/lib/" + windowsConfig + "libDaScriptDyn_runtime.dll.a";
                         if (linkWholeLib) {
                             result.compilerLibrary = getDasRoot() + "/lib/" + windowsConfig + "libDaScriptDyn.dll.a";
@@ -263,7 +268,11 @@ namespace das {
     //   artifactKind — short label for messages ("Library", "Wasm", ...).
     static bool run_link_cmd(const char * cmd, const char * artifactPath,
                              const char * artifactKind, Context * context) {
+#if defined(_WIN32)
+        FILE * fp = _wpopen(das_utf8_to_wide(cmd).c_str(), L"r");
+#else
         FILE * fp = popen(cmd, "r");
+#endif
         if ( fp == NULL ) {
             LOG(LogLevel::error) << "Failed to run command '" << cmd << "'\n";
             return false;
@@ -437,7 +446,7 @@ namespace das {
             LOG(LogLevel::error) << "File '" << objFilePath << "' , containing compiled definitions, does not exist\n";
             return false;
         }
-        remove(libraryName);
+        das_remove_utf8(libraryName);
         std::string cmd;
         #if defined(_WIN32) || defined(_WIN64)
             #if defined(_MSC_VER)

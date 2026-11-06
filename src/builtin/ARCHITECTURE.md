@@ -43,7 +43,9 @@ The gate scans the module registry of its own program, so only modules its
 current directory, and it sits beside the JIT DLL cache. `<stem>` is the script's file name
 without its extension. `<hash>` is the first 8 hex digits of a 64-bit hash over the normalized
 script path, the running executable's mtime and size (the host resolves its own path through the
-OS, so a launch by bare name through `PATH` keys the same file as a launch by path), the host's
+OS, so a launch by bare name through `PATH` keys the same file as a launch by path; when the
+host is the shared library a stub loads, the key stats that library, not the stub -
+`src/misc/ARCHITECTURE_DAS_ROOT.md#root-sidecar`), the host's
 own command line - every argument up to the first `--`, plus a `--jit-target` after it (the one
 script argument that changes what the host compiles: the target's folds); the other arguments after
 `--` belong to the script - and every `NAME=VALUE` environment pair whose name starts with `DAS`,

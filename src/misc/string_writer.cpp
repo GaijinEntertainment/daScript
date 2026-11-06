@@ -1,5 +1,6 @@
 #include "daScript/misc/platform.h"
 #include "daScript/misc/string_writer.h"
+#include "daScript/misc/sysos.h"
 #include "misc/include_fmt.h"
 #include "daScript/misc/float2string.h"
 
@@ -231,7 +232,7 @@ namespace das {
     }
 
     bool textPrinterToFile ( const char * path ) {
-        FILE * f = fopen(path, "ab");
+        FILE * f = das_fopen_utf8(path, "ab");
         if ( !f ) return false;
         FILE * was = g_textPrinterFile;
         g_textPrinterFile = f;

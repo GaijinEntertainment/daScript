@@ -39,20 +39,6 @@ def private is_tolerated_set(name : string; files : array<string>) : bool {
     return true
 }
 
-//! every tracked file matching one of `globs` - the generated and vendored copies git ignores
-//! stay out; a git that fails is a finding, never an empty tree
-def private tracked_files(globs : array<string>; check_name : string) : array<string> {
-    var out : string
-    var inscope cmd <- ["git", "ls-files", "--"]
-    cmd |> push_from(globs)
-    let rc = run_and_capture(cmd, out, 60.0)
-    var inscope files <- [for (ln in split(out, "\n")); strip(ln); where !empty(strip(ln))]
-    if (rc != 0 || empty(files)) {
-        gate_finding("REVIEW.das", "git ls-files failed (exit {rc}, {length(files)} files) - the {check_name} check ran over nothing")
-    }
-    return <- files
-}
-
 struct private SharedDecl {
     name : string
     line : int
