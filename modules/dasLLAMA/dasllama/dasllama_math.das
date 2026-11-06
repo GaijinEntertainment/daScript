@@ -331,9 +331,9 @@ def setup_dasllama_jobque_() {
 }
 
 [init, arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#jobque-policy")]
-def private setup_dasllama_jobque_if_available() {
+def private jobque_fork_pool_at_init() {
     if (is_job_que_available()) {
-        setup_dasllama_jobque_()
+        set_jobque_fork_pool(true, true)
     }
 }
 
