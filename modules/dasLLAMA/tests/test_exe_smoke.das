@@ -11,6 +11,7 @@ require strings
 require daslib/env_registry
 require _model_tier
 require ../../dasLLVM/tests/_exe_test_common.das   // lto_driver_missing - the LTO driver gate the dasLLVM exe tests share
+require ../../dasLLVM/tests/_spawn_common.das      // with_child_log_info - the build announces its form at LOG_INFO
 
 // The standalone-exe context gate: build `_exe_smoke_root.das` with `-jit -exe` and run the
 // artifact - the one rail where globals restore as DATA, so a function-typed global with no
@@ -44,7 +45,10 @@ def private smoke_build_and_run(t : T?; tag : string; jit_args : array<string>; 
         argv |> push("--")
         argv |> push_from(jit_args)
     }
-    let brc = run_and_capture(argv, bout, 600.0)
+    var brc = 0
+    with_child_log_info() {
+        brc = run_and_capture(argv, bout, 600.0)
+    }
     t |> equal(0, brc, "the -exe build ({tag}) succeeds: {slice(bout, max(0, length(bout) - 400))}")
     t |> success(find(bout, build_says) >= 0, "the build ({tag}) announces its form `{build_says}`: {slice(bout, max(0, length(bout) - 400))}")
     t |> success(find(bout, build_never) < 0, "the build ({tag}) never announces `{build_never}`: {slice(bout, max(0, length(bout) - 400))}")
