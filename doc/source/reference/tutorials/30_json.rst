@@ -323,6 +323,8 @@ It also respects ``@rename`` field annotations::
   // cfg._type == "server", cfg.tags == ["prod", "v2"]
 
 ``sscan_json`` returns ``true`` on success and ``false`` on malformed JSON.
+It accepts one complete value with optional surrounding whitespace.
+Extra characters after that value make the scan fail.
 Unknown keys are silently ignored, and missing fields keep their default values.
 
 Round-trip with ``sprint_json``::

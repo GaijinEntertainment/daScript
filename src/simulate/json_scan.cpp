@@ -991,6 +991,8 @@ namespace das {
     bool debug_json_scan(Context & ctx, char * dst, TypeInfo * info, const char * json, uint32_t jsonLen, LineInfo * at) {
         if (!json || jsonLen == 0) return false;
         JsonScanner scanner(json, jsonLen, ctx, at);
-        return scanner.scanValue(dst, info);
+        if (!scanner.scanValue(dst, info)) return false;
+        scanner.skipWS();
+        return scanner.cur == scanner.end;
     }
 }

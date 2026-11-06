@@ -246,6 +246,35 @@ def test_edge_cases(t : T?) {
     }
 }
 
+def private check_scan_complete(t : T?; text : string;
+                                witness : auto(TT)) {
+    var value : TT
+    for (space in ["", " \t\r\n"]) {
+        t |> success(sscan_json("{space}{text}{space}", value), text)
+    }
+    for (suffix in ["x", ",", ",,,,,", "]", "}", " 0", " true"]) {
+        t |> success(!sscan_json("{text}{suffix}", value),
+            "{text}{suffix}")
+    }
+}
+
+[test]
+def test_scan_complete_input(t : T?) {
+    check_scan_complete(t, "1.5", 0.0lf)
+    check_scan_complete(t, "42", 0)
+    check_scan_complete(t, "true", false)
+    check_scan_complete(t, "\"hello\"", "")
+    check_scan_complete(t, "\{\"x\":123,\"y\":2.5\}", Inner())
+    var inscope values : array<int>
+    t |> success(sscan_json(" \t[1,2]\r\n", values))
+    t |> equal(values, [1, 2])
+    t |> success(!sscan_json("[1,2]aaaaa", values))
+    for (text in ["", " ", "[", "\{"]) {
+        var value : double
+        t |> success(!sscan_json(text, value), text)
+    }
+}
+
 // ============================================================
 //  test: enums
 // ============================================================
