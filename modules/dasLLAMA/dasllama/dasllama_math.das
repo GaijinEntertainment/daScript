@@ -330,6 +330,13 @@ def setup_dasllama_jobque_() {
     set_current_thread_priority(clamp(g_env_engine.caller_prio, -2, 2))
 }
 
+[init, arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#jobque-policy")]
+def private setup_dasllama_jobque_if_available() {
+    if (is_job_que_available()) {
+        setup_dasllama_jobque_()
+    }
+}
+
 //! `blk` inside a fresh `with_job_que` the engine has configured (`setup_dasllama_jobque_` first).
 //! Engine spelling of `with_dasllama_jobque`.
 def with_dasllama_jobque_(blk : block<void>) {
