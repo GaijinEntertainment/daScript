@@ -1834,6 +1834,10 @@ def test_vulkan_arena_ffn(t : T?) {
 def test_vulkan_add_rms(t : T?) {
     t |> run("vulkan add+rms == CPU reference (fused arm + norm-only arm)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_device_ready()) {
+                t |> skip("no Vulkan device")
+                return
+            }
             let AD = 512l
             let EPS = 1e-5
             let ASCALE = 0.75

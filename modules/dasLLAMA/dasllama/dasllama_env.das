@@ -498,6 +498,9 @@ struct public MetalEnv {
 
 [EnvConfig(env_prefix = "DASLLAMA"), arch(at="../ARCHITECTURE_RUNTIME.md#env-knobs")]
 struct public VulkanEnv {
+    @clarg_doc = "Probe and serve Vulkan on macOS (MoltenVK). Off, the Vulkan home declines on macOS by name - no device, no arm - and every Vulkan test skips on its no-device path: the Mac build carries the module so its sources compile there, and Vulkan runtime evidence comes from a Linux box. On, the macOS probe runs as on any other host"
+    vk_mac : bool = false
+
     @clarg_default_doc = "auto"
     @clarg_doc = "Cooperative-matrix mode (auto = cm2 where the device has NV_cooperative_matrix2, else mm, else sdot4; `f16` and `int8` pick the KHR f16 and int8 batch tiles, which auto never does); the flash-attention twin needs it even when the GEMM runs sdot4."
     coopmat : string = ""

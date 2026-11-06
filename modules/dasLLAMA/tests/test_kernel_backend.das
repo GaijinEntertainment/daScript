@@ -9,7 +9,9 @@ require dasllama/dasllama_math_aarch64_neon   // registers "arm64-sdot" on arm64
 require ?llvm dasllama/dasllama_math_gen
 require ?das_metal dasllama/dasllama_metal_gemm   // registers the batch-only "metal" donor on Apple builds
 require ?vulkan dasllama/dasllama_math_vulkan     // registers the batch-only "vulkan" donor where dasVulkan builds
+require ?cuda dasllama/dasllama_math_cuda         // registers the batch-only "cuda" donor where dasCUDA builds
 require dasllama/dasllama_kqformat            // KqFmt + kq_fmt_stamp: the registry cell walks every format
+require ?vulkan dasllama/dasllama_env         // g_env_vulkan.vk_mac: the macOS decline's opt-out
 require daslib/enum_trait                     // for (f in type<KqFmt>)
 
 // The kernel-backend registry must self-populate at [init]: the portable Q8·Q8 backend is always
@@ -341,6 +343,13 @@ def test_batch_only_backends_refuse_the_whole_seat(t : T?) {
         }
         static_if (typeinfo builtin_module_exists(vulkan)) {
             t |> success(registered("vulkan") && kernel_backend_batch_only("vulkan"), "the vulkan donor registers batch-only")
+            if (get_platform_name() == "darwin" && !g_env_vulkan.vk_mac) {
+                t |> success(!kernel_backend_available_("vulkan"), "on macOS the vulkan donor declines before any probe unless DASLLAMA_VK_MAC asks")
+            }
+            donors++
+        }
+        static_if (typeinfo builtin_module_exists(cuda)) {
+            t |> success(registered("cuda") && kernel_backend_batch_only("cuda"), "the cuda donor registers batch-only")
             donors++
         }
         if (donors > 0) {

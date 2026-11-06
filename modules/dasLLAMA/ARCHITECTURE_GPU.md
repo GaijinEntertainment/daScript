@@ -30,7 +30,12 @@ own under one home - the CUDA assistant drafter's seams - registers its installe
 too. A driver whose seats read the same under every home - the whole-model driver's slice-window
 and stream-source providers, the Metal mirror's K/V-room and dn-room hooks - registers its
 installer as shared (`register_gpu_home_shared`) and runs it at `[init]`; a switch runs the shared
-installers right after the reset, before the named home's. A seat an `[init]` fills directly
+installers right after the reset, before the named home's. On macOS the Vulkan home
+declines before any probe (`vulkan_host_decline`, read by the arm's witness and by `vk_moe_init`
+after its dry-bake branch: a dry bake touches no device, so a GPU-less bake runs on any host, macOS
+included) unless `DASLLAMA_VK_MAC` asks: MoltenVK is not a serving home, the Mac
+build carries the module so its sources compile, and every Vulkan test skips there on its
+no-device path. A seat an `[init]` fills directly
 reads its declared default after a switch: the reset empties it and only the installers fill
 seats again. `REVIEW.das`'s `check_gpu_home_seat_registrants` fails an `[init]` function that
 calls a seat setter of `dasllama_gpu_tier.das` directly: it walks every `dasllama/` file but
