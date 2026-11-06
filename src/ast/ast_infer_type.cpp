@@ -4893,6 +4893,7 @@ namespace das {
     struct MarkNamedVariablesUsed : Visitor {
         Function * func = nullptr;
         vector<VariablePtr> * local = nullptr;
+        vector<ExprBlock *> * scopes = nullptr;
         virtual void preVisit(ExprVar * expr) override {
             Visitor::preVisit(expr);
             for (auto & arg : func->arguments) {
@@ -4900,6 +4901,14 @@ namespace das {
             }
             for (auto & var : *local) {
                 if (var->name == expr->name) var->marked_used = true;
+            }
+            for (auto block : *scopes) {
+                for (auto stmt : block->list) {
+                    if (!stmt->rtti_isLet()) continue;
+                    for (auto & var : static_cast<ExprLet *>(stmt)->variables) {
+                        if (var->name == expr->name) var->marked_used = true;
+                    }
+                }
             }
         }
     };
@@ -4966,6 +4975,7 @@ namespace das {
                         MarkNamedVariablesUsed mark;
                         mark.func = func;
                         mark.local = &local;
+                        mark.scopes = &scopes;
                         dropped->visit(mark);
                     }
                 }
