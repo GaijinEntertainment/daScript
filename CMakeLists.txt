@@ -967,20 +967,14 @@ src/ast/ast_dispatch.cpp
 src/ast/ast_const_visitor.cpp
 src/ast/ast_interop.cpp
 src/ast/ast_tls.cpp
-src/ast/ast_visitor.cpp
-src/ast/ast_simulate.cpp
-src/ast/ast_link.cpp
+src/ast/ast_simulate_hooks.cpp
 src/ast/ast_typedecl.cpp
-src/ast/ast_match.cpp
 src/ast/ast_module.cpp
 src/ast/ast_print.cpp
-src/ast/ast_same.cpp
 src/ast/ast_program.cpp
-src/ast/ast_allocate_stack.cpp
 src/ast/ast_gc_collect.cpp
 src/ast/ast_annotations.cpp
 src/ast/ast_inline.cpp
-src/ast/ast_export.cpp
 src/ast/ast_debug_info_helper.cpp
 src/ast/ast_handle.cpp
 include/daScript/ast/compilation_errors.h
@@ -988,6 +982,7 @@ include/daScript/ast/ast_typedecl.h
 include/daScript/ast/ast_typefactory.h
 include/daScript/ast/ast.h
 include/daScript/ast/ast_expressions.h
+include/daScript/ast/ast_file_access.h
 include/daScript/ast/ast_visitor.h
 include/daScript/ast/ast_const_visitor.h
 include/daScript/ast/ast_gc_report.h
@@ -1015,7 +1010,6 @@ src/builtin/module_builtin_vector_ctor.cpp
 src/builtin/module_builtin_array.cpp
 src/builtin/module_builtin_math.cpp
 src/builtin/module_builtin_string.cpp
-src/builtin/module_builtin_ast_serialize.cpp
 src/builtin/module_builtin_rtti.h
 src/builtin/module_builtin_rtti.cpp
 src/builtin/module_builtin_ast.h
@@ -1027,7 +1021,6 @@ src/builtin/module_builtin_fio.cpp
 src/builtin/module_builtin_dasbind.cpp
 src/builtin/module_builtin_debugger.cpp
 src/builtin/module_builtin_jobque.cpp
-src/builtin/module_file_access.cpp
 )
 list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
@@ -1065,7 +1058,6 @@ include/daScript/misc/lexer_alloc_track.h
 include/daScript/misc/env_cfg.h
 include/daScript/misc/dep_recorder.h
 src/misc/env_cfg.cpp
-src/misc/dep_recorder.cpp
 src/misc/das_common.cpp
 src/misc/gc_node.cpp
 src/misc/globals.cpp
@@ -1136,7 +1128,6 @@ src/hal/project_specific_crash_handler.cpp
 src/hal/wasm_thread_malloc.cpp
 include/daScript/misc/crash_handler.h
 include/daScript/misc/network.h
-src/misc/network.cpp
 src/simulate/hash.cpp
 src/simulate/debug_info.cpp
 src/simulate/runtime_string.cpp
@@ -1146,7 +1137,6 @@ src/simulate/runtime_array.cpp
 src/simulate/runtime_table.cpp
 src/simulate/runtime_profile.cpp
 src/simulate/standalone_ctx_utils.cpp
-src/simulate/simulate.cpp
 src/simulate/simulate_exceptions.cpp
 src/simulate/simulate_gc.cpp
 src/simulate/simulate_gc_pod.cpp
@@ -1154,8 +1144,7 @@ src/simulate/builtin_array_ops.cpp
 src/simulate/builtin_runtime_ops.cpp
 src/simulate/aot_library.cpp
 src/simulate/simulate_tracking.cpp
-src/simulate/simulate_visit.cpp
-src/simulate/simulate_print.cpp
+src/simulate/simulate_node_base.cpp
 src/simulate/simulate_fn_hash.cpp
 src/simulate/simulate_instrument.cpp
 include/daScript/simulate/cast.h
@@ -1211,7 +1200,6 @@ include/daScript/simulate/aot_builtin_dasbind.h
 include/daScript/simulate/aot_builtin_uriparser.h
 include/daScript/simulate/aot_builtin_jit.h
 include/daScript/simulate/fs_file_info.h
-src/simulate/fs_file_info.cpp
 )
 
 
@@ -1339,6 +1327,13 @@ SET(LIBDASCRIPT_COMPILER_SRC
     ${PARSER_GENERATED_SRC}
     ${PARSER_SRC}
     src/ast/ast_parse.cpp
+    src/ast/ast_simulate.cpp
+    src/ast/ast_link.cpp
+    src/simulate/simulate.cpp
+    src/simulate/simulate_try_catch.cpp
+    src/simulate/simulate_visit.cpp
+    src/simulate/simulate_container_nodes.cpp
+    src/simulate/simulate_print.cpp
     src/ast/ast_optimize.cpp
     src/ast/ast_const_folding.cpp
     src/ast/ast_effects.cpp
@@ -1371,6 +1366,18 @@ SET(LIBDASCRIPT_COMPILER_SRC
     src/builtin/module_builtin_ast_annotations_2.cpp
     src/builtin/module_builtin_ast_annotations_3.cpp
     src/builtin/module_builtin_ast_adapters.cpp
+    src/builtin/module_builtin_ast_program.cpp
+    src/simulate/fs_file_info.cpp
+    src/ast/ast_visitor.cpp
+    src/ast/ast_match.cpp
+    src/ast/ast_same.cpp
+    src/ast/ast_file_access.cpp
+    src/ast/ast_logic_annotation.cpp
+    src/builtin/module_builtin_ast_serialize.cpp
+    src/ast/ast_allocate_stack.cpp
+    src/ast/ast_export.cpp
+    src/misc/dep_recorder.cpp
+    src/misc/network.cpp
     src/builtin/module_builtin_network.cpp
 )
 
@@ -1699,6 +1706,7 @@ endif()
 SET(DAS_RELEASE_AST_INCLUDE
     include/daScript/ast/aot_templates.h
     include/daScript/ast/ast_expressions.h
+    include/daScript/ast/ast_file_access.h
     include/daScript/ast/ast_generate.h
     include/daScript/ast/ast.h
     include/daScript/ast/ast_handle.h

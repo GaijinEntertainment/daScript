@@ -67,7 +67,7 @@ void tutorial() {
     auto writeTo = make_unique<SerializationStorageVector>();
     {
         AstSerializer ser(writeTo.get(), true);  // writing = true
-        program->serialize(ser);
+        ser.serializeScript(program);
         ser.moduleLibrary = nullptr;
     }
 
@@ -88,7 +88,7 @@ void tutorial() {
     {
         AstSerializer deser(readFrom.get(), false);  // writing = false
         program = make_smart<Program>();
-        program->serialize(deser);
+        deser.serializeScript(program);
         deser.moduleLibrary = nullptr;
     }
     tout << "  Deserialized successfully.\n";

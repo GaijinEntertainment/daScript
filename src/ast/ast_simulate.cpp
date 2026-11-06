@@ -25,10 +25,6 @@ das::Context * get_context ( int stackSize=0 );//link time resolved dependencies
 
 namespace das
 {
-    // fusion function pointers (defined here in main lib, set by fusion lib)
-    void (*g_fusionContextFn) ( Context & context, TextWriter & logs, bool enableFusion ) = nullptr;
-    void (*g_resetFusionEngineFn) ( bool orphan ) = nullptr;
-
     // src/ast/ARCHITECTURE.md#program-scoped-symbol-state
     static __forceinline int32_t programIndexOf ( const Context & context, const Function * fn ) {
         return context.thisProgram ? context.thisProgram->indexOf(fn) : -1;
@@ -328,13 +324,12 @@ namespace das
         void visit(const ExprMakeTuple * expr) override;
     };
 
-    // Free function wrapper for SimulateVisitor — usable from other translation units.
-    SimNode * simulateExpression ( Context & context, Expression * expr ) {
+    static SimNode * simulateExpressionImpl ( Context & context, Expression * expr ) {
         SimulateVisitor sv(context);
         return sv.simulateExpression(expr);
     }
 
-    SimNode * trySimulateExpression ( Context & context, const Expression * expr, uint32_t extraOffset, const TypeDeclPtr & r2vType ) {
+    static SimNode * trySimulateExpressionImpl ( Context & context, const Expression * expr, uint32_t extraOffset, const TypeDeclPtr & r2vType ) {
         SimulateVisitor sv(context);
         return sv.sv_trySimulate(expr, extraOffset, r2vType);
     }
@@ -623,17 +618,17 @@ namespace das
         }
     }
 
-    SimNode * Function::makeSimNode ( Context & context, const vector<ExpressionPtr> & ) {
-        if ( copyOnReturn || moveOnReturn ) {
-            return context.code->makeNodeUnrollAny<SimNode_CallAndCopyOrMove>(int(arguments.size()), at);
-        } else if ( fastCall ) {
+    static SimNode * makeFunctionSimNodeImpl ( Function * fn, Context & context, const vector<ExpressionPtr> & ) {
+        if ( fn->copyOnReturn || fn->moveOnReturn ) {
+            return context.code->makeNodeUnrollAny<SimNode_CallAndCopyOrMove>(int(fn->arguments.size()), fn->at);
+        } else if ( fn->fastCall ) {
             // include/daScript/simulate/ARCHITECTURE.md#fastcall-depth-guard
             if ( context.maxFastCallDepth ) {
-                return context.code->makeNodeUnrollAny<SimNode_FastCallChecked>(int(arguments.size()), at);
+                return context.code->makeNodeUnrollAny<SimNode_FastCallChecked>(int(fn->arguments.size()), fn->at);
             }
-            return context.code->makeNodeUnrollAny<SimNode_FastCall>(int(arguments.size()), at);
+            return context.code->makeNodeUnrollAny<SimNode_FastCall>(int(fn->arguments.size()), fn->at);
         } else {
-            return context.code->makeNodeUnrollAny<SimNode_Call>(int(arguments.size()), at);
+            return context.code->makeNodeUnrollAny<SimNode_Call>(int(fn->arguments.size()), fn->at);
         }
     }
 
@@ -1199,14 +1194,6 @@ namespace das
 
     // r2v
 
-    SimNode * GetR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & type, SimNode * expr ) {
-        if ( type->isRefType() ) {
-            return expr;
-        } else {
-            return context.code->makeValueNode<SimNode_Ref2Value>(type->getR2VType(), at, expr);
-        }
-    }
-
     void SimulateVisitor::visit(const ExprRef2Value * expr) {
         const auto &at = expr->at;
         setE(expr, GetR2V(context, at, expr->type, getE(expr->subexpr)));
@@ -1382,11 +1369,6 @@ namespace das
             context.thisHelper->appendLocalVariables(info, (Expression *)expr);
         }
         setE(expr, context.code->makeNode<SimNode_MakeBlock>(at, getE(expr->block), argSp, expr->stackTop, info));
-    }
-
-    bool ExprInvoke::isCopyOrMove() const {
-        auto blockT = arguments[0]->type;
-        return blockT->firstType && blockT->firstType->isRefType() && !blockT->firstType->ref;
     }
 
     void SimulateVisitor::visit(const ExprInvoke * expr) {
@@ -3540,7 +3522,7 @@ namespace das
         }
     }
 
-    void Program::makeMacroModule ( TextWriter & logs ) {
+    void Program::makeMacroModuleImpl ( TextWriter & logs ) {
         isCompilingMacros = true;
         int macroStackSize = getContextStackSize();
         if ( policies.aot_macros || options.getBoolOption("aot_macros", false) ) {
@@ -3605,7 +3587,7 @@ namespace das
 
     void linkProgram ( Program * program, TextWriter & logs );
 
-    bool Program::simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
+    bool Program::simulateImpl ( Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
         CompilationCallbackGuard callbackGuard("", thisModule->fileName, "simulation");
         auto time0 = ref_time_ticks();
     #if !(DAS_ENABLE_KEEPALIVE)
@@ -4165,4 +4147,18 @@ namespace das
             linkError(string(fn.mangledName), tp.str() );
         }
     }
+
+    static struct SimulateHooksInstaller {
+        SimulateHooksInstaller () {
+            g_simulateHooks.simulateExpression = &simulateExpressionImpl;
+            g_simulateHooks.trySimulateExpression = &trySimulateExpressionImpl;
+            g_simulateHooks.simulateProgram = [] ( Program * program, Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
+                return program->simulateImpl(context, logs, sharedStack);
+            };
+            g_simulateHooks.makeMacroModule = [] ( Program * program, TextWriter & logs ) {
+                program->makeMacroModuleImpl(logs);
+            };
+            g_simulateHooks.makeFunctionSimNode = &makeFunctionSimNodeImpl;
+        }
+    } g_simulateHooksInstaller;
 }

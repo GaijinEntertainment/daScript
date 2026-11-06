@@ -172,3 +172,34 @@ nested compile can run. The JIT's selection - which functions of a program a DLL
 third table, `jitSelected`, read through `is_jit_selected` and written through
 `set_jit_selected` / `clear_jit_selection`; `Function::requestJit` is the `[jit]` annotation
 only, an author's request the selection reads and never writes.
+
+## The interpreter lives in the compiler library {#simulate-compiler-lib}
+
+`ast_simulate.cpp` (the AST to SimNode tree walk) and the interpreter's node bodies -
+`simulate.cpp`, `simulate_visit.cpp`, `simulate_print.cpp`, `simulate_try_catch.cpp`, and
+`simulate_container_nodes.cpp` for the array, table and string nodes - link into
+the compiler library, because only a simulated program has SimNode trees to run: a standalone exe,
+a `-lib` library and a standalone context carry no interpreter. The runtime keeps the node ABI
+the rest of the runtime builds on, in `simulate_node_base.cpp`: the `SimNode` base, the call
+node every builtin binding instantiates (`SimNode_CallBase`, `SimNode_Op1`/`SimNode_Op2`), and the
+block nodes `SimNode_Final`/`SimNode_Block`/`SimNode_ClosureBlock`, which JIT and AOT blocks derive
+from. Walks over an existing tree - `getSemanticHash`, the debugger's instrumentation - stay in
+the runtime too: they work on any context.
+
+The runtime and external modules reach the compiler half only through `g_simulateHooks`:
+`simulateExpression`, `trySimulateExpression`, `Program::simulate`, `Program::makeMacroModule` and
+`Function::makeSimNode` are runtime forwarders, filled by a static installer in
+`ast_simulate.cpp` - `ast_parse.cpp` references that file, so a host that parses links it. Each
+runtime caller - a handled-type annotation's `simulate*` override (`ast_handle.h`), a bound
+function's call node - runs only beside a compiled `Program`, so the hooks are set by then.
+A runtime symbol the compiler half calls is `DAS_API`, since the shared runtime exports nothing
+else.
+
+The front end's file classes link into the compiler library too: `TextFileInfo`, `FileAccess`,
+`ModuleFileAccess` and the require records (`ast_file_access.h` / `ast_file_access.cpp`), the
+AST serializer and module cache (`module_builtin_ast_serialize.cpp`), and the `!` / `&&` / `||` /
+`^^` annotation combinators only the parser and the serializer build (`ast_logic_annotation.cpp`).
+The program passes the serializer and the compile pipeline share - stack allocation
+(`ast_allocate_stack.cpp`) and symbol marking (`ast_export.cpp`) - link there with them.
+The runtime keeps `FileInfo`, which every `LineInfo` points at; it carries no virtual whose body
+lives in the compiler library, and the serializer writes its name and tab size itself.

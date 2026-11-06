@@ -33,3 +33,11 @@ together share the first's module.
 **A diff after which one process compiles two files that `TOLERATED_SHARED_TWINS` in `REVIEW.das`
 (beside this file) lists under one name, and no `why` among that name's rows names that process,
 is a defect - rename the module one of them declares.**
+
+**A diff that adds a `.cpp` to `LIBDASCRIPT_RUNTIME_SRC` in `CMakeLists.txt` - directly or
+through `AST_SRC`, `SIMULATE_SRC`, `BUILTIN_SRC` or `MISC_SRC` - names the runtime caller that
+needs it: a builtin module's runtime half, a standalone context, a JIT or AOT exe. A file only
+the compiler, the interpreter or a compile-time binding reaches goes in
+`LIBDASCRIPT_COMPILER_SRC`.** Every runtime source links into every JIT exe, standalone context
+and `-lib` library, so a misplaced one grows them all; the split is
+`src/ast/ARCHITECTURE.md#simulate-compiler-lib`.

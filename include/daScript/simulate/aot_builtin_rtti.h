@@ -153,6 +153,7 @@ namespace das {
     DAS_API Module * rtti_builtin_make_module ( const char * name, const TBlock<void,Module *> & block, Context * context, LineInfoArg * at );
     DAS_API smart_ptr<Program> rtti_builtin_make_main_module ( const TBlock<void,Module *> & block, Context * context, LineInfoArg * at );
     DAS_API bool rtti_has_module ( const char * name );
+    DAS_API void rtti_module_group_for_each_member ( const char * group, const TBlock<void,const char *> & block, Context * context, LineInfoArg * at );
     DAS_API bool rtti_has_macro_context ( Module * mod );
     DAS_API Context & rtti_find_macro_context ( Module * mod, Context * context, LineInfoArg * at );
 

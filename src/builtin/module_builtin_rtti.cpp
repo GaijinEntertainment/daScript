@@ -305,14 +305,6 @@ public:
             addI(enumArrayName[i], int64_t(enumArray[i]), das::LineInfo());
     }
 };
-namespace das {
-    template <>
-    struct typeFactory< das::CompilationError > {
-        static TypeDeclPtr make(const ModuleLibrary & library ) {
-            return library.makeEnumType("CompilationError");
-        }
-    };
-}
 
 das::FileAccessPtr get_file_access( char * pak );//link time resolved dependencies
 das::Context * get_context ( int stackSize=0 );//link time resolved dependencies
@@ -1239,28 +1231,6 @@ namespace das {
         return cast<VarInfo *>::from(ctx->getVariableInfo(index));
     }
 
-    void rtti_builtin_simulate ( const smart_ptr<Program> & program,
-            const TBlock<void,bool,smart_ptr_raw<Context>,string> & block, Context * context, LineInfoArg * lineinfo ) {
-        TextWriter issues;
-        auto ctx = get_context(program->getContextStackSize());
-        ctx->addRef();
-        bool failed = !program->simulate(*ctx, issues);
-        if ( failed ) {
-            for ( auto & err : program->errors ) {
-                issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
-            }
-            string istr = issues.str();
-            das_invoke<void>::invoke<bool,smart_ptr_raw<Context>,const string &>(context,lineinfo,block,false,nullptr,istr);
-        } else {
-            das_invoke<void>::invoke<bool,smart_ptr_raw<Context>,const string &>(context,lineinfo,block,true,ctx,"");
-        }
-        ctx->delRef();
-    }
-
-    Module * rtti_get_this_module ( smart_ptr_raw<Program> program ) {
-        return program->thisModule.get();
-    }
-
     Module * rtti_get_builtin_module ( const char * name ) {
         return Module::require(name);
     }
@@ -1270,57 +1240,11 @@ namespace das {
         return Module::require(name) != nullptr || is_dynamic_module_deferred(name);
     }
 
-    // a member's guard answers as the require's would (src/ast/ARCHITECTURE_MODULE_SCAN.md#module-scan-manifest)
-    static bool moduleGroupMemberAvailable ( const ModuleGroupMember & m ) {
-        if ( m.guard.empty() ) return true;
-        if ( m.guard.find('/') == string::npos ) return guardModuleAvailable(m.guard);
-        auto env = daScriptEnvironment::getBound();
-        auto program = env->g_Program;
-        if ( !program || !program->access ) return false;
-        // the base the collector and the parser resolve a relative guard against: the file being compiled
-        auto ginfo = program->access->getModuleInfo(m.guard, env->g_compilingFileName ? env->g_compilingFileName : "");
-        return !ginfo.fileName.empty() && program->access->getFileInfo(ginfo.fileName) != nullptr;
-    }
-
-    void rtti_module_group_for_each_member ( const char * group, const TBlock<void,const char *> & block, Context * context, LineInfoArg * at ) {
-        for ( const auto & member : getModuleGroupMembers(group ? group : "") ) {
-            if ( !moduleGroupMemberAvailable(member) ) continue;
-            vec4f args[1] = { cast<const char *>::from(member.member.c_str()) };
-            context->invoke(block, args, nullptr, at);
-        }
-    }
-
-    void rtti_builtin_program_for_each_module ( smart_ptr_raw<Program> program, const TBlock<void,Module *> & block, Context * context, LineInfoArg * at ) {
-        program->library.foreach([&](Module * pm) -> bool {
-            vec4f args[1] = { cast<Module *>::from(pm) };
-            context->invoke(block, args, nullptr, at);
-            return true;
-        }, "*");
-    }
-
     void rtti_builtin_program_for_each_registered_module ( const TBlock<void,Module *> & block, Context * context, LineInfoArg * at ) {
         Module::foreach([&](Module * pm) -> bool {
             vec4f args[1] = { cast<Module *>::from(pm) };
             context->invoke(block, args, nullptr, at);
             return true;
-        });
-    }
-
-    void rtti_builtin_module_for_each_dependency ( Module * module, const TBlock<void,Module *,bool> & block, Context * context, LineInfoArg * at ) {
-        for ( auto it : module->requireModule ) {
-            vec4f args[2] = { cast<Module *>::from(it.first), cast<bool>::from(it.second) };
-            context->invoke(block, args, nullptr, at);
-        }
-    }
-
-    void rtti_builtin_module_for_each_enumeration ( Module * module, const TBlock<void,const EnumInfo> & block, Context * context, LineInfoArg * at ) {
-        DebugInfoHelper helper;
-        module->enumerations.foreach([&](auto penum){
-            EnumInfo * info = helper.makeEnumDebugInfo(*penum);
-            vec4f args[1] = {
-                cast<EnumInfo *>::from(info)
-            };
-            context->invoke(block, args, nullptr, at);
         });
     }
 
@@ -1409,18 +1333,6 @@ namespace das {
         return def;
     }
 
-    void rtti_builtin_module_for_each_structure ( Module * module, const TBlock<void,const StructInfo> & block, Context * context, LineInfoArg * at ) {
-        DebugInfoHelper helper;
-        module->structures.foreach([&](auto structPtr){
-            if ( structPtr->isTemplate ) return;
-            StructInfo * info = helper.makeStructureDebugInfo(*structPtr);
-            vec4f args[1] = {
-                cast<StructInfo *>::from(info)
-            };
-            context->invoke(block, args, nullptr, at);
-        });
-    }
-
     // deprecated shim: reconstructs AST-shaped (Annotation*, AnnotationArgumentList) pairs
     // from the POD AnnotationInfo copies for the duration of the block invoke
     void rtti_builtin_structure_for_each_annotation ( const StructInfo & info, const Block & block, Context * context, LineInfoArg * at ) {
@@ -1476,112 +1388,12 @@ namespace das {
         return Module::resolveAnnotation(&info);
     }
 
-    void rtti_builtin_module_for_each_function ( Module * module, const TBlock<void,const FuncInfo> & block, Context * context, LineInfoArg * at ) {
-        DebugInfoHelper helper;
-        module->functions.foreach([&](auto funcPtr){
-            if ( funcPtr->isTemplate ) return;
-            FuncInfo * info = helper.makeFunctionDebugInfo(*funcPtr);
-            vec4f args[1] = {
-                cast<FuncInfo *>::from(info)
-            };
-            context->invoke(block, args, nullptr, at);
-        });
-    }
-
-    void rtti_builtin_module_for_each_generic ( Module * module, const TBlock<void,const FuncInfo> & block, Context * context, LineInfoArg * at ) {
-        DebugInfoHelper helper;
-        module->generics.foreach([&](auto funcPtr){
-            FuncInfo * info = helper.makeFunctionDebugInfo(*funcPtr);
-            vec4f args[1] = {
-                cast<FuncInfo *>::from(info)
-            };
-            context->invoke(block, args, nullptr, at);
-        });
-    }
-
-    void rtti_builtin_module_for_each_global ( Module * module, const TBlock<void,const VarInfo> & block, Context * context, LineInfoArg * at ) {
-        DebugInfoHelper helper;
-        module->globals.foreach([&](auto var){
-            VarInfo * info = helper.makeVariableDebugInfo(*var);
-            vec4f args[1] = {
-                cast<VarInfo *>::from(info)
-            };
-            context->invoke(block, args, nullptr, at);
-        });
-    }
-
-    void rtti_builtin_module_for_each_annotation ( Module * module, const TBlock<void,const Annotation> & block, Context * context, LineInfoArg * at ) {
-        for ( auto & [key, annotationPtr] : module->handleTypes ) {
-            vec4f args[1] = {
-                cast<Annotation*>::from(annotationPtr)
-            };
-            context->invoke(block, args, nullptr, at);
-        }
-    }
-
-    void rtti_builtin_basic_struct_for_each_parent ( const BasicStructureAnnotation & ann, const TBlock<void,Annotation *> & block, Context * context, LineInfoArg * at ) {
-        for ( auto & it : ann.parents ) {
-            vec4f args[1] = { cast<Annotation *>::from(it) };
-            context->invoke(block, args, nullptr, at);
-        }
-    }
-
-    void rtti_builtin_basic_struct_for_each_field ( const BasicStructureAnnotation & ann,
-        const TBlock<void,char *,char*,const TypeInfo,uint32_t> & block, Context * context, LineInfoArg * at ) {
-        DebugInfoHelper helper;
-        for ( auto & it : ann.fields ) {
-            const auto & fld = it.second;
-            TypeInfo * info = helper.makeTypeInfo(nullptr, fld.decl);
-            vec4f args[4] = {
-                cast<char *>::from(it.first.c_str()),
-                cast<char *>::from(fld.cppName.c_str()),
-                cast<TypeInfo *>::from(info),
-                cast<uint32_t>::from(fld.offset)
-            };
-            context->invoke(block, args, nullptr, at);
-        }
-    }
-
 
     char * rtti_get_das_type_name(Type tt, Context * context, LineInfoArg * at) {
         string str = das_to_string(tt);
         return context->allocateString(str, at);
     }
 
-    int rtti_add_annotation_argument(AnnotationArgumentList& list, const char* name) {
-        list.emplace_back(name != nullptr ? name : "", 0);
-        return (int)list.size() - 1;
-    }
-
-    bool rtti_add_file_access_root ( smart_ptr<FileAccess> access, const char * mod, const char * path ) {
-        if ( !mod ) return false;
-        if ( !path ) return false;
-        return access->addFsRoot(mod, path);
-    }
-
-    void rtti_add_extra_module ( smart_ptr_raw<FileAccess> access, const char * modName, const char * modFile, Context * context, LineInfoArg * at ) {
-        if ( !modName ) context->throw_error_at(at, "expecting module name");
-        if ( !modFile ) context->throw_error_at(at, "expecting module file path");
-        access->addExtraModule(modName, modFile);
-    }
-
-
-#if !DAS_NO_FILEIO
-
-    bool introduceFile ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context, LineInfoArg * at ) {
-        if ( !fname ) context->throw_error_at(at, "expecting file name");
-        const char * safeStr = str ? str : "";
-        uint32_t str_len = stringLength(*context, safeStr);
-        auto fileInfo = make_unique<TextFileInfo>(safeStr, str_len, false);
-        return access->setFileInfo(fname, das::move(fileInfo)) != nullptr;
-    }
-
-#else
-    bool introduceFile ( smart_ptr_raw<FileAccess>, char *, char *, Context * context, LineInfoArg * at ) {
-        context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
-        return false;
-    }
-#endif
 
     struct SimNode_RttiGetTypeDecl : SimNode_CallBase {
         DAS_PTR_NODE;
@@ -1666,20 +1478,6 @@ namespace das {
             return fun.PTR->debugInfo;
         } else {
             return nullptr;
-        }
-    }
-
-    void builtin_expected_errors ( ProgramPtr prog, const TBlock<void,CompilationError,int> & block, Context * context, LineInfoArg * lineInfo ) {
-        for ( auto er : prog->expectErrors ) {
-            das_invoke<void>::invoke<CompilationError,int>(context,lineInfo,block,er.first,er.second);
-        }
-    }
-
-    void builtin_list_require ( ProgramPtr prog, const TBlock<void,Module *,TTemporary<const char *>,TTemporary<const char *>,bool,const LineInfo &> & block,
-            Context * context, LineInfoArg * lineInfo ) {
-        for ( auto & allR : prog->allRequireDecl ) {
-            das_invoke<void>::invoke<Module *,const char *,const char *,bool,const LineInfo &>(context,lineInfo,block,
-                get<0>(allR),get<1>(allR).c_str(),get<2>(allR).c_str(),get<3>(allR),get<4>(allR));
         }
     }
 
@@ -2018,74 +1816,15 @@ namespace das {
             addInterop<rtti_contextVariableInfo,const VarInfo &,vec4f,int32_t>(*this, lib, "get_variable_info",
                 SideEffects::modifyExternal, "rtti_contextVariableInfo")
                     ->args({"context","index"});
-            addExtern<DAS_BIND_FUN(rtti_get_this_module)>(*this, lib, "get_this_module",
-                SideEffects::modifyExternal, "rtti_get_this_module")
-                    ->arg("program");
             addExtern<DAS_BIND_FUN(rtti_get_builtin_module)>(*this, lib, "get_module",
                 SideEffects::modifyExternal, "rtti_get_builtin_module")
                     ->arg("name");
             addExtern<DAS_BIND_FUN(rtti_has_module)>(*this, lib, "has_module",
                 SideEffects::modifyExternal, "rtti_has_module")
                     ->arg("name");
-            addExtern<DAS_BIND_FUN(rtti_module_group_for_each_member)>(*this, lib, "module_group_for_each_member",
-                SideEffects::modifyExternal, "rtti_module_group_for_each_member")
-                    ->args({"group","block","context","line"});
-            addExtern<DAS_BIND_FUN(builtin_expected_errors)>(*this, lib, "for_each_expected_error",
-                SideEffects::modifyExternal, "builtin_expected_errors")
-                    ->args({"program","block","context","line"});
-            addExtern<DAS_BIND_FUN(builtin_list_require)>(*this, lib, "for_each_require_declaration",
-                SideEffects::modifyExternal, "builtin_list_require")
-                    ->args({"program","block","context","line"});
-            addExtern<DAS_BIND_FUN(rtti_builtin_simulate)>(*this, lib, "simulate",
-                SideEffects::modifyExternal, "rtti_builtin_simulate")
-                    ->args({"program","block","context","line"});
-            addExtern<DAS_BIND_FUN(rtti_create_ast_serializer)>(*this, lib, "create_ast_serializer",
-                SideEffects::modifyExternal, "rtti_create_ast_serializer");
-            addExtern<DAS_BIND_FUN(rtti_create_ast_deserializer)>(*this, lib, "create_ast_deserializer",
-                SideEffects::modifyExternal, "rtti_create_ast_deserializer")
-                    ->args({"data"});
-            addExtern<DAS_BIND_FUN(rtti_delete_ast_serializer)>(*this, lib, "delete_ast_serializer",
-                SideEffects::modifyExternal, "rtti_delete_ast_serializer")
-                    ->args({"serializer"});
-            addExtern<DAS_BIND_FUN(rtti_ast_serializer_serialize_program)>(*this, lib, "serialize_program",
-                SideEffects::modifyExternal, "rtti_ast_serializer_serialize_program")
-                    ->args({"serializer","program"});
-            addExtern<DAS_BIND_FUN(rtti_ast_serializer_deserialize_program)>(*this, lib, "deserialize_program",
-                SideEffects::modifyExternal, "rtti_ast_serializer_deserialize_program")
-                    ->args({"serializer","libGroup","block","context","line"});
-            addExtern<DAS_BIND_FUN(rtti_ast_serializer_deserialize_program_ex)>(*this, lib, "deserialize_program",
-                SideEffects::modifyExternal, "rtti_ast_serializer_deserialize_program_ex")
-                    ->args({"serializer","access","libGroup","block","context","line"});
-            addExtern<DAS_BIND_FUN(rtti_ast_serializer_get_data)>(*this, lib, "ast_serializer_get_data",
-                SideEffects::modifyExternal, "rtti_ast_serializer_get_data")
-                    ->args({"serializer","block","context","line"});
-            addExtern<DAS_BIND_FUN(rtti_ast_serializer_finalize_usec)>(*this, lib, "ast_serializer_finalize_usec",
-                SideEffects::none, "rtti_ast_serializer_finalize_usec")
-                    ->args({"serializer"});
-            addExtern<DAS_BIND_FUN(rtti_ast_serializer_setup_usec)>(*this, lib, "ast_serializer_setup_usec",
-                SideEffects::none, "rtti_ast_serializer_setup_usec")
-                    ->args({"serializer"});
-            addExtern<DAS_BIND_FUN(introduceFile)>(*this, lib, "set_file_source",
-                SideEffects::modifyExternal, "introduceFile")
-                    ->args({"access","fileName","text","context","line"});
-            addExtern<DAS_BIND_FUN(rtti_add_file_access_root)>(*this, lib, "add_file_access_root",
-                SideEffects::modifyExternal, "rtti_add_file_access_root")
-                    ->args({"access","mod","path"});
-            addExtern<DAS_BIND_FUN(rtti_add_extra_module)>(*this, lib, "add_extra_module",
-                SideEffects::modifyExternal, "rtti_add_extra_module")
-                    ->args({"access","modName","modFile","context","line"});
-            addExtern<DAS_BIND_FUN(rtti_builtin_program_for_each_module)>(*this, lib, "program_for_each_module",
-                SideEffects::modifyExternal, "rtti_builtin_program_for_each_module")
-                    ->args({"program","block","context","line"});
-            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_dependency)>(*this, lib, "module_for_each_dependency",
-                SideEffects::modifyExternal, "rtti_builtin_module_for_each_dependency")
-                    ->args({"module","block","context","line"});
             addExtern<DAS_BIND_FUN(rtti_builtin_program_for_each_registered_module)>(*this, lib, "program_for_each_registered_module",
                 SideEffects::modifyExternal, "rtti_builtin_program_for_each_registered_module")
                     ->args({"block","context","line"});
-            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_structure)>(*this, lib, "module_for_each_structure",
-                SideEffects::modifyExternal, "rtti_builtin_module_for_each_structure")
-                    ->args({"module","block","context","line"});
             addExtern<DAS_BIND_FUN(rtti_builtin_variable_value),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "get_variable_value",
                 SideEffects::modifyExternal, "rtti_builtin_variable_value")
                     ->arg("varInfo");
@@ -2095,21 +1834,6 @@ namespace das {
             addExtern<DAS_BIND_FUN(rtti_builtin_argument_info_value),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "get_annotation_argument_value",
                 SideEffects::modifyExternal, "rtti_builtin_argument_info_value")
                     ->args({"info","context","at"});
-            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_enumeration)>(*this, lib, "module_for_each_enumeration",
-                SideEffects::modifyExternal, "rtti_builtin_module_for_each_enumeration")
-                    ->args({"module","block","context","line"});
-            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_function)>(*this, lib, "module_for_each_function",
-                SideEffects::modifyExternal, "rtti_builtin_module_for_each_function")
-                    ->args({"module","block","context","line"});
-            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_generic)>(*this, lib, "module_for_each_generic",
-                SideEffects::modifyExternal, "rtti_builtin_module_for_each_generic")
-                    ->args({"module","block","context","line"});
-            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_global)>(*this, lib, "module_for_each_global",
-                SideEffects::modifyExternal, "rtti_builtin_module_for_each_global")
-                    ->args({"module","block","context","line"});
-            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_annotation)>(*this, lib, "module_for_each_annotation",
-                SideEffects::modifyExternal, "rtti_builtin_module_for_each_annotation")
-                    ->args({"module","block","context","line"});
             addExtern<DAS_BIND_FUN(rtti_builtin_structure_for_each_annotation)>(*this, lib, "rtti_builtin_structure_for_each_annotation",
                 SideEffects::modifyExternal, "rtti_builtin_structure_for_each_annotation")
                     ->args({"struct","block","context","line"})->setDeprecated("use each_annotation() instead");
@@ -2131,12 +1855,6 @@ namespace das {
             addExtern<DAS_BIND_FUN(rtti_builtin_resolve_annotation)>(*this, lib, "resolve_annotation",
                 SideEffects::accessExternal, "rtti_builtin_resolve_annotation")
                     ->arg("annotation");
-            addExtern<DAS_BIND_FUN(rtti_builtin_basic_struct_for_each_field)>(*this, lib, "basic_struct_for_each_field",
-                SideEffects::invokeAndAccessExternal, "rtti_builtin_basic_struct_for_each_field")
-                    ->args({"annotation","block","context","line"});
-            addExtern<DAS_BIND_FUN(rtti_builtin_basic_struct_for_each_parent)>(*this, lib, "basic_struct_for_each_parent",
-                SideEffects::invokeAndAccessExternal, "rtti_builtin_basic_struct_for_each_parent")
-                    ->args({"annotation","block","context","line"});
             addExtern<DAS_BIND_FUN(isSameType)>(*this, lib, "builtin_is_same_type",
                 SideEffects::modifyExternal, "isSameType")
                     ->args({"a","b","refMatters","cosntMatters","tempMatters","topLevel"});
@@ -2158,9 +1876,6 @@ namespace das {
             addExtern<DAS_BIND_FUN(rtti_get_das_type_name)>(*this, lib,  "get_das_type_name",
                 SideEffects::none, "rtti_get_das_type_name")
                     ->args({"type","context","at"})->setTempStringResult();
-            addExtern<DAS_BIND_FUN(rtti_add_annotation_argument)>(*this, lib,  "add_annotation_argument",
-                SideEffects::none, "rtti_add_annotation_argument")
-                    ->args({"annotation","name"});
             // data printer
             addExtern<DAS_BIND_FUN(builtin_print_data)>(*this, lib, "sprint_data",
                 SideEffects::none, "builtin_print_data")

@@ -13,7 +13,7 @@ namespace das {
         typedef int socket_t;
     #endif
 
-    class DAS_API Server {
+    class DAS_CC_API Server {
     public:
         Server ();
         virtual ~Server();
@@ -36,7 +36,7 @@ namespace das {
         socket_t client_fd = 0;
     };
 
-    class DAS_API Client {
+    class DAS_CC_API Client {
     public:
         Client ();
         virtual ~Client();
@@ -56,5 +56,5 @@ namespace das {
         bool connected = false;
     };
 
-    DAS_API int probe_local_port ( const char * host, int port );
+    DAS_CC_API int probe_local_port ( const char * host, int port );
 }

@@ -308,7 +308,7 @@ namespace das
     void dapiStackWalk ( StackWalkerPtr walker, Context & context, const LineInfo & at );
     int32_t dapiStackDepth ( Context & context );
     void dapiReportContextState ( Context & ctx, const char * category, const char * name, const TypeInfo * info, void * data );
-    void dapiSimulateContext ( Context & ctx );
+    DAS_API void dapiSimulateContext ( Context & ctx );
     void dapiUserCommand ( const char * command );
     void dapiOnBeforeGC ( Context & ctx );
     void dapiOnAfterGC ( Context & ctx );

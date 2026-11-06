@@ -1090,7 +1090,7 @@ namespace das {
                 DAS_SER_PROFILE(*this, "FileInfo.payload");
                 number = uint32_t(writeFileInfos.size());
                 serializeAdaptiveSize32(number);
-                info->serialize(*this);
+                *this << info->name << info->tabSize;
             } else {
                 serializeAdaptiveSize32(number);
             }
@@ -1109,13 +1109,9 @@ namespace das {
             }
             SERIALIZER_VERIFYF(number == readFileInfos.size() + 1, "corrupt stream: file info #%u past the %u numbered so far",
                 number, unsigned(readFileInfos.size()));
-            uint8_t tag = 0; *this << tag;
-            switch ( tag ) {
-                case 0: info = new FileInfo; break;
-                case 1: info = new TextFileInfo; break;
-                default: SERIALIZER_VERIFYF(false, "Unreachable");
-            }
-            info->serialize(*this);
+            info = new FileInfo;
+            *this << info->name << info->tabSize;
+            deleteUponFinish.push_back(info);
             if ( fileAccess && !info->name.empty() && !isCppBindingAt(LineInfo(info, 0, 0, 0, 0)) ) {
                 if ( FileInfo * live = fileAccess->getFileInfo(info->name) ) {
                     info = live;
@@ -2500,37 +2496,6 @@ namespace das {
         ser << static_cast <vector<MakeFieldDeclPtr> &> ( *this );
     }
 
-    void FileInfo::serialize ( AstSerializer & ser ) {
-        uint8_t tag = 0;
-        if ( ser.writing ) {
-            ser << tag;
-        }
-        ser << name << tabSize;
-        if ( !ser.writing ) {
-            ser.deleteUponFinish.push_back(this);
-        }
-        // Note: we do not serialize profileData
-    }
-
-    void TextFileInfo::serialize ( AstSerializer & ser ) {
-        uint8_t tag = 1; // Signify the text file info
-        if ( ser.writing ) {
-            ser << tag;
-        }
-        ser << name << tabSize;
-        ser.serializeAdaptiveSize32(sourceLength);
-        if ( !ser.writing ) {
-            ser.deleteUponFinish.push_back(this);
-        }
-        // ser << owner;
-        // if ( ser.writing ) {
-        //     ser.write((const void *) source, sourceLength);
-        // } else {
-        //     source = (char *) das_aligned_alloc16(sourceLength + 1);
-        //     ser.read((void *) source, sourceLength);
-        // }
-    }
-
     AstSerializer & AstSerializer::operator << ( CallMacro * & ptr ) {
         dtag(HASH_TAG("CallMacro *"));
         DAS_SER_PROFILE(*this, "CallMacro*");
@@ -3819,112 +3784,6 @@ namespace das {
         }
 #endif
         return res;
-    }
-
-    AstSerializerState * rtti_create_ast_serializer () {
-        auto state = new AstSerializerState();
-        state->storage = make_unique<SerializationStorageVector>();
-        state->serializer = make_unique<AstSerializer>(state->storage.get(), true);
-        return state;
-    }
-
-    AstSerializerState * rtti_create_ast_deserializer ( const TArray<uint8_t> & data ) {
-        auto state = new AstSerializerState();
-        state->storage = make_unique<SerializationStorageVector>();
-        state->storage->buffer.assign(data.data, data.data + data.size);
-        state->serializer = make_unique<AstSerializer>(state->storage.get(), false);
-        return state;
-    }
-
-    void rtti_delete_ast_serializer ( AstSerializerState * state ) {
-        if ( state ) {
-            state->serializer->moduleLibrary = nullptr;
-            delete state;
-        }
-    }
-
-    bool rtti_ast_serializer_serialize_program (
-            AstSerializerState * state,
-            const smart_ptr<Program> & program ) {
-        auto & prog = const_cast<smart_ptr<Program> &>(program);
-        prog->serialize(*state->serializer);
-        return !prog->failToCompile;
-    }
-
-    void rtti_ast_serializer_deserialize_program_ex (
-            AstSerializerState * state, smart_ptr<FileAccess> access, ModuleGroup * libGroup,
-            const TBlock<void,bool,smart_ptr<Program>,const string> & block,
-            Context * context, LineInfoArg * at ) {
-        auto prog = make_smart<Program>();
-        prog->access = access;      // the reader's: a stream carries none (src/ast/ARCHITECTURE.md#require-after-walk)
-        state->serializer->thisModuleGroup = libGroup;
-        {
-            gc_guard deserialize_gc_scope;
-            // same-version streams can still be truncated/corrupt: the stream readers throw
-            // dasException — turn it into the clean failToCompile path (mirrors serializeScript)
-            try {
-                prog->serialize(*state->serializer);
-            } catch ( const dasException & r ) {
-                prog->failToCompile = true;
-                LOG(LogLevel::warning) << "das: deserialize: " << r.what() << "\n";
-            }
-            /*
-            // THIS ONES ARE FROM THE "already exist" MODULES
-            auto leftover = deserialize_gc_scope.guard_root.gc_count;
-            if ( leftover ) {
-                LOG(LogLevel::warning) << "das: deserialize: " << leftover << " gc_node(s) left after deserialization\n";
-                deserialize_gc_scope.guard_root.gc_dump_to_thread_root();
-            }
-            */
-        }
-        // Module::serialize leaves g_Program pointing to a temporary program with a
-        // released thisModule. Restore it so compiling_module() sees the correct module
-        // during simulate() and while tests run inside the block.
-        auto & bound = *daScriptEnvironment::getBound();
-        auto savedProg = bound.g_Program;
-        bound.g_Program = prog.get();
-        if ( prog->failToCompile ) {
-            string err = "deserialization failed";
-            das_invoke<void>::invoke<bool,smart_ptr<Program>,const string &>(
-                context, at, block, false, ProgramPtr(), err);
-            (void)prog->thisModule.release();
-            prog->library.reset();
-            bound.g_Program = savedProg;
-            return;
-        }
-        string okStr;
-        das_invoke<void>::invoke<bool,smart_ptr<Program>,const string &>(
-            context, at, block, true, prog, okStr);
-        (void)prog->thisModule.release();
-        prog->library.reset();
-        bound.g_Program = savedProg;
-    }
-
-    void rtti_ast_serializer_deserialize_program (
-            AstSerializerState * state, ModuleGroup * libGroup,
-            const TBlock<void,bool,smart_ptr<Program>,const string> & block,
-            Context * context, LineInfoArg * at ) {
-        rtti_ast_serializer_deserialize_program_ex(state, nullptr, libGroup, block, context, at);
-    }
-
-    int64_t rtti_ast_serializer_finalize_usec ( AstSerializerState * state ) {
-        return state ? int64_t(state->serializer->totFinalizeTime) : 0;
-    }
-
-    int64_t rtti_ast_serializer_setup_usec ( AstSerializerState * state ) {
-        return state ? int64_t(state->serializer->totSetupTime) : 0;
-    }
-
-    void rtti_ast_serializer_get_data (
-            AstSerializerState * state,
-            const TBlock<void,TTemporary<TArray<uint8_t> const>> & block,
-            Context * context, LineInfoArg * at ) {
-        state->storage->flush();
-        Array arr;
-        array_mark_locked(arr, state->storage->buffer.data(),
-            uint64_t(state->storage->buffer.size()), uint64_t(state->storage->buffer.size()));
-        vec4f args[1] = { cast<Array *>::from(&arr) };
-        context->invoke(block, args, nullptr, at);
     }
 
 }

@@ -13,7 +13,7 @@ runs.  Topics covered:
 
 * ``AstSerializer`` — the serializer/deserializer
 * ``SerializationStorageVector`` — in-memory serialization buffer
-* ``Program::serialize()`` — serializing a compiled program
+* ``AstSerializer::serializeScript()`` — serializing a compiled program
 * The compile → serialize → deserialize → simulate workflow
 
 
@@ -70,7 +70,7 @@ Stage 2 — Serialize to memory
    auto writeTo = make_unique<SerializationStorageVector>();
    {
        AstSerializer ser(writeTo.get(), true);  // writing = true
-       program->serialize(ser);
+       ser.serializeScript(program);
        ser.moduleLibrary = nullptr;
    }
    size_t blobSize = writeTo->buffer.size();
@@ -89,11 +89,11 @@ Stage 3 — Deserialize
    {
        AstSerializer deser(readFrom.get(), false);  // writing = false
        program = make_smart<Program>();
-       program->serialize(deser);
+       deser.serializeScript(program);
        deser.moduleLibrary = nullptr;
    }
 
-Note that ``Program::serialize()`` is used for both directions —
+Note that ``AstSerializer::serializeScript()`` is used for both directions —
 the ``AstSerializer`` constructor's ``isWriting`` flag determines
 the mode.
 

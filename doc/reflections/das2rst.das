@@ -481,12 +481,9 @@ def document_module_rtti(_root : string) {
         group_by_regex("Initialization and finalization", mod, %regex~(using|LineInfo|CodeOfPolicies|RttiValue_nothing)$%%),
         group_by_regex("Type access", mod, %regex~(get_dim|builtin_is_same_type|is_compatible_cast|get_das_type_name|is_same_type|each_dim|arg_types|arg_names|get_type_size|get_type_align)$%%),
         group_by_regex("Rtti context access", mod, %regex~(get_total_functions|get_total_variables|get_function_info|get_variable_info|get_variable_value|get_function_by_mnh|get_line_info|this_context|context_for_each_function|context_for_each_variable|for_each_init_function|class_info|type_info)$%%),
-        group_by_regex("Program access", mod, %regex~(program_for_each_module|program_for_each_registered_module|get_this_module|get_module|has_module|module_group_for_each_member)$%%),
-        group_by_regex("Module access", mod, %regex~(module_for_each_structure|module_for_each_enumeration|module_for_each_function|module_for_each_generic|module_for_each_global|module_for_each_annotation|module_for_each_dependency)$%%),
-        group_by_regex("Annotation access", mod, %regex~(get_annotation_argument_value|add_annotation_argument|get_annotation|get_annotation_argument|resolve_annotation|each_annotation|each_annotation_argument)$%%),
-        group_by_regex("Compilation and simulation", mod, %regex~(compile|compile_file|for_each_expected_error|for_each_require_declaration|simulate|create_ast_serializer|create_ast_deserializer|delete_ast_serializer|serialize_program|deserialize_program|ast_serializer_get_data|ast_serializer_finalize_usec|ast_serializer_setup_usec)$%%),
-        group_by_regex("File access", mod, %regex~(make_file_access|set_file_source|add_file_access_root|add_extra_module)$%%),
-        group_by_regex("Structure access", mod, %regex~(rtti_builtin_structure_for_each_annotation|basic_struct_for_each_field|structure_for_each_annotation|basic_struct_for_each_parent)$%%),
+        group_by_regex("Module registry", mod, %regex~(get_module|has_module|program_for_each_registered_module)$%%),
+        group_by_regex("Annotation access", mod, %regex~(get_annotation_argument_value|get_annotation|get_annotation_argument|resolve_annotation|each_annotation|each_annotation_argument)$%%),
+        group_by_regex("Structure access", mod, %regex~(rtti_builtin_structure_for_each_annotation|structure_for_each_annotation)$%%),
         group_by_regex("Data walking and printing", mod, %regex~(sprint_data|sprint_json_at|sscan_json_at|describe|get_mangled_name)$%%),
         group_by_regex("Function and mangled name hash", mod, %regex~(get_function_by_mangled_name_hash|get_function_mangled_name_hash|get_function_address)$%%),
         group_by_regex("Context and mutex locking", mod, %regex~(lock_this_context|lock_context|lock_mutex)$%%),
@@ -503,7 +500,9 @@ def document_module_rtti(_root : string) {
 def document_module_ast(_root : string) {
     var mod = [get_module("ast_core"), find_module("ast")]
     var groups <- array<DocGroup>(
-        group_by_regex("Compilation and file access", mod, %regex~(compile|compile_file|module_cache_path|parse_file|parse_file_no_prerequisites|make_file_access|require_module_now)$%%),
+        group_by_regex("Compilation and file access", mod, %regex~(compile|compile_file|module_cache_path|parse_file|parse_file_no_prerequisites|make_file_access|require_module_now|simulate|for_each_expected_error|for_each_require_declaration|set_file_source|add_file_access_root|add_extra_module)$%%),
+        group_by_regex("AST serialization", mod, %regex~(create_ast_serializer|create_ast_deserializer|delete_ast_serializer|serialize_program|deserialize_program|ast_serializer_get_data|ast_serializer_finalize_usec|ast_serializer_setup_usec)$%%),
+        group_by_regex("Program and module iteration", mod, %regex~(program_for_each_module|get_this_module|module_group_for_each_member|module_for_each_structure|module_for_each_enumeration|module_for_each_function|module_for_each_generic|module_for_each_global|module_for_each_annotation|module_for_each_dependency|basic_struct_for_each_field|basic_struct_for_each_parent)$%%),
         group_by_regex("Building programs from AST nodes", mod, %regex~(make_program|make_module|make_main_module)$%%),
         group_by_regex("Call generation", mod, %regex~(make_call)$%%),
         group_by_regex("Visitor pattern", mod, %regex~visit.*%%),

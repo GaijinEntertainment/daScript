@@ -7,7 +7,6 @@
 #include "daScript/simulate/runtime_string_delete.h"
 #include "daScript/simulate/simulate_nodes.h"
 #include "daScript/simulate/simulate_visit_op.h"
-#include "misc/include_fmt.h"
 
 namespace das {
 
@@ -65,12 +64,6 @@ namespace das {
         }
     }
 
-    SimNode * SimNode::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        vis.op("??");
-        V_END();
-    }
-
 #if DAS_ENABLE_KEEPALIVE
 
     SimNode * SimNode_KeepAlive::visit ( SimVisitor & vis ) {
@@ -81,23 +74,6 @@ namespace das {
     }
 
 #endif
-
-    void SimVisitor::sub ( SimNode ** nodes, uint32_t count, const char * ) {
-        for ( uint32_t t=0; t!=count; ++t ) {
-            nodes[t] = nodes[t]->visit(*this);
-        }
-    }
-
-    void SimNode_CallBase::visitCall ( SimVisitor & vis ) {
-        if ( fnPtr ) {
-            vis.arg(fnPtr->name,"fnPtr");
-            vis.arg(Func(), fnPtr->mangledName, "fnIndex");
-        }
-        if ( cmresEval ) {
-            V_SUB(cmresEval);
-        }
-        vis.sub(arguments, nArguments, "arguments");
-    }
 
     SimNode* SimNode_OrAny::visit(SimVisitor& vis) {
         V_BEGIN();
@@ -353,17 +329,6 @@ namespace das {
         V_END();
     }
 
-    SimNode * SimNode_At::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP(At);
-        V_SUB(value);
-        V_SUB(index);
-        V_ARG(stride);
-        V_ARG(offset);
-        V_ARG(range);
-        V_END();
-    }
-
     SimNode * SimNode_SafeAt::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(SafeAt);
@@ -468,14 +433,6 @@ namespace das {
         string dt = debug_type(typeInfo);
         V_ARG(dt.c_str());
         V_ARG(message);
-        V_END();
-    }
-
-    SimNode * SimNode_TypeInfo::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP(TypeInfo);
-        string dt = debug_type(typeInfo);
-        V_ARG(dt.c_str());
         V_END();
     }
 
@@ -857,12 +814,6 @@ namespace das {
         V_END();
     }
 
-    SimNode * SimNode_Zero::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP(Zero);
-        V_END();
-    }
-
     SimNode * SimNode_CopyReference::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(CopyReference);
@@ -889,59 +840,12 @@ namespace das {
         V_END();
     }
 
-    void SimNode_Final::visitFinal ( SimVisitor & vis ) {
-        vis.sub(finalList, totalFinal, "final");
-    }
-
-    SimNode * SimNode_Final::visit ( SimVisitor & vis ) {
-        V_BEGIN_CR();
-        V_OP(Final);
-        V_FINAL()
-        V_END();
-    }
-
-    void SimNode_Block::visitBlock ( SimVisitor & vis ) {
-        vis.sub(list, total, "block");
-    }
-
-    void SimNode_Block::visitLabels ( SimVisitor & vis ) {
-        if ( labels ) {
-            V_ARG(totalLabels);
-            for ( uint32_t i=0, is=totalLabels; i!=is; ++i ) {
-                if ( labels[i]!=-1U ) {
-                    char name[32];
-                    auto result = fmt::format_to(name, FMT_STRING("label_{}"), i);
-                    *result = 0;
-                    vis.arg(labels[i], name);
-                }
-            }
-        }
-    }
-
-    SimNode * SimNode_Block::visit ( SimVisitor & vis ) {
-        V_BEGIN_CR();
-        V_OP(Block);
-        V_BLOCK();
-        V_FINAL();
-        V_END();
-    }
-
     SimNode * SimNode_BlockWithLabels::visit ( SimVisitor & vis ) {
         V_BEGIN_CR();
         V_OP(BlockWithLabels);
         V_LABELS();
         V_BLOCK();
         V_FINAL();
-        V_END();
-    }
-
-    SimNode * SimNode_ClosureBlock::visit ( SimVisitor & vis ) {
-        V_BEGIN_CR();
-        V_OP(Block);
-        V_BLOCK();
-        V_FINAL();
-        V_ARG(needResult);
-        V_ARG(annotationDataSid);
         V_END();
     }
 
@@ -989,24 +893,6 @@ namespace das {
         V_END();
     }
 
-#if DAS_DEBUGGER
-    SimNode * SimNodeDebug_Instrument::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP(Instrument);
-        V_SUB(subexpr);
-        V_END();
-    }
-
-    SimNode * SimNodeDebug_InstrumentFunction::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP(Instrument);
-        vis.arg(func->name,"fnPtr");
-        vis.arg(Func(), func->mangledName, "fnIndex");
-        V_SUB(subexpr);
-        V_END();
-    }
-#endif
-
     SimNode * SimNode_IfThenElse::visit ( SimVisitor & vis ) {
         V_BEGIN_CR();
         V_OP(IfThenElse);
@@ -1036,12 +922,12 @@ namespace das {
     SimNode * SimNode_ForBase::visitFor ( SimVisitor & vis, int totalC, const char * loopName ) {
         char nbuf[32];
         V_BEGIN_CR();
-        auto result = fmt::format_to(nbuf, FMT_STRING("{}_{}"), loopName, total); *result = 0;
+        snprintf(nbuf, sizeof(nbuf), "%s_%u", loopName, uint32_t(total));
         vis.op(nbuf);
         for ( int t=0; t!=totalC; ++t ) {
-            result = fmt::format_to(nbuf, FMT_STRING("stackTop[{}]"), t); *result = 0;
+            snprintf(nbuf, sizeof(nbuf), "stackTop[%i]", t);
             vis.sp(stackTop[t],nbuf);
-            result = fmt::format_to(nbuf, FMT_STRING("strides[{}]"), t); *result = 0;
+            snprintf(nbuf, sizeof(nbuf), "strides[%i]", t);
             vis.arg(strides[t],nbuf);
             sources[t] = vis.sub(sources[t]);
         }
@@ -1053,10 +939,10 @@ namespace das {
     SimNode * SimNode_ForWithIteratorBase::visitFor ( SimVisitor & vis, int totalC ) {
         char nbuf[32];
         V_BEGIN_CR();
-        auto result = fmt::format_to(nbuf, FMT_STRING("ForWithIterator_{}"), total); *result = 0;
+        snprintf(nbuf, sizeof(nbuf), "ForWithIterator_%u", uint32_t(total));
         vis.op(nbuf);
         for ( int t=0; t!=totalC; ++t ) {
-            result = fmt::format_to(nbuf, FMT_STRING("stackTop[{}]"), t); *result = 0;
+            snprintf(nbuf, sizeof(nbuf), "stackTop[%i]", t);
             vis.sp(stackTop[t],nbuf);
             source_iterators[t] = vis.sub(source_iterators[t]);
         }
@@ -1067,45 +953,6 @@ namespace das {
 
     SimNode * SimNode_ForWithIteratorBase::visit ( SimVisitor & vis ) {
         return visitFor(vis, totalSources);
-    }
-
-    SimNode * SimNode_Op1::visitOp1 ( SimVisitor & vis, const char * op, int typeSize, const string & typeName ) {
-        V_BEGIN();
-        vis.op(op, typeSize, typeName);
-        V_SUB(x);
-        V_END();
-    }
-
-    SimNode * SimNode_Op2::visitOp2 ( SimVisitor & vis, const char * op, int typeSize, const string & typeName ) {
-        V_BEGIN();
-        vis.op(op, typeSize, typeName);
-        V_SUB(l);
-        V_SUB(r);
-        V_END();
-    }
-
-    SimNode * SimNode_CallBase::visitOp1 ( SimVisitor & vis, const char * op, int typeSize, const char * typeName ) {
-        V_BEGIN();
-        vis.op(op, typeSize, typeName);
-        V_SUB(arguments[0]);
-        V_END();
-    }
-
-    SimNode * SimNode_CallBase::visitOp2 ( SimVisitor & vis, const char * op, int typeSize, const char * typeName ) {
-        V_BEGIN();
-        vis.op(op, typeSize, typeName);
-        V_SUB(arguments[0]);
-        V_SUB(arguments[1]);
-        V_END();
-    }
-
-    SimNode * SimNode_CallBase::visitOp3 ( SimVisitor & vis, const char * op, int typeSize, const char * typeName ) {
-        V_BEGIN();
-        vis.op(op, typeSize, typeName);
-        V_SUB(arguments[0]);
-        V_SUB(arguments[1]);
-        V_SUB(arguments[2]);
-        V_END();
     }
 
     SimNode * SimNode_GetBitField::visit ( SimVisitor & vis ) {
