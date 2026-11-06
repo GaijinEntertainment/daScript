@@ -12,6 +12,7 @@ require dasllama/dasllama_par        // maybe_parallel_for (+ its emitted dispat
 require dasllama/dasllama_math       // get_dispatch_lanes — the requant wrappers shape their fan-out
 require dasllama/dasllama_math_default   // dequant_kq_row_grp - the repacked plane's group gather behind kq_plane_row_f32
 require dasllama/dasllama_kqformat public   // KqFmt + the plane stride truth (K4_QSB et al.) — re-exported down the gguf chain
+require dasllama/dasllama_gemm_schema   // Q8_BLOCK_ELEMS / Q8_BLOCK_BYTES: the interleaved Q8_0 block walk
 require dasllama/dasllama_gpu_math   // ue4m3_half_f32 - the nv4 sub-block scale's one decode, shared with the kernel homes
 require dasllama/dasllama_tune       // [tuned]: the f16 row converts carry per-box loop hints
 require daslib/array_boost  // nolint:STYLE030 — temp_array is a [template] the rule misses
@@ -35,9 +36,6 @@ def rd_f32(b : array<uint8> | #; o : int64) : float => unsafe(reinterpret<float>
 //! the little-endian u64 at byte `o` of `b`
 def rd_u64(b : array<uint8> | #; o : int64) : uint64 => uint64(rd_u32(b, o)) | (uint64(rd_u32(b, o + 4l)) << 32ul)
 
-let GGML_BIN_Q8_BLOCK_ELEMS = 32l   //!< a Q8_0 block of a ggml bin: an f16 scale, then this many quants
-let GGML_BIN_Q8_BLOCK_BYTES = 34l
-
 //! `n` elements of a ggml bin tensor at byte `off` into `dst[dst_off..)` as f32: byte-wise, the bin stores its data
 //! unaligned; a Q8_0 element is its block's scale times its quant
 def ggml_bin_read_f32(b : array<uint8> | #; ttype : int; off, n : int64; var dst : array<float>; dst_off : int64) {
@@ -50,14 +48,49 @@ def ggml_bin_read_f32(b : array<uint8> | #; ttype : int; off, n : int64; var dst
             dst[dst_off + i] = f16_to_f32(rd_u16(b, off + i * 2l))
         }
     } else {
-        for (blk in range64(n / GGML_BIN_Q8_BLOCK_ELEMS)) {
-            let at = off + blk * GGML_BIN_Q8_BLOCK_BYTES
-            let scale = f16_to_f32(rd_u16(b, at))
-            for (i in range64(GGML_BIN_Q8_BLOCK_ELEMS)) {
-                dst[dst_off + blk * GGML_BIN_Q8_BLOCK_ELEMS + i] = scale * float(int8(b[at + 2l + i]))
+        let nb = n / Q8_BLOCK_ELEMS
+        return if (nb == 0l)
+        if (off < 0l || off + nb * Q8_BLOCK_BYTES > long_length(b) || dst_off < 0l || dst_off + nb * Q8_BLOCK_ELEMS > long_length(dst)) {
+            panic("ggml_bin_read_f32: {nb} Q8_0 blocks at byte {off} of {long_length(b)}, into {dst_off} of {long_length(dst)}")
+        }
+        dequant_q8_blocks(unsafe(addr<uint8 const?>(b[off])), nb, unsafe(addr(dst[dst_off])))
+    }
+}
+
+//! `nb` interleaved Q8_0 blocks at `bp` (an f16 scale, then the int8 quants) into `dst[0 ..nb * Q8_BLOCK_ELEMS)`: an element is
+//! its quant times its block's scale
+def dequant_q8_blocks(bp : uint8 const?; nb : int64; var dst : float?) {
+    unsafe {
+        for (b in range64(nb)) {
+            let bo = b * Q8_BLOCK_BYTES
+            let sc = f16_to_f32(uint(bp[bo]) | (uint(bp[bo + 1l]) << 8u))
+            let qp = reinterpret<int8 const?>(bp + bo + 2l)
+            let base = b * Q8_BLOCK_ELEMS
+            for (k in range64(Q8_BLOCK_ELEMS)) {
+                dst[base + k] = float(qp[k]) * sc
             }
         }
     }
+}
+
+//! the dot of `nb` interleaved Q8_0 blocks at `bp` with the floats at `xp`: per block the quant-times-x sum, then times its
+//! scale
+def dot_q8_blocks(bp : uint8 const?; nb : int64; xp : float const?) : float {
+    var acc = 0.0
+    unsafe {
+        for (b in range64(nb)) {
+            let bo = b * Q8_BLOCK_BYTES
+            let sc = f16_to_f32(uint(bp[bo]) | (uint(bp[bo + 1l]) << 8u))
+            let qp = reinterpret<int8 const?>(bp + bo + 2l)
+            let xo = b * Q8_BLOCK_ELEMS
+            var sub = 0.0
+            for (k in range64(Q8_BLOCK_ELEMS)) {
+                sub += float(qp[k]) * xp[xo + k]
+            }
+            acc += sub * sc
+        }
+    }
+    return acc
 }
 
 

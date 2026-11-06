@@ -200,41 +200,12 @@ def repack_grp(var np : uint8?; var ep : uint8?; n, d, mr : int64; _f : KqTag_mx
     repack_unit_form(np, ep, n / KQ_B32_ELEMS, d, mr, MX4_QB, MX4_SB, verbatim_unit_field(MX4_SB, 1l))
 }
 
-//! mr-generalized q51 plane repack: per block the 20 quant bytes as five four-byte columns (the
-//! nibble dwords in mx4 order, then the qh dword), the 4-byte f16 (d, m) scale per block.
-//! grp1 == disk order.
-def repack_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64; _f : KqTag_q51) {
-    repack_unit_form(qp, sp, n / KQ_B32_ELEMS, d, mr, Q51_QB, Q51_SB, verbatim_unit_field(Q51_SB, 1l))
-}
-
-//! mr-generalized iq4nl32 plane repack: per block the 16 nibble bytes as four four-byte columns
-//! (mx4's order), the 2-byte f16 d per block. grp1 == disk order.
-def repack_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64; _f : KqTag_iq4nl32) {
-    repack_unit_form(qp, sp, n / KQ_B32_ELEMS, d, mr, IQ4NL32_QB, IQ4NL32_SB, verbatim_unit_field(IQ4NL32_SB, 1l))
-}
-
-//! the q4032 planes repack as iq4nl32's: the same block form
-def repack_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64; _f : KqTag_q4032) {
-    repack_unit_form(qp, sp, n / KQ_B32_ELEMS, d, mr, Q4032_QB, Q4032_SB, verbatim_unit_field(Q4032_SB, 1l))
-}
-
-//! the q5032 planes repack as q51's quant form (five four-byte columns, the qh dword last) under iq4nl32's 2-byte f16 d
-def repack_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64; _f : KqTag_q5032) {
-    repack_unit_form(qp, sp, n / KQ_B32_ELEMS, d, mr, Q5032_QB, Q5032_SB, verbatim_unit_field(Q5032_SB, 1l))
-}
-
-//! the affine planes repack as four (4-bit), six (6-bit) or eight (8-bit) four-byte code columns under 2-byte scale units - a
-//! row's units in order are its group pairs, so the grp row gather hands them back verbatim
-def repack_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64; _f : KqTag_mlx4 | KqTag_mlx4b) {
-    repack_unit_form(qp, sp, n / KQ_B32_ELEMS, d, mr, MLX4_QB, MLX_SB, verbatim_unit_field(MLX_SB, 1l))
-}
-
-def repack_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64; _f : KqTag_mlx8 | KqTag_mlx8b) {
-    repack_unit_form(qp, sp, n / KQ_B32_ELEMS, d, mr, MLX8_QB, MLX_SB, verbatim_unit_field(MLX_SB, 1l))
-}
-
-def repack_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64; _f : KqTag_mlx6b) {
-    repack_unit_form(qp, sp, n / KQ_B32_ELEMS, d, mr, MLX6_QB, MLX_SB, verbatim_unit_field(MLX_SB, 1l))
+//! mr-generalized per-32 plane repack, grp1 == disk order: a block's `b32_qb(f)` quant bytes as four-byte columns - q51 and
+//! q5032 five (the nibble dwords in mx4 order, the qh dword last), iq4nl32 and q4032 four, an affine member four, six or eight
+//! code columns - under its verbatim `b32_sb(f)`-byte scale unit (an affine row's units in order are its group pairs)
+def repack_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64;
+               f : KqTag_q51 | KqTag_iq4nl32 | KqTag_q4032 | KqTag_q5032 | KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) {
+    repack_unit_form(qp, sp, n / KQ_B32_ELEMS, d, mr, b32_qb(f), b32_sb(f), verbatim_unit_field(b32_sb(f), 1l))
 }
 
 //! the k4/k5 scale row: d and dmin verbatim, then the 12 packed 6-bit sc/mn bytes DECODED into the two 8-strip fields

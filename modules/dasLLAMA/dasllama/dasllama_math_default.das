@@ -2225,134 +2225,15 @@ def private b32_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uin
     }
 }
 
-// the per-32 slots' portable kernels: the shapes stamped per tag
-def private q51q8_batch_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?;
-                               xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
-    b32_batch_kernel(yp, wq, ws, xqp, xsp, n, d, ntok, KqTag_q51())
-}
-def private q51q8_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?;
-                                offs : int64 const?; nregions : int64; xqp : int8 const?;
-                                xsp : float const?; n, d : int64) {
-    b32_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_q51())
-}
-def private q51q8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?;
-                                      offs : int64 const?; nregions : int64; xqp : int8 const?;
-                                      xsp : float const?; n, d : int64) {
-    b32_batch_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_q51())
-}
-def private iq4nl32q8_batch_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?;
-                                   xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
-    b32_batch_kernel(yp, wq, ws, xqp, xsp, n, d, ntok, KqTag_iq4nl32())
-}
-def private iq4nl32q8_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?;
-                                    offs : int64 const?; nregions : int64; xqp : int8 const?;
-                                    xsp : float const?; n, d : int64) {
-    b32_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_iq4nl32())
-}
-def private iq4nl32q8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?;
-                                          offs : int64 const?; nregions : int64; xqp : int8 const?;
-                                          xsp : float const?; n, d : int64) {
-    b32_batch_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_iq4nl32())
-}
-def private q4032q8_batch_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?;
-                                 xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
-    b32_batch_kernel(yp, wq, ws, xqp, xsp, n, d, ntok, KqTag_q4032())
-}
-def private q4032q8_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?;
-                                  offs : int64 const?; nregions : int64; xqp : int8 const?;
-                                  xsp : float const?; n, d : int64) {
-    b32_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_q4032())
-}
-def private q4032q8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?;
-                                        offs : int64 const?; nregions : int64; xqp : int8 const?;
-                                        xsp : float const?; n, d : int64) {
-    b32_batch_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_q4032())
-}
-def private q5032q8_batch_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?;
-                                 xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
-    b32_batch_kernel(yp, wq, ws, xqp, xsp, n, d, ntok, KqTag_q5032())
-}
-def private q5032q8_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?;
-                                  offs : int64 const?; nregions : int64; xqp : int8 const?;
-                                  xsp : float const?; n, d : int64) {
-    b32_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_q5032())
-}
-def private q5032q8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?;
-                                        offs : int64 const?; nregions : int64; xqp : int8 const?;
-                                        xsp : float const?; n, d : int64) {
-    b32_batch_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_q5032())
-}
-
-//! the affine members' portable kernels: the shapes stamped per tag
-def private mlx4q8_batch_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
-    b32_batch_kernel(yp, wq, ws, xqp, xsp, n, d, ntok, KqTag_mlx4())
-}
-def private mlx4q8_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
-    b32_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_mlx4())
-}
-def private mlx4q8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
-    b32_batch_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_mlx4())
-}
-def private mlx8q8_batch_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
-    b32_batch_kernel(yp, wq, ws, xqp, xsp, n, d, ntok, KqTag_mlx8())
-}
-def private mlx8q8_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
-    b32_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_mlx8())
-}
-def private mlx8q8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
-    b32_batch_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_mlx8())
-}
-def private mlx4bq8_batch_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
-    b32_batch_kernel(yp, wq, ws, xqp, xsp, n, d, ntok, KqTag_mlx4b())
-}
-def private mlx4bq8_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
-    b32_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_mlx4b())
-}
-def private mlx4bq8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
-    b32_batch_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_mlx4b())
-}
-def private mlx8bq8_batch_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
-    b32_batch_kernel(yp, wq, ws, xqp, xsp, n, d, ntok, KqTag_mlx8b())
-}
-def private mlx8bq8_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
-    b32_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_mlx8b())
-}
-def private mlx8bq8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
-    b32_batch_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_mlx8b())
-}
-def private mlx6bq8_batch_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
-    b32_batch_kernel(yp, wq, ws, xqp, xsp, n, d, ntok, KqTag_mlx6b())
-}
-def private mlx6bq8_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
-    b32_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_mlx6b())
-}
-def private mlx6bq8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
-    b32_batch_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_mlx6b())
-}
+[b32_portable_slots]
+def private register_b32_portables {}
 
 //! Register the portable Q8·Q8 backend (row-major, no repack). Lowest priority — a platform ISA backend
 //! out-ranks it in the auto-select where available; it stays the fallback everywhere else.
 //! The per-32 portable kernels register first: unset slots take them.
 [init]
 def dasllama_math_default_register() {
-    register_b32_portable(KqFmt.q51, B32Slots(batch = @@q51q8_batch_kernel,
-        groupn = @@q51q8_groupn_kernel, batch_groupn = @@q51q8_batch_groupn_kernel))
-    register_b32_portable(KqFmt.iq4nl32, B32Slots(batch = @@iq4nl32q8_batch_kernel,
-        groupn = @@iq4nl32q8_groupn_kernel, batch_groupn = @@iq4nl32q8_batch_groupn_kernel))
-    register_b32_portable(KqFmt.q4032, B32Slots(batch = @@q4032q8_batch_kernel,
-        groupn = @@q4032q8_groupn_kernel, batch_groupn = @@q4032q8_batch_groupn_kernel))
-    register_b32_portable(KqFmt.q5032, B32Slots(batch = @@q5032q8_batch_kernel,
-        groupn = @@q5032q8_groupn_kernel, batch_groupn = @@q5032q8_batch_groupn_kernel))
-    register_b32_portable(KqFmt.mlx4, B32Slots(batch = @@mlx4q8_batch_kernel,
-        groupn = @@mlx4q8_groupn_kernel, batch_groupn = @@mlx4q8_batch_groupn_kernel))
-    register_b32_portable(KqFmt.mlx8, B32Slots(batch = @@mlx8q8_batch_kernel,
-        groupn = @@mlx8q8_groupn_kernel, batch_groupn = @@mlx8q8_batch_groupn_kernel))
-    register_b32_portable(KqFmt.mlx4b, B32Slots(batch = @@mlx4bq8_batch_kernel,
-        groupn = @@mlx4bq8_groupn_kernel, batch_groupn = @@mlx4bq8_batch_groupn_kernel))
-    register_b32_portable(KqFmt.mlx8b, B32Slots(batch = @@mlx8bq8_batch_kernel,
-        groupn = @@mlx8bq8_groupn_kernel, batch_groupn = @@mlx8bq8_batch_groupn_kernel))
-    register_b32_portable(KqFmt.mlx6b, B32Slots(batch = @@mlx6bq8_batch_kernel,
-        groupn = @@mlx6bq8_groupn_kernel, batch_groupn = @@mlx6bq8_batch_groupn_kernel))
+    register_b32_portables()
     register_kernel_backend(KernelBackend(name = "portable", mm = @@q8q8_kernel, batch = @@q8q8_batch_kernel,
         group3 = @@q8q8_group3_kernel, repack = @@repack_q8q8_identity, mm_mx4 = @@mx4q8_kernel,
         mx4_batch = @@mx4q8_batch_kernel, mx4_batch_groupn = @@mx4q8_batch_groupn_kernel,

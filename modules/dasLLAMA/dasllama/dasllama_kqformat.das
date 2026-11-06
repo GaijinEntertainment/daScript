@@ -130,6 +130,51 @@ class KqFmtStamp : AstCallMacro {
     }
 }
 
+[function_macro(name = "b32_portable_slots")]
+class B32PortableSlots : AstFunctionAnnotation {
+    //! ``[b32_portable_slots] def f {}`` gives each per-32 member (``kq_dense_b32``) its three portable kernels -
+    //! ``<fmt>q8_batch_kernel``, ``<fmt>q8_groupn_kernel``, ``<fmt>q8_batch_groupn_kernel``, the ``b32_*_kernel`` shapes on the
+    //! member's tag - and makes ``f``'s body their ``register_b32_portable`` calls, in ``KqFmt`` order
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
+        var body : array<ExpressionPtr>
+        for (f in type<KqFmt>) {
+            continue if (!kq_dense_b32(f))
+            let tag = "KqTag_{f}"
+            let stem = "{f}q8"
+            var fns <- [
+                qmacro_function("{stem}_batch_kernel") $(var yp : float?; wq : uint8 const?; ws : uint8 const?; xqp : int8 const?; xsp : float const?;
+                                                         n : int64; d : int64; ntok : int64) {
+                    b32_batch_kernel(yp, wq, ws, xqp, xsp, n, d, ntok, $c(tag)())
+                },
+                qmacro_function("{stem}_groupn_kernel") $(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64;
+                                                          xqp : int8 const?; xsp : float const?; n : int64; d : int64) {
+                    b32_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, $c(tag)())
+                },
+                qmacro_function("{stem}_batch_groupn_kernel") $(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?;
+                                                                nregions : int64; xqp : int8 const?; xsp : float const?; n : int64; d : int64) {
+                    b32_batch_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, $c(tag)())
+                }
+            ]
+            for (fn in fns) {
+                fn.flags |= FunctionFlags.generated | FunctionFlags.privateFunction
+                if (!(compiling_module() |> add_function(fn))) {
+                    errors := "[b32_portable_slots] failed to add {fn.name}"
+                    return false
+                }
+            }
+            var batch = new ExprAddr(at = func.at, target := "{stem}_batch_kernel")
+            var groupn = new ExprAddr(at = func.at, target := "{stem}_groupn_kernel")
+            var batch_groupn = new ExprAddr(at = func.at, target := "{stem}_batch_groupn_kernel")
+            body |> push <| qmacro_expr() {
+                register_b32_portable($v(f), B32Slots(batch = $e(batch), groupn = $e(groupn), batch_groupn = $e(batch_groupn)))
+            }
+        }
+        func.body = make_expression_block(body)
+        func.body |> force_at(func.at)
+        return true
+    }
+}
+
 [function_macro(name = "grid_words")]
 class GridWordsMacro : AstFunctionAnnotation {
     //! ``[grid_words(of = "iq3s_grid")] def f(i : int) : uint {}`` gives ``f`` the body ``let tbl = <the table's literal>; return tbl[i]``:

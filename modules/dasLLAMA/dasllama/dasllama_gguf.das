@@ -179,7 +179,8 @@ struct GGUFRowPermute {
     segs : array<int64>
 }
 
-def private gguf_put_le(var b : array<uint8>; v : uint64; nbytes : int) {
+//! the low `nbytes` bytes of `v` appended to `b`, little-endian - a GGUF writer's scalar field
+def gguf_put_le(var b : array<uint8>; v : uint64; nbytes : int) {
     let at = length(b)
     b |> resize(at + nbytes)
     for (i in range(nbytes)) {
@@ -187,7 +188,8 @@ def private gguf_put_le(var b : array<uint8>; v : uint64; nbytes : int) {
     }
 }
 
-def private gguf_put_str(var b : array<uint8>; s : string) {
+//! `s` appended to `b` as a GGUF string: its u64 byte length, then its bytes
+def gguf_put_str(var b : array<uint8>; s : string) {
     gguf_put_le(b, uint64(long_length(s)), 8)
     peek_data(s) $(d) {
         for (c in d) {

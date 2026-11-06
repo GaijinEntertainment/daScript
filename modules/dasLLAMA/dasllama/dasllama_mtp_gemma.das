@@ -9,6 +9,7 @@ require dasllama/dasllama_common   // Model/Session, embed_row, the KV-cache row
 require dasllama/dasllama_gguf     // the container reader (+ f16_to_f32 through its public re-export)
 require dasllama/dasllama_math     // rmsnorm / geglu / softmax / rope_scaled_neox_tab
 require dasllama/dasllama_rope     // build_rope_tabs — the anchor's two RoPE class rows
+require dasllama/dasllama_convert  // dot_q8_blocks: the Q8_0 blob rows' dot
 require daslib/fio
 require daslib/strings_boost   // trim_suffix — the sidecar name stem
 require strings
@@ -466,23 +467,9 @@ def private gemma_drafter_sidecar_init {
 //! `boff`, against the first `n` floats of `x`.
 def dot_q8_blob(blob : array<uint8>; boff, row, n : int64; x : array<float>) : float {
     let nb = n / Q8_BLK_ELEMS
-    var acc = 0.0
     unsafe {
-        let bp = addr<uint8 const?>(blob[boff + row * nb * Q8_BLK_BYTES])
-        let xp = addr<float const?>(x[0])
-        for (b in range64(nb)) {
-            let bo = b * Q8_BLK_BYTES
-            let sc = f16_to_f32(uint(bp[bo]) | (uint(bp[bo + 1l]) << 8u))
-            let qp = reinterpret<int8 const?>(bp + bo + 2l)
-            let xo = b * Q8_BLK_ELEMS
-            var sub = 0.0
-            for (k in range64(Q8_BLK_ELEMS)) {
-                sub += float(qp[k]) * xp[xo + k]
-            }
-            acc += sub * sc
-        }
+        return dot_q8_blocks(addr<uint8 const?>(blob[boff + row * nb * Q8_BLK_BYTES]), nb, addr<float const?>(x[0]))
     }
-    return acc
 }
 
 // y[0..d) = W . x, W stored as d rows of n inputs in the 34-byte-block blob

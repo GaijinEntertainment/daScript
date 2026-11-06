@@ -11,6 +11,8 @@ require dasllama/dasllama_arch_qwen35  // the hybrid deltanet / gated-attention 
 require dasllama/dasllama_kqformat     // GGML_TYPE_* + iq4nl_lut: the hash table's rows decode from their disk blocks
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_math
+require dasllama/dasllama_convert   // dequant_q8_blocks: the hash table's Q8_0 rows
+require dasllama/dasllama_math_default   // mlx_half / mlx_code: the n-gram table's BF16 halves and 4-bit codes, the mlx4b member's decode
 require daslib/f16_cvt      // f16_to_f32: the hash table's block scales
 require daslib/array_boost  // nolint:STYLE030 — temp_array: the decode token as a one-row token array (a generic instance the lint does not see)
 require math
@@ -55,12 +57,11 @@ def ngram_row_a4g32(tab : uint8 const?; row, shard_rows, n : int64; var dst : fl
         let sp = sbase + shard_rows * code_row + lr * pair_row
         let bp = sp + shard_rows * pair_row
         for (g in range64(groups)) {
-            let sc = reinterpret<float>((uint(sp[2l * g]) | (uint(sp[2l * g + 1l]) << 8u)) << 16u)
-            let bi = reinterpret<float>((uint(bp[2l * g]) | (uint(bp[2l * g + 1l]) << 8u)) << 16u)
-            for (k in range64(16l)) {
-                let b = int(cp[g * 16l + k])
-                dst[g * 32l + 2l * k] = sc * float(b & 15) + bi
-                dst[g * 32l + 2l * k + 1l] = sc * float(b >> 4) + bi
+            let sc = mlx_half(sp[2l * g], sp[2l * g + 1l], KqTag_mlx4b())
+            let bi = mlx_half(bp[2l * g], bp[2l * g + 1l], KqTag_mlx4b())
+            let gq = cp + g * 16l
+            for (k in range64(32l)) {
+                dst[g * 32l + k] = sc * float(mlx_code(gq, k, KqTag_mlx4b())) + bi
             }
         }
     }
@@ -88,15 +89,8 @@ def private ngram_row(t : Model; row : int64; var dst : float?) {
                     dst[blk * 32l + k + 16l] = float(lut[b >> 4]) * d
                 }
             }
-        } elif (ty == GGML_TYPE_Q8_0) {   // 34-byte blocks of 32: f16 d + 32 int8
-            for (blk in range64(n / 32l)) {
-                let bp = tab + blk * 34l
-                let d = f16_to_f32(uint(bp[0]) | (uint(bp[1]) << 8u))
-                for (k in range64(32l)) {
-                    let u = int(bp[2l + k])
-                    dst[blk * 32l + k] = float(u < 128 ? u : u - 256) * d
-                }
-            }
+        } elif (ty == GGML_TYPE_Q8_0) {
+            dequant_q8_blocks(tab, n / KQ_B32_ELEMS, dst)
         } elif (ty == GGML_TYPE_F16) {
             for (i in range64(n)) {
                 dst[i] = f16_to_f32(uint(tab[2l * i]) | (uint(tab[2l * i + 1l]) << 8u))

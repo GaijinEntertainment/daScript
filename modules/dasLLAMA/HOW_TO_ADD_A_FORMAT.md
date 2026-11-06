@@ -377,11 +377,12 @@ one-line overloads, never a kernel shape:
   bodies through the tag's `b5_level` / `b5_fold` / `b5_bytes` overloads (`dot_b5q8_scalar`,
   `expand_b5_row`, `expand_b5_grp_row`, `dequant_b5_plane_block` in `dasllama_convert.das`,
   `b5_grp_row_dot` in `dasllama_math_gen.das`).
-- **Around them:** the three portable stamps `<fmt>q8_batch_kernel` / `<fmt>q8_groupn_kernel` /
-  `<fmt>q8_batch_groupn_kernel` and the format's `register_b32_portable` row in
-  `dasllama_math_default_register` - the kernels every backend's unset `B32Slots` entry takes;
-  the `repack_grp(..., KqTag_<fmt>)` overload (`repack_columns` at colw 4 + `repack_fields` with a
-  verbatim scale unit); the panic overloads of `dot_kq` / `kq_gemv_gen` / `kq_tile_gen` on the tag
+- **Around them:** the member in `kq_dense_b32` (`dasllama_kqformat.das`) - `[b32_portable_slots]`
+  generates the three portable stamps `<fmt>q8_batch_kernel` / `<fmt>q8_groupn_kernel` /
+  `<fmt>q8_batch_groupn_kernel` and their `register_b32_portable` row off that predicate, the
+  kernels every backend's unset `B32Slots` entry takes; the tag in the union of the one per-32
+  `repack_grp` overload (`dasllama_repack.das`), which repacks on the tag's `b32_qb` / `b32_sb`
+  overloads; the panic overloads of `dot_kq` / `kq_gemv_gen` / `kq_tile_gen` on the tag
   and the tag in the tag list of `tests/_kq_dot.das`'s panic `grp_row_dot` (the stamps bind every
   member).
 - **The dispatch** is the slot table's and takes no arm: `KernelBackend.b32` and the active
