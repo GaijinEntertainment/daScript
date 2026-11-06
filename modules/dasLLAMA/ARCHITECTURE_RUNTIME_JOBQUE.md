@@ -84,8 +84,12 @@ each. The pool of fork contexts is the observable: `set_jobque_fork_pool` is per
 outlives the queue, and the setup call always turns it on. A caller that sets the pool directly,
 as the dispatch probes and benches do, has configured its queue too.
 
-The first counted dispatch of a process reads that pool, once. A queue without it panics, naming
-the setup call, and `DASLLAMA_ALLOW_BARE_JOBQUE=1` downgrades the panic to a warning for a run
+The queue is the process's and the pool flag a context's, so a context born beside a queue another
+context created (dastest's `--together` gives each file a fresh context of one program; a host may
+hold several) turns its own pool flag on at `[init]` (`jobque_fork_pool_at_init`) and touches
+nothing else: the process-wide knobs - team mode, the spin window, the worker limit - are the
+queue creator's, and a worker thread that sets team mode off for itself keeps it off. The first
+counted dispatch of a context reads that pool, once. A queue without it panics, naming the setup call, and `DASLLAMA_ALLOW_BARE_JOBQUE=1` downgrades the panic to a warning for a run
 that means to measure the bare regime. A process with no queue at all runs its arms inline and is
 not checked. The engine's own scoped queues - the ones `load_gguf` and `load_gguf_streaming` spin
 for a caller that has none - configure themselves, so the check reaches only queues a caller

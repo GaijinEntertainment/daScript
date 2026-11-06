@@ -213,8 +213,8 @@ comment does not discharge this.
 counting as the caller - is a defect: compute it once and pass it.** An edit to one copy leaves
 the other testing a condition the first no longer applies.
 
-**Where a guard sits in both a caller and a `[cold_path]` callee whose every caller is under this
-folder, the caller keeps it and the callee drops it.**
+**Where a guard sits in both a caller and a `[cold_path]` callee whose every caller carries the
+same guard, the caller keeps it and the callee drops it.**
 
 **Logic or a named constant that two files in one folder both use, and that neither the language nor
 the test contract forces them to restate (a test's CPU reference copy of the arithmetic it checks is

@@ -178,6 +178,7 @@ Vulkan GPU backend. Present only where the dasVulkan package is installed.
 
 | Variable | Type | Default | Effect |
 |---|---|---|---|
+| `DASLLAMA_VK_MAC` | flag | off | Probe and serve Vulkan on macOS (MoltenVK). Off, the Vulkan home declines on macOS by name - no device, no arm - and every Vulkan test skips on its no-device path: the Mac build carries the module so its sources compile there, and Vulkan runtime evidence comes from a Linux box. On, the macOS probe runs as on any other host |
 | `DASLLAMA_COOPMAT` | text | auto | Cooperative-matrix mode (auto = cm2 where the device has NV_cooperative_matrix2, else mm, else sdot4; `f16` and `int8` pick the KHR f16 and int8 batch tiles, which auto never does); the flash-attention twin needs it even when the GEMM runs sdot4. |
 | `DASLLAMA_MM_SMALL` | text | 32 | Small-batch tier: 32 = sdot4 (default, beats both coopmat tiles below the crossover), 64 = coopmat M, 128 = always-L. |
 | `DASLLAMA_MM_SMALLD` | number | 64 | Small-d cutoff routing narrow roles (k/v) to the small tier; widening measured worse, so this is an instrument. |

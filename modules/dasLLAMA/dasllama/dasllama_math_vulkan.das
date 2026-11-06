@@ -185,6 +185,8 @@ def private vulkan_backend_available : bool {
         g_vk_available = true
         return true
     }
+    g_vk_why = vulkan_host_decline()
+    return false if (!empty(g_vk_why))
     vk_arm_moltenvk_env()   // must precede the FIRST volkInitialize — MVK config latches at ICD load
     // raw calls, not boost creators — those panic on failure instead of reporting absence
     if (volkInitialize() != 0) {

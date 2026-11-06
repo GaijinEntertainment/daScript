@@ -8,6 +8,14 @@ require strings
 require uriparser
 
 
+//! a `cant_*`, `failed_*` or `invalid_*` test is an expected-failure
+//! compile test: it runs alone and never shares a program
+def is_expected_failure_test(path : string) : bool {
+    let base = base_name(path)
+    return ((base |> starts_with("cant_")) || (base |> starts_with("failed_"))
+        || (base |> starts_with("invalid_")))
+}
+
 def private ends_with_separator(str : string) : bool {
     for (c in "\\/") {
         if (ends_with(str, to_char(c))) {

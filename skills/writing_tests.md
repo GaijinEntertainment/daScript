@@ -136,8 +136,11 @@ bin/daslang dastest/dastest.das -- --test dastest/tests
 ```
 
 Useful flags: `--failures-only` to quieten passing output, `--color`, `--timeout <seconds>`,
-`--compile-only` to compile the test files without executing them, and `--isolated-mode` to
-run each file in its own process (slower, but survives a crash in one file).
+`--compile-only` to compile the test files without executing them, `--isolated-mode` to
+run each file in its own process (slower, but survives a crash in one file), and
+`--together <file>` (repeatable) to compile the listed files as one program, so a heavy module
+graph is parsed and JIT'd once for the list, each file then running in a fresh context of it and
+reporting on its own.
 
 ## Benchmarks
 

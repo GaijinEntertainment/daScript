@@ -8,6 +8,7 @@ require daslib/ast
 require strings
 require daslib/debugger
 require daslib/fio
+require fs
 require daslib/strings_boost
 require daslib/json_boost
 require daslib/defer
@@ -157,9 +158,252 @@ def private match_func_name(name : string; allowed : array<string>&) {
 }
 
 
+def private test_policies(ctx : SuiteCtx; var cop : CodeOfPolicies; var access : FileAccessPtr) {
+    cop.aot_module = true
+    cop.aot = ctx.use_aot
+    cop.fail_on_no_aot = ctx.use_aot
+    cop.aot_macros = ctx.aot_macros
+    if (ctx.aot_macros) {
+        // a lowered quote evaluates one large make-struct construction frame
+        // (same bump the `daslang -aot -aot-macros` flow applies)
+        cop.stack = 1024u * 1024u
+    }
+    cop.threadlock_context = true
+    cop.jit_enabled = tests_jit_enabled()
+    cop.debugger = ctx.debugger
+    cop.keep_alive = ctx.keep_alive
+    cop.disable_cse = ctx.disable_cse
+    if (ctx.persistent_heap) {
+        cop.persistent_heap = true
+    }
+    cop.disable_dse = ctx.disable_dse
+    cop.disable_temp_string_reclaim = ctx.disable_temp_string_reclaim
+    cop.disable_inline = ctx.disable_inline
+    cop.disable_auto_inline = ctx.disable_auto_inline
+    if (tests_jit_enabled()) {
+        access |> add_extra_module("just_in_time", "{get_das_root()}/daslib/just_in_time.das")
+    }
+    if (!ctx.cov_path |> empty()) {
+        cop.export_all = true
+        cop.rtti = true
+        access |> add_extra_module("coverage", "{get_das_root()}/daslib/coverage.das")
+    }
+}
+
+//! the AST record a test program compiles against: none under a
+//! project file or with no cache folder
+def private test_module_cache_path(ctx : SuiteCtx; file_name : string;
+                                   cop : CodeOfPolicies) : string {
+    return "" if (empty(ctx.moduleCacheDir) || !empty(ctx.projectPath))
+    let record = module_cache_path(get_full_file_name(file_name), cop)
+    return path_join(ctx.moduleCacheDir, base_name(record))
+}
+
 def test_file(file_name : string; var ctx : SuiteCtx) : SuiteResult {
     var inscope fileCtx <- internalFileCtx(ctx)
     let res = test_file(file_name, ctx, fileCtx)
+    return res
+}
+
+//! what follows a module's tests in its own context, for a file of
+//! its own or one of a together list: the coverage report appended
+//! while the context is alive, the queued benchmarks run where the
+//! module was green, the result folded
+def private after_module(var ctx : SuiteCtx; var file_ctx : FileCtx; var context : Context;
+                         module_result : SuiteResult; var res : SuiteResult&) {
+    if (module_result.total > 0 && !ctx.cov_path |> empty()) {
+        var report = ""
+        unsafe(invoke_in_context(context, "fill_coverage_report", unsafe(addr(report)), ""))
+        // := copies the pointer without multiple_contexts: clone instead
+        report = clone_string(report)
+        fopen(ctx.cov_path, "ab") $(fw) {
+            if (fw != null) {
+                to_log(LOG_INFO, "Coverage to {ctx.cov_path}\n")
+                fwrite(fw, report)
+            } else {
+                to_log(LOG_ERROR, "Couldn't create output file {ctx.cov_path}\n")
+            }
+        }
+    }
+    if (module_result.failed + module_result.errors == 0) {
+        file_ctx.context = unsafe(addr(context))
+        run_queued_benchmarks(ctx, file_ctx, res)
+    }
+    res += module_result
+}
+
+//! merges the leading `options` lines of `file` into `opts`
+//! (key -> line); returns why it refused (a conflict, an unread
+//! file), else ""
+def private merge_options(file : string; var opts : table<string; string>) : string {
+    var why = ""
+    fopen(file, "rb") $(fr) {
+        if (fr == null) {
+            why = "{file}: cannot be read"
+            return
+        }
+        fmap(fr) $(data) {
+            for (raw in string(data) |> split("\n")) {
+                var line = raw |> strip()
+                let cmt = find(line, "//")
+                if (cmt >= 0) {
+                    line = strip(slice(line, 0, cmt))
+                }
+                continue if (empty(line))
+                break if (!(line |> starts_with("options ")))
+                let eq = find(line, "=")
+                let key = strip(eq >= 0 ? slice(line, 0, eq) : line)
+                let prev = opts?[key] ?? ""
+                if (empty(prev)) {
+                    opts[key] = clone_string(line)
+                } elif (prev != line && empty(why)) {
+                    why = "{file}: `{line}` against `{prev}`"
+                }
+            }
+        }
+    }
+    return why
+}
+
+typedef TogetherReport = block<(file : string; status : SuiteResult; dt_usec : int64) : void>
+
+def private fail_together(files : array<string>; var res : SuiteResult&; blk : TogetherReport) {
+    for (f in files) {
+        var status : SuiteResult
+        status.total++
+        status.errors++
+        res += status
+        invoke(blk, f, status, 0l)
+    }
+}
+
+typedef TogetherRoot = tuple<path : string; dirs : array<string>; why : string>
+
+//! the generated root: the files' merged `options` lines, then a
+//! require of each file through its directory's access root
+//! (`dirs[k]`); written under the module-cache folder at a name
+//! keyed by the list, so the AST record serves it run to run.
+//! `why` names what refused it, else ""
+def private together_root(files : array<string>; ctx : SuiteCtx) : TogetherRoot {
+    var dirs : array<string>
+    var dir_of : table<string; int>
+    var requires : array<string>
+    requires |> reserve(length(files))
+    var opts : table<string; string>
+    var why = ""
+    for (f in files) {
+        if (is_expected_failure_test(f)) {
+            if (empty(why)) {
+                why = "{f} is an expected-failure compile test - it cannot share a program"
+            }
+            continue
+        }
+        let d = dir_name(get_full_file_name(f))
+        var k = dir_of?[d] ?? -1
+        if (k < 0) {
+            k = length(dirs)
+            dir_of[d] = k
+            dirs |> push(d)
+        }
+        requires |> push("require together{k}/{stem(f)}")
+        if (empty(why)) {
+            why = merge_options(f, opts)
+        }
+    }
+    if (!empty(why)) {
+        return <- (path = "", dirs <- dirs, why = "the files' options disagree - {why}")
+    }
+    var option_keys <- [for (k in keys(opts)); clone_string(k)]
+    sort(option_keys)
+    var tmp_err : string
+    let root_dir = empty(ctx.moduleCacheDir) ? temp_directory(tmp_err) : ctx.moduleCacheDir
+    let root_path = path_join(root_dir, "dastest_together_{hash(join(files, "\n"))}.das")
+    let root_text = build_string() $(var w) {
+        for (k in option_keys) {
+            w |> write("{opts[k]}\n")
+        }
+        w |> write("\n")
+        for (r in requires) {
+            w |> write("{r}\n")
+        }
+    }
+    var written = false
+    fopen(root_path, "wb") $(fw) {
+        if (fw != null) {
+            fwrite(fw, root_text)
+            written = true
+        }
+    }
+    let write_why = written ? "" : "cannot write the root {root_path}"
+    return <- (path = root_path, dirs <- dirs, why = write_why)
+}
+
+//! runs `files` as one program, each file's module in a fresh
+//! context; `blk` gets every file's status and wall time, in order
+def test_together(files : array<string>; var ctx : SuiteCtx; blk : TogetherReport) : SuiteResult {
+    var res : SuiteResult
+    var inscope fileCtx <- internalFileCtx(ctx)
+    var inscope access <- make_file_access(ctx.projectPath)
+    access |> add_file_access_root("dastest", ctx.dastestRoot)
+    let root <- together_root(files, ctx)
+    if (!empty(root.why)) {
+        log::error("together: {root.why}")
+        fail_together(files, res, blk)
+        return res
+    }
+    let root_path = root.path
+    for (d, k in root.dirs, count()) {
+        access |> add_file_access_root("together{k}", d)
+    }
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
+            test_policies(ctx, cop, access)
+            // a non-JIT simulate frees the symbol tables, and every file
+            // simulates the program anew
+            cop.keep_symbol_tables = true
+            let cache = test_module_cache_path(ctx, root_path, cop)
+            compile_file(root_path, access, unsafe(addr(mg)), cop, cache) $(ok, program, output) {
+                if (!ok) {
+                    log::error("Failed to compile the together root {root_path}\n{output}")
+                    fail_together(files, res, blk)
+                    return
+                }
+                if (!empty(output) && !log::failuresOnly) {
+                    log::info("{output}")
+                }
+                for (f in files) {
+                    let want = stem(f)
+                    let t0 = ref_time_ticks()
+                    var status : SuiteResult
+                    ctx.queued_benchmarks |> clear
+                    simulate(program) $(sok; context; serrors) {
+                        if (!sok) {
+                            log::error("Failed to simulate the together root {root_path} for {f}"
+                                + "\n{serrors}")
+                            status.total++
+                            status.errors++
+                            return
+                        }
+                        var found = false
+                        program_for_each_module(program) $(m) {
+                            if (m.name == want) {
+                                found = true
+                                let module_result = test_module(*m, *context, ctx, fileCtx)
+                                after_module(ctx, fileCtx, *context, module_result, status)
+                            }
+                        }
+                        if (!found) {
+                            log::error("no module `{want}` for {f} in the root's program")
+                            status.total++
+                            status.errors++
+                        }
+                    }
+                    res += status
+                    invoke(blk, f, status, get_time_nsec(t0) / 1000l)
+                }
+            }
+        }
+    }
     return res
 }
 
@@ -173,39 +417,8 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
             ctx.queued_benchmarks |> clear
-            cop.aot_module = true
-            cop.aot = ctx.use_aot
-            cop.fail_on_no_aot = ctx.use_aot
-            cop.aot_macros = ctx.aot_macros
-            if (ctx.aot_macros) {
-                // a lowered quote evaluates one large make-struct construction frame
-                // (same bump the `daslang -aot -aot-macros` flow applies)
-                cop.stack = 1024u * 1024u
-            }
-            cop.threadlock_context = true
-            cop.jit_enabled = tests_jit_enabled()
-            cop.debugger = ctx.debugger
-            cop.keep_alive = ctx.keep_alive
-            cop.disable_cse = ctx.disable_cse
-            if (ctx.persistent_heap) {
-                cop.persistent_heap = true
-            }
-            cop.disable_dse = ctx.disable_dse
-            cop.disable_temp_string_reclaim = ctx.disable_temp_string_reclaim
-            cop.disable_inline = ctx.disable_inline
-            cop.disable_auto_inline = ctx.disable_auto_inline
-            if (tests_jit_enabled()) {
-                access |> add_extra_module("just_in_time", "{get_das_root()}/daslib/just_in_time.das")
-            }
-            if (!ctx.cov_path |> empty()) {
-                cop.export_all = true
-                cop.rtti = true
-                access |> add_extra_module("coverage", "{get_das_root()}/daslib/coverage.das")
-            }
-            let cache = (empty(ctx.moduleCacheDir)
-                    || !empty(ctx.projectPath) ? ""
-                : path_join(ctx.moduleCacheDir, base_name(module_cache_path(
-                    get_full_file_name(file_name), cop))))
+            test_policies(ctx, cop, access)
+            let cache = test_module_cache_path(ctx, file_name, cop)
             let verdict = compile_file(file_name, access, unsafe(addr(mg)),
                 cop, cache) $(ok, program, output) {
                 var expectedErrors : table<CompilationError; int>
@@ -284,26 +497,7 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
                     var mod = program |> get_this_module()
                     if (mod != null && context != null) {
                         let module_result = test_module(*mod, *context, ctx, file_ctx)
-                        if (module_result.total > 0 && !ctx.cov_path |> empty()) {
-                            var report = ""
-                            unsafe(invoke_in_context(*context, "fill_coverage_report", unsafe(addr(report)), ""))
-                            // Clone to current context (:= does NOT clone without multiple_contexts)
-                            report = clone_string(report)
-                            fopen(ctx.cov_path, "ab") $(fw) {
-                                if (fw != null) {
-                                    to_log(LOG_INFO, "Coverage to {ctx.cov_path}\n")
-                                    fwrite(fw, report)
-                                } else {
-                                    to_log(LOG_ERROR, "Couldn't create output file {ctx.cov_path}\n")
-                                }
-                            }
-
-                        }
-                        if (module_result.failed + module_result.errors == 0) {
-                            file_ctx.context = unsafe(addr(*context))
-                            run_queued_benchmarks(ctx, file_ctx, res)
-                        }
-                        res += module_result
+                        after_module(ctx, file_ctx, *context, module_result, res)
                     } else {
                         res.errors ++
                         res.total ++
@@ -359,6 +553,9 @@ def test_module(var mod : rtti::Module; var context : rtti::Context; var suite_c
     modPtr |> module_for_each_function() $(f) {
         if (f.hash == 0ul) return
         let func = context |> get_function_by_mnh(f.hash)
+        // a required module's unused function has no sim function; a
+        // `[test]` exports itself, so none is skipped
+        if (func == null) return
         let fn = modPtr |> find_module_function_via_rtti(func)
         if (fn == null) return
         var test_name = ""
@@ -718,23 +915,19 @@ def private run_benchmark(var suite_ctx : SuiteCtx; var file_ctx : FileCtx; var 
             }
 
             benchmarking.on_start <- @capture(& selfCtx, & suite_ctx, & benchmarking, & file_ctx) (sub_name : string) {
-                unsafe { // nolint:STYLE025 — invoke_in_context needs unsafe; expression form can't wrap a pipe
-                    selfCtx |> invoke_in_context("bench_on_start_impl", suite_ctx, benchmarking, file_ctx, func_type, name, sub_name)
-                }
+                unsafe(selfCtx |> invoke_in_context("bench_on_start_impl", suite_ctx, benchmarking,
+                    file_ctx, func_type, name, sub_name))
             }
 
             benchmarking.on_finished <- @capture(& selfCtx, & suite_ctx, & benchmarking) (stats : BenchmarkRunStats) {
                 var with_func_type = stats
                 with_func_type.func_type = func_type
-                unsafe { // nolint:STYLE025 — invoke_in_context needs unsafe; expression form can't wrap a pipe
-                    selfCtx |> invoke_in_context("bench_on_finished_impl", suite_ctx, benchmarking, with_func_type)
-                }
+                unsafe(selfCtx |> invoke_in_context("bench_on_finished_impl", suite_ctx,
+                    benchmarking, with_func_type))
             }
         }
 
-        unsafe { // nolint:STYLE025 — invoke_in_context needs unsafe; expression form can't wrap a pipe
-            *file_ctx.context |> invoke_in_context(func, benchmarking)
-        }
+        unsafe(*file_ctx.context |> invoke_in_context(func, benchmarking))
     } recover {
         benchmarking.failed = true
     }

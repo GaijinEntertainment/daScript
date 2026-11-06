@@ -45,14 +45,14 @@ functions or any of its assertions from `dasbind/test_extern_abi.das` is a defec
 the only check of which register or stack slot an interpreted `[extern]` call puts each argument
 in - the JIT never takes that path - so coverage lost there reports green on every lane.
 
-**A diff that changes a `.das` file under this folder not marked `options no_aot` - one an
+**A diff that changes a `.das` file under `tests/` (repo root) not marked `options no_aot` - one an
 `AOT_*_FILES` variable of `tests/aot/CMakeLists.txt` holds after its filters, or one in a
 `tests/<name>/` folder `DAS_AOT_SUITES` lists - names in the PR body the run that showed
 `test_aot` pass: a local `daslang utils/internal/preflight/main.das -- --full` (repo root), a
 `--target run_tests_aot` build, or a CI job link.** Per-PR CI builds only the AOT subset binary
 (the test_aot_subset target), so the PR's own checks do not prove `test_aot`.
 
-**A diff that marks a `.das` file under this folder `options no_aot`, or filters one out of an
+**A diff that marks a `.das` file under `tests/` (repo root) `options no_aot`, or filters one out of an
 `AOT_*_FILES` variable of `tests/aot/CMakeLists.txt`, states in a comment beside the option or
 the filter what stops `test_aot` compiling or running the file, why an AOT build of it tests
 nothing, or which `AOT_*_FILES` variable compiles it instead.** Without a stated reason no later

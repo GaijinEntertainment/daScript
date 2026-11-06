@@ -205,7 +205,7 @@ def private cud_mirror_slack : int64 => RDEC_MIR_SLACK
 def dasllama_math_cuda_register() {
     register_kernel_backend(KernelBackend(name = "cuda", mm = @@cuda_no_gemv, batch = @@cuda_no_batch,
         group3 = @@cuda_no_group3, repack = @@cuda_repack_noop,
-        needs_repack = false, priority = -1, available = @@cuda_backend_available))   //! the witness answers under either home
+        needs_repack = false, batch_only = true, priority = -1, available = @@cuda_backend_available))   //! the witness answers under either home
     register_gpu_home("cuda", @@cuda_install_seats)
     return if (!gpu_want_cuda())
     cuda_install_seats()

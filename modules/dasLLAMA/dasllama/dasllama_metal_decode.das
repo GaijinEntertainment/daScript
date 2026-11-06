@@ -49,6 +49,13 @@ require daslib/typemacro_boost   // [template_struct_instance] — the layer enc
 // sessions are the same driver code: the GPU kernels only ever see a dense logical slab.
 
 
+[finalize, arch(at="../ARCHITECTURE_GPU_METAL_LIFECYCLE.md#metal-family-lifecycle")]
+def private metal_context_shutdown {
+    return if (g_dev == null)
+    metal_decode_shutdown()
+    metal_prefill_shutdown()
+}
+
 //! Release every GPU object the driver family holds — mirrors, weight regions, pools, PSOs,
 //! queue, device (the tests' leak-gate rail, same contract as metal_prefill_shutdown). Lazily
 //! re-initializes on the next served step; all mirrors rebuild from the CPU caches on demand.

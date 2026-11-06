@@ -31,17 +31,18 @@ oracle are as `REVIEW_KERNEL_CELLS.md` (beside this file) defines them; an encod
 **A kernel-unit cell applies `REVIEW_KERNEL_CELLS.md` (beside this file) too, wherever the diff
 puts it.**
 
-**A diff that touches a test file or cell `REVIEW_PINNED_GATES.md` (beside this file) lists, or
-changes which `run.das` suites list one, applies that checklist too.**
+**A diff that touches a cell `REVIEW_PINNED_GATES.md` (beside this file) pins, or any cell of a
+file it pins whole, or changes which `run.das` suites list one, applies that checklist too.**
 
 **A diff that adds a cell or an assert whose expected value restates, or reads, something
 maintained outside the cell, or that a checked-in table names as its evidence, applies
 `REVIEW_PINNED_GATES.md` (beside this file) too.**
 
 **A cell that calls - in its own code or through a helper - a `../dasllama/` call that sets a
-module or process global a later load, route choice or kernel dispatch reads (a `set_*`,
-`enable_*`, `disable_*`, `pin_*`, `reset_*`, `restore_*`, `register_*`, `select_*_override` or
-`unset_*` call), or that passes a loader parameter choosing
+module or process global a later load, route choice or kernel dispatch reads (that property is
+the trigger, whatever the name; `set_*`, `enable_*`, `disable_*`, `pin_*`, `reset_*`,
+`restore_*`, `reinstall_*`, `register_*`, `unregister_*`, `select_*_override` and `unset_*` are
+the common spellings), or that passes a loader parameter choosing
 a family's serving lane (the q8 or float weight form the family runs), or whose claim depends on
 which route or serving lane runs it - a compare of a CPU run against a GPU run among them - applies
 `REVIEW_LANE_PINS.md` (beside this file) too.**

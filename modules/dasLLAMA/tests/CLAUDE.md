@@ -16,6 +16,7 @@ DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das
 DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area vision --only gemma4uv,gemma4v,gemma3v,qwen3v,qwen25v   # the CUDA home's vision run: the five vision family files, whose discrete-home cells the first run's --only tokens do not reach
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --shard 1/3             # one of three boxes: every third file of the same run, from the first
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area audio            # one area: audio | vision | tts | translate | llm | infra (comma list)
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free --batch 1    # one child a file (the default is ten a child, compiled as one program: the engine parsed and JIT'd once a batch)
 ```
 
 An AREA is what someone working on audio, vision, TTS, the LLM engine or the tooling runs after an
@@ -85,7 +86,17 @@ test program's AST record, one per file, the folder keyed by the daslang binary)
 unchanged module prefix, so an engine test file that parses in ~90 s cold opens in a few seconds warm, and an
 engine edit re-parses the edited module and the modules after it alone. The `CACHE` line names the folder; a
 run on the runner's own binary removes the folders of earlier binaries, whose records can never serve again,
-and a `--das` dry run keeps them.
+and a `--das` dry run keeps them. `--batch N` (default 10; 1 = one child a file) hands N files to one child as ONE program (dastest's
+`--together`: a generated root requires every file, so the engine's parse and JIT - the 20 s a small file pays - are
+paid once a batch, and each file then runs in a fresh context of that program, ~4 s of DLL reload), each file still
+reporting its own `PASS` / `FAIL` line and the child's timeout N times the single's; a batch that dies before every
+file's verdict reruns the verdict-less files one child each (`RETRY` lines), and the image suite's child and every
+expected-failure compile test (`cant_*`, `failed_*`, `invalid_*` - a root requiring one fails to compile whole) run alone
+whatever the batch. A fresh context means fresh globals,
+`[init]`s and model caches a file - but the PROGRAM is shared: a module any file of the batch requires is in every
+file's context, so a test that reads the state before some module's `[init]` ran (the GPU tier's contract test)
+holds only alone, and establishes its own baseline instead. A red that appears only under `--batch` names that
+test, not the batch.
 No preflight tier runs the per-PR runs. `preflight -- --only dasllama-model-free` runs the
 model-free suite; the `--changed` run has no preflight lane; `-- --only dasllama-stocked` runs the
 whole stocked suite.
@@ -1868,7 +1879,10 @@ through the CUDA free alone, a Vulkan-made one through the Vulkan free alone, a 
 `test_dn_slot_drop_keeps_the_ring_image` walks the recurrent slot's owner record (`dn_slot_bind` / `dn_slot_advance` /
 `dn_slot_drop`): the drop forgets the owner and keeps the ring image the device last advanced onto, the image a parked
 claim's checkpoint copies after the owner let go.
-`test_gpu_tier.das` - model-free: the segments form's media guard (`test_segments_served_by_override`: under a
+`test_gpu_tier.das` - model-free: the seats' baseline first and last (`reset_gpu_home_seats` opens the file: the
+seats as no home's entry ever filled them, since a `--together` batch's program carries the engine's entries;
+`reinstall_gpu_home_seats` closes it: the home's seats back for the files after it, the tier still unarmed), the
+segments form's media guard (`test_segments_served_by_override`: under a
 probe override registered with a segments form and neither the per-row-table nor the deepstack arm, two plain sessions
 take the form, a session with `mrope_pos` rows or `ds_active` declines it, both take it again cleared, and no active
 override means no form; the override found is put back), and the say-once helper the GPU driver files share (`test_gpu_said_once`: one entry a reason and the call answering that it said it, a repeat recording nothing and answering that it did not, a cleared set saying it again), and the tier's seat forwarders on doubles - among them the NextN
@@ -3582,7 +3596,9 @@ region never splits, and the two k orders round apart.
 Requires the bench by relative path (like `test_tok_seed`), so it pays the
 bench's engine compile.
 `test_run_summary.das` - model-free: `run.das`'s own `log_summary` log scraper (last marker line
-wins, end of file closes an unterminated final line, doubled marker yields one line), fed
+wins, end of file closes an unterminated final line, doubled marker yields one line) and its
+`log_verdicts` (a `--together` child's `PASS` / `FAIL` file sets by base name, a tty color code
+ahead of the word read through, a per-test `--- PASS` line and a bare word no verdict), fed
 synthetic log files from a per-process temp dir. Requires `run` by bare same-dir name.
 `test_run_suites.das` - model-free: `run.das`'s per-PR split read against the files' text (no
 `model-free` file reaches a fixture root, every `stocked` file does, no file sits in both, every
@@ -3590,7 +3606,9 @@ listed file exists), the folder census (every test file sits in a `run.das` suit
 CPU-prefill tripwire the declared exemption; `run.das` carries no `[init]`), the area tables
 (every area file sits in the census, every census file has an area, every arm an area names
 exists, every image-suite arm is reachable from an area or listed as unclaimed), the pure
-planners behind an area run, the argument contracts, the area map, the reach plan behind
+planners behind an area run, the `--batch` chunking (`child_chunks`: `per` files a child in
+order, the tail short, an area run's image file and an expected-failure compile test each alone),
+the argument contracts, the area map, the reach plan behind
 `--changed` (a test file itself, a fixture the tests requiring it and no model-suite file, a leaf
 module its witness row, a core module the core set and its other areas whole, a benchmark the
 bench rows' files; every witness row and the core set census files, every row's module a file
@@ -3838,7 +3856,8 @@ attention) at q8_0 in a session and in a pool, q8_0 asked staying q8_0, and Qwen
 `kv_codec_side` macro (`dasllama/dasllama_kv_dtype`): each codec's arm sees its own cache-pointer
 type and, nested once per side, the sixteen K x V pairs each carry the same address.
 `test_kquant.das` - model-free: the K-quant and grid plane dequants and dots against in-test
-references, including the iq4nl plane dequant on a jobque team lane reading the same values as the
+references (the per-32 cells under the portable backend pinned - their disk-order contract, where
+a model load before them pins the box profile's grp<mr> backend - the seat put back), including the iq4nl plane dequant on a jobque team lane reading the same values as the
 main thread (its codebook read is fork-safe); `test_kq_phi3_longrope_factors` - the model-gated
 LongRoPE cell on Phi-3.5 Q4_K_M: the loaded model's `rope_freqs` are the file's
 `rope_factors_long` set bit for bit (the file's 131072 context runs past its original 4096) and

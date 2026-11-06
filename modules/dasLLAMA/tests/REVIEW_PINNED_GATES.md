@@ -10,7 +10,10 @@ function and pins every cell that function runs. The pinned set, one entry a lin
 must keep holding:
 
 - `test_run_suites.das` must hold the per-PR split, the folder census, the area tables, the
-  `--exclude` and `--only` filters, the `--shard` partition, the reach plan behind `--changed` -
+  `--exclude` and `--only` filters, the `--shard` partition, the `--batch` chunking (`child_chunks`:
+  `per` files a child in order, an area run's image file and every `cant_` / `failed_` / `invalid_`
+  file alone) and the batch dry run (a batch child's `START` line carrying `--together`, `--batch 1`
+  one `--test` child a file), the reach plan behind `--changed` -
   which test files each kind of changed path runs, every `MODULE_WITNESSES` row and
   `LLM_CORE_WITNESSES` naming only census files, and every witness row's module existing with a
   `MODULE_AREAS` row that holds `llm` -, the children's module-cache folder, and the
@@ -23,8 +26,10 @@ must keep holding:
   sits in a subfolder), the fixture compare (`prefix_match_len` / `fixture_ok`: a flipped last id
   red under the strict form and held under the half-span one, a flip inside the first half red
   under both), `fetch_models --convert`'s route (`convert_route`) and quantize mint steps
-  (`mint_steps`), and the board fetch (`board_provenance`) holding every file the board sweeps read
-  and no off-board row and no on-box parity oracle (`tts_oracle*`).
+  (`mint_steps`), the board fetch (`board_provenance`) holding every file the board sweeps read
+  and no off-board row and no on-box parity oracle (`tts_oracle*`), and the companion contract: a
+  companion two rows pin (each row's cell consumes it) carries one provenance - url, bytes,
+  sha256 - on both, and the provenance view holds it once.
 - `test_metal_float_a_gate.das` must hold the MSL emitter's refusal of a float A operand (the
   activation input) to `tmm2d_q8u_f32` in a kernel that lacks `[metal_kernel(float_a_ok=true)]`,
   the error naming the FLOAT A operand, and the same kernel compiling under that annotation.
@@ -246,7 +251,10 @@ no item of its own.
 rewrites an expected value its entry ties to an outside source (a document, a checked-in table, a
 knob list) to a value that source does not state, drops its input, or drops a `run.das` suite
 listing that reaches it is a defect - fix the code that fails the cell instead; a bar shown
-mis-derived is re-derived and ledgered in `../ARCHITECTURE_CELL_BARS.md#rederived-cell-bars`.**
+mis-derived is re-derived and ledgered in `../ARCHITECTURE_CELL_BARS.md#rederived-cell-bars`.
+A comparison that changes because the contract it held changed on purpose - a rule document or
+the data model now says so - is not a loosening where the same change rewrites the cell's entry to
+the new contract and names the rule or document that states it.**
 
 **A diff that removes a pinned test cell's assert while the code it checks stays adds to the same
 cell, in the same change, an assert that holds the same values to an equal or tighter bound, with

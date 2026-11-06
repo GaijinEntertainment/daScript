@@ -230,8 +230,8 @@ the same change.** The same path served faster or slower is not a behavior.
 
 **A diff that adds an environment variable that Metal alone reads, or that Vulkan or CUDA reads and
 Metal does not, that no variable read by any other backend serving the same path changes in the
-same way, and that changes what a backend reading it computes or serves, lands its own entry,
-naming the operation the API or device of the side without it lacks, in
+same way, and that changes what a backend reading it computes or serves on a device (a host-only
+on/off knob is not one), lands its own entry naming what the other side's API or device lacks, in
 `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`; a diff that removes one deletes its entry; in
 the same change.** A variable that also adds a backend-only behavior takes one entry, not two.
 

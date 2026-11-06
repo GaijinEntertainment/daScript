@@ -142,8 +142,8 @@ per-format accessor (`kq_sb`, `kq_qsb`, `kq_ssb`, `kq_elems`, `kq_schema_id`, `k
   `<fmt>_batch_cm2e_cls` / `<fmt>_batch_khr_cls` stamps exist (`kq_tile_stamp` walks the whole enum
   in the `cm2_cls_*` ladder, and the kernel cells' `khr_cls_*` one), and a Mac whose dasVulkan
   module is not built never sees it - build the module first (`cmake --build
-  modules/dasVulkan/build`; MoltenVK then also runs the sdot4 GEMV cells, the coopmat tile cells
-  skip) and keep the identity and the sec.6 stamps in ONE compile-checked step.
+  modules/dasVulkan/build`; under `DASLLAMA_VK_MAC=1` MoltenVK then also runs the sdot4 GEMV cells,
+  the coopmat tile cells skip) and keep the identity and the sec.6 stamps in ONE compile-checked step.
 - The `GGML_TYPE_<FMT>` constant, the stride constants `<FMT>_QSB` / `<FMT>_SSB` (bytes per
   superblock row of the quant and scale planes), and the `kq_desc` row: strides, weights per
   stride unit, disk bytes per stride unit (the ggml block bytes), the ggml type, the kernel/IR id
@@ -809,8 +809,9 @@ A Metal kernel lever is judged by a kernel-level probe, never by a tg128 row: an
 carries noise above the lever's size, while the dispatch-loop probe (50 dispatches per encoder,
 best of three encoders, GB/s off plane bytes) resolves 3% in seconds. On the Metal tier the app
 sets `set_metal_mode(MetalMode.required)` BEFORE `load_model_`, then `convert_model_to_metal_blob`;
-`run.das` itself declares CPU intent, and `DASLLAMA_GPU=1` on a Mac build with dasVulkan arms
-Vulkan on MoltenVK, not Metal.
+`run.das` itself declares CPU intent, and `DASLLAMA_GPU=1 DASLLAMA_VK_MAC=1` on a Mac build with
+dasVulkan arms Vulkan on MoltenVK, not Metal (without `DASLLAMA_VK_MAC` the Vulkan home declines on
+macOS).
 
 ## 8. End to end
 

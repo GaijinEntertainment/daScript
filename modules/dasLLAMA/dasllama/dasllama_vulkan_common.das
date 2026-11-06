@@ -1414,7 +1414,18 @@ def private vk_device_borrow(device : uint64) {
     verify(vk_device_flags(), "dasLLAMA vulkan tier: the process's device answers its flags for the context that made it")
 }
 
-[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-class-pipeline-build")]
+var private g_vk_mac_said = false
+
+//! why the Vulkan home declines on this host before any probe, "" where it may probe: macOS declines unless
+//! DASLLAMA_VK_MAC asks (MoltenVK is not a serving home - the Mac build carries the module so its sources compile)
+def public vulkan_host_decline : string {
+    if (get_platform_name() == "darwin" && !g_env_vulkan.vk_mac) {
+        return "Vulkan on macOS is not a serving home (MoltenVK) - DASLLAMA_VK_MAC=1 probes it anyway"
+    }
+    return ""
+}
+
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-class-pipeline-build"), arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def vk_moe_init : bool {
     if (g_init_failed) {   // checked FIRST: a partially-built g_gpu must never report ready
         return false
@@ -1440,6 +1451,18 @@ def vk_moe_init : bool {
         g_gpu.weight_budget = g_vk_dry_cfg.vram_mb * 1_000_000l
 
         return true
+    }
+    let host_why = vulkan_host_decline()
+    if (!empty(host_why)) {
+        if (!g_vk_mac_said) {
+            g_vk_mac_said = true
+            to_log(LOG_INFO, "dasLLAMA vulkan tier: {host_why}\n")
+        }
+        return false
+    }
+    if (!g_vk_mac_said && get_platform_name() == "darwin") {
+        g_vk_mac_said = true
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: Vulkan on macOS probed as asked (DASLLAMA_VK_MAC=1)\n")
     }
     g_init_failed = true   // cleared only on full success
     let t0 = ref_time_ticks()

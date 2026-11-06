@@ -1262,6 +1262,7 @@ def private provenance_walk(spec_on : block<(s : ModelSpec) : bool>; companion_o
     var inscope aspecs <- asr_catalog()
     var out : array<ProvEntry>
     out |> reserve(length(specs) + length(aspecs) + 16)   // + a few companions per pinned spec
+    var inscope seen : table<string>   //! a companion two rows pin (each row's cell consumes it) is one entry: the first row's
     for (s in specs) {
         continue if (!invoke(spec_on, s))
         if (!empty(s.url) || !empty(s.recipe)) {
@@ -1269,7 +1270,8 @@ def private provenance_walk(spec_on : block<(s : ModelSpec) : bool>; companion_o
                 bytes = s.bytes, sha256 = s.sha256, recipe = s.recipe, quantize = s.quantize))
         }
         for (c in s.companions) {
-            if (invoke(companion_on, s, c)) {
+            if (invoke(companion_on, s, c) && !(seen |> key_exists(c.name))) {
+                seen |> insert(c.name)
                 out |> push(c)
             }
         }
@@ -1278,7 +1280,12 @@ def private provenance_walk(spec_on : block<(s : ModelSpec) : bool>; companion_o
         if (!empty(a.prov.name)) {
             out |> push(a.prov)
         }
-        out |> push_from(a.companions)
+        for (c in a.companions) {
+            if (!(seen |> key_exists(c.name))) {
+                seen |> insert(c.name)
+                out |> push(c)
+            }
+        }
     }
     return <- out
 }

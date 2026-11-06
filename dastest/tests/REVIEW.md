@@ -1,11 +1,11 @@
 # dastest Tests Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `../README.md`.
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
+`../README.md`.
 
-**A diff that adds a dastest fixture - a file that exists to be run by another test rather than
-collected as a test of its own - starts its name, or its directory's name, with `_`** - dastest
-skips a `_` name when it scans a directory, so a fixture never runs as a test of its own.
+**A diff that adds a `.das` file here that is not itself a test - a fixture another test runs, or a
+module a fixture requires - starts its name, or its directory's name, with `_`** - dastest skips a
+`_` name when it scans a directory, so such a file never runs as a test of its own.
 
 **A diff that adds a test for dastest itself, or changes how one spawns a process or checks an
 exit code, runs it on Windows and Linux before it lands, or the PR body names each of those two

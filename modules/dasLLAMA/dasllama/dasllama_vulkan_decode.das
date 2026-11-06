@@ -5696,6 +5696,7 @@ def private span_record(a : MoeSpanDec) {
 //! asserts on a changed suffix, and a second model in one process - the tests' shape - has no
 //! model drop between the two. The old record's objects stay model-owned until the drop.
 def vk_span_reset {
+    return if (g_gpu == null)
     g_gpu.span_layers |> clear()
     g_gpu.span_key = -1l
     g_gpu.span_nl = 0l

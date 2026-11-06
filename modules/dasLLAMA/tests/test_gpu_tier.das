@@ -8,9 +8,11 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 // device-free: uninstalled slots decline (never panic on the probe surface), installed das-side
 // doubles receive exactly what the forwarders were handed, and the want/arm state round-trips.
 // The op-hook family (ffn/attn/dn/cls) is exercised end-to-end by test_vulkan_tier, which
-// installs the real hooks. NOTE: doubles installed here stay for the process (no uninstall
-// surface, by design) — they are benign: nothing consults rdec_* unless a resident driver
-// armed itself, and the arm double is reset to false at the end.
+// installs the real hooks. The contract reads the seats as no home's entry ever filled them: the
+// first test resets them to that state (a program that carries an entry - a --together batch
+// with an engine file - starts with the Vulkan home's seats installed), and the last test
+// reinstalls the home's seats over the doubles, so a file after this one in the same process
+// reads them as a fresh program would; the arm double is reset to false at the end.
 
 require dastest/testing_boost public
 require daslib/fio
@@ -255,6 +257,7 @@ def private arm_off() : bool => false
 
 [test]
 def test_gpu_tier_contract(t : T?) {
+    t |> success(reset_gpu_home_seats(), "the seats read as no home's entry filled them - the tier is unarmed, so the reset lands")
     t |> run("uninstalled slots decline - never serve") @(t : T?) {
         t |> success(!moe_gpu_resident_installed(), "resident must start uninstalled")
         t |> success(!rdec_reserve(4, 100l), "unset reserve must decline")
@@ -886,4 +889,10 @@ def test_vulkan_trim_default(t : T?) {
     if (!vulkan_trim_lever_set()) {
         t |> equal(vulkan_trim(), g_env_vulkan.trim, "with no lever set the lane follows the knob")
     }
+}
+
+[test]
+def test_gpu_tier_seats_put_back(t : T?) {
+    t |> success(reinstall_gpu_home_seats(), "the home's entry installers run again over the doubles")
+    t |> success(!moe_gpu_tier_arm_(), "the tier stays unarmed")
 }
