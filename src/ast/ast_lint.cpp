@@ -1195,7 +1195,7 @@ namespace das {
         virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) override {
             Visitor::preVisitBlockExpression(block, expr);
             tableLookupCollision.push_back(das_hash_set<uint64_t>());
-            if ( expr->rtti_isOp2() ) {
+            if ( expr->rtti_isOp2() && !expr->generated ) {
                 auto op2 = static_cast<ExprOp2 *>(expr);
                 if ( op2->func && op2->func->builtIn && !op2->func->hasObservableEffects() ) {
                     program->error("top level no side effect operation " + op2->op, "", "",
@@ -1211,7 +1211,7 @@ namespace das {
         virtual void preVisitBlockFinalExpression ( ExprBlock * block, Expression * expr ) override {
             Visitor::preVisitBlockFinalExpression(block, expr);
             tableLookupCollision.push_back(das_hash_set<uint64_t>());
-            if ( expr->rtti_isOp2() ) {
+            if ( expr->rtti_isOp2() && !expr->generated ) {
                 auto op2 = static_cast<ExprOp2 *>(expr);
                 if ( op2->func && op2->func->builtIn && !op2->func->hasObservableEffects() ) {
                     program->error("top level no side effect operation " + op2->op, "", "",
