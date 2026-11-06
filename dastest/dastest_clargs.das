@@ -9,6 +9,9 @@ struct DastestArgs {
     @clarg_doc = "Script file(s) to run tests for in a single subprocess (repeatable). Used internally by isolated/semi-isolated mode to dispatch a batch to one worker subprocess"
     run : array<string>
 
+    @clarg_doc = "Files compiled as ONE program (repeatable), each run in a fresh context of it"
+    together : array<string>
+
     @clarg_doc = "Only print output for failed tests, suppressing successful ones"
     failures_only : bool
 

@@ -62,6 +62,23 @@ var private fileTimings : array<FileTiming>
 var private failedFiles : array<FailedFile>
 var private timingOutliers : int = 0
 var private maxFileTime : float = 0.0
+
+//! a file's PASS / FAIL line, its failure record and its timing - the
+//! in-process and together paths share it
+def private report_file(uri : string; status : SuiteResult; fileDt : int64) {
+    if (status.errors + status.failed == 0) {
+        if (status.total > 0) {
+            log::green("PASS {uri} {time_dt_hr(fileDt)}")
+        }
+    } else {
+        log::red("FAIL {uri} {time_dt_hr(fileDt)}")
+        let reason = "{status.failed} failed, {status.errors} errors"
+        failedFiles |> push(FailedFile(uri = clone_string(uri), reason = clone_string(reason)))
+    }
+    if (timingOutliers > 0 || maxFileTime > 0.0) {
+        fileTimings |> push(FileTiming(uri = clone_string(uri), dt = fileDt))
+    }
+}
 var private g_stderr_seq : int = 0   //! with the spawn tick, names each isolated child's stderr file
 var private jsonFilePath : string
 var private jsonTestFile : string
@@ -384,11 +401,7 @@ def serialize_path(ctx : SuiteCtx, files : array<string>, out_file : string) {
         var inscope access <- make_file_access(ctx.projectPath)
         access |> add_file_access_root("dastest", ctx.dastestRoot)
         for (file in files) {
-            // Tests whose basename starts with cant_, failed_, or invalid_
-            // are expected-failure compile tests anywhere in the tests tree;
-            // they have nothing to serialize.
-            let base = base_name(file)
-            continue if (base |> starts_with("cant_") || base |> starts_with("failed_") || base |> starts_with("invalid_"))
+            continue if (is_expected_failure_test(file))   // nothing to serialize
             using() $(var mg : ModuleGroup) {
                 using() $(var cop : CodeOfPolicies) {
                     cop.aot_module = true
@@ -594,7 +607,8 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
         }
     }
 
-    var inputPaths := test_args.test_files
+    let together = !empty(test_args.together)
+    var inputPaths := together ? test_args.together : test_args.test_files
     var files : array<string>
     return 1 if (!collect_files(inputPaths, files))
     if (!empty(test_args.test_list)) {
@@ -672,6 +686,12 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
         res = serialize_path(ctx, files, ser_file)
     } elif (!empty(deser_file)) {
         res = deserialize_path(ctx, files, deser_file)
+    } elif (together) {
+        log::started("together: {length(files)} files as one program")
+        res += suite::test_together(files, ctx) $(file, status, fileDt) {
+            record_pass(cache, file, status, suite::test_inputs)
+            report_file(ctx.uriPaths ? file_name_to_uri(file) : file, status, fileDt)
+        }
     } elif (!isolatedMode) {
         var fileIndex = 0
         for (file in files) {
@@ -682,18 +702,7 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
             let status = suite::test_file(file, ctx)
             let fileDt = get_time_nsec(fileTime) / 1000
             record_pass(cache, file, status, suite::test_inputs)
-            if (status.errors + status.failed == 0) {
-                if (status.total > 0) {
-                    log::green("PASS {uri} {time_dt_hr(fileDt)}")
-                }
-            } else {
-                log::red("FAIL {uri} {time_dt_hr(fileDt)}")
-                let reason = "{status.failed} failed, {status.errors} errors"
-                failedFiles |> push(FailedFile(uri = clone_string(uri), reason = clone_string(reason)))
-            }
-            if (timingOutliers > 0 || maxFileTime > 0.0) {
-                fileTimings |> push(FileTiming(uri = clone_string(uri), dt = fileDt))
-            }
+            report_file(uri, status, fileDt)
             res += status
         }
     } else {

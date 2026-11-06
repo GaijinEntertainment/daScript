@@ -104,6 +104,12 @@ Command-line arguments
    * - ``--test-timeout <seconds>``
      - Per-test-file timeout in isolated mode (seconds).
        ``0`` disables.  Default: ``0`` (no per-file timeout).
+   * - ``--together <path>``
+     - Repeatable.  The listed files compiled as one program: a generated
+       root requires every file, so the module graph is parsed and JIT'd
+       once for the list, and each file's module then runs in a fresh
+       context of that program and reports as its own file.  The files'
+       ``options`` lines must agree.
    * - ``--stack-on-exception``
      - On a test panic, walk the call stack *at throw time* (frames intact)
        and print a real ``CALL STACK`` trace, instead of the default which
