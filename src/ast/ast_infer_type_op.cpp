@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_generate.h"
+#include "daScript/ast/ast_generate_typed.h"
 #include "daScript/ast/ast_infer_type.h"
 #include "daScript/ast/ast_visitor.h"
 
@@ -286,16 +287,7 @@ namespace das {
     void InferTypes::preVisit(ExprOp2 *expr) {
         Visitor::preVisit(expr);
         if (!strictProperties && isAssignmentOperator(expr->op)) {
-            if (expr->left->rtti_isField()) {
-                auto field = static_cast<ExprField*>(expr->left);
-                field->underClone = true;
-            } else if (expr->left->rtti_isVar()) {
-                auto var = static_cast<ExprVar*>(expr->left);
-                var->underClone = true;
-            } else if (expr->left->rtti_isAt()) {
-                auto at = static_cast<ExprAt*>(expr->left);
-                at->underClone = true;
-            }
+            markUnderClone(expr->left);
         }
     }
     void InferTypes::removeR2v(ExpressionPtr &expr) {
@@ -794,16 +786,7 @@ namespace das {
         Visitor::preVisit(expr);
         markTableStoreTarget(expr->left);
         if (!strictProperties) {
-            if (expr->left->rtti_isField()) {
-                auto field = static_cast<ExprField*>(expr->left);
-                field->underClone = true;
-            } else if (expr->left->rtti_isVar()) {
-                auto var = static_cast<ExprVar*>(expr->left);
-                var->underClone = true;
-            } else if (expr->left->rtti_isAt()) {
-                auto at = static_cast<ExprAt*>(expr->left);
-                at->underClone = true;
-            }
+            markUnderClone(expr->left);
         }
         markNoDiscard(expr->right);
     }
@@ -900,16 +883,7 @@ namespace das {
     void InferTypes::preVisit(ExprClone *expr) {
         Visitor::preVisit(expr);
         markTableStoreTarget(expr->left);
-        if (expr->left->rtti_isField()) {
-            auto field = static_cast<ExprField*>(expr->left);
-            field->underClone = true;
-        } else if (expr->left->rtti_isVar()) {
-            auto var = static_cast<ExprVar*>(expr->left);
-            var->underClone = true;
-        } else if (expr->left->rtti_isAt()) {
-            auto at = static_cast<ExprAt*>(expr->left);
-            at->underClone = true;
-        }
+        markUnderClone(expr->left);
         markNoDiscard(expr->right);
     }
     ExpressionPtr InferTypes::promoteAssignmentToProperty(ExprOp2 *expr) {

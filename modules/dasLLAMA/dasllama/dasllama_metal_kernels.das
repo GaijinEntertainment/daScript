@@ -2307,8 +2307,7 @@ class template MetalGemvB24T {
         let lane = gl_SubgroupInvocationID
         let nb4 = ndim / 4u
         let nb = ndim / 32u
-        var acc_gate : float[NR]
-        var acc_up : float[NR]                // nolint:LINT002 — the W13 arms alone accumulate into it
+        var acc_gate, acc_up : float[NR]
         var cb = 0u
         while (cb + 64u <= nb4) {
             barrier()                       // previous round done reading the panel

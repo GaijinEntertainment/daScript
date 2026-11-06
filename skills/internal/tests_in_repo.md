@@ -109,6 +109,14 @@ require path cannot contain a hyphen, so a hyphenated tool directory (`utils/det
 the directory and require the sibling module by bare name. A test needing a shared fixture
 should keep the fixture in its own directory rather than reaching across the tree.
 
+## One new test file per commit
+
+A commit adds at most one new test file, and every test its change needs goes into that file -
+no file per case, no helper module of its own. A reviewer reads one file to see what the commit
+proves. The exception is a compile-fail fixture (`tests/language/failed_*.das`): its
+`expect <code>[:line]` header speaks for the whole file, so each expected error is a file of its
+own.
+
 ## Running the repo suite
 
 - Single file: `bin/Release/daslang.exe dastest/dastest.das -- --test tests/linq/test_linq_aggregation.das`

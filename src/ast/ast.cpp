@@ -1183,6 +1183,7 @@ namespace das {
 
     ExpressionPtr Expression::autoDereference ( ExpressionPtr expr ) {
         if ( expr->type && !expr->type->isAutoOrAlias() && expr->type->isRef() && !expr->type->isRefType() ) {
+            if ( expr->rtti_isAt() ) static_cast<ExprAt *>(expr)->underDeref = true;
             auto ar2l = new ExprRef2Value();
             ar2l->subexpr = expr;
             ar2l->at = expr->at;

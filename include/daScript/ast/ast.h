@@ -1609,7 +1609,7 @@ namespace das
         Module * addModule ( const string & name );
         void finalizeAnnotations();
         bool patchAnnotations();
-        bool patchInline();     // [inline] splicing; runs in the patch slot, returns true when the AST changed
+        bool patchInline();
         void fixupAnnotations();
         void normalizeOptionTypes ();
         bool relocatePotentiallyUninitialized(TextWriter & logs);

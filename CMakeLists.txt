@@ -979,7 +979,6 @@ src/ast/ast_program.cpp
 src/ast/ast_allocate_stack.cpp
 src/ast/ast_gc_collect.cpp
 src/ast/ast_annotations.cpp
-src/ast/ast_inline.cpp
 src/ast/ast_export.cpp
 src/ast/ast_debug_info_helper.cpp
 src/ast/ast_handle.cpp
@@ -1363,6 +1362,8 @@ SET(LIBDASCRIPT_COMPILER_SRC
     src/ast/ast_cfg.cpp
     src/ast/ast_dse.cpp
     src/ast/ast_cse.cpp
+    src/ast/ast_inline.cpp
+    src/ast/ast_generate_typed.cpp
 
     src/builtin/module_builtin_ast.cpp
     src/builtin/module_builtin_ast_flags.cpp

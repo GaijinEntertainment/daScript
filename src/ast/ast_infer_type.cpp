@@ -2,6 +2,7 @@
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_generate.h"
+#include "daScript/ast/ast_generate_typed.h"
 #include "daScript/ast/ast_infer_type.h"
 #include "daScript/ast/ast_pass_macros.h"
 #include "daScript/ast/ast_visitor.h"
@@ -591,21 +592,11 @@ namespace das {
         if (!var->init->type)
             return Visitor::visitGlobalLetInit(var, init);
         if (var->type->isAuto()) {
-            auto varT = TypeDecl::inferGenericInitType(var->type, var->init->type);
-            if (!varT || varT->isAlias()) {
+            auto varT = inferLetInitType(var->type, var->init->type, var->init_via_clone, relaxedPointerConst);
+            if (!varT) {
                 error("global variable '" + var->name + "' initialization type can't be inferred, " + describeType(var->type) + " = " + describeType(var->init->type), "", "",
                       var->at, CompilationError::invalid_global_init_type);
             } else {
-                varT->ref = false;
-                if (var->init_via_clone && varT->isString()) {
-                    varT->temporary = false;
-                }
-                TypeDecl::applyAutoContracts(varT, var->type);
-                if (!relaxedPointerConst) { // var a = Foo? const -> var a : Foo const? = Foo? const
-                    if (varT->isPointer() && !varT->constant && var->init->type->constant && varT->firstType) {
-                        varT->firstType->constant = true;
-                    }
-                }
                 var->type = varT;
                 if ( !var->type->at.fileInfo ) var->type->at = var->at;
                 var->type->sanitize();
@@ -1161,23 +1152,11 @@ namespace das {
         // infer r2v(type<Foo...>)
         if (expr->subexpr->rtti_isTypeDecl()) {
             reportAstChanged();
-            if (expr->subexpr->type->isEnum()) {
-                auto ewsType = new TypeDecl(*(expr->subexpr->type));
-                ewsType->ref = false;
-                auto anyEnumValue = expr->subexpr->type->enumType->list.size() ? expr->subexpr->type->enumType->list[0].name : "";
-                auto ews = new ExprConstEnumeration(expr->at, anyEnumValue, ewsType);
-                ews->type = ewsType;
+            if (auto ews = makeTypeWitnessZero(expr->at, expr->subexpr->type)) {
                 return ews;
             } else if (expr->subexpr->type->isWorkhorseType()) {
-                auto ewsType = new TypeDecl(*(expr->subexpr->type));
-                ewsType->ref = false;
-                auto ews = Program::makeConst(expr->at, ewsType, v_zero());
-                if (!ews) {
-                    // 16/8-bit lattice vectors have no const nodes — lower to the zero ctor call
-                    return new ExprCall(expr->at, das_to_string(ewsType->baseType));
-                }
-                ews->type = ewsType;
-                return ews;
+                // 16/8-bit lattice vectors have no const nodes — lower to the zero ctor call
+                return new ExprCall(expr->at, das_to_string(expr->subexpr->type->baseType));
             } else {
                 auto mks = new ExprMakeStruct(expr->at);
                 mks->makeType = expr->subexpr->type;
@@ -2320,6 +2299,13 @@ namespace das {
         return Visitor::visit(expr);
     }
     ExpressionPtr InferTypes::visit(ExprTypeInfo *expr) {
+        auto res = foldTypeInfo(expr);
+        if (res && res != expr && res->rtti_isConstant() && !res->type) {
+            return res->visit(*this);
+        }
+        return res;
+    }
+    ExpressionPtr InferTypes::foldTypeInfo(ExprTypeInfo *expr) {
         expr->macro = nullptr;
         if (expr->typeexpr && expr->typeexpr->isExprType()) {
             return Visitor::visit(expr);
@@ -3785,9 +3771,7 @@ namespace das {
                 ++it;
             }
         }
-        block->hasEarlyOut = false;
-        block->hasReturn = false;
-        block->forLoop = false;
+        resetBlockFlow(block);
         if (block->isClosure) {
             if (block->returnType) {
                 blocks.push_back(block);
@@ -4712,13 +4696,7 @@ namespace das {
         return Visitor::visit(expr);
     }
     void InferTypes::markEarlyOut() {
-        auto i = scopes.size();
-        while (i > 0) {
-            i--;
-            scopes[i]->hasEarlyOut = true;
-            if (scopes[i]->isClosure)
-                break;
-        }
+        markScopesEarlyOut(scopes);
     }
     void InferTypes::preVisit(ExprReturn *expr) {
         Visitor::preVisit(expr);
@@ -4893,6 +4871,7 @@ namespace das {
     struct MarkNamedVariablesUsed : Visitor {
         Function * func = nullptr;
         vector<VariablePtr> * local = nullptr;
+        vector<ExprBlock *> * scopes = nullptr;
         virtual void preVisit(ExprVar * expr) override {
             Visitor::preVisit(expr);
             for (auto & arg : func->arguments) {
@@ -4900,6 +4879,14 @@ namespace das {
             }
             for (auto & var : *local) {
                 if (var->name == expr->name) var->marked_used = true;
+            }
+            for (auto block : *scopes) {
+                for (auto stmt : block->list) {
+                    if (!stmt->rtti_isLet()) continue;
+                    for (auto & var : static_cast<ExprLet *>(stmt)->variables) {
+                        if (var->name == expr->name) var->marked_used = true;
+                    }
+                }
             }
         }
     };
@@ -4966,14 +4953,15 @@ namespace das {
                         MarkNamedVariablesUsed mark;
                         mark.func = func;
                         mark.local = &local;
+                        mark.scopes = &scopes;
                         dropped->visit(mark);
                     }
                 }
-                if (condR) {
-                    return expr->if_true;
-                } else {
-                    return expr->if_false;
+                ExpressionPtr survivor = condR ? expr->if_true : expr->if_false;
+                if (expr->isStatic && survivor) {
+                    return survivor->visit(*this);
                 }
+                return survivor;
             } else if (expr->isStatic) {
                 error("static_if must resolve to constant", "", "",
                       expr->at, CompilationError::invalid_static_if_condition);
@@ -5523,12 +5511,7 @@ namespace das {
             }
         }
         DAS_ASSERT(!scopes.empty());
-        auto scope = scopes.back();
-        expr->visibility.fileInfo = expr->at.fileInfo;
-        expr->visibility.column = expr->atInit.last_column;
-        expr->visibility.line = expr->atInit.last_line;
-        expr->visibility.last_column = scope->at.last_column;
-        expr->visibility.last_line = scope->at.last_line;
+        setLetVisibility(expr, scopes.back());
         // macro generated invisible variable
         // DAS_ASSERTF(expr->visibility.line,"visiblity failed at %s",expr->at.describe().c_str());
     }
@@ -5734,19 +5717,7 @@ namespace das {
             }
         }
         if (unsafeTableLookup && var->init && var->type && !var->type->ref) { // we are looking for tab[at] to make it safe
-            auto pInit = var->init;
-            if (pInit->rtti_isR2V()) {
-                pInit = static_cast<ExprRef2Value *>(pInit)->subexpr;
-            }
-            if (pInit->rtti_isAt()) {
-                auto pAt = static_cast<ExprAt *>(pInit);
-                if (pAt->subexpr->type && pAt->subexpr->type->isGoodTableType()) {
-                    if (!pAt->alwaysSafe) {
-                        pAt->alwaysSafe = true;
-                        reportAstChanged();
-                    }
-                }
-            }
+            if (markSafeTableLookupInit(var->init)) reportAstChanged();
         }
         // we are looking into initialization with empty table or array to replace with nada
         if (isEmptyInit(var)) {
@@ -5764,24 +5735,14 @@ namespace das {
         }
         markNoDiscard(var->init);
         if (var->type->isAuto()) {
-            auto varT = TypeDecl::inferGenericInitType(var->type, var->init->type);
-            if (!varT || varT->isAlias()) {
+            auto varT = inferLetInitType(var->type, var->init->type, var->init_via_clone, relaxedPointerConst);
+            if (!varT) {
                 error("local variable " + var->name + " initialization type can't be inferred, " + describeType(var->type) + " = " + describeType(var->init->type), "", "",
                       var->at, CompilationError::invalid_local_init_type);
             } else if (varT->isVoid()) {
                 error("local variable " + var->name + " initialization can't be void, " + describeType(var->type), "", "",
                       var->at, CompilationError::invalid_local_init_type);
             } else {
-                varT->ref = false;
-                if (var->init_via_clone && varT->isString()) {
-                    varT->temporary = false;
-                }
-                TypeDecl::applyAutoContracts(varT, var->type);
-                if (!relaxedPointerConst) { // var a = Foo? const -> var a : Foo const? = Foo? const
-                    if (varT->isPointer() && varT->firstType && !varT->constant && var->init->type->constant) {
-                        varT->firstType->constant = true;
-                    }
-                }
                 var->type = varT;
                 if ( !var->type->at.fileInfo ) var->type->at = var->at;
                 var->type->sanitize();
@@ -5897,11 +5858,7 @@ namespace das {
             return blk;
         }
         if (scopes.size()) {
-            auto hasEarlyOut = scopes.back()->hasEarlyOut;
-            expr->hasEarlyOut = hasEarlyOut;
-            for (auto &var : expr->variables) {
-                var->early_out = hasEarlyOut;
-            }
+            setLetEarlyOut(expr, scopes.back()->hasEarlyOut);
         }
         if (expr->isTupleExpansion) {
             for (auto &var : expr->variables) {

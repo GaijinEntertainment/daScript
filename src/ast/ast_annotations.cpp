@@ -135,12 +135,6 @@ namespace das
             }
             return false;
         });
-        if ( astChanged ) goto done;
-        // [inline] splicing shares the patch slot: it runs once the annotation patches
-        // are quiet, and its splices restart infer the same way (ast_inline.cpp)
-        if ( !failed() ) {
-            astChanged |= patchInline();
-        }
     done:;
         return astChanged;
     }

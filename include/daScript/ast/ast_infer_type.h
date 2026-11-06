@@ -448,6 +448,7 @@ namespace das {
 
         // ExprTypeInfo
         virtual ExpressionPtr visit(ExprTypeInfo *expr) override;
+        ExpressionPtr foldTypeInfo(ExprTypeInfo *expr);
         // ExprDelete
         void reportMissingFinalizer(const string &message, const LineInfo &at, const TypeDeclPtr &ftype);
         virtual ExpressionPtr visit(ExprDelete *expr) override;

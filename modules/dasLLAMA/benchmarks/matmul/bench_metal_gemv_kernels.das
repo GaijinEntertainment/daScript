@@ -2546,7 +2546,7 @@ class template MetalKqLabK4Mm8T {
         let nrm1 = ka.nr - 1u
         let sgb = sg * rows_sg * 264u
         let wbase = sgb + r * 264u   // nolint:LINT002,LINT019 dead in the KO_DEQ stamp
-        var acc : simdgroup_float8x8[RT]   // nolint:LINT003 dead in the KO_MMA stamp
+        var acc : simdgroup_float8x8[RT]
         var ma : simdgroup_half8x8   // nolint:LINT002,LINT019 dead in the KO_MMA stamp
         var mb : simdgroup_half8x8   // nolint:LINT002,LINT019 dead in the KO_MMA stamp
         var sb = 0u

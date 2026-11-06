@@ -1459,6 +1459,11 @@ namespace das {
                 }
             }
         }
+        if ( !program->failed() ) {
+            while ( !program->failed() && program->patchInline() ) {
+                program->buildAccessFlags(logs);
+            }
+        }
         // escape analysis after buildAccessFlags so callee sideEffectFlags (rws) are final, but
         // before lint/foldUnsafe so the re-infer of the inserted scope_free matches the original
         // (in-infer-loop) ordering and does not re-trip the already-folded unsafe checks.

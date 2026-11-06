@@ -4,6 +4,7 @@
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_cfg.h"
+#include "daScript/ast/ast_generate_typed.h"
 #include "daScript/misc/anyhash.h"
 
 #include "ast_alias.h"
@@ -718,11 +719,8 @@ namespace das {
                 auto it = plan.find(expr);
                 if ( it==plan.end() ) return Visitor::visitExpression(expr);
                 auto var = it->second;
-                auto evar = new ExprVar(expr->at, var->name);
-                evar->variable = var;
-                evar->local = true;
+                auto evar = makeLocalRead(expr->at, var);
                 evar->r2v = true;
-                evar->type = new TypeDecl(*var->type);
                 evar->type->ref = false;
                 reportFolding();
                 return evar;

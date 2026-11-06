@@ -1070,6 +1070,12 @@ namespace das {
                     }
                 }
             }
+            if ( fn->mustInline ) {
+                string err;
+                if ( !canFunctionInline(fn, err) || !isInlineRecursionFree(fn, err) ) {
+                    program->error("function annotation lint failed\n", err, "", fn->at, CompilationError::runtime_function_annotation );
+                }
+            }
             if ( (fn->init | fn->shutdown) && disableInit ) { // we double-check here. we check in the infer first, but this here is for the case where macro does it later
                 program->error("[init] is disabled in the options or CodeOfPolicies",  "", "",
                     fn->at, CompilationError::cant_function);
@@ -1189,7 +1195,7 @@ namespace das {
         virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) override {
             Visitor::preVisitBlockExpression(block, expr);
             tableLookupCollision.push_back(das_hash_set<uint64_t>());
-            if ( expr->rtti_isOp2() ) {
+            if ( expr->rtti_isOp2() && !expr->generated ) {
                 auto op2 = static_cast<ExprOp2 *>(expr);
                 if ( op2->func && op2->func->builtIn && !op2->func->hasObservableEffects() ) {
                     program->error("top level no side effect operation " + op2->op, "", "",
@@ -1205,7 +1211,7 @@ namespace das {
         virtual void preVisitBlockFinalExpression ( ExprBlock * block, Expression * expr ) override {
             Visitor::preVisitBlockFinalExpression(block, expr);
             tableLookupCollision.push_back(das_hash_set<uint64_t>());
-            if ( expr->rtti_isOp2() ) {
+            if ( expr->rtti_isOp2() && !expr->generated ) {
                 auto op2 = static_cast<ExprOp2 *>(expr);
                 if ( op2->func && op2->func->builtIn && !op2->func->hasObservableEffects() ) {
                     program->error("top level no side effect operation " + op2->op, "", "",
