@@ -140,6 +140,12 @@ def metal_nmt_shutdown {
     g_nm_rate = 1.0lf
 }
 
+//! this context's translator down at its end, as the decode and prefill drivers' `metal_context_shutdown`
+[finalize, arch(at="../ARCHITECTURE_GPU_METAL_LIFECYCLE.md#metal-family-lifecycle")]
+def private metal_nmt_context_shutdown {
+    metal_nmt_shutdown()
+}
+
 //! Probe seam: the attached classifier's quants zeroed on the device, so every step's logits are the output bias alone - the
 //! device cells' control that the device served the compare; `metal_nmt_shutdown` drops the poisoned blob.
 def metal_nmt_zero_cls_probe_(m : NmtModel) {

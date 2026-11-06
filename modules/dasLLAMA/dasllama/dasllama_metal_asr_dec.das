@@ -591,6 +591,13 @@ def metal_rnnt_shutdown {
     pool_drain(g_rd_pool)
 }
 
+//! this context's decoder and transducer seats down at its end, as the decode and prefill drivers' `metal_context_shutdown`
+[finalize, arch(at="../ARCHITECTURE_GPU_METAL_LIFECYCLE.md#metal-family-lifecycle")]
+def private metal_asr_dec_context_shutdown {
+    metal_wdec_shutdown()
+    metal_rnnt_shutdown()
+}
+
 def private rd_attach(net : RnntNet; enc : RnntEnc) : bool {
     let key = rnnt_dev_key(net, enc)
     return true if (g_rd_w.key == key && g_rd_w.wh != null)
