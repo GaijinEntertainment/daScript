@@ -6,6 +6,11 @@ daslib/_aot_generated/*.cpp binary
 # Shell scripts must keep LF endings even when checked out under autocrlf=true.
 *.sh text eol=lf
 
+# dasllama-deploy.sh writes this snippet into the Linux box's Caddyfile and compares it
+# against the vhost byte for byte; a CRLF checkout under autocrlf=true reads as a changed
+# snippet on every run.
+utils/internal/dasllama-ladder/caddy.snippet text eol=lf
+
 # Windows batch launchers must keep CRLF — cmd.exe mis-parses an LF-only .cmd
 # (it runs each line's tail as a command). Force CRLF so an editor or a checkout
 # under autocrlf=input can't silently break the daslang MCP vcvars launcher.
