@@ -703,6 +703,12 @@ def kq_dense_b32(fmt : KqFmt) : bool => (fmt == KqFmt.q51 || fmt == KqFmt.iq4nl3
 //! an affine member: per-32 planes whose block pair shares one 64-group (scale, bias) pair
 def kq_mlx_affine(fmt : KqFmt) : bool => fmt == KqFmt.mlx4 || fmt == KqFmt.mlx8 || fmt == KqFmt.mlx4b || fmt == KqFmt.mlx8b || fmt == KqFmt.mlx6b
 
+//! an affine member's code width - 4, 6 or 8 - and 0 off the affine members
+def kq_mlx_bits(fmt : KqFmt) : int => int(mlx_affine_bits(kq_desc(fmt).ggml_type))
+
+//! an affine member whose scale and bias halves are BF16; the other affine members carry F16 halves
+def kq_mlx_bf16(fmt : KqFmt) : bool => fmt == KqFmt.mlx4b || fmt == KqFmt.mlx8b || fmt == KqFmt.mlx6b
+
 //! The same predicate over the int slot space the GPU drivers carry.
 def kq_dense_b32(fmt : int) : bool => (fmt >= 0 && fmt < KQ_FMT_COUNT
     && kq_dense_b32(kq_fmt_of_slot(fmt)))

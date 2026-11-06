@@ -8,6 +8,7 @@ require dasllama/dasllama_transformer   // the umbrella: hc_mix_row / hc_combine
 require dasllama/dasllama_arch_qwen4exp   // ngram_gather
 require dasllama/dasllama_kqformat   // GGML_TYPE_* + iq4nl_lut
 require dasllama/dasllama_math   // rmsnorm - the reference's grouped norm
+require dasllama/dasllama_math_gen   // bf16_bits - the affine fixture's scale and bias halves
 require dasllama/dasllama_gpu_math
 require dasllama/dasllama_par   // get_disp_count - the split legs' witness
 require daslib/jobque_boost   // with_job_que - the threaded leg
@@ -171,10 +172,6 @@ def test_hc_mixer(t : T?) {
     }
 }
 
-def private bf16_bits(x : float) : uint => unsafe(reinterpret<uint>(x)) >> 16u
-
-def private bf16_val(h : uint) : float => unsafe(reinterpret<float>(h << 16u))
-
 //! the fixture's down plane [LR x HCD] as an mlx8b triplet in the member's planes at element 0, tagged on site 0: each 64-group
 //! affine over its span (BF16 scale and bias), and the f32 down region overwritten with the planes' exact weights, so the
 //! scalar reference reads what the member serves; with `zero_scales` every scale is 0 (the control)
@@ -194,10 +191,12 @@ def private hc_down_affine(var m : Model; zero_scales : bool) {
                     lo = min(lo, m.wblob[base + k])
                     hi = max(hi, m.wblob[base + k])
                 }
-                let sh = zero_scales ? 0u : bf16_bits((hi - lo) / 255.0)
-                let bh = bf16_bits(lo)
-                let sc = bf16_val(sh)
-                let bi = bf16_val(bh)
+                let sh16 = zero_scales ? uint16(0) : bf16_bits((hi - lo) / 255.0)
+                let bh16 = bf16_bits(lo)
+                let sc = bf16_value(sh16)
+                let bi = bf16_value(bh16)
+                let sh = uint(sh16)
+                let bh = uint(bh16)
                 for (k in range64(64l)) {
                     let code = sc > 0.0 ? clamp(int(round((m.wblob[base + k] - bi) / sc)), 0, 255) : 0
                     q[base + k] = uint8(code)

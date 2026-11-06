@@ -5,7 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require _model_tier
-require _gguf_writer   // gguf_push_le: the synthetic files' little-endian words
+require _gguf_writer   // write_safetensors, half_bytes: the synthetic files and their BF16 planes
 require dasllama/dasllama_safetensors
 require dasllama/dasllama_gguf
 require dasllama/dasllama_kqformat
@@ -25,18 +25,10 @@ require math
 // served IQ4_XS file for the KVs. The pack cells skip where the pack or its GGUF oracles are not stocked, and where any of
 // them is large-tier (`snapshot_available`, `model_available`) without DASLLAMA_PARITY_FULL=1.
 
-def private bf16_bytes(v : array<float>) : array<uint8> {
-    var b : array<uint8>
-    for (x in v) {
-        gguf_push_le(b, uint64(unsafe(reinterpret<uint>(x)) >> 16u), 2)
-    }
-    return <- b
-}
-
 def private i64_bytes(v : array<int64>) : array<uint8> {
     var b : array<uint8>
     for (x in v) {
-        gguf_push_le(b, uint64(x), 8)
+        gguf_put_le(b, uint64(x), 8)
     }
     return <- b
 }
@@ -45,8 +37,8 @@ def private i64_bytes(v : array<int64>) : array<uint8> {
 //! (0.5 + r, r - seed); the codes' shape names 16 words a row
 def private triplet8(base : string; rows, seed : int) : array<tuple<name : string; dtype : string; shape : string; data : array<uint8>>> {
     return <- [(name = "{base}.weight", dtype = "U32", shape = "[{rows},16]", data <- [for (i in range(rows * 64)); uint8((i + seed) & 255)]),
-        (name = "{base}.scales", dtype = "BF16", shape = "[{rows},1]", data <- bf16_bytes([for (r in range(rows)); 0.5 + float(r)])),
-        (name = "{base}.biases", dtype = "BF16", shape = "[{rows},1]", data <- bf16_bytes([for (r in range(rows)); float(r - seed)]))]
+        (name = "{base}.scales", dtype = "BF16", shape = "[{rows},1]", data <- half_bytes([for (r in range(rows)); 0.5 + float(r)], true)),
+        (name = "{base}.biases", dtype = "BF16", shape = "[{rows},1]", data <- half_bytes([for (r in range(rows)); float(r - seed)], true))]
 }
 
 //! weight (r, k) of a `triplet8`
@@ -82,8 +74,8 @@ def private ng_shard(base : string; s : int) : array<tuple<name : string; dtype 
     let words = NG_COLS / 8
     let groups = NG_COLS / 32
     return <- [(name = "{base}.{s}.weight", dtype = "U32", shape = "[{NG_ROWS},{words}]", data <- [for (i in range(NG_ROWS * NG_COLS / 2)); uint8(ng_code(s, i / (NG_COLS / 2), i % (NG_COLS / 2)))]),
-        (name = "{base}.{s}.scales", dtype = "BF16", shape = "[{NG_ROWS},{groups}]", data <- bf16_bytes([for (i in range(NG_ROWS * groups)); ng_pair(s, i / groups, i % groups).x])),
-        (name = "{base}.{s}.biases", dtype = "BF16", shape = "[{NG_ROWS},{groups}]", data <- bf16_bytes([for (i in range(NG_ROWS * groups)); ng_pair(s, i / groups, i % groups).y]))]
+        (name = "{base}.{s}.scales", dtype = "BF16", shape = "[{NG_ROWS},{groups}]", data <- half_bytes([for (i in range(NG_ROWS * groups)); ng_pair(s, i / groups, i % groups).x], true)),
+        (name = "{base}.{s}.biases", dtype = "BF16", shape = "[{NG_ROWS},{groups}]", data <- half_bytes([for (i in range(NG_ROWS * groups)); ng_pair(s, i / groups, i % groups).y], true))]
 }
 
 //! a one-layer qwen4_exp snapshot: a zero-centred q_norm and hc gain, the plain deltanet gain, an inject, the indexer's fused
@@ -94,10 +86,10 @@ def private write_fn_snapshot(stray : bool) : string {
     let dir = create_temp_directory("dasllama_st_fn_", err)
     return "" if (!empty(err))
     let lp = "language_model.model.layers.0"
-    var ts <- [(name = "{lp}.self_attn.q_norm.weight", dtype = "BF16", shape = "[4]", data <- bf16_bytes([0.25, -0.5, 0.125, 0.0])),
-        (name = "{lp}.attn_hyper_connection.hc_norm.weight", dtype = "BF16", shape = "[4]", data <- bf16_bytes([2.5, -0.75, 0.5, 1.0])),
-        (name = "{lp}.linear_attn.norm.weight", dtype = "BF16", shape = "[4]", data <- bf16_bytes([0.875, 1.0, 0.9375, 1.0])),
-        (name = "{lp}.attn_hyper_connection.block_inject_weight.weight", dtype = "BF16", shape = "[4,2]", data <- bf16_bytes([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])),
+    var ts <- [(name = "{lp}.self_attn.q_norm.weight", dtype = "BF16", shape = "[4]", data <- half_bytes([0.25, -0.5, 0.125, 0.0], true)),
+        (name = "{lp}.attn_hyper_connection.hc_norm.weight", dtype = "BF16", shape = "[4]", data <- half_bytes([2.5, -0.75, 0.5, 1.0], true)),
+        (name = "{lp}.linear_attn.norm.weight", dtype = "BF16", shape = "[4]", data <- half_bytes([0.875, 1.0, 0.9375, 1.0], true)),
+        (name = "{lp}.attn_hyper_connection.block_inject_weight.weight", dtype = "BF16", shape = "[4,2]", data <- half_bytes([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], true)),
         (name = "{lp}.ple.ple_embedding.layer_multipliers", dtype = "I64", shape = "[3]", data <- i64_bytes([MULTS[0], MULTS[1], MULTS[2]])),
         (name = "{lp}.ple.ple_embedding.ngram_heads_offsets", dtype = "I64", shape = "[4]", data <- i64_bytes([0l, 7l, 14l, 21l])),
         (name = "{lp}.ple.ple_embedding.ngram_heads_vocab_sizes", dtype = "I64", shape = "[4]", data <- i64_bytes([7l, 7l, 7l, 7l]))]
@@ -119,7 +111,7 @@ def private write_fn_snapshot(stray : bool) : string {
         delete more
     }
     if (stray) {
-        ts |> emplace((name = "mtp.unknown_norm.weight", dtype = "BF16", shape = "[4]", data <- bf16_bytes([1.0, 1.0, 1.0, 1.0])))
+        ts |> emplace((name = "mtp.unknown_norm.weight", dtype = "BF16", shape = "[4]", data <- half_bytes([1.0, 1.0, 1.0, 1.0], true)))
     }
     let ok = write_safetensors(path_join(dir, "model.safetensors"), ts) && fwrite(path_join(dir, "config.json"), FN_CONFIG)
     return ok ? dir : ""

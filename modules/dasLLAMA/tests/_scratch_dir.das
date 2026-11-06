@@ -9,7 +9,8 @@ module _scratch_dir shared public
 
 require daslib/fio
 require dastest/testing_boost
-require _gguf_writer   // gguf_header, gguf_push_le, gguf_push_str: the header-only GGUF fixture's bytes
+require dasllama/dasllama_gguf   // gguf_put_le, gguf_put_str: the header-only GGUF fixture's bytes
+require _gguf_writer   // gguf_header: the fixture's v3 header
 
 //! `name` in this run's scratch directory
 def scratch_path(name : string) : string => path_join(test_temp_dir(), name)
@@ -30,9 +31,9 @@ def scratch_file(name, content : string) : string {
 def arch_gguf(name, arch : string) : string {
     var b : array<uint8>
     gguf_header(b, 0ul, 1ul)
-    gguf_push_str(b, "general.architecture")
-    gguf_push_le(b, 8ul, 4)            //! a string value
-    gguf_push_str(b, arch)
+    gguf_put_str(b, "general.architecture")
+    gguf_put_le(b, 8ul, 4)            //! a string value
+    gguf_put_str(b, arch)
     let p = scratch_path(name)
     fopen(p, "wb") $(f) {
         if (f != null) {

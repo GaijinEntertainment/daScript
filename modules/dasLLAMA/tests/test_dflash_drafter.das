@@ -8,7 +8,7 @@ require dasllama/dasllama   // the public facade - engine + arch registrations
 require dasllama/dasllama_common   // set_metal_mode, allow_cpu_prefill, generate, generate_mtp_greedy, the overrides
 require dasllama/dasllama_dflash   // the subject: the DFlash2 block drafter's loader, seams and CPU arm
 require dasllama/dasllama_sampling   // generate_, generate_mtp_sampled, set_seed_: the sampled walks
-require dasllama/dasllama_gguf   // gguf_header_read, gguf_find_tensor: the drafter file's disk types against the loader's tags
+require dasllama/dasllama_gguf   // gguf_header_read, gguf_find_tensor: the drafter file's disk types against the loader's tags; gguf_put_le, gguf_put_str: the synthesized header's words
 require dasllama/dasllama_math   // with_dasllama_jobque
 require ?das_metal dasllama/dasllama_metal_kernels   // nolint:STYLE030,LINT019 - the Metal decode driver, inside the das_metal half
 require ?das_metal dasllama/dasllama_metal_dflash   // nolint:STYLE030,LINT019 - the drafter's device arm registers at init; its site counters
@@ -21,7 +21,7 @@ require dasllama/dasllama_layout   // convert_model_to_metal_blob - the device a
 require dasllama/dasllama_env   // nolint:STYLE030,LINT019 - g_env_metal.rows_mt, inside the das_metal half
 require daslib/fio
 require strings   // find: the refusal text's words
-require _gguf_writer   // gguf_header, gguf_push_le, gguf_push_str: the synthesized drafter header
+require _gguf_writer   // gguf_header, gguf_tensor_info, gguf_pad_data: the synthesized drafter header
 require _model_tier   // _model_tier::models_dir() + model_available() presence/size-tier gate
 require _scratch_dir   // scratch_path / scratch_file: the refusal fixtures' files
 
@@ -53,27 +53,9 @@ let private GGUF_ARRAY = 9ul
 
 //! one GGUF key with a u32 value
 def private kv_u32(var b : array<uint8>; key : string; v : uint64) {
-    gguf_push_str(b, key)
-    gguf_push_le(b, GGUF_U32, 4)
-    gguf_push_le(b, v, 4)
-}
-
-//! one GGUF tensor record: its name, its dims, its type and its offset in the data
-def private tensor_rec(var b : array<uint8>; name : string; dims : array<uint64>; gtype : int; off : uint64) {
-    gguf_push_str(b, name)
-    gguf_push_le(b, uint64(long_length(dims)), 4)
-    for (dv in dims) {
-        gguf_push_le(b, dv, 8)
-    }
-    gguf_push_le(b, uint64(gtype), 4)
-    gguf_push_le(b, off, 8)
-}
-
-//! `b` zero-padded to the GGUF data alignment
-def private pad32(var b : array<uint8>) {
-    while (long_length(b) % 32l != 0l) {
-        b |> push(uint8(0))
-    }
+    gguf_put_str(b, key)
+    gguf_put_le(b, GGUF_U32, 4)
+    gguf_put_le(b, v, 4)
 }
 
 //! a one-layer `dflash` file 256 wide whose fc.weight is of disk type `fc_type`, its selector codebook Q8_0, and no other
@@ -82,30 +64,30 @@ def private synth_dflash(fc_type : int) : array<uint8> {
     let d = 256ul
     var b : array<uint8>
     gguf_header(b, 2ul, 17ul)
-    gguf_push_str(b, "general.architecture")
-    gguf_push_le(b, GGUF_STRING, 4)
-    gguf_push_str(b, "dflash")
+    gguf_put_str(b, "general.architecture")
+    gguf_put_le(b, GGUF_STRING, 4)
+    gguf_put_str(b, "dflash")
     for (kv in [("block_count", 1ul), ("embedding_length", d), ("feed_forward_length", d), ("attention.head_count", 2ul),
                 ("attention.head_count_kv", 1ul), ("attention.key_length", 128ul), ("block_size", 8ul), ("conv_kernel_size", 2ul),
                 ("conv_group_size", 64ul), ("selector_rank", d), ("selector_top_k", 4ul), ("attention.sliding_window", 2048ul)]) {
         kv_u32(b, "dflash.{kv._0}", kv._1)
     }
     for (kv in [("attention.layer_norm_rms_epsilon", 0x358637BDul), ("rope.freq_base", 0x49742400ul)]) {   //! 1e-6 and 1e6 as f32 bits
-        gguf_push_str(b, "dflash.{kv._0}")
-        gguf_push_le(b, GGUF_F32, 4)
-        gguf_push_le(b, kv._1, 4)
+        gguf_put_str(b, "dflash.{kv._0}")
+        gguf_put_le(b, GGUF_F32, 4)
+        gguf_put_le(b, kv._1, 4)
     }
-    gguf_push_str(b, "dflash.target_layers")
-    gguf_push_le(b, GGUF_ARRAY, 4)
-    gguf_push_le(b, GGUF_I32, 4)
-    gguf_push_le(b, 1ul, 8)
-    gguf_push_le(b, 2ul, 4)
+    gguf_put_str(b, "dflash.target_layers")
+    gguf_put_le(b, GGUF_ARRAY, 4)
+    gguf_put_le(b, GGUF_I32, 4)
+    gguf_put_le(b, 1ul, 8)
+    gguf_put_le(b, 2ul, 4)
     kv_u32(b, "tokenizer.ggml.mask_token_id", 3ul)
     let fc_bytes = ggml_type_bytes(fc_type, int64(d * d))
     let fc_span = (fc_bytes + 31l) & ~31l
-    tensor_rec(b, "fc.weight", [d, d], fc_type, 0ul)
-    tensor_rec(b, "selector_predecessor.weight", [d, 4ul], GGML_TYPE_Q8_0, uint64(fc_span))
-    pad32(b)
+    gguf_tensor_info(b, "fc.weight", [d, d], fc_type, 0ul)
+    gguf_tensor_info(b, "selector_predecessor.weight", [d, 4ul], GGML_TYPE_Q8_0, uint64(fc_span))
+    gguf_pad_data(b)
     let data0 = long_length(b)
     b |> resize(data0 + fc_span + ggml_type_bytes(GGML_TYPE_Q8_0, int64(d) * 4l))
     return <- b

@@ -4739,8 +4739,7 @@ def private rm_aff_gen(var gc : LlvmCodeCtx; nt : int) : bool { // nolint:STYLE0
     if (perm_declines(gc, p)) return false
     let fmt = rm_gen_fmt(gc)
     return false if (!kq_mlx_affine(fmt))
-    var te = TileEmit(mlxBits = fmt == KqFmt.mlx8 || fmt == KqFmt.mlx8b ? 8 : (fmt == KqFmt.mlx6b ? 6 : 4),
-        mlxBf16 = fmt == KqFmt.mlx4b || fmt == KqFmt.mlx8b || fmt == KqFmt.mlx6b)
+    var te = TileEmit(mlxBits = kq_mlx_bits(fmt), mlxBf16 = kq_mlx_bf16(fmt))
     if (!setup_tile_emit(te, gc, p, false)) return false
     te.gctx = gc.jit.ctx
     let neon = te.dotKind == DOT_SDOT
