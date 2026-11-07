@@ -4429,7 +4429,10 @@ bit the reference permutation's lattice plus `dot` over the rest, the pin counti
 override armed - the accelerate tier under `DASLLAMA_ACCEL=1`, else a counting stand-in that is offered
 no GEMM while pinned, and unpinned is offered the offset form and never the plain one (the control); the
 pin alone arms no override seat (the lane announce reads that seat); a panic inside the block reaches the
-caller with the pin put back.
+caller with the pin put back. `test_tuned_fallbacks_over_module_cache` compiles `_tuned_fallbacks_root.das` twice in
+children over one `-module-cache` record (`child_cmd_root` of `_child_run.das`), the second copy one byte longer, so the
+root reparses while the cache serves the kernels' modules: `dasllama_tuned_fallbacks()` names `f32_batch_tile`'s
+fallback and as many kernels warm as cold, the served-from-cache verdict asserted.
 `test_tower_helpers.das` - model-free: the shared encoder-tower helpers in `dasllama/dasllama_tower`
 (clamp, row norms, f16-table GEGLU-quick, im2col, two-axis rope, avg-pool, `attention_bidir`),
 each against an in-test reference; `rel_pos_table` against an fp64 sin/cos reference, its

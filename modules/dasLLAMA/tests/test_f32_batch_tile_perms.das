@@ -10,6 +10,9 @@ require _compares   // nan_plane
 require _f32_tile_pin   // the tile's grid clones, the lattice walk, the reference permutation
 require daslib/rtti   // this_context: the re-raised panic's text
 require dasllama/dasllama_math   // matmul_batch, batch_dot_rows, the float-batch override and the tile pin
+require daslib/fio   // fopen / fread: the fallbacks root's source
+require _child_run   // the fallbacks root compiled twice over one module cache record
+require _scratch_dir   // the root's copy and its cache record
 
 // Every permutation of the fp32 batch tile against a double oracle at the inverse STFT's GEMM -
 // the f32_batch_tile shape kitten mini's generator ends on (stft_bwd_re / stft_bwd_im: n = 11
@@ -301,5 +304,43 @@ def test_f32_tile_pin_seat(t : T?) {
     }
     t |> run("a panic inside the pinned block puts the pin back and re-raises") @(t : T?) {
         pin_restored_on_panic(t)
+    }
+}
+
+//! the perm a child's `FB_ROW <kernel> <perm>` record names for `kernel`, empty where it printed none
+def private fb_row(out, kernel : string) : string {
+    let key = "FB_ROW {kernel} "
+    let at = find(out, key)
+    return "" if (at < 0)
+    let from = at + length(key)
+    let eol = find(out, "\n", from)
+    return strip(slice(out, from, eol < 0 ? length(out) : eol))
+}
+
+[test]
+def test_tuned_fallbacks_over_module_cache(t : T?) {
+    t |> run("dasllama_tuned_fallbacks() names every kernel whether its module compiled or the module cache served it") @(tt : T?) {
+        var src = ""
+        fopen("{get_das_root()}/modules/dasLLAMA/tests/_tuned_fallbacks_root.das", "rb") $(f) {
+            if (f != null) {
+                src = fread(f)
+            }
+        }
+        tt |> success(!empty(src), "the root fixture reads")
+        let host = "-module-cache \"{scratch_path("tuned_fallbacks_root.dascache")}\""
+        var inscope envs <- [(name = "DAS_LOG_LEVEL", value = "info")]
+        var cold, warm : string
+        let root = scratch_file("tuned_fallbacks_root.das", src)
+        let rc_cold = run_child(child_cmd_root(root, envs, "", host), cold)
+        scratch_file("tuned_fallbacks_root.das", "{src}\n")
+        let rc_warm = run_child(child_cmd_root(root, envs, "", host), warm)
+        tt |> equal(rc_cold, 0, "the cold compile runs: {cold}")
+        tt |> equal(rc_warm, 0, "the warm compile runs: {warm}")
+        tt |> success(find(warm, "served from cache") >= 0, "the longer root reparsed over modules the cache served (else the cell holds nothing): {warm}")
+        let perm = fb_row(cold, "f32_batch_tile")
+        tt |> success(!empty(perm), "cold: the table names f32_batch_tile's fallback")
+        tt |> equal(fb_row(warm, "f32_batch_tile"), perm, "warm: the same fallback, its module served from the cache")
+        tt |> success(count(cold, "FB_ROW ") > 1, "cold: the table holds the other kernels too")
+        tt |> equal(count(warm, "FB_ROW "), count(cold, "FB_ROW "), "warm: as many kernels as the cold table")
     }
 }
