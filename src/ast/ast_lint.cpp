@@ -1295,6 +1295,7 @@ namespace das {
         "log_aot",                      Type::tBool,
         "log_infer_passes",             Type::tBool,
         "log_require",                  Type::tBool,
+        "log_compile_dag",              Type::tBool,
         "log_generics",                 Type::tBool,
         "log_mn_hash",                  Type::tBool,
         "log_gmn_hash",                 Type::tBool,

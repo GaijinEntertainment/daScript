@@ -5,6 +5,24 @@
 
 namespace das {
 
+    // src/ast/ARCHITECTURE_DAG.md#deadlock-prevention
+    static bool isNestingCompileBuiltin ( const Function * fn ) {
+        if ( !fn->builtIn || !fn->module ) return false;
+        const auto & mod = fn->module->name;
+        const auto & name = fn->name;
+        if ( mod == "ast_core" ) {
+            if ( name == "eval_single_expression" ) return fn->arguments.size() == 3;
+            return name == "compile" || name == "compile_file" || name == "parse_file" || name == "parse_file_no_prerequisites"
+                || name == "require_module_now" || name == "make_program" || name == "make_module" || name == "make_main_module";
+        } else if ( mod == "rtti_core" ) {
+            return name == "simulate";
+        } else if ( mod == "debugapi" ) {
+            return name == "invoke_in_context" || name == "try_invoke_in_context"
+                || name == "invoke_debug_agent_function" || name == "invoke_debug_agent_method";
+        }
+        return false;
+    }
+
     class ClearUnusedSymbols : public Visitor {
     public:
         ClearUnusedSymbols ( Program * prog, Module * tm ) : program(prog), thisModule(tm) {}
@@ -213,6 +231,7 @@ namespace das {
             program->setUsed(f, false);
             func->callCaptureString = false;
             func->hasStringBuilder = false;
+            func->callsNestingBuiltin = false;
             DAS_ASSERTF(!func->builtIn, "visitor should never call 'visit' on builtin function at top level.");
         }
         virtual FunctionPtr visit(Function * that) override {
@@ -247,6 +266,7 @@ namespace das {
         virtual void preVisit(ExprAddr * addr) override {
             Visitor::preVisit(addr);
             if ( !addr->func ) return;
+            if ( func && isNestingCompileBuiltin(addr->func) ) func->callsNestingBuiltin = true;
             if (builtInDependencies || !addr->func->builtIn) {
                 useFunction(addr->func);
             }
@@ -274,6 +294,7 @@ namespace das {
             if ( func && call->func->captureString ) {
                 func->callCaptureString = true;
             }
+            if ( func && isNestingCompileBuiltin(call->func) ) func->callsNestingBuiltin = true;
             if (builtInDependencies || !call->func->builtIn) {
                 useFunction(call->func);
             }
@@ -346,6 +367,10 @@ namespace das {
         visit(vis);
         vis.markUsedFunctions(library, false, true, thisModule.get());
         vis.markVarsUsed(library, false);
+        thisModule->macroNestsCompile = false;
+        for ( auto fn : usedFunctions ) {
+            if ( fn->callsNestingBuiltin ) thisModule->macroNestsCompile = true;
+        }
     }
 
     void Program::markExecutableSymbolUse(TextWriter * logs) {

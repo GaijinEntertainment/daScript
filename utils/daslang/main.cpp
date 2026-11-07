@@ -124,6 +124,7 @@ static bool gen2MakeSyntax = false;
 static bool trackAllocations = false;
 static bool heapReportAtExit = false;
 static bool logModuleCompileTime = false;
+static int32_t compileThreads = 1;
 static int64_t startupCompileUsec = 0;
 static int64_t startupSimulateUsec = 0;
 static int64_t startupRunUsec = 0;
@@ -150,6 +151,7 @@ static CodeOfPolicies getPolicies() {
     policies.no_lint = noLint;
     policies.no_optimizations = noOptimization;
     policies.log_module_compile_time = logModuleCompileTime;
+    policies.compile_threads = compileThreads;
     policies.building_documentation = buildingDocumentation;
     return policies;
 }
@@ -555,6 +557,7 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     policies.no_lint = noLint;
     policies.no_optimizations = noOptimization;
     policies.log_module_compile_time = logModuleCompileTime;
+    policies.compile_threads = compileThreads;
     policies.building_documentation = buildingDocumentation;
     policies.persistent_heap = true;
     // The AST module-cache rail (env serializer): -ser captures every parsed module as the
@@ -825,6 +828,7 @@ void print_help() {
         << "    --ast-verify  force-include daslib/ast_verify; checks AST structural invariants before each inference pass\n"
         << "    --ast-verify-batch  checks the finished tree only (no per-pass walks, no cross-module sweeps): cheap enough to gate many files (CI)\n"
         << "    --ast-verify-each-pass  also runs the verifier after every inference pass\n"
+        << "    -compile-threads <N|auto>  compile independent modules on N threads (default 1; auto = JobQue thread count)\n"
         << "    -log-compile-time  log detailed per-module compile-time breakdown (parse / infer with pass count / optimize / macro (in infer) / macro mods / simulate) + function count,\n"
         << "                a cached module's read time (and its macro-context simulate), and the process startup timeline (builtin modules / module scan / initialize / compile / simulate / run / teardown / shutdown)\n"
         << "    --          separator for script arguments\n"
@@ -1157,6 +1161,20 @@ MAIN_FUNC_LINKAGE int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 noLint = true;
             } else if ( cmd=="log-compile-time" ) {
                 logModuleCompileTime = true;
+            } else if ( cmd=="compile-threads" ) {
+                if ( i+1 >= argc ) {
+                    printf("-compile-threads requires a thread count or auto\n");
+                    print_help();
+                    return -1;
+                }
+                string threads = argv[i+1];
+                int count = threads=="auto" ? 0 : atoi(threads.c_str());
+                if ( threads!="auto" && count < 1 ) {
+                    printf("-compile-threads expects a positive thread count or auto, got '%s'\n", threads.c_str());
+                    return -1;
+                }
+                compileThreads = count;
+                i += 1;
             } else if ( cmd=="project-root" || cmd=="project_root" ) {
                 project_root = argv[i + 1];
                 i++;
