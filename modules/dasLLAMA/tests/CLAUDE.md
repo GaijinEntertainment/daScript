@@ -90,12 +90,14 @@ and a `--das` dry run keeps them. `--batch N` (default 10; 1 = one child a file)
 `--together`: a generated root requires every file, so the engine's parse and JIT - the 20 s a small file pays - are
 paid once a batch, and each file then runs in a fresh context of that program, ~4 s of DLL reload), each file still
 reporting its own `PASS` / `FAIL` line and the child's timeout N times the single's; a batch that dies before every
-file's verdict reruns the verdict-less files one child each (`RETRY` lines), and the image suite's child and every
-expected-failure compile test (`cant_*`, `failed_*`, `invalid_*` - a root requiring one fails to compile whole) run alone
-whatever the batch. A fresh context means fresh globals,
+file's verdict reruns the verdict-less files one child each (`RETRY` lines), and the image suite's child, every
+expected-failure compile test (`cant_*`, `failed_*`, `invalid_*` - a root requiring one fails to compile whole) and the
+tier contract files (`TIER_CONTRACT_FILES`: `test_gpu_tier.das`, `test_gpu_serving_declines.das`) run alone whatever
+the batch. A fresh context means fresh globals,
 `[init]`s and model caches a file - but the PROGRAM is shared: a module any file of the batch requires is in every
-file's context, so a test that reads the state before some module's `[init]` ran (the GPU tier's contract test)
-holds only alone, and establishes its own baseline instead. A red that appears only under `--batch` names that
+file's context, so a batch-mate requiring the engine core brings the Vulkan home's entry, which arms the tier at
+`[init]` under the run's `DASLLAMA_GPU=1`, and a cell that reads the tier as no entry armed it (the contract files'
+"unset" seats, a shell's load with no decline) holds only alone. A red that appears only under `--batch` names that
 test, not the batch.
 No preflight tier runs the per-PR runs. `preflight -- --only dasllama-model-free` runs the
 model-free suite; the `--changed` run has no preflight lane; `-- --only dasllama-stocked` runs the

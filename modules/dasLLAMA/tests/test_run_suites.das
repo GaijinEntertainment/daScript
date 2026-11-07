@@ -522,4 +522,10 @@ def test_child_chunks(t : T?) {
     let expected_failure <- child_chunks(with_failed, 10, false)
     t |> equal(length(expected_failure), 3, "an expected-failure compile test cuts the batch: the files before it, itself, the files after")
     t |> equal(join(expected_failure[1], ","), "{TESTS_DIR}/failed_lint.das", "it runs alone, where dastest reads its expected errors")
+    var with_tier <- [for (i in range(2)); "{TESTS_DIR}/test_{i}.das"]
+    with_tier |> push("{TESTS_DIR}/test_gpu_tier.das")
+    with_tier |> push("{TESTS_DIR}/test_9.das")
+    let tier <- child_chunks(with_tier, 10, false)
+    t |> equal(length(tier), 3, "a tier contract file cuts the batch: the files before it, itself, the files after")
+    t |> equal(join(tier[1], ","), "{TESTS_DIR}/test_gpu_tier.das", "it runs alone, where no batch-mate's entry arms the tier at [init]")
 }

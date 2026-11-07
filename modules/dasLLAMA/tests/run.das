@@ -532,6 +532,10 @@ let MODULE_WITNESSES <- {
 
 let BENCH_WITNESSES <- ["test_bench_rows.das", "test_served_bench.das", "test_bench_records_schema.das"]
 
+//! the files whose cells read the GPU tier as no home's entry armed it: a batch-mate requiring the engine core brings the
+//! Vulkan home's entry, which arms the tier at its init under the run's DASLLAMA_GPU=1, so each runs in a child of its own
+let TIER_CONTRACT_FILES <- ["test_gpu_tier.das", "test_gpu_serving_declines.das"]
+
 def private csv_list(csv : string) : array<string> => <- split_trimmed(csv, ",")
 
 //! a `tests/_*.das` fixture -> the areas a change to it reaches when no test requires it by name
@@ -1142,14 +1146,15 @@ def operator +=(var a : RunTally; b : RunTally) {
     a.failed_tags |> push_from(b.failed_tags)
 }
 
-//! `per` files a child, in order; alone: an area run's image file, and a cant_/failed_/invalid_ file (a root requiring it fails whole)
+//! `per` files a child, in order; alone: an area run's image file, a cant_/failed_/invalid_ file (a root requiring it fails
+//! whole) and a tier contract file (`TIER_CONTRACT_FILES`)
 def child_chunks(files : array<string>; per : int; area_run : bool) : array<array<string>> {
     var chunks : array<array<string>>
     chunks |> reserve(length(files) / max(per, 1) + 1)
     var cur : array<string>
     for (f in files) {
         let b = base_name(f)
-        let alone = (area_run && b == "test_model_image.das") || is_expected_failure_test(f)
+        let alone = (area_run && b == "test_model_image.das") || is_expected_failure_test(f) || has_value(TIER_CONTRACT_FILES, b)
         if (alone && !empty(cur)) {
             chunks |> emplace(cur)
         }
