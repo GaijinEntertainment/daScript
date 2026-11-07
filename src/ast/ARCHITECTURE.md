@@ -59,6 +59,10 @@ module and everything after it parse from source, and the writer rewrites the wh
 served records re-serialized from the modules the reader restored, then the freshly parsed
 ones. A record whose header matched but whose payload fails to deserialize reparses in place,
 without cutting the stream, whenever the record carries a usable payload length.
+A record that fails to write leaves the compiled program as it is - only a failed read marks the
+program failed. The writer warns (gated like the read's lines) and `ModuleFileCache::finish`
+writes no file, since the stream stops inside the failed record; the next run finds the cache it
+found before.
 
 A served module replays what its own init registered - the macro classes a `[call_macro]` or
 `[reader_macro]` annotation adds through the module's init function come back when the record
