@@ -138,18 +138,18 @@ def test_gpu_resident_cuda_llama_1b_q40(t : T?) {
     }
 }
 
-//! the FP4 leaf's bar: W4A4's e2m1 activations are a step the f32 CPU chain does not take - the 1B's rows read up to 0.135 of the
-//! step's max logit (the argmax matched; llama.cpp measures the same step at +0.7% perplexity) and the tightest one-step-off control
-//! at 0.158, the bar between them; the same carrier's cm2-tiles arm below holds the dense bar, so the extra is the feed's
-let private LOGIT_BAR_REL_FP4 = 0.14
+//! the FP4 leaf's witness ratio: W4A4's e2m1 activations carry one mantissa bit against the CPU chain's seven, so single logits
+//! scatter past any max |logit| bar a one-step-off control still clears (a 48-token window read 0.24, its control 0.16); over a
+//! window and eight steps the device reads 2.6 to 3.5 times the CPU chain's distance from the f32 chain, the control 18 to 21
+let private FP4_F32_DIST_REL = 4.0
 
 [test]
 def test_gpu_resident_cuda_llama_1b_nv4(t : T?) {
     t |> run("{FILE_1B_NV4}: one window (40 tokens) and eight steps on the CUDA driver, the window on the FP4 tensor leaf") @(t : T?) {
-        cuda_forced_feed(t, FILE_1B_NV4, "llama", 40l, 1l, LOGIT_BAR_REL_FP4)
+        cuda_forced_feed_f32_witness(t, FILE_1B_NV4, "llama", 40l, 1l, FP4_F32_DIST_REL)
     }
     t |> run("{FILE_1B_NV4}: a {PF_WINDOW_ROWS + 88l}-token prompt (two windows) and eight steps on the CUDA driver, the windows on the FP4 tensor leaf") @(t : T?) {
-        cuda_forced_feed(t, FILE_1B_NV4, "llama", PF_WINDOW_ROWS + 88l, 2l, LOGIT_BAR_REL_FP4)
+        cuda_forced_feed_f32_witness(t, FILE_1B_NV4, "llama", PF_WINDOW_ROWS + 88l, 2l, FP4_F32_DIST_REL)
     }
     t |> run("{FILE_1B_NV4}: one window (40 tokens) and eight steps pinned CUDA_MMQ_OFF - the cm2 tiles over f16 activations hold the dense bar (the FP4 arm's control)") @(t : T?) {
         with_cuda_mmq_pin(CUDA_MMQ_OFF) {

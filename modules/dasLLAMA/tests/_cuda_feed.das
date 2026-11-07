@@ -77,8 +77,48 @@ def cuda_forced_feed(t : T?; file, arch : string; n, windows : int64; bar : floa
     cuda_forced_feed(t, file, arch, n, windows, bar, host_layers, host_more) $ {}
 }
 
+//! the CUDA decoder's counters as `cud_rdec_stats` answers them
+typedef CudRdecStats = tuple<tokens : int64; graph : bool; windows : int64; unsplit : int64; unsplit_form : bool>
+
 //! ... with `witness`, the caller's own reads of the driver's counters, run after the fed steps while the model still holds the card
 def cuda_forced_feed(t : T?; file, arch : string; n, windows : int64; bar : float; host_layers : int64; host_more : bool; witness : block<void>) {
+    cuda_feed_rig(t, file, arch, host_layers, host_more) $(tr : Model; _path : string; before : CudRdecStats) {
+        forced_feed_over(t, tr, "{file} cuda ", n, 8l, bar) $ {
+            cuda_feed_served(t, before, n, windows, witness)
+        }
+    }
+}
+
+//! `cuda_forced_feed` on the FP4 tensor leaf, whose e2m1 activations the CPU chain does not take: the rows held by the f32-chain
+//! witness at `ratio` of the CPU chain's own distance from the file's f32 chain (`forced_feed_f32_witness`) in place of a bar of the
+//! step's max |logit| - one mantissa bit scatters single logits past any bar a one-step-off control still clears
+[cold_path]
+def cuda_forced_feed_f32_witness(t : T?; file, arch : string; n, windows : int64; ratio : float) {
+    cuda_feed_rig(t, file, arch, 0l, false) $(tr : Model; path : string; before : CudRdecStats) {
+        forced_feed_f32_witness(t, tr, path, "{file} cuda ", n, 8l, ratio) $ {
+            cuda_feed_served(t, before, n, windows) $ {}
+        }
+    }
+}
+
+//! the driver's counters after a fed run: every call served on the device, every position counted, `windows` window chains, the
+//! captured graph, the attention's unsplit form where the keys sit under its position; then `witness`, the caller's own reads
+def private cuda_feed_served(t : T?; before : CudRdecStats; n, windows : int64; witness : block<void>) {
+    var passes <- gpu_cpu_passes_()
+    t |> equal(length(passes), 0, "the device served every call of the resident run: {passes}")
+    delete passes
+    let st = cud_rdec_stats()
+    t |> success(st.tokens >= n + 8l, "the CUDA driver served every position of the prompt and every fed token ({st.tokens} positions)")
+    t |> equal(st.windows - before.windows, windows, "the prompt ran as {windows} window chain(s) on the CUDA driver")
+    t |> success(st.graph, "the token step replays as a captured graph past the first step")
+    let unsplit_want = st.unsplit_form && n + 8l <= RD_UNSPLIT_POS ? 8l : 0l
+    t |> equal(st.unsplit - before.unsplit, unsplit_want, "the attention's unsplit form served {unsplit_want} of the fed steps (the keys {n + 8l <= RD_UNSPLIT_POS ? "under" : "past"} the unsplit position{st.unsplit_form ? "" : "; the device splits no keys"})")
+    invoke(witness)
+}
+
+//! the fed cells' rig: `file` loaded on the driver with `host_layers` asked onto the host, admitted and checked, `feed` run under
+//! the jobque with the counters as the load left them, then the counters' control - a CPU run with the model off the device
+def private cuda_feed_rig(t : T?; file, arch : string; host_layers : int64; host_more : bool; feed : block<(tr : Model; path : string; before : CudRdecStats) : void>) {
     let path = cuda_model_path(t, file)
     if (empty(path) || !assert_pf_window(t)) return
     var tr <- load_resident(path, 1l, 0l, host_layers)
@@ -91,18 +131,7 @@ def cuda_forced_feed(t : T?; file, arch : string; n, windows : int64; bar : floa
     }
     let before = cud_rdec_stats()
     with_dasllama_jobque_() {
-        forced_feed_over(t, tr, "{file} cuda ", n, 8l, bar) $ {
-            var passes <- gpu_cpu_passes_()
-            t |> equal(length(passes), 0, "the device served every call of the resident run: {passes}")
-            delete passes
-            let st = cud_rdec_stats()
-            t |> success(st.tokens >= n + 8l, "the CUDA driver served every position of the prompt and every fed token ({st.tokens} positions)")
-            t |> equal(st.windows - before.windows, windows, "the prompt ran as {windows} window chain(s) on the CUDA driver")
-            t |> success(st.graph, "the token step replays as a captured graph past the first step")
-            let unsplit_want = st.unsplit_form && n + 8l <= RD_UNSPLIT_POS ? 8l : 0l
-            t |> equal(st.unsplit - before.unsplit, unsplit_want, "the attention's unsplit form served {unsplit_want} of the fed steps (the keys {n + 8l <= RD_UNSPLIT_POS ? "under" : "past"} the unsplit position{st.unsplit_form ? "" : "; the device splits no keys"})")
-            invoke(witness)
-        }
+        invoke(feed, tr, path, before)
         var prompt <- resident_prompt(40l)
         var toks <- resident_feed(8l)
         let off0 = cud_rdec_stats()

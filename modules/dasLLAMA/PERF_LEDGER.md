@@ -8055,6 +8055,15 @@ device tier `vulkan` then; the `cuda` leg's rows are `followup_general.md` row 2
   (dim 2048, qd 2048, hid 8192), 14180352 at 2048; 6494208 and 25976832 on the 8B (4096, 4096, 14336). The Q8 feeds' block
   sums (`pf_xsum`, `pf_asum`, `pf_hsum`), when a plane takes a min-term leaf: `np x (dim + qd + hid) / 8` bytes - 786432
   at np 512 on the 1B. `Model.site_scale`: one f32 a `.scale` tensor of the file, in the model and the image.
+- **The NVFP4 leaf's witness (2026-11-07, the same box; `tests/test_gpu_resident_cuda_llama.das`, `FP4_F32_DIST_REL` 4).**
+  The 1B NVFP4 mint's one-window cell on the FP4 tensor leaf against the CPU chain, of the step's max |logit|, by the
+  prompt's length: 40 tokens 0.151, 48 0.239, 96 0.148, 128 under the bar; 16, 32, 56 past it and 24, 64, 80, 200 under
+  it - scatter about the 0.14 bar with no tile pattern, the 48-token window's last row flipping argmax at a near tie
+  ("in" 9.11 against "```" 9.73). rel-l2 against the CPU chain 0.05 to 0.21 a row, the one-step-off row 0.11 to 0.90.
+  Summed over the window and eight steps against the file's f32 chain: the device 6.1 to 10.7, the CPU chain 2.1 to
+  3.1 (the device 2.64 to 3.50 times the CPU chain's own distance), the one-step-off rows 42.8 to 64.3 (5.4 to 7.6
+  times the device). The cell holds that ratio at 4 (`f32_chain_witness`); at 20 its control reds (the one-step-off
+  rows 42.8 against 47). The hybrid's NVFP4 cells keep their max |logit| bar (0.20, reading 0.139).
 - **The CUDA resident bars** (`tests/_cuda_feed.das`, of the step's max |logit| against the CPU chain). The dense
   carriers' `LOGIT_BAR_REL` 0.06 holds the Llama 1B Q8_0 / Q4_K_M / Q5_1 / Q5_0 / IQ4_XS / IQ4_NL files, the Phi-3.5-mini
   Q4_K_M (its two-window arm; the one-window arm's steps 41 and 44 read 2.64 and 2.75 of 34 and 42 - 7.7 and 6.6% - the
