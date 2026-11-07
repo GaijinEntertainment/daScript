@@ -702,9 +702,26 @@ def with_process(argv : array<string>; blk : block<(var p : process) : void>) {
     with_process(argv, "", noenv, blk)
 }
 
+def is_death_exit_code(rc : int) : bool {
+    //! Read as a death by the shell's convention: 128 + N for POSIX
+    //! signal N (a child's own exit(128+) reads the same), a negative
+    //! NTSTATUS on Windows; -1, popen_timed_out, process_running are not.
+    return rc != -1 && rc != popen_timed_out && rc != process_running && (rc < 0 || rc >= 128)
+}
+
+def is_spawn_failure(rc : int) : bool {
+    //! A child that never ran: -1 when the spawn failed, 126 and 127 when
+    //! the child could not exec its program, as a shell reports them; on
+    //! Windows a child's own exit(-1) reads the same as a failed spawn.
+    return rc == -1 || rc == 126 || rc == 127
+}
+
 def run_and_capture(args : array<string>; cwd : string; env : array<string>; var output : string&; timeout_sec : float = 0.0) : int {
+    //!@nolint
     //! Run an external command from `cwd` ("" inherits) with `env` ``KEY=VALUE`` overrides, capturing its stdout+stderr through ``popen_argv``.
-    //! Returns the exit code: -1 when the spawn itself failed, ``popen_timed_out`` when a positive `timeout_sec` passed first (the child's tree is killed).
+    //! The exit code: -1 for a failed spawn, ``popen_timed_out`` when
+    //! `timeout_sec` passed first (the child's tree is killed), and on
+    //! POSIX 128 + N for a child killed by signal N, like ``$?``.
     //! No shell is involved, and a forward-slash ``args[0]`` spawns on every platform (``popen_argv`` hands Windows the backslash spelling).
     var captured : string
     let exit_code = unsafe(popen_argv(args, cwd, env, timeout_sec, $(f) {

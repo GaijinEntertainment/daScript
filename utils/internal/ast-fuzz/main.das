@@ -176,10 +176,8 @@ def is_crash(exit_code : int; out : string) : bool {
     if (is_timeout(exit_code) || is_resource(out)) {
         return false
     }
-    if (exit_code >= 128 || exit_code < 0) {
-        return true
-    }
-    return find(out, "CRASH:") >= 0 || find(out, "Segmentation fault") >= 0
+    return (is_death_exit_code(exit_code) || find(out, "CRASH:") >= 0
+        || find(out, "Segmentation fault") >= 0)
 }
 
 def ensure_generated(bin : string) : bool {
@@ -296,6 +294,10 @@ def main : int { // nolint:STYLE037,STYLE038 — one linear sweep with a flat cl
         return 0
     }
     let bin = empty(cfg.bin) ? "bin/daslang" : cfg.bin
+    if (!stat(bin).is_valid && !executable_on_path(bin)) {
+        to_log(LOG_ERROR, "ast-fuzz: could not start {bin}: no such file or command\n")
+        return 2
+    }
     if (!ensure_generated(bin)) {
         return 2
     }

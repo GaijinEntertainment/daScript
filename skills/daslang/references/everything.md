@@ -936,10 +936,12 @@ The FIO module implements file input/output and filesystem operations. It provid
 - `exit_now` - Ends the process at once with the given exit code: stdout and stderr are flushed, and nothing else runs - no `atexit` handler, no module teardown, no leak dump.
 - `get_env_variable` - Returns the string value of the environment variable with the given name, or an empty string if undefined.
 - `has_env_variable` - Returns true if an environment variable with the given name is defined in the current process environment.
-- `popen` - Opens a pipe to the given shell command, provides the resulting FILE pointer to the block, and returns the process exit code.
+- `is_death_exit_code` - Read as a death by the shell's convention: 128 + N for POSIX signal N (a child's own exit(128+) reads the same), a negative NTSTATUS on Windows; -1, popen_timed_out, process_running are not.
+- `is_spawn_failure` - The exit code of a child that never ran: -1 when the spawn itself failed, 126 and 127 when the child could not exec its program, as a shell reports them; on Windows a child's own exit(-1) reads the same.
+- `popen` - Opens a pipe to the given shell command, provides the resulting FILE pointer to the block, and returns the process exit code - on POSIX 128 + N when the shell is killed by signal N.
 - `popen_argv` - Spawns a subprocess directly via argv, bypassing the shell, in the directory `cwd` (empty inherits the caller's) with each `env` entry, `KEY=VALUE`, applied over the inherited environment.
 - `popen_argv_pipe` - Spawns a subprocess with bidirectional pipes connected to its stdin and stdout (child stderr is merged into stdout).
-- `popen_binary` - Opens a pipe to the given shell command in binary mode, provides the resulting FILE pointer to the block, and returns the process exit code.
+- `popen_binary` - Opens a pipe to the given shell command in binary mode, provides the resulting FILE pointer to the block, and returns the process exit code - on POSIX 128 + N when the shell is killed by signal N.
 - `popen_timeout` - Opens a process for reading, kills the entire process tree if it exceeds `timeout` seconds.
 - `process_alive` - Whether a process with this id exists - any process, not only a child - for a single-instance guard reading a pid file.
 - `process_drain` - Hands `block` every complete line of the child's merged stdout+stderr that is ready right now, one call per line with the newline stripped, and never blocks: a partial line waits in the handle for the next drain, and a last line with no newline is delivered once the child closes its output.
@@ -947,7 +949,7 @@ The FIO module implements file input/output and filesystem operations. It provid
 - `process_pid` - The child's process id, for a pid file or a log line.
 - `process_poll` - The child's exit code if it has exited, else `process_running`; never waits.
 - `process_terminate` - Asks the child and everything it spawned to stop: `SIGTERM` to its process group on POSIX, `TerminateJobObject` with exit code 15 on Windows, where nothing gentler reaches a console-less process.
-- `process_wait` - Waits up to `timeout` seconds for the child to exit and returns its exit code, or `process_running` when the timeout passes first.
+- `process_wait` - Waits up to `timeout` seconds for the child to exit and returns its exit code (on POSIX 128 + N for a child killed by signal N, as `process_poll` reports it), or `process_running` when the timeout passes first.
 - `run_and_capture`
 - `sanitize_command_line` - Escapes and sanitizes a command-line argument string to prevent shell injection.
 - `set_env_variable` - Sets an environment variable in the current process (the `setenv`/`_putenv` family).

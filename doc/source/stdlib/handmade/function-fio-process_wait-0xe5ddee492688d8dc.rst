@@ -1,1 +1,1 @@
-Waits up to ``timeout`` seconds for the child to exit and returns its exit code, or ``process_running`` when the timeout passes first.  A timeout of zero or less waits forever.  The code is remembered, so a later ``process_poll`` answers the same.
+Waits up to ``timeout`` seconds for the child to exit and returns its exit code (on POSIX 128 + N for a child killed by signal N, as ``process_poll`` reports it), or ``process_running`` when the timeout passes first.  A timeout of zero or less waits forever.  The code is remembered, so a later ``process_poll`` answers the same.

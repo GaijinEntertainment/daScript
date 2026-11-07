@@ -23,9 +23,15 @@ def test_verify_verdict(t : T?) {
     t |> equal(crash.verdict, "crashed", "a crash banner")
     t |> equal(crash.findings, "crashed (exit 255)\nCRASH: SIGSEGV",
         "the banner rides the findings")
-    for (rc in [9, 139, -1073741819]) {
+    for (rc in [137, 139, -1073741819]) {
         t |> equal(verify_verdict("", rc, 300.0).verdict, "killed",
             "exit {rc} with no banner is a kill")
+    }
+    t |> equal(verify_verdict("", 9, 300.0).verdict, "clean",
+        "a plain exit code below 128 is the file owner's gate")
+    for (rc in [-1, 127]) {
+        t |> equal(verify_verdict("", rc, 300.0).verdict, "failed to start",
+            "a child that did not start (exit {rc}) is not a pass")
     }
 }
 
