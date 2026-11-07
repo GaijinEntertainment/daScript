@@ -81,7 +81,7 @@ class LiveWatchAgent : DapiDebugAgent {
 }
 
 def debug_agent(_ctx : Context) {
-    assert(this_context().category.debug_context)
+    verify(this_context().category.debug_context)
     install_new_debug_agent(new LiveWatchAgent(), "live_watch")
 }
 

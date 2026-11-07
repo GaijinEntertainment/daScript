@@ -108,6 +108,10 @@ namespace das {
                 "annotation patch() / pass apply() / substitution macro that produced this node",
                 "", expr->at, CompilationError::internal_function_not_resolved_yet);
         }
+        static void inheritEffects ( Expression * expr, Expression * operand, Expression * index = nullptr ) {
+            expr->noSideEffects = operand->noSideEffects && (!index || index->noSideEffects);
+            expr->noNativeSideEffects = operand->noNativeSideEffects && (!index || index->noNativeSideEffects);
+        }
         virtual bool canVisitFunction ( Function * fun ) override {
             return !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
         }
@@ -160,40 +164,34 @@ namespace das {
             expr->noNativeSideEffects = true;
         }
     // swizzle
-        virtual void preVisit ( ExprSwizzle * expr ) override {
-            Visitor::preVisit(expr);
-            expr->noSideEffects = true; // !expr->write;
-            expr->noNativeSideEffects = true;
+        virtual ExpressionPtr visit ( ExprSwizzle * expr ) override {
+            inheritEffects(expr, expr->value);
+            return Visitor::visit(expr);
         }
     // field
-        virtual void preVisit ( ExprField * expr ) override {
-            Visitor::preVisit(expr);
-            expr->noSideEffects = true; // !expr->write;
-            expr->noNativeSideEffects = true;
+        virtual ExpressionPtr visit ( ExprField * expr ) override {
+            inheritEffects(expr, expr->value);
+            return Visitor::visit(expr);
         }
     // safe-field
-        virtual void preVisit ( ExprSafeField * expr ) override {
-            Visitor::preVisit(expr);
-            expr->noSideEffects = true; // !expr->write;
-            expr->noNativeSideEffects = true;
+        virtual ExpressionPtr visit ( ExprSafeField * expr ) override {
+            inheritEffects(expr, expr->value);
+            return Visitor::visit(expr);
         }
     // is variant
-        virtual void preVisit ( ExprIsVariant * expr ) override {
-            Visitor::preVisit(expr);
-            expr->noSideEffects = true; // !expr->write;
-            expr->noNativeSideEffects = true;
+        virtual ExpressionPtr visit ( ExprIsVariant * expr ) override {
+            inheritEffects(expr, expr->value);
+            return Visitor::visit(expr);
         }
     // as variant
-        virtual void preVisit ( ExprAsVariant * expr ) override {
-            Visitor::preVisit(expr);
-            expr->noSideEffects = true; // !expr->write;
-            expr->noNativeSideEffects = true;
+        virtual ExpressionPtr visit ( ExprAsVariant * expr ) override {
+            inheritEffects(expr, expr->value);
+            return Visitor::visit(expr);
         }
     // safe as variant
-        virtual void preVisit ( ExprSafeAsVariant * expr ) override {
-            Visitor::preVisit(expr);
-            expr->noSideEffects = true; // !expr->write;
-            expr->noNativeSideEffects = true;
+        virtual ExpressionPtr visit ( ExprSafeAsVariant * expr ) override {
+            inheritEffects(expr, expr->value);
+            return Visitor::visit(expr);
         }
     // null-coalescing
         virtual ExpressionPtr visit ( ExprNullCoalescing * expr ) override {
@@ -202,23 +200,17 @@ namespace das {
             return Visitor::visit(expr);
         }
     // at
-        virtual void preVisit ( ExprAt * expr ) override {
-            Visitor::preVisit(expr);
-            if ( expr->subexpr->type->isHandle() && expr->subexpr->type->annotation->isIndexMutable(expr->index->type) ) {
-                expr->noSideEffects = false;
-            } else if ( expr->subexpr->type->isGoodTableType() ) {
-                expr->noSideEffects = false;
-            } else {
-                expr->noSideEffects = true;
-            }
-            // expr->noSideEffects = true; // !expr->write;
-            expr->noNativeSideEffects = true;
+        virtual ExpressionPtr visit ( ExprAt * expr ) override {
+            bool mutatingIndex = ( expr->subexpr->type->isHandle() && expr->subexpr->type->annotation->isIndexMutable(expr->index->type) )
+                || expr->subexpr->type->isGoodTableType();
+            inheritEffects(expr, expr->subexpr, expr->index);
+            expr->noSideEffects &= !mutatingIndex;
+            return Visitor::visit(expr);
         }
-    // at
-        virtual void preVisit ( ExprSafeAt * expr ) override {
-            Visitor::preVisit(expr);
-            expr->noSideEffects = true; // !expr->write;
-            expr->noNativeSideEffects = true;
+    // safe at
+        virtual ExpressionPtr visit ( ExprSafeAt * expr ) override {
+            inheritEffects(expr, expr->subexpr, expr->index);
+            return Visitor::visit(expr);
         }
     // op1
         virtual ExpressionPtr visit ( ExprOp1 * expr ) override {

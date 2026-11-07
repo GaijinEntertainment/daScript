@@ -362,7 +362,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 247;   // 247: block folding keeps a declaration after an unconditional goto
+            return 248;   // 248: a field or index node carries the side effects of its operands
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

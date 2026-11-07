@@ -515,7 +515,7 @@ class MemoryLeakProfilerAgent : ProfilerBaseAgent {
 
 [unused_argument(ctx)]
 def debug_agent(ctx : Context) {
-    assert(this_context().category.debug_context)
+    verify(this_context().category.debug_context)
     let cfg <- parse_profiler_args()
     if (cfg.track_leaks) {
         install_new_debug_agent(new MemoryLeakProfilerAgent(), "memleaks")

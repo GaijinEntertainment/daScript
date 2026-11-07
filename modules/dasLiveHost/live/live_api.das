@@ -307,7 +307,7 @@ class LiveApiAgent : DapiDebugAgent {
 
 [unused_argument(ctx)]
 def debug_agent(ctx : Context) {
-    assert(this_context().category.debug_context)
+    verify(this_context().category.debug_context)
     install_new_debug_agent(new LiveApiAgent(), "live_api")
 }
 
