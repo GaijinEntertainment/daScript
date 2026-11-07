@@ -125,6 +125,24 @@ def batch_sched_map(var mp : uint?; var cur : int64&; rid : int64; wblk0, rows, 
     }
 }
 
+//! one GEMM record of a chain's batch schedule: its weight block, its rows and its workgroups
+struct TowerSchedRec {
+    wblk0 : int64
+    rows : int64
+    groups : int64
+}
+
+//! a chain's schedule at `mp`: `nrec` records at its head (record `rid` answered by `rec`, in order), their maps after; `maps` takes each record's map offset
+def tower_sched_walk(@scratch @exact_size var maps : array<uint>; var mp : uint?; nrec : int64; rec : block<(rid : int64) : TowerSchedRec>) {
+    maps |> reserve(nrec)
+    maps |> resize(nrec)
+    var cur = nrec * 4l
+    for (rid in range64(nrec)) {
+        let rr = invoke(rec, rid)
+        maps[rid] = batch_sched_map(mp, cur, rid, rr.wblk0, rr.rows, rr.groups)
+    }
+}
+
 //! the workgroups a region of `cnt` rows takes at the tile column `tc` over `wtiles` weight tiles
 def sched_region_wgs(cnt, tc, wtiles : int64) : int64 => ((cnt + tc - 1l) / tc) * wtiles
 
@@ -172,6 +190,20 @@ def sched_clip(offs : int64 const?; nregions, r0, r1 : int64; var regs, row0s, c
     }
 }
 
+//! the FastConformer chain's head size: the width over the heads, 0 with no heads
+def tower_fc_hs(d, n_head : int64) : int64 => n_head > 0l ? d / n_head : 0l
+
+//! the flash tile's head width the FastConformer rotary form pads its heads onto
+def tower_fc_hsp(hs : int64) : int64 => hs <= 64l ? 64l : 128l
+
+//! the FastConformer chain's widths, heads and row counts at `npos` rows (`ww` the rel-position window); `rope_n` the shorter rope table's floats
+def tower_fc_shape_ok(rotary : bool; d, ff, n_head, conv_kernel, npos, ww, rope_n : int64) : bool {
+    let hs = tower_fc_hs(d, n_head)
+    let heads_ok = rotary ? (hs % 2l == 0l && hs <= 128l && rope_n >= npos * (hs / 2l)) : (hs == 64l || hs == 128l)
+    return (d % 64l == 0l && ff % 64l == 0l && ff >= 2l * d && heads_ok && n_head * hs == d && conv_kernel % 2l == 1l
+        && npos > 0l && (rotary || ww == 2l * npos - 1l))
+}
+
 //! the units a grid of `wgs` workgroups costs over `slots` wave slots at the column's step weight (l 16, m 10, s 5) a `steps`-deep k walk
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_wave_units(wgs, steps, slots, tc : int64) : int64 => ((wgs + slots - 1l) / slots) * steps * (tc == 256l ? 16l : (tc == 128l ? 10l : 5l))
@@ -188,6 +220,21 @@ def cm2_wave_col(d, cnt, cores, slots : int64) : int64 {
     let tiles_m = cm2_tiles_at(d, cnt, 128l)
     if (tiles_m * 4l <= cores) return 32l
     return cm2_wave_units(tiles_m, 1l, slots, 128l) < cm2_wave_units(cm2_tiles_at(d, cnt, 256l), 1l, slots, 256l) ? 128l : 256l
+}
+
+let F16_CM2_S_BLOCKS = 4l   //! the f16 tile's s column blocks an SM (`F16GemmCm2T` at 32 positions, 62 registers)
+let F16_CM2_M_BLOCKS = 2l   //! ... its m column's (128 positions, 126 registers)
+let F16_CM2_S_WAVE = 6l     //! the s column's step weight: the cost of one of its waves, six tenths of an m wave's
+let F16_CM2_M_WAVE = 10l    //! ... the m column's
+
+//! the f16 tile's position column for `rows` positions over a `d`-row plane on `cores` SMs; the m column (128) where the SM count is unknown
+[arch(at="../ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-cm2-column")]
+def f16_cm2_col(d, rows, cores : int64) : int64 {
+    if (rows <= 64l) return 32l
+    if (cores == 0l) return 128l
+    let s = (cm2_tiles_at(d, rows, 32l) + F16_CM2_S_BLOCKS * cores - 1l) / (F16_CM2_S_BLOCKS * cores) * F16_CM2_S_WAVE
+    let m = (cm2_tiles_at(d, rows, 128l) + F16_CM2_M_BLOCKS * cores - 1l) / (F16_CM2_M_BLOCKS * cores) * F16_CM2_M_WAVE
+    return s < m ? 32l : 128l
 }
 
 //! a K/V mirror position's row in its layer's slab: the position itself, or its slot of a sliding layer's ring of `ring` rows; the
@@ -303,7 +350,7 @@ def gelu_tanh_lut_f32(v : float) : float {
         return v
     }
     let xr = float(float16(v))
-    let gv = 0.5 * xr * (2.0 - 2.0 / (1.0 + exp(2.0 * (0.79788456080286535587989211986876 * xr * (1.0 + 0.044715 * xr * xr)))))
+    let gv = 0.5 * xr * (2.0 - 2.0 / (1.0 + exp(2.0 * (0.79788456080286535587989211986876 * xr * mad(0.044715 * xr, xr, 1.0)))))
     return float(float16(gv))
 }
 

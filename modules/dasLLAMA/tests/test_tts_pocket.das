@@ -323,7 +323,7 @@ def test_pocket_parity(t : T?) {
     var inscope man <- stocked_manifest(t)
     return if (empty(man.cases))
     pocket_lane_cell(PocketLane.f32) {
-        set_serving_gpu_tower(false)
+        set_serving_gpu_tower(false, TowerFamily.tts)
         var inscope m <- load_pocket(path)
         var inscope sc = PocketScratch()
         t |> success(!m.q8, "the reference lane serves f32")
@@ -408,7 +408,7 @@ def test_pocket_codec_stream(t : T?) {
         defer() {
             set_pocket_codec_window(POCKET_CODEC_WINDOW_DEFAULT)
         }
-        set_serving_gpu_tower(false)
+        set_serving_gpu_tower(false, TowerFamily.tts)
         var inscope m <- load_pocket(path)
         var inscope dump <- load_tts_dump(path_join(oracle_dir(), c.file))
         let frames = int64(c.n_frames)
@@ -459,7 +459,7 @@ def test_pocket_frames(t : T?) {
     var inscope man <- stocked_manifest(t)
     return if (empty(man.cases))
     pocket_lane_cell(PocketLane.f32) {
-        set_serving_gpu_tower(false)
+        set_serving_gpu_tower(false, TowerFamily.tts)
         var inscope m <- load_pocket(path)
         var inscope sc = PocketScratch()
         var done = 0
@@ -635,11 +635,11 @@ def private frames_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : s
     var r : tuple<fc : int64; cpu : FrameRows>
     r.fc = -1l
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        set_serving_gpu_tower(false)
+        set_serving_gpu_tower(false, TowerFamily.tts)
         let fc = forced_frames(m, k, k.x0, k.x1, sc)
         r.cpu <- frame_rows(m, sc, fc)
         let rng_cpu = sc.rng
-        set_serving_gpu_tower(true)
+        set_serving_gpu_tower(true, TowerFamily.tts)
         let h0 = pocket_gpu_stats("frames")
         let p0 = pocket_gpu_stats("prompt")
         let c0 = pocket_gpu_stats("codec")
@@ -779,10 +779,10 @@ def private prompt_kv(vs : PocketVoiceState; n : int64) : PromptRows {
 def private prompt_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : string; bar : float; var sc : PocketScratch) : bool {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         let n = long_length(k.ids)
-        set_serving_gpu_tower(false)
+        set_serving_gpu_tower(false, TowerFamily.tts)
         pocket_prompt_rows(m, k.ids, k.vs, sc)
         var inscope cpu <- prompt_kv(k.vs, n)
-        set_serving_gpu_tower(true)
+        set_serving_gpu_tower(true, TowerFamily.tts)
         let h0 = pocket_gpu_stats("prompt")
         let e0 = gpu_encodes()
         pocket_prompt_rows(m, k.ids, k.vs, sc)
@@ -803,7 +803,7 @@ def private prompt_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : s
             var inscope off <- prompt_kv(k.vs, n)
             return rel_l2(off.k, cpu.k) == 0.0 && rel_l2(off.v, cpu.v) == 0.0
         }
-        set_serving_gpu_tower(true)
+        set_serving_gpu_tower(true, TowerFamily.tts)
         var inscope ids_rot <- [for (i in range64(n)); k.ids[(i + 1l) % n]]
         pocket_prompt_rows(m, ids_rot, k.vs, sc)
         var inscope gx <- prompt_kv(k.vs, n)
@@ -882,7 +882,7 @@ def test_pocket_frames_metal(t : T?) {
                 let free_cpu = forced_frames(m, k, none, none, sc)
                 var inscope cpu_free <- frame_rows(m, sc, free_cpu)
                 let rng_free = sc.rng
-                set_serving_gpu_tower(true)
+                set_serving_gpu_tower(true, TowerFamily.tts)
                 let hf0 = pocket_gpu_stats("frames")
                 let free = forced_frames(m, k, none, none, sc)
                 let hf1 = pocket_gpu_stats("frames")
@@ -1411,7 +1411,7 @@ def private small_parity_cells(t : T?; m : PocketModel; S : PocketSmall; man : P
             static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
                 var inscope cpu : array<float>
                 codec_served_leg(t, m, "{tag} codec seat", dump["latent"].f, int64(c.n_frames), GPU_CODEC_BAR, sc, cpu)
-                set_serving_gpu_tower(false)
+                set_serving_gpu_tower(false, TowerFamily.tts)
             }
         }
         var inscope k <- forced_case(m, c, man, sc, odir)
@@ -1438,7 +1438,7 @@ def private small_parity_cells(t : T?; m : PocketModel; S : PocketSmall; man : P
             if (S.prompt_seat) {
                 prompt_seat_leg(t, m, k, "{tag} prompt seat", GPU_PROMPT_BAR, sc)
             }
-            set_serving_gpu_tower(false)
+            set_serving_gpu_tower(false, TowerFamily.tts)
         }
         done++
         break if (done >= 2)
@@ -1477,7 +1477,7 @@ def private small_published_cells(t : T?; S : PocketSmall; man : PocketManifest;
             reset_pocket_q8()
         }
         reset_pocket_q8()
-        set_serving_gpu_tower(false)
+        set_serving_gpu_tower(false, TowerFamily.tts)
         let q8_lane = pocket_serves_q8()   //! the unpinned default lane, read before the load
         var inscope m <- load_pocket(path)
         t |> equal(m.backbone.layers[0].in_proj.q8, q8_lane && S.q8_file, "{S.config}: the published file's backbone GEMMs serve {S.q8_file ? "Q8_0 blocks on the q8 lane" : "f32 planes (its widths are off the 32 lattice)"}")
@@ -1510,7 +1510,7 @@ def private small_published_cells(t : T?; S : PocketSmall; man : PocketManifest;
         chunk_probes(t, tm, fx, S.config)
         static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
             with_gpu_knobs() {
-                set_serving_gpu_tower(true)
+                set_serving_gpu_tower(true, TowerFamily.tts)
                 let d0 <- gpu_declines()
                 let c0 = pocket_gpu_stats("codec")
                 let f0 = pocket_gpu_stats("frames")
@@ -1603,7 +1603,7 @@ def private small_cells(t : T?; S : PocketSmall) {
     }
     var inscope fx <- load_tokens_fixture(small_fixture_path())
     pocket_lane_cell(PocketLane.f32) {
-        set_serving_gpu_tower(false)
+        set_serving_gpu_tower(false, TowerFamily.tts)
         var inscope m <- load_pocket(ref_path)
         t |> success(!m.q8, "{S.config}: the reference lane serves f32")
         small_shape_cells(t, m, S)
@@ -1846,7 +1846,7 @@ def test_pocket_long_chunk(t : T?) {
         t |> success(length(ids) > POCKET_MAX_TOKENS, "{length(ids)} tokens: past the budget the caches were sized for")
         static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
             with_gpu_knobs() {
-                set_serving_gpu_tower(true)
+                set_serving_gpu_tower(true, TowerFamily.tts)
                 let d0 <- gpu_declines()
                 var inscope a <- synthesize(m, text, "alba")
                 t |> success(speech_level(a.pcm).finite && length(a.pcm) > 24000, "the long chunk speaks ({length(a.pcm)} samples)")

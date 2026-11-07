@@ -299,7 +299,7 @@ def private gpu_seam_check(t : T?; m : StyleTts2Model; tag : string; gen_in : ar
 [unused_argument(t, tag, declines, stats, run)]   // off-Apple the gated body is empty
 def knob_off_leg(t : T?; tag : string; declines : int64; stats : block<() : tuple<calls : int; served : int>>; run : block<() : bool>) {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
-        set_serving_gpu_tower(false)
+        set_serving_gpu_tower(false, TowerFamily.tts)
         let h0 = invoke(stats)
         let d0 <- gpu_declines()
         let same = invoke(run)
@@ -363,9 +363,9 @@ def tts_family(kind : TtsKind) : TtsFamily => kind == TtsKind.pocket ? TtsFamily
 def seat_leg(t : T?; family : TtsFamily; tag, stage : string; bar : float; var cpu : array<float>; run : block<(leg : TowerLeg; var out : array<float>) : void>) : bool {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         return false if (family == TtsFamily.styletts2 && !seat_present(t, tag, stage))
-        set_serving_gpu_tower(false)
+        set_serving_gpu_tower(false, TowerFamily.tts)
         invoke(run, TowerLeg.cpu, cpu)
-        set_serving_gpu_tower(true)
+        set_serving_gpu_tower(true, TowerFamily.tts)
         let h0 = seat_stats(family, stage)
         let e0 = gpu_encodes()
         var inscope g : array<float>
@@ -556,13 +556,13 @@ def served_lane_counters(t : T?; var m : TtsModel; text, voice, msg, unserved : 
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         let family = tts_family(m.kind)
         var inscope seats <- family == TtsFamily.pocket ? pocket_gpu_seats() : styletts2_gpu_seats()
-        set_serving_gpu_tower(false)
+        set_serving_gpu_tower(false, TowerFamily.tts)
         var inscope h0 <- seat_counters(family, seats)
         let d0 <- gpu_declines()
         var inscope a <- synthesize(m, text, voice)
         var inscope h1 <- seat_counters(family, seats)
         let d1 <- gpu_declines()
-        set_serving_gpu_tower(true)
+        set_serving_gpu_tower(true, TowerFamily.tts)
         let e1 = gpu_encodes()
         var inscope b <- synthesize(m, text, voice)
         let e2 = gpu_encodes()
@@ -594,19 +594,19 @@ def served_lane_counters(t : T?; var m : TtsModel; text, voice, msg, unserved : 
 def private gpu_reference_lane(t : T?; path, text, voice : string) {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         var inscope m <- mint_tts_model(path, false)   // the f32 lane: the durations round as the CPU's only there
-        set_serving_gpu_tower(false)
+        set_serving_gpu_tower(false, TowerFamily.tts)
         var inscope sized <- synthesize(m, text, voice)   // the untrimmed count the captured stream covers
         let nh = m.model.source.n_harm
         let rows = 2l * sized.timings.samples + 65536l   // the source's sample count runs past the generator's output; twice covers it
         m.scratch.noise <- captured_noise(nh, rows, 0x5eedul)
         var inscope a <- synthesize(m, text, voice)
-        set_serving_gpu_tower(true)
+        set_serving_gpu_tower(true, TowerFamily.tts)
         let h1 = styletts2_gpu_stats("decode")
         let e1 = gpu_encodes()
         var inscope b <- synthesize(m, text, voice)
         let h2 = styletts2_gpu_stats("decode")
         let e2 = gpu_encodes()
-        set_serving_gpu_tower(false)
+        set_serving_gpu_tower(false, TowerFamily.tts)
         return if (h2.served == h1.served && !tower_served(t, "{base_name(path)} reference lane", "{gpu_declines()}"))
         t |> success(e2 - e1 >= int64(h2.served - h1.served), "reference lane: the tower encoded every served decode")
         t |> equal(length(b.pcm), length(a.pcm), "reference lane: the sample counts (the durations token for token)")

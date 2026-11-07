@@ -11,6 +11,7 @@ require dasllama/dasllama_whisper
 require dasllama/dasllama_asr
 require dasllama/dasllama_audio
 require dasllama/dasllama_tower
+require dasllama/dasllama_tower_image   // tower_dev_halfword: a discrete home's exact encoder is the f16 lane
 require dasllama/dasllama_common   // KVDtype — the oracle cells pin the f32 parity rail
 require dasllama/dasllama_gguf
 require dasllama/dasllama_math   // with_dasllama_jobque_
@@ -24,19 +25,24 @@ require _model_tier   // model_available() presence/size-tier gate (see the file
 require ?das_metal dasllama/dasllama_metal_asr_dec   // set_metal_wdec — the CPU-claim cells pin the GPU cross-KV hook off
 require ?das_metal dasllama/dasllama_metal_tower     // set_metal_tower — the mtmd-oracle cells pin the GPU conv hook off
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown — the crown-pin cell drops the trio's cached flags
-require ?vulkan dasllama/dasllama_vulkan_tower
-require ?vulkan dasllama/dasllama_vulkan_asr_dec   // set_vulkan_wdec / vulkan_wdec_stats - the decoder twin's seat
 require ?vulkan dasllama/dasllama_math_vulkan   // vk_drop_model - the lifetime cell's model drop between two windows
+require ?vulkan dasllama/dasllama_vulkan_common   // g_gpu.storage_align: the decoder's alignment decline leg
+require ?cuda dasllama/dasllama_cuda_decode   // cud_drop_model - the same drop on the CUDA home
 require dasllama/dasllama_audio_io
 require dasllama/dasllama_load   // load_model_ - the canary decoder built in memory, off the image rail
 require _tower_twin
+require _child_run   // DASLLAMA_AUDIO_LANE loads once at context init: a value a process
 
 // Whisper-proper tests. The f16/gelu/mel/id tests are self-contained; the loader and
 // transcription tests need a whisper.cpp ggml-tiny.bin (gitignored) and skip without it.
-// Oracle constants come from whisper-cli (CPU, greedy: -bs 1 -bo 1 -nf -ng). The Vulkan twin
-// needs ggml-tiny.bin and ggml-large-v3-turbo.bin plus jfk.wav, and skips without a Vulkan
-// device under DASLLAMA_GPU=1, under the CUDA ask (DASLLAMA_CUDA=1 or set_gpu_home("cuda"), where the Vulkan
-// tower's seats stand down - `vulkan_twin_seat`), on a build with das_metal, and when interpreted.
+// Oracle constants come from whisper-cli (CPU, greedy: -bs 1 -bo 1 -nf -ng). The discrete-home twin
+// needs ggml-tiny.bin and ggml-large-v3-turbo.bin plus jfk.wav, and runs on whisper's home (`_gpu_knobs`'
+// `CUDA_AUDIO_FAMILIES`); it skips without that home's device under DASLLAMA_GPU=1, on the Vulkan home under the
+// CUDA ask (DASLLAMA_CUDA=1 or set_gpu_home("cuda"), where the Vulkan tower's seats stand down - `vulkan_twin_seat`),
+// on a build with das_metal, and when interpreted. The E4B facade cell skips when interpreted, without
+// gemma-4-E4B-it-Q8_0.gguf (large tier) and mmproj-gemma-4-E4B-it-BF16.gguf, and without jfk.wav; its device legs run
+// only where the serving tower's device stands up. The canary oracle cell is large tier (DASLLAMA_PARITY_FULL=1), and its device walk skips where no
+// GPU tower serves canary's default lane.
 
 [test]
 def test_f32_to_f16(t : T?) {
@@ -354,7 +360,7 @@ def test_parakeet_oracle(t : T?) {
             reused_session_leg(t, m, s, samples)
             heap_flat_leg(t, m, s, samples, "parakeet")
 
-            t |> equal(m.pk.q8, !parakeet_gpu_serves(), "default load follows the lane policy - q8 unless the Metal driver serves")
+            t |> success(m.pk.q8, "default load follows the lane policy - q8 on every home")
             var inscope mf = AsrModel(kind = AsrKind.parakeet)
             var inscope stg <- stage_parakeet_model(path, !m.pk.q8)
             mint_parakeet_model(stg, mf.pk, !m.pk.q8)
@@ -410,7 +416,7 @@ def test_parakeet_v3_oracle(t : T?) {
         let c <- caps(m)
         t |> equal(length(c.languages), 25, "25 languages")
         t |> equal(m.pk.n_vocab, 8192l, "vocab")
-        t |> equal(m.pk.q8, !parakeet_gpu_serves(), "default load follows the lane policy - q8 unless the Metal driver serves")
+        t |> success(m.pk.q8, "default load follows the lane policy - q8 on every home")
         with_dasllama_jobque_() {
             var inscope s <- create_session(m, "de")   // any of the 25; parakeet has no conditioning
             var inscope segs <- session_segs(m, s, samples)
@@ -525,16 +531,22 @@ def private assert_segs_token_identical(tt : T?; a_segs, b_segs : array<Transcri
     tt |> success(f.flips == 0, "{tag}: token-identical ({f.flips}/{f.total} flips)")
 }
 
-//! a served whisper model minted in memory from a staged read (never the `.dlim` rail) in the flavor `dev` (`#tower-dev-block`);
-//! `zero_from` >= 0 zeroes the q8 encoder's GEMM planes of every block from that one on
+//! a whisper model minted in memory from a staged read in the flavor `dev` (`#tower-dev-block`); `zero_from` >= 0 zeroes the encoder's blocks from it on
 def private mint_whisper(path : string; enc_q8, dec_q8 : bool; zero_from : int64; dev : TowerDev = TowerDev.none) : WhisperModel {
     var inscope stg <- tower_dev_staged(dev) $ { return <- stage_whisper_model(path, enc_q8, dec_q8) }
     if (zero_from >= 0l) {
-        let qoff = stg.e.enc.qlayers_off
-        let qstride = stg.e.enc.qlayer_stride
+        let on_qlayers = enc_q8 || stg.e.enc.gemm_f16
+        let base = on_qlayers ? stg.e.enc.qlayers_off : stg.e.enc.layers_off
+        let stride = on_qlayers ? stg.e.enc.qlayer_stride : stg.e.enc.layer_stride
         for (b in range64(zero_from, stg.e.enc.n_layer)) {
-            for (i in range64(qstride)) {
-                stg.enc.qblob[qoff + b * qstride + i] = int8(0)
+            for (i in range64(stride)) {
+                if (enc_q8) {
+                    stg.enc.qblob[base + b * stride + i] = int8(0)
+                } elif (stg.e.enc.gemm_f16) {
+                    stg.enc.wblob[base + b * stride + i] = uint16(0)
+                } else {
+                    stg.enc.fblob[base + b * stride + i] = 0.0
+                }
             }
         }
     }
@@ -543,7 +555,7 @@ def private mint_whisper(path : string; enc_q8, dec_q8 : bool; zero_from : int64
     return <- w
 }
 
-//! the served whisper model behind the ASR facade, minted in memory on the q8 lanes the Vulkan cells pin in the flavor `dev` - the
+//! the served whisper model behind the ASR facade, minted in memory on the q8 lanes the discrete twin pins in the flavor `dev` - the
 //! facade loader would bake the serving lane's `.dlim` beside the file
 def private mint_asr_whisper(path : string; dev : TowerDev = TowerDev.none) : AsrModel {
     var m = AsrModel(kind = AsrKind.whisper)
@@ -558,11 +570,11 @@ def private whisper_rows_encode(enc : AudioTower; var es : EncoderState; win : M
 }
 
 //! the rows are `whisper_encode`'s `xb` over jfk's first 30 s window three ways - the exact f32 encoder minted in memory, `w`'s q8
-//! encoder on the CPU and `wd`'s (the Vulkan-flavored image) on the device - then the input poison: a Vulkan-flavored q8 encoder
+//! encoder on the CPU and `wd`'s (the home's flavored image) on the device - then the input poison: a home-flavored q8 encoder
 //! with every block's GEMM planes from the middle one on zeroed, through the device chain, must EXCEED the bar
 [cold_path]
 def private whisper_rows_twin(tt : T?; name, model_path : string; w, wd : WhisperModel; samples : array<float>) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
+    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
         let tag = "{name} jfk encoder rows"
         var padded : array<float>
         var mel = WhisperMel()
@@ -572,7 +584,7 @@ def private whisper_rows_twin(tt : T?; name, model_path : string; w, wd : Whispe
         whisper_mel_window(mel, 0l, win)
         var es <- make_encoder_state(w.enc)
         var esd <- make_encoder_state(wd.enc)
-        let spec = TwinSpec(family = "whisper", tag = tag, n_layer = w.enc.n_layer, metric = TwinMetric.rel_l2)
+        let spec = TwinSpec(family = "whisper", tag = tag, n_layer = w.enc.n_layer, metric = TwinMetric.rel_l2, seat_family = TowerFamily.whisper)
         var wx <- mint_whisper(model_path, false, false, -1l)
         tt |> success(!wx.enc.q8, "{tag}: the exact encoder minted for the compare")
         var esx <- make_encoder_state(wx.enc)
@@ -581,7 +593,7 @@ def private whisper_rows_twin(tt : T?; name, model_path : string; w, wd : Whispe
         }
         delete esx
         delete wx
-        var inscope wz <- mint_whisper(model_path, true, true, w.enc.n_layer / 2l, TowerDev.vulkan)
+        var inscope wz <- mint_whisper(model_path, true, true, w.enc.n_layer / 2l, serving_tower_dev(TowerFamily.whisper))
         tt |> success(wz.enc.q8, "{tag}: the poisoned encoder is on the q8 lane")
         var esz <- make_encoder_state(wz.enc)
         twin_poison(tt, r, w.enc.n_layer / 2l, wz.enc, esz) $(e; var s; var out) => whisper_rows_encode(e, s, win, out)
@@ -595,51 +607,158 @@ def private whisper_rows_twin(tt : T?; name, model_path : string; w, wd : Whispe
     }
 }
 
-//! The whisper lane whole on each side (`#tower-dev-block`): the CPU image on the CPU with both knobs off, the Vulkan-flavored
-//! image on the device - the encoder's block loop and conv stem, then the decoder's cross-KV and steps off the encoder's device
-//! rows. The counters prove each side (no dispatch and the knob declines on the CPU leg; every chunk's blocks, every window
-//! handed off device to device and no decline on the device leg), the texts are the same, and the encoder rows twin and the f32
-//! decoder's `quant_mode` decline follow.
+//! the exact encoder's lane on the device: the f32 CPU image vs the home's f16 image at `TWIN_F16_WHISPER_REL_L2`, the poison, then jfk transcribed on each
+[cold_path]
+def private whisper_exact_lane_twin(tt : T?; name, model_path : string; samples : array<float>) {
+    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
+        let tag = "{name} jfk exact encoder"
+        let home = serving_tower_dev(TowerFamily.whisper)
+        var inscope mx = AsrModel(kind = AsrKind.whisper)
+        mx.whisper <- mint_whisper(model_path, false, true, -1l)
+        var inscope mxd = AsrModel(kind = AsrKind.whisper)
+        mxd.whisper <- mint_whisper(model_path, false, true, -1l, home)
+        tt |> success(!mxd.whisper.enc.q8 && mxd.whisper.enc.gemm_f16 && mxd.whisper.dq8 && mxd.whisper.enc.dev_backend == home,
+            "{tag}: the f16 encoder's {home}-flavored image, its decoder q8")
+        tt |> equal(asr_device_lane(mxd), "{home}", "{tag}: the facade names the home the exact lane serves on")
+        var padded : array<float>
+        var mel = WhisperMel()
+        log_mel_whisper(samples, mx.whisper.mel, mx.whisper.filters, mx.whisper.enc.n_mel, padded, mel)
+        var win = MelChunk(n_mel = mx.whisper.enc.n_mel, n_len = AUDIO_CHUNK_FRAMES)
+        win.data |> resize(mx.whisper.enc.n_mel * AUDIO_CHUNK_FRAMES)
+        whisper_mel_window(mel, 0l, win)
+        {
+            var inscope es <- make_encoder_state(mx.whisper.enc)
+            var inscope esd <- make_encoder_state(mxd.whisper.enc)
+            var inscope wz <- mint_whisper(model_path, false, true, mx.whisper.enc.n_layer / 2l, home)
+            var inscope esz <- make_encoder_state(wz.enc)
+            exact_lane_served_at(tt, "{tag} rows", TowerFamily.whisper, TWIN_F16_WHISPER_REL_L2, mx.whisper.enc, es, mxd.whisper.enc, esd, mx.whisper.enc.n_ctx, wz.enc, esz,
+                $(e; var s; var out) => whisper_rows_encode(e, s, win, out))
+        }
+        with_dasllama_jobque_() {
+            with_gpu_knobs() {
+                set_serving_gpu_tower(false, TowerFamily.whisper)
+                set_gpu_wdec(false)
+                var inscope cpu_segs <- transcribe_segs(mx, samples)
+                set_serving_gpu_tower(true, TowerFamily.whisper)
+                set_gpu_wdec(true)
+                let d0 = gpu_tower_counters(TowerFamily.whisper)
+                let w0 = gpu_wdec_stats()
+                var inscope dev_segs <- transcribe_segs(mxd, samples)
+                let d1 = gpu_tower_counters(TowerFamily.whisper)
+                let w1 = gpu_wdec_stats()
+                let cpu_text = segs_text(cpu_segs)
+                let dev_text = segs_text(dev_segs)
+                to_log(LOG_INFO, "{name} cpu exact-encoder jfk: '{cpu_text}'\n")
+                to_log(LOG_INFO, "{name} {home} exact-encoder jfk: '{dev_text}'\n")
+                tt |> success(d1.encodes - d0.encodes >= 1l, "{tag}: the device served the chunk encodes ({d1.encodes - d0.encodes})")
+                tt |> equal(d1.blocks - d0.blocks, (d1.encodes - d0.encodes) * mxd.whisper.enc.n_layer, "{tag}: every block of every served encode ran on the driver")
+                tt |> success(w1.windows - w0.windows >= 1l, "{tag}: the decoder served the window's cross-KV off the exact encoder's rows")
+                tt |> equal(w1.handoffs - w0.handoffs, w1.windows - w0.windows, "{tag}: every served window took the encoder rows device to device")
+                tt |> success(cpu_text == dev_text, "{tag}: the CPU exact lane and the device's exact lane read the same text")
+            }
+        }
+        delete win
+        delete mel
+        delete padded
+    }
+}
+
+//! a storage-offset alignment past `RAIL_META_ALIGN` declines the cross-KV window `align` and the Vulkan image refuses the CPU; restored, it serves
+[cold_path]
+def private wdec_align_declines(tt : T?; name : string; md : WhisperModel) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return if (tower_family_cuda(TowerFamily.whisper))
+        let tag = "{name} cross-KV on a device asking a storage-offset alignment past {RAIL_META_ALIGN} bytes"
+        var inscope enc_out : array<float>
+        enc_out |> resize(md.enc.n_ctx * md.n_text_state)
+        var inscope ds <- make_decoder_state(md)
+        let align = g_gpu.storage_align
+        let w0 = gpu_wdec_stats()
+        let align0 = gpu_wdec_declines()?["align"] ?? 0l
+        let device0 = gpu_wdec_declines()?["device"] ?? 0l
+        var refused = false
+        g_gpu.storage_align = RAIL_META_ALIGN * 2l
+        try {
+            whisper_cross_kv(md, ds, enc_out)
+        } recover {
+            refused = true
+        }
+        g_gpu.storage_align = align
+        let w1 = gpu_wdec_stats()
+        tt |> equal(w1.windows, w0.windows, "{tag}: no window served")
+        tt |> equal((gpu_wdec_declines()?["align"] ?? 0l) - align0, 1l, "{tag}: one align decline")
+        tt |> equal((gpu_wdec_declines()?["device"] ?? 0l) - device0, 0l, "{tag}: no device decline - the alignment is its own reason")
+        tt |> success(refused, "{tag}: the Vulkan image refuses the CPU chain")
+        whisper_cross_kv(md, ds, enc_out)
+        tt |> equal(gpu_wdec_stats().windows - w1.windows, 1l, "the control: the alignment put back, the same window serves")
+    }
+}
+
+//! the f32 decoder, minted in memory, never serves on whisper's discrete decoder: it records the `quant_mode` decline and the CPU transcribes jfk
+[cold_path]
+def private wdec_f32_declines(tt : T?; name, model_path : string; samples : array<float>) {
+    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
+        let tag = "{name} jfk f32 decoder"
+        var inscope mf <- mint_whisper(model_path, false, false, -1l)
+        tt |> success(!mf.dq8, "{tag}: the mint carries the f32 decoder")
+        with_dasllama_jobque_() {
+            let f0 = gpu_wdec_stats()
+            var inscope sf <- create_session(mf)
+            var n_segs = 0
+            transcribe(mf, sf, samples) $(_seg) {
+                n_segs++
+            }
+            let f1 = gpu_wdec_stats()
+            tt |> equal(f1.windows, f0.windows, "{tag}: never serves")
+            tt |> success(f1.declines - f0.declines >= 1l, "{tag}: records a decline")
+            tt |> success(key_exists(gpu_wdec_declines(), "quant_mode"), "{tag}: the decline reason is quant_mode")
+            tt |> success(n_segs > 0, "{tag}: the f32 rail still transcribes on the CPU")
+        }
+    }
+}
+
+//! The whisper lane whole on each side (`#tower-dev-block`): the CPU image on the CPU, the home's flavored image on the device, counters proving each, texts equal
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def test_whisper_vulkan_twin(t : T?) {
+def test_whisper_discrete_twin(t : T?) {
     for (name in ["ggml-tiny.bin", "ggml-large-v3-turbo.bin"]) {
-        t |> run("{name}: the Vulkan lane vs the CPU q8 lane on jfk") @(tt : T?) {
-            static_if (typeinfo builtin_module_exists(vulkan)) {
+        t |> run("{name}: the discrete home's q8 lane vs the CPU q8 lane on jfk") @(tt : T?) {
+            static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
                 let model_path = path_join(whisper_dir(), name)
-                jfk_twin_cell(tt, model_path, true) $(samples) {
+                jfk_twin_cell(tt, model_path, true, TowerFamily.whisper) $(samples) {
                     set_asr_fp32(false)
                     set_asr_tower_fp32(false)
+                    let home = serving_tower_dev(TowerFamily.whisper)
                     var inscope m <- mint_asr_whisper(model_path)
-                    var inscope md <- mint_asr_whisper(model_path, TowerDev.vulkan)
-                    tt |> success(m.whisper.enc.q8 && m.whisper.dq8 && md.whisper.enc.dev_backend == TowerDev.vulkan, "the q8 lane's CPU image and its Vulkan-flavored image")
+                    var inscope md <- mint_asr_whisper(model_path, home)
+                    tt |> success(m.whisper.enc.q8 && m.whisper.dq8 && md.whisper.enc.dev_backend == home, "the q8 lane's CPU image and its {home}-flavored image")
                     {
                         var inscope dsd <- make_decoder_state(md.whisper)
                         var inscope dsc <- make_decoder_state(m.whisper)
-                        tt |> success(empty(dsd.kcache) && empty(dsd.kx) && empty(dsd.h) && empty(dsd.xqi), "the Vulkan image's decoder state carries no CPU chain buffers")
+                        tt |> success(empty(dsd.kcache) && empty(dsd.kx) && empty(dsd.h) && empty(dsd.xqi), "the {home} image's decoder state carries no CPU chain buffers")
                         tt |> success(!empty(dsc.kcache) && !empty(dsc.kx) && !empty(dsc.h), "the CPU image's carries them")
                     }
                     with_dasllama_jobque_() {
-                        set_vulkan_tower(false)
-                        set_vulkan_wdec(false)
-                        let d0 = vulkan_tower_stats()
-                        let w0 = vulkan_wdec_stats()
+                        set_serving_gpu_tower(false, TowerFamily.whisper)
+                        set_gpu_wdec(false)
+                        let d0 = gpu_tower_counters(TowerFamily.whisper)
+                        let w0 = gpu_wdec_stats()
                         var inscope cpu_segs <- transcribe_segs(m, samples)
-                        let d1 = vulkan_tower_stats()
-                        let w1 = vulkan_wdec_stats()
-                        set_vulkan_tower(true)
-                        set_vulkan_wdec(true)
+                        let d1 = gpu_tower_counters(TowerFamily.whisper)
+                        let w1 = gpu_wdec_stats()
+                        set_serving_gpu_tower(true, TowerFamily.whisper)
+                        set_gpu_wdec(true)
                         var inscope dev_segs <- transcribe_segs(md, samples)
-                        let d2 = vulkan_tower_stats()
-                        let w2 = vulkan_wdec_stats()
+                        let d2 = gpu_tower_counters(TowerFamily.whisper)
+                        let w2 = gpu_wdec_stats()
                         if (d2.encodes == d1.encodes || w2.windows == w1.windows) {
-                            to_log(LOG_INFO, "{name} vulkan twin: a driver declined - tower {vulkan_tower_declines()}, decoder {vulkan_wdec_declines()}\n")
+                            to_log(LOG_INFO, "{name} {home} twin: a driver declined - tower {gpu_tower_declines(TowerFamily.whisper)}, decoder {gpu_wdec_declines()}\n")
                         }
                         let n_enc = d2.encodes - d1.encodes
                         tt |> equal(d1.encodes - d0.encodes, 0l, "the CPU leg's encoder never dispatched")
                         tt |> success(d1.declines - d0.declines >= 1l, "the CPU leg recorded the tower knob's decline")
                         tt |> equal(w1.windows - w0.windows, 0l, "the CPU leg's decoder never served a window")
                         tt |> equal(w1.steps - w0.steps, 0l, "the CPU leg's decoder never served a decode step")
-                        tt |> success(key_exists(vulkan_wdec_declines(), "knob"), "the CPU leg recorded the decoder knob's decline")
+                        tt |> success(key_exists(gpu_wdec_declines(), "knob"), "the CPU leg recorded the decoder knob's decline")
                         tt |> success(n_enc >= 1l, "the device served the chunk encodes ({n_enc})")
                         tt |> equal(d2.blocks - d1.blocks, n_enc * md.whisper.enc.n_layer, "every block of every served encode ran on the driver")
                         tt |> equal(d2.rows - d1.rows, n_enc * md.whisper.enc.n_ctx, "the rows delta is the chunks' positions")
@@ -654,19 +773,20 @@ def test_whisper_vulkan_twin(t : T?) {
                         let dev_text = segs_text(dev_segs)
                         let f = segs_token_flips(cpu_segs, dev_segs)
                         to_log(LOG_INFO, "{name} cpu q8 jfk: '{cpu_text}'\n")
-                        to_log(LOG_INFO, "{name} vulkan jfk: '{dev_text}' ({f.flips}/{f.total} token flips against the CPU q8 lane)\n")
+                        to_log(LOG_INFO, "{name} {home} jfk: '{dev_text}' ({f.flips}/{f.total} token flips against the CPU q8 lane)\n")
                         tt |> equal(length(cpu_segs), length(dev_segs), "{name} jfk: segment count")
-                        tt |> success(cpu_text == dev_text, "{name} jfk cpu q8 / vulkan: the same text (two q8 chains, the device's summation order its own: a near-tie token may flip, the words do not)")
+                        tt |> success(cpu_text == dev_text, "{name} jfk cpu q8 / {home}: the same text (two q8 chains, the device's summation order its own: a near-tie token may flip, the words do not)")
                         whisper_rows_twin(tt, name, model_path, m.whisper, md.whisper, samples)
+                        wdec_align_declines(tt, name, md.whisper)
                     }
                     delete md
                     delete m
                     wdec_f32_declines(tt, name, model_path, samples)
-                    vulkan_wdec_shutdown()
-                    vulkan_tower_shutdown()
+                    whisper_exact_lane_twin(tt, name, model_path, samples)
+                    gpu_tower_shutdown(TowerFamily.whisper)
                 }
             } else {
-                tt |> skip("dasVulkan not present")
+                tt |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
             }
         }
     }
@@ -804,27 +924,25 @@ def test_whisper_metal_ln_post(t : T?) {
     }
 }
 
-//! a lifetime cell's seat: tiny on jfk, both drivers on, the q8 lane's Vulkan-flavored image, one session created for `body` the way
-//! a serving worker reuses one - the decoder's window lifetime across that session's transcriptions is the claim
+//! a lifetime cell's seat: tiny on jfk, both drivers on, one session reused across transcriptions the way a serving worker reuses one
 def private wdec_lifetime_cell(tt : T?; body : block<(m : AsrModel; var s : AsrSession; samples : array<float>) : void>) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
+    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
         let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
-        jfk_twin_cell(tt, model_path, true) $(samples) {
-            set_vulkan_tower(true)
-            set_vulkan_wdec(true)
+        jfk_twin_cell(tt, model_path, true, TowerFamily.whisper) $(samples) {
+            set_serving_gpu_tower(true, TowerFamily.whisper)
+            set_gpu_wdec(true)
             set_asr_fp32(false)
             set_asr_tower_fp32(false)
-            var inscope m <- mint_asr_whisper(model_path, TowerDev.vulkan)
+            var inscope m <- mint_asr_whisper(model_path, serving_tower_dev(TowerFamily.whisper))
             with_dasllama_jobque_() {
                 var inscope s <- create_session(m)
                 invoke(body, m, s, samples)
             }
             delete m
-            vulkan_wdec_shutdown()
-            vulkan_tower_shutdown()
+            gpu_tower_shutdown(TowerFamily.whisper)
         }
     } else {
-        tt |> skip("dasVulkan not present")
+        tt |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
     }
 }
 
@@ -832,15 +950,24 @@ def private wdec_lifetime_cell(tt : T?; body : block<(m : AsrModel; var s : AsrS
 def test_whisper_vulkan_wdec_lifetime(t : T?) {
     t |> run("ggml-tiny.bin: a model drop between two transcriptions of one session - the second serves again and reads the same") @(tt : T?) {
         wdec_lifetime_cell(tt) $(m; var s; samples) {
-            static_if (typeinfo builtin_module_exists(vulkan)) {
-                var inscope first <- session_segs(m, s, samples)
-                let d0 = vulkan_wdec_stats()
-                vk_drop_model()   // the server's LLM slot switch: every device object swept, the decoder's waiting layouts with them
-                var inscope again <- session_segs(m, s, samples)
-                let d1 = vulkan_wdec_stats()
-                tt |> success(d1.windows - d0.windows >= 1l, "the device served the window again after the drop ({d1.windows - d0.windows})")
-                assert_segs_token_identical(tt, first, again, "ggml-tiny.bin jfk before / after the drop")
+            var inscope first <- session_segs(m, s, samples)
+            let d0 = gpu_wdec_stats()
+            var dropped = false   // the server's LLM slot switch on whisper's home: every device object swept, the decoder's with them
+            static_if (typeinfo builtin_module_exists(cuda)) {
+                if (tower_family_cuda(TowerFamily.whisper)) {
+                    cud_drop_model()
+                    dropped = true
+                }
             }
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                if (!dropped) {
+                    vk_drop_model()
+                }
+            }
+            var inscope again <- session_segs(m, s, samples)
+            let d1 = gpu_wdec_stats()
+            tt |> success(d1.windows - d0.windows >= 1l, "the device served the window again after the drop ({d1.windows - d0.windows})")
+            assert_segs_token_identical(tt, first, again, "ggml-tiny.bin jfk before / after the drop")
         }
     }
 }
@@ -902,29 +1029,6 @@ def private segs_text(segs : array<TranscribeSegment>) : string {
     }
 }
 
-//! the f32 decoder, minted in memory, never serves on the Vulkan decoder: it records the `quant_mode` decline and the CPU still transcribes jfk
-[cold_path]
-def private wdec_f32_declines(tt : T?; name, model_path : string; samples : array<float>) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        let tag = "{name} jfk f32 decoder"
-        var inscope mf <- mint_whisper(model_path, false, false, -1l)
-        tt |> success(!mf.dq8, "{tag}: the mint carries the f32 decoder")
-        with_dasllama_jobque_() {
-            let f0 = vulkan_wdec_stats()
-            var inscope sf <- create_session(mf)
-            var n_segs = 0
-            transcribe(mf, sf, samples) $(_seg) {
-                n_segs++
-            }
-            let f1 = vulkan_wdec_stats()
-            tt |> equal(f1.windows, f0.windows, "{tag}: never serves")
-            tt |> success(f1.declines - f0.declines >= 1l, "{tag}: records a decline")
-            tt |> success(key_exists(vulkan_wdec_declines(), "quant_mode"), "{tag}: the decline reason is quant_mode")
-            tt |> success(n_segs > 0, "{tag}: the f32 rail still transcribes on the CPU")
-        }
-    }
-}
-
 [test]
 def test_whisper_q8_gate(t : T?) {
     t |> run("tiny q8 tower (the load_asr_model default) stays token-identical to fp32 on jfk") @(t : T?) {
@@ -980,12 +1084,17 @@ def test_whisper_tower_fp32_knob(t : T?) {
             metal_wdec_shutdown()       // every driver the encode rides rebuilds under the pin
             metal_prefill_shutdown()    // the attention trio's crown flags cache at prefill init
         }
+        let knobs_was = gpu_knobs()
+        set_serving_gpu_tower(true, TowerFamily.whisper)   // the loads' flavor pick reads the tower knob
+        set_asr_fp32(false)   // a leaked whole-model pin would put the decoder on f32 too
         set_asr_tower_fp32(true)
         var inscope mm <- load_asr_model(model_path)
         set_asr_tower_fp32(false)
-        t |> success(!mm.whisper.enc.q8, "tower knob forces the fp32 encoder")
+        t |> success(!mm.whisper.enc.q8, "tower knob forces the exact encoder")
         t |> success(mm.whisper.dq8, "tower knob leaves the decoder q8")
-        t |> equal(asr_exec_fmt(mm), "f32/q8", "exec fmt stamps the halves")
+        let f16 = tower_dev_halfword(mm.whisper.enc.dev_backend)   // a GPU home's flavor serves the exact encoder as its f16 lane
+        t |> equal(mm.whisper.enc.gemm_f16, f16, "the exact encoder is the f16 lane exactly on a GPU home's flavor ({mm.whisper.enc.dev_backend})")
+        t |> equal(asr_exec_fmt(mm), f16 ? "f16/q8" : "f32/q8", "exec fmt stamps the halves")
         var inscope m <- load_asr_model(model_path)   // the q8/q8 default = the transcript truth
         with_dasllama_jobque_() {
             var inscope segs <- transcribe_segs(m, samples)
@@ -1011,6 +1120,7 @@ def test_whisper_tower_fp32_knob(t : T?) {
             }
             t |> success(mismatches == 0, "q8-default/mixed token-identical ({mismatches}/{total} flips)")
         }
+        set_gpu_knobs(knobs_was)
         unpin_metal_tensor_crowns()
         set_metal_tensor_crowns(prev_crowns)
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -1020,6 +1130,58 @@ def test_whisper_tower_fp32_knob(t : T?) {
         }
         delete m
         delete mm
+    }
+}
+
+//! `_audio_lane_whisper_root.das` over tiny and `clip` under DASLLAMA_AUDIO_LANE=`v`, on the run's GPU home, at the info floor
+//! the load's lane line prints at
+def private whisper_lane_child(t : T?; v, model_path, clip : string) : string {
+    var out : string
+    let rc = run_child(child_cmd("_audio_lane_whisper_root.das", [(name = "DASLLAMA_AUDIO_LANE", value = v), (name = "DAS_LOG_LEVEL", value = "info")],
+        "\"{model_path}\" \"{clip}\"", true), out)
+    t |> equal(rc, 0, "the whisper lane root ran (DASLLAMA_AUDIO_LANE={v}):\n{out}")
+    t |> success(find(out, "ROOT_DONE") >= 0, "the whisper lane root reached its end:\n{out}")
+    return out
+}
+
+//! the rest of the line after `key` in `out` ("" where no line carries it)
+def private line_after(out, key : string) : string {
+    let at = find(out, key)
+    return "" if (at < 0)
+    let from = at + length(key)
+    let eol = find(out, "\n", from)
+    return strip(slice(out, from, eol < 0 ? length(out) : eol))
+}
+
+[test]
+def test_whisper_audio_lane_env(t : T?) {
+    t |> run("DASLLAMA_AUDIO_LANE=16 takes tiny's facade load onto the exact encoder (the home's f16 lane), =8 onto q8, one jfk sentence on both") @(t : T?) {
+        let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
+        return if (!jit_model_available(t, model_path))
+        let clip = asr_clip("jfk.wav")
+        if (!stat(clip).is_valid) {
+            t |> skip("jfk.wav not present")
+            return
+        }
+        let exact = whisper_lane_child(t, "16", model_path, clip)
+        let q8 = whisper_lane_child(t, "8", model_path, clip)
+        let lane16 = line_after(exact, "WLANE ")
+        let lane8 = line_after(q8, "WLANE ")
+        t |> success(find(lane16, "q8=false ") == 0, "=16 loads the exact encoder: {lane16}")
+        let half = find(lane16, "halfword=true") >= 0
+        t |> success(find(lane16, half ? "f16=true" : "f16=false") >= 0, "... on the f16 lane exactly where the home's flavor is halfword: {lane16}")
+        t |> success(find(lane16, "dec_q8=true") >= 0, "... beside the q8 decoder: {lane16}")
+        t |> success(find(lane8, "q8=true f16=false") == 0, "=8 loads the q8 encoder: {lane8}")
+        let named16 = "GEMM lane {half ? "f16" : "f32"} planes - asked by DASLLAMA_AUDIO_LANE=16"
+        t |> success(find(exact, named16) >= 0, "the load's lane line names the knob: {named16}\n{exact}")
+        t |> success(find(q8, "whisper encoder: GEMM lane q8 - asked by DASLLAMA_AUDIO_LANE=8") >= 0, "the =8 load's lane line names the knob:\n{q8}")
+        let text16 = line_after(exact, "TEXT ")
+        let text8 = line_after(q8, "TEXT ")
+        to_log(LOG_INFO, "whisper-tiny jfk under DASLLAMA_AUDIO_LANE=16 ({lane16}): '{text16}'\n")
+        to_log(LOG_INFO, "whisper-tiny jfk under DASLLAMA_AUDIO_LANE=8 ({lane8}): '{text8}'\n")
+        t |> success(!empty(text16), "=16 transcribed")
+        t |> equal(text16, text8, "the same sentence on both lanes")
+        jfk_words_floor(t, "=16", text16)
     }
 }
 
@@ -1191,36 +1353,57 @@ def private check_canary_route(t : T?; m : AsrModel; wav, route : string; sample
     t |> equal("en", s.detected_lang, "{name}: english")
 }
 
-//! the clip on the CPU chain (every GPU tower off), then on the route the box serves - the Metal tower's encode counted where
-//! it serves the canary blocks
-def private check_canary_clip(t : T?; m : AsrModel; wav : string; expected : array<int>) {
+//! the clip's frozen ids on one route of `m`'s encoder: on the device (`device`, canary's tower knob on, every forced walk and the
+//! greedy decode counted as a device encode) or on the CPU chain (every tower off, no device encode - the count's control)
+def private check_canary_clip(t : T?; m : AsrModel; wav, route : string; device : bool; expected : array<int>) {
     let samples <- load_audio_16k_mono(wav)
     if (empty(samples)) {
         t |> skip("{base_name(wav)} not present")
         return
     }
     with_gpu_knobs() {
-        set_every_gpu_tower(false)
-        let off_before = gpu_tower_counters().encodes
-        check_canary_route(t, m, wav, "cpu chain", samples, expected)
-        t |> equal(off_before, gpu_tower_counters().encodes, "{base_name(wav)} cpu chain: the tower encoded nothing with every tower off (the encode count's control)")
-        set_every_gpu_tower(true)
-        let before = gpu_tower_counters().encodes
-        check_canary_route(t, m, wav, "served", samples, expected)
-        if (canary_gpu_serves()) {
-            t |> success(gpu_tower_counters().encodes > before, "{base_name(wav)} served: the tower encoded the clip on the device")
+        if (device) {
+            set_serving_gpu_tower(true, TowerFamily.canary)
+        } else {
+            set_every_gpu_tower(false)
+        }
+        let e0 = gpu_tower_encodes(TowerFamily.canary)
+        check_canary_route(t, m, wav, route, samples, expected)
+        let encodes = gpu_tower_encodes(TowerFamily.canary) - e0
+        if (device) {
+            t |> success(encodes >= 3l, "{base_name(wav)} {route}: the tower encoded both forced walks and the greedy decode on the device ({encodes} encodes)")
+        } else {
+            t |> equal(encodes, 0l, "{base_name(wav)} {route}: the tower encoded nothing with every tower off (the encode count's control)")
         }
     }
 }
 
-//! the Canary pair behind the ASR facade, built in memory with the encoder on its f32 lane - the facade loader would bake a
-//! `.dlim` of each beside the files
+//! the Canary encoder minted in memory on the `q8` lane in flavor `dev` (`none` the CPU image) - the facade loader would bake
+//! a `.dlim` beside the file
+def private mint_canary_enc(enc : string; q8 : bool; dev : TowerDev) : CanaryEncoder {
+    var inscope stg <- tower_dev_staged(dev) $ { return <- stage_canary_encoder(enc, q8) }
+    var e = CanaryEncoder()
+    mint_canary_encoder(stg, e, dev)
+    return <- e
+}
+
+//! the Canary pair behind the ASR facade, built in memory with the encoder's CPU image on its f32 lane
 def private mint_asr_canary(dec, enc : string) : AsrModel {
     var d <- load_model_(dec, QuantMode.q8)
-    var inscope stg <- stage_canary_encoder(enc, false)
-    var e = CanaryEncoder()
-    mint_canary_encoder(stg, e)
+    var e <- mint_canary_enc(enc, false, TowerDev.none)
     return <- canary_asr_model(d, e, dec)
+}
+
+//! the oracle's three clips and their frozen NeMo SALM greedy ids (`harness/canary_qwen_expected.tsv`; trailing 151645 = text EOS)
+def private canary_oracle_clips() : array<tuple<wav : string; ids : array<int>>> {
+    return <- [
+        (wav = asr_clip("jfk.wav"), ids = [3036, 773, 847, 12357, 8877, 2548, 537, 1128, 697, 3146, 646, 653, 369, 498, 2548,
+                                           1128, 498, 646, 653, 369, 697, 3146, 151645]),
+        (wav = asr_clip("librispeech/09_1089-134686-0008.wav"), ids = [785, 26915, 304, 892, 806, 83909, 413, 55707, 3304, 5086,
+                                                                         572, 264, 9255, 11, 78908, 6540, 315, 5561, 151645]),
+        (wav = asr_clip("librispeech/05_1089-134686-0004.wav"), ids = [2833, 5779, 29160, 451, 11896, 374, 8580, 389, 498, 13,
+                                                                         7684, 3729, 9972, 151645])
+    ]
 }
 
 [test]
@@ -1245,20 +1428,31 @@ def test_canary_qwen_oracle(t : T?) {
         t |> success(!c.translate && c.timestamps == AsrTimestamps.none && !c.streaming, "no translate / timestamps / streaming")
         t |> equal(m.cenc.n_layer, 32l, "FastConformer-32")
         t |> equal(m.cenc.proj_dim, 2048l, "projects to the Qwen3 hidden width")
+        var inscope clips <- canary_oracle_clips()
         with_dasllama_jobque_() {
-            // Frozen NeMo SALM greedy ids (harness/canary_qwen_expected.tsv); trailing 151645 = text EOS
-            check_canary_clip(t, m, asr_clip("jfk.wav"),
-                [3036, 773, 847, 12357, 8877, 2548, 537, 1128, 697, 3146, 646, 653, 369, 498, 2548,
-                 1128, 498, 646, 653, 369, 697, 3146, 151645])
-            check_canary_clip(t, m, asr_clip("librispeech/09_1089-134686-0008.wav"),
-                [785, 26915, 304, 892, 806, 83909, 413, 55707, 3304, 5086, 572, 264, 9255, 11, 78908,
-                 6540, 315, 5561, 151645])
-            check_canary_clip(t, m, asr_clip("librispeech/05_1089-134686-0004.wav"),
-                [2833, 5779, 29160, 451, 11896, 374, 8580, 389, 498, 13, 7684, 3729, 9972, 151645])
+            for (clip in clips) {
+                check_canary_clip(t, m, clip.wav, "cpu chain", false, clip.ids)
+            }
             var inscope jfk <- load_audio_16k_mono(asr_clip("jfk.wav"))
             if (!empty(jfk)) {
                 var inscope hs <- create_session(m, "en")
                 heap_flat_leg(t, m, hs, jfk, "canary")
+            }
+            // the device walk: the encoder minted on the lane the home's tower serves canary by default, in that tower's flavor
+            with_gpu_knobs() {
+                set_serving_gpu_tower(true, TowerFamily.canary)
+                reset_canary_enc_q8()
+                let q8 = canary_enc_serves_q8()
+                let dev = canary_dev_flavor(q8)
+                if (dev == TowerDev.none) {
+                    t |> skip("no GPU tower on this box serves canary's default {q8 ? "q8" : "exact"} lane - the device walk needs one")
+                } else {
+                    delete m.cenc
+                    m.cenc <- mint_canary_enc(enc, q8, dev)
+                    for (clip in clips) {
+                        check_canary_clip(t, m, clip.wav, "{dev} {q8 ? "q8" : "exact"} lane", true, clip.ids)
+                    }
+                }
             }
         }
         set_asr_kv(prior_kv)
@@ -1317,6 +1511,49 @@ def test_gemma4a_audio_oracle(t : T?) {
             t |> equal(s.detected_lang, "en", "english")
         }
         set_asr_kv(KVDtype.f16)   // back to the serving default
+    }
+}
+
+//! Gemma-4 E4B audio through the facade: the embedder widens 1536 to 2560, soft tokens off the serving GPU tower, the transcript jfk's words
+[test]
+def test_gemma4a_e4b_audio_facade(t : T?) {
+    t |> run("Gemma-4 E4B audio through the facade: the widening embedder's soft tokens transcribe jfk") @(t : T?) {
+        return if (!jit_only(t))
+        let dec = path_join(models_dir(), "gemma-4-E4B-it-Q8_0.gguf")
+        let mmproj = path_join(models_dir(), "mmproj-gemma-4-E4B-it-BF16.gguf")
+        if (!model_available(t, dec) || !model_available(t, mmproj)) {
+            return
+        }
+        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
+        if (empty(samples)) {
+            t |> skip("jfk.wav not present")
+            return
+        }
+        with_gpu_knobs() {
+            set_serving_gpu_tower(true, TowerFamily.gemma4a)   // the tower knob the load's flavor pick and the encode read
+            var inscope m <- load_asr_model(dec, mmproj)
+            t |> equal(gemma4a_mid_dim(m.g4a), 1536l, "the encoder's own width")
+            t |> equal(m.g4a.proj_dim, 2560l, "the embedder widens to the decoder's width")
+            let device_up = serving_tower_device_up(TowerFamily.gemma4a)
+            let e0 = gpu_tower_encodes(TowerFamily.gemma4a)
+            var text = ""
+            with_dasllama_jobque_() {
+                var inscope s <- create_session(m, "en")
+                var inscope segs <- session_segs(m, s, samples)
+                for (sg in segs) {
+                    text += sg.text
+                }
+                if (device_up) {
+                    t |> success(gpu_tower_encodes(TowerFamily.gemma4a) > e0, "the soft tokens came off the {serving_tower_dev(TowerFamily.gemma4a)} tower")
+                    knob_off_unrouted(t, "gemma4a E4B jfk", TowerFamily.gemma4a) {
+                        var inscope so <- create_session(m, "en")
+                        var inscope off_segs <- session_segs(m, so, samples)
+                        to_log(LOG_INFO, "gemma4a E4B jfk with the tower knob off: {length(off_segs)} segments\n")
+                    }
+                }
+            }
+            jfk_words_floor(t, "gemma4a E4B jfk", text)
+        }
     }
 }
 

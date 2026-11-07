@@ -351,8 +351,8 @@ def private measure_das(var m : AsrModel; samples : array<float>; reps : int; la
     return best
 }
 
-//! one catalog model's timed buckets -> a BenchModel cell appended to `jsonModels`; on Metal the gpu arm (--ngl) rides the
-//! f32 tower rail and a row that never dispatches the tower FAILS the leg; on Vulkan the row stamps `vulkan` when the drivers
+//! one catalog model's timed buckets -> a BenchModel cell appended to `jsonModels`; on Metal the gpu arm (--ngl) pins the
+//! tower's exact lane and a row that never dispatches the tower FAILS the leg; on Vulkan the row stamps `vulkan` when the drivers
 //! served every clip (the tower, and the decoder on whisper) and FAILS when they served some but not all
 [arch(at = "../ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs")]
 def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonModels : array<BenchModel>; gpu, accel : bool) : bool {
@@ -511,7 +511,7 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
 }
 
 //! The --asr entry: catalog match -> measure -> the same cell JSON the LLM rows emit. --ngl
-//! selects the gpu leg - the f32 tower rail on the Metal tower driver, the audio-chat decoders
+//! selects the gpu leg - the tower's exact lane on the Metal tower driver, the audio-chat decoders
 //! on the standard Metal rail; whisper/parakeet decoders keep their own paths (wdec driver /
 //! CPU by design). A measured gpu row without tower engagement, or a chat-decoder row without
 //! prefill engagement, exits the leg non-zero.

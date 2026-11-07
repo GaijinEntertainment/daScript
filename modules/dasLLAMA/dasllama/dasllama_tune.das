@@ -207,12 +207,13 @@ def private emit_registry(var mod : Module?; tmpl : FunctionPtr; grid : array<Tu
 // kernel's shipped default from here instead of restating it as a literal that a per-ISA chain
 // would silently outdate.
 def private emit_fallback_registry(var mod : Module?; var errors : das_string) : bool {
+    let bank <- tuned_fallbacks_of_program()
     var body : array<ExpressionPtr>
-    body |> reserve(length(g_fallbacks) + 2)
+    body |> reserve(length(bank) + 2)
     body |> push <| qmacro_expr() {
         var result : table<string; string>
     }
-    for (k, v in keys(g_fallbacks), values(g_fallbacks)) {
+    for (k, v in keys(bank), values(bank)) {
         body |> push <| qmacro_expr() {
             result[$v(k)] = $v(v)
         }
@@ -233,7 +234,7 @@ def private emit_fallback_registry(var mod : Module?; var errors : das_string) :
 
 //! `[dasllama_fallbacks]` on any (dummy) struct emits `dasllama_tuned_fallbacks()`, mapping every
 //! `[tuned]` kernel to the fallback perm it resolved to ON THIS BOX. Declare it AFTER the requires
-//! that pull in the kernels, so every `[tuned]` apply has run by the time this one does.
+//! that pull in the kernels, so every kernel's module is in the program by the time this one applies.
 [structure_macro(name="dasllama_fallbacks")]
 class private FallbacksMacro : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup;
@@ -310,10 +311,6 @@ def box_profile_verdict_at(path : string) : string {   // nolint:LINT012,LINT019
 }
 
 
-// Every [tuned] kernel's shipped fallback AS RESOLVED HERE — a `;`-chain picks per ISA, so this
-// is box-specific and cannot be restated as a literal anywhere else. [dasllama_fallbacks] emits it.
-var private g_fallbacks : table<string; string>
-
 def private fallback_perm(args : AnnotationArgumentList) : string {
     let dv = find_arg(args, "fallback")
     if (dv is tString) {
@@ -331,6 +328,23 @@ def private fallback_perm(args : AnnotationArgumentList) : string {
     return DEFAULT_PERM
 }
 
+//! every `[tuned]` kernel's shipped fallback as this box resolves it (a `;`-chain picks per ISA), read off the annotations of
+//! the program's functions: a module the front-end cache serves runs no `[tuned]` apply, so nothing filled at apply time holds it
+[arch(at = "../ARCHITECTURE_MEASUREMENT.md#tuned-perm-precedence")]
+def private tuned_fallbacks_of_program() : table<string; string> {
+    var bank : table<string; string>
+    program_for_each_module(compiling_program()) $(mod) {
+        for_each_function(mod, "") $(func) {
+            for (ann in func.annotations) {
+                if (ann != null && ann.annotation.name == "tuned") {
+                    bank["{func.name}"] = fallback_perm(ann.arguments)
+                }
+            }
+        }
+    }
+    return <- bank
+}
+
 def private report_perm(fname, perm, source : string) : string {   // nolint:LINT012,LINT019 - `fname`/`source` are read only in the framework arm
     static_if (typeinfo module_exists(llvm_tune)) {
         if (tune_verbosity() == "verbose") {
@@ -345,7 +359,6 @@ def private report_perm(fname, perm, source : string) : string {   // nolint:LIN
 def private resolve_perm(func : FunctionPtr; args : AnnotationArgumentList) : string {
     let fname = "{func.name}"
     let fb = fallback_perm(args)
-    g_fallbacks[fname] = fb
     static_if (typeinfo module_exists(llvm_tune)) {
         if (tune_policy_env() == "reference") {
             // the true kill switch, [tune]'s twin: the template's own loops, no hints stamped
@@ -412,7 +425,7 @@ class private TunedMacro : AstFunctionAnnotation {
         }
         //! a sidecar perm is measured data, not law - one the grid dropped falls back rather than brick the tuner that would re-race it
         let fname = "{func.name}"
-        let fb = g_fallbacks?[fname] ?? DEFAULT_PERM
+        let fb = fallback_perm(args)
         print("dasllama_tune: {fname}: sidecar perm '{suffix}' is not in the grid (stale mint?) - stamping the fallback '{fb}'\n")
         for (perm in grid) {
             if (perm.suffix == fb) {

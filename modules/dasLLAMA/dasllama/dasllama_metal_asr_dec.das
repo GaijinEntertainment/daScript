@@ -71,9 +71,6 @@ var private g_wd_nvpad = 0l            // n_vocab padded to 64 rows — enc_gemm
 var private g_wd_window_key = 0ul
 var private g_wd_window_live = false
 var private g_wd_window_step = false   // this window's captured wdec_step — the step serves only when set
-// the step-time split (the g_us_* decode-rail pattern): GPU-busy vs host encode, microseconds
-var private g_wd_us_gpu = 0l
-var private g_wd_us_encode = 0l
 
 //! Engage/decline counters (the counts live in dasllama_metal_common, the counting home):
 //! `windows` = cross-KV windows served, `steps` = decode batches, `tokens` = rows across them.
@@ -85,10 +82,6 @@ def metal_wdec_stats : tuple<windows : int64; steps : int64; tokens : int64; dec
 
 //! The declines-by-reason table (a copy), keyed by `MetalWdecDecline` value names.
 def metal_wdec_declines : table<string; int64> => <- clone_to_move(g_wdec_declines.by_reason)
-
-//! The step-time split across every served decode batch: GPU-busy vs host-encode microseconds.
-//! Wall minus their sum is the commit/wait/readback residue — the per-token overhead lens.
-def metal_wdec_times : tuple<us_gpu : int64; us_encode : int64> => (us_gpu = g_wd_us_gpu, us_encode = g_wd_us_encode)
 
 //! Test A/B seat: pin the ASR-decoder driver on/off in-process (the env knob's setter twin).
 def set_metal_wdec(on : bool) {
@@ -241,9 +234,8 @@ def private metal_whisper_bake(w : WhisperModel; var b : TowerDevBuild) : bool {
     return true
 }
 
-//! whisper's Metal chains serve an encoder lane: the tower knob on, both decoder halves on the device
-[unused_argument(q8)]
-def private metal_whisper_serves_model(q8 : bool) : bool => g_wd_env && g_wd_step_env && metal_whisper_tower_serves()
+//! whisper's Metal chains serve the encoder lane `q8` (the tower's lane pick), both decoder halves on the device
+def private metal_whisper_serves_model(q8 : bool) : bool => g_wd_env && g_wd_step_env && metal_whisper_tower_serves(q8)
 
 //! the per-model buffers past the decoder blob, the key set last: `base` and `blen` name the planes the blob came from; a model
 //! whose `step` runs on the CPU takes none - its cross-KV lands in the state's own planes
@@ -507,8 +499,6 @@ def private metal_whisper_decode(w : WhisperModel; var ds : DecoderState; toks :
     unsafe {
         memcpy(addr(ds.logits[0]), reinterpret<uint8?>(metal_buffer_contents(g_wd_slog)) + (n - 1l) * g_wd_nvpad * 4l, uint64(w.n_vocab * 4l))
     }
-    g_wd_us_gpu += int64(gpu_ms * 1000.0lf)
-    g_wd_us_encode += int64(encode_ms * 1000.0lf)
     g_wdec_steps++
     g_wdec_tokens += n
     ds.gpu_kv_gen = 1l   // the GPU now owns rows of this window's self-KV (see the eviction panic)

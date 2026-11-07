@@ -4175,7 +4175,7 @@ half-width dot); the whole bf16 tower set shares that gap.
   (`followup_general.md` row 178).
 
 - **LANDED (2026-09-27) - IQ3_S served as a 16-entry codebook plane on the CPU rail (`iq3s4`,
-  `ARCHITECTURE_ENGINE_FORMATS.md#served-form`, `DASLLAMA_IQ3S_SERVE=auto|grid|lut`): every IQ3_S weight
+  `ARCHITECTURE_ENGINE_FORMATS_TERMS.md#served-form`, `DASLLAMA_IQ3S_SERVE=auto|grid|lut`): every IQ3_S weight
   is a signed odd 1..15 times its block scale, so grid entry, qh bit and sign fold at transcode into
   one nibble over `-15, -13, .., 15`, decoded by the iq4xs LUT kernels - one `tbl` per 16 nibbles
   in place of a 2 KB grid gather, one load per 4 weights.** Qwen3.8-Flash-Next UD-IQ4_XS (gate/up
@@ -8745,3 +8745,440 @@ every before-against-after figure below is `direction-grade`: two processes, and
   `DASLLAMA_GPU=1 DASLLAMA_CUDA=1` on this box, the Vulkan figures from the same run without the CUDA ask. The image
   round trips (`tests/test_model_image.das`, the `gemma3v`, `gemma4v` and `gemma4uv` arms, both homes) hold the mapped
   image's device block to the in-memory mint's, plan and bytes - a driver-against-itself compare.
+
+### From the audio towers on the CUDA home (2026-11-04, the reference box: Threadripper 3990X, RTX 5060 Ti 16 GB - 36 SMs, PCIe x8 - driver 616.56, Windows, the GPU clock locked at 2392 MHz and read before and after every row)
+
+The instruments: `harness/asr_stage_probe.das` (the family's encode row - mean, min-max, cv - over `-r 10 --warm 2`, the
+stage table's decode bucket beside it) and `harness/vision_lane_probe.das` (the median of the last ten of thirteen encodes),
+`bin/Release/daslang.exe -jit modules/dasLLAMA/harness/asr_stage_probe.das -- -m <model> [--mmproj <encoder>] -w
+modules/dasLLAMA/benchmarks/asr/corpus/<clip>.wav [--lang ru] -r 10 --warm 2` under `DASLLAMA_MODELS_DIR=F:/models
+DAS_JOBQUE_THREADS=8 DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1` and `DASLLAMA_WHISPER_DIR` at the box's whisper model folder,
+`DASLLAMA_CUDA=1` on the CUDA arm alone, `DASLLAMA_CUDA_MMQ`, `DASLLAMA_CUDA_PDL`, `DAS_TUNE_POLICY` and `DASLLAMA_COOPMAT`
+unset. Every A/B below is one process an arm, the arms back to back with the first repeated last, and `direction-grade`; an
+arm's transcript is held to the others' by its md5 (identical on every A/B here) - a driver-against-itself compare, no
+served counter read: the probe logs no tower seat counter, so an arm a seat declined would match on the CPU chain's text
+too. The twin cells the entries above name `test_<family>_vulkan_twin` run from this entry on as
+`test_<family>_discrete_twin`, the same cells seated on the serving discrete home. The per-kernel readings are `nsys profile -t cuda` (Nsight
+Systems 2026.4.1) over the same probe with `--warm 1 -r 3` and the chain graphs off (`DASLLAMA_CUDA_GRAPHS=0`, so each kernel is
+its own record), against the Vulkan tower's roles under `DASLLAMA_GPU_PROF=1`.
+
+- **The cm2 column pick on this home (`ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-cm2-column`).** A scratch race outside the tree
+  timed the Q8_0 cm2 tile at the s, m and l columns on both homes over 162 shapes - rows 138, 300, 512, 784, 882, 1024, 1500,
+  2048 and 4096 by the towers' widths and depths (384 to 8192, the projection, FFN-up and FFN-down of each), the best of
+  eight rounds of sixteen launches, us a launch (CUDA events; Vulkan timestamps). The Vulkan model at two blocks an SM - the
+  pick the CUDA home ran - sat 8.1% behind the fastest column on average, 49 shapes over 5% and 80% at worst (1500 rows,
+  4096 deep, 1024 wide: l 505 us against m 280); the CUDA rule 0.7%, 9 over 5%, 14% at worst (512 rows, 768 deep, 3072 wide:
+  l 71.1 against m 62.5). The l column on a partial last column is where the old pick lost: 1280 x 1280 at 784 rows read s
+  125.4 / m 66.0 / l 143.0, at 1024 rows 158.3 / 99.6 / 110.5, at 1500 rows 236.9 / 122.7 / 170.0. Where few weight tiles
+  leave the m grid short of a wave the s column wins: 3072 deep, 768 wide at 138 rows read s 60.9 / m 95.1 / l 292.1. The rule's
+  step weights (s 6, m 10, l 16, the partial l 20) are the race's fit, not a reading. On the Vulkan side of the same
+  race its own model (one block an SM) sat 10.1% behind and the three-column race at one block an SM with the partial l taxed
+  0.2% - a measured lead for the Vulkan window, not taken here (its windows' pick needs the pod's 82-SM card too). The whisper
+  turbo jfk encode, the old pick (every site of this encode on the l column, forced by `DASLLAMA_CM2_TILE=256`) / the new /
+  the old: **81.16 / 66.57 / 81.08 ms** (cv under 0.5%).
+- **The tower chains replayed from captured graphs (`ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-chain-graphs`), `DASLLAMA_CUDA_GRAPHS`
+  0 / 1 / 0, encode ms:** gigaam q8 ru_long **57.87 / 54.41 / 57.26** (its transducer decode 204.3 -> 86.5 ms over the forty
+  spans of ten passes, the round chain on two graphs); parakeet v2 jfk **67.08 / 64.45 / 67.07** (decode 4.21 -> 1.52 ms a
+  pass; the graphs arm's cv 3.1%, its first pass the capture); gemma4v **16.86 / 15.79 / 16.82**; qwen3v **30.45 / 29.88 /
+  30.53**; whisper turbo jfk 65.79 / 65.67 / 65.54 and gemma4a jfk 19.08 / 19.02 / 18.79 - no change where the GPU is the
+  bound. Under `nsys`, read `external`, the gigaam encode's 22406 launches over five passes cost 12.8 us of driver call each (287 ms in
+  `cuLaunchKernelEx`); the graphs arm left 19366 launches before the round chain took graphs, 16 graph launches replaying
+  the block chains. The first form keyed the FastConformer chain's shape on rows x the rel window, 0 on gigaam's rotary
+  form, so two spans of 501 and 461 rows over the same tile columns shared a key and recaptured on every pass (57.64 to
+  61.22 ms with the graphs on): the dry walk caught each mismatch - the first launch's row word - so the cost was the
+  capture, never a wrong replay; the shape is rows and window now.
+- **The shared-memory carveout left to the driver for the kernels that take none (`ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-carveout`),
+  every kernel at the full carveout / only the shared-memory kernels / every kernel:** gemma4a E2B jfk encode **20.05 / 18.99 /
+  19.98 ms**. Per kernel, before -> after, read `external` under `nsys`: `CuTowerMelLog` 504 -> 153 us, `CuTowerLnRelu`
+  235 -> 140 us a call, `CuTowerG4aAttn` 270 -> 241 us a layer, `CuTowerSpecDft` 636 -> 450 us. The Vulkan roles against
+  them: `mel` 145, `bias` 140 a stamp, `attn` 230, `spectrum` 637. The LLM guard, `bin/Release/daslang.exe -jit
+  modules/dasLLAMA/benchmarks/lcpp_bench.das -- --for-debug-purposes -m Qwen3-4B-Instruct-2507-Q8_0.gguf -p 512 -n 128 -r 3
+  -t 16 --ngl 0` on the CUDA home - the `-jit` script, its rows stamped `debug-jit`; the CPU kernel backend x64-gen (batch
+  x64-gen), no tune profile stamped (the tune gate's `tune_status is EMPTY` under `DASLLAMA_ALLOW_UNTUNED=1`); 8 lanes
+  served (`DAS_JOBQUE_THREADS=8` overrides `-t`, the bench's `config:` line reads t8),
+  the same three arms, tok/s, each the mean and spread of three reps: pp512 6797.9 +/- 26.7 / 6773.6 +/- 23.5 / 6800.5 +/-
+  23.1, tg128 86.54 +/- 0.11 / 86.12 +/- 0.18 / 86.43 +/- 0.04 - 0.4% on both, inside
+  one spread on pp512 and just past it on tg128, so the policy is scoped to the tower families' own class modules
+  (`dasllama_cuda_classes_front`, `_blocks`, `_asr`) and every LLM class keeps the full carveout. Scoped, the same three arms:
+  the LLM guard pp512 6792.4 +/- 27.8 / 6769.0 +/- 30.6 / 6768.5 +/- 25.5, tg128 86.48 / 85.98 / 86.15 (the tg128 rows'
+  spreads were not kept; the LLM classes configured alike in every arm: the spread is the session's drift); gemma4a **19.98 / 18.86 / 20.03 ms**; qwen3a 0.6B jfk
+  17.72 / 17.29 / 18.14.
+- **The pre-LN chain's q, k and v GEMMs forked onto the side streams (`ARCHITECTURE_GPU_TOWER_RAIL.md#rail-primitives`), a
+  scratch switch keeping them on the one stream / the fork / the switch:** whisper turbo jfk **65.50 / 63.53 / 65.57 ms**;
+  qwen3a 0.6B jfk **19.03 / 17.14 / 18.72**; gemma3v 171.24 / 170.27 / 171.16 (4096 rows: 288 m tiles a GEMM fill the waves
+  alone). At 1500 rows a 1280-wide GEMM is 120 m tiles over the card's 72 slots, a full wave and a partial one; three of them
+  together are five whole waves. The Vulkan tower's `gemm_v` role reads half its `gemm_q` (1852 against 3779 us over the turbo
+  encode) for the same reason: its hazard rail lets the three run together.
+- **The FastConformer front's rows handed to the blocks on the device** (`dasllama_cuda_tower_fc`: parakeet's and gigaam's
+  whole-encode seats, where a declined block chain fails the encode whole and the CPU recomputes it from the mel, so the host
+  rows are never read), the readback, sync and re-upload put back by a scratch switch / the handoff / the switch: gigaam q8
+  ru_long **54.99 / 52.51 / 55.12 ms**; parakeet v2 jfk 64.55 / 64.14 / 64.55 (138 rows: a 0.6 MB round trip). The Vulkan
+  home keeps the round trip (`ARCHITECTURE_GPU_TOWER_RAIL.md#fc-chains`).
+- **Every family on both homes with every lever above in, cuda / vulkan / cuda, one process each, the clock read 2392 MHz
+  before and after every row (three rows ended at 2377-2385), encode ms - mean (min-max) over `-r 10 --warm 2`; the vision rows
+  the probe's median of ten:** whisper tiny jfk 2.71 (2.30-3.32, cv 13.6%) / 2.73 (2.69-2.78) / 2.31 (2.18-2.55); whisper
+  turbo jfk 64.82 (63.99-66.14) / 66.90 (64.86-71.10, cv 3.8%) / 66.10 (64.24-70.33); turbo ru_long (77 s, three windows)
+  199.00 (190.71-206.11) / 198.20 (193.95-205.08) / 193.48 (191.54-194.60); qwen3a 0.6B jfk 17.65 / 18.49 / 17.94; gemma4a
+  E2B jfk 20.55 / 21.05 / 19.36; canary 2.5B jfk 92.57 / 108.68 / 90.98; parakeet v2 jfk 64.47 / 75.58 / 64.41; gigaam q8
+  ru_long 52.73 / 57.46 / 52.60; gigaam kq (q4_k) 56.42 / 59.54 / 56.46; gigaam ctc 52.80 / 59.85 / 52.64; the silero VAD over
+  ru_long (`--vad-only`, the `find_speech_timestamps` row) 9.21 / 8.61 / 8.91; gemma3v 896 170.99 / 194.98 / 171.40; gemma4v
+  672x336 15.75 / 36.98 / 15.73; qwen3v 448 29.91 / 61.25 / 29.94; qwen25v exact 448 79.16 / 88.56 / 78.84. Every transcript
+  the same on both homes (a driver-against-itself compare, no served counter read) but GigaAM CTC's, whose CUDA and Vulkan heads differ by one comma on ru_long - as they did before
+  this pass. The session read noisier than the A/Bs above (several rows past a 3% cv on both homes, no other process on the
+  GPU); the whisper turbo rows sit within that noise of each other, and the VAD row is the one CUDA trails.
+- **The upstream reference, `external`: whisper.cpp at 6fc7c33, its CUDA build (the recipe:
+  `ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs`; `build-cuda`,
+  `whisper-cli -m ggml-<model>.bin -f <clip> -l <en|ru> -t 16 -bs 1 -bo 1 -nt`, one process a rep, its `encode time` line):**
+  large-v3-turbo q8_0 jfk 170.7 / 134.1 ms (one 30 s window, the first call of the process), ru_long 93.0 / 93.8 ms a window
+  over three; large-v3-turbo f16 jfk 170.7 / 151.9, ru_long 107.1 / 108.2 a window; tiny q8_0 jfk 64.2 / 63.5, ru_long 25.0 /
+  23.1 a window; tiny f16 jfk 65.3 / 63.0, ru_long 24.8 / 24.7 a window. Ours on the CUDA home: turbo 64.5-66.3 ms a window,
+  tiny 2.3-2.7. `llama-mtmd-cli` (the local CUDA build at c70f320df) over gemma-4-E2B's audio leaves no row: the process ends
+  right after `init_audio`'s warning with 0xC0000409, the MSVC fast-fail abort, no message printed.
+- **Measured and not taken:** the whisper turbo fc2 site's k split forced (`DASLLAMA_CM2_SPLITK` unset / 2 / 3 / 4 / unset):
+  65.62 / 65.76 / 66.29 / 67.22 / 65.65 ms - the 120 m tiles' second partial wave costs less than the reduce. The silero VAD's
+  recurrence (`GkVadLstm`, one 1024-lane workgroup walking 2415 chunks) with each step's input gates read a step ahead: the
+  recurrence's kernel 4.27 -> 8.55 ms on Vulkan (`tts_lstm`), the VAD row 9.71 / 12.86 / 9.69 ms (cuda / vulkan / cuda)
+  against 8.83 / 8.48 before - four more live floats a lane past the 64 registers 1024 lanes leave each. On CUDA the kernel
+  read 6.30 -> 7.12 ms, `external` (`nsys`, a `find_speech_timestamps` pass). The recurrence is where the CUDA VAD row
+  trails: on CUDA, read `external` under `nsys`, its encoder runs 1.74 ms and the recurrence 6.30; the Vulkan roles read
+  `spectrum` 3.14 and the recurrence 4.27.
+
+### From the f16 lane on the discrete homes (2026-11-04, the reference box: Threadripper 3990X, RTX 5060 Ti 16 GB - 36 SMs - driver 616.56, Windows, the GPU clock locked at 2392 MHz and read before and after every row)
+
+The f16 lane is the audio towers' reference lane on Vulkan and CUDA: f16 weights in the image's halfword plane, an f32
+accumulator, every block GEMM through `rail_mm16` (`ARCHITECTURE_GPU_TOWER_RAIL.md#rail-primitives`). The instruments are the
+previous entry's: `harness/asr_stage_probe.das -- <model args> [--fp32-tower] -r 10 --warm 2` (`--fp32-tower` pins the f16
+lane), `DAS_JOBQUE_THREADS=8 DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1`, `DASLLAMA_CUDA=1` on the CUDA arm alone; `nsys profile
+-t cuda` (Nsight Systems 2026.4.1, the previous entry's) with `DASLLAMA_CUDA_GRAPHS=0` per kernel on CUDA (`-r 3 --warm 1`, four encodes a process, per-encode figures below
+are the totals over four), `DASLLAMA_GPU_PROF=1` role buckets on Vulkan; a scratch harness outside the tree compiled the
+emitted f16 tile's CUDA text and its variants and timed each shape as the median of twenty launches (CUDA events). Every
+A/B is `direction-grade`, one process an arm, the arms back to back with the first repeated last; every arm's transcript
+held to the others' by its md5 (identical on every row here) - a driver-against-itself compare, no served counter read
+(the probe logs no tower seat counter). The box read noisy all session - a repeated arm moved up to
+11% on one Vulkan turbo pair (104.2 then 115.9 ms) - so a lever is kept on a gap past its arms' spread.
+
+- **Where the f16 lane lost, per kernel, before any lever (CUDA `nsys`, ms an encode; Vulkan roles, ms a pass):** the
+  dispatch count is the q8 lane's on both homes, so the gap is the GEMMs alone. The CUDA readings, read `external` under
+  `nsys`, q8 against f16: launches 9548 / 9548 whisper turbo, 5006 / 5006 gemma4a, 8412 / 8412 canary, 6818 / 6818
+  parakeet; whisper turbo jfk (1500 rows) the tile 48.7 against 68.5, everything else equal (the flash tile 10.1 on both);
+  gemma4a E2B jfk (275 rows) 7.5 against 14.6 (the f16 tile's 1024-wide sites at grid 24, 113.8 us a launch, where the q8 s
+  column runs grid 72 at 54.6); canary jfk (138 rows) 19.4 against 39.2, its rel-position attention 61 on both (the
+  encode's largest kernel on either lane); parakeet v2 jfk 13.4 against 27.9. The Vulkan roles, q8 against f16: stamps
+  450 / 450, 294 / 294, 866 / 866, 650 / 650; whisper turbo's GEMM roles 41.0 (q 3.78, k 3.57, v 1.85, o 3.68, fc1 14.71,
+  fc2 13.44) against 85.7 (7.87, 5.84, 6.07, 7.54, 27.68, 30.66); gemma4a 10.4 against 15.8; canary 17.7 against 29.1,
+  attention 77.8 on both. The emitted f16 tile on CUDA loads its 128 x 64 weight tile
+  synchronously between two barriers a k step and reads the f16 feed straight from global memory; the Q8_0 tiles pipeline
+  their weight tile through cp.async and the decode (dasCUDA's `ARCHITECTURE_EMIT_TILES.md`, the decoded tile's pipeline).
+- **The f32 accumulator's cost on this card (the harness, the m tile at 1500 x 1280 -> 5120):** 34.1 TFLOP/s with the f32
+  accumulator, 55.0 with an f16 one (a scratch text, not shippable: it moves the lane's sums) - 1.36x to 1.6x across the
+  shapes. The q8 lane's GEMMs run at 38.7 TFLOP/s over the turbo encode, past the f32-accumulate rate's reach at the f16
+  tile's efficiency, so at whisper's 1500 rows the f16 lane trails the q8 lane by the accumulator, not by a tile or a pick.
+  Two blocks an SM forced on the m tile (`min_blocks = 2`): 128 registers, the same two blocks, 3-5% slower - not taken. A
+  hand-written cp.async ring on the weight tile (scratch text): 2-3% on the 1500-row shapes, 15-25% at 138 and 275 rows on the
+  m tile, and the s tile's 34 KB of shared memory halved its blocks an SM - the emitter's pipelined f16 A tile is the measured
+  lead for the small encodes, not taken here (it is the dasCUDA emitter's, beside the decode pipeline).
+- **The column pick for the f16 tile (`f16_cm2_col`, both homes - `ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-cm2-column`),
+  kept.** The tile's columns on CUDA: s (32 positions) 62 registers, four blocks an SM; m (128) 126 registers, two; l (256)
+  174 registers, one, behind m on every shape (1500 x 1280 -> 5120: 870 us against 576) - so no l stamp. The harness race over
+  63 shapes (rows 138 to 1500 by widths 384 to 5120): s ahead or level under 1000 rows, m ahead at 1500 by up to 9%. In the
+  encodes the wave form at the stamps' own occupancy and the Q8_0 step weights (s 6, m 10) picks the faster column where a
+  rows-only rule did not, read `external`: canary's 138 x 1024 -> 4096 sites 78.5 us a launch on m against 90.4 on s, its 1024-wide ones 81.4
+  on s against 120.6 on m; gemma4a's 275 x 1024 -> 4096 sites 106.1 on s against 125.9 on m (CUDA `nsys`, each site's
+  average launch over the four encodes, the m-everywhere build against the s-under-1024-rows build). Rows, f16 lane, the m column everywhere (`DASLLAMA_CM2_TILE=128`, the old tile) / the s column
+  under 1024 rows (the first form of the pick) / m again, ms: gemma4a E2B Vulkan 25.06 / 20.78 / 24.99, CUDA 26.27 / 22.67 /
+  26.20; canary Vulkan 119.65 / 109.06 / 119.97, CUDA 109.33 / 99.32 / 109.31; parakeet v2 Vulkan 83.72 / 76.99 / 83.76, CUDA
+  76.81 / 74.55 / 82.96; qwen3a Vulkan 25.89 / 20.49 / 24.92, CUDA 27.56 / 20.87 / 27.30. The wave form against the rows
+  rule, the f16 rows twice each a build, the q8 turbo row the drift anchor (67.75, 66.62 / 70.09, 66.34): CUDA canary
+  102.63, 108.92 / 99.98, 99.12, parakeet 75.55, 71.97 / 70.91, 67.53; Vulkan canary 117.37, 115.80 / 115.99, 114.08,
+  parakeet 77.78, 79.43 / 78.14, 77.99. Every column sums an output's k in the same order: the harness compared every
+  column's output to the m column's bit for bit (max diff 0 on every shape) - a kernel-against-itself compare in the
+  scratch harness, no seat ran. The twins' exact-lane rel_l2 after the lever (`bin/Release/daslang.exe -jit
+  modules/dasLLAMA/tests/run.das -- --area audio --only test_audio` on each home, `DAS_JOBQUE_THREADS=8 DASLLAMA_GPU=1`,
+  `DASLLAMA_CUDA=1` on the CUDA run alone, `DASLLAMA_ALLOW_UNTUNED` unset; each cell's `exact lane device vs exact` line,
+  CUDA / Vulkan): `test_gemma4a_discrete_twin` E2B jfk 9.7e-4 / 1.02e-3, E4B jfk 1.03e-3 / 1.07e-3;
+  `test_canary_discrete_twin` jfk 1.24e-3 / 1.25e-3; `test_parakeet_discrete_twin` jfk 8.4e-4 / 8.7e-4;
+  `test_gigaam_discrete_twin` ru_short 4.8e-4 / 4.7e-4, ru_mid 5.4e-4 / 5.4e-4; `test_encoder_blocks_vulkan` (synthetic mel)
+  qwen2audio 6.0e-3 / 5.6e-3, voxtral 6.3e-3 / 6.7e-3, omni-3b 6.1e-3 / 6.3e-3, ultravox 1.17e-2 / 1.05e-2;
+  `test_qwen3a_vulkan_front` jfk 1.17e-3 / 1.12e-3. The whisper twin did not run after the lever, and no `tests/run.das` run read it: its f16 readings are
+  the pre-lever run's, `test_whisper_discrete_twin` in `dastest/dastest.das -- --test modules/dasLLAMA/tests/test_whisper.das`
+  whole under `-jit`, `DAS_JOBQUE_THREADS=8 DASLLAMA_GPU=1 DASLLAMA_CPU_PREFILL=1 DAS_LOG_LEVEL=info`, `DAS_TUNE_MANIFEST` =
+  `performance/zen2.tune.json`, `DASLLAMA_CUDA=1` on the CUDA run alone: tiny jfk 3.7e-3 / 3.4e-3, turbo jfk 2.36e-2 /
+  2.52e-2.
+- **Measured and not taken.** The Vulkan l column at 1500 rows (a scratch l stamp, `DASLLAMA_CM2_TILE=256`), turbo f16
+  alternated m / l / m / l: 108.36 / 110.46 / 114.86 / 112.09 ms, tiny 3.33 / 3.76 / 3.07 / 3.75 - no gain. The KHR f16 tile
+  (`F16GemmKhr`) in place of the cm2 tile on the cm2 device (a scratch force): turbo 176.35 and 183.23 ms against m's 108-115.
+  A whole-tile fast path in `F16GemmCm2T` (unpadded layouts where the tile lies inside the plane, the Q8_0 tiles' form): the
+  Vulkan GEMM roles over a turbo pass 372 -> 659 ms and gemma4a's 41.5 -> 157 (the NV driver lowers the unpadded tensor loads
+  far slower here), the CUDA harness -3% to +5% by shape - reverted on both homes.
+- **A latent defect the A/B found, fixed (`rail_split_sum`):** the whisper-class chain sums fc2's split-k planes after the
+  site's GEMM; the f16 and f32 lanes' GEMM writes y whole, so a seat whose q8 pick splits fc2 (Vulkan, 1500 rows, under
+  `DASLLAMA_CM2_TILE=128`; on any card whose wave model splits it) summed stale `sk` planes over the lane's output - turbo f16
+  read 431 ms with a garbage transcript. The reduce now runs on the q8 lane alone.
+- **Every family on both homes after the kept levers, each family's q8 and f16 rows back to back, cuda / vulkan / cuda, one
+  MEASURE hold, encode ms - mean over `-r 10 --warm 2` (the f16 rows' ratio to the q8 rows' in brackets, CUDA / Vulkan):**
+  whisper tiny jfk q8 2.33 / 2.79 / 2.34, f16 2.48 / 3.17 / 2.50 (1.07 / 1.14); whisper turbo jfk q8 63.69 / 64.62 / 63.71,
+  f16 84.72 / 106.04 / 90.65 (cv 3.7%) (1.33 / 1.64); turbo ru_long (three windows) q8 204.57 / 193.62 / 190.91, f16 252.20 /
+  314.09 / 252.41 (1.28 / 1.62), 84.1 / 104.7 ms a window; qwen3a 0.6B jfk q8 17.12 / 17.83 / 17.42, f16 19.62 / 18.30 / 19.53
+  (1.14 / 1.03); canary 2.5B jfk q8 89.36 / 107.82 / 89.26, f16 98.86 / 110.52 / 100.21 (1.11 / 1.03); parakeet v2 jfk q8 63.85
+  / 75.41 / 63.21, f16 67.70 / 78.45 / 67.83 (1.07 / 1.04); gemma4a E2B jfk q8 19.01 / 20.11 / 20.17, f16 22.71 / 21.68 / 23.52
+  (1.17 / 1.08); gemma4a E4B jfk q8 21.33 / 21.81 / 21.40, f16 25.17 / 23.62 / 25.71 (1.19 / 1.08). The q8 rows sit at or
+  under the previous entry's (qwen3a 17.65 / 18.49 there): the q8 lane's f16 GEMMs - the conv stems, the fronts, the rel
+  table - take the same pick. The upstream reference, `external`: whisper.cpp at 6fc7c33, its CUDA build, `whisper-cli -m
+  ggml-large-v3-turbo.bin -f <clip> -l <en|ru> -t 16 -bs 1 -bo 1 -nt`, its `encode time` line: jfk 247.38 / 158.55 ms (one
+  window, the process's first call), ru_long 114.72 / 108.49 ms a window. The f16 lane's turbo window is under it on both
+  homes, CUDA by a fifth and Vulkan by 3 to 9%; every family's f16 row is within 1.2x of its q8 row on both homes but whisper
+  turbo's, where the CUDA tile runs at the f32 accumulator's rate and the Vulkan driver's lowering of the same cm2 f16 tile
+  reaches 22.7 TFLOP/s against the CUDA emitter's 34 (fc1, 865 against 576 us a launch).
+- **The bars the f16 lane's exact-lane twins hold, and the readings behind them** (the readings above: CUDA / Vulkan on
+  the reference box, `rel_l2` of the device encoder rows against the exact CPU chain's, every output position of the clip):
+
+  | bar | value | what it holds | reading | cell |
+  |---|---|---|---|---|
+  | `TWIN_F16_WHISPER_REL_L2` (_tower_twin) | 3.5e-2 | whisper's encoder rows on the home's f16 image against the f32 CPU image, jfk, all 1500 positions | turbo 2.36e-2 / 2.52e-2, tiny 3.7e-3 / 3.4e-3; a scratch build with the erf GELU in place of the f16 GELU table (`external`) read turbo 1.45e-2 / 1.46e-2 - the table is what the bar's headroom over 2e-2 covers | `test_whisper_discrete_twin` |
+  | `TWIN_EXACT_REL_L2_VK` (_tower_twin) on the audio towers' f16 lane | 2e-2 | the device encoder rows of the whisper-class towers, gemma4a, canary, parakeet, GigaAM and qwen3a on the home's f16 image against the exact CPU chain | 1.17e-2 / 1.05e-2 at the largest (ultravox, synthetic mel); every other family under 6.7e-3 (the per-cell figures above) | `test_encoder_blocks_vulkan`, `test_gemma4a_discrete_twin`, `test_canary_discrete_twin`, `test_parakeet_discrete_twin`, `test_gigaam_discrete_twin`, `test_qwen3a_vulkan_front` |
+
+- **STATED (2026-11-05) - the lasting device buffers the audio towers' CUDA seats add.** Derived from the allocation
+  sites (`cut_scratch`, `cuf_scratch`, `cut_g4a_scratch`, `cur_scratch`, `cud_wd_build` and `wdec_sizes`,
+  `cut_upload_planes`) and the carriers' headers - whisper large-v3-turbo (encoder d 1280, ff 5120, 32 layers, 20 heads;
+  decoder d 1280, 4 layers, 448 text positions, 51866 logits), whisper tiny (d 384, ff 1536, 4 + 4 layers, 6 heads),
+  parakeet-tdt v2 (d 1024, ff 4096, 24 layers, rel-position form); no run. `c` is `tower_cap_rows(rows)` = rows rounded
+  up to 256, `TILE_READ_SLACK` 128 rows; MiB = 2^20 B. A resident's buffers grow to the largest clip it has seen and live
+  until the resident is released or another model replaces it.
+
+  | allocation | formula (bytes) | value |
+  |---|---|---|
+  | the block scratch every tower seat shares (`cut_scratch`: x, xb, q, k, v, att, yo, yd, the two FFN planes, the halfword feed, the padded attention panels at `dp` = heads x 64 where the tower has them) | 4c(8d + 2ff) + 2(c + 128) max(d, ff) + 12 c dp | whisper turbo at its fixed 1500 rows (c 1536): 166461440 (158.8 MiB); whisper tiny: 49938432 (47.6 MiB); parakeet v2 jfk, 138 rows (c 256, dp 0): 19922944 (19.0 MiB); a 375-row clip (c 512): 38797312 (37.0 MiB) |
+  | k-split planes (`cut_pick`, a site whose pick splits) | nsplit x c x d x 4, the largest split site's | 0 where no site splits |
+  | the FastConformer rel window (`cuf_scratch`, the rel form: the 2c-row table, its halfword copy and projection, the padded q and p halves, the c x (2c - 1) score plane) | 2c d 4 x 2 + (2c + 128) d 2 + (c + 128) 256 + (2c + 127) 256 + 4c(2c - 1) | parakeet v2 at c 256: 6290176 (6.0 MiB); at c 512: 13301504 (12.7 MiB) - the score plane grows with c^2 |
+  | the rotary form's rope tables (`cuf_scratch`, GigaAM) | c x (d / heads) x 4 | 147456 at GigaAM's 25 s cap (625 rows, c 768, d 768, 16 heads) |
+  | gemma4a's tail and rel table (`cut_g4a_scratch`, beside the shared block scratch) | c (mid + proj) 4 + (13 + 128) d 2 + 13 d 4 | the rel part 342016 at d 1024; the tail at c 512 and proj 1536 (E2B) / 2560 (E4B): 3145728 / 5242880 plus c x mid x 4 |
+  | the transducer decode's per-clip planes (`cur_scratch`, `f` the clip's frames rounded up to 64) | 128 + 12 L p + 4p + 4j + 8 x 256 x ceil(logits / 256) x 4 + 32 (f s + 1) + 4 f (j + d), `L` / `p` the predictor's layers and width, `j` the joint width, `s` the symbols a frame | dominated by 4 f (j + d): parakeet v2 jfk (f 192, j 640) 1277952; f 384: 2555904 |
+  | the whisper decoder (`cud_wd_build`): self K / V, cross K / V, the encoder rows, their halfword copy and cross projection, the logits, the row-cap planes and partials | 2 nl d T 2 + 2 nl d A 2 + A d 4 x 2 + (A + 128) d 2 + V 4 + the row-cap planes and partials (under 0.7 MiB), `nl` decoder layers, `T` text positions, `A` 1500 encoder rows, `V` logits | turbo 60339432 (57.5 MiB); tiny 18247140 (17.4 MiB) - beside the decoder's Q8_0 weights, uploaded as the image stores them |
+  | the f16 lane's halfword plane (`cut_upload_planes` into `wb`; the Vulkan seat holds the same plane) | 2 x the block GEMMs' weights: whisper L(4 d^2 + 2 d ff), FastConformer L(8 d^2 + 4 d ff) (7 d^2 on the rotary form) | whisper turbo 1258291200 (1200 MiB); tiny 14155776 (13.5 MiB); parakeet v2 1207959552 (1152 MiB) - on the f16 lane alone; the q8 lane uploads its Q8_0 pieces instead |
+  | the captured chain graphs (`g_cut_graphs`) | the driver's own memory, a node a launch, at most `CUT_GRAPH_CAP` (32) graphs | not sized by the code; dropped with any resident and past the cap |
+
+### From the in-process tower race (2026-11-05, the reference box: Threadripper 3990X, RTX 5060 Ti 16 GB - 36 SMs - driver 616.56, Windows, the GPU clock locked at 2392 MHz by `nvidia-smi -lgc 2400,2400` and read before and after every run; `debug-jit`)
+
+The instrument is `harness/tower_race.das`: one model and one clip in one process, a list of candidates - each a set of
+the CUDA tower's in-process seams (`set_cuda_tower_cm2_col`, `set_cuda_tower_splitk_min_rows`,
+`set_cuda_tower_carveout_full`, `set_cuda_tower_fork`, `set_cuda_fc_front_handoff`) - and `--rounds` rounds, each round
+running every candidate once before the next, the order rotated a round. A candidate's turn sets its seams, runs one untimed
+pass (its class loads and graph captures) and one timed pass: the family's encode bucket on the asr_prof rail, the pass's
+wall, the transcript's hash, the tower's served counters (`cuda_tower_stats`: encodes, declines, rows, blocks;
+`cuda_tower_tail_encodes`) and the launch census of every kernel named `*cm2*` or `*splitk*` (`cud_kernel_census_of`;
+`--census`, its default `cm2,splitk`), each a delta over the timed pass. The census is the process's: an LLM decoder's
+window launches count beside the tower's, the same in every arm. `bin/Release/daslang.exe -jit
+modules/dasLLAMA/harness/tower_race.das -- -m <model> [--mmproj <encoder>] -w F:/models/jfk.wav [--lang auto] --rounds <n>
+--cand <spec> ...` under `DASLLAMA_MODELS_DIR=F:/models DASLLAMA_WHISPER_DIR=F:/models/whisper.cpp DASLLAMA_GPU=1
+DASLLAMA_CUDA=1 DASLLAMA_ALLOW_UNTUNED=1 DAS_JOBQUE_THREADS=16`, `DASLLAMA_CM2_TILE`, `DASLLAMA_CM2_SPLITK`,
+`DASLLAMA_CUDA_GRAPHS`, `DASLLAMA_CUDA_MMQ`, `DAS_TUNE_POLICY` and `DASLLAMA_COOPMAT` unset; every model on its default q8
+lane (`exec q8/q8`, parakeet `q8`). A figure is the encode ms of one pass, the instrument's `RACE round` line; each
+candidate's line below gives the median, mean and min-max of those lines over the rounds and every round in order (the
+instrument's own `SUMMARY` line prints the mean, min-max and cv). Every arm of every race below read one transcript hash, the same in every
+arm of its race - a driver-against-itself compare - with the tower's encode counted on the device (`encodes` 1 a pass -
+qwen3a 2, its two windows - `declines` 0); the census line is a pass's.
+
+- **The fc2 site's split-k row floor (`set_cuda_tower_splitk_min_rows`; `CUT_SPLITK_MIN_ROWS` = 512 in the raced tree,
+  its shipped value; the next entry ships 0), floor 0 / 512 / 4096 (0: the pick's own rule at every row count; 4096: no
+  encode here reaches it, so no split), 10 rounds.** The fc2-only half of the gate is not a seam: the pre-LN body sums
+  split planes at the fc2 site alone (the d site's whole k is what lets the q / k / v fork run), so splitting every site
+  needs a body change and was not raced.
+  - whisper tiny jfk (1500 rows, 4 blocks): floor 0 median 2.379 (mean 2.396, 2.220-2.760; rounds 2.76 2.39 2.36 2.26
+    2.40 2.31 2.44 2.36 2.45 2.22), floor 512 2.406 (2.407, 2.251-2.635; 2.39 2.28 2.25 2.56 2.43 2.40 2.44 2.63 2.41
+    2.28), floor 4096 2.280 (2.273, 2.112-2.507; 2.51 2.17 2.14 2.35 2.36 2.21 2.24 2.32 2.32 2.11) ms - floor 4096 the
+    round's fastest in 8 of 10. Census: floors 0 and 512 the same pass (fc2 split: `q8_batch_cm2l` 4, `splitk_reduce` 4,
+    `q8_batch_cm2m` 29), floor 4096 whole (`q8_batch_cm2m` 33). Text `4946b8bfe9fc7b41` in every arm.
+  - qwen3a 0.6B jfk (two windows, 156 rows over the pass): floor 0 median 15.675 (mean 16.337, 14.990-21.292; 21.29 17.91
+    15.62 15.01 16.02 15.73 15.51 15.89 14.99 15.40), floor 512 17.605 (17.672, 16.614-19.637; 19.64 17.38 17.20 17.35
+    16.61 17.64 17.68 17.57 17.98 17.67), floor 4096 17.270 (17.544, 16.925-19.848; 17.23 17.31 17.01 17.55 16.93 17.07
+    17.45 18.06 16.98 19.85) ms - floor 0 the round's fastest in 8 of 10. Census: floor 0 splits the fc2 site
+    (`q8_batch_cm2l` 18, `splitk_reduce` 36, `q8_batch_cm2m` 93, `q8_batch_cm2s` 111), floors 512 and 4096 the same whole
+    pass (`q8_batch_cm2m` 111, `q8_batch_cm2s` 111). Text `2724ea119cec8f11`.
+  - whisper large-v3-turbo jfk (1500 rows, 32 blocks): the pick's own rule takes no split at this shape (120 m tiles a
+    1280-wide GEMM, past half the card's 72 block slots), so the three arms run one pass (`q8_batch_cm2m` 201, no reduce) -
+    a three-way control: floor 0 median 64.308 (mean 64.236, 63.211-65.648), floor 512 63.635 (63.640, 63.297-64.217),
+    floor 4096 63.778 (63.896, 63.342-64.572) ms. Text `af6292bed3e29d6f`.
+  - The race does not support the floor at 512: under it qwen3a's short encode loses the split that wins there (17.605
+    against 15.675 ms), and whisper tiny's 1500 rows take the split that loses there (2.406 against 2.280 ms). The row count
+    does not separate the two shapes. The next entry finds the variable that does - how full the whole fc2 grid leaves the
+    card's block slots - and the tree gates the split on it (`cut_split_pays`, `set_cuda_tower_splitk_fill`, default 4)
+    with no row floor (`set_cuda_tower_splitk_min_rows`, default 0).
+- **The tower column model (`cut_cm2_tc`, `ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-cm2-column`) against every forced
+  column (`set_cuda_tower_cm2_col` 32 / 128 / 256; `col=0` the model), 8 rounds.** The seam forces the column at every
+  tower Q8_0 cm2 site the encode picks; the whisper decoder's cross site picks once at its resident's build and keeps the
+  model's column in every arm (`q8_batch_cm2m` 8 in turbo's forced arms).
+  - whisper turbo jfk (1500 rows): model median 63.715 (mean 64.305, 63.136-66.141; 66.14 63.77 63.59 65.75 64.77 63.67
+    63.14 63.63), s 109.614 (109.900, 108.946-112.432), m 63.611 (63.912, 63.104-66.872; 66.87 63.20 63.58 64.01 63.17
+    63.72 63.10 63.64), l 75.904 (76.155, 74.904-79.235) ms. The model takes m at every site (census `q8_batch_cm2m` 201,
+    the m arm's pass), so model and m are one configuration - the pair is the race's control. Text `af6292bed3e29d6f`.
+  - qwen3a 0.6B jfk: model median 17.271 (mean 17.645, 16.828-20.958; 20.96 17.50 16.90 16.83 16.95 17.33 17.21 17.49), s
+    16.638 (17.041, 15.901-20.154; 20.15 16.54 16.67 17.07 15.90 16.89 16.50 16.60), m 19.120 (19.388, 18.749-21.712), l
+    33.181 (33.477, 32.935-35.812) ms - s the round's fastest in 7 of 8. Census: the model splits the sites between s and m
+    (`q8_batch_cm2s` 111, `q8_batch_cm2m` 111), each forced arm takes 222 launches of its column. Text `2724ea119cec8f11`.
+  - canary 2.5B jfk (138 rows): model median 89.036 (mean 91.328, 87.548-100.093; 98.08 100.09 88.71 88.34 87.55 89.36
+    88.36 90.13), s 90.465 (91.347, 89.689-97.156), m 90.969 (92.594, 90.001-105.097), l 123.627 (124.881,
+    122.999-132.824) ms - the model the round's fastest in 5 of 8. Census: model `q8_batch_cm2s` 257 / `q8_batch_cm2m` 99,
+    each forced arm 356 of its column. Text `f77c3e7b3efa1b48`.
+  - parakeet tdt v2 jfk (138 rows): model median 63.050 (mean 64.400, 62.642-71.337; 66.03 71.34 63.49 62.79 62.64 62.80
+    62.95 63.16), s 64.232 (64.971, 63.694-70.388), m 63.788 (64.718, 63.265-71.715), l 89.314 (90.537, 89.114-98.711) ms
+    - the model the round's fastest in 7 of 8. Census: model `q8_batch_cm2s` 193 / `q8_batch_cm2m` 74, each forced arm 267.
+    Text `a486371601251a11`.
+  - gemma4a E2B jfk (275 rows): model median 19.049 (mean 19.539, 18.879-21.268; 21.01 21.27 19.03 18.91 18.88 19.07 18.90
+    19.25), s 20.235 (20.462, 19.833-21.852), m 20.008 (20.325, 19.766-22.885), l 30.514 (31.103, 30.325-34.627) ms - the
+    model the round's fastest in 7 of 8. Census (the tower's sites): model `q8_batch_cm2s` 97 / `q8_batch_cm2m` 38, each
+    forced arm 135 of its column; the decoder's window launches (`q8_batch_cm2s` 35, `q8_batch_cm2l` 35 with 35 reduces)
+    are the same in every arm. Text `8239916c02fc8e52`.
+  - The race confirms the model on turbo, canary, parakeet and gemma4a, and does not support it on qwen3a's encode, where
+    the s column everywhere ran 16.638 against the model's 17.271 ms (s the round's fastest in 7 of 8), its fc2 site whole
+    under the 512-row floor. The next entry re-races qwen3a with that site split under the fill gate, where the model reads
+    level with s, and `cut_cm2_tc` is not refit.
+- **The three-column model on the LLM window (`cud_cm2_pick`), not taken.** `cud_cm2_tc` - the window's column, the Vulkan
+  wave model at two blocks an SM - against the towers' model (`cut_cm2_tc`'s three-column rule, no forcing), two processes
+  an arm, back to back, the first arm repeated last, one module cache an arm: `bin/Release/daslang.exe -jit
+  modules/dasLLAMA/benchmarks/lcpp_bench.das -- --for-debug-purposes -m F:/models/Qwen3-4B-Instruct-2507-Q8_0.gguf -p
+  <rows> -n <steps> -r <reps> -t 16 --ngl 0` under `DASLLAMA_MODELS_DIR=F:/models DASLLAMA_GPU=1 DASLLAMA_CUDA=1
+  DASLLAMA_ALLOW_UNTUNED=1` (the CPU kernel backend x64-gen, batch x64-gen, 16 lanes; the x86-avx2 class profile stamped,
+  the tune gate's "47/47 kernels stamp non-manifest winners" measured anyway under `DASLLAMA_ALLOW_UNTUNED=1`), tok/s, mean
+  +/- the standard deviation over the reps as the bench prints it. pp512 tg128 (`-r 3`), the Vulkan model / the
+  three-column model / the Vulkan model, `direction-grade`: pp512 6717.70 +/- 40.56 / 6670.97 +/- 60.86 / 6706.26 +/-
+  21.78, tg128 84.58 +/- 0.32 / 85.21 +/- 0.05 / 83.62 +/- 0.46. At 512 rows the two rules pick the same column at each of
+  the Qwen3-4B projection widths (1024: m; 2560, 4096 and 9728: l; a fused q / k / v plane of 6144 m and a fused gate / up
+  plane of 19456 l by both rules too - the column rules' own answers; `cud_cm2_pick` then widens a grid it splits to l in
+  both arms, as the next entry's print of the window's picks shows), so this pair runs one configuration and its
+  differences are the session's drift.
+  pp1000 (`-n 0 -r 5`, one 1000-row window, where the rules part: the three-column rule takes m at the 4096- and 9728-wide
+  GEMMs, whose last l column is partial, where the Vulkan model takes l; both take m at 1024 and 2560), `direction-grade`:
+  7037.29 +/- 24.54 / 6417.49 +/- 80.55 / 7007.48 +/- 124.23 - the three-column rule 8.4% behind the lower Vulkan-model
+  arm. Every arm's sanity lines the same (the frozen fixture's 8 of 8 opening tokens; the pp512 warm-up argmax 2251 "ency"
+  at logit 8.480022, the tg128 one 657 "ated" at 7.642825, the pp1000 one 72 "i" at 7.343315). The LLM window keeps the
+  Vulkan wave model at two blocks an SM (`cm2_wave_col` through `cud_cm2_tc`) and the towers keep their own rule
+  (`cut_cm2_tc`) - two rules, by the owner's ruling; the towers' model's partial-l weight (20) is the tower race's fit at
+  the towers' shapes and does not transfer to the window's.
+- **The other picks of the CUDA tower arc are not re-raced here** (the owner's ruling). Each was measured across
+  processes, not in one: one process an arm, two arms back to back with the first repeated last, the transcripts held to
+  each other by md5 alone (a driver-against-itself compare) - no served counter was taken (the probe logs no tower seat
+  counter). The readings are the entries above, `direction-grade`: "From the audio towers on the CUDA home" - the chain
+  graphs (`DASLLAMA_CUDA_GRAPHS` 0 / 1 / 0, e.g. gigaam q8 ru_long 57.87 / 54.41 / 57.26, parakeet v2 jfk 67.08 / 64.45 /
+  67.07 ms), the scoped carveout (every kernel full / the shared-memory kernels only / every kernel full: gemma4a E2B jfk
+  20.05 / 18.99 / 19.98 ms; scoped: gemma4a 19.98 / 18.86 / 20.03, qwen3a 0.6B 17.72 / 17.29 / 18.14, the LLM guard pp512
+  6792.4 / 6769.0 / 6768.5 tok/s), the q / k / v fork (one stream / the fork / one stream: whisper turbo jfk 65.50 / 63.53
+  / 65.57, qwen3a 0.6B jfk 19.03 / 17.14 / 18.72 ms), the FastConformer front handoff (the round trip / the handoff / the
+  round trip: gigaam q8 ru_long 54.99 / 52.51 / 55.12, parakeet v2 jfk 64.55 / 64.14 / 64.55 ms); "From the f16 lane on
+  the discrete homes" - the f16 tile's column (`f16_cm2_col`; the m column everywhere / the s column under 1024 rows / m,
+  e.g. CUDA gemma4a 26.27 / 22.67 / 26.20, canary 109.33 / 99.32 / 109.31 ms, and the wave form against the rows rule).
+  The carveout, the fork, the front handoff and the chain graphs stand selectable in one process
+  (`harness/tower_race.das`: `--cand carveout=1`, `fork=0`, `handoff=0`, `graphs=0` - `set_cuda_tower_graphs` answers the
+  value it replaced, so a race puts it back); the f16 tile's column (forced by `DASLLAMA_CM2_TILE` alone) is not a
+  candidate of it.
+- **Served counters for the GPU-against-GPU compares of the entries above (their driver-against-itself compares, and the
+  scratch harness's kernel-against-itself one):** the races here read them for every row
+  they ran (above). For the compares this entry did not re-run - the two entries' md5 A/Bs, "every transcript the same on
+  both homes", the column outputs bit for bit in the scratch harness - the served counters were not taken.
+
+### The fc2 split gate on the CUDA tower (2026-11-05, the reference box: Threadripper 3990X, RTX 5060 Ti 16 GB - 36 SMs - driver 616.56, Windows, the GPU clock locked at 2392 MHz by the owner and read at the start and end of every run; `debug-jit`)
+
+The instrument and its environment are the previous entry's (`harness/tower_race.das`, one model and one clip a process,
+every candidate once a round, the order rotated a round, one untimed pass and one timed pass a turn, `DAS_JOBQUE_THREADS=16`,
+every model on its default q8 lane, `exec q8/q8`), with two more seams a candidate can name: `fill`
+(`set_cuda_tower_splitk_fill`, the fc2 site's split gate - the site takes `cud_cm2_pick`'s k split only where its whole
+pick's workgroups times `fill` fit the card's 72 block slots; 0 = no bound) and `graphs` (`set_cuda_tower_graphs`, which no
+race below names). A figure is the encode ms of one timed pass; each candidate's line gives the median, mean and min-max
+of its `RACE round` lines and every round in order, as the previous entry's do. Every arm of every race read one transcript hash, the same in every arm of its race - a
+driver-against-itself compare; the tower's counters a pass in every arm: whisper tiny `encodes 1, declines 0, rows 1500,
+blocks 4`; whisper turbo `encodes 1, declines 0, rows 1500, blocks 32`; qwen3a 0.6B `encodes 2, declines 0, rows 156,
+blocks 36, tails 2`; qwen3a 1.7B `encodes 2, declines 0, rows 156, blocks 48, tails 2`.
+
+- **The picks at the fc2 site** (`cut_cm2_tc` and `cud_cm2_pick` printed at each site's shape, no window scratch bound, 36
+  SMs, 72 block slots): whisper tiny at 1500 rows (384 wide, 1536 deep) runs 36 m tiles whole - half the slots, one wave -
+  and `cud_cm2_pick` splits it 3 ways (512-deep planes) into 54 l tiles with a partial last column, its reduce reading
+  6750 KiB; qwen3a 0.6B at its 104-row window (896 wide, 3584 deep) 7 m tiles whole (9% of the slots), split 7 ways into
+  49 l tiles (reduce 2548 KiB), at its 52-row window 14 s tiles (19%), split 5 ways (768 deep) into 70 s tiles (910 KiB);
+  qwen3a 1.7B (1024 wide, 4096 deep) 8 m tiles (11%) split 8 ways at 104 rows, 16 s tiles (22%) split 4 ways at 52;
+  whisper turbo at 1500 rows (1280 wide, 5120 deep) 120 m tiles whole (two waves), no split under any rule. The variable
+  that parts tiny (the split reads no faster) from qwen3a (the split wins) is the whole grid's fill of the block slots:
+  `cud_cm2_pick` asks whether the widened l grid fills half the slots (tiny's 18 l tiles do), where the tower's whole pick
+  runs the m grid, twice as wide, which at tiny's shape already holds a block on every SM. `cud_cm2_pick` takes its
+  split-plane bound from its caller and a tower site passes none (`CUT_SPLITK_SCRATCH`), so these are the picks the tower
+  takes whether or not an LLM decoder is armed in the process.
+- **The fc2 split gate, 10 rounds: the previous entry's 512-row floor (`floor=512,fill=0`), the pick's own rule everywhere
+  (`floor=0,fill=0`), no split (`floor=4096,fill=0`), and the fill bound at 4 (the gate taken), 2 and 8 (`floor=0`).**
+  - whisper tiny jfk: floor 512 median 2.297 (mean 2.380, 2.240-2.826; 2.83 2.24 2.37 2.36 2.27 2.59 2.30 2.28 2.29 2.27),
+    no gate 2.413 (2.421, 2.252-2.556; 2.53 2.44 2.39 2.37 2.25 2.56 2.52 2.36 2.30 2.49), no split 2.306 (2.411,
+    2.209-3.325; 3.33 2.26 2.37 2.29 2.47 2.27 2.21 2.25 2.35 2.32), fill 4 2.303 (2.325, 2.167-2.532; 2.34 2.23 2.26 2.46
+    2.53 2.19 2.19 2.51 2.17 2.36), fill 2 2.352 (2.370, 2.272-2.615; 2.44 2.27 2.36 2.44 2.62 2.34 2.28 2.29 2.37 2.28),
+    fill 8 2.343 (2.327, 2.158-2.533; 2.25 2.18 2.40 2.32 2.38 2.37 2.50 2.19 2.16 2.53) ms. Census: floor 512, no gate and
+    fill 2 the split pass (`q8_batch_cm2l` 4, `splitk_reduce` 4, `q8_batch_cm2m` 29), no split, fill 4 and fill 8 the whole
+    pass (`q8_batch_cm2m` 33); the whole arms took 8 of the 10 round wins (fill 4 3, fill 8 4, no split 1), the split arms
+    2. Text `4946b8bfe9fc7b41`.
+  - qwen3a 0.6B jfk: floor 512 median 17.834 (mean 18.251, 17.367-22.429; 22.43 17.70 17.46 17.37 17.92 18.13 17.75 18.12
+    17.55 18.09), no gate 16.036 (16.334, 15.524-19.557; 19.56 15.73 16.31 16.23 15.63 15.52 16.36 16.51 15.84 15.64), no
+    split 18.430 (18.392, 17.278-20.077; 20.08 17.28 18.31 18.88 18.71 18.55 17.28 18.02 18.07 18.74), fill 4 16.130
+    (16.141, 15.436-16.622; 15.61 15.44 16.01 16.62 16.15 16.15 16.09 16.61 16.11 16.62), fill 2 16.168 (16.356,
+    15.521-17.259; 15.52 16.21 16.81 16.12 16.04 15.95 16.04 16.52 17.26 17.10), fill 8 17.391 (17.427, 16.688-18.239;
+    16.69 17.98 16.74 18.24 17.41 17.21 17.37 17.97 17.09 17.57) ms. Census: no gate, fill 4 and fill 2 one pass (both
+    windows' fc2 split: `q8_batch_cm2l` 18, `splitk_reduce` 36, `q8_batch_cm2m` 93, `q8_batch_cm2s` 111), floor 512 and no
+    split the whole pass (`q8_batch_cm2m` 111, `q8_batch_cm2s` 111), fill 8 the 104-row window's split alone
+    (`splitk_reduce` 18). Text `2724ea119cec8f11`.
+  - qwen3a 1.7B jfk: floor 512 median 22.219 (mean 22.592, 21.493-27.455; 27.45 21.65 22.32 22.25 22.09 21.49 22.30 22.19
+    21.71 22.45), no gate 19.610 (19.863, 19.117-22.432; 22.43 19.46 19.82 19.84 19.89 19.49 19.38 19.47 19.12 19.73), no
+    split 21.941 (22.347, 21.366-25.468; 25.47 21.85 21.90 21.66 22.09 21.37 22.92 21.98 21.79 22.45), fill 4 19.680
+    (19.651, 19.233-20.129; 19.61 19.66 19.95 19.23 19.70 20.13 19.37 19.73 19.73 19.40), fill 2 19.909 (19.877,
+    19.402-20.741; 20.74 19.59 20.10 19.56 20.13 19.46 19.40 19.97 19.96 19.86), fill 8 20.861 (20.984, 20.436-21.810;
+    21.45 20.79 21.81 20.92 20.46 21.36 20.74 20.80 21.08 20.44) ms. Census: no gate, fill 4 and fill 2 one pass
+    (`q8_batch_cm2l` 24, `splitk_reduce` 48, `q8_batch_cm2m` 123, `q8_batch_cm2s` 147), floor 512 and no split the whole
+    pass (`q8_batch_cm2m` 147, `q8_batch_cm2s` 147), fill 8 `splitk_reduce` 24. Text `cc59f501672a3011`.
+  - whisper large-v3-turbo jfk: no arm splits (`q8_batch_cm2m` 201 in all six), a six-way control: floor 512 median 66.216
+    (mean 66.292, 65.203-68.601), no gate 65.903 (66.092, 65.477-67.605), no split 66.021 (65.967, 64.992-66.869), fill 4
+    66.077 (66.201, 65.695-66.890), fill 2 66.087 (66.157, 65.707-66.711), fill 8 65.893 (65.741, 64.920-66.554) ms. Text
+    `af6292bed3e29d6f`.
+  - The fill bound at 4 runs the faster configuration on every model raced: the split on both qwen3a windows (16.130
+    against 17.834 ms under the floor on the 0.6B, 19.680 against 22.219 on the 1.7B), the whole grid on tiny (2.303 against
+    2.297 under the floor, which splits it - one configuration's medians apart by less than the arms' round-to-round
+    spread; the whole configuration took 8 of 10 rounds). At 2 the bound admits tiny's split; at 8 it drops the 52-row
+    windows' split and reads 17.391 and 20.861 ms. The shipped gate is the fill bound at 4 with no row floor
+    (`set_cuda_tower_splitk_min_rows` stays, default 0, so the floor arm stays selectable).
+- **The tower column model on qwen3a under the gate (`col=0` the model, 32 / 128 forced; the gate at its default).** The
+  forced m column holds at the split site (`cut_split_held`; `cud_cm2_pick`, which the split site calls, widens a forced
+  m to l): `q8_batch_cm2m` 222 with 36 reduces on the 0.6B.
+  - qwen3a 0.6B jfk, 8 rounds: model median 15.915 (mean 16.634, 15.465-20.599; 20.60 17.80 15.93 15.46 15.69 16.09
+    15.89 15.59), s 15.923 (16.420, 15.515-19.866; 19.87 15.88 15.72 15.97 15.52 16.24 15.52 16.65), m 16.383 (16.590,
+    15.843-18.755; 18.75 16.05 16.35 15.84 16.00 16.42 16.53 16.78) ms; round wins model 3, s 4, m 1. Census: model
+    `q8_batch_cm2l` 18 / `q8_batch_cm2m` 93 / `q8_batch_cm2s` 111 / `splitk_reduce` 36, s `q8_batch_cm2s` 222 /
+    `splitk_reduce` 18, m `q8_batch_cm2m` 222 / `splitk_reduce` 36.
+  - qwen3a 1.7B jfk, 8 rounds: model median 19.987 (mean 20.529, 18.601-26.264; 26.26 20.77 18.60 18.64 21.00 20.02 18.98
+    19.96), s 19.450 (20.212, 18.945-23.711; 23.71 19.46 19.05 18.98 19.44 21.46 20.64 18.95), m 19.728 (20.180,
+    18.727-23.478; 23.48 19.87 19.59 19.02 18.73 21.49 18.80 20.48) ms; round wins 3 / 2 / 3. Run again at 16 rounds:
+    model 18.822 (19.361, 18.272-25.933; 25.93 20.47 18.62 18.66 18.83 19.18 18.30 18.56 18.60 19.14 18.86 19.25 18.35
+    18.81 18.27 19.94), s 19.630 (19.990, 18.905-23.795; 23.80 19.70 19.25 19.68 18.91 20.59 19.05 19.58 20.66 19.14 20.23
+    19.51 19.47 19.27 20.28 20.72), m 19.002 (19.273, 18.579-22.742; 22.74 19.66 18.91 18.89 18.58 18.91 19.24 18.82 19.33
+    19.34 18.96 18.85 19.27 19.04 18.72 19.09) ms; round wins model 10, s 0, m 6.
+  - The model is level with s on the 0.6B (15.915 against 15.923 ms) and ahead of both on the 1.7B at 16 rounds: the
+    previous entry's s lead on qwen3a (16.638 against 17.271) was the unsplit fc2 site's, where the model's m grid ran 7
+    tiles whole and s's grid 28. `cut_cm2_tc` is not refit; the other models' column races were not re-run (the column
+    model's rule did not change).
+- **The LLM window guard:** the gate edits the tower's `cut_pick` alone; the arms' `dasllama_cuda_decode.das`, which holds
+  the window's pick (`cud_cm2_pick` at the window's own column), was one file in all six. Old = the tree without this
+  change, new = with it, the edit made by hand between arms, one module cache an arm, `bin/Release/daslang.exe -jit
+  modules/dasLLAMA/benchmarks/lcpp_bench.das -- --for-debug-purposes -m F:/models/Qwen3-4B-Instruct-2507-Q8_0.gguf -p 512
+  -n 128 -r 3 -t 16 --ngl 0`, then `-p 1000 -n 0 -r 5`, under `DASLLAMA_MODELS_DIR=F:/models DASLLAMA_GPU=1
+  DASLLAMA_CUDA=1 DASLLAMA_ALLOW_UNTUNED=1` (each arm's `config:` line: the CPU kernel backend x64-gen, batch x64-gen,
+  t16; the tune gate's "47/47 kernels stamp non-manifest winners", measured anyway under `DASLLAMA_ALLOW_UNTUNED=1`), tok/s
+  mean +/- the standard deviation as the bench prints it. Two passes old / new / old, back to back, `direction-grade`:
+  pass 1 pp512 6338.81 +/- 52.92 / 5840.15 +/- 111.27 / 6253.87 +/- 87.27, tg128 83.58 +/- 2.63 / 73.33 +/- 0.29 / 74.91
+  +/- 1.73, pp1000 6930.88 +/- 137.54 / 6082.95 +/- 69.06 / 5963.17 +/- 33.31; pass 2 pp512 5819.72 +/- 97.36 / 6785.82
+  +/- 37.76 / 5622.39 +/- 23.71, tg128 68.95 +/- 1.43 / 79.83 +/- 3.55 / 72.20 +/- 2.93, pp1000 6731.77 +/- 80.80 /
+  6382.38 +/- 22.02 / 6744.63 +/- 44.36. The box drifted 10-20% process to process in both passes (old against old: tg128
+  83.58 / 74.91 in pass 1, pp512 5819.72 / 5622.39 in pass 2; the new arm read below both olds on pp512 in pass 1 and
+  above both in pass 2), so the rates show no direction. Every arm's sanity lines the same: the frozen fixture's 8 of 8
+  opening tokens, the pp512 warm-up argmax 2251 "ency" at logit 8.480022, the tg128 one 657 "ated" at 7.642825, the pp1000
+  one 72 "i" at 7.343315. The window's picks printed in each arm's tree (`cud_cm2_pick` at the Qwen3-4B window GEMMs, a
+  scratch probe) are the same line for line in all six arms; at 512 rows: q 4096 wide l whole, k / v 1024 l split 4 (768
+  deep), o 2560 l whole, gate / up 9728 l whole, down 2560 l whole, fused q / k / v 6144 m whole, fused gate / up 19456 l
+  whole; at 1000 rows: q l whole, k / v l split 2 (1280 deep), o m whole, gate / up l whole, down m whole, fused q / k / v
+  l whole, fused gate / up l whole. The later edit that hands `cud_cm2_pick` its split-plane bound from the caller (the
+  window passes its `pf_splitk_bytes`) and shares `cud_split_want` with the tower's `cut_split_held` leaves the same
+  probe's 14 lines unchanged at 512 and 1000 rows - a pick print, not a timing.
+- **Not raced:** gemma3v, the other body that passes `split_ok` at its fc2 site (the instrument loads ASR models only):
+  at its 4096 rows the fc2 GEMM (1152 wide) runs 144 l tiles whole, two waves, and no rule splits it, so the gate does not
+  change its pick. The chat towers' whisper-large encoders run turbo's 1280-wide, 1500-row shape (no split under any
+  rule). The Qwen3-Omni audio tower (the qwen3a family's other carrier here) was neither loaded nor printed.

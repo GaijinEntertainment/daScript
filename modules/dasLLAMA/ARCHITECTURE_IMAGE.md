@@ -193,8 +193,15 @@ layout helpers `pad_to_page`, `w_page`, `plane_end`, `image_total_bytes`, `w_app
 `weight_slot` and `conv1d_weight_row`, the streaming Vulkan mint's `vk_mint_plane`, `vk_mint_walk` and
 `vk_mint_sink_append`, GigaAM's streamed weight-plane writer `gg_stream_plane` and its plan's spans `gg_job_span` and
 `gg_plane_total`, every `*_bake` / `*_bake_into` a GPU flavor's device block (`ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block`)
-comes from - a CPU repack bake among them - with the block's piece writer `tower_dev_put` and the device gathers the bakes call
-(`kq_gather_rows_dev`, `wd_gather`, `vt_gather_kq_member`, `tower_gather_q8_regions`, `rnnt_dev_slab`), and the declaration lines
+comes from - a CPU repack bake among them - with the block's piece writers `tower_dev_put` and `tower_bake_q8` and the device
+gathers the bakes call (`kq_gather_rows_dev` with its scale-row packer `pack_iq_dev_row`, `wd_gather`,
+`tower_fc_gather_kq_member`, `tower_gather_q8_regions` over `q8_gather_rows` and `q8_gather_slice`, `rnnt_dev_slab` and its
+slab layout `rnnt_dev_layout`), the region and record lists they gather (`fc_q8_regions` over `fc_gemm_records` and
+`fc_front_records`, the kq lane's `tower_fc_kq_plan`, `tower_aud_regions` over `ln_block_regions` and `tower_ct_regions`,
+`tower_q3a_regions`, `gemma4a_all_regions` over `gemma4a_block_regions`) and the fronts' halfword stagers
+(`tower_aud_stem16` and its pitch `tower_aud_stem_kdp`, `tower_g4a_front16`, `tower_q3a_front16` and its stages
+`tower_q3a_stages` / `tower_conv_stage`, the conv panel `tower_stage_conv0_panel`, the padded row copy
+`tower_stage_f32_pad_row_stride`), and the declaration lines
 of the layout constants `IMAGE_PAGE`, `IMAGE_HEADER_BYTES`, `SECTION_TABLE_SLACK`, `DWRITE_STAGING_BAND`,
 `METAL_BAND_BLOCKS`, `BLOB_ALIGN_FLOATS` and `TOWER_DEV_ALIGN`. Comments are stripped first, so re-wording one moves nothing, and CRLF
 line ends fold to LF before anything is hashed, so a checkout under `autocrlf` stamps as the

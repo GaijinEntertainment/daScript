@@ -112,7 +112,7 @@ the last two from the tree:
 Write the answers down; they are the first lines of the PR body's format section.
 
 **A served form of an existing disk type** (`iq3s4` = IQ3_S as a codebook plane,
-`ARCHITECTURE_ENGINE_FORMATS.md#served-form`) is a member like any other, with four differences: the
+`ARCHITECTURE_ENGINE_FORMATS_TERMS.md#served-form`) is a member like any other, with four differences: the
 descriptor row names the SOURCE type (`ggml_type`, `disk_bytes`) under its own schema and stream
 ids; `kq_transcode_p` reads the source disk block and folds its decode into the served plane
 (exactness against the source form is a `test_kquant.das` cell - both transcodes of one superblock,

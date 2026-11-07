@@ -14,18 +14,14 @@ require daslib/math_bits   // uint_bits_to_float: the NaN row
 require _compares   // NAN_SENTINEL: the pad slots; copy_span
 require dasllama/dasllama_gigaam   // the head's model legs
 require ?das_metal dasllama/dasllama_metal_tower   // metal_tower_ga_ctcs: the Metal CTC seat's count
-require ?vulkan dasllama/dasllama_vulkan_asr_dec   // vulkan_ctc_stats: the Vulkan seat's, on a build without das_metal
+require _gpu_knobs   // gpu_ctc_stats: the discrete home's seat, on a build without das_metal
 
-//! the GigaAM CTC heads the build's device seat served: Metal's, else Vulkan's, 0 with neither
+//! the GigaAM CTC heads the build's device seat served: Metal's, else gigaam's discrete home's, 0 with neither
 def ctc_seat_heads : int64 {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         return metal_tower_ga_ctcs()
     } else {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            return vulkan_ctc_stats().heads
-        } else {
-            return 0l
-        }
+        return gpu_ctc_stats().heads
     }
 }
 

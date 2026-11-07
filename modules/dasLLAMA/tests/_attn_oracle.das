@@ -1,6 +1,7 @@
 // The single-query attention oracle the Metal, Vulkan and CUDA kernel cells share - one plain two-pass softmax per (query
 // row, head) over a key range, with the softcap and the attention sink in the forms the kernels take - and the flash tiles'
-// oracle over it on the kernel's f16 grid.
+// oracle over it on the kernel's f16 grid; the whisper decoder's chunked attention and combine forms the Vulkan and CUDA
+// decoder cells share; and canary's rel-pos attention with its rel plane, both homes' rel-plane cells' form.
 
 options gen2
 options _dasllama_internal = true
@@ -10,6 +11,7 @@ module _attn_oracle shared public
 require dasllama/dasllama_lint public
 require math
 require dasllama/dasllama_gpu_math
+require daslib/f16_cvt   // f16_to_f32: the whisper decoder's f16 K/V planes
 
 //! single-query causal attention oracle: one output row per (query row, head) - plain two-pass softmax over [kstart, cnt)
 //! (a sliding layer's window starts past 0), the cap in the exp form the kernels take; the device's online form reassociates,
@@ -129,6 +131,54 @@ def g4a_attn_oracle(q, k, v, rpe, pds : array<float>; rows, d, heads, hs, past :
     return <- ao
 }
 
+//! `dec_self_attn` / `dec_cross_attn` over the driver's f16 planes with the q bias folded in; causal row r attends len0 + r keys
+def wdec_attn_ref(q : array<float>; kh, vh : array<uint16>; wn : array<float>; rows, dim, ydim, heads, hs, tstride, len0, qboff : int; causal : bool; scale : float) : array<float> {
+    var y : array<float>
+    y |> resize(rows * ydim)
+    let vf <- [for (hv in vh); f16_to_f32(uint(hv))]
+    for (r in range(rows)) {
+        let len = causal ? len0 + r : len0
+        for (h in range(heads)) {
+            attn_row_scored(vf, h * tstride * hs, hs, hs, 0, len, y, r * ydim + h * hs, false, 0.0) $(tt : int) : float {
+                var s = 0.0
+                for (j in range(hs)) {
+                    s += (q[r * dim + h * hs + j] + wn[qboff + h * hs + j]) * f16_to_f32(uint(kh[(h * tstride + tt) * hs + j]))
+                }
+                return s * scale
+            }
+        }
+    }
+    return <- y
+}
+
+//! the chunked attention's combine on the CPU: a row's head slice over `nch` chunk partials (max, exp-sum) and their unnormalized values
+def wdec_comb_ref(pms, py : array<float>; rows, heads, hs, nch : int) : array<float> {
+    var y : array<float>
+    y |> resize(rows * heads * hs)
+    for (r in range(rows)) {
+        for (h in range(heads)) {
+            var mg = -3.0e38
+            for (c in range(nch)) {
+                mg = max(mg, pms[((c * heads + h) * rows + r) * 2])
+            }
+            var tot = 0.0
+            for (c in range(nch)) {
+                let slot = (c * heads + h) * rows + r
+                tot += pms[slot * 2 + 1] * exp(pms[slot * 2] - mg)
+            }
+            for (j in range(hs)) {
+                var acc = 0.0
+                for (c in range(nch)) {
+                    let slot = (c * heads + h) * rows + r
+                    acc += py[slot * hs + j] * exp(pms[slot * 2] - mg)
+                }
+                y[r * heads * hs + h * hs + j] = acc / max(tot, 1.0e-30)
+            }
+        }
+    }
+    return <- y
+}
+
 //! two-pass softmax row: key j in [kstart, cnt) scores `score(j)`, weighting vv[vbase + j * kvd + e]; `has_sink` adds a valueless `sink` key
 def attn_row_scored(vv : array<float>; vbase, kvd, hs, kstart, cnt : int; var out : array<float>; obase : int;
                     has_sink : bool; sink : float; score : block<(j : int) : float>) {
@@ -152,4 +202,44 @@ def attn_row_scored(vv : array<float>; vbase, kvd, hs, kstart, cnt : int; var ou
         out[obase + e] = acc / tot
     }
     delete sc
+}
+
+//! canary's rel-pos attention as `fc_attention_cpu` loops it: the content score off the u bias at `buoff`, the position score on `posl` off the v bias at `bvoff`, over sqrt(hs)
+def cn_attn_ref(q, k, v, posl, wn : array<float>; rows, d, heads, hs, buoff, bvoff : int) : array<float> {
+    var ao : array<float>
+    ao |> resize(rows * d)
+    let scale = 1.0 / sqrt(float(hs))
+    for (hh in range(heads)) {
+        let hoff = hh * hs
+        for (i in range(rows)) {
+            let base = rows - 1 - i
+            attn_row_scored(v, hoff, d, hs, 0, rows, ao, i * d + hoff, false, 0.0) $(j : int) : float {
+                var cs = 0.0
+                var rs = 0.0
+                for (n in range(hs)) {
+                    let qv = q[i * d + hoff + n]
+                    cs += (qv + wn[buoff + hoff + n]) * k[j * d + hoff + n]
+                    rs += (qv + wn[bvoff + hoff + n]) * posl[(base + j) * d + hoff + n]
+                }
+                return (cs + rs) * scale
+            }
+        }
+    }
+    return <- ao
+}
+
+//! one head's rel plane as the f16 GEMM lands it: R[i][w] = (q_i + bias_v) . P[w] over the head's slice at `hoff`
+def cn_rel_plane(q, posl, wn : array<float>; rows, ww, d, hs, hoff, bvoff : int) : array<float> {
+    var r : array<float>
+    r |> resize(rows * ww)
+    for (i in range(rows)) {
+        for (w in range(ww)) {
+            var acc = 0.0
+            for (n in range(hs)) {
+                acc += (q[i * d + hoff + n] + wn[bvoff + hoff + n]) * posl[w * d + hoff + n]
+            }
+            r[i * ww + w] = acc
+        }
+    }
+    return <- r
 }

@@ -256,7 +256,9 @@ does not cover falls to the fallback chain - never to another box's winners. Wit
 framework in the build the first three steps do not exist - no policy env, no sidecar, no
 profile - so the ladder is the `perm=` pin, then the `fallback` chain's first UNCONDITIONAL
 entry (a `suffix:requires` seat cannot be judged with no feature probe), then `DEFAULT_PERM`,
-and the compile reports nothing.
+and the compile reports nothing. `[dasllama_fallbacks]` reads each kernel's fallback off its `[tuned]`
+annotation, so `dasllama_tuned_fallbacks()` is whole whether the kernel's module compiled in this
+process or the front-end module cache served it.
 
 ### The mint's own wall rides in the sidecar's provenance {#mint-wall-provenance}
 

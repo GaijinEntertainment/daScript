@@ -16,6 +16,7 @@ require dastest/testing_boost   // T?: check asserts through the cell's handle
 require daslib/rtti   // LineInfo: the probe handle's log hook
 require dasllama/dasllama_math   // parallel_argmax
 require dasllama/dasllama_common   // Session: logits_of copies its row
+require dasllama/dasllama_convert   // cvt_f32_to_f16_sat_array: check_halves' expectation
 require daslib/fio
 require daslib/command_line
 
@@ -483,6 +484,13 @@ def check_exact(t : T?; tag : string; got, want : array<auto(TT)>) : int {
     t |> success(mismatch_exact(got, poisoned) != bad, "{tag}: the compare sees a poisoned expected element {n - 1}")
     delete poisoned
     return bad
+}
+
+//! `check_exact` of half rows against `want` rounded to half, saturating at the half range
+def check_halves(t : T?; tag : string; got : array<uint16>; want : array<float>) {
+    var want_h <- cvt_f32_to_f16_sat_array(want)
+    check_exact(t, tag, got, want_h)
+    delete want_h
 }
 
 //! the count of `got` not equal to `want` - the exact bar's compare, over floats, bytes or words alike; every element one

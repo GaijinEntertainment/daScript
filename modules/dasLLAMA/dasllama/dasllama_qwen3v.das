@@ -14,6 +14,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_common   // apply_box_profile_runtime for the tower-image identity
 require dasllama/dasllama_image   // the dlim rail: mapped planes, no allocation or work at load
 require dasllama/dasllama_tower_image
+require dasllama/dasllama_tower_flavor   // [tower_flavor]: the family's GPU flavor seat
 require dasllama/dasllama_plane public
 require dasllama/dasllama_tower   // shared encoder-tower pieces: LN, bias, attention, im2col, the aa resize
 require dasllama/dasllama_rope    // build_rope_tabs_vision — the (h, w) ladder table
@@ -588,9 +589,9 @@ def load_qwen3v_tower(path : string) : Qwen3vTower {
     } else {
         q3v_announce_lane()
     }
-    let dev = path |> ends_with(".dlim") ? TowerDev.none : tower_dev_flavor(g_q3v_flavor, tag == QWEN3V_TAG_Q8)
+    let dev = path |> ends_with(".dlim") ? TowerDev.none : tower_dev_flavor(g_qwen3v_flavor, tag == QWEN3V_TAG_Q8)
     if (dev != TowerDev.none) {
-        return <- load_staged_image_dev(path, tag, "qwen3v-tower", "source mmproj gguf", type<Qwen3vTower>, dev, g_q3v_flavor.bake, QWEN3V_DEV_CONSUMED) {
+        return <- load_staged_image_dev(path, tag, "qwen3v-tower", "source mmproj gguf", type<Qwen3vTower>, dev, g_qwen3v_flavor.bake, QWEN3V_DEV_CONSUMED) {
             return <- stage_qwen3v_tower(path)
         }
     }
@@ -603,26 +604,15 @@ def load_qwen3v_tower(path : string) : Qwen3vTower {
 
 //! A GPU driver's qwen3v flavor (`#tower-dev-block`): the backend whose image it mints, whether its chain serves a lane, and
 //! the bake that converts a CPU-form tower into the driver's device block
-typedef Qwen3vServesLaneFn = function<(q8 : bool) : bool>
-typedef Qwen3vBakeFn = function<(t : Qwen3vTower; var b : TowerDevBuild) : bool>
+[tower_flavor(family = "qwen3v", model = "Qwen3vTower")]
+struct Qwen3vFlavor {}
 
-struct Qwen3vFlavor {
-    backend : TowerDev
-    serves : Qwen3vServesLaneFn
-    bake : Qwen3vBakeFn
-}
-
-var private g_q3v_flavor = Qwen3vFlavor()
 let private QWEN3V_DEV_CONSUMED <- ["qblob", "qscales"]   //! the planes a qwen3v bake converts: a GPU flavor carries their device forms instead
-
-def register_qwen3v_flavor(backend : TowerDev; serves : Qwen3vServesLaneFn; bake : Qwen3vBakeFn) {
-    g_q3v_flavor = Qwen3vFlavor(backend = backend, serves = serves, bake = bake)
-}
 
 //! Mint a served tower from a staged read WITHOUT touching disk — the off-rail control for suites.
 //! `dev` names the GPU flavor (the staging read under `with_tower_dev_staging(dev)`), `none` the CPU image (`tower_mint_flavor`).
 def mint_qwen3v_tower(var st : Qwen3vStaging; var out : Qwen3vTower; dev : TowerDev = TowerDev.none) {
-    tower_mint_flavor(st, out, st.t.q8 ? QWEN3V_TAG_Q8 : QWEN3V_TAG, "qwen3v-tower", dev, g_q3v_flavor, QWEN3V_DEV_CONSUMED)
+    tower_mint_flavor(st, out, st.t.q8 ? QWEN3V_TAG_Q8 : QWEN3V_TAG, "qwen3v-tower", dev, g_qwen3v_flavor, QWEN3V_DEV_CONSUMED)
 }
 
 // the bind walk skips a missing section silently, so the flag=>plane invariant must be checked

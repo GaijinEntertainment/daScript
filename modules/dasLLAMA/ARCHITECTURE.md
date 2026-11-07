@@ -47,7 +47,7 @@ any sibling companion that sends a reader to it.
   tiling (`#nv4-planes`) and the per-tensor scale beside them (`#nv4-site-scale`).
 - `ARCHITECTURE_ENGINE_FORMATS_MLX.md` - a safetensors snapshot directory as a synthesized GGUF meta (`#mlx-snapshot-source`), the routed (`#mlx-moe-snapshot`) and qwen4_exp (`#mlx-qwen4exp-snapshot`) snapshot families, the affine members' planes (`#mlx-affine-planes`) and their Metal forms (`#mlx-metal-forms`).
 - `ARCHITECTURE_ENGINE_FORMATS_TERMS.md` - the weight-format terms: a site, a lever and a converted
-  copy (`ARCHITECTURE_ENGINE_FORMATS_TERMS.md#kq-format-terms`).
+  copy (`ARCHITECTURE_ENGINE_FORMATS_TERMS.md#kq-format-terms`), and the served form (`#served-form`).
 - `ARCHITECTURE_GPU.md` - the GPU backend role table (`ARCHITECTURE_GPU.md#gpu-backends`).
 - `ARCHITECTURE_GPU_METAL_LIFECYCLE.md` - the Metal family's shared device and queue, its PSO sets, device memory, race
   code and decline reasons (`ARCHITECTURE_GPU_METAL_LIFECYCLE.md#metal-family-lifecycle`).
@@ -55,7 +55,8 @@ any sibling companion that sends a reader to it.
   GPU backends - Metal, Vulkan and CUDA (`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`).
 - `ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md` - the entries of that list that are the CUDA home's alone: the
   int8 MMQ prefill, the FP4 expert rung, the nv4 nibble decode, the MMQ pin
-  (`ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries`).
+  (`ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries`); the home's cm2 column pick (`#cuda-cm2-column`), its
+  tower chains' graphs (`#cuda-chain-graphs`), its shared-memory carveout (`#cuda-carveout`).
 - `ARCHITECTURE_GPU_SHARED_KERNELS.md` - the kernels more than one GPU home stamps: the shared templates' mechanism
   (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels`), the kernel pairs, their stamps and the pairs that stay
   per home (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs`), the routed block's routing kernels both discrete
@@ -63,7 +64,8 @@ any sibling companion that sends a reader to it.
   their smalls layout and capacities (`ARCHITECTURE_GPU_SHARED_KERNELS.md#dn-discrete-kernels`).
 - `ARCHITECTURE_GPU_SHARED_READINGS.md` - what the shared row templates' stamps read on each home against the per-home
   bodies before them, and the instruments the readings come from (`ARCHITECTURE_GPU_SHARED_READINGS.md#gpu-shared-readings`).
-- `ARCHITECTURE_MEDIA.md` - the encoder-tower, audio, ASR and vision charters.
+- `ARCHITECTURE_MEDIA.md` - the encoder-tower, audio and ASR charters (`ARCHITECTURE_MEDIA.md#tower-audio-charters`).
+- `ARCHITECTURE_MEDIA_VISION.md` - the vision charters (`ARCHITECTURE_MEDIA_VISION.md#vision-charters`).
 - `ARCHITECTURE_TTS.md` - the text-to-speech charters - the front end, the block home, the
   shared assembly, the families and the facade.
 - `ARCHITECTURE_POCKET.md` - the Pocket TTS family, a continuous-audio language model with its
@@ -102,15 +104,20 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
 - `ARCHITECTURE_GPU_TOWER_POCKET.md` - the Metal tower driver's Pocket TTS seats: the codec, the
   frame loop and the text prompt.
 - `ARCHITECTURE_GPU_TOWER_VULKAN.md` - the Vulkan tower's row classes and attention routes, the
-  Vulkan tower driver's encode chains, and the Vulkan ASR-decoder driver.
+  tower encode chains on the discrete homes, and the whisper ASR decoder on the discrete homes.
 - `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md` - the StyleTTS2 synthesis seats and the Pocket codec,
   frames and prompt seats on the Vulkan tower: the shared weight slab, the f32-exact front end, the source
   and the generator, the seats' scratch and declines.
 - `ARCHITECTURE_GPU_TOWER_VULKAN_FC.md` - the Vulkan FastConformer chain's rotary form (GigaAM): the rope
   tables, the padded attention route, the LayerNorm conv stamp, the conv front.
-- `ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md` - the Vulkan tower's vision chains: the stems, blocks, taps
+- `ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md` - the vision chains on the discrete homes: the stems, blocks, taps
   and tails of gemma4uv, gemma4v, gemma3v, qwen3v and qwen25v on both weight lanes, and the lane policy's
   Vulkan default.
+- `ARCHITECTURE_GPU_TOWER_RAIL.md` - the rail the Vulkan and CUDA homes' chain bodies dispatch through:
+  the plane roles, the rail records, the stamp overload each dispatch lens generates over a rail, the
+  primitives a chain cannot spell through a stamp, the audio seats' install by home, and the family chains on the
+  rail: the spectral fronts, gemma4a, qwen3a's front and the VAD, the FastConformer trio and its decoders, the
+  whisper class and the whisper decoder.
 - `ARCHITECTURE_GPU_QUANT_PLANES.md` - the Metal kq split scale plane (`#metal-kq-split-scale-plane`), the iquant GEMV grid read with its f4-slab twin (`#metal-iquant-gemv-grid`), the Metal GEMV site abstraction (`#metal-gemv-site`), the fat iq4xs GEMV (`#metal-kq-fat-gemv`), the per-32 small-batch form (`#metal-b32-small-batch`), the wide (`#metal-b32-wide-gemv`) and fused gate|up (`#metal-b32-glu`) per-32 GEMVs, and the form matrix every Metal GEMM stamp family keeps (`ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-form-matrix`).
 - `ARCHITECTURE_GPU_BATCH.md` - the per-layer FFN widths on the Metal drivers and the Vulkan
   whole-model driver, and the Metal batch driver's row shapes - the E-series rows, a MoE's shared
@@ -135,7 +142,7 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   half rows, and how a kernel's hot loads are addressed.
 - `ARCHITECTURE_GPU_SHARED_ATTN.md` - the attention bodies both discrete homes (Vulkan and CUDA) stamp: the token
   command's attention key split, the prefill's flash-attention tile, the K/V mirror's block codecs (q8_0, tq4) with
-  tq4's rotated basis, and the batched rope store's strided k and v reads.
+  tq4's rotated basis, the batched rope store's strided k and v reads, and the FastConformer rel-position attention.
 - `ARCHITECTURE_GPU_SHARED_GEMM.md` - the GEMM tiles and GEMVs both discrete homes stamp: the cm2 decode callbacks'
   16-bit lanes, the mx4 decode, the device scale row, the cm2 tile body's k step, fast path and loop bounds, the KHR
   arm's hand-staged kq tile, the decode GEMV family's lane split by row length and region walk, and the routed gate-up
@@ -223,8 +230,9 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   call-graph terms, the GPU ramp.
 - `ARCHITECTURE_RUNTIME_JOBQUE.md` - the hybrid worker pool, the MoE region split, the job queue
   the engine dispatches on, and the mode that dispatches to none.
-- `ARCHITECTURE_MEDIA.md` - the padded tower GEMM widths, the family GPU hooks, the tower weight
-  lane.
+- `ARCHITECTURE_MEDIA.md` - the family GPU hooks, the tower weight lane.
+- `ARCHITECTURE_MEDIA_TOWER.md` - the padded tower GEMM widths
+  (`ARCHITECTURE_MEDIA_TOWER.md#tower-padded-widths`).
 - `ARCHITECTURE_MEDIA_ASR.md` - the ASR families' mechanisms - the facade's carrier sniff order, the
   oracle a family is specified by, the family's tokens, language and long-form policy, the GigaAM
   Conformer chain's log-mel (`ARCHITECTURE_MEDIA_ASR.md#gigaam-log-mel`), rotary input and planes, and

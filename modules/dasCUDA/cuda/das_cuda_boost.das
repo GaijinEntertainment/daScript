@@ -61,13 +61,18 @@ var private g_cuda_last_error : string
 //! the driver's text for the last failing boost call; empty after a success
 def public cuda_last_error() : string => g_cuda_last_error
 
+[cold_path]
+def private cu_failed(result : int; what : string) : bool {
+    g_cuda_last_error = "{what}: {cuda_error_text(result)}"
+    return false
+}
+
 def private cu_ok(result : int; what : string) : bool {
     if (result == 0) {
         g_cuda_last_error = ""
         return true
     }
-    g_cuda_last_error = "{what}: {cuda_error_text(result)}"
-    return false
+    return cu_failed(result, what)
 }
 
 //! the live-object registry the leak gate reads: kind -> count of handles and buffers not yet released

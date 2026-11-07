@@ -2496,6 +2496,25 @@ class template ActRqBT : ActRqT {
     }
 }
 
+struct TowerBiasRqArgs {
+    d : uint        //! the row width, a 32-multiple
+    nblk : uint     //! the plane's Q8_0 blocks
+    boff : uint     //! the bias row's base in wn
+}
+
+//! the bias + tanh GELU of a plane and its Q8_0 requant in one dispatch (`RqT`'s grid: eight lanes a block), the source read alone -
+//! the whisper decoder's fc1 epilogue, whose activation the architecture fixes
+[ |> template_struct_instance]
+class template TowerBiasActRqT : RqT {
+    @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 1 @role = "weight" wn : array<float>
+    @ssbo @binding = 2 outq : array<int8>
+    @ssbo @binding = 3 outs : array<float>
+    @push_constant pa : TowerBiasRqArgs
+
+    def override load1(e : uint) : float => gelu_tanh_lut_f32(x[e] + wn[pa.boff + e % max(1u, pa.d)])
+}
+
 //! act straight to the f16 hidden plane (the cm2 route, no quant)
 [ |> template_struct_instance]
 class template ActF16T {
@@ -4185,6 +4204,105 @@ class template DaAttnBWT : AtAttnTileT {
                     }
                     outp[ob + 64u * uint(z)] = v
                 }
+            }
+        }
+    }
+}
+
+struct TowerCnAttnRArgs {
+    d : uint        //! the row width (compact [npos x d] rows)
+    npos : uint
+    buoff : uint    //! the content bias row (bias_u) in wn, [d]
+    hoff : uint     //! the head's element base in a row
+}
+
+[ |> template_struct_instance]
+class template TowerCnAttnRT {
+    @template_constant HS : uint = 128u   //! the head width served (the accumulators are sized for 128)
+    @ssbo @binding = 0 q : array<float>
+    @ssbo @binding = 1 k : array<float>
+    @ssbo @binding = 2 v : array<float>
+    @ssbo @binding = 3 ao : array<float>
+    @ssbo @binding = 4 rmat : array<float>
+    @ssbo @binding = 5 @role = "weight" wn : array<float>
+    @push_constant pa : TowerCnAttnRArgs
+    @workgroup ks : float[4096]   //! 32 keys x 128
+    @workgroup vs : float[4096]
+
+    [spirv_inline, arch(at = "../ARCHITECTURE_GPU_SHARED_ATTN.md#fc-rel-attn")]
+    def cn_attn_r_body {
+        let lid = gl_LocalInvocationID.x
+        let i = gl_WorkGroupID.x * 64u + lid
+        let npos = max(1u, pa.npos)
+        let live = i < pa.npos
+        let ii = min(i, npos - 1u)
+        let d = pa.d
+        let hoff = pa.hoff
+        let hs = HS
+        var qu, acc : float[128]
+        var n = 0u
+        while (n < hs) {
+            qu[n] = q[ii * d + hoff + n] + wn[pa.buoff + hoff + n]
+            acc[n] = 0.0
+            n++
+        }
+        var m = -1.5e38
+        var den = 0.0
+        let base = npos - 1u - ii
+        let rel_row_base = ii * (2u * npos - 1u)
+        var j0 = 0u
+        while (j0 < pa.npos) {
+            barrier()
+            var e = lid
+            while (e < 32u * hs) {
+                let jj = e / hs
+                let row = j0 + jj
+                let ok = row < pa.npos
+                let src = row * d + hoff + e % hs
+                ks[e] = ok ? k[src] : 0.0
+                vs[e] = ok ? v[src] : 0.0
+                e += 64u
+            }
+            barrier()
+            if (live) {
+                let live_keys = min(32u, pa.npos - j0)
+                var jj = 0u
+                while (jj < live_keys) {
+                    var cs = 0.0
+                    n = 0u
+                    while (n < hs) {
+                        cs += qu[n] * ks[jj * hs + n]
+                        n++
+                    }
+                    let s = (cs + rmat[rel_row_base + base + j0 + jj]) * (1.0 / sqrt(float(HS)))
+                    if (s > m) {
+                        let r = exp(m - s)
+                        den *= r
+                        n = 0u
+                        while (n < hs) {
+                            acc[n] *= r
+                            n++
+                        }
+                        m = s
+                    }
+                    let w = exp(s - m)
+                    den += w
+                    n = 0u
+                    while (n < hs) {
+                        acc[n] += w * vs[jj * hs + n]
+                        n++
+                    }
+                    jj++
+                }
+            }
+            j0 += 32u
+        }
+        if (live) {
+            let inv = 1.0 / den
+            n = 0u
+            while (n < hs) {
+                ao[i * d + hoff + n] = acc[n] * inv
+                n++
             }
         }
     }
@@ -6452,27 +6570,27 @@ struct F16GemmArgs {
 
 let F16G_BK = 64u      //! the small f16 GEMM's k step (the MoE router, the deltanet beta/alpha rows and the E-series projection on the cm2 tile)
 
-//! a small f16 x f16 GEMM on the cm2 128 x 128 tile, y[rows x d] = x[rows x n] w[d x n]^T, the template both discrete homes
-//! stamp; a k chunk's partial plane lands at ybase + chunk * rows * d (stride d)
+//! a small f16 x f16 GEMM on the cm2 tile of 128 weight rows by `BN` positions, y[rows x d] = x[rows x n] w[d x n]^T, the template
+//! both discrete homes stamp, each stamp naming its AT / BT / ACC at its column; a k chunk's partial plane lands at
+//! ybase + chunk * rows * d (stride d)
 [ |> template_struct_instance]
 class template F16GemmCm2T {
     @template_constant KSPLIT : bool = true   //!< the k split rides `pa.ksplit`; off (a stamp every site dispatches whole), the body folds the split away
     @template_constant WOFF : bool = true     //!< the weight rows start at `pa.woff`; off (a stamp every site binds at row 0), at 0
+    @template_constant BN : uint = 128u       //!< the position column: BT's columns and ACC's
     @ssbo @binding = 0 w : array<float16>   //! the weight rows; no `weight` role: the E-series projection binds its f16 panel, which the Vulkan home rewrites every window
     @ssbo @binding = 1 xf16 : array<float16>
     @ssbo @binding = 2 y : array<float>
     @push_constant pa : F16GemmArgs
-    typedef AT = coopmatWgA_f16_128x64
-    typedef BT = coopmatWgB_f16_64x128
-    typedef ACC = coopmatWgAcc_f32_128x128
 
     [spirv_inline, arch(at="../ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels")]
     def f16_gemm_body {
-        let xtiles = (pa.rows + 127u) / 128u
+        let xtiles = (pa.rows + BN - 1u) / BN
         let wtiles = (pa.d + 127u) / 128u
-        let chunk = gl_WorkGroupID.x / (xtiles * wtiles)
-        let rem = gl_WorkGroupID.x % (xtiles * wtiles)
-        let t0 = (rem / wtiles) * 128u
+        let tiles = max(1u, xtiles * wtiles)
+        let chunk = gl_WorkGroupID.x / tiles
+        let rem = gl_WorkGroupID.x % tiles
+        let t0 = (rem / wtiles) * BN
         let m0 = (rem % wtiles) * 128u
         let split = KSPLIT && pa.ksplit != 0u
         let woff = WOFF ? pa.woff : 0u
@@ -6501,16 +6619,16 @@ class template F16GemmCm2T {
         var k = k0
         while (k < k1) {
             coopmatLoadTensor(a, w, woff, tla, m0, 128u, k, F16G_BK)
-            coopmatLoadTensor(b, xf16, 0u, tlb, t0, 128u, k, F16G_BK, tv)
+            coopmatLoadTensor(b, xf16, 0u, tlb, t0, BN, k, F16G_BK, tv)
             acc = coopmatMulAdd(a, b, acc)
             k += F16G_BK
         }
-        coopmatStoreTensor(acc, y, ybase, tlo, t0, 128u, m0, 128u, tv)
+        coopmatStoreTensor(acc, y, ybase, tlo, t0, BN, m0, 128u, tv)
     }
 }
 
-//! the cm2 f16 GEMM's workgroups: a 128 x 128 tile a workgroup over rows x d
-def f16_gemm_cm2_wgs(rows, d : int64) : int64 => ((rows + 127l) / 128l) * ((d + 127l) / 128l)
+//! the cm2 f16 GEMM's workgroups: a tile of 128 weight rows by `bn` positions a workgroup over rows x d
+def f16_gemm_cm2_wgs(rows, d : int64; bn : int64 = 128l) : int64 => ((rows + bn - 1l) / bn) * ((d + 127l) / 128l)
 
 struct DnBaArgs {
     npos : uint
@@ -7158,3 +7276,43 @@ class template F32GemmT {
 //! the f32 tile's arguments over [rows x n] -> [rows x dout]: the weight rows at `woff` with a stride of n, the bias row at `boff`, the output rows at `yoff`
 def f32_gemm_args(n, dout, rows : int64; woff : int64 = 0l; boff : int64 = 0l; yoff : int64 = 0l) : F32GemmArgs
     => F32GemmArgs(n = uint(n), d = uint(dout), rows = uint(rows), woff = uint(woff), wstride = uint(n), boff = uint(boff), xoff = 0u, xstride = uint(n), yoff = uint(yoff), ystride = uint(dout))
+
+struct TowerSpecDftArgs {
+    n_fft : uint    //! the window's taps
+    n_frames : uint
+    mag : uint      //! `TOWER_SPEC_MAGNITUDE` or `TOWER_SPEC_POWER`
+}
+
+let TOWER_SPEC_POWER = 0u       //! `TowerSpecDftArgs.mag`: the power re^2 + im^2 (the whisper preprocessors)
+let TOWER_SPEC_MAGNITUDE = 1u   //! ... its root, the magnitude (gemma4a)
+
+//! the spectrum of the windowed frames: one thread per (frame, bin) sums the frame's taps against the bin's
+//! (cos, sin) twiddle pair - the CPU DFT GEMM's rows [k][2 bin], [k][2 bin + 1] - and stores re^2 + im^2 or its root
+[ |> template_struct_instance]
+class template TowerSpecDftT {
+    @ssbo @binding = 0 xw : array<float>
+    @ssbo @binding = 1 tw : array<float>
+    @ssbo @binding = 2 pw : array<float>
+    @push_constant pa : TowerSpecDftArgs
+
+    [spirv_inline]
+    def spec_dft_body {
+        let gid = gl_GlobalInvocationID.x
+        let nb = pa.n_fft / 2u + 1u
+        if (gid < pa.n_frames * nb) {
+            let frame = gid / nb
+            let b = gid % nb
+            let xb = frame * pa.n_fft
+            let stride = 2u * nb
+            var re = 0.0
+            var im = 0.0
+            for (k in urange(pa.n_fft)) {
+                let x = xw[xb + k]
+                re += x * tw[k * stride + 2u * b]
+                im += x * tw[k * stride + 2u * b + 1u]
+            }
+            let p = re * re + im * im
+            pw[gid] = pa.mag != TOWER_SPEC_POWER ? sqrt(p) : p
+        }
+    }
+}

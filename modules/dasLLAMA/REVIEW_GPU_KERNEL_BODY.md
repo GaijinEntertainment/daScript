@@ -22,9 +22,7 @@ whose trip count grows with the work one thread does.
 into the kernel as a `@template_constant` or literal): peel it (the full chunks run under the
 stamped chunk bound, then one tail pass carries the guard), or, outside an `[unroll]` loop,
 replace it with an index clamp that runs the guarded work on an index inside the extent and never
-stores that iteration's result.** Inside an `[unroll]` loop a clamp folds every dead iteration -
-one past the live count - against a live one and costs what the branch saves, so there the peel is
-the only form.
+stores that iteration's result.** In an `[unroll]` loop a clamp costs what the branch saves.
 
 **A diff that adds or changes, inside a `for [unroll_full]` loop of a Metal kernel, a read of a
 kernel buffer argument whose effective index - through a local, or through the argument of an
@@ -74,12 +72,12 @@ shapes that accept the slower path deliberately.
 stream it from device instead.** A dequant, a transpose, or a layout or element-type change
 makes the forms differ. A staged pass-through costs the op more than the reads it saves.
 
-**A loop that fills a `@workgroup` tile computes each lane's tile address - where the lane writes
-in the tile - from the lane's slot index (the index that steps by one from lane to lane),
-compile-time constants and the workgroup size. The address is either a consecutive run of elements
-per lane, or a stride where each step advances every lane by the same constant or by the workgroup
-size. It never comes from a div or mod whose dividend and divisor are both run-time values. The
-workgroup size is a run-time value; an `[unroll_full]` loop's counter is a compile-time value.**
+**A diff that adds or changes a loop filling a `@workgroup` tile computes each lane's tile
+address (where the lane writes in the tile) from the lane's slot index, compile-time values and the
+workgroup size, as a consecutive run of elements per lane or a stride whose every step advances
+every lane by the same constant or by the workgroup size - never from a div or mod whose dividend
+and divisor are both run-time values.** The slot index steps by one from lane to lane. The
+workgroup size is a run-time value; an `[unroll_full]` loop's counter is a compile-time value.
 
 **Never decide a row's validity or owner in the bucket-ordered buffer (the routed rows sorted so
 each expert's rows form one contiguous run, a bucket) by scanning the per-bucket base and count
@@ -95,14 +93,13 @@ token index out of bounds.
 **A kernel body that folds one plain float sum or max (no compensation term, no index carried
 alongside) over every lane of its workgroup by hand - a shuffle loop that halves the lane distance
 each step, a lane-0 loop over a `@workgroup` array, one `@workgroup` value that one lane writes and
-every lane reads - is a defect: a Metal kernel class deriving `MetalTgReduceBase` calls its fold
-methods over its own `partial[]`, and any other Metal kernel class calls `tg_sum_all` /
-`tg_max_all` over its own `@workgroup` array; a `[vk_dispatch]` class derives `WgReduceBase` and
-calls its `wg_sum`, `wg_max` or `wg_rms_inv`; a class template in
-`dasllama/dasllama_gpu_kernels_common.das` derives
-`GkWgReduce` and calls its `wg_sum_into` / `wg_max_into`.** A fold into more than one result -
-separate sums over parts of the workgroup - is not one value; `ARCHITECTURE_GPU.md#gpu-backends`
-names the bodies that fold that way.
+every lane reads - is a defect: a Metal kernel class that derives no `GkWgReduce` calls
+`tg_sum_all` / `tg_max_all` over its own `@workgroup` array, and every other kernel class or class
+template derives `GkWgReduce`, through any chain of bases, and calls the fold methods its bases
+carry (`GkWgReduce`'s `wg_sum_into`, `wg_max_into`, `wg_rms_inv_into`; `MetalTgReduceBase`'s
+`tg_sum`, `tg_max`, `tg_rms_inv`; `WgReduceBase`'s `wg_sum`, `wg_max`, `wg_rms_inv`).** A fold
+into more than one result - separate sums over parts of the workgroup - is not one value;
+`ARCHITECTURE_GPU.md#gpu-backends` names the bodies that fold that way.
 
 **A kernel body that runs two folds in a row - two calls among `tg_sum_all`, `tg_max_all` and the
 fold methods of `MetalTgReduceBase`, `WgReduceBase` and `GkWgReduce`, or one such call inside a
@@ -139,6 +136,8 @@ index past the literal reads or writes another stage's bytes.
 
 **Never let a pad - an element the dispatch producing the buffer did not write, at a position the
 reduction walks: a row past the buffer's live count when the reduction runs down rows, or a column
-past a row's live width when it runs along a row - reach a `matmul2d` or a staged cooperative tile
-as an operand; stage it as zero, or bound the walk at the live extent of that axis.** A pad holds recycled pool
-bytes, so it multiplies stale values (NaN included) into every live output row.
+past a row's live width when it runs along a row - reach a `matmul2d` operand, a staged cooperative
+tile, or a cooperative-matrix load that reads straight from a device buffer (any `coopmatLoad*`
+call, on every backend that emits it); stage it as zero, or bound the walk at the live extent of
+that axis.** A pad holds recycled pool bytes, so it multiplies stale values (NaN included) into every
+live output row.

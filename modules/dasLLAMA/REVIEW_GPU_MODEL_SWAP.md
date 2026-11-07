@@ -1,20 +1,33 @@
 # dasLLAMA GPU Model-Swap Discharge Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU_ASYMMETRIES.md`, `ARCHITECTURE_GPU_TOWER_VULKAN.md`. Planned work:
-`followup_metal.md`, `followup_vulkan.md`.
+docs: `ARCHITECTURE_GPU_ASYMMETRIES.md`, `ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md`,
+`ARCHITECTURE_GPU_TOWER_VULKAN.md`. Planned work: `followup_metal.md`, `followup_vulkan.md`,
+`followup_general.md`.
 
-**A diff that adds to a GPU driver file a module-level variable, or a field of one, whose value
-derives from a loaded model's weights, or names, sizes or points at device content built from that
-model, or measures how a call served that model (a rate later calls size work by) - the decline
-reasons already logged for it included - and which a later call reads before that call writes it,
-returns it to its no-model value in the same change, in its backend's discharge: a Vulkan file
-(`dasllama/dasllama_*vulkan*.das`, `dasllama/dasllama_gpu*.das`) in `moe_gpu_model_marks_restore_`
-or `moe_gpu_drop_model_` (`dasllama/dasllama_gpu_resident.das`), a function either calls, or a
-`register_vk_drop_hook` listener; a Metal file (`dasllama/dasllama_metal*.das`) in a function the
-file registers with `register_reload_prep` (`dasllama/dasllama_metal_common.das`); a CUDA file
-(`dasllama/dasllama_*cuda*.das`) in `cud_drop_model` or a function it calls.** Unload and reload
-run only these; a reset elsewhere survives the swap.
+**A diff that adds to a GPU driver file a model-derived module-level variable, or a field of one,
+which a later call reads before that call writes it, returns it to its no-model value in the same
+change, inside its backend's discharge - the functions a model unload and reload run, named per
+backend in this checklist.** A value is model-derived when it derives from a loaded model's
+weights; or names, sizes or points at device content built from that model; or measures how a
+call served that model (a rate later calls size work by), the decline reasons already logged for
+it included. Unload and reload run only the discharge; a reset elsewhere survives the swap.
+
+**In a Vulkan file (`dasllama/dasllama_*vulkan*.das`, `dasllama/dasllama_gpu*.das`), a diff puts
+the model-swap reset of a model-derived variable in `moe_gpu_model_marks_restore_` or
+`moe_gpu_drop_model_` (`dasllama/dasllama_gpu_resident.das`), in a `register_vk_drop_hook`
+listener, or in a function one of these reaches through calls, a function run from a list of
+registered functions included.**
+
+**In a Metal file (`dasllama/dasllama_metal*.das`), a diff puts the model-swap reset of a
+model-derived variable in a function the file registers with `register_reload_prep`
+(`dasllama/dasllama_metal_common.das`), or in a function that one reaches through calls, a
+function run from a list of registered functions included.**
+
+**In a CUDA file (`dasllama/dasllama_*cuda*.das`), a diff puts the model-swap reset of a
+model-derived variable in `cud_drop_model` (`dasllama/dasllama_cuda_decode.das`), in a
+`register_cud_drop_hook` listener, or in a function one of these reaches through calls, a function
+run from a list of registered functions included.**
 
 **A module-level variable in a Vulkan driver file (`dasllama/dasllama_*vulkan*.das`,
 `dasllama/dasllama_gpu*.das`) whose value derives from, or names, sizes or points at device content

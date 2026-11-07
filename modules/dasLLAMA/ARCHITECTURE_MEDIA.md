@@ -1,6 +1,10 @@
 # dasLLAMA Architecture - encoder tower, audio, and vision file charters
 
-Companion to `ARCHITECTURE.md`; a section is cited by its anchor.
+Companion to `ARCHITECTURE.md`; a section is cited by its anchor. This document carries the encoder-tower, audio and
+ASR file charters with the audio carrier's licensed family namers (`#tower-audio-charters`), the family GPU hooks
+(`#tower-gpu-hook`) and the tower weight lane (`#tower-weight-lane`). The towers' served GEMM widths are
+`ARCHITECTURE_MEDIA_TOWER.md#tower-padded-widths`; the vision charters, the vision carrier's licensed namers and the
+vision oracles' provenance are `ARCHITECTURE_MEDIA_VISION.md#vision-charters`.
 
 ### Encoder towers, audio, and ASR {#tower-audio-charters}
 
@@ -30,7 +34,8 @@ carriers name, and no TTS family file (`dasllama_kitten`, `dasllama_kokoro`, `da
   stage readers (`tower_read_gemm_q8`, `tower_stage_q8_zero_rows`/`tower_stage_q8_pad_cols` and their f32 twins
   `tower_stage_f32_zero_rows`/`tower_stage_f32_pad_cols` - the load-scope padded stagers for FFN widths that are not
   32-aligned - and `tower_zero_span`), blocked `attention_bidir` and its per-window form `attention_bidir_windows`, the
-  FastConformer CPU block `fc_block_cpu`, and the encode-stage prof rail. `fc_block_cpu` branches per family on its
+  FastConformer CPU block `fc_block_cpu`, the FastConformer GEMM records every home's q8 regions and sites read
+  (`fc_gemm_records`, `fc_front_records`), and the encode-stage prof rail. `fc_block_cpu` branches per family on its
   `FcCpuForm` flags alone - `biased` (off for parakeet), `tap_major` (off for canary), `conv_ln` (gigaam's LayerNorm
   conv module) and `vec4` (off for canary) - and on its position type, `FcRelPos` or `FcRotary`. The one home: a family
   file that re-implements one of these is a defect, and nothing here names a family type.
@@ -38,7 +43,19 @@ carriers name, and no TTS family file (`dasllama_kitten`, `dasllama_kokoro`, `da
   (`tower_dev_flavor`), the CPU refusal of a GPU image (`tower_cpu_refuse`), the flavor tags (`register_tower_dev_tags`),
   the mint that bakes a driver's device block over the CPU form and copies every unconsumed plane beside it
   (`tower_dev_image`, `tower_mint_dev`, `tower_mint_flavor`) and the staged load that takes a flavor
-  (`load_staged_image_dev`), and the q8 gather both discrete homes bake their blocks with (`tower_gather_q8_regions`, `tower_bake_q8`: the regions in the row-major device layout under a driver's piece prefix). Generic over a family's staging and carrier; nothing here names a family type.
+  (`load_staged_image_dev`), the q8 gather both discrete homes bake their blocks with (`tower_gather_q8_regions`,
+  `tower_bake_q8`: the regions in the row-major device layout under a driver's piece prefix), the lane picks every
+  family's load and staging read (`#tower-weight-lane`: `tower_dev_halfword`, the halfword lane on every GPU
+  flavor; `tower_lane_f16`, the exact pick's halfword lane on a lane and a flavor; `tower_load_f16`, a load's - a
+  `.dlim` by its baked tag; `tower_staging_f16`, the running staging's) and the lane's tag spelling (`tower_lane_fmt`,
+  `tower_lane_tag`), and a source's conversion line (`tower_dev_flavor_announced`, `tower_src_quant_type`,
+  `tower_src_quant_name`: a GGUF source with an audio tensor (`a.*`, `mm.a.*`) stored quantized but not as Q8_0 keeps the
+  flavor pick, and its load names the disk type, its `KqFmt` member and the lane form it re-encodes into). Generic over a
+  family's staging and carrier; nothing here names a family type.
+- **`dasllama_tower_flavor.das`** - the `[tower_flavor]` structure macro (`TowerFlavorSeat`): on a family's flavor
+  record it declares the record's `backend`, `serves` and `bake` fields, the private global `g_<family>_flavor` and its
+  registrant `register_<family>_flavor`, so the record and its registrant are one declaration
+  (`ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block`). It names no family type.
 - **`dasllama_audio.das`** - the audio encoder tower: the mel front-ends (mtmd and whisper.cpp flavors, and the canary,
   gemma4a, qwen3a and gigaam flavors - each a `MelForm` over the one `mel_spectrum_rows`, whose branches are the form's
   `MelSum` sum order and `MelLog` log law), `AudioTower` with its staging, q8-quantize, and image rails, `EncoderState`,
@@ -51,8 +68,12 @@ carriers name, and no TTS family file (`dasllama_kitten`, `dasllama_kokoro`, `da
   points. It and `dasllama_audio_embedder.das` are the union carriers that route each facade function to one family; a
   family appears in a carrier at four places only - its union field, its finalize line, its kind value, and its one-line
   arms. `check_family_seams` over `AsrKind` licenses (`ASR_SEAM_EXEMPT`) the files driving a family past the facade's
-  verbs: the audio carrier, the four GPU family hooks, `asr_bench.das`, the bake tool, `harness/pk_parity_probe.das`,
-  `harness/cpu_asr_race.das`, `tests/`. `ASR_KIND_FILES` maps an `AsrKind` that has no family file of its own to the
+  verbs: the audio carrier, the GPU family hooks - the Metal and Vulkan tower and ASR-decoder drivers and the CUDA home's
+  seats (`dasllama_cuda_tower_fc`, `dasllama_cuda_tower_g4a`, `dasllama_cuda_asr_dec`, `dasllama_cuda_asr_dec_fc`), each
+  filling a family's seat with its model and state - and the chain bodies both discrete homes' seats run
+  (`dasllama_tower_chains_fc`, `dasllama_tower_chains_g4a`, `dasllama_asr_dec_chains`), which read a family's offsets,
+  geometry and quirk constants to write its dispatch sequence once, `asr_bench.das`, the bake tool,
+  `harness/pk_parity_probe.das`, `harness/cpu_asr_race.das`, `tests/`. `ASR_KIND_FILES` maps an `AsrKind` that has no family file of its own to the
   family file that serves it: `qwen3omni` to `dasllama_qwen3a.das`.
 - **`dasllama_whisper.das`** / **`dasllama_parakeet.das`** / **`dasllama_gigaam.das`** / **`dasllama_canary.das`** /
   **`dasllama_qwen3a.das`** / **`dasllama_gemma4a.das`** - one file per model family, each owning its weights, its
@@ -76,93 +97,6 @@ carriers name, and no TTS family file (`dasllama_kitten`, `dasllama_kokoro`, `da
   The device copy of the weights is `VadModel.slab`, the STFT basis and the LSTM's two planes
   transposed k-major, which `dasllama_layout`'s `vad_build_slab` lays at load.
 
-### Vision
-
-- **`dasllama_vision.das`** - the image preprocessing rail: dynamic-resolution geometry, the
-  letterbox resize (aspect-preserving bilinear onto a centered black canvas), u8->f32 normalize,
-  and the `DASLLAMA_VISION_DUMP` PPM writer. The only preprocessing home.
-- **`dasllama_vision_io.das`** - image decode to RGB8, from a file or a byte blob. The only file
-  that talks to stbimage; re-exported by the facade (like `dasllama_audio_io`) so consumers
-  decode through one seam - the engine itself takes decoded pixels.
-- **`dasllama_gemma4uv.das`** - the gemma4uv embedder (gemma-4 dense): mmproj load and the
-  im2col -> LayerNorm -> GEMM -> position-table -> projection forward. One file per vision
-  projector family, following the audio tower pattern; shared pieces move up into
-  `dasllama_tower.das` (the encoder-tower home), never sideways.
-  A shipped mmproj mixes element types per tensor - gemma-4's "BF16" file stores the patch
-  embedder as F32 and only the projection as BF16 - which is why a weight plane's element type
-  follows its source tensor, per tensor, never a per-file verdict.
-- **`dasllama_gemma4v.das`** - the gemma4v ViT tower (gemma-4 E-series): mmproj load (bf16 GEMM
-  planes as the file has them, the clamp sidecars as a blob table) and the 16-block pre-norm RMS
-  forward - clamped GEMMs, per-head q/k RMS, two-axis NEOX rope, weightless V RMS, unscaled
-  bidirectional attention, GEGLU-quick - then the 3x3 pool, RMS and projection. Composes the
-  `dasllama_tower.das` tower pieces; owns only its layout and the block loop.
-- **`dasllama_gemma3v.das`** - the gemma3 SigLIP tower (size-invariant across the gemma-3 line;
-  4B and 12B are the tested pairs): mmproj load (the file's f16 planes widen exactly to f32;
-  the ffn pair serves at the layout's padded 4352 width, so every q8-lane GEMM quantizes) and the 27-block pre-norm
-  LayerNorm forward - biased GEMMs, learned position add, scaled bidirectional attention,
-  GELU-tanh - then post-LN, the 4x4 pool, weighted RMS and projection. The canvas is FIXED at
-  896^2 (the learned table covers exactly that grid), and the family's image_mean/std (0.5) is
-  PREPROCESSING, not graph - `encode_image_` scales, `gemma3v_encode` takes planes raw like the
-  mtmd fixtures do. Composes `dasllama_tower.das`; owns only its layout and the block loop.
-  Two sanctioned exceptions to the family-quirk placement rule live outside this file: the
-  image span markers sit on the SHARED `gemma_chat` template in `dasllama_common.das` (template
-  detection cannot tell gemma3 from gemma2 - both spell `<start_of_turn>` - and the chat
-  layer's `image_vocab_ok` gate refuses a text-only vocab); and the carrier deliberately serves
-  ONE f32 plane (F32/F16/BF16 widen exactly; anything else refuses by name at stage) instead of
-  gemma4v's per-tensor plane split - the Metal leg runs the f32 mulmm, so there is no bf16
-  plane to preserve.
-- **`dasllama_qwen3v.das`** - the qwen3vl vision tower (Omni AND dense Qwen3-VL,
-  `qwen3vl_merger`): mmproj load (per-tensor bf16/f32 planes; the temporal patch-conv PAIR
-  folds to one f32 GEMM at stage - a still evaluates both convs on one frame, so conv_0+conv_1
-  = (W_0+W_1)*img) and the pre-LN forward - fused-qkv biased GEMMs, vision-mrope (h/w ladder
-  tables from `build_rope_tabs_vision`, full-head NEOX apply), scaled bidirectional
-  attention, GELU-tanh - after a spatial-merge REORDER of the patch stream with the 48x48
-  learned position table resized to the grid by an antialiased bilinear resample; then post-LN and
-  the 2x2 merger MLP (the x4 reshape is free - merge partners are already adjacent). Dense
-  carriers add DEEPSTACK taps (collected from the TENSOR list, never the metadata flags):
-  after each tap block a LayerNorm->fc1->GELU->fc2 merger over the x4-merged rows emits one more
-  proj_dim slice, and the output rows widen to (1+n_deepstack)*proj_dim - slice 0 = the main
-  merger, the decoder adds slice l+1 after layer l. The family token budget [8, 4096] is
-  mtmd's, not the gemma-scoped DASLLAMA_VISION_* knobs; image_mean/std (0.5) is
-  PREPROCESSING like gemma3v. CPU serving default: the block GEMMs serve as Q8_0 planes
-  (read-time transcode, the gemma3v recipe); the exact lane stages EVERYTHING f32-in-blob at
-  ff_pad both dims - blocks, mergers, and taps - because the Metal tower (`register_qwen3v_gpu`,
-  blocks + rope + taps + tail on-device, tap/tail proj outputs land in `ds_stash`/`ds_slice`)
-  and the float-batch tier both read f32 planes, and the same lane is the parity rail (the
-  f32 sites are this charter's sanction, not a fallback). Pin knobs
-  `set_qwen3v_q8`/`reset_qwen3v_q8`, two image tags; the lane policy prefers f32 when the
-  GPU tower or accel serves. Composes `dasllama_tower.das`; owns
-  only its layout, the reorder walk, and the block loop. SANCTIONED over the 1 GiB staged-mint line (this family
-  and qwen25v): the Omni (2.1 GB) and Qwen2.5-Omni (2.6 GB) mmprojs stage source+image at
-  once with no cap - the same shape their audio halves already stage - until
-  `followup_general.md` 24's streaming mint covers towers.
-- **`dasllama_qwen25v.das`** - the qwen2.5 window-attention ViT (Qwen2.5-Omni/VL, projector
-  `qwen2.5o`): 32 RMS-normed blocks with separate biased q/k/v GEMMs and a gated-silu FFN
-  whose hidden width comes from the TENSOR dims (the metadata's feed_forward_length lies);
-  rope-only positions, per-channel CLIP normalize (`vision_normalize3`). Rows sort by 112 px
-  windows of 2x2-merged groups, non-full blocks attend per contiguous window range
-  (`attention_bidir_windows` in the tower - no mask tensor exists), every `n_wa_pattern`-th
-  block attends in full, and the merger un-sorts back to group-row-major. Its decoder is the
-  `qwen2vl` arch whose plain MROPE reads the rope sections as contiguous ranges
-  (`Config.mrope_interleaved` false -> `build_rope_tabs_mrope`; the qwen3vl family sets the
-  flag and keeps the interleaved walk). This tower serves the file's planes ONLY - no q8
-  lane: its residual rows carry the Qwen2-VL-lineage outlier channels that per-32-block
-  activation requant cannot represent (a q8q8 lane measures 2.0 x rms vs the oracle, where a
-  DELETED layer measures less - the gate cannot discriminate; the weights themselves
-  quantize fine at 0.007 x rms, and a float-activation q8 GEMM wins nothing on these
-  compute-bound shapes since the CPU speedup IS the int8xint8 dot). It stages every GEMM
-  f32-in-blob at the served padded widths (`ARCHITECTURE_MEDIA.md#tower-padded-widths`) whatever the file's element type, and
-  bakes the halfword twin (`ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane`) when the block and merger GEMMs
-  share one halfword type; the Metal tower serves stem, blocks and merger tail off `s.x0`
-  through `register_qwen25v_gpu`.
-- **`dasllama_vision_embedder.das`** - the vision carrier: `VisionEmbedder` / `VisionState`, the
-  `AsrModel` shape for vision - one union through every seam, the family sniffed from the mmproj
-  (`clip.vision.projector_type`, or a `.dlim`'s baked tag) at load, one-line arms. Outside a
-  family's own file, a family type is named only here, in the three tower drivers' family hooks
-  (`dasllama_metal_tower.das`, `dasllama_vulkan_tower.das`, `dasllama_cuda_tower.das`), and in files under `tests/` - the
-  set `REVIEW.das`'s `check_family_seams` enforces, its licensed namers (`VISION_SEAM_EXEMPT`)
-  being those three driver files and `harness/vision_lane_probe.das`, the lane probe, which pins a
-  family's lane and mints its tower in memory - the carrier exposes neither.
 - **`dasllama_audio_embedder.das`** - the audio carrier: `AudioEmbedder` / `AudioState`, the
   vision carrier's audio twin - one union through every seam (server media worker, facade
   `encode_audio`, tutorials), the family probed from the mmproj's audio tensor (or a `.dlim`'s
@@ -175,29 +109,16 @@ carriers name, and no TTS family file (`dasllama_kitten`, `dasllama_kokoro`, `da
   decoder's chat template declares. Outside a family's own file, an audio family type is named
   only here, in `dasllama_asr.das`'s union field and one-line arms (the ASR rail's own carrier),
   in the GPU family hooks (`dasllama_metal_tower.das`, `dasllama_metal_asr_dec.das`,
-  `dasllama_vulkan_tower.das`, `dasllama_vulkan_asr_dec.das` - each fills the family's own seat
-  with its tower and state), in
+  `dasllama_vulkan_tower.das`, `dasllama_vulkan_asr_dec.das`, `dasllama_cuda_tower_g4a.das` - each fills the family's own
+  seat with its tower and state - and `dasllama_tower_chains_g4a.das`, the gemma4a chain body both discrete homes' seats
+  run, which reads the family's geometry and quirk constants to write its dispatch sequence once), in
   `benchmarks/asr/asr_bench.das` (the ASR bench pins a family serving knob for its correctness
   rail), in `utils/dasllama-convert/main.das` (the per-family `.dlim` bake tool dispatches on family by
   design), and in files under `tests/` - the set `REVIEW.das`'s `check_family_seams` enforces,
   its licensed namers (`AUDIO_SEAM_EXEMPT`) being `dasllama_asr.das`,
   `dasllama_metal_tower.das`, `dasllama_metal_asr_dec.das`, `dasllama_vulkan_tower.das`,
-  `dasllama_vulkan_asr_dec.das`, `benchmarks/asr/asr_bench.das` and
-  `utils/dasllama-convert/main.das`.
-
-Vision oracle provenance (the convention `REVIEW.md`'s fixture rule points at): real image
-fixtures and mmproj files live in the models dir with `.sha` pins, fetched never generated
-(their `performance/fetch_models.das` entries are the checkable pins); the mtmd reference dumps
-live beside them in `gemma4-vision-oracle/`, `gemma3-vision-oracle/` and
-`qwen3vl-vision-oracle/`, whose `mint.sh` (gemma4uv, qwen3v Omni), `mint_4b.sh` (qwen3v
-deepstack), `mint_25o.sh` (qwen25v), `mint_e2b.sh` / `mint_e4b.sh`
-(gemma4v) and `mint_gemma3.sh` (gemma3v) record the
-exact `llama-mtmd-debug` / `llama-mtmd-cli` invocation that minted each
-dump, so regeneration is a command, not archaeology. An encode oracle dump is minted on the
-CPU, `-fa off`, from the f32-widened mmproj twin - the only true-f32 reference arm (the
-reference's Metal "f32" GEMM stages half operands, its flash-attention path casts K/V to f16,
-and the shipped bf16 mmproj rounds activations to bf16; its own four arms spread
-<= 6.5e-3 on the gemma4v tokens).
+  `dasllama_vulkan_asr_dec.das`, `dasllama_cuda_tower_g4a.das`, `dasllama_tower_chains_g4a.das`,
+  `benchmarks/asr/asr_bench.das` and `utils/dasllama-convert/main.das`.
 
 ### Text-to-speech front end
 
@@ -205,19 +126,6 @@ and the shipped bf16 mmproj rounds activations to bf16; its own four arms spread
 a shared block home, a facade, one file per model family) and adds the text front end no ASR
 family needs; every stage is data-driven from the model store, and nothing under `models/`
 carries TTS data.
-
-### Towers serve padded GEMM widths {#tower-padded-widths}
-
-A tower's served GEMM widths round UP to 64 - the Metal mm tile - while the tensor-shape verify
-keeps the file's own widths. The gated FFN pair pads with zero weight ROWS and the down GEMM with
-zero tail COLUMNS; a patch conv pads its K through the im2col row stride, whose tail lanes are the
-resize's zeros. Every pad lane contributes a zero product, so a padded GEMM's output is
-bit-identical to the unpadded one on both the CPU and the Metal route, and one served layout feeds
-both. `q25v_patch_pad` / `gemma3v_patch_pad` and the `ff_pad` fields are the served widths;
-`im2col_rgb_patches` takes the padded stride as `row_stride`.
-
-The qwen25v tower stages every GEMM f32-in-blob at those widths whatever the file's element type -
-blocks and merger alike - because the Metal tower reads f32 planes or the baked halfword twin.
 
 ### Family GPU hooks install from the driver and always decline {#tower-gpu-hook}
 
@@ -250,10 +158,9 @@ front hooks, `-1` for the hooks that return a row count (gemma4a's whole chunk, 
 so a decline is a fallback, never an outage, and the CPU form stays the reference. A family calls
 its hook on either lane: the vision towers' chains read both lanes on both drivers
 (`ARCHITECTURE_GPU_TOWER.md#tower-encode-chains`, `ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains`);
-of the audio towers the Metal driver serves the whisper-class tower on both lanes and declines the
-q8 encoder of the rest, the Vulkan driver the exact one, each as a counted non-policy `quant_mode`
-decline, which under the driver's required mode panics - a caller that pins a lane pins one its
-driver serves. While the stage-diff witness is
+every GPU driver - Metal's included - serves both lanes of every audio family, and a Metal image whose
+f16 lane finds no half tensor GEMM declines `device`, which under the driver's required mode panics - a
+caller that pins a lane pins one its driver serves. While the stage-diff witness is
 armed (`set_audio_encode_ref_dir`), the whisper-class tower skips its conv and block hooks and runs
 the CPU forms: the witness diffs the CPU stages' rows against reference dumps, and a stage the
 device served leaves nothing to diff.
@@ -276,23 +183,50 @@ the encode (`enc_gen`), so the transducer seat finds that encode's rows on the d
 
 ### The tower weight lane is a policy, not a default {#tower-weight-lane}
 
-A tower serves its GEMMs on one of two lanes: q8 planes (the CPU serving format) or the file's
-exact f32 planes. Un-pinned, the lane follows the fastest GEMM path on the box: a GPU tower registered
-with the f32 lane served (`register_<family>_gpu`'s `f32_lane` - the Metal vision chains, whose f32
-tiles are the faster lane) and answering `*_gpu_serves` true flips the default to exact
-(`*_gpu_exact_serves`); the Vulkan and CUDA vision chains register the q8 lane as the faster one, so a Vulkan or CUDA
-box takes q8 and serves a pinned exact tower on its f32 tile; every other box takes q8. Whisper carries no lane policy and serves q8 everywhere:
-the Metal tower reads its q8 planes. Each family exposes the same trio over one `GemmLane` pin
-(`lane_serves_q8`, `dasllama_common.das`): `set_*_q8` pins a lane, `reset_*_q8` returns to the
-policy, `*_serves_q8` reports the lane the next load would take. The
-lane picks the image tag, so the two lanes are separate images that coexist. A family whose carrier can hold its GEMMs
-quantized (GigaAM) has a third lane the file decides: un-pinned, such a carrier serves the GEMMs as its own planes
-(`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`) whatever the GPU policy says, and a pin dequantizes it into the pinned lane.
+A tower serves its GEMMs on one of two lanes: q8 planes (the CPU serving format) or the exact lane. The audio towers
+take one lane set on every GPU home - Vulkan, CUDA and Metal - for the ASR families and the chat towers
+(`load_audio_tower`) alike: q8 is the un-pinned default, a Q8_0 requant of the file's GEMMs at default levers
+(`ARCHITECTURE_ENGINE_FORMATS.md#the-load-and-image-rail`); the exact lane is asked - by a pin or by `DASLLAMA_AUDIO_LANE=16` -
+never defaulted, and its form on a GPU home is the
+f16 lane - the file's GEMMs as halfwords, the image's only GEMM plane, f32 accumulation, its own image tag (`*-f16`,
+`whisper-f16-q8`; `tower_lane_tag`, `tower_dev_halfword`). On Metal the f16 lane rides the half tensor GEMM: where the
+Metal toolchain did not compile it (it carries no tensor ops), or `DASLLAMA_METAL_TOWER_F16=0`, the exact pick maps the CPU
+image and the load says so in one line naming the family and the missing condition (`tw_half_pick`, the homes' shared
+`tower_flavor_refused`); the q8 lane serves on that device.
+The f32 planes are the exact lane on the CPU; a box with no GPU tower takes q8 for the ASR families, and the chat towers
+keep their f32 load there. Un-pinned, no audio family but GigaAM asks a serving home which lane it prefers - the chat
+towers ask only whether one exists. GigaAM and the vision towers ask: a GPU tower registered with its exact lane served
+(`register_<family>_gpu`'s `f32_lane` - the Metal vision chains, whose f32 tiles are the faster lane) and answering its
+serves hook true flips the default to exact (`*_gpu_exact_serves`). A driver whose exact lane needs a device capability
+its q8 lane does not registers that answer too (`register_gigaam_gpu_exact`, the Metal driver's half tensor GEMM), so
+GigaAM's default on a Mac whose toolchain did not compile it is the q8 lane on the device. A vision tower's exact form is its f32 tile on every home. An exact pin (`set_*_q8(false)`, the facade's `set_asr_fp32`; on whisper `set_asr_tower_fp32`, whose `set_asr_fp32`
+pair keeps its f32 decoder on the CPU) lands on the home's form. Whisper carries no lane policy: q8 unless the facade's fp32
+rails or `DASLLAMA_AUDIO_LANE` ask, on every home. Each family exposes one trio over one `GemmLane` pin, read through the audio lane seam
+(`audio_lane_serves_q8`, `dasllama_tower.das`): `set_*_q8` pins a lane, `reset_*_q8` returns to the knob, else the policy,
+`*_serves_q8` reports the next load's lane - the chat towers'
+is `set_audio_tower_q8` / `reset_audio_tower_q8` / `audio_tower_serves_q8` (`dasllama_audio`). The lane picks the
+image tag, so the lanes are separate images that coexist. A GGUF source of the GGUF tower families (the chat towers,
+qwen3a, gemma4a) is read tensor by tensor through `gguf_read_tensor_f32` and re-encoded into the lane's form - Q8_0 on the
+q8 lane, halfwords on a GPU home's exact lane, f32 on the CPU's - so a tensor stored in any type the reader decodes serves
+on the home the flavor pick names, the CPU image converting it the same way. Where an audio tensor is stored quantized but
+not as Q8_0 the load says so in one line (`tower_dev_flavor_announced`): the disk type, the `KqFmt` member `kq_fmt_of` maps
+it to - or that no member serves it, where `kq_fmt_of` answers only its Q8_0 fallback - and the lane form it re-encodes into. A carrier holding its GEMMs quantized (GigaAM) has a third lane
+the file decides: un-pinned it serves them as its own planes (`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`) whatever the GPU
+policy says, and a pin dequantizes it into the pinned lane.
 
-Pins exist for the arms that must not follow the box: the parity legs, the CPU board rows, and the
-facade's fp32 rail.
+Pins exist for the arms that must not follow the box: the parity legs, the CPU board rows, and the facade's fp32 rail.
 
-Every family load logs its GEMM lane and the reason at LOG_INFO - the pin, the serving GPU tower's
-lane, the accelerate tier, or the CPU default - because the lane changes what the load mints and serves. Where the
+`DASLLAMA_AUDIO_LANE` is the environment's lane ask, read in that one seam for every audio family on every home and by no
+vision tower, TTS family or LLM load. Precedence, highest first: a pin (`set_<family>_q8`, `set_asr_tower_q8`,
+`set_audio_tower_q8`, the facade's fp32 rails), the knob (`8` the q8 lane, `16` the exact one), the family's policy.
+Unset, or at any other value (a warning names it), every family keeps its policy. Whisper has no trio: the facade asks the
+seam for its encoder (`whisper_tower_serves_q8`), an fp32 rail standing as its pin. The knob asks a lane and nothing more:
+the lane's serving conditions are a pin's - an exact ask on a Metal box whose toolchain compiled no half tensor GEMM maps the CPU image - and a quantized GigaAM carrier keeps its own planes, which a pin alone dequantizes. It says
+itself once a process where it moves a family off its policy.
+
+Every family load logs its GEMM lane and the reason at LOG_INFO - the pin, `DASLLAMA_AUDIO_LANE` where it asked the lane
+the load took, the serving GPU tower's lane, the accelerate tier, or the q8 default - because the lane changes what the load mints and serves. Where the
 caller hands the lane in (parakeet, canary), the line names the caller's pick beside the reason
-the policy gives, so a caller that overrides the policy shows as a pick its reason does not match.
+the policy gives, so a caller that overrides the policy shows as a pick its reason does not match. A load that takes a lane
+the set knob did not ask - a named image, a lane the caller hands in, a quantized GigaAM carrier's own planes - says the knob
+does not reach it (`audio_lane_unheard`).

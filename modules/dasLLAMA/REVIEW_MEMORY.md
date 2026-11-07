@@ -42,36 +42,49 @@ dispatching caller sizes and passes in instead.** A pooled lane runs in another 
 resize acts on that context's out-of-date copy of the global.
 
 **An array a `dasllama/` function resizes through the builtin `resize` or any helper that reaches
-it, whose element count grows with a count the model file sets and is not declared `@exact_size`
-(`@scratch @exact_size` when the buffer is `@scratch`), is a defect.** PERF032 - the lint that flags
-a `resize` with no reserve before it - checks only `@exact_size` arrays.
+it, whose element count grows with a count the model file sets, and whose declaration - the
+variable, parameter or struct field that the call in that function names as the array - is not
+`@exact_size` (`@scratch @exact_size` when it is `@scratch`), is a defect.** PERF032 - the lint
+that flags a `resize` with no reserve before it - checks a resize only when that declaration
+carries `@exact_size`.
 
 **Every `resize` of a buffer in `dasllama/` whose element count grows with a count the model
-file sets follows a `reserve(n)` or `ensure_capacity(n)` whose `n` is the resized count, or goes
-through a `dasllama/dasllama_math.das` helper whose own body does that before it resizes
-(`reserve_resize`, `grow_resize`), or is the builtin `scratch_resize` on a `@scratch` buffer;
-weakening PERF032 is a defect.**
+file sets follows a `reserve(n)` or `ensure_capacity(n)` whose `n` is at least the resized count,
+or goes through a `dasllama/dasllama_math.das` helper whose own body does that before it resizes
+(`reserve_resize`, `grow_resize`), or is the builtin `scratch_resize` on a `@scratch` buffer.**
 The lint never compares the two counts, and a resize past the heap's limit on unreserved growth
 (`max_unreserved_size`) panics on the first model big enough.
 
+**Weakening PERF032 is a defect.**
+
 **A load, mint or convert arm that holds a whole model, a whole plane family or a whole image in
-RAM where the streaming rail (`load_gguf_streaming` + `save_model_image_streaming`, the vulkan mint
-off the gguf included) serves the same artifact is a defect, and so is a refusal that routes a
-flavor or a carrier around that rail to an eager arm.** A flavor or a carrier the rail does not
-cover gets the rail extended; `utils/dasllama-convert` takes the live load's rail, never one of
-its own. A plane whose byte count scales with the model and that the load reads whole off the
-gguf without a `FillJob` is the same defect.
+RAM, for an artifact the streaming rail (`load_gguf_streaming` + `save_model_image_streaming`, the
+vulkan mint off the gguf included) serves, is a defect, and so is a refusal that routes a flavor or
+a carrier the rail serves around it to an eager arm.**
+
+**A plane of an artifact the streaming rail serves, whose byte count scales with the model, that
+the load reads whole off the gguf without a `FillJob`, is a defect.**
+
+**A diff that adds a whole-RAM arm for a flavor or a carrier the streaming rail does not cover adds
+a `followup_general.md` row to extend the rail to it, in the same change.**
+
+**A `utils/dasllama-convert/` file loads and mints through the live load's streaming rail
+(`load_gguf_streaming` + `save_model_image_streaming`), never through a rail of its own.**
 
 **A diff that adds a lasting allocation the path never made before, or adds a term to one's size,
 that grows with a scaling count states that size in bytes in a `PERF_LEDGER.md` row: at the largest
 shape the code path accepts, or, where the path accepts any value of the count, as a formula in the
 count with its value at two shapes that differ in it.**
 
-**A diff that changes the size formula of a lasting allocation that exists before and after it
+**A diff that changes the size formula of a lasting allocation that exists before and after it,
 without adding a term - a count that starts or stops scaling it, a bound that becomes piecewise -
-records in a `PERF_LEDGER.md` row the peak footprint and wall-clock, each measured before and
-after the diff at a shape both the old and the new code accept where the two formulas differ, the
-row naming that shape; where the formulas differ only at shapes the old code refuses, the row
-records the new code's peak footprint and wall-clock at the smallest such shape and names the old
-code's refusal in place of the before figure.** The pair records what the change costs; it sets no
-pass/fail threshold.
+so that the two formulas differ at a shape both the old and the new code accept, records in a
+`PERF_LEDGER.md` row the peak footprint and wall-clock, each measured before and after the diff at
+one such shape, the row naming it.** The pair records what the change costs; it sets no pass/fail
+threshold.
+
+**A diff that changes the size formula of a lasting allocation that exists before and after it,
+without adding a term - a count that starts or stops scaling it, a bound that becomes piecewise -
+so that the two formulas differ only at shapes the old code refuses, records in a `PERF_LEDGER.md`
+row the new code's peak footprint and wall-clock at the smallest such shape, and names the old
+code's refusal in place of the before figure.**

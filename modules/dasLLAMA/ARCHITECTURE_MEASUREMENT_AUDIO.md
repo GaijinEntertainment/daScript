@@ -27,6 +27,15 @@ process with the jfk-only process subtracted (the first clip carries the pipelin
 --mmproj <mmproj bf16> --audio <clip> -p "Transcribe the audio." --temp 0 --jinja -ngl 99 -t 16` (E2B with `-n 256`), its encode the sum of the clip's
 `encoding done in N ms` lines; NeMo's `generate()` through `benchmarks/asr/canary_qwen_bench.py --device cuda`.
 
+The CUDA home's whisper readings pair with whisper.cpp's own CUDA build on the same box: the checkout at 6fc7c33,
+configured `cmake -S . -B build-cuda -G "Visual Studio 17 2022" -T cuda=13.4 -DGGML_CUDA=ON
+-DCMAKE_CUDA_ARCHITECTURES=120` (CUDA 13.4, MSVC 19.44; ggml widens 120 to `sm_120a`, its flash attention on by
+default) and built with `cmake --build build-cuda --config Release --target whisper-cli`. The run is `whisper-cli -m
+ggml-<model>.bin -f <clip> -l <en|ru> -t 16 -bs 1 -bo 1 -nt` over `ggml-large-v3-turbo.bin`, `ggml-tiny.bin` and their
+`-q8_0` files, one process a rep, no environment knob set; the reading is its `encode time` line - on a one-window clip
+the whole window, the process's first call included, on a longer clip the line divided by the windows it encodes (under
+`-nt` a whole 30 s each).
+
 Four reference tools carry a GPU arm the board pairs against a das Metal row, each with its own
 spelling: the whisper reference exe takes `-ngl`, the media-chat reference exe `-ngl 99`, the
 NeMo bench script `--device mps`, and `crispasr` runs its Metal build (`crispasr_bin(true)`,

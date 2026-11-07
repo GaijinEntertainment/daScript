@@ -4,30 +4,6 @@
 docs: `../ARCHITECTURE.md`, `../ARCHITECTURE_IMAGE_LEDGER.md`. Planned work:
 `../followup_general.md`, `../followup_vulkan.md`, `../followup_metal.md`.
 
-A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the asserts
-of every helper it calls; a test file is a `.das` dastest runs - one holding a `[test]` function, or
-one whose `cant_`, `failed_` or `invalid_` prefix makes its compile the assertion. A gate function
-is a named function a cell of a `test_*_kernels.das` file calls to compare one kernel against its
-CPU oracle. A file's `CLAUDE.md` entry is
-every `CLAUDE.md` clause stating a fact about the file (named with or without its `.das` suffix),
-one of its cells, or one of its gate functions, wherever in `CLAUDE.md` the clause sits; a brace
-list naming several files at once (`test_metal_{prefill,decode}_kernels`) or a suite roster states
-none. A compare's two sides are the two computations whose mismatch reds the assert; a reference
-that only decides where the compare stops is neither side. A bound assert is a compare of two
-computed sides, or a measured quality figure against a tolerance; a floor on a capacity, a
-configuration or a roster size is not one, nor is an index guard or a route counter. A stocked
-artifact is a file a test reads from under `models_dir()` that neither this repo's build nor its
-tests produce - model files, mmprojs, front-end packs, image fixtures, oracle dumps. An area is a
-name in `run.das`'s `AREAS` list, standing for the files `run.das`'s `area_tests` returns for it.
-A box fact is a condition one box or run mode meets and another does not: the device or its
-memory, whether the build carries a module (`typeinfo module_exists` or `typeinfo
-builtin_module_exists`), the value of an environment variable or runner flag the run reads, the
-value a tune companion returns (a function whose body is the winner the `[tune]` framework
-picked for this box), a host toolchain, or a stocked artifact's presence. These definitions bind
-the `REVIEW_*.md` companions beside this file too. A kernel-unit cell, a kernel class and a CPU
-oracle are as `REVIEW_KERNEL_CELLS.md` (beside this file) defines them; an encoder is as
-`REVIEW_MEDIA_CELLS.md` (beside this file) defines it.
-
 **A kernel-unit cell applies `REVIEW_KERNEL_CELLS.md` (beside this file) too, wherever the diff
 puts it.**
 
@@ -35,21 +11,46 @@ puts it.**
 file it pins whole, or changes which `run.das` suites list one, applies that checklist too.**
 
 **A diff that adds a cell or an assert whose expected value restates, or reads, something
-maintained outside the cell, or that a checked-in table names as its evidence, applies
-`REVIEW_PINNED_GATES.md` (beside this file) too.**
+maintained outside the cell - a bar, the tolerance a compare accepts when the cell computes both
+its sides, is never such a value, whatever model file it was measured on - or that a checked-in
+table names as its evidence, applies `REVIEW_PINNED_GATES.md` (beside this file) too.**
 
 **A cell that calls - in its own code or through a helper - a `../dasllama/` call that sets a
 module or process global a later load, route choice or kernel dispatch reads (that property is
 the trigger, whatever the name; `set_*`, `enable_*`, `disable_*`, `pin_*`, `reset_*`,
 `restore_*`, `reinstall_*`, `register_*`, `unregister_*`, `select_*_override` and `unset_*` are
-the common spellings), or that passes a loader parameter choosing
-a family's serving lane (the q8 or float weight form the family runs), or whose claim depends on
-which route or serving lane runs it - a compare of a CPU run against a GPU run among them - applies
-`REVIEW_LANE_PINS.md` (beside this file) too.**
+the common spellings), or that passes a loader parameter choosing a family's serving lane (the
+weight form the family runs: q8 planes, a quantized carrier's own planes, or the f16 or f32 planes
+of the exact lane), or whose claim depends on which route or serving lane runs it - a compare of a
+CPU run against a GPU run among them - applies `REVIEW_LANE_PINS.md` (beside this file) too.**
 
 **A cell that feeds, preprocesses, or asserts on media bytes an encoder consumes - pixels or
 audio samples - compares an encoder's output rows against a second source, or compares ASR
 transcripts, applies `REVIEW_MEDIA_CELLS.md` (beside this file) too.**
+
+A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the asserts
+of every helper it calls; a test file is a `.das` dastest runs - one holding a `[test]` function, or
+one whose `cant_`, `failed_` or `invalid_` prefix makes its compile the assertion. A gate function
+is a named function a cell of a `test_*_kernels.das` file calls to compare one kernel against its
+CPU oracle. A file's `CLAUDE.md` entry is every `CLAUDE.md` clause stating a fact about the file
+(named with or without its `.das` suffix), one of its cells, or one of its gate functions, wherever
+in `CLAUDE.md` the clause sits; a brace list naming several files at once
+(`test_metal_{prefill,decode}_kernels`) or a suite roster states none. A compare's two sides are
+the two computations whose mismatch reds the assert; a reference that only decides where the
+compare stops is neither side. A bound assert is a compare of two computed sides, or a measured
+quality figure against a tolerance; a floor on a capacity, a configuration or a roster size is not
+one, nor is an index guard or a route counter. A stocked artifact is a file a test reads from under
+`models_dir()` that neither this repo's build nor its tests produce - model files, mmprojs,
+front-end packs, image fixtures, oracle dumps. An area is a name in `run.das`'s `AREAS` list,
+standing for the files `run.das`'s `area_tests` returns for it. A box fact is a condition one box
+or run mode meets and another does not: the device or its memory, whether the build carries a
+module (`typeinfo module_exists` or `typeinfo builtin_module_exists`), the value of an environment
+variable or runner flag the run reads, the value a tune companion returns (a function whose body is
+the winner the `[tune]` framework picked for this box), a host toolchain, or a stocked artifact's
+presence. These definitions bind the `REVIEW_*.md` companions beside this file wherever a companion
+does not define the term itself; a diff that changes one changes each companion's word-for-word
+copy of it too. A kernel-unit cell, a kernel class and a CPU oracle are as `REVIEW_KERNEL_CELLS.md` (beside
+this file) defines them; an encoder is as `REVIEW_MEDIA_CELLS.md` defines it.
 
 **Every PR runs `run.das -- --suite model-free`, and `run.das -- --changed` on a box with the
 models stocked (every file its `PLAN` line counts), plus every test here the change reaches -
@@ -59,9 +60,8 @@ or corpus it reads, or a name it asserts on; a comment-only edit reaches none.
 
 **A PR whose change reaches a cell that skips on, or picks its tolerance or its code path by, a
 hardware or build capability the box may lack - a device, a module the build may omit, a kernel the
-instruction sets of the box's CPU do not carry - runs that cell on a box that has it, and names
-that box in the PR body.** A reached cell run without the capability did not run what the
-capability selects.
+instruction sets of the box's CPU do not carry - runs that cell on a box that has it, and names that
+box in the PR body.** A reached cell run without the capability did not run what the capability selects.
 
 **A PR that adds a cell loading a model above the large tier (`LARGE_TIER_BYTES`,
 `_model_tier.das`), or whose change reaches such a cell, runs that cell under
@@ -70,10 +70,15 @@ capability selects.
 the cell where that suite takes `--arm` - and names the box in the PR body.** A run without
 `DASLLAMA_PARITY_FULL=1` skips every such cell and passes.
 
-**The `--changed` run a PR cites carries no `--exclude` and no `--only`; the one `--only` run a
-PR cites is the CUDA pass - `--changed --only <tokens>` under `DASLLAMA_GPU=1 DASLLAMA_CUDA=1`,
-its tokens matching every file of `run.das`'s `CUDA_WITNESSES` - beside the whole run.** A
-trimmed run never ran the coverage it dropped; an excluding run is the iteration form between PRs.
+**The `--changed` run a PR cites carries no `--exclude` and no `--only`.** A trimmed run never
+ran the coverage it dropped; an excluding run is the iteration form between PRs.
+
+**Every `--only` run a PR cites runs under `DASLLAMA_GPU=1 DASLLAMA_CUDA=1` beside the whole
+`--changed` run, never in its place, and a PR citing any `--only` run cites among them one
+`--changed --only <tokens>` run whose tokens match every file of `run.das`'s `CUDA_WITNESSES`.**
+
+**A PR whose change reaches a test file holding a cell that runs on CUDA under `DASLLAMA_CUDA=1`
+cites a run under `DASLLAMA_GPU=1 DASLLAMA_CUDA=1` whose `ONLY` lines name that file.**
 
 **A PR cites every shard of a sharded run (`--shard i/n`) with its `REPORT` line and its box, and,
 where the `--changed` run's `PLAN` line says the engine core changed, a `--suite stocked` run with
@@ -119,6 +124,10 @@ shapes, lengths, formats or lanes it sweeps, the predicate an assert reads, the 
 controls - corrects in the same change the `CLAUDE.md` entry of every test file running the cell,
 counts and skip clauses included.**
 
+**A diff that adds a function to a `_*.das` fixture module in this folder, removes or renames one,
+changes what one does, or removes its last caller makes every `CLAUDE.md` clause stating a fact
+about the function true of it as the diff leaves it, in the same change.**
+
 **A diff that adds, removes or changes a cell that a `CLAUDE.md` clause describes as one of a
 class - the cells of one helper, or the arms of one name pattern - keeps that clause's counts and
 skip clauses true for every cell in the class.**
@@ -146,13 +155,13 @@ returns without asserting registers `t |> skip` there; `feint` is a print, not a
 the asserts that need it - never a failure.**
 
 **A cell's skip condition, and any condition that picks a cell's assert or bar by something
-other than an input the cell sets itself (a format, a shape, a loop value), queries a box fact
-directly - a device query, a `typeinfo` module check, an environment read, a tune companion's
-return, a toolchain probe, a stocked artifact's presence - and never tests a registry a
-`register_*` call fills, or the presence or content of a file that the build, a mint or a test
-run writes (a minted `.dlim`, a generated binary, a dump a test wrote).** Once the producer is
-renamed, moved or removed, a condition on its product skips the cell on every box, and the suite
-still passes.
+other than an input the cell sets itself (a format, a shape, a loop value) or a constant table a
+file of this folder declares, queries a box fact directly - a device query, a `typeinfo` module
+check, an environment read, a tune companion's return, a toolchain probe, a stocked artifact's
+presence - and never tests a registry a `register_*` call fills, or the presence or content of a
+file that the build, a mint or a test run writes (a minted `.dlim`, a generated binary, a dump a
+test wrote).** Once the producer is renamed, moved or removed, a condition on its product skips
+the cell on every box, and the suite still passes.
 
 **A cell that loads or gates on a stocked model file - a `.gguf` carrier, its shards, or an
 mmproj - gates through `model_available` (`_model_tier.das`), one call per file; a test that
@@ -254,8 +263,8 @@ route.** A bound nothing has exceeded where it is applied is not known to discri
 
 **A diff that adds, in a cell that is not a kernel-unit cell, an assert on a counter showing a
 route ran ships in the same change a control under which the route does not run and the counter
-stays at its value from before the route - its own, or an existing one for the same counter in a
-cell the same file runs.** A counter that rises on both legs shows nothing about the route.
+stays at its value from before the route - its own, or one in a cell the same file runs that reads
+the assert's engine counter on every build.** A counter that moves on both legs shows nothing.
 
 **A control for a bound assert in a cell that is not a kernel-unit cell changes an input the
 computation reads - a zeroed weight region, a poisoned input element, a mechanism disabled - and
@@ -286,6 +295,6 @@ untyped, and drop a return type that would name one.** A signature cannot sit in
 
 **A function in a file of this folder that requires a module behind an optional `require ?<mod>`,
 and that has no untyped parameter, names anything that module declares only inside a
-`static_if (typeinfo builtin_module_exists(<mod>))` body.** In a build without the module a
+`static_if` branch that compiles only where `<mod>` exists.** In a build without the module a
 fully typed function is inferred anyway; one with an untyped parameter is inferred only at a call
 site, which its caller has already guarded.

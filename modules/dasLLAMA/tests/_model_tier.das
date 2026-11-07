@@ -458,3 +458,35 @@ def transcript_words(text : string) : array<string> {
     each_word(text, words)
     return <- words
 }
+
+//! The words two word lists share in order - their longest common subsequence - over the longer list's count, so a dropped
+//! word and an inserted one each cost one word: the word-agreement floor's measure
+def word_agreement(got, want : array<string>) : float {
+    let ng = length(got)
+    let nw = length(want)
+    var inscope row, prev : array<int>
+    row |> resize(nw + 1)
+    prev |> resize(nw + 1)
+    for (g in got) {
+        for (j in range(nw)) {
+            row[j + 1] = g == want[j] ? prev[j] + 1 : max(prev[j + 1], row[j])
+        }
+        swap(row, prev)
+    }
+    return float(prev[nw]) / float(max(max(nw, ng), 1))
+}
+
+let JFK_LINE = "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."   //! jfk.wav's words
+let JFK_WORD_AGREE = 0.9   //! the jfk floor: two of its 22 words lost
+
+//! a jfk transcript at `JFK_WORD_AGREE` of `JFK_LINE`'s words, the line's words reversed under the floor (the control)
+def jfk_words_floor(t : T?; tag, text : string) {
+    var inscope want <- transcript_words(JFK_LINE)
+    var inscope got <- transcript_words(text)
+    var inscope reversed <- [for (i in range(length(want))); want[length(want) - 1 - i]]
+    let agree = word_agreement(got, want)
+    let control = word_agreement(got, reversed)
+    to_log(LOG_INFO, "{tag}: words {agree} (control {control}) of jfk's: '{text}'\n")
+    t |> success(agree >= JFK_WORD_AGREE, "{tag}: the transcript holds {agree} of jfk's words in order, at least {JFK_WORD_AGREE}")
+    t |> success(control < JFK_WORD_AGREE, "{tag}: against jfk's words reversed it holds {control}, under the floor (the control)")
+}

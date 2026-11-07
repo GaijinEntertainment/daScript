@@ -32,6 +32,10 @@ def private count_shared_install() {
 
 [test]
 def test_gpu_home(t : T?) {
+    if (!has_value(gpu_homes(), env_home())) {
+        t |> skip("this build does not carry the {env_home()} home the environment spells (it has {gpu_homes()})")
+        return
+    }
     t |> run("the home is the environment's spelling, among the homes this build carries") @(tc : T?) {
         let home = gpu_home()
         tc |> success(home == "vulkan" || home == "cuda", "the home is a discrete home's name ({home})")

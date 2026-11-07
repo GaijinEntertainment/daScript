@@ -175,7 +175,7 @@ def private reference_clip(t : T?; m : GigaamModel; clip, kind : string) {
     t |> success(load_json_file("{dir}/tokens.json", tk), "{tag}: tokens.json read")
     t |> equal(int64(tk.n_enc_frames), tt, "{tag}: the encoder frame count")
     with_gpu_knobs() {
-        set_serving_gpu_tower(false)   //! the CPU chain stage by stage: the device head's own oracle cell is test_gigaam_ctc_head_oracle
+        set_serving_gpu_tower(false, TowerFamily.gigaam)   // the CPU chain stage by stage: the device head's own oracle cell is test_gigaam_ctc_head_oracle
         gigaam_decode(m, st, tt)
     }
     let ids <- [for (x in st.toks); x.id]
@@ -249,23 +249,8 @@ def private ru_words(text : string) : array<string> {
     return <- w
 }
 
-//! The words the transcript and the reference share in order: their longest common subsequence over the longer one's word count, so a dropped word and an inserted one each cost one word.
-def private word_agreement(got, want : string) : float {
-    let g <- ru_words(got)
-    let w <- ru_words(want)
-    let ng = length(g)
-    let nw = length(w)
-    var row, prev : array<int>
-    row |> resize(nw + 1)
-    prev |> resize(nw + 1)
-    for (i in range(ng)) {
-        for (j in range(nw)) {
-            row[j + 1] = g[i] == w[j] ? prev[j] + 1 : max(prev[j + 1], row[j])
-        }
-        swap(row, prev)
-    }
-    return float(prev[nw]) / float(max(max(nw, ng), 1))
-}
+//! `_model_tier`'s word agreement over the two texts' Russian words (`ru_words`)
+def private word_agreement(got, want : string) : float => word_agreement(ru_words(got), ru_words(want))
 
 //! a quantized lane's transcript of `clip` at the bar against the words of `want` (named `want_label`), the clip with its second
 //! half silenced the control under it - both transcripts logged
@@ -376,7 +361,7 @@ def private exact_reference(t : T?; clip : string; var want : string&) : bool {
 
 //! The kq lane over the published Q4_K carrier - the hosted file whose attention and FF GEMMs are Q4_K and conv pointwise GEMMs
 //! Q8_0: the carrier's own planes serve, named by their one K-quant member; the GPU block seats serve it (the parity cells
-//! `test_gigaam_vulkan_twin` and `test_gigaam_metal_twin`); its Q8_0 seats are the carrier's blocks. Every lane's transcript
+//! `test_gigaam_discrete_twin` and `test_gigaam_metal_twin`); its Q8_0 seats are the carrier's blocks. Every lane's transcript
 //! holds the q8 bar against the f16 carrier's exact lane.
 [test]
 def test_gigaam_kq_lane(tst : T?) {
@@ -396,24 +381,24 @@ def test_gigaam_kq_lane(tst : T?) {
                         lane_clip(t, m, clip, "e2e_rnnt", "kq", want, "f16 lane")
                     }
                 }
-                if (!serving_tower_device_up()) {
+                if (!serving_tower_device_up(TowerFamily.gigaam)) {
                     t |> skip("no GPU device stands up for the serving tower on this build or box - the device leg")
                     return
                 }
                 with_gpu_knobs() {
-                    set_serving_gpu_tower(true)
+                    set_serving_gpu_tower(true, TowerFamily.gigaam)
                     let dev = gigaam_dev_flavor(GigaamModel(kq_lane = true))
-                    t |> equal(dev, serving_tower_dev(), "the serving tower's flavor serves the kq lane where its device stands up")
+                    t |> equal(dev, serving_tower_dev(TowerFamily.gigaam), "the serving tower's flavor serves the kq lane where its device stands up")
                     return if (dev == TowerDev.none)
                     var inscope md <- mint(path, false, false, dev)
                     t |> success(md.kq_lane && md.dev_backend == dev && gigaam_device_gpu(md), "the {dev}-flavored image of the kq lane: the device-lane report names the device")
-                    let declines = gpu_tower_declines_of("kq_lane")
+                    let declines = gpu_tower_declines_of("kq_lane", TowerFamily.gigaam)
                     var want = ""
                     if (exact_reference(t, "ru_short", want)) {
-                        let e0 = gpu_tower_encodes()
+                        let e0 = gpu_tower_encodes(TowerFamily.gigaam)
                         lane_clip(t, md, "ru_short", "e2e_rnnt", "kq {dev}", want, "f16 lane")
-                        t |> success(gpu_tower_encodes() > e0, "the device served the kq lane's encodes ({gpu_tower_encodes() - e0})")
-                        t |> equal(gpu_tower_declines_of("kq_lane"), declines, "no kq_lane decline: every member of the carrier has a tile on the device")
+                        t |> success(gpu_tower_encodes(TowerFamily.gigaam) > e0, "the device served the kq lane's encodes ({gpu_tower_encodes(TowerFamily.gigaam) - e0})")
+                        t |> equal(gpu_tower_declines_of("kq_lane", TowerFamily.gigaam), declines, "no kq_lane decline: every member of the carrier has a tile on the device")
                     }
                 }
             }
@@ -587,8 +572,8 @@ def test_gigaam_kq_load_flavor(tst : T?) {
         tst |> run("e2e_rnnt q4_k: the load serves the carrier's own planes - on the device where its chain serves the lane, else on the CPU image") @(t : T?) {
             reset_gigaam_q8()
             with_gpu_knobs() {
-                set_serving_gpu_tower(true)
-                let kq_dev = serving_tower_device_up() ? serving_tower_dev() : TowerDev.none   // the box fact: the device the chain rides stands up
+                set_serving_gpu_tower(true, TowerFamily.gigaam)
+                let kq_dev = serving_tower_device_up(TowerFamily.gigaam) ? serving_tower_dev(TowerFamily.gigaam) : TowerDev.none   // the box fact: the device the chain rides stands up
                 let dlim = path_join(test_temp_dir(), "ga_load_flavor.dlim")
                 with_image_destination(dlim) {   // the cold mint lands in scratch, not beside the carrier
                     var inscope m <- load_gigaam_model(path)
@@ -1176,7 +1161,7 @@ def private device_decode_clip(t : T?; m, mc : GigaamModel; clip, tag : string) 
         return
     }
     with_gpu_knobs() {
-        set_serving_gpu_tower(true)
+        set_serving_gpu_tower(true, TowerFamily.gigaam)
         let samples <- load_audio_16k_mono(path)
         var st = GigaamState()
         var stc = GigaamState()
@@ -1325,7 +1310,7 @@ def private ctc_oracle_leg(m : GigaamModel; enc, lp : Npy; device : bool) : CtcO
     var st = GigaamState()
     st.x := enc.data
     with_gpu_knobs() {
-        set_serving_gpu_tower(device)
+        set_serving_gpu_tower(device, TowerFamily.gigaam)
         let c0 = ctc_seat_heads()
         gigaam_decode(m, st, enc.rows)
         r.served = ctc_seat_heads() - c0

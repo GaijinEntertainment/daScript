@@ -116,6 +116,10 @@ def reserve_resize(@exact_size var a : array<numT>; n : int64) {
 Not a runtime flag: the annotation changes nothing about how the array grows - it makes the
 reserve-first spelling a checked contract at every site that touches the buffer.
 
+On a hot path a `@scratch @exact_size` buffer sizes through a helper whose own parameter is `@scratch` too (an
+`ensure_capacity` then `resize` body, which also satisfies PERF032): a helper with an unmarked parameter is descended
+into, so the example's `reserve_resize` called on such a buffer reports PERF026 at its `reserve`.
+
 ### Escape hatches, in order of preference
 
 1. `[cold_path]` on the callee - the honest fix when the leg genuinely runs once (lazy init, PSO

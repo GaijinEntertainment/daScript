@@ -163,7 +163,7 @@ def test_gemma3v_tier1_gpu(t : T?) {
             var twq <- mint_tower(mm, true, 0l, -1l, TowerDev.metal)   // in memory: a load under the pin would bake the q8 image beside the serving one
             var stq = Gemma3vState()
             tt |> success(twq.q8, "the q8 lane minted under the pin")
-            q8_lane_served(tt, "q8 tower", twq.n_layer) $() : bool {
+            q8_lane_served(tt, "q8 tower", TowerFamily.vision, twq.n_layer) $() : bool {
                 return tt |> gate_encode(twq, stq, "cb", "g3.encode.cb896.log", TIER1_REL_Q8)
             }
             delete stq
@@ -268,18 +268,18 @@ def test_gemma3v_tier1_q8(t : T?) {
             static_if (typeinfo builtin_module_exists(das_metal)) {
                 to_log(LOG_INFO, "gemma3v q8: das_metal on this build owns the tower hooks - the Vulkan rung has no seat\n")
             } else {
-                if (serving_tower_device_up(true)) {
-                    set_serving_gpu_tower(true, true)
+                if (serving_tower_device_up(TowerFamily.vision)) {
+                    set_serving_gpu_tower(true, TowerFamily.vision)
                     for (fx in [(kind = "cb", log = "g3.encode.cb896.log"), (kind = "green", log = "g3.encode.green896.log")]) {
-                        let v0 = gpu_tower_counters(true)
+                        let v0 = gpu_tower_counters(TowerFamily.vision)
                         let ran = gate_encode(tt, tw, st, fx.kind, fx.log, TIER1_REL_Q8)
                         if (ran) {
-                            device_leg_served(tt, fx.kind, v0, gpu_tower_counters(true), tw.n_layer, -1l)
+                            device_leg_served(tt, fx.kind, v0, gpu_tower_counters(TowerFamily.vision), tw.n_layer, -1l)
                         }
                     }
                     g3v_poison_leg(tt, mm, "cb", "g3.encode.cb896.log", TIER1_REL_Q8)
                 } else {
-                    tt |> skip("no device stands up for the serving discrete home's tower ({serving_tower_dev(true)}) - the q8 lane's device rung")
+                    tt |> skip("no device stands up for the serving discrete home's tower ({serving_tower_dev(TowerFamily.vision)}) - the q8 lane's device rung")
                 }
             }
         }
@@ -301,7 +301,7 @@ def private mint_tower(mm : string; q8 : bool; nl : int64 = 0l; zero_block : int
 def private g3v_poison_leg(tt : T?; mm : string; kind : string; logname : string; bar_rms : float) {
     var o = OracleEncode()
     return if (!oracle_dump(tt, "gemma3-vision-oracle", logname, "gemma3-vision-oracle/mint_gemma3.sh", o))
-    var twp <- mint_tower(mm, true, 0l, POISON_BLOCK, serving_tower_dev(true))
+    var twp <- mint_tower(mm, true, 0l, POISON_BLOCK, serving_tower_dev(TowerFamily.vision))
     var stp = Gemma3vState()
     let px = int(twp.image_px)
     dump_poison_leg(tt, "gemma3v", kind, px, px, o, bar_rms, POISON_BLOCK, int(twp.proj_dim), TIER1_ABS, twp, stp) $(t; var s; planes; var out) => gemma3v_encode(t, s, planes, t.image_px, t.image_px, out)
@@ -315,12 +315,12 @@ def private twin_encode(tt : T?; tw : Gemma3vTower; var st : Gemma3vState; tw_ex
     let px = int(tw.image_px)
     let planes <- make_planes(kind, px, px)
     twin_canvas(tt, "gemma3v", kind, px, px, tw.patch, "", tw, st, tw_exact, st_exact, zero_block,
-        $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb, serving_tower_dev(true)) }) $(t; var s; var out) => gemma3v_encode(t, s, planes, tw.image_px, tw.image_px, out)
+        $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb, serving_tower_dev(TowerFamily.vision)) }) $(t; var s; var out) => gemma3v_encode(t, s, planes, tw.image_px, tw.image_px, out)
 }
 
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
-def test_gemma3v_vulkan_twin(t : T?) {
-    t |> run("the serving discrete home's chain ({serving_tower_dev(true)}) vs the CPU q8 chain, and the exact lane served") @(tt : T?) {
+def test_gemma3v_discrete_twin(t : T?) {
+    t |> run("the serving discrete home's chain ({serving_tower_dev(TowerFamily.vision)}) vs the CPU q8 chain, and the exact lane served") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let mm = path_join(models_dir(), "mmproj-gemma-3-4b-it-F16.gguf")
             if (!model_available(tt, mm) || !discrete_twin_seat(tt)) {
@@ -356,7 +356,7 @@ def test_gemma3v_vulkan_twin(t : T?) {
             delete twxp
             delete st_exact
             delete tw_exact
-            serving_tower_shutdown(true)
+            gpu_tower_shutdown(TowerFamily.vision)
         } else {
             tt |> skip("dasVulkan not present")
         }

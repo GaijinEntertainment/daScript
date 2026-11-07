@@ -4,16 +4,23 @@
 doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
 `../followup_metal.md`.
 
-A cell is as `REVIEW.md` (beside this file) defines it. An encoder is any stage of a vision
-tower, an audio tower or a speech synthesizer - never the language model that reads their rows.
-
-An ASR serving lane is a weight format the family serves, one chain (CPU or device) over one
-format, or one kernel form of one format. A transcript an external engine produced (an oracle
-dump's) stands for the lane that serves the same weights at the same precision; to any other lane
-it is a reference text. A crowned kernel form is the one the tuner measured fastest and
-armed as the serving one; its tensor twin is the same kernel written on Metal's tensor primitives, and the twins' rounding
-legitimately flips tokens. The twin bar holds the device chain's distance from the CPU exact
-chain within a stated multiple of the CPU q8 chain's distance from it.
+- A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the
+  asserts of every helper it calls.
+- An encoder is the silero VAD, or any stage of a vision tower, an audio tower or a speech
+  synthesizer on any chain - the log-mel front, the blocks and the projector among them; a head that
+  decodes encoder rows - a CTC head, a transducer, a whisper or language-model decoder - is not one.
+- An ASR serving lane is a weight format the family serves, one chain (CPU or device) over one
+  format, or one kernel form of one format.
+- A transcript an external engine produced (an oracle dump's) stands for the lane that serves the
+  same weights at the same precision; to any other lane it is a reference text.
+- A crowned kernel form is the one the tuner measured fastest and armed as the serving one; its
+  tensor twin is the same kernel written on Metal's tensor primitives.
+- The twin bar holds the device chain's distance from the CPU exact chain within a stated multiple
+  of the CPU q8 chain's distance from it.
+- A rows-held transcript compare is equal transcript text or equal `transcript_words` lists beside
+  the encoder output rows held within a tolerance of the other side's, or equal transcript text
+  beside the encoder output rows held by the twin bar; its words form also runs a device-route
+  control whose words must differ where the flipped token carries punctuation or casing alone.
 
 **A cell that runs with no model loaded and encodes, preprocesses, or asserts on media bytes
 an encoder consumes - pixels or audio samples, not a `.dlim` model image - builds its fixture
@@ -41,11 +48,9 @@ it compares to its bar, whether the cell passes or fails, is a defect.**
 
 **An ASR cell comparing transcripts across two serving lanes asserts one of: equal emitted
 token-id sequences; equal `transcript_words` lists (`_model_tier.das`) when the pair is a crowned
-kernel form and its tensor twin; a forced-feed logits compare within a tolerance bar; equal
-transcript text, or equal `transcript_words` lists with a device-route control whose words must
-differ where the flipped token carries punctuation or casing alone, with the encoder output rows
-held within a tolerance of the other side's; or equal transcript text with the encoder output rows
-held by the twin bar - never a text compare alone.**
+kernel form and its tensor twin; a forced-feed logits compare within a tolerance bar; or a
+rows-held transcript compare - never a text compare alone.** A tensor twin's rounding legitimately
+flips tokens.
 
 **An ASR cell comparing a transcript against a reference text - a human's, or an external
 engine's that does not stand for the cell's lane - asserts a word-agreement floor (the share of

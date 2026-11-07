@@ -5,8 +5,8 @@
 **Some module folders carry their own `REVIEW.md`; a diff applies the `REVIEW.md` of every folder
 between this one and each file it changes.** A `.das` or `.cpp` under this folder but outside
 `modules/<M>/` answers to `modules/<M>/REVIEW.md` as well when it generates the C++ binding of a
-module `modules/<M>/` registers, or when every module it requires, `daslib/` aside, is registered
-under `modules/<M>/`. A `[test]` file under `modules/<M>/` also answers to
+module registered under `modules/<M>/`. So does one that requires at least one module outside
+`daslib/`, each registered under `modules/<M>/`. A `[test]` file under `modules/<M>/` also answers to
 `modules/<M>/tests/REVIEW.md` where that checklist exists.
 
 **A diff that changes a `.das` file declaring a function carrying an annotation whose name ends
@@ -14,8 +14,8 @@ in `_kernel` or `_shader` and that a module under this folder registers - or a `
 a file requires, directly or through other requires - applies `REVIEW_SHADER_EMITTERS.md` too.**
 
 **A diff that changes a `.das` under this folder that the full `test_aot` binary compiles - a
-file in a `*_AOT_FILES` list of its module's `CMakeLists.txt` or an `AOT_*_MODULE_FILES` list of
-`tests/aot/CMakeLists.txt` (repo root), or a file such a file requires, directly or through other
+file `tests/aot/CMakeLists.txt` (repo root) feeds to the `test_aot` target, directly or through
+a module's `*_AOT_FILES` list, or a file such a file requires, directly or through other
 requires - and not marked `options no_aot`, states in the PR body that the full `test_aot` lane
 (`utils/internal/preflight/main.das` (repo root) run with `--full`, or a manual dispatch of
 `.github/workflows/nightly.yml` (repo root) on the branch) ran green on the diff's head commit.**
@@ -31,9 +31,7 @@ module's next load fails on the missing sibling.
 that dependency in the module's binder - the `bind_*.das` that generates the module's binding -
 `require_modules` when the binding uses the other module's types, `require_load_modules` when
 only the shared library links against the other's - never by hand in the generated file.** The
-binder emits `initDependencies` from those two lists, and `require_modules` puts the other
-module's types into this module's type library, so both modules binding the same C++ types
-resolve to one copy.
+binder regenerates that file, and it emits `initDependencies` from those two lists.
 
 **A diff that hand-binds a function in a module's own C++ - a function the `bind_*.das` that
 generates the module's binding would otherwise generate - makes that binder's `skip_function`

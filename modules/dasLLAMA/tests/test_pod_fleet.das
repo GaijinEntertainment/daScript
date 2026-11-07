@@ -61,6 +61,13 @@ def test_fleet_commands(t : T?) {
     t |> success(find(run, "> /workspace/logs/fleet/20261027-000000/shard_2.log") >= 0, "the runner's log beside them")
     t |> success(find(run, "echo RUN-EXIT=$?") >= 0, "RUN-EXIT closes the log")
     t |> success(find(run, "setsid nohup") >= 0 && find(run, "; setsid") >= 0, "detached, so the ssh call returns at once")
+    let times = times_command("20261027-000000")
+    t |> success(find(times, "/workspace/logs/fleet/20261027-000000/pod_*/dasllama_run_*.log") >= 0, "the times read every child log of the run")
+    t |> success(find(times, "F ") >= 0 && find(times, "T ") >= 0, "a file line and a cell line each carry their mark")
+    let report = times_report("F 12.5 modules/dasLLAMA/tests/test_a.das\nF 7.5 modules/dasLLAMA/tests/test_a.das\nF 5 modules/dasLLAMA/tests/test_b.das\nT 9 cell_x\nT 11 cell_x\nT 2 cell_y\nnoise\n", 1)
+    t |> success(find(report, "test time 25 s over 2 file(s)") >= 0, "a file's seconds sum over the children that ran it: {report}")
+    t |> success(find(report, "  20 s  80%  test_a.das") >= 0, "the top file carries its share")
+    t |> success(find(report, "  11 s  cell_x") >= 0 && find(report, "cell_y") < 0, "a cell keeps its longest reading, the top list cuts at `top`")
     let status = status_command("20261027-000000")
     t |> success(find(status, "/workspace/logs/fleet/20261027-000000/shard_*.log") >= 0 && find(status, "REPORT") >= 0 && find(status, "RUN-EXIT") >= 0, "the status reads every shard's REPORT and RUN-EXIT")
     //! a partial `down` keeps a sparse index set: the shards still number 1..n over the live pods, and `up` numbers past the largest

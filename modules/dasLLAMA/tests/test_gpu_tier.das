@@ -9,10 +9,9 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 // doubles receive exactly what the forwarders were handed, and the want/arm state round-trips.
 // The op-hook family (ffn/attn/dn/cls) is exercised end-to-end by test_vulkan_tier, which
 // installs the real hooks. The contract reads the seats as no home's entry ever filled them: the
-// first test resets them to that state (a program that carries an entry - a --together batch
-// with an engine file - starts with the Vulkan home's seats installed), and the last test
-// reinstalls the home's seats over the doubles, so a file after this one in the same process
-// reads them as a fresh program would; the arm double is reset to false at the end.
+// first test resets them to that state and the last test reinstalls the home's seats over the
+// doubles, the arm double reset to false at the end. Under the runner's DASLLAMA_GPU=1 a batch-mate's
+// entry arms the tier at [init], which no reset undoes, so run.das hands this file a child of its own.
 
 require dastest/testing_boost public
 require daslib/fio

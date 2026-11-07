@@ -14,6 +14,7 @@ require dasllama/dasllama_math   // matmul_q8q8_batch + the backend repack — t
 require dasllama/dasllama_common   // apply_box_profile_runtime for the tower-image identity
 require dasllama/dasllama_image   // the dlim rail: mapped planes, no allocation or work at load
 require dasllama/dasllama_tower_image
+require dasllama/dasllama_tower_flavor   // [tower_flavor]: the family's GPU flavor seat
 require dasllama/dasllama_plane public   // PlaneF/PlaneI8 — re-exported so requirers can delete a tower
 require dasllama/dasllama_tower   // the shared encoder-tower pieces: layernorm, biases, gelu, attention, pool
 require dasllama/dasllama_vision   // encode_image_: letterbox + normalize ahead of the tower
@@ -292,7 +293,7 @@ def private g3v_verify_tensors(m : GGUFMeta; t : Gemma3vTower; names : array<str
 
 //! The patch conv's SERVED K width: patch_dim (588) padded to the Metal mm tile's %64 - the
 //! plane's pad lanes are the resize's zeros, so the padded GEMM is exact on both routes.
-[arch(at="../ARCHITECTURE_MEDIA.md#tower-padded-widths")]
+[arch(at="../ARCHITECTURE_MEDIA_TOWER.md#tower-padded-widths")]
 def gemma3v_patch_pad(t : Gemma3vTower) : int64 => (t.patch_dim + 63l) / 64l * 64l
 
 // the plane layout: fp32 cursor `off` (blob), q8 cursor `qo` (qblob; scales at qo/32)
@@ -517,9 +518,9 @@ def load_gemma3v_tower(path : string) : Gemma3vTower {
     } else {
         g3v_announce_lane()
     }
-    let dev = path |> ends_with(".dlim") ? TowerDev.none : tower_dev_flavor(g_g3v_flavor, tag == GEMMA3V_TAG_Q8)
+    let dev = path |> ends_with(".dlim") ? TowerDev.none : tower_dev_flavor(g_gemma3v_flavor, tag == GEMMA3V_TAG_Q8)
     if (dev != TowerDev.none) {
-        return <- load_staged_image_dev(path, tag, "gemma3v-tower", "source mmproj gguf", type<Gemma3vTower>, dev, g_g3v_flavor.bake, GEMMA3V_DEV_CONSUMED) {
+        return <- load_staged_image_dev(path, tag, "gemma3v-tower", "source mmproj gguf", type<Gemma3vTower>, dev, g_gemma3v_flavor.bake, GEMMA3V_DEV_CONSUMED) {
             return <- stage_gemma3v_tower(path)
         }
     }
@@ -532,26 +533,15 @@ def load_gemma3v_tower(path : string) : Gemma3vTower {
 
 //! A GPU driver's gemma3v flavor (`#tower-dev-block`): the backend whose image it mints, whether its chain serves a lane, and
 //! the bake that converts a CPU-form tower into the driver's device block
-typedef Gemma3vServesLaneFn = function<(q8 : bool) : bool>
-typedef Gemma3vBakeFn = function<(t : Gemma3vTower; var b : TowerDevBuild) : bool>
+[tower_flavor(family = "gemma3v", model = "Gemma3vTower")]
+struct Gemma3vFlavor {}
 
-struct Gemma3vFlavor {
-    backend : TowerDev
-    serves : Gemma3vServesLaneFn
-    bake : Gemma3vBakeFn
-}
-
-var private g_g3v_flavor = Gemma3vFlavor()
 let private GEMMA3V_DEV_CONSUMED <- ["qblob", "qscales"]   //! the planes a gemma3v bake converts: a GPU flavor carries their device forms instead
-
-def register_gemma3v_flavor(backend : TowerDev; serves : Gemma3vServesLaneFn; bake : Gemma3vBakeFn) {
-    g_g3v_flavor = Gemma3vFlavor(backend = backend, serves = serves, bake = bake)
-}
 
 //! Mint a served tower from a staged read WITHOUT touching disk — the off-rail control for suites; `dev` names the GPU flavor
 //! (the staging read under `with_tower_dev_staging(dev)`), `none` the CPU image (`tower_mint_flavor`).
 def mint_gemma3v_tower(var st : Gemma3vStaging; var out : Gemma3vTower; dev : TowerDev = TowerDev.none) {
-    tower_mint_flavor(st, out, st.t.q8 ? GEMMA3V_TAG_Q8 : GEMMA3V_TAG, "gemma3v-tower", dev, g_g3v_flavor, GEMMA3V_DEV_CONSUMED)
+    tower_mint_flavor(st, out, st.t.q8 ? GEMMA3V_TAG_Q8 : GEMMA3V_TAG, "gemma3v-tower", dev, g_gemma3v_flavor, GEMMA3V_DEV_CONSUMED)
 }
 
 // the bind walk skips a missing section silently, so the flag=>plane invariant must be checked

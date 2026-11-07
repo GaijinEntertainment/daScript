@@ -10,18 +10,21 @@ options _dasllama_internal = true
 //   daslang modules/dasLLAMA/harness/pod_fleet.das -- run                      # the per-PR run, sharded over the fleet
 //   daslang modules/dasLLAMA/harness/pod_fleet.das -- run --args "--suite model-free" --env "DASLLAMA_GPU=1"
 //   daslang modules/dasLLAMA/harness/pod_fleet.das -- status
+//   daslang modules/dasLLAMA/harness/pod_fleet.das -- times                    # where the last run's test time went: the files and the cells
 //   daslang modules/dasLLAMA/harness/pod_fleet.das -- down
 
+require daslib/cmp
 require daslib/clargs
 require daslib/fio
 require daslib/strings_boost
 require strings
 require dasllama/dasllama_env
+require math   // min: the times report's top cut
 
 [CommandLineArgs]
 struct FleetArgs {
     @clarg_positional
-    @clarg_doc = "up | sync | run | status | down"
+    @clarg_doc = "up | sync | run | status | times | down"
     verb : string
     @clarg_doc = "up: pods to make"
     pods : int = 2
@@ -41,7 +44,7 @@ struct FleetArgs {
     env : string = "DASLLAMA_MODELS_DIR=/workspace/models DASLLAMA_GPU=1 DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_PARITY_FULL=1"
     @clarg_doc = "run: the run.das arguments; the tool appends each pod's --shard i/n"
     args : string = "--changed --base origin/master"
-    @clarg_doc = "status: the run to read (default: the fleet file's last run)"
+    @clarg_doc = "status, times: the run to read (default: the fleet file's last run)"
     run : string
     @clarg_doc = "the fleet file - the pods this tool made, and its last run"
     fleet : string = "~/.dasllama/fleet.json"
@@ -151,6 +154,69 @@ def run_command(cfg : FleetArgs; run : string; index, n : int) : string {
 def status_command(run : string) : string =>
     ("for f in {FLEET_LOGS}/{run}/shard_*.log; do echo \"== $f: $(grep -cE 'DONE' $f) done\";"
         + " grep -E '^\\[I\\] (SHARD|REPORT|NEXT)|RUN-EXIT' $f; grep -E 'DONE' $f | grep -vE ' 0 failed, 0 errors'; done; true")
+
+//! the remote command that reads every child log of `run` off the volume into one line a verdict: `F <seconds> <file>` for a
+//! test file's PASS / FAIL line and `T <seconds> <cell>` for a `[test]` function's, the colour codes stripped first
+def times_command(run : string) : string =>
+    ("cat {FLEET_LOGS}/{run}/pod_*/dasllama_run_*.log | sed -E 's/\\x1b\\[[0-9;]*m//g'"
+        + " | sed -nE \"s/^(PASS|FAIL) (modules\\/[^ ]+\\.das) \\(([0-9.]+)s\\).*/F \\3 \\2/p; s/^--- (PASS|FAIL) '([^']*)' \\(([0-9.]+)s\\).*/T \\3 \\2/p\"; true")
+
+//! the run's test time by file (every file's seconds summed over the children that ran it) and its longest cells (a cell's
+//! longest reading where a batch and its retry both ran it): the top `top` of each with the file's share of the whole
+def times_report(lines : string; top : int) : string {
+    var files, cells : table<string; float>
+    for (ln in split(lines, "\n")) {
+        let kind = slice(ln, 0, 1)
+        continue if (kind != "F" && kind != "T")
+        let cut = find(ln, " ", 2)
+        continue if (cut < 0)
+        let secs = to_float(slice(ln, 2, cut))
+        let name = strip(slice(ln, cut + 1))
+        if (kind == "F") {
+            files[base_name(name)] += secs
+        } elif (secs > (cells?[name] ?? 0.0)) {
+            cells[name] = secs
+        }
+    }
+    var total = 0.0
+    for (v in values(files)) {
+        total += v
+    }
+    var by_file <- [for (k, v in keys(files), values(files)); (name = k, secs = v)]
+    var by_cell <- [for (k, v in keys(cells), values(cells)); (name = k, secs = v)]
+    sort(by_file) <| cmp_by(-_.secs)
+    sort(by_cell) <| cmp_by(-_.secs)
+    return build_string() $(w) {
+        w |> write("test time {int(total)} s over {length(by_file)} file(s)\n")
+        w |> write("FILES\n")
+        for (i in range(min(top, length(by_file)))) {
+            w |> write("  {int(by_file[i].secs)} s  {total > 0.0 ? int(100.0 * by_file[i].secs / total) : 0}%  {by_file[i].name}\n")
+        }
+        w |> write("CELLS\n")
+        for (i in range(min(top, length(by_cell)))) {
+            w |> write("  {int(by_cell[i].secs)} s  {by_cell[i].name}\n")
+        }
+    }
+}
+
+def private verb_times(cfg : FleetArgs; fleet : Fleet) : int {
+    let run = empty(cfg.run) ? fleet.last_run : cfg.run
+    if (empty(run)) {
+        to_log(LOG_ERROR, "pod_fleet: no run to read - `run` first, or name one with --run\n")
+        return 2
+    }
+    if (empty(fleet.pods)) {
+        to_log(LOG_ERROR, "pod_fleet: no fleet pod to read the volume through - `up` first\n")
+        return 2
+    }
+    let read = run_capture(ssh_argv(cfg, fleet.pods[0], times_command(run)), 300.0)
+    if (read.rc != 0) {
+        to_log(LOG_ERROR, "TIMES {run} (exit {read.rc}):\n{read.out}\n")
+        return 1
+    }
+    to_log(LOG_INFO, "TIMES {run}:\n{times_report(read.out, 15)}")
+    return 0
+}
 
 def private file_text(path : string) : string {
     var text = ""
@@ -328,9 +394,11 @@ def main() : int {
         return verb_run(cfg, fleet)
     } elif (cfg.verb == "status") {
         return verb_status(cfg, fleet)
+    } elif (cfg.verb == "times") {
+        return verb_times(cfg, fleet)
     } elif (cfg.verb == "down") {
         return verb_down(cfg, fleet)
     }
-    to_log(LOG_ERROR, "pod_fleet: unknown verb '{cfg.verb}' (up | sync | run | status | down)\n")
+    to_log(LOG_ERROR, "pod_fleet: unknown verb '{cfg.verb}' (up | sync | run | status | times | down)\n")
     return 2
 }

@@ -29,16 +29,20 @@ def run_child(cmd : string; var output : string&) : int {
 def child_cmd(root : string; envs : array<tuple<name : string; value : string>>; args : string = ""; jit : bool = false) : string => child_cmd_at("modules/dasLLAMA/tests/{root}", envs, args, jit)
 
 //! `child_cmd` for a root at `path`, relative to the das root - dastest's own, to run a test file of this folder whole
-def child_cmd_at(path : string; envs : array<tuple<name : string; value : string>>; args : string = ""; jit : bool = false) : string {
+def child_cmd_at(path : string; envs : array<tuple<name : string; value : string>>; args : string = ""; jit : bool = false) : string
+    => child_cmd_root("{get_das_root()}/{path}", envs, args, jit ? "-jit" : "")
+
+//! `child_cmd` for a root at the full path `root`, `host` the host flags ahead of it (`-jit`, `-module-cache <path>`)
+def child_cmd_root(root : string; envs : array<tuple<name : string; value : string>>; args : string = ""; host : string = "") : string {
     let win = get_platform_name() == "windows"
     let prefix = build_string() $(w) {
         for (e in envs) {
             w |> write(win ? "set \"{e.name}={e.value}\"&& " : "{e.name}={e.value} ")
         }
     }
-    let flags = jit ? " -jit" : ""
+    let flags = empty(host) ? "" : " {host}"
     let tail = empty(args) ? "" : " -- {args}"
-    let line = "{prefix}\"{das_exe()}\"{flags} -dasroot \"{get_das_root()}\" \"{get_das_root()}/{path}\"{tail} 2>&1"
+    let line = "{prefix}\"{das_exe()}\"{flags} -dasroot \"{get_das_root()}\" \"{root}\"{tail} 2>&1"
     // cmd.exe strips the first and last quote of a command line that opens with one, which breaks every quoted path after
     // the exe's; an env prefix opens the line with `set`, and a line with none is wrapped in one more pair cmd strips instead
     return (win && empty(envs)) ? "\"{line}\"" : line

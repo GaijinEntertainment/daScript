@@ -22,6 +22,7 @@ require dasllama/dasllama_asr_types public
 require dasllama/dasllama_audio
 require dasllama/dasllama_tower
 require dasllama/dasllama_tower_image   // tower_dev_image: the GPU-flavored image of a CPU-form model
+require dasllama/dasllama_tower_flavor   // [tower_flavor]: the family's GPU flavor seat
 require dasllama/dasllama_load   // kq_tag: the one mapping a plane's disk type takes to the format it serves in
 require dasllama/dasllama_convert
 require dasllama/dasllama_repack   // repack_conv_out_tap_in: the f16 taps permuted tap-major
@@ -1080,28 +1081,17 @@ def private gg_mint(var st : GigaamStaging; var out : GigaamModel; img : string)
 }
 
 //! A GPU driver's GigaAM flavor (`#tower-dev-block`): the backend whose image it mints, whether its chain serves a carrier of
-//! these hparams and lane (`e`, the staging's meta), and the bake that converts a CPU-form model into the driver's device block
-typedef GigaamServesModelFn = function<(e : GigaamModel) : bool>
-typedef GigaamBakeFn = function<(m : GigaamModel; var b : TowerDevBuild) : bool>
+//! these hparams and lane (the staging's meta), and the bake that converts a CPU-form model into the driver's device block
+[tower_flavor(family = "gigaam", model = "GigaamModel", lane = "model")]
+struct GigaamFlavor {}
 
-struct GigaamFlavor {
-    backend : TowerDev
-    serves : GigaamServesModelFn
-    bake : GigaamBakeFn
-}
-
-var private g_ga_flavor = GigaamFlavor()
 let private GIGAAM_DEV_CONSUMED <- ["qblob", "qscales", "kq", "ks", "gemm_seats"]   //! the planes a GigaAM bake converts: a GPU flavor carries their device forms instead
-
-def register_gigaam_flavor(backend : TowerDev; serves : GigaamServesModelFn; bake : GigaamBakeFn) {
-    g_ga_flavor = GigaamFlavor(backend = backend, serves = serves, bake = bake)
-}
 
 //! The device flavor a load of a carrier with meta `e` takes: the registered driver's where its knob is on and its chain serves
 //! the carrier, else `none` - the CPU image
 def gigaam_dev_flavor(e : GigaamModel) : TowerDev {
     return TowerDev.none if (!gigaam_gpu_serves() || !rnnt_gpu_projects(RnntEnc()))
-    return tower_dev_flavor(g_ga_flavor, e)
+    return tower_dev_flavor(g_gigaam_flavor, e)
 }
 
 //! the lane flags a lane's tag names - the meta a flavor's `serves` reads before the staging exists
@@ -1134,7 +1124,7 @@ def private gg_mint_gpu(var st : GigaamStaging; var out : GigaamModel; img : str
     }
     let tag = tower_dev_tag(gigaam_image_tag(cpu.q8, cpu.kq_lane), dev)
     var gst = GigaamStaging(src = st.src)
-    return tower_dev_image(cpu, gst, out, img, tag, dev, g_ga_flavor.bake, GIGAAM_DEV_CONSUMED, GG_WHO)
+    return tower_dev_image(cpu, gst, out, img, tag, dev, g_gigaam_flavor.bake, GIGAAM_DEV_CONSUMED, GG_WHO)
 }
 
 //! Mint a served model from a staged read WITHOUT touching disk - the in-memory image rail, the suites' load.
@@ -1147,7 +1137,7 @@ def mint_gigaam_model(var st : GigaamStaging; var out : GigaamModel; q8 : bool =
         gg_mint(st, out, "")
         return
     }
-    tower_flavor_registered(g_ga_flavor, dev, GG_WHO)
+    tower_flavor_registered(g_gigaam_flavor, dev, GG_WHO)
     gg_mint_gpu(st, out, "", dev)
 }
 
@@ -1165,14 +1155,15 @@ def load_gigaam_model(path : string; q8 : bool = false; facade_fp32_pin : bool =
         return dev == TowerDev.none ? gg_mint(st, out, img) : gg_mint_gpu(st, out, img, dev)
     }, $ [unused_argument(t)] (t : GigaamModel) => true, $ [unused_argument(t, src)] (t : GigaamModel; src : string) {})
     if (m.kq_lane) {
+        let unheard = audio_lane_unheard("a quantized carrier's own planes (set_gigaam_q8 dequantizes them)")
         if (m.dev_backend != TowerDev.none) {   // the seats live in the device block: the image names no member on the host
-            to_log(LOG_INFO, "dasLLAMA {GIGAAM_ARCH}: GEMM lane kq - the block GEMMs as the carrier's own planes, on the {m.dev_backend} image's device block\n")
+            to_log(LOG_INFO, "dasLLAMA {GIGAAM_ARCH}: GEMM lane kq - the block GEMMs as the carrier's own planes, on the {m.dev_backend} image's device block{unheard}\n")
         } else {
             let layout = m.kq_repacked ? "repacked for {active_kernel_backend()}" : "in disk order (the portable batch GEMM)"
-            to_log(LOG_INFO, "dasLLAMA {GIGAAM_ARCH}: GEMM lane kq ({gigaam_kq_members(m)}) - the block GEMMs as the carrier's own planes, {layout}\n")
+            to_log(LOG_INFO, "dasLLAMA {GIGAAM_ARCH}: GEMM lane kq ({gigaam_kq_members(m)}) - the block GEMMs as the carrier's own planes, {layout}{unheard}\n")
         }
     } else {
-        announce_lane(GIGAAM_ARCH, m.q8, m.gemm_f16 ? "f16 GEMM planes" : "f32 planes", "set_gigaam_q8", pinned, gigaam_gpu_exact_serves())
+        announce_lane(GIGAAM_ARCH, m.q8, m.gemm_f16, "set_gigaam_q8", pinned, gigaam_gpu_exact_serves())
     }
     return <- m
 }
@@ -1324,7 +1315,17 @@ var private g_ga_gpu_encode_set = false
 //! its faster lane, so the policy prefers the exact planes over the q8 image
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
 def register_gigaam_gpu(serves : GigaamServesFn; exact_lane : bool = true) {
-    g_ga_seat = GpuLaneSeat(set = true, f32_lane = exact_lane, serves = serves)
+    g_ga_seat.set = true
+    g_ga_seat.f32_lane = exact_lane
+    g_ga_seat.serves = serves
+}
+
+//! the driver's answer on whether its exact lane serves on this device - a driver whose exact lane needs a capability its
+//! q8 lane does not registers it, and the lane policy then defaults to q8 where it answers false
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
+def register_gigaam_gpu_exact(fn : GigaamServesFn) {
+    g_ga_seat.exact = fn
+    g_ga_seat.exact_asks = true
 }
 
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
@@ -1355,7 +1356,7 @@ def reset_gigaam_q8() {
 }
 
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
-def gigaam_serves_q8() : bool => lane_serves_q8(g_ga_pin, !gigaam_gpu_exact_serves())
+def gigaam_serves_q8() : bool => audio_lane_serves_q8(g_ga_pin, !gigaam_gpu_exact_serves())
 
 //! The encode over ``st.mel``: the GPU encode hook first, else the CPU front, the rope tables, then the block hook or
 //! the CPU blocks. Leaves the encoder rows in ``st.x``; returns their count, 0 off an empty mel.

@@ -1444,6 +1444,21 @@ def cud_gu_n_enc(var s : void?; bufs : uint64 const[8]; var pc : GuNArgs; wgs : 
     }
 }
 
+//! the router GEMV over `pc.ncols` columns (0 or 1 = one row) in tiles of GEMV_COL_TILE: `bf16` the bf16 rows' stamp (`hw` its
+//! halfword walk), else the f32 rows'
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-col-tiles")]
+def cud_router_enc_cols(bf16 : bool; var s : void?; bufs : uint64 const[4]; var pc : GkRouterArgs; ne : int64; hw : bool = false) {
+    each_col_tile(pc, max(pc.ncols, 1u), GEMV_COL_TILE) $ {
+        if (bf16 && hw) {
+            enc_router_gemv_bf16_hw_cls(s, bufs, pc, ne)
+        } elif (bf16) {
+            enc_router_gemv_bf16_cls(s, bufs, pc, ne)
+        } else {
+            enc_router_gemv_cls(s, bufs, pc, ne)
+        }
+    }
+}
+
 //! the Q8_0 cm2 l tile (`Q8Cm2T` over the shared 128 x 256 workgroup fragments): the window's GEMM over the f16 activation panel
 [cuda_dispatch(name = "q8_batch_cm2l_cls", grid = "wgs", params = "wgs : int64")]
 class CuQ8Cm2L : Q8Cm2T {
@@ -4070,6 +4085,9 @@ class CuFaKhrH512F16 : FaH512T {
 class CuF16GemmCm2 : F16GemmCm2T {
     override KSPLIT = false
     override WOFF = false
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f32_128x128
 
     [cuda_kernel(local_size_x = 256, name = "f16_gemm_cm2_cls_cuda")]
     def run {
@@ -5087,7 +5105,7 @@ class CuTowerBiasGate16 : GkBiasGate {
 }
 
 //! qwen25v's window attention over the compact rows, a workgroup a window and head (`GkWinAttn`)
-[cuda_dispatch(name = "tower_win_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+[cuda_dispatch(name = "tower_win_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-routes")]
 class CuTowerWinAttn : GkWinAttn {
     override HS = 80u
 
@@ -5134,6 +5152,17 @@ class CuTowerClampCopy : GkClampRows {
     [cuda_kernel(local_size_x = 256, name = "tower_clamp_copy_cls_cuda")]
     def run {
         clamp_rows_body()
+    }
+}
+
+//! the Q8_0 feed of a clamped GEMM input, the shared rail feed's mul_mm arm (`RqPlainT`)
+[cuda_dispatch(name = "tower_clamp_rq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuTowerClampRq : RqPlainT {
+    override CLAMP = true
+
+    [cuda_kernel(local_size_x = 256, name = "tower_clamp_rq_cls_cuda")]
+    def run {
+        rq_body()
     }
 }
 
@@ -5237,6 +5266,8 @@ class CuTowerHunpad16 : GkRestride {
 //! the residual seam and the next layernorm, a workgroup a row (`GkPostAddLn`)
 [cuda_dispatch(name = "tower_post_add_ln_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class CuTowerPostAddLn : GkPostAddLn {
+    override RSQRT = true
+
     [cuda_kernel(local_size_x = 256, name = "tower_post_add_ln_cls_cuda")]
     def run {
         post_add_ln_body()
@@ -5246,6 +5277,7 @@ class CuTowerPostAddLn : GkPostAddLn {
 //! the seam with the normed rows as the cm2 tile's f16 feed (`GkPostAddLn`)
 [cuda_dispatch(name = "tower_post_add_ln16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class CuTowerPostAddLn16 : GkPostAddLn {
+    override RSQRT = true
     override OUT16 = true
     override OUT32 = false
 
@@ -5258,6 +5290,7 @@ class CuTowerPostAddLn16 : GkPostAddLn {
 //! the rms rows alone over the weight row at lnoff (`GkPostAddLn`)
 [cuda_dispatch(name = "tower_rms_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class CuTowerRms : GkPostAddLn {
+    override RSQRT = true
     override ADD = false
     override RMS = true
 
@@ -5270,6 +5303,7 @@ class CuTowerRms : GkPostAddLn {
 //! the gemma4v seam: the branch's post-norm, the add, the next rms (`GkPostAddLn`)
 [cuda_dispatch(name = "tower_post_add_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class CuTowerPostAdd : GkPostAddLn {
+    override RSQRT = true
     override RMS = true
     override POST_NORM = true
     override BIAS = false
@@ -5283,6 +5317,7 @@ class CuTowerPostAdd : GkPostAddLn {
 //! the qwen25v seam: the biased add, the next rms (`GkPostAddLn`)
 [cuda_dispatch(name = "tower_post_add_rms_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class CuTowerPostAddRms : GkPostAddLn {
+    override RSQRT = true
     override RMS = true
 
     [cuda_kernel(local_size_x = 256, name = "tower_post_add_rms_cls_cuda")]
@@ -5294,6 +5329,7 @@ class CuTowerPostAddRms : GkPostAddLn {
 //! layernorm rows alone (`GkPostAddLn`)
 [cuda_dispatch(name = "tower_ln_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class CuTowerLn : GkPostAddLn {
+    override RSQRT = true
     override ADD = false
 
     [cuda_kernel(local_size_x = 256, name = "tower_ln_cls_cuda")]
@@ -5305,6 +5341,7 @@ class CuTowerLn : GkPostAddLn {
 //! layernorm rows alone as the cm2 tile's f16 feed (`GkPostAddLn`)
 [cuda_dispatch(name = "tower_ln16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class CuTowerLn16 : GkPostAddLn {
+    override RSQRT = true
     override ADD = false
     override OUT16 = true
     override OUT32 = false
@@ -5382,12 +5419,32 @@ class CuFaCm2H128Bidir : FaH128T {
     }
 }
 
-//! the f16 x f16 GEMM over the halfword plane's rows at `pa.woff` (`F16GemmCm2T` with its weight offset): the qwen25v chain's block GEMMs
+//! the f16 x f16 GEMM over the halfword plane's rows at `pa.woff` (`F16GemmCm2T` with its weight offset, the m column): every
+//! tower's `rail_mm16` where `cud_f16_tc` picks m
 [cuda_dispatch(name = "f16_gemm_cm2_w_cls", grid = "wgs", params = "wgs : int64")]
 class CuF16GemmCm2W : F16GemmCm2T {
     override KSPLIT = false
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f32_128x128
 
     [cuda_kernel(local_size_x = 256, name = "f16_gemm_cm2_w_cls_cuda")]
+    def run {
+        f16_gemm_body()
+    }
+}
+
+//! the f16 GEMM's s column (`F16GemmCm2T` at 32 positions) with its weight offset, whole in k: every tower's `rail_mm16` where
+//! `cud_f16_tc` picks s
+[cuda_dispatch(name = "f16_gemm_cm2_ws_cls", grid = "wgs", params = "wgs : int64")]
+class CuF16GemmCm2WS : F16GemmCm2T {
+    override KSPLIT = false
+    override BN = 32u
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f32_128x32
+
+    [cuda_kernel(local_size_x = 256, name = "f16_gemm_cm2_ws_cls_cuda")]
     def run {
         f16_gemm_body()
     }

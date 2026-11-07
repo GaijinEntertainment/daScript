@@ -20,6 +20,7 @@ require dasllama_dispatch_scan
 //   ensure_<name>()                      — lazy per-class layouts + pipeline, masks registered
 //   set_<name>(bufs, sizes, gbits)      — a descriptor set over the CLASS layout + region bits
 //   enc_<name>(raw, h, set_, pc, ...)   — push constants + hazard dispatch
+//   enc_<name>(rl, roles, pc, ...)      — the same over a tower rail (VtRail): the set over the rail's planes at `roles`
 // The read/write axis is DERIVED from the kernel body (shared classifier, field mode); declared
 // @role is a cross-checked assertion, weight/alias stay declared. The hazard rail is untouched:
 // the class pipeline registers binding masks, sets carry per-binding region bits.
@@ -255,6 +256,27 @@ class VkDispatch : AstStructureAnnotation {
                 errors := "[vk_dispatch] {scan.base}: failed to add enc_{scan.base}"
                 return false
             }
+        }
+
+        // enc_<base>(rl, roles, pc, params...) — the rail overload: the set over the rail's planes at `roles`, the dispatch on its command buffer
+        {
+            var body : array<ExpressionPtr>
+            if (scan.args_t != null) {
+                var pp = new ExprCall(at = at, name := "vkd_push")
+                pp.arguments |> emplace_new <| new ExprField(at = at, value = mk_gvar(at, "rl"), name := "raw")
+                pp.arguments |> emplace_new <| mk_gvar(at, gname)
+                pp.arguments |> emplace_new <| mk_gvar(at, "pc")
+                body |> push(pp)
+            }
+            var dp = new ExprCall(at = at, name := "vkd_rail_dispatch")
+            dp.arguments |> emplace_new <| mk_gvar(at, "rl")
+            dp.arguments |> emplace_new <| mk_gvar(at, gname)
+            dp.arguments |> emplace_new <| new ExprConstString(at = at, value := scan.family)
+            dp.arguments |> emplace_new <| new ExprConstInt(at = at, value = scan.ord)
+            dp.arguments |> emplace_new <| mk_gvar(at, "roles")
+            dp.arguments |> emplace_new <| mk_grid_dim(at, scan.grid)
+            body |> push(dp)
+            return false if (!lens_rail_overload(at, args, scan, VK_WORDS, "VtRail", false, body, errors))
         }
         return true
     }

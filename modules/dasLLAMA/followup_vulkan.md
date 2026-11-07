@@ -1635,9 +1635,9 @@ module) is independent and can land any time - it is pure structure.
     late blocks' outlier channels is the f16 feed into the f16 GEMM class and the full layers' f16
     K/V shadows on the padded route. If a caption ever needs the deep bar tightened, the levers
     are f32 K/V shadows on the full layers (four of 32) and an f32-x GEMM form for the late blocks'
-    feed; the instrument is `test_qwen25v_vulkan_twin`'s whole-tower legs with the bar at what the
+    feed; the instrument is `test_qwen25v_discrete_twin`'s whole-tower legs with the bar at what the
     lever reads.
-95. **The Vulkan vision tower's speed levers.** gemma3v's q8 lane rides the pre-LN chain (`vt_ln_chain`),
+95. **The Vulkan vision tower's speed levers.** gemma3v's q8 lane rides the pre-LN chain (`tower_ln_chain`),
     which already has the cm2 f16 feed and the row passes that store it
     (`ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains`); gemma4v's and qwen3v's q8 lanes keep
     the Q8_0 requant feed and the q8 batch tile, and every family's exact lane rides the f32 tile
@@ -1724,12 +1724,13 @@ module) is independent and can land any time - it is pure structure.
     with a prompt of 512 + 300 tokens against 512 + 256.
 104. **The audio tower arc's branches no cell reaches.** The audio hooks' `shape`, `device` and
     `memory` rejection arms (`vulkan_audio_tower_blocks`, `vulkan_audio_conv_front`,
-    `vulkan_gemma4a_blocks`, `vulkan_gemma4a_chunk`, `vulkan_canary_blocks`,
+    `vt_g4a_blocks_run`, `vulkan_gemma4a_chunk`, `vulkan_canary_blocks`,
     `vulkan_canary_front`, `vulkan_q3a_front`, `vulkan_q3a_mel`, the ASR decoder's `wd_attach`)
     and the decoder's two live-window panics (a second state's window then the first's decode
     step; a decode step past a release) - a synthetic shell per decline, the way
     `test_gpu_serving_declines.das` decides the whole-model driver's, a must-panic child for the
-    panics; canary's length-mask fill (`vt_zero_elems`, one masked row a stage on jfk) held by the
+    panics; canary's length mask (`GkDwConv2dArgs.ih_valid` in `tower_fc_front`'s depthwise convs,
+    one masked row a stage on jfk) held by the
     canary twin's bar alone since its exact cell left with `TowerZeroRows`; the vision chains'
     pad fills at the 256-row cap (up to 192 dead rows a plane over the 64-row cap they left; a
     `vt_chain_one_shot` reading of the hpad role at 257 rows prices it); the drivers'
@@ -1750,7 +1751,7 @@ module) is independent and can land any time - it is pure structure.
     workgroup array where the norm class reads the row once, so the fold adds two plane passes and a
     workgroup array to a role that reads 1% of the gemma4a chain (176 us over 36 stamps at 275 rows
     on the pod's gemma4a jfk ledger, `debug-jit`) - a fold only a ledger showing no loss admits, and
-    the shape says loss. The qwen3v block chain against `vt_ln_chain`'s mul_mm arm: the fold puts the
+    the shape says loss. The qwen3v block chain against `tower_ln_chain`'s mul_mm arm: the fold puts the
     fused qkv GEMM, its bias row and the rope tables under branches in the whisper and gemma3v hot
     chain, and no differ gates it (the dispatch order changes) - the qwen3v twin alone does; left as
     the family's own chain. The three GPU timestamp ledgers (`vt_prof_report` per encode by role, the
@@ -1780,7 +1781,7 @@ module) is independent and can land any time - it is pure structure.
     host per token is the embedding rows' sum and upload, the logits readback (n_vocab floats) and
     one submit-and-wait. The levers: the embedding gather as a kernel off the token id; a recorded
     command buffer per batch width, resubmitted with the row count in its push constants; the
-    prompt batch on the tile past the row cap (today a first batch past `WD_ROW_CAP` declines
+    prompt batch on the tile past the row cap (today a first batch past `WDEC_ROW_CAP` declines
     `rows` and lands the window's memory for the CPU chain). The canary and Qwen3-ASR decoders
     are Model sessions on the box decode policy already (2.16) and need nothing here.
 100. **The FastConformer past the device's range.** The canary chain carries no row cap of its own
@@ -2019,13 +2020,6 @@ module) is independent and can land any time - it is pure structure.
     `PERF_LEDGER.md`. The fold is admissible only together with a re-reading of those rows, in a session
     that re-stamps them.
 
-144. **The gemma4a chain declines a widening audio embedder.** The Vulkan chain's projector tail sizes
-   one tail width for the out projection, the norm and the embedder (`tail_dim`), which holds where
-   the embedder is square (E2B). On E4B the embedder widens the encoder's 1536 to the decoder's 2560
-   (`gemma4a_mid_dim` against `proj_dim`), and the chain declines `shape`, so the CPU chain serves
-   E4B audio. Done = the tail's regions, tiles and buffers at the two widths (the Metal chain's
-   `g4a_tail_body` is the form), and `test_gemma4a_vulkan_twin` run on the E4B pair.
-
 145. **The audio kernel pairs that stay two.** The audio chains both homes run share their row kernels
    through `dasllama/dasllama_gpu_kernels_common.das` - the bias-and-activation rows, the clamp and f16
    feeds, the im2col of both ranks, the depthwise convs, the feature shuffles, the pools, the seam and
@@ -2162,7 +2156,7 @@ module) is independent and can land any time - it is pure structure.
 
 161. **The Vulkan encode chains add the k bias to every key row, which no attention score can see.** A bias `b` on
     every key adds `q . b` to each score of a query's row - one constant across the row, which the softmax removes -
-    so the k half of the biased head restride (`vt_enc_pad_b`'s k offset under `vt_ln_chain`'s `k_bias`, and the
+    so the k half of the biased head restride (`tower_attn_padded`'s k bias under `tower_ln_chain`'s `k_bias`, and the
     FastConformer chains' k bias) is dead work on every block. The work: pass `-1l` for the k offset on every chain,
     drop the k bias from the chain's offsets record, and keep the CPU form unchanged (the twin compares outputs, which
     do not move past rounding). Done = the encode twins on the pod within their bars with the k bias gone, and the
@@ -2204,4 +2198,21 @@ module) is independent and can land any time - it is pure structure.
     the code). The arms share one `run` because the SPIR-V emitter emits a method call as an
     `OpFunction` it never inlines; once the emitter inlines device-side calls, each arm becomes a
     method on its own template and the constant moves with it.
+
+166. **GigaAM's exact lane on the Vulkan home is untimed against its q8 image.** The Vulkan driver
+    registers the q8 image as GigaAM's faster lane, and `DASLLAMA_VK_GIGAAM_EXACT` defaults off, only
+    because the two lanes have not been timed on a Vulkan box. Done = both lanes' encodes timed on one
+    Vulkan card over the stocked GigaAM carriers, the default set to the faster lane, and the
+    `ENVIRONMENT.md` row and the `ARCHITECTURE_MEDIA_ASR.md` lane paragraph restated to the measured pick.
+
+167. **The Vulkan home's Q8_0 cm2 column model trails a three-column race on the tower shapes.** Over the
+    162 tower GEMM shapes the CUDA home's column race timed, the Vulkan side on the reference box (RTX 5060
+    Ti, 36 SMs) put the Vulkan model (`cm2_wave_col` at one block an SM, s and m by the early rules, l
+    against m past them) 10.1% behind the shape's fastest column on average, where a race of all three
+    columns on whole waves of one block an SM - the step weights s 5, m 10, l 16 and 20 on a partial last
+    column - sat 0.2% behind (`PERF_LEDGER.md`, the audio towers on the CUDA home, the cm2 column pick). The
+    CUDA LLM window's site keeps the Vulkan model at its own occupancy and is out of this row. Done = the
+    three-column form raced on the Vulkan home's tower sites and windows on the 5060 Ti and on the pod's
+    82-SM card, adopted where it wins on both, and `ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`
+    restated to the measured pick.
 

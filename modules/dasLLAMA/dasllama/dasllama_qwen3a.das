@@ -24,6 +24,7 @@ require dasllama/dasllama_common   // apply_box_profile_runtime for the qwen3a-i
 require dasllama/dasllama_blocks   // embed_text_rows/eval_embd_ — the ASR turn drives the qwen3 decoder
 require dasllama/dasllama_image
 require dasllama/dasllama_tower_image
+require dasllama/dasllama_tower_flavor   // [tower_flavor]: the family's GPU flavor seat
 
 // Qwen3-ASR audio encoder (mtmd projector type `qwen3a`): 128-mel input processed in
 // 100-frame chunks — 3 stride-2 conv2d blocks per chunk (100×128×1 -> 13×16×480), features
@@ -47,6 +48,8 @@ struct Qwen3aTower {
     cblob : PlaneF = PlaneF()
     qcblob : PlaneI8 = PlaneI8()       // dense trio Q8_0 planes (cblob keeps just the non-GEMM rest)
     qcscales : PlaneF = PlaneF()       // per-32-block scales, indexed at woff/32
+    cf16 : bool = false                //! a GPU home's f16 lane: the trio f16 halfwords dense in `wcblob` at the q8 lane's offsets
+    wcblob : PlaneU16 = PlaneU16()
     c1_w_off : int64                   // conv2d weights, file order [oc][ic][kh][kw] (= im2col col order)
     c1_b_off : int64
     c2_w_off : int64
@@ -73,9 +76,9 @@ def finalize(var t : Qwen3aTower) {
     }
 }
 
-// the tripwire: serialize_image_meta(Qwen3aTower) covers 17 fields (core reuses AudioTower's
+// the tripwire: serialize_image_meta(Qwen3aTower) covers 18 fields (core reuses AudioTower's
 // list); image_map + image_bytes are deliberate skips.
-let private QWEN3A_TOWER_META_FIELDS = 17 + 2
+let private QWEN3A_TOWER_META_FIELDS = 18 + 2
 
 // every meta-carried Qwen3aTower field, explicitly, both directions (see dasllama_image)
 def private serialize_image_meta(var arch : Archive; var t : Qwen3aTower) {
@@ -84,6 +87,7 @@ def private serialize_image_meta(var arch : Archive; var t : Qwen3aTower) {
     arch |> serialize_raw(t.proj_dim)
     arch |> serialize_raw(t.n_ch)
     arch |> serialize_raw(t.cq8)
+    arch |> serialize_raw(t.cf16)
     arch |> serialize_raw(t.c1_w_off)
     arch |> serialize_raw(t.c1_b_off)
     arch |> serialize_raw(t.c2_w_off)
@@ -109,6 +113,7 @@ struct Qwen3aStaging {
     cblob : array<float>
     qcblob : array<int8>
     qcscales : array<float>
+    @exact_size wcblob : array<uint16>
     core : AudioTowerPlanes = AudioTowerPlanes()
 }
 
@@ -125,30 +130,27 @@ def private image_post_load(var st : Qwen3aStaging) {}
 
 [init]
 def private register_qwen3a_image_tags {
-    register_image_family_tag("qwen3a-f32", true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
+    register_image_family_tag("qwen3a-f32", config_free = true)
     register_image_family_tag("qwen3a-q8")
+    register_image_family_tag("qwen3a-f16", config_free = true)
     register_tower_dev_tags("qwen3a-q8")
     register_tower_dev_tags("qwen3a-f32")
+    register_tower_dev_tags("qwen3a-f16")
 }
 
-//! A GPU driver's qwen3a flavor (`#tower-dev-block`): the backend whose image it mints, whether its chains serve the q8 lane, and
+//! a qwen3a tower's lane tag: q8, a GPU home's f16, else the exact f32 planes
+def private qwen3a_lane_tag(q8, f16 : bool) : string => tower_lane_tag("qwen3a", q8, f16)
+
+//! a staged tower's own lane tag
+def private qwen3a_tag(t : Qwen3aTower) : string => qwen3a_lane_tag(t.core.q8, t.core.gemm_f16)
+
+//! A GPU driver's qwen3a flavor (`#tower-dev-block`): the backend whose image it mints, whether its chains serve a load's lane, and
 //! the bake that converts a CPU-form tower into the driver's device block - the core's pieces and the front's and projector's
 //! in the core's one block
-typedef Qwen3aServesLaneFn = function<(q8 : bool) : bool>
-typedef Qwen3aBakeFn = function<(t : Qwen3aTower; var b : TowerDevBuild) : bool>
+[tower_flavor(family = "qwen3a", model = "Qwen3aTower")]
+struct Qwen3aFlavor {}
 
-struct Qwen3aFlavor {
-    backend : TowerDev
-    serves : Qwen3aServesLaneFn
-    bake : Qwen3aBakeFn
-}
-
-var private g_q3a_flavor = Qwen3aFlavor()
 let private QWEN3A_DEV_CONSUMED <- ["core.qblob", "core.qscales", "qcblob", "qcscales"]   //! the planes a qwen3a bake converts
-
-def register_qwen3a_flavor(backend : TowerDev; serves : Qwen3aServesLaneFn; bake : Qwen3aBakeFn) {
-    g_q3a_flavor = Qwen3aFlavor(backend = backend, serves = serves, bake = bake)
-}
 
 //! the GPU projector hook: the MLP projector over the normed rows in `s.xb` into `s.out` - a GPU-flavored tower's, whose planes
 //! the CPU never reads
@@ -165,10 +167,10 @@ def register_qwen3a_proj_gpu(fn : Qwen3aProjGpuFn) {
 var private g_q3a_pin = GemmLane.unset
 
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
-def private q3a_serve_q8() : bool => lane_serves_q8(g_q3a_pin, !audio_tower_gpu_serves())
+def private q3a_serve_q8() : bool => audio_lane_serves_q8(g_q3a_pin, true)
 
-//! Pin the qwen3a tower's weight format for subsequent loads: q8 (the CPU serving format) vs
-//! f32 planes (the Metal tower's lane; also the fp32 reference-route parity legs).
+//! Pin the qwen3a tower's weight format for subsequent loads: q8 (the default on every home) vs
+//! the exact lane (the halfword lane on a GPU home, the f32 planes on the CPU; also the fp32 reference-route parity legs).
 //! ``reset_qwen3a_q8`` returns to the policy default.
 def set_qwen3a_q8(on : bool) {
     g_q3a_pin = lane_pin(on)
@@ -181,31 +183,23 @@ def reset_qwen3a_q8() {
 //! Would the next load serve the tower q8 — the pin when set, the policy otherwise.
 def qwen3a_serves_q8() : bool => q3a_serve_q8()
 
-// the lane changes what a load mints and serves, so the load says which and why
-def private q3a_announce_lane() {
-    var why = "the CPU default (no Metal tower serving)"
-    if (g_q3a_pin != GemmLane.unset) {
-        why = "pinned via set_qwen3a_q8"
-    } elif (audio_tower_gpu_serves()) {
-        why = "the Metal tower serves f32 planes"
-    }
-    to_log(LOG_INFO, "dasLLAMA qwen3a: tower GEMM lane {q3a_serve_q8() ? "q8" : "f32 planes"} - {why}\n")
-}
-
 //! Load a Qwen3-ASR mmproj GGUF (projector type `qwen3a`, bf16/f16/f32 tensors). Like
 //! ``load_model``, caches a box/knob-specific PREPARED IMAGE for fast reload;
 //! ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
 def load_qwen3a_tower(path : string) : Qwen3aTower {
-    let tag = q3a_serve_q8() ? "qwen3a-q8" : "qwen3a-f32"
-    q3a_announce_lane()
-    let dev = path |> ends_with(".dlim") ? TowerDev.none : tower_dev_flavor(g_q3a_flavor, q3a_serve_q8())
+    let q8 = q3a_serve_q8()
+    let dev = path |> ends_with(".dlim") ? TowerDev.none : tower_dev_flavor_announced(g_qwen3a_flavor, q8, path, "qwen3a")
+    let f16 = tower_load_f16(path, q8, dev)
+    let tag = qwen3a_lane_tag(q8, f16)
+    announce_lane("qwen3a tower", q8, f16, "set_qwen3a_q8", g_q3a_pin != GemmLane.unset, false)
     if (dev != TowerDev.none) {
-        return <- load_staged_image_dev(path, tag, "qwen3a-tower", "source mmproj gguf", type<Qwen3aTower>, dev, g_q3a_flavor.bake, QWEN3A_DEV_CONSUMED) {
-            return <- stage_qwen3a_tower(path)
+        return <- load_staged_image_dev(path, tag, "qwen3a-tower", "source mmproj gguf", type<Qwen3aTower>, dev, g_qwen3a_flavor.bake,
+                                        QWEN3A_DEV_CONSUMED) {
+            return <- stage_qwen3a_tower(path, q8, f16)
         }
     }
     return <- load_staged_image(path, tag, "qwen3a-tower", "source mmproj gguf", type<Qwen3aTower>) {
-        return <- stage_qwen3a_tower(path)
+        return <- stage_qwen3a_tower(path, q8, f16)
     }
 }
 
@@ -213,12 +207,19 @@ def load_qwen3a_tower(path : string) : Qwen3aTower {
 //! (no `.dlim` written, no sibling-lane GC); the tag is the staging's own lane.
 //! `dev` names the GPU flavor (the staging read under `with_tower_dev_staging(dev)`), `none` the CPU image (`tower_mint_flavor`).
 def mint_qwen3a_tower(var st : Qwen3aStaging; var out : Qwen3aTower; dev : TowerDev = TowerDev.none) {
-    tower_mint_flavor(st, out, st.e.core.q8 ? "qwen3a-q8" : "qwen3a-f32", "qwen3a-tower", dev, g_q3a_flavor, QWEN3A_DEV_CONSUMED)
+    tower_mint_flavor(st, out, qwen3a_tag(st.e), "qwen3a-tower", dev, g_qwen3a_flavor, QWEN3A_DEV_CONSUMED)
+}
+
+//! The mmproj-gguf reader proper on the policy's lane under the running staging's flavor (`tower_staging_f16`).
+def stage_qwen3a_tower(path : string) : Qwen3aStaging {
+    let q8 = q3a_serve_q8()
+    return <- stage_qwen3a_tower(path, q8, tower_staging_f16(q8))
 }
 
 //! The mmproj-gguf reader proper: scalars land in the served tower, plane bytes in the staging
-//! arrays beside it. Nothing here is servable — the image build is what produces a live tower.
-def stage_qwen3a_tower(path : string) : Qwen3aStaging {
+//! arrays beside it - the GEMMs as Q8_0 under `q8`, as halfwords under `f16` (the load's lane). Nothing here is servable — the
+//! image build is what produces a live tower.
+def stage_qwen3a_tower(path : string; q8, f16 : bool) : Qwen3aStaging {
     var st = Qwen3aStaging()
     let f = fopen(path, "rb")
     if (f == null) {
@@ -276,13 +277,11 @@ def stage_qwen3a_tower(path : string) : Qwen3aStaging {
         }
         gguf_read_tensor_f32(m, bytes, "a.post_ln.weight", st.core.fblob, c.lnp_w_off, d)
         gguf_read_tensor_f32(m, bytes, "a.post_ln.bias", st.core.fblob, c.lnp_b_off, d)
-        let gt = gguf_tensor_type(m, "a.blk.0.attn_q.weight")
-        c.blk_bf16 = gt == GGML_TYPE_BF16
         st.e.core <- c
-        if (q3a_serve_q8()) {
+        if (q8) {
             tower_quantize(st.e.core, st.core)   // arm the shared core's q8 rail (encoder_blocks reads core.q8)
-        } elif ((gt == GGML_TYPE_BF16 || gt == GGML_TYPE_F16) && tower_gemm_types_uniform(m, st.e.core.n_layer, gt)) {
-            tower_bake_half_twin(st.core.fblob, st.core.wblob, st.e.core.blk_bf16)
+        } elif (f16) {
+            tower_halve(st.e.core, st.core)
         }
 
         // conv frontend + projector blob
@@ -329,25 +328,40 @@ def stage_qwen3a_tower(path : string) : Qwen3aStaging {
         gguf_read_tensor_f32(m, bytes, "mm.a.mlp.1.bias", st.cblob, st.e.mm1_b_off, d)
         gguf_read_tensor_f32(m, bytes, "mm.a.mlp.2.weight", st.cblob, st.e.mm2_w_off, st.e.proj_dim * d)
         gguf_read_tensor_f32(m, bytes, "mm.a.mlp.2.bias", st.cblob, st.e.mm2_b_off, st.e.proj_dim)
-        if (q3a_serve_q8()) {
-            q3a_cblob_quantize(st.e, st.cblob, st.qcblob, st.qcscales)
+        if (q8 || f16) {
+            q3a_cblob_compact(st.e, st.cblob, st.qcblob, st.qcscales, st.wcblob, f16)
         }
     }
     fclose(f)
     return <- st
 }
 
-// dense trio planes (cout/mm1/mm2) + compact cblob — the tower recipe; convs, positions, and
-// biases keep their fp32 truth, every stored offset is rewritten to its serving plane
-def private q3a_cblob_quantize(var t : Qwen3aTower; var cblob : array<float>; var qblob : array<int8>; var qscales : array<float>) {
+//! qwen3a's own q8 regions: the conv-out GEMM, and with `proj` the projector's two behind it
+def tower_q3a_regions(t : Qwen3aTower; proj : bool) : array<Q8Region> {
+    let d = t.core.d_model
+    var regions <- [Q8Region(woff = t.cout_w_off, n = 16l * t.n_ch, rows = d)]
+    if (proj) {
+        regions |> push(Q8Region(woff = t.mm1_w_off, n = d, rows = d))
+        regions |> push(Q8Region(woff = t.mm2_w_off, n = d, rows = t.proj_dim))
+    }
+    return <- regions
+}
+
+//! the dense trio planes (cout/mm1/mm2) and the compact cblob: fp32 convs, positions, biases; every offset rewritten to its plane (Q8_0, or halfwords in `wblob` under `f16`)
+def private q3a_cblob_compact(var t : Qwen3aTower; var cblob : array<float>; var qblob : array<int8>; var qscales : array<float>;
+                              var wblob : array<uint16>; f16 : bool) {
     let d = t.core.d_model
     let feat = 16l * t.n_ch
     if (d % 32l != 0l || feat % 32l != 0l || t.proj_dim % 32l != 0l) {
         panic("qwen3a cblob q8: d {d} / feat {feat} / proj {t.proj_dim} are not 32-multiples - the compact trio cannot serve this tower")
     }
     let qtotal = d * feat + d * d + t.proj_dim * d
-    qblob |> reserve_resize(qtotal)
-    qscales |> reserve_resize(qtotal / 32l)
+    if (f16) {
+        wblob |> reserve_resize(qtotal)
+    } else {
+        qblob |> reserve_resize(qtotal)
+        qscales |> reserve_resize(qtotal / kq_elems(KqFmt.q8))
+    }
     var nf : array<float>
     nf |> reserve_resize(long_length(cblob) - qtotal)
     var og = 0l
@@ -359,18 +373,19 @@ def private q3a_cblob_quantize(var t : Qwen3aTower; var cblob : array<float>; va
     t.c2_b_off = tq_keep(nf, cblob, of, t.c2_b_off, nch)
     t.c3_w_off = tq_keep(nf, cblob, of, t.c3_w_off, nch * nch * 9l)
     t.c3_b_off = tq_keep(nf, cblob, of, t.c3_b_off, nch)
-    t.cout_w_off = tq_quant(qblob, qscales, cblob, og, t.cout_w_off, d * feat)
+    t.cout_w_off = tq_gemm(f16, qblob, qscales, wblob, cblob, og, t.cout_w_off, d * feat)
     t.cout_b_off = tq_keep(nf, cblob, of, t.cout_b_off, d)
     t.pos_off = tq_keep(nf, cblob, of, t.pos_off, QWEN3A_TOK_PER_CHUNK * d)
-    t.mm1_w_off = tq_quant(qblob, qscales, cblob, og, t.mm1_w_off, d * d)
+    t.mm1_w_off = tq_gemm(f16, qblob, qscales, wblob, cblob, og, t.mm1_w_off, d * d)
     t.mm1_b_off = tq_keep(nf, cblob, of, t.mm1_b_off, d)
-    t.mm2_w_off = tq_quant(qblob, qscales, cblob, og, t.mm2_w_off, t.proj_dim * d)
+    t.mm2_w_off = tq_gemm(f16, qblob, qscales, wblob, cblob, og, t.mm2_w_off, t.proj_dim * d)
     t.mm2_b_off = tq_keep(nf, cblob, of, t.mm2_b_off, t.proj_dim)
     verify(og == qtotal)
     delete cblob
     cblob <- nf
-    t.cq8 = true
-    if (!tower_repack_backend()) {
+    t.cq8 = !f16
+    t.cf16 = f16
+    if (f16 || !tower_repack_backend()) {
         return   // row-major backend reads the dense Q8_0 planes as-is
     }
     tw_repack(qblob, qscales, t.cout_w_off, feat, d)
@@ -596,7 +611,7 @@ def qwen3a_encode(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConvStat
     q3a_mm_rq(t, s.ph, t.mm1_w_off, s.xb, cs.xq, cs.xs, d, d, npos)
     add_bias_rows(s.ph, t.cblob, t.mm1_b_off, d, npos)
     gelu_erf(s.ph, npos * d)
-    s.out |> resize(npos * t.proj_dim)
+    s.out |> grow_resize(npos * t.proj_dim)
     q3a_mm_rq(t, s.out, t.mm2_w_off, s.ph, cs.xq, cs.xs, d, t.proj_dim, npos)
     add_bias_rows(s.out, t.cblob, t.mm2_b_off, t.proj_dim, npos)
     asr_prof_add("q3a.proj", tstage)
@@ -633,7 +648,7 @@ struct Qwen3aAsrSession {
 //! from the facade, which owns the shared LLM) - read off the LOADED tower, not the lane
 //! policy, which a `reset_qwen3a_q8` after the load moves out from under the stamp.
 def qwen3a_exec_fmt(t : Qwen3aTower; dec_fmt : string) : string =>
-    "{t.core.q8 ? "q8" : "f32"}/{dec_fmt}"
+    "{tower_lane_fmt(t.core.q8, t.core.gemm_f16)}/{dec_fmt}"
 
 //! The family's encode-total ``asr_prof`` bucket (the facade's [[asr_encode_bucket]] arm):
 //! the ASR turn and the Omni chat turn time their encodes under different keys.

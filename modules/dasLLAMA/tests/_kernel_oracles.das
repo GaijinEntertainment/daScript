@@ -1,6 +1,6 @@
 // The CPU references the Metal and the Vulkan kernel cells share - the engine's table rope by its pairing, the gated
 // activation, dense GEMM rows with their envelope, an expert's FFN rows, the Q8_0 requant block check, the attention cells'
-// query rows, the MoE route's padded-CSR prefix, the gemma-4 MoE step, the f16-tap depthwise conv - with no device type and no backend require, so a
+// query rows, the MoE route's padded-CSR prefix, the gemma-4 MoE step, the f16-tap depthwise conv, the audio fronts' im2cols, shuffles, spectrum, mel and frame forms, the audio blocks' GLU, depthwise convs, pair pool and rel table, and the rail role the discrete homes' cell rigs seat a plane at - with no device type and no backend require, so a
 // build without either GPU module reads it.
 
 options gen2
@@ -17,6 +17,10 @@ require daslib/shader_lingua_franca
 require daslib/f16_cvt   // f32_to_f16: the depthwise taps' halfwords
 require dasllama/dasllama_plane   // PlaneF / PlaneU16: the CPU depthwise loops' planes
 require dasllama/dasllama_tower   // fc_dw_bias_rows / fc_dw_bias_rows_f16: the CPU depthwise loops
+require dasllama/dasllama_gpu_rail   // TowerBuf: the cell rigs' plane seats
+
+//! the rail role a cell rig seats its plane `p` at: a cell's planes ride the roles in the order the cell laid them
+def cell_role(p : int) : TowerBuf => unsafe(reinterpret<TowerBuf>(p))
 
 //! The engine's table rope over `n` elements of `v` from `base`, heads `hs` wide, on the `tcos` / `tsin` rows: the partial
 //! form whenever `rot` names a prefix short of `hs`, else the NEOX or the interleaved pairing as `neox` names - the engine's
@@ -372,6 +376,268 @@ def dw_s2_front_ref(first, relu : bool; iw, ch, oh, ow, valid : int; xv, wv, bv 
         }
     }
     return <- want
+}
+
+//! the k3 s2 p1 conv2d's im2col (`GkIm2col2d`) over [chunk][ih][iw][cin]: row (chunk, oy, ox), column (ic x 3 + kh) x 3 + kw, zero off the image and past cin x 9
+def im2col2d_ref(src : array<float>; iw, ih, cin, kdp, rows : int) : array<float> {
+    let ow = (iw - 1) / 2 + 1
+    let oh = (ih - 1) / 2 + 1
+    var col : array<float>
+    col |> resize(rows * kdp)
+    for (gid in range(rows * kdp)) {
+        let r = gid / kdp
+        let k = gid % kdp
+        var v = 0.0
+        if (k < cin * 9) {
+            let rr = r % (oh * ow)
+            let iy = (rr / ow) * 2 + (k % 9) / 3 - 1
+            let ix = (rr % ow) * 2 + k % 3 - 1
+            if (iy >= 0 && iy < ih && ix >= 0 && ix < iw) {
+                v = src[(r / (oh * ow)) * ih * iw * cin + (iy * iw + ix) * cin + k / 9]
+            }
+        }
+        col[gid] = v
+    }
+    return <- col
+}
+
+//! a 1-D conv's im2col (`GkIm2col1d`): row i column j = tap j / cin of channel j % cin at i stride + tap - pad_l, zero off x; x [tin][cin] under `row_major`, else [cin][tin]
+def im2col1d_ref(x : array<float>; cin, tin, tout, k, stride, pad_l, kdim : int; row_major : bool) : array<float> {
+    var col : array<float>
+    col |> resize(tout * kdim)
+    for (gid in range(tout * kdim)) {
+        let i = gid / kdim
+        let j = gid % kdim
+        let sp = i * stride + j / cin - pad_l
+        var v = 0.0
+        if (j < k * cin && sp >= 0 && sp < tin) {
+            v = row_major ? x[sp * cin + j % cin] : x[(j % cin) * tin + sp]
+        }
+        col[gid] = v
+    }
+    return <- col
+}
+
+//! qwen3a's conv-out feed (`GkQ3aShuffle`): feat[chunk tok + ow][h + 16 c] = y3[chunk][(h tok + ow) nch + c]
+def q3a_shuffle_ref(y3 : array<float>; nch, tok, npos : int) : array<float> {
+    let feat_w = 16 * nch
+    var feat : array<float>
+    feat |> resize(npos * feat_w)
+    for (gid in range(npos * feat_w)) {
+        let row = gid / feat_w
+        let j = gid % feat_w
+        feat[gid] = y3[(row / tok) * (16 * tok * nch) + ((j % 16) * tok + row % tok) * nch + j / 16]
+    }
+    return <- feat
+}
+
+//! the subsample stack's feature rows (`GkFeatShuffle`): the [t][w][ch] image as [t][ch][w] rows, the rows past t up to `rows_pad` zero
+def feat_shuffle_ref(src : array<float>; t, w, ch, rows_pad : int) : array<float> {
+    var dst : array<float>
+    dst |> resize(rows_pad * w * ch)
+    for (gid in range(rows_pad * w * ch)) {
+        let tt = gid / (w * ch)
+        let rem = gid % (w * ch)
+        dst[gid] = tt < t ? src[(tt * w + rem % w) * ch + rem / w] : 0.0
+    }
+    return <- dst
+}
+
+//! a row's LayerNorm (weight only, biased variance) then ReLU (`GkLnReluRows`), the statistics in double
+def ln_relu_rows_ref(x, wn : array<float>; rows, d : int; eps : float) : array<float> {
+    var y : array<float>
+    y |> resize(rows * d)
+    for (r in range(rows)) {
+        var mean = 0.0lf
+        for (c in range(d)) {
+            mean += double(x[r * d + c])
+        }
+        mean /= double(d)
+        var vv = 0.0lf
+        for (c in range(d)) {
+            let dv = double(x[r * d + c]) - mean
+            vv += dv * dv
+        }
+        let inv = 1.0lf / sqrt(vv / double(d) + double(eps))
+        for (c in range(d)) {
+            y[r * d + c] = max(float((double(x[r * d + c]) - mean) * inv) * wn[c], 0.0)
+        }
+    }
+    return <- y
+}
+
+//! the windowed frames' spectrum (`TowerSpecDftT`) in double: bin b sums the taps against twiddle pairs [k][2 b], [k][2 b + 1]; magnitude under `mag`, else power
+def spec_dft_ref(xw, tw : array<float>; n_fft, frames : int; mag : bool) : array<float> {
+    let nb = n_fft / 2 + 1
+    var pw : array<float>
+    pw |> resize(frames * nb)
+    for (gid in range(frames * nb)) {
+        let f = gid / nb
+        let b = gid % nb
+        var re = 0.0lf
+        var im = 0.0lf
+        for (k in range(n_fft)) {
+            re += double(xw[f * n_fft + k]) * double(tw[k * 2 * nb + 2 * b])
+            im += double(xw[f * n_fft + k]) * double(tw[k * 2 * nb + 2 * b + 1])
+        }
+        pw[gid] = float(mag ? sqrt(re * re + im * im) : re * re + im * im)
+    }
+    return <- pw
+}
+
+//! the log filterbank (`GkMelLog`) under law `form`: log(floored pw[f] . fil[foff + j nbins]) x scale, either row order; `float_order` sums as the CPU gigaam clamp form does
+def mel_log_ref(pw, fil : array<float>; nbins, nmel, frames, foff : int; form : uint; lo, hi, scale : float;
+                frame_major, float_order : bool) : array<float> {
+    var mel : array<float>
+    mel |> resize(frames * nmel)
+    for (f in range(frames)) {
+        for (j in range(nmel)) {
+            var sum = 0.0lf
+            var sumf = 0.0
+            for (k in range(nbins)) {
+                sum += double(pw[f * nbins + k]) * double(fil[foff + j * nbins + k])
+                sumf += pw[f * nbins + k] * fil[foff + j * nbins + k]
+            }
+            if (float_order) {
+                sum = double(sumf)
+            }
+            let v = form == 2u ? clamp(sum, double(lo), double(hi)) : (form == 1u ? sum + double(lo) : max(sum, double(lo)))
+            mel[frame_major ? f * nmel + j : j * frames + f] = float(log(v) * double(scale))
+        }
+    }
+    return <- mel
+}
+
+//! canary's per-feature normalization (`GkMelNorm`): each column's mean and unbiased deviation over `valid` frames in double, the frames past them zero
+def mel_norm_ref(mel_in : array<float>; nmel, nframes, valid : int) : array<float> {
+    var out : array<float>
+    out |> resize(nframes * nmel)
+    for (j in range(nmel)) {
+        var sum = 0.0lf
+        for (i in range(valid)) {
+            sum += double(mel_in[i * nmel + j])
+        }
+        let mean = sum / double(valid)
+        var sq = 0.0lf
+        for (i in range(valid)) {
+            let dv = double(mel_in[i * nmel + j]) - mean
+            sq += dv * dv
+        }
+        let denom = sqrt(sq / double(valid - 1)) + 1e-5lf
+        for (i in range(nframes)) {
+            out[i * nmel + j] = i < valid ? float((double(mel_in[i * nmel + j]) - mean) / denom) : 0.0
+        }
+    }
+    return <- out
+}
+
+//! gigaam's windowed frames (`GkFrameWindow`): row i column j = win[woff + j] x samp[i hop + j] for the live frames, the rows past them up to `rows` zero
+def frame_window_ref(samp, win : array<float>; woff, n_fft, hop, frames, rows : int) : array<float> {
+    var xw : array<float>
+    xw |> resize(rows * n_fft)
+    for (i in range(rows)) {
+        for (j in range(n_fft)) {
+            xw[i * n_fft + j] = i < frames ? win[woff + j] * samp[i * hop + j] : 0.0
+        }
+    }
+    return <- xw
+}
+
+//! `[ch][k]` channel-major taps as the tap-major `[k][ch]` layout (`dw_s2_front_ref`'s, parakeet's)
+def taps_tap_major(wcm : array<float>; ch, k : int) : array<float> {
+    var wv : array<float>
+    wv |> resize(k * ch)
+    for (c in range(ch)) {
+        for (kk in range(k)) {
+            wv[kk * ch + c] = wcm[c * k + kk]
+        }
+    }
+    return <- wv
+}
+
+//! the Conformer conv module's GLU (`GkGatedRows`, the sigmoid gate): row r's value half times the sigmoid of its gate half
+def glu_sig_ref(pw_rows : array<float>; rows, d : int) : array<float> {
+    var g : array<float>
+    g |> resize(rows * d)
+    for (r in range(rows)) {
+        for (c in range(d)) {
+            g[r * d + c] = pw_rows[r * 2 * d + c] * sigmoid_f32(pw_rows[r * 2 * d + d + c])
+        }
+    }
+    return <- g
+}
+
+//! the Conformer's causal k5 depthwise conv (`GkDwConvRows`): channel-major taps at `woff`, the rows before the first zero
+def dw_conv5_causal_ref(x, wn : array<float>; rows, d, woff : int) : array<float> {
+    var y : array<float>
+    y |> resize(rows * d)
+    for (r in range(rows)) {
+        for (c in range(d)) {
+            var acc = 0.0
+            for (kk in range(5)) {
+                let src = r - 4 + kk
+                if (src >= 0) {
+                    acc += wn[woff + c * 5 + kk] * x[src * d + c]
+                }
+            }
+            y[r * d + c] = acc
+        }
+    }
+    return <- y
+}
+
+//! The FastConformer conv module tail's centered depthwise conv over channel-major taps at `taps_off`: `bn` the folded
+//! BatchNorm (rows at `bnw_off` / `bnb_off`) and silu, `ga` gigaam's form - the bias row at `bnb_off` first, no epilogue
+struct FcDwRef {
+    bn : array<float>
+    ga : array<float>
+}
+
+def fc_dw_ref(x, wn : array<float>; rows, d, k, taps_off, bnw_off, bnb_off : int) : FcDwRef {
+    var r : FcDwRef
+    r.bn |> resize(rows * d)
+    r.ga |> resize(rows * d)
+    let kpad = (k - 1) / 2
+    for (row in range(rows)) {
+        for (c in range(d)) {
+            var acc = 0.0
+            for (kk in range(k)) {
+                let src = row + kk - kpad
+                if (src >= 0 && src < rows) {
+                    acc += wn[taps_off + c * k + kk] * x[src * d + c]
+                }
+            }
+            let bv = acc * wn[bnw_off + c] + wn[bnb_off + c]
+            r.bn[row * d + c] = bv * sigmoid_f32(bv)
+            r.ga[row * d + c] = wn[bnb_off + c] + acc
+        }
+    }
+    return <- r
+}
+
+//! the chat tails' pair pool (`GkPoolRows`): output row i is the mean of the input row pair 2 i, 2 i + 1
+def pool_pairs_ref(x : array<float>; width, total : int) : array<float>
+    => <- [for (i in range(total)); 0.5 * (x[(i / width) * 2 * width + i % width] + x[(i / width) * 2 * width + i % width + width])]
+
+//! the SwiGLU with its halves the other way from the swapped gate's, silu(first) . second: the swapped gate's control
+def swiglu_unswapped_ref(x : array<float>; width, total : int) : array<float>
+    => <- [for (i in range(total)); silu_f32(x[(i / width) * 2 * width + i % width]) * x[(i / width) * 2 * width + i % width + width]]
+
+//! the Transformer-XL rel table (`GkRelSinCos`): row w at rel tt - 1 - w, [sin | cos] pairs at the inverse-10000 frequencies
+def rel_sincos_ref(tt, d : int) : array<float> {
+    let ww = 2 * tt - 1
+    var rel_want : array<float>
+    rel_want |> resize(ww * d)
+    for (w in range(ww)) {
+        let rel = double(tt - 1 - w)
+        for (k in range(d / 2)) {
+            let freq = exp(-(double(k * 2) * log(10000.0lf) / double(d)))
+            let theta = float(freq * rel)
+            rel_want[w * d + 2 * k] = sin(theta)
+            rel_want[w * d + 2 * k + 1] = cos(theta)
+        }
+    }
+    return <- rel_want
 }
 
 //! the GEMM oracles' region-record walk: each record's `cnt` rows from `row0` at every output column, y[row * d + c] = `dot`(row, c, wblk0)

@@ -15,7 +15,10 @@ from `tests-cpp/small/`.** A diff that changes this list changes `routed_paths` 
 **A `.das` outside `modules/` whose own `require` lines name modules under exactly one
 `modules/<M>/` folder, or a `.cpp` outside `modules/` whose own includes name headers under
 exactly one `modules/<M>/` folder, answers to `modules/<M>/REVIEW.md` too, when that file exists.**
-`utils/internal/review-md/scan.das` does not apply this route, so the reviewer does.
+
+**A `[test]` file with a `require` line of its own naming a `cuda/` module - `require cuda/<m>` or
+the guarded `require ?cuda cuda/<m>` - wherever the diff puts it, answers to `tests/cuda/REVIEW.md`
+too.**
 
 **A guard on the `dasCUDA` package in a file outside `modules/dasCUDA/` tests for the `cuda`
 builtin module through `require ?cuda <target>`, `has_module("cuda")` or

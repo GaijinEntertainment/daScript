@@ -4,32 +4,38 @@
 docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, `ARCHITECTURE_GPU_TOWER.md`.
 Planned work: `followup_metal.md`, `followup_vulkan.md`, `followup_general.md`.
 
-- A GPU-served run is a run in which the GPU computed every output row the compare reads.
-- Parity evidence is a compare with a GPU-served run on one side and, on the other, a side that is
-  not GPU-served, where the CPU chain (the same model's forward on the CPU kernels) or an in-test
-  scalar reference (the test's own CPU code for the same math) computed at least one row - one
-  token's, frame's or stage's floats or ids - the compare reads, whatever the diff calls it; a
-  kernel-unit cell's compare - a test cell that dispatches a `[vk_dispatch]`, `[metal_dispatch]` or
-  `[cuda_dispatch]` class itself - counts.
-- Driver-against-itself evidence is a compare of the outputs of two GPU-served runs of one model,
-  whichever drivers served them.
-- An external-reference compare holds a run's output to values another implementation recorded
-  outside this engine (its ids or logits), whichever side computed the run.
-- A diff cites parity, driver-against-itself or external-reference evidence when it changes what
-  either side of a compare offered as that evidence computes, its bar or its assert, or adds or
-  changes a citation of such a compare in a doc, a ledger, a commit message or the PR description.
-- A serving call is a decode, a prefill, or an encoder or synthesis stage a GPU driver fills; a
-  tower driver is the driver filling a family's encoder or synthesis stages
-  (`dasllama/dasllama_metal_tower.das`, `dasllama/dasllama_vulkan_tower.das`,
-  `dasllama/dasllama_vulkan_tts.das`, `dasllama/dasllama_cuda_tower.das`).
-- A bar is the largest difference a continuous compare accepts - a constant, or a constant times
-  a statistic of the reference; for a tally of rows whose ids match, the most mismatched rows it
-  accepts.
-- A serving-tier line is `resident driver armed` for the whole-model driver (every layer of a step
-  on the device); for the per-op tier (single operations on the device, the rest on the CPU) a
-  `GPU MoE tier:` line reporting a rail (one operation family the tier serves) `resident` - the rail
-  and its layers, with any text after them - never one saying the rail, or any layer of it, stays
-  on the CPU: a line reading `declined`, `stopped at layer`, `leaves` or `on the CPU`.
+A GPU-served run is a run in which the GPU computed every output row the compare reads.
+
+Parity evidence is a compare with a GPU-served run on one side and, on the other, a side that is
+not GPU-served, where the CPU chain (the same model's forward on the CPU kernels) or an in-test
+scalar reference (the test's own CPU code for the same math) computed at least one row - one
+token's, frame's or stage's floats or ids - the compare reads, whatever the diff calls it; a
+kernel-unit cell's compare - a test cell that dispatches a `[vk_dispatch]`, `[metal_dispatch]` or
+`[cuda_dispatch]` class itself - counts.
+
+Driver-against-itself evidence is a compare of the outputs of two GPU-served runs of one model,
+whichever drivers served them.
+
+An external-reference compare holds a run's output to values another implementation recorded
+outside this engine (its ids or logits), whichever side computed the run.
+
+A diff cites parity, driver-against-itself or external-reference evidence when it changes what
+either side of a compare offered as that evidence computes, its bar or its assert, or adds or
+changes a citation of such a compare in a doc, a ledger, a commit message or the PR description.
+
+A serving call is a decode, a prefill, or an encoder or synthesis stage a GPU driver fills; a
+tower driver is the driver filling a family's encoder or synthesis stages; an ASR-decoder driver
+is the driver filling the decoder of a speech-recognition family whose decoder is not an LLM.
+
+A bar is the largest difference a continuous compare accepts - a constant, or a constant times
+a statistic of the reference; for a tally of rows whose ids match, the most mismatched rows it
+accepts.
+
+A serving-tier line is `resident driver armed` for the whole-model driver (every layer of a step
+on the device); for the per-op tier (single operations on the device, the rest on the CPU) a
+`GPU MoE tier:` line reporting a rail (one operation family the tier serves) `resident` - the rail
+and its layers, with any text after them - never one saying the rail, or any layer of it, stays
+on the CPU: a line reading `declined`, `stopped at layer`, `leaves` or `on the CPU`.
 
 **A diff that cites as parity evidence a compare whose GPU side is a `[vk_dispatch]`,
 `[metal_dispatch]` or `[cuda_dispatch]` class the cell dispatches itself applies the `tests/`
@@ -71,9 +77,8 @@ call (`gemma_draft_step_gpu` for gemma) returned true.** Without one of these th
 measured the CPU.
 
 **A diff that cites parity or driver-against-itself evidence of a tower driver or an ASR-decoder
-driver (`dasllama/dasllama_metal_asr_dec.das`, `dasllama/dasllama_vulkan_asr_dec.das`) with no cell
-assert or logged before/after reading of a counter rising that the driver bumps only when it served
-the stage the change touches is a defect.**
+driver with no cell assert or logged before/after reading of a counter rising that the driver
+bumps only when it served the stage the change touches is a defect.**
 
 **A diff that cites as parity evidence a Vulkan run of a serving call armed by anything but
 `DASLLAMA_GPU=1` is a defect; `--ngl` arms Metal alone.**
@@ -109,11 +114,11 @@ CPU path.
 `resident override passed a call` updates, in the same change, the serving-tier line definition
 and every rule of this checklist that reads that text.**
 
-**A diff that cites a driver-against-itself compare or an external-reference compare as parity
-evidence is a defect - the diff calls it a driver-against-itself compare or an external-reference
-compare in the cell's or harness's contract line, in every ledger row it adds or changes that
-cites it, and in the PR description.** Each kind is evidence for a `PERF_LEDGER.md` row under its
-own name.
+**A diff that cites a driver-against-itself compare or an external-reference compare, as whatever
+evidence it offers it, calls each compare by its own kind - a driver-against-itself compare or an
+external-reference compare, never parity - in the cell's or
+harness's contract line, in every ledger row it adds or changes that cites it, and in the PR
+description.** Each kind is evidence for a `PERF_LEDGER.md` row under its own name.
 
 **A diff that holds a model file's serving-call output, in a compare offered as parity,
 driver-against-itself or external-reference evidence, to a bar no earlier such compare held that

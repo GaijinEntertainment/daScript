@@ -122,7 +122,7 @@ def private unsplit_want(nprompt : int64) : int64 {
     }
 }
 
-//! the census over every `KqFmt` member's stamp of one tile column - `cm2e` (the expert schedule's m pieces in cm2 mode; a 64-step
+//! the census over every `KqFmt` member the discrete homes stamp, one tile column - `cm2e` (the expert schedule's m pieces in cm2 mode; a 64-step
 //! format's e column is its m stamp, KQ_CM2E_ALIASES_M), `khr` (every piece in mm mode), `sdot4` (every piece on the Q8-fed chain's
 //! batch tiles) or `cuda_e` (the CUDA home's cm2 e tiles plus the FP4 expert chain's m stamps) - in the format the box serves the file's planes
 def private column_census(col : string) : int64 {
@@ -131,6 +131,7 @@ def private column_census(col : string) : int64 {
     }
     var n = 0l
     for (f in type<KqFmt>) {
+        continue if (kq_discrete_unstamped(f))
         let name = "{f}"
         if (col == "sdot4") {
             n += census("{kq_tile_stem(name)}_cls_spv")

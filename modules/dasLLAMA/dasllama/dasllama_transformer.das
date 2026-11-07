@@ -50,3 +50,4 @@ require ?cuda dasllama/dasllama_math_cuda  // [init]-only: registers "cuda" unde
 require ?vulkan dasllama/dasllama_vulkan_mtp_gemma  // [init]-only: registers the gemma assistant drafter's "vulkan" seams on the resident driver (the ?das_metal dasllama_metal_mtp_gemma line's twin); after the tier for the same cache-layout reason
 require ?cuda dasllama/dasllama_cuda_mtp_gemma  // [init]-only: the same seams under "cuda" on the CUDA home's resident driver, armed under DASLLAMA_CUDA alone
 require ?cuda dasllama/dasllama_cuda_tower  // [init]-only: the CUDA home's vision tower seats
+require ?cuda dasllama/dasllama_cuda_tower_audio  // [init]-only: the CUDA home's audio seats, each family from the home its row names

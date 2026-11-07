@@ -12,28 +12,33 @@ which module it failed to require.
 **A diff that adds or changes a function in a `dasllama/` file that reports whether a hook another
 module registers is installed makes it return false when the hook is unset - never panic.**
 
-**A diff that routes an existing `dasllama/` stage's work through a GPU hook keeps the stage's CPU
-code serving when the hook is unset, and lands a test that holds the hook's output to the CPU
-code's output within a stated bar.** The CPU form serves every machine with no GPU driver.
+**A diff that routes an existing `dasllama/` stage's work through a GPU hook, or registers a GPU
+backend's implementation of an existing hook, keeps the stage's CPU code serving when the hook is
+unset, and lands a test, run on each GPU backend the diff serves the hook from, that holds the
+hook's output to the CPU code's output within a stated bar.** The CPU form serves every machine
+with no GPU driver.
 
 An override is an environment knob, a non-private setter in a `dasllama/` file whose value no
 `dasllama/` code chooses and that a file outside `tests/` calls (a harness, tool, example or host -
 a program embedding the engine), or an on-disk state file - one a run writes or a user places, never
 data a build ships - that moves a gate, policy, or threshold off its default and so changes what the
-run executes, writes, reads, mints (writes as a prepared image), or computes. A measured time, the
-run's own duration, or a different moment at which the same work happens is not such a change; a CLI
-flag is never an override, nor is an environment knob naming a program the run spawns whose path the
+run executes, writes, reads, mints (writes as a prepared image), or computes.
+
+Submitting the same GPU work another way is such a change. A measured time, the run's own
+duration, or the same work run at a different moment and submitted the same way is not. A CLI flag
+is never an override, nor is an environment knob naming a program the run spawns whose path the
 run's record carries in its `cmd`.
 
 **A diff that adds an override without the announce is a defect.** An announce is the line the run
 prints where the override changes the outcome.
 
 **A diff that makes an override clamp or ignore its value at a site, or widens what it reaches,
-makes that override's announce say so in the same change.**
+makes that override's announce say so in the same change, adding the announce where none exists.**
 
-**An announce names the override by the spelling a user would set - the env variable, the sidecar
-or file key, the setter's own name - and, for a knob that turns a default-on gate off, the
-spelling that turns it off, or, when nothing turns it off, a statement that nothing does.**
+**A diff that adds or changes an announce, or changes how a user sets an override or turns it
+off, makes that override's announce name it by the spelling a user would set - the env variable,
+the sidecar or file key, the setter's own name - and, for a knob that turns a default-on gate off,
+the spelling that turns it off, or, when nothing turns it off, a statement that nothing does.**
 
 **A call to a `set_*_q8` lane setter - one that picks whether a model family's weights run the
 q8 or the float path - in a file under `dasllama/` or `harness/`, outside the body of another

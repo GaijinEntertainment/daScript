@@ -40,10 +40,10 @@ by `bc.x & 127`.** `bc.x` is the decode callback's row coordinate, which is the 
 row, and a partial last weight tile starts at the plane's last whole 128 rows, off the 128 grid.
 
 **Never split k (cut a GEMM's dot-product length into chunks whose partial planes `SplitKReduce`
-sums) on a prefill GEMM whose output rows start above row 0 - encode it whole, whichever splitter
-would split it (`cm2_gemm_pick`, or `F16GemmCm2`'s `F16G_SPLIT` chunks).** The reduce sums
-partial planes counted from row 0, so a split dispatch starting above row 0 reduces the wrong
-rows.
+sums) on any GEMM whose output rows start above row 0 - encode it whole, whichever splitter would
+split it, `cm2_gemm_pick`, `F16GemmCm2`'s `F16G_SPLIT` chunks and `rail_mm_kq`
+(`dasllama/dasllama_vulkan_rail.das`) among them.** The reduce sums partial planes counted from
+row 0, so a split dispatch starting above row 0 reduces the wrong rows.
 
 **A diff that changes the SPIR-V words a cm2 tile stamp emits - its `DASLLAMA_VK_SPV_DUMP` output
 against the base branch's - puts that stamp's probe rows (runs of `harness/vk_gemm_probe.das`) in

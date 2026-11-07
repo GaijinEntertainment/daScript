@@ -164,7 +164,7 @@ def private q3v_metal_q8_leg(tt : T?; mm4 : string) {
         var twq <- mint_tower(mm4, true, 0l, -1l, TowerDev.metal)   // in memory: a load under the pin would bake the q8 image beside the serving one
         tt |> success(twq.q8, "the q8 lane minted under the pin")
         var stq = Qwen3vState()
-        q8_lane_served(tt, "q8 tower", twq.n_layer) $() : bool {
+        q8_lane_served(tt, "q8 tower", TowerFamily.vision, twq.n_layer) $() : bool {
             return tt |> gate_encode(twq, stq, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_Q8_DS)
         }
         delete stq
@@ -179,7 +179,7 @@ let private POISON_BLOCK = 13l   //! the whole-tower input poison's block: a mid
 def private q3v_poison_leg(tt : T?; mm : string; kind : string; w, h : int; logname : string; bar_rms : float) {
     var o = OracleEncode()
     return if (!oracle_dump(tt, "qwen3vl-vision-oracle", logname, "qwen3vl-vision-oracle/mint_4b.sh", o))
-    var twp <- mint_tower(mm, true, 0l, POISON_BLOCK, serving_tower_dev(true))
+    var twp <- mint_tower(mm, true, 0l, POISON_BLOCK, serving_tower_dev(TowerFamily.vision))
     var stp = Qwen3vState()
     dump_poison_leg(tt, "qwen3v", kind, w, h, o, bar_rms, POISON_BLOCK, int(qwen3v_row_width(twp)), TIER1_ABS, twp, stp) $(t; var s; planes; var out) => qwen3v_encode(t, s, planes, int64(w), int64(h), out)
     delete stp
@@ -406,8 +406,8 @@ def test_qwen3v_tier1_q8(t : T?) {
             tt |> equal(vision_exec_fmt(e), "q8", "the carrier stamps the q8 lane")
         }
         set_every_gpu_tower(true)   // the GPU leg's pin
-        let dev = serving_tower_dev(true)
-        if (serving_tower_device_up(true)) {
+        let dev = serving_tower_dev(TowerFamily.vision)
+        if (serving_tower_device_up(TowerFamily.vision)) {
             set_qwen3v_q8(true)
             let imgd = path_join(test_temp_dir(), base_name(image_path_for(mm, tower_dev_tag("qwen3v-q8", dev))))
             remove(imgd)
@@ -439,12 +439,12 @@ def private twin_encode(tt : T?; tw : Qwen3vTower; var st : Qwen3vState; tw_exac
                         kind : string; w, h : int; mm : string; zero_block : int64 = -1l) {
     let planes <- make_planes(kind, w, h)
     twin_canvas(tt, "qwen3v", kind, w, h, 16l, ", {tw.n_deepstack} taps", tw, st, tw_exact, st_exact, zero_block,
-        $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb, serving_tower_dev(true)) }) $(t; var s; var out) => qwen3v_encode(t, s, planes, int64(w), int64(h), out)
+        $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb, serving_tower_dev(TowerFamily.vision)) }) $(t; var s; var out) => qwen3v_encode(t, s, planes, int64(w), int64(h), out)
 }
 
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
-def test_qwen3v_vulkan_twin(t : T?) {
-    t |> run("the serving discrete home's chain ({serving_tower_dev(true)}) vs the CPU q8 chain (Qwen3-VL 4B, deepstack), and the exact lane served") @(tt : T?) {
+def test_qwen3v_discrete_twin(t : T?) {
+    t |> run("the serving discrete home's chain ({serving_tower_dev(TowerFamily.vision)}) vs the CPU q8 chain (Qwen3-VL 4B, deepstack), and the exact lane served") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let mm = path_join(models_dir(), "mmproj-Qwen3VL-4B-Instruct-F16.gguf")
             if (!model_available(tt, mm) || !discrete_twin_seat(tt)) {
@@ -482,7 +482,7 @@ def test_qwen3v_vulkan_twin(t : T?) {
             delete twxp
             delete st_exact
             delete tw_exact
-            serving_tower_shutdown(true)
+            gpu_tower_shutdown(TowerFamily.vision)
         } else {
             tt |> skip("dasVulkan not present")
         }

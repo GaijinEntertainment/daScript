@@ -10,14 +10,14 @@ Planned work: `followup_general.md`, `followup_vulkan.md`, `followup_metal.md`. 
 overload receives, wherever that string is written, applies `REVIEW_TOKENIZER.md` (beside this
 file) too.**
 
-**A diff that touches a `followup_*.md`, an `ARCHITECTURE*.md` or a `HOW_TO_*.md` under this
-folder, removes or rewrites the problem a `followup_*.md` row states, adds a file under `dasllama/`,
-or adds a STYLE037/STYLE038 suppression anywhere under this folder applies `REVIEW_DOCS.md` (beside
-this file) too.**
+**A diff that touches a `followup_*.md`, an `ARCHITECTURE*.md` or a `HOW_TO_*.md` under this folder,
+removes or rewrites the problem a `followup_*.md` row states, renames an identifier a `followup_*.md` row
+names, adds a file under `dasllama/`, or adds a STYLE037/STYLE038 suppression anywhere under this folder
+applies `REVIEW_DOCS.md` (beside this file) too.**
 
-**A diff that adds, changes or drops a check in a `REVIEW.das` under this folder, adds a name to a
-check's licensed set - the names a check does not flag - or changes a constant a check compares
-against, applies `REVIEW_GATES.md` (beside this file) too.**
+**A diff that adds, changes or drops a check in a `REVIEW.das` under this folder, adds or removes a
+name in a check's licensed set - the names a check does not flag - or changes a constant a check
+compares against, applies `REVIEW_GATES.md` (beside this file) too.**
 
 **A diff that cites a timing as the reason it picks one candidate over another, adds a race,
 changes which candidates a race times, or picks a numeric threshold by a race applies
@@ -46,10 +46,11 @@ function carrying `[hot_path]`, `[no_alloc]`, `[no_env]` or `[no_io]`.**
 
 **A diff that adds an allocation, changes an allocation's size formula, or adds, changes or
 drops a `resize` or an `@exact_size` on a buffer; that adds or changes a module global (an
-`[EnvConfig]` field is a declared environment variable, not a global), a call
-to a function-typed one, or the `[init]` that sets one; or that adds or changes code a job runs
-in a forked context or code reachable from a `team_parallel_*` or `maybe_parallel_for*` body,
-wherever the diff puts it, applies `REVIEW_MEMORY.md` (beside this file) too.**
+`[EnvConfig]` field is a declared environment variable, not a global), a call to a function-typed
+one, or the `[init]` that sets one; that adds or changes code a job runs in a forked context or code
+reachable from a `team_parallel_*` or `maybe_parallel_for*` body; or that changes which load, mint
+or convert function a `utils/dasllama-convert/` file calls, wherever the diff puts it, applies
+`REVIEW_MEMORY.md` (beside this file) too.**
 
 **A change to what enters `performance/records/`, to a model file's provenance - its source url,
 byte size, sha256 or conversion recipe, wherever it is declared - or to WHICH model file a recorded
@@ -95,26 +96,31 @@ reference - another backend's run, an external dump, or the CPU path.**
 tests asserting the format's exact wire text, its rendered template output, and a server case gated
 on the family's smallest GGUF under `LARGE_TIER_BYTES` (`tests/_model_tier.das`).**
 
-**A GPU kernel, driver, dispatch class (a class a `[metal_dispatch]`, `[vk_dispatch]` or
-`[cuda_dispatch]` declares), or K/V-mirror (the device copy of the K/V cache a GPU decode reads
-and writes) change, or a change to a `kv_*` function that a GPU driver file
-(`dasllama/dasllama_metal*.das`, `dasllama/dasllama_*{vulkan,cuda}*.das`,
-`dasllama/dasllama_gpu*.das`) calls, wherever the diff puts it, applies `REVIEW_GPU.md`.**
+**A change to a GPU kernel, a dispatch class (a class a `[metal_dispatch]`, `[vk_dispatch]` or
+`[cuda_dispatch]` declares), a K/V mirror (the device copy of the K/V cache a GPU decode reads and
+writes), a GPU driver file - a `dasllama/dasllama_{gpu,metal}*.das` or `dasllama/dasllama_*{vulkan,cuda}*.das`
+file, or any other `dasllama/` file whose code serves only GPU backends, one or several: kernel bodies,
+code that records, launches or dispatches their work, its shape and size math - or a `kv_*`
+function such a file calls, wherever the diff puts it, applies `REVIEW_GPU.md`.**
 
 **A call that creates, enables or tears down device-home serving (`create_device_session`,
-`set_device_kv`, `moe_gpu_drop_model`), or a call or definition of a `set_*` / `reset_*` function or an `install_moe_gpu_resident_*` declaration
-in `dasllama/dasllama_core.das`, `dasllama/dasllama_env.das`, or a
-`dasllama/dasllama_{gpu,metal}*.das` or `dasllama/dasllama_*{vulkan,cuda}*.das` file, wherever
+`set_device_kv`, `moe_gpu_drop_model`), or a call or definition of a `set_*` / `reset_*` function
+or an `install_moe_gpu_resident_*` declaration in `dasllama/dasllama_core.das`, `dasllama/dasllama_env.das`,
+or a `dasllama/dasllama_{gpu,metal}*.das` or `dasllama/dasllama_*{vulkan,cuda}*.das` file, wherever
 the diff puts it, applies `REVIEW_GPU.md`.**
 
 **A GPU kernel timing race (two kernels timed against each other to pick one - not a data race), a
-knockout (an arm that skips a stage to measure that stage's cost), a hand-binding arm (one that
-writes buffer or kernel-argument (kargs) binding numbers as literals), a cell or probe that fills
-or binds a `TokMeta` block, a read of `g_env_gpu.cuda` (`DASLLAMA_CUDA`) or
-`g_env_vulkan.cuda_mmq` (`DASLLAMA_CUDA_MMQ`), a call of `gpu_want_cuda`, a branch whose true arm
-directly calls a `moe_gpu_*`, `vk_*`, `cud_*` or `rdec_*` function that records, submits or waits
-on GPU work, or allocates, uploads to or frees device memory, or a call of `vk_moe_init`,
+knockout (an arm that skips a stage to measure that stage's cost) or a hand-binding arm (one that
+writes buffer or kernel-argument (kargs) binding numbers as literals), wherever the diff puts it,
+applies `REVIEW_GPU.md`.**
+
+**A cell or probe that fills or binds a `TokMeta` block, a read of `g_env_gpu.cuda` (`DASLLAMA_CUDA`)
+or `g_env_vulkan.cuda_mmq` (`DASLLAMA_CUDA_MMQ`), or a call of `gpu_want_cuda` or `vk_moe_init`,
 wherever the diff puts it, applies `REVIEW_GPU.md`.**
+
+**A branch whose true arm directly calls a `moe_gpu_*`, `vk_*`, `cud_*` or `rdec_*` function that
+records, submits or waits on GPU work, or allocates, uploads to or frees device memory, wherever the
+diff puts it, applies `REVIEW_GPU.md`.**
 
 **A change to `dasllama/dasllama_image.das`, or, wherever the diff puts it, to a `.dlim` mint
 (building a `.dlim` from a gguf), a `.dlim` load, an image identity, a flavor (the
@@ -131,9 +137,8 @@ or `dasllama_rnnt.das` (all under `dasllama/`), or to an ASR family file - a `da
 holding one speech-recognition family's CPU model - applies `REVIEW_AUDIO.md`.**
 
 **A change to `dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`,
-`dasllama/dasllama_vision_embedder.das`, or a vision family file - one
-`dasllama/dasllama_<family>.das` holding a single vision projector family - applies
-`REVIEW_VISION.md`.**
+`dasllama/dasllama_vision_embedder.das`, or a vision family file - one `dasllama/dasllama_<family>.das`
+holding a single vision projector family - applies `REVIEW_VISION.md`.**
 
 **A change to an in-process path (one that runs inside the program under review, not a spawned
 child process) that splices a stream carrying decoded media - pixels or audio samples - into a
@@ -142,8 +147,8 @@ prompt or schedules such a stream applies `REVIEW_VISION.md`.**
 **A change to how a prefill driver serves, declines, or passes to the CPU a media span - the rows
 of one image or audio turn inside a single model call - applies `REVIEW_VISION.md`.**
 
-**A `dasllama/dasllama_tower.das` change - the backend-independent encoder-tower home, not a
-backend tower driver - applies `REVIEW_AUDIO.md` and `REVIEW_VISION.md`.**
+**A change to a file `dasllama/dasllama_tower*.das` matches - encoder-tower code no single backend
+owns, never a backend's tower driver - applies `REVIEW_AUDIO.md` and `REVIEW_VISION.md`.**
 
 **A change to a file `dasllama/dasllama_tts*.das` matches, `dasllama/dasllama_styletts2.das`,
 a TTS family file - a `dasllama/dasllama_<family>.das` holding exactly one voice model's code,
@@ -185,15 +190,11 @@ Every recorded row, tune sidecar and exchange entry carries the release, so a bu
 **A change that invalidates only images never bumps `DASLLAMA_RELEASE` - it applies
 `REVIEW_IMAGE.md`.**
 
-**A diff that adds or changes a `dasllama/dasllama_common.das` function that reaches, or reports
-on, another module's hook (a function-typed global another module's `[init]` sets) applies
-`REVIEW_OVERRIDES.md` (beside this file) too.**
-
-**A diff that moves a `dasllama/` stage's work onto a GPU hook (a hook a GPU driver module's
-`[init]` sets) applies `REVIEW_OVERRIDES.md` too.**
-
-**A diff that calls a `set_*_q8` lane setter under `dasllama/` or `harness/` applies
-`REVIEW_OVERRIDES.md` too.**
+**A diff that does any of these applies `REVIEW_OVERRIDES.md` (beside this file) too: adds or
+changes a `dasllama/` function that reaches, or reports on, another module's hook (a function-typed
+global another module's `[init]` sets); moves a `dasllama/` stage's work onto a GPU hook (a hook a
+GPU driver file's `[init]` sets), or registers a GPU backend's version of an existing hook; calls a
+`set_*_q8` lane setter under `dasllama/` or `harness/`.**
 
 **A diff that adds or changes an override - an environment knob, a non-private `dasllama/` setter
 a file outside `tests/` calls, or an on-disk state file a run writes or a user places, any of them
@@ -243,11 +244,10 @@ apart from the ad-hoc profiling an engine file may not carry.
 **A tutorial source, `.rst` page, docstring, help string, `README.md`, recorded server response
 fixture (`utils/dasllama-server/tests/fixtures/`), or any other checked-in document, all outside
 this folder, left showing the old call, flag, default, response or stated behaviour after a change
-to user-facing API is the change's defect.** User-facing is anything a consumer
-outside this repo can depend on - what it calls, types, requires or parses (facade functions, CLI
-flags, environment knobs, file formats, defaults, what the installed SDK lets a program
-`require`) - plus the in-repo rig and tool surface: any output another tool parses. A
-console-only diagnostic is not user-facing.
+to user-facing API is the change's defect.** User-facing is anything a consumer outside this repo
+can depend on - what it calls, types, requires or parses (facade functions, CLI flags, environment
+knobs, file formats, defaults, what the installed SDK lets a program `require`) - plus the in-repo
+rig and tool surface: any output another tool parses. A console-only diagnostic is not user-facing.
 
 **A diff that falsifies a statement in checked-in text under this folder - docs, `//!` docstrings,
 `//` comments, or string data, any language - or in a document outside this folder whose own

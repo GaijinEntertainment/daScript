@@ -46,7 +46,7 @@ or a failed command buffer; a CPU image's encode then runs whole on the CPU, and
 Both seats serve the three weight lanes (`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`): the exact lane's GEMMs on
 the half tensor GEMM over the carrier's halfwords, the q8 lane's on the prefill q8 ladder over the model's q8 slab, the kq
 lane's - a quantized carrier's own planes - each GEMM on its seat's form (`#tower-fc-kq`). Canary and
-parakeet keep declining their q8 lane (`quant_mode`, `TwFc.q8_served` off).
+parakeet serve the first two the same way (`ARCHITECTURE_GPU_TOWER.md#tower-encode-chains`).
 
 The chain submits on the timed encoder, which every submission already pays for, so its device time costs the served
 path nothing: under the asr_prof rail `fc_submit` adds the command buffer's GPU time and its recording time under the

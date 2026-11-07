@@ -16693,7 +16693,9 @@
             "sha256":"13548d66136b15506bae6d079cbcf7191235c8cbecd9e22332142bff446acafa",
             "bytes":373038
           }
-        ]
+        ],
+        "comment":"Held off the board: this row times the Metal parakeet tower's exact lane on the f32 planes, and the exact lane the cell pins (set_asr_tower_fp32) serves the f16 halfwords on Metal now - re-mint, followup_general.md row 287.",
+        "held":"followup_general.md 287"
       },
       {
         "engine":"mlx-audio",
@@ -18457,7 +18459,9 @@
             "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
             "bytes":17490462
           }
-        ]
+        ],
+        "comment":"Held off the board: this row times the Metal whisper encoder's exact lane on the f32 planes, and the exact lane the cell pins (set_asr_tower_fp32) serves the f16 halfwords on Metal now - re-mint, followup_general.md row 287.",
+        "held":"followup_general.md 287"
       },
       {
         "engine":"whisper-cli",
@@ -19433,7 +19437,9 @@
             "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
             "bytes":17490462
           }
-        ]
+        ],
+        "comment":"Held off the board: this row times the Metal whisper encoder's exact lane on the f32 planes, and the exact lane the cell pins (set_asr_tower_fp32) serves the f16 halfwords on Metal now - re-mint, followup_general.md row 287.",
+        "held":"followup_general.md 287"
       },
       {
         "engine":"das",
@@ -20915,7 +20921,9 @@
             "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
             "bytes":17490462
           }
-        ]
+        ],
+        "comment":"Held off the board: this row times the Metal whisper encoder's exact lane on the f32 planes, and the exact lane the cell pins (set_asr_tower_fp32) serves the f16 halfwords on Metal now - re-mint, followup_general.md row 287.",
+        "held":"followup_general.md 287"
       },
       {
         "engine":"whisper-cli",
@@ -21891,7 +21899,9 @@
             "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
             "bytes":17490462
           }
-        ]
+        ],
+        "comment":"Held off the board: this row times the Metal whisper encoder's exact lane on the f32 planes, and the exact lane the cell pins (set_asr_tower_fp32) serves the f16 halfwords on Metal now - re-mint, followup_general.md row 287.",
+        "held":"followup_general.md 287"
       },
       {
         "engine":"mlx-audio",
@@ -23459,7 +23469,9 @@
             "sha256":"b55890c635c795309706aaa40a5c670042d989af43da3512d7e486c989bf0787",
             "bytes":6359578
           }
-        ]
+        ],
+        "comment":"Held off the board: this row times the Metal canary tower's exact lane on the f32 planes, and the exact lane the cell pins (set_asr_tower_fp32) serves the f16 halfwords on Metal now - re-mint, followup_general.md row 287.",
+        "held":"followup_general.md 287"
       }
     ],
     "arch":"Canary-Qwen 2.5B",
@@ -24885,7 +24897,9 @@
             "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
             "bytes":17490462
           }
-        ]
+        ],
+        "comment":"Held off the board: this row times the Metal qwen3a tower's exact lane on the f32 planes, and the exact lane the cell pins (set_asr_tower_fp32) serves the f16 halfwords on Metal now - re-mint, followup_general.md row 287.",
+        "held":"followup_general.md 287"
       },
       {
         "engine":"mlx-audio",
@@ -27767,7 +27781,9 @@
             "sha256":"3a7fbe30706a0c6e7184cda0013dc7ddf731f2ea42ba3dd4ff0f64e6e0d93969",
             "bytes":8745270
           }
-        ]
+        ],
+        "comment":"Held off the board: this row times the Metal gemma4a tower's exact lane on the f32 planes, and the exact lane the cell pins (set_asr_tower_fp32) serves the f16 halfwords on Metal now - re-mint, followup_general.md row 287.",
+        "held":"followup_general.md 287"
       },
       {
         "engine":"das",
@@ -29332,7 +29348,9 @@
             "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
             "bytes":17490462
           }
-        ]
+        ],
+        "comment":"Held off the board: this row times the Metal qwen3a tower's exact lane on the f32 planes, and the exact lane the cell pins (set_asr_tower_fp32) serves the f16 halfwords on Metal now - re-mint, followup_general.md row 287.",
+        "held":"followup_general.md 287"
       },
       {
         "engine":"das",
@@ -36974,7 +36992,9 @@
             "sha256":"43acaa61356b9a51694ebadeb68c4a2512484da1c69da2fba223cc0bb7cba57c",
             "bytes":17490462
           }
-        ]
+        ],
+        "comment":"Held off the board: this row times the Metal parakeet tower's exact lane on the f32 planes, and the exact lane the cell pins (set_asr_tower_fp32) serves the f16 halfwords on Metal now - re-mint, followup_general.md row 287.",
+        "held":"followup_general.md 287"
       },
       {
         "engine":"mlx-audio",

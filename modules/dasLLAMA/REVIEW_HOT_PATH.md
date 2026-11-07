@@ -45,8 +45,9 @@ annotated, keeps the annotation on the function it annotated while that function
 region entry or the rarely-taken branch - on the new name after a rename.**
 
 **A `[hot_path]` or a `[no_alloc]` / `[no_env]` / `[no_io]` contract on an interior function is a
-defect - move it to the region entry; an interior function carries only a `[cold_path]` on a
-rarely-taken branch.**
+defect - drop it, and when no function the interior function runs under still carries `[hot_path]`
+or that contract, put it on the region entry the interior function runs under; an interior function
+carries a `[cold_path]` only on a rarely-taken branch.**
 
 **Never put `[hot_path]` or a `[no_alloc]` / `[no_env]` / `[no_io]` contract on a function no
 serving step reaches through a call or an `invoke` - it is no region entry; it carries
@@ -55,6 +56,11 @@ serving step reaches through a call or an `invoke` - it is no region entry; it c
 **A non-`[test]` function a diff adds or changes under this module's `tests/`, `harness/`,
 `benchmarks/` or `performance/` that reaches a `[hot_path]`, `[no_alloc]`, `[no_env]` or `[no_io]`
 function puts one `[cold_path]` on the outermost non-`[test]` function of those four folders on
-each chain that reaches it, from a `[test]` or from a function nothing in those folders calls; a
-function outermost on no chain - a helper shared by two chains included - carries none, edited by
-the diff or not.**
+each chain that reaches it, from a `[test]` or from a function nothing in those folders calls.**
+
+**A diff that adds or changes a non-`[test]` function under this module's `tests/`, `harness/`,
+`benchmarks/` or `performance/` that reaches a `[hot_path]`, `[no_alloc]`, `[no_env]` or `[no_io]`
+function leaves no `[cold_path]` on a function of those four folders that is the outermost
+non-`[test]` one on no chain reaching that function from a `[test]` or from a function nothing in
+those folders calls - a helper shared by two chains included, whether the diff edits it or not;
+each chain's outermost one carries it.**

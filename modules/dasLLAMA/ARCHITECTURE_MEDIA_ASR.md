@@ -122,10 +122,11 @@ dequantizes into the pinned lane's planes, as the f16 carrier would. `REVIEW.das
 `gigaam_gemm_stride`, `gigaam_lane_tag`, `gigaam_kq_members`, `gigaam_fc_record_seats` and `gigaam_kq_members_of` beside
 the family's loader chain: defs no user program calls - the loader lays the seat index by the stride, the bake tool names
 the lane's image tag, the load log and the tests read the members, the device chains read the record seats and name the
-members in a decline. It licenses the GPU flavor's names too - `register_gigaam_flavor`, `gigaam_dev_flavor`,
-`gigaam_rnnt_dev_bake`, `rnnt_gpu_projects`, `rnnt_dev_bake` and `gigaam_gpu_lane_planes`: a driver registers the flavor,
-the load and the tests pick it, a driver's bake places the transducer halves in its device block
-(`ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block`), and a driver's serves predicate asks the lane's planes. f16 depthwise taps
+members in a decline. It licenses the GPU flavor's names too - `gigaam_dev_flavor`, `gigaam_rnnt_dev_bake`,
+`rnnt_gpu_projects`, `rnnt_dev_bake` and `gigaam_gpu_lane_planes`: the load and the tests pick the flavor, a driver's
+bake places the transducer halves in its device block (`ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block`), and a
+driver's serves predicate asks the lane's planes. The flavor's registrar `register_gigaam_flavor` is emitted by
+`[tower_flavor]`, not written in the file's text, so the check never reads it and it holds no row. f16 depthwise taps
 (`dw_f16`) sit in `wblob` on both lanes, behind the block GEMMs where they are there, every layer's [k][d] at `dw_off`; a
 carrier whose taps mix f16 with another type is refused the same way, and one whose taps hold no f16 keeps them f32 in
 `blob`. An f16 CTC head (`ctc_f16`) sits in `wblob` on both lanes behind them: its rows padded with zero rows to
@@ -155,7 +156,10 @@ flavor serves maps the CPU image and runs whole on the CPU.
 
 The un-pinned lane follows the device's faster lane (`ARCHITECTURE_MEDIA.md#tower-weight-lane`): the Metal driver
 registers the exact lane as its faster one; the Vulkan driver registers the q8 image as its faster one until the two lanes
-are timed on a Vulkan box, `DASLLAMA_VK_GIGAAM_EXACT` (`set_vulkan_gigaam_exact_lane`) flipping it. The device-lane report
+are timed on a Vulkan box, `DASLLAMA_VK_GIGAAM_EXACT` (`set_vulkan_gigaam_exact_lane`) flipping it. `DASLLAMA_AUDIO_LANE`
+asks over that policy on every home: `16` and `8` each take their lane on Metal as on the discrete homes, the exact lane
+staying Metal's default only while the knob is unset, and set, the knob decides over `DASLLAMA_VK_GIGAAM_EXACT`, which moves
+only the un-asked default. The device-lane report
 (`gigaam_device_gpu`) names the device for a GPU-flavored image, whatever its lane.
 
 The mint streams (`gg_mint`): `stage_gigaam_model` reads the hparams, the mel planes and one fill job a tensor
@@ -176,7 +180,7 @@ seat): the head's planes uploaded once a model as the image holds them - an f16 
 f32 head's rows off `blob` - and the bias row; the encoder rows the FastConformer chain left on the device for the encode's
 generation (`vulkan_tower_fc_rows`), else `st.x` uploaded; an f16 head's half feed (`TowerClampCvt`) and the f16 GEMM over
 its rows (the cm2 tile or the KHR one), an f32 head's f32 tile (`F32Gemm`); then the pick, the same body as Metal's
-(`GkCtcPick`, stamped `CtcPick`). The seat rides the tower knob and declines by name (`vulkan_ctc_declines`: `knob`, `shape`
+(`GkCtcPick`, stamped `CtcPick`). The seat rides the tower knob and declines by name (`CtcDevDecline`: `knob`, `shape`
 - d off the f16 GEMM's 64 lattice -, `device` - an f16 head on a device with no f16 GEMM tile -, `memory`); a decline leaves
 the head to the CPU.
 
@@ -217,7 +221,8 @@ FastConformer encode's residual rows under a generation each encode bumps (`meta
 the family records that generation on its state after the encode (`tower_rows_gen`, `enc_gen`) and hands it to the
 seat (`RnntEnc.gen`), so a CPU encode, another session's encode, or a freed array's address never names the held rows -
 or over rows uploaded where the CPU encoded; a lane whose projection lives in a q8 plane (parakeet's
-q8 lane) projects on the CPU and the device decodes off the result. The weights are the CPU state's halves and summed biases,
+q8 lane) projects on the CPU and the device decodes off the result, the discrete seats' serves line naming where the
+projection runs (`rnnt_dev_announce`). The weights are the CPU state's halves and summed biases,
 laid once a model: the seat keys its copy on the net's plane, offsets and lay flags, the encoder half, the small regions'
 values whole and a strided sample of the large ones' (`rnnt_dev_key`), so two sessions of one model share it and a net laid
 at a freed plane's address with other values uploads its own. Everything but the buffers and the dispatches is one host form

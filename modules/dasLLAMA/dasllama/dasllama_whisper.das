@@ -25,6 +25,7 @@ require dasllama/dasllama_tower
 require dasllama/dasllama_common   // apply_box_profile_runtime for the whisper-image identity
 require dasllama/dasllama_image
 require dasllama/dasllama_tower_image
+require dasllama/dasllama_tower_flavor   // [tower_flavor]: the family's GPU flavor seat
 
 // Whisper-proper ASR: reads ggerganov/whisper.cpp ggml-*.bin models directly (drop-in HF
 // models, no converter), reuses the validated encoder tower from dasllama_audio, adds the
@@ -272,7 +273,7 @@ def private wm_repack(var dqblob : array<int8>; var dqscales : array<float>; wof
 //! The loaded precision as ``<encoder>/<decoder>`` — whisper's half of the facade's
 //! [[asr_exec_fmt]] stamp.
 def whisper_exec_fmt(w : WhisperModel) : string =>
-    "{w.enc.q8 ? "q8" : "f32"}/{w.dq8 ? "q8" : "f32"}"
+    "{tower_lane_fmt(w.enc.q8, w.enc.gemm_f16)}/{w.dq8 ? "q8" : "f32"}"
 
 //! Whisper's encode-total ``asr_prof`` bucket (the facade's [[asr_encode_bucket]] arm).
 def whisper_encode_bucket : string => "wh.encode_total"
@@ -435,12 +436,12 @@ def private wt_read_conv_permuted(recs : table<string; WTensorRec>; b : array<ui
     }
 }
 
-// the baked-image family tag for an (enc, dec) quant pair
-def private whisper_tag(enc_q8, dec_q8 : bool) : string {
+//! the baked-image family tag for an (enc, dec) quant pair; `enc_f16` a GPU home's f16 encoder beside the q8 decoder
+def private whisper_tag(enc_q8, dec_q8 : bool; enc_f16 : bool = false) : string {
     if (enc_q8 && !dec_q8) {
         panic("dasLLAMA whisper: enc-q8/dec-f32 is not a served combination")
     }
-    return enc_q8 ? "whisper-q8" : (dec_q8 ? "whisper-f32-q8" : "whisper-f32")
+    return enc_q8 ? "whisper-q8" : (dec_q8 ? (enc_f16 ? "whisper-f16-q8" : "whisper-f32-q8") : "whisper-f32")
 }
 
 //! Loads a whisper.cpp ggml-*.bin model (f32/f16 only; verified byte-for-byte against the
@@ -449,15 +450,18 @@ def private whisper_tag(enc_q8, dec_q8 : bool) : string {
 def load_whisper_model(path : string; q8 : bool = false) : WhisperModel =>
     <- load_whisper_model(path, q8, q8)
 
-//! The per-half form: ``enc_q8`` quantizes the encoder (the CPU tower rail; the metal tower
-//! declines it), ``dec_q8`` the decoder. The GPU-tower serving mode is (false, true) —
-//! `set_asr_tower_fp32` routes here through the facade.
+//! The per-half form: ``enc_q8`` quantizes the encoder, ``dec_q8`` the decoder. The exact encoder beside the q8 decoder is
+//! (false, true) - `set_asr_tower_fp32` routes here through the facade; a GPU home serves that encoder on its f16 lane.
 def load_whisper_model(path : string; enc_q8, dec_q8 : bool) : WhisperModel {
-    let tag = whisper_tag(enc_q8, dec_q8)
-    let dev = path |> ends_with(".dlim") || !dec_q8 ? TowerDev.none : tower_dev_flavor(g_wh_flavor, enc_q8)
+    let dlim = path |> ends_with(".dlim")
+    let dev = dlim || !dec_q8 ? TowerDev.none : tower_dev_flavor(g_whisper_flavor, enc_q8)
+    let enc_f16 = dec_q8 && (dlim ? !enc_q8 && image_tag_lane(image_family_tag(path)) == whisper_tag(false, true, true) : tower_lane_f16(enc_q8, dev))
+    let tag = whisper_tag(enc_q8, dec_q8, enc_f16)
+    announce_lane("whisper encoder", enc_q8, enc_f16, "set_asr_tower_fp32 / set_asr_fp32", !enc_q8 && !audio_lane_asked(false), false)
     if (dev != TowerDev.none) {
-        return <- load_staged_image_dev(path, whisper_dev_lane(tag, dev, whisper_bin_text_state(path)), "whisper", "source model", type<WhisperModel>, dev, g_wh_flavor.bake, WHISPER_DEV_CONSUMED) {
-            return <- stage_whisper_model(path, enc_q8, dec_q8)
+        return <- load_staged_image_dev(path, whisper_dev_lane(tag, dev, whisper_bin_text_state(path)), "whisper", "source model", type<WhisperModel>, dev, g_whisper_flavor.bake,
+                                        WHISPER_DEV_CONSUMED) {
+            return <- stage_whisper_model(path, enc_q8, dec_q8, enc_f16)
         }
     }
     return <- load_through_image(path, tag, "whisper", "source model", type<WhisperModel>, $(img : string; var out : WhisperModel) {
@@ -470,49 +474,41 @@ def private register_whisper_image_tags {
     register_image_family_tag("whisper-q8")
     register_image_family_tag("whisper-f32", true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
     register_image_family_tag("whisper-f32-q8")
+    register_image_family_tag("whisper-f16-q8")
     register_tower_dev_tags("whisper-q8")
     register_tower_dev_tags("whisper-f32-q8")
+    register_tower_dev_tags("whisper-f16-q8")
 }
 
 //! A GPU driver's whisper flavor (`#tower-dev-block`): the backend whose image it mints, whether its chains serve an encoder lane,
 //! and the bake that converts a CPU-form model into the driver's device block - the encoder's and the decoder's pieces in the
 //! encoder tower's one block
-typedef WhisperServesLaneFn = function<(q8 : bool) : bool>
-typedef WhisperBakeFn = function<(w : WhisperModel; var b : TowerDevBuild) : bool>
-
 typedef WhisperStepCpuFn = function<(n_text_state : int64) : bool>
 
+[tower_flavor(family = "whisper", model = "WhisperModel")]
 struct WhisperFlavor {
-    backend : TowerDev
-    serves : WhisperServesLaneFn
-    bake : WhisperBakeFn
     step_cpu : WhisperStepCpuFn   //! a decoder of that width bakes its step onto the CPU (`#tower-dev-step-cpu`)
     step_cpu_set : bool
 }
 
-var private g_wh_flavor = WhisperFlavor()
 let private WHISPER_DEV_CONSUMED <- ["enc.qblob", "enc.qscales", "dqblob", "dqscales"]   //! the planes a whisper bake converts
 let WHISPER_DEV_CHUNK = 8l   //! the rows a GPU-flavored model's decode hands the device seat at once: every home's step cap covers it
 let WHISPER_CPU_STEP_PIECE = "wh.step.cpu"   //! a GPU-flavored image's decode step the bake left on the CPU (`#tower-dev-step-cpu`)
 let private WHISPER_CPU_STEP_FOLD = "-cstep"  //! the lane fold of such an image: its dq planes are the CPU backend's, so it keys on the box
 
-def register_whisper_flavor(backend : TowerDev; serves : WhisperServesLaneFn; bake : WhisperBakeFn) {
-    g_wh_flavor = WhisperFlavor(backend = backend, serves = serves, bake = bake)
-}
-
 //! The registered flavor's CPU-step width rule (`#tower-dev-step-cpu`): its images of a decoder `step_cpu` takes fold the lane,
 //! registered as flavors of the lane keyed on the box configuration - their dq planes are laid for the CPU backend
 def register_whisper_step_cpu(step_cpu : WhisperStepCpuFn) {
-    g_wh_flavor.step_cpu = step_cpu
-    g_wh_flavor.step_cpu_set = true
-    for (lane in ["whisper-q8", "whisper-f32-q8"]) {
-        register_image_flavor_tag(tower_dev_tag("{lane}{WHISPER_CPU_STEP_FOLD}", g_wh_flavor.backend), lane, false)
+    g_whisper_flavor.step_cpu = step_cpu
+    g_whisper_flavor.step_cpu_set = true
+    for (lane in ["whisper-q8", "whisper-f32-q8", "whisper-f16-q8"]) {
+        register_image_flavor_tag(tower_dev_tag("{lane}{WHISPER_CPU_STEP_FOLD}", g_whisper_flavor.backend), lane, false)
     }
 }
 
 //! A `dev`-flavored image of a decoder `n_text_state` wide bakes its decode step onto the CPU (`#tower-dev-step-cpu`)
 def whisper_dev_step_cpu(dev : TowerDev; n_text_state : int64) : bool =>
-    dev != TowerDev.none && dev == g_wh_flavor.backend && g_wh_flavor.step_cpu_set && invoke(g_wh_flavor.step_cpu, n_text_state)
+    dev != TowerDev.none && dev == g_whisper_flavor.backend && g_whisper_flavor.step_cpu_set && invoke(g_whisper_flavor.step_cpu, n_text_state)
 
 //! A `dev`-flavored staging of that decoder lays its dq planes for the CPU backend: its step reads them
 def whisper_dev_dq_repacked(dev : TowerDev; n_text_state : int64) : bool =>
@@ -536,6 +532,13 @@ def whisper_bin_text_state(path : string) : int64 {
         panic("dasLLAMA whisper: '{path}' is no ggml bin (want magic 0x67676d6c)")
     }
     return int64(rd_i32(head, 28l))   // the magic, then n_vocab, the four audio words and n_text_ctx ahead of it
+}
+
+//! the GPU home whose chains serve the loaded model's encoder on its lane (its image's flavor, where that driver serves the lane), else `none`: the CPU
+def whisper_device_home(w : WhisperModel) : TowerDev {
+    let dev = w.enc.dev_backend
+    return TowerDev.none if (dev == TowerDev.none || g_whisper_flavor.backend != dev || !invoke(g_whisper_flavor.serves, w.enc.q8))
+    return dev
 }
 
 [arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-step-cpu")]
@@ -575,8 +578,8 @@ def mint_whisper_model(var st : WhisperStaging; var out : WhisperModel; q8 : boo
 //! must match the tag's pair.
 //! `dev` names the GPU flavor (the staging read under `with_tower_dev_staging(dev)`), `none` the CPU image (`tower_mint_flavor`).
 def mint_whisper_model(var st : WhisperStaging; var out : WhisperModel; enc_q8, dec_q8 : bool; dev : TowerDev = TowerDev.none) {
-    let lane = whisper_dev_lane(whisper_tag(enc_q8, dec_q8), dev, st.e.n_text_state)
-    tower_mint_flavor(st, out, lane, "whisper", dev, g_wh_flavor, WHISPER_DEV_CONSUMED)
+    let lane = whisper_dev_lane(whisper_tag(enc_q8, dec_q8, st.e.enc.gemm_f16), dev, st.e.n_text_state)
+    tower_mint_flavor(st, out, lane, "whisper", dev, g_whisper_flavor, WHISPER_DEV_CONSUMED)
 }
 
 //! The ggml-bin reader proper: scalars land in the served model, plane bytes in the staging
@@ -584,8 +587,13 @@ def mint_whisper_model(var st : WhisperStaging; var out : WhisperModel; enc_q8, 
 def stage_whisper_model(path : string; q8 : bool = false) : WhisperStaging =>
     <- stage_whisper_model(path, q8, q8)
 
-//! The per-half staging twin (see ``load_whisper_model``'s per-half form for the pair's meaning).
-def stage_whisper_model(path : string; enc_q8, dec_q8 : bool) : WhisperStaging {
+//! The per-half staging twin (see ``load_whisper_model``'s per-half form for the pair's meaning), the encoder's halfword lane
+//! the running staging's (`tower_staging_f16`).
+def stage_whisper_model(path : string; enc_q8, dec_q8 : bool) : WhisperStaging =>
+    <- stage_whisper_model(path, enc_q8, dec_q8, dec_q8 && tower_staging_f16(enc_q8))
+
+//! The per-half staging twin with the encoder's halfword lane `enc_f16` handed in (the load's).
+def stage_whisper_model(path : string; enc_q8, dec_q8, enc_f16 : bool) : WhisperStaging {
     var st = WhisperStaging()
     let f = fopen(path, "rb")
     if (f == null) {
@@ -601,8 +609,8 @@ def stage_whisper_model(path : string; enc_q8, dec_q8 : bool) : WhisperStaging {
         }
         if (enc_q8) {
             tower_quantize(st.e.enc, st.enc)
-        } elif (wenc_gemm_all_f16(recs, encJobs)) {
-            tower_bake_half_twin(st.enc.fblob, st.enc.wblob, false)
+        } elif (enc_f16) {
+            tower_halve(st.e.enc, st.enc)
         }
         st.dblob |> reserve_resize(sz.dec_len)
         for (j in decJobs) {
@@ -622,15 +630,6 @@ def stage_whisper_model(path : string; enc_q8, dec_q8 : bool) : WhisperStaging {
 // a job's dense-q8 membership: a marked GEMM whose contraction is a 32-multiple
 def private wjob_quantizable(j : WFillJob) : bool => j.gemm_n != 0l && j.gemm_n % 32l == 0l
 
-[arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane")]
-def private wenc_gemm_all_f16(recs : table<string; WTensorRec>; jobs : array<WFillJob>) : bool {
-    for (j in jobs) {
-        if (j.gemm_n != 0l && (recs?[j.name] ?? default<WTensorRec>).ttype != GGML_TYPE_F16) {
-            return false
-        }
-    }
-    return true
-}
 
 // the tied token embedding streams into BOTH planes (fp32 rows for lookups, q8 for the logits GEMV)
 def private wjob_dual(j : WFillJob) : bool => j.name == "decoder.token_embedding.weight"
@@ -651,26 +650,25 @@ def private wq_total(jobs : array<WFillJob>) : int64 {
 // holes zero-filled; the q kinds walk only the quantizable GEMM jobs, densely.
 def private wstream_plane(recs : table<string; WTensorRec>; b : array<uint8> | #;
                           jobs : array<WFillJob>;
-                          kind : int;   // 0 = fp32, 1 = q8 quants, 2 = q8 scales, 3 = the f16 twin
+                          kind : int;   // 0 = fp32, 1 = q8 quants, 2 = q8 scales
                           q8 : bool;    // compact split on (an fp32 mint streams every job into kind 0)
                           rep : bool;   // repack GEMM regions — same gate the eager quantizers take
                           var w : ImgWriter; var sections : array<ImgSection>; name : string) : bool {
     w_zeros(w, pad_to_page(w.cur) - w.cur)
     let at = w.cur
     var scratch : array<float>
-    var half : array<uint16>
     var q8s : array<int8>
     var qss : array<float>
     var cur = 0l
     for (j in jobs) {
         let qz = q8 && wjob_quantizable(j)
-        if (kind == 0 || kind == 3) {
+        if (kind == 0) {
             if (j.off > cur) {
                 // a layout hole no tensor fills (whisper's biasless k slots) — kept as zeros
-                w_zeros(w, uint64((j.off - cur) * (kind == 3 ? 2l : 4l)))
+                w_zeros(w, uint64((j.off - cur) * 4l))
             }
             cur = j.off + j.n   // a skipped GEMM advances the old-layout cursor without emitting
-            continue if (kind == 0 && qz && !wjob_dual(j))
+            continue if (qz && !wjob_dual(j))
         } else {
             continue if (!qz)
         }
@@ -678,20 +676,6 @@ def private wstream_plane(recs : table<string; WTensorRec>; b : array<uint8> | #
             scratch |> grow_resize(int(j.n))
         }
         wjob_read(recs, b, j, scratch, -j.off)   // land the tensor at scratch[0]
-        if (kind == 3) {
-            //! byte-identical to the eager tower_bake_half_twin over the same span
-            if (long_length(half) < j.n) {
-                half |> grow_resize(int(j.n))
-            }
-            unsafe {
-                var hp = addr<float16?>(half[0])
-                for (i in range64(j.n)) {
-                    hp[i] = float16(clamp(scratch[i], -65504.0, 65504.0))
-                }
-                w_append(w, addr<void?>(half[0]), uint64(j.n * 2l))
-            }
-            continue
-        }
         if (kind == 0) {
             unsafe {
                 w_append(w, addr<void?>(scratch[0]), uint64(j.n * 4l))
@@ -715,7 +699,6 @@ def private wstream_plane(recs : table<string; WTensorRec>; b : array<uint8> | #
         }
     }
     delete scratch
-    delete half
     delete q8s
     delete qss
     sections |> push(ImgSection(name = name, off = at, bytes = w.cur - at))
@@ -767,11 +750,7 @@ def private stream_whisper_model(path : string; enc_q8, dec_q8 : bool; img, tag 
         let bk = tower_repack_backend()
         let rep_enc = enc_q8 && bk
         let rep_dec = dec_q8 && bk
-        let enc_twin = !enc_q8 && wenc_gemm_all_f16(recs, encJobs)
         var extra = uint64(sz.enc_len * 4l) + uint64(sz.dec_len * 4l) + 2ul * uint64(IMAGE_PAGE)
-        if (enc_twin) {
-            extra += uint64(sz.enc_len * 2l) + uint64(IMAGE_PAGE)
-        }
         if (enc_q8) {   // quant plane (over-estimate: compact is smaller) + scales + pages
             extra += uint64(sz.enc_len) + uint64((sz.enc_len / 32l) * 4l) + 2ul * uint64(IMAGE_PAGE)
         }
@@ -785,9 +764,6 @@ def private stream_whisper_model(path : string; enc_q8, dec_q8 : bool; img, tag 
             }
             if (name == "enc.fblob") {
                 return wstream_plane(recs, bytes, encJobs, 0, enc_q8, rep_enc, w, sections, name)
-            }
-            if (enc_twin && name == "enc.wblob") {
-                return wstream_plane(recs, bytes, encJobs, 3, false, false, w, sections, name)
             }
             if (dec_q8 && name == "dqblob") {
                 return wstream_plane(recs, bytes, decJobs, 1, dec_q8, rep_dec, w, sections, name)

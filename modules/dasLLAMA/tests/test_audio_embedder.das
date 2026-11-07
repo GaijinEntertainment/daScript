@@ -8,6 +8,7 @@ options _dasllama_internal = true
 // gemma4a-tagged `.dlim` beside it (absent bake, or one baked under another box's identity), the E4B width probe on
 // `mmproj-gemma-4-E4B-it-BF16.gguf` (absent file), the rows seam on `gemma-4-E2B-it-Q4_K_M.gguf`
 // + that mmproj (absent file), the no-audio-arm refusal on `SmolLM2-135M-Instruct-Q8_0.gguf`
+// (absent file), and each staged-lane leg on `mmproj-Voxtral-Mini-3B-2507-Q8_0.gguf` / `voxtral-mini-mmproj-f32.gguf`
 // (absent file). Every skip is loud.
 
 require dastest/testing_boost public
@@ -89,7 +90,7 @@ def test_audio_embedder_gemma4a_arm(t : T?) {
                 let cand = path_join(models_dir(), name)
                 let tag = image_family_tag(cand)
                 //! of the two lanes only the one this box serves: the direct route reads under the lane the loader picked above
-                if (tag == (e.gemma4a.q8 ? "gemma4a-q8" : "gemma4a-f32") && cand == image_path_for(mm, tag)) {
+                if (tag == gemma4a_lane_tag(e.gemma4a.q8, e.gemma4a.gemm_f16) && cand == image_path_for(mm, tag)) {
                     //! the lane's file name carries no box identity: a models directory another box shares holds that box's bake under it
                     let verdict = dlim_image_verdict(image_peek(cand), current)
                     if (verdict == "CURRENT") {
@@ -117,7 +118,7 @@ def test_audio_embedder_gemma4a_arm(t : T?) {
             return
         }
         var inscope st <- stage_gemma4a_encoder(mm)
-        let tag = st.e.q8 ? "gemma4a-q8" : "gemma4a-f32"
+        let tag = gemma4a_lane_tag(st.e.q8, st.e.gemm_f16)
         let img = scratch_path("{base_name(mm)}.{tag}.dlim")
         var inscope minted <- Gemma4aEncoder()
         mint_gemma4a_encoder(st, minted, img)
@@ -214,16 +215,17 @@ def test_audio_embedder_tower_arm(t : T?) {
         t |> success(!audio_probe_span_bare(omni), "a qwen2.5o mmproj does not")
         t |> success(!audio_probe_span_bare(path_join(models_dir(), "no-such-mmproj.gguf")), "a missing file probes false, never panics")
     }
-    t |> run("a Q8_0 projector file bakes the halfword twin its device GEMMs read") @(t : T?) {
-        let mm = path_join(models_dir(), "mmproj-Voxtral-Mini-3B-2507-Q8_0.gguf")
-        if (!model_available(t, mm)) {
-            return
+    for (file in ["mmproj-Voxtral-Mini-3B-2507-Q8_0.gguf", "voxtral-mini-mmproj-f32.gguf"]) {
+        t |> run("{file}: the f32 lane stages no halfword twin, the f16 lane its GEMMs as f16 halfwords") @(t : T?) {
+            let mm = path_join(models_dir(), file)
+            if (!model_available(t, mm)) {
+                return
+            }
+            var inscope st <- stage_audio_tower(mm, false, false)
+            t |> success(!st.e.gemm_f16 && empty(st.wblob), "{file}: the f32 lane carries no twin - a GPU home's exact lane is the f16 image")
+            var inscope sh <- stage_audio_tower(mm, false, true)
+            t |> success(sh.e.gemm_f16 && !empty(sh.wblob), "{file}: the f16 lane stages the GEMMs as halfwords ({length(sh.wblob)} halves)")
         }
-        var inscope st <- stage_audio_tower(mm)
-        t |> success(!empty(st.wblob) && length(st.wblob) == length(st.fblob), "the twin covers the f32 plane, a halfword an element ({length(st.wblob)} halves)")
-        t |> success(!st.e.blk_bf16, "its halves are f16: eight-bit quants times a half scale")
-        var inscope f32 <- stage_audio_tower(path_join(models_dir(), "voxtral-mini-mmproj-f32.gguf"))
-        t |> success(empty(f32.wblob), "an f32 file bakes none: its GEMMs are no halfword's")
     }
     t |> run("the Qwen2.5-Omni mmproj's audio side loads as the whisper-class tower beside its vision tensors") @(t : T?) {
         with_dasllama_jobque() {

@@ -8097,8 +8097,8 @@ def private psos_ready(psos) : bool {
     return true
 }
 
-//! Whether [[pf_enc_hmm]] can serve: the half twins compile only under a tensor crown, so a
-//! box without one (every pre-M5 Apple GPU) answers false and callers keep their f32 route.
+//! Whether [[pf_enc_hmm]] can serve: the half twins compile only where the Metal toolchain
+//! carries the tensor ops (the load's compile probe), so a box without them answers false and callers keep their f32 route.
 def pf_hmm_ready() : bool => psos_ready(fixed_array(g_pf_pso_hmm_th, g_pf_pso_half_rows))
 
 //! Whether [[pf_enc_bf16_mm]] would take a converted half-X panel (its tensor half-X stamp

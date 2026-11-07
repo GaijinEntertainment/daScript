@@ -3,33 +3,25 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `ARCHITECTURE_GPU.md`. Planned work: the `followup_*.md` ledgers beside this file.
 
-Kernel twins are two classes with the same dispatch grid formula, the same mapping of threads to
-work and the same index and guard arithmetic, whose compiled bodies differ only in expressions,
-constants or unroll counts that one value selects: a template constant, a typedef, which base
-shell's method they inherit, or a run-time count of live entries inside a fixed extent (a column
-count, a row count). A base shell is the dispatch-less base class whose methods the emitter splices
-flat into each deriving class. A stamp is a kernel class that compiles to a shader module -
-standalone, a template instance or a base-shell derivative. A census key is a kernel name
-`modules/dasLLAMA/tests/test_kernel_coverage.das` counts, that the engine's Metal or Vulkan driver
-compiles at any point of a run, and that the pre-change tree does not compile. A crown is a kernel
-family a box's tune sidecar enables. A lens is the `[metal_dispatch]`, `[vk_dispatch]` or
-`[cuda_dispatch]` macro that generates a class's builder from its bindings; kargs is the
-kernel-argument struct a dispatch hands its kernel. A home is one backend's own kernel files -
-Metal's, Vulkan's or CUDA's - as against the shared files `dasllama/dasllama_gpu_kernels_common.das`
-and `dasllama/dasllama_gpu_kernels_discrete.das`.
-
-**A diff that adds a `class template` a GPU home stamps, or moves one between a home's file,
+**A diff that adds a `class template` a GPU home (one backend's own kernel files, Metal's, Vulkan's
+or CUDA's) stamps - instantiates as one of its kernel classes - or moves one between a home's file,
 `dasllama/dasllama_gpu_kernels_discrete.das` and `dasllama/dasllama_gpu_kernels_common.das`,
 applies `REVIEW_PLACEMENT.md` too.**
 
 **A kernel twin that binds a different kargs (kernel-argument struct) type than its sibling twin
-is a defect, even where one twin ignores a field of it.**
+is a defect, even where one twin ignores a field of it.** Kernel twins are two classes with the
+same dispatch grid formula, thread-to-work mapping and index and guard arithmetic, whose compiled
+bodies differ only in expressions, constants or unroll counts that one value selects: a template
+constant, a typedef, the base shell (a dispatch-less base class whose methods the emitter splices
+flat into each deriving class) whose method they inherit, or a run-time count of live entries
+inside a fixed extent (a column count, a row count).
 
 **Kernel twins keep every `@binding` number they both declare; a field a `@template_gate` omits on
 one twin leaves a hole at its number and renumbers nothing.**
 
-**Two stamps that declare the same field at different `@binding` numbers or kargs offsets never
-share a host function that binds by number - each binds through its own generated builder.**
+**Two stamps (kernel classes - standalone, a template instance or a base-shell derivative) that
+declare the same field at different `@binding` numbers or kargs offsets never share a host
+function that binds by number - each binds through its own generated builder.**
 
 **A diff that makes two stamps of one class template or base shell declare the same field at
 different `@binding` numbers or kargs offsets ledgers the pair at
@@ -48,10 +40,12 @@ body reads one member's codes directly is a defect.** A fusion written on one me
 every other member's site on the staged kernels it replaced.
 
 **A diff that adds a bit-for-bit compare, or changes text on the path one covers - two kernel
-bodies that compile to separate shader modules, which a cell under `modules/dasLLAMA/tests/`
-holds bit for bit against each other - spells as `mad` every floating-point multiply on that path
-that feeds an add, shared method or function text included.** A driver decides per shader module
-whether to contract a multiply-add into one fma, so two bodies spelled alike round a ulp apart.
+bodies in separate shader modules (on the CUDA home each kernel class is its own NVRTC module)
+that a cell under `modules/dasLLAMA/tests/` holds bit for bit against each other - writes on that
+path, shared method and function text included, every floating-point multiply that feeds an add as
+`mad`, and every inverse square root as an explicit `rsqrt` or through a template constant that
+picks its form at compile time.** A compiler decides per module whether a multiply-add, or one
+divided by a square root, compiles to one instruction.
 
 **A value that no model file and no request can change - a tile width, a math constant, a cap
 fixed by the model architecture the class serves - which every dispatch site under `dasllama/`
@@ -82,10 +76,10 @@ compile-time choice that carries it; or the behaviour change named with the test
 it.**
 
 **A kernel-family stamp - any stamp of a class template or derivative of a base shell that a
-lens-generated builder dispatches - that binds a buffer to a binding whose fields its compiled
-body, inherited code included, never reads or writes is a defect: gate the field with
-`@template_gate` where a template constant decides it, and where the family shares one binding
-layout for the whole family on purpose, name that case in `ARCHITECTURE_GPU.md#gpu-backends`'s
+`[metal_dispatch]`, `[vk_dispatch]` or `[cuda_dispatch]` builder dispatches - that binds a buffer
+to a binding whose fields its compiled body, inherited code included, never reads or writes is a
+defect: gate the field with `@template_gate` where a template constant decides it, and where the
+family shares one binding layout on purpose, name that case in `ARCHITECTURE_GPU.md#gpu-backends`'s
 ledgered kernel-binding asymmetries.** A binding counts as used when the compiled body reads or
 writes any field declared on it - fields in the stamp or in the shell may share a binding,
 `@role = "alias"` marks such a view - including a field touched only under a run-time flag.
@@ -103,9 +97,9 @@ home stamps.**
 
 **A diff that adds a name to `DISCRETE_ONE_HOME_STAMPS` in `REVIEW.das` - the license for a
 `class template` in `dasllama/dasllama_gpu_kernels_discrete.das` that only one discrete home
-stamps - names the template, and the family of the home that does not stamp it, in the
-`followup_general.md` row of stamps that wait on their families, in the same change; a diff that
-removes a name from the list removes it from that row too.**
+stamps - adds, in the same change, a `followup_general.md` row naming the template and the family
+of the home that does not stamp it; a diff that removes a name from the list removes that row
+too.**
 
 **Weakening `check_shared_template_homes` in `REVIEW.das` is a defect.** It holds every
 `class template` in `dasllama/dasllama_gpu_kernels_discrete.das` to a stamp from the Vulkan and
@@ -113,7 +107,8 @@ the CUDA home or a `DISCRETE_ONE_HOME_STAMPS` license, and every one in
 `dasllama/dasllama_gpu_kernels_common.das` to a stamp from the Metal and the Vulkan home, through
 any chain of intermediate templates.
 
-**A diff that adds or changes a binding of a class a lens declares that no site writes
+**A diff that adds or changes a binding of a class a lens (the `[metal_dispatch]`, `[vk_dispatch]`
+or `[cuda_dispatch]` macro that generates its builder) declares that no site writes
 after arming - a binding filled before the first encode and never written again - puts
 `@role = "weight"` on a field at that binding.**
 
@@ -135,7 +130,10 @@ is the card's and the driver's, not the kernels' - the same silicon favors the f
 Vulkan driver - so a card that flips the pick turns the pair into a per-box race, never a deletion.
 
 **A diff that adds a new census key a census row dispatches names, in the PR body, that row and
-its nonzero count for the key, read from a census run on the key's backend.**
+its nonzero count for the key, read from a census run on the key's backend.** A census key is a
+kernel name `modules/dasLLAMA/tests/test_kernel_coverage.das` counts, that the engine's Metal or
+Vulkan driver compiles at any point of a run; it is new when the pre-change tree does not compile
+it.
 
 **A diff that adds a new census key which no census row of its backend dispatches where such a
 row could dispatch it - a model the census file loads for that backend, run the way the census
@@ -152,7 +150,8 @@ or covers it by prefix, carries for each key it covers the reason no census row 
 stocked model that dispatches it where one does - one the `stocked` suite runs on a box that has
 it - and the model-free test cell that dispatches it.**
 
-**A diff that adds a new Metal census key that is dispatched only under a crown adds, in the same
+**A diff that adds a new Metal census key that is dispatched only under a crown (a kernel family a
+box's tune sidecar enables) adds, in the same
 change, either a census row that pins the crown (`pin_metal_tensor_crowns`), or a
 `CENSUS_NEVER_DISPATCHED` entry plus a `CENSUS_CROWN_CONDITIONAL` entry naming the crown (both in
 `modules/dasLLAMA/tests/test_kernel_coverage.das`); both entries spell the key exactly.** The
@@ -172,7 +171,8 @@ module whose name starts with `dasllama` and contains `metal` - a direct
 `kn_kargs` on fewer paths than it calls `kn_dispatch` - is a defect; a module that adds
 `options _metal_manual_dispatch = true` weakens it.**
 
-**A diff that adds a refusal to a lens lands the cell that holds it in the same change** - a
+**A diff that adds a refusal to a lens - a compile-time error a class's declaration can trigger -
+lands the cell that holds it in the same change** - a
 `test_lens_*` cell in `modules/dasLLAMA/tests/test_metal_misc_kernels.das` for Metal, a
 `test_vkd_lens_*` cell in `modules/dasLLAMA/tests/test_vulkan_kernels.das` for Vulkan, a cell in
 `modules/dasLLAMA/tests/test_cuda_kernels.das` for CUDA.

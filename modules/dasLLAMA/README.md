@@ -128,7 +128,8 @@ modules/dasLLAMA/
   ARCHITECTURE_GPU_VULKAN.md  # companion: the Vulkan resident driver - window chain, GEMV grid codebooks
   ARCHITECTURE_GPU_VULKAN_GEMM.md # companion: the Vulkan GEMM tile pick, class pipelines, expert chain
   ARCHITECTURE_GPU_VULKAN_RESIDENCY.md # companion: the Vulkan residency plan and the GPU-slot marks swap
-  ARCHITECTURE_MEDIA.md       # companion: the encoder-tower, audio, ASR and vision charters
+  ARCHITECTURE_MEDIA.md       # companion: the encoder-tower, audio and ASR charters
+  ARCHITECTURE_MEDIA_VISION.md # companion: the vision charters
   ARCHITECTURE_IMAGE.md       # companion: the prepared-image (.dlim) rail
   ARCHITECTURE_RUNTIME.md     # companion: kernel shape, caches, knobs, coverage, the GPU ramp
   ARCHITECTURE_RUNTIME_JOBQUE.md # companion: the hybrid worker pool, the MoE region split, the job queue, single-thread mode

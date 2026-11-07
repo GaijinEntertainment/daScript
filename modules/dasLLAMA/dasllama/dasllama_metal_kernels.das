@@ -16871,7 +16871,7 @@ class MetalDnStepFused {
         }
     }
 
-    [metal_kernel]
+    [metal_kernel(max_threads=512)]
     def metal_dn_step_fused {
         let ds = ka.ds
         let h = gl_WorkGroupID.x

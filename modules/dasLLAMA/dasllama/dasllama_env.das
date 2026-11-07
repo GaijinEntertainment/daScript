@@ -119,6 +119,10 @@ struct public EngineEnv {
 
     @clarg_doc = "The streaming silero VAD (`vad_iter_feed`, the live-mic callers) runs each feed's whole chunks through the GPU driver's VAD seat (Metal, or Vulkan where it serves) instead of the CPU chunk step; off, the measured-faster form for one 32 ms chunk. The batch VAD (`vad_probs`, `find_speech_timestamps`) takes the seat whatever this says; `set_vad_stream_gpu` is the in-process twin."
     vad_stream_gpu : bool = false
+
+    @clarg_default_doc = "unset (each family's own lane)"
+    @clarg_doc = "The weight lane an audio tower load asks for where the program pins none, on every home: whisper's encoder, qwen3a, the chat towers (load_audio_tower: qwen2audio, voxtral, ultravox, omni), canary, parakeet, gemma4a and GigaAM - not the vision towers, TTS or the LLM. 8 = the q8 lane; 16 = the exact lane - the f16 image on a GPU home, the family's exact f32 planes on a CPU-only run; unset = each family's policy (q8 on every GPU home, GigaAM's exact lane on Metal, the chat towers' f32 load on a CPU-only run). Any other number logs a warning and keeps the policy. A family's API pin beats it (set_<family>_q8, set_asr_tower_q8, set_audio_tower_q8, the facade's set_asr_fp32 / set_asr_tower_fp32) and reset_<family>_q8 returns to it; set, it beats DASLLAMA_VK_GIGAAM_EXACT, which moves only GigaAM's default on the discrete homes. It asks a lane and changes nothing about what serves it: a lane a home cannot serve maps the CPU image as the pin does, and a quantized GigaAM carrier keeps its own planes (a pin alone dequantizes it). A lane it moves off the policy says so once a process (`dasLLAMA: DASLLAMA_AUDIO_LANE=<v> ...`), and each load's lane line names it."
+    audio_lane : Option<int>
 }
 
 // Tri-state on purpose: the tier's effective defaults are computed from set_gpu_tier_want state
@@ -129,7 +133,7 @@ struct public GpuTierEnv {
     @clarg_doc = "One switch for the measured-best GPU rail set; any DASLLAMA_GPU_* knob still overrides individually. On a Vulkan build it is also the want the tower driver reads before any device init: the vision and audio towers' block loops serve on the device only while it is on, and decline `device` otherwise."
     gpu : Option<bool>
 
-    @clarg_doc = "The environment's spelling of the GPU home (the program's is `set_gpu_home`, dasllama-server's its `--gpu vulkan | cuda` key): on, the CUDA home takes the GPU tier's seats in place of the Vulkan home (with DASLLAMA_GPU on) - the whole-model driver for a dense q8 model on an NVIDIA card through the driver API and NVRTC, no Vulkan call made, and the vision towers (gemma3v, gemma4v, gemma4uv, qwen3v, qwen25v) on the CUDA tower driver; the audio towers stay the Vulkan tower's. Off, the Vulkan home holds the seats until a program moves them. A build without dasCUDA (`DAS_CUDA_DISABLED`, or a 32-bit host) has no CUDA home: the knob is ignored with one warning and the Vulkan home keeps the tier."
+    @clarg_doc = "The environment's spelling of the GPU home (the program's is `set_gpu_home`, dasllama-server's its `--gpu vulkan | cuda` key): on, the CUDA home takes the GPU tier's seats in place of the Vulkan home (with DASLLAMA_GPU on) - the whole-model driver for a dense q8 model on an NVIDIA card through the driver API and NVRTC, no Vulkan call made, and the tower seats on the CUDA tower driver - the vision towers (gemma3v, gemma4v, gemma4uv, qwen3v, qwen25v), every audio tower (the whisper-class towers, qwen3a, gemma4a, canary, parakeet, GigaAM), the whisper decoder, the transducer and CTC heads and the silero VAD. Off, the Vulkan home holds the seats until a program moves them. A build without dasCUDA (`DAS_CUDA_DISABLED`, or a 32-bit host) has no CUDA home: the knob is ignored with one warning and the Vulkan home keeps the tier."
     cuda : bool = false
 
     @clarg_default_doc = "-1 (auto)"
@@ -285,10 +289,10 @@ struct public MetalEnv {
     @clarg_doc = "Serve the non-causal media span on the prefill driver (AttnArgs.uend); 0 declines it to the CPU arm, which then needs declared CPU intent."
     span : bool = true
 
-    @clarg_doc = "Serve tower/embedder encodes on the Metal tower driver - the gemma4uv chain, the gemma4v ViT and gemma3v SigLIP block loops (their exact-plane lanes), the whisper-class block loops, the gemma4a Conformer and the canary / parakeet FastConformer block loops (their f32 lanes), the whole StyleTTS2 (kitten / kokoro) synthesis - PL-BERT, the text and duration encoders, the duration head, prosody, the decoder, the harmonic source, the generator and the inverse STFT - on both weight lanes, the Pocket TTS codec and frame loop, the conv frontends (whisper im2col + the qwen3a conv2d, which serves the q8 default), the GigaAM encode and CTC head (all three weight lanes: the f16 halfwords, the q8 slab, the kq lane's own planes), and the silero VAD seat; 0 loads each family's CPU image, the lane whole on the CPU."
+    @clarg_doc = "Serve tower/embedder encodes on the Metal tower driver - the gemma4uv chain, the gemma4v ViT and gemma3v SigLIP block loops (their exact-plane lanes), the whisper-class block loops with their projector tails, qwen3a's front and projector, the gemma4a Conformer and the canary / parakeet FastConformer block loops (every audio family's q8 lane off the q8 slab, and its exact lane on the halfword plane under DASLLAMA_METAL_TOWER_F16 and a tensor crown), the whole StyleTTS2 (kitten / kokoro) synthesis - PL-BERT, the text and duration encoders, the duration head, prosody, the decoder, the harmonic source, the generator and the inverse STFT - on both weight lanes, the Pocket TTS codec and frame loop, the conv frontends (whisper im2col + the qwen3a conv2d, which serves the q8 default), the GigaAM encode and CTC head (all three weight lanes: the f16 halfwords, the q8 slab, the kq lane's own planes), and the silero VAD seat; 0 loads each family's CPU image, the lane whole on the CPU."
     tower : bool = true
 
-    @clarg_doc = "Serve a tower's weighted GEMMs from a halfword twin of its weights on the crowned tensor mul_mm twins: the image's baked f16 twin plane where the mint bakes one (only for f16-sourced GEMMs, so it holds the file's own values), and the FastConformer chain's device twin of parakeet's f32 blob. Needs a tensor crown - a box without one, or an image without the plane, keeps the f32 route; 0 pins the f32 GEMM route - the A/B rail."
+    @clarg_doc = "Serve a tower's halfword GEMM weights on the crowned tensor mul_mm twins: every audio family's exact lane on Metal - the whisper-class towers, qwen3a, canary, parakeet, gemma4a and GigaAM - whose image carries the halfword plane alone, and a vision tower's baked f16 twin plane where its mint bakes one (only for f16-sourced GEMMs, so it holds the file's own values). Needs a tensor crown: 0, or no crown, maps an audio family's exact lane to its CPU image and keeps a vision tower on the f32 route - the A/B rail."
     tower_f16 : bool = true
 
     @clarg_doc = "Serve head-72 tower attention at %64 canvases on the lifted flash kernel (no score slab, no rowstat pass, no head restrides - the gemma3v-geometry ViTs); 0 pins the three-pass slab - the A/B rail."
@@ -560,7 +564,7 @@ struct public VulkanEnv {
     @clarg_doc = "Serve the vision towers' block loops (gemma4v, gemma3v, qwen3v, qwen25v), the audio towers' (the whisper-class towers, gemma4a, canary) and the TTS seats (the StyleTTS2 families kitten and kokoro, Pocket) on the Vulkan tower and TTS drivers - the announce is `dasLLAMA vulkan tower: <family> serves on the device`, once per model when it first serves; 0 loads every tower lane's CPU image, the whole lane on the CPU."
     vk_tower : bool = true
 
-    @clarg_doc = "GigaAM's lane policy on the Vulkan tower: 1 prefers the exact lane - the block GEMMs on the f16 GEMM over the carrier's own halfwords - over the q8 image for an un-pinned load; 0 (the default, until the two lanes are timed on a Vulkan box) keeps the q8 image. Both lanes serve on the device on the f16 GEMM feed alone (off it, every lane loads the CPU image); the family's lane pin overrides it, `set_vulkan_gigaam_exact_lane` is the in-process lever."
+    @clarg_doc = "GigaAM's lane policy on the discrete tower homes (the Vulkan tower, and the CUDA tower under the CUDA ask): 1 prefers the exact lane - the block GEMMs on the f16 GEMM over the carrier's own halfwords - over the q8 image for an un-pinned load; 0 (the default, until the two lanes are timed on a discrete card) keeps the q8 image. Both lanes serve on the device on the f16 GEMM feed alone (off it, every lane loads the CPU image); the family's lane pin overrides it, `set_vulkan_gigaam_exact_lane` / `set_cuda_gigaam_exact_lane` are the in-process levers."
     vk_gigaam_exact : bool = false
 
     @clarg_doc = "Serve the whisper decoder side (the per-window cross-KV and the decode step) on the Vulkan ASR-decoder driver - the announce is `dasLLAMA vulkan wdec: the whisper decoder serves on the device`, once per model; 0 loads the lane's CPU image, the whole lane on the CPU."
@@ -602,7 +606,7 @@ struct public VulkanEnv {
     @clarg_doc = "Keeps a fused form of the token command on its split dispatches (a same-build A/B; the logits stay right; the N-row command shares the gate-up and the fused q/k norm through the layer flags read at load) - bits 1 = the wo GEMV's residual epilogue, 2 = the down GEMV's, 4 = the fused gate-up twin, 8 = the prologue's add+rms+requant stamp, 16 = the post-attention one (the wo epilogue too), 32 = the post-FFN one (the down epilogue too), 64 = the fused qk-norm+rope; the load log names each bit as taken or inert on the model"
     vk_fuse_bisect : int64 = 0l
 
-    @clarg_doc = "cm2 prefill tile pick: 0 = the wave model's pick (`cm2_gemm_pick`), 128 = force the m tile, 256 = force the l tile (A/B instrument). Inert on the KHR arm (DASLLAMA_COOPMAT=mm, or a device without NV_coopmat2), whose kq tile has one geometry."
+    @clarg_doc = "cm2 prefill tile pick: 0 = the wave model's pick (`cm2_gemm_pick` on Vulkan, the CUDA towers' own `cut_cm2_tc`), 32 = force the s tile, 128 = force the m tile, 256 = force the l tile (A/B instrument: on Vulkan the window's and the towers' GEMMs; on CUDA the towers' GEMMs alone, the column held at a split site too - the CUDA window keeps its own pick, `cud_cm2_pick`, and never reads this knob; the f16 lane's f16 tile, which has no l column, takes 32 and 128 alone, its own pick `f16_cm2_col` otherwise). Inert on the KHR arm (DASLLAMA_COOPMAT=mm, or a device without NV_coopmat2), whose kq tile has one geometry."
     cm2_tile : int64 = 0l
 
     @clarg_doc = "cm2 split-k: 0 = the pick's own (the Vulkan wave model `cm2_gemm_pick`; the CUDA home's `cud_cm2_pick` splits a grid short of two blocks an SM until it fills the card and runs a full grid whole), 1 = off, N = force N k-chunks on either home (A/B instrument; shrinks if N strands an empty tail). On the KHR arm the chunks ride its one 128-column geometry."
@@ -619,6 +623,9 @@ struct public VulkanEnv {
 
     @clarg_doc = "The CUDA home's greedy chain: the next one-row step launched behind the running one on the device's own pick; 0 off, 1 every greedy step, -1 adaptive (backs off after a miss). A sampled session never chains."
     cuda_chain : int = 0
+
+    @clarg_doc = "The CUDA home's tower chains replayed from captured graphs: a chain whose rail state recurs is walked dry (each launch's parameters hashed, nothing launched) and replayed as one graph launch where the walk matches the captured one; 1 = on, 0 = every chain launched kernel by kernel (A/B instrument)."
+    cuda_graphs : int64 = 1l
 
     @clarg_path
     @clarg_doc = "Directory of <kernel>.spv files served instead of the emitted words at pipeline creation (offline spirv-opt / hand-patched A/B instrument)."

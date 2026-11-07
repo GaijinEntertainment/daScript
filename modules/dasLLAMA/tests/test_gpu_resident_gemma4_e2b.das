@@ -282,41 +282,7 @@ def test_gpu_resident_gemma4_e2b_tied_f16(t : T?) {
 def test_gpu_resident_gemma4_e2b_short_window(t : T?) {
     t |> run("gemma-4-E2B Q8_0: short tails peel through the token commands, the side rows riding them") @(t : T?) {
         with_gemma_rig(t, GEMMA4E_FILE) $(tr) {
-            var opening <- resident_prompt(40l)
-            var feed <- resident_feed(5l)
-            let lever = vulkan_prefill_peel()
-            set_vulkan_prefill_peel(true)
-            for (rows in [1l, 2l, 5l]) {
-                var tail <- [for (i in range64(rows)); feed[i]]
-                var steps <- ramp_ids(4l, rows, 2500l, 71l, 4500l)
-                var sa <- create_session(tr, mirror_kv_dtype())
-                eval(tr, sa, opening)
-                let peels0 = moe_gpu_resident_peels()
-                forward_prefill(tr, sa, tail, rows, 40l)
-                t |> equal(moe_gpu_resident_peels() - peels0, 1l, "a tail of {rows} rows peels through the token commands")
-                sa.n_past = 40l + rows
-                var got <- steps_after(tr, sa, steps)
-                var sb <- create_session(tr, mirror_kv_dtype())
-                eval(tr, sb, opening)
-                var inscope one : array<int64>
-                one |> resize(1)
-                for (i in range64(rows)) {
-                    one[0] = tail[i]
-                    eval_(tr, sb, one)
-                }
-                var want <- steps_after(tr, sb, steps)
-                rows_within_control(t, "a tail of {rows} rows", got, want, SPLIT_BAR_REL, 1l, 1.0, $(r) => r == 0l ? "the tail's last row" : "step {r}")
-                served_every_call(t)
-                delete sa
-                delete sb
-                delete got
-                delete want
-                delete tail
-                delete steps
-            }
-            set_vulkan_prefill_peel(lever)
-            delete opening
-            delete feed
+            e_series_peel_cell(t, tr, [1l, 2l, 5l], SPLIT_BAR_REL)
         }
     }
 }

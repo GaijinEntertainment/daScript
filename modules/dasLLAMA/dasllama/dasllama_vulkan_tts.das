@@ -381,7 +381,7 @@ def private ts_lin(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; slot : T
         var s = set_f32_gemm_cls(fixed_array(slab.dev, x.dev, y.dev), fixed_array(slab.bytes, x.bytes, y.bytes), fixed_array(0u, x.bit, y.bit))
         enc_f32_gemm_cls(raw, h, s, pa, f32_gemm_wgs(rows, nout))
     }
-    vt_pt(raw, VtProfRole.tts_gemm)
+    vt_pt(raw, RailProfRole.tts_gemm)
 }
 
 //! layernorm rows from x into y (y may be x) against a norm slot's scale and shift rows
@@ -394,7 +394,7 @@ def private ts_ln_at(raw : VkCommandBuffer; var h : VkHaz; wn : TsRows; woff, bo
     var s = set_tower_ln_cls(fixed_array(x.dev, y.dev, wn.dev), fixed_array(x.bytes, y.bytes, wn.bytes), fixed_array(x.bit, y.bit, wn.bit))
     var pa = gk_ln_args(uint(d), uint(rows), eps, uint(woff), uint(boff))
     enc_tower_ln_cls(raw, h, s, pa, rows)
-    vt_pt(raw, VtProfRole.tts_ln)
+    vt_pt(raw, RailProfRole.tts_ln)
 }
 
 //! the post-LN residual seam: x += y + b (the branch linear's bias row, `bslot`), then xb = layernorm(x) on the norm slot's rows
@@ -402,7 +402,7 @@ def private ts_add_ln(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; bslot
     var s = set_tower_post_add_ln_cls(fixed_array(x.dev, y.dev, xb.dev, slab.dev), fixed_array(x.bytes, y.bytes, xb.bytes, slab.bytes), fixed_array(x.bit, y.bit, xb.bit, 0u))
     var pa = GkPostAddLnArgs(d = uint(d), rows = uint(rows), woff = 0u, boff = uint(bslot.boff), eps = eps, ln_on = 1u, lnoff = uint(ns.gwoff), lnboff = uint(ns.gboff), ascale = 1.0, xboff = 0u)
     enc_tower_post_add_ln_cls(raw, h, s, pa, rows)
-    vt_pt(raw, VtProfRole.tts_ln)
+    vt_pt(raw, RailProfRole.tts_ln)
 }
 
 //! the leaky ReLU over x's first `nelem` elements in place
@@ -410,7 +410,7 @@ def private ts_leaky(raw : VkCommandBuffer; var h : VkHaz; x : TsRows; nelem : i
     var s = set_tts_leaky_cls(fixed_array(x.dev), fixed_array(x.bytes), fixed_array(x.bit))
     var pa = TtsElemArgs(nelem = uint(nelem), off = 0u, slope = slope)
     enc_tts_leaky_cls(raw, h, s, pa, nelem)
-    vt_pt(raw, VtProfRole.tts_act)
+    vt_pt(raw, RailProfRole.tts_act)
 }
 
 //! a conv on rows, forward or transposed: x [tin][cin] gathered into col [tout][kdim_p], then the biased tile over the slot's rows into y [tout][cout]
@@ -429,7 +429,7 @@ def private ts_im2col(raw : VkCommandBuffer; var h : VkHaz; slot : TtsConvSlot; 
         var sc = set_tts_im2col_cls(fixed_array(x.dev, col.dev), fixed_array(x.bytes, col.bytes), fixed_array(x.bit, col.bit))
         enc_tts_im2col_cls(raw, h, sc, pc, tout * slot.kdim_p)
     }
-    vt_pt(raw, VtProfRole.tts_im2col)
+    vt_pt(raw, RailProfRole.tts_im2col)
 }
 
 //! `ts_conv` under a left pad of the caller's choosing (the codec convs run the CPU's first-window pad, not the conv's own)
@@ -439,7 +439,7 @@ def private ts_conv_padded(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; 
     var pm = F32GemmArgs(n = uint(cv.k * cv.cin), d = uint(cv.cout), rows = uint(tout), woff = uint(slot.woff), wstride = uint(slot.kdim_p), boff = uint(slot.boff),
         xoff = 0u, xstride = uint(slot.kdim_p), yoff = 0u, ystride = uint(cv.cout))
     enc_f32_gemm_b_cls(raw, h, sm, pm, f32_gemm_wgs(tout, cv.cout))
-    vt_pt(raw, VtProfRole.tts_gemm)
+    vt_pt(raw, RailProfRole.tts_gemm)
 }
 
 //! the recurrence stamp's workgroup is four invocations a lane; a device whose compute limit is under that declines the LSTM seats
@@ -452,10 +452,10 @@ def private ts_conv16(raw : VkCommandBuffer; var h : VkHaz; slab, slab16 : TsRow
     var sm = f16_gemm_set(khr, fixed_array(slab16.dev, col16.dev, y.dev), fixed_array(slab16.bytes, col16.bytes, y.bytes), fixed_array(0u, col16.bit, y.bit))
     var pm = F16GemmArgs(n = uint(slot.kdim_p), d = uint(cv.cout), rows = uint(tout), woff = uint(slot.woff), ybase = 0u, ystride = uint(cv.cout), ksplit = 0u)
     f16_gemm_enc(khr, raw, h, sm, pm, tout, cv.cout)
-    vt_pt(raw, VtProfRole.tts_gemm)
+    vt_pt(raw, RailProfRole.tts_gemm)
     var sb = set_tower_bias_act_cls(fixed_array(y.dev, slab.dev), fixed_array(y.bytes, slab.bytes), fixed_array(y.bit, 0u))
     vt_bias_act(raw, h, sb, cv.cout, tout * cv.cout, slot.boff, BIAS_ACT_NONE)
-    vt_pt(raw, VtProfRole.tts_rows)
+    vt_pt(raw, RailProfRole.tts_rows)
 }
 
 //! a conv on rows: under `half`, a width on the bias pass's four lattice rides the f16 tile; every other conv the f32 tile
@@ -476,7 +476,7 @@ def private ts_lstm_dir(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; xs 
     var pa = TtsLstmArgs(t = uint(t), hidden = uint(hd), goff = 0u, gstride = uint(4l * hd), hhoff = uint(hh), hoff = backward ? uint(hd) : 0u,
         hstride = uint(2l * hd), backward = backward ? 1u : 0u)
     enc_tts_lstm_dir_cls(raw, h, s, pa, 1l)
-    vt_pt(raw, VtProfRole.tts_lstm)
+    vt_pt(raw, RailProfRole.tts_lstm)
 }
 
 //! the BiLSTM over x [t][nin]: the forward walk into y's first half, the backward into its second (the CPU `bilstm`'s rows)
@@ -568,7 +568,7 @@ def private vulkan_styletts2_albert(a : St2Albert; ids : array<int>; @scratch @e
     //! x the residual stream, then the full-normed rows; xb2 the attention context, then the attention-normed rows the ffn reads
     vt_chain_one_shot("albert", a.n_layers, t) $(raw : VkCommandBuffer; var h : VkHaz) {
         enc_tts_row_gather_cls(raw, h, s_gather, pa_gather, t * a.emb_dim)
-        vt_pt(raw, VtProfRole.tts_rows)
+        vt_pt(raw, RailProfRole.tts_rows)
         ts_ln(raw, h, slab, sl.emb_ln, r_e, r_e, t, a.emb_dim, eps)
         ts_lin(raw, h, slab, sl.map_in, a.emb_dim, d, r_e, r_x, t)
         for (_l in range64(a.n_layers)) {
@@ -576,12 +576,12 @@ def private vulkan_styletts2_albert(a : St2Albert; ids : array<int>; @scratch @e
             ts_lin(raw, h, slab, sl.k, d, d, r_x, r_k, t)
             ts_lin(raw, h, slab, sl.v, d, d, r_x, r_v, t)
             enc_tts_attn_cls(raw, h, s_attn, pa_attn, tts_attn_wgs(t, a.heads))
-            vt_pt(raw, VtProfRole.tts_attn)
+            vt_pt(raw, RailProfRole.tts_attn)
             ts_lin(raw, h, slab, sl.dense, d, d, r_xb2, r_xb, t, false)
             ts_add_ln(raw, h, slab, sl.dense, sl.attn_ln, r_x, r_xb, r_xb2, t, d, eps)
             ts_lin(raw, h, slab, sl.ffn, d, ff, r_xb2, r_ffn, t)
             enc_tts_gelu_tanh_cls(raw, h, s_gelu, pa_gelu, t * ff)
-            vt_pt(raw, VtProfRole.tts_act)
+            vt_pt(raw, RailProfRole.tts_act)
             ts_lin(raw, h, slab, sl.ffn_out, ff, d, r_ffn, r_f2, t, false)
             ts_add_ln(raw, h, slab, sl.ffn_out, sl.full_ln, r_xb2, r_f2, r_x, t, d, eps)
         }
@@ -669,7 +669,7 @@ def private vulkan_styletts2_text(te : St2TextEncoder; ids : array<int>; @scratc
     let ncnn = length(te.cnn)
     vt_chain_one_shot("text", int64(ncnn), t) $(raw : VkCommandBuffer; var h : VkHaz) {
         enc_tts_row_gather_cls(raw, h, s_gather, pa_gather, t * cc)
-        vt_pt(raw, VtProfRole.tts_rows)
+        vt_pt(raw, RailProfRole.tts_rows)
         for (i in range(ncnn)) {
             let src = i % 2 == 0 ? r_a : r_b
             let dst = i % 2 == 0 ? r_b : r_a
@@ -698,7 +698,7 @@ def private ts_concat(raw : VkCommandBuffer; var h : VkHaz; x, res, f0, nd, o : 
         fixed_array(x.bit, res.bit, f0.bit, nd.bit, o.bit))
     var pc = pa
     enc_tts_concat_cls(raw, h, s, pc, int64(pa.rows) * int64(pa.width))
-    vt_pt(raw, VtProfRole.tts_rows)
+    vt_pt(raw, RailProfRole.tts_rows)
 }
 
 //! raw[t] = the sigmoid sum of nb logits a row over speed
@@ -706,7 +706,7 @@ def private ts_sigsum(raw : VkCommandBuffer; var h : VkHaz; logits, out : TsRows
     var s = set_tts_sigsum_cls(fixed_array(logits.dev, out.dev), fixed_array(logits.bytes, out.bytes), fixed_array(logits.bit, out.bit))
     var pa = GkSigSumArgs(t = uint(t), nb = uint(nb), ls = uint(nb), speed = speed)
     enc_tts_sigsum_cls(raw, h, s, pa, t)
-    vt_pt(raw, VtProfRole.tts_rows)
+    vt_pt(raw, RailProfRole.tts_rows)
 }
 
 //! the column statistics of x [t][c] into the scratch's stats rows, the block partials past the two stats rows
@@ -721,7 +721,7 @@ def private ts_colstats(raw : VkCommandBuffer; var h : VkHaz; sc_ : TsScratch; x
     enc_tts_colpart_sq_cls(raw, h, s3, pa, tts_stats_blocks(t))
     var s4 = set_tts_colreduce_sq_cls(fixed_array(st.dev, st.dev), fixed_array(st.bytes, st.bytes), fixed_array(st.bit, st.bit))
     enc_tts_colreduce_sq_cls(raw, h, s4, pa, c)
-    vt_pt(raw, VtProfRole.tts_adain)
+    vt_pt(raw, RailProfRole.tts_adain)
 }
 
 //! AdaIN, then leaky(0.2) or Snake on the norm slot's alpha row, from x into y (y may be x), the style rows at `hoff`
@@ -740,7 +740,7 @@ def private ts_adain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : 
         var s2 = set_tts_adain_leaky_cls(bufs, sizes, bits)
         enc_tts_adain_leaky_cls(raw, h, s2, p2, t * c)
     }
-    vt_pt(raw, VtProfRole.tts_adain)
+    vt_pt(raw, RailProfRole.tts_adain)
 }
 
 //! the depthwise transposed pool on rows: y [t_out][c] from x [t_in][c] over the slab's w [c][k] at `woff` and b [c] at `boff`
@@ -749,7 +749,7 @@ def private ts_pool_dw(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; cv :
     var pa = GkDwConvRowsArgs(c = uint(cv.cin), k = uint(cv.k), stride = uint(cv.stride), pad_l = uint(cv.pad_l), dil = uint(cv.dilation), t_in = uint(t_in),
         t_out = uint(t_out), woff = uint(woff), boff = uint(boff))
     enc_tts_pool_dw_cls(raw, h, s, pa, t_out * cv.cin)
-    vt_pt(raw, VtProfRole.tts_rows)
+    vt_pt(raw, RailProfRole.tts_rows)
 }
 
 //! out [rows][c] = src[idx[r]] - the nearest x2 upsample with idx = r / 2
@@ -758,7 +758,7 @@ def private ts_gather_rows(raw : VkCommandBuffer; var h : VkHaz; src, idx, out :
         fixed_array(src.bit, idx.bit, src.bit, src.bit, out.bit))
     var pa = GkRowGatherArgs(c = uint(c), rows = uint(rows), aoff = 0u, boff = 0u, coff = 0u, out_off = 0u, add_b = 0u, add_c = 0u, scale = 1.0)
     enc_tts_row_gather_cls(raw, h, s, pa, rows * c)
-    vt_pt(raw, VtProfRole.tts_rows)
+    vt_pt(raw, RailProfRole.tts_rows)
 }
 
 //! o = (a + b) * scale over n elements (o may be a)
@@ -766,7 +766,7 @@ def private ts_add_scale(raw : VkCommandBuffer; var h : VkHaz; a, b, o : TsRows;
     var s = set_tts_add_scale_cls(fixed_array(a.dev, b.dev, o.dev), fixed_array(a.bytes, b.bytes, o.bytes), fixed_array(a.bit, b.bit, o.bit))
     var pa = GkAddScaleArgs(nelem = uint(n), scale = scale)
     enc_tts_add_scale_cls(raw, h, s, pa, n)
-    vt_pt(raw, VtProfRole.tts_rows)
+    vt_pt(raw, RailProfRole.tts_rows)
 }
 
 [hot_path]   //! re-asked every chunk through `ts_arm_ensure`'s invoke
@@ -1322,7 +1322,7 @@ def private ts_axpy(raw : VkCommandBuffer; var h : VkHaz; o, y : TsRows; n : int
     var s = set_tts_axpy_cls(fixed_array(o.dev, y.dev), fixed_array(o.bytes, y.bytes), fixed_array(o.bit, y.bit))
     var pa = GkAxpyArgs(nelem = uint(n), scale = scale, zero = zero ? 1u : 0u)
     enc_tts_axpy_cls(raw, h, s, pa, n)
-    vt_pt(raw, VtProfRole.tts_rows)
+    vt_pt(raw, RailProfRole.tts_rows)
 }
 
 //! a Snake residual block from bin into bout, the CPU `gen_res_block` dispatch for dispatch; `bi` the block's index in the slab's block order
@@ -1372,7 +1372,7 @@ def private ts_stage(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : 
         enc_tts_pk_rows_cls(raw, h, s, shift, n - c2)
         var head = GkPkRowsArgs(rows = 1u, width = uint(c2), ss = uint(c2), sc = 0u, sr0 = 1u, ds = uint(c2), dc = 0u, dr0 = 0u)
         enc_tts_pk_rows_cls(raw, h, s, head, c2)
-        vt_pt(raw, VtProfRole.tts_rows)
+        vt_pt(raw, RailProfRole.tts_rows)
     }
     ts_add_scale(raw, h, r_by, r_bsres, r_by, n, 1.0)
     let nk = d.n_kernels
@@ -1440,7 +1440,7 @@ def private ts_source_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows;
         enc_tts_src_cumsum_torch_cls(raw, h, s2, ka, 1l)
         var s3 = set_tts_src_sines_torch_cls(sin_bufs, sin_sizes, sin_bits)
         enc_tts_src_sines_torch_cls(raw, h, s3, ka, sh.ss.samples)
-        vt_pt(raw, VtProfRole.tts_source)
+        vt_pt(raw, RailProfRole.tts_source)
     } else {
         var s1 = set_tts_src_low_onnx_cls(low_bufs, low_sizes, low_bits)
         enc_tts_src_low_onnx_cls(raw, h, s1, ka, nh * sh.ss.nlow)
@@ -1448,7 +1448,7 @@ def private ts_source_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows;
         enc_tts_src_cumsum_onnx_cls(raw, h, s2, ka, 1l)
         var s3 = set_tts_src_sines_onnx_cls(sin_bufs, sin_sizes, sin_bits)
         enc_tts_src_sines_onnx_cls(raw, h, s3, ka, sh.ss.samples)
-        vt_pt(raw, VtProfRole.tts_source)
+        vt_pt(raw, RailProfRole.tts_source)
     }
     let re & = unsafe(d.stft_fwd_re)
     var ks = GkStftArgs(n = uint(sh.ss.samples), frames = uint(sh.ss.spec_frames), bins = uint(d.bins), k = uint(re.k), hop = uint(re.stride), pad = uint(ST2_STFT_PAD),
@@ -1463,7 +1463,7 @@ def private ts_source_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows;
         var s4 = set_tts_stft_edge_cls(st_bufs, st_sizes, st_bits)
         enc_tts_stft_edge_cls(raw, h, s4, ks, sh.ss.spec_frames * d.bins)
     }
-    vt_pt(raw, VtProfRole.tts_stft)
+    vt_pt(raw, RailProfRole.tts_stft)
 }
 
 //! the encode block, then each decode block (re-concatenated where its width asks); the stream lands in X
@@ -1576,7 +1576,7 @@ def private vulkan_styletts2_decode(d : St2Decoder; text_c : int64; source : Sin
             wnoff = uint(sl.window))
         var s = set_tts_istft_cls(fixed_array(r_post.dev, slab.dev, r_wave.dev), fixed_array(r_post.bytes, slab.bytes, r_wave.bytes), fixed_array(r_post.bit, 0u, r_wave.bit))
         enc_tts_istft_cls(raw, h, s, ki, sh.n_out)
-        vt_pt(raw, VtProfRole.tts_stft)
+        vt_pt(raw, RailProfRole.tts_stft)
     }
     ts_readback(r_wave, sc_, wave, sh.n_out)
     g_ts_encodes++
@@ -1794,7 +1794,7 @@ def private ts_pk_rows(raw : VkCommandBuffer; var h : VkHaz; src, dst : TsRows; 
         var s = set_tts_pk_rows_cls(fixed_array(src.dev, dst.dev), fixed_array(src.bytes, dst.bytes), fixed_array(src.bit, dst.bit))
         enc_tts_pk_rows_cls(raw, h, s, pc, total)
     }
-    vt_pt(raw, VtProfRole.tts_pk)
+    vt_pt(raw, RailProfRole.tts_pk)
 }
 
 def private ts_pk_rows_args(rows, width : int64) : GkPkRowsArgs
@@ -1810,7 +1810,7 @@ def private ts_pk_row_scale(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows;
     var s = set_tts_pk_row_scale_cls(fixed_array(x.dev, slab.dev), fixed_array(x.bytes, slab.bytes), fixed_array(x.bit, 0u))
     var pa = GkBiasActArgs(d = uint(c), nelem = uint(rows * c), boff = uint(soff))
     enc_tts_pk_row_scale_cls(raw, h, s, pa, rows * c)
-    vt_pt(raw, VtProfRole.tts_pk)
+    vt_pt(raw, RailProfRole.tts_pk)
 }
 
 //! the adjacent-pair rope over the span `d` wide at column `col` of x's rows [rows][qs], positions 0.., on the tables in `tabs` (cos at coff, sin at soff)
@@ -1818,7 +1818,7 @@ def private ts_pk_rope(raw : VkCommandBuffer; var h : VkHaz; tabs : TsRows; coff
     var s = set_tts_pk_rope_cls(fixed_array(x.dev, tabs.dev, tabs.dev), fixed_array(x.bytes, tabs.bytes, tabs.bytes), fixed_array(x.bit, tabs.bit, tabs.bit))
     var pa = GkRopeTabArgs(rows = uint(rows), qs = uint(qs), col = uint(col), d = uint(d), dh = uint(dh), coff = uint(coff), soff = uint(soff))
     enc_tts_pk_rope_cls(raw, h, s, pa, rows * d / 2l)
-    vt_pt(raw, VtProfRole.tts_pk)
+    vt_pt(raw, RailProfRole.tts_pk)
 }
 
 //! the causal cached attention row over `t` query rows of the fused [q | k | v] rows (stride `qs`, query i at position pos0 + i)
@@ -1828,7 +1828,7 @@ def private ts_pk_attn(raw : VkCommandBuffer; var h : VkHaz; qkv, k, v, o : TsRo
     var pa = GkPkAttnArgs(t = uint(t), qs = uint(qs), qcol = 0u, d = uint(tf.attn_dim), pos0 = uint(pos0), ctx = uint(tf.context), hs = uint(tf.dh),
         kvs = uint(tts_pk_kv_width(tf)))
     enc_tts_pk_attn_cls(raw, h, s, pa, tts_attn_wgs(t, tf.heads))
-    vt_pt(raw, VtProfRole.tts_pk_attn)
+    vt_pt(raw, RailProfRole.tts_pk_attn)
 }
 
 //! x += y (no bias: the slab's zero row), then xb = layernorm(x) on the norm slot's rows - a transformer layer's residual join and the norm after it
@@ -1905,11 +1905,11 @@ def private ts_pk_gemv(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; p : 
 }
 
 //! the ledger role of a row GEMV stamp
-def private ts_pk_gemv_role(kind : int) : VtProfRole {
-    if (kind == TS_PK_GEMV_DOT) return VtProfRole.tts_pk_dot
-    if (kind == TS_PK_GEMV_LN_GELU) return VtProfRole.tts_pk_ffn
-    if (kind == TS_PK_GEMV_ADD_SCALE || kind == TS_PK_GEMV_ADD) return VtProfRole.tts_pk_res
-    return VtProfRole.tts_pk_head
+def private ts_pk_gemv_role(kind : int) : RailProfRole {
+    if (kind == TS_PK_GEMV_DOT) return RailProfRole.tts_pk_dot
+    if (kind == TS_PK_GEMV_LN_GELU) return RailProfRole.tts_pk_ffn
+    if (kind == TS_PK_GEMV_ADD_SCALE || kind == TS_PK_GEMV_ADD) return RailProfRole.tts_pk_res
+    return RailProfRole.tts_pk_head
 }
 
 def private ts_pk_lin(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; p : TtsConvSlot; nin, nout : int64; x : TsRows; xoff : int64; y : TsRows; yoff : int64) {
@@ -2029,7 +2029,7 @@ def private ts_pk_rows_tf(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; s
         ts_pk_add_ln(raw, h, slab, f.zero, s.n2, r_x, r_xb, r_xb, t, d, tf.eps)
         ts_lin(raw, h, slab, s.ffn1, d, tf.ffn, r_xb, r_h, t)
         enc_tts_gelu_tanh_cls(raw, h, s_gelu, pa_gelu, t * tf.ffn)
-        vt_pt(raw, VtProfRole.tts_act)
+        vt_pt(raw, RailProfRole.tts_act)
         ts_lin(raw, h, slab, s.ffn2, tf.ffn, d, r_h, r_xb, t)
         if (s.has_s2) {
             ts_pk_row_scale(raw, h, slab, r_xb, t, d, s.scale2_off)
@@ -2073,7 +2073,7 @@ def private ts_pk_codec_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRow
     var pp = GkDwConvRowsArgs(c = uint(d), k = uint(mm.upsample.k), stride = uint(mm.upsample.stride), pad_l = 0u, dil = uint(mm.upsample.dilation), t_in = uint(frames),
         t_out = uint(t1), woff = uint(sl.up_w), boff = uint(sl.up_b))
     enc_tts_pool_dw_cls(raw, h, sp, pp, t1 * d)
-    vt_pt(raw, VtProfRole.tts_rows)
+    vt_pt(raw, RailProfRole.tts_rows)
     ts_pk_transformer(raw, h, slab, sc_, mm.dec_tf, sl, t1)
     var cur = ts_rows(sc_, TS_C_A)
     ts_pk_conv(raw, h, slab, sl.dec_in, mm.dec_in, t1, r_x, r_col, cur)
@@ -2205,7 +2205,7 @@ def private ts_pk_fr_layer(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; 
         boff = uint(L.in_proj.boff), xoff = 0u, yoff = 0u, moff = 0u, lwoff = uint(L.n1.gwoff), lboff = uint(L.n1.gboff), aoff = 0u, x0off = 0u, loff = 0u,
         span = uint(qd), dh = dh, p = uint(p), coff = 0u, soff = uint(v.sin_off))
     enc_tts_pk_gemv_ln_qkv_cls(raw, h, sq, pq, qkvw)
-    vt_pt(raw, VtProfRole.tts_pk_qkv)
+    vt_pt(raw, RailProfRole.tts_pk_qkv)
     ts_pk_attn(raw, h, r_qkv, v.k[li], v.v[li], r_ctx, tf, 1l, qkvw, p)
     ts_pk_gemv_add(raw, h, slab, L.out_proj, qd, d, r_ctx, r_x, L.has_s1, L.scale1_off)
     var s1 = ts_pk_site(r_x, 0l, r_h)

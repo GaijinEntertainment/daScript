@@ -1475,6 +1475,9 @@ struct GkWdecAttnArgs {
     scale : float    //! the score scale, 1 / sqrt(hs)
 }
 
+let WDEC_CHUNK = 256u   //! the keys a partial's workgroup covers and its `scores` extent - `GkWdecAttnPart`'s literal (a kernel reads no module global)
+let WDEC_HS = 64u       //! the whisper decoder's head width, every size of the family; the drivers decline another
+
 //! the whisper decoder's chunked attention, the partials: one workgroup a (chunk, head, row) over 256 keys - the q bias folded
 //! into the dot, the chunk's scores staged, their max and exp-sum landed as the (m, s) slot, the unnormalized weighted V as the
 //! slot's row; the combine below merges the chunks by log-sum-exp
@@ -2003,7 +2006,7 @@ class template GkWdecAttnComb : GkQ8BlockStore {
         c = 0u
         while (c < pa.nchunks) {
             let slot = (c * pa.nheads + h) * pa.nrows + r
-            tot += pms[slot * 2u + 1u] * exp(pms[slot * 2u] - mg)
+            tot = mad(pms[slot * 2u + 1u], exp(pms[slot * 2u] - mg), tot)
             c++
         }
         let inv = 1.0 / max(tot, 1.0e-30)
@@ -2013,7 +2016,7 @@ class template GkWdecAttnComb : GkQ8BlockStore {
             c = 0u
             while (c < pa.nchunks) {
                 let slot = (c * pa.nheads + h) * pa.nrows + r
-                acc += py[slot * hs + j] * exp(pms[slot * 2u] - mg)
+                acc = mad(py[slot * hs + j], exp(pms[slot * 2u] - mg), acc)
                 c++
             }
             static_if (OUT_Q8) {
@@ -2240,6 +2243,8 @@ struct GkQ3aShuffleArgs {
     npos : uint         //! the window's positions
 }
 
+let Q3A_TOK_PER_CHUNK = 13u   //! the shuffle's positions a chunk, its body's literal (a kernel reads no module global); a seat checks the family's agrees
+
 //! the qwen3a feature rows off the third conv stage, the conv_out GEMM's feed: feat[ci][ow][h + 16 c] = y3[ci][(h x 13 + ow) x ncp + c],
 //! thirteen positions a chunk; the stamp names the feed's element type `OT` (the f16 tile's halves, the f32 tile's floats)
 [ |> template_struct_instance]
@@ -2410,9 +2415,11 @@ class template GkBiasAct {
 
 }
 
+let F16_MAX = 65504.0   //! the f16 range's edge: a plain halves feed clamps to it, so no inf reaches a tile
+
 //! the clamp record at the half range: the plain f32 -> f16 rows (`scale` on the way in, the halves at `hoff`)
 def gk_f16_rows_args(nelem : uint; scale : float = 1.0; hoff : uint = 0u) : GkClampArgs
-    => GkClampArgs(nelem = nelem, lo = -65504.0, hi = 65504.0, scale = scale, hoff = hoff)
+    => GkClampArgs(nelem = nelem, lo = -F16_MAX, hi = F16_MAX, scale = scale, hoff = hoff)
 
 struct GkClampArgs {
     nelem : uint          //! a 4-multiple (every tower width is a 64-multiple)
@@ -3737,6 +3744,15 @@ class template GkPostAddLn : GkQ8BlockStore {
         }
     }
 
+    [spirv_inline]
+    def inv_norm(ms : float) : float {
+        static_if (RSQRT) {
+            return rsqrt(ms)
+        } else {
+            return 1.0 / sqrt(ms)
+        }
+    }
+
     //! the branch's post-norm inverse over the row at `base` (slot 0), 1 on a stamp without the post-norm
     def post_inv_into(base : uint; var inv : float&) {
         static_if (POST_NORM) {
@@ -3749,7 +3765,7 @@ class template GkPostAddLn : GkQ8BlockStore {
             }
             var sw = 0.0
             wg_sum_into(ss, 0u, sw)
-            inv = 1.0 / sqrt(sw / float(pa.d) + pa.eps)
+            inv = inv_norm(sw / float(pa.d) + pa.eps)
         } else {
             inv = 1.0
         }
@@ -3764,7 +3780,7 @@ class template GkPostAddLn : GkQ8BlockStore {
         var i = tid
         static_if (ADD) {
             while (i < pa.d) {
-                let xv = x[base + i] + pa.ascale * branch(base, i, inv_post)
+                let xv = mad(pa.ascale, branch(base, i, inv_post), x[base + i])
                 x[base + i] = xv
                 static_if (RMS) {
                     s1 += xv * xv
@@ -3789,7 +3805,7 @@ class template GkPostAddLn : GkQ8BlockStore {
             static_if (RMS) {
                 var sw = 0.0
                 wg_sum_into(s1, POST_NORM ? 1u : 0u, sw)
-                let inv = 1.0 / sqrt(sw / float(pa.d) + pa.eps)
+                let inv = inv_norm(sw / float(pa.d) + pa.eps)
                 i = tid
                 while (i < pa.d) {
                     store(base + i, (x[base + i] * inv) * wn[pa.lnoff + i])
@@ -3803,12 +3819,12 @@ class template GkPostAddLn : GkQ8BlockStore {
                 i = tid
                 while (i < pa.d) {
                     let dv = x[base + i] - mean
-                    s2 += dv * dv
+                    s2 = mad(dv, dv, s2)
                     i += 256u
                 }
                 var s2w = 0.0
                 wg_sum_into(s2, 1u, s2w)
-                let inv = 1.0 / sqrt(s2w / float(pa.d) + pa.eps)
+                let inv = inv_norm(s2w / float(pa.d) + pa.eps)
                 static_if (OUT_Q8) {
                     static_if (ADD) {
                         memoryBarrierBuffer()   // every lane's in-place x writes visible before the block pass reads the row across lanes
@@ -5064,6 +5080,7 @@ class template GkMoeCombG4 : GkMoeCombine {
 
 let GK_VAD_CHUNK = 512l    //! the samples a chunk consumes, the bodies' literal: `x` holds the 64-sample context, then the chunks
 let GK_VAD_HIDDEN = 128l   //! the LSTM's width, the bodies' literal
+let GK_VAD_CONTEXT = 64l   //! the samples of the stream's context ahead of a call's chunks, the bodies' literal
 
 //! the VAD's element offsets in its one weight slab (`vad_build_slab`'s layout) and the chunk count of the dispatch; the
 //! row-major planes sit transposed, k-major, so a dot's lanes read consecutive rows

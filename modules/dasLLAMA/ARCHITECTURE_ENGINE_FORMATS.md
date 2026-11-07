@@ -157,31 +157,6 @@ serves as:
 | Metal | iq4nl32's stamps under `Q40L`: the GEMV and its K-split, the small-batch forms, `mul_mm`, the routed GEMV and tiles, the gather | iq4nl32's stamps under `Q50`: the GEMV, its K-split, the routed GEMV and the small-batch forms over a 32-entry `q - 16` table; the gather and `mul_mm` decode `q - 16` directly; the routed tensor twins on q51's staging under `Q50` |
 | ids | enum 18, stream tag `Q4032_STREAM_TAG`, no gemm schema | enum 19, stream tag `Q5032_STREAM_TAG`, no gemm schema |
 
-### A served form is a second member over the same disk type {#served-form}
-
-`iq3s4` is IQ3_S served as a 16-entry codebook plane: every IQ3_S weight is a signed odd
-magnitude 1..15 times its block scale, so the grid entry, the `qh` ninth bit and the sign fold
-at transcode into one nibble index (`iq3s4_lut`, `-15, -13, .., 15`) laid in the k4 tiling, and
-the scale row is iq3s's own. The dequant is value-exact against the grid form; the planes cost
-17% more bytes (128 against 104 a superblock) and decode through the iq4xs codebook kernels -
-one table lookup a nibble in place of the grid gather, which is where the IQ3_S CPU decode spent
-its time. The member's descriptor row names the source type (`GGML_TYPE_IQ3_S`, 110 disk bytes)
-with its own schema and stream ids, so the image and the stream rail carry it like any lattice
-member. The choice is `kq_fmt_of`'s at the load (`iq3s_serve_lut`, the `DASLLAMA_IQ3S_SERVE`
-knob or a process pin, `set_iq3s_serve_pin`: `grid`, `lut`, `auto` = lut on the CPU rails and the
-Vulkan tier, the grid under the Metal tier), and it is an image identity bit
-(`DlimCpuConfig.iq3s_lut`), because it changes plane bytes. Both GPU tiers decode it on every
-ladder, the codebook arithmetic (`2q - 15`, no table bound) and the stamps the iq4xs kernels with
-the odd codebook switched in: on Vulkan the device row is iq4xs's quant plane under iq3s's scale
-word; on Metal the blob's split scale plane carries the eight `1 + 2s` strip bytes and the f16 d
-exactly as iq4xs's carries its signed sub-scales (`ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane`),
-so every iq4 family stamp under `IQODD` reads it - the GEMV, the small-batch forms, the base and
-tensor tiles, the routed GEMV and tiles, the token gather. So a host that sums routed experts
-beside a Vulkan device reads the fast planes, and the device reads the same bytes; under Metal
-`auto` keeps the grid, which streams 17% fewer bytes a superblock.
-
-The nv4 member - its planes' bytes and the per-tensor scale beside them - is `ARCHITECTURE_ENGINE_FORMATS_NV4.md`; the snapshot source and its affine members are `ARCHITECTURE_ENGINE_FORMATS_MLX.md`.
-
 ### The load and image rail {#the-load-and-image-rail}
 
 **`dasllama_load.das`** is the GGUF load walk: metadata to `Config`, the plane layout, disk-format
@@ -204,7 +179,14 @@ grouped (qwen3next) file's out plane, whose input columns the load permutes acro
 so the q8 transcode is its only form. A dense or routed plane whose disk type no `KqFmt` member carries - F16, BF16,
 F32, and MXFP4 outside a routed stack - is the q8 transcode on every home, the CPU and both devices; the routed stacks
 MXFP4 on disk, the gate and up stacks apart or as gemma-4's fused gate_up stack, load as the native-MXFP4 planes
-(`experts_mx4`). No stocked gemma file carries such a dense or routed plane. Every `load_big` call names the form it
+(`experts_mx4`). No stocked gemma file carries such a dense or routed plane. An encoder tower's GEMM planes take the
+tower's lanes (`ARCHITECTURE_MEDIA.md#tower-weight-lane`), each form ledgered here: the q8 lane, the default on every
+GPU home - Vulkan, CUDA and Metal - with the chat towers included, is a Q8_0 requant of
+the file's F32, F16 or BF16 GEMMs at default levers - a
+converted copy the tower's image carries; the f16 lane's halfword plane, rounded from F32 or BF16 and saturated to the
+f16 range, is a converted copy only a pin reaches (`set_*_q8(false)`, `set_asr_fp32`, `set_asr_tower_fp32`); GigaAM's
+halfwords are its carrier's own F16, a served form; a chat tower on a box with no GPU tower reads the file's f32 rows.
+Every `load_big` call names the form it
 fills - the plane's tag, or the `KqFmt` member a conversion serves - so the conversion reads at the call;
 `REVIEW.das`'s `check_load_big_format` reds a call with no format, and licenses no names.
 

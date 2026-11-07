@@ -5,28 +5,28 @@ docs: `ARCHITECTURE_GPU_VULKAN.md`, every `ARCHITECTURE_GPU_VULKAN_<CONCERN>.md`
 it, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_SHARED_GEMM.md` and `ARCHITECTURE_GPU_SHARED_ATTN.md`.
 Planned work: `followup_vulkan.md`.
 
-**A diff that changes a GEMM tile class or template - `KqCm2BatchT`, a `<Fmt>Cm2T`, a
-`<Fmt>KhrBatch`, a stamp of one - or a kernel body that calls `coopmatLoadTensor`,
-`coopmatLoadTensorDecode` or a `[spirv_decode]` method, or a prefill GEMM's k split
-(`cm2_gemm_pick`, `F16G_SPLIT`, or an encode that splits k), or that changes the SPIR-V words a
-GEMM tile stamp emits (its `DASLLAMA_VK_SPV_DUMP` output against the base branch's), applies
-`REVIEW_GPU_VULKAN_TILES.md` (beside this file) too.**
+**A diff that changes a GEMM tile class or template - `KqCm2BatchT`, a class template deriving it
+directly or through another such template, `F16GemmCm2T`, or a stamp of any of these (the
+`<Fmt>KhrBatch` classes among them) - or a kernel body that calls `coopmatLoadTensor`,
+`coopmatLoadTensorDecode` or a `[spirv_decode]` method, or a GEMM's k split (any split whose
+partial planes `SplitKReduce` sums: `cm2_gemm_pick`, `F16G_SPLIT`, or an encode that splits k), or
+that changes the SPIR-V words a GEMM tile stamp emits (its `DASLLAMA_VK_SPV_DUMP` output against
+the base branch's), applies `REVIEW_GPU_VULKAN_TILES.md` (beside this file) too.**
 
 **A diff that adds a Vulkan dispatch family - a `[vk_dispatch]` class and the `ensure_<family>` /
 `set_<family>` pair generated from it - or that caches a descriptor set or a host address (a
 pointer into CPU memory) a later dispatch reads, puts every piece of state the family keeps per model,
 and every such cached set or address, where the model drop clears it, in the same change: in
 `vk_drop_model_state`'s sweep, or in a listener registered through `register_vk_drop_hook`
-(`dasllama/dasllama_vulkan_common.das`).** To clear is
-to zero the state or leave it unreachable to every later read. The sweep frees a `make_device_buf`
-result and clears `RDec` (the resident decode driver's state), but not a driver's own handle to
-such a buffer, a `*_ready` latch or a profiler accumulator; pipelines survive the drop.
+(`dasllama/dasllama_vulkan_common.das`).** To clear is to zero the state or leave it unreachable
+to every later read; what the sweep clears by itself is
+`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#gpu-slot-marks`.
 
-**A diff that adds to `dasllama/dasllama_vulkan_classes.das` a host-side ensure/set/enc pick
-ladder over a family's class stamps - the stamps of one `[vk_dispatch]` class template, picked by a
-shape argument - including a ladder over a family that had one stamp and gains a second, adds that
-family's stamp glob to the kernel-home row's stamp list in `ARCHITECTURE_GPU.md#gpu-backends`, in
-the same change.**
+**A diff that adds a host-side pick ladder - an ensure, set or enc function that picks among the
+`[vk_dispatch]` stamps of one class template by a shape argument - wherever the diff puts it,
+including a ladder over a family that had one stamp and gains a second, adds that family's stamp
+glob to the kernel-home row's stamp list in `ARCHITECTURE_GPU.md#gpu-backends`, in the same
+change.**
 
 **Never size a buffer bound as one SSBO (shader storage buffer) range above the device limit
 `vk_max_storage_range()` - check the size with `vk_range_ok` at the site that computes it, or
@@ -41,43 +41,47 @@ change** - the override and the gate live in `dasllama/dasllama_gpu_resident.das
 embed when that gate returns true, so a gate true where the prefill path declines sets up a
 device gather for nothing, and the CPU embeds the rows after all (`embed_backfill_rows`).
 
+A call into the tier is a call of a function a `dasllama/dasllama_*vulkan*.das` or
+`dasllama/dasllama_gpu*.das` file declares, or a call in a generic body both discrete GPU homes
+instantiate (`dasllama/dasllama_tower_chains*.das`, `dasllama/dasllama_asr_dec_chains.das`,
+`dasllama/dasllama_tower_rail.das`) that resolves to such a function in the Vulkan instantiation.
+
 **A Vulkan-tier serving gate that decides at load - a predicate or per-layer loop whose true branch
-dispatches through a call into the tier (a function a `dasllama/dasllama_*vulkan*.das` or
-`dasllama/dasllama_gpu*.das` file declares), wherever the diff puts it, and whose false branch or
+dispatches through a call into the tier, wherever the diff puts it, and whose false branch or
 `continue` routes work off the path it armed, to the CPU path or to another path inside the tier -
 is a defect when it does not log, at load, how many layers or planes it routed off and why.** A
 silent decline is a fallback a user finds only by profiling.
 
 **A Vulkan-tier serving gate that decides per call - a predicate or loop whose true branch
-dispatches through a call into the tier (a function a `dasllama/dasllama_*vulkan*.das` or
-`dasllama/dasllama_gpu*.das` file declares), wherever the diff puts it, and whose false branch or
+dispatches through a call into the tier, wherever the diff puts it, and whose false branch or
 `continue` routes work off the path it armed, to the CPU path, to another path inside the tier, or
 to a slower form inside the same path (a host upload in place of a device-to-device copy) because of
 a model, session or device property (a decline driven by the work's size is not one) - that does
-not log words
-naming the condition that failed, once per reason per armed model, is a defect.**
+not log words naming the condition that failed, once per reason per armed model, is a defect.**
 
 **A `*_decline_words` return that a diff adds or changes, for a reason a `VK_DECLINE_WORDS_*`
 constant in `dasllama/dasllama_vulkan_tower.das` already states, returns that constant or starts
-its text with it - never a second wording of that reason.**
+its text with it - never a second wording of that reason; a words function shared across homes
+takes that reason's text as a parameter, as it takes `knob` and `device`, and its Vulkan caller
+passes the constant.**
 
-**A diff that adds or changes a function under `dasllama/` that calls `vk_moe_init()`, and that
-is reachable other than through a hook `install_vk_moe_hooks` installs, makes that function test
-`gpu_want_arms_tier()` first and decline without calling `vk_moe_init()` when the test returns
-false.** `vk_moe_init` reads no knob, so a caller that skips the test serves on a box whose
-`DASLLAMA_GPU` says no.
+**A diff that adds or changes a function under `dasllama/` whose body, as written in its source
+file, calls `vk_moe_init()`, and that is reachable other than through a hook `install_vk_moe_hooks`
+installs, makes that function test `gpu_want_arms_tier()` first and decline without calling
+`vk_moe_init()` when the test returns false.**
+`vk_moe_init` reads no knob, so a caller that skips the test serves on a box whose `DASLLAMA_GPU`
+says no.
 
 **A serving hook - a hook slot the CPU chain calls to hand work to the GPU - in a Vulkan driver
 file (`dasllama/dasllama_vulkan_*.das`) that keeps a `VkDeclineCounter` counts a decline on a false `gpu_want_arms_tier()` under its decline enum's
 `device` member, with `VK_DECLINE_WORDS_DEVICE` as the reason text.**
 
-**A diff that changes what a device limit decides for the tier - which path serves, how much it
-arms, whether it declines - adds that limit to `vk_ext_roster`
-(`dasllama/dasllama_vulkan_common.das`) with what the tier does with it and what serves without
-it; a diff that makes a limit or extension the roster already names decide a new route adds the
-route to that entry, in the same change.** A new route is a caller family - the functions that
-reach the tier through one serving hook - whose serving or declining the limit or extension now
-decides. Weakening `check_vk_extension_roster` (`REVIEW.das`) is a defect.
+**A diff that changes what a device limit or extension decides for the tier - which path, tile or
+column serves, how much it arms, whether it declines - adds that limit or extension to `vk_ext_roster`
+(`dasllama/dasllama_vulkan_common.das`) with what the tier does with it and what serves without it,
+or, where the roster already names it, rewrites that entry's text to state the new decision, in the
+same change.** The roster's text is what the device-init log prints. Weakening
+`check_vk_extension_roster` (`REVIEW.das`) is a defect.
 
 **Never leave a K/V codec unserved by the kernels that read or write the whole-model driver's
 `k_slabs`/`v_slabs` mirror slabs, or the decode block's per-layer `DatLayer.k_mir`/`v_mir` pair -
