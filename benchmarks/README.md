@@ -205,6 +205,12 @@ The `m3` lane (eager linq, no `_fold` splice) was dropped on 2026-05-23; the spl
 | `to_array_filter` | `_where + _select + to_array` - three-stage materialize |
 | `zip_dot_product` | `zip(a, b) + _select(_._0 * _._1) + sum` (Array/Decs only; zip is not relational, no SQL form) |
 
+## daslib/regex/
+
+| File | Description |
+|---|---|
+| `tree_patterns.das` | `daslib/regex` over the patterns the tree runs - the REVIEW gates, `review_gate`, `cpp_gen`, the hygiene tools and das2rst's name groups - each over a few KB of generated source-like text with the call its caller uses (`regex_foreach`, `regex_search`, per-line `regex_match`, `regex_replace`), plus the shared-prefix alternation under `*` and `(a*)*b` on a tiny input |
+
 ## micro/
 
 Standalone micro-benchmarks - self-contained (no `_common`), kept out of `sql/` so they don't interfere with the `results.md` table-building sweep. Used to validate a design choice with hand-coded "fake code" (the AST the macro would emit) before building the macro.
