@@ -8,6 +8,7 @@ options _function_length = 0   // the loader and serialize walks mirror the mode
 require dasllama/dasllama_lint public
 require math
 require daslib/fio
+require daslib/rtti
 require strings
 require daslib/strings_boost
 require daslib/array_boost
@@ -581,13 +582,23 @@ def stage_nmt_model(path : string; q8 : bool = false) : NmtStaging {
     st.e.pair = length(parts) > 1 ? parts[1] : ""
     let f = fopen(path, "rb")
     nmt_expect(f != null, "cannot open model '{path}'")
-    fmap(f) $(var bytes : array<uint8>#) {
-        var inscope items <- marian_items(bytes)
-        nmt_read_hparams(items, bytes, st.e)
-        nmt_expect(st.e.n_vocab == long_length(st.e.vocab), "the model's {st.e.n_vocab} embeddings and the vocabulary's {length(st.e.vocab)} pieces")
-        nmt_fill(items, bytes, st)
+    var refused = false
+    var why = ""
+    try {
+        fmap(f) $(var bytes : array<uint8>#) {
+            var inscope items <- marian_items(bytes)
+            nmt_read_hparams(items, bytes, st.e)
+            nmt_expect(st.e.n_vocab == long_length(st.e.vocab), "the model's {st.e.n_vocab} embeddings and the vocabulary's {length(st.e.vocab)} pieces")
+            nmt_fill(items, bytes, st)
+        }
+    } recover {
+        refused = true
+        why = this_context().last_exception
     }
     fclose(f)
+    if (refused) {
+        panic(why)
+    }
     nmt_build_spm(st.e)
     return <- st
 }
