@@ -70,6 +70,22 @@ And run it:
 This module will create binaries on-the-fly for the `foo` and `main`
 functions, and use them instead of the interpreter at runtime.
 
+### Hints
+
+`[hint(...)]` on a function or a block literal is inert to the interpreter and to C++ AOT; the
+LLVM tiers (`-jit`, `-exe`, `-lib`) read its arguments as LLVM attributes. Function attributes:
+`alwaysinline`, `noinline`, `optnone`, `hot`, `cold`, `mustprogress`, `minsize`, `nofree`,
+`norecurse`. Checks: `unsafe_range_check` and `unsafe_division_check` drop the bounds and the
+division checks inside the function. Parameters: `noalias = p` and `nocapture = p` stamp one
+parameter, `align16 = p` promises a 16-byte aligned pointer, `unsafe_alias` and `unsafe_capture`
+stamp every parameter; a name that is not a parameter is a compile error on every target. A wasm
+target checks the names and then skips the hints' effects.
+
+A pointer is an address: the emitter attaches no type-based alias information, so a `float?`
+store may change what an `int?` points at, and a loop that reads its bound or an operand through
+a pointer beside a store reloads it every iteration and does not vectorize. Pass such values by
+value, or promise the distinctness with `noalias = p` on the pointer the loop writes through.
+
 ## Caching System
 When using daslang (`./bin/daslang`) and `jit_use_dll_mode=true`
 (default behaviour):

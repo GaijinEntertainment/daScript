@@ -17,9 +17,9 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_CODEGEN_IDENTITY.md`, `ARCHITECTURE_DEBUG
   another machine is reviewed with `skills/tune.md`.**
 
 - **A change to the tune framework - `daslib/llvm_tune.das`, a test under `tests/` here that
-  requires `llvm/daslib/llvm_tune` or spawns a child that does, the
-  `registerModuleGroupMember("tune_framework", ...)` row in `src/dasLLVM.cpp`, or the
-  `register_module_group("tune_framework", ...)` row in `.das_module` - is reviewed with
+  carries a `require llvm/daslib/llvm_tune` line of its own or spawns a child on a script that
+  carries one, the `registerModuleGroupMember("tune_framework", ...)` row in `src/dasLLVM.cpp`,
+  or the `register_module_group("tune_framework", ...)` row in `.das_module` - is reviewed with
   `skills/internal/llvm_tune_internals.md`.**
 
 - **A change to any file under this module but a `.md` runs the module-owned suite** (command

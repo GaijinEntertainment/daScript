@@ -243,7 +243,9 @@ Diagnostics: `[unused_argument(x, y)]`, `[nodiscard]`, `[deprecated(message=...)
 `[local_only(arg=true)]`. Codegen: `[inline]`, `[never_inline]`, `[no_aot]`, `[no_jit]`, `[jit]`,
 `[hybrid]`, `[alias_cmres]`, `[never_alias_cmres]`, `[pinvoke]`, `[type_function]`. Macro
 plumbing: `[_macro]`, `[macro_function]` (exists only in the macro context), plus `[macro]` and
-`[tag_function(t)]` from `daslib/ast_boost`. Inert carriers: `[hint(k=v)]`, `[marker]`.
+`[tag_function(t)]` from `daslib/ast_boost`. Inert carrier: `[marker]`. `[hint(...)]` is inert to
+the interpreter and AOT; the LLVM tiers read its arguments as function attributes (`noinline`,
+`alwaysinline`, `noalias = p`, ...; the alias hints are in `memory.md` sec.1).
 
 **Structure / class:** `[cpp_layout]` (`pod=false` allows non-POD), `[persistent]`
 (`non_pod=true`), `[safe_when_uninitialized]`, `[no_default_initializer]`, `[macro_interface]`,

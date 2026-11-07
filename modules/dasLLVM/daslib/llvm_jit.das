@@ -233,6 +233,28 @@ struct TableWalkState {
 
 def private is_int64_or_uint64(t : Type) : bool => t == Type.tInt64 || t == Type.tUInt64
 
+//! the hint arguments that name a parameter - `noalias = p`,
+//! `nocapture = p`, `align16 = p` - as (kind, name)
+def private for_each_parameter_hint(annotations : AnnotationList;
+                                    blk : block<(kind : string; param_name : string)>) {
+    for (ann in annotations) {
+        if (ann.annotation.name != "hint") continue
+        for (arg in ann.arguments) {
+            if (arg.basicType != Type.tString) continue
+            if (arg.name == "noalias" || arg.name == "nocapture" || arg.name == "align16") {
+                invoke(blk, string(arg.name), string(arg.sValue))
+            }
+        }
+    }
+}
+
+def private has_parameter(arguments : dasvector`ptr`Variable; param_name : string) : bool {
+    for (a in arguments) {
+        if (a.name == param_name) return true
+    }
+    return false
+}
+
 [macro]
 class public LlvmJitVisitor : AstVisitor {
     adapter : VisitorAdapter?
@@ -473,19 +495,11 @@ class public LlvmJitVisitor : AstVisitor {
         // Skip user hints entirely on wasm32 — host-LLVM wasm codegen has had
         // miscompiles around them. Tracked alongside the alwaysinline gotcha.
         if (g_target_is_wasm) return <- (noalias <- noalias, nocapture <- nocapture)
-        for (ann in annotations) {
-            if (ann.annotation.name == "hint") {
-                for (arg in ann.arguments) {
-                    if (arg.name == "noalias") {
-                        if (arg.basicType == Type.tString) {
-                            noalias |> insert(string(arg.sValue))
-                        }
-                    } elif (arg.name == "nocapture") {
-                        if (arg.basicType == Type.tString) {
-                            nocapture |> insert(string(arg.sValue))
-                        }
-                    }
-                }
+        for_each_parameter_hint(annotations) $(kind, param_name) {
+            if (kind == "noalias") {
+                noalias |> insert(param_name)
+            } elif (kind == "nocapture") {
+                nocapture |> insert(param_name)
             }
         }
         return <- (noalias <- noalias, nocapture <- nocapture)
@@ -493,7 +507,21 @@ class public LlvmJitVisitor : AstVisitor {
 
     def append_basic_block(name : string) => LLVMAppendBasicBlockInContext(g_ctx, ffunc, name)
 
-    def process_function_hints(annotations : AnnotationList; var arguments : dasvector`ptr`Variable) {
+    //! every parameter hint of `owner` names one of its parameters
+    def check_hint_parameter_names(annotations : AnnotationList; arguments : dasvector`ptr`Variable;
+                                   owner : string) {
+        for_each_parameter_hint(annotations) $(kind, param_name) {
+            if (!has_parameter(arguments, param_name)) {
+                let params = join([for (a in arguments); string(a.name)], ", ")
+                failed("[hint({kind} = {param_name})] on {owner} names no parameter; " +
+                    "the parameters are: {params}")
+            }
+        }
+    }
+
+    def process_function_hints(annotations : AnnotationList; var arguments : dasvector`ptr`Variable;
+                               owner : string) {
+        check_hint_parameter_names(annotations, arguments, owner)
         var alwaysInline = false
         var noInline = false
         var optNone = false
@@ -541,14 +569,17 @@ class public LlvmJitVisitor : AstVisitor {
                         option_no_alias = true
                     } elif (arg.name == "unsafe_capture") {
                         option_no_capture = true
-                    } elif (arg.name == "align16" && arg.basicType == Type.tString) {
-                        for (a, ai in arguments, ucount()) {
-                            if (a.name == arg.sValue) {
-                                LLVMSetParamAlignment(LLVMGetParam(ffunc, ai), 16u)
-                            }
-                        }
                     } elif (arg.name == "vec3_ldu") {
                         LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = arg.bValue
+                    }
+                }
+            }
+        }
+        for_each_parameter_hint(annotations) $(kind, param_name) {
+            if (kind == "align16") {
+                for (a, ai in arguments, ucount()) {
+                    if (a.name == param_name) {
+                        LLVMSetParamAlignment(LLVMGetParam(ffunc, ai), 16u)
                     }
                 }
             }
@@ -637,6 +668,7 @@ class public LlvmJitVisitor : AstVisitor {
     // the two drift. use_option_flags: the definition reads the visitor's option_no_* state
     // (blocks inherit the enclosing function's); a declaration mirrors the eager-declare pass,
     // where that state is always fresh/false.
+    [arch(at="../ARCHITECTURE.md#pointer-alias-model")]
     def apply_impl_param_attrs(fn : LLVMOpaqueValue?; arguments : dasvector`ptr`Variable; result : TypeDeclPtr; captureType : LLVMOpaqueType?; isCmres : bool; annotations : AnnotationList; use_option_flags : bool) {
         var inscope nat <- build_noalias_list(annotations)
         for (a, ai in arguments, ucount()) {
@@ -986,7 +1018,7 @@ class public LlvmJitVisitor : AstVisitor {
         build_function_entry(fun.at, hash(get_mangled_name(fun)),
                              fun.flags.hasMakeBlock || flags.emit_prologue,
                              fun.totalStackSize, fun.arguments)
-        process_function_hints(fun.annotations, fun.arguments)
+        process_function_hints(fun.annotations, fun.arguments, "{fun.name}")
         process_labels(fun.body)
         process_finally(fun.body)
         set_builder_location(fun.at)
@@ -6739,7 +6771,8 @@ class public LlvmJitVisitor : AstVisitor {
         build_function_entry(expr.at, hash(fnmna),
             thisBlock.blockFlags.hasMakeBlock || flags.emit_prologue,
             SIZE_OF_PROLOGUE, thisBlock.arguments)
-        process_function_hints(thisBlock.annotations, thisBlock.arguments)
+        process_function_hints(thisBlock.annotations, thisBlock.arguments,
+            block_das_name(thisBlock, func))
         process_labels(expr)
         process_finally(expr)
         return <- fnmna

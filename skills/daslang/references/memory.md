@@ -26,6 +26,13 @@ reference parameter is read-only memory to it - so `var q = unsafe(reinterpret<P
 `q.x = 5` compiles and performs a write the declared type denies; routed through `intptr` and
 back it vanishes in optimized builds. Declare the parameter `var P?`.
 
+**A pointer is an address.** No tier assumes two pointers of different types point at different
+memory: a `float?` store may change what an `int?` points at. Under `-jit` a loop that reads its
+bound or an operand through such a pointer beside a store reloads it every iteration and does not
+vectorize - pass it by value, or promise the distinctness with `[hint(noalias = p)]` on the
+pointer parameter the loop writes through (`[hint(unsafe_alias)]` promises it for every
+parameter); a hint naming no parameter is a compile error.
+
 ---
 
 ## 2. Copy, move, clone
