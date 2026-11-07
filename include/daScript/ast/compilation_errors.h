@@ -297,6 +297,7 @@ namespace das
     ,   invalid_empty_name                                          =   30296    // AST node with empty name; usually a macro emission bug
     ,   invalid_distinct_type                                       =   30297    // distinct underlying must be a workhorse type, not another distinct
     ,   invalid_with_module                                         =   30298    // with (module foo) names a module that is not part of the program
+    ,   return_in_try_recover                                       =   30299    // a return inside a try or recover arm
 
 // missing_*
 

@@ -12,11 +12,12 @@ def classify(n : int)
     return total
 
 def risky()
+    var rc = 0
     try
         classify(3) // may fail
     recover
-        return -1
-    return 0
+        rc = -1
+    return rc
 
 def commented(n : int) // what this one is for
     return n + 1 // and what it gives back

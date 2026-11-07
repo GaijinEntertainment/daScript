@@ -13,12 +13,13 @@ require vulkan
 require vulkan/vulkan_boost
 
 def require_dynamic_rendering_panics() : bool {
+    var panicked = false
     try {
         require_dynamic_rendering("gate test")
     } recover {
-        return true
+        panicked = true
     }
-    return false
+    return panicked
 }
 
 [test]

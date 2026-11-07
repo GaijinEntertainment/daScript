@@ -773,6 +773,10 @@ dereference or out-of-bounds array access:
         print("recovered from panic\n")
     }
 
+A ``return`` inside the ``try`` block or the ``recover`` block is a compile error: set a
+variable in the arm and return after the pair. A closure's own ``return`` inside the arm is
+not affected.
+
 .. warning::
     ``try``/``recover`` is **not** a general error-handling mechanism and should not be
     used for control flow. It is designed for catching runtime panics (similar to Go's

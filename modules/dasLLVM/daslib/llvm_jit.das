@@ -6534,7 +6534,9 @@ class public LlvmJitVisitor : AstVisitor {
     def override preVisitExprReturn(expr : ExprReturn?) {
         if (thisBlock != null) {
             if (expr.returnFunc != null) {
-                to_log(LOG_WARNING, "LLVM JIT: return inside try/recover leaves the try arm, not the function. at {describe(expr.at)}\n")
+                let fix = "move the return after the try"
+                failed_E(expr,
+                    "a return inside a try/recover arm is not supported under -jit; {fix}")
             }
             pre_visit_expr_return(expr, isCMRESType(thisBlock.returnType))
         } elif (thisFunc != null) {
