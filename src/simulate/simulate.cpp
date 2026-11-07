@@ -616,16 +616,12 @@ namespace das
         for (; body!=tail; ++body) {
             (*body)->eval(context);
             { if ( context.stopFlags ) {
-                if (context.stopFlags&EvalFlags::jumpToLabel) {
-                    if (  context.gotoLabel>=totalLabels ) {
-                        context.throw_error_at(debugInfo, "invalid label index %u", context.gotoLabel);
-                    }
-                    body=list+labels[context.gotoLabel];
-                    if ( body>=list && body<tail ) {
+                if ( context.stopFlags&EvalFlags::jumpToLabel ) {
+                    uint32_t labelOfs = ownedLabel(context.gotoLabel);
+                    if ( labelOfs!=-1U ) {
                         context.stopFlags &= ~EvalFlags::jumpToLabel;
+                        body = list + labelOfs;
                         goto loopbegin;
-                    } else {
-                        context.throw_error_at(debugInfo, "jump to label %u failed", context.gotoLabel);
                     }
                 }
                 goto loopend;
@@ -647,16 +643,12 @@ namespace das
             DAS_SINGLE_STEP(context,(*body)->debugInfo,false);
             (*body)->eval(context);
             { if ( context.stopFlags ) {
-                if (context.stopFlags&EvalFlags::jumpToLabel) {
-                    if (  context.gotoLabel>=totalLabels ) {
-                        context.throw_error_at(debugInfo, "invalid label index %u", context.gotoLabel);
-                    }
-                    body=list+labels[context.gotoLabel];
-                    if ( body>=list && body<tail ) {
+                if ( context.stopFlags&EvalFlags::jumpToLabel ) {
+                    uint32_t labelOfs = ownedLabel(context.gotoLabel);
+                    if ( labelOfs!=-1U ) {
                         context.stopFlags &= ~EvalFlags::jumpToLabel;
+                        body = list + labelOfs;
                         goto loopbegin;
-                    } else {
-                        context.throw_error_at(debugInfo, "jump to label %u failed", context.gotoLabel);
                     }
                 }
                 goto loopend;
