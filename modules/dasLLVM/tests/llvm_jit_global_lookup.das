@@ -21,14 +21,27 @@ def private count_of(s : string; needle : string) : int {
     return n
 }
 
-//! the `callee` lookups of a dumped function outside its entry
-//! block and its loop preheaders
+//! a block label that opens a loop body: daslang's loop header, or
+//! the vectorizer's; a preheader of either runs once, before it
+def private is_loop_header(block_label : string) : bool {
+    return false if (find(block_label, ".preheader") >= 0)
+    for (prefix in ["for_start", "while_start", "vector.ph", "vector.body"]) {
+        return true if (block_label |> starts_with(prefix))
+    }
+    return false
+}
+
+//! the `callee` lookups of a dumped function from its first loop
+//! header on: a hoisted lookup sits in the entry block or in one of
+//! the run-once blocks (`.preheader`, `iter.check`) before the loop
 def private lookups_inside_loop(fn_ir : string; callee = "jit_get_global_mnh") : int {
     var n = 0
+    var in_loop = false
     let blocks <- split(fn_ir, "\n\n")
     for (blk, ix in blocks, count()) {
         let block_label = slice(blk, 0, max(0, find(blk, ":")))
-        if (ix > 0 && find(block_label, ".preheader") < 0) {
+        in_loop = in_loop || (ix > 0 && is_loop_header(block_label))
+        if (in_loop) {
             n += count_of(blk, "@{callee}(")
         }
     }
