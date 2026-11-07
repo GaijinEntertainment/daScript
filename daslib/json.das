@@ -146,7 +146,7 @@ def JVNull {
 
 var private g_json_null_sentinel : JsonValue?
 
-def json_null_sentinel : JsonValue ? {
+def json_null_sentinel : JsonValue? {
     //! Shared, per-context ``null`` JsonValue returned by ``operator ?[]`` / ``?.`` when a key/index is absent — so missing-key navigation allocates nothing (a fresh ``JVNull()`` per miss was a steady GC-pressure source). It preserves the "``?[]`` is never null" contract callers rely on. INTERNAL: it is shared and must never be freed, mutated, or stored into a tree. ``delete_json`` and ``update`` guard against it; do not ``delete`` a ``?[]`` result directly or ``insert`` it into an object/array.
     if (g_json_null_sentinel == null) {
         g_json_null_sentinel = JVNull()

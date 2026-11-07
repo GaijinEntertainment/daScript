@@ -702,7 +702,7 @@ def mark_token_context(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 —
         }
 
         if (ctx |> eq(pos + 1, ":")) {
-            ctx |> mark_tokens_as_type(i + 2)
+            ctx |> mark_tokens_as_type(pos + 2)
         } elif (ctx |> eq(pos + 1, "(")) {
             let beginParams = pos + 1;
             ctx.tokens[beginParams].dontAddSpacesAround = true;

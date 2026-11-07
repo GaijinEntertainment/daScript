@@ -1788,7 +1788,7 @@ def public decode_audio(data : array<uint8> | #; var channels, rate : int&) : ar
     return <- samples
 }
 
-def public get_audio_command_stream : void ? => g_command_stream
+def public get_audio_command_stream : void? => g_command_stream
 
 [unsafe_operation]
 def public set_audio_thread_command_stream(ch : void?) {
@@ -1813,7 +1813,7 @@ def public adopt_audio_thread_command_stream(ch : void?) {
     g_command_stream = unsafe(reinterpret<Stream?>(ch))
 }
 
-def public get_sound_sid : void ? => g_sound_sid
+def public get_sound_sid : void? => g_sound_sid
 
 def public set_sound_sid(next_sid : void?) {
     var sid = unsafe(reinterpret<Atomic64?>(next_sid))

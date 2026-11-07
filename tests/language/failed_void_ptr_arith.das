@@ -8,7 +8,7 @@ require dastest/testing_boost public
 // non-null tVoid firstType) and lower with stride sizeof(void) == 0, silently returning the
 // unmoved pointer.
 
-def foo : void ? {
+def foo : void? {
     var x = 0
     unsafe {
         var p = reinterpret<void?>(addr(x))
