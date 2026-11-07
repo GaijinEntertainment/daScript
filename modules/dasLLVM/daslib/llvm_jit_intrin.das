@@ -37,6 +37,7 @@ let g_intrin_lookup <- {
         "$::i_das_ptr_sub" => @@intrinsic_das_ptr_sub,
         "$::i_das_ptr_inc" => @@intrinsic_das_ptr_inc,
         "$::i_das_ptr_dec" => @@intrinsic_das_ptr_dec,
+        "$::i_das_ptr_diff" => @@intrinsic_das_ptr_diff,
         "$::memcpy" => @@intrinsic_memcpy,
         "$::memmove" => @@intrinsic_memmove,
         "$::memset8" => @@intrinsic_memset8,
@@ -1971,6 +1972,15 @@ def intrinsic_das_ptr_sub(var ctx : JitCtx; expr : ExprCallFunc?; arguments : ar
     var args := arguments
     args[1] = LLVMBuildNeg(ctx.builder, args[1], "")
     return intrinsic_das_ptr_add(ctx, expr, args)
+}
+
+def intrinsic_das_ptr_diff(var ctx : JitCtx; _expr : ExprCallFunc?; // nolint:LINT014 - table shape
+                           arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    let a = LLVMBuildPtrToInt(ctx.builder, arguments[0], ctx.types.t_int64, "")
+    let b = LLVMBuildPtrToInt(ctx.builder, arguments[1], ctx.types.t_int64, "")
+    let bytes = LLVMBuildSub(ctx.builder, a, b, "")
+    let stride = LLVMBuildSExt(ctx.builder, arguments[2], ctx.types.t_int64, "")
+    return LLVMBuildSDiv(ctx.builder, bytes, stride, "ptr_diff")
 }
 
 def intrinsic_memcpy(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? { // nolint:LINT014 - mutable context matches the intrinsic table signature.

@@ -1,7 +1,5 @@
 options gen2
 require dastest/testing_boost public
-require daslib/fio
-require _spawn_common
 require strings
 require daslib/rtti
 require daslib/ast
@@ -12,17 +10,6 @@ require _exe_test_common
 // (modules/dasLLVM/ARCHITECTURE_FAST_MATH.md#never-fast-math). The check reads the dumped IR, so it
 // holds on every host - the numeric failure it prevents shows only on an AVX-512 target.
 
-//! the dumped IR of the function whose quoted name ends in `name_end`; signature to closing brace
-def private function_ir(dump : string; name_end : string) : string {
-    let start = find(dump, "{name_end}\"(")
-    if (start < 0) {
-        return ""
-    }
-    let body = slice(dump, start)
-    let close = find(body, "\n}")
-    return close < 0 ? body : slice(body, 0, close)
-}
-
 def private expect_unstamped(t : T?; ir, what : string) {
     t |> success(!empty(ir), "the dump carries {what}")
     t |> success(find(ir, "fmul double") >= 0, "{what} keeps its multiply:\n{ir}")
@@ -31,14 +18,7 @@ def private expect_unstamped(t : T?; ir, what : string) {
 
 [test]
 def test_never_fast_math_keeps_flags_off(t : T?) {
-    let root = "modules/dasLLVM/tests/_never_fast_math_root.das"
-    var out = ""
-    var rc = 0
-    with_child_log_info() {
-        // -jit-no-cache: a cache hit runs no codegen, so it prints no dump
-        rc = run_and_capture([das_exe(), "-no-module-cache", "-jit", "-jit-no-cache", root, "--", "--jit-dump"], out, 300.0)
-    }
-    t |> equal(0, rc, "the fixture runs under -jit: {tail(out)}")
+    let out = jit_dump(t, "modules/dasLLVM/tests/_never_fast_math_root.das", [])
     t |> success(find(out, "MACS 4 4 4") >= 0, "the fixture printed its three results: {tail(out)}")
     let fast = function_ir(out, "`fast_mac Cd Cd Cd implementation")
     t |> success(!empty(fast), "the dump carries fast_mac: {tail(out)}")

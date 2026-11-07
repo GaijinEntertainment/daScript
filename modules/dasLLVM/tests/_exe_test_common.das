@@ -18,6 +18,48 @@ def das_exe() : string {
 
 def tail(s : string) : string => slice(s, max(0, length(s) - 400))
 
+//! the dumped IR of the function whose quoted name ends in
+//! `name_end`; signature to closing brace
+def function_ir(dump : string; name_end : string) : string {
+    let start = find(dump, "{name_end}\"(")
+    return "" if (start < 0)
+    let body = slice(dump, start)
+    let close = find(body, "\n}")
+    return close < 0 ? body : slice(body, 0, close)
+}
+
+//! the entry block of a dumped function: everything before its
+//! first branch
+def entry_block_ir(fn_ir : string) : string {
+    let br = find(fn_ir, "\n  br ")
+    return br < 0 ? fn_ir : slice(fn_ir, 0, br)
+}
+
+//! one labelled basic block of a dumped function, label line
+//! through the blank line after it
+def named_block_ir(fn_ir : string; block_name : string) : string {
+    let start = find(fn_ir, "\n{block_name}:")
+    return "" if (start < 0)
+    let body = slice(fn_ir, start + 1)
+    let close = find(body, "\n\n")
+    return close < 0 ? body : slice(body, 0, close)
+}
+
+//! the output of `root` run under -jit with --jit-dump and `extra`
+//! after the separator, checked to exit 0; -jit-no-cache, since a
+//! cache hit runs no codegen and prints no dump
+def jit_dump(t : T?; root : string; extra : array<string>) : string {
+    var args <- [das_exe(), "-no-module-cache", "-jit", "-jit-no-cache", root, "--", "--jit-dump"]
+    args |> push_from(extra)
+    var out = ""
+    var rc = 0
+    with_child_log_info() {
+        rc = run_and_capture(args, out, 300.0)
+    }
+    t |> equal(0, rc, "the fixture runs under -jit: {tail(out)}")
+    return out
+}
+
 def run_capture(cmd : string; var out : string&; timeout = 300.0) : int {
     return unsafe(popen_timeout(cmd, timeout, $(f) {
         if (f != null) {
