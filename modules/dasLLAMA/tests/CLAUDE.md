@@ -2421,7 +2421,12 @@ with the model off the device moving neither the position nor the window counter
 the Q4_K_M file (the K-quant planes) and the Q5_1 mint (the per-32 planes) the same way at one window and two, the Q5_0
 mint (the q5032 planes), the IQ4_XS file and the IQ4_NL mint (the codebook planes, their decode through the home's byte
 permute) at one window, and Llama-3.2-3B Q8_0 (head 128: the window's attention on the h128 flash tile) at one window
-and two; and the short window's peel through the N-row command on the CUDA driver
+and two; the NVFP4 mint on the FP4 tensor leaf at one window and two, held by the same-or-better witness
+(`cuda_forced_feed_f32_witness`, `f32_chain_witness` at `FP4_F32_DIST_REL`: the device no further from the file's f32
+chain than four times the CPU chain's own summed distance, the one-step-off rows past that bound - e2m1 activations
+carry one mantissa bit, so single logits scatter past any bar of the step's max |logit| a one-step-off control still
+clears), the same mint on the cm2 tiles over f16 activations (`CUDA_MMQ_OFF`) at the dense bar as the leaf's control;
+and the short window's peel through the N-row command on the CUDA driver
 (`peel_cell` of `_resident_feed.das`, the Vulkan llama file's and the hybrid file's cell): on the Q8_0, Q4_K_M and Q5_1
 carriers, after a 40-row opening, tails of 1, 2, 5 and 8 rows as one prefill call peel (a peel and a prefill counted)
 within the split bar of the same tail stepped a row at a time, the row one step off the control; one row past the

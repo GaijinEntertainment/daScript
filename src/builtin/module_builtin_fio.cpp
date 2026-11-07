@@ -723,8 +723,11 @@ namespace das {
         array_mark_locked(arr, data, uint64_t(st.st_size));
         vec4f args[1];
         args[0] = cast<Array *>::from(&arr);
-        context->invoke(blk, args, nullptr, at);
+        bool ok = context->runWithCatch([&]() {
+            context->invoke(blk, args, nullptr, at);
+        });
         munmap(data, size_t(st.st_size));
+        if ( !ok ) context->rethrow();
     }
 
     // split fmap (the prepared-model-image loader): the mapping OUTLIVES the call — the caller
