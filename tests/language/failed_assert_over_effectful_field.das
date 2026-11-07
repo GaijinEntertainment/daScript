@@ -1,6 +1,7 @@
 expect 30151
 
 options gen2
+options no_coverage   // coverage turns every assert into verify, which may carry side effects
 
 struct P {
     x : int
