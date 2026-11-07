@@ -740,6 +740,14 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_Goto::copyNode ( Context & context, NodeAllocator * code ) {
+        SimNode_Goto * that = (SimNode_Goto *) SimNode::copyNode(context, code);
+        if ( knownLabels ) {
+            that->knownLabels = copyNodeArray(code, that->knownLabels, totalKnownLabels);
+        }
+        return that;
+    }
+
     SimNode * SimNode_Break::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(Break);
