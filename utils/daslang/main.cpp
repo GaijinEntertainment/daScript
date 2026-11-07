@@ -14,6 +14,10 @@
 #include "daScript/misc/dep_recorder.h"
 #include "daScript/misc/job_que.h"
 #include "daScript/misc/performance_time.h"
+#ifndef DAS_MAIN_LIBRARY
+#include "asan_options.h"
+#endif
+#include "daScript/misc/das_root.h"
 #ifdef __APPLE__
 #include <pthread/qos.h>
 #endif
@@ -51,14 +55,14 @@ static bool scopedStackAllocator = true;
 static bool pauseAfterErrors = false;
 static bool quiet = false;
 
-#if DAS_ASAN
-extern "C" const char * __asan_default_options() {
-    return "quarantine_size_mb=32";
-}
-#endif
-
 #ifndef MAIN_FUNC_NAME
-  #define MAIN_FUNC_NAME main
+  #ifdef DAS_MAIN_LIBRARY
+    #define MAIN_FUNC_NAME daslang_main
+    #define MAIN_FUNC_LINKAGE extern "C" DAS_EXPORT_DLL
+  #else
+    #define MAIN_FUNC_NAME daslang_main
+    #define MAIN_FUNC_LINKAGE static
+  #endif
   // the process ends when this returns: the fusion table is orphaned, not torn down - unless
   // the build tracks allocations or runs under a leak sanitizer, whose exit audit must see it
   // freed, or the browser host, which calls main once per run
@@ -73,6 +77,9 @@ extern "C" const char * __asan_default_options() {
 #else
   // a host's entry point: the host may initialize again, so shutdown resets everything
   #define DAS_ORPHAN_FUSION_AT_EXIT false
+  #ifndef MAIN_FUNC_LINKAGE
+    #define MAIN_FUNC_LINKAGE
+  #endif
 #endif
 enum class JitMode {
     None,
@@ -833,11 +840,7 @@ void print_help() {
 }
 
 static string tool_name_of_binary ( const char * arg0 ) {
-    string name = get_suffix(arg0);
-#if defined(_WIN32)
-    for ( auto & ch : name ) ch = char(tolower((unsigned char)ch));
-#endif
-    if ( name.size()>4 && name.compare(name.size() - 4, 4, ".exe")==0 ) name.resize(name.size() - 4);
+    string name = dasBinaryStem(string(arg0));
     return name.compare(0, 7, "daslang")==0 ? string() : name;
 }
 
@@ -925,7 +928,7 @@ namespace das {
 
 }
 
-int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
+MAIN_FUNC_LINKAGE int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
 #if defined(_WIN32) && defined(_DEBUG)
     // Suppress all CRT assertion/error dialogs — print to stderr instead
     _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
@@ -975,9 +978,11 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
         return -1;
     }
     setCommandLineArguments(argc,argv);
-    char exePath[4096];
-    size_t exeLen = getExecutablePathName(exePath, sizeof(exePath));
-    hostBinary = exeLen ? string(exePath, exeLen) : string(argv[0]);
+#ifdef DAS_MAIN_LIBRARY
+    hostBinary = getModuleFileNameOf((const void *) &MAIN_FUNC_NAME);
+#endif
+    if ( hostBinary.empty() ) hostBinary = getExecutableFileName();
+    if ( hostBinary.empty() ) hostBinary = argv[0];
     for ( int i=1; i < argc && strcmp(argv[i],"--")!=0; ++i ) {
         if ( int skip = das_dep_flag_argc(argv[i]) ) { i += skip - 1; continue; }
         hostOptions += argv[i];
@@ -1403,3 +1408,9 @@ void use_utf8() {
     SetConsoleOutputCP(CP_UTF8);
 #endif
 }
+
+#ifndef DAS_MAIN_LIBRARY
+int main ( int argc, char * argv[] ) {
+    return das::runMainWithUtf8Arguments(MAIN_FUNC_NAME, argc, argv);
+}
+#endif

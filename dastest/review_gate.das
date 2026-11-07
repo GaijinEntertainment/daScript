@@ -96,6 +96,43 @@ def das_requires(path : string) : array<string> {
 //! True for a byte that can sit inside a daslang identifier: `[A-Za-z0-9_]`.
 def is_ident_byte(b : int) : bool => is_alnum(b) || b == '_'
 
+//! Byte offset of the first whole-identifier `word` in `text` at or
+//! past `start`; -1 when absent.
+def word_index(text : string; word : string; start : int = 0) : int {
+    var at = -1
+    let wlen = length(word)
+    peek_data(text) $(d) {
+        let n = length(d)
+        var from = start
+        while (at < 0) {
+            let idx = find(d, word, from)
+            break if (idx < 0)
+            let before_ok = idx == 0 || !is_ident_byte(int(d[idx - 1]))
+            let after_ok = idx + wlen >= n || !is_ident_byte(int(d[idx + wlen]))
+            if (before_ok && after_ok) {
+                at = idx
+            }
+            from = idx + 1
+        }
+    }
+    return at
+}
+
+//! every tracked file matching one of `globs` - what git ignores
+//! stays out; a git that fails is a finding, never an empty tree
+def tracked_files(globs : array<string>; check_name : string) : array<string> {
+    var out : string
+    var inscope cmd <- ["git", "ls-files", "--"]
+    cmd |> push_from(globs)
+    let rc = run_and_capture(cmd, out, 60.0)
+    var inscope files <- [for (ln in split(out, "\n")); strip(ln); where !empty(strip(ln))]
+    if (rc != 0 || empty(files)) {
+        gate_finding("dastest/review_gate.das",
+            "git ls-files failed (exit {rc}, {length(files)} files): {check_name} ran over nothing")
+    }
+    return <- files
+}
+
 //! True when `word` appears in `text` as a whole identifier - no identifier byte on either side.
 def contains_word(text : string; word : string) : bool {
     var hit = false

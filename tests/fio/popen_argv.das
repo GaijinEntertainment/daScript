@@ -206,3 +206,42 @@ def test_spawn_argv_reports_exec_failure(t : T?) {
         t |> success(!launched, "missing executable was not reported as launched")
     }
 }
+
+[test]
+def test_popen_argv_paths_outside_ascii(t : T?) {
+    t |> run("a cwd and an environment value outside ASCII reach the child") @(t : T?) {
+        let dir = path_join(test_temp_dir(), "cwd_日本")
+        t |> success(mkdir(dir), "mkdir {dir}")
+        let child = path_join(get_das_root(), "tests/fio/_fixture_process_child.das")
+        let ready = path_join(dir, "ready")
+        let release = path_join(dir, "release")
+        fwrite(release, "go")
+        var output : string
+        let args <- [das_exe(), child, "--", ready, release]
+        let rc = unsafe(popen_argv(args, dir, ["DAS_PROC_TEST=値"], 30.0) $(f) {
+            if (f != null) {
+                output = fread(f)
+            }
+        })
+        t |> equal(rc, 7, output)
+        t |> success(find(output, "env=値\n") >= 0, output)
+        t |> success(find(output, "cwd=cwd_日本\n") >= 0, output)
+    }
+    t |> run("an environment variable outside ASCII round-trips through set and get") @(t : T?) {
+        set_env_variable("DAS_T_変数", "値 ünï")
+        t |> equal(get_env_variable("DAS_T_変数"), "値 ünï")
+        t |> success(has_env_variable("DAS_T_変数"))
+    }
+    t |> run("a failed spawn still runs the block; feof on its file is safe") @(t : T?) {
+        let no_env : array<string>
+        var saw_null = false
+        var at_end = false
+        let bad_dir = path_join(test_temp_dir(), "no_such_dir_日本")
+        let rc = unsafe(popen_argv(["no_such_program_値"], bad_dir, no_env, 5.0) $(f) {
+            saw_null = f == null
+            at_end = feof(f)
+        })
+        t |> success(rc != 0, "rc={rc}")
+        t |> success(!saw_null || at_end, "a null file reads as at its end")
+    }
+}

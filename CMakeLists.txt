@@ -1497,15 +1497,19 @@ if (NOT ${DAS_TOOLS_DISABLED})
 
     SET(SRC_LIBRARIES Threads::Threads)
 
-    MACRO(SETUP_COMPILER_BINARY target_name library_name modules dyn_modules)
-        add_executable(${target_name} ${DAS_DASCRIPT_MAIN_SRC})
-        # the main thread's native stack at Linux's 8 MB on Windows too (its default is 1 MB): the JIT'd call chains run
-        # on it, and an in-process compiler a module calls on the main thread (NVRTC) recurses deep below them
+    # the main thread's native stack at Linux's 8 MB on Windows too (its default is 1 MB): the JIT'd call chains run
+    # on it, and an in-process compiler a module calls on the main thread (NVRTC) recurses deep below them
+    MACRO(SETUP_MAIN_THREAD_STACK target_name)
         if (MSVC)
             target_link_options(${target_name} PRIVATE /STACK:8388608)
         elseif (WIN32)
             target_link_options(${target_name} PRIVATE -Wl,--stack,8388608)
         endif()
+    ENDMACRO()
+
+    MACRO(SETUP_COMPILER_BINARY target_name library_name modules dyn_modules)
+        add_executable(${target_name} ${DAS_DASCRIPT_MAIN_SRC})
+        SETUP_MAIN_THREAD_STACK(${target_name})
         TARGET_LINK_LIBRARIES(${target_name} ${library_name} ${SRC_LIBRARIES} ${${modules}})
         ADD_DEPENDENCIES(${target_name} ${library_name} ${${dyn_modules}})
         # Static modules generated include.
@@ -1536,14 +1540,63 @@ if (NOT ${DAS_TOOLS_DISABLED})
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running the fat man")
 
-    # Dynamic/DLL compiler binary — the default shipped binary.
-    SETUP_COMPILER_BINARY(daslang libDaScriptDyn "" DAS_DYN_MODULES_LIBS)
     # Each binary needs its own copy of the override TU to cover its own code
     # (Windows resolves operator new per-CRT). TU is #if DAS_TRACK_ALLOC-gated.
-    target_sources(daslang        PRIVATE src/misc/alloc_tracker_overrides.cpp)
     target_sources(daslang_static PRIVATE src/misc/alloc_tracker_overrides.cpp)
-    # relative RPATH from install location
-    SETUP_BIN_RPATH(daslang)
+
+    # src/misc/ARCHITECTURE_DAS_ROOT.md#root-sidecar
+    MACRO(SETUP_HOST_LIBRARY lib_name sources)
+        SETUP_DAS_SHARED_LIBRARY(${lib_name} ${${sources}} src/misc/alloc_tracker_overrides.cpp)
+        TARGET_COMPILE_DEFINITIONS(${lib_name} PRIVATE DAS_MAIN_LIBRARY=1)
+        TARGET_LINK_LIBRARIES(${lib_name} libDaScriptDyn ${SRC_LIBRARIES})
+        ADD_DEPENDENCIES(${lib_name} libDaScriptDyn ${DAS_DYN_MODULES_LIBS})
+        target_include_directories(${lib_name} PRIVATE ${NEED_MODULES_PATH})
+        SETUP_CPP11(${lib_name})
+        DAS_APPLY_STRICT_WARNINGS(${lib_name})
+        if(WIN32)
+            SET_TARGET_PROPERTIES(${lib_name} PROPERTIES PREFIX "" IMPORT_PREFIX "")
+        elseif(APPLE)
+            SET_TARGET_PROPERTIES(${lib_name} PROPERTIES BUILD_RPATH "@loader_path" INSTALL_RPATH "@loader_path")
+        else()
+            SET_TARGET_PROPERTIES(${lib_name} PROPERTIES BUILD_RPATH "\$ORIGIN" INSTALL_RPATH "\$ORIGIN")
+        endif()
+        INSTALL(
+            TARGETS ${lib_name}
+            RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
+            LIBRARY DESTINATION ${DAS_INSTALL_LIBDIR}
+        )
+    ENDMACRO()
+    MACRO(SETUP_STUB_BINARY target_name lib_name)
+        add_executable(${target_name} ${PROJECT_SOURCE_DIR}/utils/daslang/stub.cpp)
+        SETUP_MAIN_THREAD_STACK(${target_name})
+        target_include_directories(${target_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        TARGET_LINK_LIBRARIES(${target_name} ${SRC_LIBRARIES})
+        if(UNIX AND NOT APPLE)
+            TARGET_LINK_LIBRARIES(${target_name} ${CMAKE_DL_LIBS})
+        endif()
+        # the stub links nothing, so nothing would relink it when its library changes - and every
+        # DEPENDS daslang build edge reads the stub's mtime; a stamp source regenerated from the
+        # library file relinks it on every generator (LINK_DEPENDS is Ninja/Makefile only)
+        ADD_DEPENDENCIES(${target_name} ${lib_name})
+        set(_stub_stamp ${CMAKE_CURRENT_BINARY_DIR}/${target_name}_relink_stamp.cpp)
+        add_custom_command(OUTPUT ${_stub_stamp}
+            COMMAND ${CMAKE_COMMAND} -E touch ${_stub_stamp}
+            DEPENDS $<TARGET_FILE:${lib_name}>
+            COMMENT "Relinking ${target_name} after ${lib_name}")
+        target_sources(${target_name} PRIVATE ${_stub_stamp})
+        if(NOT WIN32)
+            # the leak tracker's global operator new has to live in the executable to win the
+            # symbol lookup; the stub binds it to the runtime's hooks after loading
+            target_sources(${target_name} PRIVATE src/misc/alloc_tracker_overrides.cpp)
+            target_compile_definitions(${target_name} PRIVATE DAS_STUB=1 $<$<CONFIG:RelWithDebInfo>:DAS_TRACK_ALLOC=1>)
+        endif()
+        SETUP_CPP11(${target_name})
+        DAS_APPLY_STRICT_WARNINGS(${target_name})
+        SETUP_LTO(${target_name})
+    ENDMACRO()
+
+    SETUP_HOST_LIBRARY(daslang_main DAS_DASCRIPT_MAIN_SRC)
+    SETUP_STUB_BINARY(daslang daslang_main)
     # Export daslang target, so it can be found
     # as a target (for example in aot).
     INSTALL(
@@ -1612,20 +1665,12 @@ if (NOT ${DAS_TOOLS_DISABLED})
         ${PROJECT_SOURCE_DIR}/utils/daslang-live/main.cpp
         ${DAS_MODULES_NEED_INC}
     )
-    add_executable(daslang-live ${DAS_LIVE_MAIN_SRC})
-    target_sources(daslang-live PRIVATE src/misc/alloc_tracker_overrides.cpp)
-    TARGET_LINK_LIBRARIES(daslang-live libDaScriptDyn ${SRC_LIBRARIES})
-    ADD_DEPENDENCIES(daslang-live libDaScriptDyn ${DAS_DYN_MODULES_LIBS})
-    target_include_directories(daslang-live PRIVATE
-        ${NEED_MODULES_PATH})
-    SETUP_CPP11(daslang-live)
-    DAS_APPLY_STRICT_WARNINGS(daslang-live)
-    SETUP_LTO(daslang-live)
-    SETUP_BIN_RPATH(daslang-live)
+    SETUP_HOST_LIBRARY(daslang_live_main DAS_LIVE_MAIN_SRC)
     if(APPLE)
         # Foundation: NSProcessInfo, used to disable App Nap at startup (dasImgui #190).
-        TARGET_LINK_LIBRARIES(daslang-live "-framework Foundation")
+        TARGET_LINK_LIBRARIES(daslang_live_main "-framework Foundation")
     endif()
+    SETUP_STUB_BINARY(daslang-live daslang_live_main)
     INSTALL(
         TARGETS daslang-live
         RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
@@ -2538,7 +2583,7 @@ if(TARGET daslang)
         message(FATAL_ERROR "dastest_cache_guard runs rm -rf on DAS_TEST_CACHE_DIR; refusing \"${DAS_TEST_CACHE_DIR}\"")
     endif()
     set(_das_test_binaries)
-    foreach(_t daslang libDaScriptDyn libDaScriptDyn_runtime daslang-live watchdog dasbind_probe ${_das_shared_modules} test_aot_subset)
+    foreach(_t daslang daslang_main libDaScriptDyn libDaScriptDyn_runtime daslang-live daslang_live_main watchdog dasbind_probe ${_das_shared_modules} test_aot_subset)
         if(TARGET ${_t})
             list(APPEND _das_test_binaries ${_t})
         endif()

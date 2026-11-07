@@ -72,7 +72,21 @@ and the `publish_pypi` jobs upload each set through trusted publishing - a plain
 PyPI, any other tag (RC, beta, ...) to TestPyPI. The daslang wheel is the toolchain minus the
 C++ embedding payload and the media trees, to stay under PyPI's 100 MB per-file cap - exact set:
 `EXCLUDE_*` in `wheel_build.py`; the dasllama wheel carries its bundle whole. The platform tag
-is read off the binaries (highest GLIBC symbol / Mach-O minos), never assumed. Users:
+is read off the binaries (highest GLIBC symbol / Mach-O minos), never assumed.
+
+The daslang wheel puts no Python in front of a command (`launch: "native"` in `packages.py`):
+the commands on PATH are the bundle's own executables, copied into the interpreter's scripts
+directory beside a `daslang.root` sidecar, and the bundle itself lands at
+`<prefix>/daslang_sdk`, the wheel's data directory, which the sidecar names as `../daslang_sdk`
+(and `../../daslang_sdk` for the Windows user scheme, whose scripts sit one level deeper;
+`src/misc/ARCHITECTURE_DAS_ROOT.md#root-sidecar`). `python -m daslang` execs that same binary,
+finding the tree through pip's own record of the install. Three layouts put the commands where
+no relative sidecar reaches the tree, so there only `python -m daslang` runs: Apple's system
+Python (`/usr/bin/python3`, scripts in `/usr/local/bin`, data under `/Library/Python`), `pip
+install --target`, and pipx or uv on Windows, which copy the commands out of their venv. A
+`--user` install shares one `<userbase>/daslang_sdk` between every Python version.
+The dasllama wheel keeps a console_scripts shim per command (`launch: "shim"`): its programs
+are `-exe` builds that read their files from beside themselves. Users:
 `pip install daslang` (RC: `pip install -i https://test.pypi.org/simple/ daslang==<ver>rcN`),
 then the daslang commands above are on PATH and `python -m daslang file.das` (or
 `python -m daslang -tool <name>`) works; `pip install dasllama` puts `dasllama-server`, `dasllama-cli`, `dasllama-bench` and

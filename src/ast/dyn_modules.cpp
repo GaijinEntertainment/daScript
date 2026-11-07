@@ -208,7 +208,7 @@ static ManifestRead read_manifest(const string & file, uint32_t descSize, uint64
     (void)file; (void)descSize; (void)descHash; (void)key; (void)fa;
     return res;
 #else
-    FILE * f = fopen(file.c_str(), "rb");
+    FILE * f = das_fopen_utf8(file.c_str(), "rb");
     if ( !f ) {
         return res;
     }
@@ -352,15 +352,12 @@ static bool write_manifest(const string & file, uint32_t descSize, uint64_t desc
     return false;
 #else
     const string tmp = file + ".tmp";
-    FILE * f = fopen(tmp.c_str(), "wb");
+    FILE * f = das_fopen_utf8(tmp.c_str(), "wb");
     if ( !f ) { why = "cannot create " + tmp; return false; }
     const bool wrote = fwrite(text.data(), 1, text.size(), f) == text.size();
     fclose(f);
-    if ( !wrote ) { remove(tmp.c_str()); why = "short write to " + tmp; return false; }
-#if defined(_WIN32)
-    remove(file.c_str());   // rename does not replace on Windows
-#endif
-    if ( rename(tmp.c_str(), file.c_str()) != 0 ) { remove(tmp.c_str()); why = "cannot rename " + tmp; return false; }
+    if ( !wrote ) { das_remove_utf8(tmp.c_str()); why = "short write to " + tmp; return false; }
+    if ( !das_rename_utf8(tmp.c_str(), file.c_str()) ) { das_remove_utf8(tmp.c_str()); why = "cannot rename " + tmp; return false; }
     return true;
 #endif
 }
@@ -530,32 +527,10 @@ static das_hash_set<das::string> collect_module_names(const das::string &path) {
     return result;
 #else
     das::string modules_path = path + "/modules/";
-#if defined(_MSC_VER)
-    _finddata_t c_file;
-    intptr_t hFile;
-    das::string findPath = modules_path + "/*";
-    if ((hFile = _findfirst(findPath.c_str(), &c_file)) != -1L) {
-        do {
-            if (c_file.name[0] == '.') {
-                continue;
-            }
-            result.insert(normalize_module_name(das::string(c_file.name)));
-        } while (_findnext(hFile, &c_file) == 0);
-        _findclose(hFile);
-    }
-#else
-    DIR *dir;
-    struct dirent *ent;
-    if ((dir = opendir(modules_path.c_str())) != NULL) {
-        while ((ent = readdir(dir)) != NULL) {
-            if (ent->d_name[0] == '.') {
-                continue;
-            }
-            result.insert(normalize_module_name(das::string(ent->d_name)));
-        }
-        closedir(dir);
-    }
-#endif
+    das_each_directory_entry(modules_path.c_str(), [](const char * name, bool, void * user) {
+        if (name[0] == '.') return;
+        ((das_hash_set<das::string> *) user)->insert(normalize_module_name(das::string(name)));
+    }, &result);
     return result;
 #endif // DAS_NO_FILEIO
 }
@@ -563,58 +538,29 @@ static das_hash_set<das::string> collect_module_names(const das::string &path) {
 static bool init_modules_for_folder(FileAccessPtr fa, const das::string &path, das::TextWriter &tout,
                                     const das_hash_set<das::string> *skip_set = nullptr,
                                     const das_hash_set<das::string> *disabled_set = nullptr) {
-    // FileAccess do not support iteratinf over directory.
 #if DAS_NO_FILEIO
     return false;
 #else
     using namespace das;
     string modules_path = path + "/modules/";
-    bool all_good = true;
-#if defined(_MSC_VER)
-    _finddata_t c_file;
-    intptr_t hFile;
-    string findPath = modules_path + "/*";
-    if ((hFile = _findfirst(findPath.c_str(), &c_file)) != -1L) {
-        do {
-            if (strcmp(c_file.name, ".") == 0 || strcmp(c_file.name, "..") == 0) {
-                continue;
-            }
-            if (skip_set && skip_set->count(normalize_module_name(das::string(c_file.name)))) {
-                // stderr, not `tout`: this is a diagnostic, and `tout` is stdout — which for the MCP server /
-                // dastest JSON / any stdout-parsing pipeline is a structured data channel a stray line corrupts.
-                fprintf(stderr, "Warning: local '%s' shadows global - using local\n", c_file.name);
-                continue;
-            }
-            if (disabled_set && disabled_set->count(force_lower(das::string(c_file.name)))) {
-                continue;   // explicitly disabled (--disable-module) — never load/register
-            }
-            all_good &= Result::OK == init_dyn_modules(fa, modules_path + c_file.name, tout, false);
-        } while (_findnext(hFile, &c_file) == 0);
-    }
-    _findclose(hFile);
- #else
-    DIR *dir;
-    struct dirent *ent;
-    if ((dir = opendir (modules_path.c_str())) != NULL) {
-        while ((ent = readdir (dir)) != NULL) {
-            if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) {
-                continue;
-            }
-            if (skip_set && skip_set->count(normalize_module_name(das::string(ent->d_name)))) {
-                // stderr, not `tout`: this is a diagnostic, and `tout` is stdout — which for the MCP server /
-                // dastest JSON / any stdout-parsing pipeline is a structured data channel a stray line corrupts.
-                fprintf(stderr, "Warning: local '%s' shadows global - using local\n", ent->d_name);
-                continue;
-            }
-            if (disabled_set && disabled_set->count(force_lower(das::string(ent->d_name)))) {
-                continue;   // explicitly disabled (--disable-module) — never load/register
-            }
-            all_good &= Result::OK == init_dyn_modules(fa, modules_path + ent->d_name, tout, false);
+    struct Walk {
+        FileAccessPtr fa; string modules_path; TextWriter * tout;
+        const das_hash_set<das::string> * skip_set; const das_hash_set<das::string> * disabled_set; bool all_good;
+    } walk { fa, modules_path, &tout, skip_set, disabled_set, true };
+    das_each_directory_entry(modules_path.c_str(), [](const char * name, bool, void * user) {
+        auto & w = *(Walk *) user;
+        if (w.skip_set && w.skip_set->count(normalize_module_name(das::string(name)))) {
+            // stderr, not `tout`: this is a diagnostic, and `tout` is stdout — which for the MCP server /
+            // dastest JSON / any stdout-parsing pipeline is a structured data channel a stray line corrupts.
+            fprintf(stderr, "Warning: local '%s' shadows global - using local\n", name);
+            return;
         }
-        closedir (dir);
-    }
- #endif
-    return all_good;
+        if (w.disabled_set && w.disabled_set->count(force_lower(das::string(name)))) {
+            return;   // explicitly disabled (--disable-module) — never load/register
+        }
+        w.all_good &= Result::OK == init_dyn_modules(w.fa, w.modules_path + name, *w.tout, false);
+    }, &walk);
+    return walk.all_good;
 #endif // DAS_NO_FILEIO
 }
 

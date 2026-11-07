@@ -21,11 +21,20 @@ require fio_core
 //! absolute, relative-to-cwd (e.g. ``./daslang``) if ``argv[0]`` is
 //! relative. ``execvp`` / ``popen_argv`` resolve relative paths against
 //! the child's cwd (inherited from parent), so a relative result still
-//! launches the right binary as long as cwd hasn't changed.
+//! launches the right binary as long as cwd hasn't changed. A bare
+//! ``argv[0]`` (a launch through ``PATH``) is replaced by the
+//! executable's own path first, so the daslang beside the real binary
+//! is found.
 def get_das_exe() : string {
     let args <- get_command_line_arguments()
     if (empty(args)) return ""
     var exe = args[0]
+    if (find(exe, "/") < 0 && find(exe, "\\") < 0) {
+        let self_path = get_executable_path()
+        if (!empty(self_path)) {
+            exe = self_path
+        }
+    }
     exe = replace(exe, "\\", "/")
     let last_slash = rfind(exe, "/")
     let dir = last_slash >= 0 ? slice(exe, 0, last_slash + 1) : ""

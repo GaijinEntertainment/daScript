@@ -544,4 +544,10 @@ static RegisterLeakDumpAtExit g_register_leak_dump_atexit DAS_LEAK_DUMP_EARLY_IN
 
 } // namespace das
 
+//! the hooks the stub binds its operator new/delete to once this library is loaded (alloc_tracker_overrides.cpp, DAS_STUB)
+extern "C" DAS_API void das_alloc_tracker_hooks ( void (**allocHook)(void *, size_t) noexcept, void (**freeHook)(void *) noexcept ) {
+    *allocHook = das::track_alloc_hook;
+    *freeHook = das::track_free_hook;
+}
+
 #endif // DAS_TRACK_ALLOC

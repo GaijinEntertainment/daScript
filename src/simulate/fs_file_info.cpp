@@ -21,7 +21,7 @@
 namespace das {
 #if !defined(DAS_NO_FILEIO)
     FileInfo * FsFileSystem::tryOpenFile ( const string & fileName ) {
-        if ( FILE * ff = fopen ( fileName.c_str(), "rb" ) ) {
+        if ( FILE * ff = das_fopen_utf8 ( fileName.c_str(), "rb" ) ) {
             struct stat st;
             int fd = fileno((FILE *)ff);
             fstat(fd, &st);
@@ -56,7 +56,7 @@ namespace das {
         auto & hfile = it_ok.first->second;
         if ( it_ok.second ) {
             // we inserted
-            if ( FILE * ff = fopen ( fileName.c_str(), "rb" ) ) {
+            if ( FILE * ff = das_fopen_utf8 ( fileName.c_str(), "rb" ) ) {
                 struct stat st;
                 int fd = fileno((FILE *)ff);
                 fstat(fd, &st);
@@ -140,7 +140,7 @@ namespace das {
 
 #if !defined(DAS_NO_FILEIO)
     bool FsFileAccess::introduceFileFromDisk ( const string & name, const string & diskPath ) {
-        if ( FILE * ff = fopen(diskPath.c_str(), "rb") ) {
+        if ( FILE * ff = das_fopen_utf8(diskPath.c_str(), "rb") ) {
             das_dep_note_read(diskPath.c_str());
             struct stat st;
             int fd = fileno((FILE *)ff);
@@ -168,32 +168,14 @@ namespace das {
 
     void FsFileAccess::introduceDaslib () {
         string daslibDir = getDasRoot() + "/" + DASLIB_MODULE_NAME + "/";
-#if defined(_MSC_VER)
-        _finddata_t c_file;
-        intptr_t hFile;
-        string findPath = daslibDir + "*.das";
-        if ((hFile = _findfirst(findPath.c_str(), &c_file)) != -1L) {
-            do {
-                if ( c_file.attrib & _A_SUBDIR ) continue;
-                string fullPath = daslibDir + c_file.name;
-                introduceFileFromDisk(fullPath, fullPath);
-            } while (_findnext(hFile, &c_file) == 0);
-            _findclose(hFile);
-        }
-#else
-        DIR * dir;
-        struct dirent * ent;
-        if ( (dir = opendir(daslibDir.c_str())) != NULL ) {
-            while ( (ent = readdir(dir)) != NULL ) {
-                string fname = ent->d_name;
-                if ( fname.length() > 4 && fname.substr(fname.length()-4) == ".das" ) {
-                    string fullPath = daslibDir + fname;
-                    introduceFileFromDisk(fullPath, fullPath);
-                }
-            }
-            closedir(dir);
-        }
-#endif
+        struct Walk { FsFileAccess * self; string dir; } walk { this, daslibDir };
+        das_each_directory_entry(daslibDir.c_str(), [](const char * name, bool isDirectory, void * user) {
+            auto & w = *(Walk *) user;
+            string fname = name;
+            if ( isDirectory || fname.length() <= 4 || fname.substr(fname.length() - 4) != ".das" ) return;
+            string fullPath = w.dir + fname;
+            w.self->introduceFileFromDisk(fullPath, fullPath);
+        }, &walk);
     }
 
     void FsFileAccess::introduceNativeModules () {

@@ -100,3 +100,26 @@ CC=$CC CXX=$CXX cmake -S "$DAS_ROOT" -B "$BUILD_DIR" -G Ninja \
 # sentinel (a hidden-visibility function-local static gets one copy per module,
 # so a table allocated in one and freed in another frees static data).
 cmake --build "$BUILD_DIR" --target "$TARGET" --parallel
+
+# The no_fileio variant is a static library nothing links, so a file-io function that lost its
+# DAS_NO_FILEIO stub (src/builtin/REVIEW.md) would pass the build; a console host linking the
+# library is the first to see the unresolved symbol. Link one here, through the entry points a
+# host reaches first: the das root and the file access.
+if [ "$VARIANT" = no_fileio ]; then
+  LINK_CHECK=$BUILD_DIR/no_fileio_link_check
+  cat > "$LINK_CHECK.cpp" <<'EOF'
+#include "daScript/misc/platform.h"
+#include "daScript/misc/sysos.h"
+#include "daScript/simulate/fs_file_info.h"
+int main () {
+    das::getDasRoot();
+    das::FsFileAccess access;
+    access.getFileInfo("x.das");
+    return 0;
+}
+EOF
+  LIBS="$DAS_ROOT/lib/liblibDaScript.a $DAS_ROOT/lib/liblibDaScript_runtime.a $DAS_ROOT/lib/liblibUriParser.a"
+  $CXX $EXTRA_FLAGS -isystem "$EASTL_INC" -isystem "$STAGE" -I"$DAS_ROOT/cmake/das_config_eastl" \
+    -I"$DAS_ROOT/include" -I"$BUILD_DIR/include" -I"$DAS_ROOT/3rdparty/fmt/include" \
+    "$LINK_CHECK.cpp" $LIBS "$EASTL_LIB" -lpthread -ldl -o "$LINK_CHECK"
+fi

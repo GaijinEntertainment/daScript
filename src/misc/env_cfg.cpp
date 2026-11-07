@@ -12,12 +12,56 @@
 extern "C" char ** environ;
 #endif
 
+#if defined(_WIN32)
+    #ifndef WIN32_LEAN_AND_MEAN
+        #define WIN32_LEAN_AND_MEAN
+    #endif
+    #ifndef NOMINMAX
+        #define NOMINMAX
+    #endif
+    #include <windows.h>
+#endif
+
 namespace das {
+
+#if defined(_WIN32)
+    // the environment is UTF-16; the narrow CRT view renders it in the ANSI codepage
+    static std::wstring env_wide ( const char * utf8 ) {
+        std::wstring w;
+        if ( !utf8 ) return w;
+        int n = MultiByteToWideChar(CP_UTF8, 0, utf8, -1, nullptr, 0);
+        if ( n <= 0 ) return w;
+        w.resize(n);
+        if ( MultiByteToWideChar(CP_UTF8, 0, utf8, -1, &w[0], n) != n ) return std::wstring();
+        w.resize(n - 1);
+        return w;
+    }
+
+    static string env_utf8 ( const wchar_t * wide ) {
+        string s;
+        int n = WideCharToMultiByte(CP_UTF8, 0, wide, -1, nullptr, 0, nullptr, nullptr);
+        if ( n <= 0 ) return s;
+        s.resize(n);
+        if ( WideCharToMultiByte(CP_UTF8, 0, wide, -1, &s[0], n, nullptr, nullptr) != n ) return string();
+        s.resize(n - 1);
+        return s;
+    }
+#endif
 
     const char * das_getenv ( const char * name ) {
 #if DAS_TARGET_PS
         (void)name;
         return nullptr;
+#elif defined(_WIN32)
+        thread_local string value;
+        std::wstring wname = env_wide(name);
+        DWORD n = GetEnvironmentVariableW(wname.c_str(), nullptr, 0);
+        if ( n == 0 ) return nullptr;
+        std::wstring wvalue(n, L'\0');
+        DWORD got = GetEnvironmentVariableW(wname.c_str(), &wvalue[0], n);
+        wvalue.resize(got);
+        value = env_utf8(wvalue.c_str());
+        return value.c_str();
 #else
         return getenv(name);
 #endif
@@ -27,7 +71,7 @@ namespace das {
 #if DAS_TARGET_PS
         (void)name; (void)value;
 #elif defined(_WIN32)
-        _putenv_s(name, value ? value : "");
+        _wputenv_s(env_wide(name).c_str(), env_wide(value ? value : "").c_str());
 #else
         setenv(name, value ? value : "", 1);
 #endif

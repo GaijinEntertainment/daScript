@@ -101,7 +101,7 @@ namespace das {
 #if defined(_WIN32)
             HANDLE handle;
             explicit DepFileLock ( const string & path ) {
-                handle = CreateFileA((path + ".lock").c_str(), GENERIC_READ|GENERIC_WRITE,
+                handle = CreateFileW(das_utf8_to_wide((path + ".lock").c_str()).c_str(), GENERIC_READ|GENERIC_WRITE,
                     FILE_SHARE_READ|FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
                 OVERLAPPED ov = {};
                 if ( handle != INVALID_HANDLE_VALUE ) LockFileEx(handle, LOCKFILE_EXCLUSIVE_LOCK, 0, MAXDWORD, MAXDWORD, &ov);

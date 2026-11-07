@@ -2,6 +2,7 @@
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/dyn_modules.h"
+#include "daScript/misc/sysos.h"
 #include "daScript/ast/ast_infer_type.h"
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/ast/ast_expressions.h"
@@ -690,7 +691,7 @@ namespace das {
             return;
         }
 #if !defined(DAS_NO_FILEIO)
-        FILE * f = fopen(path.c_str(), "rb");
+        FILE * f = das_fopen_utf8(path.c_str(), "rb");
         if ( !f ) return;
         fseek(f, 0, SEEK_END);
         long fsize = ftell(f);

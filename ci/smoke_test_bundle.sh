@@ -115,7 +115,7 @@ COMPILE_TESTS=(
 
 # Prebuilt exes in bin/: `cpp` rows are add_executable targets (platform suffix), presence-checked;
 # `tool` rows are DAS_UTILS_SHIPPED_EXES (always `.exe`), also launched (`--help`, exit 0) - a copy
-# loads the runtime through daslang's rpath, and an rpath into the build tree is dead on a user's box.
+# of the daslang stub loads the host library from the bundle's own tree, never from the build tree.
 SHIPPED_EXE_TESTS=(
     "daslang-live|cpp"
     "watchdog|cpp"
@@ -257,6 +257,34 @@ for front in lsp mcp dap; do
 done
 run_check "daslang -tool lists the tools" bash -c \
     "'$DASLANG' -tool | grep -qx '    lint'"
+# daslang-live is the same stub over its own host library; a bundle missing that library passes
+# the presence check above and fails here
+run_check "daslang-live starts" bash -c \
+    "'$BUNDLE/bin/daslang-live${CPP_SUFFIX}' --help > /dev/null"
+# a copy of daslang anywhere, told its root by daslang.root beside it, runs the bundle - the
+# layout pip installs (src/misc/ARCHITECTURE_DAS_ROOT.md#root-sidecar)
+RELOCATED="$(mktemp -d)"
+mkdir -p "$RELOCATED/scripts"
+cp "$DASLANG" "$RELOCATED/scripts/"
+cp "$BUNDLE/bin/lint${TOOL_EXE_SUFFIX}" "$RELOCATED/scripts/lint${TOOL_EXE_SUFFIX}"
+# the sidecar holds a native path: under Git Bash $BUNDLE is an msys /d/... spelling Windows cannot open
+BUNDLE_NATIVE="$BUNDLE"
+command -v cygpath > /dev/null 2>&1 && BUNDLE_NATIVE="$(cygpath -m "$BUNDLE")"
+printf '%s\n' "$BUNDLE_NATIVE" > "$RELOCATED/scripts/daslang.root"
+printf 'options gen2\n[export]\ndef main() => 3\n' > "$RELOCATED/rc3.das"
+run_check "relocated daslang + sidecar" bash -c \
+    "rc=0; '$RELOCATED/scripts/daslang${CPP_SUFFIX}' '$RELOCATED/rc3.das' || rc=\$?; [ \"\$rc\" -eq 3 ]"
+run_check "relocated lint + sidecar" bash -c \
+    "set -o pipefail; '$RELOCATED/scripts/lint${TOOL_EXE_SUFFIX}' '$RELOCATED/rc3.das' --no-cache | tee '$LOG.lint' \
+     && grep -Eq '^1 files, 0 issue\(s\), 0 error\(s\)\$' '$LOG.lint'"
+if [[ "$CPP_SUFFIX" == "" ]]; then
+    # brew links the commands into its bin/ as symlinks into libexec/: the stub follows the link
+    mkdir -p "$RELOCATED/linked"
+    ln -s "$DASLANG" "$RELOCATED/linked/daslang"
+    run_check "symlinked daslang" bash -c \
+        "rc=0; '$RELOCATED/linked/daslang' '$RELOCATED/rc3.das' || rc=\$?; [ \"\$rc\" -eq 3 ]"
+fi
+rm -rf "$RELOCATED"
 # lint.exe must resolve the project's own modules/ from its cwd - a missed module reports main.das skipped
 PROJECT="$(mktemp -d)"
 mkdir -p "$PROJECT/modules/greeter"

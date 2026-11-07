@@ -12,28 +12,7 @@ let private NETWORK_CPP = "src/misc/network.cpp"
 let private ERROR_SOURCE = "last_socket_error"
 let private WOULD_BLOCK_SOURCE = "socket_would_block"
 
-// Byte offset of the first whole-word occurrence of `tok` in `line`; -1 when absent.
-def private token_index(line : string; tok : string) : int {
-    var at = -1
-    let tlen = length(tok)
-    peek_data(line) $(d) {
-        let n = length(d)
-        var from = 0
-        while (at < 0) {
-            let idx = find(d, tok, from)
-            break if (idx < 0)
-            let before_ok = idx == 0 || !is_ident_byte(int(d[idx - 1]))
-            let after_ok = idx + tlen >= n || !is_ident_byte(int(d[idx + tlen]))
-            if (before_ok && after_ok) {
-                at = idx
-            }
-            from = idx + 1
-        }
-    }
-    return at
-}
-
-def private has_token(line : string; tok : string) : bool => token_index(line, tok) >= 0
+def private has_token(line : string; tok : string) : bool => word_index(line, tok) >= 0
 
 def private is_write_of(line : string; tok : string) : bool {
     let idx = find(line, tok)
@@ -61,7 +40,7 @@ def private brace_delta(line : string) : int {
 // a definition has only its return type there.
 def private body_range(lines : array<string>; fname : string) : int2 {
     for (i, ln in range(length(lines)), lines) {
-        let at = token_index(ln, fname)
+        let at = word_index(ln, fname)
         continue if (at < 0 || find(ln, "\{") < 0 || find(ln, ";") >= 0
             || find(slice(ln, 0, at), "(") >= 0 || find(slice(ln, at), "(") < 0)
         var depth = 0

@@ -4,8 +4,13 @@
 Usage: wheel_build.py [--package NAME] <bundle_dir> <tag_or_version> <out_dir> [--platform-tag TAG]
 
 - NAME is a profile in packages.py (default daslang): the commands, the license source
-- a repack, not a compile: the bundle tree lands under <package>/_sdk/, console_scripts
-  shims exec the binaries there
+- a repack, not a compile. A profile whose `launch` is "native" (daslang) puts every command's
+  executable into the wheel's scripts directory as itself, beside a `<package>.root` sidecar
+  that names the bundle, which lands at <prefix>/<package>_sdk - the wheel's data directory;
+  no Python runs when a command starts, and `python -m <package>` execs the same binary. A
+  profile whose `launch` is "shim" (dasllama) keeps the bundle under <package>/_sdk/ and one
+  console_scripts shim per command, because its executables read their files from beside
+  themselves
 - payload: the toolchain minus what EXCLUDE_* below names - keeps every wheel under
   PyPI's 100 MB per-file cap; the release zip carries the rest
 - platform tag derived from the binaries (highest GLIBC symbol / Mach-O minos), never
@@ -152,18 +157,61 @@ def detect_platform_tag(files, system=None, machine=None, probe_prefixes=("bin/"
 
 # --- package sources ----------------------------------------------------------
 
-INIT_PY = '''"""@SUMMARY@ - the bundle is under `sdk_root()`; console scripts exec it."""
+INIT_PY = '''"""@SUMMARY@ - the bundle is under `sdk_root()`; the commands on PATH run it."""
 import os
+import subprocess
+import sys
+import sysconfig
 
 __version__ = "@VERSION@"
 
 # command -> the candidate paths of its executable under sdk_root(), first present wins
 COMMANDS = @COMMANDS@
 
+# "native": the bundle sits at <prefix>/@PACKAGE@_sdk, the wheel's data directory, and the
+# commands in the scripts directory are the bundle's own executables; "shim": the bundle sits
+# beside this file and the commands are console_scripts that exec into it
+LAUNCH = "@LAUNCH@"
+
+
+def _data_prefixes():
+    here = os.path.dirname(os.path.abspath(__file__))
+    yield os.path.dirname(here)  # pip --target: the tree sits beside the package
+    yield os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(here))))
+    for scheme in (None, os.name + "_user"):
+        try:
+            yield sysconfig.get_path("data", scheme) if scheme else sysconfig.get_path("data")
+        except KeyError:
+            pass
+
+
+def _recorded_root():
+    """The bundle's root as pip recorded it at install time - exact under every install scheme."""
+    try:
+        from importlib.metadata import distribution
+        dist = distribution("@PACKAGE@")
+        for f in dist.files or []:
+            parts = f.parts
+            if "@PACKAGE@_sdk" in parts:
+                located = str(dist.locate_file(f))
+                return located[:located.index("@PACKAGE@_sdk") + len("@PACKAGE@_sdk")]
+    except Exception:
+        pass
+    return None
+
 
 def sdk_root():
     """Root of the bundle the wheel carries."""
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "_sdk")
+    if LAUNCH == "shim":
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), "_sdk")
+    recorded = _recorded_root()
+    if recorded and os.path.isdir(recorded):
+        return recorded
+    for prefix in _data_prefixes():
+        root = os.path.join(prefix, "@PACKAGE@_sdk")
+        if os.path.isdir(root):
+            return root
+    raise FileNotFoundError("@PACKAGE@_sdk not found under " + ", ".join(_data_prefixes()))
 
 
 def bin_dir():
@@ -178,17 +226,10 @@ def tool_path(name):
         if os.path.isfile(p):
             return p
     raise FileNotFoundError(f"@PACKAGE@ has no tool {name!r} under {sdk_root()}")
-'''
-
-CLI_PY = '''"""console_scripts entry points: one shim per shipped executable."""
-import os
-import subprocess
-import sys
-
-from . import tool_path
 
 
 def run(name):
+    """Hands this process over to the shipped executable `name` with this process's arguments."""
     exe = tool_path(name)
     args = [exe] + sys.argv[1:]
     if os.name == "nt":  # no execv semantics on Windows: spawn, forward the exit code
@@ -197,15 +238,24 @@ def run(name):
         except KeyboardInterrupt:
             raise SystemExit(130)
     os.execv(exe, args)
+'''
+
+CLI_PY = '''"""console_scripts entry points: one shim per shipped executable."""
+from . import run
 
 
 @SHIMS@'''
 
-MAIN_PY = '''"""`python -m @PACKAGE@ ...` == `@MAIN@ ...`."""
-from ._cli import run
+MAIN_PY = '''"""`python -m @PACKAGE@ ...` == `@MAIN@ ...`: the bundle's own binary."""
+from . import run
 
 run("@MAIN@")
 '''
+
+# the sidecar beside the native commands: the bundle relative to the scripts directory, one line
+# per pip layout - <prefix>/bin or Scripts\ beside <prefix>/<pkg>_sdk, and the Windows user scheme's
+# <userbase>/Python3xx/Scripts beside <userbase>/<pkg>_sdk; the first that exists wins
+ROOT_SIDECAR = "../@PACKAGE@_sdk\n../../@PACKAGE@_sdk\n"
 
 
 def shim_name(tool):
@@ -310,8 +360,9 @@ def build(bundle, tag, out_dir, platform_tag=None, system=None, machine=None, pa
     if not os.path.isfile(license_path):
         sys.exit(f"wheel_build: {license_path} missing — the wheel must carry its LICENSE")
 
+    native = p["launch"] == "native"
     subst = {"@VERSION@": version, "@PACKAGE@": package, "@MAIN@": p["main_command"],
-             "@SUMMARY@": p["summary"], "@COMMANDS@": repr(p["commands"])}
+             "@SUMMARY@": p["summary"], "@COMMANDS@": repr(p["commands"]), "@LAUNCH@": p["launch"]}
     def render(template):
         for k, v in subst.items():
             template = template.replace(k, v)
@@ -319,16 +370,27 @@ def build(bundle, tag, out_dir, platform_tag=None, system=None, machine=None, pa
 
     w = WheelWriter(out)
     w.add_bytes(f"{package}/__init__.py", render(INIT_PY))
-    w.add_bytes(f"{package}/_cli.py", render_cli(tools).encode())
+    if native:
+        data_dir = f"{package}-{version}.data"
+        exe_suffix = ".exe" if plat.startswith("win_") else ""
+        for tool in tools:
+            rel = next(c for c in p["commands"][tool] if c in present)
+            w.add_file(f"{data_dir}/scripts/{tool}{exe_suffix}", os.path.join(bundle, rel), executable=True)
+        w.add_bytes(f"{data_dir}/scripts/{package}.root", render(ROOT_SIDECAR))
+        payload_dir = f"{data_dir}/data/{package}_sdk"
+    else:
+        w.add_bytes(f"{package}/_cli.py", render_cli(tools).encode())
+        payload_dir = f"{package}/_sdk"
     w.add_bytes(f"{package}/__main__.py", render(MAIN_PY))
     for full, rel in files:
         # pip restores mode bits from the archive - a bundle staged on a modeless filesystem must not lose them
-        w.add_file(f"{package}/_sdk/{rel}", full, executable=rel.startswith("bin/") or rel in executables)
+        w.add_file(f"{payload_dir}/{rel}", full, executable=rel.startswith("bin/") or rel in executables)
     w.add_file(f"{dist_info}/LICENSE", license_path)
     w.add_bytes(f"{dist_info}/METADATA", render_metadata(package, version, readme).encode())
     w.add_bytes(f"{dist_info}/WHEEL",
                 f"Wheel-Version: 1.0\nGenerator: daslang-wheel-build\nRoot-Is-Purelib: false\nTag: py3-none-{plat}\n".encode())
-    w.add_bytes(f"{dist_info}/entry_points.txt", render_entry_points(package, tools).encode())
+    if not native:
+        w.add_bytes(f"{dist_info}/entry_points.txt", render_entry_points(package, tools).encode())
     w.add_bytes(f"{dist_info}/top_level.txt", f"{package}\n".encode())
     w.finish(dist_info)
     size_mb = os.path.getsize(out) / 2**20
