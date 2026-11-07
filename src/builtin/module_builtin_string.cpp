@@ -7,7 +7,6 @@
 #include "daScript/misc/performance_time.h"
 #include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/misc/string_writer.h"
-#include "daScript/misc/debug_break.h"
 
 #include "daScript/simulate/bind_enum.h"
 

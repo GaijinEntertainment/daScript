@@ -3,7 +3,6 @@
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/heap.h"
 #include "daScript/misc/memory_model.h"
-#include "daScript/misc/debug_break.h"
 
 namespace das {
 

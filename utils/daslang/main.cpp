@@ -1,4 +1,3 @@
-#include "daScript/ast/aot_templates.h"
 #include "daScript/ast/ast.h"
 #include "daScript/ast/dyn_modules.h"
 #include "daScript/daScript.h"
@@ -8,7 +7,6 @@
 #include "daScript/simulate/fs_file_info.h"
 #include "daScript/simulate/aot_builtin.h"
 #include "daScript/simulate/aot_builtin_fio.h"
-#include "daScript/ast/ast_aot_cpp.h"
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/misc/crash_handler.h"
 #include "daScript/misc/dep_recorder.h"
@@ -88,6 +86,20 @@ enum class JitMode {
     Executable,
     Library,
 };
+
+static bool saveToFile ( const string_view & fname, const string_view & str ) {
+    FILE * f = fopen ( fname.data(), "wb" );
+    if ( !f ) {
+        tout << "can't open " << fname.data() << "\n";
+        return false;
+    }
+    if ( !quiet )  {
+        tout << "saving to " << fname.data() << "\n";
+    }
+    fwrite ( str.data(), str.length(), 1, f );
+    fclose ( f );
+    return true;
+}
 
 static bool gc_thread_root_is_settled ( TextWriter & tout, const char * what, const char * when ) {
     auto & root = gc_root::gc_get_thread_root();
@@ -205,7 +217,7 @@ bool aot_compile ( vector<pair<string, string>> &aot_files, bool dryRun, bool cr
             tout << "aot returned empty result for " << in << "\n";
             compiled = false;
         } else {
-            bool is_ok = saveToFile(tout, out, resultStr, quiet);
+            bool is_ok = saveToFile(out, resultStr);
             if (!is_ok && !quiet) {
                 tout << "Failed to compile `" << out << "` in aot.\n";
             }

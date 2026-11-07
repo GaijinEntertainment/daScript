@@ -1054,8 +1054,6 @@ include/daScript/misc/smart_ptr.h
 include/daScript/misc/free_list.h
 include/daScript/misc/sysos.h
 include/daScript/misc/callable.h
-include/daScript/misc/debug_break.h
-include/daScript/misc/instance_debugger.h
 include/daScript/misc/gc_node.h
 include/daScript/misc/job_que.h
 include/daScript/misc/handle_registry.h
@@ -1743,7 +1741,6 @@ endif()
 
 # This list should be significantly reduced, most of the files, except aot related should be private.
 SET(DAS_RELEASE_AST_INCLUDE
-    include/daScript/ast/aot_templates.h
     include/daScript/ast/ast_expressions.h
     include/daScript/ast/ast_generate.h
     include/daScript/ast/ast.h
@@ -1758,7 +1755,6 @@ SET(DAS_RELEASE_AST_INCLUDE
     include/daScript/ast/ast_typedecl.h
     include/daScript/ast/ast_typefactory.h
     include/daScript/ast/ast_visitor.h
-    include/daScript/ast/ast_aot_cpp.h
     include/daScript/ast/ast_const_visitor.h
     include/daScript/ast/compilation_errors.h
     include/daScript/ast/dyn_modules.h
@@ -1784,7 +1780,6 @@ SET(DAS_RELEASE_MISC_INCLUDE
     include/daScript/misc/crash_handler.h
     include/daScript/misc/das_asan.h
     include/daScript/misc/das_common.h
-    include/daScript/misc/debug_break.h
     include/daScript/misc/dep_recorder.h
     include/daScript/misc/enums.h
     include/daScript/misc/env_cfg.h
@@ -1793,7 +1788,6 @@ SET(DAS_RELEASE_MISC_INCLUDE
     include/daScript/misc/gc_node.h
     include/daScript/misc/hal.h
     include/daScript/misc/hash.h
-    include/daScript/misc/instance_debugger.h
     include/daScript/misc/job_que.h
     include/daScript/misc/lexer_alloc_track.h
     include/daScript/misc/handle_registry.h
