@@ -5,18 +5,22 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_CODEGEN_IDENTITY.md`, `ARCHITECTURE_DEBUG
 `ARCHITECTURE_EXE.md`, `ARCHITECTURE_JIT_ENTRY.md`, `ARCHITECTURE_LIB.md`,
 `ARCHITECTURE_TARGET_FEATURES.md`, `ARCHITECTURE_VECTOR_MATH.md`. Planned work: `LEDGER.md`.
 
-**A `[test]` file under this module that carries a `require dasllama/...` line of its own answers
-to `modules/dasLLAMA/REVIEW.md` (repo root) as well.**
+- **A `[test]` file under this module that carries a `require dasllama/...` line of its own
+  answers to `modules/dasLLAMA/REVIEW.md` (repo root) as well.**
 
-**A diff that changes how the compile handles a function because it carries `[tune]`,
-`[tune_perm]`, `[tune_companion]`, `[tune_scope]`, `[tune_policy]` or `[llvm_code]` - the body
-it emits for it, which permutation it picks for it - or what a read or a save of `<app>.tune.json`
-takes from a saved sidecar that is stale (its mtime is older than the running binary) or that
-another machine wrote, is reviewed with `skills/tune.md`.**
+- **A diff that changes how the compile handles a function because it carries `[tune]`,
+  `[tune_perm]`, `[tune_companion]`, `[tune_scope]`, `[tune_policy]` or `[llvm_code]` - the body
+  it emits for it, which permutation it picks for it - is reviewed with `skills/tune.md`.**
 
-**A change to the tune framework - `daslib/llvm_tune.das`, a test under `tests/` here that requires
-`llvm/daslib/llvm_tune` or spawns a child that does, or the descriptor and C++ rows that join it to
-a program (`.das_module`, `src/dasLLVM.cpp`) - is reviewed with `skills/internal/llvm_tune_internals.md`.**
+- **A diff that changes what a read or a save of `<app>.tune.json` takes from an
+  `<app>.tune.json` it finds stale (its mtime is older than the running binary) or written by
+  another machine is reviewed with `skills/tune.md`.**
+
+- **A change to the tune framework - `daslib/llvm_tune.das`, a test under `tests/` here that
+  requires `llvm/daslib/llvm_tune` or spawns a child that does, the
+  `registerModuleGroupMember("tune_framework", ...)` row in `src/dasLLVM.cpp`, or the
+  `register_module_group("tune_framework", ...)` row in `.das_module` - is reviewed with
+  `skills/internal/llvm_tune_internals.md`.**
 
 - **A change to any file under this module but a `.md` runs the module-owned suite** (command
   and build gate: `tests/README.md` here). CI runs some of its test files only nightly, so before
@@ -37,12 +41,12 @@ a program (`.das_module`, `src/dasLLVM.cpp`) - is reviewed with `skills/internal
   temp directory), and removes them** - a shared path under `build/` is one two concurrent runs
   collide on.
 
-- **A test under `tests/` here that spawns a daslang child keeps the child's artifacts inside a
-  directory it created uniquely for this process: `-output <dir>/...` for a `-exe` build,
-  `-no-module-cache` or `-module-cache <dir>/...` for a run that compiles through the front-end
-  cache, and `-jit-no-cache` or a pinned `jit_output_path` for a `-jit` run that executes the
-  script.** A child writes its caches relative to the cwd otherwise, which is the tree two
-  concurrent runs share.
+- **A test under `tests/` here that spawns a daslang child keeps every path the child writes
+  inside a directory the test created uniquely for this process: `-output <dir>/...` for a
+  `-exe` build; `-no-module-cache` or `-module-cache <dir>/...` for a run that compiles through
+  the front-end cache; `-jit-no-cache` or `-output <dir>/...` for a `-jit` run that executes the
+  script; a working directory inside `<dir>` covers the module cache and the JIT cache.** A child
+  writes its caches relative to the cwd otherwise, which is the tree two concurrent runs share.
 
 - **A diff that changes which arm a non-host triple selects in a branch keyed on the target
   triple (a key added, changed or removed), or changes code only a cross target's arm reaches,
@@ -202,10 +206,11 @@ a program (`.das_module`, `src/dasLLVM.cpp`) - is reviewed with `skills/internal
 - **A diff that changes the machine code a twinned emitter produces - its body, which of its
   arms a call selects, or the feature set its output is lowered under - leaves it covered by a
   cell comparing the emitted result with the interpreted result over the operand range that
-  emitter serves (every vector width for a vector emitter, every pair of int8 operands for a
-  dot), adding the cell in the same change when none covers that range.** A twinned emitter is
-  one the interpreter also computes, through a das body or a builtin: every `build_vector_*` in
-  `daslib/llvm_jit_intrin.das` and every `[llvm_code]` generator under this module.
+  emitter serves (every vector width for a vector emitter, every operand value for one over
+  8-bit operands, each operand class its arms branch on otherwise), adding the cell in the same
+  change when none covers that range.** A twinned emitter is a `build_vector_*` in
+  `daslib/llvm_jit_intrin.das` or an `[llvm_code]` generator under this module: the interpreter
+  computes the same answer through a das body or a builtin, so the two can drift apart.
 
 - **A test that searches the text of the LLVM IR the JIT emits matches an instruction by its
   opcode and flags (`fmul reassoc`), never by a numbered register (`%12`).** The numbering shifts
