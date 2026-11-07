@@ -176,7 +176,10 @@ more rows runs in tiles of eight, one weight pass a tile.** Every N-column kerne
 carries `col0`, the tile's first column: column c reads activation row `col0 + c` and lands its
 output row `col0 + c`, so the tiles of one dispatch write disjoint rows of the planes the whole
 rows' extent binds. The encoders tile (`gemv_enc` over `GEMV_COL_TILE`, `router_enc_cols`,
-`q8_gemv_gu_n_enc` over `GU_N_COLS`, `pleact_enc_cols`), so no driver site counts columns; a
+`q8_gemv_gu_n_enc` over `GU_N_COLS`, `pleact_enc_cols`; the CUDA home's `cud_gemv_enc`,
+`cud_router_enc_cols` and `cud_gu_n_enc`, its fused act-projection site tiling in place), so no
+other driver site counts columns: a kernel handed more than eight columns at once lands wrong rows
+past the eighth; a
 tile's columns are summed exactly as the same columns of a narrower dispatch, so a row lands bit
 for bit whichever tile holds it. The per-row kernels (the norms, the rope and store, the attention,
 the top-k, the deltanet step, the classifier epilogue and pick) take a workgroup a row and need no

@@ -38,6 +38,7 @@ let private FILE_12B = GemmaFile(file = "gemma-4-12B-it-Q4_K_M.gguf", arm = "cud
 let private FILE_26B = GemmaFile(file = "gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf", arm = "cuda-g4m")
 let private FILE_26B_K = GemmaFile(file = "gemma-4-26B-A4B-it-Q4_K_M.gguf", arm = "cuda-g4mk", host_experts = true)   //! the rig's context asked whole: the plan moves routed layers' experts to the host
 let private FILE_E2B = GemmaFile(file = "gemma-4-E2B-it-Q8_0.gguf", arm = "cuda-g4e")   //! the E-series: the per-layer-embedding branch on every layer, the upper layers over the K/V of the ones below
+let private FILE_E2B_K = GemmaFile(file = "gemma-4-E2B-it-Q4_K_M.gguf", arm = "cuda-g4e-kq")   //! the E-series K-quant carrier: its per-layer gate and projection rows ship F32, the router GEMV's rows
 let private FILE_E4B = GemmaFile(file = "gemma-4-E4B-it-Q8_0.gguf", arm = "cuda-g4f")   //! the larger E-series carrier: 42 layers at dim 2560, the bf16 projection rows twice the E2B's
 let private FILE_12B_Q8 = GemmaFile(file = "gemma-4-12B-it-Q8_0.gguf", arm = "cuda-g4q8")   //! the dense carrier on the Q8_0 planes (the Vulkan 12B Q8_0 file's cells)
 let private FILE_31B = GemmaFile(file = "gemma-4-31B-it-Q4_K_M.gguf", arm = "cuda-g31")   //! the largest dense carrier, a 32 GB card
@@ -117,6 +118,21 @@ def test_gpu_resident_cuda_gemma4_e2b(t : T?) {
     t |> run("gemma-4-E2B Q8_0: eight tokens through the window chain against the token command on the CUDA driver, both arms") @(t : T?) {
         return if (!cuda_home_asked(t))
         prefill_vs_decode(t, 8l, FILE_E2B)
+    }
+}
+
+//! the short window's peel on the E2B Q4_K_M, whose per-layer branch reads the file's f32 gate and projection rows through the
+//! router GEMV: tails of 2, 9 and 16 rows - one column tile, then past it - within the gemma logits bar of the row-at-a-time tail
+//! (the carrier's two token-command forms round up to 0.11 of the max logit apart, its window chain as far off the CPU chain; the
+//! one-step-off control reads 0.38 and up, a tail past the tile with its router columns untiled 1.6 and up)
+[test]
+def test_gpu_resident_cuda_gemma4_e2b_k_peel(t : T?) {
+    t |> run("gemma-4-E2B Q4_K_M: short tails peel through the token commands on the CUDA driver, the f32 per-layer rows past one column tile") @(t : T?) {
+        return if (!cuda_home_asked(t))
+        with_gemma_rig(t, FILE_E2B_K) $(tr) {
+            t |> success(tr.ple_gate_f32 && tr.ple_proj_f32, "the per-layer gate and projection rows ship F32: the branch rides the router GEMV")
+            e_series_peel_cell(t, tr, [2l, 9l, 16l], GEMMA_LOGIT_BAR_REL)
+        }
     }
 }
 

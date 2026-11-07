@@ -530,9 +530,9 @@ The Vulkan gemma resident files (`test_gpu_resident_gemma*.das`, entry below), o
 `g31` (the 31B); and the E-series cells' `g4e-ple g4e-kq g4e-kq-q40 g4e-kq-ple-q6k
 g4e-kq-ple-q50 g4e-kq-q8 g4e-pre g4e-chain g4e-f16 g4f-codec`; the CUDA gemma files (`test_gpu_resident_cuda_gemma.das`,
 `test_gpu_resident_cuda_gemma4.das`) carry the same carriers under a `cuda-` prefix: `cuda-g2 cuda-g3 cuda-g3b cuda-g4k
-cuda-g4m cuda-g4mk cuda-g4e cuda-g4f cuda-g4q8 cuda-g31 cuda-g4mx`. By substring `--arm g3` also runs `g3b`, `cuda-g3` and
-`cuda-g3b`, `--arm g4m` `g4mk`, `cuda-g4m`, `cuda-g4mk` and `cuda-g4mx`, `--arm g4e` every `g4e-*` arm and `cuda-g4e`,
-`--arm g4e-kq` every `g4e-kq-*` one, `--arm g4f` `g4f-codec` and `cuda-g4f`, and every Vulkan token its `cuda-` twin;
+cuda-g4m cuda-g4mk cuda-g4e cuda-g4e-kq cuda-g4f cuda-g4q8 cuda-g31 cuda-g4mx` (`cuda-g4e-kq` the E2B Q4_K_M peel cell). By
+substring `--arm g3` also runs `g3b`, `cuda-g3` and `cuda-g3b`, `--arm g4m` `g4mk`, `cuda-g4m`, `cuda-g4mk` and `cuda-g4mx`,
+`--arm g4e` every `g4e-*` arm, `cuda-g4e` and `cuda-g4e-kq`, `--arm g4e-kq` every `g4e-kq-*` one and `cuda-g4e-kq`, `--arm g4f` `g4f-codec` and `cuda-g4f`, and every Vulkan token its `cuda-` twin;
 `--arm cuda-` selects the CUDA files' arms alone.
 
 The `image` suite (test_model_image - the prepared-image .dlim rail): `mechanics` (synthetic
@@ -2490,7 +2490,12 @@ driver's position counter rising) on gemma-4-26B-A4B UD-IQ3_XXS held whole and o
 routed layers' experts to the host - the split command, the cut window chain and the pool under the form; the 12B Q8_0 in the
 Vulkan 12B Q8_0 file's three cells (the forced feed, the perplexity form, the two-window form at its ratio; a 16 GB card arms it
 under `DASLLAMA_GPU_MIN_CTX=1024`), the 31B Q4_K_M eight-token agreement cell (a 32 GB card) and the 26B MXFP4_MOE mint's
-format census and perplexity cells (the native-MXFP4 stacks on the mx4 stamps); the same skips. The CUDA kernel cells
+format census and perplexity cells (the native-MXFP4 stacks on the mx4 stamps); and the short window's peel on the E2B
+Q4_K_M (`test_gpu_resident_cuda_gemma4_e2b_k_peel`, `e_series_peel_cell` of `_gemma_resident.das`, the Vulkan E2B file's
+short-window cell's form: its per-layer gate and projection rows asserted F32, so the branch rides the router GEMV, then
+tails of 2, 9 and 16 rows after a 40-row opening, one peel counted each, the last row and four fed steps within
+`GEMMA_LOGIT_BAR_REL` of the same tail stepped a row at a time, the row one step off the control - a router dispatch the
+encoder does not tile past eight columns lands the 9- and 16-row tails 32 and 47 logits off); the same skips. The CUDA kernel cells
 beside them, `test_cuda_kernels.das` (model-free; a CUDA device with NVRTC, else every cell but the leak gate skips;
 the per-format cells - the kq cm2 tiles, the kq and per-32 GEMVs, the token-table gathers, the Q8_K feeds -, the biased
 act twins, the deltanet family and the mx4 and nv4 FP4 leaves over the expert schedule also skip without dasVulkan, and the
@@ -3119,7 +3124,7 @@ so the f16 shadow of a sliding layer starts a 64-key step under its window - in 
 form under q8_0 (reads 0.46-1.37 against bars of 3.3-5.1) and the perplexity form (1100 + 80)
 under tq4 (reads 1.022 against the CPU chain's 1.033, 80 of 80 hits; a 4-bit mirror reads one step
 5.0 of a 33.7 max logit from the CPU's, so no logit bar holds it with room); a shadow that starts
-at the window's first row reads a perplexity of 13844. `test_gpu_resident_gemma4_e2b_short_window` peels short tails of 1, 2 and 5 rows on the E2B through the token commands, the side rows riding them, within the split bar of the same tail stepped a row at a time. `test_gpu_resident_gemma4_e2b_block_codecs`
+at the window's first row reads a perplexity of 13844. `test_gpu_resident_gemma4_e2b_short_window` peels short tails of 1, 2 and 5 rows on the E2B through the token commands, the side rows riding them, within the split bar of the same tail stepped a row at a time (`e_series_peel_cell` of `_gemma_resident.das`, the CUDA E2B Q4_K_M peel cell's body). `test_gpu_resident_gemma4_e2b_block_codecs`
 runs the shared-KV carrier - its upper layers store no K/V row of their own, and under tq4 still
 rotate their query - at forty tokens in the forced-feed form under q8_0 and at 150 + 150 in the
 perplexity form under tq4 (reads 1.032 against 1.032, 148 of 150 hits each).

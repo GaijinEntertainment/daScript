@@ -293,6 +293,48 @@ def prefill_vs_decode(t : T?; n : int64; gf : GemmaFile) {
     }
 }
 
+//! the E-series short window's peel (`../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-peel`), the peel lever on and put back: after
+//! a 40-row opening each tail of `tails` rows peels as one prefill call (one peel counted), and its last row and four fed steps sit
+//! within `rel` of the same tail stepped a row at a time on a second session, the row one step off the control
+def e_series_peel_cell(t : T?; tr : Model; tails : array<int64>; rel : float) {
+    var opening <- resident_prompt(40l)
+    var feed <- resident_feed(RDEC_NROW_MAX)
+    let lever = vulkan_prefill_peel()
+    set_vulkan_prefill_peel(true)
+    for (rows in tails) {
+        var tail <- [for (i in range64(rows)); feed[i]]
+        var steps <- ramp_ids(4l, rows, 2500l, 71l, 4500l)
+        var sa <- create_session(tr, mirror_kv_dtype())
+        eval(tr, sa, opening)
+        let peels0 = moe_gpu_resident_peels()
+        forward_prefill(tr, sa, tail, rows, 40l)
+        t |> equal(moe_gpu_resident_peels() - peels0, 1l, "a tail of {rows} rows peels through the token commands")
+        sa.n_past = 40l + rows
+        var got <- steps_after(tr, sa, steps)
+        var sb <- create_session(tr, mirror_kv_dtype())
+        eval(tr, sb, opening)
+        var inscope one : array<int64>
+        one |> resize(1)
+        for (i in range64(rows)) {
+            one[0] = tail[i]
+            eval_(tr, sb, one)
+        }
+        var want <- steps_after(tr, sb, steps)
+        rows_within_control(t, "a tail of {rows} rows", got, want, rel, 1l, 1.0, $(r) => r == 0l ? "the tail's last row" : "step {r}")
+        log_argmax_rows(tr, "a tail of {rows} rows: the row-at-a-time rows, then the tail's", got, want)
+        served_every_call(t)
+        delete sa
+        delete sb
+        delete got
+        delete want
+        delete tail
+        delete steps
+    }
+    set_vulkan_prefill_peel(lever)
+    delete opening
+    delete feed
+}
+
 //! teacher-forced negative log-likelihood over `steps` positions after `n` prefilled ids: the sum over the
 //! true next ids, the sum over the ids one position off (the control), and the argmax hits on each
 def private forced_nll(tr : Model; var s : Session; ids : array<int64>; n, steps : int64) : tuple<nll : float; off : float; hits : int64; off_hits : int64> {

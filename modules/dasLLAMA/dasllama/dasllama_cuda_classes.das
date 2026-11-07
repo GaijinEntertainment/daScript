@@ -1444,6 +1444,21 @@ def cud_gu_n_enc(var s : void?; bufs : uint64 const[8]; var pc : GuNArgs; wgs : 
     }
 }
 
+//! the router GEMV over `pc.ncols` columns (0 or 1 = one row) in tiles of GEMV_COL_TILE: `bf16` the bf16 rows' stamp (`hw` its
+//! halfword walk), else the f32 rows'
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-col-tiles")]
+def cud_router_enc_cols(bf16 : bool; var s : void?; bufs : uint64 const[4]; var pc : GkRouterArgs; ne : int64; hw : bool = false) {
+    each_col_tile(pc, max(pc.ncols, 1u), GEMV_COL_TILE) $ {
+        if (bf16 && hw) {
+            enc_router_gemv_bf16_hw_cls(s, bufs, pc, ne)
+        } elif (bf16) {
+            enc_router_gemv_bf16_cls(s, bufs, pc, ne)
+        } else {
+            enc_router_gemv_cls(s, bufs, pc, ne)
+        }
+    }
+}
+
 //! the Q8_0 cm2 l tile (`Q8Cm2T` over the shared 128 x 256 workgroup fragments): the window's GEMM over the f16 activation panel
 [cuda_dispatch(name = "q8_batch_cm2l_cls", grid = "wgs", params = "wgs : int64")]
 class CuQ8Cm2L : Q8Cm2T {

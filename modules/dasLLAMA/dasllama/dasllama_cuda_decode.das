@@ -1384,15 +1384,7 @@ def private crd_ple_pre(r : CudRdec; var s : void?; x, plep, side : uint64; nrow
     let all = r.ple_all
     let hw = !gk_bf16_pairs(r.dim, 0l)
     var pcr = GkRouterArgs(ne = uint(all), dim = uint(r.dim), eps = r.eps, ncols = uint(nrows), yscale = 1.0 / sqrt(float(r.dim)))
-    each_col_tile(pcr, uint(nrows), GEMV_COL_TILE) $ {
-        if (r.ple_wp_bf16 && hw) {
-            enc_router_gemv_bf16_hw_cls(s, fixed_array(r.ple_wp, x, plep, r.norms), pcr, all)
-        } elif (r.ple_wp_bf16) {
-            enc_router_gemv_bf16_cls(s, fixed_array(r.ple_wp, x, plep, r.norms), pcr, all)
-        } else {
-            enc_router_gemv_cls(s, fixed_array(r.ple_wp, x, plep, r.norms), pcr, all)
-        }
-    }
+    cud_router_enc_cols(r.ple_wp_bf16, s, fixed_array(r.ple_wp, x, plep, r.norms), pcr, all, hw)
     var pcf = GkPleFinArgs(ple = uint(r.ple), eps = r.eps)
     enc_ple_finish_cls(s, fixed_array(plep, r.ple_pnorm, side), pcf, r.n_layers * nrows)
 }
@@ -1437,7 +1429,7 @@ def private crd_ple_block(r : CudRdec; var s : void?; l : int64; L : CudLayer; n
     let nr = uint(nrows)
     if (L.bpg < 0l) {   // the file's f32 gate rows read the residual rows as they are
         var pcg = gk_ple_gate_args(ple, dim, l, nr)
-        enc_router_gemv_cls(s, fixed_array(r.ple_gf32, r.x, r.pleg, r.norms), pcg, ple)
+        cud_router_enc_cols(false, s, fixed_array(r.ple_gf32, r.x, r.pleg, r.norms), pcg, ple)
     } else {
         crd_rq_rows(s, L.fpg, r.x, r.xq, r.xs, dim * nrows)
         crd_gemv(s, L.fpg, L.regs_pg, r.xq, r.xs, r.pleg, dim, ple, 0u, 1l, nr, uint(ple))
@@ -1446,7 +1438,7 @@ def private crd_ple_block(r : CudRdec; var s : void?; l : int64; L : CudLayer; n
         var pcf = gk_ple_act_f32_args(ple, l, r.ple_all, nr)
         enc_ple_act_f32_cls(s, fixed_array(r.pleg, r.ple_dev, r.pleact), pcf, (ple * nrows + 255l) / 256l)
         var pcp = gk_ple_proj_args(ple, dim, l, nr)
-        enc_router_gemv_cls(s, fixed_array(r.ple_pf32, r.pleact, r.ffnout, r.norms), pcp, dim)
+        cud_router_enc_cols(false, s, fixed_array(r.ple_pf32, r.pleact, r.ffnout, r.norms), pcp, dim)
     } elif (L.ple_fused) {   // the act, its requant and the proj GEMV in one dispatch, the columns in tiles of eight
         let a = g_cud_arenas[L.fpp]
         var pcf = gk_ple_fused_args(ple, dim, L.bpp, l, r.ple_all, nr)
@@ -1844,9 +1836,7 @@ def private crd_router_rows(r : CudRdec; var s : void?; L : CudLayer; nrows : in
     let nr = uint(nrows)
     var pcr = GkRouterArgs(ne = uint(r.ner), dim = uint(r.dim), woff = uint(L.router_slot * r.ner * r.dim), obase = 0u, ncols = nr,
         norm_on = L.moe_g4 ? 1u : 0u, nwoff = uint(L.n_router), eps = r.eps)
-    each_col_tile(pcr, nr, GEMV_COL_TILE) $ {
-        enc_router_gemv_cls(s, fixed_array(r.router, L.moe_g4 ? r.x : r.xb, r.moe_dlog, r.norms), pcr, r.ner)
-    }
+    cud_router_enc_cols(false, s, fixed_array(r.router, L.moe_g4 ? r.x : r.xb, r.moe_dlog, r.norms), pcr, r.ner)
 }
 
 //! the gemma-4 routed feed into `xb`: x under the routed pre norm, the rows the experts' requant, the gather or the host reads
@@ -2150,9 +2140,7 @@ def private crd_dn_head(r : CudRdec; var s : void?; L : CudLayer; nrows : int64;
     if (r.dn_ba_f32) {
         var pcb = GkRouterArgs(ne = uint(2l * nvh), dim = uint(dim), woff = uint(L.ba_off), obase = uint(DN_SM_BETA),
             ne_split = uint(nvh), obase_split = uint(DN_SM_G), ncols = nr)
-        each_col_tile(pcb, nr, GEMV_COL_TILE) $ {
-            enc_router_gemv_cls(s, fixed_array(r.dn_ba, r.xb, st0.smalls_dev, r.norms), pcb, 2l * nvh)
-        }
+        cud_router_enc_cols(false, s, fixed_array(r.dn_ba, r.xb, st0.smalls_dev, r.norms), pcb, 2l * nvh)
     } else {
         if (kq_sb(L.fbeta) != kq_sb(feed_fmt)) {
             crd_rq_rows(s, L.fbeta, r.xb, r.xq, r.xs, dim * nrows)
