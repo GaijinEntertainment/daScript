@@ -5800,7 +5800,14 @@ class public LlvmJitVisitor : AstVisitor {
         } elif ((ect.isPointer || ect.isString) && subT.isInteger) {
             res = LLVMBuildIntToPtr(g_builder, subE, type_to_llvm_type(ect), "cast_i_p")
         } elif (!ect.isRefType && !subT.isRefType) {
-            if (ect.sizeOf == subT.sizeOf) {
+            if (ect.isBool && subT.isInteger) {
+                let low_byte = (subT.sizeOf > 1
+                    ? LLVMBuildTrunc(g_builder, subE, types.t_int8, "trunc_cast") : subE)
+                res = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, low_byte,
+                    LLVMConstNull(LLVMTypeOf(low_byte)), "cast_bool")
+            } elif (subT.isBool && ect.isInteger) {
+                res = LLVMBuildZExt(g_builder, subE, type_to_llvm_type(ect), "zext_cast")
+            } elif (ect.sizeOf == subT.sizeOf) {
                 res = LLVMBuildBitCast(g_builder, subE, type_to_llvm_type(ect), "cast_r")
             } elif (ect.sizeOf > subT.sizeOf) {
                 if (subT.isSignedInteger) {
