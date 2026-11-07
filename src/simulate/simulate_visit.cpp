@@ -767,6 +767,13 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_ReinterpretSlot::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(ReinterpretSlot);
+        V_SUB(subexpr);
+        V_END();
+    }
+
     SimNode * SimNode_Seq2Iter::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(Seq2Iter);

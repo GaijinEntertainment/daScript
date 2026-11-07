@@ -1696,8 +1696,22 @@ namespace das
         return sv_trySimulate(expr->subexpr, extraOffset, r2vType);
     }
 
+    static bool readsThroughAnotherSlot ( const ExprCast * expr ) {
+        const auto & fromType = expr->subexpr->type;
+        const auto & toType = expr->type;
+        if ( !expr->reinterpret || fromType->isRef() || toType->isRef() ) return false;
+        if ( fromType->getR2VType() == toType->getR2VType() ) return false;
+        if ( !expr->subexpr->rtti_isCallFunc() ) return false;
+        auto call = static_cast<const ExprCallFunc *>(expr->subexpr);
+        return call->func && call->func->builtIn;
+    }
+
     void SimulateVisitor::visit(const ExprCast * expr) {
-        setE(expr, getE(expr->subexpr));
+        auto se = getE(expr->subexpr);
+        if ( readsThroughAnotherSlot(expr) ) {
+            se = context.code->makeNode<SimNode_ReinterpretSlot>(expr->at, se);
+        }
+        setE(expr, se);
     }
 
     void SimulateVisitor::visit(const ExprAscend * expr) {

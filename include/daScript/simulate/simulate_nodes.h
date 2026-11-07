@@ -2914,6 +2914,17 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode * subexpr;
     };
 
+    struct DAS_API SimNode_ReinterpretSlot : SimNode {
+        SimNode_ReinterpretSlot ( const LineInfo & at, SimNode * s )
+            : SimNode(at), subexpr(s) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            return subexpr->eval(context);
+        }
+        SimNode * subexpr;
+    };
+
     // Sequence -> Iterator
     struct SimNode_Seq2Iter : SimNode_WithErrorMessage {      // ptr -> &value
         DAS_PTR_NODE;
