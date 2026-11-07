@@ -84,13 +84,14 @@ class WheelBuildTest(BundleFixture):
 
     # --- payload filter -------------------------------------------------------
 
-    def test_filter_drops_embedding_payload_and_media_keeps_jit_import_libs(self):
+    def test_filter_drops_static_libs_and_media_keeps_headers_and_import_libs(self):
         keep = ["bin/daslang", "lib/liblibDaScriptDyn.so", "lib/LLVM.dll",
                 "lib/libDaScriptDyn_runtime.lib", "lib/libDaScriptDyn.lib",
                 "daslib/x.das", "modules/dasHV/x.das", "tutorials/language/01.das",
                 "modules/dasImgui/examples/tutorial/application_lifecycle.das",
-                "skills/daslang/SKILL.md", "utils/mcp/main.das", "sgconfig.yml", "LICENSE"]
-        drop = ["include/daScript/daScript.h", "lib/libDaScript.lib", "lib/liblibDaScript.a",
+                "skills/daslang/SKILL.md", "utils/mcp/main.das", "sgconfig.yml", "LICENSE",
+                "include/daScript/daScript.h", "include/vecmath/dag_vecMath.h", "nano/CMakeLists.txt"]
+        drop = ["lib/libDaScript.lib", "lib/liblibDaScript.a",
                 "lib/libDasModuleVulkan.lib", "lib/cmake/daslang/config.cmake",
                 "lib/pkgconfig/daslang.pc", "examples/gltf/media/BoomBox.glb",
                 "tutorials/_assets/gltf/BoomBox.glb", "doc/index.html", "logs/x.log",
@@ -168,11 +169,12 @@ class WheelBuildTest(BundleFixture):
                   f"{data_dir}/scripts/daslang-live.exe", f"{data_dir}/scripts/daslang-watchdog.exe",
                   f"{data_dir}/scripts/daslang.root",
                   f"{data_dir}/data/daslang_sdk/bin/daslang.exe", f"{data_dir}/data/daslang_sdk/daslib/strings.das",
+                  f"{data_dir}/data/daslang_sdk/include/a.h",
                   "daslang-0.6.4rc1.dist-info/METADATA", "daslang-0.6.4rc1.dist-info/WHEEL",
                   "daslang-0.6.4rc1.dist-info/RECORD", "daslang-0.6.4rc1.dist-info/LICENSE"):
             self.assertIn(n, names)
         for n in ("daslang/_cli.py", "daslang-0.6.4rc1.dist-info/entry_points.txt",
-                  f"{data_dir}/data/daslang_sdk/lib/libDaScript.lib", f"{data_dir}/data/daslang_sdk/include/a.h"):
+                  f"{data_dir}/data/daslang_sdk/lib/libDaScript.lib"):
             self.assertNotIn(n, names)
         with zipfile.ZipFile(whl) as z:
             self.assertEqual(z.read(f"{data_dir}/scripts/daslang.root"), b"../daslang_sdk\n../../daslang_sdk\n",

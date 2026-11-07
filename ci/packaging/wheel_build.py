@@ -35,8 +35,9 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 # console_scripts shim per shipped executable of the daslang wheel; the scoop bucket exposes the same set
 TOOLS = list(profile("daslang")["commands"])
 
-# the daslang SDK trims to fit; the dasllama bundle ships whole
-EXCLUDE_TOP = ("include", "examples", "doc", "logs")
+# the daslang SDK trims to fit; the dasllama bundle ships whole. The C++ headers stay (a few MB):
+# with them and the libDaScriptDyn import libs below, daspkg builds native packages against the wheel
+EXCLUDE_TOP = ("examples", "doc", "logs")
 # the tutorial sources ship (0.6 MB, and the skills link into them); the 30 MB of
 # media under tutorials/_assets, the media-heavy examples tree and the dasImgui
 # text_input example (14 MB of CJK and emoji fonts it embeds) stay in the zip

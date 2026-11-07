@@ -70,8 +70,11 @@ stay read-only.
 (`<package>-<ver>-py3-none-{win_amd64,manylinux_2_NN_x86_64,manylinux_2_NN_aarch64,macosx_NN_0_arm64}.whl`)
 and the `publish_pypi` jobs upload each set through trusted publishing - a plain `vX.Y.Z` tag to
 PyPI, any other tag (RC, beta, ...) to TestPyPI. The daslang wheel is the toolchain minus the
-C++ embedding payload and the media trees, to stay under PyPI's 100 MB per-file cap - exact set:
-`EXCLUDE_*` in `wheel_build.py`; the dasllama wheel carries its bundle whole. The platform tag
+static libraries, `lib/cmake`, `examples/`, `doc/` and the media trees, to stay under PyPI's
+100 MB per-file cap - exact set: `EXCLUDE_*` in `wheel_build.py`. It keeps the C++ headers and
+the `libDaScriptDyn*` import libs, so `daspkg install` builds a native package against it;
+embedding daslang in a C++ program (the static libs, `find_package(DAS)`) needs the bundle zip.
+The dasllama wheel carries its bundle whole. The platform tag
 is read off the binaries (highest GLIBC symbol / Mach-O minos), never assumed.
 
 The daslang wheel puts no Python in front of a command (`launch: "native"` in `packages.py`):
