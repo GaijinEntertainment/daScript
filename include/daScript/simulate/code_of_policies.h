@@ -175,6 +175,7 @@ namespace das {
         /*option*/ uint32_t max_fast_call_depth = 0;  // interpreter only; 0 = unchecked.
         bool keep_symbol_tables = false;         // keep usedFunctions and the function/variable indices past the main simulate
         bool promote_shared_unoptimized = false; // src/ast/ARCHITECTURE_SHARED.md#shared-promotion
+        int32_t compile_threads = 1;             // src/ast/ARCHITECTURE_DAG.md#compile-dag
 
         // the abi_stamp truth (a member so the NSDMI above can call it - complete-class context).
         // Low byte 0 keeps a pre-stamp libDaScript reading this word seeing aot == false -

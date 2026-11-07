@@ -87,7 +87,7 @@ namespace das {
         uint32_t            mMagic = uint32_t(STATUS_MAGIC);
     };
 
-    class JobQue {
+    class DAS_API JobQue {
     public:
         JobQue();
         JobQue ( const JobQue & ) = delete;

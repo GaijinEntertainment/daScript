@@ -976,6 +976,7 @@ namespace das
                 bool    mayQueueTempString : 1;      // executing the BODY may hit a temp-string queue site (builder or wrappable call, transitively) - a caller must not hold a parked temp across a call to this
                 bool    needCallerStackFrame : 1;    // may reach a collect point - its caller must keep a real stack frame, so carriers are denied fastcall (closure: ast_unused.cpp)
                 bool    nttp : 1;                    // extern bound via addExternInline - per-function NTTP interpreter node, callee eligible to inline into the call site
+                bool    callsNestingBuiltin : 1;     // src/ast/ARCHITECTURE_DAG.md#deadlock-prevention
             };
             uint32_t moreFlags2 = 0;
         };
@@ -1233,6 +1234,7 @@ namespace das
     public:
         smart_ptr<Context>                          macroContext;
         bool                                        frozen = false;
+        bool                                        macroNestsCompile = false;  // src/ast/ARCHITECTURE_DAG.md#deadlock-prevention
         safebox<TypeDecl, TypeDeclPtr>                           aliasTypes;
         das_insert_only_hash_map<uint64_t, Annotation *>    handleTypes;
         safebox<Structure, StructurePtr>             structures;
@@ -1839,6 +1841,15 @@ namespace das
                           int32_t reqLineHint = 0 );
 
     void getAllRequireReq ( FileInfo * fi, const FileAccessPtr & access, das::string &modName, vector<RequireRecord> & req, vector<FileInfo *> & chain, das_set<FileInfo *> & collected );
+    vector<RequireRecord> getAllRequire ( FileInfo * fi, string & modName, vector<FileInfo *> & chain, const FileAccessPtr & access );
+    ProgramPtr parseDaScriptEx ( const string & fileName, const string & moduleName, const FileAccessPtr & access,
+        TextWriter & logs, ModuleGroup & libGroup, bool exportAll, bool isDep, CodeOfPolicies policies, bool inferAfterParse,
+        const ModuleCacheStream & stream = ModuleCacheStream(), const ProgramPtr & prepared = nullptr,
+        bool deferNestingMacroModule = false );
+    bool aotModuleHasName ( ProgramPtr program, const ModuleInfo & mod );
+    bool canShareModule ( ProgramPtr program );
+    void addNewModules ( ModuleGroup & libGroup, ProgramPtr program );
+    void buildDeferredMacroModule ( const ProgramPtr & program, ModuleGroup & libGroup, TextWriter & logs );
 
 
     // note: this has sifnificant performance implications

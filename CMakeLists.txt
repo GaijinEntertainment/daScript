@@ -1338,6 +1338,7 @@ SET(LIBDASCRIPT_COMPILER_SRC
     ${PARSER_GENERATED_SRC}
     ${PARSER_SRC}
     src/ast/ast_parse.cpp
+    src/ast/ast_compile_dag.cpp
     src/ast/ast_optimize.cpp
     src/ast/ast_const_folding.cpp
     src/ast/ast_effects.cpp

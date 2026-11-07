@@ -492,6 +492,8 @@ default ``false``.
      - Logs type inference passes.
    * - ``log_require``
      - Logs module resolution.
+   * - ``log_compile_dag``
+     - Logs the module dependency DAG: per-module compile times, the critical path, and the simulated parallel compile time for 2 to 32 workers.
    * - ``log_generics``
      - Logs generic function instantiation.
    * - ``log_mn_hash``

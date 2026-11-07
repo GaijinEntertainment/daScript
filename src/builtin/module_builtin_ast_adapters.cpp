@@ -18,6 +18,9 @@
 namespace das {
 
     void runMacroFunction ( Context * context, const string & message, const callable<void()> & subexpr ) {
+        // src/ast/ARCHITECTURE_DAG.md#deadlock-prevention
+        unique_lock<recursive_mutex> contextLock;
+        if ( context->contextMutex ) contextLock = unique_lock<recursive_mutex>(*context->contextMutex);
         auto timeM = ref_time_ticks();
         auto bound = daScriptEnvironment::getBound();
         if ( !context->runWithCatch(subexpr) ) {

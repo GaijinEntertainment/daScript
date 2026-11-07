@@ -49,7 +49,7 @@ namespace das {
         ReaderMacro * g_ReaderMacro = nullptr;
         ExprReader * g_ReaderExpr = nullptr;
         vector<FileInfo *> g_FileAccessStack;
-        FileAccessPtr g_Access;
+        FileAccess * g_Access = nullptr;     // src/ast/ARCHITECTURE_DAG.md#compile-workers
         ProgramPtr g_Program;
         void push_nesteds ( int Ch) {
             // printf("push nesteds\n");
