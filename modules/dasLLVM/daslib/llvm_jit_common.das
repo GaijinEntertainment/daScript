@@ -13,6 +13,7 @@ module llvm_jit_common shared private
 require llvm/daslib/llvm_boost
 require llvm/daslib/llvm_dll_utils
 require llvm/daslib/llvm_jit_plan public
+require llvm/daslib/llvm_jit_cli
 require llvm/daslib/llvm_targets
 
 require llvm/daslib/llvm_dsl
@@ -654,6 +655,17 @@ def public init_jit_clopts() {
         "-enable-unroll-and-jam=true",
         "-allow-unroll-and-jam=true"
     ]
+    let cli = jit_cli_options_or_default()
+    for (flag, llvm_opt, regex in
+            fixed_array("jit-remarks", "jit-remarks-missed", "jit-remarks-analysis"),
+            fixed_array("pass-remarks", "pass-remarks-missed", "pass-remarks-analysis"),
+            fixed_array(cli.remarks, cli.remarks_missed, cli.remarks_analysis)) {
+        if (regex |> is_some) {
+            let passes = regex |> unwrap
+            argv |> push("-{llvm_opt}={passes}")
+            to_log(LOG_INFO, "LLVM JIT: --{flag}={passes} prints LLVM's {llvm_opt} to stderr\n")
+        }
+    }
     LLVMParseCommandLineOptions(length(argv),
         unsafe(addr<string const?>(argv[0])),
         "daslang JIT cl::opts")

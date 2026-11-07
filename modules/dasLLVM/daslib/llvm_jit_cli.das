@@ -49,6 +49,18 @@ struct public JitCliOptions {
     @clarg_doc = "JIT: print the generated LLVM IR, or with =PATH write it to that file"
     dump_ir : Option<string>
 
+    @clarg_name = "jit-remarks"
+    @clarg_doc = "JIT: print LLVM optimization remarks of passes matching the regex"
+    remarks : Option<string>
+
+    @clarg_name = "jit-remarks-missed"
+    @clarg_doc = "JIT: as --jit-remarks, for the transformations a matching pass declined"
+    remarks_missed : Option<string>
+
+    @clarg_name = "jit-remarks-analysis"
+    @clarg_doc = "JIT: as --jit-remarks, for the analysis behind a matching pass's decision"
+    remarks_analysis : Option<string>
+
     @clarg_name = "jit-target"
     @clarg_doc = "JIT: cross-compile target triple (use with -exe; e.g. wasm32-unknown-emscripten)"
     target : Option<string>
