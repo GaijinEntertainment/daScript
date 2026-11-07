@@ -152,6 +152,22 @@ namespace das {
             Visitor::preVisitBlockArgument(block, var, lastArg);
             var->access_info = 0;
         }
+        void closeCallCycles ( Module & mod ) {
+            for ( bool grew = true; grew; ) {
+                grew = false;
+                for ( auto & fn : mod.functions.each() ) {
+                    if ( fn->isTemplate || fn->builtIn ) continue;
+                    for ( auto callee : fn->useFunctions ) {
+                        if ( callee == fn ) continue;
+                        uint32_t inherited = callee->sideEffectFlags & ~uint32_t(SideEffects::modifyArgument);
+                        if ( (fn->sideEffectFlags | inherited) != fn->sideEffectFlags ) {
+                            fn->sideEffectFlags |= inherited;
+                            grew = true;
+                        }
+                    }
+                }
+            }
+        }
         void MarkSideEffects ( Module & mod ) {
             // function bodies stamp access_info on globals too (preVisitLet only covers locals
             // and arguments) — clear here or the bits go sticky across buildAccessFlags rounds
@@ -170,6 +186,7 @@ namespace das {
                     getSideEffects(fn);
                 }
             }
+            closeCallCycles(mod);
             for ( auto & var : mod.globals.each() ) {
                 if ( var->init ) {
                     TrackVariableFlags vaf;

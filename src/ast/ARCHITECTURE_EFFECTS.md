@@ -48,6 +48,10 @@ the string conversions and character reads). A das function gets it the way it g
 inferred bit: `getSideEffects` (`ast_unused.cpp`) sets it from the function's own nodes and ORs it
 in from every callee. A callee still being analyzed - a call cycle - counts as raising, since an
 unreported raise would be dropped.
+The walk reads a callee still being analyzed with only the bits it has so far, so after it
+`closeCallCycles` ORs every callee's bits (minus `modifyArgument`) into its callers until nothing
+changes: a function in a call cycle carries every bit any member of the cycle has, and a global
+read two calls around a cycle still keeps a constant-argument call from folding.
 
 `NoSideEffectVisitor` (`ast_const_folding.cpp`) sets `Expression::mayRaise` beside `noSideEffects`,
 for the whole subtree: `a[10] + 1` raises although its root does not, and a call or an operator
