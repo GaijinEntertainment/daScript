@@ -851,6 +851,7 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | _fixture_nested_while_private.das | *(helper)* a private function ending in a `while (true)` whose inner `while (true)` returns | |
 | test_nested_while_private.das | Runs `_fixture_nested_while_private.das` as a child under a deadline - the inlined return leaves both loops | |
 | test_property_compound_assign_deref_offset.das | A property compound assignment under a field of `deref(p + k)`, and through a `with` over one, compiles and writes through the setter | |
+| test_generic_tuple_void_ptr.das | A generic over a tuple instantiates its own `tuple<void?>` instance after `int?` and `float?` ones exist | |
 
 ## loops/
 

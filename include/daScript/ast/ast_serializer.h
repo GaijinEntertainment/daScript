@@ -362,7 +362,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 251;   // 251: a property compound assignment gives its setter its own copy of the base
+            return 252;   // 252: an explicit type takes no void-pointer stand-in, so a generic instance is matched exactly
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
