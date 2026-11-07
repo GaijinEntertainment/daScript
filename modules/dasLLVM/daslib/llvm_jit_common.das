@@ -111,6 +111,7 @@ class public Attributes {
     nofree : LLVMOpaqueAttributeRef?
     norecurse : LLVMOpaqueAttributeRef?
     noalias : LLVMOpaqueAttributeRef?
+    speculatable : LLVMOpaqueAttributeRef?
     sext : LLVMOpaqueAttributeRef?
     zext : LLVMOpaqueAttributeRef?
     // memory(inaccessiblemem: readwrite) — for allocator-style runtime calls
@@ -138,6 +139,7 @@ class public Attributes {
         nofree = ctx |> LLVMGetEnumAttribute("nofree")
         norecurse = ctx |> LLVMGetEnumAttribute("norecurse")
         noalias = ctx |> LLVMGetEnumAttribute("noalias")
+        speculatable = ctx |> LLVMGetEnumAttribute("speculatable")
         sext = ctx |> LLVMGetEnumAttribute("signext")
         zext = ctx |> LLVMGetEnumAttribute("zeroext")
         let memory_kind = LLVMGetEnumAttributeKindForName("memory")
@@ -821,6 +823,7 @@ def public init_jit_state(cg_opt_level : uint; target_triple : string; host_feat
     assume memory_inaccessible_rw = attrs.memory_inaccessible_rw
     assume memory_arg_inaccessible_rw = attrs.memory_arg_inaccessible_rw
     assume memory_none = attrs.memory_none
+    assume speculatable = attrs.speculatable
     build_jit_types()
 
     // cold: opt sinks the failure block off the hot path; pairs with noreturn.
@@ -842,9 +845,11 @@ def public init_jit_state(cg_opt_level : uint; target_triple : string; host_feat
         jit_fn_type($(ctx : void?; nArgs : int; types, at, args : void?) : void? {}),
         get_jit_string_builder_temp(), fixed_array(nounwind, willreturn))
     jit_add_extern(FN_JIT_GET_GLOBAL_MNH, jit_fn_type($(mnh : int64; ctx : void?) : void? {}),
-        get_jit_get_global_mnh(), fixed_array(nounwind, willreturn, memory_none), (nocapture, [1]))
+        get_jit_get_global_mnh(), fixed_array(nounwind, willreturn, memory_none, speculatable),
+        (nocapture, [1]))
     jit_add_extern(FN_JIT_GET_SHARED_MNH, jit_fn_type($(mnh : int64; ctx : void?) : void? {}),
-        get_jit_get_shared_mnh(), fixed_array(nounwind, willreturn, memory_none), (nocapture, [1]))
+        get_jit_get_shared_mnh(), fixed_array(nounwind, willreturn, memory_none, speculatable),
+        (nocapture, [1]))
     // Wasm-only: resolves a handled-type (C++) field offset against the TARGET runtime's annotation
     // registry, into per-field globals at init. Declared unconditionally; only used when g_target_is_wasm.
     jit_add_extern(FN_JIT_GET_HANDLED_FIELD_OFFSET,

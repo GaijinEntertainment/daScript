@@ -35,6 +35,37 @@ def branchy(foo : bool) {
     }
 }
 
+var lut : int[256]
+var scale = 3
+
+//! two globals read on one arm of a branch inside a loop: each
+//! lookup leaves the loop
+[export, sideeffects]
+def sum_scaled(n : int) : int {
+    var s = 0
+    for (i in range(n)) {
+        if ((i & 3) != 0) {
+            s += lut[i & 255] * scale
+        }
+    }
+    return s
+}
+
+let shared shared_scale <- [3]
+
+//! a shared global read on one arm of a branch inside a loop: its
+//! lookup leaves the loop too
+[export, sideeffects]
+def sum_shared_scaled(n : int) : int {
+    var s = 0
+    for (i in range(n)) {
+        if ((i & 3) != 0) {
+            s += i * shared_scale[0]
+        }
+    }
+    return s
+}
+
 [export]
 def main {
     for (j in range(N)) {
@@ -45,4 +76,9 @@ def main {
     branchy(true)
     branchy(false)
     print("BRANCHY {ga} {gb}\n")
+    for (i in range(256)) {
+        lut[i] = i * 7
+    }
+    print("SUM_SCALED {sum_scaled(1024)}\n")
+    print("SUM_SHARED_SCALED {sum_shared_scaled(1024)}\n")
 }

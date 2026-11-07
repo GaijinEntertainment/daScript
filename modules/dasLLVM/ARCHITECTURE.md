@@ -195,10 +195,12 @@ shared one): the mangled-name hash is static, and the offset it names is added t
 globals base, which is what a cross-context call needs - the same JIT function runs on any context
 of the program, each with its own base, so the address cannot be baked. The emitter
 (`visitExprVar`, `daslib/llvm_jit.das`) emits the call where the variable is used and declares it
-`memory(none)` (`daslib/llvm_jit_common.das`): the result depends on nothing but its arguments for
-the lifetime of the context, so LLVM CSEs one use against a dominating one, hoists a loop's lookup
-into the preheader, and - the call not being `speculatable` - never moves it ahead of a branch, so
-a global written on one branch is looked up on that branch only. Every access to a global in a
+`memory(none)` and `speculatable` (`daslib/llvm_jit_common.das`): the result depends on nothing but
+its arguments for the lifetime of the context, and the probe neither traps nor writes, so LLVM CSEs
+one use against a dominating one and hoists a loop's lookup into the preheader even when the access
+sits on one arm of a branch inside the loop - one probe per call instead of one per taken iteration.
+Outside a loop the optimizer does not speculate a call, so a global written on one branch of
+straight-line code is still looked up on that branch only. Every access to a global in a
 function therefore shares one base pointer, which is what lets LLVM see `xs[j]` and `xs[j + 1]` as
 adjacent. Under `options solid_context` the address is instead `context->globals + stackTop`,
 computed once per function in the entry block.
