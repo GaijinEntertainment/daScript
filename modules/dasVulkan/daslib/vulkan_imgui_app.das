@@ -278,7 +278,7 @@ def public harness_shutdown() {
 
 // ===== harness-owned Vulkan objects — non-owning views for apps that build their own resources =====
 
-def private app_or_panic : VulkanApp ? {
+def private app_or_panic : VulkanApp? {
     if (g_app == null) {
         panic("vulkan_imgui_app: harness accessor called before harness_init")
     }

@@ -375,7 +375,7 @@ class public LlvmJitVisitor : AstVisitor {
     def get_debug_file_location_by_name(filename : string) : LLVMOpaqueMetadata? =>
         di_file_of(g_di_builder, filename)
 
-    def di_current_scope : LLVMOpaqueMetadata ? =>
+    def di_current_scope : LLVMOpaqueMetadata? =>
         di_scopes |> empty() ? di_subprogram : di_scopes |> back()
 
     [arch(at="../ARCHITECTURE_DEBUG_INFO.md#di-scopes")]
@@ -7449,7 +7449,7 @@ class public LlvmJitVisitor : AstVisitor {
         return tres
     }
 
-    def get_capture_param : LLVMOpaqueValue ? {
+    def get_capture_param : LLVMOpaqueValue? {
         if (thisBlock != null) {
             return LLVMGetParam(ffunc, uint(thisBlock.arguments |> length))
         } else {
@@ -7458,7 +7458,7 @@ class public LlvmJitVisitor : AstVisitor {
         }
     }
 
-    def get_context_param : LLVMOpaqueValue ? {
+    def get_context_param : LLVMOpaqueValue? {
         if (thisBlock != null) {
             return LLVMGetParam(ffunc, uint(thisBlock.arguments |> length + 1))
         } elif (thisFunc != null) {
@@ -7484,7 +7484,7 @@ class public LlvmJitVisitor : AstVisitor {
         return false
     }
 
-    def get_cmres_param : LLVMOpaqueValue ? {
+    def get_cmres_param : LLVMOpaqueValue? {
         // While building a heap array literal (makeArrayOnHeap), cmres-based element make-locals must
         // target arr.data (top of heapMkaData), not the enclosing function's cmres param.
         if (!(heapMkaData |> empty)) {

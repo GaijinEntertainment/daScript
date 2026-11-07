@@ -8152,7 +8152,7 @@ def pf_q3a_front_ready() : bool => psos_ready(fixed_array(g_pf_pso_q3a_shuffle))
 //! The qwen3a mel kernels compiled — its mel driver's extra device gate.
 def pf_q3a_mel_ready() : bool => psos_ready(fixed_array(g_pf_pso_q3a_pow, g_pf_pso_q3a_logmel_t))
 
-def private pf_devw_flip : MetalBuffer ? {
+def private pf_devw_flip : MetalBuffer? {
     var bwh = g_pf_bwh_flip ? g_pf_bwh2 : g_pf_bwh
     g_pf_bwh_flip = !g_pf_bwh_flip
     return bwh

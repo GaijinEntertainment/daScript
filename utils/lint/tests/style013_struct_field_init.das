@@ -168,7 +168,7 @@ def good_null_ptr_init() {
 }
 
 // good: var a = make_foo_ptr() — non-`new` pointer init, silent
-def make_foo_ptr : Foo ? {
+def make_foo_ptr : Foo? {
     return new Foo(x = 7)
 }
 def good_modify_existing_ptr() {

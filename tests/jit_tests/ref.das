@@ -12,7 +12,7 @@ def inc_arg_ref(var a : int&) => a++
 
 var global_ref = 13
 
-def get_global_ref : int & {
+def get_global_ref : int& {
     unsafe {
         return global_ref
     }

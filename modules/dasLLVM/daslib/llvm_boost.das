@@ -68,9 +68,9 @@ class PrimitiveTypes {
 
     def const LLVMByteVecType(lanes : uint) => LLVMVectorType(t_int8, lanes)
 
-    def const get_type_string : LLVMOpaqueType ? => LLVMPointerType(t_int8, 0u)
+    def const get_type_string : LLVMOpaqueType? => LLVMPointerType(t_int8, 0u)
 
-    def LLVMIntPtrType : LLVMOpaqueType ? {
+    def LLVMIntPtrType : LLVMOpaqueType? {
         static_if (typeinfo sizeof(type<void?>) == 8) {
             return t_int64
         } else {
@@ -78,7 +78,7 @@ class PrimitiveTypes {
         }
     }
 
-    def const LLVMVoidPtrType : LLVMOpaqueType ? => LLVMPointerType(t_int8, 0u)
+    def const LLVMVoidPtrType : LLVMOpaqueType? => LLVMPointerType(t_int8, 0u)
 
     def const ConstI1(val : bool) => LLVMConstInt(t_int1, uint64(val ? 1 : 0), 0)
 

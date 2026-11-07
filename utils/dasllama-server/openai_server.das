@@ -271,13 +271,13 @@ var g_cur = 0                   // slot the request being handled resolved to (h
 var g_gpu_owner = -1            // slot holding the GPU tier's VRAM state (-1 = none)
 var g_marks_slot = -1           // slot whose routing marks are INSTALLED in the engine globals
 
-def private cur_model : Model & {
+def private cur_model : Model& {
     unsafe {
         return g_slots[g_cur].model
     }
 }
 
-def private cur_sched : Scheduler & {
+def private cur_sched : Scheduler& {
     unsafe {
         return g_slots[g_cur].sched
     }

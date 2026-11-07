@@ -57,7 +57,7 @@ def public class_info_stub(cl) : StructInfo const? {
 }
 
 
-def test_rtti : StructInfo const ? {
+def test_rtti : StructInfo const? {
     var f = new Foo()
     return class_info_stub(f)
 }

@@ -22,7 +22,7 @@ def set_default_ball(var b : Ball) {
     b.radius = 5.0
 }
 
-def make_default_ball : Ball ? {
+def make_default_ball : Ball? {
     var b : Ball? = new Ball
     set_default_ball(deref(b))
     return b

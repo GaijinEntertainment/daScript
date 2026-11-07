@@ -575,7 +575,7 @@ class TagFunctionMacro : SetupAnyAnnotation {
     }
 }
 
-def public panic_expr_as : void ? {
+def public panic_expr_as : void? {
     //! Panics with an error when an `as` variant expression fails or encounters a null pointer.
     panic("invalid 'as' expression or null pointer dereference")
     return null

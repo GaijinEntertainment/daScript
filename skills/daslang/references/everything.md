@@ -7296,6 +7296,7 @@ The REGEX module implements regular expression matching and searching. It provid
 
 ### Enumerations
 
+- `PassMode` - How a quantifier runs one pass through its subexpression.
 - `ReOp` - Type of regular expression operation.
 
 ### Structures
