@@ -892,6 +892,22 @@ def forced_feed_over(t : T?; tr : Model; tag : string; n, steps : int64; bar_rel
     forced_feed_over(t, tr, tag, n, steps, bar_rel, 0l, after_gpu)
 }
 
+def forced_feed_f32_witness(t : T?; tr : Model; path, tag : string; n, steps : int64; ratio : float; after_gpu : block<void>) {
+    //! the forced feed held by the f32-chain witness in place of the per-row bar, for a device lane whose activations the CPU
+    //! chain does not quantize the same way (the FP4 tensor leaf's e2m1 rows): the device no further from the file's f32 chain
+    //! than `ratio` of the CPU chain's own distance, the one-step-off rows past that bound; `f32_chain_rows` loads the file at
+    //! `path` again and drops the device model, so `after_gpu`'s counter reads run first
+    var prompt <- resident_prompt(n)
+    var toks <- resident_feed(steps)
+    var fed <- resident_then_cpu_feed(t, tr, prompt, toks, after_gpu)
+    var f32_rows <- f32_chain_rows(path, prompt, toks)
+    f32_chain_witness(t, tr, "{tag}prefill ({n} tokens) and {steps} steps [{tile_arm_tag()}]", fed, f32_rows, ratio)
+    delete f32_rows
+    delete fed
+    delete prompt
+    delete toks
+}
+
 //! the same over the prompt `resident_prompt(n, salt)`
 def forced_feed_over(t : T?; tr : Model; tag : string; n, steps : int64; bar_rel : float; salt : int64; after_gpu : block<void>) {
     var prompt <- resident_prompt(n, salt)
