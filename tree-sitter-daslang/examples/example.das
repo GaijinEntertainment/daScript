@@ -67,12 +67,14 @@ def main(args : array<string>; verbose = false) : int {
         counter++
     }
     let shape = new Shape(origin = Point(x = 1.0, y = 2.0))
+    var failed = false
     try {
         unsafe {
             delete shape
         }
     } recover {
-        return -1
+        failed = true
     }
+    return -1 if (failed)
     return total if (total > 0) else return 0
 }

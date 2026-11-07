@@ -41,20 +41,31 @@ under a working directory or project root it passes that program - writes it und
 at once, and only those two directories are one run's own. The reviewer checks every write
 `REVIEW.das` does not flag; weakening that check is a defect.
 
+**A test that starts a daslang child passes it `-no-module-cache` or `-module-cache <dir>/...`,
+and for a `-jit` child also `-jit-no-cache` or `-output <dir>/...`, or starts it in a working
+directory inside `<dir>`, where `<dir>` is `test_temp_dir()` or a `create_temp_directory`
+directory.** A child writes its front-end module cache and its JIT DLL cache relative to its
+working directory otherwise, which is the tree two concurrent runs share.
+
 **A diff that widens the `dasbind` skip in `.das_test` or drops one of the `[extern]` probe
 functions or any of its assertions from `dasbind/test_extern_abi.das` is a defect.** The suite is
 the only check of which register or stack slot an interpreted `[extern]` call puts each argument
 in - the JIT never takes that path - so coverage lost there reports green on every lane.
 
-**A diff that changes a `.das` file under `tests/` (repo root) not marked `options no_aot` - one an
-`AOT_*_FILES` variable of `tests/aot/CMakeLists.txt` holds after its filters, or one in a
-`tests/<name>/` folder `DAS_AOT_SUITES` lists - names in the PR body the run that showed
-`test_aot` pass: a local `daslang utils/internal/preflight/main.das -- --full` (repo root), a
-`--target run_tests_aot` build, or a CI job link.** Per-PR CI builds only the AOT subset binary
-(the test_aot_subset target), so the PR's own checks do not prove `test_aot`.
+**A diff that changes a `.das` file under `tests/` (repo root) the `test_aot` binary compiles
+and runs names in the PR body the run that showed `test_aot` pass: a local
+`daslang utils/internal/preflight/main.das -- --full` (repo root), a `--target run_tests_aot`
+build, or a CI job link.** `test_aot` compiles a file when an `AOT_*_FILES` variable of
+`tests/aot/CMakeLists.txt` holds it after its filters (a folder `DAS_AOT_SUITES` lists globs
+into its own such variable), and runs it unless `tests/.das_test` skips its folder under
+`--use-aot` or the file says `options no_aot`. Per-PR CI builds only the AOT subset binary (the
+test_aot_subset target), so the PR's own checks do not prove `test_aot`.
 
-**A diff that marks a `.das` file under `tests/` (repo root) `options no_aot`, or filters one out of an
-`AOT_*_FILES` variable of `tests/aot/CMakeLists.txt`, states in a comment beside the option or
-the filter what stops `test_aot` compiling or running the file, why an AOT build of it tests
-nothing, or which `AOT_*_FILES` variable compiles it instead.** Without a stated reason no later
-diff can tell whether the opt-out is still needed.
+**A diff that takes a `.das` file under `tests/` (repo root) out of what `test_aot` compiles or
+runs - `options no_aot` in the file, a filter on an `AOT_*_FILES` variable of
+`tests/aot/CMakeLists.txt`, a `--use-aot` skip of its folder in `tests/.das_test`, or a new
+`tests/<name>/` folder whose files neither `DAS_AOT_SUITES` nor any `AOT_*_FILES` variable
+compiles - states beside the opt-out (for a folder, beside the `DAS_AOT_SUITES` list) what stops
+`test_aot` compiling or running the file, why an AOT build of it tests nothing, or which other
+`AOT_*_FILES` variable compiles it instead.** Without a stated reason no later diff can tell
+whether the opt-out is still needed.

@@ -227,9 +227,10 @@ first when the pointers are non-owning.
   function), unwinds to the nearest enclosing `try { } recover { }`; the `recover` block runs
   and execution continues after it, in every execution tier. `recover` binds nothing - there is
   no exception value to match on; the message is `this_context().last_exception`
-  (`require daslib/rtti`), with a trailing newline. Under the JIT the pair compiles to a
-  builtin call, and a `return` inside the `try` block is a compile error there (the
-  interpreter allows it). With no enclosing `try` the error unwinds out of the script: the
+  (`require daslib/rtti`), with a trailing newline. A `return` inside the `try` or the
+  `recover` block is a compile error on every tier (a closure's own `return` inside the arm
+  is fine): set a variable in the arm and return after the pair. With no enclosing `try` the
+  error unwinds out of the script: the
   daslang CLI prints it and exits nonzero, an embedding host gets it back as a context error.
   Never design APIs around panic-as-control-flow.
 - `assert(cond, "msg")` may be stripped in release; `verify(cond, "msg")` always runs. The

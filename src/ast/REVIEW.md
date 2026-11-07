@@ -10,7 +10,6 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_INFER.md`, `ARCHITECTURE_MODULE_SCAN.md`.
   `trySerializeProgramModule` (`ast_parse.cpp`, `ARCHITECTURE.md#module-cache-read`) or of the
   module-cache read diagnostics elsewhere in that file, or a finding text that no longer names
   what failed.
-  What the gate enforces is read from the gate itself.
 
 - **A diff that adds a module-cache read diagnostic outside `trySerializeProgramModule`
   (`ast_parse.cpp`), or moves one out of it - into a helper it calls, or another function in this
@@ -46,11 +45,11 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_INFER.md`, `ARCHITECTURE_MODULE_SCAN.md`.
   skipped, teaches every site that decides it the same spelling and the same skip-or-take
   decision, in the same change: the text collector `getAllRequireReq` (`ast_parse.cpp`), the
   parser's `ast_requireGuardAvailable` (`src/parser/parser_impl.cpp`), and the member walk
-  `moduleGroupMemberAvailable` (`src/builtin/module_builtin_rtti.cpp`).** The prerequisite walk collects
-  requires from the source text before any parse, so a spelling only the parser reads is a
-  module the walk never compiles, a decision the two make differently is a require the parse
-  takes with no module behind it, and a member the calls take but the require did not is a call
-  into a module that is not there.
+  `moduleGroupMemberAvailable` (`src/builtin/module_builtin_rtti.cpp`).** The prerequisite walk
+  collects requires from the source text before any parse, so a spelling only the parser reads
+  is a module the walk never compiles, a decision the collector and the parser make differently
+  is a require the parse takes with no module behind it, and a member the walk takes but the
+  require did not is a call into a module that is not there.
 
 - **A diff that makes a compile entry point in `ast_parse.cpp` rebind a `daScriptEnvironment`
   field has that entry point hold a `CompileEnvScope` for the whole compile and puts that field in
@@ -66,12 +65,12 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_INFER.md`, `ARCHITECTURE_MODULE_SCAN.md`.
   change.** A reader accepts a stream whose stored version equals `getVersion()`, so without the
   bump an older cache decodes the changed header as the old one with no diagnostic.
 
-- **A diff that changes what a pass in this folder leaves in a compiled module - an inferred
-  flag, or a node folded, inlined or rewritten - bumps `AstSerializer::getVersion()`
-  (`include/daScript/ast/ast_serializer.h`, repo root) in the same change.** The default cache
-  stamps only the host executable, which a rebuild of the runtime library alone leaves
-  unchanged, and a `-module-cache <path>` file stamps no binary, so without the bump a rebuilt
-  `daslang` serves modules the old pass produced.
+- **A diff that makes a pass in this folder reject source it accepted before, or change what it
+  leaves in a compiled module - an inferred flag, or a node folded, inlined or rewritten - bumps
+  `AstSerializer::getVersion()` (`include/daScript/ast/ast_serializer.h`, repo root) in the same
+  change.** A cached module never runs through the passes again, and the cache key misses a
+  rebuild of the runtime library alone (a `-module-cache <path>` file records no binary at all),
+  so without the bump a rebuilt `daslang` serves modules the old pass accepted or produced.
 
 - **The `setDeferredModuleLoader` call in `require_dynamic_modules` (`dyn_modules.cpp`) stays,
   and stays above the first `init_modules_for_folder` call - removing it or moving it below is a
@@ -85,11 +84,9 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_INFER.md`, `ARCHITECTURE_MODULE_SCAN.md`.
   never the name an extern binds under, so a cached DLL binds the old name and crashes on the hit.
 
 - **A diff that builds an `ExprCopy`, `ExprMove` or `ExprClone` standing in for no `=`, `<-`
-  or `:=` the user wrote - an inliner result store, a `let` relocated into an assignment, a
-  loop counter or control flag, a yield, finally-return or capture store - passes `true` as the
-  constructor's `no_promo` argument, or sets `no_promotion` from the node it rewrites
-  (`ARCHITECTURE_INFER.md#assign-operator-lookup`).** A store that performs a user-written `:=`
-  one field at a time, as a generated clone does, is the user's store and passes no flag. A
-  compiler-made
-  store that reaches the user's `operator =` runs it at a site the user never wrote, and only
-  in the build configuration that builds the store.
+  or `:=` the user wrote passes `true` as the constructor's `no_promo` argument, or sets
+  `no_promotion` from the node it rewrites (`ARCHITECTURE_INFER.md#assign-operator-lookup`).** A
+  store that performs a user-written `:=` one field at a time, as a generated clone does, is the
+  user's store and passes no flag. A compiler-made store that reaches the user's `operator =`
+  runs it at a site the user never wrote, and only in the build configuration that builds the
+  store.

@@ -4535,11 +4535,15 @@ class public LlvmJitVisitor : AstVisitor {
             }
         }
         let stride = expr.makeType.stride
-        let emptyEmbeddedTuple = expr.makeType.baseType == Type.tTuple && empty(expr.structs)
+        var mkBaseT = expr.makeType
+        while (mkBaseT.baseType == Type.tFixedArray && mkBaseT.firstType != null) {
+            mkBaseT = mkBaseT.firstType
+        }
+        let emptyEmbeddedTuple = mkBaseT.baseType == Type.tTuple && empty(expr.structs)
         let partiallyInitStruct = !expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields
         if ((partiallyInitStruct || emptyEmbeddedTuple) && stride != 0) {
             let total = expr.structs |> length
-            let bytes = max(total, 1) * stride
+            let bytes = total != 0 ? total * stride : expr.makeType.sizeOf
             let align = uint(expr.makeType.alignOf)
             LLVMBuildMemSet(g_builder, mks_ptr, 0ul, uint64(bytes), align)
         }
@@ -5781,7 +5785,7 @@ class public LlvmJitVisitor : AstVisitor {
             res = LLVMBuildPointerCast(g_builder, subE, type_to_llvm_type(ect), "cast_p")
         } elif (ect.baseType == Type.tFixedArray && subT.isPointer) {
             res = LLVMBuildPointerCast(g_builder, subE, LLVMPointerType(type_to_llvm_type(ect), 0u), "")
-        } elif (is_int64_or_uint64(ect.baseType) && subT.isPointer) {
+        } elif (ect.isInteger && subT.isPointer) {
             res = LLVMBuildPtrToInt(g_builder, subE, type_to_llvm_type(ect), "cast_p_i")
         } elif (subT.baseType == Type.tFunction && (ect.isPointer || is_int64_or_uint64(ect.baseType))) {
             // reinterpret<uint64>(f)
@@ -5800,7 +5804,14 @@ class public LlvmJitVisitor : AstVisitor {
         } elif ((ect.isPointer || ect.isString) && subT.isInteger) {
             res = LLVMBuildIntToPtr(g_builder, subE, type_to_llvm_type(ect), "cast_i_p")
         } elif (!ect.isRefType && !subT.isRefType) {
-            if (ect.sizeOf == subT.sizeOf) {
+            if (ect.isBool && subT.isInteger) {
+                let low_byte = (subT.sizeOf > 1
+                    ? LLVMBuildTrunc(g_builder, subE, types.t_int8, "trunc_cast") : subE)
+                res = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, low_byte,
+                    LLVMConstNull(LLVMTypeOf(low_byte)), "cast_bool")
+            } elif (subT.isBool && ect.isInteger) {
+                res = LLVMBuildZExt(g_builder, subE, type_to_llvm_type(ect), "zext_cast")
+            } elif (ect.sizeOf == subT.sizeOf) {
                 res = LLVMBuildBitCast(g_builder, subE, type_to_llvm_type(ect), "cast_r")
             } elif (ect.sizeOf > subT.sizeOf) {
                 if (subT.isSignedInteger) {
@@ -6527,7 +6538,9 @@ class public LlvmJitVisitor : AstVisitor {
     def override preVisitExprReturn(expr : ExprReturn?) {
         if (thisBlock != null) {
             if (expr.returnFunc != null) {
-                to_log(LOG_WARNING, "LLVM JIT: return inside try/recover leaves the try arm, not the function. at {describe(expr.at)}\n")
+                let fix = "move the return after the try"
+                failed_E(expr,
+                    "a return inside a try/recover arm is not supported under -jit; {fix}")
             }
             pre_visit_expr_return(expr, isCMRESType(thisBlock.returnType))
         } elif (thisFunc != null) {

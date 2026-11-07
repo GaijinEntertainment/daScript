@@ -5,25 +5,27 @@ require dastest/testing_boost public
 [sideeffects, no_jit]
 def div_by_zero(num : auto(numT)) : numT {
     var ex = false
+    var res = num
     try {
-        return num / numT(0)
+        res = num / numT(0)
     } recover {
         ex = true
     }
     assert(ex)
-    return num
+    return ex ? num : res
 }
 
 [sideeffects, no_jit]
 def mod_by_zero(num : auto(numT)) : numT {
     var ex = false
+    var res = num
     try {
-        return num % numT(0)
+        res = num % numT(0)
     } recover {
         ex = true
     }
     assert(ex)
-    return num
+    return ex ? num : res
 }
 
 [test]

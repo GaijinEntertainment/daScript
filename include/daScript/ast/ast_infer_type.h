@@ -50,6 +50,8 @@ namespace das {
         vector<size_t> assumeStack;
         vector<size_t> assumeTypeStack;
         vector<bool> inFinally;
+        int tryDepth = 0;
+        vector<int> tryDepthAtClosure;
         vector<Function *> inInfer;
         ExprReturn * oneReturn;
         int32_t returnCount = 0;
@@ -551,6 +553,7 @@ namespace das {
         virtual ExpressionPtr visit(ExprClone *expr) override;
         // ExprTryCatch
         void preVisit(ExprTryCatch *expr) override;
+        ExpressionPtr visit(ExprTryCatch *expr) override;
         // ExprReturn
         bool inferReturnType(TypeDeclPtr &resType, ExprReturn *expr);
         bool isVoidReturnValueSettled(Expression *subexpr) const;

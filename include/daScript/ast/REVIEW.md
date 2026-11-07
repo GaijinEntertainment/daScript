@@ -3,12 +3,14 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `src/ast/ARCHITECTURE.md` (repo root).
 
-- **A diff that changes the module an existing bind registers into, or the name it registers
-  under (`vectorHomeModule`, `typeFactory<vector<TT>>::make`, `registerVectorFunctions`, the name
-  a `ManagedVectorAnnotation` or `ManagedStructureAnnotation` takes - all in `ast_handle.h`),
-  bumps `LLVM_JIT_CODEGEN_VERSION` in `modules/dasLLVM/daslib/llvm_jit_plan.das` (repo root), in
-  the same change.** The JIT's DLL cache key folds the codegen version and each function's AST
-  hash, never the module an extern lives in, so a cache hit binds the old name and crashes.
+- **A diff that changes the module or the name `ast_handle.h` itself registers an existing C++
+  binding under (`vectorHomeModule`, `typeFactory<vector<TT>>::make`, `registerVectorFunctions`,
+  and any name those templates compute) bumps `LLVM_JIT_CODEGEN_VERSION` in
+  `modules/dasLLVM/daslib/llvm_jit_plan.das` (repo root), in the same change.** The JIT's DLL
+  cache key folds the codegen version and each function's AST hash, never the module an extern
+  lives in, so a cache hit binds the old name and crashes. The name string a
+  `ManagedVectorAnnotation` or `ManagedStructureAnnotation` constructor takes is chosen where the
+  annotation is created, so that rename answers to the creating folder's checklist.
 
 - **A diff that changes the memory layout of a C++ type declared under this folder that some
   `Managed*Annotation` is instantiated over - a data member added, removed, reordered or retyped
@@ -24,17 +26,10 @@
   `skills/internal/abi_break_sweep.md` (repo root) too.** An out-of-tree subclass that omits
   `override` keeps compiling and silently stops being called.
 
-- **A diff that adds a field to `Function` or `Variable` (`ast.h`) holding something one
-  program's compile decides - whether the program uses it, the slot it holds in that program's
-  context, whether this program's JIT selected it - is a defect; the value goes into `Program`'s
-  symbol tables (`usedFunctions`, `functionIndices`, `usedVariables`, `variableIndices`,
-  `jitSelected`) instead.** A shared module's objects are one instance for every program in the
-  process, and a compile that runs inside another would otherwise overwrite the outer program's
-  answer mid-simulate.
-  `src/ast/ARCHITECTURE.md` sec.4 lists the per-compile fields that remain and why each is
-  tolerated.
-
-- **A diff changing `getVersion()` in `include/daScript/ast/ast_serializer.h`
-  replaces its version comment instead of appending to it.** The comment describes the current
-  version rather than earlier versions. A diff that keeps the old note in a parenthesis is a defect; git carries the
-  history.
+- **A diff that adds a field to `Function` or `Variable` (`ast.h`) whose value one compiled
+  program decides, so two programs sharing the module would want different values, is a defect;
+  the value goes into a per-program table on `Program` instead.** A shared module's objects are
+  one instance for every program in the process, and a compile that runs inside another would
+  otherwise overwrite the outer program's answer before the outer program has finished reading
+  it. `src/ast/ARCHITECTURE.md#program-scoped-symbol-state` lists the per-compile fields
+  `Function` and `Variable` carry and why each is safe.

@@ -3773,6 +3773,8 @@ namespace das {
         }
         resetBlockFlow(block);
         if (block->isClosure) {
+            tryDepthAtClosure.push_back(tryDepth);
+            tryDepth = 0;
             if (block->returnType) {
                 blocks.push_back(block);
                 TypeDecl::clone(block->type, block->returnType);
@@ -3923,6 +3925,10 @@ namespace das {
         popVarStack();
         scopes.pop_back();
         inFinally.pop_back();
+        if (block->isClosure) {
+            tryDepth = tryDepthAtClosure.back();
+            tryDepthAtClosure.pop_back();
+        }
         if (block->isClosure && block->returnType) {
             blocks.pop_back();
             if (block->list.size()) {
@@ -4720,6 +4726,10 @@ namespace das {
         }
     }
     ExpressionPtr InferTypes::visit(ExprReturn *expr) {
+        if (tryDepth > 0) {
+            error("return inside a try/recover arm; set a variable in the arm and return after the pair", "", "",
+                  expr->at, CompilationError::return_in_try_recover);
+        }
         if (blocks.size()) {
             ExprBlock *block = blocks.back();
             expr->block = block;

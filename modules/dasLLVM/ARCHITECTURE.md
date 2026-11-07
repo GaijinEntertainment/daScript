@@ -112,7 +112,7 @@ bitcode and the link runs lld LTO - a dev probe artifact), `DAS_JIT_X64_FORCE_FE
 and `cpu_supports`-based tune eligibility all follow), `DAS_JIT_BASELINE` (build for a CPU class
 instead of the box - the machine, the gates, the tune ladder and the cache keys all follow;
 `ARCHITECTURE_TARGET_FEATURES.md` sec.10), `--jit-debug` / `-g` (emit DWARF or CodeView debug
-info and promote every argument to a stack slot for it; `ARCHITECTURE_DEBUG_INFO.md` sec.12), `--jit-compile-only` / `options jit_compile_only` (build, verify and optimize, then write, load and install nothing - the program runs interpreted; under a `--jit-target` cross triple it also keeps the `[tune]` grid a cross artifact would stamp as reference bodies, which is what the emission dump inspects), `--jit-sanitize` / `options jit_sanitize` (`address` runs LLVM's `asan` pass after the optimizer on functions marked `sanitize_address`; `undefined` runs `bounds-checking`; a sanitizer host defaults to its own, `none` to nothing; an exe or a library links with `-fsanitize=` for the host's sanitizers and the requested ones, through `clang++` unless a linker is named; an ASan host lowers every array push to the runtime call, which keeps the buffer's container annotation - `src/misc/ARCHITECTURE.md` sec.10), and the
+info and promote every argument to a stack slot for it; `ARCHITECTURE_DEBUG_INFO.md` sec.12), `--jit-remarks` / `--jit-remarks-missed` / `--jit-remarks-analysis` (LLVM's `-pass-remarks*` regexes, parsed once per process with the other JIT cl::opts: the matching passes' optimization remarks print to stderr, and codegen runs past the DLL and obj caches so every function's passes run), `--jit-compile-only` / `options jit_compile_only` (build, verify and optimize, then write, load and install nothing - the program runs interpreted; under a `--jit-target` cross triple it also keeps the `[tune]` grid a cross artifact would stamp as reference bodies, which is what the emission dump inspects), `--jit-sanitize` / `options jit_sanitize` (`address` runs LLVM's `asan` pass after the optimizer on functions marked `sanitize_address`; `undefined` runs `bounds-checking`; a sanitizer host defaults to its own, `none` to nothing; an exe or a library links with `-fsanitize=` for the host's sanitizers and the requested ones, through `clang++` unless a linker is named; an ASan host lowers every array push to the runtime call, which keeps the buffer's container annotation - `src/misc/ARCHITECTURE.md` sec.10), and the
 runtime escape API `tune_suppress_mint(knob)` (a library `[init]` suppresses the auto/restart mint; the
 caller passes the knob name it acts for). The announce contract: an override announces at the point it
 CHANGES THE OUTCOME - at least one line naming the knob (its env spelling, or the caller-supplied knob
@@ -195,10 +195,12 @@ shared one): the mangled-name hash is static, and the offset it names is added t
 globals base, which is what a cross-context call needs - the same JIT function runs on any context
 of the program, each with its own base, so the address cannot be baked. The emitter
 (`visitExprVar`, `daslib/llvm_jit.das`) emits the call where the variable is used and declares it
-`memory(none)` (`daslib/llvm_jit_common.das`): the result depends on nothing but its arguments for
-the lifetime of the context, so LLVM CSEs one use against a dominating one, hoists a loop's lookup
-into the preheader, and - the call not being `speculatable` - never moves it ahead of a branch, so
-a global written on one branch is looked up on that branch only. Every access to a global in a
+`memory(none)` and `speculatable` (`daslib/llvm_jit_common.das`): the result depends on nothing but
+its arguments for the lifetime of the context, and the probe neither traps nor writes, so LLVM CSEs
+one use against a dominating one and hoists a loop's lookup into the preheader even when the access
+sits on one arm of a branch inside the loop - one probe per call instead of one per taken iteration.
+Outside a loop the optimizer does not speculate a call, so a global written on one branch of
+straight-line code is still looked up on that branch only. Every access to a global in a
 function therefore shares one base pointer, which is what lets LLVM see `xs[j]` and `xs[j + 1]` as
 adjacent. Under `options solid_context` the address is instead `context->globals + stackTop`,
 computed once per function in the entry block.

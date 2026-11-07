@@ -1,20 +1,15 @@
 options gen2
 require dastest/testing_boost public
 require daslib/fio
-require _spawn_common
 require daslib/strings_boost
 require strings
 require math
+require _exe_test_common
 
 // The --jit-debug rail's DWARF, read off the emitted IR rather than off a debugger.
 // Shape and reasons: ARCHITECTURE_DEBUG_INFO.md sec.12.
 
 let private ROOT = "modules/dasLLVM/tests/_debug_info_root.das"
-
-def private das_exe() : string {
-    let argv <- get_command_line_arguments()
-    return find(to_generic_path(argv[0]), "/") < 0 ? argv[0] : get_full_file_name(normalize(argv[0]))
-}
 
 def private out_tail(s : string) : string => slice(s, max(0, length(s) - 600))
 
@@ -28,21 +23,6 @@ def private count_of(s : string; needle : string) : int {
     return n
 }
 
-//! the dumped IR of one function, by its dumped name - signature line to closing brace
-def private function_ir(dump : string; name : string) : string {
-    let start = find(dump, "`{name}\"(")
-    return "" if (start < 0)
-    let body = slice(dump, start)
-    let close = find(body, "\n}")
-    return close < 0 ? body : slice(body, 0, close)
-}
-
-//! the entry block of a dumped function: everything before its first branch
-def private entry_block_ir(fn_ir : string) : string {
-    let br = find(fn_ir, "\n  br ")
-    return br < 0 ? fn_ir : slice(fn_ir, 0, br)
-}
-
 //! the fixture's own DIFile line, whichever metadata number it landed on
 def private fixture_difile(dump : string) : string {
     var lines <- split(dump, "\n")
@@ -54,7 +34,7 @@ def private fixture_difile(dump : string) : string {
     return ""
 }
 
-let private HOT_IMPL = "hot Ci Cf CS`Lt`Point`Gt` CE`Lt`::Mode`Gt` Cs implementation"
+let private HOT_IMPL = "`hot Ci Cf CS`Lt`Point`Gt` CE`Lt`::Mode`Gt` Cs implementation"
 
 let private FIXTURE_FOR_STATEMENT = "for (i in range(n))"
 
@@ -76,15 +56,6 @@ def private fixture_line_of(needle : string) : int {
 let private FIXTURE_ARGS = ["n", "scale", "p", "m", "tag"]
 let private FIXTURE_LOCALS = ["acc", "f4", "i", "inner", "acc_ref", "spin", "dim3", "xs", "pair", "head", "node", "blocked"]
 
-//! one labelled basic block of a dumped function, label line through the blank line after it
-def private named_block_ir(fn_ir : string; block_name : string) : string {
-    let start = find(fn_ir, "\n{block_name}:")
-    return "" if (start < 0)
-    let body = slice(fn_ir, start + 1)
-    let close = find(body, "\n\n")
-    return close < 0 ? body : slice(body, 0, close)
-}
-
 //! the source line of the first !dbg attachment in a piece of IR, -1 when it carries none
 def private dbg_line_of(dump : string; ir : string) : int {
     let at = find(ir, ", !dbg !")
@@ -99,18 +70,12 @@ def private dbg_line_of(dump : string; ir : string) : int {
     return comma < 0 ? -1 : to_int(slice(after, 0, comma))
 }
 
-def private jit_dump(t : T?; debug_info : bool) : string {
-    var args <- [das_exe(), "-no-module-cache", "-jit", "-jit-no-cache", ROOT, "--",
-                 "--jit-opt-level=0", "--jit-dump"]
+def private debug_info_dump(t : T?; debug_info : bool) : string {
+    var extra <- ["--jit-opt-level=0"]
     if (debug_info) {
-        args |> push("--jit-debug")
+        extra |> push("--jit-debug")
     }
-    var out = ""
-    var rc = 0
-    with_child_log_info() {
-        rc = run_and_capture(args, out, 300.0)
-    }
-    t |> equal(0, rc, "the fixture runs under -jit: {out_tail(out)}")
+    let out = jit_dump(t, ROOT, extra)
     t |> success(find(out, "DEBUG_INFO_ROOT ") >= 0, "the fixture printed its witness: {out_tail(out)}")
     return out
 }
@@ -118,7 +83,7 @@ def private jit_dump(t : T?; debug_info : bool) : string {
 [test]
 def test_debug_info_is_off_by_default(t : T?) {
     t |> run("no --jit-debug means no debug metadata at all") @(t : T?) {
-        let out = jit_dump(t, false)
+        let out = debug_info_dump(t, false)
         t |> equal(0, count_of(out, "!DICompileUnit"), "a default run emits no compile unit")
         t |> equal(0, count_of(out, "!DILocalVariable"), "a default run emits no variable metadata")
         t |> equal(0, count_of(out, "#dbg_declare("), "a default run emits no dbg records")
@@ -128,7 +93,7 @@ def test_debug_info_is_off_by_default(t : T?) {
 [test]
 def test_one_compile_unit_per_module(t : T?) {
     t |> run("the whole module shares one compile unit, tagged C++") @(t : T?) {
-        let out = jit_dump(t, true)
+        let out = debug_info_dump(t, true)
         t |> equal(1, count_of(out, "distinct !DICompileUnit"),
             "one compile unit per module - a unit per function hides an inlined instance from a debugger's name lookup")
         t |> success(find(out, "language: DW_LANG_C_plus_plus") >= 0,
@@ -139,7 +104,7 @@ def test_one_compile_unit_per_module(t : T?) {
 [test]
 def test_subprograms_carry_the_das_name(t : T?) {
     t |> run("a das function is named as its source names it, with no linkage name") @(t : T?) {
-        let out = jit_dump(t, true)
+        let out = debug_info_dump(t, true)
         t |> equal(2, count_of(out, "!DISubprogram(name: \"hot\""),
             "both halves of the function pair carry the das name:\n{out_tail(out)}")
         t |> equal(0, count_of(out, "linkageName:"),
@@ -151,7 +116,7 @@ def test_subprograms_carry_the_das_name(t : T?) {
 [test]
 def test_locals_and_arguments_are_described(t : T?) {
     t |> run("every argument and local has a DILocalVariable in a lexical scope") @(t : T?) {
-        let out = jit_dump(t, true)
+        let out = debug_info_dump(t, true)
         for (arg, ix in FIXTURE_ARGS, count(1)) {
             t |> success(find(out, "!DILocalVariable(name: \"{arg}\", arg: {ix}") >= 0,
                 "argument {arg} is described as parameter {ix}:\n{out_tail(out)}")
@@ -170,7 +135,7 @@ def test_locals_and_arguments_are_described(t : T?) {
 [test]
 def test_a_global_is_described(t : T?) {
     t |> run("a das global reads in every function that touches it") @(t : T?) {
-        let out = jit_dump(t, true)
+        let out = debug_info_dump(t, true)
         //! a global has no static address - it is described at the pointer the function computed
         //! from its own ctx, so it lands as a variable of that function (arch doc sec.12.4)
         t |> success(find(out, "!DILocalVariable(name: \"g_calls\"") >= 0,
@@ -183,7 +148,7 @@ def test_a_global_is_described(t : T?) {
 [test]
 def test_types_are_described(t : T?) {
     t |> run("a struct, an enum, a string and a vector each reach DWARF as themselves") @(t : T?) {
-        let out = jit_dump(t, true)
+        let out = debug_info_dump(t, true)
         t |> success(find(out, "tag: DW_TAG_structure_type, name: \"Point") >= 0,
             "the struct is a real structure type, not an opaque blob:\n{out_tail(out)}")
         t |> success(find(out, "tag: DW_TAG_member, name: \"x\"") >= 0, "member x is named")
@@ -218,7 +183,7 @@ def test_types_are_described(t : T?) {
 [test]
 def test_source_paths_are_absolute(t : T?) {
     t |> run("a DIFile names an absolute path, so a debugger lists the source from any cwd") @(t : T?) {
-        let out = jit_dump(t, true)
+        let out = debug_info_dump(t, true)
         let line = fixture_difile(out)
         t |> success(!empty(line), "the dump carries a DIFile for the fixture:\n{out_tail(out)}")
         let open = find(line, "\"")
@@ -233,7 +198,7 @@ def test_source_paths_are_absolute(t : T?) {
 [test]
 def test_hoisted_instructions_carry_no_stale_line(t : T?) {
     t |> run("the prologue carries no line, and every argument is declared in it") @(t : T?) {
-        let out = jit_dump(t, true)
+        let out = debug_info_dump(t, true)
         let ir = function_ir(out, HOT_IMPL)
         t |> success(!empty(ir), "the dump carries hot's implementation:\n{out_tail(out)}")
         let entry = entry_block_ir(ir)
@@ -243,7 +208,7 @@ def test_hoisted_instructions_carry_no_stale_line(t : T?) {
             "all five arguments are declared in the entry block:\n{entry}")
     }
     t |> run("a loop latch carries the loop's own line, not its body's last statement") @(t : T?) {
-        let out = jit_dump(t, true)
+        let out = debug_info_dump(t, true)
         let ir = function_ir(out, HOT_IMPL)
         t |> success(!empty(ir), "the dump carries hot's implementation:\n{out_tail(out)}")
         let latch = named_block_ir(ir, "for_continue")

@@ -31,8 +31,11 @@ require jit
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-// Current entry: module-cache dependencies carry a FileAccess flag.
-let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xA5ul
+// Current entry: bool<->integer reinterprets are the byte, a
+// pointer reinterprets to any integer width through ptrtoint, a
+// pointer difference is inline arithmetic, a global lookup is
+// speculatable.
+let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xA6ul
 
 let public JIT_FNV_PRIME : uint64 = 1099511628211ul
 
@@ -834,6 +837,9 @@ struct public JitPlan {
     debug_info : bool
     dump_ir : bool
     dump_ir_path : string
+    //! an optimization-remark flag is set, so codegen runs past every
+    //! cache
+    remarks : bool
     gen_exe : bool
     gen_lib : bool
     lib_static : bool
@@ -911,7 +917,7 @@ def private resolve_split_options(var plan : JitPlan; cli_opts : JitCliOptions; 
     let obj_cache_asked = (cli_opts.obj_cache |> unwrap_or(obj_cache_default ? 1 : 0)) != 0
     let pinned_path = !(string(prog.policies.jit_output_path) |> empty())
     plan.obj_cache = (plan.jit_split && plan.use_dll && !pinned_path && obj_cache_asked
-        && !plan.dump_ir)
+        && !plan.dump_ir && !plan.remarks)
     if (announce && (cli_opts.obj_cache |> is_some()) && !(plan.jit_split && plan.use_dll)) {
         to_log(LOG_WARNING, "LLVM JIT: --jit-obj-cache applies under --jit-split-modules dll mode only - ignored for this run\n")
     }
@@ -1004,7 +1010,9 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool; c
         jit_all_functions = prog.policies.jit_jit_all_functions,
         debug_info = cli_opts.debug_info |> unwrap_or(prog.policies.jit_debug_info),
         dump_ir = cli_opts.dump_ir |> is_some,
-        dump_ir_path = cli_opts.dump_ir |> unwrap_or(""))
+        dump_ir_path = cli_opts.dump_ir |> unwrap_or(""),
+        remarks = ((cli_opts.remarks |> is_some) || (cli_opts.remarks_missed |> is_some)
+            || (cli_opts.remarks_analysis |> is_some)))
     if (announce && prog.policies.jit_dll_mode && !das_is_dll_build()) {
         // a legitimate configuration (static daslang), but the cost is worth naming: no DLL
         // cache exists, so every -jit run pays full in-memory codegen
