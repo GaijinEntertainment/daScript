@@ -106,6 +106,13 @@ namespace das
         const LineInfo * getLineInfo() const;
     };
 
+    template <typename TT>
+    __forceinline TT * copyNodeArray ( NodeAllocator * code, const TT * src, uint32_t count ) {
+        TT * dst = (TT *) code->allocate(count * sizeof(TT));
+        memcpy(dst, src, count * sizeof(TT));
+        return dst;
+    }
+
     struct DAS_API SimNode {
         SimNode ( const LineInfo & at ) : debugInfo(at) {}
         virtual SimNode * copyNode ( Context & context, NodeAllocator * code );

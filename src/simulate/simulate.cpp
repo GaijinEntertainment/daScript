@@ -470,13 +470,9 @@ namespace das
     SimNode * SimNode_CallBase::copyNode ( Context & context, NodeAllocator * code ) {
         SimNode_CallBase * that = (SimNode_CallBase *) SimNode_WithErrorMessage::copyNode(context, code);
         if ( nArguments ) {
-            SimNode ** newArguments = (SimNode **) code->allocate(nArguments * sizeof(SimNode *));
-            memcpy ( newArguments, that->arguments, nArguments * sizeof(SimNode *));
-            that->arguments = newArguments;
+            that->arguments = copyNodeArray(code, that->arguments, nArguments);
             if ( that->types ) {
-                TypeInfo ** newTypes = (TypeInfo **) code->allocate(nArguments * sizeof(TypeInfo **));
-                memcpy ( newTypes, that->types, nArguments * sizeof(TypeInfo **));
-                that->types = newTypes;
+                that->types = copyNodeArray(code, that->types, nArguments);
             }
         }
         if ( fnPtr ) {
@@ -491,9 +487,7 @@ namespace das
     SimNode * SimNode_Final::copyNode ( Context & context, NodeAllocator * code ) {
         SimNode_Final * that = (SimNode_Final *) SimNode::copyNode(context, code);
         if ( totalFinal ) {
-            SimNode ** newList = (SimNode **) code->allocate(totalFinal * sizeof(SimNode *));
-            memcpy ( newList, that->finalList, totalFinal*sizeof(SimNode *));
-            that->finalList = newList;
+            that->finalList = copyNodeArray(code, that->finalList, totalFinal);
         }
         return that;
     }
@@ -503,14 +497,10 @@ namespace das
     SimNode * SimNode_Block::copyNode ( Context & context, NodeAllocator * code ) {
         SimNode_Block * that = (SimNode_Block *) SimNode_Final::copyNode(context, code);
         if ( total ) {
-            SimNode ** newList = (SimNode **) code->allocate(total * sizeof(SimNode *));
-            memcpy ( newList, that->list, total*sizeof(SimNode *));
-            that->list = newList;
+            that->list = copyNodeArray(code, that->list, total);
         }
         if ( totalLabels ) {
-            uint32_t * newLabels = (uint32_t *) code->allocate(totalLabels * sizeof(uint32_t));
-            memcpy ( newLabels, that->labels, totalLabels*sizeof(uint32_t));
-            that->labels = newLabels;
+            that->labels = copyNodeArray(code, that->labels, totalLabels);
         }
         return that;
     }

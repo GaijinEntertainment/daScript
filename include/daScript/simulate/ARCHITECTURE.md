@@ -144,6 +144,17 @@ guard of its own either.
 The ledger the checklist's hot-path rules route to. Each entry: what was added, where, why
 correctness required it, and the alternative that was rejected.
 
+- **The computed goto's label check** (`SimNode_Goto::eval` in `simulate_nodes.h`) - one load
+  of the node's label-table pointer with a null test (a visitor simulating a lone expression
+  hands the node no table), one compare against the count of labels the function declares, and
+  one byte load from that table with its branch, on a computed `goto expr` only; a `goto label N`
+  carries no check. Correctness required it because a labelled block takes a jump only to a
+  label it holds and hands any other outward, so a target no block holds would otherwise leave
+  the function silently, with `Context::call` clearing the flag and the caller reading an unset
+  result.
+  Rejected alternative: the throw the innermost labelled block used to raise for an index past
+  its table, which is the check that also made it swallow every jump to an outer label.
+
 - **Explicit string release** (`Context::freeString` in `simulate.h` and the nano
   shadow header) checks whether an owned allocation is queued for temporary disposal
   and clears that queue entry before freeing it. Otherwise, address reuse lets a later
