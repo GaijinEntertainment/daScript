@@ -10,6 +10,8 @@
 #include "ast_escape_analysis.h"
 #include "daScript/ast/ast_cfg.h"
 #include "ast_bound_check_elision.h"
+#include "daScript/ast/ast_compile_dag.h"
+#include "daScript/misc/job_que.h"
 #include "daScript/misc/das_common.h"
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/aot_builtin.h"
@@ -1045,8 +1047,8 @@ namespace das {
         return false;
     }
 
-    bool detectOptionLogRequire ( const char * text, uint32_t length ) {
-        // search for `options log_require` outside of comments and strings
+    bool detectOptionFlag ( const char * text, uint32_t length, const char * name ) {
+        // search for `options <name>` outside of comments and strings
         bool in_single_line_comment = false;
         bool in_multi_line_comment = false;
         bool in_string = false;
@@ -1087,15 +1089,14 @@ namespace das {
                     continue;
                 }
             }
-            // check for options\s+log_require
+            // check for options\s+<name>
             if (text[i] == 'o' && i + 7 < length && text[i + 1] == 'p' && text[i + 2] == 't' && text[i + 3] == 'i' && text[i + 4] == 'o' && text[i + 5] == 'n' && text[i + 6] == 's' && isspace(text[i + 7]) ) {
                 i += 7;
                 while (i < length && isspace(text[i])) {
                     ++i;
                 }
-                if (i + 11 < length && text[i] == 'l' && text[i + 1] == 'o' && text[i + 2] == 'g' && text[i + 3] == '_'
-                    && text[i + 4] == 'r' && text[i + 5] == 'e' && text[i + 6] == 'q' && text[i + 7] == 'u'
-                    && text[i + 8] == 'i' && text[i + 9] == 'r' && text[i + 10] == 'e' && !isalnum(text[i + 11]) && text[i + 11] != '_') {
+                auto nameLen = uint32_t(strlen(name));
+                if (i + nameLen < length && strncmp(text + i, name, nameLen) == 0 && !isalnum(text[i + nameLen]) && text[i + nameLen] != '_') {
                     return true;
                 }
             }
@@ -1196,8 +1197,8 @@ namespace das {
         ReuseCacheGuard             reuseCache;
         ModuleCompileTimes          times;
         ModuleCompileScope ( const string & moduleName, const string & fileName, TextWriter & logs, ModuleGroup & libGroup,
-                const CodeOfPolicies & policies, bool isDep )
-            : callbackGuard(moduleName, fileName), program(make_smart<Program>()),
+                const CodeOfPolicies & policies, bool isDep, const ProgramPtr & prepared = nullptr )
+            : callbackGuard(moduleName, fileName), program(prepared ? prepared : make_smart<Program>()),
               gcScope(program->thisModule->module_gc_root.get()), gcFinalize(program.get()) {
             times.macroStartTicks = libGroup.compileTimes.macroTicks;
             gcFinalize.logs = &logs;
@@ -1220,7 +1221,7 @@ namespace das {
 
     static void bindCompilingProgram ( const ProgramPtr & program, const string & fileName, const string & moduleName,
             const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool isDep, const CodeOfPolicies & policies ) {
-        program->access = access;
+        if ( program->access.get() != access.get() ) program->access = access;     // src/ast/ARCHITECTURE_DAG.md#compile-workers
         program->compileLog = &logs;
         daScriptEnvironment::getBound()->g_Program = program;
         program->promoteToBuiltin = false;
@@ -1252,9 +1253,9 @@ namespace das {
 
     static void inferAndFinalizeModule ( const ProgramPtr & program, const string & fileName, const string & moduleName,
             const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool exportAll, bool isDep,
-            const CodeOfPolicies & policies, ModuleCompileTimes & times );
+            const CodeOfPolicies & policies, ModuleCompileTimes & times, bool deferNestingMacroModule );
 
-    static ProgramPtr parseDaScriptEx ( const string & fileName,
+    ProgramPtr parseDaScriptEx ( const string & fileName,
                                const string & moduleName,
                               const FileAccessPtr & access,
                               TextWriter & logs,
@@ -1263,9 +1264,11 @@ namespace das {
                               bool isDep,
                               CodeOfPolicies policies,
                               bool inferAfterParse,
-                              const ModuleCacheStream & stream = ModuleCacheStream() ) {
+                              const ModuleCacheStream & stream,
+                              const ProgramPtr & prepared,
+                              bool deferNestingMacroModule ) {
         verifyCodeOfPoliciesStamp(policies);
-        ModuleCompileScope scope(moduleName, fileName, logs, libGroup, policies, isDep);
+        ModuleCompileScope scope(moduleName, fileName, logs, libGroup, policies, isDep, prepared);
         auto & program = scope.program;
         auto & times = scope.times;
 
@@ -1297,7 +1300,7 @@ namespace das {
         int err;
         bindCompilingProgram(program, fileName, moduleName, access, logs, libGroup, isDep, policies);
         DasParserState parserState;
-        parserState.g_Access = access;
+        parserState.g_Access = access.get();
         parserState.g_Program = program;
         parserState.das_def_tab_size = daScriptEnvironment::getBound()->das_def_tab_size;
         parserState.das_gen2_make_syntax = policies.gen2_make_syntax;
@@ -1387,7 +1390,7 @@ namespace das {
             program->isCompiling = false;
             return program;
         } else {
-            inferAndFinalizeModule(program, fileName, moduleName, access, logs, libGroup, exportAll, isDep, policies, times);
+            inferAndFinalizeModule(program, fileName, moduleName, access, logs, libGroup, exportAll, isDep, policies, times, deferNestingMacroModule);
             auto serializer_write = stream.write;
             if ( serializer_write != nullptr && !program->failed() ) {    // a failed module is no record (a persistent stream's later writeback would carry it)
                 serializer_write->parsedModules.push_back({fileName, file_hash, file_size, program, program->thisModule.get(),
@@ -1408,9 +1411,9 @@ namespace das {
         return count;
     }
 
-    static void inferAndFinalizeModule ( const ProgramPtr & program, const string & fileName, const string & moduleName,
-            const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool exportAll, bool isDep,
-            const CodeOfPolicies & policies, ModuleCompileTimes & times ) {
+    static void inferModule ( const ProgramPtr & program, const string & fileName, const string & moduleName,
+            const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, const CodeOfPolicies & policies,
+            ModuleCompileTimes & times ) {
         if ( program->options.getBoolOption("force_inscope_pod", policies.force_inscope_pod) ) {
             program->thisModule->allowPodInscope = access->isPodInScopeAllowed(program->thisModule->name, fileName);
         }
@@ -1495,6 +1498,10 @@ namespace das {
                 }
             }
         }
+    }
+
+    static void optimizeModule ( const ProgramPtr & program, const string & fileName, const string & moduleName,
+            TextWriter & logs, ModuleGroup & libGroup, bool exportAll, const CodeOfPolicies & policies, ModuleCompileTimes & times ) {
         if ( !program->failed() ) {
             program->normalizeOptionTypes();
             if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
@@ -1540,10 +1547,10 @@ namespace das {
                 logs << *program;
             }
         }
-        program->compileLog = nullptr;
-        sort(program->errors.begin(), program->errors.end());
-        program->deduplicateErrors();
-        program->isCompiling = false;
+    }
+
+    static void buildMacroModule ( const ProgramPtr & program, const string & fileName, const string & moduleName,
+            TextWriter & logs, ModuleGroup & libGroup, ModuleCompileTimes & times, bool deferNesting ) {
         if ( !program->failed() ) {
             if ( program->needMacroModule ) {
                 if ( !program->thisModule->isModule ) { // checking if its a module
@@ -1559,12 +1566,24 @@ namespace das {
                     program->deriveAliases(logs,true,false);
                 if (!program->failed())
                     program->allocateStack(logs,true,false);
-                if (!program->failed())
+                if (!program->failed() && !(deferNesting && program->thisModule->macroNestsCompile))
                     program->makeMacroModule(logs);
                 times.macroModUsec = get_time_usec(timeM);
                 libGroup.compileTimes.macroModules += times.macroModUsec;
             }
         }
+    }
+
+    static void inferAndFinalizeModule ( const ProgramPtr & program, const string & fileName, const string & moduleName,
+            const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool exportAll, bool isDep,
+            const CodeOfPolicies & policies, ModuleCompileTimes & times, bool deferNestingMacroModule ) {
+        inferModule(program, fileName, moduleName, access, logs, libGroup, policies, times);
+        optimizeModule(program, fileName, moduleName, logs, libGroup, exportAll, policies, times);
+        program->compileLog = nullptr;
+        sort(program->errors.begin(), program->errors.end());
+        program->deduplicateErrors();
+        program->isCompiling = false;
+        buildMacroModule(program, fileName, moduleName, logs, libGroup, times, deferNestingMacroModule);
         daScriptEnvironment::getBound()->g_Program.reset();
         if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
         bool logModule = program->options.getBoolOption("log_module_compile_time",policies.log_module_compile_time);
@@ -1657,7 +1676,7 @@ namespace das {
             return program;
         }
         bool exportAll = isDep || policies.export_all;
-        inferAndFinalizeModule(program, fileName, moduleName, access, logs, libGroup, exportAll, isDep, policies, scope.times);
+        inferAndFinalizeModule(program, fileName, moduleName, access, logs, libGroup, exportAll, isDep, policies, scope.times, false);
         return program;
     }
 
@@ -1751,6 +1770,14 @@ namespace das {
             "module " + mod.moduleName + " is required", "", LineInfo(),
                 CompilationError::missing_module_name);
         return false;
+    }
+
+    void buildDeferredMacroModule ( const ProgramPtr & program, ModuleGroup & libGroup, TextWriter & logs ) {
+        CompileEnvScope envScope(daScriptEnvironment::getBound());
+        gc_active_scope gcScope(program->thisModule->module_gc_root.get());
+        daScriptEnvironment::getBound()->g_Program = program;
+        program->thisModuleGroup = &libGroup;
+        program->makeMacroModule(logs);
     }
 
     void addNewModules ( ModuleGroup & libGroup, ProgramPtr program ) {
@@ -2078,40 +2105,6 @@ namespace das {
         return res;
     }
 
-    static ProgramPtr parseRequiredModules ( const vector<ModuleInfo> & req, const FileAccessPtr & access, TextWriter & logs,
-            ModuleGroup & libGroup, CodeOfPolicies & policies, bool promoteShared, const ModuleCacheStream & stream = ModuleCacheStream() ) {
-        for ( auto & mod : req ) {
-            auto maybeMod = libGroup.findModule(mod.moduleName);
-            if ( maybeMod ) {
-                maybeMod->fromExtraDependency &= mod.extraDepModule;
-                continue;
-            }
-            auto program = parseDaScriptEx(mod.fileName, mod.moduleName, access, logs, libGroup, true, true, policies, true, stream);
-            policies.threadlock_context |= program->options.getBoolOption("threadlock_context",false);
-            if ( program->failed() ) {
-                return program;
-            }
-            if ( policies.fail_on_lack_of_aot_export && !aotModuleHasName(program, mod) ) {
-                return program;
-            }
-            if ( program->thisModule->name.empty() ) {
-                program->library.renameModule(program->thisModule.get(),mod.moduleName);
-                program->thisModule->wasParsedNameless = true;
-            }
-            program->thisModule->fileName = mod.fileName;
-            program->thisModule->fromExtraDependency = mod.extraDepModule;
-            if ( promoteShared && program->promoteToBuiltin ) {
-                if ( canShareModule(program) ) {
-                    program->thisModule->promoteToBuiltin(access, mod.requireName);
-                } else {
-                    return program;
-                }
-            }
-            addNewModules(libGroup, program);
-        }
-        return nullptr;
-    }
-
     ProgramPtr parseDaScriptWithPrerequisits ( const string & fileName,
                                               const FileAccessPtr & access,
                                               TextWriter & logs,
@@ -2132,7 +2125,7 @@ namespace das {
         if ( auto failed = checkModuleNamesUnique(walk.req, logs) ) {
             return failed;
         }
-        if ( auto failed = parseRequiredModules(walk.req, access, logs, libGroup, policies, false) ) {
+        if ( auto failed = compileModules(walk.req, access, logs, libGroup, policies, false) ) {
             return failed;
         }
         return parseDaScriptNoInfer(fileName, modName, access, logs, libGroup, policies.export_all, false, policies);
@@ -2197,7 +2190,7 @@ namespace das {
             }
             if ( ok ) {
                 disableSerializationOnDebugger(walk.req, stream);
-                if ( auto failed = parseRequiredModules(walk.req, access, logs, libGroup, policies, true, stream) ) {
+                if ( auto failed = compileModules(walk.req, access, logs, libGroup, policies, true, false, stream) ) {
                     logProgramErrors(failed, logs);
                     ok = false;
                 }
@@ -2282,7 +2275,7 @@ namespace das {
         if ( auto failed = checkModuleNamesUnique(walk.req, logs) ) {
             return failed;
         }
-        return parseRequiredModules(walk.req, access, logs, libGroup, policies, true);
+        return compileModules(walk.req, access, logs, libGroup, policies, true);
     }
 
     static const char * refuseBuiltModuleName ( const string & name, ModuleGroup & libGroup ) {
@@ -2371,7 +2364,15 @@ namespace das {
                 }
             }
             // src/ast/ARCHITECTURE_SHARED.md#shared-promotion
-            if ( auto failed = parseRequiredModules(walk.req, access, logs, libGroup, policies, !policies.no_optimizations || policies.promote_shared_unoptimized, stream) ) {
+            bool promoteShared = !policies.no_optimizations || policies.promote_shared_unoptimized;
+            bool logDag = false;
+            if ( auto fi = access->getFileInfo(fileName) ) {
+                const char * src = nullptr;
+                uint32_t len = 0;
+                fi->getSourceAndLength(src, len);
+                logDag = src && detectOptionFlag(src, len, "log_compile_dag");
+            }
+            if ( auto failed = compileModules(walk.req, access, logs, libGroup, policies, promoteShared, logDag, stream) ) {
                 return failed;
             }
             if ( stream.read && !policies.serialize_main_module ) stream.read->seenNewModule = true;
@@ -2413,7 +2414,7 @@ namespace das {
                 const char * src = nullptr;
                 uint32_t len = 0;
                 fi->getSourceAndLength(src, len);
-                if ( src && detectOptionLogRequire(src, len) ) {
+                if ( src && detectOptionFlag(src, len, "log_require") ) {
                     logRequireDependencyGraph(fileName, access, modName, libGroup, logs);
                 }
             }

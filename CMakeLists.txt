@@ -1329,6 +1329,7 @@ SET(LIBDASCRIPT_COMPILER_SRC
     src/simulate/simulate_visit.cpp
     src/simulate/simulate_container_nodes.cpp
     src/simulate/simulate_print.cpp
+    src/ast/ast_compile_dag.cpp
     src/ast/ast_optimize.cpp
     src/ast/ast_const_folding.cpp
     src/ast/ast_effects.cpp
