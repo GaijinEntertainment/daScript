@@ -846,6 +846,10 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | vec_swizzle.das | Vector swizzle - .xy, .yx, .xyz, struct member vectors | |
 | vector_fields.das | float4 .r/.g/.b/.a fields and swizzle | |
 | with_statement.das | `with (struct) { field = val }` block scoping | |
+| test_addr_argument_side_effects.das | A call dropped as unused keeps the side effects of its `addr(arr[i++])`, field-of-call and computed-index arguments | |
+| test_fold_mutual_recursion_global.das | A constant-argument call into a call cycle that reads a module global is not folded at compile time | |
+| _fixture_nested_while_private.das | *(helper)* a private function ending in a `while (true)` whose inner `while (true)` returns | |
+| test_nested_while_private.das | Runs `_fixture_nested_while_private.das` as a child under a deadline - the inlined return leaves both loops | |
 
 ## loops/
 

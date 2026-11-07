@@ -404,6 +404,7 @@ SET(AOT_SUBSET_DASLIB_MODULE_FILES
     daslib/templates.das
     daslib/rtti.das
     daslib/archive.das
+    daslib/fio.das
 )
 
 # Language test module files (libraries required by tests)

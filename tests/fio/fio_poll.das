@@ -2,7 +2,6 @@ options gen2
 options no_aot
 
 require dastest/testing_boost public
-require math
 require daslib/fio
 require daslib/strings_boost
 
@@ -13,11 +12,6 @@ def das_exe() : string {
     let args <- get_command_line_arguments()
     return empty(args) ? "" : args[0]
 }
-
-//! a deadline on a child, never a claim about speed: a Debug host compiles what the child
-//! requires several times slower
-def guard(seconds : float) : float =>
-    shared_module_extension() == "_debug.shared_module" ? min(seconds * 3.0, 300.0) : seconds
 
 [test]
 def test_fpoll_pipe(t : T?) {
@@ -40,9 +34,9 @@ def test_fpoll_pipe(t : T?) {
             funbuffered(f)
             silent = !fpoll(f, 200)
             fwrite(release, "go")
-            ready = fpoll(f, int(guard(30.0) * 1000.0))
+            ready = fpoll(f, int(child_deadline(30.0) * 1000.0))
             line = fgets(f)
-            at_eof = fpoll(f, int(guard(30.0) * 1000.0))
+            at_eof = fpoll(f, int(child_deadline(30.0) * 1000.0))
             let tail = fgets(f)
             at_eof = at_eof && empty(tail)
         }))
