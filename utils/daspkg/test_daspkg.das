@@ -59,6 +59,28 @@ def moved_bundle_exe_path(moved_root, name : string) : string {
 }
 
 [test]
+def test_native_build_blocker(t : T?) {
+    t |> run("a native build is refused on a headerless SDK, allowed with daScript.h") @(t : T?) {
+        let tmp = create_temp_directory_result("daspkg headers ")
+        if (!(tmp is value)) {
+            t |> failure("could not create temp directory: {tmp as error}")
+            return
+        }
+        let root = tmp as value
+        let blocker = native_build_blocker(root)
+        t |> success(!empty(blocker), "a headerless SDK is a blocker")
+        t |> success(find(blocker, "include/daScript") >= 0, "the message names the missing tree")
+        t |> success(find(blocker, root) >= 0, "the message names the SDK it looked at")
+        mkdir(path_join(root, "include"))
+        mkdir(path_join(root, "include/daScript"))
+        fwrite(path_join(root, "include/daScript/daScript.h"), "#pragma once")
+        t |> equal(native_build_blocker(root), "", "the header set clears the blocker")
+        let cleanup = rmdir_rec_result(root)
+        t |> success(cleanup is value && cleanup as value, "temp dir removed")
+    }
+}
+
+[test]
 def test_ship_tools(t : T?) {
     t |> run("a tool ships by bare name from bin/, then bin/Release/, with the platform's exe suffix; a missing tool fails the release") @(t : T?) {
         let tmp = create_temp_directory_result("daspkg tools ")
