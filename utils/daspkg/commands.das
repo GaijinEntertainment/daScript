@@ -1106,9 +1106,22 @@ def cmd_update_all(root : string; is_global : bool = false; force : bool = false
     return rc
 }
 
+//! Why `das_root` cannot build a native package, or "" when it can.
+def native_build_blocker(das_root : string) : string {
+    if (fexist(path_join(das_root, "include/daScript/daScript.h"))) return ""
+    return ("the daslang SDK at {das_root} carries no C++ headers (include/daScript), " +
+        "so native packages cannot build against it. " +
+        "Install the full SDK bundle, brew or scoop instead.")
+}
+
 def build_package(pkg_dir : string) : bool {
     let build_dir = "{pkg_dir}/_build"
     let das_root = get_das_root()
+    let blocker = native_build_blocker(das_root)
+    if (!empty(blocker)) {
+        to_log(LOG_ERROR, "Error: {blocker}\n")
+        return false
+    }
 
     // Configure — pass DASLANG_DIR so the package can find headers and libs
     var output : string
