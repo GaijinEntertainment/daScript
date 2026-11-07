@@ -300,6 +300,13 @@ class CoverageMacro : AstVisitor {
         return !st.flags.isTemplate
     }
 
+    def override canVisitGlobalVariable(arg : Variable?) : bool {
+        //! Skips global initializers - a block literal in one sits outside
+        //! any function, so its blocks would reach the instrumentation
+        //! with a null or stale `func`.
+        return false
+    }
+
     def override canVisitFunction(fun : Function?) : bool {
         if (fun.flags.init || fun.flags.builtIn) return false
         for (ann in fun.annotations) {
