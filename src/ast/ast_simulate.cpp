@@ -155,6 +155,10 @@ namespace das
 
         SimulateVisitor ( Context & ctx ) : context(ctx) {}
 
+        struct LabelScope { const Expression * root; const uint8_t * known = nullptr; uint32_t total = 0; };
+        vector<LabelScope> labelScopes;
+        void sv_collectKnownLabels();
+
         virtual bool canVisitLabel ( const ExprLabel * ) override { return false; }
         virtual bool canVisitReader ( const ExprReader * ) override { return false; }
 
@@ -178,6 +182,7 @@ namespace das
 
         // Simulate an expression subtree via the visitor walk
         SimNode * simulateExpression ( const Expression * expr ) {
+            if ( labelScopes.empty() ) labelScopes.push_back({ expr });
             expr->visit(*this);
             return getE(expr);
         }
@@ -321,6 +326,7 @@ namespace das
 
         void visit(const ExprBlock * expr) override;
         void visit(const ExprLet * expr) override;
+        void preVisit(const ExprMakeBlock * expr) override;
         void visit(const ExprMakeBlock * expr) override;
         void visit(const ExprMakeVariant * expr) override;
         void visit(const ExprMakeStruct * expr) override;
@@ -1181,11 +1187,35 @@ namespace das
 
     // goto
 
+    struct FunctionLabelCollector : ConstVisitor {
+        vector<int32_t> labels;
+        virtual bool canVisitMakeBlockBody ( const ExprMakeBlock * ) override { return false; }
+        virtual void visit ( const ExprLabel * expr ) override {
+            labels.push_back(expr->label);
+        }
+    };
+
+    void SimulateVisitor::sv_collectKnownLabels() {
+        auto & scope = labelScopes.back();
+        if ( scope.known ) return;
+        FunctionLabelCollector collector;
+        scope.root->visit(collector);
+        int32_t maxLabel = -1;
+        for ( auto label : collector.labels ) maxLabel = das::max(maxLabel, label);
+        scope.total = das::max(uint32_t(maxLabel + 1), 1u);
+        auto known = (uint8_t *) context.code->allocate(scope.total);
+        memset(known, 0, scope.total);
+        for ( auto label : collector.labels ) if ( label>=0 ) known[label] = 1;
+        scope.known = known;
+    }
+
     void SimulateVisitor::visit(const ExprGoto * expr) {
         const auto &at = expr->at;
         SimNode * result = nullptr;
         if ( expr->subexpr ) {
-            result = context.code->makeNode<SimNode_Goto>(at, getE(expr->subexpr));
+            sv_collectKnownLabels();
+            const auto & scope = labelScopes.back();
+            result = context.code->makeNode<SimNode_Goto>(at, getE(expr->subexpr), scope.known, scope.total);
         } else {
             result = context.code->makeNode<SimNode_GotoLabel>(at, expr->label);
         }
@@ -1368,7 +1398,12 @@ namespace das
         setE(expr, nullptr);
     }
 
+    void SimulateVisitor::preVisit(const ExprMakeBlock * expr) {
+        labelScopes.push_back({ expr->block });
+    }
+
     void SimulateVisitor::visit(const ExprMakeBlock * expr) {
+        labelScopes.pop_back();
         const auto &at = expr->at;
         gc_guard gc_scope;
         auto blk = static_cast<ExprBlock*>(expr->block);

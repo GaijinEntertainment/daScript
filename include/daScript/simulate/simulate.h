@@ -106,6 +106,13 @@ namespace das
         const LineInfo * getLineInfo() const;
     };
 
+    template <typename TT>
+    __forceinline TT * copyNodeArray ( NodeAllocator * code, const TT * src, uint32_t count ) {
+        TT * dst = (TT *) code->allocate(count * sizeof(TT));
+        memcpy(dst, src, count * sizeof(TT));
+        return dst;
+    }
+
     struct DAS_API SimNode {
         SimNode ( const LineInfo & at ) : debugInfo(at) {}
         virtual SimNode * copyNode ( Context & context, NodeAllocator * code );
@@ -187,9 +194,11 @@ namespace das
         if (context.stopFlags & EvalFlags::stopForContinue) { \
             context.stopFlags &= ~EvalFlags::stopForContinue; \
             howtocontinue; \
-        } else if (context.stopFlags&EvalFlags::jumpToLabel && context.gotoLabel<this->totalLabels) { \
-            if ((body=this->list+this->labels[context.gotoLabel])>=this->list) { \
+        } else if (context.stopFlags&EvalFlags::jumpToLabel) { \
+            uint32_t labelOfs = this->ownedLabel(context.gotoLabel); \
+            if ( labelOfs!=-1U ) { \
                 context.stopFlags &= ~EvalFlags::jumpToLabel; \
+                body = this->list + labelOfs; \
                 goto beginLabel; \
             } \
         } \
@@ -1188,6 +1197,9 @@ __forceinline void profileNode ( SimNode * node ) {
         uint64_t annotationDataSid = 0;
         uint32_t *  labels = nullptr;
         uint32_t    totalLabels = 0;
+        __forceinline uint32_t ownedLabel ( uint32_t label ) const {
+            return label<totalLabels ? labels[label] : -1U;
+        }
     };
 
 #if DAS_DEBUGGER

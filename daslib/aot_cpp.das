@@ -1192,6 +1192,13 @@ class public BlockVariableCollector : AstVisitor {
             bfinal = getTopBlock();
             variables[bfinal] |> push(variable);
             moved |> insert(variable);
+        } elif (stack[length(stack) - 1].maxLabelIndex != -1) {
+            let blabelled = stack[length(stack) - 1]
+            if (isBlockLet(variable)) {
+                blockLets[blabelled] |> push(variable);
+            }
+            variables[blabelled] |> push(variable);
+            moved |> insert(variable);
         }
         renameVariable(variable);
     }

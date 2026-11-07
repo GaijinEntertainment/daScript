@@ -198,7 +198,7 @@ namespace das {
                     }
                     continue;
                 }
-                if ( skipTilLabel ) continue;
+                if ( skipTilLabel && !expr->rtti_isLet() ) continue;
                 if ( expr->rtti_isGoto() ) {
                     list.push_back(expr);
                     skipTilLabel = true;

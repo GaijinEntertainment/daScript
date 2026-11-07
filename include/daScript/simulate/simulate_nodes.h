@@ -2834,15 +2834,23 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     // GOTO LABEL
     struct SimNode_Goto : SimNode {
-        SimNode_Goto ( const LineInfo & at, SimNode * lab ) : SimNode(at), subexpr(lab) {}
+        SimNode_Goto ( const LineInfo & at, SimNode * lab, const uint8_t * known, uint32_t totalKnown )
+            : SimNode(at), subexpr(lab), knownLabels(known), totalKnownLabels(totalKnown) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override;
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
-            context.gotoLabel = subexpr->evalInt(context);
+            int32_t label = subexpr->evalInt(context);
+            if ( knownLabels && (uint32_t(label)>=totalKnownLabels || !knownLabels[label]) ) {
+                context.throw_error_at(debugInfo, "invalid label index %i", label);
+            }
+            context.gotoLabel = label;
             context.stopFlags |= EvalFlags::jumpToLabel;
             return v_zero();
         }
         SimNode * subexpr = nullptr;
+        const uint8_t * knownLabels = nullptr;
+        uint32_t totalKnownLabels = 0;
     };
 
     // BREAK

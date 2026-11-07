@@ -7,10 +7,11 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_CAPI.md`, `ARCHITECTURE_CURSOR.md`, `ARCH
 `ARCHITECTURE_SHADER.md`, `ARCHITECTURE_SQL_LINQ.md`, `ARCHITECTURE_SYNTAX.md`. A diff touching the
 linq family - `linq*.das`, `sql_*.das` - applies `REVIEW_LINQ.md` too. A diff that changes
 compile-time AST-building code - a class deriving an `Ast*Annotation` or `Ast*Macro`, an
-`AstVisitor` a macro or an annotation runs at compile time, a `[macro_function]`, or any function
-that calls `qmacro*`, `apply_template`, `macro_error`, or `macro_sticky_error` - applies
-`REVIEW_MACROS.md` too. A diff touching `daspkg.das` - the functions a `.das_package` manifest body
-calls - applies `utils/daspkg/REVIEW.md` (repo root) too. A diff touching `shader_lingua_franca.das`
+`AstVisitor` a macro or an annotation runs at compile time (the `aot_cpp.das` visitors included),
+a `[macro_function]`, or any function that calls `qmacro*`, `apply_template`, `macro_error`, or
+`macro_sticky_error` - applies `REVIEW_MACROS.md` too. A diff touching `daspkg.das` - the
+functions a `.das_package` manifest body calls - applies `utils/daspkg/REVIEW.md` (repo root)
+too. A diff touching `shader_lingua_franca.das`
 or `shader_emit_common.das` - the declarations and helpers the shader emitters share - applies
 `modules/REVIEW_SHADER_EMITTERS.md` (repo root) too. A diff touching a file listed in `RULE_MODULES`
 of `utils/lint/REVIEW.das` (repo root) applies `utils/lint/REVIEW.md` (repo root) too.
@@ -52,12 +53,12 @@ scoped to that construct.** State an early return leaves set poisons the next co
 stack - a diff that saves it in one scalar field is a defect.** A saved value kept in a scalar
 survives into the sibling construct's exit path and unbalances it.
 
-**A diff that adds or changes a daslib fact (code or a `//!` contract), or what a C++ name
-`aot_cpp.das` writes into generated code does or returns, that code at a second site must agree
-with records the pair in an `ARCHITECTURE*.md` of this folder, naming both sides by symbol name,
-when nothing fails on a mismatch: no lint, no compile error, no default-suite test (what `dastest`
-runs over `tests/` (repo root) with no flags, an environment-gated or nightly-only test
-excluded).** The second site can sit inside or outside this repository; a statement about a family
+**A diff that adds or changes a daslib fact a second site must agree with - code or a `//!`
+contract here, or what a C++ name `aot_cpp.das` writes into generated code does or returns -
+where no lint, compile error or default-suite test fails on a mismatch, records the pair in an
+`ARCHITECTURE*.md` of this folder, naming both sides by symbol name.** The default suite is what
+`dastest` runs over `tests/` (repo root) with no flags, an environment-gated or nightly-only test
+excluded. The second site can sit inside or outside this repository; a statement about a family
 of symbols is not a pair.
 
 **A diff that records a pair puts it in the section that holds its daslib file (for a C++ name, the

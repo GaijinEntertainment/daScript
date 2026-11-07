@@ -43,11 +43,12 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_DASBIND.md`.
   descriptor - lacks every effect the recorder did not see.
 
 - **A diff that moves a bind between modules - any `addExtern*` call whose module changes, or a
-  builtin whose `vector<T>` functions follow a type to another module - bumps
-  `LLVM_JIT_CODEGEN_VERSION` in `modules/dasLLVM/daslib/llvm_jit_plan.das` (repo root), in the
-  same change.** The JIT's DLL cache key folds the codegen version and each function's AST
-  hash, never the module an extern lives in, so a cached DLL binds the old name and crashes on
-  the hit.
+  builtin whose `vector<T>` functions follow a type to another module - or changes the name a
+  bind registers under, the name string a `ManagedVectorAnnotation` or
+  `ManagedStructureAnnotation` is constructed with included, bumps `LLVM_JIT_CODEGEN_VERSION` in
+  `modules/dasLLVM/daslib/llvm_jit_plan.das` (repo root), in the same change.** The JIT's DLL
+  cache key folds the codegen version and each function's AST hash, never the module an extern
+  lives in or the name it binds under, so a cached DLL binds the old name and crashes on the hit.
 
 - **A diff that changes any flag a bind sets on its `Function` - `sideEffectFlags` included -
   bumps `LLVM_JIT_CODEGEN_VERSION` in `modules/dasLLVM/daslib/llvm_jit_plan.das` (repo root), in
