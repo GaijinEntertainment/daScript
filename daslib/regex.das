@@ -70,7 +70,14 @@ struct ReNode {
     min_rep : int
     max_rep : int
     lazy    : bool
-    @do_not_convert tail : uint8 const?
+    @do_not_convert tail : uint8 const?  //! match end on the path tried; a group ends with its body
+    @do_not_convert sub_end : ReNode?  //! quantifier: closes one pass of the sub, `next` back here
+    @do_not_convert pass_mode : PassMode
+    @do_not_convert reach_target : uint8 const?  //! quantifier: the stop a reaching pass must hit
+    @do_not_convert pass_stops : array<uint8 const?>  //! quantifier: collected stops, best first
+    @do_not_convert rest_first : bool  //! quantifier: the rest of the pattern before another pass
+    @do_not_convert ends_pass : bool  //! a quantifier's `sub_end`: reaching it ends one pass
+    @do_not_convert single_path : bool  //! quantifier: no choice in the sub, so one set of stops
 }
 
 struct Regex {
@@ -576,7 +583,7 @@ def private mk_union(var left, right : ReNode?) : ReNode? {
         return left
     } elif (right.op == ReOp.Union) {
         right.at.x = left.at.x
-        push(right.all, left)
+        push(right.all, left, 0)
         return right
     } else {
         return new ReNode(op = ReOp.Union, all <- array<ReNode?>(left, right), at = range(left.at.x, right.at.y))
@@ -611,6 +618,12 @@ def private  re_re(expr : string; offset : int) : MaybeReNode {
     return maybe(last)
 }
 
+def private mk_quantifier(op : ReOp; var sub : ReNode?; min_rep, max_rep : int; is_lazy : bool;
+                          at : range) : MaybeReNode {
+    return maybe(new ReNode(op = op, subexpr = sub, min_rep = min_rep, max_rep = max_rep,
+                            lazy = is_lazy, at = at))
+}
+
 def private re_basic(expr : string; offset : int) : MaybeReNode {  // nolint:STYLE037,STYLE038 - one arm per regex grammar production
     trace("re_basic", offset)
     if (eos(expr, offset)) return nada()
@@ -631,7 +644,7 @@ def private re_basic(expr : string; offset : int) : MaybeReNode {  // nolint:STY
             is_lazy = true
             end_ofs++
         }
-        return maybe(new ReNode(op = ReOp.Star, subexpr = oelem as value, lazy = is_lazy, at = range(offset, end_ofs)))
+        return mk_quantifier(ReOp.Star, oelem as value, 0, -1, is_lazy, range(offset, end_ofs))
     } elif (ch == '+') {
         var end_ofs = next(oelem) + 1
         var is_lazy = false
@@ -639,7 +652,7 @@ def private re_basic(expr : string; offset : int) : MaybeReNode {  // nolint:STY
             is_lazy = true
             end_ofs++
         }
-        return maybe(new ReNode(op = ReOp.Plus, subexpr = oelem as value, lazy = is_lazy, at = range(offset, end_ofs)))
+        return mk_quantifier(ReOp.Plus, oelem as value, 1, -1, is_lazy, range(offset, end_ofs))
     } elif (ch == '?') {
         var end_ofs = next(oelem) + 1
         var is_lazy = false
@@ -647,7 +660,7 @@ def private re_basic(expr : string; offset : int) : MaybeReNode {  // nolint:STY
             is_lazy = true
             end_ofs++
         }
-        return maybe(new ReNode(op = ReOp.Question, subexpr = oelem as value, lazy = is_lazy, at = range(offset, end_ofs)))
+        return mk_quantifier(ReOp.Question, oelem as value, 0, 1, is_lazy, range(offset, end_ofs))
     } elif (ch == '{') {
         var rofs = next(oelem) + 1
         var min_val = 0
@@ -739,6 +752,15 @@ def private re_assign_next(var re : Regex) {
             node.right.next = node.next
         } elif (node.op == ReOp.Group) {
             node.subexpr.next = node.next
+        } elif (is_quantifier(node.op)) {
+            if (node.sub_end == null) {
+                node.sub_end = new ReNode(op = node.op, next = node, at = node.at, ends_pass = true)
+            }
+            node.subexpr.next = node.sub_end
+            let last_in_pass = is_last_in_pass(node)
+            let greedy_open = node.op == ReOp.Star || node.op == ReOp.Plus
+            node.rest_first = node.lazy || (!last_in_pass && greedy_open)
+            node.single_path = !has_choice(node.subexpr)
         } elif (node.op == ReOp.Lookahead || node.op == ReOp.NegativeLookahead) {
             node.subexpr.next = null
         } elif (node.op == ReOp.Union) {
@@ -748,6 +770,17 @@ def private re_assign_next(var re : Regex) {
         }
     }
 }
+
+def private is_quantifier(op : ReOp) : bool =>
+    op == ReOp.Star || op == ReOp.Plus || op == ReOp.Question || op == ReOp.Repeat
+
+def private has_choice(node : ReNode?) : bool {
+    if (node == null || node.op == ReOp.Lookahead || node.op == ReOp.NegativeLookahead) return false
+    if (node.op == ReOp.Union || is_quantifier(node.op)) return true
+    return has_choice(node.subexpr) || has_choice(node.left) || has_choice(node.right)
+}
+
+def private is_last_in_pass(node : ReNode?) : bool => node.next == null || node.next.ends_pass
 
 def private re_assign_groups(var re : Regex) {
     push(re.groups, (range(0), ""))
@@ -765,8 +798,12 @@ def private re_assign_groups(var re : Regex) {
     }
 }
 
-def private re_assign_match_functions(var re : Regex) {  // nolint:STYLE038 - one dispatch entry per node kind
+def private re_assign_match_functions(var re : Regex) {
     visit_top_down(re.root) $(var node) {  // nolint:STYLE037 - the ladder IS the node-kind dispatch table
+        if (node.sub_end != null) {
+            node.sub_end.fun2 = @@re_match2_quantifier_pass_end
+            node.sub_end.gen2 = @@re_gen2_sub_end
+        }
         if (node.op == ReOp.Char) {
             if (re.caseInsensitive) {
                 if (node.textLen == 1) {
@@ -801,31 +838,13 @@ def private re_assign_match_functions(var re : Regex) {  // nolint:STYLE038 - on
             node.fun2 = @@re_match2_concat
             node.gen2 = @@re_gen2_concat
         } elif (node.op == ReOp.Plus) {
-            if (node.lazy) {
-                node.fun2 = @@re_match2_plus_lazy
-            } elif (node.subexpr.op == ReOp.Set) {
-                node.cset = node.subexpr.cset
-                if (re.caseInsensitive) {
-                    case_fold_set(node.cset)
-                }
-                node.fun2 = @@re_match2_plus_set
-            } else {
-                node.fun2 = @@re_match2_plus
-            }
+            node.fun2 = @@re_match2_quantifier
             node.gen2 = @@re_gen2_plus
         } elif (node.op == ReOp.Star) {
-            if (node.lazy) {
-                node.fun2 = @@re_match2_star_lazy
-            } else {
-                node.fun2 = @@re_match2_star
-            }
+            node.fun2 = @@re_match2_quantifier
             node.gen2 = @@re_gen2_star
         } elif (node.op == ReOp.Question) {
-            if (node.lazy) {
-                node.fun2 = @@re_match2_question_lazy
-            } else {
-                node.fun2 = @@re_match2_question
-            }
+            node.fun2 = @@re_match2_quantifier
             node.gen2 = @@re_gen2_question
         } elif (node.op == ReOp.Group) {
             node.fun2 = @@re_match2_group
@@ -834,11 +853,7 @@ def private re_assign_match_functions(var re : Regex) {  // nolint:STYLE038 - on
             node.fun2 = @@re_match2_bos
             node.gen2 = @@re_gen2_bos
         } elif (node.op == ReOp.Repeat) {
-            if (node.lazy) {
-                node.fun2 = @@re_match2_repeat_lazy
-            } else {
-                node.fun2 = @@re_match2_repeat
-            }
+            node.fun2 = @@re_match2_quantifier
             node.gen2 = @@re_gen2_repeat
         } elif (node.op == ReOp.WordBoundary) {
             node.fun2 = @@re_match2_word_boundary
@@ -855,7 +870,32 @@ def private re_assign_match_functions(var re : Regex) {  // nolint:STYLE038 - on
         } else {
             panic("unsupported {node.op}")
         }
+        if (node.sub_end != null && node.op != ReOp.Group && is_one_character(node.subexpr)) {
+            node.cset = character_class(re, node.subexpr)
+            node.fun2 = @@re_match2_char_run
+        }
     }
+}
+
+def private is_one_character(sub : ReNode?) : bool =>
+    sub.op == ReOp.Set || sub.op == ReOp.Any || (sub.op == ReOp.Char && sub.textLen == 1)
+
+def private character_class(re : Regex; sub : ReNode?) : CharSet {
+    var cset : CharSet
+    if (sub.op == ReOp.Set) {
+        cset = sub.cset
+    } elif (sub.op == ReOp.Any) {
+        if (!re.dotAll) {
+            set_or_char(cset, '\n')
+        }
+        set_negative(cset)
+    } else {
+        set_or_char(cset, first_character(sub.text))
+    }
+    if (re.caseInsensitive) {
+        case_fold_set(cset)
+    }
+    return cset
 }
 
 def private ci_lower(ch : int) : int {
@@ -1015,8 +1055,9 @@ def private re_match2_concat(var regex : Regex; var node : ReNode?; str : uint8 
     }
     var left = node.left
     let oleft = invoke(left.fun2, regex, left, str)
-    if (oleft == null) return null
-    node.tail = node.right.tail
+    if (oleft != null) {
+        node.tail = node.right.tail
+    }
     return oleft
 }
 
@@ -1035,109 +1076,237 @@ def private re_match2_eos(var regex : Regex; var node : ReNode?; str : uint8 con
     }
 }
 
-[unsafe_deref]
-def private re_match2_question(var regex : Regex; var node : ReNode?; str : uint8 const?) : uint8 const? {
-    if (log_match_enabled) {
-        print("match question {str}\n")
-    }
-    var nsub = node.subexpr
-    var tail = invoke(nsub.fun2, regex, nsub, str)
-    if (tail == null) {
-        tail = str
-    }
-    node.tail = tail
+enum PassMode {
+    probe
+    collect
+    reach
+}
+
+[inline]
+def private re_continue(var regex : Regex; var node : ReNode?; str : uint8 const?) : uint8 const? {
+    node.tail = str
     var node2 = node.next
-    if (node2 != null) {
-        return invoke(node2.fun2, regex, node2, tail)
-    } else {
-        return tail
-    }
+    if (node2 == null || (node2.ends_pass && node2.next.pass_mode == PassMode.probe)) return str
+    return invoke(node2.fun2, regex, node2, str)
+}
+
+def private is_zero_width(op : ReOp) : bool {
+    return (op == ReOp.Eos || op == ReOp.Bos
+        || op == ReOp.WordBoundary || op == ReOp.NonWordBoundary)
 }
 
 [unsafe_deref]
-def private re_match2_plus(var regex : Regex; var node : ReNode?; str : uint8 const?) : uint8 const? {
-    if (log_match_enabled) {
-        print("match2 plus {str}\n")
-    }
-    if (*str == 0u8) return null
+def private pass_cannot_start(node : ReNode?; at : uint8 const?) : bool =>
+    *at == 0u8 && !is_zero_width(node.subexpr.op)
+
+[inline]
+def private re_run_pass(var regex : Regex; var node : ReNode?; str : uint8 const?; mode : PassMode;
+                        target : uint8 const?) : uint8 const? {
+    let outer_mode = node.pass_mode
+    let outer_target = node.reach_target
+    node.pass_mode = mode
+    node.reach_target = target
     var nsub = node.subexpr
-    var osym = invoke(nsub.fun2, regex, nsub, str)
-    if (osym == null) return null
-    var ofs = osym
-    var node2 = node.next
-    if (node2 != null) {
-        while (osym != null) {
-            node.tail = osym
-            var otail = invoke(node2.fun2, regex, node2, osym)
-            if (otail != null) return otail
-            osym = invoke(nsub.fun2, regex, nsub, osym)
-        }
-        return null
-    } else {
-        while (osym != null) {
-            ofs = osym
-            osym = invoke(nsub.fun2, regex, nsub, ofs)
-        }
-        node.tail = ofs
-        return ofs
-    }
+    let pass_stop = invoke(nsub.fun2, regex, nsub, str)
+    node.pass_mode = outer_mode
+    node.reach_target = outer_target
+    return pass_stop
 }
 
-[unsafe_deref]
-def private re_match2_plus_set(var regex : Regex; var node : ReNode?; str : uint8 const?) : uint8 const? {
-    if (log_match_enabled) {
-        print("match2 plus {str}\n")
+def private re_pass_stops(var regex : Regex; var node : ReNode?;
+                          str : uint8 const?) : array<uint8 const?> {
+    var outer_stops <- node.pass_stops
+    re_run_pass(regex, node, str, PassMode.collect, null)
+    var stops <- node.pass_stops
+    node.pass_stops <- outer_stops
+    return <- stops
+}
+
+[inline]
+def private re_probe_pass(var regex : Regex; var node : ReNode?; at : uint8 const?) : uint8 const? {
+    if (node.pass_mode != PassMode.probe) return re_run_pass(regex, node, at, PassMode.probe, null)
+    var nsub = node.subexpr
+    return invoke(nsub.fun2, regex, nsub, at)
+}
+
+[inline]
+def private re_retry_choices(var regex : Regex; var node : ReNode?; str : uint8 const?;
+                             found_pass : bool) : uint8 const? {
+    if (!found_pass || node.single_path) return null
+    return re_quantifier_search(regex, node, str)
+}
+
+[inline]
+def private re_quantifier_committed(var regex : Regex; var node : ReNode?;
+                                    str : uint8 const?) : uint8 const? {
+    var at = str
+    var passes = 0
+    while (passes < node.min_rep) {
+        if (pass_cannot_start(node, at)) return re_retry_choices(regex, node, str, passes > 0)
+        let further = re_probe_pass(regex, node, at)
+        if (further == null) return re_retry_choices(regex, node, str, passes > 0)
+        at = further
+        passes++
     }
-    if (*str == 0u8 || !is_char_in_set(int(*str), node.cset)) return null
-    unsafe {
-        var ofs = str + 1
-        var osym = ofs
-        var node2 = node.next
-        if (node2 != null) {
-            while (osym != null) {
-                node.tail = osym
-                var otail = invoke(node2.fun2, regex, node2, osym)
-                if (otail != null) return otail
-                if (*osym == 0u8 || !is_char_in_set(int(*osym), node.cset)) return null
-                osym++
-            }
-            return null
+    if (node.rest_first) return re_committed_rest_first(regex, node, str, at, passes)
+    return re_committed_longest_first(regex, node, str, at, passes)
+}
+
+[inline]
+def private re_committed_rest_first(var regex : Regex; var node : ReNode?; str : uint8 const?;
+                                    from : uint8 const?; done : int) : uint8 const? {
+    var at = from
+    var passes = done
+    while (true) {
+        let rest = re_continue(regex, node, at)
+        if (rest != null) return rest
+        let at_max = node.max_rep != -1 && passes >= node.max_rep
+        if (at_max) return re_retry_choices(regex, node, str, passes > 0)
+        let further = re_probe_pass(regex, node, at)
+        let stuck = further == null || further == at
+        if (stuck) return re_retry_choices(regex, node, str, passes > 0 || further != null)
+        at = further
+        passes++
+    }
+    return null
+}
+
+[inline]
+def private re_committed_longest_first(var regex : Regex; var node : ReNode?; str : uint8 const?;
+                                       from : uint8 const?; done : int) : uint8 const? {
+    var at = from
+    var passes = done
+    var found_empty = false
+    var stops : array<uint8 const?>
+    stops |> push(at)
+    while (node.max_rep == -1 || passes < node.max_rep) {
+        let further = re_probe_pass(regex, node, at)
+        found_empty = further == at
+        if (further == null || further == at) break
+        at = further
+        stops |> push(at)
+        passes++
+    }
+    for (i in range(length(stops))) {
+        let rest = re_continue(regex, node, stops[length(stops) - 1 - i])
+        if (rest != null) return rest
+    }
+    return re_retry_choices(regex, node, str, passes > 0 || found_empty)
+}
+
+struct private PassFrame {
+    at : uint8 const?
+    passes : int
+    stops : array<uint8 const?>
+    next_stop : int
+    continued : bool
+}
+
+def private re_pass_frame(var regex : Regex; var node : ReNode?; at : uint8 const?;
+                          passes : int) : PassFrame {
+    var frame = PassFrame(at = at, passes = passes)
+    let can_repeat = node.max_rep == -1 || passes < node.max_rep
+    if (can_repeat && !(passes < node.min_rep && pass_cannot_start(node, at))) {
+        frame.stops <- re_pass_stops(regex, node, at)
+    }
+    return <- frame
+}
+
+//! what is left to try from a frame depends only on where it stands and, until `min_rep` is
+//! reached or when `max_rep` bounds it, on how many passes it took
+def private pass_state_key(node : ReNode?; str, at : uint8 const?; passes : int) : int64 {
+    let seen = node.max_rep == -1 && passes > node.min_rep ? node.min_rep : passes
+    return ((at - str) << 32) | int64(seen)
+}
+
+//! a frame explored to the end without a match is recorded, and the same state reached along
+//! another sequence of passes is not explored again - without the record, nested quantifiers
+//! over a failing tail are exponential in the input
+def private re_quantifier_search(var regex : Regex; var node : ReNode?;
+                                 str : uint8 const?) : uint8 const? {
+    var frames : array<PassFrame>
+    var failed : table<int64>
+    frames |> emplace(re_pass_frame(regex, node, str, 0))
+    while (!empty(frames)) {
+        let top = length(frames) - 1
+        let at = frames[top].at
+        let passes = frames[top].passes
+        let stops_left = frames[top].next_stop < length(frames[top].stops)
+        if (passes >= node.min_rep && !frames[top].continued && (node.rest_first || !stops_left)) {
+            frames[top].continued = true
+            let rest = re_continue(regex, node, at)
+            if (rest != null) return rest
+        } elif (stops_left) {
+            let stop = frames[top].stops[frames[top].next_stop]
+            frames[top].next_stop++
+            let key = pass_state_key(node, str, stop, passes + 1)
+            if (passes >= node.min_rep && stop == at || failed |> key_exists(key)) continue
+            re_run_pass(regex, node, at, PassMode.reach, stop)
+            frames |> emplace(re_pass_frame(regex, node, stop, passes + 1))
         } else {
-            while (osym != null) {
-                ofs = osym
-                if (*osym == 0u8 || !is_char_in_set(int(*osym), node.cset)) break
-                osym++
-            }
-            node.tail = ofs
-            return ofs
+            failed |> insert(pass_state_key(node, str, at, passes))
+            frames |> erase(top)
         }
     }
+    return null
 }
 
 [unsafe_deref]
-def private re_match2_star(var regex : Regex; var node : ReNode?; str : uint8 const?) : uint8 const? {
+def private re_match2_quantifier(var regex : Regex; var node : ReNode?;
+                                 str : uint8 const?) : uint8 const? {
     if (log_match_enabled) {
-        print("match2 plus {str}\n")
+        print("match2 {node.op} \{{node.min_rep},{node.max_rep}\} {str}\n")
     }
-    var ofs = str
-    var node2 = node.next
-    var nsub = node.subexpr
-    if (node2 != null) {
-        while (ofs != null) {
-            node.tail = ofs
-            let oany = invoke(node2.fun2, regex, node2, ofs)
-            if (oany != null) return oany
-            ofs = invoke(nsub.fun2, regex, nsub, ofs)
+    return re_quantifier_committed(regex, node, str)
+}
+
+[unsafe_deref, unused_argument(regex)]
+def private re_match2_quantifier_pass_end(var regex : Regex; var node : ReNode?;
+                                          str : uint8 const?) : uint8 const? {
+    var owner = node.next
+    if (owner.pass_mode == PassMode.probe) return str
+    if (owner.pass_mode == PassMode.reach) return str == owner.reach_target ? str : null
+    if (owner.pass_stops |> find_index(str) < 0) {
+        owner.pass_stops |> push(str)
+    }
+    return null
+}
+
+[inline, unsafe_deref]
+def private in_char_run(node : ReNode?; at : uint8 const?) : bool =>
+    *at != 0u8 && is_char_in_set(int(*at), node.cset)
+
+[unsafe_deref]
+def private re_match2_char_run(var regex : Regex; var node : ReNode?;
+                               str : uint8 const?) : uint8 const? {
+    if (log_match_enabled) {
+        print("match2 char run {node.op} \{{node.min_rep},{node.max_rep}\} {str}\n")
+    }
+    unsafe {
+        var run = 0
+        while (run < node.min_rep) {
+            if (!in_char_run(node, str + run)) return null
+            run++
+        }
+        if (node.rest_first) {
+            while (true) {
+                let rest = re_continue(regex, node, str + run)
+                if (rest != null) return rest
+                let at_max = node.max_rep != -1 && run >= node.max_rep
+                if (at_max || !in_char_run(node, str + run)) return null
+                run++
+            }
+        }
+        let shortest = run
+        while ((node.max_rep == -1 || run < node.max_rep) && in_char_run(node, str + run)) {
+            run++
+        }
+        while (run >= shortest) {
+            let rest = re_continue(regex, node, str + run)
+            if (rest != null) return rest
+            run--
         }
         return null
-    } else {
-        var osym = ofs
-        while (osym != null) {
-            ofs = osym
-            osym = invoke(nsub.fun2, regex, nsub, ofs)
-        }
-        node.tail = ofs
-        return ofs
     }
 }
 
@@ -1147,12 +1316,13 @@ def private re_match2_group(var regex : Regex; var node : ReNode?; str : uint8 c
         print("match2 group {str}\n")
     }
     var nsub = node.subexpr
-    let osub = invoke(nsub.fun2, regex, nsub, str)
-    if (osub == null) return null
+    let result = invoke(nsub.fun2, regex, nsub, str)
+    if (result == null) return null
+    node.tail = nsub.tail
     if (node.index >= 0) {
         regex.groups[node.index]._0 = range(int(str - regex.match), int(node.subexpr.tail - regex.match))  // nolint:LINT020 - group slots are `range`; spans fit int, string length is int-guarded
     }
-    return osub
+    return result
 }
 
 [unsafe_deref]
@@ -1241,201 +1411,6 @@ def private re_match2_negative_lookahead(var regex : Regex; var node : ReNode?; 
         return invoke(node2.fun2, regex, node2, str)
     } else {
         return str
-    }
-}
-
-[unsafe_deref]
-def private re_match2_repeat(var regex : Regex; var node : ReNode?; str : uint8 const?) : uint8 const? {
-    if (log_match_enabled) {
-        print("match2 repeat \{{node.min_rep},{node.max_rep}\} {str}\n")
-    }
-    var nsub = node.subexpr
-    var ofs = str
-    for (_i in range(node.min_rep)) {
-        if (*ofs == 0u8 && nsub.op != ReOp.Eos && nsub.op != ReOp.Bos && nsub.op != ReOp.WordBoundary && nsub.op != ReOp.NonWordBoundary) return null
-        var osym = invoke(nsub.fun2, regex, nsub, ofs)
-        if (osym == null) return null
-        ofs = osym
-    }
-    var node2 = node.next
-    if (node.max_rep == -1) {
-        if (node2 != null) {
-            var positions : array<uint8 const?>
-            push(positions, ofs)
-            while (true) {
-                var osym = invoke(nsub.fun2, regex, nsub, ofs)
-                if (osym == null || osym == ofs) break
-                push(positions, osym)
-                ofs = osym
-            }
-            var pidx = length(positions) - 1
-            while (pidx >= 0) {
-                var pos = positions[pidx]
-                node.tail = pos
-                var otail = invoke(node2.fun2, regex, node2, pos)
-                if (otail != null) return otail
-                pidx--
-            }
-            return null
-        } else {
-            while (true) {
-                var osym = invoke(nsub.fun2, regex, nsub, ofs)
-                if (osym == null || osym == ofs) break
-                ofs = osym
-            }
-            node.tail = ofs
-            return ofs
-        }
-    } else {
-        let remaining = node.max_rep - node.min_rep
-        if (node2 != null) {
-            var positions : array<uint8 const?>
-            push(positions, ofs)
-            for (_i in range(remaining)) {
-                var osym = invoke(nsub.fun2, regex, nsub, ofs)
-                if (osym == null || osym == ofs) break
-                push(positions, osym)
-                ofs = osym
-            }
-            var pidx = length(positions) - 1
-            while (pidx >= 0) {
-                var pos = positions[pidx]
-                node.tail = pos
-                var otail = invoke(node2.fun2, regex, node2, pos)
-                if (otail != null) return otail
-                pidx--
-            }
-            return null
-        } else {
-            for (_i in range(remaining)) {
-                var osym = invoke(nsub.fun2, regex, nsub, ofs)
-                if (osym == null || osym == ofs) break
-                ofs = osym
-            }
-            node.tail = ofs
-            return ofs
-        }
-    }
-}
-
-[unsafe_deref]
-def private re_match2_question_lazy(var regex : Regex; var node : ReNode?; str : uint8 const?) : uint8 const? {
-    if (log_match_enabled) {
-        print("match question lazy {str}\n")
-    }
-    var node2 = node.next
-    if (node2 != null) {
-        node.tail = str
-        var otail = invoke(node2.fun2, regex, node2, str)
-        if (otail != null) return otail
-    }
-    var nsub = node.subexpr
-    var tail = invoke(nsub.fun2, regex, nsub, str)
-    if (tail == null) {
-        if (node2 == null) return str
-        return null
-    }
-    node.tail = tail
-    if (node2 != null) {
-        return invoke(node2.fun2, regex, node2, tail)
-    } else {
-        return str
-    }
-}
-
-[unsafe_deref]
-def private re_match2_star_lazy(var regex : Regex; var node : ReNode?; str : uint8 const?) : uint8 const? {
-    if (log_match_enabled) {
-        print("match2 star lazy {str}\n")
-    }
-    var ofs = str
-    var node2 = node.next
-    var nsub = node.subexpr
-    if (node2 != null) {
-        while (ofs != null) {
-            node.tail = ofs
-            let oany = invoke(node2.fun2, regex, node2, ofs)
-            if (oany != null) return oany
-            ofs = invoke(nsub.fun2, regex, nsub, ofs)
-        }
-        return null
-    } else {
-        node.tail = str
-        return str
-    }
-}
-
-[unsafe_deref]
-def private re_match2_plus_lazy(var regex : Regex; var node : ReNode?; str : uint8 const?) : uint8 const? {
-    if (log_match_enabled) {
-        print("match2 plus lazy {str}\n")
-    }
-    if (*str == 0u8) return null
-    var nsub = node.subexpr
-    var osym = invoke(nsub.fun2, regex, nsub, str)
-    if (osym == null) return null
-    var node2 = node.next
-    if (node2 != null) {
-        while (osym != null) {
-            node.tail = osym
-            var otail = invoke(node2.fun2, regex, node2, osym)
-            if (otail != null) return otail
-            osym = invoke(nsub.fun2, regex, nsub, osym)
-        }
-        return null
-    } else {
-        node.tail = osym
-        return osym
-    }
-}
-
-[unsafe_deref]
-def private re_match2_repeat_lazy(var regex : Regex; var node : ReNode?; str : uint8 const?) : uint8 const? {
-    if (log_match_enabled) {
-        print("match2 repeat lazy \{{node.min_rep},{node.max_rep}\} {str}\n")
-    }
-    var nsub = node.subexpr
-    var ofs = str
-    for (_i in range(node.min_rep)) {
-        if (*ofs == 0u8 && nsub.op != ReOp.Eos && nsub.op != ReOp.Bos && nsub.op != ReOp.WordBoundary && nsub.op != ReOp.NonWordBoundary) return null
-        var osym = invoke(nsub.fun2, regex, nsub, ofs)
-        if (osym == null) return null
-        ofs = osym
-    }
-    var node2 = node.next
-    if (node.max_rep == -1) {
-        if (node2 != null) {
-            while (true) {
-                node.tail = ofs
-                var otail = invoke(node2.fun2, regex, node2, ofs)
-                if (otail != null) return otail
-                var osym = invoke(nsub.fun2, regex, nsub, ofs)
-                if (osym == null || osym == ofs) break
-                ofs = osym
-            }
-            return null
-        } else {
-            node.tail = ofs
-            return ofs
-        }
-    } else {
-        let remaining = node.max_rep - node.min_rep
-        if (node2 != null) {
-            for (i in range(remaining + 1)) {
-                node.tail = ofs
-                var otail = invoke(node2.fun2, regex, node2, ofs)
-                if (otail != null) return otail
-                if (i < remaining) {
-                    var osym = invoke(nsub.fun2, regex, nsub, ofs)
-                    if (osym == null || osym == ofs) break
-                    ofs = osym
-                }
-            }
-            return null
-        } else {
-            node.tail = ofs
-            return ofs
-        }
     }
 }
 
@@ -2065,6 +2040,12 @@ def private re_gen2_eos(var node : ReNode?; var rnd : ReGenRandom; var str : Str
     if (node2 != null) {
         invoke(node2.gen2, node2, rnd, str)
     }
+}
+
+[unused_argument(node, rnd, str)]
+def private re_gen2_sub_end(var node : ReNode?; var rnd : ReGenRandom;
+                            var str : StringBuilderWriter) : void {
+    pass
 }
 
 def private re_gen2_question(var node : ReNode?; var rnd : ReGenRandom; var str : StringBuilderWriter) : void {

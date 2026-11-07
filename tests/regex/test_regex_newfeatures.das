@@ -2,19 +2,7 @@ options gen2
 options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 require dastest/testing_boost public
-require daslib/regex
-
-// helper: match from start, return end position or -1
-def regex_test_match(pattern, input : string) : int {
-    var re <- regex_compile(pattern)
-    return regex_match(re, input)
-}
-
-// helper: match with offset
-def regex_test_match(pattern, input : string; offset : int) : int {
-    var re <- regex_compile(pattern)
-    return regex_match(re, input, offset)
-}
+require _regex_test_helpers
 
 // ── ^ anchor (beginning of string) ─────────────────────────
 

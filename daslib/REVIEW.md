@@ -55,11 +55,11 @@ survives into the sibling construct's exit path and unbalances it.
 
 **A diff that adds or changes a daslib fact a second site must agree with - code or a `//!`
 contract here, or what a C++ name `aot_cpp.das` writes into generated code does or returns -
-where no lint, compile error or default-suite test fails on a mismatch, records the pair in an
-`ARCHITECTURE*.md` of this folder, naming both sides by symbol name.** The default suite is what
-`dastest` runs over `tests/` (repo root) with no flags, an environment-gated or nightly-only test
-excluded. The second site can sit inside or outside this repository; a statement about a family
-of symbols is not a pair.
+where no lint, compile error or test that every flagless `dastest` run over `tests/` (repo
+root) executes fails on a mismatch, records the pair in an `ARCHITECTURE*.md` of this folder,
+naming both sides by symbol name.** The second site may be outside this repository. A property
+every member of a set must hold is not a pair; two named sites that must list the same members
+are.
 
 **A diff that records a pair puts it in the section that holds its daslib file (for a C++ name, the
 emitter file that writes it), or in a new section of `ARCHITECTURE.md` or a companion when no
@@ -75,10 +75,9 @@ changes what that name names so that the entry's claim stops holding, changes th
 change.** The doc is read as the current tree, and a name that no longer resolves or a claim that no
 longer holds is trusted until someone reads the code.
 
-**A diff adds an architecture-doc entry only for a fact that no lint, compile error, or
-default-suite test (what `dastest` runs over `tests/` (repo root) with no flags, an
-environment-gated or nightly-only test excluded) reports when it goes false, and that the code's own
-names do not make self-evident.**
+**A diff adds an architecture-doc entry only for a fact that no lint, compile error, or test
+that every flagless `dastest` run over `tests/` (repo root) executes reports when it goes false, and
+that the code's own names do not make self-evident.**
 
 **A diff that changes `build_lint_macro_disabled` (`lint_config.das`) keeps its steps in this order,
 each overriding the ones before it: the default-off seeding, the repo `.lint_config` `off`
@@ -167,10 +166,15 @@ suffix, and a run that skips it spells structs differently from a run that fille
 `for (ch in string)` yields a SIGNED byte under JIT, so a raw index reads out of bounds for every
 byte >= 0x80.
 
+**A diff that adds a pointer field marked `@do_not_delete`, or marks an existing one, whose
+pointee is a daslang struct, class or container names, on that field's `//!` line, what owns and
+frees the pointee - a field, a variable or the caller.** `@do_not_delete` says someone else frees
+the pointee, so a pointee nothing owns leaks once per instance.
+
 **A diff that adds or changes a parser result that borrows a view into a tree the parser allocated
-names the field that owns the tree and ships the function the caller runs to free it.** The tree
-must outlive the caller's read, and daslang finalizes neither a raw pointer field nor a local
-container at scope exit, so a borrowed view with no named owner leaks the whole document per call.
+names the field that owns the tree and ships the function the caller runs to free it.** daslang
+finalizes neither a raw pointer field nor a local container at scope exit, so a view with no named
+owner leaks the whole document per call.
 
 **Never use the throwing, one-argument string forms of `int64`, `uint64` or `double` in a lexer or
 decoder reachable from a file, a socket, or a model file - use the overload that returns
