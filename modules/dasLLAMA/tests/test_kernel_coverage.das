@@ -1232,7 +1232,7 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the Bergamot translation driver's step and attention stamps: the Vulkan serving census loads no translation model (its
     // Bergamot row, `cov_tower_bergamot`, serves on the Metal seat alone); their coverage is test_vkt_nmt and test_vkt_nmt_attn
     // in test_vulkan_tower_kernels.das, the driver's whole sentence test_nmt_device in test_nmt.das
-    "nmt_embed_cls", "nmt_ssru_cls", "nmt_pick_cls", "nmt_attn_part_cls", "nmt_attn_comb_cls",
+    "nmt_embed_cls_spv", "nmt_ssru_cls_spv", "nmt_pick_cls_spv", "nmt_attn_part_cls_spv", "nmt_attn_comb_cls_spv",
     // the KHR flash-attention tile's 256 and 512 heads: the mode sweep's mm row reaches the 64 and 128 heads through the
     // zoo's qwens; no zoo row carries a 512 head or an ungated or capped 256 head (the gemmas sit above the tier); the
     // gated 256 keys are the zoo's Qwen3.5-9B's, which the census runs at the box's coopmat mode - cm2 on the pod, so its
