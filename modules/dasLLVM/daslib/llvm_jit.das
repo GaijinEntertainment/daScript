@@ -5781,7 +5781,7 @@ class public LlvmJitVisitor : AstVisitor {
             res = LLVMBuildPointerCast(g_builder, subE, type_to_llvm_type(ect), "cast_p")
         } elif (ect.baseType == Type.tFixedArray && subT.isPointer) {
             res = LLVMBuildPointerCast(g_builder, subE, LLVMPointerType(type_to_llvm_type(ect), 0u), "")
-        } elif (is_int64_or_uint64(ect.baseType) && subT.isPointer) {
+        } elif (ect.isInteger && subT.isPointer) {
             res = LLVMBuildPtrToInt(g_builder, subE, type_to_llvm_type(ect), "cast_p_i")
         } elif (subT.baseType == Type.tFunction && (ect.isPointer || is_int64_or_uint64(ect.baseType))) {
             // reinterpret<uint64>(f)
