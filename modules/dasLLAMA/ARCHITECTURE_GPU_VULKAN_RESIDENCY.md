@@ -217,7 +217,10 @@ codec, the device-embed arm, the NextN head's arm, the per-layer-embedding proje
 reading as no-model; the restore is its exact inverse. The whole-model drop clears the same set
 and deselects the `"vulkan"` overrides, so a dropped model's prefill and decode take the plain
 CPU path and a later re-arm passes `resident_upload`'s no-active-override gate. The three carry
-the same set, which is why a model's device state never survives into the next. The upload
+the same set, which is why a model's device state never survives into the next.
+`vk_drop_model_state`'s sweep frees every `make_device_buf` result and clears `RDec` (the resident decode driver's
+state); it does not reach a driver's own handle to such a buffer, a `*_ready` latch or a profiler accumulator - a
+driver clears those in a listener it registers through `register_vk_drop_hook` - and pipelines survive the drop. The upload
 rail enforces it from its own side: a load that finds marks still installed - a model deleted
 without the drop, the shape every test process and single-model tool takes - drops that
 model's device state before uploading its own, carrying the load's MoE layer request across

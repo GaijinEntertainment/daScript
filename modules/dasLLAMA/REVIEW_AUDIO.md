@@ -8,27 +8,36 @@ An ASR family file is a `dasllama/` file holding one speech-recognition family's
 ASR model file is an ASR family file or `dasllama/dasllama_rnnt.das`, the transducer decode those
 families share. An audio-rail file is `dasllama/dasllama_tower.das`, `dasllama/dasllama_audio.das`,
 `dasllama/dasllama_audio_io.das`, `dasllama/dasllama_audio_embedder.das`,
-`dasllama/dasllama_asr_types.das`, `dasllama/dasllama_vad.das`, or an ASR model file. A
-licensed namer is a file that drives a family past the facade's verbs: the GPU family hooks
-(`dasllama/dasllama_metal_tower.das`, `dasllama/dasllama_metal_asr_dec.das`,
-`dasllama/dasllama_vulkan_tower.das`, `dasllama/dasllama_vulkan_asr_dec.das`),
-`benchmarks/asr/asr_bench.das`, `harness/pk_parity_probe.das`, `harness/cpu_asr_race.das` and
-`utils/dasllama-convert/main.das` (repo root).
+`dasllama/dasllama_asr_types.das`, `dasllama/dasllama_vad.das`, or an ASR model file.
 
-**In `dasllama/dasllama_asr.das` and `dasllama/dasllama_audio_embedder.das` - the union
-carriers that route each facade function to one family - a family arm computes nothing beyond the
-carrier's own state and forwards it in one call; any other work is a defect and goes in the family
-file.** The loader's format or
-family check that picks the arm is the dispatch, not an arm.
+The union carriers are `dasllama/dasllama_asr.das` and `dasllama/dasllama_audio_embedder.das`,
+which route each of their public functions to one family. A licensed namer is a file that drives a
+family past the union carriers' public functions: a GPU driver (`dasllama/dasllama_metal_*.das`,
+`dasllama/dasllama_vulkan_*.das`, `dasllama/dasllama_cuda_*.das`) or a chain body
+(`dasllama/dasllama_*_chains*.das`) that runs a family's encoder or decoder on a GPU with that
+family's model and state, and `benchmarks/asr/asr_bench.das`, `harness/pk_parity_probe.das`,
+`harness/cpu_asr_race.das` and `utils/dasllama-convert/main.das` (repo root).
+
+A family's own files are its family file, the union carriers, this folder's `tests/`, and the
+licensed namers.
+
+**In a union carrier, a family arm computes nothing beyond the carrier's own state, forwards it in
+one call, and at most maps that call's result to the carrier function's return type; any other
+work is a defect and goes in the family file.** The loader's format or family check that picks the
+arm is the dispatch, not an arm.
 
 **A diff that adds a family to a union carrier changes the carrier, for that family, only at its
 `require` line, union field, finalize line, kind value, loader dispatch check, and one-line arms.**
 
-**Code that names a public enum, class, variant or bitfield an ASR family file declares, or a
-public function of that file whose name does not contain the family's name (the file name after
-`dasllama_`), is a defect outside that family file, the union carriers `dasllama/dasllama_asr.das`
-and `dasllama/dasllama_audio_embedder.das`, `tests/`, and the licensed namers - route the call through
-`dasllama/dasllama_asr.das`'s public functions instead.**
+**Code outside a family's own files that names a public class, enum, variant, bitfield or
+constant its family file declares is a defect - route the use through
+`dasllama/dasllama_asr.das`'s public functions instead.** `REVIEW.das` reds a named public struct
+or typedef; weakening that check is a defect.
+
+**Code outside a family's own files that names a public function its family file declares, whose
+name does not contain the family's name (the file name between `dasllama_` and `.das`), is a
+defect - route the call through `dasllama/dasllama_asr.das`'s public functions instead.**
+`REVIEW.das` reds the family-named ones; weakening that check is a defect.
 
 **A prompt, a decode loop, a caps value, or a language rule (code that picks or validates a
 session language) in a union carrier is a defect - it goes in the family file.**

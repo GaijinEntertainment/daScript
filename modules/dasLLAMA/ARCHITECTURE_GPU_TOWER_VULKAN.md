@@ -1,8 +1,8 @@
 # dasLLAMA Architecture - the Vulkan tower and ASR-decoder drivers
 
 Companion to `ARCHITECTURE_GPU_TOWER.md`; a section is cited by its anchor. This document
-carries the Vulkan tower driver's row classes and attention routes, its encode chains, and the
-Vulkan ASR-decoder driver; the StyleTTS2 and Pocket seats are `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md`, the
+carries the Vulkan tower's row classes and attention routes, the tower encode chains on the discrete
+homes, and the whisper ASR decoder on the discrete homes; the StyleTTS2 and Pocket seats are `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md`, the
 FastConformer chain's rotary form (GigaAM) `ARCHITECTURE_GPU_TOWER_VULKAN_FC.md`. The
 Metal sections cited - the attention routes (`ARCHITECTURE_GPU_TOWER.md#tower-attn-routes`) and
 the encode chain's shape (`ARCHITECTURE_GPU_TOWER.md#tower-encode-chains`) - stay in that file.
@@ -15,7 +15,8 @@ the Q8_0 batch tile (or the f16 GEMM class) and the flash tile. The row operatio
 helper (`rms_rows`, `clamp_rows`, `requant_rows_q8_sized`, `rope_neox_2d_rows`,
 `rope_neox_tab_rows`, `layernorm`, `add_inplace_rows`) or of one closed form (the clamped
 GEGLU-quick, the tanh GELU with the CPU LUT's f16 rounding); the CPU
-helper is each class's oracle in `tests/test_vulkan_tower_kernels.das`. The seams fold what the
+helper is each class's oracle in `tests/test_vulkan_tower_kernels.das`; the CUDA home stamps the
+same templates as `[cuda_dispatch]` classes (`dasllama_cuda_classes`). The seams fold what the
 CPU loop spells as two calls: a post-add writes x += y (+ b) and, in the same workgroup, the next
 branch's pre-norm off the updated row.
 
@@ -49,7 +50,7 @@ and 72 is off every fragment lattice. Per family, both drivers:
 | qwen25v full layers | 80 | the slab trio | the padded route, h128 tile | the baked halfword twin |
 | qwen25v window layers | 80 | the per-window route | the window route, f32 | the baked halfword twin |
 
-### The Vulkan tower driver's encode chains {#vk-tower-encode-chains}
+### The tower encode chains on the discrete homes {#vk-tower-encode-chains}
 
 `dasllama_vulkan_tower.das` fills the vision hook slots (gemma4v, gemma3v, qwen3v, qwen25v, the gemma4uv embedder), the two
 audio blocks seats - the whisper-class block loop (`register_tower_blocks_gpu`) and canary's (`register_canary_gpu`), each
@@ -71,7 +72,8 @@ the chain runs it (the vision tails, the projector tails of gemma4a and of the c
   gemma3v's blocks ride the pre-LN chain below.
 - **The whisper-class towers** (whisper, qwen2audio, voxtral, ultravox, the Omni audio towers,
   Qwen3-ASR through its conv front) share one chain with gemma3v: the pre-LN block loop
-  `vt_ln_chain` over one offsets record a block (`LayerOffs`; gemma3v's block offsets mapped onto
+  `tower_ln_chain` (`dasllama_tower_chains`, on the Vulkan rail - `ARCHITECTURE_GPU_TOWER_RAIL.md#tower-rail`)
+  over one offsets record a block (`LayerOffs`; gemma3v's block offsets mapped onto
   it), at the 64-wide heads every whisper-class tower carries, the GELU arm the tower declares
   (the tanh LUT or erf), the k bias where the family has one. On the cm2 feed the chain's row
   passes store the feed themselves: the layernorm and the residual seams write f16 (the stamps'
@@ -84,18 +86,19 @@ the chain runs it (the vision tails, the projector tails of gemma4a and of the c
   chunk count, `0` the pick; `vt_sk_build` logs it once per model): 60 tiles of whisper's 1280-wide rows fill a
   36-SM card, a 128-row window's seven pay the reduce for nothing. The conv stem (`register_tower_conv_gpu`)
   serves on the same resident where the GEMMs ride the cm2 feed: conv1 as a k3 im2col to f16 and the f16 GEMM
-  over an f16 slab of the file's f32 weights (3 n_mel padded to 64), conv2 as an im2col into the chain's f16
-  feed and the q8 tile over the plane the upload gathers beside the block records, the biases, GELU and
+  over an f16 slab of the file's f32 weights (3 n_mel padded to 64), conv2 as an im2col into the chain's f16 feed and the q8
+  tile over the plane the upload gathers (the f16 lane's arm: `ARCHITECTURE_GPU_TOWER_RAIL.md#whisper-chains`), the biases, GELU and
   position rows off a plane of the stem's own; the residual rows read back into the state and left in the
   chain's x buffer, which the block loop reads without its upload (`x_ready`). The mel stays on the CPU, and
   the mul_mm arm keeps the CPU stem. The chat projector tail rides the chain behind the last block
-  (`register_tower_blocks_tail_gpu`, `vt_ct_enc`): the CPU `audio_projector_tail`'s steps at its widths - the pair
+  (`register_tower_blocks_tail_gpu`, `tower_chat_tail`): the CPU `audio_projector_tail`'s steps at its widths - the pair
   pool and the post-norm (ultravox norms every position, then rms-norms the stacked rows), the projector GEMMs
   off the arm's feed over the q8 projector planes uploaded beside the block records, qwen2a's bias, the swapped
   gate with its mid rms or voxtral's erf GELU - and reads the soft tokens back in the blocks' rows' place; it
-  serves where the GEMMs sit on the tiles' lattice (`vt_ct_shape_ok`), else the blocks alone, answering which
+  serves where the GEMMs sit on the tiles' lattice (`tower_ct_shape_ok`), else the blocks alone, answering which
   (`TowerTailServed`; counter `vulkan_tower_tail_encodes`).
-  Qwen3-ASR's front takes its own two seats: the mel hook runs the frames' power spectrum and the mel-major log rows
+  Qwen3-ASR's front takes its own two seats, both shared bodies on the rail on either home
+  (`ARCHITECTURE_GPU_TOWER_RAIL.md#g4a-chains`): the mel hook runs the frames' power spectrum and the mel-major log rows
   (the global clamp stays with the caller), and the front hook runs the window's chunk convs (im2col to f16 and the
   f16 GEMM a stage, the bias + activation as a row class), the feature shuffle, `conv_out` on the cm2 q8 tile and
   the bias + positions, read back into the state the block loop then serves - so a second window on the same
@@ -103,22 +106,25 @@ the chain runs it (the vision tails, the projector tails of gemma4a and of the c
   as one bias row as wide as the rows it covers (the class repeats its bias row every `d` elements): the whisper
   stem's row is its whole plane, so each position row lands once, and qwen3a's is one chunk's 13 position rows, so
   every chunk takes them - qwen3a's finish is two bias passes, the `conv_out` bias row, then those positions.
-- **gemma4a** serves the whole chunk (`vulkan_gemma4a_chunk`: the DFT with the magnitude arm and a frame-major
+- **gemma4a** - both homes' one body a stage, `ARCHITECTURE_GPU_TOWER_RAIL.md#g4a-chains` - serves the whole chunk
+  (`vulkan_gemma4a_chunk`: the DFT with the magnitude arm and a frame-major
   store, the mel, both subsample convs as im2col + the f16 GEMM + a LayerNorm-ReLU row class, the input
-  projection on the cm2 q8 tile) and hands the residual rows to its blocks chain, which ends in the projector
-  tail the CPU `g4a_projector_tail` spells - the out-proj with its bias, the weightless rms off the norms
-  plane's ones row, the mm-proj - and reads the projected rows back into the state's `out` with `out_ready`
-  raised, so the family's CPU tail stands down on both routes (the chunk's and the blocks-only one): the
-  macaron halves as the post-add class with a half residual weight, the clamped GEMM sites as the arm's feed
-  (the clamp + halfword store on the cm2 feed, the clamp-requant on the mul_mm tiles), the tile and the output
-  clamp where the site's calibration record is live (`vt_mm_clamped`, the device twin of the CPU's
-  `g4a_mm_clamped`; canary's chain rides it with no clamp record, as its CPU `tower_mm_rq` has none), the chunk-12
+  projection on the cm2 q8 tile, or the f16 GEMM on the f16 lane) and hands the residual rows to its blocks chain,
+  which ends in the projector tail the CPU `g4a_projector_tail` spells - the out-proj at the encoder's own width with
+  its bias, the weightless rms off the norms plane's ones row, the mm-proj to the decoder's width - and reads the rows
+  back into the state's `out` with `out_ready` raised, so the family's CPU tail stands down on both routes: the
+  macaron halves as the post-add class with a half residual weight, the clamped GEMM sites as the arm's feed (the
+  clamp + halfword store on the cm2 feed, the clamp-requant on the mul_mm tiles) and the image's lane - the q8 tile,
+  or the f16 lane's f16 GEMM over the halfword plane as stored - with the output clamp where the site's
+  calibration record is live (`tower_g4a_mm`, the device twin of the CPU's `g4a_mm_clamped`), the chunk-12
   relative-position attention in its own class with the query's per-dim scale and the key scale folded in, the
   conv module's GLU and causal depthwise taps as row classes. The RPE table rides the resident's rel quartet
-  and its projection is a 13-row batch GEMM on its own set.
-- **canary and parakeet** share one FastConformer chain over a family descriptor (`VtFc`): canary's biased GEMMs and
+  and its projection is a 13-row batch GEMM at the `rel` site.
+- **canary and parakeet** share one FastConformer chain over a family descriptor (`TowerFc`; the chain is the shared body
+  both discrete homes run, `ARCHITECTURE_GPU_TOWER_RAIL.md#fc-chains`): canary's biased GEMMs and
   channel-major taps, parakeet's bias-less GEMMs (the seams on the bare stamp, the activations alone) and tap-major
-  taps, its CPU mel uploaded where canary's spectrum runs on the device, its whole encode one hook
+  taps, its CPU mel uploaded where canary's spectrum runs on the device - said with the seat's first served encode on
+  either discrete home (`tower_fc_cpu_mel_say`) - its whole encode one hook
   (`register_parakeet_gpu_encode`: the front chain, then the blocks). The
   blocks seat runs the whisper-class row classes (layernorm, the bias class with a silu mode, the layernorm seam
   with the half residual weight) plus two of its own: the full bidirectional Transformer-XL attention with the u/v
@@ -127,16 +133,12 @@ the chain runs it (the vision tails, the projector tails of gemma4a and of the c
   mask), the two depthwise + pointwise stages (the pointwise on the cm2 q8 tile), the feature rows and the input
   projection into the residual stream. The sinusoidal rel table is per encode (2 npos - 1 rows) and a row class
   builds it on the device ahead of the blocks (the CPU table stays the CPU chain's), so the rel quartet is sized by
-  the scratch and the table's projection is a batch GEMM over those rows. The attention does not walk the projected
-  table per row: per head the (q + v) and rel-table panels are the restride stamps at one head - unpadded f16
-  panels, the (q + v) one on the biased stamp with the head's slice of `bias_v` as its bias row - the plane R = (q +
-  v) P^T runs on the f16 coopmat GEMM, and a tiled online-softmax kernel (`TowerCnAttnRT`, a workgroup per 64 query
-  rows of one head) scores ((q_i + u) . k_j + R[i][npos - 1 - i + j]) x scale, reading R beside the keys and values
-  staged 32 a tile through workgroup memory - the plane's [cap x 2 cap - 1] f32 rows are the resident's
-  `vt_cn_rel_plane` scratch, grown by the row capacity. The chain carries no row cap of its own (`vt_cn_rows_ok`):
+  the scratch and the table's projection is a batch GEMM over those rows. The attention is the shared rel-plane
+  kernel over a per-head score plane (`ARCHITECTURE_GPU_SHARED_ATTN.md#fc-rel-attn`); the plane's rows are the
+  resident's `cn_r_dev` scratch, seated on the rail as `rel_r`. The chain carries no row cap of its own (`vt_cn_rows_ok`):
   the scratch, the rel quartet and the plane each bind as one range, and the clip declines only where one passes the
-  device's range. The family's hook fires on either lane: the Metal driver declines the q8 encoder, this one the f32
-  encoder.
+  device's range. The family's hook fires on either lane; the discrete chains serve both, the exact pick's f16 image on
+  the f16 GEMM (`ARCHITECTURE_GPU_TOWER_RAIL.md#fc-chains`), and so does Metal's where its toolchain compiles the half tensor GEMM (`followup_metal.md` 71).
 
 The GEMM sites of the gemma4a and canary chains ride the cm2 f16 feed where the device has the
 cm2 tile family (`vt_cm2_feed`): a site names its tile once (`VtTile` - the cm2 token column, or
@@ -144,7 +146,7 @@ the q8 batch variant off cm2), one clamp + halfword store class feeds every inpu
 table, and the Conformer sets are bound per tile. The f16 feed (`xh_dev`) keeps stale rows past
 the encode's live count by design: the feed's rows past the live count reach no live row, because
 every restride reads `rows` and the GEMM output rows past npos those stale rows produce are dead.
-Each block family lists its GEMM regions once, in record order (`vt_g4a_regions`,
+Each block family lists its GEMM regions once, in record order (`gemma4a_block_regions`,
 `vt_cn_regions`, and the lists the drivers share: `gemma3v_all_regions`, `qwen3v_all_regions`,
 `gemma4v_all_regions`, each over its family's block list): the upload gathers the regions in that order,
 and the schedule walk maps its records in the same order beside a per-record tile or group list,
@@ -172,16 +174,15 @@ host upload. The record names the encode in flight alone: every audio hook entry
 scratch's forget drops it with the plane, and the whisper decoder hooks stand down with the
 encoder's under the stage-diff rail (`g_audio_ref_dir`) - a CPU-encoded window never reads a served one's plane.
 Under `DASLLAMA_GPU_PROF=1` every dispatch of an
-audio chain writes a timestamp with a role (`VtProfRole`), and `vt_prof_report` prints the chain's
+audio chain writes a timestamp with a role (`RailProfRole`), and `vt_prof_report` prints the chain's
 device time per role beside the host wall after the encode - the ledger the levers are read from.
 
 The rel quartet is the resident's relative-position scratch, the device buffers sized by
 `rel_cap_rows` and grown by `vt_rel_bufs`: the table's f32 rows, the table's GEMM feed
 refreshed once per encode - Q8_0 quants and scales for the mul_mm tiles, f16 halfwords with the
 tile read slack behind the rows for the cm2 tiles - and the projected rows one layer at a time;
-its projection sets are cached per tile key (`vt_rel_proj_set`: the batch variant, or the token
-column over the f16 feed on cm2), and dropped with the scratch or the quartet, because they bind
-the scratch's schedule buffer beside the weights and the quartet. The two attention classes are stamped per head width (64 and 128, the widths
+the rail seats the quartet by role (`rel_*`, `vt_rail_seats`), and the projection is the `rel` site bound to the
+feed's planes. The two attention classes are stamped per head width (64 and 128, the widths
 the served carriers carry; the driver declines another) and the residual seam per post-norm
 (`TowerPostAdd`, `TowerPostAddPlain` for the conv module's plain add), so no kernel loop
 bound or branch reads a push constant. gemma4a and canary upload
@@ -217,7 +218,7 @@ capacity field (`cap`, `cap_*`, `*_cap`, `*_cap_*`) set non-zero above a `vk_ran
 function; a `*_dev` field (a buffer handle, not a capacity) and a reset to zero (which forces the rebuild) claim no
 released buffer, so the check skips them.
 
-The declines: `quant_mode` on an exact-lane tower (or the bf16 twin), `shape` off the tile's head
+The declines: `quant_mode` on a lane the family's seat does not serve, `shape` off the tile's head
 sizes, past the row cap (`VT_MAX_ENCODE_ROWS`; the canary chain reads the range instead), or with
 a weight plane or scratch buffer over `vk_max_storage_range()`, or where the family's constants
 differ from the ones the kernel home stamps (`Q3A_TOK_PER_CHUNK`, qwen3a's 13 positions a chunk;
@@ -228,24 +229,26 @@ device init) or a class declines, where the device has neither tile family the c
 (`vulkan_tower_front_route`: the `DASLLAMA_COOPMAT=sdot4` mode - a family whose encode runs a conv front takes its CPU
 image there, its flavor pick asking the feed), `memory` where an allocation fails (the partial
 upload or scratch is released, the CPU chain serves). Each decline is logged once per reason per model.
-Engage is
-`vulkan_tower_stats` and `vulkan_tower_declines` deltas - the stats count encodes, rows and
+Engage is `vulkan_tower_stats` and `vulkan_tower_declines` deltas - the stats count encodes, rows and
 blocks, the front dispatches (`convs`) and qwen3a's device mels (`mels`) - and the bench's image
 and ASR cells print them around their timed turns.
 
-### The Vulkan ASR-decoder driver {#vk-asr-decoder}
+### The whisper ASR decoder on the discrete homes {#vk-asr-decoder}
 
 `dasllama_vulkan_asr_dec.das` fills the whisper decoder's two hook slots
 (`register_whisper_cross_kv_gpu`, `register_whisper_decode_gpu`) on a build without das_metal, the
 Metal ASR-decoder driver's twin, q8-native: the f32 decoder rail declines `quant_mode` and the CPU
-chain serves it. The decoder attaches once per model, its residency key `vt_key` over the
-decoder's planes (the tower's key, so an address alone is never the identity): the tied embedding
-and every layer's ten GEMM regions gather row-major with f16 scales through `tower_gather_q8_regions`,
-the gather the tower drivers use, at their own plane offsets (one weight buffer, every GEMV site addressing it
-by its first block), the layers' f32 rows and the final norm upload as one norms plane the row
-classes read at rebased offsets, and the K/V planes and the step scratch are sized to the model -
-the cross K/V as f16 [layer][head][ta][hs] (unscaled; the attention carries the whole hs^-0.5),
-the self cache as f16 [layer][head][tmax][hs].
+chain serves it; the CUDA home's seat (`dasllama_cuda_asr_dec`) fills the same slots under the CUDA ask
+on the same templates' stamps (`dasllama_cuda_classes_asr`). Both chains are shared bodies
+(`ARCHITECTURE_GPU_TOWER_RAIL.md#whisper-decoder`), so the dispatch sequence below is both homes'. The
+decoder attaches once per model, its residency key over the flavored image's decoder pieces and f32 rows
+(`vt_key_dev` on Vulkan, an address alone never the identity): the tied embedding and every layer's ten
+GEMM regions are the image's q8 pieces as the bake gathered them, row-major with f16 scales at their own
+plane offsets (one weight buffer, every GEMV site addressing it by its first block), uploaded as stored;
+the layers' f32 rows and the final norm upload as one norms plane the row classes read at rebased
+offsets, and the K/V planes and the step scratch are sized to the model - the cross K/V as f16
+[layer][head][ta][hs] (unscaled; the attention carries the whole hs^-0.5), the self cache as f16
+[layer][head][tmax][hs].
 
 The cross-KV chain is one command buffer per window: the encoder rows fed once (copied device to
 device off the tower's plane when the tower landed exactly these rows in the encode in flight -
@@ -278,17 +281,17 @@ f16 keys, its own max and exp-sum, its unnormalized weighted values - so a 1500-
 spreads over six workgroups a row. The combine's workgroup (`TowerWdecAttnCombRq`; the f32-storing
 `TowerWdecAttnComb` is the kernel cells' reference form) is one head and
 one row: it merges the chunks' partials by log-sum-exp into the row's head slice of the [rows x
-dim] output. A batch wider than the step's row
-cap (`WD_ROW_CAP`) at the window's first batch hands the window to the CPU chain (`rows`);
-mid-window the device owns the self-KV, so a wider batch or an evicted window panics. Engage is
-`vulkan_wdec_stats` deltas (windows, steps, tokens); the parity instrument is
-`test_whisper_vulkan_wdec`.
+dim] output. A flavored model's decode hands the step `WHISPER_DEV_CHUNK` rows at most, within the
+step's row cap (`WDEC_ROW_CAP`); the device owns the self-KV, so a wider batch or an evicted window
+panics. Engage is the `vulkan_wdec_stats` / `cuda_wdec_stats` deltas (windows, steps, tokens,
+handoffs); the parity instrument is `test_whisper_discrete_twin`.
 
-The decoder's declines (`vulkan_wdec_declines`): `knob` (`DASLLAMA_VK_WDEC=0`, or
-`set_vulkan_wdec(false)`), `quant_mode` on the f32 oracle rail (the driver reads the q8 image),
-`shape` on a width off the tile's lattice or a head width other than the kernel home's `WDEC_HS`
-(64), `device`
-where the tier has no device or a class fails to build, `memory` where a device or pinned
-allocation fails, and `rows` where the window's first batch is wider than the step's row cap - the
-CPU chain serves the window. Each is a counted fallback at the window's claim; mid-window the
-device owns the self-KV, and a failure there panics.
+The decoder's declines (`vulkan_wdec_declines`, `cuda_wdec_declines`), one gate both homes read
+(`wdec_gate`, `WdecDecline`): `knob` (`DASLLAMA_VK_WDEC=0`, or `set_vulkan_wdec(false)` /
+`set_cuda_wdec(false)`), `quant_mode` on the f32 oracle rail (the driver reads the q8 image),
+`flavor` on another home's image, `shape` on a width off the tile's lattice or a head width other
+than the kernel home's `WDEC_HS` (64), `device` where the tier has no device, a class fails to
+build, or a Vulkan device asks a storage-offset alignment the GEMV records' spacing does not keep
+(`vk_rail_view_aligned`), and `memory` where a device or pinned allocation fails. Each is counted at
+the window's claim, where a CPU image's window falls to the CPU chain and a flavored image refuses
+it; mid-window the device owns the self-KV, and a failure there panics.

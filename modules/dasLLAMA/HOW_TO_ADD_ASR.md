@@ -39,8 +39,8 @@ lines of the PR body.
    the paper puts it: GigaAM rotates the normed rows ahead of the q and k projections
    (`ARCHITECTURE_MEDIA_ASR.md#gigaam-rotary-input`), and only the per-layer dumps tell that from
    rotating q and k. The CPU's `attention_bidir` takes any head width; each GPU chain admits
-   head widths by its shape predicate (`fc_shape_ok` in `dasllama_metal_tower.das`,
-   `vt_fc_blocks` in `dasllama_vulkan_tower.das`). List each backend's predicate and, for the
+   head widths by its shape predicate (`fc_shape_ok` in `dasllama_metal_tower.das`; the discrete homes'
+   `tower_fc_shape_ok` in `dasllama_gpu_math.das`). List each backend's predicate and, for the
    family's head width, its answer: the chain serves it, a padded route
    (`ARCHITECTURE_GPU_TOWER.md#tower-attn-routes`) serves it, or the seat declines by shape.
 4. **Front end.** Sample rate, mel count, `n_fft`, window and hop, centring, the log's floor and
@@ -125,7 +125,7 @@ home, never another family file. In landing order:
 - **GEMMs.** Every weight GEMM goes through `tower_mm` / `tower_mm_rq` (any model carrying `q8`,
   `qblob`/`qscales` and `blob`), another `*_mm*` wrapper, or `mm_blob_b`, every
   activation-by-activation product through `gemm_f32_jo`. Served widths pad up to 64 with zero
-  rows and columns (`ARCHITECTURE_MEDIA.md#tower-padded-widths`). The q8 lane transcodes the block
+  rows and columns (`ARCHITECTURE_MEDIA_TOWER.md#tower-padded-widths`). The q8 lane transcodes the block
   GEMMs alone to Q8_0 at stage; a carrier that holds them quantized serves them as its own planes
   on the kq lane (GigaAM's `gemm_seats`, `tower_mm`'s seat arm); a head the carrier holds in f16 serves its own halfwords on both
   lanes (`mm_f16_b`), as do f16 depthwise taps (`fc_dw_bias_rows_f16` on the CPU, the TAP_F16
@@ -145,15 +145,16 @@ home, never another family file. In landing order:
 - **The GPU hooks.** One `var private` function slot plus a `register_<family>_gpu*` entry per
   seat the GPU can serve - the blocks, a front, or the whole encode - each answering decline in its
   return (`false`, `-1`), and the encode asking its hook first
-  (`ARCHITECTURE_MEDIA.md#tower-gpu-hook`). `<family>_gpu_serves()` reads the driver's answer. A
+  (`ARCHITECTURE_MEDIA.md#tower-gpu-hook`). `<family>_dev_flavor(q8)` names the home whose tower serves the lane a load asks. A
   CTC head is a seat on every home - Metal's `metal_gigaam_ctc` and Vulkan's `vulkan_gigaam_ctc`
   over the shared pick `GkCtcPick` - reading the encode's held rows by generation and declining
   by name.
 - **The GPU flavor.** Each backend loads only its own image, so a family a GPU chain serves gets a
   flavored image per backend (`ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block`): `dev_backend`,
   `dev` and `devplan` fields on the served struct, serialized, with `<FAMILY>_META_FIELDS` bumped;
-  the flavored tags through `register_tower_dev_tags`; a `<Family>Flavor` slot that
-  `register_<family>_flavor(backend, serves, bake)` fills; `<FAMILY>_DEV_CONSUMED`, the planes the
+  the flavored tags through `register_tower_dev_tags`; the flavor seat, one declaration -
+  `[tower_flavor(family = "<family>", model = "<Model>")] struct <Family>Flavor {}`, which declares the
+  record and `register_<family>_flavor(backend, serves, bake)`; `<FAMILY>_DEV_CONSUMED`, the planes the
   bake converts into the device block and the GPU image drops; the load asking the flavor
   (`tower_dev_flavor`) and, on a flavor, minting through `load_staged_image_dev`; and
   `tower_cpu_refuse` at every CPU stage a GPU image could reach, since the CPU never runs one.
@@ -207,7 +208,13 @@ it sets `options _dasllama_internal`. Three edits:
   fails any namer not listed. A type two families share moves up into `dasllama_asr_types.das`
   (where `CanaryLayerOffs` sits), so no family file names another's.
 - Add `dasllama_<family>` (and a new shared home such as `dasllama_rnnt`) to the module list in
-  `.das_module`; `gate_descriptor_census` fails a module file the descriptor does not list.
+  `.das_module`; `gate_descriptor_census` fails a module file the descriptor does not list. The same holds
+  for a new group's chain module and CUDA seat (section 10).
+- A new group's CUDA seat `dasllama_cuda_tower_<group>.das` (section 10) is a CUDA backend file whose role is its
+  name past `dasllama_cuda_`: add `tower_<group>` to `REVIEW.das`'s `GPU_ROLES_CUDA` and the file to the tower
+  driver's row of the role table (`ARCHITECTURE_GPU.md#gpu-backends`) in the same change -
+  `check_gpu_role_partition` fails a backend file whose role the set does not carry. The chain module
+  `dasllama_tower_chains_<group>.das` joins the tower-rail row of the same table.
 - Run `./bin/daslang -jit modules/dasLLAMA/REVIEW.das` from the repo root; it exits 0 clean.
 
 ## 6. Tests - `tests/`
@@ -225,7 +232,8 @@ The test folder's documents track its files (`ARCHITECTURE_ENGINE.md#test-folder
   `tests/REVIEW_PINNED_GATES.md` in the same change, as named cells or as one file entry naming
   what it pins.
 - **The runner** `tests/run.das`: the file in the stocked list and in `area_tests("audio")`, the
-  family module's `MODULE_AREAS` row (`audio`), and the family's image arm in
+  family module's `MODULE_AREAS` row (`audio`), a `MODULE_AREAS` row (`audio`) for each new module of
+  section 10 - the group's chain module and its CUDA seat - and the family's image arm in
   `area_image_arms("audio")` when `test_model_image.das` carries one.
 - **The kind tables:** `test_asr_verbs.das` (`<family>_exec_fmt` per lane, the detokenizer over a
   toy vocab), `test_model_image.das` (the exact lane's tag in the list whose identity keys one
@@ -291,7 +299,7 @@ A tower driver fills the family's seats from its `[init]` (`dasllama_metal_tower
 - **Admission:** a shape predicate beside `fc_shape_ok` answering decline, never an outage, for
   every shape, knob or lane the chain does not serve - the head width step 0, question 3 names
   first; a padded head uses `hs_pad` (`ARCHITECTURE_GPU_TOWER.md#tower-attn-routes`).
-- **The seats:** `register_<family>_gpu(@@metal_<family>_blocks, @@metal_tower_serves)` and the
+- **The seats:** `register_<family>_gpu(@@metal_<family>_blocks)` and the
   front or whole-encode seat. Whether a seat served reads off its engage counters - the dispatch
   counters a GPU seat moves when it serves (`metal_tower_stats`) - never off the model running.
 - **The flavor:** `register_<family>_flavor(TowerDev.metal, @@<serves>, @@metal_<family>_bake)` - the
@@ -305,26 +313,42 @@ A tower driver fills the family's seats from its `[init]` (`dasllama_metal_tower
 - **The board:** `metal_served = true` on the catalog row once tower and decoder both serve
   (`ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs`).
 
-## 10. Vulkan - `dasllama/dasllama_vulkan_tower.das`
+## 10. Vulkan and CUDA - one chain, a seat a home
 
-The Vulkan tower fills the same seats on a build without das_metal, from
-`dasllama_vulkan_tower_register` (`ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains`).
+On a build without das_metal the family's dispatch sequence is ONE body generic over the rail in a
+`dasllama/dasllama_tower_chains_<group>.das` module, and each discrete home seats it
+(`ARCHITECTURE_GPU_TOWER_RAIL.md#tower-rail`, `ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains`).
 
-- **The chain:** the CPU loop's graph on the tower's row classes and attention routes
-  (`ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-routes`); a decline is `vt_decline(r,
-  VulkanTowerDecline.<why>)`, counted.
-- **The seats:** `register_<family>_gpu(@@vulkan_<family>_blocks, @@vulkan_tower_serves_exact)`
-  and the front or whole-encode seat; an LLM decoder runs on the box's decode policy, a
-  hand-written decoder on the GPU takes an ASR-decoder driver
+- **The chain:** the CPU loop's graph on the shared row templates' stamps, every plane by role
+  (`TowerBuf`), every GEMM at a site (`RailSite`, `ARCHITECTURE_GPU_TOWER_RAIL.md#rail-sites`), a
+  `rail_pt` mark where the Vulkan profile ledger takes one; `[arch(at = ...)]` on the body.
+- **The Vulkan seat** (`dasllama_vulkan_tower.das`): the gate, the key, the uploads, the scratch, the rail
+  seated by role, the body in one command buffer; a decline is `vt_decline(r, TowerDecline.<why>)`, counted.
+  It registers from the family's arm of `vulkan_tower_install_audio_of` (and `vulkan_asr_dec_install_of` for a
+  decoder seat) under a new `TowerAudioFamily` member (`dasllama_gpu_rail.das`).
+- **The CUDA seat** (`dasllama_cuda_tower_<group>.das`, on the shared `CutResident`, the family's other planes in a
+  `CutRolePlanes` by role, the gate `cut_gate`): the same plumbing on the home's stream. Three edits move the family to it (`ARCHITECTURE_GPU_TOWER_RAIL.md#rail-audio-installs`): its
+  arm of `cuda_tower_install_audio_family` (the hooks and the CUDA flavor), its `CUDA_AUDIO_HOMES` row flipped
+  to `TowerDev.cuda`, and its `CUDA_AUDIO_FAMILIES` row in `tests/_gpu_knobs.das` flipped to `true`.
+- **The seats:** `register_<family>_gpu(...)` and the front or whole-encode seat; an LLM decoder runs on
+  the box's decode policy, a hand-written decoder on the GPU takes an ASR-decoder seat
   (`ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-asr-decoder`).
-- **The flavor:** `register_<family>_flavor(TowerDev.vulkan, @@<serves>, @@vulkan_<family>_bake)`,
-  the pick asking the knob, the lane, `vulkan_tower_arms()` and the f16 GEMM feed where the chain
-  rides it (`vt_cm2_feed`), the bake gathering the chain's planes into the device block.
-- **Tests:** a cell per new class in `tests/test_vulkan_tower_kernels.das` through `CellPlanes` and
-  `check_rows`, each with its poisoned element; the family's three-way twin in `test_audio.das`
-  (`test_<family>_vulkan_twin`: the exact tower on the CPU, the q8 tower on the CPU and on the
-  device, `tower_twin_bar`, the zeroed-blocks input poison that must exceed the bar); the class in
-  the census (`VK_CENSUS_NEVER_DISPATCHED` where no stocked carrier dispatches it).
+- **The flavor:** a line a home, `register_<family>_flavor(TowerDev.<home>, @@<serves>, @@<home>_<family>_bake)`,
+  the pick asking the knob, the lane, the home's arm and the f16 GEMM feed where the chain rides it, the bake
+  writing the chain's pieces under the home's prefix (`vk.`, `cu.`).
+- **The exact lane:** the f16 lane (`ARCHITECTURE_MEDIA.md#tower-weight-lane`) - the staging writes the GEMM set as
+  halfwords under a GPU flavor (`tower_dev_halfword`), the bake adds no GEMM piece (the image's halfwords upload as
+  stored), the body's GEMMs take the lane's arm (`rail_mm16`), the image its own tag (`tower_lane_tag`; a load of a `.dlim`
+  reads its lane back off the baked tag, `tower_load_f16`) and `asr_image_route` in `dasllama_asr.das` routes it.
+- **Tests:** a case body per new class in `tests/_discrete_cells.das` (generic over `CellPlanes` and the CUDA rig's
+  `CuPlanes`, compared through `check_rows`), run by a cell in `tests/test_vulkan_tower_kernels.das` and one in the
+  matching `tests/test_cuda_tower_*.das`, each with its poisoned element; the
+  family's three-way twin in `test_audio.das` through `discrete_audio_twin_seat` (the exact tower on the
+  CPU, the q8 tower on the CPU and on the device, `tower_twin_bar`, the zeroed-blocks input poison that
+  must exceed the bar) and its exact leg on the f16 flavor (`exact_flavor_leg` over `exact_lane_served_on`), green
+  on both homes - the CUDA pass's `--only` list in `tests/CLAUDE.md` names its file; the f16 image's
+  `gpu_lane_roundtrip` in `test_model_image.das`; the class in the census (`VK_CENSUS_NEVER_DISPATCHED` where no
+  stocked carrier dispatches it).
 
 ## 11. End to end
 

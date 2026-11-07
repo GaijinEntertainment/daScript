@@ -167,32 +167,32 @@ def test_gemma4uv_device_twin(t : T?) {
             var st = Gemma4uvState()
             var inscope embp <- mint_patch_zeroed(mm)
             var stp = Gemma4uvState()
-            let home = serving_tower_dev(true)
+            let home = serving_tower_dev(TowerFamily.vision)
             for (fx in [(w = 336, h = 336), (w = 672, h = 336)]) {
                 let tag = "gemma4uv {home} cb {fx.w}x{fx.h}"
                 var inscope planes <- make_planes("cb", fx.w, fx.h)
                 var cpu, dev, poisoned : array<float>
                 var n_cpu = 0l
                 var n_dev = 0l
-                let pre = gpu_tower_counters(true)
+                let pre = gpu_tower_counters(TowerFamily.vision)
                 var s0 = pre
                 var s1 = pre
                 var s2 = pre
                 with_gpu_knobs() {
-                    set_serving_gpu_tower(false, true)
+                    set_serving_gpu_tower(false, TowerFamily.vision)
                     with_dasllama_jobque_() {
                         n_cpu = gemma4uv_encode(emb, st, planes, int64(fx.w), int64(fx.h), cpu)
                     }
-                    s0 = gpu_tower_counters(true)
-                    set_serving_gpu_tower(true, true)
+                    s0 = gpu_tower_counters(TowerFamily.vision)
+                    set_serving_gpu_tower(true, TowerFamily.vision)
                     with_dasllama_jobque_() {
                         n_dev = gemma4uv_encode(emb, st, planes, int64(fx.w), int64(fx.h), dev)
                     }
-                    s1 = gpu_tower_counters(true)
+                    s1 = gpu_tower_counters(TowerFamily.vision)
                     with_dasllama_jobque_() {
                         gemma4uv_encode(embp, stp, planes, int64(fx.w), int64(fx.h), poisoned)
                     }
-                    s2 = gpu_tower_counters(true)
+                    s2 = gpu_tower_counters(TowerFamily.vision)
                 }
                 tt |> equal(s0.encodes - pre.encodes, 0l, "{tag}: the knob-off leg never dispatched (encodes delta)")
                 tt |> equal(s0.convs - pre.convs, 0l, "{tag}: the knob-off leg never ran the stem on the device (convs delta)")
@@ -200,13 +200,13 @@ def test_gemma4uv_device_twin(t : T?) {
                 tt |> equal(s1.encodes - s0.encodes, 1l, "{tag}: device-served (encodes delta)")
                 tt |> equal(s1.convs - s0.convs, 1l, "{tag}: the stem ran on the device (convs delta)")
                 tt |> equal(s2.encodes - s1.encodes, 1l, "{tag} patch-zeroed: device-served (encodes delta)")
-                tower_twin_held(tt, tag, cpu, dev, TWIN_EXACT_REL_L2_VK)
-                tower_twin_poisoned(tt, "{tag} patch-zeroed", cpu, poisoned, TWIN_EXACT_REL_L2_VK)
+                tower_twin_held(tt, tag, TowerFamily.vision, cpu, dev, TWIN_EXACT_REL_L2_VK)
+                tower_twin_poisoned(tt, "{tag} patch-zeroed", TowerFamily.vision, cpu, poisoned, TWIN_EXACT_REL_L2_VK)
                 delete cpu
                 delete dev
                 delete poisoned
             }
-            serving_tower_shutdown(true)
+            gpu_tower_shutdown(TowerFamily.vision)
             delete stp
             delete st
             delete emb
@@ -219,7 +219,7 @@ def test_gemma4uv_device_twin(t : T?) {
 //! the embedder whole on the serving device off the planes holds the CPU bar on the mtmd dumps; engage evidence: the encodes counter, per fixture
 [test]
 def test_gemma4uv_tier1_vulkan(t : T?) {
-    t |> run("tier-1 encode on the serving discrete home's tower ({serving_tower_dev(true)}) vs the mtmd encode dumps") @(tt : T?) {
+    t |> run("tier-1 encode on the serving discrete home's tower ({serving_tower_dev(TowerFamily.vision)}) vs the mtmd encode dumps") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let mm = path_join(models_dir(), "mmproj-gemma-4-12B-it-BF16.gguf")
             if (!model_available(tt, mm) || !discrete_twin_seat(tt)) {
@@ -230,17 +230,17 @@ def test_gemma4uv_tier1_vulkan(t : T?) {
             mint_gemma4uv_embedder(stg, emb)   //! in memory: the loader would bake the image beside the model
             var st = Gemma4uvState()
             with_gpu_knobs() {
-                set_serving_gpu_tower(true, true)
+                set_serving_gpu_tower(true, TowerFamily.vision)
                 let fixtures = [(kind = "gray", w = 480, h = 480, log = "encode.gray480.log"),
                                 (kind = "cb", w = 336, h = 336, log = "encode.cb336.log"),
                                 (kind = "red", w = 336, h = 336, log = "encode.red336.log"),
                                 (kind = "cb", w = 672, h = 336, log = "encode.cb672x336.log")]
                 for (fx in fixtures) {
-                    let s0 = gpu_tower_counters(true)
+                    let s0 = gpu_tower_counters(TowerFamily.vision)
                     let ran = gate_encode(tt, emb, st, fx.kind, fx.w, fx.h, fx.log, false)
                     if (ran) {
-                        tt |> equal(gpu_tower_counters(true).encodes - s0.encodes, 1l, "{fx.kind} {fx.w}x{fx.h}: device-served (encodes delta)")
-                        tt |> equal(gpu_tower_counters(true).convs - s0.convs, 1l, "{fx.kind} {fx.w}x{fx.h}: the stem ran on the device (convs delta)")
+                        tt |> equal(gpu_tower_counters(TowerFamily.vision).encodes - s0.encodes, 1l, "{fx.kind} {fx.w}x{fx.h}: device-served (encodes delta)")
+                        tt |> equal(gpu_tower_counters(TowerFamily.vision).convs - s0.convs, 1l, "{fx.kind} {fx.w}x{fx.h}: the stem ran on the device (convs delta)")
                     }
                 }
                 var o = OracleEncode()
@@ -251,12 +251,12 @@ def test_gemma4uv_tier1_vulkan(t : T?) {
                     delete stp
                 }
                 vk_drop_model_state()   //! the drop forgets the vision marks: the next encode regrows its buffers and uploads the stem off a fresh key
-                let sd = gpu_tower_counters(true)
+                let sd = gpu_tower_counters(TowerFamily.vision)
                 if (gate_encode(tt, emb, st, "cb", 336, 336, "encode.cb336.log", false)) {
-                    tt |> equal(gpu_tower_counters(true).encodes - sd.encodes, 1l, "after the model drop: device-served again (encodes delta)")
+                    tt |> equal(gpu_tower_counters(TowerFamily.vision).encodes - sd.encodes, 1l, "after the model drop: device-served again (encodes delta)")
                 }
             }
-            serving_tower_shutdown(true)
+            gpu_tower_shutdown(TowerFamily.vision)
             delete st
             delete emb
         } else {

@@ -844,11 +844,8 @@ Each is a stage and the models it holds for, read off the drivers' own gates:
 - **The parakeet decode** (the TDT predictor and joint, the pick) and **its mel** run on the CPU: of a
   64 s clip's 78 ms, the decode is 27.0 (260 steps at 78 us) and the mel 7.1, beside 44.9 of encode
   on the device.
-- **The q8 encoder lane** declines `quant_mode` on gemma4a, canary and parakeet, so those families
-  serve their f32 lane on the device at the larger image; the whisper-class tower reads q8.
-- **The canary perception projection** (`cn.proj`, 7 ms of a 64 s clip) runs on the CPU, and so do
-  the preemphasis and windowing ahead of the device front. A clip whose first conv output passes
-  1 GB (about five minutes) keeps the CPU front, and the q8 encoder lane the whole CPU chain.
+- **The canary front's preemphasis and windowing** run on the CPU ahead of the device front. A clip
+  whose first conv output passes 1 GB (about five minutes) keeps the CPU front.
 - **The Qwen3-ASR projector** (`q3a.proj`, 1.6 ms a chunk) runs on the CPU, and its mel's windowing
   and clamp around the device spectrum.
 - **The whisper-class chat towers' mel** (`log_mel_chunks`; Qwen2-Audio, Qwen2.5-Omni, Ultravox,
@@ -886,8 +883,7 @@ Each pair below differs on the one axis named, and the fold is behavior-neutral 
 - **The per-layer input's gate.** `ple_pre_prefill_pad_gated` and `ple_pre_prefill_gated` differ on the id source
   (`dasllama/dasllama_common.das`); one gate reads an empty token range as the padding token and keeps the CPU's
   one-gather pad arm.
-- **Smaller pairs.** `conv2_mm` beside `wt_mm` (where the q8 region's offset lives); `audio_tower_half_gemms`
-  beside `stage_qwen3a_tower`'s inline predicate (whether Q8_0 is admitted); `kv_blob_grow` beside
+- **Smaller pairs.** `conv2_mm` beside `wt_mm` (where the q8 region's offset lives); `kv_blob_grow` beside
   `reserve_resize` (no fill against zero fill); the three audio probes' file open beside `gguf_file_arch`'s;
   `uncovered_media` and `media_spans`' scan for a ref's id run, and `collect_media_refs` beside `message_parts`
   (`utils/dasllama-server/openai_server.das`); the device tail's landing in `dasllama_gemma3v.das` and
@@ -1221,3 +1217,26 @@ dispatches a site, `DASLLAMA_METAL_HC_MIX8`; the round 35.0 -> 33.4 ms, 135 -> 1
 moved along - the same entry), so the verify stands near 2.2 plain steps and the round at ~33 ms = pass 2.5 + verify
 ~27 + the seams. Done = the verify's buffer encoded while the pass runs (the ids and the side input's rows poked on the
 drafts' landing), the commit stage as one buffer, and the verify re-read against the 35B's ratio.
+
+## 71. An audio tower's exact lane runs whole on the CPU on a Metal box whose toolchain carries no tensor ops
+
+Every audio family's Metal chain - the whisper-class towers (whisper's encoder, the four chat towers), qwen3a, canary,
+parakeet, gemma4a and GigaAM - serves its q8 lane off the q8 slab and its exact lane on the half tensor GEMM over the f16
+image's halfword plane, the image's only GEMM plane (`metal_tower_lane_ok`, `tw_half_pick`,
+`dasllama/dasllama_metal_tower.das`). The half GEMMs compile only where the Metal toolchain carries the tensor ops
+(the prefill driver's compile probe, `pf_hmm_ready`), so on a box without them an exact-lane load maps the CPU image - whisper's decoder with its encoder - and the load names the refusal, while the
+q8 lane serves on the device (`ARCHITECTURE_GPU_ASYMMETRIES.md`, the exact-lane entry). GigaAM's un-pinned lane on Metal
+is the exact one only where the half GEMM compiled (row 72, `register_gigaam_gpu_exact`): on such a box it is q8. Done = an f16 GEMM on `simdgroup`
+halves (the plain `simdgroup_half8x8` path, no tensor ops) serving the tower's exact-lane sites on such a box, a
+twin leg there holding its device rows to the exact CPU chain, and the asymmetry entry removed.
+
+## 72. The audio towers' q8 lane on Metal: GigaAM's trails its f16 lane, the other families' are untimed
+
+GigaAM's Metal chain runs its q8 lane 9 to 13% behind its f16 lane on the M5 Max (ru_short 9.80 against 8.64 ms,
+ru_mid 15.22 against 13.91, ru_long 64.72 against 59.28: `PERF_LEDGER.md`, the entry on GigaAM's exact lane on the
+carrier's f16 halfwords), so GigaAM is the one audio family whose un-pinned lane on Metal is the exact one, on a box whose toolchain compiled
+the half GEMM (`register_gigaam_gpu(@@metal_tower_serves, true)`, `register_gigaam_gpu_exact`, `ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`); every other audio family
+defaults to q8 on every GPU home. The q8 lanes of whisper, qwen3a, the chat towers, canary, parakeet and gemma4a on Metal
+have no timing against their f16 lanes. Done = the Metal q8 GEMM path of the tower chain brought level with or ahead of
+the half tensor GEMM on GigaAM's shapes and GigaAM's un-pinned lane moved to q8, with the q8 and f16 lanes of every other
+audio family timed on a Metal box and the rows in `PERF_LEDGER.md`.

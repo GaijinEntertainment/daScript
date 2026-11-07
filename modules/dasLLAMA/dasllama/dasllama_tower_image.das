@@ -12,11 +12,13 @@ require dasllama/dasllama_image
 require dasllama/dasllama_env      // nolint:STYLE030 - `load_through_image` instances here: its body's names resolve in this module
 require dasllama/dasllama_common
 require dasllama/dasllama_kqformat   // kq_elems: the q8 block
+require dasllama/dasllama_gguf   // gguf_header_read: a source's tensor types
+require dasllama/dasllama_load   // kq_fmt_of: a disk type's member
 require dasllama/dasllama_layout   // q8_gather_rows: the discrete homes' row-major gather
 require dasllama/dasllama_math   // active_q8_repack_layout: the gather's plain layout
-require strings                    // nolint:STYLE030 - ... `ends_with` among them
-require daslib/strings_boost       // nolint:STYLE030 - ... the instances' string helpers
-require daslib/fio                 // nolint:STYLE030 - ... `stat` / `remove` on the image path
+require strings
+require daslib/strings_boost
+require daslib/fio                // nolint:STYLE030 - ... `stat` / `remove` on the image path
 
 //! The GPU-flavored image of the CPU-form model `cpu` (`#tower-dev-block`): the driver's `bake` over it into the device block,
 //! then `gst` - a fresh staging of the family - carrying `cpu`'s meta under `dev`, every plane the bake did not convert
@@ -78,6 +80,64 @@ def cpu_flavor_pinned() : bool => g_cpu_flavor_pin
 def tower_dev_flavor(f; lane) : TowerDev {
     return TowerDev.none if (cpu_flavor_pinned() || f.backend == TowerDev.none || !invoke(f.serves, lane))
     return f.backend
+}
+
+//! a flavor that stages the exact pick as halfwords: every GPU home
+[arch(at = "../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
+def tower_dev_halfword(dev : TowerDev) : bool => dev != TowerDev.none
+
+//! the halfword lane of a pick on `q8` under flavor `dev`: the exact pick on a flavor that stages halfwords (`tower_dev_halfword`)
+def tower_lane_f16(q8 : bool; dev : TowerDev) : bool => !q8 && tower_dev_halfword(dev)
+
+//! the halfword lane of a load of `path` on `q8` under flavor `dev`: a `.dlim` by its baked tag, a source file by its flavor
+def tower_load_f16(path : string; q8 : bool; dev : TowerDev) : bool
+    => path |> ends_with(".dlim") ? !q8 && image_tag_lane(image_family_tag(path)) |> ends_with("-f16") : tower_lane_f16(q8, dev)
+
+//! the halfword lane of the running staging on `q8` (`with_tower_dev_staging`): the pick a staging makes where its caller hands it none
+def tower_staging_f16(q8 : bool) : bool => tower_lane_f16(q8, tower_staging_dev())
+
+//! a tower's GEMM lane as its tags and exec-fmt stamps spell it: `q8`, the exact pick's halfwords (`f16`), else the file's `f32`
+def tower_lane_fmt(q8, f16 : bool) : string => q8 ? "q8" : (f16 ? "f16" : "f32")
+
+//! a tower family's image tag of a lane: `<family>-<tower_lane_fmt>`
+[arch(at = "../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
+def tower_lane_tag(family : string; q8, f16 : bool) : string => "{family}-{tower_lane_fmt(q8, f16)}"
+
+//! the disk type of the first GGUF audio tensor (`a.*`, `mm.a.*`) stored neither as a float type (F32, F16, BF16) nor as Q8_0;
+//! -1 for a source with none or a file that cannot be read as a GGUF
+def tower_src_quant_type(path : string) : int {
+    var quant = -1
+    let read = gguf_header_read(path) $ [unused_argument(bytes)] (m; bytes) {
+        for (ti in m.tensors) {
+            let gt = ti.ggml_type
+            let audio = (ti.name |> starts_with("a.")) || (ti.name |> starts_with("mm.a."))
+            continue if (!audio || gt == GGML_TYPE_F32 || gt == GGML_TYPE_F16 || gt == GGML_TYPE_BF16 || gt == GGML_TYPE_Q8_0)
+            quant = gt
+            break
+        }
+    }
+    return read ? quant : -1
+}
+
+//! a quantized disk type `gt` as the conversion line names it: the type and the `KqFmt` member `kq_fmt_of` maps it to, the type
+//! alone where `kq_fmt_of` answers only its Q8_0 fallback - no member serves the type
+def tower_src_quant_name(gt : int) : string {
+    let member = kq_fmt_of(gt)
+    return member != KqFmt.q8 ? "{ggml_type_name(gt)} (the {member} member)" : "{ggml_type_name(gt)} (a type no KqFmt member serves)"
+}
+
+//! The device flavor a load of the GGUF `path` takes under `f` on the `q8` lane (`tower_dev_flavor`), the source read once for
+//! an audio tensor stored quantized but not as Q8_0: the load decodes it to f32 and re-encodes it into the lane's form on every
+//! home, the CPU image's as much as a device's, and says so in one line
+[arch(at = "../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
+def tower_dev_flavor_announced(f; q8 : bool; path, family : string) : TowerDev {
+    let dev = tower_dev_flavor(f, q8)
+    return dev if (path |> ends_with(".dlim"))
+    let gt = tower_src_quant_type(path)
+    if (gt >= 0) {
+        to_log(LOG_INFO, "dasLLAMA {family}: the source stores an audio tensor as {tower_src_quant_name(gt)} - the load decodes it to f32 and re-encodes it into the {tower_lane_fmt(q8, tower_lane_f16(q8, dev))} lane\n")
+    }
+    return dev
 }
 
 //! panics where `dev` is not the flavor `f` registered: a mint asked for an image no driver of the family serves

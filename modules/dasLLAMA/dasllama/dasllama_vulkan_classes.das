@@ -5198,7 +5198,26 @@ def splitk_reduce_enc(raw : VkCommandBuffer; var h : VkHaz; var rset : VkDescrip
 //! the small f16 x f16 GEMM on the cm2 128 x 128 tile (`F16GemmCm2T`, the template both discrete homes stamp)
 [vk_dispatch(name = "f16_gemm_cm2_cls", grid = "wgs", params = "wgs : int64")]
 class F16GemmCm2 : F16GemmCm2T {
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f32_128x128
+
     [spirv_kernel(local_size_x = 256, name = "f16_gemm_cm2_cls_spv")]
+    def run {
+        f16_gemm_body()
+    }
+}
+
+//! the f16 GEMM's s column (`F16GemmCm2T` at 32 positions), whole in k: the tower sites where `vt_f16_tc` picks s
+[vk_dispatch(name = "f16_gemm_cm2_s_cls", grid = "wgs", params = "wgs : int64")]
+class F16GemmCm2S : F16GemmCm2T {
+    override KSPLIT = false
+    override BN = 32u
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f32_128x32
+
+    [spirv_kernel(local_size_x = 256, name = "f16_gemm_cm2_s_cls_spv")]
     def run {
         f16_gemm_body()
     }
@@ -5579,41 +5598,12 @@ class TowerQ3aShuffle : GkQ3aShuffle {
         q3a_shuffle_body()
     }
 }
-
-struct TowerSpecDftArgs {
-    n_fft : uint    //! the window's taps
-    n_frames : uint
-    mag : uint      //! 1 = the magnitude (gemma4a), 0 = the power (the whisper preprocessors)
-}
-
-//! the spectrum of the windowed frames: one thread per (frame, bin) sums the frame's taps against the bin's
-//! (cos, sin) twiddle pair - the CPU DFT GEMM's rows [k][2 bin], [k][2 bin + 1] - and stores re^2 + im^2 or its root
+//! the windowed frames' spectrum on the template both discrete homes stamp (`TowerSpecDftT`)
 [vk_dispatch(name = "tower_spec_dft_cls", grid = "wgs", params = "wgs : int64")]
-class TowerSpecDft {
-    @ssbo @binding = 0 xw : array<float>
-    @ssbo @binding = 1 tw : array<float>
-    @ssbo @binding = 2 pw : array<float>
-    @push_constant pa : TowerSpecDftArgs
-
+class TowerSpecDft : TowerSpecDftT {
     [spirv_kernel(local_size_x = 256, name = "tower_spec_dft_cls_spv")]
     def run {
-        let gid = gl_GlobalInvocationID.x
-        let nb = pa.n_fft / 2u + 1u
-        if (gid < pa.n_frames * nb) {
-            let frame = gid / nb
-            let b = gid % nb
-            let xb = frame * pa.n_fft
-            let stride = 2u * nb
-            var re = 0.0
-            var im = 0.0
-            for (k in urange(pa.n_fft)) {
-                let x = xw[xb + k]
-                re += x * tw[k * stride + 2u * b]
-                im += x * tw[k * stride + 2u * b + 1u]
-            }
-            let p = re * re + im * im
-            pw[gid] = pa.mag != 0u ? sqrt(p) : p
-        }
+        spec_dft_body()
     }
 }
 
@@ -5701,10 +5691,6 @@ class TowerWdecKv16 : GkWdecKv {
         wdec_kv_body()
     }
 }
-
-let WDEC_CHUNK = 256u   //! the keys a partial's workgroup covers (`TowerWdecAttnPart`) and the extent of its `scores` array
-let WDEC_HS = 64u       //! the whisper decoder's head width, every size of the family; the driver declines another
-let Q3A_TOK_PER_CHUNK = 13u   //! the qwen3a front's positions a chunk (the family's QWEN3A_TOK_PER_CHUNK; the driver verifies the two agree)
 
 //! the whisper decoder's chunked attention partials, on the template both homes stamp
 [vk_dispatch(name = "tower_wdec_attn_part_cls", kernel = "run", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-asr-decoder")]
@@ -5820,111 +5806,24 @@ class TowerDwConv5 : GkDwConvRows {
     }
 }
 
-struct TowerCnAttnRArgs {
-    d : uint        //! the row width (compact [npos x d] rows)
-    npos : uint
-    buoff : uint    //! the content bias row (bias_u) in wn, [d]
-    hoff : uint     //! the head's element base in a row
-}
-
-[ |> template_struct_instance]
-class template TowerCnAttnRT {
-    @template_constant HS : uint = 128u   //! the head width served (the accumulators are sized for 128)
-    @ssbo @binding = 0 q : array<float>
-    @ssbo @binding = 1 k : array<float>
-    @ssbo @binding = 2 v : array<float>
-    @ssbo @binding = 3 ao : array<float>
-    @ssbo @binding = 4 rmat : array<float>
-    @ssbo @binding = 5 @role = "weight" wn : array<float>
-    @push_constant pa : TowerCnAttnRArgs
-    @workgroup ks : float[4096]   //! 32 keys x 128
-    @workgroup vs : float[4096]
-
-    [spirv_kernel(local_size_x = 64), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+//! canary's rel-plane attention on the template both discrete homes stamp (`TowerCnAttnRT`)
+[vk_dispatch(name = "tower_cn_attn_r_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerCnAttnR : TowerCnAttnRT {
+    [spirv_kernel(local_size_x = 64)]
     def run {
-        let lid = gl_LocalInvocationID.x
-        let i = gl_WorkGroupID.x * 64u + lid
-        let npos = max(1u, pa.npos)
-        let live = i < pa.npos
-        let ii = min(i, npos - 1u)
-        let d = pa.d
-        let hoff = pa.hoff
-        let hs = HS
-        var qu, acc : float[128]
-        var n = 0u
-        while (n < hs) {
-            qu[n] = q[ii * d + hoff + n] + wn[pa.buoff + hoff + n]
-            acc[n] = 0.0
-            n++
-        }
-        var m = -1.5e38
-        var den = 0.0
-        let base = npos - 1u - ii
-        let rrow = ii * (2u * npos - 1u)   //! the rel plane's row width
-        var j0 = 0u
-        while (j0 < pa.npos) {
-            barrier()
-            var e = lid
-            while (e < 32u * hs) {
-                let jj = e / hs
-                let row = j0 + jj
-                let ok = row < pa.npos
-                let src = row * d + hoff + e % hs
-                ks[e] = ok ? k[src] : 0.0
-                vs[e] = ok ? v[src] : 0.0
-                e += 64u
-            }
-            barrier()
-            if (live) {
-                let jn = min(32u, pa.npos - j0)   //! the last chunk's live keys
-                var jj = 0u
-                while (jj < jn) {
-                    var cs = 0.0
-                    n = 0u
-                    while (n < hs) {
-                        cs += qu[n] * ks[jj * hs + n]
-                        n++
-                    }
-                    let s = (cs + rmat[rrow + base + j0 + jj]) * (1.0 / sqrt(float(HS)))
-                    if (s > m) {
-                        let r = exp(m - s)
-                        den *= r
-                        n = 0u
-                        while (n < hs) {
-                            acc[n] *= r
-                            n++
-                        }
-                        m = s
-                    }
-                    let w = exp(s - m)
-                    den += w
-                    n = 0u
-                    while (n < hs) {
-                        acc[n] += w * vs[jj * hs + n]
-                        n++
-                    }
-                    jj++
-                }
-            }
-            j0 += 32u
-        }
-        if (live) {
-            let inv = 1.0 / den
-            n = 0u
-            while (n < hs) {
-                ao[i * d + hoff + n] = acc[n] * inv
-                n++
-            }
-        }
+        cn_attn_r_body()
     }
 }
 
-[vk_dispatch(name = "tower_cn_attn_r_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TowerCnAttnR : TowerCnAttnRT {}
-
+//! ... at head width 64 (`TowerCnAttnRT`)
 [vk_dispatch(name = "tower_cn_attn_r64_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TowerCnAttnR64 : TowerCnAttnRT {
     override HS = 64u
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        cn_attn_r_body()
+    }
 }
 
 //! canary's conv module tail: the centered depthwise conv over time (k taps, odd - canary 9), the folded BatchNorm and
@@ -6230,24 +6129,9 @@ class TowerLnRq : TowerPostAddLnT {
 }
 
 
-struct TowerBiasRqArgs {
-    d : uint        //! the row width, a 32-multiple
-    nblk : uint     //! the plane's Q8_0 blocks
-    boff : uint     //! the bias row's base in wn
-}
-
-//! the bias + tanh GELU of a plane and its Q8_0 requant in one dispatch (`RqT`'s grid: eight lanes a block), the source read alone -
-//! the whisper decoder's fc1 epilogue, whose activation the architecture fixes
+//! the whisper decoder's fc1 epilogue on the template both discrete homes stamp (`TowerBiasActRqT`)
 [vk_dispatch(name = "tower_bias_act_rq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TowerBiasActRq : RqT {
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 @role = "weight" wn : array<float>
-    @ssbo @binding = 2 outq : array<int8>
-    @ssbo @binding = 3 outs : array<float>
-    @push_constant pa : TowerBiasRqArgs
-
-    def override load1(e : uint) : float => gelu_tanh_lut_f32(x[e] + wn[pa.boff + e % max(1u, pa.d)])
-
+class TowerBiasActRq : TowerBiasActRqT {
     [spirv_kernel(local_size_x = 256)]
     def run {
         rq_body()
@@ -7353,10 +7237,13 @@ def gemv_cls_set_n(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gb
     return gemv_cls_set(fmt, bufs, sizes, gbits)
 }
 
+//! the q8 N-column GEMV takes its row-pair twin: the lever armed, the reduction at least its width, an even output count
+def q8_gemv_pair_wanted(pc : GemvArgs) : bool => q8_pair_armed() && pc.n >= g_q8_n2_min_n && pc.d % 2u == 0u
+
 //! the q8 stamp for `pc.ncols` columns: the narrowest that holds them, the row-pair form past `g_q8_n2_min_n` on an even row count
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private q8_gemv_n_enc(raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {
-    let pair_wanted = q8_pair_armed() && pc.n >= g_q8_n2_min_n && pc.d % 2u == 0u
+    let pair_wanted = q8_gemv_pair_wanted(pc)
     let g2 = (wgs + 1l) / 2l   //! a subgroup a row pair: half the row grid
     if (pc.ncols <= 2u) {   //! each pair twin builds on first use, since the lever can move after the family's ensure ran
         if (pair_wanted && ensure_q8_gemv_n2p_cls()) {
@@ -7946,13 +7833,6 @@ def vt_gemm_groups(d, rows : int64) : int64 {
     return ((d + te.td - 1l) / te.td) * ((rows + te.tc - 1l) / te.tc)
 }
 
-//! a GEMM site's tile: the cm2 token column on the f16 feed (tc > 0), else the q8 batch variant on the mul_mm tiles
-struct VtTile {
-    v : int
-    tc : int64
-    fmt : int    //! the weight format slot the tile decodes: 0 (the q8 slot) the q8 planes, else a kq lane seat's K-quant member on the cm2 tiles
-}
-
 def vt_tile(cm2 : bool; width, rows : int64; fmt : int = int(KqFmt.q8)) : VtTile {
     if (cm2) {
         return VtTile(v = 0, tc = cm2_tile_cols(width, rows), fmt = fmt)
@@ -7964,25 +7844,13 @@ def vt_tile_ensure(t : VtTile) : bool => t.tc > 0l ? cm2_cls_ensure(t.fmt, t.tc)
 
 def vt_tile_groups(t : VtTile; width, rows : int64) : int64 => t.tc > 0l ? cm2_tiles_at(width, rows, t.tc) : vt_gemm_groups(width, rows)
 
-//! a FastConformer block chain's head size: the width over the heads, 0 with no heads
-def vt_fc_hs(d, n_head : int64) : int64 => n_head > 0l ? d / n_head : 0l
-
-//! the FastConformer block chain's widths, heads and row counts at `npos` rows (`ww` the relative form's position window);
-//! `rope_n` the shorter rope table's floats (the rotary form)
-def vt_fc_shape_ok(rotary : bool; d, ff, n_head, conv_kernel, npos, ww, rope_n : int64) : bool {
-    let hs = vt_fc_hs(d, n_head)
-    let heads_ok = rotary ? (hs % 2l == 0l && hs <= 128l && rope_n >= npos * (hs / 2l)) : (hs == 64l || hs == 128l)
-    return (d % 64l == 0l && ff % 64l == 0l && ff >= 2l * d && heads_ok && n_head * hs == d && conv_kernel % 2l == 1l
-        && npos > 0l && (rotary || ww == 2l * npos - 1l))
-}
-
 //! every class and tile the FastConformer block chain dispatches at `npos` rows, compiled; `cm2` the f16 feed's tiles
 def vt_fc_classes_ok(rotary : bool; d, ff, n_head, npos, ww : int64; khr, gemm_khr, cm2 : bool) : bool {
-    let hs = vt_fc_hs(d, n_head)
+    let hs = n_head > 0l ? d / n_head : 0l
     let hsp = hs <= 64l ? 64l : 128l
     let rel_ok = rotary || ((hs == 64l ? ensure_tower_cn_attn_r64_cls() : ensure_tower_cn_attn_r_cls()) && ensure_tower_rel_sincos_cls())
-    let rot_ok = (!rotary || (ensure_tower_rope_tab_cls() && ensure_tower_hpad_b_cls() && ensure_tower_hunpad_cls() && ensure_tower_ga_dw_cls() && ensure_tower_ga_dwh_cls()
-        && fa_stamp_ensure(khr, hsp, false, false, false, false, true)))
+    let rot_ok = (!rotary || (ensure_tower_rope_tab_cls() && ensure_tower_hpad_b_cls() && ensure_tower_hpad_cls() && ensure_tower_hunpad_cls()
+        && ensure_tower_ga_dw_cls() && ensure_tower_ga_dwh_cls() && fa_stamp_ensure(khr, hsp, false, false, false, false, true)))
     if (!rel_ok || !rot_ok || !ensure_tower_ln_cls() || !ensure_tower_clamp_rq_cls() || !ensure_tower_bias_act_cls() || !ensure_tower_post_add_ln_cls()
             || !ensure_tower_glu_sig_cls() || !ensure_tower_cn_dw_cls() || !ensure_tower_pk_dw_cls() || !ensure_tower_hpad16_cls()
             || !ensure_tower_hpad16_b_cls() || !f16_gemm_ensure(gemm_khr) || !ensure_tower_post_add_ln_nb_cls() || !ensure_tower_act_cls()) {
@@ -7991,9 +7859,6 @@ def vt_fc_classes_ok(rotary : bool; d, ff, n_head, npos, ww : int64; khr, gemm_k
     return (vt_tile_ensure(vt_tile(cm2, d, npos)) && vt_tile_ensure(vt_tile(cm2, ff, npos)) && vt_tile_ensure(vt_tile(cm2, 2l * d, npos))
         && vt_tile_ensure(vt_tile(cm2, d, rotary ? npos : ww)) && (!cm2 || ensure_tower_clamp_cvt_cls()))
 }
-
-//! the window's element base in the gigaam front's twiddle buffer: past the [n_fft][2 n_bins] twiddles
-def vt_ga_mel_woff(n_fft : int64) : int64 => n_fft * 2l * (n_fft / 2l + 1l)
 
 //! the rows a GEMM record carries: on the l column the encode's rounded up to the column, else the raw count
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]

@@ -16,7 +16,7 @@ require dasllama/dasllama_image  // load_model_cached (decoders ride the .dlim r
 require dasllama/dasllama_plane public  // plane finalizers — re-exported so any module that deletes an ASR carrier sees them
 require dasllama/dasllama_asr_types public  // AsrCaps/AsrTimestamps/TranscribeSegment — the shared ASR floor
 require dasllama/dasllama_math  // guard_interp_inference — the library-seam -jit stop at session creation
-require dasllama/dasllama_audio  // audio_tower_gpu_serves - whisper's lane in asr_device_lane
+require dasllama/dasllama_tower   // TowerDev: whisper's home in asr_device_lane
 require dasllama/dasllama_whisper public
 require dasllama/dasllama_qwen3a public
 require dasllama/dasllama_parakeet public
@@ -127,12 +127,17 @@ def set_asr_fp32(on : bool) {
     g_asr_force_fp32 = on
 }
 
-//! Force fp32 on the ENCODER/TOWER half only (whisper enc, the parakeet bin, the canary
-//! encoder) for models loaded AFTER this call — the GPU-tower serving mode: the decoder half
-//! keeps its fast q8 rail. ``set_asr_fp32`` (both halves) wins; GGUF facade towers stay q8.
+//! Pin the exact lane on the ENCODER/TOWER half only (whisper enc, the parakeet bin, the canary
+//! encoder) for models loaded AFTER this call: f32 on the CPU, the f16 lane on a GPU home; the decoder half
+//! keeps its q8 rail. ``set_asr_fp32`` (both halves) wins; GGUF facade towers stay q8.
 def set_asr_tower_fp32(on : bool) {
     g_asr_tower_fp32 = on
 }
+
+//! The encoder lane the facade's next whisper bin load takes (true = q8): the exact one under a facade fp32 rail, else the
+//! lane DASLLAMA_AUDIO_LANE asks, else q8
+[arch(at = "../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
+def whisper_tower_serves_q8() : bool => audio_lane_serves_q8(asr_fp32_pinned() ? GemmLane.exact : GemmLane.unset, true)
 
 //! Pin the encoder's weight lane of every family whose lane follows the GPU tower (parakeet, canary, GigaAM, gemma4a) for
 //! models loaded AFTER this call: q8 (`on`) or the exact planes, whatever the tower serves.
@@ -143,23 +148,36 @@ def set_asr_tower_q8(on : bool) {
     set_gemma4a_q8(on)
 }
 
+//! a `.dlim`'s baked lane tag as the facade routes it: the family it loads (`whisper`, `parakeet`, `gigaam`; the mmproj route's `qwen3a`, `gemma4a`, `canary`), else ""
+[arch(at = "../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
+def asr_image_route(tag : string) : string {
+    if (tag == "whisper-q8" || tag == "whisper-f32" || tag == "whisper-f32-q8" || tag == "whisper-f16-q8") return "whisper"
+    if (tag == "parakeet-q8" || tag == "parakeet-f32" || tag == "parakeet-f16") return "parakeet"
+    if (tag == "gigaam-q8" || tag == "gigaam-f16" || tag == GIGAAM_KQ_TAG) return "gigaam"
+    if (tag == "qwen3a-f32" || tag == "qwen3a-f16" || tag == "qwen3a-q8") return "qwen3a"
+    if (tag == "gemma4a-f32" || tag == "gemma4a-f16" || tag == "gemma4a-q8") return "gemma4a"
+    if (tag == "canary-q8" || tag == "canary-f32" || tag == "canary-f16") return "canary"
+    return ""
+}
+
 //! Load an ASR model, sniffing the format: a ggml bin is whisper (vocab >= 51864) or parakeet (1k/8k); a GGUF of arch
 //! ``gigaam`` is the one-file GigaAM carrier, any other GGUF needs its mmproj too (the two-argument overload). A ``.dlim``
 //! routes on its baked family tag. One loader, no family names.
 def load_asr_model(path : string) : AsrModel {
     if (path |> ends_with(".dlim")) {
         let tag = image_tag_lane(image_family_tag(path))
-        if (tag == "whisper-q8" || tag == "whisper-f32" || tag == "whisper-f32-q8") {
+        let route = asr_image_route(tag)
+        if (route == "whisper") {
             var wm = AsrModel(kind = AsrKind.whisper)
             wm.whisper <- load_whisper_model(path, tag == "whisper-q8", tag != "whisper-f32")
             return <- wm
         }
-        if (tag == "parakeet-q8" || tag == "parakeet-f32") {
+        if (route == "parakeet") {
             var pm = AsrModel(kind = AsrKind.parakeet)
             pm.pk <- load_parakeet_model(path, tag == "parakeet-q8")
             return <- pm
         }
-        if (tag == "gigaam-q8" || tag == "gigaam-f16" || tag == GIGAAM_KQ_TAG) {
+        if (route == "gigaam") {
             var gm = AsrModel(kind = AsrKind.gigaam)
             gm.ga <- load_gigaam_model(path, tag == "gigaam-q8")
             return <- gm
@@ -206,7 +224,7 @@ def load_asr_model(path : string) : AsrModel {
         panic("dasLLAMA asr: '{path}' has n_vocab {vocab} - matches neither whisper (51864-51866) nor parakeet (~1k)")
     }
     var m = AsrModel(kind = AsrKind.whisper)
-    m.whisper <- load_whisper_model(path, !asr_fp32_pinned(), !g_asr_force_fp32)
+    m.whisper <- load_whisper_model(path, whisper_tower_serves_q8(), !g_asr_force_fp32)
     return <- m
 }
 
@@ -253,18 +271,13 @@ def load_asr_model(path : string; mmproj : string) : AsrModel {
     var mm_q8 = -1   //! the mmproj image's baked lane: 1 the q8 lane, 0 the exact one; -1 for a raw bin, which follows the facade's pins
     if (mmproj |> ends_with(".dlim")) {
         let tag = image_tag_lane(image_family_tag(mmproj))
-        if (tag == "qwen3a-f32" || tag == "qwen3a-q8") {
-            eproj = "qwen3a"
+        let route = asr_image_route(tag)
+        if (route == "qwen3a" || route == "gemma4a") {
+            eproj = route
             mm_q8 = tag |> ends_with("-q8") ? 1 : 0
-        } elif (tag == "gemma4a-f32" || tag == "gemma4a-q8") {
-            eproj = "gemma4a"
-            mm_q8 = tag |> ends_with("-q8") ? 1 : 0
-        } elif (tag == "canary-q8") {
+        } elif (route == "canary") {
             emagic = CANARY_MAGIC
-            canary_q8 = true
-        } elif (tag == "canary-f32") {
-            emagic = CANARY_MAGIC
-            canary_q8 = false
+            canary_q8 = tag == "canary-q8"
         } else {
             panic("dasLLAMA asr: mmproj image '{mmproj}' is baked as '{tag}' - not an audio front-end image")
         }
@@ -375,35 +388,21 @@ def asr_encode_bucket(m : AsrModel) : string {
     return ""
 }
 
-//! The GPU tier this build's device seats run on: "metal", "vulkan", or "cpu" on a build with neither.
-def private asr_gpu_tier_name() : string {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        return "metal"
-    } else {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            return "vulkan"
-        } else {
-            return "cpu"
-        }
-    }
-}
-
 //! Where the model serves: a two-file model's decoder on its Metal flavor ("metal") or the CPU; a one-file model's encoder
-//! tower on the build's GPU tier ("metal" or "vulkan") where the family's device seat serves the loaded lane, else "cpu" -
-//! whisper's answers the exact-lane question (`audio_tower_gpu_serves`), so its q8 tower on Vulkan reads "cpu".
+//! tower on the home its image's flavor names ("metal", "vulkan" or "cuda") where that home's device seat serves the loaded
+//! lane (`whisper_device_home`, `gigaam_device_gpu`, `parakeet_device_gpu`), else "cpu".
 def asr_device_lane(m : AsrModel) : string {
     if (m.kind == AsrKind.qwen3a || m.kind == AsrKind.qwen3omni || m.kind == AsrKind.canary || m.kind == AsrKind.gemma4a) {
         return m.dec.metal_blob ? "metal" : "cpu"
     }
-    var gpu = false
-    if (m.kind == AsrKind.gigaam) {
-        gpu = gigaam_device_gpu(m.ga)
-    } elif (m.kind == AsrKind.parakeet) {
-        gpu = parakeet_device_gpu(m.pk)
-    } else {
-        gpu = audio_tower_gpu_serves()
+    if (m.kind == AsrKind.whisper) {
+        let home = whisper_device_home(m.whisper)
+        return home == TowerDev.none ? "cpu" : "{home}"
     }
-    return gpu ? asr_gpu_tier_name() : "cpu"
+    if (m.kind == AsrKind.gigaam) {
+        return gigaam_device_gpu(m.ga) ? "{m.ga.dev_backend}" : "cpu"
+    }
+    return parakeet_device_gpu(m.pk) ? "{m.pk.dev_backend}" : "cpu"
 }
 
 def caps(m : AsrModel) : AsrCaps {

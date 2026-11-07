@@ -3,7 +3,7 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_ENGINE_SERVING.md`,
 `ARCHITECTURE_ENGINE_FORMATS.md`, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_SHARED_KERNELS.md`,
-`ARCHITECTURE_MEDIA.md`, `ARCHITECTURE_TTS.md`, `ARCHITECTURE_POCKET.md`. Planned work:
+`ARCHITECTURE_MEDIA.md`, `ARCHITECTURE_MEDIA_VISION.md`, `ARCHITECTURE_TTS.md`, `ARCHITECTURE_POCKET.md`. Planned work:
 `followup_general.md`, `followup_vulkan.md` for Vulkan, `followup_metal.md` for Metal.
 
 A charter line is a file's line in the companion section that `ARCHITECTURE.md#file-charters` routes
@@ -48,19 +48,21 @@ state, lands in `dasllama/dasllama_vulkan_classes.das`; a stamp selector it is h
 naming the stamp, such as a variant ordinal - is one of those arguments.** A stamp is one class
 stamped from a kernel class template.
 
-**A function that reads shape values alone for its result - a bool or a count over a model's
-dims, row counts and formats, nothing read off a device - that a `dasllama/dasllama_*vulkan*.das`
-file calls and no `dasllama/dasllama_*cuda*.das` or `dasllama/dasllama_metal*.das` file calls lands
-in `dasllama/dasllama_vulkan_classes.das`.**
+**A function a `dasllama/dasllama_*vulkan*.das`, `dasllama/dasllama_*cuda*.das` or
+`dasllama/dasllama_metal*.das` file calls, whose parameters are only
+dims, row counts and formats and whose result is a bool or a count, with nothing read off a device,
+lands in a file that every other file calling it requires after the change, directly or through a
+public require, and that directly requires none of `dasllama/dasllama_audio.das`,
+`dasllama/dasllama_vision.das` and the model family files (`dasllama/dasllama_arch_<name>.das`,
+`dasllama/dasllama_<family>.das`).**
 
-**A function that reads shape values alone for its result, called from a
-`dasllama/dasllama_*vulkan*.das` file and a `dasllama/dasllama_metal*.das` file and from no
-`dasllama/dasllama_*cuda*.das` file, lands in a file that every calling file requires, directly or
-through a public require, after the change.**
-
-**A function that reads shape values alone for its result, called from both a
-`dasllama/dasllama_*vulkan*.das` file and a `dasllama/dasllama_*cuda*.das` file, lands in
-`dasllama/dasllama_gpu_math.das`.**
+**A function a `dasllama/dasllama_*vulkan*.das`, `dasllama/dasllama_*cuda*.das` or
+`dasllama/dasllama_metal*.das` file calls, whose parameters include a struct that
+`dasllama/dasllama_audio.das`, `dasllama/dasllama_vision.das` or a model family's file declares,
+and otherwise only dims, row counts and formats, and whose result is a bool or a count, with nothing
+read off a device, lands in the tower chain file (`dasllama/dasllama_tower_chains*.das`,
+`dasllama/dasllama_asr_dec_chains.das`) that directly requires the struct's declaring file, and in
+the declaring file when no chain file requires it.**
 
 **A Vulkan descriptor set's writer - a host-side ensure/set/encode chain whose pick reads driver
 state (`g_rd`, or an `RLayer` field read from a global or an argument), or a function that builds
@@ -75,8 +77,9 @@ function moves the chain with it.**
 **A HOST-side tensor format conversion lands in `dasllama/dasllama_convert.das`.**
 
 **A kernel-side helper - a free `def` outside any class that a kernel body calls - that one
-home's kernels splice lands in that home's kernel file: `dasllama/dasllama_metal_kernels.das`,
-`dasllama/dasllama_vulkan_classes.das` or `dasllama/dasllama_cuda_classes.das`.**
+home's kernels splice lands in that home's kernel files: `dasllama/dasllama_metal_kernels*.das`
+for Metal, `dasllama/dasllama_vulkan_classes*.das` for Vulkan, `dasllama/dasllama_cuda_classes*.das`
+for CUDA.**
 
 **A kernel-side helper that the Vulkan and the CUDA kernels splice and the Metal kernels do not
 lands once in `dasllama/dasllama_gpu_kernels_discrete.das` - never as a copy per home.**
@@ -101,30 +104,34 @@ already-decoded f32 row is not a codec primitive.
 tokenizer's own file (`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`).**
 
 **A GPU kernel body under `dasllama/` - the arithmetic loop a dispatch class (a class a
-`[metal_dispatch]`, `[vk_dispatch]` or `[cuda_dispatch]` declares) picks one variant of - that one
-home stamps lands in that home's kernel file: `dasllama/dasllama_metal_kernels.das`,
-`dasllama/dasllama_vulkan_classes.das` or `dasllama/dasllama_cuda_classes.das` - a class stamped
-from a template declared in another file is not one.**
+`[metal_dispatch]`, `[vk_dispatch]` or `[cuda_dispatch]` declares, not stamped from a template
+declared in another file) picks one variant of - that one home stamps lands in that home's kernel
+files: `dasllama/dasllama_metal_kernels*.das` for Metal, `dasllama/dasllama_vulkan_classes*.das`
+for Vulkan, `dasllama/dasllama_cuda_classes*.das` for CUDA.**
 
-**A class stamped from a template declared in another file lands in its home's kernel file, or in a
+**A class stamped from a template declared in another file lands in its home's kernel files (the
+three globs above), or in a
 file whose role row in `ARCHITECTURE_GPU.md#gpu-backends` names that template's stamps; a diff that
 stamps one in another file of the role table adds that template's stamps to the file's row, and a
 file in no row of the role table never holds one.**
 
-**A `class template` two homes stamp never sits in one home's kernel file: it lands in
+**A `class template` two homes stamp never sits in one home's kernel files: it lands in
 `dasllama/dasllama_gpu_kernels_discrete.das` when the Vulkan and the CUDA homes stamp it and Metal
 does not, and in `dasllama/dasllama_gpu_kernels_common.das` when the Metal and the Vulkan homes
 stamp it, whether or not the CUDA home does
 (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels`).** Weakening `REVIEW.das`'s
 `check_shared_template_homes` is a defect.
 
-**A CPU kernel body under `dasllama/` - a function whose loop turns a weight format's packed bytes
-(block-quantized bytes with their scales, not an f16 or bf16 element plane) into a dot product or a
-dequantized f32 row, a `[tune]` variant, a function a `register_kernel_backend` call or a
-`KernelBackend` field default names, or a scalar body those call - lands in a tier file,
-`dasllama/dasllama_math_<tier>.das`, never in `dasllama/dasllama_math.das`; a body that a
-`register_kernel_backend` call in another tier file names, or that two tier files' calls name, lands
-in `dasllama/dasllama_math_default.das`.**
+**A CPU kernel body under `dasllama/` lands in a tier file, `dasllama/dasllama_math_<tier>.das`,
+never in `dasllama/dasllama_math.das`.** A CPU kernel body is a function whose loop turns a weight
+format's packed bytes (block-quantized bytes with their scales, not an f16 or bf16 element plane)
+into a dot product or a dequantized f32 row, a `[tune]` variant, a function a
+`register_kernel_backend` call or a `KernelBackend` field default names, or a scalar body those
+call.
+
+**A CPU kernel body that a `register_kernel_backend` call in a tier file other than the one holding
+it names, or that two
+tier files' calls name, lands in `dasllama/dasllama_math_default.das`.**
 
 **A branch - one arm of an `if` or a `match` - that only one model family takes, in a file whose
 charter line names no concern of that family, lands in that family's own file
@@ -189,4 +196,5 @@ never fires for a consumer of the `dasllama/dasllama.das` facade.
 **Platform-specific code - a device call, a `require` of a backend module (the platform's binding:
 `vulkan`, `das_metal`, a `cuda/` module of `dasCUDA`), or a read of a backend's own state other
 than its `g_env_<backend>` knobs - in an engine file (`dasllama/`) lands only in one of that
-backend's role files or its entry, per the role table of `ARCHITECTURE_GPU.md#gpu-backends`.**
+backend's role files or its entry, per the role table of `ARCHITECTURE_GPU.md#gpu-backends`.** A
+require of a `dasllama/` module that re-exports the binding is not a require of a backend module.

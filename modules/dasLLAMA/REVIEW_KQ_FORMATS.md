@@ -31,16 +31,16 @@ the member's twin can run, in that diff.** When two formats'
 picks differ, a timing compared across them measures one format's base kernel against the other's
 tensor twin, not the two formats' kernels.
 
-**A diff that writes in host code (any code but a GPU kernel body), outside a definition home, a
-kernel builder's `requires =` string and a test's expected-message text, a literal standing for a
-per-format quantity of a `KqFmt` member, in any unit (words, halves, superblocks) - a number
-derived from several formats' sizes included - is a defect: read it through a `KqFmt` accessor
+**A diff that writes in host code (any code but a GPU kernel body), on any line it adds, edits or
+re-indents, outside a definition home, a kernel builder's `requires =` string and a test's
+expected-message text, a literal standing for a per-format quantity of a `KqFmt` member, in any
+unit (words, halves, superblocks) - a number derived from several formats' sizes included - is a
+defect: read it through a `KqFmt` accessor
 (`kq_elems`, `kq_disk_bytes`, ...), through `kq_qsb` / `kq_ssb` on a format id, or through a named
 constant a definition home declares, declared there in the same change when none exists.** The
 definition homes are `dasllama/dasllama_kqformat.das`, the `ggml_type_bytes` table
 (`dasllama/dasllama_gguf.das`), the `Q8_*` constants of `dasllama/dasllama_gemm_schema.das`, a
-GPU kernel class's `@template_constant`s and the pins of `tests/test_kqformat.das`. A literal `32`
-reads like a tile width.
+GPU kernel class's `@template_constant`s and the pins of `tests/test_kqformat.das`.
 
 **A diff that writes a literal integer into a kernel builder's `requires =` alignment string pins
 it against the format's block length in `tests/test_kqformat.das` in the same change** - the lens
@@ -61,21 +61,26 @@ value, and its `disk_bytes` inside the walk that checks every row against `ggml_
 Narrowing the row's literal pins or the `ggml_type_bytes` walk is a defect.
 
 Terms the rules below use (`ARCHITECTURE_ENGINE_FORMATS_TERMS.md#kq-format-terms`): a site is a
-weight plane a backend's serving call reads; a lever is an env knob or setter that changes a site's
-form; a converted copy is a site's weights in another form, not a served form, that outlives the
-call or window or reaches the `.dlim`.
+weight plane a backend's serving call reads; a weight format is the disk type of the site's source
+tensors, quantized or float; a lever is an env knob or setter that
+changes a site's form; a served form is a value-exact re-encoding of the disk values with no wider
+element type; a converted copy is a site's weights in another form, not a served form, that
+outlives the call or window or reaches the `.dlim`.
 
 **A diff that makes a site read a weight format through a converted copy, or hands a GPU site to
 the CPU's kernels, on a run with every lever at its default is a defect - add that backend's
-kernels for the format at the site instead.** A flavor pick (a GPU family's `*_serves_model`) that
-declines the GPU image at load, with the device present, does one or the other at every site the
-image covers - the load maps the CPU image or another lane's converted copy - whatever it logs; a
-tower chain's encode decline that refuses the call (`tower_cpu_refuse`) does neither.
+kernels for the format at the site instead.** The ledgers of converted copies that a default run
+reads are `ARCHITECTURE_ENGINE_FORMATS.md#the-load-and-image-rail` and `#kq-token-table`. A flavor pick (a GPU family's
+`*_serves_model`) that declines the GPU image at load, with the device present, does one or the
+other at every site the image covers - the load maps the CPU image or another lane's converted
+copy - whatever it logs; a tower chain's encode decline that refuses the call (`tower_cpu_refuse`)
+does neither.
 
 **A diff that adds a site, adds a backend's serving call to a site, or changes which `KqFmt`
 members a site serves, serves at it, on each backend whose serving call reaches the site, in the
 same change, every `KqFmt` member whose block length divides the site's row length (256 for a
-superblock member, 32 for a per-32 member), or declines each member it does not serve there.** A
+superblock member, 32 for a per-32 member) and that the diff does not refuse for that site (on
+the CPU) or decline for it (on a GPU backend).** A
 site that serves only the formats its author's files carried converts the rest without saying so,
 and the first file in another format fails or converts at load with no message naming the site.
 
@@ -84,9 +89,9 @@ load refuse that plane, with a reason naming the site and the `KqFmt` member (no
 
 **A diff that leaves a `KqFmt` member unserved at a site a GPU backend's serving call reaches
 declines it with a reason naming the site and the `KqFmt` member (not the disk type) - in the
-backend's flavor pick (its `*_serves_model`) at load for a family with a GPU image (`REVIEW_TOWER.md`'s
-flavor-pick rule: a GPU image's encode decline refuses the call), in its chain at encode for a chain
-with none.**
+backend's flavor pick (its `*_serves_model`) at load for a family with a GPU image, in its chain at
+encode for a chain with none.** A GPU image never runs on the CPU, so a decline at encode can only
+refuse the call; a decline at load lets the load map the CPU image.
 
 **A diff that makes the load accept a `.scale` tensor - a per-plane dequant factor stored beside a
 weight tensor - at a site makes each backend whose serving call reaches the site apply that factor
@@ -95,11 +100,10 @@ site and the member.** A backend that reads the plane and skips the factor produ
 and no message names the site.
 
 **A diff that adds or changes a site that names, with a literal `KqFmt` member, the format of a
-weight plane whose disk type some `KqFmt` member describes is a defect: tag the plane from its
-disk type with `kq_tag` / `kq_fmt_of` (`dasllama/dasllama_load.das`) and read that tag at the
-site instead.** A literal at the site is a conversion no report names: every disk type the file
-carries becomes the literal's form, and each backend that copies the literal serves that form in
-place of the file's.
+weight plane the site reads in the form the model file stores it in, where some `KqFmt` member
+describes that disk type, is a defect: tag the plane from its disk type with `kq_tag` / `kq_fmt_of`
+(`dasllama/dasllama_load.das`) and read that tag at the site instead.** A literal at such a site
+serves every file's plane as that one format, whatever its disk type.
 
 **Weakening `REVIEW.das`'s `check_load_big_format` is a defect.**
 
@@ -107,20 +111,20 @@ place of the file's.
 name, or a predicate that returns true for "this backend runs this format" - while, on a run with
 every lever at its default, a site that backend's serving call reaches reads the format through a
 converted copy or hands a GPU site to the CPU's kernels is a defect - state that site as a gap
-instead, or cite the follow-up row that ledgers it.**
+instead, or cite the follow-up row that plans its kernels.**
 
 **A diff that states, in any document, PR description, test name or predicate, that a GPU backend
 serves a `KqFmt` member at a site lands or cites a subtest that loads a file whose plane at that
 site is in that format on disk, and asserts that the loader's format tag for that plane equals its
-disk type and that a kernel counter (`metal_kernel_coverage_of(name)` on Metal,
-`vk_kernel_coverage_of(name)` on Vulkan, `cud_kernel_coverage_of(name)` on CUDA) that no other plane
-of that file moves rose during the run.** The file is a catalogued download, a
+disk type and that a per-kernel launch counter of that backend (`metal_kernel_coverage_of`,
+`vk_kernel_coverage_of`, `cud_kernel_coverage_of`, `cud_kernel_census_of`) that no other plane of
+that file moves rose during the run.** The file is a catalogued download, a
 `performance/model_specs.das` row's file or a `performance/profile_common.das` `asr_catalog`
 entry's; when no downloaded row carries the format, it is a row whose `file` ends `-local.gguf` and
 whose `recipe` requantizes into it. A ran-only assert still passes on a converted copy or the CPU
 pre-step.
 
-**A diff that adds a lever, off by default, that makes a site read a weight format through a
-converted copy names the lever in the same change - in `ARCHITECTURE_GPU_ASYMMETRIES.md` when one
-GPU backend carries it and another lacks it, else in the `ARCHITECTURE*.md` section that describes
-the site's planes.**
+**A diff that adds a lever, off by default, or changes which form an existing lever selects, so
+that the lever makes a site read a weight format through a converted copy, names the lever in the
+same change - in `ARCHITECTURE_GPU_ASYMMETRIES.md` when one GPU backend carries it and another lacks
+it, else in the `ARCHITECTURE*.md` section that describes the site's planes.**

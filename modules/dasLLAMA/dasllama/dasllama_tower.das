@@ -17,11 +17,12 @@ require dasllama/dasllama_common   // requant_rows_q8_sized: tower_mm_rq's q8 fe
 require dasllama/dasllama_gemm_schema   // Q8K_SUM_ELEMS: the kq lane's Q8_K image
 require dasllama/dasllama_math_default   // matmul_kq_rows_at: the kq GEMM over repacked or disk-order planes
 require dasllama/dasllama_repack   // repack_conv_out_tap_in: the conv reader's tap-major order
+require dasllama/dasllama_env   // g_env_engine.audio_lane: the audio families' lane ask
 require daslib/cmp
 
 // The family-neutral encoder-tower home: the row math, activations, GEMM wrappers, clamp
 // sidecars, patch geometry, blocked bidirectional attention, and the encode-stage prof rail
-// that every audio AND vision tower composes (ARCHITECTURE_MEDIA.md §1.7). One home: a family
+// that every audio AND vision tower composes (ARCHITECTURE_MEDIA.md#tower-audio-charters). One home: a family
 // file that re-implements a shape found here is a defect; nothing here names a family type.
 
 // Per-layer tensor offsets inside fblob, in layout order. conv weights are stored PERMUTED
@@ -73,16 +74,45 @@ def fc_gemm_records(lo : CanaryLayerOffs; d, ff : int64) : Q8Region[11] {
         Q8Region(woff = lo.ff2b_w, n = ff, rows = d))
 }
 
+//! A FastConformer chain's q8 regions, both homes' bake and attach: every block's GEMM records over `offs` (`n_layer` of them,
+//! `d` wide, `ff` the hidden width), then the `front` records and the projector `proj`, each region with no rows left out
+def fc_q8_regions(offs : array<CanaryLayerOffs>; n_layer, d, ff : int64; front : Q8Region[3]; proj : Q8Region) : array<Q8Region> {
+    var @exact_size rg : array<Q8Region>
+    rg |> reserve(n_layer * FC_GEMM_RECORDS + 4l)
+    for (l in range64(n_layer)) {
+        for (r in fc_gemm_records(offs[l], d, ff)) {
+            rg |> push(r) if (r.rows > 0l)
+        }
+    }
+    for (r in front) {
+        rg |> push(r) if (r.rows > 0l)
+    }
+    rg |> push(proj) if (proj.rows > 0l)
+    return <- rg
+}
+
+//! a rel-form FastConformer front's GEMM records (canary, parakeet): the two `nch`-square 1x1 convs, then the pre-projection over `n_mel` to `d`
+def fc_front_records(c3_w, c6_w, pre_w, nch, n_mel, d : int64) : Q8Region[3] {
+    let w3 = conv_s2_out(conv_s2_out(conv_s2_out(n_mel)))
+    return fixed_array<Q8Region>(
+        Q8Region(woff = c3_w, n = nch, rows = nch),
+        Q8Region(woff = c6_w, n = nch, rows = nch),
+        Q8Region(woff = pre_w, n = w3 * nch, rows = d))
+}
+
 //! a family's GPU tower seat as the lane policy reads it: registered, whether the driver's f32 tiles are its faster lane (the
-//! policy then prefers the file's planes over the q8 image), and whether it serves on this box
+//! policy then prefers the file's planes over the q8 image), and whether it serves on this box; `exact`, where a driver
+//! registers one (`exact_asks`), answers whether its exact lane serves on this device
 struct GpuLaneSeat {
     set : bool
     f32_lane : bool = true
     serves : function<() : bool>
+    exact_asks : bool
+    exact : function<() : bool>
 }
 
 //! the GPU tower would serve this encode on the file's planes - the lane policy's clause: with it false the policy's default is the q8 image
-def gpu_exact_serves(seat : GpuLaneSeat) : bool => seat.set && seat.f32_lane && invoke(seat.serves)
+def gpu_exact_serves(seat : GpuLaneSeat) : bool => seat.set && seat.f32_lane && invoke(seat.serves) && (!seat.exact_asks || invoke(seat.exact))
 
 //! the lane policy's reason under `seat` and the pin, the load's announce line
 def lane_why(seat : GpuLaneSeat; pinned : bool) : string {
@@ -91,19 +121,58 @@ def lane_why(seat : GpuLaneSeat; pinned : bool) : string {
     } elif (gpu_exact_serves(seat)) {
         return "the GPU tower serves the file's planes (its f32 tiles are the faster lane)"
     } elif (seat.set && invoke(seat.serves)) {
-        return "the GPU tower serves the q8 image (its q8 tiles are the faster lane)"
+        return "the GPU tower serves the q8 image (the default lane)"
     } elif (float_batch_override_active()) {
         return "DASLLAMA_ACCEL on: the float-batch tier serves the file's planes"
     }
     return "the CPU default (no GPU tower, no accelerate tier)"
 }
 
-//! A q8-lane family load's lane line: the lane taken (`q8`, else the `exact` planes) and why - the pin `setter` made, a GPU
-//! tower serving the exact planes, or the CPU default
+let private AUDIO_LANE_KNOB = g_env_engine.audio_lane ?? 0   //! DASLLAMA_AUDIO_LANE as set, 0 unset
+
+def private audio_lane_of(v : int) : GemmLane => v == 8 ? GemmLane.q8 : (v == 16 ? GemmLane.exact : GemmLane.unset)
+
+let private AUDIO_LANE_ASK = audio_lane_of(AUDIO_LANE_KNOB)   //! the lane DASLLAMA_AUDIO_LANE asks, `unset` where it names none
+
+var private g_audio_lane_said = false
+
+[init]
+def private audio_lane_knob_check {
+    if (AUDIO_LANE_KNOB != 0 && AUDIO_LANE_ASK == GemmLane.unset) {
+        to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_AUDIO_LANE={AUDIO_LANE_KNOB} is not one of 8 | 16 - every audio tower load keeps its family's own lane\n")
+    }
+}
+
+//! An audio family's lane for its next load (true = q8): its API `pin`, else the lane DASLLAMA_AUDIO_LANE asks, else its
+//! `policy` - the one read of the knob every audio family's lane takes; a lane the knob moves off the policy says so once
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
-def announce_lane(family : string; q8 : bool; exact, setter : string; pinned, gpu_serves : bool) {
-    let why = pinned ? "pinned via {setter}" : (gpu_serves ? "a GPU tower serves the {exact}" : "the CPU default (no GPU tower serving the exact planes)")
-    to_log(LOG_INFO, "dasLLAMA {family}: GEMM lane {q8 ? "q8" : exact} - {why}\n")
+def audio_lane_serves_q8(pin : GemmLane; policy : bool) : bool {
+    return lane_serves_q8(pin, policy) if (pin != GemmLane.unset || AUDIO_LANE_ASK == GemmLane.unset)
+    let q8 = AUDIO_LANE_ASK == GemmLane.q8
+    if (q8 != policy && !g_audio_lane_said) {
+        g_audio_lane_said = true
+        let lane = q8 ? "the q8 lane" : "the exact lane (the f16 image on a GPU home, the exact f32 planes on a CPU-only run)"
+        to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_AUDIO_LANE={AUDIO_LANE_KNOB} - every audio tower load no API pin names asks {lane} over its family's own lane; unset it for that lane\n")
+    }
+    return q8
+}
+
+//! DASLLAMA_AUDIO_LANE asked the lane a load took - the q8 one under `q8`, else the exact one
+def audio_lane_asked(q8 : bool) : bool => AUDIO_LANE_ASK == (q8 ? GemmLane.q8 : GemmLane.exact)
+
+//! the words a load's line adds where it took a lane DASLLAMA_AUDIO_LANE did not ask, naming the knob and `what` it does not reach;
+//! "" with the knob unset
+def audio_lane_unheard(what : string) : string => AUDIO_LANE_ASK == GemmLane.unset ? "" : " - DASLLAMA_AUDIO_LANE={AUDIO_LANE_KNOB} does not reach {what}"
+
+//! an audio family load's lane line: the lane taken (q8, halfwords under `f16`, else the f32 planes) and the reason - the `setter` pin,
+//! DASLLAMA_AUDIO_LANE, the caller's lane over it, a GPU tower, or the q8 default
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
+def announce_lane(family : string; q8, f16 : bool; setter : string; pinned, gpu_serves : bool) {
+    let policy = gpu_serves ? "a GPU tower prefers the exact lane" : "the default (no GPU tower prefers the exact lane)"
+    let unheard = audio_lane_unheard("a named image or a lane the caller hands in")
+    let other = empty(unheard) ? policy : "the caller's lane{unheard}"
+    let why = pinned ? "pinned via {setter}" : (audio_lane_asked(q8) ? "asked by DASLLAMA_AUDIO_LANE={AUDIO_LANE_KNOB}" : other)
+    to_log(LOG_INFO, "dasLLAMA {family}: GEMM lane {q8 ? "q8" : (f16 ? "f16 planes" : "f32 planes")} - {why}\n")
 }
 
 let LN_BLOCK_GEMMS = 6l   //! a pre-LN block's GEMM regions, in the order below
@@ -417,6 +486,21 @@ enum TowerDev {
     cuda
 }
 
+//! a GPU home's name as the load's lines spell it
+def tower_dev_home_name(dev : TowerDev) : string {
+    if (dev == TowerDev.metal) return "Metal"
+    if (dev == TowerDev.vulkan) return "Vulkan"
+    if (dev == TowerDev.cuda) return "CUDA"
+    return "CPU"
+}
+
+//! a family's `dev` flavor stood down at load with the failing condition `why` said: false, the load maps the CPU image
+[cold_path]
+def tower_flavor_refused(dev : TowerDev; family, why : string) : bool {
+    to_log(LOG_INFO, "dasLLAMA {dev} tower: {family} takes no {tower_dev_home_name(dev)} flavor - {why}; the load maps the CPU image\n")
+    return false
+}
+
 let TOWER_DEV_PIECE_WORDS = 3l   //! a piece's words in a ``devplan`` plane: its name's key, its byte offset in ``dev``, its bytes
 let TOWER_DEV_ALIGN = 16384l     //! a piece's alignment in ``dev``: the image page, so a mapped piece wraps as a device buffer with no copy
 
@@ -612,6 +696,11 @@ def mm_f16_b(var y : array<float>; blob : PlaneU16; woff : int64; x : array<floa
     unsafe {
         matmul_f16_batch(addr(y[0]), plane_at(blob, woff), addr<float const?>(x[0]), n, d, npos)
     }
+}
+
+//! ... over a borrowed activation plane (a position table)
+def mm_f16_b(var y : array<float>; blob : PlaneU16; woff : int64; x : PlaneF; n, d, npos : int64) {
+    matmul_f16_batch(unsafe(addr(y[0])), plane_at(blob, woff), plane_at(x, 0l), n, d, npos)
 }
 
 //! One GEMM on whichever plane a per-tensor flag picked at load: the bf16 halfword plane when
@@ -1117,7 +1206,7 @@ def rel_pos_table(@scratch var pos_emb : array<float>; d, tt, ww : int64) {
 //! im2col over an interleaved-RGB [h × w × 3] canvas into token-major rows in [C][KH][KW]
 //! order (row index c·p² + ky·p + kx), one row per non-overlapping p×p patch walking the canvas
 //! row-major (pos_x = i % n_cols, pos_y = i / n_cols). Returns npos; ``x0`` grows to npos × 3p².
-[arch(at="../ARCHITECTURE_MEDIA.md#tower-padded-widths")]
+[arch(at="../ARCHITECTURE_MEDIA_TOWER.md#tower-padded-widths")]
 def im2col_rgb_patches(planes : array<float>; w, h, p : int64; @scratch var x0 : array<float>; row_stride : int64 = 0l) : int64 {
     let n_cols = w / p
     let npos = n_cols * (h / p)

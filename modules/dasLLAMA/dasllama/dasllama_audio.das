@@ -21,6 +21,7 @@ require dasllama/dasllama_convert
 require dasllama/dasllama_common   // apply_box_profile_runtime for the tower-image identity
 require dasllama/dasllama_image
 require dasllama/dasllama_tower_image
+require dasllama/dasllama_tower_flavor   // [tower_flavor]: the family's GPU flavor seat
 
 // Whisper-family audio frontend: 16 kHz mono PCM -> log-mel chunks, in two oracle-exact
 // flavors: the mtmd flavor (log_mel_chunks) pre-extends short input to 31 s, floors at 2^-24;
@@ -649,10 +650,10 @@ struct AudioTower {
     stack_factor : int64 = 1  // frame-concat width before the projector (ultravox 8, voxtral 4)
     mm1_out : int64 = 0l      // projector hidden width (ultravox: pre-swiglu, voxtral: pre-gelu)
     has_k_bias : bool = false // qwen3a attention carries a k bias; whisper towers don't
-    blk_bf16 : bool = false   //! the twin's dispatch family: bf16-sourced GEMMs (qwen3a AuT) vs f16 (whisper)
     fblob : PlaneF = PlaneF()
-    wblob : PlaneU16 = PlaneU16()   //! the baked halfword GEMM twin ([[tower_bake_half_twin]]); empty = route-ineligible
+    wblob : PlaneU16 = PlaneU16()   //! the f16 lane's GEMMs as halfwords (`gemm_f16`); empty on the other lanes
     q8 : bool = false         // encoder GEMMs quantized: qblob/qscales carry the COMPACT Q8_0 set
+    gemm_f16 : bool = false   //! the exact pick's halfword lane: the q8 lane's compact layout, the GEMMs f16 halfwords dense in `wblob`
     qblob : PlaneI8 = PlaneI8()   // dense GEMM-only Q8_0 planes (fblob keeps just the non-GEMM rest)
     qscales : PlaneF = PlaneF()   // per-32-block scales, indexed at woff/32
     qlayers_off : int64 = 0l  // q8 layout: per-layer GEMM base/stride in the dense qblob
@@ -687,7 +688,7 @@ def finalize(var t : AudioTower) {
     }
 }
 
-// the tripwire: serialize_image_meta(AudioTower) covers 31 fields; image_map + image_bytes
+// the tripwire: serialize_image_meta(AudioTower) covers 32 fields; image_map + image_bytes
 // are deliberate skips. A new non-array AudioTower field trips this until BOTH agree.
 let private TOWER_META_FIELDS = 32 + 2
 
@@ -708,8 +709,8 @@ def serialize_image_meta(var arch : Archive; var t : AudioTower) {
     arch |> serialize_raw(t.stack_factor)
     arch |> serialize_raw(t.mm1_out)
     arch |> serialize_raw(t.has_k_bias)
-    arch |> serialize_raw(t.blk_bf16)
     arch |> serialize_raw(t.q8)
+    arch |> serialize_raw(t.gemm_f16)
     arch |> serialize_raw(t.conv1_w_off)
     arch |> serialize_raw(t.conv1_b_off)
     arch |> serialize_raw(t.conv2_w_off)
@@ -738,7 +739,7 @@ def private image_post_load(var t : AudioTower) {}   // no derived state — off
 struct AudioTowerPlanes {
     image_planes : bool = true   // the marker the image write walk static_ifs on
     fblob : array<float>
-    wblob : array<uint16>
+    @exact_size wblob : array<uint16>
     qblob : array<int8>
     qscales : array<float>
     @exact_size dev : array<uint8>       //!< a GPU-flavored mint's device block (`TowerDevBuild`)
@@ -754,7 +755,7 @@ def finalize(var pl : AudioTowerPlanes) {
 struct AudioTowerStaging {
     e : AudioTower = AudioTower()
     fblob : array<float>
-    wblob : array<uint16>
+    @exact_size wblob : array<uint16>
     qblob : array<int8>
     qscales : array<float>
     @exact_size dev : array<uint8>       //!< a GPU-flavored mint's device block (`TowerDevBuild`)
@@ -775,10 +776,15 @@ def private image_post_load(var st : AudioTowerStaging) {}
 [init]
 def private register_tower_image_tags {
     register_image_family_tag("tower-q8")
-    register_image_family_tag("tower-f32", true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
+    register_image_family_tag("tower-f32", config_free = true)
+    register_image_family_tag("tower-f16", config_free = true)
     register_tower_dev_tags("tower-q8")
     register_tower_dev_tags("tower-f32")
+    register_tower_dev_tags("tower-f16")
 }
+
+//! a whisper-class tower's lane tag: q8, a GPU home's f16 (`f16`), else the exact f32 planes
+def audio_tower_lane_tag(q8, f16 : bool) : string => tower_lane_tag("tower", q8, f16)
 
 let public ULTRAVOX_NORM_EPS = 1e-6   //! the ultravox projector norms' own eps, not the tower's
 
@@ -805,9 +811,9 @@ def audio_tokens_per_chunk(t : AudioTower) : int64 {
 def enc_layer_offsets(t : AudioTower; l : int64) : LayerOffs {
     let d = t.d_model
     let ff = t.n_ff
-    if (t.q8) {
-        // compact q8 layout: GEMM mats dense in qblob, vectors dense in the compact fblob —
-        // field-for-field the order tower_quantize_'s walk writes
+    if (t.q8 || t.gemm_f16) {
+        // compact q8 layout: GEMM mats dense in qblob (wblob on the f16 lane), vectors dense in the compact fblob —
+        // field-for-field the order tower_compact_'s walk writes
         var og = t.qlayers_off + l * t.qlayer_stride
         var of = t.layers_off + l * t.layer_stride
         var q = LayerOffs()
@@ -879,11 +885,20 @@ def tw_repack(var qblob : array<int8>; var qscales : array<float>; woff, n, d : 
 //! conv1 stays fp32 (its 3·n_mel contraction isn't a 32-multiple on 80-mel models); non-GEMM slots
 //! are quantized-but-unread — fblob stays the fp32 truth for them.
 def tower_quantize(var st : AudioTowerStaging) {
-    tower_quantize_(st.e, st.fblob, st.qblob, st.qscales)
+    tower_compact_(st.e, st.fblob, st.qblob, st.qscales, st.wblob, false)
 }
 
 def tower_quantize(var t : AudioTower; var pl : AudioTowerPlanes) {
-    tower_quantize_(t, pl.fblob, pl.qblob, pl.qscales)
+    tower_compact_(t, pl.fblob, pl.qblob, pl.qscales, pl.wblob, false)
+}
+
+[arch(at = "../ARCHITECTURE_GPU_TOWER_RAIL.md#whisper-chains")]
+def tower_halve(var st : AudioTowerStaging) {
+    tower_compact_(st.e, st.fblob, st.qblob, st.qscales, st.wblob, true)
+}
+
+def tower_halve(var t : AudioTower; var pl : AudioTowerPlanes) {
+    tower_compact_(t, pl.fblob, pl.qblob, pl.qscales, pl.wblob, true)
 }
 
 //! Copy one fp32 region into a compact blob, returning its new offset (the shared piece
@@ -907,8 +922,23 @@ def tq_quant(var qblob : array<int8>; var qscales : array<float>; fblob : array<
     return r
 }
 
+//! Store one GEMM region as f16 halfwords dense in `wblob`, returning its new offset (the f16 lane's `tq_quant`)
+def private tq_half(var wblob : array<uint16>; fblob : array<float>; var og : int64&; off, n : int64) : int64 {
+    unsafe {
+        cvt_f32_to_f16_sat(addr(wblob[og]), addr<float const?>(fblob[off]), n)
+    }
+    let r = og
+    og += n
+    return r
+}
+
+//! one GEMM region onto the lane's dense plane: Q8_0 quants and scales, or the f16 lane's halfwords
+def tq_gemm(f16 : bool; var qblob : array<int8>; var qscales : array<float>; var wblob : array<uint16>; fblob : array<float>; var og : int64&;
+            off, n : int64) : int64
+    => f16 ? tq_half(wblob, fblob, og, off, n) : tq_quant(qblob, qscales, fblob, og, off, n)
+
 //! Rewrite a tower's stored offsets to the compact-q8 layout WITHOUT touching data — the
-//! streamed mint's twin of tower_quantize_'s walk (the streamed-vs-staged image cell gates
+//! streamed mint's twin of tower_compact_'s walk (the streamed-vs-staged image cell gates
 //! that the two stay identical).
 def tower_compact_offsets(var t : AudioTower) {
     let d = t.d_model
@@ -959,7 +989,8 @@ def tower_compact_offsets(var t : AudioTower) {
     t.q8 = true
 }
 
-def private tower_quantize_(var t : AudioTower; var fblob : array<float>; var qblob : array<int8>; var qscales : array<float>) { // nolint:STYLE037 — the walk mirrors enc_layer_offsets field-for-field; splitting would decouple the two orders
+//! the compact walk both dense lanes share: GEMM regions onto the lane's dense plane (Q8_0, or halfwords in `wblob` under `f16`), the rest into fblob
+def private tower_compact_(var t : AudioTower; var fblob : array<float>; var qblob : array<int8>; var qscales : array<float>; var wblob : array<uint16>; f16 : bool) { // nolint:STYLE037 — the walk mirrors enc_layer_offsets field-for-field; splitting would decouple the two orders
     let d = t.d_model
     let ff = t.n_ff
     if (d % 32l != 0l || ff % 32l != 0l) {
@@ -979,8 +1010,12 @@ def private tower_quantize_(var t : AudioTower; var fblob : array<float>; var qb
         qtotal += pq1 ? (t.proj_kind == AudioProjKind.qwen2a ? t.proj_dim * d : t.mm1_out * m1in) : 0l
         qtotal += pq2 ? t.proj_dim * m2in : 0l
     }
-    qblob |> reserve_resize(qtotal)
-    qscales |> reserve_resize(qtotal / 32l)
+    if (f16) {
+        wblob |> reserve_resize(qtotal)
+    } else {
+        qblob |> reserve_resize(qtotal)
+        qscales |> reserve_resize(qtotal / kq_elems(KqFmt.q8))
+    }
     var nf : array<float>
     nf |> reserve_resize(long_length(fblob) - qtotal)
     var og = 0l
@@ -988,7 +1023,7 @@ def private tower_quantize_(var t : AudioTower; var fblob : array<float>; var qb
     if (has_conv) {   // conv1 always stays fp32 (3·n_mel contraction; served via mm_blob_b)
         t.conv1_w_off = tq_keep(nf, fblob, of, t.conv1_w_off, d * 3l * t.n_mel)
         t.conv1_b_off = tq_keep(nf, fblob, of, t.conv1_b_off, d)
-        t.conv2_w_off = tq_quant(qblob, qscales, fblob, og, t.conv2_w_off, 3l * d * d)
+        t.conv2_w_off = tq_gemm(f16, qblob, qscales, wblob, fblob, og, t.conv2_w_off, 3l * d * d)
         t.conv2_b_off = tq_keep(nf, fblob, of, t.conv2_b_off, d)
         t.pos_off = tq_keep(nf, fblob, of, t.pos_off, t.n_ctx * d)
     }
@@ -1002,19 +1037,19 @@ def private tower_quantize_(var t : AudioTower; var fblob : array<float>; var qb
         var oo = old_base + l * old_stride
         tq_keep(nf, fblob, of, oo, d); oo += d                            // ln1_w
         tq_keep(nf, fblob, of, oo, d); oo += d                            // ln1_b
-        tq_quant(qblob, qscales, fblob, og, oo, d * d); oo += d * d       // q_w
+        tq_gemm(f16, qblob, qscales, wblob, fblob, og, oo, d * d); oo += d * d       // q_w
         tq_keep(nf, fblob, of, oo, d); oo += d                            // q_b
-        tq_quant(qblob, qscales, fblob, og, oo, d * d); oo += d * d       // k_w
+        tq_gemm(f16, qblob, qscales, wblob, fblob, og, oo, d * d); oo += d * d       // k_w
         tq_keep(nf, fblob, of, oo, d); oo += d                            // k_b
-        tq_quant(qblob, qscales, fblob, og, oo, d * d); oo += d * d       // v_w
+        tq_gemm(f16, qblob, qscales, wblob, fblob, og, oo, d * d); oo += d * d       // v_w
         tq_keep(nf, fblob, of, oo, d); oo += d                            // v_b
-        tq_quant(qblob, qscales, fblob, og, oo, d * d); oo += d * d       // o_w
+        tq_gemm(f16, qblob, qscales, wblob, fblob, og, oo, d * d); oo += d * d       // o_w
         tq_keep(nf, fblob, of, oo, d); oo += d                            // o_b
         tq_keep(nf, fblob, of, oo, d); oo += d                            // ln2_w
         tq_keep(nf, fblob, of, oo, d); oo += d                            // ln2_b
-        tq_quant(qblob, qscales, fblob, og, oo, ff * d); oo += ff * d     // fc1_w
+        tq_gemm(f16, qblob, qscales, wblob, fblob, og, oo, ff * d); oo += ff * d     // fc1_w
         tq_keep(nf, fblob, of, oo, ff); oo += ff                          // fc1_b
-        tq_quant(qblob, qscales, fblob, og, oo, d * ff); oo += d * ff     // fc2_w
+        tq_gemm(f16, qblob, qscales, wblob, fblob, og, oo, d * ff); oo += d * ff     // fc2_w
         tq_keep(nf, fblob, of, oo, d); oo += d                            // fc2_b
     }
     t.layers_off = new_base
@@ -1023,26 +1058,27 @@ def private tower_quantize_(var t : AudioTower; var fblob : array<float>; var qb
     t.lnp_b_off = tq_keep(nf, fblob, of, t.lnp_b_off, d)
     if (t.proj_dim > 0l) {   // whisper .bin towers have no projector
         if (t.proj_kind == AudioProjKind.qwen2a) {
-            t.proj_w_off = tq_quant(qblob, qscales, fblob, og, t.proj_w_off, t.proj_dim * d)
+            t.proj_w_off = tq_gemm(f16, qblob, qscales, wblob, fblob, og, t.proj_w_off, t.proj_dim * d)
             t.proj_b_off = tq_keep(nf, fblob, of, t.proj_b_off, t.proj_dim)
         } else {
             if (t.proj_kind == AudioProjKind.ultravox) {
                 t.normpre_off = tq_keep(nf, fblob, of, t.normpre_off, m1in)
             }
-            t.proj_w_off = (pq1 ? tq_quant(qblob, qscales, fblob, og, t.proj_w_off, t.mm1_out * m1in)
+            t.proj_w_off = (pq1 ? tq_gemm(f16, qblob, qscales, wblob, fblob, og, t.proj_w_off, t.mm1_out * m1in)
                 : tq_keep(nf, fblob, of, t.proj_w_off, t.mm1_out * m1in))
             if (t.proj_kind == AudioProjKind.ultravox) {
                 t.normmid_off = tq_keep(nf, fblob, of, t.normmid_off, m2in)
             }
-            t.mm2_w_off = (pq2 ? tq_quant(qblob, qscales, fblob, og, t.mm2_w_off, t.proj_dim * m2in)
+            t.mm2_w_off = (pq2 ? tq_gemm(f16, qblob, qscales, wblob, fblob, og, t.mm2_w_off, t.proj_dim * m2in)
                 : tq_keep(nf, fblob, of, t.mm2_w_off, t.proj_dim * m2in))
         }
     }
     verify(og == qtotal)
     delete fblob
     fblob <- nf
-    t.q8 = true
-    if (!tower_repack_backend()) {
+    t.q8 = !f16
+    t.gemm_f16 = f16
+    if (f16 || !tower_repack_backend()) {
         return   // row-major backend reads the dense Q8_0 planes as-is
     }
     if (has_conv) {
@@ -1096,73 +1132,54 @@ def private tw_mm_rq(t : AudioTower; var y : array<float>; woff : int64; x : arr
 
 //! Loads an audio mmproj GGUF (qwen2a/qwen2.5o/ultravox/voxtral) into an AudioTower, skipping
 //! vision tensors in combined omni mmprojs. Like ``load_model``, caches a box/knob-specific
-//! PREPARED IMAGE for fast reload; ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
-def load_audio_tower(path : string; q8 : bool = false) : AudioTower {
-    let tag = q8 ? "tower-q8" : "tower-f32"
-    let dev = path |> ends_with(".dlim") ? TowerDev.none : audio_tower_dev_flavor(q8)
+//! PREPARED IMAGE for fast reload; ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly; no ``q8``: the policy's.
+def load_audio_tower(path : string; q8 : bool = audio_tower_serves_q8()) : AudioTower {
+    let dev = path |> ends_with(".dlim") ? TowerDev.none : tower_dev_flavor_announced(g_audio_tower_flavor, q8, path, "audio tower")
+    let f16 = tower_load_f16(path, q8, dev)
+    let tag = audio_tower_lane_tag(q8, f16)
+    announce_lane("audio tower", q8, f16, "set_audio_tower_q8", g_atw_pin != GemmLane.unset, false)
     if (dev != TowerDev.none) {
-        return <- load_staged_image_dev(path, tag, "audio-tower", "source mmproj gguf", type<AudioTower>, dev, g_tw_flavor.bake, AUDIO_TOWER_DEV_CONSUMED) {
-            return <- stage_audio_tower(path, q8)
+        return <- load_staged_image_dev(path, tag, "audio-tower", "source mmproj gguf", type<AudioTower>, dev, g_audio_tower_flavor.bake,
+                                        AUDIO_TOWER_DEV_CONSUMED) {
+            return <- stage_audio_tower(path, q8, f16)
         }
     }
-    return <- load_staged_image(path, tag, "audio-tower", "source mmproj gguf", type<AudioTower>, $ {
-        return <- stage_audio_tower(path, q8)
-    }, $(t : AudioTower) {
-        // an exact-lane image minted before the half twin rode it carries none: where the file's GEMMs are halves, mint again
-        return q8 || length(t.wblob) > 0l || !audio_tower_half_gemms(path)
-    }, $ [unused_argument(t, src)] (t : AudioTower; src : string) {})
+    return <- load_staged_image(path, tag, "audio-tower", "source mmproj gguf", type<AudioTower>) {
+        return <- stage_audio_tower(path, q8, f16)
+    }
 }
 
 //! A GPU driver's AudioTower flavor (`#tower-dev-block`): the backend whose image it mints, whether its chain serves a lane, and
 //! the bake that converts a CPU-form tower into the driver's device block
-typedef AudioTowerServesLaneFn = function<(q8 : bool) : bool>
-typedef AudioTowerBakeFn = function<(t : AudioTower; var b : TowerDevBuild) : bool>
+[tower_flavor(family = "audio_tower", model = "AudioTower")]
+struct AudioTowerFlavor {}
 
-struct AudioTowerFlavor {
-    backend : TowerDev
-    serves : AudioTowerServesLaneFn
-    bake : AudioTowerBakeFn
-}
-
-var private g_tw_flavor = AudioTowerFlavor()
 let AUDIO_TOWER_DEV_CONSUMED <- ["qblob", "qscales"]   //! the planes an AudioTower bake converts: a GPU flavor carries their device forms instead
-
-def register_audio_tower_flavor(backend : TowerDev; serves : AudioTowerServesLaneFn; bake : AudioTowerBakeFn) {
-    g_tw_flavor = AudioTowerFlavor(backend = backend, serves = serves, bake = bake)
-}
 
 //! The device flavor a standalone tower's load on the `q8` lane takes: the registered driver's where its chain serves the lane,
 //! else `none` - the CPU image
-def audio_tower_dev_flavor(q8 : bool) : TowerDev => tower_dev_flavor(g_tw_flavor, q8)
+def audio_tower_dev_flavor(q8 : bool) : TowerDev => tower_dev_flavor(g_audio_tower_flavor, q8)
+
+var private g_atw_pin = GemmLane.unset
+
+//! Pin the standalone tower's weight lane for subsequent `load_audio_tower` calls that name none: q8 or the exact lane (the
+//! halfword lane on a GPU home, the file's f32 planes on the CPU). ``reset_audio_tower_q8`` returns to the policy.
+def set_audio_tower_q8(on : bool) {
+    g_atw_pin = lane_pin(on)
+}
+
+def reset_audio_tower_q8() {
+    g_atw_pin = GemmLane.unset
+}
+
+//! The lane the next `load_audio_tower` naming none takes: the pin, else q8 where a GPU flavor serves the q8 lane - every GPU
+//! home, Metal's included - else the exact lane, the file's own f32 planes on a CPU-only run
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
+def audio_tower_serves_q8() : bool => audio_lane_serves_q8(g_atw_pin, audio_tower_dev_flavor(true) != TowerDev.none)
 
 //! A GPU-flavored tower reached a CPU path at `stage`: the device seat declined what the load handed it, and the CPU never runs
 //! that image (`#tower-dev-block`)
 def tw_cpu_refuse(t : AudioTower; stage : string) => tower_cpu_refuse(t, "dasLLAMA audio tower", stage)
-
-//! whether every block GEMM of a whisper-class mmproj - q, k, v, out, the two FFN matrices of each of `n_layer` blocks - is
-//! stored as ggml type `gt`: the half twin is baked only off a file whose GEMMs are all one half type
-def tower_gemm_types_uniform(m : GGUFMeta; n_layer : int64; gt : int) : bool {
-    for (l in range64(n_layer)) {
-        for (nm in ["attn_q", "attn_k", "attn_v", "attn_out", "ffn_up", "ffn_down"]) {
-            if (gguf_tensor_type(m, "a.blk.{l}.{nm}.weight") != gt) {
-                return false
-            }
-        }
-    }
-    return true
-}
-
-//! Whether a whisper-class mmproj stores every block GEMM in one type a halfword holds - f16, bf16, or Q8_0, whose
-//! eight-bit quants times a half scale the device's f32 tile would stage as halves anyway; false for a file that cannot be read
-def private audio_tower_half_gemms(path : string) : bool {
-    var half = false
-    let read = gguf_header_read(path) $(m; bytes) {
-        let gt = gguf_tensor_type(m, "a.blk.0.attn_q.weight")
-        let n_layer = gguf_has(m, "clip.audio.block_count") ? gguf_int(m, bytes, "clip.audio.block_count") : 0l
-        half = (gt == GGML_TYPE_BF16 || gt == GGML_TYPE_F16 || gt == GGML_TYPE_Q8_0) && n_layer > 0l && tower_gemm_types_uniform(m, n_layer, gt)
-    }
-    return read && half
-}
 
 //! the projector kind an mmproj's `clip.projector_type` names, false for a type the audio tower does not serve
 def private audio_tower_projector(proj : string; var kind : AudioProjKind&) : bool {
@@ -1232,12 +1249,16 @@ def audio_tower_probe_span_bare(path : string) : bool {
 //! Mint a served tower from a staged read WITHOUT touching disk — the off-rail control for suites; `dev` names the GPU flavor
 //! (the staging read under `with_tower_dev_staging(dev)`), `none` the CPU image (`tower_mint_flavor`).
 def mint_audio_tower(var st : AudioTowerStaging; var out : AudioTower; q8 : bool = false; dev : TowerDev = TowerDev.none) {
-    tower_mint_flavor(st, out, q8 ? "tower-q8" : "tower-f32", "audio-tower", dev, g_tw_flavor, AUDIO_TOWER_DEV_CONSUMED)
+    tower_mint_flavor(st, out, audio_tower_lane_tag(q8, st.e.gemm_f16), "audio-tower", dev, g_audio_tower_flavor, AUDIO_TOWER_DEV_CONSUMED)
 }
 
+//! The mmproj-gguf reader proper under the running staging's flavor: its halfword lane is the staging's (`tower_staging_f16`).
+def stage_audio_tower(path : string; q8 : bool = false) : AudioTowerStaging => <- stage_audio_tower(path, q8, tower_staging_f16(q8))
+
 //! The mmproj-gguf reader proper: scalars land in the served tower, plane bytes in the staging
-//! arrays beside it. Nothing here is servable — the image build is what produces a live tower.
-def stage_audio_tower(path : string; q8 : bool = false) : AudioTowerStaging {
+//! arrays beside it - the GEMMs as Q8_0 under `q8`, as halfwords under `f16` (the load's lane). Nothing here is servable — the
+//! image build is what produces a live tower.
+def stage_audio_tower(path : string; q8, f16 : bool) : AudioTowerStaging {
     var st = AudioTowerStaging()
     let f = fopen(path, "rb")
     if (f == null) {
@@ -1346,13 +1367,12 @@ def stage_audio_tower(path : string; q8 : bool = false) : AudioTowerStaging {
             gguf_read_tensor_f32(m, bytes, "mm.a.mlp.1.weight", st.fblob, st.e.proj_w_off, st.e.mm1_out * m1in)
             gguf_read_tensor_f32(m, bytes, "mm.a.mlp.2.weight", st.fblob, st.e.mm2_w_off, st.e.proj_dim * st.e.mm1_out)
         }
-        st.e.blk_bf16 = gguf_tensor_type(m, "a.blk.0.attn_q.weight") == GGML_TYPE_BF16
     }
     fclose(f)
     if (q8) {
         tower_quantize(st)
-    } elif (audio_tower_half_gemms(path)) {   // the file's GEMMs fit halves: the Metal tower's half GEMMs read them where its f32 tile would stage them as halves
-        tower_bake_half_twin(st.fblob, st.wblob, st.e.blk_bf16)
+    } elif (f16) {
+        tower_halve(st)
     }
     return <- st
 }
@@ -1374,7 +1394,7 @@ struct EncoderState {
     @exact_size pooled : array<float>// [T/2 × d]
     @scratch ph : array<float>    // projector hidden [rows × mm1_out] (ultravox/voxtral)
     pg : array<float>    // ultravox swiglu output [rows × mm1_out/2]
-    @scratch out : array<float>   // projected soft tokens [tokens_per_chunk × proj_dim]
+    @scratch @exact_size out : array<float>   // projected soft tokens [tokens_per_chunk × proj_dim]
     @exact_size xqi : array<int8>    // q8 requant image [T × max(3d, ff)] (empty on fp32 towers)
     @exact_size xsi : array<float>   // per-32-block scales for xqi
 }
@@ -1612,23 +1632,14 @@ def register_tower_blocks_ln_post_gpu(fn : TowerBlocksGpuFn) {
 }
 
 typedef TowerBlocksGpuFn = function<(t : AudioTower; var s : EncoderState; npos : int64) : bool>
-typedef TowerServesFn = function<() : bool>
 var private g_tw_blocks_gpu : TowerBlocksGpuFn
 var private g_tw_blocks_gpu_set = false
-var private g_tw_serves : TowerServesFn
-var private g_tw_serves_set = false
 
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
-def register_tower_blocks_gpu(fn : TowerBlocksGpuFn; serves : TowerServesFn) {
+def register_tower_blocks_gpu(fn : TowerBlocksGpuFn) {
     g_tw_blocks_gpu = fn
-    g_tw_serves = serves
     g_tw_blocks_gpu_set = true
-    g_tw_serves_set = true
 }
-
-//! the lane policies' question - would a GPU driver serve the exact block loop: false with no driver, with the knob off, or under the Vulkan driver, which serves q8
-[arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
-def audio_tower_gpu_serves() : bool => g_tw_serves_set && invoke(g_tw_serves)
 
 //! The conv-frontend twin: serves conv1/conv2/pos-add for one mel chunk (s.x filled) or
 //! declines with false — the CPU conv above stays the correct fallback, best-effort inside

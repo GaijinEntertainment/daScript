@@ -6,9 +6,6 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_EMIT.md`, `ARCHITECTURE_EMIT_TILES.md`. P
 **Every change under this folder applies `modules/REVIEW_SHADER_EMITTERS.md` too** - the rules
 binding a kernel body, a launch of an emitted kernel and an emitter's lowering live there.
 
-**A `[test]` file with a `require cuda/...` line of its own, wherever the diff puts it, answers to
-`tests/cuda/REVIEW.md` (repo root).**
-
 **A new or changed extern in `cuda/cuda_driver.das`, or a new or changed public function in
 `cuda/das_cuda_boost.das`, ships a host-side test under `tests/cuda/` (repo root) in the same
 change.**
@@ -57,12 +54,11 @@ calls has an empty daslang body, with a reference the test computes.**
 **Never hand-write a `__global__` entry point under this module, in a string or a `.cu` file - emit
 it from a `[cuda_kernel]` body instead.**
 
-**A diff that adds a name a `[cuda_kernel]` body can call puts it in
-`modules/dasSpirv/spirv/spirv_builtins.das` when SPIR-V has an op or a GLSL builtin that computes
-it, and otherwise in `cuda/cuda_intrinsics.das` with a row in the table at
-`ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers`; the PR body names the file it took.** A body
-that calls a `cuda_intrinsics` name compiles only for CUDA, so a name SPIR-V can express never
-lands there.
+**A diff that adds a name a `[cuda_kernel]` body can call whose daslang body the emitter never
+compiles puts it in `modules/dasSpirv/spirv/spirv_builtins.das` when SPIR-V has an op or a GLSL
+builtin that computes it, and otherwise in `cuda/cuda_intrinsics.das` with a row in the table at
+`ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers`; the PR body names the file it took.** A kernel
+that calls a `cuda_intrinsics` name compiles only for CUDA.
 
 **A diff that changes the order of a device function's hidden parameters - the builtins and
 members it takes after its own parameters - changes `hidden_params` and `hidden_args` in

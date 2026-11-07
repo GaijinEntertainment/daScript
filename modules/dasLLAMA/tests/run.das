@@ -206,7 +206,12 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_vulkan_host_twin.das",
                     "modules/dasLLAMA/tests/test_vulkan_tier.das",
                     "modules/dasLLAMA/tests/test_vulkan_shared_device.das",
-                    "modules/dasLLAMA/tests/test_cuda_kernels.das" ]
+                    "modules/dasLLAMA/tests/test_cuda_kernels.das",
+                    "modules/dasLLAMA/tests/test_cuda_tower_front.das",
+                    "modules/dasLLAMA/tests/test_cuda_tower_blocks.das",
+                    "modules/dasLLAMA/tests/test_cuda_tower_asr.das",
+                    "modules/dasLLAMA/tests/test_cuda_tower_g4a_chain.das",
+                    "modules/dasLLAMA/tests/test_cuda_tower_whisper_chain.das" ]
     } elif (name == "stocked") {
         return <- [
                     "modules/dasLLAMA/tests/test_attn_span.das",
@@ -359,11 +364,12 @@ let TESTS_DIR = "modules/dasLLAMA/tests"
 //! Non-private: test_run_suites.das holds the union to the model-free + stocked census
 def area_tests(area : string) : array<string> {
     if (area == "audio") {
-        return <- [ "test_asr_verbs.das", "test_audio.das", "test_audio_embedder.das", "test_dasllama_lint_contracts.das", "test_gigaam.das",
+        return <- [ "test_asr_verbs.das", "test_audio.das", "test_audio_embedder.das", "test_cuda_tower_asr.das", "test_cuda_tower_blocks.das",
+                    "test_cuda_tower_front.das", "test_cuda_tower_g4a_chain.das", "test_cuda_tower_whisper_chain.das", "test_dasllama_lint_contracts.das", "test_gigaam.das",
                     "test_interpreter.das", "test_parrot.das", "test_rnnt.das", "test_tower_asr_kernels.das", "test_tower_helpers.das", "test_vad.das",
                     "test_vulkan_tower_kernels.das", "test_whisper.das" ]
     } elif (area == "vision") {
-        return <- [ "test_attn_span.das", "test_gemma3v.das", "test_gemma4uv.das", "test_gemma4v.das", "test_qwen25v.das",
+        return <- [ "test_attn_span.das", "test_cuda_tower_blocks.das", "test_gemma3v.das", "test_gemma4uv.das", "test_gemma4v.das", "test_qwen25v.das",
                     "test_qwen3v.das", "test_tower_helpers.das", "test_vision.das", "test_vision_chat.das",
                     "test_vision_embedder.das", "test_vulkan_tower_kernels.das" ]
     } elif (area == "tts") {
@@ -429,6 +435,17 @@ let MODULE_AREAS <- {
     "dasllama_metal_tower" => "audio,vision,tts",
     "dasllama_vulkan_tower" => "audio,vision,tts,translate",   // the Vulkan TTS and translation drivers ride the tower's classes
     "dasllama_cuda_tower" => "audio,vision,tts",   // the GPU knobs fixture the audio and TTS cells require reads its knob
+    "dasllama_cuda_tower_seat" => "audio,vision,tts",   // every CUDA tower seat's plumbing: the knob, the counters, the resident
+    "dasllama_cuda_tower_audio" => "audio",   // the audio seats under the CUDA ask, a family's row the home it serves on
+    "dasllama_tower_flavor" => "audio,vision",   // the families' flavor records and registrants
+    "dasllama_gpu_rail" => "audio,vision,tts",   // the tower rail's roles and the rail modules: every chain body both discrete homes serve dispatches through them
+    "dasllama_vulkan_rail" => "audio,vision,tts", "dasllama_cuda_rail" => "audio,vision,tts", "dasllama_tower_rail" => "audio,vision,tts",
+    "dasllama_tower_chains" => "audio,vision,tts",
+    "dasllama_tower_chains_g4a" => "audio", "dasllama_cuda_tower_g4a" => "audio",   // the spectral fronts', gemma4a's, qwen3a's front and the VAD's chains, and their CUDA seats
+    "dasllama_tower_chains_whisper" => "audio", "dasllama_cuda_tower_whisper" => "audio",   // the whisper class's stem, blocks and chat tail, and their CUDA seats
+    "dasllama_asr_dec_chains" => "audio", "dasllama_cuda_asr_dec" => "audio",   // the whisper decoder's chains and its CUDA seat
+    "dasllama_tower_chains_fc" => "audio", "dasllama_cuda_tower_fc" => "audio", "dasllama_cuda_asr_dec_fc" => "audio",   // the FastConformer trio's chains, fronts and decoders, and their CUDA seats
+    "dasllama_cuda_classes_front" => "audio", "dasllama_cuda_classes_blocks" => "audio,vision", "dasllama_cuda_classes_asr" => "audio",
     "dasllama_tts_slab" => "audio,vision,tts",   // the Metal tower requires it for every seat
     "dasllama_vulkan_tts" => "tts",
     "dasllama_gpu_kernels_common" => "audio,vision,tts,translate,llm",   // the kernels both GPU homes stamp: the TTS chains', the depthwise rows and rope the audio and vision towers stamp, the Bergamot step's
@@ -468,7 +485,7 @@ let MODULE_AREAS <- {
     "dasllama_tokenizer" => "llm", "dasllama_transformer" => "llm",
     "dasllama_unicode" => "llm,tts",   // cpt_count serves the TTS front end and its chunker
     "dasllama_vulkan_decode" => "llm", "dasllama_vulkan_prefill" => "llm", "dasllama_vulkan_seams" => "llm",
-    "dasllama_cuda_common" => "llm", "dasllama_cuda_dispatch" => "llm", "dasllama_cuda_classes" => "llm",
+    "dasllama_cuda_common" => "llm,audio,vision", "dasllama_cuda_dispatch" => "llm,audio,vision", "dasllama_cuda_classes" => "llm,audio,vision",
     "dasllama_cuda_decode" => "llm", "dasllama_cuda_stream" => "llm", "dasllama_math_cuda" => "llm"
 }
 

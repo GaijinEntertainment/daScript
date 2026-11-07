@@ -33,3 +33,9 @@ fire it and are ruled acceptable, each with its reason.
   the test's temp directory beside the student. The reason: the facade's load is the cells' subject - the kind it picks
   off the file and the lane `exact` asks - and it has no in-memory form; they pin no lane, and `--no-tune` runs them with
   `DASLLAMA_IMAGE=0`, so the image they mint is the box's own.
+- **The gemma4a facade cells** - `test_gemma4a_e4b_audio_facade` (the E4B pair) and `test_gemma4a_audio_oracle` (E2B) in
+  `tests/test_whisper.das` load through `load_asr_model(dec, mmproj)`, which bakes the decoder's `.dlim` (`load_model_cached`)
+  and the encoder's lane image (`load_gemma4a_encoder`) beside the files. The reason: the facade's pairing is the cells'
+  subject - the projector-type sniff routing the mmproj to gemma4a, the decoder width the embedder must project to, the lane
+  the facade picks - and it has no in-memory form; they pin no lane, and `--no-tune` runs them with `DASLLAMA_IMAGE=0`, so
+  the images they mint are the box's own.

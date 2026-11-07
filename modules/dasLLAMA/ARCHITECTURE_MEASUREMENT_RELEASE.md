@@ -7,7 +7,8 @@ board with (`#measurement-vocabulary`), and where a between-release kernel chang
 
 ### The measurement checklist's vocabulary {#measurement-vocabulary}
 
-`REVIEW_MEASUREMENT.md` keeps a short form of each term; the full boundary is here.
+`REVIEW_MEASUREMENT.md` defines each term in place, and its rules apply them as written there; each bullet here
+states the same boundary.
 
 - **Figure** - any number a run produced: a rate, a wall, a count, a byte size, or a ratio or
   percentage of two such numbers, produced by the runs its sides came from. An error or agreement
@@ -15,17 +16,18 @@ board with (`#measurement-vocabulary`), and where a between-release kernel chang
   instrument's bounded-difference compare checks against, is set from it, or when a change cites it
   as evidence that a tolerance set for another cell, model or tier holds for the one it adds or
   alters. A test suite's pass, fail and skip tally, the count of kernels a compare of two dumps of
-  emitted kernel code finds identical or different, and a value inside the `provenance` object of a
-  `performance/defaults/<class>.tune-defaults.json` profile or a tune sidecar, where it sits in that
-  file, are not figures; the same value written into other text is one.
-- **Served-turn leg** - prefill, decode, a batched decode row, or a whole served request end to
-  end. A facade `transcribe` / `synthesize` / `translate` call is a whole served request, so a leg,
-  whether or not an app runs it as one stage of a larger turn. The wall of one internal stage (one
-  model component's forward pass, one decoder block) is not a leg.
+  emitted kernel code finds identical or different, and a `provenance` value read in its
+  `performance/defaults/<class>.tune-defaults.json` profile or tune sidecar are not figures; that
+  value copied into other text is one.
+- **Served-turn leg** - a chat or completion turn's prefill or token decode, a batched decode row,
+  or a whole served request end to end. A facade `transcribe` / `synthesize` / `translate` call is a
+  whole served request, so a leg, whether or not an app runs it as one stage of a larger turn. The
+  wall of one stage - one model component's forward pass or decode inside a facade call, or one
+  decoder block - is not a leg.
 - **Instrument** - a file whose printed or returned result is a wall or rate of a run it drove,
   read by its own clock or by timestamps a GPU driver returns, wherever the file sits. A file
-  reading a spawned child process's clock, and a profiler-gated report a serving path prints beside
-  its served output, are not instruments.
+  reading a spawned child process's clock, and a report a serving path prints only under a
+  profiling switch, are not instruments.
 - **Harness** - the `harness/` script that drove a run, where one did.
 - **Route** - the end-to-end code path a served turn takes. The default route is the one a run
   given no command-line arguments and no environment overrides takes.
@@ -50,6 +52,8 @@ board with (`#measurement-vocabulary`), and where a between-release kernel chang
 - **Spawned cell** - a run `performance/gen_bench_records.das` spawns whose reading lands as a row
   of `performance/records/<box>.json`. A **manual cell** is the `benchmarks/lcpp_bench.das` command
   a `PROFILE.md` section documents, run by hand, its reading written as such a row.
+- **Cell's input** - includes every environment setting the cell's spawn or its `PROFILE.md` command
+  sets.
 - **The `-jit` script** - `benchmarks/lcpp_bench.das` run as a script under `-jit`, not as the
   released exe. A **`-jit` reading** is a wall or rate that an instrument - the `-jit` script
   included - printed while running under `-jit`, or a ratio of two such prints, whoever computed it.
@@ -57,9 +61,9 @@ board with (`#measurement-vocabulary`), and where a between-release kernel chang
   `engine` `das`, named by that row's `(backend, flavor)` pair whatever its `workload`.
 - **Third-party row** - a figure from a run of a third-party program serving the same model on the
   same input size.
-- **Cell, script or exe of this repository** - a spawned or manual cell, a script in the tree at
-  the diff's tip, or an exe built from that tree. A script outside the tree is not one, whatever it
-  calls.
+- **Cell, script or exe of this repository** - a spawned or manual cell, a script in this
+  repository's tree at the diff's tip or at a named commit, or an exe built from such a tree. A
+  script outside the tree is not one, whatever it calls.
 - **A box can mint a figure** - from a spawned cell when a rig leg it neither refuses nor skips
   drives the path the owed figure measures and `performance/gen_bench_records.das --catalog
   official` carries the model; from a manual cell when it runs the documented command's OS and

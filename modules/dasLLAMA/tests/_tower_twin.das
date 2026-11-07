@@ -1,6 +1,6 @@
-// The Vulkan tower twins' shared instrument - the seat guard, the three-way encode (the exact chain, the CPU q8 chain,
+// The GPU homes' tower twins' shared instrument - the seat guard on the home each family's seats serve on, the three-way encode (the exact chain, the CPU q8 chain,
 // the device chain) with the family's counters and the bar by metric (rel_l2 wherever a CPU q8 chain is the control,
-// qwen25v's maxdiff against the exact chain), the input poison and the exact-lane decline, the vision canvas and dump-poison legs, the in-memory tower mint,
+// qwen25v's maxdiff against the exact chain), the input poison and the exact lane served on the device, the vision canvas and dump-poison legs, the in-memory tower mint,
 // the GPU knobs' capture and restore (`_gpu_knobs`, re-exported) - one text the vision and audio families' test files call
 // with their own tower, state and encode; no fixture root beside it.
 
@@ -14,6 +14,8 @@ require dastest/testing_boost public
 require dasllama/dasllama_math   // with_dasllama_jobque_
 require daslib/jobque_boost
 require daslib/defer
+require daslib/rtti   // this_context().last_exception: a knob-off leg's refusal as text
+require strings   // rtrim
 require daslib/fio   // nolint:STYLE030,LINT019 — path_join: the oracle dump's path
 require _compares   // logits_maxdiff
 require _vision_oracle   // the mtmd dump parser and the canvas fixtures the poison legs read
@@ -21,13 +23,16 @@ require _model_tier   // tower_parity_stats - the rel_l2 statistic the audio twi
 require _gpu_knobs public
 require ?vulkan dasllama/dasllama_vulkan_tower
 require ?vulkan dasllama/dasllama_vulkan_common   // vulkan_tower_tiles_on, g_gpu: the tile-family skip's words
-require ?vulkan dasllama/dasllama_audio_io
+require dasllama/dasllama_audio_io   // load_audio_16k_mono: the jfk cells' clip
 require ?cuda dasllama/dasllama_cuda_tower   // cuda_tower_arms: the CUDA twin seat
 
 let TWIN_SLACK_VK = 1.5   //! 1.5x: the q8 chain's activation quants plus f16 weight scales, the tiles' summation order
 let TWIN_ABS_VK = 2e-4    //! the tier-1 dumps' absolute floor, the bar's other term
 let TWIN_REL_L2_FLOOR = 1e-4lf   //! the audio twins' absolute floor over rel_l2, a unit-free ratio
-let TWIN_EXACT_REL_L2_VK = 2e-2lf   //! the exact lane's bar over rel_l2 from the exact CPU chain: the f32 tile over the f32 rows, the attention's f16 panels and the tiles' order the distance
+let TWIN_EXACT_REL_L2_VK = 2e-2lf   //! the exact lane's bar over rel_l2 from the exact CPU chain: the f32 tile over the f32 rows (a vision tower) or the f16 GEMM over the halfwords (an audio tower), the attention's f16 panels and the tiles' order the distance
+//! the whisper f16 lane's bar: the f16-table GELU over turbo's 32 blocks needs headroom past the shared bar (its readings: this
+//! constant's row in `PERF_LEDGER.md`'s bar table)
+let TWIN_F16_WHISPER_REL_L2 = 3.5e-2lf
 
 //! a front's witness: the front served every dispatch on the device (an audio twin's seat stands on the f16 GEMM feed alone)
 [unused_argument(declines_delta)]
@@ -35,29 +40,16 @@ def front_served(tt : T?; tag : string; convs_delta, expected, declines_delta : 
     tt |> equal(convs_delta, expected, "{tag}: the front served every dispatch on the device (convs delta = {expected})")
 }
 
-//! a jfk twin cell's seat, each miss a loud skip - the JIT (when `jit_only`), the model at `model_path` and jfk.wav stocked, the
-//! Vulkan twin's seat - then `body` over the clip, the Vulkan tower and ASR-decoder knobs put back after it
-[unused_argument(tt, model_path, jit_only, body)]
-def jfk_twin_cell(tt : T?; model_path : string; jit_only : bool; body : block<(samples : array<float>) : void>) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        if (jit_only && !jit_enabled()) {
-            tt |> skip("interpreted (dasLLAMA model tests are JIT-only)")
-            return
-        }
-        if (!model_available(tt, model_path)) {
-            return
-        }
-        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
-        if (empty(samples)) {
-            tt |> skip("jfk.wav not present")
-            return
-        }
-        if (!vulkan_audio_twin_seat(tt)) {
-            return
-        }
-        with_gpu_knobs() {
-            invoke(body, samples)
-        }
+//! the Metal twin's seat, or a loud skip: a das_metal build whose device stands up for family `fam`'s tower
+[unused_argument(fam)]
+def metal_twin_seat(tt : T?; fam : TowerFamily) : bool {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return true if (serving_tower_device_up(fam))
+        tt |> skip("no Metal device stands up for the tower on this box")
+        return false
+    } else {
+        tt |> skip("das_metal not present")
+        return false
     }
 }
 
@@ -69,7 +61,7 @@ def vulkan_twin_seat(tt : T?) : bool {
             return false
         } else {
             if (cuda_tower_asked()) {
-                tt |> skip("the CUDA home is asked for (DASLLAMA_CUDA=1 or set_gpu_home) - the Vulkan tower's seats stand down under the CUDA ask; a vision twin runs on the CUDA tower")
+                tt |> skip("the CUDA home is asked for (DASLLAMA_CUDA=1 or set_gpu_home) - the Vulkan tower's seats stand down under the CUDA ask; a family the CUDA home seats twins on the CUDA tower")
                 return false
             }
             if (!vulkan_tower_arms()) {
@@ -88,7 +80,7 @@ def vulkan_twin_seat(tt : T?) : bool {
     }
 }
 
-//! a vision tower's CUDA twin seat: the CUDA home asked for and its device armed, each miss a loud skip
+//! a tower's CUDA twin seat: the CUDA home asked for and its device armed, each miss a loud skip
 def cuda_twin_seat(tt : T?) : bool {
     static_if (typeinfo builtin_module_exists(cuda)) {
         if (!cuda_tower_asked()) {
@@ -122,6 +114,43 @@ def vulkan_audio_twin_seat(tt : T?) : bool {
     }
 }
 
+//! an audio family's twin seat on its seats' home: the CUDA tower's for a CUDA-home family (`tower_family_cuda`), else the Vulkan twin's, which stands down under the CUDA ask
+def discrete_audio_twin_seat(tt : T?; fam : TowerFamily) : bool => tower_family_cuda(fam) ? cuda_twin_seat(tt) : vulkan_audio_twin_seat(tt)
+
+[unused_argument(tt, model_path, jit_only, fam, metal, body)]
+def private jfk_cell_seated(tt : T?; model_path : string; jit_only : bool; fam : TowerFamily; metal : bool; body : block<(samples : array<float>) : void>) {
+    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda) || typeinfo builtin_module_exists(das_metal)) {
+        if (jit_only && !jit_enabled()) {
+            tt |> skip("interpreted (dasLLAMA model tests are JIT-only)")
+            return
+        }
+        if (!model_available(tt, model_path)) {
+            return
+        }
+        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
+        if (empty(samples)) {
+            tt |> skip("jfk.wav not present")
+            return
+        }
+        if (!(metal ? metal_twin_seat(tt, fam) : discrete_audio_twin_seat(tt, fam))) {
+            return
+        }
+        with_gpu_knobs() {
+            invoke(body, samples)
+        }
+    }
+}
+
+//! a jfk twin cell's seat, each miss a loud skip (the JIT under `jit_only`, the model and jfk.wav, `fam`'s twin seat), then `body` over the clip, the knobs put back
+def jfk_twin_cell(tt : T?; model_path : string; jit_only : bool; fam : TowerFamily; body : block<(samples : array<float>) : void>) {
+    jfk_cell_seated(tt, model_path, jit_only, fam, false, body)
+}
+
+//! `jfk_twin_cell` on the Metal tower's seat: its device up
+def metal_jfk_twin_cell(tt : T?; model_path : string; jit_only : bool; fam : TowerFamily; body : block<(samples : array<float>) : void>) {
+    jfk_cell_seated(tt, model_path, jit_only, fam, true, body)
+}
+
 
 //! how a twin reads its distances
 enum TwinMetric {
@@ -137,7 +166,7 @@ struct TwinSpec {
     n_layer : int64
     log_suffix : string
     metric : TwinMetric
-    vision : bool   //! a vision family: its seats follow the GPU home; an audio family's stay the Vulkan tower's
+    seat_family : TowerFamily   //! its home serves the device leg
 }
 
 //! a three-way's driver counters - before the exact leg, after it, after the CPU q8 leg, after the device leg - and each leg's encode count
@@ -176,42 +205,56 @@ def device_leg_served(tt : T?; tag : string; s0, s1 : auto; n_layer, npos : int6
     }
 }
 
-//! a q8-lane leg on the serving GPU tower: where `encode`'s gate ran (true), it served one encode and every block with no
-//! `quant_mode` decline
-def q8_lane_served(tt : T?; tag : string; n_layer : int64; encode : block<() : bool>) {
-    let s0 = gpu_tower_counters()
-    let dq0 = gpu_tower_quant_declines()
+//! a route counter's control: `encode` with family `fam`'s tower knob off moves no device encode (a flavored image's refusal of
+//! the CPU recovered and logged)
+def knob_off_unrouted(tt : T?; tag : string; fam : TowerFamily; encode : block<() : void>) {
+    let e0 = gpu_tower_encodes(fam)
+    var refusal = ""
+    with_gpu_knobs() {
+        set_serving_gpu_tower(false, fam)
+        try {
+            invoke(encode)
+        } recover {
+            refusal = this_context().last_exception |> rtrim
+        }
+    }
+    let how = empty(refusal) ? "the encode ran off the device" : "refused - " + refusal
+    to_log(LOG_INFO, "{tag} with the tower knob off: {how}\n")
+    tt |> equal(gpu_tower_encodes(fam) - e0, 0l, "{tag}: with the tower knob off no encode reached the device (the route counter's control)")
+}
+
+//! a q8-lane leg on family `fam`'s GPU tower: where `encode`'s gate ran (true), one encode served, every block, no `quant_mode` decline
+def q8_lane_served(tt : T?; tag : string; fam : TowerFamily; n_layer : int64; encode : block<() : bool>) {
+    let s0 = gpu_tower_counters(fam)
+    let dq0 = gpu_tower_quant_declines(fam)
     if (invoke(encode)) {
-        device_leg_served(tt, tag, s0, gpu_tower_counters(), n_layer, -1l)
-        tt |> equal(gpu_tower_quant_declines() - dq0, 0l, "{tag}: no quant_mode decline")
+        device_leg_served(tt, tag, s0, gpu_tower_counters(fam), n_layer, -1l)
+        tt |> equal(gpu_tower_quant_declines(fam) - dq0, 0l, "{tag}: no quant_mode decline")
     }
 }
 
-//! one input three ways - the exact chain and the CPU q8 chain (both CPU images, the knob off), the device chain over `tw_dev`,
-//! the lane's Vulkan-flavored image (`#tower-dev-block`) - then `counters` over the legs and the bar by `spec.metric`: the
-//! device's distance from the exact chain within `TWIN_SLACK_VK` x the CPU q8 chain's own; `encode` is the family's encode over
-//! a tower and its state, returning its token count
+//! one input three ways (exact, CPU q8, the device over `tw_dev`'s GPU image), then `counters` and the bar: the device within `TWIN_SLACK_VK` x the CPU q8 distance
 def twin_three_way(tt : T?; spec : TwinSpec; tw : auto(TW); var st : auto(ST); tw_dev : TW; var st_dev : ST; tw_exact : TW; var st_exact : ST;
                    encode : block<(t : TW; var s : ST; var out : array<float>) : int64>;
                    counters : block<(legs : TwinLegs) : void>) : TwinResult {
     var r = TwinResult(spec = spec)
-    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
+    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda) || typeinfo builtin_module_exists(das_metal)) {
         var cpu, dev : array<float>
         var legs = TwinLegs()
-        let home = serving_tower_dev(spec.vision)
+        let home = serving_tower_dev(spec.seat_family)
         with_gpu_knobs() {
-            set_serving_gpu_tower(false, spec.vision)
-            legs.pre = gpu_tower_counters(spec.vision)
+            set_serving_gpu_tower(false, spec.seat_family)
+            legs.pre = gpu_tower_counters(spec.seat_family)
             legs.n_exact = queued_encode(tw_exact, st_exact, r.reference, encode)
-            legs.exact = gpu_tower_counters(spec.vision)
+            legs.exact = gpu_tower_counters(spec.seat_family)
             legs.n_cpu = queued_encode(tw, st, cpu, encode)
-            legs.cpu = gpu_tower_counters(spec.vision)
-            set_serving_gpu_tower(true, spec.vision)
+            legs.cpu = gpu_tower_counters(spec.seat_family)
+            set_serving_gpu_tower(true, spec.seat_family)
             legs.n_dev = queued_encode(tw_dev, st_dev, dev, encode)
-            legs.dev = gpu_tower_counters(spec.vision)
+            legs.dev = gpu_tower_counters(spec.seat_family)
         }
         if (legs.dev.encodes == legs.cpu.encodes) {
-            to_log(LOG_INFO, "{spec.family} {home} twin {spec.tag}: the driver declined - {gpu_tower_declines(spec.vision)}\n")
+            to_log(LOG_INFO, "{spec.family} {home} twin {spec.tag}: the driver declined - {gpu_tower_declines(spec.seat_family)}\n")
         }
         invoke(counters, legs)
         if (spec.metric == TwinMetric.maxdiff) {
@@ -224,7 +267,7 @@ def twin_three_way(tt : T?; spec : TwinSpec; tw : auto(TW); var st : auto(ST); t
             to_log(LOG_INFO, "{spec.family} {home} twin {spec.tag} ({spec.n_layer} blocks{spec.log_suffix}): rms {r.rms}; vs exact: cpu q8 {q8_ex} ({q8_ex / r.rms} x rms), device {dev_ex} ({dev_ex / r.rms} x rms); device vs cpu q8 {dev_q8} ({dev_q8 / r.rms} x rms)\n")
             tt |> success(dev_ex <= bar, "{spec.tag}: the device chain sits within {TWIN_SLACK_VK}x the CPU q8 chain's distance from the exact chain ({dev_ex} vs {q8_ex})")
         } else {
-            r.bar = tower_twin_bar(tt, spec.tag, r.reference, cpu, dev, spec.n_layer, double(TWIN_SLACK_VK), TWIN_REL_L2_FLOOR)
+            r.bar = tower_twin_bar(tt, spec.tag, spec.seat_family, r.reference, cpu, dev, spec.n_layer, double(TWIN_SLACK_VK), TWIN_REL_L2_FLOOR)
         }
         delete cpu
         delete dev
@@ -236,14 +279,14 @@ def twin_three_way(tt : T?; spec : TwinSpec; tw : auto(TW); var st : auto(ST); t
 //! rel_l2 bar of 0 - its compare could not run - holds nothing, so the compare is skipped; the device encode is asserted either way)
 def twin_poison(tt : T?; r : TwinResult; zero_block : int64; twp : auto(TW); var stp : auto(ST);
                 encode : block<(t : TW; var s : ST; var out : array<float>) : int64>) {
-    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
-        var inscope poisoned <- device_poison_leg(tt, r.spec.tag, twp, stp, encode, r.spec.vision)
+    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda) || typeinfo builtin_module_exists(das_metal)) {
+        var inscope poisoned <- device_poison_leg(tt, r.spec.tag, twp, stp, encode, r.spec.seat_family)
         if (r.spec.metric == TwinMetric.maxdiff) {
             let poison_ex = logits_maxdiff(poisoned, r.reference)
-            to_log(LOG_INFO, "{r.spec.family} {serving_tower_dev(r.spec.vision)} twin {r.spec.tag} ({r.spec.n_layer} blocks) poison: block {zero_block} zeroed on the device lands {poison_ex} from the exact chain ({poison_ex / r.rms} x rms), bar {r.bar}\n")
+            to_log(LOG_INFO, "{r.spec.family} {serving_tower_dev(r.spec.seat_family)} twin {r.spec.tag} ({r.spec.n_layer} blocks) poison: block {zero_block} zeroed on the device lands {poison_ex} from the exact chain ({poison_ex / r.rms} x rms), bar {r.bar}\n")
             tt |> success(double(poison_ex) > r.bar, "{r.spec.tag}: a zeroed block through the device chain EXCEEDS the bar ({poison_ex} vs {r.bar})")
         } elif (r.bar > 0.0lf) {
-            tower_twin_poisoned(tt, r.spec.tag, r.reference, poisoned, r.bar)
+            tower_twin_poisoned(tt, r.spec.tag, r.spec.seat_family, r.reference, poisoned, r.bar)
         }
     }
 }
@@ -257,15 +300,15 @@ def private queued_encode(tw : auto(TW); var st : auto(ST); var out : array<floa
     return n
 }
 
-//! a poison's device leg: `encode` over the zeroed tower `twp` with the serving tower's knob on, one device encode asserted; the rows it wrote
-def private device_poison_leg(tt : T?; tag : string; twp : auto(TW); var stp : auto(ST); encode : block<(t : TW; var s : ST; var out : array<float>) : int64>; vision : bool) : array<float> {
+//! a poison's device leg: `encode` over the zeroed tower `twp` with family `fam`'s tower knob on, one device encode asserted; the rows it wrote
+def private device_poison_leg(tt : T?; tag : string; twp : auto(TW); var stp : auto(ST); encode : block<(t : TW; var s : ST; var out : array<float>) : int64>; fam : TowerFamily) : array<float> {
     var inscope out : array<float>
-    let e0 = gpu_tower_encodes(vision)
+    let e0 = gpu_tower_encodes(fam)
     with_gpu_knobs() {
-        set_serving_gpu_tower(true, vision)
+        set_serving_gpu_tower(true, fam)
         queued_encode(twp, stp, out, encode)
     }
-    tt |> equal(gpu_tower_encodes(vision) - e0, 1l, "{tag} poison: device-served (encodes delta)")
+    tt |> equal(gpu_tower_encodes(fam) - e0, 1l, "{tag} poison: device-served (encodes delta)")
     return <- out
 }
 
@@ -276,11 +319,11 @@ def twin_canvas(tt : T?; family, kind : string; w, h : int; patch : int64; log_s
                 tw_exact : TW; var st_exact : ST; zero_block : int64; mint_dev : block<(zb : int64) : TW>;
                 encode : block<(t : TW; var s : ST; var out : array<float>) : int64>) {
     static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
-        let spec = TwinSpec(family = family, tag = "{kind} {w}x{h}", n_layer = tw.n_layer, log_suffix = log_suffix, metric = TwinMetric.rel_l2, vision = true)
+        let spec = TwinSpec(family = family, tag = "{kind} {w}x{h}", n_layer = tw.n_layer, log_suffix = log_suffix, metric = TwinMetric.rel_l2, seat_family = TowerFamily.vision)
         let npos = (int64(w) / patch) * (int64(h) / patch)
         var tw_dev <- invoke(mint_dev, -1l)
         var st_dev = ST()
-        tt |> equal(tw_dev.dev_backend, serving_tower_dev(true), "{spec.tag}: the device leg's tower is the serving home's image ({serving_tower_dev(true)})")
+        tt |> equal(tw_dev.dev_backend, serving_tower_dev(TowerFamily.vision), "{spec.tag}: the device leg's tower is the serving home's image ({serving_tower_dev(TowerFamily.vision)})")
         let r <- twin_three_way(tt, spec, tw, st, tw_dev, st_dev, tw_exact, st_exact, encode) $(legs) {
             twin_counters(tt, spec.tag, legs, spec.n_layer, npos)
         }
@@ -300,7 +343,7 @@ def twin_canvas(tt : T?; family, kind : string; w, h : int; patch : int64; log_s
 //! must EXCEED the bar its dump holds (`bar_rms` x rms), a bar the poison clears measuring nothing; `excess` reads the encode over the dump's bar
 def dump_poison(tt : T?; family, tag : string; zero_block : int64; bar_rms : float; twp : auto(TW); var stp : auto(ST);
                 encode : block<(t : TW; var s : ST; var out : array<float>) : int64>; excess : block<(out : array<float>) : float>) {
-    var inscope out <- device_poison_leg(tt, tag, twp, stp, encode, true)
+    var inscope out <- device_poison_leg(tt, tag, twp, stp, encode, TowerFamily.vision)
     let ex = invoke(excess, out)
     to_log(LOG_INFO, "{family} device poison leg {tag}: block {zero_block} zeroed -> excess {ex} over the {bar_rms} x rms bar\n")
     tt |> success(ex > 0.0, "{tag}: a zeroed block through the device chain reds the bar (excess {ex})")
@@ -351,40 +394,23 @@ def mint_twin_tower(mm : string; q8 : bool; nl, zero_block : int64; dev : TowerD
     return <- tw
 }
 
-//! the exact-lane tower encoded with the knob on: the driver dispatches nothing - no block, no front - records the `quant_mode`
-//! decline, and the CPU chain serves the encode (`encode` returns the output's length); `one_seat`: the tower reaches the driver at
-//! the blocks seat alone, so exactly one decline (a vision tower), else at least one (an audio tower declines at its front and at
-//! its blocks, a chunked one per chunk)
-[unused_argument(tt, tag, expected_len, one_seat, encode)]
-def exact_lane_declines(tt : T?; tag : string; expected_len : int64; one_seat : bool; encode : block<() : int64>) {
-    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
-        set_serving_gpu_tower(true)
-        let x0 = gpu_tower_counters()
-        let dq0 = gpu_tower_quant_declines()
-        var n = 0l
-        with_dasllama_jobque_() {
-            n = invoke(encode)
-        }
-        let x1 = gpu_tower_counters()
-        let dq = gpu_tower_quant_declines() - dq0
-        tt |> equal(x1.encodes - x0.encodes, 0l, "{tag}: the exact-lane tower never dispatched a block with the knob on")
-        tt |> equal(x1.convs - x0.convs, 0l, "{tag}: the exact-lane tower never dispatched a front with the knob on")
-        if (one_seat) {
-            tt |> equal(dq, 1l, "{tag}: the exact-lane tower reached the blocks seat and the driver declined quant_mode")
-        } else {
-            tt |> success(dq >= 1l, "{tag}: the exact-lane tower reached the driver and it declined quant_mode ({dq} declines)")
-        }
-        tt |> equal(n, expected_len, "{tag}: the CPU chain served the exact-lane encode")
+//! a tower's block count, image flavor and halfword exact lane: its own, or - where the blocks are a nested whisper-class tower's
+//! (qwen3a) - its core's, the halfword lane there both the core's GEMM set and the front trio's; a tower with no halfword GEMM
+//! set (a vision tower: its exact lane is the f32 tile) answers false
+def twin_facts(tw) : tuple<n_layer : int64; dev : TowerDev; f16 : bool> {
+    static_if (typeinfo safe_has_field < core > (tw)) {
+        return (n_layer = tw.core.n_layer, dev = tw.core.dev_backend, f16 = tw.core.gemm_f16 && tw.cf16)
+    } static_elif (typeinfo safe_has_field < gemm_f16 > (tw)) {
+        return (n_layer = tw.n_layer, dev = tw.dev_backend, f16 = tw.gemm_f16)
+    } else {
+        return (n_layer = tw.n_layer, dev = tw.dev_backend, f16 = false)
     }
 }
 
-//! a vision tower's exact lane served on the device: the knob on, one encode, every block, the grid's rows, no `quant_mode`
-//! decline, and the device's rel_l2 from the exact CPU chain (the knob off) within `TWIN_EXACT_REL_L2_VK` - the expectation moved
-//! past the bar at one element as the compare's control; then the input poison: `twp`, the exact tower with a block zeroed,
-//! through the device chain must EXCEED the bar
-def exact_lane_served(tt : T?; tag : string; tw_exact : auto(TW); var st_exact : auto(ST); npos : int64; twp : TW; var stp : ST;
-                      encode : block<(t : TW; var s : ST; var out : array<float>) : int64>) {
-    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
+//! `exact_lane_served_on` held to `bar` over rel_l2 - a family whose exact lane the measured rows hold to its own bar
+def exact_lane_served_at(tt : T?; tag : string; fam : TowerFamily; bar : double; tw_cpu : auto(TW); var st_cpu : auto(ST); tw_dev : TW; var st_dev : ST;
+                         npos : int64; twp : TW; var stp : ST; encode : block<(t : TW; var s : ST; var out : array<float>) : int64>) {
+    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda) || typeinfo builtin_module_exists(das_metal)) {
         var cpu, dev : array<float>
         var n_cpu = 0l
         var n_dev = 0l
@@ -392,42 +418,75 @@ def exact_lane_served(tt : T?; tag : string; tw_exact : auto(TW); var st_exact :
         var s1 = GpuTowerCounters()
         var dq = 0l
         with_gpu_knobs() {
-            set_serving_gpu_tower(false, true)
-            n_cpu = queued_encode(tw_exact, st_exact, cpu, encode)
-            set_serving_gpu_tower(true, true)
-            s0 = gpu_tower_counters(true)
-            let dq0 = gpu_tower_quant_declines(true)
-            n_dev = queued_encode(tw_exact, st_exact, dev, encode)
-            s1 = gpu_tower_counters(true)
-            dq = gpu_tower_quant_declines(true) - dq0
+            set_serving_gpu_tower(false, fam)
+            n_cpu = queued_encode(tw_cpu, st_cpu, cpu, encode)
+            set_serving_gpu_tower(true, fam)
+            s0 = gpu_tower_counters(fam)
+            let dq0 = gpu_tower_quant_declines(fam)
+            n_dev = queued_encode(tw_dev, st_dev, dev, encode)
+            s1 = gpu_tower_counters(fam)
+            dq = gpu_tower_quant_declines(fam) - dq0
         }
         if (s1.encodes == s0.encodes) {
-            to_log(LOG_INFO, "{tag} exact lane: the driver declined - {gpu_tower_declines(true)}\n")
+            to_log(LOG_INFO, "{tag} exact lane: the driver declined - {gpu_tower_declines(fam)}\n")
         }
         tt |> equal(n_cpu, n_dev, "{tag} exact lane: token count on both chains")
-        device_leg_served(tt, "{tag} exact lane", s0, s1, tw_exact.n_layer, npos)
+        device_leg_served(tt, "{tag} exact lane", s0, s1, twin_facts(tw_dev).n_layer, npos)
         tt |> equal(dq, 0l, "{tag} exact lane: no quant_mode decline")
-        tower_twin_held(tt, "{tag} exact lane", cpu, dev, TWIN_EXACT_REL_L2_VK)
+        tower_twin_held(tt, "{tag} exact lane", fam, cpu, dev, bar)
         var nsq = 0.0lf
         for (v in cpu) {
             nsq += double(v) * double(v)
         }
         var moved := cpu
-        moved[0] += float(2.0lf * TWIN_EXACT_REL_L2_VK * sqrt(nsq) + double(abs(dev[0] - cpu[0])) + 1.0lf)
+        moved[0] += float(2.0lf * bar * sqrt(nsq) + double(abs(dev[0] - cpu[0])) + 1.0lf)
         var stm = TowerParityStats()
         if (tower_parity_stats(tt, "{tag} exact-lane control", moved, dev, stm)) {
-            tt |> success(stm.rel_l2 > TWIN_EXACT_REL_L2_VK, "{tag} exact lane control: the expectation moved past the bar at one element reds it ({stm.rel_l2})")
+            tt |> success(stm.rel_l2 > bar, "{tag} exact lane control: the expectation moved past the bar at one element reds it ({stm.rel_l2})")
         }
         delete moved
-        var inscope poisoned <- device_poison_leg(tt, "{tag} exact lane", twp, stp, encode, true)
-        tower_twin_poisoned(tt, "{tag} exact lane", cpu, poisoned, TWIN_EXACT_REL_L2_VK)
+        var inscope poisoned <- device_poison_leg(tt, "{tag} exact lane", twp, stp, encode, fam)
+        tower_twin_poisoned(tt, "{tag} exact lane", fam, cpu, poisoned, bar)
         delete cpu
         delete dev
     }
 }
 
-//! the device chain's rel_l2 from the exact chain held within `slack` x the CPU q8 chain's own plus `floor`; returns the bar, 0 when a compare could not run
-def tower_twin_bar(t : T?; tag : string; exact, cpu, dev : array<float>; n_layer : int64; slack, floor : double) : double {
+//! a tower's exact lane on `fam`'s device: `tw_cpu` on the CPU vs `tw_dev` within `TWIN_EXACT_REL_L2_VK`, a moved element the control; `twp`'s poison must EXCEED the bar
+def exact_lane_served_on(tt : T?; tag : string; fam : TowerFamily; tw_cpu : auto(TW); var st_cpu : auto(ST); tw_dev : TW; var st_dev : ST; npos : int64;
+                         twp : TW; var stp : ST; encode : block<(t : TW; var s : ST; var out : array<float>) : int64>) {
+    exact_lane_served_at(tt, tag, fam, TWIN_EXACT_REL_L2_VK, tw_cpu, st_cpu, tw_dev, st_dev, npos, twp, stp, encode)
+}
+
+//! a vision tower's exact lane served on the device - `exact_lane_served_on` with the exact tower on both legs, the vision home's
+def exact_lane_served(tt : T?; tag : string; tw_exact : auto(TW); var st_exact : auto(ST); npos : int64; twp : TW; var stp : ST;
+                      encode : block<(t : TW; var s : ST; var out : array<float>) : int64>) {
+    exact_lane_served_on(tt, tag, TowerFamily.vision, tw_exact, st_exact, tw_exact, st_exact, npos, twp, stp, encode)
+}
+
+//! a tower's exact lane on `fam`'s home at `bar`: `tw_exact`'s CPU chain against `mint(-1)`'s halfword flavor, the poison `mint(zero_block)`; answers the front's dispatches
+def exact_flavor_leg(tt : T?; tag : string; fam : TowerFamily; bar : double; tw_exact : auto(TW); var st_exact : auto(ST); npos : int64;
+                     mint : block<(zb : int64) : TW>; state : block<(tw : TW) : ST>;
+                     encode : block<(e : TW; var s : ST; var out : array<float>) : int64>) : int64 {
+    var inscope twd <- invoke(mint, -1l)
+    var inscope twp <- invoke(mint, twin_facts(tw_exact).n_layer / 2l)
+    let home = serving_tower_dev(fam)
+    tt |> equal(twin_facts(twd).dev, home, "{tag}: the exact lane's device leg is the {home} flavor's image")
+    tt |> success(twin_facts(twd).f16 && twin_facts(twp).f16, "{tag}: the exact lane's GEMMs are halfwords on the {home} home")
+    var inscope std <- invoke(state, twd)
+    var inscope stp <- invoke(state, twp)
+    let c0 = gpu_tower_counters(fam).convs
+    exact_lane_served_at(tt, tag, fam, bar, tw_exact, st_exact, twd, std, npos, twp, stp, encode)
+    return gpu_tower_counters(fam).convs - c0
+}
+
+//! `exact_flavor_leg` at the shared bar, each state a fresh one
+def exact_flavor_leg(tt : T?; tag : string; fam : TowerFamily; tw_exact : auto(TW); var st_exact : auto(ST); npos : int64;
+                     mint : block<(zb : int64) : TW>; encode : block<(e : TW; var s : ST; var out : array<float>) : int64>) : int64
+    => exact_flavor_leg(tt, tag, fam, TWIN_EXACT_REL_L2_VK, tw_exact, st_exact, npos, mint, $ [unused_argument(tw)] (tw : TW) => ST(), encode)
+
+//! the device's rel_l2 from the exact chain within `slack` x the CPU q8 chain's own plus `floor`; returns the bar, 0 when a compare could not run
+def tower_twin_bar(t : T?; tag : string; fam : TowerFamily; exact, cpu, dev : array<float>; n_layer : int64; slack, floor : double) : double {
     var q8_ex = TowerParityStats()
     var dev_ex = TowerParityStats()
     var dev_q8 = TowerParityStats()
@@ -438,24 +497,24 @@ def tower_twin_bar(t : T?; tag : string; exact, cpu, dev : array<float>; n_layer
         return 0.0lf
     }
     let bar = slack * q8_ex.rel_l2 + floor
-    t |> success(dev_ex.rel_l2 <= bar, "{tag} device blocks {n_layer}L on {serving_tower_dev(true)}: the device chain sits within {slack}x the CPU q8 chain's rel_l2 from the exact chain ({dev_ex.rel_l2} vs {q8_ex.rel_l2})")
+    t |> success(dev_ex.rel_l2 <= bar, "{tag} device blocks {n_layer}L on {serving_tower_dev(fam)}: the device chain sits within {slack}x the CPU q8 chain's rel_l2 from the exact chain ({dev_ex.rel_l2} vs {q8_ex.rel_l2})")
     return bar
 }
 
-//! a device encode's rel_l2 from the exact chain held within `bar`
-def tower_twin_held(t : T?; tag : string; exact, dev : array<float>; bar : double) {
-    tower_twin_verdict(t, tag, exact, dev, bar, false)
+//! a device encode's rel_l2 from the exact chain held within `bar`, the encode on family `fam`'s home
+def tower_twin_held(t : T?; tag : string; fam : TowerFamily; exact, dev : array<float>; bar : double) {
+    tower_twin_verdict(t, tag, fam, exact, dev, bar, false)
 }
 
-//! the zeroed-plane input poison: a device encode's rel_l2 from the exact chain past `bar`
-def tower_twin_poisoned(t : T?; tag : string; exact, dev : array<float>; bar : double) {
-    tower_twin_verdict(t, tag, exact, dev, bar, true)
+//! the zeroed-plane input poison: a device encode's rel_l2 from the exact chain past `bar`, the encode on family `fam`'s home
+def tower_twin_poisoned(t : T?; tag : string; fam : TowerFamily; exact, dev : array<float>; bar : double) {
+    tower_twin_verdict(t, tag, fam, exact, dev, bar, true)
 }
 
-def private tower_twin_verdict(t : T?; tag : string; exact, dev : array<float>; bar : double; must_exceed : bool) {
+def private tower_twin_verdict(t : T?; tag : string; fam : TowerFamily; exact, dev : array<float>; bar : double; must_exceed : bool) {
     var st = TowerParityStats()
     return if (!tower_parity_stats(t, must_exceed ? "{tag} poisoned device vs exact" : "{tag} device vs exact", exact, dev, st))
-    let home = serving_tower_dev(true)
+    let home = serving_tower_dev(fam)
     if (must_exceed) {
         t |> success(all_finite(exact) && all_finite(dev), "{tag}: every element of both encodes is finite before the {home} poison's exceed compare")
         t |> success(is_finite(st.rel_l2) && st.rel_l2 > bar, "{tag}: the zeroed planes through the {home} device chain EXCEED the bar ({st.rel_l2} vs {bar})")

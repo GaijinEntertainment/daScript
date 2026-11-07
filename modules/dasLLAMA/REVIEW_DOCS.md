@@ -4,22 +4,18 @@
 docs: `ARCHITECTURE.md`, `ARCHITECTURE_DOCS.md`. Planned work: `followup_general.md`,
 `followup_vulkan.md`, `followup_metal.md`.
 
-**A diff that adds a `followup_*.md` entry asking that a function carrying a STYLE037/STYLE038
-suppression (`// nolint:`, `options _function_length` / `_cyclomatic_complexity`) be shortened or
-split (an entry asking to replace its repeated, hand-copied code with a loop counts; one asking to
-merge it with a twin onto one template does not) removes that suppression, or lands the shortening
-or split, in the same change.**
+**A diff that adds a `followup_*.md` entry asking to shorten or split a function carrying a
+STYLE037/STYLE038 suppression (`// nolint:`, `options _function_length`/`_cyclomatic_complexity`),
+or adds such a suppression, of a STYLE code the function carried nowhere on the base branch, to a
+function a `followup_*.md` entry asks to shorten or split, lands the shortening or split in the
+same change, or drops the suppression.** A loop replacing hand-copied code shortens; merging
+near-copies onto one template does not.
 
-**A diff that adds a STYLE037/STYLE038 suppression under this folder to a function that carried no
-suppression of that STYLE code on the base branch, in any file, where a `followup_*.md` entry
-asks that function to be shortened or split (an entry asking to replace its repeated, hand-copied
-code with a loop counts; one asking to merge it with a twin onto one template does not), is a
-defect - it lands the shortening or split instead.**
-
-**A diff that adds a file under `dasllama/` adds that file's charter line - the one line saying
-what the file holds - to an `ARCHITECTURE_*.md` companion in the same change, never to
-`ARCHITECTURE.md`.** `ARCHITECTURE.md#file-charters`'s routing block names the companion holding
-each file's charter line.
+**A diff that adds a file under `dasllama/` adds that file's charter entry - text naming the file
+and saying what it holds, on a line of its own or inside another line or table cell - to an
+`ARCHITECTURE_*.md` companion in the same change, never to `ARCHITECTURE.md`.**
+`ARCHITECTURE.md#file-charters`'s routing block names the companion holding each file's charter
+entry.
 
 **A `followup_*.md` row's number, and an item's label inside a row, never changes and is never
 reused: a row a diff adds takes a number higher than every number its file has carried, and an
@@ -41,6 +37,10 @@ citation that names it to the new row's number or drops it, and adds the new pro
 number.** A row rewritten under its number turns every citation of
 that number into a citation of something else.
 
+**A diff that renames an identifier a surviving `followup_*.md` row or item names writes the new
+name into that row or item, under its number, in the same change; a rename does not change the
+problem the row states.**
+
 **A diff files planned work in the ledger that owns it: `followup_metal.md` for work that would
 change a Metal kernel, driver or dispatch and no Vulkan or CUDA one, or CPU engine work whose
 problem reproduces only on macOS; `followup_vulkan.md` for work that would change a Vulkan kernel,
@@ -49,17 +49,17 @@ driver or dispatch, outside every template the CUDA home also stamps, and no Met
 
 **A time, rate, ratio or error a box measured, written by a diff into an `ARCHITECTURE*.md` or a
 `followup_*.md`, names each box it holds on, and the `PERF_LEDGER.md` entry it comes from shows it
-on each of them; a `followup_*.md` row that carries one cites that entry.** A parity claim - X runs
-at Y's time - is a ratio.
+on each of them; a `followup_*.md` row that carries one cites that entry.** A parity claim (X runs
+at Y's time) and a measured ordering with no number (the faster lane) are ratios.
 
 **A diff that adds or removes an `ARCHITECTURE_*.md` companion adds or drops its line in
 `ARCHITECTURE.md`'s routing block (under `File charters` or `Mechanisms`) in the same change.**
 
-**A diff that adds, removes, or moves a `##` or `###` heading of an `ARCHITECTURE_*.md` companion
-updates every text that lists the companion's contents - its own opening, any other
-`ARCHITECTURE*.md` sentence that lists its subjects - so that it names each added heading's
-subject and no removed one's, in the same change; a listing under an umbrella term counts only
-where the term names the subject.**
+**A diff that adds, removes, moves or retitles a `##` or `###` heading of an `ARCHITECTURE_*.md`
+companion updates, in the same change, every text listing the companion's contents - its own
+opening, any other `ARCHITECTURE*.md` sentence listing its subjects - to name each added heading's
+subject, each retitled one's as its title now reads, and no removed one's.** An umbrella term lists
+a subject only where it names it; an enumerating sentence's enumeration is the listing.
 
 **A diff that moves or removes a heading of an `ARCHITECTURE_*.md` companion leaves no citation
 that names the companion file alone for that heading's subject - it repoints the citation to the

@@ -22,6 +22,7 @@ require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — th
 require dasllama/dasllama_audio
 require dasllama/dasllama_tower
 require dasllama/dasllama_tower_image
+require dasllama/dasllama_tower_flavor   // [tower_flavor]: the family's GPU flavor seat
 require dasllama/dasllama_blocks   // embed_text_rows/eval_embd_ — the ASR turn drives the Qwen3 decoder
 require dasllama/dasllama_common   // apply_box_profile_runtime for the canary-image identity
 require dasllama/dasllama_convert   // quantize_q8_0_into — the q8 load's read-time transcode
@@ -79,6 +80,8 @@ struct CanaryEncoder {
     q8 : bool
     qblob : PlaneI8 = PlaneI8()
     qscales : PlaneF = PlaneF()
+    gemm_f16 : bool                  //! a GPU home's exact lane (`tower_dev_halfword`): the GEMM offsets index ``wblob``
+    wblob : PlaneU16 = PlaneU16()    //! the GEMM regions as halfwords, the file's f32 saturated to f16 at staging
     dev_backend : TowerDev    //! the GPU flavor whose device block the image carries (`#tower-dev-block`); `none` on the CPU image
     dev : PlaneU8 = PlaneU8()
     devplan : PlaneI64 = PlaneI64()
@@ -129,9 +132,9 @@ def finalize(var t : CanaryEncoder) {
     }
 }
 
-// the tripwire: serialize_image_meta(CanaryEncoder) covers 27 fields; image_map + image_bytes
-// are deliberate skips (the seven planes are sections, not meta).
-let private CANARY_META_FIELDS = 28 + 2
+// the tripwire: serialize_image_meta(CanaryEncoder) covers 29 fields; image_map + image_bytes
+// are deliberate skips (the planes are sections, not meta).
+let private CANARY_META_FIELDS = 29 + 2
 
 // every meta-carried CanaryEncoder field, explicitly, both directions (see dasllama_image)
 def private serialize_image_meta(var arch : Archive; var t : CanaryEncoder) {
@@ -163,6 +166,7 @@ def private serialize_image_meta(var arch : Archive; var t : CanaryEncoder) {
     arch |> serialize_raw(t.proj_w)
     arch |> serialize_raw(t.proj_b)
     arch |> serialize_raw(t.q8)
+    arch |> serialize_raw(t.gemm_f16)
     arch |> serialize_raw(t.dev_backend)
 }
 
@@ -181,6 +185,7 @@ struct CanaryStaging {
     layers : array<CanaryLayerOffs>
     qblob : array<int8>       // section names must match the served plane fields (bind-by-name)
     qscales : array<float>
+    @exact_size wblob : array<uint16>
     @exact_size dev : array<uint8>       //!< a GPU-flavored mint's device block (`TowerDevBuild`)
     @exact_size devplan : array<int64>   //!< ... and its plan
 }
@@ -199,10 +204,17 @@ def private image_post_load(var st : CanaryStaging) {}
 [init]
 def private register_canary_image_tags {
     register_image_family_tag("canary-q8")
-    register_image_family_tag("canary-f32", true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
+    register_image_family_tag("canary-f32", config_free = true)
+    register_image_family_tag("canary-f16", config_free = true)
     register_tower_dev_tags("canary-q8")
-    register_tower_dev_tags("canary-f32")
+    register_tower_dev_tags("canary-f16")
 }
+
+//! the image tag of a lane: q8, the exact pick's halfwords (`f16`), or the file's f32
+def canary_lane_tag(q8, f16 : bool) : string => tower_lane_tag("canary", q8, f16)
+
+//! the image tag of the lane a load of `path` on `q8` takes under flavor `dev` (`tower_load_f16`)
+def canary_image_tag(path : string; q8 : bool; dev : TowerDev) : string => canary_lane_tag(q8, tower_load_f16(path, q8, dev))
 
 //! Every hot-path buffer of the canary encode, so a transcribe allocates nothing per call.
 struct CanaryState {
@@ -297,12 +309,11 @@ def private cn_read_plain(var recs : table<string; CnRec>; b : array<uint8> | #;
     return at
 }
 
-// GEMM read: a q8 load transcodes it from the file straight into qblob/qscales (the fp32 blob
-// never holds it); an fp32 load reads it like any plain tensor
+//! a GEMM read: q8 transcodes into qblob/qscales, f16 into wblob's halfwords (the fp32 blob never holds it), fp32 reads it as a plain tensor
 def private cn_read_gemm(var recs : table<string; CnRec>; b : array<uint8> | #; name : string;
                          var st : CanaryStaging; @scratch var wscratch : array<float>;
                          var po : int64&; var qo : int64&) : int64 {
-    if (!st.e.q8) {
+    if (!st.e.q8 && !st.e.gemm_f16) {
         return cn_read_plain(recs, b, name, st.blob, po)
     }
     let r = cn_take(recs, name)
@@ -314,7 +325,13 @@ def private cn_read_gemm(var recs : table<string; CnRec>; b : array<uint8> | #; 
         wscratch |> resize(r.n_elem)
     }
     cn_read_rec(b, r, wscratch, 0l)
-    quantize_q8_0_into(wscratch, r.n_elem, st.qblob, st.qscales, qo, qo / 32l)
+    if (st.e.gemm_f16) {
+        unsafe {
+            cvt_f32_to_f16_sat(addr(st.wblob[qo]), addr<float const?>(wscratch[0]), r.n_elem)
+        }
+    } else {
+        quantize_q8_0_into(wscratch, r.n_elem, st.qblob, st.qscales, qo, qo / kq_elems(KqFmt.q8))
+    }
     let at = qo
     qo += r.n_elem
     return at
@@ -396,35 +413,25 @@ def private cn_fold_bn(var blob : array<float>; w, b, mean, vr, dwb, d : int64; 
 //! With ``q8`` the GEMM weights transcode to Q8_0 straight from the mapped file (conv im2col, depthwise, biases, norms stay fp32).
 //! Caches a box/knob-specific PREPARED IMAGE like ``load_model``; ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
 def load_canary_encoder(path : string; q8 : bool = false) : CanaryEncoder {
-    let tag = q8 ? "canary-q8" : "canary-f32"
-    announce_lane("canary encoder", q8, "f32 planes", "set_canary_enc_q8", g_cn_pin != GemmLane.unset, canary_gpu_serves())
     let dev = path |> ends_with(".dlim") ? TowerDev.none : canary_dev_flavor(q8)
-    return <- load_staged_image_dev(path, tag, "canary-encoder", "source bin", type<CanaryEncoder>, dev, g_cn_flavor.bake, CANARY_DEV_CONSUMED) {
-        return <- stage_canary_encoder(path, q8)
+    let f16 = tower_load_f16(path, q8, dev)
+    let tag = canary_lane_tag(q8, f16)
+    announce_lane("canary encoder", q8, f16, "set_canary_enc_q8", g_cn_pin != GemmLane.unset, false)
+    return <- load_staged_image_dev(path, tag, "canary-encoder", "source bin", type<CanaryEncoder>, dev, g_canary_flavor.bake, CANARY_DEV_CONSUMED) {
+        return <- stage_canary_encoder(path, q8, f16)
     }
 }
 
 //! A GPU driver's Canary encoder flavor (`#tower-dev-block`): the backend whose image it mints, whether its chain serves a lane,
 //! and the bake that converts a CPU-form encoder into the driver's device block
-typedef CanaryServesLaneFn = function<(q8 : bool) : bool>
-typedef CanaryBakeFn = function<(m : CanaryEncoder; var b : TowerDevBuild) : bool>
+[tower_flavor(family = "canary", model = "CanaryEncoder")]
+struct CanaryFlavor {}
 
-struct CanaryFlavor {
-    backend : TowerDev
-    serves : CanaryServesLaneFn
-    bake : CanaryBakeFn
-}
-
-var private g_cn_flavor = CanaryFlavor()
 let private CANARY_DEV_CONSUMED <- ["qblob", "qscales"]   //! the planes a Canary bake converts: a GPU flavor carries their device forms instead
-
-def register_canary_flavor(backend : TowerDev; serves : CanaryServesLaneFn; bake : CanaryBakeFn) {
-    g_cn_flavor = CanaryFlavor(backend = backend, serves = serves, bake = bake)
-}
 
 //! The device flavor a load on the `q8` lane takes: the registered driver's where its chain serves the lane, else `none` - the
 //! CPU image
-def canary_dev_flavor(q8 : bool) : TowerDev => tower_dev_flavor(g_cn_flavor, q8)
+def canary_dev_flavor(q8 : bool) : TowerDev => tower_dev_flavor(g_canary_flavor, q8)
 
 //! A GPU-flavored encoder reached a CPU path at `stage`: the device seat declined what the load handed it, and the CPU never runs
 //! that image (`#tower-dev-block`)
@@ -433,7 +440,7 @@ def private cn_cpu_refuse(m : CanaryEncoder; stage : string) => tower_cpu_refuse
 //! The loaded precision as ``<encoder>/<decoder>`` (the decoder tag comes from the facade,
 //! which owns the shared LLM): the facade's [[asr_exec_fmt]] arm.
 def canary_exec_fmt(e : CanaryEncoder; dec_fmt : string) : string =>
-    "{e.q8 ? "q8" : "f32"}/{dec_fmt}"
+    "{tower_lane_fmt(e.q8, e.gemm_f16)}/{dec_fmt}"
 
 //! Canary's encode-total ``asr_prof`` bucket (the facade's [[asr_encode_bucket]] arm).
 def canary_encode_bucket : string => "cn.encode"
@@ -443,14 +450,20 @@ def canary_encode_bucket : string => "cn.encode"
 //! under `with_tower_dev_staging(dev)`), `none` the CPU image (`tower_mint_flavor`).
 def mint_canary_encoder(var st : CanaryStaging; var out : CanaryEncoder; dev : TowerDev = TowerDev.none) {
     // the tag is the staging's own precision — a caller-supplied flag could bake a lying tag
-    tower_mint_flavor(st, out, st.e.q8 ? "canary-q8" : "canary-f32", "canary-encoder", dev, g_cn_flavor, CANARY_DEV_CONSUMED)
+    tower_mint_flavor(st, out, canary_lane_tag(st.e.q8, st.e.gemm_f16), "canary-encoder", dev, g_canary_flavor, CANARY_DEV_CONSUMED)
 }
+
+//! The CNRY-bin reader proper under the running staging's flavor: its halfword lane is the staging's (`tower_load_f16`).
+def stage_canary_encoder(path : string; q8 : bool = false) : CanaryStaging
+    => <- stage_canary_encoder(path, q8, tower_load_f16(path, q8, tower_staging_dev()))
 
 // The CNRY-bin reader proper: scalars land in the served encoder, plane bytes in the staging
 // arrays beside it. Nothing here is servable — the image build is what produces a live encoder.
-def stage_canary_encoder(path : string; q8 : bool = false) : CanaryStaging {
+def stage_canary_encoder(path : string; q8, f16 : bool) : CanaryStaging {
     var st = CanaryStaging()
     st.e.q8 = q8
+    st.e.gemm_f16 = f16
+    let gemms_own_plane = q8 || f16
     let n_bytes = int64(stat(path).size)
     let f = fopen(path, "rb")
     if (f == null) {
@@ -505,7 +518,7 @@ def stage_canary_encoder(path : string; q8 : bool = false) : CanaryStaging {
         var total_plain = 0l
         var total_gemm = 0l
         for (r in values(recs)) {
-            if (q8 && cn_is_gemm_name(r.name)) {
+            if (gemms_own_plane && cn_is_gemm_name(r.name)) {
                 total_gemm += r.n_elem
             } else {
                 total_plain += r.n_elem
@@ -518,6 +531,8 @@ def stage_canary_encoder(path : string; q8 : bool = false) : CanaryStaging {
             st.qblob |> resize(total_gemm)
             st.qscales |> reserve(total_gemm / 32l)
             st.qscales |> resize(total_gemm / 32l)
+        } elif (st.e.gemm_f16) {
+            st.wblob |> reserve_resize(total_gemm)
         }
 
         // schema walk: each read consumes its record and returns the offset its field records
@@ -792,9 +807,7 @@ def canary_pos_table(m : CanaryEncoder; var st : CanaryState; tt, ww : int64) {
 //! the GPU block hook: after the subsample front + inproj, the 32 FastConformer blocks on st.x; the pos table is the hook's
 //! own (`canary_pos_table` on the host, or the device's)
 typedef CanaryGpuBlocksFn = function<(m : CanaryEncoder; var st : CanaryState; tt, ww : int64) : bool>
-typedef CanaryServesFn = function<() : bool>
 var private g_cn_gpu : CanaryGpuBlocksFn
-var private g_cn_serves : CanaryServesFn
 var private g_cn_gpu_set = false
 
 //! the GPU front hook: off the windowed frames ``st.xw``, the mel spectrum, the subsample stack and the input projection
@@ -808,24 +821,18 @@ def register_canary_front_gpu(fn : CanaryFrontGpuFn) {
     g_cn_front = fn
     g_cn_front_set = true
 }
-var private g_cn_serves_set = false
 
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
-def register_canary_gpu(fn : CanaryGpuBlocksFn; serves : CanaryServesFn) {
+def register_canary_gpu(fn : CanaryGpuBlocksFn) {
     g_cn_gpu = fn
-    g_cn_serves = serves
     g_cn_gpu_set = true
-    g_cn_serves_set = true
 }
-
-//! the lane policy's question - would a GPU driver serve the exact block loop: false with no driver, with the knob off, or under the Vulkan driver, which serves q8
-def canary_gpu_serves() : bool => g_cn_serves_set && invoke(g_cn_serves)
 
 var private g_cn_pin = GemmLane.unset
 
-//! Pin the canary encoder's weight format for subsequent loads: q8 (the CPU serving lane) vs
-//! the fp32 lane the parity legs and the GPU driver read. ``reset_canary_enc_q8`` returns to
-//! the policy default (exact when the Metal driver serves).
+//! Pin the canary encoder's weight format for subsequent loads: q8 (the default on every home) vs
+//! the exact lane (the halfword lane on a GPU home, the f32 planes on the CPU; also the parity legs).
+//! ``reset_canary_enc_q8`` returns to the policy default.
 def set_canary_enc_q8(on : bool) {
     g_cn_pin = lane_pin(on)
 }
@@ -836,7 +843,7 @@ def reset_canary_enc_q8() {
 
 //! The lane subsequent loads would take — the facade's default and the tests read it.
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
-def canary_enc_serves_q8() : bool => lane_serves_q8(g_cn_pin, !canary_gpu_serves())
+def canary_enc_serves_q8() : bool => audio_lane_serves_q8(g_cn_pin, true)
 
 def private cn_blocks_cpu(m : CanaryEncoder; var st : CanaryState; tt, ww : int64) {
     let form = FcCpuForm(d = m.d_model, ff = m.n_ff, n_head = m.n_head, nk = m.conv_kernel, tap_major = false, vec4 = false)

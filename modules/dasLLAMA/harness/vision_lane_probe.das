@@ -73,7 +73,7 @@ def main() : int {
     return 1 if (!a.ok)
     let lane = a.q8 ? "q8" : "exact"
     set_every_gpu_tower(true)
-    let dev = a.q8 ? serving_tower_dev(true) : TowerDev.none
+    let dev = a.q8 ? serving_tower_dev(TowerFamily.vision) : TowerDev.none
     let planes <- planes_of(a.w, a.h)
     var out : array<float>
     var ntok = 0l

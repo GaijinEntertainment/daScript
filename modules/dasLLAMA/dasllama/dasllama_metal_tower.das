@@ -96,7 +96,7 @@ def metal_tower_f16_encodes() : int64 => g_tower_f16_encodes
 //! whisper-preprocessor mels (Qwen3-ASR's, the chat towers' chunked one) the device served
 def metal_tower_mel_encodes() : int64 => g_tower_mels
 
-//! whisper-class encodes whose projector tail ran on the device behind the blocks
+//! whisper-class encodes whose projector tail ran on the device behind the blocks, and qwen3a projector passes on the device
 def metal_tower_tail_encodes() : int64 => g_tower_tail_encodes
 
 //! the vision q8 slab sits on the device (a q8 vision tower attached it; a weight drop or the shutdown frees it)
@@ -108,11 +108,9 @@ def private tw_decline(why : MetalTowerDecline) : bool {
     return false
 }
 
-//! a whole-encode seat's first gates, each decline counted: the knob, a lane the chain does not serve (`lane_ok` false), a model
-//! that is not the Metal-flavored image (`dev`); false where one declined
-def private tw_seat_gate(lane_ok : bool; dev : TowerDev) : bool {
+//! a whole-encode seat's first gates, each decline counted: the knob, a model not the Metal-flavored image (`dev`); every lane a Metal image carries serves
+def private tw_seat_gate(dev : TowerDev) : bool {
     return tw_decline(MetalTowerDecline.knob) if (!g_tw_env_tower)
-    return tw_decline(MetalTowerDecline.quant_mode) if (!lane_ok)
     return tw_decline(MetalTowerDecline.flavor) if (dev != TowerDev.metal)
     return true
 }
@@ -300,9 +298,35 @@ def private metal_gemma4v_bake(t : Gemma4vTower; var b : TowerDevBuild) : bool =
 //! a vision chain's q8 lane takes the Metal flavor where the tower knob is on; its exact lane's planes bind as stored
 def private metal_vision_serves_model(q8 : bool) : bool => q8 && g_tw_env_tower && metal_tower_init()
 
-//! an audio tower's Metal chain serves the exact lane - the standalone whisper-class tower, canary, parakeet, gemma4a, qwen3a: the
-//! tower knob on and the driver's pipelines built; their q8 lanes have no Metal GEMM form
-def private metal_exact_serves_model(q8 : bool) : bool => !q8 && g_tw_env_tower && metal_tower_init()
+//! the half tensor GEMM an f16 lane's halfwords need: the twin knob on and the half GEMM compiled (the toolchain's tensor ops)
+def private tw_half_ready() : bool => g_tw_env_tower_f16 && pf_hmm_ready()
+
+//! `family`'s exact-lane pick on the half tensor GEMM (`tw_half_ready`), else its Metal flavor stood down by name
+def private tw_half_pick(family : string) : bool {
+    return true if (tw_half_ready())
+    let why = (g_tw_env_tower_f16
+        ? "the exact lane's halfwords ride the half tensor GEMM, which this box's Metal toolchain did not compile (it carries no tensor ops)"
+        : "the exact lane's half twin knob is off (DASLLAMA_METAL_TOWER_F16=0 or set_metal_tower_f16(false))")
+    return tower_flavor_refused(TowerDev.metal, family, "{why}; the q8 lane serves on this device")
+}
+
+//! the lanes `family`'s Metal audio tower image carries: q8 off a q8 slab, the f16 lane on the half tensor GEMM (`tw_half_pick`); else the CPU image
+def private metal_tower_lane_ok(family : string; q8 : bool) : bool => g_tw_env_tower && metal_tower_init() && (q8 || tw_half_pick(family))
+
+//! the chat audio towers' Metal flavor pick: the lane
+def private metal_audio_tower_serves_model(q8 : bool) : bool => metal_tower_lane_ok("audio tower", q8)
+
+//! qwen3a's Metal flavor pick: the lane and the front's pipelines
+def private metal_qwen3a_serves_model(q8 : bool) : bool => metal_tower_lane_ok("qwen3a", q8) && pf_q3a_front_ready()
+
+//! canary's Metal flavor pick: the lane, the FastConformer block pipelines and the device front's
+def private metal_canary_serves_model(q8 : bool) : bool => metal_tower_lane_ok("canary", q8) && pf_fc_ready(false) && pf_cn_front_ready()
+
+//! parakeet's Metal flavor pick: the lane, the FastConformer block pipelines on the tap-major taps and the subsample front's
+def private metal_parakeet_serves_model(q8 : bool) : bool => metal_tower_lane_ok("parakeet", q8) && pf_fc_ready(true) && pf_pk_front_ready()
+
+//! gemma4a's Metal flavor pick: the lane, the Conformer block pipelines and the whole-chunk front's
+def private metal_gemma4a_serves_model(q8 : bool) : bool => metal_tower_lane_ok("gemma4a", q8) && pf_g4a_ready() && pf_g4a_front_ready()
 
 [cold_path]
 def private tw_q8_attach_vis(t : auto(TT)) : bool => tw_q8_attach_slab(g_tw_q8_vis, g_tw_q8_vis_boffs, t.qblob, t.qscales, tw_q8_regions(t))
@@ -404,21 +428,38 @@ def metal_audio_tower_bake_into(t : AudioTower; stem : bool; var b : TowerDevBui
 [cold_path]
 def private metal_audio_tower_bake(t : AudioTower; var b : TowerDevBuild) : bool => metal_audio_tower_bake_into(t, true, b)
 
-//! a whisper encoder's Metal chain serves an encoder lane: the tower knob on
-def metal_whisper_tower_serves() : bool => g_tw_env_tower
+//! a whisper encoder's Metal chain serves the encoder lane `q8` (`metal_tower_lane_ok`)
+def metal_whisper_tower_serves(q8 : bool) : bool => metal_tower_lane_ok("whisper", q8)
 
+//! a whisper-class tower's q8 slab regions: the blocks' TW_Q8_MATS a layer, the stem's second conv, then the projector tail's
+//! GEMMs where both sit on the q8 plane (`tw_q8_proj_site`)
 def private tw_q8_regions(t : AudioTower) : array<Q8Region> {
     var @exact_size rg : array<Q8Region>
     let d = t.d_model
-    rg |> reserve(t.n_layer * TW_Q8_MATS + 1l)
+    rg |> reserve(t.n_layer * TW_Q8_MATS + 3l)
     var recs : Q8Region[int(LN_BLOCK_GEMMS)]
     for (l in range64(t.n_layer)) {
         ln_block_regions(enc_layer_offsets(t, l), d, t.n_ff, recs)
         rg |> push_from(recs)
     }
     rg |> push(Q8Region(woff = t.conv2_w_off, n = 3l * d, rows = d))
+    if (tw_q8_proj_dense(t)) {
+        if (t.proj_kind == AudioProjKind.qwen2a) {
+            rg |> push(Q8Region(woff = t.proj_w_off, n = d, rows = t.proj_dim))
+        } else {
+            rg |> push(Q8Region(woff = t.proj_w_off, n = d * t.stack_factor, rows = t.mm1_out))
+            rg |> push(Q8Region(woff = t.mm2_w_off, n = audio_proj_mid_width(t), rows = t.proj_dim))
+        }
+    }
     return <- rg
 }
+
+//! every projector GEMM of the tower sits on its q8 plane: the compact walk quantizes a GEMM whose contraction is a 32-multiple
+def private tw_q8_proj_dense(t : AudioTower) : bool
+    => t.proj_dim > 0l && (t.proj_kind == AudioProjKind.qwen2a || ((t.d_model * t.stack_factor) % 32l == 0l && audio_proj_mid_width(t) % 32l == 0l))
+
+//! the q8 slab site of projector GEMM `i` (0 the first, 1 the second), behind the blocks' and the stem's
+def private tw_q8_proj_site(t : AudioTower; i : int64) : int64 => t.n_layer * TW_Q8_MATS + 1l + i
 
 //! one block GEMM of a tower chain: region `site` of the q8 slab (the vision one under `vis`, else the whisper-class one) on a q8
 //! tower, tw_mm's forms on an f32 one
@@ -488,10 +529,10 @@ enum private TwForm {
     tail      // the projector tail: the chat towers' soft tokens
 }
 
-//! Whether the projector tail rides the device: an f32 tower (a q8 tower's projector planes are not on the device), the tail's
-//! kernels compiled, every GEMM on the f32 tile's lattice (K a multiple of 32, N of 64) and the rms rows inside the ones row.
+//! Whether the projector tail rides the device: the tail's kernels compiled, a q8 tower's projector GEMMs in its slab
+//! (`tw_q8_proj_dense`), every GEMM on the tiles' lattice (K a multiple of 32, N of 64) and the rms rows inside the ones row.
 def private tw_tail_shape_ok(t : AudioTower; npos : int64) : bool {
-    return false if (t.q8 || !pf_tw_tail_ready() || npos % 2l != 0l)
+    return false if (!pf_tw_tail_ready() || npos % 2l != 0l || (t.q8 && !tw_q8_proj_dense(t)))
     if (t.proj_kind == AudioProjKind.qwen2a) {
         return t.d_model % 32l == 0l && t.proj_dim % 64l == 0l
     }
@@ -562,33 +603,39 @@ def private tw_tail_make(t : AudioTower; npos : int64) : TwTail {
 }
 
 //! The projector tail behind the blocks, the CPU tail's steps at its widths: `bx` holds the blocks' rows, `bs` is a scratch
-//! row plane of the blocks' size.
+//! row plane of the blocks' size; each GEMM on the tower's lane (`wt_mm`: the q8 slab, the halfwords in `bwh` under `f16w`, else
+//! the f32 blob), `bxh` the half feed.
 [arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
-def private tw_tail_body(enc : MetalComputeEncoder?; t : AudioTower; tl : TwTail; bblob, bx, bs : MetalBuffer?; npos : int64) {
+def private tw_tail_body(enc : MetalComputeEncoder?; t : AudioTower; tl : TwTail; f16w : bool; bblob, bwh, bxh, bx, bs : MetalBuffer?; npos : int64) {
     let d = t.d_model
     let rows = tl.rows
+    let p1 = tw_q8_proj_site(t, 0l)
+    let p2 = tw_q8_proj_site(t, 1l)
     if (t.proj_kind == AudioProjKind.ultravox) {   // post-norm over every position, the stacked rows normed, gated MLP
         let half = t.mm1_out / 2l
         enc_ln(enc, bx, bs, bblob, gk_ln_args(uint(t.d_model), uint(npos), t.eps, uint(t.lnp_w_off), uint(t.lnp_b_off)), npos)
         enc_tw_rms(enc, bs, tl.bin, tl.bn1, gk_rms_args(uint(tl.m1in), uint(rows), ULTRAVOX_NORM_EPS, 0u), rows)
-        enc_f32_mm(enc, bblob, uint64(t.proj_w_off * 4l), tl.bin, tl.bhid, 0ul, tl.u_in, tl.u_hid, tl.mpr, t.mm1_out)
+        wt_mm(enc, false, t.q8, p1, f16w, false, bwh, bblob, t.proj_w_off, tl.bin, bxh, tl.bhid, tl.u_in, tl.u_hid, tl.mpr, t.mm1_out, tl.m1in, true)
         enc_tw_swiglu_rows(enc, tl.bhid, tl.bgate, GkGatedRowsArgs(d = uint(half), nelem = uint(rows * half)), rows * half)
         enc_tw_rms(enc, tl.bgate, tl.bgate, tl.bn2, gk_rms_args(uint(tl.half), uint(rows), ULTRAVOX_NORM_EPS, 0u), rows)
-        enc_f32_mm(enc, bblob, uint64(t.mm2_w_off * 4l), tl.bgate, tl.bout, 0ul, tl.u_gate, tl.u_proj, tl.mpr, t.proj_dim)
+        wt_mm(enc, false, t.q8, p2, f16w, false, bwh, bblob, t.mm2_w_off, tl.bgate, bxh, tl.bout, tl.u_gate, tl.u_proj, tl.mpr, t.proj_dim, tl.half, true)
         return
     }
     let tp = npos / 2l   // the pair pool BEFORE the post-norm
     enc_tw_pool2(enc, bx, bs, GkPoolRowsArgs(width = uint(d), total = uint(tp * d)), tp * d)
     enc_ln(enc, bs, tl.bin, bblob, gk_ln_args(uint(t.d_model), uint(tp), t.eps, uint(t.lnp_w_off), uint(t.lnp_b_off)), tp)
     if (t.proj_kind == AudioProjKind.qwen2a) {
-        enc_f32_mm(enc, bblob, uint64(t.proj_w_off * 4l), tl.bin, tl.bout, 0ul, tl.u_in, tl.u_proj, tl.mpr, t.proj_dim)
+        wt_mm(enc, false, t.q8, p1, f16w, false, bwh, bblob, t.proj_w_off, tl.bin, bxh, tl.bout, tl.u_in, tl.u_proj, tl.mpr, t.proj_dim, tl.m1in, true)
         tw_bias(enc, tl.bout, bblob, GkBiasActArgs(d = uint(t.proj_dim), nelem = uint(rows * t.proj_dim), boff = uint(t.proj_b_off), act = BIAS_ACT_NONE))
     } else {   // voxtral: the stacked rows through the GELU MLP
-        enc_f32_mm(enc, bblob, uint64(t.proj_w_off * 4l), tl.bin, tl.bhid, 0ul, tl.u_in, tl.u_hid, tl.mpr, t.mm1_out)
+        wt_mm(enc, false, t.q8, p1, f16w, false, bwh, bblob, t.proj_w_off, tl.bin, bxh, tl.bhid, tl.u_in, tl.u_hid, tl.mpr, t.mm1_out, tl.m1in, true)
         tw_act(enc, tl.bhid, GkBiasActArgs(d = uint(0), nelem = uint(rows * t.mm1_out), boff = 0u, act = BIAS_ACT_GELU_ERF))
-        enc_f32_mm(enc, bblob, uint64(t.mm2_w_off * 4l), tl.bhid, tl.bout, 0ul, tl.u_hid, tl.u_proj, tl.mpr, t.proj_dim)
+        wt_mm(enc, false, t.q8, p2, f16w, false, bwh, bblob, t.mm2_w_off, tl.bhid, bxh, tl.bout, tl.u_hid, tl.u_proj, tl.mpr, t.proj_dim, t.mm1_out, true)
     }
 }
+
+//! the half feed's elements the tail's GEMMs convert: its rows on their lattice by the widest contraction
+def private tw_tail_feed(t : AudioTower; tl : TwTail) : int64 => tl.mpr * max(max(tl.m1in, t.mm1_out), tl.half)
 
 //! the tail's soft tokens into `s.out` where the command buffer ran; the tail's buffers released
 def private tw_tail_land(t : AudioTower; var tl : TwTail; ran : bool; var s : EncoderState) {
@@ -626,7 +673,7 @@ def private metal_tower_blocks_form(t : AudioTower; var s : EncoderState; npos :
     if (d % 64l != 0l || t.n_ff % 64l != 0l || hs % 64l != 0l || t.layers_off % 4l != 0l || t.layer_stride % 4l != 0l) {
         return tw_decline(MetalTowerDecline.shape)
     }
-    if (!metal_tower_init() || (t.q8 && !tw_q8_ready(t))) {   // per-encode: re-arms after any shutdown seat
+    if (!metal_tower_init() || (t.q8 && !tw_q8_ready(t)) || (t.gemm_f16 && !tw_half_ready())) {   // per-encode: re-arms after any shutdown seat
         return tw_decline(MetalTowerDecline.device)
     }
     residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
@@ -640,14 +687,20 @@ def private metal_tower_blocks_form(t : AudioTower; var s : EncoderState; npos :
     let bytes_att = uint64(t.n_head * mp * nk64 * 2l)
     let bytes_rowk = uint64(nk64 * d * 4l)   //! K panel: the QK grid walks nk64 key rows, past mp
     let bytes_stat = uint64(t.n_head * mp * 2l * 4l)
-    let twin = !t.q8 && g_tw_env_tower_f16 && length(t.wblob) > 0l
-    let f16_route = twin && !t.blk_bf16 && pf_hmm_ready()
-    let bf16_route = twin && t.blk_bf16
-    let bytes_xh = uint64(mp * ff * 2l)
-    var bxh = (f16_route || (bf16_route && pf_bf16_half_ready()) || (t.q8 && pf_q8_mm_half())) ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_xh) : null
-    var bwh = (f16_route || bf16_route) ? plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.wblob, 0l))), uint64(length(t.wblob) * 2l), mapped) : null
-    let f16w = f16_route && bwh != null && bxh != null
-    let bf16w = bf16_route && bwh != null
+    var tl = form == TwForm.tail ? tw_tail_make(t, npos) : TwTail()
+    let bytes_xh = uint64(max(mp * ff, form == TwForm.tail ? tw_tail_feed(t, tl) : 0l) * 2l)
+    var bxh = (t.gemm_f16 || (t.q8 && pf_q8_mm_half())) ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_xh) : null
+    var bwh = t.gemm_f16 ? plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.wblob, 0l))), uint64(length(t.wblob) * 2l), mapped) : null
+    let f16w = t.gemm_f16 && bwh != null && bxh != null
+    if (t.gemm_f16 && !f16w) {
+        if (bxh != null) {
+            pool_release(g_tw_pool, bxh, bytes_xh)
+        }
+        if (form == TwForm.tail) {
+            tw_tail_land(t, tl, false, s)
+        }
+        return tw_decline(MetalTowerDecline.memory)
+    }
     var bx = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
     var bxb = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
     var bxb2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
@@ -664,7 +717,6 @@ def private metal_tower_blocks_form(t : AudioTower; var s : EncoderState; npos :
     var ka = AttnArgs(qd = uint(d), kv_dim = uint(d), head_size = uint(hs), kv_mul = 1u,
         npos = uint(npos), np32 = uint(nk64), scale = 1.0 / sqrt(float(hs)),
         qoff = 0u, qrows = uint(mp), window = 0u, softcap = 0.0, hass = 0u, uend = uint(npos))
-    var tl = form == TwForm.tail ? tw_tail_make(t, npos) : TwTail()
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
         if (t.n_layer > 0l) {
@@ -676,23 +728,23 @@ def private metal_tower_blocks_form(t : AudioTower; var s : EncoderState; npos :
             let last = l + 1l == t.n_layer
             let nx = last ? lo : enc_layer_offsets(t, l + 1l)
             let post = last && form == TwForm.ln_post
-            wt_mm(enc, false, t.q8, l * TW_Q8_MATS, f16w, bf16w, bwh, bblob, lo.q_w, bxb, bxh, bq, u_d, u_d, mp, d, d, true)
+            wt_mm(enc, false, t.q8, l * TW_Q8_MATS, f16w, false, bwh, bblob, lo.q_w, bxb, bxh, bq, u_d, u_d, mp, d, d, true)
             tw_bias(enc, bq, bblob, GkBiasActArgs(d = uint(d), nelem = uint(npos * d), boff = uint(lo.q_b), act = BIAS_ACT_NONE))
-            wt_mm(enc, false, t.q8, l * TW_Q8_MATS + 1l, f16w, bf16w, bwh, bblob, lo.k_w, bxb, bxh, bk, u_d, u_d, mp, d, d, false)
+            wt_mm(enc, false, t.q8, l * TW_Q8_MATS + 1l, f16w, false, bwh, bblob, lo.k_w, bxb, bxh, bk, u_d, u_d, mp, d, d, false)
             if (t.has_k_bias) {
                 tw_bias(enc, bk, bblob, GkBiasActArgs(d = uint(d), nelem = uint(npos * d), boff = uint(lo.k_b), act = BIAS_ACT_NONE))
             }
-            wt_mm(enc, false, t.q8, l * TW_Q8_MATS + 2l, f16w, bf16w, bwh, bblob, lo.v_w, bxb, bxh, bv, u_d, u_d, mp, d, d, false)
+            wt_mm(enc, false, t.q8, l * TW_Q8_MATS + 2l, f16w, false, bwh, bblob, lo.v_w, bxb, bxh, bv, u_d, u_d, mp, d, d, false)
             tw_bias(enc, bv, bblob, GkBiasActArgs(d = uint(d), nelem = uint(npos * d), boff = uint(lo.v_b), act = BIAS_ACT_NONE))
             enc_qk_mm(enc, bq, bk, batt, ka, mp, nk64, t.n_head)
             enc_rowstat(enc, batt, ka, bstat, null, npos, t.n_head)
             enc_av_mm(enc, batt, bv, bxb2, ka, bstat, mp, t.n_head, hs)
-            wt_mm(enc, false, t.q8, l * TW_Q8_MATS + 3l, f16w, bf16w, bwh, bblob, lo.o_w, bxb2, bxh, bxb, u_d, u_d, mp, d, d, true)
+            wt_mm(enc, false, t.q8, l * TW_Q8_MATS + 3l, f16w, false, bwh, bblob, lo.o_w, bxb2, bxh, bxb, u_d, u_d, mp, d, d, true)
             var sm_o = gk_add_ln_args(uint(d), uint(npos), t.eps, uint(lo.o_b), true, uint(lo.ln2_w), uint(lo.ln2_b))
             enc_tw_add_ln(enc, bx, bxb, bxb, bblob, sm_o, npos)
-            wt_mm(enc, false, t.q8, l * TW_Q8_MATS + 4l, f16w, bf16w, bwh, bblob, lo.fc1_w, bxb, bxh, bh, u_d, u_ff, mp, ff, d, true)
+            wt_mm(enc, false, t.q8, l * TW_Q8_MATS + 4l, f16w, false, bwh, bblob, lo.fc1_w, bxb, bxh, bh, u_d, u_ff, mp, ff, d, true)
             tw_bias(enc, bh, bblob, GkBiasActArgs(d = uint(ff), nelem = uint(npos * ff), boff = uint(lo.fc1_b), act = t.gelu_tanh ? BIAS_ACT_GELU_TANH : BIAS_ACT_GELU_ERF))
-            wt_mm(enc, false, t.q8, l * TW_Q8_MATS + 5l, f16w, bf16w, bwh, bblob, lo.fc2_w, bh, bxh, bxb2, u_ff, u_d, mp, d, ff, true)
+            wt_mm(enc, false, t.q8, l * TW_Q8_MATS + 5l, f16w, false, bwh, bblob, lo.fc2_w, bh, bxh, bxb2, u_ff, u_d, mp, d, ff, true)
             var sm_d = gk_add_ln_args(uint(d), uint(npos), t.eps, uint(lo.fc2_b), !last || post,
                 uint(post ? t.lnp_w_off : nx.ln1_w), uint(post ? t.lnp_b_off : nx.ln1_b))
             enc_tw_add_ln(enc, bx, bxb2, bxb, bblob, sm_d, npos)
@@ -700,7 +752,7 @@ def private metal_tower_blocks_form(t : AudioTower; var s : EncoderState; npos :
         if (form == TwForm.ln_post && t.n_layer == 0l) {
             enc_ln(enc, bx, bxb, bblob, gk_ln_args(uint(d), uint(npos), t.eps, uint(t.lnp_w_off), uint(t.lnp_b_off)), npos)
         } elif (form == TwForm.tail) {
-            tw_tail_body(enc, t, tl, bblob, bx, bxb, npos)
+            tw_tail_body(enc, t, tl, f16w, bblob, bwh, bxh, bx, bxb, npos)
         }
     }
     if (form == TwForm.tail) {
@@ -715,7 +767,7 @@ def private metal_tower_blocks_form(t : AudioTower; var s : EncoderState; npos :
                 memcpy(addr(s.x[0]), metal_buffer_contents(bx), uint64(npos * d * 4l))
             }
         }
-        tw_count_encode(npos, t.n_layer, f16w || bf16w)
+        tw_count_encode(npos, t.n_layer, f16w)
         served = true
     }
     pool_release(g_tw_pool, bx, bytes_row)
@@ -738,17 +790,21 @@ def private metal_tower_blocks_form(t : AudioTower; var s : EncoderState; npos :
     return true
 }
 
-//! One clamped f32 GEMM on the gemma4a chain: clamp-in to bxc, the GEMM, clamp-out in place; an inactive record skips both passes.
-def private g4a_mm_site(enc : MetalComputeEncoder?; bblob : MetalBuffer?; c : Clamp; bsrc, bxc, bdst : MetalBuffer?; woff : int64;
-                        u_k, u_n : MetalBuffer?; totin, totout, mp, ndim : int64) {
+//! one clamped gemma4a GEMM, `kdim` into `ndim`: clamp-in to `bxc`, the GEMM on the image's lane (`g4a_mm`), clamp-out in place; an inactive record skips both
+def private g4a_mm_site(enc : MetalComputeEncoder?; g : G4aGpuCtx; c : Clamp; bsrc, bdst : MetalBuffer?; woff : int64;
+                        u_k, u_n : MetalBuffer?; kdim, ndim : int64) {
     if (c.active) {
-        tw_clamp_copy(enc, bsrc, bxc, c.imin, c.imax, totin)
-        enc_f32_mm(enc, bblob, uint64(woff * 4l), bxc, bdst, 0ul, u_k, u_n, mp, ndim)
-        tw_clamp(enc, bdst, c.omin, c.omax, totout)
+        tw_clamp_copy(enc, bsrc, g.bxc, c.imin, c.imax, g.npos * kdim)
+        g4a_mm(enc, g, woff, g.bxc, bdst, u_k, u_n, g.mp, ndim, kdim)
+        tw_clamp(enc, bdst, c.omin, c.omax, g.npos * ndim)
     } else {
-        enc_f32_mm(enc, bblob, uint64(woff * 4l), bsrc, bdst, 0ul, u_k, u_n, mp, ndim)
+        g4a_mm(enc, g, woff, bsrc, bdst, u_k, u_n, g.mp, ndim, kdim)
     }
 }
+
+//! one weighted GEMM of the gemma4a chain on the image's lane (`fc_lane_mm` over the encoder's q8 slab)
+def private g4a_mm(enc : MetalComputeEncoder?; g : G4aGpuCtx; woff : int64; bx, by, bk, bn : MetalBuffer?; rows, nd, kdim : int64)
+    => fc_lane_mm(enc, g_tw_q8_g4a, g.q8, g.f16w, g.bwh, g.bblob, g.bxh, woff, bx, by, bk, bn, rows, nd, kdim)
 
 //! The tower context every encoder-family driver shares - the blob, the row / hidden /
 //! position panels, the eight uniforms and the geometry; a family derives it with its extras.
@@ -830,14 +886,30 @@ def private tw_ctx_release(var c : TwGpuCtx) {
 struct private G4aGpuCtx : TwGpuCtx {
     bxc : MetalBuffer?
     bprpe : MetalBuffer?
+    q8 : bool               //!< the GEMMs serve off the encoder's q8 slab (`g_tw_q8_g4a`)
+    f16w : bool             //!< ... else on the half tensor GEMM over the staged halfwords in `bwh`
+    bwh : MetalBuffer?
+    bxh : MetalBuffer?      //!< the GEMMs' half feed: the f16 lane's, and the q8 ladder's where it reads one
+    bytes_xh : uint64
 }
 
+//! the chain's widths on its lattices (the blocks', the tail's two, the norm's inside the ones row) and the attention's compiled window and cap
 def private g4a_shape_ok(t : Gemma4aEncoder) : bool {
     let d = t.d_model
-    return (!t.q8 && d % 64l == 0l && t.n_ff % 64l == 0l && t.n_head * t.d_head == d
+    return (d % 64l == 0l && t.n_ff % 64l == 0l && t.n_head * t.d_head == d
         && gemma4a_attn_past() == int64(GK_G4A_ATTN_PAST) && gemma4a_softcap() == GK_G4A_ATTN_CAP && gemma4a_mid_dim(t) % 64l == 0l && t.proj_dim % 64l == 0l && gemma4a_mid_dim(t) <= int64(TW_ONES_DIM))
 }
 
+//! a Metal image's GEMM planes on its lane: the q8 slab bound off its piece, or the half tensor GEMM the halfwords need
+def private g4a_weights_ready(t : Gemma4aEncoder) : bool {
+    if (t.q8) {
+        return true if (g_tw_q8_g4a.slab.key == tw_dev_key(t.dev) && g_tw_q8_g4a.slab.buf != null)
+        return tw_q8_rg_dev_bind(g_tw_q8_g4a, t.dev, t.devplan, t.image_map != null)
+    }
+    return !t.gemm_f16 || tw_half_ready()
+}
+
+//! the context on the encoder's lane; on the f16 lane `f16w` stands only where the halfwords and the half feed bound, the chunk declining without it
 def private g4a_ctx_make(t : Gemma4aEncoder; npos : int64) : G4aGpuCtx {
     let d = t.d_model
     let past = gemma4a_attn_past()
@@ -847,12 +919,24 @@ def private g4a_ctx_make(t : Gemma4aEncoder; npos : int64) : G4aGpuCtx {
     c.bxc = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_ff)
     c.bprpe = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_pos)
     upload_rows_padded(c.bpos, unsafe(reinterpret<void?>(plane_at(t.pos_emb, 0l))), past + 1l, 32l, d)   // the RPE table, zero-padded to the GEMM's 32-row floor
+    c.q8 = t.q8
+    c.bytes_xh = uint64(max(c.mp * max(max(t.n_ff, 2l * d), gemma4a_mid_dim(t)), 32l * d) * 2l)
+    if (t.gemm_f16 || (t.q8 && pf_q8_mm_half())) {
+        c.bxh = pool_acquire_pinned(g_tw_pool, g_dev, c.bytes_xh)
+    }
+    if (t.gemm_f16) {
+        c.bwh = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.wblob, 0l))), uint64(length(t.wblob) * 2l), t.image_map != null)
+        c.f16w = c.bwh != null && c.bxh != null
+    }
     return c
 }
 
 def private g4a_ctx_release(var c : G4aGpuCtx) {
     pool_release(g_tw_pool, c.bxc, c.bytes_ff)
     pool_release(g_tw_pool, c.bprpe, c.bytes_pos)
+    if (c.bxh != null) {
+        pool_release(g_tw_pool, c.bxh, c.bytes_xh)
+    }
     tw_ctx_release(c)
 }
 
@@ -881,16 +965,16 @@ def private g4a_tail_make(t : Gemma4aEncoder; c : G4aGpuCtx) : G4aTail {
 [arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def private g4a_tail_body(enc : MetalComputeEncoder?; t : Gemma4aEncoder; c : G4aGpuCtx; tl : G4aTail) {
     let mid = gemma4a_mid_dim(t)
-    enc_f32_mm(enc, c.bblob, uint64(t.outproj_w * 4l), c.bx, tl.btmp, 0ul, c.u_d, tl.u_mid, c.mp, mid)
+    g4a_mm(enc, c, t.outproj_w, c.bx, tl.btmp, c.u_d, tl.u_mid, c.mp, mid, t.d_model)
     tw_bias(enc, tl.btmp, c.bblob, GkBiasActArgs(d = uint(mid), nelem = uint(c.npos * mid), boff = uint(t.outproj_b), act = BIAS_ACT_NONE))
     enc_tw_rms(enc, tl.btmp, tl.btmp, g_tw_ones, gk_rms_args(uint(mid), uint(c.npos), c.eps, 0u), c.npos)
-    enc_f32_mm(enc, c.bblob, uint64(t.mmproj_w * 4l), tl.btmp, tl.bout, 0ul, tl.u_mid, tl.u_proj, c.mp, t.proj_dim)
+    g4a_mm(enc, c, t.mmproj_w, tl.btmp, tl.bout, tl.u_mid, tl.u_proj, c.mp, t.proj_dim, mid)
 }
 
 //! the tail's soft tokens into `s.out` where the command buffer ran, the CPU tail told to stand down; the tail's buffers released
 def private g4a_tail_land(t : Gemma4aEncoder; c : G4aGpuCtx; var tl : G4aTail; ran : bool; var s : Gemma4aState) {
     if (ran) {
-        s.out |> resize(c.npos * t.proj_dim)   // the clip's rows exactly: a shorter clip's soft tokens are fewer than the last one's
+        s.out |> grow_resize(c.npos * t.proj_dim)   // the clip's rows exactly: a shorter clip's soft tokens are fewer than the last one's
         unsafe {
             memcpy(addr(s.out[0]), metal_buffer_contents(tl.bout), uint64(c.npos * t.proj_dim * 4l))
         }
@@ -909,7 +993,6 @@ def private g4a_blocks_body(enc : MetalComputeEncoder?; t : Gemma4aEncoder; c : 
     let d = t.d_model
     let ff = t.n_ff
     let npos = c.npos
-    let mp = c.mp
     let sc = gemma4a_attn_scales(t.d_head)
     var ka = GkG4aAttnArgs(d = uint(d), npos = uint(npos), hs = uint(t.d_head), pdsoff = 0u, cap = gemma4a_softcap(), qscale = sc.qscale, kscale = sc.kscale)
     for (l in range64(t.n_layer)) {
@@ -925,32 +1008,32 @@ def private g4a_blocks_body(enc : MetalComputeEncoder?; t : Gemma4aEncoder; c : 
         var bw_ln2 = upload_region(unsafe(reinterpret<void?>(plane_at(t.blob, lo.ln2))), uint64(d * 4l))
         ka.pdsoff = uint(lo.per_dim_scale)
         enc_tw_rms(enc, c.bx, c.bxb, bw_ffn, gk_rms_args(uint(d), uint(npos), c.eps, 0u), npos)
-        g4a_mm_site(enc, c.bblob, lo.c_ff_up, c.bxb, c.bxc, c.bh, lo.ff_up, c.u_d, c.u_ff, npos * d, npos * ff, mp, ff)
+        g4a_mm_site(enc, c, lo.c_ff_up, c.bxb, c.bh, lo.ff_up, c.u_d, c.u_ff, d, ff)
         tw_act(enc, c.bh, GkBiasActArgs(d = uint(0), nelem = uint(npos * ff), boff = 0u, act = BIAS_ACT_SILU))
-        g4a_mm_site(enc, c.bblob, lo.c_ff_down, c.bh, c.bxc, c.bxb, lo.ff_down, c.u_ff, c.u_d, npos * ff, npos * d, mp, d)
+        g4a_mm_site(enc, c, lo.c_ff_down, c.bh, c.bxb, lo.ff_down, c.u_ff, c.u_d, ff, d)
         enc_tw_rms(enc, c.bxb, c.bxb, bw_ffp, gk_rms_args(uint(d), uint(npos), c.eps, 0u), npos)
         enc_g4a_axpy(enc, c.bx, c.bxb, GkAxpyArgs(nelem = uint(npos * d), scale = c.half, zero = 0u), npos * d)
         enc_tw_rms(enc, c.bx, c.bxb, bw_apre, gk_rms_args(uint(d), uint(npos), c.eps, 0u), npos)
-        g4a_mm_site(enc, c.bblob, lo.c_q, c.bxb, c.bxc, c.bq, lo.q, c.u_d, c.u_d, npos * d, npos * d, mp, d)
-        g4a_mm_site(enc, c.bblob, lo.c_k, c.bxb, c.bxc, c.bk, lo.k, c.u_d, c.u_d, npos * d, npos * d, mp, d)
-        g4a_mm_site(enc, c.bblob, lo.c_v, c.bxb, c.bxc, c.bv, lo.v, c.u_d, c.u_d, npos * d, npos * d, mp, d)
-        enc_f32_mm(enc, c.bblob, uint64(lo.attn_k_rel * 4l), c.bpos, c.bprpe, 0ul, c.u_d, c.u_d, 32l, d)
+        g4a_mm_site(enc, c, lo.c_q, c.bxb, c.bq, lo.q, c.u_d, c.u_d, d, d)
+        g4a_mm_site(enc, c, lo.c_k, c.bxb, c.bk, lo.k, c.u_d, c.u_d, d, d)
+        g4a_mm_site(enc, c, lo.c_v, c.bxb, c.bv, lo.v, c.u_d, c.u_d, d, d)
+        g4a_mm(enc, c, lo.attn_k_rel, c.bpos, c.bprpe, c.u_d, c.u_d, 32l, d, d)
         enc_g4a_attn(enc, c.bq, c.bk, c.bv, c.bao, c.bprpe, c.bblob, ka, npos * t.n_head)
-        g4a_mm_site(enc, c.bblob, lo.c_o, c.bao, c.bxc, c.bxb, lo.o, c.u_d, c.u_d, npos * d, npos * d, mp, d)
+        g4a_mm_site(enc, c, lo.c_o, c.bao, c.bxb, lo.o, c.u_d, c.u_d, d, d)
         enc_tw_rms(enc, c.bxb, c.bxb, bw_apost, gk_rms_args(uint(d), uint(npos), c.eps, 0u), npos)
         enc_add(enc, c.bx, 0ul, c.bxb, 0ul, c.u_totd, npos * d)
         enc_tw_rms(enc, c.bx, c.bxb, bw_ncv, gk_rms_args(uint(d), uint(npos), c.eps, 0u), npos)
-        g4a_mm_site(enc, c.bblob, lo.c_pw1, c.bxb, c.bxc, c.bh, lo.conv_pw1, c.u_d, c.u_2d, npos * d, npos * 2l * d, mp, 2l * d)
+        g4a_mm_site(enc, c, lo.c_pw1, c.bxb, c.bh, lo.conv_pw1, c.u_d, c.u_2d, d, 2l * d)
         enc_g4a_glu(enc, c.bh, c.bglu, GkGatedRowsArgs(d = uint(d), nelem = uint(npos * d)), npos * d)
         enc_g4a_dw(enc, c.bglu, c.bcvd, c.bblob, GkDwConvRowsArgs(c = uint(d), t_in = uint(npos), woff = uint(lo.conv_dw)), npos * d)
         enc_tw_rms(enc, c.bcvd, c.bcvd, bw_cvn, gk_rms_args(uint(d), uint(npos), c.eps, 0u), npos)
         tw_act(enc, c.bcvd, GkBiasActArgs(d = uint(0), nelem = uint(npos * d), boff = 0u, act = BIAS_ACT_SILU))
-        g4a_mm_site(enc, c.bblob, lo.c_pw2, c.bcvd, c.bxc, c.bxb, lo.conv_pw2, c.u_d, c.u_d, npos * d, npos * d, mp, d)
+        g4a_mm_site(enc, c, lo.c_pw2, c.bcvd, c.bxb, lo.conv_pw2, c.u_d, c.u_d, d, d)
         enc_add(enc, c.bx, 0ul, c.bxb, 0ul, c.u_totd, npos * d)
         enc_tw_rms(enc, c.bx, c.bxb, bw_ffn1, gk_rms_args(uint(d), uint(npos), c.eps, 0u), npos)
-        g4a_mm_site(enc, c.bblob, lo.c_ff_up_1, c.bxb, c.bxc, c.bh, lo.ff_up_1, c.u_d, c.u_ff, npos * d, npos * ff, mp, ff)
+        g4a_mm_site(enc, c, lo.c_ff_up_1, c.bxb, c.bh, lo.ff_up_1, c.u_d, c.u_ff, d, ff)
         tw_act(enc, c.bh, GkBiasActArgs(d = uint(0), nelem = uint(npos * ff), boff = 0u, act = BIAS_ACT_SILU))
-        g4a_mm_site(enc, c.bblob, lo.c_ff_down_1, c.bh, c.bxc, c.bxb, lo.ff_down_1, c.u_ff, c.u_d, npos * ff, npos * d, mp, d)
+        g4a_mm_site(enc, c, lo.c_ff_down_1, c.bh, c.bxb, lo.ff_down_1, c.u_ff, c.u_d, ff, d)
         enc_tw_rms(enc, c.bxb, c.bxb, bw_ffp1, gk_rms_args(uint(d), uint(npos), c.eps, 0u), npos)
         enc_g4a_axpy(enc, c.bx, c.bxb, GkAxpyArgs(nelem = uint(npos * d), scale = c.half, zero = 0u), npos * d)
         enc_tw_rms(enc, c.bx, c.bx, bw_ln2, gk_rms_args(uint(d), uint(npos), c.eps, 0u), npos)
@@ -1018,7 +1101,7 @@ struct private FcGpuCtx : TwGpuCtx {
     u_nkp : MetalBuffer?
     u_wwpad : MetalBuffer?
     bytes_head : uint64
-    bwh : MetalBuffer?      //!< the blob's halfword twin, or the family's own halfword GEMM plane (`wplane`), where the half tensor GEMM serves
+    bwh : MetalBuffer?      //!< the family's own halfword GEMM plane (`wplane`), where the half tensor GEMM serves
     bxh : MetalBuffer?      //!< its activation panel, or the q8 GEMM's
     f16w : bool
     wplane : bool           //!< the GEMMs live in the family's halfword plane alone: the f32 blob holds none
@@ -1066,29 +1149,7 @@ def private fc_dev_attach(var c : FcGpuCtx; d : int64) : bool {
     return true
 }
 
-let private TW_FC_TWIN_PIECE = "mt.fc.twin"     //! an exact lane's f32 blob as halfwords in a Metal device block, where the box has the half tensor form
 let private TW_FC_CONV0_PIECE = "mt.fc.conv0"   //! the subsample front's first conv as its im2col GEMM's [ch][CONV0_KDP] panel
-
-//! An exact FastConformer lane's blob twin into its piece (`#tower-dev-block`): the blob halved by the device's own convert, the
-//! halves the f16-staged tile stamp reads; minted only where this box runs that stamp (`pf_hmm_ready`), the f32 tile form serving
-//! an image without it. False where the buffer or the convert fails.
-[cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
-def private tw_fc_twin_bake(fc : TwFc; var b : TowerDevBuild) : bool {
-    return true if (fc.q8 || fc.kq_lane || !empty(fc.wblob) || !pf_hmm_ready())
-    let blen = length(fc.blob)
-    var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(fc.blob, 0l))), uint64(blen * 4l), fc.mapped)
-    var twin = metal_new_buffer(g_dev, uint64(blen) * 2ul)
-    return false if (bblob == null || twin == null)
-    var err = ""
-    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {
-        tw_half(enc, bblob, twin, blen)
-    }
-    if (ran) {
-        tower_dev_put(b, TW_FC_TWIN_PIECE, unsafe(reinterpret<uint8 const?>(metal_buffer_contents(twin))), blen * 2l)
-    }
-    release_handle(twin)
-    return ran
-}
 
 //! The subsample front's first conv panel into its piece (`#tower-dev-block`): the host stager's [ch][CONV0_KDP] taps
 [cold_path]
@@ -1107,56 +1168,96 @@ def private fc_mm(enc : MetalComputeEncoder?; c : FcGpuCtx; woff : int64; bx, by
             tw_half(enc, bx, c.bxh, rows * kdim)
         }
         if (b.fmt == KqFmt.q8) {
-            pf_enc_q8_mm(enc, g_tw_q8_fc.buf, b.qoff, bx, c.bxh, by, bk, bn, rows, nd, kdim)
+            pf_enc_q8_mm(enc, g_tw_q8_fc.slab.buf, b.qoff, bx, c.bxh, by, bk, bn, rows, nd, kdim)
         } else {
             pf_enc_kq_mm(enc, b.fmt, int64(b.qoff), (buf = g_tw_kq_fc.buf, qoff = b.qoff), (buf = g_tw_kq_fc.buf, soff = b.soff, doff = b.doff),
                 bx, c.bxh, by, bk, bn, rows, nd, kdim)
         }
         return
     }
-    if (c.q8) {
-        if (c.bxh != null) {
-            tw_half(enc, bx, c.bxh, rows * kdim)
+    fc_lane_mm(enc, g_tw_q8_fc, c.q8, c.f16w, c.bwh, c.bblob, c.bxh, woff, bx, by, bk, bn, rows, nd, kdim)
+}
+
+//! one GEMM on a family's lane: slab `q`'s region at `woff` (`q8`, `bxh` its half feed), the half tensor GEMM over `bwh` (`f16w`), else the f32 tile over `bblob`
+def private fc_lane_mm(enc : MetalComputeEncoder?; q : TwQ8Rg; q8, f16w : bool; bwh, bblob, bxh : MetalBuffer?; woff : int64; bx, by, bk, bn : MetalBuffer?;
+                       rows, nd, kdim : int64) {
+    if (q8) {
+        if (bxh != null) {
+            tw_half(enc, bx, bxh, rows * kdim)
         }
-        pf_enc_q8_mm(enc, g_tw_q8_fc.buf, tw_fc_q8_boff(woff), bx, c.bxh, by, bk, bn, rows, nd, kdim)
+        pf_enc_q8_mm(enc, q.slab.buf, tw_q8_rg_boff(q, woff), bx, bxh, by, bk, bn, rows, nd, kdim)
         return
     }
-    tw_mm(enc, c.f16w, false, c.bwh, c.bblob, woff, bx, c.bxh, by, 0ul, bk, bn, rows, nd, kdim, true)
+    tw_mm(enc, f16w, false, bwh, bblob, woff, bx, bxh, by, 0ul, bk, bn, rows, nd, kdim, true)
 }
 
-var private g_tw_q8_fc : St2SlabBase                     //!< the served FastConformer family's q8 block GEMM planes as one device blob
-var private @exact_size g_tw_q8_fc_boffs : array<uint64>  //!< its regions' byte offsets, by ascending element offset in the family's ``qblob``
-var private @exact_size g_tw_q8_fc_woffs : array<int64>   //!< those element offsets, ascending: the chain's GEMMs name a region by its offset
-
-//! the q8 slab's byte offset of the region at element offset `woff` of the family's ``qblob``
-def private tw_fc_q8_boff(woff : int64) : uint64 {
-    let i = lower_bound(g_tw_q8_fc_woffs, woff)
-    assert(i < length(g_tw_q8_fc_woffs) && g_tw_q8_fc_woffs[i] == woff, "a FastConformer GEMM names no region of the q8 slab")
-    return g_tw_q8_fc_boffs[i]
+//! A family's q8 GEMM planes as one device blob its chain names a region of by the region's element offset in the family's
+//! ``qblob``, resident until the weights drop
+struct private TwQ8Rg {
+    slab : St2SlabBase
+    @exact_size boffs : array<uint64>   //!< the regions' byte offsets in the blob, by ascending element offset
+    @exact_size woffs : array<int64>    //!< those element offsets, ascending
 }
 
-//! The family's q8 block GEMM planes on the device, uploaded once a model: every block's GEMM regions, ascending; false where
-//! the buffer cannot be made.
-[cold_path, arch(at="../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary")]
-def private tw_fc_q8_attach(fc : TwFc) : bool {
-    return true if (st2_slab_current(g_tw_q8_fc, tw_q8_key(fc.qblob, fc.qscales)))
-    var @exact_size rg : array<Q8Region>
-    rg |> reserve(fc.n_layer * FC_GEMM_RECORDS)
-    for (l in range64(fc.n_layer)) {
-        for (r in fc_gemm_records(g_tw_fc_offs[l], fc.d, fc.ff)) {
-            rg |> push(r) if (r.rows > 0l)
-        }
-    }
+var private g_tw_q8_fc : TwQ8Rg    //!< the served FastConformer family's
+var private g_tw_q8_g4a : TwQ8Rg   //!< the served gemma4a encoder's
+var private g_tw_q8_q3a : TwQ8Rg   //!< the served qwen3a tower's conv-out and projector GEMMs (`tower_q3a_regions`)
+
+//! the slab byte offset of the region at element offset `woff` of the family's ``qblob``
+def private tw_q8_rg_boff(q : TwQ8Rg; woff : int64) : uint64 {
+    let i = lower_bound(q.woffs, woff)
+    assert(i < length(q.woffs) && q.woffs[i] == woff, "a tower GEMM names no region of its q8 slab")
+    return q.boffs[i]
+}
+
+//! the regions `rg` of `qblob` / `qscales` uploaded into `q` once a model, ascending by offset; true where the slab holds them, false where the buffer fails
+[cold_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
+def private tw_q8_rg_attach(var q : TwQ8Rg; qblob : PlaneI8; qscales : PlaneF; var rg : array<Q8Region>) : bool {
+    return true if (st2_slab_current(q.slab, tw_q8_key(qblob, qscales)))
     rg |> sort() <| cmp_by(_.woff)
-    let ok = tw_q8_attach_slab(g_tw_q8_fc, g_tw_q8_fc_boffs, fc.qblob, fc.qscales, rg)
-    g_tw_q8_fc_woffs |> reserve(long_length(rg))
-    g_tw_q8_fc_woffs |> resize(long_length(rg))
+    let ok = tw_q8_attach_slab(q.slab, q.boffs, qblob, qscales, rg)
+    q.woffs |> reserve_resize(long_length(rg))
     for (i, r in range64(long_length(rg)), rg) {
-        g_tw_q8_fc_woffs[i] = r.woff
+        q.woffs[i] = r.woff
     }
-    delete rg
     return ok
 }
+
+//! a q8 lane's slab and its regions' piece offsets (`#tower-dev-block`), attached once over the CPU-form planes; false where the slab cannot be made
+[cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
+def private tw_q8_rg_bake(var q : TwQ8Rg; qblob : PlaneI8; qscales : PlaneF; var rg : array<Q8Region>; var b : TowerDevBuild) : bool {
+    g_tw_bake_rowmajor = true
+    let built = tw_q8_rg_attach(q, qblob, qscales, rg)
+    g_tw_bake_rowmajor = false
+    return false if (!built)
+    tw_dev_put_slab(b, TW_FC_Q8_PIECE, q.slab)
+    var inscope offs : array<int64>
+    for (w, o in q.woffs, q.boffs) {
+        offs |> push_from([w, int64(o)])
+    }
+    tower_dev_put(b, TW_FC_Q8_OFFS_PIECE, offs)
+    st2_slab_free(q.slab)   // the CPU form the slab was keyed by goes away after the bake
+    return true
+}
+
+//! a Metal image's q8 slab wrapping its piece (`#tower-dev-block`), the region offsets read back; false where the image carries none (the slab stays empty)
+[cold_path]
+def private tw_q8_rg_dev_bind(var q : TwQ8Rg; dev : PlaneU8; plan : PlaneI64; mapped : bool) : bool {
+    st2_slab_free(q.slab)
+    var buf = tw_dev_buffer(dev, plan, TW_FC_Q8_PIECE, mapped)
+    q.slab = St2SlabBase(buf = buf, key = tw_dev_key(dev), borrowed = true)
+    return false if (buf == null)
+    var inscope offs <- tw_dev_words(dev, plan, TW_FC_Q8_OFFS_PIECE)
+    let n = long_length(offs) / 2l
+    q.woffs |> reserve_resize(n)
+    q.boffs |> reserve_resize(n)
+    for (i in range64(n)) {
+        q.woffs[i] = offs[2l * i]
+        q.boffs[i] = uint64(offs[2l * i + 1l])
+    }
+    return true
+}
+
 
 //! a kq-lane GEMM record's bind, keyed by the chain's virtual offset: a Q8_0 seat's byte offset in the q8 slab, a K-quant
 //! seat's quant bind and its scale pair (`kq_scales_of`'s form) in the kq slab
@@ -1236,7 +1337,7 @@ def private tw_kq_stage_member(fc : TwFc; recs : array<Q8Region>; kf : KqFmt; va
 def private tw_fc_kq_attach(fc : TwFc) : bool {
     assert(!fc.kq_repacked, "the Metal kq slab stages disk-order superblocks alone; the seat declines an interleaved carrier ahead of this")
     let key = tw_kq_key(fc)
-    return true if (st2_slab_current(g_tw_kq_fc, key) && (fc.qblob.n == 0l || st2_slab_current(g_tw_q8_fc, tw_q8_key(fc.qblob, fc.qscales))))
+    return true if (st2_slab_current(g_tw_kq_fc, key) && (fc.qblob.n == 0l || st2_slab_current(g_tw_q8_fc.slab, tw_q8_key(fc.qblob, fc.qscales))))
     st2_slab_free(g_tw_kq_fc)
     let nrec = fc.n_layer * FC_GEMM_RECORDS
     var @exact_size recs : array<Q8Region>
@@ -1256,9 +1357,9 @@ def private tw_fc_kq_attach(fc : TwFc) : bool {
         q8rid |> push(rid)
     }
     if (!empty(q8rg)) {
-        return false if (!tw_q8_attach_slab(g_tw_q8_fc, g_tw_q8_fc_boffs, fc.qblob, fc.qscales, q8rg))
+        return false if (!tw_q8_attach_slab(g_tw_q8_fc.slab, g_tw_q8_fc.boffs, fc.qblob, fc.qscales, q8rg))
         for (i, rid in range64(long_length(q8rid)), q8rid) {
-            g_tw_kq_fc_binds[rid].qoff = g_tw_q8_fc_boffs[i]
+            g_tw_kq_fc_binds[rid].qoff = g_tw_q8_fc.boffs[i]
         }
     }
     var @exact_size staging : array<uint8>
@@ -1321,22 +1422,8 @@ def private tw_dev_put_slab(var b : TowerDevBuild; name : string; slab : St2Slab
 [cold_path]
 def private tw_fc_dev_bind(fc : TwFc) : bool {
     let key = tw_dev_key(fc.dev)
-    st2_slab_free(g_tw_q8_fc)
     st2_slab_free(g_tw_kq_fc)
-    var q8 = tw_dev_buffer(fc.dev, fc.devplan, TW_FC_Q8_PIECE, fc.mapped)
-    if (q8 != null) {
-        g_tw_q8_fc = St2SlabBase(buf = q8, key = key, borrowed = true)
-        var inscope offs <- tw_dev_words(fc.dev, fc.devplan, TW_FC_Q8_OFFS_PIECE)
-        let n = long_length(offs) / 2l
-        g_tw_q8_fc_woffs |> reserve(n)
-        g_tw_q8_fc_woffs |> resize(n)
-        g_tw_q8_fc_boffs |> reserve(n)
-        g_tw_q8_fc_boffs |> resize(n)
-        for (i in range64(n)) {
-            g_tw_q8_fc_woffs[i] = offs[2l * i]
-            g_tw_q8_fc_boffs[i] = uint64(offs[2l * i + 1l])
-        }
-    }
+    let q8 = tw_q8_rg_dev_bind(g_tw_q8_fc, fc.dev, fc.devplan, fc.mapped)
     if (fc.kq_lane) {
         var kq = tw_dev_buffer(fc.dev, fc.devplan, TW_FC_KQ_PIECE, fc.mapped)
         return false if (kq == null)
@@ -1351,7 +1438,7 @@ def private tw_fc_dev_bind(fc : TwFc) : bool {
                 soff = uint64(words[w + 3l]), doff = uint64(words[w + 4l]))
         }
     }
-    return q8 != null || !fc.q8
+    return q8 || !fc.q8
 }
 
 //! GigaAM's Metal chain serves a carrier on its lane (`e`, the lane's meta): the tower knob on and its pipelines compiled; on the kq
@@ -1369,7 +1456,7 @@ def private metal_gigaam_serves_model(e : GigaamModel) : bool {
         }
         return true
     }
-    return e.q8 || (e.gemm_f16 && g_tw_env_tower_f16 && pf_hmm_ready())
+    return e.q8 || (e.gemm_f16 && tw_half_pick("gigaam"))
 }
 
 //! GigaAM's Metal device block (`#tower-dev-block`): the attach's own builders run once over the CPU-form model - the q8 slab
@@ -1378,30 +1465,24 @@ def private metal_gigaam_serves_model(e : GigaamModel) : bool {
 def private metal_gigaam_bake(m : GigaamModel; var b : TowerDevBuild) : bool {
     return false if (!metal_tower_init())
     let fc = tw_fc_of_ga(m)
-    g_tw_bake_rowmajor = true
-    let built = fc.kq_lane ? tw_fc_kq_attach(fc) : (!fc.q8 || tw_fc_q8_attach(fc))
-    g_tw_bake_rowmajor = false
-    return false if (!built)
     if (fc.kq_lane) {
+        g_tw_bake_rowmajor = true
+        let built = tw_fc_kq_attach(fc)
+        g_tw_bake_rowmajor = false
+        return false if (!built)
         tw_dev_put_slab(b, TW_FC_KQ_PIECE, g_tw_kq_fc)
         var inscope words : array<int64>
         for (bind in g_tw_kq_fc_binds) {
             words |> push_from([bind.woff, int64(int(bind.fmt)), int64(bind.qoff), int64(bind.soff), int64(bind.doff)])
         }
         tower_dev_put(b, TW_FC_KQ_BINDS_PIECE, words)
-    }
-    if (g_tw_q8_fc.buf != null && (fc.q8 || fc.qblob.n > 0l)) {
-        tw_dev_put_slab(b, TW_FC_Q8_PIECE, g_tw_q8_fc)
-        if (!fc.kq_lane) {
-            var inscope offs : array<int64>
-            for (w, o in g_tw_q8_fc_woffs, g_tw_q8_fc_boffs) {
-                offs |> push_from([w, int64(o)])
-            }
-            tower_dev_put(b, TW_FC_Q8_OFFS_PIECE, offs)
+        if (g_tw_q8_fc.slab.buf != null && fc.qblob.n > 0l) {
+            tw_dev_put_slab(b, TW_FC_Q8_PIECE, g_tw_q8_fc.slab)
         }
+    } elif (!tw_fc_q8_bake(fc, b)) {
+        return false
     }
     gigaam_rnnt_dev_bake(m, b, MT_RNNT_PIECE)
-    return false if (!tw_fc_twin_bake(fc, b))
     let g = tw_ga_mel_geo(m)
     return false if (tw_ga_mel_panel(m, g) == null)
     tw_dev_put_slab(b, TW_GA_MEL_PIECE, g_tw_ga_mel_panel)
@@ -1409,19 +1490,28 @@ def private metal_gigaam_bake(m : GigaamModel; var b : TowerDevBuild) : bool {
         return false if (tw_ga_ctc_panel(m, round_up(m.n_classes, 64l)) == null)
         tw_dev_put_slab(b, TW_GA_CTC_PIECE, g_tw_ga_ctc_panel)
     }
-    st2_slab_free(g_tw_q8_fc)
+    st2_slab_free(g_tw_q8_fc.slab)
     st2_slab_free(g_tw_kq_fc)
     st2_slab_free(g_tw_ga_mel_panel)
     st2_slab_free(g_tw_ga_ctc_panel)
     return true
 }
 
+//! a FastConformer q8 lane's slab and region offsets into their pieces (`#tower-dev-block`); true with nothing put on another lane, false where it fails
+[cold_path]
+def private tw_fc_q8_bake(fc : TwFc; var b : TowerDevBuild) : bool {
+    return true if (!fc.q8)
+    var inscope rg <- fc_q8_regions(g_tw_fc_offs, fc.n_layer, fc.d, fc.ff, fc.front, fc.proj)
+    return tw_q8_rg_bake(g_tw_q8_fc, fc.qblob, fc.qscales, rg, b)
+}
+
 //! a Metal image's chain weights bound off its pieces; the f16-only planes need the half tensor form, the f32 blob serves without it
 def private fc_weights_ready(fc : TwFc) : bool {
     return false if (fc.dev_backend != TowerDev.metal)
     let key = tw_dev_key(fc.dev)
-    return false if (g_tw_q8_fc.key != key && g_tw_kq_fc.key != key && !tw_fc_dev_bind(fc))
-    return fc.q8 || fc.kq_lane || empty(fc.wblob) || (g_tw_env_tower_f16 && pf_hmm_ready())
+    let bound = g_tw_q8_fc.slab.key == key && (!fc.q8 || g_tw_q8_fc.slab.buf != null) && (!fc.kq_lane || g_tw_kq_fc.key == key)
+    return false if (!bound && !tw_fc_dev_bind(fc))
+    return fc.q8 || fc.kq_lane || empty(fc.wblob) || tw_half_ready()
 }
 
 [arch(at="../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary")]
@@ -1534,10 +1624,6 @@ def private fc_ctx_make(fc : TwFc; npos, ww : int64) : FcGpuCtx {
         c.bxh = buf_set_take(c.scratch, g_tw_pool, bytes_xh)
         c.f16w = c.bwh != null && c.bxh != null
         c.scratch.short = c.scratch.short || !c.f16w   //! no f32 GEMM stands behind the halfword plane
-    } elif (g_tw_env_tower_f16 && pf_hmm_ready()) {
-        c.bwh = tw_dev_buffer(fc.dev, fc.devplan, TW_FC_TWIN_PIECE, fc.mapped)
-        c.bxh = c.bwh != null ? buf_set_take(c.scratch, g_tw_pool, bytes_xh, false) : null
-        c.f16w = c.bwh != null && c.bxh != null
     }
     return <- c
 }
@@ -1846,12 +1932,11 @@ def metal_tower_enc_rows(gen : uint64; elems : int64) : MetalBuffer?
 //! The element count of the encoder rows the tower holds on the device for a transducer decode, 0 where it holds none.
 def metal_tower_held_rows_elems() : int64 => g_tw_rows != null ? g_tw_rows_elems : 0l
 
-//! The FastConformer chain from the shape gate on - context, upload, the block loop over the
-//! family's layer offsets, readback - as ONE command buffer on the f32 blob; the family hook
-//! keeps its knob and quant-mode declines and the front stays CPU.
-def private fc_run(fc : TwFc; var x : array<float>; npos, ww : int64; rope_cos, rope_sin : array<float>) : bool {
+//! the FastConformer chain from the shape gate on as ONE command buffer on the image's lane, the projector behind it under `fc.proj` (its rows into `out`)
+def private fc_run(fc : TwFc; var x : array<float>; @scratch var out : array<float>; npos, ww : int64) : bool {
     let d = fc.d
-    if (!fc_form_shape_ok(fc.form, d, fc.ff, fc.n_head, fc.nk, npos, ww)) {
+    let pn = fc.proj.rows
+    if (!fc_form_shape_ok(fc.form, d, fc.ff, fc.n_head, fc.nk, npos, ww) || pn % 64l != 0l) {
         return tw_decline(MetalTowerDecline.shape)
     }
     if (!metal_tower_init() || !fc_form_ready(fc.form) || !fc_weights_ready(fc)) {   //! per-encode: re-arms after any shutdown seat
@@ -1859,13 +1944,31 @@ def private fc_run(fc : TwFc; var x : array<float>; npos, ww : int64; rope_cos, 
     }
     residency_flush()   //! pin/commit before the first submission (the post-CPU-front slack)
     var c <- fc_ctx_make(fc, npos, ww)
-    return false if (fc_ctx_declined(c, rope_cos, rope_sin))
+    return false if (fc_ctx_declined(c))
+    let bytes_p = uint64(c.mp * pn * 4l)
+    var bp = pn > 0l ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_p) : null
+    var u_p = pn > 0l ? uniform_u32(uint(pn)) : null
     upload_rows_padded(c.bx, unsafe(addr(x[0])), npos, c.mp, d)
-    return fc_submit(c, x, d, fc.n_layer, true) $(enc) {
+    let served = fc_submit(c, x, d, fc.n_layer, true) $(enc) {
         for (l in range64(fc.n_layer)) {
             fc_block(enc, c, g_tw_fc_offs[l], d, fc.ff)
         }
+        if (bp != null) {
+            fc_mm(enc, c, fc.proj.woff, c.bx, bp, c.u_d, u_p, c.mp, pn, d)
+            fc_bias(enc, c, bp, fc.proj_b, pn, npos * pn)
+        }
     }
+    if (bp != null) {
+        if (served) {
+            out |> resize(npos * pn)   // the encode's rows exactly: a shorter window's soft tokens are fewer than the last one's
+            unsafe {
+                memcpy(addr(out[0]), metal_buffer_contents(bp), uint64(npos * pn * 4l))
+            }
+        }
+        pool_release(g_tw_pool, bp, bytes_p)
+        pool_release(g_upool, u_p, 4ul)
+    }
+    return served
 }
 
 //! A FastConformer family as the Metal chain reads it, the twin of Vulkan's `VtFc`: the f32 blob, the block dims and the
@@ -1874,12 +1977,14 @@ struct private TwFc {
     blob : PlaneF = PlaneF()
     wblob : PlaneU16 = PlaneU16()   //!< the GEMMs as the family's own halfwords, where the f32 blob holds none; empty otherwise
     taps : PlaneU16 = PlaneU16()    //!< the conv_ln form's depthwise taps as the family's own halfwords, the layer offsets indexing it; empty: in the f32 blob
-    qblob : PlaneI8 = PlaneI8()     //!< the q8 lane's GEMM planes, where `q8_served`
+    qblob : PlaneI8 = PlaneI8()     //!< the q8 lane's GEMM planes on a CPU-form model, the bake's source; a Metal image carries the slab instead
     qscales : PlaneF = PlaneF()
     mapped : bool
     q8 : bool
-    q8_served : bool                //!< the q8 lane's GEMMs serve on the device off the q8 slab; else the lane declines
-    kq_lane : bool                  //!< the block GEMMs are the carrier's own planes (GigaAM's kq lane): each a seat in `g_tw_fc_gseats`
+    front : Q8Region[3]             //!< a rel-form front's GEMMs in the lane's planes (`fc_front_records`); no rows where the front is not the chain's
+    proj : Q8Region                 //!< canary's projector behind the blocks, `rows` wide; no rows where the family has none
+    proj_b : int64 = -1l
+    kq_lane : bool                 //!< the block GEMMs are the carrier's own planes (GigaAM's kq lane): each a seat in `g_tw_fc_gseats`
     kq_repacked : bool              //!< ... in the CPU backend's interleave, which the chain reads no GEMM over: it declines
     kq : PlaneU8 = PlaneU8()        //!< ... the K-quant planes the seats index
     ks : PlaneU8 = PlaneU8()
@@ -1908,8 +2013,10 @@ def private tw_fc_of_cn(t : CanaryEncoder) : TwFc {
     for (l in range64(t.n_layer)) {
         g_tw_fc_offs[l] = t.layers[l]
     }
-    return TwFc(blob = t.blob, mapped = t.image_map != null, q8 = t.q8, dev_backend = t.dev_backend, dev = t.dev, devplan = t.devplan,
-        d = t.d_model, ff = t.n_ff, n_head = t.n_head,
+    return TwFc(blob = t.blob, wblob = t.gemm_f16 ? t.wblob : PlaneU16(), qblob = t.qblob, qscales = t.qscales, mapped = t.image_map != null,
+        q8 = t.q8, front = fc_front_records(t.c3_w, t.c6_w, t.pre_w, t.n_sub_ch, t.n_mel, t.d_model),
+        proj = Q8Region(woff = t.proj_w, n = t.d_model, rows = t.proj_dim), proj_b = t.proj_b,
+        dev_backend = t.dev_backend, dev = t.dev, devplan = t.devplan, d = t.d_model, ff = t.n_ff, n_head = t.n_head,
         nk = t.conv_kernel, n_layer = t.n_layer, eps = t.eps, form = FcForm(prof = "cn"))
 }
 
@@ -1919,8 +2026,9 @@ def private tw_fc_of_pk(t : ParakeetModel) : TwFc {
     for (l in range64(t.n_layer)) {
         g_tw_fc_offs[l] = pk_fc_layer(pk_layer_offsets(t, l))
     }
-    return TwFc(blob = t.blob, mapped = t.image_map != null, q8 = t.q8, dev_backend = t.dev_backend, dev = t.dev, devplan = t.devplan,
-        d = t.n_state, ff = 4l * t.n_state, n_head = t.n_head,
+    return TwFc(blob = t.blob, wblob = t.gemm_f16 ? t.wblob : PlaneU16(), qblob = t.qblob, qscales = t.qscales, mapped = t.image_map != null,
+        q8 = t.q8, front = fc_front_records(t.c3_w, t.c6_w, t.pre_w, t.n_sub_ch, t.n_mel, t.n_state),
+        dev_backend = t.dev_backend, dev = t.dev, devplan = t.devplan, d = t.n_state, ff = 4l * t.n_state, n_head = t.n_head,
         nk = t.n_conv_kernel, n_layer = t.n_layer, eps = t.eps, form = FcForm(tap_major = true, holds_rows = true, prof = "pk"))
 }
 
@@ -1934,34 +2042,17 @@ def private tw_fc_of_ga(m : GigaamModel) : TwFc {
     g_tw_fc_gseats |> resize(nseats)
     let kq_fmts = nseats > 0l ? gigaam_fc_record_seats(m, g_tw_fc_gseats) : 0u
     return TwFc(blob = m.blob, wblob = m.gemm_f16 ? m.wblob : PlaneU16(), taps = m.dw_f16 ? m.wblob : PlaneU16(), qblob = m.qblob, qscales = m.qscales, mapped = m.image_map != null,
-        q8 = m.q8, q8_served = true, kq_lane = m.kq_lane, kq_repacked = m.kq_repacked, dev_backend = m.dev_backend, dev = m.dev, devplan = m.devplan,
+        q8 = m.q8, kq_lane = m.kq_lane, kq_repacked = m.kq_repacked, dev_backend = m.dev_backend, dev = m.dev, devplan = m.devplan,
         kq = m.kq_lane ? m.kq : PlaneU8(), ks = m.kq_lane ? m.ks : PlaneU8(), kq_fmts = kq_fmts,
         d = m.d_model, ff = m.n_ff, n_head = m.n_head, nk = m.conv_kernel, n_layer = m.n_layer, eps = m.eps,
         form = FcForm(tap_major = true, rotary = true, conv_ln = true, holds_rows = true, prof = "ga"))
 }
 
-//! One FastConformer family's block seat: the knob, quant-mode and flavor declines, then the chain over the family's descriptor -
-//! the lanes it could not run never reach it, the flavor pick mapping their CPU image (`metal_gigaam_serves_model`).
-def private tw_fc_seat(fc : TwFc; var x : array<float>; npos, ww : int64; rope_cos, rope_sin : array<float>) : bool {
-    tw_rows_drop()
-    if (!g_tw_env_tower) {
-        return tw_decline(MetalTowerDecline.knob)
-    }
-    if (fc.q8 && !fc.q8_served) {
-        return tw_decline(MetalTowerDecline.quant_mode)
-    }
-    return tw_decline(MetalTowerDecline.flavor) if (fc.dev_backend != TowerDev.metal)
-    return fc_run(fc, x, npos, ww, rope_cos, rope_sin)
-}
-
-//! The canary FastConformer block loop as ONE command buffer on the f32 blob, then the projector on the device into `st.out`
-//! (`#tower-dev-block`); the front seat runs the mel and the subsample front ahead of it.
+//! the canary block loop and projector as ONE command buffer on the image's lane, soft tokens into `st.out`; the knob and flavor declines come first
 [hot_path]
 def private metal_canary_blocks(t : CanaryEncoder; var st : CanaryState; npos, ww : int64) : bool {
-    let none : array<float>
-    return false if (!tw_fc_seat(tw_fc_of_cn(t), st.x, npos, ww, none, none))
-    var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), t.image_map != null)
-    return tw_proj_rows(bblob, st.x, st.out, npos, t.d_model, TwProjStage(w = t.proj_w, b = t.proj_b, n = t.proj_dim, act = BIAS_ACT_NONE))
+    tw_rows_drop()
+    return tw_seat_gate(t.dev_backend) && fc_run(tw_fc_of_cn(t), st.x, st.out, npos, ww)
 }
 
 //! One GEMM of a projector: the weight's and bias's float offsets in the f32 blob, its output width, the activation behind its bias
@@ -1972,22 +2063,27 @@ struct private TwProjStage {
     act : uint
 }
 
-//! A tower's projector on the device off the exact lane's f32 blob (`#tower-dev-block`): the `d`-wide rows `x` through stage `a`,
-//! then `b` where it has a width, each GEMM with its bias, read back into `out`; false with the decline counted where it cannot serve
+//! A tower's projector on the device (`#tower-dev-block`): the `d`-wide rows `x` through stage `a`, then `b` where it has a width,
+//! each GEMM on the image's lane (`fc_lane_mm`: slab `q`'s region under `q8`, the halfwords in `bwh` where it is bound, else the f32
+//! blob) with its bias from `bblob`, read back into `out`; false with the decline counted where it cannot serve
 [hot_path]
-def private tw_proj_rows(bblob : MetalBuffer?; x : array<float>; @scratch var out : array<float>; npos, d : int64; a : TwProjStage; b : TwProjStage = TwProjStage()) : bool {
+def private tw_proj_rows(q : TwQ8Rg; q8 : bool; bwh, bblob : MetalBuffer?; x : array<float>; @scratch var out : array<float>; npos, d : int64;
+                         a : TwProjStage; b : TwProjStage = TwProjStage()) : bool {
     let pdim = b.n > 0l ? b.n : a.n
     if (d % 64l != 0l || a.n % 64l != 0l || pdim % 64l != 0l || long_length(x) < npos * d) {
         return tw_decline(MetalTowerDecline.shape)
     }
     return tw_decline(MetalTowerDecline.device) if (bblob == null || !metal_tower_init())
+    let f16w = bwh != null
     let mp = round_up(npos, 32l)
     let bytes_x = uint64(mp * d * 4l)
     let bytes_h = uint64(mp * a.n * 4l)
     let bytes_y = uint64(mp * pdim * 4l)
+    let bytes_xh = uint64(mp * max(d, a.n) * 2l)
     var bx = pool_acquire_pinned(g_tw_pool, g_dev, bytes_x)
     var bh = pool_acquire_pinned(g_tw_pool, g_dev, bytes_h)
     var by = b.n > 0l ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_y) : bh
+    var bxh = (f16w || (q8 && pf_q8_mm_half())) ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_xh) : null
     unsafe {
         memcpy(metal_buffer_contents(bx), addr<void const?>(x[0]), uint64(npos * d * 4l))
     }
@@ -1996,10 +2092,10 @@ def private tw_proj_rows(bblob : MetalBuffer?; x : array<float>; @scratch var ou
     var u_p = uniform_u32(uint(pdim))
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
-        enc_f32_mm(enc, bblob, uint64(a.w * 4l), bx, bh, 0ul, u_d, u_a, mp, a.n)
+        fc_lane_mm(enc, q, q8, f16w, bwh, bblob, bxh, a.w, bx, bh, u_d, u_a, mp, a.n, d)
         tw_bias(enc, bh, bblob, GkBiasActArgs(d = uint(a.n), nelem = uint(npos * a.n), boff = uint(a.b), act = a.act))
         if (b.n > 0l) {
-            enc_f32_mm(enc, bblob, uint64(b.w * 4l), bh, by, 0ul, u_a, u_p, mp, b.n)
+            fc_lane_mm(enc, q, q8, f16w, bwh, bblob, bxh, b.w, bh, by, u_a, u_p, mp, b.n, a.n)
             tw_bias(enc, by, bblob, GkBiasActArgs(d = uint(b.n), nelem = uint(npos * b.n), boff = uint(b.b), act = b.act))
         }
     }
@@ -2013,6 +2109,9 @@ def private tw_proj_rows(bblob : MetalBuffer?; x : array<float>; @scratch var ou
     pool_release(g_tw_pool, bh, bytes_h)
     if (b.n > 0l) {
         pool_release(g_tw_pool, by, bytes_y)
+    }
+    if (bxh != null) {
+        pool_release(g_tw_pool, bxh, bytes_xh)
     }
     pool_release(g_upool, u_d, 4ul)
     pool_release(g_upool, u_a, 4ul)
@@ -2028,7 +2127,8 @@ let private CONV0_KDP = 32l   //! the fronts' first conv's column width: its nin
 //! depthwise stride-2 convs on the family's tap layout, the 1x1 convs and the pre-projection on the family's GEMM route
 struct private TwFcFront {
     tap_major : bool        //! parakeet's [9][ch] taps on the depthwise stamp; canary's are channel-major
-    f16w : bool             //! the 1x1 convs and the pre-projection on the halfword twin
+    q8 : bool               //! the 1x1 convs and the pre-projection off the q8 slab, `bfxh` the half feed where the ladder reads one
+    f16w : bool             //! ... else on the half tensor GEMM over the halfwords in `bwh`
     bwh : MetalBuffer?
     bblob : MetalBuffer?
     bfxh : MetalBuffer?
@@ -2071,17 +2171,17 @@ def private tw_fc_front_convs(enc : MetalComputeEncoder?; var f : TwFcFront; bme
     } else {
         enc_cn_dw2d(enc, y0, y2, f.bblob, f.d2, f.rows2 * f.nch)
     }
-    tw_mm(enc, f.f16w, false, f.bwh, f.bblob, f.c3_w, y2, f.bfxh, y3, 0ul, f.u_nch, f.u_nch, f.mp2, f.nch, f.nch, true)
+    fc_lane_mm(enc, g_tw_q8_fc, f.q8, f.f16w, f.bwh, f.bblob, f.bfxh, f.c3_w, y2, y3, f.u_nch, f.u_nch, f.mp2, f.nch, f.nch)
     tw_bias(enc, y3, f.bblob, GkBiasActArgs(d = uint(f.nch), nelem = uint(f.rows2 * f.nch), boff = uint(f.c3_b), act = BIAS_ACT_RELU))
     if (f.tap_major) {
         enc_pk_dw2d(enc, y3, y5, f.bblob, f.d5, f.rows3 * f.nch)
     } else {
         enc_cn_dw2d(enc, y3, y5, f.bblob, f.d5, f.rows3 * f.nch)
     }
-    tw_mm(enc, f.f16w, false, f.bwh, f.bblob, f.c6_w, y5, f.bfxh, y6, 0ul, f.u_nch, f.u_nch, f.mp3, f.nch, f.nch, true)
+    fc_lane_mm(enc, g_tw_q8_fc, f.q8, f.f16w, f.bwh, f.bblob, f.bfxh, f.c6_w, y5, y6, f.u_nch, f.u_nch, f.mp3, f.nch, f.nch)
     tw_bias(enc, y6, f.bblob, GkBiasActArgs(d = uint(f.nch), nelem = uint(f.rows3 * f.nch), boff = uint(f.c6_b), act = BIAS_ACT_RELU))
     enc_pk_xf(enc, y6, xf, f.axf, f.mpt * f.feat)
-    tw_mm(enc, f.f16w, false, f.bwh, f.bblob, f.pre_w, xf, f.bfxh, out, 0ul, f.u_feat, f.u_d, f.mpt, f.d, f.feat, true)
+    fc_lane_mm(enc, g_tw_q8_fc, f.q8, f.f16w, f.bwh, f.bblob, f.bfxh, f.pre_w, xf, out, f.u_feat, f.u_d, f.mpt, f.d, f.feat)
     tw_bias(enc, out, f.bblob, GkBiasActArgs(d = uint(f.d), nelem = uint(f.tt * f.d), boff = uint(f.pre_b), act = BIAS_ACT_NONE))
 }
 
@@ -2090,7 +2190,7 @@ def private tw_fc_front_convs(enc : MetalComputeEncoder?; var f : TwFcFront; bme
 //! a row past them reads as the zero the CPU masks it to. Answers the encoder rows, or -1 where the CPU front runs.
 [hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def private metal_canary_front(t : CanaryEncoder; var st : CanaryState) : int64 {   // nolint:STYLE038 — the dispatch chain is the shape
-    if (!g_tw_env_tower || t.q8 || t.dev_backend != TowerDev.metal) {
+    if (!g_tw_env_tower || t.dev_backend != TowerDev.metal) {
         return -1l
     }
     let d = t.d_model
@@ -2117,7 +2217,8 @@ def private metal_canary_front(t : CanaryEncoder; var st : CanaryState) : int64 
     let lay = cn_front_lay(t)
     var bw0 = tw_dev_buffer(t.dev, t.devplan, TW_FC_CONV0_PIECE, mapped)
     var bfront = tw_dev_buffer(t.dev, t.devplan, TW_CN_FRONT_PIECE, mapped)
-    if (bw0 == null || bfront == null) {
+    var bwh = t.gemm_f16 ? plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.wblob, 0l))), uint64(length(t.wblob) * 2l), mapped) : null
+    if (bw0 == null || bfront == null || (t.gemm_f16 && bwh == null) || !fc_weights_ready(tw_fc_of_cn(t))) {
         tw_decline(MetalTowerDecline.device)
         return -1l
     }
@@ -2135,7 +2236,7 @@ def private metal_canary_front(t : CanaryEncoder; var st : CanaryState) : int64 
     var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.blob, 0l))), uint64(length(t.blob) * 4l), t.image_map != null)
     let sizes = fixed_array(uint64(mp * n_fft * 4l), uint64(mp * dft_out_pad * 4l), uint64(mp * ldpow * 4l), uint64(mp * n_mel * 4l),
         uint64(mp0 * nch * 4l), uint64(mp2 * nch * 4l), uint64(mp2 * nch * 4l), uint64(mp3 * nch * 4l), uint64(mp3 * nch * 4l),
-        uint64(mpt * feat * 4l), uint64(mpt * d * 4l), uint64(mp0 * CONV0_KDP * 4l))
+        uint64(mpt * feat * 4l), uint64(mpt * d * 4l), uint64(mp0 * CONV0_KDP * 4l), uint64(max(mp2 * nch, mpt * feat) * 2l))
     g_tw_cn_bufs |> resize(length(sizes))
     assume bufs = g_tw_cn_bufs
     for (b, n in bufs, sizes) {
@@ -2164,7 +2265,8 @@ def private metal_canary_front(t : CanaryEncoder; var st : CanaryState) : int64 
     let d2 = GkDwConv2dArgs(iw = uint(w1), ih = uint(t1), ih_valid = uint(min(l0, t1)), ch = uint(nch), woff = uint(t.c2_w), boff = uint(t.c2_b))
     let d5 = GkDwConv2dArgs(iw = uint(w2), ih = uint(t2), ih_valid = uint(min(l2, t2)), ch = uint(nch), woff = uint(t.c5_w), boff = uint(t.c5_b))
     let axf = GkFeatShuffleArgs(w = uint(w3), ch = uint(nch), t = uint(tt), rows_pad = uint(mpt))
-    var front = TwFcFront(tap_major = false, f16w = false, bwh = null, bblob = bblob, bfxh = null, bw0 = bw0, c0_b = t.c0_b, c3_w = t.c3_w, c3_b = t.c3_b,
+    let half_feed = t.gemm_f16 || (t.q8 && pf_q8_mm_half())
+    var front = TwFcFront(tap_major = false, q8 = t.q8, f16w = t.gemm_f16, bwh = bwh, bblob = bblob, bfxh = half_feed ? bufs[12] : null, bw0 = bw0, c0_b = t.c0_b, c3_w = t.c3_w, c3_b = t.c3_b,
         c6_w = t.c6_w, c6_b = t.c6_b, pre_w = t.pre_w, pre_b = t.pre_b, n_mel = n_mel, n_len = n_len, rows0 = rows0, mp0 = mp0, rows2 = rows2, mp2 = mp2,
         rows3 = rows3, mp3 = mp3, mpt = mpt, nch = nch, feat = feat, d = d, tt = tt, d2 = d2, d5 = d5, axf = axf, u_k0 = u_k0, u_nch = u_nch, u_feat = u_feat, u_d = u_d)
     var err = ""
@@ -2197,8 +2299,8 @@ let private PK_FRONT_MAX_BYTES = 1073741824l   //!< the first conv's output a cl
 //! buffer off the mel, the CPU chain's stages in its order. Answers the frame count, or -1 with nothing counted
 //! where the front cannot serve: the CPU front runs then, and the block seat answers for itself.
 [hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
-def private metal_parakeet_encode(t : ParakeetModel; var st : ParakeetState) : int64 {
-    return -1l if (!tw_seat_gate(!t.q8, t.dev_backend))
+def private metal_parakeet_encode(t : ParakeetModel; var st : ParakeetState) : int64 {   // nolint:STYLE038 — the dispatch chain is the shape
+    return -1l if (!tw_seat_gate(t.dev_backend))
     let d = t.n_state
     let nch = t.n_sub_ch
     let n_len = st.mel.n_len
@@ -2218,7 +2320,11 @@ def private metal_parakeet_encode(t : ParakeetModel; var st : ParakeetState) : i
     let bytes_y0 = uint64(rows0 * nch * 4l)
     if (n_len < 1l || tt > parakeet_max_frames() || nch % 64l != 0l || feat % 32l != 0l || bytes_y0 > uint64(PK_FRONT_MAX_BYTES)
             || !fc_shape_ok(d, 4l * d, t.n_head, t.n_conv_kernel, tt, ww)
-            || !metal_tower_init() || !pf_fc_ready(true) || !pf_pk_front_ready() || !fc_weights_ready(tw_fc_of_pk(t))) {
+            || !metal_tower_init() || !pf_fc_ready(true) || !pf_pk_front_ready()) {
+        return -1l
+    }
+    if (!fc_weights_ready(tw_fc_of_pk(t))) {
+        tw_decline(MetalTowerDecline.device)
         return -1l
     }
     var bw0 = tw_dev_buffer(t.dev, t.devplan, TW_FC_CONV0_PIECE, t.image_map != null)
@@ -2238,7 +2344,7 @@ def private metal_parakeet_encode(t : ParakeetModel; var st : ParakeetState) : i
     var by5 = buf_set_take(c.scratch, g_tw_pool, bytes_y5)
     var by6 = buf_set_take(c.scratch, g_tw_pool, bytes_y5)
     var bxf = buf_set_take(c.scratch, g_tw_pool, uint64(c.mp * feat * 4l))
-    var bfxh = c.f16w ? buf_set_take(c.scratch, g_tw_pool, uint64(max(mp2 * nch, c.mp * feat) * 2l), false) : null
+    var bfxh = (c.f16w || (c.q8 && c.bxh != null)) ? buf_set_take(c.scratch, g_tw_pool, uint64(max(mp2 * nch, c.mp * feat) * 2l), c.wplane) : null
     return -1l if (fc_ctx_declined(c, false))
     unsafe {
         memcpy(metal_buffer_contents(bmel), addr(st.mel.data[0]), bytes_mel)
@@ -2254,8 +2360,7 @@ def private metal_parakeet_encode(t : ParakeetModel; var st : ParakeetState) : i
     let axf = GkFeatShuffleArgs(w = y5_geo.ow, ch = y5_geo.ch, t = y5_geo.oh, rows_pad = uint(c.mp))
     let d2 = GkDwConv2dArgs(iw = y2_geo.iw, ih = y2_geo.ih, ih_valid = y2_geo.ih, ch = y2_geo.ch, woff = uint(t.c2_w), boff = uint(t.c2_b))
     let d5 = GkDwConv2dArgs(iw = y5_geo.iw, ih = y5_geo.ih, ih_valid = y5_geo.ih, ch = y5_geo.ch, woff = uint(t.c5_w), boff = uint(t.c5_b))
-    let f16w = c.f16w && bfxh != null
-    var front = TwFcFront(tap_major = true, f16w = f16w, bwh = c.bwh, bblob = c.bblob, bfxh = bfxh, bw0 = bw0, c0_b = t.c0_b, c3_w = t.c3_w, c3_b = t.c3_b,
+    var front = TwFcFront(tap_major = true, q8 = c.q8, f16w = c.f16w, bwh = c.bwh, bblob = c.bblob, bfxh = bfxh, bw0 = bw0, c0_b = t.c0_b, c3_w = t.c3_w, c3_b = t.c3_b,
         c6_w = t.c6_w, c6_b = t.c6_b, pre_w = t.pre_w, pre_b = t.pre_b, n_mel = t.n_mel, n_len = n_len, rows0 = rows0, mp0 = mp0, rows2 = rows2, mp2 = mp2,
         rows3 = rows3, mp3 = mp3, mpt = c.mp, nch = nch, feat = feat, d = d, tt = tt, d2 = d2, d5 = d5, axf = axf, u_k0 = u_k0, u_nch = u_nch, u_feat = u_feat, u_d = c.u_d)
     let served = fc_submit(c, st.x, d, t.n_layer, false) $(enc) {
@@ -2434,7 +2539,7 @@ def metal_gigaam_mel(m : GigaamModel; samples : array<float>; @exact_size var me
 //! ``st.mel``, then the conv front and the block loop; -1 with nothing counted where the chain cannot serve.
 [hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains"), arch(at="../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary")]
 def private metal_gigaam_encode(m : GigaamModel; var st : GigaamState; samples : float const?; n_in : int64) : int64 {
-    return -1l if (!tw_seat_gate(true, m.dev_backend))   // every GigaAM lane serves: q8, exact and kq
+    return -1l if (!tw_seat_gate(m.dev_backend))
     let d = m.d_model
     let k = m.subs_kernel
     let nch = m.n_sub_ch
@@ -2559,7 +2664,7 @@ def private metal_gigaam_ctc(m : GigaamModel; var st : GigaamState; n_frames : i
         return tw_decline(MetalTowerDecline.shape)
     }
     let half = m.ctc_f16
-    if (!metal_tower_init() || !pf_ctc_pick_ready() || (half ? !(g_tw_env_tower_f16 && pf_hmm_ready()) : g_pso_f32_exact_mm == null)) {
+    if (!metal_tower_init() || !pf_ctc_pick_ready() || (half ? !tw_half_ready() : g_pso_f32_exact_mm == null)) {
         return tw_decline(MetalTowerDecline.device)
     }
     let mapped = m.image_map != null
@@ -2657,7 +2762,7 @@ def private tw_front_bake_mel(var host : array<uint8>; var scratch : MetalBuffer
     }
 }
 
-//! Canary's Metal device block (`#tower-dev-block`): the front's DFT and filterbank panels, its first conv panel, the blob's twin
+//! Canary's Metal device block (`#tower-dev-block`): the front's DFT and filterbank panels, its first conv panel, the q8 lane's slab
 [cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
 def private metal_canary_bake(t : CanaryEncoder; var b : TowerDevBuild) : bool {
     return false if (!metal_tower_init())
@@ -2669,20 +2774,19 @@ def private metal_canary_bake(t : CanaryEncoder; var b : TowerDevBuild) : bool {
     release_handle(scratch)
     tower_dev_put(b, TW_CN_FRONT_PIECE, unsafe(addr<uint8 const?>(host[0])), lay.total)
     tw_fc_conv0_bake(t.blob, t.c0_w, t.n_sub_ch, false, b)
-    return tw_fc_twin_bake(tw_fc_of_cn(t), b)
+    return tw_fc_q8_bake(tw_fc_of_cn(t), b)
 }
 
-//! Parakeet's Metal device block (`#tower-dev-block`): the front's first conv panel, the blob's twin, the transducer decoder's halves
+//! Parakeet's Metal device block (`#tower-dev-block`): the front's first conv panel, the transducer decoder's halves, the q8 lane's slab
 [cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
 def private metal_parakeet_bake(t : ParakeetModel; var b : TowerDevBuild) : bool {
     return false if (!metal_tower_init())
     tw_fc_conv0_bake(t.blob, t.c0_w, t.n_sub_ch, true, b)
     parakeet_rnnt_dev_bake(t, b, MT_RNNT_PIECE)
-    return tw_fc_twin_bake(tw_fc_of_pk(t), b)
+    return tw_fc_q8_bake(tw_fc_of_pk(t), b)
 }
 
-//! gemma4a's Metal device block (`#tower-dev-block`): the front panels the chunk stages, each laid by its own stager into a
-//! scratch buffer and copied to its offset
+//! gemma4a's Metal device block (`#tower-dev-block`): the chunk's front panels, each staged into scratch and copied to its offset, then the q8 slab
 [cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
 def private metal_gemma4a_bake(t : Gemma4aEncoder; var b : TowerDevBuild) : bool {
     return false if (!metal_tower_init())
@@ -2701,7 +2805,9 @@ def private metal_gemma4a_bake(t : Gemma4aEncoder; var b : TowerDevBuild) : bool
     release_handle(scratch)
     tower_dev_put(b, TW_G4A_FRONT_PIECE, unsafe(addr<uint8 const?>(host[0])), lay.total)
     delete host
-    return true
+    return true if (!t.q8)
+    var inscope rg <- gemma4a_all_regions(t)
+    return tw_q8_rg_bake(g_tw_q8_g4a, t.qblob, t.qscales, rg, b)
 }
 
 //! the DFT's transposed twiddle panel [rows_pad x kstride]: row n (a bin, real rows then imaginary) the twiddles' column n, pads zero
@@ -2724,14 +2830,14 @@ def private tw_twiddle_panel(var buf : MetalBuffer?; twiddles : float const?; n_
 //! Returns npos, or -1 declined.
 [hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def private metal_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len : int64) : int64 {   // nolint:STYLE038 — the dispatch chain is the shape
-    return -1l if (!tw_seat_gate(!t.q8, t.dev_backend))
+    return -1l if (!tw_seat_gate(t.dev_backend))
     if (!g4a_shape_ok(t) || n_len < 1l) {
         tw_decline(MetalTowerDecline.shape)
         return -1l
     }
     let lay = g4a_front_lay(t)
     var bfront = tw_dev_buffer(t.dev, t.devplan, TW_G4A_FRONT_PIECE, t.image_map != null)
-    if (bfront == null) {
+    if (bfront == null || !g4a_weights_ready(t)) {
         tw_decline(MetalTowerDecline.device)
         return -1l
     }
@@ -2761,6 +2867,11 @@ def private metal_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len 
     let kd1 = t.sub_ch0 * 9l
     let conv1_cout_pad = round_up(t.sub_ch1, 64l)
     var c <- g4a_ctx_make(t, npos)
+    if (t.gemm_f16 && !c.f16w) {
+        g4a_ctx_release(c)
+        tw_decline(MetalTowerDecline.memory)
+        return -1l
+    }
     var tl <- g4a_tail_make(t, c)
     let bytes_xw = uint64(mpd * n_fft * 4l)
     let bytes_reim = uint64(mpd * dft_out_pad * 4l)
@@ -2809,7 +2920,7 @@ def private metal_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len 
         enc_g4a_lnrelu(enc, by1p, c.bxb, c.bblob, GkLnReluRowsArgs(cout = uint(t.sub_ch1), ldin = uint(conv1_cout_pad), ldout = uint(t.sub_ch1),
             rows = uint(rows1), woff = uint(t.norm1_w), eps = t.eps), rows1)
         //! input projection: [npos x feat] -> [npos x d]
-        enc_f32_mm(enc, c.bblob, uint64(t.inproj_w * 4l), c.bxb, c.bx, 0ul, u_feat, c.u_d, c.mp, d)
+        g4a_mm(enc, c, t.inproj_w, c.bxb, c.bx, u_feat, c.u_d, c.mp, d, feat)
         g4a_blocks_body(enc, t, c)
         g4a_tail_body(enc, t, c, tl)
     }
@@ -2820,7 +2931,7 @@ def private metal_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len 
         unsafe {
             memcpy(addr(s.x[0]), metal_buffer_contents(c.bx), uint64(npos * d * 4l))
         }
-        tw_count_encode(npos, t.n_layer, false)
+        tw_count_encode(npos, t.n_layer, c.f16w)
         g_tower_convs++
         served = true
     }
@@ -3117,6 +3228,9 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; planes 
 }
 
 def private metal_tower_serves() : bool => g_tw_env_tower
+
+//! GigaAM's exact lane serves on this device: the tower on and the half tensor GEMM its halfword planes read through compiled
+def private metal_gigaam_exact_serves() : bool => g_tw_env_tower && metal_tower_init() && tw_half_ready()
 
 //! the gemma3v projector tail's device rows: the pooled rows, the soft tokens, the soft-norm's weight row
 struct private G3vTail {
@@ -3791,11 +3905,12 @@ def private tw_conv1_pad_attach(t : AudioTower; k1 : int64) : MetalBuffer? {
     return pad
 }
 
-//! the stem's second conv as a GEMM over its im2col rows: the device q8 blob's region on a q8 tower, the f32 blob otherwise
-def private conv2_mm(enc : MetalComputeEncoder?; t : AudioTower; bblob, bx2, bx2h, bxo, u_3d, u_d : MetalBuffer?; mp2 : int64) {
+//! the stem's second conv as a GEMM over its im2col rows: the device q8 blob's region on a q8 tower, the halfwords in `bwh` on
+//! the f16 lane, the f32 blob otherwise
+def private conv2_mm(enc : MetalComputeEncoder?; t : AudioTower; bblob, bwh, bx2, bx2h, bxo, u_3d, u_d : MetalBuffer?; mp2 : int64) {
     let d = t.d_model
     if (!t.q8) {
-        enc_f32_mm(enc, bblob, uint64(t.conv2_w_off * 4l), bx2, bxo, 0ul, u_3d, u_d, mp2, d)
+        tw_mm(enc, t.gemm_f16, false, bwh, bblob, t.conv2_w_off, bx2, bx2h, bxo, 0ul, u_3d, u_d, mp2, d, 3l * d, true)
         return
     }
     if (bx2h != null) {
@@ -3818,7 +3933,7 @@ def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelC
     let nm = t.n_mel
     // the first conv's 3 x n_mel columns ride the GEMM's 32 lattice: 80 mels' 240 pad to 256 through a padded weight copy
     let k1 = round_up(3l * nm, 32l)
-    if (d % 64l != 0l || (3l * d) % 32l != 0l || !metal_tower_init() || (t.q8 && !tw_q8_ready(t))) {
+    if (d % 64l != 0l || (3l * d) % 32l != 0l || !metal_tower_init() || (t.q8 && !tw_q8_ready(t)) || (t.gemm_f16 && !tw_half_ready())) {
         return false
     }
     var bw1 = k1 == 3l * nm ? null : tw_conv1_pad_attach(t, k1)
@@ -3829,6 +3944,8 @@ def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelC
     let mp2 = round_up(tt, 32l)
     let mapped = t.image_map != null
     var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.fblob, 0l))), uint64(length(t.fblob) * 4l), mapped)
+    var bwh = t.gemm_f16 ? plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.wblob, 0l))), uint64(length(t.wblob) * 2l), mapped) : null
+    return false if (t.gemm_f16 && bwh == null)
     let bytes_mel = uint64(nm * tin * 4l)
     let bytes_x1 = uint64(mp1 * k1 * 4l)
     let bytes_y1 = uint64(mp1 * d * 4l)
@@ -3839,7 +3956,7 @@ def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelC
     var by1 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y1)
     var bx2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_x2)
     var bxo = pool_acquire_pinned(g_tw_pool, g_dev, bytes_xo)
-    var bx2h = (t.q8 && pf_q8_mm_half()) ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_x2 / 2ul) : null
+    var bx2h = (t.gemm_f16 || (t.q8 && pf_q8_mm_half())) ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_x2 / 2ul) : null
     unsafe {
         memcpy(metal_buffer_contents(bmel), addr(mel.data[0]), bytes_mel)
     }
@@ -3860,7 +3977,7 @@ def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelC
         }
         tw_bias(enc, by1, bblob, GkBiasActArgs(d = uint(d), nelem = uint(tin * d), boff = uint(t.conv1_b_off), act = t.gelu_tanh ? BIAS_ACT_GELU_TANH : BIAS_ACT_GELU_ERF))
         enc_st2_im2col(enc, by1, bx2, ka2, mp2 * 3l * d)
-        conv2_mm(enc, t, bblob, bx2, bx2h, bxo, u_3d, u_d, mp2)
+        conv2_mm(enc, t, bblob, bwh, bx2, bx2h, bxo, u_3d, u_d, mp2)
         tw_bias(enc, bxo, bblob, GkBiasActArgs(d = uint(d), nelem = uint(tt * d), boff = uint(t.conv2_b_off), act = t.gelu_tanh ? BIAS_ACT_GELU_TANH : BIAS_ACT_GELU_ERF))
         tw_bias(enc, bxo, bblob, GkBiasActArgs(d = uint(tt * d), nelem = uint(tt * d), boff = uint(t.pos_off), act = BIAS_ACT_NONE))
     }
@@ -3943,24 +4060,44 @@ def private q3a_wpad_attach(t : Qwen3aTower) : bool {
 
 let private TW_Q3A_WPAD_PIECE = "mt.q3a.wpad"   //! qwen3a's padded conv weights and biases in a Metal device block
 
-//! qwen3a's Metal device block (`#tower-dev-block`): the core's pieces, then the front's padded conv weights the attach builds
+//! qwen3a's Metal device block (`#tower-dev-block`): the core's pieces, the front's padded conv weights the attach builds, and on
+//! the q8 lane the conv-out and projector GEMMs' slab
 [cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
 def private metal_qwen3a_bake(t : Qwen3aTower; var b : TowerDevBuild) : bool {
     return false if (!metal_audio_tower_bake_into(t.core, false, b) || !q3a_wpad_attach(t))
     tw_dev_put_slab(b, TW_Q3A_WPAD_PIECE, g_tw_q3a_wpad)
     st2_slab_free(g_tw_q3a_wpad)
-    return true
+    return true if (!t.cq8)
+    var inscope rg <- tower_q3a_regions(t, true)
+    return tw_q8_rg_bake(g_tw_q8_q3a, t.qcblob, t.qcscales, rg, b)
 }
 
-//! qwen3a's MLP projector on the device (`#tower-dev-block`) off the exact lane's f32 planes: the normed rows in `s.xb`, mm1 with
-//! its bias and erf GELU, mm2 with its bias, read back into `s.out`; false with the decline counted where it cannot serve
+//! a Metal qwen3a image's conv-out and projector GEMMs on its lane: the q8 slab bound off its piece, or the half tensor GEMM the halfwords need
+def private q3a_weights_ready(t : Qwen3aTower) : bool {
+    if (t.cq8) {
+        return true if (g_tw_q8_q3a.slab.key == tw_dev_key(t.core.dev) && g_tw_q8_q3a.slab.buf != null)
+        return tw_q8_rg_dev_bind(g_tw_q8_q3a, t.core.dev, t.core.devplan, t.image_map != null)
+    }
+    return !t.cf16 || tw_half_ready()
+}
+
+//! qwen3a's MLP projector on the device (`#tower-dev-block`) on the image's lane: the normed rows in `s.xb`, mm1 with its bias and
+//! erf GELU, mm2 with its bias, read back into `s.out`; false with the decline counted where it cannot serve
 [hot_path]
 def private metal_q3a_proj(t : Qwen3aTower; var s : EncoderState; npos : int64) : bool {
-    return tw_decline(MetalTowerDecline.flavor) if (t.core.dev_backend != TowerDev.metal || t.cq8)
+    return tw_decline(MetalTowerDecline.flavor) if (t.core.dev_backend != TowerDev.metal)
+    return tw_decline(MetalTowerDecline.device) if (!metal_tower_init() || !q3a_weights_ready(t))
     let d = t.core.d_model
-    var bcb = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.cblob, 0l))), uint64(length(t.cblob) * 4l), t.image_map != null)
-    return tw_proj_rows(bcb, s.xb, s.out, npos, d, TwProjStage(w = t.mm1_w_off, b = t.mm1_b_off, n = d, act = BIAS_ACT_GELU_ERF),
+    let mapped = t.image_map != null
+    var bcb = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.cblob, 0l))), uint64(length(t.cblob) * 4l), mapped)
+    var bwh = t.cf16 ? plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.wcblob, 0l))), uint64(length(t.wcblob) * 2l), mapped) : null
+    return tw_decline(MetalTowerDecline.memory) if (t.cf16 && bwh == null)
+    let ran = tw_proj_rows(g_tw_q8_q3a, t.cq8, bwh, bcb, s.xb, s.out, npos, d, TwProjStage(w = t.mm1_w_off, b = t.mm1_b_off, n = d, act = BIAS_ACT_GELU_ERF),
         TwProjStage(w = t.mm2_w_off, b = t.mm2_b_off, n = t.proj_dim, act = BIAS_ACT_NONE))
+    if (ran) {
+        g_tower_tail_encodes++
+    }
+    return ran
 }
 
 // one conv2d stage: padded im2col + the f32 tile GEMM + padded bias + erf-GELU
@@ -3972,9 +4109,8 @@ def private q3a_stage(enc : MetalComputeEncoder?; bsrc, bcol, bout : MetalBuffer
     tw_bias(enc, bout, g_tw_q3a_wpad.buf, GkBiasActArgs(d = uint(ncp), nelem = uint(tm), boff = uint(boff / 4ul), act = BIAS_ACT_GELU_ERF, xoff = uint(yoff / 4ul)))
 }
 
-//! The qwen3a front for one WINDOW: chunk convs + feature shuffle + conv_out + bias/positions
-//! in one command buffer, s.x readback. The q8 cblob lane declines (the cout trio lives in
-//! qcblob).
+//! The qwen3a front for one WINDOW: chunk convs + feature shuffle + conv_out on the image's lane + bias/positions
+//! in one command buffer, s.x readback.
 [hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def private metal_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; var s : EncoderState) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     let nm = t.core.n_mel
@@ -3985,8 +4121,8 @@ def private metal_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; v
     let featw = 16l * nch
     let npos = n_chunks * QWEN3A_TOK_PER_CHUNK
     //! the shape gates run first so a forever-declining tower never mints the padded slab
-    if (k2 % 32l != 0l || featw % 32l != 0l || d % 64l != 0l || t.cq8 || t.core.dev_backend != TowerDev.metal
-            || !g_tw_env_tower || !metal_tower_init() || !pf_q3a_front_ready() || !q3a_wpad_attach(t)) {
+    if (k2 % 32l != 0l || featw % 32l != 0l || d % 64l != 0l || t.core.dev_backend != TowerDev.metal
+            || !g_tw_env_tower || !metal_tower_init() || !pf_q3a_front_ready() || !q3a_weights_ready(t) || !q3a_wpad_attach(t)) {
         return false
     }
     let xin_n = QWEN3A_CHUNK * nm
@@ -3998,6 +4134,8 @@ def private metal_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; v
     let o4 = o3 + ncp * k2
     let mapped = t.image_map != null
     var bcb = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.cblob, 0l))), uint64(length(t.cblob) * 4l), mapped)
+    var bwh = t.cf16 ? plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.wcblob, 0l))), uint64(length(t.wcblob) * 2l), mapped) : null
+    return false if (t.cf16 && bwh == null)
     let bytes_xin = uint64(n_chunks * xin_n * 4l)
     let bytes_col = uint64(max(3200l * 32l, 800l * k2) * 4l)
     let bytes_y1 = uint64(3200l * ncp * 4l)
@@ -4012,6 +4150,8 @@ def private metal_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; v
     var by3 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y3)
     var bfeat = pool_acquire_pinned(g_tw_pool, g_dev, bytes_feat)
     var bx = pool_acquire_pinned(g_tw_pool, g_dev, bytes_x)
+    let bytes_feath = uint64(mpn * featw * 2l)
+    var bfeath = (t.cf16 || (t.cq8 && pf_q8_mm_half())) ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_feath) : null
     unsafe {   // the per-chunk [ih][iw] extract from the window's mel-major plane, straight into the mapped slab
         var p = reinterpret<float?>(metal_buffer_contents(bxin))
         for (ci in range64(n_chunks)) {
@@ -4042,7 +4182,7 @@ def private metal_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; v
                 u_k2, u_ncp, y3_rows * ncp, mp3, ncp, uint64(o3 * 4l), uint64((o4 + 2l * ncp) * 4l))
         }
         enc_q3a_shuffle(enc, by3, bfeat, GkQ3aShuffleArgs(nch = uint(nch), ncp = uint(ncp), chunk_stride = uint(mp3 * ncp), npos = uint(npos)), npos * featw)
-        enc_f32_mm(enc, bcb, uint64(t.cout_w_off * 4l), bfeat, bx, 0ul, u_featw, u_d, mpn, d)
+        fc_lane_mm(enc, g_tw_q8_q3a, t.cq8, t.cf16, bwh, bcb, bfeath, t.cout_w_off, bfeat, bx, u_featw, u_d, mpn, d, featw)
         tw_bias(enc, bx, bcb, GkBiasActArgs(d = uint(d), nelem = uint(npos * d), boff = uint(t.cout_b_off), act = BIAS_ACT_NONE))
         tw_bias(enc, bx, bcb, GkBiasActArgs(d = uint(QWEN3A_TOK_PER_CHUNK * d), nelem = uint(npos * d), boff = uint(t.pos_off), act = BIAS_ACT_NONE))
     }
@@ -4061,6 +4201,9 @@ def private metal_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; v
     pool_release(g_tw_pool, by3, bytes_y3)
     pool_release(g_tw_pool, bfeat, bytes_feat)
     pool_release(g_tw_pool, bx, bytes_x)
+    if (bfeath != null) {
+        pool_release(g_tw_pool, bfeath, bytes_feath)
+    }
     pool_release(g_upool, u_nch, 4ul)
     pool_release(g_upool, u_ncp, 4ul)
     pool_release(g_upool, u_kd32, 4ul)
@@ -6597,7 +6740,9 @@ def private tw_weights_drop {
     st2_slab_free(g_tw_q3a_wpad)
     st2_slab_free(g_tw_q8)
     st2_slab_free(g_tw_q8_vis)
-    st2_slab_free(g_tw_q8_fc)
+    st2_slab_free(g_tw_q8_fc.slab)
+    st2_slab_free(g_tw_q8_g4a.slab)
+    st2_slab_free(g_tw_q8_q3a.slab)
     st2_slab_free(g_tw_kq_fc)
     g_tw_kq_fc_binds |> clear()
     st2_slab_free(g_tw_conv1_pad)
@@ -6628,7 +6773,7 @@ def dasllama_metal_tower_register {
     register_gemma3v_gpu(@@metal_gemma3v_blocks, @@metal_tower_serves)
     register_qwen3v_gpu(@@metal_qwen3v_blocks, @@metal_tower_serves)
     register_qwen25v_gpu(@@metal_qwen25v_blocks)
-    register_tower_blocks_gpu(@@metal_tower_blocks, @@metal_tower_serves)
+    register_tower_blocks_gpu(@@metal_tower_blocks)
     register_tower_blocks_ln_post_gpu(@@metal_tower_blocks_ln_post)
     register_tower_blocks_tail_gpu(@@metal_tower_blocks_tail)
     register_tower_conv_gpu(@@metal_conv_frontend)
@@ -6636,23 +6781,22 @@ def dasllama_metal_tower_register {
     register_gemma3v_flavor(TowerDev.metal, @@metal_vision_serves_model, @@metal_gemma3v_bake)
     register_qwen3v_flavor(TowerDev.metal, @@metal_vision_serves_model, @@metal_qwen3v_bake)
     register_gemma4v_flavor(TowerDev.metal, @@metal_vision_serves_model, @@metal_gemma4v_bake)
-    register_qwen3a_flavor(TowerDev.metal, @@metal_exact_serves_model, @@metal_qwen3a_bake)
+    register_qwen3a_flavor(TowerDev.metal, @@metal_qwen3a_serves_model, @@metal_qwen3a_bake)
     register_qwen3a_proj_gpu(@@metal_q3a_proj)
     register_whisper_mel_gpu(@@metal_q3a_mel)
-    register_gemma4a_gpu(@@metal_tower_serves)
     register_gemma4a_chunk_gpu(@@metal_gemma4a_chunk)
-    register_gemma4a_flavor(TowerDev.metal, @@metal_exact_serves_model, @@metal_gemma4a_bake)
-    register_canary_gpu(@@metal_canary_blocks, @@metal_tower_serves)
+    register_gemma4a_flavor(TowerDev.metal, @@metal_gemma4a_serves_model, @@metal_gemma4a_bake)
+    register_canary_gpu(@@metal_canary_blocks)
     register_canary_front_gpu(@@metal_canary_front)
-    register_canary_flavor(TowerDev.metal, @@metal_exact_serves_model, @@metal_canary_bake)
-    register_parakeet_gpu(@@metal_tower_serves)
+    register_canary_flavor(TowerDev.metal, @@metal_canary_serves_model, @@metal_canary_bake)
     register_parakeet_gpu_encode(@@metal_parakeet_encode)
-    register_parakeet_flavor(TowerDev.metal, @@metal_exact_serves_model, @@metal_parakeet_bake)
+    register_parakeet_flavor(TowerDev.metal, @@metal_parakeet_serves_model, @@metal_parakeet_bake)
     register_gigaam_gpu(@@metal_tower_serves, true)
+    register_gigaam_gpu_exact(@@metal_gigaam_exact_serves)
     register_gigaam_gpu_encode(@@metal_gigaam_encode)
     register_gigaam_gpu_ctc(@@metal_gigaam_ctc)
     register_gigaam_flavor(TowerDev.metal, @@metal_gigaam_serves_model, @@metal_gigaam_bake)
-    register_audio_tower_flavor(TowerDev.metal, @@metal_exact_serves_model, @@metal_audio_tower_bake)
+    register_audio_tower_flavor(TowerDev.metal, @@metal_audio_tower_serves_model, @@metal_audio_tower_bake)
     register_tower_rows_gen(@@metal_tower_rows_gen)
     register_vad_gpu(@@metal_vad_chunks)
     register_styletts2_gpu(metal_styletts2_driver())

@@ -40,7 +40,7 @@ require dasllama/dasllama_gemm_schema   // the q8 block geometry the mint's zero
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 60   // the n-gram table's rows a shard (ngram_shard_rows) beside its type
+let IMAGE_VERSION = 61   // the tower images' device blocks: the shared tower bakes, and the Metal GigaAM f16 lane with no fc twin piece
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -300,6 +300,9 @@ def named_image_tag(path, lane : string) : string {
     return baked if (image_tag_lane(baked) == lane)
     return lane
 }
+
+//! every image family tag the loaded modules registered (`register_image_family_tag`), in registration order
+def image_family_tags() : array<string> => <- clone_to_move(g_family_tags)
 
 //! The same registration with a function answering ``layout_fingerprint`` of the family's
 //! carrier, which adds the ``STALE layout`` verdict. A function, not the value: the describe walks

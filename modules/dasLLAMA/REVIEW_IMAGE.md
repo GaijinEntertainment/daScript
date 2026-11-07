@@ -71,39 +71,41 @@ with the meta flags describing the layout - a per-tensor type split is not a sec
 decides that, not the load.**
 
 **The path a load looks up a flavor's image at comes only from `image_path_for`, and every flavor
-tag is registered through `register_image_family_tag`; building that path any other way, or using
-an unregistered tag, is a defect.**
+tag is registered through `register_image_family_tag` or `register_image_flavor_tag`; building that
+path any other way, or using an unregistered tag, is a defect.**
 
 **A family whose plane bytes no box property shapes - no backend pin, no tune state, no lane
-width - registers its tag with `register_image_family_tag(tag, config_free = true)`; a family
-whose bytes any such property shapes never does.** A config-bound identity on a property-free
+width - registers its tag config-free: `register_image_family_tag(tag, config_free = true)`, or
+`register_image_flavor_tag(tag, lane)`, whose default is config-free; a family whose bytes any such
+property shapes passes `config_free = false` to either.** A config-bound identity on a property-free
 family bakes one image per tune state and reaps the others on every switch; a config-free
 identity on a property-shaped family serves the wrong bytes under a changed property.
 
-**A diff that changes what an image at an UNCHANGED path contains without adding or dropping a
-field of a struct the image meta serializes - a moved byte, a re-meaning of a serialized field, a
-serializer body change - bumps `IMAGE_VERSION` (`dasllama/dasllama_image.das`) in the same
-change.** An added or dropped field moves `layout_fingerprint()` and the load refuses that image;
-any other change leaves a stale image valid and serving a different model.
+**A diff that changes what an image at an UNCHANGED path contains - a moved byte, a re-meaning of a
+serialized field, a serializer body change - and adds or drops no field of the struct THAT image's
+meta serializes, or of one that struct nests, bumps `IMAGE_VERSION` (`dasllama/dasllama_image.das`)
+in the same change.** An added or dropped field moves `layout_fingerprint()` and the load
+refuses that image; any other change leaves a stale image valid and serving a different model.
 
-**A diff that adds a function that places or sizes image bytes, or changes one so that it does,
-adds it to `REVIEW.das`'s `LAYOUT_HELPERS` in the same change unless that gate's layout-stamp
-closure already takes it in.** What the stamp covers is
-`ARCHITECTURE_IMAGE.md#image-layout-stamp`.
+**A diff that adds or changes a function a closure member calls to set the order, offset or size
+of a piece's or a plane's bytes - not their values - adds it to `REVIEW.das`'s `LAYOUT_HELPERS` in
+the same change, unless the layout-stamp closure holds it.** The closure is every top-level
+definition under `dasllama/` that is a `serialize*` taking an `Archive`, `build_image`,
+`parse_image`, a `*_bake` or `*_bake_into`, a `*_prepare` of `dasllama/dasllama_tts_blocks.das`, a
+`LAYOUT_HELPERS` entry, or a `LAYOUT_CONSTANTS` declaration line.
 
-**A diff that takes a function out of the layout-stamp closure names it in the PR body as one
-that places no image bytes.**
+**A diff that takes a function out of the layout-stamp closure - deleting it, renaming it, or
+changing it so it no longer qualifies - names it in the PR body with the closure member its bytes
+moved to, or as one that places no image bytes; a function it names neither way owes, for each
+family and lane it reached, the `IMAGE_VERSION` bump or the byte compare.**
 
-**A diff that re-stamps the layout-stamp hash, and does none of these - bump `IMAGE_VERSION`,
-move the image path, add or drop a field of a struct the image meta serializes, add a family or a
-flavor whose images live at new paths - carries in the PR body the proof that no byte moved: a byte compare of
-the `.dlim` minted before and after the change, for each family and lane the changed functions
-mint.**
+**A diff that re-stamps `REVIEW.das`'s `IMAGE_LAYOUT_STAMP_HASH` without bumping `IMAGE_VERSION`
+carries in the PR body a byte compare of the `.dlim` minted before and after the change for each
+family and lane a changed closure member reaches at an unchanged path, where the struct that
+family's image meta serializes, and every struct it nests, gains or loses no field.**
 
-**A diff that adds a family or a flavor whose images live at new paths and re-stamps the
-layout-stamp hash changes the stamp's closure only by the serializers and bakes it adds, and names
-them in the PR body; any other closure change in it carries the byte compare for the existing
-families and lanes it reaches.**
+**A diff that adds a family or a flavor whose images live at new paths and re-stamps
+`IMAGE_LAYOUT_STAMP_HASH` names in the PR body every closure member it adds.**
 
 **Weakening a meta field-count tripwire - `IMAGE_META_FIELDS` and every `*_META_FIELDS`
 constant in a `dasllama/` file - is a defect.** Raising the constant
@@ -117,17 +119,21 @@ what is still whole - the image already built in memory, or the carrier as loade
 **A bounds check on an image section or the meta blob in `dasllama/dasllama_image.das` is
 written `bytes > msize || off > msize - bytes`, never `off + bytes > msize`, which wraps.**
 
-**On the serving form that serves the file's own planes, a weight plane's element type follows its
-SOURCE tensors, per weight region - the set of source tensors a carrier stores in one plane
-(a block stack, a merger/projector).**
+**A diff that stores a weight region of the form that serves the file's own planes unconverted in
+an element type other than its SOURCE tensors' is a defect - keep the source tensors' type.** A weight
+region is the set of source tensors a carrier stores in one plane (a block stack, a
+merger/projector).
 
 **A weight region whose source tensors disagree on element type is refused in a message naming
 the offending tensor and both element types.**
 
-**A serving form that PERSISTS a converted form of the file's planes is a separate flavor under
-its own image identity.** A persisted form is one an image could carry. The load that picks such
-a form prints which form it picked. A conversion made and dropped inside one forward pass
-persists nothing and is not such a form.
+**A diff that makes a serving form PERSIST a converted form of the file's planes - by adding the
+form or by changing one - gives it its own flavor under its own image identity, and serving such a
+form under another flavor's identity is a defect.** A persisted form is one an image could carry;
+a conversion made and dropped inside one forward pass persists nothing and is not such a form.
+
+**A load that picks a persisted converted form and does not print the picked form after the pick
+is a defect.**
 
 **Never regroup or refactor the float products in a mint-side dequant mirror
 (`devw_dequant_q8_core` / `devw_dequant_k45_core` / `devw_dequant_k6_core`,

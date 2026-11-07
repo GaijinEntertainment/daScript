@@ -42,13 +42,15 @@ everywhere makes the equality hold by source rather than by toolchain mood.
 
 ### The baked tower twin-W plane {#image-tower-twin-plane}
 
-A vision- or audio-tower image carries `wblob`: the tower's block and merger GEMM weights
+A vision-tower image carries `wblob`: the tower's block and merger GEMM weights
 re-emitted as halfwords in the same element order as the f32 blob, so a site reads its twin at
 the f32 offset doubled. The mint emits the twin only for a GEMM whose source tensor is already
 f16 or bf16, so the twin holds the file's own values and introduces no rounding; an empty
 `wblob` is therefore the ineligibility flag a driver tests, not a separate capability field. A
 GEMM whose weights are COMPUTED at load - the folded patch-conv pair of the qwen3v and qwen25v
-stems - has no source tensor, no twin, and stays on the f32 route.
+stems - has no source tensor, no twin, and stays on the f32 route. An audio tower carries no twin:
+its exact lane on a GPU home is the f16 image, whose halfwords are its only GEMM plane
+(`ARCHITECTURE_MEDIA.md#tower-weight-lane`).
 
 The f16 arm needs a tensor crown (`pf_hmm_ready`) and converts X once per encode into one
 shared half panel every site reuses; the bf16 arm reads the twin natively and takes that panel
@@ -59,8 +61,7 @@ The bake (`tower_bake_half_twin`) is whole-blob: the file's own halves land at t
 offsets, and the f32 regions that ride along (norms, biases, position tables) clamp on the f16
 form - safe because the halfword route never reads them. An f16 source round-trips exactly and a
 bf16 source is the f32 word's top halfword, so the twin holds the file's bits, not a re-rounded
-copy. A streamed mint writes the same bytes as the eager bake over the same span, so an image
-minted either way serves the same twin. The q8 lane never bakes one - it serves quantized planes
+copy. The q8 lane never bakes one - it serves quantized planes
 instead. `blk_bf16` names which halfword family the route dispatches.
 
 The crown set is read when the prefill PSOs compile, not when a GEMM dispatches, so
@@ -80,6 +81,13 @@ page, so a mapped piece wraps as a device buffer with no copy), and writes the p
 block, the planes the bake consumed dropped. The attach finds each piece by name (`tower_dev_find`) and binds it: zero-copy on
 Metal, a byte-for-byte upload on Vulkan and on CUDA (the two discrete homes gather the same row-major q8 layout through
 `tower_bake_q8`, each under its own piece prefix - `vk.<family>` / `cu.<family>` - and its own image tag).
+
+A family declares its flavor seat once, `[tower_flavor(family = "<family>", model = "<Model>")]` on its
+`<Family>Flavor` record (`dasllama_tower_flavor`): the macro gives the record its `backend`, its `serves`
+(the pick over the load's lane - the q8 flag, or the model's meta record under `lane = "model"`) and its
+`bake`, the private global `g_<family>_flavor` holding the registered driver's, and
+`register_<family>_flavor(backend, serves, bake)`, which a driver's installer calls; the load's pick
+(`tower_dev_flavor`) and the mint's check (`tower_flavor_registered`) read the record.
 
 A flavor's image is tagged `{lane}-{dev}` (`tower_dev_tag`), registered as a flavor of its lane (`register_image_flavor_tag`):
 a `.dlim` named by path routes on the lane its baked tag serves (`image_tag_lane`), and loads under that baked tag wherever its

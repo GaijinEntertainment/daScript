@@ -4,7 +4,8 @@
 docs: `../ARCHITECTURE_GPU.md`, `../ARCHITECTURE_CPU_KERNELS.md`. Planned work:
 `../followup_general.md`, `../followup_vulkan.md`, `../followup_metal.md`.
 
-- A cell is as `REVIEW.md` (beside this file) defines it.
+- A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the
+  asserts of every helper it calls.
 - A CPU kernel is a function in `../dasllama/dasllama_math*.das` that writes an output buffer from
   operand buffers; a function that only invokes an existing kernel-backend slot (a function
   pointer the active backend fills) is a router, not a CPU kernel.
@@ -38,9 +39,10 @@ docs: `../ARCHITECTURE_GPU.md`, `../ARCHITECTURE_CPU_KERNELS.md`. Planned work:
   function's cells. A branch or regime is a path only where a serving call in `../dasllama/` can
   reach it on some shape that call does not decline, whether or not any model file the box holds
   has that shape.
-- A bound assert is as `REVIEW.md` (beside this file) defines it; in addition, an assert a rule of
-  this list requires to show a compare can fail - the in-place cell's output-differs-from-input
-  assert among them - is not a bound assert, and is not the control a bound assert needs.
+- A bound assert is a compare of two computed sides, or a measured quality figure against a
+  tolerance - never a floor on a capacity, a configuration or a roster size, an index guard, a
+  route counter, or the one-index assert against the input that a cell whose output buffer is its
+  input buffer makes; that assert is not a control either.
 - A sibling stamp is another stamp derived from the same class; it stands in for a stamp only where
   the code a rule asks about is the class's own, neither stamp overrides it - overriding a template
   constant that code reads overrides it - the sibling's cell compiles once the diff is applied, and
@@ -79,16 +81,12 @@ compare - a sentinel scan, a per-row flag - logs its mismatch count and first mi
 (for a per-row output, its row) instead.** A failure, or a pass that looks wrong, must say how far
 and where, not only how many.
 
-**A kernel-unit cell holds a CPU-oracle compare of every kernel run's output at that run's
-shapes - every size a dispatch grid or loop bound of that run reads, the row count included - or
-compares the run against a second kernel form that a cell of the same file holds to a CPU
-oracle.** Two forms can be bit-equal and both wrong.
-
-**A kernel-unit cell that compares a kernel run against a second kernel form has, in the same
-file, a cell that runs one of the two forms - directly or through any `../dasllama/` call - at the
-same shapes against a CPU oracle, and that runs on every box and every build the comparing cell
-runs on.** A companion that skips where the comparing cell runs leaves that run held to nothing
-but another kernel form.
+**A kernel-unit cell holds every kernel run's output, at that run's shapes - every size a
+dispatch grid or loop bound of that run reads, the row count included - to a CPU oracle: in a
+compare of its own, or by comparing the run against a second kernel form while a cell of the same
+file runs one of the two forms - directly or through any `../dasllama/` call - at the same shapes
+against a CPU oracle, on every box and every build the comparing cell runs on.** Two forms can be
+bit-equal and both wrong.
 
 **A diff that changes an existing kernel class's or CPU kernel's branch selection - a branch added,
 or a predicate widened or narrowed, so that a different set of kargs or argument values, or of
@@ -117,6 +115,10 @@ its body has - a sibling stamp's cell counts, and for a stamp whose override cha
 that dispatches it at the arguments of sibling cells that together reach every sibling path.** A
 merge can drop a path no cell reaches, and every cell still passes.
 
+**A diff that adds or changes a stamp's override of a template constant the class's code reads
+ships a kernel-unit cell that runs that stamp, or names the existing cell that does.** The override
+compiles different code into that stamp alone, so a sibling stamp's cell does not cover it.
+
 **Before every kernel run whose output a kernel-unit cell reads in any assert, directly or through
 a later run in the same cell, the cell fills with a sentinel every range of that run's output
 buffers that the run writes without first reading what the range held before the run; a range the
@@ -131,9 +133,10 @@ construction; an exact compare of indices or schedule words against a CPU oracle
 bit-identity assert.
 
 **A kernel-unit cell whose output buffer is its input buffer, and whose compare passes within a
-nonzero tolerance, asserts, at a known index, that the output differs from the input or that its
-reference - its CPU oracle, or the second kernel form it compares against - differs from that
-input by more than that tolerance.** An in-place kernel that never ran leaves the input, which
+nonzero tolerance, asserts at one index - a literal, or one the cell's own search finds, the cell
+failing when it finds none - either that the output's element is not bit-equal to the input's, or
+that the reference's element (its CPU oracle's, or the second kernel form's) differs from the
+input's by more than that tolerance.** An in-place kernel that never ran leaves the input, which
 can wrongly satisfy a tolerant compare.
 
 **A diff that adds or loosens, in a kernel-unit cell, a bound assert ships a control for each such
@@ -146,20 +149,23 @@ count it wrote, the offset it read or wrote at) equals that value, or by compari
 oracle every output element the value sizes or places.**
 
 **A kernel-unit cell whose dispatch covers more lanes or rows than the size the cell claims sizes
-its output buffer to the dispatch's full lane or row count, fills the elements past the claimed
-size with a sentinel, and asserts each of them still holds the sentinel after the run - or, for a
-kernel whose contract writes those elements (a class that zeroes a padded panel), asserts each
-holds the value that contract names, and holds the elements past the dispatch's own extent at the
-sentinel.**
+its output buffers for every element a lane past that size writes on a failed bounds check,
+asserts each such element outside the live output still holds its sentinel after the run, and
+covers each inside it by the oracle compare - or, for a kernel whose contract writes past the
+claimed size (a padded panel's zeroes), asserts each holds the value that contract names, and holds
+the elements past the dispatch's own extent at the sentinel.** A lane mapped to a (row, head) pair
+or a column writes at a stride.
 
 **A kernel-unit cell whose kernel computes at a narrower precision than its oracle at any
-step - operands, accumulator, or the stored result - bounds that step's error by construction
+step - an operand, the accumulator, any intermediate value (an `rsqrt` instruction's inverse
+square root among them), or the stored result - bounds that step's error by construction
 (f16-exact inputs, magnitude-bounded fixtures), or states how its bar follows from that step's
 error, in the cell or at the shared bar helper the cell calls.** A bar with no derivation admits
 whatever result it was set to pass.
 
-**A diff that changes where a kernel computes at a narrower precision than its oracle - the
-operands, the accumulator, or the stored result - restates, in every kernel-unit cell of that
+**A diff that changes where a kernel computes at a narrower precision than its oracle - an
+operand, the accumulator, any intermediate value (an `rsqrt` instruction's inverse square root
+among them), or the stored result - restates, in every kernel-unit cell of that
 kernel and in the same change, what holds that cell's compare: the construction that bounds the
 new step's error, or how its bar follows from that error, whether or not the bar moves.**
 

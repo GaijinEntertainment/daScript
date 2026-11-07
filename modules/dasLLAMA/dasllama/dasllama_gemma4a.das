@@ -16,6 +16,7 @@ require dasllama/dasllama_env
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_math
 require dasllama/dasllama_gguf
+require dasllama/dasllama_convert   // cvt_f32_to_f16_sat: the f16 lane's halfwords
 require dasllama/dasllama_plane public   // PlaneF — the borrowed weight planes; re-exported so requirers can delete an encoder
 require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — the shared ASR floor
 require dasllama/dasllama_audio
@@ -24,6 +25,7 @@ require dasllama/dasllama_blocks   // embed_text_rows/eval_embd_ — the ASR tur
 require dasllama/dasllama_common   // apply_box_profile_runtime for the gemma4a-image identity
 require dasllama/dasllama_image
 require dasllama/dasllama_tower_image
+require dasllama/dasllama_tower_flavor   // [tower_flavor]: the family's GPU flavor seat
 
 // Gemma-4 E-series audio front end: the `gemma4a` Conformer encoder + the audio multimodal
 // embedder, read straight from the bf16 audio mmproj GGUF (mmproj-gemma-4-E{2,4}B-it-bf16.gguf,
@@ -84,6 +86,7 @@ struct Gemma4aEncoder {
     // q8: the GEMM set transcodes to Q8_0 at read and the offset fields index qblob/qscales
     // instead of blob (the canary pattern); convs, norms, biases and the RPE table stay fp32
     q8 : bool
+    gemm_f16 : bool    //! the exact pick's halfword lane: the GEMM set as f16 halfwords in ``wblob``, the offset fields indexing it
     filters : PlaneF = PlaneF()    // [n_mel × n_bins] HTK, no area norm
     hann : PlaneF = PlaneF()       // [512]: 320 Hann at the front, zeros to 512
     twiddles : PlaneF = PlaneF()   // DFT twiddle matrix [n_fft × (n_bins·2)]
@@ -92,6 +95,7 @@ struct Gemma4aEncoder {
     blob : PlaneF = PlaneF()
     qblob : PlaneI8 = PlaneI8()
     qscales : PlaneF = PlaneF()
+    wblob : PlaneU16 = PlaneU16()
     // subsample conv frontend + input projection
     c0_w : int64; norm0_w : int64
     c1_w : int64; norm1_w : int64
@@ -150,9 +154,9 @@ def finalize(var t : Gemma4aEncoder) {
     }
 }
 
-// the tripwire: serialize_image_meta(Gemma4aEncoder) covers 20 fields; image_map + image_bytes
-// are deliberate skips (the eight planes and the layer table are sections, not meta).
-let private GEMMA4A_META_FIELDS = 21 + 2
+// the tripwire: serialize_image_meta(Gemma4aEncoder) covers 22 fields; image_map + image_bytes
+// are deliberate skips (the nine planes and the layer table are sections, not meta).
+let private GEMMA4A_META_FIELDS = 22 + 2
 
 // every meta-carried Gemma4aEncoder field, explicitly, both directions (see dasllama_image)
 def private serialize_image_meta(var arch : Archive; var t : Gemma4aEncoder) {
@@ -169,6 +173,7 @@ def private serialize_image_meta(var arch : Archive; var t : Gemma4aEncoder) {
     arch |> serialize_raw(t.n_bins)
     arch |> serialize_raw(t.eps)
     arch |> serialize_raw(t.q8)
+    arch |> serialize_raw(t.gemm_f16)
     arch |> serialize_raw(t.c0_w)
     arch |> serialize_raw(t.norm0_w)
     arch |> serialize_raw(t.c1_w)
@@ -196,6 +201,7 @@ struct Gemma4aStaging {
     blob : array<float>
     qblob : array<int8>       // section names must match the served plane fields (bind-by-name)
     qscales : array<float>
+    @exact_size wblob : array<uint16>
     layers : array<G4aLayer>
     @exact_size dev : array<uint8>       //!< a GPU-flavored mint's device block (`TowerDevBuild`)
     @exact_size devplan : array<int64>   //!< ... and its plan
@@ -214,10 +220,11 @@ def private image_post_load(var st : Gemma4aStaging) {}
 
 [init]
 def private register_gemma4a_image_tags {
-    register_image_family_tag("gemma4a-f32", true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
+    register_image_family_tag("gemma4a-f32", config_free = true)
     register_image_family_tag("gemma4a-q8")
-    register_tower_dev_tags("gemma4a-f32")
+    register_image_family_tag("gemma4a-f16", config_free = true)
     register_tower_dev_tags("gemma4a-q8")
+    register_tower_dev_tags("gemma4a-f16")
 }
 
 //! Hot-path scratch for one clip encode — a transcribe allocates nothing per call.
@@ -246,7 +253,7 @@ struct Gemma4aState {
     ao : array<float>         // attention output [npos × d_model]
     prpe : array<float>       // projected RPE [13 × d_model]
     sc : array<float>         // per-query score window
-    @scratch out : array<float>        // projected soft tokens [npos × proj_dim]
+    @scratch @exact_size out : array<float>        // projected soft tokens [npos × proj_dim]
     out_ready : bool          //! the device blocks hook ran the projector tail and filled `out`: the CPU tail stands down
     tmp : array<float>        // output-proj scratch [npos × proj_dim]
     xqi : array<int8>         // q8 activation image — per-site requant (clamps differ per site)
@@ -293,20 +300,23 @@ def private g4a_htk_filterbank(n_mel, n_fft, sample_rate : int64) : array<float>
     return <- out
 }
 
-//! Load a gemma4a audio mmproj GGUF (`a.*` / `mm.a.*` tensors; the vision tower is ignored).
-//! The q8 lane transcodes the GEMM set to Q8_0 planes; the f32 lane (the GPU driver's) keeps
-//! the whole blob fp32. Prepared-image caching matches ``load_model`` (``DASLLAMA_IMAGE=0`` disables).
+//! the image tag of a lane: q8, the exact pick's halfwords (`f16`), or the file's f32
+def gemma4a_lane_tag(q8, f16 : bool) : string => tower_lane_tag("gemma4a", q8, f16)
+
+//! Load a gemma4a audio mmproj GGUF: the q8 lane transcodes the GEMMs to Q8_0, the exact lane keeps fp32 (f16 on a GPU flavor); image caching as ``load_model``.
 def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
-    let tag = g4a_serve_q8() ? "gemma4a-q8" : "gemma4a-f32"
-    announce_lane("gemma4a encoder", g4a_serve_q8(), "f32 planes", "set_gemma4a_q8", g_g4a_pin != GemmLane.unset, gemma4a_gpu_serves())
-    let dev = path |> ends_with(".dlim") ? TowerDev.none : gemma4a_dev_flavor(g4a_serve_q8())
+    let q8 = g4a_serve_q8()
+    let dev = path |> ends_with(".dlim") ? TowerDev.none : tower_dev_flavor_announced(g_gemma4a_flavor, q8, path, "gemma4a")
+    let f16 = tower_load_f16(path, q8, dev)
+    let tag = gemma4a_lane_tag(q8, f16)
+    announce_lane("gemma4a encoder", q8, f16, "set_gemma4a_q8", g_g4a_pin != GemmLane.unset, false)
     if (dev != TowerDev.none) {
-        return <- load_staged_image_dev(path, tag, "gemma4a-encoder", "source mmproj gguf", type<Gemma4aEncoder>, dev, g_g4a_flavor.bake, GEMMA4A_DEV_CONSUMED) {
-            return <- stage_gemma4a_encoder(path)
+        return <- load_staged_image_dev(path, tag, "gemma4a-encoder", "source mmproj gguf", type<Gemma4aEncoder>, dev, g_gemma4a_flavor.bake, GEMMA4A_DEV_CONSUMED) {
+            return <- stage_gemma4a_encoder(path, q8, f16)
         }
     }
     return <- load_staged_image(path, tag, "gemma4a-encoder", "source mmproj gguf", type<Gemma4aEncoder>, $ {
-        return <- stage_gemma4a_encoder(path)
+        return <- stage_gemma4a_encoder(path, q8, f16)
     }, $(t : Gemma4aEncoder) {
         // an image minted off a widening embedder read as a square one carries the encoder's width as the decoder's: mint again
         return t.proj_dim == gemma4a_probe_proj_dim(path)
@@ -315,25 +325,14 @@ def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
 
 //! A GPU driver's gemma4a flavor (`#tower-dev-block`): the backend whose image it mints, whether its chain serves a lane, and
 //! the bake that converts a CPU-form encoder into the driver's device block
-typedef Gemma4aServesLaneFn = function<(q8 : bool) : bool>
-typedef Gemma4aBakeFn = function<(m : Gemma4aEncoder; var b : TowerDevBuild) : bool>
+[tower_flavor(family = "gemma4a", model = "Gemma4aEncoder")]
+struct Gemma4aFlavor {}
 
-struct Gemma4aFlavor {
-    backend : TowerDev
-    serves : Gemma4aServesLaneFn
-    bake : Gemma4aBakeFn
-}
-
-var private g_g4a_flavor = Gemma4aFlavor()
 let private GEMMA4A_DEV_CONSUMED <- ["qblob", "qscales"]   //! the planes a gemma4a bake converts: a GPU flavor carries their device forms instead
-
-def register_gemma4a_flavor(backend : TowerDev; serves : Gemma4aServesLaneFn; bake : Gemma4aBakeFn) {
-    g_g4a_flavor = Gemma4aFlavor(backend = backend, serves = serves, bake = bake)
-}
 
 //! The device flavor a load on the `q8` lane takes: the registered driver's where its chain serves the lane, else `none` - the
 //! CPU image
-def gemma4a_dev_flavor(q8 : bool) : TowerDev => tower_dev_flavor(g_g4a_flavor, q8)
+def gemma4a_dev_flavor(q8 : bool) : TowerDev => tower_dev_flavor(g_gemma4a_flavor, q8)
 
 //! A GPU-flavored encoder reached a CPU path at `stage`: the device seat declined what the load handed it, and the CPU never
 //! runs that image (`#tower-dev-block`)
@@ -344,9 +343,9 @@ def private g4a_cpu_refuse(enc : Gemma4aEncoder; stage : string) => tower_cpu_re
 //! `dev` names the GPU flavor of an in-memory mint (the staging read under `with_tower_dev_staging(dev)`, `tower_mint_flavor`).
 def mint_gemma4a_encoder(var st : Gemma4aStaging; var out : Gemma4aEncoder; img : string = ""; dev : TowerDev = TowerDev.none) {
     // the tag is the staging's own precision — a caller-supplied flag could bake a lying tag
-    let lane = st.e.q8 ? "gemma4a-q8" : "gemma4a-f32"
+    let lane = gemma4a_lane_tag(st.e.q8, st.e.gemm_f16)
     if (dev != TowerDev.none) {
-        tower_mint_flavor(st, out, lane, "gemma4a-encoder", dev, g_g4a_flavor, GEMMA4A_DEV_CONSUMED)
+        tower_mint_flavor(st, out, lane, "gemma4a-encoder", dev, g_gemma4a_flavor, GEMMA4A_DEV_CONSUMED)
     } else {
         cache_via_image_staged(st, out, img, lane)
     }
@@ -383,15 +382,14 @@ def gemma4a_probe_proj_dim(path : string) : int64 {
     return dim
 }
 
-// GEMM read: a q8 load transcodes from the file straight into qblob/qscales (the fp32 blob
-// never holds it); an fp32 load reads it like any plain tensor
+//! a GEMM read: q8 transcodes into qblob/qscales, f16 into wblob's halfwords (the fp32 blob holds neither), fp32 reads it as a plain tensor
 def private g4a_read_gemm(m : GGUFMeta; b : array<uint8> | #; name : string; var st : Gemma4aStaging;
                           @scratch var wscratch : array<float>; woff, n_elem : int64) {
-    if (!st.e.q8) {
+    if (!st.e.q8 && !st.e.gemm_f16) {
         gguf_read_tensor_f32(m, b, name, st.blob, woff, n_elem)
         return
     }
-    if (n_elem % 32l != 0l) {
+    if (st.e.q8 && n_elem % kq_elems(KqFmt.q8) != 0l) {
         panic("dasLLAMA gemma4a q8: GEMM tensor '{name}' has {n_elem} elements - not 32-aligned")
     }
     if (long_length(wscratch) < n_elem) {
@@ -399,6 +397,12 @@ def private g4a_read_gemm(m : GGUFMeta; b : array<uint8> | #; name : string; var
         wscratch |> resize(n_elem)
     }
     gguf_read_tensor_f32(m, b, name, wscratch, 0l, n_elem)
+    if (st.e.gemm_f16) {
+        unsafe {
+            cvt_f32_to_f16_sat(addr(st.wblob[woff]), addr<float const?>(wscratch[0]), n_elem)
+        }
+        return
+    }
     quantize_q8_0_into(wscratch, n_elem, st.qblob, st.qscales, woff, woff / 32l)
 }
 
@@ -442,11 +446,18 @@ def private g4a_repack_all(var st : Gemma4aStaging; mid : int64) {
     }
 }
 
+//! The mmproj-gguf reader proper on the policy's lane under the running staging's flavor (`tower_load_f16`).
+def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
+    let q8 = g4a_serve_q8()
+    return <- stage_gemma4a_encoder(path, q8, tower_load_f16(path, q8, tower_staging_dev()))
+}
+
 //! The mmproj-gguf reader proper: scalars land in the served encoder, plane bytes in the staging
 //! arrays beside it. Nothing here is servable — the image build is what produces a live encoder.
-def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
+def stage_gemma4a_encoder(path : string; q8, f16 : bool) : Gemma4aStaging {
     var st = Gemma4aStaging()
-    st.e.q8 = g4a_serve_q8()
+    st.e.q8 = q8
+    st.e.gemm_f16 = f16
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA gemma4a: cannot open mmproj gguf '{path}'")
@@ -491,8 +502,8 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
         st.e.proj_dim = m.tensors[ip].n_elem / mid          // mm.a.input_projection [mid × proj_dim]
 
         // blob layout: subsample + output first, then per-layer. GEMM fields ride the q cursor
-        // on a q8 load (the field then indexes qblob); convs, norms, biases stay on the blob
-        let q8 = st.e.q8
+        // on a q8 or an f16 load (the field then indexes qblob or wblob); convs, norms, biases stay on the blob
+        let gemms_own_plane = q8 || f16
         var o = 0l
         var qo = 0l
         st.e.c0_w = o; o += st.e.sub_ch0 * 9l                // im2col n=9 — the conv exception
@@ -500,40 +511,42 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
         st.e.c1_w = o; o += st.e.sub_ch1 * st.e.sub_ch0 * 9l
         st.e.norm1_w = o; o += st.e.sub_ch1
         let feat = st.e.sub_ch1 * (st.e.n_mel / 4l)          // 32 × 32 = 1024
-        st.e.inproj_w = take_cursor(q8, o, qo, d * feat)
-        st.e.outproj_w = take_cursor(q8, o, qo, mid * d)
+        st.e.inproj_w = take_cursor(gemms_own_plane, o, qo, d * feat)
+        st.e.outproj_w = take_cursor(gemms_own_plane, o, qo, mid * d)
         st.e.outproj_b = o; o += mid
-        st.e.mmproj_w = take_cursor(q8, o, qo, st.e.proj_dim * mid)
+        st.e.mmproj_w = take_cursor(gemms_own_plane, o, qo, st.e.proj_dim * mid)
         st.layers |> resize(st.e.n_layer)
         for (l in range64(st.e.n_layer)) {
             var lo = G4aLayer()
             lo.ff_norm = o; o += d
-            lo.ff_up = take_cursor(q8, o, qo, ff * d)
-            lo.ff_down = take_cursor(q8, o, qo, d * ff)
+            lo.ff_up = take_cursor(gemms_own_plane, o, qo, ff * d)
+            lo.ff_down = take_cursor(gemms_own_plane, o, qo, d * ff)
             lo.ff_post_norm = o; o += d
             lo.attn_pre_norm = o; o += d
-            lo.q = take_cursor(q8, o, qo, d * d)
-            lo.k = take_cursor(q8, o, qo, d * d)
-            lo.v = take_cursor(q8, o, qo, d * d)
-            lo.o = take_cursor(q8, o, qo, d * d)
+            lo.q = take_cursor(gemms_own_plane, o, qo, d * d)
+            lo.k = take_cursor(gemms_own_plane, o, qo, d * d)
+            lo.v = take_cursor(gemms_own_plane, o, qo, d * d)
+            lo.o = take_cursor(gemms_own_plane, o, qo, d * d)
             lo.per_dim_scale = o; o += st.e.d_head
-            lo.attn_k_rel = take_cursor(q8, o, qo, d * d)
+            lo.attn_k_rel = take_cursor(gemms_own_plane, o, qo, d * d)
             lo.attn_post_norm = o; o += d
             lo.norm_conv = o; o += d
-            lo.conv_pw1 = take_cursor(q8, o, qo, 2l * d * d)
+            lo.conv_pw1 = take_cursor(gemms_own_plane, o, qo, 2l * d * d)
             lo.conv_dw = o; o += 5l * d
             lo.conv_norm = o; o += d
-            lo.conv_pw2 = take_cursor(q8, o, qo, d * d)
+            lo.conv_pw2 = take_cursor(gemms_own_plane, o, qo, d * d)
             lo.ff_norm_1 = o; o += d
-            lo.ff_up_1 = take_cursor(q8, o, qo, ff * d)
-            lo.ff_down_1 = take_cursor(q8, o, qo, d * ff)
+            lo.ff_up_1 = take_cursor(gemms_own_plane, o, qo, ff * d)
+            lo.ff_down_1 = take_cursor(gemms_own_plane, o, qo, d * ff)
             lo.ff_post_norm_1 = o; o += d
             lo.ln2 = o; o += d
             st.layers[l] = lo
         }
         st.blob |> reserve(o)
         st.blob |> resize(o)
-        if (q8) {
+        if (f16) {
+            st.wblob |> reserve_resize(qo)
+        } elif (q8) {
             st.qblob |> reserve(qo)
             st.qblob |> resize(qo)
             st.qscales |> reserve(qo / 32l)
@@ -623,21 +636,6 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
 
 // ===== mel (gemma4a: no preemphasis, natural-log magnitude, HTK, no per-feature norm) =====
 
-//! whether a GPU driver would serve the encode - the lane policy's question
-typedef Gemma4aServesFn = function<() : bool>
-var private g_g4a_serves : Gemma4aServesFn
-var private g_g4a_serves_set = false
-
-//! the driver's answer to whether it serves the encode (`gemma4a_gpu_serves`): the whole chunk is its one seat
-[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
-def register_gemma4a_gpu(serves : Gemma4aServesFn) {
-    g_g4a_serves = serves
-    g_g4a_serves_set = true
-}
-
-//! the lane policy's question - would a GPU driver serve the exact block loop: false with no driver, with the knob off, or under the Vulkan driver, which serves q8
-def gemma4a_gpu_serves() : bool => g_g4a_serves_set && invoke(g_g4a_serves)
-
 //! the whole-chunk GPU hook: DFT -> mel -> subsample convs -> inproj -> blocks off g4a_window_frames
 //! (st.x filled); returns npos, or -1 to decline
 typedef Gemma4aGpuChunkFn = function<(t : Gemma4aEncoder; var s : Gemma4aState; n_len : int64) : int64>
@@ -671,11 +669,11 @@ def gemma4a_mel_floor() : float => float(G4A_MEL_FLOOR)
 var private g_g4a_pin = GemmLane.unset
 
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
-def private g4a_serve_q8() : bool => lane_serves_q8(g_g4a_pin, !gemma4a_gpu_serves())
+def private g4a_serve_q8() : bool => audio_lane_serves_q8(g_g4a_pin, true)
 
-//! Pin the gemma4a tower's weight format for subsequent loads: q8 (the CPU serving lane) vs
-//! the fp32 lane the parity legs and the GPU driver read. ``reset_gemma4a_q8`` returns to the
-//! policy default (exact when the Metal tower serves).
+//! Pin the gemma4a tower's weight format for subsequent loads: q8 (the default on every home) vs
+//! the exact lane (the halfword lane on a GPU home, the f32 planes on the CPU; also the parity legs).
+//! ``reset_gemma4a_q8`` returns to the policy default.
 def set_gemma4a_q8(on : bool) {
     g_g4a_pin = lane_pin(on)
 }
@@ -691,7 +689,7 @@ def gemma4a_serves_q8() : bool => g4a_serve_q8()
 //! from the facade, which owns the shared LLM) - read off the LOADED encoder, not the lane
 //! policy, which a `reset_gemma4a_q8` after the load moves out from under the stamp.
 def gemma4a_exec_fmt(enc : Gemma4aEncoder; dec_fmt : string) : string =>
-    "{enc.q8 ? "q8" : "f32"}/{dec_fmt}"
+    "{tower_lane_fmt(enc.q8, enc.gemm_f16)}/{dec_fmt}"
 
 //! Gemma4a's encode-total ``asr_prof`` bucket (the facade's [[asr_encode_bucket]] arm);
 //! the `g4a.mel` + `g4a.enc.*` sites split it under asr_stage_probe.
@@ -1001,6 +999,52 @@ def private g4a_tail_after_gpu(enc : Gemma4aEncoder; var st : Gemma4aState; npos
 //! The encoder's own output width - the out projection's rows and the audio embedder's columns; `proj_dim` is the
 //! embedder's rows, the decoder's width. Equal on E2B, 1536 against 2560 on E4B.
 def gemma4a_mid_dim(enc : Gemma4aEncoder) : int64 => length(enc.ones)
+
+let G4A_GEMMS = 11l   //! a Conformer block's GEMMs, in the order below - the order every GPU home's sites and q8 regions read
+let G4A_FF_UP = 0l
+let G4A_FF_DOWN = 1l
+let G4A_Q = 2l
+let G4A_K = 3l
+let G4A_V = 4l
+let G4A_O = 5l
+let G4A_REL = 6l
+let G4A_PW1 = 7l
+let G4A_PW2 = 8l
+let G4A_FF_UP_1 = 9l
+let G4A_FF_DOWN_1 = 10l
+
+//! a Conformer block's GEMM regions in the record order
+[arch(at = "../ARCHITECTURE_GPU_TOWER_RAIL.md#g4a-chains")]
+def gemma4a_block_regions(lo : G4aLayer; d, ff : int64; var out : Q8Region[int(G4A_GEMMS)]) {
+    out[G4A_FF_UP] = Q8Region(woff = lo.ff_up, n = d, rows = ff)
+    out[G4A_FF_DOWN] = Q8Region(woff = lo.ff_down, n = ff, rows = d)
+    out[G4A_Q] = Q8Region(woff = lo.q, n = d, rows = d)
+    out[G4A_K] = Q8Region(woff = lo.k, n = d, rows = d)
+    out[G4A_V] = Q8Region(woff = lo.v, n = d, rows = d)
+    out[G4A_O] = Q8Region(woff = lo.o, n = d, rows = d)
+    out[G4A_REL] = Q8Region(woff = lo.attn_k_rel, n = d, rows = d)
+    out[G4A_PW1] = Q8Region(woff = lo.conv_pw1, n = d, rows = 2l * d)
+    out[G4A_PW2] = Q8Region(woff = lo.conv_pw2, n = d, rows = d)
+    out[G4A_FF_UP_1] = Q8Region(woff = lo.ff_up_1, n = d, rows = ff)
+    out[G4A_FF_DOWN_1] = Q8Region(woff = lo.ff_down_1, n = ff, rows = d)
+}
+
+//! gemma4a's q8 regions as every GPU home's bake gathers them: the blocks' GEMMs, the input projection, the tail's out projection and embedder
+def gemma4a_all_regions(t : Gemma4aEncoder) : array<Q8Region> {
+    let d = t.d_model
+    let mid = gemma4a_mid_dim(t)
+    var @exact_size regions : array<Q8Region>
+    regions |> reserve(t.n_layer * G4A_GEMMS + 3l)
+    var recs : Q8Region[int(G4A_GEMMS)]
+    for (l in range64(t.n_layer)) {
+        gemma4a_block_regions(t.layers[l], d, t.n_ff, recs)
+        regions |> push_from(recs)
+    }
+    regions |> push(Q8Region(woff = t.inproj_w, n = d, rows = d))
+    regions |> push(Q8Region(woff = t.outproj_w, n = d, rows = mid))
+    regions |> push(Q8Region(woff = t.mmproj_w, n = mid, rows = t.proj_dim))
+    return <- regions
+}
 
 def private g4a_projector_tail(enc : Gemma4aEncoder; var st : Gemma4aState; npos : int64) : int64 {
     g4a_cpu_refuse(enc, "projector tail")

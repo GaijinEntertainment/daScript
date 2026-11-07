@@ -3,11 +3,14 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `../ARCHITECTURE.md`, `../ARCHITECTURE_CELL_BARS.md`. Planned work: `../followup_general.md`.
 
-A cell is as `REVIEW.md` (beside this file) defines it. A pinned test cell is a cell the pinned set lists, or any cell of a file
-the pinned set lists whole - a file entry, one naming the file and no cell - in the set before the
-diff or after it, and the pinned set is the only test of whether a cell is one; a named-cell entry names a `[test]`
-function and pins every cell that function runs. The pinned set, one entry a line, each with what it
-must keep holding:
+A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the asserts
+of every helper it calls. A file entry opens on a file alone (`` `<file>` must hold ``) and pins
+every cell of that file. A named-cell entry opens on a `[test]` function (`` `<file>`'s `<function>`
+cell must hold ``) and pins every cell that function runs. A pinned test
+cell is a cell an entry pins, in the set before the diff or in the set after it; the pinned set
+alone decides whether a cell is one. A bar is the tolerance a compare accepts; a bar on a compare
+whose two sides the cell computes is never a value maintained outside the cell, whatever model file
+it was measured on. The pinned set, one entry a line, each with what it must keep holding:
 
 - `test_run_suites.das` must hold the per-PR split, the folder census, the area tables, the
   `--exclude` and `--only` filters, the `--shard` partition, the `--batch` chunking (`child_chunks`:
@@ -182,7 +185,7 @@ must keep holding:
   `test_vkd_iq4nl32_cm2_batch`, `test_vkd_iq3s4_cm2_batch`, `test_vkd_mx4_gemv_gu`,
   `test_vkd_gemv_ncol`, `test_vkd_q8_gemv_gu_n`, `test_vkd_q8_gemv_pleact`, `test_vkd_act_family`,
   `test_vkd_moe_routing`, `test_vkd_dn_family`, `test_vkd_hc_seams`, `test_vkd_hc_rows`,
-  `test_vkd_ple_side`, `test_vkd_f16_gemm_khr`, `test_vkd_fa_cm2`, `test_vkd_fa_khr`,
+  `test_vkd_ple_side`, `test_vkd_f16_gemm_khr`, `test_vkd_f16_gemm_s`, `test_vkd_fa_cm2`, `test_vkd_fa_khr`,
   `test_vkd_fa_khr_h256_softcap`, `test_vkd_fa_khr_h256_gated`, `test_vkd_da_attn`, `test_vkd_da_attn_rqk`, `test_vkd_da_attn_bw`,
   `test_vkd_moe_gather_row`, `test_vkd_combine_row`, `test_vkd_kq_batch_family`,
   `test_vkd_emb_gather_family` and `test_vkd_nv4_cm2_batch` cells - the census's evidence for the
@@ -222,7 +225,8 @@ must keep holding:
   `shape` reason, as that row's seat columns say.
 - `test_whisper.das`'s `test_canary_qwen_oracle` cell, an external-reference compare, must hold
   the forced walk over `../harness/canary_qwen_expected.tsv`'s ids within `CN_TIE_BAR` of our
-  argmax at every step of its three clips, on the CPU chain and on the Metal tower, its control the
+  argmax at every step of its three clips, on the CPU chain and on the GPU tower that serves canary's default lane (the
+  encoder minted on that lane in that tower's flavor, each walk counted as a device encode), its control the
   same walk fed each id one step early with the oracle id outside the bar at every step that input
   moved, and the greedy ids equal to the oracle's up to the first tie.
 - `test_nmt.das`'s `test_nmt_spm` cell, an external-reference compare, must hold the model-file

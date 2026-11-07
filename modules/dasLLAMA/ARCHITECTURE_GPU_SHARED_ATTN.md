@@ -2,8 +2,8 @@
 
 Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document carries the attention bodies
 `dasllama_gpu_kernels_discrete.das` holds for the Vulkan and CUDA homes: the decode attention's key split, the prefill's
-flash-attention tile, the K/V mirror's block codecs, q8_0 and tq4, with tq4's attention in the rotated basis, and the
-batched rope store's strided k and v reads. The
+flash-attention tile, the K/V mirror's block codecs, q8_0 and tq4, with tq4's attention in the rotated basis, the
+batched rope store's strided k and v reads, and the FastConformer rel-position attention (`#fc-rel-attn`). The
 Vulkan window chain the flash tile serves is `ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`; the attention-side planes
 the Vulkan driver uploads (the q/k/v bias, the sink logits, the output bias) are
 `ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-attn-planes`.
@@ -247,3 +247,17 @@ rows do, and layer 0's stored bytes are the CPU cache's but for a quant on a rou
 when it merges - the Vulkan home under its arena rule
 (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`), the CUDA home on the planes' formats
 alone - and the kernel reads only the two fields.
+
+### The FastConformer rel-position attention reads a per-head score plane beside its keys {#fc-rel-attn}
+
+Canary's and parakeet's blocks attend with the full bidirectional Transformer-XL score, the u and v
+bias rows on the query, over a projected rel-position table of 2 npos - 1 rows. The attention does not
+walk the projected table per row. Per head, the chain body (`tower_fc_rel_attn`,
+`dasllama_tower_chains_fc`) restrides the (q + v) rows and the projected table's rows into unpadded
+f16 panels at one head - the (q + v) one on the biased stamp, with the head's slice of `bias_v` as its
+bias row - and the plane R = (q + v) P^T runs on the f16 GEMM (`rail_mm16`). `TowerCnAttnRT`, a
+workgroup per 64 query rows of one head, then scores ((q_i + u) . k_j + R[i][npos - 1 - i + j]) x scale
+under an online softmax, reading R beside the keys and values it stages 32 a tile through workgroup
+memory. The template is stamped per head width, 64 and 128, so no loop bound reads a push constant.
+R's [cap x 2 cap - 1] f32 rows are the rail's `rel_r` plane, which each home's seat grows by the
+row capacity.

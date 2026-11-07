@@ -2,7 +2,8 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_BATCH.md`, `ARCHITECTURE_GPU_ASYMMETRIES.md`,
-`ARCHITECTURE_GPU_RACE_SHAPES.md`, `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`, `ARCHITECTURE_MEASUREMENT.md`. Planned work:
+`ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md`, `ARCHITECTURE_GPU_RACE_SHAPES.md`,
+`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`, `ARCHITECTURE_MEASUREMENT.md`. Planned work:
 `followup_metal.md`, `followup_vulkan.md`, `followup_general.md`.
 
 **A diff touching a GPU kernel timing arm - code that dispatches a kernel to measure it rather
@@ -10,44 +11,39 @@ than to serve a call: a timing race between kernels, a knockout, an overhead mea
 wherever the diff puts it, applies `REVIEW_GPU_RACE.md`, the timing-race checklist, too.** A data
 race between serving dispatches is not a timing race.
 
-**A diff changing a restated property of a kernel class - a binding number, a kargs
-(kernel-argument struct) or push-constant layout, a bound struct's layout, threadgroup or workgroup
-memory, a staging shape (the operand tile the kernel copies into that memory before it computes)
-or the dispatch geometry, each as a timing arm or test-side dispatcher writes it out rather than
-reads it - or the rows or elements its body writes, its branch selection or the precision it
-computes a step at, or dispatching an existing class at a workgroup size or dispatch grid no
-kernel-unit cell (a test cell that dispatches the class itself, not through a serving call) runs
-it at, or adding a `[vk_dispatch]`, `[metal_dispatch]` or `[cuda_dispatch]` class, applies the
-`tests/` subfolder's `REVIEW_KERNEL_CELLS.md` too.**
+**A diff changing a restated property of a kernel class - a binding number, a kargs (kernel-argument
+struct) or push-constant layout, a bound struct's layout, threadgroup or workgroup memory, a staging shape
+(the operand tile the kernel copies into that memory before it computes) or the dispatch geometry, each as
+a timing arm or test-side dispatcher writes it out rather than reads it - or the rows or elements its body
+writes, its branch selection or the precision it computes a step at, or dispatching an existing class at a
+workgroup size or dispatch grid no kernel-unit cell (a test cell that dispatches the class itself, not
+through a serving call) runs it at, or adding a `[vk_dispatch]`, `[metal_dispatch]` or `[cuda_dispatch]`
+class, applies the `tests/` subfolder's `REVIEW_KERNEL_CELLS.md` too.**
 
-**A diff touching a tower driver (`dasllama/dasllama_metal_tower.das`, `dasllama/dasllama_vulkan_tower.das`,
-`dasllama/dasllama_vulkan_tts.das`, `dasllama/dasllama_cuda_tower.das`), a kernel class or builder a
-tower dispatches, or a kernel-argument struct a tower fills for a dispatch, wherever the struct is
-declared, applies `REVIEW_TOWER.md` too.**
+**A diff touching a tower driver (a `dasllama/dasllama_{metal,vulkan,cuda}_tower*.das` file or
+`dasllama/dasllama_vulkan_tts.das`), an ASR decoder (a `dasllama/dasllama_{metal,vulkan,cuda}_asr_dec*.das`
+file), a body they share (`dasllama/dasllama_tower_chains*.das`, `dasllama/dasllama_asr_dec_chains.das`,
+`dasllama/dasllama_tower_rail.das`, `dasllama/dasllama_gpu_rail.das`, `dasllama/dasllama_{vulkan,cuda}_rail.das`),
+a kernel class or builder any of these files dispatches or borrows, a kernel-argument struct a
+tower fills for a dispatch, wherever the struct is declared, a `register_*` function a tower-driver
+or ASR-decoder file calls with a hook - a stage seat (a hook slot the CPU chain calls to hand a
+model family's encoder or synthesis stage to the GPU), a drop hook, or a reload or weights-epoch
+listener - or a site that calls the hook such a function stores, applies `REVIEW_TOWER.md` too.**
 
 **A diff touching the `[metal_dispatch]` emission that tower builders are generated from
 (`dasllama/dasllama_metal_lens.das`), a module-level `g_tw_*` seat outside the tower driver
 files, or `dasllama/dasllama_metal_common.das` applies `REVIEW_TOWER.md` too.**
 
-**A diff touching an ASR decoder (`dasllama/dasllama_metal_asr_dec.das`,
-`dasllama/dasllama_vulkan_asr_dec.das`), a kernel class an ASR decoder dispatches or a builder it
-borrows applies `REVIEW_TOWER.md` too.**
-
-**A diff touching a `register_*` function that `dasllama_metal_tower_register`,
-`dasllama_vulkan_tower_register`, `dasllama_vulkan_tts_register` or `dasllama_cuda_tower_register`
-calls with a hook - a stage seat (a hook slot the CPU chain calls to hand a model family's encoder
-or synthesis stage to the GPU), a drop hook, or a reload or weights-epoch listener - or a site that
-calls the hook such a function stores, applies `REVIEW_TOWER.md` too.**
-
-**A diff touching the Vulkan tier - `dasllama/dasllama_*vulkan*.das`,
-`dasllama/dasllama_gpu_math.das`, `dasllama/dasllama_gpu_kernels_common.das`,
-`dasllama/dasllama_gpu_kernels_discrete.das`, `dasllama/dasllama_gpu_resident.das`,
-`dasllama/dasllama_gpu_tier.das`, a `[vk_dispatch]` class, a `[spirv_decode]` callback, or a
-cooperative-matrix GEMM class stamped per weight format and column width, on the NV
-cooperative-matrix-2 arm or the KHR cooperative-matrix arm, code that fills, sizes or binds a
+**A diff touching the Vulkan tier - `dasllama/dasllama_*vulkan*.das`, `dasllama/dasllama_gpu_math.das`,
+`dasllama/dasllama_gpu_kernels_common.das`, `dasllama/dasllama_gpu_kernels_discrete.das`,
+`dasllama/dasllama_gpu_resident.das`, `dasllama/dasllama_gpu_tier.das`, a `[vk_dispatch]` class, a
+`[spirv_decode]` callback, or a cooperative-matrix GEMM class stamped per weight format and column width,
+on the NV cooperative-matrix-2 arm or the KHR cooperative-matrix arm, code that fills, sizes or binds a
 `TokMeta` block, a branch whose true arm calls a function a `dasllama/dasllama_*vulkan*.das` or
-`dasllama/dasllama_gpu*.das` file declares, or a call of `vk_moe_init` - wherever the diff puts
-it - applies `REVIEW_GPU_VULKAN.md` too.**
+`dasllama/dasllama_gpu*.das` file declares, or, in a generic body both discrete GPU homes instantiate
+(`dasllama/dasllama_tower_chains*.das`, `dasllama/dasllama_asr_dec_chains.das`,
+`dasllama/dasllama_tower_rail.das`), a call that resolves to one in the Vulkan instantiation, or a call
+of `vk_moe_init` - wherever the diff puts it - applies `REVIEW_GPU_VULKAN.md` too.**
 
 **A diff that adds or changes a GPU kernel class - a `[metal_kernel]` def, a class carrying
 `[metal_dispatch]`, `[vk_dispatch]` or `[cuda_dispatch]`, a base shell one derives from, or a class
@@ -72,31 +68,30 @@ log line a parity rule reads - the resident driver's `resident driver armed (...
 per-op tier's `GPU MoE tier:` report, the `resident override passed a call` line - applies
 `REVIEW_GPU_PARITY.md` too.**
 
-**A diff that hands a GPU decode or prefill call the device served to the CPU path; lands a model
-family, backend arm or session shape with a batched decode step; calls `create_device_session`,
-`set_device_kv` or `moe_gpu_drop_model`; calls or defines a `set_*` or `reset_*` function or an `install_moe_gpu_resident_*` declaration in
-`dasllama/dasllama_core.das`, `dasllama/dasllama_env.das` or a GPU driver file
-(`dasllama/dasllama_metal*.das`, `dasllama/dasllama_*{vulkan,cuda}*.das`,
-`dasllama/dasllama_gpu*.das`); adds an `RdecPass` value; changes `trim_model_planes`; stores
-into, gathers from or releases a device buffer holding K or V rows; adds or changes a resident
-override (a decode/prefill hook the resident driver registers) or a byte copy of mirror rows (the
-device copy of the K/V cache); or adds or changes a GPU path that runs a recurrent (deltanet)
-forward, applies `REVIEW_GPU_RESIDENT.md` too.**
+**A diff that hands a GPU call the device served (a decode, prefill, tower driver's stage or ASR decoder step)
+to the CPU path; lands a model family, backend arm or session shape with a batched decode step; calls
+`create_device_session`, `set_device_kv` or `moe_gpu_drop_model`; calls or defines a `set_*` or `reset_*`
+function or an `install_moe_gpu_resident_*` declaration in `dasllama/dasllama_core.das`, `dasllama/dasllama_env.das`
+or a GPU driver file (a `dasllama/dasllama_{gpu,metal}*.das` or `dasllama/dasllama_*{vulkan,cuda}*.das` file, or
+any other `dasllama/` file whose code serves only GPU backends); adds an `RdecPass` value; changes
+`trim_model_planes`; stores into, gathers from or releases a device buffer holding K or V rows; adds or changes
+a resident override (a decode/prefill hook the resident driver registers) or a byte copy of mirror rows (the
+device copy of the K/V cache); or adds or changes a GPU path running a recurrent (deltanet) forward, applies
+`REVIEW_GPU_RESIDENT.md` too.**
 
-**A diff that adds a module-level variable to a GPU driver file (`dasllama/dasllama_metal*.das`,
-`dasllama/dasllama_*{vulkan,cuda}*.das`, `dasllama/dasllama_gpu*.das`) whose value derives from a
-loaded model's weights, or names, sizes or points at device content built from a loaded model - a
-served model, a draft or tower model, a TTS voice - or that measures how a call served a loaded
-model (a rate later calls size work by), or holds the decline reasons already logged for it, or
-that changes or removes a function returning
-such a variable to its no-model value, wherever that function sits, applies
-`REVIEW_GPU_MODEL_SWAP.md` too.**
+**A diff that adds a module-level variable to a GPU driver file (a `dasllama/dasllama_{gpu,metal}*.das`
+or `dasllama/dasllama_*{vulkan,cuda}*.das` file, or any other `dasllama/` file whose code serves only
+GPU backends, one or several) whose value derives from a loaded model's weights, or names, sizes or points
+at device content built from a loaded model - a served model, a draft or tower model, a TTS voice -
+or that measures how a call served a loaded model (a rate later calls size work by), or holds the
+decline reasons already logged for it, or that changes or removes a function returning such a
+variable to its no-model value, wherever that function sits, applies `REVIEW_GPU_MODEL_SWAP.md` too.**
 
 **A diff that changes a restated property of a kernel class - a binding number, a kargs or
 push-constant layout, a bound struct's layout, threadgroup or workgroup memory, a staging shape or
-the dispatch geometry - resyncs or deletes, in the same change, every timing arm that mirrors
-that kernel's binding order by hand or by an ordered setter list and every retained-reference arm
-of that kernel (an arm kept beside the shipped kernel as its measured baseline, listed as one in
+the dispatch geometry - resyncs or deletes, in the same change, every timing arm that mirrors that
+kernel's binding order by hand or by an ordered setter list and every retained-reference arm of
+that kernel (an arm kept beside the shipped kernel as its measured baseline, listed as one in
 `ARCHITECTURE_GPU_RACE_SHAPES.md`, `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` or
 `ARCHITECTURE_MEASUREMENT.md`).** An arm left dispatching stale geometry measures the wrong
 kernel silently.
@@ -111,14 +106,13 @@ shipped kernel no longer runs at that shape measures the wrong kernel silently.
 
 **A change that can alter what a GPU decode or prefill call on a session computes or selects ships
 GPU-vs-CPU parity, on every backend whose path the change reaches, on each of one q8 model, one
-K-quant model and one model of a format outside both whose path it reaches - or names both
-compares in the PR body: its emitted
-kernels byte-identical before and after (the `*_msl` globals or the AIR, Metal's compiled shader IR,
-they build into; the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes; the CUDA C text globals a
-`[cuda_kernel]` method generates) and the kernel variant the host picks, its dispatch selection
-and every bind argument (buffer, offset, kargs value) unchanged on every input.** Such a change
-is anything the call executes or that selects what it executes; only both compares together show
-the change cannot alter what the path computes or selects.
+K-quant model and one model of a format outside both whose path it reaches - or names both compares
+in the PR body: its emitted kernels byte-identical before and after (the `*_msl` globals or the AIR,
+Metal's compiled shader IR, they build into; the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes; the
+CUDA C text globals a `[cuda_kernel]` method generates) and the kernel variant the host picks, its
+dispatch selection and every bind argument (buffer, offset, kargs value) unchanged on every input.**
+Such a change is anything the call executes or that selects what it executes; only both compares
+together show the change cannot alter what the path computes or selects.
 
 **Never size a device buffer a dispatch writes to the live count of rows, keys or chunks, or to a
 live width narrower than the stride the dispatch writes at - size it to every element the
@@ -132,10 +126,9 @@ wider-row site passes the full stride as that width or dispatches the padded til
 splitting.** A split row writes at `row x dispatched-width`, so a wider-row caller lands its
 split rows on the row beside them.
 
-**Never rebind a scratch buffer a dispatch writes for a new write before the reader of its
-previous write is encoded - rotate through as many buffers as the chain has dispatches in flight
-between a write and its read.** One shared scratch serializes the whole chain through its
-write-after-read hazards.
+**Never rebind a scratch buffer a dispatch writes for a new write before the reader of its previous
+write is encoded - rotate through as many buffers as the chain has dispatches in flight between a write
+and its read.** One shared scratch serializes the whole chain through its write-after-read hazards.
 
 **A diff that makes a path split one op - dividing an op's K, key span, row count or other work
 size across two or more dispatches whose partial outputs combine - gates the split only on the
@@ -173,10 +166,11 @@ span, element type, layout, position, offset and model shape, the row count, eac
 and any other state the content was built for.** A key skipping an input reuses foreign content.
 
 **A reuse key names state by a stable id (a session's `uid`) or a generation; it names state by
-address, offset or handle only when every free of that state also drops the key - a weight region
-or loaded table, dropped at the model's release, or a device buffer that growing reallocates,
-dropped at the reallocation.** An address, offset or handle names whatever occupies it now, so a
-key that outlives the free reuses stale content silently.
+address, offset or handle only when every free of that state also drops the key, however many
+parameters the key re-checks at each use - a weight region or loaded table, dropped at the model's
+release, or a device buffer that growing reallocates, dropped at the reallocation.** An address,
+offset or handle names whatever occupies it now, so a key that outlives the free reuses stale
+content silently.
 
 **Never compile or release a Metal PSO (pipeline state object) from an engine file (`dasllama/`)
 other than the one that owns its kernel class** - it goes through that file's own init/release pair.
@@ -190,10 +184,9 @@ over an `RdecPass` value, and builds the counter key - `note_decline`'s `why`, `
 from a value of the decline enum of the driver it declines for, and from nothing else; a key held
 as a string literal is a defect.**
 
-**Never give a `*_decline_caps` predicate a parameter beyond the model, the row count, and
-whether the call carries a uniform attention span - however that parameter is derived; window
-readiness, whether this window's rope tables are staged, is asked by `prefill_decline` /
-`decode_decline` instead.**
+**Never give a `*_decline_caps` predicate a parameter beyond the model, the row count, and whether the
+call carries a uniform attention span - however that parameter is derived; window readiness, whether
+this window's rope tables are staged, is asked by `prefill_decline` / `decode_decline` instead.**
 
 **A diff that changes what a TTS stage seat both backends fill (a Pocket or StyleTTS2 stage)
 admits changes the shared admission predicate in `dasllama/dasllama_tts_slab.das`, which every
@@ -212,37 +205,44 @@ fills - a seat is a module-level variable that holds a function and has a public
 the setter is named - names the seat, by its setter's name, in the `dasllama_gpu_tier.das` entry of
 `ARCHITECTURE_GPU.md#gpu-backends`; a diff that removes one deletes that name; in the same change.**
 
-**A diff that adds a hook a GPU driver registers in a model family's registry (a `register_*` seat
-that a model family's own file, or `dasllama/dasllama_common.das`, declares), or a prefill
-builder a tower driver borrows, names it - the hook by the seat's register function, the builder
-by its name - in that driver's row of the role table in `ARCHITECTURE_GPU.md#gpu-backends`; a
-diff that removes one deletes its name from that row; in the same change.**
+**A diff that adds a hook a GPU driver registers (a call of a `register_*` function with a hook,
+wherever the function is declared), or a prefill builder a tower driver borrows, names it - the
+hook by its register function, the builder by its name - in that driver's row of the role table in
+`ARCHITECTURE_GPU.md#gpu-backends`; a diff that removes one deletes the name; in the same change.**
 
-**A diff that adds a function or export that `dasllama/` code outside the backend's own files
-calls, a hook registration no tower driver makes in a model family's registry, a kernel
-annotation, a setter that fills no `dasllama/dasllama_gpu_tier.das` seat and that no other
-backend serving the same path fills through a setter that changes the same computed or served
-result, or a decode or prefill
-behavior or a step's precision, that Metal alone has, or that Vulkan or CUDA has and Metal lacks,
-lands its own entry, naming the operation the API or device of the side without it lacks, in
-`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`; a diff that removes one deletes its entry; in
-the same change.** The same path served faster or slower is not a behavior.
+**A diff that adds a function or export that `dasllama/` code outside the backend's own files calls,
+a hook registration no tower driver makes (a call of a `register_*` function with a hook, wherever
+the function is declared), a kernel annotation, or a setter that fills no
+`dasllama/dasllama_gpu_tier.das` seat and has no twin (another backend's setter, on the same path,
+that changes the same computed or served result), that Metal alone has, or that Vulkan or CUDA has
+and Metal lacks, lands its own entry, naming the operation the API or device of the side without it
+lacks, in `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries` (an entry of the CUDA home alone in
+`ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries`); a diff that removes one deletes its entry;
+in the same change.**
+
+**A diff that adds a behavior of a served call's path - a prefill, a decode, a stage a tower driver
+fills, or an ASR decoder step - or a step's precision that Metal alone has, or that Vulkan or CUDA
+has and Metal lacks, lands its own entry, naming the operation the API or device of the side without
+it lacks, in `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries` (an entry of the CUDA home alone in
+`ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries`); a diff that removes one deletes its entry;
+in the same change.** The same path served faster or slower is not a behavior.
 
 **A diff that adds an environment variable that Metal alone reads, or that Vulkan or CUDA reads and
 Metal does not, that no variable read by any other backend serving the same path changes in the
 same way, and that changes what a backend reading it computes or serves on a device (a host-only
 on/off knob is not one), lands its own entry naming what the other side's API or device lacks, in
-`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`; a diff that removes one deletes its entry; in
-the same change.** A variable that also adds a backend-only behavior takes one entry, not two.
+`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries` (an entry of the CUDA home alone in
+`ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries`); a diff that removes one deletes its entry;
+in the same change.** A variable that also adds a backend-only behavior takes one entry, not two.
 
-**A diff that adds or extends, on one GPU backend (Metal, Vulkan or CUDA), a prefill or decode
-path or a K/V cache feature for a model family or a weight format another backend also serves - a
-capability being any behavior a served call shows, or that a test shows by driving a setter or an
-environment variable the engine exposes - lands the same capability on every other backend that
-serves that family, or that serves that weight format at the site the capability reads, in the
-same change, wherever that backend's API offers the operations it uses on any device it supports;
-a PR body that defers it is a defect.** A capability one backend has makes a served model's
-behavior depend on the box it runs on. The same path served faster or slower is not a capability.
+**A diff that adds or extends, on one GPU backend (Metal, Vulkan or CUDA), a served call's path - a
+prefill, a decode, a stage a tower driver fills, or an ASR decoder step - or a K/V cache feature for
+a model family or a weight format another backend also serves - a capability being any behavior a
+served call shows, or a test shows by driving a setter or an environment variable the engine
+exposes - lands the same capability on every other backend that serves that family, or that serves
+that weight format at the site the capability reads, in the same change, wherever that backend's API
+offers the operations it uses on any device it supports.** A capability one backend has makes a
+served model's behavior depend on its box. The same path served faster or slower is not a capability.
 
 **A diff that changes how a dev-W resident panel's cache key is built - a dev-W panel is a
 weight plane dequantized once into a device f16 panel - changes both the seed site and the
@@ -274,15 +274,15 @@ are.** A base off the format's own block grid is gathered under a layout that is
 `DEVICE_CREATION_CALLS` in `REVIEW.das` does not list, adds that spelling to the list in the same
 change.** The gate finds only the spellings it lists, so a new one passes it silently.
 
-**Never make a call that reaches the CUDA driver from an `[init]` in a CUDA file
-(`dasllama_math_cuda_register`, `dasllama_cuda_tower_register`), or from anything it runs, before
-`cud_init()` (`dasllama/dasllama_cuda_common.das`) returns true.** A box without the driver loads
-the module too, and its first driver call would fault.
+**Never make a call that reaches the CUDA driver from an `[init]` in a `dasllama/dasllama_*cuda*.das`
+file, or from anything it runs, before `cud_init()` (`dasllama/dasllama_cuda_common.das`) returns
+true.** A box without the driver loads the module too, and its first driver call would fault.
 
-**An `[init]` in a CUDA file calls its seat installer (`cuda_install_seats`,
-`cuda_tower_install_vision`) only after `gpu_want_cuda()` returns true - a seat the home does not
-want is installed by `set_gpu_home("cuda")` instead.** The seats replace the current home's hooks,
-so installing them unconditionally hands a box that asked for another home over to CUDA.
+**An `[init]` in a `dasllama/dasllama_*cuda*.das` file calls a seat installer - a function that puts
+the CUDA home's hooks in the `register_*` hook slots and the `dasllama/dasllama_gpu_tier.das` seats -
+only after `gpu_want_cuda()` returns true; a seat the home does not want is installed by
+`set_gpu_home("cuda")` instead.** The seats replace the current home's hooks, so installing them
+unconditionally hands a box that asked for another home over to CUDA.
 
 **Weakening `check_shared_file_spelling` in `REVIEW.das` is a defect.** It holds a shared kernel
 file - `dasllama/dasllama_gpu_kernels_common.das` or `dasllama/dasllama_gpu_kernels_discrete.das` -

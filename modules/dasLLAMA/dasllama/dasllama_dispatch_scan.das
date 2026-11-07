@@ -7,14 +7,16 @@ module dasllama_dispatch_scan shared public
 require dasllama/dasllama_lint public
 require daslib/ast
 require daslib/ast_boost
+require daslib/templates_boost   // make_expression_block / force_at: the rail overload's body
 require daslib/rtti
 require strings
 require daslib/strings_boost
 require dasllama_kernel_access
 
 // The member scan the two discrete dispatch lenses ([vk_dispatch], [cuda_dispatch]) share: the annotation's arguments
-// and the family ordinal, the member walk, the kernel method and its derived access, and the encoder's params=
-// arguments. Every refusal speaks the calling lens's words; what a lens generates stays in the lens.
+// and the family ordinal, the member walk, the kernel method and its derived access, the encoder's params=
+// arguments, and the tower rail overload's signature. Every refusal speaks the calling lens's words; the bodies a lens
+// generates stay in the lens.
 
 //! the words a lens's refusals carry
 struct LensWords {
@@ -300,6 +302,29 @@ def lens_params(var fn : Function?; at : LineInfo; args : AnnotationArgumentList
             errors := "{w.lens} {s.base}: grid '{s.grid}' references '{gs}', which must be declared an int64 param (the generated ceil-div math is int64)"
             return false
         }
+    }
+    return true
+}
+
+//! the rail stamp overload `enc_<base>(rl, roles, pc, <params>)` over `body`: `rl` the home's `rail` (`rail_const` read-only), `roles` a `TowerBuf` a binding, `pc` where args exist
+def lens_rail_overload(at : LineInfo; args : AnnotationArgumentList; s : LensScan; w : LensWords; rail : string; rail_const : bool;
+                       var body : array<ExpressionPtr>; var errors : das_string) : bool {
+    var fn = new Function(at = at, atDecl = at, name := "enc_{s.base}", flags = FunctionFlags.generated, result = new TypeDecl(at = at, baseType = Type.tVoid))
+    fn.arguments |> emplace_new <| new Variable(at = at, name := "rl", _type = mk_alias_t(at, rail, rail_const))
+    var roles_t = make_fixed_array_type(length(s.blist), mk_alias_t(at, "TowerBuf", false))
+    roles_t.flags.constant = true
+    fn.arguments |> emplace_new <| new Variable(at = at, name := "roles", _type = roles_t)
+    if (s.args_t != null) {
+        var pt = clone_type(s.args_t)
+        pt.flags.ref = true
+        fn.arguments |> emplace_new <| new Variable(at = at, name := "pc", _type = pt)
+    }
+    return false if (!lens_params(fn, at, args, s, w, errors))
+    fn.body = make_expression_block(body)
+    fn.body |> force_at(at)
+    if (!(compiling_module() |> add_function(fn))) {
+        errors := "{w.lens} {s.base}: failed to add the rail enc_{s.base}"
+        return false
     }
     return true
 }

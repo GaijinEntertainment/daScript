@@ -3526,12 +3526,24 @@ def cud_rdec_segs_packed : bool {
 //! the s tile where the m tiles would idle three quarters of the SMs, else cm2_wave_col at two blocks an SM
 def private cud_cm2_tc(d, rows : int64) : int64 => cm2_wave_col(d, rows, int64(g_cud.sm_count), 2l * int64(g_cud.sm_count))
 
-//! one window GEMM's column and split-k, picked together: (tc, chunks, 256-aligned chunk), chunks 1 and chunk 0 = whole
+//! the k chunks a grid of `tiles` workgroups splits into to fill the card's block slots, two an SM: 1 where it holds half of them
+def cud_split_want(tiles : int64) : int64 {
+    let slots = 2l * int64(g_cud.sm_count)
+    return tiles * 2l <= slots ? slots / tiles : 1l
+}
+
+//! one window GEMM's column and split-k, picked together: (tc, chunks, 256-aligned chunk), chunks 1 and chunk 0 = whole; its
+//! split planes bounded by the window's scratch
 def cud_cm2_pick(d, rows, n : int64) : tuple<tc : int64; nsplit : int64; ksplit : int64> {
-    var tc = cud_cm2_tc(d, rows)
+    let scratch = g_crd != null ? g_crd.pf_splitk_bytes : 9_223_372_036_854_775_807l
+    return cud_cm2_pick(d, rows, n, cud_cm2_tc(d, rows), scratch)
+}
+
+//! the same pick at a caller's column `tc0` (a tower's own column model), its split planes bounded by the caller's `scratch` bytes
+def cud_cm2_pick(d, rows, n, tc0, scratch : int64) : tuple<tc : int64; nsplit : int64; ksplit : int64> {
+    var tc = tc0
     let cores = int64(g_cud.sm_count)
     let forced = g_env_vulkan.cm2_splitk
-    let scratch = g_crd != null ? g_crd.pf_splitk_bytes : 9_223_372_036_854_775_807l
     if (forced <= 0l && rows < 32l && tc == 32l) {   // the short window: the knee's split, or whole at knee 0 - never the wave model's split, which the race never timed
         return cud_split_k_tgs() > 0l ? short_split_pick(d, rows, n, 0l, scratch, cud_split_k_tgs()) : (tc = 32l, nsplit = 1l, ksplit = 0l)
     }
@@ -3539,21 +3551,17 @@ def cud_cm2_pick(d, rows, n : int64) : tuple<tc : int64; nsplit : int64; ksplit 
     if (forced > 0l) {
         want = forced
     } elif (cores > 0l) {   // a grid under half the card's block slots splits its K, a 32-row window's included - the Vulkan wave model's rule
-        let slots = 2l * cores
         if (tc == 32l) {
-            let tiles_s = cm2_tiles_at(d, rows, 32l)
-            if (tiles_s * 2l <= slots) {
-                want = slots / tiles_s
-            }
+            want = cud_split_want(cm2_tiles_at(d, rows, 32l))
         } else {
-            let tiles_l = cm2_tiles_at(d, rows, 256l)
-            let tiles_m = cm2_tiles_at(d, rows, 128l)
-            if (tiles_l * 2l <= slots) {
+            let want_l = cud_split_want(cm2_tiles_at(d, rows, 256l))
+            let want_m = cud_split_want(cm2_tiles_at(d, rows, 128l))
+            if (want_l > 1l) {
                 tc = 256l
-                want = slots / tiles_l
-            } elif (tiles_m * 2l <= slots) {
+                want = want_l
+            } elif (want_m > 1l) {
                 tc = 128l
-                want = slots / tiles_m
+                want = want_m
             }
         }
     }

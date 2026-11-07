@@ -20,6 +20,8 @@ require dasllama/dasllama_math_default
 require dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_vulkan_common   // upload_region_at: the sentinel fills
+require dasllama/dasllama_gpu_rail   // rail_seat, TOWER_BUFS: `cell_launch`'s seats
+require dastest/testing_boost   // T?: `cell_launch`'s cell
 require _compares   // NAN_SENTINEL_BITS
 require _attn_oracle public
 require _kernel_oracles public   // act_mul_ref: the gated activation the Metal cells read too
@@ -210,20 +212,25 @@ def cell_record_timed(var cp : CellPlanes; tag, what : string; rec : block<(raw 
     return raw
 }
 
-//! the dispatches `rec` records into `raw` on the rail `h`, then every written plane copied back whole, behind its hazard bit, to
-//! the staging (grown to hold them): `cell_record`'s body, for a cell that records into a command it keeps
-def cell_record_into(var cp : CellPlanes; raw : VkCommandBuffer; var h : VkHaz; rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) {
-    var devs : array<uint64>
-    var sizes, ats : array<int64>
-    var bits = 0u
+//! the written planes' copy back to the staging: each plane's buffer, bytes and staging offset, and the hazard bits they carry
+struct private StagePlan {
+    devs : array<uint64>
+    sizes : array<int64>
+    ats : array<int64>
+    bits : uint
+}
+
+//! the written planes laid back to back in the staging (grown to hold them), each plane's host offset set
+def private stage_plan(var cp : CellPlanes) : StagePlan {
+    var plan : StagePlan
     var total = 0l
     for (p in range(length(cp.dev))) {
         continue if (!cp.written[p])
         cp.host_off[p] = total
-        devs |> push(cp.dev[p])
-        sizes |> push(cp.bytes[p])
-        ats |> push(total)
-        bits |= cp.hazard_bit[p]
+        plan.devs |> push(cp.dev[p])
+        plan.sizes |> push(cp.bytes[p])
+        plan.ats |> push(total)
+        plan.bits |= cp.hazard_bit[p]
         total += cp.bytes[p]
     }
     if (cp.host.bytes < total) {
@@ -232,8 +239,51 @@ def cell_record_into(var cp : CellPlanes; raw : VkCommandBuffer; var h : VkHaz; 
         }
         cp.host = make_host_buf(total, true, [cached = true])
     }
+    return <- plan
+}
+
+//! the dispatches `rec` records into `raw` on the rail `h`, then every written plane copied back whole, behind its hazard bit, to
+//! the staging (grown to hold them): `cell_record`'s body, for a cell that records into a command it keeps
+def cell_record_into(var cp : CellPlanes; raw : VkCommandBuffer; var h : VkHaz; rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) {
+    var inscope plan <- stage_plan(cp)
     invoke(rec, raw, h)
-    cmd_copy_planes(raw, h, devs, cp.host, ats, sizes, bits)
+    cmd_copy_planes(raw, h, plan.devs, cp.host, plan.ats, plan.sizes, plan.bits)
+}
+
+//! one command buffer: the dispatches `blk` records on the rail it is handed - every plane seated at its role (`cell_role`) -
+//! then every written plane copied back to the staging, submitted and waited; `tag` names the submit in the log
+[unused_argument(t)]
+def cell_launch(var cp : CellPlanes; t : T?; tag : string; blk : block<(var rl : VtRail) : void>) {
+    assert(length(cp.dev) <= TOWER_BUFS, "CellPlanes: a cell seats at most one plane a rail role")
+    var raw = alloc_transient_cmd()
+    var rl = VtRail(raw = raw, h = cmd_open(raw, false))
+    for (p in range(length(cp.dev))) {
+        rail_seat(rl, cell_role(p), cp.dev[p], cp.bytes[p], cp.hazard_bit[p])
+    }
+    var inscope plan <- stage_plan(cp)
+    invoke(blk, rl)
+    cmd_copy_planes(raw, rl.h, plan.devs, cp.host, plan.ats, plan.sizes, plan.bits)
+    cmd_close(raw)
+    to_log(LOG_INFO, "{tag}: submitting\n")
+    submit_wait(raw)
+    free_transient_cmd(raw)
+}
+
+//! every plane destroyed and forgotten, the staging kept: the next leg of a case lays its own
+def cell_clear(var cp : CellPlanes) {
+    for (dev in cp.dev) {
+        destroy_device_buf(dev)
+    }
+    cp.dev |> clear()
+    cp.bytes |> clear()
+    cp.hazard_bit |> clear()
+    cp.written |> clear()
+    cp.fill |> clear()
+    cp.base |> clear()
+    cp.run |> clear()
+    cp.host_off |> clear()
+    cp.auto_bits = 0
+    cp.named_bits = false
 }
 
 //! `n` elements of written plane `p` from `at` past its base set to its sentinel inside the command `raw` records, behind the
@@ -269,13 +319,21 @@ def plane_upload(cp : CellPlanes; p : int; a : array<auto(TT)>) {
 def with_cell_planes(blk : block<(var cp : CellPlanes) : void>) {
     var cp : CellPlanes
     invoke(blk, cp)
-    for (dev in cp.dev) {
-        destroy_device_buf(dev)
-    }
+    cp |> cell_clear()
     if (cp.host.buf != 0ul) {
         destroy_host_buf(cp.host)
     }
     delete cp
+}
+
+//! the f16 GEMM's s column stamp (`F16GemmCm2S`) over `roles` on the grid `rail_mm16` dispatches it at
+def f16_gemm_s_launch(var rl : VtRail; roles : TowerBuf const[3]; var pc : F16GemmArgs; rows, d : int64) {
+    enc_f16_gemm_cm2_s_cls(rl, roles, pc, f16_gemm_cm2_wgs(rows, d, 32l))
+}
+
+//! ... and its m column stamp (`F16GemmCm2`), the s column's bit-for-bit twin
+def f16_gemm_m_launch(var rl : VtRail; roles : TowerBuf const[3]; var pc : F16GemmArgs; rows, d : int64) {
+    enc_f16_gemm_cm2_cls(rl, roles, pc, f16_gemm_cm2_wgs(rows, d))
 }
 
 def to_u4(w : array<uint>) : array<uint4> {

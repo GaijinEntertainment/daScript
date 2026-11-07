@@ -3,7 +3,8 @@
 Companion to `ARCHITECTURE_GPU_ASYMMETRIES.md`; a section is cited by its anchor. This document
 carries the entries of the closed asymmetry list that are the CUDA home's alone - the int8 MMQ
 prefill, the MXFP4 expert pieces on the FP4 tensor rung, the nv4 nibble decode and the MMQ pin
-(`#cuda-asymmetries`). The list's rule and the Metal and Vulkan entries stay in
+(`#cuda-asymmetries`) - and the home's own cm2 column pick (`#cuda-cm2-column`), its tower chains' graphs
+(`#cuda-chain-graphs`) and its shared-memory carveout (`#cuda-carveout`). The list's rule and the Metal and Vulkan entries stay in
 `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`.
 
 ### The CUDA home's asymmetries {#cuda-asymmetries}
@@ -122,16 +123,128 @@ prefill, the MXFP4 expert pieces on the FP4 tensor rung, the nv4 nibble decode a
 - **`set_cuda_mmq_pin` is a CUDA-only setter.** It pins the MMQ knob's answer ahead of a load, so one process can hold a
   carrier to the leaves and then to the tiles (the resident cells' knob-off control, the W4A4 instrument). The Vulkan
   window's form follows the device's coopmat mode and Metal has one window form, so neither home has a pin to set.
-- **The CUDA tower serves the vision families alone** (`dasllama_cuda_tower`: gemma3v, gemma4v, gemma4uv, qwen3v,
-  qwen25v - `ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains`). Under the CUDA ask the audio, ASR-decoder,
-  translation and TTS seats stay the Vulkan tower's, so a process serving an audio tower beside the CUDA home holds
-  both APIs - the Vulkan device armed for the tower, the CUDA context for the decoder - and the Vulkan tower's vision
+- **The CUDA tower's in-process A/B seams are CUDA-only setters.** Each answers the value it replaced, has a getter beside
+  it, and logs once when it moves its policy off the default, so a race flips a pick between rounds with no reload:
+  `set_cuda_tower_carveout_full` / `cuda_tower_carveout_full` (`#cuda-carveout`, default off), `set_cuda_tower_fork` /
+  `cuda_tower_fork_on` (off: the pre-LN q / k / v GEMMs launch on the one stream, `ARCHITECTURE_GPU_TOWER_RAIL.md#rail-primitives`;
+  default on), `set_cuda_fc_front_handoff` / `cuda_fc_front_handoff_on` (off: the parakeet / GigaAM front reads its rows back
+  and the blocks upload them; default on), `set_cuda_tower_splitk_fill` / `cuda_tower_splitk_fill` (the fc2 site's split
+  gate, `#cuda-cm2-column`; default 4, 0 the pick's own rule), `set_cuda_tower_splitk_min_rows` /
+  `cuda_tower_splitk_min_rows` (an encode row floor the split must also reach; default 0, no floor), and
+  `set_cuda_tower_graphs` / `cuda_tower_graphs_on` (`#cuda-chain-graphs`; default on). The Vulkan tower has none of the first three to flip:
+  its driver sizes the shared-memory split, its hazard rail overlaps independent dispatches with no marks, and its front
+  hands its rows to the blocks through the host.
+- **The CUDA tower serves the vision and the audio families; the translation and TTS seats stay the Vulkan tower's**
+  (`dasllama_cuda_tower`: gemma3v, gemma4v, gemma4uv, qwen3v, qwen25v - `ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains`;
+  the audio and ASR-decoder seats from the home each family's row of `CUDA_AUDIO_HOMES` names, every row the CUDA home's -
+  `ARCHITECTURE_GPU_TOWER_RAIL.md#rail-audio-installs`). A process serving a translation or TTS tower beside the CUDA home
+  holds both APIs - the Vulkan device armed for that tower, the CUDA context for the rest - and the Vulkan tower's vision
   seats stand down there (`vulkan_tower_install_vision` is the Vulkan home's installer,
   `ARCHITECTURE_GPU_TOWER.md#tower-reach`). The CUDA tower keeps no hazard rail and no descriptor sets (the `cud_`
   rail's launches are stream-ordered), carries no per-role GPU profile (`DASLLAMA_GPU_PROF` is the Vulkan tower's -
   its encode is timed by the lane probe's wall), declines no tile family (the home has one feed, cm2), and takes its
-  f16 x f16 GEMM through `CuF16GemmCm2W` - the `F16GemmCm2T` stamp with the weight offset, beside the E-series seat's
-  `CuF16GemmCm2`, which pins the offset off - where the Vulkan tower's one `F16GemmCm2` stamp serves both sites.
+  f16 x f16 GEMM through `CuF16GemmCm2W` and its s column `CuF16GemmCm2WS` - the `F16GemmCm2T` stamps with the weight
+  offset (`#cuda-cm2-column`), beside the E-series seat's `CuF16GemmCm2`, which pins the offset off - where the Vulkan
+  tower's `F16GemmCm2` stamps serve both sites.
+
+### The CUDA home picks its cm2 column by its own wave model {#cuda-cm2-column}
+
+Every tower Q8_0 cm2 GEMM on this home (`cut_pick`, `cut_pick_whole`) takes its column from `cut_cm2_tc`, not from the
+Vulkan home's `cm2_wave_col` (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`); the LLM window's site
+(`cud_cm2_pick`) takes its own column from `cm2_wave_col` at two blocks an SM (`cud_cm2_tc`) and a tower's only where a
+tower hands it one. The two rules stay separate: at 512 rows they pick the same columns at a Qwen3-4B window's widths,
+and at 1000 rows the towers' rule takes m where the window's takes l on the 4096- and 9728-wide GEMMs, whose last l
+column is partial, and measured slower on the window there (`PERF_LEDGER.md`, the in-process tower race entry). Both
+rules open alike (64 rows or fewer take the s column, 128 or fewer m); on the towers' rule alone `DASLLAMA_CM2_TILE`
+forces one, and in process the test seam `set_cuda_tower_cm2_col` forces one over the knob, so a race flips the towers'
+column between rounds. Past them the towers' three columns race on whole waves of two blocks an SM - the occupancy the loader reports for the s, m and l tiles alike (the m and l tiles at 128 registers a
+thread and the s tile at 117, each 45088 bytes of dynamic shared memory - the class-load log line) - at the step weights
+s 6, m 10 and l 16, and the l column's weight is 20 where its last column is partial, a tie to m. Every figure in this section was read on the reference box (Threadripper 3990X,
+RTX 5060 Ti 16 GB, 36 SMs, the clock locked at 2392 MHz). Two properties of the CUDA tiles set the shape. The l tile takes
+the edge path on a partial last column, and on this home that column costs more than a whole one: at 784 rows a 1280 x 1280
+GEMM read 143 us on the l column against 110 at 1024 rows (four whole columns, the same 40 workgroups). And the rule weighs
+a wave of the s column at six tenths of an m wave (the step weights 6 and 10), where the Vulkan weights give it half (5 and
+10), yet where few weight tiles leave the m grid short of a wave the s column's wider grid still wins (a 3072-deep,
+768-wide GEMM at 138 rows: 61 us on s against 95 on m). The Vulkan model at two blocks an SM picked the l column at 1500
+rows, where it ran 40% behind m (whisper turbo's 1280-wide sites: 170 against 123 us).
+
+The fc2 site - the one tower site whose body sums split planes (`split_ok`) - takes `cud_cm2_pick`'s k split only where
+the split pays (`cut_split_pays`): where the whole pick's workgroups, at the model's column, times four fit the card's
+block slots, so the whole grid would leave half the SMs idle; a forced split count (`DASLLAMA_CM2_SPLITK`) passes the gate
+whatever the grid. The window's pick asks whether the widened l grid fills half
+the slots, which is the wrong grid at a tower site. At whisper tiny's 1500 rows the fc2 GEMM (384 wide, 1536 deep) runs 36
+m tiles whole, a block on every SM, and the window's rule splits it three ways into 54 l tiles with a partial last column
+and a reduce over three 2.3 MB planes, which reads no faster; at qwen3a's 104- and 52-row windows (896 or 1024 wide, 3584
+or 4096 deep) the whole grid is 7 to 16 tiles, under a quarter of the slots, and four to eight k planes put the idle SMs
+to work. The row count does not separate the two shapes; the whole grid does. The Vulkan tower keeps its row floor
+(`ARCHITECTURE_GPU_TOWER_VULKAN.md`, `VT_SK_MIN_ROWS`). Raced in process (`harness/tower_race.das`, `debug-jit`, 10 rounds;
+`PERF_LEDGER.md`, the fc2 split gate entry), encode ms medians: qwen3a 0.6B 16.130 under the gate against 17.834 under
+a 512-row floor and 18.430 never split, qwen3a 1.7B 19.680 against 22.219 and 21.941; whisper tiny 2.303 whole
+under the gate against 2.297 and 2.413 in the two arms that split it (the floor, no gate) - one split configuration's
+spread - the whole arms taking 8 of the 10 rounds; the bound at 8 drops qwen3a's 52-row splits and reads 17.391 and 20.861, the bound
+at 2 splits tiny. With the fc2 site split, qwen3a's encode reads the model's pick (m at 104 rows, s at 52) level with s
+everywhere on the 0.6B (15.915 against 15.923 ms) and ahead of s and m on the 1.7B (18.822 against 19.630 and 19.002).
+A column `DASLLAMA_CM2_TILE` or `set_cuda_tower_cm2_col` forces holds at a split site too (`cut_split_held`: the k
+planes at the forced column, up to the slots its grid leaves idle - `cud_split_want`, the window pick's own count), where
+the window's pick would widen m to l. Each caller bounds the split planes by its own scratch: the window by its split
+buffer (`pf_splitk_bytes`), a tower site by none at the pick, since `cut_pick` grows the tower's own planes to the split
+and picks whole where they do not fit - so a tower's split never reads whether an LLM decoder is armed.
+
+Over 162 shapes (rows 138 to 4096, the towers' widths 384 to 8192 and their depths) the CUDA rule's pick sits 0.7% behind
+the shape's fastest column on average and the Vulkan model at two blocks an SM 8.1%; on the whisper turbo encode the two
+read 66.6 and 81.1 ms (`debug-jit`; `PERF_LEDGER.md`, the audio towers on the CUDA home). The same race on the Vulkan home put its own model 10.1% behind the
+fastest column and the three-column race at one block an SM (s 5, m 10, l 16, the partial l at 20) 0.2%; the Vulkan
+window keeps its model until that form is measured on its windows.
+
+The f16 tile (`F16GemmCm2T`, the f16 lane's GEMM over the halfword plane, `rail_mm16`) takes its column from the same
+wave form at its own occupancy (`f16_cm2_col`, through `cud_f16_tc`; `DASLLAMA_CM2_TILE` forces s or m): the s column at
+64 rows or fewer, else whichever of s and m costs fewer whole waves at the step weights s 6 and m 10, the s tile at four
+blocks an SM (62 registers) and the m tile at two (126 registers, 18 KB of shared memory - the A tile alone, the B tile
+read straight from the feed). The l tile runs at one block an SM (174 registers) and trails m on every shape, so the f16
+tile has no l stamp. The weights hold in the encodes: at 138 rows the 1024-wide sites take s (canary's 81 us a launch
+against 121 on m) and the 4096-wide ones m (78 against 90 on s), at 275 rows every site takes s (gemma4a's 1024 x 4096:
+106 against 126), at 1500 rows every site m (`PERF_LEDGER.md`, the f16 lane on the discrete homes). Every column sums an output's k in the same order, so the columns' outputs are
+bit-identical. The f16 tile accumulates in f32, the reference lane's sum, where the Q8_0 tiles accumulate in f16, and this
+card runs an f32-accumulate tensor product well under the f16-accumulate rate (the same m tile at 1500 x 1280 -> 5120: 34
+TFLOP/s against 55 with an f16 accumulator), so at whisper's 1500 rows the f16 lane's GEMMs trail the q8 lane's by that rate
+rather than by a tile.
+
+### The tower chains replay from captured graphs {#cuda-chain-graphs}
+
+A tower chain on this home is hundreds of launches - a FastConformer block chain 608 a span (gigaam v3 e2e-rnnt on the q8
+lane, ru_long), a transducer round four or five - and on the reference box (RTX 5060 Ti) the driver's launch call costs
+about 13 us of host time (`cuLaunchKernelEx` under `nsys`), near the
+device time of the small kernels between the GEMMs, so a chain launched kernel by kernel leaves the GPU waiting on the host.
+Vulkan records the same chain into one command buffer and pays no call a dispatch. A seat runs its chain body through
+`cut_chain`, naming it by a tag and its shape: the first time the rail's state - every seat's plane, offset and bytes, every
+site's pick and bind, the lane, the schedule maps - is seen under that tag and shape, the body launches kernel by kernel;
+when it recurs the body is walked dry (`cud_walk`: every launch's function, grid and parameter blob, every rail copy and
+zero and every fork, branch and join - `ARCHITECTURE_GPU_TOWER_RAIL.md#rail-primitives` - folded into one hash in order,
+nothing launched, the census counted as a launch would), and it replays as one graph launch where the walk equals the one
+the graph was captured under, or is captured now and replayed. Where the GPU is the bound (the whisper blocks, gemma4a)
+the replay changes nothing; where the launches are (the FastConformer spans, the rounds, gemma4v) it is the encode's
+largest lever (`PERF_LEDGER.md`, the audio towers on the CUDA home). A replay is a launch
+sequence proven equal to its capture by the parameters themselves, never a cache key assumed complete: two encodes whose
+rail states collide but whose launches differ (two spans of different rows over the same tile columns) recapture rather
+than replay - so the shape a seat names is what keeps its graphs apart, and a shape left out costs recaptures, never a wrong
+replay. A decoder's round chain (`cut_chain_rounds`) replays its rounds from two graphs, eight rounds and one. The
+captured chains are a 32-entry cache that starts over past it, dropped with any resident and with any reallocated resident
+plane (`cut_realloc`: a captured launch names the freed address); a capture the driver refuses turns the graphs off for the
+process with a warning, and `DASLLAMA_CUDA_GRAPHS=0` launches every chain kernel by kernel, said once a process.
+
+### The shared-memory carveout follows the class family {#cuda-carveout}
+
+The policy is per class family, by the class module that stamps the kernel (`cud_class_fn`, the module `[cuda_dispatch]`
+passes it). Every kernel asks the whole carveout (`cuda_function_set_shared_carveout(fn, 100)`): the tiles' blocks an SM are
+the latency hiding the home has. The one exception is a kernel of the tower families' own class modules
+(`dasllama_cuda_classes_front`, `_blocks`, `_asr`) that takes no shared memory: it leaves the split to the driver, which
+gives it the L1. Those are the shared templates' row kernels (the log filterbank, the subsample convs' LayerNorm-ReLU rows,
+gemma4a's windowed attention), which read their rows thread by thread through L1, and under the full carveout their working
+set spilled past it. The LLM window and token classes (`dasllama_cuda_classes`, a tower kernel stamped there included,
+since the window chain launches some) keep the full carveout: left to the driver they read 0.4% slower on tg128 on the reference box (RTX 5060 Ti), a cost the
+tower's gain does not buy on the served LLM shape (`PERF_LEDGER.md`, the audio towers on the CUDA home). The class-load log line names each kernel's module and
+carveout. The test seam `set_cuda_tower_carveout_full` puts the tower modules' no-shared-memory kernels on the full
+carveout too and re-applies the policy to every kernel already loaded, so a race compares the two policies with no reload. The Vulkan driver sizes the split per pipeline from its shared-memory use, so the Vulkan home has nothing to set.
 
 ### The CUDA home binds its context to the calling thread at every entry {#cuda-thread-binding}
 

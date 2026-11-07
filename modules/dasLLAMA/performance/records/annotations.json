@@ -145,5 +145,105 @@
   "workload": "image-chat",
   "comment": "llama-mtmd-cli's gemma-4 vision encode on this ARM CPU reads 10-14 s, where the same model and picture encode in 0.4-0.7 s on the x86 boards - the ratio is withheld, followup_general.md row 224.",
   "void_clips": "img:enc"
+ },
+ {
+  "gguf": "canary-qwen-2.5b-decoder-q8_0.gguf",
+  "box": "m5",
+  "engine": "das",
+  "backend": "metal",
+  "flavor": "tuned",
+  "workload": "asr",
+  "comment": "Held off the board: this row times the Metal canary tower's exact lane on the f32 planes, and the exact lane the cell pins (set_asr_tower_fp32) serves the f16 halfwords on Metal now - re-mint, followup_general.md row 287.",
+  "held": "followup_general.md 287"
+ },
+ {
+  "gguf": "gemma-4-E2B-it-Q8_0.gguf",
+  "box": "m5",
+  "engine": "das",
+  "backend": "metal",
+  "flavor": "tuned",
+  "workload": "audio-chat",
+  "comment": "Held off the board: this row times the Metal gemma4a tower's exact lane on the f32 planes, and the exact lane the cell pins (set_asr_tower_fp32) serves the f16 halfwords on Metal now - re-mint, followup_general.md row 287.",
+  "held": "followup_general.md 287"
+ },
+ {
+  "gguf": "ggml-parakeet-tdt-0.6b-v2-f32.bin",
+  "box": "m5",
+  "engine": "das",
+  "backend": "metal",
+  "flavor": "tuned",
+  "workload": "asr",
+  "comment": "Held off the board: this row times the Metal parakeet tower's exact lane on the f32 planes, and the exact lane the cell pins (set_asr_tower_fp32) serves the f16 halfwords on Metal now - re-mint, followup_general.md row 287.",
+  "held": "followup_general.md 287"
+ },
+ {
+  "gguf": "ggml-parakeet-tdt-0.6b-v3-f32.bin",
+  "box": "m5",
+  "engine": "das",
+  "backend": "metal",
+  "flavor": "tuned",
+  "workload": "asr",
+  "comment": "Held off the board: this row times the Metal parakeet tower's exact lane on the f32 planes, and the exact lane the cell pins (set_asr_tower_fp32) serves the f16 halfwords on Metal now - re-mint, followup_general.md row 287.",
+  "held": "followup_general.md 287"
+ },
+ {
+  "gguf": "ggml-tiny.bin",
+  "box": "m5",
+  "engine": "das",
+  "backend": "metal",
+  "flavor": "tuned",
+  "workload": "asr",
+  "comment": "Held off the board: this row times the Metal whisper encoder's exact lane on the f32 planes, and the exact lane the cell pins (set_asr_tower_fp32) serves the f16 halfwords on Metal now - re-mint, followup_general.md row 287.",
+  "held": "followup_general.md 287"
+ },
+ {
+  "gguf": "ggml-large-v3-turbo.bin",
+  "box": "m5",
+  "engine": "das",
+  "backend": "metal",
+  "flavor": "tuned",
+  "workload": "asr",
+  "comment": "Held off the board: this row times the Metal whisper encoder's exact lane on the f32 planes, and the exact lane the cell pins (set_asr_tower_fp32) serves the f16 halfwords on Metal now - re-mint, followup_general.md row 287.",
+  "held": "followup_general.md 287"
+ },
+ {
+  "gguf": "Qwen3-ASR-0.6B-Q8_0.gguf",
+  "box": "m5",
+  "engine": "das",
+  "backend": "metal",
+  "flavor": "tuned",
+  "workload": "asr",
+  "comment": "Held off the board: this row times the Metal qwen3a tower's exact lane on the f32 planes, and the exact lane the cell pins (set_asr_tower_fp32) serves the f16 halfwords on Metal now - re-mint, followup_general.md row 287.",
+  "held": "followup_general.md 287"
+ },
+ {
+  "gguf": "Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf",
+  "box": "m5",
+  "engine": "das",
+  "backend": "metal",
+  "flavor": "tuned",
+  "workload": "audio-chat",
+  "comment": "Held off the board: this row times the Metal qwen3a tower's exact lane on the f32 planes, and the exact lane the cell pins (set_asr_tower_fp32) serves the f16 halfwords on Metal now - re-mint, followup_general.md row 287.",
+  "held": "followup_general.md 287"
+ },
+ {
+  "gguf": "ggml-tiny.bin",
+  "box": "m1",
+  "engine": "das",
+  "backend": "metal",
+  "flavor": "tuned",
+  "workload": "asr",
+  "comment": "Held off the board: this row times the Metal whisper encoder's exact lane on the f32 planes, and the exact lane the cell pins (set_asr_tower_fp32) serves the f16 halfwords on Metal now - re-mint, followup_general.md row 287.",
+  "held": "followup_general.md 287"
+ },
+ {
+  "gguf": "ggml-large-v3-turbo.bin",
+  "box": "m1",
+  "engine": "das",
+  "backend": "metal",
+  "flavor": "tuned",
+  "workload": "asr",
+  "comment": "Held off the board: this row times the Metal whisper encoder's exact lane on the f32 planes, and the exact lane the cell pins (set_asr_tower_fp32) serves the f16 halfwords on Metal now - re-mint, followup_general.md row 287.",
+  "held": "followup_general.md 287"
  }
 ]

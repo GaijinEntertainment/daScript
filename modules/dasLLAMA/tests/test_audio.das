@@ -14,10 +14,10 @@ require math
 require _model_tier   // models_dir() + model_available() presence/size-tier gate (see the file's header)
 require ?das_metal dasllama/dasllama_metal_tower   // pin the CPU-oracle encodes off-GPU + the blocks parity cell
 require ?das_metal dasllama/dasllama_metal_common   // set_metal_take_max_probe_: the scratch declines' seam
+require ?das_metal dasllama/dasllama_metal_prefill   // pf_hmm_ready: the half tensor GEMM, the exact lane's device condition
 require _rnnt_oracle   // rnnt_seat_*: the build's device transducer seat, its pin and counters
-require ?vulkan dasllama/dasllama_vulkan_tower
+require ?vulkan dasllama/dasllama_vulkan_tower   // the Vulkan home's seams: the storage-range legs' counters, gigaam's standalone mel
 require ?vulkan dasllama/dasllama_vulkan_common   // g_gpu: the storage range the blocks-refused legs stand in
-require ?vulkan dasllama/dasllama_vulkan_asr_dec   // vulkan_ctc_stats: the CTC head's device seat
 require _ctc_oracle   // nolint:STYLE030,LINT019 — ctc_leg / ctc_cpu_leg / ctc_hard_flips, inside the vulkan arm alone
 require daslib/linq   // sequence_equal: the twin legs' ids
 require daslib/strings_boost   // split: a kq carrier's members by name
@@ -29,6 +29,8 @@ require dasllama/dasllama_parakeet
 require dasllama/dasllama_gigaam
 require dasllama/dasllama_audio_io
 require _tower_twin
+require ?cuda dasllama/dasllama_cuda_tower_fc   // cuda_gigaam_mel: gigaam's standalone device mel on the CUDA home
+require ?cuda dasllama/dasllama_cuda_common   // cud_kernel_census_of: the kq lane's tile census on the CUDA home
 
 // Audio tower tests. The mel/gelu/filterbank tests are self-contained; the encoder tests
 // need the locally-converted Qwen2-Audio mmproj (2.5 GB, gitignored) and skip without it.
@@ -38,14 +40,18 @@ require _tower_twin
 // skip without gigaam-v3-e2e-rnnt-q4_k.gguf, the mixed-member leg without gigaam-v3-e2e-rnnt-q4_k-mix-local.gguf;
 // the Metal ones on a build without das_metal. The parakeet device-decode twin skips without its
 // f32 carrier, per clip without jfk.wav or gb1.wav in benchmarks/asr/corpus/, where no GPU device stands up for the
-// serving tower (`serving_tower_device_up`), on the lane the build's chain does not flavor (Metal's q8, Vulkan's exact),
-// and where the build or the box has no device transducer seat (`rnnt_seat_skip`).
-// The oracle constants come from llama-mtmd-debug (CPU backend). The Vulkan twins skip without
-// their carriers (the qwen2audio / voxtral / omni-3b f32 mmprojs, the E2B bf16 mmproj, the
-// canary f32 encoder, the parakeet f32 encoder, the ultravox f16 mmproj, the Qwen3-ASR bf16 mmproj), without jfk.wav,
-// without a Vulkan device under
-// DASLLAMA_GPU=1, under the CUDA ask (DASLLAMA_CUDA=1 or set_gpu_home("cuda"), where the Vulkan tower's seats stand
-// down - `vulkan_twin_seat`), and on a build with das_metal; the qwen3a front also skips when interpreted.
+// serving tower (`serving_tower_device_up`), on the lane the build's chain does not flavor (Metal's q8, a discrete home's
+// exact), and where the build or the box has no device transducer seat (`rnnt_seat_skip`).
+// The oracle constants come from llama-mtmd-debug (CPU backend). The discrete-home twins run on the home each family's
+// seats serve on (`_gpu_knobs`' `CUDA_AUDIO_FAMILIES`) and skip without their carriers (the qwen2audio / voxtral / omni-3b
+// f32 mmprojs, the E2B bf16 and E4B BF16 mmprojs, the canary f32 encoder, the parakeet f32 encoder, the ultravox f16
+// mmproj, the Qwen3-ASR bf16 mmproj), without jfk.wav, without that home's device under DASLLAMA_GPU=1, on the Vulkan
+// home under the CUDA ask (DASLLAMA_CUDA=1 or set_gpu_home("cuda"), where the Vulkan tower's seats stand down -
+// `vulkan_twin_seat`), and on a build with das_metal; the qwen3a front also skips when interpreted. The Metal twins
+// (`test_fc_metal_twin`: canary and parakeet v3; `test_gemma4a_metal_twin`: E2B and E4B) skip on a build without
+// das_metal, with no Metal device standing up for the tower, under a family filter leaving the family out, without
+// their carriers (the canary and parakeet v3 f32 encoders, the E2B / E4B mmprojs) and without jfk.wav; the gemma4a
+// one also when interpreted.
 
 [test]
 def test_gelu_erf(t : T?) {
@@ -169,7 +175,7 @@ def private load_cpu_audio_tower(path : string) : AudioTower {
     var tw = AudioTower()
     with_gpu_knobs() {
         set_every_gpu_tower(false)
-        tw <- load_audio_tower(path)
+        tw <- load_audio_tower(path, false)
     }
     return <- tw
 }
@@ -271,13 +277,18 @@ def private zero_plane(var q : array<auto(PT)>; off, n : int64) {
 //! one zeroed block moves a 32-block tower less than its own q8 chain's noise, so the poison zeroes an eighth of the blocks
 def private poison_blocks(n_layer : int64) : int64 => max(1l, n_layer / 8l)
 
-//! `zero_block` >= 0 zeroes the q8 GEMM planes of `poison_blocks` blocks from that block on; `dev` the image flavor (`none` the
-//! CPU image, a GPU flavor staged row-major for its driver's bake - `#tower-dev-block`)
+//! `zero_block` >= 0 zeroes `poison_blocks` blocks from it on, on the lane's planes; `dev` the image flavor (`none` the CPU image, `#tower-dev-block`)
 def private mint_aud(path : string; q8 : bool; zero_block : int64; dev : TowerDev = TowerDev.none) : AudioTower {
     var inscope stg <- tower_dev_staged(dev) $ { return <- stage_audio_tower(path, q8) }
     if (zero_block >= 0l) {
         for (b in range64(zero_block, min(stg.e.n_layer, zero_block + poison_blocks(stg.e.n_layer)))) {
-            zero_plane(stg.qblob, stg.e.qlayers_off + b * stg.e.qlayer_stride, stg.e.qlayer_stride)
+            if (q8) {
+                zero_plane(stg.qblob, stg.e.qlayers_off + b * stg.e.qlayer_stride, stg.e.qlayer_stride)
+            } elif (stg.e.gemm_f16) {
+                zero_plane(stg.wblob, stg.e.qlayers_off + b * stg.e.qlayer_stride, stg.e.qlayer_stride)
+            } else {
+                zero_plane(stg.fblob, stg.e.layers_off + b * stg.e.layer_stride, stg.e.layer_stride)
+            }
         }
     }
     var tw = AudioTower()
@@ -291,13 +302,25 @@ def private aud_twin_encode(tw : AudioTower; var enc : EncoderState; mel : MelCh
     return long_length(out)
 }
 
+//! the exact tower's lane on the serving home (`exact_flavor_leg`): `twx`, the CPU image, on the CPU chain against the home's f16 flavor
 [cold_path]
-def private vulkan_blocks_twin(t : T?; family, file : string; layers_claimed : int64) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
+def private blocks_exact_leg(t : T?; tag : string; path : string; twx : AudioTower; var encx : EncoderState; mel : MelChunk) {
+    let home = serving_tower_dev(TowerFamily.whisper)
+    let tail0 = gpu_tower_tail_encodes(TowerFamily.whisper)
+    let convs = exact_flavor_leg(t, tag, TowerFamily.whisper, TWIN_EXACT_REL_L2_VK, twx, encx, twx.n_ctx, $(zb) { return <- mint_aud(path, false, zb, home) },
+        $(tw) { return <- make_encoder_state(tw) }) $(e; var s; var out) => aud_twin_encode(e, s, mel, out)
+    t |> equal(convs, 2l, "{tag} exact lane: the conv stem served on the device, the clean encode and the poisoned one")
+    t |> equal(gpu_tower_tail_encodes(TowerFamily.whisper) - tail0, 2l, "{tag} exact lane: the projector tail rode the device behind both encodes' blocks")
+}
+
+[cold_path]
+def private blocks_twin(t : T?; family, file : string; layers_claimed : int64) {
+    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
         let path = path_join(models_dir(), file)
-        if (!model_available(t, path) || !vulkan_audio_twin_seat(t)) {
+        if (!model_available(t, path) || !discrete_audio_twin_seat(t, TowerFamily.whisper)) {
             return
         }
+        let home = serving_tower_dev(TowerFamily.whisper)
         let tag = "{family} synthetic mel"
         let knobs = gpu_knobs()
         defer() {
@@ -312,9 +335,9 @@ def private vulkan_blocks_twin(t : T?; family, file : string; layers_claimed : i
         let mel <- synth_mel(tw.n_mel)
         var encx <- make_encoder_state(twx)
         var enc <- make_encoder_state(tw)
-        let spec = TwinSpec(family = family, tag = tag, n_layer = tw.n_layer, metric = TwinMetric.rel_l2)
-        let tail0 = vulkan_tower_tail_encodes()
-        var twd <- mint_aud(path, true, -1l, TowerDev.vulkan)
+        let spec = TwinSpec(family = family, tag = tag, n_layer = tw.n_layer, metric = TwinMetric.rel_l2, seat_family = TowerFamily.whisper)
+        let tail0 = gpu_tower_tail_encodes(TowerFamily.whisper)
+        var twd <- mint_aud(path, true, -1l, home)
         var encd <- make_encoder_state(twd)
         let r <- twin_three_way(t, spec, tw, enc, twd, encd, twx, encx, $(e; var s; var out) => aud_twin_encode(e, s, mel, out)) $(legs) {
             t |> equal(legs.dev.encodes - legs.pre.encodes, 1l, "{tag}: exactly the device leg dispatched")
@@ -323,32 +346,37 @@ def private vulkan_blocks_twin(t : T?; family, file : string; layers_claimed : i
         }
         delete encd
         delete twd
-        t |> equal(vulkan_tower_tail_encodes() - tail0, 1l, "{tag}: the projector tail rode the device behind the device leg's blocks")
+        t |> equal(gpu_tower_tail_encodes(TowerFamily.whisper) - tail0, 1l, "{tag}: the projector tail rode the device behind the device leg's blocks")
         if (r.bar > 0.0lf) {
-            var twp <- mint_aud(path, true, tw.n_layer / 2l, TowerDev.vulkan)
+            var twp <- mint_aud(path, true, tw.n_layer / 2l, home)
             var encp <- make_encoder_state(twp)
             twin_poison(t, r, tw.n_layer / 2l, twp, encp) $(e; var s; var out) => aud_twin_encode(e, s, mel, out)
             delete encp
             delete twp
         }
-        var encx2 <- make_encoder_state(twx)
-        exact_lane_declines(t, tag, long_length(r.reference), false) $() : int64 {
-            audio_encode(twx, encx2, mel)
-            return long_length(encx2.out)
-        }
-        delete encx2
         delete enc
-        delete encx
         delete tw
+        blocks_exact_leg(t, tag, path, twx, encx, mel)
+        delete encx
         delete twx
-        vulkan_tower_shutdown()
+        gpu_tower_shutdown(TowerFamily.whisper)
     } else {
-        t |> skip("dasVulkan not present")
+        t |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
     }
 }
 
-//! `zero_block` >= 0 zeroes the eleven q8 GEMM planes of `poison_blocks` blocks from that block on; `dev` the image flavor
-//! (`none` the CPU image, a GPU flavor staged row-major for its driver's bake - `#tower-dev-block`)
+//! `n` GEMM weights at `off` zeroed on the staging's lane: the q8 plane, the f16 lane's halfwords, else the f32 blob
+def private zero_g4a_gemm(var stg : Gemma4aStaging; off, n : int64) {
+    if (stg.e.q8) {
+        zero_plane(stg.qblob, off, n)
+    } elif (stg.e.gemm_f16) {
+        zero_plane(stg.wblob, off, n)
+    } else {
+        zero_plane(stg.blob, off, n)
+    }
+}
+
+//! `zero_block` >= 0 zeroes the eleven GEMM planes of `poison_blocks` blocks from it on, on the lane's planes; `dev` the image flavor
 def private mint_g4a(mm : string; q8 : bool; zero_block : int64; dev : TowerDev = TowerDev.none) : Gemma4aEncoder {
     set_gemma4a_q8(q8)
     defer() {
@@ -361,12 +389,12 @@ def private mint_g4a(mm : string; q8 : bool; zero_block : int64; dev : TowerDev 
         for (b in range64(zero_block, min(stg.e.n_layer, zero_block + poison_blocks(stg.e.n_layer)))) {
             let lo = stg.layers[b]
             for (w in fixed_array(lo.q, lo.k, lo.v, lo.o, lo.attn_k_rel, lo.conv_pw2)) {
-                zero_plane(stg.qblob, w, d * d)
+                zero_g4a_gemm(stg, w, d * d)
             }
             for (w in fixed_array(lo.ff_up, lo.ff_down, lo.ff_up_1, lo.ff_down_1)) {
-                zero_plane(stg.qblob, w, d * ff)
+                zero_g4a_gemm(stg, w, d * ff)
             }
-            zero_plane(stg.qblob, lo.conv_pw1, d * 2l * d)
+            zero_g4a_gemm(stg, lo.conv_pw1, d * 2l * d)
         }
     }
     var enc = Gemma4aEncoder()
@@ -380,39 +408,40 @@ def private clip_head(samples : array<float>) : array<float> {
     return <- [for (i in range64(n)); samples[i]]
 }
 
-//! the regrow legs at `r`'s bar - a short encode then the clip on one residency, the clip after a shutdown, then the poison; `exactly_three`: one dispatch an encode, else a chunked encode's several
+//! the regrow legs at `r`'s bar on the twin family's home (short encode, clip, clip after a shutdown, poison); `exactly_three`: one dispatch an encode
 [cold_path, unused_argument(t, tag, enc, st, samples, r, exactly_three, mint_poisoned, encode)]
 def private twin_regrow_legs(t : T?; tag : string; enc : auto(TW); var st : auto(ST); samples : array<float>; r : TwinResult;
                              exactly_three : bool; mint_poisoned : block<() : TW>;
                              encode : block<(e : TW; var s : ST; clip : array<float>; var out : array<float>) : int64>) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
+    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
+        let fam = r.spec.seat_family
         let head <- clip_head(samples)
         var dev_head, dev_again, dev_fresh : array<float>
-        set_vulkan_tower(true)
-        let e0 = vulkan_tower_stats().encodes
+        set_serving_gpu_tower(true, fam)
+        let e0 = gpu_tower_encodes(fam)
         with_dasllama_jobque_() {
             invoke(encode, enc, st, head, dev_head)
             invoke(encode, enc, st, samples, dev_again)
-            vulkan_tower_shutdown()
+            gpu_tower_shutdown(fam)
             invoke(encode, enc, st, samples, dev_fresh)
         }
-        let n_enc = vulkan_tower_stats().encodes - e0
+        let n_enc = gpu_tower_encodes(fam) - e0
         if (exactly_three) {
             t |> equal(n_enc, 3l, "{tag}: the short, the regrown and the fresh encodes ran on the device")
         } else {
             t |> success(n_enc >= 3l, "{tag}: the short, the regrown and the fresh encodes ran on the device")
         }
-        tower_twin_held(t, "{tag} regrown scratch", r.reference, dev_again, r.bar)
-        tower_twin_held(t, "{tag} after shutdown", r.reference, dev_fresh, r.bar)
+        tower_twin_held(t, "{tag} regrown scratch", fam, r.reference, dev_again, r.bar)
+        tower_twin_held(t, "{tag} after shutdown", fam, r.reference, dev_fresh, r.bar)
         var encp <- invoke(mint_poisoned)
         var stp = ST()
         var poisoned : array<float>
-        let p0 = vulkan_tower_stats().encodes
+        let p0 = gpu_tower_encodes(fam)
         with_dasllama_jobque_() {
             invoke(encode, encp, stp, samples, poisoned)
         }
-        t |> success(vulkan_tower_stats().encodes > p0, "{tag} poison: device-served (encodes delta)")
-        tower_twin_poisoned(t, tag, r.reference, poisoned, r.bar)
+        t |> success(gpu_tower_encodes(fam) > p0, "{tag} poison: device-served (encodes delta)")
+        tower_twin_poisoned(t, tag, fam, r.reference, poisoned, r.bar)
         delete poisoned
         delete stp
         delete encp
@@ -422,54 +451,61 @@ def private twin_regrow_legs(t : T?; tag : string; enc : auto(TW); var st : auto
     }
 }
 
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def test_gemma4a_vulkan_twin(tst : T?) {
-    tst |> run("gemma4a E2B: the Vulkan Conformer blocks vs the CPU q8 chain on jfk, the exact chain the reference") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
-            jfk_twin_cell(t, mm, false) $(samples) {
+//! one gemma4a encoder `tag` on jfk three ways on the q8 lane with its regrow and poison legs, then its exact lane on the home's exact image
+[cold_path, unused_argument(tst, tag, mm_file)]
+def private g4a_discrete_twin(tst : T?; tag, mm_file : string; want_proj : int64) {
+    tst |> run("gemma4a {tag}: the discrete home's Conformer chain vs the CPU q8 chain on jfk, then its exact lane, the exact chain the reference") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
+            let mm = path_join(models_dir(), mm_file)
+            let jt = "gemma4a {tag} jfk"
+            jfk_twin_cell(t, mm, false, TowerFamily.gemma4a) $(samples) {
+                let home = serving_tower_dev(TowerFamily.gemma4a)
                 var encx <- mint_g4a(mm, false, -1l)
                 var enc <- mint_g4a(mm, true, -1l)
                 t |> success(!encx.q8 && enc.q8, "the exact and the q8 encoders minted")
-                var encd <- mint_g4a(mm, true, -1l, TowerDev.vulkan)
+                t |> equal(gemma4a_mid_dim(enc), 1536l, "{jt}: the encoder's own width")
+                t |> equal(enc.proj_dim, want_proj, "{jt}: the embedder projects to the decoder's width")
+                var encd <- mint_g4a(mm, true, -1l, home)
                 var stx = Gemma4aState()
                 var st = Gemma4aState()
                 var std = Gemma4aState()
                 var n_exact = 0l
-                let spec = TwinSpec(family = "gemma4a", tag = "gemma4a jfk", n_layer = enc.n_layer, metric = TwinMetric.rel_l2)
+                let spec = TwinSpec(family = "gemma4a", tag = jt, n_layer = enc.n_layer, metric = TwinMetric.rel_l2, seat_family = TowerFamily.gemma4a)
                 let r <- twin_three_way(t, spec, enc, st, encd, std, encx, stx, $(e; var s; var out) => gemma4a_encode_all(e, s, samples, out)) $(legs) {
                     n_exact = legs.n_exact
                     let n_chunks = legs.dev.encodes - legs.pre.encodes
-                    t |> equal(legs.n_cpu, legs.n_exact, "gemma4a jfk: the q8 chain's token count")
-                    t |> equal(legs.n_dev, legs.n_exact, "gemma4a jfk: the device chain's token count")
-                    t |> success(n_chunks >= 1l, "gemma4a jfk: the device served the chunk encodes ({n_chunks})")
-                    t |> equal(legs.dev.blocks - legs.pre.blocks, n_chunks * enc.n_layer, "gemma4a jfk: every block of every served encode ran on the driver")
-                    front_served(t, "gemma4a jfk", legs.dev.convs - legs.pre.convs, n_chunks, legs.dev.declines - legs.cpu.declines)
+                    t |> equal(legs.n_cpu, legs.n_exact, "{jt}: the q8 chain's token count")
+                    t |> equal(legs.n_dev, legs.n_exact, "{jt}: the device chain's token count")
+                    t |> success(n_chunks >= 1l, "{jt}: the device served the chunk encodes ({n_chunks})")
+                    t |> equal(legs.dev.blocks - legs.pre.blocks, n_chunks * enc.n_layer, "{jt}: every block of every served encode ran on the driver")
+                    front_served(t, jt, legs.dev.convs - legs.pre.convs, n_chunks, legs.dev.declines - legs.cpu.declines)
                 }
                 if (r.bar > 0.0lf) {
                     var st2 = Gemma4aState()
-                    twin_regrow_legs(t, "gemma4a jfk", encd, st2, samples, r, false, $ { return <- mint_g4a(mm, true, enc.n_layer / 2l, TowerDev.vulkan) }) $(e; var s; clip; var out) => gemma4a_encode_all(e, s, clip, out)
+                    twin_regrow_legs(t, jt, encd, st2, samples, r, false, $ { return <- mint_g4a(mm, true, enc.n_layer / 2l, home) }) $(e; var s; clip; var out) => gemma4a_encode_all(e, s, clip, out)
                     delete st2
                 }
                 delete std
                 delete encd
-                var stx2 = Gemma4aState()
-                var exact2 : array<float>
-                exact_lane_declines(t, "gemma4a jfk", n_exact, false) $() : int64 {
-                    return gemma4a_encode_all(encx, stx2, samples, exact2)
-                }
-                delete exact2
-                delete stx2
+                let xconvs = exact_flavor_leg(t, jt, TowerFamily.gemma4a, encx, stx, n_exact, $(zb) { return <- mint_g4a(mm, false, zb, home) }) $(e; var s; var out) => gemma4a_encode_all(e, s, samples, out)
+                t |> success(xconvs >= 2l, "{jt} exact lane: the chunk front served on both device encodes ({xconvs} dispatches)")
                 delete stx
                 delete st
                 delete enc
                 delete encx
-                vulkan_tower_shutdown()
+                gpu_tower_shutdown(TowerFamily.gemma4a)
             }
         } else {
-            t |> skip("dasVulkan not present")
+            t |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
         }
     }
+}
+
+//! E2B's audio embedder is square on the encoder's 1536; E4B's widens it to the decoder's 2560 - the projector tail at two widths
+[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+def test_gemma4a_discrete_twin(tst : T?) {
+    g4a_discrete_twin(tst, "E2B", "mmproj-gemma-4-E2B-it-bf16.gguf", 1536l)
+    g4a_discrete_twin(tst, "E4B", "mmproj-gemma-4-E4B-it-BF16.gguf", 2560l)
 }
 
 //! the GEMM planes of one FastConformer block zeroed in its GEMM plane (the q8 quants, or the halfwords) - eleven, or ten where
@@ -503,12 +539,11 @@ def private x_rows_encode(var st : auto(ST); width : int64; var out : array<floa
     return n
 }
 
-//! the Vulkan encode of a Vulkan-flavored model (`run`) with the device's storage range stood in at `msr_at` bytes - past the
-//! front's buffers, under the blocks' q8 plane: the front stands down before it runs (no front, mel or encode counted, no memory
-//! decline) and the family refuses the CPU chain - a Vulkan-flavored image never runs on the CPU (`#tower-dev-block`)
-[unused_argument(t, tag, msr_at, run)]   // without dasVulkan the gated body is empty
-def private blocks_refused_leg(t : T?; tag : string; msr_at : int64; run : block<() : void>) {
+//! a Vulkan-flavored model's encode under a storage range stood in at `msr_at`: the front stands down and the CPU chain refuses (`#tower-dev-block`)
+[unused_argument(t, tag, fam, msr_at, run)]   // without dasVulkan the gated body is empty
+def private blocks_refused_leg(t : T?; tag : string; fam : TowerFamily; msr_at : int64; run : block<() : void>) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
+        return if (tower_family_cuda(fam))
         let msr = g_gpu.msr
         let s0 = vulkan_tower_stats()
         let k0 <- vulkan_tower_declines()
@@ -545,11 +580,16 @@ def private synth_mel(n_mel : int64) : MelChunk {
     return <- mel
 }
 
-//! `zero_block` >= 0 zeroes the eleven q8 GEMM planes of `poison_blocks` blocks from that block on; `dev` the image flavor
-//! (`none` the CPU image, a GPU flavor staged row-major for its driver's bake - `#tower-dev-block`)
+//! `zero_block` >= 0 zeroes the eleven GEMM planes of `poison_blocks` blocks from it on, in the lane's GEMM plane; `dev` the image flavor
 def private mint_cn(path : string; q8 : bool; zero_block : int64; dev : TowerDev = TowerDev.none) : CanaryEncoder {
     var inscope stg <- tower_dev_staged(dev) $ { return <- stage_canary_encoder(path, q8) }
-    poison_fc_blocks(stg.qblob, stg.e.n_layer, zero_block, stg.e.d_model, stg.e.n_ff) $(b) => stg.layers[b]
+    if (q8) {
+        poison_fc_blocks(stg.qblob, stg.e.n_layer, zero_block, stg.e.d_model, stg.e.n_ff) $(b) => stg.layers[b]
+    } elif (stg.e.gemm_f16) {
+        poison_fc_blocks(stg.wblob, stg.e.n_layer, zero_block, stg.e.d_model, stg.e.n_ff) $(b) => stg.layers[b]
+    } else {
+        poison_fc_blocks(stg.blob, stg.e.n_layer, zero_block, stg.e.d_model, stg.e.n_ff) $(b) => stg.layers[b]
+    }
     var enc = CanaryEncoder()
     mint_canary_encoder(stg, enc, dev)
     return <- enc
@@ -564,23 +604,30 @@ def private cn_twin_encode(enc : CanaryEncoder; var st : CanaryState; clip : arr
     return n
 }
 
+//! a FastConformer's exact lane on family `fam`'s home (`exact_flavor_leg` over `mint`'s halfword flavor), the front on both device legs
+[cold_path]
+def private fc_exact_lane_leg(t : T?; tag : string; fam : TowerFamily; tw_exact : auto(TW); var st_exact : auto(ST); mint : block<(zb : int64) : TW>;
+                              encode : block<(e : TW; var s : ST; var out : array<float>) : int64>) {
+    let convs = exact_flavor_leg(t, tag, fam, tw_exact, st_exact, -1l, mint, encode)
+    front_served(t, "{tag} exact lane", convs, 2l, 0l)
+}
+
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def test_canary_vulkan_twin(tst : T?) {
-    tst |> run("canary-qwen 2.5B: the Vulkan FastConformer blocks vs the CPU q8 chain on jfk, the exact chain the reference") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
+def test_canary_discrete_twin(tst : T?) {
+    tst |> run("canary-qwen 2.5B: the discrete home's FastConformerblocks vs the CPU q8 chain on jfk, the exact chain the reference") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
             let path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
-            jfk_twin_cell(t, path, false) $(samples) {
+            jfk_twin_cell(t, path, false, TowerFamily.canary) $(samples) {
+                let home = serving_tower_dev(TowerFamily.canary)
                 var encx <- mint_cn(path, false, -1l)
                 var enc <- mint_cn(path, true, -1l)
                 t |> success(!encx.q8 && enc.q8, "the exact and the q8 encoders minted")
-                var encd <- mint_cn(path, true, -1l, TowerDev.vulkan)
+                var encd <- mint_cn(path, true, -1l, home)
                 var stx = CanaryState()
                 var st = CanaryState()
                 var std = CanaryState()
-                var n_exact = 0l
-                let spec = TwinSpec(family = "canary", tag = "canary jfk", n_layer = enc.n_layer, metric = TwinMetric.rel_l2)
+                let spec = TwinSpec(family = "canary", tag = "canary jfk", n_layer = enc.n_layer, metric = TwinMetric.rel_l2, seat_family = TowerFamily.canary)
                 let r <- twin_three_way(t, spec, enc, st, encd, std, encx, stx, $(e; var s; var out) => cn_twin_encode(e, s, samples, out)) $(legs) {
-                    n_exact = legs.n_exact
                     t |> equal(legs.n_cpu, legs.n_exact, "canary jfk: the q8 chain's frame count")
                     t |> equal(legs.n_dev, legs.n_exact, "canary jfk: the device chain's frame count")
                     t |> equal(legs.dev.encodes - legs.pre.encodes, 1l, "canary jfk: the device served the encode")
@@ -589,34 +636,34 @@ def test_canary_vulkan_twin(tst : T?) {
                 }
                 if (r.bar > 0.0lf) {
                     var st2 = CanaryState()
-                    twin_regrow_legs(t, "canary jfk", encd, st2, samples, r, true, $ { return <- mint_cn(path, true, enc.n_layer / 2l, TowerDev.vulkan) }) $(e; var s; clip; var out) => cn_twin_encode(e, s, clip, out)
+                    twin_regrow_legs(t, "canary jfk", encd, st2, samples, r, true, $ { return <- mint_cn(path, true, enc.n_layer / 2l, home) }) $(e; var s; clip; var out) => cn_twin_encode(e, s, clip, out)
                     delete st2
                 }
                 delete std
                 delete encd
-                var stx2 = CanaryState()
-                exact_lane_declines(t, "canary jfk", n_exact, false) $() : int64 {
-                    canary_log_mel(encx, samples, stx2)
-                    return canary_encode(encx, stx2)
-                }
-                delete stx2
+                delete enc
+                fc_exact_lane_leg(t, "canary jfk", TowerFamily.canary, encx, stx, $(zb) { return <- mint_cn(path, false, zb, home) }) $(e; var s; var out) => cn_twin_encode(e, s, samples, out)
                 delete stx
                 delete st
-                delete enc
                 delete encx
-                vulkan_tower_shutdown()
+                gpu_tower_shutdown(TowerFamily.canary)
             }
         } else {
-            t |> skip("dasVulkan not present")
+            t |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
         }
     }
 }
 
-//! the parakeet model staged and minted in memory on the lane asked; `zero_block` >= 0 zeroes the eleven q8 GEMM planes of
-//! `poison_blocks` blocks from that block on
+//! parakeet staged and minted in memory on the lane asked; `zero_block` >= 0 zeroes the eleven GEMM planes of `poison_blocks` blocks from it on
 def private mint_pk(path : string; q8 : bool; zero_block : int64; dev : TowerDev = TowerDev.none) : ParakeetModel {
     var inscope stg <- tower_dev_staged(dev) $ { return <- stage_parakeet_model(path, q8) }
-    poison_fc_blocks(stg.qblob, stg.e.n_layer, zero_block, stg.e.n_state, 4l * stg.e.n_state) $(b) => pk_fc_layer(pk_layer_offsets(stg.e, b))
+    if (q8) {
+        poison_fc_blocks(stg.qblob, stg.e.n_layer, zero_block, stg.e.n_state, 4l * stg.e.n_state) $(b) => pk_fc_layer(pk_layer_offsets(stg.e, b))
+    } elif (stg.e.gemm_f16) {
+        poison_fc_blocks(stg.wblob, stg.e.n_layer, zero_block, stg.e.n_state, 4l * stg.e.n_state) $(b) => pk_fc_layer(pk_layer_offsets(stg.e, b))
+    } else {
+        poison_fc_blocks(stg.blob, stg.e.n_layer, zero_block, stg.e.n_state, 4l * stg.e.n_state) $(b) => pk_fc_layer(pk_layer_offsets(stg.e, b))
+    }
     var m = ParakeetModel()
     mint_parakeet_model(stg, m, q8, dev)
     return <- m
@@ -639,11 +686,11 @@ def private short_clip_noise(var seed : uint&) : float {
     return (float(seed >> 8u) / 16777216.0 - 0.5) * 0.6
 }
 
-//! a Vulkan-flavored tower's encode of clips a few mel frames long against its CPU image's: one device encode a clip with no decline, the CPU's row count, the rows within `SHORT_CLIP_BAR`; the control the device's rows of a noise clip outside the bar of the longest clip's CPU rows (a short clip's rows sit near the normalized mel's fixed point)
-[cold_path, unused_argument(t, tag, tw, st, twd, std)]   // without dasVulkan the gated body is empty
-def private short_clip_cell(t : T?; tag : string; tw : auto(TW); var st : auto(ST); twd : TW; var std : ST;
+//! clips a few mel frames long through `twd` (the GPU-flavored tower) on family `fam`'s home against `tw` (its CPU image) at `SHORT_CLIP_BAR`, `encode` the family's encode of a clip
+[cold_path, unused_argument(t, tag, fam, tw, st, twd, std)]   // without a discrete home the gated body is empty
+def private short_clip_cell(t : T?; tag : string; fam : TowerFamily; tw : auto(TW); var st : auto(ST); twd : TW; var std : ST;
                             encode : block<(e : TW; var s : ST; clip : array<float>; var out : array<float>) : int64>) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
+    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
         var last_cpu : array<float>
         for (n in SHORT_CLIP_SAMPLES) {
             var inscope clip <- [for (i in range64(n)); 0.3 * sin(float(i) * 0.05) + 0.1 * sin(float(i) * 0.31)]
@@ -655,12 +702,12 @@ def private short_clip_cell(t : T?; tag : string; tw : auto(TW); var st : auto(S
             var s2 = GpuTowerCounters()
             with_gpu_knobs() {
                 with_dasllama_jobque_() {
-                    set_vulkan_tower(true)
-                    s0 = vulkan_tower_stats()
+                    set_serving_gpu_tower(true, fam)
+                    s0 = gpu_tower_counters(fam)
                     n_cpu = invoke(encode, tw, st, clip, cpu)
-                    s1 = vulkan_tower_stats()
+                    s1 = gpu_tower_counters(fam)
                     n_dev = invoke(encode, twd, std, clip, dev)
-                    s2 = vulkan_tower_stats()
+                    s2 = gpu_tower_counters(fam)
                 }
             }
             let ctag = "{tag} {n}-sample clip"
@@ -682,7 +729,7 @@ def private short_clip_cell(t : T?; tag : string; tw : auto(TW); var st : auto(S
         var other : array<float>
         with_gpu_knobs() {
             with_dasllama_jobque_() {
-                set_vulkan_tower(true)
+                set_serving_gpu_tower(true, fam)
                 invoke(encode, twd, std, noise, other)
             }
         }
@@ -697,79 +744,78 @@ def private short_clip_cell(t : T?; tag : string; tw : auto(TW); var st : auto(S
 
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def test_vulkan_short_clips(tst : T?) {
-    tst |> run("gemma4a E2B: clips of 320 to 1600 samples serve on the Vulkan image as the CPU image reads them") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
+    tst |> run("gemma4a E2B: clips of 320 to 1600 samples serve on the discrete home's image as the CPU image reads them") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
             let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
-            return if (!model_available(t, mm) || !vulkan_audio_twin_seat(t))
+            return if (!model_available(t, mm) || !discrete_audio_twin_seat(t, TowerFamily.gemma4a))
             var enc <- mint_g4a(mm, true, -1l)
-            var encd <- mint_g4a(mm, true, -1l, TowerDev.vulkan)
+            var encd <- mint_g4a(mm, true, -1l, serving_tower_dev(TowerFamily.gemma4a))
             var st = Gemma4aState()
             var std = Gemma4aState()
-            short_clip_cell(t, "gemma4a", enc, st, encd, std) $(e; var s; clip; var out) => gemma4a_encode_all(e, s, clip, out)
+            short_clip_cell(t, "gemma4a", TowerFamily.gemma4a, enc, st, encd, std) $(e; var s; clip; var out) => gemma4a_encode_all(e, s, clip, out)
             delete std
             delete st
             delete encd
             delete enc
-            vulkan_tower_shutdown()
+            gpu_tower_shutdown(TowerFamily.gemma4a)
         } else {
-            t |> skip("dasVulkan not present")
+            t |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
         }
     }
-    tst |> run("canary: clips of 320 to 1600 samples serve on the Vulkan image as the CPU image reads them") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
+    tst |> run("canary: clips of 320 to 1600 samples serve on the discrete home's image as the CPU image reads them") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
             let path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
-            return if (!model_available(t, path) || !vulkan_audio_twin_seat(t))
+            return if (!model_available(t, path) || !discrete_audio_twin_seat(t, TowerFamily.canary))
             var enc <- mint_cn(path, true, -1l)
-            var encd <- mint_cn(path, true, -1l, TowerDev.vulkan)
+            var encd <- mint_cn(path, true, -1l, serving_tower_dev(TowerFamily.canary))
             var st = CanaryState()
             var std = CanaryState()
-            short_clip_cell(t, "canary", enc, st, encd, std) $(e; var s; clip; var out) => cn_twin_encode(e, s, clip, out)
+            short_clip_cell(t, "canary", TowerFamily.canary, enc, st, encd, std) $(e; var s; clip; var out) => cn_twin_encode(e, s, clip, out)
             delete std
             delete st
             delete encd
             delete enc
-            vulkan_tower_shutdown()
+            gpu_tower_shutdown(TowerFamily.canary)
         } else {
-            t |> skip("dasVulkan not present")
+            t |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
         }
     }
-    tst |> run("parakeet-TDT 0.6B v2: clips of 320 to 1600 samples serve on the Vulkan image as the CPU image reads them") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
+    tst |> run("parakeet-TDT 0.6B v2: clips of 320 to 1600 samples serve on the discrete home's image as the CPU image reads them") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
             let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v2-f32.bin")
-            return if (!model_available(t, path) || !vulkan_audio_twin_seat(t))
+            return if (!model_available(t, path) || !discrete_audio_twin_seat(t, TowerFamily.parakeet))
             var m <- mint_pk(path, true, -1l)
-            var md <- mint_pk(path, true, -1l, TowerDev.vulkan)
+            var md <- mint_pk(path, true, -1l, serving_tower_dev(TowerFamily.parakeet))
             var st = ParakeetState()
             var std = ParakeetState()
-            short_clip_cell(t, "parakeet", m, st, md, std) $(e; var s; clip; var out) => pk_twin_encode(e, s, clip, out)
+            short_clip_cell(t, "parakeet", TowerFamily.parakeet, m, st, md, std) $(e; var s; clip; var out) => pk_twin_encode(e, s, clip, out)
             delete std
             delete st
             delete md
             delete m
-            vulkan_tower_shutdown()
+            gpu_tower_shutdown(TowerFamily.parakeet)
         } else {
-            t |> skip("dasVulkan not present")
+            t |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
         }
     }
 }
 
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def test_parakeet_vulkan_twin(tst : T?) {
-    tst |> run("parakeet-TDT 0.6B v2: the Vulkan FastConformer front and blocks vs the CPU q8 chain on jfk, the exact chain the reference") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
+def test_parakeet_discrete_twin(tst : T?) {
+    tst |> run("parakeet-TDT 0.6B v2: the discrete home's FastConformerfront and blocks vs the CPU q8 chain on jfk, the exact chain the reference") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
             let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v2-f32.bin")
-            jfk_twin_cell(t, path, false) $(samples) {
+            jfk_twin_cell(t, path, false, TowerFamily.parakeet) $(samples) {
+                let home = serving_tower_dev(TowerFamily.parakeet)
                 var mx <- mint_pk(path, false, -1l)
                 var m <- mint_pk(path, true, -1l)
-                var md <- mint_pk(path, true, -1l, TowerDev.vulkan)
-                t |> success(!mx.q8 && m.q8 && md.dev_backend == TowerDev.vulkan, "the exact and the q8 models minted, the q8 lane's Vulkan image beside")
+                var md <- mint_pk(path, true, -1l, home)
+                t |> success(!mx.q8 && m.q8 && md.dev_backend == home, "the exact and the q8 models minted, the q8 lane's {home} image beside")
                 var stx = ParakeetState()
                 var st = ParakeetState()
                 var std = ParakeetState()
-                var n_exact = 0l
-                let spec = TwinSpec(family = "parakeet", tag = "parakeet jfk", n_layer = m.n_layer, metric = TwinMetric.rel_l2)
+                let spec = TwinSpec(family = "parakeet", tag = "parakeet jfk", n_layer = m.n_layer, metric = TwinMetric.rel_l2, seat_family = TowerFamily.parakeet)
                 let r <- twin_three_way(t, spec, m, st, md, std, mx, stx, $(e; var s; var out) => pk_twin_encode(e, s, samples, out)) $(legs) {
-                    n_exact = legs.n_exact
                     t |> equal(legs.n_cpu, legs.n_exact, "parakeet jfk: the q8 chain's frame count")
                     t |> equal(legs.n_dev, legs.n_exact, "parakeet jfk: the device chain's frame count")
                     t |> equal(legs.dev.encodes - legs.pre.encodes, 1l, "parakeet jfk: the device served the encode")
@@ -779,32 +825,27 @@ def test_parakeet_vulkan_twin(tst : T?) {
                 if (r.bar > 0.0lf) {
                     var st_rf = ParakeetState()
                     var out_rf : array<float>
-                    blocks_refused_leg(t, "parakeet jfk", 256l << 20l) $ {
+                    blocks_refused_leg(t, "parakeet jfk", TowerFamily.parakeet, 256l << 20l) $ {
                         pk_twin_encode(md, st_rf, samples, out_rf)
                     }
                     delete st_rf
-                    var mp <- mint_pk(path, true, m.n_layer / 2l, TowerDev.vulkan)
+                    var mp <- mint_pk(path, true, m.n_layer / 2l, home)
                     var stp = ParakeetState()
                     twin_poison(t, r, m.n_layer / 2l, mp, stp) $(e; var s; var out) => pk_twin_encode(e, s, samples, out)
                     delete stp
                     delete mp
                 }
-                var stx2 = ParakeetState()
-                exact_lane_declines(t, "parakeet jfk", n_exact, false) $() : int64 {
-                    parakeet_log_mel(samples, mx, stx2)
-                    return parakeet_encode(mx, stx2)
-                }
-                delete stx2
-                delete stx
-                delete st
                 delete std
                 delete md
+                fc_exact_lane_leg(t, "parakeet jfk", TowerFamily.parakeet, mx, stx, $(zb) { return <- mint_pk(path, false, zb, home) }) $(e; var s; var out) => pk_twin_encode(e, s, samples, out)
+                delete stx
+                delete st
                 delete m
                 delete mx
-                vulkan_tower_shutdown()
+                gpu_tower_shutdown(TowerFamily.parakeet)
             }
         } else {
-            t |> skip("dasVulkan not present")
+            t |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
         }
     }
 }
@@ -1284,8 +1325,9 @@ def test_gigaam_metal_twin(tst : T?) {
                 }
                 with_gpu_knobs() {
                     set_metal_tower(true)
-                    t |> equal(gigaam_serves_q8(), !gigaam_gpu_exact_serves(), "the tower on: the un-pinned lane follows the driver's faster lane")
-                    t |> success(!gigaam_serves_q8(), "the tower on: the un-pinned lane is the f16 planes")
+                    let ga_q8 = gigaam_serves_q8()
+                    t |> equal(ga_q8, !gigaam_gpu_exact_serves(), "the tower on: the un-pinned lane follows the driver's faster lane")
+                    t |> equal(!ga_q8, get_metal_tower_f16() && pf_hmm_ready(), "the tower on: the un-pinned lane is the f16 planes where the toolchain compiled the half tensor GEMM, the q8 slab on a box without it")
                     set_metal_tower(false)
                     t |> success(gigaam_serves_q8(), "the tower off: the un-pinned lane is the q8 planes (the control)")
                 }
@@ -1321,6 +1363,126 @@ def test_canary_metal_holds_no_rows(tst : T?) {
             }
         } else {
             t |> skip("no Metal build")
+        }
+    }
+}
+
+//! family `fam`'s q8 lane three ways on the Metal home (`twin_three_way`), every stage on the device, then the poisoned image `mint_poisoned` mints
+[cold_path, unused_argument(t, tag, fam, tw, st, twd, std, twx, stx, mint_poisoned, encode)]
+def private metal_q8_twin(t : T?; tag : string; fam : TowerFamily; tw : auto(TW); var st : auto(ST); twd : TW; var std : ST; twx : TW; var stx : ST;
+                          mint_poisoned : block<() : TW>; encode : block<(e : TW; var s : ST; var out : array<float>) : int64>) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let n_layer = twin_facts(tw).n_layer
+        let dq0 = gpu_tower_quant_declines(fam)
+        let f0 = metal_tower_f16_encodes()
+        let spec = TwinSpec(family = "{fam}", tag = tag, n_layer = n_layer, metric = TwinMetric.rel_l2, seat_family = fam)
+        let r <- twin_three_way(t, spec, tw, st, twd, std, twx, stx, encode) $(legs) {
+            t |> equal(legs.n_cpu, legs.n_exact, "{tag}: the q8 chain's frame count")
+            t |> equal(legs.n_dev, legs.n_exact, "{tag}: the device chain's frame count")
+            let n_enc = legs.dev.encodes - legs.pre.encodes
+            t |> success(n_enc >= 1l, "{tag}: the device served the encodes ({n_enc})")
+            t |> equal(legs.dev.blocks - legs.pre.blocks, n_enc * n_layer, "{tag}: every block of every encode ran on the driver")
+            front_served(t, tag, legs.dev.convs - legs.pre.convs, n_enc, legs.dev.declines - legs.cpu.declines)
+        }
+        t |> equal(gpu_tower_quant_declines(fam) - dq0, 0l, "{tag}: the q8 lane declined nothing (`quant_mode`)")
+        t |> equal(metal_tower_f16_encodes() - f0, 0l, "{tag}: the q8 lane read the q8 slab, not the halfword plane")
+        if (r.bar > 0.0lf) {
+            var twp <- invoke(mint_poisoned)
+            var stp = ST()
+            twin_poison(t, r, n_layer / 2l, twp, stp, encode)
+            delete stp
+            delete twp
+        }
+    }
+}
+
+//! the Metal home's FastConformer rel-form twins on jfk: the q8 lane three ways with its poison, then the exact lane (`fc_exact_lane_leg`)
+[test, arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
+def test_fc_metal_twin(tst : T?) {
+    tst |> run("canary-qwen 2.5B: the Metal FastConformer chain's q8 and f16 lanes vs the CPU chains on jfk, the exact chain the reference") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
+            return if (!family_on(t, "canary"))
+            metal_jfk_twin_cell(t, path, false, TowerFamily.canary) $(samples) {
+                var encx <- mint_cn(path, false, -1l)
+                var enc <- mint_cn(path, true, -1l)
+                var encd <- mint_cn(path, true, -1l, TowerDev.metal)
+                t |> success(!encx.q8 && enc.q8 && encd.q8 && encd.dev_backend == TowerDev.metal, "the exact and the q8 encoders minted, the q8 lane's Metal image beside")
+                var stx = CanaryState()
+                var st = CanaryState()
+                var std = CanaryState()
+                metal_q8_twin(t, "canary metal jfk", TowerFamily.canary, enc, st, encd, std, encx, stx, $ { return <- mint_cn(path, true, enc.n_layer / 2l, TowerDev.metal) }) $(e; var s; var out) => cn_twin_encode(e, s, samples, out)
+                delete std
+                delete encd
+                delete enc
+                fc_exact_lane_leg(t, "canary metal jfk", TowerFamily.canary, encx, stx, $(zb) { return <- mint_cn(path, false, zb, TowerDev.metal) }) $(e; var s; var out) => cn_twin_encode(e, s, samples, out)
+                delete st
+                delete stx
+                delete encx
+                metal_tower_shutdown()
+            }
+        } else {
+            t |> skip("no Metal build")
+        }
+    }
+    tst |> run("parakeet-TDT 0.6B v3: the Metal FastConformer chain's q8 and f16 lanes vs the CPU chains on jfk, the exact chain the reference") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
+            return if (!family_on(t, "parakeet"))
+            metal_jfk_twin_cell(t, path, false, TowerFamily.parakeet) $(samples) {
+                var mx <- mint_pk(path, false, -1l)
+                var m <- mint_pk(path, true, -1l)
+                var md <- mint_pk(path, true, -1l, TowerDev.metal)
+                t |> success(!mx.q8 && m.q8 && md.q8 && md.dev_backend == TowerDev.metal, "the exact and the q8 models minted, the q8 lane's Metal image beside")
+                var stx = ParakeetState()
+                var st = ParakeetState()
+                var std = ParakeetState()
+                metal_q8_twin(t, "parakeet metal jfk", TowerFamily.parakeet, m, st, md, std, mx, stx, $ { return <- mint_pk(path, true, m.n_layer / 2l, TowerDev.metal) }) $(e; var s; var out) => pk_twin_encode(e, s, samples, out)
+                delete std
+                delete md
+                delete m
+                fc_exact_lane_leg(t, "parakeet metal jfk", TowerFamily.parakeet, mx, stx, $(zb) { return <- mint_pk(path, false, zb, TowerDev.metal) }) $(e; var s; var out) => pk_twin_encode(e, s, samples, out)
+                delete st
+                delete stx
+                delete mx
+                metal_tower_shutdown()
+            }
+        } else {
+            t |> skip("no Metal build")
+        }
+    }
+}
+
+//! the Metal home's gemma4a twins on jfk, E2B and E4B: the q8 lane three ways with its poison, then the exact lane (`exact_flavor_leg`)
+[test, arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
+def test_gemma4a_metal_twin(tst : T?) {
+    for (tag, mm_file in fixed_array("E2B", "E4B"), fixed_array("mmproj-gemma-4-E2B-it-bf16.gguf", "mmproj-gemma-4-E4B-it-BF16.gguf")) {
+        let mm = path_join(models_dir(), mm_file)
+        tst |> run("gemma4a {tag}: the Metal Conformer chain's q8 and f16 lanes vs the CPU chains on jfk ({base_name(mm)}), the exact chain the reference") @(t : T?) {
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                return if (!family_on(t, "gemma4a"))
+                let jt = "gemma4a {tag} metal jfk"
+                metal_jfk_twin_cell(t, mm, true, TowerFamily.gemma4a) $(samples) {
+                    var encx <- mint_g4a(mm, false, -1l)
+                    var enc <- mint_g4a(mm, true, -1l)
+                    var encd <- mint_g4a(mm, true, -1l, TowerDev.metal)
+                    t |> success(!encx.q8 && enc.q8 && encd.q8 && encd.dev_backend == TowerDev.metal, "{jt}: the exact and the q8 encoders minted, the q8 lane's Metal image beside")
+                    var stx = Gemma4aState()
+                    var st = Gemma4aState()
+                    var std = Gemma4aState()
+                    metal_q8_twin(t, jt, TowerFamily.gemma4a, enc, st, encd, std, encx, stx, $ { return <- mint_g4a(mm, true, enc.n_layer / 2l, TowerDev.metal) }) $(e; var s; var out) => gemma4a_encode_all(e, s, samples, out)
+                    delete std
+                    delete encd
+                    delete enc
+                    exact_flavor_leg(t, jt, TowerFamily.gemma4a, encx, stx, -1l, $(zb) { return <- mint_g4a(mm, false, zb, TowerDev.metal) }) $(e; var s; var out) => gemma4a_encode_all(e, s, samples, out)
+                    delete st
+                    delete stx
+                    delete encx
+                    metal_tower_shutdown()
+                }
+            } else {
+                t |> skip("no Metal build")
+            }
         }
     }
 }
@@ -1372,9 +1534,17 @@ def private mint_ga_served(path : string; q8 : bool; zero_block : int64) : Gigaa
 
 //! the device's declines that keep a lane off it on this box: `device` (no form for the lane's GEMMs), or `flavor` (the lane
 //! loaded its CPU image)
-def private off_device_declines() : int64 {
+def private off_device_declines() : int64
+    => gpu_tower_declines_of("device", TowerFamily.gigaam) + gpu_tower_declines_of("flavor", TowerFamily.gigaam)
+
+//! gigaam's device log-mel alone on its home (the encode chain's mel record) into `mel`: its frame count
+[unused_argument(m, samples, mel)]
+def private gpu_gigaam_mel(m : GigaamModel; samples : array<float>; @exact_size var mel : array<float>) : int64 {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        return cuda_gigaam_mel(m, samples, mel) if (tower_family_cuda(TowerFamily.gigaam))
+    }
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        return (vulkan_tower_declines()?["device"] ?? 0l) + (vulkan_tower_declines()?["flavor"] ?? 0l)
+        return vulkan_gigaam_mel(m, samples, mel)
     } else {
         return 0l
     }
@@ -1386,40 +1556,38 @@ def private ga_twin_encode(m : GigaamModel; var st : GigaamState; clip : array<f
     }
 }
 
-//! the Vulkan device log-mel alone (`vulkan_gigaam_mel`, the encode chain's mel record) against `gigaam_log_mel` at
-//! ``GA_MEL_BAR``, the frame count and the counter beside it, the bar's poisoned element the control
-[unused_argument(t, m, samples, clip)]   // without dasVulkan the gated body is empty
-def private ga_vk_mel_twin_cell(t : T?; m : GigaamModel; samples : array<float>; clip : string) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
+//! gigaam's device log-mel alone on its home against `gigaam_log_mel` at `GA_MEL_BAR`, frame count and counter; a poisoned element the control
+[unused_argument(t, m, samples, clip)]   // without a discrete home the gated body is empty
+def private ga_discrete_mel_twin_cell(t : T?; m : GigaamModel; samples : array<float>; clip : string) {
+    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
         var st = GigaamState()
         with_dasllama_jobque_() {
             gigaam_log_mel(samples, m, st)
         }
         var inscope dev : array<float>
-        let s0 = vulkan_tower_stats()
-        let n = vulkan_gigaam_mel(m, samples, dev)
-        t |> equal(n, st.n_len, "{clip}: the Vulkan device mel's frame count")
-        t |> equal(vulkan_tower_stats().mels - s0.mels, 1l, "{clip}: the Vulkan mel seat ran on the device")
-        check_rows(t, "gigaam {clip} vulkan: the device log-mel tracks the CPU's", dev, st.mel, Bar(rel = GA_MEL_BAR, poison_scaled = true), int(m.n_mel))
+        let s0 = gpu_tower_counters(TowerFamily.gigaam)
+        let n = gpu_gigaam_mel(m, samples, dev)
+        t |> equal(n, st.n_len, "{clip}: the device mel's frame count")
+        t |> equal(gpu_tower_counters(TowerFamily.gigaam).mels - s0.mels, 1l, "{clip}: the mel seat ran on the device")
+        check_rows(t, "gigaam {clip} {serving_tower_dev(TowerFamily.gigaam)}: the device log-mel tracks the CPU's", dev, st.mel, Bar(rel = GA_MEL_BAR, poison_scaled = true), int(m.n_mel))
         var inscope loud <- [for (v in samples); v * 1.1]
         var inscope dev_loud : array<float>
-        vulkan_gigaam_mel(m, loud, dev_loud)
-        check_exceeds(t, "gigaam {clip} vulkan: the control - the clip at 1.1x on the device side off the CPU's log-mel", dev_loud, st.mel,
+        gpu_gigaam_mel(m, loud, dev_loud)
+        check_exceeds(t, "gigaam {clip} {serving_tower_dev(TowerFamily.gigaam)}: the control - the clip at 1.1x on the device side off the CPU's log-mel", dev_loud, st.mel,
             Bar(rel = GA_MEL_BAR))
         delete st
     }
 }
 
-//! one clip's Vulkan legs: the three-way twin (exact, CPU q8, device over the q8 lane's Vulkan image `md`), the CPU q8 and device
-//! transcripts, the device's range refusal, the poison.
-[cold_path, unused_argument(t, path, mx, m, md, samples, clip)]   // without dasVulkan the gated body is empty
-def private ga_vk_clip_cell(t : T?; path : string; mx, m, md : GigaamModel; samples : array<float>; clip : string) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
+//! one clip's device legs on gigaam's home: the three-way twin over the q8 GPU image `md`, both transcripts, the range refusal, the poison
+[cold_path, unused_argument(t, path, mx, m, md, samples, clip)]   // without a discrete home the gated body is empty
+def private ga_discrete_clip_cell(t : T?; path : string; mx, m, md : GigaamModel; samples : array<float>; clip : string) {
+    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
         var stx = GigaamState()
         var st = GigaamState()
         var std = GigaamState()
         let tag = "gigaam {clip}"
-        let spec = TwinSpec(family = "gigaam", tag = tag, n_layer = m.n_layer, metric = TwinMetric.rel_l2)
+        let spec = TwinSpec(family = "gigaam", tag = tag, n_layer = m.n_layer, metric = TwinMetric.rel_l2, seat_family = TowerFamily.gigaam)
         let r <- twin_three_way(t, spec, m, st, md, std, mx, stx, $(e; var s; var out) => ga_twin_encode(e, s, samples, out)) $(legs) {
             t |> equal(legs.n_cpu, legs.n_exact, "{tag}: the q8 chain's frame count")
             t |> equal(legs.n_dev, legs.n_exact, "{tag}: the device chain's frame count")
@@ -1428,29 +1596,29 @@ def private ga_vk_clip_cell(t : T?; path : string; mx, m, md : GigaamModel; samp
             front_served(t, tag, legs.dev.convs - legs.pre.convs, 1l, legs.dev.declines - legs.cpu.declines)
             t |> equal(legs.dev.mels - legs.pre.mels, legs.dev.convs - legs.pre.convs, "{tag}: the log-mel ran on the device wherever the front did")
         }
-        ga_vk_mel_twin_cell(t, md, samples, clip)
+        ga_discrete_mel_twin_cell(t, md, samples, clip)
         delete stx
         delete st
         delete std
         with_gpu_knobs() {
             with_dasllama_jobque_() {
-                set_vulkan_tower(false)
+                set_serving_gpu_tower(false, TowerFamily.gigaam)
                 var inscope cpu <- ga_leg(m, samples)
-                set_vulkan_tower(true)
+                set_serving_gpu_tower(true, TowerFamily.gigaam)
                 let k4_0 = kq_tile_count("k4")
                 var inscope dev <- ga_leg(md, samples)
                 t |> equal(kq_tile_count("k4") - k4_0, 0l, "{tag}: the q8 lane dispatches no k4 tile (the kq lane counter's control)")
-                to_log(LOG_INFO, "test_audio: gigaam {clip} vulkan vs cpu q8: rel_l2 {rel_l2(dev.x, cpu.x)}\n")
+                to_log(LOG_INFO, "test_audio: gigaam {clip} {md.dev_backend} vs cpu q8: rel_l2 {rel_l2(dev.x, cpu.x)}\n")
                 to_log(LOG_INFO, "test_audio: gigaam {clip} cpu q8: {cpu.text}\n")
-                to_log(LOG_INFO, "test_audio: gigaam {clip} vulkan: {dev.text}\n")
+                to_log(LOG_INFO, "test_audio: gigaam {clip} {md.dev_backend}: {dev.text}\n")
                 t |> equal(dev.text, cpu.text, "{tag}: the device chain's transcript is the CPU q8 chain's")
-                blocks_refused_leg(t, tag, 64l << 20l) $ {
+                blocks_refused_leg(t, tag, TowerFamily.gigaam, 64l << 20l) $ {
                     var inscope refused <- ga_leg(md, samples)
                 }
             }
         }
         if (r.bar > 0.0lf) {
-            var mp <- mint_ga(path, true, m.n_layer / 2l, TowerDev.vulkan)
+            var mp <- mint_ga(path, true, m.n_layer / 2l, md.dev_backend)
             var stp = GigaamState()
             twin_poison(t, r, m.n_layer / 2l, mp, stp) $(e2; var s; var out) => ga_twin_encode(e2, s, samples, out)
             delete stp
@@ -1459,26 +1627,26 @@ def private ga_vk_clip_cell(t : T?; path : string; mx, m, md : GigaamModel; samp
     }
 }
 
-//! GigaAM's exact lane on the Vulkan chain (the f16 GEMM over the halfwords) against the CPU exact chain: every stage on the device with no `quant_mode` decline, the CPU's frames and ids, the rows nearer the exact chain than the CPU q8 chain's, the zeroed-blocks control past that bar; off the f16 feed the lane loads its CPU image (`mxd` the exact lane's flavor on this box)
-[cold_path, unused_argument(t, path, mx, mxd, mq, samples, clip)]   // without dasVulkan the gated body is empty
-def private ga_vk_exact_cell(t : T?; path : string; mx, mxd, mq : GigaamModel; samples : array<float>; clip : string) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
+//! GigaAM's exact lane on its discrete home's chain (the f16 GEMM over the halfwords) against the CPU exact chain: every stage on the device with no `quant_mode` decline, the CPU's frames and ids, the rows nearer the exact chain than the CPU q8 chain's, the zeroed-blocks control past that bar; off the f16 feed the lane loads its CPU image (`mxd` the exact lane's flavor on this box)
+[cold_path, unused_argument(t, path, mx, mxd, mq, samples, clip)]   // without a discrete home the gated body is empty
+def private ga_discrete_exact_cell(t : T?; path : string; mx, mxd, mq : GigaamModel; samples : array<float>; clip : string) {
+    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
         let tag = "gigaam {clip} exact lane"
         t |> success(!mx.q8 && mx.gemm_f16, "{tag}: the block GEMMs serve off the halfword plane")
         with_gpu_knobs() {
             with_dasllama_jobque_() {
-                set_vulkan_tower(false)
+                set_serving_gpu_tower(false, TowerFamily.gigaam)
                 var inscope ex <- ga_leg(mx, samples)
                 var inscope q8 <- ga_leg(mq, samples)
-                set_vulkan_tower(true)
-                let s0 = vulkan_tower_stats()
-                let dq0 = vulkan_tower_declines()?["quant_mode"] ?? 0l
+                set_serving_gpu_tower(true, TowerFamily.gigaam)
+                let s0 = gpu_tower_counters(TowerFamily.gigaam)
+                let dq0 = gpu_tower_quant_declines(TowerFamily.gigaam)
                 let dd0 = off_device_declines()
                 var inscope dev <- ga_leg(mxd, samples)
-                let s1 = vulkan_tower_stats()
-                t |> equal((vulkan_tower_declines()?["quant_mode"] ?? 0l) - dq0, 0l, "{tag}: no quant_mode decline")
+                let s1 = gpu_tower_counters(TowerFamily.gigaam)
+                t |> equal(gpu_tower_quant_declines(TowerFamily.gigaam) - dq0, 0l, "{tag}: no quant_mode decline")
                 t |> equal(dev.n, ex.n, "{tag}: the frame count")
-                if (!vulkan_tower_front_route()) {
+                if (!gpu_tower_front_route(TowerFamily.gigaam)) {
                     t |> equal(s1.encodes - s0.encodes, 0l, "{tag}: off the f16 GEMM feed no encode on the device")
                     t |> success(off_device_declines() > dd0, "{tag}: off the f16 GEMM feed the chain declined the lane")
                     return
@@ -1487,19 +1655,19 @@ def private ga_vk_exact_cell(t : T?; path : string; mx, mxd, mq : GigaamModel; s
                 t |> equal(s1.convs - s0.convs, 1l, "{tag}: the conv front ran on the device")
                 t |> equal(dev.ids, ex.ids, "{tag}: the token ids are the CPU exact chain's")
                 to_log(LOG_INFO, "test_audio: {tag} cpu exact: {ex.text}\n")
-                to_log(LOG_INFO, "test_audio: {tag} vulkan   : {dev.text}\n")
+                to_log(LOG_INFO, "test_audio: {tag} {mxd.dev_backend}   : {dev.text}\n")
                 var q8_ex = TowerParityStats()
                 var dev_ex = TowerParityStats()
-                if (tower_parity_stats(t, "{tag} cpu q8 vs exact", ex.x, q8.x, q8_ex) && tower_parity_stats(t, "{tag} vulkan vs exact", ex.x, dev.x, dev_ex)) {
+                if (tower_parity_stats(t, "{tag} cpu q8 vs exact", ex.x, q8.x, q8_ex) && tower_parity_stats(t, "{tag} device vs exact", ex.x, dev.x, dev_ex)) {
                     let bar = q8_ex.rel_l2
-                    to_log(LOG_INFO, "test_audio: {tag}: rel_l2 from the exact chain - vulkan exact lane {dev_ex.rel_l2}, the bar (cpu q8) {bar}\n")
+                    to_log(LOG_INFO, "test_audio: {tag}: rel_l2 from the exact chain - {mxd.dev_backend} exact lane {dev_ex.rel_l2}, the bar (cpu q8) {bar}\n")
                     t |> success(dev_ex.rel_l2 <= bar, "{tag}: the device rows sit nearer the exact chain than the CPU q8 chain's ({dev_ex.rel_l2} vs {bar})")
-                    var mp <- mint_ga(path, false, mx.n_layer / 2l, TowerDev.vulkan)
-                    let p0 = vulkan_tower_stats()
+                    var mp <- mint_ga(path, false, mx.n_layer / 2l, serving_tower_dev(TowerFamily.gigaam))
+                    let p0 = gpu_tower_encodes(TowerFamily.gigaam)
                     var inscope bad <- ga_leg(mp, samples)
-                    t |> equal(vulkan_tower_stats().encodes - p0.encodes, 1l, "{tag} poison: device-served (encodes delta)")
+                    t |> equal(gpu_tower_encodes(TowerFamily.gigaam) - p0, 1l, "{tag} poison: device-served (encodes delta)")
                     var bad_ex = TowerParityStats()
-                    if (tower_parity_stats(t, "{tag} poisoned vulkan vs exact", ex.x, bad.x, bad_ex)) {
+                    if (tower_parity_stats(t, "{tag} poisoned device vs exact", ex.x, bad.x, bad_ex)) {
                         t |> success(is_finite(bad_ex.rel_l2) && bad_ex.rel_l2 > bar, "{tag}: zeroed halfword blocks through the device chain EXCEED the bar ({bad_ex.rel_l2} vs {bar})")
                     }
                     delete mp
@@ -1509,20 +1677,20 @@ def private ga_vk_exact_cell(t : T?; path : string; mx, mxd, mq : GigaamModel; s
     }
 }
 
-//! the Vulkan build's GigaAM lane policy: with the tower on, the lane knob off keeps the q8 image as the un-pinned lane and on
-//! takes the exact planes; with the tower off the q8 image whatever the knob (the control); the knob put back as found
-[unused_argument(t)]   // without dasVulkan the gated body is empty
-def private ga_vk_lane_policy_cell(t : T?) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
+//! GigaAM's lane policy on its discrete home: tower on, the lane knob picks q8 or exact; tower off, q8 whatever the knob; the knob restored
+[unused_argument(t)]   // without a discrete home the gated body is empty
+def private ga_discrete_lane_policy_cell(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
         with_gpu_knobs() {
-            set_vulkan_tower(true)
-            let was = set_vulkan_gigaam_exact_lane(false)
+            reset_gigaam_q8()   // the cell reads the un-pinned policy's lane
+            set_serving_gpu_tower(true, TowerFamily.gigaam)
+            let was = set_gpu_gigaam_exact_lane(false)
             t |> success(gigaam_gpu_serves() && gigaam_serves_q8(), "the lane knob off: the un-pinned lane is the q8 image")
-            set_vulkan_gigaam_exact_lane(true)
+            set_gpu_gigaam_exact_lane(true)
             t |> success(!gigaam_serves_q8(), "the lane knob on: the un-pinned lane is the exact planes")
-            set_vulkan_tower(false)
+            set_serving_gpu_tower(false, TowerFamily.gigaam)
             t |> success(gigaam_serves_q8(), "the tower off: the un-pinned lane is the q8 image whatever the knob (the control)")
-            set_vulkan_gigaam_exact_lane(was)
+            set_gpu_gigaam_exact_lane(was)
         }
     }
 }
@@ -1531,6 +1699,12 @@ def private ga_vk_lane_policy_cell(t : T?) {
 //! the dispatches of the K-quant member `fmt`'s batch tiles (`kq_batch_<fmt>_*`) the census counted
 [unused_argument(fmt)]
 def private kq_tile_count(fmt : string) : int64 {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        if (tower_family_cuda(TowerFamily.gigaam)) {
+            return (max(cud_kernel_census_of("kq_batch_{fmt}_cm2l_cls_cuda"), 0l) + max(cud_kernel_census_of("kq_batch_{fmt}_cm2m_cls_cuda"), 0l)
+                + max(cud_kernel_census_of("kq_batch_{fmt}_cm2s_cls_cuda"), 0l))
+        }
+    }
     static_if (typeinfo builtin_module_exists(vulkan)) {
         return (vk_kernel_coverage_of("kq_batch_{fmt}_cm2l_cls_spv") + vk_kernel_coverage_of("kq_batch_{fmt}_cm2m_cls_spv")
             + vk_kernel_coverage_of("kq_batch_{fmt}_cm2s_cls_spv") + vk_kernel_coverage_of("kq_batch_{fmt}_khr_cls_spv"))
@@ -1545,33 +1719,33 @@ def private kq_members_of(m : GigaamModel) : array<string> {
     return <- [for (name in names); name; where name != "q8"]
 }
 
-//! GigaAM's kq lane on the Vulkan chain against the CPU kq chain: the lane named `fmt`, no `kq_lane` or `quant_mode` decline,
-//! every K-quant member's tiles counted - "a kernel counter ... that no other plane of that file moves" (REVIEW_KQ_FORMATS.md);
-//! off the f16 GEMM feed the chain declines `device`
-[cold_path, unused_argument(t, kq_path, mx, mk, mkd, samples, clip, fmt), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-kq")]   // without dasVulkan the gated body is empty
-def private ga_vk_kq_cell(t : T?; kq_path : string; mx, mk, mkd : GigaamModel; samples : array<float>; clip, fmt : string) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
+//! GigaAM's kq lane on its discrete home's chain against the CPU kq chain: the lane named `fmt`, no `kq_lane` or `quant_mode`
+//! decline, every K-quant member's tiles counted - "a kernel counter ... that no other plane of that file moves"
+//! (REVIEW_KQ_FORMATS.md); off the f16 GEMM feed the chain declines `device`
+[cold_path, unused_argument(t, kq_path, mx, mk, mkd, samples, clip, fmt), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-kq")]   // without a discrete home the gated body is empty
+def private ga_discrete_kq_cell(t : T?; kq_path : string; mx, mk, mkd : GigaamModel; samples : array<float>; clip, fmt : string) {
+    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
         let tag = "gigaam {clip} kq lane {gigaam_kq_members(mk)}"
         t |> success(mk.kq_lane, "{tag}: the carrier serves as its own planes")
         t |> equal(gigaam_exec_fmt(mk), fmt, "{tag}: the lane's name - its one K-quant member's disk type, or `kq` where the members mix")
         with_gpu_knobs() {
             with_dasllama_jobque_() {
                 let members <- kq_members_of(mk)
-                set_vulkan_tower(false)
+                set_serving_gpu_tower(false, TowerFamily.gigaam)
                 var inscope ex <- ga_leg(mx, samples)
                 var inscope cpu <- ga_leg(mk, samples)
-                set_vulkan_tower(true)
-                let s0 = vulkan_tower_stats()
-                let dk0 = vulkan_tower_declines()?["kq_lane"] ?? 0l
-                let dq0 = vulkan_tower_declines()?["quant_mode"] ?? 0l
+                set_serving_gpu_tower(true, TowerFamily.gigaam)
+                let s0 = gpu_tower_counters(TowerFamily.gigaam)
+                let dk0 = gpu_tower_declines_of("kq_lane", TowerFamily.gigaam)
+                let dq0 = gpu_tower_quant_declines(TowerFamily.gigaam)
                 let dd0 = off_device_declines()
                 let tiles0 <- [for (n in members); kq_tile_count(n)]
                 var inscope dev <- ga_leg(mkd, samples)
-                let s1 = vulkan_tower_stats()
-                t |> equal((vulkan_tower_declines()?["kq_lane"] ?? 0l) - dk0, 0l, "{tag}: no kq_lane decline")
-                t |> equal((vulkan_tower_declines()?["quant_mode"] ?? 0l) - dq0, 0l, "{tag}: no quant_mode decline")
+                let s1 = gpu_tower_counters(TowerFamily.gigaam)
+                t |> equal(gpu_tower_declines_of("kq_lane", TowerFamily.gigaam) - dk0, 0l, "{tag}: no kq_lane decline")
+                t |> equal(gpu_tower_quant_declines(TowerFamily.gigaam) - dq0, 0l, "{tag}: no quant_mode decline")
                 t |> equal(dev.n, cpu.n, "{tag}: the frame count")
-                if (!vulkan_tower_front_route()) {
+                if (!gpu_tower_front_route(TowerFamily.gigaam)) {
                     t |> equal(s1.encodes - s0.encodes, 0l, "{tag}: off the f16 GEMM feed no encode on the device")
                     t |> success(off_device_declines() > dd0, "{tag}: off the f16 GEMM feed the chain declined the lane")
                     return
@@ -1583,40 +1757,41 @@ def private ga_vk_kq_cell(t : T?; kq_path : string; mx, mk, mkd : GigaamModel; s
                 }
                 t |> equal(dev.ids, cpu.ids, "{tag}: the token ids are the CPU kq chain's")
                 to_log(LOG_INFO, "test_audio: {tag} cpu kq : {cpu.text}\n")
-                to_log(LOG_INFO, "test_audio: {tag} vulkan : {dev.text}\n")
-                let bar = tower_twin_bar(t, tag, ex.x, cpu.x, dev.x, mk.n_layer, double(TWIN_SLACK_VK), TWIN_REL_L2_FLOOR)
+                to_log(LOG_INFO, "test_audio: {tag} {mkd.dev_backend} : {dev.text}\n")
+                let bar = tower_twin_bar(t, tag, TowerFamily.gigaam, ex.x, cpu.x, dev.x, mk.n_layer, double(TWIN_SLACK_VK), TWIN_REL_L2_FLOOR)
                 if (bar > 0.0lf) {
-                    ga_kq_poison_leg(t, tag, kq_path, mk.n_layer, TowerDev.vulkan, ex.x, samples, bar)
+                    ga_kq_poison_leg(t, tag, kq_path, mk.n_layer, serving_tower_dev(TowerFamily.gigaam), ex.x, samples, bar)
                 }
             }
         }
     }
 }
 
-//! the kq lane over the mixed-member carrier (Q4_K attention, Q6_K FF, Q8_0 conv pointwise), its Vulkan image beside its CPU one
-[cold_path, unused_argument(t, mx, samples, clip)]   // without dasVulkan the gated body is empty
-def private ga_vk_kq_mix_cell(t : T?; mx : GigaamModel; samples : array<float>; clip : string) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
+//! the kq lane over the mixed-member carrier (Q4_K attention, Q6_K FF, Q8_0 conv pointwise), its home's image beside its CPU one
+[cold_path, unused_argument(t, mx, samples, clip)]   // without a discrete home the gated body is empty
+def private ga_discrete_kq_mix_cell(t : T?; mx : GigaamModel; samples : array<float>; clip : string) {
+    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
         let mix_path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k-mix-local.gguf")
         return if (!model_available(t, mix_path))
         var inscope mm <- mint_ga(mix_path, false, -1l)
         var inscope mmd <- mint_ga_served(mix_path, false, -1l)
         t |> equal(gigaam_kq_members(mm), "k4+k6+q8", "the mixed carrier's members: Q4_K attention, Q6_K FF, Q8_0 conv pointwise")
-        ga_vk_kq_cell(t, mix_path, mx, mm, mmd, samples, clip, "kq")
+        ga_discrete_kq_cell(t, mix_path, mx, mm, mmd, samples, clip, "kq")
     }
 }
 
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-rotary")]
-def test_gigaam_vulkan_twin(tst : T?) {
-    tst |> run("GigaAM v3 e2e-rnnt: the Vulkan rotary FastConformer front and blocks on every lane - the q8 lane vs the CPU q8 chain, the exact lane off the halfwords vs the CPU exact chain, the Q4_K carrier's kq lane vs the CPU kq chain - on the FLEURS ru clips") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
+def test_gigaam_discrete_twin(tst : T?) {
+    tst |> run("GigaAM v3 e2e-rnnt: the discrete home's rotary FastConformer front and blocks on every lane - the q8 lane vs the CPU q8 chain, the exact lane off the halfwords vs the CPU exact chain, the Q4_K carrier's kq lane vs the CPU kq chain - on the FLEURS ru clips") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
             let path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-f16.gguf")
-            return if (!family_on(t, "gigaam") || !model_available(t, path) || !vulkan_audio_twin_seat(t))
+            return if (!family_on(t, "gigaam") || !model_available(t, path) || !discrete_audio_twin_seat(t, TowerFamily.gigaam))
+            let home = serving_tower_dev(TowerFamily.gigaam)
             var mx <- mint_ga(path, false, -1l)
             var m <- mint_ga(path, true, -1l)
-            var md <- mint_ga(path, true, -1l, TowerDev.vulkan)
+            var md <- mint_ga(path, true, -1l, home)
             var mxd <- mint_ga_served(path, false, -1l)
-            t |> success(!mx.q8 && m.q8 && md.dev_backend == TowerDev.vulkan, "the exact and the q8 models minted, the q8 lane's Vulkan image beside")
+            t |> success(!mx.q8 && m.q8 && md.dev_backend == home, "the exact and the q8 models minted, the q8 lane's {home} image beside")
             let kq_path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k.gguf")
             var mk = GigaamModel()
             var mkd = GigaamModel()
@@ -1635,53 +1810,53 @@ def test_gigaam_vulkan_twin(tst : T?) {
                     continue
                 }
                 var inscope samples <- load_audio_16k_mono(wav)
-                ga_vk_clip_cell(t, path, mx, m, md, samples, clip)
-                ga_vk_exact_cell(t, path, mx, mxd, m, samples, clip)
+                ga_discrete_clip_cell(t, path, mx, m, md, samples, clip)
+                ga_discrete_exact_cell(t, path, mx, mxd, m, samples, clip)
                 if (has_kq) {
-                    ga_vk_kq_cell(t, kq_path, mx, mk, mkd, samples, clip, "k4")
+                    ga_discrete_kq_cell(t, kq_path, mx, mk, mkd, samples, clip, "k4")
                 }
                 if (clip == "ru_short") {
-                    ga_vk_kq_mix_cell(t, mx, samples, clip)
+                    ga_discrete_kq_mix_cell(t, mx, samples, clip)
                 }
             }
-            ga_vk_lane_policy_cell(t)
+            ga_discrete_lane_policy_cell(t)
             delete mkd
             delete mk
             delete mxd
             delete md
             delete m
             delete mx
-            vulkan_tower_shutdown()
+            gpu_tower_shutdown(TowerFamily.gigaam)
         } else {
-            t |> skip("dasVulkan not present")
+            t |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
         }
     }
 }
 
-//! GigaAM's CTC head on the Vulkan seat (`vulkan_gigaam_ctc`) against the CPU head over one encode: each pick the CPU's but at a near-tie, -log sum exp within `CTC_PLOG_BAR`, the ids and transcript the CPU's, the device leg counted once and the CPU leg (`mc`) never, the 1.05x control outside the bar; then the head off the first clip's uploaded rows
-[cold_path, unused_argument(t, m, mc, samples, tag)]   // without dasVulkan the gated body is empty
-def private ga_vk_ctc_cell(t : T?; m, mc : GigaamModel; samples : array<float>; tag : string) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
+//! GigaAM's CTC head on the family's discrete seat (`vulkan_gigaam_ctc`, `cuda_gigaam_ctc`) against the CPU head over one encode: each pick the CPU's but at a near-tie, -log sum exp within `CTC_PLOG_BAR`, the ids and transcript the CPU's, the device leg counted once and the CPU leg (`mc`) never, the 1.05x control outside the bar; then the head off the first clip's uploaded rows
+[cold_path, unused_argument(t, m, mc, samples, tag)]   // without a discrete home the gated body is empty
+def private ga_discrete_ctc_cell(t : T?; m, mc : GigaamModel; samples : array<float>; tag : string) {
+    static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
         with_gpu_knobs() {
             with_dasllama_jobque_() {
-                set_vulkan_tower(true)
+                set_serving_gpu_tower(true, TowerFamily.gigaam)
                 let bar = Bar(rel = CTC_PLOG_BAR, abs_floor = CTC_PLOG_BAR, poison_scaled = true)
                 let n_in = min(long_length(samples), GIGAAM_MAX_CLIP_S * AUDIO_SAMPLE_RATE)
                 var st = GigaamState()
                 let n = gigaam_encode_span(samples, 0l, n_in, m, st)
                 let held = st.enc_gen != 0ul
                 to_log(LOG_INFO, "test_audio: {tag}: the encode {held ? "served on the device, its rows held" : "ran on the CPU"}\n")
-                set_vulkan_tower(false)
+                set_serving_gpu_tower(false, TowerFamily.gigaam)
                 var sc = GigaamState()
                 sc.x := st.x
                 var inscope cpu <- ctc_cpu_leg(mc, sc, n)
                 delete sc
-                set_vulkan_tower(true)
-                let s0 = vulkan_ctc_stats()
+                set_serving_gpu_tower(true, TowerFamily.gigaam)
+                let s0 = gpu_ctc_stats()
                 var inscope dev <- ctc_leg(m, st, n)
-                let s1 = vulkan_ctc_stats()
+                let s1 = gpu_ctc_stats()
                 to_log(LOG_INFO, "test_audio: {tag} cpu   : {cpu.text}\n")
-                to_log(LOG_INFO, "test_audio: {tag} vulkan: {dev.text}\n")
+                to_log(LOG_INFO, "test_audio: {tag} {m.dev_backend}: {dev.text}\n")
                 t |> equal(cpu.served, 0l, "{tag}: the tower knob off - the head stays on the CPU")
                 t |> equal(dev.served, 1l, "{tag}: the head served on the device")
                 t |> equal(s1.handoffs - s0.handoffs, held ? 1l : 0l, "{tag}: the head read the encode's own device rows where the chain held them")
@@ -1697,10 +1872,10 @@ def private ga_vk_ctc_cell(t : T?; m, mc : GigaamModel; samples : array<float>; 
                 check_exceeds(t, "test_audio: {tag} the control - the clip at 1.05x through the device chain", moved.plogs, cpu.plogs, bar)
                 t |> success(sl.enc_gen != st.enc_gen, "{tag}: the control's encode holds the device rows now")
                 delete sl
-                let u0 = vulkan_ctc_stats()
+                let u0 = gpu_ctc_stats()
                 var inscope up <- ctc_leg(m, st, n)
                 t |> equal(up.served, 1l, "{tag}: off rows the device no longer holds the head serves off the uploaded rows")
-                t |> equal(vulkan_ctc_stats().handoffs - u0.handoffs, 0l, "{tag}: no held rows to read")
+                t |> equal(gpu_ctc_stats().handoffs - u0.handoffs, 0l, "{tag}: no held rows to read")
                 t |> equal(ctc_hard_flips(cpu, up, m.n_classes), 0, "{tag}: the uploaded rows' picks are the CPU head's but at a near-tie frame")
                 check(t, "test_audio: {tag} the head off the uploaded rows' log-sums", up.plogs, cpu.plogs, bar, FLAT_SHAPE)
                 t |> equal(up.text, cpu.text, "{tag}: the uploaded rows' transcript")
@@ -1711,12 +1886,12 @@ def private ga_vk_ctc_cell(t : T?; m, mc : GigaamModel; samples : array<float>; 
 }
 
 [test, arch(at = "../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
-def test_gigaam_ctc_vulkan_twin(tst : T?) {
+def test_gigaam_ctc_discrete_twin(tst : T?) {
     for (kind, q8 in ["e2e-ctc", "ctc", "e2e-ctc", "ctc"], [false, false, true, true]) {
-        tst |> run("GigaAM v3 {kind} {q8 ? "q8" : "f16"}: the CTC head on the Vulkan device seat is the CPU head's, off the encode's held rows and off uploaded rows") @(t : T?) {
-            static_if (typeinfo builtin_module_exists(vulkan)) {
+        tst |> run("GigaAM v3 {kind} {q8 ? "q8" : "f16"}: the CTC head on the discrete device seat is the CPU head's, off the encode's held rows and off uploaded rows") @(t : T?) {
+            static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
                 let path = path_join(models_dir(), "gigaam-v3-{kind}-f16.gguf")
-                return if (!family_on(t, "gigaam") || !model_available(t, path) || !vulkan_audio_twin_seat(t))
+                return if (!family_on(t, "gigaam") || !model_available(t, path) || !discrete_audio_twin_seat(t, TowerFamily.gigaam))
                 let wav = asr_clip("ru_short.wav")
                 if (!stat(wav).is_valid) {
                     t |> skip("ru_short.wav not present")
@@ -1726,13 +1901,12 @@ def test_gigaam_ctc_vulkan_twin(tst : T?) {
                 var mc <- mint_ga(path, q8, -1l)
                 t |> success(m.ctc_f16 && m.dw_f16, "the head and the depthwise taps serve off the carrier's halfwords")
                 var inscope samples <- load_audio_16k_mono(wav)
-                ga_vk_ctc_cell(t, m, mc, samples, "gigaam {kind} {q8 ? "q8" : "f16"} ru_short")
+                ga_discrete_ctc_cell(t, m, mc, samples, "gigaam {kind} {q8 ? "q8" : "f16"} ru_short")
                 delete mc
                 delete m
-                vulkan_ctc_shutdown()
-                vulkan_tower_shutdown()
+                gpu_tower_shutdown(TowerFamily.gigaam)
             } else {
-                t |> skip("dasVulkan not present")
+                t |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
             }
         }
     }
@@ -1740,23 +1914,21 @@ def test_gigaam_ctc_vulkan_twin(tst : T?) {
 
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def test_encoder_blocks_vulkan(tst : T?) {
-    tst |> run("qwen2audio tower: Vulkan blocks vs the CPU q8 chain on the synthetic mel, 32 layers") @(t : T?) {
-        vulkan_blocks_twin(t, "qwen2audio", "qwen2audio-mmproj-f32.gguf", 32l)
+    tst |> run("qwen2audio tower: the discrete home's blocksvs the CPU q8 chain on the synthetic mel, 32 layers") @(t : T?) {
+        blocks_twin(t, "qwen2audio", "qwen2audio-mmproj-f32.gguf", 32l)
     }
-    tst |> run("voxtral tower: Vulkan blocks vs the CPU q8 chain on the synthetic mel") @(t : T?) {
-        vulkan_blocks_twin(t, "voxtral", "voxtral-mini-mmproj-f32.gguf", 0l)
+    tst |> run("voxtral tower: the discrete home's blocksvs the CPU q8 chain on the synthetic mel") @(t : T?) {
+        blocks_twin(t, "voxtral", "voxtral-mini-mmproj-f32.gguf", 0l)
     }
-    tst |> run("omni-3b audio tower: Vulkan blocks vs the CPU q8 chain on the synthetic mel") @(t : T?) {
-        vulkan_blocks_twin(t, "omni-3b", "mmproj-omni-3b-f32.gguf", 0l)
+    tst |> run("omni-3b audio tower: the discrete home's blocksvs the CPU q8 chain on the synthetic mel") @(t : T?) {
+        blocks_twin(t, "omni-3b", "mmproj-omni-3b-f32.gguf", 0l)
     }
-    tst |> run("ultravox audio tower: Vulkan blocks and the gated-MLP tail vs the CPU q8 chain on the synthetic mel") @(t : T?) {
-        vulkan_blocks_twin(t, "ultravox", "mmproj-ultravox-v0_5-llama-3_2-1b-f16.gguf", 0l)
+    tst |> run("ultravox audio tower: the discrete home's blocksand the gated-MLP tail vs the CPU q8 chain on the synthetic mel") @(t : T?) {
+        blocks_twin(t, "ultravox", "mmproj-ultravox-v0_5-llama-3_2-1b-f16.gguf", 0l)
     }
 }
 
-//! the qwen3a tower staged and minted in memory under the lane pin, the pin reset after; `zero_block` >= 0 zeroes the
-//! q8 GEMM planes of `poison_blocks` blocks from that block on; `dev` the image flavor (`none` the CPU image, a GPU flavor staged
-//! row-major for its driver's bake - `#tower-dev-block`)
+//! qwen3a staged and minted in memory under the lane pin, reset after; `zero_block` >= 0 zeroes `poison_blocks` blocks from it on; `dev` the flavor
 def private mint_q3a(path : string; q8 : bool; zero_block : int64; dev : TowerDev = TowerDev.none) : Qwen3aTower {
     set_qwen3a_q8(q8)
     defer() {
@@ -1766,7 +1938,13 @@ def private mint_q3a(path : string; q8 : bool; zero_block : int64; dev : TowerDe
     if (zero_block >= 0l) {
         let nl = stg.e.core.n_layer
         for (b in range64(zero_block, min(nl, zero_block + poison_blocks(nl)))) {
-            zero_plane(stg.core.qblob, stg.e.core.qlayers_off + b * stg.e.core.qlayer_stride, stg.e.core.qlayer_stride)
+            if (q8) {
+                zero_plane(stg.core.qblob, stg.e.core.qlayers_off + b * stg.e.core.qlayer_stride, stg.e.core.qlayer_stride)
+            } elif (stg.e.core.gemm_f16) {
+                zero_plane(stg.core.wblob, stg.e.core.qlayers_off + b * stg.e.core.qlayer_stride, stg.e.core.qlayer_stride)
+            } else {
+                zero_plane(stg.core.fblob, stg.e.core.layers_off + b * stg.e.core.layer_stride, stg.e.core.layer_stride)
+            }
         }
     }
     var tw = Qwen3aTower()
@@ -1789,7 +1967,7 @@ def private q3a_leg_state(tw : Qwen3aTower) : Q3aLegState {
 //! the device leg (the knob on) encodes the device mel's `dev_win`, the CPU legs the CPU mel's `win`
 [cold_path]
 def private q3a_twin_encode(tw : Qwen3aTower; var s : Q3aLegState; win, dev_win : MelChunk; var out : array<float>) : int64 {
-    if (gpu_knobs().vulkan_tower) {
+    if (serving_gpu_tower(TowerFamily.qwen3a)) {
         qwen3a_encode(tw, s.enc, s.conv, dev_win)
     } else {
         qwen3a_encode(tw, s.enc, s.conv, win)
@@ -1798,43 +1976,64 @@ def private q3a_twin_encode(tw : Qwen3aTower; var s : Q3aLegState; win, dev_win 
     return long_length(out)
 }
 
+//! qwen3a's exact lane on the serving home over window 0 (`exact_flavor_leg`): the CPU image's chain against the home's f16 flavor on the device
+[cold_path]
+def private q3a_exact_leg(t : T?; path : string; twx : Qwen3aTower; var sx : Q3aLegState; mel, dev_mel : WhisperMel) {
+    let home = serving_tower_dev(TowerFamily.qwen3a)
+    let tag = "qwen3a jfk mel+front+blocks at 0"
+    let win <- qwen3a_mel_window(mel, 0l)
+    let dev_win <- qwen3a_mel_window(dev_mel, 0l)
+    let n_chunks = dev_win.n_len / QWEN3A_CHUNK
+    let convs = exact_flavor_leg(t, tag, TowerFamily.qwen3a, TWIN_EXACT_REL_L2_VK, twx, sx, n_chunks * QWEN3A_TOK_PER_CHUNK,
+        $(zb) { return <- mint_q3a(path, false, zb, home) }, $(tw) { return <- q3a_leg_state(tw) }) $(e; var s; var out) => q3a_twin_encode(e, s, win, dev_win, out)
+    t |> equal(convs, 2l * n_chunks, "{tag} exact lane: the front served every chunk of both device encodes")
+}
+
+//! the Vulkan storage-range seam over the qwen3a mel: a range its scratch runs past declines `memory` and keeps no capacity, so the next mel rebuilds
+[unused_argument(t, samples, n_mel, mel, dev_mel)]   // without dasVulkan the gated body is empty
+def private q3a_mel_range_legs(t : T?; samples : array<float>; n_mel : int64; mel, dev_mel : WhisperMel) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return if (tower_family_cuda(TowerFamily.qwen3a))
+        vulkan_tower_shutdown()
+        let msr = g_gpu.msr
+        let k0 = vulkan_tower_declines()?["memory"] ?? 0l
+        g_gpu.msr = 4096l
+        let cpu_mel <- log_mel_qwen3a(samples, n_mel)
+        g_gpu.msr = msr
+        t |> equal((vulkan_tower_declines()?["memory"] ?? 0l) - k0, 1l, "qwen3a jfk mel: the scratch past the range declined memory")
+        check_exact(t, "qwen3a jfk mel: the declined mel is the CPU's", cpu_mel.data, mel.data)
+        let m3 = vulkan_tower_stats()
+        let re_mel <- log_mel_qwen3a(samples, n_mel)
+        t |> equal(vulkan_tower_stats().mels - m3.mels, 1l, "qwen3a jfk mel: the range put back, the device mel served on a rebuilt scratch")
+        check_exact(t, "qwen3a jfk mel: the rebuilt scratch's rows are the first device mel's", re_mel.data, dev_mel.data)
+    }
+}
+
 [test]
 def test_qwen3a_vulkan_front(tst : T?) {
-    tst |> run("qwen3a: the Vulkan mel + conv front + blocks vs the CPU q8 chain on jfk windows 0 and the tail") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
+    tst |> run("qwen3a: the discrete home's mel + conv front + blocks vs the CPU q8 chain on jfk windows 0 and the tail") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
             let path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
-            jfk_twin_cell(t, path, true) $(samples) {
+            jfk_twin_cell(t, path, true, TowerFamily.qwen3a) $(samples) {
+                let home = serving_tower_dev(TowerFamily.qwen3a)
                 var twx <- mint_q3a(path, false, -1l)
                 var tw <- mint_q3a(path, true, -1l)
                 t |> success(!twx.core.q8 && tw.core.q8 && tw.cq8, "qwen3a jfk: the exact and the q8 towers minted, the cblob trio on the q8 lane")
-                set_vulkan_tower(false)
-                let m0 = vulkan_tower_stats()
+                set_serving_gpu_tower(false, TowerFamily.qwen3a)
+                let m0 = gpu_tower_counters(TowerFamily.qwen3a)
                 let mel <- log_mel_qwen3a(samples, tw.core.n_mel)
-                let m1 = vulkan_tower_stats()
+                let m1 = gpu_tower_counters(TowerFamily.qwen3a)
                 t |> equal(m1.mels - m0.mels, 0l, "qwen3a jfk mel: the knob-off mel ran on the CPU (mels delta)")
-                set_vulkan_tower(true)
+                set_serving_gpu_tower(true, TowerFamily.qwen3a)
                 let dev_mel <- log_mel_qwen3a(samples, tw.core.n_mel)
-                let m2 = vulkan_tower_stats()
+                let m2 = gpu_tower_counters(TowerFamily.qwen3a)
                 t |> equal(m2.mels - m1.mels, 1l, "qwen3a jfk mel: the device mel served (mels delta)")
                 t |> equal(m2.declines, m1.declines, "qwen3a jfk mel: the device mel served with no decline")
                 t |> equal(dev_mel.n_len, mel.n_len, "qwen3a jfk mel: the device mel has the CPU mel's frames")
                 let mel_maxd = logits_maxdiff(dev_mel.data, mel.data)
                 t |> success(mel_maxd < 1e-3, "qwen3a jfk mel: the device log-mel matches the CPU's within 1e-3 (max |diff| {mel_maxd})")
-                // a fresh resident under a storage range its scratch runs past: the range decline must leave no capacity behind,
-                // so with the range put back the next mel builds its scratch rather than dispatching into the released buffers
-                vulkan_tower_shutdown()
-                let msr = g_gpu.msr
-                let k0 = vulkan_tower_declines()?["memory"] ?? 0l
-                g_gpu.msr = 4096l
-                let cpu_mel <- log_mel_qwen3a(samples, tw.core.n_mel)
-                g_gpu.msr = msr
-                t |> equal((vulkan_tower_declines()?["memory"] ?? 0l) - k0, 1l, "qwen3a jfk mel: the scratch past the range declined memory")
-                check_exact(t, "qwen3a jfk mel: the declined mel is the CPU's", cpu_mel.data, mel.data)
-                let m3 = vulkan_tower_stats()
-                let re_mel <- log_mel_qwen3a(samples, tw.core.n_mel)
-                t |> equal(vulkan_tower_stats().mels - m3.mels, 1l, "qwen3a jfk mel: the range put back, the device mel served on a rebuilt scratch")
-                check_exact(t, "qwen3a jfk mel: the rebuilt scratch's rows are the first device mel's", re_mel.data, dev_mel.data)
-                var twd <- mint_q3a(path, true, -1l, TowerDev.vulkan)
+                q3a_mel_range_legs(t, samples, tw.core.n_mel, mel, dev_mel)
+                var twd <- mint_q3a(path, true, -1l, home)
                 var sx <- q3a_leg_state(twx)
                 var sq <- q3a_leg_state(tw)
                 var sd <- q3a_leg_state(twd)
@@ -1843,16 +2042,19 @@ def test_qwen3a_vulkan_front(tst : T?) {
                     let win <- qwen3a_mel_window(mel, off)
                     let dev_win <- qwen3a_mel_window(dev_mel, off)
                     let n_chunks = dev_win.n_len / QWEN3A_CHUNK
-                    let spec = TwinSpec(family = "qwen3a", tag = tag, n_layer = tw.core.n_layer, metric = TwinMetric.rel_l2)
+                    let spec = TwinSpec(family = "qwen3a", tag = tag, n_layer = tw.core.n_layer, metric = TwinMetric.rel_l2, seat_family = TowerFamily.qwen3a)
+                    let tail0 = gpu_tower_tail_encodes(TowerFamily.qwen3a)
                     let r <- twin_three_way(t, spec, tw, sq, twd, sd, twx, sx, $(e; var s; var out) => q3a_twin_encode(e, s, win, dev_win, out)) $(legs) {
                         if (legs.dev.convs == legs.pre.convs) {
-                            to_log(LOG_INFO, "{tag}: the driver declined - {vulkan_tower_declines()}\n")
+                            to_log(LOG_INFO, "{tag}: the driver declined - {gpu_tower_declines(TowerFamily.qwen3a)}\n")
                         }
                         front_served(t, tag, legs.dev.convs - legs.pre.convs, n_chunks, legs.dev.declines - legs.cpu.declines)
                         t |> equal(legs.dev.encodes - legs.pre.encodes, 1l, "{tag}: the block loop served the window")
                     }
+                    t |> equal(gpu_tower_tail_encodes(TowerFamily.qwen3a) - tail0, 1l,
+                        "{tag}: the projector ran on the device behind the device leg's blocks and on neither knob-off leg (tail encodes delta)")
                     if (off == 0l && r.bar > 0.0lf) {
-                        var twp <- mint_q3a(path, true, tw.core.n_layer / 2l, TowerDev.vulkan)
+                        var twp <- mint_q3a(path, true, tw.core.n_layer / 2l, home)
                         var sp <- q3a_leg_state(twp)
                         twin_poison(t, r, tw.core.n_layer / 2l, twp, sp) $(e; var s; var out) => q3a_twin_encode(e, s, win, dev_win, out)
                         delete sp
@@ -1861,60 +2063,68 @@ def test_qwen3a_vulkan_front(tst : T?) {
                 }
                 delete sd
                 delete sq
-                delete sx
                 delete twd
                 delete tw
+                q3a_exact_leg(t, path, twx, sx, mel, dev_mel)
+                delete sx
                 delete twx
-                vulkan_tower_shutdown()
+                gpu_tower_shutdown(TowerFamily.qwen3a)
             }
         } else {
-            t |> skip("dasVulkan not present")
+            t |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
         }
     }
 }
 
-//! the Metal chain against the CPU encoder on one synthetic mel, one cell a projector kind (the CPU image on the CPU, the Metal-flavored one on the device, the tail behind the blocks): one encode, every block, the tail once, nothing on the CPU leg, the tokens within `tower_parity_deep`'s bar, another mel's outside it; `layers` > 0 pins the depth
+//! the Metal home's chat tower on one synthetic mel, one cell a projector kind: the q8 lane three ways (`twin_three_way`: the
+//! exact CPU image the reference, the CPU q8 image, the q8 lane's Metal image with the projector tail behind its blocks) with
+//! its poison, then the exact lane on its f16 Metal image (`blocks_exact_leg`); `layers` > 0 pins the depth
 [cold_path, unused_argument(file, kind, layers)]   // off-Apple the cell skips
 def private metal_tower_chain_cell(t : T?; file : string; kind : AudioProjKind; layers : int64) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let path = path_join(models_dir(), file)
-        return if (!jit_model_available(t, path))
-        let tower_was = metal_tower_knob()
-        set_metal_tower(true)
-        var twc <- mint_aud(path, false, -1l)
-        var tw <- mint_aud(path, false, -1l, TowerDev.metal)
-        t |> success(tw.proj_kind == kind, "{file}: the projector kind the cell names")
-        if (layers > 0l) {
-            t |> equal(tw.n_layer, layers, "{file}: the tower's depth is the {layers} blocks the cell names")
-        }
-        var inscope mel <- synth_mel(tw.n_mel)
-        var encc <- make_encoder_state(twc)
-        var enc <- make_encoder_state(tw)
-        with_dasllama_jobque_() {
-            let s0 = metal_tower_stats()
-            let t0 = metal_tower_tail_encodes()
-            audio_encode(twc, encc, mel)
-            t |> equal(metal_tower_stats().encodes - s0.encodes, 0l, "{file}: the CPU image's leg never dispatched")
-            audio_encode(tw, enc, mel)
-            let s1 = metal_tower_stats()
-            t |> equal(s1.encodes - s0.encodes, 1l, "{file}: the Metal image's leg dispatched once")
-            t |> equal(s1.blocks - s0.blocks, tw.n_layer, "{file}: blocks delta = n_layer")
-            t |> equal(s1.rows - s0.rows, tw.n_ctx, "{file}: rows delta = n_ctx")
-            t |> equal(metal_tower_tail_encodes() - t0, 1l, "{file}: the projector tail rode the device behind the blocks")
-            tower_parity_deep(t, "{file} {tw.n_layer}L", encc.out, enc.out, tw.n_layer)
-            synth_mel_fill(mel, true)
-            audio_encode(tw, enc, mel)
-            var ctl = TowerParityStats()
-            if (tower_parity_stats(t, "{file} control", encc.out, enc.out, ctl)) {
-                let bar = tower_deep_bar(tw.n_layer)
-                t |> success(is_finite(ctl.rel_l2) && ctl.rel_l2 > bar, "{file}: another mel's tokens land outside the bar (rel_l2 {ctl.rel_l2}) - the control")
+        return if (!jit_model_available(t, path) || !metal_twin_seat(t, TowerFamily.whisper))
+        let tag = "{file} metal synthetic mel"
+        with_gpu_knobs() {
+            set_metal_tower(true)
+            var twx <- mint_aud(path, false, -1l)
+            var tw <- mint_aud(path, true, -1l)
+            var twd <- mint_aud(path, true, -1l, TowerDev.metal)
+            t |> success(tw.proj_kind == kind, "{tag}: the projector kind the cell names")
+            if (layers > 0l) {
+                t |> equal(tw.n_layer, layers, "{tag}: the tower's depth is the {layers} blocks the cell names")
             }
+            t |> success(!twx.q8 && tw.q8 && twd.q8 && twd.dev_backend == TowerDev.metal, "{tag}: the exact and the q8 towers minted, the q8 lane's Metal image beside")
+            let mel <- synth_mel(tw.n_mel)
+            var encx <- make_encoder_state(twx)
+            var enc <- make_encoder_state(tw)
+            var encd <- make_encoder_state(twd)
+            let spec = TwinSpec(family = file, tag = tag, n_layer = tw.n_layer, metric = TwinMetric.rel_l2, seat_family = TowerFamily.whisper)
+            let tail0 = metal_tower_tail_encodes()
+            let f0 = metal_tower_f16_encodes()
+            let r <- twin_three_way(t, spec, tw, enc, twd, encd, twx, encx, $(e; var s; var out) => aud_twin_encode(e, s, mel, out)) $(legs) {
+                t |> equal(legs.dev.encodes - legs.pre.encodes, 1l, "{tag}: exactly the device leg dispatched")
+                t |> equal(legs.dev.blocks - legs.pre.blocks, tw.n_layer, "{tag}: blocks delta = n_layer")
+                t |> equal(legs.dev.rows - legs.pre.rows, tw.n_ctx, "{tag}: rows delta = n_ctx")
+            }
+            t |> equal(metal_tower_tail_encodes() - tail0, 1l, "{tag}: the q8 projector tail rode the device behind the device leg's blocks")
+            t |> equal(metal_tower_f16_encodes() - f0, 0l, "{tag}: the q8 lane read the q8 slab, not the halfword plane")
+            delete encd
+            delete twd
+            if (r.bar > 0.0lf) {
+                var twp <- mint_aud(path, true, tw.n_layer / 2l, TowerDev.metal)
+                var encp <- make_encoder_state(twp)
+                twin_poison(t, r, tw.n_layer / 2l, twp, encp) $(e; var s; var out) => aud_twin_encode(e, s, mel, out)
+                delete encp
+                delete twp
+            }
+            delete enc
+            delete tw
+            blocks_exact_leg(t, tag, path, twx, encx, mel)
+            delete encx
+            delete twx
+            metal_tower_shutdown()
         }
-        set_metal_tower(tower_was)
-        delete enc
-        delete encc
-        delete tw
-        delete twc
     } else {
         t |> skip("das_metal not present")
     }
@@ -2052,17 +2262,19 @@ def test_encoder_state_sizing(t : T?) {
 
 let private PK_DEVICE_PLOG_BAR = 1e-4   //!< the device decode's plog off the CPU's: float log-sums over a recurrence of several hundred tokens, 2.3e-5 measured on gb1
 
-//! one parakeet clip's encoder rows decoded on the CPU loop and on the device seat (`rnnt_device_twin`): the CPU's tuples, the plog within `PK_DEVICE_PLOG_BAR`, the exact lane projected on the device (off the encode's device rows on Metal), the q8 lane off the CPU's projection; `m` the lane's GPU-flavored model, `mc` its CPU image
+//! one parakeet clip decoded on the CPU loop and on the device seat (`rnnt_device_twin`) at `PK_DEVICE_PLOG_BAR`: `m` the lane's
+//! GPU-flavored model, `mc` the CPU image whose projection the device runs (the exact image where `m` keeps the joint's half f32)
 [cold_path]
 def private pk_device_decode_clip(t : T?; m, mc : ParakeetModel; samples : array<float>; tag : string) {
     return if (rnnt_seat_skip(t, tag))
     with_gpu_knobs() {
-        set_serving_gpu_tower(true)
+        set_serving_gpu_tower(true, TowerFamily.parakeet)
         var st = ParakeetState()
         var stc = ParakeetState()
         parakeet_log_mel(samples, m, st)
         let tt = parakeet_encode(m, st)
-        var inscope tw <- rnnt_device_twin(t, "test_audio: {tag}", PK_DEVICE_PLOG_BAR, m.q8 ? 0l : 1l, !m.q8 && rnnt_seat_name() == "metal" ? 1l : 0l,
+        let projected = m.q8 && !m.jenc_exact ? 0l : 1l
+        var inscope tw <- rnnt_device_twin(t, "test_audio: {tag}", PK_DEVICE_PLOG_BAR, projected, projected,
                 st.x, $(var toks) {
             stc.x := st.x
             parakeet_tdt_decode(mc, stc, tt)
@@ -2085,25 +2297,21 @@ def test_parakeet_device_decode_twin(tst : T?) {
             let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-{v}-f32.bin")
             continue if (!model_available(tst, path))
             for (q8 in [false, true]) {
-                tst |> run("parakeet {v} {q8 ? "q8" : "f32"}: the TDT decode on the device seat is the CPU decoder's") @(t : T?) {
-                    if (!serving_tower_device_up()) {
+                tst |> run("parakeet {v} {q8 ? "q8" : "exact"}: the TDT decode on the device seat is the CPU decoder's") @(t : T?) {
+                    if (!serving_tower_device_up(TowerFamily.parakeet)) {
                         t |> skip("parakeet {v}: no GPU device stands up for the serving tower on this build or box")
                         return
                     }
-                    let served_q8 = serving_tower_dev() == TowerDev.vulkan   // the lane the build's FastConformer chain flavors: Vulkan's q8, Metal's exact
-                    if (q8 != served_q8) {
-                        t |> skip("parakeet {v} {q8 ? "q8" : "f32"}: the {serving_tower_dev()} chain flavors the other lane - this one runs whole on the CPU")
-                        return
-                    }
+                    let home = serving_tower_dev(TowerFamily.parakeet)
                     var dev = TowerDev.none
                     with_gpu_knobs() {
-                        set_serving_gpu_tower(true)
+                        set_serving_gpu_tower(true, TowerFamily.parakeet)
                         dev = parakeet_dev_flavor(q8)
                     }
-                    t |> equal(dev, serving_tower_dev(), "parakeet {v}: the serving tower flavors the lane its chain serves")
+                    t |> equal(dev, home, "parakeet {v}: the serving tower flavors the lane its chain serves")
                     return if (dev == TowerDev.none)
                     var inscope m <- mint_pk(path, q8, -1l, dev)
-                    var inscope mc <- mint_pk(path, q8, -1l)
+                    var inscope mc <- mint_pk(path, q8 && !m.jenc_exact, -1l)
                     for (clip in ["jfk", "gb1"]) {
                         let wav = asr_clip("{clip}.wav")
                         if (!stat(wav).is_valid) {
@@ -2111,8 +2319,9 @@ def test_parakeet_device_decode_twin(tst : T?) {
                             continue
                         }
                         var inscope samples <- load_audio_16k_mono(wav)
-                        pk_device_decode_clip(t, m, mc, samples, "parakeet {v} {q8 ? "q8" : "f32"} {clip}")
+                        pk_device_decode_clip(t, m, mc, samples, "parakeet {v} {q8 ? "q8" : "exact"} {clip}")
                     }
+                    gpu_tower_shutdown(TowerFamily.parakeet)
                 }
             }
         }

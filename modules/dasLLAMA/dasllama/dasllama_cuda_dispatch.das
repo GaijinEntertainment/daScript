@@ -20,6 +20,7 @@ require dasllama_dispatch_scan
 // cud_ rail (dasllama_cuda_common):
 //   ensure_<name>()                        - device up, the kernel's function loaded once
 //   enc_<name>(stream, bufs, pc, ...)      - the launch over the buffer addresses in binding order
+//   enc_<name>(rl, roles, pc, ...)         - the same over a tower rail (CutRail): the planes at `roles`, on its stream
 // The read/write axis is DERIVED from the kernel body (shared classifier, field mode); declared
 // @role is a cross-checked assertion, weight/alias stay declared. A CUDA kernel has no sets and
 // no hazard rail: the buffer tuple IS the parameter blob, built a launch.
@@ -65,6 +66,7 @@ class CudaDispatch : AstStructureAnnotation {
             cf.arguments |> emplace_new <| mk_gvar(at, "{text}_smem")
             cf.arguments |> emplace_new <| mk_gvar(at, "{text}_block")
             cf.arguments |> emplace_new <| new ExprConstString(at = at, value := disp_name)
+            cf.arguments |> emplace_new <| new ExprConstString(at = at, value := "{compiling_module().name}")
             var made = new ExprCall(at = at, name := "cud_fn_made")
             made.arguments |> emplace_new <| mk_gvar(at, gname)
             made.arguments |> emplace_new <| new ExprConstInt(at = at, value = scan.ord)
@@ -123,6 +125,19 @@ class CudaDispatch : AstStructureAnnotation {
                 errors := "[cuda_dispatch] {scan.base}: failed to add enc_{scan.base}"
                 return false
             }
+        }
+
+        // enc_<base>(rl, roles, pc, params...) — the rail overload: the launch over the rail's planes at `roles` on its stream
+        {
+            var dp = new ExprCall(at = at, name := "cud_rail_launch")
+            dp.arguments |> emplace_new <| mk_gvar(at, gname)
+            dp.arguments |> emplace_new <| new ExprConstInt(at = at, value = scan.ord)
+            dp.arguments |> emplace_new <| mk_gvar(at, "rl")
+            dp.arguments |> emplace_new <| mk_gvar(at, "roles")
+            dp.arguments |> emplace_new <| mk_gvar(at, "pc")
+            dp.arguments |> emplace_new <| mk_grid_dim(at, scan.grid)
+            var body <- array<ExpressionPtr>(dp)
+            return false if (!lens_rail_overload(at, args, scan, CUDA_WORDS, "CutRail", true, body, errors))
         }
         return true
     }

@@ -773,7 +773,9 @@ def private cov_tower(t : T?) {
         // the erf-GELU carrier (whisper is the LUT flavor): one qwen2audio chunk on varied mel
         let apath = path_join(models_dir(), "qwen2audio-mmproj-f32.gguf")
         if (model_available(t, apath)) {
+            set_audio_tower_q8(false)   // the exact lane, pinned: the census row reaches the same kernels whatever the box's lane policy picks
             var atw <- load_audio_tower(apath)
+            reset_audio_tower_q8()
             var mel = MelChunk(n_mel = atw.n_mel, n_len = AUDIO_CHUNK_FRAMES)
             mel.data |> resize(atw.n_mel * AUDIO_CHUNK_FRAMES)
             for (i in range(length(mel.data))) {
@@ -1243,13 +1245,13 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     "fa_khr_h256_g_cls_spv", "fa_khr_h256_g_f16_cls_spv",
     "fa_khr_h512_cls_spv", "fa_khr_h512_f16_cls_spv",
     // the bidirectional flash tiles (the vision towers' encoder attention): the 64 head is the gemma4v tower's (the stocked
-    // mmproj-gemma-4-E2B-it-bf16.gguf, dispatched by test_gemma4v_vulkan_twin in test_gemma4v.das), the padded 128 the
-    // gemma3v / qwen3v towers' (mmproj-gemma-3-4b-it-F16.gguf via test_gemma3v_vulkan_twin, mmproj-Qwen3VL-4B-Instruct-F16.gguf
-    // via test_qwen3v_vulkan_twin) - no zoo row; their kernel coverage is test_vkt_fa_bidir in test_vulkan_tower_kernels.das
+    // mmproj-gemma-4-E2B-it-bf16.gguf, dispatched by test_gemma4v_discrete_twin in test_gemma4v.das), the padded 128 the
+    // gemma3v / qwen3v towers' (mmproj-gemma-3-4b-it-F16.gguf via test_gemma3v_discrete_twin, mmproj-Qwen3VL-4B-Instruct-F16.gguf
+    // via test_qwen3v_discrete_twin) - no zoo row; their kernel coverage is test_vkt_fa_bidir in test_vulkan_tower_kernels.das
     "fa_cm2_h64_bidir_cls_spv", "fa_cm2_h128_bidir_cls_spv", "fa_khr_h64_bidir_cls_spv", "fa_khr_h128_bidir_cls_spv",
     // the audio fronts' classes (the Vulkan tower driver's mel and conv seats - no zoo row, no audio carrier in the census);
     // the carriers are the stocked mmproj-Qwen3-ASR-0.6B-bf16.gguf (test_qwen3a_vulkan_front in test_audio.das),
-    // mmproj-gemma-4-E2B-it-bf16.gguf (test_gemma4a_vulkan_twin) and canary-qwen-2.5b-encoder-f32.bin (test_canary_vulkan_twin);
+    // mmproj-gemma-4-E2B-it-bf16.gguf (test_gemma4a_discrete_twin) and canary-qwen-2.5b-encoder-f32.bin (test_canary_discrete_twin);
     // every covering cell below is in test_vulkan_tower_kernels.das
     // the spectrum pair (Qwen3-ASR's mel); its coverage is test_vkt_tower_front_mel
     "tower_spec_dft_cls_spv",
@@ -1265,17 +1267,17 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     "tower_pool_rows_cls_spv",
     "tower_swiglu_swapped_cls_spv",
     // gigaam's biased tap-major depthwise conv: no census row reaches it because the Vulkan census loads no gigaam carrier
-    // (gigaam-v3-e2e-rnnt-f16.gguf, run by test_gigaam_vulkan_twin); its coverage is test_vkt_tower_fastconformer
+    // (gigaam-v3-e2e-rnnt-f16.gguf, run by test_gigaam_discrete_twin); its coverage is test_vkt_tower_fastconformer
     "tower_ga_dw_cls_spv",
     // the same conv over the carrier's f16 taps, and GigaAM's CTC head pick (the ASR-decoder driver's CTC seat, run by a
-    // gigaam CTC carrier's decode - gigaam-v3-ctc-f16.gguf and gigaam-v3-e2e-ctc-f16.gguf via test_gigaam_ctc_vulkan_twin in
+    // gigaam CTC carrier's decode - gigaam-v3-ctc-f16.gguf and gigaam-v3-e2e-ctc-f16.gguf via test_gigaam_ctc_discrete_twin in
     // test_audio.das): no census row loads a gigaam carrier; their coverage is test_vkt_tower_ga_dwh and test_vkt_ctc_pick
     "tower_ga_dwh_cls_spv", "ctc_pick_cls_spv",
     // the transducer decode's four stamps (the ASR-decoder driver's transducer seat, run by GigaAM's and parakeet's decode - no
     // zoo row, no audio carrier in the census); their coverage is test_vkt_rnnt
     "rnnt_gates_cls_spv", "rnnt_proj_cls_spv", "rnnt_joint_cls_spv", "rnnt_pick_cls_spv",
     // gigaam's device mel's frame window: no census row reaches it because the Vulkan census loads no gigaam carrier
-    // (gigaam-v3-e2e-rnnt-f16.gguf, run by test_gigaam_vulkan_twin); its coverage is test_vkt_tower_ga_mel
+    // (gigaam-v3-e2e-rnnt-f16.gguf, run by test_gigaam_discrete_twin); its coverage is test_vkt_tower_ga_mel
     "tower_ga_frames_cls_spv",
     // parakeet's tap-major subsample depthwise conv2d; its coverage is test_vkt_tower_dw2d
     "tower_pk_dw2d_cls_spv",
@@ -1310,8 +1312,11 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // kernel coverage is test_vkt_tower_f16_feeds in test_vulkan_tower_kernels.das
     "tower_ln16_cls_spv", "tower_post_add_ln16_cls_spv", "tower_hpad_b_cls_spv", "tower_hpad16_b_cls_spv", "tower_hunpad16_cls_spv",
     "tower_bias_act_cvt16_cls_spv",
+    // the f16 GEMM's s column (the 32-position tile `vt_f16_tc` picks for a tower GEMM site on the f16 lane): the towers' f16
+    // images dispatch it, which no census row loads; its kernel coverage is test_vkd_f16_gemm_s in test_vulkan_kernels.das
+    "f16_gemm_cm2_s_cls_spv",
     // the gemma4v tower's row classes (the clamps, feeds, the two-axis rope, the post-add, the GEGLU and the weighted rms the
-    // vision tails share): the stocked mmproj-gemma-4-E2B-it-bf16.gguf, dispatched by test_gemma4v_vulkan_twin in
+    // vision tails share): the stocked mmproj-gemma-4-E2B-it-bf16.gguf, dispatched by test_gemma4v_discrete_twin in
     // test_gemma4v.das - no zoo row; their kernel coverage is test_vkt_tower_rows in test_vulkan_tower_kernels.das (the clamp +
     // halfword feed is no entry: it is the LLM prefill's f32 -> f16 rows too, which the zoo rows dispatch)
     "tower_clamp_cls_spv", "tower_clamp_rq_cls_spv", "tower_rope2d_cls_spv",
@@ -1326,8 +1331,8 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     "tower_patch_im2col_cls_spv", "tower_pos_add_2d_cls_spv", "tower_stem_asm_cls_spv", "tower_pool_2d_cls_spv", "tower_affine_rows_cls_spv",
     "tower_clamp_copy_cls_spv",
     // the biased-block (SigLIP) row classes: the bias with its GELU, the head restrides to the flash tile's width (the
-    // stocked mmproj-gemma-3-4b-it-F16.gguf, dispatched by test_gemma3v_vulkan_twin in test_gemma3v.das; the rope on a
-    // fused row's slot is the qwen3v tower's - mmproj-Qwen3VL-4B-Instruct-F16.gguf via test_qwen3v_vulkan_twin in
+    // stocked mmproj-gemma-3-4b-it-F16.gguf, dispatched by test_gemma3v_discrete_twin in test_gemma3v.das; the rope on a
+    // fused row's slot is the qwen3v tower's - mmproj-Qwen3VL-4B-Instruct-F16.gguf via test_qwen3v_discrete_twin in
     // test_qwen3v.das); their kernel coverage is test_vkt_tower_ln_rows. The layernorm, the seam with its next
     // layernorm and the bias pass serve the TTS rows too (the PL-BERT seat, the decoder convs' bias after the f16
     // tile), so the census reaches them on a box with a StyleTTS2 carrier
@@ -1335,12 +1340,12 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     "tower_hunpad_cls_spv", "tower_rope_tab_cls_spv",
     // the window-attention ViT's classes (qwen25v): the f32 per-window attention over the compact rows and the rms seam (the
     // gated hidden is the shared bias-gate stamp (`TowerBiasGate16`); the stocked mmproj-Qwen2.5-Omni-3B-f16.gguf,
-    // dispatched by test_qwen25v_vulkan_twin in test_qwen25v.das); their kernel coverage is test_vkt_tower_win_rows
+    // dispatched by test_qwen25v_discrete_twin in test_qwen25v.das); their kernel coverage is test_vkt_tower_win_rows
     "tower_win_attn_cls_spv", "tower_post_add_rms_cls_spv", "tower_bias_gate16_cls_spv",
     // the audio towers' classes - no zoo row runs an audio tower: the Conformer's silu rows (the bias class's unbiased stamp),
     // GLU, causal depthwise taps, windowed RPE attention (the 128-wide stamp serves the stocked mmproj-gemma-4-E2B-it-bf16.gguf's
-    // audio encoder through test_gemma4a_vulkan_twin in test_audio.das) and the plain residual seam; the FastConformer's
-    // centered depthwise conv (the stocked canary-qwen-2.5b-encoder-f32.bin through test_canary_vulkan_twin); the 64-wide
+    // audio encoder through test_gemma4a_discrete_twin in test_audio.das) and the plain residual seam; the FastConformer's
+    // centered depthwise conv (the stocked canary-qwen-2.5b-encoder-f32.bin through test_canary_discrete_twin); the 64-wide
     // attention stamp serves no stocked carrier; their kernel coverage is test_vkt_tower_conformer,
     // test_vkt_tower_fastconformer and test_vkt_tower_rows
     "tower_act_cls_spv", "tower_glu_sig_cls_spv", "tower_dw_conv5_cls_spv", "tower_g4a_attn_cls_spv", "tower_g4a_attn64_cls_spv",

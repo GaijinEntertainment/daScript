@@ -148,9 +148,11 @@ prefill, the FP4 expert rung, the nv4 nibble decode, the MMQ pin) in `ARCHITECTU
   `set_metal_wdec_small_cpu`): a Metal image of a decoder under the width rule bakes its step onto the CPU beside the
   device cross-KV, its lane folding `-cstep` (`ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-step-cpu`); the Vulkan
   decoder's step serves on the device at every width it serves, so Vulkan registers no width rule.
-- **Whisper's Vulkan flavor is the q8 lane alone**: the Vulkan tower serves a q8 encoder only, so the `whisper-f32-q8` lane
-  (the f32 encoder beside the q8 decoder) loads its CPU image on a Vulkan box, the whole lane on the CPU, where Metal's
-  tower serves the f32 encoder and flavors that lane (`ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block`).
+- **The audio towers' exact lane needs the tensor toolchain on Metal alone**: every home's exact lane is the f16 lane (the file's
+  GEMMs as halfwords, f32 accumulation; whisper's `whisper-f16-q8`, `ARCHITECTURE_MEDIA.md#tower-weight-lane`), and Metal's
+  rides the half tensor GEMM, so a Mac whose Metal toolchain carries no tensor ops (`pf_hmm_ready` false) serves the q8 lane on
+  the device and the exact lane on the CPU image - the load says so, naming the family (`tw_half_pick`) - where the
+  discrete homes serve the exact lane on their f16 tiles.
 - **The tower's decline stand-ins are Metal-only setters** (`set_metal_take_max_probe_`: the device's largest
   buffer under the pooled scratch takes, the seam of the tower's `memory` decline and the translation driver's
   `device` decline; `set_metal_vad_lanes_probe_`: the VAD recurrence pipeline's thread cap, the `device` decline's

@@ -216,7 +216,7 @@ def private q25v_gemm_types_uniform(m : GGUFMeta; n_layer : int64; gt : int) : b
 }
 
 //! The conv/attention GEMM K width served padded — %64 fits the Metal tiles; zero pads, exact.
-[arch(at="../ARCHITECTURE_MEDIA.md#tower-padded-widths")]
+[arch(at="../ARCHITECTURE_MEDIA_TOWER.md#tower-padded-widths")]
 def q25v_patch_pad(t : Qwen25vTower) : int64 => (t.patch_dim + 63l) / 64l * 64l
 
 def private q25v_gemm_sizes(d, ffp : int64) : array<int64> =>
@@ -252,7 +252,7 @@ def private q25v_verify_tensors(m : GGUFMeta; t : Qwen25vTower) {
     }
 }
 
-[unused_argument(woff), arch(at="../ARCHITECTURE_MEDIA.md#tower-padded-widths")]   // no wblob cursor: every GEMM stages f32-in-blob; woff keeps the shared layout signature
+[unused_argument(woff), arch(at="../ARCHITECTURE_MEDIA_TOWER.md#tower-padded-widths")]   // no wblob cursor: every GEMM stages f32-in-blob; woff keeps the shared layout signature
 def private q25v_layout(var t : Qwen25vTower; var off : int64&; var woff : int64&) {
     let d = t.n_embd
     let ffp = t.ff_pad

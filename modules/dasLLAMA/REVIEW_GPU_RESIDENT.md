@@ -4,9 +4,11 @@
 docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`. Planned work:
 `followup_metal.md`, `followup_vulkan.md`, `followup_general.md` (the CUDA rows).
 
-**A diff never hands a whole GPU decode or prefill call that the device served before the diff to
-the CPU path silently - the shape it cannot serve on the device declines by name instead.** A call that
-runs on the CPU gives the user who selected the GPU a fraction of its speed.
+**A diff never hands a whole GPU call that the device served before the diff - a resident decode
+or prefill, a stage a tower driver fills (an encoder or synthesis stage of an audio, vision or speech
+model), or an ASR decoder step - to the CPU path silently; the shape it cannot serve on the device
+declines by name instead.** A call that runs on the CPU gives the user who
+selected the GPU a fraction of its speed.
 
 **A diff that lands or changes a model family, a backend arm or a session shape so that, for any
 model it serves, its batched decode step reads a weight plane once per row instead of once for all
@@ -43,11 +45,12 @@ to decide what the whole-model GPU driver holds on the device; a value set after
 reaches that decision.
 
 **A diff that defines a setter - a function that stores, in a module or process global, a value
-the next load reads to plan what the device holds: a `set_*` knob, an `install_*` declaration, or
-a function that fills or empties the home's seats alike - adds its name to the list
-that opens "the `set_gpu_*` and `reset_gpu_*` functions of `dasllama/dasllama_core.das`", in the
-same change.** The list is the trigger a reviewer reads; an unlisted setter reaches no call-order
-check.
+the next load reads to plan what the whole-model GPU driver (`dasllama/dasllama_gpu_resident.das`
+and the `dasllama/dasllama_<gpu>_decode.das` homes) holds on the device: a `set_*` knob, an
+`install_*` declaration, or a function that fills or empties the home's seats alike - adds its
+name to the list that opens "the `set_gpu_*` and `reset_gpu_*` functions of
+`dasllama/dasllama_core.das`", in the same change.** The list is the trigger a reviewer reads; an
+unlisted setter reaches no call-order check.
 
 **A diff that adds or rewords an `RdecPass` value's sentence in `rdec_pass_words` writes it in
 plain words a reader who never saw the engine understands, naming no part of the engine.** A
@@ -79,12 +82,8 @@ twice or overwrites its rows.
 `dasllama/dasllama_gpu_resident.das` registers in `dasllama/dasllama_common.das`'s override
 registries - makes it check that the session's K/V rows use the codec the mirror is armed with (the
 row encoding - f16, q8_0, tq4 or f32 - the mirror was built in) before it touches the mirror (the
-device copy of the K/V cache a GPU decode reads and writes).**
-
-**A resident override that byte-copies mirror rows across codecs - the mirror being the device
-copy of the K/V cache a GPU decode reads, the codec its rows' encoding - is a defect: bytes move
-only between same-codec session rows and mirror rows.** A cross-codec copy corrupts the host's
-authoritative cache.
+device copy of the K/V cache a GPU decode reads), and moves bytes only between session
+rows and mirror rows of one codec.** A cross-codec copy corrupts the host's authoritative cache.
 
 **A diff that adds or changes a GPU path that runs a recurrent (deltanet) forward itself makes it
 zero the deltanet state on a call at position zero, and decline every call at a nonzero position

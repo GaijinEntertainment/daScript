@@ -150,7 +150,7 @@ def test_gemma4v_tier1_gpu(t : T?) {
             var twq <- mint_tower(mm, true, 0l, -1l, TowerDev.metal)   // in memory: a load under the pin would bake the q8 image beside the serving one
             var stq = Gemma4vState()
             tt |> success(twq.q8, "the q8 lane minted under the pin")
-            q8_lane_served(tt, "q8 tower", twq.n_layer) $() : bool {
+            q8_lane_served(tt, "q8 tower", TowerFamily.vision, twq.n_layer) $() : bool {
                 return gate_encode(tt, twq, stq, "cb", 336, 336, "e2b.encode.cb336.log", TIER1_REL_Q8)
             }
             delete stq
@@ -345,7 +345,7 @@ def private mint_tower(mm : string; q8 : bool; nl : int64 = 0l; zero_block : int
 def private g4v_poison_leg(tt : T?; mm : string; kind : string; w, h : int; logname : string; bar_rms : float) {
     var o = OracleEncode()
     return if (!oracle_dump(tt, "gemma4-vision-oracle", logname, "its gemma4-vision-oracle mint script", o))
-    var twp <- mint_tower(mm, true, 0l, POISON_BLOCK, serving_tower_dev(true))
+    var twp <- mint_tower(mm, true, 0l, POISON_BLOCK, serving_tower_dev(TowerFamily.vision))
     var stp = Gemma4vState()
     dump_poison_leg(tt, "gemma4v", kind, w, h, o, bar_rms, POISON_BLOCK, int(twp.proj_dim), TIER1_ABS, twp, stp) $(t; var s; planes; var out) => gemma4v_encode(t, s, planes, int64(w), int64(h), out)
     delete stp
@@ -355,7 +355,7 @@ def private g4v_poison_leg(tt : T?; mm : string; kind : string; w, h : int; logn
 //! the q8 lane's bar: the device runs the q8 chain's arithmetic with f16 weight scales and its own summation order
 [test]
 def test_gemma4v_tier1_vulkan(t : T?) {
-    t |> run("tier-1 attempt on the serving discrete home's tower ({serving_tower_dev(true)}) vs the mtmd encode dumps (the q8 lane's bar)") @(tt : T?) {
+    t |> run("tier-1 attempt on the serving discrete home's tower ({serving_tower_dev(TowerFamily.vision)}) vs the mtmd encode dumps (the q8 lane's bar)") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
             if (!model_available(tt, mm) || !discrete_twin_seat(tt)) {
@@ -363,17 +363,17 @@ def test_gemma4v_tier1_vulkan(t : T?) {
             }
             let knobs = gpu_knobs()
             set_every_gpu_tower(true)
-            var tw <- mint_tower(mm, true, 0l, -1l, serving_tower_dev(true))
+            var tw <- mint_tower(mm, true, 0l, -1l, serving_tower_dev(TowerFamily.vision))
             var st = Gemma4vState()
             let fixtures = [(kind = "cb", w = 96, h = 96, log = "e2b.encode.cb96.log"),
                             (kind = "cb", w = 336, h = 336, log = "e2b.encode.cb336.log"),
                             (kind = "green", w = 336, h = 336, log = "e2b.encode.green336.log"),
                             (kind = "cb", w = 672, h = 336, log = "e2b.encode.cb672x336.log")]
             for (fx in fixtures) {
-                let s0 = gpu_tower_counters(true)
+                let s0 = gpu_tower_counters(TowerFamily.vision)
                 let ran = gate_encode(tt, tw, st, fx.kind, fx.w, fx.h, fx.log, TIER1_REL_Q8)
                 if (ran) {
-                    device_leg_served(tt, "{fx.kind} {fx.w}x{fx.h}", s0, gpu_tower_counters(true), tw.n_layer, -1l)
+                    device_leg_served(tt, "{fx.kind} {fx.w}x{fx.h}", s0, gpu_tower_counters(TowerFamily.vision), tw.n_layer, -1l)
                 }
             }
             delete st
@@ -391,12 +391,12 @@ def private twin_encode(tt : T?; tw : Gemma4vTower; var st : Gemma4vState; tw_ex
                         kind : string; w, h : int; mm : string; zero_block : int64 = -1l) {
     let planes <- make_planes(kind, w, h)
     twin_canvas(tt, "gemma4v", kind, w, h, 16l, "", tw, st, tw_exact, st_exact, zero_block,
-        $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb, serving_tower_dev(true)) }) $(t; var s; var out) => gemma4v_encode(t, s, planes, int64(w), int64(h), out)
+        $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb, serving_tower_dev(TowerFamily.vision)) }) $(t; var s; var out) => gemma4v_encode(t, s, planes, int64(w), int64(h), out)
 }
 
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
-def test_gemma4v_vulkan_twin(t : T?) {
-    t |> run("the serving discrete home's chain ({serving_tower_dev(true)}) vs the CPU q8 chain, and the exact lane served") @(tt : T?) {
+def test_gemma4v_discrete_twin(t : T?) {
+    t |> run("the serving discrete home's chain ({serving_tower_dev(TowerFamily.vision)}) vs the CPU q8 chain, and the exact lane served") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
             if (!model_available(tt, mm) || !discrete_twin_seat(tt)) {
@@ -436,7 +436,7 @@ def test_gemma4v_vulkan_twin(t : T?) {
             delete twxp
             delete st_exact
             delete tw_exact
-            serving_tower_shutdown(true)
+            gpu_tower_shutdown(TowerFamily.vision)
         } else {
             tt |> skip("dasVulkan not present")
         }
@@ -488,20 +488,20 @@ def test_gemma4v_tier1_e4b(t : T?) {
             static_if (typeinfo builtin_module_exists(das_metal)) {
                 to_log(LOG_INFO, "E4B q8: das_metal on this build owns the tower hooks - the Vulkan leg has no seat\n")
             } else {
-                if (serving_tower_device_up(true)) {
-                    set_serving_gpu_tower(true, true)
-                    var twv <- mint_tower(mm, true, 0l, -1l, serving_tower_dev(true))
+                if (serving_tower_device_up(TowerFamily.vision)) {
+                    set_serving_gpu_tower(true, TowerFamily.vision)
+                    var twv <- mint_tower(mm, true, 0l, -1l, serving_tower_dev(TowerFamily.vision))
                     var stv = Gemma4vState()
-                    let v0 = gpu_tower_counters(true)
+                    let v0 = gpu_tower_counters(TowerFamily.vision)
                     let ran = gate_encode(tt, twv, stv, "cb", 336, 336, "e4b.encode.cb336.log", TIER1_REL_Q8)
                     if (ran) {
-                        device_leg_served(tt, "E4B q8", v0, gpu_tower_counters(true), twv.n_layer, -1l)
+                        device_leg_served(tt, "E4B q8", v0, gpu_tower_counters(TowerFamily.vision), twv.n_layer, -1l)
                     }
                     delete stv
                     delete twv
                     g4v_poison_leg(tt, mm, "cb", 336, 336, "e4b.encode.cb336.log", TIER1_REL_Q8)
                 } else {
-                    tt |> skip("no device stands up for the serving discrete home's tower ({serving_tower_dev(true)}) - the E4B q8 device leg")
+                    tt |> skip("no device stands up for the serving discrete home's tower ({serving_tower_dev(TowerFamily.vision)}) - the E4B q8 device leg")
                 }
             }
         }

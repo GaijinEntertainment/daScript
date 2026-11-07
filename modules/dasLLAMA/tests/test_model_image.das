@@ -8,7 +8,9 @@ require dastest/testing_boost public
 require dasllama/dasllama            // the facade: load_model's image cache is the surface under test
 require dasllama/dasllama_whisper
 require dasllama/dasllama_tower     // TowerDev/with_tower_dev_staging - the Metal arms mint each side's flavor (`#tower-dev-block`)
+require dasllama/dasllama_tower_image   // tower_dev_halfword - the discrete homes' exact lane is the f16 one
 require _gpu_knobs                  // with_gpu_knobs/set_every_gpu_tower/serving_tower_dev - each round trip's CPU image and GPU flavor
+require _tower_twin                 // knob_off_unrouted - the f16 by-path cells' route-counter control
 require dasllama/dasllama_gguf       // rd_u32/rd_u16 — the wav fixture reader
 require dasllama/dasllama_image
 require dasllama/dasllama_plane   // PlaneF — the served side of the round-trip comparisons
@@ -36,6 +38,7 @@ require ?das_metal dasllama/dasllama_metal_decode   // metal_decode_shutdown —
 require ?das_metal metal/das_metal_boost   // metal_create_system_default_device: the mlx-metal arms' device skip
 require dasllama/dasllama_gemm_schema // Q8_BLOCK_ELEMS/Q8_QPB/Q8_SPB — the dev-W bake key arithmetic
 require dasllama/dasllama_gpu_tier    // moe_gpu_bake_tag — the lane a cold load under an armed tier mints
+require dasllama/dasllama_env   // g_env_engine.image: the f16 by-path cells' skip with the rail off
 require dasllama/dasllama_layout // convert_model_to_metal_blob — the derive cell's in-RAM control
 require daslib/jobque_boost
 require daslib/archive
@@ -63,7 +66,8 @@ require _child_run   // run_child / das_exe - the mx4-stream arm's mint child
 // (DASLLAMA_IMAGE=0), and without its clip (the ASR corpus clips under benchmarks/asr/corpus/,
 // `asr_clip`); the Metal arms (gemma4uv-metal, mtower, the whisper cross-KV decoder, mlx-metal,
 // mlx-metal-35b) skip on a build without das_metal, the mlx-metal pair also on a box with no Metal
-// device, and mx4-stream's footprint leg off macOS.
+// device, and mx4-stream's footprint leg off macOS. The f16 by-path cells (`*_f16_image_by_path`)
+// also skip where no GPU home serving the family's f16 lane stands up (`f16_home_up`: every GPU home).
 
 // element-exact plane compare: -1 = length mismatch, else the number of differing elements
 // the staged (owned array) side against the served (borrowed plane) side — the only comparison
@@ -153,12 +157,9 @@ def private dev_block_same(t : T?; tag : string; dev : TowerDev; img : string; c
     t |> equal(count_plane_mismatch(fresh.dev, warm.dev), 0l, "{tag}: the warm image's device bytes are the mint's")
 }
 
-//! The lane's GPU flavor round trip where the box's driver serves it: the flavor's image (`lane`'s tag under the serving tower's
-//! flavor) removed, `load` twice - the cold mint, then the warm map - and `mint`, the in-memory mint of the same flavor, through
-//! `dev_block_roundtrip`, the serving tower pinned on and put back; `flavored` is whether the build's chain flavors the lane
-//! (`lane_flavored`) - a loud skip where it does not, or where no GPU device stands up for the serving tower
-def private gpu_lane_roundtrip(t : T?; tag, path, lane : string; flavored : bool; load : block<() : auto(M)>; mint : block<(dev : TowerDev) : M>) {
-    let dev = serving_tower_dev()
+//! the lane's GPU flavor round trip (`dev_block_roundtrip`): cold mint, warm map, in-memory mint; a loud skip where `flavored` is false or no device stands up
+def private gpu_lane_roundtrip(t : T?; tag : string; fam : TowerFamily; path, lane : string; flavored : bool; load : block<() : auto(M)>; mint : block<(dev : TowerDev) : M>) {
+    let dev = serving_tower_dev(fam)
     if (dev == TowerDev.none) {
         t |> skip("{tag}: the build has no GPU tower")
         return
@@ -167,12 +168,12 @@ def private gpu_lane_roundtrip(t : T?; tag, path, lane : string; flavored : bool
         t |> skip("{tag}: the {dev} chain flavors the family's other lane - this one runs whole on the CPU")
         return
     }
-    if (!serving_tower_device_up()) {
+    if (!serving_tower_device_up(fam)) {
         t |> skip("{tag}: no GPU device stands up for the serving tower on this box")
         return
     }
     with_gpu_knobs() {
-        set_serving_gpu_tower(true)
+        set_serving_gpu_tower(true, fam)
         let img = image_path_for(path, tower_dev_tag(lane, dev))
         remove(img)
         var inscope cold <- invoke(load)
@@ -184,8 +185,17 @@ def private gpu_lane_roundtrip(t : T?; tag, path, lane : string; flavored : bool
     }
 }
 
-//! the lane the serving tower's audio chains flavor: Vulkan's q8 image, Metal's exact one
-def private lane_flavored(q8 : bool) : bool => serving_tower_dev() == TowerDev.vulkan ? q8 : !q8
+//! family `fam`'s chains serve its exact image - the f16 one (`tower_dev_halfword`) - beside the q8 one, on every GPU home
+def private exact_lane_flavored(fam : TowerFamily) : bool
+    => (fam == TowerFamily.canary || fam == TowerFamily.parakeet || fam == TowerFamily.gemma4a || fam == TowerFamily.whisper
+        || fam == TowerFamily.qwen3a)
+
+//! family `fam`'s audio chains flavor the lane on its home: the q8 lane, and the exact one too under `exact_lane_flavored`
+def private lane_flavored(fam : TowerFamily; q8 : bool) : bool => q8 || exact_lane_flavored(fam)
+
+//! a whisper-class family's exact lane tag on `fam`'s home: `f16_tag` on a GPU home, `f32_tag` on the CPU
+def private exact_lane_tag(fam : TowerFamily; f32_tag, f16_tag : string) : string
+    => tower_dev_halfword(serving_tower_dev(fam)) ? f16_tag : f32_tag
 
 // ===== the synthetic carrier (mechanics arm) =====
 
@@ -473,7 +483,7 @@ def test_tower_exact_lanes_are_config_free(t : T?) {
             return
         }
         let seat = kernel_backend_seat()
-        let exact <- ["whisper-f32", "parakeet-f32", gigaam_image_tag(false), nmt_image_tag(false), "canary-f32", "gemma4a-f32", "qwen3a-f32", "tower-f32", "gemma4v", "gemma3v", "gemma4uv", "qwen3v", "qwen25v"]
+        let exact <- ["whisper-f32", "parakeet-f32", gigaam_image_tag(false), nmt_image_tag(false), "canary-f32", "canary-f16", "parakeet-f16", "gemma4a-f32", "gemma4a-f16", "qwen3a-f32", "qwen3a-f16", "tower-f32", "tower-f16", "gemma4v", "gemma3v", "gemma4uv", "qwen3v", "qwen25v"]
         var first : table<string; string>
         for (n in whole) {
             pin_kernel_backend(n)
@@ -1643,7 +1653,7 @@ def test_tower_image_roundtrip(t : T?) {
         return if (!jit_model_available(t, path))
         tower_cpu_roundtrip(t, path)
         for (q8 in [false, true]) {
-            gpu_lane_roundtrip(t, "ultravox-1b {q8 ? "q8" : "exact"} lane", path, q8 ? "tower-q8" : "tower-f32", lane_flavored(q8), $ => load_audio_tower(path, q8)) $(dev) {
+            gpu_lane_roundtrip(t, "ultravox-1b {q8 ? "q8" : "exact"} lane", TowerFamily.whisper, path, q8 ? "tower-q8" : exact_lane_tag(TowerFamily.whisper, "tower-f32", "tower-f16"), lane_flavored(TowerFamily.whisper, q8), $ => load_audio_tower(path, q8)) $(dev) {
                 var inscope stg <- tower_dev_staged(dev) $ { return <- stage_audio_tower(path, q8) }
                 var m = AudioTower()
                 mint_audio_tower(stg, m, q8, dev)
@@ -1661,12 +1671,12 @@ def private tower_cpu_roundtrip(t : T?; path : string) {
         remove(img)
         // the truth is the OFF-RAIL staged read: cold and warm are both image-backed now, so a
         // cold-vs-warm compare alone would only prove the file matches the chunk it came from
-        var inscope a <- stage_audio_tower(path)
-        var inscope cold <- load_audio_tower(path)
+        var inscope a <- stage_audio_tower(path, false)
+        var inscope cold <- load_audio_tower(path, false)
         t |> success(cold.image_map != null, "cold load serves the image it built")
         t |> success(stat(img).is_valid, "cold load saved an image")
         t |> equal(count_mismatch(a.fblob, cold.fblob), 0l, "cold-built fblob element-exact")
-        var inscope b <- load_audio_tower(path)
+        var inscope b <- load_audio_tower(path, false)
         t |> success(b.image_map != null, "warm load is image-backed")
         t |> equal(b.d_model, a.e.d_model)
         t |> equal(b.n_layer, a.e.n_layer)
@@ -1717,8 +1727,8 @@ def test_whisper_image_roundtrip(t : T?) {
         whisper_cpu_roundtrip(t, path, samples)
         for (enc_q8 in [true, false]) {
             // tiny's flavor bakes its step onto the CPU where the driver's width rule says so: its lane folds (`#tower-dev-step-cpu`)
-            let lane = whisper_dev_lane(enc_q8 ? "whisper-q8" : "whisper-f32-q8", serving_tower_dev(), whisper_bin_text_state(path))
-            gpu_lane_roundtrip(t, "whisper tiny {enc_q8 ? "q8" : "f32-enc q8-dec"} lane", path, lane, enc_q8 || serving_tower_dev() == TowerDev.metal,   // Metal flavors both whisper lanes, Vulkan the q8 one
+            let lane = whisper_dev_lane(enc_q8 ? "whisper-q8" : exact_lane_tag(TowerFamily.whisper, "whisper-f32-q8", "whisper-f16-q8"), serving_tower_dev(TowerFamily.whisper), whisper_bin_text_state(path))
+            gpu_lane_roundtrip(t, "whisper tiny {enc_q8 ? "q8" : "f32-enc q8-dec"} lane", TowerFamily.whisper, path, lane, lane_flavored(TowerFamily.whisper, enc_q8),
                     $ => load_whisper_model(path, enc_q8, true)) $(dev) {
                 var inscope stg <- tower_dev_staged(dev) $ { return <- stage_whisper_model(path, enc_q8, true) }
                 var m = WhisperModel()
@@ -1727,6 +1737,88 @@ def test_whisper_image_roundtrip(t : T?) {
             }
         }
         delete samples
+    }
+}
+
+//! a GPU home serving family `fam`'s f16 lane - every GPU home - else a loud skip naming why
+def private f16_home_up(t : T?; fam : TowerFamily) : bool {
+    if (!tower_dev_halfword(serving_tower_dev(fam)) || !serving_tower_device_up(fam)) {
+        t |> skip("no GPU home serving {fam}'s f16 lane stands up on this box")
+        return false
+    }
+    return true
+}
+
+//! family `fam`'s f16 image by path (`#tower-weight-lane`): `mint` leaves `img` on disk, `serve` maps and serves it; false is a loud
+//! skip (the image rail off) or a failed mint
+def private f16_image_by_path(t : T?; tag : string; fam : TowerFamily; img : string; mint : block<() : bool>; serve : block<() : void>) : bool {
+    if (!g_env_engine.image) {
+        t |> skip("{tag}: the image rail is off (DASLLAMA_IMAGE=0) - no f16 image to load by path")
+        return false
+    }
+    var minted_image = false
+    with_gpu_knobs() {
+        set_serving_gpu_tower(true, fam)
+        t |> success(invoke(mint), "{tag}: the exact-pinned load takes the {serving_tower_dev(fam)} flavor's f16 image")
+        minted_image = stat(img).is_valid
+        t |> success(minted_image, "{tag}: the exact-pinned load left its f16 image at {img}")
+        return if (!minted_image)
+        with_dasllama_jobque_() {
+            invoke(serve)
+        }
+    }
+    return minted_image
+}
+
+//! an ASR family's f16 image by path through the facade (`f16_image_by_path`), jfk transcribed in `lang` off the device chain
+def private asr_f16_by_path(t : T?; tag : string; fam : TowerFamily; img, lang : string; mint : block<() : bool>; load : block<() : AsrModel>;
+                            f16_of : block<(m : AsrModel) : bool>) {
+    var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
+    if (empty(samples)) {
+        t |> skip("jfk.wav not present")
+        return
+    }
+    let dev = serving_tower_dev(fam)
+    var text = ""
+    let served = f16_image_by_path(t, tag, fam, img, mint) {
+        var inscope m <- invoke(load)
+        t |> success(invoke(f16_of, m), "{tag}: the by-path load maps the {dev} flavor's f16 image")
+        let e0 = gpu_tower_encodes(fam)
+        var inscope s <- create_session(m, lang)
+        transcribe(m, s, samples) $(seg) {
+            text += seg.text
+        }
+        t |> success(gpu_tower_encodes(fam) > e0, "{tag}: the encoder rows came off the {dev} device chain")
+        knob_off_unrouted(t, tag, fam) {
+            var inscope so <- create_session(m, lang)
+            transcribe(m, so, samples) $ [unused_argument(seg)] (seg) {}
+        }
+    }
+    delete samples
+    return if (!served)
+    jfk_words_floor(t, "{tag} by path", text)
+}
+
+//! whisper tiny's f16-encoder image (`whisper-f16-q8`), minted by a `set_asr_tower_fp32` load, through `load_asr_model` by path
+[test]
+def test_whisper_f16_image_by_path(t : T?) {
+    t |> run("whisper tiny f16 image: the facade loads the discrete home's f16-encoder .dlim by path and serves it on the device") @(t : T?) {
+        return if (!family_on(t, "whisper") || !arm_on(t, "whisper") || !jit_only(t))
+        let path = path_join(whisper_dir(), "ggml-tiny.bin")
+        return if (!model_available(t, path) || !f16_home_up(t, TowerFamily.whisper))
+        let dev = serving_tower_dev(TowerFamily.whisper)
+        let img = image_path_for(path, tower_dev_tag(whisper_dev_lane("whisper-f16-q8", dev, whisper_bin_text_state(path)), dev))
+        asr_f16_by_path(t, "whisper tiny f16 image", TowerFamily.whisper, img, "", $ {
+            set_asr_fp32(false)   // a leaked whole-model pin would put the decoder on f32 too
+            set_asr_tower_fp32(true)
+            var inscope minted <- load_asr_model(path)
+            set_asr_tower_fp32(false)
+            return minted.whisper.enc.gemm_f16 && minted.whisper.dq8 && minted.whisper.enc.dev_backend == dev
+        }, $ {
+            return <- load_asr_model(img)
+        }) $(m) {
+            return m.whisper.enc.gemm_f16 && m.whisper.dq8 && m.whisper.enc.dev_backend == dev
+        }
     }
 }
 
@@ -1814,11 +1906,11 @@ def private whisper_lane_text(path : string; samples : array<float>; enc_q8 : bo
 
 // The whisper-class tower blocks on the GPU (arm `mtower`): the lane whole on each side - the CPU image on the CPU, the
 // Metal-flavored image on the device, encoder and decoder - transcript equality on the corpus clip + geometry-derived counter
-// deltas, the knob-off leg on the CPU image. Numeric bars live in the kernels suite; the transcript is the backend-portable
-// oracle (battery: stated claims).
+// deltas, the knob-off leg on the CPU image. The exact encoder's Metal image is its f16 one, the CPU image's the f32 planes.
+// Numeric bars live in the kernels suite; the transcript is the backend-portable oracle (battery: stated claims).
 [test]
 def test_whisper_metal_tower(tst : T?) {
-    tst |> run("whisper tiny f32: the Metal tower blocks - transcript + counters + knob") @(t : T?) {
+    tst |> run("whisper tiny exact encoder: the Metal tower blocks on the f16 image - transcript + counters + knob") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             if (!family_on(t, "whisper") || !arm_on(t, "mtower")) return
             let path = path_join(whisper_dir(), "ggml-tiny.bin")
@@ -1835,9 +1927,13 @@ def test_whisper_metal_tower(tst : T?) {
             let s1 = metal_tower_stats()
             t |> equal(s1.encodes, s0.encodes, "OFF leg never dispatches")
             t |> equal(s1.declines - s0.declines, 1l, "OFF leg records the knob decline")
-            let gpu = whisper_lane_text(path, samples, false, TowerDev.metal)
+            var inscope wg <- whisper_lane_model(path, false, TowerDev.metal)
+            t |> success(wg.enc.gemm_f16 && wg.enc.dev_backend == TowerDev.metal, "the exact encoder's Metal image is its f16 one")
+            let h0 = metal_tower_f16_encodes()
+            let gpu = wdec_transcribe(wg, samples)
             let s2 = metal_tower_stats()
             let chunks = s2.encodes - s1.encodes
+            t |> equal(metal_tower_f16_encodes() - h0, chunks, "every exact-lane encode rode the halfword plane")
             t |> equal(chunks, 1l, "jfk is one 30s chunk")
             t |> equal(s2.blocks - s1.blocks, 4l * chunks, "blocks delta = n_layer x chunks (tiny = 4)")
             t |> equal(s2.rows - s1.rows, 1500l * chunks, "rows delta = n_ctx x chunks")
@@ -1863,30 +1959,28 @@ def test_whisper_metal_tower(tst : T?) {
                 t |> success(!empty(lg), "large: non-empty transcript")
                 t |> success(lc == lg, "large: transcript-exact CPU vs GPU")
             }
-            set_metal_tensor_crowns("mulmm_q8")
-            metal_prefill_shutdown()
-            let tw0 = metal_tower_f16_encodes()
-            let twg = whisper_lane_text(path, samples, false, TowerDev.metal)
-            t |> success(metal_tower_f16_encodes() - tw0 >= 1l, "the f16-sourced tower rode the twin route")
-            t |> success(twg == cpu, "twin route: transcript-exact vs CPU")
+            // the twin knob off: the exact lane's flavor pick is the CPU image, which the CPU serves
             set_metal_tower_f16(false)
-            let tw1 = metal_tower_f16_encodes()
-            let twf = whisper_lane_text(path, samples, false, TowerDev.metal)
+            let hf0 = metal_tower_f16_encodes()
+            let sf0 = metal_tower_stats()
+            var inscope wf <- load_whisper_model(path, false, true)
+            let twf = wdec_transcribe(wf, samples)
             set_metal_tower_f16(true)
-            t |> equal(metal_tower_f16_encodes(), tw1, "twin knob off: the route never engaged")
-            t |> success(twf == cpu, "twin knob off: the f32 route stays transcript-exact")
+            t |> equal(wf.enc.dev_backend, TowerDev.none, "twin knob off: the exact lane maps the CPU image")
+            t |> equal(metal_tower_stats().encodes, sf0.encodes, "twin knob off: no device encode")
+            t |> equal(metal_tower_f16_encodes(), hf0, "twin knob off: the halfword plane never engaged")
+            t |> success(twf == cpu, "twin knob off: the CPU image's transcript is the CPU chain's")
+            // the f16 image's halfword plane is the GEMMs' only weight plane: one layer of it zeroed changes the transcript
             var inscope wpz = WhisperModel()
             var inscope stgz <- tower_dev_staged(TowerDev.metal) $ { return <- stage_whisper_model(path, false, true) }
-            t |> success(long_length(stgz.enc.wblob) > 0l, "the f16 bin baked a twin at stage")
-            let zbase = stgz.e.enc.layers_off + 2l * stgz.e.enc.layer_stride
-            for (i in range64(long_length(stgz.enc.wblob) > 0l ? stgz.e.enc.layer_stride : 0l)) {
+            t |> success(stgz.e.enc.gemm_f16 && long_length(stgz.enc.wblob) > 0l, "the Metal staging laid the exact encoder's GEMMs as halfwords")
+            let zbase = stgz.e.enc.qlayers_off + 2l * stgz.e.enc.qlayer_stride
+            for (i in range64(stgz.e.enc.qlayer_stride)) {
                 stgz.enc.wblob[zbase + i] = uint16(0)
             }
             mint_whisper_model(stgz, wpz, false, true, TowerDev.metal)
             let z_text = wdec_transcribe(wpz, samples)
-            t |> success(z_text != cpu, "a zeroed twin layer CHANGES the GPU transcript (the twin is read)")
-            set_metal_tensor_crowns("")
-            metal_prefill_shutdown()
+            t |> success(z_text != cpu, "a zeroed halfword layer CHANGES the GPU transcript (the halfword plane is read)")
             // the q8 SERVING DEFAULT serves on the tower: its block GEMMs read the q8 planes as a device blob
             var inscope w8 <- whisper_lane_model(path, true, TowerDev.none)
             var inscope w8d <- whisper_lane_model(path, true, TowerDev.metal)
@@ -1904,7 +1998,7 @@ def test_whisper_metal_tower(tst : T?) {
             t |> equal(sq1.encodes - sq0.encodes, 1l, "q8: one GPU chunk")
             t |> equal(sq1.blocks - sq0.blocks, 4l, "q8: blocks delta = n_layer (tiny = 4)")
             t |> equal((metal_tower_declines()?["quant_mode"] ?? 0l) - dq0, 0l, "q8: no quant_mode decline")
-            t |> equal(metal_tower_f16_encodes(), tq0, "q8: the halfword twin route stays out of it")
+            t |> equal(metal_tower_f16_encodes(), tq0, "q8: the halfword plane stays out of it")
             t |> success(!empty(q8_gpu) && q8_gpu == q8_cpu, "q8: transcript-exact CPU vs GPU")
             // the control: a q8 tower with one layer's GEMM planes zeroed, through the device chain, reads another text
             var inscope wz8 = WhisperModel()
@@ -2078,11 +2172,11 @@ def test_whisper_metal_cross_kv(tst : T?) {
     }
 }
 
-//! a parakeet model on the exact lane behind the ASR facade, minted in memory in the flavor `dev` (`#tower-dev-block`)
-def private pk_asr_model(path : string; dev : TowerDev) : AsrModel {
-    var inscope stg <- tower_dev_staged(dev) $ { return <- stage_parakeet_model(path, false) }
+//! a parakeet model on the exact lane (`q8` off) or the q8 one behind the ASR facade, minted in memory in the flavor `dev` (`#tower-dev-block`)
+def private pk_asr_model(path : string; dev : TowerDev; q8 : bool = false) : AsrModel {
+    var inscope stg <- tower_dev_staged(dev) $ { return <- stage_parakeet_model(path, q8) }
     var m = AsrModel(kind = AsrKind.parakeet)
-    mint_parakeet_model(stg, m.pk, false, dev)
+    mint_parakeet_model(stg, m.pk, q8, dev)
     return <- m
 }
 
@@ -2110,20 +2204,21 @@ def test_parakeet_tower_metal(tst : T?) {
             var poison_rel_l2 = 0.0
             var rows_gpu = 0l
             var twin_delta = 0l
-            var tile_delta = 0l
             var twin_rel_l2 = 0.0
-            var tile_rel_l2 = 0.0
+            var knob_off_flavor = TowerDev.metal
+            var knob_on_flavor = TowerDev.none
             var front_delta = 0l
             var dev_delta = 0l
             var dev_off_delta = 0l
             var dev_rel_l2 = 0.0
             var dev_off_rel_l2 = 0.0
             var dev_text = ""
+            let tower_was = metal_tower_knob()
             with_dasllama_jobque_() {
-                // the exact lane twice (`#tower-dev-block`): its CPU image for the CPU legs, its Metal-flavored image for the device's
                 var inscope m <- pk_asr_model(path, TowerDev.none)
                 var inscope md <- pk_asr_model(path, TowerDev.metal)
-                t |> success(!m.pk.q8 && !md.pk.q8, "model is on the f32 rail")
+                t |> success(!m.pk.q8 && !md.pk.q8, "model is on the exact lane")
+                t |> success(!m.pk.gemm_f16 && md.pk.gemm_f16, "the CPU image's GEMMs are the file's f32, the Metal image's its halfwords")
                 nlayer = m.pk.n_layer
                 // every lever a leg below depends on, set here and put back at the cell's end
                 let crowns_prev = get_metal_tensor_crowns()
@@ -2168,8 +2263,7 @@ def test_parakeet_tower_metal(tst : T?) {
                 }
                 parakeet_encode(md.pk, stg2)
                 poison_rel_l2 = rel_l2(stg2.x, stc.x)
-                // the two GEMM routes under a pinned tensor crown: the image minted under it carries the device twin (the box
-                // runs the half tensor form), then the knob's f32 tiles over the same image
+                // a pinned tensor crown puts the halfwords on the half tensor GEMM; twin knob off, the flavor pick maps the CPU image (no Metal f32 GEMM plane)
                 set_metal_tensor_crowns("mulmm_q8")
                 metal_prefill_shutdown()
                 var inscope mdt <- pk_asr_model(path, TowerDev.metal)
@@ -2179,11 +2273,9 @@ def test_parakeet_tower_metal(tst : T?) {
                 twin_delta = metal_tower_f16_encodes() - tw0
                 twin_rel_l2 = rel_l2(stg2.x, stc.x)
                 set_metal_tower_f16(false)
-                let tw1 = metal_tower_f16_encodes()
-                parakeet_encode(mdt.pk, stg2)
-                tile_delta = metal_tower_f16_encodes() - tw1
-                tile_rel_l2 = rel_l2(stg2.x, stc.x)
+                knob_off_flavor = parakeet_dev_flavor(false)
                 set_metal_tower_f16(true)
+                knob_on_flavor = parakeet_dev_flavor(false)
                 // the all-heads attention under the device pair's crown, then its lever off: the per-head loop serves
                 set_metal_tensor_crowns("mulmm_q8,attn_dev")
                 metal_prefill_shutdown()
@@ -2205,6 +2297,7 @@ def test_parakeet_tower_metal(tst : T?) {
                 set_metal_tensor_crowns(crowns_prev)
                 metal_prefill_shutdown()
             }
+            set_metal_tower(tower_was)
             t |> equal(dev_delta, 1l, "under the device pair's crown the attention ran over every head at once")
             t |> success(dev_rel_l2 < 5.0e-2, "the all-heads attention tracks the CPU rail (rel-l2 {dev_rel_l2})")
             t |> equal(dev_text, cpu_text, "the all-heads attention's transcript is the CPU's")
@@ -2213,13 +2306,13 @@ def test_parakeet_tower_metal(tst : T?) {
             t |> success(dev_rel_l2 != dev_off_rel_l2, "the two attention forms round apart - the lever switched the route")
             to_log(LOG_INFO, "parakeet mtower encode rel-l2 by attention form: all heads {dev_rel_l2}, per head {dev_off_rel_l2}\n")
             t |> equal(front_delta, enc_delta, "every GPU encode ran the subsample front on the device ({front_delta} of {enc_delta})")
-            t |> equal(twin_delta, 1l, "under a tensor crown the encode rode the device twin")
-            t |> success(twin_rel_l2 < 5.0e-2, "the twin route tracks the CPU rail (rel-l2 {twin_rel_l2})")
-            t |> equal(tile_delta, 0l, "twin knob off: the route never engaged")
-            t |> success(tile_rel_l2 < 5.0e-2, "twin knob off: the f32 tile route tracks the CPU rail (rel-l2 {tile_rel_l2})")
-            to_log(LOG_INFO, "parakeet mtower encode rel-l2 by route: twin {twin_rel_l2}, f32 tiles {tile_rel_l2}\n")
-            t |> success(parakeet_gpu_serves(), "the driver reports serving with the tower on")
-            t |> success(!parakeet_serves_q8(), "the un-pinned lane is the f32 planes while the driver serves")
+            t |> equal(twin_delta, 1l, "under a tensor crown the encode rode the halfword plane")
+            t |> success(twin_rel_l2 < 5.0e-2, "the halfword plane tracks the CPU rail (rel-l2 {twin_rel_l2})")
+            t |> equal(knob_off_flavor, TowerDev.none, "twin knob off: the exact lane maps the CPU image")
+            t |> equal(knob_on_flavor, TowerDev.metal, "twin knob on: the exact lane takes the Metal flavor (the knob's control)")
+            to_log(LOG_INFO, "parakeet mtower encode rel-l2 on the halfword plane under the crown: {twin_rel_l2}\n")
+            reset_parakeet_q8()
+            t |> success(parakeet_serves_q8(), "the un-pinned lane is the policy's: q8 on every home")
             t |> equal(off_encodes, 0l, "the tower-off leg never dispatched")
             t |> success(off_declines >= 1l, "the tower-off leg recorded the knob decline ({off_declines})")
             t |> equal(rows_gpu, 1l, "the rows compare's GPU encode dispatched")
@@ -2245,10 +2338,10 @@ def test_parakeet_tower_metal(tst : T?) {
     }
 }
 
-// A q8 parakeet stays on the CPU chain: the driver declines it (quant_mode) and never dispatches.
+//! the q8 parakeet's Metal image serves off its q8 slab to the CPU q8 text; a capability decline panics naming the mode, a policy decline serves the CPU
 [test]
-def test_parakeet_tower_q8_decline(tst : T?) {
-    tst |> run("parakeet tower: the q8 lane records the quant_mode decline and never dispatches") @(t : T?) {
+def test_parakeet_tower_q8_metal(tst : T?) {
+    tst |> run("parakeet tower: the q8 lane serves on the Metal chain off its q8 slab, and the seat's required-mode contract") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             if (!family_on(t, "parakeet") || !arm_on(t, "mtower")) return
             let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
@@ -2258,46 +2351,80 @@ def test_parakeet_tower_q8_decline(tst : T?) {
                 t |> skip("jfk.wav not present")
                 return
             }
-            var text = ""
+            var cpu_text = ""
+            var gpu_text = ""
+            var policy_text = ""
+            var inscope cpu_toks, gpu_toks : array<int>
             var enc_delta = 0l
-            var dec_delta = 0l
+            var off_delta = 0l
+            var quant_delta = 0l
+            var f16_delta = 0l
+            let tower_was = metal_tower_knob()
             with_dasllama_jobque_() {
-                var inscope m = AsrModel(kind = AsrKind.parakeet)
-                var inscope stg <- stage_parakeet_model(path, true)
-                mint_parakeet_model(stg, m.pk, true)
-                t |> success(m.pk.q8, "model is on the q8 lane")
+                var inscope mc <- pk_asr_model(path, TowerDev.none, true)
+                var inscope md <- pk_asr_model(path, TowerDev.metal, true)
+                t |> success(mc.pk.q8 && md.pk.q8 && md.pk.dev_backend == TowerDev.metal, "the q8 lane's CPU image and its Metal image")
+                set_metal_tower(false)
+                let c0 = metal_tower_stats()
+                var inscope sc <- create_session(mc, "en")
+                transcribe(mc, sc, samples) $(seg) {
+                    cpu_toks |> push_from(seg.tokens)
+                    cpu_text += seg.text
+                }
+                off_delta = metal_tower_stats().encodes - c0.encodes
                 set_metal_tower(true)
                 let s0 = metal_tower_stats()
-                var inscope s <- create_session(m, "en")
-                text = transcribe(m, s, samples)
-                let s1 = metal_tower_stats()
-                enc_delta = s1.encodes - s0.encodes
-                dec_delta = s1.declines - s0.declines
+                let q0 = metal_tower_declines()?["quant_mode"] ?? 0l
+                let f0 = metal_tower_f16_encodes()
+                var inscope sd <- create_session(md, "en")
+                transcribe(md, sd, samples) $(seg) {
+                    gpu_toks |> push_from(seg.tokens)
+                    gpu_text += seg.text
+                }
+                enc_delta = metal_tower_stats().encodes - s0.encodes
+                quant_delta = (metal_tower_declines()?["quant_mode"] ?? 0l) - q0
+                f16_delta = metal_tower_f16_encodes() - f0
             }
-            t |> success(!empty(text), "transcript non-empty")
-            t |> equal(enc_delta, 0l, "no tower encodes on the q8 lane")
-            t |> success(dec_delta >= 1l, "the quant_mode decline is counted ({dec_delta})")
-            // required-mode contract: a capability decline (quant_mode) under MetalMode.required
-            // panics instead of silently CPU-serving
-            var tripped = false
+            to_log(LOG_INFO, "parakeet mtower q8 CPU eyeball: {cpu_text}\n")
+            to_log(LOG_INFO, "parakeet mtower q8 GPU eyeball: {gpu_text}\n")
+            t |> success(!empty(gpu_text), "transcript non-empty")
+            t |> equal(gpu_text, cpu_text, "the q8 lane's Metal transcript is the CPU q8 chain's")
+            t |> success(!empty(gpu_toks), "the Metal leg emitted token ids")
+            t |> equal(count_mismatch(cpu_toks, gpu_toks), 0l, "the q8 lane's Metal token ids are the CPU q8 chain's, id for id ({length(gpu_toks)} against {length(cpu_toks)})")
+            t |> success(enc_delta >= 1l, "the q8 lane encoded on the device ({enc_delta} encodes)")
+            t |> equal(off_delta, 0l, "the knob-off CPU leg encoded nothing on the device (the route counter's control)")
+            t |> equal(quant_delta, 0l, "the q8 lane declined nothing (`quant_mode`)")
+            t |> equal(f16_delta, 0l, "the q8 lane read the q8 slab, not the halfword plane")
+            var tripped = ""
             let mode_was = get_metal_mode()
+            let f16_was = get_metal_tower_f16()
             set_metal_mode(MetalMode.required)
             try {
                 with_dasllama_jobque_() {
-                    var inscope m = AsrModel(kind = AsrKind.parakeet)
-                    var inscope stg <- stage_parakeet_model(path, true)
-                    mint_parakeet_model(stg, m.pk, true)
-                    var inscope s <- create_session(m, "en")
-                    transcribe(m, s, samples)
+                    set_metal_tower_f16(true)
+                    var inscope mx <- pk_asr_model(path, TowerDev.metal)   // minted with the twin knob on: the halfword image
+                    set_metal_tower_f16(false)
+                    var inscope s <- create_session(mx, "en")
+                    transcribe(mx, s, samples)
                 }
             } recover {
-                tripped = true
+                tripped = this_context().last_exception |> rtrim
             }
+            set_metal_tower_f16(f16_was)
+            with_dasllama_jobque_() {
+                var inscope mc <- pk_asr_model(path, TowerDev.none, true)
+                set_metal_tower(false)
+                var inscope s <- create_session(mc, "en")
+                policy_text = transcribe(mc, s, samples)
+            }
+            set_metal_tower(tower_was)
             set_metal_mode(mode_was)
-            t |> success(tripped, "required mode: the q8 tower decline panics")
+            t |> success(find(tripped, "metal mode `required`") >= 0 && find(tripped, "device") >= 0,
+                "required mode: the exact image's halfwords with the twin knob off decline `device`, and the decline panics ('{tripped}')")
+            t |> equal(policy_text, cpu_text, "required mode + knob off: the policy decline serves the CPU, no panic")
             delete samples
         } else {
-            t |> skip("no Metal build - the parakeet FastConformer driver has no device to decline")
+            t |> skip("no Metal build - the parakeet FastConformer driver has no device to serve")
         }
     }
 }
@@ -2335,8 +2462,10 @@ def test_parakeet_image_roundtrip(t : T?) {
             t |> skip("jfk.wav not present")
             return
         }
-        let lane = parakeet_serves_q8() ? "parakeet-q8" : "parakeet-f32"
-        let img = image_path_for(path, tower_dev_tag(lane, parakeet_dev_flavor(parakeet_serves_q8())))
+        reset_parakeet_q8()   // the cell reads the un-pinned policy's lane
+        let policy_dev = parakeet_dev_flavor(parakeet_serves_q8())
+        let lane = parakeet_image_tag(path, parakeet_serves_q8(), policy_dev)
+        let img = image_path_for(path, tower_dev_tag(lane, policy_dev))
         remove(image_path_for(path, lane))
         remove(img)
         // off-rail truth: both cached loads are image-backed, so they cannot check each other
@@ -2353,6 +2482,20 @@ def test_parakeet_image_roundtrip(t : T?) {
         t |> success(g.text == a.text, "in-memory mint vs cold-built image transcript")
         t |> success(g.text == b.text, "in-memory mint vs mapped image transcript")
         delete samples
+        gpu_lane_roundtrip(t, "parakeet exact lane", TowerFamily.parakeet, path, parakeet_image_tag(path, false, serving_tower_dev(TowerFamily.parakeet)),
+                lane_flavored(TowerFamily.parakeet, false), $ => load_parakeet_model(path)) $(dev) {
+            var inscope stg <- tower_dev_staged(dev) $ { return <- stage_parakeet_model(path) }
+            var m = ParakeetModel()
+            mint_parakeet_model(stg, m, false, dev)
+            return <- m
+        }
+        gpu_lane_roundtrip(t, "parakeet q8 lane", TowerFamily.parakeet, path, "parakeet-q8", lane_flavored(TowerFamily.parakeet, true),
+                $ => load_parakeet_model(path, true)) $(dev) {
+            var inscope stg <- tower_dev_staged(dev) $ { return <- stage_parakeet_model(path, true) }
+            var m = ParakeetModel()
+            mint_parakeet_model(stg, m, true, dev)
+            return <- m
+        }
     }
 }
 
@@ -2365,7 +2508,7 @@ def private asr_text(m : AsrModel; samples : array<float>) : string {
 //! the lane `tag`'s images on both flavors removed: the CPU image's and the serving tower's (`#tower-dev-block`)
 def private ga_remove_lane_images(path, tag : string) {
     remove(image_path_for(path, tag))
-    remove(image_path_for(path, tower_dev_tag(tag, serving_tower_dev())))
+    remove(image_path_for(path, tower_dev_tag(tag, serving_tower_dev(TowerFamily.gigaam))))
 }
 
 //! where the cold load served a GPU flavor, its device block against an in-memory mint of that flavor (`dev_block_same`)
@@ -2501,6 +2644,112 @@ def test_bergamot_image_roundtrip(t : T?) {
     }
 }
 
+//! qwen3a's f16 image (`qwen3a-f16`), minted by an exact-pinned tower load, through the facade's mmproj route by path
+[test]
+def test_qwen3a_f16_image_by_path(t : T?) {
+    t |> run("qwen3a f16 image: the facade loads the discrete home's halfword mmproj .dlim by path and serves it on the device") @(t : T?) {
+        return if (!family_on(t, "qwen3a") || !arm_on(t, "qwen3a") || !jit_only(t))
+        let dec_path = path_join(models_dir(), "Qwen3-ASR-0.6B-Q8_0.gguf")
+        let mmp_path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
+        return if (!model_available(t, dec_path) || !model_available(t, mmp_path) || !f16_home_up(t, TowerFamily.qwen3a))
+        let dev = serving_tower_dev(TowerFamily.qwen3a)
+        let img = image_path_for(mmp_path, tower_dev_tag("qwen3a-f16", dev))
+        asr_f16_by_path(t, "qwen3a f16 image", TowerFamily.qwen3a, img, "", $ {
+            set_qwen3a_q8(false)
+            var inscope minted <- load_qwen3a_tower(mmp_path)
+            reset_qwen3a_q8()
+            return minted.core.gemm_f16 && minted.cf16 && minted.core.dev_backend == dev
+        }, $ {
+            return <- load_asr_model(dec_path, img)
+        }) $(m) {
+            return m.q3t.core.gemm_f16 && m.q3t.cf16 && m.q3t.core.dev_backend == dev
+        }
+    }
+}
+
+//! ultravox-1b's f16 tower image by path through the audio embedder: the baked tag routes it, every chunk's soft tokens finite off the device chain
+[test]
+def test_tower_f16_image_by_path(t : T?) {
+    t |> run("ultravox-1b f16 image: the audio embedder loads the discrete home's halfword .dlim by path and serves it on the device") @(t : T?) {
+        return if (!family_on(t, "ultravox") || !arm_on(t, "tower") || !jit_only(t))
+        let path = path_join(models_dir(), "mmproj-ultravox-1b-f32.gguf")
+        return if (!model_available(t, path) || !f16_home_up(t, TowerFamily.whisper))
+        var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
+        if (empty(samples)) {
+            t |> skip("jfk.wav not present")
+            return
+        }
+        let dev = serving_tower_dev(TowerFamily.whisper)
+        let img = image_path_for(path, tower_dev_tag("tower-f16", dev))
+        f16_image_by_path(t, "ultravox-1b f16 image", TowerFamily.whisper, img, $ {
+            var inscope minted <- load_audio_tower(path, false)
+            return minted.gemm_f16 && minted.dev_backend == dev
+        }) {
+            set_audio_tower_q8(false)   // the f16 lane is pin-only: the embedder's un-pinned load would take the policy's q8
+            var inscope e <- load_audio_embedder(img)
+            reset_audio_tower_q8()
+            t |> success(e.kind == AudioKind.audio_tower && e.audio_tower.tower.gemm_f16 && e.audio_tower.tower.dev_backend == dev,
+                "the by-path load maps the {dev} flavor's f16 tower image")
+            var inscope s = AudioState()
+            var out : array<float>
+            let e0 = gpu_tower_encodes(TowerFamily.whisper)
+            let n = encode_audio_(e, s, samples, out)
+            let chunks = gpu_tower_encodes(TowerFamily.whisper) - e0
+            t |> success(chunks >= 1l, "the soft tokens came off the {dev} device chain ({chunks} encodes)")
+            t |> equal(long_length(out), n * audio_proj_dim(e), "{n} soft tokens of the projector's width")
+            t |> success(n > 0l && all_finite(out), "every soft token finite")
+            knob_off_unrouted(t, "ultravox-1b f16 image", TowerFamily.whisper) {
+                var inscope so = AudioState()
+                var inscope oo : array<float>
+                encode_audio_(e, so, samples, oo)
+            }
+            delete out
+        }
+        delete samples
+    }
+}
+
+//! parakeet v3's f16 image (`parakeet-f16`), minted by an exact load on the GPU home, through `load_asr_model` by path
+[test]
+def test_parakeet_f16_image_by_path(t : T?) {
+    t |> run("parakeet v3 f16 image: the facade loads the GPU home's halfword .dlim by path and serves it on the device") @(t : T?) {
+        return if (!family_on(t, "parakeet") || !arm_on(t, "parakeet") || !jit_only(t))
+        let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
+        return if (!model_available(t, path) || !f16_home_up(t, TowerFamily.parakeet))
+        let dev = serving_tower_dev(TowerFamily.parakeet)
+        let img = image_path_for(path, tower_dev_tag("parakeet-f16", dev))
+        asr_f16_by_path(t, "parakeet f16 image", TowerFamily.parakeet, img, "", $ {
+            var inscope minted <- load_parakeet_model(path, false)
+            return minted.gemm_f16 && minted.dev_backend == dev
+        }, $ {
+            return <- load_asr_model(img)
+        }) $(m) {
+            return m.pk.gemm_f16 && m.pk.dev_backend == dev
+        }
+    }
+}
+
+//! canary's f16 encoder image (`canary-f16`), minted by an exact load on the GPU home, through the facade's mmproj route by path
+[test]
+def test_canary_f16_image_by_path(t : T?) {
+    t |> run("canary f16 image: the facade loads the GPU home's halfword encoder .dlim by path and serves it on the device") @(t : T?) {
+        return if (!family_on(t, "canary") || !arm_on(t, "canary") || !jit_only(t))
+        let dec_path = path_join(models_dir(), "canary-qwen-2.5b-decoder-f16.gguf")
+        let enc_path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
+        return if (!model_available(t, dec_path) || !model_available(t, enc_path) || !f16_home_up(t, TowerFamily.canary))
+        let dev = serving_tower_dev(TowerFamily.canary)
+        let img = image_path_for(enc_path, tower_dev_tag("canary-f16", dev))
+        asr_f16_by_path(t, "canary f16 image", TowerFamily.canary, img, "", $ {
+            var inscope minted <- load_canary_encoder(enc_path, false)
+            return minted.gemm_f16 && minted.dev_backend == dev
+        }, $ {
+            return <- load_asr_model(dec_path, img)
+        }) $(m) {
+            return m.cenc.gemm_f16 && m.cenc.dev_backend == dev
+        }
+    }
+}
+
 [test]
 def test_qwen3a_tower_image_roundtrip(t : T?) {
     t |> run("qwen3a 0.6B tower: mapped image planes are element-exact vs gguf") @(t : T?) {
@@ -2510,7 +2759,7 @@ def test_qwen3a_tower_image_roundtrip(t : T?) {
         qwen3a_cpu_roundtrip(t, path)
         for (q8 in [true, false]) {
             set_qwen3a_q8(q8)
-            gpu_lane_roundtrip(t, "qwen3a {q8 ? "q8" : "exact"} lane", path, q8 ? "qwen3a-q8" : "qwen3a-f32", lane_flavored(q8), $ => load_qwen3a_tower(path)) $(dev) {
+            gpu_lane_roundtrip(t, "qwen3a {q8 ? "q8" : "exact"} lane", TowerFamily.qwen3a, path, q8 ? "qwen3a-q8" : exact_lane_tag(TowerFamily.qwen3a, "qwen3a-f32", "qwen3a-f16"), lane_flavored(TowerFamily.qwen3a, q8), $ => load_qwen3a_tower(path)) $(dev) {
                 var inscope stg <- tower_dev_staged(dev) $ { return <- stage_qwen3a_tower(path) }
                 var m = Qwen3aTower()
                 mint_qwen3a_tower(stg, m, dev)
@@ -2559,7 +2808,7 @@ def private qwen3a_cpu_roundtrip(t : T?; path : string) {
         var inscope c32 <- load_qwen3a_tower(path)
         t |> success(!c32.core.q8, "f32 rail still serves")
         t |> equal(count_mismatch(a32.core.fblob, c32.core.fblob), 0l, "f32 core.fblob element-exact")
-        t |> success(long_length(a32.core.wblob) > 0l, "the bf16 mmproj bakes the halfword twin on the exact lane")
+        t |> equal(long_length(a32.core.wblob), 0l, "the f32 lane carries no halfword twin - a GPU home's exact lane is the f16 image")
         reset_qwen3a_q8()
     }
 }
@@ -2624,7 +2873,7 @@ def test_gemma4v_tower_image_roundtrip(t : T?) {
         return if (!jit_model_available(t, path))
         gemma4v_cpu_roundtrip(t, path)
         // the q8 lane's GPU flavor, where the box's driver serves it
-        let dev = serving_tower_dev(true)
+        let dev = serving_tower_dev(TowerFamily.vision)
         return if (dev == TowerDev.none)
         set_gemma4v_q8(true)
         let imgd = image_path_for(path, tower_dev_tag("gemma4v-q8", dev))
@@ -2711,7 +2960,7 @@ def test_gemma3v_tower_image_roundtrip(t : T?) {
         return if (!jit_model_available(t, path))
         gemma3v_cpu_roundtrip(t, path)
         // the q8 lane's GPU flavor, where the box's driver serves it
-        let dev = serving_tower_dev(true)
+        let dev = serving_tower_dev(TowerFamily.vision)
         return if (dev == TowerDev.none)
         set_gemma3v_q8(true)
         let imgd = image_path_for(path, tower_dev_tag("gemma3v-q8", dev))
@@ -2876,7 +3125,8 @@ def test_canary_encoder_image_roundtrip(t : T?) {
         let path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
         return if (!jit_model_available(t, path))
         canary_cpu_roundtrip(t, path)
-        gpu_lane_roundtrip(t, "canary exact lane", path, "canary-f32", lane_flavored(false), $ => load_canary_encoder(path)) $(dev) {
+        gpu_lane_roundtrip(t, "canary exact lane", TowerFamily.canary, path, canary_image_tag(path, false, serving_tower_dev(TowerFamily.canary)),
+                lane_flavored(TowerFamily.canary, false), $ => load_canary_encoder(path)) $(dev) {
             var inscope stg <- tower_dev_staged(dev) $ { return <- stage_canary_encoder(path) }
             var m = CanaryEncoder()
             mint_canary_encoder(stg, m, dev)
@@ -2918,7 +3168,7 @@ def test_canary_encoder_q8_image_roundtrip(t : T?) {
         let path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
         return if (!jit_model_available(t, path))
         canary_q8_cpu_roundtrip(t, path)
-        gpu_lane_roundtrip(t, "canary q8 lane", path, "canary-q8", lane_flavored(true), $ => load_canary_encoder(path, true)) $(dev) {
+        gpu_lane_roundtrip(t, "canary q8 lane", TowerFamily.canary, path, "canary-q8", lane_flavored(TowerFamily.canary, true), $ => load_canary_encoder(path, true)) $(dev) {
             var inscope stg <- tower_dev_staged(dev) $ { return <- stage_canary_encoder(path, true) }
             var m = CanaryEncoder()
             mint_canary_encoder(stg, m, dev)
@@ -2971,7 +3221,8 @@ def test_gemma4a_encoder_image_roundtrip(t : T?) {
         gemma4a_cpu_roundtrip(t, path)
         for (q8 in [true, false]) {
             set_gemma4a_q8(q8)
-            gpu_lane_roundtrip(t, "gemma4a {q8 ? "q8" : "exact"} lane", path, q8 ? "gemma4a-q8" : "gemma4a-f32", lane_flavored(q8), $ => load_gemma4a_encoder(path)) $(dev) {
+            let lane = gemma4a_lane_tag(q8, !q8 && tower_dev_halfword(serving_tower_dev(TowerFamily.gemma4a)))
+            gpu_lane_roundtrip(t, "gemma4a {lane} lane", TowerFamily.gemma4a, path, lane, lane_flavored(TowerFamily.gemma4a, q8), $ => load_gemma4a_encoder(path)) $(dev) {
                 var inscope stg <- tower_dev_staged(dev) $ { return <- stage_gemma4a_encoder(path) }
                 var m = Gemma4aEncoder()
                 mint_gemma4a_encoder(stg, m, "", dev)
@@ -3079,6 +3330,29 @@ def test_gemma4a_transcribe_q8_ab(t : T?) {
     }
 }
 
+//! the discrete home's f16 E2B encoder image by path through the mmproj route: the baked tag routes it, jfk transcribed off the device chain
+[test]
+def test_gemma4a_f16_image_by_path(t : T?) {
+    t |> run("gemma4a f16 image: the facade loads the discrete home's halfword .dlim by path and serves it on the device") @(t : T?) {
+        return if (!family_on(t, "gemma4a") || !arm_on(t, "gemma4a") || !jit_only(t))
+        let dec_path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
+        let mmp_path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
+        return if (!model_available(t, dec_path) || !model_available(t, mmp_path) || !f16_home_up(t, TowerFamily.gemma4a))
+        let dev = serving_tower_dev(TowerFamily.gemma4a)
+        let img = image_path_for(mmp_path, tower_dev_tag("gemma4a-f16", dev))
+        asr_f16_by_path(t, "gemma4a f16 image", TowerFamily.gemma4a, img, "en", $ {
+            set_gemma4a_q8(false)
+            var inscope minted <- load_gemma4a_encoder(mmp_path)
+            reset_gemma4a_q8()
+            return minted.gemm_f16 && minted.dev_backend == dev
+        }, $ {
+            return <- load_asr_model(dec_path, img)
+        }) $(m) {
+            return m.g4a.gemm_f16 && m.g4a.dev_backend == dev
+        }
+    }
+}
+
 [test]
 def test_gemma4a_tower_metal(t : T?) {
     g4a_tower_metal_cell(t, "E2B", "gemma-4-E2B-it-Q8_0.gguf", "mmproj-gemma-4-E2B-it-bf16.gguf", 1536l)
@@ -3110,6 +3384,12 @@ def private g4a_tower_metal_cell(tst : T?; tag, dec_file, mmp_file : string; wan
             var enc_delta = 0l
             var blk_delta = 0l
             var enc_rel_l2 = 0.0
+            var q8_cpu_text = ""
+            var q8_gpu_text = ""
+            var inscope q8_cpu_toks, q8_gpu_toks : array<int>
+            var q8_enc_delta = 0l
+            var q8_off_delta = 0l
+            var q8_quant_delta = 0l
             let tower_was = metal_tower_knob()
             with_dasllama_jobque_() {
                 var dec <- load_model_(dec_path, QuantMode.q8)
@@ -3119,7 +3399,8 @@ def private g4a_tower_metal_cell(tst : T?; tag, dec_file, mmp_file : string; wan
                 var inscope enc <- load_gemma4a_encoder(mmp_path)
                 set_metal_tower(false)   // the knob-off load takes the lane's CPU image (`#tower-dev-block`): the CPU legs run it
                 var inscope encc <- load_gemma4a_encoder(mmp_path)
-                t |> success(!enc.q8 && !encc.q8, "tower is on the f32 rail")
+                t |> success(!enc.q8 && !encc.q8, "tower is on the exact lane")
+                t |> success(enc.gemm_f16 && !encc.gemm_f16, "the Metal image's exact GEMMs are its halfwords, the CPU image's the file's f32")
                 t |> equal(enc.dev_backend, TowerDev.metal, "the knob-on load is the Metal-flavored image")
                 t |> equal(encc.dev_backend, TowerDev.none, "the knob-off load is the CPU image")
                 t |> equal(enc.proj_dim, want_proj, "the embedder projects to the decoder's width")
@@ -3156,13 +3437,44 @@ def private g4a_tower_metal_cell(tst : T?; tag, dec_file, mmp_file : string; wan
                 gemma4a_encode_all(enc, stg, samples, rows_g)   // the whole chunk on the device: the Metal image's one encode route
                 enc_rel_l2 = rel_l2(rows_g, rows_c)
                 t |> success(stg.out_ready && !stc.out_ready, "the device leg ran the projector tail, the CPU leg its own")
+                // the q8 lane the same way: the knob-on load the Metal image off its q8 slab, the knob-off load the CPU q8 chain
+                set_gemma4a_q8(true)
+                var inscope encq <- load_gemma4a_encoder(mmp_path)
+                set_metal_tower(false)
+                var inscope encqc <- load_gemma4a_encoder(mmp_path)
+                t |> success(encq.q8 && encqc.q8 && encq.dev_backend == TowerDev.metal && encqc.dev_backend == TowerDev.none,
+                    "the q8 lane's knob-on load is its Metal image, the knob-off load its CPU image")
+                let qc0 = metal_tower_stats()
+                var inscope s4 <- create_gemma4a_asr_session(dec)
+                gemma4a_transcribe(dec, encqc, s4, samples, $(seg : TranscribeSegment) {
+                    q8_cpu_toks |> push_from(seg.tokens)
+                    q8_cpu_text += seg.text
+                }, lang)
+                q8_off_delta = metal_tower_stats().encodes - qc0.encodes
+                set_metal_tower(true)
+                let q0 = metal_tower_stats()
+                let qd0 = metal_tower_declines()?["quant_mode"] ?? 0l
+                var inscope s5 <- create_gemma4a_asr_session(dec)
+                gemma4a_transcribe(dec, encq, s5, samples, $(seg : TranscribeSegment) {
+                    q8_gpu_toks |> push_from(seg.tokens)
+                    q8_gpu_text += seg.text
+                }, lang)
+                q8_enc_delta = metal_tower_stats().encodes - q0.encodes
+                q8_quant_delta = (metal_tower_declines()?["quant_mode"] ?? 0l) - qd0
                 set_metal_tower(tower_was)
                 reset_gemma4a_q8()
                 delete dec
             }
+            t |> success(q8_enc_delta >= 1l, "q8 lane: the GPU leg dispatched ({q8_enc_delta} encodes)")
+            t |> equal(q8_off_delta, 0l, "q8 lane: the knob-off CPU leg dispatched nothing (the route counter's control)")
+            t |> equal(q8_quant_delta, 0l, "q8 lane: no quant_mode decline")
+            to_log(LOG_INFO, "gemma4a mtower q8 CPU eyeball: {q8_cpu_text}\n")
+            to_log(LOG_INFO, "gemma4a mtower q8 GPU eyeball: {q8_gpu_text}\n")
+            t |> equal(join(transcript_words(q8_cpu_text), " "), join(transcript_words(q8_gpu_text), " "), "q8 lane: the Metal words are the CPU q8 chain's")
+            t |> success(!empty(q8_gpu_toks), "q8 lane: the Metal leg emitted token ids")
+            t |> equal(count_mismatch(q8_cpu_toks, q8_gpu_toks), 0l, "q8 lane: the Metal token ids are the CPU q8 chain's, id for id ({length(q8_gpu_toks)} against {length(q8_cpu_toks)})")
             t |> success(enc_delta >= 1l, "GPU leg dispatched ({enc_delta} encodes)")
             t |> equal(blk_delta, nlayer * enc_delta, "blocks delta = n_layer x encodes")
-            //! measured 3.9e-4 on the jfk fixture (12 blocks, window-12 attention caps the mixing)
             t |> success(enc_rel_l2 < 5.0e-3, "GPU encode tracks the CPU rail element-level (rel-l2 {enc_rel_l2})")
             to_log(LOG_INFO, "gemma4a mtower CPU eyeball: {cpu_text}\n")
             to_log(LOG_INFO, "gemma4a mtower GPU eyeball: {gpu_text}\n")
@@ -3198,6 +3510,13 @@ def test_canary_tower_metal(t : T?) {
             var enc_rel_l2 = 0.0
             var poison_rel_l2 = 0.0
             var rows_gpu = 0l
+            var q8_cpu_text = ""
+            var q8_gpu_text = ""
+            var inscope q8_cpu_toks, q8_gpu_toks : array<int>
+            var q8_enc_delta = 0l
+            var q8_off_delta = 0l
+            var q8_quant_delta = 0l
+            let tower_was = metal_tower_knob()
             with_dasllama_jobque_() {
                 var dec <- load_model_(dec_path, QuantMode.q8)
                 dec.config.seq_len = min(dec.config.seq_len, 8192l)
@@ -3206,7 +3525,8 @@ def test_canary_tower_metal(t : T?) {
                 var inscope enc <- load_canary_encoder(mmp_path, false)
                 set_metal_tower(false)   // the knob-off load takes the lane's CPU image (`#tower-dev-block`): the CPU legs run it
                 var inscope encc <- load_canary_encoder(mmp_path, false)
-                t |> success(!enc.q8 && !encc.q8, "encoder is on the f32 rail")
+                t |> success(!enc.q8 && !encc.q8, "encoder is on the exact lane")
+                t |> success(enc.gemm_f16 && !encc.gemm_f16, "the Metal image's exact GEMMs are its halfwords, the CPU image's the file's f32")
                 t |> equal(enc.dev_backend, TowerDev.metal, "the knob-on load is the Metal-flavored image")
                 t |> equal(encc.dev_backend, TowerDev.none, "the knob-off load is the CPU image")
                 nlayer = enc.n_layer
@@ -3243,13 +3563,45 @@ def test_canary_tower_metal(t : T?) {
                 }
                 canary_encode(enc, stg)
                 poison_rel_l2 = rel_l2(stg.out, stc.out)
+                // the q8 lane the same way: the knob-on load the Metal image off its q8 slab, the knob-off load the CPU q8 chain
+                set_canary_enc_q8(true)
+                set_metal_tower(true)
+                var inscope encq <- load_canary_encoder(mmp_path, true)
+                set_metal_tower(false)
+                var inscope encqc <- load_canary_encoder(mmp_path, true)
+                t |> success(encq.q8 && encqc.q8 && encq.dev_backend == TowerDev.metal && encqc.dev_backend == TowerDev.none,
+                    "the q8 lane's knob-on load is its Metal image, the knob-off load its CPU image")
+                let qc0 = metal_tower_stats()
+                var inscope s3 <- create_canary_asr_session(dec, "en")
+                canary_transcribe(dec, encqc, s3, samples, $(seg : TranscribeSegment) {
+                    q8_cpu_toks |> push_from(seg.tokens)
+                    q8_cpu_text += seg.text
+                }, lang)
+                q8_off_delta = metal_tower_stats().encodes - qc0.encodes
+                set_metal_tower(true)
+                let q0 = metal_tower_stats()
+                let qd0 = metal_tower_declines()?["quant_mode"] ?? 0l
+                var inscope s4 <- create_canary_asr_session(dec, "en")
+                canary_transcribe(dec, encq, s4, samples, $(seg : TranscribeSegment) {
+                    q8_gpu_toks |> push_from(seg.tokens)
+                    q8_gpu_text += seg.text
+                }, lang)
+                q8_enc_delta = metal_tower_stats().encodes - q0.encodes
+                q8_quant_delta = (metal_tower_declines()?["quant_mode"] ?? 0l) - qd0
+                set_metal_tower(tower_was)
                 reset_canary_enc_q8()
                 delete dec
             }
+            t |> success(q8_enc_delta >= 1l, "q8 lane: the GPU leg dispatched ({q8_enc_delta} encodes)")
+            t |> equal(q8_off_delta, 0l, "q8 lane: the knob-off CPU leg dispatched nothing (the route counter's control)")
+            t |> equal(q8_quant_delta, 0l, "q8 lane: no quant_mode decline")
+            to_log(LOG_INFO, "canary mtower q8 CPU eyeball: {q8_cpu_text}\n")
+            to_log(LOG_INFO, "canary mtower q8 GPU eyeball: {q8_gpu_text}\n")
+            t |> equal(q8_cpu_text, q8_gpu_text, "q8 lane: the Metal transcript is the CPU q8 chain's")
+            t |> success(!empty(q8_gpu_toks), "q8 lane: the Metal leg emitted token ids")
+            t |> equal(count_mismatch(q8_cpu_toks, q8_gpu_toks), 0l, "q8 lane: the Metal token ids are the CPU q8 chain's, id for id ({length(q8_gpu_toks)} against {length(q8_cpu_toks)})")
             t |> success(enc_delta >= 1l, "GPU leg dispatched ({enc_delta} encodes)")
             t |> equal(blk_delta, nlayer * enc_delta, "blocks delta = n_layer x encodes")
-            //! measured 3.1e-4 on the jfk fixture (f32 GEMMs both sides; the online-softmax
-            //! attention re-orders accumulation) - the bar leaves deep-GPU headroom
             t |> equal(rows_gpu, 1l, "the rows compare's GPU encode dispatched")
             t |> success(enc_rel_l2 < 5.0e-2, "GPU encode tracks the CPU rail element-level (rel-l2 {enc_rel_l2})")
             t |> success(poison_rel_l2 >= 5.0e-2, "a poisoned GPU element reds the bar (rel-l2 {poison_rel_l2})")
@@ -3348,96 +3700,106 @@ def test_qwen3a_transcribe_q8_ab(t : T?) {
     }
 }
 
-// The qwen3a f32-rail tower on the GPU (arm `mtower`): transcript equality with the knob off
-// vs on, blocks-counter delta derived from the loaded tower's own n_layer. The q8 SERVING
-// default declines by design (the whisper mtower cell above owns that assert).
+// The qwen3a tower on the GPU (arm `mtower`), each lane whole on each side: the knob-off load's CPU image against the knob-on
+// load's Metal image - the exact lane's f16 image beside the CPU's f32 one, then the q8 lane, the serving default, on both -
+// transcript equality, the blocks counter from the tower's own n_layer, the front and the projector counted on the device, the
+// exact lane's window-0 encode element-level, the halfword counter on the exact lane alone.
 [test, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def test_qwen3a_metal_tower(tst : T?) {
-    tst |> run("qwen3a f32 rail: the Metal tower blocks - transcript + counters") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            return if (!family_on(t, "qwen3a") || !arm_on(t, "mtower") || !jit_only(t))
-            let dec_path = path_join(models_dir(), "Qwen3-ASR-0.6B-Q8_0.gguf")
-            let mmp_path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
-            if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
-            var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
-            if (empty(samples)) {
-                t |> skip("jfk.wav not present")
-                return
+    for (q8 in fixed_array(false, true)) {
+        tst |> run("qwen3a {q8 ? "q8" : "exact"} lane: the Metal tower - transcript + counters") @(t : T?) {
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                return if (!family_on(t, "qwen3a") || !arm_on(t, "mtower") || !jit_only(t))
+                let dec_path = path_join(models_dir(), "Qwen3-ASR-0.6B-Q8_0.gguf")
+                let mmp_path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
+                if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
+                var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
+                if (empty(samples)) {
+                    t |> skip("jfk.wav not present")
+                    return
+                }
+                q3a_metal_lane_cell(t, dec_path, mmp_path, samples, q8)
+                delete samples
             }
-            var cpu_text = ""
-            var gpu_text = ""
-            var lang = ""
-            var nlayer = 0l
-            var enc_delta = 0l
-            var blk_delta = 0l
-            var conv_delta = 0l
-            var enc_rel_l2 = 0.0
-            with_dasllama_jobque_() {
+        }
+    }
+}
+
+//! one lane of `test_qwen3a_metal_tower`
+[unused_argument(t, dec_path, mmp_path, samples, q8)]   // off-Apple the gated body is empty
+def private q3a_metal_lane_cell(t : T?; dec_path, mmp_path : string; samples : array<float>; q8 : bool) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let tag = q8 ? "q8 lane" : "exact lane"
+        var cpu_text = ""
+        var gpu_text = ""
+        var lang = ""
+        var nlayer = 0l
+        var enc_rel_l2 = 0.0
+        var d = (enc = 0l, blk = 0l, conv = 0l, tail = 0l, f16 = 0l)
+        with_dasllama_jobque_() {
+            with_gpu_knobs() {
                 var dec <- load_model_(dec_path, QuantMode.q8)
                 dec.config.seq_len = min(dec.config.seq_len, 8192l)
-                set_qwen3a_q8(false)
-                set_metal_tower_f16(false)   //! this cell's element bar claims the f32 GPU chain; the twin leg below re-arms
+                set_qwen3a_q8(q8)
                 set_metal_tower(true)
                 var inscope tw <- load_qwen3a_tower(mmp_path)
                 set_metal_tower(false)   // the knob-off load takes the lane's CPU image (`#tower-dev-block`): the CPU legs run it
                 var inscope twc <- load_qwen3a_tower(mmp_path)
-                t |> success(!tw.core.q8 && !twc.core.q8, "tower core is on the f32 rail")
-                t |> equal(tw.core.dev_backend, TowerDev.metal, "the knob-on load is the Metal-flavored image")
-                t |> equal(twc.core.dev_backend, TowerDev.none, "the knob-off load is the CPU image")
+                reset_qwen3a_q8()
+                t |> success(tw.core.q8 == q8 && tw.cq8 == q8 && twc.core.q8 == q8, "{tag}: both images on the lane")
+                t |> success(tw.core.gemm_f16 == !q8 && tw.cf16 == !q8 && !twc.core.gemm_f16, "{tag}: the Metal image's exact lane is its f16 one, the CPU image's its f32 planes")
+                t |> equal(tw.core.dev_backend, TowerDev.metal, "{tag}: the knob-on load is the Metal-flavored image")
+                t |> equal(twc.core.dev_backend, TowerDev.none, "{tag}: the knob-off load is the CPU image")
                 nlayer = tw.core.n_layer
                 var inscope s <- create_qwen3a_asr_session(dec, twc, "auto", false)
                 qwen3a_transcribe(dec, twc, s, "", samples, $(seg : TranscribeSegment) {
                     cpu_text += seg.text
                 }, lang)
                 let s0 = metal_tower_stats()
+                let tl0 = metal_tower_tail_encodes()
+                let f0 = metal_tower_f16_encodes()
                 set_metal_tower(true)
                 var inscope s2 <- create_qwen3a_asr_session(dec, tw, "auto", false)
                 qwen3a_transcribe(dec, tw, s2, "", samples, $(seg : TranscribeSegment) {
                     gpu_text += seg.text
                 }, lang)
                 let s1 = metal_tower_stats()
-                enc_delta = s1.encodes - s0.encodes
-                blk_delta = s1.blocks - s0.blocks
-                conv_delta = s1.convs - s0.convs
-                // window-0 encode pair, same f32 core, tower off/on: the element instrument
-                // that SEES the conv bias (transcripts do not - negative-controlled)
-                var inscope mel <- log_mel_qwen3a(samples, tw.core.n_mel)
-                var inscope ecpu <- make_encoder_state(twc.core)
-                var inscope egpu <- make_encoder_state(tw.core)
-                var inscope c1 = Qwen3aConvState()
-                var inscope c2 = Qwen3aConvState()
-                set_metal_tower(false)
-                var inscope w1 <- qwen3a_mel_window(mel, 0l)
-                qwen3a_encode(twc, ecpu, c1, w1)
-                set_metal_tower(true)
-                var inscope w2 <- qwen3a_mel_window(mel, 0l)
-                qwen3a_encode(tw, egpu, c2, w2)
-                enc_rel_l2 = rel_l2(egpu.out, ecpu.out)
-                set_metal_tower_f16(true)
-                let tw0 = metal_tower_f16_encodes()
-                var twin_text = ""
-                var inscope s3 <- create_qwen3a_asr_session(dec, tw, "auto", false)
-                qwen3a_transcribe(dec, tw, s3, "", samples, $(seg : TranscribeSegment) {
-                    twin_text += seg.text
-                }, lang)
-                t |> success(metal_tower_f16_encodes() - tw0 >= 1l, "the bf16-sourced tower rode the twin route")
-                t |> equal(gpu_text, twin_text, "twin route: transcript matches the f32 GPU turn")
-                reset_qwen3a_q8()
+                d = (enc = s1.encodes - s0.encodes, blk = s1.blocks - s0.blocks, conv = s1.convs - s0.convs, tail = metal_tower_tail_encodes() - tl0,
+                    f16 = metal_tower_f16_encodes() - f0)
+                if (!q8) {   // window-0 encode pair, tower off/on: the element instrument that SEES the conv bias (transcripts do not - negative-controlled)
+                    var inscope mel <- log_mel_qwen3a(samples, tw.core.n_mel)
+                    var inscope ecpu <- make_encoder_state(twc.core)
+                    var inscope egpu <- make_encoder_state(tw.core)
+                    var inscope c1 = Qwen3aConvState()
+                    var inscope c2 = Qwen3aConvState()
+                    set_metal_tower(false)
+                    var inscope w1 <- qwen3a_mel_window(mel, 0l)
+                    qwen3a_encode(twc, ecpu, c1, w1)
+                    set_metal_tower(true)
+                    var inscope w2 <- qwen3a_mel_window(mel, 0l)
+                    qwen3a_encode(tw, egpu, c2, w2)
+                    enc_rel_l2 = rel_l2(egpu.out, ecpu.out)
+                }
                 delete dec
             }
-            t |> success(enc_delta >= 1l, "GPU leg dispatched ({enc_delta} encodes)")
-            t |> equal(blk_delta, nlayer * enc_delta, "blocks delta = n_layer x encodes")
-            t |> success(conv_delta >= 1l, "the conv2d frontend served on the GPU ({conv_delta} convs)")
+        }
+        t |> success(d.enc >= 1l, "{tag}: GPU leg dispatched ({d.enc} encodes)")
+        t |> equal(d.blk, nlayer * d.enc, "{tag}: blocks delta = n_layer x encodes")
+        t |> success(d.conv >= 1l, "{tag}: the conv2d frontend served on the GPU ({d.conv} convs)")
+        t |> equal(d.tail, d.enc, "{tag}: the projector ran on the device behind every encode")
+        if (q8) {
+            t |> equal(d.f16, 0l, "{tag}: the q8 lane read the q8 slabs, not the halfword planes")
+        } else {
+            t |> equal(d.f16, d.enc, "{tag}: every encode rode the halfword plane")
             // 5e-3, not 1e-3: the tower's attention score slab is f16 (written half once,
             // read half twice) - measured 2.5e-3 on the jfk fixture; transcripts stay exact
-            t |> success(enc_rel_l2 < 5.0e-3, "GPU encode tracks the CPU rail element-level (rel-l2 {enc_rel_l2})")
-            to_log(LOG_INFO, "qwen3a mtower CPU eyeball: {cpu_text}\n")
-            to_log(LOG_INFO, "qwen3a mtower GPU eyeball: {gpu_text}\n")
-            t |> success(!empty(gpu_text), "non-empty transcript")
-            // a legitimate near-tie flip means converting this cell to forced-feed, not loosening the compare
-            t |> equal(cpu_text, gpu_text, "transcript equality CPU vs GPU")
-            delete samples
+            t |> success(enc_rel_l2 < 5.0e-3, "{tag}: GPU encode tracks the CPU rail element-level (rel-l2 {enc_rel_l2})")
         }
+        to_log(LOG_INFO, "qwen3a mtower {tag} CPU eyeball: {cpu_text}\n")
+        to_log(LOG_INFO, "qwen3a mtower {tag} GPU eyeball: {gpu_text}\n")
+        t |> success(!empty(gpu_text), "{tag}: non-empty transcript")
+        // a legitimate near-tie flip means converting this cell to forced-feed, not loosening the compare
+        t |> equal(cpu_text, gpu_text, "{tag}: transcript equality CPU vs GPU")
     }
 }
 

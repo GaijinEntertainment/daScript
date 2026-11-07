@@ -1,10 +1,14 @@
 # dasLLAMA Vision Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `ARCHITECTURE_MEDIA.md`. Planned work: `followup_general.md`, `followup_vulkan.md`.
+docs: `ARCHITECTURE_MEDIA.md`, `ARCHITECTURE_MEDIA_VISION.md`. Planned work: `followup_general.md`,
+`followup_vulkan.md`.
 
 A vision family file is one `dasllama/dasllama_<family>.das` holding a single vision projector
 family.
+
+Span markers are the template text that opens and closes the media rows - the `image_pre` /
+`image_post` or `audio_pre` / `audio_post` fields of a `ChatTemplate`.
 
 **A GEMM in a vision family file that does not go through an `mm_*` or `*_mm*` function of
 `dasllama/dasllama_tower.das` or `matmul_q8q8_batch` (`dasllama/dasllama_math.das`) is a defect, a
@@ -29,16 +33,17 @@ does not say so, is a defect.**
 **A diff that puts a vision family's `set_*` runtime knob, or the module global it writes,
 anywhere but that family's file is a defect.**
 
-**A decoder family (`dasllama/dasllama_arch_<family>.das`) gaining support for a media kind adds
-that kind's span markers to that family's chat template, never to another family's; a diff claiming
-that support while the family's chat template or vocab lacks the markers is a defect.** Span markers
-are the template text that opens and closes the media rows.
+**A decoder family (`dasllama/dasllama_arch_<family>.das`) gaining support for a media kind through
+an encoder that takes span markers (for audio, one whose `audio_span_bare` is false) adds that kind's
+span markers to that family's chat template, never to another family's; a diff whose test, tutorial,
+document or PR text states that a family serves a media kind through such an encoder while that
+family's chat template or vocab lacks the kind's markers is a defect.**
 
 **A media splice's rows reaching the layer stack as more than one `forward_prefill_embd` call, or as
-row chunks inside one call, is a defect; a driver declining the whole call to the CPU loop, or
-splitting its command buffers per layer, still makes one call, and that call may also carry the text
-tokens before and after the span** - the span bounds are counted from the start of the call, so a
-boundary inside the span changes the mask.
+row chunks inside one call, is a defect** - the span bounds are counted from the start of the call,
+so a boundary inside the span changes the mask. The call stays one when a driver hands all of it
+to the CPU loop or splits its command buffers per layer, and when the call carries the text tokens
+around the span.
 
 **A diff that adds or changes a session kind or an admission mode of the in-process scheduler
 (`dasllama/dasllama_scheduler.das`) that a stream carrying decoded media can reach either serves
@@ -53,6 +58,6 @@ is what keeps BPE merges from crossing the media.
 request carries in `media_embd` - also updates, in the same change, every file that fills or
 reads a `media_embd`.**
 
-**A vision family file's new arm for a media kind that reaches the layer stack by any path
-but `forward_prefill_embd` is a defect, a second prefill body for it included** - write a sibling
-`eval_embd_span*` entry that feeds the same body instead.
+**A diff that adds, in any `dasllama/` file, code that feeds a media kind's rows into the layer
+stack other than through `forward_prefill_embd` is a defect, a second copy of the prefill layer
+loop included** - write a new `eval_embd_span*` function that calls `forward_prefill_embd` instead.

@@ -11,8 +11,12 @@ included - stays in `ARCHITECTURE_GPU.md#gpu-backends`.
   one GigaAM serves through.
 - `ARCHITECTURE_GPU_TOWER_POCKET.md` - the Metal tower driver's three Pocket TTS seats: the
   codec, the frame loop and the text prompt.
-- `ARCHITECTURE_GPU_TOWER_VULKAN.md` - the Vulkan tower driver's row classes and attention
-  routes, its encode chains, and the Vulkan ASR-decoder driver.
+- `ARCHITECTURE_GPU_TOWER_VULKAN.md` - the Vulkan tower's row classes and attention routes, the tower
+  encode chains on the discrete homes, and the whisper ASR decoder on the discrete homes.
+- `ARCHITECTURE_GPU_TOWER_RAIL.md` - the rail the Vulkan and CUDA homes' chain bodies dispatch
+  through: the plane roles, the rail records, the lens-generated stamp overload, the primitives, the
+  audio seats' install by home, and the family chains on the rail (the spectral fronts, gemma4a,
+  qwen3a's front and the VAD; the FastConformer trio and its decoders; the whisper class and its decoder).
 
 ### A tower driver and the hooks it registers {#tower-reach}
 
@@ -21,13 +25,16 @@ hook seats - stage slots the CPU chain calls and the driver fills. Every hook a 
 through is registered by an `[init]` of that tower's driver files: a seat, a drop hook, or a
 reload or weights-epoch listener. The registrations run in `dasllama_metal_tower_register` (the
 Metal tower), `dasllama_vulkan_tower_register` (the Vulkan tower), `dasllama_vulkan_tts_register`
-(the Vulkan TTS driver, the Vulkan tower's TTS seats) and `dasllama_cuda_tower_register` (the CUDA
-tower), so the hooks a function can reach are the ones those four register. The vision seats
-follow the GPU home: the Vulkan tower's `vulkan_tower_install_vision` and the CUDA tower's
-`cuda_tower_install_vision` are each registered under their home's name (`register_gpu_home`), run at
+(the Vulkan TTS driver, the Vulkan tower's TTS seats), `dasllama_cuda_tower_register` (the CUDA
+tower) and `dasllama_cuda_tower_audio_register` (the CUDA home's audio installer), so the hooks a
+function can reach are the ones those register. The vision and audio seats follow the GPU home: the
+Vulkan tower's `vulkan_tower_install_vision`, `vulkan_tower_install_audio` and the ASR decoder's
+`vulkan_asr_dec_install`, and the CUDA tower's `cuda_tower_install_vision` and
+`cuda_tower_install_audio`, are each registered under their home's name (`register_gpu_home`), run at
 `[init]` only where that home is asked for (`gpu_want_cuda`), and run again when `set_gpu_home`
-moves the tier; the audio, ASR-decoder, translation and TTS seats stay the Vulkan tower's under
-either home (`ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries`).
+moves the tier; the CUDA home's audio installer seats each audio family from the home its row names
+(`ARCHITECTURE_GPU_TOWER_RAIL.md#rail-audio-installs`), and the translation and TTS seats stay the
+Vulkan tower's under either home (`ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries`).
 
 A gate covers a hook when it asserts the hook's counter rising on a leg where that hook is the
 only reachable hook raising it; `REVIEW_TOWER.md` names the counter each hook kind raises.
@@ -122,7 +129,11 @@ and its bias at the encoder's own output width (`gemma4a_mid_dim`, the length of
 norm's ones row), that norm, then the audio embedder to the decoder's width (`proj_dim`). The
 embedder is square on E2B (1536 by 1536) and widens on E4B (1536 to 2560), so the two widths are
 read apart off the file - the out projection's rows, the embedder's rows - and never assumed equal.
-The chain lands the soft tokens in `Gemma4aState.out` and says so (`out_ready`).
+The chain lands the soft tokens in `Gemma4aState.out` and says so (`out_ready`). It serves the two lanes a
+Metal image carries the way the FastConformer chain does (below): every weighted GEMM - the input
+projection, the eleven a block, the relative-position table's projection, the tail's two - on the q8
+ladder over the encoder's own q8 slab, or on the half tensor GEMM over the staged halfwords; a clamped
+site clamps into the copy its GEMM reads either way.
 
 Canary's front runs whole on the device ahead of its block seat (`metal_canary_front`, the front
 seat): off the CPU-windowed frames, the DFT as a GEMM over the transposed twiddles, the power
@@ -152,17 +163,20 @@ encoder rows (else `st.x` uploaded), its weight panel padded to the 64-row colum
 (`enc_ctc_pick`, `MetalCtcPick` on the template both homes stamp, `GkCtcPick`) - the bias, each frame's argmax (the lowest index of a tie, as the CPU's) and the
 emitted class's log-sum - two words a frame read back; the collapse stays on the host.
 
-The chain's eleven weighted GEMMs a block read a DEVICE twin of the f32 blob where a tensor crown
-compiled the half GEMM (`pf_hmm_ready`): `fc_twin_attach` converts the whole blob to halfwords on
-the device once a blob, at the f32 element offsets, and the half x half tensor GEMM serves each
-site over it with X converted into one shared half panel. The twin holds the halves the f16-staged tile stamp rounds a tile at
-a time, so the route changes the GEMM, not the values it multiplies; the file is f32, so no image
-carries this twin (`ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane` is the f16-source form) and it
-drops with the weights epoch and the tower shutdown. GigaAM's exact lane needs no device twin: its
-block GEMMs are the carrier's own halfwords (`wblob`), bound as the GEMM plane directly, and its q8 lane
-reads the q8 slab (`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`). `DASLLAMA_METAL_TOWER_F16=0` pins the f32
-tiles - on GigaAM's exact lane it declines the chain, its blob holding no block GEMM - and `metal_tower_f16_encodes()` counts the encodes that rode the twin. The per-head
-attention GEMMs multiply packed f32 panels and stay on the tile stamp.
+The chain serves the two lanes a Metal image carries, canary's projector riding behind the blocks in
+their command buffer on the same lane. On the q8 lane every weighted GEMM - the eleven a block, a rel-form
+front's two 1x1 convs and pre-projection (`fc_front_records`), canary's projector - runs on the prefill
+ladder's q8 GEMM (`pf_enc_q8_mm`) over the family's q8 slab: the regions repacked once at the bake into
+the ladder's 34-byte blocks and named by their element offsets in the family's `qblob` (`TwQ8Rg`), the
+activations converted to one shared half panel where the ladder reads one. On the exact lane the GEMMs
+are the image's own halfwords (`wblob`: canary's and parakeet's file f32 saturated to f16 at staging, the
+bytes the discrete homes read; GigaAM's carrier's own), bound as the GEMM plane and served by the half x
+half tensor GEMM where the toolchain compiled it (`pf_hmm_ready`), X converted into one shared half
+panel; the f32 blob holds no GEMM. The flavor pick (`metal_tower_lane_ok` under each family's, `metal_gigaam_serves_model`)
+maps the CPU image for an exact lane the box cannot serve - `DASLLAMA_METAL_TOWER_F16=0`, or no half
+GEMM - so no Metal image carries an f32 GEMM plane, and `metal_tower_f16_encodes()` counts the encodes on
+the halfword plane. GigaAM's q8 lane reads the same slab form (`ARCHITECTURE_MEDIA_ASR.md#gigaam-planes`).
+The per-head attention GEMMs multiply packed f32 panels and stay on the tile stamp.
 
 Under the `attn_dev` crown the attention runs over EVERY head in five dispatches a block instead
 of the per-head loop's forty-one (`pf_enc_fc_attn_dev`), on the prefill driver's device pair
@@ -188,10 +202,12 @@ pre-projection as weighted GEMMs of the chain with a bias-and-ReLU or a bias row
 the feature permute between (the shared `GkFeatShuffle`, which also zeroes the pre-projection's row
 pad). The rel table is built on the device at the head of every FastConformer command buffer
 (the shared `GkRelSinCos` into the context's zero-padded table, canary's and parakeet's alike), so
-no session table is uploaded. The seat answers -1 with nothing counted on a
-q8 model, a clip whose first conv output passes 1 GB (about five minutes of audio), a shape off
-the lattice, a model that is not the Metal-flavored image, a scratch buffer it cannot take or a failed command
-buffer: a CPU image's encode then runs whole on the CPU, and a Metal-flavored image's refuses (`tower_cpu_refuse`).
+no session table is uploaded. The seat declines the knob, a model that is not the Metal-flavored image
+and its lane's weights off the device (`device`: the q8 slab unbound, or the half GEMM the halfwords need
+not compiled), each counted, and answers -1 with nothing counted on a clip whose first conv output passes
+1 GB (about five minutes of audio), a shape off the lattice, a scratch buffer it cannot take or a failed
+command buffer: a CPU image's encode then runs whole on the CPU, and a Metal-flavored image's refuses
+(`tower_cpu_refuse`).
 `metal_tower_stats().convs` counts the encodes whose front ran on the device.
 
 ### The tower driver's StyleTTS2 synthesis chain {#tower-tts-chain}

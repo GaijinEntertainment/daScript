@@ -495,7 +495,7 @@
     / 5924 ms against 2619 / 2885), while the same f32 GEMMs through Accelerate's sgemm read
     2.84 / 1.36 of the stock reference's `img:enc` and the Metal tower 1.11 / 0.99 - the tower
     has no served CPU lane, only the exact f32 one.** The exact-only
-    ruling (ARCHITECTURE_MEDIA.md 1.7b: a per-32-block activation requant cannot represent the
+    ruling (`ARCHITECTURE_MEDIA_VISION.md#vision-charters`, the qwen25v charter: a per-32-block activation requant cannot represent the
     tower's outlier rows; a q8q8 lane measured 2.0 x rms where a deleted layer measures less)
     is LIFTED as a serving rule: the exact f32 lane stays as the REFERENCE lane the tier-1 gate
     holds every served lane against, and a served CPU lane is open work. The candidates, in
@@ -1770,7 +1770,7 @@
     hyper-connection mixes 5.4 ms; the down expert GEMVs (`mm_moe_dn`, iq4nl32 on the gen family)
     3.9 ms; the head 2.7 ms. The IQ3_S rail gathers each superblock's grid rows into a byte panel
     before its dots (`emit_iq3s_gather`), and that gather is the token's largest cost. The lever
-    landed as the `iq3s4` served form (`ARCHITECTURE_ENGINE_FORMATS.md#served-form`, the
+    landed as the `iq3s4` served form (`ARCHITECTURE_ENGINE_FORMATS_TERMS.md#served-form`, the
     `DASLLAMA_IQ3S_SERVE` knob): on the same binary and box, warm passes, grid 134.1 +/- 2.0 pp512 /
     18.98 +/- 0.13 tg128 against lut 140.6 +/- 0.7 / 26.9 +/- 0.5 (llama.cpp 107.8 / 19.9); the decode
     profile 59.5 -> 40.3 ms a token, `mm_moe` 25.1 -> 6.7 ms, every other bucket unchanged (the
@@ -2583,34 +2583,6 @@
     the attach keeps only what the image bakes, and each TTS family mints its Metal, Vulkan and CUDA image, bound on load
     with no conversion like every other tower's.
 
-281. **The ten `register_<family>_flavor` seats are one shape written ten times.** Each family file (gigaam, parakeet,
-    canary, the whisper-class audio tower, gemma4a, qwen3a, whisper, gemma3v, qwen3v, gemma4v) declares a `<Family>Flavor`
-    record - `backend`, `serves`, `bake` - a private global holding it, and a three-line `register_<family>_flavor(backend,
-    serves, bake)` filling it; `tower_dev_flavor` and `tower_flavor_registered` then read the record generically. The
-    eleventh family copies the shape again. Done = when the next family lands: one macro (or one generic over a record the
-    families share) declares the record, the global and the registrant, and the ten families call it.
-
-282. **The CUDA vision tower driver is the Vulkan tower's vision half on another rail.** `dasllama_cuda_tower.das` runs
-    each vision chain dispatch for dispatch as `dasllama_vulkan_tower.das` does, one body a home: the chains
-    (`cuda_gemma3v_chain` + `cut_ln_chain`, `cuda_gemma4v_chain`, `cuda_gemma4uv_encode`, `cuda_qwen3v_chain`,
-    `cuda_qwen25v_chain` against `vulkan_gemma3v_chain` + `vt_ln_chain`, `vulkan_gemma4v_chain`, `vulkan_gemma4uv_encode`,
-    `vulkan_qwen3v_chain`, `vulkan_qwen25v_chain`), the tails (`cut_vis_tail_enc`, `cut_merger` against `vt_vis_tail_enc`,
-    `vt_merger_enc`), the GEMM helpers (`cut_mm_clamped32`, `cut_mm_clamped_q8`, `cut_mm32`, `cut_vis_im2col`,
-    `cut_planes_up`, `cut_cvt16`, `cut_served`, `cut_upload_q8` against `vt_mm_clamped32`, `vt_mm_clamped`, `vt_set_f32` /
-    `vt_enc_f32`, `vt_vis_im2col`, `vt_planes_up`, `vt_cvt16`, `vt_served_from`, `vt_put_piece`), the decline, announce and
-    gate (`cut_decline` / `cut_decline_words`, `cut_announce`, `cut_vis_gate` against `vt_decline` / `vt_decline_words`,
-    `vt_announce`, `vt_vis_gate`), `cut_each_resident`
-    against `vt_each_resident`, and `cut_f32_ensure` against `vt_f32_ensure`. The pairs differ on the encode rail alone: a
-    command buffer, its hazard bits and a descriptor set a binding tuple on Vulkan, a stream and a buffer array on CUDA -
-    and on the residency record that follows the rail (`VtResident` with its sets and hazard marks, `CutResident` with its
-    `CutBuf`s). The args, the stamps, the shape gates and the tail record (`TowerVisTail`) are already shared. Done = one
-    chain body a family in a shared module, generic over a rail record whose `enc(stamp, bufs, pc, wgs)` the Vulkan home
-    meets through its set cache and hazard bits and the CUDA home through its stream, per row 274's rail-parameter form;
-    the helper pairs fold with it, each `ensure_*` binding staying the home's. The fold is the first step of the ASR pass -
-    the audio towers (the whisper-class, canary, parakeet, gigaam, qwen3a and gemma4a encoders, the audio embedders and the
-    ASR-decoder seats) coming to the CUDA home - so the rail-generic body is written once with both halves in hand; TTS
-    stays on the Vulkan tower until its own pass.
-
 283. **A split GGUF NextN head does not attach to a safetensors snapshot trunk.** `DASLLAMA_MTP_HEAD` / `set_mtp_head_path`
     ride the GGUF loader path alone: a snapshot load (`ARCHITECTURE_ENGINE_FORMATS_MLX.md`) synthesizes its GGUF meta and
     reads the trunk as headless, so the 27B MLX snapshot - the DFlash2 reference, the same bits as the other engine's -
@@ -2689,3 +2661,46 @@
     Done = each item raced on the RTX PRO 4500 pod and on a CUDA box with the Metal figure beside it, the ones that pay
     landed with their kernel cells, and the eight-row step on the discrete homes read against its one-row step the way
     `harness/batch_rows_probe.das --sameslab` reads it on Metal.
+
+286. **The CUDA f16 tile loads its weight tile synchronously, where a pipelined tile measured 15-25% on the small
+    encodes.** The emitted f16 tile on the CUDA home (`F16GemmCm2T`, the f16 lane's `rail_mm16` GEMM) loads its 128 x 64
+    weight tile between two barriers a k step and reads the f16 feed straight from global memory; the Q8_0 tiles
+    pipeline their weight tile through cp.async and the decode. A hand-written cp.async ring on the f16 weight tile (a
+    scratch text outside the tree, `external`) read 2-3% faster on the 1500-row shapes and 15-25% at 138 and 275 rows on
+    the m tile on the reference box (RTX 5060 Ti), while its 34 KB of shared memory halved the s tile's blocks an SM
+    (`PERF_LEDGER.md`, the f16 lane on the discrete homes). The pipeline is the dasCUDA emitter's (the decoded tile's
+    pipeline, dasCUDA's `ARCHITECTURE_EMIT_TILES.md`), so the lever lands there, not as a hand-written stamp. Done = the
+    emitter's pipelined f16 A tile in the CUDA stamps, the s column's occupancy kept or its step weight re-raced
+    (`f16_cm2_col`), the f16 lane's encode rows re-read on the 5060 Ti against that entry's, and the f16 tile's CUDA
+    kernel cells green.
+
+287. **The CUDA audio towers and the gemma4a E4B tail have no spawned board cell, and ten Metal rows time a lane
+    their cell no longer runs.** Under `DASLLAMA_CUDA=1` every audio family's tower, the whisper decoder and the
+    transducer rounds serve on the CUDA seats, and gemma4a's E4B projector tail serves at its 2560 width; the ASR cells of
+    `performance/gen_bench_records.das` spawn on the neon, accel and metal legs alone and `asr_catalog`
+    (`performance/profile_common.das`) carries E2B alone, so no board row prices either route - their figures stand in
+    `PERF_LEDGER.md` (the audio towers on the CUDA home; the f16 lane on the discrete homes), read by
+    `harness/asr_stage_probe.das`. The Metal ASR cell (`lcpp_bench --asr --ngl`, spawned with no `--asr-q8`) pins every
+    family's exact tower lane (`set_asr_tower_fp32`), and on Metal that lane serves the f16 halfwords now where the
+    board's rows timed the f32 planes. The das `metal` / `tuned` rows are the m5 board's
+    `canary-qwen-2.5b-decoder-q8_0.gguf`, the two `ggml-parakeet-tdt-0.6b-v*-f32.bin`, `ggml-tiny.bin`,
+    `ggml-large-v3-turbo.bin`, `Qwen3-ASR-0.6B-Q8_0.gguf`, `gemma-4-E2B-it-Q8_0.gguf` (audio-chat) and
+    `Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf` (audio-chat), and the m1 board's `ggml-tiny.bin` and
+    `ggml-large-v3-turbo.bin`; each carries a `held` entry in
+    `performance/records/annotations.json` naming this row. Done = a cuda-leg ASR cell and an E4B audio cell in
+    `gen_bench_records.das` with their rows minted on the reference box, and the ten Metal rows re-minted at a release
+    boundary with their `held` entries dropped.
+
+288. **The towers' f16 lane and the CUDA tower bakes mint whole in RAM, on carriers the streaming rail does not
+    cover.** On every GPU home the exact-lane pick stages f16 (`tower_staging_f16`, `dasllama/dasllama_tower_image.das`):
+    the staged mint (`load_staged_image_dev` -> `tower_mint_dev`) holds every block GEMM of the tower as halfwords in one
+    host plane, beside the f32 source planes it reads them from - the whisper-class tower (`tower_compact_`,
+    `dasllama/dasllama_audio.das`), whisper's encoder (`stage_whisper_model`), canary (`stage_canary_encoder`), parakeet
+    (`stage_parakeet_model`), gemma4a (`stage_gemma4a_encoder`), and qwen3a's core and its conv-out, mm1 and mm2 trio
+    (`stage_qwen3a_tower`, `q3a_cblob_compact`). The CUDA home's tower bakes (`cuda_*_bake`) build each carrier's whole
+    device block in RAM before the `.dlim` is written. The streaming rail (`load_gguf_streaming` +
+    `save_model_image_streaming`) serves the LLM `Model` alone, and whisper's own streamed mint (`stream_whisper_model`)
+    writes no f16 plane. Row 24 streams six over-line carriers' mints one family at a time; this row extends the rail
+    to the tower carriers. Done = every tower carrier's mint, on every lane and flavor, writes each plane as it is
+    produced off the source - the f16 plane and the device block included - and each family's staged peak is read
+    before and after in a `PERF_LEDGER.md` entry.

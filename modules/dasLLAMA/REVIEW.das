@@ -103,7 +103,7 @@ var private FACADE_DEFS_WITHOUT_TUTORIAL <- {
     "gigaam_log_mel", "gigaam_conv_out", "gigaam_encode_front", "gigaam_rope_tables",   //! the encoder stages the transcribe arm and the device towers drive
     "gigaam_encode_block", "gigaam_encode", "gigaam_mel_frames", "gigaam_encode_span",   //! the encoder stages the transcribe arm and the device towers drive
     "gigaam_layer_offsets", "gigaam_decode", "gigaam_detokenize", "gigaam_chunks", "gigaam_spans",   //! the encoder's plane offsets and the decode stages the transcribe arm drives
-    "register_gigaam_gpu", "register_gigaam_gpu_encode", "register_gigaam_gpu_ctc", "register_rnnt_gpu",   //! the Metal and Vulkan towers and decoders register their device seats through them
+    "register_gigaam_gpu", "register_gigaam_gpu_exact", "register_gigaam_gpu_encode", "register_gigaam_gpu_ctc", "register_rnnt_gpu",   //! the Metal and Vulkan towers and decoders register their device seats through them
     "rnnt_greedy", "rnnt_decode", "rnnt_n_logits", "rnnt_joint_blocks", "rnnt_step_lanes",   //! the shared transducer decode the parakeet and gigaam families drive
     "rnnt_dev_args", "rnnt_dev_cap", "rnnt_dev_faulted", "rnnt_dev_first_input", "rnnt_dev_key",   //! the host half of the device transducer decode the Metal and Vulkan seats call
     "rnnt_dev_land_tokens", "rnnt_dev_layer_args", "rnnt_dev_layout", "rnnt_dev_round_budget",   //! the host half of the device transducer decode the Metal and Vulkan seats call
@@ -112,7 +112,7 @@ var private FACADE_DEFS_WITHOUT_TUTORIAL <- {
     "set_rnnt_trace",   //! the CPU transducer decode's per-frame trace an engine developer flips while bringing a family up
     "gigaam_gemm_stride", "gigaam_lane_tag", "gigaam_kq_members",   //! the kq lane's seat geometry, image tag and members - the next line's reasons
     "gigaam_fc_record_seats", "gigaam_kq_members_of",   //! the kq lane's seat geometry a test pins, the lane's image tag the bake tool names, the lane's members the load log and the tests read, the record seats the device chains read
-    "register_gigaam_flavor", "gigaam_dev_flavor", "gigaam_rnnt_dev_bake", "rnnt_gpu_projects", "rnnt_dev_bake", "gigaam_gpu_lane_planes"   //! the GPU flavor a driver registers, the load's and the tests' pick of it, the transducer halves a driver's bake places in its device block (`#tower-dev-block`), the lane's planes a driver's serves predicate asks
+    "gigaam_dev_flavor", "gigaam_rnnt_dev_bake", "rnnt_gpu_projects", "rnnt_dev_bake", "gigaam_gpu_lane_planes"   //! the load's and the tests' pick of the GPU flavor, the transducer halves a driver's bake places in its device block (`#tower-dev-block`), the lane's planes a driver's serves predicate asks
 }
 
 [arch(at = "ARCHITECTURE_TTS.md#text-to-speech")]
@@ -149,13 +149,15 @@ let private AUDIO_CARRIER = "modules/dasLLAMA/dasllama/dasllama_audio_embedder.d
 let private VISION_CARRIER = "modules/dasLLAMA/dasllama/dasllama_vision_embedder.das"
 let private ASR_CARRIER = "modules/dasLLAMA/dasllama/dasllama_asr.das"
 
-// The licensed family namers per modality - the ARCHITECTURE_MEDIA.md carrier charters ledger each with its reason.
+// The licensed family namers per modality - the carrier charters (ARCHITECTURE_MEDIA.md#tower-audio-charters, ARCHITECTURE_MEDIA_VISION.md#vision-charters) ledger each with its reason.
 var private AUDIO_SEAM_EXEMPT <- {
     "modules/dasLLAMA/dasllama/dasllama_asr.das",
     "modules/dasLLAMA/dasllama/dasllama_metal_tower.das",
     "modules/dasLLAMA/dasllama/dasllama_metal_asr_dec.das",
     "modules/dasLLAMA/dasllama/dasllama_vulkan_tower.das",
     "modules/dasLLAMA/dasllama/dasllama_vulkan_asr_dec.das",
+    "modules/dasLLAMA/dasllama/dasllama_cuda_tower_g4a.das",
+    "modules/dasLLAMA/dasllama/dasllama_tower_chains_g4a.das",
     "modules/dasLLAMA/benchmarks/asr/asr_bench.das",
     "utils/dasllama-convert/main.das"
 }
@@ -166,6 +168,13 @@ var private ASR_SEAM_EXEMPT <- {
     "modules/dasLLAMA/dasllama/dasllama_metal_asr_dec.das",
     "modules/dasLLAMA/dasllama/dasllama_vulkan_tower.das",
     "modules/dasLLAMA/dasllama/dasllama_vulkan_asr_dec.das",
+    "modules/dasLLAMA/dasllama/dasllama_cuda_tower_fc.das",
+    "modules/dasLLAMA/dasllama/dasllama_cuda_tower_g4a.das",
+    "modules/dasLLAMA/dasllama/dasllama_cuda_asr_dec.das",
+    "modules/dasLLAMA/dasllama/dasllama_cuda_asr_dec_fc.das",
+    "modules/dasLLAMA/dasllama/dasllama_tower_chains_fc.das",
+    "modules/dasLLAMA/dasllama/dasllama_tower_chains_g4a.das",
+    "modules/dasLLAMA/dasllama/dasllama_asr_dec_chains.das",
     "modules/dasLLAMA/benchmarks/asr/asr_bench.das",
     "modules/dasLLAMA/harness/pk_parity_probe.das",
     "modules/dasLLAMA/harness/cpu_asr_race.das",
@@ -179,6 +188,7 @@ var private VISION_SEAM_EXEMPT <- {
     "modules/dasLLAMA/dasllama/dasllama_metal_tower.das",
     "modules/dasLLAMA/dasllama/dasllama_vulkan_tower.das",
     "modules/dasLLAMA/dasllama/dasllama_cuda_tower.das",
+    "modules/dasLLAMA/dasllama/dasllama_tower_chains.das",
     "modules/dasLLAMA/harness/vision_lane_probe.das"   //! the lane probe pins a family's lane and mints its tower in memory - neither reaches the carrier
 }
 
@@ -281,11 +291,12 @@ var private GPU_ROLES_METAL <- {
 
 var private GPU_ROLES_VULKAN <- {
     "tts",
-    "classes", "common", "decode", "prefill", "seams", "dispatch", "tower", "asr_dec", "nmt", "mtp_gemma"
+    "classes", "common", "decode", "prefill", "seams", "dispatch", "tower", "asr_dec", "nmt", "mtp_gemma", "rail"
 }
 
 var private GPU_ROLES_CUDA <- {
-    "classes", "common", "dispatch", "decode", "stream", "tower", "mtp_gemma"
+    "classes", "classes_front", "classes_blocks", "classes_asr", "common", "dispatch", "decode", "stream", "rail",
+    "tower", "tower_seat", "tower_audio", "tower_whisper", "tower_fc", "tower_g4a", "asr_dec", "asr_dec_fc", "mtp_gemma"
 }
 
 // the fastmath default, mechanically: a [metal_kernel] declaring fastmath=false reds unless
@@ -864,7 +875,7 @@ def private check_gpu_role_partition {
             }
             if (!known) {
                 gate_finding("modules/dasLLAMA/dasllama/{name}",
-                    "backend file with role '{role}' that the partition does not carry - add the role to ARCHITECTURE_GPU.md#gpu-backends's role table and this gate's set in the same change")
+                    "backend file with role '{role}' that the partition does not carry - a role file holds one backend-only capability a row of ARCHITECTURE_GPU.md#gpu-backends's role table names, never a split of a role the table already carries: add that row and the role to this gate's set in the same change, or land the code in the file of the role it splits")
             }
         }
     }
@@ -1399,21 +1410,27 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // the TTS block file's *_prepare mints, the layout helpers and the layout constants' declaration
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
-let private IMAGE_LAYOUT_STAMP_VERSION = 60
-let private IMAGE_LAYOUT_STAMP_HASH = 0xda308a4c0917ee20ul
+let private IMAGE_LAYOUT_STAMP_VERSION = 61
+let private IMAGE_LAYOUT_STAMP_HASH = 0x7d1b47509481167cul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, the header's scalar stores, the lattice
 // plane's section name, and the TTS blob's aligned append, its per-weight walk slot and the
-// conv's stacked-row gather the q8 mint quantizes. Changing one moves every plane offset (or
-// renames every lattice section) while every serializer body reads the same.
+// conv's stacked-row gather the q8 mint quantizes, and the device gathers, region and record lists, kq plan, piece writer
+// and halfword slab stagers a GPU flavor's bakes lay their pieces by. Changing one moves every plane offset (or renames
+// every lattice section) while every serializer body reads the same.
 var private LAYOUT_HELPERS <- {
     "pad_to_page", "w_page", "plane_end", "image_total_bytes",
     "w_append", "w_zeros", "w_header", "store_at", "kq_plane_name",
     "blob_push", "weight_slot", "conv1d_weight_row",
     "vk_mint_plane", "vk_mint_walk", "vk_mint_sink_append",
-    "gg_stream_plane", "gg_job_span", "gg_plane_total", "tower_dev_put",
-    "kq_gather_rows_dev", "wd_gather", "vt_gather_kq_member", "tower_gather_q8_regions", "rnnt_dev_slab"
+    "gg_stream_plane", "gg_job_span", "gg_plane_total", "tower_dev_put", "tower_bake_q8",
+    "kq_gather_rows_dev", "pack_iq_dev_row", "wd_gather", "tower_fc_gather_kq_member", "tower_gather_q8_regions",
+    "q8_gather_rows", "q8_gather_slice", "rnnt_dev_slab", "rnnt_dev_layout",
+    "fc_q8_regions", "fc_gemm_records", "fc_front_records", "tower_fc_kq_plan", "tower_aud_regions", "ln_block_regions",
+    "tower_ct_regions", "tower_q3a_regions", "gemma4a_all_regions", "gemma4a_block_regions",
+    "tower_aud_stem16", "tower_aud_stem_kdp", "tower_g4a_front16", "tower_q3a_front16", "tower_q3a_stages", "tower_conv_stage",
+    "tower_stage_conv0_panel", "tower_stage_f32_pad_row_stride"
 }
 
 // The constants those helpers place bytes by, and the bands the two streaming writers stage
@@ -3800,12 +3817,12 @@ def main() : int {
     check_tutorial_floor(tut_texts, rst_texts)
     gate_descriptor_census("modules/dasLLAMA/.das_module", ["modules/dasLLAMA/dasllama"])
     check_family_seams(AUDIO_CARRIER, "AudioKind", AUDIO_SEAM_EXEMPT, "ARCHITECTURE_MEDIA.md#tower-audio-charters",
-        "the ASR carrier, a GPU driver's family hooks, the ASR bench's serving pin, or the per-family bake tool",
+        "the ASR carrier, a GPU driver's family hooks or the chain bodies both discrete homes' hooks run, the ASR bench's serving pin, or the per-family bake tool",
         "load_audio_embedder / encode_audio / audio_probe_proj_dim")
-    check_family_seams(VISION_CARRIER, "VisionKind", VISION_SEAM_EXEMPT, "ARCHITECTURE_MEDIA.md#tower-audio-charters",
-        "a GPU tower driver's family hooks, or the lane probe", "load_vision_embedder / encode_image / vision_proj_dim")
+    check_family_seams(VISION_CARRIER, "VisionKind", VISION_SEAM_EXEMPT, "ARCHITECTURE_MEDIA_VISION.md#vision-charters",
+        "a GPU tower driver's family hooks or the chain bodies both discrete homes' hooks run, or the lane probe", "load_vision_embedder / encode_image / vision_proj_dim")
     check_family_seams(ASR_CARRIER, "AsrKind", ASR_SEAM_EXEMPT, ASR_KIND_FILES, "ARCHITECTURE_MEDIA.md#tower-audio-charters",
-        "a file driving a family past the facade's verbs - the audio carrier, a GPU driver's family hooks, the ASR bench, a parity or race harness, or the per-family bake tool",
+        "a file driving a family past the facade's verbs - the audio carrier, a GPU driver's family hooks or the chain bodies both discrete homes' hooks run, the ASR bench, a parity or race harness, or the per-family bake tool",
         "dasllama_asr.das's public functions")
     return gate_verdict("dasllama")
 }

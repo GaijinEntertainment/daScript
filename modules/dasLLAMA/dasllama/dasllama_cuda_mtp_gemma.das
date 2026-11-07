@@ -446,7 +446,7 @@ def private cud_draft_chain(t : Model; r, seed, anchor, k : int64; h : array<flo
     if (g.graphs[ci] == null) {
         cud_draft_graph(g, dr, r, k)
     }
-    if (!cuda_graph_launch(g.graphs[ci], g_cud.stream) || !cud_sync()) {   // nolint:PERF026 — cu_ok's text is built on its failure arm alone
+    if (!cuda_graph_launch(g.graphs[ci], g_cud.stream) || !cud_sync()) {
         panic("dasLLAMA cuda gemma drafter: the draft graph failed on the device (region {r}, depth {k}): {cuda_last_error()}")
     }
     unsafe {

@@ -21,6 +21,7 @@ require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — th
 require dasllama/dasllama_audio
 require dasllama/dasllama_tower
 require dasllama/dasllama_tower_image
+require dasllama/dasllama_tower_flavor   // [tower_flavor]: the family's GPU flavor seat
 require dasllama/dasllama_convert
 require dasllama/dasllama_par
 require dasllama/dasllama_common   // apply_box_profile_runtime for the parakeet-image identity
@@ -132,6 +133,8 @@ struct ParakeetModel {
     jenc_exact : bool         //! the joint's encoder projection f32 in `blob` on the q8 lane: a GPU flavor's, which the device's exact tile projects
     qblob : PlaneI8 = PlaneI8()
     qscales : PlaneF = PlaneF()
+    gemm_f16 : bool                  //! a GPU home's exact lane (`tower_dev_halfword`): the encoder GEMMs in ``wblob`` at their full-layout offsets
+    wblob : PlaneU16 = PlaneU16()    //! the encoder GEMM regions as halfwords, the file's f32 saturated to f16 at staging; the joint stays f32
     dev_backend : TowerDev    //! the GPU flavor whose device block the image carries (`#tower-dev-block`); `none` on the CPU image
     dev : PlaneU8 = PlaneU8()
     devplan : PlaneI64 = PlaneI64()
@@ -155,10 +158,10 @@ def finalize(var t : ParakeetModel) {
     }
 }
 
-// the tripwire: serialize_image_meta(ParakeetModel) covers 40 fields (vocab rides the meta
+// the tripwire: serialize_image_meta(ParakeetModel) covers 43 fields (vocab rides the meta
 // blob — string arrays can't be raw planes); fft (rebuilt at load) + image_map + image_bytes
 // are deliberate skips.
-let private PARAKEET_META_FIELDS = 42 + 3
+let private PARAKEET_META_FIELDS = 43 + 3
 
 // every meta-carried ParakeetModel field, explicitly, both directions (see dasllama_image)
 def private serialize_image_meta(var arch : Archive; var t : ParakeetModel) {
@@ -204,6 +207,7 @@ def private serialize_image_meta(var arch : Archive; var t : ParakeetModel) {
     arch |> serialize_raw(t.joint_net_b)
     arch |> serialize_raw(t.q8)
     arch |> serialize_raw(t.jenc_exact)
+    arch |> serialize_raw(t.gemm_f16)
     arch |> serialize_raw(t.dev_backend)
 }
 
@@ -214,17 +218,24 @@ def private image_post_load(var t : ParakeetModel) {
 [init]
 def private register_parakeet_image_tags {
     register_image_family_tag("parakeet-q8")
-    register_image_family_tag("parakeet-f32", true)   // config-free: the exact lane's planes are the file's own, no box property shapes them
+    register_image_family_tag("parakeet-f32", config_free = true)
+    register_image_family_tag("parakeet-f16", config_free = true)
     register_tower_dev_tags("parakeet-q8")
-    register_tower_dev_tags("parakeet-f32")
+    register_tower_dev_tags("parakeet-f16")
 }
+
+//! the image tag of a lane: q8, the exact pick's halfwords (`f16`), or the file's f32
+def parakeet_lane_tag(q8, f16 : bool) : string => tower_lane_tag("parakeet", q8, f16)
+
+//! the image tag of the lane a load of `path` on `q8` takes under flavor `dev` (`tower_load_f16`)
+def parakeet_image_tag(path : string; q8 : bool; dev : TowerDev) : string => parakeet_lane_tag(q8, tower_load_f16(path, q8, dev))
 
 def pk_layer_offsets(m : ParakeetModel; l : int64) : PkLayerOffs {
     let d = m.n_state
     let ff = 4l * d
     let dh = d / m.n_head
-    // dual walk: `o` is the full GEMM layout (qblob on a q8 load); `a` is the fp32 walk of m.blob (identical on an fp32 load)
-    let g = m.q8 ? 0l : 1l
+    // dual walk: `o` is the full GEMM layout (qblob on a q8 load, wblob on an f16 one); `a` is the fp32 walk of m.blob (identical on an fp32 load)
+    let g = (m.q8 || m.gemm_f16) ? 0l : 1l
     var o = m.layers_off + l * m.layer_stride
     var a = m.aux_layers_off + l * m.aux_layer_stride
     var r = PkLayerOffs()
@@ -417,11 +428,10 @@ def private pk_read(recs : table<string; PkTensorRec>; b : array<uint8> | #; nam
     ggml_bin_read_f32(b, r.ttype, r.off, n, dst, dst_off)
 }
 
-// GEMM weight read: a q8 load transcodes it from the file straight into qblob/qscales at its
-// full-layout offset (the fp32 blob never holds it); an fp32 load reads it into the blob.
+//! a GEMM weight read: q8 transcodes into qblob/qscales at its full-layout offset, f16 into wblob's halfwords, fp32 into the blob
 def private pk_read_gemm(recs : table<string; PkTensorRec>; b : array<uint8> | #; name : string;
                          var st : ParakeetStaging; var scratch : array<float>; woff, n : int64) {
-    if (!st.e.q8) {
+    if (!st.e.q8 && !st.e.gemm_f16) {
         pk_read(recs, b, name, st.blob, woff, n)
         return
     }
@@ -433,43 +443,39 @@ def private pk_read_gemm(recs : table<string; PkTensorRec>; b : array<uint8> | #
         scratch |> resize(n)
     }
     pk_read(recs, b, name, scratch, 0l, n)
-    quantize_q8_0_into(scratch, n, st.qblob, st.qscales, woff, woff / 32l)
+    if (st.e.gemm_f16) {
+        unsafe {
+            cvt_f32_to_f16_sat(addr(st.wblob[woff]), addr<float const?>(scratch[0]), n)
+        }
+    } else {
+        quantize_q8_0_into(scratch, n, st.qblob, st.qscales, woff, woff / kq_elems(KqFmt.q8))
+    }
 }
 
 //! Loads a converted Parakeet-TDT ggml bin (convert-parakeet-to-ggml.py output; f32 or f16).
 //! With ``q8`` the encoder/joint GEMM weights transcode to Q8_0 straight from the mapped file (~4x CPU fast path); conv im2col, depthwise, LSTM, and joint_net stay fp32 (a few % of encode).
 //! Like ``load_model``, caches a box/knob-specific PREPARED IMAGE for fast reload; ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
 def load_parakeet_model(path : string; q8 : bool = false) : ParakeetModel {
-    announce_lane("parakeet", q8, "f32 planes", "set_parakeet_q8", g_pk_pin != GemmLane.unset, parakeet_gpu_serves())
-    let tag = q8 ? "parakeet-q8" : "parakeet-f32"
     let dev = path |> ends_with(".dlim") ? TowerDev.none : parakeet_dev_flavor(q8)
-    return <- load_staged_image_dev(path, tag, "parakeet", "source model", type<ParakeetModel>, dev, g_pk_flavor.bake, PARAKEET_DEV_CONSUMED) {
-        return <- stage_parakeet_model(path, q8)
+    let f16 = tower_load_f16(path, q8, dev)
+    let tag = parakeet_lane_tag(q8, f16)
+    announce_lane("parakeet", q8, f16, "set_parakeet_q8", g_pk_pin != GemmLane.unset, false)
+    return <- load_staged_image_dev(path, tag, "parakeet", "source model", type<ParakeetModel>, dev, g_parakeet_flavor.bake, PARAKEET_DEV_CONSUMED) {
+        return <- stage_parakeet_model(path, q8, f16)
     }
 }
 
 //! A GPU driver's Parakeet flavor (`#tower-dev-block`): the backend whose image it mints, whether its chain serves a lane, and
 //! the bake that converts a CPU-form model into the driver's device block
-typedef ParakeetServesLaneFn = function<(q8 : bool) : bool>
-typedef ParakeetBakeFn = function<(m : ParakeetModel; var b : TowerDevBuild) : bool>
+[tower_flavor(family = "parakeet", model = "ParakeetModel")]
+struct ParakeetFlavor {}
 
-struct ParakeetFlavor {
-    backend : TowerDev
-    serves : ParakeetServesLaneFn
-    bake : ParakeetBakeFn
-}
-
-var private g_pk_flavor = ParakeetFlavor()
 let private PARAKEET_DEV_CONSUMED <- ["qblob", "qscales"]   //! the planes a Parakeet bake converts: a GPU flavor carries their device forms instead
-
-def register_parakeet_flavor(backend : TowerDev; serves : ParakeetServesLaneFn; bake : ParakeetBakeFn) {
-    g_pk_flavor = ParakeetFlavor(backend = backend, serves = serves, bake = bake)
-}
 
 //! The device flavor a load on the `q8` lane takes: the registered driver's where its chain and the device decode serve the
 //! lane, else `none` - the CPU image
 def parakeet_dev_flavor(q8 : bool) : TowerDev =>
-    rnnt_gpu_projects(RnntEnc()) ? tower_dev_flavor(g_pk_flavor, q8) : TowerDev.none
+    rnnt_gpu_projects(RnntEnc()) ? tower_dev_flavor(g_parakeet_flavor, q8) : TowerDev.none
 
 //! A GPU-flavored model reached a CPU path at `stage`: the device seat declined what the load handed it, and the CPU never runs
 //! that image (`#tower-dev-block`)
@@ -489,6 +495,7 @@ struct ParakeetStaging {
     lstm_b : array<int64>
     qblob : array<int8>
     qscales : array<float>
+    @exact_size wblob : array<uint16>
     @exact_size dev : array<uint8>       //!< a GPU-flavored mint's device block (`TowerDevBuild`)
     @exact_size devplan : array<int64>   //!< ... and its plan
 }
@@ -508,14 +515,20 @@ def private image_post_load(var st : ParakeetStaging) {}
 //! The off-rail control for suites: a live model that came from no `.dlim` file; `dev` names the GPU flavor (the staging read
 //! under `with_tower_dev_staging(dev)`), `none` the CPU image (`tower_mint_flavor`).
 def mint_parakeet_model(var st : ParakeetStaging; var out : ParakeetModel; q8 : bool = false; dev : TowerDev = TowerDev.none) {
-    tower_mint_flavor(st, out, q8 ? "parakeet-q8" : "parakeet-f32", "parakeet", dev, g_pk_flavor, PARAKEET_DEV_CONSUMED)
+    tower_mint_flavor(st, out, parakeet_lane_tag(q8, st.e.gemm_f16), "parakeet", dev, g_parakeet_flavor, PARAKEET_DEV_CONSUMED)
 }
+
+//! The ggml-bin reader proper under the running staging's flavor: its halfword lane is the staging's (`tower_load_f16`).
+def stage_parakeet_model(path : string; q8 : bool = false) : ParakeetStaging
+    => <- stage_parakeet_model(path, q8, tower_load_f16(path, q8, tower_staging_dev()))
 
 //! The ggml-bin reader proper: scalars land in the served model, plane bytes in the staging
 //! arrays beside it. Nothing here is servable — the image build is what produces a live model.
-def stage_parakeet_model(path : string; q8 : bool = false) : ParakeetStaging {
+def stage_parakeet_model(path : string; q8, f16 : bool) : ParakeetStaging {
     var st = ParakeetStaging()
     st.e.q8 = q8
+    st.e.gemm_f16 = f16
+    let gemms_own_plane = q8 || f16
     let n_bytes = int64(stat(path).size)
     let f = fopen(path, "rb")
     if (f == null) {
@@ -607,7 +620,7 @@ def stage_parakeet_model(path : string; q8 : bool = false) : ParakeetStaging {
         let ff = 4l * d
         let dh = d / st.e.n_head
         let nch = st.e.n_sub_ch
-        let g = q8 ? 0l : 1l
+        let g = gemms_own_plane ? 0l : 1l
         let gj = q8 && tower_staging_dev() == TowerDev.none ? 0l : 1l   // a GPU flavor's joint encoder half stays the source's f32
         st.e.jenc_exact = q8 && gj == 1l
         var bo = 0l
@@ -628,7 +641,7 @@ def stage_parakeet_model(path : string; q8 : bool = false) : ParakeetStaging {
         st.e.layers_off = bo
         st.e.layer_stride = pk_layer_stride(d, ff, st.e.n_conv_kernel)
         st.e.aux_layers_off = ao
-        st.e.aux_layer_stride = q8 ? pk_aux_layer_stride(d, st.e.n_conv_kernel) : st.e.layer_stride
+        st.e.aux_layer_stride = gemms_own_plane ? pk_aux_layer_stride(d, st.e.n_conv_kernel) : st.e.layer_stride
         bo += st.e.n_layer * st.e.layer_stride
         ao += st.e.n_layer * st.e.aux_layer_stride
         st.e.embed_off = ao; ao += (st.e.n_vocab + 1l) * st.e.n_pred_dim; bo += (st.e.n_vocab + 1l) * st.e.n_pred_dim
@@ -654,6 +667,8 @@ def stage_parakeet_model(path : string; q8 : bool = false) : ParakeetStaging {
             st.qblob |> resize(bo)
             st.qscales |> reserve(bo / 32l)
             st.qscales |> resize(bo / 32l)
+        } elif (st.e.gemm_f16) {
+            st.wblob |> reserve_resize(bo)
         }
 
         var wscratch : array<float>   // q8 transcode staging, one GEMM tensor at a time
@@ -711,7 +726,7 @@ def stage_parakeet_model(path : string; q8 : bool = false) : ParakeetStaging {
             pk_read(recs, bytes, "decoder.prediction.dec_rnn.lstm.weight_hh_l{l}", st.blob, st.lstm_hh[l], 4l * st.e.n_pred_dim * st.e.n_pred_dim)
             pk_read(recs, bytes, "decoder.prediction.dec_rnn.lstm.bias_h_l{l}", st.blob, st.lstm_b[l], 4l * st.e.n_pred_dim)
         }
-        if (st.e.jenc_exact) {
+        if (gj == 1l) {   // the joint's encoder half in the f32 blob: the exact lanes and a GPU flavor's q8 one
             pk_read(recs, bytes, "joint.enc.weight", st.blob, st.e.joint_enc_w, st.e.n_pred_dim * d)
         } else {
             pk_read_gemm(recs, bytes, "joint.enc.weight", st, wscratch, st.e.joint_enc_w, st.e.n_pred_dim * d)
@@ -734,7 +749,7 @@ def stage_parakeet_model(path : string; q8 : bool = false) : ParakeetStaging {
 
 //! The loaded precision (one tag — parakeet is a single carrier): the facade's
 //! [[asr_exec_fmt]] arm.
-def parakeet_exec_fmt(p : ParakeetModel) : string => p.q8 ? "q8" : "f32"
+def parakeet_exec_fmt(p : ParakeetModel) : string => tower_lane_fmt(p.q8, p.gemm_f16)
 
 //! Parakeet's log-mel: preemphasis 0.97, zero center-pad n_fft/2, the file's STFT window, power
 //! spectra, mel dot, NATURAL log(sum + 2⁻²⁴), then per-feature mean/std normalization over the
@@ -1090,18 +1105,6 @@ def private pk_encode_rows(m : ParakeetModel; var st : ParakeetState) : int64 {
     return tt
 }
 
-//! whether a GPU driver would serve the encode - the lane policy's question
-typedef ParakeetServesFn = function<() : bool>
-var private g_pk_serves : ParakeetServesFn
-var private g_pk_serves_set = false
-
-//! the driver's answer to whether it serves the encode (`parakeet_gpu_serves`): the whole encode is its one seat
-[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
-def register_parakeet_gpu(serves : ParakeetServesFn) {
-    g_pk_serves = serves
-    g_pk_serves_set = true
-}
-
 //! the GPU encode hook: the whole encode off `st.mel` - the subsample front, the pre-projection and the blocks - into
 //! `st.x`; answers the frame count, or -1 where it declined - a CPU image's encode, which the CPU chain then runs whole
 typedef ParakeetGpuEncodeFn = function<(m : ParakeetModel; var st : ParakeetState) : int64>
@@ -1114,18 +1117,14 @@ def register_parakeet_gpu_encode(fn : ParakeetGpuEncodeFn) {
     g_pk_gpu_encode_set = true
 }
 
-//! Would the Metal driver serve the block loop — the lane policy asks (a serving driver wants
-//! the f32 blob, so the un-pinned lane defaults to exact); false on CPU builds or knob-off.
-def parakeet_gpu_serves() : bool => g_pk_serves_set && invoke(g_pk_serves)
-
-//! Would a GPU driver serve the loaded model's encode: the exact lane, with a driver whose knob is on - the facade's device-lane arm.
-def parakeet_device_gpu(m : ParakeetModel) : bool => !m.q8 && parakeet_gpu_serves()
+//! would a GPU driver serve the model's encode: a GPU-flavored image, its lane picked at load, never run on the CPU (`#tower-dev-block`) - the facade's arm
+def parakeet_device_gpu(m : ParakeetModel) : bool => m.dev_backend != TowerDev.none
 
 var private g_pk_pin = GemmLane.unset
 
-//! Pin the parakeet weight format for subsequent loads: q8 (the CPU serving lane) vs the fp32
-//! lane the parity legs and the GPU driver read. ``reset_parakeet_q8`` returns to the policy
-//! default (exact when the Metal driver serves).
+//! Pin the parakeet weight format for subsequent loads: q8 (the default on every home) vs the
+//! exact lane (the halfword lane on a GPU home, the f32 planes on the CPU; also the parity legs).
+//! ``reset_parakeet_q8`` returns to the policy default.
 def set_parakeet_q8(on : bool) {
     g_pk_pin = lane_pin(on)
 }
@@ -1135,7 +1134,7 @@ def reset_parakeet_q8() {
 }
 
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
-def parakeet_serves_q8() : bool => lane_serves_q8(g_pk_pin, !parakeet_gpu_serves())
+def parakeet_serves_q8() : bool => audio_lane_serves_q8(g_pk_pin, true)
 
 //! a parakeet block's offsets as the FastConformer chains read them: canary's record with no GEMM bias (-1 = none)
 def pk_fc_layer(lo : PkLayerOffs) : CanaryLayerOffs {

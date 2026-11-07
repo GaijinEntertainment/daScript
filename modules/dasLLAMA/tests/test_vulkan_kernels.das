@@ -40,6 +40,7 @@ require dasllama/dasllama_arch_qwen35
 require daslib/strings_boost   // join: the spawned fixture's source
 require daslib/math_bits   // float_bits_to_uint / uint_bits_to_float: the NaN sentinel by bit pattern, the read-back planes as floats
 require daslib/f16_cvt   // nolint:STYLE030,LINT019 — the half conversions of the vulkan cells, unused in the darwin world
+require _discrete_cells   // nolint:STYLE030,LINT019 — I8_SENTINEL_BITS and the f16 s-column case body both homes run, unused in the darwin world
 
 //! The Vulkan tier's kernel classes against their CPU oracles, one cell a class family: the decode GEMVs, the tile families
 //! (the cm2 l, m, s and e stamps, the KHR staged tile over every format and over a file's f32 rows, the sdot4 tiles), the
@@ -53,8 +54,6 @@ let private NAN_HALF = 0x7E00   //! the sentinel half no kernel writes: a NaN
 let private NAN_HALF_PAIR = 0x7E007E00u   //! ... in both lanes of a word
 let private TILE_SLACK_ROWS = int(TILE_READ_SLACK)   //! the cm2 fixtures' rows past the last region, the engine's count: a stamp that loads partial columns unclamped (`STILE`) reads the last region's column rounded up to its BN, so the slack holds while every such stamp keeps BN <= slack + 1
 let private Q8_CELL_K = 544     //! the q8 cm2 s and e cells' K: 512 + 32, off the 64-deep stamp's k grid, so the tile takes its padded edge path (the l and m cells run K = 576, the fast path; TILE_CELL_K, the per-format cells' K, sits in _vk_kq_fixtures)
-
-let private I8_SENTINEL_BITS = 0x80808080u   //! a Q8 quant plane's fill: -128 in every byte, a value no requant produces (|q| <= 127)
 
 let private ARM_CM2_L = 0
 let private ARM_CM2_M = 1
@@ -750,6 +749,29 @@ def test_vkd_f16_gemm(t0 : T?) {
             f16_gemm_cell(t, "router-like", 200, 1024, 130)
             f16_gemm_cell(t, "odd router", 61, 512, 41)   //! rows x d off every 4-multiple: the reduce's element-guarded tail
             f16_gemm_cell(t, "rel plane, ragged d, short K", 2495, 64, 37)   // canary's rel-plane GEMM shape, the cm2 twin of the KHR cell's arm
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! the f16 GEMM's s column (`F16GemmCm2S`, the tower GEMM sites `vt_f16_tc` puts on the 32-position column) against the f32 dot
+//! of the same halves and bit for bit its m column twin (`F16GemmCm2`), on the case body the CUDA s-column cell runs
+[test]
+def test_vkd_f16_gemm_s(t0 : T?) {
+    t0 |> run("the f16 GEMM's s column on the cm2 tile == the f32 dot of the same halves, bit for bit the m column [DASLLAMA_COOPMAT=cm2]") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            if (g_gpu.coopmat_mode != COOPMAT_CM2 || !ensure_f16_gemm_cm2_s_cls() || !ensure_f16_gemm_cm2_cls()) {
+                t |> skip("no cm2 tile family on this device (the f16 GEMM's s column rides the cm2 tile alone)")
+                return
+            }
+            with_cell_planes() $(var cp : CellPlanes) {
+                f16_gemm_s_case(t, cp)
+            }
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -2751,7 +2773,8 @@ def test_vkd_q8_khr_batch(t0 : T?) {
             var y_ref <- tile_cell_arms(t, "q8", int(KqFmt.q8), f, [ARM_KHR], @@q8f16_gemm_oracle)
             // the split arm: the first region alone under two 256-aligned k chunks (512 and 64 deep) into the partial
             // planes, then the reduce into the y plane - the k0 / k1 / ybase prologue the KHR stamp shares with the cm2 tiles
-            khr_split_arm(t, "q8 KHR tile", f, y_ref, 512l, @@set_q8_batch_khr_cls, @@enc_q8_batch_khr_cls)
+            khr_split_arm(t, "q8 KHR tile", f, y_ref, 512l, @@set_q8_batch_khr_cls,
+                @@ < (raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : BatchArgs; wgs : int64) : void > enc_q8_batch_khr_cls)
             delete y_ref
             delete f
         } else {
@@ -2786,8 +2809,10 @@ def test_vkd_f32_khr_batch(t0 : T?) {
             y_ref |> resize(f.rows * d)
             var recs <- one_region_words(TILE_CELL_ROWS0, ((TILE_CELL_ROWS0 + 127) / 128) * ((d + 127) / 128))
             f32f16_gemm_oracle(f.wqh, f.wsh, f.xfh, recs, 1, n, d, y_ref)   //! the stamp's one schedule form: a region at row 0, its map at word 4
-            khr_split_arm(t, "the staged f32 tile", f, y_ref, 0l, @@ < (bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet > set_f32_khr_wo_scales, @@enc_f32_batch_khr_cls, 1)//! the projection's whole form
-            khr_split_arm(t, "the staged f32 tile", f, y_ref, 512l, @@ < (bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet > set_f32_khr_wo_scales, @@enc_f32_batch_khr_cls)//! the window gate's split form
+            khr_split_arm(t, "the staged f32 tile", f, y_ref, 0l, @@ < (bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet > set_f32_khr_wo_scales,
+                @@ < (raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : BatchArgs; wgs : int64) : void > enc_f32_batch_khr_cls, 1)   // the projection's whole form
+            khr_split_arm(t, "the staged f32 tile", f, y_ref, 512l, @@ < (bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet > set_f32_khr_wo_scales,
+                @@ < (raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : BatchArgs; wgs : int64) : void > enc_f32_batch_khr_cls)   // the window gate's split form
             delete recs
             delete y_ref
             delete f

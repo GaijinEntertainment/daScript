@@ -3937,6 +3937,7 @@ The AST module provides access to the abstract syntax tree representation of das
 - `CommentReader` - Adapter for the `AstCommentReader`.
 - `ExprAssert` - Assert expression (`assert(x<13)`, or `assert(x<13, "x is too big")`, or `verify(foo()!=0)`)
 - `ExprMemZero` - Memzero (`memzero(expr)`)
+- `ConstVisitorAdapter` - Adapter for the `AstConstVisitor` interface.
 - `ExprFor` - For loop (`for expr1 in expr2 {your; block; here;}`)
 - `ExprAsVariant` - As expression (`foo as bar`)
 - `ExprTypeInfo` - typeinfo() expression (`typeinfo dim(a)`, `typeinfois_ref_type<int&>()`)
@@ -4167,6 +4168,7 @@ The AST module provides access to the abstract syntax tree representation of das
 - `AstTypeInfoMacro` - Macro for implementing custom `typeinfo` traits, enabling expressions like `typeinfo YourTraitHere(...)` that extract compile-time type information.
 - `AstEnumerationAnnotation` - Annotation macro that attaches to `Enumeration` declarations.
 - `AstVisitor` - Implements the `Visitor` interface for traversing and transforming the AST tree.
+- `AstConstVisitor` - Read-only counterpart of `AstVisitor`: every callback takes a const node and returns nothing, so a visitor can inspect the tree but neither write into it nor replace a node.
 
 ### Compilation and file access
 
@@ -4190,7 +4192,7 @@ The AST module provides access to the abstract syntax tree representation of das
 
 ### Visitor pattern
 
-- `visit` - Invokes an AST visitor on the given object.
+- `visit` - Invokes a read-only AST visitor on the given expression.
 - `visit_enumeration` - Applies the given visitor adapter to the specified enumeration within the context of the program, triggering the appropriate visitor callbacks.
 - `visit_finally` - Invokes the visitor on the finally section of a block.
 - `visit_module` - Invokes an AST visitor on the given module.
@@ -4213,6 +4215,7 @@ The AST module provides access to the abstract syntax tree representation of das
 - `make_capture_macro` - Creates an adapter for the AstCaptureMacro interface.
 - `make_clone_structure` - Generates a clone function for the given structure.
 - `make_comment_reader` - Creates an adapter for the AstCommentReader interface.
+- `make_const_visitor` - Creates an adapter for the AstConstVisitor interface.
 - `make_enum_debug_info` - Generates an EnumInfo for the specified enumeration using the given DebugInfoHelper.
 - `make_enumeration_annotation` - Creates an adapter for the AstEnumerationAnnotation interface.
 - `make_for_loop_macro` - Creates an adapter for the AstForLoopMacro interface.
