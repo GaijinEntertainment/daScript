@@ -850,6 +850,7 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | test_fold_mutual_recursion_global.das | A constant-argument call into a call cycle that reads a module global is not folded at compile time | |
 | _fixture_nested_while_private.das | *(helper)* a private function ending in a `while (true)` whose inner `while (true)` returns | |
 | test_nested_while_private.das | Runs `_fixture_nested_while_private.das` as a child under a deadline - the inlined return leaves both loops | |
+| test_property_compound_assign_deref_offset.das | A property compound assignment under a field of `deref(p + k)`, and through a `with` over one, compiles and writes through the setter | |
 
 ## loops/
 

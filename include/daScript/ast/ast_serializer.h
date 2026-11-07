@@ -362,7 +362,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 250;   // 250: an inlined return under a loop that ends a loop body leaves the outer loop
+            return 251;   // 251: a property compound assignment gives its setter its own copy of the base
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
