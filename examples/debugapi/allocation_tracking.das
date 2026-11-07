@@ -97,7 +97,7 @@ var tracker : AllocationTracker?
 
 [export]
 def install_tracker(_ctx : Context) {
-    assert(this_context().category.debug_context)
+    verify(this_context().category.debug_context)
     var agent = new AllocationTracker()
     tracker = agent
     // Thread-local: receives allocation callbacks

@@ -112,7 +112,7 @@ class StackWalkAgent : DapiDebugAgent {
 
 [export, unused_argument(ctx)]
 def install_stack_agent(ctx : Context) {
-    assert(this_context().category.debug_context)
+    verify(this_context().category.debug_context)
     install_new_debug_agent(new StackWalkAgent(), "stack_agent")
 }
 

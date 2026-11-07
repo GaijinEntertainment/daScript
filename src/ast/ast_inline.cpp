@@ -1568,7 +1568,6 @@ namespace das {
                     }
                     if ( exitKind!=RetExit::Maybe ) continue;
                     overall = RetExit::Maybe;
-                    if ( i+1 >= list.size() ) break;
                     if ( inLoop ) {
                         // control past a flagged inner exit leaves this loop too; for a
                         // non-loop Maybe the returning paths already broke - the guard is
@@ -1581,6 +1580,7 @@ namespace das {
                         ++i;    // past the guard
                         continue;
                     }
+                    if ( i+1 >= list.size() ) break;
                     // non-loop level: the tail runs only when no return fired
                     auto tailBlk = new ExprBlock();
                     tailBlk->at = list[i+1]->at;

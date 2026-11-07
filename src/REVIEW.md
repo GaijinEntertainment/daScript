@@ -13,9 +13,10 @@ on Windows reads a `char *` path in the ANSI codepage.**
 
 **A diff that adds or changes a `NARROW_PATH_FILES` row of `REVIEW.das` (beside this file) names
 in its `why` the platforms that compile the file's narrow calls - C runtime or OS calls that take
-a `char *` file path. A file with a narrow call that compiles on Windows gets no row; that call
-moves to the UTF-8 file API.**
+a `char *` file path - and a row whose `why` lists Windows among the compiling platforms is a
+defect: those calls move to the UTF-8 file API in `include/daScript/misc/sysos.h` instead.**
 
-**A diff that changes `REVIEW.das` (beside this file) anywhere but its `NARROW_PATH_FILES` rows
-keeps it reporting every narrow call it reported before, each finding naming the call and the
-API to use.**
+**A diff that changes `REVIEW.das` (beside this file) keeps it reporting every narrow call - a C
+runtime or OS call that takes a `char *` file path - it reported before in each file the changed
+`REVIEW.das` leaves without a `NARROW_PATH_FILES` row, each finding naming the call and the API
+to use.**

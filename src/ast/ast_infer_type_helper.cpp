@@ -691,11 +691,12 @@ namespace das {
                     pSt = eWT->firstType->structType;
                 }
                 if (pSt) {
+                    auto withValue = eW->with->clone();
                     if (eWT->isPointer()) {
-                        if (auto opE = tryPropertyThroughDeref(probe, expr->at, eW->with, right))
+                        if (auto opE = tryPropertyThroughDeref(probe, expr->at, withValue, right))
                             return opE;
                     } else {
-                        if (auto opE = tryProperty(probe, expr->at, eW->with, right))
+                        if (auto opE = tryProperty(probe, expr->at, withValue, right))
                             return opE;
                     }
                 }

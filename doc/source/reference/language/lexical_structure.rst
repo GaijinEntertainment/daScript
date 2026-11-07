@@ -228,7 +228,7 @@ and string interpolation:
 +------------------+-------------------------------+
 | ``\"``           | Double quote                  |
 +------------------+-------------------------------+
-| ``\'``           | Single quote (char literals)  |
+| ``\'``           | Single quote                  |
 +------------------+-------------------------------+
 | ``\b``           | Backspace                     |
 +------------------+-------------------------------+
@@ -236,15 +236,21 @@ and string interpolation:
 +------------------+-------------------------------+
 | ``\v``           | Vertical tab                  |
 +------------------+-------------------------------+
+| ``\a``           | Bell                          |
++------------------+-------------------------------+
+| ``\?``           | Question mark                 |
++------------------+-------------------------------+
 | ``\xHH``         | Hexadecimal byte              |
++------------------+-------------------------------+
+| ``\0``-``\377``  | Octal byte                    |
 +------------------+-------------------------------+
 | ``\uHHHH``       | Unicode code point (16-bit)   |
 +------------------+-------------------------------+
 | ``\UHHHHHHHH``   | Unicode code point (32-bit)   |
 +------------------+-------------------------------+
 
-``\'`` is valid only inside character literals (``'...'``); in a double-quoted
-string, write a bare ``'``. Conversely, ``\"`` is the string-only form.
+Character literals take the same escapes except ``\uHHHH`` and ``\UHHHHHHHH`` - ``'\0'`` is
+``0``, ``'\x41'`` and ``'\101'`` are ``65``. A string is NUL-terminated, so ``"a\0b"`` is ``"a"``.
 
 **Multiline strings:**
 

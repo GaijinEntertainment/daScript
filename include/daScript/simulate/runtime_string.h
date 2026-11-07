@@ -8,6 +8,8 @@ namespace das
     class Context;
 
     DAS_API string unescapeString ( const string & input, bool * error, bool das_escape = true );
+    struct CharacterEscape { int32_t value; int32_t length; };
+    DAS_API CharacterEscape decodeCharacterEscape ( const char * backslash );
     DAS_API string escapeString ( const string & input, bool das_escape = true );
     DAS_API string to_cpp_double ( double val );
     DAS_API string to_cpp_float ( float val );

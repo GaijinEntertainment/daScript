@@ -328,6 +328,7 @@ namespace das {
                 } else if (auto propGet = promoteToProperty(efield, nullptr)) { // we need both get and set
                     auto opRight = new ExprOp2(expr->at, opName, propGet, expr->right);
                     opRight->type = new TypeDecl(*expr->right->type);
+                    efield->value = efield->value->clone();
                     if (auto cloneSet = promoteToProperty(efield, opRight)) {
                         removeR2v(cloneSet);
                         return cloneSet;

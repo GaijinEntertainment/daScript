@@ -65,6 +65,8 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 
 /* %option debug */
 
+CHAR_ESCAPE     \\([abfnrtv\\\'\"?]|x[0-9a-fA-F]{1,2}|[0-3][0-7]{0,2}|[4-7][0-7]?)
+
 %x indent
 %x strb
 %x strfmt
@@ -547,31 +549,13 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         BEGIN(strb);
         return BEGIN_STRING;
     }
-<normal>\'\\b\'(u8|U8)                  yylval_param->ui = 8; return UNSIGNED_INT8;
-<normal>\'\\t\'(u8|U8)                  yylval_param->ui = 9; return UNSIGNED_INT8;
-<normal>\'\\n\'(u8|U8)                  yylval_param->ui = 10; return UNSIGNED_INT8;
-<normal>\'\\f\'(u8|U8)                  yylval_param->ui = 12; return UNSIGNED_INT8;
-<normal>\'\\r\'(u8|U8)                  yylval_param->ui = 13; return UNSIGNED_INT8;
-<normal>\'\\\\'(u8|U8)                  yylval_param->ui = '\\'; return UNSIGNED_INT8;
-<normal>\'\\\'\'(u8|U8)                 yylval_param->ui = '\''; return UNSIGNED_INT8;
+<normal>\'{CHAR_ESCAPE}\'(u8|U8)        yylval_param->ui = uint32_t(decodeCharacterEscape(yytext + 1).value); return UNSIGNED_INT8;
 <normal>\'.\'(u8|U8)                    yylval_param->ui = uint32_t(yytext[1]); return UNSIGNED_INT8;
 
-<normal>\'\\b\'(u|U)                    yylval_param->ui = 8; return UNSIGNED_INTEGER;
-<normal>\'\\t\'(u|U)                    yylval_param->ui = 9; return UNSIGNED_INTEGER;
-<normal>\'\\n\'(u|U)                    yylval_param->ui = 10; return UNSIGNED_INTEGER;
-<normal>\'\\f\'(u|U)                    yylval_param->ui = 12; return UNSIGNED_INTEGER;
-<normal>\'\\r\'(u|U)                    yylval_param->ui = 13; return UNSIGNED_INTEGER;
-<normal>\'\\\\'(u|U)                    yylval_param->ui = '\\'; return UNSIGNED_INTEGER;
-<normal>\'\\\'\'(u|U)                   yylval_param->ui = '\''; return UNSIGNED_INTEGER;
+<normal>\'{CHAR_ESCAPE}\'(u|U)          yylval_param->ui = uint32_t(decodeCharacterEscape(yytext + 1).value); return UNSIGNED_INTEGER;
 <normal>\'.\'(u|U)                      yylval_param->ui = uint32_t(yytext[1]); return UNSIGNED_INTEGER;
 
-<normal>\'\\b\'                         yylval_param->i = 8; return INTEGER;
-<normal>\'\\t\'                         yylval_param->i = 9; return INTEGER;
-<normal>\'\\n\'                         yylval_param->i = 10; return INTEGER;
-<normal>\'\\f\'                         yylval_param->i = 12; return INTEGER;
-<normal>\'\\r\'                         yylval_param->i = 13; return INTEGER;
-<normal>\'\\\\'                         yylval_param->i = '\\'; return INTEGER;
-<normal>\'\\\'\'                        yylval_param->i = '\''; return INTEGER;
+<normal>\'{CHAR_ESCAPE}\'               yylval_param->i = decodeCharacterEscape(yytext + 1).value; return INTEGER;
 
 <normal>\'.\'                           yylval_param->i = int32_t(yytext[1]); return INTEGER;
 <normal>[0-9][0-9\_]*(u|U)(l|L) {

@@ -42,9 +42,12 @@ def public panic_text(blk : block<() : void>) : string {
 }
 
 //! The relative-tolerance float compare of a fastmath (GPU, flattened) result against its oracle.
-def public fapprox(x, y : float) : bool {
-    return abs(x - y) <= 1e-4 * max(1.0, max(abs(x), abs(y)))
-}
+def public fapprox(x, y : float) : bool => abs(x - y) <= 1e-4 * max(1.0, max(abs(x), abs(y)))
+
+//! a Debug host runs a child several times slower, so its deadline
+//! triples there, never past five minutes
+def public child_deadline(seconds : float) : float =>
+    shared_module_extension() == "_debug.shared_module" ? min(seconds * 3.0, 300.0) : seconds
 
 [macro_function]
 def private validate_arguments(type_name : string, args) : bool {

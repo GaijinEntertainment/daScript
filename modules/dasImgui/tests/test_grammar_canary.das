@@ -102,6 +102,10 @@ let CANARY_SECTIONS : array<CanarySection> <- [
         snippet = "def can_half_whole() \{\n    let zero = 0h\n    let three = 3h\n    let one = 1.0h\n    print(\"\{float(zero)\} \{float(three)\} \{float(one)\}\\n\")\n\}"),
     CanarySection(name = "\\v, \\x and \\U escapes",
         snippet = "def can_escapes() \{\n    let vt = \"a\\vb\"\n    let hx = \"\\x41\\x42\"\n    let uc = \"\\U00000041\"\n    print(\"\{length(vt)\} \{hx\} \{uc\}\\n\")\n\}"),
+    CanarySection(name = "the C escape set in character and string literals",
+        snippet = "def can_c_escapes() \{\n    let bell = '\\a'\n    let hex = '\\x41'u8\n" +
+            "    let oct = '\\101'\n    let s = \"\\a\\?\\'\\377\"\n" +
+            "    print(\"\{bell\} \{hex\} \{oct\} \{length(s)\}\\n\")\n\}"),
     CanarySection(name = "annotation list after an arrow body",
         snippet = "def can_arrow_annotated(x : int) : int => x + 1\n\n[sideeffects, unused_argument(y)]\ndef can_after_arrow(y : int) \{\n    print(\"after\\n\")\n\}"),
     CanarySection(name = "one-line if before an if/elif/else chain",

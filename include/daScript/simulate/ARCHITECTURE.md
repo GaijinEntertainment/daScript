@@ -190,6 +190,16 @@ correctness required it, and the alternative that was rejected.
   the odd bit of `trunc(y)` shifted to bit 31, anded with x. `pow_est` is the same without the
   xor, which is `GLSLstd450.Pow` - undefined for a negative base, as GLSL leaves it.
 
+- **The reinterpret-slot wrapper** (`SimNode_ReinterpretSlot` in `simulate_nodes.h`) - one
+  virtual call and a `vec4f` round-trip on a value `reinterpret` whose operand is a C++-bound
+  call (an extern, an intrinsic, an operator lowered to one) and whose target type reads a
+  different eval slot; a reinterpret of a local, a global, a constant, a field or a das
+  function's result simulates to the operand node alone, as before. Correctness required it
+  because a bound call's node answers only its own return kind's typed eval - `DAS_NODE`
+  defines `eval` and one `eval<Kind>` - so `reinterpret<int?>(f())` of a `uint64` extern asked
+  `evalPtr` of a node that throws on it. Rejected alternative: every typed eval on every bound
+  call node, which multiplies the extern template instantiations by the eight slots.
+
 - **The fastcall depth counter's save and restore at every panic handler** - one 32-bit load
   of `Context::fastCallDepth` at the entry of `SimNode_TryCatch::eval`, its debugger twin,
   `das_try_recover` (`src/simulate/simulate_exceptions.cpp`, repo root), `jit_try_recover`

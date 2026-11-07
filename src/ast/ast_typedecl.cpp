@@ -1834,6 +1834,21 @@ namespace das
         return true;
     }
 
+    static bool pointerVoidnessDiffers ( const TypeDecl & a, const TypeDecl & b ) {
+        if ( a.baseType != b.baseType ) return false;
+        if ( a.baseType==Type::tPointer || a.baseType==Type::tIterator ) {
+            bool aIsVoid = !a.firstType || a.firstType->isVoid();
+            bool bIsVoid = !b.firstType || b.firstType->isVoid();
+            return aIsVoid != bIsVoid;
+        }
+        if ( (a.baseType==Type::tTuple || a.baseType==Type::tVariant) && a.argTypes.size()==b.argTypes.size() ) {
+            for ( size_t i=0, is=a.argTypes.size(); i!=is; ++i ) {
+                if ( pointerVoidnessDiffers(*a.argTypes[i], *b.argTypes[i]) ) return true;
+            }
+        }
+        return false;
+    }
+
     bool TypeDecl::isSameType ( const TypeDecl & decl,
              RefMatters refMatters,
              ConstMatters constMatters,
@@ -1842,6 +1857,9 @@ namespace das
              bool topLevel,
              bool isPassType ) const {
         if ( baseType!=decl.baseType ) {
+            return false;
+        }
+        if ( isExplicit && pointerVoidnessDiffers(*this, decl) ) {
             return false;
         }
         if ( topLevel && !isPointer() && !isRef()  ) {

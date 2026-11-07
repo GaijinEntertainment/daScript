@@ -118,6 +118,11 @@ def test_safe_unescape(t : T?) {
         t |> success(!empty(result))
     }
 
+    t |> run("the escapes only a das literal takes stay undecoded") @@(t : T?) {
+        t |> equal(safe_unescape("\\a"), "a")
+        t |> equal(safe_unescape("\\101"), "101")
+    }
+
     t |> run("empty string") @@(t : T?) {
         t |> equal(safe_unescape(""), "")
     }

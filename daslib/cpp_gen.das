@@ -185,13 +185,13 @@ def is_str(jso, str) {
 
 def with_object(var jso; field; blk : block<(var val : table<string; JsonValue?>) : void>) {
     //! Invokes a block with the specified JSON object field.
-    assert(jso[field] is _object)
+    verify(jso[field] is _object)
     invoke(blk, jso[field] as _object)
 }
 
 def with_array(var jso; field; blk : block<(var val : array<JsonValue?>) : void>) {
     //! Invokes a block with the specified JSON array field.
-    assert(jso[field] is _array)
+    verify(jso[field] is _array)
     invoke(blk, jso[field] as _array)
 }
 

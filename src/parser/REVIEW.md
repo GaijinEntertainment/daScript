@@ -5,7 +5,9 @@
 in `ds2_lexer.lpp` or an assignment rule in `ds2_parser.ypp` applies `daslib/REVIEW.md` (repo
 root) too - the formatter and the AST printer carry their pairs (`daslib/ARCHITECTURE_SYNTAX.md`).
 
-**A diff that lets `ds2_parser.ypp` or `ds2_lexer.lpp` accept new syntax also adds the matching
-rule to `tree-sitter-daslang/grammar.js` (repo root), in the same change.** The editor and the
-MCP search tools parse with the tree-sitter grammar, not with bison, so syntax missing from
-`grammar.js` does not appear in code folding, outline or `grep_usage`.
+**A diff that lets `ds2_parser.ypp` or `ds2_lexer.lpp` accept new syntax also makes
+`tree-sitter-daslang` (repo root) parse it, in the same change - in
+`tree-sitter-daslang/src/scanner.c` for a token listed under `externals` in
+`tree-sitter-daslang/grammar.js`, else in `grammar.js`.** The editor and the MCP search tools
+parse with tree-sitter, not bison, so syntax it lacks is missing from folding, outline and
+`grep_usage`.

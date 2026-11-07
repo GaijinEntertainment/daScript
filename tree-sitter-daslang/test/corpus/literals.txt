@@ -248,6 +248,90 @@ let f = 'y'u
       init: (constant_unsigned_integer))))
 
 ================================================================================
+Character constants with C escapes
+================================================================================
+
+let a = '\0'
+let b = '\a'
+let c = '\v'
+let d = '\x41'
+let e = '\101'
+let f = '\377'u8
+let g = '\xFF'u
+let h = '\"'
+let i = '\?'
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_integer)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_integer)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_integer)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_integer)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_integer)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_unsigned_integer8)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_unsigned_integer)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_integer)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_integer))))
+
+================================================================================
+String constants with C escapes
+================================================================================
+
+let s = "\0\a\v\?\'\x41\101\377z"
+let t = "z\a\?y\7"
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_string
+        (escape_sequence)
+        (escape_sequence)
+        (escape_sequence)
+        (escape_sequence)
+        (escape_sequence)
+        (escape_sequence)
+        (escape_sequence)
+        (escape_sequence))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_string
+        (escape_sequence)
+        (escape_sequence)
+        (escape_sequence)))))
+
+================================================================================
 Boolean and null constants
 ================================================================================
 
