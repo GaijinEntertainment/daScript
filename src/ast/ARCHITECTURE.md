@@ -59,6 +59,10 @@ module and everything after it parse from source, and the writer rewrites the wh
 served records re-serialized from the modules the reader restored, then the freshly parsed
 ones. A record whose header matched but whose payload fails to deserialize reparses in place,
 without cutting the stream, whenever the record carries a usable payload length.
+A record that fails to write leaves the compiled program as it is - only a failed read marks the
+program failed. The writer warns (gated like the read's lines) and `ModuleFileCache::finish`
+writes no file, since the stream stops inside the failed record; the next run finds the cache it
+found before.
 
 A served module replays what its own init registered - the macro classes a `[call_macro]` or
 `[reader_macro]` annotation adds through the module's init function come back when the record
@@ -71,7 +75,11 @@ retargeted to into the `dasbind` builtin. The registering site marks the compili
 which is what a module being compiled looks like; the binder sets it on the program's own
 module) and the record header carries the mark. A marked record is never served: it reparses in
 place, the records after it still serve, and the cache is not rewritten for it; a marked record
-whose length word cannot skip it cuts the stream like a changed file. Serving it would leave any
+whose length word cannot skip it cuts the stream like a changed file. The writer gives a marked
+record its header and a one-byte payload in place of the module: nothing reads that payload, and
+the module's own would name what only its compile registered - a generic's body is stored
+uninferred, so a call macro registered into the module survives there as an `ExprCallMacro`, a
+reference the payload cannot carry. Serving it would leave any
 module parsed from source against it - after a cutoff in the same read, or in a later compile of
 the same process once a `shared` module is promoted - without the registrations, and its call
 sites would fail to resolve (or, for a binder, find no proxy).

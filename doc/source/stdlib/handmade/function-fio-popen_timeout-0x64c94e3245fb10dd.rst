@@ -1,1 +1,1 @@
-Opens a process for reading, kills the entire process tree if it exceeds `timeout` seconds. Returns exit code on normal completion, or `popen_timed_out` if the timeout was exceeded. If `timeout` is 0 or negative, behaves identically to `popen`.
+Opens a process for reading, kills the entire process tree if it exceeds `timeout` seconds. Returns exit code on normal completion (on POSIX 128 + N when the shell is killed by signal N), or `popen_timed_out` if the timeout was exceeded. If `timeout` is 0 or negative, behaves identically to `popen`.

@@ -1842,7 +1842,12 @@ namespace das {
             profRecord.file = fileName;
             auto profT0 = ref_time_ticks();
 #endif
-            if ( program->thisModule )  {
+            if ( thisModule->registersAtCompile ) {
+                uint8_t unreadPayload = 0;
+                *serializer_write << unreadPayload;
+                serializer_write->writingReadyModules.insert(thisModule);
+                serializer_write->clearNodeIds();
+            } else if ( program->thisModule )  {
                 // the program owns its module (entry script) - write as is, never mutate it
                 serializer_write->serializeProgram(program, libGroup);
             } else {

@@ -362,7 +362,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 252;   // 252: an explicit type takes no void-pointer stand-in, so a generic instance is matched exactly
+            return 253;   // 253: a module that registers at compile is a header and a one-byte payload the reader skips
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

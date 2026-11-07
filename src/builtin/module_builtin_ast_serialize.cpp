@@ -3241,7 +3241,7 @@ namespace das {
             if ( !quietCache ) LOG(LogLevel::warning) << "das: serialize: program " << (writing ? "write" : "read") << " failed: " << r.what() << "\n";
             failed = true;
             seenNewModule = true;
-            if ( program ) program->failToCompile = true;
+            if ( program && !writing ) program->failToCompile = true;
             // scope guards in the impl repointed the active gc root during unwind;
             // the caller replaces the (now gutted) program via replaceProgramKeepGcRootValid
         } catch ( ... ) {
@@ -3251,7 +3251,7 @@ namespace das {
             if ( !quietCache ) LOG(LogLevel::warning) << "das: serialize: program " << (writing ? "write" : "read") << " failed: unknown exception\n";
             failed = true;
             seenNewModule = true;
-            if ( program ) program->failToCompile = true;
+            if ( program && !writing ) program->failToCompile = true;
         }
         // per-record scratch must never survive into the next record: a failed or
         // early-returned record leaves refs whose targets die with it (throwaway root,
@@ -3776,9 +3776,10 @@ namespace das {
             if ( !writer->quietCache ) { LOG tw(LogLevel::info); writer->profReport(tw); }
 #endif
             writer->moduleLibrary = nullptr;
+            bool writeFailed = writer->failed;
             writer.reset();     // releases the parsedModules program refs before the program runs
             writeStorage.flush();
-            if ( !writeStorage.buffer.empty() ) {
+            if ( !writeFailed && !writeStorage.buffer.empty() ) {
                 // write-to-temp + rename: a concurrent reader on the same path sees a
                 // complete old or a complete new stream, never a torn one. The CRT rename
                 // cannot replace on Windows, so there is a missing-file blink there - a

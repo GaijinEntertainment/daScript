@@ -14,7 +14,8 @@ require strings
 
 struct public VerifyResult {
     index : int
-    //! clean, unverifiable, AST verify, timed out, crashed or killed
+    //! clean, unverifiable, AST verify, timed out, failed to start,
+    //! crashed or killed
     verdict : string
     //! the `AST verify` lines, or the crash/timeout/kill line;
     //! "" when clean
@@ -49,19 +50,20 @@ def public verify_verdict(out : string; rc : int; timeout : float) : VerifyResul
     res.unverifiable = find(out, "error[20510]") >= 0
     res.verdict = res.unverifiable ? "unverifiable" : (empty(hits) ? "clean" : "AST verify")
     if (empty(hits) && !res.unverifiable) {
-        //! popen_argv: POSIX signal death = the raw signal number
-        //! (2..31), Windows = a negative NTSTATUS; daslang itself only
-        //! exits 0/1/255. No CRASH: banner = nothing ran the handler
-        //! (an OOM or external kill), which is still not a pass
+        // a death with no CRASH: banner = nothing ran the handler (an OOM
+        // or an external kill), which is still not a pass
         let crash_lines <- [for (line in lines); line; where find(line, "CRASH:") >= 0]
         if (rc == popen_timed_out) {
             res.verdict = "timed out"
             hits |> push("timed out after {int(timeout)}s")
+        } elif (is_spawn_failure(rc)) {
+            res.verdict = "failed to start"
+            hits |> push("the verifier child did not start (exit {rc})")
         } elif (!empty(crash_lines)) {
             res.verdict = "crashed"
             hits |> push("crashed (exit {rc})")
             hits |> push_from(crash_lines)
-        } elif (rc < 0 || rc >= 128 || (rc >= 2 && rc <= 31)) {
+        } elif (is_death_exit_code(rc)) {
             res.verdict = "killed"
             let causes = "the runner, an external kill, or a stack overflow off the main thread"
             hits |> push("killed (exit {rc}), no crash report - {causes}")

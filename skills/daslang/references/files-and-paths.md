@@ -64,7 +64,10 @@ fopen(path, "rb") $(f) {
   return `int64` and have no cap.
 - `run_and_capture(args, var output, timeout_sec = 0.0) : int` runs a child with no shell, capturing
   merged stdout+stderr. A forward-slash `args[0]` spawns on every host - the spawn hands Windows
-  the backslash spelling its CreateProcess wants.
+  the backslash spelling its CreateProcess wants. It returns the child's exit code, `-1` when the
+  spawn failed, `popen_timed_out` when the timeout passed; on POSIX a child killed by signal N
+  reads 128 + N, as the shell's `$?` does (SIGSEGV is 139) - the same code `popen_argv`,
+  `process_poll` and `process_wait` return.
 - A long-lived child - a supervisor's, a server's - is a `with_process` block over
   `spawn_process` / `close_process`. `with_process` is safe; every `process_*` call is `unsafe`:
 

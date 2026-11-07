@@ -238,6 +238,21 @@ else
 fi
 
 echo
+echo "Shipped headers compile:"
+# The scan above sees only daScript/ includes; one translation unit compiled against the bundle's
+# include/ alone reaches every header simulate.h pulls in, wherever it lives. No POSIX c++ on a
+# Windows bundle or a bare box skips the row, as the python3 row does.
+HEADER_CXX="${CXX:-c++}"
+if [[ -n "$CPP_SUFFIX" ]] || ! "$HEADER_CXX" --version > /dev/null 2>&1; then
+    printf '  %-30s SKIP (no POSIX c++)\n' "simulate.h"
+else
+    HEADER_TU="$(mktemp -d)"
+    printf '#include "daScript/simulate/simulate.h"\n' > "$HEADER_TU/tu.cpp"
+    run_check "simulate.h" "$HEADER_CXX" -std=c++17 -fsyntax-only -I "$BUNDLE/include" "$HEADER_TU/tu.cpp"
+    rm -rf "$HEADER_TU"
+fi
+
+echo
 echo "Runtime launch:"
 # A stdio JSON-RPC server (the MCP server and the DAP bridge run from source, the watchdog's
 # LSP front in the static exe) is started on empty stdin: a clean exit is the only safe

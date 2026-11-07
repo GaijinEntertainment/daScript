@@ -16,10 +16,8 @@ let BIN = das_exe()
 def private run(argv : array<string>; var out : string&; timeout : float) : int =>
     run_and_capture(argv, out, timeout)
 
-def private died(ec : int; out : string) : bool {
-    // popen_argv reports a POSIX signal death as the raw signal number (2..31), not 128+n; daslang itself exits 0/1/255
-    return (ec >= 128 || (ec >= 2 && ec <= 31) || ec == popen_timed_out || ec < 0 || find(out, "CRASH:") >= 0)
-}
+def private died(ec : int; out : string) : bool =>
+    (is_death_exit_code(ec) || ec == popen_timed_out || find(out, "CRASH:") >= 0)
 
 [test]
 def test_verifier_reports_null_child(t : T?) {
@@ -211,6 +209,17 @@ def test_generator_runs_and_classifies(t : T?) {
         "--seeds", "3", "--synth-size", "4", "--synth-depth", "2", "--timeout", "30"], out, 300.0)
     t |> success(!died(ec, out), "driver itself crashed or hung (exit {ec})\n{out}")
     t |> success(find(out, "run(s) —") >= 0, "driver produced no summary\n{out}")
+}
+
+[test]
+def test_a_binary_that_does_not_start_stops_the_driver(t : T?) {
+    var out : string
+    let ec = run([BIN, "utils/internal/ast-fuzz/main.das", "--", "--bin", "/nonexistent/daslang",
+        "--seeds", "2", "--timeout", "30"], out, 300.0)
+    t |> equal(2, ec, "the driver exits 2 on a binary it cannot start\n{out}")
+    t |> success(find(out, "could not start /nonexistent/daslang") >= 0,
+        "the driver names the binary\n{out}")
+    t |> success(find(out, "run(s)") < 0, "no run was classified\n{out}")
 }
 
 [test]

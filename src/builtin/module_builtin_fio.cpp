@@ -26,7 +26,7 @@ extern char ** environ;
 
 #define DAS_POPEN_TIMEOUT 0x7FFFFF01
 // process_poll / process_wait return this while the child is still running: INT32_MIN, a value no
-// signal number and no ordinary exit code takes (a Windows process could return 0x80000000 on purpose).
+// exit code takes, signalled (128 + N) or ordinary (a Windows process could return 0x80000000 on purpose).
 #define DAS_PROCESS_RUNNING (-2147483647-1)
 
 MAKE_TYPE_FACTORY(clock, das::Time)// use MAKE_TYPE_FACTORY out of namespace. Some compilers not happy otherwise
@@ -414,6 +414,12 @@ namespace das {
 #include <cerrno>            // errno for non-blocking process_drain
 
 namespace das {
+#ifndef _WIN32
+    static int childExitCode ( int status ) {
+        return WIFEXITED(status) ? WEXITSTATUS(status) : WIFSIGNALED(status) ? 128 + WTERMSIG(status) : status;
+    }
+#endif
+
     void builtin_sleep ( uint32_t msec ) {
 #if defined(_WIN32)
         _sleep(msec);
@@ -1244,11 +1250,11 @@ namespace das {
         {
             lock_guard<mutex> lock(mtx);
             auto t = pclose(f);
-            return WIFEXITED(t) ? WEXITSTATUS(t) : WIFSIGNALED(t) ? WTERMSIG(t) : t;
+            return childExitCode(t);
         }
 #else
         auto t = pclose(f);
-        return WIFEXITED(t) ? WEXITSTATUS(t) : WIFSIGNALED(t) ? WTERMSIG(t) : t;
+        return childExitCode(t);
 #endif
     }
 
@@ -1394,7 +1400,7 @@ namespace das {
         fclose(f);
         watchdog.join();
         if ( timedOut ) return DAS_POPEN_TIMEOUT;
-        return WIFEXITED(status) ? WEXITSTATUS(status) : WIFSIGNALED(status) ? WTERMSIG(status) : status;
+        return childExitCode(status);
 #endif
     }
 
@@ -1856,7 +1862,7 @@ namespace das {
         fclose(f);
         if ( watchdog.joinable() ) watchdog.join();
         if ( timedOut ) return DAS_POPEN_TIMEOUT;
-        return WIFEXITED(status) ? WEXITSTATUS(status) : WIFSIGNALED(status) ? WTERMSIG(status) : status;
+        return childExitCode(status);
 #endif
     }
 
@@ -2052,7 +2058,7 @@ namespace das {
         waitpid(pid, &status, 0);
         if ( drain.joinable() ) drain.join();
         if ( fStdout ) fclose(fStdout);
-        return WIFEXITED(status) ? WEXITSTATUS(status) : WIFSIGNALED(status) ? WTERMSIG(status) : status;
+        return childExitCode(status);
 #endif
     }
 
@@ -2248,8 +2254,7 @@ namespace das {
         pid_t r = waitpid(p->pid, &status, WNOHANG);
         if ( r == 0 ) return DAS_PROCESS_RUNNING;
         p->reaped = true;
-        p->exitCode = r < 0 ? -1
-            : WIFEXITED(status) ? WEXITSTATUS(status) : WIFSIGNALED(status) ? WTERMSIG(status) : status;
+        p->exitCode = r < 0 ? -1 : childExitCode(status);
         return p->exitCode;
 #endif
     }
@@ -2270,8 +2275,7 @@ namespace das {
             pid_t r = waitpid(p->pid, &status, WNOHANG);
             if ( r > 0 ) {
                 p->reaped = true;
-                p->exitCode = WIFEXITED(status) ? WEXITSTATUS(status)
-                    : WIFSIGNALED(status) ? WTERMSIG(status) : status;
+                p->exitCode = childExitCode(status);
                 return p->exitCode;
             }
             if ( r < 0 ) { p->reaped = true; p->exitCode = -1; return -1; }
