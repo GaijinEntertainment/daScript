@@ -495,6 +495,33 @@ def target_upcast_of_rvalue {
     poke_n(cast<WrPlain>(make_wr_kid()))
 }
 
+[export]
+def target_invisible_dependency() : string {
+    var root : string
+    with_auto_inline_visibility_mid() $(value) {
+        root = value
+    }
+    return root
+}
+
+[export]
+def target_invisible_global() : int {
+    var value : int
+    with_auto_inline_visibility_value_mid() $(result) {
+        value = result
+    }
+    return value
+}
+
+[export]
+def target_invisible_private_global() : int {
+    var value : int
+    with_auto_inline_visibility_private_mid() $(result) {
+        value = result
+    }
+    return value
+}
+
 def has(s, sub : string) : bool => find(s, sub, 0) >= 0
 
 [test]
@@ -542,6 +569,33 @@ def test_auto_inline_functions_fired(t : T?) {
         t |> run("copyable move-return call splices via a copy store") @(t : T?) {
             let b = body_of(t, "target_move_copyable")
             t |> success(!has(b, "node_via_call("), "call is gone: {b}")
+        }
+        t |> run("callee naming an unseen dependency splices") @(t : T?) {
+            let b = body_of(t, "target_invisible_dependency")
+            t |> success(!has(b, "with_auto_inline_visibility_mid("),
+                "call is gone: {b}")
+            t |> success(!has(b, "with_auto_inline_visibility_root("),
+                "inner call is gone: {b}")
+            t |> success(has(b, "auto_inline_visibility_root("),
+                "hidden function stays bound: {b}")
+        }
+        t |> run("callee naming an unseen global splices") @(t : T?) {
+            let b = body_of(t, "target_invisible_global")
+            t |> success(!has(b, "with_auto_inline_visibility_value_mid("),
+                "call is gone: {b}")
+            t |> success(!has(b, "with_auto_inline_visibility_value("),
+                "inner call is gone: {b}")
+            t |> success(has(b, "auto_inline_visibility_value"),
+                "hidden global stays bound: {b}")
+        }
+        t |> run("callee naming an unseen private global splices") @(t : T?) {
+            let b = body_of(t, "target_invisible_private_global")
+            t |> success(!has(b, "with_auto_inline_visibility_private_mid("),
+                "call is gone: {b}")
+            t |> success(!has(b, "with_auto_inline_visibility_private("),
+                "inner call is gone: {b}")
+            t |> success(has(b, "auto_inline_visibility_private_value"),
+                "hidden private global stays bound: {b}")
         }
     }
 }
@@ -629,6 +683,9 @@ def test_auto_inline_functions_behavior(t : T?) {
         t |> equal(target_two_arms(-1), -2)
         t |> equal(target_private_loop_ret([3, 9, 1, 7], 5), 9)
         t |> equal(target_private_loop_ret([3, 9, 1, 7], 100), -1)
+        t |> success(!empty(target_invisible_dependency()))
+        t |> equal(target_invisible_global(), 42)
+        t |> equal(target_invisible_private_global(), 43)
     }
     t |> run("declined results match") @(t : T?) {
         t |> equal(target_never_inline(2, 3), 5)
