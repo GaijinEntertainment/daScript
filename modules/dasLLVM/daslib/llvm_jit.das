@@ -4535,11 +4535,15 @@ class public LlvmJitVisitor : AstVisitor {
             }
         }
         let stride = expr.makeType.stride
-        let emptyEmbeddedTuple = expr.makeType.baseType == Type.tTuple && empty(expr.structs)
+        var mkBaseT = expr.makeType
+        while (mkBaseT.baseType == Type.tFixedArray && mkBaseT.firstType != null) {
+            mkBaseT = mkBaseT.firstType
+        }
+        let emptyEmbeddedTuple = mkBaseT.baseType == Type.tTuple && empty(expr.structs)
         let partiallyInitStruct = !expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields
         if ((partiallyInitStruct || emptyEmbeddedTuple) && stride != 0) {
             let total = expr.structs |> length
-            let bytes = max(total, 1) * stride
+            let bytes = total != 0 ? total * stride : expr.makeType.sizeOf
             let align = uint(expr.makeType.alignOf)
             LLVMBuildMemSet(g_builder, mks_ptr, 0ul, uint64(bytes), align)
         }
