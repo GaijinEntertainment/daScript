@@ -223,7 +223,7 @@ namespace das
     vec4f SimNode_Assert::eval ( Context & context ) {
         DAS_PROFILE_NODE
         if ( !subexpr->evalBool(context) ) {
-            {
+            if ( (context.category.value & uint32_t(ContextCategory::folding_context)) == 0u ) {
                 string error_message = "assert failed";
                 if ( message )
                     error_message = error_message + ", " + message;

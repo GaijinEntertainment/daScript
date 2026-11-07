@@ -13,15 +13,6 @@ typedef file = FILE const?
 
 
 [generic]
-def fopen(name : string; mode : string; blk : block<(f : file) : void>) {
-    let f = fopen(name, mode)
-    invoke(blk, f)
-    if (f != null) {
-        fclose(f)
-    }
-}
-
-[generic]
 def dir(path : string; blk : block<(filename : string) : void>) {
     builtin_dir(path, blk)
 }

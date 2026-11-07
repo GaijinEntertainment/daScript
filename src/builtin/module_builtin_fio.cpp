@@ -237,6 +237,7 @@ namespace das {
     #define GENERATE_IO_STUB { context->throw_error_at(at, "%s is not implemented (because DAS_NO_FILEIO is enabled)", __FUNCTION__); }
     void builtin_fprint(const FILE *f, const char *text, Context *context, LineInfoArg *at) GENERATE_IO_STUB
     void builtin_fclose ( const FILE * f, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    void builtin_fopen_with ( const char *, const char *, const TBlock<void, const FILE *> &, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     void builtin_fflush ( const FILE * f, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     bool builtin_try_fflush ( const FILE * ) { return false; }
     bool builtin_try_lock_file ( const FILE * ) { return false; }
@@ -562,6 +563,17 @@ namespace das {
     void builtin_fclose ( const FILE * f, Context * context, LineInfoArg * at ) {
         if ( !f ) context->throw_error_at(at, "can't fclose NULL");
         fclose((FILE *)f);
+    }
+
+    void builtin_fopen_with ( const char * name, const char * mode, const TBlock<void, const FILE *> & blk, Context * context, LineInfoArg * at ) {
+        const FILE * f = builtin_fopen(name, mode, context, at);
+        vec4f args[1];
+        args[0] = cast<const FILE *>::from(f);
+        bool ok = context->runWithCatch([&]() {
+            context->invoke(blk, args, nullptr, at);
+        });
+        if ( f ) fclose((FILE *)f);
+        if ( !ok ) context->rethrow();
     }
 
     void builtin_fflush ( const FILE * f, Context * context, LineInfoArg * at ) {
@@ -3309,6 +3321,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_fclose)>(*this, lib, "fclose",
                 SideEffects::modifyExternal, "builtin_fclose")
                     ->args({"file","context","line"});
+            addExtern<DAS_BIND_FUN(builtin_fopen_with)>(*this, lib, "fopen",
+                SideEffects::modifyExternal, "builtin_fopen_with")
+                    ->args({"name","mode","blk","context","line"});
             addExtern<DAS_BIND_FUN(builtin_fflush)>(*this, lib, "fflush",
                 SideEffects::modifyExternal, "builtin_fflush")
                     ->args({"file","context","line"});

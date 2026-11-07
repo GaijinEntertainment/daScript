@@ -95,6 +95,7 @@ namespace das {
 
     DAS_API const FILE * builtin_fopen  ( const char * name, const char * mode, Context * context, LineInfoArg * at );
     DAS_API void builtin_fclose ( const FILE * f, Context * context, LineInfoArg * at );
+    DAS_API void builtin_fopen_with ( const char * name, const char * mode, const TBlock<void, const FILE *> & blk, Context * context, LineInfoArg * at );
     //! Tries an exclusive OS lock without waiting; false includes unsupported hosts. Close FILE to release; keep the path while contenders may hold it open.
     DAS_API bool builtin_try_lock_file ( const FILE * file );
     DAS_API void builtin_fflush ( const FILE * f, Context * context, LineInfoArg * at );
