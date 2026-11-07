@@ -32,6 +32,9 @@ this document states what the folder is and why its tests take the shape they do
   record is skipped and the module reparses in place, the warm read says so and serves the
   rest, and a driver edited after it parses from source against the macro the reparse
   registered - the site the macro rewrites still reads 42.
+- `test_generic_call_macro_cache.das` - a script whose function annotation registers a call
+  macro into it, and whose generic body still holds that call uninferred, writes its record: the
+  cold run writes the cache and prints the result, and the warm run reparses the script in place.
 - `test_extern_registrar_reparse.das` - a module whose compile registered an extern proxy into
   `dasbind` (a `late` `[extern]` def, so no library is needed) carries the same mark: the warm
   read skips its record and reparses it in place without reading the payload, so no cumulative
@@ -135,7 +138,10 @@ this document states what the folder is and why its tests take the shape they do
   its own compile reads clean on two warm runs, rewrites nothing, and keeps the good cache when
   a later edit breaks the compile.
 - `_fixtures/` - the driver and module scripts the spawned children compile (`mc_dep_*`,
-  `mc_generic_origin_*`, `mc_backref_*` - the two scripts one process compiles over `json_boost`, `mc_cf_drv` - the `compile_file` driver, the file it compiles and
+  `mc_generic_origin_*`, `mc_backref_*` - the two scripts one process compiles over `json_boost`, `mc_generic_call_macro` - a script whose `[mc_kind]`
+  annotation registers a call macro into it and whose generic body still holds that call,
+  `mc_gcm_mod` with `mc_gcm_drv` - the same shape as a shared module and the script that requires
+  it, `mc_cf_drv` - the `compile_file` driver, the file it compiles and
   whether it caches on its argv; the `mc_late_*` set a late require targets: a shared module with a
   macro context, one without, one that is not shared, one that does not compile, one declaring
   another name, and a macro module whose call macro requires the first from inside a compile);

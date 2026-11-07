@@ -75,7 +75,11 @@ retargeted to into the `dasbind` builtin. The registering site marks the compili
 which is what a module being compiled looks like; the binder sets it on the program's own
 module) and the record header carries the mark. A marked record is never served: it reparses in
 place, the records after it still serve, and the cache is not rewritten for it; a marked record
-whose length word cannot skip it cuts the stream like a changed file. Serving it would leave any
+whose length word cannot skip it cuts the stream like a changed file. The writer gives a marked
+record its header and a one-byte payload in place of the module: nothing reads that payload, and
+the module's own would name what only its compile registered - a generic's body is stored
+uninferred, so a call macro registered into the module survives there as an `ExprCallMacro`, a
+reference the payload cannot carry. Serving it would leave any
 module parsed from source against it - after a cutoff in the same read, or in a later compile of
 the same process once a `shared` module is promoted - without the registrations, and its call
 sites would fail to resolve (or, for a binder, find no proxy).
