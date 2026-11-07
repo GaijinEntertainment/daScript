@@ -853,6 +853,7 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | test_property_compound_assign_deref_offset.das | A property compound assignment under a field of `deref(p + k)`, and through a `with` over one, compiles and writes through the setter | |
 | test_generic_tuple_void_ptr.das | A generic over a tuple instantiates its own `tuple<void?>` instance after `int?` and `float?` ones exist | |
 | test_reinterpret_extern_result.das | `reinterpret` applied directly to an extern's `uint64` or pointer result runs in the interpreter as the two-step form does | |
+| test_char_escapes.das | Character and string literals take the C escape set - `\0`, `\a`, `\v`, `\?`, `\xHH`, octal `\NNN` and the rest - with and without the `u` / `u8` suffixes; an embedded `\0` ends a string | |
 
 ## loops/
 

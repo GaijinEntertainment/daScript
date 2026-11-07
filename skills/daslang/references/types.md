@@ -34,14 +34,13 @@ The first five groups pass by value, everything else by reference; `string` is i
 | `1.52d`, `1.e2lf` | `double` |
 | `1.5h` | `float16` |
 
-Strings use `"..."`, may span lines, escapes `\t \n \r \\ \" \' \b \f \v \xHH \uHHHH
-\UHHHHHHHH`, and interpolate `{expr}` with an optional format spec (`"{pi:5.2f}"`). A nested
+Strings use `"..."`, may span lines, escapes `\a \b \f \n \r \t \v \\ \" \' \? \xHH`, octal
+`\0`-`\377`, `\uHHHH \UHHHHHHHH`, and interpolate `{expr}` with an optional format spec (`"{pi:5.2f}"`). A nested
 literal inside an interpolation stays plain - `"{s == "abc"}"`; escaping it (`"{s == \"abc\"}"`)
 is a syntax error.
 
-**Character literals take a smaller escape set** - `\b \t \n \f \r \\ \'` only. `'\v'` is
-`error[30151] syntax error, unexpected invalid token` though `"\v"` works; write the number,
-`11`.
+**Character literals take the same C escapes**, minus `\u` / `\U`: `'\0'` is `0`, `'\x41'` and
+`'\101'` are `65`. A string is NUL-terminated, so `"a\0b"` is `"a"`.
 
 ## Conversions
 

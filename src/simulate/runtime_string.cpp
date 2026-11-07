@@ -390,7 +390,41 @@ namespace das
       return false;
     }
 
-    string unescapeString ( const string & input, bool * error, bool ) {
+    static int octalEscapeLength ( const char * digits ) {
+        int limit = digits[0]<='3' ? 3 : 2;
+        int length = 0;
+        while ( length<limit && digits[length]>='0' && digits[length]<='7' ) length ++;
+        return length;
+    }
+
+    CharacterEscape decodeCharacterEscape ( const char * backslash ) {
+        char kind = backslash[1];
+        switch ( kind ) {
+            case 'a':   return { '\a', 2 };
+            case 'b':   return { '\b', 2 };
+            case 'f':   return { '\f', 2 };
+            case 'n':   return { '\n', 2 };
+            case 'r':   return { '\r', 2 };
+            case 't':   return { '\t', 2 };
+            case 'v':   return { '\v', 2 };
+            case '\\': case '\'': case '"': case '?':
+                        return { kind, 2 };
+            case 'x': {
+                    int32_t value = 0, i = 2;
+                    for ( ; i!=4 && hexChar(backslash[i])>=0; ++i ) value = value * 16 + hexChar(backslash[i]);
+                    return i==2 ? CharacterEscape{ 0, 0 } : CharacterEscape{ value, i };
+                }
+            default:
+                if ( kind>='0' && kind<='7' ) {
+                    int32_t value = 0, n = octalEscapeLength(backslash + 1);
+                    for ( int i=0; i!=n; ++i ) value = value * 8 + (backslash[1 + i] - '0');
+                    return { value, n + 1 };
+                }
+                return { 0, 0 };
+        }
+    }
+
+    string unescapeString ( const string & input, bool * error, bool das_escape ) {
         if ( error ) *error = false;
         const char* str = input.c_str();
         const char* strEnd = str + input.length();
@@ -398,6 +432,14 @@ namespace das
         result.reserve(input.size());
         for( ; str < strEnd; ++str ) {
             if ( *str=='\\' ) {
+                if ( das_escape ) {
+                    auto esc = decodeCharacterEscape(str);
+                    if ( esc.length ) {
+                        result += char(esc.value);
+                        str += esc.length - 1;
+                        continue;
+                    }
+                }
                 ++str;
                 if ( str == strEnd ) {
                     if ( error ) *error = true;

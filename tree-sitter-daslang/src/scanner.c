@@ -271,8 +271,15 @@ static bool scan_escape(TSLexer *lexer) {
     }
     return true;
   }
-  if (c == '"' || c == '/' || c == '\\' || c == 'b' || c == 'f' || c == 'n' || c == 'r' || c == 't' || c == 'v' ||
-      c == '\n' || c == '{' || c == '}') {
+  if (c >= '0' && c <= '7') {
+    unsigned digits = c <= '3' ? 3 : 2;
+    for (unsigned i = 0; i < digits && lexer->lookahead >= '0' && lexer->lookahead <= '7'; i++) {
+      advance(lexer);
+    }
+    return true;
+  }
+  if (c == '"' || c == '\'' || c == '/' || c == '\\' || c == 'a' || c == 'b' || c == 'f' || c == 'n' || c == 'r' ||
+      c == 't' || c == 'v' || c == '?' || c == '\n' || c == '{' || c == '}') {
     advance(lexer);
     return true;
   }
@@ -308,9 +315,9 @@ static bool scan_string_part(Scanner *scanner, TSLexer *lexer) {
     if (c == '\\') {
       advance(lexer);
       int32_t next = lexer->lookahead;
-      bool simple = next == '"' || next == '/' || next == '\\' || next == 'b' || next == 'f' || next == 'n' ||
-                    next == 'r' || next == 't' || next == 'v' || next == '\n' || next == '\r' || next == '{' ||
-                    next == '}';
+      bool simple = next == '"' || next == '\'' || next == '/' || next == '\\' || next == 'a' || next == 'b' ||
+                    next == 'f' || next == 'n' || next == 'r' || next == 't' || next == 'v' || next == '?' ||
+                    next == '\n' || next == '\r' || next == '{' || next == '}' || (next >= '0' && next <= '7');
       bool hex = next == 'x' || next == 'u' || next == 'U';
       if (simple || hex) {
         // A known escape ends the text before the backslash. An `\x`, `\u` or `\U` without enough digits is text.
@@ -639,8 +646,7 @@ static bool scan_number(TSLexer *lexer) {
   return accept_integer(lexer, INTEGER, digits);
 }
 
-// constraint: the compiler lexer reads `'x'` with one byte, or one of the escapes \b \t \n \f \r \\ \', and an optional
-// u8 or u suffix
+// constraint: follows CHAR_ESCAPE in src/parser/ds2_lexer.lpp, then an optional u8 or u suffix
 static bool scan_character(TSLexer *lexer) {
   advance(lexer);
   int32_t c = lexer->lookahead;
@@ -654,16 +660,32 @@ static bool scan_character(TSLexer *lexer) {
         advance(lexer);
         lexer->mark_end(lexer);
       }
-    } else if (escape == 'b' || escape == 't' || escape == 'n' || escape == 'f' || escape == 'r' ||
-               escape == '\\') {
-      advance(lexer);
+    } else {
+      if (escape == 'x') {
+        advance(lexer);
+        if (!is_hex_digit(lexer->lookahead)) {
+          return false;
+        }
+        advance(lexer);
+        if (is_hex_digit(lexer->lookahead)) {
+          advance(lexer);
+        }
+      } else if (escape >= '0' && escape <= '7') {
+        unsigned digits = escape <= '3' ? 3 : 2;
+        for (unsigned i = 0; i < digits && lexer->lookahead >= '0' && lexer->lookahead <= '7'; i++) {
+          advance(lexer);
+        }
+      } else if (escape == 'a' || escape == 'b' || escape == 'f' || escape == 'n' || escape == 'r' || escape == 't' ||
+                 escape == 'v' || escape == '\\' || escape == '"' || escape == '?') {
+        advance(lexer);
+      } else {
+        return false;
+      }
       if (lexer->lookahead != '\'') {
         return false;
       }
       advance(lexer);
       lexer->mark_end(lexer);
-    } else {
-      return false;
     }
   } else {
     if (c == '\n' || c >= 0x80 || lexer->eof(lexer)) {
