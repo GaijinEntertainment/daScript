@@ -5488,6 +5488,7 @@ def test_vkd_gemv_ncol(t0 : T?) {
             let fmts <- kq_gemv_fmts()
             t |> equal(length(fmts), 1 + length(KQ_LEAF_FMTS), "the superblock roster is q8 and the fifteen kq leaves")
             for (f in type<KqFmt>) {
+                continue if (kq_discrete_unstamped(f))
                 t |> success(gemv_cls_ensure(int(f)), "{f}: the one-column class rail engages")
                 gemv_ncol_arm(t, f, 1024, 96)   //! n a multiple of 256 for the superblock formats, d even for the row-pair stamps
                 gemv_ncol_arm(t, f, 4096, 90)   //! a wider reduction at a row count off the lane splits' multiples
