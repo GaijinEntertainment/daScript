@@ -14,7 +14,7 @@
 #include "daScript/ast/ast_policy_types.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_visitor.h"
-#include "daScript/ast/ast_generate.h"
+#include "../ast/ast_generate.h"
 #include "daScript/ast/ast_simulate.h"
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/misc/das_common.h"
@@ -2366,7 +2366,6 @@ namespace das {
     ModuleAotType Module_Ast::aotRequire ( TextWriter & tw ) const {
         tw << "#include \"daScript/ast/ast.h\"\n";
         tw << "#include \"daScript/simulate/aot_builtin_ast.h\"\n";
-        tw << "#include \"daScript/ast/ast_generate.h\"\n";
         return ModuleAotType::cpp;
     }
 }

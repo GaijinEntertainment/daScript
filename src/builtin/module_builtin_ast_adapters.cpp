@@ -6,7 +6,7 @@
 #include "daScript/simulate/simulate_visit_op.h"
 #include "daScript/ast/ast_policy_types.h"
 #include "daScript/ast/ast_expressions.h"
-#include "daScript/ast/ast_generate.h"
+#include "../ast/ast_generate.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_const_visitor.h"
 #include "daScript/simulate/aot_builtin_ast.h"

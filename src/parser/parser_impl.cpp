@@ -3,7 +3,7 @@
 #include "parser_impl.h"
 #include "parser_state.h"
 
-#include "daScript/ast/ast_generate.h"
+#include "../ast/ast_generate.h"
 #include "daScript/ast/ast_handle.h"
 
 #undef yyextra

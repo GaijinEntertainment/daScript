@@ -989,7 +989,6 @@ include/daScript/ast/ast.h
 include/daScript/ast/ast_expressions.h
 include/daScript/ast/ast_visitor.h
 include/daScript/ast/ast_const_visitor.h
-include/daScript/ast/ast_generate.h
 include/daScript/ast/ast_interop.h
 include/daScript/ast/ast_handle.h
 include/daScript/ast/ast_policy_types.h
@@ -1723,7 +1722,6 @@ endif()
 # This list should be significantly reduced, most of the files, except aot related should be private.
 SET(DAS_RELEASE_AST_INCLUDE
     include/daScript/ast/ast_expressions.h
-    include/daScript/ast/ast_generate.h
     include/daScript/ast/ast.h
     include/daScript/ast/ast_handle.h
     include/daScript/ast/ast_interop.h
