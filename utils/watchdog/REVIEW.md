@@ -12,9 +12,10 @@ supervisor no longer tries sends the user to the wrong folder.
 section of `README.md`, in the same change** - that section is the list a rename sweep starts
 from.
 
-**A diff that adds an `event` value or a field key to the log from any `.das` in this folder
-uses the name another file here already writes for the same thing** - one meaning under two
-spellings matches a log reader on only one of the two, and the miss is silent.
+**A diff that adds an `event` value or a field key to the log from a `.das` in this folder
+reuses the name a `.das` in this folder already writes to the log for the same thing** -
+one meaning under two spellings matches a log reader on only one of the two, and the miss is
+silent.
 
 **Weakening `REVIEW.das` (beside this file) is a defect: dropping a check, narrowing what a
 check walks, or rewriting a finding text so it no longer names what failed.**
@@ -32,7 +33,7 @@ its line in `README.md`.** `--help` lists a flag field only through its `@clarg_
 
 **A diff that adds a switch, or a value of a switch, read before the config (`wants_mode` in
 `main.das`, `tool_front` in `watchdog.das`) adds or updates its line in `print_watchdog_help`
-or `README.md`, in the same change.**
+and in `README.md`, in the same change.**
 
 **A diff that removes or renames a `WatchdogConfig` field updates every `watchdog.json` in the
 tree in the same change, and names any out-of-tree `watchdog.json` in the PR description** -

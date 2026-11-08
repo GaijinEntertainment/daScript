@@ -120,3 +120,34 @@ def test_idle_fork_memory_is_separate_from_owner(t : T?) {
     for (v, i in results, count()){t |> equal(v, i + 4096)}
     delete results; set_jobque_threads(0)
 }
+
+//! the panic fixture's exit code and output, in `mode`
+def run_panic_fixture(mode : string; var output : string&) : int {
+    var args <- [get_host_binary(), "-dasroot", get_das_root(), "-no-module-cache",
+        "{get_das_root()}/tests/jobque/_fixture_panic_parked_job.das"]
+    if (!empty(mode)) {
+        args |> push("--")
+        args |> push(mode)
+    }
+    return run_and_capture(args, output, 60.0)
+}
+
+[test(description = "A panic in main with a job or a detached thread still parked on a channel exits with code 1 instead of hanging the teardown, and a panic with nothing running tears down as before, proven by child runs", timeout = 1200)]
+def panic_with_a_parked_job_exits(t : T?) {
+    for (mode in ["", "thread"]) {
+        t |> run(empty(mode) ? "a parked que job" : "a parked detached thread") @(t : T?) {
+            var output : string
+            let result = run_panic_fixture(mode, output)
+            t |> equal(result, 1, output)
+            t |> success(contains(output, "EXCEPTION: boom"), output)
+            t |> success(contains(output, "exiting without teardown"), output)
+        }
+    }
+    t |> run("nothing running: the regular teardown, no early exit") @(t : T?) {
+        var output : string
+        let result = run_panic_fixture("clean", output)
+        t |> equal(result, 1, output)
+        t |> success(contains(output, "EXCEPTION: boom"), output)
+        t |> success(!contains(output, "exiting without teardown"), output)
+    }
+}
