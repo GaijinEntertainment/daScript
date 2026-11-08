@@ -5,26 +5,19 @@ options no_unused_block_arguments = false
 require dastest/testing_boost public
 require daslib/json_boost
 require daslib/fio
-require strings
 
-def dastest_root() : string {
-    return "{get_das_root()}/dastest"
-}
+def dastest_root() : string => "{get_das_root()}/dastest"
 
-def fixture_path(name : string) : string {
-    return "{dastest_root()}/tests/{name}"
-}
+def fixture_path(name : string) : string => "{dastest_root()}/tests/{name}"
 
-def json_out_path() : string {
-    return "{get_das_root()}/.dastest_json_test.json"
-}
+def json_out_path() : string => "{get_das_root()}/.dastest_json_test.json"
 
 def run_dastest_json(test_file : string; var json_content : string&; var exit_code : int&) {
     let exe = get_command_line_arguments()[0]
     let json_path = json_out_path()
     let cmd = "{exe} {dastest_root()}/dastest.das -- --test {test_file} --json-file {json_path}"
     var output : string
-    unsafe {
+    unsafe {    // nolint:STYLE025 - popen takes a trailing block
         exit_code = popen(cmd) $(f) {
             if (f != null) {
                 while (!feof(f)) {
@@ -43,7 +36,7 @@ def run_dastest_json(test_file : string; var json_content : string&; var exit_co
 }
 
 [test]
-def test_json_file_passing(tt : T?) {
+def test_json_file_passing(tt : T?) {  // nolint:STYLE038 - one JSON report checked field by field
     tt |> run("produces valid JSON for passing tests") <| @(t : T?) {
         var json_content : string
         var exit_code : int
@@ -76,10 +69,10 @@ def test_json_file_passing(tt : T?) {
         let passed_count = js?.passed ?? -1
         let failed_count = js?.failed ?? -1
         let errors_count = js?.errors ?? -1
-        t |> equal(int(total), 3)  // test_pass_one has sub_a, test_pass_two = 3 tests total
-        t |> equal(int(passed_count), 3)
-        t |> equal(int(failed_count), 0)
-        t |> equal(int(errors_count), 0)
+        t |> equal(total, 3)  // test_pass_one has sub_a, test_pass_two = 3 tests total
+        t |> equal(passed_count, 3)
+        t |> equal(failed_count, 0)
+        t |> equal(errors_count, 0)
     }
 
     tt |> run("individual test results have correct fields") <| @(t : T?) {
@@ -106,7 +99,7 @@ def test_json_file_passing(tt : T?) {
 
         let tests & = unsafe(tests_jv.value as _array)
         t |> equal(length(tests), 3)
-        if (length(tests) < 1) {
+        if (empty(tests)) {
             return
         }
 
@@ -141,7 +134,7 @@ def test_json_file_passing(tt : T?) {
             return
         }
 
-        let time_usec = int(js?.time_usec ?? 0)
+        let time_usec = (js?.time_usec ?? 0)
         t |> success(time_usec > 0, "time_usec should be positive")
 
         let tests_jv = js?.tests
@@ -150,7 +143,7 @@ def test_json_file_passing(tt : T?) {
         }
         let tests & = unsafe(tests_jv.value as _array)
         for (test_jv in tests) {
-            let test_time = int(test_jv?.time ?? 0)
+            let test_time = (test_jv?.time ?? 0)
             let test_name = test_jv?.name ?? "unknown"
             t |> success(test_time >= 0, "test '{test_name}' time should be >= 0")
         }
@@ -165,7 +158,7 @@ def test_json_file_not_created_without_flag(tt : T?) {
         let exe = get_command_line_arguments()[0]
         let fix_path = fixture_path("_fixture_passing.das")
         let cmd = "{exe} {dastest_root()}/dastest.das -- --test {fix_path}"
-        unsafe {
+        unsafe {    // nolint:STYLE025 - popen takes a trailing block
             popen(cmd) $(f) {
                 if (f != null) {
                     while (!feof(f)) {

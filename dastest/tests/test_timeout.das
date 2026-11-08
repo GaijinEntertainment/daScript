@@ -7,9 +7,7 @@ require daslib/fio
 require daslib/strings_boost
 require strings
 
-def dastest_root() : string {
-    return "{get_das_root()}/dastest"
-}
+def dastest_root() : string => "{get_das_root()}/dastest"
 
 [test]
 def test_timeout(tt : T?) {

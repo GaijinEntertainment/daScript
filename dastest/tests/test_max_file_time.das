@@ -7,22 +7,26 @@ require daslib/fio
 require daslib/strings_boost
 require strings
 
-def dastest_root() : string {
-    return "{get_das_root()}/dastest"
-}
+def dastest_root() : string => "{get_das_root()}/dastest"
 
-def passing_fixture() : string {
-    return "{dastest_root()}/tests/_fixture_passing.das"
-}
+def passing_fixture() : string => "{dastest_root()}/tests/_fixture_passing.das"
 
-def run_dastest(args : array<string>; var output : string&; var exit_code : int&) {
+def raised_fixture() : string => "{dastest_root()}/tests/_fixture_raised_timeout.das"
+
+def run_dastest_on(fixture : string; args : array<string>;
+                   var output : string&; var exit_code : int&) {
     let exe = get_command_line_arguments()[0]
-    var cmd <- [exe, "-dasroot", get_das_root(), "{dastest_root()}/dastest.das", "--", "--failures-only", "--test", passing_fixture()]
+    var cmd <- [exe, "-dasroot", get_das_root(), "{dastest_root()}/dastest.das", "--",
+                "--failures-only", "--test", fixture]
     cmd |> push_from(args)
     exit_code = run_and_capture(cmd, output)
 }
 
-[test]
+def run_dastest(args : array<string>; var output : string&; var exit_code : int&) {
+    run_dastest_on(passing_fixture(), args, output, exit_code)
+}
+
+[test(description = "--max-file-time fails a completed file past the limit in both modes, and a file's declared test budgets raise its limit")]
 def test_max_file_time(tt : T?) {
     tt |> run("a generous file-time limit preserves a passing suite") <| @(t : T?) {
         var output : string
@@ -55,5 +59,17 @@ def test_max_file_time(tt : T?) {
             "isolated failure should name the slow file, got:\n{output}")
         t |> success(output |> contains("exceeding --max-file-time 0.001s"),
             "isolated failure should name the limit, got:\n{output}")
+    }
+
+    tt |> run("a declared test budget raises the file's limit by the same amount") <| @(t : T?) {
+        // the fixture sleeps 300ms inside a 10s budget; the 1ms limit alone
+        // would fail it, the budget lifts the limit to 10.001s
+        var output : string
+        var exit_code : int
+        run_dastest_on(raised_fixture(), ["--max-file-time", "0.001"], output, exit_code)
+        t |> equal(exit_code, 0,
+            "the declared budget should lift the limit, got {exit_code}:\n{output}")
+        t |> success(!(output |> contains("exceeding --max-file-time")),
+            "no file-time failure expected, got:\n{output}")
     }
 }

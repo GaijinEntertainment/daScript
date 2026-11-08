@@ -12,8 +12,9 @@ require daslib/fio
 
 var private g_test_temp_dir : string
 
-//! A directory only this context writes to - created on the first call, removed with everything
-//! in it when the context ends. A thread or job context gets its own.
+//! A directory only this context writes to - created on the first
+//! call, removed with everything in it when the context ends. A
+//! thread or job context gets its own.
 def public test_temp_dir() : string {
     if (empty(g_test_temp_dir)) {
         let made = create_temp_directory_result("dastest_")
@@ -30,7 +31,8 @@ def private remove_test_temp_dir {
     rmdir_rec(g_test_temp_dir)
 }
 
-//! The panic a block raises, as text ("" when it returns): a refusal cell reads the message it holds.
+//! The panic a block raises, as text ("" when it returns): a refusal
+//! cell reads the message it holds.
 def public panic_text(blk : block<() : void>) : string {
     var why = ""
     try {
@@ -41,7 +43,8 @@ def public panic_text(blk : block<() : void>) : string {
     return why
 }
 
-//! The relative-tolerance float compare of a fastmath (GPU, flattened) result against its oracle.
+//! The relative-tolerance float compare of a fastmath (GPU,
+//! flattened) result against its oracle.
 def public fapprox(x, y : float) : bool => abs(x - y) <= 1e-4 * max(1.0, max(abs(x), abs(y)))
 
 //! a Debug host runs a child several times slower, so its deadline
@@ -56,18 +59,39 @@ def private validate_arguments(type_name : string, args) : bool {
         return true
     }
     if (len == 1) {
-        return (args[0]._type.isPointer && args[0]._type.firstType.isStructure && args[0]._type.firstType.structType.name == type_name
-                && args[0]._type.firstType.structType._module != null && args[0]._type.firstType.structType._module.name == "testing")
+        return (args[0]._type.isPointer && args[0]._type.firstType.isStructure
+                && args[0]._type.firstType.structType.name == type_name
+                && args[0]._type.firstType.structType._module != null
+                && args[0]._type.firstType.structType._module.name == "testing")
     }
     return false
 }
 
 [function_macro(name="test")]
 class TestFunctionAnnotation : AstFunctionAnnotation {
-    [unused_argument(group, args, errors)] def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
+    [unused_argument(group)] def override apply(var func : FunctionPtr; var group : ModuleGroup;
+                                                var args : AnnotationArgumentList;
+        var errors : das_string) : bool {
         if (!validate_arguments("T", func.arguments)) {
             errors := "Invalid arguments for test macro\nexpected function header: def {func.name}() or def {func.name}(t: testing::T?)"
             return false
+        }
+        for (arg in args) {
+            if (arg.name == "name" || arg.name == "description" || arg.name == "standalone") {
+                if (arg.basicType != Type.tString) {
+                    errors := "[test({arg.name} = ...)] takes a string"
+                    return false
+                }
+            } elif (arg.name == "timeout") {
+                if (arg.basicType != Type.tFloat && arg.basicType != Type.tInt) {
+                    errors := "[test(timeout = ...)] takes seconds as an int or float"
+                    return false
+                }
+            } else {
+                errors := ("[test] does not take an argument named '{arg.name}'; it takes " +
+                    "name, description, timeout, and standalone")
+                return false
+            }
         }
         func.flags.exports = true
         return true
@@ -76,7 +100,9 @@ class TestFunctionAnnotation : AstFunctionAnnotation {
 
 [function_macro(name="benchmark")]
 class BenchmarkFunctionAnnotation : AstFunctionAnnotation {
-    [unused_argument(group, args, errors)] def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
+    [unused_argument(group, args, errors)] def override apply(var func : FunctionPtr;
+                                                              var group : ModuleGroup;
+        var args : AnnotationArgumentList; var errors : das_string) : bool {
         if (!validate_arguments("B", func.arguments)) {
             errors := "Invalid arguments for benchmark macro\nexpected function header: def {func.name}() or def {func.name}(b: testing::B?)"
             return false

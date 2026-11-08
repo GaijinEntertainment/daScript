@@ -24,6 +24,18 @@ Running only **some** selected benchmarks (uses `vector_alloc` as a filtering pr
 
 - `daslang dastest.das -- --bench --bench-names vector_alloc --test $target --test-names none`
 
+### The `[test]` annotation
+
+`[test]` marks a `def f()` or `def f(t : T?)` as a test and exports it. Its arguments, each optional:
+
+- `name = "..."`: the name the run prints and `--test-names` matches, in place of the function's name
+- `description = "..."`: one sentence stating what the test proves. It prints under the test's `--- FAIL` line and nowhere else; an index generator can read it without compiling the file
+- `timeout = seconds` (an int or a float): this one test's budget. A test that finishes past it is reported failed, naming the budget; the file's `--max-file-time` limit and, in isolated mode, its `--test-timeout` deadline grow by the same amount, so one slow test raises its own limit without loosening any other file's
+
+- `standalone = "..."`: why this test's file cannot share a program with any other - a program-wide registry it fills, a deliberate duplicate that breaks other tests. dastest ignores it; a test-tree gate reads it to accept a small file
+
+Any other argument, or a wrong type, is a compile error from the macro.
+
 ### dastest.das arguments
 
 - `--test`: Path to the folder with scripts or single script to test
@@ -46,12 +58,12 @@ Running only **some** selected benchmarks (uses `vector_alloc` as a filtering pr
 - `--cov-path <path>`: Path to write coverage report data to
 - `--timing-outliers <n>`: Print the top N slowest test files and highlight statistical timing outliers (above mean + 2x stddev). `0` (default) prints none
 - `--timeout <seconds>`: The whole suite's timeout. Past it the process ends at once with exit code 124 and no summary, after one line naming the timeout; the `run N/M` lines say which file was running. `0` disables it. The default is 20 minutes
-- `--max-file-time <seconds>`: Fail after the suite finishes if any completed test file exceeded this wall-clock duration. `0` (default) disables the limit; this is independent of the global `--timeout` deadlock guard.
+- `--max-file-time <seconds>`: Fail after the suite finishes if any completed test file exceeded this wall-clock duration plus the `[test(timeout = N)]` budgets it declares. `0` (default) disables the limit; this is independent of the global `--timeout` deadlock guard.
 - `--isolated-mode`: Run tests in isolated processes, useful to catch crashes
 - `--isolated-mode-threads <n>`: Number of worker threads in isolated mode. `0` uses a conservative JIT rule (`min(32, max(4, logical_threads / 2))`) and 2x hardware threads otherwise. Preflight can override the JIT width per machine through its user config.
 - `--batch <n>`: Files per worker subprocess in isolated mode (semi-isolated sharding). `1` (default) is one process per test (full isolation). `>1` amortizes process/compile cold-start across a batch - much faster, especially on Windows. A crash in a batch is auto-recovered: the file that died is reported as crashed and the rest of the batch is re-run one-process-per-file, so isolation is preserved exactly where it is needed.
 - `--together <path>` (repeatable): The listed files compiled as ONE program. A generated root (under `--module-cache-dir`, else the temp folder) carries the files' merged `options` lines and requires every file, so the module graph is parsed and JIT'd once for the list; each file's module then runs in a FRESH context of that program - its globals re-initialized, its `[init]`s run anew, the previous file's `[finalize]`s run at its context's drop, the JIT DLL reloaded from its cache in a few seconds - and reports as its own file (`PASS` / `FAIL` line, result counts). The files' `options` must agree key for key, and none may be an expected-failure compile test (`cant_` / `failed_` / `invalid_`). What a file still shares with the files before it is the program: a module one file requires is in every file's context, so a test that reads the state before some module's `[init]` ran holds only alone. Unlike `--batch`, which runs each file as its own program in one worker, this shares the parse and the JIT
-- `--test-timeout <seconds>`: Per-test timeout in isolated mode. `0` (default) disables it
+- `--test-timeout <seconds>`: Isolated mode: each file's subprocess deadline, plus every `[test(timeout = N)]` the file declares - a test that raises its own budget raises the file's by N. `0` (default) disables it
 - `--use-aot`: Compile and run tests using AOT (ahead-of-time) compilation, failing if AOT is unavailable
 - `--aot-macros`: Force `quote()`/`qmacro` lowering (`daslib/quote` QuotePass) when compiling test files
 - `--ser <path>`: Path to serialize compiled test programs to (for use with `--deser`)

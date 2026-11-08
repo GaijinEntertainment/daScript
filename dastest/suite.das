@@ -19,7 +19,8 @@ require log
 require testing
 require suite_result public
 
-//! a standalone exe reports jit_enabled() but carries no llvm/dasbind to JIT with, so only a -jit host JITs the tests
+//! a standalone exe reports jit_enabled() but carries no llvm/dasbind
+//! to JIT with, so only a -jit host JITs the tests
 def public tests_jit_enabled() : bool => jit_enabled() && !is_standalone_exe()
 
 var test_results : array<SuiteTestResult>
@@ -87,7 +88,8 @@ def SuiteCtx(args : DastestArgs) : SuiteCtx {
     let at = get_line_info()
 
     // TODO: maybe just store DastestArgs inside the context?
-    // That would involve more diff, so maybe after the initial safer replacement?
+    // That would involve more diff, so maybe after the initial safer
+    // replacement?
 
     // TODO: fix this somehow?
     // Maybe include the das_root into command info?
@@ -134,6 +136,14 @@ struct FileCtx {
     expectFailure : bool = false
 }
 
+//! what a `[test(description = "...", timeout = seconds)]` declares:
+//! the claim printed under a failure, and the wall-clock timeout past
+//! which a finished test is reported failed (0 = none)
+struct TestMeta {
+    description : string
+    timeoutSec : float
+}
+
 
 def FileCtx(ctx : SuiteCtx) : FileCtx {
     var res <- internalFileCtx(ctx)
@@ -143,7 +153,8 @@ def FileCtx(ctx : SuiteCtx) : FileCtx {
 
 
 def private internalFileCtx(ctx : SuiteCtx) : FileCtx =>
-    <- FileCtx(uriPaths = ctx.uriPaths, verbose = ctx.verbose, stackOnException = ctx.stackOnException)
+    <- FileCtx(uriPaths = ctx.uriPaths, verbose = ctx.verbose,
+               stackOnException = ctx.stackOnException)
 
 
 // match_func_name may reject a test if explicit test list
@@ -518,8 +529,9 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
         }
     }
     let gc_after = gc_thread_root_count()
-    // Small bounded leaks (< 10) are expected from RTTI type walks in test_module.
-    // Report only significant leaks that suggest a real gc_collect gap.
+    // Small bounded leaks (< 10) are expected from RTTI type walks in
+    // test_module. Report only significant leaks that suggest a real
+    // gc_collect gap.
     if (gc_after > gc_before + 10ul) {
         let delta = int64(gc_after) - int64(gc_before)
         to_log(LOG_WARNING, "GC LEAK: {file_name} — {delta} new TypeDecl nodes on thread root\n")
@@ -529,14 +541,16 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
 }
 
 
-def test_module(var mod : rtti::Module; var context : rtti::Context; var suite_ctx : SuiteCtx) : SuiteResult {
+def test_module(var mod : rtti::Module; var context : rtti::Context;
+                var suite_ctx : SuiteCtx) : SuiteResult {
     var inscope fileCtx <- internalFileCtx(suite_ctx)
     let res = test_module(mod, context, suite_ctx, fileCtx)
     return res
 }
 
 
-def test_module(var mod : rtti::Module; var context : rtti::Context; var suite_ctx : SuiteCtx; file_ctx : FileCtx) : SuiteResult {
+def test_module(var mod : rtti::Module; var context : rtti::Context; var suite_ctx : SuiteCtx;
+                file_ctx : FileCtx) : SuiteResult {
     if (suite_ctx.compile_only) return default<SuiteResult>
     var res : SuiteResult
     var inscope fileCtx := file_ctx
@@ -545,8 +559,9 @@ def test_module(var mod : rtti::Module; var context : rtti::Context; var suite_c
         fileCtx.context = addr(context)
         modPtr = addr(mod)
     }
-    // Walk the call stack at throw time (stack intact → real frames) rather than after
-    // the panic unwinds (the old post-unwind walk reported sp=0 with no frames).
+    // Walk the call stack at throw time (stack intact → real frames)
+    // rather than after the panic unwinds (the old post-unwind walk
+    // reported sp=0 with no frames).
     if (fileCtx.stackOnException) {
         context.alwaysStackWalkOnException = true
     }
@@ -560,6 +575,7 @@ def test_module(var mod : rtti::Module; var context : rtti::Context; var suite_c
         if (fn == null) return
         var test_name = ""
         var test_kind = ""
+        var meta : TestMeta
         for (ann in fn.annotations) {
             let tag = "{ann.annotation.name}"
             if (tag != "test" && tag != "benchmark") continue
@@ -570,6 +586,10 @@ def test_module(var mod : rtti::Module; var context : rtti::Context; var suite_c
             for (arg in ann.arguments) {
                 if (arg.name == "name") {
                     name = "{arg.sValue}"
+                } elif (arg.name == "description") {
+                    meta.description = "{arg.sValue}"
+                } elif (arg.name == "timeout") {
+                    meta.timeoutSec = arg.basicType == Type.tFloat ? arg.fValue : float(arg.iValue)
                 }
             }
             test_name = name
@@ -580,7 +600,7 @@ def test_module(var mod : rtti::Module; var context : rtti::Context; var suite_c
         let allowed_list & = test_kind == "benchmark" ? suite_ctx.bench_names : suite_ctx.testNames
         if (!match_func_name(test_name, allowed_list)) return
         if (test_kind == "test") {
-            test_any(test_name, func, length(fn.arguments), fileCtx, res)
+            test_any(test_name, func, length(fn.arguments), fileCtx, res, meta)
         } elif (test_kind == "benchmark" && suite_ctx.bench_enabled) {
             let bench_func = unsafe(reinterpret<function<(b : B?) : void>>(func))
             let queued_bench = Benchmark(name = test_name, fn = bench_func)
@@ -591,7 +611,8 @@ def test_module(var mod : rtti::Module; var context : rtti::Context; var suite_c
 }
 
 
-def test_func(name : string; var context : FileCtx; func : function<(t : T?) : void>) : SuiteResult {
+def test_func(name : string; var context : FileCtx;
+              func : function<(t : T?) : void>) : SuiteResult {
     var res : SuiteResult
     test_any(name, func, 1, context, res)
     return res
@@ -620,19 +641,22 @@ def test_func(name : string; var context : FileCtx; func : lambda<() : void>) : 
 
 
 [export]
-def private test_any_func(name : string; func : function; args_num : int; var context : FileCtx; var res : SuiteResult&) {
+def private test_any_func(name : string; func : function; args_num : int; var context : FileCtx;
+                          var res : SuiteResult&) {
     test_any(name, func, args_num, context, res)
 }
 
 
 [export]
-def private test_any_lambda(name : string; func : lambda; args_num : int; var context : FileCtx; var res : SuiteResult&) {
+def private test_any_lambda(name : string; func : lambda; args_num : int; var context : FileCtx;
+                            var res : SuiteResult&) {
     test_any(name, func, args_num, context, res)
 }
 
 
 [export]
-def private sub_test_any_func(name : string; func : function; args_num : int; var context : FileCtx; var res : SuiteResult&) {
+def private sub_test_any_func(name : string; func : function; args_num : int; var context : FileCtx;
+                              var res : SuiteResult&) {
     var inscope subContext := context
     subContext.indenting = "\t" + subContext.indenting
     test_any(name, func, args_num, subContext, res)
@@ -640,7 +664,8 @@ def private sub_test_any_func(name : string; func : function; args_num : int; va
 
 
 [export]
-def private sub_test_any_lambda(name : string; func : lambda; args_num : int; var context : FileCtx; var res : SuiteResult&) {
+def private sub_test_any_lambda(name : string; func : lambda; args_num : int; var context : FileCtx;
+                                var res : SuiteResult&) {
     var inscope subContext := context
     subContext.indenting = "\t" + subContext.indenting
     test_any(name, func, args_num, subContext, res)
@@ -659,7 +684,9 @@ def private record_test_log(context : FileCtx; var messages : array<string>;
     }
 }
 
-def private test_any(name : string; func; args_num : int; var context : FileCtx; var res : SuiteResult&) {  // nolint:STYLE038 - one invoke-and-report arm per test-function signature
+def private test_any(name : string; func; args_num : int;  // nolint:STYLE038 - one arm per shape
+                     var context : FileCtx; var res : SuiteResult&;
+                     meta : TestMeta = default<TestMeta>) {
     if (!log::failuresOnly) {
         log::info("{context.indenting}=== RUN '{name}'")
     }
@@ -704,11 +731,13 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
                 testing.onRun <- @ capture(& selfCtx, & context, & res)(test_name : string; f : RunT) {
                     if (f is func1) {
                         unsafe {
-                            selfCtx |> invoke_in_context("sub_test_any_func", test_name, f as func1, 1, context, res)
+                            selfCtx |> invoke_in_context("sub_test_any_func", test_name, f as func1,
+                                                         1, context, res)
                         }
                     } elif (f is lmd1) {
                         unsafe {
-                            selfCtx |> invoke_in_context("sub_test_any_lambda", test_name, f as lmd1, 1, context, res)
+                            selfCtx |> invoke_in_context("sub_test_any_lambda", test_name,
+                                                         f as lmd1, 1, context, res)
                         }
                     }
                 }
@@ -726,11 +755,13 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
             dt = get_time_usec(t0)
         }
     } recover {
-        if (!deliberateRecover && context.context != null && context.context.exception |> starts_with("test skipped")) {
-            // a DIRECT T.skipNow unwound through this level (its panic tears down every
-            // test-context frame, outer [test] body included; the exception text carries a
-            // trailing newline — hence prefix match). The pipe-form `t |> skip(...)` does not
-            // unwind and never lands here. Propagate as a skip, not an error.
+        if (!deliberateRecover && context.context != null
+            && context.context.exception |> starts_with("test skipped")) {
+            // a DIRECT T.skipNow unwound through this level (its panic tears down
+            // every test-context frame, outer [test] body included; the exception
+            // text carries a trailing newline — hence prefix match). The
+            // pipe-form `t |> skip(...)` does not unwind and never lands here.
+            // Propagate as a skip, not an error.
             deliberateRecover = true
             skipped = true
             dt = get_time_usec(t0)
@@ -739,10 +770,12 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
             dt = get_time_usec(t0)
             failed = true
             res.errors ++
-            errorOrBlue(context.expectFailure, "{context.indenting}--- FAIL '{name}' {time_dt_hr(dt)}")
+            errorOrBlue(context.expectFailure,
+                        "{context.indenting}--- FAIL '{name}' {time_dt_hr(dt)}")
             if (!empty(context.context.exception)) {
                 let loc = file_info_hr(context.context.exceptionAt, context.uriPaths)
-                errorOrBlue(context.expectFailure, "{loc}: {context.indenting}{context.context.exception}")
+                errorOrBlue(context.expectFailure,
+                            "{loc}: {context.indenting}{context.context.exception}")
                 testMessages |> push("{loc}: {context.context.exception}")
                 if (empty(testLocation)) {
                     testLocation = "{loc}"
@@ -750,7 +783,8 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
             }
             if (!empty(context.context.last_exception)) {
                 let loc = file_info_hr(context.context.exceptionAt, context.uriPaths)
-                errorOrBlue(context.expectFailure, "{loc}: {context.indenting}{context.context.last_exception}")
+                errorOrBlue(context.expectFailure,
+                            "{loc}: {context.indenting}{context.context.last_exception}")
                 testMessages |> push("{loc}: {context.context.last_exception}")
                 if (empty(testLocation)) {
                     testLocation = "{loc}"
@@ -766,6 +800,14 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
         log::error("{context.indenting}--- expect test failure, but it's success '{name}' {time_dt_hr(dt)}")
     }
 
+    if (meta.timeoutSec > 0.0 && double(dt) > double(meta.timeoutSec) * 1000000.0lf) {
+        failed = true
+        let timeoutText = fmt(":.3f", meta.timeoutSec)
+        let overrun = "took {time_dt_hr(dt)}, exceeding its timeout={timeoutText}s"
+        log::error("{context.indenting}--- '{name}' {overrun}")
+        testMessages |> push(overrun)
+    }
+
     if (failed) {
         if (beforeErrors == res.errors) {
             res.failed ++
@@ -779,6 +821,9 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
 
     if (beforeFailed < res.failed || beforeErrors < res.errors) {
         errorOrBlue(expectFailure, "{context.indenting}--- FAIL '{name}' {time_dt_hr(dt)}")
+        if (!empty(meta.description)) {
+            errorOrBlue(expectFailure, "{context.indenting}    {meta.description}")
+        }
     } else {
         log::green("{context.indenting}--- PASS '{name}' {time_dt_hr(dt)}")
     }
@@ -793,7 +838,8 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
     ))
 }
 
-def private run_queued_benchmarks(var suite_ctx : SuiteCtx; var file_ctx : FileCtx, var res : SuiteResult&) {
+def private run_queued_benchmarks(var suite_ctx : SuiteCtx; var file_ctx : FileCtx,
+                                  var res : SuiteResult&) {
     for (q in suite_ctx.queued_benchmarks) {
         let failed = res.failed
         for (_i in range(suite_ctx.bench_count)) {
@@ -804,7 +850,8 @@ def private run_queued_benchmarks(var suite_ctx : SuiteCtx; var file_ctx : FileC
 }
 
 [export]
-def private bench_on_start_impl(suite_ctx : SuiteCtx; var benchmarking : B?; file_ctx : FileCtx; func_type, name, sub_name : string) {
+def private bench_on_start_impl(suite_ctx : SuiteCtx; var benchmarking : B?; file_ctx : FileCtx;
+                                func_type, name, sub_name : string) {
     let is_first_bench = !benchmarking.started
     benchmarking.started = true
     benchmarking.current_sub_name = sub_name
@@ -830,7 +877,8 @@ def private bench_on_start_impl(suite_ctx : SuiteCtx; var benchmarking : B?; fil
 }
 
 [export]
-def private bench_on_finished_impl(suite_ctx : SuiteCtx; var benchmarking : B?; stats : BenchmarkRunStats) {
+def private bench_on_finished_impl(suite_ctx : SuiteCtx; var benchmarking : B?;
+                                   stats : BenchmarkRunStats) {
     let n = stats.n
     let time_ns = stats.time_ns
     let allocs = stats.allocs
@@ -844,7 +892,8 @@ def private bench_on_finished_impl(suite_ctx : SuiteCtx; var benchmarking : B?; 
     let avg_string_heap_bytes = double(ceil(float(stats.string_heap_bytes) / float(n)))
     let avg_string_num_allocs = double(ceil(float(stats.string_allocs) / float(n)))
 
-    // Collect plain-text stats for JSON report messages (always, regardless of format)
+    // Collect plain-text stats for JSON report messages (always,
+    // regardless of format)
     bench_messages |> push("{stats.sub_name}: {avg_time:.1f} ns/op, {avg_heap_bytes:.0f} B/op, {avg_num_allocs:.0f} allocs/op [{stats.func_type}]")
 
     if (suite_ctx.bench_format == BenchmarkOutputFormat.native) {
@@ -887,7 +936,9 @@ def private bench_on_finished_impl(suite_ctx : SuiteCtx; var benchmarking : B?; 
 
 }
 
-def private run_benchmark(var suite_ctx : SuiteCtx; var file_ctx : FileCtx; var res : SuiteResult&; name : string; func : function<(b : B?) : void>) {  // nolint:STYLE038 - warmup/measure/report is one benchmark pass
+def private run_benchmark(var suite_ctx : SuiteCtx;  // nolint:STYLE038 - one pass
+                          var file_ctx : FileCtx; var res : SuiteResult&; name : string;
+                          func : function<(b : B?) : void>) {
     var benchmarking = new B(name = name)
 
     let t0 = ref_time_ticks()
@@ -914,12 +965,14 @@ def private run_benchmark(var suite_ctx : SuiteCtx; var file_ctx : FileCtx; var 
                 benchmarking.failed = true
             }
 
-            benchmarking.on_start <- @capture(& selfCtx, & suite_ctx, & benchmarking, & file_ctx) (sub_name : string) {
+            benchmarking.on_start <- @capture(& selfCtx, & suite_ctx, & benchmarking,
+                                              & file_ctx) (sub_name : string) {
                 unsafe(selfCtx |> invoke_in_context("bench_on_start_impl", suite_ctx, benchmarking,
                     file_ctx, func_type, name, sub_name))
             }
 
-            benchmarking.on_finished <- @capture(& selfCtx, & suite_ctx, & benchmarking) (stats : BenchmarkRunStats) {
+            benchmarking.on_finished <- @capture(& selfCtx, & suite_ctx,
+                                                 & benchmarking) (stats : BenchmarkRunStats) {
                 var with_func_type = stats
                 with_func_type.func_type = func_type
                 unsafe(selfCtx |> invoke_in_context("bench_on_finished_impl", suite_ctx,
@@ -935,7 +988,8 @@ def private run_benchmark(var suite_ctx : SuiteCtx; var file_ctx : FileCtx; var 
     let dt = get_time_usec(t0)
 
     // A failed bench increases the failure count and may
-    // print an exception if it wasn't a controlled panic via fail or failNow.
+    // print an exception if it wasn't a controlled panic via fail or
+    // failNow.
     if (benchmarking.failed) {
         res.failed++
         if (benchmarking.started && !benchmarking.finished) {
