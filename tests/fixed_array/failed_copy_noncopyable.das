@@ -1,5 +1,8 @@
-// Stage 0 characterization (FIXED_ARRAY_REWORK.md): plain assignment of a fixed array
-// with non-copyable elements (array<int>) is a compile error — use := (clone).
+//! Plain assignment between fixed arrays of non-copyable elements
+//! must not compile (30950); only := clones them.
+// Stage 0 characterization (FIXED_ARRAY_REWORK.md): plain assignment
+// of a fixed array with non-copyable elements (array<int>) is a
+// compile error — use := (clone).
 options gen2
 expect 30950
 

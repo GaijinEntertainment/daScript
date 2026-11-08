@@ -18,7 +18,7 @@ def make_cars() : array<Car> => <- [for (i in range(1000)); Car(id = i, dealer =
 
 def make_dealers() : array<Dealer> => <- [for (i in range(10)); Dealer(id = i)]
 
-[test]
+[test(description = "a folded group_join returns every bucket to the heap, leaving the allocated byte count unchanged after 20 runs")]
 def test_group_join_fold_frees_its_buckets(t : T?) {
     var cars <- make_cars()
     var dealers <- make_dealers()
@@ -31,7 +31,7 @@ def test_group_join_fold_frees_its_buckets(t : T?) {
     t |> equal(heap_bytes_allocated(), before)
 }
 
-[test]
+[test(description = "a folded join returns its buckets to the heap, leaving the allocated byte count unchanged after 20 runs")]
 def test_join_fold_frees_its_buckets(t : T?) {
     var cars <- make_cars()
     var dealers <- make_dealers()
@@ -44,7 +44,7 @@ def test_join_fold_frees_its_buckets(t : T?) {
     t |> equal(heap_bytes_allocated(), before)
 }
 
-[test]
+[test(description = "a folded reverse/take/select/to_array chain releases its intermediate buffer, leaving the allocated byte count unchanged after 20 runs")]
 def test_terminal_select_frees_its_buffer(t : T?) {
     var cars <- make_cars()
     let before = heap_bytes_allocated()

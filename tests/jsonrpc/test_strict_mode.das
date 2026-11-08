@@ -8,7 +8,7 @@ require strings
 
 // ===== strict=true enforces jsonrpc:"2.0" (spec §4) =====
 
-[test]
+[test(description = "strict parse_request rejects a request without the jsonrpc field with -32600")]
 def test_strict_rejects_missing_jsonrpc(t : T?) {
     let r = parse_request("\{\"id\":1,\"method\":\"x\"}", true)
     t |> success(!empty(r.error_envelope), "envelope built")
@@ -16,7 +16,7 @@ def test_strict_rejects_missing_jsonrpc(t : T?) {
     t |> success(find(r.error_envelope, "jsonrpc field must be \\\"2.0\\\"") >= 0, "message names the rule")
 }
 
-[test]
+[test(description = "strict parse_request rejects jsonrpc values other than the string 2.0")]
 def test_strict_rejects_non_2_0(t : T?) {
     t |> run("jsonrpc:1.0 rejected in strict") @(t : T?) {
         let r = parse_request("\{\"jsonrpc\":\"1.0\",\"id\":1,\"method\":\"x\"}", true)
@@ -32,7 +32,7 @@ def test_strict_rejects_non_2_0(t : T?) {
     }
 }
 
-[test]
+[test(description = "a strict-mode rejection keeps the request id in its error envelope")]
 def test_strict_preserves_id_in_response(t : T?) {
     // strict-mode rejection still echoes the request's id (not null) because
     // id was already validated by the time the jsonrpc field is checked.
@@ -40,7 +40,7 @@ def test_strict_preserves_id_in_response(t : T?) {
     t |> success(find(r.error_envelope, "\"id\":\"abc\"") >= 0, "id preserved on strict rejection")
 }
 
-[test]
+[test(description = "strict parse_batch rejects only the entries that break strict rules")]
 def test_strict_batch(t : T?) {
     // parse_batch with strict=true should reject elements with missing jsonrpc.
     let pb = parse_batch("[\{\"id\":1,\"method\":\"x\"},\{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"y\"}]", true)

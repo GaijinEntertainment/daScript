@@ -1,3 +1,6 @@
+//! named calls with unknown, duplicate, missing or mistyped
+//! arguments, and generic or contract mismatches through them, do not
+//! compile
 options gen2
 expect 30161, 30341:12, 30915
 
@@ -8,7 +11,9 @@ def func(a : int = 1; b : int; c : int = 3) {
     feint("{a},{b},{c}\n")
 }
 
-def gen(a; b; c = 1) {// that one is bellow - 30101: function argument default value type mismatch 'string const explicit' vs 'int const'
+// that one is bellow - 30101: function argument default value type
+// mismatch 'string const explicit' vs 'int const'
+def gen(a; b; c = 1) {
     feint("{a},{b},{c}\n")
 }
 
@@ -41,11 +46,15 @@ def test_invalid_types(t : T?) {
     gen(3, [b=6])
     gen(3, [a=5])               //30304: no matching functions or generics gen
     gen("hello", [a=5, b=6, c=1])
-    gen("hello", [a=5, b=6, c="ttt"])  //30101: function argument default value type mismatch string const explicit vs int const
+    // 30101: function argument default value type mismatch string const
+    // explicit vs int const
+    gen("hello", [a=5, b=6, c="ttt"])
 
     contract(1, [a= (1, "ttt")])//30304: no matching functions or generics contract
-    contract(fixed_array(1, "ttt"), [a=1]) //30507: can't initialize array element; int = string const
-                                      //30304: no matching functions or generics contract ( int const )
+    // 30507: can't initialize array element; int = string const
+    contract(fixed_array(1, "ttt"), [a=1])
+                                      // 30304: no matching functions or generics
+                                      // contract ( int const )
     contract((1, "ttt"), [a=1]) //30304: no matching functions or generics contract ( int const )
     contract((1, "ttt"), [a= ("ttt", 1)])
 }

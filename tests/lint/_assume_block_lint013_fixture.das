@@ -1,6 +1,6 @@
 options gen2
 
-// Fixture for test_assume_block_lint013.das.
+// Fixture for the assume-block LINT013 test in test_lint_rules.das.
 // `assume name = <block>` stores a template block whose body reads its arguments.
 // Every use of `name` substitutes a *clone* of that block, so the alias-definition
 // block is never invoked directly and its arguments keep isAccessUnused == true.

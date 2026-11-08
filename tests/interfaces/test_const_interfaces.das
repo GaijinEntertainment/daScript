@@ -54,7 +54,7 @@ class Counter {
 // Tests: const interface with let/const pointers
 // ═══════════════════════════════════════
 
-[test]
+[test(description = "is on an interface pointer tests implementation for both let and var pointers")]
 def test_const_is(tt : T?) {
     tt |> run("let ptr: is works on const pointer") @(tt : T?) {
         let w = new Widget(10, "test")
@@ -67,7 +67,7 @@ def test_const_is(tt : T?) {
     }
 }
 
-[test]
+[test(description = "as IReadable on a const or var pointer returns a working proxy")]
 def test_const_as(tt : T?) {
     tt |> run("let ptr: as IReadable works on const pointer") @(tt : T?) {
         let w = new Widget(10, "const-as")
@@ -86,7 +86,7 @@ def test_const_as(tt : T?) {
     }
 }
 
-[test]
+[test(description = "?as IReadable returns a proxy for a non-null const or var pointer and null for a null one")]
 def test_const_safe_as(tt : T?) {
     tt |> run("let ptr: ?as IReadable works on const pointer") @(tt : T?) {
         let w = new Widget(30, "safe-as")
@@ -113,7 +113,7 @@ def test_const_safe_as(tt : T?) {
     }
 }
 
-[test]
+[test(description = "a const pointer passed to a function can be viewed through as and read through the interface")]
 def test_const_function_arg(tt : T?) {
     tt |> run("pass const ptr to function using as") @(tt : T?) {
         let w = new Widget(50, "func-arg")
@@ -131,7 +131,7 @@ def read_via_interface(w : Widget? const) : int {
 // Tests: mixed interface still requires var
 // ═══════════════════════════════════════
 
-[test]
+[test(description = "as on a var pointer gives an interface whose mutating method changes the object")]
 def test_mixed_interface_var(tt : T?) {
     tt |> run("var ptr: as IMixed works") @(tt : T?) {
         var c = new Counter()
@@ -148,7 +148,7 @@ def test_mixed_interface_var(tt : T?) {
 // Tests: lazy proxy caching works for const getter
 // ═══════════════════════════════════════
 
-[test]
+[test(description = "the const getter caches its proxy so repeated as returns the same one, and its writes reach the object on every tier")]
 def test_const_lazy_cache(tt : T?) {
     tt |> run("const getter caches the proxy") @(tt : T?) {
         let w = new Widget(60, "cache-test")

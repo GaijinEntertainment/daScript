@@ -95,9 +95,7 @@ def file_info_hr(at : LineInfo; uri_path : bool) {
 }
 
 
-def time_dt_hr(dt : int) : string {
-    return time_dt_hr(int64(dt))
-}
+def time_dt_hr(dt : int) : string => time_dt_hr(int64(dt))
 
 
 def time_dt_hr(dt : int64) : string {

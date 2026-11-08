@@ -1,5 +1,10 @@
+//! A macro that leaves the for loop's iteratorsAt and iteratorsAka
+//! shorter than its iterators yields a malformed tree that the
+//! compiler reports as an internal-expression error.
 options gen2
-expect 50607    // internal_expression — malformed AST, iteratorsAt/iteratorsAka shorter than iterators
+// internal_expression — malformed AST, iteratorsAt/iteratorsAka
+// shorter than iterators
+expect 50607
 
 require _malformed_tree_macros
 

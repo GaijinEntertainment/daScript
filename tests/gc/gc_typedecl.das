@@ -55,7 +55,7 @@ def compile_only(file_path : string) : bool {
 }
 
 
-[test]
+[test(description = "compiling a program without running it leaves the thread root count unchanged")]
 def test_no_leak_compile_only(t : T?) {
     t |> run("compile-only does not leak TypeDecl nodes") @(t : T?) {
         let before = gc_thread_root_count()
@@ -67,7 +67,7 @@ def test_no_leak_compile_only(t : T?) {
 }
 
 
-[test]
+[test(description = "compiling, running and destroying a program leaves the thread root count unchanged")]
 def test_no_leak_compile_and_run(t : T?) {
     t |> run("compile+run+destroy does not grow thread root") @(t : T?) {
         let before = gc_thread_root_count()
@@ -79,7 +79,7 @@ def test_no_leak_compile_and_run(t : T?) {
 }
 
 
-[test]
+[test(description = "compiling and running a complex program leaves the thread root count unchanged")]
 def test_no_leak_complex(t : T?) {
     t |> run("compile+run complex program does not leak") @(t : T?) {
         let before = gc_thread_root_count()
@@ -91,7 +91,7 @@ def test_no_leak_complex(t : T?) {
 }
 
 
-[test]
+[test(description = "ten compile-and-destroy cycles leave the thread root count with zero drift")]
 def test_no_leak_repeated(t : T?) {
     t |> run("10 compile+destroy cycles produce zero drift") @(t : T?) {
         let before = gc_thread_root_count()
@@ -105,7 +105,7 @@ def test_no_leak_repeated(t : T?) {
 }
 
 
-[test]
+[test(description = "a failed compilation of a missing file leaves the thread root count unchanged")]
 def test_no_leak_compile_error(t : T?) {
     t |> run("failed compilation does not leak TypeDecl nodes") @(t : T?) {
         let before = gc_thread_root_count()
@@ -124,7 +124,7 @@ def test_no_leak_compile_error(t : T?) {
 }
 
 
-[test]
+[test(description = "compiling a program allocates nodes so gc_total_id grows")]
 def test_gc_total_id_grows(t : T?) {
     t |> run("gc_total_id increases after compilation (TypeDecl nodes are allocated)") @(t : T?) {
         let before = gc_total_id()
@@ -136,7 +136,7 @@ def test_gc_total_id_grows(t : T?) {
 }
 
 
-[test]
+[test(description = "across compile, simulate, invoke and teardown the thread root count returns to its starting value")]
 def test_thread_root_decrease_investigation(t : T?) {
     t |> run("investigate per-phase thread root changes") @(t : T?) {
         let c0 = gc_thread_root_count()

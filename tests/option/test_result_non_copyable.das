@@ -28,7 +28,7 @@ def operator ==(a : array<int>; b : array<int>) : bool {
 
 def make_arr(a : int; b : int) : array<int> => <- [a, b]
 
-[test]
+[test(description = "a Result can carry a non-copyable array, err works with a non-copyable witness and is_ok and is_err agree")]
 def test_constructors(t : T?) {
     t |> run("ok carries a non-copyable payload") @(t : T?) {
         let r = ok(make_arr(1, 2), type<string>)
@@ -50,7 +50,7 @@ def test_constructors(t : T?) {
     }
 }
 
-[test]
+[test(description = "move_ok moves a non-copyable payload out of its source and also works on a copyable one")]
 def test_move_ok(t : T?) {
     t |> run("move_ok moves a non-copyable value payload out of the source") @(t : T?) {
         var src = make_arr(1, 2)
@@ -70,7 +70,7 @@ def test_move_ok(t : T?) {
     }
 }
 
-[test]
+[test(description = "move_err moves a non-copyable error out of its source and also works on a copyable one")]
 def test_move_err(t : T?) {
     t |> run("move_err moves a non-copyable error payload out of the source") @(t : T?) {
         var src = make_arr(7, 8)
@@ -90,7 +90,7 @@ def test_move_err(t : T?) {
     }
 }
 
-[test]
+[test(description = "map on a Result of an array changes the ok type, keeps a non-copyable output and leaves err as err")]
 def test_map(t : T?) {
     t |> run("map Result<array<int>, string> -> Result<int, string>") @(t : T?) {
         let m = ok(make_arr(1, 2), type<string>) |> map($(v : array<int>) => length(v))
@@ -111,7 +111,7 @@ def test_map(t : T?) {
     }
 }
 
-[test]
+[test(description = "map_err on a Result of an array leaves ok unchanged and transforms err")]
 def test_map_err(t : T?) {
     t |> run("map_err leaves ok unchanged") @(t : T?) {
         let m = ok(make_arr(1, 2), type<string>) |> map_err($(e : string) => "<{e}>")
@@ -127,7 +127,7 @@ def test_map_err(t : T?) {
     }
 }
 
-[test]
+[test(description = "and_then on a Result of an array chains ok, allows a non-copyable output and short-circuits on err")]
 def test_and_then(t : T?) {
     t |> run("and_then chains ok -> ok") @(t : T?) {
         let r = ok(make_arr(1, 2), type<string>) |> and_then($(v : array<int>) => ok(length(v), type<string>))
@@ -147,7 +147,7 @@ def test_and_then(t : T?) {
     }
 }
 
-[test]
+[test(description = "or_else on a Result of an array passes ok through and recovers from err")]
 def test_or_else(t : T?) {
     t |> run("or_else passes ok through") @(t : T?) {
         let r = ok(make_arr(1, 2), type<string>) |> or_else($(e : string) => ok(make_arr(9, 9), type<string>))
@@ -162,7 +162,7 @@ def test_or_else(t : T?) {
     }
 }
 
-[test]
+[test(description = "unwrap and its fallback forms return the array, the fallback or the error as specified")]
 def test_unwrap(t : T?) {
     t |> run("unwrap on ok returns the array") @(t : T?) {
         let arr = ok(make_arr(5, 6), type<string>) |> unwrap
@@ -192,7 +192,7 @@ def test_unwrap(t : T?) {
     }
 }
 
-[test]
+[test(description = "move_unwrap moves the array out of an ok and flips the result to its err state")]
 def test_move_unwrap(t : T?) {
     t |> run("move_unwrap moves the array out of ok, flips r to err state") @(t : T?) {
         var r = ok(make_arr(5, 6), type<string>)
@@ -204,7 +204,7 @@ def test_move_unwrap(t : T?) {
     }
 }
 
-[test]
+[test(description = "expect_value returns the array of an ok and expect_err returns the error of an err")]
 def test_expect(t : T?) {
     t |> run("expect_value on ok returns the array") @(t : T?) {
         let arr = ok(make_arr(7, 8), type<string>) |> expect_value("never fires")
@@ -218,7 +218,7 @@ def test_expect(t : T?) {
     }
 }
 
-[test]
+[test(description = "if_ok and if_err run their block with the array or the error only on the matching state")]
 def test_if_ok_if_err(t : T?) {
     t |> run("if_ok fires with the array") @(t : T?) {
         var seen = 0
@@ -245,7 +245,7 @@ def test_if_ok_if_err(t : T?) {
     }
 }
 
-[test]
+[test(description = "to_option and err_to_option carry the array or the error and give none on the other state")]
 def test_bridges(t : T?) {
     t |> run("to_option of ok carries the array") @(t : T?) {
         let o = ok(make_arr(7, 8), type<string>) |> to_option
@@ -270,7 +270,7 @@ def test_bridges(t : T?) {
     }
 }
 
-[test]
+[test(description = "the ?? operator unwraps an ok array and returns the fallback on err")]
 def test_op_qq(t : T?) {
     t |> run("?? unwraps ok array") @(t : T?) {
         let arr = ok(make_arr(7, 8), type<string>) ?? make_arr(0, 0)
@@ -285,7 +285,7 @@ def test_op_qq(t : T?) {
     }
 }
 
-[test]
+[test(description = "== on a Result of an array compares tag and payload")]
 def test_equality(t : T?) {
     t |> run("== on Result<array<int>, string>") @(t : T?) {
         t |> success(ok(make_arr(1, 2), type<string>) == ok(make_arr(1, 2), type<string>))
@@ -295,7 +295,7 @@ def test_equality(t : T?) {
     }
 }
 
-[test]
+[test(description = "a Result of an array compares with == and != against a plain array")]
 def test_op_eq_value(t : T?) {
     t |> run("Result<array<int>, string> == array<int>") @(t : T?) {
         t |> success(ok(make_arr(1, 2), type<string>) == make_arr(1, 2))
@@ -311,7 +311,7 @@ def test_op_eq_value(t : T?) {
     }
 }
 
-[test]
+[test(description = "an ok array flows through map, and_then and unwrap_or while an err short-circuits the whole chain")]
 def test_chaining(t : T?) {
     t |> run("ok -> map -> and_then -> unwrap_or") @(t : T?) {
         let n = (ok(make_arr(1, 2), type<string>)
@@ -330,7 +330,7 @@ def test_chaining(t : T?) {
     }
 }
 
-[test]
+[test(description = "move_ok and move_err work when the other side of the Result is a non-copyable array")]
 def test_move_with_non_copyable_other_side(t : T?) {
     var value <- make_arr(1, 2)
     var r <- move_ok(value, type<array<int>>)

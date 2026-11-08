@@ -28,7 +28,7 @@ def private same_as_scan(t : T?; pattern : string; str : string) {
     }
 }
 
-[test]
+[test(description = "patterns that can match empty clear the early-out and scan like the slow path from every position")]
 def test_empty_matchable_patterns_scan_every_position(t : T?) {
     t |> run("star") @(t : T?) {
         same_as_scan(t, "a*", "bab")
@@ -45,7 +45,7 @@ def test_empty_matchable_patterns_scan_every_position(t : T?) {
     }
 }
 
-[test]
+[test(description = "a* over bab reports every zero-length and non-empty match span")]
 def test_zero_length_matches_are_reported(t : T?) {
     t |> run("a* on bab yields three matches") @(t : T?) {
         var re <- regex_compile("a*")
@@ -66,7 +66,7 @@ def test_zero_length_matches_are_reported(t : T?) {
 // literal matcher scanning a tail SHORTER than the literal is a deliberate, multi-byte
 // out-of-bounds read if the matcher ever compares fixed-length again (a block compare
 // reads past the terminator whenever the terminator falls before the literal's last byte).
-[test]
+[test(description = "a literal scanned over a tail shorter than itself never reads past the terminator, case-sensitive or not")]
 def test_literal_longer_than_tail_stays_in_bounds(t : T?) {
     t |> run("case-sensitive literal scanned over short matching tails") @(t : T?) {
         var re <- regex_compile("abcdef")
@@ -99,7 +99,7 @@ def test_literal_longer_than_tail_stays_in_bounds(t : T?) {
     }
 }
 
-[test]
+[test(description = "mandatory patterns keep the early-out while empty-matchable ones clear it")]
 def test_early_out_survives_where_it_is_sound(t : T?) {
     t |> run("empty-matchable patterns clear the early-out") @(t : T?) {
         var star <- regex_compile("a*")

@@ -220,7 +220,7 @@ def run_smmla(salt : uint) : int {
     return bad
 }
 
-[test]
+[test(description = "the aarch64 sdot4, sdot4_w and laneq variants equal the reference implementation on random data")]
 def test_sdot4_family(t : T?) {
     g_salt++
     t |> run("sdot4 / sdot4_w / sdot4_laneq / sdot4_laneq_w: hardware == reference") @(t : T?) {
@@ -229,7 +229,7 @@ def test_sdot4_family(t : T?) {
     }
 }
 
-[test]
+[test(description = "the aarch64 tbl16 lo and hi lookups equal the reference implementation on random data")]
 def test_tbl16(t : T?) {
     g_salt++
     t |> run("tbl16_lo / tbl16_hi: hardware == reference") @(t : T?) {
@@ -238,7 +238,7 @@ def test_tbl16(t : T?) {
     }
 }
 
-[test]
+[test(description = "the aarch64 smmla matrix multiply-accumulate equals the reference implementation on random data")]
 def test_smmla(t : T?) {
     g_salt++
     t |> run("smmla: hardware == reference") @(t : T?) {

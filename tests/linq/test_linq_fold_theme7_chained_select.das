@@ -21,7 +21,7 @@ require dastest/testing_boost public
 
 // ── 7c primary: zip + 2 pure selects + to_array ──────────────────────────────
 
-[test]
+[test(description = "zip followed by two chained selects and to_array composes them left to right")]
 def test_t7c_zip_two_selects_to_array(t : T?) {
     t |> run("7c: each(a) |> zip(each(b)) |> _select(_._0) |> _select(_ * 2) |> to_array — audit primary target") @(tt : T?) {
         let a <- [1, 2, 3, 4]
@@ -41,7 +41,7 @@ def test_t7c_zip_two_selects_to_array(t : T?) {
 
 // ── 7c N=3: zip + three pure selects + count ─────────────────────────────────
 
-[test]
+[test(description = "zip followed by three adjacent selects and count fold the selects left to right")]
 def test_t7c_zip_three_selects_count(t : T?) {
     t |> run("7c N=3: zip + _select(_._0) + _select(_ + 1) + _select(_ * 10) + count — runs of three adjacent selects fold left-to-right") @(tt : T?) {
         let a <- [1, 2, 3]
@@ -58,7 +58,7 @@ def test_t7c_zip_three_selects_count(t : T?) {
 
 // ── 7c-parity: collapsed splice produces same array as handwritten cascade ──
 
-[test]
+[test(description = "the chained-select result equals the hand-written cascade element by element")]
 def test_t7c_parity_vs_cascade(t : T?) {
     t |> run("7c parity: chained-select splice output equals handwritten cascade element-wise") @(tt : T?) {
         let a <- [for (i in range(20)); i * 3]
@@ -79,7 +79,7 @@ def test_t7c_parity_vs_cascade(t : T?) {
 
 // ── 7c distinct: 2 pure selects + distinct + count ───────────────────────────
 
-[test]
+[test(description = "two chained selects collapse before distinct and count")]
 def test_t7c_distinct_two_selects(t : T?) {
     t |> run("plan_distinct: each + _select(_ + 1) + _select(_ * 10) + distinct + count — chained selects collapse before distinct") @(tt : T?) {
         // 10 elements 0..9 → +1 → ×10 = 10, 20, 30, ..., 100 → all distinct → 10.
@@ -95,7 +95,7 @@ def test_t7c_distinct_two_selects(t : T?) {
 
 // ── 7c reverse: 2 pure selects + reverse + to_array ──────────────────────────
 
-[test]
+[test(description = "two chained selects collapse before reverse and to_array")]
 def test_t7c_reverse_two_selects(t : T?) {
     t |> run("plan_reverse: each + _select(_ + 1) + _select(_ * 10) + reverse + to_array — chained selects collapse before reverse") @(tt : T?) {
         let a <- [1, 2, 3]
@@ -127,7 +127,7 @@ def populate_t7_decs() {
     }
 }
 
-[test]
+[test(description = "two chained selects collapse before distinct and count over a decs source")]
 def test_t7c_decs_distinct_two_selects(t : T?) {
     t |> run("plan_decs_distinct: from_decs_template + _select(_.grp) + _select(_ + 1) + distinct + count — chained selects collapse on decs distinct lane") @(tt : T?) {
         populate_t7_decs()
@@ -144,7 +144,7 @@ def test_t7c_decs_distinct_two_selects(t : T?) {
 
 // ── 7c-decs-reverse: from_decs_template + 2 selects + reverse + to_array ─────
 
-[test]
+[test(description = "two chained selects collapse before reverse and to_array over a decs source")]
 def test_t7c_decs_reverse_two_selects(t : T?) {
     t |> run("plan_decs_reverse: from_decs_template + _select(_.id) + _select(_ * 10) + reverse + to_array — chained selects collapse on decs reverse path") @(tt : T?) {
         populate_t7_decs()
@@ -164,7 +164,7 @@ def test_t7c_decs_reverse_two_selects(t : T?) {
 
 // ── 7c-anti-impure: inner `% 5` is flagged unsafe → cascade preserves output ──
 
-[test]
+[test(description = "a division-class op in the inner select makes the chain fall back to the unfused path with the right output")]
 def test_t7c_anti_impure_inner_cascade(t : T?) {
     t |> run("anti-impure: each + _select(_ % 5) + _select(_ + 1) + distinct + count — inner has division-class op, gate falls back to cascade; output still correct") @(tt : T?) {
         // Inner `_ % 5` is op2(%) which has_sideeffects flags as unsafe (div-by-zero panic).
@@ -182,7 +182,7 @@ def test_t7c_anti_impure_inner_cascade(t : T?) {
 
 // ── 7c-anti-nonadjacent: select + take + select → not collapsed (intervening op) ──
 
-[test]
+[test(description = "selects separated by a take are not collapsed and the output is still correct")]
 def test_t7c_anti_nonadjacent_selects(t : T?) {
     t |> run("anti-nonadjacent: each + _select(_ + 1) + take(N) + _select(_ * 10) + sum — selects separated by take don't collapse; output still correct") @(tt : T?) {
         // plan_loop_or_count handles intermediate selects via its own intermediateBinds.

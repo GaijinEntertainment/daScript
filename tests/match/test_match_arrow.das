@@ -33,7 +33,7 @@ def pair_kind(x, y : int) {
     }
 }
 
-[test]
+[test(description = "A match on several values at once picks the arm whose every column fits")]
 def test_several_values(t : T?) {
     t |> equal(pair_kind(0, 0), "origin")
     t |> equal(pair_kind(0, 5), "axis")
@@ -51,7 +51,7 @@ def mixed_kinds(p : Point; d : Dir; v : IntOrStr) {
     }
 }
 
-[test]
+[test(description = "A match may take scrutinees of different types (struct, enum, variant) in one arm list")]
 def test_several_values_of_different_types(t : T?) {
     t |> equal(mixed_kinds(Point(x = 0, y = 7), Dir.south, IntOrStr(i = 3)), "vertical 7 3")
     t |> equal(mixed_kinds(Point(x = 2, y = 0), Dir.west, IntOrStr(s = "w")), "horizontal 2 w")
@@ -67,7 +67,7 @@ def int_alternation(n : int) {
     }
 }
 
-[test]
+[test(description = "An integer alternation arm still matches each of its values after lowering")]
 def test_int_alternation_is_not_folded(t : T?) {
     t |> equal(int_alternation(1), "one or two")
     t |> equal(int_alternation(2), "one or two")
@@ -82,7 +82,7 @@ def guard_keeps_bitwise_or(n : int) {
     }
 }
 
-[test]
+[test(description = "A guard that uses bitwise or is kept as an expression and not read as an alternation")]
 def test_guard_keeps_bitwise_or(t : T?) {
     t |> equal(guard_keeps_bitwise_or(2), "low bits 2")
     t |> equal(guard_keeps_bitwise_or(3), "low bits 3")
@@ -98,7 +98,7 @@ def bare_name_binds(x : int) {
     }
 }
 
-[test]
+[test(description = "A bare name in a pattern binds the value and does not compare against an outer variable of that name")]
 def test_bare_name_binds_instead_of_comparing(t : T?) {
     t |> equal(bare_name_binds(5), "bound 5")
     t |> equal(bare_name_binds(-5), "outer 100")
@@ -112,7 +112,7 @@ def pinned(x, limit : int) {
     }
 }
 
-[test]
+[test(description = "match_expr compares the scrutinee against a variable's value")]
 def test_match_expr_compares_a_variable(t : T?) {
     t |> equal(pinned(7, 7), "at limit")
     t |> equal(pinned(6, 7), "not at limit")
@@ -127,7 +127,7 @@ def bool_pair(a, b : bool) {
     }
 }
 
-[test]
+[test(description = "Boolean patterns across two columns select the right arm for all four combinations")]
 def test_bool_patterns(t : T?) {
     t |> equal(bool_pair(true, true), "both")
     t |> equal(bool_pair(false, true), "one")
@@ -145,7 +145,7 @@ def value_in_let(n : int) {
     return s
 }
 
-[test]
+[test(description = "A match used as a let initializer yields the arm's value")]
 def test_value_in_let(t : T?) {
     t |> equal(value_in_let(0), "zero")
     t |> equal(value_in_let(-4), "negative 4")
@@ -160,7 +160,7 @@ def value_as_argument(n : int) {
     } + ">"
 }
 
-[test]
+[test(description = "A match used as a call argument yields the arm's value")]
 def test_value_as_argument(t : T?) {
     t |> equal(value_as_argument(3), "<fizz>")
     t |> equal(value_as_argument(4), "<4>")
@@ -183,7 +183,7 @@ def value_inside_statement_arm(n : int) {
     return res
 }
 
-[test]
+[test(description = "A value match nested inside a statement arm yields its own arm's value")]
 def test_value_inside_statement_arm(t : T?) {
     t |> equal(value_inside_statement_arm(0), "zero")
     t |> equal(value_inside_statement_arm(3), "odd")
@@ -204,7 +204,7 @@ def assignment_bodies(values : array<int>) {
     return (pos, neg)
 }
 
-[test]
+[test(description = "Arms whose bodies are assignments update the accumulators they name")]
 def test_assignment_bodies(t : T?) {
     let sums = assignment_bodies([1, -2, 0, 5, -7])
     t |> equal(sums._0, 6)
@@ -220,7 +220,7 @@ def generic_kind(what) {
     }
 }
 
-[test]
+[test(description = "A generic static match keeps the arrow arms that fit each instance's type")]
 def test_static_match_arrow_arms(t : T?) {
     t |> equal(generic_kind(5), "int 5")
     t |> equal(generic_kind("x"), "string x")
@@ -248,7 +248,7 @@ def make_shape(n : int) : Shape? {
     }
 }
 
-[test]
+[test(description = "A value match takes the declared result type, so arms of derived class types convert to the base pointer")]
 def test_value_takes_declared_result_type(t : T?) {
     var sq = make_shape(0)
     var re = make_shape(5)
@@ -279,7 +279,7 @@ def private pick() : int {
     return 1
 }
 
-[test]
+[test(description = "The scrutinee expression is evaluated exactly once, in both value and statement form")]
 def test_scrutinee_is_evaluated_once(t : T?) {
     calls = 0
     let s = match (next_value()) {
@@ -300,7 +300,7 @@ def test_scrutinee_is_evaluated_once(t : T?) {
     t |> equal(calls, 1)
 }
 
-[test]
+[test(description = "An l-value scrutinee's index expression is evaluated once even when an arm writes through it")]
 def test_lvalue_scrutinee_is_evaluated_once(t : T?) {
     var values <- [10, 20, 30]
     picked = 0
@@ -350,7 +350,7 @@ def private tuple_columns(t : tuple<bool; Dir>) : string {
     }
 }
 
-[test]
+[test(description = "A value match that covers every case compiles without a catch-all arm and picks the right arm")]
 def test_exhaustive_value_match_needs_no_catch_all(t : T?) {
     t |> equal(dir_name(Dir.west), "side")
     t |> equal(dir_name(Dir.south), "s")
@@ -396,7 +396,7 @@ def private bool_guard(a : int; flag : bool) : string {
     }
 }
 
-[test]
+[test(description = "Complementary guards count as covering their pattern, so no catch-all arm is needed")]
 def test_complementary_guards_cover_their_pattern(t : T?) {
     t |> equal(compare_pair(3, 1), "gt")
     t |> equal(compare_pair(1, 3), "le")
@@ -425,7 +425,7 @@ def private warmth(d : Dir) : string {
     }
 }
 
-[test]
+[test(description = "An and pattern binds the whole value alongside its parts")]
 def test_and_pattern_binds_the_whole_value(t : T?) {
     t |> equal(whole_and_parts(Point(x = 0, y = 3)), "y-axis 3")
     t |> equal(whole_and_parts(Point(x = 4, y = 0)), "positive x 4")
@@ -460,7 +460,7 @@ def private lamp_state(l : Lamp) : string {
     }
 }
 
-[test]
+[test(description = "Struct field patterns are checked column by column for coverage and select the right arm")]
 def test_struct_fields_are_checked_for_coverage(t : T?) {
     t |> equal(light_state(Light(dir = Dir.north, on = true)), "north on")
     t |> equal(light_state(Light(dir = Dir.west, on = true)), "other on")
@@ -487,7 +487,7 @@ def private letter_case(c : int) : string {
     }
 }
 
-[test]
+[test(description = "Range patterns include their low end and exclude their high end")]
 def test_range_patterns_are_half_open(t : T?) {
     t |> equal(size_class(0, 500), "digit")
     t |> equal(size_class(9, 500), "digit")
@@ -521,7 +521,7 @@ def private axis_distance(p : Point) : string {
     }
 }
 
-[test]
+[test(description = "The alternatives of an or pattern may bind the same name from different places")]
 def test_alternatives_may_bind_different_places(t : T?) {
     t |> equal(figure_size(Figure(circle = 2.0)), "size 2")
     t |> equal(figure_size(Figure(square = 3.0)), "size 3")
@@ -553,7 +553,7 @@ def private bump_counter(var t : table<string; int>) {
     }
 }
 
-[test]
+[test(description = "Table patterns match keys and key-value pairs and let an arm update the matched table")]
 def test_table_patterns(t : T?) {
     let get <- { "method" => "GET", "path" => "/x" }
     let post <- { "method" => "POST" }
@@ -636,7 +636,7 @@ def private command(s : string) : string {
     }
 }
 
-[test]
+[test(description = "View patterns read array and string contents in place for arms over arrays, fields and tuples")]
 def test_view_patterns(t : T?) {
     let empty : array<int>
     let small <- [1, 2, 3]
@@ -688,7 +688,7 @@ def private triple_kind(v : tuple<int; int; int>) : string {
     }
 }
 
-[test]
+[test(description = "A view pattern reads the value where it stands, across variant alternatives and tuple columns")]
 def test_view_reads_the_value_where_it_stands(t : T?) {
     t |> equal(string_view(IntOrStr(s = "")), "empty")
     t |> equal(string_view(IntOrStr(s = "a")), "one")
@@ -704,7 +704,7 @@ def test_view_reads_the_value_where_it_stands(t : T?) {
     t |> equal(triple_kind((1, 2, 3)), "other")
 }
 
-[test]
+[test(description = "A view call's result can be matched against a variant alternative")]
 def test_view_result_matches_a_variant_alternative(t : T?) {
     t |> equal(command("-4"), "negative -4")
     t |> equal(command("12"), "number 12")
@@ -733,7 +733,7 @@ def private held_kind(h : Holder) : string {
     }
 }
 
-[test]
+[test(description = "A variant alternative written as a call matches on its value, top level or in a field")]
 def test_variant_alternative_called_by_name(t : T?) {
     t |> equal(call_kind(IntOrStr(i = 1)), "small")
     t |> equal(call_kind(IntOrStr(i = -3)), "negative -3")
@@ -758,7 +758,7 @@ def private answer_text(a : Answer) : string {
     }
 }
 
-[test]
+[test(description = "A value-less variant case written as a call matches by name")]
 def test_variant_case_without_value_called_by_name(t : T?) {
     t |> equal(answer_text(Answer(nothing)), "nothing")
     t |> equal(answer_text(Answer(maybe)), "maybe")
@@ -785,7 +785,7 @@ def private tagged(t : tuple<string; int>) : string {
     }
 }
 
-[test]
+[test(description = "String prefix and suffix patterns match and bind the remaining parts")]
 def test_string_prefix_and_suffix_patterns(t : T?) {
     t |> equal(route("GET /static/a.png"), "static")
     t |> equal(route("GET /x"), "get /x")

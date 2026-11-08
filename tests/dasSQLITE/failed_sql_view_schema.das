@@ -1,4 +1,5 @@
 options gen2
+//! sql_view must not compile with a key, unique or computed field
 
 // Each struct intentionally violates one [sql_view] schema-validation rule.
 // Each failure produces error 30111 = "macro [sql_view] failed to apply to

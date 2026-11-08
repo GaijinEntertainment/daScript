@@ -2,7 +2,7 @@ options gen2
 require dastest/testing_boost public
 require daslib/strings_boost
 
-[test]
+[test(description = "String interpolation, starts_with, ends_with, length and comparison give the expected results in AOT")]
 def test_string_operations(t : T?) {
     t |> run("string building") @(t : T?) {
         let s = "hello"
@@ -24,7 +24,7 @@ def test_string_operations(t : T?) {
 
 def greet(name : string) : string => "Hello, {name}!"
 
-[test]
+[test(description = "A custom string function, to_lower, to_upper and join give the expected results in AOT")]
 def test_string_functions(t : T?) {
     t |> run("custom string function") @(t : T?) {
         t |> equal(greet("daslang"), "Hello, daslang!")
@@ -63,7 +63,7 @@ def test_first_character_ds_empty_throws(t : T?) {
     t |> success(threw, "first_character on empty das_string should throw")
 }
 
-[test]
+[test(description = "first_character returns the first character of a non-empty string and throws on an empty string or das_string in AOT")]
 def test_first_character(t : T?) {
     t |> run("first_character basic") @(t : T?) {
         t |> equal(first_character("hello"), 'h')

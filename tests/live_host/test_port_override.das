@@ -5,7 +5,7 @@ options no_unused_function_arguments = false
 require dastest/testing_boost public
 require live/live_api
 
-[test]
+[test(description = "parse_port_string accepts ports in range and returns 0 for out-of-range and non-numeric text")]
 def test_parse_port_string(t : T?) {
     t |> run("valid port") @(t : T?) {
         t |> equal(parse_port_string("19090"), 19090)
@@ -30,7 +30,7 @@ def test_parse_port_string(t : T?) {
     }
 }
 
-[test]
+[test(description = "parse_argv_port reads --live-port N and --live-port=N, takes the last occurrence and ignores a missing or invalid flag")]
 def test_parse_argv_port(t : T?) {
     t |> run("--live-port N") @(t : T?) {
         t |> equal(parse_argv_port(["--live-port", "19090"]), 19090)
@@ -72,7 +72,7 @@ def test_parse_argv_port(t : T?) {
     }
 }
 
-[test]
+[test(description = "an explicit --live-port beats the default and an invalid one resolves to 0 so the caller keeps its default")]
 def test_resolve_precedence(t : T?) {
     t |> run("argv beats default") @(t : T?) {
         let no_argv : array<string>
@@ -85,7 +85,7 @@ def test_resolve_precedence(t : T?) {
     }
 }
 
-[test]
+[test(description = "live_api_set_port changes live_api_port before the agent is installed")]
 def test_set_port_still_wins_before_agent_install(t : T?) {
     t |> run("live_api_set_port mutates live_api_port") @(t : T?) {
         // CAVEAT: live_api_set_port is "before LiveApiAgent constructor"

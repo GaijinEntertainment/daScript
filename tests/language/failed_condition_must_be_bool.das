@@ -1,3 +1,6 @@
+//! a non-bool if or ternary condition, ternary arms of different
+//! types, and assignment to a ternary that is not a reference do not
+//! compile
 // non-bool condition errors
 // verifies compiler rejects non-bool conditions in if/ternary,
 // type mismatches in ternary branches, and writes to non-references

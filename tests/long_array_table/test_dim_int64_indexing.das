@@ -7,7 +7,7 @@ require dastest/testing_boost public
 // (SimNode_At_I64/U64 + fused variants), r2v reads, writes, argument
 // passing, and safe-at.
 
-[test]
+[test(description = "a fixed array can be read with an int64 index")]
 def test_dim_i64_index_read(t : T?) {
     var arr : int[5]
     for (i in range(5)) {
@@ -17,7 +17,7 @@ def test_dim_i64_index_read(t : T?) {
     t |> equal(arr[i64_idx], 20)
 }
 
-[test]
+[test(description = "a fixed array can be read with a uint64 index")]
 def test_dim_u64_index_read(t : T?) {
     var arr : int[5]
     for (i in range(5)) {
@@ -27,7 +27,7 @@ def test_dim_u64_index_read(t : T?) {
     t |> equal(arr[u64_idx], 30)
 }
 
-[test]
+[test(description = "a fixed array element can be written through an int64 index")]
 def test_dim_i64_index_write(t : T?) {
     var arr : int[3]
     let i64_idx : int64 = 1_l
@@ -35,7 +35,7 @@ def test_dim_i64_index_write(t : T?) {
     t |> equal(arr[1], 42)
 }
 
-[test]
+[test(description = "int, int64 and uint64 indices address the same fixed-array elements")]
 def test_dim_mixed_width_indexing(t : T?) {
     var arr : int[4]
     arr[0] = 10
@@ -45,7 +45,7 @@ def test_dim_mixed_width_indexing(t : T?) {
     t |> equal(arr[0] + arr[int64(1)] + arr[uint64(2)] + arr[uint(3)], 100)
 }
 
-[test]
+[test(description = "a constant int64 index into a fixed array is folded and reads the right element")]
 def test_dim_i64_const_idx(t : T?) {
     // const literal 64-bit indices fold at compile time (sv_trySimulate const path)
     var arr : int[10]
@@ -60,7 +60,7 @@ def test_dim_i64_const_idx(t : T?) {
     t |> equal(arr[9_ul], 63)
 }
 
-[test]
+[test(description = "a fixed array passed as an argument can be indexed with an int64")]
 def test_dim_i64_via_argument(t : T?) {
     var arr : int[8]
     for (i in range(8)) {
@@ -76,7 +76,7 @@ def read_at(arr : int[8]; idx : int64) : int => arr[idx]
 
 def read_at_u(arr : int[8]; idx : uint64) : int => arr[idx]
 
-[test]
+[test(description = "int64 indexing works on a fixed array of floats")]
 def test_dim_i64_float_value_type(t : T?) {
     // float element exercises the AtR2V_I64 value-node path
     var arr : float[4]
@@ -88,7 +88,7 @@ def test_dim_i64_float_value_type(t : T?) {
     t |> equal(arr[3_l], 4.5f)
 }
 
-[test]
+[test(description = "a uint64 index works as an lvalue write into a fixed array")]
 def test_dim_u64_lvalue_write(t : T?) {
     var arr : float[3]
     arr[0_ul] = 1.0f
@@ -97,7 +97,7 @@ def test_dim_u64_lvalue_write(t : T?) {
     t |> equal(arr[0_ul] + arr[1_ul] + arr[2_ul], 6.0f)
 }
 
-[test]
+[test(description = "int64 indices work on a multi-dimensional fixed array")]
 def test_dim_i64_multi_dim(t : T?) {
     // one-peel rule: each [] peels one fixed-array level; 64-bit index at both levels
     var arr : int[2][3]
@@ -113,7 +113,7 @@ def test_dim_i64_multi_dim(t : T?) {
     t |> equal(arr[0][2_ul], 2)
 }
 
-[test]
+[test(description = "int64 indexing works on a fixed array of int64 values")]
 def test_dim_i64_int64_value_type(t : T?) {
     // 64-bit element type + 64-bit index
     var arr : int64[4]
@@ -123,7 +123,7 @@ def test_dim_i64_int64_value_type(t : T?) {
     t |> equal(arr[idx], 5_000_000_000_l)
 }
 
-[test]
+[test(description = "safe-at with an int64 index returns the element in range and the default out of range")]
 def test_dim_i64_safe_at(t : T?) {
     var arr : int[5]
     for (i in range(5)) {
@@ -140,7 +140,7 @@ def test_dim_i64_safe_at(t : T?) {
     t |> equal(val, -1)
 }
 
-[test]
+[test(description = "safe-at with a uint64 index returns the element in range and the default out of range")]
 def test_dim_u64_safe_at(t : T?) {
     var arr : int[5]
     for (i in range(5)) {

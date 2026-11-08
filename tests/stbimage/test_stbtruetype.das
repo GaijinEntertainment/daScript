@@ -26,7 +26,7 @@ def load_font_data() : array<uint8> {
 
 // ---- Font loading (low-level wrappers) ----
 
-[test]
+[test(description = "the bundled single-font .ttf file reports exactly one font")]
 def test_get_number_of_fonts(t : T?) {
     t |> run("stbtt_num_fonts returns 1 for single-font TTF") <| @(tt : T?) {
         var data <- load_font_data()
@@ -35,7 +35,7 @@ def test_get_number_of_fonts(t : T?) {
     }
 }
 
-[test]
+[test(description = "initialising a font info from the bundled .ttf bytes succeeds and reports a non-zero glyph count")]
 def test_init_font(t : T?) {
     t |> run("stbtt_init succeeds for valid TTF data") <| @(tt : T?) {
         var data <- load_font_data()
@@ -45,7 +45,7 @@ def test_init_font(t : T?) {
     }
 }
 
-[test]
+[test(description = "initialising a font info with font index 99, which the file does not contain, returns false")]
 def test_init_font_bad_index(t : T?) {
     t |> run("stbtt_init returns false for bad font index") <| @(tt : T?) {
         var data <- load_font_data()
@@ -54,7 +54,7 @@ def test_init_font_bad_index(t : T?) {
     }
 }
 
-[test]
+[test(description = "the glyph lookup gives a non-zero index for 'A' and for space and the missing-glyph index 0 for codepoint 0x1FFFF")]
 def test_find_glyph_index(t : T?) {
     t |> run("stbtt_find_glyph finds common glyphs") <| @(tt : T?) {
         var data <- load_font_data()
@@ -68,7 +68,7 @@ def test_find_glyph_index(t : T?) {
 
 // ---- Font metrics (low-level wrappers) ----
 
-[test]
+[test(description = "the scale for a 32-pixel height is positive and the scale for 64 pixels is larger")]
 def test_scale_for_pixel_height(t : T?) {
     t |> run("stbtt_scale_for_pixel_height returns positive scale") <| @(tt : T?) {
         var data <- load_font_data()
@@ -81,7 +81,7 @@ def test_scale_for_pixel_height(t : T?) {
     }
 }
 
-[test]
+[test(description = "the scale that maps the em to 32 pixels is positive")]
 def test_scale_for_mapping_em(t : T?) {
     t |> run("stbtt_scale_for_em returns positive scale") <| @(tt : T?) {
         var data <- load_font_data()
@@ -92,7 +92,7 @@ def test_scale_for_mapping_em(t : T?) {
     }
 }
 
-[test]
+[test(description = "the raw vertical metrics of the font have a positive ascent and a negative descent")]
 def test_stbtt_font_vmetrics(t : T?) {
     t |> run("stbtt_font_vmetrics returns valid ascent/descent") <| @(tt : T?) {
         var data <- load_font_data()
@@ -104,7 +104,7 @@ def test_stbtt_font_vmetrics(t : T?) {
     }
 }
 
-[test]
+[test(description = "the font's overall bounding box has a positive width and a positive height")]
 def test_stbtt_font_bbox(t : T?) {
     t |> run("stbtt_font_bbox returns valid box") <| @(tt : T?) {
         var data <- load_font_data()
@@ -116,7 +116,7 @@ def test_stbtt_font_bbox(t : T?) {
     }
 }
 
-[test]
+[test(description = "the advance width of 'A' is positive and equals the advance width of 'B' in this monospace font")]
 def test_codepoint_hmetrics(t : T?) {
     t |> run("stbtt_codepoint_hmetrics returns valid advance width") <| @(tt : T?) {
         var data <- load_font_data()
@@ -130,7 +130,7 @@ def test_codepoint_hmetrics(t : T?) {
     }
 }
 
-[test]
+[test(description = "looking up the kerning between 'A' and 'V' returns an integer without failing, whatever its sign")]
 def test_codepoint_kern_advance(t : T?) {
     t |> run("stbtt_codepoint_kern returns int") <| @(tt : T?) {
         var data <- load_font_data()
@@ -141,7 +141,7 @@ def test_codepoint_kern_advance(t : T?) {
     }
 }
 
-[test]
+[test(description = "the unscaled bounding box of the 'A' glyph has a positive width and a positive height")]
 def test_codepoint_box(t : T?) {
     t |> run("stbtt_codepoint_box returns valid bounding box for 'A'") <| @(tt : T?) {
         var data <- load_font_data()
@@ -155,7 +155,7 @@ def test_codepoint_box(t : T?) {
 
 // ---- Packing API (low-level wrappers) ----
 
-[test]
+[test(description = "packing 96 characters at 24 pixels into a 256x256 atlas draws non-zero pixels and gives 'A' a positive x advance")]
 def test_pack_basic(t : T?) {
     t |> run("stbtt_pack basic workflow") <| @(tt : T?) {
         var data <- load_font_data()
@@ -178,7 +178,7 @@ def test_pack_basic(t : T?) {
     }
 }
 
-[test]
+[test(description = "packing 96 characters into a 512x512 atlas with oversampling 2 still gives 'A' a positive x advance")]
 def test_pack_with_oversampling(t : T?) {
     t |> run("stbtt_pack with oversampling") <| @(tt : T?) {
         var data <- load_font_data()
@@ -193,7 +193,7 @@ def test_pack_with_oversampling(t : T?) {
     }
 }
 
-[test]
+[test(description = "the packed quad for 'A' has positive screen width and atlas extents in both directions and advances the pen position")]
 def test_packed_quad(t : T?) {
     t |> run("stbtt_packed_quad returns valid quad for 'A'") <| @(tt : T?) {
         var data <- load_font_data()
@@ -216,7 +216,7 @@ def test_packed_quad(t : T?) {
 
 // ---- Direct bitmap rendering (low-level wrappers) ----
 
-[test]
+[test(description = "the 32-pixel bitmap box of 'A' has positive width and height, and the space box is no wider than it")]
 def test_codepoint_bitmap_box(t : T?) {
     t |> run("stbtt_codepoint_bitmap_box returns valid box") <| @(tt : T?) {
         var data <- load_font_data()
@@ -232,7 +232,7 @@ def test_codepoint_bitmap_box(t : T?) {
     }
 }
 
-[test]
+[test(description = "the 32-pixel bitmap box of 'A' with a subpixel shift of (0.25, 0.75) is never inverted")]
 def test_codepoint_bitmap_box_subpixel(t : T?) {
     t |> run("stbtt_codepoint_bitmap_box_subpixel returns valid box") <| @(tt : T?) {
         var data <- load_font_data()
@@ -245,7 +245,7 @@ def test_codepoint_bitmap_box_subpixel(t : T?) {
     }
 }
 
-[test]
+[test(description = "rendering 'A' at 32 pixels returns a single-channel Image of positive size containing non-zero pixels")]
 def test_codepoint_bitmap(t : T?) {
     t |> run("stbtt_codepoint_bitmap renders 'A' as Image") <| @(tt : T?) {
         var data <- load_font_data()
@@ -267,7 +267,7 @@ def test_codepoint_bitmap(t : T?) {
     }
 }
 
-[test]
+[test(description = "rendering 'A' at 32 pixels with a subpixel shift of (0.5, 0.5) returns an Image of positive width and height")]
 def test_codepoint_bitmap_subpixel(t : T?) {
     t |> run("stbtt_codepoint_bitmap_subpixel renders with shift") <| @(tt : T?) {
         var data <- load_font_data()
@@ -280,7 +280,7 @@ def test_codepoint_bitmap_subpixel(t : T?) {
     }
 }
 
-[test]
+[test(description = "rendering 'A' into a caller buffer sized from its bitmap box writes non-zero pixels")]
 def test_make_codepoint_bitmap(t : T?) {
     t |> run("stbtt_make_codepoint_bitmap renders into buffer") <| @(tt : T?) {
         var data <- load_font_data()
@@ -305,7 +305,7 @@ def test_make_codepoint_bitmap(t : T?) {
     }
 }
 
-[test]
+[test(description = "rendering 'A' with a (0.5, 0.5) subpixel shift into a buffer sized from its subpixel box writes non-zero pixels")]
 def test_make_codepoint_bitmap_subpixel(t : T?) {
     t |> run("stbtt_make_codepoint_bitmap_subpixel renders with shift") <| @(tt : T?) {
         var data <- load_font_data()
@@ -331,7 +331,7 @@ def test_make_codepoint_bitmap_subpixel(t : T?) {
 
 // ---- Glyph shape (low-level wrappers) ----
 
-[test]
+[test(description = "iterating the outline of 'A' visits at least one vertex including a move-to, and the visit count equals the reported shape count")]
 def test_codepoint_shape(t : T?) {
     t |> run("stbtt_codepoint_shape iterates vertices for 'A'") <| @(tt : T?) {
         var data <- load_font_data()
@@ -354,7 +354,7 @@ def test_codepoint_shape(t : T?) {
 
 // ── Font high-level API tests ──────────────────────────────────────────
 
-[test]
+[test(description = "load_font on the bundled file gives a valid font that has no pixel height and no packed character data because no atlas was built")]
 def test_load_font(t : T?) {
     t |> run("load_font loads font without atlas") <| @(tt : T?) {
         let font <- load_font(font_path())
@@ -364,7 +364,7 @@ def test_load_font(t : T?) {
     }
 }
 
-[test]
+[test(description = "load_font on a file name that does not exist returns a font that is not valid")]
 def test_load_font_invalid(t : T?) {
     t |> run("load_font returns invalid for missing file") <| @(tt : T?) {
         let font <- load_font("nonexistent.ttf")
@@ -372,7 +372,7 @@ def test_load_font_invalid(t : T?) {
     }
 }
 
-[test]
+[test(description = "a loaded Font reports a positive scale for a 32-pixel height")]
 def test_font_scale_for_pixel_height(t : T?) {
     t |> run("scale_for_pixel_height on Font") <| @(tt : T?) {
         var font <- load_font(font_path())
@@ -381,7 +381,7 @@ def test_font_scale_for_pixel_height(t : T?) {
     }
 }
 
-[test]
+[test(description = "a loaded Font's raw vertical metrics have a positive ascent and a negative descent")]
 def test_font_vmetrics(t : T?) {
     t |> run("font_vmetrics returns raw metrics") <| @(tt : T?) {
         var font <- load_font(font_path())
@@ -391,7 +391,7 @@ def test_font_vmetrics(t : T?) {
     }
 }
 
-[test]
+[test(description = "a loaded Font's scaled metrics at 32 pixels have a positive ascent, a negative descent and a positive line height")]
 def test_font_metrics_with_pixel_height(t : T?) {
     t |> run("font_metrics with explicit pixel_height") <| @(tt : T?) {
         var font <- load_font(font_path())
@@ -402,7 +402,7 @@ def test_font_metrics_with_pixel_height(t : T?) {
     }
 }
 
-[test]
+[test(description = "a loaded Font reports a positive advance width for 'A'")]
 def test_font_codepoint_hmetrics(t : T?) {
     t |> run("codepoint_hmetrics on Font") <| @(tt : T?) {
         var font <- load_font(font_path())
@@ -411,7 +411,7 @@ def test_font_codepoint_hmetrics(t : T?) {
     }
 }
 
-[test]
+[test(description = "iterating the outline of 'A' on a loaded Font visits at least one vertex, and the visit count equals the reported shape count")]
 def test_font_codepoint_shape(t : T?) {
     t |> run("codepoint_shape on Font iterates vertices") <| @(tt : T?) {
         var font <- load_font(font_path())
@@ -424,7 +424,7 @@ def test_font_codepoint_shape(t : T?) {
     }
 }
 
-[test]
+[test(description = "a loaded Font finds a non-zero glyph index for 'A' and the missing-glyph index 0 for codepoint 0x1FFFF")]
 def test_font_find_glyph(t : T?) {
     t |> run("find_glyph on Font") <| @(tt : T?) {
         var font <- load_font(font_path())
@@ -433,7 +433,7 @@ def test_font_find_glyph(t : T?) {
     }
 }
 
-[test]
+[test(description = "a loaded Font's overall bounding box has a positive width and a positive height")]
 def test_font_bounding_box(t : T?) {
     t |> run("font_bounding_box returns valid box") <| @(tt : T?) {
         var font <- load_font(font_path())
@@ -443,7 +443,7 @@ def test_font_bounding_box(t : T?) {
     }
 }
 
-[test]
+[test(description = "a loaded Font's unscaled bounding box for 'A' has a positive width and a positive height")]
 def test_font_codepoint_box(t : T?) {
     t |> run("codepoint_box on Font") <| @(tt : T?) {
         var font <- load_font(font_path())
@@ -453,7 +453,7 @@ def test_font_codepoint_box(t : T?) {
     }
 }
 
-[test]
+[test(description = "measuring \"Hello\" at 32 pixels gives a positive width and \"Hello World\" measures wider")]
 def test_measure_text(t : T?) {
     t |> run("measure_text returns positive width for non-empty string") <| @(tt : T?) {
         var font <- load_font(font_path())
@@ -465,7 +465,7 @@ def test_measure_text(t : T?) {
     }
 }
 
-[test]
+[test(description = "a loaded Font's 32-pixel bitmap box for 'A' has a positive width and a positive height")]
 def test_font_codepoint_bitmap_box(t : T?) {
     t |> run("codepoint_bitmap_box on Font") <| @(tt : T?) {
         var font <- load_font(font_path())
@@ -476,7 +476,7 @@ def test_font_codepoint_bitmap_box(t : T?) {
     }
 }
 
-[test]
+[test(description = "a loaded Font renders 'A' at 32 pixels as a single-channel Image of positive size containing non-zero pixels")]
 def test_font_codepoint_bitmap(t : T?) {
     t |> run("codepoint_bitmap on Font renders 'A' as Image") <| @(tt : T?) {
         var font <- load_font(font_path())
@@ -495,7 +495,7 @@ def test_font_codepoint_bitmap(t : T?) {
     }
 }
 
-[test]
+[test(description = "load_ttf at 24 pixels with a 256x256 atlas returns a valid font with packed character data, pixel height 24 and a positive ascent from the plain font_metrics call")]
 def test_load_ttf_uses_wrappers(t : T?) {
     t |> run("load_ttf still works after refactoring") <| @(tt : T?) {
         var font <- load_ttf(font_path(), [pixel_height = 24.0, atlas_dim = int2(256, 256)])

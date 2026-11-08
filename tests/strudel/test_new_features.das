@@ -16,7 +16,7 @@ def private hc(p : Pattern) : int {
     return length(h)
 }
 
-[test]
+[test(description = "freq sets the event frequency field and defaults to deriving it from the note")]
 def test_freq_sets_field(t : T?) {
     let p <- atom("sawtooth") |> freq(440.0)
     let h <- p(at(1.0lf))
@@ -28,7 +28,7 @@ def test_freq_sets_field(t : T?) {
     t |> success(abs(h2[0].value.freq) < 0.001)
 }
 
-[test]
+[test(description = "a pattern-valued freq resolves and is sampled")]
 def test_freq_pattern_overload(t : T?) {
     // pattern-valued freq still resolves and samples
     let p <- atom("sawtooth") |> freq(note("220 440"))
@@ -36,13 +36,13 @@ def test_freq_pattern_overload(t : T?) {
     t |> success(!empty(h))
 }
 
-[test]
+[test(description = "note_to_freq exists and maps note 69 to 440 Hz")]
 def test_note_to_freq_exists(t : T?) {
     // feedback claimed this was missing — it is not
     t |> success(abs(note_to_freq(69.0) - 440.0) < 0.5)
 }
 
-[test]
+[test(description = "euclidRot rotates a euclid rhythm left by the given number of steps")]
 def test_euclidRot(t : T?) {
     // euclid(3,8) onsets: steps 0,3,6 -> 0, 0.375, 0.75
     let e0 <- atom("bd") |> euclid(3, 8)
@@ -58,7 +58,7 @@ def test_euclidRot(t : T?) {
     t |> success(abs(h1[2].whole.start - 0.875lf) < 0.001lf)
 }
 
-[test]
+[test(description = "chop splits one held sample into back-to-back slices with begin and end positions")]
 def test_chop(t : T?) {
     // chop(4): one held sample -> 4 back-to-back slices in [0,1)
     let p <- atom("bev") |> chop(4)
@@ -73,7 +73,7 @@ def test_chop(t : T?) {
     t |> success(abs(h[0].whole.stop - 0.25lf) < 0.001lf)
 }
 
-[test]
+[test(description = "slice picks the begin and end of each step from an index pattern")]
 def test_slice(t : T?) {
     // slice(4, "0 2 1 3"): structure from idx pattern; begin/end from index
     let p <- s("bev") |> slice(4, note("0 2 1 3"))
@@ -95,7 +95,7 @@ def test_slice(t : T?) {
     t |> success(abs(hw[1].value.begin - 0.25) < 0.001)
 }
 
-[test]
+[test(description = "chop with a count of zero or below returns the pattern unchanged instead of crashing")]
 def test_granulation_guards(t : T?) {
     // live-coding safety: n <= 0 must not crash — returns the pattern unchanged
     t |> equal(hc(atom("bev") |> chop(0)), 1)
@@ -104,7 +104,7 @@ def test_granulation_guards(t : T?) {
     t |> equal(hc(s("bev") |> slice(0, note("0 1"))), 1)
 }
 
-[test]
+[test(description = "the bd(3,8) and bd(3,8,2) mini-notation forms build euclid and rotated euclid rhythms")]
 def test_mini_euclid_paren(t : T?) {
     // "bd(3,8)" -> euclid(3,8)
     let p <- s("bd(3,8)")

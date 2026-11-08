@@ -53,7 +53,7 @@ def call_with_int(f : function<(char : int) : int>; v : int) : int => invoke(f, 
 var g_char = 100
 var register_g = 7
 
-[test]
+[test(description = "for-loop iterator variables named char and register iterate and accumulate like any other name")]
 def test_for_loop_iter(t : T?) {
     t |> run("for-loop iter named char (user's bug repro)") @(t : T?) {
         var sum = 0
@@ -71,7 +71,7 @@ def test_for_loop_iter(t : T?) {
     }
 }
 
-[test]
+[test(description = "let and var locals named char, short, long and volatile hold and update their values")]
 def test_let_var(t : T?) {
     t |> run("let var named char") @(t : T?) {
         let char = 42
@@ -90,7 +90,7 @@ def test_let_var(t : T?) {
     }
 }
 
-[test]
+[test(description = "globals whose names start with the C++ keywords char and register keep their initial values")]
 def test_global_var(t : T?) {
     t |> run("global var named g_char") @(t : T?) {
         t |> equal(g_char, 100)
@@ -100,7 +100,7 @@ def test_global_var(t : T?) {
     }
 }
 
-[test]
+[test(description = "struct fields named char, register, extern and mutable initialize and read back by name")]
 def test_struct_fields(t : T?) {
     t |> run("struct fields named after C++ keywords") @(t : T?) {
         let s = StFields(char = 5, register = 3.14, extern = true, mutable = "ok")
@@ -111,7 +111,7 @@ def test_struct_fields(t : T?) {
     }
 }
 
-[test]
+[test(description = "a struct named register constructs and reads its field")]
 def test_struct_name(t : T?) {
     t |> run("struct name 'register'") @(t : T?) {
         let r = register(value = 17)
@@ -119,7 +119,7 @@ def test_struct_name(t : T?) {
     }
 }
 
-[test]
+[test(description = "a class named extern constructs with new and dispatches its method")]
 def test_class_name(t : T?) {
     t |> run("class name 'extern'") @(t : T?) {
         var c = new extern()
@@ -128,7 +128,7 @@ def test_class_name(t : T?) {
     }
 }
 
-[test]
+[test(description = "an enum named signed declares values that compare by identity")]
 def test_enum_name(t : T?) {
     t |> run("enum name 'signed'") @(t : T?) {
         let s = signed.plus
@@ -137,7 +137,7 @@ def test_enum_name(t : T?) {
     }
 }
 
-[test]
+[test(description = "enum values named short, long and union are distinct values of their enum")]
 def test_enum_values(t : T?) {
     t |> run("enum values short/long/union") @(t : T?) {
         let w = Width.short
@@ -147,7 +147,7 @@ def test_enum_values(t : T?) {
     }
 }
 
-[test]
+[test(description = "a type alias named short declares an int local")]
 def test_typedef_alias(t : T?) {
     t |> run("typedef alias named short") @(t : T?) {
         let x : short = 5
@@ -155,7 +155,7 @@ def test_typedef_alias(t : T?) {
     }
 }
 
-[test]
+[test(description = "a function argument named char works in a direct call and through a function type whose argument is named char")]
 def test_function_arg(t : T?) {
     t |> run("function arg 'char'") @(t : T?) {
         t |> equal(double_it(5), 10)
@@ -165,7 +165,7 @@ def test_function_arg(t : T?) {
     }
 }
 
-[test]
+[test(description = "lambda arguments named char and register work, with and without a capture")]
 def test_lambda_arg(t : T?) {
     t |> run("lambda arg 'char'") @(t : T?) {
         var f <- @(char : int) => char * 3

@@ -1,6 +1,10 @@
+//! a static_assert inside a generic fails the compile for an instance
+//! that violates it
 options gen2
 options no_coverage
-// options log=true,log_infer_passes=false,log_optimization_passes=true,optimize=true
+// options
+// log=true,log_infer_passes=false,
+// log_optimization_passes=true,optimize=true
 
 expect 31403
 

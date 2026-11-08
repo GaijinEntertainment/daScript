@@ -1,6 +1,10 @@
-// C : B : A where A has user ctor and B is empty. C's user ctor must still
-// call super() — otherwise A's invariants are silently skipped. The lint
-// walks ancestors so the empty intermediate B doesn't hide the requirement.
+//! a constructor that never calls super() does not compile when a
+//! grandparent has a user constructor, even past an empty
+//! intermediate class
+// C : B : A where A has user ctor and B is empty. C's user ctor must
+// still call super() — otherwise A's invariants are silently skipped.
+// The lint walks ancestors so the empty intermediate B doesn't hide
+// the requirement.
 options gen2
 expect 30308
 

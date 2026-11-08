@@ -81,7 +81,7 @@ def run_child(t : T?; phase : string; argv : array<string>;
 }
 
 
-[test]
+[test(description = "A same-stamp edit to a module is caught by content and the warm run serves the new text", timeout = 1200)]
 def test_module_edit_inside_its_stamp(t : T?) {
     with_fixtures(t, ["mc_key_mod.das", "mc_key_drv.das"]) $(dir) {
         let mod = path_join(dir, "mc_key_mod.das")
@@ -94,7 +94,7 @@ def test_module_edit_inside_its_stamp(t : T?) {
 }
 
 
-[test]
+[test(description = "A same-stamp edit to an included file is caught by content and the warm run serves the new text", timeout = 1200)]
 def test_included_file_edit_inside_its_stamp(t : T?) {
     with_fixtures(t, ["mc_key_body.inc", "mc_key_inc_drv.das"]) $(dir) {
         let body = path_join(dir, "mc_key_body.inc")
@@ -109,7 +109,7 @@ def test_included_file_edit_inside_its_stamp(t : T?) {
     }
 }
 
-[test]
+[test(description = "The included files' stamps survive a cache writeback, so the next run still serves clean", timeout = 1200)]
 def test_included_stamps_survive_writeback(t : T?) {
     with_fixtures(t, ["mc_key_body.inc", "mc_key_inc_mod.das",
             "mc_key_inc_mod_drv.das"]) $(dir) {
@@ -131,7 +131,7 @@ def test_included_stamps_survive_writeback(t : T?) {
 }
 
 
-[test]
+[test(description = "A driver with 4095 included files round-trips through the cache, and one more include makes the read fail and fall back to a rewrite", timeout = 1200)]
 def test_included_source_count_bound(t : T?) {
     with_fixtures(t, ["mc_key_body.inc", "mc_key_inc_drv.das"]) $(dir) {
         let driver = path_join(dir, "mc_key_inc_drv.das")
@@ -164,7 +164,7 @@ def test_included_source_count_bound(t : T?) {
 }
 
 
-[test]
+[test(description = "A cold run still writes its record when the shared temporary name is already taken, so the writer uses a private temporary", timeout = 1200)]
 def test_writer_temp_is_private(t : T?) {
     with_fixtures(t, ["mc_key_mod.das", "mc_key_drv.das"]) $(dir) {
         t |> success(mkdir(path_join(dir, "mc.bin.tmp")),

@@ -1,4 +1,4 @@
-// a view inside an array pattern has no value to read yet
+//! a view inside an array pattern has no value to read yet
 options gen2
 
 require daslib/match

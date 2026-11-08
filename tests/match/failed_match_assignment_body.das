@@ -1,4 +1,4 @@
-// an assignment body binds looser than `=>` and needs a $-block
+//! an assignment body binds looser than `=>` and needs a $-block
 options gen2
 
 require daslib/match

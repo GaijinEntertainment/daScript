@@ -1,6 +1,9 @@
-// Regression test for invalid_empty_name (30296) on Structure::FieldDeclaration.
-// The structure_macro patch() emits a Structure with one empty-named field;
-// the typer fires preVisitStructureField and rejects.
+//! A structure macro that adds a field with an empty name must be
+//! rejected (30296).
+// Regression test for invalid_empty_name (30296) on
+// Structure::FieldDeclaration. The structure_macro patch() emits a
+// Structure with one empty-named field; the typer fires
+// preVisitStructureField and rejects.
 options gen2
 expect 30296
 

@@ -1,16 +1,18 @@
 options gen2
-options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
+
 
 // Contract area: predicate-form write macros — _sql_update / _sql_delete / _sql_upsert,
 // their returning variants (CONF_HAS_RETURNING), and rows-affected reporting.
 
 require dastest/testing_boost public
+
 require _conformance_provider
 
 [sql_table(name = "ConfHits"),
  sql_index(fields = "Word", unique = true)]
+
 struct ConfHit {
     @sql_primary_key Id : int
     Word : string
@@ -26,7 +28,7 @@ def private seed(db) {
         ConfHit(Id = 3, Word = "stale", Hits = 0, Active = true)])
 }
 
-[test]
+[test(description = "predicate update and delete report rows affected and an update can reference the existing row")]
 def test_conf_sql_update_delete(t : T?) {
     t |> run("_sql_update by predicate reports rows affected") @(t : T?) {
         with_conf_db() $(db) {
@@ -57,7 +59,7 @@ def test_conf_sql_update_delete(t : T?) {
     }
 }
 
-[test]
+[test(description = "upsert inserts on a miss, merges on a conflict and auto-assigns an unset integer primary key")]
 def test_conf_sql_upsert(t : T?) {
     t |> run("insert-on-miss, merge-on-conflict") @(t : T?) {
         with_conf_db() $(db) {
@@ -110,7 +112,7 @@ def test_conf_sql_upsert(t : T?) {
     }
 }
 
-[test]
+[test(description = "update, delete and upsert with returning give back the affected rows and the assigned key")]
 def test_conf_returning(t : T?) {
     if (!CONF_HAS_RETURNING) {
         return

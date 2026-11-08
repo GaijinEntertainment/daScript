@@ -1,4 +1,4 @@
-// a constant inside an earlier arm's range is unreachable
+//! a constant inside an earlier arm's range is unreachable
 options gen2
 
 require daslib/match

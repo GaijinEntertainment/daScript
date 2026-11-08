@@ -8,7 +8,7 @@ def m1(db : SqlRunner) {
     db |> exec("CREATE TABLE users (Id INTEGER PRIMARY KEY)")
 }
 
-[test]
+[test(description = "the migration description is stored in its audit row", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_description_lands_in_audit_row(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()

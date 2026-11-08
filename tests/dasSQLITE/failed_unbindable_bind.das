@@ -1,4 +1,5 @@
 options gen2
+//! binding a value of a type without sql_bind must not compile
 
 // Predicate binds a tuple value — sql_bind has no overload, the catch-all
 // generic at sqlite_boost.das fires its concept_assert (40103). This is the

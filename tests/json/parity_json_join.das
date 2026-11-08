@@ -63,7 +63,7 @@ def tables_equal(a : table<string; int>; b : table<string; int>) : bool {
     return true
 }
 
-[test]
+[test(description = "a fused join then count over from_json matches the array and the hand-counted total")]
 def parity_join_count(t : T?) {
     // join + count (no where) — bucket-length fast path. Every car's brand matches exactly one HQ → 8.
     let jv = fixture_json()
@@ -81,7 +81,7 @@ def parity_join_count(t : T?) {
     t |> equal(jf, af)
 }
 
-[test]
+[test(description = "a fused join into an array of tuples over from_json matches the array result")]
 def parity_join_to_array(t : T?) {
     // join + to_array (named-tuple projection) — compare (country → sum id) maps.
     let jv = fixture_json()
@@ -102,7 +102,7 @@ def parity_join_to_array(t : T?) {
     delete jf; delete af; delete sj; delete sa
 }
 
-[test]
+[test(description = "a where after a join is evaluated per pair and matches the array count")]
 def parity_join_where_count(t : T?) {
     // join + where + count — predicate fires per pair; only USA (Ford ×3) survives.
     let jv = fixture_json()
@@ -122,7 +122,7 @@ def parity_join_where_count(t : T?) {
     t |> equal(jf, af)
 }
 
-[test]
+[test(description = "a select after a join over from_json matches the array result")]
 def parity_join_select(t : T?) {
     // join + bare _select — sum the projected ids.
     let jv = fixture_json()
@@ -148,7 +148,7 @@ def parity_join_select(t : T?) {
     delete jf; delete af
 }
 
-[test]
+[test(description = "a join and select with no terminator fuses to a sequence equal to the eager array")]
 def parity_join_select_no_terminator(t : T?) {
     // join + bare _select with NO to_array → iterator-typed result. Fuses via the fused-materialize path
     // (build result array, wrap as sequence). Correctness gate: the fused sequence equals the eager array lane.
@@ -180,7 +180,7 @@ def parity_join_select_no_terminator(t : T?) {
     delete af
 }
 
-[test]
+[test(description = "group_by after a join over from_json sums per country as the array does")]
 def parity_join_group_by_sum(t : T?) {
     // join |> group_by(country) |> select(sum qty) — group-by-after-join (JsonJoinAdapter). Compare country→sum(qty).
     let jv = fixture_json()
@@ -205,7 +205,7 @@ def parity_join_group_by_sum(t : T?) {
     delete jf; delete af
 }
 
-[test]
+[test(description = "an unmatched row drops and a multi-row bucket fans out exactly as a hand-computed inner join")]
 def parity_join_edge_buckets(t : T?) {
     // Inner-join semantics the 1:1 fixture above never hits: an unmatched srcA row (Tesla has no HQ → 0 rows)
     // and a multi-row srcB bucket (Ford has two HQ rows → each Ford car fans out ×2). Both exercise the

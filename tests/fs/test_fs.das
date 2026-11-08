@@ -5,7 +5,7 @@ require dastest/testing_boost public
 require daslib/fio
 require strings
 
-[test]
+[test(description = "extension returns the last dot suffix of a path and empty when there is none, ignoring dots in directories")]
 def test_extension(t : T?) {
     t |> run("basic extension") @(t : T?) {
         t |> equal(extension("foo.txt"), ".txt")
@@ -24,7 +24,7 @@ def test_extension(t : T?) {
     }
 }
 
-[test]
+[test(description = "stem returns the file name without its last extension, for paths with or without a directory")]
 def test_stem(t : T?) {
     t |> run("basic stem") @(t : T?) {
         t |> equal(stem("foo.txt"), "foo")
@@ -40,7 +40,7 @@ def test_stem(t : T?) {
     }
 }
 
-[test]
+[test(description = "replace_extension swaps, removes or adds an extension on a path")]
 def test_replace_extension(t : T?) {
     t |> run("swap extension") @(t : T?) {
         t |> equal(replace_extension("foo.txt", ".md"), "foo.md")
@@ -53,7 +53,7 @@ def test_replace_extension(t : T?) {
     }
 }
 
-[test]
+[test(description = "path_join joins two components with a separator and tolerates an empty first one")]
 def test_path_join(t : T?) {
     t |> run("two components") @(t : T?) {
         let result = path_join("foo", "bar.txt")
@@ -66,7 +66,7 @@ def test_path_join(t : T?) {
     }
 }
 
-[test]
+[test(description = "normalize collapses dot-dot and dot components out of a path")]
 def test_normalize(t : T?) {
     t |> run("remove dot-dot") @(t : T?) {
         let result = normalize("foo/bar/../baz")
@@ -81,7 +81,7 @@ def test_normalize(t : T?) {
     }
 }
 
-[test]
+[test(description = "is_absolute is false for relative and empty paths")]
 def test_is_absolute(t : T?) {
     t |> run("relative path") @(t : T?) {
         t |> success(!is_absolute("foo/bar"))
@@ -91,7 +91,7 @@ def test_is_absolute(t : T?) {
     }
 }
 
-[test]
+[test(description = "parent returns the containing directory of a file path")]
 def test_parent(t : T?) {
     t |> run("file in directory") @(t : T?) {
         let result = parent("/foo/bar/baz.txt")
@@ -104,7 +104,7 @@ def test_parent(t : T?) {
     }
 }
 
-[test]
+[test(description = "file_size reports the byte length of an existing file and a failure value for a missing one")]
 def test_file_size(t : T?) {
     t |> run("known file size") @(t : T?) {
         let tmp_dir = test_temp_dir()
@@ -124,7 +124,7 @@ def test_file_size(t : T?) {
     }
 }
 
-[test]
+[test(description = "equivalent is true for two paths to the same file and false for different files")]
 def test_equivalent(t : T?) {
     t |> run("same file") @(t : T?) {
         let tmp_dir = test_temp_dir()
@@ -155,7 +155,7 @@ def test_equivalent(t : T?) {
     }
 }
 
-[test]
+[test(description = "is_symlink is false for a regular file, a UTF-8 named file, a missing path and an empty path")]
 def test_is_symlink(t : T?) {
     t |> run("regular file is not symlink") @(t : T?) {
         let tmp_dir = test_temp_dir()
@@ -190,7 +190,7 @@ def test_is_symlink(t : T?) {
     }
 }
 
-[test]
+[test(description = "copy_file copies a file, refuses to overwrite by default and overwrites on request")]
 def test_copy_file(t : T?) {
     t |> run("copy existing file") @(t : T?) {
         let tmp_dir = test_temp_dir()
@@ -247,7 +247,7 @@ def test_copy_file(t : T?) {
     }
 }
 
-[test]
+[test(description = "dir_rec lists a directory tree recursively with paths relative to the base")]
 def test_dir_rec(t : T?) {
     t |> run("recursive listing") @(t : T?) {
         let tmp_dir = test_temp_dir()
@@ -300,7 +300,7 @@ def test_dir_rec(t : T?) {
     }
 }
 
-[test]
+[test(description = "temp_directory returns an existing non-empty path")]
 def test_temp_directory(t : T?) {
     t |> run("returns non-empty path") @(t : T?) {
         var error : string
@@ -311,7 +311,7 @@ def test_temp_directory(t : T?) {
     }
 }
 
-[test]
+[test(description = "create_temp_file creates an existing file and returns its path")]
 def test_create_temp_file(t : T?) {
     t |> run("creates file") @(t : T?) {
         var error : string
@@ -325,7 +325,7 @@ def test_create_temp_file(t : T?) {
     }
 }
 
-[test]
+[test(description = "create_temp_directory creates an existing directory and returns its path")]
 def test_create_temp_directory(t : T?) {
     t |> run("creates directory") @(t : T?) {
         var error : string
@@ -338,7 +338,7 @@ def test_create_temp_directory(t : T?) {
     }
 }
 
-[test]
+[test(description = "builtin_disk_space reports a positive capacity for the current directory, through the convenience overload too")]
 def test_disk_space(t : T?) {
     t |> run("current directory") @(t : T?) {
         var info = DiskSpaceInfo()
@@ -354,7 +354,7 @@ def test_disk_space(t : T?) {
     }
 }
 
-[test]
+[test(description = "set_mtime changes a file modification time to the requested value")]
 def test_set_mtime(t : T?) {
     t |> run("set modification time") @(t : T?) {
         let tmp_dir = test_temp_dir()
@@ -375,7 +375,7 @@ def test_set_mtime(t : T?) {
     }
 }
 
-[test]
+[test(description = "relative computes the path from a base directory to a descendant")]
 def test_relative(t : T?) {
     t |> run("compute relative path") @(t : T?) {
         let root = get_das_root()

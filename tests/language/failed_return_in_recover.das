@@ -1,3 +1,4 @@
+//! a return inside a recover block does not compile
 options gen2
 expect 30299
 

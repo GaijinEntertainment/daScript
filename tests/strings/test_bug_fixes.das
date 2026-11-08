@@ -6,7 +6,7 @@ require daslib/strings_boost
 
 // Tests for C++ bug fixes in module_builtin_string.cpp
 
-[test]
+[test(description = "chop clamps a negative start or length, returns empty past the end and handles empty and zero-length input")]
 def test_chop_bounds(t : T?) {
     // Bug fix: chop now does bounds checking instead of reading out-of-bounds memory
 
@@ -53,7 +53,7 @@ def test_chop_bounds(t : T?) {
     }
 }
 
-[test]
+[test(description = "hex conversion accepts an optional 0x or 0X prefix with surrounding spaces for every integer type")]
 def test_hex_conversion_with_whitespace(t : T?) {
     // Bug fix: hex prefix detection now works correctly with leading whitespace
 
@@ -120,7 +120,7 @@ def test_hex_conversion_with_whitespace(t : T?) {
     }
 }
 
-[test]
+[test(description = "to_uint16 parses decimal and hex text with spaces, returns zero for invalid text and reports the ConversionResult")]
 def test_to_uint16(t : T?) {
     // Bug fix: to_uint16 was not bound to daslang
 
@@ -166,7 +166,7 @@ def test_to_uint16(t : T?) {
     }
 }
 
-[test]
+[test(description = "compare_ignore_case treats strings differing only in case as equal and orders others by length and character")]
 def test_compare_ignore_case(t : T?) {
     // Bug fix: stricmp was not bound to daslang
 

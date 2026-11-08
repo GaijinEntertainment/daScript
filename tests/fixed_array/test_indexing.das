@@ -10,7 +10,7 @@ struct Holder {
 
 let g_const : int[4] = fixed_array(10, 20, 30, 40)
 
-[test]
+[test(description = "fixed arrays of one, two and three dimensions read and write by constant and computed indices and a partial index of a 2D array yields a row")]
 def test_index_rw(t : T?) {
     t |> run("1D read/write") @(t : T?) {
         var a : int[4]
@@ -53,7 +53,7 @@ def test_index_rw(t : T?) {
     }
 }
 
-[test]
+[test(description = "a const global fixed array reads correctly and indexing works through a struct field")]
 def test_const_and_fields(t : T?) {
     t |> run("const global FA reads") @(t : T?) {
         t |> equal(g_const[0], 10)
@@ -67,7 +67,7 @@ def test_const_and_fields(t : T?) {
     }
 }
 
-[test]
+[test(description = "subarray with a range or range64 and range-index sugar give views of the right elements")]
 def test_subarray(t : T?) {
     t |> run("subarray range view") @(t : T?) {
         var s : int[4]

@@ -1,7 +1,7 @@
 options gen2
-options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
+
 
 // Contract area: the `_sql` read chain — _where translation with captured-var binds,
 // _order_by, take/skip, distinct, _distinct_by (provider-lowered: bare-aggregate GROUP BY
@@ -10,7 +10,9 @@ options no_unused_function_arguments = false
 // provider-rendered, so only shape is asserted).
 
 require dastest/testing_boost public
+
 require _conformance_provider
+
 require strings
 
 [sql_table(name = "ConfNums")]
@@ -30,7 +32,7 @@ def private seed(db) {
         ConfNum(Id = 0, Val = 40, Tag = "a")])
 }
 
-[test]
+[test(description = "where binds captured variables, composes chained wheres with AND and supports starts_with and contains")]
 def test_conf_where_binds(t : T?) {
     t |> run("captured-var predicate binds and filters") @(t : T?) {
         with_conf_db() $(db) {
@@ -61,7 +63,7 @@ def test_conf_where_binds(t : T?) {
     }
 }
 
-[test]
+[test(description = "order_by with skip and take paginates deterministically, descending sorts and distinct dedupes a projection")]
 def test_conf_order_page_distinct(t : T?) {
     t |> run("_order_by + skip/take paginate deterministically") @(t : T?) {
         with_conf_db() $(db) {
@@ -92,7 +94,7 @@ def test_conf_order_page_distinct(t : T?) {
     }
 }
 
-[test]
+[test(description = "first and first_opt return the contract row or none")]
 def test_conf_terminals(t : T?) {
     t |> run("_first / _first_opt") @(t : T?) {
         with_conf_db() $(db) {
@@ -107,7 +109,7 @@ def test_conf_terminals(t : T?) {
     }
 }
 
-[test]
+[test(description = "distinct_by picks the first or last row per key and works with counts, predicate counts, column aggregates and group_by first")]
 def test_conf_distinct_by(t : T?) {
     t |> run("_distinct_by picks the first row per key in pk order") @(t : T?) {
         with_conf_db() $(db) {
@@ -161,7 +163,7 @@ def test_conf_distinct_by(t : T?) {
     }
 }
 
-[test]
+[test(description = "order_by over a renamed projection alias and a grouped aggregate alias actually orders the rows")]
 def test_conf_projection_alias_order(t : T?) {
     t |> run("_order_by over a renamed projection alias actually orders") @(t : T?) {
         with_conf_db() $(db) {
@@ -190,7 +192,7 @@ def test_conf_projection_alias_order(t : T?) {
     }
 }
 
-[test]
+[test(description = "_sql_text emits SELECT and WHERE with quoted identifiers")]
 def test_conf_sql_text_shape(t : T?) {
     t |> run("_sql_text emits SELECT/WHERE with quoted identifiers") @(t : T?) {
         with_conf_db() $(db) {

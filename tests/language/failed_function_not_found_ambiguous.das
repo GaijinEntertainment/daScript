@@ -1,3 +1,5 @@
+//! an unqualified call matching same-signature functions in two
+//! modules does not compile, while the qualified calls do
 // ambiguous function call
 // verifies compiler rejects an unqualified call when two modules
 // define functions with the same name and signature;

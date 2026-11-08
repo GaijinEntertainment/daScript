@@ -1,5 +1,5 @@
-// A bare case is one value of the variant: a match that names every
-// other case still misses it.
+//! A bare case is one value of the variant: a match that names every
+//! other case still misses it.
 options gen2
 require daslib/match
 expect 50503

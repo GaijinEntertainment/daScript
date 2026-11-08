@@ -43,7 +43,7 @@ def run() {
   is built up front); `STREAM` takes the incremental `HttpResponseWriter` handler for live SSE /
   chunked. Static serving: `STATIC(path, dir)`, plus `set_document_root` / `set_home_page` /
   `set_index_of` / `set_error_page` / `allow_cors` / `set_bind_host`. Literal routes outrank
-  `:param` routes outrank `ANY("*")` (trie router; pinned by `test_server_routes.das`).
+  `:param` routes outrank `ANY("*")` (trie router; pinned by `test_server.das`).
 - **Request access:** `string(req.body)`, `req.method`, `get_param(req, "id")` (path `:id` or query),
   `each_param(req) $(k, v) { }`, `get_header(req, "X-...")`, `each_header`, multipart via
   `each_form_field(req) $(name, content, filename) { }` + `save_form_file(req, name, path)`

@@ -1,6 +1,10 @@
-// each_kv compile-time rejections: non-copyable value type, void values (set form — use keys()),
-// and dim-array values (no dedicated overload). One statement per reject; the void/dim arms
-// cascade the standard "void iteration" pair (30192/30107) behind the concept_assert.
+//! each_kv over a table with a non-copyable value, a set with void
+//! values, or fixed-array values does not compile
+// each_kv compile-time rejections: non-copyable value type, void
+// values (set form — use keys()), and dim-array values (no dedicated
+// overload). One statement per reject; the void/dim arms cascade the
+// standard "void iteration" pair (30192/30107) behind the
+// concept_assert.
 options gen2
 
 expect 31400:3, 30192:2, 30107:2

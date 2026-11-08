@@ -1,3 +1,5 @@
+//! indexing a value that is not an array or a container does not
+//! compile
 // invalid index operations
 // verifies compiler rejects indexing non-array/non-container types
 options gen2

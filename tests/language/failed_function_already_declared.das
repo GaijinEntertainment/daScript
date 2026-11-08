@@ -1,3 +1,5 @@
+//! two functions with the same name and signature in one module do
+//! not compile
 // duplicate function declaration
 // verifies compiler rejects two functions with identical signatures
 options gen2

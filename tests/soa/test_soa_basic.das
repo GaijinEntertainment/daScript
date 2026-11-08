@@ -33,7 +33,7 @@ struct SingleField {
 // SOA struct generation
 // ===========================
 
-[test]
+[test(description = "the SOA type is generated for particle, entity and single-field structs")]
 def test_soa_struct_exists(t : T?) {
     t |> run("particle SOA type is created") @(t : T?) {
         let soa : Particle`SOA
@@ -53,7 +53,7 @@ def test_soa_struct_exists(t : T?) {
 // Push and length
 // ===========================
 
-[test]
+[test(description = "push grows the SOA length and keeps every field value, including string and single-field structs")]
 def test_soa_push_and_length(t : T?) {
     t |> run("empty SOA has length 0") @(t : T?) {
         let soa : Particle`SOA
@@ -98,7 +98,7 @@ def test_soa_push_and_length(t : T?) {
 // Indexed access ([] operator and field rewrite)
 // ===========================
 
-[test]
+[test(description = "soa[i].field reads the right value for every field kind and index")]
 def test_soa_index_access(t : T?) {
     t |> run("soa[i].field returns correct value") @(t : T?) {
         var soa : Particle`SOA
@@ -142,7 +142,7 @@ def test_soa_index_access(t : T?) {
 // Erase
 // ===========================
 
-[test]
+[test(description = "erase shrinks the SOA, removes the right element and keeps string fields intact")]
 def test_soa_erase(t : T?) {
     t |> run("erase reduces length") @(t : T?) {
         var soa : Particle`SOA
@@ -198,7 +198,7 @@ def test_soa_erase(t : T?) {
 // push_clone
 // ===========================
 
-[test]
+[test(description = "push_clone adds a copy of an element, including its string field")]
 def test_soa_push_clone(t : T?) {
     t |> run("push_clone adds element") @(t : T?) {
         var soa : Particle`SOA
@@ -229,7 +229,7 @@ def test_soa_push_clone(t : T?) {
 // emplace
 // ===========================
 
-[test]
+[test(description = "emplace adds an element by move, including entities")]
 def test_soa_emplace(t : T?) {
     t |> run("emplace adds element by move") @(t : T?) {
         var soa : Particle`SOA
@@ -251,7 +251,7 @@ def test_soa_emplace(t : T?) {
 // Combined operations
 // ===========================
 
-[test]
+[test(description = "mixed pushes and erases leave the SOA with the expected contents")]
 def test_soa_combined(t : T?) {
     t |> run("push then erase then push") @(t : T?) {
         var soa : Particle`SOA

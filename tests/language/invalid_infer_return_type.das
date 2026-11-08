@@ -1,3 +1,5 @@
+//! return statements of mismatched types, a missing return value and
+//! an unexpected one do not compile
 // return type inference failures
 // verifies compiler rejects mismatched return types in branches,
 // missing return values, and unexpected return values

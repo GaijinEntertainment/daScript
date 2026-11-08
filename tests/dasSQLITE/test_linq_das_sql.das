@@ -24,7 +24,7 @@ def private fixture(db : SqlRunner) {
     db |> insert(Car(id = 3, name = "Tesla", price = 300))
 }
 
-[test]
+[test(description = "a linq_das where and select over a SQL source matches the hand-written _sql chain")]
 def test_sql_where_select(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -38,7 +38,7 @@ def test_sql_where_select(t : T?) {
     }
 }
 
-[test]
+[test(description = "two linq_das where clauses push down as one ANDed SQL WHERE")]
 def test_sql_multiple_where(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -51,7 +51,7 @@ def test_sql_multiple_where(t : T?) {
     }
 }
 
-[test]
+[test(description = "a linq_das identity select over a SQL source returns whole rows")]
 def test_sql_identity_select(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -61,7 +61,7 @@ def test_sql_identity_select(t : T?) {
     }
 }
 
-[test]
+[test(description = "a linq_das query over a SQL source can produce an iterator")]
 def test_sql_iterator_output(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -70,7 +70,7 @@ def test_sql_iterator_output(t : T?) {
     }
 }
 
-[test]
+[test(description = "a linq_das orderby over a SQL source pushes down as ORDER BY ascending")]
 def test_sql_orderby_ascending(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -84,7 +84,7 @@ def test_sql_orderby_ascending(t : T?) {
     }
 }
 
-[test]
+[test(description = "a linq_das where with orderby descending pushes both down")]
 def test_sql_orderby_descending_with_where(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -96,7 +96,7 @@ def test_sql_orderby_descending_with_where(t : T?) {
     }
 }
 
-[test]
+[test(description = "a linq_das multi-key orderby with mixed directions pushes down as one ORDER BY")]
 def test_sql_orderby_multi_key(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<Car>)
@@ -132,7 +132,7 @@ struct JCar {
     price : int
 }
 
-[test]
+[test(description = "a linq_das group into with aggregates matches the hand-written grouped _sql chain")]
 def test_sql_group_into_aggregate(t : T?) {
     with_sqlite(":memory:") $(db) {
         join_fixture(db)
@@ -153,7 +153,7 @@ def test_sql_group_into_aggregate(t : T?) {
     }
 }
 
-[test]
+[test(description = "a linq_das group into pushes down as a SQL GROUP BY with aggregate columns")]
 def test_sql_group_into_emits_group_by(t : T?) {
     with_sqlite(":memory:") $(db) {
         join_fixture(db)
@@ -186,7 +186,7 @@ def private join_fixture(db : SqlRunner) {
     db |> insert(JBrand(brand = "us", country = "USA"))
 }
 
-[test]
+[test(description = "a linq_das join with a tuple select terminal matches the hand-written _sql join")]
 def test_sql_join_select_terminal_tuple(t : T?) {
     with_sqlite(":memory:") $(db) {
         join_fixture(db)
@@ -199,7 +199,7 @@ def test_sql_join_select_terminal_tuple(t : T?) {
     }
 }
 
-[test]
+[test(description = "a linq_das join with a scalar select terminal pushes down")]
 def test_sql_join_select_terminal_scalar(t : T?) {
     with_sqlite(":memory:") $(db) {
         join_fixture(db)
@@ -208,7 +208,7 @@ def test_sql_join_select_terminal_scalar(t : T?) {
     }
 }
 
-[test]
+[test(description = "a linq_das where before a join pushes down as a SQL WHERE")]
 def test_sql_join_pre_join_where(t : T?) {
     with_sqlite(":memory:") $(db) {
         join_fixture(db)
@@ -221,7 +221,7 @@ def test_sql_join_pre_join_where(t : T?) {
 // ===== multiple `from` over SQL (uncorrelated → CROSS JOIN pushdown) — same select-terminal / pre-from
 // where boundary as join; a post-from where carries the (c, d) tuple in-memory (the documented boundary) =====
 
-[test]
+[test(description = "a linq_das query with two from clauses matches the hand-written cross join")]
 def test_sql_multifrom_tuple(t : T?) {
     with_sqlite(":memory:") $(db) {
         join_fixture(db)
@@ -234,7 +234,7 @@ def test_sql_multifrom_tuple(t : T?) {
     }
 }
 
-[test]
+[test(description = "a linq_das query with two from clauses pushes down as a CROSS JOIN")]
 def test_sql_multifrom_emits_cross_join(t : T?) {
     with_sqlite(":memory:") $(db) {
         join_fixture(db)
@@ -246,7 +246,7 @@ def test_sql_multifrom_emits_cross_join(t : T?) {
     }
 }
 
-[test]
+[test(description = "a linq_das where before a second from pushes down before the cross join")]
 def test_sql_multifrom_pre_where(t : T?) {
     with_sqlite(":memory:") $(db) {
         join_fixture(db)
@@ -261,7 +261,7 @@ def test_sql_multifrom_pre_where(t : T?) {
 // computed column / key forms `_sql` renders directly (see test_99_computed_select_subquery for the
 // pushdown machinery). The whole query stays a single SELECT.
 
-[test]
+[test(description = "a linq_das let binding is inlined into the SQL and matches the hand-written chain")]
 def test_sql_let_pushdown(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -280,7 +280,7 @@ def test_sql_let_pushdown(t : T?) {
     }
 }
 
-[test]
+[test(description = "an inlined let appears as a computed expression in the emitted ORDER BY and WHERE")]
 def test_sql_let_emits_computed_pushdown(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)

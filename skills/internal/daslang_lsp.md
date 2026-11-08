@@ -102,14 +102,14 @@ from a scratch project dir. The log records every message both ways.
 
 ## Tests
 
-`tests/lsp/test_lsp_protocol.das` - full session over `popen_argv_pipe`, once
+`tests/lsp/uncategorized.das` - full session over `popen_argv_pipe`, once
 through the interpreter host and once through `bin/watchdog` where it is built
 (initialize -> didOpen broken-buffer/clean-disk -> publishDiagnostics with the
 exact 30341 range -> didChange clean -> empty publish -> definition -> shutdown).
 Byte-exact frame bodies via `fread(f, array<uint8>)` (C fread loops until the
 requested length); headers via `fgets`. AOT-registered in
 `tests/aot/CMakeLists.txt` (glob excludes `/_` fixtures).
-`tests/watchdog/test_lsp_front.das` - the cross-tree guard over throwaway
+`tests/watchdog/test_stdio_front.das` - the cross-tree guard over throwaway
 git-style trees (requires the front's module, so it sits with the watchdog
 tests and their module gate).
 
@@ -119,7 +119,7 @@ tests and their module gate).
   Windows text-mode stdout writes `\r\r\n` for `\r\n`, the client never finds the header
   terminator, and the unaccepted `initialize` reply leaves every request hanging - the LSP
   tool "never answers" while the log shows `initialize` received and nothing after.
-  `tests/lsp/test_lsp_protocol.das` checks the header bytes exactly, on every platform.
+  `tests/lsp/uncategorized.das` checks the header bytes exactly, on every platform.
 - Compiler paths must be **absolute** - subtools spawn with per-request cwd
   (`find_compiler` absolutizes; keep it that way).
 - The lint-profile compile (`lint_check`, `export_all`, `no_optimizations`,

@@ -1,6 +1,9 @@
+//! a local variable, array or table of a non-local handled type such
+//! as ast::TypeDecl does not compile
 // non-local type as local variable
-// verifies compiler rejects local variables, arrays, and tables of non-local types
-// uses ast::TypeDecl as a representative non-local handled type
+// verifies compiler rejects local variables, arrays, and tables of
+// non-local types uses ast::TypeDecl as a representative non-local
+// handled type
 options gen2
 expect 30112, 30254, 31016:2, 31020:4, 31030
 options force_inscope_pod = false

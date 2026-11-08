@@ -24,7 +24,7 @@ def private validate(t : T?; words : array<uint>; lbl : string) {
     }
 }
 
-[test]
+[test(description = "User functions with value parameters, transitive and shared helpers and vector in/out lower to OpFunctionCalls.")]
 def test_userfn_value(t : T?) {
     t |> run("user functions: value params, transitive + shared helper, vector in/out") <| @(t : T?) {
         var words <- userfn_words()
@@ -43,7 +43,7 @@ def test_userfn_value(t : T?) {
     }
 }
 
-[test]
+[test(description = "By-reference parameters lower through copy-in and copy-out temporaries.")]
 def test_userfn_ref(t : T?) {
     t |> run("user functions: by-reference params (copy-in / copy-out temps)") <| @(t : T?) {
         var words <- userfn_ref_words()
@@ -63,7 +63,7 @@ def test_userfn_ref(t : T?) {
     }
 }
 
-[test]
+[test(description = "spirv_inline helpers are visited in place instead of called.")]
 def test_userfn_inline(t : T?) {
     t |> run("[spirv_inline] helpers: visited in place, " +
             "no OpFunction or OpFunctionCall of their own") <| @(t : T?) {
@@ -103,7 +103,7 @@ def userfn_inline_unrolled {
     unr_data[i] = acc
 }
 
-[test]
+[test(description = "An inlined tail return inside a caller's unroll_full loop lowers correctly.")]
 def test_userfn_inline_unrolled(t : T?) {
     t |> run("an inlined tail return inside a caller's for [unroll_full]") <| @(t : T?) {
         var words <- clone_to_move(userfn_inline_unrolled_spv)
@@ -115,7 +115,7 @@ def test_userfn_inline_unrolled(t : T?) {
     }
 }
 
-[test]
+[test(description = "spirv_inline kernel-class methods inline a self-method chain.")]
 def test_userfn_inline_method(t : T?) {
     t |> run("[spirv_inline] kernel-class methods: a self-method chain " +
             "and a by-reference method, inlined into the kernel") <| @(t : T?) {
@@ -129,7 +129,7 @@ def test_userfn_inline_method(t : T?) {
     }
 }
 
-[test]
+[test(description = "A spirv_inline self-method whose ternary arm indexes a member array stays lazy.")]
 def test_userfn_inline_lazy(t : T?) {
     t |> run("[spirv_inline] self-method: a ternary arm indexing a member array " +
             "branches under the method's own self") <| @(t : T?) {
@@ -144,7 +144,7 @@ def test_userfn_inline_lazy(t : T?) {
     }
 }
 
-[test]
+[test(description = "A helper that reads a module global lowers and validates.")]
 def test_userfn_global(t : T?) {
     t |> run("user functions: a helper that reads a module global") <| @(t : T?) {
         var words <- userfn_global_words()

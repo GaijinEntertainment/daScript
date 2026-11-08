@@ -1,7 +1,10 @@
 options gen2
+//! add_column of a primary key field must not compile because SQLite
+//! cannot add a primary key column
 
-// AddColumnMacro must reject @sql_primary_key fields — SQLite cannot add a PK column
-// to an existing table; this requires a table rebuild (chunk 14c struct_convert).
+// AddColumnMacro must reject @sql_primary_key fields — SQLite cannot
+// add a PK column to an existing table; this requires a table rebuild
+// (chunk 14c struct_convert).
 expect 50503
 
 require sqlite/sqlite_migrate

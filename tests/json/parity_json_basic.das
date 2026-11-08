@@ -34,7 +34,7 @@ def fixture_array() : array<Car> {
 // comparable to fixture_array.
 def fixture_json() : JsonValue? => JV([for (c in fixture_array()); JV(c)])
 
-[test]
+[test(description = "a fused where and select over from_json gives the same ids and brands as the same chain over an array")]
 def parity_where_select(t : T?) {
     let jv = fixture_json()
     let arr <- fixture_array()
@@ -48,7 +48,7 @@ def parity_where_select(t : T?) {
     t |> equal(js, as_)
 }
 
-[test]
+[test(description = "a fused chain that returns whole rows gives the same rows from from_json as from an array")]
 def parity_whole_row(t : T?) {
     // whole-row escape: `to_array()` with no `_select` yields `array<Car>`, so the entire row escapes ->
     // usesWholeRow -> the adapter materializes every field by name (Option B, not an overridable `from_JV(it)`).
@@ -73,7 +73,7 @@ def parity_whole_row(t : T?) {
     }
 }
 
-[test]
+[test(description = "ascending, descending and multi-key order_by over from_json match the array result")]
 def parity_orderby(t : T?) {
     let jv = fixture_json()
     let arr <- fixture_array()
@@ -91,7 +91,7 @@ def parity_orderby(t : T?) {
     t |> equal(jm, am)
 }
 
-[test]
+[test(description = "group_by over from_json gives the same per-key counts as over an array")]
 def parity_group_by(t : T?) {
     let jv = fixture_json()
     let arr <- fixture_array()
@@ -101,7 +101,7 @@ def parity_group_by(t : T?) {
     t |> equal(j, a)
 }
 
-[test]
+[test(description = "taking the first whole row of each group over from_json matches the array result")]
 def parity_group_by_first(t : T?) {
     let jv = fixture_json()
     let arr <- fixture_array()
@@ -117,7 +117,7 @@ def parity_group_by_first(t : T?) {
     t |> equal(js, as_)
 }
 
-[test]
+[test(description = "sum, count, min and max over from_json match the array results")]
 def parity_aggregates(t : T?) {
     let jv = fixture_json()
     let arr <- fixture_array()
@@ -131,7 +131,7 @@ def parity_aggregates(t : T?) {
                _fold(each(arr)._select(_.qty).max()))
 }
 
-[test]
+[test(description = "distinct over from_json gives the same values as over an array")]
 def parity_distinct(t : T?) {
     let jv = fixture_json()
     let arr <- fixture_array()
@@ -141,7 +141,7 @@ def parity_distinct(t : T?) {
     t |> equal(j, a)
 }
 
-[test]
+[test(description = "first, last and single over from_json return the same rows as over an array")]
 def parity_first_last_single(t : T?) {
     let jv = fixture_json()
     let arr <- fixture_array()
@@ -157,7 +157,7 @@ def parity_first_last_single(t : T?) {
                _fold(each(arr)._where(_.price > 199.0).last()).brand)
 }
 
-[test]
+[test(description = "element_at and element_at_or_default over from_json match the array results")]
 def parity_element_at(t : T?) {
     let jv = fixture_json()
     let arr <- fixture_array()
@@ -167,7 +167,7 @@ def parity_element_at(t : T?) {
                _fold(each(arr).element_at_or_default(99)).id)
 }
 
-[test]
+[test(description = "any, all and contains over from_json match the array results")]
 def parity_any_all_contains(t : T?) {
     let jv = fixture_json()
     let arr <- fixture_array()
@@ -179,7 +179,7 @@ def parity_any_all_contains(t : T?) {
                _fold(each(arr)._select(_.id).contains(5)))
 }
 
-[test]
+[test(description = "skip and take over from_json match the array result")]
 def parity_take_skip(t : T?) {
     let jv = fixture_json()
     let arr <- fixture_array()

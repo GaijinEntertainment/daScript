@@ -25,7 +25,7 @@ def parse_expect_fail(json_str : string; t : T?) {
 //  Parsing: scalars
 // ============================================================
 
-[test]
+[test(description = "read_json parses null, booleans, integers, floats and strings to the matching variants")]
 def test_parse_scalars(t : T?) {
     t |> run("null") @(t : T?) {
         var js = parse("null", t)
@@ -92,7 +92,7 @@ def test_parse_scalars(t : T?) {
 //  Parsing: string escapes
 // ============================================================
 
-[test]
+[test(description = "read_json decodes every string escape sequence")]
 def test_parse_string_escapes(t : T?) {
     t |> run("escaped quote") @(t : T?) {
         let input = build_string() $(var w) {
@@ -170,7 +170,7 @@ def test_parse_string_escapes(t : T?) {
 //  Parsing: arrays
 // ============================================================
 
-[test]
+[test(description = "read_json parses empty, flat, nested and mixed arrays")]
 def test_parse_arrays(t : T?) {
     t |> run("empty array") @(t : T?) {
         var js = parse("[]", t)
@@ -211,7 +211,7 @@ def test_parse_arrays(t : T?) {
 //  Parsing: objects
 // ============================================================
 
-[test]
+[test(description = "read_json parses empty, flat, nested and array-valued objects")]
 def test_parse_objects(t : T?) {
     t |> run("empty object") @(t : T?) {
         var js = parse("\{\}", t)
@@ -242,7 +242,7 @@ def test_parse_objects(t : T?) {
 //  Parsing: error handling
 // ============================================================
 
-[test]
+[test(description = "read_json reports an error for malformed documents and accepts only JSON whitespace between tokens")]
 def test_parse_errors(t : T?) {
     t |> run("empty input") @(t : T?) {
         var error : string
@@ -321,7 +321,7 @@ def test_parse_errors(t : T?) {
 //  JV constructors (json.das)
 // ============================================================
 
-[test]
+[test(description = "JV builds the matching JSON variant for each scalar type")]
 def test_jv_constructors(t : T?) {
     t |> run("JV string") @(t : T?) {
         var js = JV("hello")
@@ -370,7 +370,7 @@ def test_jv_constructors(t : T?) {
 //  write_json
 // ============================================================
 
-[test]
+[test(description = "write_json writes scalars, empty containers and null pointers and sorts object keys on request")]
 def test_write_json(t : T?) {
     t |> run("write null") @(t : T?) {
         var js = JVNull()
@@ -439,7 +439,7 @@ def test_write_json(t : T?) {
 //  roundtrip: parse → write → parse
 // ============================================================
 
-[test]
+[test(description = "write_json then read_json gives back the same scalars, objects and nesting")]
 def test_roundtrip(t : T?) {
     t |> run("roundtrip scalars") @(t : T?) {
         let inputs = array<string>("42", "3.14", "true", "false", "null", "\"hello\"")
@@ -474,7 +474,7 @@ def test_roundtrip(t : T?) {
 //  json_boost: safe access operators
 // ============================================================
 
-[test]
+[test(description = "the safe operators read present values, return null for missing keys and indices, and apply defaults and coercions")]
 def test_safe_access(t : T?) {
     t |> run("?[] on object") @(t : T?) {
         let input = "\{ \"x\": 10 \}"
@@ -559,7 +559,7 @@ struct TestStruct {
 
 def operator ==(a, b : TestStruct) => a.name == b.name && a.value == b.value && a.score == b.score
 
-[test]
+[test(description = "from_JV converts JSON values to scalars, structs and arrays and gives the default for null")]
 def test_from_jv(t : T?) {
     t |> run("from_JV int") @(t : T?) {
         var js = JV(42)
@@ -607,7 +607,7 @@ def test_from_jv(t : T?) {
 //  json_boost: JV for complex types
 // ============================================================
 
-[test]
+[test(description = "JV converts structs, arrays, tables, tuples and vectors and round-trips them")]
 def test_jv_complex(t : T?) {
     t |> run("JV struct roundtrip") @(t : T?) {
         let s = TestStruct(name = "test", value = 42, score = 1.5)
@@ -658,7 +658,7 @@ enum Color {
     blue
 }
 
-[test]
+[test(description = "an enum converts to a JSON name and back")]
 def test_enum_json(t : T?) {
     t |> run("enum to JV") @(t : T?) {
         var js = JV(Color.green)
@@ -679,7 +679,7 @@ def test_enum_json(t : T?) {
 //  json reader macro (%json~...%%)
 // ============================================================
 
-[test]
+[test(description = "the json reader macro builds object, array and nested literals")]
 def test_json_reader_macro(t : T?) {
     t |> run("simple object literal") @(t : T?) {
         var js = %json~
@@ -713,7 +713,7 @@ def test_json_reader_macro(t : T?) {
 //  settings: no_trailing_zeros, no_empty_arrays
 // ============================================================
 
-[test]
+[test(description = "the write settings suppress empty arrays and trailing zeros without changing fractions")]
 def test_write_settings(t : T?) {
     t |> run("no_empty_arrays suppresses empty arrays") @(t : T?) {
         let old = set_no_empty_arrays(true)
@@ -746,7 +746,7 @@ def test_write_settings(t : T?) {
 //  is/as variant checks via BetterJsonMacro
 // ============================================================
 
-[test]
+[test(description = "is and as select the JSON variant of a value")]
 def test_is_as_variant(t : T?) {
     t |> run("is _string") @(t : T?) {
         var js = JV("hello")
@@ -786,7 +786,7 @@ def test_is_as_variant(t : T?) {
 //  try_fixing_broken_json
 // ============================================================
 
-[test]
+[test(description = "try_fixing_broken_json repairs trailing commas, string concatenation and the listed malformed tails")]
 def test_fix_broken_json(t : T?) {
     t |> run("fix trailing comma in object") @(t : T?) {
         let bad = "\{ \"a\": 1, \}"
@@ -841,7 +841,7 @@ def operator ==(a, b : Shape) {
     return false
 }
 
-[test]
+[test(description = "a variant value round-trips through JSON")]
 def test_variant_json(t : T?) {
     t |> run("variant circle roundtrip") @(t : T?) {
         let s = Shape(circle = 5.0)

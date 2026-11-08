@@ -1,4 +1,4 @@
-// a view whose call does not compile for the value is an error
+//! a view whose call does not compile for the value is an error
 options gen2
 
 require daslib/match

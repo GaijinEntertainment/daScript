@@ -1,15 +1,23 @@
 options gen2
+//! a named pre-join where over an untranslatable column expression
+//! must be rejected instead of binding a lambda-local variable
 
-// Regression (Copilot R2, #2979): a pre-join `_where` with a NAMED receiver (`c`) over an UNTRANSLATABLE
-// column expression must reject cleanly via the source-arg guard — NOT bind `?` and splice the lambda-local
-// `c` into the runtime bind list, which fails to compile with `error[30838]: can't locate variable 'c'`.
+// Regression (Copilot R2, #2979): a pre-join `_where` with a NAMED
+// receiver (`c`) over an UNTRANSLATABLE column expression must reject
+// cleanly via the source-arg guard — NOT bind `?` and splice the
+// lambda-local `c` into the runtime bind list, which fails to compile
+// with `error[30838]: can't locate variable 'c'`.
 //
-// Multi-source (join) chains skip arg-name normalization (joins need distinct `c`/`b` names), so the LHS
-// `_where` keeps its named param. It runs in the pre-join window (rootAlias="t0", !seenJoin) where the
-// join's `into` has not populated argNames yet. The column-ref resolver already maps any field receiver to
-// t0 there (the three sites fixed in test_prejoin_where_named.das); `mentions_source_arg` — the fourth site,
-// added by the pred_to_sql audit — was missing the same fallback, so the bind guard never fired for `c`.
-// The single-source form (`_`) already rejected cleanly; this is the join-LHS analogue.
+// Multi-source (join) chains skip arg-name normalization (joins need
+// distinct `c`/`b` names), so the LHS `_where` keeps its named param.
+// It runs in the pre-join window (rootAlias="t0", !seenJoin) where
+// the join's `into` has not populated argNames yet. The column-ref
+// resolver already maps any field receiver to t0 there (the three
+// sites fixed in test_prejoin_where_named.das); `mentions_source_arg`
+// — the fourth site, added by the pred_to_sql audit — was missing the
+// same fallback, so the bind guard never fired for `c`. The
+// single-source form (`_`) already rejected cleanly; this is the
+// join-LHS analogue.
 expect 50503
 
 require daslib/sql
@@ -30,8 +38,9 @@ struct Owner {
     Name  : string
 }
 
-// Unrecognized by fn_call_to_sql → reaches pred_to_sql's bind fallthrough, where the source-arg guard must
-// catch the column reference and reject (instead of binding the whole call as `?`).
+// Unrecognized by fn_call_to_sql → reaches pred_to_sql's bind
+// fallthrough, where the source-arg guard must catch the column
+// reference and reject (instead of binding the whole call as `?`).
 def private untranslatable_score(x : int) : int {
     return x * 3 + 1
 }

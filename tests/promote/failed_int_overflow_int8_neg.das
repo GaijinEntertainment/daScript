@@ -1,4 +1,5 @@
-// -129 doesn't fit in int8 (range -128..127)
+//! -129 assigned to an int8 must not compile (30515), the range being
+//! -128..127.
 options gen2
 
 expect 30515

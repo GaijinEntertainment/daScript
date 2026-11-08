@@ -1,4 +1,5 @@
-// one match block takes either `if (pattern)` arms or `pattern => body` arms, never both
+//! one match block takes either `if (pattern)` arms or `pattern =>
+//! body` arms, never both
 options gen2
 
 require daslib/match

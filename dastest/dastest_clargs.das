@@ -24,7 +24,7 @@ struct DastestArgs {
     @clarg_doc = "Print the top N slowest test files and highlight statistical timing outliers (above mean + 2x stddev)"
     timing_outliers : int = 0
 
-    @clarg_doc = "Fail the suite when any completed test file takes longer than this many seconds. If 0, the limit is disabled"
+    @clarg_doc = "Fail the suite when any completed test file takes longer than this many seconds plus the [test(timeout = N)] budgets it declares. If 0, the limit is disabled"
     max_file_time : float = 0.0
 
     @clarg_doc = "Path to write the JSON test results report to"
@@ -57,7 +57,7 @@ struct DastestArgs {
     @clarg_doc = "Run all benchmarks this number of times (useful for sample collection)"
     count : int = 1
 
-    @clarg_doc = "Per-test timeout in seconds when running in isolated mode"
+    @clarg_doc = "Isolated mode: each file's subprocess deadline in seconds, plus every `[test(timeout = N)]` the file declares - a test that raises its own budget raises the file's by N. 0 (default) disables it"
     test_timeout : float
 
     @clarg_doc = "Folder of the test result cache. A file whose last run passed is not run again while dastest's sources, every module source its compile read, and the arguments that are not report-only all stay the same. The cache does not see the daslang binaries: whoever rebuilds them empties the folder. Empty (default) disables the cache; benchmarks, coverage and --ser/--deser runs never use it"

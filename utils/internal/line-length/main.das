@@ -50,17 +50,24 @@ def main : int {
     ])
     let untracked = git(["ls-files", "--others", "--exclude-standard", "--full-name",
                          "--", "*.das"])
-    return 1 if (!diff.ok || !untracked.ok)
+    // the base-side lines the diff removes or deletes: an added line
+    // equal to one of them is a move
+    let removed = git([
+        "diff", "-U0", "--no-color", "--no-ext-diff", "--diff-filter=DMR", strip(merge_base.out),
+        "--", "*.das"
+    ])
+    return 1 if (!diff.ok || !untracked.ok || !removed.ok)
     let top = strip(root.out)
     var total = 0
     var changed <- added_lines(diff.out)
+    let moved <- removed_lines(removed.out)
     for (path in untracked_paths(untracked.out)) {
         changed[path] <- all_lines(fread(path_join(top, path)))
     }
     for (path, lines in keys(changed), values(changed)) {
         let full = path_join(top, path)
         let text = fread(full)
-        for (f in find_violations(path, text, lines, line_length_policy_for(full))) {
+        for (f in find_violations(path, text, lines, line_length_policy_for(full), moved)) {
             to_log(LOG_ERROR, "{path}:{f.line}: {f.message}\n")
             total++
         }

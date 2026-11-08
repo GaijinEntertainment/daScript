@@ -1,6 +1,9 @@
-// Regression test for invalid_empty_name (30296) on Structure declaration.
-// The structure_macro patch() adds an empty-named Structure to the
-// compiling module; the typer fires preVisit(Structure) and rejects.
+//! A structure macro that adds a structure with an empty name must be
+//! rejected (30296).
+// Regression test for invalid_empty_name (30296) on Structure
+// declaration. The structure_macro patch() adds an empty-named
+// Structure to the compiling module; the typer fires
+// preVisit(Structure) and rejects.
 options gen2
 expect 30296
 

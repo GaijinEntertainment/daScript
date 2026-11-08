@@ -1,3 +1,6 @@
+//! A local reference bound to a ?: with a temporary arm must not
+//! compile (31019 twice), because the reference would dangle when
+//! that arm is picked.
 // a `?:` with a temporary arm is the temporary whenever the condition
 // picks that arm, so a local reference bound to it would dangle
 options gen2

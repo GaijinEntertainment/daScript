@@ -1,3 +1,4 @@
+//! [class_method] on a non-static class method does not compile
 // [class_method] applied to a non-static class method
 // verifies the static-only guard in daslib/class_boost.das ClassMethodMacro.apply
 options gen2

@@ -1,4 +1,5 @@
 options gen2
+//! create_index with an empty field name must not compile
 
 // CreateIndexMacro must reject an empty-string field name — equivalent to "fields=()".
 // Mirrors [sql_index]'s "missing or empty `fields=`" error.

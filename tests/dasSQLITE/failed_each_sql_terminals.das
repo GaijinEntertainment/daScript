@@ -1,8 +1,10 @@
 options gen2
+//! each_sql must not compile with a materializing terminal such as
+//! to_array, first or an aggregate
 
-// _each_sql rejects materializing terminals — _to_array, _first, _first_opt,
-// and aggregates each fire a macro_error pointing at `_sql(...)` for the
-// scalar / single-row form.
+// _each_sql rejects materializing terminals — _to_array, _first,
+// _first_opt, and aggregates each fire a macro_error pointing at
+// `_sql(...)` for the scalar / single-row form.
 expect 50503:4
 
 require daslib/sql

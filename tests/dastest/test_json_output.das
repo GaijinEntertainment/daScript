@@ -73,7 +73,7 @@ def find_test(report : JsonReport; name : string) : SuiteTestResult const? {
 
 // ---- Tests for JSON output with messages and location ----
 
-[test]
+[test(description = "the JSON report of a passing file counts every test as passed with no messages, no location and a positive time")]
 def test_passing_json_output(tt : T?) {
     let report = run_dastest("pass")
     tt |> equal(report.total, 2)
@@ -87,7 +87,7 @@ def test_passing_json_output(tt : T?) {
     }
 }
 
-[test]
+[test(description = "the JSON report of a failing file marks the failed test with messages and a location and leaves the passing one clean")]
 def test_failing_json_output(tt : T?) {
     let report = run_dastest("fail")
     tt |> equal(report.total, 2)
@@ -109,7 +109,7 @@ def test_failing_json_output(tt : T?) {
     }
 }
 
-[test]
+[test(description = "the JSON report records a skipped test as skipped, not passed, beside its passing sibling")]
 def test_skipped_json_output(tt : T?) {
     let report = run_dastest("skip")
     tt |> equal(report.total, 2)
@@ -127,7 +127,7 @@ def test_skipped_json_output(tt : T?) {
     }
 }
 
-[test]
+[test(description = "a --bench run's JSON report lists the benchmark as passed with its sub-benchmark ns/op and B/op stats in its messages")]
 def test_benchmark_json_output(tt : T?) {
     let report = run_dastest("bench", "--bench")
     tt |> success(!empty(report.tests), "should have at least one result in tests array")
@@ -145,14 +145,14 @@ def test_benchmark_json_output(tt : T?) {
     }
 }
 
-[test]
+[test(description = "--test-only runs the named file alone and a name matching nothing runs no tests")]
 def test_test_only_filter(tt : T?) {
     let fixture = "{get_das_root()}/tests/dastest/_fixture_pass.das"
     tt |> equal(run_dastest("pass", "--test-only {fixture}").total, 2)
     tt |> equal(run_dastest("pass", "--test-only {fixture}.other").total, 0)
 }
 
-[test]
+[test(description = "--test-names keeps only the tests whose names it lists")]
 def test_test_name_filter(tt : T?) {
     let report = run_dastest("pass", "--test-names test_passing")
     tt |> equal(report.total, 1)

@@ -1,4 +1,6 @@
-// an arm can't declare a name its pattern binds - a let, a for iterator, a block argument or a comprehension variable shadows the binding, as outside a match
+//! an arm can't declare a name its pattern binds - a let, a for
+//! iterator, a block argument or a comprehension variable shadows the
+//! binding, as outside a match
 options gen2
 
 require daslib/match

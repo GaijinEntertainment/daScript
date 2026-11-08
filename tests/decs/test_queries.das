@@ -7,7 +7,7 @@ require daslib/decs_boost
 require dastest/testing_boost public
 require daslib/static_let
 
-[test]
+[test(description = "nested queries visit the expected entities, with break and continue")]
 def test_queries(t : T?) {
     restart()
     for (i in range(3)) {
@@ -63,7 +63,7 @@ def test_queries(t : T?) {
 }
 
 
-[test]
+[test(description = "a REQUIRE or REQUIRE_NOT contract filters the entities a query sees")]
 def test_contracts(t : T?) {
     restart()
     for (i in range(3)) {
@@ -98,7 +98,7 @@ def test_contracts(t : T?) {
     }
 }
 
-[test]
+[test(description = "find_query returns the first matching entity and stops")]
 def test_find_query(t : T?) {
     restart()
     for (i in range(3)) {
@@ -132,7 +132,7 @@ def test_find_query(t : T?) {
     }
 }
 
-[test]
+[test(description = "a query can take the entity id as an argument")]
 def test_query_eid(t : T?) {
     restart()
     let EID = create_entity() @(eid, cmp) {
@@ -152,7 +152,7 @@ struct Something {
     a : int
 }
 
-[test]
+[test(description = "a query by entity id reads a template object")]
 def test_query_eid_obj(t : T?) {
     restart()
     let EID = create_entity() @(eid, cmp) {
@@ -167,7 +167,7 @@ def test_query_eid_obj(t : T?) {
     t |> equal(count, 1)
 }
 
-[test]
+[test(description = "a query with no component filter visits every entity")]
 def test_query_everything(t : T?) {
     restart()
     create_entity() @(eid, cmp) {
@@ -193,7 +193,7 @@ def test_query_everything(t : T?) {
     }
 }
 
-[test]
+[test(description = "an aka argument lets nested queries read the same component under two names")]
 def test_aka_query(t : T?) {
     restart()
     for (i in range(10)) {
@@ -216,4 +216,40 @@ def test_aka_query(t : T?) {
     t |> equal(equ, 10)
 }
 
-
+[test(description = "an optional query argument is null when the component is missing, and a non-optional pointer argument fails at run time")]
+def test_optional_values(t : T?) {
+    restart()
+    create_entity() @(eid, cmp) {
+        cmp.a := 1
+    }
+    create_entity() @(eid, cmp) {
+        cmp.a := 2
+        cmp.b := 10
+    }
+    commit()
+    t |> run("proper optional") @@(t : T?) {
+        var count = 0
+        query() $(a : int; @optional b : int?) {
+            if (b == null) {
+                t |> equal(a, 1)
+            } else {
+                t |> equal(a, 2)
+                t |> equal(*b, 10)
+            }
+            count ++
+        }
+        t |> equal(count, 2)
+    }
+    t |> run("proper optional") @@(t : T?) {
+        var failed = false
+        try {
+            // runtime error - component array b type mismatch, expecting int vs int?
+            query() $(a : int; b : int?) {// note no optional
+                pass
+            }
+        } recover {
+            failed = true
+        }
+        t |> success(failed)
+    }
+}

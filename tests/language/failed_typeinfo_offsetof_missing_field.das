@@ -1,3 +1,5 @@
+//! typeinfo offsetof of a field the struct does not have reports an
+//! error instead of crashing
 // typeinfo offsetof of a missing field is an error, not a crash
 options gen2
 expect 30825

@@ -27,7 +27,7 @@ def compile_under_lint_policies(t : T?; blk : block<(program : smart_ptr<Program
     }
 }
 
-[test]
+[test(description = "an array dimension expression still folds when infer-time folding is off")]
 def test_dimension_expression_folds_without_infer_time_folding(t : T?) {
     t |> run("an array dimension folds even with folding off") @@(t : T?) {
         compile_under_lint_policies(t) $(program) {
@@ -38,7 +38,7 @@ def test_dimension_expression_folds_without_infer_time_folding(t : T?) {
 
 // The fold is granted per const the compiler demanded a constant of.  A const
 // nobody demanded keeps its initializer whole, which is what lint reads.
-[test]
+[test(description = "a const nobody demanded a constant of keeps its whole initializer, so lint still sees the cast")]
 def test_an_undemanded_const_keeps_its_initializer(t : T?) {
     t |> run("lint still sees the cast in an undemanded const") @@(t : T?) {
         compile_under_lint_policies(t) $(program) {
@@ -58,7 +58,7 @@ def test_an_undemanded_const_keeps_its_initializer(t : T?) {
 
 // What a backend asks when it needs a value the policy left unfolded: the answer is the
 // constant, and the initializer lint reads is still the arithmetic that was written.
-[test]
+[test(description = "get_const_expr still answers a constant for an undemanded const")]
 def test_an_undemanded_const_answers_a_constant(t : T?) {
     t |> run("get_const_expr answers an undemanded const") @@(t : T?) {
         compile_under_lint_policies(t) $(program) {

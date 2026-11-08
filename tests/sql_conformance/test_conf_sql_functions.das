@@ -1,13 +1,14 @@
 options gen2
-options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
+
 
 // Contract area: [sql_function] client-side UDFs — CAPABILITY-GATED (caps.client_udfs).
 // A provider without client UDFs (e.g. PostgreSQL) drops this FILE from its copy of
 // the suite — see README.md.
 
 require dastest/testing_boost public
+
 require _conformance_provider
 
 [sql_table(name = "ConfEnemies")]
@@ -20,7 +21,7 @@ struct ConfEnemy {
 [sql_function(deterministic = true)]
 def conf_score(hp : float; armor : int) : double => double(hp) * (1.0lf - double(armor) / 100.0lf)
 
-[test]
+[test(description = "a sql_function is visible to _sql chains", standalone = "a provider copies this directory and drops files per capability; the file is the unit")]
 def test_conf_sql_function(t : T?) {
     t |> run("[sql_function] UDF is visible to _sql chains") @(t : T?) {
         with_conf_db() $(db) {

@@ -50,7 +50,7 @@ def private seed_decs() {
 
 // ===== array source =====
 
-[test]
+[test(description = "a %linq! from/where/select query over an array returns the projected elements of the matching rows")]
 def test_array_where_select(t : T?) {
     let cars <- mk_cars()
     let names <- %linq! from c in cars where c.price > 100 select c.name %%
@@ -59,7 +59,7 @@ def test_array_where_select(t : T?) {
     t |> equal(names[1], "lux")
 }
 
-[test]
+[test(description = "several where clauses in one %linq! query combine as a conjunction")]
 def test_array_multiple_where(t : T?) {
     let cars <- mk_cars()
     // C# allows several `where` clauses — each emits its own `_where` (AND-folded, source order).
@@ -68,7 +68,7 @@ def test_array_multiple_where(t : T?) {
     t |> equal(names[0], "mid")
 }
 
-[test]
+[test(description = "a where placed after an orderby still filters the sorted rows")]
 def test_array_where_after_orderby(t : T?) {
     let cars <- mk_cars()
     // a `where` after the `orderby` filters the sorted sequence — same result as filtering first (total
@@ -79,7 +79,7 @@ def test_array_where_after_orderby(t : T?) {
     t |> equal(names[1], "cheap")
 }
 
-[test]
+[test(description = "a query with no where projects every element")]
 def test_array_select_only(t : T?) {
     let cars <- mk_cars()
     let names <- %linq! from c in cars select c.name %%
@@ -87,7 +87,7 @@ def test_array_select_only(t : T?) {
     t |> equal(names[0], "cheap")
 }
 
-[test]
+[test(description = "select of the range variable itself returns the filtered structs unchanged")]
 def test_array_identity_select(t : T?) {
     let cars <- mk_cars()
     let kept <- %linq! from c in cars where c.price >= 150 select c %%
@@ -95,7 +95,7 @@ def test_array_identity_select(t : T?) {
     t |> equal(kept[0].name, "mid")
 }
 
-[test]
+[test(description = "parenthesized predicates and numeric projections parse and select the one matching row")]
 def test_array_numeric_projection_and_parens(t : T?) {
     let cars <- mk_cars()
     let prices <- %linq! from c in cars where (c.price > 100) && c.price < 300 select c.price %%
@@ -103,7 +103,7 @@ def test_array_numeric_projection_and_parens(t : T?) {
     t |> equal(prices[0], 150)
 }
 
-[test]
+[test(description = "keywords and the range variable name inside a string literal in the predicate are left alone")]
 def test_array_string_literal_in_predicate(t : T?) {
     // the keyword 'select' and range var 'c' inside a string literal must NOT be touched
     let cars <- mk_cars()
@@ -112,7 +112,7 @@ def test_array_string_literal_in_predicate(t : T?) {
     t |> equal(names[0], "lux")
 }
 
-[test]
+[test(description = "a multi-character range variable name is spliced verbatim into the query")]
 def test_array_arbitrary_range_var_name(t : T?) {
     let cars <- mk_cars()
     let names <- %linq! from car in cars where car.price > 100 select car.name %%
@@ -120,14 +120,14 @@ def test_array_arbitrary_range_var_name(t : T?) {
     t |> equal(names[0], "mid")
 }
 
-[test]
+[test(description = "a %linq! query works as a call argument inside a larger expression")]
 def test_array_inline_in_larger_expression(t : T?) {
     let cars <- mk_cars()
     let n = length(%linq! from c in cars where c.price > 100 select c.name %%)
     t |> equal(n, 2, "query result used directly as a call argument")
 }
 
-[test]
+[test(description = "a query body spread over several lines parses like a one-line query")]
 def test_array_multiline_query(t : T?) {
     let cars <- mk_cars()
     let names <- %linq!
@@ -138,7 +138,7 @@ def test_array_multiline_query(t : T?) {
     t |> equal(length(names), 2, "multi-line query body parses identically")
 }
 
-[test]
+[test(description = "comments inside the query body are blanked, so keywords in them neither split clauses nor leak into the chain")]
 def test_comments_in_body_are_stripped(t : T?) {
     // line/block comments are blanked before parsing — a keyword or range var inside a comment must not
     // confuse the clause splitter, and the comment must not leak into the spliced chain.
@@ -153,7 +153,7 @@ def test_comments_in_body_are_stripped(t : T?) {
     t |> equal(names[0], "mid")
 }
 
-[test]
+[test(description = "the trailing iterator keyword yields a lazy iterator of the projected elements")]
 def test_array_iterator_output(t : T?) {
     // trailing `iterator` keyword → lazy iterator<T> (consumed here by a comprehension)
     let cars <- mk_cars()
@@ -165,14 +165,14 @@ def test_array_iterator_output(t : T?) {
 
 // ===== decs source (typed range variable `: CarComp` + the `decs` keyword marker) =====
 
-[test]
+[test(description = "where and select over a decs source with a typed range variable return the matching components")]
 def test_decs_where_select(t : T?) {
     seed_decs()
     let names <- %linq! from c : CarComp in decs where c.price > 100 select c.name %%
     t |> equal(length(names), 2, "decs: where filters, select projects")
 }
 
-[test]
+[test(description = "several where clauses over a decs source combine as a conjunction")]
 def test_decs_multiple_where(t : T?) {
     seed_decs()
     // decs rows: car0(100,a), car1(200,a), car2(300,b). price>100 → car1,car2; brand a → car1.
@@ -181,14 +181,14 @@ def test_decs_multiple_where(t : T?) {
     t |> equal(names[0], "car1")
 }
 
-[test]
+[test(description = "select of the range variable over a decs source returns whole rows")]
 def test_decs_identity_select(t : T?) {
     seed_decs()
     let rows <- %linq! from c : CarComp in decs where c.price >= 200 select c %%
     t |> equal(length(rows), 2, "decs identity select returns the row tuples")
 }
 
-[test]
+[test(description = "the iterator suffix over a decs source yields a lazy iterator of the results")]
 def test_decs_iterator_output(t : T?) {
     seed_decs()
     let names <- [for (nm in %linq! from c : CarComp in decs where c.price > 100 select c.name iterator %%); nm]
@@ -206,7 +206,7 @@ def private mk_car_tab() : table<int; Car> {
     }
 }
 
-[test]
+[test(description = "a query over a table filters and projects through kv.key and kv.value")]
 def test_table_kv_where_select(t : T?) {
     let tab <- mk_car_tab()
     let prices <- %linq! from kv in tab where kv.value.price > 100 select kv.value.price %%
@@ -214,7 +214,7 @@ def test_table_kv_where_select(t : T?) {
     t |> equal(prices[0] + prices[1], 450, "mid + lux, slot-order-insensitive")
 }
 
-[test]
+[test(description = "a table query can project only the key")]
 def test_table_kv_key_only(t : T?) {
     let tab <- mk_car_tab()
     let ks <- %linq! from kv in tab where kv.key != 2 select kv.key %%
@@ -222,7 +222,7 @@ def test_table_kv_key_only(t : T?) {
     t |> equal(ks[0] + ks[1], 4, "keys 1 + 3")
 }
 
-[test]
+[test(description = "select of the range variable over a table returns the key-value pairs")]
 def test_table_kv_identity_select(t : T?) {
     let tab <- mk_car_tab()
     let rows <- %linq! from kv in tab where kv.value.brand == "eco" select kv %%
@@ -231,7 +231,7 @@ def test_table_kv_identity_select(t : T?) {
     t |> equal(rows[0].value.price + rows[1].value.price, 200, "eco prices 50 + 150")
 }
 
-[test]
+[test(description = "orderby over a table source sorts the pairs by the chosen key")]
 def test_table_kv_orderby(t : T?) {
     let tab <- mk_car_tab()
     // orderby makes the unspecified slot order deterministic
@@ -241,7 +241,7 @@ def test_table_kv_orderby(t : T?) {
     t |> equal(names[2], "cheap")
 }
 
-[test]
+[test(description = "group by over a table source buckets the pairs by key")]
 def test_table_kv_group_by(t : T?) {
     let tab <- mk_car_tab()
     let buckets <- %linq! from kv in tab group kv by kv.value.brand %%
@@ -251,7 +251,7 @@ def test_table_kv_group_by(t : T?) {
     }
 }
 
-[test]
+[test(description = "a let binding over a table source can be used downstream")]
 def test_table_kv_let(t : T?) {
     let tab <- mk_car_tab()
     let doubled <- %linq! from kv in tab let p = kv.value.price * 2 where p >= 300 select p %%
@@ -259,7 +259,7 @@ def test_table_kv_let(t : T?) {
     t |> equal(doubled[0] + doubled[1], 900, "2*150 + 2*300")
 }
 
-[test]
+[test(description = "the iterator suffix over a table source yields a lazy iterator")]
 def test_table_kv_iterator_output(t : T?) {
     let tab <- mk_car_tab()
     let got <- [for (nm in %linq! from kv in tab orderby kv.value.price select kv.value.name iterator %%); nm]
@@ -267,7 +267,7 @@ def test_table_kv_iterator_output(t : T?) {
     t |> equal(got[0], "cheap")
 }
 
-[test]
+[test(description = "a query over a set table iterates its keys")]
 def test_table_set_form(t : T?) {
     var s : table<int> <- { 5, 7, 9 }
     let big <- %linq! from k in s where k > 6 select k %%
@@ -275,7 +275,7 @@ def test_table_set_form(t : T?) {
     t |> equal(big[0] + big[1], 16, "7 + 9")
 }
 
-[test]
+[test(description = "a table query accepts a multi-character range variable name")]
 def test_table_arbitrary_range_var_name(t : T?) {
     let tab <- mk_car_tab()
     // the kv pair name is the range variable — any identifier works
@@ -284,7 +284,7 @@ def test_table_arbitrary_range_var_name(t : T?) {
     t |> equal(names[0], "lux")
 }
 
-[test]
+[test(description = "a table works as the right side of a join clause")]
 def test_table_as_join_right_source(t : T?) {
     // a table works on either side of a join (the kv pair is that side's row). A right-side table
     // joined on its bare `.key` fuses as a key probe — no internal join hash.
@@ -298,7 +298,7 @@ def test_table_as_join_right_source(t : T?) {
     t |> equal(rows[2], "lux=99")
 }
 
-[test]
+[test(description = "a table works as the left side of a join clause")]
 def test_table_as_join_left_source(t : T?) {
     let cars <- mk_cars()
     let prio <- { "eco" => 10, "lux" => 99 }
@@ -311,7 +311,7 @@ def test_table_as_join_left_source(t : T?) {
     t |> equal(rows[2], "mid=10")
 }
 
-[test]
+[test(description = "a set table works as a join source")]
 def test_set_as_join_source(t : T?) {
     // a table<K> set joins on its bare element — membership probe
     let cars <- mk_cars()
@@ -321,7 +321,7 @@ def test_set_as_join_source(t : T?) {
     t |> equal(names[0], "lux")
 }
 
-[test]
+[test(description = "a table joined with join into g exposes the matching rows as a group")]
 def test_table_join_into_group(t : T?) {
     // `into` (group join) over a table right source stays OUTER — the probe never fires (its result
     // consumes the whole bucket), the hashed walk does
@@ -336,7 +336,7 @@ def test_table_join_into_group(t : T?) {
 
 // ===== orderby (single key, optional `descending`) =====
 
-[test]
+[test(description = "orderby sorts the rows ascending by the key")]
 def test_array_orderby_asc(t : T?) {
     let cars <- mk_cars()
     let names <- %linq! from c in cars orderby c.price select c.name %%
@@ -346,7 +346,7 @@ def test_array_orderby_asc(t : T?) {
     t |> equal(names[2], "lux")     // 300
 }
 
-[test]
+[test(description = "orderby descending sorts the rows descending")]
 def test_array_orderby_descending(t : T?) {
     let cars <- mk_cars()
     let names <- %linq! from c in cars orderby c.price descending select c.name %%
@@ -355,7 +355,7 @@ def test_array_orderby_descending(t : T?) {
     t |> equal(names[2], "cheap")
 }
 
-[test]
+[test(description = "where followed by orderby filters first and sorts the survivors")]
 def test_array_where_orderby(t : T?) {
     let cars <- mk_cars()
     let names <- %linq! from c in cars where c.price >= 150 orderby c.price descending select c.name %%
@@ -364,7 +364,7 @@ def test_array_where_orderby(t : T?) {
     t |> equal(names[1], "mid")
 }
 
-[test]
+[test(description = "orderby with select of the whole row returns the sorted structs")]
 def test_array_orderby_identity_select(t : T?) {
     let cars <- mk_cars()
     let rows <- %linq! from c in cars orderby c.price select c %%
@@ -373,7 +373,7 @@ def test_array_orderby_identity_select(t : T?) {
     t |> equal(rows[2].name, "lux")
 }
 
-[test]
+[test(description = "orderby with the iterator suffix yields the sorted rows lazily")]
 def test_array_orderby_iterator(t : T?) {
     let cars <- mk_cars()
     let got <- [for (nm in %linq! from c in cars orderby c.price descending select c.name iterator %%); nm]
@@ -381,7 +381,7 @@ def test_array_orderby_iterator(t : T?) {
     t |> equal(got[2], "cheap")
 }
 
-[test]
+[test(description = "orderby over a decs source sorts the components")]
 def test_decs_orderby(t : T?) {
     seed_decs()
     let names <- %linq! from c : CarComp in decs orderby c.price descending select c.name %%
@@ -401,7 +401,7 @@ def private mk_cars_ties() : array<Car> {
                Car(name = "e", price = 200, brand = "lux")]
 }
 
-[test]
+[test(description = "a two-key orderby sorts by the first key then breaks ties by the second")]
 def test_array_orderby_multi_asc(t : T?) {
     let cars <- mk_cars_ties()
     let rows <- %linq! from c in cars orderby c.brand, c.price select c.name %%
@@ -414,7 +414,7 @@ def test_array_orderby_multi_asc(t : T?) {
     t |> equal(rows[4], "e")
 }
 
-[test]
+[test(description = "a multi-key orderby honors a separate direction per key")]
 def test_array_orderby_mixed_dir(t : T?) {
     let cars <- mk_cars_ties()
     let rows <- %linq! from c in cars orderby c.brand, c.price descending select c.name %%
@@ -426,7 +426,7 @@ def test_array_orderby_mixed_dir(t : T?) {
     t |> equal(rows[4], "c")
 }
 
-[test]
+[test(description = "a three-key orderby sorts by all keys in order")]
 def test_array_orderby_3key(t : T?) {
     // all tie on (brand, price); the 3rd key (name asc) reorders vs input order z, a, m
     let cars <- [Car(name = "z", price = 100, brand = "eco"),
@@ -438,7 +438,7 @@ def test_array_orderby_3key(t : T?) {
     t |> equal(rows[2], "z")
 }
 
-[test]
+[test(description = "_order_by_keys called directly gives the same composite stable sort as the query form")]
 def test_array_orderby_keys_op_direct(t : T?) {
     // hand-written fold-op form (brand asc, price desc) — exercises _order_by_keys directly
     let cars <- mk_cars_ties()
@@ -448,7 +448,7 @@ def test_array_orderby_keys_op_direct(t : T?) {
     t |> equal(rows[4].name, "c")
 }
 
-[test]
+[test(description = "a multi-key orderby over a decs source sorts by every key")]
 def test_decs_orderby_multi(t : T?) {
     seed_decs()
     // brand asc, price desc; decs: car0(100,a) car1(200,a) car2(300,b)
@@ -461,7 +461,7 @@ def test_decs_orderby_multi(t : T?) {
 
 // ===== group … by (terminal; IGrouping `(key, [elems])` per bucket; in-memory sources) =====
 
-[test]
+[test(description = "group by yields one (key, members) bucket per distinct key")]
 def test_array_group_by(t : T?) {
     let cars <- mk_cars()
     let groups <- %linq! from c in cars group c by c.brand %%
@@ -476,7 +476,7 @@ def test_array_group_by(t : T?) {
     t |> equal(luxN, 1, "lux bucket has lux")
 }
 
-[test]
+[test(description = "a where before group by filters rows before they are bucketed")]
 def test_array_group_with_where(t : T?) {
     let cars <- mk_cars()
     // price>=150 keeps mid(eco), lux(lux) → one element each
@@ -485,7 +485,7 @@ def test_array_group_with_where(t : T?) {
     for (g in groups) { t |> equal(length(g._1), 1) }
 }
 
-[test]
+[test(description = "group by with the iterator suffix yields the buckets lazily")]
 def test_array_group_iterator(t : T?) {
     let cars <- mk_cars()
     var n = 0
@@ -493,7 +493,7 @@ def test_array_group_iterator(t : T?) {
     t |> equal(n, 2, "group iterator yields the buckets")
 }
 
-[test]
+[test(description = "group by over a decs source yields one bucket per distinct key")]
 def test_decs_group_by(t : T?) {
     seed_decs()
     let groups <- %linq! from c : CarComp in decs group c by c.brand %%
@@ -518,7 +518,7 @@ def private mk_brands() : array<BrandHQ> {
                BrandHQ(brand = "lux", country = "Italy")]
 }
 
-[test]
+[test(description = "join on equals with a scalar select pairs matching rows from both sides")]
 def test_join_select_terminal_scalar(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -528,7 +528,7 @@ def test_join_select_terminal_scalar(t : T?) {
     t |> equal(names[2], "lux")
 }
 
-[test]
+[test(description = "join with a tuple select can read both range variables")]
 def test_join_select_terminal_tuple(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -539,7 +539,7 @@ def test_join_select_terminal_tuple(t : T?) {
     t |> equal(rows[2].Country, "Italy")
 }
 
-[test]
+[test(description = "join with a whole-row select returns the paired rows")]
 def test_join_select_terminal_whole_row(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -548,7 +548,7 @@ def test_join_select_terminal_whole_row(t : T?) {
     t |> equal(rows[1].name, "mid")
 }
 
-[test]
+[test(description = "a where before the join filters the left source")]
 def test_join_pre_join_where(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -560,7 +560,7 @@ def test_join_pre_join_where(t : T?) {
     t |> equal(rows[1].Country, "Italy")
 }
 
-[test]
+[test(description = "a where after the join filters the joined pairs")]
 def test_join_post_join_where(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -571,7 +571,7 @@ def test_join_post_join_where(t : T?) {
     t |> equal(names[1], "mid")
 }
 
-[test]
+[test(description = "several where clauses before the join all filter the left source")]
 def test_join_multiple_pre_where(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -584,7 +584,7 @@ def test_join_multiple_pre_where(t : T?) {
     t |> equal(rows[0].Country, "USA")
 }
 
-[test]
+[test(description = "several where clauses after the join all filter the joined pairs")]
 def test_join_multiple_post_where(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -596,7 +596,7 @@ def test_join_multiple_post_where(t : T?) {
     t |> equal(names[0], "mid")
 }
 
-[test]
+[test(description = "where clauses before and after the join each apply at their own stage")]
 def test_join_mixed_pre_post_where(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -609,7 +609,7 @@ def test_join_mixed_pre_post_where(t : T?) {
     t |> equal(names[0], "mid")
 }
 
-[test]
+[test(description = "an orderby after the join sorts the joined pairs")]
 def test_join_orderby(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -619,7 +619,7 @@ def test_join_orderby(t : T?) {
     t |> equal(names[2], "cheap")
 }
 
-[test]
+[test(description = "a group by after the join buckets the joined pairs")]
 def test_join_group_after(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -644,7 +644,7 @@ def private mk_brands3() : array<BrandHQ> {
                BrandHQ(brand = "sport", country = "Germany")]   // no car → outer empty group
 }
 
-[test]
+[test(description = "join into g counts the matching right rows per left row, with an empty group for an unmatched left row")]
 def test_join_into_group_count(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands3()
@@ -659,7 +659,7 @@ def test_join_into_group_count(t : T?) {
     }
 }
 
-[test]
+[test(description = "join into g lets a select sum a field over the matching right rows")]
 def test_join_into_group_sum(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -673,7 +673,7 @@ def test_join_into_group_sum(t : T?) {
     }
 }
 
-[test]
+[test(description = "a where before join into g filters the left source")]
 def test_join_into_pre_where(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands3()
@@ -689,7 +689,7 @@ def test_join_into_pre_where(t : T?) {
     }
 }
 
-[test]
+[test(description = "join into g with the iterator suffix yields the group rows lazily")]
 def test_join_into_iterator(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands3()
@@ -698,7 +698,7 @@ def test_join_into_iterator(t : T?) {
     t |> equal(n, 3, "iterator over every brand (outer)")
 }
 
-[test]
+[test(description = "a string-interpolating select can read both range variables of a join")]
 def test_join_string_interpolation_select(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -708,7 +708,7 @@ def test_join_string_interpolation_select(t : T?) {
     t |> equal(labels[2], "lux:Italy")
 }
 
-[test]
+[test(description = "a join with the iterator suffix yields the pairs lazily")]
 def test_join_iterator_output(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -738,7 +738,7 @@ def private seed_decs_join() {
     commit()
 }
 
-[test]
+[test(description = "join with a decs source pairs matching components in a select")]
 def test_decs_join_select_terminal(t : T?) {
     seed_decs_join()
     let rows <- %linq! from c : CarComp in decs join d : DealerComp in decs on c.brand equals d.brand select (Name = c.name, Region = d.region) %%
@@ -755,7 +755,7 @@ def test_decs_join_select_terminal(t : T?) {
 
 // ===== cross_join engine (plain `_fold`, no reader) — the ops the uncorrelated multiple-`from` rides =====
 
-[test]
+[test(description = "to_array on an array moves it through unchanged")]
 def test_to_array_array_noop(t : T?) {
     // to_array(array<T>) is a move-through no-op (moved sqlite_linq → builtin so source-agnostic emitters
     // can append `|> to_array()` over any source). Consumes a temporary — the cross_join result the reader
@@ -766,7 +766,7 @@ def test_to_array_array_noop(t : T?) {
     t |> equal(r[2], 30)
 }
 
-[test]
+[test(description = "_cross_join with an untyped result lambda in _fold yields the 3 by 2 = 6 pairs")]
 def test_cross_join_untyped_lambda_fold(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -779,7 +779,7 @@ def test_cross_join_untyped_lambda_fold(t : T?) {
 // `from c in A from b in B …` with B independent of `c`. Same clause grammar as `join` (pre/post `where`,
 // `orderby`, `select`/`group`, transparent-id carry, `iterator`) minus the `on … equals`. (See linq_das.rst.)
 
-[test]
+[test(description = "two independent from clauses with a scalar select produce the cross product")]
 def test_multifrom_scalar(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -787,7 +787,7 @@ def test_multifrom_scalar(t : T?) {
     t |> equal(length(names), 6, "3 cars × 2 brands")
 }
 
-[test]
+[test(description = "two independent from clauses with a tuple select can read both range variables")]
 def test_multifrom_tuple(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -798,7 +798,7 @@ def test_multifrom_tuple(t : T?) {
     t |> equal(rows[1].Country, "Italy")   // cheap×lux second
 }
 
-[test]
+[test(description = "two independent from clauses with a whole-row select return the paired rows")]
 def test_multifrom_whole_row(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -808,7 +808,7 @@ def test_multifrom_whole_row(t : T?) {
     t |> equal(rows[2].name, "mid")
 }
 
-[test]
+[test(description = "a where between the two from clauses filters the first source")]
 def test_multifrom_pre_where(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -819,7 +819,7 @@ def test_multifrom_pre_where(t : T?) {
     t |> equal(names[3], "lux")
 }
 
-[test]
+[test(description = "a where after both from clauses filters the cross pairs")]
 def test_multifrom_post_where(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -832,7 +832,7 @@ def test_multifrom_post_where(t : T?) {
     t |> equal(names[2], "lux")
 }
 
-[test]
+[test(description = "several where clauses around multiple from clauses all apply")]
 def test_multifrom_multiple_where(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -845,7 +845,7 @@ def test_multifrom_multiple_where(t : T?) {
     t |> equal(names[1], "lux")
 }
 
-[test]
+[test(description = "an orderby after multiple from clauses sorts the cross pairs")]
 def test_multifrom_orderby(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -855,7 +855,7 @@ def test_multifrom_orderby(t : T?) {
     t |> equal(names[5], "cheap")  // price 50
 }
 
-[test]
+[test(description = "a group by after multiple from clauses buckets the cross pairs")]
 def test_multifrom_group_after(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -867,7 +867,7 @@ def test_multifrom_group_after(t : T?) {
     }
 }
 
-[test]
+[test(description = "a string-interpolating select can read both range variables of a cross")]
 def test_multifrom_string_interpolation(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -876,7 +876,7 @@ def test_multifrom_string_interpolation(t : T?) {
     t |> equal(labels[0], "cheap:USA")   // lowest price, cheap×eco first
 }
 
-[test]
+[test(description = "multiple from clauses with the iterator suffix yield the pairs lazily")]
 def test_multifrom_iterator_output(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -885,7 +885,7 @@ def test_multifrom_iterator_output(t : T?) {
     t |> equal(n, 6)
 }
 
-[test]
+[test(description = "multiple from clauses work with a decs source")]
 def test_multifrom_decs(t : T?) {
     seed_decs_join()
     // decs × decs cross — from_decs_template field-tuples + the LinqCrossJoin injection. 3 cars × 2 dealers.
@@ -919,7 +919,7 @@ def private mk_orders() : array<Order> {
     return <- [o1, o2, o3]
 }
 
-[test]
+[test(description = "_select_many with an untyped pair lambda in _fold flattens the inner collections")]
 def test_select_many_pair_untyped_fold(t : T?) {
     let orders <- mk_orders()
     // UNTYPED lambdas — proves the two-stage `_select_many` op-macro injects (o : Order) then (x : Line),
@@ -934,7 +934,7 @@ def test_select_many_pair_untyped_fold(t : T?) {
     t |> equal(rows[3].sku, "d")
 }
 
-[test]
+[test(description = "a second from over a field of the first flattens it and a select can read both range variables")]
 def test_correlated_project_both(t : T?) {
     let orders <- mk_orders()
     // headline correlated case — the result selector references BOTH the outer and inner range vars.
@@ -946,7 +946,7 @@ def test_correlated_project_both(t : T?) {
     t |> equal(rows[2].Sku, "c")
 }
 
-[test]
+[test(description = "a correlated from with a select of the inner variable only yields the flattened inner rows")]
 def test_correlated_project_inner(t : T?) {
     let orders <- mk_orders()
     let skus <- %linq! from o in orders from l in o.lines select l.sku %%
@@ -955,7 +955,7 @@ def test_correlated_project_inner(t : T?) {
     t |> equal(skus[3], "d")
 }
 
-[test]
+[test(description = "a post-from where on the inner variable is pushed into the collection before flattening")]
 def test_correlated_push_where(t : T?) {
     let orders <- mk_orders()
     // inner-only post-`from` `where` — pushed into the collection (filter o.lines before flattening).
@@ -967,7 +967,7 @@ def test_correlated_push_where(t : T?) {
     t |> equal(rows[2].Sku, "d")
 }
 
-[test]
+[test(description = "several inner-only where clauses on a correlated from all apply before flattening")]
 def test_correlated_multiple_inner_where(t : T?) {
     let orders <- mk_orders()
     // two inner-only post-`from` `where`s both push into the collection (filter before flattening).
@@ -978,7 +978,7 @@ def test_correlated_multiple_inner_where(t : T?) {
     t |> equal(rows[1].Sku, "d")
 }
 
-[test]
+[test(description = "a where before a correlated from filters the outer rows")]
 def test_correlated_pre_where(t : T?) {
     let orders <- mk_orders()
     // pre-`from` `where` filters the OUTER (orders 2, 3) before flattening.
@@ -988,7 +988,7 @@ def test_correlated_pre_where(t : T?) {
     t |> equal(skus[1], "d")
 }
 
-[test]
+[test(description = "a correlated from with the iterator suffix yields the flattened rows lazily")]
 def test_correlated_iterator_output(t : T?) {
     let orders <- mk_orders()
     var n = 0
@@ -1001,7 +1001,7 @@ def test_correlated_iterator_output(t : T?) {
 // `(<expr>)`, so the chain is identical to writing the expression out by hand. Works in every context and,
 // for SQL, the inlined computed column/key pushes down (see tests/dasSQLITE/test_linq_das_sql.das).
 
-[test]
+[test(description = "a let binding is usable in both a following where and select")]
 def test_let_where_and_select(t : T?) {
     let cars <- mk_cars()
     // `net` is reused in both the where predicate and the projection — inlined at each site.
@@ -1013,7 +1013,7 @@ def test_let_where_and_select(t : T?) {
     t |> equal(rows[1].Net, 140)
 }
 
-[test]
+[test(description = "a later let binding can use an earlier one")]
 def test_let_chained(t : T?) {
     let cars <- mk_cars()
     // `net` references the earlier `disc` — chained lets resolve in order.
@@ -1026,7 +1026,7 @@ def test_let_chained(t : T?) {
     t |> equal(rows[2].Net, 45)
 }
 
-[test]
+[test(description = "a let binding feeds a select-only query")]
 def test_let_computed_select_only(t : T?) {
     let cars <- mk_cars()
     let rows <- %linq! from c in cars let tax = c.price / 5 select (N = c.name, Tax = tax) %%
@@ -1035,7 +1035,7 @@ def test_let_computed_select_only(t : T?) {
     t |> equal(rows[2].Tax, 60)   // 300/5
 }
 
-[test]
+[test(description = "a let binding can serve as the group by key")]
 def test_let_in_group_key(t : T?) {
     let cars <- mk_cars()
     let groups <- %linq! from c in cars let b = c.brand group c by b %%
@@ -1046,7 +1046,7 @@ def test_let_in_group_key(t : T?) {
     }
 }
 
-[test]
+[test(description = "a let binding works over a decs source")]
 def test_let_decs(t : T?) {
     seed_decs()
     let names <- %linq! from c : CarComp in decs let hi = c.price * 2 orderby hi descending select c.name %%
@@ -1055,7 +1055,7 @@ def test_let_decs(t : T?) {
     t |> equal(names[2], "car0")   // 100*2 lowest
 }
 
-[test]
+[test(description = "a let binding after a join can combine both range variables")]
 def test_let_join_both_vars(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -1067,7 +1067,7 @@ def test_let_join_both_vars(t : T?) {
     t |> equal(tags[2], "lux:Italy")
 }
 
-[test]
+[test(description = "a let binding works after multiple from clauses")]
 def test_let_cross(t : T?) {
     let cars <- mk_cars()
     let brands <- mk_brands()
@@ -1076,7 +1076,7 @@ def test_let_cross(t : T?) {
     t |> equal(pairs[0], "cheap/USA")
 }
 
-[test]
+[test(description = "a let binding works after a correlated from")]
 def test_let_correlated(t : T?) {
     let orders <- mk_orders()
     // a `let` over a correlated (flatten) query references the outer and inner range vars.
@@ -1086,7 +1086,7 @@ def test_let_correlated(t : T?) {
     t |> equal(labels[3], "3-d")
 }
 
-[test]
+[test(description = "a where before a let sees the outer variable of the same name, not the later binding")]
 def test_let_forward_scope_no_clobber(t : T?) {
     let cars <- mk_cars()
     let lux = "eco"   // OUTER var; the `where` references it BEFORE the same-named `let` is introduced
@@ -1103,7 +1103,7 @@ struct D2Brand {
     country : string
 }
 
-[test]
+[test(description = "tuple labels named like range variables survive the join and where rewrite")]
 def test_join_where_labels_shadow_range_vars(t : T?) {
     let cars <- mk_cars()
     var brands <- [D2Brand(brand = "eco", country = "JP"), D2Brand(brand = "lux", country = "DE")]
@@ -1116,7 +1116,7 @@ def test_join_where_labels_shadow_range_vars(t : T?) {
     delete brands
 }
 
-[test]
+[test(description = "a table works as the second from source of a cross product")]
 def test_cross_from_table_source(t : T?) {
     let cars <- mk_cars()
     var tags <- { 1 => "t1", 2 => "t2" }
@@ -1124,7 +1124,7 @@ def test_cross_from_table_source(t : T?) {
     t |> equal(length(rows), 6, "a table source works in the second from")
 }
 
-[test]
+[test(description = "select (c) gives the same rows as select c")]
 def test_parenthesized_identity_select(t : T?) {
     let cars <- mk_cars()
     let bare <- %linq! from c in cars where c.price > 100 select c %%
@@ -1135,7 +1135,7 @@ def test_parenthesized_identity_select(t : T?) {
     }
 }
 
-[test]
+[test(description = "tuple labels named like a let binding or the group variable stay labels")]
 def test_labels_shadowing_let_and_group_vars(t : T?) {
     let cars <- mk_cars()
     let r1 <- %linq! from c in cars let price = c.price select (price = price * 2) %%

@@ -1,6 +1,9 @@
+//! a break out of a captured block, block type mismatches between
+//! void, int and float, and missing or unexpected block return values
+//! do not compile
 // invalid block usage
-// verifies block errors: break from captured block, block type mismatches
-// (void vs int vs float), unexpected/missing return values
+// verifies block errors: break from captured block, block type
+// mismatches (void vs int vs float), unexpected/missing return values
 options gen2
 expect 30125, 30319, 30341:4, 30343, 31402  // invalid_block
 
@@ -36,10 +39,14 @@ def test : bool {
     take_any() <| $ : void {// 32102: not expecting return value
         return 13
     }
-    take_any() <| $ : int { // 30304: no matching functions or generics: take_any(block<int> const)
+    // 30304: no matching functions or generics: take_any(block<int>
+    // const)
+    take_any() <| $ : int {
         return              // 32101: expecting return value
     }
-    take_any() <| $ : int { // 30304: no matching functions or generics: take_any(block<int> const)
+    // 30304: no matching functions or generics: take_any(block<int>
+    // const)
+    take_any() <| $ : int {
         return 13.0         // 30102: incompatible return type, expecting int vs float
     }
     return true

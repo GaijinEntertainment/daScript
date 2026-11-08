@@ -88,7 +88,7 @@ class Placeholder {
 // Tests: basic interface dispatch
 // ═══════════════════════════════════════
 
-[test]
+[test(description = "calls through an interface proxy dispatch to the implementing methods, including return values and state")]
 def test_basic_dispatch(t : T?) {
 
     t |> run("tick dispatch") @(t : T?) {
@@ -142,7 +142,7 @@ def test_basic_dispatch(t : T?) {
 // Tests: multiple interfaces on one struct
 // ═══════════════════════════════════════
 
-[test]
+[test(description = "a class implementing two interfaces serves each through its own independent proxy")]
 def test_multiple_interfaces(t : T?) {
 
     t |> run("actor has both ITick and ILogger") @(t : T?) {
@@ -172,7 +172,7 @@ def test_multiple_interfaces(t : T?) {
 // Tests: lazy proxy construction
 // ═══════════════════════════════════════
 
-[test]
+[test(description = "an interface proxy is null until first requested and is reused on later requests")]
 def test_lazy_proxy(t : T?) {
 
     t |> run("proxy is null before first get") @(t : T?) {
@@ -197,7 +197,7 @@ def test_lazy_proxy(t : T?) {
 // Tests: is operator (compile-time)
 // ═══════════════════════════════════════
 
-[test]
+[test(description = "is is true for implemented interfaces and false for ones the class does not implement, including the empty interface")]
 def test_is_operator(t : T?) {
 
     t |> run("Actor is ITick") @(t : T?) {
@@ -253,7 +253,7 @@ def test_is_operator(t : T?) {
 // Tests: as operator
 // ═══════════════════════════════════════
 
-[test]
+[test(description = "as returns a working proxy for each implemented interface")]
 def test_as_operator(t : T?) {
 
     t |> run("Actor as ITick returns proxy") @(t : T?) {
@@ -287,7 +287,7 @@ def test_as_operator(t : T?) {
 // Tests: ?as operator (null-safe)
 // ═══════════════════════════════════════
 
-[test]
+[test(description = "?as returns a working proxy for a non-null object and null for a null one, for each interface")]
 def test_safe_as_operator(t : T?) {
 
     t |> run("non-null ?as returns proxy") @(t : T?) {
@@ -337,7 +337,7 @@ def test_safe_as_operator(t : T?) {
 // Tests: empty interface
 // ═══════════════════════════════════════
 
-[test]
+[test(description = "a class can implement an interface with no methods and is and as work on it")]
 def test_empty_interface(t : T?) {
 
     t |> run("Placeholder implements IEmpty") @(t : T?) {

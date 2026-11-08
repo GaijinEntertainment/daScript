@@ -7,7 +7,7 @@ require daslib/linq_boost
 
 require _common
 
-[test]
+[test(description = "skip and skip_while drop the leading elements for iterators, structs, arrays and in place")]
 def test_skip(t : T?) {
     t |> run("basic skip") @(t : T?) {
         var query = skip(
@@ -65,7 +65,7 @@ def test_skip(t : T?) {
     }
 }
 
-[test]
+[test(description = "take, take_while and take ranges keep the leading elements for iterators, structs and arrays, as sequence, array and in place")]
 def test_take(t : T?) { // nolint:STYLE038 flat list of independent run arms
     t |> run("basic take") @(t : T?) {
         var query = take(
@@ -160,7 +160,7 @@ def test_take(t : T?) { // nolint:STYLE038 flat list of independent run arms
     }
 }
 
-[test]
+[test(description = "skip_last drops the trailing elements from iterators and arrays, in place and under _fold, including the all and zero counts")]
 def test_skip_last(t : T?) {
     t |> run("skip last from iterator") @(t : T?) {
         var query = skip_last(
@@ -224,7 +224,7 @@ def test_skip_last(t : T?) {
     }
 }
 
-[test]
+[test(description = "take_last keeps the trailing elements from iterators and arrays, in place and under _fold, including the all and zero counts")]
 def test_take_last(t : T?) {
     t |> run("take last from iterator") @(t : T?) {
         var query = take_last(
@@ -283,7 +283,7 @@ def test_take_last(t : T?) {
     }
 }
 
-[test]
+[test(description = "chunk splits a sequence into consecutive fixed-size groups for ints, structs and the to-array form")]
 def text_chunk(t : T?) {
     t |> run("basic chunk") @(t : T?) {
         var query = chunk(

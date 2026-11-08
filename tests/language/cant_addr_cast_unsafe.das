@@ -1,5 +1,8 @@
-// addr<T?>(x) without unsafe: both gates fire (address + reinterpret);
-// the exact-type form folds the cast away but the addr gate still holds
+//! addr<T?>(x) outside unsafe does not compile: it takes an address
+//! and reinterprets it, and both gates fire
+// addr<T?>(x) without unsafe: both gates fire (address +
+// reinterpret); the exact-type form folds the cast away but the addr
+// gate still holds
 options gen2
 expect 31000:2, 31004    // unsafe_address, unsafe_cast
 

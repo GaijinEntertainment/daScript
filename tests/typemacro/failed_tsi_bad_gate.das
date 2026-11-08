@@ -1,3 +1,5 @@
+//! A @template_gate naming an axis that does not exist must not
+//! compile (20800).
 options gen2
 expect 20800
 

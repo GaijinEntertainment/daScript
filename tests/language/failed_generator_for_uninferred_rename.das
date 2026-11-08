@@ -1,3 +1,5 @@
+//! a malformed generator comprehension over an uninferred iterator
+//! reports type errors instead of crashing the compiler
 options gen2
 expect 30113, 30158, 30166, 30192
 

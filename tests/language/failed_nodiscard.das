@@ -1,5 +1,8 @@
-// A genuinely discarded [nodiscard] result is still an error — the interpolation fix marks
-// string-builder elements only, not statement-level discards.
+//! discarding the result of a [nodiscard] function as a statement
+//! does not compile
+// A genuinely discarded [nodiscard] result is still an error — the
+// interpolation fix marks string-builder elements only, not
+// statement-level discards.
 options gen2
 
 expect 30166:1

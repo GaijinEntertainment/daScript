@@ -1,3 +1,5 @@
+//! a [run] function with side effects is not evaluated at compile
+//! time and reports an error
 options gen2
 expect 50500
 
@@ -13,7 +15,9 @@ def add13(n) {
 
 [export]
 def test {
-    feint("{add13(3)}\n")       //  40101: function did not run at compilation time because it has side-effects
+    // 40101: function did not run at compilation time because it has
+    // side-effects
+    feint("{add13(3)}\n")
     return true
 }
 

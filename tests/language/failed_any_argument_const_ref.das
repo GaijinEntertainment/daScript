@@ -1,3 +1,6 @@
+//! a builtin argument bound as an any-type mutable reference rejects
+//! const values and fresh temporaries, the same as a typed var T&
+//! argument
 // a builtin argument bound as `vec4f &` (any type, mutable reference)
 // takes the same const and ref checks as a typed `var T&` argument,
 // and a builtin's mutable reference argument rejects a fresh

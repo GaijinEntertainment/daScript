@@ -31,7 +31,7 @@ def has_start(var haps : array<Hap>; name : string; start : double) : bool {
     return false
 }
 
-[test]
+[test(description = "mask steps spelled f, false or 0 mask out and t and 1 keep, and a cycling mask gates whole cycles")]
 def test_mask_false_steps(t : T?) {
     t |> run("a mask step spelled f, false or 0 masks out; t and 1 keep") @(t : T?) {
         t |> equal(sounds(mask(s("a b c d"), s("t f t f")), 0.0lf, 1.0lf), ["a", "c"])
@@ -45,7 +45,7 @@ def test_mask_false_steps(t : T?) {
     }
 }
 
-[test]
+[test(description = "struct_ takes its timing from the truthy steps only")]
 def test_struct_false_steps(t : T?) {
     t |> run("struct_ takes its timing from the truthy steps only") @(t : T?) {
         let haps <- haps_of(struct_(atom("bd"), s("x f x x")), 0.0lf, 1.0lf)
@@ -56,7 +56,7 @@ def test_struct_false_steps(t : T?) {
     }
 }
 
-[test]
+[test(description = "G1 minor names the same scale as G1:minor and not a minor scale rooted at C")]
 def test_scale_space_form(t : T?) {
     t |> run("`G1 minor` is the same scale as `G1:minor`, not minor with a C root") @(t : T?) {
         let colon <- notes(n("0 2 4") |> set_scale("G1:minor"), 0.0lf, 1.0lf)
@@ -66,7 +66,7 @@ def test_scale_space_form(t : T?) {
     }
 }
 
-[test]
+[test(description = "late moves an event's whole later by the offset and early moves it earlier")]
 def test_early_late(t : T?) {
     t |> run("late moves an event's whole later by the offset, early earlier") @(t : T?) {
         var l <- haps_of(late(s("a b"), 0.25), 0.0lf, 1.0lf)
@@ -78,7 +78,7 @@ def test_early_late(t : T?) {
     }
 }
 
-[test]
+[test(description = "rarely is public and keeps every event")]
 def test_rarely(t : T?) {
     t |> run("rarely is public and keeps every event") @(t : T?) {
         let pat <- s("a b c d") |> rarely(@(var x : Pattern) => x |> set_note(72.0))
@@ -86,7 +86,7 @@ def test_rarely(t : T?) {
     }
 }
 
-[test]
+[test(description = "add and sub take a pattern or a scalar offset sampled per cycle")]
 def test_add_sub_pattern(t : T?) {
     t |> run("add with a pattern samples the offset per cycle") @(t : T?) {
         let pat <- note("c3 e3") |> add(n("<0 12>"))
@@ -101,7 +101,7 @@ def test_add_sub_pattern(t : T?) {
     }
 }
 
-[test]
+[test(description = "an upper-case note letter names the same note as the lower-case one")]
 def test_note_name_case(t : T?) {
     t |> run("an upper-case note letter names the same note as the lower-case one") @(t : T?) {
         t |> equal(notes(note("C4 Bb3 F#2 Eb5"), 0.0lf, 1.0lf), notes(note("c4 bb3 f#2 eb5"), 0.0lf, 1.0lf))
@@ -110,7 +110,7 @@ def test_note_name_case(t : T?) {
     }
 }
 
-[test]
+[test(description = "a negative numeric atom keeps its sign and a negative euclid rotation turns the other way")]
 def test_negative_numbers(t : T?) {
     t |> run("a negative numeric atom keeps its sign") @(t : T?) {
         t |> equal(notes(n("0 -2 -4.5"), 0.0lf, 1.0lf), [0.0, -2.0, -4.5])
@@ -128,7 +128,7 @@ def test_negative_numbers(t : T?) {
     }
 }
 
-[test]
+[test(description = "an alternation inside a sequence step advances with the outer cycle and a nested alternation runs at half the outer clock")]
 def test_nested_alternation(t : T?) {
     t |> run("an alternation inside a sequence step advances with the outer cycle") @(t : T?) {
         let pat <- n("<0 1 2> <5 6 7>")

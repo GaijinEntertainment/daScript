@@ -676,7 +676,7 @@ def test_dasmetal_gate_fixtures(t : T?) {
     let fixture = repo_fixture(t, "modules/dasMetal/REVIEW.das", "review_dasmetal")
     if (empty(fixture)) return
     write_at(t, fixture, "modules/dasMetal/metal/msl_emit.das", "options gen2\n")
-    write_at(t, fixture, "tests/msl/test_msl_fail_closed.das", "options gen2\n")
+    write_at(t, fixture, "tests/msl/uncategorized_no_aot.das", "options gen2\n")
     write_at(t, fixture, "tests/msl/_fail_closed/README.txt", "fixtures\n")
     write_at(t, fixture, "modules/dasMetal/src/dasMetal.mm", METAL_SHIM_GREEN + "\}\n")
     var err : string

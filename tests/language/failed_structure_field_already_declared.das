@@ -1,3 +1,4 @@
+//! a struct with two fields of the same name does not compile
 // duplicate struct field name
 // verifies compiler rejects two fields with the same name in a struct
 options gen2

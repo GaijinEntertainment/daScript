@@ -6,7 +6,7 @@ require dastest/testing_boost public
 // src/simulate/simulate_fusion_tableindex.cpp:81. These tests verify the
 // fused path produces correct values for int64/uint64 keys.
 
-[test]
+[test(description = "a table with int64 keys writes and reads back by index through the fused path")]
 def test_table_i64_key_index_write_read(t : T?) {
     var tab : table<int64; int>  // nolint:STYLE031 — fused tab[k]=v write path is under test
     tab[1_l] = 10
@@ -17,7 +17,7 @@ def test_table_i64_key_index_write_read(t : T?) {
     t |> equal(tab[-1_l], 30)
 }
 
-[test]
+[test(description = "writing an existing int64 key through the fused path overwrites its value")]
 def test_table_i64_key_overwrite(t : T?) {
     var tab : table<int64; string>
     tab[42_l] = "first"
@@ -26,7 +26,7 @@ def test_table_i64_key_overwrite(t : T?) {
     t |> equal(tab[42_l], "second")
 }
 
-[test]
+[test(description = "a table with uint64 keys indexes correctly through the fused path")]
 def test_table_u64_key_index(t : T?) {
     var tab : table<uint64; int>  // nolint:STYLE031 — fused tab[k]=v write path is under test
     tab[1_ul] = 100
@@ -35,7 +35,7 @@ def test_table_u64_key_index(t : T?) {
     t |> equal(tab[18446744073709551615_ul], 200)
 }
 
-[test]
+[test(description = "an int64 key held in a local indexes the table through the fused path")]
 def test_table_i64_key_via_local(t : T?) {
     var tab : table<int64; int>
     let k1 : int64 = 5_l
@@ -46,7 +46,7 @@ def test_table_i64_key_via_local(t : T?) {
     t |> equal(tab[k2], 1000)
 }
 
-[test]
+[test(description = "an int64 key passed as an argument indexes the table through the fused path")]
 def test_table_i64_key_via_arg(t : T?) {
     var tab : table<int64; int>
     fill_table(tab, 7_l, 77)

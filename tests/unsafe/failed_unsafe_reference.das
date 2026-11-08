@@ -1,3 +1,5 @@
+//! A local reference bound to a non-local expression must not compile
+//! without unsafe (31019).
 options gen2
 expect 31019
 

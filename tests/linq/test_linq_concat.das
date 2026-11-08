@@ -7,7 +7,7 @@ require daslib/linq
 require _common
 
 
-[test]
+[test(description = "append adds one element to the end of an iterator or array, including the in-place array form")]
 def test_append(t : T?) {
     t |> run("basic append") @(t : T?) {
         var query = append(
@@ -46,7 +46,7 @@ def test_append(t : T?) {
     }
 }
 
-[test]
+[test(description = "prepend adds one element to the front of an iterator or array, including the in-place array form")]
 def test_prepend(t : T?) {
     t |> run("basic prepend") @(t : T?) {
         var query = prepend(
@@ -85,7 +85,7 @@ def test_prepend(t : T?) {
     }
 }
 
-[test]
+[test(description = "concat joins two sequences in order for iterators and arrays, including the in-place array form")]
 def test_concat(t : T?) {
     t |> run("basic concat") @(t : T?) {
         var query = concat(

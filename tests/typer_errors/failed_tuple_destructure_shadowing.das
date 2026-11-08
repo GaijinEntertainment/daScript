@@ -1,13 +1,16 @@
+//! Tuple destructuring must follow the let shadowing rules: a
+//! repeated name is 30704 and a for-loop rebinding is 30708.
 options gen2
 
 expect 30704 : 4
 expect 30708 : 1
 
-// Tuple destructuring binds names like `let` declarations, so it follows the same
-// shadowing rules. Before the check, a repeated name silently rebound (the newest
-// assume alias won in ExprVar resolution) with no diagnostic - while plain
-// `let x` twice was error[30704]. The for-loop form reports 30708, matching the
-// plain for-iterator shadowing diagnostics beside it.
+// Tuple destructuring binds names like `let` declarations, so it
+// follows the same shadowing rules. Before the check, a repeated name
+// silently rebound (the newest assume alias won in ExprVar
+// resolution) with no diagnostic - while plain `let x` twice was
+// error[30704]. The for-loop form reports 30708, matching the plain
+// for-iterator shadowing diagnostics beside it.
 
 def p1() : tuple<bool; int> {
     return (true, 1)

@@ -18,7 +18,7 @@ require dastest/testing_boost public
 // ``subexpr is ExprVar``, so the inner var lost its substitution.
 
 // ── 1. Bare-var substitution (no wrapper) ──────────────────────────────────
-[test]
+[test(description = "template substitution replaces a bare variable matching the template name with the replacement expression")]
 def test_substitutes_bare_var(t : T?) {
     ast_gc_guard() {
         var bare : Expression? = new ExprVar(at = LineInfo(), name := "x")
@@ -32,7 +32,7 @@ def test_substitutes_bare_var(t : T?) {
 }
 
 // ── 2. Wrapper around bare ExprVar — wrapper stripped, substitution fires ──
-[test]
+[test(description = "substituting a bare variable wrapped in a ref-to-value node strips the wrapper")]
 def test_strips_r2v_wrapper_around_bare_var(t : T?) {
     ast_gc_guard() {
         var bare : Expression? = new ExprVar(at = LineInfo(), name := "x")
@@ -50,7 +50,7 @@ def test_strips_r2v_wrapper_around_bare_var(t : T?) {
 // R2V(ExprField(ExprVar(x), "f")) — wrapper is around the field access, not
 // directly the var. visitExprRef2Value's peel won't fire (subexpr isn't
 // ExprVar). The inner ExprVar(x) must still substitute via visitExprVar.
-[test]
+[test(description = "substitution reaches a variable under a ref-to-value wrapper around a field access")]
 def test_substitutes_var_under_r2v_around_field(t : T?) {
     ast_gc_guard() {
         var inner_var = new ExprVar(at = LineInfo(), name := "x")
@@ -72,7 +72,7 @@ def test_substitutes_var_under_r2v_around_field(t : T?) {
 }
 
 // ── 4. Non-matching var: wrapper + var stay as-is ──────────────────────────
-[test]
+[test(description = "a variable whose name does not match the template name is left alone")]
 def test_no_substitute_when_name_does_not_match(t : T?) {
     ast_gc_guard() {
         var bare : Expression? = new ExprVar(at = LineInfo(), name := "other")

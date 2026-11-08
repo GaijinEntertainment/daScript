@@ -9,7 +9,7 @@ require daslib/strings_boost
 // is_alnum, is_hex, is_tab_or_space, ltrim, trim, format, fast to_int8/etc.
 
 
-[test]
+[test(description = "fmt formats every integer and floating type, in hex and with padding")]
 def test_fmt(t : T?) { // nolint:STYLE038 — flat one-run-per-numeric-type list
     // fmt uses Python-style {fmt} format specifiers, not printf-style
     t |> run("fmt int") @@(t : T?) {
@@ -98,7 +98,7 @@ def test_fmt(t : T?) { // nolint:STYLE038 — flat one-run-per-numeric-type list
 }
 
 
-[test]
+[test(description = "safe_unescape decodes the standard escape sequences, keeps invalid escapes and das-only escapes undecoded and handles empty input")]
 def test_safe_unescape(t : T?) {
     t |> run("basic unescape") @@(t : T?) {
         t |> equal(safe_unescape("hello"), "hello")
@@ -133,7 +133,7 @@ def test_safe_unescape(t : T?) {
 }
 
 
-[test]
+[test(description = "to_lower lowercases mixed text and leaves lowercase, digits, symbols and empty strings unchanged")]
 def test_to_lower(t : T?) {
     // Test the safe to_lower function (allocates new string)
     t |> run("basic to_lower") @@(t : T?) {
@@ -158,7 +158,7 @@ def test_to_lower(t : T?) {
 }
 
 
-[test]
+[test(description = "to_upper uppercases mixed text and leaves uppercase, digits, symbols and empty strings unchanged")]
 def test_to_upper(t : T?) {
     // Test the safe to_upper function (allocates new string)
     t |> run("basic to_upper") @@(t : T?) {
@@ -183,7 +183,7 @@ def test_to_upper(t : T?) {
 }
 
 
-[test]
+[test(description = "character_at returns the character code at an index for letters, digits and special characters")]
 def test_character_at(t : T?) {
     t |> run("basic character_at") @@(t : T?) {
         t |> equal(character_at("hello", 0), 'h') // nolint:PERF003 character_at is the subject
@@ -203,7 +203,7 @@ def test_character_at(t : T?) {
 }
 
 
-[test]
+[test(description = "is_alnum, is_hex and is_tab_or_space classify characters correctly")]
 def test_char_classification(t : T?) {
     t |> run("is_alnum") @@(t : T?) {
         t |> equal(is_alnum('a'), true)
@@ -241,7 +241,7 @@ def test_char_classification(t : T?) {
 }
 
 
-[test]
+[test(description = "trim, ltrim and rtrim remove whitespace or the given characters from the proper ends")]
 def test_trim_and_ltrim(t : T?) {
     t |> run("trim basic") @@(t : T?) {
         t |> equal(trim("  hello  "), "hello")
@@ -275,7 +275,7 @@ def test_trim_and_ltrim(t : T?) {
 }
 
 
-[test]
+[test(description = "the string builder format call renders each integer and floating type")]
 def test_format_builder(t : T?) {
     // format is a deprecated string builder function using printf-style specifiers
     t |> run("format int") @@(t : T?) {
@@ -322,7 +322,7 @@ def test_format_builder(t : T?) {
 }
 
 
-[test]
+[test(description = "to_int8, to_uint8, to_int16 and to_uint16 parse decimal and hex text")]
 def test_fast_to_small_types(t : T?) {
     t |> run("to_int8") @@(t : T?) {
         t |> equal(to_int8("42"), int8(42))
@@ -371,7 +371,7 @@ def test_fast_to_small_types(t : T?) {
 }
 
 
-[test]
+[test(description = "appending characters and resizing a das_string keeps its content and length consistent")]
 def test_append_and_resize(t : T?) {
     t |> run("append char") @@(t : T?) {
         using() $(var s : das_string) {

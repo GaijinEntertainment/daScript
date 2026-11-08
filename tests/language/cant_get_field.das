@@ -1,6 +1,10 @@
+//! field access on a non-struct type, safe navigation on a
+//! non-pointer, and a write through const safe navigation do not
+//! compile
 // invalid field access
 // verifies compiler rejects field access on arrays, non-struct types,
-// safe-navigation on non-pointers, and writes through const safe navigation
+// safe-navigation on non-pointers, and writes through const safe
+// navigation
 options gen2
 expect 30224:2, 30928:2, 30952    // cant_get_field
 

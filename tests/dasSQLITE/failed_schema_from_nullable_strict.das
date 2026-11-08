@@ -1,4 +1,5 @@
 options gen2
+//! a non-optional field over a nullable column must not compile
 
 // User declares non-optional `string` against a nullable TEXT column → compile error.
 expect 20800

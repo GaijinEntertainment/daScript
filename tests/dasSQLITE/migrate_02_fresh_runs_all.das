@@ -18,21 +18,21 @@ def m3(db : SqlRunner) {
     db |> exec("ALTER TABLE users ADD COLUMN Score INTEGER NOT NULL DEFAULT 0")
 }
 
-[test]
+[test(description = "migrate_to_latest on a fresh database applies all three registered migrations")]
 def test_fresh_runs_all_three(t : T?) {
     var inscope db = open_sqlite(":memory:")
     let n = db |> migrate_to_latest()
     t |> equal(n, 3, "fresh DB must apply all 3 registered migrations")
 }
 
-[test]
+[test(description = "migrate_to_latest returns the number applied and 0 on a rerun")]
 def test_fresh_returns_count(t : T?) {
     var inscope db = open_sqlite(":memory:")
     t |> equal(db |> migrate_to_latest(), 3, "first call applies 3")
     t |> equal(db |> migrate_to_latest(), 0, "second call applies 0 (no-op rerun)")
 }
 
-[test]
+[test(description = "every migration body runs, leaving the table with all four columns")]
 def test_fresh_runs_each_body(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()
@@ -40,7 +40,7 @@ def test_fresh_runs_each_body(t : T?) {
     t |> equal(cols, 4, "users must have Id+Name+Email+Score (4 columns) after all migrations")
 }
 
-[test]
+[test(description = "the audit table gets one row per applied migration with the highest version recorded")]
 def test_audit_has_three_rows_with_versions(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()

@@ -413,7 +413,7 @@ def private fill_oracle(var o : TmmKernels?) {
     }
 }
 
-[test]
+[test(description = "tmm2d lowering generates the helpers and the MPP preamble, and the GPU result equals the CPU replay exactly.")]
 def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source assertions
     t |> run("tmm2d lowering: generated helpers + MPP preamble") @(t : T?) {
         t |> success(find(tmm_bf16_msl, "__das_tmm2d_bf_8_16_2") >= 0, "bf helper generated")
@@ -615,7 +615,7 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
     }
 }
 
-[test]
+[test(description = "tmm2d with bk 64 and 128 across the K sweep and the 72-half deva tile is exactly the CPU replay.")]
 def test_tmm2d_bk_shapes(t : T?) { // nolint:STYLE038 - one flat cell sweep over (bk, kk)
     t |> run("tmm2d bk = 64/128 across the K sweep + the deva 72-half tile: GPU == CPU-replay exact") @(t : T?) {
         var oracle = new TmmBkKernels()
@@ -958,7 +958,7 @@ def private rx8_arm(t : T?; dev; queue; var bxah; xs : array<float16>) {
 //! layout-free: every valid destination element is a token row's sum
 //! times the left value or int8 code, sixteen a row, whatever the
 //! device's layout
-[test]
+[test(description = "tmm2d rx with a register-filled left operand against a device half table matches the reference regardless of layout.")]
 def test_tmm2d_rx(t : T?) {
     t |> run("tmm2d rx: register-filled left operand x device half table, layout-free") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -1038,7 +1038,7 @@ def test_tmm2d_rx(t : T?) {
 }
 
 //! the whole-tile CPU replay OVERWRITES its scratch - the one tmm2d form that takes no begin
-[test]
+[test(description = "The tmm2d_tile_tg CPU replay is the tile product and the scratch's old contents are gone.")]
 def test_tmm2d_tile_tg_replay(t : T?) {
     t |> run("tmm2d_tile_tg: the CPU replay is the tile product, the scratch's old contents gone") @(t : T?) {
         var ta : float16[256]
@@ -1106,7 +1106,7 @@ def private devab_gpu(t : T?; dev; queue; src, entry : string; var bxah, bwh, bd
     return <- got
 }
 
-[test]
+[test(description = "tmm2d devab and devabnt over two device-half steps at kk 40 and 8 with ldb 56 equal the CPU replay exactly.")]
 def test_tmm2d_devab(t : T?) { // nolint:STYLE038 - both flavors x clean/poisoned in one device session
     t |> run("tmm2d devab / devabnt: two device-half steps at kk = 40 + 8, ldb = 56: GPU == CPU-replay exact") @(t : T?) {
         var oracle = new TmmDevabKernels()

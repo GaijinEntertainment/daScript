@@ -1,3 +1,6 @@
+//! two by-reference lookups into the same table in one expression do
+//! not compile, since one insert can move the other's slot - in
+//! initializers, copy, clone, move and field-access forms
 options gen2
 expect 30250:7
 

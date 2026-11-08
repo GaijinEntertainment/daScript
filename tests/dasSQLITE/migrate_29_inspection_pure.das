@@ -13,13 +13,13 @@ def m2(db : SqlRunner) {
     db |> exec("CREATE TABLE y (b INT)")
 }
 
-[test]
+[test(description = "current_schema_version is 0 on a fresh database")]
 def test_current_zero_on_empty_db(t : T?) {
     var inscope db = open_sqlite(":memory:")
     t |> equal(db |> current_schema_version(), 0, "fresh DB current must be 0")
 }
 
-[test]
+[test(description = "current_schema_version does not create the audit table")]
 def test_current_does_not_create_audit(t : T?) {
     var inscope db = open_sqlite(":memory:")
     let v = db |> current_schema_version()
@@ -29,7 +29,7 @@ def test_current_does_not_create_audit(t : T?) {
     t |> equal(exists, 0, "current_schema_version must NOT create the audit table")
 }
 
-[test]
+[test(description = "pending lists every registered migration on a fresh database")]
 def test_pending_lists_all_on_fresh_db(t : T?) {
     var inscope db = open_sqlite(":memory:")
     let p <- db |> pending_migrations()
@@ -39,7 +39,7 @@ def test_pending_lists_all_on_fresh_db(t : T?) {
     t |> equal(p[0].description, "alpha", "description from annotation")
 }
 
-[test]
+[test(description = "pending is empty after migrate_to_latest")]
 def test_pending_empty_when_current(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()
@@ -47,7 +47,7 @@ def test_pending_empty_when_current(t : T?) {
     t |> equal(p |> length, 0, "pending must be empty after migrate_to_latest")
 }
 
-[test]
+[test(description = "migration_history is empty on a fresh database and does not create the audit table")]
 def test_history_empty_on_fresh_db(t : T?) {
     var inscope db = open_sqlite(":memory:")
     let h <- db |> migration_history()
@@ -57,7 +57,7 @@ def test_history_empty_on_fresh_db(t : T?) {
     t |> equal(exists, 0, "migration_history must NOT create the audit table")
 }
 
-[test]
+[test(description = "the three inspection calls together leave a fresh database untouched")]
 def test_inspectors_have_no_side_effects_on_fresh_db(t : T?) {
     var inscope db = open_sqlite(":memory:")
     let _v = db |> current_schema_version()

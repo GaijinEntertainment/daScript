@@ -1,4 +1,4 @@
-// a match used as a value needs a last arm that always matches
+//! a match used as a value needs a last arm that always matches
 options gen2
 
 require daslib/match

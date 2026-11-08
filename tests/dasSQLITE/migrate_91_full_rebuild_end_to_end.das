@@ -37,7 +37,7 @@ def m_002(db : SqlRunner) {
     db |> convert_and_rename(type<UserV6>, type<User>)
 }
 
-[test]
+[test(description = "a struct_convert table rebuild preserves the row count")]
 def test_full_rebuild_preserves_rows(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()
@@ -45,7 +45,7 @@ def test_full_rebuild_preserves_rows(t : T?) {
     t |> equal(n, 2, "row count preserved across rebuild")
 }
 
-[test]
+[test(description = "a struct_convert rebuild maps an old column to the new one and applies a fallback for empty values")]
 def test_full_rebuild_translates_fields(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()
@@ -57,7 +57,7 @@ def test_full_rebuild_translates_fields(t : T?) {
     t |> equal(bob_email, "unknown@example.com", "bob's empty LegacyEmail picked the fallback")
 }
 
-[test]
+[test(description = "a table rebuild runs inside the migration transaction and both migrations are recorded")]
 def test_rebuild_inside_migration_txn(t : T?) {
     // The whole migrate_to_latest call runs inside a single BEGIN IMMEDIATE / COMMIT.
     // Test by introspecting the audit table.

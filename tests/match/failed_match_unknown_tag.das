@@ -1,4 +1,4 @@
-// a reification tag other than $v is not a pattern
+//! a reification tag other than $v is not a pattern
 options gen2
 
 require daslib/match

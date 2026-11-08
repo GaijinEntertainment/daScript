@@ -94,7 +94,7 @@ def remove_cache_files(stem : string) {
 def quiet(out : string) : bool => find(out, "deser:") < 0 && find(out, "ser:") < 0
 
 //! an explicit -module-cache says how many modules the cache served and where the cutoff fell
-[test]
+[test(description = "An explicit -module-cache reports how many modules it served and which module was the cutoff", timeout = 1200)]
 def test_fallback_verdict_names_the_cutoff(t : T?) {
     if (aot_host_skips(t)) return
     var terr : string
@@ -122,7 +122,7 @@ def test_fallback_verdict_names_the_cutoff(t : T?) {
 
 //! a record written under one set of compile policies serves nothing to a compile under another:
 //! the same explicit cache read by a -no-lint run reparses every module in place and is rewritten
-[test]
+[test(description = "A record written under one set of compile policies serves nothing to a compile under another", timeout = 1200)]
 def test_policy_change_refuses_the_cache(t : T?) {
     if (aot_host_skips(t)) return
     var terr : string
@@ -152,7 +152,7 @@ def test_policy_change_refuses_the_cache(t : T?) {
 
 //! the record stamps a module's file by content: a rewrite that leaves the bytes alone serves the
 //! cache, and a same-size edit is a cutoff - the stamp never reads mtime
-[test]
+[test(description = "The record stamps a module's file by content, so a byte-identical rewrite serves and a same-size edit is a cutoff", timeout = 1200)]
 def test_source_stamp_is_content(t : T?) {
     if (aot_host_skips(t)) return
     var terr : string
@@ -185,7 +185,7 @@ def test_source_stamp_is_content(t : T?) {
 
 //! a module's `options gen2` derives its syntax policy from the source; the policy compare sees the
 //! same derivation, so a -v1syntax host serves a gen2 module instead of rewriting the cache every run
-[test]
+[test(description = "A gen2 module is served by a -v1syntax host and does not rewrite the cache every run", timeout = 1200)]
 def test_source_derived_syntax_policy_serves(t : T?) {
     if (aot_host_skips(t)) return
     var terr : string
@@ -235,7 +235,7 @@ def count_lines_with(text, needle : string) : int {
 
 //! the AOT generator is a daslang script whose shared modules a warm default cache serves; a
 //! deserialized module must still read as AOT-capable, or every stub it emits is empty
-[test]
+[test(description = "A deserialized module still reads as AOT-capable, so the AOT generator emits non-empty stubs", timeout = 1200)]
 def test_aot_generation_reads_cached_modules(t : T?) {
     var terr : string
     let tmp = create_temp_directory("das_mc_aot", terr)
@@ -285,7 +285,7 @@ def scramble_header(path : string) {
 
 //! a served module keeps its source lines: the lint reads `nolint:` markers off them, so a
 //! warm run of a module whose only defence against a lint finding is the marker must still compile
-[test]
+[test(description = "A served module keeps its source lines, so lint nolint markers still apply on a warm run", timeout = 1200)]
 def test_source_lines_survive_the_cache(t : T?) {
     if (aot_host_skips(t)) return
     var terr : string
@@ -330,7 +330,7 @@ def check_damaged_cache(t : T?; base, a : string) {
 }
 
 //! the AST module cache is on by default - silent, at a path keyed by script, host flags and DAS* env - and the flags that turn it off or make it loud
-[test]
+[test(description = "The module cache is on by default, silent and keyed by script, host flags and environment, and the flags that turn it off or make it loud work", timeout = 1200)]
 def test_default_module_cache(t : T?) {
     if (aot_host_skips(t)) return
     var terr : string
@@ -428,7 +428,7 @@ def record_size_in(dir, stem : string) : uint64 {
 //! the default cache directory holds at most DAS_MODULE_CACHE_LIMIT megabytes: past it the oldest
 //! records go, a record read this run counts as fresh, the record just written stays, and an
 //! explicit -module-cache path is never pruned
-[test]
+[test(description = "The default cache directory holds at most DAS_MODULE_CACHE_LIMIT megabytes, evicts oldest records first, keeps the one just written and never prunes an explicit path", timeout = 1200)]
 def test_default_cache_evicts_to_the_limit(t : T?) {
     if (aot_host_skips(t)) return
     var terr : string

@@ -47,7 +47,7 @@ def eq_ints(t : T?; a : array<int>; b : array<int>; msg : string) {
     }
 }
 
-[test]
+[test(description = "each_child_reverse visits all elements from last to first, skipping text and non-matching nodes")]
 def test_each_child_reverse_all(t : T?) {
     parse_xml(XML) $(doc, ok) {
         t |> success(ok)
@@ -60,7 +60,7 @@ def test_each_child_reverse_all(t : T?) {
     }
 }
 
-[test]
+[test(description = "for_each_child_reverse visits all elements from last to first")]
 def test_for_each_child_reverse_all(t : T?) {
     parse_xml(XML) $(doc, ok) {
         t |> success(ok)
@@ -71,7 +71,7 @@ def test_for_each_child_reverse_all(t : T?) {
     }
 }
 
-[test]
+[test(description = "each_child_reverse with a name visits only matching children from last to first")]
 def test_each_child_reverse_named(t : T?) {
     parse_xml(XML) $(doc, ok) {
         t |> success(ok)
@@ -83,7 +83,7 @@ def test_each_child_reverse_named(t : T?) {
     }
 }
 
-[test]
+[test(description = "for_each_child_reverse with a name visits only matching children from last to first")]
 def test_for_each_child_reverse_named(t : T?) {
     parse_xml(XML) $(doc, ok) {
         t |> success(ok)
@@ -94,7 +94,7 @@ def test_for_each_child_reverse_named(t : T?) {
     }
 }
 
-[test]
+[test(description = "the reverse walk yields exactly the forward walk's ids in opposite order")]
 def test_reverse_round_trip(t : T?) {
     parse_xml(XML) $(doc, ok) {
         t |> success(ok)
@@ -112,7 +112,7 @@ def test_reverse_round_trip(t : T?) {
     }
 }
 
-[test]
+[test(description = "the reverse walk over an element without children yields nothing")]
 def test_reverse_empty(t : T?) {
     parse_xml("<root></root>") $(doc, ok) {
         t |> success(ok)

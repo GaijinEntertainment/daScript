@@ -7,7 +7,7 @@ apply that list with this one.
 **Weakening the census check is a defect.** The check runs both directions: every kind in
 `declared_msl_census` is emitted by some fixture, and every kind any fixture emits is declared
 there. A kind is the construct label the emitter records at emit time. Dropping either
-direction's assertion in `test_msl_census.das` weakens the check, and so does dropping a kind
+direction's assertion in `uncategorized.das` weakens the check, and so does dropping a kind
 from `declared_msl_census` or a fixture's census from `all_msl_censuses` (both in
 `_msl_common.das`). Emitted text cannot be read back into constructs, so the census is the
 only measure of coverage.
@@ -17,6 +17,6 @@ declares, whose emit records a `<name>_census` global - adds that census to `all
 (`_msl_common.das`) in the same change.** A fixture left out of that list emits kinds the
 check never sees, so both directions pass with the fixture uncounted.
 
-**Weakening `test_msl_fail_closed.das`'s `check_rejects` is a defect.** It asserts each
+**Weakening `uncategorized_no_aot.das`'s `check_rejects` is a defect.** It asserts each
 `_fail_closed/` fixture fails to compile and that the compile error contains the fixture's
 needle - the substring naming the rejected construct.

@@ -1,3 +1,6 @@
+//! a global initialized from a global declared after it does not
+//! compile, while folded constants and other modules' globals may be
+//! used
 options gen2
 expect 30173
 

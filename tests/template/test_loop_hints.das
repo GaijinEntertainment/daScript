@@ -13,7 +13,7 @@ require dastest/testing_boost public
 // what the parser emits, so the JIT's append_loop_hint_operand reads it the
 // same whether the loop was hand-written or macro-tuned.
 
-[test]
+[test(description = "append_vectorize with a width adds the vectorize and vectorize_width annotations to a loop")]
 def test_vectorize_width(t : T?) {
     ast_gc_guard() {
         var loop = qmacro_expr(${ for (j in range64(4l)) { let x = j; } }) as ExprFor
@@ -28,7 +28,7 @@ def test_vectorize_width(t : T?) {
     }
 }
 
-[test]
+[test(description = "append_unroll with a count adds one unroll annotation to a loop")]
 def test_unroll_count(t : T?) {
     ast_gc_guard() {
         var loop = qmacro_expr(${ for (j in range64(4l)) { let x = j; } }) as ExprFor
@@ -40,7 +40,7 @@ def test_unroll_count(t : T?) {
     }
 }
 
-[test]
+[test(description = "append_vectorize and append_unroll without arguments add only their flag annotations")]
 def test_bare_flags(t : T?) {
     ast_gc_guard() {
         var loop = qmacro_expr(${ for (j in range64(4l)) { let x = j; } }) as ExprFor

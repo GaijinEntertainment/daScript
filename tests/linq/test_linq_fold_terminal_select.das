@@ -43,7 +43,7 @@ def make_sounds() : array<Sound> {
     ]
 }
 
-[test]
+[test(description = "order_by, take and a terminal select over an array fuse and return the projected top rows")]
 def test_order_take_select_array(t : T?) {
     t |> run("plan_order_family: take + terminal _select") @(tt : T?) {
         let sounds <- make_sounds()
@@ -56,7 +56,7 @@ def test_order_take_select_array(t : T?) {
     }
 }
 
-[test]
+[test(description = "where, order_by, take and a terminal select over an array fuse and project only the filtered top rows")]
 def test_where_order_take_select_array(t : T?) {
     t |> run("plan_order_family: where + take + terminal _select") @(tt : T?) {
         let sounds <- make_sounds()
@@ -69,7 +69,7 @@ def test_where_order_take_select_array(t : T?) {
     }
 }
 
-[test]
+[test(description = "where, a bare order and a terminal select over an array return the filtered sorted projection")]
 def test_where_order_bare_select_array(t : T?) {
     t |> run("plan_order_family: where + bare order + terminal _select") @(tt : T?) {
         let sounds <- make_sounds()
@@ -80,7 +80,7 @@ def test_where_order_bare_select_array(t : T?) {
     }
 }
 
-[test]
+[test(description = "order_by, take and a terminal select over a decs source return the projected top rows")]
 def test_order_take_select_decs(t : T?) {
     t |> run("plan_decs_order_family: take + terminal _select") @(tt : T?) {
         restart()
@@ -93,7 +93,7 @@ def test_order_take_select_decs(t : T?) {
     }
 }
 
-[test]
+[test(description = "where, reverse, take and a terminal select over an array return the projection of the last survivors")]
 def test_reverse_take_select_array(t : T?) {
     t |> run("plan_reverse: where + reverse + take + terminal _select") @(tt : T?) {
         let sounds <- make_sounds()
@@ -115,7 +115,7 @@ def test_reverse_take_select_array(t : T?) {
 // push_clones into the scratch buf instead of N; the post-loop projection K push_clones is shared
 // with the catch-all. Previously this shape fell through to R1-R4 which walked ALL N entries.
 
-[test]
+[test(description = "bare reverse, take and a terminal select over an array walk the source backwards and project only the taken elements")]
 def test_reverse_take_select_array_bare(t : T?) {
     t |> run("plan_reverse R6: bare reverse + take + terminal _select — backward index walk projects K only") @(tt : T?) {
         let sounds <- make_sounds()
@@ -127,7 +127,7 @@ def test_reverse_take_select_array_bare(t : T?) {
     }
 }
 
-[test]
+[test(description = "reverse, take(N) with N past the length and a select clamps to the source length")]
 def test_reverse_take_select_array_take_exceeds(t : T?) {
     t |> run("plan_reverse R6: bare reverse + take(N>len) + _select clamps to length") @(tt : T?) {
         let sounds <- make_sounds()
@@ -140,7 +140,7 @@ def test_reverse_take_select_array_take_exceeds(t : T?) {
     }
 }
 
-[test]
+[test(description = "reverse, take(0) and a select returns an empty result")]
 def test_reverse_take_select_array_take_zero(t : T?) {
     t |> run("plan_reverse R6: bare reverse + take(0) + _select returns empty") @(tt : T?) {
         let sounds <- make_sounds()
@@ -149,7 +149,7 @@ def test_reverse_take_select_array_take_zero(t : T?) {
     }
 }
 
-[test]
+[test(description = "reverse, take and a select over an empty source returns an empty result")]
 def test_reverse_take_select_array_empty(t : T?) {
     t |> run("plan_reverse R6: bare reverse + take + _select on empty source") @(tt : T?) {
         var empty_sounds : array<Sound>
@@ -158,7 +158,7 @@ def test_reverse_take_select_array_empty(t : T?) {
     }
 }
 
-[test]
+[test(description = "where, reverse, select and first returns the projection of the last survivor")]
 def test_reverse_select_first_array(t : T?) {
     t |> run("plan_reverse: where + reverse + _select + first") @(tt : T?) {
         let sounds <- make_sounds()
@@ -174,7 +174,7 @@ def test_reverse_select_first_array(t : T?) {
 // emit composes `pushExpr` from the pre-projection and the terminal-select pass from the post-projection;
 // there's no semantic conflict (it's plain function composition over the reversed survivors).
 
-[test]
+[test(description = "selects before and after a reverse compose over the reversed survivors")]
 def test_reverse_pre_and_post_select_array(t : T?) {
     t |> run("plan_reverse R1-R4: where + select(f) + reverse + take + select(g) — both selects compose") @(tt : T?) {
         let sounds <- make_sounds()
@@ -190,7 +190,7 @@ def test_reverse_pre_and_post_select_array(t : T?) {
     }
 }
 
-[test]
+[test(description = "selects before and after a reverse compose for first")]
 def test_reverse_pre_and_post_select_first(t : T?) {
     t |> run("plan_reverse Rb: where + select(f) + reverse + select(g) + first — both selects compose") @(tt : T?) {
         let sounds <- make_sounds()
@@ -207,7 +207,7 @@ def test_reverse_pre_and_post_select_first(t : T?) {
 // through the post-reverse `_select(g)`. The default is already typed at the post-select element type, so
 // applying termsel(d) double-applies and miscomputes when the chain hits the empty branch.
 
-[test]
+[test(description = "with selects around a reverse, first_or_default returns the projected last survivor when one exists")]
 def test_reverse_pre_and_post_select_first_or_default_nonempty(t : T?) {
     t |> run("plan_reverse Rb: where + select(f) + reverse + select(g) + first_or_default — nonempty hits found branch") @(tt : T?) {
         let sounds <- make_sounds()
@@ -217,7 +217,7 @@ def test_reverse_pre_and_post_select_first_or_default_nonempty(t : T?) {
     }
 }
 
-[test]
+[test(description = "with selects around a reverse, first_or_default on an empty result returns the raw default and does not project it again")]
 def test_reverse_pre_and_post_select_first_or_default_empty(t : T?) {
     t |> run("plan_reverse Rb: where + select(f) + reverse + select(g) + first_or_default — empty seq returns RAW default, not termsel(default)") @(tt : T?) {
         let sounds <- make_sounds()
@@ -228,7 +228,7 @@ def test_reverse_pre_and_post_select_first_or_default_empty(t : T?) {
     }
 }
 
-[test]
+[test(description = "reverse, take and a terminal select over a decs source return the projection of the last entities")]
 def test_reverse_take_select_decs(t : T?) {
     t |> run("plan_decs_reverse: reverse + take + terminal _select") @(tt : T?) {
         restart()
@@ -244,7 +244,7 @@ def test_reverse_take_select_decs(t : T?) {
     }
 }
 
-[test]
+[test(description = "reverse, take(N) past the total and a select over a decs source clamps to the total")]
 def test_reverse_take_select_decs_take_exceeds(t : T?) {
     t |> run("plan_decs_reverse: reverse + take(N>total) + terminal _select clamps to total") @(tt : T?) {
         restart()
@@ -261,7 +261,7 @@ def test_reverse_take_select_decs_take_exceeds(t : T?) {
     }
 }
 
-[test]
+[test(description = "reverse, take and a select over an empty decs source returns an empty result")]
 def test_reverse_take_select_decs_empty(t : T?) {
     t |> run("plan_decs_reverse: reverse + take + terminal _select on empty source") @(tt : T?) {
         restart()
@@ -271,7 +271,7 @@ def test_reverse_take_select_decs_empty(t : T?) {
     }
 }
 
-[test]
+[test(description = "a decs join followed by a terminal select returns the projected joined rows")]
 def test_join_select_to_array(t : T?) {
     t |> run("plan_decs_join: join + terminal _select") @(tt : T?) {
         restart()
@@ -292,7 +292,7 @@ def test_join_select_to_array(t : T?) {
     }
 }
 
-[test]
+[test(description = "a three-source zip with a result selector and sum adds the combined values")]
 def test_zip_3arg_sum(t : T?) {
     t |> run("plan_zip: 3-arg zip + sum") @(tt : T?) {
         let a <- [1, 2, 3, 4]
@@ -303,7 +303,7 @@ def test_zip_3arg_sum(t : T?) {
     }
 }
 
-[test]
+[test(description = "a three-source zip with a result selector and to_array returns the combined values")]
 def test_zip_3arg_to_array(t : T?) {
     t |> run("plan_zip: 3-arg zip + to_array") @(tt : T?) {
         let a <- [1, 2, 3]

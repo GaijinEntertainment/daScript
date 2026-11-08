@@ -20,7 +20,7 @@ def private is_null_str(s : string) : bool => empty(s)
 
 def private ptr_delta(src, res : string) : int64 => ptr_of(res) - ptr_of(src)
 
-[test]
+[test(description = "slice on a runtime heap string returns the inner range and handles the edge and empty cases")]
 def test_pin_slice(t : T?) {
     let s = heap_str("abcdef")
     let none = heap_str("")
@@ -42,7 +42,7 @@ def test_pin_slice(t : T?) {
     t |> success(is_null_str(slice(none, 0)), "slice-to-end of empty string is null")
 }
 
-[test]
+[test(description = "chop on a runtime heap string returns the inner range and handles the edge and empty cases")]
 def test_pin_chop(t : T?) {
     let s = heap_str("abcdef")
     let none = heap_str("")
@@ -57,7 +57,7 @@ def test_pin_chop(t : T?) {
     t |> success(is_null_str(chop(none, 0, 1)), "chop of empty string is null")
 }
 
-[test]
+[test(description = "find on a heap string returns the first hit offset, -1 for a miss or an empty needle, honors a start offset and clamps a negative start to 0")]
 def test_pin_find_substring(t : T?) {
     let s = heap_str("abcabc")
     let none = heap_str("")
@@ -86,7 +86,7 @@ def private heap_high_byte() : string {
     }
 }
 
-[test]
+[test(description = "find with a char matches the unsigned byte value and not its signed reading")]
 def test_pin_find_char_byte_value(t : T?) {
     // the char form matches an UNSIGNED byte value: 195 is byte 0xC3, and -61 - which is that
     // same byte read as a signed char - matches nothing
@@ -96,7 +96,7 @@ def test_pin_find_char_byte_value(t : T?) {
     t |> equal(find(s, 256), -1, "find char above the byte range is -1")
 }
 
-[test]
+[test(description = "find with a char returns the first offset of a hit and -1 for misses")]
 def test_pin_find_char(t : T?) {
     let s = heap_str("abcabc")
     let none = heap_str("")
@@ -113,7 +113,7 @@ def test_pin_find_char(t : T?) {
     t |> equal(find(s, 'a', -6), 0, "find char negative start wraps to 0")
 }
 
-[test]
+[test(description = "rfind on a heap string returns the last offset of a substring hit")]
 def test_pin_rfind(t : T?) {
     let s = heap_str("abcabc")
     let none = heap_str("")
@@ -134,7 +134,7 @@ def test_pin_rfind(t : T?) {
     t |> equal(rfind(s, "", 3), -1, "rfind-from with empty needle is -1")
 }
 
-[test]
+[test(description = "starts_with on a heap string matches a prefix and rejects other prefixes and empty inputs")]
 def test_pin_starts_with(t : T?) {
     let s = heap_str("abcdef")
     let none = heap_str("")
@@ -152,7 +152,7 @@ def test_pin_starts_with(t : T?) {
     t |> success(starts_with(s, "", 3u), "starts_with empty cmp ignores cmpLen")
 }
 
-[test]
+[test(description = "starts_with at an offset matches the text from that offset and rejects a mismatch")]
 def test_pin_starts_with_offset(t : T?) {
     let s = heap_str("abcdef")
     t |> success(starts_with(s, 3, "def"), "starts_with at offset")
@@ -173,7 +173,7 @@ def test_pin_starts_with_offset(t : T?) {
     t |> success(!starts_with(s, 6, "a", 0u), "starts_with offset == length is false even with cmpLen 0")
 }
 
-[test]
+[test(description = "ends_with on a heap string matches a suffix and rejects other suffixes and empty inputs")]
 def test_pin_ends_with(t : T?) {
     let s = heap_str("abcdef")
     let none = heap_str("")
@@ -186,7 +186,7 @@ def test_pin_ends_with(t : T?) {
     t |> success(ends_with(none, ""), "ends_with empty on empty is true")
 }
 
-[test]
+[test(description = "the das_string overloads of starts_with, ends_with and the other searches agree with the string forms")]
 def test_pin_das_string_overloads(t : T?) {
     with_das_string() $(var ds) {
         ds := heap_str("abcdef")
@@ -208,7 +208,7 @@ def private pin_strip_removes(t : T?; ch, what : string) {
     t |> equal(strip_right(s), "{ch}ab", "strip_right removes trailing {what}")
 }
 
-[test]
+[test(description = "strip removes every whitespace byte kind: space, tab, newline and the others")]
 def test_pin_strip_whitespace_set(t : T?) {
     pin_strip_removes(t, " ", "space")
     pin_strip_removes(t, "\t", "tab")
@@ -218,7 +218,7 @@ def test_pin_strip_whitespace_set(t : T?) {
     pin_strip_removes(t, "\v", "vertical tab")
 }
 
-[test]
+[test(description = "strip, strip_left and strip_right return null for all-whitespace and empty strings and leave a clean string unchanged")]
 def test_pin_strip_degenerate(t : T?) {
     let ws = heap_str("   ")
     let none = heap_str("")
@@ -242,7 +242,7 @@ def private pin_skip_removes(t : T?; ch, what : string) {
     }
 }
 
-[test]
+[test(description = "skip_white_space skips every whitespace byte kind")]
 def test_pin_skip_white_space_set(t : T?) {
     // skip_white_space is strip_left as a cursor, so it rides the same C isspace 6-set
     pin_skip_removes(t, " ", "space")
@@ -253,7 +253,7 @@ def test_pin_skip_white_space_set(t : T?) {
     pin_skip_removes(t, "\v", "vertical tab")
 }
 
-[test]
+[test(description = "skip_white_space respects the start offset and the string bounds, including all-whitespace and empty strings")]
 def test_pin_skip_white_space_bounds(t : T?) {
     let s = heap_str("  ab  cd")
     let ws = heap_str("   ")
@@ -293,7 +293,7 @@ def private pin_trim_removes(t : T?; ch, what : string) {
     t |> equal(rtrim(s), "{ch}ab", "rtrim removes trailing {what}")
 }
 
-[test]
+[test(description = "trim removes every whitespace byte kind")]
 def test_pin_trim_whitespace_set(t : T?) {
     // the trim family strips the same C isspace 6-set as the strip family
     pin_trim_removes(t, " ", "space")
@@ -304,7 +304,7 @@ def test_pin_trim_whitespace_set(t : T?) {
     pin_trim_removes(t, "\v", "vertical tab")
 }
 
-[test]
+[test(description = "trim, ltrim and rtrim return null for all-whitespace and empty strings and leave a clean string unchanged")]
 def test_pin_trim_degenerate(t : T?) {
     let ws = heap_str("   ")
     let none = heap_str("")
@@ -328,7 +328,7 @@ def test_pin_trim_degenerate(t : T?) {
     t |> success(is_null_str(rtrim(none, "x")), "rtrim chars on empty is null")
 }
 
-[test]
+[test(description = "trim, strip, replace, slice and chop always return a fresh allocation, never an alias of the input or an interior pointer")]
 def test_pin_result_passthrough(t : T?) {
     let clean = heap_str("abc")
     let lead = heap_str("  abc")
@@ -351,7 +351,7 @@ def test_pin_result_passthrough(t : T?) {
     t |> success(ptr_of(chop(clean, 0, 3)) != ptr_of(clean), "chop of the whole string allocates")
 }
 
-[test]
+[test(description = "replace substitutes every occurrence without rescanning its own output and handles empty inputs")]
 def test_pin_replace(t : T?) {
     let none = heap_str("")
     t |> equal(replace(heap_str("abcabc"), "bc", "X"), "aXaX", "replace all occurrences")
@@ -378,7 +378,7 @@ def private parse_int(s : string; hex : bool = false; preset = ConversionResult.
     return IntParse(v = v, cr = cr, off = off)
 }
 
-[test]
+[test(description = "the integer parse returns the value and an ok result for valid text and an error result for bad text")]
 def test_pin_parse_int(t : T?) {
     let good = parse_int("123")
     t |> equal(good.v, 123, "int parse value")
@@ -404,7 +404,7 @@ def test_pin_parse_int(t : T?) {
     t |> equal(neg.off, 2, "int parse of a negative offset")
 }
 
-[test]
+[test(description = "the integer parse skips leading whitespace, counts it in the offset and parses hex text")]
 def test_pin_parse_int_offset_and_hex(t : T?) {
     let led = parse_int("  42")
     t |> equal(led.v, 42, "int parse skips leading whitespace")
@@ -429,7 +429,7 @@ def test_pin_parse_int_offset_and_hex(t : T?) {
     t |> equal(stale.cr, ConversionResult.ok, "a successful parse resets ConversionResult to ok")
 }
 
-[test]
+[test(description = "narrow integer parses return zero with out_of_range on overflow and the value with an advanced offset when in range")]
 def test_pin_parse_int_widths(t : T?) {
     var cr = ConversionResult.ok
     var off = -1
@@ -477,7 +477,7 @@ def private parse_double(s : string) : RealParse {
     return RealParse(v = v, cr = cr, off = off)
 }
 
-[test]
+[test(description = "the real parse returns the value and an ok result for valid text and an error result for bad text")]
 def test_pin_parse_real(t : T?) {
     let good = parse_float("1.5")
     t |> equal(good.v, 1.5lf, "float parse value")
@@ -510,7 +510,7 @@ def test_pin_parse_real(t : T?) {
     t |> equal(dover.cr, ConversionResult.out_of_range, "double parse overflow result")
 }
 
-[test]
+[test(description = "string of a byte array copies a plain buffer, gives null for an empty one and truncates at an interior NUL")]
 def test_pin_string_from_array(t : T?) {
     var inscope normal : array<uint8>
     normal |> push_from([uint8('a'), uint8('b'), uint8('c')])
@@ -532,7 +532,7 @@ def test_pin_string_from_array(t : T?) {
     t |> equal(seen, 1, "an interior NUL truncates the peek_data view")
 }
 
-[test]
+[test(description = "to_bytes gives an empty array for an empty string and the exact bytes otherwise")]
 def test_pin_to_bytes(t : T?) {
     var inscope none <- to_bytes(heap_str(""))
     t |> equal(length(none), 0, "to_bytes of an empty string is an empty array")

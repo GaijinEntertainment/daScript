@@ -63,7 +63,7 @@ def parse_not_eof(input : string; blk : block<(val : string; err : array<Parsing
     }
 }
 
-[test]
+[test(description = "a positive lookahead passes when the next character fits")]
 def test_peek_matches(t : T?) {
     t |> run("digit passes peek") @(t : T?) {
         parse_peek_digit("42") $(val; err) {
@@ -73,7 +73,7 @@ def test_peek_matches(t : T?) {
     }
 }
 
-[test]
+[test(description = "a positive lookahead fails when the next character does not fit")]
 def test_peek_fails(t : T?) {
     t |> run("letter fails peek") @(t : T?) {
         parse_peek_digit("abc") $(val; err) {
@@ -82,7 +82,7 @@ def test_peek_fails(t : T?) {
     }
 }
 
-[test]
+[test(description = "a negative lookahead accepts input that is not the keyword")]
 def test_negative_lookahead_accepts(t : T?) {
     t |> run("non-keyword accepted") @(t : T?) {
         parse_not_keyword("hello") $(val; err) {
@@ -92,7 +92,7 @@ def test_negative_lookahead_accepts(t : T?) {
     }
 }
 
-[test]
+[test(description = "a negative lookahead rejects the keywords if and then")]
 def test_negative_lookahead_rejects(t : T?) {
     t |> run("keyword 'if' rejected") @(t : T?) {
         parse_not_keyword("if") $(val; err) {
@@ -106,7 +106,7 @@ def test_negative_lookahead_rejects(t : T?) {
     }
 }
 
-[test]
+[test(description = "a lookahead steers a choice between a number and a word token")]
 def test_peek_with_alternatives(t : T?) {
     t |> run("number token") @(t : T?) {
         parse_token("42") $(val; err) {
@@ -122,7 +122,7 @@ def test_peek_with_alternatives(t : T?) {
     }
 }
 
-[test]
+[test(description = "a negative lookahead consumes no input")]
 def test_negative_lookahead_no_consume(t : T?) {
     t |> run("text before dot") @(t : T?) {
         parse_not_eof("abc.") $(val; err) {

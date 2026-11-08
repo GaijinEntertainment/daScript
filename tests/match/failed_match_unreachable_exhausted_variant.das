@@ -1,4 +1,4 @@
-// a _ arm after every variant alternative is matched is unreachable
+//! a _ arm after every variant alternative is matched is unreachable
 options gen2
 
 require daslib/match

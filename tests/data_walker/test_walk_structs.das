@@ -1,16 +1,18 @@
+options gen2
+options no_unused_function_arguments = false
+options no_unused_block_arguments = false
+
+require _dw_common
+
 // Tests for DapiDataWalker — structures and classes
 //
 // Covers: simple struct, nested struct, field last flags, class/derived class,
 //         struct with all scalar types, struct with vectors and ranges
 
-options gen2
-options no_unused_function_arguments = false
-options no_unused_block_arguments = false
-
-require dw_common
 
 
-[test]
+
+[test(description = "the data walker visits simple and nested structs and flags the last field correctly")]
 def test_walk_struct(t : T?) {
     t |> run("simple struct") @(t : T?) {
         var walker = new LogWalker()
@@ -59,7 +61,7 @@ def test_walk_struct(t : T?) {
 }
 
 
-[test]
+[test(description = "the data walker visits a base class and a derived class with the inherited fields")]
 def test_walk_class(t : T?) {
     t |> run("base class") @(t : T?) {
         var walker = new LogWalker()
@@ -87,7 +89,7 @@ def test_walk_class(t : T?) {
 }
 
 
-[test]
+[test(description = "a struct holding every scalar type is walked field by field")]
 def test_walk_all_scalars_in_struct(t : T?) {
     t |> run("struct with all scalar types") @(t : T?) {
         var walker = new LogWalker()
@@ -126,7 +128,7 @@ def test_walk_all_scalars_in_struct(t : T?) {
 }
 
 
-[test]
+[test(description = "vector and range fields inside a struct are walked")]
 def test_walk_vectors_in_struct(t : T?) {
     t |> run("struct with vectors and range") @(t : T?) {
         var walker = new LogWalker()
@@ -143,6 +145,86 @@ def test_walk_vectors_in_struct(t : T?) {
         t |> equal(find(walker.log, "Float3:") != -1, true)
         t |> equal(find(walker.log, "Float4:") != -1, true)
         t |> equal(find(walker.log, "Range:") != -1, true)
+        unsafe { delete walker; }
+    }
+}
+
+// Tests for DapiDataWalker — tuples and variants
+//
+// Covers: tuple (2-element, 3-element), variant (int/string/float alternatives)
+
+
+
+
+[test(description = "the data walker visits two- and three-element tuples")]
+def test_walk_tuple(t : T?) {
+    t |> run("int-string tuple") @(t : T?) {
+        var walker = new LogWalker()
+        var tup : tuple<int; string> = (42, "hello")
+        make_data_walker(walker) $(adapter) {
+            adapter |> walk_data(unsafe(addr(tup)), typeinfo rtti_typeinfo(tup))
+        }
+        var expected = "beforeTuple\n"
+        expected += "beforeTupleEntry:0:false\n"
+        expected += "Int:42\n"
+        expected += "afterTupleEntry:0:false\n"
+        expected += "beforeTupleEntry:1:true\n"
+        expected += "String:hello\n"
+        expected += "afterTupleEntry:1:true\n"
+        expected += "afterTuple\n"
+        t |> equal(walker.log, expected)
+        unsafe { delete walker; }
+    }
+    t |> run("3-element tuple") @(t : T?) {
+        var walker = new LogWalker()
+        var tup : tuple<int; float; bool> = (1, 2.0, true)
+        make_data_walker(walker) $(adapter) {
+            adapter |> walk_data(unsafe(addr(tup)), typeinfo rtti_typeinfo(tup))
+        }
+        // Middle element should not be last
+        t |> equal(find(walker.log, "beforeTupleEntry:1:false") != -1, true)
+        // Last element should be last
+        t |> equal(find(walker.log, "beforeTupleEntry:2:true") != -1, true)
+        unsafe { delete walker; }
+    }
+}
+
+
+[test(description = "the data walker visits the int, string and float alternatives of a variant")]
+def test_walk_variant(t : T?) {
+    t |> run("variant int alternative") @(t : T?) {
+        var walker = new LogWalker()
+        var v : MyVariant = MyVariant(i = 42)
+        make_data_walker(walker) $(adapter) {
+            adapter |> walk_data(unsafe(addr(v)), typeinfo rtti_typeinfo(v))
+        }
+        t |> equal(find(walker.log, "beforeVariant") != -1, true)
+        t |> equal(find(walker.log, "Int:42") != -1, true)
+        t |> equal(find(walker.log, "afterVariant") != -1, true)
+        // Should NOT contain String or Float callbacks
+        t |> equal(find(walker.log, "String:") == -1, true)
+        t |> equal(find(walker.log, "Float:") == -1, true)
+        unsafe { delete walker; }
+    }
+    t |> run("variant string alternative") @(t : T?) {
+        var walker = new LogWalker()
+        var v : MyVariant = MyVariant(s = "hello")
+        make_data_walker(walker) $(adapter) {
+            adapter |> walk_data(unsafe(addr(v)), typeinfo rtti_typeinfo(v))
+        }
+        t |> equal(find(walker.log, "beforeVariant") != -1, true)
+        t |> equal(find(walker.log, "String:hello") != -1, true)
+        t |> equal(find(walker.log, "afterVariant") != -1, true)
+        t |> equal(find(walker.log, "Int:") == -1, true)
+        unsafe { delete walker; }
+    }
+    t |> run("variant float alternative") @(t : T?) {
+        var walker = new LogWalker()
+        var v : MyVariant = MyVariant(f = 9.5)
+        make_data_walker(walker) $(adapter) {
+            adapter |> walk_data(unsafe(addr(v)), typeinfo rtti_typeinfo(v))
+        }
+        t |> equal(find(walker.log, "Float:9.5") != -1, true)
         unsafe { delete walker; }
     }
 }

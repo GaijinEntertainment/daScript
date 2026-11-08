@@ -1,12 +1,13 @@
 options gen2
-options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
+
 
 // Contract area: [sql_table] DDL round-trip + row CRUD (create_table / check_schema /
 // column_info / insert single+bulk / update / delete_ / delete_by_id / drop_table_if_exists).
 
 require dastest/testing_boost public
+
 require _conformance_provider
 
 [sql_table(name = "ConfCars")]
@@ -17,7 +18,7 @@ struct ConfCar {
     Price : int
 }
 
-[test]
+[test(description = "create_table, check_schema, column_info and drop agree on the table shape")]
 def test_conf_ddl_roundtrip(t : T?) {
     t |> run("create_table + check_schema + column_info + drop") @(t : T?) {
         with_conf_db() $(db) {
@@ -36,7 +37,7 @@ def test_conf_ddl_roundtrip(t : T?) {
     }
 }
 
-[test]
+[test(description = "single and bulk insert, and a sql_unique constraint, behave as the contract says")]
 def test_conf_insert_select(t : T?) {
     t |> run("single insert returns a fresh id; select_from reads it back") @(t : T?) {
         with_conf_db() $(db) {
@@ -71,7 +72,7 @@ def test_conf_insert_select(t : T?) {
     }
 }
 
-[test]
+[test(description = "update, delete_ and delete_by_id act by primary key")]
 def test_conf_update_delete(t : T?) {
     t |> run("update / delete_ / delete_by_id by primary key") @(t : T?) {
         with_conf_db() $(db) {

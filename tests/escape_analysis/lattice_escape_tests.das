@@ -96,7 +96,7 @@ def use_param_alias(i : int) : int {
     return c.x + owned.y    // both read the SAME object
 }
 
-[test]
+[test(description = "an allocation that is only aliased by a local is freed each iteration so the heap does not grow")]
 def test_alias_local_freed(t : T?) {            // [NEW] shared local is still freed
     let before = heap_bytes_allocated()
     let s = sum_alias_local()
@@ -105,7 +105,7 @@ def test_alias_local_freed(t : T?) {            // [NEW] shared local is still f
     t |> equal(grew, 0ul)
 }
 
-[test]
+[test(description = "an allocation returned to a caller that consumes it locally is freed, with the sum intact")]
 def test_return_ownership_freed(t : T?) {       // [NEW] caller frees the fresh-owned result
     let before = heap_bytes_allocated()
     let s = sum_return_owned()
@@ -114,7 +114,7 @@ def test_return_ownership_freed(t : T?) {       // [NEW] caller frees the fresh-
     t |> equal(grew, 0ul)
 }
 
-[test]
+[test(description = "ownership returned through a chain of calls is still freed by the final consumer")]
 def test_return_ownership_transitive(t : T?) {  // [NEW] provenance transits the call chain
     let before = heap_bytes_allocated()
     let s = sum_return_owned_transitive()
@@ -123,7 +123,7 @@ def test_return_ownership_transitive(t : T?) {  // [NEW] provenance transits the
     t |> equal(grew, 0ul)
 }
 
-[test]
+[test(description = "an allocation pushed into a global is not freed, so the heap grows as the control case")]
 def test_escaping_control_grows(t : T?) {       // control: escaping allocations are retained
     g_list |> clear()
     let before = heap_bytes_allocated()
@@ -134,7 +134,7 @@ def test_escaping_control_grows(t : T?) {       // control: escaping allocations
     t |> success(grew >= uint64(N) * uint64(typeinfo sizeof(type<Node>)))
 }
 
-[test]
+[test(description = "a function that aliases its parameter never frees the caller object, so repeated calls stay correct")]
 def test_param_alias_no_double_free(t : T?) {   // [NEW] param-alias result is not double-freed
     var acc = 0
     for (i in range(N)) {
@@ -169,7 +169,7 @@ def make_reader(i : int) : lambda<() : int> {
     return <- @() : int { return p.x + p.y }
 }
 
-[test]
+[test(description = "an allocation captured by a lambda stored in a global is not freed, so later allocations do not overwrite it")]
 def test_capture_into_global_lambda_not_freed(t : T?) {
     capture_into_global_lambda(7)
     var churn = 0
@@ -182,7 +182,7 @@ def test_capture_into_global_lambda_not_freed(t : T?) {
     unsafe { delete g_lam }
 }
 
-[test]
+[test(description = "an allocation captured by a local lambda stays valid for every call of the lambda")]
 def test_capture_into_local_lambda_sound(t : T?) {
     var acc = 0
     for (i in range(N)) {
@@ -191,7 +191,7 @@ def test_capture_into_local_lambda_sound(t : T?) {
     t |> equal(acc, 3 * ((N - 1) * N / 2))
 }
 
-[test]
+[test(description = "an allocation captured by a returned lambda is not freed before the lambda is invoked")]
 def test_returned_lambda_capture_not_freed(t : T?) {
     var acc = 0
     for (i in range(N)) {
@@ -213,7 +213,7 @@ def make_counter(i : int) : iterator<int> {
     }
 }
 
-[test]
+[test(description = "an allocation captured by a returned generator is not freed while the generator yields")]
 def test_returned_generator_capture_not_freed(t : T?) {
     var acc = 0
     for (i in range(N)) {
@@ -248,7 +248,7 @@ def block_escapes(i : int) {
     }
 }
 
-[test]
+[test(description = "an allocation only read through a block field is freed after use")]
 def test_block_field_use_freed(t : T?) {        // block capture does not block the free
     let before = heap_bytes_allocated()
     var acc = 0
@@ -260,7 +260,7 @@ def test_block_field_use_freed(t : T?) {        // block capture does not block 
     t |> equal(grew, 0ul)
 }
 
-[test]
+[test(description = "an allocation that escapes through a block into a global is kept, so the heap grows")]
 def test_block_escape_grows(t : T?) {           // escape from inside a block still escapes
     g_list |> clear()
     let before = heap_bytes_allocated()
@@ -329,7 +329,7 @@ def unsafe_addr_local(i : int) : int {
     return r
 }
 
-[test]
+[test(description = "an allocation that reaches a global through a chain of aliases is not freed")]
 def test_alias_chain_escape_sound(t : T?) {
     g_list |> clear()
     let before = heap_bytes_allocated()
@@ -342,7 +342,7 @@ def test_alias_chain_escape_sound(t : T?) {
     t |> success(grew >= uint64(N) * uint64(typeinfo sizeof(type<Node>)))
 }
 
-[test]
+[test(description = "an allocation that escapes on one branch is not freed on either, and the stored objects stay intact")]
 def test_conditional_escape_sound(t : T?) {
     g_list |> clear()
     var acc = 0
@@ -353,7 +353,7 @@ def test_conditional_escape_sound(t : T?) {
     t |> success(ok, "conditionally-escaped objects intact")
 }
 
-[test]
+[test(description = "reassigning a variable that held an allocation never frees the object held by a global anchor")]
 def test_reassigned_no_double_free(t : T?) {
     g_anchor = new Node(x = 777, y = 1)
     var acc = 0
@@ -361,7 +361,7 @@ def test_reassigned_no_double_free(t : T?) {
     t |> equal(g_anchor.x, 777)
 }
 
-[test]
+[test(description = "of two sibling allocations the escaping one stays intact while the other is freed")]
 def test_sibling_mixed(t : T?) {
     // soundness: the escaping sibling (keep) must survive intact while the non-escaping sibling
     // (drop) is freed. (drop's freeing is verified precisely by test_alias_local_freed / sum_multi;
@@ -372,14 +372,14 @@ def test_sibling_mixed(t : T?) {
     t |> equal(g_anchor.x, N - 1)               // last keep retained intact (not clobbered by a freed drop)
 }
 
-[test]
+[test(description = "returning a parameter alias never frees the caller object")]
 def test_return_param_alias_no_double_free(t : T?) {
     var acc = 0
     for (i in range(N)) { acc += use_ret_param(i) }
     t |> equal(acc, 3 * ((N - 1) * N / 2))
 }
 
-[test]
+[test(description = "an allocation whose address is taken in unsafe code is not freed")]
 def test_unsafe_local_not_freed(t : T?) {
     var acc = 0
     for (i in range(N)) { acc += unsafe_addr_local(i) }
@@ -413,7 +413,7 @@ def lambda_in_block(i : int) {
     }
 }
 
-[test]
+[test(description = "a lambda that captures an alias of an allocation keeps that allocation alive")]
 def test_lambda_captures_alias_sound(t : T?) {
     capture_alias_into_global(11)
     var churn = 0
@@ -423,7 +423,7 @@ def test_lambda_captures_alias_sound(t : T?) {
     unsafe { delete g_lam }
 }
 
-[test]
+[test(description = "a block that aliases an allocation into a global keeps it, so the heap grows")]
 def test_block_aliases_escape_grows(t : T?) {
     g_list |> clear()
     let before = heap_bytes_allocated()
@@ -436,7 +436,7 @@ def test_block_aliases_escape_grows(t : T?) {
     t |> success(grew >= uint64(N) * uint64(typeinfo sizeof(type<Node>)))
 }
 
-[test]
+[test(description = "a lambda created inside a block keeps its captured allocation alive")]
 def test_lambda_in_block_sound(t : T?) {
     lambda_in_block(13)
     var churn = 0
@@ -454,7 +454,7 @@ def format_only(i : int) : int {
     return p.x + p.y
 }
 
-[test]
+[test(description = "a temporary used only to build a string is freed each iteration")]
 def test_string_builder_element_freed(t : T?) {
     let before = heap_bytes_allocated()
     var acc = 0
@@ -489,7 +489,7 @@ def pea_sum_freed_path() : int {
     return seen
 }
 
-[test]
+[test(description = "partial escape analysis frees the allocation on the path where it does not escape")]
 def test_pea_partial_free_reclaims(t : T?) {        // [PEA] free on the non-escaping branch reclaims the heap
     g_pea |> clear()
     let before = heap_bytes_allocated()
@@ -500,7 +500,7 @@ def test_pea_partial_free_reclaims(t : T?) {        // [PEA] free on the non-esc
     t |> equal(grew, 0ul)               // freed each iteration, free-list reuses the slot
 }
 
-[test]
+[test(description = "on the escaping path of a partial-escape function the allocation survives with its value intact")]
 def test_pea_partial_escape_path_ok(t : T?) {       // [PEA] escaping branch keeps the object live (no over-free)
     g_pea |> clear()
     let r = pea_partial(true, 5)
@@ -531,7 +531,7 @@ def pea_sum_use_then_free() : int {
     return total
 }
 
-[test]
+[test(description = "an allocation that dies within a block is freed at the end of the block")]
 def test_pea_within_block_death_freed(t : T?) {     // [PEA] free after the last use on the non-escaping branch
     g_pea |> clear()
     let before = heap_bytes_allocated()
@@ -554,7 +554,7 @@ def pea_early_return(keep : bool, i : int) : int {
     let after = i * 3                        // continuation anchor: the free is inserted before this
     return after
 }
-[test]
+[test(description = "an allocation on a non-escaping early-return path is freed")]
 def test_pea_early_return_freed(t : T?) {
     g_pea |> clear()
     let before = heap_bytes_allocated()
@@ -565,7 +565,7 @@ def test_pea_early_return_freed(t : T?) {
     t |> equal(length(g_pea), 0)
     t |> equal(grew, 0ul)                   // freed before the continuation statement -> heap flat
 }
-[test]
+[test(description = "an allocation on the escaping early-return path survives in the global")]
 def test_pea_early_return_escape_survives(t : T?) {
     g_pea |> clear()
     var acc = 0
@@ -590,7 +590,7 @@ def pea_nested(a : bool, b : bool, i : int) : int {
     }
     return i + 2                            // !a: p dead
 }
-[test]
+[test(description = "nested non-escaping branches free their allocation")]
 def test_pea_nested_freed(t : T?) {
     g_pea |> clear()
     let before = heap_bytes_allocated()
@@ -611,7 +611,7 @@ def pea_multi(keep_a : bool, i : int) : int {
     if (keep_a) { g_pea |> push(a); return -1 }
     return b.x + c.x
 }
-[test]
+[test(description = "several allocations on non-escaping paths are all freed")]
 def test_pea_multi_freed(t : T?) {
     g_pea |> clear()
     let before = heap_bytes_allocated()
@@ -632,7 +632,7 @@ def pea_for_source(keep : bool, i : int) : int {
     for (e in range(p.x)) { sum += e }
     return sum
 }
-[test]
+[test(description = "an allocation used as a for-loop source is not freed while the loop runs")]
 def test_pea_for_source_not_freed(t : T?) {
     g_pea |> clear(); g_clob |> clear()
     var acc = 0

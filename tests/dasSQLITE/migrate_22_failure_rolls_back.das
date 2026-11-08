@@ -19,7 +19,7 @@ def m3(db : SqlRunner) {
     db |> exec("CREATE TABLE three (x INT)")
 }
 
-[test]
+[test(description = "a failing migration rolls back the earlier ones and restores autocommit")]
 def test_v1_rolls_back_when_v2_fails(t : T?) {
     var inscope db = open_sqlite(":memory:")
     let r <- db |> try_migrate_to_latest()
@@ -49,7 +49,7 @@ def test_v1_rolls_back_when_v2_fails(t : T?) {
         "autocommit must be restored after failed migrate")
 }
 
-[test]
+[test(description = "migrate_to_latest panics when a migration body fails")]
 def test_strict_form_panics_on_body_failure(t : T?) {
     // The detailed message-content assertions live in migrate_64 against the try_ form
     // (Result::Err.unwrap_err is directly inspectable without going through panic
@@ -65,7 +65,7 @@ def test_strict_form_panics_on_body_failure(t : T?) {
     t |> success(caught, "strict migrate_to_latest must panic on body failure")
 }
 
-[test]
+[test(description = "a rerun against an unchanged broken registry fails again and records nothing")]
 def test_rerun_after_fix_succeeds(t : T?) {
     // Simulating "fix v2 and re-run" needs the same registry shape, just a working v2.
     // We can't easily replace the [sql_migration] body at runtime, so this test verifies

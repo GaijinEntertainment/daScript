@@ -1,3 +1,5 @@
+//! cmp_by(k) with a key that has no `_` placeholder must not compile:
+//! every key has to read from the compared element.
 options gen2
 options no_aot
 expect 50503

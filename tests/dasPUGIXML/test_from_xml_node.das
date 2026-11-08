@@ -12,7 +12,7 @@ struct XmlCar {
     year : int = 1990          // declared default — survives a missing attribute
 }
 
-[test]
+[test(description = "from_xml_node yields one struct per child element with the attributes mapped to fields")]
 def test_from_xml_node(t : T?) {
     // (d) collect rows inside the RAII block, then assert AFTER it closes —
     // materialized values (incl. strings) must stay valid once the document is freed.
@@ -42,7 +42,7 @@ def test_from_xml_node(t : T?) {
     t |> equal(collected[1].year, 1990)
 }
 
-[test]
+[test(description = "the tag-filtered from_xml_node overload skips elements of other names")]
 def test_from_xml_node_filtered(t : T?) {
     parse_xml("<root><car id=\"1\"/><other id=\"99\"/><car id=\"2\"/><car id=\"3\"/></root>") $(doc, ok) {
         t |> success(ok)
@@ -56,7 +56,7 @@ def test_from_xml_node_filtered(t : T?) {
     }
 }
 
-[test]
+[test(description = "from_xml_node skips text nodes between elements instead of yielding default rows")]
 def test_from_xml_node_mixed_content(t : T?) {
     // bare from_xml_node skips non-element children (PCDATA between the cars),
     // so mixed content yields only the 2 elements — not extra default rows

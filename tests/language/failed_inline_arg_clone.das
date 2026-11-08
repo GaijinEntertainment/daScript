@@ -1,3 +1,6 @@
+//! an [inline] call whose array argument is a ternary of const
+//! results cannot splice without a clone, so the demanded inline does
+//! not compile
 options gen2
 expect 30100:1
 

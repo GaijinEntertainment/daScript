@@ -29,7 +29,7 @@ def private fact_guard(var node : SolverFactNode) : SolverGuard =>
 def private dir_column() : array<SolverColumn> =>
     [SolverColumn(domain <- some(["north", "south", "east", "west"]))]
 
-[test]
+[test(description = "The coverage solver reports unreachable arms and the missing values of finite and open columns")]
 def test_solve_coverage(t : T?) {
     t |> run("an arm the arms before it already cover is unreachable") @(t : T?) {
         let cov <- coverage(dir_column(),
@@ -92,7 +92,7 @@ def test_solve_coverage(t : T?) {
     }
 }
 
-[test]
+[test(description = "Guards cover a pattern only when their outcomes are complete questions about the same fact")]
 def test_solve_coverage_guards(t : T?) {
     t |> run("a guarded arm covers nothing") @(t : T?) {
         let cov <- coverage(dir_column(),
@@ -146,7 +146,7 @@ def private overlap(var a, b : array<SolverCell>) : bool {
 
 def private both(var a, b : SolverCell) : SolverCell => SolverCell(all_of <- [a, b])
 
-[test]
+[test(description = "Key, span and any cells overlap exactly when they share a value, and rows overlap only when every column does")]
 def test_overlaps(t : T?) {
     t |> run("keys overlap when they share one") @(t : T?) {
         t |> success(overlap([SolverCell(keys <- ["a", "b"])], [SolverCell(keys <- ["b", "c"])]))
@@ -174,7 +174,7 @@ def test_overlaps(t : T?) {
     }
 }
 
-[test]
+[test(description = "all_of intersects cells as sets, and disjoint cells intersect to nothing")]
 def test_all_of(t : T?) {
     t |> run("any is the identity") @(t : T?) {
         t |> success(overlap([both(SolverCell(any = true), key("a"))], [key("a")]))
@@ -201,7 +201,7 @@ def test_all_of(t : T?) {
     }
 }
 
-[test]
+[test(description = "The solver's reachability, exhaustiveness, overlap and missing-value questions answer correctly")]
 def test_questions(t : T?) {
     t |> run("all_reachable: no arm and no alternative is dead") @(t : T?) {
         t |> success(all_reachable(coverage(dir_column(), [one(key("north")), one(key("south"))])))
@@ -242,7 +242,7 @@ def private unsupported(var node : SolverFactNode) : Result<SolverCoverage; Solv
     return <- solve_coverage(dir_column(), arms)
 }
 
-[test]
+[test(description = "The exact backend names the arm whose fact it cannot decide, and decidable facts raise no error")]
 def test_unsupported_facts(t : T?) {
     t |> run("the exact backend names the arm whose fact it can not decide") @(t : T?) {
         let truth = @() => SolverFact(node = SolverFactNode(truth = SolverTerm(value = 0)))

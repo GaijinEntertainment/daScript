@@ -50,7 +50,7 @@ def make_users() : array<User> {
 
 // ── Theme 4: plan_distinct count(p) / long_count(p) (closes audit 3c) ─────────
 
-[test]
+[test(description = "distinct_by followed by count with a predicate counts the distinct keys whose element passes the predicate")]
 def test_distinct_count_pred(t : T?) {
     t |> run("plan_distinct: distinct_by(region).count(active)") @(tt : T?) {
         let users <- make_users()
@@ -61,7 +61,7 @@ def test_distinct_count_pred(t : T?) {
     }
 }
 
-[test]
+[test(description = "distinct_by followed by long_count with a predicate counts the passing distinct keys as int64")]
 def test_distinct_long_count_pred(t : T?) {
     t |> run("plan_distinct: distinct_by(region).long_count(active)") @(tt : T?) {
         let users <- make_users()
@@ -70,7 +70,7 @@ def test_distinct_long_count_pred(t : T?) {
     }
 }
 
-[test]
+[test(description = "distinct_by with a count predicate that every element passes counts all distinct keys")]
 def test_distinct_count_pred_all_match(t : T?) {
     t |> run("plan_distinct: distinct_by + count(p) where all distinct match") @(tt : T?) {
         let users <- make_users()
@@ -82,7 +82,7 @@ def test_distinct_count_pred_all_match(t : T?) {
 
 // ── Theme 4: plan_decs_distinct count(p) / long_count(p) (decs mirror of 3c) ──
 
-[test]
+[test(description = "distinct_by with a count predicate over a decs source counts the passing distinct keys")]
 def test_decs_distinct_count_pred(t : T?) {
     t |> run("plan_decs_distinct: from_decs_template + distinct_by(region) + count(active)") @(tt : T?) {
         restart()
@@ -103,7 +103,7 @@ def test_decs_distinct_count_pred(t : T?) {
 
 // ── Theme 4: plan_zip count(p) / long_count(p) (closes audit 7-family predicated count) ──
 
-[test]
+[test(description = "zip followed by count with a predicate counts the passing pairs")]
 def test_zip_count_pred(t : T?) {
     t |> run("plan_zip: zip + count(p) over pair") @(tt : T?) {
         let a <- [1, 2, 3, 4, 5]
@@ -114,7 +114,7 @@ def test_zip_count_pred(t : T?) {
     }
 }
 
-[test]
+[test(description = "zip followed by long_count with a predicate counts the passing pairs as int64")]
 def test_zip_long_count_pred(t : T?) {
     t |> run("plan_zip: zip + long_count(p)") @(tt : T?) {
         let a <- [1, 2, 3]
@@ -124,7 +124,7 @@ def test_zip_long_count_pred(t : T?) {
     }
 }
 
-[test]
+[test(description = "zip, where and a count predicate combine the two filters as a conjunction")]
 def test_zip_where_then_count_pred(t : T?) {
     t |> run("plan_zip: zip + where + count(p) AND merge") @(tt : T?) {
         let a <- [1, 2, 3, 4, 5]
@@ -135,7 +135,7 @@ def test_zip_where_then_count_pred(t : T?) {
     }
 }
 
-[test]
+[test(description = "zip, select and a count predicate apply the predicate to the projected element")]
 def test_zip_select_then_count_pred(t : T?) {
     t |> run("plan_zip: zip + select(F) + count(p) — p binds to post-select element") @(tt : T?) {
         let a <- [1, 2, 3, 4, 5]
@@ -147,7 +147,7 @@ def test_zip_select_then_count_pred(t : T?) {
     }
 }
 
-[test]
+[test(description = "zip, select and a long_count predicate apply the predicate to the projected element")]
 def test_zip_select_then_long_count_pred(t : T?) {
     t |> run("plan_zip: zip + select(F) + long_count(p) — p binds to post-select element") @(tt : T?) {
         let a <- [1, 2, 3, 4, 5]
@@ -165,7 +165,7 @@ def side_effect_proj(x : int) : int {
     return x * 2
 }
 
-[test]
+[test(description = "in a zip chain the where filters before the side-effecting select runs")]
 def test_zip_where_select_count_pred_side_effect_order(t : T?) {
     t |> run("plan_zip: where filters BEFORE side-effecting select runs (R3-1 regression)") @(tt : T?) {
         let a <- [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -187,7 +187,7 @@ def test_zip_where_select_count_pred_side_effect_order(t : T?) {
 
 // ── Theme 4: bare from_decs_template + count() and count(p) (extract_decs_bridge fix) ──
 
-[test]
+[test(description = "a bare count over a decs template source counts its entities")]
 def test_decs_bare_count(t : T?) {
     t |> run("plan_decs_unroll Slice 1: bare count() over from_decs_template (bridge recovery)") @(tt : T?) {
         restart()
@@ -202,7 +202,7 @@ def test_decs_bare_count(t : T?) {
     }
 }
 
-[test]
+[test(description = "count with a predicate over a decs template source counts the matching entities")]
 def test_decs_bare_count_pred(t : T?) {
     t |> run("plan_decs_unroll: bare count(p) over from_decs_template (bridge recovery + 2-arg)") @(tt : T?) {
         restart()
@@ -219,7 +219,7 @@ def test_decs_bare_count_pred(t : T?) {
 
 // ── Theme 5: order_by(k).reverse() → order_by_descending(k) (closes audit 1b) ─
 
-[test]
+[test(description = "order_by, reverse and take(3) return the same rows as order_by_descending and take(3)")]
 def test_order_by_reverse_take(t : T?) {
     t |> run("Theme 5 1b: _order_by(_).reverse().take(3) normalizes to _order_by_descending(_).take(3)") @(tt : T?) {
         let scores <- [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5]
@@ -232,7 +232,7 @@ def test_order_by_reverse_take(t : T?) {
     }
 }
 
-[test]
+[test(description = "order_by_descending, reverse and take(3) return the same rows as order_by and take(3)")]
 def test_order_by_descending_reverse_take(t : T?) {
     t |> run("Theme 5 symmetric: _order_by_descending(_).reverse().take(3) → _order_by(_).take(3)") @(tt : T?) {
         let scores <- [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5]
@@ -245,7 +245,7 @@ def test_order_by_descending_reverse_take(t : T?) {
     }
 }
 
-[test]
+[test(description = "two reverses after order_by_descending cancel out")]
 def test_double_reverse_after_order_descending(t : T?) {
     t |> run("Theme 5: _order_by_descending(_).reverse().reverse() cancels to _order_by_descending(_)") @(tt : T?) {
         let scores <- [3, 1, 4, 1, 5]
@@ -258,7 +258,7 @@ def test_double_reverse_after_order_descending(t : T?) {
     }
 }
 
-[test]
+[test(description = "order_by, reverse and take(2) over a decs source return the largest rows in descending order")]
 def test_decs_order_by_reverse(t : T?) {
     t |> run("Theme 5 decs mirror: from_decs_template._order_by(_.price).reverse().take(2)") @(tt : T?) {
         restart()

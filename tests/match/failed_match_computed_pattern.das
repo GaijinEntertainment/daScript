@@ -1,4 +1,5 @@
-// a computed expression is not a pattern - compare against it with match_expr
+//! a computed expression is not a pattern - compare against it with
+//! match_expr
 options gen2
 
 require daslib/match

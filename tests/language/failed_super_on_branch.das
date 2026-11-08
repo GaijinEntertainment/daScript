@@ -1,4 +1,7 @@
-// Derived ctor must call super() on every path — calling only in one if-branch is not enough.
+//! a constructor calling super() on only one if branch does not
+//! compile: every path must call it
+// Derived ctor must call super() on every path — calling only in one
+// if-branch is not enough.
 options gen2
 expect 30308
 

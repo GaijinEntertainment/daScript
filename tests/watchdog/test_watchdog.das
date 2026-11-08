@@ -127,7 +127,7 @@ def skip_without_jit(t : T?) : bool {
     return true
 }
 
-[test]
+[test(description = "each supervisor state has its status line and badge and equal folds compare without text")]
 def test_tray_status_line(t : T?) {
     t |> run("each supervisor state has its line and its badge") @(t : T?) {
         var line = tray_status_line(TrayStatus(child_pid = 0, restart_seconds = 3, last_exit_code = 9))
@@ -177,7 +177,7 @@ def test_tray_status_line(t : T?) {
     }
 }
 
-[test]
+[test(description = "tuner events fold into a plan, kernel and end state that opens and closes the run")]
 def test_tune_fold(t : T?) {
     t |> run("plan opens the run, begin names the kernel, the last end closes it") @(t : T?) {
         var f = TuneFold()
@@ -201,7 +201,7 @@ def test_tune_fold(t : T?) {
     }
 }
 
-[test]
+[test(description = "the origin of a URL is its scheme and authority with a trailing slash")]
 def test_url_origin(t : T?) {
     t |> run("the origin is the scheme and authority with a trailing slash") @(t : T?) {
         t |> equal(url_origin("http://127.0.0.1:8080/v1/models"), "http://127.0.0.1:8080/")
@@ -215,7 +215,7 @@ def test_url_origin(t : T?) {
     }
 }
 
-[test]
+[test(description = "the tray page comes from the tray URL, else the health URL's origin, and Open is live only while the child is green or running")]
 def test_tray_page_and_open(t : T?) {
     t |> run("the page comes from --tray-url, else the polled health URL's origin, else nowhere") @(t : T?) {
         t |> equal(tray_page_url("http://box:1/", "http://127.0.0.1:8080/v1/models", true), "http://box:1/")
@@ -240,7 +240,7 @@ def pixel(px : array<uint8>; side, x, y : int) : int4 {
     return int4(int(px[i]), int(px[i + 1]), int(px[i + 2]), int(px[i + 3]))
 }
 
-[test]
+[test(description = "the tray mark places the disc, the moat and the state badges where each state puts them")]
 def test_tray_mark(t : T?) {
     t |> run("the disc, the moat and the badges land where the states put them") @(t : T?) {
         let base <- tray_mark(32, "base")
@@ -343,7 +343,7 @@ def stop_parked_run(t : T?; var wd : process; root : string) {
     t |> equal(count_event(events, "watchdog_stopped"), 1)
 }
 
-[test]
+[test(description = "the tray menu carries the status line, Open and Shutdown, and Shutdown ends supervision with exit code 0")]
 def test_tray_shutdown_over_private_bus(t : T?) {
     if (!dbus_tools_present()) {
         t |> skip("no /usr/bin/dbus-daemon or dbus-send here: the Linux tray rides D-Bus")
@@ -394,7 +394,7 @@ def test_tray_shutdown_over_private_bus(t : T?) {
 }
 
 //! macOS: the status item's help text is the tooltip, read back through System Events.
-[test]
+[test(description = "the macOS status item's tooltip is the watchdog's status line")]
 def test_tray_status_item_macos(t : T?) {
     if (!fexist("/usr/bin/osascript")) {
         t |> skip("no /usr/bin/osascript here: this arm reads the macOS status item through System Events")
@@ -424,7 +424,7 @@ def test_tray_status_item_macos(t : T?) {
 
 //! Windows has no scriptable route to the notification area: this arm proves the wiring reaches
 //! `tray_started` on an interactive desktop and gives the icon up in session 0.
-[test]
+[test(description = "on Windows the watchdog shows its icon on an interactive desktop or reports it unavailable")]
 def test_tray_windows_smoke(t : T?) {
     if (!fexist("C:\\Windows\\explorer.exe")) {
         t |> skip("not Windows")
@@ -449,7 +449,7 @@ def test_tray_windows_smoke(t : T?) {
 
 //! Supervision under --tray completes whether the icon exists - finish() tears it down and the
 //! crash notification went through it - or not: the icon is never fatal.
-[test]
+[test(description = "supervision of a crash-then-ok child under --tray ends with 0 whether or not an icon exists", timeout = 1200)]
 def test_tray_supervision_completes(t : T?) {
     t |> run("crash-then-ok under --tray ends with 0 with or without an icon") @(t : T?) {
         let no_env : array<string>
@@ -475,7 +475,7 @@ def event_number(events : array<JsonValue?>; name, key : string) : double {
 
 //! The supervisor's own heaps stay bounded under a talkative child: every line becomes a log
 //! record, and the host collects between ticks.
-[test]
+[test(description = "twenty thousand child output lines leave the supervisor's string heap under two megabytes")]
 def test_heaps_stay_bounded_under_a_chatty_child(t : T?) {
     t |> run("twenty thousand child lines leave the string heap under two megabytes") @(t : T?) {
         let root = make_temp(t, "wd chatty ")
@@ -498,7 +498,7 @@ def test_heaps_stay_bounded_under_a_chatty_child(t : T?) {
     }
 }
 
-[test]
+[test(description = "watchdog.json sets flag defaults, a command-line flag wins over it, and arguments after -- go to the child")]
 def test_config_layering(t : T?) {
     t |> run("watchdog.json sets flag defaults, a flag on the command line wins, -- goes to the child") @(t : T?) {
         let root = make_temp(t, "wd config ")
@@ -528,7 +528,7 @@ def test_config_layering(t : T?) {
     }
 }
 
-[test]
+[test(description = "a leading tilde means the home directory and the log, pid file, dumps and crash bundles resolve under state_dir while the child still runs in cwd")]
 def test_state_dir(t : T?) {
     t |> run("~ is the home directory, alone or leading a path; anything else is untouched") @(t : T?) {
         t |> equal(expand_home("~", "/h"), "/h")
@@ -560,7 +560,7 @@ def test_state_dir(t : T?) {
     }
 }
 
-[test]
+[test(description = "the watchdog discovers script mode or program mode from the files beside it, rejects ambiguous or empty layouts and finds a daspkg bundle's executable, config and assets")]
 def test_discovery(t : T?) {   // nolint:STYLE038 — one layout fixture per arm, each a straight list of assertions
     t |> run("main.das beside bin/Release/daslang means script mode; two exes are ambiguous; nothing is an error") @(t : T?) {
         let root = make_temp(t, "wd discover ")
@@ -676,7 +676,7 @@ def test_discovery(t : T?) {   // nolint:STYLE038 — one layout fixture per arm
     }
 }
 
-[test]
+[test(description = "the dasllama mark's ICO decodes to its largest PNG frame with the badge on it, and a non-image or missing file names the reason")]
 def test_tray_icon(t : T?) {
     t |> run("the dasllama mark's ICO decodes to its largest PNG frame, and the badge lands on it") @(t : T?) {
         let path = path_join(get_das_root(), "utils/dasllama-server/tray.ico")
@@ -804,7 +804,7 @@ def load_crafted(dir, name : string; bytes : array<uint8>) : TrayIcon {
     return <- tray_icon_load(path)
 }
 
-[test]
+[test(description = "every malformed or oversize icon file is refused by name and PNG and ICO files with the same pixels are both accepted")]
 def test_tray_icon_refusals(t : T?) {
     t |> run("every malformed or oversize icon file is refused by name, never mapped or decoded blind") @(tt : T?) {
         let dir = make_temp(tt, "wd icons ")
@@ -855,7 +855,7 @@ def test_tray_icon_refusals(t : T?) {
     }
 }
 
-[test]
+[test(description = "only a forward move in the stage rank reports and a tuner restart rewinds the rank")]
 def test_stages_are_ranked_and_monotonic(t : T?) {
     t |> run("only a forward move reports; the tune restart rewinds the rank") @(t : T?) {
         var detector = new StageDetector()
@@ -883,7 +883,7 @@ def test_stages_are_ranked_and_monotonic(t : T?) {
     }
 }
 
-[test]
+[test(description = "an @tune line splits into a kind and key-value fields and other lines do not parse")]
 def test_parse_child_event(t : T?) {
     t |> run("@tune <kind> k=v ... splits into a kind and fields; other lines do not") @(t : T?) {
         let ev <- parse_child_event("@tune plan scope=metal total=12", "@tune ")
@@ -895,7 +895,7 @@ def test_parse_child_event(t : T?) {
     }
 }
 
-[test]
+[test(description = "the event log writes one JSON object per line with ts and event and rotates at the size cap")]
 def test_emitter_envelope_and_rotation(t : T?) {
     t |> run("one JSON object per line with ts and event, fields beside them; the file rotates at the size cap") @(t : T?) {
         let root = make_temp(t, "wd log ")
@@ -925,7 +925,7 @@ def test_emitter_envelope_and_rotation(t : T?) {
     }
 }
 
-[test]
+[test(description = "a crashing child is reported, bundled and restarted with backoff and a clean exit 0 ends supervision", timeout = 1200)]
 def test_supervise_crash_then_clean_exit(t : T?) {
     t |> run("a crash is reported, bundled and restarted with backoff; exit 0 ends supervision") @(t : T?) {
         notifications_enabled = false
@@ -972,7 +972,7 @@ def test_supervise_crash_then_clean_exit(t : T?) {
     }
 }
 
-[test]
+[test(description = "a child exit code 4 relaunches the child at once with no crash report")]
 def test_supervise_config_restart(t : T?) {
     t |> run("exit 4 relaunches at once with no crash report") @(t : T?) {
         notifications_enabled = false
@@ -1003,7 +1003,7 @@ def test_supervise_config_restart(t : T?) {
     }
 }
 
-[test]
+[test(description = "in script mode exit code 3 after the restart marker relaunches the child at once")]
 def test_supervise_tune_bootstrap(t : T?) {
     t |> run("script mode: exit 3 after the restart marker relaunches at once") @(t : T?) {
         if (skip_without_jit(t)) return
@@ -1031,7 +1031,7 @@ def test_supervise_tune_bootstrap(t : T?) {
     }
 }
 
-[test]
+[test(description = "in script mode exit code 3 without the restart marker is a tuner abort relaunched with backoff and not a crash")]
 def test_supervise_tune_abort_backs_off(t : T?) {
     t |> run("script mode: exit 3 without the restart marker is a tuner abort - relaunched with backoff, not a crash") @(t : T?) {
         if (skip_without_jit(t)) return
@@ -1060,7 +1060,7 @@ def test_supervise_tune_abort_backs_off(t : T?) {
     }
 }
 
-[test]
+[test(description = "with --no-shutdown a stop request terminates the child instead of asking it")]
 def test_request_stop_terminates_with_no_shutdown(t : T?) {
     t |> run("--no-shutdown: the stop request terminates the child instead of asking it") @(t : T?) {
         notifications_enabled = false
@@ -1105,7 +1105,7 @@ def test_request_stop_terminates_with_no_shutdown(t : T?) {
     }
 }
 
-[test]
+[test(description = "a stop request writes the stop file so the parked child exits 0 and supervision ends")]
 def test_request_stop_uses_the_stop_file(t : T?) {
     t |> run("the host's stop request writes the stop file; the parked child exits 0 and supervision ends") @(t : T?) {
         notifications_enabled = false
@@ -1151,7 +1151,7 @@ def test_request_stop_uses_the_stop_file(t : T?) {
     }
 }
 
-[test]
+[test(description = "--no-notifications is consumed by the watchdog and never forwarded to the child command, which still gets the arguments after --")]
 def headless_notification_flag_is_owned_by_watchdog(t : T?) {
     let resolved <- resolve_config(["--program", das_exe(), "--no-notifications", "--", "child-argument"], getcwd())
     t |> equal(resolved.error, "")
@@ -1161,7 +1161,7 @@ def headless_notification_flag_is_owned_by_watchdog(t : T?) {
     t |> equal(command[length(command) - 1], "child-argument")
 }
 
-[test]
+[test(description = "the parsed --no-notifications policy survives discovery and parse failures and a child-side --no-notifications cannot change it")]
 def headless_notification_flag_survives_configuration_errors(t : T?) {
     let root = make_temp(t, "watchdog-quiet-errors-")
     if (empty(root)) return

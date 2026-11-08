@@ -25,7 +25,7 @@ def operator :=(var a : PodVariant; _b : PodVariant) {
     a = PodVariant(i = 42)
 }
 
-[test]
+[test(description = "a user clone operator on a variant is called for clone between inferred locals")]
 def test_user_clone_operator_with_inferred_locals(t : T?) {
     let src = PodVariant(f = 1.5)
     var dst = PodVariant(i = 2)
@@ -82,7 +82,7 @@ def index_operators_on_unresolved_dim(var a : int[UNRESOLVED_DIM]) : IndexTarget
     return target
 }
 
-[test]
+[test(description = "index-assign operators whose value is a fixed array of an unresolved dimension bind the concrete int[3] overload, not the auto one")]
 def test_index_operators_bind_the_concrete_overload(t : T?) {
     var x : int[3]
     let target = index_operators_on_unresolved_dim(x)
@@ -106,7 +106,7 @@ def index_assign_into_unresolved_dim(var a : int[UNRESOLVED_DIM]) {
     a[0] = 1
 }
 
-[test]
+[test(description = "an index assignment into a fixed array of an unresolved dimension binds the concrete int[3] self overload")]
 def test_index_assign_on_unresolved_self_binds_the_concrete_overload(t : T?) {
     var x : int[3]
     index_assign_into_unresolved_dim(x)
@@ -131,7 +131,7 @@ def index_assign_with_unresolved_index(a : int[UNRESOLVED_DIM]) : int {
     return sink.hit
 }
 
-[test]
+[test(description = "an index assignment whose index is a fixed array of an unresolved dimension binds the concrete int[3] index overload")]
 def test_index_assign_with_unresolved_index_binds_the_concrete_overload(t : T?) {
     let x : int[3] = fixed_array(1, 2, 3)
     t |> equal(index_assign_with_unresolved_index(x), 1)
@@ -139,7 +139,7 @@ def test_index_assign_with_unresolved_index_binds_the_concrete_overload(t : T?) 
 
 def is_three_ints(a : int[UNRESOLVED_DIM]) : bool => a is type<int[3]> && a[0] == 1
 
-[test]
+[test(description = "is type<int[3]> on a fixed array declared with an unresolved dimension answers true once the dimension resolves")]
 def test_is_type_on_unresolved_dim(t : T?) {
     let x : int[3] = fixed_array(1, 2, 3)
     t |> success(is_three_ints(x))
@@ -190,7 +190,7 @@ typedef HeapPair = tuple<a : int; v : HeapVariant>
 
 def HeapPair(a : int; _v : HeapVariant) : HeapPair => <- (a = a + 100, v = HeapVariant(p = 7))
 
-[test]
+[test(description = "a call whose argument type is still being inferred - a local, a class member, a field, a method result - binds the intended function, not a same-signature impostor")]
 def test_call_with_inferred_argument_binds_the_function(t : T?) {
     t |> equal(call_with_inferred_local(), 1)
     var holder = new HeapTargetHolder()
@@ -215,7 +215,7 @@ def memzero(var s : ZeroTarget; _v : HeapVariant) {
     s.x = 42
 }
 
-[test]
+[test(description = "a dot method call whose argument comes through nested generic pass-throughs binds the user function over the builtin of the same name")]
 def test_method_call_with_inferred_argument_binds_the_function(t : T?) {
     var s = ZeroTarget(x = 5)
     let src <- pass_through(pass_through(pass_through(HeapVariant(p = 1))))
@@ -229,7 +229,7 @@ def memzero(var _v : HeapVariant) {
     g_receiver_hit = 42
 }
 
-[test]
+[test(description = "a dot method call on a receiver inferred through nested generic pass-throughs binds the user function and leaves the receiver intact")]
 def test_method_call_on_inferred_receiver_binds_the_function(t : T?) {
     var src <- pass_through(pass_through(pass_through(HeapVariant(p = 1))))
     src.memzero()
@@ -242,12 +242,12 @@ struct WithUnresolvedDim {
     x : int
 }
 
-[test]
+[test(description = "typeinfo offsetof of a field after a fixed array with an unresolved dimension counts the resolved size")]
 def test_offsetof_after_unresolved_dim(t : T?) {
     t |> equal(typeinfo offsetof < x > (type<WithUnresolvedDim>), 12)
 }
 
-[test]
+[test(description = "pointer + 1, ++ and pointer difference over a struct holding an unresolved-dimension array stride by the resolved struct size")]
 def test_pointer_stride_over_unresolved_dim(t : T?) {
     var arr : WithUnresolvedDim[4]
     unsafe {
@@ -271,7 +271,7 @@ struct WithInferredFieldType {
     x : int
 }
 
-[test]
+[test(description = "pointer arithmetic over a struct whose field type is inferred strides by the struct's final size")]
 def test_pointer_stride_over_inferred_field_type(t : T?) {
     unsafe {
         var arr : WithInferredFieldType[4]
@@ -287,7 +287,7 @@ def test_pointer_stride_over_inferred_field_type(t : T?) {
 
 def ptr_diff(a, b : WithInferredFieldType?) : int64 => a - b
 
-[test]
+[test(description = "the difference of two pointers to a struct with an inferred field type counts elements, not bytes")]
 def test_pointer_diff_over_inferred_field_type(t : T?) {
     unsafe {
         var arr : WithInferredFieldType[4]
@@ -300,7 +300,7 @@ struct SelfLinked {
     x : int
 }
 
-[test]
+[test(description = "pointer + 1 over a self-referential struct strides by the struct's size")]
 def test_pointer_stride_over_self_referential_struct(t : T?) {
     unsafe {
         var arr : SelfLinked[4]
@@ -312,7 +312,7 @@ def test_pointer_stride_over_self_referential_struct(t : T?) {
 
 typedef InferredFieldPair = WithInferredFieldType[2]
 
-[test]
+[test(description = "pointer + 1 over a fixed array of structs with an inferred field type strides by the whole array's size")]
 def test_pointer_stride_over_array_of_inferred_struct(t : T?) {
     unsafe {
         var arr : InferredFieldPair[4]
@@ -330,7 +330,7 @@ def count_down(n : int) {
     return 0
 }
 
-[test]
+[test(description = "a recursive function whose result type is read through a local still pending inference infers and returns the right count")]
 def test_recursive_result_read_through_a_pending_local(t : T?) {
     t |> equal(count_down(3), 3)
 }

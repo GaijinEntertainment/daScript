@@ -1,3 +1,5 @@
+//! with_ over an element reached through a nested index must not
+//! compile (50503), because only the inner container would be locked.
 options gen2
 expect 50503
 

@@ -215,6 +215,13 @@ add_custom_target(check_review_gates
     COMMENT "Running every REVIEW.das gate"
 )
 
+add_das_target(check_tests_index
+    COMMAND $<TARGET_FILE:daslang> ./utils/internal/test-audit/main.das -- --verify
+    DEPENDS daslang
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Checking tests/README.md against the [test] census (regenerate: test-audit --readme)"
+)
+
 add_das_target(check_gated_das
     COMMAND $<TARGET_FILE:daslang> utils/internal/preflight/main.das -- --only ci-das
     DEPENDS daslang
@@ -352,6 +359,7 @@ SET(DAS_UTILS_TO_TEST
     internal/requirefix
     internal/test-release
     internal/line-length/test_line_length.das
+    internal/test-audit/test_audit.das
     common/tests
     daspkg/test_daspkg.das
     daspkg/test_release_workspace.das

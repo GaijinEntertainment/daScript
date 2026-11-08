@@ -98,7 +98,7 @@ def parse_lines(input : string; blk : block<(val : array<string>; err : array<Pa
     }
 }
 
-[test]
+[test(description = "star over empty input yields an empty array")]
 def test_star_empty(t : T?) {
     parse_star_array("") $(val; err) {
         t |> success(err |> empty)
@@ -106,7 +106,7 @@ def test_star_empty(t : T?) {
     }
 }
 
-[test]
+[test(description = "star over one element yields a one-element array")]
 def test_star_one(t : T?) {
     parse_star_array("42") $(val; err) {
         t |> success(err |> empty, "single number should match")
@@ -115,7 +115,7 @@ def test_star_one(t : T?) {
     }
 }
 
-[test]
+[test(description = "star over space-separated numbers yields all elements in order")]
 def test_star_many(t : T?) {
     parse_star_array("1 2 3") $(val; err) {
         t |> success(err |> empty, "space-separated numbers")
@@ -126,7 +126,7 @@ def test_star_many(t : T?) {
     }
 }
 
-[test]
+[test(description = "a skipped star prefix of spaces leaves the value that follows")]
 def test_star_skip(t : T?) {
     t |> run("skip leading spaces") @(t : T?) {
         parse_star_skip("   42") $(val; err) {
@@ -142,14 +142,14 @@ def test_star_skip(t : T?) {
     }
 }
 
-[test]
+[test(description = "plus requires at least one match and errors on empty input")]
 def test_plus_empty_fails(t : T?) {
     parse_plus("") $(_val; err) {
         t |> success(!empty(err), "one-or-more should require at least one match")
     }
 }
 
-[test]
+[test(description = "plus with one repeated element and a trailing element yields both")]
 def test_plus_one(t : T?) {
     // + requires at least one match of spaced_number (number + " ")
     // so "7 8" has spaced_number="7 " and last=8
@@ -161,7 +161,7 @@ def test_plus_one(t : T?) {
     }
 }
 
-[test]
+[test(description = "plus collects several repeated elements in order")]
 def test_plus_many(t : T?) {
     parse_plus("10 20 30") $(val; err) {
         t |> success(err |> empty, "multiple elements")
@@ -172,7 +172,7 @@ def test_plus_many(t : T?) {
     }
 }
 
-[test]
+[test(description = "a comma-separated list parses empty, single and multiple items")]
 def test_comma_separated(t : T?) {
     t |> run("empty list") @(t : T?) {
         parse_csv_nums("") $(val; err) {
@@ -198,7 +198,7 @@ def test_comma_separated(t : T?) {
     }
 }
 
-[test]
+[test(description = "a line-separated repetition parses one or two lines")]
 def test_lines(t : T?) {
     t |> run("two lines") @(t : T?) {
         parse_lines("hello\nworld") $(val; err) {

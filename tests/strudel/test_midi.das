@@ -34,7 +34,7 @@ def push_midi_header(var d : array<uint8>; fmt, nTracks, tpqn : uint) {
 
 // ─── VLQ ───
 
-[test]
+[test(description = "the MIDI variable-length quantity reader decodes one and two byte values")]
 def test_vlq(t : T?) {
     t |> run("single byte 0") <| @(t : T?) {
         var data : array<uint8>
@@ -66,7 +66,7 @@ def test_vlq(t : T?) {
 
 // ─── Binary Readers ───
 
-[test]
+[test(description = "the big-endian u16 and u32 readers decode correctly and a byte read past the end is handled")]
 def test_binary_readers(t : T?) {
     t |> run("read_u16 big-endian") <| @(t : T?) {
         var data : array<uint8>
@@ -131,7 +131,7 @@ def make_test_midi() : array<uint8> {
     return <- d
 }
 
-[test]
+[test(description = "a format 0 MIDI file parses its header, events and absolute tick positions")]
 def test_parse_format0(t : T?) {
     t |> run("header fields") <| @(t : T?) {
         let data <- make_test_midi()
@@ -166,7 +166,7 @@ def test_parse_format0(t : T?) {
 
 // ─── Velocity 0 = Note Off ───
 
-[test]
+[test(description = "a note-on with velocity 0 is read as a note-off")]
 def test_velocity_zero(t : T?) {
     t |> run("note on with velocity 0 becomes note off") <| @(t : T?) {
         var d : array<uint8>
@@ -185,7 +185,7 @@ def test_velocity_zero(t : T?) {
 
 // ─── Program Change ───
 
-[test]
+[test(description = "a MIDI program change event is parsed")]
 def test_program_change(t : T?) {
     t |> run("program change parsed") <| @(t : T?) {
         var d : array<uint8>
@@ -203,7 +203,7 @@ def test_program_change(t : T?) {
 
 // ─── Format 1 + merge_tracks ───
 
-[test]
+[test(description = "the tracks of a format 1 file are merged and sorted by time")]
 def test_format1_merge(t : T?) {
     t |> run("two tracks merged and sorted") <| @(t : T?) {
         var d : array<uint8>
@@ -246,7 +246,7 @@ def test_format1_merge(t : T?) {
 
 // ─── Edge Cases ───
 
-[test]
+[test(description = "empty data, a wrong magic and truncated data are rejected without a crash")]
 def test_edge_cases(t : T?) {
     t |> run("empty data") <| @(t : T?) {
         let empty : array<uint8>

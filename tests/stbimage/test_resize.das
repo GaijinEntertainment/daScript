@@ -9,7 +9,7 @@ require dastest/testing_boost public
 
 // ---- enum values ----
 
-[test]
+[test(description = "the stbir_pixel_layout members 1CHANNEL, RGB, RGBA, 4CHANNEL, BGRA and RGBA_PM carry the stb values 1, 3, 4, 5, 6 and 11")]
 def test_pixel_layout_enum(t : T?) {
     t |> run("stbir_pixel_layout enum values are correct") <| @(tt : T?) {
         tt |> equal(int(stbir_pixel_layout.STBIR_1CHANNEL), 1)
@@ -21,7 +21,7 @@ def test_pixel_layout_enum(t : T?) {
     }
 }
 
-[test]
+[test(description = "the stbir_edge members CLAMP, REFLECT, WRAP and ZERO carry the stb values 0, 1, 2 and 3")]
 def test_edge_enum(t : T?) {
     t |> run("stbir_edge enum values are correct") <| @(tt : T?) {
         tt |> equal(int(stbir_edge.STBIR_EDGE_CLAMP), 0)
@@ -31,7 +31,7 @@ def test_edge_enum(t : T?) {
     }
 }
 
-[test]
+[test(description = "the stbir_filter members DEFAULT, BOX, TRIANGLE, MITCHELL and POINT_SAMPLE carry the stb values 0, 1, 2, 5 and 6")]
 def test_filter_enum(t : T?) {
     t |> run("stbir_filter enum values are correct") <| @(tt : T?) {
         tt |> equal(int(stbir_filter.STBIR_FILTER_DEFAULT), 0)
@@ -42,7 +42,7 @@ def test_filter_enum(t : T?) {
     }
 }
 
-[test]
+[test(description = "the stbir_datatype members UINT8, UINT8_SRGB, UINT16, FLOAT and HALF_FLOAT carry the stb values 0, 1, 3, 4 and 5")]
 def test_datatype_enum(t : T?) {
     t |> run("stbir_datatype enum values are correct") <| @(tt : T?) {
         tt |> equal(int(stbir_datatype.STBIR_TYPE_UINT8), 0)
@@ -55,7 +55,7 @@ def test_datatype_enum(t : T?) {
 
 // ---- resize uint8 srgb ----
 
-[test]
+[test(description = "enlarging a uniform mid-grey 2x2 RGBA image to 4x4 with the sRGB resizer succeeds and keeps every output byte between 100 and 156")]
 def test_resize_uint8_srgb_upscale(t : T?) {
     t |> run("resize 2x2 to 4x4 srgb") <| @(tt : T?) {
         // 2x2 RGBA image
@@ -77,7 +77,7 @@ def test_resize_uint8_srgb_upscale(t : T?) {
     }
 }
 
-[test]
+[test(description = "shrinking an all-white 4x4 RGBA image to 2x2 with the sRGB resizer succeeds and leaves every output byte at exactly 255")]
 def test_resize_uint8_srgb_downscale(t : T?) {
     t |> run("resize 4x4 to 2x2 srgb") <| @(tt : T?) {
         var input : uint8[64]  // 4x4 RGBA, all white
@@ -100,7 +100,7 @@ def test_resize_uint8_srgb_downscale(t : T?) {
 
 // ---- resize uint8 linear ----
 
-[test]
+[test(description = "enlarging a 2x2 RGB 8-bit image to 4x4 with the linear resizer succeeds")]
 def test_resize_uint8_linear(t : T?) {
     t |> run("resize linear mode works") <| @(tt : T?) {
         var input : uint8[12]  // 2x2 RGB
@@ -119,7 +119,7 @@ def test_resize_uint8_linear(t : T?) {
 
 // ---- resize float linear ----
 
-[test]
+[test(description = "enlarging a uniform 0.5 float 2x2 RGBA image to 4x4 with the float resizer succeeds and keeps every output value between 0.4 and 0.6")]
 def test_resize_float_linear(t : T?) {
     t |> run("resize float data works") <| @(tt : T?) {
         var input : float[16]  // 2x2 RGBA float
@@ -142,7 +142,7 @@ def test_resize_float_linear(t : T?) {
 
 // ---- resize medium API ----
 
-[test]
+[test(description = "stbir_resize with an explicit Mitchell filter and clamp edge mode enlarges a 2x2 RGBA 8-bit image to 3x3 successfully")]
 def test_resize_medium_api(t : T?) {
     t |> run("medium API with explicit filter and edge mode") <| @(tt : T?) {
         var input : uint8[16]  // 2x2 RGBA
@@ -162,7 +162,7 @@ def test_resize_medium_api(t : T?) {
     }
 }
 
-[test]
+[test(description = "point-sampling a single opaque red RGBA pixel up to 2x2 gives four pixels that are exactly (255, 0, 0, 255)")]
 def test_resize_medium_api_point_sample(t : T?) {
     t |> run("point sample filter produces exact copies") <| @(tt : T?) {
         // 1x1 red pixel
@@ -193,7 +193,7 @@ def test_resize_medium_api_point_sample(t : T?) {
 
 // ---- resize with null output (auto-allocate) ----
 
-[test]
+[test(description = "passing a null output buffer to the sRGB resizer makes it allocate and return the 4x4 result itself")]
 def test_resize_auto_allocate(t : T?) {
     t |> run("resize with null output allocates result") <| @(tt : T?) {
         var input : uint8[16]

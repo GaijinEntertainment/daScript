@@ -14,7 +14,7 @@ require dastest/testing_boost public
 
 // ── Multi-statement append ──────────────────────────────────────────────
 
-[test]
+[test(description = "push of a block appends all its statements to a statement list")]
 def test_appends_all_statements(t : T?) {
     ast_gc_guard() {
         var stmts : array<Expression?>
@@ -30,7 +30,7 @@ def test_appends_all_statements(t : T?) {
 
 // ── Single-statement (degenerate but legal) ────────────────────────────
 
-[test]
+[test(description = "push of a one-statement block appends that statement")]
 def test_single_statement(t : T?) {
     ast_gc_guard() {
         var stmts : array<Expression?>
@@ -44,7 +44,7 @@ def test_single_statement(t : T?) {
 
 // ── Composes with prior + subsequent pushes ────────────────────────────
 
-[test]
+[test(description = "push of a block keeps its place among other pushes to the same list")]
 def test_interleaves_with_other_pushes(t : T?) {
     ast_gc_guard() {
         var stmts : array<Expression?>
@@ -65,7 +65,7 @@ def test_interleaves_with_other_pushes(t : T?) {
 
 // ── Pipe form ───────────────────────────────────────────────────────────
 
-[test]
+[test(description = "push of a block works in the pipe form")]
 def test_pipe_form(t : T?) {
     ast_gc_guard() {
         var stmts : array<Expression?>
@@ -80,7 +80,7 @@ def test_pipe_form(t : T?) {
 
 // ── Null input is a silent no-op ────────────────────────────────────────
 
-[test]
+[test(description = "push of a null block leaves the statement list unchanged")]
 def test_null_block_is_noop(t : T?) {
     ast_gc_guard() {
         var stmts : array<Expression?>

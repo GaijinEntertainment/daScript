@@ -1,3 +1,6 @@
+//! A distinct type must not mix with its underlying type or with
+//! another distinct of the same underlying type (30341 six times,
+//! 30344).
 options gen2
 
 expect 30341 : 6

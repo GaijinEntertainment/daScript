@@ -29,7 +29,7 @@ def struct_convert_field(var dst : string&; src : int) : void {
 [struct_convert]
 def m_v1_to_v2(old : ItemV1; var dst : Item) {}
 
-[test]
+[test(description = "a user struct_convert_field overload takes precedence over the shipped catch-all", standalone = "its struct_convert_field overload changes int-to-string conversion for the whole program")]
 def test_user_overload_extends_dispatch(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> exec("CREATE TABLE items (Id INTEGER PRIMARY KEY, Score INTEGER NOT NULL)")

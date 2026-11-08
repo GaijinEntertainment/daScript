@@ -135,7 +135,7 @@ def run_module_test_option_ignored(base_path, main_file, ignored_opt, applied_op
 }
 
 
-[test]
+[test(description = "modules resolve through project.das_project and the main script runs")]
 def test_module_main(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules"
     t |> run("basic module resolution via project.das_project") @(t : T?) {
@@ -143,7 +143,7 @@ def test_module_main(t : T?) {
     }
 }
 
-[test]
+[test(description = "module resolution works with #include support")]
 def test_module_main_inc(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules"
     t |> run("module resolution with #include support") @(t : T?) {
@@ -151,7 +151,7 @@ def test_module_main_inc(t : T?) {
     }
 }
 
-[test]
+[test(description = "modules resolve without a project file through the default resolver")]
 def test_module_main_default(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules"
     t |> run("module resolution without project file") @(t : T?) {
@@ -159,7 +159,7 @@ def test_module_main_default(t : T?) {
     }
 }
 
-[test]
+[test(description = "a module is reachable under the alias given by the third tuple field")]
 def test_module_alias(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules/alias"
     t |> run("module aliasing via third tuple field") @(t : T?) {
@@ -167,7 +167,7 @@ def test_module_alias(t : T?) {
     }
 }
 
-[test]
+[test(description = "the project resolver routes requires through a custom profile")]
 def test_module_cdp(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules/cdp"
     t |> run("custom profile routing in project resolver") @(t : T?) {
@@ -175,7 +175,7 @@ def test_module_cdp(t : T?) {
     }
 }
 
-[test]
+[test(description = "module_allowed_unsafe grants permission for implicit parameters")]
 def test_module_unsafe(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules/unsafe"
     t |> run("module_allowed_unsafe permission for implicit params") @(t : T?) {
@@ -183,7 +183,7 @@ def test_module_unsafe(t : T?) {
     }
 }
 
-[test]
+[test(description = "module_allowed blocks strings_boost, so the compile fails")]
 def test_module_failed(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules/failed"
     t |> run("module_allowed blocks strings_boost — compilation must fail") @(t : T?) {
@@ -191,7 +191,7 @@ def test_module_failed(t : T?) {
     }
 }
 
-[test]
+[test(description = "the same module name from two packages is a conflict, so the compile fails")]
 def test_module_conflict(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules/conflict"
     t |> run("same module name from different packages — compilation must fail") @(t : T?) {
@@ -199,7 +199,7 @@ def test_module_conflict(t : T?) {
     }
 }
 
-[test]
+[test(description = "option_allowed blocks the rtti option, so the compile fails")]
 def test_module_option_allowed(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules/options"
     t |> run("option_allowed blocks `rtti` — compilation must fail") @(t : T?) {
@@ -207,7 +207,7 @@ def test_module_option_allowed(t : T?) {
     }
 }
 
-[test]
+[test(description = "option_blocked tolerates persistent_heap, so the compile succeeds and the option is ignored")]
 def test_module_option_blocked(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules/options"
     t |> run("option_blocked tolerates `persistent_heap` — compiles, option ignored") @(t : T?) {
@@ -221,7 +221,7 @@ def test_module_option_blocked(t : T?) {
 // required via different path expressions (`./foo.das` vs `../foo.das`) from
 // different files must DEDUP to the same Module after resolver normalization,
 // not over-reject and fail with "already created".
-[test]
+[test(description = "different path expressions for the same shared module resolve to one module")]
 def test_module_promoted_path_dedup(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules/promoted_path_dedup"
     t |> run("different path expressions for the same shared module must dedup") @(t : T?) {
@@ -233,7 +233,7 @@ def test_module_promoted_path_dedup(t : T?) {
 // (no-project) mode. main.das requires the same helpers.das module via four
 // different paths and must dedup them; main_missing.das has a require to a
 // non-existent file and must fail compilation cleanly.
-[test]
+[test(description = "file-path requires starting with ./, ../ or %/ resolve and dedup in default mode")]
 def test_module_filepath(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules/filepath"
     t |> run("file-path requires (./, ../, %/) resolve and dedup in default mode") @(t : T?) {
@@ -260,7 +260,7 @@ def expect_compile_failure_default(base, main_file : string) : bool {
     return result
 }
 
-[test]
+[test(description = "a file-path require of a missing file produces a clean compile error")]
 def test_module_filepath_missing(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules/filepath"
     t |> run("missing file-path require produces a clean compilation error") @(t : T?) {
@@ -271,7 +271,7 @@ def test_module_filepath_missing(t : T?) {
 // Security regression: %/ must stay rooted at get_das_root(). %/../etc/x.das
 // would normalize to <dasroot>'s parent and escape unless the resolver
 // rejects `..` segments in the %/ branch.
-[test]
+[test(description = "a %/ require cannot use .. to escape get_das_root")]
 def test_module_filepath_escape(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules/filepath"
     t |> run("%/ require with .. cannot escape get_das_root") @(t : T?) {
@@ -304,7 +304,7 @@ def extra_module_diagnostic(base : string; extras : array<string>) : string {
 def reports_readably(text, must_contain : string) : bool =>
     !empty(text) && find(text, must_contain) >= 0 && find(text, "internal error") < 0
 
-[test]
+[test(description = "an extra module with a missing require reports it readably")]
 def test_extra_module_missing(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules/extra_errors"
     t |> run("extra module with a missing require reports it readably") @(t : T?) {
@@ -313,7 +313,7 @@ def test_extra_module_missing(t : T?) {
     }
 }
 
-[test]
+[test(description = "an extra module with a circular require reports it readably")]
 def test_extra_module_circular(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules/extra_errors"
     t |> run("extra module with a circular require reports it readably") @(t : T?) {
@@ -322,7 +322,7 @@ def test_extra_module_circular(t : T?) {
     }
 }
 
-[test]
+[test(description = "an extra module requiring a non-requirable module reports it readably")]
 def test_extra_module_private(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules/extra_errors"
     t |> run("extra module requiring a non-requirable module reports it readably") @(t : T?) {
@@ -331,7 +331,7 @@ def test_extra_module_private(t : T?) {
     }
 }
 
-[test]
+[test(description = "an extra module requiring a blocked module reports it readably, and a blocked dependency of a native module is named")]
 def test_extra_module_blocked(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules/extra_errors"
     t |> run("extra module requiring a blocked module reports it readably") @(t : T?) {
@@ -344,7 +344,7 @@ def test_extra_module_blocked(t : T?) {
     }
 }
 
-[test]
+[test(description = "an extra module requiring a mis-named module suggests the real name")]
 def test_extra_module_wrong_name(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules/extra_errors"
     t |> run("extra module requiring a mis-named module suggests the real name") @(t : T?) {
@@ -353,7 +353,7 @@ def test_extra_module_wrong_name(t : T?) {
     }
 }
 
-[test]
+[test(description = "an extra module that pulls two files of one module name reports both")]
 def test_extra_module_duplicate(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules/extra_errors"
     t |> run("extra module pulling two files of the same module name reports both") @(t : T?) {
@@ -362,7 +362,7 @@ def test_extra_module_duplicate(t : T?) {
     }
 }
 
-[test]
+[test(description = "an extra module requiring one file under two casings reports a conflict")]
 def test_extra_module_case_conflict(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules/extra_errors"
     t |> run("extra module requiring one nameless file under two casings conflicts") @(t : T?) {
@@ -373,7 +373,7 @@ def test_extra_module_case_conflict(t : T?) {
 
 // The trailing newline in the expected text is load-bearing: it pins the
 // no-suggestion module-info-not-found phrase to end cleanly, with no stray quote.
-[test]
+[test(description = "an extra module requiring a blank-name resolution reports that module info was not found")]
 def test_extra_module_module_info(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules/extra_errors"
     t |> run("extra module requiring a blank-name resolution reports module info not found") @(t : T?) {
@@ -382,7 +382,7 @@ def test_extra_module_module_info(t : T?) {
     }
 }
 
-[test]
+[test(description = "a dependency that failed for one extra module is not reported as circular for the next")]
 def test_extra_module_shared_failed_dependency(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules/extra_errors"
     t |> run("a dependency that failed for one extra module is not circular for the next") @(t : T?) {

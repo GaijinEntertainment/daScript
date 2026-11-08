@@ -1,3 +1,5 @@
+//! an uninitialized local block variable, or one initialized from
+//! anything but a block literal, does not compile
 options gen2
 expect 30198, 30315
 
@@ -9,7 +11,9 @@ def test_fail_block(t : T?) {
         return a + b
     }
     var b : block<(a : int) : void>// 30108: local block variable needs to be initialized
-    let bb = blk                // 30113: local variable bb can only be initialized with make block expression
+    // 30113: local variable bb can only be initialized with make block
+    // expression
+    let bb = blk
 }
 
 

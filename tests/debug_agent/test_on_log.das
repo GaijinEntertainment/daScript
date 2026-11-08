@@ -49,7 +49,7 @@ def reset_log_state() {
     last_log_level = -1
 }
 
-[test]
+[test(description = "to_log reaches the agent onLog hook")]
 def test_to_log_triggers_on_log(t : T?) {
     set_env_variable("DAS_LOG_LEVEL", "info")
     defer() {
@@ -67,7 +67,7 @@ def test_to_log_triggers_on_log(t : T?) {
     }
 }
 
-[test]
+[test(description = "print reaches the agent onLog hook")]
 def test_print_triggers_on_log(t : T?) {
     t |> run("print routes through onLog") @(t : T?) {
         ensure_log_agent()
@@ -82,7 +82,7 @@ def test_print_triggers_on_log(t : T?) {
     }
 }
 
-[test]
+[test(description = "onLog receives the level that to_log was called with")]
 def test_on_log_receives_level(t : T?) {
     t |> run("onLog receives the log level") @(t : T?) {
         ensure_log_agent()
@@ -96,7 +96,7 @@ def test_on_log_receives_level(t : T?) {
     }
 }
 
-[test]
+[test(description = "delete_debug_agent_context removes the named agent")]
 def test_cleanup(t : T?) {
     t |> run("delete_debug_agent_context removes log_test agent") @(t : T?) {
         ensure_log_agent()

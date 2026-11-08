@@ -24,7 +24,7 @@ struct PairVal {
 // with_channel(N) creates a channel expecting N notify() calls before pop stops
 // blocking. This is used with new_job/new_thread patterns where each job notifies.
 
-[test]
+[test(description = "with_channel creates and destroys a channel, with or without an initial count")]
 def test_channel_basics(t : T?) {
     t |> run("with_channel creates and destroys") @(t : T?) {
         var entered = false
@@ -50,7 +50,7 @@ def test_channel_basics(t : T?) {
     }
 }
 
-[test]
+[test(description = "push_clone then pop_and_clone_one returns the pushed values, pairs included")]
 def test_channel_push_pop(t : T?) {
     t |> run("push_clone and pop_and_clone_one") @(t : T?) {
         with_channel() $(ch) {
@@ -97,7 +97,7 @@ def test_channel_push_pop(t : T?) {
     }
 }
 
-[test]
+[test(description = "for_each_clone visits every pushed value and does nothing on an empty channel")]
 def test_channel_for_each_clone(t : T?) {
     t |> run("for_each_clone reads all pushed values") @(t : T?) {
         with_channel() $(ch) {
@@ -126,7 +126,7 @@ def test_channel_for_each_clone(t : T?) {
     }
 }
 
-[test]
+[test(description = "gather hands every pushed value to its block")]
 def test_channel_gather(t : T?) {
     t |> run("gather reads all pushed values") @(t : T?) {
         with_channel() $(ch) {
@@ -145,7 +145,7 @@ def test_channel_gather(t : T?) {
 // Reentrancy contract: gather drains the pipe under the lock, then runs the block
 // OUTSIDE it — same rule as Stream::gather (see test_jobque_stream.das). Items
 // pushed during a gather join the next drain, never the current one.
-[test]
+[test(description = "A gather block may push to or query the channel it is draining")]
 def test_channel_gather_reentrant(t : T?) {
     t |> run("gather block may push to the same channel") @(t : T?) {
         with_channel() $(ch) {
@@ -179,7 +179,7 @@ def test_channel_gather_reentrant(t : T?) {
     }
 }
 
-[test]
+[test(description = "peek reads the pending values without consuming them")]
 def test_channel_peek(t : T?) {
     t |> run("peek reads without consuming") @(t : T?) {
         with_channel() $(ch) {
@@ -198,7 +198,7 @@ def test_channel_peek(t : T?) {
     }
 }
 
-[test]
+[test(description = "The each_clone iterator yields every pushed value")]
 def test_channel_each_clone_iterator(t : T?) {
     t |> run("each_clone iterator") @(t : T?) {
         with_channel() $(ch) {
@@ -217,7 +217,7 @@ def test_channel_each_clone_iterator(t : T?) {
     }
 }
 
-[test]
+[test(description = "push_batch_clone pushes every item of the batch")]
 def test_channel_push_batch_clone(t : T?) {
     t |> run("push_batch_clone pushes all items") @(t : T?) {
         with_channel() $(ch) {
@@ -239,7 +239,7 @@ def test_channel_push_batch_clone(t : T?) {
 // A payload consumer (pop_with_timeout_clone) wakes on the worker's push, which lands BEFORE the
 // worker's notify_and_release - the deliberate sleep holds that window open, and join() before the
 // with_channel scope closes is the fence (see skills/jobque_debugging.md).
-[test]
+[test(description = "A join before scope close waits for a slow-releasing payload consumer to finish")]
 def test_join_fences_a_payload_consumer(t : T?) {
     t |> run("join before scope close outlives a slow-releasing worker") @(t : T?) {
         var value = 0
@@ -264,7 +264,7 @@ def test_join_fences_a_payload_consumer(t : T?) {
     }
 }
 
-[test]
+[test(description = "Channel pops return values in FIFO order")]
 def test_channel_ordering(t : T?) {
     t |> run("FIFO ordering preserved") @(t : T?) {
         with_channel() $(ch) {

@@ -1,6 +1,9 @@
-// Aliasing two different modules to the same name is an error (20510). Reachable for
-// non-path requires only once explicit `as` registers unconditionally — before the fix
-// both aliases were silently dropped and this file compiled clean.
+//! aliasing two different modules to the same name with require as
+//! does not compile
+// Aliasing two different modules to the same name is an error
+// (20510). Reachable for non-path requires only once explicit `as`
+// registers unconditionally — before the fix both aliases were
+// silently dropped and this file compiled clean.
 options gen2
 
 expect 20510:1

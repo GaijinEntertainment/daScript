@@ -23,7 +23,7 @@ def private lacks(t : T?; text, needle, what : string) {
     t |> success(find(text, needle) < 0, "{what}: emitted CUDA does not carry `{needle}`")
 }
 
-[test]
+[test(description = "The emitted CUDA carries the pointer struct, entry point, launch bounds and unpacking, passes the args struct by value with methods as __device__ functions, and routes precise f32 operations through the correctly rounded intrinsics.")]
 def test_cuda_signature(t : T?) {
     t |> run("the pointer struct, the entry point, the launch bounds, the unpacking") <| @(t : T?) {
         has(t, mul_ab_cuda, "struct MulAB_mul_ab_bufs \{\n    const float* a;\n    const float* b;\n    float* c;\n\};", "bufs")
@@ -56,7 +56,7 @@ def test_cuda_signature(t : T?) {
     }
 }
 
-[test]
+[test(description = "The emitted CUDA spells vectors, control flow with loop hints and the math names, with the right operators, swizzles and bitcasts.")]
 def test_cuda_constructs(t : T?) {
     t |> run("vectors: make_, operators from the prelude, swizzles, splat, convert, scalar-bool compares") <| @(t : T?) {
         has(t, vecarith_cuda, "__device__ __forceinline__ float4 operator+(float4 a, float4 b)", "vec ops prelude")
@@ -98,7 +98,7 @@ def test_cuda_constructs(t : T?) {
     }
 }
 
-[test]
+[test(description = "The emitted CUDA spells shared memory, barriers, warp-shuffle subgroup ops, the half family, free functions with generic twins, atomics, constant tables and pointer locals.")]
 def test_cuda_constructs_device(t : T?) {
     t |> run("shared memory, barriers, the subgroup set over warp shuffles") <| @(t : T?) {
         has(t, reduce_cuda, "extern __shared__ __align__(16) char __das_smem[];", "the dynamic shared block")
@@ -162,7 +162,7 @@ def test_cuda_constructs_device(t : T?) {
     }
 }
 
-[test]
+[test(description = "Aliased bindings share one slot, struct elements lower to declarations and field access, and the KHR tiles emit fragment structs, lane gathers and mma.sync.")]
 def test_cuda_lifts(t : T?) {
     t |> run("two members view one binding: one slot, a cast for the alias, __restrict__ only while no view is written") <| @(t : T?) {
         has(t, alias_cuda, "struct Alias_alias_bufs \{\n    const uint* wq;\n    float* o;\n    uint* p;\n\};", "one slot per binding, non-const where any view writes")
@@ -213,7 +213,7 @@ def test_cuda_lifts(t : T?) {
     }
 }
 
-[test]
+[test(description = "The workgroup tiles emit shared A and B structs, per-warp accumulator slots, the layout object and the lane walks.")]
 def test_cuda_wg_tiles(t : T?) {
     t |> run("the workgroup tiles: shared A/B structs, per-warp accumulator slots, the layout object, the lane walks") <| @(t : T?) {
         has(t, cm2_cuda, "struct __das_wgA_f16_64x64 \{ ushort e[4608]; \};", "A tile in shared memory, its rows padded by eight halves")
@@ -267,7 +267,7 @@ def test_cuda_wg_tiles(t : T?) {
     }
 }
 
-[test]
+[test(description = "The CUDA-only tier emits cp.async, ldmatrix, the scaled accumulate, the named barrier, byte_perm, clock32 and inline PTX, and the FP4 rung emits e2m1 fragments and the block-scaled mma.")]
 def test_cuda_intrinsics(t : T?) {
     t |> run("the CUDA-only tier: cp.async, ldmatrix, the scaled accumulate, the named barrier, byte_perm, clock32, inline PTX") <| @(t : T?) {
         has(t, intrin_cuda, "asm volatile(\"cp.async.cg.shared.global [%0], [%1], 16;\" :: \"r\"((unsigned)__cvta_generic_to_shared(dst)), \"l\"(src) : \"memory\");", "cp.async of 16 bytes, the shared destination converted")
@@ -304,7 +304,7 @@ def test_cuda_intrinsics(t : T?) {
     }
 }
 
-[test]
+[test(description = "The pack family emits the expected CUDA text.")]
 def test_cuda_packs(t : T?) {
     t |> run("the pack family") <| @(t : T?) {
         has(t, packs_cuda, "cvt.rn.f16x2.f32 %0, %1, %2;", "packHalf2x16 PTX")
@@ -317,7 +317,7 @@ def test_cuda_packs(t : T?) {
     }
 }
 
-[test]
+[test(description = "The entry override, float exchange, unroll count, constant urange, swizzled store and const pointee each emit their pinned CUDA spelling.")]
 def test_cuda_pins(t : T?) {
     t |> run("the entry override, the float exchange, the unroll count, the constant urange, the swizzled store, the const pointee") <| @(t : T?) {
         t |> equal(pins_cuda_entry, "pins_entry", "entry= names the entry point")
@@ -332,7 +332,7 @@ def test_cuda_pins(t : T?) {
     }
 }
 
-[test]
+[test(description = "No emitted CUDA text includes a header.")]
 def test_cuda_no_include(t : T?) {
     t |> run("no emitted text includes a header") <| @(t : T?) {
         for (k in all_cuda_texts()) {
@@ -341,7 +341,7 @@ def test_cuda_no_include(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every fixture emitted CUDA text compiles through NVRTC for this card.")]
 def test_cuda_compile_gate(t : T?) {
     t |> run("every fixture's text compiles through NVRTC for this card") <| @(t : T?) {
         if (!cuda_available() || !cuda_nvrtc_available()) {

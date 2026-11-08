@@ -59,7 +59,7 @@ def spans_of(var arr : array<Span>) : string => join([for (s in arr); "{s.from}:
 
 def players_of(var arr : array<Player>) : string => join([for (p in arr); "{p.name}{p.score}"], " ")
 
-[test]
+[test(description = "the ordered annotation builds a comparison over fields, directions and key functions as listed")]
 def test_ordered_annotation(t : T?) {
     t |> run("every field in declaration order, ascending") @(t : T?) {
         var arr <- [Span(from = 2, to = 1), Span(from = 1, to = 5), Span(from = 1, to = 3)]
@@ -92,7 +92,7 @@ def test_ordered_annotation(t : T?) {
     }
 }
 
-[test]
+[test(description = "cmp_by builds comparators from fields, computed keys, the element itself and an index key")]
 def test_compare_by(t : T?) {
     t |> run("fields, a descending key") @(t : T?) {
         var arr <- [
@@ -131,7 +131,7 @@ def test_compare_by(t : T?) {
     }
 }
 
-[test]
+[test(description = "cmp keys evaluate once per side and cover nested fields, non-copyable structures, searches and partial sorts")]
 def test_cmp_more(t : T?) {
     t |> run("a computed key that is not the last is evaluated once per side") @(t : T?) {
         let one <- [3]

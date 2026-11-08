@@ -1,3 +1,5 @@
+//! A piped block call is rejected as ambiguous when two overloads
+//! need equal default padding and neither is a better match.
 options gen2
 expect 30341
 

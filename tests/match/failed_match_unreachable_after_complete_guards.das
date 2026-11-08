@@ -1,4 +1,5 @@
-// an arm after guards that together cover their pattern is unreachable
+//! an arm after guards that together cover their pattern is
+//! unreachable
 options gen2
 
 require daslib/match

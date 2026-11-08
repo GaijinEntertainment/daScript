@@ -1,11 +1,14 @@
 options gen2
+//! a group_by projection mixing first with a column aggregate must
+//! not compile
 
 // `_._1 |> first()` mixed with a column aggregate (`_._1 |> length`,
 // `_._1 |> select($(u:T) => u.X) |> sum/min/max/average`) in the same
 // projection is rejected in v1 — would require an extra COUNT(*) AS
-// alongside the bare-aggregate MIN(pk), and the row builder would have
-// to interleave scalar reads with offset row reads. Deferred to a
-// follow-up; today the user splits the projection into two `_sql` calls.
+// alongside the bare-aggregate MIN(pk), and the row builder would
+// have to interleave scalar reads with offset row reads. Deferred to
+// a follow-up; today the user splits the projection into two `_sql`
+// calls.
 expect 50503
 
 require daslib/sql

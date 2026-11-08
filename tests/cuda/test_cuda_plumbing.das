@@ -39,7 +39,7 @@ struct AxpyParams {
 //! the cubin cache every cell compiles into: this run's own, never the shared one under the working directory
 def private cubin_dir() : string => path_join(test_temp_dir(), "cubin")
 
-[test]
+[test(description = "The driver, NVRTC, the cubin cache and a struct-of-pointers launch work end to end.")]
 def test_cuda_plumbing(t : T?) {
     t |> run("driver + nvrtc + cubin cache + struct-of-pointers launch") <| @(t : T?) {
         if (!cuda_available()) {
@@ -121,7 +121,7 @@ def test_cuda_plumbing(t : T?) {
     }
 }
 
-[test]
+[test(description = "Device queries, register, occupancy and carveout queries, mapped host memory, memset, device-to-device copy and the PDL launch work.")]
 def test_cuda_host_rails(t : T?) {
     t |> run("device queries, the kernel's register, occupancy and carveout queries, mapped host memory the device reads in place, memset, dtod copy, the PDL launch") <| @(t : T?) {
         if (!cuda_available() || !cuda_nvrtc_available()) {
@@ -197,7 +197,7 @@ def test_cuda_host_rails(t : T?) {
     }
 }
 
-[test]
+[test(description = "Three launches captured on a stream replay as one graph launch twice with the parameters as captured.")]
 def test_cuda_graph_replay(t : T?) {
     t |> run("three launches captured on a stream, replayed as one launch twice with the parameters as captured") <| @(t : T?) {
         if (!cuda_available() || !cuda_nvrtc_available()) {
@@ -257,7 +257,7 @@ def test_cuda_graph_replay(t : T?) {
 //! the cubin cache's arms on a copy of the gate kernel no other cell compiles (the first line carries the clock), so the
 //! files it overwrites are its own: a hit serves the file's bytes, an empty file is a miss, and two option sets of one
 //! length key two files
-[test]
+[test(description = "A cubin cache hit reads the file, an empty file recompiles, and the compile options key the file.")]
 def test_cuda_cubin_cache_arms(t : T?) {
     t |> run("the hit reads the file, an empty file recompiles, the options key the file") <| @(t : T?) {
         if (!cuda_available() || !cuda_nvrtc_available()) {
@@ -306,7 +306,7 @@ def test_cuda_cubin_cache_arms(t : T?) {
     }
 }
 
-[test]
+[test(description = "A syntax error answers the compiler log, a compute_ cubin is refused by name, and a compute_ PTX loads and resolves its entry.")]
 def test_cuda_compile_arms(t : T?) {
     t |> run("a syntax error answers the compiler's log, a compute_ cubin is refused by name, a compute_ PTX loads and resolves its entry") <| @(t : T?) {
         if (!cuda_available() || !cuda_nvrtc_available()) {
@@ -342,7 +342,7 @@ def test_cuda_compile_arms(t : T?) {
 }
 
 //! the arm only a box without NVRTC reaches - every lane without the toolkit runs it
-[test]
+[test(description = "cuda_compile refuses by name where NVRTC does not load.")]
 def test_cuda_compile_without_nvrtc(t : T?) {
     t |> run("cuda_compile refuses by name where NVRTC does not load") <| @(t : T?) {
         if (cuda_nvrtc_available()) {
@@ -356,7 +356,7 @@ def test_cuda_compile_without_nvrtc(t : T?) {
     }
 }
 
-[test]
+[test(description = "Module load, function_from_source, mem_alloc and launch refusals answer their text, release what they made and leave the counters balanced.")]
 def test_cuda_module_function_arms(t : T?) {
     t |> run("module load, function_from_source, mem_alloc and launch refusals answer their text, release what they made and leave the counters") <| @(t : T?) {
         if (!cuda_available() || !cuda_nvrtc_available()) {
@@ -410,7 +410,7 @@ def test_cuda_module_function_arms(t : T?) {
     }
 }
 
-[test]
+[test(description = "A capture the legacy stream cannot begin never runs its block, and one invalidated by a context sync fails at its end and leaves the stream capturable.")]
 def test_cuda_graph_capture_arms(t : T?) {
     t |> run("a capture the legacy stream cannot begin never runs the block; one a context sync invalidates fails at its end and leaves the stream capturable") <| @(t : T?) {
         if (!cuda_available() || !cuda_nvrtc_available()) {
@@ -459,7 +459,7 @@ struct WorkerBind {
 //! the fences and the thread bind a GPU tier rides: an untimed event recorded behind a long memset on one stream, queried without
 //! a wait and waited on by a second stream; the context bound again on its creating thread, refused on null, and bound on a
 //! worker thread whose device calls answer only after the bind
-[test]
+[test(description = "Untimed events fence two streams, the ready query never blocks, and a worker thread bound to the context can use the device.")]
 def test_cuda_fences_and_thread_bind(t : T?) {
     t |> run("untimed events fence two streams, the ready query never blocks, a worker thread binds the context") <| @(t : T?) {
         if (!cuda_available()) {
@@ -526,7 +526,7 @@ def test_cuda_fences_and_thread_bind(t : T?) {
 }
 
 //! the panics that fire before any driver call, so every lane runs them
-[test]
+[test(description = "Freeing an unknown pointer and launching a null function each panic with a named message.")]
 def test_cuda_boost_panics(t : T?) {
     t |> run("freeing an unknown pointer and launching a null function panic by name") <| @(t : T?) {
         let unknown_free = panic_text() $ {

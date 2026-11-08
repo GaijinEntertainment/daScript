@@ -5,7 +5,7 @@ require dastest/testing_boost public
 // compute-mode cross-product (Local_Const / Local_Local / Argument).
 // Correctness only; fusion-vs-unfused parity is a benchmark concern.
 
-[test]
+[test(description = "the fused path reads an array element through a constant int64 index")]
 def test_arr_i64_const_idx(t : T?) {
     var arr : array<int>
     arr |> resize(10)
@@ -18,7 +18,7 @@ def test_arr_i64_const_idx(t : T?) {
     t |> equal(arr[9_l], 63)
 }
 
-[test]
+[test(description = "the fused path reads an array element through a constant uint64 index")]
 def test_arr_u64_const_idx(t : T?) {
     var arr : array<int>
     arr |> resize(10)
@@ -31,7 +31,7 @@ def test_arr_u64_const_idx(t : T?) {
     t |> equal(arr[9_ul], 99)
 }
 
-[test]
+[test(description = "the fused path writes and reads back through a variable int64 index")]
 def test_arr_i64_var_write_read(t : T?) {
     var arr : array<int>
     arr |> resize(5)
@@ -43,7 +43,7 @@ def test_arr_i64_var_write_read(t : T?) {
     t |> equal(arr[j], 200)
 }
 
-[test]
+[test(description = "the fused path indexes an array argument with an int64")]
 def test_arr_i64_via_argument(t : T?) {
     var arr : array<int>
     arr |> resize(8)
@@ -57,7 +57,7 @@ def test_arr_i64_via_argument(t : T?) {
 
 def read_at(arr : array<int>; idx : int64) : int => arr[idx]
 
-[test]
+[test(description = "the fused int64 index path works on a float array")]
 def test_arr_i64_float_value_type(t : T?) {
     var arr : array<float>
     arr |> resize(4)
@@ -69,7 +69,7 @@ def test_arr_i64_float_value_type(t : T?) {
     t |> equal(arr[3_l], 4.5f)
 }
 
-[test]
+[test(description = "the fused int64 index path writes an lvalue element")]
 def test_arr_i64_lvalue_write_via_fusion(t : T?) {
     // Exercises ArrayAt_I64 (DAS_PTR_NODE) — writes through the fused ptr return.
     var arr : array<int>
@@ -85,7 +85,7 @@ def test_arr_i64_lvalue_write_via_fusion(t : T?) {
     t |> equal(total, 100)
 }
 
-[test]
+[test(description = "the fused uint64 index path writes an lvalue element")]
 def test_arr_u64_lvalue_write_via_fusion(t : T?) {
     var arr : array<float>
     arr |> resize(3)

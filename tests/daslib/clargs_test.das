@@ -205,7 +205,7 @@ struct CountConfig {
     verbose : int
 }
 
-[test]
+[test(description = "a token consumed as a flag's value is never read as a boolean, another occurrence or any other flag")]
 def test_consumed_flag_values(t : T?) {
     t |> run("a string value cannot enable a boolean") @(t : T?) {
         var r <- parse_args(type<Config>, ["--name", "--verbose"])
@@ -259,7 +259,7 @@ def test_consumed_flag_values(t : T?) {
     }
 }
 
-[test]
+[test(description = "with a schema, consumed flag values stay out of positionals, mutex groups and required checks")]
 def test_consumed_flag_values_with_schema(t : T?) {
     t |> run("positionals keep consumed flag values separate") @(t : T?) {
         var r <- parse_args(type<PositionalConfig>,
@@ -309,7 +309,7 @@ def test_consumed_flag_values_with_schema(t : T?) {
     }
 }
 
-[test]
+[test(description = "a string flag takes the next token as its value")]
 def test_string_flag(t : T?) {
     let a <- ["--name", "Alice"]
     var r <- parse_args(type<Config>, a)
@@ -318,7 +318,7 @@ def test_string_flag(t : T?) {
     t |> equal(cfg.name, "Alice")
 }
 
-[test]
+[test(description = "a string flag accepts the --name=value spelling")]
 def test_string_flag_equals(t : T?) {
     let a <- ["--name=Bob"]
     var r <- parse_args(type<Config>, a)
@@ -327,7 +327,7 @@ def test_string_flag_equals(t : T?) {
     t |> equal(cfg.name, "Bob")
 }
 
-[test]
+[test(description = "an array flag collects repeated occurrences in both spellings in order")]
 def test_string_array_flag(t : T?) {
     let a <- ["--tags=aaa", "--tags", "bbb", "--tags=ccc"]
     var r <- parse_args(type<Config>, a)
@@ -336,7 +336,7 @@ def test_string_array_flag(t : T?) {
     t |> equal(cfg.tags, ["aaa", "bbb", "ccc"])
 }
 
-[test]
+[test(description = "an int flag parses its value")]
 def test_int_flag(t : T?) {
     let a <- ["--count", "42"]
     var r <- parse_args(type<Config>, a)
@@ -345,7 +345,7 @@ def test_int_flag(t : T?) {
     t |> equal(cfg.count, 42)
 }
 
-[test]
+[test(description = "a float flag parses its value")]
 def test_float_flag(t : T?) {
     let a <- ["--timeout", "45.1"]
     var r <- parse_args(type<Config>, a)
@@ -354,7 +354,7 @@ def test_float_flag(t : T?) {
     t |> equal(cfg.timeout, 45.1)
 }
 
-[test]
+[test(description = "a bare bool flag reads true")]
 def test_bool_flag(t : T?) {
     let a <- ["--verbose"]
     var r <- parse_args(type<Config>, a)
@@ -363,7 +363,7 @@ def test_bool_flag(t : T?) {
     t |> success(cfg.verbose, "verbose is true")
 }
 
-[test]
+[test(description = "--flag=false sets a bool flag to false")]
 def test_bool_flag_explicit_false(t : T?) {
     let a <- ["--verbose=false"]
     var r <- parse_args(type<Config>, a)
@@ -372,7 +372,7 @@ def test_bool_flag_explicit_false(t : T?) {
     t |> success(!cfg.verbose, "verbose is false")
 }
 
-[test]
+[test(description = "an enum flag parses a value name into the enum")]
 def test_enum_flag(t : T?) {
     let a <- ["--color", "Green"]
     var r <- parse_args(type<Config>, a)
@@ -381,25 +381,25 @@ def test_enum_flag(t : T?) {
     t |> equal(int(cfg.color), int(Color.Green))
 }
 
-[test]
+[test(description = "a non-numeric int value is a parse error")]
 def test_invalid_int(t : T?) {
     let a <- ["--count", "abc"]
     t |> success(parse_args(type<Config>, a) |> is_err, "parse fails on bad int")
 }
 
-[test]
+[test(description = "a non-numeric float value is a parse error")]
 def test_invalid_float(t : T?) {
     let a <- ["--timeout", "abc"]
     t |> success(parse_args(type<Config>, a) |> is_err, "parse fails on bad floats")
 }
 
-[test]
+[test(description = "an unknown enum value is a parse error")]
 def test_invalid_enum(t : T?) {
     let a <- ["--color", "Purple"]
     t |> success(parse_args(type<Config>, a) |> is_err, "parse fails on unknown enum value")
 }
 
-[test]
+[test(description = "with no arguments every field keeps its declared default")]
 def test_defaults_unchanged(t : T?) {
     let a : array<string>
     var r <- parse_args(type<Config>, a)
@@ -411,7 +411,7 @@ def test_defaults_unchanged(t : T?) {
     t |> success(!cfg.verbose)
 }
 
-[test]
+[test(description = "a required flag that is present parses")]
 def test_required(t : T?) {
     // Required flag present: parse succeeds.
     let r <- parse_args(type<ConfigWithRequired>, ["--foo=1", "--bar-required=hello"])
@@ -421,7 +421,7 @@ def test_required(t : T?) {
     t |> equal(cfg.bar_required, "hello")
 }
 
-[test]
+[test(description = "a help request succeeds with the required flag absent, while without it the missing-flag error stands")]
 def test_required_yields_to_help(t : T?) {
     // `--help` answers with the required flag absent
     for (asked in [["--help"], ["-h"], ["--help", "--file=x.txt"]]) {
@@ -434,7 +434,7 @@ def test_required_yields_to_help(t : T?) {
     t |> equal(r |> unwrap_err, "--file: missing required flag")
 }
 
-[test]
+[test(description = "a missing required flag returns the missing-flag error")]
 def test_required_failure(t : T?) {
     // Required flag missing: parse returns a missing-flag error.
     let r <- parse_args(type<ConfigWithRequired>, ["--foo=1"])
@@ -445,44 +445,44 @@ def test_required_failure(t : T?) {
 // A bare "--flag" (last token, no value, no "=value" form) is malformed for any
 // value-bearing flag; parse_args must report it, not default silently.
 
-[test]
+[test(description = "a string flag with no value reports a missing value")]
 def test_missing_value_string(t : T?) {
     let r <- parse_args(type<Config>, ["--name"])
     t |> equal(r |> unwrap_err, "--name: missing value")
 }
 
-[test]
+[test(description = "an int flag with no value reports a missing value")]
 def test_missing_value_int(t : T?) {
     let r <- parse_args(type<Config>, ["--count"])
     t |> equal(r |> unwrap_err, "--count: missing value")
 }
 
-[test]
+[test(description = "a float flag with no value reports a missing value")]
 def test_missing_value_float(t : T?) {
     let r <- parse_args(type<Config>, ["--timeout"])
     t |> equal(r |> unwrap_err, "--timeout: missing value")
 }
 
-[test]
+[test(description = "an enum flag with no value reports a missing value")]
 def test_missing_value_enum(t : T?) {
     let r <- parse_args(type<Config>, ["--color"])
     t |> equal(r |> unwrap_err, "--color: missing value")
 }
 
-[test]
+[test(description = "an array flag with no value reports a missing value")]
 def test_missing_value_array(t : T?) {
     let r <- parse_args(type<Config>, ["--tags"])
     t |> equal(r |> unwrap_err, "--tags: missing value")
 }
 
-[test]
+[test(description = "the short spelling of a flag with no value reports the same missing-value error under the long name")]
 def test_missing_value_short_flag(t : T?) {
     // Same path via the short-flag form.
     let r <- parse_args(type<ShortFlagsConfig>, ["-n"])
     t |> equal(r |> unwrap_err, "--name: missing value")
 }
 
-[test]
+[test(description = "a bare bool flag is a set, not a missing value")]
 def test_bare_bool_still_sets_true(t : T?) {
     // Bool is the one type where bare "--flag" IS the canonical "set true"
     // form, not a missing value.  Make sure the new detection didn't break it.
@@ -496,37 +496,37 @@ def test_bare_bool_still_sets_true(t : T?) {
 // Matches GNU getopt, argparse, clap, etc. — lets users override an earlier
 // flag (typically from an alias / wrapper) by appending a later one.
 
-[test]
+[test(description = "the last occurrence of a repeated string flag wins")]
 def test_duplicate_string_last_wins(t : T?) {
     let cfg <- parse_args(type<Config>, ["--name=Alice", "--name=Bob"]) |> move_unwrap
     t |> equal(cfg.name, "Bob")
 }
 
-[test]
+[test(description = "the last occurrence of a repeated int flag wins")]
 def test_duplicate_int_last_wins(t : T?) {
     let cfg <- parse_args(type<Config>, ["--count", "1", "--count=42"]) |> move_unwrap
     t |> equal(cfg.count, 42)
 }
 
-[test]
+[test(description = "an explicit false after a bare true overrides it")]
 def test_duplicate_bool_last_wins(t : T?) {
     let cfg <- parse_args(type<Config>, ["--verbose", "--verbose=false"]) |> move_unwrap
     t |> success(!cfg.verbose, "explicit false after bare true overrides")
 }
 
-[test]
+[test(description = "a long spelling after a short one wins")]
 def test_short_long_alias_last_wins(t : T?) {
     let cfg <- parse_args(type<ShortFlagsConfig>, ["-n", "Alice", "--name", "Bob"]) |> move_unwrap
     t |> equal(cfg.name, "Bob")
 }
 
-[test]
+[test(description = "a short spelling after a long one wins")]
 def test_long_short_alias_last_wins(t : T?) {
     let cfg <- parse_args(type<ShortFlagsConfig>, ["--name", "Bob", "-n", "Alice"]) |> move_unwrap
     t |> equal(cfg.name, "Alice")
 }
 
-[test]
+[test(description = "get_command_info lists the flags in declaration order with their enum values")]
 def test_get_command_info(t : T?) {
     let info <- get_command_info(type<Config>)
     t |> equal(length(info.args), 6)
@@ -541,7 +541,7 @@ def test_get_command_info(t : T?) {
 
 // --- Short flags ----------------------------------------------------------
 
-[test]
+[test(description = "a short flag takes the next token as a string value")]
 def test_short_flag_string(t : T?) {
     let a <- ["-n", "Alice"]
     var r <- parse_args(type<ShortFlagsConfig>, a)
@@ -550,7 +550,7 @@ def test_short_flag_string(t : T?) {
     t |> equal(cfg.name, "Alice")
 }
 
-[test]
+[test(description = "a short flag accepts the -n=value spelling")]
 def test_short_flag_string_equals(t : T?) {
     let a <- ["-n=Bob"]
     var r <- parse_args(type<ShortFlagsConfig>, a)
@@ -559,7 +559,7 @@ def test_short_flag_string_equals(t : T?) {
     t |> equal(cfg.name, "Bob")
 }
 
-[test]
+[test(description = "a short int flag parses its value")]
 def test_short_flag_int(t : T?) {
     let a <- ["-c", "42"]
     var r <- parse_args(type<ShortFlagsConfig>, a)
@@ -568,7 +568,7 @@ def test_short_flag_int(t : T?) {
     t |> equal(cfg.count, 42)
 }
 
-[test]
+[test(description = "a short float flag parses its value with the = spelling")]
 def test_short_flag_float(t : T?) {
     let a <- ["-r=2.5"]
     var r <- parse_args(type<ShortFlagsConfig>, a)
@@ -577,7 +577,7 @@ def test_short_flag_float(t : T?) {
     t |> equal(cfg.timeout, 2.5)
 }
 
-[test]
+[test(description = "a bare short bool flag reads true")]
 def test_short_flag_bool(t : T?) {
     let a <- ["-v"]
     var r <- parse_args(type<ShortFlagsConfig>, a)
@@ -586,7 +586,7 @@ def test_short_flag_bool(t : T?) {
     t |> success(cfg.verbose, "verbose is true")
 }
 
-[test]
+[test(description = "a short enum flag parses a value name")]
 def test_short_flag_enum(t : T?) {
     let a <- ["-p", "Blue"]
     var r <- parse_args(type<ShortFlagsConfig>, a)
@@ -595,7 +595,7 @@ def test_short_flag_enum(t : T?) {
     t |> equal(int(cfg.color), int(Color.Blue))
 }
 
-[test]
+[test(description = "a short array flag collects repeated occurrences")]
 def test_short_flag_array(t : T?) {
     let a <- ["-t", "a", "-t=b", "-t", "c"]
     var r <- parse_args(type<ShortFlagsConfig>, a)
@@ -604,7 +604,7 @@ def test_short_flag_array(t : T?) {
     t |> equal(cfg.tags, ["a", "b", "c"])
 }
 
-[test]
+[test(description = "mixed long and short array occurrences keep command-line order")]
 def test_short_and_long_array_preserve_order(t : T?) {
     // Mixing long and short occurrences must preserve command-line order.
     let a <- ["--tags=a", "-t", "b", "--tags=c", "-t=d"]
@@ -614,7 +614,7 @@ def test_short_and_long_array_preserve_order(t : T?) {
     t |> equal(cfg.tags, ["a", "b", "c", "d"])
 }
 
-[test]
+[test(description = "a required flag is satisfied by its short spelling")]
 def test_short_flag_required_present(t : T?) {
     let r <- parse_args(type<ShortFlagsRequiredConfig>, ["-f", "in.txt"])
     t |> success(r |> is_ok, "parse succeeds")
@@ -622,13 +622,13 @@ def test_short_flag_required_present(t : T?) {
     t |> equal(cfg.file, "in.txt")
 }
 
-[test]
+[test(description = "a missing required flag with a short spelling reports its long name")]
 def test_short_flag_required_missing(t : T?) {
     let r <- parse_args(type<ShortFlagsRequiredConfig>, [])
     t |> equal(r |> unwrap_err, "--file: missing required flag")
 }
 
-[test]
+[test(description = "command info records the short flag name beside the long one")]
 def test_short_flag_metadata(t : T?) {
     let info <- get_command_info(type<ShortFlagsConfig>)
     t |> equal(info.args[0].flag_name, "--name")
@@ -641,7 +641,7 @@ def test_short_flag_metadata(t : T?) {
 
 // --- get_cli_arguments / get_program_args overloads -----------------------
 
-[test]
+[test(description = "get_cli_arguments returns the tokens after the first double dash")]
 def test_get_cli_arguments_after_double_dash(t : T?) {
     let result <- get_cli_arguments(["host", "script.das", "--", "--name=Alice", "--verbose"])
     t |> equal(length(result), 2)
@@ -649,19 +649,19 @@ def test_get_cli_arguments_after_double_dash(t : T?) {
     t |> equal(result[1], "--verbose")
 }
 
-[test]
+[test(description = "get_cli_arguments returns nothing when there is no double dash")]
 def test_get_cli_arguments_no_separator(t : T?) {
     let result <- get_cli_arguments(["host", "script.das", "--name=Alice"])
     t |> equal(length(result), 0)
 }
 
-[test]
+[test(description = "get_cli_arguments returns nothing when the double dash ends the list")]
 def test_get_cli_arguments_empty_after_separator(t : T?) {
     let result <- get_cli_arguments(["host", "script.das", "--"])
     t |> equal(length(result), 0)
 }
 
-[test]
+[test(description = "get_program_args drops the program name and keeps the rest")]
 def test_get_program_args_skips_argv0(t : T?) {
     let result <- get_program_args(["fmt.exe", "--write", "file.das"])
     t |> equal(length(result), 2)
@@ -669,7 +669,7 @@ def test_get_program_args_skips_argv0(t : T?) {
     t |> equal(result[1], "file.das")
 }
 
-[test]
+[test(description = "get_program_args returns nothing when only the program name is present")]
 def test_get_program_args_only_argv0(t : T?) {
     let result <- get_program_args(["fmt.exe"])
     t |> equal(length(result), 0)
@@ -677,7 +677,7 @@ def test_get_program_args_only_argv0(t : T?) {
 
 // --- print_help / format_help --------------------------------------------
 
-[test]
+[test(description = "format_help renders the usage line, short and long specs, enum values and the repeated marker")]
 def test_format_help_smoke(t : T?) {
     let info <- get_command_info(type<ShortFlagsConfig>)
     let help = format_help(info, "demo")
@@ -690,14 +690,14 @@ def test_format_help_smoke(t : T?) {
     t |> success(find(help, "(repeated)") != -1, "array flags marked (repeated)")
 }
 
-[test]
+[test(description = "format_help marks required flags")]
 def test_format_help_required_marker(t : T?) {
     let info <- get_command_info(type<ShortFlagsRequiredConfig>)
     let help = format_help(info, "upload")
     t |> success(find(help, "(required)") != -1, "required flags marked (required)")
 }
 
-[test]
+[test(description = "flags without short spellings align with the blank short slot")]
 def test_format_help_no_short_alignment(t : T?) {
     let info <- get_command_info(type<Config>)
     let help = format_help(info, "demo")
@@ -708,7 +708,7 @@ def test_format_help_no_short_alignment(t : T?) {
 
 // --- Option<T> fields ----------------------------------------------------
 
-[test]
+[test(description = "absent optional flags stay none")]
 def test_optional_bool_absent_is_none(t : T?) {
     let a : array<string>
     let r <- parse_args(type<OptionalConfig>, a)
@@ -719,7 +719,7 @@ def test_optional_bool_absent_is_none(t : T?) {
     t |> success(cfg.name |> is_none, "name stays None when flag absent")
 }
 
-[test]
+[test(description = "a bare optional bool flag becomes some(true)")]
 def test_optional_bool_set_true(t : T?) {
     let a <- ["--verbose"]
     let r <- parse_args(type<OptionalConfig>, a)
@@ -729,7 +729,7 @@ def test_optional_bool_set_true(t : T?) {
     t |> equal(cfg.verbose |> unwrap, true)
 }
 
-[test]
+[test(description = "--flag=false on an optional bool becomes some(false)")]
 def test_optional_bool_set_false_explicit(t : T?) {
     let a <- ["--verbose=false"]
     let r <- parse_args(type<OptionalConfig>, a)
@@ -739,7 +739,7 @@ def test_optional_bool_set_false_explicit(t : T?) {
     t |> equal(cfg.verbose |> unwrap, false)
 }
 
-[test]
+[test(description = "an optional int flag becomes some of its value")]
 def test_optional_int_set(t : T?) {
     let a <- ["--count", "7"]
     let r <- parse_args(type<OptionalConfig>, a)
@@ -749,7 +749,7 @@ def test_optional_int_set(t : T?) {
     t |> equal(cfg.count |> unwrap, 7)
 }
 
-[test]
+[test(description = "an optional string flag becomes some of its value")]
 def test_optional_string_set(t : T?) {
     let a <- ["--name=Alice"]
     let r <- parse_args(type<OptionalConfig>, a)
@@ -759,7 +759,7 @@ def test_optional_string_set(t : T?) {
     t |> equal(cfg.name |> unwrap, "Alice")
 }
 
-[test]
+[test(description = "a bad optional int value is an error naming the flag")]
 def test_optional_int_invalid_value(t : T?) {
     let a <- ["--count=notanumber"]
     let r <- parse_args(type<OptionalConfig>, a)
@@ -771,7 +771,7 @@ def test_optional_int_invalid_value(t : T?) {
 // @clarg_positional fills fields from non-flag tokens in declaration order: plain
 // string = required, Option<string> = optional, array<string> collects the rest.
 
-[test]
+[test(description = "required and optional positionals fill in order")]
 def test_positional_basic(t : T?) {
     let a <- ["install", "dasImgui"]
     let r <- parse_args(type<PositionalConfig>, a)
@@ -782,7 +782,7 @@ def test_positional_basic(t : T?) {
     t |> equal(cfg.command_arg |> unwrap, "dasImgui")
 }
 
-[test]
+[test(description = "an absent optional positional stays none")]
 def test_positional_only_required(t : T?) {
     let a <- ["list"]
     let r <- parse_args(type<PositionalConfig>, a)
@@ -792,7 +792,7 @@ def test_positional_only_required(t : T?) {
     t |> success(cfg.command_arg |> is_none, "command_arg absent")
 }
 
-[test]
+[test(description = "a missing required positional is an error naming it")]
 def test_positional_missing_required(t : T?) {
     let a : array<string>
     let r <- parse_args(type<PositionalConfig>, a)
@@ -800,7 +800,7 @@ def test_positional_missing_required(t : T?) {
     t |> success(find(r |> unwrap_err, "command") != -1, "error mentions positional name")
 }
 
-[test]
+[test(description = "positionals and flags can interleave in any order")]
 def test_positional_mixed_with_flags(t : T?) {
     let a <- ["--root", "/tmp", "install", "dasImgui", "--force"]
     let r <- parse_args(type<PositionalConfig>, a)
@@ -812,7 +812,7 @@ def test_positional_mixed_with_flags(t : T?) {
     t |> success(cfg.force, "force flag set")
 }
 
-[test]
+[test(description = "a --flag=value spelling does not consume the following positional")]
 def test_positional_equals_form_flag_no_consumption(t : T?) {
     // `--root=/tmp` MUST NOT consume `install` as the flag value.
     let a <- ["--root=/tmp", "install"]
@@ -824,7 +824,7 @@ def test_positional_equals_form_flag_no_consumption(t : T?) {
     t |> success(cfg.command_arg |> is_none, "no second positional")
 }
 
-[test]
+[test(description = "a space-separated short flag consumes the next token and later tokens are positionals")]
 def test_positional_short_flag_with_value(t : T?) {
     // Space-separated short flag form takes the next token as value.
     let a <- ["-v", "install", "foo"]
@@ -836,7 +836,7 @@ def test_positional_short_flag_with_value(t : T?) {
     t |> equal(cfg.command_arg |> unwrap, "foo")
 }
 
-[test]
+[test(description = "an unknown flag is dropped, not read as a positional")]
 def test_positional_unknown_flag_skipped(t : T?) {
     // Unknown `--unknown` is silently dropped, NOT treated as positional.
     let a <- ["--unknown", "install"]
@@ -846,7 +846,7 @@ def test_positional_unknown_flag_skipped(t : T?) {
     t |> equal(cfg.command, "install")
 }
 
-[test]
+[test(description = "an array positional collects the remaining tokens")]
 def test_positional_array_tail(t : T?) {
     let a <- ["a", "b", "c", "d"]
     var r <- parse_args(type<PositionalArrayTailConfig>, a)
@@ -856,7 +856,7 @@ def test_positional_array_tail(t : T?) {
     t |> equal(cfg.rest, ["b", "c", "d"])
 }
 
-[test]
+[test(description = "an array positional may be empty")]
 def test_positional_array_tail_empty(t : T?) {
     let a <- ["only"]
     var r <- parse_args(type<PositionalArrayTailConfig>, a)
@@ -866,7 +866,7 @@ def test_positional_array_tail_empty(t : T?) {
     t |> equal(length(cfg.rest), 0)
 }
 
-[test]
+[test(description = "help shows required and optional positionals in the usage line and a positionals section")]
 def test_positional_help_renders_usage(t : T?) {
     let info = get_command_info(type<PositionalConfig>)
     let help = format_help(info, "test")
@@ -879,7 +879,7 @@ def test_positional_help_renders_usage(t : T?) {
 // parse_args_with_help is generated when the user declared no --help/-h flag;
 // returns -1 on clean parse, 0 on help, 1 on parse error.
 
-[test]
+[test(description = "format_help_with_auto_help injects --help and -h when the struct declares none")]
 def test_auto_help_long(t : T?) {
     // format_help_with_auto_help injects --help / -h into the help table when
     // the user did not declare their own (AutoHelpConfig has none).
@@ -889,7 +889,7 @@ def test_auto_help_long(t : T?) {
     t |> success(find(help, "-h, --help") != -1, "auto-injected -h short alias")
 }
 
-[test]
+[test(description = "auto help does not add a second row when the struct declares its own help flag")]
 def test_auto_help_user_help_no_inject(t : T?) {
     // ShortFlagsConfig (defined above) declares its OWN help field; auto-help
     // must NOT add a duplicate row.
@@ -911,7 +911,7 @@ def test_auto_help_user_help_no_inject(t : T?) {
 
 // --- Mutex groups ---------------------------------------------------------
 
-[test]
+[test(description = "one member of a mutex group parses")]
 def test_mutex_group_one_member(t : T?) {
     let a <- ["--color"]
     let r <- parse_args(type<MutexConfig>, a)
@@ -921,7 +921,7 @@ def test_mutex_group_one_member(t : T?) {
     t |> success(!cfg.no_color, "no_color clear")
 }
 
-[test]
+[test(description = "two members of one mutex group are an error naming both flags and the group")]
 def test_mutex_group_violation(t : T?) {
     let a <- ["--color", "--no-color"]
     let r <- parse_args(type<MutexConfig>, a)
@@ -931,13 +931,13 @@ def test_mutex_group_violation(t : T?) {
     t |> success(find(r |> unwrap_err, "color") != -1, "error mentions group name")
 }
 
-[test]
+[test(description = "a mutex group with no member set parses")]
 def test_mutex_group_none_set(t : T?) {
     let a : array<string>
     t |> success(parse_args(type<MutexConfig>, a) |> is_ok, "parse succeeds")
 }
 
-[test]
+[test(description = "members of different mutex groups may be set together")]
 def test_mutex_different_groups_coexist(t : T?) {
     let a <- ["--color", "--quiet"]
     let r <- parse_args(type<MutexConfig>, a)
@@ -947,7 +947,7 @@ def test_mutex_different_groups_coexist(t : T?) {
     t |> success(cfg.quiet, "quiet set")
 }
 
-[test]
+[test(description = "help annotates each flag with its mutex group")]
 def test_mutex_help_decoration(t : T?) {
     let info = get_command_info(type<MutexConfig>)
     let help = format_help(info, "test")
@@ -957,7 +957,7 @@ def test_mutex_help_decoration(t : T?) {
 
 // --- Count action ---------------------------------------------------------
 
-[test]
+[test(description = "a count flag defaults to zero")]
 def test_count_default(t : T?) {
     let a : array<string>
     let r <- parse_args(type<CountConfig>, a)
@@ -966,7 +966,7 @@ def test_count_default(t : T?) {
     t |> equal(cfg.verbose, 0)
 }
 
-[test]
+[test(description = "one long occurrence of a count flag counts one")]
 def test_count_long_once(t : T?) {
     let a <- ["--verbose"]
     let r <- parse_args(type<CountConfig>, a)
@@ -975,7 +975,7 @@ def test_count_long_once(t : T?) {
     t |> equal(cfg.verbose, 1)
 }
 
-[test]
+[test(description = "three short occurrences count three")]
 def test_count_short_thrice(t : T?) {
     let a <- ["-v", "-v", "-v"]
     let r <- parse_args(type<CountConfig>, a)
@@ -984,7 +984,7 @@ def test_count_short_thrice(t : T?) {
     t |> equal(cfg.verbose, 3)
 }
 
-[test]
+[test(description = "long and short occurrences of a count flag add up")]
 def test_count_mixed_long_short(t : T?) {
     let a <- ["-v", "--verbose"]
     let r <- parse_args(type<CountConfig>, a)
@@ -993,7 +993,7 @@ def test_count_mixed_long_short(t : T?) {
     t |> equal(cfg.verbose, 2)
 }
 
-[test]
+[test(description = "a count flag rejects the =value spelling")]
 def test_count_rejects_value_form(t : T?) {
     let a <- ["--verbose=2"]
     let r <- parse_args(type<CountConfig>, a)
@@ -1001,7 +1001,7 @@ def test_count_rejects_value_form(t : T?) {
     t |> success(find(r |> unwrap_err, "--verbose") != -1, "error mentions flag")
 }
 
-[test]
+[test(description = "help marks a count flag as repeating")]
 def test_count_help_decoration(t : T?) {
     let info = get_command_info(type<CountConfig>)
     let help = format_help(info, "test")
@@ -1060,7 +1060,7 @@ def clear_clet_env() {
     }
 }
 
-[test]
+[test(description = "each flag's environment twin is named from its field, an override, or none")]
 def test_env_twin_names(t : T?) {
     let info = get_command_info(type<EnvTwinConfig>)
     let by_field <- { for (a in info.args); a.field_name => a.env_name }
@@ -1071,7 +1071,7 @@ def test_env_twin_names(t : T?) {
     t |> equal("", by_field?["quiet"] ?? "?")
 }
 
-[test]
+[test(description = "an environment value fills a flag that argv leaves out, and argv wins when both are present")]
 def test_env_fallback_and_precedence(t : T?) {
     clear_clet_env()
     set_env_variable("CLET_NAME", "envn")
@@ -1094,7 +1094,7 @@ def test_env_fallback_and_precedence(t : T?) {
     clear_clet_env()
 }
 
-[test]
+[test(description = "an environment bool reads false only for the false spellings, and an argv bool beats it")]
 def test_env_bool_rule(t : T?) {
     clear_clet_env()
     let no_args : array<string>
@@ -1114,7 +1114,7 @@ def test_env_bool_rule(t : T?) {
     clear_clet_env()
 }
 
-[test]
+[test(description = "a garbage environment int is a parse error naming the bad int")]
 def test_env_int_garbage_is_loud(t : T?) {
     clear_clet_env()
     set_env_variable("CLET_LEVEL", "fifty")
@@ -1125,7 +1125,7 @@ def test_env_int_garbage_is_loud(t : T?) {
     clear_clet_env()
 }
 
-[test]
+[test(description = "an environment enum parses a value name and rejects an unknown one")]
 def test_env_enum(t : T?) {
     clear_clet_env()
     let no_args : array<string>
@@ -1141,7 +1141,7 @@ def test_env_enum(t : T?) {
     clear_clet_env()
 }
 
-[test]
+[test(description = "an environment value satisfies a required flag while a bare value-less argv flag keeps its error")]
 def test_env_required_and_edges(t : T?) {
     clear_clet_env()
     let no_args : array<string>
@@ -1167,7 +1167,7 @@ def test_env_required_and_edges(t : T?) {
     clear_clet_env()
 }
 
-[test]
+[test(description = "an environment-supplied mutex member does not trip the group")]
 def test_env_mutex_is_argv_only(t : T?) {
     clear_clet_env()
     set_env_variable("CLETM_AS_JSON", "1")
@@ -1180,7 +1180,7 @@ def test_env_mutex_is_argv_only(t : T?) {
     clear_clet_env()
 }
 
-[test]
+[test(description = "help names each flag's environment twin")]
 def test_env_help_decoration(t : T?) {
     let info = get_command_info(type<EnvTwinConfig>)
     let help = format_help(info, "test")
@@ -1211,7 +1211,7 @@ def clear_clec_env() {
     }
 }
 
-[test]
+[test(description = "env_config keeps declared defaults and reads overrides from the environment")]
 def test_env_config_defaults_and_overrides(t : T?) {
     clear_clec_env()
     let d = env_config(type<EngineKnobs>)
@@ -1231,7 +1231,7 @@ def test_env_config_defaults_and_overrides(t : T?) {
     clear_clec_env()
 }
 
-[test]
+[test(description = "a garbage environment value keeps the default and a set-but-empty one counts as unset")]
 def test_env_config_edges(t : T?) {
     clear_clec_env()
     set_env_variable("CLEC_LANES", "banana")   // garbage logs a warning and keeps the default
@@ -1243,7 +1243,7 @@ def test_env_config_edges(t : T?) {
     clear_clec_env()
 }
 
-[test]
+[test(description = "environment config info lists each field with its variable name")]
 def test_env_config_info(t : T?) {
     let info = get_env_config_info(type<EngineKnobs>)
     t |> equal(4, length(info.args))
@@ -1283,7 +1283,7 @@ def clear_cleo_env() {
     }
 }
 
-[test]
+[test(description = "optional env fields stay none when unset and read int, int64, bool and string values when set")]
 def test_env_config_tri_state(t : T?) {
     clear_cleo_env()
     let d = env_config(type<TriKnobs>)
@@ -1308,7 +1308,7 @@ def test_env_config_tri_state(t : T?) {
     clear_cleo_env()
 }
 
-[test]
+[test(description = "garbage and empty values leave optional env fields none or at their default")]
 def test_env_config_tri_state_edges(t : T?) {
     clear_cleo_env()
     set_env_variable("CLEO_LAYERS", "banana")   // garbage warns and keeps the default (none)
@@ -1323,7 +1323,7 @@ def test_env_config_tri_state_edges(t : T?) {
     clear_cleo_env()
 }
 
-[test]
+[test(description = "environment config info records default docs, path marks and optional wraps per field")]
 def test_env_config_default_doc_and_path(t : T?) {
     let info = get_env_config_info(type<TriKnobs>)
     t |> equal(6, length(info.args))
@@ -1365,7 +1365,7 @@ struct ClaimedShortHConfig {
     help : bool
 }
 
-[test]
+[test(description = "--help and -h set the help field even when the struct names its flag differently")]
 def test_help_reaches_a_renamed_help_flag(t : T?) {
     for (asked in fixed_array("--help", "-h", "--show-help")) {
         var r <- parse_args(type<RenamedHelpConfig>, [asked])
@@ -1375,7 +1375,7 @@ def test_help_reaches_a_renamed_help_flag(t : T?) {
     }
 }
 
-[test]
+[test(description = "a help alias is not taken when it is a flag's value, follows a bare double dash, or is claimed by another flag")]
 def test_help_alias_leaves_claimed_tokens_alone(t : T?) {
     var as_value <- parse_args(type<RenamedHelpConfig>, ["--name", "--help"])
     let cfg_value <- as_value |> move_unwrap
@@ -1395,7 +1395,7 @@ def test_help_alias_leaves_claimed_tokens_alone(t : T?) {
     t |> equal(cfg_no_field.name, "z")
 }
 
-[test]
+[test(description = "get_host_binary returns an absolute path when it found the file and a bare name when the shell did")]
 def test_get_host_binary(t : T?) {
     let host = get_host_binary()
     if (fexist(host)) {
@@ -1407,7 +1407,7 @@ def test_get_host_binary(t : T?) {
     t |> success(!fexist(get_full_file_name(bare)), "a bare name resolves beside the cwd, where nothing sits - get_host_binary keeps such a name bare for PATH")
 }
 
-[test]
+[test(description = "a host started by a relative path finds itself by an absolute path", timeout = 1200)]
 def test_get_host_binary_relative_start(t : T?) {
     let host = get_host_binary()
     if (!fexist(host)) {
@@ -1434,7 +1434,7 @@ def test_get_host_binary_relative_start(t : T?) {
 
 // --- @clarg_optional_value -----------------------------------------
 
-[test]
+[test(description = "an optional-value flag gives an empty value bare and its value with = and in the short form, and help renders it")]
 def test_optional_value_flag(t : T?) {
     t |> run("the bare flag gives an empty value and leaves the next token positional") @(t : T?) {
         var r <- parse_args(type<OptionalValueConfig>, ["--dump", "main.das"])

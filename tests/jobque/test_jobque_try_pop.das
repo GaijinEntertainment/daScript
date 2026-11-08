@@ -11,7 +11,7 @@ struct IntVal {
 
 // ---- try_pop_clone: non-blocking pop ----
 
-[test]
+[test(description = "try_pop_clone on an empty channel returns false")]
 def test_try_pop_empty(t : T?) {
     t |> run("try_pop_clone on empty channel returns false") @(t : T?) {
         with_channel() $(ch) {
@@ -25,7 +25,7 @@ def test_try_pop_empty(t : T?) {
     }
 }
 
-[test]
+[test(description = "try_pop_clone returns the data when some is available")]
 def test_try_pop_with_data(t : T?) {
     t |> run("try_pop_clone returns data when available") @(t : T?) {
         with_channel() $(ch) {
@@ -41,7 +41,7 @@ def test_try_pop_with_data(t : T?) {
     }
 }
 
-[test]
+[test(description = "try_pop_clone pops items in FIFO order")]
 def test_try_pop_multiple(t : T?) {
     t |> run("try_pop_clone pops items in FIFO order") @(t : T?) {
         with_channel() $(ch) {
@@ -63,7 +63,7 @@ def test_try_pop_multiple(t : T?) {
     }
 }
 
-[test]
+[test(description = "try_pop_clone sees data a job pushed")]
 def test_try_pop_from_job(t : T?) {
     t |> run("try_pop_clone works after job pushes data") @(t : T?) {
         with_job_que() {
@@ -94,7 +94,7 @@ def test_try_pop_from_job(t : T?) {
 
 // ---- pop_with_timeout_clone: timed pop ----
 
-[test]
+[test(description = "pop_with_timeout_clone on an empty channel times out")]
 def test_pop_with_timeout_empty(t : T?) {
     t |> run("pop_with_timeout_clone on empty channel times out") @(t : T?) {
         with_channel() $(ch) {
@@ -108,7 +108,7 @@ def test_pop_with_timeout_empty(t : T?) {
     }
 }
 
-[test]
+[test(description = "pop_with_timeout_clone returns at once when data is present")]
 def test_pop_with_timeout_has_data(t : T?) {
     t |> run("pop_with_timeout_clone returns immediately when data present") @(t : T?) {
         with_channel() $(ch) {
@@ -123,7 +123,7 @@ def test_pop_with_timeout_has_data(t : T?) {
     }
 }
 
-[test]
+[test(description = "pop_with_timeout_clone receives data a job pushes")]
 def test_pop_with_timeout_from_job(t : T?) {
     t |> run("pop_with_timeout_clone receives data pushed by job") @(t : T?) {
         with_job_que() {
@@ -143,7 +143,7 @@ def test_pop_with_timeout_from_job(t : T?) {
     }
 }
 
-[test]
+[test(description = "pop_with_timeout_clone with a 0 ms timeout acts like try_pop")]
 def test_pop_with_timeout_zero(t : T?) {
     t |> run("pop_with_timeout_clone with 0ms timeout acts like try_pop") @(t : T?) {
         with_channel() $(ch) {

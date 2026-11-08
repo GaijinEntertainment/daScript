@@ -60,49 +60,49 @@ def parse_deep(input : string; blk : block<(val : int; err : array<ParsingError>
     }
 }
 
-[test]
+[test(description = "a recursive rule parses one level of nesting")]
 def test_one_level(t : T?) {
     parse_nested_parens("()") $(val; _err) {
         t |> equal(1, val)
     }
 }
 
-[test]
+[test(description = "a recursive rule parses two levels of nesting")]
 def test_two_levels(t : T?) {
     parse_nested_parens("(())") $(val; _err) {
         t |> equal(2, val)
     }
 }
 
-[test]
+[test(description = "a recursive rule parses three levels of nesting")]
 def test_three_levels(t : T?) {
     parse_nested_parens("((()))") $(val; _err) {
         t |> equal(3, val)
     }
 }
 
-[test]
+[test(description = "mutually recursive rules parse a bare number")]
 def test_mutual_number(t : T?) {
     parse_mutual("42") $(val; _err) {
         t |> equal(42, val)
     }
 }
 
-[test]
+[test(description = "mutually recursive rules parse a parenthesized number")]
 def test_mutual_parens(t : T?) {
     parse_mutual("(42)") $(val; _err) {
         t |> equal(42, val)
     }
 }
 
-[test]
+[test(description = "mutually recursive rules parse doubly nested parentheses")]
 def test_mutual_nested(t : T?) {
     parse_mutual("((42))") $(val; _err) {
         t |> equal(42, val)
     }
 }
 
-[test]
+[test(description = "a recursive rule handles twenty nested levels and accumulates the depth")]
 def test_deep_nesting(t : T?) {
     let depth = 20
     let input = build_string() $(var writer) {

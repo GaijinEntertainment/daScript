@@ -58,7 +58,7 @@ def test_null_return(_input : JsonValue?) : JsonValue? => null
 
 // --- Tests ---
 
-[test]
+[test(description = "the test live commands appear in the command registry and an unknown name does not")]
 def test_registration(t : T?) {
     t |> run("commands are registered") @(t : T?) {
         t |> success(key_exists(live_command_registry, "test_increment"), "test_increment registered")
@@ -71,7 +71,7 @@ def test_registration(t : T?) {
     }
 }
 
-[test]
+[test(description = "live_dispatch_command runs a registered command and returns its result, once per call")]
 def test_dispatch_basic(t : T?) {
     test_call_count = 0
     t |> run("dispatch increment") @(t : T?) {
@@ -87,7 +87,7 @@ def test_dispatch_basic(t : T?) {
     }
 }
 
-[test]
+[test(description = "live_dispatch_command passes JSON args to the command and returns valid JSON")]
 def test_dispatch_with_args(t : T?) {
     t |> run("dispatch with args") @(t : T?) {
         let r = live_dispatch_command("\{\"name\": \"test_add\", \"args\": \{\"a\": 3, \"b\": 4}}")
@@ -107,7 +107,7 @@ def test_dispatch_with_args(t : T?) {
     }
 }
 
-[test]
+[test(description = "a command that returns nothing is answered with true")]
 def test_dispatch_null_return(t : T?) {
     t |> run("null return gives ok") @(t : T?) {
         let r = live_dispatch_command("\{\"name\": \"test_null_return\"}")
@@ -115,7 +115,7 @@ def test_dispatch_null_return(t : T?) {
     }
 }
 
-[test]
+[test(description = "live_dispatch_command reports an error for an unknown command, a missing name, invalid JSON, an empty string and a non-object body")]
 def test_dispatch_errors(t : T?) {
     t |> run("unknown command") @(t : T?) {
         let r = live_dispatch_command("\{\"name\": \"nonexistent\"}")

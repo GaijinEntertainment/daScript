@@ -8,7 +8,7 @@ require strudel/strudel_event
 require strudel/strudel_pattern
 require strudel/strudel_samples
 
-[test]
+[test(description = "setting hrtf_azimuth marks every event hrtf_active")]
 def test_hrtf_setters_engage_active(t : T?) {
     t |> run("hrtf_azimuth flips hrtf_active true on every event") @(t : T?) {
         var inscope sched : Scheduler
@@ -22,7 +22,7 @@ def test_hrtf_setters_engage_active(t : T?) {
     }
 }
 
-[test]
+[test(description = "hrtf(az, el) sets both axes and engages HRTF")]
 def test_hrtf_combined_setter(t : T?) {
     t |> run("hrtf(az, el) sets both axes and engages") @(t : T?) {
         var inscope sched : Scheduler
@@ -37,7 +37,7 @@ def test_hrtf_combined_setter(t : T?) {
     }
 }
 
-[test]
+[test(description = "a pattern without hrtf setters leaves hrtf_active false")]
 def test_no_hrtf_means_inactive(t : T?) {
     t |> run("plain pattern leaves hrtf_active = false") @(t : T?) {
         var inscope sched : Scheduler
@@ -50,7 +50,7 @@ def test_no_hrtf_means_inactive(t : T?) {
     }
 }
 
-[test]
+[test(description = "setting hrtf alongside pan still engages HRTF and bypasses the pan path")]
 def test_hrtf_overrides_pan(t : T?) {
     t |> run("setting hrtf alongside pan still engages HRTF (pan path is bypassed)") @(t : T?) {
         var inscope sched : Scheduler
@@ -64,7 +64,7 @@ def test_hrtf_overrides_pan(t : T?) {
     }
 }
 
-[test]
+[test(description = "an HRTF-positioned sine renders audible stereo output")]
 def test_hrtf_renders_audible_output(t : T?) {
     t |> run("HRTF-positioned sine produces audible stereo output without crashing") @(t : T?) {
         var inscope sched : Scheduler
@@ -84,7 +84,7 @@ def test_hrtf_renders_audible_output(t : T?) {
     }
 }
 
-[test]
+[test(description = "a pattern-valued hrtf_azimuth gives each event its own value")]
 def test_hrtf_pattern_modulated(t : T?) {
     t |> run("pattern-valued hrtf_azimuth animates per event") @(t : T?) {
         var inscope sched : Scheduler
@@ -106,7 +106,7 @@ def test_hrtf_pattern_modulated(t : T?) {
     }
 }
 
-[test]
+[test(description = "HRTF instances are allocated lazily on the first render")]
 def test_hrtf_lazy_alloc(t : T?) {
     t |> run("ma_hrtf instances allocated lazily on first render") @(t : T?) {
         var inscope sched : Scheduler

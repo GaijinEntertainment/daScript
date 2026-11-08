@@ -1,4 +1,5 @@
-// out-of-range literal in return — promotion's range error must suppress invalid_return_type
+//! An out-of-range literal in a return statement must report the
+//! range error (30515) and not an invalid return type.
 options gen2
 
 expect 30515

@@ -35,7 +35,7 @@ def slow_task() : void {
 
 // ---- async_run ----
 
-[test]
+[test(description = "async_run drives a single task to completion")]
 def test_async_run(t : T?) {
     t |> run("async_run drives single task to completion") @(t : T?) {
         g_log |> clear()
@@ -50,7 +50,7 @@ def test_async_run(t : T?) {
 
 // ---- async_run_all ----
 
-[test]
+[test(description = "async_run_all drives several tasks of different lengths to completion")]
 def test_async_run_all(t : T?) {
     t |> run("async_run_all drives multiple tasks") @(t : T?) {
         g_log |> clear()
@@ -74,7 +74,7 @@ def test_async_run_all(t : T?) {
 
 // ---- async_timeout: completes ----
 
-[test]
+[test(description = "async_timeout returns true when the task finishes within the frame limit")]
 def test_async_timeout_completes(t : T?) {
     t |> run("async_timeout returns true when task completes in time") @(t : T?) {
         var it <- quick_task()
@@ -85,7 +85,7 @@ def test_async_timeout_completes(t : T?) {
 
 // ---- async_timeout: expires ----
 
-[test]
+[test(description = "async_timeout returns false when the task outlasts the frame limit")]
 def test_async_timeout_expires(t : T?) {
     t |> run("async_timeout returns false when task exceeds limit") @(t : T?) {
         var it <- slow_task()
@@ -96,7 +96,7 @@ def test_async_timeout_expires(t : T?) {
 
 // ---- async_timeout: zero frames ----
 
-[test]
+[test(description = "async_timeout with a zero-frame limit always times out")]
 def test_async_timeout_zero(t : T?) {
     t |> run("async_timeout with 0 frames always times out") @(t : T?) {
         var it <- quick_task()
@@ -107,7 +107,7 @@ def test_async_timeout_zero(t : T?) {
 
 // ---- async_race: first finishes first ----
 
-[test]
+[test(description = "async_race returns 0 when the first task finishes first")]
 def test_async_race_first_wins(t : T?) {
     t |> run("async_race returns 0 when first task is faster") @(t : T?) {
         var a <- quick_task()
@@ -119,7 +119,7 @@ def test_async_race_first_wins(t : T?) {
 
 // ---- async_race: second finishes first ----
 
-[test]
+[test(description = "async_race returns 1 when the second task finishes first")]
 def test_async_race_second_wins(t : T?) {
     t |> run("async_race returns 1 when second task is faster") @(t : T?) {
         var a <- slow_task()
@@ -137,7 +137,7 @@ def two_frame_task() : void {
     await_next_frame()
 }
 
-[test]
+[test(description = "async_race returns 0 when both tasks finish on the same frame")]
 def test_async_race_tie(t : T?) {
     t |> run("async_race with equal tasks returns 0 (first checked)") @(t : T?) {
         var a <- two_frame_task()

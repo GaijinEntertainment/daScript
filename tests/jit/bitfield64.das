@@ -15,7 +15,7 @@ def pass_and_return_bitfield64(f : TestFlags64) : TestFlags64 => f
 
 def bitfield64_to_uint64(f : TestFlags64) : uint64 => uint64(f)
 
-[test]
+[test(description = "a bitfield64 constant with bit 63 set keeps that bit when read back as uint64")]
 def test_bitfield64_high_bit(t : T?) {
     t |> run("bitfield64 high bit constant") @(t : T?) {
         let f = bitfield64(1ul << 63ul)
@@ -23,7 +23,7 @@ def test_bitfield64_high_bit(t : T?) {
     }
 }
 
-[test]
+[test(description = "a bitfield64 returned from a function keeps its high bit")]
 def test_bitfield64_pass_through(t : T?) {
     t |> run("bitfield64 pass through function") @(t : T?) {
         let f = get_bitfield64_value()
@@ -31,7 +31,7 @@ def test_bitfield64_pass_through(t : T?) {
     }
 }
 
-[test]
+[test(description = "a bitfield64 passed into and out of a function keeps its high bit")]
 def test_bitfield64_roundtrip(t : T?) {
     t |> run("bitfield64 roundtrip via function call") @(t : T?) {
         let f = pass_and_return_bitfield64(bitfield64(1ul << 63ul))
@@ -39,7 +39,7 @@ def test_bitfield64_roundtrip(t : T?) {
     }
 }
 
-[test]
+[test(description = "a bitfield64 converted to uint64 inside a function keeps its high bit")]
 def test_bitfield64_cast(t : T?) {
     t |> run("bitfield64 to uint64 via function") @(t : T?) {
         let v = bitfield64_to_uint64(bitfield64(1ul << 63ul))
@@ -47,7 +47,7 @@ def test_bitfield64_cast(t : T?) {
     }
 }
 
-[test]
+[test(description = "or-ing the named flags of a bitfield64 sets exactly their bits")]
 def test_bitfield64_all_bits(t : T?) {
     t |> run("bitfield64 all named bits") @(t : T?) {
         let f = TestFlags64.lo | TestFlags64.mid | TestFlags64.hi
@@ -55,7 +55,7 @@ def test_bitfield64_all_bits(t : T?) {
     }
 }
 
-[test]
+[test(description = "assigning a high-bit value to a bitfield64 variable stores it intact")]
 def test_bitfield64_var_assign(t : T?) {
     t |> run("bitfield64 var assign high bit") @(t : T?) {
         var f : TestFlags64
@@ -64,7 +64,7 @@ def test_bitfield64_var_assign(t : T?) {
     }
 }
 
-[test]
+[test(description = "or-assigning the high bit into a bitfield64 variable adds the high bit and keeps the existing bit")]
 def test_bitfield64_orassign(t : T?) {
     t |> run("bitfield64 |= high bit") @(t : T?) {
         var f = TestFlags64.lo

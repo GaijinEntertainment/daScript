@@ -1,4 +1,5 @@
 options gen2
+//! a MATCH on an UNINDEXED fts5 column must not compile
 
 // UNINDEXED metadata is stored and filterable, but cannot be a MATCH target.
 expect 50503

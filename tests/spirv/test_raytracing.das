@@ -1,5 +1,11 @@
 options gen2
-options indenting = 4
+
+require dastest/testing_boost public
+require _spirv_common
+require spirv/spirv_dis
+require spirv/spirv_grammar
+require spirv/spirv_reflect
+require daslib/strings_boost
 
 // Ray-tracing stage scaffolding (VK_KHR_ray_tracing_pipeline). Each fixture asserts:
 //   * the right execution model (RayGenerationKHR 5313 / MissKHR 5317 / ClosestHitKHR 5316)
@@ -15,14 +21,6 @@ options indenting = 4
 //   * the reflected acceleration_structure binding + raygen stage flag
 //   * spirv-val against vulkan1.2 (the first env with SPV_KHR_ray_tracing promoted extensions).
 // AnyHit / Intersection / Callable stages land with their first consumer.
-
-require dastest/testing_boost public
-require _spirv_common
-require spirv/spirv_dis
-require spirv/spirv_grammar
-require spirv/spirv_reflect
-require daslib/strings_boost
-
 def private validate(t : T?; words : array<uint>; lbl : string) {
     let r = validate_spirv(words, "vulkan1.2")
     if (r.ran) {
@@ -95,7 +93,7 @@ def private assert_rt_module_shape(t : T?; words : array<uint>; lbl : string; mo
         "{lbl}: no execution modes (got {count_op(words, SpvOp.ExecutionMode)})")
 }
 
-[test]
+[test(description = "A raygen shader declares its execution model, capability, extension, payload and TLAS and passes the payload operand to OpTraceRayKHR.")]
 def test_raygen_stage(t : T?) {
     t |> run("[raygen_shader]: model + cap + ext + payload + TLAS + OpTraceRayKHR payload operand") <| @(t : T?) {
         var words <- rt_raygen_words()
@@ -145,7 +143,7 @@ def test_raygen_stage(t : T?) {
     }
 }
 
-[test]
+[test(description = "A miss shader declares the miss model, an incoming payload and the world-ray builtin.")]
 def test_miss_stage(t : T?) {
     t |> run("[miss_shader]: model + incoming payload + world-ray builtin") <| @(t : T?) {
         var words <- rt_miss_words()
@@ -165,7 +163,7 @@ def test_miss_stage(t : T?) {
     }
 }
 
-[test]
+[test(description = "A closest-hit shader declares a hit attribute, hit builtins and a second payload for its shadow trace.")]
 def test_closest_hit_stage(t : T?) {
     t |> run("[closest_hit_shader]: hit attribute + hit builtins + second payload + shadow trace") <| @(t : T?) {
         var words <- rt_chit_words()
@@ -204,6 +202,47 @@ def test_closest_hit_stage(t : T?) {
         t |> success(tpay.ok && tpay.value == svar.value,
             "rt_chit: OpTraceRayKHR payload operand == the shadow payload id (op={tpay.value} var={svar.value})")
         validate(t, words, "rt_chit")
+        delete words
+    }
+}
+
+[test(description = "An inline ray query in a compute shader declares the capability, extension and type and emits the seven OpRayQuery opcodes.")]
+def test_ray_query_compute(t : T?) {
+    t |> run("[compute_shader] inline ray query: cap + ext + type + the seven OpRayQuery* + spirv-val") <| @(t : T?) {
+        var words <- ray_query_words()
+        // a ray query is a plain compute stage: GLCompute model + a LocalSize execution mode
+        t |> success(op_has_operand_at(words, SpvOp.EntryPoint, 0, uint(SpvExecutionModel.GLCompute)),
+            "ray_query: GLCompute execution model")
+        t |> success(count_op(words, SpvOp.ExecutionMode) >= 1,
+            "ray_query: a LocalSize execution mode is present")
+        // RayQueryKHR + SPV_KHR_ray_query, each exactly once; and NOT the RT-pipeline cap/ext
+        t |> success(op_has_operand_at(words, SpvOp.Capability, 0, uint(SpvCapability.RayQueryKHR)),
+            "ray_query: OpCapability RayQueryKHR")
+        let ncap = count_op_operand_at(words, SpvOp.Capability, 0, uint(SpvCapability.RayQueryKHR))
+        t |> success(ncap == 1, "ray_query: exactly one RayQueryKHR cap (got {ncap})")
+        t |> success(!op_has_operand_at(words, SpvOp.Capability, 0, uint(SpvCapability.RayTracingKHR)),
+            "ray_query: no RayTracingKHR capability (a ray query is not a trace)")
+        // OpTypeRayQueryKHR + a Function-storage OpVariable of it (the rq local)
+        t |> success(has_op(words, SpvOp.TypeRayQueryKHR), "ray_query: OpTypeRayQueryKHR")
+        let rqvar = variable_id_with_storage(words, SpvStorageClass.Function)
+        t |> success(rqvar.ok, "ray_query: a Function-storage OpVariable (the rq local)")
+        // the TLAS descriptor
+        t |> success(has_op(words, SpvOp.TypeAccelerationStructureKHR),
+            "ray_query: OpTypeAccelerationStructureKHR")
+        t |> success(op_has_operand_at(words, SpvOp.Decorate, 1, uint(SpvDecoration.DescriptorSet)),
+            "ray_query: TLAS has a DescriptorSet decoration")
+        // the seven ray-query opcodes, each exactly once; and NO OpTraceRayKHR
+        for (op in [SpvOp.RayQueryInitializeKHR, SpvOp.RayQueryProceedKHR,
+                    SpvOp.RayQueryGetIntersectionTypeKHR,
+                    SpvOp.RayQueryGetIntersectionInstanceCustomIndexKHR,
+                    SpvOp.RayQueryGetIntersectionPrimitiveIndexKHR,
+                    SpvOp.RayQueryGetIntersectionBarycentricsKHR,
+                    SpvOp.RayQueryGetIntersectionTKHR]) {
+            let c = count_op(words, op)
+            t |> success(c == 1, "ray_query: exactly one {op} (got {c})")
+        }
+        t |> success(count_op(words, SpvOp.TraceRayKHR) == 0, "ray_query: no OpTraceRayKHR")
+        validate(t, words, "ray_query")
         delete words
     }
 }

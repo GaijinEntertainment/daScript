@@ -8,14 +8,14 @@ options gen2
 options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
-require dw_common
+require _dw_common
 
 
 // ============================================================
 // Dynamic arrays
 // ============================================================
 
-[test]
+[test(description = "the data walker visits dynamic arrays of ints, structs, strings and tuples, including empty and single-element arrays, with the expected callbacks")]
 def test_walk_array(t : T?) { // nolint:STYLE038 - flat list of independent walker arms
     t |> run("array of ints") @(t : T?) {
         var walker = new LogWalker()
@@ -107,7 +107,7 @@ def test_walk_array(t : T?) { // nolint:STYLE038 - flat list of independent walk
 // Fixed-size arrays (dim)
 // ============================================================
 
-[test]
+[test(description = "the data walker visits every element of a fixed-size array")]
 def test_walk_dim(t : T?) {
     t |> run("int dim") @(t : T?) {
         var walker = new LogWalker()
@@ -132,7 +132,7 @@ def test_walk_dim(t : T?) {
 // Tables
 // ============================================================
 
-[test]
+[test(description = "the data walker visits table keys and values in order for string and int keys, including empty tables")]
 def test_walk_table(t : T?) {
     t |> run("table string to int") @(t : T?) {
         var walker = new LogWalker()

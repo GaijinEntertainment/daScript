@@ -10,7 +10,7 @@ require daslib/cmp
 
 // === Query across multiple archetypes ===
 
-[test]
+[test(description = "one query visits matching entities in every archetype")]
 def test_query_spans_archetypes(t : T?) {
     restart()
     // {hp} archetype
@@ -40,7 +40,7 @@ def test_query_spans_archetypes(t : T?) {
 
 // === Mutable query ===
 
-[test]
+[test(description = "a query with a var argument changes the stored components")]
 def test_mutable_query(t : T?) {
     restart()
     for (i in range(5)) {
@@ -63,7 +63,7 @@ def test_mutable_query(t : T?) {
 
 // === REQUIRE / REQUIRE_NOT ===
 
-[test]
+[test(description = "REQUIRE and REQUIRE_NOT narrow a query to the matching entities")]
 def test_require_filters(t : T?) {
     restart()
     create_entity() @(eid, cmp) {
@@ -114,7 +114,7 @@ def test_require_filters(t : T?) {
 
 // === find_query returns true on match, false on no match ===
 
-[test]
+[test(description = "find_query returns the match and its result")]
 def test_find_query_result(t : T?) {
     restart()
     for (i in range(10)) {
@@ -142,7 +142,7 @@ def test_find_query_result(t : T?) {
 
 // === Query by EntityId ===
 
-[test]
+[test(description = "a query by entity id visits exactly that entity")]
 def test_query_by_eid_returns_correct_entity(t : T?) {
     restart()
     var eids : array<EntityId>
@@ -166,7 +166,7 @@ def test_query_by_eid_returns_correct_entity(t : T?) {
 
 // === Query with default values ===
 
-[test]
+[test(description = "a query argument with a default gets it when the component is missing")]
 def test_query_default_value(t : T?) {
     restart()
     create_entity() @(eid, cmp) {
@@ -189,7 +189,7 @@ def test_query_default_value(t : T?) {
 
 // === Large entity count ===
 
-[test]
+[test(description = "queries handle a thousand entities")]
 def test_large_entity_count(t : T?) {
     restart()
     for (i in range(1000)) {
@@ -210,7 +210,7 @@ def test_large_entity_count(t : T?) {
 
 // === Nested queries ===
 
-[test]
+[test(description = "a nested query sees the entities of the outer one")]
 def test_nested_query(t : T?) {
     restart()
     create_entity() @(eid, cmp) {
@@ -234,7 +234,7 @@ def test_nested_query(t : T?) {
 
 // === Query after delete ===
 
-[test]
+[test(description = "a query skips deleted entities")]
 def test_query_after_delete(t : T?) {
     restart()
     let e1 = create_entity() @(eid, cmp) {
@@ -257,4 +257,34 @@ def test_query_after_delete(t : T?) {
     t |> equal(length(vals), 2)
     t |> equal(vals[0], 1)
     t |> equal(vals[1], 3)
+}
+
+[decs_template]
+struct CmpOne {
+    num : int
+}
+
+[decs_template]
+struct CmpTwo {
+    num : int
+}
+
+[test(description = "a nested query by entity id can change another entity's component")]
+def test_qeid_rw(t : T?) {
+    create_entity() @(eid, cmp) {
+        cmp |> set("eid", eid)
+        apply_decs_template(cmp,  CmpOne())
+        apply_decs_template(cmp,  CmpTwo())
+    }
+    commit()
+    query() $(var c1 : CmpOne; eid : EntityId) {
+        c1.num++
+        query(eid) $(var c2 : CmpTwo) {
+            c2.num++
+        }
+        query(eid) $(c2 : CmpTwo) {
+            t |> equal(c1.num, 1)
+            t |> equal(c2.num, 1)
+        }
+    }
 }

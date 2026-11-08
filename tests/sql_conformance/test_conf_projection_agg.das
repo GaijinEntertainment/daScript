@@ -1,13 +1,15 @@
 options gen2
-options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
+
 
 // Contract area: projections (single column / named tuple / computed scalar) and
 // aggregates (count / sum / average / min / max), grouped and ungrouped (+ _having).
 
 require dastest/testing_boost public
+
 require _conformance_provider
+
 require daslib/strings_boost
 
 [sql_table(name = "ConfSales")]
@@ -27,7 +29,7 @@ def private seed(db) {
         ConfSale(Id = 0, Region = "north", Amount = 999)])
 }
 
-[test]
+[test(description = "single-column, named-tuple and computed projections return the contract values, with select-list binds ordered first")]
 def test_conf_projections(t : T?) {
     t |> run("single-column projection") @(t : T?) {
         with_conf_db() $(db) {
@@ -70,7 +72,7 @@ def test_conf_projections(t : T?) {
     }
 }
 
-[test]
+[test(description = "scalar aggregates and the one-scan aggregate return the contract values, including defaults for an empty source and the same shape over arrays")]
 def test_conf_aggregates(t : T?) {
     t |> run("count / sum / min / max / average over the table") @(t : T?) {
         with_conf_db() $(db) {
@@ -150,7 +152,7 @@ def test_conf_aggregates(t : T?) {
     }
 }
 
-[test]
+[test(description = "group_by with aggregates and having return one filtered row per group")]
 def test_conf_group_by(t : T?) {
     t |> run("_group_by + aggregate _select") @(t : T?) {
         with_conf_db() $(db) {

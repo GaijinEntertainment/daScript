@@ -1,8 +1,8 @@
 options gen2
 
 // STYLE048 fixture: every function is one decision the rule makes;
-// test_style048_hints.das pins the exact finding each one reports,
-// or that it reports none.
+// the STYLE048 hints test in test_lint_rules.das pins the exact
+// finding each one reports, or that it reports none.
 
 require daslib/ast
 require daslib/match

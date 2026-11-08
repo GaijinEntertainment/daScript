@@ -123,7 +123,7 @@ def private check_validates(t : T?; words : array<uint>; what : string) {
     }
 }
 
-[test]
+[test(description = "An enum lowers to its underlying int in SPIR-V.")]
 def test_enum_value_rail(t : T?) {
     t |> run("enum: lowers to its underlying int") <| @(t : T?) {
         var words <- clone_to_move(enum_spv)
@@ -140,7 +140,7 @@ def test_enum_value_rail(t : T?) {
     }
 }
 
-[test]
+[test(description = "An enum used as a struct member, a local and a result lowers to its underlying int.")]
 def test_enum_struct_member(t : T?) {
     t |> run("enum: struct member, local and result") <| @(t : T?) {
         var words <- clone_to_move(enum_struct_spv)
@@ -163,7 +163,7 @@ def test_enum_struct_member(t : T?) {
     }
 }
 
-[test]
+[test(description = "An enum over uint8 lowers to OpTypeInt 8 0.")]
 def test_enum_uint8(t : T?) {
     t |> run("enum over uint8: lowers to OpTypeInt 8 0") <| @(t : T?) {
         var words <- clone_to_move(enum_u8_spv)

@@ -26,6 +26,18 @@ def test_something(t : T?) {
 
 `[test]` also accepts a no-argument form (`[test] def test_x()`) when the body needs no assertions object.
 
+`[test(description = "...", timeout = seconds)]` - both optional. The description is one sentence
+stating what the test proves, printed under the test's `--- FAIL` line and nowhere else; write the
+claim, not the function name again. `timeout` is this one test's budget: a test that finishes past
+it fails naming the budget, and the file's limits (`--max-file-time`, the isolated-mode deadline)
+grow by the same amount, so one slow test raises its own limit without loosening any other file's.
+Write `timeout = 1200` (the suite default) on a test that builds, spawns or waits, and no other
+number: CI runs several times slower than your box, so a measured value is a flake there, and the
+suite's own `--timeout` still catches a hang. `name = "..."` renames the test
+in reports. `standalone = "why"` states why the test's file cannot share a program with any
+other (a program-wide registry it fills, a deliberate duplicate); dastest ignores it, a test-tree
+gate reads it.
+
 ## Key test functions
 
 - `t |> equal(actual, expected)` - value equality assertion (reports "values differ"). **Label caveat:** on failure it prints `expected:` for argument 1 and `got:` for argument 2 - the reverse of XUnit. Keep writing `equal(actualExpr, wantValue)` (house idiom); just read `expected:` as *the live result*

@@ -1,4 +1,6 @@
 options gen2
+//! schema_from naming a table that is not in the database must not
+//! compile
 
 // `name=` references a table that doesn't exist in the .db.
 expect 20800

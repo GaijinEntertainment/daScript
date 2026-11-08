@@ -1,4 +1,5 @@
-// a range pattern matches only values of its element type - an int range does not match a uint
+//! a range pattern matches only values of its element type - an int
+//! range does not match a uint
 options gen2
 
 require daslib/match

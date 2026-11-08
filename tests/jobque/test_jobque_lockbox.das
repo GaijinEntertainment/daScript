@@ -19,7 +19,7 @@ struct IntVal {
 
 // ---- Basic tests (no set/get, no job context needed) ----
 
-[test]
+[test(description = "with_lock_box creates and destroys a lock box that starts out ready")]
 def test_lockbox_basics(t : T?) {
     t |> run("with_lock_box creates and destroys") @(t : T?) {
         var entered = false
@@ -39,7 +39,7 @@ def test_lockbox_basics(t : T?) {
 
 // ---- Set/get tests inside job contexts ----
 
-[test]
+[test(description = "A job can set a lock box value that the caller then reads")]
 def test_lockbox_set_get(t : T?) {
     t |> run("set and get via job") @(t : T?) {
         with_job_que() {
@@ -64,7 +64,7 @@ def test_lockbox_set_get(t : T?) {
     }
 }
 
-[test]
+[test(description = "A producer job sets a lock box and a consumer job reads that value")]
 def test_lockbox_producer_consumer(t : T?) {
     t |> run("producer sets, consumer reads via lockbox") @(t : T?) {
         with_job_que() {

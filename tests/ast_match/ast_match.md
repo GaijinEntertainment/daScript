@@ -159,13 +159,9 @@ Pattern block arguments match Function's arguments (filtering hidden `fakeContex
 | File | Tests | Coverage |
 |------|-------|----------|
 | `test_ast_match.das` | 43 | Core qmatch + qmatch_block wildcards |
-| `test_qmatch_basic.das` | 8 | Constants, RTTI mismatch, cross-type, null, op2 |
-| `test_capture_e.das` | 6 | `$e` on children, whole expr, clone independence |
-| `test_capture_v.das` | 12 | `$v` int/float/bool/string, wrong type, in compound |
-| `test_capture_i.das` | 11 | `$i` on ExprVar, op2, const, let decl, for iterator |
-| `test_capture_cfb.das` | 15 | `$c` call name, `$f` field name, `$b` statement range |
+| `test_qmatch.das` | 23 | Constants, RTTI mismatch, cross-type, null, op2, functions, no-bind-on-fail |
+| `test_capture.das` | 44 | `$e`, `$v`, `$i` captures; `$c` call name, `$f` field name, `$b` statement range |
 | `test_control_flow.das` | 19 | if/else, while, for, return, mixed with wildcards |
-| `test_qmatch_function.das` | 3 | Compiled function body matching |
 | `test_type_match.das` | 17 | TypeDecl matching, `$t` capture |
 | `test_args_return.das` | 19 | Function/block arg names, types, return type, `$a` capture |
 

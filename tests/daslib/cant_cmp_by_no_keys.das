@@ -1,3 +1,5 @@
+//! cmp_by() with no key placeholders must not compile: a comparator
+//! needs at least one key.
 options gen2
 options no_aot
 expect 50503

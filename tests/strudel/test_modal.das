@@ -28,13 +28,13 @@ def private check_sound(t : T?; buf : array<float>; name : string) {
     t |> success(all_finite_in_range(buf), "{name}: samples in [-1,1]")
 }
 
-[test]
+[test(description = "a default modal voice renders non-empty, audible audio inside [-1, 1]")]
 def test_default_voice(t : T?) {
     let buf <- render_modal_voice(ModalVoice())
     check_sound(t, buf, "default")
 }
 
-[test]
+[test(description = "modal voices render audibly at both low and high pitch")]
 def test_pitch_range(t : T?) {
     let lo <- render_modal_voice(ModalVoice(pitch = 180.0))
     let hi <- render_modal_voice(ModalVoice(pitch = 3200.0))
@@ -42,7 +42,7 @@ def test_pitch_range(t : T?) {
     check_sound(t, hi, "high pitch")
 }
 
-[test]
+[test(description = "the mode count is clamped so 1, 8 and 0 modes all render cleanly")]
 def test_mode_count_extremes(t : T?) {
     // n_modes is clamped to [1,8] internally — both extremes must render cleanly
     let one <- render_modal_voice(ModalVoice(n_modes = 1))
@@ -53,7 +53,7 @@ def test_mode_count_extremes(t : T?) {
     check_sound(t, oob, "0 modes (clamped)")
 }
 
-[test]
+[test(description = "a modal voice with echo renders audibly, both dry and wet")]
 def test_echo_renders(t : T?) {
     let dry <- render_modal_voice(ModalVoice(echo_amount = 0.0, duration = 0.4))
     let wet <- render_modal_voice(ModalVoice(echo_amount = 0.5, echo_delay = 0.05, duration = 0.4))
@@ -61,7 +61,7 @@ def test_echo_renders(t : T?) {
     check_sound(t, wet, "echo")
 }
 
-[test]
+[test(description = "the same modal parameters render identical buffers")]
 def test_deterministic(t : T?) {
     let v = ModalVoice(pitch = 1500.0, transient = 0.6, echo_amount = 0.3)
     let a <- render_modal_voice(v)
@@ -79,7 +79,7 @@ def test_deterministic(t : T?) {
     t |> success(same, "same params render identical buffers")
 }
 
-[test]
+[test(description = "a longer ring keeps more energy late in the buffer")]
 def test_ring_affects_tail(t : T?) {
     // a longer ring should leave more energy late in the buffer (same duration)
     let dur = 0.4

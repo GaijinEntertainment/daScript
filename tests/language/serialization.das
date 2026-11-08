@@ -43,7 +43,7 @@ def serialize(var arch : Archive; var c : Color&) {
     }
 }
 
-[test]
+[test(description = "an int, a float and a string each survive a mem_archive_save / mem_archive_load round trip")]
 def test_primitive_round_trip(t : T?) {
     t |> run("int round trip") @(t : T?) {
         var val = 42
@@ -68,7 +68,7 @@ def test_primitive_round_trip(t : T?) {
     }
 }
 
-[test]
+[test(description = "every field of a struct survives a mem archive round trip")]
 def test_struct_round_trip(t : T?) {
     t |> run("Player struct") @(t : T?) {
         var p = Player(name = "hero", score = 100, alive = true)
@@ -81,7 +81,7 @@ def test_struct_round_trip(t : T?) {
     }
 }
 
-[test]
+[test(description = "an int array keeps its length and elements through a mem archive round trip")]
 def test_array_round_trip(t : T?) {
     t |> run("int array") @(t : T?) {
         var arr <- [10, 20, 30]
@@ -95,7 +95,7 @@ def test_array_round_trip(t : T?) {
     }
 }
 
-[test]
+[test(description = "a string-to-int table keeps its keys and values through a mem archive round trip")]
 def test_table_round_trip(t : T?) {
     t |> run("string-int table") @(t : T?) {
         var tab <- {"a" => 1, "b" => 2}
@@ -111,7 +111,7 @@ def test_table_round_trip(t : T?) {
     }
 }
 
-[test]
+[test(description = "both elements of an int-string tuple survive a mem archive round trip")]
 def test_tuple_round_trip(t : T?) {
     t |> run("tuple int,string") @(t : T?) {
         var tup = (42, "answer")
@@ -123,7 +123,7 @@ def test_tuple_round_trip(t : T?) {
     }
 }
 
-[test]
+[test(description = "values serialized one by one through a writing Archive over MemSerializer read back in order through a reading Archive")]
 def test_manual_archive(t : T?) {
     t |> run("MemSerializer write then read") @(t : T?) {
         // Write phase
@@ -147,7 +147,7 @@ def test_manual_archive(t : T?) {
     }
 }
 
-[test]
+[test(description = "a user serialize overload for a struct replaces the default layout, for a single value and for each element of an array")]
 def test_custom_serialize(t : T?) {
     t |> run("Color packs to 3 bytes") @(t : T?) {
         var c = Color(r = 1.0, g = 0.5, b = 0.0)
@@ -194,4 +194,129 @@ def test_custom_serialize(t : T?) {
         t |> equal(loaded[1].g, 1.0)
         t |> equal(loaded[1].b, 0.0)
     }
+}
+
+[safe_when_uninitialized]
+struct Bar {
+    t : string = "blah"
+    ta : array<float> <- make_10()
+}
+
+def make_10 => <- [for (i in range(10)); float(i)]
+
+[safe_when_uninitialized]
+struct Foo {
+    data_bool : bool = true
+    data_int : int = 1
+    data_float : float = 3.14
+    data_bar : Bar <- Bar()
+    data_uint_3 : uint[3] = fixed_array<uint>(1u, 2u, 3u)
+}
+
+[test(description = "binary_save then binary_load restores scalar, string, nested-array and fixed-array fields of a struct with field initializers")]
+def test_bin_serializer(t : T?) {
+    let f0 <- Foo()
+    var f1 : Foo
+    binary_save(f0) $(data) {
+        binary_load(f1, data)
+        t |> equal(f1.data_bool, true)
+        t |> equal(f1.data_int, 1)
+        t |> equal(f1.data_float, 3.14)
+        t |> equal(f1.data_bar.t, "blah")
+        t |> success(f1.data_uint_3[0] == 1u && f1.data_uint_3[1] == 2u && f1.data_uint_3[2] == 3u)
+        for (i in range(10)) {
+            t |> equal(f1.data_bar.ta[i], float(i))
+        }
+    }
+}
+
+//! Keep the embedded fixed array so this fixture exercises differing array allocation strides.
+struct BinaryStrideRecord { bytes : array<uint8>; values : float4[3] }
+struct BinaryStrideEnvelope { records : array<BinaryStrideRecord> }
+struct BinarySaveBuffer { bytes : array<uint8> }
+[test(description = "binary_load decodes an array of records holding an array and a fixed array with the right element stride, so the decoded hash equals the source")]
+def test_binary_array_element_stride(t : T?){
+    var source : BinaryStrideEnvelope; source.records |> resize(3)
+    for (record, i in source.records, count()){
+        record.bytes |> resize(7 + i)
+        for (value, k in record.bytes, count()){value = uint8(k + i)}
+        record.values[2] = float4(float(i), 2.0, 3.0, 4.0)
+    }
+    binary_save(source) $(data){
+        for (_repeat in range(8)){
+            var decoded : BinaryStrideEnvelope
+            binary_load(decoded, data)
+            t |> equal(hash(decoded), hash(source), "nested arrays deserialize with the element stride")
+            delete decoded
+        }
+    }
+    delete source
+}
+
+[test(description = "repeated binary_save calls free each temporary serialization buffer, so heap usage does not grow")]
+def test_binary_save_reclaims_temporary_buffer(t : T?){
+    var source : BinarySaveBuffer; source.bytes |> resize(64 * 1024)
+    for (value, i in source.bytes, count()){value = uint8(i)}
+    binary_save(source) $(data){let _size = length(data)}
+    let before = heap_bytes_allocated()
+    for (_repeat in range(16)){
+        binary_save(source) $(data){let _size = length(data)}
+    }
+    let after = heap_bytes_allocated()
+    t |> equal(after, before, "binary_save releases each temporary serialization buffer")
+    delete source
+}
+
+[test(description = "a panic in the binary_save callback propagates to the caller and still frees the temporary buffer")]
+def test_binary_save_reclaims_buffer_when_callback_panics(t : T?) {
+    var source : BinarySaveBuffer; source.bytes |> resize(64 * 1024)
+    try {
+        binary_save(source) $(data) {let _size = length(data); panic("callback failure")}
+    } recover {}
+    let before = heap_bytes_allocated()
+    var caught = 0
+    for (_repeat in range(16)) {
+        try {
+            binary_save(source) $(data) {let _size = length(data); panic("callback failure")}
+        } recover {caught++}
+    }
+    let after = heap_bytes_allocated()
+    t |> equal(caught, 16, "callback exceptions propagate to the caller")
+    t |> equal(after, before, "callback exceptions release the temporary serialization buffer")
+    delete source
+}
+
+struct WithLambda {
+    fn : lambda<(x : int) : int>
+    v : int
+}
+
+[test(description = "a struct with a null lambda field binary round-trips, keeping its other fields and loading the lambda as null")]
+def test_bin_serializer_null_lambda(t : T?) {
+    var w : WithLambda
+    w.v = 13
+    var loaded : WithLambda
+    binary_save(w) $(data) {
+        binary_load(loaded, data)
+    }
+    t |> equal(loaded.v, 13)
+    t |> equal(loaded.fn == null, true)
+}
+
+struct BinaryEmptyStrings {
+    null_text : string
+    empty_text : string
+    following_text : string
+}
+
+[test(description = "a null string and an empty string binary round-trip as themselves without corrupting the string after them")]
+def test_binary_null_and_empty_strings(t : T?) {
+    let source = BinaryEmptyStrings(empty_text = "", following_text = "after empty")
+    var decoded : BinaryEmptyStrings
+    binary_save(source) $(data) {
+        binary_load(decoded, data)
+    }
+    t |> equal(decoded.null_text, source.null_text)
+    t |> equal(decoded.empty_text, source.empty_text)
+    t |> equal(decoded.following_text, source.following_text, "empty payloads preserve the following value")
 }

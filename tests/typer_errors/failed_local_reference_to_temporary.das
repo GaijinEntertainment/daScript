@@ -1,12 +1,17 @@
-// Regression for issue #3065 (fuzzer, AOT): binding a local reference to a temporary
-// value -- here a freshly-built array `[1]` -- has no addressable storage to point at,
-// so the reference would dangle. The front-end used to let this through under `unsafe`
-// (in the fuzzer it was the finally of an unsafe block that suppressed the check), after
-// which it crashed the interpreter at runtime and emitted ill-formed C++ (`&temporary`)
-// under AOT. It is now a hard compile error regardless of `unsafe`.
-// A view built ON the temporary is still the temporary (a cast, or the `??` default arm), and
-// the expression form of `unsafe` marks the initializer alwaysSafe -- none of the three may
-// suppress the check.
+//! A local reference bound to a temporary, directly or through a cast
+//! or a ?? default arm, must not compile even inside unsafe (31019,
+//! four times).
+// Regression for issue #3065 (fuzzer, AOT): binding a local reference
+// to a temporary value -- here a freshly-built array `[1]` -- has no
+// addressable storage to point at, so the reference would dangle. The
+// front-end used to let this through under `unsafe` (in the fuzzer it
+// was the finally of an unsafe block that suppressed the check),
+// after which it crashed the interpreter at runtime and emitted
+// ill-formed C++ (`&temporary`) under AOT. It is now a hard compile
+// error regardless of `unsafe`. A view built ON the temporary is
+// still the temporary (a cast, or the `??` default arm), and the
+// expression form of `unsafe` marks the initializer alwaysSafe --
+// none of the three may suppress the check.
 options gen2
 expect 31019 : 4
 

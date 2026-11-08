@@ -58,7 +58,7 @@ def parse_single_char(input : string; blk : block<(val : bool; err : array<Parsi
     }
 }
 
-[test]
+[test(description = "a literal matches identical input")]
 def test_literal_match(t : T?) {
     t |> run("exact match") @(t : T?) {
         parse_literal("hello") $(val; err) {
@@ -68,7 +68,7 @@ def test_literal_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "a literal fails on different input")]
 def test_literal_no_match(t : T?) {
     t |> run("wrong input") @(t : T?) {
         parse_literal("world") $(val; err) {
@@ -77,7 +77,7 @@ def test_literal_no_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "a literal fails when the input is only a prefix of it")]
 def test_literal_partial_match(t : T?) {
     t |> run("partial input fails") @(t : T?) {
         parse_literal("hell") $(val; err) {
@@ -86,7 +86,7 @@ def test_literal_partial_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "a literal followed by EOF fails when extra input remains")]
 def test_literal_extra_input(t : T?) {
     t |> run("extra input after literal fails due to EOF") @(t : T?) {
         parse_literal("hello world") $(val; err) {
@@ -95,7 +95,7 @@ def test_literal_extra_input(t : T?) {
     }
 }
 
-[test]
+[test(description = "a literal containing several words matches as one unit")]
 def test_multi_literal(t : T?) {
     t |> run("multi-word literal") @(t : T?) {
         parse_multi_literal("hello world") $(val; err) {
@@ -105,7 +105,7 @@ def test_multi_literal(t : T?) {
     }
 }
 
-[test]
+[test(description = "escaped braces in a literal match the brace characters")]
 def test_escaped_braces(t : T?) {
     t |> run("escaped brace literals") @(t : T?) {
         parse_braces("\{content\}") $(val; err) {
@@ -115,7 +115,7 @@ def test_escaped_braces(t : T?) {
     }
 }
 
-[test]
+[test(description = "literal matching is case sensitive")]
 def test_case_sensitive(t : T?) {
     t |> run("case sensitive match") @(t : T?) {
         parse_case("Hello") $(val; err) {
@@ -135,7 +135,7 @@ def test_case_sensitive(t : T?) {
     }
 }
 
-[test]
+[test(description = "a one-character literal matches that character and rejects another")]
 def test_single_char_literal(t : T?) {
     t |> run("single char matches") @(t : T?) {
         parse_single_char("x") $(val; err) {
@@ -150,7 +150,7 @@ def test_single_char_literal(t : T?) {
     }
 }
 
-[test]
+[test(description = "a non-empty literal fails on empty input")]
 def test_empty_input(t : T?) {
     t |> run("empty input fails for non-empty literal") @(t : T?) {
         parse_literal("") $(val; err) {

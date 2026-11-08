@@ -10,7 +10,7 @@ require daslib/linq_fold
 require _common
 require daslib/cmp
 
-[test]
+[test(description = "join matches elements of two sequences by key for iterators, structs and arrays, as array and as sequence")]
 def test_join(t : T?) { // nolint:STYLE038 flat list of independent run arms
     t |> run("basic join") @(t : T?) {
         var query = join(
@@ -110,7 +110,7 @@ def test_join(t : T?) { // nolint:STYLE038 flat list of independent run arms
     }
 }
 
-[test]
+[test(description = "left_join keeps unmatched left rows for numeric and struct keys, with empty sides and the array result")]
 def test_left_join(t : T?) { // nolint:STYLE038 flat list of independent run arms
     t |> run("left join — numeric keys") @(t : T?) {
         let arr1 = [1, 2, 3, 4, 5]
@@ -232,7 +232,7 @@ def test_left_join(t : T?) { // nolint:STYLE038 flat list of independent run arm
     }
 }
 
-[test]
+[test(description = "group_join collects the matching right rows per left row, with an empty group for an unmatched left row")]
 def test_groupjoin(t : T?) { // nolint:STYLE038 flat list of independent run arms
     t |> run("basic group join") @(t : T?) {
         var query = group_join(
@@ -380,7 +380,7 @@ def check_pet_age_groups(t : T?; var got : array<tuple<float; int; float; float>
     }
 }
 
-[test]
+[test(description = "group_by buckets elements by key for plain and struct elements, from arrays, to array and to sequence")]
 def test_groupby(t : T?) {
     t |> run("basic group by") @(t : T?) {
         var query = group_by(
@@ -461,7 +461,7 @@ def test_groupby(t : T?) {
     }
 }
 
-[test]
+[test(description = "the _join macro matches rows by primitive, field and computed keys over arrays and iterators, and yields nothing when no key matches")]
 def test_join_macro(t : T?) {
     t |> run("_join — primitive keys on arrays") @(t : T?) {
         let arr1 = [1, 2, 3, 4, 5]
@@ -540,7 +540,7 @@ def test_join_macro(t : T?) {
     }
 }
 
-[test]
+[test(description = "the _left_join macro keeps unmatched left rows for primitive and struct keys and handles an empty right side")]
 def test_left_join_macro(t : T?) {
     t |> run("_left_join — primitive keys with unmatched rows") @(t : T?) {
         let arr1 = [1, 2, 3, 4, 5]
@@ -652,7 +652,7 @@ struct AJKey {
     b : int
 }
 
-[test]
+[test(description = "_join over array sources inside _fold gives the same counts, projections, filters and group aggregates as the unfused form")]
 def test_array_join_splice(t : T?) { // nolint:STYLE038 flat list of independent run arms
     t |> run("_join + count — int key, 4 matches (orphan dropped)") @(t : T?) {
         let cars <- aj_cars()
@@ -868,7 +868,7 @@ def test_array_join_splice(t : T?) { // nolint:STYLE038 flat list of independent
 // scalar `_join` result, over `each(...)` sources. These fall to the tier-2 `fold_linq_default`
 // fallback: the bare `each(srcB)` argument used to trip error[31013] ("each unsafe outside a
 // for-loop"), and a scalar join result used to build a const buffer tripping error[30913].
-[test]
+[test(description = "_join over each(...) sources followed by a materializing op or a scalar result compiles and returns the right rows")]
 def test_join_fused_regressions(t : T?) {
     t |> run("each |> _join |> _order_by — was error[31013]") @(t : T?) {
         let cars <- aj_cars()

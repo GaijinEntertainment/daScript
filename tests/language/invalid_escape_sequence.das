@@ -1,3 +1,4 @@
+//! an unknown escape sequence in a string literal does not compile
 // invalid string escape sequence
 // verifies compiler rejects unknown escape sequences like \x
 options gen2

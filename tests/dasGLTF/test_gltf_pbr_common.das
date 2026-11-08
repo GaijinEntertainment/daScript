@@ -4,6 +4,7 @@ options indenting = 4
 require dastest/testing_boost public
 require gltf/gltf_pbr_common
 require math
+require gltf/gltf_atmosphere
 
 def private near(t : T?; got, want, eps : float) {
     t |> success(abs(got - want) < eps, "expected {want}, got {got}")
@@ -13,7 +14,7 @@ def private near3(t : T?; got, want : float3; eps : float) {
     t |> success(length(got - want) < eps, "expected {want}, got {got}")
 }
 
-[test]
+[test(description = "gltf_skin_point returns the point under an identity palette, blends weighted translations and ignores translation for w=0 directions")]
 def test_skin_point(t : T?) {
     t |> run("identity palette returns the point") @(t : T?) {
         let m = identity4x4()
@@ -38,7 +39,7 @@ def test_skin_point(t : T?) {
     }
 }
 
-[test]
+[test(description = "the Fresnel, GGX, Smith and direct-light terms hit their known values at grazing and normal incidence and go black when the light is behind")]
 def test_brdf_terms(t : T?) {
     let n = float3(0., 0., 1.)
     t |> run("fresnel at grazing/normal incidence") @(t : T?) {
@@ -62,7 +63,7 @@ def test_brdf_terms(t : T?) {
     }
 }
 
-[test]
+[test(description = "ambient occlusion blend, perturb_normal fallbacks and sRGB encode endpoints give their expected values")]
 def test_shading_helpers(t : T?) {
     t |> run("ambient occlusion strength blend") @(t : T?) {
         let albedo = float3(1., 1., 1.)
@@ -87,7 +88,7 @@ def test_shading_helpers(t : T?) {
     }
 }
 
-[test]
+[test(description = "equirect uv, reflect_dir, roughness Fresnel and occlusion factor give their expected values at the poles, seam and bounds")]
 def test_environment_helpers(t : T?) {
     t |> run("equirect uv poles and seam") @(t : T?) {
         near(t, gltf_equirect_uv(float3(0., 1., 0.)).y, 0.0, 1e-5)     // straight up -> top row
@@ -114,7 +115,7 @@ def test_environment_helpers(t : T?) {
     }
 }
 
-[test]
+[test(description = "gltf_shadow_pcf_weights sum to 1 at every sub-texel offset")]
 def test_shadow_pcf_subtexel_coverage(t : T?) {
     let left = gltf_shadow_pcf_weights(0.0)
     let middle = gltf_shadow_pcf_weights(0.5)
@@ -135,7 +136,7 @@ def test_shadow_pcf_subtexel_coverage(t : T?) {
     }
 }
 
-[test]
+[test(description = "the receiver-plane gradient keeps PCF depth comparisons consistent across a sloped receiver")]
 def test_shadow_receiver_plane_pcf(t : T?) {
     let slope = float2(0.31, -0.24)
     let dx = float3(0.001, 0.0003, dot(slope, float2(0.001, 0.0003)))
@@ -158,10 +159,24 @@ def test_shadow_receiver_plane_pcf(t : T?) {
     t |> equal(gltf_shadow_receiver_gradient(float3(0.0), float3(0.0)), float2(0.0))
 }
 
-[test]
+[test(description = "gltf_shadow_edge_blend preserves energy, keeping 1 for all-lit and 0 for all-shadowed samples and averaging mixed ones")]
 def test_shadow_edge_filter_energy(t : T?) {
     t |> equal(gltf_shadow_edge_blend(1.0, 1.0, 1.0), 1.0)
     t |> equal(gltf_shadow_edge_blend(0.0, 0.0, 0.0), 0.0)
     t |> equal(gltf_shadow_edge_blend(1.0, 0.0, 0.0), 0.5)
     t |> equal(gltf_shadow_edge_blend(0.0, 1.0, 1.0), 0.5)
+}
+
+[test(description = "atmosphere_transmittance gives the same value along a path and its reverse")]
+def test_atmosphere_is_shared_and_direction_independent(t : T?){
+    let params = float4(.01, 2.0, .15, -1.0)
+    let a = float3(0.0, -4.0, 0.0); let b = float3(10.0, 2.0, 0.0)
+    let forward = atmosphere_transmittance(a, b, params, 1.0)
+    let reverse = atmosphere_transmittance(b, a, params, 1.0)
+    t |> success(abs(forward - reverse) < .00001, "optical depth is independent of ray direction")
+    t |> success(forward > 0.0 && forward < 1.0, "fog attenuates without leaving physical bounds")
+    t |> equal(atmosphere_transmittance(a, b, float4(0.0), 1.0), 1.0, "zero-density atmosphere is neutral")
+    let below = atmosphere_transmittance(float3(0.0, -4.0, 0.0), float3(10.0, -4.0, 0.0), params, 1.0)
+    let above = atmosphere_transmittance(float3(0.0, 4.0, 0.0), float3(10.0, 4.0, 0.0), params, 1.0)
+    t |> success(below < above, "lower layer attenuates more strongly")
 }

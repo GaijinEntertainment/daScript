@@ -140,7 +140,7 @@ def free_kernel \{
 \}
 "
 
-[test]
+[test(description = "A 3-lane struct field, a returned value, a parameter or a free function in a kernel fails to compile with a specific diagnostic.")]
 def test_cuda_reject_kernel_shape(t : T?) {
     t |> run("a 3-lane struct field, a returned value, a parameter, a free function") <| @(t : T?) {
         check_arms(t, [
@@ -152,7 +152,7 @@ def test_cuda_reject_kernel_shape(t : T?) {
     }
 }
 
-[test]
+[test(description = "A statement or expression outside the CUDA subset fails to compile and names its construct.")]
 def test_cuda_reject_body(t : T?) {
     t |> run("a statement or an expression outside the CUDA subset names its construct") <| @(t : T?) {
         check_arms(t, [
@@ -210,7 +210,7 @@ def test_cuda_reject_body(t : T?) {
     }
 }
 
-[test]
+[test(description = "A module global, user operator, or overload of a lowered math, atomic, intrinsic or pack name fails to compile with a specific diagnostic.")]
 def test_cuda_reject_callee(t : T?) {
     t |> run("a module global, a user operator, an overload of a lowered math, atomic, intrinsic or pack name") <| @(t : T?) {
         check_arms(t, [
@@ -260,7 +260,7 @@ def test_cuda_reject_callee(t : T?) {
     }
 }
 
-[test]
+[test(description = "An overload of a subgroup, ctor, barrier or range name, a helper the body calls, or self used as a value fails to compile.")]
 def test_cuda_reject_helpers(t : T?) {
     t |> run("an overload of a subgroup, ctor, barrier or range name; a helper the body calls; self as a value") <| @(t : T?) {
         check_arms(t, [
@@ -310,7 +310,7 @@ def test_cuda_reject_helpers(t : T?) {
     }
 }
 
-[test]
+[test(description = "A kernel class member or element struct the emitter cannot lower fails to compile with a specific diagnostic.")]
 def test_cuda_reject_class(t : T?) {
     t |> run("a member or an element struct the class carries") <| @(t : T?) {
         check_arms(t, [
@@ -378,7 +378,7 @@ def test_cuda_reject_class(t : T?) {
     }
 }
 
-[test]
+[test(description = "A written args member, a method, a pointer field, a tile with no block or a bad intrinsic address space fails to compile.")]
 def test_cuda_reject_methods(t : T?) {
     t |> run("a written args member, a method, a pointer's field, a tile with no block, an intrinsic's address spaces") <| @(t : T?) {
         check_arms(t, [
@@ -417,7 +417,7 @@ def test_cuda_reject_methods(t : T?) {
     }
 }
 
-[test]
+[test(description = "A KHR tile form with a bad arity, operand type or layout fails to compile.")]
 def test_cuda_reject_khr_tiles(t : T?) {
     t |> run("a KHR tile form: an arity, an operand type, a layout") <| @(t : T?) {
         check_arms(t, [
@@ -470,7 +470,7 @@ def test_cuda_reject_khr_tiles(t : T?) {
     }
 }
 
-[test]
+[test(description = "A bad tensor layout, view, load or store fails to compile.")]
 def test_cuda_reject_tensor(t : T?) {
     t |> run("a tensor layout or view, a tensor load or store") <| @(t : T?) {
         check_arms(t, [
@@ -514,7 +514,7 @@ def test_cuda_reject_tensor(t : T?) {
     }
 }
 
-[test]
+[test(description = "A bad workgroup tile convert or element-wise form fails to compile.")]
 def test_cuda_reject_wg_forms(t : T?) {
     t |> run("a workgroup tile convert or element-wise form") <| @(t : T?) {
         check_arms(t, [
@@ -555,7 +555,7 @@ def test_cuda_reject_wg_forms(t : T?) {
     }
 }
 
-[test]
+[test(description = "A bad workgroup per-element walk, reduce, product or scaled accumulate fails to compile.")]
 def test_cuda_reject_wg_walks(t : T?) {
     t |> run("a workgroup per-element walk, reduce, product or scaled accumulate") <| @(t : T?) {
         check_arms(t, [
@@ -599,7 +599,7 @@ def test_cuda_reject_wg_walks(t : T?) {
     }
 }
 
-[test]
+[test(description = "A bad decode-in-load arity, tile, source, layout or callback fails to compile.")]
 def test_cuda_reject_decode(t : T?) {
     t |> run("a decode-in-load: an arity, the tile, the source, the layout, the callback") <| @(t : T?) {
         check_arms(t, [

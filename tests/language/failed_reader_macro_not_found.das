@@ -1,5 +1,8 @@
-// a `%name~ ... %%` whose reader no required module provides is one lookup error, not a
-// syntax cascade: the parser reads the sequence to its `%%` and goes on
+//! a reader macro sequence whose reader no required module provides
+//! is one lookup error, not a syntax cascade
+// a `%name~ ... %%` whose reader no required module provides is one
+// lookup error, not a syntax cascade: the parser reads the sequence
+// to its `%%` and goes on
 options gen2
 expect 30821
 

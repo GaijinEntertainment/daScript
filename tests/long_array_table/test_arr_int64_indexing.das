@@ -1,7 +1,7 @@
 options gen2
 require dastest/testing_boost public
 
-[test]
+[test(description = "an array can be read with an int64 index")]
 def test_arr_i64_index_read(t : T?) {
     var arr : array<int>
     arr |> resize(int64(5))
@@ -12,7 +12,7 @@ def test_arr_i64_index_read(t : T?) {
     t |> equal(arr[i64_idx], 20)
 }
 
-[test]
+[test(description = "an array can be read with a uint64 index")]
 def test_arr_u64_index_read(t : T?) {
     var arr : array<int>
     arr |> resize(int64(5))
@@ -23,7 +23,7 @@ def test_arr_u64_index_read(t : T?) {
     t |> equal(arr[u64_idx], 30)
 }
 
-[test]
+[test(description = "an array element can be written through an int64 index")]
 def test_arr_i64_index_write(t : T?) {
     var arr : array<int>
     arr |> resize(int64(3))
@@ -32,7 +32,7 @@ def test_arr_i64_index_write(t : T?) {
     t |> equal(arr[1], 42)
 }
 
-[test]
+[test(description = "int, int64 and uint64 indices address the same elements")]
 def test_mixed_width_indexing(t : T?) {
     var arr : array<int>
     arr |> resize(int64(4))

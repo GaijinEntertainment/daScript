@@ -1,13 +1,18 @@
+//! An unused function argument raises exactly one LINT012 while
+//! underscore-prefixed, read, annotated and nolint-marked arguments
+//! raise none.
 // LINT012 — unused function argument.
-// Combined-assertion fixture: one `expect 50503` verifies several behaviors at
-// once (50503 is the macro-error code every lint hit raises under
-// `require daslib/lint`, so the count must equal the total intended hits).
+// Combined-assertion fixture: one `expect 50503` verifies several
+// behaviors at once (50503 is the macro-error code every lint hit
+// raises under `require daslib/lint`, so the count must equal the
+// total intended hits).
 //
-//   f1.deadArg     : plainly-named, never read   — fires LINT012  (the 1 expected)
-//   f1._ok         : underscore-prefixed, unused — suppressed
-//   f1.usedArg     : read                         — not fired
-//   f2._used       : underscore-prefixed but read — NOT fired (args don't get LINT004)
-//   f3.annotatedArg: [unused_argument(...)]        — suppressed (marked_used)
+// f1.deadArg     : plainly-named, never read   — fires LINT012  (the
+// 1 expected) f1._ok         : underscore-prefixed, unused —
+// suppressed f1.usedArg     : read                         — not
+// fired f2._used       : underscore-prefixed but read — NOT fired
+// (args don't get LINT004) f3.annotatedArg: [unused_argument(...)]
+// — suppressed (marked_used)
 //   f4.nolintArg   : // nolint:LINT012 on its line — suppressed
 //
 // Total expected 50503 hits: 1.

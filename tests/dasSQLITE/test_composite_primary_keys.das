@@ -1,4 +1,5 @@
 options gen2
+
 require dastest/testing_boost public
 require sqlite/sqlite_boost
 require daslib/sql_linq
@@ -11,6 +12,7 @@ struct CompositeRecord {
     ordinal : int64
     value : string
 }
+
 [sql_table(name="generated_ids")]
 struct GeneratedId {
     @sql_primary_key
@@ -18,7 +20,7 @@ struct GeneratedId {
     value : string
 }
 
-[test]
+[test(description = "a composite primary key creates, accepts a zero component, replaces by full key and works with generated ids")]
 def composite_primary_key_ddl_and_zero_component(t : T?) {
     var inscope db = open_sqlite(":memory:")
     let created = db |> try_create_table(type<CompositeRecord>)
@@ -41,7 +43,7 @@ def composite_primary_key_ddl_and_zero_component(t : T?) {
     t |> equal(db |> query_scalar("SELECT id FROM generated_ids", type<int64>), 1l)
 }
 
-[test]
+[test(description = "update and delete by row match every composite key column and an incomplete key is rejected")]
 def row_mutations_match_every_composite_key_column(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> exec("CREATE TABLE composite_records(partition TEXT NOT NULL," +
@@ -75,10 +77,11 @@ struct NumericFirst {
     partition : string
     value : string
 }
+
 [sql_table(name="without_key")]
 struct WithoutKey { value : string }
 
-[test]
+[test(description = "a composite key with an integer first column supports bulk insert and mutations on missing keys affect nothing")]
 def composite_integer_first_bulk_insert_and_missing_key_mutations(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> create_table(type<NumericFirst>)
@@ -117,7 +120,7 @@ struct UniqueComponent {
     version : int64
 }
 
-[test]
+[test(description = "composite key components keep their declared unique and NOT NULL constraints")]
 def composite_components_preserve_declared_unique_and_non_null_constraints(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> create_table(type<UniqueComponent>)
@@ -131,10 +134,11 @@ def composite_components_preserve_declared_unique_and_non_null_constraints(t : T
 
 [sql_view(name="read_only_rows")]
 struct ReadOnlyRows { value : string }
+
 [sql_fts5(name="search_rows")]
 struct SearchRows { value : string }
 
-[test]
+[test(description = "a scalar delete on a view or an fts5 table returns a typed error and changes nothing")]
 def scalar_delete_rejects_view_and_fts_rows_with_a_typed_error(t : T?) {
     var inscope db = open_sqlite(":memory:")
     let view <- db |> try_delete_by_id(type<ReadOnlyRows>, 1l)

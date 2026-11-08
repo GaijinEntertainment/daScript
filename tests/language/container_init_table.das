@@ -16,7 +16,7 @@ def bump_x(var f : Foo) {
     f.x++
 }
 
-[test]
+[test(description = "indexing a fresh table key runs the value type's field initializers, including an allocating one, before the read, store or var-ref use")]
 def test_table_index_inits(t : T?) {
     t |> run("fresh slot runs initializers") @(t : T?) {
         var inscope tab : table<string; Foo>
@@ -45,7 +45,7 @@ def test_table_index_inits(t : T?) {
     }
 }
 
-[test]
+[test(description = "copy, move, relaxed-assign and clone stores into a fresh table key each land the value without initializing the slot first or leaking its default")]
 def test_table_index_store_forms(t : T?) {
     t |> run("copy store carries its own construction") @(t : T?) {
         var inscope tab : table<string; Foo>
@@ -84,7 +84,7 @@ def test_table_index_store_forms(t : T?) {
     }
 }
 
-[test]
+[test(description = "fresh table slots of workhorse and container value types still start zero-filled")]
 def test_table_index_trivial_unchanged(t : T?) {
     t |> run("workhorse values") @(t : T?) {
         var inscope tab : table<string; int>
@@ -99,7 +99,7 @@ def test_table_index_trivial_unchanged(t : T?) {
     }
 }
 
-[test]
+[test(description = "fresh-slot initialization holds for runtime-built, iterator-temporary and non-string keys, while a safe index neither inserts nor initializes")]
 def test_table_index_key_flavors(t : T?) {
     t |> run("runtime-built key") @(t : T?) {
         var inscope tab : table<string; Foo>
@@ -130,7 +130,7 @@ def test_table_index_key_flavors(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fresh table slot of a tuple holding an initialized struct stays all zero, because default<> runs no member initializers")]
 def test_table_index_composites(t : T?) {
     // default<tuple<...>> does NOT run member initializers (probe-verified) - the init path
     // fires for tuple values but lands zeros, same as before. Pinned so a future

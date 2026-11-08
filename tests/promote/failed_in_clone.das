@@ -1,4 +1,5 @@
-// out-of-range literal via clone (:=) — promotion's range error must suppress mismatching_clone_type
+//! An out-of-range literal assigned with := must report the range
+//! error (30515) and not a clone-type mismatch.
 options gen2
 
 expect 30515

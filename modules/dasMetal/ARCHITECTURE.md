@@ -134,7 +134,7 @@ Three behavioral layers + enforcement gates:
   directions. Census-record and emit are fused in one helper so they cannot drift; the
   golden-snapshot layer catches emissions that bypass it.
 - **Gate C - fail-closed sync.** The `tests/msl/_fail_closed/` fixture list and the
-  `check_rejects` assert list in `test_msl_fail_closed.das` (keyed by fixture name; the
+  `check_rejects` assert list in `uncategorized_no_aot.das` (keyed by fixture name; the
   needle text is the suite's to judge) are both hand-maintained;
   `check_fail_closed_sync` (`REVIEW.das`) holds them equal in both directions, so an unpinned
   rejection or a stranded assert cannot pass as a green suite.
@@ -171,9 +171,9 @@ N bindings for one argument-buffer read and the kernel branches on exactly the v
 before. Metal inlining a passed shape value back into a constant is an assumption, not a
 guarantee.
 
-Tests: `tests/msl/test_msl_uniform_struct.das` (repo root - definition placement, the single
+Tests: `tests/msl/test_msl_functions.das` (repo root - definition placement, the single
 `constant&` parameter, no per-scalar parameter survives) and
-`tests/metal/test_metal_uniform_struct.das` (repo root - GPU vs CPU-oracle, the only thing that
+`tests/metal/test_metal_functions.das` (repo root - GPU vs CPU-oracle, the only thing that
 can prove the layout claim; mutation-verified by inserting one pad field into the emitted
 struct).
 

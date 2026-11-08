@@ -22,7 +22,7 @@ def m_002(db : SqlRunner) {
     db |> add_column(type<User>, "Email")
 }
 
-[test]
+[test(description = "add_column on a renamed field creates the column under its SQL name only", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_sql_column_rename_propagates_to_alter(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()

@@ -124,14 +124,14 @@ def move_into_local_box_read(i : int) : int {
     return b.node.x                  // read through the moved-in pointer before scope exit
 }
 
-[test]
+[test(description = "a pointer stored in a global is not statically freed")]
 def test_escape_free_does_not_free_global(t : T?) {
     leak_into_global(42)
     unsafe(heap_collect(true, true))
     t |> equal(g_kept.x, 42)
 }
 
-[test]
+[test(description = "a pointer returned from its function is not statically freed")]
 def test_escape_free_does_not_free_returned(t : T?) {
     var n = make_node(7)
     unsafe(heap_collect(true, true))
@@ -139,7 +139,7 @@ def test_escape_free_does_not_free_returned(t : T?) {
     unsafe { delete n }
 }
 
-[test]
+[test(description = "a pointer pushed into a container is not statically freed")]
 def test_escape_free_does_not_free_pushed(t : T?) {
     g_list |> clear()
     push_into_global(11)
@@ -150,7 +150,7 @@ def test_escape_free_does_not_free_pushed(t : T?) {
     t |> equal(g_list[1].x, 22)
 }
 
-[test]
+[test(description = "a pointer aliased by another escaping variable is not statically freed")]
 def test_escape_free_does_not_free_aliased(t : T?) {
     alias_then_escape(99)
     unsafe(heap_collect(true, true))
@@ -159,7 +159,7 @@ def test_escape_free_does_not_free_aliased(t : T?) {
 
 // nested ownership: Outer is scope-freed each iteration, its Inner child is orphaned and reclaimed
 // by the GC. The validating heap_collect proves no dangling pointer results from the partial free.
-[test]
+[test(description = "scope-freeing an outer object orphans its child pointer to the GC without leaving a dangling pointer")]
 def test_escape_free_nested_sound(t : T?) {
     let s = churn_nested()
     unsafe(heap_collect(true, true))
@@ -168,7 +168,7 @@ def test_escape_free_nested_sound(t : T?) {
 
 // a local captured by a lambda escapes through the capture frame; freeing it would dangle the
 // lambda's captured pointer. It must survive.
-[test]
+[test(description = "a pointer captured by a lambda is not statically freed")]
 def test_escape_free_does_not_free_captured(t : T?) {
     capture_into_global(55)
     unsafe(heap_collect(true, true))
@@ -178,7 +178,7 @@ def test_escape_free_does_not_free_captured(t : T?) {
 // a pointer passed to an impure (retaining) bound C++ function must NOT be freed. After retaining
 // it, we churn freeable allocations that would reuse its slot if it had been wrongly freed, then
 // confirm the retained value is intact.
-[test]
+[test(description = "a pointer passed to an impure bound function that retains it is not freed, even after churn reuses freed slots")]
 def test_escape_free_does_not_free_retained(t : T?) {
     pass_to_retaining(42)
     for (_i in range(1000)) {
@@ -190,7 +190,7 @@ def test_escape_free_does_not_free_retained(t : T?) {
 
 // GC-equivalence: the optimization frees via a raw collect (no `delete`), so even a type with a
 // user finalizer is reclaimed WITHOUT calling that finalizer - exactly as the GC would.
-[test]
+[test(description = "the static free reclaims an object without running its user finalizer, as the GC would")]
 def test_escape_free_does_not_run_user_finalizer(t : T?) {
     g_user_fin_calls = 0
     churn_user_finalizer()
@@ -200,21 +200,21 @@ def test_escape_free_does_not_run_user_finalizer(t : T?) {
 // SCRIPT-callee escape: a local passed to a script function that stores it must survive. If the
 // per-parameter analysis wrongly marked the callee's parameter escape-free, the local would be
 // statically freed and the validating collect (or the value check) would fail.
-[test]
+[test(description = "a pointer passed to a script function that stores it in a global is not freed")]
 def test_escape_free_does_not_free_stored_by_script(t : T?) {
     escape_via_script(77)
     unsafe(heap_collect(true, true))
     t |> equal(g_kept.x, 77)
 }
 
-[test]
+[test(description = "an escape that goes through a chain of script callees still keeps the pointer alive")]
 def test_escape_free_does_not_free_stored_by_script_transitive(t : T?) {
     escape_via_script_transitive(88)
     unsafe(heap_collect(true, true))
     t |> equal(g_kept.x, 88)
 }
 
-[test]
+[test(description = "a pointer passed to a script function that captures it in a stored lambda is not freed")]
 def test_escape_free_does_not_free_captured_by_script(t : T?) {
     escape_via_script_capture(66)
     unsafe(heap_collect(true, true))
@@ -223,7 +223,7 @@ def test_escape_free_does_not_free_captured_by_script(t : T?) {
 
 // a pointer MOVED into a struct that then escapes must survive: the move transfers it into the box
 // frame (ExprMakeStruct-by-move), so it escapes through the box and must not be statically freed.
-[test]
+[test(description = "a pointer moved into a struct that escapes is not statically freed")]
 def test_escape_free_move_into_escaping_struct_not_freed(t : T?) {
     g_boxes |> clear()
     move_into_escaping_box(55)
@@ -234,7 +234,7 @@ def test_escape_free_move_into_escaping_struct_not_freed(t : T?) {
 
 // a pointer moved into a NON-escaping local struct: read back correctly with no double-free (the
 // moved pointer is owned by the box, so it must not also be freed as the original local)
-[test]
+[test(description = "a pointer moved into a non-escaping local struct reads back correctly with no double free")]
 def test_escape_free_move_into_local_struct_sound(t : T?) {
     var acc = 0
     for (i in range(100)) { acc += move_into_local_box_read(i) }

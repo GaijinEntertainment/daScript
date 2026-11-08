@@ -2,7 +2,9 @@ options gen2
 options rtti
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
+
 require dastest/testing_boost public
+require daslib/rtti
 
 // ============================================================
 //  shared types
@@ -97,7 +99,7 @@ struct BasicTypes {
 //  test: basic scalar types
 // ============================================================
 
-[test]
+[test(description = "sscan_json reads every scalar type into a struct")]
 def test_basic_scalars(t : T?) {
     t |> run("all scalar types") @(t : T?) {
         var v : BasicTypes
@@ -122,7 +124,7 @@ def test_basic_scalars(t : T?) {
 //  test: nested struct
 // ============================================================
 
-[test]
+[test(description = "sscan_json reads a nested struct by value")]
 def test_nested_struct(t : T?) {
     t |> run("by value") @(t : T?) {
         var v : Outer
@@ -138,7 +140,7 @@ def test_nested_struct(t : T?) {
 //  test: struct pointer
 // ============================================================
 
-[test]
+[test(description = "sscan_json fills a non-null struct pointer and leaves a null one null")]
 def test_struct_pointer(t : T?) {
     t |> run("non-null pointer") @(t : T?) {
         var v : WithPtr
@@ -161,7 +163,7 @@ def test_struct_pointer(t : T?) {
 //  test: arrays
 // ============================================================
 
-[test]
+[test(description = "sscan_json fills arrays, empties them and clears them on a re-scan")]
 def test_arrays(t : T?) {
     t |> run("mixed arrays") @(t : T?) {
         var v : WithArrays
@@ -200,7 +202,7 @@ def test_arrays(t : T?) {
 //  test: @rename
 // ============================================================
 
-[test]
+[test(description = "sscan_json reads a renamed field by its key with the leading underscore stripped")]
 def test_rename(t : T?) {
     t |> run("rename strips underscore") @(t : T?) {
         var v : WithRename
@@ -216,7 +218,7 @@ def test_rename(t : T?) {
 //  test: unknown keys, missing fields, empty object
 // ============================================================
 
-[test]
+[test(description = "sscan_json ignores unknown keys, keeps defaults for missing fields, accepts an empty object and returns false on bad JSON")]
 def test_edge_cases(t : T?) {
     t |> run("unknown keys ignored") @(t : T?) {
         var v : Inner
@@ -250,7 +252,7 @@ def test_edge_cases(t : T?) {
 //  test: enums
 // ============================================================
 
-[test]
+[test(description = "sscan_json reads an enum from its name or its integer")]
 def test_enums(t : T?) {
     t |> run("enum as string") @(t : T?) {
         var v : WithEnum
@@ -270,7 +272,7 @@ def test_enums(t : T?) {
 //  test: deeply nested pointers
 // ============================================================
 
-[test]
+[test(description = "sscan_json reads three levels of nested structs")]
 def test_deep_nesting(t : T?) {
     t |> run("3 levels deep") @(t : T?) {
         var v : Level1
@@ -287,7 +289,7 @@ def test_deep_nesting(t : T?) {
 //  test: array of struct pointers (telegram-style)
 // ============================================================
 
-[test]
+[test(description = "sscan_json fills an array of struct pointers from message-style JSON")]
 def test_array_of_struct_ptrs(t : T?) {
     t |> run("telegram-style messages") @(t : T?) {
         var v : Updates
@@ -305,7 +307,7 @@ def test_array_of_struct_ptrs(t : T?) {
 //  test: string escapes
 // ============================================================
 
-[test]
+[test(description = "sscan_json decodes newline and tab escapes in strings")]
 def test_string_escapes(t : T?) {
     t |> run("newline and tab") @(t : T?) {
         var v : Outer
@@ -319,7 +321,7 @@ def test_string_escapes(t : T?) {
 //  test: number coercion
 // ============================================================
 
-[test]
+[test(description = "sscan_json coerces between float and int and reads negative numbers")]
 def test_number_coercion(t : T?) {
     t |> run("float-to-int and int-to-float") @(t : T?) {
         var v : Inner
@@ -341,7 +343,7 @@ def test_number_coercion(t : T?) {
 //  test: round-trip sprint_json -> sscan_json
 // ============================================================
 
-[test]
+[test(description = "sprint_json output scans back into an equal value")]
 def test_round_trip(t : T?) {
     t |> run("sprint then sscan") @(t : T?) {
         var src <- RoundTrip(x = 42, y = 3.14, name = "test", flag = true,
@@ -365,7 +367,7 @@ def test_round_trip(t : T?) {
 //  test: tuples
 // ============================================================
 
-[test]
+[test(description = "sscan_json reads tuples including a two-int tuple")]
 def test_tuples(t : T?) {
     t |> run("tuple round-trip") @(t : T?) {
         let src = (42, 3.14, "hello")
@@ -395,7 +397,7 @@ variant TestPayload {
     msg : string
 }
 
-[test]
+[test(description = "sscan_json reads int and string variant alternatives")]
 def test_variants(t : T?) {
     t |> run("variant int round-trip") @(t : T?) {
         let src = TestPayload(code = 99)
@@ -421,7 +423,7 @@ def test_variants(t : T?) {
 //  test: tables
 // ============================================================
 
-[test]
+[test(description = "sscan_json reads string-keyed, int-keyed and empty tables")]
 def test_tables(t : T?) {
     t |> run("string-keyed table round-trip") @(t : T?) {
         let src <- { "a" => 1, "b" => 2, "c" => 3 }
@@ -466,7 +468,7 @@ struct WithVectors {
     u2 : uint2
 }
 
-[test]
+[test(description = "vector fields in a struct round-trip through sprint_json and sscan_json")]
 def test_vector_types(t : T?) {
     t |> run("vectors in struct round-trip") @(t : T?) {
         let src = WithVectors(i2 = int2(10, 20), i3 = int3(1, 2, 3), i4 = int4(1, 2, 3, 4),
@@ -503,7 +505,7 @@ struct WithRanges {
     ur64 : urange64
 }
 
-[test]
+[test(description = "range fields in a struct round-trip through sprint_json and sscan_json")]
 def test_range_types(t : T?) {
     t |> run("ranges in struct round-trip") @(t : T?) {
         let src = WithRanges(r = range(10, 20), ur = urange(5u, 15u),
@@ -538,7 +540,7 @@ struct WithBitfield {
     name : string
 }
 
-[test]
+[test(description = "a bitfield in a struct round-trips through sprint_json and sscan_json")]
 def test_bitfields(t : T?) {
     t |> run("bitfield in struct round-trip") @(t : T?) {
         let src = WithBitfield(bits = TestBits.flagA | TestBits.flagC, name = "test")
@@ -555,7 +557,7 @@ def test_bitfields(t : T?) {
 //  test: void pointer (null)
 // ============================================================
 
-[test]
+[test(description = "a void pointer field accepts null")]
 def test_void_pointer(t : T?) {
     t |> run("void pointer accepts null") @(t : T?) {
         var dst : void?
@@ -574,7 +576,7 @@ struct WithTable {
     data : table<string; int>
 }
 
-[test]
+[test(description = "a struct holding a table scans its entries")]
 def test_struct_with_table(t : T?) {
     t |> run("struct containing table") @(t : T?) {
         var src : WithTable
@@ -606,7 +608,7 @@ struct WithUInt64Table { data : table<uint64; string>; }
 struct WithInt2Table { data : table<int2; string>; }
 struct WithFloat2Table { data : table<float2; string>; }
 
-[test]
+[test(description = "tables keyed by each scalar and vector type scan")]
 def test_table_key_types(t : T?) { // nolint:STYLE038 one flat arm per JIT_TABLE_FUNCTION key type
     t |> run("bool-keyed table") @(t : T?) {
         var src : WithBoolTable
@@ -707,7 +709,7 @@ struct WithLatticeVecs {
     b16 : byte16
 }
 
-[test]
+[test(description = "the array form fills all lanes of a wide vector and the object form is rejected past four lanes")]
 def test_lattice_vectors(t : T?) {
     t |> run("array form fills all lanes; object form ok at <= 4 lanes") @(t : T?) {
         var v : WithLatticeVecs
@@ -726,4 +728,246 @@ def test_lattice_vectors(t : T?) {
         var v3 : WithLatticeVecs
         t |> success(!sscan_json("\{\"b16\":\{\"x\":1\}\}", v3), "byte16 object form rejected")
     }
+}
+
+// ============================================================
+//  sscan_json_at — addr+TypeInfo entry point
+//
+//  Mutates the value at `addr` from the parsed JSON, given the TypeInfo
+//  baked from the call site (typically via `typeinfo rtti_typeinfo(value)`).
+// ============================================================
+
+struct private Pair {
+    a : int
+    b : float
+}
+
+[test(description = "sscan_json_at reads an int through a raw address")]
+def test_sscan_json_at_int(t : T?) {
+    var x : int = 0
+    let ok = sscan_json_at("123", unsafe(addr(x)), typeinfo rtti_typeinfo(x))
+    t |> equal(ok, true)
+    t |> equal(x, 123)
+}
+
+[test(description = "sscan_json_at reads an int64 beyond 32 bits")]
+def test_sscan_json_at_int64(t : T?) {
+    var x : int64 = 0l
+    let ok = sscan_json_at("9999999999", unsafe(addr(x)), typeinfo rtti_typeinfo(x))
+    t |> equal(ok, true)
+    t |> equal(x, 9999999999l)
+}
+
+[test(description = "sscan_json_at reads a bool")]
+def test_sscan_json_at_bool(t : T?) {
+    var x : bool = false
+    let ok = sscan_json_at("true", unsafe(addr(x)), typeinfo rtti_typeinfo(x))
+    t |> equal(ok, true)
+    t |> equal(x, true)
+}
+
+[test(description = "sscan_json_at reads a string")]
+def test_sscan_json_at_string(t : T?) {
+    var s : string
+    let ok = sscan_json_at("\"world\"", unsafe(addr(s)), typeinfo rtti_typeinfo(s))
+    t |> equal(ok, true)
+    t |> equal(s, "world")
+}
+
+[test(description = "sscan_json_at fills a struct from an object")]
+def test_sscan_json_at_struct(t : T?) {
+    var p = Pair(a = 0, b = 0.0)
+    let ok = sscan_json_at("\{\"a\":42,\"b\":1.5\}", unsafe(addr(p)), typeinfo rtti_typeinfo(p))
+    t |> equal(ok, true)
+    t |> equal(p.a, 42)
+    t |> equal(p.b, 1.5)
+}
+
+[test(description = "sscan_json_at fills an array")]
+def test_sscan_json_at_array(t : T?) {
+    var arr : array<int>
+    let ok = sscan_json_at("[10, 20, 30]", unsafe(addr(arr)), typeinfo rtti_typeinfo(arr))
+    t |> equal(ok, true)
+    t |> equal(length(arr), 3)
+    t |> equal(arr[0], 10)
+    t |> equal(arr[1], 20)
+    t |> equal(arr[2], 30)
+}
+
+[test(description = "sscan_json_at fills a table")]
+def test_sscan_json_at_table(t : T?) {
+    var tab : table<string; int>
+    let ok = sscan_json_at("\{\"x\":1,\"y\":2\}", unsafe(addr(tab)), typeinfo rtti_typeinfo(tab))
+    t |> equal(ok, true)
+    t |> equal(length(tab), 2)
+    t |> equal(tab["x"], 1)
+    t |> equal(tab["y"], 2)
+}
+
+[test(description = "sprint_json_at then sscan_json_at reproduces a struct")]
+def test_sscan_json_at_round_trip(t : T?) {
+    var p = Pair(a = 7, b = 3.5)
+    let json = sprint_json_at(unsafe(addr(p)), typeinfo rtti_typeinfo(p), false)
+    var q = Pair(a = 0, b = 0.0)
+    let ok = sscan_json_at(json, unsafe(addr(q)), typeinfo rtti_typeinfo(q))
+    t |> equal(ok, true)
+    t |> equal(q.a, p.a)
+    t |> equal(q.b, p.b)
+}
+
+[test(description = "sscan_json_at on an empty string returns false and leaves the target unchanged")]
+def test_sscan_json_at_empty_json(t : T?) {
+    // Empty JSON string: builtin returns false (no parse), addr unchanged.
+    var x : int = 99
+    t |> equal(sscan_json_at("", unsafe(addr(x)), typeinfo rtti_typeinfo(x)), false)
+    t |> equal(x, 99)
+}
+
+struct ScanDestination {
+    value : int
+}
+
+def private scan_scalar(text : string; var value : float&) : bool =>
+    sscan_json(text, value)
+
+def private scan_struct(text : string; var value : ScanDestination) : bool =>
+    sscan_json(text, value)
+
+def private scan_array(text : string; var value : array<int>) : bool =>
+    sscan_json(text, value)
+
+def private scan_table(text : string; var value : table<string; int>) : bool =>
+    sscan_json(text, value)
+
+def private scan_fixed_array(text : string; var value : int[2]) : bool =>
+    sscan_json(text, value)
+
+def private with_destination(var value : ScanDestination;
+                             body : block<(var item : ScanDestination)>
+                             ) {
+    body |> invoke(value)
+}
+
+[test(description = "sscan_json reads into scalar destinations and overwrites their values")]
+def test_scalar_scan_destinations(t : T?) {
+    var number = 17
+    t |> success(sscan_json("42", number))
+    t |> equal(number, 42)
+    var flag = false
+    t |> success(sscan_json("true", flag))
+    t |> equal(flag, true)
+    var text = "before"
+    t |> success(sscan_json("\"after\"", text))
+    t |> equal(text, "after")
+    var amount = 3.5
+    t |> success(sscan_json("null", amount))
+    t |> equal(amount, 3.5)
+    t |> success(sscan_json([json = "2.5", value = amount]))
+    t |> equal(amount, 2.5)
+}
+
+[test(description = "a scan destination forwarded through a wrapper function is filled the same way")]
+def test_forwarded_scan_destinations(t : T?) {
+    var scalar = 0.0
+    t |> success(scan_scalar("1.5", scalar))
+    t |> equal(scalar, 1.5)
+    var value : ScanDestination
+    t |> success(scan_struct("\{\"value\":7\}", value))
+    t |> equal(value.value, 7)
+    var items : array<int>
+    t |> success(scan_array("[3,4]", items))
+    t |> equal(items, [3, 4])
+    var mapping : table<string; int>
+    t |> success(scan_table("\{\"value\":7\}", mapping))
+    t |> equal(mapping?["value"] ?? 0, 7)
+    var fixed : int[2]
+    t |> success(scan_fixed_array("[3,4]", fixed))
+    t |> equal(fixed[0], 3)
+    t |> equal(fixed[1], 4)
+    with_destination(value) $(var item) {
+        t |> success(sscan_json("\{\"value\":9\}", item))
+    }
+    t |> equal(value.value, 9)
+}
+
+[test(description = "sscan_json fills pointer and fixed-array destinations")]
+def test_pointer_and_fixed_scan_destinations(t : T?) {
+    var value : ScanDestination?
+    t |> strictEqual(sscan_json("\{\"value\":7\}", value), true)
+    t |> strictEqual(value != null, true)
+    t |> equal(value.value, 7)
+    var points : float[2]
+    t |> success(sscan_json("[1.5,2.5]", points))
+    t |> equal(points[0], 1.5)
+    t |> equal(points[1], 2.5)
+    var scalar = 0.0
+    let address = unsafe(addr(scalar))
+    t |> success(sscan_json_at("1.5", address,
+        typeinfo rtti_typeinfo(scalar)))
+    t |> equal(scalar, 1.5)
+}
+
+struct StorageDestination {
+    value : int
+}
+
+struct DerivedDestination : StorageDestination {
+    extra : int
+}
+
+def private scan_selected(text : string; choose_first : bool;
+                          var first, second : auto(T)) : bool =>
+    sscan_json(text, choose_first ? first : second)
+
+def private scan_cast(text : string; var value : DerivedDestination) : bool =>
+    sscan_json(text, cast<StorageDestination>(value))
+
+def private scan_fallback(text : string; var value : StorageDestination?;
+                          var fallback : StorageDestination) : bool =>
+    sscan_json(text, value ?? fallback)
+
+[test(description = "a destination chosen at run time between two storages is the one filled")]
+def test_selected_scan_storage(t : T?) {
+    var first, second : StorageDestination
+    t |> success(scan_selected("\{\"value\":7\}", true, first, second))
+    t |> equal(first.value, 7)
+    t |> equal(second.value, 0)
+    t |> success(scan_selected("\{\"value\":9\}", false, first, second))
+    t |> equal(first.value, 7)
+    t |> equal(second.value, 9)
+    var items, other_items : array<int>
+    t |> success(scan_selected("[3,4]", false, items, other_items))
+    t |> equal(length(items), 0)
+    t |> equal(other_items, [3, 4])
+    var mapping, other_mapping : table<string; int>
+    t |> success(scan_selected("\{\"value\":7\}", true,
+        mapping, other_mapping))
+    t |> equal(mapping?["value"] ?? 0, 7)
+    t |> equal(length(other_mapping), 0)
+    var fixed, other_fixed : int[2]
+    t |> success(scan_selected("[3,4]", true, fixed, other_fixed))
+    t |> equal(fixed[0], 3)
+    t |> equal(fixed[1], 4)
+    t |> equal(other_fixed[0], 0)
+}
+
+[test(description = "scanning through a base-type view of a derived value fills its base fields and keeps the extras")]
+def test_cast_scan_storage(t : T?) {
+    var value = DerivedDestination(extra = 11)
+    t |> success(scan_cast("\{\"value\":7\}", value))
+    t |> equal(value.value, 7)
+    t |> equal(value.extra, 11)
+}
+
+[test(description = "scanning into a pointer falls back to the supplied storage when the pointer is null")]
+def test_fallback_scan_storage(t : T?) {
+    var fallback : StorageDestination
+    var pointer : StorageDestination?
+    t |> success(scan_fallback("\{\"value\":7\}", pointer, fallback))
+    t |> equal(fallback.value, 7)
+    var value : StorageDestination
+    t |> success(scan_fallback("\{\"value\":9\}", unsafe(addr(value)),
+        fallback))
+    t |> equal(value.value, 9)
+    t |> equal(fallback.value, 7)
 }

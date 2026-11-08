@@ -26,7 +26,7 @@ def make_pt_table : table<string; Pt> {
     }
 }
 
-[test]
+[test(description = "count over a table source in _fold equals its length, with a predicate walks it, and is zero for an empty table")]
 def test_table_fold_count_shortcuts(t : T?) {
     t |> run("bare count is length") @(t : T?) {
         var tab <- make_int_table(10)
@@ -50,7 +50,7 @@ def test_table_fold_count_shortcuts(t : T?) {
     }
 }
 
-[test]
+[test(description = "sum, min, max, any, all and contains over a table's keys and values agree with hand loops")]
 def test_table_fold_accumulators(t : T?) {
     t |> run("sum/min/max over values and keys") @(t : T?) {
         var tab <- make_int_table(10)
@@ -75,7 +75,7 @@ def test_table_fold_accumulators(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fused kv where/select, keys and identity to_array over a table agree with a hand loop in slot order")]
 def test_table_fold_to_array_agreement(t : T?) {
     t |> run("kv where+select agrees with hand loop, in slot order") @(t : T?) {
         var tab <- make_pt_table()
@@ -124,7 +124,7 @@ def test_table_fold_to_array_agreement(t : T?) {
     }
 }
 
-[test]
+[test(description = "order_by, distinct, take, skip and first over a table source in _fold agree with the hand-written result")]
 def test_table_fold_order_distinct_take(t : T?) {
     t |> run("order_by key descending") @(t : T?) {
         var tab <- make_int_table(10)
@@ -175,7 +175,7 @@ def test_table_fold_order_distinct_take(t : T?) {
     }
 }
 
-[test]
+[test(description = "a table chain consumed as an iterator yields the same values as the array form")]
 def test_table_fold_iterator_result(t : T?) {
     t |> run("chain consumed as iterator") @(t : T?) {
         var tab <- make_int_table(6)
@@ -188,7 +188,7 @@ def test_table_fold_iterator_result(t : T?) {
     }
 }
 
-[test]
+[test(description = "keys over a set table folds like any other table source")]
 def test_table_fold_set_form(t : T?) {
     t |> run("keys over table<K> set") @(t : T?) {
         var s : table<string> <- {"alpha", "beta", "gamma"}
@@ -207,7 +207,7 @@ def private bump_key(var c : int&) : int {
 // `tab?[X]`), residual conjuncts evaluated on the probed element only. Probes must agree with the scan
 // on hit AND miss; non-probe shapes (key-eq not the leftmost conjunct) must keep riding the scan.
 
-[test]
+[test(description = "a key-equality where over a table folds to an O(1) probe that agrees with the scan on hits and misses, and non-probe shapes stay scans")]
 def test_table_point_lookup(t : T?) { // nolint:STYLE038 flat list of independent run arms
     t |> run("kv any/count/first probes, hit and miss") @(t : T?) {
         var tab <- make_int_table(10)
@@ -327,7 +327,7 @@ def flip_kv(kv : IKV) : tuple<int; int> => (kv.value => kv.key)
 // pruned slot walk. Either way must agree with the hash/hand-loop semantics: inner joins drop misses,
 // keep lead duplicates; group joins stay outer.
 
-[test]
+[test(description = "a table as join right side probes the table directly and agrees with the hash join for inner, set and group joins")]
 def test_table_join_srcb_probe(t : T?) { // nolint:STYLE038 flat list of independent run arms
     t |> run("inner join on the table key: count + rows in lead order") @(t : T?) {
         var ids <- [0, 1, 1, 4, 9, 2, 0, 7]   // dups stay, 9/7 miss
@@ -431,7 +431,7 @@ def test_table_join_srcb_probe(t : T?) { // nolint:STYLE038 flat list of indepen
     }
 }
 
-[test]
+[test(description = "a table as the join lead agrees with the hand loop for counts, to_array, filters, values and group joins")]
 def test_table_join_lead(t : T?) {
     t |> run("table lead, array srcB: count keeps bucket multiplicity") @(t : T?) {
         var ctab <- make_int_table(10)
@@ -513,7 +513,7 @@ def test_table_join_lead(t : T?) {
 // Tier-2 over the raw each_kv iterator (no _fold) — the [unsafe_outside_of_for] contract requires the
 // explicit unsafe(...) wrap at a bare chain head; fused chains rewrite the head before inference.
 
-[test]
+[test(description = "where, select and keys over a raw each_kv iterator work without _fold")]
 def test_each_kv_tier2(t : T?) {
     t |> run("where/select/to_array over each_kv") @(t : T?) {
         var tab <- {"a" => 1, "b" => 2, "c" => 3}
@@ -531,7 +531,7 @@ def test_each_kv_tier2(t : T?) {
     }
 }
 
-[test]
+[test(description = "to_table as a fused sink agrees with a hand loop for pass-through, projections, set form, duplicate keys, take and string keys")]
 def test_to_table_sink(t : T?) { // nolint:STYLE038 flat list of independent run arms
     t |> run("kv pass-through + where agrees with a hand loop") @(t : T?) {
         var src <- make_int_table(6)
@@ -652,7 +652,7 @@ def test_to_table_sink(t : T?) { // nolint:STYLE038 flat list of independent run
     }
 }
 
-[test]
+[test(description = "group_by over a table's kv, values and keys lanes agrees with a hand loop and with the tier-2 path")]
 def test_table_group_by(t : T?) { // nolint:STYLE038 flat list of independent run arms
     t |> run("kv lane: count + sum per group agrees with a hand loop") @(t : T?) {
         var tab <- make_int_table(20)
@@ -758,7 +758,7 @@ def test_table_group_by(t : T?) { // nolint:STYLE038 flat list of independent ru
     }
 }
 
-[test]
+[test(description = "each_kv chains accept positional _0 and _1 field access")]
 def test_table_kv_positional_fields(t : T?) {
     t |> run("each_kv chains accept positional _0/_1 access") @(tt : T?) {
         var tab <- { 1 => 10, 2 => 20, 3 => 30 }
@@ -775,7 +775,7 @@ def keys(var _t : table<int; string> ==const) : iterator<int> {
     return [iterator for(_i in 0..1); 999]
 }
 
-[test]
+[test(description = "a user-defined keys overload runs instead of folding to length of the table")]
 def test_user_keys_overload_not_hijacked(t : T?) {
     t |> run("a user keys overload runs instead of folding to length(tab)") @(tt : T?) {
         var tab <- { 1 => "a", 2 => "b", 3 => "c" }
@@ -789,7 +789,7 @@ def test_user_keys_overload_not_hijacked(t : T?) {
     }
 }
 
-[test]
+[test(description = "a join against a table's key accepts positional _1 access in the result")]
 def test_join_probe_kv_positional_fields(t : T?) {
     t |> run("a table srcB joined on its key accepts positional _1 in the result") @(tt : T?) {
         var tab <- { 1 => 100, 2 => 200 }

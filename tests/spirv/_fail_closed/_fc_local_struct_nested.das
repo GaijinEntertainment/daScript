@@ -1,7 +1,10 @@
-// Fail-closed fixture: a nested struct (or fixed-array) member of a LOCAL struct value would need its
-// laid-out type to match the loaded composite -- not yet handled, so it must fail closed rather than emit
-// a mismatched OpCompositeExtract. (Scalar/vector/matrix members of a local struct value ARE supported;
-// see test_local_struct_member.) `_`-prefix + `expect 50501` keep dastest/lint off the failing shader.
+// Fail-closed fixture: a nested struct (or fixed-array) member of a
+// LOCAL struct value would need its laid-out type to match the loaded
+// composite -- not yet handled, so it must fail closed rather than
+// emit a mismatched OpCompositeExtract. (Scalar/vector/matrix members
+// of a local struct value ARE supported; see test_local_struct_member
+// in test_struct.das.) `_`-prefix + `expect 50501` keep dastest/lint
+// off the failing shader.
 expect 50501
 
 options gen2

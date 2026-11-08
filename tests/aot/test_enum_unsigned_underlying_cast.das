@@ -3,7 +3,7 @@ options rtti
 require dastest/testing_boost public
 require daslib/json_boost
 
-// AOT mirror of tests/language/enum_unsigned_underlying_cast.das — exercises the same
+// AOT mirror of tests/language/enum.das — exercises the same
 // uint8/uint16/uint32/uint64-backed enum cast cases through the AOT codegen path. Post-fix the
 // generated C++ should call enum8u_to_uint/enum16u_to_uint/enum64u_to_uint (zero-extending)
 // rather than the signed helpers.
@@ -42,7 +42,7 @@ enum Signed16 : int16 {
     NEGATIVE = 0xfc18l           // int16 bit-reinterpret = -1000
 }
 
-[test]
+[test(description = "An enum with an unsigned underlying type zero-extends when cast in AOT")]
 def test_aot_unsigned_underlying_zero_extends(t : T?) {
     t |> run("aot: uint8-backed enum cast preserves byte value") @(t : T?) {
         t |> equal(uint(Opcode.HEARTBEAT), 200u)
@@ -60,7 +60,7 @@ def test_aot_unsigned_underlying_zero_extends(t : T?) {
     }
 }
 
-[test]
+[test(description = "An enum with a signed underlying type keeps its sign when cast in AOT")]
 def test_aot_signed_underlying_unchanged(t : T?) {
     t |> run("aot: int8-backed enum cast keeps sign-reinterpret") @(t : T?) {
         t |> equal(int(Signed8.NEGATIVE), -50)
@@ -71,7 +71,7 @@ def test_aot_signed_underlying_unchanged(t : T?) {
     }
 }
 
-[test]
+[test(description = "Runtime loops over uint8 and uint64 enum values sum and compare the full unsigned values in AOT")]
 def test_aot_runtime_iteration(t : T?) {
     t |> run("aot: runtime for-loop sum of uint8 enums") @(t : T?) {
         var arr <- [Opcode.PING, Opcode.HEARTBEAT]
@@ -94,7 +94,7 @@ def test_aot_runtime_iteration(t : T?) {
     }
 }
 
-[test]
+[test(description = "Equality on unsigned-underlying enums compares the full unsigned values in AOT")]
 def test_aot_unsigned_enum_equality(t : T?) {
     t |> run("aot: uint8 enum == operator works") @(t : T?) {
         let a = Opcode.HEARTBEAT
@@ -130,7 +130,7 @@ struct Pkt64 {
     w : Wide64
 }
 
-[test]
+[test(description = "Casting an unsigned-underlying enum struct field keeps its value in AOT")]
 def test_aot_struct_field_cast(t : T?) {
     t |> run("aot: struct field of uint8 enum, cast to uint") @(t : T?) {
         let p = Pkt(op = Opcode.HEARTBEAT)
@@ -142,7 +142,7 @@ def test_aot_struct_field_cast(t : T?) {
     }
 }
 
-[test]
+[test(description = "String interpolation prints the names of unsigned-underlying enum values in AOT")]
 def test_aot_string_interpolation_names(t : T?) {
     t |> run("aot: uint8 enum interpolates value name") @(t : T?) {
         t |> equal("{Opcode.HEARTBEAT}", "HEARTBEAT")
@@ -174,7 +174,7 @@ struct PktU64 {
     w : Wide64
 }
 
-[test]
+[test(description = "sprint_json writes an unsigned-underlying enum field with its right value in AOT")]
 def test_aot_sprint_json_unsigned_enum_field(t : T?) {
     t |> run("aot: sprint_json uint8 enum renders by name") @(t : T?) {
         let p = PktU8(op = Opcode.HEARTBEAT)

@@ -67,7 +67,7 @@ class CookieTestServer : HvWebServer {
 // Tests
 // ??????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 
-[test]
+[test(description = "A cookie added on a response arrives at the client")]
 def test_add_cookie_response_simple(t : T?) {
     with_test_server(type<CookieTestServer>) $(base_url) {
         t |> run("add_cookie sets cookies on response") @(t : T?) {
@@ -92,7 +92,7 @@ def test_add_cookie_response_simple(t : T?) {
     }
 }
 
-[test]
+[test(description = "A cookie added with extended attributes arrives at the client")]
 def test_add_cookie_response_extended(t : T?) {
     with_test_server(type<CookieTestServer>) $(base_url) {
         t |> run("extended cookie is received") @(t : T?) {
@@ -113,7 +113,7 @@ def test_add_cookie_response_extended(t : T?) {
     }
 }
 
-[test]
+[test(description = "A cookie added to a request reaches the server")]
 def test_add_cookie_request(t : T?) {
     with_test_server(type<CookieTestServer>) $(base_url) {
         t |> run("add_cookie on request (simple)") @(t : T?) {
@@ -130,7 +130,7 @@ def test_add_cookie_request(t : T?) {
     }
 }
 
-[test]
+[test(description = "get_cookie returns an empty string for a cookie that was not sent")]
 def test_get_cookie_missing(t : T?) {
     with_test_server(type<CookieTestServer>) $(base_url) {
         t |> run("get_cookie returns empty for missing cookie") @(t : T?) {
@@ -145,7 +145,7 @@ def test_get_cookie_missing(t : T?) {
     }
 }
 
-[test]
+[test(description = "each_cookie visits every cookie of the request")]
 def test_each_cookie_iterates_all(t : T?) {
     with_test_server(type<CookieTestServer>) $(base_url) {
         t |> run("each_cookie iterates all cookies") @(t : T?) {
@@ -166,7 +166,7 @@ def test_each_cookie_iterates_all(t : T?) {
     }
 }
 
-[test]
+[test(description = "each_cookie visits nothing when the request has no cookies")]
 def test_each_cookie_empty(t : T?) {
     with_test_server(type<CookieTestServer>) $(base_url) {
         t |> run("each_cookie with no cookies") @(t : T?) {
@@ -181,7 +181,7 @@ def test_each_cookie_empty(t : T?) {
     }
 }
 
-[test]
+[test(description = "each_header on a response includes its Set-Cookie entries")]
 def test_each_header_includes_set_cookie(t : T?) {
     with_test_server(type<CookieTestServer>) $(base_url) {
         t |> run("each_header sees Set-Cookie entries") @(t : T?) {

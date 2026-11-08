@@ -4,8 +4,9 @@
 `../README.md`.
 
 **A diff that adds a `.das` file here that is not itself a test - a fixture another test runs, or a
-module a fixture requires - starts its name, or its directory's name, with `_`** - dastest skips a
-`_` name when it scans a directory, so such a file never runs as a test of its own.
+module a fixture requires - starts its name, or the name of a directory on its path under this
+folder, with `_`** - dastest skips a `_` name anywhere on the path when it scans a directory, so
+such a file never runs as a test of its own.
 
 **A diff that adds a test for dastest itself, or changes how one spawns a process or checks an
 exit code, runs it on Windows and Linux before it lands, or the PR body names each of those two

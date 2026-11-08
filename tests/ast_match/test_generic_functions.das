@@ -42,7 +42,7 @@ def target_branch(a : int; threshold : int) : int => generic_branch(a, threshold
 
 // ── Tests ────────────────────────────────────────────────────────────────
 
-[test]
+[test(description = "qmatch_function matches a function whose body calls a generic instantiated for int")]
 def test_add_int_match(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_add_int)
@@ -63,7 +63,7 @@ def test_add_int_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_function matches a function whose body calls a generic instantiated for float")]
 def test_add_float_match(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_add_float)
@@ -83,7 +83,7 @@ def test_add_float_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_function matches a function whose body calls a generic identity")]
 def test_identity_match(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_identity)
@@ -103,7 +103,7 @@ def test_identity_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_function rejects a call pattern naming a different generic")]
 def test_wrong_generic_name(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_add_int)
@@ -117,7 +117,7 @@ def test_wrong_generic_name(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_function rejects an inlined-arithmetic pattern against a body that calls the generic")]
 def test_wrong_pattern(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_add_int)
@@ -132,7 +132,7 @@ def test_wrong_pattern(t : T?) {
     }
 }
 
-[test]
+[test(description = "a $c capture binds the generic's name and $i captures bind its argument names")]
 def test_capture_names(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_add_int)
@@ -154,7 +154,7 @@ def test_capture_names(t : T?) {
     }
 }
 
-[test]
+[test(description = "a function calling a branching generic matches either the call or the folded ternary form")]
 def test_branch_match(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_branch)
@@ -174,7 +174,7 @@ def test_branch_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_function checks the instantiated parameter types of a generic caller")]
 def test_add_arg_types(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_add_int)
@@ -195,7 +195,7 @@ def test_add_arg_types(t : T?) {
     }
 }
 
-[test]
+[test(description = "a pattern with float parameter types does not match the int instantiation")]
 def test_float_arg_types_dont_match_int(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_add_int)

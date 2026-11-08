@@ -12,7 +12,7 @@ class Bar : Foo {
 }
 
 
-[test]
+[test(description = "is_instance_of is true for an object of the type or a derived type and false for a base object asked about a derived type")]
 def test_is_instance_of(t : T?) {
     var f = new Foo()
     f->hello()
@@ -24,7 +24,7 @@ def test_is_instance_of(t : T?) {
     t |> success(!is_instance_of(f, type<Bar>))
 }
 
-[test]
+[test(description = "the is operator on class pointers is true for the type and its base and false for a base object tested as the derived type")]
 def test_is(t : T?) {
     var f = new Foo()
     f->hello()
@@ -36,7 +36,7 @@ def test_is(t : T?) {
     t |> success(!(f is Bar))
 }
 
-[test]
+[test(description = "dynamic_type_cast upcasts a derived object to the same address and returns null for a base object cast to the derived type")]
 def test_dynamic_type_cast(t : T?) {
     var f = new Foo()
     t |> equal(f->hello(), "hello from Foo!")
@@ -49,7 +49,7 @@ def test_dynamic_type_cast(t : T?) {
 }
 
 
-[test]
+[test(description = "as upcasts a derived object to the same address and ?as gives null for a base object cast to the derived type")]
 def test_as(t : T?) {
     var f = new Foo()
     f->hello()

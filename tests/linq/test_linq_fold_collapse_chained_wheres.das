@@ -22,7 +22,7 @@ require dastest/testing_boost public
 // 1. plan_reverse surface
 // ═════════════════════════════════════════════════════════════════════════════
 
-[test]
+[test(description = "two chained wheres before reverse and to_array compose into the same predicate as the manual && form")]
 def test_chained_wheres_reverse_n2(t : T?) {
     t |> run("chained wheres N=2 + reverse + to_array: composed pred matches manual && form") @(tt : T?) {
         let arr <- [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -38,7 +38,7 @@ def test_chained_wheres_reverse_n2(t : T?) {
     }
 }
 
-[test]
+[test(description = "three chained wheres before reverse and to_array compose into one && chain")]
 def test_chained_wheres_reverse_n3(t : T?) {
     t |> run("chained wheres N=3 + reverse + to_array: all three compose into single && chain") @(tt : T?) {
         let arr <- [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -55,7 +55,7 @@ def test_chained_wheres_reverse_n3(t : T?) {
     }
 }
 
-[test]
+[test(description = "chained wheres before reverse and first feed the scalar terminator the composed predicate")]
 def test_chained_wheres_reverse_first(t : T?) {
     t |> run("chained wheres + reverse + first: scalar terminator splice (Rb archetype) sees composed pred") @(tt : T?) {
         let arr <- [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -65,7 +65,7 @@ def test_chained_wheres_reverse_first(t : T?) {
     }
 }
 
-[test]
+[test(description = "chained wheres before reverse and count give the composed count, reverse being the identity for a count")]
 def test_chained_wheres_reverse_count(t : T?) {
     t |> run("chained wheres + reverse + count: counter terminator (Ra archetype) — reverse is identity for count") @(tt : T?) {
         let arr <- [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -78,7 +78,7 @@ def test_chained_wheres_reverse_count(t : T?) {
 // 2. plan_distinct surface
 // ═════════════════════════════════════════════════════════════════════════════
 
-[test]
+[test(description = "two chained wheres before distinct and to_array compose into the same predicate as the manual && form")]
 def test_chained_wheres_distinct_n2(t : T?) {
     t |> run("chained wheres N=2 + distinct + to_array: composed pred matches manual && form") @(tt : T?) {
         let arr <- [1, 2, 1, 3, 2, 4, 3, 5, 4, 6]
@@ -92,7 +92,7 @@ def test_chained_wheres_distinct_n2(t : T?) {
     }
 }
 
-[test]
+[test(description = "three chained wheres before distinct and count compose and give the right count")]
 def test_chained_wheres_distinct_n3(t : T?) {
     t |> run("chained wheres N=3 + distinct + count: all three compose; count fast-path") @(tt : T?) {
         let arr <- [1, 2, 1, 3, 2, 4, 3, 5, 4, 6, 5, 7, 6, 8]
@@ -102,7 +102,7 @@ def test_chained_wheres_distinct_n3(t : T?) {
     }
 }
 
-[test]
+[test(description = "chained wheres before distinct and take(N) compose and respect the take bound")]
 def test_chained_wheres_distinct_take(t : T?) {
     t |> run("chained wheres + distinct + take(N): bounded splice path with composed pred") @(tt : T?) {
         let arr <- [1, 2, 1, 3, 2, 4, 3, 5, 4, 6, 5, 7, 6, 8]
@@ -119,7 +119,7 @@ def test_chained_wheres_distinct_take(t : T?) {
 // 3. Edge cases: no collapse when call between, single where unaffected
 // ═════════════════════════════════════════════════════════════════════════════
 
-[test]
+[test(description = "a chain with a single where gives the same result, so the collapse pre-pass is a no-op there")]
 def test_single_where_unchanged(t : T?) {
     t |> run("single where unchanged: collapse pre-pass is a no-op on chains without adjacent wheres") @(tt : T?) {
         let arr <- [1, 2, 3, 4, 5]
@@ -130,7 +130,7 @@ def test_single_where_unchanged(t : T?) {
     }
 }
 
-[test]
+[test(description = "wheres separated by a select are not merged and each applies at its own stage")]
 def test_wheres_split_by_select_no_collapse(t : T?) {
     t |> run("wheres with select between: NOT collapsed (collapse only fires on ADJACENT wheres)") @(tt : T?) {
         let arr <- [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]

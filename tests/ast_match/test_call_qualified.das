@@ -14,7 +14,7 @@ require dastest/testing_boost public
 // unqualified pattern name matches its last `::` segment via
 // qm_call_name_matches. The suffix must be segment-aligned.
 
-[test]
+[test(description = "a bare callee name in the pattern matches the same call written with a module qualifier")]
 def test_unqualified_pattern_vs_qualified_call(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(math::sin(1.0))
@@ -27,7 +27,7 @@ def test_unqualified_pattern_vs_qualified_call(t : T?) {
     }
 }
 
-[test]
+[test(description = "a qualified callee name in the pattern matches the identical qualified call")]
 def test_qualified_pattern_vs_qualified_call(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(math::sin(1.0))
@@ -37,7 +37,7 @@ def test_qualified_pattern_vs_qualified_call(t : T?) {
     }
 }
 
-[test]
+[test(description = "a bare callee name does not match a qualified call of a different function")]
 def test_wrong_name_fails(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(math::sin(1.0))
@@ -47,7 +47,7 @@ def test_wrong_name_fails(t : T?) {
     }
 }
 
-[test]
+[test(description = "a bare callee name matches only whole :: segments, not a name that merely ends with it")]
 def test_suffix_is_segment_aligned(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(foosin(1.0))
@@ -57,7 +57,7 @@ def test_suffix_is_segment_aligned(t : T?) {
     }
 }
 
-[test]
+[test(description = "a qualified callee name in the pattern does not match a bare call")]
 def test_qualified_pattern_requires_exact(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(sin(1.0))

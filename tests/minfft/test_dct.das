@@ -9,7 +9,7 @@ def private close(t : T?; a, b, eps : float; what : string) {
 }
 
 // DCT-II of a constant signal: all energy in the DC term, AC coefficients zero.
-[test]
+[test(description = "the DCT of a constant signal has energy only in the DC coefficient")]
 def test_dct_constant(t : T?) {
     t |> run("dct of constant -> DC only") <| @(t : T?) {
         let n = 8
@@ -27,7 +27,7 @@ def test_dct_constant(t : T?) {
 }
 
 // idct(dct(x)) == 2N * x  (minfft is unnormalized).
-[test]
+[test(description = "a 1D DCT followed by the inverse, divided by 2N, returns the signal")]
 def test_dct_roundtrip_1d(t : T?) {
     t |> run("1d round-trip / 2N") <| @(t : T?) {
         let n = 16
@@ -46,7 +46,7 @@ def test_dct_roundtrip_1d(t : T?) {
 }
 
 // 2D 8x8 block (the JPEG case): idct(dct(x)) == (2*rows)*(2*cols) * x.
-[test]
+[test(description = "an 8x8 2D DCT followed by the inverse, divided by 256, returns the block")]
 def test_dct_roundtrip_2d(t : T?) {
     t |> run("2d 8x8 round-trip / 256") <| @(t : T?) {
         let rows = 8
@@ -66,7 +66,7 @@ def test_dct_roundtrip_2d(t : T?) {
 }
 
 // Real FFT pair: invrealdft(realdft(x)) == N * x, and a pure tone lands on one bin.
-[test]
+[test(description = "a real FFT of a cosine puts its energy in one bin and the inverse, divided by N, returns the signal")]
 def test_real_fft(t : T?) {
     t |> run("real fft round-trip / N + single bin") <| @(t : T?) {
         let n = 32

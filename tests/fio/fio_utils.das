@@ -3,7 +3,7 @@ require dastest/testing_boost public
 
 require daslib/fio
 
-[test]
+[test(description = "get_das_version returns a non-empty major.minor.patch string")]
 def test_get_das_version(t : T?) {
     t |> run("returns non-empty version string") @(t : T?) {
         let ver = get_das_version()
@@ -21,7 +21,7 @@ def test_get_das_version(t : T?) {
     }
 }
 
-[test]
+[test(description = "fexist is true for existing files and directories and false for missing ones")]
 def test_fexist(t : T?) {
     t |> run("existing file returns true") @(t : T?) {
         // this test file itself must exist
@@ -35,7 +35,7 @@ def test_fexist(t : T?) {
     }
 }
 
-[test]
+[test(description = "fread by path reads a file, returns empty for a missing one and round-trips a UTF-8 Windows path")]
 def test_fread_path(t : T?) {
     t |> run("read file by path") @(t : T?) {
         let tmp = path_join(test_temp_dir(), "_test_fread_path.tmp")
@@ -60,7 +60,7 @@ def test_fread_path(t : T?) {
     }
 }
 
-[test]
+[test(description = "fwrite by path writes a file")]
 def test_fwrite_path(t : T?) {
     t |> run("write file by path") @(t : T?) {
         let tmp = path_join(test_temp_dir(), "_test_fwrite_path.tmp")
@@ -73,7 +73,7 @@ def test_fwrite_path(t : T?) {
     }
 }
 
-[test]
+[test(description = "rmdir removes an empty directory")]
 def test_rmdir(t : T?) {
     t |> run("remove empty directory") @(t : T?) {
         let tmp = path_join(test_temp_dir(), "_test_rmdir_empty")
@@ -84,7 +84,7 @@ def test_rmdir(t : T?) {
     }
 }
 
-[test]
+[test(description = "rmdir_rec removes a directory tree")]
 def test_rmdir_rec(t : T?) {
     t |> run("remove directory tree") @(t : T?) {
         let base = path_join(test_temp_dir(), "_test_rmdir_rec")
@@ -99,7 +99,7 @@ def test_rmdir_rec(t : T?) {
     }
 }
 
-[test]
+[test(description = "A home directory path becomes ~ on macOS and Windows and other paths are left alone")]
 def test_tilde_home(t : T?) {
     t |> run("a macOS home anywhere in a receipt becomes ~") @(t : T?) {
         t |> equal(tilde_home("-m /Users/boris/Work/models/x.gguf"), "-m ~/Work/models/x.gguf")

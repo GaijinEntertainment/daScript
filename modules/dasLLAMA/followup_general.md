@@ -1344,7 +1344,7 @@
     checks no sizes, and the interpreter relabels memory at the target's width: a `function`,
     `lambda` or pointer local is 4 bytes on a 32-bit host, so `reinterpret<uint64>(f)` on a
     parameter or local reads four uninitialized bytes past it (the auto-inliner turns a parameter
-    into exactly such a local - issue #3979, tests/language/func_addr.das). The same shape on an
+    into exactly such a local - issue #3979, tests/language/functions.das). The same shape on an
     `int` local reads garbage on every host. Neither the compiler nor a 64-bit lint host sees the
     pointer case as a size mismatch (pointer and `uint64` are both 8 bytes there), so the rule is
     type-based, not size-based: fire on `reinterpret<int64|uint64>(e)` where `e` is a pointer,
@@ -1947,7 +1947,7 @@
    (`utils/dasllama-server/test_openai_server_mtp.das`, repo root) spells the Metal mode as a
    `bool` where `with_llama_server` takes a `MetalMode`, and the ready poll is written in every
    `with_*_server` rig of that folder. Elapsed seconds off `get_time_usec`:
-   `tests/fio/popen_timeout_tree.das`, `seconds_since` (`utils/internal/preflight/main.das`),
+   `tests/fio/popen.das`, `seconds_since` (`utils/internal/preflight/main.das`),
    `now_seconds` (`utils/watchdog/watchdog.das`), all repo root. Done = one fixture module the
    tests and the harness both require for the planes and the envelope, one two-thread helper
    taking the round's body, the rigs' boot and ready poll in `_server_rig.das`, and an elapsed

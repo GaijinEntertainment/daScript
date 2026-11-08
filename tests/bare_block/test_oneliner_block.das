@@ -8,7 +8,7 @@ require dastest/testing_boost public
 
 def private add_one(var x : int&) { x++ }
 
-[test]
+[test(description = "one-line if, if-else and elif chains parse without trailing semicolons")]
 def test_oneliner_if(t : T?) {
     t |> run("if one-liner, no trailing semicolon") @(t : T?) {
         var x = 0
@@ -27,7 +27,7 @@ def test_oneliner_if(t : T?) {
     }
 }
 
-[test]
+[test(description = "one-line bare blocks parse, nest, take an internal separator and may be empty")]
 def test_oneliner_bare_block(t : T?) {
     t |> run("bare block one-liner") @(t : T?) {
         var x = 0
@@ -53,7 +53,7 @@ def test_oneliner_bare_block(t : T?) {
     }
 }
 
-[test]
+[test(description = "one-line for and while bodies parse")]
 def test_oneliner_loops(t : T?) {
     t |> run("for one-liner") @(t : T?) {
         var sum = 0
@@ -68,7 +68,7 @@ def test_oneliner_loops(t : T?) {
     }
 }
 
-[test]
+[test(description = "a one-line block may end in a call, and the multi-line form still works")]
 def test_oneliner_last_statement_kinds(t : T?) {
     t |> run("call as last statement") @(t : T?) {
         var x = 0

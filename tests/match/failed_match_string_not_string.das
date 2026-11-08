@@ -1,4 +1,4 @@
-// a string pattern matches only a string
+//! a string pattern matches only a string
 options gen2
 
 require daslib/match

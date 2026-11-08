@@ -5,7 +5,7 @@ options no_unused_function_arguments = false
 require dastest/testing_boost public
 require live_host
 
-[test]
+[test(description = "get_dt, get_uptime and get_fps are non-negative and advance_frame_clock makes get_dt stable within a frame")]
 def test_timing(t : T?) {
     t |> run("get_dt returns non-negative") @(t : T?) {
         let dt = get_dt()
@@ -34,7 +34,7 @@ def test_timing(t : T?) {
     }
 }
 
-[test]
+[test(description = "set_paused and is_paused toggle the paused flag, which defaults to false")]
 def test_paused_state(t : T?) {
     t |> run("default not paused") @(t : T?) {
         set_paused(false)
@@ -52,7 +52,7 @@ def test_paused_state(t : T?) {
     set_paused(false)
 }
 
-[test]
+[test(description = "exit_requested can be called and returns a flag")]
 def test_exit_flags(t : T?) {
     t |> run("exit_requested callable") @(t : T?) {
         let er = exit_requested()
@@ -61,7 +61,7 @@ def test_exit_flags(t : T?) {
     }
 }
 
-[test]
+[test(description = "is_reload and is_live_mode are false under dastest")]
 def test_reload_state(t : T?) {
     t |> run("is_reload returns false outside live mode") @(t : T?) {
         t |> success(!is_reload(), "is_reload should be false in test context")

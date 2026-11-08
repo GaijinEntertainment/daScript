@@ -10,7 +10,7 @@ options optimize = false
 
 let PI_F = 3.14159265358979323846f
 
-[test]
+[test(description = "radians converts scalar degrees to radians")]
 def test_radians_scalar(t : T?) {
     t |> equal(radians(0.0f), 0.0f)
     t |> success(abs(radians(180.0f) - PI_F) < 1.0e-5f, "radians(180) ~= pi")
@@ -18,14 +18,14 @@ def test_radians_scalar(t : T?) {
     t |> success(abs(radians(-180.0f) + PI_F) < 1.0e-5f, "radians(-180) ~= -pi")
 }
 
-[test]
+[test(description = "degrees converts scalar radians to degrees")]
 def test_degrees_scalar(t : T?) {
     t |> equal(degrees(0.0f), 0.0f)
     t |> success(abs(degrees(PI_F) - 180.0f) < 1.0e-3f, "degrees(pi) ~= 180")
     t |> success(abs(degrees(PI_F * 0.5f) - 90.0f) < 1.0e-3f, "degrees(pi/2) ~= 90")
 }
 
-[test]
+[test(description = "radians converts float vectors per lane")]
 def test_radians_vec(t : T?) {
     let r2 = radians(float2(0.0, 180.0))
     t |> success(abs(r2.x) < 1.0e-5f && abs(r2.y - PI_F) < 1.0e-5f, "radians(float2) per-lane")
@@ -35,7 +35,7 @@ def test_radians_vec(t : T?) {
     t |> success(abs(r4.x) < 1.0e-5f && abs(r4.y - PI_F * 0.25f) < 1.0e-5f && abs(r4.z - PI_F * 0.5f) < 1.0e-5f && abs(r4.w - PI_F) < 1.0e-5f, "radians(float4) per-lane")
 }
 
-[test]
+[test(description = "degrees converts float vectors per lane")]
 def test_degrees_vec(t : T?) {
     let d2 = degrees(float2(0.0, PI_F))
     t |> success(abs(d2.x) < 1.0e-3f && abs(d2.y - 180.0f) < 1.0e-3f, "degrees(float2) per-lane")

@@ -1,10 +1,11 @@
 options gen2
 options no_unused_function_arguments = false
 options no_unused_block_arguments = false
+
 require dastest/testing_boost public
 require jobque
 
-[test]
+[test(description = "with_atomic32 scopes an atomic through set, get, inc and dec, starting at 0 and holding negative and large values")]
 def test_atomic32_with(t : T?) {
     t |> run("with_atomic32 set/get") @(t : T?) {
         with_atomic32() $(ch) {
@@ -54,7 +55,7 @@ def test_atomic32_with(t : T?) {
     }
 }
 
-[test]
+[test(description = "A manually created atomic64 starts at 0, round-trips set/get and holds large values until removed")]
 def test_atomic64_manual(t : T?) {
     t |> run("atomic64 create/set/get/remove") @(t : T?) {
         var ch = atomic64_create()
@@ -77,7 +78,7 @@ def test_atomic64_manual(t : T?) {
     }
 }
 
-[test]
+[test(description = "with_atomic64 scopes an atomic64 through set, get, inc and dec and keeps negative values")]
 def test_atomic64_with(t : T?) {
     t |> run("with_atomic64 set/get/inc/dec") @(t : T?) {
         with_atomic64() $(ch) {
@@ -97,7 +98,7 @@ def test_atomic64_with(t : T?) {
     }
 }
 
-[test]
+[test(description = "A manually created atomic32 round-trips set and get and is removed cleanly")]
 def test_atomic32_manual(t : T?) {
     t |> run("atomic32 create/set/get/remove") @(t : T?) {
         var ch = atomic32_create()
@@ -106,5 +107,25 @@ def test_atomic32_manual(t : T?) {
         t |> equal(43, ch |> inc)
         t |> equal(42, ch |> dec)
         unsafe(atomic32_remove(ch))
+    }
+}
+
+[test(description = "atomic32 and atomic64 survive a create, set, get and remove cycle")]
+def test_lpipe(t : T?) {
+    t |> run("atomic32") @(t : T?) {
+        with_atomic32() $(ch) {
+            ch |> set(13)
+            t |> equal(13, ch |> get)
+            t |> equal(14, ch |> inc)
+            t |> equal(13, ch |> dec)
+        }
+    }
+    t |> run("atomic64") @(t : T?) {
+        var ch = atomic64_create()
+        ch |> set(13l)
+        t |> equal(13l, ch |> get)
+        t |> equal(14l, ch |> inc)
+        t |> equal(13l, ch |> dec)
+        unsafe(atomic64_remove(ch))
     }
 }

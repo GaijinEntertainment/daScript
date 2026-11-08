@@ -13,7 +13,7 @@ def m2(db : SqlRunner) {
     db |> exec("ALTER TABLE users ADD COLUMN Email TEXT NOT NULL DEFAULT ''")
 }
 
-[test]
+[test(description = "a database at v1 applies only the v2 migration", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_steady_state_v1_to_v2(t : T?) {
     var inscope db = open_sqlite(":memory:")
     // Simulate user already at v1 by inserting an audit row.

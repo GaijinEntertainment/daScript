@@ -35,7 +35,7 @@ require dastest/testing_boost public
 // 1. reverse() — matrix
 // ═════════════════════════════════════════════════════════════════════════════
 
-[test]
+[test(description = "a folded reverse over an iterator source with no terminator is typed iterator<int>")]
 def test_matrix_reverse_iter_to_iter(t : T?) {
     t |> run("reverse(): iter src, no to_array → iterator<int>") @(tt : T?) {
         var got <- _fold([1, 2, 3, 4, 5].to_sequence() |> reverse())
@@ -48,7 +48,7 @@ def test_matrix_reverse_iter_to_iter(t : T?) {
     }
 }
 
-[test]
+[test(description = "a folded reverse over an iterator source with to_array is typed array<int> const")]
 def test_matrix_reverse_iter_to_array(t : T?) {
     t |> run("reverse(): iter src + to_array() → array<int> const") @(tt : T?) {
         let got <- _fold([1, 2, 3, 4, 5].to_sequence() |> reverse() |> to_array())
@@ -59,7 +59,7 @@ def test_matrix_reverse_iter_to_array(t : T?) {
     }
 }
 
-[test]
+[test(description = "a folded reverse over an array source with no terminator is typed iterator<int>")]
 def test_matrix_reverse_array_to_iter(t : T?) {
     t |> run("reverse(): array src, no to_array → iterator<int>") @(tt : T?) {
         let arr = [1, 2, 3, 4, 5]
@@ -73,7 +73,7 @@ def test_matrix_reverse_array_to_iter(t : T?) {
     }
 }
 
-[test]
+[test(description = "a folded reverse over an array source with to_array is typed array<int> const")]
 def test_matrix_reverse_array_to_array(t : T?) {
     t |> run("reverse(): array src + to_array() → array<int> const") @(tt : T?) {
         let arr = [1, 2, 3, 4, 5]
@@ -89,7 +89,7 @@ def test_matrix_reverse_array_to_array(t : T?) {
 // 2. distinct() / distinct_by — matrix
 // ═════════════════════════════════════════════════════════════════════════════
 
-[test]
+[test(description = "a folded distinct over an iterator source with no terminator is typed iterator<int>")]
 def test_matrix_distinct_iter_to_iter(t : T?) {
     t |> run("distinct(): iter src, no to_array → iterator<int>") @(tt : T?) {
         var got <- _fold([1, 2, 1, 3, 2, 3, 1].to_sequence() |> distinct())
@@ -99,7 +99,7 @@ def test_matrix_distinct_iter_to_iter(t : T?) {
     }
 }
 
-[test]
+[test(description = "a folded distinct over an iterator source with to_array is typed array<int> const")]
 def test_matrix_distinct_iter_to_array(t : T?) {
     t |> run("distinct(): iter src + to_array() → array<int> const") @(tt : T?) {
         let got <- _fold([1, 2, 1, 3, 2, 3, 1].to_sequence() |> distinct() |> to_array())
@@ -108,7 +108,7 @@ def test_matrix_distinct_iter_to_array(t : T?) {
     }
 }
 
-[test]
+[test(description = "a folded distinct over an array source with no terminator is typed iterator<int>")]
 def test_matrix_distinct_array_to_iter(t : T?) {
     t |> run("distinct(): array src, no to_array → iterator<int>") @(tt : T?) {
         let arr = [1, 2, 1, 3, 2, 3, 1]
@@ -119,7 +119,7 @@ def test_matrix_distinct_array_to_iter(t : T?) {
     }
 }
 
-[test]
+[test(description = "a folded distinct over an array source with to_array is typed array<int> const")]
 def test_matrix_distinct_array_to_array(t : T?) {
     t |> run("distinct(): array src + to_array() → array<int> const") @(tt : T?) {
         let arr = [1, 2, 1, 3, 2, 3, 1]
@@ -129,7 +129,7 @@ def test_matrix_distinct_array_to_array(t : T?) {
     }
 }
 
-[test]
+[test(description = "a folded distinct_by over an iterator source with no terminator is typed iterator<int>")]
 def test_matrix_distinct_by_iter_to_iter(t : T?) {
     t |> run("distinct_by(_): iter src, no to_array → iterator<int>") @(tt : T?) {
         var got <- _fold([10, 21, 32, 11, 23, 30, 13].to_sequence()._distinct_by(_ % 10))
@@ -148,7 +148,7 @@ def test_matrix_distinct_by_iter_to_iter(t : T?) {
 //   Iter path falls through to emit_hashtable_dedup with an upstream reverse iterator.
 // ═════════════════════════════════════════════════════════════════════════════
 
-[test]
+[test(description = "a folded reverse plus distinct over an iterator source with no terminator is typed iterator<int>")]
 def test_matrix_reverse_distinct_iter_to_iter(t : T?) {
     t |> run("reverse() + distinct(): iter src, no to_array → iterator<int>") @(tt : T?) {
         var got <- _fold([3, 1, 2, 1, 3, 2].to_sequence() |> reverse() |> distinct())
@@ -160,7 +160,7 @@ def test_matrix_reverse_distinct_iter_to_iter(t : T?) {
     }
 }
 
-[test]
+[test(description = "a folded reverse plus distinct over an iterator source with to_array is typed array<int> const")]
 def test_matrix_reverse_distinct_iter_to_array(t : T?) {
     t |> run("reverse() + distinct(): iter src + to_array() → array<int> const") @(tt : T?) {
         let got <- _fold([3, 1, 2, 1, 3, 2].to_sequence() |> reverse() |> distinct() |> to_array())
@@ -170,7 +170,7 @@ def test_matrix_reverse_distinct_iter_to_array(t : T?) {
     }
 }
 
-[test]
+[test(description = "a folded reverse plus distinct over an array source with no terminator is typed iterator<int>")]
 def test_matrix_reverse_distinct_array_to_iter(t : T?) {
     t |> run("reverse() + distinct(): array src, no to_array → iterator<int>") @(tt : T?) {
         let arr = [3, 1, 2, 1, 3, 2]
@@ -182,7 +182,7 @@ def test_matrix_reverse_distinct_array_to_iter(t : T?) {
     }
 }
 
-[test]
+[test(description = "a folded reverse plus distinct over an array source with to_array is typed array<int> const")]
 def test_matrix_reverse_distinct_array_to_array(t : T?) {
     t |> run("reverse() + distinct(): array src + to_array() → array<int> const") @(tt : T?) {
         let arr = [3, 1, 2, 1, 3, 2]
@@ -199,7 +199,7 @@ def test_matrix_reverse_distinct_array_to_array(t : T?) {
 //   Iter path falls through to emit_reverse_buffer_inplace (full buffer + reverse_inplace + resize).
 // ═════════════════════════════════════════════════════════════════════════════
 
-[test]
+[test(description = "a folded reverse plus take over an iterator source with no terminator is typed iterator<int>")]
 def test_matrix_reverse_take_iter_to_iter(t : T?) {
     t |> run("reverse() + take(N): iter src, no to_array → iterator<int>") @(tt : T?) {
         var got <- _fold([10, 20, 30, 40, 50].to_sequence() |> reverse() |> take(2))
@@ -211,7 +211,7 @@ def test_matrix_reverse_take_iter_to_iter(t : T?) {
     }
 }
 
-[test]
+[test(description = "a folded reverse plus take over an iterator source with to_array is typed array<int> const")]
 def test_matrix_reverse_take_iter_to_array(t : T?) {
     t |> run("reverse() + take(N): iter src + to_array() → array<int> const") @(tt : T?) {
         let got <- _fold([10, 20, 30, 40, 50].to_sequence() |> reverse() |> take(2) |> to_array())
@@ -222,7 +222,7 @@ def test_matrix_reverse_take_iter_to_array(t : T?) {
     }
 }
 
-[test]
+[test(description = "a folded reverse plus take over an array source with no terminator is typed iterator<int>")]
 def test_matrix_reverse_take_array_to_iter(t : T?) {
     t |> run("reverse() + take(N): array src, no to_array → iterator<int>") @(tt : T?) {
         let arr = [10, 20, 30, 40, 50]
@@ -235,7 +235,7 @@ def test_matrix_reverse_take_array_to_iter(t : T?) {
     }
 }
 
-[test]
+[test(description = "a folded reverse plus take over an array source with to_array is typed array<int> const")]
 def test_matrix_reverse_take_array_to_array(t : T?) {
     t |> run("reverse() + take(N): array src + to_array() → array<int> const") @(tt : T?) {
         let arr = [10, 20, 30, 40, 50]

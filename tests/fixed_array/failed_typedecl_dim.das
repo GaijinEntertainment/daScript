@@ -1,6 +1,9 @@
-// Stage 0 characterization (FIXED_ARRAY_REWORK.md): typedecl(...) can't be an array
-// base type — the parser rejects it (dims and the expression payload shared dimExpr
-// historically; the restriction is preserved by the rework).
+//! typedecl(...) as the base type of a fixed array must not compile
+//! (30112); the parser rejects it.
+// Stage 0 characterization (FIXED_ARRAY_REWORK.md): typedecl(...)
+// can't be an array base type — the parser rejects it (dims and the
+// expression payload shared dimExpr historically; the restriction is
+// preserved by the rework).
 options gen2
 expect 30112
 

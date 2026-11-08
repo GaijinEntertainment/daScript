@@ -22,97 +22,97 @@ struct Foo {
 // before the call_macro runs (so the macro sees ExprConstInt, not the original
 // ExprOp2). To exercise the operator paths explicitly, tests below use `var`.
 
-[test]
+[test(description = "has_sideeffects reports no side effects for an int constant")]
 def test_const_int(t : T?) {
     t |> equal(_test_has_sideeffects(42), false)
 }
 
-[test]
+[test(description = "has_sideeffects reports no side effects for a string constant")]
 def test_const_string(t : T?) {
     t |> equal(_test_has_sideeffects("hello"), false)
 }
 
-[test]
+[test(description = "has_sideeffects reports no side effects for a bool constant")]
 def test_const_bool(t : T?) {
     t |> equal(_test_has_sideeffects(true), false)
 }
 
-[test]
+[test(description = "has_sideeffects reports no side effects for reading a variable")]
 def test_var_read(t : T?) {
     var _x = 5
     t |> equal(_test_has_sideeffects(_x), false)
 }
 
-[test]
+[test(description = "has_sideeffects reports no side effects for plain arithmetic on a variable")]
 def test_arith_pure(t : T?) {
     var _x = 5
     t |> equal(_test_has_sideeffects(_x + 1), false)
 }
 
-[test]
+[test(description = "has_sideeffects reports no side effects for nested arithmetic over several variables")]
 def test_arith_nested(t : T?) {
     var _x = 5
     var _y = 3
     t |> equal(_test_has_sideeffects(_x * 2 + _y - 3), false)
 }
 
-[test]
+[test(description = "has_sideeffects reports no side effects for reading a struct field")]
 def test_field_access(t : T?) {
     var _s = Foo(a = 1, b = 2)
     t |> equal(_test_has_sideeffects(_s.a), false)
 }
 
-[test]
+[test(description = "has_sideeffects reports no side effects for indexing an array")]
 def test_array_index(t : T?) {
     var _arr = [1, 2, 3, 4, 5]
     t |> equal(_test_has_sideeffects(_arr[0]), false)
 }
 
-[test]
+[test(description = "has_sideeffects reports no side effects for a safe table lookup with ?[]")]
 def test_safe_table_lookup(t : T?) {
     var tab : table<string; int>
     tab |> insert("k", 1)
     t |> equal(_test_has_sideeffects(tab?["k"]), false)
 }
 
-[test]
+[test(description = "has_sideeffects reports no side effects for a comparison")]
 def test_comparison(t : T?) {
     var _x = 5
     t |> equal(_test_has_sideeffects(_x == 0), false)
 }
 
-[test]
+[test(description = "has_sideeffects reports no side effects for a ternary over pure branches")]
 def test_ternary(t : T?) {
     var _x = 5
     t |> equal(_test_has_sideeffects(_x > 0 ? 1 : 2), false)
 }
 
-[test]
+[test(description = "has_sideeffects reports no side effects for ?? over a pointer")]
 def test_null_coalescing(t : T?) {
     var _p : int? = null
     t |> equal(_test_has_sideeffects(_p ?? 0), false)
 }
 
-[test]
+[test(description = "has_sideeffects reports no side effects for && over comparisons")]
 def test_logical_and(t : T?) {
     var _x = 5
     var _y = 10
     t |> equal(_test_has_sideeffects(_x > 0 && _y < 100), false)
 }
 
-[test]
+[test(description = "has_sideeffects reports no side effects for unary minus")]
 def test_unary_neg(t : T?) {
     var _x = 5
     t |> equal(_test_has_sideeffects(-_x), false)
 }
 
-[test]
+[test(description = "has_sideeffects reports no side effects for a string builder over pure parts")]
 def test_string_builder_safe(t : T?) {
     var _x = 5
     t |> equal(_test_has_sideeffects("hello {_x}"), false)
 }
 
-[test]
+[test(description = "has_sideeffects reports no side effects for length of an array once the generic is resolved")]
 def test_generic_length_resolved(t : T?) {
     var _arr = [1, 2, 3]
     t |> equal(_test_has_sideeffects(length(_arr)), false)
@@ -120,20 +120,20 @@ def test_generic_length_resolved(t : T?) {
 
 // ── UNSAFE cases — has_sideeffects must return true ──────────────────────
 
-[test]
+[test(description = "has_sideeffects reports side effects for a call to a user function that has them")]
 def test_user_call_unsafe(t : T?) {
     var _x = 5
     t |> equal(_test_has_sideeffects(side_effect_fn(_x)), true)
 }
 
-[test]
+[test(description = "has_sideeffects reports side effects for a table subscript, which inserts on read")]
 def test_table_insert_subscript(t : T?) {
     var _tab : table<string; int>
     // _tab[k] auto-inserts a default value if k is missing — side effect.
     t |> equal(_test_has_sideeffects(_tab["k"]), true)
 }
 
-[test]
+[test(description = "has_sideeffects reports side effects for integer division, which can trap")]
 def test_division_unsafe(t : T?) {
     var _x = 10
     var _y = 2
@@ -141,24 +141,24 @@ def test_division_unsafe(t : T?) {
     t |> equal(_test_has_sideeffects(_x / _y), true)
 }
 
-[test]
+[test(description = "has_sideeffects reports side effects for integer modulo, which can trap")]
 def test_modulo_unsafe(t : T?) {
     var _x = 10
     var _y = 3
     t |> equal(_test_has_sideeffects(_x % _y), true)
 }
 
-[test]
+[test(description = "has_sideeffects reports side effects for an array literal, which allocates")]
 def test_array_literal_alloc(t : T?) {
     t |> equal(_test_has_sideeffects([1, 2, 3]), true)
 }
 
-[test]
+[test(description = "has_sideeffects reports side effects for constructing a struct")]
 def test_struct_construct_alloc(t : T?) {
     t |> equal(_test_has_sideeffects(Foo(a = 1, b = 2)), true)
 }
 
-[test]
+[test(description = "has_sideeffects reports side effects for a string builder with an effectful part")]
 def test_string_builder_unsafe_part(t : T?) {
     var _x = 5
     // The string interpolation itself is safe, but a side-effecting operand propagates.
@@ -172,13 +172,13 @@ def test_string_builder_unsafe_part(t : T?) {
 // mistakenly missing `knownSideEffects`/`unsafeOperation` can't classify them
 // as pure. Covers Copilot review concern from PR #2691.
 
-[test]
+[test(description = "has_sideeffects reports side effects for postfix increment")]
 def test_postfix_increment_unsafe(t : T?) {
     var _x = 5
     t |> equal(_test_has_sideeffects(_x ++), true)
 }
 
-[test]
+[test(description = "has_sideeffects reports side effects for postfix decrement")]
 def test_postfix_decrement_unsafe(t : T?) {
     var _x = 5
     t |> equal(_test_has_sideeffects(_x --), true)
@@ -202,7 +202,7 @@ def operator +(a : SideEffectingNumber; b : int) : SideEffectingNumber {
     return SideEffectingNumber(v = a.v + b)
 }
 
-[test]
+[test(description = "has_sideeffects reports side effects for a user operator overload that has them")]
 def test_user_op_overload_unsafe(t : T?) {
     var _c = SideEffectingNumber(v = 5)
     t |> equal(_test_has_sideeffects(_c + 1), true)
@@ -216,7 +216,7 @@ def test_user_op_overload_unsafe(t : T?) {
 // so the conservative classifier rejects them. A future Function-level
 // `[no_side_effects]` annotation could let user-defined helpers opt in.
 
-[test]
+[test(description = "has_sideeffects conservatively reports side effects for key_exists, whose generic is not resolved at that point")]
 def test_key_exists_unresolved(t : T?) {
     var tab : table<string; int>
     tab |> insert("k", 1)

@@ -1,3 +1,6 @@
+//! A template instance that leaves a template type alias unbound must
+//! not compile (30826), the undefined type being reported at the
+//! template field.
 options gen2
 expect 30826
 
@@ -11,7 +14,8 @@ struct template NT {
 
 struct NInst : NT {
     typedef KT = int
-    // VT deliberately unbound: falls through to infer, which reports the undefined type at the template field
+    // VT deliberately unbound: falls through to infer, which reports the
+    // undefined type at the template field
 }
 
 [export]

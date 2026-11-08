@@ -3,14 +3,18 @@ options indenting = 4
 
 require math
 
-//! Store-form corpus for `collect_mutable` (daslib/flatten_opt_common). One local per spelling a
-//! store can take — plain copy, move, clone, increment, compound assign, swizzle lane, and a write
-//! through a by-reference call argument — plus `ro`, the read-only control that must stay out of
-//! the mutable set. The local names here are the assertion keys in test_flatten_mutcollect.das.
+//! Store-form corpus for `collect_mutable`
+//! (daslib/flatten_opt_common). One local per spelling a store can
+//! take — plain copy, move, clone, increment, compound assign,
+//! swizzle lane, and a write through a by-reference call argument —
+//! plus `ro`, the read-only control that must stay out of the mutable
+//! set. The local names here are the assertion keys of the mutcollect
+//! test in uncategorized.das.
 //!
-//! `mut_out` is the signature side of the same corpus: one by-value parameter and one `var T&`,
-//! so `writes_through_argument` can be asked a true case, a false case, and both out-of-range
-//! ends against a real Function.
+//! `mut_out` is the signature side of the same corpus: one by-value
+//! parameter and one `var T&`, so `writes_through_argument` can be
+//! asked a true case, a false case, and both out-of-range ends
+//! against a real Function.
 
 [export]
 def mut_forms(x : float) : float {

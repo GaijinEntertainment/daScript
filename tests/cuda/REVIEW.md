@@ -4,7 +4,7 @@
 `modules/dasCUDA/ARCHITECTURE.md`. A diff that touches a `[cuda_kernel]` method under this folder
 applies `modules/REVIEW_SHADER_EMITTERS.md` too.
 
-**A diff that removes or weakens an assert in `test_cuda_census.das` is a defect.** It is the
+**A diff that removes or weakens an assert in `uncategorized.das` is a defect.** It is the
 emitter's only coverage measure.
 
 **A diff that adds a fixture - a `[cuda_kernel]` method in `_cuda_common.das` - adds its

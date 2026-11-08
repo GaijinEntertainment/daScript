@@ -10,7 +10,7 @@ def m1(db : SqlRunner) {
     db |> exec("DELETE FROM big WHERE rowid > 100")
 }
 
-[test]
+[test(description = "a migration flagged vacuum runs VACUUM after commit and empties the freelist", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_vacuum_runs_post_commit(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()
@@ -19,7 +19,7 @@ def test_vacuum_runs_post_commit(t : T?) {
     t |> equal(freelist, 0, "VACUUM must zero the freelist")
 }
 
-[test]
+[test(description = "the audit row is recorded even when VACUUM runs")]
 def test_audit_row_present_with_vacuum_flag_set(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()

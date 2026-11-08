@@ -7,7 +7,7 @@ require daslib/cmp
 
 typedef M4 = float[4][4]
 
-[test]
+[test(description = "each over a multi-dimensional fixed array yields its rows, and over a typedef element type yields that type")]
 def test_each_multi_dim(t : T?) {
     t |> run("each over multi-dim yields rows") @(t : T?) {
         var m : float[4][4]
@@ -33,7 +33,7 @@ def test_each_multi_dim(t : T?) {
     }
 }
 
-[test]
+[test(description = "sort with cmp orders the whole rows of a multi-dimensional fixed array")]
 def test_sort_rows(t : T?) {
     t |> run("sort with cmp sorts whole rows") @(t : T?) {
         var s : int[3][2]
@@ -54,7 +54,7 @@ def test_sort_rows(t : T?) {
     }
 }
 
-[test]
+[test(description = "find_index, find_index_if over rows and subarray over rows work on fixed arrays and keep the row type")]
 def test_find_subarray_rows(t : T?) {
     t |> run("find_index 1-D") @(t : T?) {
         var f1 : int[4]
@@ -82,7 +82,7 @@ def test_find_subarray_rows(t : T?) {
     }
 }
 
-[test]
+[test(description = "clone_dim copies a multi-dimensional fixed array and finalize_dim releases its array rows")]
 def test_clone_finalize_multi_dim(t : T?) {
     t |> run("clone_dim multi-dim") @(t : T?) {
         var src : float[4][4]

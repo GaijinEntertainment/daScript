@@ -1,6 +1,11 @@
-// A generic whose first argument is an unresolved type expression with a default value. The
-// call matches at lookup; the alias map then stops growing with that argument still
-// unmatched, and the instancing after the loop used to read types the loop never produced.
+//! a call to a generic whose first argument type is an unresolved
+//! type expression reports function-not-found instead of instancing
+//! from types never produced
+// A generic whose first argument is an unresolved type expression
+// with a default value. The call matches at lookup; the alias map
+// then stops growing with that argument still unmatched, and the
+// instancing after the loop used to read types the loop never
+// produced.
 options gen2
 expect 30341
 

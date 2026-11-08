@@ -49,7 +49,7 @@ def parse_expr(input : string; blk : block<(val : int; err : array<ParsingError>
     }
 }
 
-[test]
+[test(description = "a rule with a commit parses a valid assignment")]
 def test_commit_success(t : T?) {
     t |> run("valid assignment") @(t : T?) {
         parse_assignment("x = 42;") $(val; err) {
@@ -59,7 +59,7 @@ def test_commit_success(t : T?) {
     }
 }
 
-[test]
+[test(description = "after a commit a missing value is reported as an error instead of backtracking")]
 def test_commit_error_on_missing_value(t : T?) {
     t |> run("missing value after =") @(t : T?) {
         parse_assignment("x = ;") $(val; err) {
@@ -68,7 +68,7 @@ def test_commit_error_on_missing_value(t : T?) {
     }
 }
 
-[test]
+[test(description = "after a commit a missing semicolon is reported as an error")]
 def test_commit_error_on_missing_semicolon(t : T?) {
     t |> run("missing semicolon") @(t : T?) {
         parse_assignment("x = 42") $(val; err) {
@@ -77,7 +77,7 @@ def test_commit_error_on_missing_semicolon(t : T?) {
     }
 }
 
-[test]
+[test(description = "a committed failure carries position information")]
 def test_commit_error_position(t : T?) {
     t |> run("error has position info") @(t : T?) {
         parse_print("print") $(val; err) {
@@ -89,7 +89,7 @@ def test_commit_error_position(t : T?) {
     }
 }
 
-[test]
+[test(description = "a committed keyword rule parses the keyword followed by its value")]
 def test_commit_keyword_success(t : T?) {
     parse_print("print 42") $(val; err) {
         t |> success(err |> empty)
@@ -97,7 +97,7 @@ def test_commit_keyword_success(t : T?) {
     }
 }
 
-[test]
+[test(description = "a commit inside an expression accepts a valid addition and errors on a trailing plus")]
 def test_commit_in_expression(t : T?) {
     t |> run("valid addition") @(t : T?) {
         parse_expr("1 + 2") $(val; err) {

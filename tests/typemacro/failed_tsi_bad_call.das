@@ -1,3 +1,5 @@
+//! A @template_call override that is neither a function pointer nor a
+//! string constant must not compile (20800).
 options gen2
 expect 20800
 

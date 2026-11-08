@@ -7,7 +7,7 @@ require daslib/linq_boost
 
 require _common
 
-[test]
+[test(description = "_fold turns comprehension-shaped queries (plain, with select, with where, over structs) into the same results as the unfused form")]
 def test_comprehension_fold(t : T?) {
     t |> run("basic comprehension") @(t : T?) {
         var t1 <- ([1, 2, 3, 4, 5].to_sequence()
@@ -89,7 +89,7 @@ def test_comprehension_fold(t : T?) {
     }
 }
 
-[test]
+[test(description = "_fold of a default chain keeps array and iterator results consistent in every array/iterator input and output combination")]
 def test_generic_fold(t : T?) {
     t |> run("default array to array") @(t : T?) {
         var t1 <- ([1, 2, 3, 4, 5]
@@ -156,7 +156,7 @@ def test_generic_fold(t : T?) {
     }
 }
 
-[test]
+[test(description = "_fold of order, order_descending, order_by and order_by_descending sorts like the unfused calls")]
 def test_generic_fold_order(t : T?) {
     t |> run("order fold") @(t : T?) {
         var t5 <- ([5, 3, 1, 4, 2]
@@ -205,7 +205,7 @@ def test_generic_fold_order(t : T?) {
     }
 }
 
-[test]
+[test(description = "_fold of min, max, their by-key forms, min_max, average, sum and aggregate matches the unfused aggregates")]
 def test_generic_fold_aggregates(t : T?) { // nolint:STYLE038 flat list of independent run arms
     t |> run("min fold") @(t : T?) {
         var t1 = ([5, 3, 8, 1, 4]    // nolint:LINT003 — `var` required for the `typename(t1) == "int"` assertion below (let adds const)
@@ -307,7 +307,7 @@ def test_generic_fold_aggregates(t : T?) { // nolint:STYLE038 flat list of indep
     }
 }
 
-[test]
+[test(description = "_fold of skip, skip_while, take, take_while and take ranges keeps the expected elements")]
 def test_generic_fold_skip_and_take(t : T?) {
     t |> run("skip fold") @(t : T?) {
         var t1 = ([5, 3, 8, 1, 4]    // nolint:LINT003
@@ -361,7 +361,7 @@ def test_generic_fold_skip_and_take(t : T?) {
     }
 }
 
-[test]
+[test(description = "_fold of concat, append and prepend yields the sources in the expected order")]
 def test_concat(t : T?) {
     t |> run("basic concat") @(t : T?) {
         var q <- (
@@ -425,7 +425,7 @@ def test_concat(t : T?) {
     }
 }
 
-[test]
+[test(description = "_fold of any, all and contains returns the right boolean for hits, misses, empty input and struct elements")]
 def test_any_all_contains(t : T?) {
     t |> run("fold any") @(t : T?) {
         var query = (    // nolint:LINT003
@@ -485,7 +485,7 @@ def test_any_all_contains(t : T?) {
     }
 }
 
-[test]
+[test(description = "_fold of distinct and distinct_by removes duplicates for plain and struct elements")]
 def test_distinct_and_distinct_by(t : T?) {
     t |> run("basic distinct") @(t : T?) {
         var query = distinct(
@@ -520,7 +520,7 @@ def test_distinct_and_distinct_by(t : T?) {
     }
 }
 
-[test]
+[test(description = "_fold of unique and unique_by removes adjacent duplicates")]
 def test_unique(t : T?) {
     t |> run("basic unique") @(t : T?) {
         var t1 <- (
@@ -559,7 +559,7 @@ def test_unique(t : T?) {
     }
 }
 
-[test]
+[test(description = "_fold of except and except_by matches the unfused result")]
 def test_except(t : T?) {
     t |> run("basic except") @(t : T?) {
         var t1 <- (
@@ -600,7 +600,7 @@ def test_except(t : T?) {
     }
 }
 
-[test]
+[test(description = "_fold of intersect and intersect_by matches the unfused result")]
 def test_intersect(t : T?) {
     t |> run("basic intersect") @(t : T?) {
         var t1 <- (
@@ -639,7 +639,7 @@ def test_intersect(t : T?) {
     }
 }
 
-[test]
+[test(description = "_fold of chunk splits the sequence into fixed-size groups")]
 def test_chunk(t : T?) {
     t |> run("basic chunk") @(t : T?) {
         var query = (
@@ -657,7 +657,7 @@ def test_chunk(t : T?) {
     }
 }
 
-[test]
+[test(description = "_fold of zip pairs elements positionally, also with a predicate")]
 def test_zip(t : T?) {
     t |> run("basic zip") @(t : T?) {
         var query = (
@@ -696,7 +696,7 @@ def test_zip(t : T?) {
     }
 }
 
-[test]
+[test(description = "_fold of order combined with distinct gives sorted unique values wherever distinct sits in the chain")]
 def test_order_distinct(t : T?) {
     t |> run("basic order distinct") @(t : T?) {
         var t7 = (    // nolint:LINT003
@@ -723,7 +723,7 @@ def test_order_distinct(t : T?) {
     }
 }
 
-[test]
+[test(description = "where followed by count fuses into a counter with the right total for half, zero, all and empty matches")]
 def test_where_count_fold(t : T?) {
     // Guards the where + count fold rule in linq_boost (fold_where_count).
     // The fused loop emits a single counter pass with no intermediate filter array.
@@ -760,7 +760,7 @@ def projection_with_side_effect(x : int) : int {
     return x * 2
 }
 
-[test]
+[test(description = "a counter chain runs the select projection once per element, and only on where survivors")]
 def test_counter_lane_projection_side_effects(t : T?) {
     // Counter lane must evaluate the projection per matched element so user-visible
     // side effects fire — matches raw `count(select(src, f))` semantics. Tests guard
@@ -783,7 +783,7 @@ def test_counter_lane_projection_side_effects(t : T?) {
 
 // ===== Phase 2B Ring 1 — Accumulator lane (sum / min / max / average / long_count) =====
 
-[test]
+[test(description = "a fused sum is correct for empty, single, many, filtered and projected sources")]
 def test_sum_accumulator(t : T?) {
     t |> run("sum: empty") @(t : T?) {
         let arr : array<int>
@@ -817,7 +817,7 @@ def test_sum_accumulator(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fused min is correct for empty (default), single, many, filtered and projected sources")]
 def test_min_accumulator(t : T?) {
     t |> run("min: empty → default") @(t : T?) {
         let arr : array<int>
@@ -847,7 +847,7 @@ def test_min_accumulator(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fused max is correct for empty (default), single, many, filtered and projected sources")]
 def test_max_accumulator(t : T?) {
     t |> run("max: empty → default") @(t : T?) {
         let arr : array<int>
@@ -876,7 +876,7 @@ def test_max_accumulator(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fused average is zero for empty input, correct for single, many and filtered sources, and double for an int source")]
 def test_average_accumulator(t : T?) {
     t |> run("average: empty → 0.0lf (matches linq.das semantics)") @(t : T?) {
         let arr : array<int>
@@ -906,7 +906,7 @@ def test_average_accumulator(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fused long_count is correct for empty, many and filtered sources and a pure select uses the length shortcut")]
 def test_long_count_accumulator(t : T?) {
     t |> run("long_count: empty") @(t : T?) {
         let arr : array<int>
@@ -931,7 +931,7 @@ def test_long_count_accumulator(t : T?) {
         t |> equal(5l, c)
     }
 }
-[test]
+[test(description = "a fused first returns the first element, first match or first projection and stops early")]
 def test_first_early_exit(t : T?) {
     t |> run("first: singleton") @(t : T?) {
         let arr <- [42]
@@ -955,7 +955,7 @@ def test_first_early_exit(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fused first_or_default returns the default for empty or non-matching input and the first match otherwise")]
 def test_first_or_default_early_exit(t : T?) {
     t |> run("first_or_default: empty returns default") @(t : T?) {
         let arr : array<int>
@@ -979,7 +979,7 @@ def test_first_or_default_early_exit(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fused any is false for empty, true for non-empty and honors where and predicate filters")]
 def test_any_early_exit(t : T?) {
     t |> run("any: empty → false") @(t : T?) {
         let arr : array<int>
@@ -1008,7 +1008,7 @@ def test_any_early_exit(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fused all is vacuously true on empty input, false when one element fails, and honors an upstream where")]
 def test_all_early_exit(t : T?) {
     t |> run("all: empty → true (vacuous)") @(t : T?) {
         let arr : array<int>
@@ -1033,7 +1033,7 @@ def test_all_early_exit(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fused contains is false when empty or absent, true when found, also against a projected value")]
 def test_contains_early_exit(t : T?) {
     t |> run("contains: empty → false") @(t : T?) {
         let arr : array<int>
@@ -1058,7 +1058,7 @@ def test_contains_early_exit(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fused last returns the final element, final survivor or final projection")]
 def test_last_terminal_walk(t : T?) {
     t |> run("last: many returns final element") @(t : T?) {
         let arr <- [7, 8, 9]
@@ -1083,7 +1083,7 @@ def test_last_terminal_walk(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fused last_or_default returns the default for empty or non-matching input and the last survivor otherwise")]
 def test_last_or_default_terminal_walk(t : T?) {
     t |> run("last_or_default: empty returns default") @(t : T?) {
         let arr : array<int>
@@ -1107,7 +1107,7 @@ def test_last_or_default_terminal_walk(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fused single returns the only match or only projected element")]
 def test_single_terminal_walk(t : T?) {
     t |> run("single: exactly one match returns it") @(t : T?) {
         let arr <- [1, 2, 3, 4, 5]
@@ -1121,7 +1121,7 @@ def test_single_terminal_walk(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fused single_or_default returns the default for empty, non-matching or multiple matches and the only match otherwise")]
 def test_single_or_default_terminal_walk(t : T?) {
     t |> run("single_or_default: empty returns default") @(t : T?) {
         let arr : array<int>
@@ -1145,7 +1145,7 @@ def test_single_or_default_terminal_walk(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fused element_at returns the right element with where and select upstream and matches the unfused call")]
 def test_element_at_terminal_walk(t : T?) {
     t |> run("element_at: index 0 returns first") @(t : T?) {
         let arr <- [10, 20, 30]
@@ -1177,7 +1177,7 @@ def test_element_at_terminal_walk(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fused element_at_or_default returns the default for empty, out-of-range and negative indexes without panicking")]
 def test_element_at_or_default_terminal_walk(t : T?) {
     t |> run("element_at_or_default: empty returns default") @(t : T?) {
         let arr : array<int>
@@ -1201,7 +1201,7 @@ def test_element_at_or_default_terminal_walk(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fused aggregate returns the seed for empty input and folds correctly with where, select and string seeds")]
 def test_aggregate_terminal_walk(t : T?) {
     t |> run("aggregate: empty returns seed") @(t : T?) {
         let arr : array<int>
@@ -1240,7 +1240,7 @@ def test_aggregate_terminal_walk(t : T?) {
     }
 }
 
-[test]
+[test(description = "take and skip before count fuse into the counter lane with correct totals, including zero and huge counts")]
 def test_take_skip_counter_lane(t : T?) {
     t |> run("counter: where.take.count") @(t : T?) {
         let arr <- [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -1277,7 +1277,7 @@ def test_take_skip_counter_lane(t : T?) {
     }
 }
 
-[test]
+[test(description = "take and skip before sum, average, min and long_count fuse into the accumulator lane with correct values")]
 def test_take_skip_accumulator_lane(t : T?) {
     t |> run("accumulator: select.take.sum") @(t : T?) {
         let arr <- [1, 2, 3, 4, 5]
@@ -1310,7 +1310,7 @@ def test_take_skip_accumulator_lane(t : T?) {
     }
 }
 
-[test]
+[test(description = "take and skip before first, any, all, first_or_default and contains stop at the right element")]
 def test_take_skip_early_exit_lane(t : T?) {
     t |> run("early-exit: take.first") @(t : T?) {
         let arr <- [5, 3, 8, 1, 4]
@@ -1365,7 +1365,7 @@ def test_take_skip_early_exit_lane(t : T?) {
     }
 }
 
-[test]
+[test(description = "take and skip before to_array produce the right slice, empty for zero or huge counts and a no-op for non-positive skip")]
 def test_take_skip_array_lane(t : T?) {
     t |> run("array: take.to_array") @(t : T?) {
         let arr <- [1, 2, 3, 4, 5]
@@ -1438,7 +1438,7 @@ def test_take_skip_array_lane(t : T?) {
     }
 }
 
-[test]
+[test(description = "chained selects through a struct intermediate type still reduce to the right sum or max")]
 def test_chained_non_workhorse_select(t : T?) {
     // Pre-Commit-2: planner rejected any chained _select whose previous projection was
     // non-workhorse (prevWorkhorse=false → return null), falling back to the iterator path.
@@ -1475,7 +1475,7 @@ def test_chained_non_workhorse_select(t : T?) {
     }
 }
 
-[test]
+[test(description = "order_by over an iterator source returns an iterator from the fused splice")]
 def test_iterator_source_bare_order(t : T?) {
     // Regression — splice path for bare order family on an iterator source. peel_each only
     // unwraps `each(<array>)`; `each(<iterator-yielding source>)` leaves an iterator on top.
@@ -1492,7 +1492,7 @@ def test_iterator_source_bare_order(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fused reverse to array matches the unfused reverse for five, zero and one element")]
 def test_reverse_basic_parity(t : T?) {
     // Phase 3+ / R1: bare reverse + to_array splices into buffer + reverse_inplace.
     // Parity test — output element-by-element matches plain reverse().
@@ -1516,7 +1516,7 @@ def test_reverse_basic_parity(t : T?) {
     }
 }
 
-[test]
+[test(description = "reverse after one or two where clauses reverses only the survivors")]
 def test_reverse_with_where_parity(t : T?) {
     // R2: where_ before reverse — buffer accumulates filtered survivors, then reverses.
     t |> run("where(>2).reverse: [1..5] → survivors [3,4,5] reversed = [5,4,3]") @(tt : T?) {
@@ -1549,7 +1549,7 @@ def test_reverse_with_where_parity(t : T?) {
     }
 }
 
-[test]
+[test(description = "reverse after select, where plus select, or a struct-valued select reverses the projected values")]
 def test_reverse_with_select_parity(t : T?) {
     // R3: select before reverse — projected values land in the buffer, then reverse.
     t |> run("select(x*10).reverse: [1..5] → [10,20,30,40,50] reversed = [50,40,30,20,10]") @(tt : T?) {
@@ -1578,7 +1578,7 @@ def test_reverse_with_select_parity(t : T?) {
     }
 }
 
-[test]
+[test(description = "reverse then take keeps the first N of the reversed sequence, empty for non-positive N, and works after a where")]
 def test_reverse_with_take_parity(t : T?) {
     // R4: take(N) after reverse — resize the reversed buffer to keep first N.
     // Equivalent to "last N of source in reverse".
@@ -1617,7 +1617,7 @@ def test_reverse_with_take_parity(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fused distinct keeps first-seen order and handles empty, all-unique and all-same sources")]
 def test_distinct_fold_parity(t : T?) {
     // D1: bare distinct → to_array splices into streaming dedup. Verify identical
     // output to plain distinct(). Uses `.to_sequence()` (const-iterator source) instead
@@ -1659,7 +1659,7 @@ def test_distinct_fold_parity(t : T?) {
     }
 }
 
-[test]
+[test(description = "distinct combined with where, select, distinct_by, take, count, sum and long_count matches the unfused result")]
 def test_distinct_extended_parity(t : T?) {
     // D2: where_ before distinct
     t |> run("where(>1).distinct: [1,2,3,2,4,1,5] → survivors [2,3,4,5] distinct") @(tt : T?) {
@@ -1740,7 +1740,7 @@ def test_distinct_extended_parity(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fused group_by with a count, sum or long_count reducer per bucket matches the unfused result, also with a named tuple and empty input")]
 def test_group_by_count_fold_parity(t : T?) {
     // G2/G3: group_by + select(count) splice should produce same per-bucket counts
     // as the plain LINQ chain.
@@ -1804,7 +1804,7 @@ def test_group_by_count_fold_parity(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fused group_by with a per-bucket sum of a projected value matches the plain reference, bare and named")]
 def test_group_by_inner_select_sum_fold_parity(t : T?) {
     // G4 (PR-A1): inner-select-sum recognized via is_bucket_reducer_call's new arm.
     // Splice inlines the inner projection into the per-element accumulator update so the
@@ -1846,7 +1846,7 @@ def test_group_by_inner_select_sum_fold_parity(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fused group_by with per-bucket min, max or first, bare, named and over an inner select, matches the plain reference")]
 def test_group_by_min_max_first_fold_parity(t : T?) { // nolint:STYLE038 flat list of independent run arms
     // PR-A2: min/max/first bare + named + inner-select reducers. Each splices into the
     // miss/hit emission with per-reducer init+update shapes (min/max compare; first no-op on hit).
@@ -1951,7 +1951,7 @@ def test_group_by_min_max_first_fold_parity(t : T?) { // nolint:STYLE038 flat li
     }
 }
 
-[test]
+[test(description = "a fused group_by with several reducers per bucket computes them in one pass and matches the reference")]
 def test_group_by_multi_reducer_fold_parity(t : T?) {
     // PR-A2 A.4: N-slot named tuples fuse multiple reducers into a single per-element pass.
     t |> run("3-slot (K, N=length, S=sum): two reducers per bucket") @(tt : T?) {
@@ -2022,7 +2022,7 @@ def test_group_by_multi_reducer_fold_parity(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fused group_by with per-bucket averages, bare, named, doubled or combined with other reducers, matches the reference")]
 def test_group_by_average_fold_parity(t : T?) { // nolint:STYLE038 flat list of independent run arms
     // PR-A2 follow-up: average reducer splices via 2-slot per-key accumulator
     // (sum : double + count : uint64) with post-process division at result-build.
@@ -2124,7 +2124,7 @@ def test_group_by_average_fold_parity(t : T?) { // nolint:STYLE038 flat list of 
     }
 }
 
-[test]
+[test(description = "where and select stages before a fused group_by feed the bucket table and match the unfused result")]
 def test_group_by_upstream_fusion_fold_parity(t : T?) {
     // PR-B: upstream where_/select fuses into the per-element loop. Where guards the
     // table update; select binds projected values that the key/reducer chain references.
@@ -2203,7 +2203,7 @@ def test_group_by_upstream_fusion_fold_parity(t : T?) {
     }
 }
 
-[test]
+[test(description = "a select after a where in a fused group_by runs only on the where survivors")]
 def test_group_by_upstream_select_after_where_is_lazy(t : T?) {
     // PR-B correctness guard: a select that appears AFTER a where must execute ONLY for
     // where-survivors. Eager evaluation of all upstream selects before any where guard would
@@ -2234,7 +2234,7 @@ def test_group_by_upstream_select_after_where_is_lazy(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fused having after group_by filters buckets by size or key, with count terminators and upstream where, like the reference")]
 def test_group_by_having_fold_parity(t : T?) {
     // PR-D: `_group_by_lazy(k) |> _having(p) |> _select(group_proj) [|> count]` — having filters
     // groups at result-build time. The predicate references _._0 (key) and/or reducer calls on _._1
@@ -2315,7 +2315,7 @@ def test_group_by_having_fold_parity(t : T?) {
     }
 }
 
-[test]
+[test(description = "count with a predicate over group_by output falls back to the unfused path and honors the predicate")]
 def test_group_by_count_predicate_cascades(t : T?) {
     // Regression for Copilot review on PR #2775: the recognizer pops `.count()` as the bare-count terminator (→ length(tab)) — but `count(src, predicate)` is a valid linq.das overload, and popping that form silently drops the predicate. Recognizer must check `length(arguments) == 1` and otherwise cascade.
     t |> run("count(predicate) over group-by output cascades and honors the predicate") @(tt : T?) {
@@ -2330,7 +2330,7 @@ def test_group_by_count_predicate_cascades(t : T?) {
     }
 }
 
-[test]
+[test(description = "a having predicate indexing the bucket with an unsupported node falls back to the unfused path")]
 def test_group_by_having_unhandled_node_cascades(t : T?) {
     // PR-D safety: any unhandled node type that references `hb` (ExprAt for `_._1[0]`,
     // ExprInvoke from a non-peelable lambda, etc.) must NOT silently leak `hbName` into
@@ -2348,7 +2348,7 @@ def test_group_by_having_unhandled_node_cascades(t : T?) {
     }
 }
 
-[test]
+[test(description = "two hidden inner-select sums with different lambdas in a having are computed independently")]
 def test_group_by_having_two_same_named_inner_select_diff_lambdas(t : T?) {
     // PR-E + Copilot review: when having has TWO same-named inner-select reducers with
     // DIFFERENT lambdas, naive dedup-by-name would route both predicate terms to the same
@@ -2370,7 +2370,7 @@ def test_group_by_having_two_same_named_inner_select_diff_lambdas(t : T?) {
     }
 }
 
-[test]
+[test(description = "a bare-form select with a hidden sum in the having falls back to the unfused path")]
 def test_group_by_having_bare_form_with_hidden_cascades(t : T?) {
     // PR-E bail: bare-form group_proj combined with a having reducer that needs a hidden slot
     // falls back to tier 2 (the bare table layout uses `tuple<KeyT; AccT>` synthesized inside a
@@ -2391,7 +2391,7 @@ def test_group_by_having_bare_form_with_hidden_cascades(t : T?) {
     }
 }
 
-[test]
+[test(description = "reverse followed by count gives the same count as the unfused chain, including filtered and empty sources")]
 def test_reverse_count_parity(t : T?) {
     // R5: reverse |> count — counter loop, no reverse work.
     t |> run("reverse.count: identity") @(tt : T?) {
@@ -2409,7 +2409,7 @@ def test_reverse_count_parity(t : T?) {
     }
 }
 
-[test]
+[test(description = "reverse followed by first returns the last element, last survivor or last projection")]
 def test_reverse_first_parity(t : T?) {
     // R5: reverse |> first = LAST survivor in source order.
     t |> run("reverse.first: [1..5] → 5 (last element)") @(tt : T?) {
@@ -2427,7 +2427,7 @@ def test_reverse_first_parity(t : T?) {
     }
 }
 
-[test]
+[test(description = "reverse followed by first_or_default returns the last survivor or the default")]
 def test_reverse_first_or_default_parity(t : T?) {
     // R5: reverse |> first_or_default — return default if no survivor, else last survivor.
     t |> run("non-empty source returns last survivor") @(tt : T?) {
@@ -2442,7 +2442,7 @@ def test_reverse_first_or_default_parity(t : T?) {
     }
 }
 
-[test]
+[test(description = "a having on a hidden sum, min, max or average reducer filters buckets correctly without exposing the reducer")]
 def test_group_by_having_hidden_slot_fold_parity(t : T?) { // nolint:STYLE038 flat list of independent run arms
     // PR-E: having references a reducer not present in select — splice synthesizes a hidden
     // accumulator slot in the internal table value type; result-build projects only the
@@ -2535,7 +2535,7 @@ def test_group_by_having_hidden_slot_fold_parity(t : T?) { // nolint:STYLE038 fl
     }
 }
 
-[test]
+[test(description = "top_n_by in the middle of a chain over an iterator source stays unrewritten and returns the right rows")]
 def test_top_n_mid_chain_iterator_source(t : T?) {
     // Regression — `top_n_*` registered in linqCalls but always returns array regardless of
     // input shape, so no `_to_array` variant exists. `fold_linq_default`'s first-position
@@ -2552,7 +2552,7 @@ def test_top_n_mid_chain_iterator_source(t : T?) {
     }
 }
 
-[test]
+[test(description = "fused take_while and skip_while match the unfused result across array, counter, accumulator and early-exit lanes and in composition with take, skip and where")]
 def test_take_while_skip_while_splice_parity(t : T?) { // nolint:STYLE038 flat list of independent run arms
     t |> run("take_while array lane") @(tt : T?) {
         let got <- _fold(each([5, 3, 8, 1, 4])._take_while(_ < 8).to_array())
@@ -2671,7 +2671,7 @@ def test_take_while_skip_while_splice_parity(t : T?) { // nolint:STYLE038 flat l
     }
 }
 
-[test]
+[test(description = "take_while or skip_while after a select, or repeated take_while, falls back to the unfused path and still matches the reference")]
 def test_take_while_skip_while_cascade_bails(t : T?) {
     // Cascades to tier 2 (still semantically correct, just no splice). These confirm the
     // bail conditions don't break observable behavior.
@@ -2700,7 +2700,7 @@ def test_take_while_skip_while_cascade_bails(t : T?) {
     }
 }
 
-[test]
+[test(description = "order_by followed by first folds into a min or max, honoring where, defaults, custom comparators and a panic on empty input")]
 def test_fold_order_by_first(t : T?) {
     t |> run("order_by + first → min_by") @(tt : T?) {
         let v = _fold(each([10, 20, 5, 8, 30, 15, 2, 25])._order_by(_).first())
@@ -2767,7 +2767,7 @@ def test_fold_order_by_first(t : T?) {
     }
 }
 
-[test]
+[test(description = "a join whose result lambda holds several statements keeps its rows through a following group_by")]
 def test_join_multistatement_result_group_by(t : T?) {
     t |> run("join with multi-statement result lambda + group_by keeps its rows") @(tt : T?) {
         let cars = [(id = 1, dealer = 1), (id = 2, dealer = 2), (id = 3, dealer = 1)]
@@ -2798,7 +2798,7 @@ def impure_double_for_fold(x : int) : int {
     return x * 2
 }
 
-[test]
+[test(description = "chained impure selects followed by a where compile and match the plain evaluation")]
 def test_chained_impure_selects_then_where(t : T?) {
     t |> run("chained impure selects + where compile and match plain semantics") @(tt : T?) {
         g_impure_counter = 0
@@ -2817,7 +2817,7 @@ def test_chained_impure_selects_then_where(t : T?) {
     }
 }
 
-[test]
+[test(description = "a having inner select uses its own selector rather than the visible select slot")]
 def test_having_inner_select_distinct_selector(t : T?) {
     t |> run("having inner-select uses its own selector, not the visible _select slot") @(tt : T?) {
         let arr = [1, 2, 3, 4, 5, 6]
@@ -2836,7 +2836,7 @@ struct MmItem {
     w : int
 }
 
-[test]
+[test(description = "the fused min and max family matches plain evaluation")]
 def test_min_max_family_splice_parity(t : T?) {
     t |> run("min_max family folds match plain evaluation") @(tt : T?) {
         let xs = [5, 1, 9, 3, 7, 3]
@@ -2869,7 +2869,7 @@ def test_min_max_family_splice_parity(t : T?) {
     }
 }
 
-[test]
+[test(description = "locals named like the generated binds do not hijack tier-2 chains")]
 def test_tier2_generated_names_do_not_capture_locals(t : T?) {
     t |> run("locals named like the generated binds do not hijack tier-2 chains") @(tt : T?) {
         let fsrc = [7]
@@ -2886,7 +2886,7 @@ def test_tier2_generated_names_do_not_capture_locals(t : T?) {
     }
 }
 
-[test]
+[test(description = "first and the other element-returning terminators over array<array<int>> fall back to the unfused path instead of failing")]
 def test_early_exit_non_copyable_elements_cascade(t : T?) {
     t |> run("first over array<array<int>> cascades instead of failing") @(tt : T?) {
         var arr2d <- [[1, 2], [3]]
@@ -2921,7 +2921,7 @@ def impure_having_sel(x : int) : int {
     return x
 }
 
-[test]
+[test(description = "repeated impure having reducers are evaluated as often fused as in the plain chain")]
 def test_having_impure_selector_call_parity(t : T?) {
     t |> run("repeated impure having reducers evaluate as often fused as plain") @(tt : T?) {
         let arr = [1, 2, 3, 4, 5, 6]

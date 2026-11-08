@@ -6,7 +6,7 @@ require daslib/linq_boost
 
 require _common
 
-[test]
+[test(description = "any is true when some element (or some element matching the predicate) exists and false for an empty sequence")]
 def test_any(t : T?) {
     t |> run("basic any") @(t : T?) {
         let query = any(
@@ -45,7 +45,7 @@ def test_any(t : T?) {
     }
 }
 
-[test]
+[test(description = "all is true when every element satisfies the predicate and true vacuously for an empty sequence")]
 def test_all(t : T?) {
     t |> run("basic all") @(t : T?) {
         let query = _all(
@@ -78,7 +78,7 @@ def test_all(t : T?) {
     }
 }
 
-[test]
+[test(description = "none and the _none macro are true exactly when no element (or no element matching the predicate) exists")]
 def test_none(t : T?) {
     t |> run("basic none") @(t : T?) {
         let query = none(
@@ -147,7 +147,7 @@ def test_none(t : T?) {
     }
 }
 
-[test]
+[test(description = "_in and _not_in test membership over arrays, iterators and empty iterators")]
 def test_in_not_in(t : T?) {
     t |> run("_in on array — present") @(t : T?) {
         let haystack = [1, 2, 3, 4, 5]
@@ -179,7 +179,7 @@ def test_in_not_in(t : T?) {
     }
 }
 
-[test]
+[test(description = "contains finds a present element and misses an absent one for ints and struct elements")]
 def test_contains(t : T?) {
     t |> run("basic contains") @(t : T?) {
         let query = contains(

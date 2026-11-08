@@ -1,7 +1,11 @@
+//! verify_completion must reject unbounded iterator and while loops
+//! and unbounded keys() iteration (50503, eight diagnostics
+//! expected).
 options gen2
 expect 50503:8
 
-// Verify that [verify_completion] rejects unbounded loops and recursive calls.
+// Verify that [verify_completion] rejects unbounded loops and
+// recursive calls.
 
 require daslib/validate_code
 

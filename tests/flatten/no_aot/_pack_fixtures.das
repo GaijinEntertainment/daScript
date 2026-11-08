@@ -2,16 +2,20 @@ options gen2
 options indenting = 4
 options no_unused_function_arguments = false
 
-require flat_pack_macro
+require _flat_pack_macro
 require math
 
-//! Fixtures for the scalar-packing pass (`pack_map_reduce` via `flatten_pack`). Each `[flat_pack]`
-//! function produces a `*_packflat` twin (flattened → packed → folded). test_flatten_pack.das
-//! compiles this file and asserts the min/max reduction re-rolls into `_pk*` vector vars, while
-//! the fail-closed shapes (a const-threshold select, a lane that reads the accumulator) do NOT.
+//! Fixtures for the scalar-packing pass (`pack_map_reduce` via
+//! `flatten_pack`). Each `[flat_pack]` function produces a
+//! `*_packflat` twin (flattened → packed → folded). The pack test in
+//! uncategorized.das compiles this file and asserts the min/max
+//! reduction re-rolls into `_pk*` vector vars, while the fail-closed
+//! shapes (a const-threshold select, a lane that reads the
+//! accumulator) do NOT.
 
-// PACKS: a min reduction over 4 independent, isomorphic scalar lanes (each lane = sin/mul chain
-// of `seed` + a per-lane const). The unrolled `?:` min spine re-rolls into width-4 vector ops.
+// PACKS: a min reduction over 4 independent, isomorphic scalar lanes
+// (each lane = sin/mul chain of `seed` + a per-lane const). The
+// unrolled `?:` min spine re-rolls into width-4 vector ops.
 [flat_pack]
 def pk_min4(seed : float) : float {
     var acc = 100.0
@@ -23,8 +27,9 @@ def pk_min4(seed : float) : float {
     return acc
 }
 
-// BAILS (classification, fail-closed): the select compares `d` against a CONST threshold, not the
-// accumulator — `acc = (d < 5) ? d : acc` is NOT a min reduction. classify_link must reject it.
+// BAILS (classification, fail-closed): the select compares `d`
+// against a CONST threshold, not the accumulator — `acc = (d < 5) ? d
+// : acc` is NOT a min reduction. classify_link must reject it.
 [flat_pack]
 def pk_thresh(seed : float) : float {
     var acc = 100.0
@@ -36,8 +41,9 @@ def pk_thresh(seed : float) : float {
     return acc
 }
 
-// BAILS (independence, fail-closed): each lane reads the running accumulator (`sin(acc + ...)`),
-// so the iterations are genuinely sequential — the per-lane independence check must reject it.
+// BAILS (independence, fail-closed): each lane reads the running
+// accumulator (`sin(acc + ...)`), so the iterations are genuinely
+// sequential — the per-lane independence check must reject it.
 [flat_pack]
 def pk_dep(seed : float) : float {
     var acc = 100.0

@@ -1,4 +1,4 @@
-// a struct pattern naming a missing field is an error, not a crash
+//! a struct pattern naming a missing field is an error, not a crash
 options gen2
 
 require daslib/match

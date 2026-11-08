@@ -41,7 +41,7 @@ let public JIT_FNV_PRIME : uint64 = 1099511628211ul
 
 // `options fast_math` stamps every FP op with VALUE-SAFE flags (reassoc|nsz|contract) before opt —
 // NON-bit-exact, default off, +8-10% e2e. nnan|ninf|arcp|afn are deliberately NOT stamped: engine
-// kernels make real infs and arcp+ninf's rcp-estimate div computes inf*0=NaN (tests/jit/fast_math_specials.das).
+// kernels make real infs; the arcp+ninf rcp div yields inf*0=NaN.
 var public g_jit_fast_math = false
 
 let public JIT_NEVER_FAST_MATH_ATTR = "das-never-fast-math"

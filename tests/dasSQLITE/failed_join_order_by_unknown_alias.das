@@ -1,11 +1,14 @@
 options gen2
+//! order_by on a name that is not a join projection alias must not
+//! compile
 
-// `_join |> _order_by(_.<not-an-alias>)` rejects with a clear error listing the
-// valid projection aliases. collect_order_keys has a post-join branch that consults
-// the projection registry and emits a macro_error when the field name isn't found.
+// `_join |> _order_by(_.<not-an-alias>)` rejects with a clear error
+// listing the valid projection aliases. collect_order_keys has a
+// post-join branch that consults the projection registry and emits a
+// macro_error when the field name isn't found.
 //
-// macro_error fires but typer cascade adds typer-level errors for the unknown
-// tuple field; probe expects all 3 codes.
+// macro_error fires but typer cascade adds typer-level errors for the
+// unknown tuple field; probe expects all 3 codes.
 expect 50503
 expect 30831
 expect 30341

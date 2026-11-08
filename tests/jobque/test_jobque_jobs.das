@@ -13,7 +13,7 @@ struct IntVal {
 
 // ---- JobStatus tests (no threading) ----
 
-[test]
+[test(description = "A job status becomes ready only after as many notifications as its count, and notify_and_release nulls it")]
 def test_with_job_status(t : T?) {
     t |> run("with_job_status creates and destroys") @(t : T?) {
         var entered = false
@@ -71,7 +71,7 @@ def test_with_job_status(t : T?) {
 
 // ---- with_job_que tests ----
 
-[test]
+[test(description = "with_job_que runs its block and reports a positive hardware thread count")]
 def test_with_job_que(t : T?) {
     t |> run("with_job_que block runs") @(t : T?) {
         var entered = false
@@ -90,7 +90,7 @@ def test_with_job_que(t : T?) {
 
 // ---- new_job tests (use with_channel(N) + notify_and_release pattern) ----
 
-[test]
+[test(description = "new_job runs its lambda on the job pool")]
 def test_new_job_basic(t : T?) {
     t |> run("new_job executes lambda in thread pool") @(t : T?) {
         with_job_que() {
@@ -109,7 +109,7 @@ def test_new_job_basic(t : T?) {
     }
 }
 
-[test]
+[test(description = "Multiple jobs can push to the same channel")]
 def test_new_job_multiple(t : T?) {
     t |> run("multiple jobs push to same channel") @(t : T?) {
         with_job_que() {
@@ -137,7 +137,7 @@ def test_new_job_multiple(t : T?) {
 
 // ---- new_thread test ----
 
-[test]
+[test(description = "new_thread runs its lambda on a dedicated thread")]
 def test_new_thread_basic(t : T?) {
     t |> run("new_thread executes in dedicated thread") @(t : T?) {
         with_job_que() {
@@ -158,7 +158,7 @@ def test_new_thread_basic(t : T?) {
 
 // ---- Captures test ----
 
-[test]
+[test(description = "A job lambda sees the local variables it captures")]
 def test_job_with_captures(t : T?) {
     t |> run("job captures local variables") @(t : T?) {
         with_job_que() {
@@ -180,7 +180,7 @@ def test_job_with_captures(t : T?) {
 
 // ---- join test: uses both status and channel ----
 
-[test]
+[test(description = "join on a job status waits until the job completes")]
 def test_job_status_join(t : T?) {
     t |> run("join waits for job completion") @(t : T?) {
         with_job_que() {
@@ -205,7 +205,7 @@ def test_job_status_join(t : T?) {
 
 // ---- persistent job queue: create_job_que / destroy_job_que ----
 
-[test]
+[test(description = "new_job runs on a create_job_que pool outside any with_job_que block, and a destroyed pool can be created again")]
 def test_persistent_job_que(t : T?) {
     t |> run("new_job runs on a create_job_que pool with no with_job_que block") @(t : T?) {
         create_job_que()
@@ -263,7 +263,7 @@ def private poll_ready(var status : JobStatus?) : bool {
     return false
 }
 
-[test]
+[test(description = "Repeated multi-band passes over a persistent queue land every item exactly once")]
 def test_persistent_que_frame_loop(t : T?) {
     //! The Physarum / Path Tracer Lab dispatch. Their frame loop is driven externally
     //! (emscripten set_main_loop), so a pass is polled through isReady rather than
@@ -310,7 +310,7 @@ def test_persistent_que_frame_loop(t : T?) {
     }
 }
 
-[test]
+[test(description = "A band with no work still balances its wait group")]
 def test_persistent_que_empty_band(t : T?) {
     t |> run("a band with no work still balances the wait group") @(t : T?) {
         //! Physarum dispatches MAX_BANDS bands whatever the agent count, so a band

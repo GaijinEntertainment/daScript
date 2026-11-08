@@ -33,7 +33,7 @@ def pick(a : auto(TT)) : string => "plain"
 
 def pick(a : auto(TT)[]) : string => "dim"
 
-[test]
+[test(description = "auto(TT) binds the whole fixed array and default of that type is a zeroed fixed array")]
 def test_whole_array_binding(t : T?) {
     t |> run("auto(TT) binds the whole fixed array") @(t : T?) {
         let i4 : int[4]
@@ -45,7 +45,7 @@ def test_whole_array_binding(t : T?) {
     }
 }
 
-[test]
+[test(description = "auto(TT)[] peels exactly one dimension off a multi-dimensional array and the dim overload is preferred at every depth")]
 def test_peel_one_level(t : T?) {
     t |> run("auto(TT)[] peels one level off multi-dim") @(t : T?) {
         // decoration matches the plain form (settled at Stage 2 review): the peeled
@@ -71,7 +71,7 @@ def test_peel_one_level(t : T?) {
     }
 }
 
-[test]
+[test(description = "get_key on a table whose values are fixed arrays resolves the key")]
 def test_get_key_fixed(t : T?) {
     t |> run("get_key on table<K;V[N]> resolves") @(t : T?) {
         // master's dedicated FA overload (old builtin.das:1407) failed to resolve;

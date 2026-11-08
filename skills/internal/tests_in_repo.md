@@ -109,13 +109,21 @@ require path cannot contain a hyphen, so a hyphenated tool directory (`utils/det
 the directory and require the sibling module by bare name. A test needing a shared fixture
 should keep the fixture in its own directory rather than reaching across the tree.
 
-## One new test file per commit
+## Where a new test goes: an existing file, else `uncategorized.das`
 
-A commit adds at most one new test file, and every test its change needs goes into that file -
-no file per case, no helper module of its own. A reviewer reads one file to see what the commit
-proves. The exception is a compile-fail fixture (`tests/language/failed_*.das`): its
-`expect <code>[:line]` header speaks for the whole file, so each expected error is a file of its
-own.
+A new `[test]` under `tests/` never opens a file. It goes into the category file of its topic
+in the folder when one exists, and into the folder's `uncategorized.das` otherwise - every
+folder has one. When three tests in `uncategorized.das` belong together, the author of the
+third moves them into a category file, new or existing. A file holds at most 100 `[test]`
+functions; `uncategorized_2.das` continues a full one. Every `[test]` carries
+`description = "..."`, the claim it proves. Two files are the only ones a change may create:
+a compile-fail fixture (its `expect <code>[:line]` header speaks for the whole file, so each
+expected error is a file of its own, with a `//!` first line stating what must not compile),
+and `uncategorized_<option>.das` for a test whose `options` fence it off from the plain
+`uncategorized.das` (`tests/ARCHITECTURE.md`, the fence signature section). The gate is
+`daslang tests/REVIEW.das -- --shape`; `tests/README.md` is generated from the descriptions
+by `daslang utils/internal/test-audit/main.das -- --readme`, and `--verify` is the CI check -
+regenerate it in the same change that adds, moves or describes a test.
 
 ## Running the repo suite
 
@@ -128,7 +136,7 @@ Sweep the whole `tests` root for AOT/JIT validation, per the root-path caveat ab
 ## The dasSpirv emitter suite (`tests/spirv`)
 
 `tests/spirv` is the SPIR-V emitter's own gate: every fixture compiles a shader and asserts on
-the emitted words, `test_census.das` holds the emitted opcode set equal to the declared set in
+the emitted words, `tests/spirv/uncategorized.das` holds the emitted opcode set equal to the declared set in
 both directions, and every blob is validated with `spirv-val` where the box resolves one - a cell
 prints `spirv-val not found locally; skipping` otherwise, and no CI lane resolves it. The run
 `modules/dasSpirv/REVIEW.md` owes, on a box with the Vulkan SDK on `PATH`:

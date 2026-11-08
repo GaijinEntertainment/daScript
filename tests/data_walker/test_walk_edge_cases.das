@@ -7,7 +7,7 @@ options gen2
 options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
-require dw_common
+require _dw_common
 
 
 // ============================================================
@@ -36,7 +36,7 @@ class CountWalker : DapiDataWalker {
 // Pointers
 // ============================================================
 
-[test]
+[test(description = "the data walker reports a null pointer without dereferencing it and follows a non-null one")]
 def test_walk_null_pointer(t : T?) {
     t |> run("null pointer") @(t : T?) {
         var walker = new LogWalker()
@@ -71,7 +71,7 @@ def test_walk_null_pointer(t : T?) {
 // Lambdas
 // ============================================================
 
-[test]
+[test(description = "the data walker visits a lambda with its captured value")]
 def test_walk_lambda(t : T?) {
     t |> run("lambda with capture") @(t : T?) {
         var walker = new LogWalker()
@@ -99,7 +99,7 @@ def walk_block_value(walker : LogWalker?; blk : block<(x : int) : int>) {
     }
 }
 
-[test]
+[test(description = "block fields are read through the DapiBlock mirror")]
 def test_walk_block(t : T?) {
     t |> run("block fields read through the DapiBlock mirror") @(t : T?) {
         var walker = new LogWalker()
@@ -116,7 +116,7 @@ def test_walk_block(t : T?) {
 // Edge values
 // ============================================================
 
-[test]
+[test(description = "the data walker delivers zero, negative, maximum and minimum values unchanged")]
 def test_walk_edge_values(t : T?) {
     t |> run("zero int") @(t : T?) {
         var walker = new LogWalker()
@@ -170,7 +170,7 @@ def test_walk_edge_values(t : T?) {
 // Deeply nested data
 // ============================================================
 
-[test]
+[test(description = "the data walker reaches a struct nested inside an array")]
 def test_deeply_nested(t : T?) {
     t |> run("nested struct in array") @(t : T?) {
         var walker = new LogWalker()
@@ -193,7 +193,7 @@ def test_deeply_nested(t : T?) {
 // Adapter reuse
 // ============================================================
 
-[test]
+[test(description = "one walker adapter can walk twice and visits the data both times")]
 def test_reuse_adapter(t : T?) {
     t |> run("walk twice with same adapter") @(t : T?) {
         var walker = new LogWalker()
@@ -216,7 +216,7 @@ def test_reuse_adapter(t : T?) {
 // Scalar counting
 // ============================================================
 
-[test]
+[test(description = "a counting walker totals the scalars of a struct, a nested struct and an array")]
 def test_count_scalars(t : T?) {
     t |> run("count in struct") @(t : T?) {
         var walker = new CountWalker()

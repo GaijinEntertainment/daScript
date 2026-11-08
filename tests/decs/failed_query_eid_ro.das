@@ -1,3 +1,5 @@
+//! Writing to a component read through a nested query(eid) block must
+//! not compile: that component is read-only.
 options gen2
 expect 30905
 
@@ -25,7 +27,8 @@ def test_qeid_rw(t : T?) {
     query() $(var c1 : CmpOne; eid : EntityId) {
         c1.num++
         query(eid) $(c2 : CmpTwo) {
-            c2.num++                            // 30303: +++ can't be applied to constant int const&
+            // 30303: +++ can't be applied to constant int const&
+            c2.num++
         }
     }
 }

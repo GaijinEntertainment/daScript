@@ -1,3 +1,5 @@
+//! a table with a reference key or a non-hashable key, and a void
+//! local variable, do not compile
 // invalid table key/value types
 // verifies compiler rejects ref keys, non-hashable keys (array),
 // and void local variables

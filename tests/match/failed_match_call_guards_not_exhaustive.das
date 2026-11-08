@@ -1,4 +1,5 @@
-// guards that call a function are not combined - the call may answer differently each time
+//! guards that call a function are not combined - the call may answer
+//! differently each time
 options gen2
 
 require daslib/match

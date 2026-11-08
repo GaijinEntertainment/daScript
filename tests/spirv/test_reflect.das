@@ -10,7 +10,7 @@ require dastest/testing_boost public
 require _spirv_common
 require spirv/spirv_reflect
 
-[test]
+[test(description = "Reflection of the compute square kernel reports one storage buffer at set 0 binding 0 and local size 64,1,1.")]
 def test_reflect_compute_ssbo(t : T?) {
     t |> run("reflect: compute square -> one storage_buffer @ (0,0), local_size (64,1,1)") <| @(t : T?) {
         var r = decode_reflection(square_spv_reflect)
@@ -29,7 +29,7 @@ def test_reflect_compute_ssbo(t : T?) {
     }
 }
 
-[test]
+[test(description = "Reflection of a fragment UBO shader reports one uniform buffer at 0,0 in the fragment stage.")]
 def test_reflect_uniform_fragment(t : T?) {
     t |> run("reflect: ubo_frag -> one uniform_buffer @ (0,0), fragment stage") <| @(t : T?) {
         var r = decode_reflection(ubo_frag_spv_reflect)
@@ -45,7 +45,7 @@ def test_reflect_uniform_fragment(t : T?) {
     }
 }
 
-[test]
+[test(description = "Reflection of the MVP vertex shader reports one uniform buffer at 0,0 in the vertex stage.")]
 def test_reflect_uniform_vertex(t : T?) {
     t |> run("reflect: mvp_vert -> one uniform_buffer @ (0,0), vertex stage") <| @(t : T?) {
         var r = decode_reflection(mvp_vert_spv_reflect)
@@ -59,7 +59,7 @@ def test_reflect_uniform_vertex(t : T?) {
     }
 }
 
-[test]
+[test(description = "Reflection of a push-constant shader reports one range at offset 0 of size 20 and no descriptors.")]
 def test_reflect_push_constant(t : T?) {
     t |> run("reflect: pc_frag -> one push-constant range (offset 0, size 20), no descriptors") <| @(t : T?) {
         var r = decode_reflection(pc_frag_spv_reflect)
@@ -75,7 +75,7 @@ def test_reflect_push_constant(t : T?) {
     }
 }
 
-[test]
+[test(description = "Reflection of a texture shader reports one combined image sampler at 0,0.")]
 def test_reflect_sampler(t : T?) {
     t |> run("reflect: tex_frag -> one combined_image_sampler @ (0,0)") <| @(t : T?) {
         var r = decode_reflection(tex_frag_spv_reflect)
@@ -90,7 +90,7 @@ def test_reflect_sampler(t : T?) {
     }
 }
 
-[test]
+[test(description = "Reflection of a shadow-sampler shader reports one comparison sampler at 0,0 in the fragment stage.")]
 def test_reflect_comparison_sampler(t : T?) {
     t |> run("reflect: fragshadow -> one comparison_sampler @ (0,0), fragment stage") <| @(t : T?) {
         var r = decode_reflection(fragshadow_spv_reflect)
@@ -105,7 +105,7 @@ def test_reflect_comparison_sampler(t : T?) {
     }
 }
 
-[test]
+[test(description = "Malformed reflection streams decode to empty without over-reading, over-allocating or panicking.")]
 def test_reflect_malformed(t : T?) {
     t |> run("reflect: malformed streams decode to empty (no over-read / over-alloc / panic)") <| @(t : T?) {
         // empty stream
@@ -129,7 +129,7 @@ def test_reflect_malformed(t : T?) {
     }
 }
 
-[test]
+[test(description = "Encoding then decoding a hand-built reflection returns the same reflection.")]
 def test_reflect_roundtrip(t : T?) {
     t |> run("reflect: encode/decode round-trips a hand-built reflection") <| @(t : T?) {
         var src = SpirvReflection(stage = SpirvStageFlags.vertex | SpirvStageFlags.fragment,

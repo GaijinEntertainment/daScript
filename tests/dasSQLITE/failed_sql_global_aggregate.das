@@ -1,4 +1,6 @@
 options gen2
+//! a global aggregate in a position SQL cannot express must not
+//! compile
 
 expect 50503:9
 
@@ -35,8 +37,8 @@ def main() {
                 |> _select($(row : GlobalAggregateRow) => captured.Amount)
                 |> sum)))
 
-    // V1 aggregates the filtered source directly; pre-projection and DISTINCT
-    // need a separate inner-query composition rail.
+    // V1 aggregates the filtered source directly; pre-projection and
+    // DISTINCT need a separate inner-query composition rail.
     let bad5 = _sql(db |> select_from(type<GlobalAggregateRow>)
         |> _select(_.Amount)
         |> _aggregate($(_rows) => (N = _rows |> count)))

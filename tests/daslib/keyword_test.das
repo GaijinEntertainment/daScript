@@ -6,7 +6,7 @@ options no_unused_block_arguments = false
 require ast_core
 require dastest/testing_boost public
 
-[test]
+[test(description = "is_cpp_keyword accepts C++ keywords and rejects daslang-only words and the empty string")]
 def test_is_cpp_keyword(t : T?) {
     // positive
     t |> success(is_cpp_keyword("int"), "int is a C++ keyword")
@@ -25,7 +25,7 @@ def test_is_cpp_keyword(t : T?) {
     t |> success(!is_cpp_keyword("recover"), "recover is not a C++ keyword")
 }
 
-[test]
+[test(description = "is_das_keyword accepts daslang keywords and rejects C++-only words and the empty string")]
 def test_is_das_keyword(t : T?) {
     // positive
     t |> success(is_das_keyword("def"), "def is a daScript keyword")
@@ -45,7 +45,7 @@ def test_is_das_keyword(t : T?) {
     t |> success(!is_das_keyword("namespace"), "namespace is not a daScript keyword")
 }
 
-[test]
+[test(description = "the keyword tables agree on shared words and keep C++-only and daslang-only words apart")]
 def test_overlap_keywords(t : T?) {
     // keywords in both languages
     t |> success(is_cpp_keyword("class") && is_das_keyword("class"), "class is in both")

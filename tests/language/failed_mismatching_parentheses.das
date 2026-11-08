@@ -1,3 +1,4 @@
+//! an extra closing parenthesis does not parse
 // mismatched parentheses
 // verifies parser detects extra closing parenthesis
 options gen2

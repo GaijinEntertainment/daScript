@@ -1,3 +1,5 @@
+//! A @template_constant overridden with a non-constant expression
+//! must not compile (20800).
 options gen2
 expect 20800
 

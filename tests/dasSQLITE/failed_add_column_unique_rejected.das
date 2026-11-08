@@ -1,7 +1,10 @@
 options gen2
+//! add_column of a sql_unique field must not compile because SQLite
+//! cannot add a UNIQUE column inline
 
-// AddColumnMacro must reject @sql_unique fields — SQLite cannot add a UNIQUE
-// column to an existing table inline; the user should use create_unique_index instead.
+// AddColumnMacro must reject @sql_unique fields — SQLite cannot add a
+// UNIQUE column to an existing table inline; the user should use
+// create_unique_index instead.
 expect 50503
 
 require sqlite/sqlite_migrate

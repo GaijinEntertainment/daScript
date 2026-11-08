@@ -22,7 +22,7 @@ def m_002(db : SqlRunner) {
     db |> add_column(type<User>, "Author", "O'Reilly")
 }
 
-[test]
+[test(description = "a string default containing a single quote round-trips through add_column", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_single_quote_escapes_in_default(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()
@@ -30,7 +30,7 @@ def test_single_quote_escapes_in_default(t : T?) {
     t |> equal(alice_author, "O'Reilly", "Embedded single-quote must round-trip via escape")
 }
 
-[test]
+[test(description = "the DEFAULT clause stores a string default in SQL-quoted form with the quote doubled")]
 def test_default_clause_in_pragma(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()

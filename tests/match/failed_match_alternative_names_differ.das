@@ -1,4 +1,4 @@
-// the sides of an alternative must bind the same names
+//! the sides of an alternative must bind the same names
 options gen2
 
 require daslib/match

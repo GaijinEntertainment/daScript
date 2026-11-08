@@ -1,11 +1,14 @@
+//! the juxtaposition cast form cast<T> expr does not compile: the
+//! operand must be parenthesized, cast<T>(expr)
 options gen2
 expect 30151
 
 require dastest/testing_boost public
 
-// the juxtaposition cast form is gone: `cast<T> expr` must now be spelled `cast<T>(expr)`.
-// the old form silently swallowed trailing binary operators into the operand
-// (`reinterpret<uint8?>(p) + 1` meant `reinterpret<uint8?>((p) + 1)`).
+// the juxtaposition cast form is gone: `cast<T> expr` must now be
+// spelled `cast<T>(expr)`. the old form silently swallowed trailing
+// binary operators into the operand (`reinterpret<uint8?>(p) + 1`
+// meant `reinterpret<uint8?>((p) + 1)`).
 
 def foo : int {
     var x = 0

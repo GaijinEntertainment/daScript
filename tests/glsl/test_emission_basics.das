@@ -1,16 +1,15 @@
 options gen2
-options indenting = 4
 options no_unused_function_arguments = false
+
+require dastest/testing_boost public
+require glsl/glsl_opengl
+require strings
+require math
 
 // Baseline emission gate for the GLSL generator's general surface (untested except by use before
 // this arc). Pins the version line, the @in/@out/@inout declaration lowering, and the entry-point
 // body shape for a minimal vertex+fragment pair. Compile-time only (no GPU). A forward regression
 // lock so an emitter change that reshapes the prelude/declarations/body is caught in CI.
-
-require dastest/testing_boost public
-require glsl/glsl_opengl
-require strings
-
 var @in @location b_pos : float2
 var @in @location b_color : float3
 var @inout b_vcolor : float3
@@ -191,7 +190,7 @@ def uniquify_fragment {
 
 def private has(hay, needle : string) : bool => find(hay, needle) >= 0
 
-[test]
+[test(description = "Vertex and fragment emission has the expected shape: decimal-point float literals, discard, explicit MRT locations, and temp and function names that never contain the reserved double underscore.")]
 def test_glsl_emission_basics(t : T?) {
     t |> run("vertex shader emission shape") <| @(t : T?) {
         t |> success(has(basics_vs_glsl, "#version 330 core"), "version line")
@@ -253,5 +252,93 @@ def test_glsl_emission_basics(t : T?) {
     t |> run("the function-name uniquifier never spells __ on a struct collision") <| @(t : T?) {
         t |> success(has(uniquify_fs_glsl, "u_Coll"), "the colliding _-spelled function got the u prefix")
         t |> success(!has(uniquify_fs_glsl, "__"), "no reserved __ from the uniquifier")
+    }
+}
+
+// Regression gate for `continue` inside a lowered for-loop.
+//
+// The emitter used to lower a range- or dim-for to `while (cond) { body; i++ }`, with the
+// increment as the LAST STATEMENT OF THE BODY. A `continue` in that body jumps over the
+// increment, so the loop variable never advances and the shader spins forever -- a GPU hang
+// with no diagnostic in any tier, because the das source is correct and the GLSL compiles.
+//
+// The loops now emit a real `for ( ; cond; i++ )` header, so `continue` reaches the
+// increment. The asserts pin the property, not the spelling: the increment appears inside a
+// for-header, and no `while` survives. Renaming the emitter's temporaries keeps them green.
+var @in @location a_uv : float2
+var @out o_color : float4
+
+[fragment_program(name="loop_continue_glsl")]
+def loop_continue_shader {
+    var acc = 0.0
+    for (i in range(4)) {
+        if (i == 2) {
+            continue
+        }
+        acc += float(i) * a_uv.x
+    }
+    var d : float[3]
+    d[0] = 1.0
+    d[1] = 2.0
+    d[2] = 3.0
+    for (v in d) {
+        if (v > 2.5) {
+            continue
+        }
+        acc += v
+    }
+    o_color = float4(acc)
+}
+
+[test(description = "A for loop with continue keeps its increment in the for header and is never lowered to a while loop with a body increment.")]
+def test_for_continue_emission(t : T?) {
+    t |> run("the shader under test really does emit a continue") <| @(t : T?) {
+        t |> success(has(loop_continue_glsl, "continue;"), "continue; present in the emitted GLSL")
+    }
+    t |> run("a range for-loop carries its increment in the for header") <| @(t : T?) {
+        t |> success(has(loop_continue_glsl, "; i++ )"), "for ( ; ... ; i++ ) header emitted")
+    }
+    t |> run("a dim for-loop carries its increment in the for header") <| @(t : T?) {
+        t |> success(has(loop_continue_glsl, "; v++ )"), "for ( ; ... ; v++ ) header emitted")
+    }
+    t |> run("no loop is lowered to a while with a body increment") <| @(t : T?) {
+        t |> success(!has(loop_continue_glsl, "while ("), "no while ( in the emitted GLSL")
+    }
+}
+
+// Regression gate for the runtime matrix-/vector-/array-column index emitter gap. Indexing a matrix
+// (or vector / fixed array) by a NON-constant value must emit plain `base[index]`: GLSL has its own
+// (non-trapping) out-of-bounds behavior, so no bounds-check machinery belongs in the output. It once
+// errored with `__context__ is not supported` (error[50501]) under JIT, where the index lowered to a
+// `.[](base, index, __context__, __lineinfo__)` operator call; that rewrite is gone -- a runtime index
+// is a plain ExprAt in every tier -- and the negative asserts stay as the guard that neither the call
+// shape nor a context/lineinfo argument comes back. Uniform-free, so no opengl_boost.
+var @in @location mcol_uv : float2
+var @out mcol_color : float4
+
+[fragment_program(name="mcol_glsl")]
+def mcol_shader {
+    var m : float4x4
+    let i = int(mcol_uv.x)
+    let j = int(mcol_uv.y)
+    m[i] = float4(mcol_uv, 0.0, 1.0)           // matrix-column WRITE, runtime index
+    let col = m[j]                           // matrix-column READ
+    let comp = m[i][j]                       // 2D index
+    let v = float4(1.0, 2.0, 3.0, 4.0)
+    let vc = v[i]                            // vector runtime index
+    mcol_color = col + float4(comp + vc)
+}
+
+[test(description = "A runtime matrix, vector or array index emits plain base[index] with no bounds-check call or context argument leaking into the GLSL.")]
+def test_matrix_column_index(t : T?) {
+    t |> run("runtime matrix-column index emits plain base[index]") <| @(t : T?) {
+        t |> success(has(mcol_glsl, "m[") && has(mcol_glsl, "v["), "emits m[...] and v[...] indexing")
+    }
+    t |> run("the .[] bounds-check operator call does not leak into the GLSL") <| @(t : T?) {
+        t |> success(!has(mcol_glsl, ".[]"), "no .[] call in the emitted GLSL")
+    }
+    t |> run("no __context__ / __lineinfo__ bounds-check args leak into the GLSL") <| @(t : T?) {
+        t |> success(!has(mcol_glsl, "__context__") && !has(mcol_glsl, "__lineinfo__"),
+            "no __context__ / __lineinfo__ in the emitted GLSL")
     }
 }

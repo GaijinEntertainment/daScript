@@ -1,5 +1,4 @@
 options gen2
-options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 
@@ -10,7 +9,7 @@ require daslib/option
 // constructors + predicates
 // ===========================
 
-[test]
+[test(description = "some carries its value, none is empty for its named type, is_some and is_none agree and different payload types work")]
 def test_constructors(t : T?) {
     t |> run("some carries the value") @(t : T?) {
         let a = some(42)
@@ -42,7 +41,7 @@ def test_constructors(t : T?) {
 // map / filter / and_then / or_else / or_value
 // ===========================
 
-[test]
+[test(description = "map transforms a some, leaves none as none and can change the payload type")]
 def test_map(t : T?) {
     t |> run("map transforms some") @(t : T?) {
         let m = some(3) |> map($(x : int) => x * 2)
@@ -61,7 +60,7 @@ def test_map(t : T?) {
     }
 }
 
-[test]
+[test(description = "filter keeps a matching some, drops a non-matching one and passes none through")]
 def test_filter(t : T?) {
     t |> run("filter keeps matching some") @(t : T?) {
         let f = some(10) |> filter($(x : int) => x > 5)
@@ -79,7 +78,7 @@ def test_filter(t : T?) {
     }
 }
 
-[test]
+[test(description = "and_then chains some to some, short-circuits on none and can return none")]
 def test_and_then(t : T?) {
     t |> run("and_then chains some → some") @(t : T?) {
         let r = some(4) |> and_then($(x : int) => some(x + 10))
@@ -97,7 +96,7 @@ def test_and_then(t : T?) {
     }
 }
 
-[test]
+[test(description = "or_else passes a some through and runs the fallback on none")]
 def test_or_else(t : T?) {
     t |> run("or_else passes some through") @(t : T?) {
         let r = some(1) |> or_else() { return some(99); }
@@ -110,7 +109,7 @@ def test_or_else(t : T?) {
     }
 }
 
-[test]
+[test(description = "or_value passes a some through and substitutes a value on none")]
 def test_or_value(t : T?) {
     t |> run("or_value passes some through") @(t : T?) {
         let r = some(1) |> or_value(99)
@@ -127,7 +126,7 @@ def test_or_value(t : T?) {
 // unwrap family
 // ===========================
 
-[test]
+[test(description = "unwrap, unwrap_or, unwrap_or_else, unwrap_or_default and move_unwrap return the payload or the fallback as specified")]
 def test_unwrap(t : T?) {
     t |> run("unwrap on some returns value") @(t : T?) {
         t |> equal(some(42) |> unwrap, 42)
@@ -160,7 +159,7 @@ def test_unwrap(t : T?) {
 // operators
 // ===========================
 
-[test]
+[test(description = "the ?? operator unwraps or defaults and == and != compare options with options and with payload values")]
 def test_operators(t : T?) {
     t |> run("?? unwraps some") @(t : T?) {
         t |> equal(some(7) ?? 0, 7)
@@ -200,7 +199,7 @@ def test_operators(t : T?) {
 // side-effect combinators
 // ===========================
 
-[test]
+[test(description = "if_some and if_none run their block only on the matching state")]
 def test_if_some_if_none(t : T?) {
     t |> run("if_some fires on some") @(t : T?) {
         var fired = 0
@@ -231,7 +230,7 @@ def test_if_some_if_none(t : T?) {
 // zip
 // ===========================
 
-[test]
+[test(description = "zip of two somes is a some pair and either none makes the result none")]
 def test_zip(t : T?) {
     t |> run("zip some + some -> some") @(t : T?) {
         let z = zip(some(1), some(2.5f))
@@ -251,7 +250,7 @@ def test_zip(t : T?) {
 // chaining smoke test — the whole point of the library
 // ===========================
 
-[test]
+[test(description = "a some flows through map, filter and unwrap_or while a none short-circuits the whole chain")]
 def test_chaining(t : T?) {
     t |> run("some → map → filter → unwrap_or") @(t : T?) {
         let result = (some(3)
@@ -267,5 +266,51 @@ def test_chaining(t : T?) {
             |> filter($(x : int) => x > 0)
             |> unwrap_or(-1))
         t |> equal(result, -1)
+    }
+}
+
+// Regression for typemacro+tuple Option carrying a payload that's
+// "unsafe-when-uninitialized" — i.e. a struct with hasInitFields = true.
+// Without TypeDeclFlags.safeWhenUninitialized on the value field,
+// default<Option<Brittle>> would trip ast_infer_type.cpp:5032's
+// "Uninitialized variable" check.
+
+struct Brittle {
+    must_init : int = 42
+    name : string = "default"
+}
+
+[test(description = "an Option of a struct with must-init fields compiles as none, as a bare var and as a some that round-trips")]
+def option_brittle_constructors(t : T?) {
+    t |> run("default<Option<Brittle>> compiles and reads as none") @(t : T?) {
+        let o = none(type<Brittle>)
+        t |> success(o |> is_none)
+        t |> success(!(o |> is_some))
+    }
+    t |> run("bare var Option<Brittle> compiles via @safe_when_uninitialized on _value") @(t : T?) {
+        // Without @safe_when_uninitialized on the _value field of the tuple
+        // produced by [template_tuple(T)] in daslib/option.das, this would
+        // trigger "Uninitialized variable is unsafe" at ast_infer_type.cpp:5040.
+        // The bare var (no init) is the only form that exercises this check —
+        // ``let`` requires an initializer.
+        var bare : Option<Brittle> // nolint:LINT003
+        t |> success(bare |> is_none)
+    }
+    t |> run("some(Brittle(...)) round-trips") @(t : T?) {
+        let o = some(Brittle(must_init = 7, name = "x"))
+        t |> success(o |> is_some)
+        let v = o |> unwrap
+        t |> equal(v.must_init, 7)
+        t |> equal(v.name, "x")
+    }
+}
+
+[test(description = "unwrap_or_default of a none Option of a must-init struct returns the struct's defaults")]
+def option_brittle_unwrap_or_default(t : T?) {
+    t |> run("unwrap_or_default returns default<Brittle> on none") @(t : T?) {
+        let o = none(type<Brittle>)
+        let v = o |> unwrap_or_default
+        t |> equal(v.must_init, 42)
+        t |> equal(v.name, "default")
     }
 }

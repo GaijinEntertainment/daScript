@@ -1,7 +1,7 @@
 options gen2
 
 require dastest/testing_boost public
-require inline_reader
+require _inline_reader
 
 // Expression-level (inline) reader macros: `%wrap! <expr> %%` rewrites to `( <expr> )` and is
 // re-parsed in place. These lock the inline-rewrite path that the old module-level-only suffix
@@ -9,32 +9,32 @@ require inline_reader
 
 def dbl(a : int) : int => a * 2
 
-[test]
+[test(description = "an inline reader macro %wrap! ... %% is rewritten to its parenthesized body in place")]
 def test_inline_plain(t : T?) {
     let x = %wrap! 41 + 1 %%
     t |> equal(x, 42, "plain: %wrap! 41 + 1 %% == 42")
 }
 
-[test]
+[test(description = "an inline reader macro result composes inside a larger expression")]
 def test_inline_in_expr(t : T?) {
     // rewrite is parenthesized, so it composes inside a larger expression: 1 + (20) * 2
     let z = 1 + %wrap! 20 %% * 2
     t |> equal(z, 41, "in-expr: 1 + (20) * 2 == 41")
 }
 
-[test]
+[test(description = "an inline reader macro can stand as a call argument")]
 def test_inline_as_arg(t : T?) {
     let r = dbl(%wrap! 5 %%)
     t |> equal(r, 10, "as-arg: dbl((5)) == 10")
 }
 
-[test]
+[test(description = "an inline reader macro result can be piped into a function")]
 def test_inline_pipe(t : T?) {
     let n = %wrap! [1, 2, 3] %% |> length()
     t |> equal(n, 3, "pipe: ([1,2,3]) |> length() == 3")
 }
 
-[test]
+[test(description = "an inline reader macro body may span several lines")]
 def test_inline_multiline(t : T?) {
     let s = %wrap!
         100 +
@@ -43,7 +43,7 @@ def test_inline_multiline(t : T?) {
     t |> equal(s, 300, "multiline body captured and re-parsed")
 }
 
-[test]
+[test(description = "a multi-line inline reader macro reports its opening line, not the line of the closing %%")]
 def test_inline_multiline_location(t : T?) {
     // %at_line! emits the source line the lexer assigned to the macro. A multi-line body must report
     // its OPENING line, not the closing %% line. `single` is a single-line baseline on line A; `multi`

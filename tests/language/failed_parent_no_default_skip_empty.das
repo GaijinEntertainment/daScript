@@ -1,8 +1,14 @@
-// Walking past an empty intermediate: A has only def A(int) (no default),
-// B is empty, C inherits from B. C cannot synth a chain that reaches A's
-// 0-arg ctor (there isn't one). Error must name A, not B.
+//! the missing default constructor of an ancestor is reported for
+//! each descendant, naming that ancestor, past an empty intermediate
+//! class
+// Walking past an empty intermediate: A has only def A(int) (no
+// default), B is empty, C inherits from B. C cannot synth a chain
+// that reaches A's 0-arg ctor (there isn't one). Error must name A,
+// not B.
 options gen2
-expect 30322:2, 30318, 30341    // 30322 fires once for B and once for C — both name A as the offending ancestor
+// 30322 fires once for B and once for C — both name A as the
+// offending ancestor
+expect 30322:2, 30318, 30341
 
 class A {
     a : int = 0

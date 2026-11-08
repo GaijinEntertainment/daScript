@@ -2,7 +2,6 @@ options gen2
 
 require daslib/cmp
 require dastest/testing_boost public
-
 require daslib/sql
 require daslib/linq_boost
 require daslib/linq_fold
@@ -50,7 +49,7 @@ def cars_equal(a, b : array<Car>) : bool {
     return true
 }
 
-[test]
+[test(description = "_fold over a select_from source returns the same rows as _sql")]
 def fold_select_all(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture_db(db)
@@ -61,7 +60,7 @@ def fold_select_all(t : T?) {
     }
 }
 
-[test]
+[test(description = "_fold of a where and count returns the same count as _sql")]
 def fold_where_count(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture_db(db)
@@ -72,7 +71,7 @@ def fold_where_count(t : T?) {
     }
 }
 
-[test]
+[test(description = "_fold of a group_by returns the same groups as _sql")]
 def fold_group_by(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture_db(db)
@@ -93,7 +92,7 @@ def fold_group_by(t : T?) {
     }
 }
 
-[test]
+[test(description = "_fold of a join and count returns the same count as _sql")]
 def fold_join_count(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture_db(db)

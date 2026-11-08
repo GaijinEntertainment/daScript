@@ -15,7 +15,7 @@ def test_roundi(t : T?; a : auto(TT)) {
     // precision mismatch???
     // t |> numericEqual ( roundi(a), jit_roundi(a), "roundi(a)" )
 
-[test]
+[test(description = "JIT-compiled roundi returns the interpreter's result on fuzzed float inputs")]
 def test_intrin_roundi(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -30,7 +30,7 @@ def test_trunci(t : T?; a : auto(TT)) {
     t |> strictEqual(trunci(a), jit_trunci(a), "trunci(a)")
 }
 
-[test]
+[test(description = "JIT-compiled trunci returns the interpreter's result on fuzzed float inputs")]
 def test_intrin_trunci(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -45,7 +45,7 @@ def test_floor(t : T?; a : auto(TT)) {
     t |> strictEqual(floor(a), jit_floor(a), "floor(a)")
 }
 
-[test]
+[test(description = "JIT-compiled floor returns the interpreter's result on fuzzed float inputs")]
 def test_intrin_floor(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -60,7 +60,7 @@ def test_fract(t : T?; a : auto(TT)) {
     t |> strictEqual(fract(a), jit_fract(a), "fract(a)")
 }
 
-[test]
+[test(description = "JIT-compiled fract returns the interpreter's result on fuzzed float and double inputs")]
 def test_intrin_fract(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -76,7 +76,7 @@ def test_ceil(t : T?; a : auto(TT)) {
     t |> numericEqual(ceil(a), jit_ceil(a), "ceil(a)")
 }
 
-[test]
+[test(description = "JIT-compiled ceil returns the interpreter's result on fuzzed float inputs")]
 def test_intrin_ceil(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -91,7 +91,7 @@ def test_sqrt(t : T?; a : auto(TT)) {
     t |> strictEqual(sqrt(a), jit_sqrt(a), "sqrt(a)")
 }
 
-[test]
+[test(description = "JIT-compiled sqrt returns the interpreter's result on fuzzed float and double inputs")]
 def test_intrin_sqrt(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -109,7 +109,7 @@ def test_rcp(t : T?; a : auto(TT)) {
     // note: we can't really compare, because precision is different
     //t |> numericEqual ( rcp(a), jit_rcp(a), "rcp(a)" )
 
-[test]
+[test(description = "JIT-compiled rcp returns the interpreter's result on fuzzed float inputs")]
 def test_intrin_rcp(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -127,7 +127,7 @@ def test_rcp_est(t : T?; a : auto(TT)) {
     // note: we can't really compare, because precision is different
     // t |> numericEqual ( rsqrt(a), jit_rsqrt(a), "rsqrt(a)" )
 
-[test]
+[test(description = "JIT-compiled rcp_est returns the interpreter's result on fuzzed float inputs")]
 def test_intrin_rcp_est(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -145,7 +145,7 @@ def test_rsqrt(t : T?; a : auto(TT)) {
     // note: we can't really compare, because precision is different
     // t |> numericEqual ( rsqrt(a), jit_rsqrt(a), "rsqrt(a)" )
 
-[test]
+[test(description = "JIT-compiled rsqrt returns the interpreter's result on fuzzed float inputs")]
 def test_intrin_rsqrt(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -163,7 +163,7 @@ def test_rsqrt_est(t : T?; a : auto(TT)) {
     // note: we can't really compare, because precision is different
     //t |> numericEqual ( rsqrt_est(a), jit_rsqrt_est(a), "rsqrt_est(a)" )
 
-[test]
+[test(description = "JIT-compiled rsqrt_est returns the interpreter's result on fuzzed float inputs")]
 def test_intrin_rsqrt_est(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -181,7 +181,7 @@ def test_exp(t : T?; a : auto(TT)) {
     // note: we can't really compare, because precision is different
     // t |> numericEqual ( exp(a), jit_exp(a), "exp(a)" )
 
-[test]
+[test(description = "JIT-compiled exp returns the interpreter's result on fuzzed float and double inputs")]
 def test_intrin_exp(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -199,7 +199,7 @@ def test_exp2(t : T?; a : auto(TT)) {
     // note: we can't really compare, because precision is different
     // t |> numericEqual ( exp2(a), jit_exp2(a), "exp2(a)" )
 
-[test]
+[test(description = "JIT-compiled exp2 returns the interpreter's result on fuzzed float and double inputs")]
 def test_intrin_exp2(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -217,7 +217,7 @@ def test_log(t : T?; a : auto(TT)) {
     // note: we can't really compare, because precision is different
     // t |> numericEqual ( log(a), jit_log(a), "log(a)" )
 
-[test]
+[test(description = "JIT-compiled log returns the interpreter's result on fuzzed float and double inputs")]
 def test_intrin_log(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -235,7 +235,7 @@ def test_log2(t : T?; a : auto(TT)) {
     // note: we can't really compare, because precision is different
     // t |> numericEqual ( log2(a), jit_log2(a), "log2(a)" )
 
-[test]
+[test(description = "JIT-compiled log2 returns the interpreter's result on fuzzed float and double inputs")]
 def test_intrin_log2(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -250,7 +250,7 @@ def test_popcount(t : T?; a : auto(TT)) {
     t |> equal(popcnt(a), jit_popcount(a), "popcnt(a)")
 }
 
-[test]
+[test(description = "JIT-compiled popcount returns the interpreter's result on fuzzed integer inputs")]
 def test_popcount(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -265,7 +265,7 @@ def test_ctz(t : T?; a : auto(TT)) {
     t |> equal(ctz(a), jit_ctz(a), "ctz(a)")
 }
 
-[test]
+[test(description = "JIT-compiled ctz returns the interpreter's result on fuzzed integer inputs")]
 def test_ctz(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -280,7 +280,7 @@ def test_clz(t : T?; a : auto(TT)) {
     t |> equal(clz(a), jit_clz(a), "clz(a)")
 }
 
-[test]
+[test(description = "JIT-compiled clz returns the interpreter's result on fuzzed integer inputs")]
 def test_clz(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -295,7 +295,7 @@ def test_min(t : T?; a, b : auto(TT)) {
     t |> strictEqual(min(a, b), jit_min(a, b), "min(a,b)")
 }
 
-[test]
+[test(description = "JIT-compiled min returns the interpreter's result on fuzzed operands")]
 def test_min(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -310,7 +310,7 @@ def test_max(t : T?; a, b : auto(TT)) {
     t |> strictEqual(max(a, b), jit_max(a, b), "max(a,b)")
 }
 
-[test]
+[test(description = "JIT-compiled max returns the interpreter's result on fuzzed operands")]
 def test_max(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -325,7 +325,7 @@ def test_abs(t : T?; a : auto(TT)) {
     t |> strictEqual(abs(a), jit_abs(a), "abs(a)")
 }
 
-[test]
+[test(description = "JIT-compiled abs returns the interpreter's result on fuzzed operands")]
 def test_abs(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -340,7 +340,7 @@ def test_saturate(t : T?; a : auto(TT)) {
     t |> strictEqual(saturate(a), jit_saturate(a), "saturate(a)")
 }
 
-[test]
+[test(description = "JIT-compiled saturate returns the interpreter's result on fuzzed operands")]
 def test_saturate(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -358,7 +358,7 @@ def test_pow(t : T?; a, b : auto(TT)) {
     // note: mismatching precision
     // t |> numericEqual ( pow(a,b), jit_pow(a,b), "pow(a,b)" )
 
-[test]
+[test(description = "JIT-compiled pow returns the interpreter's result on fuzzed operands")]
 def test_intrin_pow(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -376,7 +376,7 @@ def test_mad(t : T?; a : auto(TT); b : auto(QQ); c : TT) {
     // note: mismatching precision
     // t |> numericEqual ( mad(a,b,c), jit_mad(a,b,c), "mad(a,b,c)" )
 
-[test]
+[test(description = "JIT-compiled mad returns the interpreter's result on fuzzed operands")]
 def test_mad(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -406,7 +406,7 @@ def jit_normalize_zero() => normalize(float2(0.0, 0.0))
 [sideeffects]
 def jit_normalize_nonzero() => normalize(float2(2.0, 2.0))
 
-[test]
+[test(description = "JIT-compiled normalize returns the interpreter's result on fuzzed vectors")]
 def test_normalize(t : T?) {
     if (HOST_FAST_MATH) {
         t |> skip("host runtime is built -ffast-math: normalize goes through a reciprocal-sqrt estimate, so it is not bit-equal to the scalar reference")
@@ -421,7 +421,7 @@ def test_normalize(t : T?) {
 [sideeffects]
 def float3_lerp(from, to : float3; t : float) : float3 => lerp(from, to, t)
 
-[test]
+[test(description = "JIT-compiled lerp returns the interpreter's result on fuzzed operands")]
 def test_lerp(t : T?) {
     t |> success(!jit_enabled() || is_jit_function(@@ < (a : float3; b : float3; c : float) : float3 > float3_lerp))
     var fake <- Faker()
@@ -442,7 +442,7 @@ def test_clamp(t : T?; a : auto(TT); _b : auto(QQ); c : TT) {
     // note: mismatching precision
     // t |> numericEqual ( clamp(a,b,c), jit_clamp(a,b,c), "clamp({a},{b},{c})" )
 
-[test]
+[test(description = "JIT-compiled clamp returns the interpreter's result on fuzzed operands")]
 def test_clamp(t : T?) {
     t |> equal(3, jit_clamp(0, 3, 4))
     t |> equal(4, jit_clamp(10, 3, 4))
@@ -465,7 +465,7 @@ def get_m_3x4 => float3x4()
 [sideeffects]
 def get_m_4x4 => float4x4()
 
-[test]
+[test(description = "JIT-compiled matrix constructors return the interpreter's matrices")]
 def test_mat_ctor(t : T?) {
     t |> success(!jit_enabled() || is_jit_function(@@get_m_3x3))
     t |> success(!jit_enabled() || is_jit_function(@@get_m_3x4))
@@ -494,7 +494,7 @@ def test_mat_ctor(t : T?) {
 [sideeffects]
 def jit_sign(x) => sign(x)
 
-[test]
+[test(description = "JIT-compiled sign returns the interpreter's result on fuzzed operands")]
 def test_sign(t : T?) {
     // int
     t |> equal(1, jit_sign(1))

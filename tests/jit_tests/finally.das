@@ -1,7 +1,8 @@
 options gen2
-require dastest/testing_boost
 
-[test]
+require dastest/testing_boost public
+
+[test(description = "finally blocks run once on every exit of if, for, while, function and block bodies, including early outs and cmres returns")]
 def test_finally(t : T?) {
     t |> run("test if finally") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@test_if_finally))
@@ -239,4 +240,80 @@ def cmres_return_without_finally() : CmresBag {
     }
 }
 
+def try_recover(a : array<int>) {
+    var res : int
+    try {
+        res = a[1]
+    } recover {
+        res = -1
+    }
+    return res
+}
 
+[test(description = "a JIT-compiled try/recover reaches the recover arm after a panic")]
+def test_try_recover(t : T?) {
+    t |> run("try recover") @(t : T?) {
+        var a : array<int>
+        t |> equal(-1, try_recover(a))
+        a |> resize(2)
+        a[1] = 13
+        t |> equal(13, try_recover(a))
+    }
+}
+
+def private apply_it(blk : block<(x : int) : int>) : int => invoke(blk, 1)
+
+def scope_in_arm : int {
+    return apply_it() $(x : int) : int {
+        var res = 0
+        try {
+            var inscope arr <- [1, 2, 3]
+            res = length(arr) + x
+        } recover {
+            res = -1
+        }
+        return res
+    }
+}
+
+def scope_in_arm_recovering : int {
+    return apply_it() $(x : int) : int {
+        var res = 0
+        try {
+            var inscope arr <- [1, 2, 3]
+            res = length(arr) / (x - 1)
+        } recover {
+            res = -1
+        }
+        return res
+    }
+}
+
+[test(description = "an inscope variable in a try arm is unwound before the recover arm runs")]
+def test_try_recover_scope(t : T?) {
+    t |> run("inscope in a try arm inside a block") @(t : T?) {
+        t |> success(!jit_enabled() || is_jit_function(@@scope_in_arm))
+        t |> equal(4, scope_in_arm())
+    }
+    t |> run("the recover arm runs with the arm's scope unwound") @(t : T?) {
+        t |> equal(-1, scope_in_arm_recovering())
+    }
+}
+
+def returns_from_a_block_inside_try : int {
+    var r = 0
+    try {
+        let f = $() : int {
+            return 3
+        }
+        r = invoke(f)
+    } recover {
+        pass
+    }
+    return r
+}
+
+[test(description = "a return inside a block nested in a try arm returns from that block and not from the enclosing function")]
+def test_a_return_from_a_closure_inside_a_try_arm_is_the_closures_own(t : T?) {
+    t |> equal(returns_from_a_block_inside_try(), 3)
+}

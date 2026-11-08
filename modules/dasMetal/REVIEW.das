@@ -31,7 +31,7 @@ def private check_rp_law {
 }
 
 let private FC_DIR = "tests/msl/_fail_closed"
-let private FC_TEST = "tests/msl/test_msl_fail_closed.das"
+let private FC_TEST = "tests/msl/uncategorized_no_aot.das"
 
 def private check_fail_closed_sync {
     var fixtures : table<string>

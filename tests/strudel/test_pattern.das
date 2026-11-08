@@ -5,7 +5,7 @@ require dastest/testing_boost
 require strudel/strudel
 require math
 
-[test]
+[test(description = "splitSpans leaves a span inside one cycle as a single span")]
 def test_splitSpans(t : T?) {
     let spans <- splitSpans(TimeSpan(start = 0.0lf, stop = 1.0lf))
     t |> equal(length(spans), 1)
@@ -21,7 +21,7 @@ def test_splitSpans(t : T?) {
     t |> equal(length(spans3), 3)
 }
 
-[test]
+[test(description = "pure yields one event holding the value")]
 def test_pure(t : T?) {
     let pat <- pure(Event(s = "bd"))
     let haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
@@ -33,7 +33,7 @@ def test_pure(t : T?) {
     t |> success(abs(haps[0].part.stop - 1.0lf) < 0.001lf)
 }
 
-[test]
+[test(description = "pure queried over a partial cycle keeps the whole cycle as the event's whole")]
 def test_pure_partial(t : T?) {
     let pat <- pure(Event(s = "bd"))
     let haps <- pat(TimeSpan(start = 0.25lf, stop = 0.75lf))
@@ -44,14 +44,14 @@ def test_pure_partial(t : T?) {
     t |> success(abs(haps[0].part.stop - 0.75lf) < 0.001lf)
 }
 
-[test]
+[test(description = "silence yields no events")]
 def test_silence(t : T?) {
     let pat <- silence()
     let haps <- pat(TimeSpan(start = 0.0lf, stop = 10.0lf))
     t |> equal(length(haps), 0)
 }
 
-[test]
+[test(description = "atom yields one event with that sound")]
 def test_atom(t : T?) {
     let pat <- atom("sd")
     let haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
@@ -59,7 +59,7 @@ def test_atom(t : T?) {
     t |> equal(haps[0].value.s, "sd")
 }
 
-[test]
+[test(description = "fast(2) doubles the events per cycle")]
 def test_fast(t : T?) {
     let pat <- atom("bd") |> fast(2.0lf)
     let haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
@@ -70,7 +70,7 @@ def test_fast(t : T?) {
     t |> success(abs(haps[1].whole.stop - 1.0lf) < 0.001lf)
 }
 
-[test]
+[test(description = "slow stretches an event over more than one cycle")]
 def test_slow(t : T?) {
     let pat <- atom("bd") |> slow(2.0lf)
     let haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
@@ -79,7 +79,7 @@ def test_slow(t : T?) {
     t |> success(abs(haps[0].whole.stop - 2.0lf) < 0.001lf)
 }
 
-[test]
+[test(description = "stack plays its patterns at the same time")]
 def test_stack(t : T?) {
     var pats : array<Pattern>
     var p0 <- atom("bd")
@@ -93,7 +93,7 @@ def test_stack(t : T?) {
     t |> equal(haps[1].value.s, "hh")
 }
 
-[test]
+[test(description = "cat plays one pattern per cycle")]
 def test_cat(t : T?) {
     var pats : array<Pattern>
     var p0 <- atom("bd")
@@ -112,7 +112,7 @@ def test_cat(t : T?) {
     t |> equal(haps2[0].value.s, "bd")
 }
 
-[test]
+[test(description = "fastcat squeezes its patterns into one cycle")]
 def test_fastcat(t : T?) {
     var pats : array<Pattern>
     var p0 <- atom("bd")
@@ -136,7 +136,7 @@ def test_fastcat(t : T?) {
     t |> success(abs(haps[1].whole.stop - 0.5lf) < 0.001lf)
 }
 
-[test]
+[test(description = "fmap transforms each event's value")]
 def test_fmap(t : T?) {
     let fn <- @(e : Event) : Event { return Event(s = e.s, gain = 0.5); }
     let pat <- atom("bd") |> fmap(fn)
@@ -146,7 +146,7 @@ def test_fmap(t : T?) {
     t |> success(abs(haps[0].value.gain - 0.5) < 0.001)
 }
 
-[test]
+[test(description = "degrade drops events deterministically at the extremes")]
 def test_degrade(t : T?) {
     let pat <- atom("bd") |> degrade(1.0)
     let haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
@@ -156,7 +156,7 @@ def test_degrade(t : T?) {
     t |> equal(length(haps2), 1)
 }
 
-[test]
+[test(description = "the Bjorklund algorithm spreads 3 onsets over 8 steps")]
 def test_bjorklund(t : T?) {
     var rhythm <- bjorklund(3, 8)
     t |> equal(length(rhythm), 8)
@@ -169,14 +169,14 @@ def test_bjorklund(t : T?) {
     t |> equal(count, 3)
 }
 
-[test]
+[test(description = "euclid yields one event per onset of the rhythm")]
 def test_euclid(t : T?) {
     let pat <- atom("bd") |> euclid(3, 8)
     let haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
     t |> equal(length(haps), 3)
 }
 
-[test]
+[test(description = "a query spanning two cycles returns the events of both")]
 def test_cross_cycle_query(t : T?) {
     var pats : array<Pattern>
     var p0 <- atom("bd")

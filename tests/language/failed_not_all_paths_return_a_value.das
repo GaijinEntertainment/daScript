@@ -1,3 +1,5 @@
+//! a function that returns a value on only one branch does not
+//! compile
 // missing return in some code paths
 // verifies compiler rejects a function that only returns a value
 // in one branch of an if statement

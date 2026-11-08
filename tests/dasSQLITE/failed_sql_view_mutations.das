@@ -1,9 +1,12 @@
 options gen2
+//! update, delete and upsert against a sql_view type must not compile
+//! because views are read-only
 
-// Predicate-form mutations against a [sql_view] type. Every call_macro
-// (_sql_update / _sql_delete / _sql_upsert and the try / returning
-// variants) must macro_error at compile time with the "views are
-// read-only" message — never reach the runtime panic stubs.
+// Predicate-form mutations against a [sql_view] type. Every
+// call_macro (_sql_update / _sql_delete / _sql_upsert and the try /
+// returning variants) must macro_error at compile time with the
+// "views are read-only" message — never reach the runtime panic
+// stubs.
 expect 50503:8
 
 require daslib/sql

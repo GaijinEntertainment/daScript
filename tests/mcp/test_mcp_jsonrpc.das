@@ -90,7 +90,7 @@ def private to_int(v : JsonValue?) : int {
 
 // ── Tests ────────────────────────────────────────────────────────────
 
-[test]
+[test(description = "an MCP initialize request is answered with serverInfo.name daslang and the session exits with 0")]
 def test_initialize(t : T?) {
     t |> run("initialize returns result.serverInfo.name='daslang'") @(t : T?) {
         var responses, reqs : array<string>
@@ -116,7 +116,7 @@ def test_initialize(t : T?) {
     }
 }
 
-[test]
+[test(description = "tools/list returns a non-empty tools array")]
 def test_tools_list_non_empty(t : T?) {
     t |> run("tools/list returns a non-empty tools array") @(t : T?) {
         var responses : array<string>
@@ -145,7 +145,7 @@ def test_tools_list_non_empty(t : T?) {
     }
 }
 
-[test]
+[test(description = "tools/call for list_modules returns non-empty content")]
 def test_tools_call_list_modules(t : T?) {
     t |> run("tools/call list_modules returns non-empty content") @(t : T?) {
         var responses : array<string>
@@ -176,7 +176,7 @@ def test_tools_call_list_modules(t : T?) {
     }
 }
 
-[test]
+[test(description = "an unknown MCP method is answered with a JSON-RPC error")]
 def test_method_not_found(t : T?) {
     t |> run("unknown method returns JSON-RPC error") @(t : T?) {
         var responses : array<string>

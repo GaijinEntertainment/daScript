@@ -1,6 +1,9 @@
 options gen2
+//! a hand-declared field that is not a column of the schema_from
+//! database must not compile
 
-// Hand-declared field that doesn't exist in the schema_from .db → compile error.
+// Hand-declared field that doesn't exist in the schema_from .db →
+// compile error.
 expect 20800
 
 require daslib/sql

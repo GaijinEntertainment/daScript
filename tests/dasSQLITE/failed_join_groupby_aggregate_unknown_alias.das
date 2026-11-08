@@ -1,13 +1,18 @@
 options gen2
+//! a joined group_by aggregate over a column missing from the join
+//! projection must not compile
 
-// `_join |> _group_by(_.K) |> _select((K=_._0, X=_._1|>_select(_.<bad>)|>sum()))`
-// rejects when the aggregate's inner _select references a column that's not in
-// the join's `into` projection. The fix path is in try_translate_group_aggregate's
-// post-join branch — when the col name isn't found in joinProjRecordNames,
-// emit a macro_error listing the available aliases.
+// `_join |> _group_by(_.K) |> _select((K=_._0,
+// X=_._1|>_select(_.<bad>)|>sum()))` rejects when the aggregate's
+// inner _select references a column that's not in the join's `into`
+// projection. The fix path is in try_translate_group_aggregate's
+// post-join branch — when the col name isn't found in
+// joinProjRecordNames, emit a macro_error listing the available
+// aliases.
 //
-// macro_error fires but typer cascade adds typer-level errors for the unknown
-// tuple field in the inner _select lambda; probe expects all 3 codes.
+// macro_error fires but typer cascade adds typer-level errors for the
+// unknown tuple field in the inner _select lambda; probe expects all
+// 3 codes.
 expect 50503
 expect 30831
 expect 30341

@@ -57,7 +57,7 @@ def build_argv(workers : int; fixtures : array<string>; quiet : bool = true) : a
 }
 
 
-[test]
+[test(description = "the lint CLI with --workers 1 and --workers 4 produces byte-identical output")]
 def test_parallel_matches_serial(t : T?) {
     t |> run("--workers 1 and --workers 4 produce byte-identical output") @(t : T?) {
         let fixtures <- collect_fixtures()
@@ -76,7 +76,7 @@ def test_parallel_matches_serial(t : T?) {
 }
 
 
-[test]
+[test(description = "--workers 8 over fewer than 16 files runs serially and leaks no temp files")]
 def test_below_threshold_stays_serial(t : T?) {
     t |> run("--workers 8 on <16 files runs serially (no temp files leaked)") @(t : T?) {
         let all <- collect_fixtures()
@@ -96,7 +96,7 @@ def test_below_threshold_stays_serial(t : T?) {
 }
 
 
-[test]
+[test(description = "an explicit --workers 1 always runs serially regardless of file count")]
 def test_workers_one_explicit_is_serial(t : T?) {
     t |> run("--workers 1 explicit always serial regardless of file count") @(t : T?) {
         let fixtures <- collect_fixtures()

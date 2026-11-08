@@ -1,4 +1,7 @@
-// Derived finalizer must call `delete super.self` when an ancestor has a finalizer.
+//! a derived class finalizer that never calls delete super.self,
+//! while an ancestor has a finalizer, does not compile
+// Derived finalizer must call `delete super.self` when an ancestor
+// has a finalizer.
 options gen2
 expect 30308
 
@@ -10,7 +13,8 @@ class Base {
 
 class Derived : Base {
     def operator delete {
-        // 30308: class finalizer does not call delete super.self on every control-flow path
+        // 30308: class finalizer does not call delete super.self on every
+        // control-flow path
         feint("derived finalizer\n")
     }
 }

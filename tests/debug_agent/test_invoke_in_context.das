@@ -48,7 +48,7 @@ def ensure_invoke_agent() {
     }
 }
 
-[test]
+[test(description = "invoke_in_context calls an agent function with no extra arguments in the agent context")]
 def test_invoke_no_args(t : T?) {
     t |> run("invoke_in_context with no extra args") @(t : T?) {
         ensure_invoke_agent()
@@ -65,7 +65,7 @@ def test_invoke_no_args(t : T?) {
     }
 }
 
-[test]
+[test(description = "invoke_in_context passes one argument to the agent function")]
 def test_invoke_one_arg(t : T?) {
     t |> run("invoke_in_context with 1 arg") @(t : T?) {
         ensure_invoke_agent()
@@ -81,7 +81,7 @@ def test_invoke_one_arg(t : T?) {
     }
 }
 
-[test]
+[test(description = "invoke_in_context passes two arguments to the agent function")]
 def test_invoke_two_args(t : T?) {
     t |> run("invoke_in_context with 2 args") @(t : T?) {
         ensure_invoke_agent()
@@ -97,7 +97,7 @@ def test_invoke_two_args(t : T?) {
     }
 }
 
-[test]
+[test(description = "repeated invoke_in_context calls accumulate in the agent state")]
 def test_invoke_multiple_calls(t : T?) {
     t |> run("multiple invoke_in_context calls accumulate") @(t : T?) {
         ensure_invoke_agent()
@@ -113,7 +113,7 @@ def test_invoke_multiple_calls(t : T?) {
     }
 }
 
-[test]
+[test(description = "invoking an agent function changes the agent global and not the caller own copy")]
 def test_local_unchanged(t : T?) {
     t |> run("local copy of global is unchanged by agent") @(t : T?) {
         ensure_invoke_agent()
@@ -124,7 +124,7 @@ def test_local_unchanged(t : T?) {
     }
 }
 
-[test]
+[test(description = "delete_debug_agent_context removes the named agent")]
 def test_cleanup(t : T?) {
     t |> run("delete_debug_agent_context removes invoke_test agent") @(t : T?) {
         ensure_invoke_agent()

@@ -1,4 +1,7 @@
-// Derived finalizer must `delete super.self` on every path — one if-branch is not enough.
+//! a derived class finalizer that calls delete super.self on only one
+//! branch does not compile: every path must call it
+// Derived finalizer must `delete super.self` on every path — one
+// if-branch is not enough.
 options gen2
 expect 30308
 

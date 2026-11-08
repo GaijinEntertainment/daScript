@@ -10,7 +10,7 @@ def m1(db : SqlRunner) {
     db |> exec("INSERT INTO users (Name) VALUES ('alice'), ('bob'), ('charlie')")
 }
 
-[test]
+[test(description = "a migration flagged analyze runs ANALYZE and fills sqlite_stat1", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_analyze_populates_sqlite_stat1(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()

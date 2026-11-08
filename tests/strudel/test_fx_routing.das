@@ -15,7 +15,7 @@ require strudel/strudel_scheduler
 require strudel/strudel_samples
 require math
 
-[test]
+[test(description = "room, delay and chorus each allocate their orbit bus lazily on send")]
 def test_per_orbit_effects_allocate_bus(t : T?) {
     t |> run("room/delay/chorus each lazily allocate their orbit bus on send") @(t : T?) {
         // reverb (room) on orbit 0
@@ -42,7 +42,7 @@ def test_per_orbit_effects_allocate_bus(t : T?) {
     }
 }
 
-[test]
+[test(description = "per-voice effects set event fields and allocate no orbit bus")]
 def test_per_voice_effects_do_not_allocate_orbit_bus(t : T?) {
     t |> run("per-voice FX set event fields but allocate no orbit bus") @(t : T?) {
         var inscope sched : Scheduler
@@ -57,7 +57,7 @@ def test_per_voice_effects_do_not_allocate_orbit_bus(t : T?) {
     }
 }
 
-[test]
+[test(description = "per-voice effects live on the event payload")]
 def test_per_voice_effects_set_event_fields(t : T?) {
     // per-voice FX live on the Event payload
     let p <- atom("sawtooth") |> lpf(800.0) |> hpf(200.0) |> bpf(1000.0) |> crush(6.0) |> shape(0.4) |> phaser(2.0) |> tremolo(3.0)

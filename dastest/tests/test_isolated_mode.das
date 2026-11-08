@@ -7,29 +7,19 @@ require daslib/fio
 require daslib/strings_boost
 require strings
 
-def dastest_root() : string {
-    return "{get_das_root()}/dastest"
-}
+def dastest_root() : string => "{get_das_root()}/dastest"
 
-def fixture_dir() : string {
-    return "{dastest_root()}/tests/_isolated_fixture"
-}
+def fixture_dir() : string => "{dastest_root()}/tests/_isolated_fixture"
 
-def fixture_dir_pre_dashdash() : string {
-    return "{dastest_root()}/tests/_isolated_fixture_pre_dashdash"
-}
+def fixture_dir_pre_dashdash() : string => "{dastest_root()}/tests/_isolated_fixture_pre_dashdash"
 
-def fixture_dir_crash() : string {
-    return "{dastest_root()}/tests/_isolated_fixture_crash"
-}
+def fixture_dir_crash() : string => "{dastest_root()}/tests/_isolated_fixture_crash"
 
-def fixture_dir_panic() : string {
-    return "{dastest_root()}/tests/_isolated_fixture_panic"
-}
+def fixture_dir_panic() : string => "{dastest_root()}/tests/_isolated_fixture_panic"
 
 def run_dastest(cmd : string; var output : string&; var exit_code : int&) {
     output = ""
-    unsafe {
+    unsafe {    // nolint:STYLE025 - popen takes a trailing block
         exit_code = popen(cmd) $(f) {
             if (f != null) {
                 while (!feof(f)) {
@@ -41,7 +31,7 @@ def run_dastest(cmd : string; var output : string&; var exit_code : int&) {
 }
 
 [test]
-def test_isolated_mode(tt : T?) {
+def test_isolated_mode(tt : T?) {  // nolint:STYLE038 - one isolated sweep checked arm by arm
     tt |> run("isolated mode spawns 4 workers, fixture suite all passes, --worker-index round-trips") <| @(t : T?) {
         let exe = get_command_line_arguments()[0]
         let cmd = "{exe} {dastest_root()}/dastest.das -- --test {fixture_dir()} --isolated-mode --isolated-mode-threads 4"
@@ -49,30 +39,33 @@ def test_isolated_mode(tt : T?) {
         var exit_code : int
         run_dastest(cmd, output, exit_code)
         t |> equal(exit_code, 0)
-        t |> success(output |> contains("SUCCESS"), "expected SUCCESS in dastest output, got:\n{output}")
+        t |> success(output |> contains("SUCCESS"),
+                     "expected SUCCESS in dastest output, got:\n{output}")
         t |> success(!(output |> contains("subprocess stderr")),
             "a passing isolated run must not emit the crashed-stderr header")
     }
 
     tt |> run("isolated mode preserves pre-`--` daslang flags (-dasroot) in singleTest cmd") <| @(t : T?) {
-        // Pass `-dasroot {existing-dasroot}` — a no-op pre-`--` flag — to the outer
-        // dastest. Pre-fix, dastest's singleTest reconstruction used
+        // Pass `-dasroot {existing-dasroot}` — a no-op pre-`--` flag — to the
+        // outer dastest. Pre-fix, dastest's singleTest reconstruction used
         // `raw_args[0] raw_args[1]` which dropped everything between exe and
-        // dastest.das. The fixture test under fixture_dir_pre_dashdash() asserts
-        // -dasroot survives into the spawned subprocess's argv.
+        // dastest.das. The fixture test under fixture_dir_pre_dashdash()
+        // asserts -dasroot survives into the spawned subprocess's argv.
         let exe = get_command_line_arguments()[0]
         let cmd = "{exe} -dasroot {get_das_root()} {dastest_root()}/dastest.das -- --test {fixture_dir_pre_dashdash()} --isolated-mode --isolated-mode-threads 1"
         var output : string
         var exit_code : int
         run_dastest(cmd, output, exit_code)
         t |> equal(exit_code, 0)
-        t |> success(output |> contains("SUCCESS"), "expected SUCCESS in dastest output, got:\n{output}")
+        t |> success(output |> contains("SUCCESS"),
+                     "expected SUCCESS in dastest output, got:\n{output}")
     }
 
     tt |> run("isolated mode folds a crashed worker's stderr (crash-handler stack) into the failing test's log") <| @(t : T?) {
         // The fixture hard-crashes, so the spawned dastest reports a failure
-        // (non-zero exit) — the point is that the crash diagnostic is surfaced
-        // under the failing test rather than dropped with the worker's stderr.
+        // (non-zero exit) — the point is that the crash diagnostic is
+        // surfaced under the failing test rather than dropped with the
+        // worker's stderr.
         let exe = get_command_line_arguments()[0]
         let cmd = "{exe} {dastest_root()}/dastest.das -- --test {fixture_dir_crash()} --isolated-mode --isolated-mode-threads 1"
         var output : string
@@ -85,18 +78,20 @@ def test_isolated_mode(tt : T?) {
     }
 
     tt |> run("--stack-on-exception folds an at-throw call stack into a panicking worker's log") <| @(t : T?) {
-        // WITH the flag: the worker sets the test context's alwaysStackWalkOnException,
-        // so the panic walks the stack at throw (frames intact) to the worker's stderr,
-        // which the isolated runner folds into the failing test's log. The recursive
-        // fixture means the deep_panic call chain shows up in the walk.
+        // WITH the flag: the worker sets the test context's
+        // alwaysStackWalkOnException, so the panic walks the stack at throw
+        // (frames intact) to the worker's stderr, which the isolated runner
+        // folds into the failing test's log. The recursive fixture means the
+        // deep_panic call chain shows up in the walk.
         let exe = get_command_line_arguments()[0]
         let cmd = "{exe} {dastest_root()}/dastest.das -- --test {fixture_dir_panic()} --isolated-mode --isolated-mode-threads 1 --stack-on-exception"
         var output : string
         var exit_code : int
         run_dastest(cmd, output, exit_code)
-        // Positive proof the fixture actually ran and panicked (so an absent CALL
-        // STACK below is meaningful, not a subprocess that never ran).
-        t |> success(exit_code != 0, "expected non-zero exit from the panicking fixture, got {exit_code}\n{output}")
+        // Positive proof the fixture actually ran and panicked (so an absent
+        // CALL STACK below is meaningful, not a subprocess that never ran).
+        t |> success(exit_code != 0,
+                     "expected non-zero exit from the panicking fixture, got {exit_code}\n{output}")
         t |> success(output |> contains("intentional panic"),
             "expected the fixture's panic message in output, got:\n{output}")
         t |> success(output |> contains("CALL STACK"),
@@ -104,8 +99,8 @@ def test_isolated_mode(tt : T?) {
         t |> success(output |> contains("deep_panic"),
             "expected the panicking call chain (deep_panic) in the walk, got:\n{output}")
 
-        // WITHOUT the flag: the fixture still panics (non-zero exit + message), but
-        // no stack walk is emitted.
+        // WITHOUT the flag: the fixture still panics (non-zero exit +
+        // message), but no stack walk is emitted.
         let cmd2 = "{exe} {dastest_root()}/dastest.das -- --test {fixture_dir_panic()} --isolated-mode --isolated-mode-threads 1"
         var output2 : string
         var exit_code2 : int
@@ -118,23 +113,26 @@ def test_isolated_mode(tt : T?) {
     }
 
     tt |> run("--run worker path honors --failures-only (PASS lines suppressed at the source)") <| @(t : T?) {
-        // The worker (--run) path used to return before log::failuresOnly was set,
-        // AND the parent never forwarded the flag — so every per-test RUN/PASS line
-        // of every passing file streamed through the captured pipe. The JSON report
-        // must keep streaming regardless (it is the parent's IPC, emitted raw).
+        // The worker (--run) path used to return before log::failuresOnly was
+        // set, AND the parent never forwarded the flag — so every per-test
+        // RUN/PASS line of every passing file streamed through the captured
+        // pipe. The JSON report must keep streaming regardless (it is the
+        // parent's IPC, emitted raw).
         let exe = get_command_line_arguments()[0]
         let file = "{fixture_dir()}/test_one.das"
         var output : string
         var exit_code : int
-        run_dastest("{exe} {dastest_root()}/dastest.das -- --run {file} --failures-only", output, exit_code)
+        run_dastest("{exe} {dastest_root()}/dastest.das -- --run {file} --failures-only", output,
+                    exit_code)
         t |> equal(exit_code, 0)
         t |> success(output |> contains("##dastest##"),
             "JSON report must stream regardless of --failures-only, got:\n{output}")
         t |> success(!(output |> contains("--- PASS")),
             "worker must suppress per-test PASS lines under --failures-only, got:\n{output}")
 
-        // Control: the same invocation WITHOUT the flag does print them (proves the
-        // assertion above is meaningful, not a fixture that never logs).
+        // Control: the same invocation WITHOUT the flag does print them
+        // (proves the assertion above is meaningful, not a fixture that never
+        // logs).
         run_dastest("{exe} {dastest_root()}/dastest.das -- --run {file}", output, exit_code)
         t |> equal(exit_code, 0)
         t |> success(output |> contains("--- PASS"),

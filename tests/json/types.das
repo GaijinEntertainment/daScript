@@ -12,7 +12,7 @@ def test_equ(t : T?; x : auto(TT)) {
     }
 }
 
-[test]
+[test(description = "scalar types round-trip through JSON")]
 def basic_types(t : T?) {
     test_equ(t, 1)
     test_equ(t, 2u)
@@ -27,7 +27,7 @@ def basic_types(t : T?) {
     test_equ(t, bitfield(13))
 }
 
-[test]
+[test(description = "vector types round-trip through JSON")]
 def vector_types(t : T?) {
     test_equ(t, float2(1, 2))
     test_equ(t, float3(1, 2, 3))
@@ -50,7 +50,7 @@ def test_array_form(t : T?; jsonText : string; want : auto(VecT)) {
     }
 }
 
-[test]
+[test(description = "from_JV accepts the array form of a vector as well as the object form")]
 def vector_array_form(t : T?) {
     //! from_JV<vecN> accepts the JSON array form '[x,y,z,w]' (what sprint_json /
     //! debug_json_value emit) in addition to the object form '{x,y,z,w}' (what
@@ -83,7 +83,7 @@ enum FooBar {
     bar
 }
 
-[test]
+[test(description = "enums round-trip through JSON")]
 def enum_types(t : T?) {
     test_equ(t, FooBar.foo)
     test_equ(t, FooBar.bar)
@@ -103,7 +103,7 @@ struct NFoo {
 
 def operator ==(a, b : NFoo) => a.c == b.c && a.s == b.s
 
-[test]
+[test(description = "structs round-trip through JSON")]
 def struct_types(t : T?) {
     test_equ(t, SFoo(a = 1, b = 2.))
     test_equ(t, NFoo(c = 1.lf, s = SFoo(a = 1, b = 2.)))
@@ -123,7 +123,7 @@ def operator ==(a, b : SFoo[2] | #) {
     return true
 }
 
-[test]
+[test(description = "fixed arrays round-trip through JSON")]
 def dim_types(t : T?) {
     test_equ(t, fixed_array<int>(1, 2, 3, 4))
     test_equ(t, [SFoo(a=1, b=2.), SFoo(a=2, b=3.)])
@@ -143,7 +143,7 @@ def operator ==(a, b : array<SFoo>) {
     return true
 }
 
-[test]
+[test(description = "arrays round-trip through JSON")]
 def array_types(t : T?) {
     test_equ(t, array<int>(1, 2, 3, 4))
     test_equ(t, [SFoo(a=1, b=2.), SFoo(a=2, b=3.)])
@@ -153,7 +153,7 @@ typedef TFoo = tuple<int; float; string>
 
 def operator ==(a, b : TFoo | #) => a._0 == b._0 && a._1 == b._1 && a._2 == b._2
 
-[test]
+[test(description = "tuples round-trip through JSON")]
 def tuple_types(t : T?) {
     test_equ(t, (1, 2.0, "3"))
 }
@@ -174,7 +174,7 @@ def operator ==(a, b : table<string; int>) => op_equ_tab(a, b)
 
 def operator ==(a, b : table<string; SFoo>) => op_equ_tab(a, b)
 
-[test]
+[test(description = "string-keyed tables round-trip through JSON")]
 def string_table(t : T?) {
     test_equ(t, {"one" => 1, "two" => 2})
     test_equ(t, {"tab1" => SFoo(a = 1, b = 2.), "tab2" => SFoo(a = 2, b = 3.)})
@@ -195,7 +195,7 @@ def operator ==(a, b : VFoo) {
     }
 }
 
-[test]
+[test(description = "variants round-trip through JSON")]
 def variant_types(t : T?) {
     test_equ(t, VFoo(i = 1))
     test_equ(t, VFoo(f = 1.))
@@ -215,7 +215,7 @@ def operator ==(a, b : MFoo) {
     return a.a == b.a && a.b == b.b
 }
 
-[test]
+[test(description = "a struct with a move-only field round-trips through JSON")]
 def moveable_struct_types(t : T?) {
     test_equ(t, MFoo(a = 1, b = 2., c <- array<int>(1, 2, 3)))
 }

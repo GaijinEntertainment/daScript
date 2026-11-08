@@ -56,7 +56,7 @@ def private check_marked(t : T?; words : array<uint>; lbl : string; least : int)
     delete fm
 }
 
-[test]
+[test(description = "precise puts NoContraction on every float op, including the callee's and the vector product.")]
 def test_precise_marks_every_float_op(t : T?) {
     t |> run("precise: NoContraction on every float op, the callee's and the vector product included") <| @(t : T?) {
         var words <- precise_words()
@@ -67,7 +67,7 @@ def test_precise_marks_every_float_op(t : T?) {
     }
 }
 
-[test]
+[test(description = "The spirv_kernel class form carries the precise property.")]
 def test_precise_class_kernel(t : T?) {
     t |> run("precise: the [spirv_kernel] form carries the property") <| @(t : T?) {
         var words <- precise_kern_words()
@@ -76,7 +76,7 @@ def test_precise_class_kernel(t : T?) {
     }
 }
 
-[test]
+[test(description = "The plain twin of a precise kernel has the same float ops and no NoContraction.")]
 def test_plain_twin_unmarked(t : T?) {
     t |> run("the plain twin: the same float ops, no NoContraction") <| @(t : T?) {
         var words <- plain_sum_words()

@@ -1,4 +1,5 @@
-// an arm after one that matches everything is unreachable, guarded or not
+//! an arm after one that matches everything is unreachable, guarded
+//! or not
 options gen2
 
 require daslib/match

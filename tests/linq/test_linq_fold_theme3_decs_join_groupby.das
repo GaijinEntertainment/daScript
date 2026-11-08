@@ -9,11 +9,12 @@ require daslib/decs_boost
 require dastest/testing_boost public
 
 // Theme 3 Phase 1 (probe C3): the
-// "killer demo" composition. plan_decs_group_by recognizes a trailing `join`
-// upstream of `group_by_lazy` and switches to the isDecsJoin adapter mode so
-// plan_decs_join's hashB-collect + srcA-probe + per-pair result-lam bind feeds
-// plan_group_by_core's bucket-update directly — one pass, no intermediate alloc.
-// Today (pre-PR) this composition cascades to tier-2 (3 allocs).
+// "killer demo" composition. plan_decs_group_by recognizes a trailing
+// `join` upstream of `group_by_lazy` and switches to the isDecsJoin
+// adapter mode so plan_decs_join's hashB-collect + srcA-probe +
+// per-pair result-lam bind feeds plan_group_by_core's bucket-update
+// directly — one pass, no intermediate alloc. Today (pre-PR) this
+// composition cascades to tier-2 (3 allocs).
 
 [decs_template(prefix = "dt3c_")]
 struct C3Car {
@@ -31,7 +32,8 @@ struct C3Dealer {
 
 def populate_c3_fixture() {
     restart()
-    // 6 cars across 3 dealers (id 1,2,3); dealers 1 & 2 are in REGION_NORTH, 3 in REGION_SOUTH.
+    // 6 cars across 3 dealers (id 1,2,3); dealers 1 & 2 are in
+    // REGION_NORTH, 3 in REGION_SOUTH.
     create_entities(6) $ [unused_argument(eid)] (eid : EntityId; i : int; var cmp : ComponentMap) {
         apply_decs_template(cmp, C3Car(id = i + 1, dealer_id = i % 3 + 1, name = "Car{i}"))
     }
@@ -41,7 +43,8 @@ def populate_c3_fixture() {
     }
 }
 
-// Module-level counters for the side-effect ordering probe (C3e). Reset per test run.
+// Module-level counters for the side-effect ordering probe (C3e).
+// Reset per test run.
 var g_c3e_result_calls = 0
 
 def c3e_make_result(carName, dealerRegion : string) : tuple<Region : string; Car : string> {
@@ -49,9 +52,10 @@ def c3e_make_result(carName, dealerRegion : string) : tuple<Region : string; Car
     return (Region = dealerRegion, Car = carName)
 }
 
-// ── C3a: count terminator + count reducer ──────────────────────────────────────
+// ── C3a: count terminator + count reducer
+// ──────────────────────────────────────
 
-[test]
+[test(description = "a decs join, group_by region, a count select and count give the number of region buckets")]
 def test_c3a_count_count(t : T?) {
     t |> run("C3a: _join + _group_by(_.Region) + _select(N=count()) + count() (bucket count)") @(tt : T?) {
         populate_c3_fixture()
@@ -68,9 +72,10 @@ def test_c3a_count_count(t : T?) {
     }
 }
 
-// ── C3b: count terminator + sum reducer ────────────────────────────────────────
+// ── C3b: count terminator + sum reducer
+// ────────────────────────────────────────
 
-[test]
+[test(description = "a decs join, group_by region, a sum select and count give the number of region buckets")]
 def test_c3b_sum_count(t : T?) {
     t |> run("C3b: _join + _group_by(_.Region) + _select(S=sum(r.CarId)) + count()") @(tt : T?) {
         populate_c3_fixture()
@@ -86,9 +91,10 @@ def test_c3b_sum_count(t : T?) {
     }
 }
 
-// ── C3c: to_array terminator + named-tuple reducer (full BI shape) ─────────────
+// ── C3c: to_array terminator + named-tuple reducer (full BI shape)
+// ─────────────
 
-[test]
+[test(description = "a decs join, group_by region and a named tuple select with to_array give the per-region bucket counts")]
 def test_c3c_to_array_named_tuple(t : T?) {
     t |> run("C3c: _join + _group_by(_.Region) + _select((R, N=count)) + to_array (per-region bucket count)") @(tt : T?) {
         populate_c3_fixture()
@@ -100,8 +106,9 @@ def test_c3c_to_array_named_tuple(t : T?) {
                 |> _group_by(_.Region)
                 |> _select((R = _._0, N = _._1 |> count()))
                 |> to_array())
-            // Cars by dealer_id: dealer1 gets cars 0,3; dealer2 gets 1,4; dealer3 gets 2,5.
-            // Regions: dealer1,2 → north (4 cars), dealer3 → south (2 cars).
+            // Cars by dealer_id: dealer1 gets cars 0,3; dealer2 gets 1,4; dealer3
+            // gets 2,5. Regions: dealer1,2 → north (4 cars), dealer3 → south (2
+            // cars).
             tt |> equal(length(rows), 2)
             var perRegion <- {for (item in rows); item.R => item.N}
             tt |> equal(perRegion["north"], 4)
@@ -111,12 +118,14 @@ def test_c3c_to_array_named_tuple(t : T?) {
     }
 }
 
-// ── C3d: parity vs handwritten cascade ─────────────────────────────────────────
+// ── C3d: parity vs handwritten cascade
+// ─────────────────────────────────────────
 
 def c3d_handwritten() : array<tuple<R : string; N : int>> {
-    // Manual cascade equivalent to the C3c chain. The C3d test below compares per-bucket counts
-    // (length + dict-comprehension lookup), so bucket order does not need to match — only the
-    // per-key totals must agree between the spliced and handwritten paths.
+    // Manual cascade equivalent to the C3c chain. The C3d test below
+    // compares per-bucket counts (length + dict-comprehension lookup), so
+    // bucket order does not need to match — only the per-key totals must
+    // agree between the spliced and handwritten paths.
     var hashB : table<int; array<tuple<region : string; name : string>>>
     query() $ [unused_argument(eid)] (eid : EntityId; dt3d_id : int; dt3d_region : string; dt3d_name : string) {
         hashB[dt3d_id] |> push_clone((region = dt3d_region, name = dt3d_name))
@@ -137,7 +146,7 @@ def c3d_handwritten() : array<tuple<R : string; N : int>> {
     return <- out
 }
 
-[test]
+[test(description = "the fused join and group_by per-region counts match the hand-written cascade")]
 def test_c3d_parity_with_handwritten(t : T?) {
     t |> run("C3d: spliced vs handwritten cascade — per-region bucket counts must agree") @(tt : T?) {
         populate_c3_fixture()
@@ -160,9 +169,10 @@ def test_c3d_parity_with_handwritten(t : T?) {
     }
 }
 
-// ── C3e: side-effect ordering — result lambda fires once per join pair ─────────
+// ── C3e: side-effect ordering — result lambda fires once per join
+// pair ─────────
 
-[test]
+[test(description = "the join result lambda runs exactly once per matching pair")]
 def test_c3e_result_lambda_called_once_per_pair(t : T?) {
     t |> run("C3e: result lambda fires exactly len(srcA)·matchesPerKey times (no double-eval)") @(tt : T?) {
         populate_c3_fixture()
@@ -181,9 +191,10 @@ def test_c3e_result_lambda_called_once_per_pair(t : T?) {
     }
 }
 
-// ── C3-anti-having: cascade-still-works guard ──────────────────────────────────
+// ── C3-anti-having: cascade-still-works guard
+// ──────────────────────────────────
 
-[test]
+[test(description = "a having after a join and group_by falls back to the unfused path and returns the right result")]
 def test_c3_anti_having_cascades(t : T?) {
     t |> run("C3-anti-having: _join + _group_by + _select + _where (HAVING) — v1 cascades, must produce correct result") @(tt : T?) {
         populate_c3_fixture()
@@ -203,9 +214,10 @@ def test_c3_anti_having_cascades(t : T?) {
     }
 }
 
-// ── C3-anti-segment: cascade-still-works guard ─────────────────────────────────
+// ── C3-anti-segment: cascade-still-works guard
+// ─────────────────────────────────
 
-[test]
+[test(description = "a where between the join and group_by falls back to the unfused path and returns the right result")]
 def test_c3_anti_segment_cascades(t : T?) {
     t |> run("C3-anti-segment: _join + _where + _group_by — segment between join and group_by_lazy cascades, must produce correct result") @(tt : T?) {
         populate_c3_fixture()
@@ -219,6 +231,33 @@ def test_c3_anti_segment_cascades(t : T?) {
             |> count())
         // After WHERE filter: only north (4 cars) survives → 1 bucket.
         tt |> equal(nBuckets, 1)
+        restart()
+    }
+}
+
+// Theme 6 - companion to the warning-enabled decs fall-off test in
+// uncategorized.das: with the file's `_no_linq_perf_warn` option the
+// diagnostic is suppressed and the cascade still returns the same
+// result.
+
+[decs_template(prefix = "t6s_")]
+struct Theme6SilencedRow {
+    val : int
+}
+
+def theme6s_populate(n : int) {
+    restart()
+    create_entities(n) $(_eid : EntityId; i : int; var cmp : ComponentMap) {
+        apply_decs_template(cmp, Theme6SilencedRow(val = i))
+    }
+}
+
+[test(description = "with _no_linq_perf_warn set, the same decs fall-off chain still compiles and counts 15")]
+def test_theme6_silenced_no_warn_cascade_correct(t : T?) {
+    t |> run("Theme 6: `_no_linq_perf_warn` suppresses warning, cascade still correct") @(tt : T?) {
+        theme6s_populate(20)
+        let c = _fold(from_decs_template(type<Theme6SilencedRow>)._select(_.val)._skip_while(_ < 5).count())
+        tt |> equal(c, 15)
         restart()
     }
 }

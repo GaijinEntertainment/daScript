@@ -17,7 +17,7 @@ struct BigPayload {
 // panics; a prior exact reserve means the resize never grows, so it passes at any size.
 // The 64 KB option above keeps every case cheap; the shipped default is 64 MB.
 
-[test]
+[test(description = "a resize that must grow past max_unreserved_size bytes panics, through resize_no_init and the int64 overload too, with element stride counted")]
 def test_unreserved_resize_panics(t : T?) {
     t |> run("bare growing resize past the threshold panics") @(t : T?) {
         var failed = false
@@ -61,7 +61,7 @@ def test_unreserved_resize_panics(t : T?) {
     }
 }
 
-[test]
+[test(description = "reserve-then-resize, small resizes, ensure_capacity appends, zero-stride elements, to_bytes, binary_load, MemSerializer writes and shrinks never trip the unreserved-resize guard")]
 def test_reserved_and_small_resizes_pass(t : T?) {
     t |> run("reserve-then-resize passes at any size, capacity exact") @(t : T?) {
         var a : array<uint8>
@@ -133,7 +133,7 @@ def test_reserved_and_small_resizes_pass(t : T?) {
     }
 }
 
-[test]
+[test(description = "the max_unreserved_size option, its getter and its runtime setter agree, and lowering the limit again re-arms the guard")]
 def test_max_unreserved_size_api(t : T?) {
     t |> run("option, getter, and runtime setter agree") @(t : T?) {
         t |> equal(max_unreserved_size(), uint64(LIMIT))

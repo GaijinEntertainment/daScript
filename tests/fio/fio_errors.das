@@ -5,7 +5,7 @@ require daslib/fio
 
 // ---- path manipulation (correctness, no error reporting) ----
 
-[test]
+[test(description = "extension returns the extension with its dot, null when absent, and the last of a double extension")]
 def test_extension(t : T?) {
     t |> run("returns extension with dot") @(t : T?) {
         t |> equal(extension("foo.txt"), ".txt")
@@ -18,7 +18,7 @@ def test_extension(t : T?) {
     }
 }
 
-[test]
+[test(description = "stem returns the file name without its extension")]
 def test_stem(t : T?) {
     t |> run("returns stem") @(t : T?) {
         t |> equal(stem("foo.txt"), "foo")
@@ -28,7 +28,7 @@ def test_stem(t : T?) {
     }
 }
 
-[test]
+[test(description = "replace_extension swaps an extension or adds one to a file without any")]
 def test_replace_extension(t : T?) {
     t |> run("replaces extension") @(t : T?) {
         t |> equal(replace_extension("foo.txt", ".md"), "foo.md")
@@ -38,7 +38,7 @@ def test_replace_extension(t : T?) {
     }
 }
 
-[test]
+[test(description = "path_join joins two components")]
 def test_path_join(t : T?) {
     t |> run("joins two components") @(t : T?) {
         let joined = path_join("a", "b")
@@ -47,7 +47,7 @@ def test_path_join(t : T?) {
     }
 }
 
-[test]
+[test(description = "normalize collapses dot-dot components")]
 def test_normalize(t : T?) {
     t |> run("normalizes dot-dot") @(t : T?) {
         let n = normalize("a/b/../c")
@@ -55,14 +55,14 @@ def test_normalize(t : T?) {
     }
 }
 
-[test]
+[test(description = "is_absolute is false for a relative path")]
 def test_is_absolute(t : T?) {
     t |> run("relative path is not absolute") @(t : T?) {
         t |> success(!is_absolute("foo/bar"))
     }
 }
 
-[test]
+[test(description = "parent returns the parent directory")]
 def test_parent(t : T?) {
     t |> run("returns parent directory") @(t : T?) {
         let p = parent("a/b/c")
@@ -72,7 +72,7 @@ def test_parent(t : T?) {
 
 // ---- filesystem functions with error reporting ----
 
-[test]
+[test(description = "file_size reports an error for a missing file and a valid size for an existing one")]
 def test_file_size_error(t : T?) {
     t |> run("reports error for missing file") @(t : T?) {
         var error : string
@@ -88,7 +88,7 @@ def test_file_size_error(t : T?) {
     }
 }
 
-[test]
+[test(description = "copy_file reports an error for a missing source")]
 def test_copy_file_error(t : T?) {
     t |> run("reports error for missing source") @(t : T?) {
         var error : string
@@ -98,7 +98,7 @@ def test_copy_file_error(t : T?) {
     }
 }
 
-[test]
+[test(description = "equivalent reports an error for a missing file")]
 def test_equivalent_error(t : T?) {
     t |> run("reports error for missing file") @(t : T?) {
         var error : string
@@ -108,7 +108,7 @@ def test_equivalent_error(t : T?) {
     }
 }
 
-[test]
+[test(description = "disk_space reports an error for a bad path")]
 def test_disk_space_error(t : T?) {
     t |> run("reports error for bad path") @(t : T?) {
         var error : string
@@ -117,7 +117,7 @@ def test_disk_space_error(t : T?) {
     }
 }
 
-[test]
+[test(description = "remove reports an error for a missing file")]
 def test_remove_error(t : T?) {
     t |> run("reports error for missing file") @(t : T?) {
         var error : string
@@ -127,7 +127,7 @@ def test_remove_error(t : T?) {
     }
 }
 
-[test]
+[test(description = "mkdir reports an error for an invalid path")]
 def test_mkdir_error(t : T?) {
     t |> run("reports error for invalid path") @(t : T?) {
         var error : string
@@ -137,7 +137,7 @@ def test_mkdir_error(t : T?) {
     }
 }
 
-[test]
+[test(description = "rmdir_rec succeeds for a missing directory")]
 def test_rmdir_rec_error(t : T?) {
     t |> run("succeeds for missing directory") @(t : T?) {
         var error : string
@@ -147,7 +147,7 @@ def test_rmdir_rec_error(t : T?) {
     }
 }
 
-[test]
+[test(description = "rmdir_rec removes a symlink and leaves its target in place")]
 def test_rmdir_rec_does_not_follow_symlinks(t : T?) {
     // `rm -rf`'s rule: a symlink is unlinked, never descended into. Following
     // one deletes whatever it points at, OUTSIDE the tree being removed —
@@ -187,7 +187,7 @@ def test_rmdir_rec_does_not_follow_symlinks(t : T?) {
     rmdir_rec(root)
 }
 
-[test]
+[test(description = "relative reports no error for valid paths")]
 def test_relative_error(t : T?) {
     t |> run("works for valid paths") @(t : T?) {
         var error : string
@@ -199,7 +199,7 @@ def test_relative_error(t : T?) {
 
 // ---- _result variant wrappers ----
 
-[test]
+[test(description = "file_size_result returns a value on success and an error on failure")]
 def test_file_size_result(t : T?) {
     t |> run("success returns value") @(t : T?) {
         let r = file_size_result("{get_das_root()}/tests/fio/fio_errors.das")
@@ -213,7 +213,7 @@ def test_file_size_result(t : T?) {
     }
 }
 
-[test]
+[test(description = "equivalent_result returns an error on failure")]
 def test_equivalent_result(t : T?) {
     t |> run("failure returns error") @(t : T?) {
         let r = equivalent_result("_no_such_a_99999.xyz", "_no_such_b_99999.xyz")
@@ -222,7 +222,7 @@ def test_equivalent_result(t : T?) {
     }
 }
 
-[test]
+[test(description = "copy_file_result returns an error on failure")]
 def test_copy_file_result(t : T?) {
     t |> run("failure returns error") @(t : T?) {
         let r = copy_file_result("_no_such_source_99999.xyz", "_dest.xyz", false)
@@ -231,7 +231,7 @@ def test_copy_file_result(t : T?) {
     }
 }
 
-[test]
+[test(description = "temp_directory_result returns a value on success")]
 def test_temp_directory_result(t : T?) {
     t |> run("success returns value") @(t : T?) {
         let r = temp_directory_result()
@@ -240,7 +240,7 @@ def test_temp_directory_result(t : T?) {
     }
 }
 
-[test]
+[test(description = "create_temp_file_result returns a value on success")]
 def test_create_temp_file_result(t : T?) {
     t |> run("success returns value") @(t : T?) {
         let r = create_temp_file_result("dastest", ".tmp")
@@ -252,7 +252,7 @@ def test_create_temp_file_result(t : T?) {
     }
 }
 
-[test]
+[test(description = "create_temp_directory_result returns a value on success")]
 def test_create_temp_directory_result(t : T?) {
     t |> run("success returns value") @(t : T?) {
         let r = create_temp_directory_result("dastest")
@@ -264,7 +264,7 @@ def test_create_temp_directory_result(t : T?) {
     }
 }
 
-[test]
+[test(description = "relative_result returns a value on success")]
 def test_relative_result(t : T?) {
     t |> run("success returns value") @(t : T?) {
         let r = relative_result("{get_das_root()}/tests/fio/fio_errors.das", "{get_das_root()}/tests")
@@ -274,7 +274,7 @@ def test_relative_result(t : T?) {
     }
 }
 
-[test]
+[test(description = "remove_result returns an error on failure")]
 def test_remove_result(t : T?) {
     t |> run("failure returns error") @(t : T?) {
         let r = remove_result("_no_such_file_to_remove_99999.xyz")
@@ -283,7 +283,7 @@ def test_remove_result(t : T?) {
     }
 }
 
-[test]
+[test(description = "mkdir_result returns an error on failure")]
 def test_mkdir_result(t : T?) {
     t |> run("failure returns error") @(t : T?) {
         let r = mkdir_result("_no_such_parent_99999/child/deep")
@@ -307,7 +307,7 @@ def expect_fopen_throws(t : T?; mode : string) {
     t |> success(threw, "fopen with mode '{mode}' should throw, not fail silently")
 }
 
-[test]
+[test(description = "fopen throws on an empty, unknown or garbage mode and accepts a valid one")]
 def test_fopen_invalid_mode(t : T?) {
     t |> run("empty mode throws") @(t : T?) {
         expect_fopen_throws(t, "")

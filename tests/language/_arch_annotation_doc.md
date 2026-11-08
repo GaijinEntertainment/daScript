@@ -1,6 +1,6 @@
 # Architecture document fixture
 
-Support file for `arch_annotation.das`. Its sections exist so that the `[arch]` citations in
+Support file for the arch-annotation tests in `annotations.das`. Its sections exist so that the `[arch]` citations in
 that test resolve under LINT026 (`utils/lint/main.das`) the way a real citation does - the
 `_` prefix keeps it out of every tree walk that collects sources.
 

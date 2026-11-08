@@ -1,4 +1,5 @@
-// a range that overlaps an earlier arm's range is partly unreachable: the overlap is reported
+//! a range that overlaps an earlier arm's range is partly
+//! unreachable: the overlap is reported
 options gen2
 
 require daslib/match

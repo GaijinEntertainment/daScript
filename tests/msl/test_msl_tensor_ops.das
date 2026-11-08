@@ -12,7 +12,7 @@ require dastest/testing_boost public
 require _msl_common
 require daslib/strings_boost
 
-[test]
+[test(description = "The tensor matmul device forms pick one helper per operand-type pair, name the q8 bk helpers distinctly, and pad staged rows per bk.")]
 def test_tmm2d_device_forms(t : T?) {
     t |> run("f16w: one helper per operand-type pair, picked by the activation pointee") <| @(t : T?) {
         t |> success(contains(tmmhw_msl, "static void __das_tmm2d_hw_8_16_2(device const float * a"), "hw streams the licensed f32 A")
@@ -60,7 +60,7 @@ def test_tmm2d_device_forms(t : T?) {
     }
 }
 
-[test]
+[test(description = "The staged tensor protocol makes the acc local the cooperative tensor, types the operand tensor from the begin witness, and stages B natural or transposed per form.")]
 def test_tmm2d_staged_protocol(t : T?) {
     t |> run("staged protocol: the acc local IS the cooperative tensor") <| @(t : T?) {
         t |> success(!contains(tmmdeva_msl, "float acc["), "the acc array declaration is suppressed on the GPU")
@@ -97,7 +97,7 @@ def test_tmm2d_staged_protocol(t : T?) {
     }
 }
 
-[test]
+[test(description = "The rx tensor forms fill the left operand from registers, scale rows per owning lane and write a tile into threadgroup scratch.")]
 def test_tmm2d_rx_protocol(t : T?) {
     t |> run("rx: a register-filled left operand against a sliced device half table") <| @(t : T?) {
         t |> success(contains(tmmrx_msl, "matmul2d_descriptor(16, 8, 32, false, true, true, " +
@@ -179,7 +179,7 @@ def test_tmm2d_rx_protocol(t : T?) {
     }
 }
 
-[test]
+[test(description = "sgmat_to_half narrows per lane through thread_elements().")]
 def test_sgmat_to_half(t : T?) {
     t |> run("sgmat_to_half: per-lane narrowing through thread_elements()") <| @(t : T?) {
         t |> success(contains(sgmathalf_msl, "for (ushort __sgh = 0; __sgh < 2; ++__sgh) \{ hout.thread_elements()[__sgh] = half(acc.thread_elements()[__sgh]); \}"), "8x8 over 32 lanes = 2 owned elements per lane")

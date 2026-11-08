@@ -1,4 +1,6 @@
 options gen2
+//! sql_function must not compile with an unsupported signature or an
+//! invalid name
 
 // [sql_function] rejects:
 //   1. Struct argument type
@@ -7,9 +9,9 @@ options gen2
 //   4. Unsupported return type
 //   5. Empty name=
 //   6. name= that isn't a valid SQLite identifier
-//   7. name= with non-string value (silently coerced default would mask the typo)
-//   8. deterministic= with non-bool value
-//   9. directonly= with non-bool value
+// 7. name= with non-string value (silently coerced default would mask
+// the typo) 8. deterministic= with non-bool value 9. directonly= with
+// non-bool value
 expect 20800:9
 
 require daslib/sql

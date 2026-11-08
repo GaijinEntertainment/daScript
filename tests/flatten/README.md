@@ -6,12 +6,12 @@ have no call primitive and no dynamic branch.
 
 ## Files
 
-- `test_flatten_basic.das` - **differential equivalence**. Each `[flatten]` function is
+- `test_flatten_differential.das` - **differential equivalence**. Each `[flatten]` function is
   run against its generated `<name>_flat` twin over an input grid; the flattened twin
   must compute identical results. Covers: tail return, early-return guards, nested
   if/else, local mutation, transitive inlining (`a->b->c`), nested-expression call-lifting,
-  and whitelisted builtins.
-- `test_flatten_errors.das` - **supported-subset boundaries**. Compiles each `_err_*.das`
+  and whitelisted builtins, plus unrolled loops, break/continue and the cross-module API.
+- `uncategorized_no_aot.das` - **supported-subset boundaries**. Compiles each `_err_*.das`
   fixture and asserts the specific loud `flatten:` error fires (recursion, loops,
   non-whitelisted builtin) rather than silently emitting wrong output.
 - `_err_*.das` - compile-failure fixtures (the `_` prefix keeps the runner from executing

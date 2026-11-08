@@ -103,7 +103,7 @@ def private gpu_text_ready(cc : CudaContext?; name : string) : bool {
     return false
 }
 
-[test]
+[test(description = "uint, int and float arithmetic run on the GPU equal the CPU reference.")]
 def test_arith_gpu_vs_cpu(t : T?) {
     t |> run("uint, int and float arithmetic: GPU == CPU-reference") <| @(t : T?) {
         var uo = new UArith()
@@ -160,7 +160,7 @@ def test_arith_gpu_vs_cpu(t : T?) {
     }
 }
 
-[test]
+[test(description = "A precise kernel f32 sums, products and quotients on the GPU equal the CPU reference bit for bit.")]
 def test_precise_gpu_vs_cpu(t : T?) {
     t |> run("a precise kernel's f32 sums, products and quotients: GPU == CPU-reference bit for bit") <| @(t : T?) {
         var o = new Precise()
@@ -192,7 +192,7 @@ def test_precise_gpu_vs_cpu(t : T?) {
     }
 }
 
-[test]
+[test(description = "A kernel using the args struct and a method gives the same results on the GPU as the CPU reference.")]
 def test_axpy_gpu_vs_cpu(t : T?) {
     t |> run("the args struct and a method: GPU == CPU-reference") <| @(t : T?) {
         var o = new Axpy()
@@ -236,7 +236,7 @@ struct VecParams {
     f2 : uint64
 }
 
-[test]
+[test(description = "Vector arithmetic, swizzles and converts on the GPU equal the CPU reference.")]
 def test_vec_gpu_vs_cpu(t : T?) {
     t |> run("vector arithmetic, swizzles, converts: GPU == CPU-reference") <| @(t : T?) {
         var o = new VecArith()
@@ -297,7 +297,7 @@ struct CtlParams {
     out3 : uint64
 }
 
-[test]
+[test(description = "Control flow on the GPU gives the same results as the CPU reference.")]
 def test_control_gpu_vs_cpu(t : T?) {
     t |> run("control flow: GPU == CPU-reference") <| @(t : T?) {
         var o = new Control()
@@ -354,7 +354,7 @@ struct MathParams {
     uc : uint64
 }
 
-[test]
+[test(description = "The math whitelist on the GPU matches the CPU reference under fastmath.")]
 def test_math_gpu_vs_cpu(t : T?) {
     t |> run("the math whitelist: GPU ~= CPU-reference under fastmath") <| @(t : T?) {
         var o = new MathCalls()
@@ -416,7 +416,7 @@ struct HalfParams {
     vf : uint64
 }
 
-[test]
+[test(description = "The half family on the GPU equals the CPU reference.")]
 def test_half_gpu_vs_cpu(t : T?) {
     t |> run("the half family: GPU == CPU-reference") <| @(t : T?) {
         var o = new HalfArith()
@@ -480,7 +480,7 @@ struct ReduceParams {
     ka : ReduceArgs
 }
 
-[test]
+[test(description = "Warp reductions, shared memory and the id builtins on the GPU equal hand-computed values.")]
 def test_reduce_gpu(t : T?) {
     t |> run("warp reductions, shared memory, the IDs: GPU == hand-computed") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
@@ -527,7 +527,7 @@ struct DivergeParams {
     ka : DivergeArgs
 }
 
-[test]
+[test(description = "A lane-pair shuffle, first broadcast and elect inside a guard that half the warp skips give the hand-computed values on the GPU.")]
 def test_diverge_gpu(t : T?) {
     t |> run("a lane-pair shuffle, the first broadcast and the elect inside a guard half the warp skips: GPU == hand-computed") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
@@ -566,7 +566,7 @@ struct UfParams {
     yo : uint64
 }
 
-[test]
+[test(description = "Free functions over buffers, shared memory and references on the GPU equal hand-computed values.")]
 def test_userfns_gpu(t : T?) {
     t |> run("free functions over buffers, shared memory and references: GPU == hand-computed") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
@@ -618,7 +618,7 @@ def private as_uint4(src : array<uint>) : array<uint4> {
     return <- out
 }
 
-[test]
+[test(description = "Aliased bindings on the GPU, one buffer per binding, equal the CPU reference with one array per view.")]
 def test_alias_gpu_vs_cpu(t : T?) {
     t |> run("aliased bindings: GPU (one buffer per binding) == CPU-reference (one array per view)") <| @(t : T?) {
         var o = new Alias()
@@ -661,7 +661,7 @@ def test_alias_gpu_vs_cpu(t : T?) {
     }
 }
 
-[test]
+[test(description = "Struct elements and vector lanes indexed at run time on the GPU equal the CPU reference.")]
 def test_blocks_gpu_vs_cpu(t : T?) {
     t |> run("struct elements, vector lanes by index: GPU == CPU-reference") <| @(t : T?) {
         var o = new Blocks()
@@ -700,7 +700,7 @@ def test_blocks_gpu_vs_cpu(t : T?) {
     }
 }
 
-[test]
+[test(description = "The pack family on the GPU equals the CPU reference.")]
 def test_packs_gpu_vs_cpu(t : T?) {
     t |> run("the pack family: GPU == CPU-reference") <| @(t : T?) {
         var o = new Packs()
@@ -754,7 +754,7 @@ struct CoopParams {
     b8r : uint64
 }
 
-[test]
+[test(description = "The KHR tiles on the GPU equal a CPU reference GEMM for every layout and accumulator.")]
 def test_coop_gpu(t : T?) {
     t |> run("the KHR tiles: GPU == a CPU reference GEMM, every layout, every accumulator") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
@@ -866,7 +866,7 @@ def private cm2_dot(a, bt : array<float16>; r, n : int) : float {
     return s
 }
 
-[test]
+[test(description = "The workgroup tiles on the GPU equal a CPU reference through every form.")]
 def test_cm2_gpu(t : T?) {
     t |> run("the workgroup tiles: GPU == a CPU reference through every form") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
@@ -933,7 +933,7 @@ def test_cm2_gpu(t : T?) {
     }
 }
 
-[test]
+[test(description = "The eight-warp workgroup tiles with column-owned accumulators give the CPU-reference row reduce through scratch and block-wide convert.")]
 def test_cm2w8_gpu(t : T?) {
     t |> run("the workgroup tiles over eight warps (column-owned accumulators): the row reduce through scratch and the block-wide convert == the CPU reference") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
@@ -1028,7 +1028,7 @@ def private fp4_cvt_inputs() : array<float> {
     return <- xin
 }
 
-[test]
+[test(description = "The FP4 tensor rung block-scaled e2m1 product through cp.async and ldmatrix equals the CPU sum, and its conversions equal their CPU bodies.")]
 def test_intrin_fp4_gpu(t : T?) {
     t |> run("the FP4 tensor rung: the block-scaled e2m1 product through cp.async + ldmatrix == the CPU sum, the conversions == their CPU bodies") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
@@ -1116,7 +1116,7 @@ struct Cm2I8Params {
     c : uint64
 }
 
-[test]
+[test(description = "The int8 workgroup tiles s32 products of two k windows, scaled per row and column off shared arrays, equal the CPU reference.")]
 def test_cm2i8_gpu(t : T?) {
     t |> run("the int8 workgroup tiles: the s32 products of two k windows scaled per row and column off shared arrays == the CPU reference") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
@@ -1160,7 +1160,7 @@ def test_cm2i8_gpu(t : T?) {
     }
 }
 
-[test]
+[test(description = "The CUDA-only tier (cp.async, ldmatrix, block-scaled int8 product, byte_perm, named barrier under clock32, inline PTX) on the GPU equals the CPU reference.")]
 def test_intrin_gpu(t : T?) {
     t |> run("the CUDA-only tier: cp.async into shared, ldmatrix fragments, the block-scaled int8 product, byte_perm, a named barrier under clock32, inline PTX == the CPU reference") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
@@ -1240,7 +1240,7 @@ def test_intrin_gpu(t : T?) {
     }
 }
 
-[test]
+[test(description = "The decode-in-load form over two k windows with the view B tile reloaded per window equals the CPU reference.")]
 def test_cm2deck_gpu(t : T?) {
     t |> run("the decode-in-load form over two k windows, the view B tile reloaded a window at a time == the CPU reference") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
@@ -1280,7 +1280,7 @@ def test_cm2deck_gpu(t : T?) {
     }
 }
 
-[test]
+[test(description = "The pipelined decode-in-load over two k windows, the second decoded past the first product, equals the CPU reference.")]
 def test_cm2raw_gpu(t : T?) {
     t |> run("the pipelined decode-in-load over two k windows: the first synchronous, the second decoded past the first product == the CPU reference") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
@@ -1320,7 +1320,7 @@ def test_cm2raw_gpu(t : T?) {
     }
 }
 
-[test]
+[test(description = "The decode-in-load form on the GPU equals a CPU reference through the block decode.")]
 def test_cm2dec_gpu(t : T?) {
     t |> run("the decode-in-load form: GPU == a CPU reference through the block decode") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
@@ -1366,7 +1366,7 @@ struct AtomParams {
     ext : uint64
 }
 
-[test]
+[test(description = "Atomics on the GPU equal hand-computed values.")]
 def test_atomics_gpu(t : T?) {
     t |> run("atomics: GPU == hand-computed") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
@@ -1418,7 +1418,7 @@ struct PtrParams {
     dst : uint64
 }
 
-[test]
+[test(description = "Constant tables, the lattice and pointer locals on the GPU equal the CPU reference.")]
 def test_tables_lattice_ptrs_gpu_vs_cpu(t : T?) {
     t |> run("constant tables, the lattice, pointer locals: GPU == CPU-reference") <| @(t : T?) {
         var ct = new ConstTab()
@@ -1556,7 +1556,7 @@ def private cm2flash_loads_first_cell(t : T?; cc : CudaContext?; key_cols : int)
     }
 }
 
-[test]
+[test(description = "Prefetched f16 tiles with both loads ahead of both products leave no copy group in flight after the last product, and a 60-wide extent keeps the plain copy.")]
 def test_cm2flash_loads_first_gpu(t : T?) {
     t |> run("the prefetched f16 tiles with both loads ahead of both products: the trip's last product leaves no group in flight, and a 60-wide extent keeps the plain copy") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {
@@ -1577,7 +1577,7 @@ struct Cm2FlashParams {
     rmax : uint64
 }
 
-[test]
+[test(description = "The flash tile forms (register A tile, prefetched f16 tiles, packed f16 accumulator) on the GPU equal a CPU reference.")]
 def test_cm2flash_gpu(t : T?) {
     t |> run("the flash tile's forms: the register A tile, the prefetched f16 tiles, the packed f16 accumulator == a CPU reference") <| @(t : T?) {
         with_cuda_context() $(cc : CudaContext?) {

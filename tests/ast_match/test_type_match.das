@@ -10,7 +10,7 @@ require dastest/testing_boost public
 
 // ── ExprTypeDecl matching ────────────────────────────────────────────────
 
-[test]
+[test(description = "a type<int> pattern matches a type<int> expression")]
 def test_type_int(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(type<int>)
@@ -19,7 +19,7 @@ def test_type_int(t : T?) {
     }
 }
 
-[test]
+[test(description = "a type<float> pattern matches a type<float> expression")]
 def test_type_float(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(type<float>)
@@ -28,7 +28,7 @@ def test_type_float(t : T?) {
     }
 }
 
-[test]
+[test(description = "a type<float> pattern does not match type<int>")]
 def test_type_wrong(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(type<int>)
@@ -38,7 +38,7 @@ def test_type_wrong(t : T?) {
     }
 }
 
-[test]
+[test(description = "a type<int const?> pattern matches an identical const pointer type")]
 def test_type_const_pointer(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(type<int const?>)
@@ -47,7 +47,7 @@ def test_type_const_pointer(t : T?) {
     }
 }
 
-[test]
+[test(description = "a const pointer type pattern does not match a non-const pointer type")]
 def test_type_const_mismatch(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(type<int?>)
@@ -56,7 +56,7 @@ def test_type_const_mismatch(t : T?) {
     }
 }
 
-[test]
+[test(description = "a pointer type pattern does not match a non-pointer type")]
 def test_type_pointer_mismatch(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(type<int>)
@@ -65,7 +65,7 @@ def test_type_pointer_mismatch(t : T?) {
     }
 }
 
-[test]
+[test(description = "a type<array<int>> pattern matches an identical array type")]
 def test_type_array(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(type<array<int>>)
@@ -74,7 +74,7 @@ def test_type_array(t : T?) {
     }
 }
 
-[test]
+[test(description = "an array type pattern does not match an array with a different element type")]
 def test_type_array_wrong_elem(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(type<array<int>>)
@@ -83,7 +83,7 @@ def test_type_array_wrong_elem(t : T?) {
     }
 }
 
-[test]
+[test(description = "a table type pattern matches an identical table type")]
 def test_type_table(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(type<table<string; int>>)
@@ -92,7 +92,7 @@ def test_type_table(t : T?) {
     }
 }
 
-[test]
+[test(description = "a table type pattern does not match a table with a different value type")]
 def test_type_table_wrong_value(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(type<table<string; int>>)
@@ -103,7 +103,7 @@ def test_type_table_wrong_value(t : T?) {
 
 // ── $t capture ───────────────────────────────────────────────────────────
 
-[test]
+[test(description = "a $t capture binds the type of a type<> expression")]
 def test_capture_t(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(type<int>)
@@ -116,7 +116,7 @@ def test_capture_t(t : T?) {
     }
 }
 
-[test]
+[test(description = "a $t capture binds a const pointer type with its inner type")]
 def test_capture_t_pointer(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(type<float const?>)
@@ -137,7 +137,7 @@ def test_capture_t_pointer(t : T?) {
 
 // ── Type matching in call arguments ──────────────────────────────────────
 
-[test]
+[test(description = "a type<> pattern matches a type argument inside a call")]
 def test_type_in_call(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(foo(type<int>))
@@ -146,7 +146,7 @@ def test_type_in_call(t : T?) {
     }
 }
 
-[test]
+[test(description = "a call pattern rejects a type argument of a different type")]
 def test_type_in_call_wrong(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(foo(type<int>))
@@ -155,7 +155,7 @@ def test_type_in_call_wrong(t : T?) {
     }
 }
 
-[test]
+[test(description = "a $t capture binds the type argument of a call")]
 def test_capture_t_in_call(t : T?) {
     ast_gc_guard() {
         // Capture type from a call argument
@@ -171,7 +171,7 @@ def test_capture_t_in_call(t : T?) {
 
 // ── Type matching in blocks ──────────────────────────────────────────────
 
-[test]
+[test(description = "qmatch_block matches a type<> argument in a block statement")]
 def test_type_in_block(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { foo(type<int>); })
@@ -182,7 +182,7 @@ def test_type_in_block(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_block rejects a type<> argument of a different type")]
 def test_type_in_block_wrong(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { foo(type<int>); })
@@ -195,7 +195,7 @@ def test_type_in_block_wrong(t : T?) {
 
 // ── auto (wildcard type) ─────────────────────────────────────────────
 
-[test]
+[test(description = "type<auto> matches type<int>")]
 def test_auto_matches_int(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(type<int>)
@@ -204,7 +204,7 @@ def test_auto_matches_int(t : T?) {
     }
 }
 
-[test]
+[test(description = "type<auto> matches type<float>")]
 def test_auto_matches_float(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(type<float>)
@@ -213,7 +213,7 @@ def test_auto_matches_float(t : T?) {
     }
 }
 
-[test]
+[test(description = "type<auto> matches type<string>")]
 def test_auto_matches_string(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(type<string>)
@@ -222,7 +222,7 @@ def test_auto_matches_string(t : T?) {
     }
 }
 
-[test]
+[test(description = "type<auto> matches a pointer type")]
 def test_auto_matches_pointer(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(type<int?>)
@@ -231,7 +231,7 @@ def test_auto_matches_pointer(t : T?) {
     }
 }
 
-[test]
+[test(description = "type<array<auto>> matches an int array type")]
 def test_array_auto_matches_array_int(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(type<array<int>>)
@@ -240,7 +240,7 @@ def test_array_auto_matches_array_int(t : T?) {
     }
 }
 
-[test]
+[test(description = "type<array<auto>> matches a float array type")]
 def test_array_auto_matches_array_float(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(type<array<float>>)
@@ -249,7 +249,7 @@ def test_array_auto_matches_array_float(t : T?) {
     }
 }
 
-[test]
+[test(description = "type<array<auto>> does not match a non-array type")]
 def test_array_auto_rejects_non_array(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(type<int>)
@@ -258,7 +258,7 @@ def test_array_auto_rejects_non_array(t : T?) {
     }
 }
 
-[test]
+[test(description = "a table type pattern with an auto value matches any value type")]
 def test_table_auto_value(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(type<table<string; int>>)
@@ -267,7 +267,7 @@ def test_table_auto_value(t : T?) {
     }
 }
 
-[test]
+[test(description = "a table type pattern with an auto key matches any key type")]
 def test_table_auto_key(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(type<table<string; int>>)
@@ -276,7 +276,7 @@ def test_table_auto_key(t : T?) {
     }
 }
 
-[test]
+[test(description = "a table type pattern with auto key and value matches any table type")]
 def test_table_auto_both(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(type<table<string; int>>)
@@ -285,7 +285,7 @@ def test_table_auto_both(t : T?) {
     }
 }
 
-[test]
+[test(description = "a table type pattern with a wrong fixed key rejects despite an auto value")]
 def test_table_auto_wrong_key(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(type<table<string; int>>)
@@ -294,7 +294,7 @@ def test_table_auto_wrong_key(t : T?) {
     }
 }
 
-[test]
+[test(description = "an auto-parameterized array type matches a type argument inside a call")]
 def test_auto_in_call(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(foo(type<array<int>>))
@@ -303,7 +303,7 @@ def test_auto_in_call(t : T?) {
     }
 }
 
-[test]
+[test(description = "an auto-parameterized array type matches a type argument in a block statement")]
 def test_auto_in_block(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { foo(type<array<int>>); })

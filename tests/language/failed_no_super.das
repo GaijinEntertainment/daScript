@@ -1,3 +1,5 @@
+//! a derived class constructor that never calls super() does not
+//! compile
 // Derived ctor must call super() — missing on every path.
 options gen2
 expect 30308
@@ -12,7 +14,8 @@ class Base {
 class Derived : Base {
     y : int = 0
     def Derived {
-        // 30308: class constructor does not call super(...) on every control-flow path
+        // 30308: class constructor does not call super(...) on every
+        // control-flow path
         y = 20
     }
 }

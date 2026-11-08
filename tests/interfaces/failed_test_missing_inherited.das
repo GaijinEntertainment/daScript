@@ -1,3 +1,6 @@
+//! An [implements] class that provides its own interface method but
+//! not the abstract method inherited from the parent interface must
+//! not compile (30926).
 options gen2
 // Test: completeness check catches missing inherited abstract methods
 expect 30926

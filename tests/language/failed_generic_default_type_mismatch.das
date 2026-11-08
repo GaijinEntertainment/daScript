@@ -1,7 +1,12 @@
-// A piped call pads a default in for the parameter it shifts across, and lookup admits the
-// candidate on that default's existence alone. When the parameter type is concrete the
-// candidate is still instanced, so the argument-matching loop gives up without progress and
-// the instanced function names the real mistake - which is why that exit falls through.
+//! a piped call to a generic whose concrete parameter has a default
+//! of the wrong type reports that mismatch from the instanced
+//! function
+// A piped call pads a default in for the parameter it shifts across,
+// and lookup admits the candidate on that default's existence alone.
+// When the parameter type is concrete the candidate is still
+// instanced, so the argument-matching loop gives up without progress
+// and the instanced function names the real mistake - which is why
+// that exit falls through.
 options gen2
 expect 30161, 30341
 

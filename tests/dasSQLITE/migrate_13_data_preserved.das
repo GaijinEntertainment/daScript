@@ -13,7 +13,7 @@ def m2(db : SqlRunner) {
     db |> exec("ALTER TABLE users ADD COLUMN Email TEXT NOT NULL DEFAULT ''")
 }
 
-[test]
+[test(description = "existing rows survive an ADD COLUMN migration and take the column default", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_existing_rows_preserved_after_alter(t : T?) {
     var inscope db = open_sqlite(":memory:")
     // Apply v1 only (manually, then INSERT some data).

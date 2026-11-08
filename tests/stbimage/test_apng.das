@@ -100,7 +100,7 @@ def make_gradient_frame(var pixels : array<uint8>; w : int; h : int; frame_idx :
     }
 }
 
-[test]
+[test(description = "encoding four 32x32 frames writes one IHDR, one acTL announcing 4 frames, four fcTL, one IDAT and three fdAT chunks, and frame 0 loads as a plain 32x32 PNG")]
 def test_apng_basic(t : T?) {
     t |> run("APNG: encode 4 frames, parse chunks, decode frame 0") <| @(tt : T?) {
         let fname = temp_output(".apng")
@@ -146,7 +146,7 @@ def test_apng_basic(t : T?) {
     }
 }
 
-[test]
+[test(description = "an 8x8 three-channel writer fed two frames ends successfully and produces one IHDR, one IDAT and one fdAT chunk")]
 def test_apng_rgb_channels(t : T?) {
     t |> run("APNG: 3-channel RGB encode works") <| @(tt : T?) {
         let fname = temp_output(".apng")
@@ -173,7 +173,7 @@ def test_apng_rgb_channels(t : T?) {
     }
 }
 
-[test]
+[test(description = "beginning an APNG on a path that is a directory returns a null writer instead of crashing")]
 def test_apng_begin_bad_filename(t : T?) {
     t |> run("APNG: begin with unwritable path returns null") <| @(tt : T?) {
         // A path that fopen("wb") refuses: the path IS a directory.
@@ -182,7 +182,7 @@ def test_apng_begin_bad_filename(t : T?) {
     }
 }
 
-[test]
+[test(description = "after submitting 40 large frames the dropped count plus the fcTL chunks in the valid file equals 40, and the acTL frame count equals the fcTL count")]
 def test_apng_drop_accounting(t : T?) {
     t |> run("APNG: submitted == emitted + dropped (worker race-tolerant invariant)") <| @(tt : T?) {
         let fname = temp_output(".apng")
@@ -226,7 +226,7 @@ def test_apng_drop_accounting(t : T?) {
     }
 }
 
-[test]
+[test(description = "two APNG writers of 32x32 and 64x64 open at once both end successfully and each file decodes at its own size")]
 def test_apng_double_writers(t : T?) {
     t |> run("APNG: two parallel writers — no shared state") <| @(tt : T?) {
         let path1 = temp_output(".apng")
@@ -271,7 +271,7 @@ def test_apng_double_writers(t : T?) {
     }
 }
 
-[test]
+[test(description = "three tiny frames submitted 50 ms apart are all kept, so the dropped counter stays 0")]
 def test_apng_dropped_zero_when_keeping_up(t : T?) {
     t |> run("APNG: drop counter stays at 0 for small, slow stream") <| @(tt : T?) {
         let fname = temp_output(".apng")

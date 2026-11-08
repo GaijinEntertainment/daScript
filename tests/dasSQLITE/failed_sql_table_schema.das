@@ -1,17 +1,20 @@
 options gen2
+//! sql_table must not compile with an invalid default, computed
+//! column or foreign key declaration
 
-// Each struct below intentionally violates one [sql_table] schema-validation
-// rule introduced in chunk 7 (defaults / computed / foreign keys). Each
-// failure produces error 30111 = "macro [sql_table] failed to apply to the
-// structure". Validation is fail-fast (first error aborts that struct's
-// apply()) so each struct contributes exactly one error.
+// Each struct below intentionally violates one [sql_table]
+// schema-validation rule introduced in chunk 7 (defaults / computed /
+// foreign keys). Each failure produces error 30111 = "macro
+// [sql_table] failed to apply to the structure". Validation is
+// fail-fast (first error aborts that struct's apply()) so each struct
+// contributes exactly one error.
 expect 20800:13
 
 require daslib/sql
 require sqlite/sqlite_boost
 
-// 1. @sql_computed on a @sql_primary_key column — SQLite rejects PRIMARY KEY
-//    on a generated column.
+// 1. @sql_computed on a @sql_primary_key column — SQLite rejects
+// PRIMARY KEY on a generated column.
 [sql_table(name = "C1")]
 struct C1 {
     @sql_primary_key
@@ -19,8 +22,8 @@ struct C1 {
     Id : int
 }
 
-// 2. @sql_computed combined with a daslang field initializer — the SQL
-//    expression is the only source of value for a computed column.
+// 2. @sql_computed combined with a daslang field initializer — the
+// SQL expression is the only source of value for a computed column.
 [sql_table(name = "C2")]
 struct C2 {
     @sql_primary_key Id : int
@@ -28,8 +31,8 @@ struct C2 {
     DoubleId : int = 7
 }
 
-// 3. @sql_computed combined with @sql_default_fn — defaults don't apply to
-//    generated columns.
+// 3. @sql_computed combined with @sql_default_fn — defaults don't
+// apply to generated columns.
 [sql_table(name = "C3")]
 struct C3 {
     @sql_primary_key Id : int
@@ -38,7 +41,8 @@ struct C3 {
     DoubleId : int
 }
 
-// 4. Native field initializer combined with @sql_default_fn — pick one.
+// 4. Native field initializer combined with @sql_default_fn — pick
+// one.
 [sql_table(name = "C4")]
 struct C4 {
     @sql_primary_key Id : int
@@ -46,8 +50,8 @@ struct C4 {
     CreatedAt : string = "fixed"
 }
 
-// 5. @sql_default_fn outside the supported whitelist (CURRENT_TIMESTAMP /
-//    CURRENT_DATE / CURRENT_TIME).
+// 5. @sql_default_fn outside the supported whitelist
+// (CURRENT_TIMESTAMP / CURRENT_DATE / CURRENT_TIME).
 [sql_table(name = "C5")]
 struct C5 {
     @sql_primary_key Id : int
@@ -55,8 +59,8 @@ struct C5 {
     Ts : string
 }
 
-// 6. @sql_on_delete without @sql_references — FK actions only apply to a
-//    foreign-key relationship.
+// 6. @sql_on_delete without @sql_references — FK actions only apply
+// to a foreign-key relationship.
 [sql_table(name = "C6")]
 struct C6 {
     @sql_primary_key Id : int
@@ -73,8 +77,8 @@ struct C7 {
 }
 
 // 8. @sql_on_delete action outside the whitelist.
-//    Need a real referenced struct so we hit the action check, not the
-//    "missing reference" branch.
+// Need a real referenced struct so we hit the action check, not the
+// "missing reference" branch.
 [sql_table(name = "C8Parent")]
 struct C8Parent {
     @sql_primary_key Id : int
@@ -88,8 +92,8 @@ struct C8 {
     ParentId : int
 }
 
-// 9. @sql_on_delete = "set_null" on a non-Option<T> column — SQLite cannot
-//    set a NOT NULL column to NULL.
+// 9. @sql_on_delete = "set_null" on a non-Option<T> column — SQLite
+// cannot set a NOT NULL column to NULL.
 [sql_table(name = "C9Parent")]
 struct C9Parent {
     @sql_primary_key Id : int
@@ -103,8 +107,8 @@ struct C9 {
     ParentId : int
 }
 
-// 10. @sql_on_delete = "set_default" without a default — SET DEFAULT has
-//     nothing to set.
+// 10. @sql_on_delete = "set_default" without a default — SET DEFAULT
+// has nothing to set.
 [sql_table(name = "C10Parent")]
 struct C10Parent {
     @sql_primary_key Id : int
@@ -118,7 +122,8 @@ struct C10 {
     ParentId : int
 }
 
-// 11. @sql_references naming a struct that doesn't exist in this module.
+// 11. @sql_references naming a struct that doesn't exist in this
+// module.
 [sql_table(name = "C11")]
 struct C11 {
     @sql_primary_key Id : int
@@ -140,8 +145,8 @@ struct C12 {
     ParentId : int
 }
 
-// 13. @sql_unique on a generated column — use an explicit [sql_index] only
-//     when the target provider supports indexing that expression.
+// 13. @sql_unique on a generated column — use an explicit [sql_index]
+// only when the target provider supports indexing that expression.
 [sql_table(name = "C13")]
 struct C13 {
     @sql_primary_key Id : int

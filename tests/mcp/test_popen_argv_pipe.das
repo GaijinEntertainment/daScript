@@ -13,7 +13,7 @@ require strings
 
 def private fixture_path(name : string) : string => path_join(get_das_root(), "tests/mcp/{name}")
 
-[test]
+[test(description = "popen_argv_pipe round-trips writes and reads through the pipe of an echo child")]
 def test_echo_roundtrip(t : T?) {
     t |> run("write+read+write+read round-trips through pipe") @(t : T?) {
         let exe = get_das_exe()
@@ -39,7 +39,7 @@ def test_echo_roundtrip(t : T?) {
     }
 }
 
-[test]
+[test(description = "popen_argv_pipe returns the exit code of the child process")]
 def test_exit_code_propagated(t : T?) {
     t |> run("subprocess exit code returned to caller") @(t : T?) {
         let exe = get_das_exe()
@@ -53,7 +53,7 @@ def test_exit_code_propagated(t : T?) {
     }
 }
 
-[test]
+[test(description = "closing stdin at the end of the popen_argv_pipe block lets the echo child exit cleanly")]
 def test_stdin_eof_after_block(t : T?) {
     t |> run("closing stdin (block return) lets the echo fixture exit cleanly") @(t : T?) {
         let exe = get_das_exe()

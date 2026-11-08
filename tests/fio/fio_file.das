@@ -1,10 +1,11 @@
 options gen2
-require dastest/testing_boost
+
+require dastest/testing_boost public
 require daslib/faker
 require daslib/fuzzer
 require daslib/strings_boost
-
 require daslib/fio
+require daslib/defer
 
 let TOTAL_FUZZ_FILES = 100
 
@@ -20,7 +21,7 @@ def operator ==(a, b : array<uint8> implicit) {
     return true
 }
 
-[test]
+[test(description = "fwrite and fread of an empty array are 0-byte no-ops and not out-of-bounds addresses")]
 def test_empty_array_io(t : T?) {
     t |> run("fwrite/fread of an empty array is a 0-byte no-op, not an OOB addr") @(t : T?) {
         let fname = path_join(test_temp_dir(), "empty_array.bin")
@@ -48,7 +49,7 @@ def test_empty_array_io(t : T?) {
     }
 }
 
-[test]
+[test(description = "stat reports the execute bit: a data file has none and an executable has it")]
 def test_stat_is_exec(t : T?) {
     t |> run("stat reports the execute bit: a data file has none, an executable has it") @(t : T?) {
         let dir = test_temp_dir()
@@ -75,7 +76,7 @@ def test_stat_is_exec(t : T?) {
     }
 }
 
-[test]
+[test(description = "fopen, fread and fmap survive fuzzed arguments without crashing")]
 def test_fopen(t : T?) {
     t |> run("fuzz fopen") @@(t : T?) {
         var fake <- Faker()
@@ -135,4 +136,58 @@ def test_fopen(t : T?) {
             }
         }
     }
+}
+
+[test(description = "stat and fstat agree on the mode and type of a directory and an open file")]
+def stat_mode_matches_open_file_and_type(t : T?) {
+    let made = create_temp_directory_result("stat-mode-")
+    verify(made is value)
+    let root = made as value
+    {
+        var directory : FStat
+        t |> success(stat(root, directory))
+        t |> success(directory.is_dir)
+        t |> success(directory.mode != 0u)
+        fopen("{root}/file", "wb") $(file) {
+            verify(file != null)
+            var opened, named : FStat
+            fstat(file, opened)
+            t |> success(stat("{root}/file", named))
+            t |> success(opened.is_reg && named.is_reg)
+            t |> equal(opened.mode, named.mode)
+            t |> success(opened.mode != directory.mode, "file type bits are retained")
+        }
+    } finally { rmdir_rec(root) }
+}
+
+def private scratch(name : string) : string {
+    var terr : string
+    let tmp = temp_directory(terr)
+    return path_join(empty(tmp) ? "." : tmp, "{name}_{ref_time_ticks()}.txt")
+}
+
+[test(description = "fwrite_if_changed leaves a file and its timestamp alone when the text is identical")]
+def test_identical_text_is_not_written(t : T?) {
+    let path = scratch("fio_wic_same")
+    defer() {
+        var err : string
+        remove(path, err)
+    }
+    t |> success(fwrite_if_changed(path, "one\n"), "a file that does not exist yet is written")
+    let stamp = stat(path).mtime
+    t |> success(!fwrite_if_changed(path, "one\n"), "the same text is not written again")
+    t |> equal(stat(path).mtime, stamp, "so the timestamp does not move")
+    t |> equal(fread(path), "one\n", "and the text is still there")
+}
+
+[test(description = "fwrite_if_changed replaces a file whose text differs")]
+def test_different_text_is_written(t : T?) {
+    let path = scratch("fio_wic_diff")
+    defer() {
+        var err : string
+        remove(path, err)
+    }
+    fwrite(path, "one\n")
+    t |> success(fwrite_if_changed(path, "two\n"), "different text is written")
+    t |> equal(fread(path), "two\n", "and it replaces what was there")
 }

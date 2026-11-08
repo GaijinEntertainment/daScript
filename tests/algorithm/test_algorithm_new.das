@@ -11,7 +11,7 @@ struct KeyedItem {
 
 // ---- upper_bound ----
 
-[test]
+[test(description = "upper_bound returns the first position greater than the key, differing from lower_bound on duplicates, with comparator and key-type variants")]
 def test_upper_bound(t : T?) {
     t |> run("basic upper bound") @(t : T?) {
         let a <- [1, 3, 5, 7, 9]
@@ -68,7 +68,7 @@ def test_upper_bound(t : T?) {
 
 // ---- equal_range ----
 
-[test]
+[test(description = "equal_range returns the half-open span of equal elements and an empty span at the insertion point when none match")]
 def test_equal_range(t : T?) {
     t |> run("range of duplicates") @(t : T?) {
         let a <- [1, 2, 2, 2, 3, 4]
@@ -122,7 +122,7 @@ def test_equal_range(t : T?) {
 
 // ---- fill ----
 
-[test]
+[test(description = "fill sets every element of an array to a value, and is a no-op on an empty one")]
 def test_fill(t : T?) {
     t |> run("fills array with value") @(t : T?) {
         var a <- [1, 2, 3, 4]
@@ -152,7 +152,7 @@ def test_fill(t : T?) {
 
 // ---- is_sorted ----
 
-[test]
+[test(description = "is_sorted is true for non-decreasing input and false otherwise, honouring a custom comparator")]
 def test_is_sorted(t : T?) {
     t |> run("sorted array") @(t : T?) {
         let a <- [1, 2, 3, 4, 5]
@@ -191,7 +191,7 @@ def test_is_sorted(t : T?) {
 
 // ---- rotate ----
 
-[test]
+[test(description = "rotate moves elements left by the count, leaving the array unchanged for 0 or its length")]
 def test_rotate(t : T?) {
     t |> run("rotate by 2") @(t : T?) {
         var a <- [1, 2, 3, 4, 5]
@@ -242,7 +242,7 @@ def test_rotate(t : T?) {
 
 // ---- min_element / max_element ----
 
-[test]
+[test(description = "min_element returns the index of the smallest element (first on ties, -1 when empty), with a comparator and on fixed-size arrays")]
 def test_min_element(t : T?) {
     t |> run("finds minimum") @(t : T?) {
         let a <- [3, 1, 4, 1, 5, 9]
@@ -282,7 +282,7 @@ def test_min_element(t : T?) {
     }
 }
 
-[test]
+[test(description = "max_element returns the index of the largest element (-1 when empty), with a comparator and on fixed-size arrays")]
 def test_max_element(t : T?) {
     t |> run("finds maximum") @(t : T?) {
         let a <- [3, 1, 4, 1, 5, 9]
@@ -320,7 +320,7 @@ def test_max_element(t : T?) {
 
 // ---- symmetric_difference ----
 
-[test]
+[test(description = "symmetric_difference holds the keys present in exactly one of two sets")]
 def test_symmetric_difference(t : T?) {
     t |> run("basic symmetric difference") @(t : T?) {
         let a <- { 1, 2, 3 }
@@ -355,7 +355,7 @@ def test_symmetric_difference(t : T?) {
 
 // ---- is_subset ----
 
-[test]
+[test(description = "is_subset is true when every key of the first set is in the second, including equal and empty sets")]
 def test_is_subset(t : T?) {
     t |> run("proper subset") @(t : T?) {
         let a <- { 1, 2 }

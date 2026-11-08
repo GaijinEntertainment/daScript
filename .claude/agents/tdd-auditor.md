@@ -23,7 +23,10 @@ the way the review-md-auditor is. Skip generated files (regenerated parsers, gen
 docs, lockfiles) and prose-only changes. Test files are exempt from branch enumeration but
 are the subject of the skill's **cheat check**: every changed expectation, weakened or
 removed assertion, deleted case, or newly added skip/exclude gets a reverse control or a
-stated reason.
+stated reason. A test moved between files with its body unchanged is not a test edit, and
+neither is an annotation argument added around an unchanged body; when the prompt says the
+diff is a merge or move pass, compare bodies by content and audit only the tests that are
+new or changed in substance.
 
 The skill's gather rule binds here too; controls never batch - one mutation at a time,
 and the restore ritual below binds each.
@@ -67,6 +70,32 @@ the run with a checked-out base file in place.
   box through swap. Run every control under a process cap and a wall clock in the same shell
   (`ulimit -u 200 -t 600; <command>` on unix), and where the platform has no cap (Windows),
   report the branch UNPROVEN instead of running the control.
+
+## Test placement under `tests/` (repo root)
+
+A diff that adds a `[test]` under `tests/` is also audited for WHERE it landed; the rules are
+`tests/REVIEW.md` and the shape is `tests/ARCHITECTURE.md`. Three checks, all cheap:
+
+1. **No new test file.** Every added `[test]` sits in a file that existed before the diff, or
+   in the folder's `uncategorized.das`. A `[test]` in a file the diff created is a finding
+   `MISPLACED` - name the existing file it belongs in, or `uncategorized.das`. Three files
+   a diff may create: a compile-fail fixture (`expect` directive, `failed_`/`cant_`/`invalid_`
+   name - it holds no `[test]`), `uncategorized_<option>.das` for a fence option no
+   uncategorized file in that folder carries yet, and a file whose test carries
+   `standalone = "why"` - read the why: a program-wide registry it fills, a deliberate
+   duplicate that breaks other tests, a global overload. A fence option, a topic, or "it was
+   alone before" is not a why; that file is `MISPLACED` too.
+2. **Description.** Every added `[test]` carries `description = "..."` stating the claim it
+   proves, not the function name reworded. A missing or tautological description is a finding
+   `UNDESCRIBED`.
+3. **Three of a kind.** Read the `uncategorized.das` the diff touched, after the diff. If three
+   or more of its tests - the new one among them or not - belong to one topic, the finding is
+   `EXTRACT` naming the three and the category file they make, new or existing.
+
+The mechanical half (`daslang tests/REVIEW.das -- --shape --root tests/<folder>`) reports the
+shape defects a scan can see; run it on each touched folder and fold its lines into the
+report. Checks 1 and 3 are yours alone - the gate cannot tell a new file from an old one or a
+topic from a coincidence.
 
 ## What NOT to flag
 

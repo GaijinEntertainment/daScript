@@ -5,7 +5,7 @@ require dastest/testing_boost public
 require daslib/jobque_boost
 require daslib/fio
 
-[test]
+[test(description = "join with a timeout returns false when nothing ever notifies the wait group")]
 def test_join_timeout_expires(t : T?) {
     t |> run("join times out when the wait group is never notified") @(t : T?) {
         with_job_status(1) $(status) {
@@ -16,7 +16,7 @@ def test_join_timeout_expires(t : T?) {
     }
 }
 
-[test]
+[test(description = "join with a timeout returns true once every job has notified")]
 def test_join_timeout_completes(t : T?) {
     t |> run("join returns true once every job has notified") @(t : T?) {
         with_job_que() {
@@ -34,7 +34,7 @@ def test_join_timeout_completes(t : T?) {
     }
 }
 
-[test]
+[test(description = "A join that timed out does not prevent a later join from seeing the completion")]
 def test_join_timeout_then_success(t : T?) {
     t |> run("a short join times out, a later join still sees the completion") @(t : T?) {
         with_job_que() {
@@ -52,7 +52,7 @@ def test_join_timeout_then_success(t : T?) {
     }
 }
 
-[test]
+[test(description = "A timed join publishes the pending batched jobs like the untimed join")]
 def test_join_timeout_flushes_batched_dispatch(t : T?) {
     t |> run("join publishes the pending batch, same as the untimed join") @(t : T?) {
         with_job_que() {
@@ -71,7 +71,7 @@ def test_join_timeout_flushes_batched_dispatch(t : T?) {
     }
 }
 
-[test]
+[test(description = "join with a non-positive timeout polls and returns immediately")]
 def test_join_zero_timeout_polls(t : T?) {
     t |> run("join with a non-positive timeout polls instead of waiting") @(t : T?) {
         with_job_status(1) $(status) {
@@ -86,7 +86,7 @@ def test_join_zero_timeout_polls(t : T?) {
     }
 }
 
-[test]
+[test(description = "The timeout still bounds the wait when the join spin is enabled")]
 def test_join_timeout_with_join_spin(t : T?) {
     t |> run("the timeout bounds the wait with the join spin enabled") @(t : T?) {
         set_jobque_join_spin(2)
@@ -98,7 +98,7 @@ def test_join_timeout_with_join_spin(t : T?) {
     }
 }
 
-[test]
+[test(description = "join on a filled lock box nobody grabs times out instead of waiting forever")]
 def test_join_timeout_on_filled_lock_box(t : T?) {
     t |> run("a filled lock box nobody grabs times out instead of waiting forever") @(t : T?) {
         with_lock_box() $(box) {

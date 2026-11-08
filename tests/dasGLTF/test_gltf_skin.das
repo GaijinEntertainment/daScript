@@ -21,7 +21,7 @@ def private skin_vertex(scene : GltfScene; skinIndex : int; v : GltfVertex) : fl
     return acc.xyz
 }
 
-[test]
+[test(description = "SimpleSkin joint matrices at the bind pose are identity and skinning leaves the vertices in place")]
 def test_skin_bind_pose(t : T?) {
     // At the bind pose (no animation applied), each joint's palette = jointWorld * inverseBind is the
     // identity, so any skinned vertex maps to its original position. SimpleSkin's two joints both bind to
@@ -40,7 +40,7 @@ def test_skin_bind_pose(t : T?) {
     }
 }
 
-[test]
+[test(description = "evaluating SimpleSkin at an exact keyframe time sets the node rotation to that keyframe value")]
 def test_anim_keyframe(t : T?) {
     // At an exact keyframe time a LINEAR sampler returns that keyframe's value verbatim (no slerp fuzz).
     // input[2] == 1.0 -> node 2's rotation must equal sampler output[2].
@@ -55,7 +55,7 @@ def test_anim_keyframe(t : T?) {
     }
 }
 
-[test]
+[test(description = "evaluating SimpleSkin between two keyframes gives the slerp midpoint rotation")]
 def test_anim_interpolation(t : T?) {
     // Halfway between keyframes 1 (t=0.5) and 2 (t=1.0), the LINEAR rotation is quat_slerp at f=0.5.
     t |> run("SimpleSkin animation slerp midpoint") @(t : T?) {
@@ -70,7 +70,7 @@ def test_anim_interpolation(t : T?) {
     }
 }
 
-[test]
+[test(description = "an animated SimpleSkin keeps the weight-1 base vertex fixed while the tip vertex moves")]
 def test_anim_skin_invariant(t : T?) {
     // The animation rotates only joint 1 (node 2). A vertex bound entirely to joint 0 (node 1, never a
     // channel target) must keep its position under animation, while a joint-1-bound vertex must move.

@@ -1,4 +1,5 @@
 options gen2
+
 require daslib/apply
 require dastest/testing_boost public
 
@@ -7,7 +8,7 @@ variant FooBar {
     bar : string
 }
 
-[test]
+[test(description = "apply over a variant visits only the active arm with its field name and value")]
 def test_apply_variant(t : T?) {
     t |> run("contents") @(t : T?) {
         apply(FooBar(foo = 1)) $(name, field) {
@@ -38,7 +39,7 @@ struct Foo {
     b : string
 }
 
-[test]
+[test(description = "apply over a struct visits every field by name and can assign through the field reference")]
 def test_apply_struct(t : T?) {
     t |> run("contents") @(t : T?) {
         var foo = Foo(a = 1, b = "hello")
@@ -68,7 +69,7 @@ def test_apply_struct(t : T?) {
     }
 }
 
-[test]
+[test(description = "apply over a tuple visits fields named _0, _1 and can assign through them")]
 def test_apply_tuple(t : T?) {
     t |> run("contents") @(t : T?) {
         var foo = (1, "hello")
@@ -98,7 +99,7 @@ def test_apply_tuple(t : T?) {
     }
 }
 
-[test]
+[test(description = "apply over a named tuple hands each field its declared name")]
 def test_apply_named_tuple(t : T?) {
     var foo = (a = 1, b = "hello")
     apply(foo) $(name, field) {
@@ -112,7 +113,7 @@ def test_apply_named_tuple(t : T?) {
     }
 }
 
-[test]
+[test(description = "apply_imm over a const struct visits every field by name and value")]
 def test_apply_imm_struct(t : T?) {
     t |> run("contents") @(t : T?) {
         let foo = Foo(a = 1, b = "hello")
@@ -147,7 +148,7 @@ struct FooAnn {
     b : string
 }
 
-[test]
+[test(description = "apply_imm passes each field's annotations to a block that asks for them")]
 def test_apply_imm_annotations(t : T?) {
     let foo = FooAnn(a = 2, b = "hi")
     apply_imm(foo) $(name; field; annotations) {
@@ -183,7 +184,7 @@ variant Foov {
     b : float
 }
 
-[test]
+[test(description = "a static_if on the field name selects per-field code at compile time inside apply")]
 def test_static_assert_on_name(_t : T?) {
     var f = Foos(a = 1, b = 2.0)
     apply(f) $(name, value) {
@@ -239,7 +240,7 @@ struct RegStruct {
     tag   : int
 }
 
-[test]
+[test(description = "apply over a struct with nested struct and array fields reads every field of every type")]
 def test_apply_regular_struct_read(t : T?) {
     var rs <- RegStruct(inner = Inner(v = 7), tag = 3, nums <- [10, 20])
     var seen = 0
@@ -258,7 +259,7 @@ def test_apply_regular_struct_read(t : T?) {
     t |> equal(seen, 3)
 }
 
-[test]
+[test(description = "apply with a var field writes through to nested struct fields of the source")]
 def test_apply_regular_struct_mutate(t : T?) {
     var rs : RegStruct
     apply(rs) $(name : string; var field) {
@@ -275,7 +276,7 @@ def test_apply_regular_struct_mutate(t : T?) {
     t |> equal(rs.tag, 42)
 }
 
-[test]
+[test(description = "apply over a tuple of a struct and an int reads and mutates both elements")]
 def test_apply_regular_tuple(t : T?) {
     var tu : tuple<Inner; int>
     tu._0 = Inner(v = 8)
@@ -296,7 +297,7 @@ variant RegVar {
     n  : int
 }
 
-[test]
+[test(description = "apply over a variant with a struct arm mutates the active arm in place")]
 def test_apply_regular_variant(t : T?) {
     var rv = RegVar(sm = Inner(v = 11))
     apply(rv) $(name : string; var field) {
@@ -309,7 +310,7 @@ def test_apply_regular_variant(t : T?) {
 
 // ===== const self (read-only) =====
 
-[test]
+[test(description = "apply over a const struct reads its fields without needing a mutable source")]
 def test_apply_const_self(t : T?) {
     let cs = Foo(a = 5, b = "world")
     var seen = 0
@@ -328,7 +329,7 @@ def test_apply_const_self(t : T?) {
 
 // ===== variant: mutation through the active arm =====
 
-[test]
+[test(description = "apply over a variant assigns a new value to the active arm")]
 def test_apply_variant_mutate(t : T?) {
     var v = FooBar(foo = 1)
     apply(v) $(name : string; var field) {
@@ -348,7 +349,7 @@ def test_apply_variant_mutate(t : T?) {
 
 // ===== annotations (struct, 3-arg block) =====
 
-[test]
+[test(description = "apply passes each struct field's annotations, with the declared count, to the block")]
 def test_apply_struct_annotations(t : T?) {
     let foo = FooAnn(a = 2, b = "hi")
     apply(foo) $(name : string; field; annotations) {
@@ -371,7 +372,7 @@ struct WideAnn {
     @wide = 4102444800l @huge = 18446744073709551615ul @offset = 0xD0 a : int
 }
 
-[test]
+[test(description = "apply delivers every annotation of a field that carries many")]
 def test_apply_wide_annotations(t : T?) {
     // 64-bit and unsigned values keep their type and value
     let foo = WideAnn()
@@ -411,7 +412,7 @@ def make_counted_foo() : Foo {
     return Foo(a = 1, b = "x")
 }
 
-[test]
+[test(description = "apply over a call expression evaluates that expression exactly once however many fields it visits")]
 def test_apply_rvalue_single_eval(t : T?) {
     g_apply_make_count = 0
     var seen = 0
@@ -428,7 +429,7 @@ def take_int_block(blk : block<(v : int) : void>) {
     invoke(blk, 77)
 }
 
-[test]
+[test(description = "a block passed to apply can call a function taking a block with the visited field")]
 def test_apply_nested_capture(t : T?) {
     var foo = Foo(a = 1, b = "x")
     apply(foo) $(name : string; var field) {
@@ -450,7 +451,7 @@ struct Big36 {
     f30, f31, f32, f33, f34, f35 : int
 }
 
-[test]
+[test(description = "apply over a struct with 36 fields visits every field exactly once")]
 def test_apply_large_arity(t : T?) {
     var b : Big36
     var count = 0
@@ -487,7 +488,7 @@ def sum_skip_b(tr : Triple) : int {
     return sum
 }
 
-[test]
+[test(description = "an apply block that returns early falls back to per-field helpers and skips just the returned field of a struct")]
 def test_apply_invoke_fallback_struct(t : T?) {
     t |> equal(sum_skip_b(Triple(a = 1, b = 2, c = 3)), 4)   // a + c; b skipped, function returns normally
 }
@@ -503,7 +504,7 @@ def sum_skip_first(tu : tuple<int; int; int>) : int {
     return sum
 }
 
-[test]
+[test(description = "an apply block that returns early skips just the returned element of a tuple")]
 def test_apply_invoke_fallback_tuple(t : T?) {
     t |> equal(sum_skip_first((1, 2, 3)), 5)   // _1 + _2; _0 skipped
 }
@@ -524,8 +525,52 @@ def read_skip_x(v : Triv) : int {
     return got
 }
 
-[test]
+[test(description = "an apply block that returns early skips the active variant arm and still processes another arm")]
 def test_apply_invoke_fallback_variant(t : T?) {
     t |> equal(read_skip_x(Triv(x = 7)), -1)   // active arm x is skipped -> got stays -1
     t |> equal(read_skip_x(Triv(y = 9)), 9)    // active arm y is processed
+}
+
+// ---- call-site keys ----
+
+//! An `apply` whose block uses `return` to skip a field falls back to generated per-field
+//! helpers whose names key the call site. Two applies sharing a line must each get their own
+//! instantiation and their own value; a key without a column component gives them one name.
+
+struct KeyFoo {
+    a : int
+    b : string
+}
+
+struct OtherFoo {
+    a : int
+    b : string
+    c : int
+}
+
+[test(description = "two applies on one source line each get their own instantiation and their own value")]
+def test_two_applies_on_one_line_stay_separate(t : T?) {
+    t |> run("same struct twice") @(t : T?) {
+        var left = ""
+        var right = ""
+        apply(KeyFoo(a = 1, b = "x")) $(name, field) { if (name == "b") { return }; left += "{name}={field};" }; apply(KeyFoo(a = 2, b = "y")) $(name, field) { if (name == "a") { return }; right += "{name}={field};" }
+        t |> equal(left, "a=1;")
+        t |> equal(right, "b=y;")
+    }
+    t |> run("different structs") @(t : T?) {
+        var left = ""
+        var right = ""
+        apply(KeyFoo(a = 3, b = "p")) $(name, field) { if (name == "a") { return }; left += "{name};" }; apply(OtherFoo(a = 4, b = "q", c = 5)) $(name, field) { if (name == "b") { return }; right += "{name};" }
+        t |> equal(left, "b;")
+        t |> equal(right, "a;c;")
+    }
+    t |> run("const and mutable sources") @(t : T?) {
+        let fixed = KeyFoo(a = 6, b = "r")
+        var movable = KeyFoo(a = 7, b = "s")
+        var left = ""
+        var right = ""
+        apply(fixed) $(name, field) { if (name == "b") { return }; left += "{field};" }; apply(movable) $(name, field) { if (name == "a") { return }; right += "{field};" }
+        t |> equal(left, "6;")
+        t |> equal(right, "s;")
+    }
 }

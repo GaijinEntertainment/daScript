@@ -1,3 +1,5 @@
+//! returning a block from a function does not compile: a block is not
+//! a valid return type
 // mismatched return types
 // verifies compiler rejects returning a block from a function
 // (blocks are not valid return types)

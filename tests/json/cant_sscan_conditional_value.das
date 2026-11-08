@@ -1,3 +1,5 @@
+//! sscan_json into a conditional (cond ? var : temporary) must not
+//! compile: a temporary branch cannot be a destination.
 options gen2
 options rtti
 expect 30107

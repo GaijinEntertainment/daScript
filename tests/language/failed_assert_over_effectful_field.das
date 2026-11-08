@@ -1,7 +1,11 @@
+//! an assert whose condition calls a function with side effects does
+//! not compile, since the condition is dropped when asserts are off
 expect 30151
 
 options gen2
-options no_coverage   // coverage turns every assert into verify, which may carry side effects
+// coverage turns every assert into verify, which may carry side
+// effects
+options no_coverage
 
 struct P {
     x : int

@@ -235,7 +235,7 @@ def private gate_ast_verify(daslang : string) : bool {
             || starts_with(base_name(f), "invalid_") || find(f, "ast-fuzz/selftest/") >= 0)]
     var subject = "{length(das_files)} changed files"
     if (empty(das_files)) {
-        das_files |> push("tests/jit_tests/array.das")
+        das_files |> push("tests/jit_tests/containers.das")
         das_files |> push("tests/decs/test_bulk_create.das")
         subject = "the macro-heavy smoke set (C++-only AST change)"
     }
@@ -260,7 +260,7 @@ def private gate_jit_smoke(daslang : string) : bool {
         to_log(LOG_INFO, "jit-smoke: diff touches no JIT surface - skipped\n")
         return true
     }
-    for (test in ["tests/jit_tests/array.das", "tests/decs/test_bulk_create.das"]) {
+    for (test in ["tests/jit_tests/containers.das", "tests/decs/test_bulk_create.das"]) {
         var out = ""
         let rc = run([daslang, "dastest/dastest.das", "-jit", "--", "--jit-opt-level=3", "--failures-only", "--test", test], out, 600.0)
         if (find(to_lower(out), "verifier") >= 0 || find(out, "Both operands") >= 0) {

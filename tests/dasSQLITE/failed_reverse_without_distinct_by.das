@@ -1,9 +1,12 @@
 options gen2
+//! reverse inside _sql must not compile unless it is wrapped by
+//! distinct_by
 
-// `reverse()` in `_sql` is only legal when wrapped by `_distinct_by(_.K)` —
-// SQL has no inherent row ordering to reverse. Bare `reverse() |> to_array`
-// has no SQL form; the user should use `_order_by_descending(...)` for sort
-// reversal, or `reverse() |> _distinct_by(K)` for last-per-K semantics.
+// `reverse()` in `_sql` is only legal when wrapped by
+// `_distinct_by(_.K)` — SQL has no inherent row ordering to reverse.
+// Bare `reverse() |> to_array` has no SQL form; the user should use
+// `_order_by_descending(...)` for sort reversal, or `reverse() |>
+// _distinct_by(K)` for last-per-K semantics.
 expect 50503
 
 require daslib/sql

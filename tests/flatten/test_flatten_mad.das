@@ -11,7 +11,7 @@ require math
 //! `mad(b-a, t, a)` back into `lerp(a,b,t)`. `lerp` calls are KEPT WHOLE by default (a native-lerp
 //! backend computes `(b-a)*t+a` in one instruction); the const-selector identities (`t=0`/`t=1`/
 //! `a==b`) fire directly on the call. The opt-in expansion path (`options _flatten_expand_lerp`)
-//! has its own corpus in test_flatten_lerp_expand.das.
+//! has its own corpus in uncategorized__flatten_expand_lerp.das.
 //! Exactness per twin: int twins and same-builtin-both-sides round trips compare exact; ANY
 //! float twin comparing raw interp ops against a `mad`/`lerp` builtin compares approx — the
 //! vector builtins are hardware-fused (NEON FMLA / x86 FMADD), and even the scalar C++ impls
@@ -111,7 +111,7 @@ def cmp3i(t : T?; a, b : int3) {
     t |> equal(a.x, b.x); t |> equal(a.y, b.y); t |> equal(a.z, b.z)
 }
 
-[test]
+[test(description = "multiply-add shapes re-fuse into mad and lerp calls for scalar, int and vector twins that match their originals", standalone = "no_aot/test_flatten_fold.das compiles this file by path as a unit and checks its twins structurally")]
 def test_flatten_mad(t : T?) {    // nolint:STYLE038 -- flat list of independent differential arms, one per mad shape
     t |> run("mad: a*b + c fuses (approx)") @(t : T?) {
         for (v in GRID) {

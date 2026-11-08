@@ -65,7 +65,7 @@ def make_act_items() : array<ActItem> {
 
 // ── plan_decs_join trailing _where (closes 8a, C6) ─────────────────────────────
 
-[test]
+[test(description = "a decs join followed by a trailing where and count counts only the pairs passing the filter")]
 def test_join_where_count(t : T?) {
     t |> run("plan_decs_join: trailing _where + count (probe 8a)") @(tt : T?) {
         restart()
@@ -86,7 +86,7 @@ def test_join_where_count(t : T?) {
     }
 }
 
-[test]
+[test(description = "a decs join followed by a trailing where and to_array returns only the pairs passing the filter")]
 def test_join_where_to_array(t : T?) {
     t |> run("plan_decs_join: trailing _where + to_array") @(tt : T?) {
         restart()
@@ -106,7 +106,7 @@ def test_join_where_to_array(t : T?) {
     }
 }
 
-[test]
+[test(description = "a decs join with a trailing where and select returns the filtered projections")]
 def test_join_where_select_to_array(t : T?) {
     t |> run("plan_decs_join: trailing _where + _select + to_array (combination)") @(tt : T?) {
         restart()
@@ -129,7 +129,7 @@ def test_join_where_select_to_array(t : T?) {
 
 // ── plan_group_by_core trailing _where as HAVING (closes 4a, 4e) ───────────────
 
-[test]
+[test(description = "a trailing where after group_by aggregates acts as HAVING on the bucket tuples")]
 def test_groupby_having_where_to_array(t : T?) {
     t |> run("plan_group_by: trailing _where (HAVING) on post-aggregate tuple (probe 4a)") @(tt : T?) {
         let items <- make_items()
@@ -142,7 +142,7 @@ def test_groupby_having_where_to_array(t : T?) {
     }
 }
 
-[test]
+[test(description = "a trailing where after group_by aggregates followed by count counts the surviving buckets")]
 def test_groupby_having_where_count(t : T?) {
     t |> run("plan_group_by: trailing _where + count") @(tt : T?) {
         let items <- make_items()
@@ -156,7 +156,7 @@ def test_groupby_having_where_count(t : T?) {
     }
 }
 
-[test]
+[test(description = "a trailing where after group_by over a decs source acts as HAVING")]
 def test_groupby_having_where_decs(t : T?) {
     t |> run("plan_decs_group_by: trailing _where (probe 4e)") @(tt : T?) {
         restart()
@@ -178,7 +178,7 @@ def test_groupby_having_where_decs(t : T?) {
 
 // ── plan_loop_or_count take.where (closes 5c, all 4 lanes) ─────────────────────
 
-[test]
+[test(description = "take(N) then where then count counts the survivors among the first N elements")]
 def test_take_where_count(t : T?) {
     t |> run("plan_loop_or_count: take(N)._where(p).count() (counter lane, probe 5c)") @(tt : T?) {
         let items <- make_act_items()
@@ -191,7 +191,7 @@ def test_take_where_count(t : T?) {
     }
 }
 
-[test]
+[test(description = "take(N) then where then sum adds the survivors among the first N elements")]
 def test_take_where_sum(t : T?) {
     t |> run("plan_loop_or_count: take(N)._where(p).sum() (accumulator lane)") @(tt : T?) {
         let items <- make_act_items()
@@ -201,7 +201,7 @@ def test_take_where_sum(t : T?) {
     }
 }
 
-[test]
+[test(description = "take(N) then where then first_or_default returns the first survivor among the first N elements")]
 def test_take_where_first(t : T?) {
     t |> run("plan_loop_or_count: take(N)._where(p).first_or_default() (early-exit lane)") @(tt : T?) {
         let items <- make_act_items()
@@ -211,7 +211,7 @@ def test_take_where_first(t : T?) {
     }
 }
 
-[test]
+[test(description = "take(N) then where then to_array returns the survivors among the first N elements")]
 def test_take_where_to_array(t : T?) {
     t |> run("plan_loop_or_count: take(N)._where(p).to_array() (array lane)") @(tt : T?) {
         let items <- make_act_items()
@@ -223,7 +223,7 @@ def test_take_where_to_array(t : T?) {
     }
 }
 
-[test]
+[test(description = "take(0) followed by a where yields nothing")]
 def test_take_zero_where(t : T?) {
     t |> run("plan_loop_or_count: take(0)._where edge case") @(tt : T?) {
         let items <- make_act_items()
@@ -244,7 +244,7 @@ def populate_decs_act_items() {
     }
 }
 
-[test]
+[test(description = "over a decs source, take(N) then where then count counts the survivors among the first N entities")]
 def test_take_where_count_decs(t : T?) {
     t |> run("plan_loop_or_count: decs take(N)._where(p).count() (counter lane, probe 5c)") @(tt : T?) {
         restart()
@@ -257,7 +257,7 @@ def test_take_where_count_decs(t : T?) {
     }
 }
 
-[test]
+[test(description = "over a decs source, take(N) then where then sum adds the survivors among the first N entities")]
 def test_take_where_sum_decs(t : T?) {
     t |> run("plan_loop_or_count: decs take(N)._where(p).sum() (accumulator lane)") @(tt : T?) {
         restart()
@@ -271,7 +271,7 @@ def test_take_where_sum_decs(t : T?) {
     }
 }
 
-[test]
+[test(description = "over a decs source, take(N) then where then first_or_default returns the first survivor")]
 def test_take_where_first_decs(t : T?) {
     t |> run("plan_loop_or_count: decs take(N)._where(p).first_or_default() (early-exit lane)") @(tt : T?) {
         restart()
@@ -282,7 +282,7 @@ def test_take_where_first_decs(t : T?) {
     }
 }
 
-[test]
+[test(description = "over a decs source, take(N) then where then to_array returns the survivors among the first N entities")]
 def test_take_where_to_array_decs(t : T?) {
     t |> run("plan_loop_or_count: decs take(N)._where(p).to_array() (array lane)") @(tt : T?) {
         restart()
@@ -295,7 +295,7 @@ def test_take_where_to_array_decs(t : T?) {
     }
 }
 
-[test]
+[test(description = "a decs where, take and second where before count apply both filters around the take cap")]
 def test_head_where_take_post_where_count_decs(t : T?) {
     t |> run("plan_loop_or_count: decs _where(P1)._take(N)._where(P2).count() (head + gate fire together)") @(tt : T?) {
         restart()
@@ -307,7 +307,7 @@ def test_head_where_take_post_where_count_decs(t : T?) {
     }
 }
 
-[test]
+[test(description = "a decs select, take and where before count tests the projected values among the first N")]
 def test_select_take_post_where_count_decs(t : T?) {
     t |> run("plan_loop_or_count: decs _select(f).take(N)._where(p).count() (gate peels against finalBind)") @(tt : T?) {
         restart()
@@ -319,7 +319,7 @@ def test_select_take_post_where_count_decs(t : T?) {
     }
 }
 
-[test]
+[test(description = "a decs skip, take and where before count tests the window of entities after the skip")]
 def test_skip_take_post_where_count_decs(t : T?) {
     t |> run("plan_loop_or_count: decs skip(M).take(N)._where(p).count() (skip + post-take gate)") @(tt : T?) {
         restart()

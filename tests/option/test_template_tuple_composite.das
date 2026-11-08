@@ -12,7 +12,7 @@ require _test_template_tuple_composite_mod
 // the generic-path bind for composite shapes. See the helper module for
 // details on what was broken pre-fix.
 
-[test]
+[test(description = "a template tuple with a single type argument composes and is constructed, moved and dispatched generically")]
 def template_tuple_composite_single_arg(t : T?) {
     t |> run("Bag<int>: default + concrete construction") @(t : T?) {
         let b = default<Bag<int>>
@@ -35,7 +35,7 @@ def template_tuple_composite_single_arg(t : T?) {
     }
 }
 
-[test]
+[test(description = "a template tuple with several type arguments is constructed and dispatched generically")]
 def template_tuple_top_level_multi_arg(t : T?) {
     t |> run("Pair<int, string>: concrete construction") @(t : T?) {
         var p : Pair<int, string>
@@ -52,7 +52,7 @@ def template_tuple_top_level_multi_arg(t : T?) {
     }
 }
 
-[test]
+[test(description = "a composite template tuple with several type arguments dispatches through both array element types")]
 def template_tuple_composite_multi_arg(t : T?) {
     t |> run("KVList<int, string>: concrete construction") @(t : T?) {
         var l : KVList<int, string>

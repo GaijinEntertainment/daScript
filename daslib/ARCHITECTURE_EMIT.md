@@ -94,7 +94,7 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   calls.
 - **`DEFAULT_MODULE_ORDER` mirrors `register_builtin_modules_impl`** in
   `src/builtin/modules.cpp` - the same builtin C++ modules in the same order, a
-  daslib-to-C++ pair `tests/aot/test_standalone_emit.das` reads back from the C++ source and
+  daslib-to-C++ pair `tests/aot/uncategorized_no_aot_stack_1_048_576.das` reads back from the C++ source and
   pins. A standalone context registers these first because
   module constructors `Module::require` earlier ones by name (`fio_core` takes `strings`,
   dasHV takes `rtti_core`). A module missing from the daslib list still registers, only in
@@ -151,7 +151,7 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   unguarded, so a context that collects with a null one crashes. The flag line is gated on
   the option because the nano context (`nano/include/daScript/simulate/simulate.h`) has no
   `gcEnabled`; it does carry `GlobalVariable::debugInfo`, so the infos are emitted for every
-  standalone program. `tests/aot/test_standalone_emit.das` pins the emitted text; the
+  standalone program. `tests/aot/uncategorized_no_aot_stack_1_048_576.das` pins the emitted text; the
   watchdog (`utils/watchdog/main.das`, `options gc`, globals) is the build that compiles and
   runs it, collecting on its first tick.
 - **There is no `!stopFlags` guard between `[init]` calls** - a panic propagates out of the

@@ -22,7 +22,7 @@ variant VarFA {
     one : float
 }
 
-[test]
+[test(description = "fixed-array sizeof multiplies element size by every dimension, with packed strides for vectors and struct size for structs")]
 def test_sizes(t : T?) {
     t |> run("scalar element sizes") @(t : T?) {
         var _i4 : int[4]
@@ -60,7 +60,7 @@ def test_sizes(t : T?) {
     }
 }
 
-[test]
+[test(description = "element strides, contiguous 2D rows and fixed-array field offsets inside a struct match the declared layout")]
 def test_addresses(t : T?) {
     t |> run("element stride via addresses") @(t : T?) {
         var s : Packed[2]
@@ -99,7 +99,7 @@ def test_addresses(t : T?) {
     }
 }
 
-[test]
+[test(description = "a tuple with a fixed-array member, a variant with a fixed-array arm and a fixed array of tuples lay out as declared")]
 def test_composite_layout(t : T?) {
     t |> run("tuple with FA member") @(t : T?) {
         var tp : tuple<flag : int8; arr : int[3]>

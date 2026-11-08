@@ -1,7 +1,6 @@
 options gen2
 
 require dastest/testing_boost public
-
 require daslib/sql
 require sqlite/sqlite_boost
 require daslib/sql_linq
@@ -20,28 +19,28 @@ struct MessageDoc {
     @sql_fts_rank Rank : float
 }
 
-[test]
+[test(description = "an fts5 struct creates a virtual table with the unicode61 tokenizer")]
 def test_fts5_emits_create_virtual_table(t : T?) {
     t |> equal(_::_sql_create_table_sql(type<Doc>),
         "CREATE VIRTUAL TABLE IF NOT EXISTS \"docs_idx\" USING fts5(\"Body\", tokenize='unicode61')",
         "[sql_fts5] emits CREATE VIRTUAL TABLE … USING fts5")
 }
 
-[test]
+[test(description = "selecting from an fts5 table includes the hidden rank column")]
 def test_fts5_emits_select_with_rank_column(t : T?) {
     t |> equal(_::_sql_select_all_sql(type<Doc>),
         "SELECT \"Body\", rank FROM \"docs_idx\"",
         "@sql_fts_rank field maps to FTS5 hidden `rank` column on SELECT")
 }
 
-[test]
+[test(description = "inserting into an fts5 table never names the rank column")]
 def test_fts5_insert_skips_rank_column(t : T?) {
     t |> equal(_::_sql_insert_no_pk_sql(Doc(Body = "x")),
         "INSERT INTO \"docs_idx\" (\"Body\") VALUES (?)",
         "@sql_fts_rank column is skipped on INSERT (FTS5 populates rank automatically)")
 }
 
-[test]
+[test(description = "column_info reports the rank field under FTS5's hidden rank name")]
 def test_fts5_column_info_exposes_rank_as_rank(t : T?) {
     // `@sql_fts_rank` fields surface in column_info as name="rank" regardless of
     // the daslang field name — that's the SQL-side identifier callers see.
@@ -52,7 +51,7 @@ def test_fts5_column_info_exposes_rank_as_rank(t : T?) {
     t |> equal(cols[1].is_nullable, false, "rank is non-nullable (Option<float> rejected at macro time)")
 }
 
-[test]
+[test(description = "a text-match predicate on an fts5 table emits MATCH with a bind")]
 def test_fts5_text_match_emits_match_predicate(t : T?) {
     var _db = SqlRunner()
     let _q = "fox"
@@ -63,7 +62,7 @@ def test_fts5_text_match_emits_match_predicate(t : T?) {
         "text_match on [sql_fts5] column emits MATCH ?")
 }
 
-[test]
+[test(description = "inserted rows are found by an fts5 match and returned most relevant first")]
 def test_fts5_runtime_insert_select_match(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<Doc>)
@@ -80,7 +79,7 @@ def test_fts5_runtime_insert_select_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "an fts5 prefix query matches words by their start")]
 def test_fts5_runtime_prefix_match(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<Doc>)
@@ -94,7 +93,7 @@ def test_fts5_runtime_prefix_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "an fts5 phrase query matches only adjacent tokens in order")]
 def test_fts5_runtime_phrase_match(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<Doc>)
@@ -107,7 +106,7 @@ def test_fts5_runtime_phrase_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "UNINDEXED fts5 columns appear in the DDL and round-trip as metadata")]
 def test_fts5_unindexed_metadata_emits_ddl_and_round_trips(t : T?) {
     t |> equal(_::_sql_create_table_sql(type<MessageDoc>),
         "CREATE VIRTUAL TABLE IF NOT EXISTS \"messages_idx\" USING fts5(\"ChatId\" UNINDEXED, \"TelegramMessageId\" UNINDEXED, \"Body\", tokenize='unicode61')",
@@ -126,7 +125,7 @@ def test_fts5_unindexed_metadata_emits_ddl_and_round_trips(t : T?) {
     }
 }
 
-[test]
+[test(description = "a typed delete on an fts5 table removes every matching row")]
 def test_fts5_runtime_typed_predicate_delete(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<Doc>)

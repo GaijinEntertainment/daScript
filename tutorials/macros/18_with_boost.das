@@ -126,7 +126,7 @@ def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the less
     //         arr |> push(A(f1 = 1000, f2 = 2000))   // panic: array is locked
     //     }
     //
-    // See `tests/with_boost/test_with_lock_panics.das` for the
+    // See `tests/with_boost/test_with.das` for the
     // full set of runtime-locked behaviours.
 
     print("section 7: see comment for the lock-panic shape\n")

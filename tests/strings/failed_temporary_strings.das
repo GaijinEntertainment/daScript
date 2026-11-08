@@ -1,3 +1,6 @@
+//! temp_string with a variable, a function call or a string literal
+//! must not compile (TempStringMacro rejects it), while a string
+//! builder expression is accepted
 options gen2
 expect 50501:3
 

@@ -7,36 +7,36 @@ require daslib/jsonrpc
 
 // ===== compact_json_whitespace =====
 
-[test]
+[test(description = "compact_json_whitespace removes newlines and tabs between tokens")]
 def test_strips_newlines_tabs_between_tokens(t : T?) {
     let r = compact_json_whitespace("\{\n\t\"fps\" : 60,\n\t\"paused\" : false\n}")
     t |> equal(r, "\{\"fps\":60,\"paused\":false}")
 }
 
-[test]
+[test(description = "compact_json_whitespace keeps whitespace and escapes inside string values")]
 def test_preserves_whitespace_inside_strings(t : T?) {
     let r = compact_json_whitespace("\{\n\t\"msg\" : \"hello\\nworld with spaces\"\n}")
     t |> equal(r, "\{\"msg\":\"hello\\nworld with spaces\"}")
 }
 
-[test]
+[test(description = "compact_json_whitespace does not end a string at an escaped quote")]
 def test_preserves_escaped_quotes_inside_strings(t : T?) {
     let r = compact_json_whitespace("\{\n\t\"q\" : \"a\\\"b\\\"c\"\n}")
     t |> equal(r, "\{\"q\":\"a\\\"b\\\"c\"}")
 }
 
-[test]
+[test(description = "compact_json_whitespace of an empty string is empty")]
 def test_empty_string_returns_empty(t : T?) {
     t |> equal(compact_json_whitespace(""), "")
 }
 
-[test]
+[test(description = "compact_json_whitespace leaves already compact JSON unchanged")]
 def test_already_compact_unchanged(t : T?) {
     let r = compact_json_whitespace("\{\"a\":1,\"b\":[1,2,3]}")
     t |> equal(r, "\{\"a\":1,\"b\":[1,2,3]}")
 }
 
-[test]
+[test(description = "compact_json_whitespace removes carriage returns between tokens")]
 def test_carriage_returns_stripped(t : T?) {
     let r = compact_json_whitespace("\{\r\n  \"x\":1\r\n}")
     t |> equal(r, "\{\"x\":1}")

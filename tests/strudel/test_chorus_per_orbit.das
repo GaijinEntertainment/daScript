@@ -6,7 +6,7 @@ require strudel/strudel
 require strudel/strudel_scheduler
 require strudel/strudel_samples
 
-[test]
+[test(description = "a chorus instance for an orbit is allocated only when an event uses chorus")]
 def test_chorus_orbit_lazy_init(t : T?) {
     t |> run("chorus on orbit allocated only when event uses chorus") @(t : T?) {
         var inscope sched : Scheduler
@@ -19,7 +19,7 @@ def test_chorus_orbit_lazy_init(t : T?) {
     }
 }
 
-[test]
+[test(description = "a chorus instance is created when an event with chorus arrives")]
 def test_chorus_orbit_init_on_send(t : T?) {
     t |> run("chorus instance created when an event with chorus arrives") @(t : T?) {
         var inscope sched : Scheduler
@@ -32,7 +32,7 @@ def test_chorus_orbit_init_on_send(t : T?) {
     }
 }
 
-[test]
+[test(description = "two orbits that use chorus get independent chorus instances")]
 def test_chorus_per_orbit_independence(t : T?) {
     t |> run("two orbits with chorus get independent chorus instances") @(t : T?) {
         var inscope sched : Scheduler
@@ -49,7 +49,7 @@ def test_chorus_per_orbit_independence(t : T?) {
     }
 }
 
-[test]
+[test(description = "chorus on orbit 0 leaves orbit 1 dry")]
 def test_chorus_isolation_between_orbits(t : T?) {
     t |> run("chorus on orbit 0 leaves orbit 1 dry") @(t : T?) {
         var inscope sched : Scheduler
@@ -66,7 +66,7 @@ def test_chorus_isolation_between_orbits(t : T?) {
     }
 }
 
-[test]
+[test(description = "an OscVoice carries its chorus send from the event")]
 def test_chorus_voice_field(t : T?) {
     t |> run("OscVoice carries chorus_send from Event.chorus") @(t : T?) {
         var inscope sched : Scheduler

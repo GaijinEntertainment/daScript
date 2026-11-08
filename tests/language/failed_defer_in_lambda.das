@@ -1,6 +1,10 @@
-// A defer at the top level of a lambda (or generator) body would land in the body block's
-// finally section, which the lambda lowering turns into the finalizer - the cleanup would
-// then run once on delete instead of once per call. The macro rejects the shape outright.
+//! a defer at the top level of a lambda or generator body does not
+//! compile: it would run once at finalize instead of once per call
+// A defer at the top level of a lambda (or generator) body would land
+// in the body block's finally section, which the lambda lowering
+// turns into the finalizer - the cleanup would then run once on
+// delete instead of once per call. The macro rejects the shape
+// outright.
 options gen2
 expect 50503:2
 

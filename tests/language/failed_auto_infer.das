@@ -1,6 +1,9 @@
+//! auto declarations with no initializer, auto-to-auto, or mismatched
+//! dimensions, pointer levels or block types do not compile
 // auto type inference failures
-// verifies compiler rejects invalid auto inferences: missing initializers,
-// dimension mismatches, pointer-level mismatches, block type mismatches
+// verifies compiler rejects invalid auto inferences: missing
+// initializers, dimension mismatches, pointer-level mismatches, block
+// type mismatches
 options gen2
 expect 30123, 30200:5, 30254, 30312, 30341:2, 30343, 30407, 31019
 
@@ -38,11 +41,14 @@ def test3 {
     }
                                         // 31102: type can't be inferred, auto?, returns int
     blk() <| $(a : auto? = 3) : int {// 30304: no matching function (blk block<(auto?):int>)
-                                        // 31102: block argument initialization type can't be inferred, auto? = int
+                                        // 31102: block argument initialization type
+                                        // can't be inferred, auto?
+                                        // = int
         return a                        // 30102: incompatible return type, expecting int vs auto?
     }
     let tab : table<string; int>
-    let tabI : table<auto; float> = tab // 31102: local variable initialization type can't be inferred
+    // 31102: local variable initialization type can't be inferred
+    let tabI : table<auto; float> = tab
 }
                                         // 30106: Table key has to be basic 'hashable' type
                                         // 30105: table key is not fully resolved, auto

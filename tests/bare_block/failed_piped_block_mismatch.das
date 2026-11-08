@@ -1,3 +1,5 @@
+//! A piped block whose signature does not match the callee's block
+//! parameter is rejected.
 options gen2
 expect 30341
 

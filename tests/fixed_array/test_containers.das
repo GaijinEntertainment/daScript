@@ -16,7 +16,7 @@ def make_iota() : int[4] {
     return r
 }
 
-[test]
+[test(description = "an array of fixed arrays supports push, push_clone, emplace, in-place element mutation and iteration")]
 def test_array_of_fa(t : T?) {
     t |> run("push / push_clone / emplace") @(t : T?) {
         var v = make_iota()
@@ -54,7 +54,7 @@ def test_array_of_fa(t : T?) {
     }
 }
 
-[test]
+[test(description = "a table with fixed-array values supports insert, get, write-through mutation, values() iteration and insert_clone")]
 def test_table_of_fa(t : T?) {
     t |> run("insert / get / get_value") @(t : T?) {
         var tab : table<string; int[4]>
@@ -101,7 +101,7 @@ def test_table_of_fa(t : T?) {
     }
 }
 
-[test]
+[test(description = "a tuple holding a fixed array keeps its contents inside an array container")]
 def test_struct_with_fa_in_containers(t : T?) {
     t |> run("struct holding FA inside array") @(t : T?) {
         var arr : array<tuple<name : string; data : float[2]>>

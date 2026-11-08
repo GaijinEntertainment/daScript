@@ -1,3 +1,5 @@
+//! An [implements] class that omits abstract methods of its interface
+//! must not compile (30926).
 options gen2
 // Test: completeness check catches missing abstract methods
 expect 30926

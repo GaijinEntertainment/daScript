@@ -1,3 +1,4 @@
+//! a block comment left unterminated at end of file does not compile
 // unterminated comment at end of file
 // the nested comment construct /*//*/ triggers error 10007
 options gen2

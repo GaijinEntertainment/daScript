@@ -1,3 +1,5 @@
+//! assume aliases that refer to each other directly or transitively
+//! do not compile: the circular substitution is detected
 options gen2
 // test for circular assume detection
 expect 30838:3, 31101:2

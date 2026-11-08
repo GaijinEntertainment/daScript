@@ -17,7 +17,7 @@ def m2(db : SqlRunner) {
     db |> exec("ALTER TABLE users ADD COLUMN Email TEXT NOT NULL DEFAULT ''")
 }
 
-[test]
+[test(description = "a database ahead of the registered migrations applies nothing and keeps its audit", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_db_ahead_of_binary_returns_zero(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> exec("CREATE TABLE __schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL DEFAULT '', applied_at INTEGER NOT NULL)")
@@ -31,7 +31,7 @@ def test_db_ahead_of_binary_returns_zero(t : T?) {
     t |> equal(max_v, 9, "audit unchanged after downgrade detection")
 }
 
-[test]
+[test(description = "current_schema_version returns the recorded maximum even when it is ahead of the binary")]
 def test_current_schema_version_reads_max(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> exec("CREATE TABLE __schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL DEFAULT '', applied_at INTEGER NOT NULL)")

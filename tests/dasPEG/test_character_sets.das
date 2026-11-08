@@ -72,7 +72,7 @@ def parse_vowel(input : string; blk : block<(val : bool; err : array<ParsingErro
     }
 }
 
-[test]
+[test(description = "a digit range set matches 0 to 9 and rejects letters")]
 def test_digit_range(t : T?) {
     t |> run("digit 0 matches") @(t : T?) {
         parse_digit("0") $(val; err) {
@@ -96,7 +96,7 @@ def test_digit_range(t : T?) {
     }
 }
 
-[test]
+[test(description = "a set with several ranges matches hex digits in both cases and rejects g and G")]
 def test_hex_multiple_ranges(t : T?) {
     t |> run("hex digit 0") @(t : T?) {
         parse_hex("0") $(val; err) {
@@ -125,7 +125,7 @@ def test_hex_multiple_ranges(t : T?) {
     }
 }
 
-[test]
+[test(description = "a set of single characters matches exactly its members")]
 def test_single_chars_in_set(t : T?) {
     t |> run("plus matches") @(t : T?) {
         parse_sign("+") $(val; err) {
@@ -144,7 +144,7 @@ def test_single_chars_in_set(t : T?) {
     }
 }
 
-[test]
+[test(description = "a negated set accepts every character outside the set and rejects members")]
 def test_not_set(t : T?) {
     t |> run("letter passes not_set(digits)") @(t : T?) {
         parse_not_digit("a") $(val; err) {
@@ -163,7 +163,7 @@ def test_not_set(t : T?) {
     }
 }
 
-[test]
+[test(description = "repeating a letter set extracts a word and fails on digits")]
 def test_word_from_letter_set(t : T?) {
     t |> run("word extraction") @(t : T?) {
         parse_word("Hello") $(val; err) {
@@ -184,7 +184,7 @@ def test_word_from_letter_set(t : T?) {
     }
 }
 
-[test]
+[test(description = "a vowel set matches vowels and rejects consonants")]
 def test_vowels(t : T?) {
     t |> run("vowel a") @(t : T?) {
         parse_vowel("a") $(val; err) {

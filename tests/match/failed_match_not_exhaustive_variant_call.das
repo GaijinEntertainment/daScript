@@ -1,4 +1,4 @@
-// i(n) covers only alternative i, so the s case is missing
+//! i(n) covers only alternative i, so the s case is missing
 options gen2
 
 require daslib/match

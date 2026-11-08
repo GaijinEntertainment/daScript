@@ -29,7 +29,7 @@ def private drop_fixture(t : testing::T?; root : string) {
     }
 }
 
-[test]
+[test(description = "mkdir creates the exact UTF-8 name in both error-reporting forms")]
 def test_mkdir_stat_utf8(t : T?) {
     t |> run("mkdir with a UTF-8 name creates that exact name") @(t : T?) {
         let root = make_fixture(t)
@@ -53,7 +53,7 @@ def test_mkdir_stat_utf8(t : T?) {
     }
 }
 
-[test]
+[test(description = "fwrite and fread round-trip through UTF-8 and surrogate-pair file names")]
 def test_file_roundtrip_utf8(t : T?) {
     t |> run("fwrite/fread round-trip through a UTF-8 filename") @(t : T?) {
         let root = make_fixture(t)
@@ -77,7 +77,7 @@ def test_file_roundtrip_utf8(t : T?) {
     }
 }
 
-[test]
+[test(description = "dir and dir_rec yield UTF-8 names byte-exact")]
 def test_dir_lists_utf8(t : T?) {
     t |> run("dir() yields the UTF-8 name byte-exact") @(t : T?) {
         let root = make_fixture(t)
@@ -111,7 +111,7 @@ def test_dir_lists_utf8(t : T?) {
     }
 }
 
-[test]
+[test(description = "Path helpers, relative and get_full_file_name keep UTF-8 bytes intact")]
 def test_path_helpers_utf8(t : T?) {
     t |> run("pure path helpers keep UTF-8 bytes intact") @(t : T?) {
         let p = "каталог/файл_文件.txt"
@@ -142,7 +142,7 @@ def test_path_helpers_utf8(t : T?) {
     }
 }
 
-[test]
+[test(description = "rename, copy_file, remove, rmdir and file_size work on UTF-8 names in every arity")]
 def test_mutations_utf8(t : T?) {
     t |> run("rename UTF-8 to UTF-8, both arities") @(t : T?) {
         let root = make_fixture(t)
@@ -220,7 +220,7 @@ def test_mutations_utf8(t : T?) {
     }
 }
 
-[test]
+[test(description = "chdir into a UTF-8 directory makes getcwd report it")]
 def test_cwd_utf8(t : T?) {
     t |> run("chdir into a UTF-8 dir and getcwd reports it") @(t : T?) {
         let root = make_fixture(t)

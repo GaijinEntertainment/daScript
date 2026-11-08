@@ -473,7 +473,7 @@ def cmp3f_approx(t : T?; a, b : float3) {
     fapprox(t, a.x, b.x); fapprox(t, a.y, b.y); fapprox(t, a.z, b.z)
 }
 
-[test]
+[test(description = "flatten folds multiply, add and subtract identities and zero products for scalars, vectors and ints, and each twin matches its original over a finite grid", standalone = "no_aot/test_flatten_fold.das compiles this file by path as a unit and checks its twins structurally")]
 def test_flatten_const(t : T?) {    // nolint:STYLE038 -- flat list of independent differential arms, one per const-fold rule
     t |> run("x * 1.0 -> x") @(t : T?) {
         for (v in GRID) {

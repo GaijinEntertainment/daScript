@@ -64,7 +64,7 @@ def fapprox(t : T?; a, b : float) {
     t |> success(abs(a - b) <= 1.0e-4 * m, "dot-fused approx mismatch: {a} vs {b}")
 }
 
-[test]
+[test(description = "sums of lanes of one vector are re-packed into a dot product without changing the result beyond float rounding", standalone = "no_aot/test_flatten_fold.das compiles this file by path as a unit and checks its twins structurally")]
 def test_flatten_dot(t : T?) {
     t |> run("bare horizontal adds — value approx") @(t : T?) {
         for (v in GRID) {

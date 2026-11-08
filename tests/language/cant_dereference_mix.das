@@ -1,3 +1,5 @@
+//! dereferencing a non-pointer or a void pointer, or ?? with
+//! mismatched types, does not compile
 // invalid dereference operations
 // verifies compiler rejects deref on non-pointers, void pointers,
 // and ?? with type mismatches

@@ -12,7 +12,7 @@ def font_path() : string => "{get_das_root()}/modules/dasStbImage/fonts/droidsan
 
 // ---- load_ttf ----
 
-[test]
+[test(description = "load_ttf on the bundled font gives a 512x512 single-channel atlas with some drawn glyph pixels, a positive pixel height, and 96 glyphs starting at character 32")]
 def test_load_ttf_basic(t : T?) {
     t |> run("load_ttf loads font and creates valid atlas") <| @(tt : T?) {
         var font <- load_ttf(font_path())
@@ -37,7 +37,7 @@ def test_load_ttf_basic(t : T?) {
     }
 }
 
-[test]
+[test(description = "load_ttf with pixel height 48 and a 256x256 atlas returns a valid 256x256 bitmap and a font whose pixel height is 48")]
 def test_load_ttf_custom_params(t : T?) {
     t |> run("load_ttf with custom atlas size and pixel height") <| @(tt : T?) {
         let font <- load_ttf(font_path(), [pixel_height = 48.0f, atlas_dim = int2(256, 256)])
@@ -48,7 +48,7 @@ def test_load_ttf_custom_params(t : T?) {
     }
 }
 
-[test]
+[test(description = "load_ttf on a path that does not exist returns a font with an invalid bitmap and no font data")]
 def test_load_ttf_nonexistent(t : T?) {
     t |> run("load_ttf with nonexistent file returns invalid font") <| @(tt : T?) {
         let font <- load_ttf("/does/not/exist.ttf")
@@ -59,7 +59,7 @@ def test_load_ttf_nonexistent(t : T?) {
 
 // ---- font_metrics ----
 
-[test]
+[test(description = "the loaded font's metrics have a positive ascent, a negative descent, and a line height that covers ascent minus descent")]
 def test_font_metrics(t : T?) {
     t |> run("font_metrics returns valid ascent, descent, line_height") <| @(tt : T?) {
         var font <- load_ttf(font_path())
@@ -73,7 +73,7 @@ def test_font_metrics(t : T?) {
 
 // ---- render_text ----
 
-[test]
+[test(description = "rendering \"Hi\" in white onto a black 200x50 image changes at least one pixel to non-black")]
 def test_render_text_basic(t : T?) {
     t |> run("render_text produces non-zero pixels") <| @(tt : T?) {
         var font <- load_ttf(font_path())
@@ -95,7 +95,7 @@ def test_render_text_basic(t : T?) {
     }
 }
 
-[test]
+[test(description = "rendering an empty string onto a black image leaves every pixel black")]
 def test_render_text_empty(t : T?) {
     t |> run("render_text with empty string does nothing") <| @(tt : T?) {
         var font <- load_ttf(font_path())
@@ -115,7 +115,7 @@ def test_render_text_empty(t : T?) {
     }
 }
 
-[test]
+[test(description = "rendering \"A\" in pure red onto black produces a lit pixel whose green and blue are 0")]
 def test_render_text_color(t : T?) {
     t |> run("render_text uses specified color") <| @(tt : T?) {
         var font <- load_ttf(font_path())
@@ -142,7 +142,7 @@ def test_render_text_color(t : T?) {
 
 // ---- font bitmap save ----
 
-[test]
+[test(description = "saving the loaded font's atlas bitmap to a .png path succeeds")]
 def test_font_bitmap_save(t : T?) {
     t |> run("font bitmap can be saved as PNG via Image API") <| @(tt : T?) {
         var font <- load_ttf(font_path())

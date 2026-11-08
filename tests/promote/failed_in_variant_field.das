@@ -1,4 +1,5 @@
-// out-of-range value in variant arm constructor
+//! An out-of-range value in a variant arm constructor must not
+//! compile (30515).
 options gen2
 
 expect 30515

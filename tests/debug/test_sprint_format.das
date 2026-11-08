@@ -30,7 +30,7 @@ variant TestComplexVariant {
     nested : array<int>
 }
 
-[test]
+[test(description = "a struct prints with or without field names and interpolates into strings in the declared layout")]
 def test_struct_format(t : T?) {
     t |> run("struct with names") @@(t : T?) {
         var f = TestFoo(a = 1, b = 2.23)   // nolint:LINT003 sprint prints the declared type; 'let' makes it "TestFoo const"
@@ -48,7 +48,7 @@ def test_struct_format(t : T?) {
     }
 }
 
-[test]
+[test(description = "a tuple prints as a parenthesised list, with type info when requested")]
 def test_tuple_format(t : T?) {
     t |> run("tuple default") @@(t : T?) {
         let tup = (3, 0.14)
@@ -63,7 +63,7 @@ def test_tuple_format(t : T?) {
     }
 }
 
-[test]
+[test(description = "a dynamic array prints as a bracketed list for ints and strings, with type info when requested")]
 def test_dynamic_array_format(t : T?) {
     t |> run("array default") @@(t : T?) {
         let arr <- [1, 2, 3]
@@ -84,7 +84,7 @@ def test_dynamic_array_format(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fixed-size array prints as a bracketed list, with type info when requested")]
 def test_fixed_array_format(t : T?) {
     t |> run("fixed_array default") @@(t : T?) {
         let a = fixed_array(1, 2, 3, 4, 5, 6)
@@ -97,7 +97,7 @@ def test_fixed_array_format(t : T?) {
     }
 }
 
-[test]
+[test(description = "a table prints key => value pairs, escapes strings on request and shows type info only when asked")]
 def test_table_format(t : T?) {
     t |> run("table default") @@(t : T?) {
         let tab <- {1 => "one"}
@@ -120,7 +120,7 @@ def test_table_format(t : T?) {
     }
 }
 
-[test]
+[test(description = "an enum value prints as its name, with the enum type when type info is requested")]
 def test_enum_format(t : T?) {
     t |> run("enum default") @@(t : T?) {
         let c = TestColor.green
@@ -133,7 +133,7 @@ def test_enum_format(t : T?) {
     }
 }
 
-[test]
+[test(description = "structs print fields separated by commas and tables use => rather than semicolons or colons")]
 def test_separator_format(t : T?) {
     t |> run("struct uses commas not semicolons") @@(t : T?) {
         let f = TestFoo(a = 1, b = 2.0)
@@ -148,7 +148,7 @@ def test_separator_format(t : T?) {
     }
 }
 
-[test]
+[test(description = "a handled C++ type prints with parentheses and without [[ ]] wrappers")]
 def test_handle_format(t : T?) {
     t |> run("handle uses parens") @@(t : T?) {
         // Handles print with Type(...) when namesAndDimensions is set
@@ -161,7 +161,7 @@ def test_handle_format(t : T?) {
     }
 }
 
-[test]
+[test(description = "a variant prints in variant( ) syntax with its active field, with type info when requested")]
 def test_variant_format(t : T?) {
     t |> run("variant simple single line") @@(t : T?) {
         let v = TestVariant(i = 42)
@@ -178,7 +178,7 @@ def test_variant_format(t : T?) {
     }
 }
 
-[test]
+[test(description = "float and double print in their shortest default spelling")]
 def test_float_default_spelling(t : T?) {
     t |> run("float and double default spelling") @@(t : T?) {
         let f = 3.14f

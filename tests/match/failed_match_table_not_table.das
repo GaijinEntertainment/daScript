@@ -1,4 +1,4 @@
-// a table pattern matches only a table
+//! a table pattern matches only a table
 options gen2
 
 require daslib/match

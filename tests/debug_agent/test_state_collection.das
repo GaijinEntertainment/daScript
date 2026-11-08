@@ -48,7 +48,7 @@ def reset_collector_state() {
     variable_count = 0
 }
 
-[test]
+[test(description = "collect_debug_agent_state runs the agent onCollect hook")]
 def test_on_collect_called(t : T?) {
     t |> run("collect_debug_agent_state triggers onCollect") @(t : T?) {
         ensure_collector()
@@ -62,7 +62,7 @@ def test_on_collect_called(t : T?) {
     }
 }
 
-[test]
+[test(description = "each collect_debug_agent_state call runs onCollect once more")]
 def test_on_collect_increments(t : T?) {
     t |> run("multiple collect calls increment counter") @(t : T?) {
         ensure_collector()
@@ -77,7 +77,7 @@ def test_on_collect_increments(t : T?) {
     }
 }
 
-[test]
+[test(description = "delete_debug_agent_context removes the named agent")]
 def test_cleanup(t : T?) {
     t |> run("delete_debug_agent_context removes collector agent") @(t : T?) {
         ensure_collector()

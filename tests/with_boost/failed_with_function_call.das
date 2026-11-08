@@ -1,3 +1,5 @@
+//! with_ over a function call result must not compile (50503),
+//! because the container must be an indexed expression.
 options gen2
 expect 50503
 

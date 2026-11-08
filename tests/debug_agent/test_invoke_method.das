@@ -43,7 +43,7 @@ def read_method_value(var result : int?) {
     *result = method_value
 }
 
-[test]
+[test(description = "invoke_debug_agent_method calls a method with no user arguments")]
 def test_method_no_extra_args(t : T?) {
     t |> run("invoke_debug_agent_method with 0 user args") @(t : T?) {
         ensure_method_agent()
@@ -57,7 +57,7 @@ def test_method_no_extra_args(t : T?) {
     }
 }
 
-[test]
+[test(description = "invoke_debug_agent_method passes one user argument to the method")]
 def test_method_one_arg(t : T?) {
     t |> run("invoke_debug_agent_method with 1 user arg") @(t : T?) {
         ensure_method_agent()
@@ -70,7 +70,7 @@ def test_method_one_arg(t : T?) {
     }
 }
 
-[test]
+[test(description = "invoke_debug_agent_method passes two user arguments to the method")]
 def test_method_two_args(t : T?) {
     t |> run("invoke_debug_agent_method with 2 user args") @(t : T?) {
         ensure_method_agent()
@@ -83,7 +83,7 @@ def test_method_two_args(t : T?) {
     }
 }
 
-[test]
+[test(description = "an invoked agent method reads the agent own fields through self")]
 def test_method_reads_agent_field(t : T?) {
     t |> run("method can read agent fields via self") @(t : T?) {
         ensure_method_agent()
@@ -96,7 +96,7 @@ def test_method_reads_agent_field(t : T?) {
     }
 }
 
-[test]
+[test(description = "delete_debug_agent_context removes the named agent")]
 def test_cleanup(t : T?) {
     t |> run("delete_debug_agent_context removes method_test agent") @(t : T?) {
         ensure_method_agent()

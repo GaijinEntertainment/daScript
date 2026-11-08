@@ -1,3 +1,5 @@
+//! A piped block cannot shift across a parameter that has no default,
+//! so the call is rejected.
 options gen2
 expect 30341
 

@@ -1,9 +1,12 @@
+//! Field initializers on a non-composite make-type, such as an enum,
+//! a vector alias, a pointer alias or a string alias, must not
+//! compile (30243 four times) instead of being folded away.
 options gen2
 
 expect 30243 : 4
 
-// issue #3426: field initializers on a non-composite make-type must not be
-// silently discarded by the zero-value constant fold
+// issue #3426: field initializers on a non-composite make-type must
+// not be silently discarded by the zero-value constant fold
 
 enum E {
     a

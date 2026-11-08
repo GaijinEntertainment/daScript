@@ -4,6 +4,7 @@ options no_aot
 require dastest/testing_boost public
 require daslib/fio
 require daslib/strings_boost
+require daslib/clargs
 
 //! `fpoll` on a pipe: false while the child is silent, true once it wrote, true at its EOF;
 //! `funbuffered` on the same stream is a no-op the read survives; a regular file is always ready
@@ -13,7 +14,7 @@ def das_exe() : string {
     return empty(args) ? "" : args[0]
 }
 
-[test]
+[test(description = "fpoll on a child's pipe is false while silent and true once a line or EOF arrives")]
 def test_fpoll_pipe(t : T?) {
     t |> run("a silent child polls false, a written line polls true, the EOF polls true") @(t : T?) {
         let tmp = create_temp_directory_result("das fio poll ")
@@ -50,7 +51,7 @@ def test_fpoll_pipe(t : T?) {
     }
 }
 
-[test]
+[test(description = "fpoll on a regular file is always true")]
 def test_fpoll_regular_file(t : T?) {
     t |> run("a regular file is always readable") @(t : T?) {
         var terr : string
@@ -67,4 +68,36 @@ def test_fpoll_regular_file(t : T?) {
         t |> success(ready, "fpoll reports a regular file readable with a zero timeout")
         t |> success(remove(fname))
     }
+}
+
+[test(description = "try_lock_file locks exclusively across handles and a child process, and closing the handle releases the lock")]
+def file_lock_is_exclusive_and_released_by_close(t : T?) {
+    let made = create_temp_directory_result("file-lock-")
+    verify(made is value)
+    let root = made as value
+    {
+        var first = fopen("{root}/owner.lock", "ab")
+        let second = fopen("{root}/owner.lock", "ab")
+        verify(first != null && second != null)
+        {
+            t |> success(try_lock_file(first))
+            t |> success(!try_lock_file(second), "another open handle cannot take the lock")
+            var output : string
+            let blocked = run_and_capture([get_host_binary(), "-dasroot", get_das_root(),
+                    "{get_das_root()}/tests/fio/_fixture_file_lock.das",
+                    "--", "{root}/owner.lock"], output, 60.0)
+            t |> equal(3, blocked, "another process is excluded: {output}")
+            fclose(first); first = null
+            t |> success(try_lock_file(second), "close releases ownership")
+        } finally {
+            if (first != null) { fclose(first) }
+            fclose(second)
+        }
+        var output : string
+        let acquired = run_and_capture([get_host_binary(), "-dasroot", get_das_root(),
+                "{get_das_root()}/tests/fio/_fixture_file_lock.das",
+                "--", "{root}/owner.lock"], output, 60.0)
+        t |> equal(0, acquired, "a later process acquires after close: {output}")
+        t |> success(!try_lock_file(null))
+    } finally { rmdir_rec(root) }
 }

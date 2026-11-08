@@ -24,7 +24,7 @@ def private query_cycles(var pat : Pattern; num_cycles : int) : array<Event> {
 
 // ─── set_s (patternified set_sound) ───
 
-[test]
+[test(description = "set_s with a fixed name sets the sound on the event")]
 def test_set_s_static(t : T?) {
     let pat <- note_pattern("c3", "sine") |> set_s("supersaw")
     var inscope events <- query_cycle(pat)
@@ -32,7 +32,7 @@ def test_set_s_static(t : T?) {
     t |> equal(events[0].s, "supersaw")
 }
 
-[test]
+[test(description = "set_s with a mini-notation pattern picks a sound per cycle")]
 def test_set_s_mini_notation(t : T?) {
     let pat <- note_pattern("c3", "sine") |> set_s("<supersaw sawtooth>")
     // Cycle 0 → supersaw
@@ -43,7 +43,7 @@ def test_set_s_mini_notation(t : T?) {
     t |> equal(ev1[0].s, "sawtooth")
 }
 
-[test]
+[test(description = "a sound pattern applies the cycle's sound to every note in that cycle")]
 def test_set_sound_pattern(t : T?) {
     let sound_pat <- s("<triangle square>")
     let pat <- note_pattern("c3 e3", "sine") |> set_sound(sound_pat)
@@ -60,7 +60,7 @@ def test_set_sound_pattern(t : T?) {
 
 // ─── Signal + filter integration ───
 
-[test]
+[test(description = "a signal-driven lpf applies to every note of a chord and keeps the sound")]
 def test_signal_lpf_on_chord(t : T?) {
     let lpfSig <- signal_sine() |> signal_range(200.0, 2000.0) |> slow(4.0lf)
     let pat <- note_pattern("c3 e3 g3", "sawtooth") |> set_lpf(lpfSig) |> set_room(0.7)
@@ -75,7 +75,7 @@ def test_signal_lpf_on_chord(t : T?) {
 
 // ─── FM + vowel + reverb integration ───
 
-[test]
+[test(description = "fm, vowel and reverb setters combine on one event")]
 def test_fm_vowel_reverb(t : T?) {
     let vowelPat <- s("<a e i>") |> slow(12.0lf)
     let pat <- note_pattern("<g3 c4>", "sine") |> set_fm(2.0) |> set_fmh(3.0) |> set_vowel(vowelPat) |> set_room(1.0) |> set_roomsize(10.0)
@@ -90,7 +90,7 @@ def test_fm_vowel_reverb(t : T?) {
 
 // ─── Scale + delay + pan integration ───
 
-[test]
+[test(description = "scale conversion combines with delay and pan and maps degrees onto minor pentatonic notes")]
 def test_scale_delay_pan(t : T?) {
     let gainSig <- signal_perlin() |> signal_range(0.03, 0.12) |> slow(10.0lf)
     let panSig <- signal_sine() |> signal_range(0.15, 0.85) |> slow(7.0lf)
@@ -115,7 +115,7 @@ def test_scale_delay_pan(t : T?) {
 
 // ─── Supersaw pad integration ───
 
-[test]
+[test(description = "the supersaw pad layer produces one supersaw event")]
 def test_supersaw_pad(t : T?) {
     let lpfSig <- signal_sine() |> signal_range(250.0, 800.0) |> slow(32.0lf)
     let panSig <- signal_sine() |> signal_range(0.3, 0.7) |> slow(20.0lf)
@@ -131,7 +131,7 @@ def test_supersaw_pad(t : T?) {
 
 // ─── Noise bed integration ───
 
-[test]
+[test(description = "the noise bed layer produces one pink-noise event")]
 def test_noise_bed(t : T?) {
     let lpfSig <- signal_sine() |> signal_range(120.0, 350.0) |> slow(40.0lf)
     let pat <- atom("pink") |> set_gain(0.03) |> set_lpf(lpfSig) |> set_hpf(40.0) |> set_room(0.5) |> set_roomsize(4.0) |> set_orbit(5)
@@ -146,7 +146,7 @@ def test_noise_bed(t : T?) {
 
 // ─── Full ambient stack ───
 
-[test]
+[test(description = "the full ambient composition yields events from all seven layers in a cycle")]
 def test_full_ambient_layer_count(t : T?) {
     // Build all 7 layers exactly as in integration_full_ambient.das
     let layer1 <- note_pattern("<c1 g1 f1 eb1 bb0 f1>", "sine") |> slow(32.0lf) |> set_gain(0.3) |> set_attack(6.0) |> set_release(8.0) |> set_lpf(180.0) |> set_room(1.0) |> set_roomsize(10.0) |> set_orbit(1)
@@ -169,7 +169,7 @@ def test_full_ambient_layer_count(t : T?) {
     t |> success(length(events) >= 7)
 }
 
-[test]
+[test(description = "each ambient layer produces its own sound name")]
 def test_full_ambient_layer_sounds(t : T?) {
     // Quick build — just verify each layer produces the right sound name
     let layer1 <- note_pattern("<c1>", "sine") |> set_orbit(1)
@@ -192,7 +192,7 @@ def test_full_ambient_layer_sounds(t : T?) {
     t |> equal(events[6].s, "sine")       // layer 7
 }
 
-[test]
+[test(description = "each ambient layer is routed to its own orbit")]
 def test_full_ambient_orbits(t : T?) {
     let layer1 <- note_pattern("<c1>", "sine") |> set_orbit(1)
     let layer2 <- note_pattern("<c2>", "supersaw") |> set_orbit(2)

@@ -1,4 +1,5 @@
-// out-of-range literal in compound assignment — promotion's range error must suppress mismatching_numeric_type
+//! An out-of-range literal in a compound assignment must report the
+//! range error (30515) and not a numeric type mismatch.
 options gen2
 
 expect 30515

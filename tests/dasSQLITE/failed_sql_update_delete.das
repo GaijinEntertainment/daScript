@@ -1,4 +1,5 @@
 options gen2
+//! malformed _sql_update and _sql_delete calls must not compile
 
 // Each `_sql_update` / `_sql_delete` call below is intentionally malformed.
 // 40104 = macro_error (from the analyzer).

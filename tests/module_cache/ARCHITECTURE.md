@@ -14,7 +14,7 @@ this document states what the folder is and why its tests take the shape they do
   the module's source, stamped by content so a byte-identical rewrite serves and a same-size
   edit cuts off; and the directory's size cap - children run inside a temp directory, so the
   default cache they fill and prune is their own, never the tree's.
-- `test_compile_file_cache.das` - a script's `compile_file` under `CodeOfPolicies.module_cache`
+- `test_compile_file_cache` in `uncategorized.das` - a script's `compile_file` under `CodeOfPolicies.module_cache`
   reads and refreshes the default cache as the host does for its own script: the cold compile
   parses and writes one record for the compiled file, the warm one serves the leaf and the root
   (read off the `cache read took` lines `log_module_compile_time` prints, matched on the file
@@ -24,36 +24,36 @@ this document states what the folder is and why its tests take the shape they do
   records of their own - the target beside other policies too, since the occurrence list the
   key folds is NUL-separated and the key is hashed as a C string; the children run inside the
   temp directory, so the default cache they write is under it.
-- `test_macro_dep_invalidate.das` - a compile-time input a macro pinned through
+- `test_macro_dep_invalidate` in `test_macro_cache.das` - a compile-time input a macro pinned through
   `add_module_cache_dependency` is compared by content, not mtime: a byte-identical rewrite
   serves the record, a changed file re-parses from that module on and says so.
-- `test_apply_macro_reparse.das` - a module whose compile registered a call macro into itself
+- `test_apply_macro_reparse` in `test_macro_cache.das` - a module whose compile registered a call macro into itself
   (a function annotation's `apply` on a def of the module) is never served from the cache: its
   record is skipped and the module reparses in place, the warm read says so and serves the
   rest, and a driver edited after it parses from source against the macro the reparse
   registered - the site the macro rewrites still reads 42.
-- `test_generic_call_macro_cache.das` - a script whose function annotation registers a call
+- `test_generic_call_macro_cache` in `test_macro_cache.das` - a script whose function annotation registers a call
   macro into it, and whose generic body still holds that call uninferred, writes its record: the
   cold run writes the cache and prints the result, and the warm run reparses the script in place.
-- `test_extern_registrar_reparse.das` - a module whose compile registered an extern proxy into
+- `test_extern_registrar_reparse` in `test_macro_cache.das` - a module whose compile registered an extern proxy into
   `dasbind` (a `late` `[extern]` def, so no library is needed) carries the same mark: the warm
   read skips its record and reparses it in place without reading the payload, so no cumulative
   hash warning and no failed read, and the driver still serves.
-- `test_builtin_embedded_not_cached.das` - a builtin module's embedded source (`UnitTest`'s
+- `test_builtin_embedded_not_cached` in `uncategorized.das` - a builtin module's embedded source (`UnitTest`'s
   `unit_test.das`) leaves no record in the cache, and a program requiring the module serves
   clean on the warm run with no cumulative hash warning.
-- `test_generic_instance_origin.das` - a generic instance restored from the cache keeps its
+- `test_generic_instance_origin` in `uncategorized.das` - a generic instance restored from the cache keeps its
   origin generic, so a fresh program compiled in the same process after the restore resolves it.
-- `test_type_backref_record.das` - one host process compiles two scripts requiring `json_boost`,
+- `test_type_backref_record` in `uncategorized.das` - one host process compiles two scripts requiring `json_boost`,
   a `shared` module, under the default cache in the temp directory: on the warm run the first
   script's compile holds it, so the second script's stream reads its record into a throwaway
   copy, and the second script's `JV` call - a main-module type equal to one in that record -
   still serves and runs; the stream's type table restarts at each module's record, so no
   back-reference reaches the copy.
-- `test_shared_typename.das` - compound type-name folding across cold,
+- `test_shared_typename` in `uncategorized.das` - compound type-name folding across cold,
   warm and obsolete-version cache reads, retaining the invoking host's
   static or dynamic kind outside AOT-consuming runs.
-- `test_descriptor_manifest.das` - the manifest the module scan keeps beside each `.das_module`
+- `test_descriptor_manifest` in `test_module_loading.das` - the manifest the module scan keeps beside each `.das_module`
   descriptor, replaying its registrations instead of compiling the descriptor, on a project root
   the test writes, three modules in it: one whose descriptor registers
   a require path, one whose descriptor registers an absent C++ artifact (the `dm` row, replayed
@@ -68,7 +68,7 @@ this document states what the folder is and why its tests take the shape they do
   tab leaves the manifest unwritten, and a directory sitting where the `.tmp` or the manifest
   goes fails the create or the rename so the start just compiles; each verdict is read from
   the `DAS_TRACE_MODULE_LOAD=1` line the child prints.
-- `test_deferred_modules.das` - a replayed `dm` row is not loaded by the scan. The project root
+- `test_deferred_modules` in `test_module_loading.das` - a replayed `dm` row is not loaded by the scan. The project root
   holds a copy of the tree's `dasUnitTest` (descriptor and artifact), which shadows the tree's,
   so the copy's manifest is the test's to make cold or warm: a cold start compiles the
   descriptor, loads the module to record its name, and a `require ?UnitTest x` is taken; a
@@ -100,7 +100,7 @@ this document states what the folder is and why its tests take the shape they do
   and the arm says so. A static host - the AOT
   test binary, whose descriptors register no shared module, or a tree holding no
   `.shared_module` - has nothing to observe and the test says so and returns.
-- `test_module_groups.das` - `require [group]` on a project root the test writes: two pure-das
+- `test_module_groups` in `test_module_loading.das` - `require [group]` on a project root the test writes: two pure-das
   modules whose descriptors register themselves under one group (one guarded on a module the
   build has) and under a second group behind path guards, one the fixture has and one it lacks;
   a third whose descriptor registers a member no require path serves; and a fourth that joins
@@ -121,7 +121,7 @@ this document states what the folder is and why its tests take the shape they do
   module cache, a member joining the group after a requirer's record was written cuts the cache
   off at that requirer (`require set changed`) while the unchanged tree and the rewritten cache
   serve.
-- `test_require_module_now.das` - a `require` issued after the walk (`daslib/cross_context`),
+- `test_require_module_now` in `test_module_loading.das` - a `require` issued after the walk (`daslib/cross_context`),
   from the test module's own `[init]` for the API - a require after the walk is a compile's, and
   a test body runs after the compile - and in a child for the cache: a `shared` fixture with a
   macro context compiles at the call and the same module answers after; `macro_context_of` and

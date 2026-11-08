@@ -1,9 +1,13 @@
+//! A piped block cannot pad across a parameter without a default, nor
+//! land on a function or method with no block parameter, even when
+//! other arguments are named.
 options gen2
 expect 30341:4
 
 require dastest/testing_boost public
 
-// 'mid' has no default, so the piped block cannot pad across it to reach 'body'
+// 'mid' has no default, so the piped block cannot pad across it to
+// reach 'body'
 def blocked(tag : int; mid : int; opt : int = 0; body : block<() : int>) : int {
     return tag + mid + opt + invoke(body)
 }
@@ -13,11 +17,13 @@ def noblock(tag : int; opt : int = 0) : int {
     return tag + opt
 }
 
-// genuine class methods have the same limits: a non-default param that is not provided blocks
-// padding, and a method with no block param has nowhere for the piped block to land
+// genuine class methods have the same limits: a non-default param
+// that is not provided blocks padding, and a method with no block
+// param has nowhere for the piped block to land
 class Widget {
     d : int
-    // 'mid' has no default and is not provided positionally -> can't pad across it to reach 'body'
+    // 'mid' has no default and is not provided positionally -> can't pad
+    // across it to reach 'body'
     def blocked(a : int; mid : int; opt : int = 0; body : block<() : int>) : int {
         return d + a + mid + opt + invoke(body)
     }

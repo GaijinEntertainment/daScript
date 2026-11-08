@@ -1,15 +1,19 @@
 options gen2
+//! group_by on a name that is not a join projection alias must not
+//! compile
 
-// `_join |> _group_by(_.<not-an-alias>)` rejects with a clear error message
-// listing the valid projection aliases. The fix path lives in push_group_key's
-// post-join branch (sql_linq.das): when `q.seenJoin` is true and the
-// `_.<field>` name is not in `q.joinProjRecordNames`, emit a macro_error.
+// `_join |> _group_by(_.<not-an-alias>)` rejects with a clear error
+// message listing the valid projection aliases. The fix path lives in
+// push_group_key's post-join branch (sql_linq.das): when `q.seenJoin`
+// is true and the `_.<field>` name is not in `q.joinProjRecordNames`,
+// emit a macro_error.
 //
-// The macro_error fires but the typer continues expanding the chain because
-// `_sql_text` returns null when its macro errors out — `_._0`/`_._1` in the
-// trailing `_select` then cascade to additional typer errors (linq generic
-// instantiation for group_by_lazy with an invalid tuple). Probe expects the
-// full cascade so the test is stable across linq.das internal changes.
+// The macro_error fires but the typer continues expanding the chain
+// because `_sql_text` returns null when its macro errors out —
+// `_._0`/`_._1` in the trailing `_select` then cascade to additional
+// typer errors (linq generic instantiation for group_by_lazy with an
+// invalid tuple). Probe expects the full cascade so the test is
+// stable across linq.das internal changes.
 expect 50503
 expect 50503
 expect 30831

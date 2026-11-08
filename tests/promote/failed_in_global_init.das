@@ -1,4 +1,5 @@
-// out-of-range global variable init
+//! An out-of-range initializer of a global variable must not compile
+//! (30515).
 options gen2
 
 expect 30515

@@ -35,19 +35,19 @@ def bump_vec_ret_scalar() : float {
     return 1.0
 }
 
-[test]
+[test(description = "the splat-collapse fold declines when only the vector operand has side effects, so the splat reads the scalar before the right operand writes it")]
 def test_splat_swap_declines_when_only_right_is_impure(t : T?) {
     g_scalar = 1.0
     t |> equal(float3(g_scalar) * bump_scalar_ret_vec(), float3(1.0, 1.0, 1.0), "splat argument read before the right operand writes it")
 }
 
-[test]
+[test(description = "the splat-collapse fold declines when only the splat argument has side effects, so its write lands before the right operand is read")]
 def test_splat_swap_declines_when_only_left_is_impure(t : T?) {
     g_vec3 = float3(1.0, 1.0, 1.0)
     t |> equal(float3(bump_vec_ret_scalar()) * g_vec3, float3(10.0, 10.0, 10.0), "splat argument writes before the right operand is read")
 }
 
-[test]
+[test(description = "a splat times a vector with both operands impure evaluates left to right in either operand order")]
 def test_splat_swap_keeps_evaluation_order(t : T?) {
     g_order = 0
     let r = float3(a()) * b()

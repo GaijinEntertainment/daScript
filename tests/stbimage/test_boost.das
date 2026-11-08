@@ -12,7 +12,7 @@ def test_image_path(name : string) : string => "{get_das_root()}/tests/stbimage/
 
 // ---- struct queries ----
 
-[test]
+[test(description = "an Image that was declared but never loaded reports valid() as false")]
 def test_default_image_invalid(t : T?) {
     t |> run("freshly declared Image is not valid") <| @(tt : T?) {
         let img : Image
@@ -20,7 +20,7 @@ def test_default_image_invalid(t : T?) {
     }
 }
 
-[test]
+[test(description = "loading test.png succeeds and leaves the Image reporting valid() as true")]
 def test_valid_after_load(t : T?) {
     t |> run("Image is valid after load") <| @(tt : T?) {
         var img : Image
@@ -30,7 +30,7 @@ def test_valid_after_load(t : T?) {
     }
 }
 
-[test]
+[test(description = "the stride of the loaded 64x64 RGBA 8-bit image is 256 bytes, one row of 64 four-byte pixels")]
 def test_stride(t : T?) {
     t |> run("stride of 64x64 RGBA uint8 image") <| @(tt : T?) {
         var img : Image
@@ -39,7 +39,7 @@ def test_stride(t : T?) {
     }
 }
 
-[test]
+[test(description = "the stride of the 64x64 four-channel HDR image is 1024 bytes because each channel is a 4-byte float")]
 def test_stride_hdr(t : T?) {
     t |> run("stride of 64x64 HDR image") <| @(tt : T?) {
         var img : Image
@@ -48,7 +48,7 @@ def test_stride_hdr(t : T?) {
     }
 }
 
-[test]
+[test(description = "has_alpha is true for the PNG loaded as four channels and false for the JPG loaded as three")]
 def test_has_alpha(t : T?) {
     t |> run("has_alpha for RGBA and RGB") <| @(tt : T?) {
         var img4 : Image
@@ -60,7 +60,7 @@ def test_has_alpha(t : T?) {
     }
 }
 
-[test]
+[test(description = "pixel_size is 4 bytes for the RGBA 8-bit PNG and 16 bytes for the RGBA float HDR image")]
 def test_pixel_size(t : T?) {
     t |> run("pixel_size for uint8 and float") <| @(tt : T?) {
         var img : Image
@@ -72,7 +72,7 @@ def test_pixel_size(t : T?) {
     }
 }
 
-[test]
+[test(description = "is_hdr is false for the 8-bit PNG Image and true for the Image loaded from the .hdr file")]
 def test_is_hdr_query(t : T?) {
     t |> run("is_hdr query on uint8 and float images") <| @(tt : T?) {
         var img : Image
@@ -84,7 +84,7 @@ def test_is_hdr_query(t : T?) {
     }
 }
 
-[test]
+[test(description = "data_size of the loaded 64x64 RGBA 8-bit image is 16384 bytes")]
 def test_data_size(t : T?) {
     t |> run("data_size matches expected") <| @(tt : T?) {
         var img : Image
@@ -95,7 +95,7 @@ def test_data_size(t : T?) {
 
 // ---- load from file ----
 
-[test]
+[test(description = "loading test.png succeeds and yields a 64x64 image with 4 channels and 1 byte per channel")]
 def test_load_png(t : T?) {
     t |> run("load PNG from file") <| @(tt : T?) {
         var img : Image
@@ -108,7 +108,7 @@ def test_load_png(t : T?) {
     }
 }
 
-[test]
+[test(description = "loading test.bmp succeeds and yields a 64x64 image with 1 byte per channel")]
 def test_load_bmp(t : T?) {
     t |> run("load BMP from file") <| @(tt : T?) {
         var img : Image
@@ -120,7 +120,7 @@ def test_load_bmp(t : T?) {
     }
 }
 
-[test]
+[test(description = "loading test.tga succeeds and yields a 64x64 image with 1 byte per channel")]
 def test_load_tga(t : T?) {
     t |> run("load TGA from file") <| @(tt : T?) {
         var img : Image
@@ -132,7 +132,7 @@ def test_load_tga(t : T?) {
     }
 }
 
-[test]
+[test(description = "loading test.jpg with three requested channels yields a 64x64 image with 3 channels and 1 byte per channel")]
 def test_load_jpg(t : T?) {
     t |> run("load JPG from file") <| @(tt : T?) {
         var img : Image
@@ -145,7 +145,7 @@ def test_load_jpg(t : T?) {
     }
 }
 
-[test]
+[test(description = "load_hdr on test.hdr succeeds and yields a 64x64 image stored as 4-byte floats")]
 def test_load_hdr_file(t : T?) {
     t |> run("load HDR from file") <| @(tt : T?) {
         var img : Image
@@ -157,7 +157,7 @@ def test_load_hdr_file(t : T?) {
     }
 }
 
-[test]
+[test(description = "load_16 on the 8-bit test.png succeeds and yields a 64x64 image widened to 2 bytes per channel")]
 def test_load_16_file(t : T?) {
     t |> run("load 16-bit from file") <| @(tt : T?) {
         var img : Image
@@ -169,7 +169,7 @@ def test_load_16_file(t : T?) {
     }
 }
 
-[test]
+[test(description = "loading the RGBA test.png with three requested channels returns an image with exactly 3 channels")]
 def test_load_requested_channels(t : T?) {
     t |> run("load with requested_channels changes channel count") <| @(tt : T?) {
         var img : Image
@@ -179,7 +179,7 @@ def test_load_requested_channels(t : T?) {
     }
 }
 
-[test]
+[test(description = "loading a file that does not exist reports failure with a non-empty error and leaves the Image invalid")]
 def test_load_failure(t : T?) {
     t |> run("load nonexistent file returns error") <| @(tt : T?) {
         var img : Image
@@ -192,7 +192,7 @@ def test_load_failure(t : T?) {
 
 // ---- load from memory ----
 
-[test]
+[test(description = "PNG bytes encoded from test.png decode through load_from_memory into a 64x64 image with 1 byte per channel")]
 def test_load_from_memory(t : T?) {
     t |> run("load from memory buffer") <| @(tt : T?) {
         var img : Image
@@ -209,7 +209,7 @@ def test_load_from_memory(t : T?) {
     }
 }
 
-[test]
+[test(description = "load_from_memory on 16 bytes that are not an image reports failure with a non-empty error")]
 def test_load_from_memory_failure(t : T?) {
     t |> run("load from garbage memory fails") <| @(tt : T?) {
         var garbage : array<uint8>
@@ -224,7 +224,7 @@ def test_load_from_memory_failure(t : T?) {
     }
 }
 
-[test]
+[test(description = "load_16_from_memory on 8-bit PNG bytes succeeds and returns an image with 2 bytes per channel")]
 def test_load_16_from_memory(t : T?) {
     t |> run("load 16-bit from memory") <| @(tt : T?) {
         var img : Image
@@ -238,7 +238,7 @@ def test_load_16_from_memory(t : T?) {
     }
 }
 
-[test]
+[test(description = "load_from_memory on RGBA PNG bytes with three requested channels returns an image with exactly 3 channels")]
 def test_load_from_memory_requested_channels(t : T?) {
     t |> run("load from memory with requested channels") <| @(tt : T?) {
         var img : Image
@@ -252,7 +252,7 @@ def test_load_from_memory_requested_channels(t : T?) {
     }
 }
 
-[test]
+[test(description = "the raw bytes of test.hdr decode through load_hdr_from_memory into a 64x64 float image with at least one channel")]
 def test_load_hdr_from_memory(t : T?) {
     t |> run("load HDR from memory buffer") <| @(tt : T?) {
         // load HDR file to get raw float data, encode as HDR to memory, then load_hdr_from_memory
@@ -281,7 +281,7 @@ def test_load_hdr_from_memory(t : T?) {
 
 // ---- save to file ----
 
-[test]
+[test(description = "an image saved to a .png path loads back successfully as a 64x64 image")]
 def test_save_png(t : T?) {
     t |> run("save as PNG and load back") <| @(tt : T?) {
         var img : Image
@@ -298,7 +298,7 @@ def test_save_png(t : T?) {
     }
 }
 
-[test]
+[test(description = "an image saved to a .bmp path loads back successfully with width 64")]
 def test_save_bmp(t : T?) {
     t |> run("save as BMP and load back") <| @(tt : T?) {
         var img : Image
@@ -314,7 +314,7 @@ def test_save_bmp(t : T?) {
     }
 }
 
-[test]
+[test(description = "an image saved to a .tga path loads back successfully with width 64")]
 def test_save_tga(t : T?) {
     t |> run("save as TGA and load back") <| @(tt : T?) {
         var img : Image
@@ -330,7 +330,7 @@ def test_save_tga(t : T?) {
     }
 }
 
-[test]
+[test(description = "a three-channel image saved to a .jpg path with the default quality loads back successfully with width 64")]
 def test_save_jpg(t : T?) {
     t |> run("save as JPG with default quality") <| @(tt : T?) {
         var img : Image
@@ -346,7 +346,7 @@ def test_save_jpg(t : T?) {
     }
 }
 
-[test]
+[test(description = "saving an Image that holds no pixels reports failure with a non-empty error")]
 def test_save_invalid_image(t : T?) {
     t |> run("save invalid image returns error") <| @(tt : T?) {
         var img : Image
@@ -358,7 +358,7 @@ def test_save_invalid_image(t : T?) {
 
 // ---- encode to memory ----
 
-[test]
+[test(description = "encoding the image as png succeeds and the output starts with the PNG signature bytes 137 80 78 71")]
 def test_encode_png(t : T?) {
     t |> run("encode PNG to memory with magic bytes") <| @(tt : T?) {
         var img : Image
@@ -375,7 +375,7 @@ def test_encode_png(t : T?) {
     }
 }
 
-[test]
+[test(description = "encoding the image as bmp succeeds and the output starts with the bytes 'B' 'M'")]
 def test_encode_bmp(t : T?) {
     t |> run("encode BMP to memory with magic bytes") <| @(tt : T?) {
         var img : Image
@@ -389,7 +389,7 @@ def test_encode_bmp(t : T?) {
     }
 }
 
-[test]
+[test(description = "encoding the three-channel image as jpg succeeds and the output starts with the JPEG marker bytes 255 216")]
 def test_encode_jpg(t : T?) {
     t |> run("encode JPG to memory with magic bytes") <| @(tt : T?) {
         var img : Image
@@ -403,7 +403,7 @@ def test_encode_jpg(t : T?) {
     }
 }
 
-[test]
+[test(description = "encoding the image as tga succeeds and produces a non-empty byte array")]
 def test_encode_tga(t : T?) {
     t |> run("encode TGA to memory") <| @(tt : T?) {
         var img : Image
@@ -415,7 +415,7 @@ def test_encode_tga(t : T?) {
     }
 }
 
-[test]
+[test(description = "encoding to the unsupported format gif reports failure with a non-empty error")]
 def test_encode_invalid_format(t : T?) {
     t |> run("encode unsupported format returns error") <| @(tt : T?) {
         var img : Image
@@ -429,7 +429,7 @@ def test_encode_invalid_format(t : T?) {
 
 // ---- pixel access: with_pixels ----
 
-[test]
+[test(description = "with_pixels over bytes shows test.png's top-left pixel as (0, 0, 128, 255) and its bottom-right pixel as (252, 252, 128)")]
 def test_with_pixels_uint8(t : T?) {
     t |> run("with_pixels uint8 reads corner pixels") <| @(tt : T?) {
         var img : Image
@@ -449,7 +449,7 @@ def test_with_pixels_uint8(t : T?) {
     }
 }
 
-[test]
+[test(description = "with_pixels over floats shows the HDR image's first pixel as red and green near 0, blue near 0.5 and alpha near 1")]
 def test_with_pixels_float(t : T?) {
     t |> run("with_pixels float reads HDR data") <| @(tt : T?) {
         var img : Image
@@ -464,7 +464,7 @@ def test_with_pixels_float(t : T?) {
     }
 }
 
-[test]
+[test(description = "with_pixels over uint16 shows the 16-bit load's first pixel with red and green 0 and blue scaled up to a non-zero value")]
 def test_with_pixels_16(t : T?) {
     t |> run("with_pixels uint16 reads 16-bit data") <| @(tt : T?) {
         var img : Image
@@ -479,7 +479,7 @@ def test_with_pixels_16(t : T?) {
     }
 }
 
-[test]
+[test(description = "a byte written inside one mutable with_pixels block is still there when the pixels are viewed again")]
 def test_with_pixels_modify(t : T?) {
     t |> run("mutable with_pixels modifies pixel data") <| @(tt : T?) {
         var img : Image
@@ -494,7 +494,7 @@ def test_with_pixels_modify(t : T?) {
     }
 }
 
-[test]
+[test(description = "with_pixels_f exposes the HDR image as floats whose first alpha is near 1")]
 def test_with_pixels_named_f(t : T?) {
     t |> run("with_pixels_f explicit name on HDR") <| @(tt : T?) {
         var img : Image
@@ -505,7 +505,7 @@ def test_with_pixels_named_f(t : T?) {
     }
 }
 
-[test]
+[test(description = "with_pixels_16 exposes the 16-bit load as 64*64*4 uint16 values")]
 def test_with_pixels_named_16(t : T?) {
     t |> run("with_pixels_16 explicit name") <| @(tt : T?) {
         var img : Image
@@ -518,7 +518,7 @@ def test_with_pixels_named_16(t : T?) {
 
 // ---- pixel access: with_row ----
 
-[test]
+[test(description = "with_row 0 exposes 256 bytes whose first pixel has red and green equal to 0")]
 def test_with_row(t : T?) {
     t |> run("with_row reads first row") <| @(tt : T?) {
         var img : Image
@@ -532,7 +532,7 @@ def test_with_row(t : T?) {
     }
 }
 
-[test]
+[test(description = "with_row 63 exposes 256 bytes whose first pixel has red 0 and green 252, unlike row 0")]
 def test_with_row_last(t : T?) {
     t |> run("with_row reads last row") <| @(tt : T?) {
         var img : Image
@@ -546,7 +546,7 @@ def test_with_row_last(t : T?) {
     }
 }
 
-[test]
+[test(description = "with_row over floats on the HDR image exposes 256 values whose first blue is near 0.5")]
 def test_with_row_float(t : T?) {
     t |> run("with_row float on HDR image") <| @(tt : T?) {
         var img : Image
@@ -558,7 +558,7 @@ def test_with_row_float(t : T?) {
     }
 }
 
-[test]
+[test(description = "a byte written inside a mutable with_row block is still there when the same row is viewed again")]
 def test_with_row_modify(t : T?) {
     t |> run("mutable with_row modifies row data") <| @(tt : T?) {
         var img : Image
@@ -574,7 +574,7 @@ def test_with_row_modify(t : T?) {
 
 // ---- resize ----
 
-[test]
+[test(description = "resizing the 64x64 RGBA image to 32x32 gives a valid 32x32 image that keeps 4 channels and 1 byte per channel")]
 def test_resize_downscale(t : T?) {
     t |> run("resize 64x64 to 32x32") <| @(tt : T?) {
         var img : Image
@@ -588,7 +588,7 @@ def test_resize_downscale(t : T?) {
     }
 }
 
-[test]
+[test(description = "resizing the 64x64 RGBA image up to 128x128 gives a 128x128 image that keeps 4 channels")]
 def test_resize_upscale(t : T?) {
     t |> run("resize 64x64 to 128x128") <| @(tt : T?) {
         var img : Image
@@ -600,7 +600,7 @@ def test_resize_upscale(t : T?) {
     }
 }
 
-[test]
+[test(description = "enlarging an all-255 2x2 image to 4x4 leaves every output byte at 255")]
 def test_resize_uniform_color(t : T?) {
     t |> run("resize uniform white stays white") <| @(tt : T?) {
         var img = Image(width = 2, height = 2, channels = 4, bpc = 1)
@@ -617,7 +617,7 @@ def test_resize_uniform_color(t : T?) {
     }
 }
 
-[test]
+[test(description = "point-sample enlarging a single opaque red pixel to 2x2 gives four opaque red pixels")]
 def test_resize_with_filter(t : T?) {
     t |> run("resize with POINT_SAMPLE filter") <| @(tt : T?) {
         var img = Image(width = 1, height = 1, channels = 4, bpc = 1)
@@ -638,7 +638,7 @@ def test_resize_with_filter(t : T?) {
     }
 }
 
-[test]
+[test(description = "resizing the HDR image to 32x32 gives a valid 32x32 image that is still stored as 4-byte floats")]
 def test_resize_hdr(t : T?) {
     t |> run("resize HDR preserves bpc=4") <| @(tt : T?) {
         var img : Image
@@ -653,7 +653,7 @@ def test_resize_hdr(t : T?) {
 
 // ---- flip vertical ----
 
-[test]
+[test(description = "flip_vertical moves test.png's top-left pixel (0, 0, 128) to the last row and its bottom-left row's green 252 to the first row")]
 def test_flip_vertical(t : T?) {
     t |> run("flip vertical reverses rows") <| @(tt : T?) {
         var img : Image
@@ -673,7 +673,7 @@ def test_flip_vertical(t : T?) {
     }
 }
 
-[test]
+[test(description = "flipping an image vertically twice reproduces the first 16 bytes of the original")]
 def test_flip_vertical_roundtrip(t : T?) {
     t |> run("double flip restores original") <| @(tt : T?) {
         var img : Image
@@ -686,7 +686,7 @@ def test_flip_vertical_roundtrip(t : T?) {
     }
 }
 
-[test]
+[test(description = "flipping the HDR image vertically keeps its 64x64 size and 4-byte float storage")]
 def test_flip_vertical_hdr(t : T?) {
     t |> run("flip vertical on HDR preserves bpc") <| @(tt : T?) {
         var img : Image
@@ -700,7 +700,7 @@ def test_flip_vertical_hdr(t : T?) {
 
 // ---- standalone functions ----
 
-[test]
+[test(description = "load_image on test.png returns a valid Image of width 64")]
 def test_load_image_convenience(t : T?) {
     t |> run("load_image convenience returns valid Image") <| @(tt : T?) {
         let img <- load_image(test_image_path("test.png"))
@@ -709,7 +709,7 @@ def test_load_image_convenience(t : T?) {
     }
 }
 
-[test]
+[test(description = "load_image on a missing file returns an invalid Image and fills the error string")]
 def test_load_image_with_error(t : T?) {
     t |> run("load_image with error out-param") <| @(tt : T?) {
         var error : string
@@ -719,7 +719,7 @@ def test_load_image_with_error(t : T?) {
     }
 }
 
-[test]
+[test(description = "image_info on test.png reports width 64, height 64 and 4 components without decoding it")]
 def test_image_info(t : T?) {
     t |> run("image_info returns dimensions") <| @(tt : T?) {
         let info = image_info(test_image_path("test.png"))
@@ -729,7 +729,7 @@ def test_image_info(t : T?) {
     }
 }
 
-[test]
+[test(description = "the path-based is_hdr is true for test.hdr and false for test.png")]
 def test_is_hdr_standalone(t : T?) {
     t |> run("is_hdr standalone function") <| @(tt : T?) {
         tt |> success(stbimage_boost::is_hdr(test_image_path("test.hdr")), "HDR detected")
@@ -737,14 +737,14 @@ def test_is_hdr_standalone(t : T?) {
     }
 }
 
-[test]
+[test(description = "the path-based is_16_bit is false for the 8-bit test.png")]
 def test_is_16_bit_standalone(t : T?) {
     t |> run("is_16_bit standalone function") <| @(tt : T?) {
         tt |> success(!stbimage_boost::is_16_bit(test_image_path("test.png")), "8-bit PNG not 16-bit")
     }
 }
 
-[test]
+[test(description = "is_hdr_from_memory is false for the bytes of an encoded PNG")]
 def test_is_hdr_from_memory_standalone(t : T?) {
     t |> run("is_hdr_from_memory on PNG bytes") <| @(tt : T?) {
         var img : Image
@@ -757,7 +757,7 @@ def test_is_hdr_from_memory_standalone(t : T?) {
 
 // ---- roundtrip integrity ----
 
-[test]
+[test(description = "saving test.png to a new PNG file and loading it back gives the same byte count and zero differing bytes")]
 def test_save_load_pixel_roundtrip(t : T?) {
     t |> run("save PNG then load back preserves pixels") <| @(tt : T?) {
         var img : Image
@@ -778,7 +778,7 @@ def test_save_load_pixel_roundtrip(t : T?) {
     }
 }
 
-[test]
+[test(description = "encoding test.png to PNG bytes and decoding them back gives the same size, channel count and zero differing bytes")]
 def test_encode_decode_roundtrip(t : T?) {
     t |> run("encode to PNG memory then decode preserves pixels") <| @(tt : T?) {
         var img : Image
@@ -802,7 +802,7 @@ def test_encode_decode_roundtrip(t : T?) {
 
 // ---- make_image ----
 
-[test]
+[test(description = "make_image(32, 16, 4) returns an 8-bit image of that size whose 2048 bytes are all zero")]
 def test_make_image(t : T?) {
     t |> run("make_image creates blank image") <| @(tt : T?) {
         let img <- make_image(32, 16, 4)
@@ -822,7 +822,7 @@ def test_make_image(t : T?) {
     }
 }
 
-[test]
+[test(description = "make_image with 4 bytes per channel returns an image that reports is_hdr and holds 8*8*3*4 bytes")]
 def test_make_image_hdr(t : T?) {
     t |> run("make_image with bpc=4 creates HDR image") <| @(tt : T?) {
         let img <- make_image(8, 8, 3, 4)
@@ -834,7 +834,7 @@ def test_make_image_hdr(t : T?) {
 
 // ---- save HDR ----
 
-[test]
+[test(description = "an HDR image saved to a .hdr path loads back with load_hdr as a 64x64 float image")]
 def test_save_hdr(t : T?) {
     t |> run("save as HDR and load back") <| @(tt : T?) {
         var img : Image
@@ -852,7 +852,7 @@ def test_save_hdr(t : T?) {
     }
 }
 
-[test]
+[test(description = "saving the same image as JPG at quality 100 produces a larger file than at quality 10")]
 def test_save_jpg_quality(t : T?) {
     t |> run("save JPG with explicit quality") <| @(tt : T?) {
         var img : Image
@@ -887,7 +887,7 @@ def test_save_jpg_quality(t : T?) {
 
 // ---- is_16_bit_from_memory ----
 
-[test]
+[test(description = "is_16_bit_from_memory is false for the bytes of an encoded 8-bit PNG")]
 def test_is_16_bit_from_memory_standalone(t : T?) {
     t |> run("is_16_bit_from_memory on PNG bytes") <| @(tt : T?) {
         var img : Image
@@ -900,7 +900,7 @@ def test_is_16_bit_from_memory_standalone(t : T?) {
 
 // ---- make_image with bpc=2 ----
 
-[test]
+[test(description = "make_image with 2 bytes per channel returns a valid 8x8 four-channel image holding 8*8*4*2 bytes")]
 def test_make_image_16(t : T?) {
     t |> run("make_image with bpc=2 creates 16-bit image") <| @(tt : T?) {
         let img <- make_image(8, 8, 4, 2)

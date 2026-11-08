@@ -1,3 +1,5 @@
+//! under options no_init a global initialized by a function call and
+//! an [init] function do not compile
 options gen2
 expect 30164:2, 30174
 

@@ -53,7 +53,7 @@ def parse_optional_default(input : string; blk : block<(val : int; err : array<P
     }
 }
 
-[test]
+[test(description = "an optional element is taken when present")]
 def test_optional_present(t : T?) {
     t |> run("minus present") @(t : T?) {
         parse_optional_sign("-42") $(val; err) {
@@ -63,7 +63,7 @@ def test_optional_present(t : T?) {
     }
 }
 
-[test]
+[test(description = "a missing optional element does not fail the rule")]
 def test_optional_absent(t : T?) {
     t |> run("no minus") @(t : T?) {
         parse_optional_sign("42") $(val; err) {
@@ -73,7 +73,7 @@ def test_optional_absent(t : T?) {
     }
 }
 
-[test]
+[test(description = "the suffix form of optional matches a present element")]
 def test_optional_suffix_present(t : T?) {
     parse_optional_suffix("hello!") $(val; err) {
         t |> success(err |> empty)
@@ -81,7 +81,7 @@ def test_optional_suffix_present(t : T?) {
     }
 }
 
-[test]
+[test(description = "the suffix form of optional succeeds on an absent element")]
 def test_optional_suffix_absent(t : T?) {
     parse_optional_suffix("hello") $(val; err) {
         t |> success(err |> empty)
@@ -89,7 +89,7 @@ def test_optional_suffix_absent(t : T?) {
     }
 }
 
-[test]
+[test(description = "an absent optional value falls back to its default of 0")]
 def test_optional_default_value(t : T?) {
     t |> run("with value") @(t : T?) {
         parse_optional_default("val = 42") $(val; err) {

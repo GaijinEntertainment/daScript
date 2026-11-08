@@ -1,3 +1,5 @@
+//! sscan_json into a function call's scalar result must not compile:
+//! a call result is const, not a destination.
 options gen2
 expect 30341
 

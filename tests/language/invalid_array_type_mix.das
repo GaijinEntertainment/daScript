@@ -1,3 +1,4 @@
+//! an array of references or of void does not compile
 // invalid array element types
 // verifies compiler rejects array<ref> and array<void>
 options gen2

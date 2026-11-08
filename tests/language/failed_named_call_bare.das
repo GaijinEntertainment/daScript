@@ -1,3 +1,6 @@
+//! a named call with an unknown or duplicate name, a missing required
+//! argument, out-of-order names or a name for a positionally filled
+//! slot does not compile
 options gen2
 expect 30341:5
 

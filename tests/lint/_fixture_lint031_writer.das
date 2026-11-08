@@ -1,8 +1,8 @@
 options gen2
 options auto_inline_functions = false
-// lint-skip-file: the const-stripped call below is the finding test_lint031_memo_and_anchor.das measures
+// lint-skip-file: the const-stripped call is the LINT031 anchor
 
-// the first of two programs sharing one callee name: this fill_one writes through its slot
+// program one of two sharing a callee name: fill_one writes its slot
 def fill_one(var p : int?) {
     unsafe {
         *p = 1

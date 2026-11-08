@@ -1,3 +1,4 @@
+//! a function with two arguments of the same name does not compile
 // duplicate function argument name
 // verifies compiler rejects a function with two arguments of the same name
 options gen2

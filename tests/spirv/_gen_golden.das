@@ -1,11 +1,13 @@
 options gen2
 options indenting = 4
 
-// Maintained golden generator: writes a full symbolic disassembly (spirv_dis::dump) of every
-// captured fixture blob to tests/spirv/_golden/<name>.txt.  Re-run whenever a new fixture is
-// added or the emitter is intentionally changed to update the frozen baseline.  Not a [test] — run via
-//   daslang tests/spirv/_gen_golden.das
-// test_golden.das is the permanent byte-identical gate; this script keeps the _golden/ dir in sync.
+// Maintained golden generator: writes a full symbolic disassembly
+// (spirv_dis::dump) of every captured fixture blob to
+// tests/spirv/_golden/<name>.txt.  Re-run whenever a new fixture is
+// added or the emitter is intentionally changed to update the frozen
+// baseline.  Not a [test] — run via daslang
+// tests/spirv/_gen_golden.das uncategorized.das is the permanent
+// byte-identical gate; this script keeps the _golden/ dir in sync.
 
 require _spirv_common
 require spirv/spirv_dis
@@ -58,16 +60,19 @@ def main {   // nolint:STYLE038 — one emit per golden fixture: a flat list, on
     emit_golden(dir, "tex_frag", tex_frag_words())
     emit_golden(dir, "conv", conv_words())
     emit_golden(dir, "storimg", storimg_words())
-    emit_golden(dir, "imgfmt", imgfmt_words())              // storage-image @format qualifier (r32f + default rgba8)
-    emit_golden(dir, "lsvmember", lsvmember_words())        // local struct value member access (CompositeExtract)
+    // storage-image @format qualifier (r32f + default rgba8)
+    emit_golden(dir, "imgfmt", imgfmt_words())
+    // local struct value member access (CompositeExtract)
+    emit_golden(dir, "lsvmember", lsvmember_words())
     emit_golden(dir, "texlod", texlod_words())
     emit_golden(dir, "dims", dims_words())
     emit_golden(dir, "septex", septex_words())
     emit_golden(dir, "tern", tern_words())
     emit_golden(dir, "vecarith", vecarith_words())
     emit_golden(dir, "mathx", mathx_words())
-    // Phase-10.1..10.6 fixtures: forward-regression freezes (no hand-walker baseline; locks the
-    // current emitter's output so future drift is caught on top of census + spirv-val).
+    // Phase-10.1..10.6 fixtures: forward-regression freezes (no
+    // hand-walker baseline; locks the current emitter's output so future
+    // drift is caught on top of census + spirv-val).
     emit_golden(dir, "ssbovec", ssbovec_words())            // 10.1 SSBO std430 vec elements
     emit_golden(dir, "ssbostruct", ssbostruct_words())      // 10.1 SSBO std430 struct elements
     emit_golden(dir, "gswizzle", gswizzle_words())          // 10.2 composite/global swizzle
@@ -78,42 +83,52 @@ def main {   // nolint:STYLE038 — one emit per golden fixture: a flat list, on
     emit_golden(dir, "catomics", catomics_words())          // 10.5 atomics
     emit_golden(dir, "imgquery", imgquery_words())          // 10.6 imageSize
     emit_golden(dir, "modconst", modconst_words())          // 10.6 module-scope let constants
-    // Phase-11 user-defined function fixtures (forward-regression freeze — byte-identical locks on
-    // the current emitter, asserted via check()).
+    // Phase-11 user-defined function fixtures (forward-regression freeze
+    // — byte-identical locks on the current emitter, asserted via
+    // check()).
     emit_golden(dir, "userfn", userfn_words())
     emit_golden(dir, "userfn_ref", userfn_ref_words())
     emit_golden(dir, "userfn_global", userfn_global_words())
-    // PR-D mesh + task stage scaffolding (VK_EXT_mesh_shader): empty mesh + empty task.
-    // Forward-regression freeze.
+    // PR-D mesh + task stage scaffolding (VK_EXT_mesh_shader): empty mesh
+    // + empty task. Forward-regression freeze.
     emit_golden(dir, "mesh_empty", mesh_empty_words())
     emit_golden(dir, "task_empty", task_empty_words())
-    // PR-E mesh output config: non-default counts + lines / points topology.
+    // PR-E mesh output config: non-default counts + lines / points
+    // topology.
     emit_golden(dir, "mesh_lines", mesh_lines_words())
     emit_golden(dir, "mesh_points", mesh_points_words())
-    // PR-E2 array-of-builtin output: one-triangle per-vertex Position + triangle index array.
+    // PR-E2 array-of-builtin output: one-triangle per-vertex Position +
+    // triangle index array.
     emit_golden(dir, "mesh_tri", mesh_tri_words())
-    // PR-F mesh user + per-primitive-builtin outputs + the fragment gl_PrimitiveID read.
+    // PR-F mesh user + per-primitive-builtin outputs + the fragment
+    // gl_PrimitiveID read.
     emit_golden(dir, "mesh_outs", mesh_outs_words())
     emit_golden(dir, "prim_frag", prim_frag_words())
     emit_golden(dir, "pp_frag", pp_frag_words())
-    // PR-G task -> mesh payload (TaskPayloadWorkgroupEXT): the task writes + EmitMeshTasksEXT 4-operand
-    // form, the mesh reads its survivor-list slice.
+    // PR-G task -> mesh payload (TaskPayloadWorkgroupEXT): the task
+    // writes + EmitMeshTasksEXT 4-operand form, the mesh reads its
+    // survivor-list slice.
     emit_golden(dir, "task_payload", task_payload_words())
     emit_golden(dir, "mesh_payload", mesh_payload_words())
-    // 16/8-bit lattice: ctors + width converts + fp16 arithmetic (pins the FConvert/SConvert/
-    // UConvert emission and the type-factory-pulled Float16/Int16 capabilities)
+    // 16/8-bit lattice: ctors + width converts + fp16 arithmetic (pins
+    // the FConvert/SConvert/ UConvert emission and the
+    // type-factory-pulled Float16/Int16 capabilities)
     emit_golden(dir, "lattice", lattice_words())
-    // subgroup ops (GroupNonUniform*) + spec constants (@constant_id / local_size_x_id)
+    // subgroup ops (GroupNonUniform*) + spec constants (@constant_id /
+    // local_size_x_id)
     emit_golden(dir, "subgroup", subgroup_words())
     emit_golden(dir, "specc", specc_words())
-    // 8/16-bit SSBO storage: block_q8_0-mirror struct + half4 elements + unpack8/pack32
+    // 8/16-bit SSBO storage: block_q8_0-mirror struct + half4 elements +
+    // unpack8/pack32
     emit_golden(dir, "q8blk", q8blk_words())
-    // packed integer dot product: sdot4 -> OpSDot + PackedVectorFormat4x8Bit literal
+    // packed integer dot product: sdot4 -> OpSDot +
+    // PackedVectorFormat4x8Bit literal
     emit_golden(dir, "sdot", sdot_words())
-    // cooperative matrix: OpTypeCooperativeMatrixKHR + Load/Store/MulAddKHR, the Vulkan memory model,
-    // SPIR-V 1.6 header
+    // cooperative matrix: OpTypeCooperativeMatrixKHR +
+    // Load/Store/MulAddKHR, the Vulkan memory model, SPIR-V 1.6 header
     emit_golden(dir, "coopmat", coopmat_words())
-    // coopmat int8: the s8 x s8 -> s32 tile + the signed-components MulAdd operands mask
+    // coopmat int8: the s8 x s8 -> s32 tile + the signed-components
+    // MulAdd operands mask
     emit_golden(dir, "coopmat_i8", coopmat_i8_words())
     // coopmat from @workgroup shared memory (the tiled-GEMM staging path)
     emit_golden(dir, "coopmat_sm", coopmat_sm_words())

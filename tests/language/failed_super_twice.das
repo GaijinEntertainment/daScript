@@ -1,4 +1,7 @@
-// Derived ctor must call super() exactly once — duplicate is rejected.
+//! a constructor calling super() twice does not compile: super must
+//! run exactly once
+// Derived ctor must call super() exactly once — duplicate is
+// rejected.
 options gen2
 expect 30308
 

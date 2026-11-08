@@ -8,7 +8,7 @@ require daslib/strings
 // def public base64_decode ( _in:string ) : string
 // def public base64_encode ( _inp:string )
 
-[test]
+[test(description = "base64_encode matches the reference string, decode inverts it, and random long strings round-trip")]
 def test_boundaries(t : T?) {
     let example = "hello, world"
     let reference = "aGVsbG8sIHdvcmxk"
@@ -28,7 +28,7 @@ def test_boundaries(t : T?) {
     }
 }
 
-[test]
+[test(description = "base64_decode accepts input with the trailing = padding stripped for every remainder length")]
 def test_unpadded_decode(t : T?) {
     let samples = fixed_array("T", "Th", "The", "The ", "The q", "The qu", "The qui", "The quic", "The quick")
     for (src in samples) {
@@ -44,14 +44,14 @@ def test_unpadded_decode(t : T?) {
     t |> equal(BASE64_DECODE_OUT_SIZE(8), 6)
 }
 
-[test]
+[test(description = "base64_decode returns -1 and leaves no partial output for a character outside the alphabet")]
 def test_decode_rejects_bad_input(t : T?) {
     var out : array<uint8>
     t |> equal(base64_decode("QQ*Q", out), -1)
     t |> equal(length(out), 0, "a rejected decode leaves no partial output")
 }
 
-[test]
+[test(description = "base64_decode treats - and _ as the URL-safe forms of + and / and reads JWT-style unpadded input")]
 def test_decode_url_safe_alphabet(t : T?) {
     t |> equal(base64_decode("PDw/Pz8+Pj4=").text, "<<???>>>")
     t |> equal(base64_decode("PDw_Pz8-Pj4").text, "<<???>>>", "- and _ are the URL-safe spelling of + and /")
@@ -59,7 +59,7 @@ def test_decode_url_safe_alphabet(t : T?) {
     t |> equal(base64_decode("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9").text, "\{\"alg\":\"HS256\",\"typ\":\"JWT\"\}")
 }
 
-[test]
+[test(description = "base64_decode returns -1 when a single leftover character cannot carry a byte")]
 def test_decode_rejects_orphan_quantum(t : T?) {
     var out : array<uint8>
     t |> equal(base64_decode("Q", out), -1, "one leftover character cannot carry a byte")
@@ -72,7 +72,7 @@ def test_decode_rejects_orphan_quantum(t : T?) {
     t |> equal(base64_decode("QUJDREU", out), 5, "and a 3-over tail")
 }
 
-[test]
+[test(description = "base64_decode of an empty string returns 0 and clears the output array")]
 def test_decode_empty_input_clears_output(t : T?) {
     var out : array<uint8>
     t |> equal(base64_decode("QUJD", out), 3)

@@ -49,7 +49,7 @@ list(FILTER AOT_CUDA_FILES EXCLUDE REGEX "/_")
 
 FILE(GLOB AOT_TESTS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/aot/*.das")
 list(APPEND AOT_TESTS_FILES tests/REVIEW.das)
-SET(AOT_DASTEST_MODULE_FILES dastest/review_gate.das)
+SET(AOT_DASTEST_MODULE_FILES dastest/review_gate.das dastest/file_census.das)
 # Exclude _-prefixed helper modules (required transitively, not standalone test entry points)
 list(FILTER AOT_TESTS_FILES EXCLUDE REGEX "/_")
 
@@ -90,7 +90,7 @@ list(FILTER AOT_DECS_FILES EXCLUDE REGEX "test_stages_extra")
 
 # Decs test module files (libraries required by decs tests)
 SET(AOT_DECS_MODULE_FILES
-    tests/decs/test_stages_extra.das
+    tests/decs/_test_stages_extra.das
 )
 
 # dasLiveHost tests transitively require dashv, so AOT them only when HV is enabled.
@@ -138,8 +138,6 @@ IF(NOT DAS_AUDIO_DISABLED)
         tests/strudel/test_samples.das
         tests/strudel/test_sequencer.das
         tests/strudel/test_sf2.das
-        tests/strudel/test_sf2_voice.das
-        tests/strudel/test_sf2_modulators.das
         tests/strudel/test_adsr_resolver.das
         tests/strudel/test_aliases.das
         tests/strudel/test_chorus_per_orbit.das
@@ -155,10 +153,9 @@ IF(NOT DAS_AUDIO_DISABLED)
         tests/strudel/test_integration.das
         tests/strudel/test_memory.das
         tests/strudel/test_orbits.das
-        tests/strudel/test_orbit_gain.das
         tests/strudel/test_reverb.das
         tests/strudel/test_scales.das
-        tests/strudel/test_scratch_pools.das
+        tests/strudel/uncategorized_persistent_heap_very_safe_context.das
         tests/strudel/test_setters.das
         tests/strudel/test_signals.das
         tests/strudel/test_synthesis.das
@@ -168,7 +165,7 @@ IF(NOT DAS_AUDIO_DISABLED)
         tests/strudel/test_sfx.das
         tests/strudel/test_one_shot.das
         tests/audio/test_hrtf_budget.das
-        tests/audio/test_wav.das
+        tests/audio/uncategorized.das
     )
 ENDIF()
 
@@ -204,7 +201,7 @@ ENDIF()
 
 FILE(GLOB AOT_FLATTEN_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/flatten/*.das")
 # Exclude the _err_ boundary fixtures (they intentionally fail to compile) and the
-# flat_api_macro helper module (a compile-time-only macro, not a test entry point)
+# _flat_api_macro helper module (a compile-time-only macro, not a test entry point)
 list(FILTER AOT_FLATTEN_FILES EXCLUDE REGEX "_err_|flat_api_macro")
 
 FILE(GLOB AOT_INTERFACES_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/interfaces/*.das")
@@ -221,9 +218,6 @@ SET(AOT_LINQ_MODULE_FILES
 )
 
 FILE(GLOB AOT_READER_MACRO_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/reader_macro/*.das")
-# Exclude the inline reader-macro module (no_aot, compile-time only; required transitively by the test).
-# Anchor on '/' so this does not also drop test_inline_reader.das (which ends in inline_reader.das).
-list(FILTER AOT_READER_MACRO_FILES EXCLUDE REGEX "/inline_reader\\.das$")
 
 FILE(GLOB AOT_MACRO_CALL_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/macro_call/*.das")
 # Exclude helpers (files prefixed with `_`); they are required transitively
@@ -250,7 +244,7 @@ list(FILTER AOT_MATH_FILES EXCLUDE REGEX "fake_numeric")
 
 # Math test module files (libraries required by math tests)
 SET(AOT_MATH_MODULE_FILES
-    tests/math/fake_numeric.das
+    tests/math/_fake_numeric.das
 )
 
 FILE(GLOB AOT_STRINGS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/strings/*.das")
@@ -317,15 +311,11 @@ SET(AOT_DASLIB_FILES
     tests/daslib/cmp_test.das
     tests/daslib/test_toml.das
     tests/daslib/test_logger.das
-    tests/daslib/test_logger_checked.das
     tests/daslib/tty_test.das
     tests/daslib/test_sha_256.das
     tests/daslib/test_faker.das
     tests/daslib/test_tune_shells.das
-    tests/daslib/test_format_raw_assign.das
-    tests/daslib/test_format_match_keyword.das
-    tests/daslib/test_format_pointer_return_type.das
-    tests/daslib/test_wrap_long_lines.das
+    tests/daslib/test_format.das
 )
 # tests/daslib is listed by hand, so a test file there is exactly one of: listed above, or
 # marked `options no_aot` because a module it requires keeps out of AOT. A file that is neither
@@ -333,7 +323,7 @@ SET(AOT_DASLIB_FILES
 FILE(GLOB DASLIB_TEST_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/daslib/*.das")
 list(FILTER DASLIB_TEST_FILES EXCLUDE REGEX "tests/daslib/(_|failed_|cant_|invalid_)")
 FOREACH(_daslib_test ${DASLIB_TEST_FILES})
-    FILE(STRINGS ${PROJECT_SOURCE_DIR}/${_daslib_test} _test_lines REGEX "^\\[test\\]")
+    FILE(STRINGS ${PROJECT_SOURCE_DIR}/${_daslib_test} _test_lines REGEX "^\\[test[]( ,]")
     IF(NOT _test_lines)
         CONTINUE()   # a fixture or helper, not a test program the -use-aot run links
     ENDIF()
@@ -461,7 +451,7 @@ foreach(_s IN LISTS DAS_AOT_SUITES)
     list(LENGTH AOT_${_u}_FILES _nf)
     if(_nf GREATER 0)
         if(_s STREQUAL "tests" OR _s STREQUAL "dastest")
-            set(DAS_AOT_EXTRA_DEPENDS ${PROJECT_SOURCE_DIR}/dastest/review_gate.das)
+            set(DAS_AOT_EXTRA_DEPENDS ${PROJECT_SOURCE_DIR}/dastest/review_gate.das ${PROJECT_SOURCE_DIR}/dastest/file_census.das)
         endif()
         DAS_AOT("${AOT_${_u}_FILES}" ${_u}_AOT_GENERATED_SRC test_aot_${_s} daslang)
         set(DAS_AOT_EXTRA_DEPENDS "")
@@ -700,9 +690,10 @@ if(NOT ${DAS_LLVM_DISABLED})
     list(REMOVE_DUPLICATES LLVM_AOT_TEST_FILES)
     # _-prefixed helpers and negative/fixture tests.
     list(FILTER LLVM_AOT_TEST_FILES EXCLUDE REGEX "/_")
-    # jit_fastpath (is_jit_function/remove_jit semantics) and typeinfo behave differently under
-    # SimNode_Jit binding; llvm_code/compile-only are not object-emitted. Everything else is covered.
-    list(FILTER LLVM_AOT_TEST_FILES EXCLUDE REGEX "/(failed_|cant_|invalid_|llvm_tune|llvm_code|llvm_compile_only|dll_cache|jit_fastpath|typeinfo)|_solid\\.das$")
+    # jit_fastpath (is_jit_function/remove_jit semantics) and the rtti/strict-smart-pointer typeinfo
+    # tests behave differently under SimNode_Jit binding; llvm_code/compile-only are not object-emitted;
+    # jit_artifacts tests the JIT's own outputs (exe, lib, wasm, the DLL cache). Everything else is covered.
+    list(FILTER LLVM_AOT_TEST_FILES EXCLUDE REGEX "/(failed_|cant_|invalid_|llvm_tune|llvm_code|llvm_compile_only|jit_artifacts|jit_fastpath|uncategorized_rtti_strict_smart_pointers_false)|_solid_context\\.das$")
     # msl/metal exercise 16/8-bit lattice + simdgroup ops the LLVM JIT declines (lattice_fallback in
     # llvm_jit.das) — they interpret, so they have no emitted object; keep them out of the AOT rail.
     # spirv joins them on the fp16 side: aarch64 lowers the lattice natively (g_lattice_fp16_ops_native),

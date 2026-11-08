@@ -26,7 +26,7 @@ struct PtrKeyNode {
 
 // --- set overload: to_table_move(var a : array<keyT>) ---
 
-[test]
+[test(description = "to_table_move on an int array moves its elements into the set and leaves the source empty")]
 def test_to_table_move_set_consumes_source(t : T?) {
     var ks <- [10, 20, 30]
     var tab <- to_table_move(ks)
@@ -36,7 +36,7 @@ def test_to_table_move_set_consumes_source(t : T?) {
     delete tab
 }
 
-[test]
+[test(description = "to_table_move on a string array moves heap keys into the set and empties the source")]
 def test_to_table_move_set_heap_keys(t : T?) {
     var ks <- ["a", "b"]
     var tab <- to_table_move(ks)
@@ -47,7 +47,7 @@ def test_to_table_move_set_heap_keys(t : T?) {
 
 // --- map overload: to_table_move(var a : array<tuple<keyT;valT>>) ---
 
-[test]
+[test(description = "to_table_move on key-value tuples builds the map and leaves the source empty")]
 def test_to_table_move_map_consumes_source(t : T?) {
     var kvs <- [("a", 1), ("b", 2)]
     var tab <- to_table_move(kvs)
@@ -59,7 +59,7 @@ def test_to_table_move_map_consumes_source(t : T?) {
 
 // heap key AND heap value: exercises the move-then-delete path that would
 // double-free if the value were pointer-copied (aliased) into the table.
-[test]
+[test(description = "to_table_move with heap keys and heap values moves them into the table so the later delete cannot double-free")]
 def test_to_table_move_map_heap_key_value(t : T?) {
     var kvs <- [("k1", "v1"), ("k2", "v2")]
     var tab <- to_table_move(kvs)
@@ -75,7 +75,7 @@ def test_to_table_move_map_heap_key_value(t : T?) {
 // pointee). Reclaiming the temp array must therefore leave pointer-key pointees
 // alive, or the table's keys dangle and the caller's data is corrupted. The
 // caller retains ownership of the pointees.
-[test]
+[test(description = "reclaiming the source array leaves pointer-key pointees alive so the table's keys do not dangle")]
 def test_to_table_move_pointer_keys_not_dangling(t : T?) {
     var n0 = new PtrKeyNode(x = 11)
     var n1 = new PtrKeyNode(x = 22)
@@ -109,7 +109,7 @@ def test_to_table_move_pointer_keys_not_dangling(t : T?) {
 
 // --- end-to-end: the comprehension forms that lower to the overloads above ---
 
-[test]
+[test(description = "set and map comprehensions lowered through to_table_move produce the expected entries")]
 def test_comprehension_round_trip(t : T?) {
     var setc <- {for (j in range(4)); "k{j}"}
     t |> equal(length(setc), 4)
