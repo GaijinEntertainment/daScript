@@ -48,6 +48,35 @@ def test_sprint_basic_types(t : T?) {
     }
 }
 
+let private pos_inf = unsafe(reinterpret<double>(0x7FF0000000000000ul))
+let private quiet_nan = unsafe(reinterpret<double>(0x7FF8000000000000ul))
+
+[test(description = "sprint_json writes NaN, Infinity and -Infinity for non-finite reals")]
+def test_sprint_non_finite_reals(t : T?) {
+    for ((value, text) in [(pos_inf, "Infinity"), (-pos_inf, "-Infinity"),
+            (quiet_nan, "NaN"), (1.5lf, "1.5")]) {
+        t |> equal(sprint_json(value, false), text)
+        t |> equal(sprint_json(float(value), false), text)
+    }
+}
+
+[test(description = "sprint_json writes non-finite real vector components in object, key and array form")]
+def test_sprint_non_finite_vectors(t : T?) {
+    let inf = float(pos_inf)
+    let nan = float(quiet_nan)
+    t |> equal(sprint_json(float2(inf, -inf), false),
+        "\{\"x\":Infinity,\"y\":-Infinity\}")
+    t |> equal(sprint_json(float3(inf, -inf, nan), false),
+        "\{\"x\":Infinity,\"y\":-Infinity,\"z\":NaN\}")
+    t |> equal(sprint_json(float4(inf, -inf, nan, 1.5), false),
+        "\{\"x\":Infinity,\"y\":-Infinity,\"z\":NaN,\"w\":1.5\}")
+    let keyed <- { float2(inf, -inf) => 7 }
+    t |> equal(sprint_json(keyed, false),
+        "\{\"[Infinity,-Infinity]\":7\}")
+    t |> equal(sprint_json([[nan, inf], [-inf, 1.5]], false),
+        "[[NaN,Infinity],[-Infinity,1.5]]")
+}
+
 // ============================================================
 //  sprint_json: containers
 // ============================================================
