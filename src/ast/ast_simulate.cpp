@@ -631,6 +631,9 @@ namespace das
 
     SimNode * Function::makeSimNode ( Context & context, const vector<ExpressionPtr> & ) {
         if ( copyOnReturn || moveOnReturn ) {
+            if ( context.maxFramedCallDepth ) {
+                return context.code->makeNodeUnrollAny<SimNode_CallAndCopyOrMoveChecked>(int(arguments.size()), at);
+            }
             return context.code->makeNodeUnrollAny<SimNode_CallAndCopyOrMove>(int(arguments.size()), at);
         } else if ( fastCall ) {
             // include/daScript/simulate/ARCHITECTURE.md#fastcall-depth-guard
@@ -639,6 +642,9 @@ namespace das
             }
             return context.code->makeNodeUnrollAny<SimNode_FastCall>(int(arguments.size()), at);
         } else {
+            if ( context.maxFramedCallDepth ) {
+                return context.code->makeNodeUnrollAny<SimNode_CallChecked>(int(arguments.size()), at);
+            }
             return context.code->makeNodeUnrollAny<SimNode_Call>(int(arguments.size()), at);
         }
     }
@@ -3692,6 +3698,7 @@ namespace das
         context.verySafeContext = options.getBoolOption("very_safe_context",policies.very_safe_context);
         context.maxUnreservedSize = options.getUInt64Option("max_unreserved_size", policies.max_unreserved_size);
         context.maxFastCallDepth = uint32_t(options.getIntOption("max_fast_call_depth", int32_t(policies.max_fast_call_depth)));
+        context.maxFramedCallDepth = uint32_t(options.getIntOption("max_framed_call_depth", int32_t(policies.max_framed_call_depth)));
         astTypeInfo.clear();    // this is to be filled via typeinfo(ast_typedecl and such)
         auto disableInit = options.getBoolOption("no_init", policies.no_init);
         context.thisProgram = this;

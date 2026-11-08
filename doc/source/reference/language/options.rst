@@ -192,6 +192,18 @@ Optimization
        <function>``, which ``recover`` can catch, instead of exhausting the native stack. ``0``
        leaves fastcall unchecked and costs nothing. Calls through function pointers, lambdas
        and class methods push a regular frame and are already bounded by ``stack``.
+   * - ``max_framed_call_depth``
+     - int
+     - 0
+     - Interpreter only. Caps how deep framed calls to named functions may nest; past the cap
+       the call panics with ``stack overflow, max_framed_call_depth <cap> exceeded while calling
+       <function>``, which ``recover`` can catch. ``stack`` bounds the simulated stack only, so
+       a recursion with a large ``stack`` reaches the native stack's end first and dies there;
+       this cap is the diagnostic for that case, sized below the depth the native stack holds
+       (an interpreted frame costs on the order of a hundred bytes of it). ``0`` leaves framed
+       calls unchecked and costs nothing. A body the optimizer folds to a single ``return`` is a fastcall and answers to
+       ``max_fast_call_depth`` instead; calls through function pointers, lambdas and class
+       methods are not counted by either.
 
 --------------------
 Memory
@@ -208,7 +220,9 @@ Memory
    * - ``stack``
      - int
      - 16384
-     - Stack size in bytes. Set to ``0`` for a unique stack per context.
+     - Size of the simulated stack in bytes; set to ``0`` for a unique stack per context. It
+       bounds only the simulated frames - a recursion deep enough to exhaust the native stack
+       is caught by ``max_framed_call_depth`` / ``max_fast_call_depth``, not by this size.
    * - ``heap_size_hint``
      - int
      - 65536

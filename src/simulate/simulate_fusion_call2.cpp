@@ -369,11 +369,82 @@ IMPLEMENT_ANY_OP2(__forceinline, FastCall, Ptr, StringPtr)
 
 IMPLEMENT_ANY_OP2(__forceinline, FastCallChecked, Ptr, StringPtr)
 
+/* CallChecked */
+
+// OP(COMPUTEL,*)
+#undef IMPLEMENT_OP2_NODE_ANYR
+#define IMPLEMENT_OP2_NODE_ANYR(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
+    struct SimNode_##OPNAME##_Any_##COMPUTEL : SimNode_Op2Call2 { \
+        NO_ASAN_INLINE auto compute ( Context & context ) { \
+            DAS_PROFILE_NODE \
+            vec4f argValues[2]; \
+            argValues[0] = l.subexpr->eval(context); \
+            argValues[1] = v_zero(); \
+            memcpy(&argValues[1], r.compute##COMPUTEL(context), rightLoadSize); \
+            context.enterCheckedFramedCall(debugInfo, fnPtr); \
+            auto res = context.call(fnPtr, argValues, &debugInfo); \
+            context.framedCallDepth --; \
+            return res; \
+        } \
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+            return compute(context); \
+        } \
+        DAS_EVAL_NODE \
+    };
+
+// OP(*,COMPUTER)
+#undef IMPLEMENT_OP2_NODE_ANYL
+#define IMPLEMENT_OP2_NODE_ANYL(INLINE,OPNAME,TYPE,CTYPE,COMPUTER) \
+    struct SimNode_##OPNAME##_##COMPUTER##_Any : SimNode_Op2Call2 { \
+        NO_ASAN_INLINE auto compute ( Context & context ) { \
+            DAS_PROFILE_NODE \
+            vec4f argValues[2]; \
+            argValues[0] = v_zero(); \
+            memcpy(&argValues[0], l.compute##COMPUTER(context), leftLoadSize); \
+            argValues[1] = r.subexpr->eval(context); \
+            context.enterCheckedFramedCall(debugInfo, fnPtr); \
+            auto res = context.call(fnPtr, argValues, &debugInfo); \
+            context.framedCallDepth --; \
+            return res; \
+        } \
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+            return compute(context); \
+        } \
+        DAS_EVAL_NODE \
+    };
+
+// OP(COMPUTEL,COMPUTER)
+#undef IMPLEMENT_OP2_NODE
+#define IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL,COMPUTER) \
+    struct SimNode_##OPNAME##_##COMPUTEL##_##COMPUTER : SimNode_Op2Call2 { \
+        NO_ASAN_INLINE auto compute ( Context & context ) { \
+            DAS_PROFILE_NODE \
+            vec4f argValues[2]; \
+            argValues[0] = v_zero(); \
+            memcpy(&argValues[0], l.compute##COMPUTEL(context), leftLoadSize); \
+            argValues[1] = v_zero(); \
+            memcpy(&argValues[1], r.compute##COMPUTER(context), rightLoadSize); \
+            context.enterCheckedFramedCall(debugInfo, fnPtr); \
+            auto res = context.call(fnPtr, argValues, &debugInfo); \
+            context.framedCallDepth --; \
+            return res; \
+        } \
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+            return compute(context); \
+        } \
+        DAS_EVAL_NODE \
+    };
+
+#include "simulate_fusion_op2_impl.h"
+
+IMPLEMENT_ANY_OP2(__forceinline, CallChecked, Ptr, StringPtr)
+
     void createFusionEngine_call2() {
         (*getFusionEngine())["Call"].emplace_back(new FusionPoint_Call_StringPtr());
         (*getFusionEngine())["CallAndCopyOrMove"].emplace_back(new FusionPoint_CallAndCopyOrMove_StringPtr());
         (*getFusionEngine())["FastCall"].emplace_back(new FusionPoint_FastCall_StringPtr());
         (*getFusionEngine())["FastCallChecked"].emplace_back(new FusionPoint_FastCallChecked_StringPtr());
+        (*getFusionEngine())["CallChecked"].emplace_back(new FusionPoint_CallChecked_StringPtr());
     }
 }
 

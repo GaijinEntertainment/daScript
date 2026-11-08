@@ -478,6 +478,7 @@ namespace das
             exception = nullptr;
             last_exception = nullptr;
             fastCallDepth = 0;
+            framedCallDepth = 0;
         }
 
         __forceinline void restartHeaps() {
@@ -632,6 +633,12 @@ namespace das
         __forceinline void enterCheckedFastCall ( const LineInfo & at, const SimFunction * fn ) {
             if ( ++fastCallDepth > maxFastCallDepth ) {
                 throw_error_at(at, "stack overflow, max_fast_call_depth %u exceeded while calling %s", maxFastCallDepth, fn->mangledName);
+            }
+        }
+
+        __forceinline void enterCheckedFramedCall ( const LineInfo & at, const SimFunction * fn ) {
+            if ( ++framedCallDepth > maxFramedCallDepth ) {
+                throw_error_at(at, "stack overflow, max_framed_call_depth %u exceeded while calling %s", maxFramedCallDepth, fn->mangledName);
             }
         }
 
@@ -965,6 +972,8 @@ namespace das
         // include/daScript/simulate/ARCHITECTURE.md#fastcall-depth-guard
         uint32_t                        fastCallDepth = 0;
         uint32_t                        maxFastCallDepth = 0;       //! fixed at simulate: 0 exactly when the program carries no guarded fastcall nodes
+        uint32_t                        framedCallDepth = 0;
+        uint32_t                        maxFramedCallDepth = 0;           //! fixed at simulate: 0 exactly when the program carries no guarded framed-call nodes
     };
 
     struct DebugAgentInstance {

@@ -362,7 +362,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 253;   // 253: a module that registers at compile is a header and a one-byte payload the reader skips
+            return 254;   // 254: max_framed_call_depth joins the module-cache policy stream
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

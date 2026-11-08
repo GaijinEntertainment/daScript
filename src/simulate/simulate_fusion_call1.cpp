@@ -175,11 +175,38 @@ __forceinline SimNode * safeArg1 ( SimNode * node, int index ) {
 
     IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,Call,,vec4f,vec4f)
 
+/* CallChecked op1 */
+
+#undef IMPLEMENT_ANY_OP1_NODE
+#define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
+    struct SimNode_Op1##COMPUTE : SimNode_Op1Call1 { \
+        NO_ASAN_INLINE vec4f compute(Context & context) { \
+            DAS_PROFILE_NODE \
+            vec4f argValues[1]; \
+            argValues[0] = v_zero(); \
+            memcpy(&argValues[0], subexpr.compute##COMPUTE(context), loadSize); \
+            context.enterCheckedFramedCall(debugInfo, fnPtr); \
+            auto res = context.call(fnPtr, argValues, &debugInfo); \
+            context.framedCallDepth --; \
+            return res; \
+        } \
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+            return compute(context); \
+        } \
+        DAS_EVAL_NODE \
+    };
+
+#include "simulate_fusion_op1_impl.h"
+#include "simulate_fusion_op1_perm.h"
+
+    IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,CallChecked,,vec4f,vec4f)
+
     void createFusionEngine_call1()
     {
         (*getFusionEngine())["FastCall"].emplace_back(new Op1FusionPoint_FastCall_vec4f());
         (*getFusionEngine())["FastCallChecked"].emplace_back(new Op1FusionPoint_FastCallChecked_vec4f());
         (*getFusionEngine())["Call"].emplace_back(new Op1FusionPoint_Call_vec4f());
+        (*getFusionEngine())["CallChecked"].emplace_back(new Op1FusionPoint_CallChecked_vec4f());
     }
 }
 

@@ -141,6 +141,20 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_CallCheckedAny::visit(SimVisitor& vis) {
+        V_BEGIN();
+        V_OP(CallChecked);
+        V_CALL();
+        V_END();
+    }
+
+    SimNode* SimNode_CallAndCopyOrMoveCheckedAny::visit(SimVisitor& vis) {
+        V_BEGIN();
+        V_OP(CallAndCopyOrMoveChecked);
+        V_CALL();
+        V_END();
+    }
+
     SimNode* SimNode_InvokeAny::visit(SimVisitor& vis) {
         V_BEGIN();
         V_OP(Invoke);

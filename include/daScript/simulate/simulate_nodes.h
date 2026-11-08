@@ -1502,6 +1502,65 @@ SIM_NODE_AT_VECTOR(Float, float)
 #undef  EVAL_NODE
     };
 
+    // FUNCTION CALL, counted against max_framed_call_depth
+
+    struct SimNode_CallCheckedAny : SimNode_CallBase {
+        SimNode_CallCheckedAny ( const LineInfo & at ) : SimNode_CallBase(at,"") {}
+        virtual SimNode * visit ( SimVisitor& vis ) override;
+    };
+
+    template <int argCount>
+    struct SimNode_CallChecked : SimNode_CallCheckedAny {
+        SimNode_CallChecked ( const LineInfo & at ) : SimNode_CallCheckedAny(at) {}
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            vec4f argValues[argCount ? argCount : 1];
+            EvalBlock<argCount>::eval(context, arguments, argValues);
+            context.enterCheckedFramedCall(debugInfo, fnPtr);
+            auto res = context.call(fnPtr, argValues, &debugInfo);
+            context.framedCallDepth --;
+            return res;
+        }
+#define EVAL_NODE(TYPE,CTYPE)\
+        virtual CTYPE eval##TYPE ( Context & context ) override {                               \
+                DAS_PROFILE_NODE \
+                vec4f argValues[argCount ? argCount : 1];                                       \
+                EvalBlock<argCount>::eval(context, arguments, argValues);                       \
+                context.enterCheckedFramedCall(debugInfo, fnPtr);                                     \
+                auto res = context.call(fnPtr, argValues, &debugInfo);                          \
+                context.framedCallDepth --;                                                           \
+                return cast<CTYPE>::to(res);                                                    \
+        }
+        DAS_EVAL_NODE
+#undef  EVAL_NODE
+    };
+
+    template <>
+    struct SimNode_CallChecked<-1> : SimNode_CallCheckedAny {
+        SimNode_CallChecked ( const LineInfo & at ) : SimNode_CallCheckedAny(at) {}
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
+            evalArgs(context, argValues);
+            context.enterCheckedFramedCall(debugInfo, fnPtr);
+            auto res = context.call(fnPtr, argValues, &debugInfo);
+            context.framedCallDepth --;
+            return res;
+        }
+#define EVAL_NODE(TYPE,CTYPE) \
+        virtual CTYPE eval##TYPE ( Context & context ) override { \
+                DAS_PROFILE_NODE \
+                vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS]; \
+                evalArgs(context, argValues); \
+                context.enterCheckedFramedCall(debugInfo, fnPtr); \
+                auto res = context.call(fnPtr, argValues, &debugInfo); \
+                context.framedCallDepth --; \
+                return cast<CTYPE>::to(res); \
+        }
+        DAS_EVAL_NODE
+#undef  EVAL_NODE
+    };
+
     // FUNCTION CALL with copy-or-move-on-return
 
     struct SimNode_CallAndCopyOrMoveAny : SimNode_CallBase {
@@ -1532,6 +1591,45 @@ SIM_NODE_AT_VECTOR(Float, float)
             vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
             evalArgs(context, argValues);
             return cast<char*>::to(context.callWithCopyOnReturn(fnPtr, argValues, cmres, &debugInfo));
+        }
+    };
+
+    // FUNCTION CALL with copy-or-move-on-return, counted against max_framed_call_depth
+
+    struct SimNode_CallAndCopyOrMoveCheckedAny : SimNode_CallBase {
+        SimNode_CallAndCopyOrMoveCheckedAny(const LineInfo& at) : SimNode_CallBase(at,"") {}
+        virtual SimNode* visit(SimVisitor& vis) override;
+    };
+
+    template <int argCount>
+    struct SimNode_CallAndCopyOrMoveChecked : SimNode_CallAndCopyOrMoveCheckedAny {
+        DAS_PTR_NODE;
+        SimNode_CallAndCopyOrMoveChecked ( const LineInfo & at ) : SimNode_CallAndCopyOrMoveCheckedAny(at) {}
+        __forceinline char * compute ( Context & context ) {
+                DAS_PROFILE_NODE
+                auto cmres = cmresEval->evalPtr(context);
+                vec4f argValues[argCount ? argCount : 1];
+                EvalBlock<argCount>::eval(context, arguments, argValues);
+                context.enterCheckedFramedCall(debugInfo, fnPtr);
+                auto res = context.callWithCopyOnReturn(fnPtr, argValues, cmres, &debugInfo);
+                context.framedCallDepth --;
+                return cast<char *>::to(res);
+        }
+    };
+
+    template <>
+    struct SimNode_CallAndCopyOrMoveChecked<-1> : SimNode_CallAndCopyOrMoveCheckedAny {
+        DAS_PTR_NODE;
+        SimNode_CallAndCopyOrMoveChecked(const LineInfo& at) : SimNode_CallAndCopyOrMoveCheckedAny(at) {}
+        __forceinline char* compute(Context& context) {
+            DAS_PROFILE_NODE
+            auto cmres = cmresEval->evalPtr(context);
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
+            evalArgs(context, argValues);
+            context.enterCheckedFramedCall(debugInfo, fnPtr);
+            auto res = context.callWithCopyOnReturn(fnPtr, argValues, cmres, &debugInfo);
+            context.framedCallDepth --;
+            return cast<char*>::to(res);
         }
     };
 
