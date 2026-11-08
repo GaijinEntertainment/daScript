@@ -28,6 +28,13 @@ def function_ir(dump : string; name_end : string) : string {
     return close < 0 ? body : slice(body, 0, close)
 }
 
+//! the signature line of a dumped function: everything before its
+//! first newline
+def signature_ir(fn_ir : string) : string {
+    let nl = find(fn_ir, "\n")
+    return nl < 0 ? fn_ir : slice(fn_ir, 0, nl)
+}
+
 //! the entry block of a dumped function: everything before its
 //! first branch
 def entry_block_ir(fn_ir : string) : string {

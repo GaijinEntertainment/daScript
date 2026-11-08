@@ -35,7 +35,7 @@ require jit
 // pointer reinterprets to any integer width through ptrtoint, a
 // pointer difference is inline arithmetic, a global lookup is
 // speculatable.
-let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xA6ul
+let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xA7ul
 
 let public JIT_FNV_PRIME : uint64 = 1099511628211ul
 

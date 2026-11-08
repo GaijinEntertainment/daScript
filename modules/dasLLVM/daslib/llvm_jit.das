@@ -647,8 +647,12 @@ class public LlvmJitVisitor : AstVisitor {
                 LLVMSetParamAlignment(param, uint(a._type.firstType.alignOf))
             }
             LLVMSetValueName(param, string(a.name))
+            //! a container, or a type holding one, is lock-written by `for`:
+            //! never readonly
+            let pointee = a._type.isPointer ? a._type.firstType : null
+            let lockable = a._type.isRef ? !a._type.canCopy : (pointee != null && !pointee.canCopy)
             if ((a._type.isRef || a._type.isPointer || a._type.isString) && a._type.flags.constant
-                    && !a.access_flags.access_ref) {
+                    && !a.access_flags.access_ref && !lockable) {
                 LLVMAddAttributeToFunctionArgument(fn, ai, attributes.readonly)
             }
             if ((use_option_flags && option_no_alias) || nat.noalias |> key_exists(string(a.name))) {
