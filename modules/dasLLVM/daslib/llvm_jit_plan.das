@@ -32,10 +32,10 @@ require jit
 // llvm_macro.das, llvm_jit_common.das, runtime helper ABI, default
 // target triple). Cache filenames fold this in, so a bump makes every
 // previously written DLL miss the cache on the next run and get GC'd.
-// Current entry: every load and store carries a TBAA class tag; a
-// function holding a punning view, and every caller handed one, is
-// left untagged.
-let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xA8ul
+// Current entry: a 16/8-bit lattice value passed by value to an
+// interop builtin rides the vec4f slot in the cast<T>::from
+// convention instead of declining the function.
+let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xA9ul
 
 let public JIT_FNV_PRIME : uint64 = 1099511628211ul
 

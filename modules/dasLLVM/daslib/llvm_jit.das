@@ -1491,6 +1491,10 @@ class public LlvmJitVisitor : AstVisitor {
                         arg_val = LLVMBuildZExt(g_builder, arg_val, types.t_int32, "zext_{ai}")
                     }
                     arg_cast_type = types.t_int32
+                } elif (is_lattice_small_type(a._type.baseType)) {
+                    // the cast<T>::from slot convention, zero tail
+                    arg_val = cast_to_vec4f(a._type, arg_val)
+                    arg_cast_type = types.LLVMFloat4Type()
                 }
                 LLVMBuildStore2(g_builder, types, arg_cast_type, arg_val, arg_ptr)
             }
@@ -8174,9 +8178,16 @@ def public optimize_llvm_module(opt_level : uint; size_level : uint; inline_thre
 
 class public DisableJitVisitor : AstVisitor {
     disable : bool
+    reason : string
     uids : table<uint64, uint64>
     def TypeInfoVisitor {
         disable = false
+    }
+
+    def decline(why : string) {
+        to_log(LOG_WARNING, "LLVM JIT: {why}, falling back to interpreter.\n")
+        disable = true
+        reason = why
     }
 
     def override canVisitWithAliasSubexpression(expr : ExprAssume?) : bool => false
@@ -8185,27 +8196,25 @@ class public DisableJitVisitor : AstVisitor {
     // inside it, so expr.func there is legitimately null.
     def override canVisitFunctionArgumentInit(fun : Function?; arg : VariablePtr; value : ExpressionPtr) : bool =>
         false
-    // 16/8-bit lattice floor: data movement (loads/stores/moves/locals/indexing/swizzles) and the
-    // vec4f wrapper ABI lower natively; what still falls back is lattice values crossing a BUILTIN CALL
-    // boundary (ctors/converts/operators) — the builtin-address gates below catch those.
+    // 16/8-bit lattice floor: data movement and the vec4f wrapper ABI
+    // lower natively; what still falls back is a lattice value crossing a
+    // NON-INTEROP builtin call (ctors/converts/operators) - gated below.
     def lattice_fallback(t : TypeDeclPtr; at : LineInfo) {
         if (!disable && t != null && is_lattice_small_type(t.baseType)) {
-            to_log(LOG_WARNING, "LLVM JIT: 16/8-bit lattice type `{describe(t)}` at {at}, falling back to interpreter.\n")
-            disable = true
+            decline("16/8-bit lattice type `{describe(t)}` at {at}")
         }
     }
     def override preVisitExprTypeInfo(expr : ExprTypeInfo?) : void {
         if (expr.trait == "ast_typedecl" || expr.trait == "rtti_classinfo" || expr.trait == "rtti_typeinfo") {
             pass
         } else {
-            to_log(LOG_WARNING, "LLVM JIT: unsupported typeinfo trait `{expr.trait}` at {describe(expr.at)}, falling back to interpreter\n")
-            disable = true
+            decline("unsupported typeinfo trait `{expr.trait}` at {describe(expr.at)}")
         }
     }
 
     def override preVisitExprQuote(expr : ExprQuote?) : void {
-        to_log(LOG_WARNING, "LLVM JIT: raw quote( ) - daslib/quote lowering (the aot_macros gate) did not run for this module at {describe(expr.at)}, falling back to interpreter.\n")
-        disable = true
+        decline("raw quote( ) - daslib/quote lowering (the aot_macros gate) did not run " +
+            "for this module at {describe(expr.at)}")
     }
 
     def override preVisitExprForBody(expr : ExprFor?) : void {
@@ -8222,32 +8231,26 @@ class public DisableJitVisitor : AstVisitor {
         assume leftT = expr.left._type
         if (leftT.isHandle) {
             if (get_jit_clone(leftT.annotation) == null) {
-                to_log(LOG_WARNING, "LLVM JIT: clone of handled type `{describe(leftT)}` is not supported at {describe(expr.at)}, falling back to interpreter\n")
-                disable = true
+                decline("clone of handled type `{describe(leftT)}` is not supported " +
+                    "at {describe(expr.at)}")
             }
         } elif (!leftT.canCopy) {
-            to_log(LOG_WARNING, "LLVM JIT: clone of `{describe(leftT)}` is not supported at {describe(expr.at)}, falling back to interpreter\n")
-            disable = true
+            decline("clone of `{describe(leftT)}` is not supported at {describe(expr.at)}")
         }
     }
 
     def override preVisitExprAt(expr : ExprAt?) : void {
         if (expr.subexpr._type.isHandle && !handle_at_is_jitable(expr)) {
             let type_str = describe(expr.subexpr._type)
-            to_log(LOG_WARNING,
-                "LLVM JIT: annotation for type {type_str} at {describe(expr.at)} " +
-                "implements no jitGetAt, keeping interpreter mode.\n")
-            disable = true
+            decline("annotation for type {type_str} at {describe(expr.at)} implements no jitGetAt")
         }
     }
 
     def override preVisitExprForSource(var expr : ExprFor?, var source : ExpressionPtr, last : bool) {
         if (source._type.isHandle && !handle_each_is_jitable(source)) {
             let type_str = describe(source._type)
-            to_log(LOG_WARNING,
-                "LLVM JIT: annotation for type {type_str} at {describe(expr.at)} " +
-                "implements no jitGetEach, keeping interpreter mode.\n")
-            disable = true
+            decline("annotation for type {type_str} at {describe(expr.at)} " +
+                "implements no jitGetEach")
         }
     }
 
@@ -8258,26 +8261,27 @@ class public DisableJitVisitor : AstVisitor {
         }
         if (expr.func.flags.builtIn && !expr.func.flags.interopFn && get_builtin_function_address(expr.func) == null) {
             if (!has_intrinsic(expr) && !is_dasbind_late(expr.func)) {
-                to_log(LOG_WARNING, "LLVM JIT: unsupported builtin `{expr.func._module.name}::{expr.func.name}` at {describe(expr.at)}, falling back to interpreter.\n")
-                disable = true
+                decline("unsupported builtin `{expr.func._module.name}::{expr.func.name}` " +
+                    "at {describe(expr.at)}")
             }
         }
-        if (!disable && expr.func.flags.builtIn && !has_intrinsic(expr)) {
-            // lattice values crossing a builtin call lower as intrinsics (ctors/converts/sat-narrows
-            // emit IR directly); anything NOT in the intrinsic tables hits the direct-extern ABI, where
-            // LLVM half / packed vectors mismatch the C++ das slot conventions — those still fall back.
-            var lattice = is_lattice_small_type(expr._type.baseType)
+        if (!disable && expr.func.flags.builtIn && !expr.func.flags.interopFn
+                && !has_intrinsic(expr)) {
+            // lattice values cross a builtin call as intrinsics or in interop
+            // vec4f slots; the direct-extern ABI has no half / packed-vector
+            // form, so those calls still fall back. A ref crosses nothing.
+            var lattice = !expr._type.isRef && is_lattice_small_type(expr._type.baseType)
             if (!lattice) {
                 for (arg in expr.arguments) {
-                    if (is_lattice_small_type(arg._type.baseType)) {
+                    if (!arg._type.isRef && is_lattice_small_type(arg._type.baseType)) {
                         lattice = true
                         break
                     }
                 }
             }
             if (lattice) {
-                to_log(LOG_WARNING, "LLVM JIT: 16/8-bit lattice type crosses `{expr.func._module.name}::{expr.func.name}` at {describe(expr.at)}, falling back to interpreter.\n")
-                disable = true
+                decline("16/8-bit lattice type crosses " +
+                    "`{expr.func._module.name}::{expr.func.name}` at {describe(expr.at)}")
             }
         }
     }

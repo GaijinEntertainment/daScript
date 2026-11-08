@@ -23,8 +23,10 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_CODEGEN_IDENTITY.md`, `ARCHITECTURE_DEBUG
   `skills/internal/llvm_tune_internals.md`.**
 
 - **A change to any file under this module but a `.md` runs the module-owned suite** (command
-  and build gate: `tests/README.md` here). CI runs some of its test files only nightly, so before
-  merge this run is the only one that covers every file.
+  and build gate: `tests/README.md` here), **and a change to a file the emitter pin hashes
+  (`EMITTER_FILES` in `tests-cpp/small/test_jit_emitter_pin.cpp`, repo root) also runs that test
+  and `dastest/dastest.das -jit -- --test tests` (repo root).** CI runs some of its test files
+  only nightly, so before merge this run is the only one that covers every file.
 
 - **A diff that adds or changes a branch keyed on what `get_platform_name()`,
   `get_architecture_name()`, `cpu_supports()`, or `host_llvm_feature()` returns, directly or
@@ -89,9 +91,10 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_CODEGEN_IDENTITY.md`, `ARCHITECTURE_DEBUG
   to run fails there.
 
 - **A diff that adds an input that can differ between two functions of one compile, that the JIT
-  emitter reads, and that the function's AOT hash does not cover, folds it into
-  `fold_jit_only_inputs` (`daslib/llvm_jit_plan.das`) in the same change, and the fold's result
-  changes when the input moves from one function to another**
+  emitter reads, and that the function's AOT hash does not cover - an input no SimNode carries,
+  so simulation never reads it - folds it into `fold_jit_only_inputs`
+  (`daslib/llvm_jit_plan.das`) in the same change, and the fold's result changes when the input
+  moves from one function to another**
   (`ARCHITECTURE_JIT_ENTRY.md#hint-folds`). A `LLVM_JIT_CODEGEN_VERSION` bump re-keys once, so
   adding or removing the input on a function afterwards still serves the old machine code back.
 

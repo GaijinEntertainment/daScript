@@ -9,10 +9,16 @@ namespace das {
         void * fn;
         vec4f (*wrappedFn)(Context*);
         bool is_jit = false;
+        const char * declineReason = nullptr;
         AotFactory(bool is_cmres, void *fn, vec4f(*wrappedFn)(Context*))
             : is_cmres(is_cmres), fn(fn), wrappedFn(wrappedFn) {}
         explicit AotFactory(void *jitFn)
             : is_cmres(false), fn(jitFn), wrappedFn(nullptr), is_jit(true) {}
+        static AotFactory declined ( const char * reason ) {
+            AotFactory factory(nullptr);
+            factory.declineReason = reason;
+            return factory;
+        }
 
         SimNode * operator ()(Context &ctx) const;
     };

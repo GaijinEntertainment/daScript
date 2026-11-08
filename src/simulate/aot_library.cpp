@@ -10,7 +10,9 @@ namespace das {
 
     SimNode* AotFactory::operator()(Context& ctx) const
     {
-        if (is_jit) {
+        if (declineReason) {
+            return nullptr;
+        } else if (is_jit) {
             return makeAotJitNode(ctx, fn);
         } else if (is_cmres) {
             return ctx.code->makeNode<SimNode_AotCMRES>(fn, wrappedFn);
