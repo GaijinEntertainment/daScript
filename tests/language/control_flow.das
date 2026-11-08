@@ -795,6 +795,38 @@ def test_a_goto_to_a_label_that_ends_a_block(t : T?) {
     t |> equal(g_gl_r, 100)
 }
 
+def lab_block_forward() : int {
+    var q = 0
+    let v = invoke($() : int {
+        goto label 3
+        q += 100
+        label 3:
+        return 3
+    })
+    return v + q
+}
+
+def lab_block_backward() : int {
+    var n = 3
+    return invoke($() : int {
+        var k = 0
+        label 1:
+        k++
+        if (n > 0) {
+            n--
+            goto label 1
+        }
+        return k
+    })
+}
+
+[test(description = "a static goto inside a block literal reaches the literal's own label, forward or backward, instead of leaving the block")]
+def test_a_goto_inside_a_block_literal_reaches_its_label(t : T?) {
+    t |> equal(lab_block_forward(), 3,
+        "forward: the skipped statement does not run, the return after the label does")
+    t |> equal(lab_block_backward(), 4, "backward: the label loops inside the block")
+}
+
 [test(description = "a goto from inside a labelled if body to an outer label loops back correctly")]
 def test_a_goto_from_a_labelled_block_to_an_outer_label(t : T?) {
     t |> equal(gl_o(2), 3)

@@ -960,6 +960,17 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_ClosureBlockWithLabels::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP(ClosureBlockWithLabels);
+        V_LABELS();
+        V_BLOCK();
+        V_FINAL();
+        V_ARG(needResult);
+        V_ARG(annotationDataSid);
+        V_END();
+    }
+
     SimNode * SimNode_MakeLocal::visit ( SimVisitor & vis ) {
         V_BEGIN_CR();
         V_OP(MakeLocal);

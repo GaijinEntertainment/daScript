@@ -1280,6 +1280,22 @@ __forceinline void profileNode ( SimNode * node ) {
     };
 #endif
 
+    // a block literal holding labels: takes a jump to a label it owns, hands any other outward
+    struct DAS_API SimNode_ClosureBlockWithLabels : SimNode_ClosureBlock {
+        SimNode_ClosureBlockWithLabels ( const LineInfo & at, bool nr, uint64_t ad )
+            : SimNode_ClosureBlock(at,nr,false,ad) { }
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
+    };
+
+#if DAS_DEBUGGER
+    struct DAS_API SimNodeDebug_ClosureBlockWithLabels : SimNode_ClosureBlockWithLabels {
+        SimNodeDebug_ClosureBlockWithLabels ( const LineInfo & at, bool nr, uint64_t ad )
+            : SimNode_ClosureBlockWithLabels(at,nr,ad) { }
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
+    };
+#endif
+
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4701)

@@ -2233,17 +2233,29 @@ namespace das
             SimNode_Block * block;
             if ( expr->isClosure ) {
                 bool needResult = expr->type!=nullptr && expr->type->baseType!=Type::tVoid;
-                // the invokeEx code0 fast path evals list[0] bare, skipping the ClosureBlock
-                // epilogue that clears stopForReturn — a block containing a return must take
-                // the full path or the flag leaks into the invoking enumeration and its caller
-                bool C0 = !needResult && simlist.size()==1 && expr->finalList.size()==0 && !expr->hasReturn;
+                if ( expr->maxLabelIndex!=-1 ) {
 #if DAS_DEBUGGER
-                if ( context.debugger ) {
-                    block = context.code->makeNode<SimNodeDebug_ClosureBlock>(at, needResult, C0, expr->annotationData);
-                } else
+                    if ( context.debugger ) {
+                        block = context.code->makeNode<SimNodeDebug_ClosureBlockWithLabels>(at, needResult, expr->annotationData);
+                    } else
 #endif
-                {
-                    block = context.code->makeNode<SimNode_ClosureBlock>(at, needResult, C0, expr->annotationData);
+                    {
+                        block = context.code->makeNode<SimNode_ClosureBlockWithLabels>(at, needResult, expr->annotationData);
+                    }
+                    sv_simulateLabels(expr, block, ofsmap);
+                } else {
+                    // the invokeEx code0 fast path evals list[0] bare, skipping the ClosureBlock
+                    // epilogue that clears stopForReturn — a block containing a return must take
+                    // the full path or the flag leaks into the invoking enumeration and its caller
+                    bool C0 = !needResult && simlist.size()==1 && expr->finalList.size()==0 && !expr->hasReturn;
+#if DAS_DEBUGGER
+                    if ( context.debugger ) {
+                        block = context.code->makeNode<SimNodeDebug_ClosureBlock>(at, needResult, C0, expr->annotationData);
+                    } else
+#endif
+                    {
+                        block = context.code->makeNode<SimNode_ClosureBlock>(at, needResult, C0, expr->annotationData);
+                    }
                 }
             } else {
                 if ( expr->maxLabelIndex!=-1 ) {
