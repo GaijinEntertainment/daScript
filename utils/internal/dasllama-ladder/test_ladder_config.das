@@ -7,7 +7,7 @@ require daslib/json_boost
 // Config-merge coverage: defaults < toml < explicit CLI, authoritative flip,
 // wrong-typed keys refused. Pure data — no server, no filesystem discovery.
 
-[test]
+[test(description = "with no config every ladder setting keeps its default")]
 def test_defaults(t : T?) {
     t |> run("defaults stand with no config") @(t : T?) {
         let cfg = LadderArgs()
@@ -19,7 +19,7 @@ def test_defaults(t : T?) {
     }
 }
 
-[test]
+[test(description = "toml overrides the defaults with provenance, an explicit CLI flag beats it unless it is authoritative, wrong types are refused, and the banner shows each value's source")]
 def test_toml_merge(t : T?) {
     t |> run("toml overrides defaults and records provenance") @(t : T?) {
         var cfg = LadderArgs()
@@ -78,7 +78,7 @@ def test_toml_merge(t : T?) {
     }
 }
 
-[test]
+[test(description = "submit_open follows toml with provenance, an explicit --submit-open beats a non-authoritative toml, and a wrong-typed value is refused")]
 def test_submit_open_config(t : T?) {
     t |> run("submit_open flips via toml, with provenance") @(t : T?) {
         var cfg = LadderArgs()

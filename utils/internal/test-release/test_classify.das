@@ -4,7 +4,7 @@ require dastest/testing_boost public
 require daslib/fio
 require classify
 
-[test]
+[test(description = "a run's verdict line reads OK, TIMEOUT with its seconds, or FAIL with its exit code and first error line, and stays parseable with no output")]
 def test_verdict_lines(t : T?) {
     t |> equal("OK a/b.das", verdict_line("a/b.das", 0, 1.0, 60.0, ""))
     t |> equal("TIMEOUT a/b.das 61.5s", verdict_line("a/b.das", 1, 61.5, 60.0, "whatever"))
@@ -13,7 +13,7 @@ def test_verdict_lines(t : T?) {
     t |> equal("FAIL a/b.das rc=3 ", verdict_line("a/b.das", 3, 2.0, 60.0, ""), "empty output keeps the line parseable")
 }
 
-[test]
+[test(description = "the expected-failures list skips comments and blanks, keeps each entry's reason, and records a default reason when none is given")]
 def test_expected_list_round_trip(t : T?) {
     let fixture_r = create_temp_file_result("test_release_expected", ".txt")
     t |> success(fixture_r is value, "temp fixture created")
@@ -27,7 +27,7 @@ def test_expected_list_round_trip(t : T?) {
     t |> success(remove(fixture))
 }
 
-[test]
+[test(description = "the summary counts each verdict once as ok, expected, unexpected, stale or timeout, so a listed file that now passes reads as stale")]
 def test_summarize_buckets(t : T?) {
     var inscope expected : table<string; string>
     expected["e/known.das"] = "by design"

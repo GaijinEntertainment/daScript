@@ -55,7 +55,7 @@ def private json_of(resp : HttpResponse?) : JsonValue? {
     return read_json(string(resp.body), jerr)
 }
 
-[test]
+[test(description = "the ladder server answers healthz and returns a json 404 for an unknown route", timeout = 1200)]
 def test_health_and_unknown(t : T?) {
     with_ladder_server(default_policy()) $(base_url) {
         t |> run("healthz") @(tt : T?) {
@@ -74,7 +74,7 @@ def test_health_and_unknown(t : T?) {
     }
 }
 
-[test]
+[test(description = "a sidecar submit mints its content sha, downloads back exact, ladders by version and box, lists without a box, and transport-shape errors are refused", timeout = 1200)]
 def test_sidecar_routes(t : T?) {
     with_ladder_server(default_policy()) $(base_url) {
         let doc = sidecar_doc(BOX_A, "3", "vec8_u8")
@@ -155,7 +155,7 @@ def test_sidecar_routes(t : T?) {
     }
 }
 
-[test]
+[test(description = "a records submit lands community rows that the versions and runs routes surface, the receipt is the verbatim submission, and an official import works over loopback admin", timeout = 1200)]
 def test_records_routes(t : T?) {
     with_ladder_server(default_policy()) $(base_url) {
         let doc = records_doc()
@@ -227,7 +227,7 @@ def test_records_routes(t : T?) {
     }
 }
 
-[test]
+[test(description = "an imported image-chat run reaches /api/runs with its encode, prefill and decode cells and its gpu", timeout = 1200)]
 def test_image_routes(t : T?) {
     with_ladder_server(LadderPolicy()) $(base_url) {
         let what = "image-chat rows ride /api/runs with their encode, prefill and decode cells"
@@ -249,7 +249,7 @@ def test_image_routes(t : T?) {
     }
 }
 
-[test]
+[test(description = "an imported hold takes its model's runs off /api/runs, a malformed annotations document is refused, and replacing the holds brings the runs back", timeout = 1200)]
 def test_holds_routes(t : T?) {
     with_ladder_server(LadderPolicy()) $(base_url) {
         POST("{base_url}/admin/import-official", official_doc()) $(resp) {
@@ -288,7 +288,7 @@ def private run_jv(js : JsonValue?; engine, workload : string) : JsonValue const
     return null
 }
 
-[test]
+[test(description = "asr and tts rows reach /api/runs with their audio cells, and a cell's outlier verdict rides along as its voided flag", timeout = 1200)]
 def test_audio_routes(t : T?) {
     with_ladder_server(LadderPolicy()) $(base_url) {
         t |> run("asr and tts rows ride /api/runs with their audio cells") @(tt : T?) {
@@ -360,7 +360,7 @@ def test_audio_routes(t : T?) {
     }
 }
 
-[test]
+[test(description = "an oversize submission is 413, a throttled one 429, and invalid submissions are attempt-limited before they are parsed", timeout = 1200)]
 def test_policy_status_mapping(t : T?) {
     with_ladder_server(LadderPolicy(max_sidecar_bytes = 64, max_submissions_per_ip_hour = 1, submit_open = true)) $(base_url) {
         t |> run("oversize is 413, throttle is 429") @(tt : T?) {
@@ -393,7 +393,7 @@ def test_policy_status_mapping(t : T?) {
     }
 }
 
-[test]
+[test(description = "the admin surface plants verified sidecars on a closed board, lists gate and moderation state, verifies and demotes by sha with an absent key demoting, and deletes with the receipt", timeout = 1200)]
 def test_admin_sidecar_curation(t : T?) {
     // gate CLOSED throughout: the operator surface is independent of public submissions
     with_ladder_server(LadderPolicy()) $(base_url) {
@@ -460,7 +460,7 @@ def test_admin_sidecar_curation(t : T?) {
     }
 }
 
-[test]
+[test(description = "malformed, unknown and empty admin inputs each get a named refusal", timeout = 1200)]
 def test_admin_transport_rejections(t : T?) {
     with_ladder_server(LadderPolicy()) $(base_url) {
         t |> run("malformed, unknown, and empty inputs are named refusals") @(tt : T?) {
@@ -489,7 +489,7 @@ let private ADMIN_POSTS <- [
     "/admin/import-official", "/admin/import-annotations", "/shutdown"
 ]
 
-[test]
+[test(description = "every admin route refuses a cross-site Origin, a same-origin request passes, and the IPv4-mapped IPv6 loopback Host is accepted", timeout = 1200)]
 def test_admin_origin_gate_and_page(t : T?) {
     with_ladder_server(LadderPolicy()) $(base_url) {
         // 404 from the store is the pass signal - a request the gate blocks answers 403
@@ -570,7 +570,7 @@ def test_admin_origin_gate_and_page(t : T?) {
     }
 }
 
-[test]
+[test(description = "the operator page serves on the loopback admin surface", timeout = 1200)]
 def test_admin_page_serves(t : T?) {
     with_ladder_server(LadderPolicy()) $(base_url) {
         t |> run("the operator page serves on the loopback surface") @(tt : T?) {
@@ -585,7 +585,7 @@ def test_admin_page_serves(t : T?) {
     }
 }
 
-[test]
+[test(description = "planting a sidecar that matches a community upload promotes that upload in place", timeout = 1200)]
 def test_admin_plant_promotes_community(t : T?) {
     // gate OPEN: a community upload is the same content a later plant promotes
     with_ladder_server(default_policy()) $(base_url) {
@@ -613,7 +613,7 @@ def test_admin_plant_promotes_community(t : T?) {
     }
 }
 
-[test]
+[test(description = "a closed board refuses submissions with 403, the loopback admin toggle opens and closes it, and a malformed toggle body cannot leave it open", timeout = 1200)]
 def test_submit_gate(t : T?) {
     // default policy = submit CLOSED: the read board serves, writes are refused until opened, and
     // the loopback admin flip is reversible (the test-window switch)
@@ -677,7 +677,7 @@ def private write_text(path, text : string) {
 let private HELD_DOC = ("[\{\"gguf\":\"gemma-3-1b-it-Q8_0.gguf\",\"engine\":\"das\"," +
     "\"held\":\"followup_general.md 219\"\}]")
 
-[test]
+[test(description = "the startup import of an official dir applies its annotations.json after the stores, so a held model's rows are off the board")]
 def test_official_dir_imports_its_annotations(t : T?) {
     let what = "the startup import reads the dir's annotations.json after its stores"
     t |> run(what) @(tt : T?) {
@@ -713,7 +713,7 @@ def private run_admin(args : array<string>; var output : string&) : int {
     return run_and_capture(cmd, output, 300.0)
 }
 
-[test]
+[test(description = "admin.das --op import-annotations holds a model off the board and exits 1 naming a missing file", timeout = 1200)]
 def test_admin_import_annotations(t : T?) {
     let what = ("admin.das --op import-annotations holds a model off the board, " +
         "and refuses a missing file")

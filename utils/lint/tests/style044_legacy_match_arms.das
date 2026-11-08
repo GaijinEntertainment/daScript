@@ -1,3 +1,5 @@
+//! STYLE044 reports a match written with legacy if-arms instead of
+//! pattern arms.
 options gen2
 
 expect 31209:3

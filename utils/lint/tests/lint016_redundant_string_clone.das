@@ -1,3 +1,5 @@
+//! LINT016 reports string clone syntax that only copies the pointer
+//! unless multiple_contexts is enabled.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert source call/assignment shapes
 

@@ -1,3 +1,4 @@
+//! PERF028 is reported for: console / file I/O on a hot path.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // PERF028: console / file I/O on a hot path

@@ -17,7 +17,10 @@ let FIXTURE_DIRS <- [ "utils/lint/tests", "tests/lint" ]
 // fixtures whose file name does not carry the id (README.md lists them)
 var FIXTURE_ALIAS <- { "LINT019" => "tests/lint/test_stale_nolint.das",
                        "PERF033" => "tests/lint/test_lint_fix.das",
-                       "LINT032" => "utils/lint/tests/lint033_rule_doc_names.das" }
+                       "LINT025" => "utils/lint/tests/lint_rule_docs.das",
+                       "LINT027" => "utils/lint/tests/lint_rule_docs.das",
+                       "LINT032" => "utils/lint/tests/lint_rule_docs.das",
+                       "LINT033" => "utils/lint/tests/lint_rule_docs.das" }
 
 var private RULE_ID <- %regex~"((LINT|PERF|STYLE)[0-9][0-9][0-9]):%%
 

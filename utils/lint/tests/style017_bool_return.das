@@ -1,3 +1,5 @@
+//! STYLE017 reports an if that returns true and false only to
+//! propagate its condition.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options _nolint = "STYLE042"

@@ -1,3 +1,5 @@
+//! STYLE041 is reported for: a bool flag set-then-returned is a
+//! return value in disguise.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // STYLE041: a bool flag set-then-returned is a return value in disguise

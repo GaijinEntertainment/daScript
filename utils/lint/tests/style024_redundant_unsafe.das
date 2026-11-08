@@ -1,3 +1,4 @@
+//! STYLE024 is reported for: redundant `unsafe` wrap.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options _nolint = "STYLE042"

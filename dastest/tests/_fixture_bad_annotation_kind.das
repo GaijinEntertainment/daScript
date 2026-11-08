@@ -2,7 +2,7 @@ options gen2
 
 require dastest/testing_boost public
 
-//! a fixture for test_annotation_args.das: a description that is not
+//! a fixture for test_timeouts.das: a description that is not
 //! a string does not compile
 
 [test(description = 5)]

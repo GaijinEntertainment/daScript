@@ -5,7 +5,7 @@ require daslib/fio
 require daslib/strings_boost
 require strings
 
-[test]
+[test(description = "test_temp_dir is one stable, writable directory per run that sits outside the repo tree")]
 def test_temp_dir_is_private(tt : T?) {
     tt |> run("one directory per run, outside the repo tree, writable") <| @(t : T?) {
         let dir = test_temp_dir()
@@ -18,7 +18,7 @@ def test_temp_dir_is_private(tt : T?) {
     }
 }
 
-[test]
+[test(description = "a child run's temp directory is its own and is gone, files included, once the child ends", timeout = 1200)]
 def test_temp_dir_removed_when_the_run_ends(tt : T?) {
     tt |> run("a run's directory and its files are gone once the run ends") <| @(t : T?) {
         let exe = get_command_line_arguments()[0]
@@ -35,7 +35,7 @@ def test_temp_dir_removed_when_the_run_ends(tt : T?) {
     }
 }
 
-[test]
+[test(description = "with no usable temp root the first test_temp_dir call panics and names itself", timeout = 1200)]
 def test_temp_dir_panics_without_a_temp_root(tt : T?) {
     tt |> run("no usable temp root: the first call panics and names itself") <| @(t : T?) {
         let exe = get_command_line_arguments()[0]

@@ -1,3 +1,5 @@
+//! PERF025 is reported for: string(...) inside string interpolation
+//! is redundant.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // PERF025: string(...) inside string interpolation is redundant.

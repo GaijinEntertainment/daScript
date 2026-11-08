@@ -10,7 +10,7 @@ require tl_stats
 // Launch-rail helpers that run without a subprocess: quote-aware argv split and the
 // mtime/size debounced file watcher.
 
-[test]
+[test(description = "the argv splitter respects quotes")]
 def test_split_args(t : T?) {
     t |> run("quote-aware argv split") @(t : T?) {
         let a <- split_args("-m \"a b.gguf\" -p  512")
@@ -26,7 +26,7 @@ def test_split_args(t : T?) {
     }
 }
 
-[test]
+[test(description = "the launcher finds the .json token in an output line")]
 def test_extract_json_path(t : T?) {
     t |> run("finds the .json token in an output line") @(t : T?) {
         t |> equal("C:/tmp/a.trace.json", extract_json_path("jobque trace saved: C:/tmp/a.trace.json"))
@@ -35,7 +35,7 @@ def test_extract_json_path(t : T?) {
     }
 }
 
-[test]
+[test(description = "the file watch fires on a change only after a stable poll")]
 def test_file_watch(t : T?) {
     t |> run("watch fires on change only after a stable poll") @(t : T?) {
         var terr = ""
@@ -94,7 +94,7 @@ def new_format_trace() : string {
     return s
 }
 
-[test]
+[test(description = "a new-format trace loads with its header, markers and chains")]
 def test_loader_new_format(t : T?) {
     t |> run("new-format trace loads with header, markers, chains") @(t : T?) {
         let path = write_temp(t, "tl_test_new.json", new_format_trace())
@@ -134,7 +134,7 @@ def test_loader_new_format(t : T?) {
     }
 }
 
-[test]
+[test(description = "a headerless trace falls back to the legacy palette")]
 def test_loader_old_format(t : T?) {
     t |> run("headerless trace falls back to the legacy palette") @(t : T?) {
         var s = "\{\"traceEvents\":[\n"
@@ -154,7 +154,7 @@ def test_loader_old_format(t : T?) {
     }
 }
 
-[test]
+[test(description = "untagged chains classify by their stage count")]
 def test_loader_untagged_heuristic(t : T?) {
     t |> run("untagged chains classify by stage count") @(t : T?) {
         var s = "\{\"traceEvents\":[\n"
@@ -190,7 +190,7 @@ def make_doc() : TraceDoc {
     return <- doc
 }
 
-[test]
+[test(description = "range stats compute busy, idle and parallelism with edge clipping")]
 def test_range_stats(t : T?) {
     t |> run("busy/idle/parallelism with edge clipping") @(t : T?) {
         var doc <- make_doc()
@@ -209,7 +209,7 @@ def test_range_stats(t : T?) {
     }
 }
 
-[test]
+[test(description = "a full-span range counts publish and wait time")]
 def test_range_stats_full(t : T?) {
     t |> run("full span counts publish and wait") @(t : T?) {
         var doc <- make_doc()
@@ -221,7 +221,7 @@ def test_range_stats_full(t : T?) {
     }
 }
 
-[test]
+[test(description = "the stats cache recomputes only when its key changes")]
 def test_stats_cache(t : T?) {
     t |> run("cache recomputes only on key change") @(t : T?) {
         var doc <- make_doc()

@@ -1,3 +1,4 @@
+//! PERF027 is reported for: environment lookup on a hot path.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // PERF027: environment lookup on a hot path

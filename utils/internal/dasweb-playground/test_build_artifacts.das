@@ -17,7 +17,7 @@ def private with_temp_blobs(blk : block<(blobs : string) : void>) {
     rmdir_rec(blobs)
 }
 
-[test]
+[test(description = "only the known delivery file names pass artifact name validation; every other name is refused")]
 def test_filename_validation(t : T?) {
     t |> run("known delivery names pass") @(tt : T?) {
         tt |> success(is_valid_artifact_filename("sample.wasm"), "wasm")
@@ -43,7 +43,7 @@ def test_filename_validation(t : T?) {
     }
 }
 
-[test]
+[test(description = "a toolchain id must be 7 to 64 lowercase hex characters and an artifact hash exactly 64")]
 def test_component_validation(t : T?) {
     t |> run("toolchain ids are 7..64 lowercase hex") @(tt : T?) {
         tt |> success(is_valid_toolchain_id("abc1234"), "short sha")
@@ -60,7 +60,7 @@ def test_component_validation(t : T?) {
     }
 }
 
-[test]
+[test(description = "staged files with matching shas land atomically as an artifact, and a re-upload onto an existing artifact is absorbed")]
 def test_finalize_roundtrip(t : T?) {
     with_temp_blobs() $(blobs) {
         t |> run("staged files with good shas land atomically") @(tt : T?) {
@@ -90,7 +90,7 @@ def test_finalize_roundtrip(t : T?) {
     }
 }
 
-[test]
+[test(description = "a wrong sha, a missing staged file or an empty manifest keeps the whole artifact out")]
 def test_finalize_refusals(t : T?) {
     with_temp_blobs() $(blobs) {
         t |> run("wrong sha keeps the artifact out") @(tt : T?) {
@@ -118,7 +118,7 @@ def test_finalize_refusals(t : T?) {
     }
 }
 
-[test]
+[test(description = "artifact path resolution refuses every malformed component, so no bad path reaches the disk")]
 def test_resolve_is_the_choke_point(t : T?) {
     with_temp_blobs() $(blobs) {
         let stage = create_stage_dir(blobs)
@@ -135,7 +135,7 @@ def test_resolve_is_the_choke_point(t : T?) {
     }
 }
 
-[test]
+[test(description = "the startup sweep removes stage directories a previous run left behind")]
 def test_stage_cleanup(t : T?) {
     with_temp_blobs() $(blobs) {
         t |> run("startup sweep removes leftover stages") @(tt : T?) {
@@ -157,7 +157,7 @@ def private place_artifact(blobs : string; toolchain : string; hash : string) {
     finalize_artifact(blobs, toolchain, hash, stage, files)
 }
 
-[test]
+[test(description = "a stale toolchain's tree goes only after a day's grace, the current toolchain, blobs/tmp and stray files stay, and with no announced toolchain nothing is swept")]
 def test_stale_toolchain_sweep(t : T?) {
     with_temp_blobs() $(blobs) {
         let stale_tc = "feed5678deadbeef000000000000000000000000"
@@ -196,7 +196,7 @@ def test_stale_toolchain_sweep(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fresh process sweeps toolchains at once and then once per interval")]
 def test_toolchain_sweep_cadence(t : T?) {
     t |> run("a fresh process sweeps at once, then once per interval") @(tt : T?) {
         tt |> success(toolchain_sweep_due(0l, 1000l), "first tick is due")

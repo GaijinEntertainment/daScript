@@ -1,3 +1,4 @@
+//! STYLE020 reports from_JV on a scalar that a ?? default replaces.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options _nolint = "STYLE042"

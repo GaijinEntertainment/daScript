@@ -44,7 +44,7 @@ def private convert_shape(t : T?; shape : Shape; var out : string&) : bool {
 }
 
 
-[test]
+[test(description = "a comment after else leaves room for the brace")]
 def test_else_with_trailing_comment(t : T?) {
     t |> run("a comment after `else` leaves room for the brace") @(t : T?) {
         var out = ""
@@ -58,7 +58,7 @@ def test_else_with_trailing_comment(t : T?) {
 }
 
 
-[test]
+[test(description = "a bare let heading a block of globals takes braces")]
 def test_global_let_block(t : T?) {
     t |> run("a bare `let` heading a block of globals takes braces") @(t : T?) {
         var out = ""
@@ -78,7 +78,7 @@ def test_global_let_block(t : T?) {
 }
 
 
-[test]
+[test(description = "a typeinfo condition is wrapped past its trait")]
 def test_typeinfo_condition(t : T?) {
     t |> run("a `typeinfo` condition reaches past its trait") @(t : T?) {
         var out = ""
@@ -92,7 +92,7 @@ def test_typeinfo_condition(t : T?) {
 }
 
 
-[test]
+[test(description = "a quoted body is converted like any other block")]
 def test_call_macro_body(t : T?) {
     t |> run("a quoted body is converted like any other block") @(t : T?) {
         var out = ""
@@ -106,7 +106,7 @@ def test_call_macro_body(t : T?) {
 }
 
 
-[test]
+[test(description = "a make-literal at the head of a pipe becomes an argument")]
 def test_piped_make_literal(t : T?) {
     t |> run("a make-literal at the head of a pipe becomes an argument") @(t : T?) {
         var out = ""
@@ -125,7 +125,7 @@ def test_piped_make_literal(t : T?) {
 }
 
 
-[test]
+[test(description = "blocks that end on one line each keep their brace")]
 def test_stacked_block_closers(t : T?) {
     t |> run("blocks that end on one line each keep their brace") @(t : T?) {
         var out = ""
@@ -138,7 +138,7 @@ def test_stacked_block_closers(t : T?) {
 }
 
 
-[test]
+[test(description = "a condition anchored on its index is not wrapped from there")]
 def test_indexed_condition(t : T?) {
     t |> run("a condition anchored on its index is not wrapped from there") @(t : T?) {
         var out = ""
@@ -153,7 +153,7 @@ def test_indexed_condition(t : T?) {
 }
 
 
-[test]
+[test(description = "the for head starts after the keyword rather than at the first iterator")]
 def test_for_head_from_keyword(t : T?) {
     t |> run("the for head starts after the keyword, not at the first iterator") @(t : T?) {
         var out = ""
@@ -166,7 +166,7 @@ def test_for_head_from_keyword(t : T?) {
 }
 
 
-[test]
+[test(description = "a capture list or an annotation still belongs to its literal")]
 def test_literal_header_forms(t : T?) {
     t |> run("a capture list or an annotation still belongs to the literal") @(t : T?) {
         var out = ""
@@ -181,7 +181,7 @@ def test_literal_header_forms(t : T?) {
 }
 
 
-[test]
+[test(description = "a block in an initializer is not treated as a continued expression")]
 def test_multiline_initializer(t : T?) {
     t |> run("a block in an initializer is not a continued expression") @(t : T?) {
         var out = ""
@@ -195,7 +195,7 @@ def test_multiline_initializer(t : T?) {
     }
 }
 
-[test]
+[test(description = "a declaration with no body still gets one")]
 def test_bodyless_declaration(t : T?) {
     t |> run("a declaration with no body still gets one") @(t : T?) {
         var out = ""
@@ -213,7 +213,7 @@ def test_bodyless_declaration(t : T?) {
     }
 }
 
-[test]
+[test(description = "a call macro spelled as a keyword parenthesises its subject")]
 def test_match_subject(t : T?) {
     t |> run("a call macro spelled as a keyword parenthesises its subject") @(t : T?) {
         var out = ""
@@ -226,7 +226,7 @@ def test_match_subject(t : T?) {
 }
 
 
-[test]
+[test(description = "a comment between methods does not close the class")]
 def test_comment_does_not_end_a_body(t : T?) {
     t |> run("a comment between methods does not close the class") @(t : T?) {
         var out = ""
@@ -241,7 +241,7 @@ def test_comment_does_not_end_a_body(t : T?) {
 }
 
 
-[test]
+[test(description = "a make-literal is converted past its closing bracket")]
 def test_make_literal_closer(t : T?) {
     t |> run("a make-literal reaches past its closing bracket") @(t : T?) {
         var out = ""
@@ -253,7 +253,7 @@ def test_make_literal_closer(t : T?) {
 }
 
 
-[test]
+[test(description = "static_elif takes parentheses like static_if")]
 def test_static_elif(t : T?) {
     t |> run("static_elif takes parentheses like static_if") @(t : T?) {
         var out = ""
@@ -268,7 +268,7 @@ def test_static_elif(t : T?) {
 }
 
 
-[test]
+[test(description = "an index next to the closer is not the closer and both generator spellings stay generators")]
 def test_closer_and_generators(t : T?) {
     t |> run("an index next to the closer is not the closer") @(t : T?) {
         var out = ""

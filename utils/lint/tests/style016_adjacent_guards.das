@@ -1,3 +1,5 @@
+//! STYLE016 reports adjacent guards with an identical early exit that
+//! one condition could combine.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // STYLE016: adjacent guards leading to identical early-exit can be combined with '||'

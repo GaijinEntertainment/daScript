@@ -6,7 +6,7 @@ require daslib/strings_boost
 
 require ../config.das
 
-[test]
+[test(description = "a changed path under the prefix arms the gate, CR-terminated or not, while a look-alike elsewhere in the path or an empty diff does not")]
 def test_has_path_under(t : T?) {
     let prefix = "modules/dasLLAMA/"
     t |> success(has_path_under(["src/ast/ast_parse.cpp", "modules/dasLLAMA/tests/run.das"], prefix), "a path under the prefix arms the gate")
@@ -18,7 +18,7 @@ def test_has_path_under(t : T?) {
 
 // A gate's reach: no reach set means the gate runs whatever changed; a reach set is hit by its own
 // prefixes or by the core, and missed by everything else.
-[test]
+[test(description = "an empty reach set runs on any change, and a reach set is hit only by its own prefixes or a core change")]
 def test_reach_hit(t : T?) {
     let none : array<string>
     let imgui <- ["modules/dasImgui/", "modules/dasGlfw/"]
@@ -30,7 +30,7 @@ def test_reach_hit(t : T?) {
     t |> success(!reach_hit(none, imgui), "an empty diff misses every reach set")
 }
 
-[test]
+[test(description = "the review-md suites run on a change to any REVIEW.das gate, the walkers or the gate library, and not on a checklist, a tool edit or a look-alike name")]
 def test_review_md_tests_reach(t : T?) {
     t |> success(review_md_tests_reach(["utils/REVIEW.das"]), "a gate under utils/ reaches the suites")
     t |> success(review_md_tests_reach(["modules/dasLLAMA/REVIEW.das", "x.md"]), "a module's gate reaches them")
@@ -42,7 +42,7 @@ def test_review_md_tests_reach(t : T?) {
 
 // The compile sweep's root filter: program roots under the swept trees, never tests, generated files,
 // fixtures, or a module tree nested inside an example through a junction.
-[test]
+[test(description = "the compile sweep takes tool mains, examples and tutorials as roots and skips tests, test_ files, fixtures, generated files, junctioned module trees and non-.das files")]
 def test_is_sweep_root_path(t : T?) {
     t |> success(is_sweep_root_path("utils/lint/main.das"), "a tool's main is a root candidate")
     t |> success(is_sweep_root_path("modules/dasImgui/examples/features/active_widget.das"), "a module's own example is a candidate")
@@ -57,7 +57,7 @@ def test_is_sweep_root_path(t : T?) {
 
 // A lane child's report: the verdict lines with their seconds, details and indented breakdown; RUN
 // lines and prose are not verdicts; a docs child reports several gates.
-[test]
+[test(description = "a lane child's output parses into one report per verdict line with its seconds, detail and trimmed breakdown, behind a log-level prefix too, and RUN lines and prose yield none")]
 def test_parse_gate_reports(t : T?) {
     let out = "preflight: fast tier; daslang=bin/daslang\n[RUN ] tests-jit\n[PASS] tests-jit (396.2s) — JIT suite ok\n       Top 3 slowest files:\n       12.0s  tests/a.das\n\npreflight: 1 passed\n"
     let one <- parse_gate_reports(out)
@@ -93,7 +93,7 @@ def test_parse_gate_reports(t : T?) {
     t |> equal(e[2].breakdown, "12.0s  tests/z.das", "the last report closes without a trailing newline")
 }
 
-[test]
+[test(description = "the fast tier always runs, a lane runs only under --full, and a module gate never runs from a tier")]
 def test_tier_runs(t : T?) {
     t |> success(tier_runs("fast", false), "the fast tier runs without --full")
     t |> success(tier_runs("fast", true), "and with it")
@@ -102,7 +102,7 @@ def test_tier_runs(t : T?) {
     t |> success(!tier_runs("module", false) && !tier_runs("module", true), "a module gate never runs from a tier")
 }
 
-[test]
+[test(description = "the sweep excludes listed trees by whole path segment, each with a reason, and excludes a module-gated tree exactly when the box lacks its module")]
 def test_sweep_excluded(t : T?) {
     t |> success(sweep_excluded("examples/crash/crash.das"), "an excluded tree's root")
     t |> success(sweep_excluded("utils/internal/ast-fuzz/selftest/broken.das"), "the fuzz fixtures")
@@ -130,7 +130,7 @@ def test_sweep_excluded(t : T?) {
     }
 }
 
-[test]
+[test(description = "only text with an exported main is a sweep root, and one requiring the dasllama engine is a heavy root")]
 def test_sweep_root_text(t : T?) {
     t |> success(is_sweep_root_text("options gen2\n[export]\ndef main() \{\n\}\n"), "an exported main is a root")
     t |> success(!is_sweep_root_text("options gen2\ndef helper() \{\n\}\n"), "a module without main is not")
@@ -139,7 +139,7 @@ def test_sweep_root_text(t : T?) {
     t |> success(!is_heavy_sweep_root("require daslib/fio\n[export]\ndef main() \{\}\n"), "a plain root is light")
 }
 
-[test]
+[test(description = "the FAILURES block names the failed files, five at most with the rest counted, and a stated default when the block is absent")]
 def test_failed_files_block(t : T?) {
     let one = "13205 tests, 13201 passed, 1 failed\n\nFAILURES:\n  tests/json/test_sscan_json.das — 1 failed, 0 errors\n\nFAILED! (109.3s)\n"
     t |> equal(failed_files_block(one), "tests/json/test_sscan_json.das", "the file before the dash")
@@ -149,7 +149,7 @@ def test_failed_files_block(t : T?) {
     t |> equal(failed_files_block(many), "tests/t0.das, tests/t1.das, tests/t2.das, tests/t3.das, tests/t4.das, and 2 more", "five named, the rest counted")
 }
 
-[test]
+[test(description = "the line-length gate passes the base as given, passes on rc 0, and fails on rc 1 naming the base")]
 def test_line_length_run(t : T?) {
     t |> equal(line_length_argv("das.exe", "upstream/main"),
         ["das.exe", "utils/internal/line-length/main.das", "--", "--base", "upstream/main"],
@@ -161,7 +161,7 @@ def test_line_length_run(t : T?) {
         "rc 1 fails the gate and names the base - the tool fails on an unresolvable base too")
 }
 
-[test]
+[test(description = "the lint pass detail names the rails that ran and any files --fix rewrote, and the darwin mirror runs only where the box carries dasVulkan")]
 def test_lint_pass_detail(t : T?) {
     t |> equal(lint_pass_detail(6, 0, "host, linux-mirror, darwin-mirror"),
         ("6 file(s) clean on every rail (host, linux-mirror, darwin-mirror), " +
@@ -178,7 +178,7 @@ def test_lint_pass_detail(t : T?) {
     t |> equal(rails, expected, "the darwin mirror runs only where the box carries dasVulkan")
 }
 
-[test]
+[test(description = "a .das or .md file is a lint input and an .rst, .cpp or .txt is not")]
 def test_lint_inputs(t : T?) {
     t |> success(is_lint_input("daslib/lint.das"), "a .das file is a lint input")
     t |> success(is_lint_input("modules/dasLLVM/ARCHITECTURE.md"), "a .md file is a lint input - LINT027's line gate reads it")
@@ -187,7 +187,7 @@ def test_lint_inputs(t : T?) {
     t |> success(!is_lint_input("utils/internal/preflight/ci_only_das.txt"), "a .txt is not")
 }
 
-[test]
+[test(description = "the lint gate takes every changed lint input except the tree-sitter grammar copy")]
 def test_lint_gate_files(t : T?) {
     var inscope files <- lint_gate_files(["daslib/lint.das", "tree-sitter-daslang/test/tags/tags.das"],
                                          ["tree-sitter-daslang/CLAUDE.md", "utils/REVIEW.md"],
@@ -197,10 +197,32 @@ def test_lint_gate_files(t : T?) {
                "every changed lint input but the grammar copy, which mirrors its own repository byte for byte")
 }
 
-[test]
+[test(description = "the lint output counts one rewritten file per line starting with FIXED, and none without --fix")]
 def test_count_fixed_files(t : T?) {
     t |> equal(count_fixed_files(""), 0, "a run without --fix edits rewrote nothing")
     let out = "FIXED /a/b.das (2)\nWARN /a/c.das (1)\n  LINT003: variable x ...\nFIXED /a/d.das (1)\n"
     t |> equal(count_fixed_files(out), 2, "one FIXED line per rewritten file")
     t |> equal(count_fixed_files("  FIXED is prose here\n"), 0, "only a line that starts with FIXED counts")
+}
+
+[test(description = "each run-only lane gets a child of its own in the given order, and the lanes that build in the shared build dir share one child, since two builds in one dir collide")]
+def test_lane_groups(t : T?) {
+    let builds <- ["docs", "tests-aot", "utils-tests"]
+    let lanes <- ["docs", "tests-cpp", "tests-interp", "tests-jit", "tests-aot", "utils-tests"]
+    let groups <- lane_groups(lanes, builds)
+    t |> equal(length(groups), 4, "three run-only lanes a child each, the building lanes one child")
+    t |> equal(groups[0][0], "tests-cpp", "a run-only lane keeps its order")
+    t |> equal(groups[1][0], "tests-interp", "a run-only lane keeps its order")
+    t |> equal(groups[2][0], "tests-jit", "a run-only lane keeps its order")
+    t |> equal(length(groups[3]), 3, "the building lanes share the last child")
+    t |> equal(groups[3][0], "docs", "the building lanes keep the order given")
+    t |> equal(groups[3][1], "tests-aot", "the building lanes keep the order given")
+    t |> equal(groups[3][2], "utils-tests", "the building lanes keep the order given")
+    let run_only <- lane_groups(["tests-interp", "tests-jit"], builds)
+    t |> equal(length(run_only), 2, "no building lane, no building child")
+    let builders <- lane_groups(["tests-aot", "docs"], builds)
+    t |> equal(length(builders), 1, "building lanes alone make one child")
+    t |> equal(length(builders[0]), 2, "building lanes alone make one child")
+    let none : array<string>
+    t |> equal(length(lane_groups(none, builds)), 0, "no lane, no child")
 }

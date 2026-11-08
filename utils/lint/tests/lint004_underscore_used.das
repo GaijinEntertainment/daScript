@@ -1,3 +1,5 @@
+//! LINT004 reports a leading-underscore local that is read, and
+//! exempts arguments.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // LINT004: a leading underscore says "unused on purpose"; a `_name` local that IS read wears the

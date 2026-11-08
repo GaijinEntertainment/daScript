@@ -19,7 +19,7 @@ def private run(argv : array<string>; var out : string&; timeout : float) : int 
 def private died(ec : int; out : string) : bool =>
     (is_death_exit_code(ec) || ec == popen_timed_out || find(out, "CRASH:") >= 0)
 
-[test]
+[test(description = "a compile whose tree holds a null ExprOp2 operand reports `ExprOp2.right is null` instead of crashing", timeout = 1200)]
 def test_verifier_reports_null_child(t : T?) {
     var out : string
     let ec = run([BIN, "utils/internal/ast-fuzz/selftest/run.das"], out, 60.0)
@@ -28,7 +28,7 @@ def test_verifier_reports_null_child(t : T?) {
         "did not report the null child\n{out}")
 }
 
-[test]
+[test(description = "a node that points at its own ancestor is reported as a cycle and the walk survives it", timeout = 1200)]
 def test_verifier_cuts_a_cycle(t : T?) {
     var out : string
     let ec = run([BIN, "utils/internal/ast-fuzz/selftest/cycle.das"], out, 60.0)
@@ -37,7 +37,7 @@ def test_verifier_cuts_a_cycle(t : T?) {
         "did not report the cycle\n{out}")
 }
 
-[test]
+[test(description = "a null entry in ExprLet.variables is reported by count and dropped instead of crashing the compile", timeout = 1200)]
 def test_verifier_drops_a_null_vector_entry(t : T?) {
     var out : string
     let ec = run([BIN, "utils/internal/ast-fuzz/selftest/null_entry.das"], out, 60.0)
@@ -46,7 +46,7 @@ def test_verifier_drops_a_null_vector_entry(t : T?) {
         "did not report the null entry\n{out}")
 }
 
-[test]
+[test(description = "one TypeDecl shared by two owners is reported as aliased", timeout = 1200)]
 def test_verifier_reports_an_aliased_type(t : T?) {
     var out : string
     let ec = run([BIN, "utils/internal/ast-fuzz/selftest/alias.das"], out, 60.0)
@@ -57,7 +57,7 @@ def test_verifier_reports_an_aliased_type(t : T?) {
 
 // the flag a macro that rewrites a literal's values must clear; nothing but this verifier
 // notices one it did not
-[test]
+[test(description = "an ExprMakeArray left flagged constValues over a value that is no typed constant is reported", timeout = 1200)]
 def test_verifier_reports_a_stale_const_values_flag(t : T?) {
     var out : string
     let ec = run([BIN, "utils/internal/ast-fuzz/selftest/const_values.das"], out, 60.0)
@@ -68,7 +68,7 @@ def test_verifier_reports_a_stale_const_values_flag(t : T?) {
 
 // expr.type is not walked by the visitor, so this alias is only visible to the type
 // tree recorded from preVisitExpression
-[test]
+[test(description = "an aliased expression type, which the visitor never walks, is reported and its report trails no empty location", timeout = 1200)]
 def test_verifier_reports_an_aliased_expression_type(t : T?) {
     var out : string
     let ec = run([BIN, "utils/internal/ast-fuzz/selftest/alias_type.das"], out, 60.0)
@@ -83,7 +83,7 @@ def test_verifier_reports_an_aliased_expression_type(t : T?) {
 // A node with no `at` is anchored by the verify itself, tier by tier: its own subtree first, then
 // the node the walk passed last (in pre-order the enclosing one, for a first child), then the last
 // located non-expression site. One function per tier in at_unset.das.
-[test]
+[test(description = "--ast-verify anchors a node with an unset `at` at each fallback tier: its subtree, the enclosing node, the argument, the function", timeout = 1200)]
 def test_ast_verify_guesses_a_location_for_an_unset_at(t : T?) {
     var out : string
     let f = "utils/internal/ast-fuzz/selftest/at_unset.das"
@@ -109,7 +109,7 @@ def test_ast_verify_guesses_a_location_for_an_unset_at(t : T?) {
 // of the process; one that never required it is left alone. The lint
 // runner shares modules, so the verify fixture ahead of the breaking
 // one in one run is the shape.
-[test]
+[test(description = "a verify one program promoted in a shared-module lint run does not fail a later program that never required it", timeout = 1200)]
 def test_ast_verify_leaves_a_program_that_did_not_ask(t : T?) {
     var out : string
     let d = "utils/internal/ast-fuzz/selftest"
@@ -121,7 +121,7 @@ def test_ast_verify_leaves_a_program_that_did_not_ask(t : T?) {
         "the promoted verify reached a program that did not require it\n{out}")
 }
 
-[test]
+[test(description = "--ast-verify on valid code exits 0 and prints no AST verify report", timeout = 1200)]
 def test_ast_verify_clean_on_valid_code(t : T?) {
     var out : string
     let ec = run([BIN, "--ast-verify", "utils/internal/ast-fuzz/selftest/cli_victim.das"], out, 60.0)
@@ -131,7 +131,7 @@ def test_ast_verify_clean_on_valid_code(t : T?) {
 
 // Batch mode keeps the post-infer walk, so a tree an [infer_macro] broke after inference is
 // still reported before lint/fold/codegen consume it.
-[test]
+[test(description = "--ast-verify-batch still reports an unset `at` an [infer_macro] left after inference", timeout = 1200)]
 def test_ast_verify_batch_still_reports_a_macro_broken_tree(t : T?) {
     var out : string
     let f = "utils/internal/ast-fuzz/selftest/at_unset.das"
@@ -152,17 +152,17 @@ def check_user_macro_break_is_reported(t : T?; f : string) {
     }
 }
 
-[test]
+[test(description = "a null a user macro leaves mid-pass is reported under both verify modes and fails the compile", timeout = 1200)]
 def test_user_macro_break_is_reported_mid_pass(t : T?) {
     check_user_macro_break_is_reported(t, "utils/internal/ast-fuzz/selftest/_mid_pass.das")
 }
 
-[test]
+[test(description = "a null a user macro leaves at run start is reported under both verify modes and fails the compile", timeout = 1200)]
 def test_user_macro_break_is_reported_run_start(t : T?) {
     check_user_macro_break_is_reported(t, "utils/internal/ast-fuzz/selftest/_run_start.das")
 }
 
-[test]
+[test(description = "a null an [optimization_macro] leaves is reported by --ast-verify-batch and fails the compile", timeout = 1200)]
 def test_user_macro_break_at_optimize_is_reported(t : T?) {
     var out : string
     let f = "utils/internal/ast-fuzz/selftest/_optimize.das"
@@ -173,7 +173,7 @@ def test_user_macro_break_at_optimize_is_reported(t : T?) {
     t |> success(ec != 0, "compiled a repaired tree as a success (exit {ec})\n{out}")
 }
 
-[test]
+[test(description = "--ast-verify-batch on valid code exits 0 and prints no AST verify report", timeout = 1200)]
 def test_ast_verify_batch_clean_on_valid_code(t : T?) {
     var out : string
     let ec = run([BIN, "--ast-verify-batch", "utils/internal/ast-fuzz/selftest/cli_victim.das"], out, 60.0)
@@ -181,7 +181,7 @@ def test_ast_verify_batch_clean_on_valid_code(t : T?) {
     t |> success(find(out, "AST verify:") < 0, "reported on valid code\n{out}")
 }
 
-[test]
+[test(description = "the post-infer verify skips a never-inferred dasbind stub body and exits 0", timeout = 1200)]
 def test_ast_verify_skips_late_extern_stubs(t : T?) {
     // a dasbind stub body is never inferred (InferTypes::canVisitFunction skips
     // stub=true), so its unresolved int() must not trip the post-infer verify
@@ -191,14 +191,14 @@ def test_ast_verify_skips_late_extern_stubs(t : T?) {
     t |> success(find(out, "AST verify") < 0, "reported on a stub body\n{out}")
 }
 
-[test]
+[test(description = "gen_invariants finds a repair for every child deref the visitor makes", timeout = 1200)]
 def test_every_visitor_deref_has_a_repair(t : T?) {
     var out : string
     let ec = run([BIN, "utils/internal/ast-fuzz/gen_invariants.das"], out, 180.0)
     t |> success(ec == 0, "an unguarded child deref has no repair\n{out}")
 }
 
-[test]
+[test(description = "the fuzz driver runs three seeds to its classified summary without crashing or hanging", timeout = 1200)]
 def test_generator_runs_and_classifies(t : T?) {
     set_env_variable("DAS_LOG_LEVEL", "info")
     defer() {
@@ -211,7 +211,7 @@ def test_generator_runs_and_classifies(t : T?) {
     t |> success(find(out, "run(s) —") >= 0, "driver produced no summary\n{out}")
 }
 
-[test]
+[test(description = "a --bin that cannot start makes the driver exit 2 naming it, with no run classified", timeout = 1200)]
 def test_a_binary_that_does_not_start_stops_the_driver(t : T?) {
     var out : string
     let ec = run([BIN, "utils/internal/ast-fuzz/main.das", "--", "--bin", "/nonexistent/daslang",
@@ -222,7 +222,7 @@ def test_a_binary_that_does_not_start_stops_the_driver(t : T?) {
     t |> success(find(out, "run(s)") < 0, "no run was classified\n{out}")
 }
 
-[test]
+[test(description = "a cross-module ctor in the field default of a struct nothing constructs passes the post-infer verify and runs", timeout = 1200)]
 def test_verifier_tolerates_uninstantiated_field_default(t : T?) {
     // a cross-module ctor in a field default of a struct nothing constructs: infer types the
     // decl init but never binds the func - the post-infer walk must not report it

@@ -20,7 +20,7 @@ require math                                            // min
 // Qwen3.5-0.8B-MTP-Q8_0.gguf (the NextN head) and tinyllama-1.1b-chat-v1.0.Q8_0.gguf (no head).
 //! the Metal cells skip on a box with no Metal backend
 
-let TEST_PORT = 18150   // 18150-18158: the nine cells' boots; 18097-18147 belong to the sibling suites (test_openai_server*.das, test_setup_mode.das)
+let TEST_PORT = 18150   // 18150-18158: the nine cells' boots; 18097-18147 belong to the sibling suites (test_openai_server*.das, uncategorized_persistent_heap_stack_524288.das)
 let TEST_CTX = 1024l
 
 let MTP_PATH = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
@@ -69,7 +69,7 @@ def private drafted_after_chat(t : T?; base_url : string) : int64 {
     return drafted
 }
 
-[test]
+[test(description = "on Metal the NextN-headed slot decodes plain when unset or at four streams and drafts only when explicitly on", timeout = 1200)]
 def test_mtp_default_on_metal(t : T?) {
     if (model_missing(t, MTP_PATH)) {
         return
@@ -100,7 +100,7 @@ def test_mtp_default_on_metal(t : T?) {
     }
 }
 
-[test]
+[test(description = "on the CPU the unset default decodes plain, an explicit setting wins, and a constrained reply decodes plain beside drafting streams", timeout = 1200)]
 def test_mtp_default_on_cpu(t : T?) {
     if (model_missing(t, MTP_PATH)) {
         return
@@ -159,7 +159,7 @@ def test_mtp_default_on_cpu(t : T?) {
     }
 }
 
-[test]
+[test(description = "a model with no NextN head ignores the speculation default and the chat serves", timeout = 1200)]
 def test_mtp_default_no_head(t : T?) {
     if (model_missing(t, PLAIN_PATH)) {
         return

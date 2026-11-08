@@ -2,7 +2,7 @@ options gen2
 
 require dastest/testing_boost public
 
-//! a fixture for test_annotation_args.das: an argument [test] does
+//! a fixture for test_timeouts.das: an argument [test] does
 //! not take does not compile
 
 [test(slow = true)]

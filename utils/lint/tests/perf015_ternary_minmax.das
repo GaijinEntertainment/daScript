@@ -1,3 +1,4 @@
+//! PERF015 reports a ternary that computes min or max.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // PERF015: ternary min/max → min(a, b) / max(a, b)

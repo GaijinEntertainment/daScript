@@ -60,7 +60,7 @@ def has_test(report : JsonReport; name : string) : bool {
     return false
 }
 
-[test]
+[test(description = "--together compiles the listed fixtures as one program yet reports each file's tests, results and output lines separately", timeout = 1200)]
 def test_together_runs_every_file(tt : T?) {
     var output : string
     let r <- run_together(["passing", "skipping", "failing"], output)
@@ -80,7 +80,7 @@ def test_together_runs_every_file(tt : T?) {
     tt |> success(find(output, "_fixture_skipping.das") >= 0, "the skipping file gets its line too")
 }
 
-[test]
+[test(description = "--together runs each file in a fresh context, so one file's write to a shared global never reaches the next", timeout = 1200)]
 def test_together_gives_each_file_a_fresh_context(tt : T?) {
     var output : string
     let r <- run_together(["state_a", "state_b"], output)
@@ -90,7 +90,7 @@ def test_together_gives_each_file_a_fresh_context(tt : T?) {
     tt |> equal(r.exit_code, 0, "a clean run:\n{output}")
 }
 
-[test]
+[test(description = "--together refuses a batch whose files disagree on options, reporting one error per file and naming both values", timeout = 1200)]
 def test_together_refuses_disagreeing_options(tt : T?) {
     var output : string
     let r <- run_together(["opt_a", "opt_b"], output)

@@ -28,7 +28,7 @@ def private role_at(js : JsonValue?; i : int) : string => message_field(js, i, "
 
 def private content_at(js : JsonValue?; i : int) : string => message_field(js, i, "content")
 
-[test]
+[test(description = "the cache probe's request plan is sixteen requests: eight first rounds on one opening, six replays, one other system prompt and one repeat")]
 def test_cache_probe_cycle_shape(t : T?) {
     t |> run("sixteen requests: eight first rounds on one opening, six later rounds replaying their first reply, one other system prompt, one repeat") @(t : T?) {
         let replies <- [for (i in range(PROBE_FIRST)); "reply {i + 1}"]
@@ -88,7 +88,7 @@ def test_cache_probe_cycle_shape(t : T?) {
     }
 }
 
-[test]
+[test(description = "each conversation gets its own long note that repeats identically, a body builds the same twice, and preserve_thinking rides the kwargs only on request")]
 def test_cache_probe_notes_and_kwargs(t : T?) {
     t |> run("every conversation's note is its own, long, and the same each time; a body builds the same twice; preserve_thinking rides the kwargs on request") @(t : T?) {
         let replies <- [for (i in range(PROBE_FIRST)); "reply {i + 1}"]
@@ -122,7 +122,7 @@ def test_cache_probe_notes_and_kwargs(t : T?) {
 def private row(index : int; prompt, cached : int; ms : double; status : int = 200; sweep : int = 1) : ProbeRow =>
     ProbeRow(sweep = sweep, index = index, kind = probe_kind(index), conversation = probe_conversation(index), prompt = prompt, cached = cached, completion = 4, status = status, ms = ms, reply = "ok")
 
-[test]
+[test(description = "the probe's summary computes shares by kind, the cold start, the medians and the failures from a table of answers")]
 def test_cache_probe_summary(t : T?) {
     t |> run("the figures off a table of answers: shares by kind, the cold start, the openings attached, the other-system and repeat reads, the medians, the failures") @(t : T?) {
         var rows : array<ProbeRow>
@@ -165,7 +165,7 @@ def test_cache_probe_summary(t : T?) {
     }
 }
 
-[test]
+[test(description = "the second sweep reads warm, and a refused request counts as failed without disturbing the shares of the answered ones")]
 def test_cache_probe_warm(t : T?) {
     t |> run("the second sweep reads warm: its share, and every request that attached less than its prompt minus a page") @(t : T?) {
         var rows : array<ProbeRow>

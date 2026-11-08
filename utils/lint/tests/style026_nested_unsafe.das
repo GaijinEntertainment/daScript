@@ -1,3 +1,4 @@
+//! STYLE026 is reported for: nested `unsafe { ... }` block.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // STYLE026: nested `unsafe { ... }` block

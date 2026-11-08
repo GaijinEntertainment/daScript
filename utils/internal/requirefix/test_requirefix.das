@@ -51,7 +51,7 @@ def find_module_is_public(var result : ModuleAnalysisResult; name : string) : bo
     return false
 }
 
-[test]
+[test(description = "a required module nothing uses is tagged unused with no references")]
 def test_unused_require(t : T?) {
     t |> run("unused_1") @(t : T?) {
         var result = run_analysis(testdata_path("_fixture_unused_1.das"))
@@ -61,26 +61,26 @@ def test_unused_require(t : T?) {
     }
 }
 
-[test]
+[test(description = "a module whose function is called is tagged used:referenced with the call's line")]
 def test_used_func_require(t : T?) {
     t |> run("used_func_1") @(t : T?) {
-        var result = run_analysis(testdata_path("fixture_used_func_1.das"))
+        var result = run_analysis(testdata_path("_fixture_used_func_1.das"))
         t |> equal(result.err, "")
         t |> equal(find_module_tag(result, "math"), "used:referenced")
         t |> equal(find_module_refs(result, "math"), ["function_call/sin:7"])
     }
 }
 
-[test]
+[test(description = "a require marked public is reported as a public re-export")]
 def test_public_require(t : T?) {
     t |> run("public_reexport_1") @(t : T?) {
-        var result = run_analysis(testdata_path("fixture_public_1.das"))
+        var result = run_analysis(testdata_path("_fixture_public_1.das"))
         t |> equal(result.err, "")
         t |> success(find_module_is_public(result, "strings"))
     }
 }
 
-[test]
+[test(description = "in one file an unused require is tagged unused while a used one carries its call reference")]
 def test_mixed_requires(t : T?) {
     t |> run("mixed_1") @(t : T?) {
         var result = run_analysis(testdata_path("_fixture_mixed_1.das"))
@@ -91,20 +91,20 @@ def test_mixed_requires(t : T?) {
     }
 }
 
-[test]
+[test(description = "a module whose global variable is read is tagged used:referenced with a variable reference")]
 def test_used_var_require(t : T?) {
     t |> run("used_var_1") @(t : T?) {
-        var result = run_analysis(testdata_path("fixture_used_var_1.das"))
+        var result = run_analysis(testdata_path("_fixture_used_var_1.das"))
         t |> equal(result.err, "")
         t |> equal(find_module_tag(result, "math"), "used:referenced")
         t |> equal(find_module_refs(result, "math"), ["variable/PI:10"])
     }
 }
 
-[test]
+[test(description = "a module whose enum value is used is tagged used:referenced with enum-type references")]
 def test_used_enum_require(t : T?) {
     t |> run("used_enum_1") @(t : T?) {
-        var result = run_analysis(testdata_path("fixture_used_enum_1.das"))
+        var result = run_analysis(testdata_path("_fixture_used_enum_1.das"))
         t |> equal(result.err, "")
         t |> equal(find_module_tag(result, "strings"), "used:referenced")
         t |> equal(find_module_refs(result, "strings"), [
@@ -114,10 +114,10 @@ def test_used_enum_require(t : T?) {
     }
 }
 
-[test]
+[test(description = "a module whose struct is used by value, by pointer or inside an array is tagged used:referenced with a reference per use")]
 def test_used_struct_require(t : T?) {
     t |> run("used_struct_1") @(t : T?) {
-        var result = run_analysis(testdata_path("fixture_used_struct_1.das"))
+        var result = run_analysis(testdata_path("_fixture_used_struct_1.das"))
         t |> equal(result.err, "")
         t |> equal(find_module_tag(result, "math_boost"), "used:referenced")
         t |> equal(find_module_refs(result, "math_boost"), [
@@ -129,7 +129,7 @@ def test_used_struct_require(t : T?) {
     }
 
     t |> run("used_struct_2") @(t : T?) {
-        var result = run_analysis(testdata_path("fixture_used_struct_2.das"))
+        var result = run_analysis(testdata_path("_fixture_used_struct_2.das"))
         t |> equal(result.err, "")
         t |> equal(find_module_tag(result, "math_boost"), "used:referenced")
         t |> equal(find_module_refs(result, "math_boost"), [
@@ -139,7 +139,7 @@ def test_used_struct_require(t : T?) {
     }
 }
 
-[test]
+[test(description = "an unreadable target sets the error and reports no modules")]
 def test_err_missing_file(t : T?) {
     t |> run("nonexistent_file") <| @(t : T?) {
         var config = RequirefixConfig(

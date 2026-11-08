@@ -129,7 +129,7 @@ def private build_tree(name : string) : string {
 }
 
 
-[test]
+[test(description = "the extractor copies exactly the cited sections, verbatim and in document order, and a citation-free tree yields only the base folder", timeout = 1200)]
 def test_extraction(t : T?) {
     t |> run("cited sections are excerpted verbatim, uncited ones are not") @(t : T?) {
         let root = build_tree("basic")
@@ -182,7 +182,7 @@ def test_extraction(t : T?) {
 }
 
 
-[test]
+[test(description = "a nested cited anchor lands on the page once, a re-extraction drops an excerpt no citation names, and a commented-out citation counts for nothing", timeout = 1200)]
 def test_nested_sections(t : T?) {
     t |> run("a cited anchor nested inside a cited section is on the page once") @(t : T?) {
         let root = path_join(tmp_root(), "nested")
@@ -249,7 +249,7 @@ def test_nested_sections(t : T?) {
 }
 
 
-[test]
+[test(description = "a cited section pulls in the sections its own text cites to a fixed point, and a dangling citation inside one fails the run", timeout = 1200)]
 def test_section_closure(t : T?) {
     t |> run("a section the code cites pulls in the sections its own text cites, to a fixed point") @(t : T?) {
         let root = path_join(tmp_root(), "closure")
@@ -286,7 +286,7 @@ def test_section_closure(t : T?) {
 }
 
 
-[test]
+[test(description = "the scan recurses into subfolders, takes a single-file entry alone, ignores builtin.das, and fails on a document above --root or an entry that does not exist", timeout = 1200)]
 def test_scan_edges(t : T?) {
     t |> run("the scan recurses into subfolders of a scan root") @(t : T?) {
         let root = path_join(tmp_root(), "recurse")
@@ -359,7 +359,7 @@ def test_scan_edges(t : T?) {
 }
 
 
-[test]
+[test(description = "a dangling citation or a document outside --base fails the run and writes nothing, and pointing the citation at a declared anchor clears it", timeout = 1200)]
 def test_failures(t : T?) {
     t |> run("a dangling citation fails the run and writes nothing") @(t : T?) {
         let root = path_join(tmp_root(), "dangling")

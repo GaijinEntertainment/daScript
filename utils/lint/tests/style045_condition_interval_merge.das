@@ -1,3 +1,5 @@
+//! STYLE045 is reported for: a condition an interval lattice
+//! collapses to a single comparison.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // STYLE045: a condition an interval lattice collapses to a single

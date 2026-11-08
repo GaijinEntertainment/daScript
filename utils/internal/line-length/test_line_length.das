@@ -18,7 +18,7 @@ def private kinds(path, text : string) : array<string> => <- kinds(path, text, a
 let LONG_COMMENT = repeat("x", COMMENT_LIMIT + 1)
 let LONG_CODE = repeat("y", CODE_LIMIT + 1)
 
-[test]
+[test(description = "a code line past CODE_LIMIT columns is a finding and one at it is not, with a tab as TAB_WIDTH columns, a multi-byte character as one, and only added lines measured")]
 def test_code_width(t : T?) {
     t |> run("over the limit") @(t : T?) {
         t |> equal(kinds("a.das", "let s = \"{LONG_CODE}\"\n"), ["1:line"])
@@ -59,7 +59,7 @@ def test_moved_and_annotation_lines(t : T?) {
     }
 }
 
-[test]
+[test(description = "a comment is measured from its marker without its indentation, on line, trailing, block-continuation and nested-block comments alike")]
 def test_comment_width(t : T?) {
     t |> run("line comment") @(t : T?) {
         t |> equal(kinds("a.das", "// {LONG_COMMENT}\n"), ["1:comment"])
@@ -82,7 +82,7 @@ def test_comment_width(t : T?) {
     }
 }
 
-[test]
+[test(description = "a comment marker inside a string or an interpolated string is code, and a quote character literal opens no string")]
 def test_lexing(t : T?) {
     t |> run("a comment marker inside a string is code") @(t : T?) {
         let url = "https://" + repeat("z", COMMENT_LIMIT)
@@ -97,7 +97,7 @@ def test_lexing(t : T?) {
     }
 }
 
-[test]
+[test(description = "a non-.das file and a file marked generated are never measured")]
 def test_skips(t : T?) {
     t |> run("non-das files") @(t : T?) {
         t |> equal(length(kinds("a.cpp", LONG_CODE)), 0)
@@ -107,7 +107,7 @@ def test_skips(t : T?) {
     }
 }
 
-[test]
+[test(description = "a limit of 0 turns a measure off, a wider limit admits the line, and each key comes from the nearest .lint_config with the defaults filling the rest")]
 def test_folder_limits(t : T?) {
     t |> run("a limit of 0 leaves that measure unchecked") @(t : T?) {
         let text = "{LONG_CODE}\n// {LONG_COMMENT}\n"
@@ -156,14 +156,14 @@ def test_folder_limits(t : T?) {
     }
 }
 
-[test]
+[test(description = "with no --base the diff base is origin/<default branch>, and a given --base is used as written")]
 def test_diff_base(t : T?) {
     t |> equal(diff_base("", "master"), "origin/master", "no --base: the remote's branch")
     t |> equal(diff_base("HEAD~1", "master"), "HEAD~1", "--base is used as given")
     t |> equal(diff_base("upstream/main", "master"), "upstream/main", "another remote stays")
 }
 
-[test]
+[test(description = "the untracked list keeps only .das paths with blank lines and CR dropped, and every line of a file, the empty tail included, counts as added")]
 def test_untracked(t : T?) {
     t |> equal(untracked_paths("a/new.das\r\nnotes.md\n\nb.das\n"), ["a/new.das", "b.das"],
         "only .das files, blank lines and CR dropped")
@@ -182,7 +182,7 @@ def private run_in(cwd : string; args : array<string>) : tuple<rc : int; out : s
     return (rc = rc, out = out)
 }
 
-[test]
+[test(description = "the tool fails on a long line in an untracked file, names it, and never reads a gitignored one", timeout = 1200)]
 def test_untracked_files_are_checked(t : T?) {
     let made = create_temp_directory_result("line_length_repo")
     if (!(made is value)) {
@@ -209,7 +209,7 @@ def test_untracked_files_are_checked(t : T?) {
     t |> success(find(run.out, "skip.das") < 0, "an ignored file is not read: {run.out}")
 }
 
-[test]
+[test(description = "the --base value reaches git merge-base as given, never prefixed with origin/", timeout = 1200)]
 def test_base_option_reaches_git(t : T?) {
     let cmd = "{get_das_exe()} utils/internal/line-length/main.das -- --base no-such-ref-xyz 2>&1"
     var out : string
@@ -222,7 +222,7 @@ def test_base_option_reaches_git(t : T?) {
         "--base reaches git as given, not under origin/: {out}")
 }
 
-[test]
+[test(description = "a unified diff yields the added line numbers of each surviving file and nothing for a deleted one")]
 def test_added_lines(t : T?) {
     let diff = ("diff --git a/x.das b/x.das\n--- a/x.das\n+++ b/x.das\n"
         + "@@ -3,0 +4,2 @@\n+a\n+b\n@@ -9 +11 @@\n-c\n+d\n@@ -20,2 +22,0 @@\n"

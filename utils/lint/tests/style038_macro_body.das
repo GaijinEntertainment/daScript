@@ -1,3 +1,5 @@
+//! STYLE038 counts the lines the author wrote, not a body a function
+//! annotation built in another file.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options _function_length = 10           // keep fixture functions small

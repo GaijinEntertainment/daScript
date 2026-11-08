@@ -1,3 +1,5 @@
+//! STYLE005 (armed by _lint) reports braces around a single
+//! early-exit statement.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // STYLE005 is default-off via daslib/lint_config; force it on so this fixture

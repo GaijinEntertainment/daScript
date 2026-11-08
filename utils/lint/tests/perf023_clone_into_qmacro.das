@@ -1,3 +1,5 @@
+//! PERF023 reports a clone_expression local used only to be spliced
+//! into a qmacro.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options rtti

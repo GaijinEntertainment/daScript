@@ -1,3 +1,6 @@
+//! LINT030 is reported for: a call whose argument list reads a
+//! variable that a nested call in another argument writes by
+//! reference.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options _lint = "LINT030"   // the rule ships default-off; the fixture arms it

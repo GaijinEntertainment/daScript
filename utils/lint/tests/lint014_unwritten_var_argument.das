@@ -1,3 +1,4 @@
+//! LINT014 reports a var argument the body never writes.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // LINT014: mutable (var) function argument is never written

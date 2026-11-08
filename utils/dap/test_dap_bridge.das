@@ -170,7 +170,7 @@ def private run_fixture(name : string; args : array<string>; var out : string&) 
     return run_and_capture(argv, out, 30.0)
 }
 
-[test]
+[test(description = "the debugger worker is cancelled at shutdown, survives its context's destruction, restarts after ending and refuses a second thread", timeout = 1200)]
 def test_debugger_fixtures(t : T?) {
     t |> run("a waiting debugger worker is cancelled at shutdown") @(t : T?) {
         var out : string
@@ -236,7 +236,7 @@ def private bytes_of(text : string) : array<uint8> {
     return <- out
 }
 
-[test]
+[test(description = "every malformed DAP frame is refused with its reason, an over-long header is refused early and a complete frame parses while an incomplete one waits")]
 def test_dap_frame_limits(t : T?) {
     t |> run("every malformed frame is refused with its reason") @(t : T?) {
         let xs_8192 = repeated("x", 8192)
@@ -285,7 +285,7 @@ def test_dap_frame_limits(t : T?) {
     }
 }
 
-[test]
+[test(description = "the resuming tools map onto their DAP commands")]
 def test_execution_command_mapping(t : T?) {
     t |> run("the resuming tools map onto their DAP commands") @(t : T?) {
         t |> equal(resume_command("debug_continue"), "continue")
@@ -660,7 +660,7 @@ def private run_session(t : T?; stepping : bool) {
     t |> equal(rc, 0, "the bridge exits 0 when its stdin closes")
 }
 
-[test]
+[test(description = "the bridge speaks a full debug session over a pipe with both the instrumentation and the stepping debugger", timeout = 1200)]
 def test_bridge_session(t : T?) {
     t |> run("the bridge over a pipe, instrumentation debugger") @(t : T?) {
         run_session(t, false)
@@ -670,7 +670,7 @@ def test_bridge_session(t : T?) {
     }
 }
 
-[test]
+[test(description = "a disconnect detaches the debuggee so only instruments that fired before it count", timeout = 1200)]
 def test_disconnect_removes_runtime_instruments(t : T?) {
     let argv <- bridge_argv()
     let rc = unsafe(popen_argv_pipe(argv) $(w, r) {

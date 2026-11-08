@@ -1,3 +1,4 @@
+//! LINT022 is reported for: a private declaration that is never used.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // LINT022: a private declaration that is never used

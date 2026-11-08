@@ -37,7 +37,7 @@ def private spec_of(req : string) : ConstraintSpec {
     return <- spec_of(req, no_tools)
 }
 
-[test]
+[test(description = "a forced tool_choice on the Qwen3.6 format reads to the <function=NAME> block grammar")]
 def test_constraint_spec_xml_function_tool(t : T?) {
     t |> run("a forced tool_choice on the Qwen3.6 format reads to the <function=NAME> block grammar") @(t : T?) {
         let tools <- ["\{\"type\":\"function\",\"function\":\{\"name\":\"get_weather\",\"parameters\":\{\"type\":\"object\",\"properties\":\{\"city\":\{\"type\":\"string\"},\"unit\":\{\"type\":\"string\"}},\"required\":[\"city\"]}}}",
@@ -67,7 +67,7 @@ def test_constraint_spec_xml_function_tool(t : T?) {
 
 let SCHEMA_LEGS = "\{\"type\":\"object\",\"properties\":\{\"answer\":\{\"type\":\"integer\"\}\},\"required\":[\"answer\"],\"additionalProperties\":false\}"
 
-[test]
+[test(description = "response_format reads to a grammar for json_object and json_schema and refuses what it cannot express")]
 def test_constraint_spec_response_format(t : T?) {
     t |> run("response_format reads to a grammar: json_object, json_schema, and the refusals") @(t : T?) {
         let plain <- spec_of("\{\"messages\":[]\}")
@@ -111,7 +111,7 @@ def test_constraint_spec_response_format(t : T?) {
 let TOOL_WEATHER = "\{\"type\":\"function\",\"function\":\{\"name\":\"get_weather\",\"parameters\":\{\"type\":\"object\",\"properties\":\{\"city\":\{\"type\":\"string\"\}\},\"required\":[\"city\"]\}\}\}"
 let TOOL_TIME = "\{\"type\":\"function\",\"function\":\{\"name\":\"get_time\"\}\}"
 
-[test]
+[test(description = "a forced tool_choice reads to the wire-marked call grammar and its refusals name their cause")]
 def test_constraint_spec_tool_choice(t : T?) {
     t |> run("a forced tool_choice reads to the wire-marked call grammar; its refusals name their cause") @(t : T?) {
         let tools <- [TOOL_WEATHER, TOOL_TIME]
@@ -191,7 +191,7 @@ def private ids_spelling(pieces : table<string; int64>; text : string) : array<i
     return <- ids
 }
 
-[test]
+[test(description = "the grammar constraint admits a model's tokens along a sentence and the stop token only at its end")]
 def test_grammar_constraint_walk(t : T?) {
     t |> run("the grammar constraint admits a model's tokens along a sentence and the stop token at its end alone (tinyllama Q8)") @(t : T?) {
         if (!jit_enabled()) {

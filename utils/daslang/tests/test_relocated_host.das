@@ -26,7 +26,7 @@ def make_sdk_with_libraries(t : T?; name : string) : string {
 
 def probe() : string => path_join(tests_dir(), "_root_probe.das")
 
-[test]
+[test(description = "a daslang.root sidecar names the tree root, relative to the daslang folder or absolute, the first existing folder wins, it is trimmed, it beats bin/.. and a daslang started by bare name through PATH still finds itself", timeout = 1200)]
 def test_sidecar_names_the_root(t : T?) {
     let sdk = make_sdk_with_libraries(t, "reloc/sdk")
     t |> run("a relative daslang.root is joined to the daslang's folder, not the cwd") @(t : T?) {
@@ -90,7 +90,7 @@ def test_sidecar_names_the_root(t : T?) {
     }
 }
 
-[test]
+[test(description = "without a sidecar, or with a blank one, the root derives from bin/.. including the multi-config layout, and non-ASCII roots, scripts and arguments reach the host as typed", timeout = 1200)]
 def test_root_without_a_sidecar(t : T?) {
     t |> run("a root named outside ASCII works, on Windows outside the code page too") @(t : T?) {
         let own = make_sdk_with_libraries(t, "reloc_ünï_日本")
@@ -130,7 +130,7 @@ def test_root_without_a_sidecar(t : T?) {
     }
 }
 
-[test]
+[test(description = "a symlink to daslang, as brew installs it, runs the real binary's tree", timeout = 1200)]
 def test_symlinked_host(t : T?) {
     if (get_platform_name() == "windows") {
         t |> skip("a package manager links through junctions there, which the exe path resolves")
@@ -147,7 +147,7 @@ def test_symlinked_host(t : T?) {
     }
 }
 
-[test]
+[test(description = "a missing or unloadable host library, or a sidecar root without libraries, is refused naming every path looked at and the loader reason, and a -dasroot after the script -- or a trailing one is handled", timeout = 1200)]
 def test_missing_host_library(t : T?) {
     t |> run("no sidecar and no library: every path looked at is named") @(t : T?) {
         let bin = relocate(t, "lost", "bin", "")

@@ -28,7 +28,7 @@ def private drop(var s : ModelSlot) {
     }
 }
 
-[test]
+[test(description = "served and served_note give one sentence per way a slot is served and per reason one is held back")]
 def test_slot_served(t : T?) {
     t |> run("served: one sentence per way a slot is served") @(t : T?) {
         var cpu <- gpu_slot("cpu")
@@ -78,7 +78,7 @@ def test_slot_served(t : T?) {
     }
 }
 
-[test]
+[test(description = "the streams' caches go to the card only when every term holds, and the residency ask pins context and K/V codec")]
 def test_slot_wants_device_kv(t : T?) {
     t |> run("the streams' caches go to the card only when every term holds") @(t : T?) {
         var s <- gpu_slot("gpu:resident")
@@ -135,7 +135,7 @@ def test_slot_wants_device_kv(t : T?) {
     }
 }
 
-[test]
+[test(description = "the vulkan backend asks for the whole-model driver on every GPU slot")]
 def test_vulkan_serving_want(t : T?) {
     t |> run("the vulkan backend asks for the whole-model driver on every GPU slot") @(t : T?) {
         let cfg = ServerArgs()

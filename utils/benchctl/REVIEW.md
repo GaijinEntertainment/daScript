@@ -42,8 +42,7 @@ line here, with its tests, in the same change.**
 - `bench_history.das` - run records to dataset. No processes, no argv, no statistics.
 - `bench_stand.das` - the `run` and `report` verbs the nightly box drives.
 - `table_fmt.das`, `utils.das` - output formatting and small shared helpers.
-- `tests/test_bench_suite.das`, `tests/test_bench_runner.das`, `tests/test_bench_history.das` -
-  the module suites; `tests/test_bench_cli.das` - the verbs, spawned; `tests/_test_common.das` -
-  the fixtures they share; `tests/_fake_dastest.das` - the stand-in dastest a spawn test measures
+- `tests/test_bench.das` - the module suites (suite, runner, history) and the verbs, spawned;
+  `tests/_test_common.das` - the fixtures they share; `tests/_fake_dastest.das` - the stand-in dastest a spawn test measures
   against.
 

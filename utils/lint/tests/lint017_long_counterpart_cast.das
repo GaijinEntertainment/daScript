@@ -1,3 +1,5 @@
+//! LINT017 is reported for: int64/uint64 cast of a call that has a
+//! 64-bit counterpart.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // LINT017: int64/uint64 cast of a call that has a 64-bit counterpart

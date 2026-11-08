@@ -8,7 +8,7 @@ require strings
 
 def private no_args : array<string> => <- array<string>()
 
-[test]
+[test(description = "the defaults stand with no toml keys, toml overrides them with provenance recorded, and bad toml or a wrong-typed value is an error rather than a silent zero")]
 def test_defaults_and_toml(t : T?) {
     t |> run("defaults stand with no toml keys") @(t : T?) {
         var cfg = ServerArgs()
@@ -63,7 +63,7 @@ def test_defaults_and_toml(t : T?) {
     }
 }
 
-[test]
+[test(description = "an explicit missing config is an error, an explicit file loads and merges, and the banner carries every key with its provenance")]
 def test_load_config_and_banner(t : T?) {
     t |> run("explicit missing config is an error") @(t : T?) {
         var cfg = ServerArgs()
@@ -103,7 +103,7 @@ def test_load_config_and_banner(t : T?) {
     }
 }
 
-[test]
+[test(description = "the build keys merge from toml with provenance, an empty page_origin disables page builds, a trailing slash is normalized away, and a wrong type is an error")]
 def test_build_keys_merge(t : T?) {
     t |> run("the build keys come through toml with provenance") @(t : T?) {
         var cfg = ServerArgs()
@@ -147,7 +147,7 @@ def test_build_keys_merge(t : T?) {
     }
 }
 
-[test]
+[test(description = "the banner reports whether the builder token is set, never its value")]
 def test_banner_never_carries_the_token(t : T?) {
     t |> run("the banner reports set/unset, never the secret") @(t : T?) {
         var cfg = ServerArgs()
@@ -162,7 +162,7 @@ def test_banner_never_carries_the_token(t : T?) {
     }
 }
 
-[test]
+[test(description = "an explicit CLI flag, -p included, beats the toml unless the toml is authoritative, and a hyphenated flag maps to its underscored key")]
 def test_cli_precedence(t : T?) {
     t |> run("explicit cli flag beats toml") @(t : T?) {
         var cfg = ServerArgs()

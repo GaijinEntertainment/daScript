@@ -154,7 +154,7 @@ def private with_speechless_server(t : T?; port : int; blk : block<(base_url : s
     }
 }
 
-[test]
+[test(description = "a missing TTS model or front-end pack drops the speech route instead of panicking")]
 def test_configure_tts_degrades_a_boot_it_cannot_serve(t : T?) {
     t |> run("a missing model file drops the route instead of panicking") @(t : T?) {
         t |> equal(tts_missing_file(BOGUS_TTS_PATH), BOGUS_TTS_PATH, "the probe names the missing model")
@@ -191,7 +191,7 @@ def test_configure_tts_degrades_a_boot_it_cannot_serve(t : T?) {
     }
 }
 
-[test]
+[test(description = "a boot whose TTS file set is missing serves on and refuses the speech and phonemes routes naming --tts", timeout = 1200)]
 def test_speech_route_without_a_model(t : T?) {
     t |> run("a boot whose TTS file set is missing serves on and refuses the speech route") @(t : T?) {
         with_speechless_server(t, SPEECHLESS_PORT) $(base_url) {
@@ -225,7 +225,7 @@ def private catalog_download(base_url, body : string; blk : block<(status : int;
 // The tts arm of POST /catalog/download - the control page's speech card addresses one FILE of
 // the pinned set, not a catalog entry name. Only the refusals are exercised: an accepted start
 // pulls a real file from the pinned upstream, which no test may do.
-[test]
+[test(description = "a tts catalog download with no file, an unlisted file or an unknown tower is refused in words", timeout = 1200)]
 def test_catalog_tts_download_arm(t : T?) {
     t |> run("a tts start with no file, and one naming a file outside the set, refuse in words") @(t : T?) {
         with_speechless_server(t, CATALOG_PORT) $(base_url) {
@@ -245,7 +245,7 @@ def test_catalog_tts_download_arm(t : T?) {
     }
 }
 
-[test]
+[test(description = "the TTS lane defaults to q8, f32 is the other served lane and an unknown lane is refused")]
 def test_tts_lane_normalizes_at_config_time(t : T?) {
     t |> run("q8 is the default and f32 is the other served lane") @(t : T?) {
         configure_tts(BOGUS_TTS_PATH)
@@ -467,7 +467,7 @@ def private expect_speech_wav(t : T?; status : int; ctype : string; bytes : arra
 // asked for), the tts block says it clones and names its language, the phonemes route answers
 // the chunks with no phoneme string, a speed is refused as the caller's mistake, and a clip's
 // worth of speech comes back as a WAV.
-[test]
+[test(description = "a Pocket GGUF stands alone, reports that it clones, answers phonemes without a phoneme string, refuses a speed and returns a speech-length WAV", timeout = 1200)]
 def test_speech_route_pocket(t : T?) {
     if (pocket_model_missing(t)) {
         return
@@ -524,7 +524,7 @@ def test_speech_route_pocket(t : T?) {
 // tts_voices_dir on a cloning model: one boot speaks the clip, the next boot points the key at
 // its directory - the clip joins the roster under its file's stem and speaks, while a file that
 // decodes as no clip is skipped without dropping the route.
-[test]
+[test(description = "a tts_voices_dir clip joins the roster under its file's stem and speaks, while a file that decodes as no clip is skipped", timeout = 1200)]
 def test_pocket_voices_dir(t : T?) {
     if (pocket_model_missing(t)) {
         return
@@ -586,7 +586,7 @@ def test_pocket_voices_dir(t : T?) {
     rmdir(voices_dir)
 }
 
-[test]
+[test(description = "the speech route lists the TTS id, returns WAV and raw pcm, reports the tts block, honors its caps and declines malformed requests", timeout = 1200)]
 def test_speech_route(t : T?) {
     if (speech_model_missing(t)) {
         return
@@ -696,7 +696,7 @@ def private check_multi_language_phonemes(t : T?; base_url : string) {
     }
 }
 
-[test]
+[test(description = "the phonemes route reads the voice's own dialect and refuses a voice it cannot", timeout = 1200)]
 def test_phonemes_on_a_multi_language_model(t : T?) {
     if (!jit_enabled()) {
         t |> skip("JIT-only: the interpreter is too slow to load a TTS model")
@@ -714,10 +714,7 @@ def test_phonemes_on_a_multi_language_model(t : T?) {
     }
 }
 
-// The Russian fine-tune on the phonemes route: with the English packs beside it the front end lists
-// en-us first, and a request naming no voice still reads in the default voice's language - the one
-// the speech route would speak - so the preview is the Russian normalizer's and phonemizer's.
-[test]
+[test(description = "the phonemes route on the Russian fine-tune: with the English packs beside it the front end lists en-us first, and a request naming no voice still previews in the default voice's language, the Russian normalizer's and phonemizer's")]
 def test_phonemes_on_a_russian_model(t : T?) {
     if (!jit_enabled()) {
         t |> skip("JIT-only: the interpreter is too slow to load a TTS model")
@@ -759,7 +756,7 @@ def private with_spawned_boot(t : T?; what : string; port : int; model_path : st
 // A --tts boot with no --model is the ONE start shape only main.das can prove: its roster is
 // empty, so every roster-indexing step of the boot has to survive that, and the in-process
 // harness above never runs them (it calls configure_tts + run_server directly).
-[test]
+[test(description = "a --tts boot with no --model serves the speech route and carries the model as a roster of one", timeout = 1200)]
 def test_speech_only_boot_through_main(t : T?) {
     if (speech_model_missing(t)) {
         return
@@ -839,7 +836,7 @@ def private drop_staged_dir(dir_path : string) {
 // worker's load panics on the pack version - a failure no file check can see ahead of time - and
 // the boot has to come up anyway, because a crash-looping boot under a watchdog never gets a page
 // to fix the config from. Spawned through main.das: only the real boot path runs the fallback.
-[test]
+[test(description = "a boot whose speech worker cannot load drops the route, serves on and says why on /v1/stats", timeout = 1200)]
 def test_boot_degrades_when_the_worker_cannot_load(t : T?) {
     if (speech_model_missing(t)) {
         return
@@ -876,7 +873,7 @@ def test_boot_degrades_when_the_worker_cannot_load(t : T?) {
     drop_staged_dir(staged)
 }
 
-[test]
+[test(description = "the configured f32 lane reaches the worker, synthesizes speech and comes back on /v1/stats", timeout = 1200)]
 def test_speech_route_on_the_f32_lane(t : T?) {
     if (speech_model_missing(t)) {
         return
@@ -912,7 +909,7 @@ def private with_llm_and_speech_server(port : int; blk : block<(base_url : strin
 //! hundreds of milliseconds while syntheses are asked and answered, each in a fraction of that - the speech thread takes
 //! the route off the front and its worker answers through the front. The control is a route the engine answers itself
 //! (/config), asked inside the hold: it waits the hold out, and every synthesis lands in under a quarter of that wait.
-[test]
+[test(description = "a synthesis is answered while a handler holds the engine", timeout = 1200)]
 def test_speech_answers_while_engine_held(t : T?) {
     t |> run("a synthesis is answered while a handler holds the engine (needs tinyllama q8 + kitten-nano)") @(t : T?) {
         var inscope files <- [LLM_PATH, TTS_PATH, path_join(models_dir(), "tts_g2p.bin"), path_join(models_dir(), "tts_postag.bin")]

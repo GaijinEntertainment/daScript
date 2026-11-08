@@ -1,3 +1,5 @@
+//! STYLE037 is reported for: function or closure cyclomatic
+//! complexity exceeds the limit.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options _cyclomatic_complexity = 5      // keep fixture functions small

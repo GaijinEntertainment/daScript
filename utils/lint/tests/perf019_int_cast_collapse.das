@@ -1,3 +1,5 @@
+//! PERF019 is reported for: int(T.a) | int(T.b) on
+//! bitfield/enum-with-operator-| can collapse to int(T.a | T.b).
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // PERF019: int(T.a) | int(T.b) on bitfield/enum-with-operator-| can collapse to int(T.a | T.b)

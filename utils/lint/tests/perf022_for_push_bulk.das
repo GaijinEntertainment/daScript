@@ -1,3 +1,5 @@
+//! PERF022 is reported for: for (s in A) { B |> push(s) } - use bulk
+//! *_from.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // PERF022: for (s in A) { B |> push(s) } — use bulk *_from

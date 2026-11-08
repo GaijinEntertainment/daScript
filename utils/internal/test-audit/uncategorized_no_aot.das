@@ -33,7 +33,7 @@ def private make_tree(t : T?) : string {
 }
 
 [test(description = "the audit counts a tree's run files by class, --readme writes the index from the descriptions, and --verify exits 0 on a matching index (LF or CRLF) and 1 on an edited one", timeout = 1200)]
-def test_audit(tt : T?) {
+def test_audit(tt : T?) {  // nolint:STYLE038 - one arm per tool flag
     let tree = make_tree(tt)
 
     tt |> run("the audit reports files, suites, fixtures and the undescribed count") <| @(t : T?) {
@@ -70,6 +70,42 @@ def test_audit(tt : T?) {
         var output : string
         t |> equal(run_audit(["--root", tree, "--verify"], output), 0, output)
         t |> success(fwrite(indexPath, lf))
+    }
+
+    tt |> run("--tests-only leaves a tool's sources out and --index puts the index " +
+        "elsewhere") <| @(t : T?) {
+        let tool = path_join(test_temp_dir(), "audit_tool_tree")
+        mkdir_rec(path_join(tool, "lint/tests"))
+        t |> success(fwrite(path_join(tool, "lint/main.das"),
+            "options gen2\n[export]\ndef main() \{\n    print(\"a tool\")\n\}\n"))
+        t |> success(fwrite(path_join(tool, "lint/tests/uncategorized.das"),
+            "options gen2\nrequire dastest/testing_boost public\n\n" +
+            "[test(description = \"the tool answers\")]\ndef test_answers(t : T?) \{\n" +
+            "    t |> equal(1, 1)\n\}\n"))
+        var output : string
+        t |> equal(run_audit(["--root", tool], output), 0, output)
+        t |> success(output |> contains("bare scripts 1"),
+                     "without --tests-only the source counts as a script, got:\n{output}")
+        t |> equal(run_audit(["--root", tool, "--tests-only"], output), 0, output)
+        t |> success(output |> contains("files: 1  (suites 1, expect fixtures 0, bare scripts 0)"),
+                     "with --tests-only the source is out, got:\n{output}")
+        // a daspkg-installed package under the tool is not the tool's tests
+        mkdir_rec(path_join(tool, "lint/modules/pkg"))
+        t |> success(fwrite(path_join(tool, "lint/.das_package"), "options gen2\n"))
+        t |> success(fwrite(path_join(tool, "lint/modules/pkg/test_pkg.das"),
+            "options gen2\nrequire dastest/testing_boost public\n\n[test]\n" +
+            "def test_pkg(t : T?) \{\n\}\n"))
+        t |> equal(run_audit(["--root", tool, "--tests-only"], output), 0, output)
+        t |> success(output |> contains("files: 1  (suites 1,"),
+                     "the installed package's test is not counted, got:\n{output}")
+        let index = path_join(tool, "TESTS.md")
+        t |> equal(run_audit(["--root", tool, "--tests-only", "--index", index, "--readme"],
+                             output), 0, output)
+        t |> success(fexist(index), "expected the index at --index, got:\n{output}")
+        t |> success(!fexist(path_join(tool, "README.md")), "no README.md beside a --index")
+        t |> success(!(fread(index) |> contains("`main.das`")), "the source is not indexed")
+        t |> equal(run_audit(["--root", tool, "--tests-only", "--index", index, "--verify"],
+                             output), 0, output)
     }
 
     tt |> run("--verify exits 1 on an index that differs from the census") <| @(t : T?) {

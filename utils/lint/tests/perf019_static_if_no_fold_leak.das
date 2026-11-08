@@ -1,3 +1,5 @@
+//! A static_if restores infer-time folding state, so a later PERF
+//! finding is not lost to leaked folding.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options infer_time_folding = false   // mirror the lint runner's policy via the source-level option;

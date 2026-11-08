@@ -1,3 +1,5 @@
+//! STYLE028 reports a self->method call inside a class method where
+//! the arrow is optional.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options _nolint = "STYLE042"

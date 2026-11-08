@@ -134,7 +134,7 @@ def private wav_seconds(t : T?; path : string) : double {
 
 // ===== the fastest column: every subcommand =====
 
-[test]
+[test(description = "complete answers greedily and deterministically with the answer alone on stdout, keeps the sampler flags, and refuses a missing model by name", timeout = 1200)]
 def test_complete(t : T?) {
     let llm = model(SMOL)
     t |> run("complete: greedy, deterministic, the answer alone on stdout under --quiet") @(t : T?) {
@@ -161,7 +161,7 @@ def test_complete(t : T?) {
     }
 }
 
-[test]
+[test(description = "tokenize prints one id and piece per line (ids alone under --ids) and embed --json prints a JSON array of floats", timeout = 1200)]
 def test_tokenize_embed(t : T?) {
     let llm = model(SMOL)
     t |> run("tokenize: one id and piece per line, ids alone under --ids") @(t : T?) {
@@ -195,7 +195,7 @@ def test_tokenize_embed(t : T?) {
     }
 }
 
-[test]
+[test(description = "transcribe turns the JFK clip into text through Qwen3-ASR and writes into an output directory that did not exist", timeout = 1200)]
 def test_transcribe(t : T?) {
     t |> run("transcribe: the JFK clip through Qwen3-ASR") @(t : T?) {
         return if (model_missing(t, model(QWEN_ASR)))
@@ -215,7 +215,7 @@ def test_transcribe(t : T?) {
     }
 }
 
-[test]
+[test(description = "speak writes a speech-length WAV into a new directory, plays it under --play, and serves an unknown lane spelling with a warning", timeout = 1200)]
 def test_speak(t : T?) {
     t |> run("speak: kitten-nano writes a WAV of speech length, into a directory that did not exist") @(t : T?) {
         return if (model_missing(t, model(KITTEN)))
@@ -251,7 +251,7 @@ def test_speak(t : T?) {
     }
 }
 
-[test]
+[test(description = "chat --script feeds messages and blocks, writes the transcript file and runs the slash commands", timeout = 1200)]
 def test_chat_script(t : T?) {
     let llm = model(SMOL)
     t |> run("chat --script: messages, the block, the transcript file, the commands") @(t : T?) {
@@ -285,7 +285,7 @@ def test_chat_script(t : T?) {
     }
 }
 
-[test]
+[test(description = "a chat on a thinking model streams the reasoning by default and the answer follows within the budget", timeout = 1200)]
 def test_chat_thinking(t : T?) {
     let llm = model(QWEN_4B)
     t |> run("chat on a thinking model: the reasoning streams by default, the answer follows it within the budget") @(t : T?) {
@@ -320,7 +320,7 @@ def test_chat_thinking(t : T?) {
     }
 }
 
-[test]
+[test(description = "talk chains JFK speech through ASR, a chat model and TTS in one process, and --play plays each spoken reply once the WAV lands", timeout = 1200)]
 def test_talk_chain(t : T?) {
     t |> run("talk: JFK -> Qwen3-ASR -> SmolLM2 -> kitten, one process") @(t : T?) {
         return if (model_missing(t, model(QWEN_ASR)) || model_missing(t, model(SMOL)) || model_missing(t, model(KITTEN)))
@@ -372,7 +372,7 @@ def test_talk_chain(t : T?) {
     }
 }
 
-[test]
+[test(description = "bench prints the pp and tg rows as a markdown table", timeout = 1200)]
 def test_bench(t : T?) {
     let llm = model(SMOL)
     t |> run("bench: the pp and tg rows as a markdown table") @(t : T?) {
@@ -388,7 +388,7 @@ def test_bench(t : T?) {
 
 // ===== before any model loads: refusals and the exit codes, no model gate =====
 
-[test]
+[test(description = "a bad command exits 2 with the usage, and a missing prompt, config or format exits 1 with the reason", timeout = 1200)]
 def test_preload(t : T?) {
     t |> run("a bad command exits 2 with the usage; a missing prompt, config or format exits 1 with the reason") @(t : T?) {
         let bad = run_cli(["frobnicate"])
@@ -418,7 +418,7 @@ def test_preload(t : T?) {
     }
 }
 
-[test]
+[test(description = "without the JIT the CLI refuses rather than running the kernels interpreted", timeout = 1200)]
 def test_preload_hosts(t : T?) {
     t |> run("without the JIT the CLI refuses rather than runs the kernels interpreted") @(t : T?) {
         var argv <- cli_argv(["complete", "-m", "x.gguf", "hi"])
@@ -430,7 +430,7 @@ def test_preload_hosts(t : T?) {
     }
 }
 
-[test]
+[test(description = "-n, --seed, --ctx, --gpu off, --no-special and --no-think each change the run the way their help says", timeout = 1200)]
 def test_flags_take_effect(t : T?) {
     let llm = model(SMOL)
     t |> run("-n caps the reply; --seed is reported; --ctx caps the context") @(t : T?) {
@@ -500,7 +500,7 @@ def test_flags_take_effect(t : T?) {
     }
 }
 
-[test]
+[test(description = "/regen answers again and keeps one turn, and /image or --audio-mmproj without a usable tower is refused by name", timeout = 1200)]
 def test_chat_edges(t : T?) {
     let llm = model(SMOL)
     t |> run("/regen answers again and keeps one turn; the commands with nothing to act on say so") @(t : T?) {
@@ -553,7 +553,7 @@ def test_chat_edges(t : T?) {
 
 // ===== translate: the loop's commands and the direction flags =====
 
-[test]
+[test(description = "the translate loop's commands work on a Firefox Translations model, an unsupported --to or missing model is refused, and a translation LLM takes --from and --to", timeout = 1200)]
 def test_translate_loop(t : T?) {
     t |> run("the loop's commands on a Firefox Translations model: /help, /langs refused, /speak with no TTS, /exit; --quiet") @(t : T?) {
         return if (model_missing(t, model(BERGAMOT_RUEN)))
@@ -606,7 +606,7 @@ def test_translate_loop(t : T?) {
 
 // ===== the documented examples, as written (README + the RST page) =====
 
-[test]
+[test(description = "each README command example runs as written and succeeds", timeout = 1200)]
 def test_doc_examples(t : T?) {
     t |> run("README: complete -m SmolLM2-135M-Instruct-Q8_0.gguf --quiet \"The capital of France is\"") @(t : T?) {
         return if (model_missing(t, model(SMOL)))
@@ -678,7 +678,7 @@ def test_doc_examples(t : T?) {
 
 // ===== the documented scenarios =====
 
-[test]
+[test(description = "the documented stdout/stderr split, --verbose echo, shared knobs and --config file behave as the docs say", timeout = 1200)]
 def test_doc_scenarios(t : T?) {
     let llm = model(SMOL)
     t |> run("<command> --show-help lists the command's flags and the shared ones, exit 0") @(t : T?) {
@@ -750,7 +750,7 @@ def test_doc_scenarios(t : T?) {
     }
 }
 
-[test]
+[test(description = "the chat commands the docs list (/help, /read, /load, /speak, --hide-thinking) and the bare embed and tokenize outputs behave as documented", timeout = 1200)]
 def test_doc_chat_commands(t : T?) {
     let llm = model(SMOL)
     t |> run("chat: /help, /read, /load, /speak off then on - the spoken replies are numbered") @(t : T?) {
@@ -809,7 +809,7 @@ def test_doc_chat_commands(t : T?) {
     }
 }
 
-[test]
+[test(description = "the documented refusals (--lang on a self-detecting ASR, a missing tower, an unknown voice, an unsupported speed) are clean refusals, not crashes", timeout = 1200)]
 def test_doc_refusals(t : T?) {
     t |> run("transcribe --lang on a model that detects the language itself is refused, not a crash") @(t : T?) {
         return if (model_missing(t, model(QWEN_ASR)))
@@ -865,7 +865,7 @@ def test_doc_refusals(t : T?) {
 
 // ===== the tower column: gemma-4-E2B, one mmproj, both towers =====
 
-[test]
+[test(description = "the vision and audio towers answer through complete and chat --script, with the leading thought block kept off the screen", timeout = 1200)]
 def test_towers(t : T?) {
     let llm = model(E2B)
     let mm = model(E2B_MMPROJ)

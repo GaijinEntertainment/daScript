@@ -1,3 +1,5 @@
+//! STYLE047 reports hand-written field-by-field ordering that cmp_by
+//! or [ordered] replaces.
 options gen2
 
 expect 31209:8

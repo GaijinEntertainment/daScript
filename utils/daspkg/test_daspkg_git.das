@@ -13,7 +13,7 @@ require utils
 require index
 require commands
 
-[test]
+[test(description = "install_git clones a package from GitHub, records it as a root entry and lays out its files", timeout = 1200)]
 def test_install_git_basic(t : T?) {
     t |> run("clones a package from github") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_git"
@@ -33,7 +33,7 @@ def test_install_git_basic(t : T?) {
     }
 }
 
-[test]
+[test(description = "installing at v1.0 resolves the v1 tag and lacks the v2-only file", timeout = 1200)]
 def test_install_git_version_v1(t : T?) {
     t |> run("installs v1.0 via resolve — no new_in_v2") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_v1"
@@ -50,7 +50,7 @@ def test_install_git_version_v1(t : T?) {
     }
 }
 
-[test]
+[test(description = "an @v1.0 suffix strips the v prefix so the tag is not resolved as vv1.0", timeout = 1200)]
 def test_install_version_with_v_prefix(t : T?) {
     t |> run("@v1.0 strips v prefix — no double-v") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_vprefix"
@@ -69,7 +69,7 @@ def test_install_version_with_v_prefix(t : T?) {
     }
 }
 
-[test]
+[test(description = "installing at v2.0 resolves the v2 tag and has the v2-only file", timeout = 1200)]
 def test_install_git_version_v2(t : T?) {
     t |> run("installs v2.0 via resolve — has new_in_v2") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_v2"
@@ -86,7 +86,7 @@ def test_install_git_version_v2(t : T?) {
     }
 }
 
-[test]
+[test(description = "installing a package also installs its transitive dependencies", timeout = 1200)]
 def test_install_with_dependencies(t : T?) {
     t |> run("installs transitive dependencies") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_deps"
@@ -108,7 +108,7 @@ def test_install_with_dependencies(t : T?) {
     }
 }
 
-[test]
+[test(description = "the package index fetches from the network and parses", timeout = 1200)]
 def test_fetch_index(t : T?) {
     t |> run("fetches and parses package index") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_idx"
@@ -122,7 +122,7 @@ def test_fetch_index(t : T?) {
     }
 }
 
-[test]
+[test(description = "a bare name installs the package the index maps it to", timeout = 1200)]
 def test_cmd_install_by_name(t : T?) {
     t |> run("installs from index by bare name") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_byname"
@@ -138,7 +138,7 @@ def test_cmd_install_by_name(t : T?) {
     }
 }
 
-[test]
+[test(description = "cmd_update updates one git package", timeout = 1200)]
 def test_cmd_update_single(t : T?) {
     t |> run("updates a single git package") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_upd"
@@ -156,7 +156,7 @@ def test_cmd_update_single(t : T?) {
     }
 }
 
-[test]
+[test(description = "cmd_update re-copies a local package from its source", timeout = 1200)]
 def test_cmd_update_recopies_local(t : T?) {
     t |> run("re-copies local packages on update") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_upd_local"
@@ -187,7 +187,7 @@ def test_cmd_update_recopies_local(t : T?) {
     }
 }
 
-[test]
+[test(description = "cmd_update on an unknown package reports an error and changes nothing", timeout = 1200)]
 def test_cmd_update_nonexistent(t : T?) {
     t |> run("error on nonexistent package") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_upd_noex"
@@ -202,7 +202,7 @@ def test_cmd_update_nonexistent(t : T?) {
     }
 }
 
-[test]
+[test(description = "cmd_update_all updates every installed package", timeout = 1200)]
 def test_cmd_update_all_integration(t : T?) {
     t |> run("updates all installed packages") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_upd_all"
@@ -222,7 +222,7 @@ def test_cmd_update_all_integration(t : T?) {
     }
 }
 
-[test]
+[test(description = "an update re-resolves a pinned version instead of jumping to latest", timeout = 1200)]
 def test_cmd_update_preserves_version(t : T?) {
     t |> run("update re-resolves pinned version") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_upd_ver"
@@ -251,7 +251,7 @@ def test_cmd_update_preserves_version(t : T?) {
     }
 }
 
-[test]
+[test(description = "cmd_install_all installs every dependency named in .das_package", timeout = 1200)]
 def test_cmd_install_all_integration(t : T?) {
     t |> run("installs all dependencies from .das_package") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_inst_all"
@@ -269,7 +269,7 @@ def test_cmd_install_all_integration(t : T?) {
     }
 }
 
-[test]
+[test(description = "cmd_check reports installed packages as present", timeout = 1200)]
 def test_cmd_check_integration(t : T?) {
     t |> run("check reports OK for installed packages") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_chk"
@@ -285,7 +285,7 @@ def test_cmd_check_integration(t : T?) {
     }
 }
 
-[test]
+[test(description = "installing an already installed package without --force skips it", timeout = 1200)]
 def test_cmd_install_already_installed(t : T?) {
     t |> run("skip if already installed without force") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_skip"
@@ -303,7 +303,7 @@ def test_cmd_install_already_installed(t : T?) {
     }
 }
 
-[test]
+[test(description = "installing a local package with a CMakeLists.txt builds it", timeout = 1200)]
 def test_install_local_auto_build(t : T?) {
     t |> run("auto-builds package with CMakeLists.txt on install") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_autobuild"
@@ -324,7 +324,7 @@ def test_install_local_auto_build(t : T?) {
     }
 }
 
-[test]
+[test(description = "updating a package with a CMakeLists.txt rebuilds it", timeout = 1200)]
 def test_update_local_auto_build(t : T?) {
     t |> run("auto-builds package with CMakeLists.txt on update") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_autobuild_upd"
@@ -346,7 +346,7 @@ def test_update_local_auto_build(t : T?) {
     }
 }
 
-[test]
+[test(description = "a pure-daslang package installs, runs, updates and runs again with the new behavior", timeout = 1200)]
 def test_full_workflow_local(t : T?) {
     t |> run("install, run, update, run — pure das package") @(t : T?) {
         let das_root = get_das_root()
@@ -403,7 +403,7 @@ def test_full_workflow_local(t : T?) {
     }
 }
 
-[test]
+[test(description = "cmd_build builds every installed package that has a CMakeLists.txt", timeout = 1200)]
 def test_cmd_build_integration(t : T?) {
     t |> run("builds all packages with CMakeLists.txt") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_build_all"
@@ -428,7 +428,7 @@ def test_cmd_build_integration(t : T?) {
     }
 }
 
-[test]
+[test(description = "cmd_upgrade moves a package from v1.0 to the latest tag", timeout = 1200)]
 def test_cmd_upgrade_single(t : T?) {
     t |> run("upgrades from v1.0 to latest") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_upgr"
@@ -459,7 +459,7 @@ def test_cmd_upgrade_single(t : T?) {
     }
 }
 
-[test]
+[test(description = "cmd_upgrade skips a package already at the latest tag", timeout = 1200)]
 def test_cmd_upgrade_already_latest(t : T?) {
     t |> run("upgrade skips when already at latest") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_upgr_skip"
@@ -479,7 +479,7 @@ def test_cmd_upgrade_already_latest(t : T?) {
     }
 }
 
-[test]
+[test(description = "cmd_upgrade skips local packages", timeout = 1200)]
 def test_cmd_upgrade_local_skips(t : T?) {
     t |> run("upgrade skips local packages") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_upgr_local"
@@ -500,7 +500,7 @@ def test_cmd_upgrade_local_skips(t : T?) {
     }
 }
 
-[test]
+[test(description = "cmd_upgrade_all upgrades every root package", timeout = 1200)]
 def test_cmd_upgrade_all_integration(t : T?) {
     t |> run("upgrades all root packages") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_upgr_all"
@@ -523,7 +523,7 @@ def test_cmd_upgrade_all_integration(t : T?) {
     }
 }
 
-[test]
+[test(description = "an upgrade also upgrades a dependency whose constraint the old version no longer satisfies", timeout = 1200)]
 def test_cmd_upgrade_dep_constraint(t : T?) {
     t |> run("upgrades dependency when constraint not satisfied") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_upgr_dep"
@@ -554,7 +554,7 @@ def test_cmd_upgrade_dep_constraint(t : T?) {
     }
 }
 
-[test]
+[test(description = "a dependency cycle terminates instead of recursing forever", timeout = 1200)]
 def test_dependency_cycle_detection(t : T?) {
     t |> run("cycle detection prevents infinite recursion") <| @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_cycle"
@@ -576,7 +576,7 @@ def test_dependency_cycle_detection(t : T?) {
     }
 }
 
-[test]
+[test(description = "a failed update restores the backup of the installed package", timeout = 1200)]
 def test_cmd_update_rollback(t : T?) {
     t |> run("update restores backup on failure") <| @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_rollback"
@@ -608,7 +608,7 @@ def test_cmd_update_rollback(t : T?) {
     }
 }
 
-[test]
+[test(description = "a global install lands in das_root/modules and is recorded in the global lock file", timeout = 1200)]
 def test_install_global_basic(t : T?) {
     t |> run("installs package globally to das_root/modules") @(t : T?) {
         let das_root = get_das_root()
@@ -629,7 +629,7 @@ def test_install_global_basic(t : T?) {
     }
 }
 
-[test]
+[test(description = "a local install reuses a compatible global version instead of cloning", timeout = 1200)]
 def test_local_auto_uses_global(t : T?) {
     t |> run("local install uses compatible global version") @(t : T?) {
         let das_root = get_das_root()
@@ -655,7 +655,7 @@ def test_local_auto_uses_global(t : T?) {
     }
 }
 
-[test]
+[test(description = "a local install errors when the global version does not match the request", timeout = 1200)]
 def test_global_version_mismatch(t : T?) {
     t |> run("local install errors on version mismatch with global") @(t : T?) {
         let das_root = get_das_root()
@@ -677,7 +677,7 @@ def test_global_version_mismatch(t : T?) {
     }
 }
 
-[test]
+[test(description = "--force installs locally despite a global version mismatch", timeout = 1200)]
 def test_global_version_mismatch_force(t : T?) {
     t |> run("--force installs locally despite global version mismatch") @(t : T?) {
         let das_root = get_das_root()
@@ -702,7 +702,7 @@ def test_global_version_mismatch_force(t : T?) {
     }
 }
 
-[test]
+[test(description = "removing a local reference to a global package keeps the global directory", timeout = 1200)]
 def test_remove_global_reference(t : T?) {
     t |> run("removing global reference doesn't delete global directory") @(t : T?) {
         let das_root = get_das_root()
@@ -730,7 +730,7 @@ def test_remove_global_reference(t : T?) {
     }
 }
 
-[test]
+[test(description = "cmd_install_all checks version constraints against global packages and installs nothing on a mismatch", timeout = 1200)]
 def test_install_all_version_constraint(t : T?) {
     t |> run("cmd_install_all passes version constraint to global check") @(t : T?) {
         let das_root = get_das_root()
@@ -755,7 +755,7 @@ def test_install_all_version_constraint(t : T?) {
     }
 }
 
-[test]
+[test(description = "remove --global deletes the directory and the global lock entry", timeout = 1200)]
 def test_remove_global_package(t : T?) {
     t |> run("remove --global deletes directory and lock entry") @(t : T?) {
         let das_root = get_das_root()
@@ -774,7 +774,7 @@ def test_remove_global_package(t : T?) {
     }
 }
 
-[test]
+[test(description = "update --global reinstalls at the pinned version", timeout = 1200)]
 def test_update_global_package(t : T?) {
     t |> run("update --global re-installs at pinned version") @(t : T?) {
         let das_root = get_das_root()
@@ -794,7 +794,7 @@ def test_update_global_package(t : T?) {
     }
 }
 
-[test]
+[test(description = "update without --global rejects a global entry", timeout = 1200)]
 def test_local_update_rejects_global_entry(t : T?) {
     t |> run("update without --global rejects global entry") @(t : T?) {
         let das_root = get_das_root()

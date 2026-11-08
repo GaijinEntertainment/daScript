@@ -1,3 +1,5 @@
+//! STYLE014 reports an over-long plain comment block and an over-long
+//! public docstring, and skips the module header docstring.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options _comment_hygiene = true
@@ -7,7 +9,8 @@ expect 31209:2
 
 require daslib/style_lint
 
-//! Module-level header docstring — always allowed regardless of length.
+//! Module-level header docstring - always allowed regardless of
+//! length.
 //! Even though this `//!` block is more than three lines, STYLE014 must
 //! treat it as the module-leading docstring and skip it. This is the
 //! "regex_boost.das line 9" exception.

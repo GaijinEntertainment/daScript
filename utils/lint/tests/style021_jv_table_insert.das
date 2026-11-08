@@ -1,3 +1,5 @@
+//! STYLE021 reports a JsonValue table built by repeated constant-key
+//! inserts, leaving computed keys to STYLE031.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // STYLE021: table<string; JsonValue?> built by repeated const-key insert —

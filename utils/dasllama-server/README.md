@@ -874,7 +874,7 @@ absent; set `DASLLAMA_MODELS_DIR`):
 - `modules/dasLLAMA/tests/test_scheduler.das` - the continuous-batching scheduler against `generate()` references (moved with the module)
   (bit-exact single stream, chunk invariance, staggered admits, eviction); needs
   `SmolLM2-135M-Instruct-Q8_0.gguf`.
-- `test_openai_server_stream.das` - SSE chunk framing, the over-long-prompt 400, two concurrent
+- `test_openai_server.das`, the stream cells - SSE chunk framing, the over-long-prompt 400, two concurrent
   clients batching on one server (`peak_active >= 2` via `/v1/stats`), mid-generation disconnect
   eviction, and a request served off the prefix cache repeating itself token for token; needs
   `SmolLM2-135M-Instruct-Q8_0.gguf`.
@@ -883,7 +883,7 @@ absent; set `DASLLAMA_MODELS_DIR`):
   token spans, and comes back as a caption about the picture; plus the decode-failure and
   remote-URL 400s. Needs `gemma-4-12B-it-Q4_K_M.gguf`, `mmproj-gemma-4-12B-it-BF16.gguf` and the
   coco cats jpeg.
-- `test_openai_server_vision_multi.das` - two vision models of different families on one server
+- `test_openai_server_vision.das`, the two-model cells - two vision models of different families on one server
   (gemma-4-E2B and Qwen3-VL-4B, each slot with its own mmproj): an image request routes by its
   `model` field, each model captions the photo alone and both when asked at once, an id no slot
   carries is a 404. Needs both decoders, both mmprojs and the cats photo.
@@ -951,7 +951,7 @@ absent; set `DASLLAMA_MODELS_DIR`):
   starts its download under the id `drafter:<name>` the document's machine names, and the worker's
   verify fails bytes off the pinned sha. Its own file: the download machine is process state that
   `test_model_catalog.das`'s document cells read idle.
-- `test_setup_mode.das` - model-free, runs end to end even interpreted (setup mode never
+- `uncategorized_persistent_heap_stack_524288.das` (setup mode) - model-free, runs end to end even interpreted (setup mode never
   infers): a slotless boot serves setup stats and the catalog while every inference route
   fails closed, and its model picker lists a planted GGUF but neither a `.dlim` nor a GGUF that
   serves no chat (an mmproj of arch `clip`, a one-file `gigaam` ASR model).

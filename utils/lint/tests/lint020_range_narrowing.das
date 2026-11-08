@@ -1,3 +1,5 @@
+//! LINT020 is reported for: 64-bit bound narrowed into a 32-bit range
+//! constructor.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // LINT020: 64-bit bound narrowed into a 32-bit range constructor

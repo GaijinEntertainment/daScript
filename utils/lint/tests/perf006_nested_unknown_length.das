@@ -1,3 +1,5 @@
+//! PERF006 keeps its known-length counter balanced after a
+//! known-length for nested with an unknown-length one.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // PERF006 regression: nesting a known-length and an unknown-length for must not

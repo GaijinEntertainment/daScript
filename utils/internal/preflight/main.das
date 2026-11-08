@@ -451,8 +451,10 @@ def gate_review_md(ctx : PreflightCtx) : GateResult {
 }
 
 //! CI's `Test review-md discovery` step, suite for suite
-let REVIEW_MD_TEST_SUITES <- ["utils/internal/review-md/test_scan.das", "utils/internal/review-md/test_gate.das",
-    "utils/internal/review-md/test_walkers.das", "utils/internal/make-pr/test_gates.das", "utils/internal/preflight/tests"]
+let REVIEW_MD_TEST_SUITES <- ["utils/internal/review-md/test_scan.das",
+    "utils/internal/review-md/uncategorized.das",
+    "utils/internal/review-md/test_walkers.das", "utils/internal/make-pr/test_gates.das",
+    "utils/internal/preflight/tests"]
 
 def gate_review_md_tests(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()

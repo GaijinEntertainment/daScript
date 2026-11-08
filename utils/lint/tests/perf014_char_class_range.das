@@ -1,3 +1,4 @@
+//! PERF014 is reported for: exact char-class range checks.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // PERF014: exact char-class range checks

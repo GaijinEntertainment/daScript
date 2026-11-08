@@ -13,7 +13,7 @@ require ../report.das
 // ── parse_verdict (judge.das) ──────────────────────────────────────────
 
 
-[test]
+[test(description = "parse_verdict accepts one group covering every candidate and keeps its reason")]
 def test_parse_verdict_full_real(t : T?) {
     var error : string
     let json = "\{\"groups\":[[0,1,2]],\"false_positives\":[],\"reason\":\"identical\"\}"
@@ -29,7 +29,7 @@ def test_parse_verdict_full_real(t : T?) {
 }
 
 
-[test]
+[test(description = "parse_verdict accepts a partial group with the leftover index listed as a false positive")]
 def test_parse_verdict_partial(t : T?) {
     var error : string
     let json = "\{\"groups\":[[0,1]],\"false_positives\":[2],\"reason\":\"only first two match\"\}"
@@ -44,7 +44,7 @@ def test_parse_verdict_partial(t : T?) {
 }
 
 
-[test]
+[test(description = "parse_verdict rejects a group index at or past the candidate count")]
 def test_parse_verdict_index_out_of_range(t : T?) {
     var error : string
     let json = "\{\"groups\":[[0,1,5]],\"false_positives\":[],\"reason\":\"oops\"\}"
@@ -55,7 +55,7 @@ def test_parse_verdict_index_out_of_range(t : T?) {
 }
 
 
-[test]
+[test(description = "parse_verdict rejects an index that appears in two groups")]
 def test_parse_verdict_duplicate_index(t : T?) {
     var error : string
     let json = "\{\"groups\":[[0,1],[1,2]],\"false_positives\":[],\"reason\":\"oops\"\}"
@@ -66,7 +66,7 @@ def test_parse_verdict_duplicate_index(t : T?) {
 }
 
 
-[test]
+[test(description = "parse_verdict rejects a verdict that leaves a candidate uncovered")]
 def test_parse_verdict_missing_index(t : T?) {
     var error : string
     // n=4 but only 0,1 covered
@@ -78,7 +78,7 @@ def test_parse_verdict_missing_index(t : T?) {
 }
 
 
-[test]
+[test(description = "parse_verdict sets an error on a null JSON input")]
 def test_parse_verdict_null_input(t : T?) {
     var v : Verdict
     parse_verdict(null, 3, v)
@@ -86,7 +86,7 @@ def test_parse_verdict_null_input(t : T?) {
 }
 
 
-[test]
+[test(description = "all-singleton groups normalize to false positives and classify as false_positive")]
 def test_parse_verdict_singletons_normalized(t : T?) {
     // A model returning all singleton groups + empty false_positives
     // should normalize to "groups: [], false_positives: [0,1,2]" so
@@ -104,7 +104,7 @@ def test_parse_verdict_singletons_normalized(t : T?) {
 }
 
 
-[test]
+[test(description = "a reused Verdict loses its previous error on a successful parse")]
 def test_parse_verdict_resets_stale_error(t : T?) {
     // A reused Verdict instance must not carry a previous error
     // through a successful parse.
@@ -121,7 +121,7 @@ def test_parse_verdict_resets_stale_error(t : T?) {
 // ── classify_verdict (report.das) ──────────────────────────────────────
 
 
-[test]
+[test(description = "a group covering every candidate classifies as real")]
 def test_classify_real_full_group(t : T?) {
     var v : Verdict
     var grp <- [0, 1, 2]
@@ -131,7 +131,7 @@ def test_classify_real_full_group(t : T?) {
 }
 
 
-[test]
+[test(description = "a group plus a false positive classifies as partial")]
 def test_classify_partial_subset(t : T?) {
     var v : Verdict
     var grp <- [0, 1]
@@ -142,7 +142,7 @@ def test_classify_partial_subset(t : T?) {
 }
 
 
-[test]
+[test(description = "a verdict of only false positives classifies as false_positive")]
 def test_classify_false_positive_all(t : T?) {
     let v <- Verdict(false_positives <- [0, 1])
     let kind = classify_verdict(2, v)
@@ -150,7 +150,7 @@ def test_classify_false_positive_all(t : T?) {
 }
 
 
-[test]
+[test(description = "a verdict carrying an error classifies as error")]
 def test_classify_error_propagates(t : T?) {
     var v : Verdict
     v.error = "something broke"
@@ -162,7 +162,7 @@ def test_classify_error_propagates(t : T?) {
 // ── source_extract (source_extract.das) ────────────────────────────────
 
 
-[test]
+[test(description = "extract_source returns the requested line range of a file")]
 def test_extract_source_known_range(t : T?) {
     var cache = FileCache()
     var error : string
@@ -176,7 +176,7 @@ def test_extract_source_known_range(t : T?) {
 }
 
 
-[test]
+[test(description = "extract_source leaves the file in the cache after the first read")]
 def test_extract_source_caches(t : T?) {
     var cache = FileCache()
     var error : string
@@ -185,7 +185,7 @@ def test_extract_source_caches(t : T?) {
 }
 
 
-[test]
+[test(description = "extract_source reports an error and no source for a missing file")]
 def test_extract_source_missing_file(t : T?) {
     var cache = FileCache()
     var error : string
@@ -195,7 +195,7 @@ def test_extract_source_missing_file(t : T?) {
 }
 
 
-[test]
+[test(description = "an end_line of 0 falls back to a single-line extract")]
 def test_extract_source_v1_fallback(t : T?) {
     var cache = FileCache()
     var error : string
@@ -206,7 +206,7 @@ def test_extract_source_v1_fallback(t : T?) {
 }
 
 
-[test]
+[test(description = "extract_source errors instead of clamping when end_line is past the end of the file")]
 def test_extract_source_end_line_past_eof(t : T?) {
     // Stale detect-dupe report against an edited file: end_line points
     // past EOF. Should error rather than silently clamp + extract.
@@ -218,7 +218,7 @@ def test_extract_source_end_line_past_eof(t : T?) {
 }
 
 
-[test]
+[test(description = "extract_source errors on an end_line before the start line")]
 def test_extract_source_inverted_range(t : T?) {
     // Degenerate end_line < start_line. Should error rather than
     // silently coerce to a single-line peek.
@@ -234,7 +234,8 @@ def test_extract_source_inverted_range(t : T?) {
 
 
 // Cross-platform temp-file helper. Mirrors `make_temp_corpus_file` in
-// `utils/mcp/test_tools.das` — `create_temp_file_result` resolves the
+// `utils/mcp/test_tools_corpus.das` —`create_temp_file_result`
+// resolves the
 // OS tempdir (`%TEMP%` on Windows, `$TMPDIR`/`/var/folders/...` on
 // macOS, `/tmp` on Linux), so tests don't hardcode `/tmp` and break
 // the Windows extended_checks runner.
@@ -254,7 +255,7 @@ def make_temp_input_file(t : T?; body : string) : string {
 }
 
 
-[test]
+[test(description = "read_input_report parses a detect-dupe report into clusters and members")]
 def test_read_input_report_basic(t : T?) {
     let json_text = "\{\"summary\":\{\"files_scanned\":1,\"functions_analyzed\":3,\"exact_clusters\":1,\"fuzzy_pairs\":0,\"threshold\":0.7,\"min_tokens\":8\},\"exact_clusters\":[\{\"canonical_sample\":\"\",\"token_count\":12,\"members\":[\{\"file\":\"a.das\",\"name\":\"foo\",\"line\":1,\"end_line\":5,\"is_lambda\":false\},\{\"file\":\"b.das\",\"name\":\"bar\",\"line\":10,\"end_line\":15,\"is_lambda\":false\}]\}],\"fuzzy_pairs\":[]\}"
     let path = make_temp_input_file(t, json_text)
@@ -271,12 +272,13 @@ def test_read_input_report_basic(t : T?) {
 }
 
 
-[test]
+[test(description = "read_input_report fails with an error for a file that does not exist")]
 def test_read_input_report_missing_file(t : T?) {
     // Generate a unique temp path then immediately delete it — the
     // path is now guaranteed nonexistent and unique to this run, and
     // works on Windows where `/tmp` doesn't exist. Same pattern as
-    // utils/mcp/test_tools.das `test_detect_duplicates_corpus_not_found`.
+    // utils/mcp/test_tools_corpus.das
+    // `test_detect_duplicates_corpus_not_found`.
     let bogus = make_temp_input_file(t, "")
     if (empty(bogus)) return
     remove(bogus)

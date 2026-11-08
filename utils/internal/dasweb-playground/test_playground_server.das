@@ -56,7 +56,7 @@ def private default_policy : StorePolicy => StorePolicy()
 def private tiny_policy : StorePolicy =>
     StorePolicy(max_source_bytes = 64, max_inserts_per_ip_hour = 3)
 
-[test]
+[test(description = "the server answers healthz and returns a json 404 for an unknown route", timeout = 1200)]
 def test_health_and_unknown_routes(t : T?) {
     with_playground_server(default_policy()) $(base_url) {
         t |> run("healthz") @(tt : T?) {
@@ -75,7 +75,7 @@ def test_health_and_unknown_routes(t : T?) {
     }
 }
 
-[test]
+[test(description = "a posted source mints a hash and url, a second post dedups onto it, and a GET returns the exact source", timeout = 1200)]
 def test_put_get_roundtrip(t : T?) {
     with_playground_server(default_policy()) $(base_url) {
         let source = "print(\"shared via /s/\")"
@@ -110,7 +110,7 @@ def test_put_get_roundtrip(t : T?) {
     }
 }
 
-[test]
+[test(description = "an empty body is 400, an oversized one 413, a malformed hash 400, and an unknown well-formed hash 404", timeout = 1200)]
 def test_transport_rejections(t : T?) {
     with_playground_server(tiny_policy()) $(base_url) {
         t |> run("empty body is 400") @(tt : T?) {
@@ -140,7 +140,7 @@ def test_transport_rejections(t : T?) {
     }
 }
 
-[test]
+[test(description = "the fourth insert from one forwarded ip is 429 while another ip still passes", timeout = 1200)]
 def test_rate_limiting_by_forwarded_ip(t : T?) {
     with_playground_server(tiny_policy()) $(base_url) {
         t |> run("fourth insert from one ip is 429; another ip passes") @(tt : T?) {
@@ -163,11 +163,12 @@ def test_rate_limiting_by_forwarded_ip(t : T?) {
     }
 }
 
-[test]
+[test(description = "varying the earlier X-Forwarded-For hops does not escape the rate ceiling", timeout = 1200)]
 def test_forged_forwarded_hops_share_one_bucket(t : T?) {
     //! Regression: the rate ceiling keyed on the FIRST X-Forwarded-For hop,
     //! which a client authors. A proxy appends the peer it accepted, so only
-    //! the last hop is trustworthy — keying on the first let one caller mint a
+    //! the last hop is trustworthy - keying on the first let one
+    //! caller mint a
     //! fresh identity per request and never be throttled.
     with_playground_server(tiny_policy()) $(base_url) {
         t |> run("a caller cannot escape the ceiling by varying earlier hops") @(tt : T?) {
@@ -187,11 +188,12 @@ def test_forged_forwarded_hops_share_one_bucket(t : T?) {
     }
 }
 
-[test]
+[test(description = "a body is accepted only when its byte count matches its string view, so a body cut at an embedded NUL is refused")]
 def test_body_byte_faithfulness_guard(t : T?) {
     //! Regression: the body was read through a NUL-terminated string, so
     //! everything past an embedded NUL was dropped before the size check, the
-    //! validation, the hash and the stored row — two different bodies sharing a
+    //! validation, the hash and the stored row - two different bodies
+    //! sharing a
     //! pre-NUL prefix would collapse onto one hash and one public URL.
     //! The guard is tested as a predicate rather than end-to-end: the dasHV
     //! client takes the body as a NUL-terminated string too, so no dastest
@@ -210,7 +212,7 @@ def test_body_byte_faithfulness_guard(t : T?) {
     }
 }
 
-[test]
+[test(description = "a stored source is served with X-Content-Type-Options: nosniff", timeout = 1200)]
 def test_stored_sources_are_served_nosniff(t : T?) {
     //! Regression: stored anonymous input was served same-origin with a
     //! one-year immutable cache and no nosniff, so a browser could sniff a
@@ -227,7 +229,7 @@ def test_stored_sources_are_served_nosniff(t : T?) {
     }
 }
 
-[test]
+[test(description = "only loopback address forms count as a local peer; every other address is remote")]
 def test_loopback_peer_predicate(t : T?) {
     //! The operator-surface gate. Only the predicate is unit-testable here: the
     //! test client necessarily connects FROM loopback, so the allow path is
@@ -247,7 +249,7 @@ def test_loopback_peer_predicate(t : T?) {
     }
 }
 
-[test]
+[test(description = "the listing is empty and reimport 503s with no curated import configured, and a boot import feeds the listing that reimport recounts", timeout = 1200)]
 def test_listed_and_reimport(t : T?) {
     t |> run("listed is empty without curated import; reimport 503s unconfigured") @(tt : T?) {
         with_playground_server(default_policy()) $(base_url) {
@@ -300,7 +302,7 @@ def test_listed_and_reimport(t : T?) {
     }
 }
 
-[test]
+[test(description = "a share link for a known hash redirects to the playground and an unknown hash is 404", timeout = 1200)]
 def test_share_link(t : T?) {
     with_playground_server(default_policy()) $(base_url) {
         let source = "let shared = true"

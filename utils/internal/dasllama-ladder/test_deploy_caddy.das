@@ -75,7 +75,7 @@ def private with_runs_cap(directive_lines, cap : string) : string =>
     replace(directive_lines, "\thandle /api/runs \{\n\t\trequest_body \{\n\t\t\tmax_size 64KB\n",
         "\thandle /api/runs \{\n\t\trequest_body \{\n\t\t\tmax_size {cap}\n")
 
-[test]
+[test(description = "the caddy snippet's encode block names its content types, application/wasm among them")]
 def test_snippet_compresses_wasm(t : T?) {
     let snippet = fread("{LADDER}/caddy.snippet")
     let from = find(snippet, "\nencode zstd gzip \{\n")
@@ -87,7 +87,7 @@ def test_snippet_compresses_wasm(t : T?) {
 
 def private has_shell() : bool => executable_on_path("sh") && executable_on_path("awk")
 
-[test]
+[test(description = "deploy.sh caddy writes the snippet region once into the dasllama.io vhost, gathers or drops stray copies of its directives, restores edited values, and leaves a matching vhost alone", timeout = 1200)]
 def test_caddy_region(t : T?) {
     if (!has_shell()) {
         t |> skip("no sh or awk on this box")
@@ -154,7 +154,7 @@ def test_caddy_region(t : T?) {
     }
 }
 
-[test]
+[test(description = "deploy.sh caddy refuses a file with no dasllama.io vhost or an unclosed region, and rolls back a config caddy rejects without reloading", timeout = 1200)]
 def test_caddy_refusals(t : T?) {
     if (!has_shell()) {
         t |> skip("no sh or awk on this box")

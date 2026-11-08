@@ -19,7 +19,7 @@ def private write_manifest(dir : string; text : string) : string {
     return path
 }
 
-[test]
+[test(description = "a well-formed samples manifest parses with unknown keys ignored, and a missing, unparseable or file-less one fails closed naming what is wrong")]
 def test_load_manifest(t : T?) {
     with_temp_dir("dasweb_verify_") $(dir) {
         t |> run("a well-formed manifest parses into entries") @(tt : T?) {
@@ -69,7 +69,7 @@ def test_load_manifest(t : T?) {
     }
 }
 
-[test]
+[test(description = "a sample that compiles, sibling requires included, passes, a broken one fails with the compiler's message, and a missing listed file fails before compiling")]
 def test_check_sample(t : T?) {
     with_temp_dir("dasweb_verify_") $(dir) {
         t |> run("a compiling sample passes") @(tt : T?) {
@@ -99,7 +99,7 @@ def test_check_sample(t : T?) {
     }
 }
 
-[test]
+[test(description = "a stage-time-generated sample compiles from its canonical source, and fails naming both paths when that source is gone")]
 def test_generated_samples(t : T?) {
     with_temp_dir("dasweb_verify_") $(samples) {
         with_temp_dir("dasweb_verify_repo_") $(repo) {

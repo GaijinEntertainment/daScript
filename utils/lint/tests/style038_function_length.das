@@ -1,3 +1,4 @@
+//! STYLE038 is reported for: function exceeds the line-count limit.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options _function_length = 10           // keep fixture functions small

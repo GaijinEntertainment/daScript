@@ -5,7 +5,7 @@ require daslib/clargs
 require daslib/fio
 require ../../../common/verify_pool.das
 
-[test]
+[test(description = "a verify child's output and exit code classify as clean, AST verify, unverifiable, timed out, crashed, killed or failed to start, a compile error counting as clean")]
 def test_verify_verdict(t : T?) {
     t |> equal(verify_verdict("compiled\n", 0, 300.0).verdict, "clean", "a clean run")
     t |> equal(verify_verdict("error[30341]: no matching functions\n", 1, 300.0).verdict, "clean",
@@ -35,7 +35,7 @@ def test_verify_verdict(t : T?) {
     }
 }
 
-[test]
+[test(description = "a verify child runs -dry-run --ast-verify-batch with the module cache off, or on the named run cache")]
 def test_verify_argv(t : T?) {
     t |> equal(verify_argv("d", "f.das", ""),
         ["d", "-no-module-cache", "-dry-run", "--ast-verify-batch", "f.das"],
@@ -47,7 +47,7 @@ def test_verify_argv(t : T?) {
 
 //! the broken fixture reported on twice - a module cache the first
 //! child wrote must not pass the second
-[test]
+[test(description = "the verify pool reports results in input order and the broken fixture fails on its second child too, past the cache the first one wrote", timeout = 1200)]
 def test_pool_reports_in_input_order(t : T?) {
     let root = get_das_root()
     let clean = path_join(root, "utils/internal/ast-fuzz/selftest/cli_victim.das")

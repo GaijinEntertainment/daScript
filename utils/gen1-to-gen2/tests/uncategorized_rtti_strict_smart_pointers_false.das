@@ -47,7 +47,7 @@ def private compiles_as_gen1(near : string; text : string; var issues_out : stri
 }
 
 
-[test]
+[test(description = "converting a v1 file adds the gen2 header, keeps every comment, handles the semicolon and gen1.5 modes, still compiles as v1 and leaves an already-gen2 file byte for byte")]
 def test_convert_pipeline(t : T?) {
     t |> run("a v1 file gains the gen2 header and keeps every comment") @(t : T?) {
         let res <- convert_file(FIXTURE, ConvertOptions(v2 = true))
@@ -92,7 +92,7 @@ def test_convert_pipeline(t : T?) {
 }
 
 
-[test]
+[test(description = "a CRLF file converts to the same result as its LF twin, with CRLF endings and every comment conserved")]
 def test_crlf_input(t : T?) {
     t |> run("a CRLF file converts to the LF result with CRLF endings") @(t : T?) {
         for (f in [FIXTURE, STMT_FIXTURE]) {

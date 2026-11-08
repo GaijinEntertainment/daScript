@@ -26,7 +26,7 @@ def private sniff_cell(t : T?; name : string; want : AsrCarrierKind) {
     t |> equal(sniff_asr_kind(path), want, name)
 }
 
-[test]
+[test(description = "the converter sniffs a GGUF as gigaam, decoder, qwen3a or bergamot and refuses a non-Marian item table")]
 def test_sniff_asr_kind(t : T?) {
     t |> run("the four GigaAM v3 carriers sniff as gigaam") @(t : T?) {
         for (v in ["ctc", "rnnt", "e2e-ctc", "e2e-rnnt"]) {
@@ -62,7 +62,7 @@ def test_sniff_asr_kind(t : T?) {
     }
 }
 
-[test]
+[test(description = "a Marian student bakes its lane images beside the source", timeout = 1200)]
 def test_bake_bergamot(t : T?) {
     let src_dir = path_join(models_dir(), "bergamot/ru-en-base-memory")
     let src = path_join(src_dir, "model.ruen.intgemm.alphas.bin")
@@ -92,7 +92,7 @@ def test_bake_bergamot(t : T?) {
     remove(path_join(dir, "vocab.ruen.spm"))
 }
 
-[test]
+[test(description = "a Marian student bakes to -o with no image beside the source, and -o naming the source is refused without deleting it", timeout = 1200)]
 def test_bake_to_destination(t : T?) {
     let src_dir = path_join(models_dir(), "bergamot/ru-en-base-memory")
     let src = path_join(src_dir, "model.ruen.intgemm.alphas.bin")
@@ -132,7 +132,7 @@ def test_bake_to_destination(t : T?) {
     remove(path_join(dir, "vocab.ruen.spm"))
 }
 
-[test]
+[test(description = "the q4_k GigaAM carrier bakes each lane's image to -o and a destination mint reaps no stale image", timeout = 1200)]
 def test_bake_gigaam_lanes(t : T?) {
     let src = path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k.gguf")
     return if (!model_available(t, src))

@@ -12,7 +12,7 @@ def write_marker(path : string) {
     }
 }
 
-[test]
+[test(description = "a changed file is governed by every REVIEW.md from its folder up to the root, root first, and a blank or empty input governs nothing")]
 def test_walk_collects_governing_checklists(t : T?) {
     let fixture_r = create_temp_directory_result("review_md_scan")
     t |> success(fixture_r is value, "temp fixture dir created")
@@ -51,7 +51,7 @@ def test_walk_collects_governing_checklists(t : T?) {
     t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
 }
 
-[test]
+[test(description = "the root routing sends an include/daScript header to its src/ checklist, a [test] file outside modules/ to tests/REVIEW.md and a doctest .cpp to tests-cpp/small/REVIEW.md, deleted files included")]
 def test_walk_follows_the_root_routing(t : T?) {
     let fixture_r = create_temp_directory_result("review_md_routes")
     t |> success(fixture_r is value, "temp fixture dir created")
@@ -101,7 +101,7 @@ def test_walk_follows_the_root_routing(t : T?) {
     t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
 }
 
-[test]
+[test(description = "a REVIEW.das beside a governing checklist is its sibling gate, one with no checklist is an orphan, and a gate deleted with its checklist is no orphan")]
 def test_sibling_and_orphan_gates(t : T?) {
     let fixture_r = create_temp_directory_result("review_md_gates")
     t |> success(fixture_r is value, "temp fixture dir created")
@@ -138,7 +138,7 @@ def test_sibling_and_orphan_gates(t : T?) {
     t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
 }
 
-[test]
+[test(description = "git's changed-file output splits into paths with CR and blank lines dropped, and empty output yields none")]
 def test_git_output_parsing(t : T?) {
     var inscope parsed <- changed_from_git_output("a.txt\r\n\nb/c.txt\n")
     t |> equal(2, length(parsed))

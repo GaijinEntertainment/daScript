@@ -2,7 +2,7 @@ options gen2
 
 require dastest/testing_boost public
 
-//! a fixture for test_annotation_args.das: a timeout spelled as a
+//! a fixture for test_timeouts.das: a timeout spelled as a
 //! string does not compile
 
 [test(timeout = "soon")]

@@ -1599,7 +1599,7 @@ if (NOT ${DAS_TOOLS_DISABLED})
         # this only fixes local incremental iteration). Scoped: unset right after.
         # cpp_main's require graph = its (stable) top-level server files, listed
         # explicitly so the full-server / test / setup peers (main.das,
-        # registry_das.das, test_tools.das, setup.das) don't re-trigger the AOT;
+        # registry_das.das, test_tools_*.das, setup.das) don't re-trigger the AOT;
         # plus the tool modules (GLOB, so a new cpp tool tracks automatically) and
         # utils/common. NOT GLOB_RECURSE -> tests/ fixtures stay out.
         file(GLOB CPP_MCP_DAS_DEPS CONFIGURE_DEPENDS
@@ -2056,11 +2056,13 @@ install(FILES
     ${PROJECT_SOURCE_DIR}/utils/mcp/rules/cpp_outline_rules.yml
     DESTINATION utils/mcp/rules
 )
+file(GLOB DAS_MCP_TEST_TOOLS CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/utils/mcp/test_tools_*.das)
 install(FILES
-    ${PROJECT_SOURCE_DIR}/utils/mcp/test_tools.das
+    ${DAS_MCP_TEST_TOOLS}
+    ${PROJECT_SOURCE_DIR}/utils/mcp/_tools_common.das
     DESTINATION utils/mcp
 )
-# The installed test_tools.das drives non-.das fixtures — _fixture_cpp_outline.h
+# The installed test_tools_*.das suite drives non-.das fixtures — _fixture_cpp_outline.h
 # (cpp_outline) and the _pretend_root/modules/*/.das_module descriptors (project_root) — so a
 # bare "*.das" filter ships the suite in a state where those cases cannot run.
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/mcp/tests/

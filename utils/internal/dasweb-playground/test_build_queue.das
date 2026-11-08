@@ -18,7 +18,7 @@ let H2 = "2222222222222222222222222222222222222222222222222222222222222222"
 let H3 = "3333333333333333333333333333333333333333333333333333333333333333"
 let TC = "abc1234def5678900000000000000000000000000"
 
-[test]
+[test(description = "a fresh samples database migrates to schema v4")]
 def test_migration_v4(t : T?) {
     t |> run("fresh db migrates to v4") @(t : T?) {
         with_latest_sqlite(":memory:") $(db) {
@@ -27,7 +27,7 @@ def test_migration_v4(t : T?) {
     }
 }
 
-[test]
+[test(description = "module mode expects exactly one named artifact, page mode the html+js+wasm triple, and an undeclared mode nothing")]
 def test_expected_artifact_names(t : T?) {
     // The server enforces this set rather than trusting the builder, so it is
     // a store behaviour and gets a store test, not only an HTTP one.
@@ -48,7 +48,7 @@ def test_expected_artifact_names(t : T?) {
     }
 }
 
-[test]
+[test(description = "a native graphics or audio require in any file of a source or bundle forces a page build, while plain compute code and lookalike names stay module builds")]
 def test_detect_build_mode(t : T?) {
     t |> run("plain compute source is a module build") @(tt : T?) {
         tt |> equal(detect_build_mode("require math\n[export]\ndef main \{\n    print(\"hi\")\n\}\n"), BUILD_MODE_MODULE)
@@ -82,7 +82,7 @@ def test_detect_build_mode(t : T?) {
     }
 }
 
-[test]
+[test(description = "there is no toolchain until one is announced, and a re-announce overwrites it")]
 def test_toolchain_meta(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         t |> run("no toolchain until announced") @(tt : T?) {
@@ -97,7 +97,7 @@ def test_toolchain_meta(t : T?) {
     }
 }
 
-[test]
+[test(description = "enqueueing a hash twice makes one queued job, while the same hash under another toolchain is its own job")]
 def test_enqueue_idempotent(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         t |> run("first enqueue creates a queued job") @(tt : T?) {
@@ -117,7 +117,7 @@ def test_enqueue_idempotent(t : T?) {
     }
 }
 
-[test]
+[test(description = "a claim takes the oldest queued job of its own toolchain with its mode, and an empty queue claims nothing")]
 def test_claim_semantics(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         t |> run("empty queue claims nothing") @(tt : T?) {
@@ -146,7 +146,7 @@ def test_claim_semantics(t : T?) {
     }
 }
 
-[test]
+[test(description = "only a building job accepts a result, which resolves it to done with its artifact, and a second result is refused")]
 def test_done_flow(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         enqueue_build(db, H1, TC, BUILD_MODE_MODULE, 1000l)
@@ -167,7 +167,7 @@ def test_done_flow(t : T?) {
     }
 }
 
-[test]
+[test(description = "a failure stores the compiler error, a forced re-enqueue resets the job, and a plain re-request leaves it failed")]
 def test_failed_flow(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         enqueue_build(db, H1, TC, BUILD_MODE_MODULE, 1000l)
@@ -196,7 +196,7 @@ def test_failed_flow(t : T?) {
     }
 }
 
-[test]
+[test(description = "an oversized compiler error is stored truncated with a marker")]
 def test_error_text_is_capped(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         enqueue_build(db, H1, TC, BUILD_MODE_MODULE, 1000l)
@@ -215,7 +215,7 @@ def test_error_text_is_capped(t : T?) {
     }
 }
 
-[test]
+[test(description = "an abandoned claim returns to the queue until its attempts run out and the job fails, while a live claim is not swept")]
 def test_stale_claim_requeue(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         let cfg = BuildConfig(claim_timeout_seconds = 600, max_build_attempts = 2)
@@ -245,7 +245,7 @@ def test_stale_claim_requeue(t : T?) {
     }
 }
 
-[test]
+[test(description = "queued jobs report 1-based positions that shift as the queue drains, and an unknown job is not found")]
 def test_queue_positions(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         enqueue_build(db, H1, TC, BUILD_MODE_MODULE, 1000l)
@@ -274,7 +274,7 @@ def private no_trees : array<string> {
     return <- none
 }
 
-[test]
+[test(description = "only stale-toolchain rows queued before the cutoff and with no tree left are purged, the current toolchain keeps its rows, and a purged sample re-enqueues fresh")]
 def test_forget_stale_toolchain_jobs(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         let stale_tc = "feed5678deadbeef000000000000000000000000"

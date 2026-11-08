@@ -7,7 +7,7 @@ require strings
 require gates
 require ../../common/log_floor.das
 
-[test]
+[test(description = "an unset DAS_LOG_LEVEL is raised to info and a level the caller set is left standing")]
 def test_default_log_floor_to_info(t : T?) {
     let saved = get_env_variable("DAS_LOG_LEVEL")
     set_env_variable("DAS_LOG_LEVEL", "")
@@ -19,7 +19,7 @@ def test_default_log_floor_to_info(t : T?) {
     set_env_variable("DAS_LOG_LEVEL", saved)
 }
 
-[test]
+[test(description = "make-pr started with DAS_LOG_LEVEL unset still prints its gate lines", timeout = 1200)]
 def test_main_prints_its_gate_lines_with_no_floor_set(t : T?) {
     let no_floor_prefix = get_platform_name() == "windows" ? "set \"DAS_LOG_LEVEL=\"&& " : "env -u DAS_LOG_LEVEL "
     var out : string
@@ -31,7 +31,7 @@ def test_main_prints_its_gate_lines_with_no_floor_set(t : T?) {
     t |> success(find(out, "stamp-reach:") >= 0, "make-pr's gate lines print with DAS_LOG_LEVEL unset:\n{out}")
 }
 
-[test]
+[test(description = "with no flags every gate is wanted, --only wants just the named gate, and --skip drops just the skipped one")]
 def test_want_gate(t : T?) {
     let no_skip : array<string>
     t |> success(want_gate("", no_skip, "sync"), "default: every gate wanted")
@@ -42,7 +42,7 @@ def test_want_gate(t : T?) {
     t |> success(want_gate("", skip, "sync"), "skip-mode: others still wanted")
 }
 
-[test]
+[test(description = "sync, stamp-reach and jit-smoke run by default, and every named-only gate runs only under its own --only")]
 def test_in_default_chain(t : T?) {
     for (g in ["sync", "stamp-reach", "jit-smoke"]) {
         t |> success(in_default_chain("", g), "{g} is in the default chain")
@@ -53,7 +53,7 @@ def test_in_default_chain(t : T?) {
     }
 }
 
-[test]
+[test(description = "a misspelled gate name in --only or --skip is reported, and known names report nothing")]
 def test_unknown_gate_names(t : T?) {
     let no_skip : array<string>
     t |> equal(length(unknown_gate_names("", no_skip)), 0)
@@ -67,7 +67,7 @@ def test_unknown_gate_names(t : T?) {
     t |> equal(bad_skip[0], "ast-verfiy")
 }
 
-[test]
+[test(description = "changed files scope to their deduplicated parent folders, backslashes normalized, and a root-level file adds no scope")]
 def test_scopes_of(t : T?) {
     let files <- ["utils/mcp/tools/format_file.das", "utils/mcp/registry_das.das",
                   "daslib\\das_source_formatter.das", "README.md"]
@@ -77,7 +77,7 @@ def test_scopes_of(t : T?) {
     t |> equal(scopes[1], "daslib", "a top-level file scopes to its parent DIRECTORY, not itself")
 }
 
-[test]
+[test(description = "a path prefix matches a backslash-spelled file, any pattern of several can hit, and an unrelated prefix does not")]
 def test_any_path_matches(t : T?) {
     let files <- ["src\\ast\\ast_simulate.cpp", "doc/source/index.rst"]
     t |> success(any_path_matches(files, ["src/ast/"]), "backslash path normalizes before match")
@@ -85,7 +85,7 @@ def test_any_path_matches(t : T?) {
     t |> success(!any_path_matches(files, ["daslib/"]), "no false hit")
 }
 
-[test]
+[test(description = "an existing binary candidate wins over a missing one, and no existing candidate yields an empty path")]
 def test_pick_newest(t : T?) {
     var terr : string
     let dir = create_temp_directory("make_pr_pick", terr)

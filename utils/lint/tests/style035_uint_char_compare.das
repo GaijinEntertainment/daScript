@@ -1,3 +1,5 @@
+//! STYLE035 reports a non-int numeric variable compared with a cast
+//! of a character literal.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options _nolint = "STYLE042"

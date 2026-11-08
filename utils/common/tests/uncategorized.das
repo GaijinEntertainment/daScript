@@ -3,7 +3,7 @@ options gen2
 require dastest/testing_boost public
 require ../text_lines.das
 
-[test]
+[test(description = "non_empty_lines keeps the non-blank lines of a text")]
 def test_non_empty_lines(t : T?) {
     t |> equal(non_empty_lines("a.txt\r\nb/c.txt\n"), ["a.txt", "b/c.txt"],
         "CR and the trailing newline dropped")
@@ -11,7 +11,7 @@ def test_non_empty_lines(t : T?) {
     t |> equal(length(non_empty_lines("\n\r\n   \n")), 0, "blank and whitespace-only lines dropped")
 }
 
-[test]
+[test(description = "split_trimmed splits a text on a separator and trims each piece")]
 def test_split_trimmed(t : T?) {
     t |> equal(split_trimmed(" a.bin, ,b.gguf ,", ","), ["a.bin", "b.gguf"],
         "pieces stripped, empty ones dropped, in order")

@@ -1,3 +1,5 @@
+//! LINT024 reports an int64 or uint64 cast over a 32-bit product that
+//! already wrapped.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // LINT024: int64/uint64 cast over a 32-bit product

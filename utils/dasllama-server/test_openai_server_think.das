@@ -96,7 +96,7 @@ struct private Chunk {
 }
 
 // Every `data: <payload>` line of an SSE body, in order ("[DONE]" included). Sibling copy of
-// test_openai_server_stream's — the server test files stay self-contained by dir convention.
+// test_openai_server.das's stream cell — the server test files stay self-contained by dir convention.
 // POST a chat request and hand the parsed ChatResp to the block (fails the test on a non-200 or
 // unparseable body). Greedy requests are deterministic per box, so content asserts are stable.
 def private chat_resp(t : T?; base_url, body : string; blk : block<(r : ChatResp) : void>) {
@@ -122,7 +122,7 @@ def private chat_resp(t : T?; base_url, body : string; blk : block<(r : ChatResp
 
 // ===== Qwen3-0.6B: symmetric <think> + Hermes tools (the hybrid-thinking flagship) =====
 
-[test]
+[test(description = "Qwen3 separates reasoning_content from content, honors enable_thinking and thinking_budget, streams reasoning first and composes with tools", timeout = 1200)]
 def test_think_qwen3(t : T?) {   // nolint:STYLE038 — one live server session: the four thinking/tool arms share that one boot
     if (model_missing(t, QWEN3_PATH)) {
         return
@@ -247,7 +247,7 @@ def test_think_qwen3(t : T?) {   // nolint:STYLE038 — one live server session:
 
 // ===== Qwen3.5-0.8B: the deltanet hybrid keeps Hermes tools (the qwen35 registration fix) =====
 
-[test]
+[test(description = "a Qwen3.5 model declaring Hermes calls the tool and the server parses it", timeout = 1200)]
 def test_think_qwen35_tools(t : T?) {
     if (model_missing(t, QWEN35_PATH)) {
         return
@@ -274,7 +274,7 @@ def test_think_qwen35_tools(t : T?) {
 
 // ===== gemma-4-E2B: asymmetric channels, thinking ON by default (instruct = opt-out) =====
 
-[test]
+[test(description = "Gemma 4 reasons by default, opts out with enable_thinking=false, splits its thought channel and closes it at the budget", timeout = 1200)]
 def test_think_gemma4(t : T?) {
     if (model_missing(t, GEMMA4_PATH)) {
         return
@@ -342,7 +342,7 @@ let CATS_PATH = path_join(models_dir(), "coco-val2017-000000039769.jpg")
 // still captions. The E-series does that in the chat layer at seed 1234 (test_vision_chat's
 // no-think cell); through the scheduler's prefill the same seeds answer directly, so this cell
 // pins the served shape - the caption in content, no marker in either half.
-[test]
+[test(description = "with enable_thinking=false and an image under the chat sampler preset, the caption lands as content", timeout = 1200)]
 def test_think_gemma4_media_instruct(t : T?) {
     if (model_missing(t, GEMMA4_PATH) || model_missing(t, GEMMA4_MM_PATH) || model_missing(t, CATS_PATH)) {
         return
@@ -367,7 +367,7 @@ def test_think_gemma4_media_instruct(t : T?) {
 
 // ===== gpt-oss-20b: Harmony channel-switch (analysis -> final), 11 GB — large-tier gated =====
 
-[test]
+[test(description = "the Harmony analysis channel lands in reasoning_content and the final channel in content", timeout = 1200)]
 def test_think_gptoss(t : T?) {
     if (!g_env_test.parity_full) {
         t |> skip("gpt-oss-20b is large-tier (11 GB) — set DASLLAMA_PARITY_FULL=1 to run")
@@ -412,7 +412,7 @@ def private assert_tool_call(t : T?; base_url : string; max_toks : int) {
     }
 }
 
-[test]
+[test(description = "the llama_json format parses a whole-reply call to tool_calls and streams text as it comes and a call as one chunk at the finish", timeout = 1200)]
 def test_tools_llama(t : T?) {
     if (model_missing(t, path_join(models_dir(), "Llama-3.2-3B-Instruct-Q4_K_M.gguf"))) {
         return
@@ -440,7 +440,7 @@ def test_tools_llama(t : T?) {
 }
 
 
-[test]
+[test(description = "the Mistral format parses [TOOL_CALLS] arrays to tool_calls and streams text and calls correctly", timeout = 1200)]
 def test_tools_mistral(t : T?) {
     if (model_missing(t, path_join(models_dir(), "Mistral-7B-Instruct-v0.3-Q4_K_M.gguf"))) {
         return
@@ -465,7 +465,7 @@ def test_tools_mistral(t : T?) {
     }
 }
 
-[test]
+[test(description = "the Gemma 4 call block parses to tool_calls, streams correctly and replays a call and result into an answer", timeout = 1200)]
 def test_tools_gemma4(t : T?) {
     if (model_missing(t, GEMMA4_PATH)) {
         return
@@ -502,7 +502,7 @@ def test_tools_gemma4(t : T?) {
     }
 }
 
-[test]
+[test(description = "a Harmony commentary-channel call parses to a tool call while the analysis stays reasoning", timeout = 1200)]
 def test_tools_gptoss(t : T?) {
     if (!g_env_test.parity_full) {
         t |> skip("gpt-oss-20b is large-tier (11 GB) — set DASLLAMA_PARITY_FULL=1 to run")

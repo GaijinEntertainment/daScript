@@ -136,7 +136,11 @@ set(_lane_util_bin ${UTIL_BIN_DIR})
 
 
 das_lane_dastest_target(run_tests_daspkg COMMENT "Testing daspkg"
-    FILES utils/daspkg/test_daspkg.das utils/daspkg/test_release_workspace.das utils/daspkg/test_package_runner_errors.das
+    FILES utils/daspkg/test_daspkg_names_versions.das utils/daspkg/test_daspkg_cli.das
+          utils/daspkg/test_daspkg_lockfile.das utils/daspkg/test_daspkg_commands.das
+          utils/daspkg/test_daspkg_install.das utils/daspkg/test_daspkg_index.das
+          utils/daspkg/test_daspkg_manifest.das utils/daspkg/test_daspkg_release.das
+          utils/daspkg/uncategorized.das
     ARGS --timeout 600)
 add_custom_target(run_daspkg_tests
     COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --color --failures-only
@@ -175,21 +179,27 @@ endif()
 
 das_lane_dastest_target(run_tests_mcp_tools
     COMMENT "Testing the MCP tools"
-    FILES utils/mcp/test_tools.das utils/mcp/test_crosstree_guard.das utils/mcp/test_setup.das
+    FILES utils/mcp/test_tools_arch_discover.das utils/mcp/test_tools_build.das
+          utils/mcp/test_tools_corpus.das utils/mcp/test_tools_cpp.das
+          utils/mcp/test_tools_format.das utils/mcp/test_tools_launch.das
+          utils/mcp/test_tools_lint.das utils/mcp/test_tools_load_module.das
+          utils/mcp/test_tools_modules.das utils/mcp/test_tools_navigation.das
+          utils/mcp/test_tools_project_root.das utils/mcp/test_tools_search.das
+          utils/mcp/uncategorized.das utils/mcp/uncategorized_no_aot.das
 )
 
 das_lane_dastest_target(run_tests_dap_bridge COMMENT "Testing the DAP MCP bridge"
     FILES utils/dap/test_dap_bridge.das ARGS --timeout 900)
 
 das_lane_dastest_target(run_tests_review_md COMMENT "Testing review-md discovery, the make-pr gates and preflight"
-    FILES utils/internal/review-md/test_scan.das utils/internal/review-md/test_gate.das
+    FILES utils/internal/review-md/test_scan.das utils/internal/review-md/uncategorized.das
           utils/internal/review-md/test_walkers.das utils/internal/make-pr/test_gates.das
           utils/internal/preflight/tests)
 
 das_lane_dastest_target(run_tests_dastest COMMENT "Testing dastest's own suite" FILES dastest/tests)
 
 das_lane_dastest_target(run_tests_pr_babysit COMMENT "Testing the pr-babysit verdict core"
-    FILES utils/internal/pr-babysit/test_watch_verdict.das)
+    FILES utils/internal/pr-babysit/uncategorized.das)
 
 set(_ci_dasweb_playground)
 foreach(_s test_samples_store test_curated_import test_playground_config test_playground_server test_build_queue test_build_artifacts test_build_endpoints)
@@ -204,7 +214,7 @@ endforeach()
 das_lane_dastest_target(run_tests_dasllama_ladder COMMENT "Testing dasllama-ladder" FILES ${_ci_dasllama_ladder})
 
 set(_ci_dasweb_buildd)
-foreach(_s test_buildd_config test_buildd_core test_buildd_client test_roll_toolchain)
+foreach(_s test_buildd_config test_buildd_core uncategorized_persistent_heap uncategorized)
     list(APPEND _ci_dasweb_buildd utils/internal/dasweb-buildd/${_s}.das)
 endforeach()
 das_lane_dastest_target(run_tests_dasweb_buildd COMMENT "Testing dasweb-buildd" FILES ${_ci_dasweb_buildd})
@@ -226,9 +236,11 @@ add_custom_target(check_review_gates
 
 add_das_target(check_tests_index
     COMMAND $<TARGET_FILE:daslang> ./utils/internal/test-audit/main.das -- --verify
+    COMMAND $<TARGET_FILE:daslang> ./utils/internal/test-audit/main.das -- --root utils --tests-only --index utils/TESTS.md --verify
+    COMMAND $<TARGET_FILE:daslang> ./utils/internal/test-audit/main.das -- --root dastest/tests --verify
     DEPENDS daslang
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    COMMENT "Checking tests/README.md against the [test] census (regenerate: test-audit --readme)"
+    COMMENT "Checking the generated test indexes (tests/README.md, utils/TESTS.md, dastest/tests/README.md) against the [test] census (regenerate: test-audit --readme)"
 )
 
 add_das_target(check_gated_das
@@ -285,7 +297,9 @@ add_custom_target(das_shipped_exes ALL
     DEPENDS daslang
     COMMENT "Copying daslang beside itself as each shipped tool exe")
 
-if(NOT DAS_TESTS_DISABLED)
+# every arm spawns the lint tool as a child; a Windows Debug child runs past dastest's suite
+# timeout, so that cell leaves the ctest out and run_utils_tests keeps the file
+if(NOT DAS_TESTS_DISABLED AND NOT (WIN32 AND CMAKE_BUILD_TYPE STREQUAL "Debug"))
     file(GLOB _lint_project_tests CONFIGURE_DEPENDS
         ${PROJECT_SOURCE_DIR}/utils/lint/tests/module_cache/project_*.das)
     foreach(_test ${_lint_project_tests})
@@ -368,13 +382,19 @@ SET(DAS_UTILS_TO_TEST
     internal/requirefix
     internal/test-release
     internal/line-length/test_line_length.das
-    internal/test-audit/test_audit.das
+    internal/test-audit/uncategorized_no_aot.das
     common/tests
-    daspkg/test_daspkg.das
-    daspkg/test_release_workspace.das
-    daspkg/test_package_runner_errors.das
+    daspkg/test_daspkg_names_versions.das
+    daspkg/test_daspkg_cli.das
+    daspkg/test_daspkg_lockfile.das
+    daspkg/test_daspkg_commands.das
+    daspkg/test_daspkg_install.das
+    daspkg/test_daspkg_index.das
+    daspkg/test_daspkg_manifest.das
+    daspkg/test_daspkg_release.das
+    daspkg/uncategorized.das
     daslang/tests
-    dasllama-server/test_bundle_licenses.das
+    dasllama-server/uncategorized.das
     watchdog/tests
 )
 

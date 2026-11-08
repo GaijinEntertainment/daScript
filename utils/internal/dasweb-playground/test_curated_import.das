@@ -36,7 +36,7 @@ let MANIFEST_V1 = ("\{ \"examples\": [" +
     "\{ \"name\": \"Multi (multi-file)\", \"slug\": \"multi\", \"files\": [\"examples/multi_a.das\", \"examples/multi_b.das\"] \}" +
     "] \}")
 
-[test]
+[test(description = "the curated import lists every entry with its metadata, stores single files raw and multi-file entries as a share bundle, and a re-import is a no-op")]
 def test_import_and_idempotency(t : T?) {
     let dir = fixture_dir(t, "basic")
     write_manifest(dir, MANIFEST_V1)
@@ -80,7 +80,7 @@ def test_import_and_idempotency(t : T?) {
     nuke(dir)
 }
 
-[test]
+[test(description = "a re-import repoints a changed entry while keeping its old permalink, and demotes a dropped entry while user promotions survive")]
 def test_reimport_repoints_and_demotes(t : T?) {
     let dir = fixture_dir(t, "repoint")
     write_manifest(dir, MANIFEST_V1)
@@ -140,7 +140,7 @@ def test_reimport_repoints_and_demotes(t : T?) {
     nuke(dir)
 }
 
-[test]
+[test(description = "a missing manifest or bad json returns -1, and an entry with a missing file is skipped while the rest import")]
 def test_import_failure_modes(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         t |> run("missing manifest returns -1") @(tt : T?) {
@@ -166,10 +166,11 @@ def test_import_failure_modes(t : T?) {
     }
 }
 
-[test]
+[test(description = "a manifest path that is absolute or climbs out of the samples dir is refused")]
 def test_manifest_paths_stay_inside_the_samples_dir(t : T?) {
     //! Regression: manifest paths were path_join'd with no containment check,
-    //! and path_join DISCARDS the base when the right side is absolute — so a
+    //! and path_join DISCARDS the base when the right side is
+    //! absolute - so a
     //! manifest entry could publish any file the service user can read as a
     //! permanent public sample.
     let dir = fixture_dir(t, "escape")
@@ -199,10 +200,11 @@ def test_manifest_paths_stay_inside_the_samples_dir(t : T?) {
     nuke(dir)
 }
 
-[test]
+[test(description = "categories sort while entries keep manifest order within one, and a re-import reproduces that order")]
 def test_multi_category_order_is_reproducible(t : T?) {
     //! Regression: Position was assigned while iterating keys() of the parsed
-    //! manifest object, which is a table — hash order, not the manifest's. That
+    //! manifest object, which is a table - hash order, not the
+    //! manifest's. That
     //! made the listing order depend on something unspecified. Categories are
     //! now visited sorted, so the assignment is reproducible: alphabetical
     //! across categories, manifest order within one.
@@ -236,11 +238,12 @@ def test_multi_category_order_is_reproducible(t : T?) {
     nuke(dir)
 }
 
-[test]
+[test(description = "when every entry's source is unreadable the prior listings survive and the import reports failure")]
 def test_all_entries_unreadable_keeps_prior_listings(t : T?) {
     //! Regression: a manifest that parsed but whose files were all unreadable
     //! (partial deploy, `current` swapped mid-import, curated_dir one directory
-    //! off) demoted against an empty keep set — unlisting the whole dropdown
+    //! off) demoted against an empty keep set - unlisting the whole
+    //! dropdown
     //! while reporting success.
     let dir = fixture_dir(t, "allskipped")
     write_manifest(dir, MANIFEST_V1)

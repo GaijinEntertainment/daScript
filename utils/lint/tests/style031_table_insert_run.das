@@ -1,3 +1,5 @@
+//! STYLE031 reports an empty table filled by a run of inserts that a
+//! table literal replaces.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // STYLE031: table<K;V> (or table<K> set) with empty default-init followed by a

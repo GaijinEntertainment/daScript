@@ -1,3 +1,5 @@
+//! PERF009 reports nothing for a move-init that ends its block, and
+//! no false finding on the next statement.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // PERF009 pin: a move-init that ends its block (nothing follows it) arms the

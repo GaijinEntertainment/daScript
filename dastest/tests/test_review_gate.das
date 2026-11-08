@@ -6,7 +6,7 @@ require daslib/fio
 require daslib/strings_boost
 require dastest/review_gate
 
-[test]
+[test(description = "findings accumulate with optional line anchors, drive the gate verdict, and clear on reset")]
 def test_findings_accumulate_and_reset(t : T?) {
     gate_reset()
     gate_finding("a.das", "message one")
@@ -24,7 +24,7 @@ def test_findings_accumulate_and_reset(t : T?) {
     t |> equal(0, gate_verdict("fixture"))
 }
 
-[test]
+[test(description = "identifier bytes are letters, digits and underscore, and a word matches only as a whole identifier")]
 def test_ident_bytes_and_whole_words(t : T?) {
     t |> success(is_ident_byte('a') && is_ident_byte('Z') && is_ident_byte('7') && is_ident_byte('_'))
     t |> success(!is_ident_byte('.') && !is_ident_byte(' ') && !is_ident_byte('('))
@@ -37,7 +37,7 @@ def test_ident_bytes_and_whole_words(t : T?) {
     t |> success(!contains_word("abc", ""), "an empty word matches nothing and returns")
 }
 
-[test]
+[test(description = "kebab case accepts lowercase words joined by single dashes and rejects underscores, camel case and stray dashes")]
 def test_kebab_case(t : T?) {
     t |> success(is_kebab_case("like-this"))
     t |> success(is_kebab_case("aot"))
@@ -50,7 +50,7 @@ def test_kebab_case(t : T?) {
     t |> success(!is_kebab_case(""))
 }
 
-[test]
+[test(description = "find_line answers the 1-based line of a needle, including a multi-line needle, and 0 when absent")]
 def test_find_line(t : T?) {
     let text = "one\ntwo\nthree\n"
     t |> equal(1, find_line(text, "one"))
@@ -61,7 +61,7 @@ def test_find_line(t : T?) {
     t |> equal(0, find_line("", "x"))
 }
 
-[test]
+[test(description = "das_requires lists the required module paths, skipping comments, indentation noise and ?guard tokens")]
 def test_das_requires(t : T?) {
     let fixture_r = create_temp_file_result("review_gate_req", ".das")
     t |> success(fixture_r is value, "temp fixture file created")
@@ -82,7 +82,7 @@ def test_das_requires(t : T?) {
     t |> success(remove(fixture))
 }
 
-[test]
+[test(description = "cmake_command_blocks returns whole multi-line command blocks by exact name, ignoring comments and parens inside quotes")]
 def test_cmake_command_blocks(t : T?) {
     let text = "# install( inside a comment stays closed\nset(FOO bar)\ninstall(FILES a.das\n    DESTINATION utils/aot) # trailing\nmyinstall(x)\ninstall(PROGRAMS \"weird)name.exe\" DESTINATION bin)\n"
     var inscope blocks <- cmake_command_blocks(text, "install")
@@ -94,7 +94,7 @@ def test_cmake_command_blocks(t : T?) {
     t |> equal("set(FOO bar)", sets[0])
 }
 
-[test]
+[test(description = "command block scanning survives escaped quotes, parens in comments, space before the paren and an unterminated block")]
 def test_cmake_command_blocks_edges(t : T?) {
     // escaped quote inside a string, a paren inside an in-block comment,
     // whitespace before the paren, and an unterminated block at EOF
@@ -106,7 +106,7 @@ def test_cmake_command_blocks_edges(t : T?) {
     t |> success(find(blocks[2], "PROGRAMS z") >= 0, "whitespace before the paren is accepted")
 }
 
-[test]
+[test(description = "cmake_words splits text into words with parens as their own words, quoted runs as one word and comments dropped")]
 def test_cmake_words(t : T?) {
     let text = "add_test(NAME a # comment ) here\n    COMMAND \"c:/p a t h/x.exe\")\n"
     var inscope words <- cmake_words(text)
@@ -144,7 +144,7 @@ def test_cmake_words(t : T?) {
     t |> equal("d", hashed[1])
 }
 
-[test]
+[test(description = "cmake_test_labels reads every LABELS value of any command, expanded lists included, and stops at its own command's end")]
 def test_cmake_test_labels(t : T?) {
     let text = "add_test(NAME one COMMAND x)\nset_tests_properties(one PROPERTIES\n    LABELS \"big;style_lint\"\n    PASS_REGULAR_EXPRESSION \"STYLE014\")\ndoctest_discover_tests(exe PROPERTIES LABELS \"small\")\nset_tests_properties(two PROPERTIES LABELS big)\n"
     var inscope labels <- cmake_test_labels(text)
@@ -175,7 +175,7 @@ def test_cmake_test_labels(t : T?) {
     t |> equal("big", bounded[0])
 }
 
-[test]
+[test(description = "cmake_command_targets returns the first argument of each named command, even on the next line, and nothing for an empty block")]
 def test_cmake_command_targets(t : T?) {
     let text = "add_dependencies(test-big test_a test_b)\n# add_dependencies(test-small ghost)\nadd_dependencies(\n    test-small test_c)\nadd_executable(other x.cpp)\n"
     var inscope deps <- cmake_command_targets(text, "add_dependencies")
@@ -193,7 +193,7 @@ def test_cmake_command_targets(t : T?) {
     t |> equal(0, length(absent))
 }
 
-[test]
+[test(description = "the cmake readers accept a command in any casing, as CMake itself does")]
 def test_cmake_commands_are_case_insensitive(t : T?) {
     // CMake itself accepts any casing; a gate that only reads one spelling reports
     // a wiring defect that is not there, or misses one that is
@@ -209,7 +209,7 @@ def test_cmake_commands_are_case_insensitive(t : T?) {
     t |> equal("big", labels[0])
 }
 
-[test]
+[test(description = "cmake_test_commands returns each add_test COMMAND's program verbatim and skips an add_test without one")]
 def test_cmake_test_commands(t : T?) {
     let text = "add_test(NAME a COMMAND test_a WORKING_DIRECTORY x)\nadd_test(\n    NAME b\n    COMMAND $<TARGET_FILE:daslang> script.das)\nadd_test(NAME c)\n"
     var inscope cmds <- cmake_test_commands(text)
@@ -218,7 +218,7 @@ def test_cmake_test_commands(t : T?) {
     t |> equal("$<TARGET_FILE:daslang>", cmds[1], "a generator expression comes back verbatim")
 }
 
-[test]
+[test(description = "cmake_list_entries collects a list variable's entries from set and list(APPEND), once per command and in any casing")]
 def test_cmake_list_entries(t : T?) {
     let text = "set(DAS_UTILS\n    aot\n    dascov  # a comment\n    internal/jit\n)\nif(NOT X)\n    list(APPEND DAS_UTILS benchctl)   # same gate\nendif()\nset(OTHER_LIST nope)\n"
     var inscope entries <- cmake_list_entries(text, "DAS_UTILS")
@@ -240,7 +240,7 @@ def test_cmake_list_entries(t : T?) {
     t |> equal(2, length(shouty), "an uppercase command is read once, not twice")
 }
 
-[test]
+[test(description = "url_host extracts the host of absolute and protocol-relative URLs and answers empty for relative paths and comments")]
 def test_url_host(t : T?) {
     t |> equal(url_host("https://gc.zgo.at/count.js"), "gc.zgo.at")
     t |> equal(url_host("http://example.com"), "example.com")
@@ -255,7 +255,7 @@ def test_url_host(t : T?) {
     t |> equal(url_host(""), "")
 }
 
-[test]
+[test(description = "script_urls finds quoted absolute and protocol-relative addresses and ignores comments and relative paths")]
 def test_script_urls(t : T?) {
     let src = "var A = 'https://api.github.com/repos/x';\nvar B = \"//gc.zgo.at/count.js\";\n// var C = 'https://commented.example/x';\nfetch(\"http://plain.example/y\");\nvar D = 'files/local.js';\n"
     var inscope urls <- script_urls(src)
@@ -265,7 +265,7 @@ def test_script_urls(t : T?) {
     t |> equal("http://plain.example/y", urls[2])
 }
 
-[test]
+[test(description = "html_resource_urls returns only addresses a page loads - src, href of resources, data attributes and inline scripts - not links or meta")]
 def test_html_resource_urls(t : T?) {
     let page = "<link rel=\"stylesheet\" href=\"https://cdn.example/a.css\" />\n<a href=\"https://clicked.example/page\">link</a>\n<meta property=\"og:image\" content=\"https://meta.example/i.png\" />\n<script data-goatcounter=\"https://beacon.example/count\"\n        async src=\"//gc.zgo.at/count.js\"></script>\n<img src=\"files/local.png\" />\n<script>fetch(\"https://inline.example/x\");</script>\n"
     var inscope urls <- html_resource_urls(page)
@@ -281,7 +281,7 @@ def test_html_resource_urls(t : T?) {
     t |> equal("inline.example", hosts[3], "an inline script body is scanned too")
 }
 
-[test]
+[test(description = "the web third-party gate reports a disallowed host and document.cookie use, and skips allowed hosts, skipped directories and other file kinds")]
 def test_gate_web_third_party(t : T?) {
     let dir_r = create_temp_directory_result("review_gate_web")
     t |> success(dir_r is value, "temp fixture directory created")
@@ -306,7 +306,7 @@ def test_gate_web_third_party(t : T?) {
     t |> success(rmdir_rec("{root}"))
 }
 
-[test]
+[test(description = "the lane census reports a test file that no CMake lane names, ignoring commented lanes, fixtures and files without tests, and reports a missing lane file")]
 def test_gate_lane_census(t : T?) {
     let dir_r = create_temp_directory_result("review_gate_lanes")
     t |> success(dir_r is value, "temp fixture directory created")
@@ -337,7 +337,7 @@ def test_gate_lane_census(t : T?) {
     t |> success(rmdir_rec("{root}"))
 }
 
-[test]
+[test(description = "css_urls finds @import and url() addresses, including bare protocol-relative ones, and ignores local paths and comments")]
 def test_css_urls(t : T?) {
     let sheet = "@import url(\"https://fonts.googleapis.com/css2?family=Inter\");\n@font-face \{ src: url(//cdn.example/a.woff2) format('woff2'); \}\nbody \{ background: url('files/local.png'); \}\n/* see http://ie.microsoft.com/testdrive/ for the prefix history */\n"
     var inscope urls <- css_urls(sheet)
@@ -346,7 +346,7 @@ def test_css_urls(t : T?) {
     t |> equal("//cdn.example/a.woff2", urls[1], "a bare protocol-relative url() counts")
 }
 
-[test]
+[test(description = "the web third-party gate scans rst, md and css files but not rule documents or READMEs")]
 def test_gate_web_third_party_file_kinds(t : T?) {
     let dir_r = create_temp_directory_result("review_gate_kinds")
     t |> success(dir_r is value, "temp fixture directory created")
@@ -372,7 +372,7 @@ def test_gate_web_third_party_file_kinds(t : T?) {
     t |> success(rmdir_rec("{root}"))
 }
 
-[test]
+[test(description = "html_resource_urls reads unquoted attribute values and every entry of a srcset")]
 def test_html_resource_urls_edges(t : T?) {
     let page = "<script src=https://bare.example/a.js></script>\n<source srcset=\"https://first.example/a 1x, https://second.example/b 2x\" />\n<img src='https://quoted.example/c.png' />\n"
     var inscope urls <- html_resource_urls(page)
@@ -388,7 +388,7 @@ def test_html_resource_urls_edges(t : T?) {
     t |> equal("quoted.example", hosts[3])
 }
 
-[test]
+[test(description = "script_urls reads addresses inside a template literal as it does inside quotes")]
 def test_script_urls_template_literal(t : T?) {
     let src = "fetch(`//tpl.example/a`);\nfetch(`https://tpl2.example/b`);\n"
     var inscope urls <- script_urls(src)
@@ -397,13 +397,13 @@ def test_script_urls_template_literal(t : T?) {
     t |> equal("https://tpl2.example/b", urls[1])
 }
 
-[test]
+[test(description = "url_host lowercases the host and accepts a scheme in any case")]
 def test_url_host_is_case_insensitive(t : T?) {
     t |> equal(url_host("HTTPS://Tracker.Example/x.js"), "tracker.example", "a scheme is case-insensitive")
     t |> equal(url_host("HtTp://EXAMPLE.COM"), "example.com", "a host is case-insensitive")
 }
 
-[test]
+[test(description = "an uppercase script tag still bounds an inline script body")]
 def test_html_resource_urls_uppercase_script(t : T?) {
     let page = "<SCRIPT>fetch(\"https://inline.example/x\");</SCRIPT>\n"
     var inscope urls <- html_resource_urls(page)
@@ -411,14 +411,14 @@ def test_html_resource_urls_uppercase_script(t : T?) {
     t |> equal("inline.example", url_host(urls[0]))
 }
 
-[test]
+[test(description = "url_host treats a bracketed IPv6 literal as a host, drops the port after it and rejects an unclosed bracket")]
 def test_url_host_ipv6_literal(t : T?) {
     t |> equal(url_host("http://[::1]/t.js"), "[::1]", "a bracketed IPv6 literal is a host")
     t |> equal(url_host("https://[2001:DB8::1]:8443/x"), "[2001:db8::1]", "the port after the bracket is dropped")
     t |> equal(url_host("http://[::1"), "", "an unclosed bracket is not host-shaped")
 }
 
-[test]
+[test(description = "script_urls keeps scanning the later lines of a multi-line template literal while a plain comment still does not count")]
 def test_script_urls_multiline_template_literal(t : T?) {
     let src = "const s = `//tpl.example/a\nhttps://tpl2.example/b\n`;\nconst u = \"x\"; // https://commented.example/c\n"
     var inscope urls <- script_urls(src)
@@ -427,7 +427,7 @@ def test_script_urls_multiline_template_literal(t : T?) {
     t |> equal("https://tpl2.example/b", urls[1])
 }
 
-[test]
+[test(description = "only a real script end tag closes an inline script body, not a longer tag name inside a string")]
 def test_html_resource_urls_script_end_tag_exact(t : T?) {
     let page = "<script>var a = \"</scriptx>\"; fetch(\"https://after.example/x\");</script >\n"
     var inscope urls <- html_resource_urls(page)
@@ -435,7 +435,7 @@ def test_html_resource_urls_script_end_tag_exact(t : T?) {
     t |> equal("after.example", url_host(urls[0]))
 }
 
-[test]
+[test(description = "the web third-party gate reports an unreadable file as a finding instead of passing it silently")]
 def test_gate_web_third_party_unreadable_file(t : T?) {
     let dir_r = create_temp_directory_result("review_gate_unreadable")
     t |> success(dir_r is value, "temp fixture directory created")
@@ -463,7 +463,7 @@ def test_gate_web_third_party_unreadable_file(t : T?) {
     t |> success(find(join(fs, "\n"), "locked.js: unreadable") >= 0, join(fs, "\n"))
 }
 
-[test]
+[test(description = "a script with no end tag is scanned to the end of the file, as a browser runs it")]
 def test_html_resource_urls_unclosed_script(t : T?) {
     let page = "<p>x</p>\n<script>fetch(\"https://open.example/x\");\n"
     var inscope urls <- html_resource_urls(page)
@@ -471,7 +471,7 @@ def test_html_resource_urls_unclosed_script(t : T?) {
     t |> equal("open.example", url_host(urls[0]))
 }
 
-[test]
+[test(description = "shell_cp_sources lists every source of each cp into the site tree, dropping flags and quotes and skipping other destinations")]
 def test_shell_cp_sources(t : T?) {
     let sh = "set -eux\ncp -r web/examples/ui/src/* _site/playground/\ncp \"web/output64/examples/$g/$g.html\" \"_site/examples/$g/\"\ncp -r site/playground/samples _site/playground/samples 2>/dev/null || true\ncp web/a.js web/b.js _site/x/\ncp web/elsewhere.js build/out/\n"
     var inscope srcs <- shell_cp_sources(sh, "_site/")
@@ -483,7 +483,7 @@ def test_shell_cp_sources(t : T?) {
     t |> equal("web/b.js", srcs[4], "every source of a multi-source cp")
 }
 
-[test]
+[test(description = "cmake_copy_sources lists every source of each copy command whose destination carries the marker and skips the rest")]
 def test_cmake_copy_sources(t : T?) {
     let cm = "add_custom_target(stage ALL\n    COMMAND $\{CMAKE_COMMAND} -E copy_directory\n        $\{CMAKE_CURRENT_SOURCE_DIR\}/examples/ui/src\n        $\{SITE_PLAYGROUND_DIR\}\n    COMMAND $\{CMAKE_COMMAND} -E copy\n        $\{DAS_WEB_OUTPUT_DIR\}/a.js\n        $\{DAS_WEB_OUTPUT_DIR\}/a.wasm\n        $\{SITE_FILES_WASM_DIR\}/\n    COMMAND $\{CMAKE_COMMAND} -E copy_directory\n        $\{CMAKE_CURRENT_SOURCE_DIR\}/examples/ui\n        $\{DAS_WEB_OUTPUT_DIR\}\n    COMMENT \"stage\"\n)\n"
     var inscope srcs <- cmake_copy_sources(cm, "SITE_")
@@ -493,7 +493,7 @@ def test_cmake_copy_sources(t : T?) {
     t |> equal("$\{DAS_WEB_OUTPUT_DIR\}/a.wasm", srcs[2], "every source of a multi-source copy")
 }
 
-[test]
+[test(description = "the web third-party gate scans an .assets.json sidecar entry by entry and leaves other json files alone")]
 def test_gate_web_third_party_assets_json(t : T?) {
     let dir_r = create_temp_directory_result("review_gate_assets")
     t |> success(dir_r is value, "temp fixture directory created")
@@ -513,7 +513,7 @@ def test_gate_web_third_party_assets_json(t : T?) {
     t |> success(find(join(fs, "\n"), "demo.das.assets.json:2: reaches cdn.example") >= 0, join(fs, "\n"))
 }
 
-[test]
+[test(description = "the home-path gate reports unix and drive home directories by line and passes a path already spelled with ~")]
 def test_gate_home_paths(t : T?) {
     let fixture_r = create_temp_file_result("review_gate_home", ".json")
     t |> success(fixture_r is value, "temp fixture file created")
@@ -532,7 +532,7 @@ def test_gate_home_paths(t : T?) {
     t |> success(find(fs[1], ":4: names a home directory") >= 0, fs[1])
 }
 
-[test]
+[test(description = "prefixed_tokens collects whole tokens with the prefix, including double-dash modifiers, and skips glued prefixes and bare prefixes in prose")]
 def test_prefixed_tokens(t : T?) {
     let text = "<tr class=\"dl-row dl-row--noted\">.dl-table--bench tbody tr.dl-row--flat \{ \} var x = 'dl-win'; model-dl-x; the dl-* names"
     var inscope toks <- prefixed_tokens(text, "dl-")
@@ -544,7 +544,7 @@ def test_prefixed_tokens(t : T?) {
     t |> success(key_exists(toks, "dl-win"))
 }
 
-[test]
+[test(description = "markdown_table_rows returns a section's table rows as cells, dropping the alignment row and backticks, and nothing for an absent section")]
 def test_markdown_table_rows(t : T?) {
     let md = "# title\n\n## INTERP\n\nprose\n\n| Benchmark | A (m1) | B (m2) |\n|---|---:|---:|\n| `fam_one` | 1.5 | - |\n| `fam_two` | 2.0 | 3.5 |\n\ntrailing prose\n\n## JIT\n\n| Benchmark | A (m1) |\n|---|---:|\n| `fam_one` | 0.5 |\n"
     var inscope rows <- markdown_table_rows(md, "INTERP")
@@ -562,7 +562,7 @@ def test_markdown_table_rows(t : T?) {
     t |> equal(0, length(none))
 }
 
-[test]
+[test(description = "html_ids collects bare id attributes only, not data-id or look-alike attributes")]
 def test_html_ids(t : T?) {
     var inscope ids <- html_ids("<span id=\"dl-hero-x\">6</span> <div data-id=\"not-one\" uid=\"nor-this\"><b id=\"plain\">")
     t |> equal(2, length(ids), "only a bare id attribute counts")
@@ -570,7 +570,7 @@ def test_html_ids(t : T?) {
     t |> success(key_exists(ids, "plain"))
 }
 
-[test]
+[test(description = "html_code_blocks returns blocks of the named class with entities decoded, the offset after the close tag and the opening tag")]
 def test_html_code_blocks(t : T?) {
     let page = "<pre><code class=\"language-daslang\">if (a &lt; b &amp;&amp; c) \{ \}</code></pre>\n<a href=\"/playground/\">try</a>\n<code class=\"language-js\">x</code>\n<code class=\"language-daslang\" data-playground=\"none\">second</code>"
     var inscope blocks <- html_code_blocks(page, "language-daslang")
@@ -581,7 +581,7 @@ def test_html_code_blocks(t : T?) {
     t |> success(find(blocks[1].tag, "data-playground=\"none\"") >= 0, "the opening tag is carried whole")
 }
 
-[test]
+[test(description = "markdown_fences returns fences of the exact language tag with the offset after the closing fence")]
 def test_markdown_fences(t : T?) {
     let md = "prose\n```das\nlet x = 1\n```\nmore\n```dasx\nnot this\n```\n```das\nlet y = 2\n```\n"
     var inscope fences <- markdown_fences(md, "das")
@@ -591,7 +591,7 @@ def test_markdown_fences(t : T?) {
     t |> success(find(slice(md, fences[0].after), "more") >= 0, "the offset lands after the closing fence")
 }
 
-[test]
+[test(description = "css_selector_tokens counts a class as defined only by a selector, including those nested in group at-rules, not by comments, values or descriptors")]
 def test_css_selector_tokens(t : T?) {
     let sheet = "/* dl-ghost is only mentioned here */\n.dl-row, .dl-table--bench tbody tr.dl-row--flat \{ content: \"dl-value\"; \}\n@media (max-width: 600px) \{ .dl-narrow \{ color: red; \} @supports (gap: 1px) \{ .dl-gapped \{ gap: 1px; \} \} \}\n@font-face \{ font-family: dl-face; src: url(x.woff); \}\n@keyframes dl-spin \{ from \{ opacity: 0; \} to \{ opacity: 1; \} \}\n.dl-after \{ color: blue; \}\n"
     var inscope defined <- css_selector_tokens(sheet, "dl-")
@@ -605,7 +605,7 @@ def test_css_selector_tokens(t : T?) {
     t |> success(!key_exists(defined, "dl-face"), "@font-face holds descriptors, not rules")
 }
 
-[test]
+[test(description = "shell_cp_sources ends the argument list at a # comment, ignores a commented-out cp and keeps a quoted source with a space whole")]
 def test_shell_cp_sources_comments_and_quotes(t : T?) {
     let sh = "cp web/a.js _site/   # a trailing comment names no destination\ncp \"web/my dir/b.js\" _site/x/\n# cp web/c.js _site/\n"
     var inscope srcs <- shell_cp_sources(sh, "_site/")
@@ -614,7 +614,7 @@ def test_shell_cp_sources_comments_and_quotes(t : T?) {
     t |> equal("web/my dir/b.js", srcs[1], "a quoted source with a space is one token")
 }
 
-[test]
+[test(description = "the home-path gate reports an unreadable file as a finding instead of passing it")]
 def test_gate_home_paths_unreadable_file(t : T?) {
     let fixture_r = create_temp_file_result("review_gate_home_locked", ".json")
     t |> success(fixture_r is value, "temp fixture file created")
@@ -640,7 +640,7 @@ def test_gate_home_paths_unreadable_file(t : T?) {
     t |> success(find(fs[0], "unreadable") >= 0, fs[0])
 }
 
-[test]
+[test(description = "the home-path gate reports a path that does not exist as a finding instead of passing it")]
 def test_gate_home_paths_missing_file(t : T?) {
     gate_reset()
     gate_home_paths("/nonexistent/review_gate_probe/records.json")

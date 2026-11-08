@@ -8,7 +8,7 @@
 bare name.**
 
 **A test that reaches any host or port other than the stub playground in
-`test_buildd_client.das`, on this directory's reserved test port 19014, is a defect.**
+`uncategorized_persistent_heap.das` (the buildd client test), on this directory's reserved test port 19014, is a defect.**
 
 **A test of `buildd_core.das` that reaches the network at all is a defect.**
 

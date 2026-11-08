@@ -72,7 +72,7 @@ def private json_of(resp : HttpResponse?) : JsonValue? {
     return read_json(string(resp.body), jerr)
 }
 
-[test]
+[test(description = "with no builder token configured every build endpoint, the public request included, answers 503 and build info reports the surface off", timeout = 1200)]
 def test_disabled_surface(t : T?) {
     with_build_server("", "") $(base_url) {
         t |> run("builder endpoints are 503 without a configured token") @(tt : T?) {
@@ -97,7 +97,7 @@ def test_disabled_surface(t : T?) {
     }
 }
 
-[test]
+[test(description = "a missing or wrong bearer token is refused, the right one claims 204 from an empty queue, and a malformed toolchain announce is refused", timeout = 1200)]
 def test_bearer_auth(t : T?) {
     var err = ""
     let blobs = create_temp_directory("dasweb_ep_blobs_", err)
@@ -127,7 +127,7 @@ def test_bearer_auth(t : T?) {
     rmdir_rec(blobs)
 }
 
-[test]
+[test(description = "the constant-time token comparison is true only for byte-identical strings")]
 def test_constant_time_equal(t : T?) {
     t |> run("equality is exact") @(tt : T?) {
         tt |> success(constant_time_equal("secret-token", "secret-token"), "equal strings")
@@ -140,7 +140,7 @@ def test_constant_time_equal(t : T?) {
     }
 }
 
-[test]
+[test(description = "a build goes request, claim, result and serve end to end: a wrong-sha result is stored nowhere, a good one serves byte-exact with immutable headers, and a late result is 409", timeout = 1200)]
 def test_build_flow_end_to_end(t : T?) { // nolint:STYLE038 — sequential pipeline scenario; each step consumes the previous step's state
     var err = ""
     let blobs = create_temp_directory("dasweb_ep_blobs_", err)
@@ -275,7 +275,7 @@ def test_build_flow_end_to_end(t : T?) { // nolint:STYLE038 — sequential pipel
     rmdir_rec(blobs)
 }
 
-[test]
+[test(description = "a failed build surfaces its compiler error, an upload with an extra, duplicate or unpublished file is refused, and status for an unrequested sample is 404", timeout = 1200)]
 def test_build_failure_paths(t : T?) { // nolint:STYLE038 — sequential refusal scenarios, each consuming the previous step's queue state
     var err = ""
     let blobs = create_temp_directory("dasweb_ep_blobs_", err)
@@ -407,7 +407,7 @@ def private upload_page_triple(base_url : string; hash : string; html_src, js_sr
 
 let GL_SOURCE = "require glfw/glfw_boost\nrequire opengl/opengl_boost\n[export]\ndef main \{\n\}\n"
 
-[test]
+[test(description = "a graphics sample builds as a page whose triple lands, serves with the isolation headers, and answers html and js only on the run origin's Host", timeout = 1200)]
 def test_page_build_flow(t : T?) {
     var err = ""
     let blobs = create_temp_directory("dasweb_ep_blobs_", err)
@@ -485,7 +485,7 @@ def test_page_build_flow(t : T?) {
     rmdir_rec(blobs)
 }
 
-[test]
+[test(description = "with no page origin configured a graphics sample is refused while a compute sample still builds", timeout = 1200)]
 def test_page_build_refused_without_page_origin(t : T?) {
     // Fail CLOSED: page artifacts are attacker-authored html/js, and page_origin
     // is the only thing keeping them off this origin. A server without it must
@@ -516,7 +516,7 @@ def test_page_build_refused_without_page_origin(t : T?) {
     rmdir_rec(blobs)
 }
 
-[test]
+[test(description = "a 20MB result lands and serves back whole and byte-exact", timeout = 1200)]
 def test_large_artifact_serves_whole(t : T?) {
     // Regression: libhv closes a connection whose queued unsent body exceeds its
     // 16MB write-buf cap, so a large artifact came back TRUNCATED after a clean
@@ -567,7 +567,7 @@ def test_large_artifact_serves_whole(t : T?) {
     rmdir_rec(blobs)
 }
 
-[test]
+[test(description = "announcing a new toolchain removes the stale toolchain's tree on the next tick", timeout = 1200)]
 def test_announce_retires_stale_toolchain(t : T?) {
     var err = ""
     let blobs = create_temp_directory("dasweb_ep_blobs_", err)

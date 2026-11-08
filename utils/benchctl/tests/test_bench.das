@@ -40,7 +40,7 @@ def private write_run_record(runs_dir : string; n : int; ns : double) {
     fwrite(path_join(runs_dir, "r{n}.json"), sprint_json(rec, false))
 }
 
-[test]
+[test(description = "the run verb records one file per lane and exits on the night's verdict, --failed records a night that never ran and report exits 0 or 1", timeout = 1200)]
 def test_verbs(t : T?) {
     with_temp_dir("bench_cli_") $(dir) {
         let suite = path_join(dir, "suite.json")
@@ -116,7 +116,7 @@ def private eight_nights_with_a_jump() : array<RunRecord> {
     return <- runs
 }
 
-[test]
+[test(description = "run records load in commit order, a corrupt file is named and skipped, and a night's status derives from its results")]
 def test_load_runs(t : T?) {
     with_temp_dir("bench_hist_") $(dir) {
         t |> run("records load in commit order, a corrupt file is named and skipped, status derives") @(tt : T?) {
@@ -149,7 +149,7 @@ def test_load_runs(t : T?) {
     }
 }
 
-[test]
+[test(description = "dataset series are keyed by lane and arm with run-indexed points, and the run summary carries failures and the ok count")]
 def test_build_dataset(t : T?) {
     t |> run("series are keyed by lane and arm, points carry the run index; the dataset round-trips") @(tt : T?) {
         let ds <- build_dataset(eight_nights_with_a_jump(), "2026-09-08T05:00:00Z", "https://github.com/x/y")
@@ -188,7 +188,7 @@ def private parsed(lines : array<string>; report : string; exit_code : int; stat
     return <- res
 }
 
-[test]
+[test(description = "a run's output classifies into samples, compile errors, failed functions, shutdown deaths and timeouts")]
 def test_classify_run_output(t : T?) {
     t |> run("samples aggregate over repeats: min, median, spread, per-op allocation medians") @(tt : T?) {
         let res <- parsed([stats_line("b", "insert", 10, 1000l, 20), stats_line("b", "insert", 10, 1200l, 30), stats_line("b", "insert", 10, 1100l, 40), "noise"], report_json(["b"], []), 0)
@@ -234,7 +234,7 @@ def test_classify_run_output(t : T?) {
 def private bench_file() : BenchFile =>
     BenchFile(path = "x/y.das", id = "x/y", group = "x", timeout_seconds = 2)
 
-[test]
+[test(description = "a skipped file never spawns, a clean child is ok, a child past its timeout is killed keeping its arms and an unrunnable binary reports nothing measured", timeout = 1200)]
 def test_run_bench_file(t : T?) {
     with_temp_dir("bench_run_") $(root) {
         t |> run("a skipped file never spawns and carries its reason") @(tt : T?) {
@@ -257,7 +257,10 @@ def test_run_bench_file(t : T?) {
         }
         t |> run("a child that outlives timeout_seconds is killed; the arms it printed survive") @(tt : T?) {
             fake_repo(root, "hang")
-            let res <- run_bench_file(get_host_binary(), root, bench_file(), "interp", RunLimits(timeout_seconds = 20))
+            // the fake prints its one arm at once and then hangs; the
+            // limit only has to outlive that print
+            let res <- run_bench_file(get_host_binary(), root, bench_file(), "interp",
+                                      RunLimits(timeout_seconds = 3))
             tt |> equal(res.status, FileStatus.timeout)
             tt |> success(find(res.message, "timeout_seconds") >= 0, "message names the knob")
             tt |> equal(length(res.samples), 1, "the arm it printed before the kill stands")
@@ -270,7 +273,7 @@ def test_run_bench_file(t : T?) {
     }
 }
 
-[test]
+[test(description = "the jit probe reports the lane available on a daslang that runs it and names the binary that cannot", timeout = 1200)]
 def test_probe_jit(t : T?) {
     t |> run("a daslang that runs the probe reports the lane available; one that cannot run says so") @(tt : T?) {
         tt |> equal(probe_jit(get_host_binary()), "", "the running host prints the marker")
@@ -297,7 +300,7 @@ def private load_cfg(dir : string) : SuiteConfig {
     return <- load_suite_config(path_join(dir, "suite.json"), error)
 }
 
-[test]
+[test(description = "a well-formed suite config parses with its overrides and a missing, unparseable or out-of-range one fails closed naming the fault")]
 def test_load_suite_config(t : T?) {
     with_temp_dir("bench_stand_") $(dir) {
         t |> run("a well-formed config parses with its overrides") @(tt : T?) {
@@ -337,7 +340,7 @@ def test_load_suite_config(t : T?) {
     }
 }
 
-[test]
+[test(description = "suite discovery excludes helpers, test dirs and non-das files, sorts the rest, applies overrides and reports an override naming a missing file")]
 def test_discover_files(t : T?) {
     with_temp_dir("bench_stand_") $(dir) {
         fwrite(path_join(dir, "suite.json"), good_config())

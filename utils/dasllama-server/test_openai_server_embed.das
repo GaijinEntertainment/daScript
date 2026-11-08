@@ -183,7 +183,7 @@ def private served_beside_chat(t : T?; before, after : EmbedStats; device_box : 
     t |> success(after.chat_backend == "gpu:resident" && after.chat_holds_gpu, "beside the chat slot's model, resident on the engine's tier ({after.chat_backend}, holds_gpu {after.chat_holds_gpu})")
 }
 
-[test]
+[test(description = "a GGUF that names its pooling is an embedding model and a chat model's names none")]
 def test_embedding_gguf(t : T?) {
     return if (model_missing(t, [EMB_PATH, CHAT_PATH]))
     t |> run("a GGUF that names its pooling is an embedding model; a chat model's names none") @(t : T?) {
@@ -193,7 +193,7 @@ def test_embedding_gguf(t : T?) {
     }
 }
 
-[test]
+[test(description = "an embedding worker serves vectors that match the reference alongside a chat slot", timeout = 1200)]
 def test_embedding_worker(t : T?) {
     return if (model_missing(t, [EMB_PATH, CHAT_PATH]))
     allow_cpu_prefill()
@@ -276,7 +276,7 @@ def test_embedding_worker(t : T?) {
 
 //! A worker that cannot load degrades its model: the boot serves on, the model is off /v1/models and serves nothing,
 //! and the `embed` block carries the reason.
-[test]
+[test(description = "a worker that cannot load degrades its model: the boot serves on, the model leaves /v1/models and the embed block carries the reason", timeout = 1200)]
 def test_embedding_worker_load_failure(t : T?) {
     return if (model_missing(t, CHAT_PATH))
     let broken = path_join(test_temp_dir(), "broken-embedder.gguf")
@@ -328,7 +328,7 @@ def private vulkan_device_box(t : T?) : bool {
 
 //! With DASLLAMA_GPU unset the worker's context arms its device tier off the want the server hands it alone: the want the
 //! roster's slot gets reaches the worker (`add_embedding_model`'s `gpu_want`), and the worker serves on the device.
-[test]
+[test(description = "the want a roster slot gets reaches the embedding worker, which then serves on the device", timeout = 1200)]
 def test_embedding_worker_gpu_want(t : T?) {
     return if (model_missing(t, EMB_PATH) || !vulkan_device_box(t))
     let env_was = env_value_of("DASLLAMA_GPU")
@@ -356,7 +356,7 @@ def test_embedding_worker_gpu_want(t : T?) {
 
 //! A chat slot whose model is a trimmed vulkan lane and whose streams cannot each hold a device region is refused at the
 //! server's start, by name - never at its first prompt; the same boot with a region a stream starts (`test_embedding_worker`).
-[test]
+[test(description = "a trimmed vulkan chat slot whose streams cannot each hold a device region is refused at the server's start by name", timeout = 1200)]
 def test_trimmed_chat_refused_at_start(t : T?) {
     return if (model_missing(t, [EMB_PATH, CHAT_PATH]) || !vulkan_device_box(t))
     var refusal = ""
@@ -392,7 +392,7 @@ def test_trimmed_chat_refused_at_start(t : T?) {
 
 //! A chat model named in /v1/embeddings whose lane is planes-trimmed embeds in a free device region: with every region
 //! held by a live stream the request is refused 503, by reason, and once a stream finishes the same request answers 200.
-[test]
+[test(description = "a trimmed chat model's embedding is refused 503 while every device region is held and answers 200 once a stream finishes", timeout = 1200)]
 def test_trimmed_chat_embedding_waits_for_a_region(t : T?) {
     return if (model_missing(t, [EMB_PATH, CHAT_PATH]) || !vulkan_device_box(t))
     let ask = "\{\"model\":\"chat\",\"input\":\"{TEXT}\"}"
@@ -499,7 +499,7 @@ def private bench_hold_refuses(t : T?; client : OpenAIClient; var bench_hold : A
 //! embedding model; an embedder with no context of its own serves min(trained, EMB_SCRATCH_TOKENS) and an explicit one past
 //! it serves whole; a worker's answer wakes the engine; a job that panics answers 500 and the worker serves on; past
 //! EMB_QUEUE_LIMIT pending a request is refused 503.
-[test]
+[test(description = "an embeddings-only server refuses during a bench hold, routes the default, sizes the context, wakes the engine, survives a panic and refuses past the queue limit", timeout = 1200)]
 def test_embedding_worker_seams(t : T?) {
     return if (model_missing(t, EMB_PATH))
     let trained = trained_ctx()
@@ -578,7 +578,7 @@ def test_embedding_worker_seams(t : T?) {
 //! main.das's boot from a config roster holding a chat GGUF and an embedding GGUF - the embedding one marked default: the
 //! embedding model lands on a worker (the `embed` block, at the scratch budget's context), never an engine slot, and the
 //! chat model takes the default, so a request naming no model embeds on the chat slot.
-[test]
+[test(description = "a config roster's embedding GGUF lands on a worker, never an engine slot, and the chat model takes the default", timeout = 1200)]
 def test_roster_routes_an_embedding_gguf(t : T?) {
     return if (model_missing(t, [EMB_PATH, CHAT_PATH]))
     let config = build_string() $(var w) {

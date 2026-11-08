@@ -47,7 +47,7 @@ by category, idle %, parallelism, publish count).
 `main.das` (app + dock layout + live commands), `tl_model.das` (trace model), `tl_loader.das`
 (fast rigid-format parser), `tl_lod.das` (per-lane bucket mipmaps), `tl_view.das` (canvas +
 cached draw runs), `tl_stats.das` (range statistics), `tl_launch.das` (subprocess launch +
-file watch). Tests are co-located (`test_tl_*.das`):
+file watch). Tests are co-located (`test_tl.das`):
 
 ```
 bin/Release/daslang.exe dastest/dastest.das -- --test utils/jobque-timeline
