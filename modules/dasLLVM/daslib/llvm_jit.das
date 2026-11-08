@@ -784,7 +784,20 @@ class public LlvmJitVisitor : AstVisitor {
         if (is_never_fast_math(fun.annotations)) {
             LLVMAddTargetDependentFunctionAttr(ffunc, JIT_NEVER_FAST_MATH_ATTR, "")
         }
+        mark_strict_aliasing(ffunc, fun)
+        mark_strict_aliasing(wfunc, fun)
         thisFunc = null
+    }
+
+    //! `[hint(strict_aliasing)]` opts in whatever the body does; the
+    //! program-wide exclusion set opts out; a block literal follows its
+    //! enclosing function
+    def mark_strict_aliasing(fn : LLVMOpaqueValue?; owner : FunctionPtr) {
+        if (has_hint_flag(owner.annotations, "strict_aliasing")) {
+            LLVMAddTargetDependentFunctionAttr(fn, JIT_STRICT_ALIASING_ATTR, "")
+        } elif (g_strict_aliasing_excluded |> key_exists(hash(get_mangled_name(owner)))) {
+            LLVMAddTargetDependentFunctionAttr(fn, JIT_NO_STRICT_ALIASING_ATTR, "")
+        }
     }
 
     // --jit-split-modules: a direct call may target a function whose pair lives in a SIBLING
@@ -6765,6 +6778,10 @@ class public LlvmJitVisitor : AstVisitor {
             LLVMAddTargetDependentFunctionAttr(ffunc, JIT_NEVER_FAST_MATH_ATTR, "")
         }
         wfunc = LLVMGetNamedFunction(g_mod, fnmna.publ())
+        if (func != null) {
+            mark_strict_aliasing(ffunc, func)
+            mark_strict_aliasing(wfunc, func)
+        }
         // build wrapper function
         build_wrapper_function(fnmna, block_das_name(thisBlock, func), thisBlock.arguments, thisBlock.returnType, isCmres, captureType, thisBlock.at)
         debug_before_block(thisBlock, func)

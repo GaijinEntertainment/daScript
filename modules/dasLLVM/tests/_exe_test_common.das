@@ -52,6 +52,16 @@ def named_block_ir(fn_ir : string; block_name : string) : string {
     return close < 0 ? body : slice(body, 0, close)
 }
 
+//! the implementation of the fixture function `name` taking
+//! (float?, int?, int?), and its `while_body` block
+def scale_loop_of(t : T?; out : string; name : string) : tuple<ir : string; body : string> {
+    let ir = function_ir(out, "`{name} 1`Lt`f`Gt`? C1`Lt`i`Gt`? C1`Lt`i`Gt`? implementation")
+    t |> success(!empty(ir), "the dump carries {name}: {tail(out)}")
+    let body = named_block_ir(ir, "while_body")
+    t |> success(!empty(body), "{name} keeps a while_body block:\n{ir}")
+    return (ir = ir, body = body)
+}
+
 //! the output of `root` run under -jit with --jit-dump and `extra`
 //! after the separator, checked to exit 0; -jit-no-cache, since a
 //! cache hit runs no codegen and prints no dump

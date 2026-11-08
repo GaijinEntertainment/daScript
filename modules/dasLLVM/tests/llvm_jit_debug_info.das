@@ -62,7 +62,9 @@ def private dbg_line_of(dump : string; ir : string) : int {
     return -1 if (at < 0)
     let rest = slice(ir, at + length(", !dbg "))
     let eol = find(rest, "\n")
-    let mdref = eol < 0 ? rest : slice(rest, 0, eol)
+    let attachments = eol < 0 ? rest : slice(rest, 0, eol)
+    let next_md = find(attachments, ",")   // other attachments (`, !tbaa !N`) follow the dbg one
+    let mdref = next_md < 0 ? attachments : slice(attachments, 0, next_md)
     let decl = find(dump, "\n{mdref} = !DILocation(line: ")
     return -1 if (decl < 0)
     let after = slice(dump, decl + length("\n{mdref} = !DILocation(line: "))

@@ -2012,7 +2012,9 @@ def build_cmove_nz(var ctx : JitCtx; val : LLVMOpaqueValue?; blk : block) {   //
 def build_write_n_values(var ctx : JitCtx; iptr, value, ival, isize : LLVMOpaqueValue?; count : int) {
     var ptr = LLVMBuildLoad2(ctx.builder, LLVMPointerType(ctx.types.LLVMInt4Type(), 0u), iptr, "")
     for (_i in range(count)) {
-        LLVMSetAlignment(LLVMBuildStore(ctx.builder, value, ptr), 4u)
+        var st = LLVMBuildStore(ctx.builder, value, ptr)
+        LLVMSetAlignment(st, 4u)
+        mark_untyped_access(ctx.ctx, st)
         ptr = LLVMBuildGEP2(ctx.builder, ctx.types.LLVMInt4Type(), ptr, LLVMConstInt(ctx.types.t_int64, 1ul, 0), "")
     }
     LLVMBuildStore(ctx.builder, LLVMBuildSub(ctx.builder, ival, LLVMConstInt(ctx.types.t_int64, uint64(count), 0), ""), isize)
@@ -2075,7 +2077,7 @@ def build_write_if_cond(ctx : JitCtx; cond, ptr, value : LLVMOpaqueValue?) {
     LLVMBuildCondBr(ctx.builder, cond, write, skip)
 // write:
     LLVMPositionBuilderAtEnd(ctx.builder, write)
-    LLVMBuildStore(ctx.builder, value, ptr)
+    mark_untyped_access(ctx.ctx, LLVMBuildStore(ctx.builder, value, ptr))
 // *ptr = value
     LLVMBuildBr(ctx.builder, skip)
 // skip:

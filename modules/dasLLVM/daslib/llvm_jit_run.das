@@ -37,24 +37,110 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0xfa273d06cf45ca6aul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x89c4c5329f1262deul
+
+//! every instruction of `fn`, block by block
+def private for_each_instruction(fn : LLVMOpaqueValue?; blk : block<(inst : LLVMOpaqueValue?)>) {
+    var bb = LLVMGetFirstBasicBlock(fn)
+    while (bb != null) {
+        var inst = LLVMGetFirstInstruction(bb)
+        while (inst != null) {
+            invoke(blk, inst)
+            inst = LLVMGetNextInstruction(inst)
+        }
+        bb = LLVMGetNextBasicBlock(bb)
+    }
+}
 
 [arch(at = "../ARCHITECTURE_FAST_MATH.md#never-fast-math")]
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
     var fn = LLVMGetFirstFunction(m)
     while (fn != null) {
-        let never_fast_math = LLVMGetStringAttributeAtIndex(fn, 0xFFFFFFFFu, JIT_NEVER_FAST_MATH_ATTR, uint(length(JIT_NEVER_FAST_MATH_ATTR))) != null
-        var bb = never_fast_math ? null : LLVMGetFirstBasicBlock(fn)
-        while (bb != null) {
-            var inst = LLVMGetFirstInstruction(bb)
-            while (inst != null) {
+        if (!has_fn_attr(fn, JIT_NEVER_FAST_MATH_ATTR)) {
+            for_each_instruction(fn) $(inst) {
                 // authored flags win — the blanket stamp only fills instructions with no explicit FMF
                 if (LLVMCanValueUseFastMathFlags(inst) != 0 && LLVMGetFastMathFlags(inst) == 0u) {
                     LLVMSetFastMathFlags(inst, 0x29u)   // reassoc|nsz|contract (see header note)
                 }
-                inst = LLVMGetNextInstruction(inst)
             }
-            bb = LLVMGetNextBasicBlock(bb)
+        }
+        fn = LLVMGetNextFunction(fn)
+    }
+}
+
+//! the TBAA class of an access of LLVM type `ty`: float and double
+//! each their own; wider integers, pointers and half one class; ""
+//! (aliases everything) for bytes, bools, vectors and aggregates
+def private tbaa_class_of(ty : LLVMOpaqueType?) : string {
+    let kind = LLVMGetTypeKind(ty)
+    if (kind == LLVMTypeKind.LLVMIntegerTypeKind) {
+        return LLVMGetIntTypeWidth(ty) <= 8u ? "" : "integral"
+    } elif (kind == LLVMTypeKind.LLVMPointerTypeKind || kind == LLVMTypeKind.LLVMHalfTypeKind) {
+        return "integral"
+    } elif (kind == LLVMTypeKind.LLVMFloatTypeKind) {
+        return "float"
+    } elif (kind == LLVMTypeKind.LLVMDoubleTypeKind) {
+        return "double"
+    }
+    return ""
+}
+
+def private has_fn_attr(fn : LLVMOpaqueValue?; name : string) : bool =>
+    LLVMGetStringAttributeAtIndex(fn, 0xFFFFFFFFu, name, uint(length(name))) != null
+
+//! the TBAA tree for one module: a root, one scalar node per access
+//! class, one access tag per node
+struct private TbaaTree {
+    root : LLVMOpaqueMetadata?
+    zero : LLVMOpaqueMetadata?
+    tags : table<string; LLVMOpaqueValue?>
+}
+
+def private tbaa_tree() : TbaaTree {
+    var tree : TbaaTree
+    let root_name = "daslang TBAA"
+    var root_ops <- [LLVMMDStringInContext2(g_ctx, root_name, uint64(long_length(root_name)))]
+    tree.root = LLVMMDNodeInContext2(g_ctx, unsafe(addr(root_ops[0])), 1ul)
+    tree.zero = LLVMValueAsMetadata(LLVMConstInt(LLVMInt64TypeInContext(g_ctx), 0ul, 0))
+    return <- tree
+}
+
+def private tbaa_tag(var tree : TbaaTree; name : string) : LLVMOpaqueValue? {
+    if (tree.tags |> key_exists(name)) {
+        return tree.tags[name]
+    }
+    var name_md = LLVMMDStringInContext2(g_ctx, name, uint64(long_length(name)))
+    var scalar_ops <- [name_md, tree.root, tree.zero]
+    var scalar = LLVMMDNodeInContext2(g_ctx, unsafe(addr(scalar_ops[0])), 3ul)
+    var tag_ops <- [scalar, scalar, tree.zero]
+    var tag = LLVMMetadataAsValue(g_ctx, LLVMMDNodeInContext2(g_ctx, unsafe(addr(tag_ops[0])), 3ul))
+    tree.tags[name] = tag
+    return tag
+}
+
+//! a function under strict aliasing - `[hint(strict_aliasing)]`, or
+//! the program option with no opt-out - gets a TBAA tag on every load
+//! and store, so accesses of two different classes never alias
+def private apply_strict_aliasing_to_module(m : LLVMOpaqueModule?) {
+    let tbaa_kind = LLVMGetMDKindIDInContext(g_ctx, "tbaa", 4u)
+    let untyped_kind = LLVMGetMDKindIDInContext(g_ctx, JIT_UNTYPED_MD, uint(length(JIT_UNTYPED_MD)))
+    var tree <- tbaa_tree()
+    var fn = LLVMGetFirstFunction(m)
+    while (fn != null) {
+        let opted_in = has_fn_attr(fn, JIT_STRICT_ALIASING_ATTR)
+        let opted_out = has_fn_attr(fn, JIT_NO_STRICT_ALIASING_ATTR)
+        if (opted_in || (g_jit_strict_aliasing && !opted_out)) {
+            for_each_instruction(fn) $(inst) {
+                let op = LLVMGetInstructionOpcode(inst)
+                let typed = LLVMGetMetadata(inst, untyped_kind) == null
+                if (typed && (op == LLVMOpcode.LLVMLoad || op == LLVMOpcode.LLVMStore)) {
+                    let accessed = op == LLVMOpcode.LLVMLoad ? inst : LLVMGetOperand(inst, 0u)
+                    let name = tbaa_class_of(LLVMTypeOf(accessed))
+                    if (!empty(name)) {
+                        LLVMSetMetadata(inst, tbaa_kind, tbaa_tag(tree, name))
+                    }
+                }
+            }
         }
         fn = LLVMGetNextFunction(fn)
     }
@@ -428,6 +514,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
         if (g_jit_fast_math) {
             apply_fast_math_to_module(g_mod)
         }
+        apply_strict_aliasing_to_module(g_mod)
         g_split_parts |> push(JitSplitPart(ctx = g_ctx, mod = g_mod, engine = g_engine, prim_t = g_prim_t,
             tm = create_default_target_machine(codegen_level, use_host_cpu),
             pbo = create_jit_pass_builder_options(LLVM_INLINE_THRESHOLD),
@@ -466,6 +553,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
             if (g_jit_fast_math) {
                 apply_fast_math_to_module(g_mod)
             }
+            apply_strict_aliasing_to_module(g_mod)
             let obj_final = artifact_path("{output_path}.p{length(order)}_{ptag}", JitArtifact.object)
             let obj = "{obj_final}.{publish_token}.tmp"
             objs |> push(obj_final)
@@ -851,6 +939,7 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
             if (g_jit_fast_math) {
                 apply_fast_math_to_module(g_mod)   // EXPERIMENT: stamp all FP ops fast (non-bit-exact ceiling)
             }
+            apply_strict_aliasing_to_module(g_mod)
             if (use_host_cpu && !(compile_only || emit_aot_object || gen_lib || gen_wasm || gen_exe || use_dll)) {
                 stamp_host_target_attrs(g_mod)   // the module runs on the in-memory engine, which carries no cpu or features of its own
             }
