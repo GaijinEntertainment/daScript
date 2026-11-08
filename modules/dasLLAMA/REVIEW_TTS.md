@@ -1,27 +1,30 @@
 # dasLLAMA text-to-speech Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_TTS.md`, `ARCHITECTURE_TTS_MEMORY.md`, `ARCHITECTURE_POCKET.md`,
-`ARCHITECTURE_GPU.md`. Planned work: `followup_general.md`.
+docs: `ARCHITECTURE_TTS.md`, `ARCHITECTURE_TTS_FRONT_END.md`, `ARCHITECTURE_TTS_MEMORY.md`,
+`ARCHITECTURE_POCKET.md`, `ARCHITECTURE_GPU.md`. Planned work: `followup_general.md`.
 
 A TTS source file is a file the glob `dasllama/dasllama_tts*.das` matches,
 `dasllama/dasllama_styletts2.das`, a TTS family file - a `dasllama/dasllama_<family>.das` holding
-exactly one voice model's code (`dasllama/dasllama_kitten.das`, `dasllama/dasllama_kokoro.das`,
-`dasllama/dasllama_pocket.das`), never the two-family carrier `dasllama/dasllama_styletts2.das` -
-or a text front-end file (`dasllama/dasllama_textnorm.das`, `dasllama/dasllama_postag.das`,
-`dasllama/dasllama_g2p.das`).
+exactly one voice model's code, never the two-family carrier `dasllama/dasllama_styletts2.das` -
+or a text front-end file - a `dasllama/` file holding one stage of the pass that turns text into
+phonemes in any language, or the pack shape or codepoint scanning those stages share.
 
-**A family's synthesis entry point (`styletts2_synthesize`, `pocket_synthesize`) carries
-`[hot_path]`.**
+**A synthesis entry point of a family (`styletts2_synthesize`, `pocket_synthesize`) without
+`[hot_path]` is a defect.**
 
-**A text front-end stage (`dasllama/dasllama_textnorm.das`, `dasllama/dasllama_postag.das`,
-`dasllama/dasllama_g2p.das`) called below a family's synthesis entry point is a defect -
-phonemize before the entry point.**
+**A function of a text front-end file that a family's synthesis entry point reaches, directly or
+through its callees, is a defect - phonemize before the entry point.**
 
-**An array or table - a module global, or a field of the activation scratch struct one synthesis
-reuses for every stage (`St2Scratch`, `PocketScratch`; never the model struct) - that a synthesis
-sizes or fills, or that model load fills for syntheses to reuse, in a TTS source file, that is
-not `@scratch` on its declaration or on the callee parameter it grows through, is a defect.** The
+**A diff that adds or changes an entry of `RESPELL_WORD` in `dasllama/dasllama_g2p_ru.das` whose
+value has a different count of the vowels а е ё и о у ы э ю я from its key is a defect - respell
+within the key's vowel count.** The stress mark lands on the same-numbered vowel of the respelled
+word, so a changed count moves the stress.
+
+**In a TTS source file, an array or table that a synthesis sizes or fills, or that model load fills
+for later syntheses to reuse, is `@scratch` - on its declaration or on the callee parameter it grows
+through - or the diff is a defect. This covers module globals and the fields of the activation
+scratch struct of a synthesis (`St2Scratch`, `PocketScratch`), never the model struct.** The
 annotation is what lets `[hot_path]` hold through every stage the entry point drives.
 
 **A function that exists only for tests, debugging or profiling - a stats, trace or dump reader
@@ -32,21 +35,20 @@ a kernel `dasllama/dasllama_tts_blocks.das` exports is a defect, hand-written do
 loops included.**
 
 **A block in `dasllama/dasllama_tts_blocks.das` that gains a rows form (token-major [T][C])
-ships its channel-major form in the same change.** The channel-major form is what the parity rail
-and any GPU driver are checked against.
+ships its channel-major ([C][T]) form in the same change.** The channel-major form is what the
+parity tests and any GPU driver are checked against.
 
 **A rows kernel whose result depends on how its row blocks split across the parallel workers
 is a defect.** How a rows kernel stays split-invariant is `ARCHITECTURE_TTS.md#tts-two-layouts`.
 
-**A diff that adds to `dasllama/dasllama_tts_blocks.das` a function that writes floats it
-computed, not copied - exported, or private and reached from an export; a new exported wrapper
-over an existing function counts - or a new weight lane of one ships a numeric cell in the same
-change, in the `tests/` file that holds that kernel family's cells (`test_tts_blocks.das`;
-`test_tower_asr_kernels.das` for the shared resamplers), holding it bit for bit or within a bar the
-cell names against one of: the leaf it applies per row - the single-row reference kernel it calls
-for each row; a double-precision form of its arithmetic; or expected values the test computes
-itself from the function's definition without calling any `dasllama/dasllama_tts_blocks.das`
-function.**
+**A diff that adds to `dasllama/dasllama_tts_blocks.das` a function that writes floats it computed
+rather than copied - an export, a private function an export reaches, or a new exported wrapper
+over an existing function - or adds a weight lane (the number format a model stores and multiplies
+its weights in: f32, q8) to one, ships in the same change a numeric cell in `tests/test_tts_blocks.das`
+(`tests/test_tower_asr_kernels.das` for the resamplers shared with ASR). The cell holds the function,
+bit for bit or within a bar it names, against one of: the single-row reference kernel it calls for
+each row, a double-precision form of its arithmetic, or expected values the test computes from the
+definition of the function without calling into `dasllama/dasllama_tts_blocks.das`.**
 
 **A diff that adds a rows form to `dasllama/dasllama_tts_blocks.das` also ships a cell holding it
 against its channel-major form within the dot-envelope bar - each element within a tolerance
@@ -58,8 +60,9 @@ whole-row form, in the same change.**
 
 **A function, weight lane or window form a diff adds to `dasllama/dasllama_tts_blocks.das` whose
 rows split across workers - in its own `maybe_parallel_for` / `lanes_for_work`, or in a backend
-kernel it hands a row block to - also ships a bit-equality cell on both axes that move the split,
-the batch lane cap and the jobque worker limit.**
+kernel it hands a row block to - also ships a bit-equality cell on both axes that move the split:
+the batch lane cap (`set_batch_lane_cap`, the cap `matmul_chunks` hands `lanes_for_work`) and the
+jobque worker limit (`set_jobque_worker_limit`).**
 
 **A `read_*` call in `dasllama/dasllama_styletts2.das` that leaves a conv or linear on the
 channel-major default while the forward assembly runs it through a rows kernel is a defect -
@@ -74,7 +77,7 @@ in another context never arrives.
 **A diff that reorders the float operations, or changes the rounding of any step, of the phase
 the CPU harmonic source builds in `dasllama/dasllama_tts_blocks.das` - the cycles, the resamples,
 the cumulative sum - is a defect.** One float32 ulp of the accumulated phase is a hundredth of a
-radian, so only the reference's own operation order reproduces the reference.
+radian, so only the operation order of the upstream PyTorch model (the reference) reproduces it.
 
 **A diff that moves or rewrites any step of the phase the CPU harmonic source builds in
 `dasllama/dasllama_tts_blocks.das`, without changing its arithmetic, ships in the PR body the PCM
@@ -85,10 +88,11 @@ match.**
 step - implemented in a TTS family file is a defect; it goes in
 `dasllama/dasllama_tts_blocks.das`.**
 
-**Code in `dasllama/dasllama_tts_blocks.das` or `dasllama/dasllama_styletts2.das` that branches on
-which family is running, or hard-codes a constant or a symbol or token rule only one family uses, is
-a defect - the family file passes the constant in as an argument, or the family's data record on
-the shared carrier holds it, filled by its reader from the gguf or the image
+**Code in `dasllama/dasllama_tts_blocks.das` or `dasllama/dasllama_styletts2.das` - outside the
+family records' reader and writer, `stage_family_data` and `serialize_image_meta` - that branches
+on which family is running, or hard-codes a constant or a symbol or token rule only one family
+uses, is a defect - the family file passes the constant in as an argument, or the family's data
+record on the shared carrier holds it, filled by its reader from the gguf or the image
 (`ARCHITECTURE_TTS.md#tts-image-rail`).**
 
 **A diff that adds a field to a family's data record on the shared carrier (`KittenFamily`,
@@ -96,13 +100,27 @@ the shared carrier holds it, filled by its reader from the gguf or the image
 `verify` beside it (`dasllama/dasllama_styletts2.das`), in the same change** - an unwritten
 field reads back zero from a mapped image.
 
-**A diff that changes what a flag-free run synthesizes - a run with no flags and no environment
-overrides, on the CPU chain or on a GPU TTS seat that serves by default
-(`ARCHITECTURE_GPU.md#gpu-backends`), the text front end included (a moved phoneme of the rig
-corpus, which `test_corpus_phonemes` in `tests/test_tts_g2p.das` decides) - ships in the PR body
-the WER and UTMOS of `harness/tts_rig.py`, before and after, at the rig's voice, on every model
-the change reaches and every weight lane that model can take - the unpinned default and each
-pin - or the PCM hash of one flag-free synthesis per family, before and after, the two matching.**
+**A diff that changes what a flag-free run synthesizes from English text on a model it
+synthesized before - a run with no flags and no environment overrides, on the CPU chain or on a GPU
+TTS seat (a stage's device hook a tower driver fills) that serves by default
+(`ARCHITECTURE_GPU.md#gpu-backends`), the English front end included (a moved phoneme of
+`test_corpus_phonemes` in `tests/test_tts_g2p.das`) - ships in the PR body the WER and UTMOS of
+`harness/tts_rig.py`, before and after, at the rig's voice, on every model the change reaches and
+every weight lane that model can take - the unpinned default and each pin - or the PCM hash of one
+flag-free synthesis per model the change reaches, of a text whose synthesis runs the changed code,
+before and after, the two matching.**
+
+**A diff that changes what a flag-free run synthesizes from text in another language, on a model
+that synthesized that language before - a moved phoneme of that language's corpus cell
+(`test_corpus_ru` in `tests/test_tts_g2p_ru.das`) included - lists in the PR body each moved
+phoneme of that cell's fixture with the reason it moved, and names the `followup_general.md` row
+under which that language's rig arm is owed.** The rig measures English alone.
+
+**A diff that newly serves a model or a language no flag-free run could synthesize before ships,
+in the same change, a facade cell on that model - a synthesis whose sample count is the front
+end's own phoneme string's and not another reading's - and names in the PR body the
+`followup_general.md` row under which its oracle dump and its rig arm are owed.** The rig
+measures English alone, and a model that could not speak before has no hash to match.
 
 **A diff that changes what a GPU TTS seat's chain computes, on a seat that is not armed by
 default, ships in the PR body the WER and UTMOS of `harness/tts_rig.py` with that seat armed
@@ -111,13 +129,15 @@ the seat serves, on its served lane - or the PCM hash of one synthesis per famil
 armed, before and after, the two matching.** The rig measures what the seat's own cells cannot -
 the speech.
 
-**A text normalization or grapheme-to-phoneme error `harness/tts_rig.py`'s transcripts
-expose lands as a failing-first case in `tests/test_tts_textnorm.das` or
-`tests/test_tts_g2p.das` in the same change as its fix.**
+**A text normalization or grapheme-to-phoneme error that a transcript of `harness/tts_rig.py` or a
+listening pass exposes lands as a failing-first case in the test file of the front-end file the
+fix edits (`tests/test_tts_textnorm.das`, `tests/test_tts_g2p.das`, `tests/test_tts_textnorm_ru.das`,
+`tests/test_tts_g2p_ru.das`), in the same change as its fix.**
 
 **Never accept a voice or language a model's `caps()` does not declare, a cloning request when
 `caps().cloning` is false, or a speed other than 1.0 when `caps().speed` is false - panic at
-the call site instead.**
+the call site instead. A function taking a language code answers in that language, hands the text
+back untouched, or panics - never in another language.**
 
 **A diff that adds a windowed stage `dasllama/dasllama_styletts2.das` or a TTS family file
 assembles from kernels - one that runs its input a window at a time over a carry, the state one
@@ -126,22 +146,24 @@ over the whole input in one pass on the f32 lane and holds the two together with
 (a few ulp per element), in the `tests/` file that holds that stage's cells**
 (`ARCHITECTURE_TTS_MEMORY.md#tts-source-stream`, `ARCHITECTURE_POCKET.md#pocket-codec-stream`).
 
-**A Pocket codec conv (`dasllama/dasllama_pocket.das`) carries its causal context as the
-stream's carry - the rows its taps reach before a window, zero or edge-replicated ahead of the
-first (`ARCHITECTURE_POCKET.md#pocket-codec-stream`) - and a diff that pads one symmetrically or
-trims the final output by hand is a defect.**
+**A diff that pads a Pocket codec conv (`dasllama/dasllama_pocket.das`) symmetrically, or trims
+the final output by hand, is a defect - carry the causal context as the stream's carry: the rows
+its taps reach before a window, zero or edge-replicated ahead of the first
+(`ARCHITECTURE_POCKET.md#pocket-codec-stream`).**
 
 **A change to which quant format a published file stores a Pocket tensor in, or to its layout
 (`q8_linear` / `kq_tensor` / `head_q8_linear` / `dense_codec_conv` in
 `harness/convert_pocket.py`, `read_linear` / `read_conv_q8` and the K-quant branch in
-`dasllama/dasllama_pocket.das`), ships both sides in the same diff** - which tensors a format
-covers is written once in the converter and again in the reader.
+`dasllama/dasllama_pocket.das`), changes the converter side and the reader side together, in the
+same diff** - which tensors a format covers is written once in the converter and again in the
+reader.
 
-**A diff that changes what `harness/convert_pocket.py` writes into a published file re-mints
-that file and lands its new bytes and sha256 in `harness/tts_model_card.md` and
-`performance/model_specs.das`, and its new sha256 in every `examples/dasLLAMA/*/models.json`
-(repo root) pinning it, in the same change - or, where the change writes a key the file's driver
-did not have when the file was minted, leaves the file at its pinned bytes and names in its
-`performance/model_specs.das` recipe the converter commit that minted it.** The fetches refuse a
-file whose sha256 moved, and the card is what a reader downloads against; a file read as its own
-driver ran stays the voice its listeners judged.
+**A diff that changes what a TTS converter under `harness/` writes for a key a published file
+already carries re-mints that file and, in the same change, lands its new bytes and sha256 in
+`harness/tts_model_card.md` and `performance/model_specs.das` and its new sha256 in every
+`examples/dasLLAMA/*/models.json` (repo root) pinning it.** The fetches refuse a file whose
+sha256 moved, and the card is what a reader downloads against.
+
+**A diff that makes a TTS converter under `harness/` write a key a published file does not carry
+leaves that file at its pinned bytes and names, in its `performance/model_specs.das` recipe, the
+converter commit that minted it.** The published voice stays the one its listeners rated.

@@ -294,10 +294,11 @@ def private serialize_image_meta(var arch : Archive; var m : StyleTts2Model) {
     arch |> serialize_raw(m.q8)
     // the family records are hand-listed too, so each pins its count - an unwritten field reads back zero
     verify(count_meta_fields(m.kitten) == 2)   // grew KittenFamily? extend this list
-    verify(count_meta_fields(m.kokoro) == 1)   // grew KokoroFamily? extend this list
+    verify(count_meta_fields(m.kokoro) == 2)   // grew KokoroFamily? extend this list
     arch |> serialize(m.kitten.speed_priors)
     arch |> serialize(m.kitten.aliases)
     arch |> serialize(m.kokoro.sym)
+    arch |> serialize(m.kokoro.voice_langs)
 }
 
 [unused_argument(m)]
@@ -722,6 +723,17 @@ def private stage_family_data(m : GGUFMeta; bytes : array<uint8>#; var e : Style
         var inscope ids <- gguf_int_array(m, bytes, "kokoro.symbol_ids")
         for (c, i in cpts, ids) {
             e.kokoro.sym[int(c)] = int(i)
+        }
+        if (gguf_has(m, "kokoro.voice_langs")) {
+            var inscope langs <- gguf_str_array(m, bytes, "kokoro.voice_langs")
+            if (length(langs) != length(e.voice_names)) {
+                panic("dasLLAMA tts: kokoro.voice_langs names {length(langs)} languages for {length(e.voice_names)} voices - the converter writes one per styletts2.voices entry")
+            }
+            for (voice, lang in e.voice_names, langs) {
+                if (!empty(lang)) {
+                    e.kokoro.voice_langs[voice] = lang
+                }
+            }
         }
     }
 }

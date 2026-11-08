@@ -21,7 +21,7 @@ require strings
 //! /catalog document's `tts` list carries. A companion of the served set outside this list (the
 //! browser's American-only phoneme pack) is fetchable through `catalog_download_start_tts` and
 //! rides no ladder.
-let public TTS_FRONT_END_PACKS : array<string> <- ["tts_g2p.bin", "tts_postag.bin"]
+let public TTS_FRONT_END_PACKS : array<string> <- ["tts_g2p.bin", "tts_postag.bin", "tts_g2p_ru.bin"]
 
 //! A catalog row's pinned companion artifact: the file beside the model, its commit-pinned URL, its canonical size and sha
 //! (`file` "" = none).

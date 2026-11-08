@@ -31,16 +31,20 @@ struct TtsCorpusRow {
     heteronym : TtsHeteronym
 }
 
-//! The whole fixture, in file order. Panics on a missing or malformed file: the fixture is
-//! checked in, so its absence is a defect, never a skip.
-def load_tts_corpus() : array<TtsCorpusRow> {
-    let path = tts_corpus_path()
-    var rows : array<TtsCorpusRow>
+//! The rows of a checked-in fixture, `n` of them. Panics on a missing or malformed file: the fixture
+//! is checked in, so its absence is a defect, never a skip.
+def load_tts_fixture_rows(path, kind : string; n : int; var rows : array<auto>) {
     if (!load_json_file(path, rows)) {
-        panic("tts corpus fixture missing: {path}")
+        panic("tts {kind} fixture missing: {path}")
     }
-    if (length(rows) != 200) {
-        panic("tts corpus fixture has {length(rows)} rows, expected 200")
+    if (length(rows) != n) {
+        panic("tts {kind} fixture has {length(rows)} rows, expected {n}")
     }
+}
+
+//! The whole fixture, in file order.
+def load_tts_corpus() : array<TtsCorpusRow> {
+    var rows : array<TtsCorpusRow>
+    load_tts_fixture_rows(tts_corpus_path(), "corpus", 200, rows)
     return <- rows
 }

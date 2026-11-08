@@ -936,8 +936,8 @@ The FIO module implements file input/output and filesystem operations. It provid
 - `exit_now` - Ends the process at once with the given exit code: stdout and stderr are flushed, and nothing else runs - no `atexit` handler, no module teardown, no leak dump.
 - `get_env_variable` - Returns the string value of the environment variable with the given name, or an empty string if undefined.
 - `has_env_variable` - Returns true if an environment variable with the given name is defined in the current process environment.
-- `is_death_exit_code` - Read as a death by the shell's convention: 128 + N for POSIX signal N (a child's own exit(128+) reads the same), a negative NTSTATUS on Windows; -1, popen_timed_out, process_running are not.
-- `is_spawn_failure` - The exit code of a child that never ran: -1 when the spawn itself failed, 126 and 127 when the child could not exec its program, as a shell reports them; on Windows a child's own exit(-1) reads the same.
+- `is_death_exit_code`
+- `is_spawn_failure`
 - `popen` - Opens a pipe to the given shell command, provides the resulting FILE pointer to the block, and returns the process exit code - on POSIX 128 + N when the shell is killed by signal N.
 - `popen_argv` - Spawns a subprocess directly via argv, bypassing the shell, in the directory `cwd` (empty inherits the caller's) with each `env` entry, `KEY=VALUE`, applied over the inherited environment.
 - `popen_argv_pipe` - Spawns a subprocess with bidirectional pipes connected to its stdin and stdout (child stderr is merged into stdout).
@@ -3405,10 +3405,11 @@ Text to speech in pure daslang: load a converted StyleTTS2-lineage GGUF (KittenT
 - `caps` - What the loaded model offers: the canonical voice names the front end can drive, each with its language (a voice whose language it does not phonemize is left out; aliases resolve at synthesis), the PCM rate, the languages, whether it clones a voice, whether a speed applies.
 - `finalize` - Free the model's planes, the carrier and both packs; `delete m` runs it.
 - `g2p_pack_path`
-- `load_tts_model` - Load a TTS model: a converted GGUF (KittenTTS, Kokoro or Pocket TTS, picked from its architecture) or its prepared `.dlim` image; the phoneme families read `tts_g2p.bin` and `tts_postag.bin` from the same directory (Pocket needs neither).
-- `tts_finish_styletts2` - A StyleTTS2 carrier in `m.model`, loaded or minted from `path`, made a facade: its family's kind, the phoneme packs its front end reads from the same directory, the voices it cannot speak said once.
-- `tts_has_phonemes` - Whether `tts_phonemize` has an answer for this model: the phoneme families yes, a Pocket model no - it reads text, and its chunks carry no phoneme string.
-- `tts_needs_packs` - Whether the model at `path` reads the front-end packs (`tts_g2p.bin`, `tts_postag.bin`) from its directory: the phoneme families do, a Pocket TTS GGUF reads text and needs neither - decided before any load, by the architecture test `load_tts_model` makes (a `.dlim` is a phoneme family).
+- `load_tts_model` - Load a TTS model: a converted GGUF (KittenTTS, Kokoro or Pocket TTS, picked from its architecture) or its prepared `.dlim` image; a phoneme family reads the packs its voices' languages ask for from the same directory (`tts_pack_names`; Pocket needs none).
+- `tts_finish_styletts2` - A StyleTTS2 carrier in `m.model`, loaded or minted from `path`, made a facade: its family's kind, the packs its voices' languages ask for from the same directory (the English pair also where it merely sits there, for the Latin words inside another language's text), the voices it cannot speak said once.
+- `tts_has_phonemes` - Whether `tts_phonemize` has an answer for this model: the phoneme families yes, in the languages `caps().langs` lists (the two-argument form's English needs the English packs beside the model), a Pocket model no - it reads text.
+- `tts_needs_packs` - Whether the model at `path` reads any front-end pack from its directory: the phoneme families do (`tts_pack_names` says which), a Pocket TTS GGUF reads text and needs none - decided before any load, by the architecture test `load_tts_model` makes (a `.dlim` is a phoneme family).
+- `tts_pack_names` - The front-end packs the model at `path` reads from its directory, decided from the file's own metadata before any load: the phoneme pack tier the directory holds and `tts_postag.bin` where a voice speaks English, `tts_g2p_ru.bin` where one speaks Russian, none for a Pocket GGUF; a `.dlim` answers for the GGUF beside it, and names the English pair where none is.
 - `tts_voice_lang` - The language the front end reads `voice` in - a canonical name from `caps` or a family alias, resolved the way `synthesize` resolves it.
 
 ### Voices
@@ -3422,7 +3423,7 @@ Text to speech in pure daslang: load a converted StyleTTS2-lineage GGUF (KittenT
 
 - `tts_chunks` - The chunks a synthesis on this model takes, by the family's own driver rule: Kitten's appends a comma to a chunk the split left bare, Kokoro's sends the text as it is (its voices render an added mark as a breath), Pocket's splits on its tokenizer's sentence marks under a token budget.
 - `tts_normalize` - The spoken form of `text`: the normalization pass every synthesis runs first (rules alone - it reads no pack), where "Dr." reads "Doctor", "3.5" reads "three point five" and "$12" reads "twelve dollars".
-- `tts_phonemize` - The phonemes one already-normalized sentence becomes, in the front end's own American inventory (the tagger of `tts_postag.bin` labels the tokens, the grapheme-to-phoneme pass of `tts_g2p.bin` reads them); a family wanting other symbols rewrites them.
+- `tts_phonemize` - The phonemes one already-normalized sentence becomes, in the front end's own American inventory (`tts_postag.bin` tags the tokens, `tts_g2p.bin` reads them); a family wanting other symbols rewrites them.
 
 ### Synthesis
 
@@ -4780,33 +4781,33 @@ The ALGORITHM module provides array and collection manipulation algorithms inclu
 
 ### Search
 
-- `binary_search` - Returns true if val appears within the range [f, last).
-- `equal_range` - Returns a pair of indices [lower, upper) bounding the range of elements equal to val within [f, l).
-- `lower_bound` - Returns the index of the first element in the range [f, l) that is not less than val, or l if no such element is found.
-- `upper_bound` - Returns the index of the first element in the range [f, l) that is greater than val, or l if no such element is found.
+- `binary_search`
+- `equal_range`
+- `lower_bound`
+- `upper_bound`
 
 ### Array manipulation
 
-- `combine` - Returns a new array containing elements from a followed by b.
-- `erase_all` - Erases all elements equal to value from arr in O(n) time.
-- `fill` - Sets all elements of the array to the given value using clone.
-- `is_sorted` - Returns true if the array is sorted in non-descending order.
-- `max_element` - Returns the index of the maximum element in the array, or -1 if the array is empty.
-- `min_element` - Returns the index of the minimum element in the array, or -1 if the array is empty.
-- `reverse` - Reverses the elements of a in place.
-- `rotate` - Rotates the array so that the element at index mid becomes the first element.
-- `sort_unique` - Returns an array of elements from a, sorted and with duplicates removed.
-- `topological_sort` - Topological sort of a graph.
-- `unique` - Returns an array with adjacent duplicate elements removed.
+- `combine`
+- `erase_all`
+- `fill`
+- `is_sorted`
+- `max_element`
+- `min_element`
+- `reverse`
+- `rotate`
+- `sort_unique`
+- `topological_sort`
+- `unique`
 
 ### Table manipulation
 
-- `difference` - Returns the difference of two sets.
-- `identical` - Returns true if the two sets are identical.
-- `intersection` - Returns the intersection of two sets.
-- `is_subset` - Returns true if all elements of a are contained in b.
-- `symmetric_difference` - Returns the symmetric difference of two sets (elements in either set but not both).
-- `union` - Returns the union of two sets.
+- `difference`
+- `identical`
+- `intersection`
+- `is_subset`
+- `symmetric_difference`
+- `union`
 
 ## ansi_colors
 
@@ -4939,16 +4940,16 @@ The ARRAY_BOOST module extends array operations with temporary array views over 
 
 ### Temporary arrays
 
-- `temp_array` - Creates temporary array from the given object.
+- `temp_array`
 
 ### Empty check
 
-- `empty` - returns true if 'v' has 0 elements.
+- `empty`
 
 ### Sub-array view
 
-- `array_view` - creates a subview of an existing borrowed array, valid only within the block
-- `pod_view` - reads one raw POD value from borrowed bytes at an arbitrary, possibly unaligned, byte offset; bounds-checked byte copy — the alignment-free complement of the typed `array_view`
+- `array_view`
+- `pod_view`
 
 ## assert_once
 
@@ -5494,26 +5495,26 @@ The CONTRACTS module provides compile-time type constraints for generic function
 
 ### Function annotations
 
-- `expect_any_variant` - [expect_any_variant(argname)] contract, which only accepts variants
-- `expect_any_workhorse` - [expect_any_workhorse(argname)] contract, which only accepts workhorse types (int, float, etc) Workhorse types are: bool,int*,uint*,float*,double,range and urange, range64 and urange64, string,enumeration,and non-smart pointers
-- `expect_any_function` - [expect_any_function(argname)] contract, which only accepts functions
-- `expect_any_lambda` - [expect_any_lambda(argname)] contract, which only accepts lambdas
-- `expect_ref` - [expect_ref(argname)] contract, which only accepts references
-- `expect_any_bitfield` - [expect_any_bitfield(argname)] contract, which only accepts bitfields
-- `expect_value_handle` - [expect_value_handle(argname)] contract, which only accepts value handles
-- `expect_any_struct` - [expect_any_struct(argname)] contract, which only accepts structs (but not classes)
-- `expect_any_enum` - [expect_any_enum(argname)] contract, which only accepts enumerations
-- `expect_any_tuple` - [expect_any_tuple(argname)] contract, which only accepts tuples
-- `expect_any_numeric` - [expect_any_numeric(argname)] contract, which only accepts numeric types (int, float, etc)
-- `expect_any_array` - [expect_any_array(argname)] contract, which only accepts array<T>, T[], or das`vector<T>
-- `expect_any_vector_type` - [expect_any_vector_type(argname)] contract, which only accepts vector types, i.e.
-- `expect_pointer` - [expect_pointer(argname)] contract, which only accepts pointers
-- `expect_class` - [expect_class(argname)] contract, which only accepts class instances
-- `expect_any_workhorse_raw` - [expect_any_workhorse_raw(argname)] contract, which only accepts workhorse types which are raw (not pointer or bool)
+- `expect_any_variant`
+- `expect_any_workhorse`
+- `expect_any_function`
+- `expect_any_lambda`
+- `expect_ref`
+- `expect_any_bitfield`
+- `expect_value_handle`
+- `expect_any_struct`
+- `expect_any_enum`
+- `expect_any_tuple`
+- `expect_any_numeric`
+- `expect_any_array`
+- `expect_any_vector_type`
+- `expect_pointer`
+- `expect_class`
+- `expect_any_workhorse_raw`
 
 ### Type queries
 
-- `isYetAnotherVectorTemplate` - returns true if the given type declaration is a das::vector template bound on C++ side
+- `isYetAnotherVectorTemplate`
 
 ## coroutines
 
@@ -7204,23 +7205,23 @@ The QUOTE module provides quasiquotation support for AST construction. It allows
 
 ### Structures
 
-- `CaptureEntryInitData` - Initialization data for a captured variable entry.
-- `LineInfoInitData` - Initialization data for source line info reconstruction.
-- `EnumEntryInitData` - Initialization data for a quoted enum entry.
-- `AnnotationArgumentInitData` - Initialization data for a quoted annotation argument.
-- `FileInfoInitData` - Initialization data for reconstructing file info.
+- `CaptureEntryInitData`
+- `LineInfoInitData`
+- `EnumEntryInitData`
+- `AnnotationArgumentInitData`
+- `FileInfoInitData`
 
 ### Clone operations
 
-- `clone` - Clones an array of AnnotationArgumentInitData into an AnnotationArgumentList.
-- `clone_file_info` - Creates a FileInfo from a FileInfoInitData struct.
-- `clone_line_info` - Creates a LineInfo from a LineInfoInitData struct.
-- `resolve_file_info` - Stable FileInfo for reconstructed LineInfos: one interned dummy per (file name, tab size) (per context), instead of a fresh allocation per evaluation.
+- `clone`
+- `clone_file_info`
+- `clone_line_info`
+- `resolve_file_info`
 
 ### Conversion
 
-- `cvt_to_mks` - Converts an array of arguments into a MakeStruct pointer.
-- `make_alias_type_decl` - Reconstruction helper: a by-name alias TypeDecl, resolved by re-infer at the splice site.
+- `cvt_to_mks`
+- `make_alias_type_decl`
 
 ## random
 
@@ -7792,98 +7793,98 @@ The TEMPLATES_BOOST module extends template utilities with high-level macros for
 
 ### Structures
 
-- `Template` - This structure contains collection of substitution rules for a template.
+- `Template`
 
 ### Call macros
 
-- `qmacro_template_function` - Call macro for quoting named template functions.
-- `qmacro_variable` - This macro implements expression reification for variables.
-- `qmacro_type` - This macro implements type declaration reification 'qmacro_type'
-- `qmacro_function` - This macro implements expression reification for functions.
-- `qmacro` - This macro implements expression reification 'qmacro'
-- `qmacro_template_class` - Call macro for quoting named template class methods.
-- `qmacro_method` - This macro implements expression reification for class methods.
-- `qmacro_block` - This macro implements expression block reification 'qmacro_block'
-- `qmacro_expr` - This macro implements first line of the expression block reification 'qmacro_expr'
-- `qmacro_block_to_array` - This macro implements expression block to array reification 'qmacro_block_to_array'
+- `qmacro_template_function`
+- `qmacro_variable`
+- `qmacro_type`
+- `qmacro_function`
+- `qmacro`
+- `qmacro_template_class`
+- `qmacro_method`
+- `qmacro_block`
+- `qmacro_expr`
+- `qmacro_block_to_array`
 
 ### Template rules
 
-- `kaboomVarField` - Adds a rule to to the template to replace a variable field access with a prefix and suffix.
-- `renameCall` - Adds a rule to the template to rename a call.
-- `renameField` - Adds a rule to the template to rename any field lookup (., ?., as, is, etc)
-- `renameVariable` - Adds a rule to the template to rename a variable.
-- `replaceAnnotationArgument` - Adds a rule to the template to replace an annotation argument with the result of a callback.
-- `replaceArgumentWithList` - Adds a rule to the template to replace a block argument with a list of variables.
-- `replaceBlockArgument` - Adds a rule to the template to rename a block argument.
-- `replaceStructWithTypeDecl` - Adds a rule to the template to replace a type alias with another type alias, specified by type declaration.
-- `replaceType` - Adds a rule to the template to replace a type alias with another type alias, specified by name.
-- `replaceTypeWithTypeDecl` - Adds a rule to the template to replace a type alias with another type alias, specified by type declaration.
-- `replaceVarTag` - Adds a rule to the template to replace a variable tag with an expression.
-- `replaceVariable` - Adds a rule to the template to replace a variable with an expression.
-- `replaceVariableWithList` - Adds a rule to the template to replace a variable with an expression list.
+- `kaboomVarField`
+- `renameCall`
+- `renameField`
+- `renameVariable`
+- `replaceAnnotationArgument`
+- `replaceArgumentWithList`
+- `replaceBlockArgument`
+- `replaceStructWithTypeDecl`
+- `replaceType`
+- `replaceTypeWithTypeDecl`
+- `replaceVarTag`
+- `replaceVariable`
+- `replaceVariableWithList`
 
 ### Template application
 
-- `apply_template` - Applies the template to the given expression.
-- `bind_block_argument` - Clones the body of a block literal with its argument `argname` replaced by the expression `bound`, and returns it as a plain (argument-less) block.
-- `clone_and_rename_var` - Clones `src` and renames every `ExprVar` named `from_name` to `to_name`.
+- `apply_template`
+- `bind_block_argument`
+- `clone_and_rename_var`
 
 ### Expression helpers
 
-- `expression_at` - Force expression location, then return it.
-- `remove_deref` - Removes dereferences of the variable `varname` from the expression.
-- `visit_expression` - Visits the expression with the given visitor adapter.
+- `expression_at`
+- `remove_deref`
+- `visit_expression`
 
 ### Expression generation
 
-- `make_expression_block` - Create ExprBlock and move all expressions from expr to the list of the block.
+- `make_expression_block`
 
 ### Block helpers
 
-- `move_unquote_block` - Moves the corresponding block subexpression expression from the ExprMakeBlock.
-- `push_block_list` - Splice every statement from a `qmacro_block(...) { ...
-- `unquote_block` - Returns the corresponding block subexpression expression from the ExprMakeBlock.
+- `move_unquote_block`
+- `push_block_list`
+- `unquote_block`
 
 ### Global variable helpers
 
-- `add_global_let` - Add global variable to the module, given name and initial value.
-- `add_global_private_let` - Add global variable to the module, given name and initial value.
-- `add_global_private_var` - Add global variable to the module, given name and initial value.
-- `add_global_var` - Add global variable to the module, given name and type.
+- `add_global_let`
+- `add_global_private_let`
+- `add_global_private_var`
+- `add_global_var`
 
 ### Hygienic names
 
-- `make_unique_private_name` - Generates unique private name for the variable, given prefix and line info.
+- `make_unique_private_name`
 
 ### Quoting macros
 
-- `apply_qblock` - Implementation details for the expression reification.
-- `apply_qblock_expr` - Implementation details for the expression reification.
-- `apply_qblock_to_array` - Implementation details for the expression reification.
-- `apply_qmacro` - Implementation details for the expression reification.
-- `apply_qmacro_function` - Implementation details for reification.
-- `apply_qmacro_method` - Implementation details for reification.
-- `apply_qmacro_template_class` - Implementation details for the expression reification.
-- `apply_qmacro_template_function` - Applies template rules to a function, cloning it with substituted types.
-- `apply_qmacro_variable` - Implementation details for reification.
-- `apply_qtype` - Implementation details for the expression reification.
+- `apply_qblock`
+- `apply_qblock_expr`
+- `apply_qblock_to_array`
+- `apply_qmacro`
+- `apply_qmacro_function`
+- `apply_qmacro_method`
+- `apply_qmacro_template_class`
+- `apply_qmacro_template_function`
+- `apply_qmacro_variable`
+- `apply_qtype`
 
 ### Type pointer helpers
 
-- `add_array_ptr_ref` - Implementation details for the reification.
-- `add_type_ptr_ref` - Implementation details for the reification.
+- `add_array_ptr_ref`
+- `add_type_ptr_ref`
 
 ### Structure helpers
 
-- `add_structure_field` - Adds a field to the structure.
+- `add_structure_field`
 
 ### Class generation
 
-- `enum_class_type` - return underlying type for the enumeration
-- `make_class` - Creates a class structure.
-- `make_class_constructor` - Adds a class constructor from a constructor function.
-- `modify_to_class_member` - Modifies function to be a member of a particular class.
+- `enum_class_type`
+- `make_class`
+- `make_class_constructor`
+- `modify_to_class_member`
 
 ## templates
 
@@ -7892,12 +7893,12 @@ The TEMPLATES module implements template instantiation utilities for daslang cod
 
 ### Function annotations
 
-- `template` - This macro is used to remove unused (template) arguments from the instantiation of the generic function.
+- `template`
 
 ### Call macros
 
-- `decltype` - This macro returns `ast::TypeDecl` for the corresponding expression.
-- `decltype_noref` - This macro returns TypeDecl for the corresponding expression, minus the ref (&) portion.
+- `decltype`
+- `decltype_noref`
 
 ## type_traits
 

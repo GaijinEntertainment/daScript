@@ -169,16 +169,15 @@ cannot require `_model_tier.das` open-codes the same two checks: the file and ev
 are present, and their total size is under `LARGE_TIER_BYTES` unless `DASLLAMA_PARITY_FULL=1` is
 set.** `DASLLAMA_PARITY_FULL=1` is a final pre-PR switch, not the iteration loop.
 
-**A test - or a program a test builds or spawns - that is not about the `.dlim` model image runs
-with `DASLLAMA_IMAGE=0` in its environment, or calls nothing that reaches a baking loader, in its
-own code or through a helper.** A test is about the image
-when it checks the image's mint, map or identity, including how a lane pin changes that identity (a
-lane pin is a call that picks the weight form, the Metal tensor crowns - the pin that compiles a
-family's half-precision GEMM twins - or the CPU kernel backend a load serves on). A baking loader
-is any load call that writes a `.dlim` beside the model when `DASLLAMA_IMAGE` is unset, itself or
-through a loader it calls. A test that sets no `DASLLAMA_IMAGE=0` loads its media carrier in
-memory through the family's `stage_*` function paired with its `mint_*`, or through
-`cache_via_image_staged` with an empty image path.
+**A cell - or a program a cell builds or spawns - that is not about the `.dlim` model image calls
+nothing that reaches a baking loader, in its own code or through a helper.** A cell is about the
+image when it checks the image's mint, map or identity, including how a lane pin changes that
+identity (a lane pin picks the weight form, the Metal tensor crowns - the pin that compiles a
+family's half-precision GEMM twins - or the CPU kernel backend a load serves on). A baking loader is
+any load call that writes a `.dlim` beside the model when `DASLLAMA_IMAGE` is unset, itself or
+through a loader it calls. Such a cell loads a GGUF through `load_model_`, and a media carrier in
+memory through the family's `stage_*` paired with its `mint_*`, or `cache_via_image_staged` with an
+empty image path; the cells that break this by design are ledgered at `../ARCHITECTURE_IMAGE_LEDGER.md#suite-image-mints`.
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
 therefore cannot differ between two runs on one machine is never tested through its own
@@ -227,7 +226,8 @@ script in `../harness/`; for an oracle dump, the mint script stocked beside the 
 
 **A diff that adds a cell reading a stocked artifact from a model file's directory names that
 artifact in the `companions` of that model file's row in `../performance/model_specs.das`, in the
-same change.** A box that fetches the row alone then has what the cell reads.
+same change - with no `url`, `bytes` or `sha256` where another row's entry carries them.** The row
+then names everything the cell reads; an artifact's url and checksum sit in one row.
 
 **A test that reads a vision encode oracle dump without naming the minting arm in its header - the
 backend, the flash-attention setting and the mmproj precision the dump came from - is a defect.**

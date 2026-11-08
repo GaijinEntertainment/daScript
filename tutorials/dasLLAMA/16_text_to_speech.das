@@ -111,9 +111,12 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
     // name, the languages it speaks, the rate its PCM comes out at, whether it can clone a
     // voice from a recording, and whether a speed means anything to it. Ask a voice caps()
     // does not carry and the call panics — the request is never quietly swapped for something
-    // the model does have. tts_needs_packs answers, from the file alone, whether the two
-    // front-end packs have to sit beside it.
-    print("front-end packs beside the file: {tts_needs_packs(model_path)}\n")
+    // the model does have. tts_needs_packs answers, from the file alone,
+    // whether any front-end pack has to sit beside it, and tts_pack_names
+    // says which: the English pair where a voice speaks English, the
+    // Russian stress pack where one speaks Russian.
+    let packs <- tts_pack_names(model_path)
+    print("front-end packs beside the file: {tts_needs_packs(model_path)} - {join(packs, " + ")}\n")
     let t_load = ref_time_ticks()
     var m <- load_tts_model(model_path)
     print("loaded in {double(get_time_usec(t_load)) / 1.0e6lf} s\n")
@@ -156,15 +159,28 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
     // A Pocket model reads text, not phonemes: tts_has_phonemes answers false, tts_phonemize
     // panics rather than invent a string, and the normalized text IS what the model is asked to
     // say (the normalizer is English; the other Pocket languages read their text as it is).
-    let sentence = "Dr. Chen read 3.5 pages and paid $12."
-    let spoken = tts_normalize(sentence)
+    //
+    // The normalizer has a language form too: tts_normalize(text, lang)
+    // reads Russian for "ru" - kokoro-ru's voices, whose stress pack
+    // tts_g2p_ru.bin sits beside the GGUF - and English for an English
+    // code, so a synthesis in a Russian voice reads "в 2024 году" as the
+    // words a Russian reader says. The one-argument tts_normalize is the
+    // English form, so an English voice needs no language at all; a voice
+    // of another language does.
     let vlang = tts_voice_lang(m, vname)
+    let english_sentence = "Dr. Chen read 3.5 pages and paid $12."
+    let sentence = vlang == "ru" ? "В 2024 году вышло 12 игр." : english_sentence
+    let spoken = vlang == "ru" ? tts_normalize(sentence, vlang) : tts_normalize(sentence)
     print("\ntext:       {sentence}\n")
     print("normalized: {spoken}\n")
     print("voice:      {vname} reads {vlang}\n")
     if (tts_has_phonemes(m)) {
         print("phoneme pack: {base_name(g2p_pack_path(dir_name(model_path)))}\n")
-        print("phonemes:   {tts_phonemize(m, spoken, vlang)}\n")
+        // the two-argument tts_phonemize reads American English; any other
+        // dialect or language names itself
+        let american = vlang == "en-us"
+        let ps = american ? tts_phonemize(m, spoken) : tts_phonemize(m, spoken, vlang)
+        print("phonemes:   {ps}\n")
     } else {
         print("phonemes:   none - this model reads the text\n")
     }

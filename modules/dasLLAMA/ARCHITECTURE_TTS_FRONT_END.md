@@ -1,0 +1,134 @@
+# dasLLAMA architecture - text to speech, the text front end
+
+A companion of `ARCHITECTURE_TTS.md`: the file charters of the text front end
+(`ARCHITECTURE_TTS_FRONT_END.md#tts-front-end`) and the mechanisms they implement. `ARCHITECTURE_COMMON.md`
+(repo root) is the contract. The block home, the shared assembly, the families and the facade are
+`ARCHITECTURE_TTS.md`.
+
+## File charters
+
+### Text front end {#tts-front-end}
+
+- **`dasllama_textnorm.das`** - text normalization: numbers, ordinals, years and decades,
+  currency, percentages, clock times, dates, fractions, units, abbreviations, URLs and e-mail
+  addresses become the words a reader says; prosodic punctuation and apostrophes survive,
+  everything else becomes a space. The defects of the reference normalizer are fixed here and
+  pinned by the tests. A digit run wider than eighteen digits reads digit by digit: the reader
+  accumulates in int64, so past that width there is no number to say, and a reader says a
+  number that long one digit at a time anyway. A unit carries both its forms and the literal
+  picks: exactly one is singular ("1 cm" is one centimeter), anything else - a fraction of one
+  included - is plural. Pure code, no data file.
+- **`dasllama_textnorm_ru.das`** - Russian text normalization: numbers, decimals (три целых пять
+  десятых), percentages, money, units, clock times, dates and years (an ordinal in the case its
+  word asks for - в 2024 году, 25 декабря 2023 года), the ordinal suffixes (5-й, 5-го), the
+  common abbreviations and symbols become the words a reader says, agreeing with the count where
+  Russian agrees (один рубль, два рубля, пять рублей; две тысячи); the prosodic punctuation
+  survives, everything else becomes a space. Case and gender beyond the nominative only where the
+  pattern fixes them - the rest is the nominative masculine. Pure code, no data file.
+- **`dasllama_postag.das`** - the tokenizer and part-of-speech tagger. The tokenizer reproduces
+  the reference pipeline's English tokenization over normalized text (the exception table for
+  contractions and abbreviations, prefix and suffix punctuation, infix hyphens); the tagger is
+  a greedy averaged perceptron over the PTB tagset. Both load from `tts_postag.bin`
+  (`harness/train_postag.py`: UD English-EWT gold plus normalizer-shaped prose tagged by the
+  reference tagger, `harness/mint_postag_silver.py`). Tags matter downstream only through the
+  lexicon's part-of-speech entries and the punctuation phonemes. The tagger's word class is
+  the trainer's own `normalize`: a hyphen anywhere in a token that does not start with one, so
+  "--" and "-well-known" are ordinary words, not `!HYPHEN`.
+- **`dasllama_g2p.das`** - grapheme-to-phoneme into the reference front end's inventory, in
+  either English dialect: a gold lexicon with part-of-speech keyed entries, a silver lexicon,
+  function-word rules that read what follows (the pass runs right to left), the heteronym
+  rules of `ARCHITECTURE_TTS_FRONT_END.md#tts-heteronym-context`, inflection stemming, capitalization and acronym stress, then a fallback
+  chain - the lexicon's own plain reading for each letter run, then CMUdict pre-rendered into
+  the same inventory, then a GRU spelling model - so no word is ever dropped. The lexicon leads
+  that chain because a glued group sends its WHOLE surface to the fallback as soon as one piece
+  is unresolvable, so a run both dialects carry does arrive there, and CMUdict is pruned of
+  exactly those words. The `british` flag picks the dialect: the gold and silver tables carry an
+  American and a British value per key (a key present for one dialect only reads as unknown to
+  the other, as the reference does), the inflection rules switch their suffix vowels and drop
+  the American flap, and the two American sources of the fallback chain rewrite their answer
+  into the British inventory through a table derived from aligning the two lexicons (the
+  non-rhotic rule keyed on whether a vowel follows, the goat, trap, lot and reduced vowels
+  onto their British symbols, the length marks) - the lexicon's own reading is already British
+  and takes no rewrite, which matters because the rewrite is not the identity: it reads the
+  DRESS vowel before a linking rhotic as SQUARE, having nothing in the string to tell merry from
+  Mary. A vowel the two lexicons give no evidence for before a dropped rhotic keeps that
+  rhotic. The bath-trap split reaches only lexicon words. Loads a phoneme
+  pack - `tts_g2p.bin` (both dialect tiers) or `tts_g2p_en_us.bin` (the American tier alone,
+  `ARCHITECTURE_TTS_FRONT_END.md#tts-g2p-pack-tiers`) - pack version 2 (`harness/build_g2p_data.py`: the gold tier extended by
+  `harness/g2p_local_additions.json`, the US and GB keys merged into one string table per
+  tier, the GRU stored as f16, CMUdict pruned of the words both dialects' lexicons carry -
+  safe because the fallback reads the lexicon first), searched in place as byte-sorted string
+  tables; a version 1 pack is refused by name. The 200-sentence fixtures under
+  `tests/_tts_fixtures/` (American, minted by `harness/mint_tts_g2p_fixture.py` from the G2P
+  fidelity experiment; British, by `harness/mint_tts_g2p_gb_fixture.py` from the reference's own
+  British front end) are the parity rails for all three stages.
+- **`dasllama_g2p_pack.das`** - the front-end packs' file shape every language's reader shares:
+  the little-endian scalar readers, the whole-file read, the header every pack opens with (magic,
+  version, the source note - checked against the reader's own, the panic naming the file, the pack
+  and its builder), and the byte-sorted string table (an offset column per key and per value over
+  one key blob and one value blob) searched in place by binary search on the file bytes. The
+  tagger's header carries its three floats between the version and the note, so `dasllama_postag.das`
+  reads its own header over the same scalar readers. No language, no rule.
+- **`dasllama_textscan.das`** - the codepoint scanning the normalizers and the tokenizer share, in
+  no language: the bounds-safe read, the digit and whitespace classes, the run ends, a digit run's
+  value and the width past which a run reads digit by digit (`MAX_DIGITS_AS_NUMBER`), a pass's
+  output pieces (a string emitted as codepoints, a span taken back as a string), and the digit words
+  reader over a language's ten-word table. A letter class is the language's own and stays in its
+  file.
+- **`dasllama_g2p_ru.das`** - the Russian front end, stress then letter-to-sound. Stress comes
+  from the text (`+` before the stressed vowel or U+0301 after it, which always wins, a ё
+  carrying its own), else from the pack `tts_g2p_ru.bin` (`harness/build_g2p_ru_data.py`: every
+  inflected form of the OpenRussian dictionary with its stressed vowel's ordinal - a form with
+  two readings carries both, the first the default, a corpus frequency table ordering them - and
+  the ё spellings a text written without ё needs, where the е spelling is no word of its own;
+  pack version 1), a reflexive the pack has only without its -ся read through the base form,
+  else from the shape rule (the vowel before the last); the clitics (prepositions, conjunctions,
+  particles) take none. Letter-to-sound reproduces the label shape the kokoro-ru checkpoints
+  were trained on - the reference's espeak-ng Russian over acute-marked text, its positional
+  vowel reduction (ɐ in the first pretonic syllable and word-initially, ə elsewhere, ɪ after a
+  soft consonant) and its long щ: palatalization with the regressive cases (с з before a
+  vowel-softened dental, т before тʲ дʲ нʲ, м before a soft labial), iotation with the sign
+  cases (jj before an unstressed vowel after ь ъ, the stress mark before the j of я ю and after
+  the j of е ё), ь leaving л н and the labials hard and reading р as its own sound, voicing
+  assimilation read off the written letters (right to left, a final cluster devoicing through,
+  д keeping its voice before ф and before a hard т, a sign blocking a т's voicing), the sandhi
+  on the last consonant from what opens the next word (в ж ш ч and a soft з voiced before a
+  voiced obstruent, the prepositions в and об keeping their voice before a vowel or sonorant, a
+  final soft л н р в soft before a vowel), the respellings (-ого/-его as -ово/-ево outside the
+  adverbs, the чн words said with шн, что-, сегодня, the silent т д л в of стн здн рдц лнц
+  чувств- здравств-), the merged clusters (сч зч жч as ɕː, сш зш as ʃʃ, сж зж as ʒʒ, -тся
+  -ться as ʦə, дц as tʦ after the stress or right before it and ʦ further ahead of it, гк as xk,
+  кк single, чш as tʃ before the stress), a hyphenated word read side by side (a one-vowel side stressed unless a
+  clitic, либо/нибудь/таки with their own stress). A run of another script passes through
+  unchanged - the facade's place to splice a Latin word already turned into English phonemes.
+  The 200-sentence fixture `tests/_tts_fixtures/g2p_corpus_ru.json` (`harness/mint_tts_g2p_ru_fixture.py`:
+  stress-marked Balalaika sentences through kokoro-ru's own front end) is the parity rail for
+  letter-to-sound alone - the stress it compares on is the fixture's, so a stress decision never
+  moves its numbers.
+
+## Mechanisms
+
+### What a word sees around it {#tts-heteronym-context}
+
+The lexicon's part-of-speech keyed entries settle most heteronyms, and the pass runs right to
+left so a word sees the vowel and the "to" that follow it. The tag alone cannot settle the
+rest, so the token context also carries the word and tag on either side, and the entry keys
+are tried in an order those neighbours set: the infinitive after "to" reads the verb key; after
+a determiner a verb tag is a mis-tag (the noun, then the default) and an adjective before a
+non-noun is the noun. A small collocation table settles the readings no tag carries ("lead
+pipe", "get the lead out", "bass player", "minute detail"), and keyed entries the lexicon holds
+as one reading join it ("the does", "my resume"). Every collocation names a noun reading, so a
+verb tag out-ranks the table: "the pipes lead out" is the verb whatever follows it. The corpus
+cell names the sentences these
+rules and the lexicon additions read past the reference front end and keeps a budget of tag
+calls for the rest.
+
+### The phoneme pack ships in two tiers {#tts-g2p-pack-tiers}
+
+`build_g2p_data.py` mints two packs from one source: `tts_g2p.bin`, carrying both dialect tiers,
+and `tts_g2p_en_us.bin` under `--dialect us`, the American tier alone - four megabytes smaller,
+and what the web serving set ships. A pack names its own tier in its source line, which `load_g2p`
+reads into `G2pModel.us_only`. `load_tts_model` takes the full pack from the model's directory when
+it is there and the American-only twin otherwise, and panics when neither is. On the American-only
+pack `g2p_phonemize` refuses a British request by name and `caps` offers no British voice, so a
+Kokoro `bf_*` / `bm_*` pack is simply not on the list.

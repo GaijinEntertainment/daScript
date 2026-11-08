@@ -76,6 +76,38 @@ def test_fixture_bar_rule(t : T?) {
     }
 }
 
+//! a row whose cell consumes a companion pinned on another row names it too: with the same url, bytes and sha256, or with
+//! none of them, the pin left to the row that carries it - a bare name with no recipe that no row pins is a file no box gets
+def private check_companion_pins(t : T?; specs : array<ModelSpec>) {
+    var seen : table<string; string>
+    var unpinned : array<string>
+    for (s in specs) {
+        for (c in s.companions) {
+            if (empty(c.url)) {
+                if (empty(c.recipe)) {
+                    unpinned |> push(c.name)
+                }
+                continue
+            }
+            let prov = "{c.url}|{c.bytes}|{c.sha256}"
+            let prev = seen?[c.name] ?? ""
+            t |> success(empty(prev) || prev == prov, "a companion pinned on two rows carries the same provenance on both: {c.name}")
+            seen[c.name] = prov
+        }
+    }
+    for (name in unpinned) {
+        t |> success(key_exists(seen, name), "a companion named with neither url nor recipe is pinned on another row: {name}")
+    }
+    var bare_english_pack = false
+    for (s in specs) {
+        for (c in s.companions) {
+            bare_english_pack = bare_english_pack || (c.name == "tts_g2p.bin" && empty(c.url))
+        }
+    }
+    t |> success(bare_english_pack && key_exists(seen, "tts_g2p.bin"), "the kokoro-ru row names the English phoneme pack bare, the kitten-nano row pins it")
+    delete seen
+}
+
 [test]
 def test_model_spec_views(t : T?) {
     t |> run("llm_catalog / official_catalog are exact filters over the table") @(t : T?) {
@@ -140,17 +172,7 @@ def test_model_spec_views(t : T?) {
         }
         t |> success(pinned, "{bench_image_fixture()} rides a companion list, so every box provisions it")
         var inscope specs <- model_specs()
-        // a row whose cell consumes a companion pinned on another row names it too, so two rows may pin one file; both carry one provenance
-        var seen : table<string; string>
-        for (s in specs) {
-            for (c in s.companions) {
-                let prov = "{c.url}|{c.bytes}|{c.sha256}"
-                let prev = seen?[c.name] ?? ""
-                t |> success(empty(prev) || prev == prov, "a companion pinned on two rows carries the same provenance on both: {c.name}")
-                seen[c.name] = prov
-            }
-        }
-        delete seen
+        check_companion_pins(t, specs)
     }
 }
 

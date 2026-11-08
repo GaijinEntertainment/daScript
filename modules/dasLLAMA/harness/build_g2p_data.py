@@ -66,6 +66,20 @@ def string_table(entries):
     return buf
 
 
+def write_pack(path, magic, version, source, sections):
+    """the pack file every front-end reader opens the same way: magic, version, the source note, then the sections in order;
+    answers the bytes written."""
+    buf = bytearray()
+    buf += struct.pack("<II", magic, version)
+    note = source.encode("utf8")
+    buf += struct.pack("<H", len(note)) + note
+    for _name, sec in sections:
+        buf += sec
+    with open(path, "wb") as f:
+        f.write(buf)
+    return len(buf)
+
+
 def encode_value(v):
     """one dialect's reading: a plain phoneme string, or a part-of-speech keyed dictionary."""
     if isinstance(v, str):
@@ -207,16 +221,10 @@ def main():
                 ("silver", merged_lexicon_section(silver, gb_silver)),
                 ("cmudict", lexicon_section(cmu_misaki)),
                 ("gru", tensor_section(arrays, graphemes, phonemes))]
-    buf = bytearray()
-    buf += struct.pack("<II", MAGIC, VERSION)
     lexicons = "us_gold/us_silver; dialect us" if a.dialect == "us" else "us_gold/us_silver + gb_gold/gb_silver"
     source = (f"misaki 0.9.4 {lexicons}; CMUdict 0.7a first pronunciations via the "
-              "calibrated ARPAbet->misaki table; g2p_en 2.1.0 checkpoint20").encode("utf8")
-    buf += struct.pack("<H", len(source)) + source
-    for _name, sec in sections:
-        buf += sec
-    with open(a.out, "wb") as f:
-        f.write(buf)
+              "calibrated ARPAbet->misaki table; g2p_en 2.1.0 checkpoint20")
+    written = write_pack(a.out, MAGIC, VERSION, source, sections)
     misaki_files = ("misaki us_gold.json / us_silver.json " if a.dialect == "us"
                     else "misaki us_gold.json / us_silver.json / gb_gold.json / gb_silver.json ")
     with open(a.out + ".LICENSE", "w", encoding="utf8") as f:
@@ -226,7 +234,7 @@ def main():
                 "CMUdict 0.7a (Copyright (C) 1993-2008 Carnegie Mellon University, BSD 2-Clause), "
                 "first pronunciations rendered into the misaki inventory\n"
                 "g2p_en checkpoint20.npz (Kyubyong Park, Apache License 2.0)\n")
-    print(f"wrote {a.out}: {len(buf)} bytes")
+    print(f"wrote {a.out}: {written} bytes")
     for name, sec in sections:
         print(f"  {name:8s} {len(sec):9d} bytes")
     print(f"gold {len(gold)} US + {len(gb_gold)} GB -> {len(set(gold) | set(gb_gold))} keys "

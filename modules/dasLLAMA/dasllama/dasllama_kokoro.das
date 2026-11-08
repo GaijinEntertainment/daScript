@@ -51,6 +51,12 @@ def kokoro_voice_lang(name : string) : string {
     return ""
 }
 
+def kokoro_voice_lang(fam : KokoroFamily; name : string) : string {
+    //! The language a voice pack speaks: what the file declares for it (``kokoro.voice_langs``,
+    //! a fine-tune's packs named outside the pipeline's shape), else what its name's shape says.
+    return fam.voice_langs?[name] ?? kokoro_voice_lang(name)
+}
+
 //! The style row the reference pipeline picks: the phoneme string's character count, less
 //! one, capped at the last row.
 def kokoro_style_row(ps : string; rows : int) : int {

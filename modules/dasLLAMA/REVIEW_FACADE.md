@@ -4,16 +4,16 @@
 docs: `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_RUNTIME.md`, `ARCHITECTURE_TTS.md`. Planned work:
 `followup_general.md`.
 
-**Every non-private, non-operator def that a user program calls, in a file `REVIEW.das`'s
-`FACADE_FILES` lists - each new overload, and each def a diff adds a parameter to, included - is
-called with that overload's argument types in runnable code (not a comment or a passing mention)
-in a `tutorials/dasLLAMA/*.das` source, and narrated on a
-`doc/source/reference/tutorials/dasLLAMA_*.rst` page.**
+**A diff that adds or changes a def in a file `REVIEW.das`'s `FACADE_FILES` lists leaves each
+overload of every non-private, non-operator def in that file that `REVIEW.das`'s
+`FACADE_DEFS_WITHOUT_TUTORIAL` does not list called with its own argument types in runnable code
+(not a comment or a passing mention) in a `tutorials/dasLLAMA/*.das` source, and narrated on a
+`doc/source/reference/tutorials/dasLLAMA_*.rst` page.** Weakening `REVIEW.das`'s
+`check_tutorial_floor` is a defect.
 
 **A row a diff adds to `REVIEW.das`'s `FACADE_DEFS_WITHOUT_TUTORIAL` names only a def no user
 program calls - one that only engine code, this module's tests, or an in-repo tool calls; a row for
-a def a user program calls is a defect - teach that def in a tutorial instead.** `REVIEW.das` fails
-a top-level facade def with neither a tutorial nor a row; weakening that check is a defect.
+a def a user program calls is a defect - teach that def in a tutorial instead.**
 
 **A diff that adds a `public` require, or makes a require `public`, in `dasllama/dasllama.das`
 or in a file `dasllama/dasllama.das` reaches through `public` requires only, adds the required

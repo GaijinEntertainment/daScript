@@ -17,10 +17,11 @@ The loader rule of `tests/REVIEW.md` keeps a test whose subject is not the `.dli
 fire it and are ruled acceptable, each with its reason.
 
 - **The TTS facade smoke cells** - `facade_smoke` in `tests/_tts_parity.das`, called from `tests/test_tts_kitten.das` and
-  `tests/test_tts_kokoro.das`. They load through the facade's `load_tts_model`, which bakes the StyleTTS2 `.dlim` beside
-  the model when `DASLLAMA_IMAGE` is unset, so each mints an image per carrier. The reason: the facade's own load path is
-  the cells' subject, and they run under the suite child's identity - on the tuned arm the box's own, with no policy
-  override - so the image they mint is the one the image suite's `kitten` arm and the serving rig read.
+  `tests/test_tts_kokoro.das`, and `test_kokoro_ru_facade` in `tests/test_tts_kokoro.das`. They load through the facade's
+  `load_tts_model`, which bakes the StyleTTS2 `.dlim` beside the model when `DASLLAMA_IMAGE` is unset, so each mints an
+  image per carrier. The reason: the facade's own load path is the cells' subject - for the Russian cell the packs it
+  picks by the voices' declared languages - and they run under the suite child's identity - on the tuned arm the box's
+  own, with no policy override - so the image they mint is the one the image suite's `kitten` arm and the serving rig read.
 - **The Metal MTP rails** - the fixtures of `tests/test_metal_mtp_parity.das` that load their served twin through
   `load_model_cached`, and every served arm of `tests/test_mtp_gemma_drafter.das` on the Metal home, each loading its
   target through `gdraft_target` (the Q4_K_M target and, for `mtp-gdraft-iq3`, the UD-IQ3_XXS one) - mint the target's

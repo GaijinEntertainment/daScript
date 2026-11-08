@@ -886,7 +886,7 @@ def add_tts_model(path : string; lane : string = TTS_LANE_DEFAULT; voices_dir : 
     return if (empty(path))
     let missing = tts_missing_file(path)
     if (!empty(missing)) {
-        to_log(LOG_ERROR, "dasllama-server: dropping the speech route for {base_name(path)} - a TTS file was not found: {missing} (a phoneme family's GGUF and the front-end packs tts_g2p.bin + tts_postag.bin sit in one directory, a Pocket TTS GGUF stands alone; fix the config, then POST /restart)\n")
+        to_log(LOG_ERROR, "dasllama-server: dropping the speech route for {base_name(path)} - a TTS file was not found: {missing} (a phoneme family's GGUF and the front-end packs its voices read - tts_g2p.bin + tts_postag.bin for English, tts_g2p_ru.bin for Russian - sit in one directory, a Pocket TTS GGUF stands alone; fix the config, then POST /restart)\n")
     }
     let mid = speech_model_id(id, path)
     if (speech_id_taken(mid)) {
@@ -5601,20 +5601,18 @@ def private process_tts_job(var model : TtsModel; job : TtsJob; events : Channel
 // chunk's text and the 45-symbol phoneme string the g2p pass reads out of it.
 // the dialect a phonemes request reads in. A model whose front end phonemizes ONE language has
 // only that answer to give, so every voice name reads in it - an alias, a name the model does not
-// carry, a name typed into the page's box. A model that phonemizes several must be told which
-// voice, and refuses an unservable one exactly as the speech route does.
+// carry, a name typed into the page's box. A model that phonemizes several reads in the named
+// voice's language - the default voice's where none is named, as the speech route speaks it -
+// and refuses an unservable one exactly as the speech route does.
 def private tts_phonemes_lang(model : TtsModel; voice : string) : string {
     var inscope c <- caps(model)
-    if (empty(voice) || length(c.langs) < 2) {
-        return c.langs[0]
-    }
-    return tts_voice_lang(model, voice)
+    return c.langs[0] if (length(c.langs) < 2)
+    return tts_voice_lang(model, empty(voice) ? c.voices[0] : voice)   // the ready event refused an empty roster, so index 0 is there
 }
 
 def private process_tts_phonemes(model : TtsModel; job : TtsJob; events : Channel?) {
     let lang = tts_phonemes_lang(model, job.voice)
-    // the normalizer reads English: a Pocket model in another language takes the text as it is
-    let norm = tts_has_phonemes(model) || lang == "en" ? tts_normalize(job.text) : job.text
+    let norm = tts_normalize(job.text, lang)
     var inscope chunks <- tts_chunks(model, norm)
     let doc = build_string() $(w) {
         w |> write("\{\"normalized\":{json_str(norm)},\"lang\":{json_str(lang)},\"chunks\":[")

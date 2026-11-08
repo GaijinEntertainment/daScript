@@ -142,7 +142,10 @@ struct KittenFamily {
     aliases : table<string; string>
 }
 
-//! Kokoro's driver data beside the shared model: codepoint -> token id, from ``kokoro.*``.
+//! Kokoro's driver data beside the shared model, from ``kokoro.*``: codepoint -> token id, and
+//! the language each voice pack speaks where the file declares it (a pack the file leaves out
+//! is read from its name's shape, `kokoro_voice_lang`).
 struct KokoroFamily {
     sym : table<int; int>
+    voice_langs : table<string; string>
 }

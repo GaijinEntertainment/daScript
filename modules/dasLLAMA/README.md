@@ -90,7 +90,7 @@ one carries no JIT or interpreter either. Read
   Parakeet-TDT 0.6b v2/v3, GigaAM v3 (Russian; CTC and RNN-T heads), Qwen3-ASR 0.6B/1.7B,
   Canary-Qwen 2.5B.
 - **Text-to-speech**: Kokoro 82M, KittenTTS mini/nano, Pocket TTS (Kyutai) — the engine's own
-  text front end (normalization, POS tagging, G2P: `ARCHITECTURE_TTS.md`), generation on the
+  text front end (normalization, POS tagging, G2P: `ARCHITECTURE_TTS_FRONT_END.md`), generation on the
   CPU, Metal and Vulkan.
 - **Translation**: the Bergamot students (Firefox Translations' Marian int8 `.bin` + SentencePiece
   vocabulary) on the CPU, Metal and Vulkan, and translation LLMs (MiLMMT-46, or any instruct

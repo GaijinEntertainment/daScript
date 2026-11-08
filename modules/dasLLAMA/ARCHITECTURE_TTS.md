@@ -4,62 +4,23 @@ The companion `ARCHITECTURE.md` indexes: the TTS file charters (`ARCHITECTURE_TT
 and the mechanisms the TTS files implement. `ARCHITECTURE_COMMON.md` (repo root) is the
 contract. What a synthesis allocates, holds and gives back - the carrier, the generator's
 buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECTURE_TTS_MEMORY.md`.
+The text front end - its file charters, the heteronym context and the two-tier phoneme pack - is
+`ARCHITECTURE_TTS_FRONT_END.md`.
 
 ## File charters
 
 ### Text to speech {#text-to-speech}
 
-- **`dasllama_textnorm.das`** - text normalization: numbers, ordinals, years and decades,
-  currency, percentages, clock times, dates, fractions, units, abbreviations, URLs and e-mail
-  addresses become the words a reader says; prosodic punctuation and apostrophes survive,
-  everything else becomes a space. The defects of the reference normalizer are fixed here and
-  pinned by the tests. A digit run wider than eighteen digits reads digit by digit: the reader
-  accumulates in int64, so past that width there is no number to say, and a reader says a
-  number that long one digit at a time anyway. A unit carries both its forms and the literal
-  picks: exactly one is singular ("1 cm" is one centimeter), anything else - a fraction of one
-  included - is plural. Pure code, no data file.
-- **`dasllama_postag.das`** - the tokenizer and part-of-speech tagger. The tokenizer reproduces
-  the reference pipeline's English tokenization over normalized text (the exception table for
-  contractions and abbreviations, prefix and suffix punctuation, infix hyphens); the tagger is
-  a greedy averaged perceptron over the PTB tagset. Both load from `tts_postag.bin`
-  (`harness/train_postag.py`: UD English-EWT gold plus normalizer-shaped prose tagged by the
-  reference tagger, `harness/mint_postag_silver.py`). Tags matter downstream only through the
-  lexicon's part-of-speech entries and the punctuation phonemes. The tagger's word class is
-  the trainer's own `normalize`: a hyphen anywhere in a token that does not start with one, so
-  "--" and "-well-known" are ordinary words, not `!HYPHEN`.
-- **`dasllama_g2p.das`** - grapheme-to-phoneme into the reference front end's inventory, in
-  either English dialect: a gold lexicon with part-of-speech keyed entries, a silver lexicon,
-  function-word rules that read what follows (the pass runs right to left), the heteronym
-  rules of `ARCHITECTURE_TTS.md#tts-heteronym-context`, inflection stemming, capitalization and acronym stress, then a fallback
-  chain - the lexicon's own plain reading for each letter run, then CMUdict pre-rendered into
-  the same inventory, then a GRU spelling model - so no word is ever dropped. The lexicon leads
-  that chain because a glued group sends its WHOLE surface to the fallback as soon as one piece
-  is unresolvable, so a run both dialects carry does arrive there, and CMUdict is pruned of
-  exactly those words. The `british` flag picks the dialect: the gold and silver tables carry an
-  American and a British value per key (a key present for one dialect only reads as unknown to
-  the other, as the reference does), the inflection rules switch their suffix vowels and drop
-  the American flap, and the two American sources of the fallback chain rewrite their answer
-  into the British inventory through a table derived from aligning the two lexicons (the
-  non-rhotic rule keyed on whether a vowel follows, the goat, trap, lot and reduced vowels
-  onto their British symbols, the length marks) - the lexicon's own reading is already British
-  and takes no rewrite, which matters because the rewrite is not the identity: it reads the
-  DRESS vowel before a linking rhotic as SQUARE, having nothing in the string to tell merry from
-  Mary. A vowel the two lexicons give no evidence for before a dropped rhotic keeps that
-  rhotic. The bath-trap split reaches only lexicon words. Loads a phoneme
-  pack - `tts_g2p.bin` (both dialect tiers) or `tts_g2p_en_us.bin` (the American tier alone,
-  `ARCHITECTURE_TTS.md#tts-g2p-pack-tiers`) - pack version 2 (`harness/build_g2p_data.py`: the gold tier extended by
-  `harness/g2p_local_additions.json`, the US and GB keys merged into one string table per
-  tier, the GRU stored as f16, CMUdict pruned of the words both dialects' lexicons carry -
-  safe because the fallback reads the lexicon first), searched in place as byte-sorted string
-  tables; a version 1 pack is refused by name. The 200-sentence fixtures under
-  `tests/_tts_fixtures/` (American, minted by `harness/mint_tts_g2p_fixture.py` from the G2P
-  fidelity experiment; British, by `harness/mint_tts_g2p_gb_fixture.py` from the reference's own
-  British front end) are the parity rails for all three stages.
+The text front end's charters - `dasllama_textnorm.das`, `dasllama_textnorm_ru.das`,
+`dasllama_postag.das`, `dasllama_g2p.das`, `dasllama_g2p_pack.das`, `dasllama_textscan.das` and
+`dasllama_g2p_ru.das` - are `ARCHITECTURE_TTS_FRONT_END.md#tts-front-end`.
+
 - **`dasllama_tts_types.das`** - the TTS floor: `TtsCaps`, `TtsAudio` (f32 PCM + rate), `TtsNoise`
   (the source noise a synthesis consumed - captured from the oracle, or drawn into a reused
   carrier), `TtsGpuSeats` (a family's GPU hook seats - the names in dispatch order, the calls and
   the serves per seat - behind `tts_seat_*`; the family keeps its own record), and the two family data records the shared carrier serializes - `KittenFamily` (speed
-  priors, voice aliases) and `KokoroFamily` (the symbol vocabulary) - plain data, no family logic.
+  priors, voice aliases) and `KokoroFamily` (the symbol vocabulary, the declared voice languages) -
+  plain data, no family logic.
   Family files require this, never each other.
 - **`dasllama_tts_blocks.das`** - the TTS block home, the TTS twin of `dasllama_tower.das`, in
   the two layouts of `ARCHITECTURE_TTS.md#tts-two-layouts`: Conv1d (dense, depthwise, forward and transposed), the dense
@@ -106,7 +67,7 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   rows or declining; the trace rail keeps the CPU chain, and engage is read from the counters.
   The Metal and the Vulkan tower drivers each fill every seat on both lanes (`ARCHITECTURE_GPU_TOWER.md#tower-tts-chain`, `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain`). The carrier also holds each family's DATA - the `KittenFamily` /
   `KokoroFamily` records of `dasllama_tts_types.das`, read from the GGUF's `kitten.*` /
-  `kokoro.symbol_*` metadata by `stage_family_data` - because the image meta serializes them and a
+  `kokoro.symbol_*` / `kokoro.voice_langs` metadata by `stage_family_data` - because the image meta serializes them and a
   `.dlim` load has no GGUF to read them from (`ARCHITECTURE_TTS.md#tts-image-rail`); the family LOGIC that interprets those
   records lives in the family files.
 - **`dasllama_kitten.das`** - the KittenTTS family (nano and mini): the reference driver's symbol
@@ -118,16 +79,28 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
 - **`dasllama_kokoro.das`** - the Kokoro family (Kokoro-82M): the reference pipeline's
   vocabulary (the `KokoroFamily` symbol record - the front end's own inventory, no rewrite), its
   token wrapping and style-row rule (the phoneme string's character count less one). Fifty-four voice
-  packs of 510 rows, each named `<language><f|m>_<name>`; a pack's language is read from that
-  shape and only from it, because the language letters are ordinary first letters of ordinary
-  names, so a name of any other shape has no language rather than the one its first letter spells.
+  packs of 510 rows, each named `<language><f|m>_<name>`; a pack's language is what the file
+  declares for it (`kokoro.voice_langs`, one code per voice, written by the converter - `--lang`
+  for a fine-tune whose packs are named outside the shape, kokoro-ru's `sveta` and `masha` and
+  `dima` speak `ru`) and otherwise is read from that shape and only from it, because the language
+  letters are ordinary first letters of ordinary names, so a name of any other shape has no
+  language rather than the one its first letter spells. The declared languages ride the
+  `KokoroFamily` record, so a prepared image carries them.
 - **`dasllama_tts.das`** - the TTS facade: `load_tts_model` (the shared model plus the family
   picked by `general.architecture` - from a GGUF or from a prepared `.dlim`; for a phoneme
   family `tts_finish_styletts2` - the one finish a test's minted model runs too - sets the kind
-  and reads the phoneme pack and `tts_postag.bin` from the model's directory, the full pack
-  preferred over the American-only twin, `ARCHITECTURE_TTS.md#tts-g2p-pack-tiers`, the packs it leaves out named once in the
+  and reads the packs its voices' languages ask for from the model's directory: the English
+  phoneme pack and `tts_postag.bin` where a voice speaks English, and where they merely sit
+  there (the Latin words inside another language's text read through them), the full pack
+  preferred over the American-only twin, `ARCHITECTURE_TTS_FRONT_END.md#tts-g2p-pack-tiers`; `tts_g2p_ru.bin`
+  where a voice speaks Russian, a panic naming it where it is missing; the voices it leaves out named once in the
   log; a Pocket file stands alone and `tts_needs_packs` says so from the file's architecture
-  before any load), `tts_has_phonemes` (whether `tts_phonemize` has an answer for the model),
+  before any load, `tts_pack_names` naming the packs the file's voices read - the phoneme pack
+  tier the directory holds with the tagger, the Russian stress pack, both, or none - from the
+  GGUF's voice languages before any load, a `.dlim` answering for the GGUF it was minted from
+  where that sits beside it; the list the server's missing-file check and the tutorial read),
+  `tts_has_phonemes` (whether
+  `tts_phonemize` has an answer for the model),
   `tts_register_voice` (a clip at the model's own rate joins the roster where `caps` says the
   model clones; a phoneme family refuses), `TtsVoicePrompt` (owned codec latents) with
   `tts_prepare_voice_prompt`, `tts_voice_prompt_valid` and `tts_register_voice_prompt`
@@ -137,17 +110,22 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
   the name carried none, with the fact that the front end cannot phonemize it), `tts_voice_lang`
   (the language a voice reads in - the resolution `synthesize` runs, aliases included, so a
   caller can phonemize in the dialect the voice will actually be spoken in), the front-end pair
-  `tts_normalize` (the spoken form a synthesis reads; it consults no pack) and `tts_phonemize`
+  `tts_normalize` (the spoken form a synthesis reads; it consults no pack; the language form
+  reads Russian for "ru", English for an English code, and hands any other language's text
+  back as it is - what `synthesize` does for a Pocket model's other languages) and `tts_phonemize`
   (a normalized sentence in the front end's inventory, before a family rewrites its symbols;
-  the language form takes a code from `caps` and refuses undeclared languages), the lane pin
+  the language form takes a code from `caps` and refuses undeclared languages - "ru" runs the
+  Russian front end, a run of Latin letters inside its text first read by the English front end
+  where its packs are loaded and spliced in as phonemes), the lane pin
   (`set_tts_q8`, `reset_tts_q8`, `tts_serves_q8`), the chunk cap (`tts_set_chunk_chars`, per
   model - the peak a say holds is the largest chunk's, `ARCHITECTURE_TTS_MEMORY.md#tts-idle-release`),
-  `synthesize_stream` (text -> normalize -> the reference sentence chunker, 400 codepoints a
+  `synthesize_stream` (text -> normalize in the voice's language -> the reference sentence chunker, 400 codepoints a
   chunk by default - `length()` on a string is bytes, and an em dash costs three of them - abbreviations
   and decimals never split, a whitespace-free run longer than the cap hard-split at the cap on
   a codepoint boundary; a chunk the split left without a closing mark gets a comma under
   Kitten's driver rule and nothing under Kokoro's, whose pipeline sends the text as it is and
-  whose voices render an added mark as an audible breath -> per chunk: phonemize -> the family's
+  whose voices render an added mark as an audible breath -> per chunk: phonemize in the voice's
+  language -> the family's
   symbols and style row -> PCM, timed, delivered to the caller's block as it lands) and `synthesize`
   (the same, concatenated, timings summed). Every chunk draws its own source noise: the seed is the
   facade's constant plus the chunk's index, so consecutive sentences of one request never share a
@@ -261,21 +239,6 @@ scalar sine stays on libm. The GPU route keeps the same order on the device: its
 compile without fast math, the torch law's double accumulator runs as a two-float sum, and the
 sine reduces its argument in exact pieces (`ARCHITECTURE_GPU_TOWER.md#tower-tts-chain`).
 
-### What a word sees around it {#tts-heteronym-context}
-
-The lexicon's part-of-speech keyed entries settle most heteronyms, and the pass runs right to
-left so a word sees the vowel and the "to" that follow it. The tag alone cannot settle the
-rest, so the token context also carries the word and tag on either side, and the entry keys
-are tried in an order those neighbours set: the infinitive after "to" reads the verb key; after
-a determiner a verb tag is a mis-tag (the noun, then the default) and an adjective before a
-non-noun is the noun. A small collocation table settles the readings no tag carries ("lead
-pipe", "get the lead out", "bass player", "minute detail"), and keyed entries the lexicon holds
-as one reading join it ("the does", "my resume"). Every collocation names a noun reading, so a
-verb tag out-ranks the table: "the pipes lead out" is the verb whatever follows it. The corpus
-cell names the sentences these
-rules and the lexicon additions read past the reference front end and keeps a budget of tag
-calls for the rest.
-
 ### The rig scores against what a person says {#tts-rig-scoring}
 
 `harness/tts_rig.py` runs the 200-sentence fixture through one model and voice, transcribes
@@ -288,13 +251,3 @@ exposes `expected` so the normalizer cell and the rig read the one correction; t
 (`harness/mint_tts_g2p_fixture.py`) carries the table so a re-mint reproduces it. The reference
 line is the reference arms' own WAVs re-scored from the experiment's transcripts on the same
 forms with the same scorer, the clock suffix ("a m", "am") counted as one word on both sides.
-
-### The phoneme pack ships in two tiers {#tts-g2p-pack-tiers}
-
-`build_g2p_data.py` mints two packs from one source: `tts_g2p.bin`, carrying both dialect tiers,
-and `tts_g2p_en_us.bin` under `--dialect us`, the American tier alone - four megabytes smaller,
-and what the web serving set ships. A pack names its own tier in its source line, which `load_g2p`
-reads into `G2pModel.us_only`. `load_tts_model` takes the full pack from the model's directory when
-it is there and the American-only twin otherwise, and panics when neither is. On the American-only
-pack `g2p_phonemize` refuses a British request by name and `caps` offers no British voice, so a
-Kokoro `bf_*` / `bm_*` pack is simply not on the list.

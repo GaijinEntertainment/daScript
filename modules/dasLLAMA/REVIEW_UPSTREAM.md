@@ -8,8 +8,9 @@ doc: `ARCHITECTURE_MEASUREMENT.md`. Planned work: `followup_metal.md` for the Me
 and PR body; each rule judges one independent clause - bounded by a period, a semicolon, a colon
 or a dash.**
 
-The reference build is any third-party engine, library or runtime whose figure any checked-in
-text of this module compares with this module's own, whatever copy a box holds - a prebuilt
+The reference build is any third-party engine, library or runtime whose measured numbers any
+checked-in text of this module compares with this module's own (comparing only its outputs, as a
+parity fixture does, does not make it one), whatever copy a box holds - a prebuilt
 release, or a checkout a setup script of this module pins. A library the build's release or
 source tree bundles is part of it; a package an environment installs beside it is not. A model's
 name, and a family this module names after its model, name the model, not the reference build.

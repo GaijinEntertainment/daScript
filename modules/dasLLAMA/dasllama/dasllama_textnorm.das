@@ -9,6 +9,7 @@ require math
 require strings
 require daslib/strings_boost
 require dasllama/dasllama_unicode
+require dasllama/dasllama_textscan
 
 //! English text normalization for the TTS front end: numbers, ordinals, years and decades,
 //! currency, percentages, clock times, dates, fractions, units, abbreviations, URLs and
@@ -180,10 +181,6 @@ def digit_string_value(s : string) : int64 {
     return v
 }
 
-//! The widest digit run `digit_string_value` reads without overflowing its int64 accumulator.
-//! Past it a number reads digit by digit, which is how a reader says one that long anyway.
-let MAX_DIGITS_AS_NUMBER = 18
-
 //! How many of a string's characters are digits.
 def digit_count(s : string) : int {
     var n = 0
@@ -196,18 +193,7 @@ def digit_count(s : string) : int {
 }
 
 //! Every digit of a run as its own word: "102" -> "one zero two".
-def digits_to_words(s : string) : string {
-    var inscope parts : array<string>
-    peek_data(s) $(d : array<uint8> const#) {
-        for (b in d) {
-            let cp = int(b)
-            if (is_number(cp)) {
-                parts |> push(DIGIT_WORDS[cp - '0'])
-            }
-        }
-    }
-    return join(parts, " ")
-}
+def digits_to_words(s : string) : string => digits_as_words(s, DIGIT_WORDS)
 
 //! A digit run as a cardinal, or digit by digit past `MAX_DIGITS_AS_NUMBER`.
 def private cardinal_words(digits : string) : string {
@@ -298,29 +284,10 @@ def number_or_year_to_words(raw : string) : string {
 
 // ---------------------------------------------------------------- codepoint scanning
 
-def private cp_at(c : array<int>; i : int) : int => (i >= 0 && i < length(c)) ? c[i] : -1
-def private is_digit(cp : int) : bool => is_number(cp)
 def private is_ascii_alpha(cp : int) : bool => cp < 128 && is_alpha(cp)
 def private is_word(cp : int) : bool => cp == '_' || is_digit(cp) || (cp >= 128 ? (cpt_is_letter(cp) || cpt_is_number(cp)) : is_ascii_alpha(cp))
-def private is_space(cp : int) : bool => cp >= 0 && cpt_is_whitespace(cp)
 def private at_boundary(c : array<int>; i : int) : bool => is_word(cp_at(c, i - 1)) != is_word(cp_at(c, i))
 def private lower_ascii(cp : int) : int => (cp >= 'A' && cp <= 'Z') ? cp + 32 : cp
-
-def private digits_end(c : array<int>; i : int) : int {
-    var j = i
-    while (is_digit(cp_at(c, j))) {
-        j++
-    }
-    return j
-}
-
-def private spaces_end(c : array<int>; i : int) : int {
-    var j = i
-    while (is_space(cp_at(c, j))) {
-        j++
-    }
-    return j
-}
 
 def private ascii_alpha_end(c : array<int>; i : int) : int {
     var j = i
@@ -330,26 +297,9 @@ def private ascii_alpha_end(c : array<int>; i : int) : int {
     return j
 }
 
-def private digits_value(c : array<int>; a, b : int) : int64 {
-    var v = 0l
-    for (i in range(a, b)) {
-        if (is_digit(c[i])) {
-            v = v * 10l + int64(c[i] - '0')
-        }
-    }
-    return v
-}
-
-def private cpts_str(c : array<int>; a, b : int) : string => cpts_to_utf8(c, a, b)
-
 def private lower_str(c : array<int>; a, b : int) : string {
     var inscope lowered <- [for (i in range(a, b)); lower_ascii(c[i])]
     return cpts_str(lowered, 0, length(lowered))
-}
-
-def private emit(var out : array<int>; s : string) {
-    var inscope cps <- utf8_to_cpts(s)
-    out |> push_from(cps)
 }
 
 def private emit_range(var out : array<int>; c : array<int>; a, b : int) {

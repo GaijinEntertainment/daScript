@@ -6,9 +6,12 @@ module tts_corpus shared public
 require daslib/fio
 require daslib/json_boost
 
+//! A checked-in TTS fixture by its file name under `tests/_tts_fixtures/`
+def tts_fixture_path(name : string) : string => path_join(get_das_root(), "modules/dasLLAMA/tests/_tts_fixtures/{name}")
+
 //! The 200-sentence g2p corpus every TTS rig and cell reads (`id`, `text`, `ps_espeak` per sentence),
 //! minted by `harness/mint_tts_g2p_fixture.py`.
-def tts_corpus_path() : string => path_join(get_das_root(), "modules/dasLLAMA/tests/_tts_fixtures/g2p_corpus.json")
+def tts_corpus_path() : string => tts_fixture_path("g2p_corpus.json")
 
 //! One sentence of the corpus a synthesis speaks.
 struct TtsSentence {

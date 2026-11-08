@@ -12,8 +12,10 @@ require daslib/strings_boost
 require daslib/utf8_utils
 require dasllama/dasllama_unicode
 require dasllama/dasllama_textnorm
+require dasllama/dasllama_textnorm_ru
 require dasllama/dasllama_postag
 require dasllama/dasllama_g2p
+require dasllama/dasllama_g2p_ru
 require dasllama/dasllama_tts_types public
 require dasllama/dasllama_styletts2
 require dasllama/dasllama_kitten
@@ -36,8 +38,9 @@ struct TtsModel {
     kind : TtsKind                          //! the family the GGUF's architecture named
     model : StyleTts2Model = StyleTts2Model()   //! the shared StyleTTS2-lineage assembly, its voices and the family's driver data
     scratch : St2Scratch = St2Scratch()   //! the activation carrier every synthesis reuses
-    g2p : G2pModel                          //! ``tts_g2p.bin``: lexicons, rules and the fallback chain
+    g2p : G2pModel                          //! ``tts_g2p.bin``: lexicons, rules and the fallback chain; empty where no voice speaks English and the directory has none
     tagger : PosTagger                      //! ``tts_postag.bin``: the tokenizer and part-of-speech tagger
+    ru_stress : RuStressPack                //! ``tts_g2p_ru.bin``: the Russian stress tables; empty where no voice speaks Russian
     pocket : PocketModel = PocketModel()    //! the Pocket TTS family's model, when the GGUF is one; it reads text, not phonemes
     pocket_scratch : PocketScratch = PocketScratch()   //! its activation carrier
     chunk_chars : int = TTS_CHUNK_CHARS     //! the longest chunk a synthesis speaks, in codepoints (``tts_set_chunk_chars``)
@@ -51,6 +54,7 @@ def finalize(var m : TtsModel) {
     delete m.scratch
     delete m.g2p
     delete m.tagger
+    delete m.ru_stress
     delete m.pocket
     delete m.pocket_scratch
 }
@@ -83,10 +87,19 @@ def tts_set_chunk_chars(var m : TtsModel; chars : int) {
     to_log(LOG_INFO, "dasLLAMA tts: tts_set_chunk_chars: a synthesis speaks {chars} codepoints a chunk - {which}\n")
 }
 
+def private voice_lang(m : TtsModel; vname : string) : string {
+    //! The language a canonical voice was trained on: Kitten's voices are all American
+    //! English; a Kokoro pack's name carries its language; a Pocket voice speaks its model's.
+    if (m.kind == TtsKind.pocket) {
+        return m.pocket.lang
+    }
+    return m.kind == TtsKind.kitten ? "en-us" : kokoro_voice_lang(m.model.kokoro, vname)
+}
+
 def load_tts_model(path : string) : TtsModel {
     //! Load a TTS model: a converted GGUF (KittenTTS, Kokoro or Pocket TTS, picked from its architecture) or its prepared
-    //! ``.dlim`` image; the phoneme families read ``tts_g2p.bin`` and ``tts_postag.bin`` from the same directory (Pocket
-    //! needs neither). A GGUF serves the rows GEMMs on the lane ``tts_serves_q8`` names; an image serves the lane it was baked on.
+    //! ``.dlim`` image; a phoneme family reads the packs its voices' languages ask for from the same directory (``tts_pack_names``;
+    //! Pocket needs none). A GGUF serves the rows GEMMs on the lane ``tts_serves_q8`` names; an image serves the lane it was baked on.
     var inscope m = TtsModel()
     if (!(path |> ends_with(".dlim")) && gguf_file_arch(path) == "pocket-tts") {
         m.kind = TtsKind.pocket
@@ -100,7 +113,8 @@ def load_tts_model(path : string) : TtsModel {
 
 def tts_finish_styletts2(var m : TtsModel; path : string) {
     //! A StyleTTS2 carrier in ``m.model``, loaded or minted from ``path``, made a facade: its family's kind, the
-    //! phoneme packs its front end reads from the same directory, the voices it cannot speak said once.
+    //! packs its voices' languages ask for from the same directory (the English pair also where it merely sits
+    //! there, for the Latin words inside another language's text), the voices it cannot speak said once.
     if (m.model.family == "kitten-tts") {
         m.kind = TtsKind.kitten
     } elif (m.model.family == "kokoro") {
@@ -109,22 +123,105 @@ def tts_finish_styletts2(var m : TtsModel; path : string) {
         panic("dasLLAMA tts: '{path}' has architecture '{m.model.family}', which is not a TTS family")
     }
     let dir = dir_name(path)
-    m.g2p <- load_g2p(g2p_pack_path(dir))
-    m.tagger <- load_pos_tagger(path_join(dir, "tts_postag.bin"))
+    var speaks_english = m.kind == TtsKind.kitten
+    var speaks_russian = false
+    for (v in m.model.voice_names) {
+        let lang = voice_lang(m, v)
+        speaks_english = speaks_english || (lang |> starts_with("en"))
+        speaks_russian = speaks_russian || lang == "ru"
+    }
+    if (speaks_english || english_pack_present(dir)) {
+        m.g2p <- load_g2p(g2p_pack_path(dir))
+        m.tagger <- load_pos_tagger(path_join(dir, "tts_postag.bin"))
+    }
+    if (speaks_russian) {
+        m.ru_stress <- load_ru_stress_pack(path_join(dir, RU_PACK_NAME))
+    }
     log_dropped_voices(m)
+}
+
+def private english_packs_loaded(m : TtsModel) : bool => !empty(m.g2p.data)
+
+let private RU_PACK_NAME = "tts_g2p_ru.bin"
+
+//! the phoneme pack's two tiers in a directory, the full pack first
+def private english_pack_tiers(dir : string) : array<string> => [path_join(dir, "tts_g2p.bin"), path_join(dir, "tts_g2p_en_us.bin")]
+
+def private english_pack_present(dir : string) : bool {
+    for (p in english_pack_tiers(dir)) {
+        return true if (stat(p).is_valid)
+    }
+    return false
+}
+
+//! the English packs as a program checks for them in `dir`: the phoneme pack tier the directory holds (the full pack
+//! unless only the American-only twin is there, `g2p_pack_path`'s own order) and the tagger
+def private english_pack_names(dir : string) : array<string> {
+    var inscope tiers <- english_pack_tiers(dir)
+    let twin_alone = !stat(tiers[0]).is_valid && stat(tiers[1]).is_valid
+    var inscope names : array<string>
+    names |> push(base_name(tiers[twin_alone ? 1 : 0]))
+    names |> push("tts_postag.bin")
+    return <- names
+}
+
+//! the GGUF a prepared `.dlim` was minted from, by its name beside it (`<gguf>.<lane>.dlim`); "" where none sits there
+def private image_source_gguf(path : string) : string {
+    let image = base_name(path)
+    let stem = slice(image, 0, length(image) - 5)
+    let lane = rfind(stem, ".")
+    return "" if (lane <= 0)
+    let gguf = path_join(dir_name(path), slice(stem, 0, lane))
+    return stat(gguf).is_valid ? gguf : ""
 }
 
 //! The phoneme pack a model directory serves: the full pack when present, else the American-only
 //! twin; neither is a panic naming the directory.
-[arch(at = "../ARCHITECTURE_TTS.md#tts-g2p-pack-tiers")]
+[arch(at = "../ARCHITECTURE_TTS_FRONT_END.md#tts-g2p-pack-tiers")]
 def g2p_pack_path(dir : string) : string {
-    let full = path_join(dir, "tts_g2p.bin")
-    return full if (stat(full).is_valid)
-    let us = path_join(dir, "tts_g2p_en_us.bin")
-    if (!stat(us).is_valid) {
-        panic("dasLLAMA tts: no phoneme pack beside the model - neither {full} nor {us}")
+    var inscope tiers <- english_pack_tiers(dir)
+    for (p in tiers) {
+        return p if (stat(p).is_valid)
     }
-    return us
+    panic("dasLLAMA tts: no phoneme pack beside the model - neither {tiers[0]} nor {tiers[1]}")
+    return ""
+}
+
+def tts_pack_names(path : string) : array<string> {
+    //! The front-end packs the model at ``path`` reads from its directory, decided from the file's own metadata before any load:
+    //! the phoneme pack tier the directory holds and ``tts_postag.bin`` where a voice speaks English, ``tts_g2p_ru.bin`` where one
+    //! speaks Russian, none for a Pocket GGUF; a ``.dlim`` answers for the GGUF beside it, and names the English pair where none is.
+    var inscope out : array<string>
+    let dir = dir_name(path)
+    if (path |> ends_with(".dlim")) {
+        let source = image_source_gguf(path)
+        return <- tts_pack_names(source) if (!empty(source))
+        return <- english_pack_names(dir)
+    }
+    let arch = gguf_file_arch(path)
+    return <- out if (arch == "pocket-tts")
+    var english = arch != "kokoro"
+    var russian = false
+    if (arch == "kokoro") {
+        gguf_header_read(path) $(m; bytes) {
+            var inscope voices <- gguf_str_array(m, bytes, "styletts2.voices")
+            var inscope langs <- gguf_has(m, "kokoro.voice_langs") ? gguf_str_array(m, bytes, "kokoro.voice_langs") : array<string>()
+            for (i, v in iter_range(voices), voices) {
+                let declared = i < length(langs) ? langs[i] : ""
+                let lang = empty(declared) ? kokoro_voice_lang(v) : declared
+                english = english || (lang |> starts_with("en"))
+                russian = russian || lang == "ru"
+            }
+        }
+    }
+    if (english) {
+        var inscope names <- english_pack_names(dir)
+        out |> push_from(names)
+    }
+    if (russian) {
+        out |> push(RU_PACK_NAME)
+    }
+    return <- out
 }
 
 [cold_path]
@@ -163,27 +260,23 @@ def tts_serves_q8() : bool {
 
 def private front_end_langs(m : TtsModel) : array<string> {
     //! The languages the front end reads for this model, as the reference pipeline's codes: American
-    //! English for both phoneme families, British too for Kokoro when the pack carries that tier, and
-    //! for a Pocket model the one language it was trained for.
+    //! English where the English packs are loaded, British too for Kokoro when the pack carries that
+    //! tier, Russian where the Russian pack is, and for a Pocket model the one language it was trained for.
     var inscope langs : array<string>
     if (m.kind == TtsKind.pocket) {
         langs |> push(m.pocket.lang)
         return <- langs
     }
-    langs |> push("en-us")
-    if (m.kind == TtsKind.kokoro && !m.g2p.us_only) {
-        langs |> push("en-gb")
+    if (english_packs_loaded(m)) {
+        langs |> push("en-us")
+        if (m.kind == TtsKind.kokoro && !m.g2p.us_only) {
+            langs |> push("en-gb")
+        }
+    }
+    if (ru_pack_loaded(m.ru_stress)) {
+        langs |> push("ru")
     }
     return <- langs
-}
-
-def private voice_lang(m : TtsModel; vname : string) : string {
-    //! The language a canonical voice was trained on: Kitten's voices are all American
-    //! English; a Kokoro pack's name carries its language; a Pocket voice speaks its model's.
-    if (m.kind == TtsKind.pocket) {
-        return m.pocket.lang
-    }
-    return m.kind == TtsKind.kitten ? "en-us" : kokoro_voice_lang(vname)
 }
 
 def private family_name(m : TtsModel) : string =>
@@ -289,16 +382,56 @@ def tts_normalize(text : string) : string {
     return normalize_text(text)
 }
 
+def tts_normalize(text : string; lang : string) : string {
+    //! The same in the language ``lang`` names - a code from ``caps``: Russian ("ru") reads "в 2024 году" as
+    //! "в две тысячи двадцать четвёртом году", an English code ("en-us", "en-gb", "en") reads English, and any other
+    //! language's text comes back as it is - a Pocket model's other languages read their text whole, as their reference does.
+    return normalize_text_ru(text) if (lang == "ru")
+    return normalize_text(text) if (lang |> starts_with("en"))
+    return text
+}
+
+//! a Latin run inside Russian text passes to the Russian reader as English phonemes where the English packs are loaded, as letters where not
+def private ru_phonemize_latin_spliced(m : TtsModel; norm : string) : string {
+    var text = norm
+    if (english_packs_loaded(m)) {
+        var inscope cps <- utf8_to_cpts(norm)
+        let n = length(cps)
+        text = build_string() $(var wr) {
+            var i = 0
+            while (i < n) {
+                let cp = cps[i]
+                let latin = is_alpha(cp)
+                if (!latin) {
+                    wr |> write(cpt_to_utf8(cp))
+                    i++
+                    continue
+                }
+                var j = i
+                while (j < n && ((is_alpha(cps[j])) || (j > i && (cps[j] == '\'' || cps[j] == '-') && j + 1 < n && (is_alpha(cps[j + 1]))))) {
+                    j++
+                }
+                wr |> write(strip(g2p_phonemize(m.g2p, m.tagger, cpts_to_utf8(cps, i, j))))
+                i = j
+            }
+        }
+    }
+    return ru_phonemize(m.ru_stress, text)
+}
+
+def private phonemize_for(m : TtsModel; norm : string; lang : string) : string =>
+    lang == "ru" ? ru_phonemize_latin_spliced(m, norm) : g2p_phonemize(m.g2p, m.tagger, norm, lang == "en-gb")
+
 def tts_needs_packs(path : string) : bool {
-    //! Whether the model at ``path`` reads the front-end packs (``tts_g2p.bin``, ``tts_postag.bin``)
-    //! from its directory: the phoneme families do, a Pocket TTS GGUF reads text and needs neither -
-    //! decided before any load, by the architecture test ``load_tts_model`` makes (a ``.dlim`` is a phoneme family).
+    //! Whether the model at ``path`` reads any front-end pack from its directory: the phoneme families do
+    //! (``tts_pack_names`` says which), a Pocket TTS GGUF reads text and needs none - decided before any
+    //! load, by the architecture test ``load_tts_model`` makes (a ``.dlim`` is a phoneme family).
     return (path |> ends_with(".dlim")) || gguf_file_arch(path) != "pocket-tts"
 }
 
 def tts_has_phonemes(m : TtsModel) : bool {
-    //! Whether ``tts_phonemize`` has an answer for this model: the phoneme families yes, a Pocket
-    //! model no - it reads text, and its chunks carry no phoneme string.
+    //! Whether ``tts_phonemize`` has an answer for this model: the phoneme families yes, in the languages ``caps().langs``
+    //! lists (the two-argument form's English needs the English packs beside the model), a Pocket model no - it reads text.
     return m.kind != TtsKind.pocket
 }
 
@@ -310,22 +443,21 @@ def private phoneme_family_only(m : TtsModel) {
 
 def tts_phonemize(m : TtsModel; text : string) : string {
     //! The phonemes one already-normalized sentence becomes, in the front end's own American
-    //! inventory (the tagger of ``tts_postag.bin`` labels the tokens, the grapheme-to-phoneme pass of
-    //! ``tts_g2p.bin`` reads them); a family wanting other symbols rewrites them. A Pocket model panics.
-    phoneme_family_only(m)
-    return g2p_phonemize(m.g2p, m.tagger, text)
+    //! inventory (``tts_postag.bin`` tags the tokens, ``tts_g2p.bin`` reads them); a family wanting other
+    //! symbols rewrites them. A Pocket model panics, and so does a model with no English pack beside it.
+    return tts_phonemize(m, text, "en-us")
 }
 
 def tts_phonemize(m : TtsModel; text : string; lang : string) : string {
-    //! The same, in the inventory ``lang`` names - a language code from ``caps``, ``"en-us"`` or
-    //! ``"en-gb"``. A language this model's front end does not phonemize panics rather than
-    //! answering in the wrong dialect.
+    //! The same, in the inventory ``lang`` names - a language code from ``caps``: ``"en-us"``, ``"en-gb"``,
+    //! or ``"ru"`` (the Russian front end, a Latin word inside read by the English one where its packs are
+    //! loaded). A language this model's front end does not phonemize panics rather than answering in another.
     phoneme_family_only(m)
     var inscope langs <- front_end_langs(m)
     if (find_index(langs, lang) < 0) {
         panic("dasLLAMA tts: this front end does not phonemize '{lang}'")
     }
-    return g2p_phonemize(m.g2p, m.tagger, text, lang == "en-gb")
+    return phonemize_for(m, text, lang)
 }
 
 // ===== chunking =====
@@ -490,14 +622,14 @@ def private synthesize_chunk_pocket(var m : TtsModel; chunk : string; vname : st
     return <- out
 }
 
-def private synthesize_chunk(var m : TtsModel; norm : string; vname : string; speed : float; chunk_index : int) : TtsAudio {
+def private synthesize_chunk(var m : TtsModel; norm : string; vname, lang : string; speed : float; chunk_index : int) : TtsAudio {
     if (m.kind == TtsKind.pocket) {
         return <- synthesize_chunk_pocket(m, norm, vname, speed, chunk_index)
     }
     var inscope out = TtsAudio()
     out.sample_rate = m.model.sample_rate
     let clock = ref_time_ticks()
-    let ps_misaki = g2p_phonemize(m.g2p, m.tagger, norm, voice_lang(m, vname) == "en-gb")
+    let ps_misaki = phonemize_for(m, norm, lang)
     let is_kitten = m.kind == TtsKind.kitten
     var inscope ids <- is_kitten ? kitten_token_ids(kitten_phonemes_from_misaki(ps_misaki)) : kokoro_token_ids(m.model.kokoro, ps_misaki)
     let row = is_kitten ? kitten_style_row(norm, m.model.style_rows) : kokoro_style_row(ps_misaki, m.model.style_rows)
@@ -541,12 +673,11 @@ def synthesize_stream(var m : TtsModel; text : string; voice : string; speed : f
     //! soon as it exists, in order. Normalization runs once over the whole text; ``voice`` is a
     //! name from ``caps`` or a family alias, and an unknown one panics.
     let vname = resolve_voice(m, voice)
-    // the normalizer reads English; a Pocket model in another language takes the text as it is,
-    // which is what its reference does in every language
-    let norm = m.kind == TtsKind.pocket && m.pocket.lang != "en" ? text : normalize_text(text)
+    let lang = voice_lang(m, vname)
+    let norm = tts_normalize(text, lang)
     var inscope chunks <- tts_chunks(m, norm)
     for (i, chunk in iter_range(chunks), chunks) {
-        var inscope a <- synthesize_chunk(m, chunk, vname, speed, i)
+        var inscope a <- synthesize_chunk(m, chunk, vname, lang, speed, i)
         to_log(LOG_INFO, "dasLLAMA tts: {family_name(m)}: {timings_line(a.timings, a.sample_rate)}\n")
         invoke(blk, a)
     }

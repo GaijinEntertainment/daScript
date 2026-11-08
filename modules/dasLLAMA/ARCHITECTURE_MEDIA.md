@@ -124,7 +124,7 @@ carriers name, and no TTS family file (`dasllama_kitten`, `dasllama_kokoro`, `da
 
 `ARCHITECTURE_TTS.md` carries this section - the TTS family mirrors the ASR one (a types floor,
 a shared block home, a facade, one file per model family) and adds the text front end no ASR
-family needs; every stage is data-driven from the model store, and nothing under `models/`
+family needs (`ARCHITECTURE_TTS_FRONT_END.md`); every stage is data-driven from the model store, and nothing under `models/`
 carries TTS data.
 
 ### Family GPU hooks install from the driver and always decline {#tower-gpu-hook}

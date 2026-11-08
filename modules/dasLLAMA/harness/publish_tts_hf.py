@@ -6,6 +6,11 @@
 # take (performance/model_specs.das, serve_tts_set).
 #
 #   python publish_tts_hf.py --repo <user>/dasllama-tts [--models ~/Work/llama.cpp/models] [--dry-run]
+#                            [--only kokoro-ru.gguf,tts_g2p_ru.bin]
+#
+# `--only` publishes the named files alone (each still verified against the card), with the card,
+# the licence texts and the sidecars - the commit for a set that grew by a few files; the files it
+# leaves out stay in the repository as they are.
 #
 # Auth: HF_TOKEN in the environment, or `huggingface-cli login` beforehand. Runs in the
 # experiment venv (huggingface_hub importable).
@@ -14,7 +19,8 @@ import argparse, hashlib, os, re, shutil, sys, tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 MODULE = os.path.dirname(HERE)
 CARD = os.path.join(HERE, "tts_model_card.md")
-FILES = ["kitten-nano.gguf", "kitten-mini.gguf", "kokoro-82m.gguf", "tts_g2p.bin", "tts_g2p_en_us.bin", "tts_postag.bin",
+FILES = ["kitten-nano.gguf", "kitten-mini.gguf", "kokoro-82m.gguf", "kokoro-ru.gguf", "kokoro-ru-dima.gguf",
+         "tts_g2p.bin", "tts_g2p_en_us.bin", "tts_postag.bin", "tts_g2p_ru.bin",
          "pocket-tts-en-q8.gguf", "pocket-tts-de-q8.gguf", "pocket-tts-es-q8.gguf", "pocket-tts-it-q8.gguf",
          "pocket-tts-pt-q8.gguf", "pocket-tts-fr-q8.gguf", "pocket-tts-en-kq.gguf", "pocket-tts-en-stuart-kq.gguf",
          "pocket-tts-en-18m-q8.gguf", "pocket-tts-en-18m-kq.gguf", "pocket-tts-en-18m-stuart-kq.gguf", "pocket-tts-en-7m-q8.gguf",
@@ -39,13 +45,13 @@ def card_hashes(card_text):
     return out
 
 
-def stage(models_dir, work):
+def stage(models_dir, work, files):
     card_text = open(CARD, encoding="utf8").read()
     expected = card_hashes(card_text)
-    missing = [f for f in FILES if f not in expected]
+    missing = [f for f in files if f not in expected]
     if missing:
         sys.exit(f"the model card's Files table lacks: {missing}")
-    for name in FILES:
+    for name in files:
         src = os.path.join(models_dir, name)
         if not os.path.exists(src):
             sys.exit(f"missing {src}")
@@ -69,10 +75,17 @@ def main():
     ap.add_argument("--models", default=os.path.expanduser("~/Work/llama.cpp/models"))
     ap.add_argument("--dry-run", action="store_true", help="stage and verify, upload nothing")
     ap.add_argument("--message", default="dasLLAMA text-to-speech set")
+    ap.add_argument("--only", help="comma-separated names from the set: publish these files alone, with the card and licences")
     a = ap.parse_args()
+    files = FILES
+    if a.only:
+        files = [f.strip() for f in a.only.split(",") if f.strip()]
+        unknown = [f for f in files if f not in FILES]
+        if unknown:
+            sys.exit(f"--only names files outside the set: {unknown}")
     work = tempfile.mkdtemp(prefix="dasllama_tts_hf_")
     try:
-        staged = stage(a.models, work)
+        staged = stage(a.models, work, files)
         print("staged:", ", ".join(staged))
         if a.dry_run:
             return
@@ -82,7 +95,7 @@ def main():
         info = api.upload_folder(folder_path=work, repo_id=a.repo, repo_type="model", commit_message=a.message)
         sha = getattr(info, "oid", None) or getattr(info, "commit_sha", None) or str(info)
         print(f"commit {sha}")
-        for name in FILES:
+        for name in files:
             print(f"https://huggingface.co/{a.repo}/resolve/{sha}/{name}")
     finally:
         shutil.rmtree(work, ignore_errors=True)

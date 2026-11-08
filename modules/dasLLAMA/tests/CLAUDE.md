@@ -4300,6 +4300,16 @@ decimal readers, the reference normalizer's own examples, the fixed upstream def
 failing-first cases, and the 200-sentence corpus (`_tts_fixtures/g2p_corpus.json`, loaded by
 `_tts_corpus.das`) against the reference normalizer's output - or the fixture's hand-corrected
 `expected` form where that output is not what a person says - idempotence included.
+`test_tts_textnorm_ru.das` - model-free: the Russian normalizer - the cardinal reader with its
+scale words (две тысячи, пять тысяч), the grammatical number a count takes (рубль, рубля, рублей),
+the ordinal reader in every form a suffix or a date asks for (третьего, восьмом, две тысячи
+двадцать четвёртом, двухтысячный), the decimal reader (три целых четырнадцать сотых, одна целая
+пять десятых), and the sentence passes on pinned sentences - years after в and before года, dates
+in both spellings (a no-break space before the month a space), clock times with seconds and a
+second past 59 left alone, ordinal suffixes, units (both Celsius spellings), percentages with a
+decimal, money, a minus before a unit kept, a run past eighteen digits read digit by digit before its unit and after a
+currency sign, abbreviations with the sentence's dot kept at the end of the text, symbols,
+punctuation - a normalized sentence a fixed point.
 `test_tts_postag.das` - stocked suite; model-free cells: the tagger's word class and shape
 features (the trainer's own hyphen rule, the d/h/q suffixes), the tokenizer's comma and colon
 infix rules, and the missing-pack panic; model-gated (`tts_postag.bin` in the models dir): the TTS
@@ -4334,6 +4344,26 @@ line beside it. Then the AMERICAN-ONLY pack (`tts_g2p_en_us.bin`, skips when abs
 with the full pack on the 200 sentences, British refused by name on it (the full pack reading
 British is the control), and the directory rule of `g2p_pack_path` - the full pack wins where
 both sit, the American twin serves alone, an empty directory panics naming it.
+`test_tts_g2p_ru.das` - stocked suite; model-free cells: letter-to-sound on 50 pinned marked
+words (the label shape kokoro-ru was trained on - palatalization, the sign cases, voicing and
+final devoicing, the reduction, the respellings and the merged clusters, both mark spellings,
+case-insensitive), the sandhi across words (the preposition keeping its voice before a vowel, a
+word's final в devoicing there, ч and шь voiced before a voiced opening, сделать opening voiced, a
+final soft consonant soft before a vowel and hard otherwise, a final вь devoicing whatever
+follows), hyphenated words (the one-vowel side stressed, the clitic side not, либо with its own
+stress whatever its case), punctuation (quotes and brackets go, the dash stays) and another script's run passing
+through; then the 200-sentence fixture `_tts_fixtures/g2p_corpus_ru.json` (loaded by
+`_tts_corpus_ru.das`, minted by `../harness/mint_tts_g2p_ru_fixture.py` from stress-marked
+Balalaika sentences through kokoro-ru's own front end) on its marked words - the words a bare
+corpus left to the reference's own stress are counted apart - the mismatch count pinned exactly at
+4 (three loanwords the reference reads from its dictionary, one voiced final зь); and the
+missing-pack panic, the version refusal and the wrong-magic refusal (synthetic headers in the
+per-process temp dir). Model-gated (`tts_g2p_ru.bin` under models_dir()): the pack's forms and
+variants (молоко́ one reading, замок two), ё restoration where the е spelling is no word and the
+ambiguous все left alone, marking a word - the text's mark winning, the case kept, a ё its own
+mark, the clitics bare, a reflexive read through its base form (-ся and -сь) and falling to the
+shape rule where the pack lacks the base too, the shape rule on a word the pack lacks, a
+hyphenated clitic - and the whole text-to-phonemes path.
 `test_tts_kitten.das` - stocked suite; the symbol-map and token-rule cells run everywhere
 (the front end's inventory into espeak-style IPA against the reference rewrite over the corpus,
 the reference driver's re-spacing and wrapping), as does `test_spectrum_diff_reds_a_nan` (the
@@ -4376,7 +4406,16 @@ The kitten image rail is the `image` suite's `kitten` arm (the TTS area's), not 
 `test_tts_kokoro.das` - stocked suite; model-free cells: the symbol map over a synthetic phoneme
 string, the out-of-vocabulary drop, the style-row clamps, and the pack-name language rule
 (`<language><f|m>_` for all nine codes, and every other shape reading "" whatever letter it opens
-with - the letter alone would make "emma" Spanish); model-gated (`kokoro-82m.gguf` +
+with - the letter alone would make "emma" Spanish); model-gated on the Russian fine-tune
+(`kokoro-ru.gguf` + `tts_g2p_ru.bin` under models_dir(), `test_kokoro_ru_facade`):
+`tts_pack_names` naming the Russian pack alone before any load, both voice packs listed as `ru`
+from the file's own declaration (the family record carries it; the name alone carries none), the
+front end listing Russian, the Russian normalizer and phonemizer through the facade's language
+forms on a pinned line, every Russian symbol in the model's vocabulary by the token count (a
+click outside it adding no id, the control), a Latin word inside the Russian text read by the
+English front end sitting beside the model, `sveta` speaking finite non-silent PCM whose sample
+count is the pack-default phoneme string's and not the other stress readings' (the control);
+model-gated (`kokoro-82m.gguf` +
 `tts_oracle/kokoro/`): the vocabulary and style-row rule, the parity rail of `_tts_parity.das`
 against the PyTorch reference, a facade smoke cell through the front end's own inventory (the 28
 English packs, two declared languages, 8 of them British), the British voice cell - one line

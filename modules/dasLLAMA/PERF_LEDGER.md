@@ -10,6 +10,15 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **SIZED (2026-11-08, any box - a file's bytes, no run) - the Russian front end's lasting allocations.**
+  `TtsModel.ru_stress.data` holds the whole of `tts_g2p_ru.bin`, 17,320,693 bytes (its pinned size), read once at a
+  Russian-voiced model's load and kept for the model's life - the two string tables are searched in place, nothing is
+  parsed out of it. `KokoroFamily.voice_langs` holds one entry per voice the GGUF declares a language for: a string key
+  (the voice name), a string value (the code) and the table slot, under 100 bytes a voice - 2 entries on
+  `kokoro-ru.gguf`, 1 on `kokoro-ru-dima.gguf`, 0 on `kokoro-82m.gguf` (its file declares none; the name's shape
+  answers), 54 at most where a converter declares every pack of the 54-voice file. The English packs' resident bytes
+  are unchanged: `tts_g2p.bin` 14,011,554 and `tts_postag.bin` 12,566,510, loaded where a voice speaks English or the
+  packs sit beside the model.
 - **MEASURED (2026-11-05, `direction-grade`) - the round's seams on the 27B and the 35B, the NextN ladder on three
   carriers, and the Flash-Next prefill (the M5 Max, `bbatkin/mlx-loader` at 57370cab0a, `m5.mlx.tune.json`, the box to
   one process, a clean tree, 70 s between processes, three interleaved reps of every row - every row's reps within 1.5%,

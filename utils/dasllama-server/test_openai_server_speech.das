@@ -43,10 +43,12 @@ let POCKET_CLIP_PORT = 18145    // the Pocket boot that speaks the clip the next
 let POCKET_CLONE_PORT = 18146   // the Pocket boot with a voices directory
 let POCKET_NOCLONE_PORT = 18147   // the kitten boot under the same voices directory: ignored
 let HELD_PORT = 18163      // the LLM + TTS boot whose engine an embeddings forward holds
+let KOKORO_RU_PORT = 18164   // the Russian boot: its own worker, so its own port
 let TTS_BURST = 24      // past the server's queue cap (16): the overflow must be refused, not queued
 
 let TTS_PATH = path_join(models_dir(), "kitten-nano.gguf")
 let KOKORO_PATH = path_join(models_dir(), "kokoro-82m.gguf")   // the multi-language front end: two dialects to be wrong about
+let KOKORO_RU_PATH = path_join(models_dir(), "kokoro-ru.gguf")   // the Russian fine-tune: its voices speak ru, the English packs beside it read a Latin word
 let POCKET_PATH = path_join(models_dir(), "pocket-tts-en-q8.gguf")   // the text-reading, voice-cloning family: no packs, no phonemes, no speed
 let LLM_PATH = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")   // the slot whose embeddings forward holds the engine
 let BOGUS_TTS_PATH = path_join(models_dir(), "no-such-tts-model.gguf")   // never on disk: the degrade path
@@ -708,6 +710,42 @@ def test_phonemes_on_a_multi_language_model(t : T?) {
     with_speech_server(KOKORO_PATH, KOKORO_PORT, "q8", "") $(base_url) {
         t |> run("the phonemes route reads the voice's own dialect and refuses a voice it cannot") @(t : T?) {
             check_multi_language_phonemes(t, base_url)
+        }
+    }
+}
+
+// The Russian fine-tune on the phonemes route: with the English packs beside it the front end lists
+// en-us first, and a request naming no voice still reads in the default voice's language - the one
+// the speech route would speak - so the preview is the Russian normalizer's and phonemizer's.
+[test]
+def test_phonemes_on_a_russian_model(t : T?) {
+    if (!jit_enabled()) {
+        t |> skip("JIT-only: the interpreter is too slow to load a TTS model")
+        return
+    }
+    if (!stat(KOKORO_RU_PATH).is_valid || !stat(path_join(models_dir(), "tts_g2p_ru.bin")).is_valid) {
+        t |> skip("kokoro-ru.gguf or tts_g2p_ru.bin not present under {models_dir()}")
+        return
+    }
+    t |> equal(tts_missing_file(KOKORO_RU_PATH), "", "the Russian set is complete: the GGUF and its stress pack")
+    with_speech_server(KOKORO_RU_PATH, KOKORO_RU_PORT, "q8", "") $(base_url) {
+        t |> run("no voice named: the default voice's language, Russian") @(t : T?) {
+            phonemes_request(base_url, "\{\"input\": \"В 2024 году вышло 12 игр.\"}") $(status, text) {
+                t |> equal(status, 200, text)
+                var err = ""
+                var js = read_json(text, err)
+                t |> success(js != null, "the answer parses as JSON: {err}")
+                if (js != null) {
+                    t |> equal(js?["lang"] ?? "", "ru", "the default voice speaks Russian, whatever the front end lists first")
+                    t |> equal(js?["normalized"] ?? "", "В две тысячи двадцать четвёртом году вышло двенадцать игр.", "the Russian normalizer read the year and the count")
+                    var inscope phons <- json_row_field(js?["chunks"], "phonemes")
+                    t |> equal(length(phons), 1, "one chunk")
+                    t |> success(length(phons) == 1 && find(phons[0], "ɡɐdˈu") >= 0, "the Russian phonemizer read году: {phons}")
+                    unsafe {
+                        delete js
+                    }
+                }
+            }
         }
     }
 }

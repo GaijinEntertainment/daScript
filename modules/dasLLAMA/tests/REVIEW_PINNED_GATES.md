@@ -270,14 +270,18 @@ replacement's output to the deleted assert's bound or tighter, with its control,
 testing the replacement, or names in the old cell's pinned-set entry the pinned cell that already
 asserts the replacement's output to that bound.**
 
-**A diff that adds a cell or an assert whose expected value must keep step with something
-maintained outside the cell - a value an outside source can change while no sha, row or tag in
-this repository changes, restated as a literal or a copied condition or read from an
-expected-value file under `models_dir()` the cell does not build (an oracle dump, a truth cache),
-never a value the cell's own claim defines - or
-that a checked-in table (`../README.md`'s model table, a kernel list whose coverage note names a
-cell as each kernel's evidence) names as its evidence, adds the cell
-carrying it to the pinned set in the same change** - as a named cell, or, when the new cell leaves
-every cell of its file pinned, by replacing the file's named cells with one file entry naming what
-it pins. A new entry in an existing cell's expectation list is not a new assert; a `../dasllama/`
-constant compared by name keeps nothing in step.
+**A diff that adds a cell or an assert whose expected value the cell does not compute from its own
+input, and that an outside source can change while no sha, row or tag in this repository changes,
+adds the cell to the pinned set in the same change.** Such a value is a literal or a copied
+condition restating that source, or a read of a file under `models_dir()` that the cell does not
+build and that no `../performance/model_specs.das` row pins by sha256 (an oracle dump, a truth
+cache). A new entry in an existing cell's expectation list is not a new assert, and a
+`../dasllama/` constant compared by name is not such a value.
+
+**A diff that adds a cell or an assert that a checked-in table names as its evidence -
+`../README.md`'s model table, a kernel list whose coverage note names a cell as each kernel's
+evidence - adds the cell to the pinned set in the same change.**
+
+**A diff that adds a cell to the pinned set adds it as a named-cell entry, or, when the new cell
+leaves every cell of its file pinned, replaces the file's named cells with one file entry naming
+what it pins.**

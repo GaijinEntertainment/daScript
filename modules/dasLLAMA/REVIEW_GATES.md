@@ -1,7 +1,8 @@
 # dasLLAMA Gate Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `ARCHITECTURE.md`. Planned work: `followup_general.md`.
+docs: `ARCHITECTURE.md` and its `ARCHITECTURE_*.md` companions. Planned work:
+`followup_general.md`.
 
 **An edit to a `REVIEW.das` under this folder never drops a check while code it guards remains in
 the tree and no lint takes it over - fix the flagged code instead.**
@@ -9,10 +10,10 @@ the tree and no lint takes it over - fix the flagged code instead.**
 **An edit to a `REVIEW.das` under this folder never narrows what a check walks (a file or folder
 it stops reading) - fix the flagged code instead.**
 
-**An edit to a `REVIEW.das` under this folder never edits the fixed value a check compares
-against - a hash, a count or a list - unless the finding text tells the author to and every
-condition that text states for doing so is shown to hold, by the change it names in the diff or by
-a PR-body claim that it holds with the evidence - fix the flagged code instead.**
+**An edit to a `REVIEW.das` under this folder changes a literal a check compares the tree
+against only when that check's finding text says to, and each condition the text sets for the
+change holds - shown by the change the text names, in the same diff, or by a PR-body claim with
+its evidence; otherwise fix the flagged code.**
 
 **An edit to a `REVIEW.das` under this folder never leaves a check passing code its finding text
 still names as a defect - fix the flagged code instead.**

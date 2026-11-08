@@ -426,9 +426,11 @@ let GIGAAM_RECIPE = "fetched: cstr/gigaam-v3-GGUF, converted by CrispASR's model
 let GIGAAM_Q4K_RECIPE = "fetched: cstr/gigaam-v3-GGUF's q4_k file, CrispASR's crispasr-quantize over the f16 carrier (the attention and FF GEMMs Q4_K, the conv pointwise GEMMs Q8_0, the rest as the f16 file); serves on the kq lane as its own planes; THIRD_PARTY_NOTICES.md (module root) carries the attribution"
 let CANARY_ENC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv; encoder is a repack - sha canonical everywhere)"
 let CANARY_DEC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv), then llama-quantize Q8_0 (a Q8_0 disk embedding lets the tied classifier serve cls_q8 on the Metal rail); bytes are per-arch (fp16 LoRA merge) - gate via asr_bench --text over jfk/jfk3/gb1 vs benchmarks/asr/canary_transcripts.expected"
-let TTS_HF = "{HF}/borisbat/dasllama-tts/resolve/9e6b0aa612bcb1473c5bd4ca129fb47ad1a69bc2"   //! the published set, commit-pinned
+let TTS_HF = "{HF}/borisbat/dasllama-tts/resolve/0cf5b7a89d9882139af08e4b871e9e82e70b4715"   //! the published set, commit-pinned
 let TTS_KITTEN_RECIPE = "convert: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/convert_kitten.py over KittenML/kitten-tts-nano-0.8 @ 7a1db645b1f3ab9420761d87428e042b9cec3f26 and kitten-tts-mini-0.8 @ c02725660cea441db4c383af69f1f26f5cd00947 (the ONNX weights into GGUF, f32); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
-let TTS_KOKORO_RECIPE = "convert: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/convert_kokoro.py over hexgrad/Kokoro-82M @ f3ff3571791e39611d31c381e3a41a3af07b4987 (kokoro-v1_0.pth + the voice packs into GGUF, f32); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
+let TTS_KOKORO_RECIPE = "convert: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/convert_kokoro.py at 807f0164c3 (a later converter also writes kokoro.voice_langs; the pinned file carries none, its voices named in the pipeline's shape) over hexgrad/Kokoro-82M @ f3ff3571791e39611d31c381e3a41a3af07b4987 (kokoro-v1_0.pth + the voice packs into GGUF, f32); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
+let TTS_KOKORO_RU_RECIPE = "convert: harness/convert_kokoro.py --checkpoint <pth> --config config.json --voices <dir of .bin packs> --name <stem> --lang ru --source 'zaakirio/kokoro-ru @ d649c57b239b18c4c384378127cbf01dba039bc1' (kokoro-ru-v2-base.pth with sveta and masha into kokoro-ru.gguf, kokoro-ru-v2-dima.pth with dima into kokoro-ru-dima.gguf, f32); THIRD_PARTY_NOTICES.md carries the attribution"
+let TTS_PACKS_RU_RECIPE = "mint: harness/build_g2p_ru_data.py --openrussian <dir of the OpenRussian csv files> --frequency <word, ordinal, count over the Balalaika corpora's stress marks> --out tts_g2p_ru.bin (every inflected form's stressed vowel and the \xD1\x91 spellings into tts_g2p_ru.bin)"
 let TTS_POCKET_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.py at 3fe41ff187 --language english_2026-04 --q8 --name pocket-tts-en-q8 over kyutai/pocket-tts languages/english_2026-04/model.safetensors @ 19f95fe2df36e79fbd9f10008595cc4c977a0fcc, the tokenizer of kyutai/pocket-tts-without-voice-cloning @ d29db7978e464fb90cb3359ee0c69a273b9142cc and the voice clips of kyutai/tts-voices @ 323332d33f997de8394f24a193e1a76df720e01a (the served linears as Q8_0, every codec conv and the rest f16); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
 let TTS_POCKET_LANG_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.py at 3fe41ff187 --language <config> --q8 --name pocket-tts-<code>-q8 over kyutai/pocket-tts languages/<config>/model.safetensors @ 39592ff23c9ef80098bb74895d104c26275fe2c9 (german, italian, spanish, portuguese, french_24l), the tokenizer of kyutai/pocket-tts-without-voice-cloning @ d29db7978e464fb90cb3359ee0c69a273b9142cc and the language's default clip (kyutai/pocket-tts @ 64ab7d24c479d736a83b8cc666c4a776fca30fda; estelle from kyutai/tts-voices @ 1fc7395b7e012e2bbebfca14b942a4ef62ccc899); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
 //! the small form the browser examples fetch: K-quant planes where the ladder held (backbone and codec transformers Q4_K, the embedding table Q4_K), Q8_0 where it did not (the flow head), the codec convolutions f16, the roster as latent frames
@@ -1071,8 +1073,8 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             bytes = 13597177568l, sha256 = "babd1e389d386352f71600765d37390f7dc993fbfad6725caccf996ffe34aecf",
             parity <- ev_gemma_count([kq_native = true])),
         // the text-to-speech carriers: local conversions with no board row (followup_general.md
-        // row 77); the front-end packs every TTS model loads ride the kitten-nano row, the
-        // per-model oracle dumps ride their own rows
+        // row 77); the English front-end packs ride the kitten-nano row, the Russian stress pack
+        // the kokoro-ru row, the per-model oracle dumps their own rows
         ModelSpec(file = "kitten-nano.gguf", recipe = TTS_KITTEN_RECIPE, serve_tts = true,
             tts = TtsBoard(display = "KittenTTS nano", voice = "Bella", ref = "kitten-nano", package = "kittentts"),
             url = "{TTS_HF}/kitten-nano.gguf", bytes = 59331456l,
@@ -1100,6 +1102,20 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             sha256 = "e0d6584b5b650730bd62e7b105a2e9502384bbe3fbebf3030113560355e6232f",
             companions <- [
                 ProvEntry(name = "tts_oracle/kokoro", root = "llm", recipe = TTS_ORACLE_RECIPE)]),
+        // the Russian fine-tune: the base checkpoint's two voices, its stress pack beside it; the English
+        // packs its facade cell reads for a Latin word are named without their pins, which ride the kitten-nano row
+        ModelSpec(file = "kokoro-ru.gguf", recipe = TTS_KOKORO_RU_RECIPE, serve_tts = true,
+            url = "{TTS_HF}/kokoro-ru.gguf", bytes = 325804992l,
+            sha256 = "635a43debfcbff5cf1fd0380a4ffc55dfacff083ae16d057bae6d7e7c9a29c9f",
+            companions <- [
+                ProvEntry(name = "tts_g2p_ru.bin", root = "llm", recipe = TTS_PACKS_RU_RECIPE,
+                    url = "{TTS_HF}/tts_g2p_ru.bin", bytes = 17320693l,
+                    sha256 = "775d9a308b81874328909ad7ea8426513a43401f34a83973d0f2ed437068c8b1"),
+                ProvEntry(name = "tts_g2p.bin", root = "llm", recipe = TTS_PACKS_RECIPE),
+                ProvEntry(name = "tts_postag.bin", root = "llm", recipe = TTS_PACKS_RECIPE)]),
+        ModelSpec(file = "kokoro-ru-dima.gguf", recipe = TTS_KOKORO_RU_RECIPE,
+            url = "{TTS_HF}/kokoro-ru-dima.gguf", bytes = 325282688l,
+            sha256 = "7720e1087c0c9720577e7e0b383dd31f75b7f6ab45bcd88df1f28df3c08c56a6"),
         // the Pocket TTS family reads text, so it needs no pack; the published form is the Q8_0 file,
         // the f16 twin (pocket-tts-en.gguf, the parity rail's reference) stays local
         ModelSpec(file = "pocket-tts-en-q8.gguf", recipe = TTS_POCKET_RECIPE, serve_tts = true,
@@ -1227,11 +1243,12 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
     ]
 }
 
-//! The text-to-speech set the serving catalog offers: the nine served GGUFs (the three phoneme
-//! families, the six Pocket languages) and the three front-end packs (the full phoneme pack, its
-//! American-only twin, the tagger), as pinned on the borisbat/dasllama-tts repository - a view
-//! over the rows above (the packs ride the kitten-nano row's companions). Every entry carries
-//! url + bytes + sha256; `pack` tells the packs apart from the models.
+//! The text-to-speech set the serving catalog offers: the served GGUFs (the three phoneme
+//! families and the Russian fine-tune, the six Pocket languages and the small English forms) and the
+//! four front-end packs (the full phoneme pack, its American-only twin, the tagger, the Russian
+//! stress pack), as pinned on the borisbat/dasllama-tts repository - a view over the rows above
+//! (a pack rides its carrier row's companions with a url; a companion named without one is left out).
+//! Every entry carries url + bytes + sha256; `pack` tells the packs apart from the models.
 def serve_tts_set() : array<tuple<entry : ProvEntry; pack : bool>> {
     var out : array<tuple<entry : ProvEntry; pack : bool>>
     var all <- model_specs()

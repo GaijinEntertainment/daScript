@@ -12,6 +12,12 @@ Files named README.md or CHANGELIST.md ship to readers and keep their
 typography: they are prose, not rules or action items, so they are exempt
 from transliteration but still held to valid UTF-8 — mojibake in them is
 repaired (default) or flagged (--check).
+
+Letters of a script a document discusses - Cyrillic words of the Russian
+front end, the IPA labels a phonemizer emits - are content, not typography:
+mojibake never produces them, so they stay as written (CONTENT_RANGES), and a
+combining mark riding one of them (a stress accent on a Cyrillic vowel) stays
+with it.
 """
 import argparse
 import re
@@ -42,6 +48,15 @@ EXEMPT_FILES = {
 # em dash gets surrounding-space normalization; plain dashes map directly
 DASH = {"—"}
 SENTINEL = "\x00"
+
+# scripts a document may quote as its subject: Cyrillic, the IPA extensions and
+# the spacing modifiers IPA uses (the stress mark, the length mark)
+CONTENT_RANGES = ((0x0400, 0x04FF), (0x0250, 0x02AF), (0x02B0, 0x02FF))
+
+
+def is_content_letter(ch: str) -> bool:
+    code = ord(ch)
+    return any(lo <= code <= hi for lo, hi in CONTENT_RANGES)
 
 MAP = {
     "–": "-", "−": "-", "‑": "-",
@@ -123,6 +138,9 @@ def transliterate(text: str):
         if ord(ch) < 128:
             out.append(ch)
             continue
+        if is_content_letter(ch) or (unicodedata.combining(ch) and out and is_content_letter(out[-1])):
+            out.append(ch)
+            continue
         if ch in DASH:
             out.append(SENTINEL)  # spacing fixed below
             continue
@@ -166,9 +184,11 @@ def main():
         if residual:
             failed.append((rel, residual))
             continue
+        if fixed == text and not was_broken:
+            continue   # the non-ASCII it holds is content a document may quote (CONTENT_RANGES)
         dirty.append(rel)
         if not args.check:
-            path.write_bytes(fixed.encode("ascii"))
+            path.write_bytes(fixed.encode("utf-8"))
 
     for rel in dirty:
         print(("needs fix: " if args.check else "fixed: ") + rel)

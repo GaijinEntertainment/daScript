@@ -184,6 +184,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_think_split.das",
                     "modules/dasLLAMA/tests/test_tok_seed.das",
                     "modules/dasLLAMA/tests/test_tts_textnorm.das",
+                    "modules/dasLLAMA/tests/test_tts_textnorm_ru.das",
                     "modules/dasLLAMA/tests/test_tts_blocks.das",
                     "modules/dasLLAMA/tests/test_tts_voice_prompts.das",
                     "modules/dasLLAMA/tests/test_tool_formats.das",
@@ -328,6 +329,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_tokenizer.das",
                     "modules/dasLLAMA/tests/test_tts_postag.das",
                     "modules/dasLLAMA/tests/test_tts_g2p.das",
+                    "modules/dasLLAMA/tests/test_tts_g2p_ru.das",
                     "modules/dasLLAMA/tests/test_tts_kitten.das",
                     "modules/dasLLAMA/tests/test_tts_kokoro.das",
                     "modules/dasLLAMA/tests/test_tts_pocket.das",
@@ -374,8 +376,8 @@ def area_tests(area : string) : array<string> {
                     "test_vision_embedder.das", "test_vulkan_tower_kernels.das" ]
     } elif (area == "tts") {
         return <- [ "test_f32_batch_tile_perms.das", "test_interpreter.das", "test_parrot.das", "test_storyteller_restart.das", "test_storywish.das", "test_tts_blocks.das", "test_tts_facade.das",
-                    "test_tts_g2p.das", "test_tts_kitten.das", "test_tts_kokoro.das", "test_tts_pocket.das",
-                    "test_tts_postag.das", "test_tts_textnorm.das", "test_tts_voice_prompts.das", "test_vulkan_tts_conv_kernels.das",
+                    "test_tts_g2p.das", "test_tts_g2p_ru.das", "test_tts_kitten.das", "test_tts_kokoro.das", "test_tts_pocket.das",
+                    "test_tts_postag.das", "test_tts_textnorm.das", "test_tts_textnorm_ru.das", "test_tts_voice_prompts.das", "test_vulkan_tts_conv_kernels.das",
                     "test_vulkan_tts_kernels.das", "test_vulkan_tts_pocket_kernels.das", "test_vulkan_tts_source_kernels.das" ]
     } elif (area == "translate") {
         return <- [ "test_interpreter.das", "test_nmt.das" ]
@@ -457,8 +459,8 @@ let MODULE_AREAS <- {
     "dasllama_gemma3v" => "vision", "dasllama_gemma4uv" => "vision", "dasllama_gemma4v" => "vision",
     "dasllama_qwen25v" => "vision", "dasllama_qwen3v" => "vision", "dasllama_vision" => "vision",
     "dasllama_vision_embedder" => "vision", "dasllama_vision_io" => "vision",
-    "dasllama_g2p" => "tts", "dasllama_kitten" => "tts", "dasllama_kokoro" => "tts", "dasllama_pocket" => "tts", "dasllama_postag" => "tts",
-    "dasllama_styletts2" => "tts", "dasllama_textnorm" => "tts", "dasllama_tts" => "tts",
+    "dasllama_g2p" => "tts", "dasllama_g2p_pack" => "tts", "dasllama_g2p_ru" => "tts", "dasllama_kitten" => "tts", "dasllama_kokoro" => "tts", "dasllama_pocket" => "tts", "dasllama_postag" => "tts",
+    "dasllama_styletts2" => "tts", "dasllama_textnorm" => "tts", "dasllama_textnorm_ru" => "tts", "dasllama_textscan" => "tts", "dasllama_tts" => "tts",
     "dasllama_tts_blocks" => "tts", "dasllama_tts_types" => "tts",
     "dasllama_exchange" => "infra", "dasllama_exchange_schema" => "infra", "dasllama_lint" => "infra",
     "dasllama_version" => "infra", "dasllama_fat_start" => "infra",

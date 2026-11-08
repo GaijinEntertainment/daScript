@@ -100,7 +100,7 @@ struct ServerArgs {
     @clarg_doc = "mmproj for the GGUF Qwen3-ASR route (paired with --asr; with several ASR models, the first one's)"
     mmproj : string
 
-    @clarg_doc = "Path to a TTS model GGUF (kitten-nano, kitten-mini, kokoro-82m, with the front-end packs tts_g2p.bin + tts_postag.bin beside them; or a pocket-tts-<lang>-q8 file, which needs no pack) — enables /v1/audio/speech. Repeatable: each model serves under its file's stem, the first is the default; the config's [[tts]] tables give each model its own id, lane and voices_dir"
+    @clarg_doc = "Path to a TTS model GGUF (kitten-nano, kitten-mini, kokoro-82m, kokoro-ru, with the front-end packs beside them - tts_g2p.bin + tts_postag.bin for the English voices, tts_g2p_ru.bin for the Russian ones; or a pocket-tts-<lang>-q8 file, which needs no pack) — enables /v1/audio/speech. Repeatable: each model serves under its file's stem, the first is the default; the config's [[tts]] tables give each model its own id, lane and voices_dir"
     tts : string
 
     @clarg_name = "tts-lane"
