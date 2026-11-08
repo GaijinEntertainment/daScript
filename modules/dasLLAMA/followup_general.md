@@ -2704,3 +2704,21 @@
     to the tower carriers. Done = every tower carrier's mint, on every lane and flavor, writes each plane as it is
     produced off the source - the f16 plane and the device block included - and each family's staged peak is read
     before and after in a `PERF_LEDGER.md` entry.
+
+289. **No dasLLAMA kernel opts into the JIT's typed aliasing; every kernel is untagged because it
+    views byte buffers through `reinterpret`.** The JIT tags loads and stores by type class
+    (`float`, `double`, one class for wider integers and pointers) and leaves a function untagged
+    when its body reinterprets memory under another pointer type or takes such a view from a
+    caller (`modules/dasLLVM/ARCHITECTURE.md#pointer-alias-model`); `DAS_LOG_LEVEL=info` prints
+    the count per compile - 14884 of the model-free suite's 20197 functions. Every CPU kernel the
+    generator templates in `dasllama/dasllama_math_gen.das` and `dasllama_gemm_gen.das` emit, and
+    every hand-written `[hot_path]` body (36 files), is among them. `[hint(strict_aliasing)]`
+    turns the tags on for one function regardless of what it was handed; it asserts the body
+    accesses each location under one class only, which a kernel reading a quantized block as
+    `int8` and writing `float` satisfies. Done = (a) the kernel generator templates stamp
+    `[hint(strict_aliasing)]` beside the `noalias` hints they already carry, so every emitted
+    CPU kernel takes it; (b) the hand-written `[hot_path]` loops are visited one by one and the
+    hint placed where the body holds the one-class assertion; (c) each change is measured on the
+    CPU rail against the untagged build and kept only where it moves the number - the kernels are
+    already tuned and the hints already name the distinct buffers, so the expected gain is small
+    or zero, and a row that measures nothing is closed with that figure.
