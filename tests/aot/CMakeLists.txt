@@ -410,6 +410,7 @@ SET(AOT_LANGUAGE_MODULE_FILES
     tests/language/_inline_counter_helper.das
     tests/language/_inline_generic_helper.das
     tests/language/_inline_scope_helper.das
+    tests/language/_inline_unoptimized_scope_helper.das
     tests/language/_inline_unsafe_helper.das
     tests/language/_invoke_cmres_global_helper.das
     tests/language/_lambda_vis_inner.das

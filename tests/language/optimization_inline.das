@@ -12,6 +12,7 @@ require _optimized_body_helper
 require _inline_counter_helper
 require _never_inline_module
 require _inline_scope_helper
+require _inline_unoptimized_scope_helper // nolint:STYLE030 call inlined
 require _inline_unsafe_helper
 
 // structural FIRED proof + behavioral safety net for [inline] splicing
@@ -594,6 +595,22 @@ def target_inside_with(a, b : int) : int {
     return r
 }
 
+[export]
+def target_visible_dependency() : string {
+    var root : string
+    with (module _inline_scope_helper) {
+        root = must_inline_visibility_root()
+    }
+    return root
+}
+
+[export]
+def target_generated_dependency_scope() : string =>
+    must_inline_visibility_root()
+
+[export]
+def target_unoptimized_scope() : int => scoped_unoptimized_value()
+
 [test(description = "an [inline] callee that uses its module's private symbols still splices, under a generated with (module) wrapper, and so does a call inside a user with (module) block")]
 def test_scope_wrapped_inline_fired(t : T?) {
     ast_gc_guard() {
@@ -610,6 +627,21 @@ def test_scope_wrapped_inline_fired(t : T?) {
             let b = body_of(t, "target_inside_with")
             t |> success(!has(b, "scoped_add("), "call is gone: {b}")
         }
+        t |> run("caller scope resolves an unseen dependency") @(t : T?) {
+            let b = body_of(t, "target_visible_dependency")
+            t |> success(!has(b, "must_inline_visibility_root("),
+                "call is gone: {b}")
+        }
+        t |> run("generated scope resolves an unseen dependency") @(t : T?) {
+            let b = body_of(t, "target_generated_dependency_scope")
+            t |> success(!has(b, "must_inline_visibility_root("),
+                "call is gone: {b}")
+        }
+        t |> run("unoptimized callee keeps its inner scope") @(t : T?) {
+            let b = body_of(t, "target_unoptimized_scope")
+            t |> success(!has(b, "scoped_unoptimized_value("),
+                "call is gone: {b}")
+        }
     }
 }
 
@@ -620,6 +652,9 @@ def test_scope_wrapped_inline_behavior(t : T?) {
         t |> equal(target_scoped_pick(5), 5 + 7)
         t |> equal(target_scoped_pick(-5), -(5 + 7))
         t |> equal(target_inside_with(3, 4), (3 + 7) + (4 + 7))
+        t |> success(!empty(target_visible_dependency()))
+        t |> success(!empty(target_generated_dependency_scope()))
+        t |> equal(target_unoptimized_scope(), 43)
     }
     t |> run("mirror rule: caller global wins over callee module's same-named global") @(t : T?) {
         // caller g_shared = 555 substitutes outside the wrap; body's own g_shared
