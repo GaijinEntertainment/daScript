@@ -1272,7 +1272,7 @@ static const flex_int32_t yy_rule_can_match_eol[263] =
     #include "parser_state.h"
     #include "ds2_parser.hpp"
     #if DAS_TRACK_ALLOC
-    #include "../misc/lexer_alloc_track.h"
+    #include "daScript/misc/lexer_alloc_track.h"
     #endif
 
     #ifndef SCNi64

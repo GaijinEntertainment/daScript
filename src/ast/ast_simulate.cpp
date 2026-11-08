@@ -10,7 +10,7 @@
 #include "daScript/simulate/runtime_array.h"
 #include "daScript/simulate/runtime_table_nodes.h"
 #include "daScript/simulate/runtime_range.h"
-#include "../simulate/runtime_string_delete.h"
+#include "daScript/simulate/runtime_string_delete.h"
 #include "daScript/simulate/hash.h"
 #include "daScript/simulate/das_qsort_r.h"
 

@@ -983,6 +983,7 @@ include/daScript/ast/ast_expressions.h
 include/daScript/ast/ast_file_access.h
 include/daScript/ast/ast_visitor.h
 include/daScript/ast/ast_const_visitor.h
+include/daScript/ast/ast_generate.h
 include/daScript/ast/ast_interop.h
 include/daScript/ast/ast_handle.h
 include/daScript/ast/ast_policy_types.h
@@ -1025,6 +1026,7 @@ ENDIF()
 SET(MISC_SRC
 include/daScript/misc/enums.h
 include/daScript/misc/hal.h
+include/daScript/misc/fpe.h
 include/daScript/misc/platform.h
 include/daScript/misc/vectypes.h
 include/daScript/misc/arraytype.h
@@ -1040,10 +1042,12 @@ include/daScript/misc/smart_ptr.h
 include/daScript/misc/free_list.h
 include/daScript/misc/sysos.h
 include/daScript/misc/callable.h
+include/daScript/misc/instance_debugger.h
 include/daScript/misc/gc_node.h
 include/daScript/misc/job_que.h
 include/daScript/misc/handle_registry.h
 include/daScript/misc/uric.h
+include/daScript/misc/lexer_alloc_track.h
 include/daScript/misc/env_cfg.h
 include/daScript/misc/dep_recorder.h
 src/misc/env_cfg.cpp
@@ -1134,6 +1138,7 @@ src/simulate/heap.cpp
 include/daScript/simulate/debug_info.h
 include/daScript/simulate/interop.h
 include/daScript/simulate/runtime_string.h
+include/daScript/simulate/runtime_string_delete.h
 include/daScript/simulate/runtime_iterator.h
 include/daScript/simulate/runtime_array.h
 include/daScript/simulate/runtime_table.h
@@ -1768,6 +1773,7 @@ endif()
 SET(DAS_RELEASE_AST_INCLUDE
     include/daScript/ast/ast_expressions.h
     include/daScript/ast/ast_file_access.h
+    include/daScript/ast/ast_generate.h
     include/daScript/ast/ast.h
     include/daScript/ast/ast_handle.h
     include/daScript/ast/ast_interop.h
@@ -1806,11 +1812,14 @@ SET(DAS_RELEASE_MISC_INCLUDE
     include/daScript/misc/dep_recorder.h
     include/daScript/misc/enums.h
     include/daScript/misc/env_cfg.h
+    include/daScript/misc/fpe.h
     include/daScript/misc/free_list.h
     include/daScript/misc/gc_node.h
     include/daScript/misc/hal.h
     include/daScript/misc/hash.h
+    include/daScript/misc/instance_debugger.h
     include/daScript/misc/job_que.h
+    include/daScript/misc/lexer_alloc_track.h
     include/daScript/misc/handle_registry.h
     include/daScript/misc/macro.h
     include/daScript/misc/memory_model.h
@@ -1867,6 +1876,7 @@ SET(DAS_SIMULATE_INCLUDES
     include/daScript/simulate/runtime_matrices.h
     include/daScript/simulate/runtime_profile.h
     include/daScript/simulate/runtime_range.h
+    include/daScript/simulate/runtime_string_delete.h
     include/daScript/simulate/runtime_string.h
     include/daScript/simulate/runtime_table.h
     include/daScript/simulate/runtime_table_nodes.h
