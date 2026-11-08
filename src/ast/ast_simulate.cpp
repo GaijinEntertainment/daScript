@@ -631,6 +631,9 @@ namespace das
 
     SimNode * Function::makeSimNode ( Context & context, const vector<ExpressionPtr> & ) {
         if ( copyOnReturn || moveOnReturn ) {
+            if ( context.maxFramedCallDepth ) {
+                return context.code->makeNodeUnrollAny<SimNode_CallAndCopyOrMoveChecked>(int(arguments.size()), at);
+            }
             return context.code->makeNodeUnrollAny<SimNode_CallAndCopyOrMove>(int(arguments.size()), at);
         } else if ( fastCall ) {
             // include/daScript/simulate/ARCHITECTURE.md#fastcall-depth-guard
@@ -639,6 +642,9 @@ namespace das
             }
             return context.code->makeNodeUnrollAny<SimNode_FastCall>(int(arguments.size()), at);
         } else {
+            if ( context.maxFramedCallDepth ) {
+                return context.code->makeNodeUnrollAny<SimNode_CallChecked>(int(arguments.size()), at);
+            }
             return context.code->makeNodeUnrollAny<SimNode_Call>(int(arguments.size()), at);
         }
     }
@@ -2233,17 +2239,29 @@ namespace das
             SimNode_Block * block;
             if ( expr->isClosure ) {
                 bool needResult = expr->type!=nullptr && expr->type->baseType!=Type::tVoid;
-                // the invokeEx code0 fast path evals list[0] bare, skipping the ClosureBlock
-                // epilogue that clears stopForReturn — a block containing a return must take
-                // the full path or the flag leaks into the invoking enumeration and its caller
-                bool C0 = !needResult && simlist.size()==1 && expr->finalList.size()==0 && !expr->hasReturn;
+                if ( expr->maxLabelIndex!=-1 ) {
 #if DAS_DEBUGGER
-                if ( context.debugger ) {
-                    block = context.code->makeNode<SimNodeDebug_ClosureBlock>(at, needResult, C0, expr->annotationData);
-                } else
+                    if ( context.debugger ) {
+                        block = context.code->makeNode<SimNodeDebug_ClosureBlockWithLabels>(at, needResult, expr->annotationData);
+                    } else
 #endif
-                {
-                    block = context.code->makeNode<SimNode_ClosureBlock>(at, needResult, C0, expr->annotationData);
+                    {
+                        block = context.code->makeNode<SimNode_ClosureBlockWithLabels>(at, needResult, expr->annotationData);
+                    }
+                    sv_simulateLabels(expr, block, ofsmap);
+                } else {
+                    // the invokeEx code0 fast path evals list[0] bare, skipping the ClosureBlock
+                    // epilogue that clears stopForReturn — a block containing a return must take
+                    // the full path or the flag leaks into the invoking enumeration and its caller
+                    bool C0 = !needResult && simlist.size()==1 && expr->finalList.size()==0 && !expr->hasReturn;
+#if DAS_DEBUGGER
+                    if ( context.debugger ) {
+                        block = context.code->makeNode<SimNodeDebug_ClosureBlock>(at, needResult, C0, expr->annotationData);
+                    } else
+#endif
+                    {
+                        block = context.code->makeNode<SimNode_ClosureBlock>(at, needResult, C0, expr->annotationData);
+                    }
                 }
             } else {
                 if ( expr->maxLabelIndex!=-1 ) {
@@ -3680,6 +3698,7 @@ namespace das
         context.verySafeContext = options.getBoolOption("very_safe_context",policies.very_safe_context);
         context.maxUnreservedSize = options.getUInt64Option("max_unreserved_size", policies.max_unreserved_size);
         context.maxFastCallDepth = uint32_t(options.getIntOption("max_fast_call_depth", int32_t(policies.max_fast_call_depth)));
+        context.maxFramedCallDepth = uint32_t(options.getIntOption("max_framed_call_depth", int32_t(policies.max_framed_call_depth)));
         astTypeInfo.clear();    // this is to be filled via typeinfo(ast_typedecl and such)
         auto disableInit = options.getBoolOption("no_init", policies.no_init);
         context.thisProgram = this;

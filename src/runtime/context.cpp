@@ -92,6 +92,7 @@ namespace das
         verySafeContext = options.getBoolOption("very_safe_context",policies.very_safe_context);
         maxUnreservedSize = options.getUInt64Option("max_unreserved_size", policies.max_unreserved_size);
         maxFastCallDepth = uint32_t(options.getIntOption("max_fast_call_depth", int32_t(policies.max_fast_call_depth)));
+        maxFramedCallDepth = uint32_t(options.getIntOption("max_framed_call_depth", int32_t(policies.max_framed_call_depth)));
         breakOnException |= policies.debugger;
         gcEnabled = options.getBoolOption("gc", false);
         gcLogTime = options.getBoolOption("log_gc_time", policies.log_gc_time);
@@ -230,6 +231,7 @@ namespace das
         thisHelper = ctx.thisHelper;
         category.value = ctx.category.value;
         maxFastCallDepth = ctx.maxFastCallDepth;
+        maxFramedCallDepth = ctx.maxFramedCallDepth;
 
         // globals (on condition that all context globals are read-only)
         globals = ctx.globals;
@@ -302,6 +304,7 @@ namespace das
         verySafeContext = ctx.verySafeContext;
         maxUnreservedSize = ctx.maxUnreservedSize;
         maxFastCallDepth = ctx.maxFastCallDepth;
+        maxFramedCallDepth = ctx.maxFramedCallDepth;
         persistent = ctx.persistent;
         gcEnabled = ctx.gcEnabled;
         code = ctx.code;

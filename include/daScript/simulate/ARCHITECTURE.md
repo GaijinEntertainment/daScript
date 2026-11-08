@@ -139,6 +139,19 @@ already; `Context::callOrFastcall`, the entry AOT and JIT code use to call back 
 interpreted function, stays frameless and uncounted, and the native code around it has no
 guard of its own either.
 
+A framed call has the same guard under its own cap, because `options stack` bounds the das
+stack alone: with a large enough `stack` a recursion of regular calls exhausts the native
+stack before the das one, and `stack.push` never fires. `CodeOfPolicies::max_framed_call_depth`
+(also `options max_framed_call_depth`) mirrors into `Context::maxFramedCallDepth` the same way; when it is
+nonzero `Function::makeSimNode` emits `SimNode_CallChecked<N>` for `SimNode_Call<N>` and
+`SimNode_CallAndCopyOrMoveChecked<N>` for the copy-or-move-on-return form - `enterCheckedFramedCall`
+before `Context::call`, a decrement of `framedCallDepth` after - and the fused one- and two-argument
+shapes are a `"CallChecked"` family beside `"Call"`; the copy-or-move checked node has no fused
+twin and takes the general node. Every handler that restores `fastCallDepth` restores
+`framedCallDepth` beside it, and `Context::restart` zeroes both. The struct-constructor call
+`ast_simulate.cpp` builds directly as `SimNode_CallAndCopyOrMove<0>` and the runtime-resolved
+calls stay uncounted, as for fastcall.
+
 ## Sanctioned hot-path additions {#sanctioned-hot-path-additions}
 
 The ledger the checklist's hot-path rules route to. Each entry: what was added, where, why
@@ -200,11 +213,12 @@ correctness required it, and the alternative that was rejected.
   `evalPtr` of a node that throws on it. Rejected alternative: every typed eval on every bound
   call node, which multiplies the extern template instantiations by the eight slots.
 
-- **The fastcall depth counter's save and restore at every panic handler** - one 32-bit load
-  of `Context::fastCallDepth` at the entry of `SimNode_TryCatch::eval`, its debugger twin,
-  `das_try_recover` (`src/simulate/simulate_exceptions.cpp`, repo root), `jit_try_recover`
+- **The fastcall and framed-call depth counters' save and restore at every panic handler** -
+  one 32-bit load each of `Context::fastCallDepth` and `Context::framedCallDepth` at the entry of
+  `SimNode_TryCatch::eval`, its debugger twin, `das_try_recover`
+  (`src/simulate/simulate_exceptions.cpp`, repo root), `jit_try_recover`
   (`src/builtin/jit_runtime.cpp`, repo root) and the `evalWithCatch` / `runWithCatch` family,
-  held across the `setjmp` or `try`, and one store on the catch path, cap set or not.
+  held across the `setjmp` or `try`, and one store each on the catch path, cap set or not.
   Correctness requires it because a panic is a longjmp that runs no frame's epilogue, so the
   checked node's decrement is skipped for every frame between the throw and the handler, and
   the handler is the only place the counter can be put back (`ARCHITECTURE.md#fastcall-depth-guard`).

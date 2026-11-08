@@ -92,7 +92,7 @@ namespace das {
         auto aa = abiArg;
         auto acm = abiCMRES;
         auto atba = abiThisBlockArg;
-        auto fcd = fastCallDepth;
+        auto fcd = fastCallDepth; auto fcd2 = framedCallDepth;
         char * EP, * SP;
         stack.watermark(EP,SP);
         vec4f vres = v_zero();
@@ -103,7 +103,7 @@ namespace das {
             abiArg = aa;
             abiCMRES = acm;
             abiThisBlockArg = atba;
-            fastCallDepth = fcd;
+            fastCallDepth = fcd; framedCallDepth = fcd2;
             stack.pop(EP,SP);
             exceptionMessage = ex.what();
             exception = exceptionMessage.c_str();
@@ -119,7 +119,7 @@ namespace das {
             abiArg = aa;
             abiCMRES = acm;
             abiThisBlockArg = atba;
-            fastCallDepth = fcd;
+            fastCallDepth = fcd; framedCallDepth = fcd2;
             stack.pop(EP,SP);
         }
         throwBuf = JB;
@@ -131,7 +131,7 @@ namespace das {
         auto aa = abiArg;
         auto acm = abiCMRES;
         auto atba = abiThisBlockArg;
-        auto fcd = fastCallDepth;
+        auto fcd = fastCallDepth; auto fcd2 = framedCallDepth;
         char * EP, * SP;
         stack.watermark(EP,SP);
         bool bres = false;
@@ -143,7 +143,7 @@ namespace das {
             abiArg = aa;
             abiCMRES = acm;
             abiThisBlockArg = atba;
-            fastCallDepth = fcd;
+            fastCallDepth = fcd; framedCallDepth = fcd2;
             stack.pop(EP,SP);
             exceptionMessage = ex.what();
             exception = exceptionMessage.c_str();
@@ -160,7 +160,7 @@ namespace das {
             abiArg = aa;
             abiCMRES = acm;
             abiThisBlockArg = atba;
-            fastCallDepth = fcd;
+            fastCallDepth = fcd; framedCallDepth = fcd2;
             stack.pop(EP,SP);
         }
         throwBuf = JB;
@@ -184,7 +184,7 @@ namespace das {
         auto aa = abiArg;
         auto acm = abiCMRES;
         auto atba = abiThisBlockArg;
-        auto fcd = fastCallDepth;
+        auto fcd = fastCallDepth; auto fcd2 = framedCallDepth;
         char * EP, * SP;
         stack.watermark(EP,SP);
         vec4f vres = v_zero();
@@ -195,7 +195,7 @@ namespace das {
             abiArg = aa;
             abiCMRES = acm;
             abiThisBlockArg = atba;
-            fastCallDepth = fcd;
+            fastCallDepth = fcd; framedCallDepth = fcd2;
             stack.pop(EP,SP);
             exceptionMessage = ex.what();
             exception = exceptionMessage.c_str();
@@ -211,7 +211,7 @@ namespace das {
             abiArg = aa;
             abiCMRES = acm;
             abiThisBlockArg = atba;
-            fastCallDepth = fcd;
+            fastCallDepth = fcd; framedCallDepth = fcd2;
             stack.pop(EP,SP);
         }
         throwBuf = JB;
@@ -223,7 +223,7 @@ namespace das {
 
     vec4f WIN_EH_NO_ASAN SimNode_TryCatch::eval ( Context & context ) {
         DAS_PROFILE_NODE
-        auto aa = context.abiArg; auto acm = context.abiCMRES; auto fcd = context.fastCallDepth;
+        auto aa = context.abiArg; auto acm = context.abiCMRES; auto fcd = context.fastCallDepth; auto fcd2 = context.framedCallDepth;
         auto atba = context.abiThisBlockArg;
         char * EP, * SP;
         context.stack.watermark(EP,SP);
@@ -234,7 +234,7 @@ namespace das {
                 context.abiArg = aa;
                 context.abiCMRES = acm;
                 context.abiThisBlockArg = atba;
-                context.fastCallDepth = fcd;
+                context.fastCallDepth = fcd; context.framedCallDepth = fcd2;
                 context.stack.pop(EP,SP);
                 context.stopFlags = 0;
                 context.last_exception = context.exception;
@@ -252,7 +252,7 @@ namespace das {
                 context.abiArg = aa;
                 context.abiCMRES = acm;
                 context.abiThisBlockArg = atba;
-                context.fastCallDepth = fcd;
+                context.fastCallDepth = fcd; context.framedCallDepth = fcd2;
                 context.stack.pop(EP,SP);
                 context.stopFlags = 0;
                 context.last_exception = context.exception;
@@ -267,7 +267,7 @@ namespace das {
 #if DAS_DEBUGGER
     vec4f WIN_EH_NO_ASAN SimNodeDebug_TryCatch::eval ( Context & context ) {
         DAS_PROFILE_NODE
-        auto aa = context.abiArg; auto acm = context.abiCMRES; auto fcd = context.fastCallDepth;
+        auto aa = context.abiArg; auto acm = context.abiCMRES; auto fcd = context.fastCallDepth; auto fcd2 = context.framedCallDepth;
         auto atba = context.abiThisBlockArg;
         char * EP, * SP;
         context.stack.watermark(EP,SP);
@@ -279,7 +279,7 @@ namespace das {
                 context.abiArg = aa;
                 context.abiCMRES = acm;
                 context.abiThisBlockArg = atba;
-                context.fastCallDepth = fcd;
+                context.fastCallDepth = fcd; context.framedCallDepth = fcd2;
                 context.stack.pop(EP,SP);
                 context.stopFlags = 0;
                 context.last_exception = context.exception;
@@ -299,7 +299,7 @@ namespace das {
                 context.abiArg = aa;
                 context.abiCMRES = acm;
                 context.abiThisBlockArg = atba;
-                context.fastCallDepth = fcd;
+                context.fastCallDepth = fcd; context.framedCallDepth = fcd2;
                 context.stack.pop(EP,SP);
                 context.stopFlags = 0;
                 context.last_exception = context.exception;
@@ -314,14 +314,14 @@ namespace das {
 #endif
 
     void WIN_EH_NO_ASAN das_try_recover ( Context * __context__, const callable<void()> & try_block, const callable<void()> & catch_block ) {
-        auto aa = __context__->abiArg; auto acm = __context__->abiCMRES; auto fcd = __context__->fastCallDepth;
+        auto aa = __context__->abiArg; auto acm = __context__->abiCMRES; auto fcd = __context__->fastCallDepth; auto fcd2 = __context__->framedCallDepth;
         char * EP, * SP;
         __context__->stack.watermark(EP,SP);
 #if DAS_ENABLE_EXCEPTIONS
         try {
             try_block();
         } catch ( const dasException & ) {
-            __context__->fastCallDepth = fcd; //-V1048
+            __context__->fastCallDepth = fcd; __context__->framedCallDepth = fcd2; //-V1048
             catch_block();
             __context__->abiArg = aa;
             __context__->abiCMRES = acm;
@@ -337,7 +337,7 @@ namespace das {
         if ( !das_setjmp(ev) ) {
             try_block();
         } else {
-            __context__->fastCallDepth = fcd;
+            __context__->fastCallDepth = fcd; __context__->framedCallDepth = fcd2;
             catch_block();
             __context__->throwBuf = JB;
             __context__->abiArg = aa;

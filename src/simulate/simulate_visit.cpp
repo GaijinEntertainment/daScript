@@ -141,6 +141,20 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_CallCheckedAny::visit(SimVisitor& vis) {
+        V_BEGIN();
+        V_OP(CallChecked);
+        V_CALL();
+        V_END();
+    }
+
+    SimNode* SimNode_CallAndCopyOrMoveCheckedAny::visit(SimVisitor& vis) {
+        V_BEGIN();
+        V_OP(CallAndCopyOrMoveChecked);
+        V_CALL();
+        V_END();
+    }
+
     SimNode* SimNode_InvokeAny::visit(SimVisitor& vis) {
         V_BEGIN();
         V_OP(Invoke);
@@ -953,6 +967,17 @@ namespace das {
     SimNode * SimNode_ClosureBlock::visit ( SimVisitor & vis ) {
         V_BEGIN_CR();
         V_OP(Block);
+        V_BLOCK();
+        V_FINAL();
+        V_ARG(needResult);
+        V_ARG(annotationDataSid);
+        V_END();
+    }
+
+    SimNode * SimNode_ClosureBlockWithLabels::visit ( SimVisitor & vis ) {
+        V_BEGIN_CR();
+        V_OP(ClosureBlockWithLabels);
+        V_LABELS();
         V_BLOCK();
         V_FINAL();
         V_ARG(needResult);

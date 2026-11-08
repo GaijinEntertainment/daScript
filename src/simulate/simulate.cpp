@@ -595,6 +595,73 @@ namespace das
 
 #endif
 
+// SimNode_ClosureBlockWithLabels
+
+    vec4f SimNode_ClosureBlockWithLabels::eval ( Context & context ) {
+        DAS_PROFILE_NODE
+        SimNode ** __restrict tail = list + total;
+        SimNode ** __restrict body = list;
+    loopbegin:;
+        for (; body!=tail; ++body) {
+            (*body)->eval(context);
+            { if ( context.stopFlags ) {
+                if ( context.stopFlags&EvalFlags::jumpToLabel ) {
+                    uint32_t labelOfs = ownedLabel(context.gotoLabel);
+                    if ( labelOfs!=-1U ) {
+                        context.stopFlags &= ~EvalFlags::jumpToLabel;
+                        body = list + labelOfs;
+                        goto loopbegin;
+                    }
+                }
+                goto loopend;
+            } }
+        }
+    loopend:;
+        evalFinal(context);
+        if ( context.stopFlags & EvalFlags::stopForReturn ) {
+            context.stopFlags &= ~EvalFlags::stopForReturn;
+            return context.abiResult();
+        } else {
+            if ( needResult ) context.throw_error_at(debugInfo,"end of block without return");
+            return v_zero();
+        }
+    }
+
+#if DAS_DEBUGGER
+
+    vec4f SimNodeDebug_ClosureBlockWithLabels::eval ( Context & context ) {
+        DAS_PROFILE_NODE
+        SimNode ** __restrict tail = list + total;
+        SimNode ** __restrict body = list;
+    loopbegin:;
+        for (; body!=tail; ++body) {
+            DAS_SINGLE_STEP(context,(*body)->debugInfo,false);
+            (*body)->eval(context);
+            { if ( context.stopFlags ) {
+                if ( context.stopFlags&EvalFlags::jumpToLabel ) {
+                    uint32_t labelOfs = ownedLabel(context.gotoLabel);
+                    if ( labelOfs!=-1U ) {
+                        context.stopFlags &= ~EvalFlags::jumpToLabel;
+                        body = list + labelOfs;
+                        goto loopbegin;
+                    }
+                }
+                goto loopend;
+            } }
+        }
+    loopend:;
+        evalFinalSingleStep(context);
+        if ( context.stopFlags & EvalFlags::stopForReturn ) {
+            context.stopFlags &= ~EvalFlags::stopForReturn;
+            return context.abiResult();
+        } else {
+            if ( needResult ) context.throw_error_at(debugInfo,"end of block without return");
+            return v_zero();
+        }
+    }
+
+#endif
+
 // SimNode_BlockWithLabels
 
     vec4f SimNode_BlockWithLabels::eval ( Context & context ) {

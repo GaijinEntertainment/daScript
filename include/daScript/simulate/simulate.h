@@ -478,6 +478,7 @@ namespace das
             exception = nullptr;
             last_exception = nullptr;
             fastCallDepth = 0;
+            framedCallDepth = 0;
         }
 
         __forceinline void restartHeaps() {
@@ -632,6 +633,12 @@ namespace das
         __forceinline void enterCheckedFastCall ( const LineInfo & at, const SimFunction * fn ) {
             if ( ++fastCallDepth > maxFastCallDepth ) {
                 throw_error_at(at, "stack overflow, max_fast_call_depth %u exceeded while calling %s", maxFastCallDepth, fn->mangledName);
+            }
+        }
+
+        __forceinline void enterCheckedFramedCall ( const LineInfo & at, const SimFunction * fn ) {
+            if ( ++framedCallDepth > maxFramedCallDepth ) {
+                throw_error_at(at, "stack overflow, max_framed_call_depth %u exceeded while calling %s", maxFramedCallDepth, fn->mangledName);
             }
         }
 
@@ -965,6 +972,8 @@ namespace das
         // include/daScript/simulate/ARCHITECTURE.md#fastcall-depth-guard
         uint32_t                        fastCallDepth = 0;
         uint32_t                        maxFastCallDepth = 0;       //! fixed at simulate: 0 exactly when the program carries no guarded fastcall nodes
+        uint32_t                        framedCallDepth = 0;
+        uint32_t                        maxFramedCallDepth = 0;           //! fixed at simulate: 0 exactly when the program carries no guarded framed-call nodes
     };
 
     struct DebugAgentInstance {
@@ -1276,6 +1285,22 @@ __forceinline void profileNode ( SimNode * node ) {
     struct DAS_API SimNodeDebug_ClosureBlock : SimNode_ClosureBlock {
         SimNodeDebug_ClosureBlock ( const LineInfo & at, bool nr, bool c0, uint64_t ad )
             : SimNode_ClosureBlock(at,nr,c0,ad) { }
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
+    };
+#endif
+
+    // a block literal holding labels: takes a jump to a label it owns, hands any other outward
+    struct DAS_API SimNode_ClosureBlockWithLabels : SimNode_ClosureBlock {
+        SimNode_ClosureBlockWithLabels ( const LineInfo & at, bool nr, uint64_t ad )
+            : SimNode_ClosureBlock(at,nr,false,ad) { }
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
+    };
+
+#if DAS_DEBUGGER
+    struct DAS_API SimNodeDebug_ClosureBlockWithLabels : SimNode_ClosureBlockWithLabels {
+        SimNodeDebug_ClosureBlockWithLabels ( const LineInfo & at, bool nr, uint64_t ad )
+            : SimNode_ClosureBlockWithLabels(at,nr,ad) { }
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
     };
 #endif
