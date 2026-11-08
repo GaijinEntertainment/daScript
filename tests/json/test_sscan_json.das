@@ -121,8 +121,8 @@ def test_basic_scalars(t : T?) {
     }
 }
 
-let private pos_inf = 1.0lf / 0.0lf // nolint:LINT006 - non-finite input
-let private quiet_nan = 0.0lf / 0.0lf // nolint:LINT006 - non-finite input
+let private pos_inf = unsafe(reinterpret<double>(0x7FF0000000000000ul))
+let private quiet_nan = unsafe(reinterpret<double>(0x7FF8000000000000ul))
 
 struct NonFiniteReals {
     low : double
@@ -132,7 +132,7 @@ struct NonFiniteReals {
     half : float16
 }
 
-[test]
+[test(description = "non-finite reals round-trip through sprint_json and sscan_json, skip under unknown keys, and malformed tokens are refused")]
 def test_non_finite_reals(t : T?) {
     t |> run("round-trip through sprint_json") @(t : T?) {
         let src = NonFiniteReals(low = -pos_inf, high = float(pos_inf),
@@ -190,7 +190,7 @@ def private check_scan_real_scalar(t : T?; witness : auto(TT)) {
     }
 }
 
-[test]
+[test(description = "sscan_json reads NaN, Infinity and -Infinity into float, double, containers and vector keys")]
 def test_scan_non_finite_scalars(t : T?) {
     check_scan_real_scalar(t, 0.0lf)
     check_scan_real_scalar(t, 0.0)
@@ -348,7 +348,7 @@ def private check_scan_complete(t : T?; text : string;
     }
 }
 
-[test]
+[test(description = "sscan_json accepts one value with surrounding whitespace and fails on trailing input")]
 def test_scan_complete_input(t : T?) {
     check_scan_complete(t, "1.5", 0.0lf)
     check_scan_complete(t, "42", 0)
@@ -622,7 +622,7 @@ struct NonFiniteVectors {
     h8 : half8
 }
 
-[test]
+[test(description = "sscan_json reads non-finite real and half vectors in object and array form and sprint_json writes them back")]
 def test_scan_non_finite_vectors(t : T?) {
     let pair = "\{\"x\":Infinity,\"y\":-Infinity\}"
     let triple = "\{\"x\":Infinity,\"y\":-Infinity,\"z\":NaN\}"

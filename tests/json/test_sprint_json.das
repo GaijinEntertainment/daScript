@@ -48,10 +48,10 @@ def test_sprint_basic_types(t : T?) {
     }
 }
 
-let private pos_inf = 1.0lf / 0.0lf // nolint:LINT006 - non-finite input
-let private quiet_nan = 0.0lf / 0.0lf // nolint:LINT006 - non-finite input
+let private pos_inf = unsafe(reinterpret<double>(0x7FF0000000000000ul))
+let private quiet_nan = unsafe(reinterpret<double>(0x7FF8000000000000ul))
 
-[test]
+[test(description = "sprint_json writes NaN, Infinity and -Infinity for non-finite reals")]
 def test_sprint_non_finite_reals(t : T?) {
     for ((value, text) in [(pos_inf, "Infinity"), (-pos_inf, "-Infinity"),
             (quiet_nan, "NaN"), (1.5lf, "1.5")]) {
@@ -60,7 +60,7 @@ def test_sprint_non_finite_reals(t : T?) {
     }
 }
 
-[test]
+[test(description = "sprint_json writes non-finite real vector components in object, key and array form")]
 def test_sprint_non_finite_vectors(t : T?) {
     let inf = float(pos_inf)
     let nan = float(quiet_nan)
