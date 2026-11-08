@@ -12,6 +12,7 @@
 
 #include "daScript/simulate/aot.h"
 #include "daScript/simulate/aot_builtin_jit.h"
+#include "daScript/simulate/aot_builtin_jobque.h"
 #include "daScript/simulate/aot_builtin.h"
 #include "daScript/simulate/aot_builtin_rtti.h"
 #include "daScript/simulate/aot_library.h"
@@ -1190,6 +1191,7 @@ DAS_API int32_t jit_run_main_guarded ( das::Context * ctx, void * mainFn, int32_
         das::TextPrinter tp;
         tp << "EXCEPTION: " << (ctx->getException() ? ctx->getException() : "unknown") << "\n";
         tp.output();    // TextWriter's dtor only frees its buffer — output() is what prints
+        das::jobque_teardown_or_exit_after_panic(3000);   // src/builtin/ARCHITECTURE_JOBQUE.md#jobque-panic-teardown
         return 1;
     }
     return rc;

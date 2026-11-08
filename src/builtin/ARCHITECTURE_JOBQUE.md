@@ -42,3 +42,19 @@ collection runs only after a step returns true, when that step's stack has unwou
 and persistent values reside in globals or the rooted capture. A false return is
 the final step: it releases captured handles, skips collection, and proceeds to
 capture-release verification.
+
+### A panic that strands a job ends the process {#jobque-panic-teardown}
+
+An uncaught panic in the entry function skips the program's own shutdown, so a job parked on a
+channel pop, or a `new_thread` loop, is still running when the host tears the modules down - and
+`~JobQue` joins its workers while the module destructor waits for every detached thread, both
+forever. A hung process holds its port with nothing serving it, and a supervisor that restarts
+on exit never sees one. So after printing the panic the host calls
+`jobque_teardown_or_exit_after_panic`: one deadline, under which the detached-thread count must
+reach zero - a live thread can still enqueue work - and the global que must then drain with the
+count still zero - a drained job can still start a thread; the two are rechecked until both hold
+in one pass. When that does not happen in time it prints that it is exiting without teardown and `_Exit`s
+with code 1 - the panic was fatal already, and the leak and heap reports a teardown would print
+describe a program that never reached its shutdown. Both hosts call it: `daslang`
+(`utils/daslang/main.cpp`) and the standalone exe's `jit_run_main_guarded`
+(`src/builtin/jit_runtime.cpp`).

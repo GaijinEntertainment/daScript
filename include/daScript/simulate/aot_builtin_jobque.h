@@ -418,4 +418,10 @@ namespace das {
         if ( !ch ) context->throw_error_at(at, "atomic is null");
         return ch->dec();
     }
+
+    // bounded drain + teardown of the global job que; false = jobs did not drain, the que stays
+    // alive and the caller must LEAK the context (freeing it under running jobs is heap corruption)
+    DAS_API bool shutdown_job_que_bounded ( int timeoutMs );
+    // src/builtin/ARCHITECTURE_JOBQUE.md#jobque-panic-teardown
+    DAS_API void jobque_teardown_or_exit_after_panic ( int timeoutMs );
 }

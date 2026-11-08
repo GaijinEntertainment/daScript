@@ -11,6 +11,7 @@
 #include "daScript/misc/crash_handler.h"
 #include "daScript/misc/dep_recorder.h"
 #include "daScript/misc/job_que.h"
+#include "daScript/simulate/aot_builtin_jobque.h"
 #include "daScript/misc/performance_time.h"
 #ifndef DAS_MAIN_LIBRARY
 #include "asan_options.h"
@@ -341,11 +342,6 @@ int das_aot_main ( int argc, char * argv[] ) {
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 
-namespace das {
-    // link-time resolved: src/builtin/module_builtin_jobque.cpp — bounded drain +
-    // teardown of the global job que; false = jobs did not drain, LEAK the context
-    bool shutdown_job_que_bounded ( int timeoutMs );
-}
 
 // Browser 3-call lifecycle: a wasm page cannot block in main()'s while(true) — it
 // must yield to the browser each frame. So a program that exposes `update` is run
@@ -701,6 +697,7 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
                     if ( auto ex = pctx->getException() ) {
                         tout << "EXCEPTION: " << ex << " at " << pctx->exceptionAt.describe() << "\n";
                         exitCode = 1;
+                        das::jobque_teardown_or_exit_after_panic(3000);   // src/builtin/ARCHITECTURE_JOBQUE.md#jobque-panic-teardown
                     } else if ( fnTest->debugInfo && fnTest->debugInfo->result ) {
                         auto resType = fnTest->debugInfo->result->type;
                         if ( resType == Type::tInt ) {

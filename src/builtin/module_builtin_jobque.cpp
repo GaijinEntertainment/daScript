@@ -6,6 +6,9 @@
 #include "daScript/ast/ast_handle.h"
 
 #include "daScript/misc/job_que.h"
+
+#include <cstdio>
+#include <cstdlib>
 #include "module_builtin_rtti.h"
 
 #if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
@@ -1505,7 +1508,7 @@ namespace das {
     // destroy a Context that in-flight jobs still reference (the browser loop).
     // On timeout the que stays alive and the CALLER must leak the context —
     // freeing it under running jobs is heap corruption, joining them a frozen tab.
-    bool shutdown_job_que_bounded ( int timeoutMs ) {
+    DAS_API bool shutdown_job_que_bounded ( int timeoutMs ) {
         flushPendingForkJobs();     // batched closures reference the context too — publish them into the drain
         g_batchForkJobs = false;
         shared_ptr<JobQue> jq;
@@ -1520,6 +1523,25 @@ namespace das {
         g_persistentJobQue.reset();
         if ( g_jobQue.use_count()==1 ) g_jobQue.reset();  // idle pool — ~JobQue joins promptly
         return true;
+    }
+
+    // src/builtin/ARCHITECTURE_JOBQUE.md#jobque-panic-teardown
+    DAS_API void jobque_teardown_or_exit_after_panic ( int timeoutMs ) {
+        auto started = ref_time_ticks();
+        bool quiescent = false;
+        for ( ;; ) {
+            int64_t left = int64_t(timeoutMs) - get_time_usec(started) / 1000;
+            if ( left <= 0 ) break;
+            if ( g_jobQueTotalThreads ) { builtin_sleep(1); continue; }
+            if ( !shutdown_job_que_bounded(int(left)) ) break;
+            if ( !g_jobQueTotalThreads ) { quiescent = true; break; }   // a drained job started no thread
+        }
+        if ( quiescent ) return;
+        TextPrinter tp;
+        tp << "a job or thread is still running after the panic - exiting without teardown\n";
+        tp.output();
+        fflush(stdout);
+        _Exit(1);
     }
 
     void jobStatusAddRef ( JobStatus * status, Context * context, LineInfoArg * at ) {
