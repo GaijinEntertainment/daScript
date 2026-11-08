@@ -1,6 +1,6 @@
 #pragma once
 
-#include <type_traits>
+#include "daScript/misc/basic_type.h"
 
 namespace das {
     struct SimNode;
@@ -227,70 +227,19 @@ namespace das {
     DAS_API void builtin_table_values(Sequence &result, const Table &tab, int32_t stride, Context *__context__, LineInfoArg *at);
     DAS_API void builtin_table_get_key(void * result, const Table & tab, const void * value_ptr, int32_t value_stride, int32_t key_stride, Context * __context__, LineInfoArg * at);
 
-    template <typename TT>
-    struct EnumStubAny {
-        typedef TT BaseType;
-        TT value;
-    };
+    template<> struct ToBasicType<Sequence>     { enum { type = Type::tIterator }; };
+    template<> struct ToBasicType<Sequence *>   { enum { type = Type::tIterator }; };
+    template<> struct ToBasicType<Array *>      { enum { type = Type::tArray }; };
+    template<> struct ToBasicType<Table *>      { enum { type = Type::tTable }; };
+    template<> struct ToBasicType<Array>        { enum { type = Type::tArray }; };
+    template<> struct ToBasicType<Table>        { enum { type = Type::tTable }; };
+    template<> struct ToBasicType<Block>        { enum { type = Type::tBlock }; };
+    template<> struct ToBasicType<Func>         { enum { type = Type::tFunction }; };
+    template<> struct ToBasicType<Lambda>       { enum { type = Type::tLambda }; };
+    template<> struct ToBasicType<Tuple>        { enum { type = Type::tTuple }; };
+    template<> struct ToBasicType<Variant>      { enum { type = Type::tVariant }; };
+    template<> struct ToBasicType<Context *>    { enum { type = Type::fakeContext }; };
+    template<> struct ToBasicType<LineInfoArg *>{ enum { type = Type::fakeLineInfo }; };
 
-    typedef EnumStubAny<int32_t> EnumStub;
-    typedef EnumStubAny<int8_t>   EnumStub8;
-    typedef EnumStubAny<int16_t>  EnumStub16;
-    typedef EnumStubAny<int64_t>  EnumStub64;
-    // unsigned-underlying variants — used by the typer to dispatch `int(uint8Enum)` / `uint(uint8Enum)`
-    // (and 16/64-bit) so the byte zero-extends instead of sign-extending via int8_t/int16_t/int64_t.
-    typedef EnumStubAny<uint8_t>  EnumStub8u;
-    typedef EnumStubAny<uint16_t> EnumStub16u;
-    typedef EnumStubAny<uint64_t> EnumStub64u;
-
-    template <typename ST>
-    struct BitfieldAny {
-        ST value;
-        __forceinline BitfieldAny() {}
-        // exactly ST converts implicitly (bitfield math decays to ST through operator ST&,
-        // and every cast/call boundary must convert back); every other type converts only
-        // through an explicit cast, so implicit narrowing - int included - dies at the call site
-        template <typename QQ, typename std::enable_if<std::is_same<QQ,ST>::value,int>::type = 0>
-        __forceinline BitfieldAny(QQ v) : value(v) {}
-        template <typename QQ, typename std::enable_if<!std::is_same<QQ,ST>::value,int>::type = 0>
-        __forceinline explicit BitfieldAny(QQ v) : value(ST(v)) {}
-        __forceinline operator ST &() { return value; }
-        __forceinline operator float() const { return float(value); }
-        __forceinline operator double() const { return double(value); }
-        __forceinline operator int8_t() const { return int8_t(value); }
-        __forceinline operator uint8_t() const { return uint8_t(value); }
-        __forceinline operator uint32_t() const { return uint32_t(value); }
-        __forceinline operator int32_t() const { return int32_t(value); }
-        __forceinline operator int16_t() const { return int16_t(value); }
-        __forceinline operator uint16_t() const { return uint16_t(value); }
-        __forceinline operator int64_t() const { return int64_t(value); }
-        __forceinline operator uint64_t() const { return uint64_t(value); }
-        __forceinline bool operator==(const BitfieldAny<ST> &f) const { return value == f.value; }
-        __forceinline bool operator!=(const BitfieldAny<ST> &f) const { return value != f.value; }
-        __forceinline bool operator==(ST f) const { return value == f; }
-        __forceinline bool operator!=(ST f) const { return value != f; }
-    };
-
-    typedef BitfieldAny<uint8_t> Bitfield8;
-    typedef BitfieldAny<uint16_t> Bitfield16;
-    typedef BitfieldAny<uint32_t> Bitfield;
-    typedef BitfieldAny<uint64_t> Bitfield64;
-
-    __forceinline bool operator==(uint8_t f, const Bitfield8 &t) { return t.value == f; }
-    __forceinline bool operator!=(uint8_t f, const Bitfield8 &t) { return t.value != f; }
-    __forceinline bool operator==(uint16_t f, const Bitfield16 &t) { return t.value == f; }
-    __forceinline bool operator!=(uint16_t f, const Bitfield16 &t) { return t.value != f; }
-    __forceinline bool operator==(uint32_t f, const Bitfield &t) { return t.value == f; }
-    __forceinline bool operator!=(uint32_t f, const Bitfield &t) { return t.value != f; }
-    __forceinline bool operator==(uint64_t f, const Bitfield64 &t) { return t.value == f; }
-    __forceinline bool operator!=(uint64_t f, const Bitfield64 &t) { return t.value != f; }
 }
 
-namespace std {
-    template <>
-    struct hash<das::Bitfield> {
-        size_t operator()(das::Bitfield b) const {
-            return hash<uint32_t>()(b.value);
-        }
-    };
-}

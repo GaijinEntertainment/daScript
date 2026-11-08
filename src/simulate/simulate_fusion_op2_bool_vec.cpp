@@ -9,7 +9,6 @@
 #if DAS_FUSION>=2
 
 #include "daScript/simulate/sim_policy.h"
-#include "daScript/ast/ast.h"
 #include "simulate_fusion_op2.h"
 #include "simulate_fusion_op2_vec_settings.h"
 

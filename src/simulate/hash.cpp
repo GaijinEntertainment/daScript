@@ -1,7 +1,6 @@
 #include "daScript/misc/platform.h"
 
 
-#include "daScript/ast/ast.h"
 #include "daScript/simulate/hash.h"
 #include "daScript/simulate/runtime_string.h"
 #include "daScript/simulate/data_walker.h"

@@ -9,7 +9,6 @@
 #if DAS_FUSION
 
 #include "daScript/simulate/sim_policy.h"
-#include "daScript/ast/ast.h"
 #include "simulate_fusion_op2.h"
 
 // fake DAS_NODE to support boolean eval

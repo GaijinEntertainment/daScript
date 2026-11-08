@@ -11,7 +11,6 @@
 #include <cstring>
 
 #include "daScript/simulate/sim_policy.h"
-#include "daScript/ast/ast.h"
 #include "simulate_fusion_op2.h"
 
 namespace das {

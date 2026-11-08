@@ -9,7 +9,6 @@
 #if DAS_FUSION
 
 #include "daScript/simulate/sim_policy.h"
-#include "daScript/ast/ast.h"
 #include "simulate_fusion_op1.h"
 #include "daScript/simulate/runtime_table_nodes.h"
 #include "daScript/simulate/simulate_visit_op.h"
