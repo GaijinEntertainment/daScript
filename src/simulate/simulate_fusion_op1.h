@@ -29,13 +29,13 @@
 
 #define FUSION_OP1_SUBEXPR(CTYPE,node)      ((static_cast<SimNode_Op1*>(node))->x)
 
-#include "daScript/simulate/simulate_fusion_op1_impl.h"
-#include "daScript/simulate/simulate_fusion_op1_set_impl.h"
+#include "simulate_fusion_op1_impl.h"
+#include "simulate_fusion_op1_set_impl.h"
 
-#include "daScript/simulate/simulate_fusion_op1_perm.h"
-#include "daScript/simulate/simulate_fusion_op1_set_perm.h"
+#include "simulate_fusion_op1_perm.h"
+#include "simulate_fusion_op1_set_perm.h"
 
 #define REGISTER_OP1_FUSION_POINT(OPNAME,TYPE,CTYPE) \
     registerFusion(#OPNAME,typeName<CTYPE>::name(),new Op1FusionPoint_##OPNAME##_##CTYPE());
 
-#include "daScript/simulate/simulate_fusion_op1_reg.h"
+#include "simulate_fusion_op1_reg.h"

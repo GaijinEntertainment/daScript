@@ -25,7 +25,7 @@
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/simulate_visit_op.h"
 
-#include "daScript/misc/fpe.h"
+#include "../misc/fpe.h"
 #include "daScript/misc/sysos.h"
 #include "misc/include_fmt.h"
 

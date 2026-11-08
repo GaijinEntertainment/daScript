@@ -14,7 +14,7 @@ the module and install beside these.
 | dag_noise | Gaijin Entertainment | BSD-3-Clause | noise generators (`include/dag_noise`) | `DAG_NOISE.LICENSE` (`include/dag_noise/LICENSE`) |
 | vecmath | Gaijin Entertainment | BSD-3-Clause | the SIMD vector-math layer (`include/vecmath`); the JIT's aarch64 polynomial rail mirrors its kernels | `VEC_MATH.LICENSE` (`include/vecmath/LICENSE`) |
 | {fmt} | https://github.com/fmtlib/fmt | MIT | formatting (`3rdparty/fmt`) | `FMT.LICENSE` (`3rdparty/fmt/LICENSE`) |
-| fast_float | https://github.com/fastfloat/fast_float | MIT (elected) | float parsing (`include/fast_float`) | `FAST_FLOAT.LICENSE` (`include/fast_float/LICENSE`) |
+| fast_float | https://github.com/fastfloat/fast_float | MIT (elected) | float parsing (`3rdparty/fast_float`) | `FAST_FLOAT.LICENSE` (`3rdparty/fast_float/LICENSE`) |
 | Luau | https://github.com/luau-lang/luau | MIT (Lua.org copyright) | the shortest-float emitter (`src/misc/luau_float2string.cpp`) | `LUAU.LICENSE` (`src/misc/LUAU.LICENSE`) |
 | Khronos PBR Neutral | https://github.com/KhronosGroup/ToneMapping | Apache-2.0 | PBR Neutral tone mapping (`daslib/color_mapping.das`) | `COLOR_MAPPING.LICENSE` (`daslib/color_mapping.LICENSE`) |
 | Unicode Character Database 17.0.0 | https://www.unicode.org/Public/17.0.0/ucd/ | Unicode-3.0 | canonical normalization and full case folding (`daslib/unicode_text.das`) | `UNICODE.LICENSE` (`3rdparty/unicode/LICENSE.txt`); source data and conformance corpus under `3rdparty/unicode/17.0.0/` |

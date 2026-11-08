@@ -15,7 +15,7 @@ add_das_target(check_format
 
 add_custom_target(check_dasgen
     COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/utils/internal/dasgen/gen_bind.das
-    COMMAND git diff --exit-code -- ${PROJECT_SOURCE_DIR}/include/daScript/builtin/
+    COMMAND git diff --exit-code -- ${PROJECT_SOURCE_DIR}/include/daScript/builtin/ ${PROJECT_SOURCE_DIR}/src/builtin/debugapi_gen.inc
     DEPENDS daslang
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     COMMENT "Checking generated builtin .inc files are up to date (dasgen)"

@@ -3,7 +3,7 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_generate.h"
-#include "daScript/ast/ast_generate_typed.h"
+#include "ast_generate_typed.h"
 #include "daScript/ast/ast_simulate.h"
 #include "daScript/simulate/debug_print.h"
 #include "ast_effects.h"

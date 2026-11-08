@@ -100,7 +100,7 @@ This reads the `AstVisitor` class definition from `daslib/ast.das` (via `require
 - Field offset table entries
 - `get_canVisitMyNewThing()` / `invoke_canVisitMyNewThing()` inline methods
 
-Also regenerates `include/daScript/builtin/debugapi_gen.inc` (for debug walker adapters).
+Also regenerates `src/builtin/debugapi_gen.inc` (for debug walker adapters).
 
 ### 7. Additional files (if adding policies or serialization)
 

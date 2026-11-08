@@ -4,13 +4,13 @@
 #pragma warning(disable:4505)
 #endif
 
-#include "daScript/simulate/simulate_fusion.h"
+#include "simulate_fusion.h"
 
 #if DAS_FUSION
 
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/ast/ast.h"
-#include "daScript/simulate/simulate_fusion_op2.h"
+#include "simulate_fusion_op2.h"
 
 // fake DAS_NODE to support boolean eval
 #undef DAS_NODE

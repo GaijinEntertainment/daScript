@@ -4,13 +4,13 @@
 #pragma warning(disable:4505)
 #endif
 
-#include "daScript/simulate/simulate_fusion.h"
+#include "simulate_fusion.h"
 
 #if DAS_FUSION
 
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/ast/ast.h"
-#include "daScript/simulate/simulate_fusion_op1.h"
+#include "simulate_fusion_op1.h"
 #include "daScript/simulate/simulate_visit_op.h"
 #include "vecmath/dag_vecMathDecl.h"
 
@@ -117,8 +117,8 @@ __forceinline SimNode * safeArg1 ( SimNode * node, int index ) {
         DAS_EVAL_NODE \
     };
 
-#include "daScript/simulate/simulate_fusion_op1_impl.h"
-#include "daScript/simulate/simulate_fusion_op1_perm.h"
+#include "simulate_fusion_op1_impl.h"
+#include "simulate_fusion_op1_perm.h"
 
     IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,FastCall,,vec4f,vec4f)
 
@@ -147,8 +147,8 @@ __forceinline SimNode * safeArg1 ( SimNode * node, int index ) {
         DAS_EVAL_NODE \
     };
 
-#include "daScript/simulate/simulate_fusion_op1_impl.h"
-#include "daScript/simulate/simulate_fusion_op1_perm.h"
+#include "simulate_fusion_op1_impl.h"
+#include "simulate_fusion_op1_perm.h"
 
     IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,FastCallChecked,,vec4f,vec4f)
 
@@ -170,8 +170,8 @@ __forceinline SimNode * safeArg1 ( SimNode * node, int index ) {
         DAS_EVAL_NODE \
     };
 
-#include "daScript/simulate/simulate_fusion_op1_impl.h"
-#include "daScript/simulate/simulate_fusion_op1_perm.h"
+#include "simulate_fusion_op1_impl.h"
+#include "simulate_fusion_op1_perm.h"
 
     IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,Call,,vec4f,vec4f)
 

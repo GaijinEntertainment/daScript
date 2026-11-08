@@ -14,6 +14,7 @@ require strings
 [export]
 def main {
     let root = get_das_root() + "/include/daScript/builtin/"
+    let src_root = get_das_root() + "/src/builtin/"
     fwrite_if_changed(root + "ast_gen.inc", build_string() $(var cpp_file) {
         ast_gc_guard() {
             log_cpp_class_adapter(cpp_file, "AstFunctionAnnotation_Adapter", typeinfo ast_typedecl(type<AstFunctionAnnotation>))
@@ -35,7 +36,7 @@ def main {
                                   typeinfo ast_typedecl(type<AstConstVisitor>))
         }
     })
-    fwrite_if_changed(root + "debugapi_gen.inc", build_string() $(var cpp_file) {
+    fwrite_if_changed(src_root + "debugapi_gen.inc", build_string() $(var cpp_file) {
         ast_gc_guard() {
             log_cpp_class_adapter(cpp_file, "DapiDataWalker_Adapter", typeinfo ast_typedecl(type<DapiDataWalker>))
             log_cpp_class_adapter(cpp_file, "DapiDebugAgent_Adapter", typeinfo ast_typedecl(type<DapiDebugAgent>))

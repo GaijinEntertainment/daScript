@@ -1,5 +1,5 @@
 #include "daScript/misc/platform.h"
-#include "daScript/ast/ast_pass_macros.h"
+#include "ast_pass_macros.h"
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_expressions.h"

@@ -4,7 +4,7 @@
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_generate.h"
 #include "daScript/ast/ast_cfg.h"
-#include "daScript/ast/ast_escape_analysis.h"
+#include "ast_escape_analysis.h"
 #include "daScript/misc/string_writer.h"
 #include <cstdint>
 

@@ -4,13 +4,13 @@
 #pragma warning(disable:4505)
 #endif
 
-#include "daScript/simulate/simulate_fusion.h"
+#include "simulate_fusion.h"
 
 #if DAS_FUSION
 
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/ast/ast.h"
-#include "daScript/simulate/simulate_fusion_op1.h"
+#include "simulate_fusion_op1.h"
 #include "daScript/simulate/simulate_visit_op.h"
 
 namespace das {
@@ -58,8 +58,8 @@ namespace das {
         DAS_PTR_NODE; \
     };
 
-#include "daScript/simulate/simulate_fusion_op1_impl.h"
-#include "daScript/simulate/simulate_fusion_op1_perm.h"
+#include "simulate_fusion_op1_impl.h"
+#include "simulate_fusion_op1_perm.h"
 
     IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,PtrFieldDeref,,vec4f,vec4f)
 
@@ -76,8 +76,8 @@ namespace das {
         DAS_PTR_NODE; \
     };
 
-#include "daScript/simulate/simulate_fusion_op1_impl.h"
-#include "daScript/simulate/simulate_fusion_op1_perm.h"
+#include "simulate_fusion_op1_impl.h"
+#include "simulate_fusion_op1_perm.h"
 
     IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,FieldDeref,,vec4f,vec4f)
 
@@ -101,8 +101,8 @@ namespace das {
         DAS_NODE(TYPE,RCTYPE); \
     };
 
-#include "daScript/simulate/simulate_fusion_op1_impl.h"
-#include "daScript/simulate/simulate_fusion_op1_perm.h"
+#include "simulate_fusion_op1_impl.h"
+#include "simulate_fusion_op1_perm.h"
 
     IMPLEMENT_OP1_WORKHORSE_FUSION_POINT(PtrFieldDerefR2V);
 
@@ -119,8 +119,8 @@ namespace das {
         DAS_NODE(TYPE,RCTYPE); \
     };
 
-#include "daScript/simulate/simulate_fusion_op1_impl.h"
-#include "daScript/simulate/simulate_fusion_op1_perm.h"
+#include "simulate_fusion_op1_impl.h"
+#include "simulate_fusion_op1_perm.h"
 
     IMPLEMENT_OP1_WORKHORSE_FUSION_POINT(FieldDerefR2V);
 
@@ -139,8 +139,8 @@ namespace das {
         } \
     };
 
-#include "daScript/simulate/simulate_fusion_op1_impl.h"
-#include "daScript/simulate/simulate_fusion_op1_perm.h"
+#include "simulate_fusion_op1_impl.h"
+#include "simulate_fusion_op1_perm.h"
 
     IMPLEMENT_OP1_NUMERIC_VEC(PtrFieldDerefR2V);
 
@@ -158,12 +158,12 @@ namespace das {
         } \
     };
 
-#include "daScript/simulate/simulate_fusion_op1_impl.h"
-#include "daScript/simulate/simulate_fusion_op1_perm.h"
+#include "simulate_fusion_op1_impl.h"
+#include "simulate_fusion_op1_perm.h"
 
     IMPLEMENT_OP1_NUMERIC_VEC(FieldDerefR2V);
 
-#include "daScript/simulate/simulate_fusion_op1_reg.h"
+#include "simulate_fusion_op1_reg.h"
 
     void createFusionEngine_ptrfdr()
     {

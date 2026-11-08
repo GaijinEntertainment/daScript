@@ -46,7 +46,7 @@ tag_composition, proposed_enum_name, wording_change`.
 | Granularity | Mild collapse: 1116 sites -> 561 unique codes (was 632 before collapse). Modifier suffixes like `_void`, `_ref`, `_const`, `_value` are dropped from cerr names; the info stays in the message text. |
 | Follow-on / internal granularity | Fine-grained per subject. `not_resolved_yet_<subject>` for each subject (38 codes); `internal_<subject>_<facet>` for each (42 codes). |
 | Numbering | Loose ranges: 1xxxx lex / 2xxxx parse / 3xxxx semantic / 4xxxx logic / 5xxxx integration. Inside a stage, cluster by leading facet (within-stage offset = `(facet_idx % 90 + 1) * 100`). New codes go next-available within the cluster. |
-| Verbose flag | Reuse existing `InferTypes::verbose` ([include/daScript/ast/ast_infer_type.h:30](../../include/daScript/ast/ast_infer_type.h#L30)) - no new user-facing flag. Plumb through 89 emit sites identified by audit. |
+| Verbose flag | Reuse existing `InferTypes::verbose` ([src/ast/ast_infer_type.h:30](../../src/ast/ast_infer_type.h#L30)) - no new user-facing flag. Plumb through 89 emit sites identified by audit. |
 | Taxonomy expansion | Accept 11 new tags surfaced by the audit: 8 subjects (`string, comment, indentation, runtime, iterator, pointer, buffer, context`) + 3 facets (`runtime, performance_lint, style_lint`). Reject narrow parser-only tags (`aka, pipe, keyword, dispatcher`). |
 
 ## The naming discipline
@@ -122,7 +122,7 @@ Full enum draft: `D:/daslang-error-audit/design/new_enum_draft.h`. To copy into
    - `utils/daslang-live/main.cpp`
    - `utils/gen1-to-gen2/`
    - `include/daScript/simulate/runtime_string.h` (the `reportError` formatter - unchanged behavior)
-5. `include/daScript/ast/ast_infer_type.h:5` declares CompilationError values used in inference; verify still resolve.
+5. `src/ast/ast_infer_type.h:5` declares CompilationError values used in inference; verify still resolve.
 6. Regenerate parsers (CMake handles `.ypp`/`.lpp` automatically when sources touched).
 
 Worker plan: split Phase C across 4-6 subagents by file group, mirroring the inventory-agent split. Each agent reads `legacy_map.tsv`, filters by its files, applies edits via Edit tool. **No hand-tuning** - the TSV is the source of truth.

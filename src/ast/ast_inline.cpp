@@ -4,7 +4,7 @@
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_const_visitor.h"
 #include "daScript/ast/ast_expressions.h"
-#include "daScript/ast/ast_generate_typed.h"
+#include "ast_generate_typed.h"
 
 namespace das {
 

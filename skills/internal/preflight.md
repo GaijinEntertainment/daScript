@@ -204,7 +204,7 @@ test rather than a check that silently stopped running.
 | CI step | Local mirror | Notes |
 |---|---|---|
 | Markdown ASCII gate | preflight's `md-ascii` gate (fast tier, runs when the diff touches any `.md`); the CI target is `cmake --build build --config Release --target check_md_ascii`, fix in place with `python3 ci/fix_md_ascii.py` | em-dashes/arrows/ellipses in new markdown are the usual trip |
-| dasgen freshness | `<daslang> utils/internal/dasgen/gen_bind.das` then `git diff --exit-code -- include/daScript/builtin/` | regen + commit if dirty; `skills/internal/visitor_gen_bind.md` |
+| dasgen freshness | `<daslang> utils/internal/dasgen/gen_bind.das` then `git diff --exit-code -- include/daScript/builtin/ src/builtin/debugapi_gen.inc` | regen + commit if dirty; `skills/internal/visitor_gen_bind.md` |
 | Run examples - **nightly** | `cmake --build build --config Release --target run_examples`; per PR, preflight's `compile-sweep` gate compiles every example root | the run form is 5-8 minutes a lane |
 | Utils tests | `cmake --build build --config Release --target run_utils_tests` - preflight's `utils-tests` lane | |
 | Tutorial dry-runs - **nightly** | `cmake --build build --config Release --target dry_run_tutorials`; per PR, preflight's `compile-sweep` gate compiles every tutorial root | compile rot in `tutorials/` after daslib API changes; the run form is 8-11 minutes a lane |

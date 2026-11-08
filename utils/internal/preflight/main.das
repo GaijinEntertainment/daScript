@@ -838,7 +838,8 @@ def gate_dasgen(ctx : PreflightCtx) : GateResult {
         return GateResult(name = "dasgen", status = GateStatus.Fail, seconds = seconds_since(t0),
             detail = "gen_bind.das failed", output = r.out)
     }
-    let d = run_argv(["git", "diff", "--exit-code", "--stat", "--", "include/daScript/builtin/"])
+    let d = run_argv(["git", "diff", "--exit-code", "--stat", "--",
+        "include/daScript/builtin/", "src/builtin/debugapi_gen.inc"])
     return GateResult(name = "dasgen", status = d.rc == 0 ? GateStatus.Pass : GateStatus.Fail,
         seconds = seconds_since(t0),
         detail = d.rc == 0 ? "" : "generated .inc files out of date — commit the regenerated files",

@@ -4,7 +4,7 @@
 #pragma warning(disable:4505)
 #endif
 
-#include "daScript/simulate/simulate_fusion.h"
+#include "simulate_fusion.h"
 
 #if DAS_FUSION
 
@@ -152,7 +152,7 @@ __forceinline SimNode * safeArg2 ( SimNode * node, int index ) {
 #define FUSION_OP2_SUBEXPR_LEFT(CTYPE,node)     (safeArg2(node,0))
 #define FUSION_OP2_SUBEXPR_RIGHT(CTYPE,node)    (safeArg2(node,1))
 
-#include "daScript/simulate/simulate_fusion_op2_impl.h"
+#include "simulate_fusion_op2_impl.h"
 
 IMPLEMENT_ANY_OP2(__forceinline, Call, Ptr, StringPtr)
 
@@ -207,7 +207,7 @@ IMPLEMENT_ANY_OP2(__forceinline, Call, Ptr, StringPtr)
         DAS_PTR_NODE; \
     };
 
-#include "daScript/simulate/simulate_fusion_op2_impl.h"
+#include "simulate_fusion_op2_impl.h"
 
 IMPLEMENT_ANY_OP2(__forceinline, CallAndCopyOrMove, Ptr, StringPtr)
 
@@ -283,7 +283,7 @@ IMPLEMENT_ANY_OP2(__forceinline, CallAndCopyOrMove, Ptr, StringPtr)
         DAS_EVAL_NODE \
     };
 
-#include "daScript/simulate/simulate_fusion_op2_impl.h"
+#include "simulate_fusion_op2_impl.h"
 
 IMPLEMENT_ANY_OP2(__forceinline, FastCall, Ptr, StringPtr)
 
@@ -365,7 +365,7 @@ IMPLEMENT_ANY_OP2(__forceinline, FastCall, Ptr, StringPtr)
         DAS_EVAL_NODE \
     };
 
-#include "daScript/simulate/simulate_fusion_op2_impl.h"
+#include "simulate_fusion_op2_impl.h"
 
 IMPLEMENT_ANY_OP2(__forceinline, FastCallChecked, Ptr, StringPtr)
 

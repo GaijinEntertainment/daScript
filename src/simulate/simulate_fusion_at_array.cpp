@@ -4,7 +4,7 @@
 #pragma warning(disable:4505)
 #endif
 
-#include "daScript/simulate/simulate_fusion.h"
+#include "simulate_fusion.h"
 
 #if DAS_FUSION
 
@@ -82,8 +82,8 @@ namespace das {
 #define FUSION_OP2_SUBEXPR_LEFT(CTYPE,node)     ((static_cast<SimNode_ArrayAt *>(node))->l)
 #define FUSION_OP2_SUBEXPR_RIGHT(CTYPE,node)    ((static_cast<SimNode_ArrayAt *>(node))->r)
 
-#include "daScript/simulate/simulate_fusion_op2_set_impl.h"
-#include "daScript/simulate/simulate_fusion_op2_set_perm.h"
+#include "simulate_fusion_op2_set_impl.h"
+#include "simulate_fusion_op2_set_perm.h"
 
 #define DAS_ARRAYAT_CHECK DAS_ARRAYAT_CHECK_ON
     IMPLEMENT_SETOP_SCALAR(ArrayAtR2V);
@@ -122,8 +122,8 @@ namespace das {
         } \
     };
 
-#include "daScript/simulate/simulate_fusion_op2_set_impl.h"
-#include "daScript/simulate/simulate_fusion_op2_set_perm.h"
+#include "simulate_fusion_op2_set_impl.h"
+#include "simulate_fusion_op2_set_perm.h"
 
 #define DAS_ARRAYAT_CHECK DAS_ARRAYAT_CHECK_ON
     IMPLEMENT_SETOP_NUMERIC_VEC(ArrayAtR2V);
@@ -168,8 +168,8 @@ namespace das {
     rn->offset = sn->offset; \
     rn->baseType = Type::none;
 
-#include "daScript/simulate/simulate_fusion_op2_set_impl.h"
-#include "daScript/simulate/simulate_fusion_op2_set_perm.h"
+#include "simulate_fusion_op2_set_impl.h"
+#include "simulate_fusion_op2_set_perm.h"
 
 #define DAS_ARRAYAT_CHECK DAS_ARRAYAT_CHECK_ON
     IMPLEMENT_ANY_SETOP(__forceinline, ArrayAt, Ptr, StringPtr, StringPtr);
@@ -218,8 +218,8 @@ namespace das {
 #define FUSION_OP2_SUBEXPR_LEFT(CTYPE,node)     ((static_cast<SimNode_ArrayAt_I64 *>(node))->l)
 #define FUSION_OP2_SUBEXPR_RIGHT(CTYPE,node)    ((static_cast<SimNode_ArrayAt_I64 *>(node))->r)
 
-#include "daScript/simulate/simulate_fusion_op2_set_impl.h"
-#include "daScript/simulate/simulate_fusion_op2_set_perm.h"
+#include "simulate_fusion_op2_set_impl.h"
+#include "simulate_fusion_op2_set_perm.h"
 
     IMPLEMENT_SETOP_SCALAR(ArrayAtR2V_I64);
 
@@ -253,8 +253,8 @@ namespace das {
         } \
     };
 
-#include "daScript/simulate/simulate_fusion_op2_set_impl.h"
-#include "daScript/simulate/simulate_fusion_op2_set_perm.h"
+#include "simulate_fusion_op2_set_impl.h"
+#include "simulate_fusion_op2_set_perm.h"
 
     IMPLEMENT_SETOP_NUMERIC_VEC(ArrayAtR2V_I64);
 
@@ -294,8 +294,8 @@ namespace das {
     rn->offset = sn->offset; \
     rn->baseType = Type::none;
 
-#include "daScript/simulate/simulate_fusion_op2_set_impl.h"
-#include "daScript/simulate/simulate_fusion_op2_set_perm.h"
+#include "simulate_fusion_op2_set_impl.h"
+#include "simulate_fusion_op2_set_perm.h"
 
     IMPLEMENT_ANY_SETOP(__forceinline, ArrayAt_I64, Ptr, StringPtr, StringPtr);
 
@@ -339,8 +339,8 @@ namespace das {
 #define FUSION_OP2_SUBEXPR_LEFT(CTYPE,node)     ((static_cast<SimNode_ArrayAt_U64 *>(node))->l)
 #define FUSION_OP2_SUBEXPR_RIGHT(CTYPE,node)    ((static_cast<SimNode_ArrayAt_U64 *>(node))->r)
 
-#include "daScript/simulate/simulate_fusion_op2_set_impl.h"
-#include "daScript/simulate/simulate_fusion_op2_set_perm.h"
+#include "simulate_fusion_op2_set_impl.h"
+#include "simulate_fusion_op2_set_perm.h"
 
     IMPLEMENT_SETOP_SCALAR(ArrayAtR2V_U64);
 
@@ -374,8 +374,8 @@ namespace das {
         } \
     };
 
-#include "daScript/simulate/simulate_fusion_op2_set_impl.h"
-#include "daScript/simulate/simulate_fusion_op2_set_perm.h"
+#include "simulate_fusion_op2_set_impl.h"
+#include "simulate_fusion_op2_set_perm.h"
 
     IMPLEMENT_SETOP_NUMERIC_VEC(ArrayAtR2V_U64);
 
@@ -415,8 +415,8 @@ namespace das {
     rn->offset = sn->offset; \
     rn->baseType = Type::none;
 
-#include "daScript/simulate/simulate_fusion_op2_set_impl.h"
-#include "daScript/simulate/simulate_fusion_op2_set_perm.h"
+#include "simulate_fusion_op2_set_impl.h"
+#include "simulate_fusion_op2_set_perm.h"
 
     IMPLEMENT_ANY_SETOP(__forceinline, ArrayAt_U64, Ptr, StringPtr, StringPtr);
 
