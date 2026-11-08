@@ -839,7 +839,7 @@ def gate_dasgen(ctx : PreflightCtx) : GateResult {
             detail = "gen_bind.das failed", output = r.out)
     }
     let d = run_argv(["git", "diff", "--exit-code", "--stat", "--",
-        "include/daScript/builtin/", "src/builtin/debugapi_gen.inc"])
+        "src/builtin/ast_gen.inc", "src/builtin/debugapi_gen.inc"])
     return GateResult(name = "dasgen", status = d.rc == 0 ? GateStatus.Pass : GateStatus.Fail,
         seconds = seconds_since(t0),
         detail = d.rc == 0 ? "" : "generated .inc files out of date — commit the regenerated files",
@@ -1542,7 +1542,9 @@ def gate_table() : array<GateInfo> {
             doc = ("daslang -dry-run --ast-verify-batch on changed .das (parallel, 600s/file;"
                 + " mirrors CI) - an AST verify line, a crash, or a timeout fails")),
         GateInfo(name = "cpp-syntax", tier = "fast", doc = "clang frontend pass on changed C++; header change → full src+tests-cpp sweep"),
-        GateInfo(name = "dasgen", tier = "fast", doc = "gen_bind.das freshness vs include/daScript/builtin/", reach <- ["src/builtin/", "include/daScript/builtin/", "utils/internal/dasgen/"]),
+        GateInfo(name = "dasgen", tier = "fast",
+            doc = "gen_bind.das freshness vs src/builtin/*_gen.inc",
+            reach <- ["src/builtin/", "utils/internal/dasgen/"]),
         GateInfo(name = "ci-das", tier = "fast", doc = "compile-only sweep of CI-only das surface (ci_only_das.txt)"),
         GateInfo(name = "ci-matrix", tier = "fast", doc = "python3 ci/test_ci_matrix.py - the CI job matrices per event and the extended_checks role conditions (mirrors CI's core-role step)", reach <- [".github/", "ci/"]),
         GateInfo(name = "compile-sweep", tier = "fast", doc = "compile-only of every program root under utils/, examples/, tutorials/ and the modules' examples and utils, in parallel (the per-PR form of CI's examples and tutorial runs)"),

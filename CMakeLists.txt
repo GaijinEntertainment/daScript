@@ -997,7 +997,6 @@ list(SORT AST_SRC)
 SOURCE_GROUP_FILES("ast" AST_SRC)
 
 SET(BUILTIN_SRC
-include/daScript/builtin/ast_gen.inc
 
 src/builtin/module_builtin.h
 src/builtin/module_builtin.cpp
@@ -1878,12 +1877,6 @@ install(FILES include/dag_noise/dag_uint_noise.h
 # Install internal builtin headers (needed by integration tutorials like class adapters).
 file(GLOB DAS_BUILTIN_HEADERS ${PROJECT_SOURCE_DIR}/src/builtin/*.h)
 install(FILES ${DAS_BUILTIN_HEADERS}
-    DESTINATION include/daScript/builtin
-)
-# The generated binding tables: the shipped aot_builtin_ast.h includes ast_gen.inc, so without it
-# an SDK consumer's AOT translation unit that touches the ast module fails to compile.
-install(FILES
-    ${PROJECT_SOURCE_DIR}/include/daScript/builtin/ast_gen.inc
     DESTINATION include/daScript/builtin
 )
 

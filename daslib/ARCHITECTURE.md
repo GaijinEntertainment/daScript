@@ -280,7 +280,7 @@ Companion documents carry separate concerns.
   `AnnotationArgumentList &`: `FunctionAnnotation`, `StructureAnnotation` and
   `EnumerationAnnotation` in `include/daScript/ast/ast.h` (repo root) hand the adapters in
   `src/builtin/module_builtin_ast_adapters.cpp` the declaration's own `arguments`, and
-  `include/daScript/builtin/ast_gen.inc` - regenerated from `ast.das` by
+  `src/builtin/ast_gen.inc` - regenerated from `ast.das` by
   `utils/internal/dasgen/gen_bind.das` - carries the same reference type.** Nothing fails when
   one side moves alone: an override compiles under either constness and the adapter resolves a
   hook by field name, so a C++ side back on `const` leaves daslang writing through a const
