@@ -214,23 +214,50 @@ assertion that such a line is absent passes on a hit whatever the macro would do
 after the front end - by the backend or by the runtime guard, such as the `LLVM JIT:` announce,
 the covered-box announce or `re-tuning (--tune)` - prints on every run, hit or miss.
 
-## 13. A pointer is an address: no type-based alias information {#pointer-alias-model}
+## 13. Alias information: typed by class, parameters by promise {#pointer-alias-model}
 
-A load or a store carries no `!tbaa`, and a pointer parameter carries no `noalias` the source did
-not ask for: a `float?` store may change what an `int?` points at, as clang treats C under
-`-fno-strict-aliasing`. That is the language's pointer model - any type reads through any pointer
-(`reinterpret` between pointer types, a `uint8?` view over a quantized block, a float's bits
-through an `int?`), and the host build compiles with `DAS_STRICT_ALIASING` off - so a type-based
-root set would make every such read undefined behavior. The cost lands on a loop that reads a
-bound or an operand through a pointer of one type beside a store through a pointer of another:
-the read is repeated after every store, the trip count stays unknown and the loop does not
-vectorize. What `apply_impl_param_attrs` (`daslib/llvm_jit.das`) stamps is what the source
-states: `readonly` on a const indirect parameter the body never writes through and whose type
-can be copied - a container, or a type holding one, is lock-written by `for` even when const, and a
-`readonly` the lock contradicts turns into stale reads the moment a `noalias` joins it; `noalias` and
-`nocapture` on the context, the capture frame and the result slot, which the runtime owns; and
+Every load and store of a jitted function carries a TBAA tag for the class of the LLVM type it
+accesses (`apply_strict_aliasing_to_module`, `daslib/llvm_jit_run.das`, before the optimizer):
+`float` and `double` are each a class, every integer wider than a byte, every pointer and `half`
+share one, and bytes, bools, vectors and aggregates carry no tag and alias everything, as `char`
+does in C. The integers share a class because the emitter itself widens them - `memset16` writes
+its pattern as `i32`, a pointer stored is read back as a word, an f16 scale is written as `uint16` -
+and a tag per width would make those reads stale. What the tags buy is the loop whose bound or
+operand is read through a pointer of one class beside a store through a pointer of another: with
+no tags the read repeats after every store and the loop never vectorizes; with them the reads
+leave the loop. `options strict_aliasing` is the program-wide switch and is on by default;
+it folds into `jit_env_salt`, so the two settings never share a cached DLL.
+
+A function is left untagged when its body holds a punning `reinterpret` - one whose result is a
+pointer to anything but `void` or a byte, or a reference of another type (`is_punning_reinterpret`,
+`daslib/llvm_jit_plan.das`) - because such a function holds two typed views of one object, which is
+the one shape the tags miscompile; an `invoke` whose result is a pointer counts the same, since
+its callee is unknown. The set is computed once per compile over the whole jit set
+(`compute_strict_aliasing_exclusions`: one AST walk per function, then a fixpoint over the call
+graph), so it is the same in every partition of a split build and a cross-partition declaration
+carries the same verdict as its definition. A block literal takes its enclosing function's
+verdict, since it inlines into it; a function that calls an untagged function returning a
+pointer, or writing one back through a writable argument, is untagged too, since inlining would
+otherwise mix its tagged accesses with the punned view it was handed; so is a callee or lambda an untagged function hands a pointer to, every
+function that touches a pointer-carrying global an untagged function touches, since the view
+reaches them through memory rather than a call, and - once an untagged function hands a pointer to
+a function value - every lambda and address-taken function taking one, since the value's target
+is unknown. A view stored into a heap object's field and
+loaded by a function that shares no global or call with the writer is the one escape the
+analysis does not follow; `[hint(no_strict_aliasing)]` on the reader is the answer there.
+`[hint(strict_aliasing)]` keeps a function tagged whatever its body does, `[hint(no_strict_aliasing)]`
+takes it out; both fold into the per-function hint fold. A `void?` or byte view is not punning: its
+accesses are untagged by the class rule.
+
+What `apply_impl_param_attrs` (`daslib/llvm_jit.das`) stamps on parameters is what the source
+states: `readonly` on a const indirect parameter the body never writes through and whose type can
+be copied - a container, or a type holding one, is lock-written by `for` even when const, and a
+`readonly` the lock contradicts turns into stale reads the moment a `noalias` joins it; `noalias`
+and `nocapture` on the context, the capture frame and the result slot, which the runtime owns; and
 the user's promise - `[hint(noalias = p)]` for one parameter, `[hint(unsafe_alias)]` for all of
-them - as LLVM's `noalias`, under which the reads above leave the loop. A `noalias`, `nocapture`
-or `align16` hint naming no parameter is a compile error (`process_function_hints`), since a hint
-that names nothing would otherwise do nothing. Passing the bound and the operand by value is the
-other way out: a value is never reloaded.
+them - as LLVM's `noalias`. No parameter is `noalias` without that promise: daslang stores the
+address of a parameter's interior in memory and reads it back (a generator's frame keeps
+`addr(self.i)`), and a pointer loaded from memory is not "based on" the parameter to LLVM, so a
+blanket `noalias` miscompiles the language's own lowering. A `noalias`, `nocapture` or `align16`
+hint naming no parameter is a compile error (`process_function_hints`), since a hint that names
+nothing would otherwise do nothing.

@@ -64,4 +64,12 @@ def test_salt_folds_layouts(t : T?) {
     t |> run("other layouts are another salt") @(t : T?) {
         t |> success(salt(here + 1ul) != salt(here))
     }
+    t |> run("the typed aliasing switch is another salt") @(t : T?) {
+        let on = salt(here)
+        g_jit_strict_aliasing = false
+        let off = salt(here)
+        g_jit_strict_aliasing = true
+        t |> success(on != off)
+        t |> equal(on, salt(here))
+    }
 }

@@ -1310,6 +1310,7 @@ namespace das {
         "never_inline",                 Type::tBool,    // module-wide inline opt-out (ast_inline.cpp)
         // fusion registered via its CodeOfPolicies field
         "remove_unused_symbols",        Type::tBool,
+        "strict_aliasing",              Type::tBool,
     // language
         "always_export_initializer",    Type::tBool,
         "infer_time_folding",           Type::tBool,

@@ -153,6 +153,15 @@ Optimization
      - bool
      - false
      - Disables all optimizations unconditionally. Overrides all other optimization settings.
+   * - ``strict_aliasing``
+     - bool
+     - true
+     - Under the LLVM tiers a ``float`` or ``double`` access never aliases an integer or pointer
+       access, so a loop that reads its bound through an ``int?`` beside ``float`` stores hoists the
+       read. A function whose body reinterprets memory under another pointer or reference type is
+       left out automatically, and so is every function that view reaches through a call, a return,
+       an out argument, a lambda, a callback or a shared global; ``[hint(strict_aliasing)]`` and
+       ``[hint(no_strict_aliasing)]`` override per function. The interpreter and C++ AOT ignore it.
    * - ``fast_math``
      - bool
      - false

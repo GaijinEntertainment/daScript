@@ -23,6 +23,36 @@ def private fold_source_function_hints(t : T?; src : string) : uint64 {
     return h
 }
 
+//! the typed model's verdicts over `src`, folded as a cache key
+//! takes them
+def private fold_source_exclusions(t : T?; src : string) : uint64 {
+    var h = 0ul
+    compile("fold_source_exclusions", src, CodeOfPolicies()) $(ok; prog; errors) {
+        t |> success(ok, "the probe source compiles: {errors}")
+        if (ok) {
+            var funcs : array<FunctionPtr>
+            get_this_module(prog) |> for_each_function("") $(fn) {
+                funcs |> push(fn)
+            }
+            compute_strict_aliasing_exclusions(funcs)
+            h = fold_strict_aliasing_exclusions(funcs, 0ul)
+        }
+    }
+    return h
+}
+
+//! two functions over a float buffer; `pun_first` puts the int view
+//! in the first, else the second
+def private two_views(pun_first : bool) : string {
+    let pun = "        let bits & = unsafe(reinterpret<int&>(fa[0]))\n        return float(bits)\n"
+    let plain = "        return fa[0]\n"
+    let first = pun_first ? pun : plain
+    let second = pun_first ? plain : pun
+    let head = "options gen2\ndef first_view(var fa : float?) : float \{\n    unsafe \{\n"
+    let mid = "{first}    \}\n\}\ndef second_view(var fa : float?) : float \{\n    unsafe \{\n"
+    return "{head}{mid}{second}    \}\n\}\n"
+}
+
 //! two functions with identical bodies; `on_first` puts `ann` on the first, else on the second
 def private two_functions(ann : string; on_first : bool) : string {
     let first = on_first ? "{ann}\n" : ""
@@ -35,6 +65,17 @@ def test_hint_folds_bind_to_their_function(t : T?) {
     let hint = "[hint(noinline)]"
     t |> equal(fold_source_function_hints(t, two_functions(hint, true)), fold_source_function_hints(t, two_functions(hint, true)), "the fold is a function of the source")
     t |> success(fold_source_function_hints(t, two_functions(hint, true)) != fold_source_function_hints(t, two_functions(hint, false)), "a [hint] moved to another function changes the key")
+}
+
+//! a function's typed-model verdict is not in its AOT hash, and it
+//! can change through another partition's body
+[test]
+def test_an_aliasing_exclusion_rekeys_the_jit_cache(t : T?) {
+    let pun_first = fold_source_exclusions(t, two_views(true))
+    t |> equal(pun_first, fold_source_exclusions(t, two_views(true)),
+        "the fold is a function of the source")
+    t |> success(pun_first != fold_source_exclusions(t, two_views(false)),
+        "the punning view moved to the other function changes the key")
 }
 
 [test]

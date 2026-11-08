@@ -27,15 +27,15 @@ require daslib/option
 require daslib/result
 require jit
 
-// Bump this constant whenever LLVM codegen / linking logic changes in a way that
-// invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
-// runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
-// makes every previously written DLL miss the cache on the next run and get GC'd.
-// Current entry: bool<->integer reinterprets are the byte, a
-// pointer reinterprets to any integer width through ptrtoint, a
-// pointer difference is inline arithmetic, a global lookup is
-// speculatable.
-let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xA7ul
+// Bump this constant whenever LLVM codegen / linking logic changes in
+// a way that invalidates cached DLLs (e.g. edits to llvm_jit.das,
+// llvm_macro.das, llvm_jit_common.das, runtime helper ABI, default
+// target triple). Cache filenames fold this in, so a bump makes every
+// previously written DLL miss the cache on the next run and get GC'd.
+// Current entry: every load and store carries a TBAA class tag; a
+// function holding a punning view, and every caller handed one, is
+// left untagged.
+let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xA8ul
 
 let public JIT_FNV_PRIME : uint64 = 1099511628211ul
 
@@ -43,6 +43,336 @@ let public JIT_FNV_PRIME : uint64 = 1099511628211ul
 // NON-bit-exact, default off, +8-10% e2e. nnan|ninf|arcp|afn are deliberately NOT stamped: engine
 // kernels make real infs; the arcp+ninf rcp div yields inf*0=NaN.
 var public g_jit_fast_math = false
+
+//! `options strict_aliasing` (on by default): every load and
+//! store carries a TBAA tag of its type; `[hint(strict_aliasing)]`
+//! opts a function in regardless, `[hint(no_strict_aliasing)]` out
+var public g_jit_strict_aliasing = true
+
+let public JIT_STRICT_ALIASING_ATTR = "das-strict-aliasing"
+let public JIT_NO_STRICT_ALIASING_ATTR = "das-no-strict-aliasing"
+
+//! true when `annotations` carries `[hint(<flag>)]`
+def public has_hint_flag(annotations : AnnotationList; flag : string) : bool {
+    for (ann in annotations) {
+        if (ann.annotation.name == "hint") {
+            for (arg in ann.arguments) {
+                if (arg.name == flag) return true
+            }
+        }
+    }
+    return false
+}
+
+//! a reinterpret that makes a typed view of memory: a pointer to
+//! anything but `void` or a byte, or a reference of another type (a
+//! `void?` or byte view is read through untagged accesses)
+def public is_punning_reinterpret(to_type, from_type : TypeDeclPtr) : bool {
+    if (is_same_type(to_type, from_type, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) {
+        return false
+    }
+    if (to_type.isPointer) {
+        let pointee = to_type.firstType
+        let pt = pointee == null ? Type.tVoid : pointee.baseType
+        if (pt == Type.tVoid || pt == Type.tInt8 || pt == Type.tUInt8) return false
+        return from_type.isPointer || from_type.isRef || from_type.isInteger
+    }
+    return to_type.isRef && from_type.isRef
+}
+
+//! a value of type `t` can carry a view of memory: a pointer or
+//! reference itself, or one anywhere inside an aggregate; a lambda,
+//! function or iterator value may hold any pointer in its captures
+def private carries_view(t : TypeDeclPtr; depth : int = 0) : bool {
+    if (t == null) return false
+    if (t.isPointer || t.isRef || depth > 8) return true
+    let bt = t.baseType
+    let holds_captures = (bt == Type.tLambda || bt == Type.tFunction
+        || bt == Type.tIterator || bt == Type.tBlock)
+    if (holds_captures) return true
+    if (bt == Type.tArray) return carries_view(t.firstType, depth + 1)
+    if (bt == Type.tTable) {
+        return carries_view(t.firstType, depth + 1) || carries_view(t.secondType, depth + 1)
+    }
+    if (bt == Type.tTuple || bt == Type.tVariant) {
+        for (at in t.argTypes) {
+            if (carries_view(at, depth + 1)) return true
+        }
+        return false
+    }
+    if (bt == Type.tStructure && t.structType != null) {
+        for (fld in t.structType.fields) {
+            if (carries_view(fld._type, depth + 1)) return true
+        }
+    }
+    return false
+}
+
+def private yields_view(t : TypeDeclPtr) : bool => carries_view(t)
+
+//! a function an `invoke` can reach - a lambda, or one some body
+//! takes by `@@` - with a parameter that can carry a view (a lambda's
+//! first parameter is its capture)
+def private callback_target(fn : FunctionPtr; addressed : bool) : bool {
+    if (!(fn.flags._lambda || addressed)) return false
+    for (arg, i in fn.arguments, count()) {
+        if ((i > 0 || !fn.flags._lambda) && carries_view(arg._type)) return true
+    }
+    return false
+}
+
+//! a parameter the callee can write a view back through: a writable
+//! reference or aggregate holding one, or a pointer to such a slot
+def private writable_view_slot(t : TypeDeclPtr) : bool {
+    if (t.isConst) return false
+    if (t.isPointer && !t.isRef) return t.firstType != null && carries_view(t.firstType)
+    return carries_view(t)
+}
+
+//! a source file's identity, for the global and lambda indexes
+def private file_of(at : LineInfo) : uint64 => unsafe(reinterpret<uint64>(at.fileInfo))
+
+//! a global's identity for the view-flow analysis
+def private global_key(v : Variable?) : uint64 =>
+    hash("{v.name}@{file_of(v.at)}:{v.at.line}:{v.at.column}")
+
+//! one body as the typed model reads it: does it view memory under
+//! another type (a punning reinterpret, an `invoke` yielding a
+//! pointer or reference), and which das functions hand it a view
+class private StrictAliasingScan : AstVisitor {
+    punning : bool = false
+    invokes_view : bool = false    //! hands a view to a function value
+    view_sources : table<uint64>   //! das callees that hand this body a view
+    view_sinks : table<uint64>     //! das callees this body hands a view to
+    view_globals : table<uint64>   //! view-carrying globals this body touches
+    addressed : table<uint64>      //! das functions any body takes by `@@`
+    def override preVisitExprAddr(expr : ExprAddr?) : void {
+        if (expr.func != null) {
+            addressed |> insert(hash(get_mangled_name(expr.func)))
+        }
+    }
+    def override preVisitExprCast(expr : ExprCast?) : void {
+        if (expr.castFlags.reinterpretCast) {
+            punning ||= is_punning_reinterpret(expr._type, expr.subexpr._type)
+        }
+    }
+    def override preVisitExprInvoke(expr : ExprInvoke?) : void {
+        punning ||= yields_view(expr._type)
+        for (arg, i in expr.arguments, count()) {
+            invokes_view ||= i > 0 && yields_view(arg._type)
+        }
+    }
+    def override preVisitExprCall(expr : ExprCall?) : void {
+        if (expr.func == null || expr.func.flags.builtIn) return
+        let key = hash(get_mangled_name(expr.func))
+        if (yields_view(expr.func.result)) {
+            view_sources |> insert(key)
+        }
+        for (arg, i in expr.arguments, count()) {
+            if (!yields_view(arg._type)) continue
+            view_sinks |> insert(key)
+            if (i >= length(expr.func.arguments)) continue
+            if (writable_view_slot(expr.func.arguments[i]._type)) {
+                view_sources |> insert(key)
+            }
+        }
+    }
+}
+
+
+//! the lambdas each function's body encloses, by key: a lambda sits
+//! in every function whose body span in its file holds its `at`
+typedef LambdaSets = table<uint64; array<uint64>>
+
+def private enclosed_lambdas(funcs : array<FunctionPtr>; fnkeys : array<uint64>) : LambdaSets {
+    var by_file : table<uint64; array<int>>
+    for (fn, i in funcs, range(length(funcs))) {
+        if (fn.body != null) {
+            by_file[file_of(fn.body.at)] |> push(i)
+        }
+    }
+    var result : table<uint64; array<uint64>>
+    for (lam, lkey in funcs, fnkeys) {
+        if (!lam.flags._lambda) continue
+        let file = file_of(lam.at)
+        if (!(by_file |> key_exists(file))) continue
+        for (i in by_file[file]) {
+            let span = funcs[i].body.at
+            if (lam.at.line >= span.line && lam.at.line <= span.last_line) {
+                result[fnkeys[i]] |> push(lkey)
+            }
+        }
+    }
+    return <- result
+}
+
+//! the mangled-name hashes of the jit set's functions the typed model
+//! leaves untagged; `compute_strict_aliasing_exclusions` fills it
+var public g_strict_aliasing_excluded : table<uint64>
+
+def private strict_aliasing_opted_in(fn : FunctionPtr) : bool =>
+    has_hint_flag(fn.annotations, "strict_aliasing")
+
+//! a function the fixpoint may still exclude: not opted in by hint,
+//! not excluded yet
+def private taintable(key : uint64; opted_in : table<uint64>) : bool =>
+    !(opted_in |> key_exists(key)) && !(g_strict_aliasing_excluded |> key_exists(key))
+
+//! where a view can flow, per function key
+struct private ViewFlow {
+    scanned, opted_in : table<uint64>
+    sources : LambdaSets    //! das callees handing the function a view
+    sinks : LambdaSets      //! das callees it hands a view to
+    globals : LambdaSets    //! view-carrying globals it touches
+    global_users : LambdaSets
+    lambdas : LambdaSets    //! the lambdas its body encloses
+    invokers : table<uint64>        //! functions handing a view to a function value
+    callback_targets : array<uint64>
+}
+
+//! why the fixpoint untagged a function, for the log
+struct private ExclusionCount {
+    punning, hinted, sources, sinks, lambdas, globals, callbacks : int
+}
+
+//! excludes every function in `targets`; the number newly excluded
+def private taint(targets : array<uint64>; flow : ViewFlow) : int {
+    var n = 0
+    for (t in targets) {
+        if ((flow.scanned |> key_exists(t)) && taintable(t, flow.opted_in)) {
+            g_strict_aliasing_excluded |> insert(t)
+            n++
+        }
+    }
+    return n
+}
+
+//! a source the function takes a view from is excluded or unscanned
+def private takes_punned_view(key : uint64; var flow : ViewFlow) : bool {
+    for (c in flow.sources[key]) {
+        if (!(flow.scanned |> key_exists(c)) || (g_strict_aliasing_excluded |> key_exists(c))) {
+            return true
+        }
+    }
+    return false
+}
+
+//! one body's share of the flow record, and whether it is punning
+//! on its own
+def private scan_body(fn : FunctionPtr; key : uint64; var scan : StrictAliasingScan;
+                      adapter : VisitorAdapter?; var flow : ViewFlow) : bool {
+    scan.punning = false
+    scan.invokes_view = false
+    scan.view_sources |> clear()
+    scan.view_sinks |> clear()
+    scan.view_globals |> clear()
+    if (fn.body != null) {
+        visit(fn.body, adapter)
+    }
+    fn |> get_use_global_variables() $(v) {
+        if (carries_view(v._type)) {
+            scan.view_globals |> insert(global_key(v))
+        }
+    }
+    flow.sources[key] <- [for (c in keys(scan.view_sources)); c]
+    flow.sinks[key] <- [for (c in keys(scan.view_sinks)); c]
+    flow.globals[key] <- [for (g in keys(scan.view_globals)); g]
+    for (g in keys(scan.view_globals)) {
+        flow.global_users[g] |> push(key)
+    }
+    if (scan.invokes_view) {
+        flow.invokers |> insert(key)
+    }
+    return scan.punning
+}
+
+//! the typed model's verdicts for this compile, before either cache
+//! key folds them; nothing to compute with the option off
+def private settle_strict_aliasing(candidates : array<FunctionPtr>) {
+    if (g_jit_strict_aliasing) {
+        compute_strict_aliasing_exclusions(candidates)
+    } else {
+        g_strict_aliasing_excluded |> clear()
+    }
+}
+
+//! the functions left untagged, over the whole jit set: a punning
+//! body or an opt-out hint; a taker of a view from an excluded or
+//! unscanned function; a callee, lambda, global or callback it feeds
+def public compute_strict_aliasing_exclusions(funcs : array<FunctionPtr>) {
+    let t0 = ref_time_ticks()
+    g_strict_aliasing_excluded |> clear()
+    var flow : ViewFlow
+    var count : ExclusionCount
+    let fnkeys <- [for (fn in funcs); hash(get_mangled_name(fn))]
+    flow.lambdas <- enclosed_lambdas(funcs, fnkeys)
+    var scan = new StrictAliasingScan()
+    make_visitor(*scan) $(adapter) {
+        for (fn, key in funcs, fnkeys) {
+            flow.scanned |> insert(key)
+            let opted_in = strict_aliasing_opted_in(fn)
+            if (opted_in) {
+                flow.opted_in |> insert(key)
+            }
+            let punning = scan_body(fn, key, *scan, adapter, flow)
+            let hinted = has_hint_flag(fn.annotations, "no_strict_aliasing")
+            if ((punning || hinted) && !opted_in) {
+                g_strict_aliasing_excluded |> insert(key)
+                if (punning) { count.punning++ } else { count.hinted++ }
+            }
+        }
+    }
+    for (fn, key in funcs, fnkeys) {
+        if (callback_target(fn, scan.addressed |> key_exists(key))) {
+            flow.callback_targets |> push(key)
+        }
+    }
+    unsafe { delete scan }
+    let t_scan = get_time_usec(t0)
+    var tainted_globals : table<uint64>
+    var callbacks_tainted = false
+    var changed = true
+    while (changed) {
+        changed = false
+        for (key in fnkeys) {
+            if (g_strict_aliasing_excluded |> key_exists(key)) {
+                let via_sinks = taint(flow.sinks[key], flow)
+                var via_lambdas = 0
+                if (flow.lambdas |> key_exists(key)) {
+                    via_lambdas = taint(flow.lambdas[key], flow)
+                }
+                var via_globals = 0
+                for (g in flow.globals[key]) {
+                    if (tainted_globals |> key_exists(g)) continue
+                    tainted_globals |> insert(g)
+                    via_globals += taint(flow.global_users[g], flow)
+                }
+                var via_callbacks = 0
+                if (!callbacks_tainted && (flow.invokers |> key_exists(key))) {
+                    callbacks_tainted = true
+                    via_callbacks = taint(flow.callback_targets, flow)
+                }
+                count.sinks += via_sinks
+                count.lambdas += via_lambdas
+                count.globals += via_globals
+                count.callbacks += via_callbacks
+                changed ||= (via_sinks + via_lambdas + via_globals + via_callbacks) > 0
+            } elif (!(flow.opted_in |> key_exists(key)) && takes_punned_view(key, flow)) {
+                g_strict_aliasing_excluded |> insert(key)
+                count.sources++
+                changed = true
+            }
+        }
+    }
+    let t_total = get_time_usec(t0)
+    let untagged = length(g_strict_aliasing_excluded)
+    to_log(LOG_INFO, "LLVM JIT: strict aliasing - {untagged} of {length(funcs)} functions untagged"
+        + " (punning {count.punning}, hinted {count.hinted}, from sources {count.sources},"
+        + " via calls {count.sinks}, via lambdas {count.lambdas}, via globals {count.globals}"
+        + " through {length(tainted_globals)} globals, via callbacks {count.callbacks})"
+        + " in {float(t_total) / 1000000.} sec"
+        + " (scan {float(t_scan) / 1000000.})\n")
+}
 
 let public JIT_NEVER_FAST_MATH_ATTR = "das-never-fast-math"
 
@@ -266,6 +596,7 @@ def public jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool;
     h = (h ^ (emit_prologue ? 1ul : 0ul)) * JIT_FNV_PRIME
     h = (h ^ (debug_info ? 1ul : 0ul)) * JIT_FNV_PRIME
     h = (h ^ (g_jit_fast_math ? 1ul : 0ul)) * JIT_FNV_PRIME   // fast-math changes codegen → distinct cache
+    h = (h ^ (g_jit_strict_aliasing ? 1ul : 0ul)) * JIT_FNV_PRIME
     h = (h ^ ((sanitize.address ? 1ul : 0ul) | (sanitize.undefined ? 2ul : 0ul) | (JIT_HOST_ASAN ? 4ul : 0ul))) * JIT_FNV_PRIME
     // split-built and monolith DLLs differ in inlining — never share a cache entry (bool only: partition count is data-driven)
     h = (h ^ (split ? 1ul : 0ul)) * JIT_FNV_PRIME
@@ -797,7 +1128,23 @@ def public fold_jit_only_inputs(prog : Program?; funcs : array<FunctionPtr>; see
     var h = fold_loop_hints(funcs, seed)
     h = fold_llvm_code_hints(funcs, h)
     h = fold_function_hints(funcs, h)
+    h = fold_strict_aliasing_exclusions(funcs, h)
     return fold_extern_slot_names(prog, funcs, h)
+}
+
+//! the typed model's verdicts, each after the name of the function
+//! it untags: a verdict can change through another partition's body
+[arch(at = "../ARCHITECTURE_JIT_ENTRY.md#hint-folds")]
+def public fold_strict_aliasing_exclusions(funcs : array<FunctionPtr>; seed : uint64) : uint64 {
+    var h = seed
+    for (fn in funcs) {
+        let key = hash(get_mangled_name(fn))
+        if (g_strict_aliasing_excluded |> key_exists(key)) {
+            h = (h ^ key) * JIT_FNV_PRIME
+            h = (h ^ hash("no_strict_aliasing")) * JIT_FNV_PRIME
+        }
+    }
+    return h
 }
 
 //! fills the DLL's extern slots for `funcs`; the errors, empty on success
@@ -1042,7 +1389,8 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool; c
     plan.size_level = cli_opts.size_level |> unwrap_or(prog.policies.jit_size_level)
     // This policy must be set before compilation so stack-frame sizes include the prologue.
     plan.emit_prologue = prog.policies.emit_prologue
-    // strict: a standalone exe with a no_jit function fails the build (collect_standalone_functions)
+    // strict: a standalone exe with a no_jit function fails the build
+    // (collect_standalone_functions)
     plan.exe_strict = true
     plan.config_out_path = string(prog.policies.jit_output_path)
     plan.output_path = plan.config_out_path |> empty() ? ".cache/daslang/{prog.thisNamespace}" : plan.config_out_path
@@ -1098,6 +1446,7 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool; c
     // a runtime built -ffast-math already relaxes the interpreter's own ops, so the JIT inherits
     // that unless the program says otherwise; `options fast_math` still wins either way
     g_jit_fast_math = (prog._options |> find_arg("fast_math") ?as tBool ?? (prog.policies.fast_math || HOST_FAST_MATH)) || (prog._options |> find_arg("_jit_fast_math") ?as tBool ?? false)
+    g_jit_strict_aliasing = prog._options |> find_arg("strict_aliasing") ?as tBool ?? true
     resolve_static_option(plan, cli_opts, announce)
     resolve_sanitize_option(plan, cli_opts, prog, announce)
 
@@ -1152,6 +1501,7 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool; c
             }
         }
     }
+    settle_strict_aliasing(plan.candidates)
     // Content-address the DLL: distinct (AST + codegen version + opt flags) → distinct files, same
     // inputs → same filename → cache hit. Only in dll-mode with the default output path; a pinned
     // jit_output_path or an exe keeps the user's path.

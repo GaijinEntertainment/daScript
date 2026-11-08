@@ -78,13 +78,23 @@ LLVM tiers (`-jit`, `-exe`, `-lib`) read its arguments as LLVM attributes. Funct
 `norecurse`. Checks: `unsafe_range_check` and `unsafe_division_check` drop the bounds and the
 division checks inside the function. Parameters: `noalias = p` and `nocapture = p` stamp one
 parameter, `align16 = p` promises a 16-byte aligned pointer, `unsafe_alias` and `unsafe_capture`
-stamp every parameter; a name that is not a parameter is a compile error on every target. A wasm
-target checks the names and then skips the hints' effects.
+stamp every parameter; a name that is not a parameter is a compile error on every target.
+Aliasing: `strict_aliasing` keeps a function under the typed model whatever its body does,
+`no_strict_aliasing` takes it out. A wasm target checks the names and then skips the hints'
+effects.
 
-A pointer is an address: the emitter attaches no type-based alias information, so a `float?`
-store may change what an `int?` points at, and a loop that reads its bound or an operand through
-a pointer beside a store reloads it every iteration and does not vectorize. Pass such values by
-value, or promise the distinctness with `noalias = p` on the pointer the loop writes through.
+Typed aliasing is on by default (`options strict_aliasing = false` turns it off for a
+program): a `float` store cannot change what an `int?` points at, so a loop that reads its bound
+or an operand through an `int?` beside `float` stores hoists the reads and vectorizes. `float` and
+`double` are each a class; every wider integer, pointer and `half` share one class; bytes, bools,
+vectors and aggregates alias everything. A function whose body reinterprets memory under another
+type - a `reinterpret` to a pointer other than `void?` or a byte pointer, or to a reference of
+another type - is left out automatically, and so is every function the punned view reaches
+through a call, a return, an out argument, a lambda, a callback or a shared global; a view that
+travels through a heap object's field is the one shape to mark by hand,
+`[hint(no_strict_aliasing)]` on the reader. Two
+pointers of the same class are still assumed to alias; `noalias = p` is the promise that they do
+not.
 
 ## Caching System
 When using daslang (`./bin/daslang`) and `jit_use_dll_mode=true`

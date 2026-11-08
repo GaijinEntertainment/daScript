@@ -5,33 +5,24 @@ require strings
 require _spawn_common
 require _exe_test_common
 
-//! the `while_body` block of the fixture function `name`, checked
-//! to store the float
-def private loop_body(t : T?; out : string; name : string) : string {
-    let ir = function_ir(out, "`{name} 1`Lt`f`Gt`? C1`Lt`i`Gt`? C1`Lt`i`Gt`? implementation")
-    t |> success(!empty(ir), "the dump carries {name}: {tail(out)}")
-    let body = named_block_ir(ir, "while_body")
-    t |> success(!empty(body), "{name} keeps a while_body block:\n{ir}")
-    t |> success(find(body, "store float") >= 0,
-        "the loop body of {name} stores the float:\n{body}")
-    return body
-}
-
-//! a float store may change what an int? points at, so with no
-//! promise the bound and the addend are reloaded every iteration;
-//! `[hint(noalias = fa)]` is the promise, under which both leave
-//! the loop
+//! under the typed model the bound and the addend leave the loop on
+//! their own; `[hint(noalias = fa)]` promises distinctness instead,
+//! and both forms hoist
 [test]
-def test_a_pointer_is_an_address_and_the_noalias_hint_is_the_promise(t : T?) {
+def test_the_typed_default_and_the_noalias_hint_both_hoist(t : T?) {
     let out = jit_dump(t, "modules/dasLLVM/tests/_pointer_aliasing_root.das", [])
     t |> success(find(out, "SCALE 5.25 5.25 HINTED 5.25 5.25") >= 0,
         "the fixture printed its result: {tail(out)}")
-    let plain = loop_body(t, out, "scale")
-    t |> success(find(plain, "load i32") >= 0,
-        "with no promise the bound and the addend are reloaded after every float store:\n{plain}")
-    let hinted = loop_body(t, out, "scale_hinted")
-    t |> equal(-1, find(hinted, "load i32"),
-        "under [hint(noalias = fa)] the bound and the addend are read outside the loop:\n{hinted}")
+    let plain = scale_loop_of(t, out, "scale")
+    t |> success(find(plain.body, "store float") >= 0,
+        "the loop body stores the float:\n{plain.body}")
+    t |> equal(-1, find(plain.body, "load i32"),
+        "under the typed model the bound and the addend leave the loop unhinted:\n{plain.body}")
+    let hinted = scale_loop_of(t, out, "scale_hinted")
+    t |> success(find(hinted.body, "store float") >= 0,
+        "the hinted loop body stores the float:\n{hinted.body}")
+    t |> equal(-1, find(hinted.body, "load i32"),
+        "under [hint(noalias = fa)] the bound and the addend leave the loop:\n{hinted.body}")
 }
 
 //! a hint naming no parameter is a compile error that names the

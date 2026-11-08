@@ -190,6 +190,7 @@ if(NOT DAS_TOOLS_DISABLED)
                   modules/dasLLVM/tests/llvm_jit_remarks.das
                   modules/dasLLVM/tests/llvm_jit_pointer_aliasing.das
                   modules/dasLLVM/tests/llvm_jit_const_container_param.das
+                  modules/dasLLVM/tests/llvm_jit_strict_aliasing.das
                   modules/dasLLVM/tests/llvm_jit_sanitize.das modules/dasLLVM/tests/llvm_layout_key.das
                   modules/dasLLVM/tests/llvm_second_context.das)
     das_lane_dastest_target(run_tests_llvm_tune COMMENT "Testing the llvm_tune framework"

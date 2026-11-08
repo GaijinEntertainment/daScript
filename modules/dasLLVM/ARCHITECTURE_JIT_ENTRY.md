@@ -103,6 +103,10 @@ take - the DLL key and each split partition's key - beside the AOT hashes, so an
 reaches both. `fold_function_hints` folds each annotation after its function's mangled name:
 the key is a sequence of tokens, so without the name a marker moved from one function to another
 folds to the same key and a warm cache serves code where the wrong function carries it.
+`fold_strict_aliasing_exclusions` folds the typed model's verdict the same way, after the name of
+each function it untags (`ARCHITECTURE.md#pointer-alias-model`): the verdict is computed over the
+whole candidate set in `make_jit_plan`, before either key, and a body in one partition can flip a
+function's verdict in another, so a partition key without it would serve a tagged object back.
 
 ## 6. An artifact is published by rename {#artifact-publish}
 

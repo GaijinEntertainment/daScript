@@ -1548,3 +1548,12 @@ def public expand_scalar(builder : LLVMOpaqueBuilder?; scalar : LLVMOpaqueValue?
     return vec
 }
 
+//! the metadata kind that marks an access the emitter writes by bit
+//! pattern into memory of another type (the memset family): the
+//! strict-aliasing stamp leaves it untagged, so it aliases everything
+let public JIT_UNTYPED_MD = "das.untyped"
+
+def public mark_untyped_access(ctx : LLVMOpaqueContext?; inst : LLVMOpaqueValue?) {
+    let kind = LLVMGetMDKindIDInContext(ctx, JIT_UNTYPED_MD, uint(length(JIT_UNTYPED_MD)))
+    LLVMSetMetadata(inst, kind, LLVMMetadataAsValue(ctx, LLVMMDNodeInContext2(ctx, null, 0ul)))
+}
