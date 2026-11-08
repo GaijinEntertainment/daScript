@@ -5,7 +5,7 @@ require math
 require daslib/strings_boost
 require daslib/fio
 require dastest/review_gate
-require dastest/file_census
+require dastest/test_shape
 
 // The mechanical half of tests/REVIEW.md (contract: REVIEW_COMMON.md
 // at the repo root). Run from the repo root: bin/daslang
@@ -308,134 +308,28 @@ def private check_folder(folder : string; calls : array<WriteCall>) {
     }
 }
 
-def private is_uncategorized(name : string) : bool =>
-    name == "uncategorized" || name |> starts_with("uncategorized_")
-
-//! the file name a fence signature spells: its options joined by `_`,
-//! every value other than true joining its option's name
-//! (`optimize_false`, `stack_524288`, `unit_test_1_23`)
-def private canonical_fenced_stem(signature : string) : string {
-    let parts <- [for (option in split(signature, ","));
-                  replace(replace(option, "=", "_"), ".", "_")]
-    return "uncategorized_" + join(parts, "_")
-}
-
-//! the index a stem carries past `base`: 1 for the base itself, N for
-//! `<base>_N`, 0 when the stem is neither
-def private continuation_index(stem : string; base : string) : int {
-    return 1 if (stem == base)
-    return 0 if (!(stem |> starts_with(base + "_")))
-    let suffix = slice(stem, length(base) + 1)
-    let index = to_int(suffix)
-    return index >= 2 && "{index}" == suffix ? index : 0
-}
-
-def private check_shape(folder : string; cap : int) {  // nolint:STYLE037,STYLE038 - flat
-    var files : array<TestFileCensus>
-    census_tree(folder, files)
-    // for the continuation rule
-    let testCounts <- {for (c in files); "{c.folder}|{c.stem}" => length(c.tests)}
-    for (c in files) {
-        let fullPath = "{folder}/{c.path}"
-        for (line in c.unparsedAnnotationLines) {
-            gate_finding(fullPath, line, "the `[test(` annotation does not close on its " +
-                "line; keep the whole annotation on one line so the index generator can read it")
-        }
-        if (c.cls == TestFileClass.fixture) {
-            if (empty(c.header)) {
-                gate_finding(fullPath, "a compile-fail fixture states its claim as a " +
-                    "`//!` line above its first declaration")
-            }
-            if (!is_fixture_name(c.stem)) {
-                gate_finding(fullPath, "a compile-fail fixture's name starts with " +
-                    "`failed_`, `cant_` or `invalid_`, so the tools that skip files with " +
-                        "no compilable AST can tell it apart")
-            }
-            continue
-        }
-        if (c.cls == TestFileClass.script) {
-            gate_finding(fullPath, "a run file with no `[test]` and no `expect` proves " +
-                "nothing by name; wrap its body in a `[test]` and give it a description")
-            continue
-        }
-        for (e in c.tests) {
-            if (empty(e.description)) {
-                gate_finding(fullPath, e.line, "`{e.funcName}` has no description; write " +
-                    "`[test(description = \"what it proves\")]`")
-            }
-        }
-        if (!is_uncategorized(c.stem)) {
-            if (length(c.tests) > cap) {
-                gate_finding(fullPath, "{length(c.tests)} `[test]` functions, over the " +
-                    "cap of {cap}; split the file into files of three or more tests each")
-            }
-            var anyStandalone = false
-            for (e in c.tests) {
-                anyStandalone ||= !empty(e.standalone)
-            }
-            if (length(c.tests) < 3 && !anyStandalone) {
-                gate_finding(fullPath, "a category file holds three or more `[test]` " +
-                    "functions; this one holds {length(c.tests)} - move them into the " +
-                        "folder's `uncategorized.das`, or into the category file they " +
-                            "belong to; a file that cannot share a program says why in " +
-                            "`[test(standalone = \"...\")]`")
-            }
-            continue
-        }
-        let signature = fence_signature(c)
-        let canonical = empty(signature) ? "uncategorized" : canonical_fenced_stem(signature)
-        let index = continuation_index(c.stem, canonical)
-        if (length(c.tests) > cap) {
-            gate_finding(fullPath, "{length(c.tests)} `[test]` functions, over the cap of " +
-                "{cap}; continue the file in `{canonical}_{max(index, 1) + 1}.das`")
-        }
-        if (index == 0) {
-            if (empty(signature)) {
-                gate_finding(fullPath, "`{c.stem}.das` carries no fence option, so its " +
-                    "tests belong in `uncategorized.das`")
-            } elif (continuation_index(c.stem, "uncategorized") > 0) {
-                gate_finding(fullPath, "`{c.stem}.das` carries fence options " +
-                    "[{signature}], so a plain test cannot join it; a fenced " +
-                        "uncategorized file is named by its signature, `{canonical}.das`")
-            } else {
-                gate_finding(fullPath, "`{c.stem}.das` is named apart from its fence " +
-                    "signature [{signature}]; a fenced uncategorized file is named by its " +
-                        "signature, `{canonical}.das`")
-            }
-            continue
-        }
-        if (index > 1) {
-            let previous = index == 2 ? canonical : "{canonical}_{index - 1}"
-            let previousTests = testCounts?["{c.folder}|{previous}"] ?? -1
-            if (previousTests < 0) {
-                gate_finding(fullPath, "`{c.stem}.das` continues `{previous}.das`, which " +
-                    "does not exist; rename it `{previous}.das`")
-            } elif (previousTests < cap) {
-                gate_finding(fullPath, "`{c.stem}.das` continues `{previous}.das`, which " +
-                    "holds {previousTests} `[test]` functions, under the cap of {cap}; " +
-                        "add the tests there")
-            }
-        }
-    }
-}
-
 //! `--root <dir>` scans another folder in place of `tests/` - the
-//! gate's own fixture test uses it; `--cap N` sets the file-shape
-//! rules' tests-per-file cap
+//! gate's own fixture test uses it, and so does a merge pass over a
+//! tool tree (`--tests-only` then skips the tool's sources); `--cap
+//! N`
+//! sets the file-shape rules' tests-per-file cap
 [export]
 def main() : int {
     var folder = FOLDER
     var cap = 100
+    var testsOnly = false
     let args <- get_command_line_arguments()
     for (i in range(length(args))) {
         if (args[i] == "--root" && i + 1 < length(args)) {
             folder = args[i + 1]
         } elif (args[i] == "--cap" && i + 1 < length(args)) {
             cap = to_int(args[i + 1])
+        } elif (args[i] == "--tests-only") {
+            testsOnly = true
         }
     }
     var inscope calls <- write_calls()
     check_folder(folder, calls)
-    check_shape(folder, cap)
+    check_test_shape(folder, cap, testsOnly)
     return gate_verdict("tests")
 }

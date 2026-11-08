@@ -38,6 +38,12 @@ struct Config {
 
     @clarg_doc = "Exit 1 when <root>/README.md differs from what --readme would write"
     verify : bool
+
+    @clarg_doc = "Write or verify this file instead of <root>/README.md (a tool tree keeps its own README)"
+    index : string
+
+    @clarg_doc = "Tool tree: a .das with neither [test] nor expect is a source or fixture, left out of the audit and the index"
+    tests_only : bool
 }
 
 struct Bucket {
@@ -257,7 +263,9 @@ def print_audit(files : array<TestFileCensus>; root : string; cfg : Config) {
 }
 
 def write_file_block(var w : StringBuilderWriter; c : TestFileCensus) {
-    let fileName = base_name(c.path)
+    // the path under the section's folder: a tool tree nests one
+    // `uncategorized.das` per tool below one first-level folder
+    let fileName = c.folder == "." ? c.path : slice(c.path, length(c.folder) + 1)
     if (c.cls == TestFileClass.suite) {
         w |> write("\n### {fileName}\n")
         if (!empty(c.header)) {
@@ -296,13 +304,53 @@ def render_readme(files : array<TestFileCensus>) : string {
             "the [test] annotations; edit the tests, not this file -->\n\n")
         w |> write("{total.files} files: {total.suites} test suites holding {total.tests} " +
             "`[test]` functions, {total.fixtures} compile-fail fixtures, {total.scripts} " +
-                "scripts. How the tree is laid out and what each class of file is: " +
-                    "`ARCHITECTURE.md`.\n")
+                "scripts. How a test tree is laid out and what each class of file is: " +
+                    "`tests/ARCHITECTURE.md` at the repo root.\n")
         for (folder in folderNames) {
             w |> write("\n## {folder}/\n")
             for (i in folders[folder]) {
                 write_file_block(w, files[i])
             }
+        }
+    }
+}
+
+//! the lines one side has and the other lacks, a few of each, so a
+//! CI log says what moved without a checkout to diff against
+def private print_index_diff(have, want : string) {
+    var inscope haveLines <- split(have, "\n")
+    var inscope wantLines <- split(want, "\n")
+    var inscope haveSet, wantSet : table<string>
+    for (l in haveLines) {
+        haveSet |> insert(l)
+    }
+    for (l in wantLines) {
+        wantSet |> insert(l)
+    }
+    var shown = 0
+    for (l in haveLines) {
+        break if (shown >= 12)
+        if (!empty(l) && !(wantSet |> key_exists(l))) {
+            print("  index only:  {l}\n")
+            shown++
+        }
+    }
+    shown = 0
+    for (l in wantLines) {
+        break if (shown >= 12)
+        if (!empty(l) && !(haveSet |> key_exists(l))) {
+            print("  census only: {l}\n")
+            shown++
+        }
+    }
+    // the same lines in another order or count show up here alone
+    print("  index {length(haveLines)} lines, census {length(wantLines)} lines\n")
+    let common = min(length(haveLines), length(wantLines))
+    for (i in range(common)) {
+        if (haveLines[i] != wantLines[i]) {
+            print("  first difference at line {i + 1}:\n    index:  {haveLines[i]}\n" +
+                "    census: {wantLines[i]}\n")
+            break
         }
     }
 }
@@ -315,16 +363,28 @@ def main : int {
     let root = empty(cfg.root) ? path_join(get_das_root(), "tests") : cfg.root
     var files : array<TestFileCensus>
     census_tree(root, files)
-    sort(files) <| cmp_by(_.folder, _.stem)
+    if (cfg.tests_only) {
+        var inscope judged <- [for (c in files); c; where c.cls != TestFileClass.script]
+        delete files
+        files <- judged
+    }
+    // by path, not stem: a tool tree holds one `uncategorized.das` per
+    // tool under the same first-level folder, and an unstable tie
+    // would order the index differently on each platform
+    sort(files) <| cmp_by(_.folder, _.path)
     if (cfg.readme || cfg.verify) {
-        let readmePath = path_join(root, "README.md")
+        let readmePath = empty(cfg.index) ? path_join(root, "README.md") : cfg.index
         let want = render_readme(files)
         if (cfg.verify) {
-            //! a CRLF checkout (autocrlf=true) must read as the same index
+            // a CRLF checkout (autocrlf=true) must read as the same index
             let have = fread(readmePath) |> replace("\r", "")
             if (have != want |> replace("\r", "")) {
+                let rootArg = empty(cfg.root) ? "" : " --root {cfg.root}"
+                let indexArg = empty(cfg.index) ? "" : " --index {cfg.index}"
+                let onlyArg = cfg.tests_only ? " --tests-only" : ""
                 print("{readmePath} differs from the census; regenerate it: daslang " +
-                    "utils/internal/test-audit/main.das -- --readme\n")
+                    "utils/internal/test-audit/main.das --{rootArg}{indexArg}{onlyArg} --readme\n")
+                print_index_diff(have, want)
                 return 1
             }
             print("{readmePath} matches the census\n")

@@ -57,7 +57,7 @@ Any other argument, or a wrong type, is a compile error from the macro.
 - `--json-file <path>`: Path to write the JSON test results report to
 - `--cov-path <path>`: Path to write coverage report data to
 - `--timing-outliers <n>`: Print the top N slowest test files and highlight statistical timing outliers (above mean + 2x stddev). `0` (default) prints none
-- `--timeout <seconds>`: The whole suite's timeout. Past it the process ends at once with exit code 124 and no summary, after one line naming the timeout; the `run N/M` lines say which file was running. `0` disables it. The default is 20 minutes
+- `--timeout <seconds>`: The whole suite's timeout. Past it the process ends at once with exit code 124 and no summary, after one line naming the timeout and, in the sequential mode, the file that was running (`--failures-only` hides the `run N/M` lines, so this line is the one record). `0` disables it. The default is 20 minutes
 - `--max-file-time <seconds>`: Fail after the suite finishes if any completed test file exceeded this wall-clock duration plus the `[test(timeout = N)]` budgets it declares. `0` (default) disables the limit; this is independent of the global `--timeout` deadlock guard.
 - `--isolated-mode`: Run tests in isolated processes, useful to catch crashes
 - `--isolated-mode-threads <n>`: Number of worker threads in isolated mode. `0` uses a conservative JIT rule (`min(32, max(4, logical_threads / 2))`) and 2x hardware threads otherwise. Preflight can override the JIT width per machine through its user config.

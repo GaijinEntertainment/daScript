@@ -23,12 +23,16 @@ def private gate_findings_for(root : string; var rc : int&) : array<string> {
 
 //! the gate's `path: finding` lines over `root`, as `<file name>:
 //! <finding>`
-def private shape_findings_for(root : string; cap : int; var rc : int&) : array<string> {
+def private shape_findings_for(root : string; cap : int; var rc : int&;
+                               testsOnly : bool = false) : array<string> {
     let exe = get_command_line_arguments()[0]
     var output : string
-    rc = run_and_capture(
-                         [exe, "-dasroot", get_das_root(), "{get_das_root()}/tests/REVIEW.das",
-                          "--", "--root", root, "--cap", "{cap}"], output)
+    var cmd <- [exe, "-dasroot", get_das_root(), "{get_das_root()}/tests/REVIEW.das",
+                "--", "--root", root, "--cap", "{cap}"]
+    if (testsOnly) {
+        cmd |> push("--tests-only")
+    }
+    rc = run_and_capture(cmd, output)
     var findings : array<string>
     for (line in split(output, "\n")) {
         let at = find(line, ": ")
@@ -77,6 +81,21 @@ def test_tests_review_gate_shape(tt : T?) {
                          && !(f |> starts_with("uncategorized_persistent_heap.das:"))
                 && !(f |> starts_with("alone.das:")), "a well-formed file fired: {f}")
         }
+    }
+
+    tt |> run("tests-only mode skips the bare script and the fixture-name rule, " +
+        "nothing else") <| @(t : T?) {
+        var rc = 0
+        var inscope findings <- shape_findings_for(
+            "{get_das_root()}/tests/dastest/_tests_shape_fixture", 3, rc, true)
+        t |> equal(rc, 1)
+        t |> equal(length(findings), 9, "found:\n{join(findings, "\n")}")
+        for (f in findings) {
+            t |> success(!(f |> starts_with("plain.das:")) && !(f |> starts_with("noprefix.das:")),
+                         "a tool-tree source or fixture fired: {f}")
+        }
+        t |> success(findings |> has_value_prefix("lonely.das: a category file holds three"),
+                     "the category rule still fires:\n{join(findings, "\n")}")
     }
 
     tt |> run("a plain uncategorized file that carries a fence option is a finding") <| @(t : T?) {

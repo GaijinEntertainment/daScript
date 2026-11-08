@@ -1679,6 +1679,7 @@ if (NOT ${DAS_TOOLS_DISABLED})
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/dastest/tests/
         DESTINATION ${DAS_INSTALL_DASTESTDIR}/tests
         FILES_MATCHING PATTERN "*.das"
+        PATTERN "REVIEW.das" EXCLUDE   # the folder's gate is repo-internal; the bundle gate bans it
     )
 
     #IF(APPLE)
