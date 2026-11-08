@@ -3,6 +3,8 @@ options no_unused_function_arguments = false
 
 require UnitTest
 require math
+require strings
+require daslib/strings_boost
 require daslib/sort_boost
 require daslib/cmp
 require daslib/coroutines
@@ -1216,4 +1218,34 @@ def test_comprehension_literal_elements(t : T?) {
         delete v
         delete src
     }
+}
+
+def table_rows(text : string) : array<array<string>> {
+    var out : array<array<string>>
+    for (raw in split(text, "\n")) {
+        let line = strip(raw)
+        break if (line |> starts_with("#"))
+        continue if (!(line |> starts_with("|")))
+        var inscope cells <- split(line, "|")
+        let n_cells = length(cells)
+        continue if (n_cells < 3)
+        var row <- [for (idx in range(1, n_cells - 1)); strip(cells[idx])]
+        out |> emplace(row)
+    }
+    return <- out
+}
+
+[test(description = "reading an element of a scoped array of arrays between two calls of the function that built it, where that function breaks out of a loop over a temporary array and declares a scoped array in the loop body, leaves the array unlocked for its scoped delete")]
+def test_scoped_array_of_arrays_unlocked_after_element_read(t : T?) {
+    var inscope rows <- table_rows("| a | 1 |\n| b | 2 |\n# end\n| c | 3 |\n")
+    let first = rows[1][0]
+    let second = rows[1][1]
+    t |> equal(first, "b")
+    t |> equal(second, "2")
+    var inscope rows2 <- table_rows("| x | 9 |\n# end\n")
+    let picked <- [for (k in range(0, 2)); rows2[0][k]]
+    t |> equal(length(rows), 2)
+    t |> equal(length(picked), 2)
+    t |> equal(picked[0], "x")
+    t |> equal(picked[1], "9")
 }
