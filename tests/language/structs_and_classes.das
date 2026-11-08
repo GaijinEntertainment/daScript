@@ -1645,6 +1645,29 @@ class DoppelChild : _finalize_collision_helper::Doppel {
     z : int = 3
 }
 
+// a by-value member whose own struct points back at the holder: AOT
+// defines the member's struct first, the pointer rides the forward
+// declaration; the holder is declared first here on purpose
+struct BackOuter {
+    next : BackOuter?
+    embedded : BackInner
+    tag : int
+}
+
+struct BackInner {
+    owner : BackOuter?
+    a : int
+    b : int
+}
+
+[test(description = "a struct held by value whose own field points back at the holder runs on every tier, so the AOT emitter defines the member's struct first")]
+def test_by_value_member_with_a_back_pointer(t : T?) {
+    var o = BackOuter(tag = 7, embedded = BackInner(a = 1, b = 2))
+    o.embedded.owner = unsafe(addr(o))
+    t |> equal(o.embedded.owner.tag, 7)
+    t |> equal(o.embedded.a + o.embedded.b, 3)
+}
+
 [test(description = "a class named like a class of a required module compiles, and a class derived from the module's twin constructs and finalizes with both its own and the inherited field initialized")]
 def test_class_name_collision(t : T?) {
     t |> run("same-named class across modules compiles") @(t : T?) {

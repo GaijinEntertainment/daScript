@@ -532,8 +532,9 @@ namespace das {
         if ( !type ) return;
         // a function, lambda or block value is a handle: the types in its signature are not stored by value
         if ( type->baseType == Type::tFunction || type->baseType == Type::tLambda || type->baseType == Type::tBlock ) return;
+        // a pointer's pointee is reached through the forward declaration, whatever it holds
+        if ( type->baseType == Type::tPointer ) return;
         if ( type->baseType == Type::tStructure && type->structType && type->structType != owner ) {
-            if ( type->isPointer() ) return;   // pointers don't need full definition
             if ( !deps.insert(type->structType).second ) return;   // already visited
             // recurse into the struct's own fields
             for ( auto & field : type->structType->fields ) {
