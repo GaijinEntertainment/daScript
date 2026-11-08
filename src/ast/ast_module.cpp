@@ -6,7 +6,7 @@
 #include "daScript/misc/das_common.h"
 #include "daScript/daScriptModule.h"
 #include "daScript/misc/handle_registry.h"
-#include "../simulate/simulate_fusion.h"
+#include "daScript/simulate/simulate_fusion_hooks.h"
 #include "daScript/ast/dyn_modules.h"
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/misc/das_asan.h"

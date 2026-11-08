@@ -89,11 +89,6 @@ namespace das {
     };
 
 
-    // function pointers for fusion library decoupling
-    // runtime defines these; fusion lib sets them via register_fusion()
-    DAS_API extern void (*g_fusionContextFn) ( Context & context, TextWriter & logs, bool enableFusion );
-    DAS_API extern void (*g_resetFusionEngineFn) ( bool orphan );   // orphan: forget the table without freeing it (a process about to exit)
-
     string fuseName ( const string & name, const string & typeName );
     unique_ptr<FusionEngine> &getFusionEngine();
     void resetFusionEngine( bool orphan );

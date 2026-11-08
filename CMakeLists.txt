@@ -1142,6 +1142,7 @@ include/daScript/simulate/runtime_range.h
 include/daScript/simulate/runtime_profile.h
 include/daScript/simulate/runtime_matrices.h
 include/daScript/simulate/simulate.h
+include/daScript/simulate/simulate_fusion_hooks.h
 include/daScript/simulate/simulate_nodes.h
 include/daScript/simulate/simulate_visit.h
 include/daScript/simulate/simulate_visit_op.h
@@ -1871,6 +1872,7 @@ SET(DAS_SIMULATE_INCLUDES
     include/daScript/simulate/runtime_table_nodes.h
     include/daScript/simulate/sim_policy.h
     include/daScript/simulate/simulate.h
+    include/daScript/simulate/simulate_fusion_hooks.h
     include/daScript/simulate/name_lookup.h
     include/daScript/simulate/simulate_nodes.h
     include/daScript/simulate/simulate_visit.h

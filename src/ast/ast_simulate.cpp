@@ -5,7 +5,7 @@
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_simulate.h"
-#include "../simulate/simulate_fusion.h"
+#include "daScript/simulate/simulate_fusion_hooks.h"
 
 #include "daScript/simulate/runtime_array.h"
 #include "daScript/simulate/runtime_table_nodes.h"
