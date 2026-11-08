@@ -8,6 +8,8 @@ require daslib/strings_boost
 require ../../utils/watchdog/watchdog.das
 require ../stddlg/_tray_rig.das
 require stbimage   // stbi_write_png_to_memory - the crafted icon fixtures
+require daslib/network   // probe_local_port - the health test's free port
+require dashv   // hv_set_log_file - libhv's log moves out of a temp root
 
 // argv[0] is the daslang running dastest; the supervised "program" is that binary running the
 // fixture, so program mode and script mode both spawn a real daslang child. Absolute, because a
@@ -519,6 +521,7 @@ def test_config_layering(t : T?) {
             t |> equal(with_tail.cfg.server_args[1], "child arg")
         }
         t |> equal(with_tail.cfg.name, "fromjson", "the config's name applies when no flag names one")
+        t |> equal(with_tail.cfg.unhealthy_timeout, 120.0, "the unhealthy timeout is on by default")
         t |> success(ends_with(with_tail.cfg.log, "fromjson-watchdog.log"), "log path keyed on the name: {with_tail.cfg.log}")
         fwrite(path_join(root, "watchdog.json"), "\{\"helth_url\": \"x\"\}")
         let typo <- resolve_config(["--program", das_exe()], root)
@@ -1057,6 +1060,251 @@ def test_supervise_tune_abort_backs_off(t : T?) {
         }
         let cleanup = rmdir_rec_result(root)
         t |> success(cleanup is value && cleanup as value, "temp dir removed")
+    }
+}
+
+[test(description = "a child that served and then stops answering health polls for the unhealthy timeout is terminated, reported as a crash and restarted", timeout = 1200)]
+def test_unhealthy_timeout_restarts_a_stalled_child(t : T?) {
+    t |> run("the stalled child is terminated after the timeout, its exit is a crash") @(t : T?) {
+        notifications_enabled = false
+        let root = make_temp(t, "wd stall ")
+        if (empty(root)) return
+        let state_dir = path_join(root, "state")
+        mkdir(state_dir)
+        let port = probe_local_port("127.0.0.1", 0)
+        t |> success(port > 0, "a free port was found")
+        if (port <= 0) return
+        var args <- ["--program", das_exe(), "--name", "wdstall", "--cwd", root,
+            "--health-url", "http://127.0.0.1:{port}/health", "--health-interval", "0.5",
+            "--unhealthy-timeout", "2", "--stable-seconds", "0.1", "--max-restart-delay", "0.5",
+            "--no-crash-bundle", "--"]
+        args |> push_from(child_args(state_dir, "serve-then-stall"))
+        args |> push("{port}")
+        var code = 0
+        var sup = watchdog_start(args, root, 0, code)
+        t |> success(sup != null, "supervision started (code {code})")
+        if (sup == null) return
+        t |> equal(run_bounded(t, sup, child_deadline(90.0)), 0,
+                   "supervision ends with 0 after the relaunched child's clean exit")
+        let events <- read_events(sup.cfg.log)
+        t |> equal(count_event(events, "child_started"), 2,
+                   "the child ran twice: {event_names(events)}")
+        t |> equal(count_event(events, "unhealthy_timeout"), 1,
+                   "one unhealthy timeout: {event_names(events)}")
+        t |> success(event_int(events, "unhealthy_timeout", "after_s") >= 2,
+                     "the timeout fired after the configured seconds")
+        t |> equal(count_event(events, "terminate_requested"), 0,
+                   "the stop ladder's own event is not the hang's")
+        t |> equal(count_event(events, "crash"), 1,
+                   "the terminated child's exit is reported as a crash")
+        t |> equal(count_event(events, "kill_requested"), 0,
+                   "the terminate ended the child; the kill step never ran")
+        t |> equal(count_event(events, "intentional_shutdown"), 1)
+        var served = false
+        for (ev in events) {
+            if ((ev?["event"] ?? "") == "health" && (ev?["ok"] ?? false)) {
+                served = true
+            }
+        }
+        t |> success(served, "the first child answered a health poll before it stalled")
+        unsafe {
+            delete sup
+        }
+        remove_health_root(t, root)
+    }
+}
+
+//! the args of a health-polled program-mode supervision of `mode` on
+//! `port`, polled every `interval` seconds, with `extra` flags
+def health_mode_args(root, state_dir, mode : string; port : int; interval : string;
+                     extra : array<string>) : array<string> {
+    var args <- ["--program", das_exe(), "--name", "wdhealth", "--cwd", root,
+        "--health-url", "http://127.0.0.1:{port}/health", "--health-interval", interval,
+        "--stable-seconds", "0.1", "--max-restart-delay", "0.5", "--no-crash-bundle"]
+    args |> push_from(extra)
+    args |> push("--")
+    args |> push_from(child_args(state_dir, mode))
+    args |> push("{port}")
+    return <- args
+}
+
+//! whether the log holds a `health` transition to `ok` naming `was`
+def health_transition_seen(log_path : string; ok : bool) : bool {
+    for (ev in read_events(log_path)) {
+        if ((ev?["event"] ?? "") == "health" && (ev?["ok"] ?? !ok) == ok && ev?["was"] != null) {
+            return true
+        }
+    }
+    return false
+}
+
+//! ticks until a health transition to `ok` is logged, or `seconds`
+//! pass; whether it was seen
+def tick_until_health(var sup : Supervisor?; ok : bool; seconds : float) : bool {
+    let started = ref_time_ticks()
+    while (float(get_time_usec(started)) < seconds * 1000000.0) {
+        sup->tick()
+        if (health_transition_seen(sup.cfg.log, ok)) return true
+    }
+    return false
+}
+
+//! ticks for `seconds`
+def tick_for(var sup : Supervisor?; seconds : float) {
+    let started = ref_time_ticks()
+    while (float(get_time_usec(started)) < seconds * 1000000.0) {
+        sup->tick()
+    }
+}
+
+//! removes a health-polling supervision's root: libhv's log, which
+//! the failed polls opened under it, moves to the run's temp dir
+//! first, and a just-terminated child gets time to let go of its cwd
+def remove_health_root(t : T?; root : string) {
+    hv_set_log_file(path_join(test_temp_dir(), "libhv"))
+    let started = ref_time_ticks()
+    var removed = false
+    while (!removed && float(get_time_usec(started)) < 5000000.0) {
+        let cleanup = rmdir_rec_result(root)
+        removed = cleanup is value && cleanup as value
+        if (!removed) sleep(100u)
+    }
+    t |> success(removed, "temp dir removed")
+}
+
+[test(description = "the unhealthy timeout leaves a healthy child, a child that never served, a run with the timeout off, and a child already being stopped to the paths they were on", timeout = 1200)]
+def test_unhealthy_timeout_guards(t : T?) {   // nolint:STYLE038 — one guard per arm, one child each
+    notifications_enabled = false
+    t |> run("a child healthy for longer than the timeout is never terminated") @(t : T?) {
+        let root = make_temp(t, "wd healthy ")
+        if (empty(root)) return
+        let state_dir = path_join(root, "state")
+        mkdir(state_dir)
+        let port = probe_local_port("127.0.0.1", 0)
+        var code = 0
+        var sup = watchdog_start(health_mode_args(root, state_dir, "serve-then-exit", port, "0.5",
+            ["--unhealthy-timeout", "1"]), root, 0, code)
+        t |> success(sup != null, "supervision started (code {code})")
+        if (sup == null) return
+        t |> equal(run_bounded(t, sup, child_deadline(60.0)), 0,
+                   "the child's own exit 0 ends supervision")
+        let events <- read_events(sup.cfg.log)
+        t |> success(health_transition_seen(sup.cfg.log, true),
+                     "the child served: {event_names(events)}")
+        t |> equal(count_event(events, "unhealthy_timeout"), 0, "{event_names(events)}")
+        t |> equal(count_event(events, "intentional_shutdown"), 1)
+        unsafe {
+            delete sup
+        }
+        remove_health_root(t, root)
+    }
+    t |> run("a timeout shorter than the poll interval still waits for the next poll") @(t : T?) {
+        let root = make_temp(t, "wd blip ")
+        if (empty(root)) return
+        let state_dir = path_join(root, "state")
+        mkdir(state_dir)
+        let port = probe_local_port("127.0.0.1", 0)
+        var code = 0
+        // one poll fails during the blip; a half-second timeout would fire
+        // before the two-second interval brings the recovery, so the window
+        // must stretch to the interval
+        var sup = watchdog_start(health_mode_args(root, state_dir, "serve-blip-serve", port, "2",
+            ["--unhealthy-timeout", "0.5"]), root, 0, code)
+        t |> success(sup != null, "supervision started (code {code})")
+        if (sup == null) return
+        t |> equal(run_bounded(t, sup, child_deadline(60.0)), 0,
+                   "the child's own exit 0 ends supervision")
+        let events <- read_events(sup.cfg.log)
+        t |> success(health_transition_seen(sup.cfg.log, false),
+                     "one poll failed during the blip: {event_names(events)}")
+        t |> equal(count_event(events, "unhealthy_timeout"), 0, "{event_names(events)}")
+        t |> equal(count_event(events, "child_exited"), 1, "one child, one clean exit")
+        t |> equal(count_event(events, "intentional_shutdown"), 1)
+        unsafe {
+            delete sup
+        }
+        remove_health_root(t, root)
+    }
+    t |> run("a child that never served is not terminated however long it fails") @(t : T?) {
+        let root = make_temp(t, "wd unserved ")
+        if (empty(root)) return
+        let state_dir = path_join(root, "state")
+        mkdir(state_dir)
+        let port = probe_local_port("127.0.0.1", 0)   // nothing listens: every poll fails
+        var code = 0
+        var sup = watchdog_start(health_mode_args(root, state_dir, "park", port, "0.5",
+            ["--unhealthy-timeout", "1", "--stop-file", path_join(root, "stop")]), root, 0, code)
+        t |> success(sup != null, "supervision started (code {code})")
+        if (sup == null) return
+        tick_for(sup, 3.0)
+        let before <- read_events(sup.cfg.log)
+        t |> equal(count_event(before, "unhealthy_timeout"), 0, "{event_names(before)}")
+        t |> equal(count_event(before, "child_exited"), 0,
+                   "the child is still parked: {event_names(before)}")
+        sup->request_stop()
+        t |> equal(run_bounded(t, sup, child_deadline(30.0)), 0)
+        unsafe {
+            delete sup
+        }
+        remove_health_root(t, root)
+    }
+    t |> run("--unhealthy-timeout 0 never terminates a stalled child") @(t : T?) {
+        let root = make_temp(t, "wd timeout off ")
+        if (empty(root)) return
+        let state_dir = path_join(root, "state")
+        mkdir(state_dir)
+        let port = probe_local_port("127.0.0.1", 0)
+        var code = 0
+        var sup = watchdog_start(health_mode_args(root, state_dir, "serve-then-stall", port, "0.5",
+            ["--unhealthy-timeout", "0", "--no-shutdown"]), root, 0, code)
+        t |> success(sup != null, "supervision started (code {code})")
+        if (sup == null) return
+        t |> success(tick_until_health(sup, false, child_deadline(30.0)),
+                     "the child served and then stalled")
+        tick_for(sup, 3.0)
+        let before <- read_events(sup.cfg.log)
+        t |> equal(count_event(before, "unhealthy_timeout"), 0, "{event_names(before)}")
+        t |> equal(count_event(before, "child_exited"), 0,
+                   "the stalled child is still running: {event_names(before)}")
+        sup->request_stop()
+        t |> equal(run_bounded(t, sup, child_deadline(30.0)), 0)
+        t |> equal(count_event(read_events(sup.cfg.log), "terminate_requested"), 1,
+                   "the stop ladder ended it")
+        unsafe {
+            delete sup
+        }
+        remove_health_root(t, root)
+    }
+    t |> run("a stop requested while the child is unhealthy runs the stop ladder") @(t : T?) {
+        let root = make_temp(t, "wd stop unhealthy ")
+        if (empty(root)) return
+        let state_dir = path_join(root, "state")
+        mkdir(state_dir)
+        let port = probe_local_port("127.0.0.1", 0)
+        var code = 0
+        // the stalled child never reads the stop file, so the stop ladder
+        // terminates it after its own timeout - longer than the unhealthy
+        // timeout, which must stay silent meanwhile
+        var sup = watchdog_start(health_mode_args(root, state_dir, "serve-then-stall", port, "0.5",
+            ["--unhealthy-timeout", "1", "--stop-file", path_join(root, "stop"),
+             "--stop-timeout", "3"]), root, 0, code)
+        t |> success(sup != null, "supervision started (code {code})")
+        if (sup == null) return
+        t |> success(tick_until_health(sup, false, child_deadline(30.0)),
+                     "the child served and then stalled")
+        sup->request_stop()
+        t |> equal(run_bounded(t, sup, child_deadline(30.0)), 0,
+                   "a stop the host asked for ends with 0")
+        let events <- read_events(sup.cfg.log)
+        t |> equal(count_event(events, "unhealthy_timeout"), 0, "{event_names(events)}")
+        t |> equal(count_event(events, "stop_file_requested"), 1)
+        t |> equal(count_event(events, "terminate_requested"), 1,
+                   "the stop ladder's terminate: {event_names(events)}")
+        t |> equal(count_event(events, "crash"), 0, "a stop is not a crash")
+        unsafe {
+            delete sup
+        }
+        remove_health_root(t, root)
     }
 }
 

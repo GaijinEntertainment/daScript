@@ -82,6 +82,15 @@ per kernel variant; `tune_restart` is the one legitimate rewind, since the proce
 apply the winners. Health is logged only on transition plus a heartbeat every five minutes, so a
 long quiet run stays quiet.
 
+A health poll is answered by the child's own event loop, so a process whose loop has stopped - a
+panic that left its workers parked, a deadlock - fails the poll while its pid stays alive, which
+a supervisor that restarts only on exit never sees. A child that served once and then fails every
+poll for `--unhealthy-timeout` seconds (120 by default; 0 never) is terminated, killed ten seconds
+later if it ignores that, and its exit is handled as a crash: report, bundle, restart with
+backoff. The timeout is armed only after the first healthy poll, so a cold start of any length is
+never cut short, and the window is never shorter than one poll interval, so a single failed poll
+never decides on its own - the next poll sees a recovery first.
+
 `llvm_tune` emits structured progress as `@tune <kind> k=v ...` lines; the watchdog logs a
 `tune` event at the kernel boundaries (`plan`, `end`, `abort`) and drops the hundreds of steps
 between them.
@@ -98,13 +107,14 @@ live set, and a number that only grows across heartbeats is a leak. `child_start
 carries `pid` from the supervisor and `command` from the front, whose pipe reports no pid;
 `child_exited` carries `code`, with `uptime_seconds` from the supervisor and `answered` from
 the front, whether the child answered a request before it died; `child_noise` and
-`client_noise` carry the `line` that was not a JSON message. From the `--lsp` front,
+`client_noise` carry the `line` that was not a JSON message; `unhealthy_timeout` carries the
+`pid` and `after_s`, the seconds the child failed its polls. From the `--lsp` front,
 `watchdog_started` carries `cwd`, `compiler` and `subtools`, and `watchdog_stopped` the
 `reason`; `received` carries the request's `method` and `id`, `handle_error` the `method`;
 `published` and `overlay_error` carry the `uri`, `overlay_error` and `parse_error` the
 `error`; `nav` carries the `op` and `ok`. The events: `watchdog_started`,
 `child_started`, `spawn_failed`, `child` (one per line the child wrote), `stage`, `tune`,
-`health`, `health_heartbeat`, `recovered`, `child_exited`, `intentional_shutdown`,
+`health`, `health_heartbeat`, `unhealthy_timeout`, `recovered`, `child_exited`, `intentional_shutdown`,
 `tune_bootstrap_complete`, `tune_incomplete`, `config_restart_relaunch`, `crash`,
 `crash_bundle`, `stop_file_requested`, `shutdown_requested`, `shutdown_request_failed`,
 `terminate_requested`, `kill_requested`, `child_unkillable`, `watchdog_already_running`,

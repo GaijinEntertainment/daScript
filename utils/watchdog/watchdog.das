@@ -72,6 +72,8 @@ struct public WatchdogConfig {
     stop_timeout : float = 1200.0
     @clarg_doc = "Seconds between health polls"
     health_interval : float = 5.0
+    @clarg_doc = "Seconds a child that once served may keep failing health polls before it is terminated and its exit handled as a crash, never less than one poll interval; 0 never"
+    unhealthy_timeout : float = 120.0
     @clarg_doc = "Uptime after which the restart backoff resets"
     stable_seconds : float = 300.0
     @clarg_doc = "Cap on the exponential restart delay"
@@ -1517,17 +1519,21 @@ class public Supervisor {
         })
     }
 
-    def private poll_health(t : float) {
+    //! One health poll when one is due; the time it finished, which a
+    //! poll on a stalled child puts up to its request timeout past `t`
+    //! - every transition is stamped with it
+    def private poll_health(t : float) : float {
         if (cfg.no_health) {
             if (recovery_pending && t - started_at >= min(cfg.stable_seconds, 10.0)) {
                 notify("{cfg.name} recovered", "Process is running (pid {child_pid})", false, !cfg.no_notifications)
                 log->emit("recovered", JV((pid = child_pid)))
                 recovery_pending = false
             }
-            return
+            return t
         }
-        if (t < next_health) return
+        if (t < next_health) return t
         let healthy = health_ok(cfg.health_url)
+        let polled = now()
         let healthy_int = healthy ? 1 : 0
         // transitions, not every poll: a cold start is minutes of `ok:false` the stage events
         // say better, a steady run is hours of `ok:true`; the heartbeat keeps a quiet run observable
@@ -1535,33 +1541,35 @@ class public Supervisor {
             var fields <- {"pid" => JV(child_pid), "ok" => JV(healthy)}
             if (last_health >= 0) {
                 fields["was"] = JV(last_health == 1)
-                fields["after_s"] = JV(round_to(t - last_health_change, 1))
+                fields["after_s"] = JV(round_to(polled - last_health_change, 1))
             }
             if (!healthy && !empty(stage.name)) {
                 fields["stage"] = JV(stage.name)
             }
             log->emit("health", JV(fields))
             last_health = healthy_int
-            last_health_change = t
-            next_heartbeat = t + HEALTH_HEARTBEAT_SECONDS
+            last_health_change = polled
+            next_heartbeat = polled + HEALTH_HEARTBEAT_SECONDS
             if (healthy && served_at == 0.0) {
-                served_at = t
+                served_at = polled
             }
-        } elif (healthy && t >= next_heartbeat) {
-            var beat <- {"pid" => JV(child_pid), "ok" => JV(true), "healthy_for_s" => JV(round(t - last_health_change))}
+        } elif (healthy && polled >= next_heartbeat) {
+            var beat <- {"pid" => JV(child_pid), "ok" => JV(true),
+                "healthy_for_s" => JV(round(polled - last_health_change))}
             var gauges <- heap_gauges()
             for (key, val in keys(gauges), values(gauges)) {
                 beat[key] = val
             }
             log->emit("health_heartbeat", JV(beat))
-            next_heartbeat = t + HEALTH_HEARTBEAT_SECONDS
+            next_heartbeat = polled + HEALTH_HEARTBEAT_SECONDS
         }
         if (healthy && recovery_pending) {
             notify("{cfg.name} recovered", "Server is healthy (pid {child_pid})", false, !cfg.no_notifications)
             log->emit("recovered", JV((pid = child_pid)))
             recovery_pending = false
         }
-        next_health = t + max(cfg.health_interval, 1.0)
+        next_health = polled + max(cfg.health_interval, 1.0)
+        return polled
     }
 
     def private send_stop_request() {
@@ -1747,21 +1755,36 @@ class public Supervisor {
             return false
         }
         drain_child()
-        let t = now()
+        var t = now()
         if (stopping && !shutdown_sent) {
             send_stop_request()
         }
         // a stop is a ladder with an end: the request, terminate once the stop timeout passes,
         // kill ten seconds later, and ten seconds after that the child is left behind - a child
         // that ignores every signal must not hold the supervisor forever
-        if (stopping && shutdown_sent) {
-            if (terminate_sent_at < 0.0) {
-                if (t - shutdown_requested_at > cfg.stop_timeout) {
-                    unsafe(process_terminate(child))
-                    terminate_sent_at = t
-                    log->emit("terminate_requested", JV((after_s = round_to(t - shutdown_requested_at, 1))))
-                }
-            } elif (kill_sent_at < 0.0) {
+        if (stopping && shutdown_sent && terminate_sent_at < 0.0
+                && t - shutdown_requested_at > cfg.stop_timeout) {
+            unsafe(process_terminate(child))
+            terminate_sent_at = t
+            log->emit("terminate_requested", JV((after_s = round_to(t - shutdown_requested_at, 1))))
+        }
+        t = poll_health(t)
+        // a child that served and then failed every poll for the unhealthy
+        // timeout is terminated down the same ladder, and its exit is a
+        // crash: the restart a hang never gets on its own. The window is
+        // never shorter than a poll interval, so one failed poll alone
+        // never decides: the next poll gets to see a recovery first
+        let unhealthy_for = t - last_health_change
+        let unhealthy_window = max(cfg.unhealthy_timeout, max(cfg.health_interval, 1.0))
+        if (!stopping && terminate_sent_at < 0.0 && !cfg.no_health && cfg.unhealthy_timeout > 0.0
+                && served_at > 0.0 && last_health == 0 && unhealthy_for > unhealthy_window) {
+            unsafe(process_terminate(child))
+            terminate_sent_at = t
+            log->emit("unhealthy_timeout",
+                JV((pid = child_pid, after_s = round_to(unhealthy_for, 1))))
+        }
+        if (terminate_sent_at >= 0.0) {
+            if (kill_sent_at < 0.0) {
                 if (t - terminate_sent_at > 10.0) {
                     unsafe(process_kill(child))
                     kill_sent_at = t
@@ -1774,7 +1797,6 @@ class public Supervisor {
                 return true
             }
         }
-        poll_health(t)
         let rc = unsafe(process_poll(child))
         if (rc == process_running) {
             sleep(TICK_MS)
