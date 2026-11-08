@@ -12,7 +12,7 @@ require daslib/cmp
 // Previously crashed by resizing empty array to 1
 // ============================================================================
 
-[test]
+[test(description = "unique_inplace handles empty, single, duplicate and distinct arrays without crashing on the empty case")]
 def test_unique_inplace_empty(t : T?) {
     t |> run("unique_inplace on empty array") @(t : T?) {
         var arr : array<int>
@@ -63,7 +63,7 @@ def test_unique_inplace_empty(t : T?) {
     }
 }
 
-[test]
+[test(description = "unique_by_inplace handles empty and single-element arrays and complex keys without resizing an empty array")]
 def test_unique_by_inplace_empty(t : T?) {
     t |> run("unique_by_inplace on empty array") @(t : T?) {
         var arr : array<int>
@@ -94,7 +94,7 @@ def test_unique_by_inplace_empty(t : T?) {
     }
 }
 
-[test]
+[test(description = "unique and unique_by return an empty result for an empty array")]
 def test_unique_empty_via_unique(t : T?) {
     t |> run("unique on empty array") @(t : T?) {
         var arr : array<int>
@@ -112,7 +112,7 @@ def test_unique_empty_via_unique(t : T?) {
 // Tests for BUG 2: select_impl (indexed) had inverted lock flags
 // ============================================================================
 
-[test]
+[test(description = "indexed select passes the right index and element for iterators, arrays, to-array, empty and struct inputs")]
 def test_select_indexed(t : T?) {
     t |> run("select indexed from iterator") @(t : T?) {
         var query = select(
@@ -177,7 +177,7 @@ def test_select_indexed(t : T?) {
 // [1,2,3] was considered equal to [1,2]
 // ============================================================================
 
-[test]
+[test(description = "sequence_equal is false when one sequence is a prefix of the other, whichever side is longer")]
 def test_sequence_equal_length(t : T?) {
     t |> run("sequence_equal different lengths - first longer") @(t : T?) {
         let result = sequence_equal(
@@ -243,7 +243,7 @@ def test_sequence_equal_length(t : T?) {
     }
 }
 
-[test]
+[test(description = "sequence_equal_by is false for different lengths and true for equal content and for two empty sequences")]
 def test_sequence_equal_by_length(t : T?) {
     t |> run("sequence_equal_by different lengths") @(t : T?) {
         let result = _sequence_equal_by(
@@ -281,7 +281,7 @@ def test_sequence_equal_by_length(t : T?) {
 // Tests for BUG 4: intersect yielded duplicates from second source
 // ============================================================================
 
-[test]
+[test(description = "intersect yields each common element once however many duplicates either source holds")]
 def test_intersect_duplicates(t : T?) {
     t |> run("intersect with duplicates in second source") @(t : T?) {
         // srca = [1,2,3], srcb = [2,2,3,3,3]
@@ -333,7 +333,7 @@ def test_intersect_duplicates(t : T?) {
 // Tests for BUG 5: except didn't deduplicate first source
 // ============================================================================
 
-[test]
+[test(description = "except deduplicates the first source and excludes every element present in the second")]
 def test_except_duplicates(t : T?) {
     t |> run("except with duplicates in source") @(t : T?) {
         // src = [1,1,2,2,3], exclude = [3]
@@ -377,7 +377,7 @@ def test_except_duplicates(t : T?) {
 // Tests for range_sequence
 // ============================================================================
 
-[test]
+[test(description = "range_sequence yields the right count and values, including a zero count, a count of one and a negative start")]
 def test_range_sequence_count(t : T?) {
     t |> run("range_sequence produces correct count") @(t : T?) {
         var query = range_sequence(0, 5)
@@ -426,7 +426,7 @@ def test_range_sequence_count(t : T?) {
 // Additional coverage: empty sequences for aggregation functions
 // ============================================================================
 
-[test]
+[test(description = "count, long_count and sum of an empty sequence are zero and average of a single element is that element")]
 def test_aggregation_empty(t : T?) {
     t |> run("count empty") @(t : T?) {
         let c = count(empty(type<int>))
@@ -452,7 +452,7 @@ def test_aggregation_empty(t : T?) {
 // Additional coverage: aggregate edge cases
 // ============================================================================
 
-[test]
+[test(description = "aggregate over an empty sequence returns the seed and over one element applies the accumulator once")]
 def test_aggregate_edge_cases(t : T?) {
     t |> run("aggregate empty sequence") @(t : T?) {
         let result = aggregate(
@@ -476,7 +476,7 @@ def test_aggregate_edge_cases(t : T?) {
 // Additional coverage: where edge cases
 // ============================================================================
 
-[test]
+[test(description = "where returns nothing when no element matches, everything when all match, and nothing for an empty input")]
 def test_where_edge_cases(t : T?) {
     t |> run("where no match") @(t : T?) {
         var query = _where(
@@ -517,7 +517,7 @@ def test_where_edge_cases(t : T?) {
 // Additional coverage: take/skip edge cases
 // ============================================================================
 
-[test]
+[test(description = "take and skip with zero, all, and more-than-available counts return the expected prefix or remainder")]
 def test_take_skip_edge_cases(t : T?) {
     t |> run("take zero") @(t : T?) {
         var query = take(
@@ -580,7 +580,7 @@ def test_take_skip_edge_cases(t : T?) {
 // Additional coverage: element_at edge cases
 // ============================================================================
 
-[test]
+[test(description = "element_at returns the first and last element and element_at_or_default returns the default for out-of-range and negative indexes")]
 def test_element_at_edge_cases(t : T?) {
     t |> run("element_at first") @(t : T?) {
         let result = element_at(
@@ -616,7 +616,7 @@ def test_element_at_edge_cases(t : T?) {
 // Additional coverage: concat edge cases
 // ============================================================================
 
-[test]
+[test(description = "concat with an empty side returns the other side and two empty inputs give an empty result")]
 def test_concat_edge_cases(t : T?) {
     t |> run("concat empty and non-empty") @(t : T?) {
         var query = concat(
@@ -659,7 +659,7 @@ def test_concat_edge_cases(t : T?) {
 // Additional coverage: distinct edge cases
 // ============================================================================
 
-[test]
+[test(description = "distinct and distinct_by collapse identical elements and keys to one and keep a single element")]
 def test_distinct_edge_cases(t : T?) {
     t |> run("distinct all same") @(t : T?) {
         var arr = [5, 5, 5, 5, 5]
@@ -686,7 +686,7 @@ def test_distinct_edge_cases(t : T?) {
 // Additional coverage: union edge cases
 // ============================================================================
 
-[test]
+[test(description = "union with an empty side returns the other side deduplicated and union of identical sets returns one copy")]
 def test_union_edge_cases(t : T?) {
     t |> run("union with empty first") @(t : T?) {
         var result = union(
@@ -731,7 +731,7 @@ def test_union_edge_cases(t : T?) {
 // Additional coverage: repeat and default_empty edge cases
 // ============================================================================
 
-[test]
+[test(description = "repeat yields nothing for a zero count and exactly one element for a count of one")]
 def test_repeat_edge_cases(t : T?) {
     t |> run("repeat zero times") @(t : T?) {
         var result = repeat(42, 0)
@@ -758,7 +758,7 @@ def test_repeat_edge_cases(t : T?) {
 // Additional coverage: order edge cases
 // ============================================================================
 
-[test]
+[test(description = "order handles empty, single, already sorted and reverse sorted input")]
 def test_order_edge_cases(t : T?) {
     t |> run("order empty") @(t : T?) {
         var result = order(
@@ -809,7 +809,7 @@ def test_order_edge_cases(t : T?) {
 // Additional coverage: reverse edge cases
 // ============================================================================
 
-[test]
+[test(description = "reverse and reverse_inplace handle empty and single-element inputs")]
 def test_reverse_edge_cases(t : T?) {
     t |> run("reverse empty") @(t : T?) {
         var result = reverse(empty(type<int>))
@@ -841,7 +841,7 @@ def test_reverse_edge_cases(t : T?) {
 // Additional coverage: zip edge cases
 // ============================================================================
 
-[test]
+[test(description = "zip stops at the shorter source and yields nothing when the first source is empty")]
 def test_zip_edge_cases(t : T?) {
     t |> run("zip different lengths") @(t : T?) {
         var result = zip(
@@ -873,7 +873,7 @@ def test_zip_edge_cases(t : T?) {
 // Additional coverage: chunk edge cases
 // ============================================================================
 
-[test]
+[test(description = "chunk yields one short group when fewer elements than the chunk size and exact groups on even division")]
 def test_chunk_edge_cases(t : T?) {
     t |> run("chunk with fewer elements than chunk size") @(t : T?) {
         var query = chunk(
@@ -907,7 +907,7 @@ def test_chunk_edge_cases(t : T?) {
 // Additional coverage: first/last with empty sequences
 // ============================================================================
 
-[test]
+[test(description = "first_or_default, last_or_default and single_or_default return the default for empty input and single_or_default for several elements")]
 def test_first_last_defaults(t : T?) {
     t |> run("first_or_default from empty") @(t : T?) {
         let result = first_or_default(
@@ -943,7 +943,7 @@ def test_first_last_defaults(t : T?) {
 // Additional coverage: to_table edge cases
 // ============================================================================
 
-[test]
+[test(description = "to_table returns an empty table for empty input and a one-entry table for one element")]
 def test_to_table_edge_cases(t : T?) {
     t |> run("to_table empty") @(t : T?) {
         let result = to_table(
@@ -971,7 +971,7 @@ def test_to_table_edge_cases(t : T?) {
 // Additional coverage: select_many edge cases
 // ============================================================================
 
-[test]
+[test(description = "select_many over an empty outer sequence yields nothing")]
 def test_select_many_edge_cases(t : T?) {
     t |> run("select_many empty outer") @(t : T?) {
         var seq_seq : array<iterator<int>>
@@ -991,7 +991,7 @@ def test_select_many_edge_cases(t : T?) {
 // Additional coverage: contains edge cases
 // ============================================================================
 
-[test]
+[test(description = "contains is false in an empty sequence, finds the first and last element and misses an absent one")]
 def test_contains_edge_cases(t : T?) {
     t |> run("contains in empty") @(t : T?) {
         let result = contains(empty(type<int>), 42)
@@ -1024,7 +1024,7 @@ def test_contains_edge_cases(t : T?) {
 // Additional coverage: any/all edge cases
 // ============================================================================
 
-[test]
+[test(description = "any is false and all is true on empty input, and any and all honor a predicate that fails or always matches")]
 def test_any_all_edge_cases(t : T?) {
     t |> run("any with predicate on empty") @(t : T?) {
         let result = _any(empty(type<int>), _ > 0)
@@ -1056,7 +1056,7 @@ struct BiasPair {
     tag : string
 }
 
-[test]
+[test(description = "indexed select, zip and zip3 leave their source arrays intact")]
 def test_select_zip_source_preserved(t : T?) {
     t |> run("indexed select preserves source elements") @(t : T?) {
         var src <- [[10], [20], [30]]
@@ -1099,7 +1099,7 @@ def test_select_zip_source_preserved(t : T?) {
     }
 }
 
-[test]
+[test(description = "zip4 through zip8 leave all their source arrays intact")]
 def test_zipn_source_preserved(t : T?) {
     t |> run("zip4 through zip7 preserve all source arrays") @(t : T?) {
         var a1 <- [[1]]
@@ -1159,7 +1159,7 @@ def test_zipn_source_preserved(t : T?) {
 }
 
 
-[test]
+[test(description = "group_by_lazy does not move out the first group member of its source")]
 def test_group_by_lazy_source_preserved(t : T?) {
     t |> run("group_by_lazy does not gut first group member") @(t : T?) {
         var src <- [[10], [11], [20]]
@@ -1182,7 +1182,7 @@ def test_group_by_lazy_source_preserved(t : T?) {
 }
 
 
-[test]
+[test(description = "skip_last with a negative count keeps all elements and take_last with a negative count keeps none, in every form")]
 def test_skip_take_last_negative(t : T?) {
     t |> run("skip_last_inplace negative count is a no-op") @(t : T?) {
         var arr = [1, 2, 3]
@@ -1225,7 +1225,7 @@ def test_skip_take_last_negative(t : T?) {
 }
 
 
-[test]
+[test(description = "intersect and intersect_by return the left-side elements in left order, deduplicated, in the iterator forms too")]
 def test_intersect_left_bias(t : T?) {
     t |> run("intersect returns left elements in left order") @(t : T?) {
         let a = [3, 1, 2]
@@ -1259,7 +1259,7 @@ def test_intersect_left_bias(t : T?) {
     }
 }
 
-[test]
+[test(description = "to_sequence over an array of pointers preserves the pointees")]
 def test_lazy_surface_pointer_arrays(t : T?) {
     t |> run("to_sequence over array of pointers preserves pointees") @(t : T?) {
         var n1 = new BiasPair(id = 11, tag = "a")
@@ -1278,7 +1278,7 @@ def test_lazy_surface_pointer_arrays(t : T?) {
     }
 }
 
-[test]
+[test(description = "the unique family accepts iterator sources")]
 def test_unique_iterator_overloads(t : T?) {
     t |> run("unique family accepts iterator sources") @(t : T?) {
         let src = [3, 1, 1, 2]

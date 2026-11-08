@@ -31,7 +31,7 @@ def make_callable() : Callable {
 // 1. Named function call (expr_call) + assumed pipe
 // ============================================================
 
-[test]
+[test(description = "a bare block after a named call is passed as the final block argument")]
 def test_named_call_bare_block(t : T?) {
     t |> run("named_call() bare block") @(t : T?) {
         let res = call_block() {
@@ -41,7 +41,7 @@ def test_named_call_bare_block(t : T?) {
     }
 }
 
-[test]
+[test(description = "a block literal after a named call is passed as the final block argument, with and without block arguments")]
 def test_named_call_block(t : T?) {
     t |> run("named_call() block") @(t : T?) {
         let res = call_block() $ {
@@ -57,7 +57,7 @@ def test_named_call_block(t : T?) {
     }
 }
 
-[test]
+[test(description = "a lambda after a named call is passed as the final argument, with and without lambda arguments")]
 def test_named_call_lambda_block(t : T?) {
     t |> run("named_call() @ block") @(t : T?) {
         let res = call_block() $ {
@@ -73,7 +73,7 @@ def test_named_call_lambda_block(t : T?) {
     }
 }
 
-[test]
+[test(description = "an explicit pipe after a named call passes a block, with and without block arguments")]
 def test_named_call_explicit_pipe(t : T?) {
     t |> run("named_call() <| $ block") @(t : T?) {
         let res = call_block() <| $ {     // nolint:STYLE002 - the explicit pipe form is what this test covers
@@ -93,7 +93,7 @@ def test_named_call_explicit_pipe(t : T?) {
 // 2. Arrow method call (expr_method_call) + assumed pipe
 // ============================================================
 
-[test]
+[test(description = "a bare block after an arrow method call is passed as the final block argument")]
 def test_arrow_call_bare_block(t : T?) {
     t |> run("obj->method() bare block") @(t : T?) {
         let c = make_callable()
@@ -104,7 +104,7 @@ def test_arrow_call_bare_block(t : T?) {
     }
 }
 
-[test]
+[test(description = "a block literal after an arrow method call is passed as the final block argument")]
 def test_arrow_call_block(t : T?) {
     t |> run("obj->method() block") @(t : T?) {
         let c = make_callable()
@@ -115,7 +115,7 @@ def test_arrow_call_block(t : T?) {
     }
 }
 
-[test]
+[test(description = "a lambda after an arrow method call is passed as the final argument")]
 def test_arrow_call_lambda_block(t : T?) {
     t |> run("obj->method() @ block") @(t : T?) {
         let c = make_callable()
@@ -126,7 +126,7 @@ def test_arrow_call_lambda_block(t : T?) {
     }
 }
 
-[test]
+[test(description = "an explicit pipe after an arrow method call passes a block")]
 def test_arrow_call_explicit_pipe(t : T?) {
     t |> run("obj->method() <| $ block") @(t : T?) {
         let c = make_callable()
@@ -141,7 +141,7 @@ def test_arrow_call_explicit_pipe(t : T?) {
 // 3. Dot method call (expr_field) + assumed pipe
 // ============================================================
 
-[test]
+[test(description = "a bare block after a dot method call is passed as the final block argument")]
 def test_dot_call_bare_block(t : T?) {
     t |> run("obj.method() bare block") @(t : T?) {
         var r = new Receiver()
@@ -152,7 +152,7 @@ def test_dot_call_bare_block(t : T?) {
     }
 }
 
-[test]
+[test(description = "a block literal after a dot method call is passed as the final block argument, with and without block arguments")]
 def test_dot_call_block(t : T?) {
     t |> run("obj.method() block") @(t : T?) {
         var r = new Receiver()
@@ -170,7 +170,7 @@ def test_dot_call_block(t : T?) {
     }
 }
 
-[test]
+[test(description = "a lambda after a dot method call is passed as the final argument, with and without lambda arguments")]
 def test_dot_call_lambda_block(t : T?) {
     t |> run("obj.method() @ block") @(t : T?) {
         var r = new Receiver()
@@ -188,7 +188,7 @@ def test_dot_call_lambda_block(t : T?) {
     }
 }
 
-[test]
+[test(description = "an explicit pipe after a dot method call passes a block, with and without block arguments")]
 def test_dot_call_explicit_pipe(t : T?) {
     t |> run("obj.method() <| $ block") @(t : T?) {
         var r = new Receiver()
@@ -210,7 +210,7 @@ def test_dot_call_explicit_pipe(t : T?) {
 // 4. Pipe operator (|>) + assumed pipe
 // ============================================================
 
-[test]
+[test(description = "a block after a right-pipe call is passed as the final block argument")]
 def test_rpipe_block(t : T?) {
     t |> run("arg |> func() block with args") @(t : T?) {
         let res = 10 |> call_block_with_arg() $(v : int) : int {
@@ -224,7 +224,7 @@ def test_rpipe_block(t : T?) {
 // 5. Mixed: extra args before the block
 // ============================================================
 
-[test]
+[test(description = "a block after a named call with extra arguments is passed as the final block argument")]
 def test_named_call_with_extra_args(t : T?) {
     t |> run("named_call(arg) block with args") @(t : T?) {
         let res = call_block_with_arg(7) $(v : int) : int {
@@ -234,7 +234,7 @@ def test_named_call_with_extra_args(t : T?) {
     }
 }
 
-[test]
+[test(description = "a block after a dot method call with extra arguments is passed as the final block argument")]
 def test_dot_call_with_extra_args(t : T?) {
     t |> run("obj.method(arg) block with args") @(t : T?) {
         var r = new Receiver()

@@ -1,3 +1,6 @@
+//! a function a structure macro adds during patch without setting
+//! astChanged reports a clean diagnostic instead of crashing lint and
+//! side-effect analysis
 // regression test: a structure_macro that adds a function during
 // patch() without setting astChanged used to leave the new function
 // uninferred, which then crashed lint/checkSideEffects with a null

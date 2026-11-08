@@ -52,7 +52,7 @@ def private inc_leg(t : T?; queue; pso1; ba; pu; dispatches : int; concurrent : 
     t |> equal(bad, 0, "{tag}: every element incremented {times} times")
 }
 
-[test]
+[test(description = "The pipeline cache, buffer pool and multi-dispatch encoder work together.")]
 def test_host_plumbing(t : T?) {
     t |> run("pipeline cache + buffer pool + multi-dispatch encoder") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -119,7 +119,7 @@ def test_host_plumbing(t : T?) {
     }
 }
 
-[test]
+[test(description = "The residency heartbeat arms, witnesses and unregisters on release, and the submit trace branch runs.")]
 def test_residency_heartbeat(t : T?) {
     t |> run("residency heartbeat: arm, witness, unregister-on-release; submit trace branch") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -185,7 +185,7 @@ def private pool_null_fixture() : string {
     }
 }
 
-[test]
+[test(description = "pool_release refuses a null buffer instead of letting it surface later as an unrelated bind.")]
 def test_pool_release_null_guard(t : T?) {
     t |> run("pool_release refuses a null buffer (a null in a free list surfaces later as an unrelated bind)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -218,7 +218,7 @@ let RELEASE_SLACK_BYTES = 64ul * 1024ul * 1024ul
 //! release: three write-release cycles of 256 MB leave the
 //! process footprint within 64 MB of where it started, where a buffer
 //! the binding left alive adds 256 MB a cycle
-[test]
+[test(description = "A released buffer's pages leave the process footprint.")]
 def test_buffer_release_returns_memory(t : T?) {
     t |> run("a released buffer's pages leave the process footprint") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -249,7 +249,7 @@ def test_buffer_release_returns_memory(t : T?) {
 //! The pool's size buckets on the host, no device: 256 at least,
 //! else the next power of two - a size on a power keeps it, one
 //! past it takes the next.
-[test]
+[test(description = "pool_bucket returns at least 256 and the next power of two above the request.")]
 def test_pool_bucket(t : T?) {
     t |> run("pool_bucket: 256 at least, the next power of two above") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {

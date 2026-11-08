@@ -1,15 +1,13 @@
 options gen2
-options indenting = 4
-
-// Phase-5 simdgroup_matrix gate (text layer): the reference-body 8x8 tile family lowers to
-// Metal's simdgroup_matrix surface — zero-init/filled locals via make_filled_simdgroup_matrix,
-// device and threadgroup loads as pointer+offset, multiply / multiply-accumulate (all-f32,
-// all-f16, and the mixed f32-accumulator/f16-operand combo), and device or threadgroup stores.
 
 require dastest/testing_boost public
 require _msl_common
 require daslib/strings_boost
 
+// Phase-5 simdgroup_matrix gate (text layer): the reference-body 8x8 tile family lowers to
+// Metal's simdgroup_matrix surface — zero-init/filled locals via make_filled_simdgroup_matrix,
+// device and threadgroup loads as pointer+offset, multiply / multiply-accumulate (all-f32,
+// all-f16, and the mixed f32-accumulator/f16-operand combo), and device or threadgroup stores.
 let GOLDEN_SGMAT = "#include <metal_stdlib>
 using namespace metal;
 kernel void sgmat_tile(device const float* fa [[buffer(0)]],
@@ -73,7 +71,7 @@ kernel void sgmat_tiled(device const half* xa [[buffer(0)]],
 \}
 "
 
-[test]
+[test(description = "Simdgroup matrix locals, loads, stores, multiply and multiply-accumulate lower to simdgroup types, including the tiled threadgroup staging and the store into a workgroup slab.")]
 def test_sgmat_shape(t : T?) {
     t |> run("sgmat: locals lower to simdgroup types with zero fills") <| @(t : T?) {
         t |> success(contains(sgmat_msl, "simdgroup_float8x8 ma = make_filled_simdgroup_matrix<float, 8, 8>(0.0f);"), "f32 zero-init local")
@@ -171,7 +169,7 @@ kernel void sgmat_rolled(device const half* xa [[buffer(0)]],
 \}
 "
 
-[test]
+[test(description = "Arrays of simdgroup tiles under unroll_full keep their loops rolled.")]
 def test_sgmat_rolled_shape(t : T?) {
     t |> run("sgmat rolled: arrays + [unroll_full] keep loops rolled") <| @(t : T?) {
         t |> success(contains(sgmat_rolled_msl, "simdgroup_float8x8 mc[2];"), "f32 matrix array local")
@@ -189,7 +187,7 @@ def test_sgmat_rolled_shape(t : T?) {
     }
 }
 
-[test]
+[test(description = "The sgmat, tiled and rolled kernels' emitted MSL match their golden snapshots.")]
 def test_sgmat_golden(t : T?) {
     t |> run("sgmat: golden snapshot") <| @(t : T?) {
         t |> equal(sgmat_msl, GOLDEN_SGMAT)
@@ -199,5 +197,49 @@ def test_sgmat_golden(t : T?) {
     }
     t |> run("sgmat rolled: golden snapshot") <| @(t : T?) {
         t |> equal(sgmat_rolled_msl, GOLDEN_SGMAT_ROLLED)
+    }
+}
+
+// Text-assertion units for the Phase-1 a*b kernel: structural facts about the emitted MSL
+// (signature shape, per-binding attributes, write-set const-ness, builtin param, statement forms),
+// the companion globals, and the golden snapshot of our own emitted text — the forward regression
+// guard (any emitter change that reshapes output must consciously update the golden).
+let GOLDEN_MUL_AB = "#include <metal_stdlib>
+using namespace metal;
+kernel void mul_ab(device const float* a [[buffer(0)]],
+        device const float* b [[buffer(1)]],
+        device float* c [[buffer(2)]],
+        uint3 gl_GlobalInvocationID [[thread_position_in_grid]]) \{
+    uint i = gl_GlobalInvocationID.x;
+    c[i] = (a[i] * b[i]);
+\}
+"
+
+[test(description = "The mul_ab kernel emits the expected signature, body statements and companion globals.")]
+def test_mul_ab_shape(t : T?) {
+    t |> run("mul_ab: kernel signature") <| @(t : T?) {
+        t |> success(contains(mul_ab_msl, "#include <metal_stdlib>"), "preamble include")
+        t |> success(contains(mul_ab_msl, "using namespace metal;"), "preamble namespace")
+        t |> success(contains(mul_ab_msl, "kernel void mul_ab("), "kernel qualifier + entry name")
+        t |> success(contains(mul_ab_msl, "device const float* a [[buffer(0)]]"), "a: read-only -> device const, binding 0")
+        t |> success(contains(mul_ab_msl, "device const float* b [[buffer(1)]]"), "b: read-only -> device const, binding 1")
+        t |> success(contains(mul_ab_msl, "device float* c [[buffer(2)]]"), "c: written -> device (mutable), binding 2")
+        t |> success(contains(mul_ab_msl, "uint3 gl_GlobalInvocationID [[thread_position_in_grid]]"), "builtin param synthesized")
+    }
+    t |> run("mul_ab: body statements") <| @(t : T?) {
+        t |> success(contains(mul_ab_msl, "uint i = gl_GlobalInvocationID.x;"), "value let lowers to typed local")
+        t |> success(contains(mul_ab_msl, "c[i] = (a[i] * b[i]);"), "assignment through pointer index")
+    }
+    t |> run("mul_ab: companion globals") <| @(t : T?) {
+        t |> equal(mul_ab_msl_entry, "mul_ab")
+        t |> success(mul_ab_msl_fastmath, "fastmath defaults ON ([metal_kernel] property)")
+        t |> success(!empty(mul_ab_msl_census), "census companion is filled")
+    }
+}
+
+[test(description = "The mul_ab kernel's emitted MSL matches its golden snapshot.")]
+def test_mul_ab_golden(t : T?) {
+    t |> run("mul_ab: golden snapshot") <| @(t : T?) {
+        t |> equal(mul_ab_msl, GOLDEN_MUL_AB)
     }
 }

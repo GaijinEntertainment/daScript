@@ -13,7 +13,7 @@ require _test_option_user_struct_mod
 // are not module-keyed, so this should be even more robust — the test exists
 // to prove that conclusion under future refactors.
 
-[test]
+[test(description = "an Option of a struct defined in another module works on the some path")]
 def cross_module_option_some(t : T?) {
     t |> run("Option<Foo> across module boundary — some path") @(t : T?) {
         let hit = lookup_foo(7)
@@ -24,7 +24,7 @@ def cross_module_option_some(t : T?) {
     }
 }
 
-[test]
+[test(description = "an Option of a struct defined in another module works on the none path")]
 def cross_module_option_none(t : T?) {
     t |> run("Option<Foo> across module boundary — none path") @(t : T?) {
         let miss = lookup_foo(0)
@@ -32,7 +32,7 @@ def cross_module_option_none(t : T?) {
     }
 }
 
-[test]
+[test(description = "an Option of a struct defined in another module compares structurally")]
 def cross_module_option_equality(t : T?) {
     t |> run("Option<Foo> structural equality across module boundary") @(t : T?) {
         t |> success(lookup_foo(3) == some(make_foo(3, "name-3")))

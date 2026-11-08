@@ -1,7 +1,6 @@
 options gen2
 
 require dastest/testing_boost public
-
 require daslib/sql
 require daslib/option
 require sqlite/sqlite_boost
@@ -30,7 +29,7 @@ def private fixture(db : SqlRunner) {
 // DDL — Option<T> drops NOT NULL; T keeps it.
 // ──────────────────────────────────────────────────────────────────────────
 
-[test]
+[test(description = "create_table omits NOT NULL for option-typed fields")]
 def test_create_table_drops_not_null_for_option(t : T?) {
     t |> equal(_::_sql_create_table_sql(type<User>),
         "CREATE TABLE \"Users\"(\"Id\" INTEGER PRIMARY KEY, \"Name\" TEXT NOT NULL, \"Age\" INTEGER, \"Nick\" TEXT, \"DeletedAt\" INTEGER)",
@@ -42,7 +41,7 @@ def test_create_table_drops_not_null_for_option(t : T?) {
 // SELECT (full row) — readers wrap NULL → none, value → some.
 // ──────────────────────────────────────────────────────────────────────────
 
-[test]
+[test(description = "option-typed columns round-trip some and none values through insert and select")]
 def test_round_trip_option_columns(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -74,7 +73,7 @@ def test_round_trip_option_columns(t : T?) {
 // _where — is_some / is_none translate to IS NOT NULL / IS NULL.
 // ──────────────────────────────────────────────────────────────────────────
 
-[test]
+[test(description = "is_some in a where emits IS NOT NULL")]
 def test_where_is_some_emits_is_not_null(t : T?) {
     var _db = SqlRunner()
     let sql = _sql_text(_db |> select_from(type<User>)
@@ -84,7 +83,7 @@ def test_where_is_some_emits_is_not_null(t : T?) {
         "_.Col |> is_some emits Col IS NOT NULL")
 }
 
-[test]
+[test(description = "is_none in a where emits IS NULL")]
 def test_where_is_none_emits_is_null(t : T?) {
     var _db = SqlRunner()
     let sql = _sql_text(_db |> select_from(type<User>)
@@ -94,7 +93,7 @@ def test_where_is_none_emits_is_null(t : T?) {
         "_.Col |> is_none emits Col IS NULL")
 }
 
-[test]
+[test(description = "is_some in a where returns only the rows with a value")]
 def test_where_is_some_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -107,7 +106,7 @@ def test_where_is_some_runtime(t : T?) {
     }
 }
 
-[test]
+[test(description = "is_none in a where returns only the rows without a value")]
 def test_where_is_none_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -124,7 +123,7 @@ def test_where_is_none_runtime(t : T?) {
 // a bind parameter (`?`), and the surrounding comparison adds another.
 // ──────────────────────────────────────────────────────────────────────────
 
-[test]
+[test(description = "unwrap_or in a where emits COALESCE with the default as a bind")]
 def test_where_unwrap_or_emits_coalesce(t : T?) {
     var _db = SqlRunner()
     let _cutoff = 18
@@ -135,7 +134,7 @@ def test_where_unwrap_or_emits_coalesce(t : T?) {
         "_.Col |> unwrap_or(d) >= x emits COALESCE + comparison")
 }
 
-[test]
+[test(description = "unwrap_or in a where substitutes the default for a missing value before comparing")]
 def test_where_unwrap_or_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -156,7 +155,7 @@ def test_where_unwrap_or_runtime(t : T?) {
 // the field's `Option<int>` shape. No implicit unwrapping at projection.
 // ──────────────────────────────────────────────────────────────────────────
 
-[test]
+[test(description = "a full-row select keeps option fields as none for rows where they are NULL")]
 def test_full_row_preserves_option_in_result(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -173,7 +172,7 @@ def test_full_row_preserves_option_in_result(t : T?) {
 // _try_sql variant — Option methods compose with the non-panicking form.
 // ──────────────────────────────────────────────────────────────────────────
 
-[test]
+[test(description = "_try_sql accepts an is_some predicate and returns the matching rows")]
 def test_try_sql_with_is_some(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)

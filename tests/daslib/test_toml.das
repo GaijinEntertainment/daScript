@@ -42,7 +42,7 @@ def get_object_field(var v : JsonValue?; key : string) : JsonValue? {
     return obj[key]
 }
 
-[test]
+[test(description = "empty input parses to an empty table")]
 def test_empty(t : T?) {
     t |> run("empty input parses to empty table") @@(t : T?) {
         var v : JsonValue? = expect_ok(t, "empty", "")
@@ -53,7 +53,7 @@ def test_empty(t : T?) {
     }
 }
 
-[test]
+[test(description = "a document of only comments and blank lines parses to an empty table")]
 def test_comments_only(t : T?) {
     t |> run("comments and blank lines only") @@(t : T?) {
         var v : JsonValue? = expect_ok(t, "comments", "# top comment\n\n# another\n")
@@ -64,7 +64,7 @@ def test_comments_only(t : T?) {
     }
 }
 
-[test]
+[test(description = "a basic string value decodes its escape sequences")]
 def test_string_value(t : T?) {
     t |> run("basic string with escapes") @@(t : T?) {
         var v : JsonValue? = expect_ok(t, "string", "name = \"a\\tb\\nc\"\n")
@@ -76,7 +76,7 @@ def test_string_value(t : T?) {
     }
 }
 
-[test]
+[test(description = "a literal string keeps its backslashes unescaped")]
 def test_literal_string(t : T?) {
     t |> run("literal string preserves backslashes") @@(t : T?) {
         var v : JsonValue? = expect_ok(t, "literal", "p = 'C:\\path'\n")
@@ -87,7 +87,7 @@ def test_literal_string(t : T?) {
     }
 }
 
-[test]
+[test(description = "decimal integers parse with a sign and underscore separators")]
 def test_int_decimal(t : T?) {
     t |> run("decimal integer with sign and _ separator") @@(t : T?) {
         var v : JsonValue? = expect_ok(t, "int", "a = -1\nb = 1_000_000\n")
@@ -102,7 +102,7 @@ def test_int_decimal(t : T?) {
     }
 }
 
-[test]
+[test(description = "hex, octal and binary integers parse to their values")]
 def test_int_radix(t : T?) {
     t |> run("hex / octal / binary integers") @@(t : T?) {
         var v : JsonValue? = expect_ok(t, "radix", "h = 0xff\no = 0o755\nb = 0b1010\n")
@@ -115,7 +115,7 @@ def test_int_radix(t : T?) {
     }
 }
 
-[test]
+[test(description = "floats parse with a decimal point and an exponent")]
 def test_float(t : T?) {
     t |> run("float with decimal point and exponent") @@(t : T?) {
         var v : JsonValue? = expect_ok(t, "float", "pi = 3.14\nsci = 1e6\n")
@@ -130,7 +130,7 @@ def test_float(t : T?) {
     }
 }
 
-[test]
+[test(description = "true and false parse to booleans")]
 def test_bool(t : T?) {
     t |> run("boolean values") @@(t : T?) {
         var v : JsonValue? = expect_ok(t, "bool", "x = true\ny = false\n")
@@ -141,7 +141,7 @@ def test_bool(t : T?) {
     }
 }
 
-[test]
+[test(description = "inline and multi-line arrays parse to the same values")]
 def test_array(t : T?) {
     t |> run("inline and multi-line arrays both work") @@(t : T?) {
         var v1 : JsonValue? = expect_ok(t, "inline", "xs = [1, 2, 3]\n")
@@ -156,7 +156,7 @@ def test_array(t : T?) {
     }
 }
 
-[test]
+[test(description = "a single-line inline table parses into a table")]
 def test_inline_table(t : T?) {
     t |> run("inline table single-line") @@(t : T?) {
         var v : JsonValue? = expect_ok(t, "inline_table", "p = \{ x = 1, y = 2 \}\n")
@@ -168,7 +168,7 @@ def test_inline_table(t : T?) {
     }
 }
 
-[test]
+[test(description = "a [section] header opens a table that takes the following keys")]
 def test_section(t : T?) {
     t |> run("[section] table header") @@(t : T?) {
         var v : JsonValue? = expect_ok(t, "section", "[server]\nhost = \"localhost\"\nport = 8080\n")
@@ -184,7 +184,7 @@ def test_section(t : T?) {
     }
 }
 
-[test]
+[test(description = "a dotted [a.b] header creates nested tables")]
 def test_dotted_section(t : T?) {
     t |> run("[a.b] dotted section creates nested tables") @@(t : T?) {
         var v : JsonValue? = expect_ok(t, "dotted", "[a.b]\nv = 1\n")
@@ -197,7 +197,7 @@ def test_dotted_section(t : T?) {
     }
 }
 
-[test]
+[test(description = "a dotted key creates nested tables")]
 def test_dotted_key(t : T?) {
     t |> run("a.b.c = 1 creates nested tables") @@(t : T?) {
         var v : JsonValue? = expect_ok(t, "dotted_key", "a.b.c = 1\n")
@@ -210,7 +210,7 @@ def test_dotted_key(t : T?) {
     }
 }
 
-[test]
+[test(description = "[[items]] headers append entries to an array of tables")]
 def test_array_of_tables(t : T?) {
     t |> run("[[items]] appends entries to an array") @@(t : T?) {
         var v : JsonValue? = expect_ok(t, "aot", "[[items]]\nx = 1\n[[items]]\nx = 2\n")
@@ -234,7 +234,7 @@ def private host_folds_nan_compares() : bool {
     return a == b || !(a != b)
 }
 
-[test]
+[test(description = "inf, -inf and nan values parse to the matching floats")]
 def test_inf_nan(t : T?) {
     if (host_folds_nan_compares()) {
         t |> skip("host runtime is built -ffinite-math-only: nan compares fold")
@@ -259,7 +259,7 @@ def test_inf_nan(t : T?) {
     }
 }
 
-[test]
+[test(description = "datetime values are kept as their raw strings")]
 def test_datetime_preserved(t : T?) {
     t |> run("datetime values preserved as raw strings") @@(t : T?) {
         var v : JsonValue? = expect_ok(t, "datetime", "t = 2024-01-15T10:30:00Z\n")
@@ -270,7 +270,7 @@ def test_datetime_preserved(t : T?) {
     }
 }
 
-[test]
+[test(description = "the table-of-bools shape of .lint_config parses")]
 def test_rules_shape(t : T?) {
     t |> run("[rules] table-of-bools (the .lint_config shape)") @@(t : T?) {
         var v : JsonValue? = expect_ok(t, "rules", "[rules]\nSTYLE005 = true\nPERF007 = false\n")
@@ -282,7 +282,7 @@ def test_rules_shape(t : T?) {
     }
 }
 
-[test]
+[test(description = "date-shaped bare key is accepted (per TOML ABNF)")]
 def test_date_shaped_bare_key(t : T?) {
     t |> run("date-shaped bare key is accepted (per TOML ABNF)") @@(t : T?) {
         var v : JsonValue? = expect_ok(t, "date_key", "2024-01-15 = 1\n")
@@ -293,7 +293,7 @@ def test_date_shaped_bare_key(t : T?) {
     }
 }
 
-[test]
+[test(description = "'inf' / 'nan' are valid bare keys (no leading sign)")]
 def test_inf_bare_key(t : T?) {
     t |> run("'inf' / 'nan' are valid bare keys (no leading sign)") @@(t : T?) {
         var v : JsonValue? = expect_ok(t, "inf_key", "inf = 1\nnan = 2\n")
@@ -304,7 +304,7 @@ def test_inf_bare_key(t : T?) {
     }
 }
 
-[test]
+[test(description = "identifiers starting with 'inf' / 'nan' are not split (infinity_count)")]
 def test_inf_prefix_bare_key(t : T?) {
     t |> run("identifiers starting with 'inf' / 'nan' are not split (infinity_count)") @@(t : T?) {
         var v : JsonValue? = expect_ok(t, "inf_prefix", "infinity_count = 1\nnanoseconds = 2\n")
@@ -315,7 +315,7 @@ def test_inf_prefix_bare_key(t : T?) {
     }
 }
 
-[test]
+[test(description = "bare keys may start with '-' per TOML ABNF")]
 def test_dash_prefix_bare_key(t : T?) {
     t |> run("bare keys may start with '-' per TOML ABNF") @@(t : T?) {
         var v : JsonValue? = expect_ok(t, "dash_key", "-foo = 1\n")
@@ -326,7 +326,7 @@ def test_dash_prefix_bare_key(t : T?) {
     }
 }
 
-[test]
+[test(description = "bare keys may start with digits and contain alpha (123abc)")]
 def test_alphanum_bare_key(t : T?) {
     t |> run("bare keys may start with digits and contain alpha (123abc)") @@(t : T?) {
         var v : JsonValue? = expect_ok(t, "alphanum_key", "123abc = 1\n0xff_oops = 2\n")
@@ -337,7 +337,7 @@ def test_alphanum_bare_key(t : T?) {
     }
 }
 
-[test]
+[test(description = "'x = inf' / 'x = -inf' / 'x = nan' still interpret as float values")]
 def test_inf_nan_still_work_as_values(t : T?) {
     if (host_folds_nan_compares()) {
         t |> skip("host runtime is built -ffinite-math-only: nan compares fold")
@@ -358,35 +358,35 @@ def test_inf_nan_still_work_as_values(t : T?) {
     }
 }
 
-[test]
+[test(description = "trailing underscore in number is rejected")]
 def test_fail_underscore_trailing(t : T?) {
     t |> run("trailing underscore in number is rejected") @@(t : T?) {
         expect_fail(t, "trail_underscore", "x = 42_\n")
     }
 }
 
-[test]
+[test(description = "doubled underscore in number is rejected")]
 def test_fail_underscore_double(t : T?) {
     t |> run("doubled underscore in number is rejected") @@(t : T?) {
         expect_fail(t, "double_underscore", "x = 4__2\n")
     }
 }
 
-[test]
+[test(description = "leading underscore after radix prefix is rejected")]
 def test_fail_underscore_hex_leading(t : T?) {
     t |> run("leading underscore after radix prefix is rejected") @@(t : T?) {
         expect_fail(t, "hex_underscore", "x = 0x_ff\n")
     }
 }
 
-[test]
+[test(description = "trailing underscore in fractional part is rejected")]
 def test_fail_underscore_float_fractional(t : T?) {
     t |> run("trailing underscore in fractional part is rejected") @@(t : T?) {
         expect_fail(t, "frac_underscore", "x = 3.14_\n")
     }
 }
 
-[test]
+[test(description = "'_' between digits parses correctly across decimal / hex / float / exp")]
 def test_valid_underscores(t : T?) {
     t |> run("'_' between digits parses correctly across decimal / hex / float / exp") @@(t : T?) {
         var v : JsonValue? = expect_ok(t, "valid_underscores",
@@ -398,14 +398,14 @@ def test_valid_underscores(t : T?) {
     }
 }
 
-[test]
+[test(description = "exponent without digits ('1e') is rejected")]
 def test_fail_exponent_no_digits(t : T?) {
     t |> run("exponent without digits ('1e') is rejected") @@(t : T?) {
         expect_fail(t, "exp_no_digits", "x = 1e\n")
     }
 }
 
-[test]
+[test(description = "exponent with sign but no digits ('1e+') is rejected")]
 def test_fail_exponent_sign_no_digits(t : T?) {
     t |> run("exponent with sign but no digits ('1e+') is rejected") @@(t : T?) {
         expect_fail(t, "exp_sign_no_digits", "x = 1e+\n")
@@ -429,56 +429,56 @@ def expect_fail_with_eof(t : T?; what : string; input : string) {
     }
 }
 
-[test]
+[test(description = "EOF after a top-level key reports 'end of input' (not '0:0')")]
 def test_fail_eof_after_key_no_equals(t : T?) {
     t |> run("EOF after a top-level key reports 'end of input' (not '0:0')") @@(t : T?) {
         expect_fail_with_eof(t, "eof_no_equals", "a")
     }
 }
 
-[test]
+[test(description = "EOF inside section header reports 'end of input'")]
 def test_fail_eof_in_section_header(t : T?) {
     t |> run("EOF inside section header reports 'end of input'") @@(t : T?) {
         expect_fail_with_eof(t, "eof_section", "[a")
     }
 }
 
-[test]
+[test(description = "EOF inside [[items header reports 'end of input'")]
 def test_fail_eof_in_aot_header(t : T?) {
     t |> run("EOF inside [[items header reports 'end of input'") @@(t : T?) {
         expect_fail_with_eof(t, "eof_aot", "[[a]")
     }
 }
 
-[test]
+[test(description = "EOF inside inline table reports 'end of input'")]
 def test_fail_eof_in_inline_table(t : T?) {
     t |> run("EOF inside inline table reports 'end of input'") @@(t : T?) {
         expect_fail_with_eof(t, "eof_inline", "x = \{ a")
     }
 }
 
-[test]
+[test(description = "unterminated basic string is rejected")]
 def test_fail_unclosed_string(t : T?) {
     t |> run("unterminated basic string is rejected") @@(t : T?) {
         expect_fail(t, "unclosed", "name = \"oops\n")
     }
 }
 
-[test]
+[test(description = "unterminated array is rejected")]
 def test_fail_unclosed_array(t : T?) {
     t |> run("unterminated array is rejected") @@(t : T?) {
         expect_fail(t, "unclosed_array", "xs = [1, 2\n")
     }
 }
 
-[test]
+[test(description = "duplicate key in same table is rejected")]
 def test_fail_duplicate_key(t : T?) {
     t |> run("duplicate key in same table is rejected") @@(t : T?) {
         expect_fail(t, "dup", "a = 1\na = 2\n")
     }
 }
 
-[test]
+[test(description = "key without = is rejected")]
 def test_fail_missing_equals(t : T?) {
     t |> run("key without = is rejected") @@(t : T?) {
         expect_fail(t, "no_equals", "key value\n")
@@ -501,7 +501,7 @@ def expect_fail_with(t : T?; what : string; input : string; needle : string) {
     }
 }
 
-[test]
+[test(description = "[a.b] after `b.c = 1` under [a] is rejected")]
 def test_fail_section_after_dotted_implicit(t : T?) {
     // F4: [a]\nb.c=1 implicitly creates 'a.b' via dotted key. [a.b] then tries
     // to re-open that implicit table — invalid per TOML 1.0.
@@ -512,7 +512,7 @@ def test_fail_section_after_dotted_implicit(t : T?) {
     }
 }
 
-[test]
+[test(description = "[a.b.d] after `b.c = 1` under [a] is accepted (new subtree)")]
 def test_ok_subtable_header_after_dotted(t : T?) {
     // The complementary VALID case: a NEW sub-sub-table header is still OK after
     // dotted-key creation of an intermediate.
@@ -529,7 +529,7 @@ def test_ok_subtable_header_after_dotted(t : T?) {
     }
 }
 
-[test]
+[test(description = "[a] after [a.b] is accepted (parent after child)")]
 def test_ok_parent_header_after_child(t : T?) {
     // Opening a parent header after a child header is permitted (the parent
     // was created via header walk, not dotted-key, so it remains openable).
@@ -545,7 +545,7 @@ def test_ok_parent_header_after_child(t : T?) {
     }
 }
 
-[test]
+[test(description = "`a = \{x=1\}` followed by `a.y = 2` is rejected (inline table closed)")]
 def test_fail_dotted_key_extends_inline_table(t : T?) {
     // F5: inline tables are immutable per TOML 1.0; once `a = { x = 1 }` is
     // written, `a.y = 2` cannot extend it.
@@ -556,7 +556,7 @@ def test_fail_dotted_key_extends_inline_table(t : T?) {
     }
 }
 
-[test]
+[test(description = "`a = \{x=1\}` then `a.y = 2` under [t] is rejected")]
 def test_fail_dotted_key_extends_inline_under_section(t : T?) {
     // F5: same rule inside a section header.
     t |> run("`a = \{x=1\}` then `a.y = 2` under [t] is rejected") @@(t : T?) {
@@ -566,7 +566,7 @@ def test_fail_dotted_key_extends_inline_under_section(t : T?) {
     }
 }
 
-[test]
+[test(description = "[a.sub] after `a = \{x=1\}` is rejected")]
 def test_fail_section_header_into_inline_table(t : T?) {
     // A [section] header cannot open a path under an inline-table value either.
     t |> run("[a.sub] after `a = \{x=1\}` is rejected") @@(t : T?) {
@@ -576,7 +576,7 @@ def test_fail_section_header_into_inline_table(t : T?) {
     }
 }
 
-[test]
+[test(description = "inline `\{ p = \{x=1\}, p.y = 2 \}` is rejected")]
 def test_fail_inline_internal_dotted_extends_inline(t : T?) {
     // F6: same rule applies WITHIN an inline-table literal — once a key is
     // bound to an inline-table value, a later dotted key cannot extend it.
@@ -587,7 +587,7 @@ def test_fail_inline_internal_dotted_extends_inline(t : T?) {
     }
 }
 
-[test]
+[test(description = "inline `\{ p.x = 1, p.y = 2 \}` is accepted (shared implicit `p`)")]
 def test_ok_inline_dotted_keys_share_implicit(t : T?) {
     // The complementary VALID inline case: two dotted keys sharing an implicit
     // intermediate (the spec allows this; only the inline-literal closure is
@@ -604,7 +604,7 @@ def test_ok_inline_dotted_keys_share_implicit(t : T?) {
     }
 }
 
-[test]
+[test(description = "`+foo = 1` is rejected (stray '+', not empty bare key)")]
 def test_fail_plus_prefix_identifier(t : T?) {
     // F13: rewind-to-bare lands on '+' (not a bare-key char) — must be a parse
     // error naming the stray sign, not an empty `_bare` token.
@@ -613,7 +613,7 @@ def test_fail_plus_prefix_identifier(t : T?) {
     }
 }
 
-[test]
+[test(description = "`+infinity_count = 1` is rejected (stray '+')")]
 def test_fail_plus_inf_with_bare_tail(t : T?) {
     // F13 cousin: classifier consumes '+inf', sees a bare-char tail, rewinds
     // onto '+' — the empty bare scan must error instead.
@@ -622,7 +622,7 @@ def test_fail_plus_inf_with_bare_tail(t : T?) {
     }
 }
 
-[test]
+[test(description = "`x = 2024-01-15:00` errors with a date-specific message")]
 def test_fail_date_followed_by_colon(t : T?) {
     // F16: `2024-01-15:00` is a malformed datetime (missing the T/space
     // separator). Surface a dedicated "expected 'T' or space" diagnostic
@@ -632,7 +632,7 @@ def test_fail_date_followed_by_colon(t : T?) {
     }
 }
 
-[test]
+[test(description = "`x = 12:34:56:` errors with a time-specific message")]
 def test_fail_time_trailing_colon(t : T?) {
     // F16: `12:34:56:` is a malformed time (trailing colon). Surface a
     // dedicated message anchored at the time value.
@@ -643,7 +643,7 @@ def test_fail_time_trailing_colon(t : T?) {
 
 // ===== write_toml =====
 
-[test]
+[test(description = "write_toml emits canonical text with sorted keys, sections and arrays of tables")]
 def test_write_toml_exact(t : T?) {
     t |> run("canonical emit: sorted keys, sections, array-of-tables") @@(t : T?) {
         var v = expect_ok(t, "wt_exact", "b = 2\na = 1\n[s]\nk = \"v\"\n[[j]]\nn = 1\n[[j]]\nn = 2\n")
@@ -654,7 +654,7 @@ def test_write_toml_exact(t : T?) {
     }
 }
 
-[test]
+[test(description = "writing then reading gives back the same value for every value class")]
 def test_write_toml_round_trip(t : T?) {
     t |> run("write then read is stable across value classes") @@(t : T?) {
         let src = "i = 9007199254740993\nf = 4.0\npi = 3.141592653589793\nneg = -3\non = true\ns = \"a\\tb \\\"q\\\" \\u0001\"\narr = [\"a\", 3, 4.5, \{ nested = true }]\nempty_arr = []\ndate = 2024-01-15T10:00:00Z\n[tab.sub]\n\"weird key\" = \"x\"\n[[jobs]]\nsub = \{ a = 1, b = [1, 2] }\n"
@@ -672,7 +672,7 @@ def test_write_toml_round_trip(t : T?) {
     }
 }
 
-[test]
+[test(description = "tiny and huge floats round-trip through exponent form")]
 def test_write_toml_tiny_huge_floats(t : T?) {
     t |> run("tiny and huge magnitudes round-trip via exponent form") @@(t : T?) {
         var v = expect_ok(t, "wt_exp", "a = 1e-30\nb = 1.5e-17\nc = 5e+22\nd = 0.001\n")
@@ -691,7 +691,7 @@ def test_write_toml_tiny_huge_floats(t : T?) {
     }
 }
 
-[test]
+[test(description = "inf, -inf and nan are written as TOML keywords")]
 def test_write_toml_non_finite(t : T?) {
     if (host_folds_nan_compares()) {
         t |> skip("host runtime is built -ffinite-math-only: nan compares fold")
@@ -706,7 +706,7 @@ def test_write_toml_non_finite(t : T?) {
     }
 }
 
-[test]
+[test(description = "null values and non-table roots are rejected as unrepresentable")]
 def test_write_toml_rejects(t : T?) {
     t |> run("null values and non-table roots are unrepresentable") @@(t : T?) {
         var nul = JVNull()

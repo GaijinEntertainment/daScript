@@ -1,3 +1,5 @@
+//! A private distinct type must not be visible across modules
+//! (30297).
 options gen2
 
 expect 30297

@@ -32,49 +32,49 @@ def private check_sound(t : T?; buf : array<float>; name : string) {
 
 // ─── Presets ───
 
-[test]
+[test(description = "the pickup-coin preset renders audible audio inside [-1, 1]")]
 def test_preset_pickup_coin(t : T?) {
     var seed = 12345u
     let buf <- render_sfxr(sfxr_pickup_coin(seed))
     check_sound(t, buf, "pickup_coin")
 }
 
-[test]
+[test(description = "the laser preset renders audible audio inside [-1, 1]")]
 def test_preset_laser_shoot(t : T?) {
     var seed = 22222u
     let buf <- render_sfxr(sfxr_laser_shoot(seed))
     check_sound(t, buf, "laser_shoot")
 }
 
-[test]
+[test(description = "the explosion preset renders audible audio inside [-1, 1]")]
 def test_preset_explosion(t : T?) {
     var seed = 33333u
     let buf <- render_sfxr(sfxr_explosion(seed))
     check_sound(t, buf, "explosion")
 }
 
-[test]
+[test(description = "the powerup preset renders audible audio inside [-1, 1]")]
 def test_preset_powerup(t : T?) {
     var seed = 44444u
     let buf <- render_sfxr(sfxr_powerup(seed))
     check_sound(t, buf, "powerup")
 }
 
-[test]
+[test(description = "the hit-hurt preset renders audible audio inside [-1, 1]")]
 def test_preset_hit_hurt(t : T?) {
     var seed = 55555u
     let buf <- render_sfxr(sfxr_hit_hurt(seed))
     check_sound(t, buf, "hit_hurt")
 }
 
-[test]
+[test(description = "the jump preset renders audible audio inside [-1, 1]")]
 def test_preset_jump(t : T?) {
     var seed = 66666u
     let buf <- render_sfxr(sfxr_jump(seed))
     check_sound(t, buf, "jump")
 }
 
-[test]
+[test(description = "the blip-select preset renders audible audio inside [-1, 1]")]
 def test_preset_blip_select(t : T?) {
     var seed = 77777u
     let buf <- render_sfxr(sfxr_blip_select(seed))
@@ -83,7 +83,7 @@ def test_preset_blip_select(t : T?) {
 
 // ─── Every waveform produces sound ───
 
-[test]
+[test(description = "every sfxr waveform renders audible audio inside [-1, 1]")]
 def test_all_waveforms(t : T?) {
     let waves = fixed_array(SfxrWave.square, SfxrWave.sawtooth, SfxrWave.sine, SfxrWave.triangle, SfxrWave.noise)
     for (w in waves) {
@@ -99,7 +99,7 @@ def test_all_waveforms(t : T?) {
 
 // ─── Render is deterministic (fixed internal noise seed) ───
 
-[test]
+[test(description = "the same sfxr parameters render identical buffers")]
 def test_deterministic_render(t : T?) {
     var seed = 0xC0FFEEu
     let s = sfxr_explosion(seed)  // noise voice exercises the per-period noise refill
@@ -120,7 +120,7 @@ def test_deterministic_render(t : T?) {
 
 // ─── Envelope length scales with decay ───
 
-[test]
+[test(description = "a longer decay yields a longer buffer")]
 def test_decay_controls_length(t : T?) {
     var short = SfxrSound()
     short.env_sustain = 0.0
@@ -135,7 +135,7 @@ def test_decay_controls_length(t : T?) {
 
 // ─── Randomize / mutate stay renderable and well-formed ───
 
-[test]
+[test(description = "randomized sfxr parameters always render samples inside [-1, 1]")]
 def test_randomize_renderable(t : T?) {
     var seed = 0xABCDEFu
     for (i in range(8)) {
@@ -145,7 +145,7 @@ def test_randomize_renderable(t : T?) {
     }
 }
 
-[test]
+[test(description = "mutated sfxr parameters always render samples inside [-1, 1]")]
 def test_mutate_renderable(t : T?) {
     var seed = 0x13572468u
     let base = sfxr_jump(seed)

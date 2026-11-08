@@ -1,3 +1,5 @@
+//! constructing a valueless variant case with a value, or a valued
+//! case bare, does not compile
 // A case with no value takes none, and a case with a value is not
 // spelled bare.
 options gen2

@@ -1,3 +1,5 @@
+//! as, ?as and the unsafe field read of a variant case declared
+//! without a type do not compile: the case has no value
 // A variant case declared without a type has no value: `as`, `?as`
 // and the unsafe field read all refuse it.
 options gen2

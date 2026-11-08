@@ -1,3 +1,4 @@
+//! a reference type as a struct field does not compile
 // ref type in struct field
 // verifies compiler rejects reference types as struct fields
 options gen2

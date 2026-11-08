@@ -1,3 +1,5 @@
+//! with (module name) for a module that is not part of the program
+//! must not compile (30298).
 options gen2
 
 expect 30298

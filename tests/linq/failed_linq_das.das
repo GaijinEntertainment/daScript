@@ -1,39 +1,71 @@
+//! Malformed %linq! queries (bad keywords, ill-formed
+//! group/join/multiple-from/correlated-from clauses) must not
+//! compile: each emits exactly one macro error 50503.
 options gen2
 
-// linq_das reader-macro rejections. Each malformed query emits one macro_error (50503) and a benign
-// `(0)` fallback, so the surrounding statement still parses — one 50503 per bad query, no cascade.
-expect 50503   // `fromc` — not the standalone `from` keyword (read as one identifier)
-expect 50503   // `orderby` before `group` (would emit a non-fusing _order_by |> _group_by_lazy)
-expect 50503   // group element is not the range variable (element selectors unsupported)
+// linq_das reader-macro rejections. Each malformed query emits one
+// macro_error (50503) and a benign `(0)` fallback, so the surrounding
+// statement still parses — one 50503 per bad query, no cascade.
+// `fromc` — not the standalone `from` keyword (read as one
+// identifier)
+expect 50503
+// `orderby` before `group` (would emit a non-fusing _order_by |>
+// _group_by_lazy)
+expect 50503
+// group element is not the range variable (element selectors
+// unsupported)
+expect 50503
 expect 50503   // `group` with no `by` clause
 expect 50503   // join: two `join` clauses (nested joins unsupported)
 expect 50503   // join: missing `on`
 expect 50503   // join: `on` without `equals`
 expect 50503   // join: composite key (second `equals` before the terminal)
-expect 50503   // join … into: post-`into` `where` over the (outer, g) pair (needs the carry — not yet)
-expect 50503   // join … into: post-`into` `orderby` over the (outer, g) pair (needs the carry — not yet)
-expect 50503   // join … into: `group` terminal after `into` (select the group instead — not yet)
-expect 50503   // join: a query-continuation `into` AFTER the terminal (single-source only; group-join `into` precedes it)
+// join … into: post-`into` `where` over the (outer, g) pair (needs
+// the carry — not yet)
+expect 50503
+// join … into: post-`into` `orderby` over the (outer, g) pair (needs
+// the carry — not yet)
+expect 50503
+// join … into: `group` terminal after `into` (select the group
+// instead — not yet)
+expect 50503
+// join: a query-continuation `into` AFTER the terminal (single-source
+// only; group-join `into` precedes it)
+expect 50503
 expect 50503   // join: `where` inside the join clause (between join and equals)
 expect 50503   // join: range var collides with the reserved transparent-id name
 expect 50503   // multiple-from: three `from` clauses (N-ary SelectMany unsupported)
 expect 50503   // multiple-from: `from … from` combined with `join`
-expect 50503   // multiple-from: range var collides with the reserved transparent-id name
-expect 50503   // correlated: `orderby` over a correlated `from … from` (non-copyable outer can't ride the carry)
-expect 50503   // correlated: `group` over a correlated `from … from` (non-copyable outer can't ride the carry)
-expect 50503   // correlated: post-`from` `where` references the OUTER range var (only inner-only is pushed down)
+// multiple-from: range var collides with the reserved transparent-id
+// name
+expect 50503
+// correlated: `orderby` over a correlated `from … from` (non-copyable
+// outer can't ride the carry)
+expect 50503
+// correlated: `group` over a correlated `from … from` (non-copyable
+// outer can't ride the carry)
+expect 50503
+// correlated: post-`from` `where` references the OUTER range var
+// (only inner-only is pushed down)
+expect 50503
 expect 50503   // let: binding name shadows the range variable
 expect 50503   // let: missing `=` after the binding name
 expect 50503   // let: empty right-hand-side expression
 expect 50503   // let: same binding name bound twice
 expect 50503   // let: trailing `let` after the `select` terminal (no clause uses it)
-expect 50503   // let: binding reuses the second range variable (a `let` after the join)
-expect 50503   // let: binding reuses the second range variable (a `let` before the join)
+// let: binding reuses the second range variable (a `let` after the
+// join)
+expect 50503
+// let: binding reuses the second range variable (a `let` before the
+// join)
+expect 50503
 expect 50503   // orderby: more than 4 keys (eager less_masked caps at 4-arity)
 expect 50503   // orderby: a direction-only segment (no key expression)
 expect 50503   // into: missing continuation range variable
 expect 50503   // into: `into <id>` with no following clause (continuation is empty)
-expect 50503   // into: continuation range var collides with the reserved transparent-id name
+// into: continuation range var collides with the reserved
+// transparent-id name
+expect 50503
 expect 50503   // into: trailing `iterator` cannot precede an `into` continuation
 
 require daslib/linq_das
@@ -134,8 +166,9 @@ def trigger_join_into_group_terminal() {
 
 def trigger_join_into_post_terminal_continuation() {
     var cars <- one_car()
-    // a continuation `into` AFTER the join's `select` terminal — single-source only (the (outer, g) carry
-    // can't rebind); must reject clearly, not let `into n select n` fall into the projection text
+    // a continuation `into` AFTER the join's `select` terminal —
+    // single-source only (the (outer, g) carry can't rebind); must reject
+    // clearly, not let `into n select n` fall into the projection text
     let x <- %linq! from c in cars join b in cars on c.brand equals b.brand select c.name into n select n %%
     unused(x)
 }
@@ -154,7 +187,8 @@ def trigger_join_reserved_var_name() {
 
 def trigger_correlated_orderby() {
     var orders <- one_order()
-    // `orderby` over a correlated `from … from` — the non-copyable outer can't ride the transparent-id carry
+    // `orderby` over a correlated `from … from` — the non-copyable outer
+    // can't ride the transparent-id carry
     let x <- %linq! from o in orders from l in o.lines orderby l.qty select l.sku %%
     unused(x)
 }
@@ -167,7 +201,8 @@ def trigger_correlated_group() {
 
 def trigger_correlated_outer_where() {
     var orders <- one_order()
-    // a post-`from` `where` that references the OUTER `o` (only inner-only predicates are pushed down)
+    // a post-`from` `where` that references the OUTER `o` (only
+    // inner-only predicates are pushed down)
     let x <- %linq! from o in orders from l in o.lines where o.id > 0 select l.sku %%
     unused(x)
 }
@@ -216,35 +251,40 @@ def trigger_let_duplicate_binding() {
 
 def trigger_let_after_terminal() {
     var cars <- one_car()
-    // a `let` after the `select` terminal has no clause to use it — must not be silently dropped
+    // a `let` after the `select` terminal has no clause to use it — must
+    // not be silently dropped
     let x <- %linq! from c in cars select c.name let n = c.price %%
     unused(x)
 }
 
 def trigger_let_reuses_join_var_after() {
     var cars <- one_car()
-    // a `let` reusing the join's range variable 'b' (after the join) would silently shadow it
+    // a `let` reusing the join's range variable 'b' (after the join)
+    // would silently shadow it
     let x <- %linq! from c in cars join b in cars on c.brand equals b.brand let b = c.price select b %%
     unused(x)
 }
 
 def trigger_let_reuses_join_var_before() {
     var cars <- one_car()
-    // a `let` reusing the join's range variable 'b' (before the join) would rewrite its declaration
+    // a `let` reusing the join's range variable 'b' (before the join)
+    // would rewrite its declaration
     let x <- %linq! from c in cars let b = c.price join b in cars on c.brand equals b.brand select c.name %%
     unused(x)
 }
 
 def trigger_orderby_too_many_keys() {
     var cars <- one_car()
-    // 5 order keys exceeds the 4-key cap (eager less_masked / tuple `less` are ≤4-arity)
+    // 5 order keys exceeds the 4-key cap (eager less_masked / tuple
+    // `less` are ≤4-arity)
     let x <- %linq! from c in cars orderby c.price, c.name, c.brand, c.price, c.name select c %%
     unused(x)
 }
 
 def trigger_orderby_direction_only_segment() {
     var cars <- one_car()
-    // a comma segment that is only a direction keyword has no key expression
+    // a comma segment that is only a direction keyword has no key
+    // expression
     let x <- %linq! from c in cars orderby c.price, descending select c %%
     unused(x)
 }
@@ -271,7 +311,8 @@ def trigger_into_reserved_var_name() {
 
 def trigger_into_iterator_before_into() {
     var cars <- one_car()
-    // a trailing `iterator` must be the final clause, not before an `into`
+    // a trailing `iterator` must be the final clause, not before an
+    // `into`
     let x <- %linq! from c in cars select c.name iterator into n select n %%
     unused(x)
 }

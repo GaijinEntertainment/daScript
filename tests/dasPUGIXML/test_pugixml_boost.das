@@ -4,7 +4,7 @@ require math
 require strings
 require dastest/testing_boost public
 
-[test]
+[test(description = "for_each_child visits every child element in document order")]
 def test_for_each_child(t : T?) {
     parse_xml("<root><a>1</a><b>2</b><c>3</c></root>") $(doc, ok) {
         t |> success(ok)
@@ -20,7 +20,7 @@ def test_for_each_child(t : T?) {
     }
 }
 
-[test]
+[test(description = "for_each_child with a name visits only the children of that name")]
 def test_for_each_child_named(t : T?) {
     parse_xml("<root><item>1</item><other/><item>2</item><item>3</item></root>") $(doc, ok) {
         t |> success(ok)
@@ -34,7 +34,7 @@ def test_for_each_child_named(t : T?) {
     }
 }
 
-[test]
+[test(description = "for_each_attribute visits every attribute in order")]
 def test_for_each_attribute(t : T?) {
     parse_xml("<root x=\"1\" y=\"2\" z=\"3\"/>") $(doc, ok) {
         t |> success(ok)
@@ -50,7 +50,7 @@ def test_for_each_attribute(t : T?) {
     }
 }
 
-[test]
+[test(description = "for_each over an XPath node set visits every selected node")]
 def test_for_each_xpath(t : T?) {
     parse_xml("<root><item key=\"a\"/><item key=\"b\"/></root>") $(doc, ok) {
         t |> success(ok)
@@ -65,7 +65,7 @@ def test_for_each_xpath(t : T?) {
     }
 }
 
-[test]
+[test(description = "each over an XPath node set iterates the nodes, yields nothing for an empty set and gives access to attributes")]
 def test_each_xpath(t : T?) {
     t |> run("basic iteration") <| @(t : T?) {
         parse_xml("<root><a>1</a><b>2</b><c>3</c></root>") $(doc, ok) {
@@ -105,7 +105,7 @@ def test_each_xpath(t : T?) {
     }
 }
 
-[test]
+[test(description = "each over a node's children iterates all children and yields nothing for an empty node")]
 def test_each_child(t : T?) {
     t |> run("all children") <| @(t : T?) {
         parse_xml("<root><a>1</a><b>2</b><c>3</c></root>") $(doc, ok) {
@@ -130,7 +130,7 @@ def test_each_child(t : T?) {
     }
 }
 
-[test]
+[test(description = "each over named children iterates only matching children and yields nothing when none match")]
 def test_each_child_named(t : T?) {
     t |> run("filtered iteration") <| @(t : T?) {
         parse_xml("<root><item>1</item><other/><item>2</item><item>3</item></root>") $(doc, ok) {
@@ -155,7 +155,7 @@ def test_each_child_named(t : T?) {
     }
 }
 
-[test]
+[test(description = "each over a node's attributes iterates all of them with their values and yields nothing without attributes")]
 def test_each_attribute(t : T?) {
     t |> run("all attributes") <| @(t : T?) {
         parse_xml("<root x=\"1\" y=\"2\" z=\"3\"/>") $(doc, ok) {
@@ -190,7 +190,7 @@ def test_each_attribute(t : T?) {
     }
 }
 
-[test]
+[test(description = "parse_xml parses a document and hands its root element to the block")]
 def test_parse_xml(t : T?) {
     parse_xml("<hello>world</hello>") $(doc, ok) {
         t |> success(ok)
@@ -200,7 +200,7 @@ def test_parse_xml(t : T?) {
     }
 }
 
-[test]
+[test(description = "with_doc builds a fresh document in which child text reads back")]
 def test_with_doc(t : T?) {
     with_doc() $(doc) {
         var root = append_child(doc as xml_node, "test")
@@ -210,7 +210,7 @@ def test_with_doc(t : T?) {
     }
 }
 
-[test]
+[test(description = "node_text returns child text, empty text for an empty child, and the fallback for a missing child")]
 def test_node_text(t : T?) {
     parse_xml("<root><title>Hello World</title><empty/></root>") $(doc, ok) {
         t |> success(ok)
@@ -221,7 +221,7 @@ def test_node_text(t : T?) {
     }
 }
 
-[test]
+[test(description = "node_attr and its typed variants read attributes with defaults for missing ones")]
 def test_node_attr(t : T?) {
     parse_xml("<root name=\"test\" count=\"42\" ratio=\"3.14\" flag=\"true\"/>") $(doc, ok) {
         t |> success(ok)
@@ -235,7 +235,7 @@ def test_node_attr(t : T?) {
     }
 }
 
-[test]
+[test(description = "add_child and add_child_ex append children with text and attributes")]
 def test_add_child(t : T?) {
     with_doc() $(doc) {
         var root = append_child(doc as xml_node, "catalog")
@@ -247,7 +247,7 @@ def test_add_child(t : T?) {
     }
 }
 
-[test]
+[test(description = "add_attr stores string, int, float and bool attributes that read back typed")]
 def test_add_attr(t : T?) {
     with_doc() $(doc) {
         var root = append_child(doc as xml_node, "node")
@@ -262,7 +262,7 @@ def test_add_attr(t : T?) {
     }
 }
 
-[test]
+[test(description = "to_string of a document serializes its tags and text")]
 def test_to_string_doc(t : T?) {
     with_doc() $(doc) {
         var root = append_child(doc as xml_node, "root")
@@ -275,7 +275,7 @@ def test_to_string_doc(t : T?) {
     }
 }
 
-[test]
+[test(description = "to_string of a node serializes that node's tag and text")]
 def test_to_string_node(t : T?) {
     parse_xml("<root><item>text</item></root>") $(doc, ok) {
         t |> success(ok)
@@ -286,7 +286,7 @@ def test_to_string_node(t : T?) {
     }
 }
 
-[test]
+[test(description = "with_xpath compiles a query that evaluates to the selected node")]
 def test_with_xpath(t : T?) {
     parse_xml("<root><item>hello</item></root>") $(doc, ok) {
         t |> success(ok)
@@ -299,7 +299,7 @@ def test_with_xpath(t : T?) {
     }
 }
 
-[test]
+[test(description = "select_text returns the text at an XPath and the fallback for a missing path")]
 def test_select_text(t : T?) {
     parse_xml("<root><a><b>deep</b></a></root>") $(doc, ok) {
         t |> success(ok)
@@ -309,7 +309,7 @@ def test_select_text(t : T?) {
     }
 }
 
-[test]
+[test(description = "select_value on an element path returns the element's text")]
 def test_select_value_element(t : T?) {
     parse_xml("<root><title>hello</title></root>") $(doc, ok) {
         t |> success(ok)
@@ -317,7 +317,7 @@ def test_select_value_element(t : T?) {
     }
 }
 
-[test]
+[test(description = "select_value on an attribute path returns the attribute value")]
 def test_select_value_attribute(t : T?) {
     parse_xml("<root><item key=\"val\"/></root>") $(doc, ok) {
         t |> success(ok)
@@ -325,7 +325,7 @@ def test_select_value_attribute(t : T?) {
     }
 }
 
-[test]
+[test(description = "for_each_select visits every node an XPath selects")]
 def test_for_each_select(t : T?) {
     parse_xml("<root><a>1</a><a>2</a><a>3</a></root>") $(doc, ok) {
         t |> success(ok)
@@ -340,7 +340,7 @@ def test_for_each_select(t : T?) {
 
 // ============ operator is/as type tests ============
 
-[test]
+[test(description = "attribute returns a variant holding an int for integer text")]
 def test_attr_as_int(t : T?) {
     parse_xml("<root count=\"42\"/>") $(doc, ok) {
         t |> success(ok)
@@ -350,7 +350,7 @@ def test_attr_as_int(t : T?) {
     }
 }
 
-[test]
+[test(description = "attribute returns a variant holding a float for fractional text")]
 def test_attr_as_float(t : T?) {
     parse_xml("<root ratio=\"3.14\"/>") $(doc, ok) {
         t |> success(ok)
@@ -360,7 +360,7 @@ def test_attr_as_float(t : T?) {
     }
 }
 
-[test]
+[test(description = "attribute returns a variant holding a bool for true or false text")]
 def test_attr_as_bool(t : T?) {
     parse_xml("<root flag=\"true\"/>") $(doc, ok) {
         t |> success(ok)
@@ -370,7 +370,7 @@ def test_attr_as_bool(t : T?) {
     }
 }
 
-[test]
+[test(description = "attribute returns a variant holding a string for plain text")]
 def test_attr_as_string(t : T?) {
     parse_xml("<root name=\"hello\"/>") $(doc, ok) {
         t |> success(ok)
@@ -380,7 +380,7 @@ def test_attr_as_string(t : T?) {
     }
 }
 
-[test]
+[test(description = "attribute returns a variant holding a uint for unsigned integer text")]
 def test_attr_as_uint(t : T?) {
     parse_xml("<root val=\"100\"/>") $(doc, ok) {
         t |> success(ok)
@@ -390,7 +390,7 @@ def test_attr_as_uint(t : T?) {
     }
 }
 
-[test]
+[test(description = "attribute returns a variant holding a double for high-precision numeric text")]
 def test_attr_as_double(t : T?) {
     parse_xml("<root val=\"2.718281828\"/>") $(doc, ok) {
         t |> success(ok)
@@ -400,7 +400,7 @@ def test_attr_as_double(t : T?) {
     }
 }
 
-[test]
+[test(description = "attribute of a missing name holds none of the value types")]
 def test_attr_missing_is_not(t : T?) {
     parse_xml("<root/>") $(doc, ok) {
         t |> success(ok)
@@ -412,7 +412,7 @@ def test_attr_missing_is_not(t : T?) {
     }
 }
 
-[test]
+[test(description = "a node's text variant holds an int for integer text")]
 def test_text_as_int(t : T?) {
     parse_xml("<root><val>99</val></root>") $(doc, ok) {
         t |> success(ok)
@@ -422,7 +422,7 @@ def test_text_as_int(t : T?) {
     }
 }
 
-[test]
+[test(description = "a node's text variant holds a float for fractional text")]
 def test_text_as_float(t : T?) {
     parse_xml("<root><val>1.5</val></root>") $(doc, ok) {
         t |> success(ok)
@@ -432,7 +432,7 @@ def test_text_as_float(t : T?) {
     }
 }
 
-[test]
+[test(description = "a node's text variant holds a bool for true or false text")]
 def test_text_as_bool(t : T?) {
     parse_xml("<root><val>true</val></root>") $(doc, ok) {
         t |> success(ok)
@@ -442,7 +442,7 @@ def test_text_as_bool(t : T?) {
     }
 }
 
-[test]
+[test(description = "a node's text variant holds a string for plain text")]
 def test_text_as_string(t : T?) {
     parse_xml("<root><val>hello world</val></root>") $(doc, ok) {
         t |> success(ok)
@@ -452,7 +452,7 @@ def test_text_as_string(t : T?) {
     }
 }
 
-[test]
+[test(description = "the text variant of an empty element holds none of the numeric or string types")]
 def test_text_empty_is_not(t : T?) {
     parse_xml("<root><val/></root>") $(doc, ok) {
         t |> success(ok)
@@ -463,7 +463,7 @@ def test_text_empty_is_not(t : T?) {
     }
 }
 
-[test]
+[test(description = "a node converts with as string to its serialized markup")]
 def test_node_as_string(t : T?) {
     parse_xml("<root><item>text</item></root>") $(doc, ok) {
         t |> success(ok)
@@ -476,7 +476,7 @@ def test_node_as_string(t : T?) {
 
 // ============ operator [] ============
 
-[test]
+[test(description = "the index operator reads an attribute by name and works with is on the result")]
 def test_index_operator(t : T?) {
     t |> run("node[name] returns attribute") <| @(t : T?) {
         parse_xml("<item isbn=\"978\" price=\"29.99\" active=\"true\" count=\"5\"/>") $(doc, ok) {
@@ -504,7 +504,7 @@ def test_index_operator(t : T?) {
 
 // ============ tag builder ============
 
-[test]
+[test(description = "tag with a block builds a nested element structure")]
 def test_tag_with_block(t : T?) {
     t |> run("tag with block creates nested structure") <| @(t : T?) {
         with_doc() $(doc) {
@@ -524,7 +524,7 @@ def test_tag_with_block(t : T?) {
     }
 }
 
-[test]
+[test(description = "tag with text builds a leaf element")]
 def test_tag_leaf(t : T?) {
     t |> run("tag with text creates leaf element") <| @(t : T?) {
         with_doc() $(doc) {
@@ -537,7 +537,7 @@ def test_tag_leaf(t : T?) {
     }
 }
 
-[test]
+[test(description = "tag without text builds an empty element")]
 def test_tag_bare(t : T?) {
     t |> run("tag without text creates empty element") <| @(t : T?) {
         with_doc() $(doc) {
@@ -550,7 +550,7 @@ def test_tag_bare(t : T?) {
     }
 }
 
-[test]
+[test(description = "the tag overloads work directly on a document pointer")]
 def test_tag_on_document(t : T?) {
     t |> run("tag overloads work on xml_document?") <| @(t : T?) {
         with_doc() $(doc) {
@@ -566,7 +566,7 @@ def test_tag_on_document(t : T?) {
 
 // ============ attr builder ============
 
-[test]
+[test(description = "attr returns the parent node so calls can be chained")]
 def test_attr_chaining(t : T?) {
     t |> run("attr returns parent for chaining") <| @(t : T?) {
         with_doc() $(doc) {
@@ -584,7 +584,7 @@ def test_attr_chaining(t : T?) {
 
 // ============ Full builder pattern ============
 
-[test]
+[test(description = "tag and attr together build a complete document")]
 def test_full_builder_pattern(t : T?) {
     t |> run("complete XML built with tag + attr") <| @(t : T?) {
         with_doc() $(doc) {

@@ -27,7 +27,7 @@ def m_003(db : SqlRunner) {
     db |> add_column(type<User>, "Score", 1)
 }
 
-[test]
+[test(description = "an add_column that fails at runtime returns an error and rolls back every migration of the run", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_runtime_alter_failure_rolls_back_transaction(t : T?) {
     var inscope db = open_sqlite(":memory:")
     let res = db |> try_migrate_to_latest()

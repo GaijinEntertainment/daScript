@@ -1,3 +1,5 @@
+//! the HttpRequest handed to a WebSocket upgrade authorizer is
+//! borrowed and cannot escape into a global (expect 30187)
 options gen2
 expect 30187
 require dashv/dashv_boost

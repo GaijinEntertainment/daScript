@@ -6,7 +6,7 @@ require _regex_test_helpers
 
 // ── \w (word characters) ────────────────────────────────────
 
-[test]
+[test(description = "the word class matches letters, digits and underscore and rejects non-word characters")]
 def test_word_class(t : T?) {
     t |> run("\\w matches letters") @(t : T?) {
         t |> equal(regex_test_match("\\w", "a"), 1)
@@ -28,7 +28,7 @@ def test_word_class(t : T?) {
 
 // ── \W (non-word characters) ────────────────────────────────
 
-[test]
+[test(description = "the non-word class matches non-word characters and rejects word characters")]
 def test_non_word_class(t : T?) {
     t |> run("\\W matches non-word chars") @(t : T?) {
         t |> equal(regex_test_match("\\W", " "), 1)
@@ -44,7 +44,7 @@ def test_non_word_class(t : T?) {
 
 // ── \d (digit) ──────────────────────────────────────────────
 
-[test]
+[test(description = "the digit class matches digits and rejects non-digits")]
 def test_digit_class(t : T?) {
     t |> run("\\d matches digits") @(t : T?) {
         t |> equal(regex_test_match("\\d", "0"), 1)
@@ -59,7 +59,7 @@ def test_digit_class(t : T?) {
 
 // ── \D (non-digit) ──────────────────────────────────────────
 
-[test]
+[test(description = "the non-digit class matches non-digits and rejects digits")]
 def test_non_digit_class(t : T?) {
     t |> run("\\D matches non-digits") @(t : T?) {
         t |> equal(regex_test_match("\\D", "a"), 1)
@@ -74,7 +74,7 @@ def test_non_digit_class(t : T?) {
 
 // ── \s (whitespace) ─────────────────────────────────────────
 
-[test]
+[test(description = "the space class matches whitespace and rejects non-whitespace")]
 def test_space_class(t : T?) {
     t |> run("\\s matches whitespace") @(t : T?) {
         t |> equal(regex_test_match("\\s", " "), 1)
@@ -90,7 +90,7 @@ def test_space_class(t : T?) {
 
 // ── \S (non-whitespace) ─────────────────────────────────────
 
-[test]
+[test(description = "the non-space class matches non-whitespace and rejects whitespace")]
 def test_non_space_class(t : T?) {
     t |> run("\\S matches non-whitespace") @(t : T?) {
         t |> equal(regex_test_match("\\S", "a"), 1)
@@ -106,7 +106,7 @@ def test_non_space_class(t : T?) {
 
 // ── \t \n \r standalone escapes ─────────────────────────────
 
-[test]
+[test(description = "the tab, newline and carriage-return escapes match their characters")]
 def test_escape_chars(t : T?) {
     t |> run("\\t matches tab") @(t : T?) {
         t |> equal(regex_test_match("\\t", "\t"), 1)
@@ -124,7 +124,7 @@ def test_escape_chars(t : T?) {
 
 // ── character classes combined ──────────────────────────────
 
-[test]
+[test(description = "character classes combine in patterns such as digits, email-like and whitespace-then-word")]
 def test_combined_classes(t : T?) {
     t |> run("\\d+ matches digits") @(t : T?) {
         t |> equal(regex_test_match("\\d+", "12345"), 5)
@@ -141,7 +141,7 @@ def test_combined_classes(t : T?) {
 
 // ── hex escapes ─────────────────────────────────────────────
 
-[test]
+[test(description = "hex escapes work inside character sets and standalone with one or two digits")]
 def test_hex_escapes_charclass(t : T?) {
     t |> run("hex in character set") @(t : T?) {
         t |> equal(regex_test_match("[\\x41-\\x5a]", "A"), 1)  // A-Z
@@ -160,7 +160,7 @@ def test_hex_escapes_charclass(t : T?) {
 
 // ── classes inside character sets ───────────────────────────
 
-[test]
+[test(description = "digit and word classes work inside a bracketed set")]
 def test_classes_in_sets(t : T?) {
     t |> run("\\d in set") @(t : T?) {
         t |> equal(regex_test_match("[\\d_]+", "123_456"), 7)

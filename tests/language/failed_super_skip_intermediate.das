@@ -1,4 +1,7 @@
-// super.X() cannot skip an intermediate class whose own ctor would be bypassed.
+//! super.X() that skips an intermediate class whose own constructor
+//! would be bypassed does not compile
+// super.X() cannot skip an intermediate class whose own ctor would be
+// bypassed.
 options gen2
 expect 30245, 30808, 30838    // 30245 from the rule; 30808/30838 cascade as super stays unresolved
 

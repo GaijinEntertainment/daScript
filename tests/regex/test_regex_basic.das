@@ -7,7 +7,7 @@ require _regex_test_helpers
 
 // ── basic literal matching ──────────────────────────────────
 
-[test]
+[test(description = "literal characters match when equal, fail when different and handle empty input")]
 def test_literal_char(t : T?) {
     t |> run("single char match") @(t : T?) {
         t |> equal(regex_test_match("a", "a"), 1)
@@ -28,7 +28,7 @@ def test_literal_char(t : T?) {
 
 // ── any (.) ─────────────────────────────────────────────────
 
-[test]
+[test(description = "the dot matches any single character but not the empty string")]
 def test_any(t : T?) {
     t |> run("dot matches any char") @(t : T?) {
         t |> equal(regex_test_match(".", "x"), 1)
@@ -47,7 +47,7 @@ def test_any(t : T?) {
 
 // ── anchors (^ and $) ───────────────────────────────────────
 
-[test]
+[test(description = "caret and dollar anchor at the start and end of the input and together force a full match")]
 def test_anchors(t : T?) {
     t |> run("caret matches start") @(t : T?) {
         t |> equal(regex_test_match("^hello", "hello"), 5)
@@ -72,7 +72,7 @@ def test_anchors(t : T?) {
 
 // ── alternation (|) ─────────────────────────────────────────
 
-[test]
+[test(description = "alternation picks the matching branch among two, three or concatenated alternatives")]
 def test_alternation(t : T?) {
     t |> run("simple alternation") @(t : T?) {
         t |> equal(regex_test_match("cat|dog", "cat"), 3)
@@ -94,7 +94,7 @@ def test_alternation(t : T?) {
 
 // ── groups ──────────────────────────────────────────────────
 
-[test]
+[test(description = "groups match as a unit and capture their text, sequentially too")]
 def test_groups(t : T?) {
     t |> run("simple group") @(t : T?) {
         t |> equal(regex_test_match("(abc)", "abc"), 3)
@@ -117,7 +117,7 @@ def test_groups(t : T?) {
 
 // ── character sets ──────────────────────────────────────────
 
-[test]
+[test(description = "character sets match positive, negated, range and meta members")]
 def test_sets(t : T?) {
     t |> run("positive set") @(t : T?) {
         t |> equal(regex_test_match("[abc]", "a"), 1)
@@ -143,7 +143,7 @@ def test_sets(t : T?) {
 
 // ── quantifiers (*, +, ?) ──────────────────────────────────
 
-[test]
+[test(description = "plus, star and question quantifiers repeat as specified over characters, sets and groups")]
 def test_quantifiers(t : T?) {
     t |> run("plus one or more") @(t : T?) {
         t |> equal(regex_test_match("ab+", "a"), -1)
@@ -174,7 +174,7 @@ def test_quantifiers(t : T?) {
 
 // ── hex escapes ─────────────────────────────────────────────
 
-[test]
+[test(description = "one- and two-digit hex escapes match their character")]
 def test_hex_escapes(t : T?) {
     t |> run("hex escape 2 digit") @(t : T?) {
         t |> equal(regex_test_match("\\x41", "A"), 1)  // 0x41 = 'A'

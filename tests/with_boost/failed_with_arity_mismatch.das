@@ -1,8 +1,10 @@
+//! with_ over two containers with a block that takes one parameter
+//! must not compile (50503).
 options gen2
 expect 50503
 
-// Explicitly-typed block param so pre-macro typing succeeds; the macro
-// then catches the arity mismatch.
+// Explicitly-typed block param so pre-macro typing succeeds; the
+// macro then catches the arity mismatch.
 
 require daslib/with_boost
 

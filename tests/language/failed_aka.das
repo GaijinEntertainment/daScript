@@ -1,3 +1,5 @@
+//! aka on a global variable or on a function type argument does not
+//! compile: aka names only locals and arguments
 expect 30151
 
 options gen2

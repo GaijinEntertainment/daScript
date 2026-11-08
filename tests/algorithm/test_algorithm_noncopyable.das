@@ -20,7 +20,7 @@ def operator !=(a, b : NoCopy) : bool => a.id != b.id
 
 // ---- erase_all with non-copyable type ----
 
-[test]
+[test(description = "erase_all removes matching elements of a non-copyable type without copying the survivors")]
 def test_erase_all_non_copyable(t : T?) {
     t |> run("erases matching non-copyable elements") @(t : T?) {
         var a <- [
@@ -56,7 +56,7 @@ def test_erase_all_non_copyable(t : T?) {
 
 // ---- fill with non-copyable type ----
 
-[test]
+[test(description = "fill clones a non-copyable prototype into every slot")]
 def test_fill_non_copyable(t : T?) {
     t |> run("fills with cloned non-copyable values") @(t : T?) {
         var a : array<NoCopy>
@@ -79,7 +79,7 @@ def test_fill_non_copyable(t : T?) {
 
 // ---- combine with non-copyable type ----
 
-[test]
+[test(description = "combine concatenates arrays of a non-copyable element type")]
 def test_combine_non_copyable(t : T?) {
     t |> run("combines arrays of non-copyable type") @(t : T?) {
         let a <- [NoCopy(id = 1, data <- [10]), NoCopy(id = 2, data <- [20])]
@@ -101,7 +101,7 @@ def test_combine_non_copyable(t : T?) {
 
 // ---- unique with non-copyable type ----
 
-[test]
+[test(description = "unique drops adjacent duplicates of a non-copyable element type")]
 def test_unique_non_copyable(t : T?) {
     t |> run("unique on sorted non-copyable array") @(t : T?) {
         var a <- [
@@ -121,7 +121,7 @@ def test_unique_non_copyable(t : T?) {
 
 // ---- reverse with non-copyable type ----
 
-[test]
+[test(description = "reverse flips an array of a non-copyable element type")]
 def test_reverse_non_copyable(t : T?) {
     t |> run("reverses non-copyable array") @(t : T?) {
         var a <- [
@@ -140,7 +140,7 @@ def test_reverse_non_copyable(t : T?) {
 
 // ---- rotate with non-copyable type ----
 
-[test]
+[test(description = "rotate moves elements of a non-copyable type by the count")]
 def test_rotate_non_copyable(t : T?) {
     t |> run("rotates non-copyable array") @(t : T?) {
         var a <- [

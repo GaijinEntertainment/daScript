@@ -17,7 +17,7 @@ def void_task() : void {
     await_next_frame()
 }
 
-[test]
+[test(description = "a void async yields an iterator<bool> that drives to completion frame by frame")]
 def test_void_async(t : T?) {
     t |> run("void async produces iterator<bool>") @(t : T?) {
         var it <- void_task()
@@ -47,7 +47,7 @@ def get_value(x : int) : int {
     yield x * 2
 }
 
-[test]
+[test(description = "a typed async yields variant<res; wait> and delivers its value as the res arm")]
 def test_typed_async(t : T?) {
     t |> run("typed async yields variant<res:int;wait:bool>") @(t : T?) {
         var found_value = false
@@ -79,7 +79,7 @@ def get_payload(n : int) : Payload {
     yield <- p
 }
 
-[test]
+[test(description = "a struct-returning async delivers the struct as its res value")]
 def test_struct_async(t : T?) {
     t |> run("struct async yields and moves result") @(t : T?) {
         var found = false
@@ -107,7 +107,7 @@ def frame_counter(n : int) : void {
     }
 }
 
-[test]
+[test(description = "await_next_frame suspends for exactly the requested number of frames")]
 def test_frame_counting(t : T?) {
     t |> run("await_next_frame suspends for exactly N frames") @(t : T?) {
         var it <- frame_counter(5)
@@ -131,7 +131,7 @@ def early_return(do_return : bool) : void {
     await_next_frame()
 }
 
-[test]
+[test(description = "return false exits an async early while one without it completes normally")]
 def test_early_return(t : T?) {
     t |> run("return false exits early") @(t : T?) {
         var it <- early_return(true)
@@ -159,7 +159,7 @@ def empty_async() : void {
     pass
 }
 
-[test]
+[test(description = "an async with an empty body completes immediately")]
 def test_empty_async(t : T?) {
     t |> run("empty async completes immediately") @(t : T?) {
         var it <- empty_async()
@@ -180,7 +180,7 @@ def multi_yield() : int {
     yield 30
 }
 
-[test]
+[test(description = "a typed async yields several values in order")]
 def test_multi_yield(t : T?) {
     t |> run("typed async yields multiple values") @(t : T?) {
         let vals <- [for (v in multi_yield()); v as res; where v is res]
@@ -202,7 +202,7 @@ def get_or_default(x : int) : int {
     yield x
 }
 
-[test]
+[test(description = "a typed async that returns early yields no value and one with valid input yields its value")]
 def test_typed_early_return(t : T?) {
     t |> run("typed async with return false yields nothing") @(t : T?) {
         let vals <- [for (v in get_or_default(-1)); v as res; where v is res]

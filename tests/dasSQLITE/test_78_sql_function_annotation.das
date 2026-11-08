@@ -1,14 +1,14 @@
 options gen2
 
 require dastest/testing_boost public
-
-require math       // nolint:STYLE030 — pulls math::normalize(float2/3/4) into scope — collision regression for `normalize` below
+require math   // nolint:STYLE030 - math::normalize is the collision under test
 require daslib/sql
 require sqlite/sqlite_boost
 require daslib/sql_linq
 
-// [sql_function] auto-registers the function against every opened SQL connection
-// and makes it visible to the `_sql` chain analyzer (rendered as `name(args)` SQL).
+// [sql_function] auto-registers the function against every opened SQL
+// connection and makes it visible to the `_sql` chain analyzer
+// (rendered as `name(args)` SQL).
 
 [sql_function]
 def my_upper(s : string) : string => s |> to_upper
@@ -29,8 +29,9 @@ def double_it(x : double) : double => x * 2.0lf
 def directonly_echo(s : string) : string => s
 
 // Same SQL name as `math::normalize(float2)` — exercises the explicit
-// `funcType` on `ExprAddr` in the macro emit. Without that disambiguation,
-// the registration thunk would fail to resolve `@@normalize` (ambiguous).
+// `funcType` on `ExprAddr` in the macro emit. Without that
+// disambiguation, the registration thunk would fail to resolve
+// `@@normalize` (ambiguous).
 [sql_function]
 def normalize(s : string) : string => s |> to_upper
 
@@ -48,16 +49,17 @@ def private fixture(db : SqlRunner) {
     db |> insert(Item(Id = 3, Name = "cherry", Qty = 7))
 }
 
-[test]
+[test(description = "a function annotated sql_function is registered automatically and callable from raw SQL")]
 def test_auto_registered_raw_sql(t : T?) {
-    // No manual register_function call — open_sqlite's installer hook does it.
+    // No manual register_function call — open_sqlite's installer hook
+    // does it.
     with_sqlite(":memory:") $(db) {
         let v = db |> query_scalar("SELECT my_upper('hello')", type<string>)
         t |> equal(v, "HELLO", "auto-registered my_upper via raw SQL")
     }
 }
 
-[test]
+[test(description = "a sql_function is usable in the where of a _sql chain")]
 def test_chain_visibility(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -67,7 +69,7 @@ def test_chain_visibility(t : T?) {
     }
 }
 
-[test]
+[test(description = "a two-argument sql_function is usable in the where of a _sql chain")]
 def test_chain_visibility_two_args(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -77,26 +79,28 @@ def test_chain_visibility_two_args(t : T?) {
     }
 }
 
-[test]
+[test(description = "the name argument of sql_function sets the SQL-visible name")]
 def test_name_override(t : T?) {
     with_sqlite(":memory:") $(db) {
-        // log_event was registered as "sql_log" via [sql_function(name="sql_log")]
+        // log_event was registered as "sql_log" via
+        // [sql_function(name="sql_log")]
         let v = db |> query_scalar("SELECT sql_log('msg-from-test')", type<int>)
         t |> equal(v, 13, "sql_log returns length('msg-from-test')")
     }
 }
 
-[test]
+[test(description = "a renamed sql_function is usable in a _sql chain under its SQL name")]
 def test_name_override_in_chain(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
-        // Calling log_event in a chain should emit sql_log(...) (the override name).
+        // Calling log_event in a chain should emit sql_log(...) (the override
+        // name).
         let rows <- _sql(db |> select_from(type<Item>) |> _where(log_event(_.Name) >= 6) |> _to_array)
         t |> equal(length(rows), 2, "Banana(6) + cherry(6) → length >= 6")
     }
 }
 
-[test]
+[test(description = "sql_function accepts the deterministic flag and the function works")]
 def test_deterministic_accepted(t : T?) {
     with_sqlite(":memory:") $(db) {
         let v = db |> query_scalar("SELECT double_it(3.5)", type<double>)
@@ -104,19 +108,20 @@ def test_deterministic_accepted(t : T?) {
     }
 }
 
-[test]
+[test(description = "a directonly sql_function is callable from application SQL")]
 def test_directonly_works_in_raw_sql(t : T?) {
-    // directonly=true is enforced by SQLite for views/triggers/CHECK only —
-    // direct SELECT/UPDATE/etc. against the connection still work.
+    // directonly=true is enforced by SQLite for views/triggers/CHECK only
+    // — direct SELECT/UPDATE/etc. against the connection still work.
     with_sqlite(":memory:") $(db) {
         let v = db |> query_scalar("SELECT directonly_echo('hello')", type<string>)
         t |> equal(v, "hello", "directonly=true UDF callable from application SQL")
     }
 }
 
-[test]
+[test(description = "a directonly sql_function is usable in a _sql chain")]
 def test_directonly_works_in_chain(t : T?) {
-    // Chain context isn't `_create_view` — directonly UDF is fine here too.
+    // Chain context isn't `_create_view` — directonly UDF is fine here
+    // too.
     with_sqlite(":memory:") $(db) {
         fixture(db)
         let rows <- _sql(db |> select_from(type<Item>) |> _where(directonly_echo(_.Name) == "Banana") |> _to_array)
@@ -124,22 +129,24 @@ def test_directonly_works_in_chain(t : T?) {
     }
 }
 
-[test]
+[test(description = "a sql_function named like an imported math function coexists with it")]
 def test_name_collision_with_imported_module(t : T?) {
-    // `normalize` is also exported by `math` (with float2/3/4 signatures). The macro
-    // emits an `ExprAddr` with explicit `funcType` so the typer resolves to OUR
-    // `normalize(string)` instead of erroring on ambiguity.
+    // `normalize` is also exported by `math` (with float2/3/4
+    // signatures). The macro emits an `ExprAddr` with explicit `funcType`
+    // so the typer resolves to OUR `normalize(string)` instead of
+    // erroring on ambiguity.
     with_sqlite(":memory:") $(db) {
         let v = db |> query_scalar("SELECT normalize('hi')", type<string>)
         t |> equal(v, "HI", "user [sql_function] normalize coexists with math::normalize")
     }
 }
 
-[test]
+[test(description = "a sql_function in a single-column select projects its result for every row")]
 def test_projection_single_column(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
-        // [sql_function] in single-column projection — emits `my_upper("Name")` SQL-side.
+        // [sql_function] in single-column projection — emits
+        // `my_upper("Name")` SQL-side.
         let rows <- _sql(db |> select_from(type<Item>) |> _order_by(_.Id) |> _select(my_upper(_.Name)) |> _to_array)
         t |> equal(length(rows), 3, "3 rows projected through my_upper")
         t |> equal(rows[0], "APPLE",  "my_upper(apple)")
@@ -148,7 +155,7 @@ def test_projection_single_column(t : T?) {
     }
 }
 
-[test]
+[test(description = "a sql_function in a select emits the function call in the SELECT list")]
 def test_projection_single_column_emits_call(t : T?) {
     var _db = SqlRunner()
     let sql = _sql_text(_db |> select_from(type<Item>) |> _select(my_upper(_.Name)))
@@ -157,11 +164,12 @@ def test_projection_single_column_emits_call(t : T?) {
         "single-column [sql_function] projection emits the call verbatim")
 }
 
-[test]
+[test(description = "a named-tuple select can mix a sql_function result with a plain column")]
 def test_projection_named_tuple_mixed(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
-        // Named tuple mixing a [sql_function] computed slot with a plain column ref.
+        // Named tuple mixing a [sql_function] computed slot with a plain
+        // column ref.
         let rows <- _sql(db |> select_from(type<Item>)
                            |> _order_by(_.Id)
                            |> _select((Loud = my_upper(_.Name), Id = _.Id))
@@ -172,11 +180,12 @@ def test_projection_named_tuple_mixed(t : T?) {
     }
 }
 
-[test]
+[test(description = "a named-tuple select can project a two-argument sql_function")]
 def test_projection_named_tuple_two_args(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
-        // Two-arg [sql_function] in tuple slot — args may themselves be column refs.
+        // Two-arg [sql_function] in tuple slot — args may themselves be
+        // column refs.
         let rows <- _sql(db |> select_from(type<Item>)
                            |> _order_by(_.Id)
                            |> _select((Id = _.Id, Boosted = damage(_.Qty, 3)))
@@ -188,7 +197,7 @@ def test_projection_named_tuple_two_args(t : T?) {
     }
 }
 
-[test]
+[test(description = "a sql_function is installed on every connection that is opened")]
 def test_multiple_opened_dbs(t : T?) {
     with_sqlite(":memory:") $(db1) {
         with_sqlite(":memory:") $(db2) {

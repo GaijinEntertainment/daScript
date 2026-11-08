@@ -15,7 +15,7 @@ def make_dollar_brace(inner : string) : string {
     }
 }
 // ── Feature 4: dot does not match newline by default ─────────
-[test]
+[test(description = "the dot rejects a newline unless dotAll is set, and dot-star stops at newlines accordingly")]
 def test_dot_newline(t : T?) {
     t |> run("dot rejects newline") @(t : T?) {
         var re <- regex_compile("a.b")
@@ -44,7 +44,7 @@ def test_dot_newline(t : T?) {
     }
 }
 // ── Feature 1: case-insensitive matching ─────────────────────
-[test]
+[test(description = "the case-insensitive flag matches mixed case in literals, sets, groups and search but not digits, and matching is case-sensitive by default")]
 def test_case_insensitive(t : T?) {
     t |> run("simple CI match") @(t : T?) {
         var re <- regex_compile("hello", [case_insensitive = true])
@@ -87,7 +87,7 @@ def test_case_insensitive(t : T?) {
     }
 }
 // ── Feature 2: lookahead assertions ──────────────────────────
-[test]
+[test(description = "positive and negative lookahead test the following text without consuming it")]
 def test_lookahead(t : T?) {
     t |> run("positive lookahead basic") @(t : T?) {
         var re <- regex_compile("foo(?=bar)")
@@ -121,7 +121,7 @@ def test_lookahead(t : T?) {
     }
 }
 // ── Feature 3: string-based regex_replace ────────────────────
-[test]
+[test(description = "string replace supports literal, all-occurrences, whole-match, numbered, named and literal-dollar replacements")]
 def test_string_replace(t : T?) {
     t |> run("simple literal replace") @(t : T?) {
         var re <- regex_compile("world")
@@ -166,7 +166,7 @@ def test_string_replace(t : T?) {
     }
 }
 // ── Reader macro flags ───────────────────────────────────────
-[test]
+[test(description = "the regex reader macro accepts case-insensitive and dotAll flags alone and combined")]
 def test_reader_macro_flags(t : T?) {
     t |> run("reader macro case insensitive") @(t : T?) {
         var re <- %regex~hello~i%%
@@ -189,7 +189,7 @@ def test_reader_macro_flags(t : T?) {
     }
 }
 // ── Cross-feature interactions ───────────────────────────────
-[test]
+[test(description = "case-insensitivity, dotAll, lookahead and string replace work together")]
 def test_cross_features(t : T?) {
     t |> run("CI + lookahead") @(t : T?) {
         var re <- regex_compile("foo(?=BAR)", [case_insensitive = true])

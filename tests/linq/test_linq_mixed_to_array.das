@@ -31,7 +31,7 @@ def same_arr(t : T?; name : string; ref : array<int>; var got : array<int>) {
     delete got
 }
 
-[test]
+[test(description = "concat_to_array with one array and one iterator source, in either order, gives the same array as the all-array call")]
 def test_concat_to_array(t : T?) {
     let a <- fixture_a(); let b <- fixture_b()
     let ref <- (a |> concat(b))
@@ -39,7 +39,7 @@ def test_concat_to_array(t : T?) {
     same_arr(t, "concat_to_array array+iter", ref, concat_to_array(a, unsafe(each(b))))
 }
 
-[test]
+[test(description = "union_to_array with one array and one iterator source, in either order, gives the same array as the all-array call")]
 def test_union_to_array(t : T?) {
     let a <- fixture_a(); let b <- fixture_b()
     let ref <- (a |> union(b))
@@ -47,7 +47,7 @@ def test_union_to_array(t : T?) {
     same_arr(t, "union_to_array array+iter", ref, union_to_array(a, unsafe(each(b))))
 }
 
-[test]
+[test(description = "union_by_to_array with one array and one iterator source, in either order, gives the same array as the all-array call")]
 def test_union_by_to_array(t : T?) {
     let a <- fixture_a(); let b <- fixture_b()
     let ref <- (a |> union_by(b, $(x : int) => x % 10))
@@ -55,7 +55,7 @@ def test_union_by_to_array(t : T?) {
     same_arr(t, "union_by_to_array array+iter", ref, union_by_to_array(a, unsafe(each(b)), $(x : int) => x % 10))
 }
 
-[test]
+[test(description = "intersect_to_array with one array and one iterator source, in either order, gives the same array as the all-array call")]
 def test_intersect_to_array(t : T?) {
     let a <- fixture_a(); let b <- fixture_b()
     let ref <- (a |> intersect(b))
@@ -63,7 +63,7 @@ def test_intersect_to_array(t : T?) {
     same_arr(t, "intersect_to_array array+iter", ref, intersect_to_array(a, unsafe(each(b))))
 }
 
-[test]
+[test(description = "intersect_by_to_array with one array and one iterator source, in either order, gives the same array as the all-array call")]
 def test_intersect_by_to_array(t : T?) {
     let a <- fixture_a(); let b <- fixture_b()
     let ref <- (a |> intersect_by(b, $(x : int) => x % 10))
@@ -71,7 +71,7 @@ def test_intersect_by_to_array(t : T?) {
     same_arr(t, "intersect_by_to_array array+iter", ref, intersect_by_to_array(a, unsafe(each(b)), $(x : int) => x % 10))
 }
 
-[test]
+[test(description = "except_to_array with one array and one iterator source, in either order, gives the same array as the all-array call")]
 def test_except_to_array(t : T?) {
     let a <- fixture_a(); let b <- fixture_b()
     let ref <- (a |> except(b))
@@ -79,7 +79,7 @@ def test_except_to_array(t : T?) {
     same_arr(t, "except_to_array array+iter", ref, except_to_array(a, unsafe(each(b))))
 }
 
-[test]
+[test(description = "except_by_to_array with one array and one iterator source, in either order, gives the same array as the all-array call")]
 def test_except_by_to_array(t : T?) {
     let a <- fixture_a(); let b <- fixture_b()
     let ref <- (a |> except_by(b, $(x : int) => x % 10))
@@ -87,7 +87,7 @@ def test_except_by_to_array(t : T?) {
     same_arr(t, "except_by_to_array array+iter", ref, except_by_to_array(a, unsafe(each(b)), $(x : int) => x % 10))
 }
 
-[test]
+[test(description = "join_to_array with one array and one iterator source, in either order, gives the same array as the all-array call")]
 def test_join_to_array(t : T?) {
     let a <- fixture_l(); let b <- fixture_r()
     let ref <- (join(a, b, $(l : L) => l.k, $(r : R) => r.k, $(l : L, r : R) => l.id + r.v))
@@ -97,7 +97,7 @@ def test_join_to_array(t : T?) {
         join_to_array(a, unsafe(each(b)), $(l : L) => l.k, $(r : R) => r.k, $(l : L, r : R) => l.id + r.v))
 }
 
-[test]
+[test(description = "group_join_to_array with one array and one iterator source, in either order, gives the same array as the all-array call")]
 def test_group_join_to_array(t : T?) {
     let a <- fixture_l(); let b <- fixture_r()
     let ref <- (group_join(a, b, $(l : L) => l.k, $(r : R) => r.k, $(l : L, rs : array<R>) => l.id + length(rs)))
@@ -107,7 +107,7 @@ def test_group_join_to_array(t : T?) {
         group_join_to_array(a, unsafe(each(b)), $(l : L) => l.k, $(r : R) => r.k, $(l : L, rs : array<R>) => l.id + length(rs)))
 }
 
-[test]
+[test(description = "left_join_to_array with one array and one iterator source, in either order, gives the same array as the all-array call")]
 def test_left_join_to_array(t : T?) {
     let a <- fixture_l(); let b <- fixture_r()
     let ref <- (left_join(a, b, $(l : L) => l.k, $(r : R) => r.k, $(l : L, r : Option<R>) => l.id + (r |> is_some ? 1 : 0)))
@@ -117,7 +117,7 @@ def test_left_join_to_array(t : T?) {
         left_join_to_array(a, unsafe(each(b)), $(l : L) => l.k, $(r : R) => r.k, $(l : L, r : Option<R>) => l.id + (r |> is_some ? 1 : 0)))
 }
 
-[test]
+[test(description = "right_join_to_array with one array and one iterator source, in either order, gives the same array as the all-array call")]
 def test_right_join_to_array(t : T?) {
     let a <- fixture_l(); let b <- fixture_r()
     let ref <- (right_join(a, b, $(l : L) => l.k, $(r : R) => r.k, $(l : Option<L>, r : R) => (l |> is_some ? 1 : 0) + r.v))
@@ -127,7 +127,7 @@ def test_right_join_to_array(t : T?) {
         right_join_to_array(a, unsafe(each(b)), $(l : L) => l.k, $(r : R) => r.k, $(l : Option<L>, r : R) => (l |> is_some ? 1 : 0) + r.v))
 }
 
-[test]
+[test(description = "full_outer_join_to_array with one array and one iterator source, in either order, gives the same array as the all-array call")]
 def test_full_outer_join_to_array(t : T?) {
     let a <- fixture_l(); let b <- fixture_r()
     let ref <- (full_outer_join(a, b, $(l : L) => l.k, $(r : R) => r.k,
@@ -140,7 +140,7 @@ def test_full_outer_join_to_array(t : T?) {
             $(l : Option<L>, r : Option<R>) => (l |> is_some ? 1 : 0) + (r |> is_some ? 1 : 0)))
 }
 
-[test]
+[test(description = "cross_join_to_array with one array and one iterator source, in either order, gives the same array as the all-array call")]
 def test_cross_join_to_array(t : T?) {
     let a <- fixture_l(); let b <- fixture_r()
     let ref <- (cross_join(a, b, $(l : L, r : R) => l.id * r.v))
@@ -150,7 +150,7 @@ def test_cross_join_to_array(t : T?) {
         cross_join_to_array(a, unsafe(each(b)), $(l : L, r : R) => l.id * r.v))
 }
 
-[test]
+[test(description = "_fold of an iterator-sourced _join with an array right side resolves through the mixed join_to_array overload and counts 5 pairs in both directions")]
 def test_fold_join_consumer(t : T?) {
     // The reason these overloads exist: _fold lowers `_join |> count()` to join_to_array(iterator,
     // array, ...) internally — without the mixed overload this fails to resolve. Both directions.

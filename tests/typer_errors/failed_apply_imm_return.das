@@ -1,7 +1,12 @@
-// Regression test: apply_imm always inlines, so it has no invoke fallback and cannot accept a block
-// that uses `return` to skip a field (an inlined bare `return` would escape the caller). The macro
-// rejects it with 50503; the unresolved call leaves the block arg uninferred (cascade 30303). Use
-// `apply` for a return-block — it falls back to the invoke codegen where `return` stays block-local.
+//! apply_imm must reject a block that uses return to skip a field
+//! (50503, with a cascading 30303), because apply_imm always inlines
+//! and has no invoke fallback.
+// Regression test: apply_imm always inlines, so it has no invoke
+// fallback and cannot accept a block that uses `return` to skip a
+// field (an inlined bare `return` would escape the caller). The macro
+// rejects it with 50503; the unresolved call leaves the block arg
+// uninferred (cascade 30303). Use `apply` for a return-block — it
+// falls back to the invoke codegen where `return` stays block-local.
 options gen2
 expect 50503, 30303
 

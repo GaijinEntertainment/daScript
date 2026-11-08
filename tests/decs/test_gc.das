@@ -11,7 +11,7 @@ require daslib/random
 require daslib/math
 require daslib/static_let
 
-[test]
+[test(description = "array components archive the same before and after a gc")]
 def test_archive_arrays(t : T?) {
     restart()
     for (i in range(3)) {
@@ -46,7 +46,7 @@ def test_archive_arrays(t : T?) {
     }
 }
 
-[test]
+[test(description = "string components archive the same before and after a string gc")]
 def test_archive_strings(t : T?) {
     restart()
     for (i in range(3)) {
@@ -74,7 +74,7 @@ def test_archive_strings(t : T?) {
     }
 }
 
-[test, no_jit]
+[test(description = "array components keep their values across a gc"), no_jit]
 def test_gc_arrays(t : T?) {
     restart()
     for (i in range(3)) {
@@ -103,7 +103,7 @@ def test_gc_arrays(t : T?) {
     }
 }
 
-[test, no_jit]
+[test(description = "string components keep their values across a string gc"), no_jit]
 def test_gc_strings(t : T?) {
     restart()
     for (i in range(3)) {
@@ -141,7 +141,7 @@ class FooWithLifetime {
     }
 }
 
-[test]
+[test(description = "array components stay valid for the life of the entities")]
 def test_arrays_lifetime(t : T?) {
     restart()
     for (_i in range(3)) {
@@ -155,7 +155,7 @@ def test_arrays_lifetime(t : T?) {
     t |> success(total_foo == 0)
 }
 
-[test, no_jit]
+[test(description = "random entity churn with gc keeps every component value intact"), no_jit]
 def test_gc_stress(t : T?) {   // nolint:STYLE037,STYLE038 - one randomized stress scenario; every phase consumes the same RNG stream and running entity count, so a split would only thread state
     var seed = random_seed(13)
     restart()

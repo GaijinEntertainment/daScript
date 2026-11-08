@@ -33,7 +33,7 @@ def tick_handler() {
 
 // ── tests ──────────────────────────────────────────────────────────────
 
-[test]
+[test(description = "an empty delegate reports empty and length 0, and invoking it returns false for non-void and does nothing for void and zero-arg ones")]
 def test_empty_delegate(t : T?) {
     t |> run("empty non-void delegate") @(tt : T?) {
         var del <- OnEvent()
@@ -56,7 +56,7 @@ def test_empty_delegate(t : T?) {
     }
 }
 
-[test]
+[test(description = "a delegate constructed from a lambda holds one handler and invokes it, for non-void and void signatures")]
 def test_lambda_constructor(t : T?) {
     t |> run("non-void lambda ctor") @(tt : T?) {
         var del <- OnEvent(@(arg : string) : bool {
@@ -77,7 +77,7 @@ def test_lambda_constructor(t : T?) {
     }
 }
 
-[test]
+[test(description = "a delegate constructed from a function pointer holds one handler and invokes it, for non-void and void signatures")]
 def test_function_constructor(t : T?) {
     t |> run("non-void function ctor") @(tt : T?) {
         var del <- OnEvent(@@event_handler)
@@ -92,7 +92,7 @@ def test_function_constructor(t : T?) {
     }
 }
 
-[test]
+[test(description = "assigning a lambda with := leaves a single handler and replaces any previous one")]
 def test_assign_lambda(t : T?) {
     t |> run("assign sets single handler") @(tt : T?) {
         var del <- OnEvent()
@@ -114,7 +114,7 @@ def test_assign_lambda(t : T?) {
     }
 }
 
-[test]
+[test(description = "assigning a function pointer with := replaces the previous handler")]
 def test_assign_function(t : T?) {
     t |> run("assign from function pointer") @(tt : T?) {
         var del <- OnEvent(@(arg : string) : bool {
@@ -126,7 +126,7 @@ def test_assign_function(t : T?) {
     }
 }
 
-[test]
+[test(description = "+= with a lambda adds a handler and invoke returns the last handler result")]
 def test_append_lambda(t : T?) {
     t |> run("append adds handler, last result returned") @(tt : T?) {
         var del <- OnEvent(@(arg : string) : bool {
@@ -140,7 +140,7 @@ def test_append_lambda(t : T?) {
     }
 }
 
-[test]
+[test(description = "+= with a function pointer adds a handler and invoke returns the last handler result")]
 def test_append_function(t : T?) {
     t |> run("append function pointer") @(tt : T?) {
         var del <- OnEvent(@(arg : string) : bool {
@@ -152,7 +152,7 @@ def test_append_function(t : T?) {
     }
 }
 
-[test]
+[test(description = "invoke calls every handler in order and returns the last handler result")]
 def test_multiple_handlers(t : T?) {
     t |> run("all handlers called, last result returned") @(tt : T?) {
         var del <- OnEvent()
@@ -170,7 +170,7 @@ def test_multiple_handlers(t : T?) {
     }
 }
 
-[test]
+[test(description = "a void delegate invokes all its handlers without a result")]
 def test_void_delegate(t : T?) {
     t |> run("void delegate invokes without error") @(tt : T?) {
         var del <- OnNotify()
@@ -186,7 +186,7 @@ def test_void_delegate(t : T?) {
     }
 }
 
-[test]
+[test(description = "clear removes every handler so the delegate is empty again")]
 def test_clear(t : T?) {
     t |> run("clear resets delegate") @(tt : T?) {
         var del <- OnEvent(@(arg : string) : bool {
@@ -203,7 +203,7 @@ def test_clear(t : T?) {
     }
 }
 
-[test]
+[test(description = "a delegate with two arguments passes both to a lambda or a function handler")]
 def test_multi_arg_delegate(t : T?) {
     t |> run("2-arg lambda") @(tt : T?) {
         var del <- OnCompute(@(a : int; b : float) : int {
@@ -217,7 +217,7 @@ def test_multi_arg_delegate(t : T?) {
     }
 }
 
-[test]
+[test(description = "a zero-argument delegate invokes every appended handler")]
 def test_zero_arg_delegate(t : T?) {
     t |> run("zero-arg void delegate invokes") @(tt : T?) {
         var del <- OnTick()
@@ -231,7 +231,7 @@ def test_zero_arg_delegate(t : T?) {
 
 // ── each iteration ────────────────────────────────────────────────────
 
-[test]
+[test(description = "iterating a non-void delegate visits each handler so the caller can call it")]
 def test_each_non_void(t : T?) {
     t |> run("each iterates non-void delegate handlers") @(tt : T?) {
         var del <- OnCompute()
@@ -245,7 +245,7 @@ def test_each_non_void(t : T?) {
     }
 }
 
-[test]
+[test(description = "iterating a void delegate visits each handler")]
 def test_each_void(t : T?) {
     t |> run("each iterates void delegate handlers") @(tt : T?) {
         var del <- OnNotify()
@@ -260,7 +260,7 @@ def test_each_void(t : T?) {
     }
 }
 
-[test]
+[test(description = "iterating an empty delegate visits nothing")]
 def test_each_empty(t : T?) {
     t |> run("each on empty delegate iterates zero times") @(tt : T?) {
         var del <- OnCompute()
@@ -274,7 +274,7 @@ def test_each_empty(t : T?) {
 
 // ── non-copyable return type ──────────────────────────────────────────
 
-[test]
+[test(description = "a delegate whose handlers return an array moves the result out, and an empty one returns an empty array")]
 def test_array_return(t : T?) {
     t |> run("non-copyable return type (array)") @(tt : T?) {
         var del <- OnCollect()

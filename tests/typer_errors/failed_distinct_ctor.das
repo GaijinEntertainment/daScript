@@ -1,3 +1,5 @@
+//! A distinct type constructor must reject an argument of the wrong
+//! type, no argument and named fields (30413 twice, 30243).
 options gen2
 
 expect 30413 : 2

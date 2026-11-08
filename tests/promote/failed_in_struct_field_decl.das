@@ -1,4 +1,5 @@
-// out-of-range default in struct field decl
+//! An out-of-range default in a struct field declaration must not
+//! compile (30515).
 options gen2
 
 expect 30515

@@ -140,7 +140,7 @@ kernel without the wait would read its predecessor's output early.
 2. **The text layer** (`test_cuda_emit.das`): the emitted shape of every construct family on the
    `_cuda_common.das` fixtures, plus the compile gate - every fixture's text through NVRTC for
    the card present.
-3. **The census** (`test_cuda_census.das`): the union of construct kinds the emitter records
+3. **The census** (`tests/cuda/uncategorized.das`): the union of construct kinds the emitter records
    across every fixture equals `declared_cuda_census`, both directions - text has no
    disassembler, so the census is the emitter's coverage.
 4. **The behavioral gate** (`test_cuda_oracle.das`): the same kernel method runs on the CPU - a

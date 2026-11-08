@@ -1,3 +1,5 @@
+//! after constant and block folding, top-level expressions with no
+//! side effect are reported as errors
 // constant and block folding
 // verifies dead code elimination, constant folding, and detection
 // of top-level expressions with no side effects

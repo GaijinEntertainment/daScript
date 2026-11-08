@@ -18,7 +18,7 @@ def side_f : float {
     return g_f
 }
 
-[test]
+[test(description = "under fast_math x*0 and x-x fold to zero for float and double while an impure operand still runs once")]
 def test_fp_zero_folds(t : T?) {
     t |> equal(g_f * 0.0, 0.0)
     t |> equal(0.0 * g_f, 0.0)
@@ -30,7 +30,7 @@ def test_fp_zero_folds(t : T?) {
     t |> equal(g_calls, 1)    // impure operand must still run
 }
 
-[test]
+[test(description = "under fast_math the double x+0, x-0 and 0-x folds give the same values as the unfolded expressions")]
 def test_double_zero_sign_folds(t : T?) {
     // double x+0 / 0-x folds are fast_math-gated; values are identical for normal inputs
     t |> equal(g_d + 0.0lf, 2.25lf)
@@ -38,7 +38,7 @@ def test_double_zero_sign_folds(t : T?) {
     t |> equal(0.0lf - g_d, -2.25lf)
 }
 
-[test]
+[test(description = "under fast_math division by a constant through its reciprocal is exact for powers of two and within tolerance otherwise, for scalars and vectors")]
 def test_reciprocal_division(t : T?) {
     // powers of two: the reciprocal is exact
     t |> equal(g_f / 2.0, 1.75)
@@ -49,13 +49,13 @@ def test_reciprocal_division(t : T?) {
     t |> success(abs(g_f / 3.0 - 1.1666666) < 1e-5, "x/3 via reciprocal stays close")
 }
 
-[test]
+[test(description = "under fast_math a negated float comparison flips to the opposite comparison with the same result")]
 def test_fp_compare_flip(t : T?) {
     t |> equal(!(g_f < 4.0), g_f >= 4.0)
     t |> equal(!(g_f == 3.5), false)
 }
 
-[test]
+[test(description = "under fast_math chained additions and multiplications by constants reassociate into one constant with exact results")]
 def test_reassociation(t : T?) {
     // (x ∘ C1) ∘ C2 → x ∘ K; constants chosen exactly representable
     t |> equal((g_f + 1.0) + 2.0, 6.5)

@@ -1,4 +1,5 @@
-// a statement match over a finite type must cover every value or end with _
+//! a statement match over a finite type must cover every value or end
+//! with _
 options gen2
 
 require daslib/match

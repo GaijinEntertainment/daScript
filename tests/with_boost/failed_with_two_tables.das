@@ -1,3 +1,5 @@
+//! with_ over two tables must not compile (50503); it accepts a
+//! single table only.
 options gen2
 expect 50503
 

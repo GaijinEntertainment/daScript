@@ -2,7 +2,7 @@ options gen2
 require daslib/lz4
 require strings
 require dastest/testing_boost
-[test]
+[test(description = "lz4_decompress decodes a literal-only block and blocks whose matches overlap their own output")]
 def literal_and_overlapping_match_vectors(t : T?) {
     var inscope output : array<uint8>
     t |> success(lz4_decompress([0x30u8, 97u8, 98u8, 99u8], output, 3))
@@ -13,7 +13,7 @@ def literal_and_overlapping_match_vectors(t : T?) {
     for (i in range(9)) { t |> equal(output[i], 97u8) }
     t |> equal(output[13], 102u8)
 }
-[test]
+[test(description = "lz4_decompress rejects malformed blocks and size bombs and leaves the output array untouched")]
 def malformed_blocks_and_bombs_leave_output_unchanged(t : T?) {
     var inscope output <- [42u8]
     for (input in [[0xf0u8], [0x20u8, 1u8], [0x10u8, 97u8, 0u8, 0u8], [0x10u8, 97u8, 2u8, 0u8], [0x1fu8, 97u8, 1u8, 0u8, 255u8, 255u8]]) {
@@ -22,7 +22,7 @@ def malformed_blocks_and_bombs_leave_output_unchanged(t : T?) {
     t |> success(!lz4_decompress([0u8], output, -1)); t |> equal(output, [42u8])
     t |> success(lz4_decompress([0u8], output, 0)); t |> success(empty(output))
 }
-[test]
+[test(description = "lz4_compress then lz4_decompress restores inputs of many sizes and repeated data compresses smaller")]
 def blocks_roundtrip_and_compress_repeated_data(t : T?) {
     for (size in [0, 1, 4, 5, 12, 13, 14, 15, 16, 255, 4096, 70000]) {
         var inscope input : array<uint8>; resize(input, size)
@@ -34,14 +34,14 @@ def blocks_roundtrip_and_compress_repeated_data(t : T?) {
         t |> success(lz4_compress(input, input)); t |> success(lz4_decompress(input, input, size)); t |> equal(input, decoded); t |> success(long_capacity(decoded) <= int64(size), "decode allocation stays within the supplied budget")
     }
 }
-[test]
+[test(description = "lz4_decompress rejects a block that does not end with the required terminal literals")]
 def decoder_rejects_missing_terminal_literals(t : T?) {
     var inscope output <- [42u8]
     t |> success(!lz4_decompress([0x10u8, 97u8, 1u8, 0u8], output, 100))
     t |> success(!lz4_decompress([0x10u8, 97u8, 1u8, 0u8, 0u8], output, 100))
     t |> equal(output, [42u8])
 }
-[test]
+[test(description = "a thousand pseudo-random malformed inputs never make lz4_decompress write past the allowed size")]
 def deterministic_malformed_inputs_stay_bounded(t : T?) {
     var random = 87131u
     for (trial in range(1000)) {
@@ -54,7 +54,7 @@ def deterministic_malformed_inputs_stay_bounded(t : T?) {
 }
 
 require daslib/debugger
-[test]
+[test(description = "lz4 entries reject a view whose size exceeds the 32-bit range before narrowing it or touching its data")]
 def oversized_views_are_rejected_before_narrowing_or_access(t : T?) {
     var input : array<uint8>
     var inscope output <- [42u8]
@@ -68,7 +68,7 @@ def oversized_views_are_rejected_before_narrowing_or_access(t : T?) {
     t |> equal(output, [42u8])
 }
 
-[test]
+[test(description = "lz4_decompress rejects a block that violates only the final-literals rule and one that violates only the last-match-distance rule")]
 def terminal_constraints_are_independent(t : T?) {
     var inscope output <- [42u8]
     // Match starts early enough, but only four final literals remain.
@@ -78,14 +78,14 @@ def terminal_constraints_are_independent(t : T?) {
     t |> success(!lz4_decompress([0x10u8, 97u8, 1u8, 0u8, 0x50u8, 98u8, 99u8, 100u8, 101u8, 102u8], output, 10))
     t |> equal(output, [42u8])
 }
-[test]
+[test(description = "lz4_compress refuses an input whose encoded size would overflow the signed size range")]
 def compression_refuses_encoded_size_overflow_with_signed_input_size(t : T?) {
     var input : array<uint8>; var inscope output <- [42u8]
     var header = unsafe(addr<DapiArray?>(input)); header.size = 2147483647ul
     let result = lz4_compress(input, output); header.size = 0ul
     t |> success(!result); t |> equal(output, [42u8])
 }
-[test]
+[test(description = "lz4 compress and decompress work on borrowed byte views and give the expected block")]
 def borrowed_byte_views_roundtrip(t : T?) {
     var inscope encoded, decoded : array<uint8>; var compressed = false; var restored = false
     peek_data("abc") $(bytes) { compressed = lz4_compress(bytes, encoded) }
@@ -94,7 +94,7 @@ def borrowed_byte_views_roundtrip(t : T?) {
     t |> success(restored); t |> equal(decoded, [97u8, 98u8, 99u8])
 }
 
-[test]
+[test(description = "lz4_compress of an input shorter than the minimum match size allocates only small output storage, emits one literal run and round-trips")]
 def tiny_blocks_do_not_allocate_a_match_table(t : T?) {
     for (size in range(13)) {
         var inscope input, encoded, decoded : array<uint8>; resize(input, size)
@@ -109,7 +109,7 @@ def tiny_blocks_do_not_allocate_a_match_table(t : T?) {
     }
 }
 
-[test]
+[test(description = "lz4_compress shrinks the smallest block that can contain a match")]
 def minimum_matchable_block_still_compresses(t : T?) {
     var inscope input <- [for (_ in range(13)); 97u8]
     var inscope encoded, decoded : array<uint8>

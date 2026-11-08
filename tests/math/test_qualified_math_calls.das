@@ -32,7 +32,7 @@ var g_one4 = float4(1.0f, 1.0f, 1.0f, 1.0f)
 var g_zero = 0.0f
 var g_bits = 0x7fffffffu
 
-[test]
+[test(description = "module-qualified unary float builtins answer exactly what the unqualified spelling answers")]
 def test_qualified_unary_float(t : T?) {
     t |> equal(math::sqrt(g_nine), sqrt(g_nine), "math::sqrt")
     t |> equal(math::floor(g_frac), floor(g_frac), "math::floor")
@@ -48,20 +48,20 @@ def test_qualified_unary_float(t : T?) {
     t |> equal(math::tanh(g_small), tanh(g_small), "math::tanh")
 }
 
-[test]
+[test(description = "module-qualified float-to-int builtins answer what the unqualified spelling answers")]
 def test_qualified_float_to_int(t : T?) {
     t |> equal(math::floori(g_frac), floori(g_frac), "math::floori")
     t |> equal(math::ceili(g_frac), ceili(g_frac), "math::ceili")
 }
 
-[test]
+[test(description = "module-qualified two-operand builtins answer what the unqualified spelling answers")]
 def test_qualified_two_operand(t : T?) {
     t |> equal(math::pow(g_lo, g_two), pow(g_lo, g_two), "math::pow")
     t |> equal(math::fmod(g_hi, g_lo), fmod(g_hi, g_lo), "math::fmod")
 }
 
 // clz/ctz/popcnt live in the builtin module, whose qualified spelling is `_::`
-[test]
+[test(description = "module-qualified bit-level builtins answer what the unqualified spelling answers")]
 def test_qualified_builtin_bits(t : T?) {
     t |> equal(_::popcnt(g_bits), popcnt(g_bits), "_::popcnt")
     t |> equal(_::clz(g_bits), clz(g_bits), "_::clz")
@@ -70,7 +70,7 @@ def test_qualified_builtin_bits(t : T?) {
 
 // the half8 lane accessors are keyed by name the same way, and the qualified spelling used to
 // answer the hi lanes for a lo call
-[test]
+[test(description = "module-qualified half8 lane accessors answer the lo and hi lanes")]
 def test_qualified_half8_lanes(t : T?) {
     let p = half8(g_v4, g_v4 + g_one4)
     t |> equal(_::half8_lo(p), half8_lo(p), "_::half8_lo")
@@ -78,7 +78,7 @@ def test_qualified_half8_lanes(t : T?) {
     t |> equal(_::half8_lo(p), g_v4, "_::half8_lo answers the lo lanes")
 }
 
-[test]
+[test(description = "module-qualified min, max, hmin and hmax answer what the unqualified spelling answers")]
 def test_qualified_minmax(t : T?) {
     t |> equal(math::min(g_lo, g_hi), min(g_lo, g_hi), "math::min")
     t |> equal(math::max(g_lo, g_hi), max(g_lo, g_hi), "math::max")
@@ -86,7 +86,7 @@ def test_qualified_minmax(t : T?) {
     t |> equal(math::hmax(g_v4), hmax(g_v4), "math::hmax")
 }
 
-[test]
+[test(description = "module-qualified float4 builtins answer what the unqualified spelling answers")]
 def test_qualified_on_vectors(t : T?) {
     t |> equal(math::sqrt(g_v4), sqrt(g_v4), "math::sqrt(float4)")
     t |> equal(math::sin(g_v4), sin(g_v4), "math::sin(float4)")
@@ -94,14 +94,14 @@ def test_qualified_on_vectors(t : T?) {
     t |> equal(math::tanh(g_v4), tanh(g_v4), "math::tanh(float4)")
 }
 
-[test]
+[test(description = "a math-qualified call inside the file's own sqrt overload reaches the builtin")]
 def test_qualified_call_inside_own_overload(t : T?) {
     let s = sqrt(Vec2(x = g_nine, y = g_frac * g_frac))
     t |> equal(s.x, math::sqrt(g_nine), "own sqrt(Vec2).x")
     t |> equal(s.y, g_frac, "own sqrt(Vec2).y")
 }
 
-[test]
+[test(description = "qualified cos, sin, cosh, sinh and tanh on float4 pick the arm of the named function, not a neighbour")]
 def test_qualified_vector_arm_identity(t : T?) {
     // cos/cosh/tanh reach an inline polynomial rail whose arm is picked by the call's name,
     // and that rail only runs on aarch64. Comparing spellings there proves nothing if both
@@ -118,7 +118,7 @@ def test_qualified_vector_arm_identity(t : T?) {
     t |> equal(th, tanh(g_v4), "math::tanh matches the unqualified spelling")
 }
 
-[test]
+[test(description = "qualified and unqualified cos answer NaN in the same lanes")]
 def test_qualified_nan_lanes(t : T?) {
     // both spellings answer NaN in the same lanes; is_nan reads IEEE on a host that folds
     // nan compares, so this cell holds wherever it runs

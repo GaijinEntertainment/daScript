@@ -9,7 +9,7 @@ options optimize = false
 // semantics) / LLVM frem; mad maps to GLSLstd450.Fma (= a*b + c per sim_policy). C++ bindings
 // already exist for float scalar + float2/3/4; this test pins per-tier float correctness.
 
-[test]
+[test(description = "fmod on floats keeps the sign of the dividend")]
 def test_fmod_scalar(t : T?) {
     t |> equal(fmod(5.5f, 2.0f), 1.5f)
     t |> equal(fmod(-5.5f, 2.0f), -1.5f)
@@ -17,7 +17,7 @@ def test_fmod_scalar(t : T?) {
     t |> equal(fmod(0.0f, 1.0f), 0.0f)
 }
 
-[test]
+[test(description = "fmod on float vectors works per lane")]
 def test_fmod_vec(t : T?) {
     let r2 = fmod(float2(5.5, -5.5), float2(2.0, 2.0))
     t |> success(abs(r2.x - 1.5f) < 1.0e-5f && abs(r2.y + 1.5f) < 1.0e-5f, "fmod(float2) per-lane")
@@ -27,7 +27,7 @@ def test_fmod_vec(t : T?) {
     t |> success(abs(r4.x - 1.5f) < 1.0e-5f && abs(r4.y - 1.5f) < 1.0e-5f && abs(r4.z + 1.5f) < 1.0e-5f && abs(r4.w - 1.0f) < 1.0e-5f, "fmod(float4) per-lane")
 }
 
-[test]
+[test(description = "mad on floats computes a times b plus c")]
 def test_mad_scalar(t : T?) {
     // mad(a, b, c) = a*b + c
     t |> equal(mad(2.0f, 3.0f, 4.0f), 10.0f)
@@ -35,7 +35,7 @@ def test_mad_scalar(t : T?) {
     t |> equal(mad(-1.0f, 2.0f, 3.0f), 1.0f)
 }
 
-[test]
+[test(description = "mad on float vectors works per lane")]
 def test_mad_vec(t : T?) {
     // float2 vec form: mad(a : float2, b : float, c : float2) = a*b + c
     let r2 = mad(float2(1.0, 2.0), 3.0f, float2(4.0, 5.0))

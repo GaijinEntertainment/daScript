@@ -9,7 +9,7 @@ require dastest/testing_boost public
 // from a prefix + LineInfo. These tests pin the byte-output contract so
 // downstream macros can rely on it.
 
-[test]
+[test(description = "qn builds a name from the prefix and the hex line and column")]
 def test_basic(t : T?) {
     var at = LineInfo()
     at.line = 42u
@@ -18,7 +18,7 @@ def test_basic(t : T?) {
     t |> equal(qn("src", at), "`src`0x2a`0x7")
 }
 
-[test]
+[test(description = "qn gives distinct names to distinct prefixes at one position")]
 def test_prefix_distinct(t : T?) {
     var at = LineInfo()
     at.line = 100u
@@ -26,7 +26,7 @@ def test_prefix_distinct(t : T?) {
     t |> success(qn("buf", at) != qn("acc", at), "distinct prefixes must produce distinct qnames")
 }
 
-[test]
+[test(description = "qn gives distinct names to one prefix at distinct positions")]
 def test_position_distinct(t : T?) {
     var at1 = LineInfo()
     at1.line = 1u
@@ -37,7 +37,7 @@ def test_position_distinct(t : T?) {
     t |> success(qn("x", at1) != qn("x", at2), "same prefix at distinct columns must produce distinct qnames")
 }
 
-[test]
+[test(description = "qn of a zero LineInfo yields the zero-position name")]
 def test_zero_lineinfo(t : T?) {
     // Documented behavior: synthesized LineInfo (line=0, column=0) produces
     // `prefix`0`0 and WILL collide across distinct synth sites with the same

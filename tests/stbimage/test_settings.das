@@ -9,7 +9,7 @@ require dastest/testing_boost public
 
 // ---- flip vertically on load ----
 
-[test]
+[test(description = "a 1x2 PNG with a red top row and a blue bottom row loads red-first normally and blue-first once flip-on-load is switched on")]
 def test_flip_vertically_on_load(t : T?) {
     t |> run("flip vertically on load changes pixel order") <| @(tt : T?) {
         // create a 2x1 image: top row = red, bottom row = blue
@@ -48,7 +48,7 @@ def test_flip_vertically_on_load(t : T?) {
 
 // ---- flip vertically on write ----
 
-[test]
+[test(description = "encoding a 1x2 red-over-blue image with flip-on-write enabled stores the blue row first, so it decodes with a blue first pixel")]
 def test_flip_vertically_on_write(t : T?) {
     t |> run("flip on write reverses row order") <| @(tt : T?) {
         var pixels : uint8[8]
@@ -76,7 +76,7 @@ def test_flip_vertically_on_write(t : T?) {
 
 // ---- PNG compression level ----
 
-[test]
+[test(description = "the PNG compression level getter returns 1 after setting 1 and 9 after setting 9")]
 def test_png_compression_level(t : T?) {
     t |> run("set and get PNG compression level") <| @(tt : T?) {
         let original = stbi_write_get_png_compression_level()
@@ -91,7 +91,7 @@ def test_png_compression_level(t : T?) {
 
 // ---- PNG filter ----
 
-[test]
+[test(description = "the forced PNG filter getter returns 0 after setting 0 and 4 after setting 4")]
 def test_force_png_filter(t : T?) {
     t |> run("set and get force PNG filter") <| @(tt : T?) {
         let original = stbi_write_get_force_png_filter()
@@ -105,7 +105,7 @@ def test_force_png_filter(t : T?) {
 
 // ---- TGA RLE ----
 
-[test]
+[test(description = "the TGA RLE flag getter returns 0 after setting 0 and 1 after setting 1")]
 def test_tga_with_rle(t : T?) {
     t |> run("set and get TGA RLE flag") <| @(tt : T?) {
         let original = stbi_write_get_tga_with_rle()
@@ -119,7 +119,7 @@ def test_tga_with_rle(t : T?) {
 
 // ---- HDR gamma/scale ----
 
-[test]
+[test(description = "the four HDR-to-LDR and LDR-to-HDR gamma and scale setters accept the default values 2.2 and 1.0 and return without crashing")]
 def test_hdr_gamma_scale(t : T?) {
     t |> run("HDR gamma and scale setters do not crash") <| @(tt : T?) {
         // these are fire-and-forget setters with no getters, just verify no crash
@@ -133,7 +133,7 @@ def test_hdr_gamma_scale(t : T?) {
 
 // ---- unpremultiply on load ----
 
-[test]
+[test(description = "switching unpremultiply-on-load on and then off returns normally without crashing")]
 def test_unpremultiply_on_load(t : T?) {
     t |> run("set_unpremultiply_on_load does not crash") <| @(tt : T?) {
         stbi_set_unpremultiply_on_load(1)
@@ -144,7 +144,7 @@ def test_unpremultiply_on_load(t : T?) {
 
 // ---- convert iphone png to rgb ----
 
-[test]
+[test(description = "switching iPhone-PNG-to-RGB conversion on and then off returns normally without crashing")]
 def test_convert_iphone_png_to_rgb(t : T?) {
     t |> run("convert_iphone_png_to_rgb does not crash") <| @(tt : T?) {
         stbi_convert_iphone_png_to_rgb(1)

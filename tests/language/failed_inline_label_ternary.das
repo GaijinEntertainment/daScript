@@ -1,3 +1,6 @@
+//! an [inline] call with an early return inside a ternary right after
+//! a goto target label cannot splice, so the demanded inline does not
+//! compile
 options gen2
 expect 30100:1
 

@@ -13,7 +13,7 @@ require daslib/debugger
 // missing pad, wrong width, base-trailing-pad reuse difference between
 // ABIs — would surface as a mismatched compare.
 
-[test]
+[test(description = "the DapiArray debug mirror reads the same size and capacity the array reports")]
 def test_dapi_array_size_capacity_match(t : T?) {
     var arr : array<int>
     arr |> resize(int64(7))
@@ -22,7 +22,7 @@ def test_dapi_array_size_capacity_match(t : T?) {
     t |> equal(view.capacity, uint64(long_capacity(arr)))
 }
 
-[test]
+[test(description = "the DapiArray mirror's data pointer is non-null for a filled array")]
 def test_dapi_array_data_pointer_non_null(t : T?) {
     var arr : array<int>
     arr |> resize(int64(3))
@@ -30,7 +30,7 @@ def test_dapi_array_data_pointer_non_null(t : T?) {
     t |> success(view.data != null)
 }
 
-[test]
+[test(description = "the DapiTable mirror reads the same size and tombstone count the table reports")]
 def test_dapi_table_size_tombstones_match(t : T?) {
     var tab : table<int; int>  // nolint:STYLE031 — layout after the canonical insert path is under test
     tab |> insert(1, 100)
@@ -41,7 +41,7 @@ def test_dapi_table_size_tombstones_match(t : T?) {
     t |> equal(view.tombstones, uint64(0))
 }
 
-[test]
+[test(description = "the DapiTable mirror's keys and hashes pointers are non-null for a filled table")]
 def test_dapi_table_keys_hashes_non_null(t : T?) {
     // If the inherited DapiArray slice has the wrong size, keys/hashes
     // would land at the wrong offsets and either read garbage or null.
@@ -52,7 +52,7 @@ def test_dapi_table_keys_hashes_non_null(t : T?) {
     t |> success(view.hashes != null)
 }
 
-[test]
+[test(description = "the DapiTable mirror's tombstone count grows after an erase")]
 def test_dapi_table_tombstones_after_erase(t : T?) {
     // Small (packed) tables erase via swap-remove and leave no tombstone; tombstones only
     // exist in the open-addressed regime, so grow past maxLinearCapacity (8) first.
@@ -66,7 +66,7 @@ def test_dapi_table_tombstones_after_erase(t : T?) {
     t |> equal(view.tombstones, uint64(1))
 }
 
-[test]
+[test(description = "the DapiTable mirror's keys field offset matches the runtime layout")]
 def test_dapi_table_keys_offset_matches_runtime(t : T?) {
     // Catches base-trailing-pad drift on 32-bit Itanium ABI directly.
     // In the C++ Table memory layout, `keys` points to `data + capacity * sizeof(value)`.

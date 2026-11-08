@@ -1,5 +1,9 @@
+//! A macro_sticky_error raised on an otherwise valid tree still fails
+//! the compile.
 options gen2
-expect 50503    // runtime_macro — macro_sticky_error on a VALID tree must still fail the compile
+// runtime_macro — macro_sticky_error on a VALID tree must still fail
+// the compile
+expect 50503
 
 require _malformed_tree_macros
 

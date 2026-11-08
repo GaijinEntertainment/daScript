@@ -18,7 +18,7 @@ closes the connection during graceful shutdown. No callback should perform an
 external side effect under the assumption that SQLite can roll it back.
 
 The existing void-block overload keeps its behavior. Tests in
-`tests/dasSQLITE/test_transaction_result.das` cover explicit rejection, SQL failure,
+`tests/dasSQLITE/test_transactions.das` cover explicit rejection, SQL failure,
 nested savepoints and a deferred constraint that fails at commit.
 
 ## Composite primary keys

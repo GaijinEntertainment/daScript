@@ -4,7 +4,6 @@ require dastest/testing_boost public
 require sqlite/sqlite_migrate
 
 // Bundled SQLite 3.41.2 supports DROP COLUMN natively (since 3.35.0). No 12-step recipe.
-
 [sql_migration(version = 1, description = "create with extra")]
 def m1(db : SqlRunner) {
     db |> exec("CREATE TABLE users (Id INTEGER PRIMARY KEY, Name TEXT NOT NULL, Legacy TEXT)")
@@ -15,7 +14,7 @@ def m2(db : SqlRunner) {
     db |> exec("ALTER TABLE users DROP COLUMN Legacy")
 }
 
-[test]
+[test(description = "drop_column removes the column using SQLite native DROP COLUMN", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_drop_column_works_natively(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()
@@ -26,8 +25,7 @@ def test_drop_column_works_natively(t : T?) {
     t |> equal(has_legacy, 0, "Legacy column must be gone")
 }
 
-
-[test]
+[test(description = "the bundled SQLite is new enough to support DROP COLUMN")]
 def test_sqlite_version_at_least_3_35(t : T?) {
     // 3.35.0+ supports DROP COLUMN (the feature this file tests).
     // sqlite3_libversion_number() encodes 3.35.0 as 3*1000000 + 35*1000 + 0 = 3035000.

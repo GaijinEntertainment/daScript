@@ -1,3 +1,5 @@
+//! globals whose initializers depend on each other in a loop,
+//! directly or through a function, do not compile
 options gen2
 expect 30173, 31104:4
 

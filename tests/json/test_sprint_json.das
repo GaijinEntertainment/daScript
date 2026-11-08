@@ -2,15 +2,19 @@ options gen2
 options rtti
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
+
 require dastest/testing_boost public
 require daslib/json_boost
 require daslib/strings_boost
+require daslib/rtti
+require strings
+require daslib/json
 
 // ============================================================
 //  sprint_json: basic types
 // ============================================================
 
-[test]
+[test(description = "sprint_json writes every scalar type and escapes strings")]
 def test_sprint_basic_types(t : T?) {
     t |> run("int") @(t : T?) {
         t |> equal(sprint_json(42, false), "42")
@@ -48,7 +52,7 @@ def test_sprint_basic_types(t : T?) {
 //  sprint_json: containers
 // ============================================================
 
-[test]
+[test(description = "sprint_json writes arrays, tables and tuples including the empty ones")]
 def test_sprint_containers(t : T?) {
     // NOTE: assertions use parsed JSON instead of exact string matching
     // due to JIT bug with sprint_json compact mode — see test_sprint_jit_compact_bug.
@@ -99,7 +103,7 @@ struct SimpleStruct {
     name : string
 }
 
-[test]
+[test(description = "sprint_json writes a struct as a JSON object of its fields")]
 def test_sprint_struct(t : T?) {
     t |> run("basic struct") @(t : T?) {
         let s = SimpleStruct(x = 42, name = "hello")
@@ -123,7 +127,7 @@ enum Color {
     blue
 }
 
-[test]
+[test(description = "sprint_json writes an enum as its name string")]
 def test_sprint_enum(t : T?) {
     t |> run("enum as string") @(t : T?) {
         t |> equal(sprint_json(Color.green, false), "\"green\"")
@@ -139,7 +143,7 @@ variant TestPayload {
     msg : string
 }
 
-[test]
+[test(description = "sprint_json writes the active alternative of a variant")]
 def test_sprint_variant(t : T?) {
     t |> run("variant int") @(t : T?) {
         let v = TestPayload(code = 99)
@@ -168,7 +172,7 @@ class TestAnimal {
     legs : int
 }
 
-[test]
+[test(description = "sprint_json writes a class instance as an object of its fields")]
 def test_sprint_class(t : T?) {
     t |> run("class fields") @(t : T?) {
         var a = new TestAnimal(species = "cat", legs = 4)
@@ -200,7 +204,7 @@ struct LambdaFieldStruct {
     fn : lambda<(a : int) : int>
 }
 
-[test]
+[test(description = "sprint_json skips method fields and keeps the JSON valid for lambda fields")]
 def test_sprint_callables(t : T?) {
     t |> run("class method field is skipped, json stays valid") @(t : T?) {
         var a = new MethodClass(hp = 7)
@@ -236,7 +240,7 @@ def test_sprint_callables(t : T?) {
 //  sprint_json: null pointer
 // ============================================================
 
-[test]
+[test(description = "sprint_json writes a null void pointer as null")]
 def test_sprint_null(t : T?) {
     t |> run("null void pointer") @(t : T?) {
         var p : void?
@@ -248,7 +252,7 @@ def test_sprint_null(t : T?) {
 //  sprint_json: human-readable formatting
 // ============================================================
 
-[test, no_jit]
+[test(description = "pretty output contains newlines and compact output does not"), no_jit]
 def test_sprint_pretty(t : T?) {
     t |> run("pretty has newlines") @(t : T?) {
         let s = SimpleStruct(x = 1, name = "a")
@@ -282,7 +286,7 @@ struct OptionalFields {
     @optional opt_ptr : void?
 }
 
-[test]
+[test(description = "an optional field is omitted at its default and written otherwise")]
 def test_annotation_optional(t : T?) {
     t |> run("default values are omitted") @(t : T?) {
         let s <- OptionalFields(uninitialized name = "test")
@@ -331,7 +335,7 @@ struct EnumFields {
     @enum_as_int as_int : Color
 }
 
-[test]
+[test(description = "an enum_as_int field is written as an integer where a plain enum is written as a string")]
 def test_annotation_enum_as_int(t : T?) {
     t |> run("normal enum is string") @(t : T?) {
         let s = EnumFields(normal = Color.green, as_int = Color.blue)
@@ -368,7 +372,7 @@ struct EmbedFields {
     @embed data : string
 }
 
-[test]
+[test(description = "an embed field is written as raw JSON and a string is re-parsed")]
 def test_annotation_embed(t : T?) {
     // NOTE: @embed assertions use parsed JSON (read_json + type checks) instead of
     // exact substring matching because of a JIT bug: sprint_json(struct, false)
@@ -414,7 +418,7 @@ struct UnescapeFields {
     @unescape raw : string
 }
 
-[test]
+[test(description = "an unescape field keeps the raw string where a plain one escapes backslashes")]
 def test_annotation_unescape(t : T?) {
     t |> run("normal string escapes backslash") @(t : T?) {
         let s = UnescapeFields(normal = "C:\\Users\\test", raw = "C:\\Users\\test")
@@ -443,7 +447,7 @@ struct RenameFields {
     normal : bool
 }
 
-[test]
+[test(description = "a rename annotation changes the key in sprint_json, JV and from_JV")]
 def test_annotation_rename(t : T?) {
     t |> run("renamed fields in sprint_json") @(t : T?) {
         let s = RenameFields(_type = "widget", _class = 5, normal = true)
@@ -489,7 +493,7 @@ struct BareRenameFields {
     normal : string
 }
 
-[test]
+[test(description = "a bare rename strips the leading underscore in sprint_json, JV and from_JV")]
 def test_annotation_rename_bare(t : T?) {
     t |> run("bare @rename strips underscore in sprint_json") @(t : T?) {
         let s = BareRenameFields(_bare = 42, normal = "ok")
@@ -533,7 +537,7 @@ struct CombinedAnnotations {
     @unescape raw : string
 }
 
-[test]
+[test(description = "annotations combine on one struct and optional does not skip an enum field")]
 def test_combined_annotations(t : T?) {
     // NOTE: @embed assertion uses parsed JSON instead of substring match
     // due to JIT bug with sprint_json compact mode — see test_sprint_jit_compact_bug.
@@ -569,7 +573,7 @@ def test_combined_annotations(t : T?) {
     }
 }
 
-[test]
+[test(description = "compact output contains no newlines")]
 def test_sprint_jit_compact_bug(t : T?) {
     t |> run("compact mode should not contain newlines") @(t : T?) {
         let s = CombinedAnnotations(
@@ -581,5 +585,175 @@ def test_sprint_jit_compact_bug(t : T?) {
         let json = sprint_json(s, false)
         let has_newlines = find(json, "\n") >= 0
         t |> equal(has_newlines, false)
+    }
+}
+
+// ============================================================
+//  sprint_json_at — addr+TypeInfo entry point
+//
+//  Equivalent to sprint_json but takes (addr, ti) directly instead
+//  of routing through an `any` arg + SimNode_CallBase::types[].
+//  Lets call sites that have only a raw `void?` address (e.g. from
+//  the dasImgui widget dispatcher) serialize without a per-call-site
+//  daslang thunk.
+// ============================================================
+
+var private g_int = 42
+var private g_uint = 0xFFu
+var private g_int64 = 123456789l
+var private g_bool_t = true
+var private g_bool_f = false
+var private g_string = "hello"
+var private g_escape = "a\nb"
+
+struct private Pair {
+    a : int
+    b : float
+}
+var private g_pair = Pair(a = 7, b = 3.5)
+
+var private g_array : array<int>
+var private g_table : table<string; int>
+
+[init]
+def fill_array_and_table() {
+    g_array |> push(1)
+    g_array |> push(2)
+    g_array |> push(3)
+    g_table |> insert("x", 10)
+    g_table |> insert("y", 20)
+}
+
+[test(description = "sprint_json_at writes the same text as sprint_json for scalars, strings, structs, arrays and tables")]
+def test_sprint_json_at_matches_sprint_json(tt : T?) {
+    tt |> run("int") @(t : T?) {
+        let a = sprint_json(g_int, false)
+        let b = sprint_json_at(unsafe(addr(g_int)), typeinfo rtti_typeinfo(g_int), false)
+        t |> equal(a, b)
+    }
+    tt |> run("uint") @(t : T?) {
+        let a = sprint_json(g_uint, false)
+        let b = sprint_json_at(unsafe(addr(g_uint)), typeinfo rtti_typeinfo(g_uint), false)
+        t |> equal(a, b)
+    }
+    tt |> run("int64") @(t : T?) {
+        let a = sprint_json(g_int64, false)
+        let b = sprint_json_at(unsafe(addr(g_int64)), typeinfo rtti_typeinfo(g_int64), false)
+        t |> equal(a, b)
+    }
+    tt |> run("bool true") @(t : T?) {
+        let a = sprint_json(g_bool_t, false)
+        let b = sprint_json_at(unsafe(addr(g_bool_t)), typeinfo rtti_typeinfo(g_bool_t), false)
+        t |> equal(a, b)
+    }
+    tt |> run("bool false") @(t : T?) {
+        let a = sprint_json(g_bool_f, false)
+        let b = sprint_json_at(unsafe(addr(g_bool_f)), typeinfo rtti_typeinfo(g_bool_f), false)
+        t |> equal(a, b)
+    }
+    tt |> run("string") @(t : T?) {
+        let a = sprint_json(g_string, false)
+        let b = sprint_json_at(unsafe(addr(g_string)), typeinfo rtti_typeinfo(g_string), false)
+        t |> equal(a, b)
+    }
+    tt |> run("string with escapes") @(t : T?) {
+        let a = sprint_json(g_escape, false)
+        let b = sprint_json_at(unsafe(addr(g_escape)), typeinfo rtti_typeinfo(g_escape), false)
+        t |> equal(a, b)
+    }
+    tt |> run("struct") @(t : T?) {
+        let a = sprint_json(g_pair, false)
+        let b = sprint_json_at(unsafe(addr(g_pair)), typeinfo rtti_typeinfo(g_pair), false)
+        t |> equal(a, b)
+    }
+    tt |> run("array<int>") @(t : T?) {
+        let a = sprint_json(g_array, false)
+        let b = sprint_json_at(unsafe(addr(g_array)), typeinfo rtti_typeinfo(g_array), false)
+        t |> equal(a, b)
+    }
+    tt |> run("table<string;int>") @(t : T?) {
+        let a = sprint_json(g_table, false)
+        let b = sprint_json_at(unsafe(addr(g_table)), typeinfo rtti_typeinfo(g_table), false)
+        t |> equal(a, b)
+    }
+}
+
+[test(description = "sprint_json_at writes a non-empty compact form and a different human-readable form")]
+def test_sprint_json_at_human_readable(t : T?) {
+    let compact = sprint_json_at(unsafe(addr(g_pair)), typeinfo rtti_typeinfo(g_pair), false)
+    let human = sprint_json_at(unsafe(addr(g_pair)), typeinfo rtti_typeinfo(g_pair), true)
+    t |> equal(empty(compact), false)
+    t |> equal(empty(human), false)
+    // Human-readable form contains newlines; compact form doesn't.
+    t |> equal(find(human, "\n") >= 0, true)
+    t |> equal(find(compact, "\n") < 0, true)
+}
+
+// ============================================================
+//  Enum-as-flags JSON serialization.
+//
+//  An OR-combined enum value (e.g. ImGui's `OpenOnArrow | DefaultOpen`)
+//  matches no single enumerator. The reflective JSON writer used to emit
+//  NOTHING for such a value, producing invalid JSON ({"flags": ,...}) that
+//  dropped the entire surrounding object on parse. It now emits the number,
+//  which round-trips (scanEnum already accepts a bare integer).
+// ============================================================
+
+enum private TreeFlag {
+    none       = 0
+    on_arrow   = 1
+    default_on = 2
+    framed     = 4
+}
+
+var private g_single   = TreeFlag.default_on
+var private g_none     : TreeFlag
+var private g_combined : TreeFlag
+
+struct private WidgetState {
+    flags  : TreeFlag
+    opened : bool
+}
+var private g_widget : WidgetState
+
+[init]
+def setup() {
+    // on_arrow | default_on == 3 — no single enumerator equals 3. Plain enums don't
+    // define `|` (ImGui's flag enums get it from their C++ binding); build the combined
+    // value the way it actually arrives in memory — an OR'd int reinterpreted as the enum.
+    g_combined = unsafe(reinterpret<TreeFlag>(int(TreeFlag.on_arrow) | int(TreeFlag.default_on)))
+    g_widget.flags = g_combined
+    g_widget.opened = true
+}
+
+[test(description = "an OR-combined enum value is written as a number that round-trips instead of emitting nothing")]
+def test_enum_flags_serialize(tt : T?) {
+    tt |> run("single value serializes to its name") @(t : T?) {
+        let s = sprint_json_at(unsafe(addr(g_single)), typeinfo rtti_typeinfo(g_single), false)
+        t |> equal(s, "\"default_on\"")
+    }
+    tt |> run("zero value serializes to its name") @(t : T?) {
+        let s = sprint_json_at(unsafe(addr(g_none)), typeinfo rtti_typeinfo(g_none), false)
+        t |> equal(s, "\"none\"")
+    }
+    tt |> run("combined value serializes to the number, not empty") @(t : T?) {
+        let s = sprint_json_at(unsafe(addr(g_combined)), typeinfo rtti_typeinfo(g_combined), false)
+        t |> equal(s, "3")
+    }
+    tt |> run("combined value round-trips through sscan") @(t : T?) {
+        var back : TreeFlag
+        let ok = sscan_json_at("3", unsafe(addr(back)), typeinfo rtti_typeinfo(back))
+        t |> equal(ok, true)
+        t |> equal(int(back), 3)
+    }
+    tt |> run("struct with a combined enum field stays parseable") @(t : T?) {
+        // The regression: a combined flags field used to blank out, leaving
+        // {"flags": ,"opened":true} — invalid, so the whole object dropped.
+        let s = sprint_json_at(unsafe(addr(g_widget)), typeinfo rtti_typeinfo(g_widget), false)
+        var err : string
+        let parsed = read_json(s, err)
+        t |> equal(parsed != null, true)
+        t |> equal(parsed?["opened"] ?? false, true)
+        t |> equal(parsed?["flags"] ?? 0, 3)
     }
 }

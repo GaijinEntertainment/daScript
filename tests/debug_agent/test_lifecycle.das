@@ -28,14 +28,14 @@ def lifecycle_noop() {
     pass
 }
 
-[test]
+[test(description = "has_debug_agent_context is false for a name never installed")]
 def test_has_agent_before_install(t : T?) {
     t |> run("has_debug_agent_context false before install") @(t : T?) {
         t |> equal(has_debug_agent_context("nonexistent_agent_xyz"), false)
     }
 }
 
-[test]
+[test(description = "has_debug_agent_context is true once the agent is installed")]
 def test_has_agent_after_install(t : T?) {
     t |> run("has_debug_agent_context true after install") @(t : T?) {
         ensure_lifecycle()
@@ -43,7 +43,7 @@ def test_has_agent_after_install(t : T?) {
     }
 }
 
-[test]
+[test(description = "get_debug_agent_context returns a context that invoke_in_context can call into")]
 def test_get_agent_context_callable(t : T?) {
     t |> run("get_debug_agent_context returns callable context") @(t : T?) {
         ensure_lifecycle()
@@ -53,7 +53,7 @@ def test_get_agent_context_callable(t : T?) {
     }
 }
 
-[test]
+[test(description = "installing an agent under an already used name does not crash and keeps the agent")]
 def test_fork_idempotent(t : T?) {
     t |> run("re-installing same agent name does not crash") @(t : T?) {
         ensure_lifecycle()
@@ -62,7 +62,7 @@ def test_fork_idempotent(t : T?) {
     }
 }
 
-[test]
+[test(description = "delete_debug_agent_context removes an installed agent by name")]
 def test_delete_agent(t : T?) {
     t |> run("delete_debug_agent_context removes agent by name") @(t : T?) {
         ensure_lifecycle()

@@ -1,3 +1,5 @@
+//! a checked HTTPS response borrowed by its callback cannot be stored
+//! in a variable that outlives the call (expect 30915)
 options gen2
 expect 30915
 require dashv/dashv_boost

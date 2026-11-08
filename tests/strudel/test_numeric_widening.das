@@ -18,7 +18,7 @@ def private hc(p : Pattern) : int {
     return length(h)
 }
 
-[test]
+[test(description = "effect setters accept int, float and double arguments")]
 def test_effect_setters_accept_int_float_double(t : T?) {
     // each modifier called with int, then float, then double — non-structural,
     // so the single held event survives the depth-3 chain.
@@ -57,7 +57,7 @@ def test_effect_setters_accept_int_float_double(t : T?) {
     t |> equal(hc(atom("sawtooth") |> add(0) |> add(2.0) |> add(2.0lf)), 1)
 }
 
-[test]
+[test(description = "the set_X scalar setters accept int, float and double arguments and write the field")]
 def test_newly_public_set_x_scalars(t : T?) {
     // the 9 set_X scalars exposed in Phase B accept int / float / double
     t |> equal(hc(atom("sawtooth") |> set_speed(2) |> set_speed(1.5) |> set_speed(1.0lf)), 1)
@@ -75,7 +75,7 @@ def test_newly_public_set_x_scalars(t : T?) {
     t |> success(abs(h[0].value.crush - 4.0) < 0.001)
 }
 
-[test]
+[test(description = "fast accepts int, float and double factors")]
 def test_time_funcs_accept_int_float_double(t : T?) {
     t |> equal(hc(s("bd sd") |> fast(2)), 4)
     t |> equal(hc(s("bd sd") |> fast(2.0)), 4)
@@ -87,7 +87,7 @@ def test_time_funcs_accept_int_float_double(t : T?) {
     t |> equal(hc(s("bd") |> compress(0.25lf, 0.75lf)), 1)
 }
 
-[test]
+[test(description = "numeric widening does not shadow the pattern-argument overload")]
 def test_pattern_overload_still_resolves(t : T?) {
     // widening must NOT shadow the Pattern (mod_pat) overload
     let p <- s("bd sd") |> speed(s("1 2")) |> gain(s("0.5 1.0")) |> fast(s("1 2"))

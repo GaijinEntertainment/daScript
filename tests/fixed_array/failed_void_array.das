@@ -1,3 +1,4 @@
+//! A fixed array of void must not compile (30108).
 // Stage 0 characterization (FIXED_ARRAY_REWORK.md): array of void is a compile error.
 options gen2
 expect 30108

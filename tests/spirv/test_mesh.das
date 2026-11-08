@@ -135,7 +135,7 @@ def private entry_point_interface_count(words : array<uint>) : int {
     return count
 }
 
-[test]
+[test(description = "An empty mesh shader declares its capability, extension, execution model and modes and calls SetMeshOutputsEXT.")]
 def test_mesh_stage_scaffolding(t : T?) {
     t |> run("[mesh_shader] empty: cap + ext + execution model + execution modes + SetMeshOutputsEXT") <| @(t : T?) {
         var words <- mesh_empty_words()
@@ -174,7 +174,7 @@ def test_mesh_stage_scaffolding(t : T?) {
     }
 }
 
-[test]
+[test(description = "An empty task shader declares its capability, extension, execution model and LocalSize and ends in EmitMeshTasksEXT.")]
 def test_task_stage_scaffolding(t : T?) {
     t |> run("[task_shader] empty: cap + ext + execution model + LocalSize + EmitMeshTasksEXT terminator") <| @(tt : T?) {
         var words <- task_empty_words()
@@ -207,7 +207,7 @@ def test_task_stage_scaffolding(t : T?) {
     }
 }
 
-[test]
+[test(description = "max_vertices, max_primitives and output_topology lower to the matching execution modes.")]
 def test_mesh_output_config(t : T?) {
     t |> run("[mesh_shader] output config: max_vertices / max_primitives / output_topology -> execution modes") <| @(t : T?) {
         // mesh_lines: max_vertices=96, max_primitives=32, output_topology="lines".
@@ -235,7 +235,7 @@ def test_mesh_output_config(t : T?) {
     }
 }
 
-[test]
+[test(description = "Per-vertex and per-primitive output arrays lower to gl_MeshVerticesEXT and gl_PrimitiveTriangleIndicesEXT.")]
 def test_mesh_output_arrays(t : T?) {
     t |> run("[mesh_shader] per-vertex/per-primitive output arrays: gl_MeshVerticesEXT + gl_PrimitiveTriangleIndicesEXT") <| @(t : T?) {
         var words <- mesh_tri_words()
@@ -268,7 +268,7 @@ def test_mesh_output_arrays(t : T?) {
     }
 }
 
-[test]
+[test(description = "User per-vertex varyings, @per_primitive outputs and per-primitive builtins lower to the mesh output variables.")]
 def test_mesh_user_outputs(t : T?) {
     t |> run("[mesh_shader] user + per-primitive-builtin outputs: per-vertex varying + @per_primitive + gl_MeshPrimitivesEXT") <| @(t : T?) {
         var words <- mesh_outs_words()
@@ -319,7 +319,7 @@ def test_mesh_user_outputs(t : T?) {
     }
 }
 
-[test]
+[test(description = "A @task_payload emits TaskPayloadWorkgroupEXT, a four-operand EmitMeshTasksEXT and a mesh-side read.")]
 def test_mesh_task_payload(t : T?) {
     t |> run("[task_shader]/[mesh_shader] @task_payload: TaskPayloadWorkgroupEXT + EmitMeshTasksEXT 4-operand + mesh read") <| @(t : T?) {
         // task half: writes the payload (count + tint + survivor list) and dispatches `count` mesh
@@ -364,7 +364,7 @@ def test_mesh_task_payload(t : T?) {
     }
 }
 
-[test]
+[test(description = "A mesh shader reading a UBO lists the Uniform variable in the OpEntryPoint interface at SPIR-V 1.4.")]
 def test_mesh_ubo_interface(t : T?) {
     t |> run("[mesh_shader] reading a UBO: the Uniform variable is listed in the OpEntryPoint interface (SPIR-V 1.4)") <| @(t : T?) {
         var words <- mesh_ubo_words()
@@ -394,7 +394,7 @@ def private check_shared(t : T?; words : array<uint>; lbl : string; model : SpvE
     validate(t, words, lbl)
 }
 
-[test]
+[test(description = "@workgroup memory and barrier work in mesh and task shaders.")]
 def test_mesh_task_shared(t : T?) {
     t |> run("[mesh_shader] / [task_shader] @workgroup memory + barrier()") <| @(t : T?) {
         var mwords <- mesh_shared_words()

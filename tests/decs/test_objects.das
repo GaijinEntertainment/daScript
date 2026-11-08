@@ -7,7 +7,7 @@ require daslib/decs_boost
 require dastest/testing_boost public
 require daslib/apply
 
-[test]
+[test(description = "an entity created with set holds the given component")]
 def test_create_object(t : T?) {
     restart()
     create_entity() @(eid, cmp) {   // create one entity
@@ -22,7 +22,7 @@ def test_create_object(t : T?) {
     t |> success(count == 1)                           // make sure its the right one
 }
 
-[test]
+[test(description = "the clone-assign syntax sets the same components as set")]
 def test_clone_syntax(t : T?) {
     restart()
     create_entity() @(eid, cmp) {   // create one entity
@@ -37,7 +37,7 @@ def test_clone_syntax(t : T?) {
     t |> success(count == 1)
 }
 
-[test]
+[test(description = "a mismatched set or get type is rejected at run time and a get with the right type returns the stored value")]
 def test_type_mismatch(t : T?) {
     restart()
     create_entity() @(eid, cmp) {
@@ -67,7 +67,7 @@ struct Particle {
     pos, vel : float3
 }
 
-[test]
+[test(description = "entities are created from decs templates")]
 def test_create_from_templates(t : T?) {
     restart()
     for (i in range(3)) {
@@ -89,7 +89,7 @@ struct Prefixless {
     value : int
 }
 
-[test]
+[test(description = "entities are created from templates with no prefix")]
 def test_create_from_prefixless_templates(t : T?) {
     restart()
     for (i in range(3)) {

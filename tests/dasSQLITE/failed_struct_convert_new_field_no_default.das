@@ -1,7 +1,10 @@
 options gen2
+//! struct_convert must not compile when a new non-option field has no
+//! default and no override
 
-// `[struct_convert]` rejects new T fields that are not Option<T> and have no default initializer
-// when the user provides no override — there's no auto-derivation rule that can populate them.
+// `[struct_convert]` rejects new T fields that are not Option<T> and
+// have no default initializer when the user provides no override —
+// there's no auto-derivation rule that can populate them.
 expect 20800
 
 require sqlite/sqlite_migrate

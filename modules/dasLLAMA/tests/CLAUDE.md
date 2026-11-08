@@ -3453,8 +3453,7 @@ outside it never runs the chunk), `DAS_JOBQUE_THREADS=2`, and `DASLLAMA_SINGLE_T
 inherited single-thread pin runs the chunk inline, with no job exception to report). The
 in-process case - a `try/recover` around a fifo `parallel_for`, a team, an indexed and a stage
 dispatch whose chunks panic, an ordinary round after them still completing, and no clone leaked
-(the process-wide live-object count at shutdown) - is `tests/jobque/test_jobque_team.das` and
-`tests/jobque/test_jobque_stages.das` at the repo root. The tripwire reds any `with_job_que()`
+(the process-wide live-object count at shutdown) - is `tests/jobque/test_jobque_dispatch.das` at the repo root. The tripwire reds any `with_job_que()`
 block a test opens around the engine without calling `setup_dasllama_jobque_()` first.
 `test_rnnt.das` - model-free (area audio): the shared transducer decoder (`rnnt_greedy`) over synthetic nets of tiny widths
 built in-test, against a scalar reference written in the file - the zero and blank first inputs, the symbol cap, the shapes

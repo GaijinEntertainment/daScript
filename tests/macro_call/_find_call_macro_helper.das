@@ -1,12 +1,14 @@
-// Helper module for tests/macro_call/test_find_call_macro_null.das.
+// Helper module for the find-call-macro-null test in
+// tests/macro_call.
 //
-// Pre-fix, find_call_macro(mod, "absent_name") null-deref'd in the C++
-// binding (findModuleCallMacro in src/builtin/module_builtin_ast_adapters.cpp)
-// because Module::findCall returns nullptr on miss. Now it returns null and
+// Pre-fix, find_call_macro(mod, "absent_name") null-deref'd in the
+// C++ binding (findModuleCallMacro in
+// src/builtin/module_builtin_ast_adapters.cpp) because
+// Module::findCall returns nullptr on miss. Now it returns null and
 // callers can use it as a soft "is this name registered?" probe.
 //
-// This call_macro performs the compile-time probe and folds to a bool literal
-// that the [test] in the sibling file asserts on.
+// This call_macro performs the compile-time probe and folds to a bool
+// literal that the [test] in the sibling file asserts on.
 options gen2
 options indenting = 4
 

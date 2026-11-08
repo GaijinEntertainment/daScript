@@ -149,7 +149,7 @@ keystroke bursts exist in this client).
   unoptimized AST anyway. On a clean compile the three passes run via the structured
   `*_collect_issues` overloads (added to `daslib/lint` / `perf_lint` / `style_lint`;
   shared `LintIssue` record in `daslib/lint_config`, tested in
-  `tests/lint/test_collect_issues.das`) - no parsing positions back out of display
+  `tests/lint/uncategorized.das`) - no parsing positions back out of display
   strings, and `last_line`/`last_column` give real LSP ranges. Severity map:
   LINT/PERF -> Warning, STYLE -> Information (probe-verified `[!]`/`[i]` render). Repo
   policy honored (`seed_default_disabled` + `.lint_config` + per-file
@@ -212,7 +212,7 @@ and CC converts to 0-based LSP before they reach the server.
   a didOpen of a file that doesn't exist on disk works too. For CC (which
   saves before notifying) the overlay is identical to disk - the mechanism
   still runs every request, so it stays tested.
-- Protocol tests: `tests/lsp/test_lsp_protocol.das` drives
+- Protocol tests: `tests/lsp/uncategorized.das` drives
   the endpoint over `popen_argv_pipe` - initialize handshake ->
   didOpen with BROKEN buffer text while the committed fixture stays clean
   (publishDiagnostics must carry the buffer's 30341 at the exact range -
@@ -274,7 +274,7 @@ sessions first, then develop the new ops with live diagnostics on.
    method, its overrides in derived classes; for an abstract method,
    the implementations; consider generic -> instances. Scope the exact
    semantics in-session.
-4. Extend `tests/lsp/test_lsp_protocol.das` + live-verify in a headless
+4. Extend `tests/lsp/uncategorized.das` + live-verify in a headless
    CC session, as before.
 
 PR for the whole branch AFTER wave 4 (single preflight + CI round).

@@ -1,5 +1,10 @@
+//! returning a void call into a non-void result, by copy, by move or
+//! inside a generator block, does not compile, and a structured auto
+//! result never collapses to void
 options gen2
-expect 30220 : 4    // returning void value into a non-void result, via move, and inside a generator block
+// returning void value into a non-void result, via move, and inside a
+// generator block
+expect 30220 : 4
 expect 30343 : 1    // structured auto result (auto?) never collapses to void
 expect 30407 : 1
 

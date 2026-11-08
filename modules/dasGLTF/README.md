@@ -253,7 +253,7 @@ scene-linear RGB and return display-linear RGB. Apply exposure first; apply disp
 encoding once afterwards, either in a shader or through an sRGB output attachment.
 OpenGL and Vulkan HDR/SDF tutorials consume the same operator functions.
 
-CPU checks: `tests/math/test_color_mapping.das` and `tests/math/test_srgb_transfer.das`.
+CPU checks: `tests/math/test_color_mapping.das`.
 `modules/dasGLTF/tests/test_render_targets.das` reads back legacy and above-white
 linear output, fog and tint from a floating-point target. Its GL case requires a
 context and reports a skip when no display is available.

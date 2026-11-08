@@ -1,7 +1,7 @@
 options gen2
 require dastest/testing_boost public
 
-[test]
+[test(description = "a bare block executes its statements and scopes the variables declared inside it")]
 def test_basic_bare_block(t : T?) {
     t |> run("bare block executes statements") @(t : T?) {
         var x = 0
@@ -30,7 +30,7 @@ def test_basic_bare_block(t : T?) {
     }
 }
 
-[test]
+[test(description = "bare blocks nest, including deeply")]
 def test_nested_bare_blocks(t : T?) {
     t |> run("nested bare blocks") @(t : T?) {
         var result = 0
@@ -56,7 +56,7 @@ def test_nested_bare_blocks(t : T?) {
     }
 }
 
-[test]
+[test(description = "several bare blocks in a row each execute")]
 def test_bare_block_sequential(t : T?) {
     t |> run("multiple sequential bare blocks") @(t : T?) {
         var x = 0
@@ -73,7 +73,7 @@ def test_bare_block_sequential(t : T?) {
     }
 }
 
-[test]
+[test(description = "a bare block works inside if, for and while bodies")]
 def test_bare_block_in_control_flow(t : T?) {
     t |> run("bare block inside if") @(t : T?) {
         var x = 0
@@ -106,7 +106,7 @@ def test_bare_block_in_control_flow(t : T?) {
     }
 }
 
-[test]
+[test(description = "a bare block can carry a finally clause that runs at block exit")]
 def test_bare_block_with_finally(t : T?) {
     t |> run("bare block with finally clause") @(t : T?) {
         var x = 0
@@ -121,7 +121,7 @@ def test_bare_block_with_finally(t : T?) {
     }
 }
 
-[test]
+[test(description = "variables of a bare block are invisible outside, outer variables can be modified inside, and each nested block has its own scope")]
 def test_bare_block_scope(t : T?) {
     t |> run("inner var not visible outside") @(t : T?) {
         var x = 1
@@ -188,7 +188,7 @@ def test_bare_block_scope(t : T?) {
     }
 }
 
-[test]
+[test(description = "sequential and nested bare blocks may reuse a variable name, even with a different type")]
 def test_bare_block_name_reuse(t : T?) {
     t |> run("same name different type in sequential blocks") @(t : T?) {
         var ok = true

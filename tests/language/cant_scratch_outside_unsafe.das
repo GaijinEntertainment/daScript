@@ -1,5 +1,10 @@
+//! every scratch primitive - set_scratch, scratch_reserve,
+//! scratch_resize, scratch_ensure_capacity - called outside unsafe
+//! does not compile
 options gen2
-expect 31013 : 6    // unsafe_function_call - every scratch primitive is gated; one site per def below
+// unsafe_function_call - every scratch primitive is gated; one site
+// per def below
+expect 31013 : 6
 
 var a : array<int>
 var tb : table<int; int>

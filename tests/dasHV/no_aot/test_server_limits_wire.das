@@ -6,7 +6,7 @@ require dastest/testing_boost public
 require ../_server_limits_fixture.das
 require _wire_peer
 
-[test]
+[test(description = "A chunked body past the limit is refused with 413 and the handler never runs")]
 def chunked_overflow_rejects_without_running_handler(t : T?) {
     var server = new LimitedServer()
     server->init(0)
@@ -65,17 +65,17 @@ def private check_saturation(t : T?; event_budget, byte_budget : int; body : str
     unsafe { delete server }
 }
 
-[test]
+[test(description = "A full pending-event count closes admission until the server ticks")]
 def pending_event_count_closes_admission_until_tick(t : T?) {
     check_saturation(t, 1, 4096, "x")
 }
 
-[test]
+[test(description = "Full pending payload bytes close admission until the server ticks")]
 def pending_payload_bytes_close_admission_until_tick(t : T?) {
     check_saturation(t, 8, 12288, repeat("x", 8192))
 }
 
-[test]
+[test(description = "A binary WebSocket message keeps its embedded zero bytes and length")]
 def binary_websocket_message_keeps_zero_bytes(t : T?) {
     var server = new LimitedServer()
     server->init(0)
@@ -102,7 +102,7 @@ def binary_websocket_message_keeps_zero_bytes(t : T?) {
     unsafe { delete peer; delete server }
 }
 
-[test]
+[test(description = "A fragmented WebSocket message past the limit closes the connection and is never delivered")]
 def fragmented_websocket_overflow_closes_without_delivery(t : T?) {
     var server = new LimitedServer()
     server->init(0)
@@ -123,7 +123,7 @@ def fragmented_websocket_overflow_closes_without_delivery(t : T?) {
     unsafe { delete peer; delete server }
 }
 
-[test]
+[test(description = "Pipelined HTTP requests get their replies in request order with the right bodies")]
 def pipelined_http_replies_keep_request_order_and_bodies(t : T?) {
     var server = new LimitedServer()
     server.event_limit = 1
@@ -154,7 +154,7 @@ def pipelined_http_replies_keep_request_order_and_bodies(t : T?) {
     unsafe { delete peer; delete server }
 }
 
-[test]
+[test(description = "Pipelined requests resume dispatch after each response completes")]
 def pipelined_requests_resume_after_each_response(t : T?) {
     var server = new LimitedServer()
     server->init(0)
@@ -178,7 +178,7 @@ def pipelined_requests_resume_after_each_response(t : T?) {
     unsafe { delete peer; delete server }
 }
 
-[test]
+[test(description = "An oversized pending HTTP pipeline is cut off before any request is dispatched")]
 def pending_http_pipeline_is_bounded_before_dispatch(t : T?) {
     var server = new LimitedServer()
     server->init(0)

@@ -9,7 +9,7 @@ require daslib/sort_boost
 require _common
 require daslib/cmp
 
-[test]
+[test(description = "reverse returns the elements in opposite order for plain and struct elements")]
 def test_reverse(t : T?) {
     t |> run("basic reverse") @(t : T?) {
         var query = reverse(
@@ -29,7 +29,7 @@ def test_reverse(t : T?) {
     }
 }
 
-[test]
+[test(description = "order_by sorts by a key ascending or descending for plain and struct elements, as array and in place")]
 def test_orderby(t : T?) {
     t |> run("basic orderby") @(t : T?) {
         var numbers = [
@@ -110,7 +110,7 @@ def test_orderby(t : T?) {
     }
 }
 
-[test]
+[test(description = "order sorts elements by their natural order ascending or descending, for plain and struct elements, as array and in place")]
 def test_order(t : T?) {
     t |> run("basic order") @(t : T?) {
         var numbers = [
@@ -191,7 +191,7 @@ def test_order(t : T?) {
     }
 }
 
-[test]
+[test(description = "order_descending sorts by the default key as iterator, array, in place and under _fold")]
 def test_order_descending_default(t : T?) {
     t |> run("order descending default key") @(t : T?) {
         let numbers = [5, 3, 8, 1, 4]
@@ -233,7 +233,7 @@ def test_order_descending_default(t : T?) {
     }
 }
 
-[test]
+[test(description = "unique removes adjacent duplicates for plain and struct elements")]
 def test_unique(t : T?) {
     t |> run("basic unique") @(t : T?) {
         let numbers = [
@@ -269,7 +269,7 @@ def test_unique(t : T?) {
     }
 }
 
-[test]
+[test(description = "unique_by removes adjacent elements with equal keys for plain and struct elements")]
 def test_unique_by(t : T?) {
     t |> run("basic unique by") @(t : T?) {
         let numbers = [
@@ -311,7 +311,7 @@ def test_unique_by(t : T?) {
     }
 }
 
-[test]
+[test(description = "partial_sort puts the first N elements in order, with a custom comparator, N of zero, N past the length and struct keys")]
 def test_partial_sort(t : T?) {
     t |> run("basic partial_sort first N ascending") @(t : T?) {
         var a <- [5, 2, 8, 1, 9, 3, 7, 4, 6, 0]
@@ -362,7 +362,7 @@ def test_partial_sort(t : T?) {
     }
 }
 
-[test]
+[test(description = "nth_element places the k-th smallest at position k, is a no-op for k out of range, and works with a struct key comparator")]
 def test_nth_element(t : T?) {
     t |> run("kth-smallest at position k") @(t : T?) {
         var a <- [7, 3, 1, 9, 5, 8, 0, 4, 2]
@@ -402,7 +402,7 @@ def test_nth_element(t : T?) {
     }
 }
 
-[test]
+[test(description = "top_n_by returns the N smallest by key in ascending order for arrays and iterators, with the zero, oversize and single cases")]
 def test_top_n_by(t : T?) {
     t |> run("top_n_by on array source — N smallest ascending") @(t : T?) {
         let src <- [10, 20, 5, 8, 30, 15, 2, 25]
@@ -458,7 +458,7 @@ def test_top_n_by(t : T?) {
     }
 }
 
-[test]
+[test(description = "top_n_by_descending returns the N largest by key in descending order, matches sort-then-take, and yields empty for N of zero or below")]
 def test_top_n_by_descending(t : T?) {
     t |> run("top_n_by_descending on array source — N largest descending") @(t : T?) {
         let src <- [10, 20, 5, 8, 30, 15, 2, 25]
@@ -536,7 +536,7 @@ def test_top_n_by_descending(t : T?) {
     }
 }
 
-[test]
+[test(description = "top_n_descending returns the N largest elements in descending order for arrays, iterators and floats")]
 def test_top_n_descending(t : T?) {
     t |> run("top_n_descending on array source — N largest descending") @(t : T?) {
         let src <- [10, 20, 5, 8, 30, 15, 2, 25]
@@ -570,7 +570,7 @@ def test_top_n_descending(t : T?) {
     }
 }
 
-[test]
+[test(description = "make_heap, pop and push_heap keep the max at the root and support a bounded streaming top-N heap")]
 def test_heap_ops(t : T?) {
     t |> run("make_heap → max at root") @(t : T?) {
         var a <- [5, 2, 8, 1, 9, 3, 7]
@@ -622,7 +622,7 @@ def test_heap_ops(t : T?) {
     }
 }
 
-[test]
+[test(description = "the qpartial_sort, qnth_element, qmake_heap, qpush_heap and qpop_heap macros match the underlying sort and heap operations on arrays")]
 def test_q_macros(t : T?) {
     //! Smoke tests for the qpartial_sort / qnth_element / qmake_heap /
     //! qpush_heap / qpop_heap dispatcher macros. Verifies the macro expansion

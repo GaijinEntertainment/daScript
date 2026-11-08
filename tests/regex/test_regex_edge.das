@@ -7,7 +7,7 @@ require _regex_test_helpers
 
 // ── offset parameter ────────────────────────────────────────
 
-[test]
+[test(description = "the offset parameter skips leading characters and offset zero is the default")]
 def test_offset_param(t : T?) {
     t |> run("offset skips chars") @(t : T?) {
         t |> equal(regex_test_match("world", "hello world", 6), 11)
@@ -22,7 +22,7 @@ def test_offset_param(t : T?) {
 
 // ── zero-length match guards ────────────────────────────────
 
-[test]
+[test(description = "foreach terminates on a pattern that matches zero-length, star or zero-width anchor")]
 def test_zero_length_foreach(t : T?) {
     t |> run("star foreach terminates") @(t : T?) {
         var re <- regex_compile("a*")
@@ -44,7 +44,7 @@ def test_zero_length_foreach(t : T?) {
     }
 }
 
-[test]
+[test(description = "replace terminates on a pattern that matches zero-length")]
 def test_zero_length_replace(t : T?) {
     t |> run("star replace terminates") @(tt : T?) {
         var re <- regex_compile("a*")
@@ -57,7 +57,7 @@ def test_zero_length_replace(t : T?) {
 
 // ── EOS behavior ────────────────────────────────────────────
 
-[test]
+[test(description = "groups, unions and concatenations match at the end of the string and dollar matches only truly at the end")]
 def test_eos_behavior(t : T?) {
     t |> run("group at EOS matches") @(t : T?) {
         t |> equal(regex_test_match("(abc)", "abc"), 3)
@@ -76,7 +76,7 @@ def test_eos_behavior(t : T?) {
 
 // ── escaped meta chars ──────────────────────────────────────
 
-[test]
+[test(description = "escaped metacharacters (dot, plus, star, parentheses, brackets, pipe, backslash) match literally")]
 def test_escaped_meta(t : T?) {
     t |> run("escaped dot") @(t : T?) {
         t |> equal(regex_test_match("\\.", "."), 1)
@@ -107,7 +107,7 @@ def test_escaped_meta(t : T?) {
 
 // ── negated set with plus ───────────────────────────────────
 
-[test]
+[test(description = "plus over a negated set, a non-word class or a non-digit class stops correctly at the end of input")]
 def test_negated_set_plus(t : T?) {
     t |> run("negated set stops at end") @(t : T?) {
         let inp = "abc"
@@ -131,7 +131,7 @@ def test_negated_set_plus(t : T?) {
 
 // ── complex combinations ────────────────────────────────────
 
-[test]
+[test(description = "email-like, IP-like and nested-quantifier patterns match")]
 def test_complex_patterns(t : T?) {
     t |> run("email-like pattern") @(t : T?) {
         t |> equal(regex_test_match("[\\w.]+@[\\w.]+", "user@host.com"), 13)

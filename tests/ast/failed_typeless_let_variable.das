@@ -1,8 +1,13 @@
+//! A macro that injects a let whose variable has no type is reported
+//! as an internal-variable error, neither a crash nor a silent
+//! repair.
 options gen2
-expect 50640    // internal_variable — malformed AST, variable 't`less' is missing its type
+// internal_variable — malformed AST, variable 't`less' is missing its
+// type
+expect 50640
 
-// The macro injects a `let` whose Variable has no type; the compiler must report
-// 50640 (not crash, not silently repair-and-succeed)
+// The macro injects a `let` whose Variable has no type; the compiler
+// must report 50640 (not crash, not silently repair-and-succeed)
 
 require _typeless_let_macro
 

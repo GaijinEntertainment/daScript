@@ -3,17 +3,17 @@ require dastest/testing_boost
 require daslib/faker
 require daslib/fuzzer
 
-require fake_numeric
+require _fake_numeric
 
 require math
 
-[test]
+[test(description = "min and max pass the generated fuzz comparison for every numeric type")]
 def test_min_max(t : T?) {
     fake_numeric2(min)
     fake_numeric2(max)
 }
 
-[test]
+[test(description = "the float and double math functions pass the generated fuzz comparison, and is_finite, is_nan and sincos survive fuzzing")]
 def test_float_and_double(t : T?) {
     fake_numeric(sin)
     fake_numeric(cos)
@@ -83,7 +83,7 @@ def test_float_and_double(t : T?) {
     }
 }
 
-[test]
+[test(description = "the float-only math functions pass the generated fuzz comparison")]
 def test_float_only(t : T?) {
     fake_float(atan_est)
     fake_float2(atan2_est)
@@ -97,7 +97,7 @@ def test_float_only(t : T?) {
 }
 
 
-[test]
+[test(description = "cross, distance and reflect on float3 survive fuzzing")]
 def test_float3_only(t : T?) {
     t |> run("fuzz cross") @@(t : T?) {
         var fake <- Faker()
@@ -142,7 +142,7 @@ def test_float3_only(t : T?) {
     }
 }
 
-[test]
+[test(description = "the float2, float3 and float4 math functions pass the generated fuzz comparison")]
 def test_float234(t : T?) {
     fake_float2_234(dot)
     fake_float_234(fast_normalize)
@@ -153,7 +153,7 @@ def test_float234(t : T?) {
     fake_float_234(inv_length_sq)
 }
 
-[test]
+[test(description = "lerp, mad and clamp pass the generated fuzz comparison")]
 def test_lerp_mad_clamp(t : T?) {
     fake_float3(lerp)
     fake_float3(mad)

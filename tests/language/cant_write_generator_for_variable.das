@@ -1,3 +1,5 @@
+//! assigning to a for-loop variable inside a generator does not
+//! compile: the loop variable is constant
 options gen2
 expect 30952
 

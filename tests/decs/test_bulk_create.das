@@ -12,7 +12,7 @@ struct BulkItem {
     pos   : float3
 }
 
-[test]
+[test(description = "create_entities makes the requested number of entities with the right values and valid ids")]
 def test_bulk_create_basic(t : T?) {
     t |> run("creates correct number of entities") @(t : T?) {
         restart()
@@ -52,7 +52,7 @@ def test_bulk_create_basic(t : T?) {
     }
 }
 
-[test]
+[test(description = "bulk-created entities are visible without a commit")]
 def test_bulk_create_immediate(t : T?) {
     t |> run("entities visible without commit") @(t : T?) {
         restart()
@@ -68,7 +68,7 @@ def test_bulk_create_immediate(t : T?) {
     }
 }
 
-[test]
+[test(description = "bulk creation of zero entities does nothing")]
 def test_bulk_create_zero(t : T?) {
     t |> run("zero count is a no-op") @(t : T?) {
         restart()
@@ -83,7 +83,7 @@ def test_bulk_create_zero(t : T?) {
     }
 }
 
-[test]
+[test(description = "bulk and regular entities coexist")]
 def test_bulk_create_mixed_with_regular(t : T?) {
     t |> run("bulk + regular entities coexist") @(t : T?) {
         restart()
@@ -107,7 +107,7 @@ def test_bulk_create_mixed_with_regular(t : T?) {
     }
 }
 
-[test]
+[test(description = "bulk creation handles a thousand entities")]
 def test_bulk_create_large(t : T?) {
     t |> run("1000 entities") @(t : T?) {
         restart()
@@ -125,7 +125,7 @@ def test_bulk_create_large(t : T?) {
     }
 }
 
-[test]
+[test(description = "bulk-created entities can be deleted")]
 def test_bulk_delete_after(t : T?) {
     t |> run("can delete bulk-created entities") @(t : T?) {
         restart()
@@ -149,7 +149,7 @@ def test_bulk_delete_after(t : T?) {
 
 // --- Direct archetype write tests (create_entities`T) ---
 
-[test]
+[test(description = "the direct bulk path makes the requested number of entities")]
 def test_direct_bulk_basic(t : T?) {
     t |> run("direct: creates correct number of entities") @(t : T?) {
         restart()
@@ -165,7 +165,7 @@ def test_direct_bulk_basic(t : T?) {
     }
 }
 
-[test]
+[test(description = "the direct bulk path stores the given values")]
 def test_direct_bulk_values(t : T?) {
     t |> run("direct: entities have correct values") @(t : T?) {
         restart()
@@ -181,7 +181,7 @@ def test_direct_bulk_values(t : T?) {
     }
 }
 
-[test]
+[test(description = "the direct bulk path hands out valid ids")]
 def test_direct_bulk_eids(t : T?) {
     t |> run("direct: entities have valid eids") @(t : T?) {
         restart()
@@ -197,7 +197,7 @@ def test_direct_bulk_eids(t : T?) {
     }
 }
 
-[test]
+[test(description = "the direct bulk path handles a thousand entities")]
 def test_direct_bulk_large(t : T?) {
     t |> run("direct: 1000 entities") @(t : T?) {
         restart()
@@ -216,7 +216,7 @@ def test_direct_bulk_large(t : T?) {
     }
 }
 
-[test]
+[test(description = "the direct bulk path with zero entities does nothing")]
 def test_direct_bulk_zero(t : T?) {
     t |> run("direct: zero count is a no-op") @(t : T?) {
         restart()
@@ -231,7 +231,7 @@ def test_direct_bulk_zero(t : T?) {
     }
 }
 
-[test]
+[test(description = "direct-bulk and regular entities coexist")]
 def test_direct_bulk_mixed_with_regular(t : T?) {
     t |> run("direct: coexists with regular entities") @(t : T?) {
         restart()
@@ -255,7 +255,7 @@ def test_direct_bulk_mixed_with_regular(t : T?) {
     }
 }
 
-[test]
+[test(description = "direct-bulk entities can be deleted")]
 def test_direct_bulk_delete_after(t : T?) {
     t |> run("direct: can delete bulk-created entities") @(t : T?) {
         restart()
@@ -276,7 +276,7 @@ def test_direct_bulk_delete_after(t : T?) {
     }
 }
 
-[test]
+[test(description = "direct-bulk entities survive serialization")]
 def test_direct_bulk_serialize(t : T?) {
     t |> run("direct: bulk-created entities survive serialization") @(t : T?) {
         restart()
@@ -298,7 +298,7 @@ def test_direct_bulk_serialize(t : T?) {
     }
 }
 
-[test]
+[test(description = "a mutable query changes direct-bulk entities")]
 def test_direct_bulk_query_mutable(t : T?) {
     t |> run("direct: mutable query on bulk-created entities") @(t : T?) {
         restart()
@@ -316,7 +316,7 @@ def test_direct_bulk_query_mutable(t : T?) {
     }
 }
 
-[test]
+[test(description = "several direct-bulk batches coexist")]
 def test_direct_bulk_multiple_batches(t : T?) {
     t |> run("direct: multiple bulk batches coexist") @(t : T?) {
         restart()
@@ -337,7 +337,7 @@ def test_direct_bulk_multiple_batches(t : T?) {
     }
 }
 
-[test]
+[test(description = "bulk-created entities survive serialization")]
 def test_bulk_serialize(t : T?) {
     t |> run("cmp-based bulk entities survive serialization") @(t : T?) {
         restart()

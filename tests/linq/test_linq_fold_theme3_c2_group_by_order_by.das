@@ -16,7 +16,7 @@ require dastest/testing_boost public
 
 // ── C2a: array source + order_by ascending ────────────────────────────────────
 
-[test]
+[test(description = "group_by, a count select and ascending order_by over an array return the buckets sorted by count")]
 def test_c2a_array_order_by_asc(t : T?) {
     t |> run("C2a: each(items) + _group_by + _select((B,C=count)) + _order_by(_.C) + to_array — array source, ascending") @(tt : T?) {
         var items <- [for (i in range(20)); (brand = "B{i % 4}", price = float(i))]
@@ -35,7 +35,7 @@ def test_c2a_array_order_by_asc(t : T?) {
 
 // ── C2b: array source + order_by descending with unequal counts ───────────────
 
-[test]
+[test(description = "group_by with unequal bucket counts and order_by_descending return the buckets in descending count order")]
 def test_c2b_array_order_by_desc(t : T?) {
     t |> run("C2b: _order_by_descending + unequal bucket counts — must produce descending-by-C sequence") @(tt : T?) {
         // Brand frequencies: A×6, B×3, C×2, D×1 → desc order [A, B, C, D].
@@ -78,7 +78,7 @@ def c2c_handwritten(items : array<tuple<brand : string; price : float>>) : array
     return <- out
 }
 
-[test]
+[test(description = "the fused group_by plus sort matches the hand-written cascade element by element")]
 def test_c2c_parity_handwritten(t : T?) {
     t |> run("C2c: spliced sort vs handwritten cascade — sequences must match element-for-element") @(tt : T?) {
         // Distinct counts so ascending sort is deterministic.
@@ -104,7 +104,7 @@ def test_c2c_parity_handwritten(t : T?) {
 
 // ── C2d: order_by composes with HAVING (trailing _where) ──────────────────────
 
-[test]
+[test(description = "a having filter before order_by sorts only the surviving buckets")]
 def test_c2d_order_by_after_having(t : T?) {
     t |> run("C2d: _select(reducer) + _where(HAVING) + _order_by + to_array — HAVING gates buckets, sort fires on survivors") @(tt : T?) {
         // A×6, B×3, C×2, D×1 → HAVING C>=2 keeps A,B,C; sort asc → C,B,A.
@@ -140,7 +140,7 @@ def c2anti_count_and_return_C(v : tuple<B : string; C : int>) : int {
     return v.C
 }
 
-[test]
+[test(description = "a side-effecting order key after group_by falls back to the unfused path and still sorts correctly")]
 def test_c2_anti_non_inline_key_cascades(t : T?) {
     t |> run("C2-anti: _order_by(side-effecting fn call) — must cascade to tier-2 (no splice) AND produce correct sorted output") @(tt : T?) {
         let items <- [for (k in [
@@ -181,7 +181,7 @@ def populate_c2_decs() {
     }
 }
 
-[test]
+[test(description = "group_by, a count select and order_by_descending over a decs source return the buckets sorted by count")]
 def test_c2_decs_order_by_desc(t : T?) {
     t |> run("C2-decs: from_decs_template + _group_by + _select(count) + _order_by_descending + to_array — decs adapter feeds inline sort") @(tt : T?) {
         populate_c2_decs()
@@ -228,7 +228,7 @@ def populate_c2_decs_join() {
     }
 }
 
-[test]
+[test(description = "a decs join, group_by by region, a count select and order_by return the regions sorted by count")]
 def test_c2_decs_join_order_by(t : T?) {
     t |> run("C2-decs-join: from_decs_template(Car) + _join(Dealer) + _group_by(Region) + _select(count) + _order_by + to_array — isDecsJoin adapter + inline sort, single pass end-to-end") @(tt : T?) {
         populate_c2_decs_join()

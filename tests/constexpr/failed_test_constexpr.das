@@ -1,9 +1,11 @@
+//! A [constexpr] argument must not compile when the call passes a
+//! global variable instead of a compile-time constant (50501).
 options gen2
 expect 50501
 
 // Verify that [constexpr] annotation rejects non-constant arguments.
-// The call `foo("ouch", BOO)` must fail because BOO is a global variable,
-// not a compile-time constant.
+// The call `foo("ouch", BOO)` must fail because BOO is a global
+// variable, not a compile-time constant.
 
 require daslib/constant_expression
 

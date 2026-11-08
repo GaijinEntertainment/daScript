@@ -31,7 +31,7 @@ def private load_patched(name : string; inject : string) : GltfScene {
     return <- scene
 }
 
-[test]
+[test(description = "load_gltf of a nonexistent file returns an empty scene")]
 def test_missing_file(t : T?) {
     t |> run("missing file yields empty scene") @(t : T?) {
         var scene <- load_gltf("nonexistent.gltf")
@@ -41,7 +41,7 @@ def test_missing_file(t : T?) {
     }
 }
 
-[test]
+[test(description = "Box.glb loads as one mesh, two nodes and one root")]
 def test_box_glb(t : T?) {
     // GLB container (12-byte header + JSON/BIN chunks); tightly-packed VEC3 f32
     // POSITION/NORMAL; SCALAR u16 indices; node `matrix` (column-major).
@@ -71,7 +71,7 @@ def test_box_glb(t : T?) {
     }
 }
 
-[test]
+[test(description = "an interleaved-buffer glb loads as 24 vertices and 36 indices with the expected first position")]
 def test_box_interleaved(t : T?) {
     // Same geometry as Box but interleaved (bufferView byteStride 24, POSITION at
     // byteOffset 12) — decoded values must match the non-interleaved Box exactly.
@@ -86,7 +86,7 @@ def test_box_interleaved(t : T?) {
     }
 }
 
-[test]
+[test(description = "a glTF listing an unsupported required extension loads as an empty scene while an unsupported optional one still loads")]
 def test_extensions_gate(t : T?) {
     // extensionsRequired naming an unsupported extension (e.g. Draco) must fail
     // closed - empty scene + error log - instead of silently-degenerate geometry;
@@ -105,7 +105,7 @@ def test_extensions_gate(t : T?) {
     }
 }
 
-[test]
+[test(description = "SimpleSkin.gltf loads one mesh, three nodes and one skin")]
 def test_simple_skin(t : T?) {
     // base64-embedded .gltf container; integer-lane VEC4 u16 JOINTS_0 -> float4;
     // strided WEIGHTS_0; MAT4 inverse-bind; skin + animation; TRS node hierarchy.

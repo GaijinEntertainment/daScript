@@ -23,7 +23,7 @@ def private pcm_rms(buf : array<float>) : float {
     return sqrt(sum / float(length(buf)))
 }
 
-[test]
+[test(description = "once() keeps a phrase's onsets in its first cycle and playFor(n) spans n cycles, then both stop")]
 def test_play_for_gate(t : T?) {
     t |> run("once() keeps the phrase's onsets only within its first cycle, then silence") @(t : T?) {
         let pat <- once(fast(atom("sine"), 4))            // 4 onsets per cycle, gated to cycle 0
@@ -50,7 +50,7 @@ def test_play_for_gate(t : T?) {
     }
 }
 
-[test]
+[test(description = "a one-shot rings out during its cycle and is silent afterwards")]
 def test_one_shot_render_stops(t : T?) {
     t |> run("once(): rings out during its cycle, then stays silent (stop + tail)") @(t : T?) {
         var inscope sched : Scheduler
@@ -79,7 +79,7 @@ def test_one_shot_render_stops(t : T?) {
 
 // Player-level lifecycle + quantize share the strudel globals (g_wall_time, g_tracks), so they
 // run as ordered `run` blocks in one [test] with a single teardown — no cross-test contamination.
-[test]
+[test(description = "a one-shot player fires, retires itself when silent, and lands a quantized first sound on the beat grid")]
 def test_one_shot_player(t : T?) {
     strudel_set_cps(2.0lf)   // cycle = 0.5 s
     t |> run("strudel_one_shot fires, then auto-retires once silent (die)") @(t : T?) {

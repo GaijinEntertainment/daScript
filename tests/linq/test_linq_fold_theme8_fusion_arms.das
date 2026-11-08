@@ -28,7 +28,7 @@ struct Theme8Event {
     val  : int
 }
 
-[test]
+[test(description = "reverse then distinct_by keeps the last element per kind of the source")]
 def test_2a_array_reverse_distinct_by(t : T?) {
     t |> run("2a: each(arr).reverse()._distinct_by(_.kind).to_array() — keep FIRST per kind in reversed order = LAST per kind in source") @(tt : T?) {
         let events <- [
@@ -49,7 +49,7 @@ def test_2a_array_reverse_distinct_by(t : T?) {
     }
 }
 
-[test]
+[test(description = "reverse then distinct deduplicates whole elements of the reversed source")]
 def test_2a_array_reverse_distinct(t : T?) {
     t |> run("2a-distinct: each(arr).reverse().distinct().to_array() — whole-tuple dedup on reversed source") @(tt : T?) {
         let items <- [1, 2, 1, 3, 2]
@@ -73,7 +73,7 @@ def theme8_2a_handwritten(events : array<Theme8Event>) : array<Theme8Event> {
     return <- out
 }
 
-[test]
+[test(description = "the fused backward walk matches the hand-written one element by element over 100 rows")]
 def test_2a_parity_handwritten(t : T?) {
     t |> run("2a-parity: spliced vs handwritten backward walk — element-for-element match across 100 rows") @(tt : T?) {
         let events <- [for (i in range(100)); Theme8Event(kind = i % 7, val = i)]
@@ -97,7 +97,7 @@ struct Theme8Row {
     score   : int
 }
 
-[test]
+[test(description = "distinct_by then order_by with no take returns the distinct users sorted by timestamp")]
 def test_3b_distinct_by_order_by(t : T?) {
     t |> run("3b: each(rows)._distinct_by(_.user_id)._order_by(_.ts).to_array() — distinct gate + sort, no take") @(tt : T?) {
         let rows <- [
@@ -119,7 +119,7 @@ def test_3b_distinct_by_order_by(t : T?) {
     }
 }
 
-[test]
+[test(description = "distinct_by then order_by_descending returns the distinct users sorted descending")]
 def test_3b_distinct_by_order_descending(t : T?) {
     t |> run("3b-desc: each(rows)._distinct_by(_.user_id)._order_by_descending(_.ts).to_array()") @(tt : T?) {
         let rows <- [
@@ -136,7 +136,7 @@ def test_3b_distinct_by_order_descending(t : T?) {
     }
 }
 
-[test]
+[test(description = "distinct then order_by returns whole-tuple distinct rows sorted by score")]
 def test_3b_distinct_whole_order_by(t : T?) {
     t |> run("3b-distinct: each(items).distinct()._order_by(_.score).to_array() — whole-tuple dedup + sort") @(tt : T?) {
         var items <- [
@@ -154,7 +154,7 @@ def test_3b_distinct_whole_order_by(t : T?) {
     }
 }
 
-[test]
+[test(description = "a where before distinct_by and order_by filters before the distinct gate")]
 def test_3b_where_then_distinct_then_order(t : T?) {
     t |> run("3b-where: each(rows)._where(...)._distinct_by(_.user_id)._order_by(_.ts).to_array() — where filters BEFORE distinct gate") @(tt : T?) {
         let rows <- [
@@ -175,7 +175,7 @@ def test_3b_where_then_distinct_then_order(t : T?) {
     }
 }
 
-[test]
+[test(description = "distinct_by, order_by and a terminal select return the projected sorted users")]
 def test_3b_with_terminal_select(t : T?) {
     t |> run("3b-select: each(rows)._distinct_by(_.user_id)._order_by(_.ts)._select(_.user_id).to_array() — Theme 1 terminal _select composes") @(tt : T?) {
         let rows <- [
@@ -202,7 +202,7 @@ def theme8_3b_handwritten(rows : array<Theme8Row>) : array<Theme8Row> {
     return <- buf
 }
 
-[test]
+[test(description = "the fused distinct plus sort matches the hand-written cascade over 100 rows with 12 distinct users")]
 def test_3b_parity_handwritten(t : T?) {
     t |> run("3b-parity: spliced vs handwritten distinct+sort cascade — 100 rows, 12 distinct user_ids") @(tt : T?) {
         let rows <- [for (i in range(100)); Theme8Row(user_id = i % 12, ts = (i * 17) % 1000, score = i)]
@@ -220,7 +220,7 @@ def test_3b_parity_handwritten(t : T?) {
 // C4 — zip + reverse (array lane / counter lane / accumulator lane)
 // ═════════════════════════════════════════════════════════════════════════════
 
-[test]
+[test(description = "zip then reverse and to_array returns the pairs in reverse order")]
 def test_c4_zip_reverse_to_array(t : T?) {
     t |> run("C4: each(a) |> zip(each(b)) |> reverse() |> to_array() — array lane, reverse_inplace tail") @(tt : T?) {
         var a <- [1, 2, 3, 4]
@@ -234,7 +234,7 @@ def test_c4_zip_reverse_to_array(t : T?) {
     }
 }
 
-[test]
+[test(description = "zip then reverse and count gives the pair count, reverse being the identity for count")]
 def test_c4_zip_reverse_count(t : T?) {
     t |> run("C4-count: zip + reverse + count — reverse is identity for count, no buf alloc") @(tt : T?) {
         var a <- [for (i in range(20)); i]
@@ -245,7 +245,7 @@ def test_c4_zip_reverse_count(t : T?) {
     }
 }
 
-[test]
+[test(description = "zip, a select of the pair sum, reverse and sum give the total, reverse being the identity for sum")]
 def test_c4_zip_reverse_sum(t : T?) {
     t |> run("C4-sum: zip + select(sum-of-pair) + reverse + sum — accumulator lane, reverse identity") @(tt : T?) {
         var a <- [1, 2, 3]
@@ -256,7 +256,7 @@ def test_c4_zip_reverse_sum(t : T?) {
     }
 }
 
-[test]
+[test(description = "zip, where, reverse and to_array filter before reversing")]
 def test_c4_zip_where_reverse(t : T?) {
     t |> run("C4-where: zip + where + reverse + to_array — where filters BEFORE reverse_inplace") @(tt : T?) {
         var a <- [for (i in range(6)); i]
@@ -281,7 +281,7 @@ def theme8_c4_handwritten(a : array<int>; b : array<int>) : array<tuple<int; int
     return <- buf
 }
 
-[test]
+[test(description = "the fused zip plus reverse matches the hand-written version over 50 pairs")]
 def test_c4_parity_handwritten(t : T?) {
     t |> run("C4-parity: spliced vs handwritten zip+reverse — 50-pair match") @(tt : T?) {
         var a <- [for (i in range(50)); i * 3]
@@ -302,7 +302,7 @@ def test_c4_parity_handwritten(t : T?) {
 //  the test framework — only that output is correct.)
 // ═════════════════════════════════════════════════════════════════════════════
 
-[test]
+[test(description = "reverse, distinct_by and take fall back to the unfused path with the right output")]
 def test_anti_2a_with_take_cascades(t : T?) {
     t |> run("anti-2a-take: reverse + distinct_by + take — out of v1 scope, must still produce correct output via cascade") @(tt : T?) {
         let events <- [
@@ -319,7 +319,7 @@ def test_anti_2a_with_take_cascades(t : T?) {
     }
 }
 
-[test]
+[test(description = "distinct_by, order_by and first fall back to the unfused path with the right output")]
 def test_anti_3b_distinct_with_first_cascades(t : T?) {
     t |> run("anti-3b-first: distinct_by + order_by + first — out of v1 scope (streaming-min path has no dset hook), cascades correctly") @(tt : T?) {
         let rows <- [
@@ -333,7 +333,7 @@ def test_anti_3b_distinct_with_first_cascades(t : T?) {
     }
 }
 
-[test]
+[test(description = "zip, reverse and first fall back to the unfused path because reverse is not the identity for first")]
 def test_anti_c4_zip_reverse_first_cascades(t : T?) {
     t |> run("anti-C4-first: zip + reverse + first — out of v1 scope (reverse is NOT identity for first), cascades correctly") @(tt : T?) {
         let a <- [1, 2, 3]
@@ -344,7 +344,7 @@ def test_anti_c4_zip_reverse_first_cascades(t : T?) {
     }
 }
 
-[test]
+[test(description = "a select after zip and reverse makes the chain fall back to the unfused path with the right output")]
 def test_anti_c4_zip_reverse_select_cascades(t : T?) {
     t |> run("anti-C4-not-last: zip + reverse + select — reverse not last chain op, splice bails (select after reverse), cascades correctly") @(tt : T?) {
         let a <- [1, 2, 3]

@@ -6,7 +6,7 @@ require daslib/linq_boost
 
 require _common
 
-[test]
+[test(description = "count returns the element or long count, honors a predicate, and handles none-match and all-match predicates")]
 def test_count(t : T?) {
     t |> run("basic count") @(t : T?) {
         let total = count(
@@ -67,7 +67,7 @@ def test_count(t : T?) {
     }
 }
 
-[test]
+[test(description = "min and min_by return the smallest element or the element with the smallest key for ints, structs and strings")]
 def test_min(t : T?) {
     t |> run("basic min") @(t : T?) {
         var numbers = [
@@ -113,7 +113,7 @@ def test_min(t : T?) {
     }
 }
 
-[test]
+[test(description = "max and max_by return the largest element or the element with the largest key for ints, structs and strings")]
 def test_max(t : T?) {
     t |> run("basic max") @(t : T?) {
         var numbers = [
@@ -159,7 +159,7 @@ def test_max(t : T?) {
     }
 }
 
-[test]
+[test(description = "min_max returns both extremes in one pass, with or without a key selector, including for strings")]
 def test_min_max(t : T?) {
     t |> run("basic min_max") @(t : T?) {
         var numbers = [
@@ -197,7 +197,7 @@ def test_min_max(t : T?) {
     }
 }
 
-[test]
+[test(description = "min_max_average returns the minimum, maximum and mean together, also by key selector")]
 def test_min_max_average(t : T?) {
     t |> run("basic min_max_average") @(t : T?) {
         var numbers = [
@@ -221,7 +221,7 @@ def test_min_max_average(t : T?) {
     }
 }
 
-[test]
+[test(description = "sum adds up ints, selected struct fields and float arrays")]
 def test_sum(t : T?) {
     t |> run("basic sum") @(t : T?) {
         let query = sum(
@@ -243,7 +243,7 @@ def test_sum(t : T?) {
     }
 }
 
-[test]
+[test(description = "average returns the mean of ints and floats from iterators and arrays")]
 def test_average(t : T?) {
     t |> run("basic average") @(t : T?) {
         let query = average(
@@ -264,7 +264,7 @@ def test_average(t : T?) {
     }
 }
 
-[test]
+[test(description = "aggregate folds with an accumulator for ints, strings and an accumulator of a different type")]
 def test_aggregate(t : T?) {
     t |> run("basic aggregate") @(t : T?) {
         let query = aggregate(

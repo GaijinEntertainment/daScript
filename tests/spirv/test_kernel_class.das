@@ -123,7 +123,7 @@ def private check_valid(t : T?; words : array<uint>; tag : string) {
     }
 }
 
-[test]
+[test(description = "A class kernel emits the expected opcode shape and decorations.")]
 def test_kernel_class_shape(t : T?) {
     t |> run("class kernel: opcode shape + decorations") <| @(t : T?) {
         t |> equal(kc_spv[0], SPV_MAGIC)
@@ -135,7 +135,7 @@ def test_kernel_class_shape(t : T?) {
     }
 }
 
-[test]
+[test(description = "A class kernel emits the same per-opcode counts as its module-globals twin.")]
 def test_kernel_class_twin_equivalence(t : T?) {
     t |> run("class kernel == module-globals twin (per-opcode counts)") <| @(t : T?) {
         t |> equal(length(kc_spv), length(kc_twin_spv))
@@ -151,7 +151,7 @@ def test_kernel_class_twin_equivalence(t : T?) {
     }
 }
 
-[test]
+[test(description = "Method calls in a class kernel devirtualize to OpFunctionCalls with self dropped.")]
 def test_kernel_class_methods(t : T?) {
     t |> run("class kernel: method calls devirtualize to self-dropped OpFunctionCalls") <| @(t : T?) {
         t |> equal(count_op(km_spv, SpvOp.Function), 3)       // main + scale + gain
@@ -159,7 +159,7 @@ def test_kernel_class_methods(t : T?) {
     }
 }
 
-[test]
+[test(description = "Base-class members are inherited and an override devirtualizes to the derived body.")]
 def test_kernel_class_inheritance(t : T?) {
     t |> run("class kernel: base members inherit, overrides devirtualize to the derived body") <| @(t : T?) {
         t |> equal(count_op(kd_spv, SpvOp.Function), 3)   // main + gain (override) + bias (base)
@@ -170,7 +170,7 @@ def test_kernel_class_inheritance(t : T?) {
     }
 }
 
-[test]
+[test(description = "Class kernel modules are accepted by spirv-val.")]
 def test_kernel_class_validates(t : T?) {
     t |> run("class kernels: spirv-val clean") <| @(t : T?) {
         check_valid(t, kc_spv, "kc")
@@ -180,7 +180,7 @@ def test_kernel_class_validates(t : T?) {
     }
 }
 
-[test]
+[test(description = "Class kernel reflection reports the bindings and the push-constant range.")]
 def test_kernel_class_reflection(t : T?) {
     t |> run("class kernel: reflection carries bindings + push range") <| @(t : T?) {
         var refl <- decode_reflection(kc_spv_reflect)

@@ -10,7 +10,7 @@ require daslib/result
 // constructors + predicates
 // ===========================
 
-[test]
+[test(description = "ok carries its value, err carries its error and is_ok and is_err agree")]
 def test_constructors(t : T?) {
     t |> run("ok carries the value") @(t : T?) {
         let r = ok(42, type<string>)
@@ -36,7 +36,7 @@ def test_constructors(t : T?) {
 // map / map_err / and_then / or_else
 // ===========================
 
-[test]
+[test(description = "map transforms an ok, leaves an err and can change the ok type")]
 def test_map(t : T?) {
     t |> run("map transforms ok") @(t : T?) {
         let m = ok(3, type<string>) |> map($(x : int) => x * 2)
@@ -55,7 +55,7 @@ def test_map(t : T?) {
     }
 }
 
-[test]
+[test(description = "map_err transforms an err and leaves an ok unchanged")]
 def test_map_err(t : T?) {
     t |> run("map_err transforms err") @(t : T?) {
         let m = err("boom", type<int>) |> map_err($(e : string) => "wrapped: {e}")
@@ -68,7 +68,7 @@ def test_map_err(t : T?) {
     }
 }
 
-[test]
+[test(description = "and_then chains ok to ok, short-circuits on err and can return err")]
 def test_and_then(t : T?) {
     t |> run("and_then chains ok → ok") @(t : T?) {
         let next = ok(4, type<string>) |> and_then($(x : int) => ok(x + 10, type<string>))
@@ -88,7 +88,7 @@ def test_and_then(t : T?) {
     }
 }
 
-[test]
+[test(description = "or_else passes an ok through and recovers on err")]
 def test_or_else(t : T?) {
     t |> run("or_else passes ok through") @(t : T?) {
         let rec = ok(1, type<string>) |> or_else($(e : string) => ok(99, type<string>))
@@ -105,7 +105,7 @@ def test_or_else(t : T?) {
 // unwrap family
 // ===========================
 
-[test]
+[test(description = "unwrap, unwrap_or, unwrap_or_else, unwrap_or_default, unwrap_err and the move forms return the payload as specified")]
 def test_unwrap(t : T?) {
     t |> run("unwrap on ok returns value") @(t : T?) {
         t |> equal(ok(42, type<string>) |> unwrap, 42)
@@ -146,7 +146,7 @@ def test_unwrap(t : T?) {
 // operators
 // ===========================
 
-[test]
+[test(description = "the ?? operator unwraps or defaults and == and != compare results with results and with payload values")]
 def test_operators(t : T?) {
     t |> run("?? unwraps ok") @(t : T?) {
         t |> equal(ok(7, type<string>) ?? 0, 7)
@@ -186,7 +186,7 @@ def test_operators(t : T?) {
 // side-effect combinators
 // ===========================
 
-[test]
+[test(description = "if_ok and if_err run their block only on the matching state")]
 def test_if_ok_if_err(t : T?) {
     t |> run("if_ok fires on ok") @(t : T?) {
         var fired = 0
@@ -217,7 +217,7 @@ def test_if_ok_if_err(t : T?) {
 // bridges to Option
 // ===========================
 
-[test]
+[test(description = "to_option and err_to_option bridge a result to some or none by state")]
 def test_to_option(t : T?) {
     t |> run("to_option on ok is some") @(t : T?) {
         let o = ok(42, type<string>) |> to_option
@@ -246,7 +246,7 @@ def test_to_option(t : T?) {
 // chaining smoke test
 // ===========================
 
-[test]
+[test(description = "an ok flows through map, and_then and unwrap_or while an err short-circuits and map_err rewrites it")]
 def test_chaining(t : T?) {
     t |> run("ok → map → and_then → unwrap_or") @(t : T?) {
         let result = (ok(3, type<string>)

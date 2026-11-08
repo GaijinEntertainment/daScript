@@ -1,5 +1,9 @@
+//! returning a shorthand tuple whose variable names do not match the
+//! declared named-tuple result does not compile
 options gen2
-expect 30343    // incompatible return type: shorthand var names don't match declared named-tuple result
+// incompatible return type: shorthand var names don't match declared
+// named-tuple result
+expect 30343
 
 require dastest/testing_boost public
 

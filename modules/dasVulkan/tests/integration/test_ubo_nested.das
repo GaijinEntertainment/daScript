@@ -10,7 +10,8 @@ options indenting = 4
 //   - nubo.material.base_color * material.roughness  (nested-struct member chain)
 //   - nubo.lights[1].color.rgb               (array-of-struct member chain)
 // The host uploads the UBO bytes directly (the std140 layout below mirrors the emitter's published
-// offsets exactly; see daslang's tests/spirv/test_ubo_nested.das for the same fixture without GPU).
+// offsets exactly; see daslang's tests/spirv/test_ubo.das for the
+// same fixture without GPU).
 // A correct render on lavapipe (or any real driver) proves the std140 ArrayStride 16 + nested struct
 // Offset cascade + array-of-struct ArrayStride 32 are GPU-honored end to end -- spirv-val + opcode
 // asserts cannot verify the layout numerically lines up with what the driver expects.
@@ -25,8 +26,9 @@ require spirv/spirv_reflect public
 require scene_helpers
 
 // ===== Shader fixture =====
-// NestedUBO is the same struct as daslang's tests/spirv/test_ubo_nested.das fixture: published
-// layout is palette@0 (3*16=48), material@48 (laid-out size 32; std140 align rounds 24 up to 32),
+// NestedUBO is the same struct as daslang's tests/spirv/test_ubo.das
+// fixture: published layout is palette@0 (3*16=48), material@48
+// (laid-out size 32; std140 align rounds 24 up to 32),
 // lights@80 (2*32=64). Total 144 bytes. NMaterial offsets: base_color@0, roughness@16, metallic@20.
 // NLight offsets: pos@0, color@16. We keep field names + ORDER aligned with the offsets in the
 // host upload below.

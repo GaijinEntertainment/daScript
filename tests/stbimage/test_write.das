@@ -27,7 +27,7 @@ def make_rgb_pixels(var pixels : uint8[12]) {
 
 // ---- write to file + read back ----
 
-[test]
+[test(description = "a 2x2 RGBA image written to a .png file is accepted and loads back as 2x2")]
 def test_write_png_roundtrip(t : T?) {
     t |> run("write PNG to file and read back") <| @(tt : T?) {
         var pixels : uint8[16]
@@ -46,7 +46,7 @@ def test_write_png_roundtrip(t : T?) {
     }
 }
 
-[test]
+[test(description = "a 2x2 RGB image written to a .bmp file is accepted and loads back as 2x2")]
 def test_write_bmp_roundtrip(t : T?) {
     t |> run("write BMP to file and read back") <| @(tt : T?) {
         var pixels : uint8[12]
@@ -64,7 +64,7 @@ def test_write_bmp_roundtrip(t : T?) {
     }
 }
 
-[test]
+[test(description = "a 2x2 RGBA image written to a .tga file is accepted and loads back as 2x2")]
 def test_write_tga_roundtrip(t : T?) {
     t |> run("write TGA to file and read back") <| @(tt : T?) {
         var pixels : uint8[16]
@@ -82,7 +82,7 @@ def test_write_tga_roundtrip(t : T?) {
     }
 }
 
-[test]
+[test(description = "a 2x2 RGB image written to a .jpg file at quality 90 is accepted and loads back as 2x2")]
 def test_write_jpg_roundtrip(t : T?) {
     t |> run("write JPG to file and read back") <| @(tt : T?) {
         var pixels : uint8[12]
@@ -102,7 +102,7 @@ def test_write_jpg_roundtrip(t : T?) {
 
 // ---- write to memory (block API) ----
 
-[test]
+[test(description = "encoding a 2x2 RGBA image to PNG in memory yields more than 8 bytes that start with the PNG signature 137 80 78 71")]
 def test_write_png_to_memory(t : T?) {
     t |> run("write PNG to memory produces valid PNG") <| @(tt : T?) {
         var pixels : uint8[16]
@@ -118,7 +118,7 @@ def test_write_png_to_memory(t : T?) {
     }
 }
 
-[test]
+[test(description = "encoding a 2x2 RGB image to BMP in memory yields more than 14 bytes that start with 'B' 'M'")]
 def test_write_bmp_to_memory(t : T?) {
     t |> run("write BMP to memory produces valid BMP") <| @(tt : T?) {
         var pixels : uint8[12]
@@ -132,7 +132,7 @@ def test_write_bmp_to_memory(t : T?) {
     }
 }
 
-[test]
+[test(description = "encoding a 2x2 RGB image to JPEG in memory yields more than 2 bytes that start with the marker bytes 255 216")]
 def test_write_jpg_to_memory(t : T?) {
     t |> run("write JPG to memory produces valid JPEG") <| @(tt : T?) {
         var pixels : uint8[12]
@@ -146,7 +146,7 @@ def test_write_jpg_to_memory(t : T?) {
     }
 }
 
-[test]
+[test(description = "encoding a 2x2 RGBA image to TGA in memory yields a non-empty byte block")]
 def test_write_tga_to_memory(t : T?) {
     t |> run("write TGA to memory produces data") <| @(tt : T?) {
         var pixels : uint8[16]
@@ -159,7 +159,7 @@ def test_write_tga_to_memory(t : T?) {
 
 // ---- write-to-memory roundtrip (encode then decode) ----
 
-[test]
+[test(description = "a 2x2 RGBA image encoded to PNG in memory decodes back as 2x2 with 4 components and all 16 bytes identical to the source")]
 def test_write_read_roundtrip_memory(t : T?) {
     t |> run("PNG encode to memory then decode back matches") <| @(tt : T?) {
         var pixels : uint8[16]

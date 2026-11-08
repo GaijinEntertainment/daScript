@@ -13,7 +13,7 @@ def verify_match(t : T?; a : BoolArray; b : array<bool>; context_msg : string) {
     }
 }
 
-[test]
+[test(description = "BoolArray length, push, indexing, set, the xor/and/or assignments, pop and to_string behave like an array of bool")]
 def test_basic(t : T?) {   // nolint:STYLE038 - flat list of independent BoolArray operation arms
     t |> run("clear_and_length") @@(t : T?) {
         var a : BoolArray
@@ -116,7 +116,7 @@ def test_basic(t : T?) {   // nolint:STYLE038 - flat list of independent BoolArr
     }
 }
 
-[test]
+[test(description = "BoolArray resize zero-fills growth, preserves existing bits and is correct across the 32-bit word boundaries")]
 def test_resize(t : T?) {   // nolint:STYLE038 - flat list of independent resize arms
     t |> run("resize_grow_zeros") @@(t : T?) {
         var a : BoolArray
@@ -204,7 +204,7 @@ def test_resize(t : T?) {   // nolint:STYLE038 - flat list of independent resize
     }
 }
 
-[test]
+[test(description = "BoolArray erase matches an array<bool> reference at every position, including word boundaries and repeated erase to empty")]
 def test_erase(t : T?) {   // nolint:STYLE038 - flat list of independent erase arms
     t |> run("erase_vs_reference") @@(t : T?) {
         var a : BoolArray
@@ -336,7 +336,7 @@ def test_erase(t : T?) {   // nolint:STYLE038 - flat list of independent erase a
     }
 }
 
-[test]
+[test(description = "BoolArray insert matches an array<bool> reference at every position, with carry across words and insert/erase round trips")]
 def test_insert(t : T?) {   // nolint:STYLE038 - flat list of independent insert arms
     t |> run("insert_vs_reference") @@(t : T?) {
         var a : BoolArray
@@ -482,7 +482,7 @@ def test_insert(t : T?) {   // nolint:STYLE038 - flat list of independent insert
     }
 }
 
-[test]
+[test(description = "BoolArray push at a position and at the end matches an array<bool> reference, and push/pop cycles restore the contents")]
 def test_push(t : T?) {
     t |> run("push_at_position") @@(t : T?) {
         var a : BoolArray
@@ -540,7 +540,7 @@ def test_push(t : T?) {
     }
 }
 
-[test]
+[test(description = "iterating a BoolArray visits every bit in order for empty, word-aligned, odd-sized, all-true and all-false arrays")]
 def test_iterator(t : T?) {
     t |> run("iterator_empty") @@(t : T?) {
         var a : BoolArray
@@ -609,7 +609,7 @@ def test_iterator(t : T?) {
     }
 }
 
-[test]
+[test(description = "BoolArray stays equal to an array<bool> reference through insert-only, alternating insert/erase and random mutation patterns")]
 def test_stress(t : T?) {
     t |> run("build_with_insert_only") @@(t : T?) {
         var a : BoolArray

@@ -27,7 +27,7 @@ def private month_index(name : string) : int {
     return -1
 }
 
-[test]
+[test(description = "week_day gives the right day for anchor dates in both the int and uint overloads")]
 def test_week_day_known_dates(t : T?) {
     t |> run("dates the algorithm is anchored on") @(t : T?) {
         t |> equal(week_day(1700, 1, 1), 5)
@@ -43,7 +43,7 @@ def test_week_day_known_dates(t : T?) {
     }
 }
 
-[test]
+[test(description = "week_day matches a reference calendar for every month from 1700 to 2100 and at the leap-day boundary")]
 def test_week_day_matches_reference(t : T?) {
     t |> run("every month of every year from 1700 to 2100") @(t : T?) {
         var mismatch = ""
@@ -76,7 +76,7 @@ def test_week_day_matches_reference(t : T?) {
     }
 }
 
-[test]
+[test(description = "a generated faker date carries the week day it falls on")]
 def test_faker_date_names_the_right_week_day(t : T?) {
     t |> run("generated dates carry the week day they fall on") @(t : T?) {
         var fake <- Faker()
@@ -99,7 +99,7 @@ def test_faker_date_names_the_right_week_day(t : T?) {
     }
 }
 
-[test]
+[test(description = "vector and range draws take their lanes in the order scalar draws would")]
 def test_faker_composite_draws_in_order(t : T?) {
     t |> run("a vector or range draw takes its lanes in the order scalar draws would") @(t : T?) {
         var composite <- Faker()

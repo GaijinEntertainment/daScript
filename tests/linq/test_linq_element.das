@@ -6,7 +6,7 @@ require daslib/linq
 
 require _common
 
-[test]
+[test(description = "element_at returns the element at an index for iterators, structs and arrays")]
 def test_elementat(t : T?) {
     t |> run("basic element at") @(t : T?) {
         let query = element_at(
@@ -32,7 +32,7 @@ def test_elementat(t : T?) {
     }
 }
 
-[test]
+[test(description = "element_at_or_default returns the element at an in-range index for iterators, structs and arrays")]
 def test_elementatordefault(t : T?) {
     t |> run("basic element at or default") @(t : T?) {
         let query = element_at_or_default(
@@ -58,7 +58,7 @@ def test_elementatordefault(t : T?) {
     }
 }
 
-[test]
+[test(description = "first returns the first element for iterators, structs and arrays")]
 def test_first(t : T?) {
     t |> run("basic first") @(t : T?) {
         let query = first(
@@ -81,7 +81,7 @@ def test_first(t : T?) {
     }
 }
 
-[test]
+[test(description = "first_or_default returns the first element, and the supplied default when the sequence is empty")]
 def test_firstordefault(t : T?) {
     t |> run("basic first or default") @(t : T?) {
         let query = first_or_default(
@@ -122,7 +122,7 @@ def test_firstordefault(t : T?) {
     }
 }
 
-[test]
+[test(description = "last returns the final element for iterators, structs and arrays")]
 def test_last(t : T?) {
     t |> run("basic last") @(t : T?) {
         let query = last(
@@ -145,7 +145,7 @@ def test_last(t : T?) {
     }
 }
 
-[test]
+[test(description = "last_or_default returns the last element, and the supplied default when the sequence is empty")]
 def test_lastordefault(t : T?) {
     t |> run("basic last or default") @(t : T?) {
         let query = last_or_default(
@@ -178,7 +178,7 @@ def test_lastordefault(t : T?) {
     }
 }
 
-[test]
+[test(description = "single returns the sole element of a one-element sequence for ints, structs and arrays")]
 def test_single(t : T?) {
     t |> run("basic single") @(t : T?) {
         let query = single(
@@ -207,7 +207,7 @@ def test_single(t : T?) {
     }
 }
 
-[test]
+[test(description = "single_or_default returns the sole element of a one-element sequence and the default when the sequence holds several")]
 def test_singleordefault(t : T?) {
     t |> run("basic single or default") @(t : T?) {
         let query = single_or_default(

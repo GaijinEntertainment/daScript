@@ -5,15 +5,21 @@ require dastest/testing_boost public
 require daslib/flatten
 require math
 
-//! Differential net for the PHASE_FUSED horizontal-reduce re-pack (DEFAULT width>=3 policy): a sum of
-//! independent scalars (no shared vector base, so the dot fold above can't reach them) collapses into
-//! `hadd(floatN(...))` groups of width 3..4 via plan_groups — or `dot(floatN(s), floatN(weights))` when
-//! the lanes carry const weights (`a*2 + b*3 + …`). A width-2 tail stays scalar (a bare pair is +1 node
-//! on a node-graph backend); the width-2 path is exercised under the option in
-//! no_aot/test_flatten_hadd_pairs.das. The reduce reorders the adds, so floats compare approx (same
-//! contract as the dot/mad corpus). The structural FIRED half lives in no_aot/test_flatten_fold.das.
+//! Differential net for the PHASE_FUSED horizontal-reduce re-pack
+//! (DEFAULT width>=3 policy): a sum of independent scalars (no shared
+//! vector base, so the dot fold above can't reach them) collapses
+//! into `hadd(floatN(...))` groups of width 3..4 via plan_groups — or
+//! `dot(floatN(s), floatN(weights))` when the lanes carry const
+//! weights (`a*2 + b*3 + …`). A width-2 tail stays scalar (a bare
+//! pair is +1 node on a node-graph backend); the width-2 path is
+//! exercised under the option in
+//! no_aot/uncategorized__flatten_hadd_pack_pairs.das. The reduce
+//! reorders the adds, so floats compare approx (same contract as the
+//! dot/mad corpus). The structural FIRED half lives in
+//! no_aot/test_flatten_fold.das.
 
-// ----- 2-way sum: below the default width-3 floor -> stays a scalar add -----
+// ----- 2-way sum: below the default width-3 floor -> stays a scalar
+// add -----
 [flatten]
 def h_two(a, b : float) : float => a + b
 
@@ -25,7 +31,8 @@ def h_three(a, b, c : float) : float => a + b + c
 [flatten]
 def h_four(a, b, c, d : float) : float => a + b + c + d
 
-// ----- 5 terms: plan_groups(5,3) = [4] -> hadd4, the 5th lane stays a scalar add (sub-width-3 tail) -----
+// ----- 5 terms: plan_groups(5,3) = [4] -> hadd4, the 5th lane stays
+// a scalar add (sub-width-3 tail) -----
 [flatten]
 def h_five(a, b, c, d, e : float) : float => a + b + c + d + e
 
@@ -33,12 +40,14 @@ def h_five(a, b, c, d, e : float) : float => a + b + c + d + e
 [flatten]
 def h_seven(a, b, c, d, e, f, g : float) : float => a + b + c + d + e + f + g
 
-// ----- 8 terms: two groups of four -> two PARALLEL hadd4 (never a nested hadd) -----
+// ----- 8 terms: two groups of four -> two PARALLEL hadd4 (never a
+// nested hadd) -----
 [flatten]
 def h_eight(a, b, c, d, e, f, g, h : float) : float => a + b + c + d + e + f + g + h
 
-// ----- one lane only: `a` is the sole reduce lane, `b*c` is a runtime*runtime product (mad, not a
-// weighted lane) -> nothing to pack -----
+// ----- one lane only: `a` is the sole reduce lane, `b*c` is a
+// runtime*runtime product (mad, not a weighted lane) -> nothing to
+// pack -----
 [flatten]
 def h_one_lane(a, b, c : float) : float => a + b * c
 
@@ -46,7 +55,8 @@ def h_one_lane(a, b, c : float) : float => a + b * c
 [flatten]
 def h_neg(a, b, c, d, e : float) : float => a + b + c + d - e
 
-// ----- const term stays out of the ctor (it folds), four vars pack -----
+// ----- const term stays out of the ctor (it folds), four vars pack
+// -----
 [flatten]
 def h_const(a, b, c, d : float) : float => a + b + c + d + 0.5
 
@@ -54,28 +64,35 @@ def h_const(a, b, c, d : float) : float => a + b + c + d + 0.5
 [flatten]
 def h_buried(a, b, c, d : float) : float => sin(a + b + c + d)
 
-// ----- the plasma shape: `(sum) * s + k` -> mad(hadd(...), s, k) -----
+// ----- the plasma shape: `(sum) * s + k` -> mad(hadd(...), s, k)
+// -----
 [flatten]
 def h_mad(a, b, c, d : float) : float => (a + b + c + d) * 2.0 + 1.0
 
-// ----- const-weighted lanes pack into a DOT, not hadd: `n*w` summed -> dot(floatN(n), floatN(w)) -----
-// (the weighted reduction beats the mad-chain at width>=3: combine + dot vs N mads — the mandelbrot fBm)
+// ----- const-weighted lanes pack into a DOT, not hadd: `n*w` summed
+// -> dot(floatN(n), floatN(w)) ----- (the weighted reduction beats
+// the mad-chain at width>=3: combine + dot vs N mads — the mandelbrot
+// fBm)
 [flatten]
 def h_weighted(a, b, c, d : float) : float => a * 2.0 + b * 3.0 + c * 4.0 + d * 5.0
 
-// ----- mixed plain + weighted lanes share one dot with a unit weight: `a + b*2 + c*3` -> dot(.,(1,2,3)) -----
+// ----- mixed plain + weighted lanes share one dot with a unit
+// weight: `a + b*2 + c*3` -> dot(.,(1,2,3)) -----
 [flatten]
 def h_wmixed(a, b, c : float) : float => a + b * 2.0 + c * 3.0
 
-// ----- producer-vectorization: same elementwise-unary lanes collapse the producer -> hadd(sin(float3(...))) -----
+// ----- producer-vectorization: same elementwise-unary lanes collapse
+// the producer -> hadd(sin(float3(...))) -----
 [flatten]
 def h_trig(a, b, c : float) : float => sin(a) + sin(b) + sin(c)
 
-// ----- producer-vectorization at width 4 -> hadd(cos(float4(...))) -----
+// ----- producer-vectorization at width 4 -> hadd(cos(float4(...)))
+// -----
 [flatten]
 def h_trig4(a, b, c, d : float) : float => cos(a) + cos(b) + cos(c) + cos(d)
 
-// ----- mixed producers (sin / cos / sin) do NOT vectorize: leaf-pack hadd(float3(sin,cos,sin)) -----
+// ----- mixed producers (sin / cos / sin) do NOT vectorize: leaf-pack
+// hadd(float3(sin,cos,sin)) -----
 [flatten]
 def h_mixed(a, b, c : float) : float => sin(a) + cos(b) + sin(c)
 
@@ -86,7 +103,7 @@ def fapprox(t : T?; a, b : float) {
     t |> success(abs(a - b) <= 1.0e-4 * m, "hadd-fused approx mismatch: {a} vs {b}")
 }
 
-[test]
+[test(description = "sums of independent scalars are re-packed into horizontal adds of width three or four and the twins match their originals beyond float rounding", standalone = "no_aot/test_flatten_fold.das compiles this file by path as a unit and checks its twins structurally")]
 def test_flatten_hadd(t : T?) {
     t |> run("two / three / four scalar sums — value approx") @(t : T?) {
         for (v in GRID) {

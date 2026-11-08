@@ -1,4 +1,6 @@
 options gen2
+//! _sql_pragma with an untyped runner must report a missing provider
+//! at compile time
 expect 50503, 30838
 
 // _sql_pragma reports a missing provider, not an exception, when its

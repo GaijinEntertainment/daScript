@@ -1,15 +1,13 @@
 options gen2
-options indenting = 4
-
-// Phase-2 control-flow gate (text layer): mutable + zero-init locals, compound assignment
-// (arithmetic + bitwise), pre/post increment (statement-level das ++ arrives prefix; value-level
-// postfix stays postfix), every comparison flavor per scalar class, logical &&/||/!, if/elif/else
-// chains, ternary — plus the golden snapshot.
 
 require dastest/testing_boost public
 require _msl_common
 require daslib/strings_boost
 
+// Phase-2 control-flow gate (text layer): mutable + zero-init locals, compound assignment
+// (arithmetic + bitwise), pre/post increment (statement-level das ++ arrives prefix; value-level
+// postfix stays postfix), every comparison flavor per scalar class, logical &&/||/!, if/elif/else
+// chains, ternary — plus the golden snapshot.
 let GOLDEN_CONTROL = "#include <metal_stdlib>
 using namespace metal;
 kernel void control(device const uint* a [[buffer(0)]],
@@ -104,7 +102,7 @@ kernel void control(device const uint* a [[buffer(0)]],
 \}
 "
 
-[test]
+[test(description = "Locals, if/elif/else chains, compound assignment, increment and decrement, comparisons, logical operators and ternaries emit the expected MSL.")]
 def test_control_shape(t : T?) {
     t |> run("control: locals") <| @(t : T?) {
         t |> success(contains(control_msl, "uint acc = 0u;"), "mutable local with initializer")
@@ -143,9 +141,80 @@ def test_control_shape(t : T?) {
     }
 }
 
-[test]
+[test(description = "The control-flow kernel's emitted MSL matches its golden snapshot.")]
 def test_control_golden(t : T?) {
     t |> run("control: golden snapshot") <| @(t : T?) {
         t |> equal(control_msl, GOLDEN_CONTROL)
+    }
+}
+
+// Phase-2 loop gate (text layer): the @uniform scalar -> constant-address-space reference param,
+// the non-exact-grid bounds guard (early return), while + break/continue, constant range-for, and
+// the dynamic-end range-for hoist — das evaluates range endpoints ONCE, so a non-constant end
+// lands in a loop-scoped `<i>_end` local (comma-declared: sequential same-name loops can't collide).
+let GOLDEN_LOOPS = "#include <metal_stdlib>
+using namespace metal;
+kernel void loops(device const int* src [[buffer(0)]],
+        device int* dst [[buffer(1)]],
+        constant uint& n [[buffer(2)]],
+        device uint* udst [[buffer(3)]],
+        uint3 gl_GlobalInvocationID [[thread_position_in_grid]]) \{
+    uint i = gl_GlobalInvocationID.x;
+    if ((i >= n)) \{
+        return;
+    \}
+    int s = 0;
+    int j = 0;
+    while ((j < 100)) \{
+        ++j;
+        if ((j == 3)) \{
+            continue;
+        \}
+        if ((j >= 7)) \{
+            break;
+        \}
+        s += j;
+    \}
+    for (int k = 0; k < 4; ++k) \{
+        s += (k * src[i]);
+    \}
+    for (int _k = 0, _k_end = s; _k < _k_end; ++_k) \{
+        ++s;
+    \}
+    dst[i] = s;
+    uint usum = 0u;
+    for (uint ku = 0u, ku_end = n; ku < ku_end; ++ku) \{
+        usum += ku;
+    \}
+    udst[i] = usum;
+\}
+"
+
+[test(description = "A @uniform scalar parameter, a bounds guard, while with break and continue, and the range-for forms emit the expected loop MSL.")]
+def test_loops_shape(t : T?) {
+    t |> run("loops: @uniform scalar param") <| @(t : T?) {
+        t |> success(contains(loops_msl, "constant uint& n [[buffer(2)]]"), "@uniform uint -> constant-address-space reference")
+    }
+    t |> run("loops: bounds guard") <| @(t : T?) {
+        t |> success(contains(loops_msl, "if ((i >= n)) \{"), "guard compares thread id against the uniform")
+        t |> success(contains(loops_msl, "return;"), "void early return")
+    }
+    t |> run("loops: while + break/continue") <| @(t : T?) {
+        t |> success(contains(loops_msl, "while ((j < 100)) \{"), "while loop")
+        t |> success(contains(loops_msl, "continue;"), "continue")
+        t |> success(contains(loops_msl, "break;"), "break")
+    }
+    t |> run("loops: range-for forms") <| @(t : T?) {
+        t |> success(contains(loops_msl, "for (int k = 0; k < 4; ++k) \{"), "constant range inlines its bounds")
+        t |> success(contains(loops_msl, "for (int _k = 0, _k_end = s; _k < _k_end; ++_k) \{"),
+            "dynamic end hoists into a loop-scoped local (das evaluates range endpoints once)")
+        t |> success(contains(loops_msl, "for (uint ku = 0u, ku_end = n; ku < ku_end; ++ku) \{"), "urange over the uniform, uint induction")
+    }
+}
+
+[test(description = "The loops kernel's emitted MSL matches its golden snapshot.")]
+def test_loops_golden(t : T?) {
+    t |> run("loops: golden snapshot") <| @(t : T?) {
+        t |> equal(loops_msl, GOLDEN_LOOPS)
     }
 }

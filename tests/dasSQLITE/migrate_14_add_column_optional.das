@@ -20,7 +20,7 @@ def m_002(db : SqlRunner) {
     db |> add_column(type<User>, "Email")
 }
 
-[test]
+[test(description = "add_column of an option field creates a nullable TEXT column with no default", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_option_field_is_nullable_no_default(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()

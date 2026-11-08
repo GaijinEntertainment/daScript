@@ -22,7 +22,7 @@ require dastest/testing_boost public
 
 // ── C1a: array source, distinct_by + order_by + take ─────────────────────────
 
-[test]
+[test(description = "distinct_by, order_by and take over an array return the top-K distinct users by timestamp")]
 def test_c1a_array_distinct_by_order_take(t : T?) {
     t |> run("C1a: each + _distinct_by(_.user) + _order_by(_.ts) + take(N) + to_array — top-K distinct users by ts") @(tt : T?) {
         // 50 items: user cycles U0..U9, ts = i*13%100. Top-5 distinct users by smallest ts:
@@ -49,7 +49,7 @@ def test_c1a_array_distinct_by_order_take(t : T?) {
 
 // ── C5a: array source, order_by + distinct + take ────────────────────────────
 
-[test]
+[test(description = "order_by, distinct and take over an array return the top-K distinct tuples by score")]
 def test_c5a_array_order_distinct_take(t : T?) {
     t |> run("C5a: each + _order_by(_.score) + distinct() + take(N) + to_array — top-K distinct tuples by score") @(tt : T?) {
         // 6 elems, distinct tuples ascending by score: (a, 10), (b, 10), (c, 20), (d, 30); plus dupes.
@@ -85,7 +85,7 @@ def test_c5a_array_order_distinct_take(t : T?) {
 
 // ── C1c: descending order on top of distinct_by ──────────────────────────────
 
-[test]
+[test(description = "distinct_by, order_by_descending and take over an array return the top-K distinct users by largest timestamp")]
 def test_c1c_array_distinct_by_order_desc(t : T?) {
     t |> run("C1c: each + _distinct_by(_.user) + _order_by_descending(_.ts) + take + to_array — top-K distinct users by LARGEST ts") @(tt : T?) {
         // Largest ts per user across the 50-item cycle. Top-3 by desc ts.
@@ -110,7 +110,7 @@ def test_c1c_array_distinct_by_order_desc(t : T?) {
 
 // ── C1-where: WHERE filter composes with distinct_by + order + take ──────────
 
-[test]
+[test(description = "a where before distinct_by, order_by and take keeps distinct users that all pass the filter, sorted ascending")]
 def test_c1_where_distinct_by_order_take(t : T?) {
     t |> run("C1-where: each + _where + _distinct_by + _order_by + take + to_array — filter before distinct gate; structural assertion (distinct users, all pass filter, sorted asc)") @(tt : T?) {
         let items <- [for (i in range(50)); (user = "U{i % 10}", ts = (i * 13) % 100)]
@@ -149,7 +149,7 @@ def test_c1_where_distinct_by_order_take(t : T?) {
 
 // ── C1-select: terminal _select projects ≤K heap survivors ───────────────────
 
-[test]
+[test(description = "distinct_by, order_by, take and a terminal select return the projected top-K distinct rows")]
 def test_c1_with_terminal_select(t : T?) {
     t |> run("C1-select: each + _distinct_by + _order_by + take + _select(_.user) — projection at return") @(tt : T?) {
         let items <- [for (i in range(50)); (user = "U{i % 10}", ts = (i * 13) % 100)]
@@ -182,7 +182,7 @@ def c1_handwritten(items : array<tuple<user : string; ts : int>>) : array<tuple<
     return <- out
 }
 
-[test]
+[test(description = "the fused distinct_by, sort and take chain matches the hand-written version")]
 def test_c1_parity_handwritten(t : T?) {
     t |> run("C1-parity: spliced vs handwritten distinct+sort+take cascade") @(tt : T?) {
         let items <- [for (i in range(50)); (user = "U{i % 10}", ts = (i * 13) % 100)]
@@ -215,7 +215,7 @@ def populate_c1_decs() {
     }
 }
 
-[test]
+[test(description = "distinct_by, order_by and take over a decs source return the top-K distinct users by timestamp")]
 def test_c1_decs_distinct_by_order_take(t : T?) {
     t |> run("C1-decs: from_decs_template + _distinct_by(_.user) + _order_by(_.ts) + take + to_array — decs lane bounded-heap with set-gate") @(tt : T?) {
         populate_c1_decs()
@@ -263,7 +263,7 @@ def populate_c5_decs() {
     }
 }
 
-[test]
+[test(description = "order_by, distinct and take over a decs source return the top-K distinct tuples by score")]
 def test_c5_decs_order_distinct_take(t : T?) {
     t |> run("C5-decs: from_decs_template + _order_by(_.score) + distinct() + take + to_array — decs lane with whole-tuple set") @(tt : T?) {
         populate_c5_decs()
@@ -296,7 +296,7 @@ def c1anti_ts_with_count(v : tuple<user : string; ts : int>) : int {
     return v.ts
 }
 
-[test]
+[test(description = "an order key that calls a side-effecting function falls back to the unfused path and still sorts correctly")]
 def test_c1_anti_non_inline_order_key_cascades(t : T?) {
     t |> run("C1-anti: _order_by(side-effecting fn) — inline-cmp guard fails, splice null, full cascade fires (and still produces correct output)") @(tt : T?) {
         let items <- [for (i in range(20)); (user = "U{i % 5}", ts = (i * 7) % 50)]
@@ -319,7 +319,7 @@ def test_c1_anti_non_inline_order_key_cascades(t : T?) {
 // (cascade picks the FIRST K1 in sort order = min-K2 per K1; splice would keep
 // an arbitrary K1 representative). Must cascade to preserve semantics.
 
-[test]
+[test(description = "order_by before distinct_by falls back to the unfused path and keeps the minimum sort key per distinct key")]
 def test_c1_anti_order_by_then_distinct_by_cascades(t : T?) {
     t |> run("C1-anti: _order_by(K2) + _distinct_by(K1) + take — sort-aware dedup required; splice bails, cascade picks min-K2 per K1") @(tt : T?) {
         // 3 entries per user with varying ts; ascending sort by ts then distinct_by user picks min-ts per user.
@@ -349,7 +349,7 @@ def test_c1_anti_order_by_then_distinct_by_cascades(t : T?) {
 // `distinct[_by]` without `take` would be silently dropped by the splice (the
 // set-gate lives only in the bounded-heap path). Must cascade.
 
-[test]
+[test(description = "distinct_by with order_by and no take falls back so the distinct is not silently dropped")]
 def test_c1_anti_distinct_without_take_cascades(t : T?) {
     t |> run("C1-anti: _distinct_by + _order_by + to_array (no take) — must cascade so distinct isn't silently dropped") @(tt : T?) {
         let items <- [
@@ -376,7 +376,7 @@ def test_c1_anti_distinct_without_take_cascades(t : T?) {
 // `take(N).distinct[_by]()` is NOT equivalent to a per-walk distinct gate
 // (cascade takes first N then dedups, splice would dedup ALL source then take).
 
-[test]
+[test(description = "take before distinct_by and order_by falls back so the distinct is not applied before the take")]
 def test_c1_anti_take_then_distinct_cascades(t : T?) {
     t |> run("C1-anti: take(N) + distinct_by + order_by — must cascade so distinct isn't applied pre-take") @(tt : T?) {
         // First 3 items are all distinct users; later items add duplicates. take(3).distinct keeps all 3.

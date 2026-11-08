@@ -29,7 +29,7 @@ def private render_voice_stereo(var voice : OscVoice; frames : int) : array<floa
 
 // ─── Pink noise ───
 
-[test]
+[test(description = "pink noise renders non-zero output")]
 def test_pink_noise_nonzero(t : T?) {
     // Pink noise should produce non-zero output
     var voice = OscVoice(osc_type = OscType.osc_pink_noise, freq = 440.0, duration = 1.0, gain = 1.0)
@@ -42,7 +42,7 @@ def test_pink_noise_nonzero(t : T?) {
     t |> success(maxVal > 0.001)
 }
 
-[test]
+[test(description = "pink noise is not constant")]
 def test_pink_noise_varies(t : T?) {
     // Pink noise should not be constant — check that samples differ
     var voice = OscVoice(osc_type = OscType.osc_pink_noise, freq = 440.0, duration = 1.0, gain = 1.0)
@@ -59,7 +59,7 @@ def test_pink_noise_varies(t : T?) {
     t |> success(differs)
 }
 
-[test]
+[test(description = "pink noise has relatively less high-frequency energy than white noise")]
 def test_pink_noise_lower_than_white(t : T?) {
     // Pink noise has more energy in low frequencies — its high-frequency RMS
     // should be lower relative to overall RMS compared to white noise.
@@ -81,7 +81,7 @@ def test_pink_noise_lower_than_white(t : T?) {
 
 // ─── Supersaw ───
 
-[test]
+[test(description = "the supersaw renders non-zero output")]
 def test_supersaw_nonzero(t : T?) {
     var voice = OscVoice(osc_type = OscType.osc_supersaw, freq = 440.0, duration = 1.0, gain = 1.0)
     osc_voice_init_supersaw(voice)
@@ -94,7 +94,7 @@ def test_supersaw_nonzero(t : T?) {
     t |> success(maxVal > 0.01)
 }
 
-[test]
+[test(description = "the supersaw spreads its left and right channels apart")]
 def test_supersaw_stereo_width(t : T?) {
     // Supersaw should have different L and R channels (stereo spread)
     var voice = OscVoice(osc_type = OscType.osc_supersaw, freq = 440.0, duration = 1.0, gain = 1.0)
@@ -111,7 +111,7 @@ def test_supersaw_stereo_width(t : T?) {
     t |> success(diffCount > frames / 2)
 }
 
-[test]
+[test(description = "the supersaw has non-trivial energy comparable to a single saw")]
 def test_supersaw_wider_than_saw(t : T?) {
     // Supersaw RMS should be comparable to or greater than single saw at same gain
     var saw_voice = OscVoice(osc_type = OscType.osc_sawtooth, freq = 440.0, duration = 1.0, gain = 1.0)
@@ -141,7 +141,7 @@ def test_supersaw_wider_than_saw(t : T?) {
 
 // ─── FM synthesis ───
 
-[test]
+[test(description = "FM changes a sine's output")]
 def test_fm_changes_output(t : T?) {
     // Sine with FM should differ from plain sine
     let frames = 2400
@@ -159,7 +159,7 @@ def test_fm_changes_output(t : T?) {
     t |> success(diffSum > 1.0)
 }
 
-[test]
+[test(description = "FM with zero depth equals the plain sine")]
 def test_fm_zero_depth_matches_plain(t : T?) {
     // FM with depth=0 should produce identical output to plain sine
     let frames = 2400
@@ -176,7 +176,7 @@ def test_fm_zero_depth_matches_plain(t : T?) {
     t |> success(maxDiff < 0.0001)
 }
 
-[test]
+[test(description = "FM also changes a sawtooth oscillator's output")]
 def test_fm_on_sawtooth(t : T?) {
     // FM should also work on sawtooth oscillator
     let frames = 2400
@@ -193,7 +193,7 @@ def test_fm_on_sawtooth(t : T?) {
     t |> success(diffSum > 0.5)
 }
 
-[test]
+[test(description = "different FM harmonicity ratios give different output")]
 def test_fm_harmonicity_affects_timbre(t : T?) {
     // Different harmonicity ratios should produce different output
     let frames = 2400

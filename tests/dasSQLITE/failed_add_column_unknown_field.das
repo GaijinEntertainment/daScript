@@ -1,7 +1,10 @@
 options gen2
+//! add_column naming a field the struct does not have must not
+//! compile
 
-// AddColumnMacro must reject a field name that doesn't exist on the struct,
-// with the same wording the [sql_index] structure annotation uses.
+// AddColumnMacro must reject a field name that doesn't exist on the
+// struct, with the same wording the [sql_index] structure annotation
+// uses.
 expect 50503
 
 require sqlite/sqlite_migrate

@@ -1,4 +1,4 @@
-// a set has no values - its table pattern lists keys only
+//! a set has no values - its table pattern lists keys only
 options gen2
 
 require daslib/match

@@ -8,7 +8,7 @@ def m_users(db : SqlRunner) {
     db |> exec("CREATE TABLE users (Id INTEGER PRIMARY KEY)")
 }
 
-[test]
+[test(description = "migrate_to_latest creates the __schema_version audit table", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_audit_table_appears_after_migrate(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()
@@ -18,7 +18,7 @@ def test_audit_table_appears_after_migrate(t : T?) {
     t |> equal(exists, 1, "__schema_version must exist after migrate_to_latest")
 }
 
-[test]
+[test(description = "the audit table has exactly three columns with version as the primary key and description and applied_at NOT NULL")]
 def test_audit_table_has_locked_3_column_shape(t : T?) {
     // Shape locked 2026-05-04: (version INTEGER PK, description TEXT NOT NULL DEFAULT '', applied_at INTEGER NOT NULL).
     var inscope db = open_sqlite(":memory:")

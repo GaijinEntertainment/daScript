@@ -2,6 +2,7 @@ options gen2
 
 require dastest/testing_boost public
 require _template_struct_instance_mod
+require _template_structure_class_mod
 
 typedef ModLevelT = float // module-level typedef: must not trip the unbound-alias check
 
@@ -120,7 +121,7 @@ class DotStr : DotT {
     override tsi_sdot = "tsi_ssdot"
 }
 
-[test]
+[test(description = "a class template instance stamps its methods, folds static_if, lets an override win and keeps constant defaults for a second instance")]
 def test_tsi_class_rail(t : T?) {
     t |> run("stamped methods, static_if fold, override wins, constants") @(t : T?) {
         unsafe {
@@ -144,7 +145,7 @@ def test_tsi_class_rail(t : T?) {
     }
 }
 
-[test]
+[test(description = "two instances of one struct template fold their own constants into the field initializers")]
 def test_tsi_struct_rail(t : T?) {
     t |> run("two instances of one struct template") @(t : T?) {
         let p = PairInt3(a = 2, b = 3)
@@ -157,7 +158,7 @@ def test_tsi_struct_rail(t : T?) {
     }
 }
 
-[test]
+[test(description = "a template own base class survives reification")]
 def test_tsi_base_class(t : T?) {
     t |> run("template's own base class survives reification") @(t : T?) {
         unsafe {
@@ -172,7 +173,7 @@ def test_tsi_base_class(t : T?) {
     }
 }
 
-[test]
+[test(description = "a template required from another module can be instantiated")]
 def test_tsi_cross_module(t : T?) {
     t |> run("template required from another module") @(t : T?) {
         unsafe {
@@ -196,7 +197,7 @@ class XModOverInt : XModOverKern {
     override STEP = 10
 }
 
-[test]
+[test(description = "a template deriving from a concrete class of another module keeps that class as its parent")]
 def test_tsi_cross_module_base(t : T?) {
     t |> run("template deriving a concrete class from another module keeps that class as parent") @(t : T?) {
         unsafe {
@@ -210,7 +211,7 @@ def test_tsi_cross_module_base(t : T?) {
     }
 }
 
-[test]
+[test(description = "an alias supplied by another macro after reification is bound at infer time")]
 def test_tsi_late_bind(t : T?) {
     t |> run("an alias another macro supplies after the reifier binds at infer") @(t : T?) {
         unsafe {
@@ -221,7 +222,7 @@ def test_tsi_late_bind(t : T?) {
     }
 }
 
-[test]
+[test(description = "@template_call rebinds calls and function addresses per instance")]
 def test_tsi_call_rebind(t : T?) {
     t |> run("@template_call rebinds calls and @@ addresses per instance") @(t : T?) {
         unsafe {
@@ -280,7 +281,7 @@ class GExt : GKernT {
     override EXT = true
 }
 
-[test]
+[test(description = "a gated field exists only where its axis enables it, in both polarities, and a dead static_if arm may reference a gated-off field")]
 def test_tsi_gated_fields(t : T?) {
     t |> run("a gated field exists only where its axis says so, both polarities") @(t : T?) {
         // each stamp dropped exactly one of the two gated ints — both remaining would be 12
@@ -316,7 +317,7 @@ class TagInt : TagKernT {
     typedef KT = int
 }
 
-[test]
+[test(description = "methods stamped by a template get their function-annotation applies")]
 def test_tsi_method_annotation_apply(t : T?) {
     t |> run("stamped methods get their function-annotation applies") @(t : T?) {
         // TsiTestFnTag`apply added this global when the reifier stamped TagInt`tick —
@@ -394,7 +395,7 @@ class RootedLeafBase : RootedBase {
     override SCALE = 10
 }
 
-[test]
+[test(description = "a chain of templates reifies whole, with constants, typedefs and overrides at every level and a template-level method override under a concrete parent")]
 def test_tsi_template_chain(t : T?) {
     t |> run("a template chain reifies whole: constants, typedefs and overrides at every level") @(t : T?) {
         unsafe {
@@ -412,5 +413,27 @@ def test_tsi_template_chain(t : T?) {
             var inscope b <- new RootedLeafBase()
             t |> equal(b->run(5), 5 * 2 * 10)
         }
+    }
+}
+
+typedef ProbeIntCommand = $ProbeScalarCommand<int>
+typedef ProbeFloatCommand = $ProbeScalarCommand<float>
+
+[test(description = "instances of a template structure class built for int and float run redo and undo and keep their own values and execution counts")]
+def test_template_structure_class(t : T?) {
+    unsafe {
+        var inscope intCommand <- new ProbeIntCommand()
+        intCommand.newValue = 42
+        intCommand->redo()
+        t |> equal(intCommand->getValue(), 42)
+        t |> equal(intCommand.executions, 1)
+        intCommand->undo()
+        t |> equal(intCommand.executions, 0)
+
+        var inscope floatCommand <- new ProbeFloatCommand()
+        floatCommand.newValue = 1.5
+        floatCommand->redo()
+        t |> equal(floatCommand->getValue(), 1.5)
+        t |> equal(floatCommand.executions, 1)
     }
 }

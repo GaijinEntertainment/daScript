@@ -1,3 +1,4 @@
+//! a variable of an undefined type name does not compile
 // unknown type name
 // verifies compiler rejects using an undefined type name
 options gen2

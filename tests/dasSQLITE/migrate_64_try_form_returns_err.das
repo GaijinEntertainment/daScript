@@ -14,7 +14,7 @@ def m2(db : SqlRunner) {
     db |> exec("SELECT not_a_real_function(1)")
 }
 
-[test]
+[test(description = "try_migrate_to_latest returns an error naming the failing version and description and stating the rollback", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_try_form_returns_err_with_enriched_message(t : T?) {
     var inscope db = open_sqlite(":memory:")
     let r <- db |> try_migrate_to_latest()

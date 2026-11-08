@@ -1,3 +1,6 @@
+//! A match statement in return position must not compile (30220
+//! twice), because it folds into a block that never resolves to a
+//! value.
 options gen2
 
 expect 30220 : 2
@@ -10,9 +13,10 @@ enum EOption {
     Maybe
 }
 
-// `match` is a statement macro - it folds into a statement block. In return
-// position that block never resolves to a value; before the unresolved-return
-// check this compiled silently and returned garbage (interp and jit alike).
+// `match` is a statement macro - it folds into a statement block. In
+// return position that block never resolves to a value; before the
+// unresolved-return check this compiled silently and returned garbage
+// (interp and jit alike).
 
 def get_string(option : EOption) : string {
     return match (option) {        // 30220: can't return a block

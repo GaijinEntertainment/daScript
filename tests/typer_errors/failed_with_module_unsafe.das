@@ -1,3 +1,5 @@
+//! with (module name) must require unsafe when the
+//! with_module_is_unsafe policy is on (31037).
 options gen2
 options with_module_is_unsafe = true
 
@@ -7,7 +9,8 @@ require ../language/_with_module_helper.das
 
 [export]
 def main {
-    with (module _with_module_helper) {     // 31037: policy demands unsafe around user-written module-with
+    // 31037: policy demands unsafe around user-written module-with
+    with (module _with_module_helper) {
         let x = secret_scale
     }
 }

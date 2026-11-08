@@ -53,7 +53,7 @@ def test_let_await_impl() : void {
     assert(a == 11)
 }
 
-[test]
+[test(description = "let x <- await of a typed async binds the awaited result")]
 def test_let_await(t : T?) {
     t |> run("let x <- await typed async") @(t : T?) {
         var it <- test_let_await_impl()
@@ -71,7 +71,7 @@ def test_copy_await_impl() : void {
     assert(a == 100)
 }
 
-[test]
+[test(description = "x = await copies the awaited result into an existing variable")]
 def test_copy_await(t : T?) {
     t |> run("x = await copies result") @(t : T?) {
         var it <- test_copy_await_impl()
@@ -89,7 +89,7 @@ def test_move_await_impl() : void {
     assert(a == 50)
 }
 
-[test]
+[test(description = "x <- await moves the awaited result into an existing variable")]
 def test_move_await(t : T?) {
     t |> run("x <- await moves result") @(t : T?) {
         var it <- test_move_await_impl()
@@ -107,7 +107,7 @@ def test_struct_await_impl() : void {
     assert(d.tag == "hello")
 }
 
-[test]
+[test(description = "await of a struct-returning async yields the whole struct")]
 def test_struct_await(t : T?) {
     t |> run("let d <- await struct async") @(t : T?) {
         var it <- test_struct_await_impl()
@@ -123,7 +123,7 @@ def test_void_await_impl() : void {
     await <| void_delay(3)
 }
 
-[test]
+[test(description = "await of a void async suspends the caller for as many frames as the callee waits")]
 def test_void_await(t : T?) {
     t |> run("await void async") @(t : T?) {
         var it <- test_void_await_impl()
@@ -156,7 +156,7 @@ def outer_task() : void {
     assert(v == 21) // 10*2 + 1
 }
 
-[test]
+[test(description = "three levels of nested awaits complete and propagate their results")]
 def test_nested_await(t : T?) {
     t |> run("three-level nested await") @(t : T?) {
         var it <- outer_task()
@@ -177,7 +177,7 @@ def sum_sequence(n : int) : void {
     assert(total == n * (n + 1) / 2)
 }
 
-[test]
+[test(description = "await inside a for loop accumulates results across iterations")]
 def test_await_in_loop(t : T?) {
     t |> run("await inside a for loop") @(t : T?) {
         var it <- sum_sequence(5)
@@ -197,7 +197,7 @@ def chained_computation() : void {
     assert(x == 3)
 }
 
-[test]
+[test(description = "sequential awaits feed each result into the next call")]
 def test_chained_await(t : T?) {
     t |> run("sequential await calls chain results") @(t : T?) {
         var it <- chained_computation()

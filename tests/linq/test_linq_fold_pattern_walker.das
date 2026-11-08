@@ -13,7 +13,7 @@ require dastest/testing_boost public
 // End-to-end pattern selection is covered by the existing test_linq_fold_*.das suite (each user
 // chain exercises the emit fns through `_fold`).
 
-[test]
+[test(description = "the runtime-initialized alias table holds the pattern aliases it is declared with")]
 def test_alias_table_resolves(t : T?) {
     t |> run("alias_table: PR A aliases populated (runtime-initialized via literal)") @(tt : T?) {
         tt |> equal(alias_table |> key_exists("distinct_family"), true)
@@ -28,7 +28,7 @@ def test_alias_table_resolves(t : T?) {
 
 // ─── Prefix-conflict helper: positive case (synthetic patterns we KNOW shadow) ───
 
-[test]
+[test(description = "chain_prefix_of reports a pattern as a strict prefix of another when its slots structurally match the other's first slots")]
 def test_chain_prefix_of_positive(t : T?) {
     t |> run("chain_prefix_of: A is a strict prefix of B when A's slots structurally match B's first N") @(tt : T?) {
         let prefix : array<Slot> <- [
@@ -43,7 +43,7 @@ def test_chain_prefix_of_positive(t : T?) {
     }
 }
 
-[test]
+[test(description = "chain_prefix_of rejects a pattern when any position has a different matcher")]
 def test_chain_prefix_of_negative(t : T?) {
     t |> run("chain_prefix_of: different matchers at any position break the prefix") @(tt : T?) {
         let a : array<Slot> <- [
@@ -59,7 +59,7 @@ def test_chain_prefix_of_negative(t : T?) {
     }
 }
 
-[test]
+[test(description = "chain_prefix_of compares alias matchers by alias name")]
 def test_chain_prefix_of_alias_equality(t : T?) {
     t |> run("chain_prefix_of: alias matchers compare by alias name") @(tt : T?) {
         let a : array<Slot> <- [
@@ -85,7 +85,7 @@ def null_emit(var _c : Captures; var _ctx : EmitCtx; _at : LineInfo) : Expressio
 // via tests/linq/test_linq_fold_loop_or_count.das — the walker stays private and is exercised
 // through plan_loop_or_count's pattern table just like plan_reverse / plan_distinct in PR A.
 
-[test]
+[test(description = "slot_chain_of builds a c_chain slot with a one_of matcher and the capture name")]
 def test_slot_chain_of_constructs_expected_shape(t : T?) {
     t |> run("slot_chain_of: produces c_chain cardinality + one_of matcher + capture_name") @(tt : T?) {
         let s = slot_chain_of(["where_", "select"], "head")
@@ -102,7 +102,7 @@ def test_slot_chain_of_constructs_expected_shape(t : T?) {
     }
 }
 
-[test]
+[test(description = "slots_structurally_match tells apart c_chain, c_one and c_opt slots with the same matcher")]
 def test_slots_structurally_match_distinguishes_c_chain(t : T?) {
     t |> run("slots_structurally_match: c_chain vs c_one vs c_opt at same matcher are distinct shapes") @(tt : T?) {
         // c_chain ≢ c_one ≢ c_opt at the structural level — chain_prefix_of must reject mixed-cardinality matches.
@@ -120,7 +120,7 @@ def test_slots_structurally_match_distinguishes_c_chain(t : T?) {
     }
 }
 
-[test]
+[test(description = "check_pattern_table_reachable accepts a c_chain head with distinct trailers as reachable")]
 def test_check_pattern_table_reachable_accepts_c_chain(t : T?) {
     t |> run("check_pattern_table_reachable: c_chain head + distinct trailers stay reachable (no shadow)") @(tt : T?) {
         var patterns <- [
@@ -145,7 +145,7 @@ def test_check_pattern_table_reachable_accepts_c_chain(t : T?) {
     }
 }
 
-[test]
+[test(description = "check_pattern_table_reachable returns false for a table where one row shadows another by strict prefix")]
 def test_check_pattern_table_reachable_catches_shadow(t : T?) {
     t |> run("check_pattern_table_reachable: returns false for a table with a strict-prefix shadow") @(tt : T?) {
         var bad <- [

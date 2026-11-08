@@ -1,7 +1,10 @@
-// verifies the compiler detects a recursive default argument expansion:
-// a struct method whose default argument calls itself. The recursive named call
-// can't resolve (30341) and the auto return type can't be inferred through the
-// recursion, so the field type stays unresolvable.
+//! a struct method whose default argument calls the method itself
+//! does not compile: the recursive default cannot resolve
+// verifies the compiler detects a recursive default argument
+// expansion: a struct method whose default argument calls itself. The
+// recursive named call can't resolve (30341) and the auto return type
+// can't be inferred through the recursion, so the field type stays
+// unresolvable.
 expect 30161, 30341, 30805
 struct v {
     def var0(var0 = 0; r = var0([var0=0])) {}

@@ -1,4 +1,5 @@
-// a match on several values must cover every combination of finite values
+//! a match on several values must cover every combination of finite
+//! values
 options gen2
 
 require daslib/match

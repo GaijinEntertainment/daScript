@@ -3,7 +3,7 @@ options gen2
 require daslib/md_boost
 require dastest/testing_boost public
 
-[test]
+[test(description = "md_bold wraps text in double asterisks and md_escape escapes pipe characters only")]
 def test_md_primitives(t : T?) {
     t |> run("md_bold + md_escape") @(t : T?) {
         t |> equal(md_bold("0.61x"), "**0.61x**")
@@ -12,7 +12,7 @@ def test_md_primitives(t : T?) {
     }
 }
 
-[test]
+[test(description = "render_md_table aligns columns, writes GitHub separator rows and gives every column a minimum width of 3")]
 def test_render_md_table(t : T?) {
     t |> run("render_md_table: aligned columns, GitHub separators, min-width 3") @(t : T?) {
         let headers <- ["a", "bb"]
@@ -24,7 +24,7 @@ def test_render_md_table(t : T?) {
     }
 }
 
-[test]
+[test(description = "a bolded cell still aligns, because the asterisks count toward the column width")]
 def test_render_md_table_bold_aligns(t : T?) {
     t |> run("bolded winner still aligns (** counted in width)") @(t : T?) {
         let headers <- ["file", "das/cli"]

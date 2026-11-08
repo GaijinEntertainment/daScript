@@ -16,7 +16,7 @@ struct Particle {
     life : int
 }
 
-[test]
+[test(description = "a decs_template component names get the struct-name prefix by default")]
 def test_template_default_prefix(t : T?) {
     restart()
     let eid = create_entity() @(eid, cmp) {
@@ -42,7 +42,7 @@ struct Bullet {
     damage : int
 }
 
-[test]
+[test(description = "a decs_template with a custom prefix names its components with it")]
 def test_template_custom_prefix(t : T?) {
     restart()
     let eid = create_entity() @(eid, cmp) {
@@ -66,7 +66,7 @@ struct Vehicle {
     fuel : int
 }
 
-[test]
+[test(description = "a decs_template with an empty prefix names its components by field")]
 def test_template_empty_prefix(t : T?) {
     restart()
     let eid = create_entity() @(eid, cmp) {
@@ -85,7 +85,7 @@ def test_template_empty_prefix(t : T?) {
 
 // === Query with template struct ===
 
-[test]
+[test(description = "a query can read a template's components back as a struct")]
 def test_query_with_template_struct(t : T?) {
     restart()
     for (i in range(3)) {
@@ -104,7 +104,7 @@ def test_query_with_template_struct(t : T?) {
 
 // === Mutable query with template struct ===
 
-[test]
+[test(description = "a query can modify the components of a template")]
 def test_query_mutate_template(t : T?) {
     restart()
     let eid = create_entity() @(eid, cmp) {
@@ -128,7 +128,7 @@ def test_query_mutate_template(t : T?) {
 
 // === remove_decs_template ===
 
-[test]
+[test(description = "removing a template removes its components and keeps the others")]
 def test_remove_template(t : T?) {
     restart()
     let eid = create_entity() @(eid, cmp) {
@@ -159,7 +159,7 @@ def test_remove_template(t : T?) {
 
 // === Multiple templates on same entity ===
 
-[test]
+[test(description = "one entity can carry several templates")]
 def test_multiple_templates(t : T?) {
     restart()
     let eid = create_entity() @(eid, cmp) {
@@ -176,4 +176,47 @@ def test_multiple_templates(t : T?) {
         found = true
     }
     t |> success(found)
+}
+
+[decs_template]
+struct DefaultParticle {
+    live = 13
+}
+
+[test(description = "a template built with default values creates an entity with those defaults")]
+def test_create_from_default(t : T?) {
+    restart()
+    create_entity() @(eid, cmp) {
+        apply_decs_template(cmp, DefaultParticle())
+    }
+    commit()
+    query() $(var p : DefaultParticle) {
+        p.live ++
+    }
+    query() $(var p : DefaultParticle) {
+        t |> equal(p.live, 14)
+    }
+}
+
+[test(description = "a query argument with a default value gets it when the component is missing")]
+def test_default_values(t : T?) {
+    restart()
+    create_entity() @(eid, cmp) {
+        cmp.a := 1
+    }
+    create_entity() @(eid, cmp) {
+        cmp.a := 2
+        cmp.b := 10
+    }
+    commit()
+    var count = 0
+    query() $(a : int; b : int = -1) {
+        if (b == -1) {
+            t |> equal(a, 1)
+        } elif (b == 10) {
+            t |> equal(a, 2)
+        }
+        count ++
+    }
+    t |> equal(count, 2)
 }

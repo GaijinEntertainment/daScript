@@ -29,7 +29,7 @@ def make_group(n : string; vals : array<int>; act : bool) : Group {
 // Push must not destroy the source variable
 // ===========================
 
-[test]
+[test(description = "pushing a named variable with a non-copyable field leaves the source intact")]
 def test_noncopyable_push_preserves_source(t : T?) {
     t |> run("push named variable preserves source scores") @(t : T?) {
         var soa : Group`SOA
@@ -68,7 +68,7 @@ def test_noncopyable_push_preserves_source(t : T?) {
 // Basic: push with move, length, indexed access
 // ===========================
 
-[test]
+[test(description = "a push by move with an array field works with indexed access to every field")]
 def test_noncopyable_push_and_access(t : T?) {
     t |> run("push with move and length") @(t : T?) {
         var soa : Group`SOA
@@ -106,7 +106,7 @@ def test_noncopyable_push_and_access(t : T?) {
 // Iteration
 // ===========================
 
-[test]
+[test(description = "a for loop over an SOA with an array field reads the array and the other fields")]
 def test_noncopyable_iteration(t : T?) {
     t |> run("for loop accesses array field") @(t : T?) {
         var soa : Group`SOA
@@ -141,7 +141,7 @@ def test_noncopyable_iteration(t : T?) {
 // Erase
 // ===========================
 
-[test]
+[test(description = "erase removes an element that has an array field")]
 def test_noncopyable_erase(t : T?) {
     t |> run("erase removes element with array field") @(t : T?) {
         var soa : Group`SOA
@@ -161,7 +161,7 @@ def test_noncopyable_erase(t : T?) {
 // Pop
 // ===========================
 
-[test]
+[test(description = "pop removes the last element that has an array field")]
 def test_noncopyable_pop(t : T?) {
     t |> run("pop removes last element with array field") @(t : T?) {
         var soa : Group`SOA
@@ -178,7 +178,7 @@ def test_noncopyable_pop(t : T?) {
 // Clear
 // ===========================
 
-[test]
+[test(description = "clear removes all elements that have array fields")]
 def test_noncopyable_clear(t : T?) {
     t |> run("clear removes all elements with array fields") @(t : T?) {
         var soa : Group`SOA
@@ -193,7 +193,7 @@ def test_noncopyable_clear(t : T?) {
 // Resize and reserve
 // ===========================
 
-[test]
+[test(description = "resize truncates array fields when shrinking and extends with defaults when growing")]
 def test_noncopyable_resize(t : T?) {
     t |> run("resize truncates array fields") @(t : T?) {
         var soa : Group`SOA
@@ -217,7 +217,7 @@ def test_noncopyable_resize(t : T?) {
     }
 }
 
-[test]
+[test(description = "reserve leaves the length of an SOA with array fields unchanged")]
 def test_noncopyable_reserve(t : T?) {
     t |> run("reserve does not change length") @(t : T?) {
         var soa : Group`SOA
@@ -233,7 +233,7 @@ def test_noncopyable_reserve(t : T?) {
 // Capacity
 // ===========================
 
-[test]
+[test(description = "capacity works on a struct with an array field")]
 def test_noncopyable_capacity(t : T?) {
     t |> run("capacity on struct with array field") @(t : T?) {
         var soa : Group`SOA
@@ -246,7 +246,7 @@ def test_noncopyable_capacity(t : T?) {
 // Swap
 // ===========================
 
-[test]
+[test(description = "swap exchanges elements that have array fields and is a no-op for the same index")]
 def test_noncopyable_swap(t : T?) {
     t |> run("swap exchanges elements with array fields") @(t : T?) {
         var soa : Group`SOA
@@ -275,7 +275,7 @@ def test_noncopyable_swap(t : T?) {
 // push_clone with non-copyable field
 // ===========================
 
-[test]
+[test(description = "push_clone clones a non-copyable field and does not consume the source")]
 def test_noncopyable_push_clone(t : T?) {
     t |> run("push_clone with non-copyable field") @(t : T?) {
         var soa : Group`SOA
@@ -312,7 +312,7 @@ def test_noncopyable_push_clone(t : T?) {
 // Modify array field through indexed access
 // ===========================
 
-[test]
+[test(description = "an array field can be modified, cleared and changed in a loop through the SOA")]
 def test_noncopyable_modify_array_field(t : T?) {
     t |> run("modify array field via indexed access") @(t : T?) {
         var soa : Group`SOA
@@ -345,7 +345,7 @@ def test_noncopyable_modify_array_field(t : T?) {
 // from_array with non-copyable field
 // ===========================
 
-[test]
+[test(description = "from_array clones non-copyable fields and preserves the source array")]
 def test_noncopyable_from_array(t : T?) {
     t |> run("from_array clones non-copyable fields") @(t : T?) {
         var arr <- [make_group("a", [1, 2], true), make_group("b", [3, 4, 5], false)]
@@ -378,7 +378,7 @@ def test_noncopyable_from_array(t : T?) {
 // to_array with non-copyable field
 // ===========================
 
-[test]
+[test(description = "to_array clones non-copyable fields and round-trips the data")]
 def test_noncopyable_to_array(t : T?) {
     t |> run("to_array clones non-copyable fields") @(t : T?) {
         var soa : Group`SOA

@@ -28,14 +28,14 @@ def m_003(db : SqlRunner) {
     db |> drop_index_if_exists("never_existed")
 }
 
-[test]
+[test(description = "a create, a unique-index and a drop-index migration all apply")]
 def test_all_three_migrations_apply(t : T?) {
     var inscope db = open_sqlite(":memory:")
     let n = db |> migrate_to_latest()
     t |> equal(n, 3, "all three migrations applied (CREATE TABLE + CREATE UNIQUE INDEX + drop trio)")
 }
 
-[test]
+[test(description = "drop_index_if_exists succeeds silently, also for indexes that do not exist")]
 def test_drop_index_if_exists_idempotent(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()
@@ -45,7 +45,7 @@ def test_drop_index_if_exists_idempotent(t : T?) {
     t |> equal(idx_count, 0, "All three drop_index_if_exists calls succeeded silently; no indexes remain")
 }
 
-[test]
+[test(description = "create_unique_index over two columns builds one UNIQUE composite index")]
 def test_unique_composite_was_created_first(t : T?) {
     // Run only v1 + v2 (skip v3 which drops the index) by walking history.
     var inscope db = open_sqlite(":memory:")

@@ -152,7 +152,7 @@ def cmp3f_approx(t : T?; a, b : float3) {
     fapprox(t, a.x, b.x); fapprox(t, a.y, b.y); fapprox(t, a.z, b.z)
 }
 
-[test]
+[test(description = "preshader extraction, common-subexpression elimination and regrouping keep each twin's result equal to its original", standalone = "no_aot/test_flatten_fold.das compiles this file by path as a unit and checks its twins structurally")]
 def test_flatten_opt(t : T?) {
     t |> run("preshader: whole-uniform let -> _preshader_") @(t : T?) {
         for (v in GRID) {

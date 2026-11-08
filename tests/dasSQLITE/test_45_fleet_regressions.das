@@ -1,7 +1,6 @@
 options gen2
 
 require dastest/testing_boost public
-
 require daslib/sql
 require daslib/linq_boost
 require sqlite/sqlite_boost
@@ -34,7 +33,7 @@ def private fixture_things(db : SqlRunner) {
     db |> insert(FleetThing(Id = 3, Price = 290))
 }
 
-[test]
+[test(description = "skip followed by first keeps the skipped offset in the emitted LIMIT 1 OFFSET")]
 def test_skip_then_first_keeps_offset(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture_things(db)
@@ -45,7 +44,7 @@ def test_skip_then_first_keeps_offset(t : T?) {
     }
 }
 
-[test]
+[test(description = "_not_in with a computed left side filters rows instead of being neutered")]
 def test_not_in_computed_lhs_binds_once(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture_things(db)
@@ -57,7 +56,7 @@ def test_not_in_computed_lhs_binds_once(t : T?) {
     }
 }
 
-[test]
+[test(description = "a grouped sum reads the renamed SQL column, not a string literal")]
 def test_grouped_aggregate_honors_sql_column_rename(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<FleetSale>)
@@ -75,7 +74,7 @@ def test_grouped_aggregate_honors_sql_column_rename(t : T?) {
     }
 }
 
-[test]
+[test(description = "aggregates after reverse and distinct_by use the last row of each key")]
 def test_reversed_distinct_by_aggregates_keep_last(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<FleetKV>)
@@ -89,7 +88,7 @@ def test_reversed_distinct_by_aggregates_keep_last(t : T?) {
     }
 }
 
-[test]
+[test(description = "where, order_by, take and first after a set operation act on the combined rows")]
 def test_set_op_post_operators_divert(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<FleetKV>)
@@ -123,7 +122,7 @@ struct FleetName {
     Name : string
 }
 
-[test]
+[test(description = "contains and starts_with are case-sensitive, escape pattern metacharacters and match an empty needle on every row")]
 def test_string_ops_case_sensitive_rail(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<FleetName>)
@@ -157,7 +156,7 @@ struct FleetJoinA {
     V : int
 }
 
-[test]
+[test(description = "take followed by an aggregate on a join keeps the join projection so shared column names stay unambiguous")]
 def test_join_take_aggregate_projects_the_join(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<FleetJoinA>)
@@ -174,7 +173,7 @@ def test_join_take_aggregate_projects_the_join(t : T?) {
     }
 }
 
-[test]
+[test(description = "take of zero followed by first or first_opt behaves like the plain linq chain")]
 def test_take_zero_then_first_matches_plain(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture_things(db)

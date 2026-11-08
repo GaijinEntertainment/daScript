@@ -31,7 +31,7 @@ def private sum_plain_generic(var src : iterator<auto(TT)>) : int {
     return total
 }
 
-[test]
+[test(description = "a mutable iterator can be passed to a parameter that takes a const iterator")]
 def test_mut_iter_flows_into_const_param(t : T?) {
     // each(array<int>) yields iterator<int -&> (mut element). Passing it into a
     // function expecting iterator<int const -&> should succeed via variance.
@@ -40,7 +40,7 @@ def test_mut_iter_flows_into_const_param(t : T?) {
     t |> equal(15, total)
 }
 
-[test]
+[test(description = "a const iterator source can be passed to a const iterator parameter")]
 def test_const_source_into_const_param(t : T?) {
     // Iterator comprehension yields iterator<int const -&>. Passing it into a
     // function expecting iterator<int const -&> is the trivial case.
@@ -48,7 +48,7 @@ def test_const_source_into_const_param(t : T?) {
     t |> equal(15, total)
 }
 
-[test]
+[test(description = "a generic const-iterator parameter accepts both mutable and const iterators")]
 def test_generic_const_param_accepts_both_flavors(t : T?) {
     // The regression case: the same generic instantiated from BOTH a mut-element
     // source AND a const-element source within one module. Pre-fix this would
@@ -64,7 +64,7 @@ def test_generic_const_param_accepts_both_flavors(t : T?) {
     }
 }
 
-[test]
+[test(description = "a plain generic iterator parameter accepts both flavors without an internal compiler error")]
 def test_plain_generic_flavor_siblings_no_ice(t : T?) {
     // A PLAIN-element generic mints one instance per element flavor (mut, then
     // const). Pre-fix a THIRD mut-source call ICE'd with `error[50609]: multiple

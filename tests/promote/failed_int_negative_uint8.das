@@ -1,4 +1,5 @@
-// -1 doesn't fit in uint8 — uint is unsigned
+//! -1 assigned to a uint8 must not compile (30515), because uint8 is
+//! unsigned.
 options gen2
 
 expect 30515

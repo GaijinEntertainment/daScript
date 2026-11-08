@@ -16,7 +16,7 @@ require dastest/testing_boost public
 
 // ── Array comprehension ─────────────────────────────────────────────────
 
-[test]
+[test(description = "qmatch matches an array comprehension against an identical pattern")]
 def test_array_comprehension_match(t : T?) {
     ast_gc_guard() {
         var expr = qmacro([for (x in range(10)); x])
@@ -25,7 +25,7 @@ def test_array_comprehension_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch rejects an array comprehension whose source differs")]
 def test_array_comprehension_wrong_source(t : T?) {
     ast_gc_guard() {
         var expr = qmacro([for (x in range(10)); x])
@@ -34,7 +34,7 @@ def test_array_comprehension_wrong_source(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch rejects an array comprehension whose result expression differs")]
 def test_array_comprehension_wrong_subexpr(t : T?) {
     ast_gc_guard() {
         var expr = qmacro([for (x in range(10)); x])
@@ -43,7 +43,7 @@ def test_array_comprehension_wrong_subexpr(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch matches an array comprehension with a where clause")]
 def test_array_comprehension_with_where(t : T?) {
     ast_gc_guard() {
         var expr = qmacro([for (x in range(10)); x; where x > 5])
@@ -52,7 +52,7 @@ def test_array_comprehension_with_where(t : T?) {
     }
 }
 
-[test]
+[test(description = "a pattern with a where clause does not match a comprehension without one")]
 def test_array_comprehension_where_mismatch(t : T?) {
     ast_gc_guard() {
         // Pattern has where, actual doesn't
@@ -62,7 +62,7 @@ def test_array_comprehension_where_mismatch(t : T?) {
     }
 }
 
-[test]
+[test(description = "a pattern without a where clause does not match a comprehension that has one")]
 def test_array_comprehension_no_where_mismatch(t : T?) {
     ast_gc_guard() {
         // Pattern has no where, actual does
@@ -72,7 +72,7 @@ def test_array_comprehension_no_where_mismatch(t : T?) {
     }
 }
 
-[test]
+[test(description = "a $e capture binds the result expression of an array comprehension")]
 def test_array_comprehension_capture_subexpr(t : T?) {
     ast_gc_guard() {
         var expr = qmacro([for (x in range(10)); x * 2])
@@ -85,7 +85,7 @@ def test_array_comprehension_capture_subexpr(t : T?) {
     }
 }
 
-[test]
+[test(description = "an $i capture binds the iterator name of an array comprehension")]
 def test_array_comprehension_capture_iterator(t : T?) {
     ast_gc_guard() {
         var expr = qmacro([for (x in range(10)); x])
@@ -98,7 +98,7 @@ def test_array_comprehension_capture_iterator(t : T?) {
     }
 }
 
-[test]
+[test(description = "_any as the result expression matches any array comprehension body")]
 def test_array_comprehension_wildcard_subexpr(t : T?) {
     ast_gc_guard() {
         var expr = qmacro([for (x in range(10)); x * x + 1])
@@ -109,7 +109,7 @@ def test_array_comprehension_wildcard_subexpr(t : T?) {
 
 // ── Array vs table mismatch ─────────────────────────────────────────────
 
-[test]
+[test(description = "an array comprehension pattern does not match a table comprehension")]
 def test_array_vs_table_mismatch(t : T?) {
     ast_gc_guard() {
         var expr = qmacro([for (x in range(10)); x])
@@ -118,7 +118,7 @@ def test_array_vs_table_mismatch(t : T?) {
     }
 }
 
-[test]
+[test(description = "a table comprehension pattern does not match an array comprehension")]
 def test_table_vs_array_mismatch(t : T?) {
     ast_gc_guard() {
         var expr = qmacro({for (x in range(10)); x})
@@ -129,7 +129,7 @@ def test_table_vs_array_mismatch(t : T?) {
 
 // ── Table comprehension ─────────────────────────────────────────────────
 
-[test]
+[test(description = "qmatch matches a table comprehension with key and value expressions")]
 def test_table_comprehension_match(t : T?) {
     ast_gc_guard() {
         var expr = qmacro({for (x in range(10)); x => x * x})
@@ -138,7 +138,7 @@ def test_table_comprehension_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch matches a key-only table comprehension")]
 def test_table_comprehension_key_only(t : T?) {
     ast_gc_guard() {
         var expr = qmacro({for (x in range(10)); x})
@@ -147,7 +147,7 @@ def test_table_comprehension_key_only(t : T?) {
     }
 }
 
-[test]
+[test(description = "a $e capture binds the value expression of a table comprehension")]
 def test_table_comprehension_capture_subexpr(t : T?) {
     ast_gc_guard() {
         var expr = qmacro({for (x in range(10)); x => x * x})
@@ -161,7 +161,7 @@ def test_table_comprehension_capture_subexpr(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch rejects a table comprehension whose value expression differs")]
 def test_table_comprehension_wrong_subexpr(t : T?) {
     ast_gc_guard() {
         var expr = qmacro({for (x in range(10)); x => x * x})
@@ -172,7 +172,7 @@ def test_table_comprehension_wrong_subexpr(t : T?) {
 
 // ── Generator comprehension ─────────────────────────────────────────────
 
-[test]
+[test(description = "qmatch matches an iterator comprehension against an identical pattern")]
 def test_generator_comprehension_match(t : T?) {
     ast_gc_guard() {
         var expr = qmacro([iterator for(x in range(10)); x])
@@ -181,7 +181,7 @@ def test_generator_comprehension_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "an iterator comprehension pattern does not match an array comprehension")]
 def test_generator_vs_array_mismatch(t : T?) {
     ast_gc_guard() {
         var expr = qmacro([iterator for(x in range(10)); x])
@@ -190,7 +190,7 @@ def test_generator_vs_array_mismatch(t : T?) {
     }
 }
 
-[test]
+[test(description = "an array comprehension pattern does not match an iterator comprehension")]
 def test_array_vs_generator_mismatch(t : T?) {
     ast_gc_guard() {
         var expr = qmacro([for (x in range(10)); x])
@@ -201,7 +201,7 @@ def test_array_vs_generator_mismatch(t : T?) {
 
 // ── ExprMakeBlock mmFlags ───────────────────────────────────────────────
 
-[test]
+[test(description = "a plain block pattern matches a plain block")]
 def test_block_matches_block(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { return 1; })
@@ -210,7 +210,7 @@ def test_block_matches_block(t : T?) {
     }
 }
 
-[test]
+[test(description = "a plain block pattern does not match a lambda")]
 def test_block_not_lambda(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(@() { return 1; })
@@ -219,7 +219,7 @@ def test_block_not_lambda(t : T?) {
     }
 }
 
-[test]
+[test(description = "a lambda pattern matches a lambda")]
 def test_lambda_matches_lambda(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(@(x) { return x + 1; })
@@ -228,7 +228,7 @@ def test_lambda_matches_lambda(t : T?) {
     }
 }
 
-[test]
+[test(description = "a lambda pattern does not match a plain block")]
 def test_lambda_not_block(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { return 1; })
@@ -237,7 +237,7 @@ def test_lambda_not_block(t : T?) {
     }
 }
 
-[test]
+[test(description = "a local function pattern matches a local function")]
 def test_local_function_matches(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(@@(x) { return x + 1; })
@@ -246,7 +246,7 @@ def test_local_function_matches(t : T?) {
     }
 }
 
-[test]
+[test(description = "a local function pattern does not match a lambda")]
 def test_local_function_not_lambda(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(@(x) { return x + 1; })
@@ -269,7 +269,7 @@ def target_with_local_fn_wrong() {
     feint("{f}")
 }
 
-[test]
+[test(description = "a local function pattern matches the inferred form, an address-of expression, in a compiled function")]
 def test_local_fn_post_inference(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_with_local_fn)
@@ -285,7 +285,7 @@ def test_local_fn_post_inference(t : T?) {
     }
 }
 
-[test]
+[test(description = "a local function pattern with a different body fails against the inferred form")]
 def test_local_fn_post_inference_wrong_body(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_with_local_fn)
@@ -300,7 +300,7 @@ def test_local_fn_post_inference_wrong_body(t : T?) {
     }
 }
 
-[test]
+[test(description = "a $e capture binds the body statement of an inferred local function")]
 def test_local_fn_capture_body(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_with_local_fn)
@@ -325,7 +325,7 @@ def target_with_local_fn_two_args() {
     feint("{f}")
 }
 
-[test]
+[test(description = "a local function pattern with two arguments matches the inferred form")]
 def test_local_fn_match_two_args(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_with_local_fn_two_args)
@@ -340,7 +340,7 @@ def test_local_fn_match_two_args(t : T?) {
     }
 }
 
-[test]
+[test(description = "an $i capture binds the name of the let variable holding an inferred local function")]
 def test_local_fn_capture_var_name(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_with_local_fn)
@@ -379,7 +379,7 @@ def target_comp_where() {
     feint("{a}")
 }
 
-[test]
+[test(description = "an array comprehension pattern matches the inferred form in a compiled function")]
 def test_comp_array_post_inference(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_comp_array)
@@ -395,7 +395,7 @@ def test_comp_array_post_inference(t : T?) {
     }
 }
 
-[test]
+[test(description = "a table comprehension pattern matches the inferred form in a compiled function")]
 def test_comp_table_post_inference(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_comp_table)
@@ -411,7 +411,7 @@ def test_comp_table_post_inference(t : T?) {
     }
 }
 
-[test]
+[test(description = "a comprehension pattern with a where clause matches the inferred form")]
 def test_comp_where_post_inference(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_comp_where)
@@ -427,7 +427,7 @@ def test_comp_where_post_inference(t : T?) {
     }
 }
 
-[test]
+[test(description = "a comprehension pattern with a different result expression fails against the inferred form")]
 def test_comp_wrong_body_post_inference(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_comp_array)
@@ -442,7 +442,7 @@ def test_comp_wrong_body_post_inference(t : T?) {
     }
 }
 
-[test]
+[test(description = "a $e capture binds the result expression of an inferred comprehension")]
 def test_comp_capture_post_inference(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_comp_array)
@@ -461,7 +461,7 @@ def test_comp_capture_post_inference(t : T?) {
     }
 }
 
-[test]
+[test(description = "an $i capture binds the iterator name of an inferred comprehension")]
 def test_comp_capture_iterator_post_inference(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_comp_array)

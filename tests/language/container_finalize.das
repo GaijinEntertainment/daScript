@@ -55,7 +55,7 @@ def private make_probes(n : int) : array<Probe> {
     return <- arr
 }
 
-[test]
+[test(description = "erase, erase_range, clear, shrinking resize, pop and erase_if release exactly the heap the dropped elements own, through nested and fixed-array containers too")]
 def test_banner_releases_owned_heap(t : T?) {
     t |> run("erase") @(t : T?) {
         var inscope arr <- make_bags(3)
@@ -135,7 +135,7 @@ def test_banner_releases_owned_heap(t : T?) {
     }
 }
 
-[test]
+[test(description = "array and table erase, clear, shrink and pop never call a user finalizer, while delete still runs the full teardown")]
 def test_user_finalizers_never_run_implicitly(t : T?) {
     t |> run("erase, clear, shrink, pop leave the finalizer cold") @(t : T?) {
         var arr <- make_probes(4)
@@ -170,7 +170,7 @@ def test_user_finalizers_never_run_implicitly(t : T?) {
     }
 }
 
-[test]
+[test(description = "table erase and clear release the heap owned by the dropped values, and erasing a missing key releases nothing")]
 def test_table_banner(t : T?) {
     t |> run("erase releases the dropped value's heap") @(t : T?) {
         var inscope tab : table<string; Bag>
@@ -206,7 +206,7 @@ def test_table_banner(t : T?) {
     }
 }
 
-[test]
+[test(description = "erase and clear on arrays and tables of borrowed pointers leave the pointees alive")]
 def test_pointer_carveout(t : T?) {
     t |> run("borrowed array pointers survive erase and clear") @(t : T?) {
         var p1 = new Holder(v = 41)
@@ -247,7 +247,7 @@ def test_pointer_carveout(t : T?) {
     }
 }
 
-[test]
+[test(description = "dropping pointer-carrying composite elements skips the release, so their pointees are untouched")]
 def test_composite_carveout(t : T?) {
     t |> run("pointer-carrying composites skip the banner") @(t : T?) {
         // the linq-planner shape: tuple-of-pointers elements alias live data

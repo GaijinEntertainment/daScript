@@ -22,7 +22,7 @@ def returns_uint8() : uint8 => 200
 
 def returns_float() : float => 42
 
-[test]
+[test(description = "an int literal initializing a local of a narrower or wider numeric type is promoted to that type")]
 def test_var_init_local(t : T?) {
     let i8 : int8 = -42
     let i16 : int16 = 30000
@@ -52,7 +52,7 @@ def test_var_init_local(t : T?) {
     t |> equal(int(bf64), 255, "bitfield64 promotion")
 }
 
-[test]
+[test(description = "an int literal initializing a global of another numeric type is promoted to that type")]
 def test_var_init_global(t : T?) {
     t |> equal(int(g_int8), -100, "global int8 init")
     t |> equal(int(g_uint8), 200, "global uint8 init")
@@ -63,7 +63,7 @@ def test_var_init_global(t : T?) {
     t |> equal(uint(g_uint64), 0xFFFFFFFFu, "global uint64 init")
 }
 
-[test]
+[test(description = "an int literal used as a struct field default is promoted to the field type")]
 def test_struct_field_decl_init(t : T?) {
     let f = Foo()
     t |> equal(f.a, 7.0f, "struct float field init")
@@ -72,7 +72,7 @@ def test_struct_field_decl_init(t : T?) {
     t |> equal(int(f.d), 1, "struct bitfield8 field init")
 }
 
-[test]
+[test(description = "an int literal passed as a struct constructor field is promoted to the field type")]
 def test_struct_ctor_init(t : T?) {
     let f = Foo(a = 3, b = 100, c = 2)
     t |> equal(f.a, 3.0f, "ctor float promotion")
@@ -80,7 +80,7 @@ def test_struct_ctor_init(t : T?) {
     t |> equal(int(f.c), 2, "ctor int64 promotion")
 }
 
-[test]
+[test(description = "an int literal is promoted to a float on copy, clone and compound assignment")]
 def test_copy_clone_compound(t : T?) {
     var f : float = 0      // nolint:LINT010 — init exists so type is fixed; first test rewrites it
     f = 42
@@ -97,7 +97,7 @@ def test_copy_clone_compound(t : T?) {
     t |> equal(f, 100.0f, "compound div promotion")
 }
 
-[test]
+[test(description = "an int operand beside a float in arithmetic is promoted to float on either side")]
 def test_op2_arith(t : T?) {
     let a : float = 10
     t |> equal(a + 1, 11.0f, "right-side int promotion in +")
@@ -107,7 +107,7 @@ def test_op2_arith(t : T?) {
     t |> equal(a / 2, 5.0f, "right-side int promotion in /")
 }
 
-[test]
+[test(description = "an int literal compared with a float is promoted to float")]
 def test_op2_compare(t : T?) {
     let a : float = 10
     t |> equal(a < 11, true, "compare with int literal")
@@ -115,13 +115,13 @@ def test_op2_compare(t : T?) {
     t |> equal(a == 10, true, "equality with int literal")
 }
 
-[test]
+[test(description = "an int literal returned from a function is promoted to the declared return type")]
 def test_return_promotion(t : T?) {
     t |> equal(int(returns_uint8()), 200, "return uint8 promotion")
     t |> equal(returns_float(), 42.0f, "return float promotion")
 }
 
-[test]
+[test(description = "int literals after a float literal in an array literal are promoted to float")]
 def test_array_element_promotion(t : T?) {
     // first element fixes the element type, subsequent int literals
     // flow through visitMakeArrayIndex's promotion path
@@ -137,7 +137,7 @@ def test_array_element_promotion(t : T?) {
     t |> equal(int(u[3]), 255, "uint8 array elem 3 (boundary int promoted)")
 }
 
-[test]
+[test(description = "the minimum and maximum values of each small integer type are accepted as literals")]
 def test_boundary_values(t : T?) {
     // exact boundary values that fit
     let i8_min : int8 = -128

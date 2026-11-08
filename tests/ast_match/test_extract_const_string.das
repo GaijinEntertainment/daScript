@@ -15,7 +15,7 @@ require dastest/testing_boost public
 
 // ── Null / non-literal inputs ────────────────────────────────────────────
 
-[test]
+[test(description = "extract_const_string returns false for a null expression")]
 def test_null_does_not_match(t : T?) {
     var expr : Expression?
     let r = extract_const_string(expr)
@@ -23,7 +23,7 @@ def test_null_does_not_match(t : T?) {
     t |> equal(r._1, "")
 }
 
-[test]
+[test(description = "extract_const_string returns false for an int constant")]
 def test_non_string_const_does_not_match(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(42)
@@ -33,7 +33,7 @@ def test_non_string_const_does_not_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "extract_const_string returns false for a variable reference")]
 def test_var_ref_does_not_match(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(some_var)
@@ -45,7 +45,7 @@ def test_var_ref_does_not_match(t : T?) {
 
 // ── Positive matches ─────────────────────────────────────────────────────
 
-[test]
+[test(description = "extract_const_string returns true and the text for a string literal")]
 def test_const_string_literal(t : T?) {
     ast_gc_guard() {
         var expr = qmacro("hello")
@@ -55,7 +55,7 @@ def test_const_string_literal(t : T?) {
     }
 }
 
-[test]
+[test(description = "extract_const_string accepts the empty string literal")]
 def test_empty_const_string(t : T?) {
     ast_gc_guard() {
         var expr = qmacro("")
@@ -65,7 +65,7 @@ def test_empty_const_string(t : T?) {
     }
 }
 
-[test]
+[test(description = "extract_const_string returns a string literal containing quotes unchanged")]
 def test_const_string_with_special_chars(t : T?) {
     ast_gc_guard() {
         var expr = qmacro("foo'bar\"baz")

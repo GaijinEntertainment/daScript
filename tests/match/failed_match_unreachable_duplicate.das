@@ -1,4 +1,4 @@
-// an arm whose values an earlier arm already matches is unreachable
+//! an arm whose values an earlier arm already matches is unreachable
 options gen2
 
 require daslib/match

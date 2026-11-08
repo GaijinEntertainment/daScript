@@ -1,4 +1,7 @@
-// Derived finalizer must `delete super.self` exactly once — duplicate is rejected.
+//! a derived class finalizer that calls delete super.self twice on
+//! one path does not compile
+// Derived finalizer must `delete super.self` exactly once — duplicate
+// is rejected.
 options gen2
 expect 30308
 

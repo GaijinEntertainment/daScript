@@ -2,12 +2,14 @@ options gen2
 options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 options persistent_heap
+
 require dastest/testing_boost public
 require daslib/regex_boost
+require daslib/regex
 
 // ── regex_match API ─────────────────────────────────────────
 
-[test]
+[test(description = "regex_match returns the end position, -1 on failure, handles an empty string and honors an offset")]
 def test_regex_match_api(t : T?) {
     t |> run("returns end pos") @(t : T?) {
         var re <- regex_compile("hello")
@@ -30,7 +32,7 @@ def test_regex_match_api(t : T?) {
 
 // ── regex_group API ─────────────────────────────────────────
 
-[test]
+[test(description = "regex_group returns a single capture and sequential captures in order")]
 def test_regex_group(t : T?) {
     t |> run("single group capture") @(tt : T?) {
         var re <- regex_compile("(\\w+)@(\\w+)")
@@ -52,7 +54,7 @@ def test_regex_group(t : T?) {
 
 // ── regex_foreach API ───────────────────────────────────────
 
-[test]
+[test(description = "regex_foreach visits every match and stops when the callback returns early")]
 def test_regex_foreach(t : T?) {
     t |> run("finds all matches") @(tt : T?) {
         var re <- regex_compile("\\d+")
@@ -80,7 +82,7 @@ def test_regex_foreach(t : T?) {
 
 // ── regex_replace API ───────────────────────────────────────
 
-[test]
+[test(description = "regex_replace substitutes matches and returns the original when nothing matches")]
 def test_regex_replace(t : T?) {
     t |> run("simple replacement") @(tt : T?) {
         var re <- regex_compile("\\d+")
@@ -100,7 +102,7 @@ def test_regex_replace(t : T?) {
 
 // ── is_valid API ────────────────────────────────────────────
 
-[test]
+[test(description = "is_valid accepts a good pattern and rejects a malformed one")]
 def test_is_valid(t : T?) {
     t |> run("valid regex") @(t : T?) {
         var re : Regex
@@ -116,7 +118,7 @@ def test_is_valid(t : T?) {
 
 // ── regex_debug API ─────────────────────────────────────────
 
-[test]
+[test(description = "regex_debug on a compiled pattern runs without crashing")]
 def test_regex_debug(t : T?) {
     t |> run("debug does not crash") @(t : T?) {
         var re <- regex_compile("(a|b)+c")
@@ -127,7 +129,7 @@ def test_regex_debug(t : T?) {
 
 // ── regex_boost reader macro ────────────────────────────────
 
-[test]
+[test(description = "the regex reader macro compiles literal patterns, including character classes")]
 def test_regex_boost_macro(t : T?) {
     t |> run("reader macro compiles") @(t : T?) {
         var re <- %regex~\d+%%
@@ -137,5 +139,25 @@ def test_regex_boost_macro(t : T?) {
     t |> run("reader macro with classes") @(t : T?) {
         var re <- %regex~[a-z]+%%
         t |> equal(regex_match(re, "hello"), 5)
+    }
+}
+
+//! on the persistent heap a free is exact, so the byte count
+//! sees a node nothing owns
+[test(description = "compiling and deleting quantified patterns leaves the persistent-heap byte count unchanged")]
+def test_a_compiled_quantifier_frees_its_pass_end(t : T?) {
+    for (pat in ["a*b+c?", "(ab|cd)*x", "(a\{2,3\})+"]) {
+        var warm <- regex_compile(pat)
+        unsafe {
+            delete warm
+        }
+        let before = heap_bytes_allocated()
+        for (_ in range(100)) {
+            var r <- regex_compile(pat)
+            unsafe {
+                delete r
+            }
+        }
+        t |> equal(before, heap_bytes_allocated(), "{pat} leaks per compile")
     }
 }

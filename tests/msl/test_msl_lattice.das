@@ -88,7 +88,7 @@ kernel void packed3(device const packed_float3* pf [[buffer(0)]],
 \}
 "
 
-[test]
+[test(description = "fp16 closed arithmetic, h literals and all/any compares emit native half MSL and match the golden snapshot.")]
 def test_halfarith_shape(t : T?) {
     t |> run("halfarith: fp16 closed arithmetic, h literals, all/any compares") <| @(t : T?) {
         t |> success(contains(halfarith_msl, "device const half4* ha [[buffer(0)]]"), "half4 buffer param")
@@ -106,7 +106,7 @@ def test_halfarith_shape(t : T?) {
     }
 }
 
-[test]
+[test(description = "Int-lattice storage and converts emit clamp-based saturating narrows and match the golden snapshot.")]
 def test_latconv_shape(t : T?) {
     t |> run("latconv: int-lattice storage + converts, clamp-based sat narrows") <| @(t : T?) {
         t |> success(contains(latconv_msl, "device const char4* bi [[buffer(0)]]"), "byte4 buffer -> char4 (das byte = SIGNED int8)")
@@ -126,7 +126,7 @@ def test_latconv_shape(t : T?) {
     }
 }
 
-[test]
+[test(description = "Three-lane elements take packed_T3 with wrapped loads and whole-element stores and match the golden snapshot.")]
 def test_packed3_shape(t : T?) {
     t |> run("packed3: 3-lane elements take packed_T3, loads wrap, stores are whole-element") <| @(t : T?) {
         t |> success(contains(packed3_msl, "device const packed_float3* pf [[buffer(0)]]"), "float3 buffer -> packed_float3 (das packs 12B)")

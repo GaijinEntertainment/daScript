@@ -33,7 +33,7 @@ def fill_unsized(var a : int[] ==const) {
 
 def first_exact(a : int[4]) : int => a[0]
 
-[test]
+[test(description = "a one-dimensional fixed array picks the dim overload while dynamic containers pick the plain one")]
 def test_overload_preference(t : T?) {
     t |> run("1D FA prefers the dim overload") @(t : T?) {
         let i4 : int[4]
@@ -47,7 +47,7 @@ def test_overload_preference(t : T?) {
     }
 }
 
-[test]
+[test(description = "auto(TT) binds a whole dynamic container with its const-qualified type name")]
 def test_container_binding(t : T?) {
     t |> run("auto(TT) binds whole dynamic container") @(t : T?) {
         let ai : array<int>
@@ -57,7 +57,7 @@ def test_container_binding(t : T?) {
     }
 }
 
-[test]
+[test(description = "an unsized int[] parameter accepts any size, length() inside sees the real size, and an exact-size parameter matches")]
 def test_unsized_params(t : T?) {
     t |> run("int[] accepts any size") @(t : T?) {
         var a : int[4]

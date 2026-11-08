@@ -18,7 +18,7 @@ def probe(blk : block<(x : int) : int>) : uint64 => testBlockAnnotationData(blk)
 
 def call_block(blk : block<(x : int) : int>) : int => invoke(blk, 20)
 
-[test]
+[test(description = "the annotation data a block annotation writes in finalize reads back off the runtime block as the expected payload")]
 def test_block_annotation_data(t : T?) {
     let ad = probe() $ [block_ann_data] (x : int) : int {
         return x + 2
@@ -27,7 +27,7 @@ def test_block_annotation_data(t : T?) {
 }
 
 // An annotated block still has to run normally -- the data rides along, it does not replace the body.
-[test]
+[test(description = "a block carrying annotation data still invokes and returns its body's result")]
 def test_annotated_block_still_invokes(t : T?) {
     let r = call_block() $ [block_ann_data] (x : int) : int {
         return x + 2
@@ -36,7 +36,7 @@ def test_annotated_block_still_invokes(t : T?) {
 }
 
 // A block with no annotation must report 0, or the test above would pass on a stale read.
-[test]
+[test(description = "a block with no annotation reports zero annotation data")]
 def test_unannotated_block_has_no_data(t : T?) {
     let ad = probe() $(x : int) : int {
         return x + 2

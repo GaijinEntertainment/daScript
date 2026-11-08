@@ -200,7 +200,7 @@ Home: tests/language (already AOT-registered, runs in the per-PR
 skills/writing_tests.md + skills/internal/tests_in_repo.md at implementation
 time. Four files:
 
-1. **container_init_traits.das** - trait truth table.
+1. **uncategorized_force_inscope_pod.das** - trait truth table.
    `needs_nontrivial_init` FALSE for: int, plain struct, `array<T>`,
    `T?`; TRUE for: field-init struct, user-default-ctor struct
    (hasDefaultInitializer), a struct nesting one, fixed_array / tuple /

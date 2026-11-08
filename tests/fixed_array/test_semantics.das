@@ -17,7 +17,7 @@ def make_iota() : int[4] {
     return r
 }
 
-[test]
+[test(description = "assigning, init-copying and cloning a fixed array copy it by value, and 2D assignment copies every row")]
 def test_copy_semantics(t : T?) {
     t |> run("whole-array assignment copies") @(t : T?) {
         var a = make_iota()
@@ -57,7 +57,7 @@ def test_copy_semantics(t : T?) {
     }
 }
 
-[test]
+[test(description = "fixed arrays are zero-initialized, fixed_array literals take the expected types and a function returns one by value")]
 def test_init_and_return(t : T?) {
     t |> run("zero-initialized by default") @(t : T?) {
         var a : int[8]
@@ -89,7 +89,7 @@ def test_init_and_return(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fixed array of arrays clones and finalizes element by element")]
 def test_noncopyable_elements(t : T?) {
     t |> run("FA of array<int>: clone + finalize_dim") @(t : T?) {
         var na : array<int>[3]

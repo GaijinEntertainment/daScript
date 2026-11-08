@@ -140,7 +140,7 @@ class PartialOverride {
 // Tests: interface inheritance — is operator
 // ═══════════════════════════════════════
 
-[test]
+[test(description = "is is true for the interface, its ancestors and unrelated implemented interfaces, and false for interfaces the class does not implement")]
 def test_inheritance_is(t : T?) {
 
     t |> run("Dog is IGuideDog") @(t : T?) {
@@ -196,7 +196,7 @@ def test_inheritance_is(t : T?) {
 // Tests: interface inheritance — as operator
 // ═══════════════════════════════════════
 
-[test]
+[test(description = "as through a child, parent or grandparent interface dispatches to the implementing class method")]
 def test_inheritance_as(t : T?) {
 
     t |> run("Dog as IAnimal — name dispatches") @(t : T?) {
@@ -252,7 +252,7 @@ def test_inheritance_as(t : T?) {
 // Tests: interface inheritance — ?as operator
 // ═══════════════════════════════════════
 
-[test]
+[test(description = "?as through an inherited interface returns a working proxy for a non-null object and null for a null one")]
 def test_inheritance_safe_as(t : T?) {
 
     t |> run("Dog ?as IAnimal — non-null") @(t : T?) {
@@ -286,7 +286,7 @@ def test_inheritance_safe_as(t : T?) {
 // Tests: default method implementations
 // ═══════════════════════════════════════
 
-[test]
+[test(description = "a default interface method is used when not overridden, can be overridden, and several defaults mix with overrides")]
 def test_default_methods(t : T?) {
 
     t |> run("SimpleGreeter uses default greet()") @(t : T?) {
@@ -331,7 +331,7 @@ def test_default_methods(t : T?) {
 // Tests: mixed scenarios
 // ═══════════════════════════════════════
 
-[test]
+[test(description = "one object is reachable through every interface of its hierarchy while a different class implements only part of it")]
 def test_mixed_scenarios(t : T?) {
 
     t |> run("Dog accessible via all three interfaces in hierarchy") @(t : T?) {

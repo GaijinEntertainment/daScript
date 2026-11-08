@@ -246,7 +246,7 @@ def has(s, sub : string) : bool => find(s, sub, 0) >= 0
 
 def count_of(s, sub : string) : int => length(split(s, sub)) - 1
 
-[test]
+[test(description = "CSE reuses a pure expression already held by a clean local wherever it is available on every path, and declines after stores to its inputs, on one-arm availability, impure calls, aliased leaves and make-block interiors")]
 def test_cse_fired(t : T?) {  // nolint:STYLE038 - flat list of independent test arms
     ast_gc_guard() {
         t |> run("let-seeded reuse") @(t : T?) {
@@ -359,7 +359,7 @@ def test_cse_fired(t : T?) {  // nolint:STYLE038 - flat list of independent test
     }
 }
 
-[test]
+[test(description = "functions rewritten by CSE compute the same values, still run both impure calls and recompute an aliased leaf after a store")]
 def test_cse_behavior(t : T?) {
     t |> run("values preserved") @(t : T?) {
         t |> equal(target_let_reuse(3, 4), 24)
@@ -407,4 +407,38 @@ def test_cse_behavior(t : T?) {
         let s3 = CseBody(pos = CsePoint(x = 2, y = 0), id = 0)
         t |> equal(target_arg_aliasing(s2, s3), 172)
     }
+}
+
+// a const global with a constant initializer folds on every value read, the right-hand
+// side of a plain copy included - a store through a pointer as much as a local copy
+
+let K_COPY : int = 7
+
+[export]
+def target_copy_through_pointer(var p : int?) {
+    *p = K_COPY
+}
+
+[export]
+def target_copy_to_local() : int {
+    var x : int
+    x = K_COPY  // nolint:STYLE011 - the plain copy is the shape under test
+    return x
+}
+
+[test(description = "a const global with a constant initializer folds to its value on the right of a plain copy, through a pointer store and into a local alike")]
+def test_const_global_folds_on_the_right_of_a_copy(t : T?) {
+    ast_gc_guard() {
+        for (nm in ["target_copy_through_pointer", "target_copy_to_local"]) {
+            t |> run(nm) @(t : T?) {
+                let b = body_of(t, nm)
+                t |> success(!(b |> contains("K_COPY")), "the global read is folded, got:\n{b}")
+                t |> success(b |> contains("= 7"), "the copy stores the constant, got:\n{b}")
+            }
+        }
+    }
+    var a = 0
+    target_copy_through_pointer(unsafe(addr(a)))
+    t |> equal(a, 7)
+    t |> equal(target_copy_to_local(), 7)
 }

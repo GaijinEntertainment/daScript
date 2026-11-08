@@ -34,7 +34,7 @@ struct SingleField {
 // Basic for-loop iteration
 // ===========================
 
-[test]
+[test(description = "a for loop over an SOA visits every element with the right field values")]
 def test_soa_for_loop_basic(t : T?) {
     t |> run("iterate over SOA with for loop") @(t : T?) {
         var soa : Particle`SOA
@@ -96,7 +96,7 @@ def test_soa_for_loop_basic(t : T?) {
 // For loop with entity (string + bool fields)
 // ===========================
 
-[test]
+[test(description = "a for loop over an entity SOA reads its int, string and bool fields")]
 def test_soa_for_loop_entity(t : T?) {
     t |> run("iterate entity SOA accessing int field") @(t : T?) {
         var soa : Entity`SOA
@@ -139,7 +139,7 @@ def test_soa_for_loop_entity(t : T?) {
 // Mixed for-loop (SOA + other iterators)
 // ===========================
 
-[test]
+[test(description = "an SOA loop combines with a count or range iterator")]
 def test_soa_for_loop_mixed(t : T?) {
     t |> run("SOA with count() iterator") @(t : T?) {
         var soa : Particle`SOA
@@ -172,7 +172,7 @@ def test_soa_for_loop_mixed(t : T?) {
 // For loop after erase
 // ===========================
 
-[test]
+[test(description = "a for loop after an erase visits the remaining elements")]
 def test_soa_for_loop_after_erase(t : T?) {
     t |> run("iterate after erase") @(t : T?) {
         var soa : Particle`SOA
@@ -196,7 +196,7 @@ def test_soa_for_loop_after_erase(t : T?) {
 // For loop accessing only one field (optimization check)
 // ===========================
 
-[test]
+[test(description = "a for loop that touches only one field of a particle reads the right values")]
 def test_soa_for_loop_single_field_access(t : T?) {
     t |> run("accessing only pos in particle loop") @(t : T?) {
         var soa : Particle`SOA

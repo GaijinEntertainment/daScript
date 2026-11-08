@@ -1,5 +1,8 @@
+//! overriding a sealed field or a sealed method in a derived class
+//! does not compile
 // sealed field and method override
-// verifies compiler rejects overriding fields and methods marked 'sealed'
+// verifies compiler rejects overriding fields and methods marked
+// 'sealed'
 options gen2
 expect 20107:2
 

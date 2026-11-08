@@ -10,7 +10,7 @@ struct IntVal {
 
 // ---- with_wait_group: convenience wrapper for with_job_status + join ----
 
-[test]
+[test(description = "with_wait_group waits for all notifications")]
 def test_wait_group_basic(t : T?) {
     t |> run("with_wait_group waits for all notifications") @(t : T?) {
         with_job_que() {
@@ -39,7 +39,7 @@ def test_wait_group_basic(t : T?) {
     }
 }
 
-[test]
+[test(description = "with_wait_group with a zero count returns immediately")]
 def test_wait_group_zero_count(t : T?) {
     t |> run("with_wait_group with 0 count returns immediately") @(t : T?) {
         var entered = false
@@ -51,7 +51,7 @@ def test_wait_group_zero_count(t : T?) {
     }
 }
 
-[test]
+[test(description = "The no-count with_wait_group variant waits for the notifications added by append")]
 def test_wait_group_no_count(t : T?) {
     t |> run("with_wait_group no-count variant with append") @(t : T?) {
         with_job_que() {
@@ -82,7 +82,7 @@ def test_wait_group_no_count(t : T?) {
 
 // ---- done: ergonomic alias for notify_and_release ----
 
-[test]
+[test(description = "done signals a notification exactly like notify_and_release")]
 def test_done_alias(t : T?) {
     t |> run("done signals notification like notify_and_release") @(t : T?) {
         with_job_que() {
@@ -104,7 +104,7 @@ def test_done_alias(t : T?) {
     }
 }
 
-[test]
+[test(description = "with_wait_group waits for a single job")]
 def test_wait_group_single_job(t : T?) {
     t |> run("with_wait_group with single job") @(t : T?) {
         with_job_que() {
@@ -126,7 +126,7 @@ def test_wait_group_single_job(t : T?) {
     }
 }
 
-[test]
+[test(description = "with_wait_group waits for a new_thread body")]
 def test_wait_group_with_thread(t : T?) {
     t |> run("with_wait_group works with new_thread") @(t : T?) {
         with_job_que() {

@@ -5,7 +5,7 @@
 options gen2
 require dastest/testing_boost public
 
-[test]
+[test(description = "typeinfo dim returns the outermost dimension size")]
 def test_dim_trait(t : T?) {
     t |> run("typeinfo dim returns outer size") @(t : T?) {
         var _a : int[4]
@@ -16,7 +16,7 @@ def test_dim_trait(t : T?) {
     }
 }
 
-[test]
+[test(description = "typeinfo typename spells fixed arrays alone and inside container type names")]
 def test_typenames(t : T?) {
     t |> run("non-alias typename strings") @(t : T?) {
         var _a : int[4]
@@ -37,7 +37,7 @@ def test_typenames(t : T?) {
     }
 }
 
-[test]
+[test(description = "typeinfo can_copy and is_pod hold for plain fixed arrays and sizeof composes with dim")]
 def test_traits(t : T?) {
     t |> run("copy/pod traits on FA") @(t : T?) {
         var _a : int[4]

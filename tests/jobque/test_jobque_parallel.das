@@ -15,7 +15,7 @@ struct IndexedResult {
 
 // ===== parallel_for tests =====
 
-[test]
+[test(description = "parallel_for splits a range across jobs and waits for all of them")]
 def test_parallel_for_basic(t : T?) {
     t |> run("distributes range across jobs and waits") @(t : T?) {
         with_job_que() {
@@ -42,7 +42,7 @@ def test_parallel_for_basic(t : T?) {
     }
 }
 
-[test]
+[test(description = "parallel_for with one job gets the whole range")]
 def test_parallel_for_single_job(t : T?) {
     t |> run("1 job gives full range") @(t : T?) {
         with_job_que() {
@@ -67,7 +67,7 @@ def test_parallel_for_single_job(t : T?) {
     }
 }
 
-[test]
+[test(description = "parallel_for clamps the job count to the range size")]
 def test_parallel_for_more_jobs_than_items(t : T?) {
     t |> run("clamps jobs to range size") @(t : T?) {
         with_job_que() {
@@ -93,7 +93,7 @@ def test_parallel_for_more_jobs_than_items(t : T?) {
     }
 }
 
-[test]
+[test(description = "parallel_for over an empty range runs nothing")]
 def test_parallel_for_empty_range(t : T?) {
     t |> run("empty range does nothing") @(t : T?) {
         with_job_que() {
@@ -106,7 +106,7 @@ def test_parallel_for_empty_range(t : T?) {
     }
 }
 
-[test]
+[test(description = "parallel_for over an inverted range runs nothing")]
 def test_parallel_for_negative_range(t : T?) {
     t |> run("inverted range does nothing") @(t : T?) {
         with_job_que() {
@@ -119,7 +119,7 @@ def test_parallel_for_negative_range(t : T?) {
     }
 }
 
-[test]
+[test(description = "parallel_for covers a range that does not start at zero")]
 def test_parallel_for_offset_range(t : T?) {
     t |> run("non-zero start range") @(t : T?) {
         with_job_que() {
@@ -145,7 +145,7 @@ def test_parallel_for_offset_range(t : T?) {
     }
 }
 
-[test]
+[test(description = "parallel_for covers 100 items across 8 jobs exactly once")]
 def test_parallel_for_large(t : T?) {
     t |> run("100 items across 8 jobs") @(t : T?) {
         with_job_que() {
@@ -171,7 +171,7 @@ def test_parallel_for_large(t : T?) {
     }
 }
 
-[test]
+[test(description = "parallel_for works with the done alias of notify_and_release")]
 def test_parallel_for_done(t : T?) {
     t |> run("works with done alias") @(t : T?) {
         with_job_que() {
@@ -200,7 +200,7 @@ def test_parallel_for_done(t : T?) {
 
 // ===== parallel_for_each tests =====
 
-[test]
+[test(description = "parallel_for_each partitions array indices into chunks that cover the array")]
 def test_parallel_for_each_basic(t : T?) {
     t |> run("partitions array indices into chunks") @(t : T?) {
         with_job_que() {
@@ -228,7 +228,7 @@ def test_parallel_for_each_basic(t : T?) {
     }
 }
 
-[test]
+[test(description = "parallel_for_each over an empty array runs nothing")]
 def test_parallel_for_each_empty(t : T?) {
     t |> run("empty array does nothing") @(t : T?) {
         with_job_que() {
@@ -244,7 +244,7 @@ def test_parallel_for_each_empty(t : T?) {
 
 // ===== parallel_map tests =====
 
-[test]
+[test(description = "parallel_map collects indexed results through a channel")]
 def test_parallel_map_basic(t : T?) {
     t |> run("collects indexed results via channel") @(t : T?) {
         with_job_que() {
@@ -271,7 +271,7 @@ def test_parallel_map_basic(t : T?) {
     }
 }
 
-[test]
+[test(description = "parallel_map over an empty array runs nothing")]
 def test_parallel_map_empty(t : T?) {
     t |> run("empty array does nothing") @(t : T?) {
         with_job_que() {
@@ -287,7 +287,7 @@ def test_parallel_map_empty(t : T?) {
     }
 }
 
-[test]
+[test(description = "parallel_map results come back reordered by index")]
 def test_parallel_map_order(t : T?) {
     t |> run("results reordered by index") @(t : T?) {
         with_job_que() {

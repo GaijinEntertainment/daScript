@@ -7,7 +7,7 @@ variant FooBar {
     b : string
 }
 
-[test]
+[test(description = "a variant survives a mem_archive save and load with its active arm and value")]
 def test_save_and_load_variant(t : T?) {
     // save
     var reference = fixed_array(FooBar(a = 13.), FooBar(b = "hello"))
@@ -22,7 +22,7 @@ def test_save_and_load_variant(t : T?) {
     t |> equal(test[1] as b, "hello")
 }
 
-[test]
+[test(description = "a table round-trips through mem_archive_save and mem_archive_load with every key and value")]
 def test_save_and_load_mem_table(t : T?) {
     // save
     var reference <- {
@@ -40,7 +40,7 @@ def test_save_and_load_mem_table(t : T?) {
     }
 }
 
-[test]
+[test(description = "an array round-trips through mem_archive_save and mem_archive_load element for element")]
 def test_save_and_load_mem_array(t : T?) {
     // save
     var reference <- [for (tt in range(10)); tt + 1]
@@ -55,7 +55,7 @@ def test_save_and_load_mem_array(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fixed-size array round-trips through mem_archive_save and mem_archive_load")]
 def test_save_and_load_mem_dim(t : T?) {
     // save
     var reference = fixed_array<int>(1, 2, 3, 4, 5)
@@ -74,7 +74,7 @@ struct Foo {
     b : string
 }
 
-[test]
+[test(description = "a struct round-trips through mem_archive_save with its numeric and string fields intact")]
 def test_save_and_load_struct(t : T?) {
     // save
     var reference = Foo(a = 13., b = "hello")
@@ -89,7 +89,7 @@ def test_save_and_load_struct(t : T?) {
     t |> equal(test.b, "hello")
 }
 
-[test]
+[test(description = "a tuple round-trips through mem_archive_save with both elements intact")]
 def test_save_and_load_tuple(t : T?) {
     // save
     var reference =  (13., "hello")
@@ -104,7 +104,7 @@ def test_save_and_load_tuple(t : T?) {
     t |> equal(test._1, "hello")
 }
 
-[test]
+[test(description = "a uint64 saves to exactly its own size and loads back unchanged")]
 def test_save_and_load_mem_archive(t : T?) {
     // save
     var reference = 13ul
@@ -134,17 +134,17 @@ def test_save_and_load_string(t : T?; ref : string) {
     t |> equal(test, ref)
 }
 
-[test]
+[test(description = "a non-empty string round-trips through the archive unchanged")]
 def test_save_and_load_string(t : T?) {
     test_save_and_load_string(t, "13ul")
 }
 
-[test]
+[test(description = "an empty string round-trips through the archive as empty")]
 def test_save_and_load_empty_string(t : T?) {
     test_save_and_load_string(t, "")
 }
 
-[test]
+[test(description = "2D fixed arrays of int and string round-trip with every cell preserved")]
 def test_save_and_load_dim2d(t : T?) {
     t |> run("int 2D fixed array") @(t : T?) {
         var reference : int[3][2]
@@ -174,7 +174,7 @@ def test_save_and_load_dim2d(t : T?) {
     }
 }
 
-[test]
+[test(description = "a 3D fixed array round-trips with set cells preserved and unset cells zero")]
 def test_save_and_load_dim3d(t : T?) {
     t |> run("int 3D fixed array") @(t : T?) {
         var reference : int[2][3][4]
@@ -195,7 +195,7 @@ struct DimTestStruct {
     name : string
 }
 
-[test]
+[test(description = "a struct holding a 2D fixed array round-trips with the array contents intact")]
 def test_save_and_load_struct_with_dim(t : T?) {
     t |> run("struct containing 2D fixed array") @(t : T?) {
         var reference = DimTestStruct(name = "test")
@@ -212,7 +212,7 @@ def test_save_and_load_struct_with_dim(t : T?) {
     }
 }
 
-[test]
+[test(description = "a value serialized by hand through an Archive over a MemSerializer reads back unchanged")]
 def test_save_and_load_manual(t : T?) {
     var reference = 13
     // saving
@@ -250,7 +250,7 @@ struct NonRawStruct {
     name : string
 }
 
-[test]
+[test(description = "arrays of workhorse types are written as one bulk block and structs of plain data element-wise, both reading back equal")]
 def test_bulk_array_raw_pod(t : T?) {
     t |> run("array<int> bulk path") @(t : T?) {
         var reference <- [for (i in range(1000)); i * 7]
@@ -297,7 +297,7 @@ def test_bulk_array_raw_pod(t : T?) {
     }
 }
 
-[test]
+[test(description = "arrays of strings and of structs holding strings are written element-wise and read back equal")]
 def test_bulk_array_non_raw(t : T?) {
     t |> run("array<string> element-wise path") @(t : T?) {
         var reference <- ["hello", "world", "foo"]
@@ -324,7 +324,7 @@ def test_bulk_array_non_raw(t : T?) {
     }
 }
 
-[test]
+[test(description = "an empty array is written as just its zero length and reads back empty")]
 def test_bulk_array_empty(t : T?) {
     t |> run("empty array<int>") @(t : T?) {
         var reference : array<int>
@@ -337,7 +337,7 @@ def test_bulk_array_empty(t : T?) {
     }
 }
 
-[test]
+[test(description = "fixed-size arrays of workhorse types use the bulk path, structs the element-wise path, and 2D arrays the bulk path, all reading back equal")]
 def test_bulk_dim_raw_pod(t : T?) {
     t |> run("int[5] bulk path") @(t : T?) {
         var reference = fixed_array(10, 20, 30, 40, 50)
@@ -385,7 +385,7 @@ def test_bulk_dim_raw_pod(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fixed-size array of strings is written element-wise and reads back equal")]
 def test_bulk_dim_non_raw(t : T?) {
     t |> run("string[3] element-wise path") @(t : T?) {
         var reference = fixed_array("a", "bb", "ccc")
@@ -399,7 +399,7 @@ def test_bulk_dim_non_raw(t : T?) {
     }
 }
 
-[test]
+[test(description = "a large array of int16 takes the bulk path and reads back equal")]
 def test_bulk_array_int16(t : T?) {
     // Simulates the SF2 sample_data use case (array<int16>)
     t |> run("array<int16> bulk path") @(t : T?) {

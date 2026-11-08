@@ -1,3 +1,6 @@
+//! a structure, a function, lambda or block argument, a local, a new
+//! allocation or a default value of a type over the size limit does
+//! not compile
 options gen2
 options disable_auto_inline    // this test pins lint diagnostics; splicing would reshape them
 expect 30500:3, 30508, 30510, 30512:3, 30513
@@ -33,8 +36,9 @@ def test_invalid_types(t : T?) {
     debug(default<foo>)             // 30512: can't make a value of a type that is too big
 }
 
-    // this one happens during infer, and not lint. so we can't have it in the test
-    // var sz = typeinfo(sizeof type<int[32767][32767]>)    // 30101: typeinfo(sizeof int[32767][32767]) is too big
-    // feint("sz = {sz}\n")
+    // this one happens during infer, and not lint. so we can't have it in
+    // the test var sz = typeinfo(sizeof type<int[32767][32767]>)    //
+    // 30101: typeinfo(sizeof int[32767][32767]) is too big feint("sz =
+    // {sz}\n")
 
 

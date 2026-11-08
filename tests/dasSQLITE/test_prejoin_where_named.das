@@ -1,5 +1,6 @@
 options gen2
 
+
 // Regression: a NAMED-param `_where($(c) => …)` BEFORE a `_join` previously leaked the lambda var
 // `c` into the emitted bind list (`error[30838]: can't locate variable 'c'`). The column-ref resolver
 // rescued an unbound param to source 0 only for the `_` placeholder; the LHS `_where` runs before the
@@ -10,10 +11,15 @@ options gen2
 require dastest/testing_boost public
 
 require strings
+
 require daslib/sql
+
 require daslib/linq_boost
+
 require daslib/linq_fold
+
 require sqlite/sqlite_boost
+
 require daslib/sql_linq
 
 struct CarMeta {
@@ -45,7 +51,7 @@ def private fixture(db : SqlRunner) {
     db |> insert(Dealer(id = 30, city = "NY"))
 }
 
-[test]
+[test(description = "a pre-join where with a named parameter qualifies its column with the left alias like the placeholder form")]
 def test_prejoin_where_named_emits_t0_col(t : T?) {
     // Core: the named-param pre-join where must qualify as `t0.did` (identical to the `_` placeholder form).
     var _db = SqlRunner()
@@ -59,7 +65,7 @@ def test_prejoin_where_named_emits_t0_col(t : T?) {
         "named-param _where before _join resolves to t0.did (was error[30838])")
 }
 
-[test]
+[test(description = "a pre-join where with a named parameter filters the left side before the join")]
 def test_prejoin_where_named_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -78,7 +84,7 @@ def test_prejoin_where_named_runtime(t : T?) {
     }
 }
 
-[test]
+[test(description = "a json-path predicate on a named pre-join parameter filters before the join")]
 def test_prejoin_where_named_jsonpath(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -96,7 +102,7 @@ def test_prejoin_where_named_jsonpath(t : T?) {
     }
 }
 
-[test]
+[test(description = "a row-referencing string key in a named pre-join order_by emits a computed key, not a dynamic column name")]
 def test_prejoin_order_by_named_string_key_emits_computed(t : T?) {
     // Mirror site 4 (mentions_source_arg): a row-referencing STRING key in a pre-join `_order_by` with a
     // named param must route to the computed-key path (`LOWER("t0"."name")`), NOT the dynamic-column-NAME
@@ -112,7 +118,7 @@ def test_prejoin_order_by_named_string_key_emits_computed(t : T?) {
         "named-param pre-join _order_by(to_lower(c.name)) lowers to ORDER BY LOWER(t0.name)")
 }
 
-[test]
+[test(description = "a not_in subquery in a named pre-join where excludes the matching rows")]
 def test_prejoin_where_named_not_in(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)

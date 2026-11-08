@@ -2,7 +2,7 @@ options gen2
 require daslib/functional
 require dastest/testing_boost public
 
-[test]
+[test(description = "the long iterator range yields int64 indices in order")]
 def test_long_iter_range(t : T?) {
     var arr : array<int>
     arr |> resize(int64(5))
@@ -16,7 +16,7 @@ def test_long_iter_range(t : T?) {
     t |> equal(sum, 15_l)
 }
 
-[test]
+[test(description = "long_enumerate pairs int64 indices with the elements")]
 def test_long_enumerate(t : T?) {
     var arr : array<int>
     arr |> resize(int64(4))
@@ -34,7 +34,7 @@ def test_long_enumerate(t : T?) {
     t |> equal(sum_val, 100)
 }
 
-[test]
+[test(description = "long_find_index returns the int64 position of a present element")]
 def test_long_find_index_present(t : T?) {
     var arr : array<int>
     arr |> resize(int64(5))
@@ -46,7 +46,7 @@ def test_long_find_index_present(t : T?) {
     t |> equal(long_find_index(arr, 300), 2_l)
 }
 
-[test]
+[test(description = "long_find_index returns -1 for a missing element")]
 def test_long_find_index_missing(t : T?) {
     var arr : array<int>
     arr |> resize(int64(3))

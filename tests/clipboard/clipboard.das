@@ -32,7 +32,7 @@ def private make_all_formats() : ClipboardContent {
     return <- content
 }
 
-[test]
+[test(description = "writing all formats to ClipboardMemory and reading them back returns the same plain text, markdown, html, uri list and image")]
 def test_clipboard_memory_atomic_all_format_roundtrip(t : T?) {
     var memory = ClipboardMemory()
     var offered <- make_all_formats()
@@ -82,7 +82,7 @@ def test_clipboard_memory_atomic_all_format_roundtrip(t : T?) {
     clipboard_memory_dispose(memory)
 }
 
-[test]
+[test(description = "an offer with no format bits is a successful clear of ClipboardMemory")]
 def test_clipboard_memory_clear_and_empty_offer(t : T?) {
     var memory = ClipboardMemory()
     var content = ClipboardContent(plain_text = "ignored without a format bit")
@@ -108,7 +108,7 @@ def test_clipboard_memory_clear_and_empty_offer(t : T?) {
     clipboard_memory_dispose(memory)
 }
 
-[test]
+[test(description = "cloning clipboard content copies only the formats whose bit is set")]
 def test_clipboard_clone_only_selected_formats(t : T?) {
     var content = ClipboardContent(
         plain_text = "",
@@ -132,7 +132,7 @@ def test_clipboard_clone_only_selected_formats(t : T?) {
     clipboard_dispose_content(cloned)
 }
 
-[test]
+[test(description = "clipboard_validate_content reports invalid_utf8 for malformed text in any text format and invalid_image for inconsistent image data")]
 def test_clipboard_content_validation(t : T?) {
     let invalid_utf8 = string([uint8(0xC3), uint8(0x28)])
     var content = ClipboardContent()
@@ -177,7 +177,7 @@ def test_clipboard_content_validation(t : T?) {
     clipboard_dispose_content(content)
 }
 
-[test]
+[test(description = "the native capability flags form a coherent set: text operations come together, rich-text and image read/write are symmetric and imply the base transport")]
 def test_clipboard_native_capabilities_are_coherent(t : T?) {
     let capabilities = clipboard_capabilities()
     let has_base = (capabilities.read_text || capabilities.write_text

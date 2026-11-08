@@ -73,7 +73,7 @@ class Counter {
     }
 }
 
-[test]
+[test(description = "a class_method can mutate its object and is inherited by derived classes")]
 def test_class_method_on_classes(t : T?) {
     t |> run("class_method mutates self") @(it : T?) {
         var a : Animal? = new Animal()
@@ -93,7 +93,7 @@ def test_class_method_on_classes(t : T?) {
     }
 }
 
-[test]
+[test(description = "with an explicit const overload, a mutable object calls the mutating method and a const object the const one")]
 def test_explicit_const_class_method_overload(t : T?) {
     t |> run("non-const overload mutates") @(it : T?) {
         var c : Counter? = new Counter()
@@ -112,7 +112,7 @@ def test_explicit_const_class_method_overload(t : T?) {
     }
 }
 
-[test]
+[test(description = "a regular method of a base or derived class calls a generic static method without writing self")]
 def test_unqualified_generic_class_method_calls(t : T?) {
     t |> run("base_regular_method_calls_generic_static_without_self") @(it : T?) {
         var a : GenericAnimal? = new GenericAnimal()

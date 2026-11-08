@@ -1,11 +1,14 @@
 options gen2
+//! distinct_by combined with where must not compile because the inner
+//! and outer filter forms differ in meaning
 
-// `_distinct_by(K)` composed with `_where(P)` must reject in v1. SQL form
-// `SELECT * FROM (SELECT *, MIN(pk) FROM t WHERE P GROUP BY K)` (inner WHERE)
-// vs `WHERE P` outside the subquery (outer WHERE) have different semantics
-// — the former filters before the bare-aggregate picks the min-pk row, the
-// latter filters from the picked rows. Disambiguation is deferred to a
-// future chunk; today's check_distinct_by_passthrough_gating rejects loudly.
+// `_distinct_by(K)` composed with `_where(P)` must reject in v1. SQL
+// form `SELECT * FROM (SELECT *, MIN(pk) FROM t WHERE P GROUP BY K)`
+// (inner WHERE) vs `WHERE P` outside the subquery (outer WHERE) have
+// different semantics — the former filters before the bare-aggregate
+// picks the min-pk row, the latter filters from the picked rows.
+// Disambiguation is deferred to a future chunk; today's
+// check_distinct_by_passthrough_gating rejects loudly.
 expect 50503
 
 require daslib/sql

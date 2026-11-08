@@ -16,7 +16,7 @@ require dastest/testing_boost public
 // element_at_or_default's success path (`return $i(valueName)`) still
 // plain-returns the element — pre-existing on both paths, separate fix.
 
-[test]
+[test(description = "last_or_default with an array<int> default returns the default for an empty source")]
 def test_last_or_default_non_copyable(t : T?) {
     t |> run("array<int> default — empty source returns default") @(tt : T?) {
         let src : array<array<int>>
@@ -28,7 +28,7 @@ def test_last_or_default_non_copyable(t : T?) {
     }
 }
 
-[test]
+[test(description = "single_or_default with an array<int> default returns the default for an empty source")]
 def test_single_or_default_non_copyable_empty(t : T?) {
     t |> run("array<int> default — empty source returns default") @(tt : T?) {
         let src : array<array<int>>
@@ -40,7 +40,7 @@ def test_single_or_default_non_copyable_empty(t : T?) {
     }
 }
 
-[test]
+[test(description = "single_or_default with an array<int> default returns the default when several elements match")]
 def test_single_or_default_non_copyable_multi_match(t : T?) {
     t |> run("array<int> default — multi-match returns default") @(tt : T?) {
         var src : array<array<int>>

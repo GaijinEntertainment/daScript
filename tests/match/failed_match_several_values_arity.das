@@ -1,4 +1,4 @@
-// a match on two values takes two-element patterns
+//! a match on two values takes two-element patterns
 options gen2
 
 require daslib/match

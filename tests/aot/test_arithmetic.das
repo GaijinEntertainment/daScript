@@ -2,7 +2,7 @@ options gen2
 require dastest/testing_boost public
 require daslib/math_boost
 
-[test]
+[test(description = "Reaching the test body proves every function of the file linked to AOT code under fail_on_no_aot")]
 def test_aot_is_active(t : T?) {
     // Under fail_on_no_aot, reaching this point proves all functions AOT-linked
     t |> run("aot linked successfully") @(t : T?) {
@@ -10,7 +10,7 @@ def test_aot_is_active(t : T?) {
     }
 }
 
-[test]
+[test(description = "Integer arithmetic, float arithmetic and abs, min, max and clamp give the expected results in AOT")]
 def test_basic_math(t : T?) {
     t |> run("integer arithmetic") @(t : T?) {
         t |> equal(2 + 3, 5)
@@ -43,7 +43,7 @@ def factorial(n : int) : int {
     return n * factorial(n - 1)
 }
 
-[test]
+[test(description = "Plain, recursive and default-argument function calls return the right values in AOT")]
 def test_function_calls(t : T?) {
     t |> run("simple function") @(t : T?) {
         t |> equal(add_values(3, 4), 7)
@@ -62,7 +62,7 @@ def fn_add(x, y : int) : int => x + y
 
 def fn_mul(x, y : int) : int => x * y
 
-[test]
+[test(description = "Function pointers call through correctly in AOT")]
 def test_function_pointers(t : T?) {
     t |> run("function pointer call") @(t : T?) {
         t |> equal(apply_op(3, 4, @@fn_add), 7)

@@ -1,3 +1,4 @@
+//! defining the same struct name twice in one module does not compile
 // duplicate struct definition
 // verifies compiler rejects defining the same struct name twice
 options gen2

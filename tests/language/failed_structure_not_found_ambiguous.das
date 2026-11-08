@@ -1,7 +1,10 @@
+//! an unqualified struct name defined in two visible modules does not
+//! compile, while the qualified names do
 // ambiguous struct name
 // verifies compiler rejects unqualified `new` when two modules
 // define structs with the same name;
-// qualified names (_helper_foo::TestObjectFoo, ::TestObjectFoo) must work
+// qualified names (_helper_foo::TestObjectFoo, ::TestObjectFoo) must
+// work
 options gen2
 
 require _helper_foo
@@ -13,7 +16,9 @@ struct TestObjectFoo {
 }
 
 def test {
-    new TestObjectFoo               // 30301: undefined type, 2 candidates _helper_foo::TestObjectFoo and ::TestObjectFoo
+    // 30301: undefined type, 2 candidates _helper_foo::TestObjectFoo and
+    // ::TestObjectFoo
+    new TestObjectFoo
     new _helper_foo::TestObjectFoo  // this one ok
     new ::TestObjectFoo             // this one ok too
 }

@@ -1,15 +1,19 @@
+//! An int literal promoted to float with precision loss raises
+//! exactly one LINT011 while exact, suppressed and double-fitting
+//! literals raise none.
 // LINT011 — int literal promoted to float/double with precision loss.
-// Combined-assertion fixture: one expect 50503 (runtime_macro) verifies
-// FOUR behaviors in a single test.
+// Combined-assertion fixture: one expect 50503 (runtime_macro)
+// verifies FOUR behaviors in a single test.
 //
 // Lines and their expected behavior:
 //   _exact       : exactly representable (2^24)    — must NOT fire
-//   _inexact     : 2^24 + 1                        — fires LINT011 (the 1 expected)
+// _inexact     : 2^24 + 1                        — fires LINT011 (the
+// 1 expected)
 //   _suppressed  : 2^24 + 3 + nolint:LINT011       — must be suppressed
 //   _dbl         : int → double, uint32 fits 2^53  — must NOT fire
 //
-// If any of those four behaviors regresses, the expected count won't match
-// the actual count and the test fails.
+// If any of those four behaviors regresses, the expected count won't
+// match the actual count and the test fails.
 options gen2
 
 require daslib/lint

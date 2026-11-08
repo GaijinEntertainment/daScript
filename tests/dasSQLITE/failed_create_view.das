@@ -1,7 +1,9 @@
 options gen2
+//! create_view must not compile when the view struct has the wrong
+//! field count, a mismatched field type or no sql_view
 
-// _create_view shape errors. Each block triggers exactly one macro_error
-// (40104) from `SqlCreateViewMacro`.
+// _create_view shape errors. Each block triggers exactly one
+// macro_error (40104) from `SqlCreateViewMacro`.
 expect 50503:6
 
 require daslib/sql
@@ -68,7 +70,8 @@ def main {
         // 5. _to_array() terminal — redundant for a view
         db |> _create_view(type<CarName3>,
             db |> select_from(type<Car>) |> _to_array())
-        // 6. runtime _order_by(string) — column name would be baked at view-creation
+        // 6. runtime _order_by(string) — column name would be baked at
+        // view-creation
         let runtime_col = "Price"
         db |> _create_view(type<CarName3>,
             db |> select_from(type<Car>) |> _order_by(runtime_col))

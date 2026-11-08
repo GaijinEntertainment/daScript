@@ -6,8 +6,11 @@ options no_unused_block_arguments = false
 
 require daslib/decs_boost
 require dastest/testing_boost public
+require daslib/static_let
+require daslib/apply
+require daslib/strings_boost
 
-[test]
+[test(description = "every created entity gets a distinct id")]
 def test_entity_id_uniqueness(t : T?) {
     restart()
     var ids : array<EntityId>
@@ -31,7 +34,7 @@ def test_entity_id_uniqueness(t : T?) {
     }
 }
 
-[test]
+[test(description = "the default entity id is invalid and compares as the invalid id")]
 def test_invalid_entity_id(t : T?) {
     restart()
     t |> run("default is invalid") @(t : T?) {
@@ -43,7 +46,7 @@ def test_invalid_entity_id(t : T?) {
     }
 }
 
-[test]
+[test(description = "a deleted entity's slot is reused with a bumped generation and the old id becomes dead")]
 def test_entity_id_recycling(t : T?) {
     restart()
     let eid1 = create_entity() @(eid, cmp) {
@@ -86,7 +89,7 @@ def test_entity_id_recycling(t : T?) {
     }
 }
 
-[test]
+[test(description = "repeated create and delete cycles keep recycling the slot with a rising generation")]
 def test_multiple_recycle_cycles(t : T?) {
     restart()
     var lastId : uint
@@ -105,7 +108,7 @@ def test_multiple_recycle_cycles(t : T?) {
     t |> success(true)
 }
 
-[test]
+[test(description = "deleting an already deleted entity is harmless")]
 def test_delete_already_deleted(t : T?) {
     restart()
     let eid = create_entity() @(eid, cmp) {
@@ -120,7 +123,7 @@ def test_delete_already_deleted(t : T?) {
     t |> success(true)
 }
 
-[test]
+[test(description = "an entity with a single component is created and readable")]
 def test_entity_minimal(t : T?) {
     // entity with a single component — the simplest useful entity
     restart()
@@ -136,7 +139,7 @@ def test_entity_minimal(t : T?) {
     t |> success(found)
 }
 
-[test]
+[test(description = "an entity can hold components of many value types")]
 def test_entity_many_component_types(t : T?) {
     restart()
     let eid = create_entity() @(eid, cmp) {
@@ -160,7 +163,7 @@ def test_entity_many_component_types(t : T?) {
     }
 }
 
-[test]
+[test(description = "entity_count sums entities over all archetypes")]
 def test_entity_count_across_archetypes(t : T?) {
     restart()
     // 3 entities with {pos}
@@ -187,4 +190,113 @@ def test_entity_count_across_archetypes(t : T?) {
         velCount++
     }
     t |> equal(velCount, 2)
+}
+
+[test(description = "create, update, modify, empty update and remove each change the entity as requested")]
+def test_create_update_remove(t : T?) {
+    restart()
+    static_let() {
+        var migr : EntityId
+    }
+    t |> run("create entity") @(t : T?) {
+        create_entity() @(eid, cmp) {
+            cmp.pos := float3(1, 2, 3)
+            cmp.vel := float3(0., -9.8, 0.)
+            verify(cmp |> has("pos"))
+            verify(cmp |> has("vel"))
+            migr = eid
+        }
+        commit()
+        query(migr) $(pos, vel : float3) {
+            assert(pos == float3(1, 2, 3))
+            assert(vel == float3(0., -9.8, 0.))
+        }
+    }
+    t |> run("update entity") @(t : T?) {
+        migr |> update_entity() @(eid, cmp) {
+            verify(cmp |> has("pos"))
+            verify(cmp |> has("vel"))
+            verify(!cmp |> has("color"))
+            cmp.color := float4(1, 0, 0, 1)
+            verify(cmp |> has("color"))
+            migr = eid
+        }
+        commit()
+        query(migr) $(pos, vel : float3; color : float4) {
+            assert(pos == float3(1, 2, 3))
+            assert(color == float4(1, 0, 0, 1))
+            assert(vel == float3(0., -9.8, 0.))
+        }
+    }
+    t |> run("modify entity") @(t : T?) {
+        migr |> update_entity() @(eid, cmp) {
+            verify(cmp |> has("vel"))
+            cmp |> remove("vel")
+            verify(!cmp |> has("vel"))
+            migr = eid
+        }
+        commit()
+        query(migr) $(pos : float3; color : float4) {
+            assert(pos == float3(1, 2, 3))
+            assert(color == float4(1, 0, 0, 1))
+        }
+    }
+    t |> run("empty update") @(t : T?) {
+        migr |> update_entity() @(eid, cmp) {
+            migr = eid
+        }
+        commit()
+    }
+    t |> run("remove") @(t : T?) {
+        migr |> delete_entity
+        commit()
+        query(migr) $(pos : float3; color : float4) {
+            panic("somehwow did not remove")
+        }
+    }
+}
+
+[test(description = "a created entity exists after commit and is gone after delete")]
+def test_create_delete(t : T?) {
+    restart()
+    create_entity() @(eid, cmp) {
+        cmp.pos  := float3(1., 2., 3.)
+        cmp.name := "entity_once"
+    }
+    static_let() {
+        var de : array<EntityId>
+    }
+    for (i in range(3)) {
+        create_entity() @(eid, cmp) {
+            if (i == 1 || i == 2) {
+                de |> push(eid)
+            }
+            cmp.pos  := float3(1 + i, 2 + i, 3 + i)
+            cmp.name := "entity{i}"
+            cmp.id   := i
+        }
+    }
+    commit()
+    t |> run("verify create") @(t : T?) {
+        var total = 0
+        query() $(name : string) {
+            success(t, name |> starts_with("entity"))
+            total ++
+        }
+        t |> equal(total, 4)
+    }
+    for (d in de) {
+        delete_entity(d)
+    }
+    commit()
+    t |> run("verify delete") @(t : T?) {
+        var total = 0
+        query() $(name : string) {
+            if (name != "entity0" && name != "entity_once") {
+                t->fatal("deleted something else {name}")
+            }
+            total ++
+        }
+        t |> equal(total, 2)
+    }
 }

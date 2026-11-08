@@ -22,7 +22,7 @@ def shell_add(a, b : int) : int => a + b + 7
 [tune_policy(missing = "fallback")]
 def private shell_policy_probe(a : int) : int => a * 2
 
-[test]
+[test(description = "a tune shell computes the same result as the reference function over a small grid")]
 def test_tune_shell_result_matches_the_reference(t : T?) {
     for (a in range(-3, 4)) {
         for (b in range(-3, 4)) {
@@ -31,14 +31,14 @@ def test_tune_shell_result_matches_the_reference(t : T?) {
     }
 }
 
-[test]
+[test(description = "a tune policy does not change the result of the function body")]
 def test_tune_policy_leaves_the_body_alone(t : T?) {
     t |> equal(shell_policy_probe(21), 42)
 }
 
 // the shells reach the framework through `require [tune_framework] public`: on a build that
 // carries the `llvm` witness the group has its member, and the shells see it
-[test]
+[test(description = "the tune_framework group brings llvm_tune in exactly when the build has the LLVM witness")]
 def test_tune_framework_group_carries_the_member(t : T?) {
     static_if (typeinfo builtin_module_exists(llvm)) {
         t |> success(typeinfo module_exists(llvm_tune), "the tune_framework group brings llvm_tune to daslib/tune on a build with the witness")

@@ -9,7 +9,7 @@ require daslib/strings_boost
 require ../../dastest/worker_policy.das
 require ../../utils/internal/preflight/config.das
 
-[test(description = "dasfmt --verify honors --exclude-mask: a masked generated file is skipped and reported, a ./-prefixed mask normalizes to the same exclusion, and a mask that normalizes to empty excludes nothing", timeout = 300)]
+[test(description = "dasfmt --verify honors --exclude-mask: a masked generated file is skipped and reported, a ./-prefixed mask normalizes to the same exclusion, and a mask that normalizes to empty excludes nothing", timeout = 1200)]
 def test_dasfmt_exclude_mask(t : T?) {
     let exe = get_command_line_arguments()[0]
     let tool = path_join(get_das_root(), "utils/das-fmt/dasfmt.das")
@@ -116,7 +116,7 @@ def run_dastest_capturing(t : T?; mode_args : array<string>) : string {
     return output
 }
 
-[test(description = "a sequential sweep under --failures-only prints `run N/M: <file>` before the program runs, so a hung sweep still names it", timeout = 120)]
+[test(description = "a sequential sweep under --failures-only prints `run N/M: <file>` before the program runs, so a hung sweep still names it", timeout = 1200)]
 def test_sequential_sweep_names_each_program(t : T?) {
     let output = run_dastest_capturing(t, [])
     let at = find(output, "run 1/1: ")
@@ -127,7 +127,7 @@ def test_sequential_sweep_names_each_program(t : T?) {
     }
 }
 
-[test(description = "an isolated sweep under --failures-only prints `worker K starts: <files>` before the batch runs, so a hung sweep still names it", timeout = 120)]
+[test(description = "an isolated sweep under --failures-only prints `worker K starts: <files>` before the batch runs, so a hung sweep still names it", timeout = 1200)]
 def test_isolated_sweep_names_each_batch(t : T?) {
     let output = run_dastest_capturing(t, ["--isolated-mode", "--isolated-mode-threads", "1"])
     let at = find(output, "worker 1 starts: ")

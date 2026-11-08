@@ -22,7 +22,7 @@ require dastest/testing_boost public
 
 // ─── 1. normalize_order_reverse parity ───
 
-[test]
+[test(description = "order_by, reverse and take(N) fuse into a descending top-N")]
 def test_order_by_reverse_take_via_pattern_table(t : T?) {
     t |> run("order_by + reverse + take splices to descending top-N (single_name preserves the normalize swap)") @(tt : T?) {
         let scores <- [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5]
@@ -34,7 +34,7 @@ def test_order_by_reverse_take_via_pattern_table(t : T?) {
     }
 }
 
-[test]
+[test(description = "order_by_descending, reverse and first fuse into the ascending minimum")]
 def test_order_by_descending_reverse_first_via_pattern_table(t : T?) {
     t |> run("order_by_descending + reverse + first splices to ascending min (streaming_min path post-normalize)") @(tt : T?) {
         let scores <- [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5]
@@ -45,7 +45,7 @@ def test_order_by_descending_reverse_first_via_pattern_table(t : T?) {
 
 // ─── 2. KR-1: collapse_chained_wheres + order_family ───
 
-[test]
+[test(description = "two consecutive wheres compose before an order_by and take chain and feed the fused prefilter path")]
 def test_chained_wheres_then_order_take(t : T?) {
     t |> run("two consecutive _where calls compose via collapse_chained_wheres, then route through fused_prefilter") @(tt : T?) {
         let scores <- [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -60,7 +60,7 @@ def test_chained_wheres_then_order_take(t : T?) {
 
 // ─── 3. Row 5 — order_then_plain_distinct (plain distinct only; distinct_by NOT in scope) ───
 
-[test]
+[test(description = "order_by then plain distinct gives the sorted deduplicated result")]
 def test_order_then_plain_distinct(t : T?) {
     t |> run("order_by then plain distinct: whole-tuple equality is position-invariant; deduped sorted result") @(tt : T?) {
         let scores <- [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5]
@@ -75,7 +75,7 @@ def test_order_then_plain_distinct(t : T?) {
 
 // ─── 4. Streaming-min spot checks ───
 
-[test]
+[test(description = "where, order_by and first_or_default fuse into a streaming minimum with the default on empty")]
 def test_streaming_min_with_where(t : T?) {
     t |> run("where + order_by + first_or_default: streaming-min with prefilter, default on empty") @(tt : T?) {
         let scores <- [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5]
@@ -90,7 +90,7 @@ def test_streaming_min_with_where(t : T?) {
 
 // ─── 5. Bounded-heap with distinct gate ───
 
-[test]
+[test(description = "distinct, order_by and take fuse into a bounded heap that dedups and keeps the top N in one pass")]
 def test_bounded_heap_with_distinct(t : T?) {
     t |> run("distinct + order_by + take: bounded-heap with dset gate; single-pass dedup-then-top-N") @(tt : T?) {
         let scores <- [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5]
@@ -103,7 +103,7 @@ def test_bounded_heap_with_distinct(t : T?) {
     }
 }
 
-[test]
+[test(description = "order_by followed by take(0) or take of a negative count gives the default from first_or_default and panics from first, like the plain chain")]
 def test_order_take_nonpositive_then_first(t : T?) {
     t |> run("order_by + take(0) + first_or_default returns the default") @(tt : T?) {
         let scores <- [5, 1, 4]

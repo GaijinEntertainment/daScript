@@ -1,8 +1,10 @@
-// Fail-closed fixture: GLSL forbids reading a `writeonly` image, and the NonReadable decoration says
-// the same thing to the driver.  imageLoad on a @writeonly storage image must be rejected at the call
-// site rather than emitted as an OpImageRead against a NonReadable variable.  (imageSize is a query,
-// not a read, and stays legal -- test_storage_images.das covers that half.)
-// `_`-prefix + `expect 50501` keep dastest/lint off the failing shader.
+// Fail-closed fixture: GLSL forbids reading a `writeonly` image, and
+// the NonReadable decoration says the same thing to the driver.
+// imageLoad on a @writeonly storage image must be rejected at the
+// call site rather than emitted as an OpImageRead against a
+// NonReadable variable.  (imageSize is a query, not a read, and stays
+// legal -- test_storage_image.das covers that half.) `_`-prefix +
+// `expect 50501` keep dastest/lint off the failing shader.
 expect 50501
 
 options gen2

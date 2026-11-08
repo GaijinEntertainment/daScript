@@ -102,7 +102,7 @@ def parse_void(input : string; blk : block<(val : bool; err : array<ParsingError
     }
 }
 
-[test]
+[test(description = "a rule can return an int")]
 def test_return_int(t : T?) {
     parse_int("42") $(val; err) {
         t |> success(err |> empty)
@@ -110,7 +110,7 @@ def test_return_int(t : T?) {
     }
 }
 
-[test]
+[test(description = "a rule can return a double")]
 def test_return_double(t : T?) {
     parse_dbl("3.14") $(val; err) {
         t |> success(err |> empty)
@@ -118,7 +118,7 @@ def test_return_double(t : T?) {
     }
 }
 
-[test]
+[test(description = "a rule can return a string")]
 def test_return_string(t : T?) {
     parse_str("hello") $(val; err) {
         t |> success(err |> empty)
@@ -126,7 +126,7 @@ def test_return_string(t : T?) {
     }
 }
 
-[test]
+[test(description = "a rule can return true and false")]
 def test_return_bool(t : T?) {
     t |> run("true") @(t : T?) {
         parse_bool("true") $(val; err) {
@@ -142,7 +142,7 @@ def test_return_bool(t : T?) {
     }
 }
 
-[test]
+[test(description = "a rule can return a struct built from its bindings")]
 def test_return_struct(t : T?) {
     parse_kv("name = 42") $(val; err) {
         t |> success(err |> empty)
@@ -151,7 +151,7 @@ def test_return_struct(t : T?) {
     }
 }
 
-[test]
+[test(description = "a rule can return a tuple built from its bindings")]
 def test_return_tuple(t : T?) {
     parse_pair_tuple("age : 30") $(val; err) {
         t |> success(err |> empty)
@@ -160,7 +160,7 @@ def test_return_tuple(t : T?) {
     }
 }
 
-[test]
+[test(description = "a pattern rule returns bool for a three-digit match and false for two digits")]
 def test_void_pattern_rule(t : T?) {
     t |> run("three digits") @(t : T?) {
         parse_void("123") $(val; err) {

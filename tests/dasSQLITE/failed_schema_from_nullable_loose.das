@@ -1,6 +1,9 @@
 options gen2
+//! an option field over a NOT NULL primary key column must not
+//! compile
 
-// User declares Option<int64> against a NOT NULL INTEGER PRIMARY KEY column → compile error.
+// User declares Option<int64> against a NOT NULL INTEGER PRIMARY KEY
+// column → compile error.
 expect 20800
 
 require daslib/sql

@@ -9,7 +9,7 @@ require math
 
 require _common
 
-[test]
+[test(description = "select_transform maps elements through a transform for plain and struct elements, also to an array")]
 def test_select_transform(t : T?) {
     t |> run("basic select_transform") @(t : T?) {
         let chars = ["a", "b", "c", "d", "e"]
@@ -45,7 +45,7 @@ def test_select_transform(t : T?) {
     }
 }
 
-[test]
+[test(description = "select projects each element for iterators, structs, arrays, result selectors, to array and to sequence")]
 def test_select(t : T?) {
     t |> run("basic select") @(t : T?) {
         var chars = ["a", "b", "c", "d", "e"]
@@ -122,7 +122,7 @@ def test_select(t : T?) {
     }
 }
 
-[test]
+[test(description = "select_many flattens the inner collections of each element for iterators, structs, arrays and to array")]
 def test_selectmany(t : T?) {
     t |> run("basic selectmany") @(t : T?) {
         var seq_seq = [
@@ -204,7 +204,7 @@ def test_selectmany(t : T?) {
     }
 }
 
-[test]
+[test(description = "select_many with a collection selector pairs each outer element with the inner results for plain and struct elements")]
 def test_selectmany_collsel(t : T?) {
     t |> run("basic selectmany with collection selector") @(t : T?) {
         var chars = ["a", "b", "c", "d", "e"]
@@ -250,7 +250,7 @@ def test_selectmany_collsel(t : T?) {
     }
 }
 
-[test]
+[test(description = "zip pairs elements of two sequences positionally for plain and struct elements, also to an array")]
 def test_zip(t : T?) { // nolint:STYLE038 flat list of independent run arms
     t |> run("basic zip") @(t : T?) {
         var query = zip(
@@ -350,7 +350,7 @@ def test_zip(t : T?) { // nolint:STYLE038 flat list of independent run arms
     }
 }
 
-[test]
+[test(description = "zip of three sequences pairs elements positionally for iterators and arrays, to array, stopping at the shortest")]
 def test_zip3(t : T?) {
     t |> run("basic zip 3 iterators") @(t : T?) {
         var query = zip(
@@ -403,7 +403,7 @@ def test_zip3(t : T?) {
     }
 }
 
-[test]
+[test(description = "zip of four sequences pairs elements positionally, also with a result selector, stopping at the shortest")]
 def test_zip4(t : T?) { // nolint:STYLE038 flat list of independent run arms
     t |> run("basic zip 4 iterators") @(t : T?) {
         var query = zip(
@@ -504,7 +504,7 @@ def test_zip4(t : T?) { // nolint:STYLE038 flat list of independent run arms
     }
 }
 
-[test]
+[test(description = "zip of five sequences pairs elements positionally, also with a result selector, stopping at the shortest")]
 def test_zip5(t : T?) { // nolint:STYLE038 flat list of independent run arms
     t |> run("basic zip 5 iterators") @(t : T?) {
         var query = zip(
@@ -608,7 +608,7 @@ def test_zip5(t : T?) { // nolint:STYLE038 flat list of independent run arms
     }
 }
 
-[test]
+[test(description = "zip of six sequences pairs elements positionally, also with a result selector, stopping at the shortest")]
 def test_zip6(t : T?) { // nolint:STYLE038 flat list of independent run arms
     t |> run("basic zip 6 iterators") @(t : T?) {
         var query = zip(
@@ -721,7 +721,7 @@ def test_zip6(t : T?) { // nolint:STYLE038 flat list of independent run arms
     }
 }
 
-[test]
+[test(description = "zip of seven sequences pairs elements positionally, also with a result selector, stopping at the shortest")]
 def test_zip7(t : T?) { // nolint:STYLE038 flat list of independent run arms
     t |> run("basic zip 7 iterators") @(t : T?) {
         var query = zip(
@@ -838,7 +838,7 @@ def test_zip7(t : T?) { // nolint:STYLE038 flat list of independent run arms
     }
 }
 
-[test]
+[test(description = "zip of eight sequences pairs elements positionally, also with a result selector, stopping at the shortest")]
 def test_zip8(t : T?) { // nolint:STYLE038 flat list of independent run arms
     t |> run("basic zip 8 iterators") @(t : T?) {
         var query = zip(

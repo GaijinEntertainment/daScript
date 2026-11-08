@@ -1,3 +1,5 @@
+//! A @template_gate that names an int constant instead of a bool axis
+//! must not compile (20800).
 options gen2
 expect 20800
 

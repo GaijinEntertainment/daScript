@@ -8,7 +8,7 @@ require daslib/ast_boost
 require daslib/templates_boost
 require dastest/testing_boost public
 
-[test]
+[test(description = "ast_gc_guard sweeps the temporary TypeDecl nodes made inside it")]
 def test_ast_gc_guard_basic(t : T?) {
     let before = gc_thread_root_count()
     ast_gc_guard() {
@@ -20,7 +20,7 @@ def test_ast_gc_guard_basic(t : T?) {
     t |> success(after <= before, "gc_guard should sweep temporary TypeDecl nodes (before={before}, after={after})")
 }
 
-[test]
+[test(description = "a panic inside ast_gc_guard propagates and the thread root is restored so later allocations land on it")]
 def test_ast_gc_guard_panic_recover(t : T?) {
     var recovered = false
     try {
@@ -41,7 +41,7 @@ def test_ast_gc_guard_panic_recover(t : T?) {
     unsafe(delete_expression(probe))
 }
 
-[test]
+[test(description = "ast_gc_guard sweeps all the temporary nodes of several qmacro and qmatch calls")]
 def test_ast_gc_guard_sweeps(t : T?) {
     let before = gc_thread_root_count()
     ast_gc_guard() {

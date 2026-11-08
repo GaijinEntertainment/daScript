@@ -11,7 +11,7 @@ struct IntVal {
 
 // ---- fill/grab basics ----
 
-[test]
+[test(description = "A fresh lock box reports isReady")]
 def test_lockbox_fill_grab_ready(t : T?) {
     t |> run("lockbox starts isReady (empty)") @(t : T?) {
         with_lock_box() $(box) {
@@ -20,7 +20,7 @@ def test_lockbox_fill_grab_ready(t : T?) {
     }
 }
 
-[test]
+[test(description = "fill marks the lock box not ready")]
 def test_lockbox_fill_marks_not_ready(t : T?) {
     t |> run("fill marks box as not ready") @(t : T?) {
         with_job_que() {
@@ -44,7 +44,7 @@ def test_lockbox_fill_marks_not_ready(t : T?) {
     }
 }
 
-[test]
+[test(description = "grab returns the filled data and marks the box ready again")]
 def test_lockbox_grab_returns_data(t : T?) {
     t |> run("grab reads data and marks ready") @(t : T?) {
         with_job_que() {
@@ -78,7 +78,7 @@ def test_lockbox_grab_returns_data(t : T?) {
     }
 }
 
-[test]
+[test(description = "grab on an empty lock box returns false")]
 def test_lockbox_grab_empty_returns_false(t : T?) {
     t |> run("grab on empty box returns false") @(t : T?) {
         with_job_que() {
@@ -103,7 +103,7 @@ def test_lockbox_grab_empty_returns_false(t : T?) {
     }
 }
 
-[test]
+[test(description = "Repeated fill and grab cycles keep working")]
 def test_lockbox_fill_grab_cycle(t : T?) {
     t |> run("fill-grab-fill-grab cycle works") @(t : T?) {
         with_job_que() {

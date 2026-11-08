@@ -113,7 +113,7 @@ def target_impure_operands() : V2 {
 
 def has(s, sub : string) : bool => find(s, sub, 0) >= 0
 
-[test]
+[test(description = "[inline] binary, unary, op-assign and comparison operator overloads splice at their sites, and a small unmarked operator splices through the heuristic tier")]
 def test_inline_operators_fired(t : T?) {
     ast_gc_guard() {
         t |> run("[inline] binary operator splices") @(t : T?) {
@@ -144,7 +144,7 @@ def test_inline_operators_fired(t : T?) {
     }
 }
 
-[test]
+[test(description = "a [never_inline] operator and an over-budget operator stay regular calls")]
 def test_inline_operators_declines(t : T?) {
     ast_gc_guard() {
         t |> run("[never_inline] operator stays a call") @(t : T?) {
@@ -158,7 +158,7 @@ def test_inline_operators_declines(t : T?) {
     }
 }
 
-[test]
+[test(description = "spliced and declined operator overloads compute the same results, with impure operands evaluated in call order")]
 def test_inline_operators_behavior(t : T?) {
     t |> run("spliced operator results match") @(t : T?) {
         let a = V2(x = 1, y = 2)

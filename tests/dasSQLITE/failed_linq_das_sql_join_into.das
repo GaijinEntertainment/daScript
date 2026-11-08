@@ -1,9 +1,14 @@
 options gen2
+//! a linq_das group join over a SQL source must not compile because
+//! SQL has no group-join form
 
-// linq_das `join … into g` (group-join) over a SQL source. The reader emits `_group_join`, which has no SQL
-// push-down form, so `_sql` rejects it — group-join is in-memory only (array sources). One macro_error (50503),
-// no cascade. (Own file: this `_sql` infer-time reject aborts the pass, so it can't share with the other
-// `_sql` join reject in failed_linq_das_sql_join.das or the `group … by` reject in failed_linq_das_sql.das.)
+// linq_das `join … into g` (group-join) over a SQL source. The reader
+// emits `_group_join`, which has no SQL push-down form, so `_sql`
+// rejects it — group-join is in-memory only (array sources). One
+// macro_error (50503), no cascade. (Own file: this `_sql` infer-time
+// reject aborts the pass, so it can't share with the other `_sql`
+// join reject in failed_linq_das_sql_join.das or the `group … by`
+// reject in failed_linq_das_sql.das.)
 expect 50503
 
 require daslib/linq_das
@@ -28,7 +33,8 @@ def trigger_join_into_sql() {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<Car>)
         db |> create_table(type<Brand>)
-        // `join … into g` emits `_group_join`, which has no SQL push-down → `_sql` rejects (in-memory only).
+        // `join … into g` emits `_group_join`, which has no SQL push-down →
+        // `_sql` rejects (in-memory only).
         let r <- %linq! from b : Brand in db
                         join c : Car in db on b.brand equals c.brand into g
                         select (brand = b.brand, n = g |> length) %%

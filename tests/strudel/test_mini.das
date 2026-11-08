@@ -7,7 +7,7 @@ require math
 
 def query_one_cycle(var pat : Pattern) : array<Hap> => <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
 
-[test]
+[test(description = "the mini-notation tokenizer splits bd sd [ hh hh ] cp into eight tokens with their kinds")]
 def test_tokenize(t : T?) {
     let tokens <- tokenize("bd sd [hh hh] cp")
     // bd sd [ hh hh ] cp EOF = 8 tokens
@@ -23,7 +23,7 @@ def test_tokenize(t : T?) {
     t |> equal(tokens[7].kind, TokenKind.EOF_TOKEN)
 }
 
-[test]
+[test(description = "a single word is one event with that sound")]
 def test_single_atom(t : T?) {
     let pat <- s("bd")
     let haps <- query_one_cycle(pat)
@@ -31,7 +31,7 @@ def test_single_atom(t : T?) {
     t |> equal(haps[0].value.s, "bd")
 }
 
-[test]
+[test(description = "a two-word sequence gives two events per cycle")]
 def test_sequence(t : T?) {
     // "bd sd" = fastcat([bd, sd]) = 2 events per cycle
     let pat <- s("bd sd")
@@ -41,7 +41,7 @@ def test_sequence(t : T?) {
     t |> equal(haps[1].value.s, "sd")
 }
 
-[test]
+[test(description = "a bracketed subsequence shares one slot of the cycle between its steps")]
 def test_subsequence(t : T?) {
     // "bd [hh hh]" = fastcat([bd, fastcat([hh, hh])])
     // = 2 slots: bd takes 0.0-0.5, [hh hh] takes 0.5-1.0
@@ -54,7 +54,7 @@ def test_subsequence(t : T?) {
     t |> equal(haps[2].value.s, "hh")
 }
 
-[test]
+[test(description = "silence yields no events")]
 def test_silence(t : T?) {
     // "bd ~ sd ~" = 4 slots, 2 silent
     let pat <- s("bd ~ sd ~")
@@ -64,7 +64,7 @@ def test_silence(t : T?) {
     t |> equal(haps[1].value.s, "sd")
 }
 
-[test]
+[test(description = "the * modifier repeats a step that many times per cycle")]
 def test_fast_modifier(t : T?) {
     // "bd*3" = fast(3, atom("bd")) = 3 events per cycle
     let pat <- s("bd*3")
@@ -73,7 +73,7 @@ def test_fast_modifier(t : T?) {
     t |> equal(haps[0].value.s, "bd")
 }
 
-[test]
+[test(description = "the / modifier stretches a step over several cycles")]
 def test_slow_modifier(t : T?) {
     // "bd/2" = slow(2, atom("bd")) = spans 2 cycles
     let pat <- s("bd/2")
@@ -82,7 +82,7 @@ def test_slow_modifier(t : T?) {
     t |> success(abs(haps[0].whole.stop - 2.0lf) < 0.001lf)
 }
 
-[test]
+[test(description = "the ? modifier drops events probabilistically")]
 def test_degrade_modifier(t : T?) {
     // "bd?" = degrade(0.5, bd)
     let pat <- s("bd?1")  // degrade with prob=1.0 removes everything
@@ -90,7 +90,7 @@ def test_degrade_modifier(t : T?) {
     t |> equal(length(haps), 0)
 }
 
-[test]
+[test(description = "the colon suffix sets the sample index on the event")]
 def test_sample_index(t : T?) {
     // "bd:2" = atom("bd") with n=2
     let pat <- s("bd:2")
@@ -100,7 +100,7 @@ def test_sample_index(t : T?) {
     t |> equal(haps[0].value.n, 2)
 }
 
-[test]
+[test(description = "stack plays its patterns at the same time")]
 def test_stack(t : T?) {
     // "bd, hh" = stack([bd, hh]) = 2 events at same time
     let pat <- s("bd, hh")
@@ -110,7 +110,7 @@ def test_stack(t : T?) {
     t |> equal(haps[1].value.s, "hh")
 }
 
-[test]
+[test(description = "angle brackets alternate their steps one per cycle")]
 def test_alternate(t : T?) {
     // "<bd sd>" = cat([bd, sd]) = bd on cycle 0, sd on cycle 1
     let pat <- s("<bd sd>")
@@ -122,7 +122,7 @@ def test_alternate(t : T?) {
     t |> equal(haps1[0].value.s, "sd")
 }
 
-[test]
+[test(description = "the classic bd sd [hh hh] cp pattern gives five events in order")]
 def test_full_pattern(t : T?) {
     // the classic: "bd sd [hh hh] cp"
     let pat <- s("bd sd [hh hh] cp")
@@ -135,7 +135,7 @@ def test_full_pattern(t : T?) {
     t |> equal(haps[4].value.s, "cp")
 }
 
-[test]
+[test(description = "note names parse to MIDI notes with the sine sound")]
 def test_note_names(t : T?) {
     // note names parse to MIDI + sound="sine"
     let pat <- s("c3 e3 g3")
@@ -147,7 +147,7 @@ def test_note_names(t : T?) {
     t |> success(abs(haps[2].value.note - 55.0) < 0.001)  // g3 = 55
 }
 
-[test]
+[test(description = "sharps and flats in note names raise and lower the MIDI note")]
 def test_note_names_sharps_flats(t : T?) {
     let pat <- s("cs3 eb3")
     let haps <- query_one_cycle(pat)
@@ -156,7 +156,7 @@ def test_note_names_sharps_flats(t : T?) {
     t |> success(abs(haps[1].value.note - 51.0) < 0.001)  // eb3 = 51
 }
 
-[test]
+[test(description = "every(2, ...) applies its function on alternate cycles")]
 def test_every(t : T?) {
     // every(2, fast_bd, normal_bd) — fast on even cycles, normal on odd
     let on <- atom("bd") |> fast(2.0lf)
@@ -173,7 +173,7 @@ def test_every(t : T?) {
     t |> equal(length(haps2), 2)
 }
 
-[test]
+[test(description = "every with fast doubles the event count on the transformed cycles only")]
 def test_every_fast(t : T?) {
     let pat <- every_fast(3, 2.0lf, "bd sd")
     // cycle 0: fast(2) = 4 events
@@ -187,7 +187,7 @@ def test_every_fast(t : T?) {
     t |> equal(length(haps2), 2)
 }
 
-[test]
+[test(description = "a note pattern with tildes produces silence for those steps")]
 def test_note_pattern(t : T?) {
     let pat <- note_pattern("c3 ~ e3 g3")
     let haps <- query_one_cycle(pat)
@@ -199,7 +199,7 @@ def test_note_pattern(t : T?) {
 
 // ─── Tokenizer: accidentals must stay inside the word ───
 
-[test]
+[test(description = "a hash inside a word stays part of the word so d#3 is one token")]
 def test_tokenize_sharp_in_word(t : T?) {
     // Previously '#' was silently skipped, splitting "d#3" into "d" + "3".
     // It must now be part of the WORD so note-name parsing sees "d#3".
@@ -215,7 +215,7 @@ def test_tokenize_sharp_in_word(t : T?) {
 
 // ─── parse_note_name: explicit octave required ───
 
-[test]
+[test(description = "parse_note_name needs an octave, so a bare letter is not a note")]
 def test_parse_note_name_requires_octave(t : T?) {
     t |> success(abs(parse_note_name("d3") - 50.0) < 0.01)
     t |> success(abs(parse_note_name("d#3") - 51.0) < 0.01)
@@ -229,7 +229,7 @@ def test_parse_note_name_requires_octave(t : T?) {
 
 // ─── parse_note_name_default: defaults octave to 3 ───
 
-[test]
+[test(description = "parse_note_name_default applies the default octave to a bare note name and an explicit octave overrides it")]
 def test_parse_note_name_default(t : T?) {
     // Bare "d" → D3 (MIDI 50) via default octave 3
     t |> success(abs(parse_note_name_default("d", 3) - 50.0) < 0.01)
@@ -247,7 +247,7 @@ def test_parse_note_name_default(t : T?) {
 
 // ─── note(): bare-letter note names resolve to default octave 3 ───
 
-[test]
+[test(description = "note() accepts bare letter names in the default octave")]
 def test_note_bare_letters(t : T?) {
     // note("d d d# d") → D3, D3, D#3, D3 (default octave 3)
     let pat <- note("d d d# d", "supersaw")
@@ -262,7 +262,7 @@ def test_note_bare_letters(t : T?) {
     t |> equal(haps[2].value.s, "supersaw")
 }
 
-[test]
+[test(description = "bare and explicit-octave note names can be mixed in one pattern")]
 def test_note_mixed_octaves(t : T?) {
     // Mixing bare and explicit forms should round-trip.
     let pat <- note("d d#3 e4 f", "sine")
@@ -274,7 +274,7 @@ def test_note_mixed_octaves(t : T?) {
     t |> success(abs(haps[3].value.note - 53.0) < 0.01)  // F3 (default oct)
 }
 
-[test]
+[test(description = "a bare flat name such as eb resolves to the right MIDI note")]
 def test_note_flat_bare(t : T?) {
     // "eb" should resolve to E♭3 = MIDI 51 - 1 semitone below D4 ... = 51
     // Actually Eb3 = 4+3 chroma+octave offsets...
@@ -286,7 +286,7 @@ def test_note_flat_bare(t : T?) {
     t |> success(abs(haps[1].value.note - 63.0) < 0.01, "Eb4={haps[1].value.note}")
 }
 
-[test]
+[test(description = "s() treats single letters as sound names and not as notes")]
 def test_s_single_letter_stays_sound(t : T?) {
     // Crucial invariant: s("a e i o u") is sound tokens (vowel names), NOT notes.
     // parse_note_name rejects bare letters so this still produces atoms with .s set.

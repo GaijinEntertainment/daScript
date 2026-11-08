@@ -1,3 +1,5 @@
+//! [ordered(x = upward)] must not compile: a field direction other
+//! than ascending or descending is rejected.
 options gen2
 options no_aot
 expect 20800

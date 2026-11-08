@@ -8,7 +8,7 @@ require strings
 
 // ===== make_request (int id) =====
 
-[test]
+[test(description = "make_request builds a request with an integer id for object, array and null params and escapes the method name")]
 def test_make_request_int_id(t : T?) {
     t |> run("with object params") @(t : T?) {
         let r = make_request("set_color", "\{\"r\":1.0}", 7)
@@ -30,7 +30,7 @@ def test_make_request_int_id(t : T?) {
 
 // ===== make_request (string id) =====
 
-[test]
+[test(description = "make_request builds a request with a string id, escaping special characters")]
 def test_make_request_string_id(t : T?) {
     t |> run("simple string id") @(t : T?) {
         let r = make_request("status", "null", "abc")
@@ -44,7 +44,7 @@ def test_make_request_string_id(t : T?) {
 
 // ===== make_notification =====
 
-[test]
+[test(description = "make_notification builds a request with no id field, with or without params")]
 def test_make_notification(t : T?) {
     t |> run("notification has no id field") @(t : T?) {
         let r = make_notification("shutdown", "null")
@@ -61,7 +61,7 @@ def test_make_notification(t : T?) {
 
 // ===== make_batch =====
 
-[test]
+[test(description = "make_batch joins requests and notifications into an array and gives [] for no input")]
 def test_make_batch(t : T?) {
     t |> run("two requests") @(t : T?) {
         let msgs <- [make_request("a", "null", 1), make_request("b", "null", 2)]

@@ -41,7 +41,7 @@ def operator ==(a : array<int>; b : array<int>) : bool {
 
 def make_arr(a : int; b : int) : array<int> => <- [a, b]
 
-[test]
+[test(description = "an Option can carry a non-copyable array, none of it is empty and is_some and is_none agree")]
 def test_constructors(t : T?) {
     t |> run("some carries a non-copyable payload") @(t : T?) {
         let o = some(make_arr(1, 2))
@@ -62,7 +62,7 @@ def test_constructors(t : T?) {
     }
 }
 
-[test]
+[test(description = "move_some moves a non-copyable payload out of its source and also works on a copyable one")]
 def test_move_some(t : T?) {
     t |> run("move_some moves a non-copyable payload out of the source") @(t : T?) {
         var src = make_arr(1, 2)
@@ -83,7 +83,7 @@ def test_move_some(t : T?) {
     }
 }
 
-[test]
+[test(description = "map turns an Option of an array into an Option of its length and leaves none as none")]
 def test_map(t : T?) {
     t |> run("map Option<array<int>> -> Option<int> via length") @(t : T?) {
         let n = some(make_arr(1, 2)) |> map($(v : array<int>) => length(v))
@@ -97,7 +97,7 @@ def test_map(t : T?) {
     }
 }
 
-[test]
+[test(description = "filter on an Option of an array keeps a match, drops a non-match and passes none through")]
 def test_filter(t : T?) {
     t |> run("filter keeps matching some") @(t : T?) {
         let f = some(make_arr(1, 2)) |> filter($(v : array<int>) => !empty(v))
@@ -115,7 +115,7 @@ def test_filter(t : T?) {
     }
 }
 
-[test]
+[test(description = "and_then chains an Option of an array and short-circuits on none")]
 def test_and_then(t : T?) {
     t |> run("and_then chains some -> some") @(t : T?) {
         let r = some(make_arr(1, 2)) |> and_then($(v : array<int>) => some(make_arr(length(v), 0)))
@@ -129,7 +129,7 @@ def test_and_then(t : T?) {
     }
 }
 
-[test]
+[test(description = "or_else and or_value pass a some array through and fall back on none")]
 def test_or_else_or_value(t : T?) {
     t |> run("or_else passes some through") @(t : T?) {
         let r = some(make_arr(1, 2)) |> or_else() { return some(make_arr(9, 9)); }
@@ -149,7 +149,7 @@ def test_or_else_or_value(t : T?) {
     }
 }
 
-[test]
+[test(description = "unwrap and its fallback forms return the array or the fallback as specified")]
 def test_unwrap(t : T?) {
     t |> run("unwrap on some returns the array") @(t : T?) {
         let arr = some(make_arr(7, 8)) |> unwrap
@@ -175,7 +175,7 @@ def test_unwrap(t : T?) {
     }
 }
 
-[test]
+[test(description = "move_unwrap moves the array out of the Option and leaves it empty")]
 def test_move_unwrap(t : T?) {
     t |> run("move_unwrap moves the array out of Option, leaves it empty") @(t : T?) {
         var o = some(make_arr(7, 8))
@@ -187,7 +187,7 @@ def test_move_unwrap(t : T?) {
     }
 }
 
-[test]
+[test(description = "if_some and if_none run their block with the array only on the matching state")]
 def test_if_some_if_none(t : T?) {
     t |> run("if_some fires with the array") @(t : T?) {
         var seen = 0
@@ -208,7 +208,7 @@ def test_if_some_if_none(t : T?) {
     }
 }
 
-[test]
+[test(description = "== on an Option of an array compares the arrays")]
 def test_equality(t : T?) {
     t |> run("== on Option<array<int>>") @(t : T?) {
         t |> success(some(make_arr(1, 2)) == some(make_arr(1, 2)))
@@ -218,7 +218,7 @@ def test_equality(t : T?) {
     }
 }
 
-[test]
+[test(description = "a some array flows through map, filter and unwrap_or while a none short-circuits")]
 def test_chaining(t : T?) {
     t |> run("some -> map -> filter -> unwrap_or") @(t : T?) {
         let n = (some(make_arr(1, 2))
@@ -237,7 +237,7 @@ def test_chaining(t : T?) {
     }
 }
 
-[test]
+[test(description = "zip of two some arrays yields a pair of arrays and either none makes the result none")]
 def test_zip(t : T?) {
     t |> run("zip some + some -> some pair of arrays") @(t : T?) {
         let z = zip(some(make_arr(1, 2)), some(make_arr(3, 4)))
@@ -255,7 +255,7 @@ def test_zip(t : T?) {
     }
 }
 
-[test]
+[test(description = "the ?? operator unwraps a some array and returns the fallback on none")]
 def test_op_qq(t : T?) {
     t |> run("?? unwraps some array") @(t : T?) {
         let arr = some(make_arr(7, 8)) ?? make_arr(0, 0)
@@ -270,7 +270,7 @@ def test_op_qq(t : T?) {
     }
 }
 
-[test]
+[test(description = "an Option of an array compares with == and != against a plain array")]
 def test_op_eq_value(t : T?) {
     t |> run("Option<array<int>> == array<int>") @(t : T?) {
         t |> success(some(make_arr(1, 2)) == make_arr(1, 2))

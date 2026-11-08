@@ -228,7 +228,7 @@ directory). Stdout is the protocol, and both stdio streams are switched to binar
 (`fbinary`): a Windows text-mode stdout writes the `\r\n` of a frame header as `\r\r\n`, no
 client reader matches that as the terminator, and the `initialize` reply it never accepts leaves
 every later request waiting forever. No pid file, no health poll, no tray. Configuration and the navigation notes: `utils/lsp/README.md`;
-`tests/lsp/test_lsp_protocol.das` drives it through both hosts.
+`tests/lsp/uncategorized.das` drives it through both hosts.
 
 ## Layout
 

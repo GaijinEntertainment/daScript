@@ -42,7 +42,7 @@ def gpad(a : auto; b : float = 1.5; blk : block<(x : auto; y : float) : float>) 
 // A. core padding
 // ============================================================
 
-[test]
+[test(description = "a piped block pads one default parameter before the block parameter, with an explicit pipe too")]
 def test_pad_one_default(t : T?) {
     t |> run("one default padded before the block") @(t : T?) {
         let r = pad_b(1) $(y : float) : float {
@@ -58,7 +58,7 @@ def test_pad_one_default(t : T?) {
     }
 }
 
-[test]
+[test(description = "a piped block pads two defaults and forward-infers the block parameter types")]
 def test_pad_two_defaults(t : T?) {
     t |> run("two defaults padded, block param types forward-inferred") @(t : T?) {
         let r = pad_two(10) $(y; z) {
@@ -68,7 +68,7 @@ def test_pad_two_defaults(t : T?) {
     }
 }
 
-[test]
+[test(description = "a piped block pads when every other argument is defaulted")]
 def test_pad_from_position_zero(t : T?) {
     t |> run("all arguments defaulted") @(t : T?) {
         let r = pad_all() $(x : int) : int {
@@ -78,7 +78,7 @@ def test_pad_from_position_zero(t : T?) {
     }
 }
 
-[test]
+[test(description = "a fully positional piped call behaves as before")]
 def test_full_positional_regression(t : T?) {
     t |> run("fully positional piped call is unchanged") @(t : T?) {
         let r = pad_b(1, 9.0) $(y : float) : float {
@@ -88,7 +88,7 @@ def test_full_positional_regression(t : T?) {
     }
 }
 
-[test]
+[test(description = "a piped lambda lands on the lambda parameter behind a default")]
 def test_pad_lambda_argument(t : T?) {
     t |> run("piped lambda lands on lambda param behind a default") @(t : T?) {
         let r = pad_lambda(1) <| @(x : int) : int {
@@ -98,7 +98,7 @@ def test_pad_lambda_argument(t : T?) {
     }
 }
 
-[test]
+[test(description = "a piped function pointer lands on the function parameter behind a default")]
 def test_pad_funcptr_argument(t : T?) {
     t |> run("piped function pointer lands on function param behind a default") @(t : T?) {
         let r = pad_funcptr(1) <| @@(x : int) : int {
@@ -108,7 +108,7 @@ def test_pad_funcptr_argument(t : T?) {
     }
 }
 
-[test]
+[test(description = "a default that is a function call is cloned into the call site when padding")]
 def test_pad_call_default(t : T?) {
     t |> run("default that is a function call is cloned to the call site") @(t : T?) {
         let r = pad_call_default(1) $(x : int) : int {
@@ -118,7 +118,7 @@ def test_pad_call_default(t : T?) {
     }
 }
 
-[test]
+[test(description = "a default struct value is padded before the piped block")]
 def test_pad_struct_default(t : T?) {
     t |> run("default<struct> padded before the block") @(t : T?) {
         let r = pad_struct(1) $(s : int) : int {
@@ -128,7 +128,7 @@ def test_pad_struct_default(t : T?) {
     }
 }
 
-[test]
+[test(description = "padding works with an OR-typed prefix argument in both its int and float flavors")]
 def test_pad_or_type(t : T?) {
     t |> run("OR-type prefix argument, int flavor") @(t : T?) {
         let r = pad_or(1) $(x : int) : int {
@@ -144,7 +144,7 @@ def test_pad_or_type(t : T?) {
     }
 }
 
-[test]
+[test(description = "a generic callee is instantiated after the padding is applied")]
 def test_pad_generic_callee(t : T?) {
     t |> run("generic callee instanced after padding") @(t : T?) {
         let r = gpad(2) $(x : int; y : float) : float {
@@ -171,7 +171,7 @@ def fn_vs_gen(_a : int; b : int = 1; blk : block<() : int>) : int => 3000 + invo
 
 def fn_vs_gen(_a : auto; b : int = 1; blk : block<() : int>) : int => 4000 + invoke(blk)
 
-[test]
+[test(description = "among overloads the one needing fewer padded defaults wins")]
 def test_least_padding_wins(t : T?) {
     t |> run("overload with fewer padded defaults wins") @(t : T?) {
         let r = pick(1) $ {
@@ -181,7 +181,7 @@ def test_least_padding_wins(t : T?) {
     }
 }
 
-[test]
+[test(description = "at equal padding exact constness breaks the tie")]
 def test_aligned_distance_tiebreak(t : T?) {
     t |> run("equal padding, exact constness wins") @(t : T?) {
         var v = 5 // `let` would flip resolution to the const overload
@@ -192,7 +192,7 @@ def test_aligned_distance_tiebreak(t : T?) {
     }
 }
 
-[test]
+[test(description = "at equal padding a plain function wins over a generic")]
 def test_function_beats_generic(t : T?) {
     t |> run("function wins over generic at equal padding") @(t : T?) {
         let r = fn_vs_gen(1) $ {
@@ -202,7 +202,7 @@ def test_function_beats_generic(t : T?) {
     }
 }
 
-[test]
+[test(description = "a C++ builtin with fewer padded defaults wins over a das overload")]
 def test_builtin_beats_das_overload(t : T?) {
     t |> run("C++ builtin with fewer padded defaults wins over das overload") @(t : T?) {
         var got = 0.0
@@ -228,7 +228,7 @@ class Widget {
     def scaled(k : int = 3; blk : block<(v : int) : int>) : int => invoke(blk, base * k)
 }
 
-[test]
+[test(description = "an arrow method call pads defaults before the piped block")]
 def test_class_method_arrow(t : T?) {
     t |> run("obj->method() pads defaults before the block") @(t : T?) {
         var w = new Widget()
@@ -239,7 +239,7 @@ def test_class_method_arrow(t : T?) {
     }
 }
 
-[test]
+[test(description = "a dot method call pads defaults before the piped block")]
 def test_class_method_dot(t : T?) {
     t |> run("obj.method() pads defaults before the block") @(t : T?) {
         var w = new Widget()
@@ -250,7 +250,7 @@ def test_class_method_dot(t : T?) {
     }
 }
 
-[test]
+[test(description = "a module-qualified piped call pads defaults")]
 def test_module_qualified(t : T?) {
     t |> run("_:: qualified piped call pads") @(t : T?) {
         let r = _::pad_b(1) $(y : float) : float {
@@ -266,7 +266,7 @@ def via_generic(v : auto) : float {
     }
 }
 
-[test]
+[test(description = "a piped call with padding survives generic instancing in two instances")]
 def test_piped_call_inside_generic(t : T?) {
     t |> run("piped call survives generic instancing, two instances") @(t : T?) {
         t |> equal(via_generic(1), 6.5)
@@ -274,7 +274,7 @@ def test_piped_call_inside_generic(t : T?) {
     }
 }
 
-[test]
+[test(description = "a prefix pipe combined with a trailing block pads the defaults in between")]
 def test_prefix_and_trailing_pipe(t : T?) {
     t |> run("a |> foo() with trailing block pads in between") @(t : T?) {
         let r = 10 |> pad_two() $(y; z) {
@@ -284,7 +284,7 @@ def test_prefix_and_trailing_pipe(t : T?) {
     }
 }
 
-[test]
+[test(description = "a C++ extern with a default before the block and fake context and line info after it is padded correctly")]
 def test_cpp_builtin_with_fakes(t : T?) {
     t |> run("C++ extern: default before block, fakeContext/fakeLineInfo after") @(t : T?) {
         var got_a = 0
@@ -298,7 +298,7 @@ def test_cpp_builtin_with_fakes(t : T?) {
     }
 }
 
-[test]
+[test(description = "a padded piped call inside a piped block works")]
 def test_nested_piped_calls(t : T?) {
     t |> run("piped call inside a piped block") @(t : T?) {
         let r = pad_b(1) $(y : float) : float {
@@ -314,7 +314,7 @@ def test_nested_piped_calls(t : T?) {
 def lam_then_blk(a : int; lam : lambda<(x : int) : int> = @ (x : int) => x; blk : block<() : int>) : int =>
     invoke(lam, invoke(blk) + a)
 
-[test]
+[test(description = "a piped block skips a defaulted lambda parameter and lands on the block parameter")]
 def test_landing_is_type_driven(t : T?) {
     t |> run("piped block skips a defaulted lambda param and lands on the block param") @(t : T?) {
         let r = lam_then_blk(1) $ {
@@ -330,7 +330,7 @@ class Gadget {
         invoke(lam, invoke(blk) + bias)
 }
 
-[test]
+[test(description = "a piped block on a method skips a defaulted lambda parameter and lands on the block parameter")]
 def test_method_landing_is_type_driven(t : T?) {
     t |> run("method piped block skips a defaulted lambda param") @(t : T?) {
         var g = new Gadget()

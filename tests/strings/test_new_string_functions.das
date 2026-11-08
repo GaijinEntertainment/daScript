@@ -6,7 +6,7 @@ require daslib/strings_boost
 
 // Tests for new string utility functions added to strings_boost.das
 
-[test]
+[test(description = "contains finds substrings and single characters case-sensitively and handles edge cases")]
 def test_contains(t : T?) {
     t |> run("basic contains") @@(t : T?) {
         t |> equal(contains("hello world", "world"), true)
@@ -37,7 +37,7 @@ def test_contains(t : T?) {
 }
 
 
-[test]
+[test(description = "count returns non-overlapping occurrences and handles edge cases")]
 def test_count(t : T?) {
     t |> run("basic count") @@(t : T?) {
         t |> equal(count("hello world hello", "hello"), 2)
@@ -68,7 +68,7 @@ def test_count(t : T?) {
 }
 
 
-[test]
+[test(description = "last_index_of returns the last occurrence, honors a start offset and handles edge cases")]
 def test_last_index_of(t : T?) {
     t |> run("basic last_index_of") @@(t : T?) {
         t |> equal(last_index_of("hello world hello", "hello"), 12)
@@ -104,7 +104,7 @@ def test_last_index_of(t : T?) {
 }
 
 
-[test]
+[test(description = "pad_right pads to a width with spaces or a custom character and leaves wide enough strings alone")]
 def test_pad_right(t : T?) {
     t |> run("basic pad_right") @@(t : T?) {
         t |> equal(pad_right("hi", 5), "hi   ")
@@ -131,7 +131,7 @@ def test_pad_right(t : T?) {
 }
 
 
-[test]
+[test(description = "pad_left pads to a width with spaces or a custom character and leaves wide enough strings alone")]
 def test_pad_left(t : T?) {
     t |> run("basic pad_left") @@(t : T?) {
         t |> equal(pad_left("hi", 5), "   hi")
@@ -160,7 +160,7 @@ def test_pad_left(t : T?) {
 }
 
 
-[test]
+[test(description = "trim_prefix removes a leading prefix when present and leaves the string alone otherwise")]
 def test_trim_prefix(t : T?) {
     t |> run("basic trim_prefix") @@(t : T?) {
         t |> equal(trim_prefix("hello world", "hello "), "world")
@@ -188,7 +188,7 @@ def test_trim_prefix(t : T?) {
 }
 
 
-[test]
+[test(description = "trim_suffix removes a trailing suffix when present and leaves the string alone otherwise")]
 def test_trim_suffix(t : T?) {
     t |> run("basic trim_suffix") @@(t : T?) {
         t |> equal(trim_suffix("hello.txt", ".txt"), "hello")
@@ -217,7 +217,7 @@ def test_trim_suffix(t : T?) {
 }
 
 
-[test]
+[test(description = "capitalize uppercases only the first letter and preserves the rest")]
 def test_capitalize(t : T?) {
     t |> run("basic capitalize") @@(t : T?) {
         t |> equal(capitalize("hello"), "Hello")
@@ -249,7 +249,7 @@ def test_capitalize(t : T?) {
 }
 
 
-[test]
+[test(description = "is_null_or_whitespace is true for null, empty and whitespace-only strings and false otherwise")]
 def test_is_null_or_whitespace(t : T?) {
     t |> run("null and empty") @@(t : T?) {
         t |> equal(is_null_or_whitespace(""), true)

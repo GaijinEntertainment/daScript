@@ -7,7 +7,7 @@ require math
 
 // ─── signal_sine ───
 
-[test]
+[test(description = "the sine signal reads 0.5 at time zero and has no whole")]
 def test_signal_sine_midpoint(t : T?) {
     // At t=0.0, sin(0) = 0, mapped to 0.5
     let pat <- signal_sine()
@@ -17,7 +17,7 @@ def test_signal_sine_midpoint(t : T?) {
     t |> success(abs(haps[0].value.note - 0.5) < 0.01)
 }
 
-[test]
+[test(description = "the sine signal peaks at 1.0 at a quarter cycle")]
 def test_signal_sine_peak(t : T?) {
     // At t=0.25, sin(PI/2) = 1, mapped to 1.0
     let pat <- signal_sine()
@@ -26,7 +26,7 @@ def test_signal_sine_peak(t : T?) {
     t |> success(abs(haps[0].value.note - 1.0) < 0.01)
 }
 
-[test]
+[test(description = "the sine signal bottoms at 0.0 at three quarters of a cycle")]
 def test_signal_sine_trough(t : T?) {
     // At t=0.75, sin(3PI/2) = -1, mapped to 0.0
     let pat <- signal_sine()
@@ -37,7 +37,7 @@ def test_signal_sine_trough(t : T?) {
 
 // ─── signal_cosine ───
 
-[test]
+[test(description = "the cosine signal reads 1.0 at time zero")]
 def test_signal_cosine(t : T?) {
     // At t=0.0, cos(0) = 1, mapped to 1.0
     let pat <- signal_cosine()
@@ -48,7 +48,7 @@ def test_signal_cosine(t : T?) {
 
 // ─── signal_saw ───
 
-[test]
+[test(description = "the saw signal rises from 0.0 to 0.5 at half a cycle")]
 def test_signal_saw(t : T?) {
     let pat <- signal_saw()
     // At t=0.0 → 0.0
@@ -64,7 +64,7 @@ def test_signal_saw(t : T?) {
 
 // ─── signal_tri ───
 
-[test]
+[test(description = "the triangle signal rises from 0.0 to 0.5 at a quarter cycle")]
 def test_signal_tri(t : T?) {
     let pat <- signal_tri()
     // At t=0.0 → 0.0
@@ -83,7 +83,7 @@ def test_signal_tri(t : T?) {
 
 // ─── signal_perlin ───
 
-[test]
+[test(description = "the perlin signal returns the same value for the same query")]
 def test_signal_perlin_deterministic(t : T?) {
     // Same query twice → same value
     let pat <- signal_perlin()
@@ -94,7 +94,7 @@ def test_signal_perlin_deterministic(t : T?) {
     t |> success(abs(haps1[0].value.note - haps2[0].value.note) < 0.001)
 }
 
-[test]
+[test(description = "the perlin signal stays within 0 and 1")]
 def test_signal_perlin_range(t : T?) {
     // All values should be in [0, 1]
     let pat <- signal_perlin()
@@ -108,7 +108,7 @@ def test_signal_perlin_range(t : T?) {
 
 // ─── signal_range ───
 
-[test]
+[test(description = "range maps a unit signal onto the given interval")]
 def test_signal_range(t : T?) {
     // sine at t=0.25 is 1.0 → range(200, 4000) should give 4000
     let pat <- signal_sine() |> signal_range(200.0, 4000.0)
@@ -122,7 +122,7 @@ def test_signal_range(t : T?) {
 
 // ─── signal_slow ───
 
-[test]
+[test(description = "slowing a signal reads it at the slowed time")]
 def test_signal_slow(t : T?) {
     // slow(4) sine: at t=1.0 (which is 0.25 in signal space) → 1.0
     let pat <- signal_sine() |> slow(4.0lf)
@@ -133,7 +133,7 @@ def test_signal_slow(t : T?) {
 
 // ─── n() numeric pattern ───
 
-[test]
+[test(description = "n with angle brackets alternates its note per cycle and wraps")]
 def test_n_alternating(t : T?) {
     // n("<2 16>") alternates note=2.0 on cycle 0, note=16.0 on cycle 1
     let pat <- n("<2 16>")
@@ -151,7 +151,7 @@ def test_n_alternating(t : T?) {
 
 // ─── innerJoin ───
 
-[test]
+[test(description = "innerJoin applies a function built from an alternating parameter pattern per cycle")]
 def test_innerJoin_basic(t : T?) {
     // innerJoin with a parameter pattern that alternates 1.0 and 2.0,
     // and a fn that creates fast(atom("bd"), val).
@@ -169,7 +169,7 @@ def test_innerJoin_basic(t : T?) {
 
 // ─── patternified slow/fast ───
 
-[test]
+[test(description = "slow with a pattern factor changes speed per cycle")]
 def test_slow_patternified(t : T?) {
     // slow(pat, n("<1 2>")): cycle 0 → slow(1)=normal, cycle 1 → slow(2)=half speed
     // Base: s("a b") = 2 events per cycle at normal speed
@@ -182,7 +182,7 @@ def test_slow_patternified(t : T?) {
     t |> equal(length(haps1), 1)
 }
 
-[test]
+[test(description = "fast with a pattern factor changes speed per cycle")]
 def test_fast_patternified(t : T?) {
     // fast(pat, n("<1 2>")): cycle 0 → fast(1)=normal, cycle 1 → fast(2)=double
     // Base: atom("bd") = 1 event per cycle
@@ -195,7 +195,7 @@ def test_fast_patternified(t : T?) {
     t |> equal(length(haps1), 2)
 }
 
-[test]
+[test(description = "a signal slowed by an alternating pattern factor is read at the right time")]
 def test_slow_patternified_signal(t : T?) {
     // The actual use case: slow a signal with alternating factors
     // slow(signal_saw(), n("<1 2>"))
@@ -213,7 +213,7 @@ def test_slow_patternified_signal(t : T?) {
 
 // ─── combineWith ───
 
-[test]
+[test(description = "combining a pattern with a sine signal sets the gain from the signal")]
 def test_combine_with_gain(t : T?) {
     // Base pattern atom("bd"), combine with sine signal to set gain.
     // At cycle 0.0, sine=0.5 → gain=0.5
@@ -228,7 +228,7 @@ def test_combine_with_gain(t : T?) {
     t |> equal(haps[0].value.s, "bd")
 }
 
-[test]
+[test(description = "combining with a saw signal gives each event in a cycle its own gain")]
 def test_combine_with_varies_by_cycle(t : T?) {
     // Two events per cycle (fastcat), signal_saw modulates gain.
     // Event at 0.0 → gain=0.0, event at 0.5 → gain=0.5
@@ -245,7 +245,7 @@ def test_combine_with_varies_by_cycle(t : T?) {
 
 // ─── Pattern-valued setters ───
 
-[test]
+[test(description = "set_gain with a signal samples it at the event onset")]
 def test_set_gain_pattern(t : T?) {
     // set_gain with a signal pattern
     let pat <- atom("bd") |> set_gain(signal_sine())
@@ -255,7 +255,7 @@ def test_set_gain_pattern(t : T?) {
     t |> success(abs(haps[0].value.gain - 0.5) < 0.01)
 }
 
-[test]
+[test(description = "set_lpf with a ranged signal maps the sampled value into the range")]
 def test_set_lpf_pattern(t : T?) {
     // set_lpf with a ranged signal
     let pat <- atom("bd") |> set_lpf(signal_sine() |> signal_range(200.0, 4000.0))
@@ -265,7 +265,7 @@ def test_set_lpf_pattern(t : T?) {
     t |> success(abs(haps[0].value.lpf - 2100.0) < 50.0)
 }
 
-[test]
+[test(description = "set_pan with a signal samples it at each cycle's onset")]
 def test_set_pan_pattern(t : T?) {
     let pat <- atom("bd") |> set_pan(signal_saw())
     // Query full cycles. pure() whole starts at cycle boundary.

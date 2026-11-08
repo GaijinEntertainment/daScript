@@ -40,7 +40,7 @@ def make_simple_midi() : array<uint8> {
 
 // ─── GM Presets ───
 
-[test]
+[test(description = "every GM program has a valid preset with the expected waveform and envelope character")]
 def test_gm_presets(tt : T?) {
     tt |> run("all programs valid") <| @(tt : T?) {
         for (i in range(128)) {
@@ -61,7 +61,7 @@ def test_gm_presets(tt : T?) {
 
 // ─── MIDI ADSR ───
 
-[test]
+[test(description = "the MIDI envelope attacks, holds with natural decay, releases and reports finished")]
 def test_midi_adsr_fn(tt : T?) {
     let att = 0.01
     let dec = 0.05
@@ -87,7 +87,7 @@ def test_midi_adsr_fn(tt : T?) {
 
 // ─── Drum Rendering ───
 
-[test]
+[test(description = "the kick, snare, hihat and unknown-drum fallback all render non-empty audio")]
 def test_drums(tt : T?) {
     tt |> run("kick non-empty") <| @(tt : T?) {
         let s <- render_drum_hit(36, 1.0)
@@ -109,7 +109,7 @@ def test_drums(tt : T?) {
 
 // ─── Playback Tick ───
 
-[test]
+[test(description = "MIDI playback renders non-silent output and reports done after the last note")]
 def test_playback(tt : T?) {
     tt |> run("non-silent output") <| @(tt : T?) {
         let d <- make_simple_midi()
@@ -152,7 +152,7 @@ def test_playback(tt : T?) {
 
 // ─── Event Processing ───
 
-[test]
+[test(description = "a note-on creates a voice and a program change updates the channel")]
 def test_events(tt : T?) {
     tt |> run("note on creates voice") <| @(tt : T?) {
         let d <- make_simple_midi()

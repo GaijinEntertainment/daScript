@@ -1,3 +1,4 @@
+//! a class deriving from a sealed class does not compile
 // sealed class derivation
 // verifies compiler rejects inheriting from a class marked 'sealed'
 options gen2

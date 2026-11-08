@@ -1,10 +1,15 @@
-// A generator lifts every top-level local into its capture structure, and a block can never
-// live there — it is stack storage whose lifetime ends with the enclosing call, so the lifted
-// field could only dangle. Infer used to let the declaration through and the failure surfaced
-// downstream against the synthesized lambda ("_lambda_thismodule_N() can't be allocated
-// locally" plus "block<...>& can't be cloned"), naming generated code instead of the line the
-// author wrote. It is now rejected at the declaration, and the same reasoning rejects
-// capturing a block into a lambda (30912) rather than reporting it as a copy/move failure.
+//! A block local inside a generator, and capturing a block into a
+//! lambda, must be rejected at the declaration (30202, 30912).
+// A generator lifts every top-level local into its capture structure,
+// and a block can never live there — it is stack storage whose
+// lifetime ends with the enclosing call, so the lifted field could
+// only dangle. Infer used to let the declaration through and the
+// failure surfaced downstream against the synthesized lambda
+// ("_lambda_thismodule_N() can't be allocated locally" plus
+// "block<...>& can't be cloned"), naming generated code instead of
+// the line the author wrote. It is now rejected at the declaration,
+// and the same reasoning rejects capturing a block into a lambda
+// (30912) rather than reporting it as a copy/move failure.
 options gen2
 expect 30202 : 1, 30912 : 1
 

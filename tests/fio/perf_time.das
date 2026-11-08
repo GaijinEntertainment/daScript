@@ -16,7 +16,7 @@ require math
 //!   - sleep(N ms) round-trip lands close to N ms (with slack for OS
 //!     scheduler granularity — Windows is the worst at ~16 ms ticks).
 
-[test]
+[test(description = "Successive ref_time_ticks reads never go backwards")]
 def test_ref_time_ticks_monotonic(t : T?) {
     //! Successive calls never go backwards. Catches QPC wrap-around
     //! arithmetic bugs and any future signed/unsigned mixups in the
@@ -33,7 +33,7 @@ def test_ref_time_ticks_monotonic(t : T?) {
     t |> success(true, "1000 successive ref_time_ticks reads stayed monotonic")
 }
 
-[test]
+[test(description = "A 100 ms sleep measures between 80 and 500 ms in nanoseconds")]
 def test_ref_time_ticks_sleep_roundtrip(t : T?) {
     //! sleep(100ms) → delta_ns should be in [80ms, 500ms]. Wide upper
     //! bound covers CI runner jitter (GitHub-hosted Windows scheduling
@@ -50,7 +50,7 @@ def test_ref_time_ticks_sleep_roundtrip(t : T?) {
         "sleep(100ms) elapsed {delta_ms}ms — way over budget")
 }
 
-[test]
+[test(description = "get_time_usec agrees with the nanosecond delta of ref_time_ticks to within 5 ms")]
 def test_get_time_usec_agrees_with_ref_delta(t : T?) {
     //! `get_time_usec(t0)` and `(ref_time_ticks() - t0) / 1000` should
     //! agree to within a few µs (the two calls happen sequentially,
@@ -64,7 +64,7 @@ def test_get_time_usec_agrees_with_ref_delta(t : T?) {
         "get_time_usec={usec_via_helper} vs delta/1000={usec_via_delta} drift={drift_us}us")
 }
 
-[test]
+[test(description = "Equal sleeps produce roughly equal raw tick deltas, so the tick rate is uniform")]
 def test_ref_time_ticks_units_are_nanoseconds(t : T?) {
     //! Sanity check that two sleep(100ms) calls in a row produce roughly the
     //! same raw tick delta. Ticks are in the embedder's unit, so this pins rate

@@ -19,7 +19,7 @@ def m_002(db : SqlRunner) {
     db |> create_index(type<User>, "Email")
 }
 
-[test]
+[test(description = "create_index builds a non-unique index named idx_table_column by default", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_auto_named_single_col_index(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()

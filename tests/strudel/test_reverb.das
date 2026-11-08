@@ -37,7 +37,7 @@ def private rms_range(samples : array<float>; startSample, endSample : int) : fl
     return sqrt(sum / float(count))
 }
 
-[test]
+[test(description = "an OscVoice takes its reverb send from the event room")]
 def test_osc_voice_reverb_send_field(t : T?) {
     t |> run("OscVoice reverb_send populated from Event.room") @(t : T?) {
         // Spawn an osc voice with room=0.5 via the scheduler
@@ -53,7 +53,7 @@ def test_osc_voice_reverb_send_field(t : T?) {
     }
 }
 
-[test]
+[test(description = "the reverb is created automatically when room is above zero")]
 def test_reverb_auto_init(t : T?) {
     t |> run("reverb auto-initializes when room > 0") @(t : T?) {
         var inscope sched : Scheduler
@@ -68,7 +68,7 @@ def test_reverb_auto_init(t : T?) {
     }
 }
 
-[test]
+[test(description = "the reverb stays null when room is zero")]
 def test_no_reverb_when_room_zero(t : T?) {
     t |> run("reverb stays null when room = 0") @(t : T?) {
         var inscope sched : Scheduler
@@ -80,7 +80,7 @@ def test_no_reverb_when_room_zero(t : T?) {
     }
 }
 
-[test]
+[test(description = "room above zero produces a reverb tail after the voice ends")]
 def test_reverb_send_produces_output(t : T?) {
     t |> run("room > 0 produces reverb tail after voice ends") @(t : T?) {
         // Short pluck with reverb — slow cps so only one event fires
@@ -99,7 +99,7 @@ def test_reverb_send_produces_output(t : T?) {
     }
 }
 
-[test]
+[test(description = "room of zero leaves no reverb tail")]
 def test_no_reverb_tail_when_dry(t : T?) {
     t |> run("room = 0 produces no reverb tail") @(t : T?) {
         var inscope sched : Scheduler
@@ -115,7 +115,7 @@ def test_no_reverb_tail_when_dry(t : T?) {
     }
 }
 
-[test]
+[test(description = "a pre-rendered drum with room above zero gets a reverb send")]
 def test_reverb_on_drums(t : T?) {
     t |> run("pre-rendered drum with room > 0 has reverb send") @(t : T?) {
         var inscope sched : Scheduler
@@ -131,7 +131,7 @@ def test_reverb_on_drums(t : T?) {
     }
 }
 
-[test]
+[test(description = "a larger room size produces a longer reverb tail")]
 def test_reverb_roomsize_decay(t : T?) {
     t |> run("larger roomsize produces longer reverb tail") @(t : T?) {
         // Small room (short decay)
@@ -157,7 +157,7 @@ def test_reverb_roomsize_decay(t : T?) {
     }
 }
 
-[test]
+[test(description = "a supersaw voice with room produces a reverb tail")]
 def test_reverb_supersaw(t : T?) {
     t |> run("supersaw with room produces reverb tail") @(t : T?) {
         var inscope sched : Scheduler

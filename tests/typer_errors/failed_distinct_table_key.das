@@ -1,3 +1,6 @@
+//! A table or set keyed by a distinct type must reject a key of
+//! another distinct over the same underlying type (30251, 30341 three
+//! times).
 options gen2
 
 expect 30251

@@ -1,12 +1,15 @@
+//! pointer arithmetic on void? does not compile: a void pointee has
+//! no stride
 options gen2
 expect 30950
 expect 30341
 
 require dastest/testing_boost public
 
-// pointer arithmetic on void? is prohibited — it used to slip past the guard (a void? carries a
-// non-null tVoid firstType) and lower with stride sizeof(void) == 0, silently returning the
-// unmoved pointer.
+// pointer arithmetic on void? is prohibited — it used to slip past
+// the guard (a void? carries a non-null tVoid firstType) and lower
+// with stride sizeof(void) == 0, silently returning the unmoved
+// pointer.
 
 def foo : void? {
     var x = 0

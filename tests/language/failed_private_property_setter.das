@@ -1,5 +1,8 @@
-// private property operators of a class are private to the declaring module
-// verifies a private setter, a private getter, and an operator of a private class are rejected from another module
+//! a private property setter, a private getter and an operator of a
+//! private class are not reachable from another module
+// private property operators of a class are private to the declaring
+// module verifies a private setter, a private getter, and an operator
+// of a private class are rejected from another module
 options gen2
 expect 30915, 30928:2
 
@@ -10,5 +13,7 @@ def main {
     var g = new Gate()
     g.flag = true                   // 30915: can only copy to a reference - the setter is private
     let h = g.hidden                // 30928: field 'hidden' not found - the getter is private
-    let f = make_hidden().flag      // 30928: field 'flag' not found - the class is private, so its operator is too
+    // 30928: field 'flag' not found - the class is private, so its
+    // operator is too
+    let f = make_hidden().flag
 }

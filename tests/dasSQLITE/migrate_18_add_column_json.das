@@ -26,7 +26,7 @@ def m_002(db : SqlRunner) {
     db |> add_column(type<User>, "Profile")
 }
 
-[test]
+[test(description = "add_column of an optional sql_json field creates a nullable TEXT column", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_sql_json_field_emits_text_storage(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()

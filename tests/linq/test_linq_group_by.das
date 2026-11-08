@@ -6,7 +6,7 @@ require daslib/linq_boost
 
 require _common
 
-[test]
+[test(description = "_group_by_lazy buckets arrays and iterators by primitive and struct keys, keeps member access, and yields no groups for an empty input")]
 def test_group_by_lazy(t : T?) {
     t |> run("basic _group_by_lazy on array — primitive key") @(t : T?) {
         let nums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -84,7 +84,7 @@ def test_group_by_lazy(t : T?) {
     }
 }
 
-[test]
+[test(description = "_having keeps only groups passing the group predicate and chains with _where as pre-filter")]
 def test_having(t : T?) {
     t |> run("basic _having keeps groups above threshold") @(t : T?) {
         let nums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -134,7 +134,7 @@ def test_having(t : T?) {
     }
 }
 
-[test]
+[test(description = "_group_by matches the lazy buckets, supports per-group aggregates, array results and chaining with _having")]
 def test_group_by(t : T?) {
     // _group_by is an alias for _group_by_lazy — same in-memory behavior,
     // distinct macro name so the dasSQLITE _sql translator can pattern-

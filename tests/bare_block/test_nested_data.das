@@ -43,7 +43,7 @@ def accept_table(tab : table<string; int>) : int => length(tab)
 
 // --- tests ---
 
-[test]
+[test(description = "a brace table literal can initialize a struct field, nested too")]
 def test_table_literal_in_struct(t : T?) {
     t |> run("struct field assigned with braces") @(t : T?) {
         let cfg = Config(name = "test", tags = {"a" => 1, "b" => 2})
@@ -60,7 +60,7 @@ def test_table_literal_in_struct(t : T?) {
     }
 }
 
-[test]
+[test(description = "brace table literals can be elements of an array literal")]
 def test_table_literal_in_array(t : T?) {
     t |> run("array of tables [braces, braces]") @(t : T?) {
         let arr = [{"a" => 1}, {"b" => 2, "c" => 3}]
@@ -80,7 +80,7 @@ def test_table_literal_in_array(t : T?) {
     }
 }
 
-[test]
+[test(description = "a brace table literal can be a function argument")]
 def test_table_literal_in_function_arg(t : T?) {
     t |> run("braces as function argument") @(t : T?) {
         let n = count_keys({"x" => 1, "y" => 2, "z" => 3})
@@ -92,7 +92,7 @@ def test_table_literal_in_function_arg(t : T?) {
     }
 }
 
-[test]
+[test(description = "a function can return a brace table literal, nested too")]
 def test_table_literal_return(t : T?) {
     t |> run("return braces from function") @(t : T?) {
         let tab = make_table()
@@ -108,7 +108,7 @@ def test_table_literal_return(t : T?) {
     }
 }
 
-[test]
+[test(description = "a brace table literal can be a tuple element")]
 def test_table_literal_in_tuple(t : T?) {
     t |> run("braces as tuple element") @(t : T?) {
         let tup = "config" => {"k" => 42}
@@ -118,7 +118,7 @@ def test_table_literal_in_tuple(t : T?) {
     }
 }
 
-[test]
+[test(description = "a brace table literal can be a variant alternative")]
 def test_table_literal_in_variant(t : T?) {
     t |> run("braces in variant alternative") @(t : T?) {
         let s = Setting(as_map = {"x" => 5, "y" => 10})
@@ -128,7 +128,7 @@ def test_table_literal_in_variant(t : T?) {
     }
 }
 
-[test]
+[test(description = "tables whose values are tables built from nested brace literals have the expected contents")]
 def test_nested_table_literals(t : T?) {
     t |> run("braces of braces tables") @(t : T?) {
         let tab = {1 => {"A", "B"}, 3 => {"C", "D"}}
@@ -144,7 +144,7 @@ def test_nested_table_literals(t : T?) {
     }
 }
 
-[test]
+[test(description = "moving a table literal or comprehension into variables, struct fields and existing variables yields the expected tables")]
 def test_table_move_semantics(t : T?) {
     t |> run("var <- table literal") @(t : T?) {
         var tab <- {"a" => 1, "b" => 2}     // nolint:LINT003 - the arm's subject is the mutable `var <-` move-init form
@@ -200,7 +200,7 @@ def test_table_move_semantics(t : T?) {
     }
 }
 
-[test]
+[test(description = "brace-for comprehensions build tables with int and string keys, expression values and nested table values")]
 def test_table_comprehension(t : T?) {
     t |> run("brace-for creates table") @(t : T?) {
         let tab <- {for (i in range(3)); i => i * 10}
@@ -230,7 +230,7 @@ def test_table_comprehension(t : T?) {
     }
 }
 
-[test]
+[test(description = "table literals, moves and comprehensions work inside a bare block")]
 def test_table_literal_in_bare_block(t : T?) {
     t |> run("braces inside bare block") @(t : T?) {
         var found = false

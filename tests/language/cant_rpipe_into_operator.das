@@ -1,4 +1,7 @@
-// an operator has no argument list, so piping a value into one is a compile error
+//! piping a value into an operator does not compile: an operator has
+//! no argument list to receive it
+// an operator has no argument list, so piping a value into one is a
+// compile error
 options gen2
 expect 30922:3
 

@@ -1,4 +1,5 @@
-// a name an arm binds is a read-only copy of the matched part - assigning to it is an error
+//! a name an arm binds is a read-only copy of the matched part -
+//! assigning to it is an error
 options gen2
 
 require daslib/match

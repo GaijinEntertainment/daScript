@@ -10,7 +10,7 @@ require audio/audio_boost
 // prevents flapping when channels swap rank between frames, but must NOT preserve HRTF status when
 // the budget is 0 (otherwise "all simulated" doesn't clear in-flight HRTF channels).
 
-[test]
+[test(description = "a budget of 999 routes every rank to HRTF whatever its prior state")]
 def test_full_hrtf_budget_keeps_everything_hrtf(t : T?) {
     t |> run("budget=999: every rank routed to HRTF regardless of prior state") @(t : T?) {
         t |> success(hrtf_budget_classify(0, 999, true),  "rank 0, wasHrtf -> HRTF")
@@ -21,7 +21,7 @@ def test_full_hrtf_budget_keeps_everything_hrtf(t : T?) {
     }
 }
 
-[test]
+[test(description = "a budget of 0 routes every rank to simulation even for channels that were HRTF before")]
 def test_zero_budget_clears_all_hrtf(t : T?) {
     t |> run("budget=0: sticky margin must NOT preserve HRTF — all channels go simulated") @(t : T?) {
         // This is the regression case for the sticky-margin bug: stickyTop is clamped to 0 when budget=0,
@@ -33,7 +33,7 @@ def test_zero_budget_clears_all_hrtf(t : T?) {
     }
 }
 
-[test]
+[test(description = "a budget of 32 routes the top 32 fresh ranks to HRTF and the rest to simulation")]
 def test_mixed_budget_routes_top_n(t : T?) {
     t |> run("budget=32: top-32 ranks HRTF, rest simulated (no sticky effect for fresh entries)") @(t : T?) {
         t |> success(hrtf_budget_classify(0, 32, false), "rank 0 below budget -> HRTF (flip in)")
@@ -43,7 +43,7 @@ def test_mixed_budget_routes_top_n(t : T?) {
     }
 }
 
-[test]
+[test(description = "a channel that was HRTF stays HRTF through the budget plus 10 percent margin, so a rank swap does not flap")]
 def test_sticky_margin_in_rank_space(t : T?) {
     t |> run("HRTF channels keep HRTF status across the budget+10% margin to avoid rank-swap flapping") @(t : T?) {
         // For budget=32: stickyTop = 32 + max(2, 32/10) = 32 + 3 = 35
@@ -56,7 +56,7 @@ def test_sticky_margin_in_rank_space(t : T?) {
     }
 }
 
-[test]
+[test(description = "small budgets keep a minimum sticky margin of 2 ranks")]
 def test_sticky_margin_floor_at_small_budgets(t : T?) {
     t |> run("small budgets enforce a minimum margin of 2 so single-channel swaps don't immediately flip") @(t : T?) {
         // For budget=10: stickyTop = 10 + max(2, 1) = 10 + 2 = 12

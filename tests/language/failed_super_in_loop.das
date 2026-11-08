@@ -1,4 +1,7 @@
-// Derived ctor must call super() exactly once — call inside a loop is unbounded.
+//! a constructor calling super() inside a loop does not compile:
+//! super must run exactly once
+// Derived ctor must call super() exactly once — call inside a loop is
+// unbounded.
 options gen2
 expect 30308
 
@@ -12,7 +15,8 @@ class Base {
 class Derived : Base {
     y : int = 0
     def Derived {
-        // 30308: super() in a loop body — count is unbounded, not exactly once
+        // 30308: super() in a loop body — count is unbounded, not exactly
+        // once
         for (i in range(2)) {
             super()
         }

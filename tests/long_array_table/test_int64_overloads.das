@@ -2,7 +2,7 @@ options gen2
 require dastest/testing_boost public
 require daslib/array_boost
 
-[test]
+[test(description = "resize accepts an int64 length")]
 def test_resize_int64(t : T?) {
     var arr : array<int>
     arr |> resize(int64(7))
@@ -10,14 +10,14 @@ def test_resize_int64(t : T?) {
     t |> equal(long_length(arr), 7_l)
 }
 
-[test]
+[test(description = "reserve accepts an int64 capacity")]
 def test_reserve_int64(t : T?) {
     var arr : array<int>
     arr |> reserve(int64(16))
     t |> success(long_capacity(arr) >= 16_l)
 }
 
-[test]
+[test(description = "erase accepts an int64 position")]
 def test_erase_int64(t : T?) {
     var arr : array<int>
     arr |> resize(int64(5))
@@ -29,7 +29,7 @@ def test_erase_int64(t : T?) {
     t |> equal(arr[2], 4)
 }
 
-[test]
+[test(description = "erase accepts an int64 position and count")]
 def test_erase_range_int64(t : T?) {
     var arr : array<int>
     arr |> resize(int64(5))
@@ -42,14 +42,14 @@ def test_erase_range_int64(t : T?) {
     t |> equal(arr[1], 4)
 }
 
-[test]
+[test(description = "table reserve accepts an int64 capacity")]
 def test_table_reserve_int64(t : T?) {
     var tab : table<int; int>
     tab |> reserve(int64(64))
     t |> success(long_capacity(tab) >= 64_l)
 }
 
-[test]
+[test(description = "push at an int64 position inserts the element there")]
 def test_push_at_int64(t : T?) {
     var arr : array<int>
     arr |> reserve(4)
@@ -62,7 +62,7 @@ def test_push_at_int64(t : T?) {
     t |> equal(arr[2], 20)
 }
 
-[test]
+[test(description = "push_clone at an int64 position inserts a copy there")]
 def test_push_clone_at_int64(t : T?) {
     var arr : array<int>
     arr |> reserve(4)
@@ -75,7 +75,7 @@ def test_push_clone_at_int64(t : T?) {
     t |> equal(arr[2], 20)
 }
 
-[test]
+[test(description = "emplace at an int64 position moves the element there")]
 def test_emplace_at_int64(t : T?) {
     var arr : array<int>
     arr |> reserve(4)
@@ -91,7 +91,7 @@ def test_emplace_at_int64(t : T?) {
     t |> equal(arr[2], 20)
 }
 
-[test]
+[test(description = "resize_and_init accepts an int64 length and initializes the new elements")]
 def test_resize_and_init_int64(t : T?) {
     var arr : array<int>
     arr |> resize_and_init(int64(5))
@@ -101,7 +101,7 @@ def test_resize_and_init_int64(t : T?) {
     }
 }
 
-[test]
+[test(description = "resize_and_init with an int64 length fills new elements with the given value")]
 def test_resize_and_init_initvalue_int64(t : T?) {
     var arr : array<int>
     arr |> resize_and_init(int64(5), 42)
@@ -111,7 +111,7 @@ def test_resize_and_init_initvalue_int64(t : T?) {
     }
 }
 
-[test]
+[test(description = "a temp array made from data and an int64 length reports that length")]
 def test_temp_array_data_lenA_int64(t : T?) {
     // array_boost public temp_array(data, lenA, a) -- int64 lenA overload via int|int64
     var src : array<int>
@@ -128,7 +128,7 @@ def test_temp_array_data_lenA_int64(t : T?) {
     }
 }
 
-[test]
+[test(description = "an array view takes int64 offset and length")]
 def test_array_view_int64(t : T?) {
     // array_boost array_view(offset, length : int|int64) -- int64 path
     var bytes : array<int>
@@ -148,7 +148,7 @@ def test_array_view_int64(t : T?) {
     t |> equal(observed[2], 400)
 }
 
-[test]
+[test(description = "a sub-view of a borrowed array view addresses the same storage")]
 def test_array_view_borrowed_subview(t : T?) {
     let values <- [10, 20, 30, 40]
     array_view(values, 0, length(values)) $(whole : array<int>#) {
@@ -163,7 +163,7 @@ def test_array_view_borrowed_subview(t : T?) {
     }
 }
 
-[test]
+[test(description = "a typed array_view reinterprets bytes as ints and rejects unaligned or out-of-range views")]
 def test_array_view_typed_bytes(t : T?) {
     let bytes <- [
         uint8(1), uint8(0), uint8(0), uint8(0),
@@ -203,7 +203,7 @@ def test_array_view_typed_bytes(t : T?) {
     t |> success(out_of_range_panicked, "typed array_view rejects out-of-range data")
 }
 
-[test]
+[test(description = "pod_view reads unaligned POD values from a byte array at given offsets")]
 def test_pod_view(t : T?) {
     // 0x04030201 at offset 1, 0x08070605 at offset 5, fp32 3.5 at offset 9 — all unaligned
     let bytes <- [

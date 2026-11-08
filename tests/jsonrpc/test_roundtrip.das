@@ -7,7 +7,7 @@ require daslib/jsonrpc
 
 // ===== End-to-end round-trip: client builds → server parses → server responds → client parses =====
 
-[test]
+[test(description = "a request made by make_request parses back to the same method, params and id")]
 def test_roundtrip_simple_request(t : T?) {
     // Client side
     let wire = make_request("echo", "[\"hello\"]", 7)
@@ -25,7 +25,7 @@ def test_roundtrip_simple_request(t : T?) {
     t |> equal(resp.result_json |> compact_json_whitespace(), "[\"hello\"]")
 }
 
-[test]
+[test(description = "a notification made by make_notification parses back as a notification")]
 def test_roundtrip_notification_no_response(t : T?) {
     let wire = make_notification("log", "\{\"level\":\"info\"}")
     let req = parse_request(wire)
@@ -34,7 +34,7 @@ def test_roundtrip_notification_no_response(t : T?) {
     // Server emits nothing for a notification — no parse_response needed.
 }
 
-[test]
+[test(description = "an error envelope built for a parsed request carries its id and the method-not-found code")]
 def test_roundtrip_method_not_found_error(t : T?) {
     let wire = make_request("missing_method", "null", 1)
     let req = parse_request(wire)
@@ -49,7 +49,7 @@ def test_roundtrip_method_not_found_error(t : T?) {
     t |> equal(resp.id_str, "1")
 }
 
-[test]
+[test(description = "a batch made by make_batch parses back to the same requests")]
 def test_roundtrip_batch(t : T?) {
     // Client side — build batch
     let msgs <- [make_request("a", "null", 1), make_request("b", "null", 2)]

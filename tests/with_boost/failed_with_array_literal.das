@@ -1,3 +1,6 @@
+//! with_ over an element of an array literal must not compile
+//! (50503), because the container must be a named variable, not a
+//! temporary.
 options gen2
 expect 50503
 

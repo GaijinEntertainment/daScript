@@ -40,7 +40,7 @@ def private run_at(level, script : string) : string {
     return out
 }
 
-[test]
+[test(description = "with no DAS_LOG_LEVEL a child script drops LOG_DEBUG and LOG_INFO and keeps LOG_WARNING and LOG_ERROR, while print always survives")]
 def test_debug_is_dropped_by_default(t : T?) {
     let script = emitter(t)
     if (empty(script)) return
@@ -56,7 +56,7 @@ def test_debug_is_dropped_by_default(t : T?) {
     t |> success(find(out, "W") >= 0, "and LOG_WARNING is the floor itself")
 }
 
-[test]
+[test(description = "DAS_LOG_LEVEL=debug lets debug records through and DAS_LOG_LEVEL=error drops warnings while keeping errors and print")]
 def test_the_floor_moves_both_ways(t : T?) {
     let script = emitter(t)
     if (empty(script)) return
@@ -72,7 +72,7 @@ def test_the_floor_moves_both_ways(t : T?) {
     t |> success(find(high, "P") >= 0, "print is never filtered")
 }
 
-[test]
+[test(description = "DAS_LOG_LEVEL reads ERROR and Info the same as their lowercase names")]
 def test_the_level_name_is_case_insensitive(t : T?) {
     let script = emitter(t)
     if (empty(script)) return

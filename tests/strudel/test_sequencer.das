@@ -14,7 +14,7 @@ def query_one_cycle(var pat : Pattern) : array<Hap> => <- query_cycle(pat, 0.0lf
 
 // ─── Tokenizer ───
 
-[test]
+[test(description = "the bar-separator pipe is tokenized, also when repeated")]
 def test_pipe_token(t : T?) {
     t |> run("pipe token is recognized") <| @(t : T?) {
         let tokens <- tokenize("c4 | e4")
@@ -34,7 +34,7 @@ def test_pipe_token(t : T?) {
 
 // ─── seq() with bars ───
 
-[test]
+[test(description = "a sequence of one bar equals the plain s() pattern")]
 def test_seq_single_bar(t : T?) {
     t |> run("single bar same as s()") <| @(t : T?) {
         let pat <- seq("c4 e4 g4")
@@ -47,7 +47,7 @@ def test_seq_single_bar(t : T?) {
     }
 }
 
-[test]
+[test(description = "a two-bar sequence plays bar 1 in cycle 0 and bar 2 in cycle 1")]
 def test_seq_two_bars(t : T?) {
     t |> run("bar 1 in cycle 0") <| @(t : T?) {
         let pat <- seq("c4 e4 | g4 a4")
@@ -65,7 +65,7 @@ def test_seq_two_bars(t : T?) {
     }
 }
 
-[test]
+[test(description = "bars with different note counts each fill their own cycle")]
 def test_seq_uneven_bars(t : T?) {
     t |> run("1 note vs 3 notes") <| @(t : T?) {
         let pat <- seq("c4 | e4 g4 a4")
@@ -77,7 +77,7 @@ def test_seq_uneven_bars(t : T?) {
     }
 }
 
-[test]
+[test(description = "a tilde in a bar leaves a silent slot")]
 def test_seq_rests(t : T?) {
     t |> run("tilde creates silence slot") <| @(t : T?) {
         let pat <- seq("c4 ~ e4 | g4")
@@ -89,7 +89,7 @@ def test_seq_rests(t : T?) {
     }
 }
 
-[test]
+[test(description = "the sound parameter is set on every event of the sequence")]
 def test_seq_sound_parameter(t : T?) {
     t |> run("sound is set on all events") <| @(t : T?) {
         let pat <- seq("c4 e4", "triangle")
@@ -100,7 +100,7 @@ def test_seq_sound_parameter(t : T?) {
     }
 }
 
-[test]
+[test(description = "sequence notes are converted to the right MIDI numbers")]
 def test_seq_note_values(t : T?) {
     t |> run("MIDI note numbers correct") <| @(t : T?) {
         let pat <- seq("c4 d4 e4 f4 g4 a4 b4")
@@ -116,7 +116,7 @@ def test_seq_note_values(t : T?) {
     }
 }
 
-[test]
+[test(description = "an empty bar produces a silent cycle")]
 def test_seq_empty_bar(t : T?) {
     t |> run("empty bar produces silence cycle") <| @(t : T?) {
         let pat <- seq("c4 | | e4")
@@ -130,7 +130,7 @@ def test_seq_empty_bar(t : T?) {
     }
 }
 
-[test]
+[test(description = "bracket grouping works inside a bar")]
 def test_seq_subdivisions_in_bars(t : T?) {
     t |> run("[] grouping works inside bars") <| @(t : T?) {
         let pat <- seq("[c4 e4] g4 | a4")
@@ -140,7 +140,7 @@ def test_seq_subdivisions_in_bars(t : T?) {
     }
 }
 
-[test]
+[test(description = "sharp and flat note names work in a sequence")]
 def test_seq_sharps_flats(t : T?) {
     t |> run("sharp and flat note names") <| @(t : T?) {
         let pat <- seq("cs4 eb4 fs4")
@@ -152,7 +152,7 @@ def test_seq_sharps_flats(t : T?) {
     }
 }
 
-[test]
+[test(description = "the bars repeat by cycling after the last one")]
 def test_seq_bars_cycle(t : T?) {
     t |> run("bars repeat via cat cycling") <| @(t : T?) {
         let pat <- seq("c4 | e4")

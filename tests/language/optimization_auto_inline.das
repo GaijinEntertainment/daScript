@@ -319,7 +319,7 @@ def private locked_forward(node : int; var counted : array<int>) : float {
 
 def has(s, sub : string) : bool => find(s, sub, 0) >= 0
 
-[test]
+[test(description = "a call passing a block literal to a block-taking function splices the callee and devirtualizes the invoke, across multi-exit, struct-result and array-result shapes, and declines recursive callees and element-flavor changes")]
 def test_auto_inline_fired(t : T?) {
     ast_gc_guard() {
         t |> run("block-literal call splices and devirtualizes") @(t : T?) {
@@ -392,7 +392,7 @@ def test_auto_inline_fired(t : T?) {
     }
 }
 
-[test]
+[test(description = "auto-inlined block-literal calls compute the same values as the calls and evaluate impure arguments once, in call order")]
 def test_auto_inline_behavior(t : T?) {
     t |> run("iterator argument borrowing a temporary keeps call-scoped storage alive") @(t : T?) {
         // devirt/auto splices decline composed iterator arguments: an arg temp would
@@ -444,7 +444,7 @@ def target_never_inline_block() : int {
     }
 }
 
-[test]
+[test(description = "a [never_inline] block literal keeps its invoke even though the block-taking callee still inlines")]
 def test_never_inline_block(t : T?) {
     ast_gc_guard() {
         t |> run("[never_inline] block declines invoke-block inlining") @(t : T?) {

@@ -1,4 +1,6 @@
 options gen2
+//! schema_from pointing to a database file that does not exist must
+//! not compile
 
 // `schema_from=` points to a path that doesn't exist.
 expect 20800

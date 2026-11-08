@@ -1,3 +1,4 @@
+//! declaring the same global variable twice does not compile
 // duplicate global variable declaration
 // verifies compiler rejects declaring the same global variable twice
 options gen2

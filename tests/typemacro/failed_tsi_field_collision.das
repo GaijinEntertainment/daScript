@@ -1,3 +1,5 @@
+//! An instance that redeclares an inherited template field without
+//! override must not compile (20503).
 options gen2
 expect 20503
 
@@ -11,7 +13,9 @@ struct template FT {
 
 struct FInst : FT {
     typedef KT = int
-    n : int = 2 // redeclared without `override` — the parser rejects this before the reifier runs
+    // redeclared without `override` — the parser rejects this before the
+    // reifier runs
+    n : int = 2
 }
 
 [export]

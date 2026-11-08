@@ -37,7 +37,7 @@ def private rms_range(samples : array<float>; startSample, endSample : int) : fl
     return sqrt(sum / float(count))
 }
 
-[test]
+[test(description = "the delay unit is created automatically when an event has a delay amount above zero")]
 def test_delay_auto_init(t : T?) {
     t |> run("delay auto-initializes when delay_amount > 0") @(t : T?) {
         var inscope sched : Scheduler
@@ -50,7 +50,7 @@ def test_delay_auto_init(t : T?) {
     }
 }
 
-[test]
+[test(description = "the delay unit stays null when the event delay amount is zero")]
 def test_no_delay_when_zero(t : T?) {
     t |> run("delay stays null when delay_amount = 0") @(t : T?) {
         var inscope sched : Scheduler
@@ -62,7 +62,7 @@ def test_no_delay_when_zero(t : T?) {
     }
 }
 
-[test]
+[test(description = "an OscVoice takes its delay send from the event delay amount")]
 def test_osc_voice_delay_send_field(t : T?) {
     t |> run("OscVoice delay_send populated from Event.delay_amount") @(t : T?) {
         var inscope sched : Scheduler
@@ -75,7 +75,7 @@ def test_osc_voice_delay_send_field(t : T?) {
     }
 }
 
-[test]
+[test(description = "a delay amount above zero produces an echo after the voice has ended")]
 def test_delay_produces_echo(t : T?) {
     t |> run("delay_amount > 0 produces echo after voice ends") @(t : T?) {
         var inscope sched : Scheduler
@@ -92,7 +92,7 @@ def test_delay_produces_echo(t : T?) {
     }
 }
 
-[test]
+[test(description = "a delay amount of zero leaves no echo tail")]
 def test_no_delay_tail_when_dry(t : T?) {
     t |> run("delay_amount = 0 produces no echo tail") @(t : T?) {
         var inscope sched : Scheduler
@@ -107,7 +107,7 @@ def test_no_delay_tail_when_dry(t : T?) {
     }
 }
 
-[test]
+[test(description = "a higher delay feedback produces a longer echo trail")]
 def test_delay_feedback_decay(t : T?) {
     t |> run("higher feedback produces longer echo trail") @(t : T?) {
         // Low feedback
@@ -133,7 +133,7 @@ def test_delay_feedback_decay(t : T?) {
     }
 }
 
-[test]
+[test(description = "a pre-rendered drum with delay produces an echo")]
 def test_delay_on_drums(t : T?) {
     t |> run("pre-rendered drum with delay has echo") @(t : T?) {
         var inscope sched : Scheduler
@@ -149,7 +149,7 @@ def test_delay_on_drums(t : T?) {
     }
 }
 
-[test]
+[test(description = "a supersaw voice with delay produces an echo")]
 def test_delay_supersaw(t : T?) {
     t |> run("supersaw with delay produces echo") @(t : T?) {
         var inscope sched : Scheduler
@@ -164,7 +164,7 @@ def test_delay_supersaw(t : T?) {
     }
 }
 
-[test]
+[test(description = "delay and reverb can be used on the same voice at once")]
 def test_delay_plus_reverb(t : T?) {
     t |> run("delay and reverb can coexist") @(t : T?) {
         var inscope sched : Scheduler

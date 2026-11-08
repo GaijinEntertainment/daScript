@@ -1,4 +1,6 @@
 options gen2
+//! a foreign key reference to a parent with a composite primary key
+//! must not compile
 expect 20800:1
 require sqlite/sqlite_boost
 

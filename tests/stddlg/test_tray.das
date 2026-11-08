@@ -119,7 +119,7 @@ def with_rig(t : T?; blk : block<(var rig : TrayRig) : void>) {
 //! Windows has no scriptable route to a real click on the notification area, so this arm only
 //! proves the availability gate and the create path: a service or ssh session (no visible window
 //! station) reports `@unavailable`, an interactive desktop reaches `@ready`.
-[test]
+[test(description = "on Windows the tray fixture reaches ready on an interactive desktop, or reports unavailable", timeout = 1200)]
 def test_tray_windows_smoke(t : T?) {
     if (!fexist("C:\\Windows\\explorer.exe")) {
         t |> skip("not Windows")
@@ -146,7 +146,7 @@ def test_tray_windows_smoke(t : T?) {
     }
 }
 
-[test]
+[test(description = "on macOS a System Events click on the status item arrives in the tray as a click event", timeout = 1200)]
 def test_tray_macos_status_item(t : T?) {
     if (!fexist("/usr/bin/osascript")) {
         t |> skip("no /usr/bin/osascript here: this arm drives the macOS status item through System Events")
@@ -200,7 +200,7 @@ def skip_without_dbus(t : T?) : bool {
     return true
 }
 
-[test]
+[test(description = "the tray item exposes its StatusNotifierItem properties on a private D-Bus and Activate and ContextMenu arrive as click and right_click events", timeout = 1200)]
 def test_tray_over_private_bus(t : T?) {
     if (skip_without_dbus(t)) return
     t |> run("the item exposes its StatusNotifierItem properties") @(t : T?) {
@@ -232,7 +232,7 @@ def test_tray_over_private_bus(t : T?) {
     }
 }
 
-[test]
+[test(description = "the tray menu layout carries labels, separator and checked or disabled entries over D-Bus, a clicked entry reports its id, and Quit ends the child", timeout = 1200)]
 def test_tray_menu_over_private_bus(t : T?) {
     if (skip_without_dbus(t)) return
     t |> run("the menu layout carries labels, the separator and the checked disabled entry") @(t : T?) {
@@ -298,7 +298,7 @@ def icon_rejected(pixels : array<uint8>; width : int; height : int) : bool {
     return rejected
 }
 
-[test]
+[test(description = "a tray icon whose byte count is not width times height times 4, or whose size is zero or negative, is rejected, and a matching one passes")]
 def test_tray_icon_validation(t : T?) {
     t |> run("a byte count that does not match width * height * 4 is rejected") @(t : T?) {
         var px : array<uint8>

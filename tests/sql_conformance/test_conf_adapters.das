@@ -1,13 +1,14 @@
 options gen2
-options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
+
 
 // Contract area: the sql_bind / sql_extract custom-type adapter rail — user pair
 // next to the type, enum auto-round-trip, Option over a custom adapter, and the
 // @sql_json / @sql_blob generated adapters (+ json-path descent in a predicate).
 
 require dastest/testing_boost public
+
 require _conformance_provider
 
 struct ConfStamp {
@@ -38,7 +39,7 @@ struct ConfShipment {
     @sql_json Prefs : ConfPrefs
 }
 
-[test]
+[test(description = "custom types, enums, options over custom types and sql_json columns round-trip through the sql_bind and sql_extract adapter rail, also as bound predicate values", standalone = "a provider copies this directory and drops files per capability; the file is the unit")]
 def test_conf_adapter_rail(t : T?) {
     t |> run("custom type + enum + Option-over-custom round-trip") @(t : T?) {
         with_conf_db() $(db) {

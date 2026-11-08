@@ -34,7 +34,7 @@ def geq(a, b) => a >= b
 [sideeffects]
 def opaque(x) => x
 
-[test]
+[test(description = "half subnormals round-trip through float conversion and a value below half the minimum subnormal flushes to zero")]
 def test_half_subnormals_survive_conversion(t : T?) {
     t |> equal(float(half(opaque(3.0517578e-5f))), 3.0517578e-5f)
     t |> equal(float(half(opaque(5.9604645e-8f))), 5.9604645e-8f)   // min subnormal
@@ -42,7 +42,7 @@ def test_half_subnormals_survive_conversion(t : T?) {
     t |> equal(float(half(opaque(2.9802322e-8f))), 0.0f)            // half of min: to zero
 }
 
-[test]
+[test(description = "abs of negative zero has the sign bit cleared for float, double and vector types, folded and at runtime")]
 def test_abs_clears_the_sign_of_zero(t : T?) {
     t |> run("folded") @@(t : T?) {
         t |> equal(unsafe(reinterpret<uint>(abs(-0.0f))), 0u)
@@ -59,7 +59,7 @@ def test_abs_clears_the_sign_of_zero(t : T?) {
     }
 }
 
-[test]
+[test(description = "infinities and NaN are classified by is_finite and is_nan and compare as IEEE requires")]
 def test_inf_and_nan(t : T?) {
     if (HOST_FAST_MATH || host_folds_nan_compares()) {
         t |> skip("host runtime is built -ffast-math/-ffinite-math-only: nan compares fold")
@@ -127,7 +127,7 @@ def test_inf_and_nan(t : T?) {
 }
 
 // bit-built values, so no arithmetic a finite-math host could fold; this test never skips
-[test]
+[test(description = "is_nan and is_finite answer correctly for float and double on every host")]
 def test_is_nan_and_is_finite_hold_on_every_host(t : T?) {
     t |> run("float") @@(t : T?) {
         let fnan = opaque(unsafe(reinterpret<float>(0x7FC00000u)))

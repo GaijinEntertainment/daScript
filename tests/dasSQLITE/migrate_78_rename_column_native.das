@@ -4,7 +4,6 @@ require dastest/testing_boost public
 require sqlite/sqlite_migrate
 
 // SQLite 3.41.2 supports RENAME COLUMN natively (since 3.25.0).
-
 [sql_migration(version = 1, description = "create")]
 def m1(db : SqlRunner) {
     db |> exec("CREATE TABLE users (Id INTEGER PRIMARY KEY, OldName TEXT NOT NULL)")
@@ -16,7 +15,7 @@ def m2(db : SqlRunner) {
     db |> exec("ALTER TABLE users RENAME COLUMN OldName TO Name")
 }
 
-[test]
+[test(description = "rename_column renames the column and keeps its data", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_rename_column_preserves_data(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()
@@ -30,7 +29,7 @@ def test_rename_column_preserves_data(t : T?) {
     t |> equal(alice, "alice", "row data preserved across RENAME")
 }
 
-[test]
+[test(description = "the bundled SQLite is new enough to support RENAME COLUMN")]
 def test_sqlite_version_at_least_3_25(t : T?) {
     // 3.25.0+ supports RENAME COLUMN (the feature this file tests).
     // sqlite3_libversion_number() encodes 3.25.0 as 3*1000000 + 25*1000 + 0 = 3025000.

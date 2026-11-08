@@ -35,7 +35,7 @@ def compile_fixture(blk : block<(program : smart_ptr<Program>) : void>) {
     }
 }
 
-[test]
+[test(description = "a cursor on a variable reference yields an ExprVar hit")]
 def test_find_var_at_cursor(t : T?) {
     t |> run("finds ExprVar at variable reference") @(t2 : T?) {
         compile_fixture() $(program) {
@@ -48,7 +48,7 @@ def test_find_var_at_cursor(t : T?) {
     }
 }
 
-[test]
+[test(description = "a cursor on a function call yields an ExprCall hit")]
 def test_find_call_at_cursor(t : T?) {
     t |> run("finds ExprCall at function call") @(t2 : T?) {
         compile_fixture() $(program) {
@@ -66,7 +66,7 @@ def test_find_call_at_cursor(t : T?) {
     }
 }
 
-[test]
+[test(description = "hits at a cursor are ordered innermost expression first")]
 def test_innermost_first(t : T?) {
     t |> run("innermost expression comes first") @(t2 : T?) {
         compile_fixture() $(program) {
@@ -89,7 +89,7 @@ def test_innermost_first(t : T?) {
     }
 }
 
-[test]
+[test(description = "the cursor query reports the function that encloses the position")]
 def test_enclosing_function(t : T?) {
     t |> run("reports enclosing function") @(t2 : T?) {
         compile_fixture() $(program) {
@@ -102,7 +102,7 @@ def test_enclosing_function(t : T?) {
     }
 }
 
-[test]
+[test(description = "a cursor on a field access yields an ExprField hit")]
 def test_field_access(t : T?) {
     t |> run("finds ExprField for field access") @(t2 : T?) {
         compile_fixture() $(program) {
@@ -120,7 +120,7 @@ def test_field_access(t : T?) {
     }
 }
 
-[test]
+[test(description = "a position outside any code yields no hits")]
 def test_no_hits_outside(t : T?) {
     t |> run("returns empty for position outside code") @(t2 : T?) {
         compile_fixture() $(program) {
@@ -130,7 +130,7 @@ def test_no_hits_outside(t : T?) {
     }
 }
 
-[test]
+[test(description = "describing a hit produces readable text")]
 def test_describe_hit(t : T?) {
     t |> run("describe produces readable output") @(t2 : T?) {
         compile_fixture() $(program) {
@@ -151,7 +151,7 @@ def has_variable_hit(hits : array<CursorHit>; name : string) : bool {
     return false
 }
 
-[test]
+[test(description = "declarations are variable hits only when asked for, and nested spans order from the call to the enclosing blocks")]
 def test_find_declaration_at_cursor(t : T?) {
     t |> run("a for loop variable in its header is a variable hit when declarations are asked for") @(t2 : T?) {
         compile_fixture() $(program) {
@@ -199,7 +199,7 @@ def test_find_declaration_at_cursor(t : T?) {
     }
 }
 
-[test]
+[test(description = "members the compiler adds to a class line are never hit by the cursor and are told apart from user members")]
 def test_synthesized_members(t : T?) {
     t |> run("a cursor on a class name yields no hit from the members the compiler puts on that line") @(t2 : T?) {
         compile_fixture() $(program) {
@@ -241,7 +241,7 @@ def test_synthesized_members(t : T?) {
     }
 }
 
-[test]
+[test(description = "declaration lookup by cursor resolves class, parent and function names and requires the cursor on the name token")]
 def test_find_declaration(t : T?) {
     t |> run("a class name, its parent on the derived line, a function name") @(t2 : T?) {
         compile_fixture() $(program) {
@@ -273,7 +273,7 @@ def test_find_declaration(t : T?) {
     }
 }
 
-[test]
+[test(description = "the cursor text helpers extract words, name columns and bare names from source lines")]
 def test_text_helpers(t : T?) {
     t |> run("word_at, name_column, spells_name, source_name, bare_name") @(t2 : T?) {
         let w = word_at("    let dx = a.x - b.x", 15)
@@ -299,7 +299,7 @@ def test_text_helpers(t : T?) {
     }
 }
 
-[test]
+[test(description = "a cursor on the field name of a field access hits that access")]
 def test_field_name_hit(t : T?) {
     t |> run("a cursor on the field name of a field access hits the access") @(t2 : T?) {
         compile_fixture() $(program) {
@@ -321,7 +321,7 @@ def has_type_hit(hits : array<CursorHit>; name : string = "") : bool {
     return false
 }
 
-[test]
+[test(description = "a cursor on a type name yields the type and its declaration, including typedefs from other modules")]
 def test_type_name_hit(t : T?) {
     t |> run("a cursor on a type name yields the type; on a forward-referenced class's new site too") @(t2 : T?) {
         compile_fixture() $(program) {
@@ -383,7 +383,7 @@ def test_type_name_hit(t : T?) {
     }
 }
 
-[test]
+[test(description = "method calls, overrides, inherited fields and captured variables resolve to the right declarations at the cursor")]
 def test_class_members(t : T?) {
     t |> run("a method call is a hit on the method's name, never on the conversions the call desugars to") @(t2 : T?) {
         compile_fixture() $(program) {

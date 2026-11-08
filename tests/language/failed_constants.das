@@ -1,10 +1,12 @@
+//! integer and floating literals out of range for their suffixed type
+//! do not compile, for every numeric type
 options gen2
 expect 10300:16
 
 [export]
 def main {
-    // ALL THE POSSIBLE NUMBER TYPES AND THEIR LITERALS, OUT OF RANGE VALUES
-    // uint64
+    // ALL THE POSSIBLE NUMBER TYPES AND THEIR LITERALS, OUT OF RANGE
+    // VALUES uint64
     var ui64 = 10000000000000000000000000000000000000ul
     feint("ui64 = {ui64}\n")
     // int64
@@ -53,7 +55,8 @@ def main {
     var d = 1.0e1000lf
     feint("d = {d}\n")
     // regular double without fractional part (and out of range)
-    var d2 = 100000000000000000000000000000000000000000000000000000000000000000000lf    // this returns inf, dunno why
+    // this returns inf, dunno why
+    var d2 = 100000000000000000000000000000000000000000000000000000000000000000000lf
     feint("d2 = {d2}\n")
     // scientific notation double without fractional part
     var d3 = 1e1000lf

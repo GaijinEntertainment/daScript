@@ -21,35 +21,35 @@ def wrap_fn(var fn : MyFn) : MyFn => <- fn
 
 def double_wrap(var fn : MyFn) : MyFn => <- wrap_fn(fn)
 
-[test]
+[test(description = "a lambda returned from a function is callable with the expected result")]
 def test_lambda_return(t : T?) {
     // basic: return <- lambda from function
     let f <- make_fn()
     t |> equal(f(5), 10)
 }
 
-[test]
+[test(description = "a returned lambda keeps its captured value")]
 def test_lambda_return_with_capture(t : T?) {
     // return <- lambda with captured variable
     let f <- make_fn_capture(3)
     t |> equal(f(5), 15)
 }
 
-[test]
+[test(description = "a returned lambda wrapped by another function still returns the same result")]
 def test_lambda_return_chain(t : T?) {
     // lambda returned through two function calls
     let f <- wrap_fn(make_fn())
     t |> equal(f(5), 10)
 }
 
-[test]
+[test(description = "a returned lambda wrapped twice still returns the same result")]
 def test_lambda_return_double_chain(t : T?) {
     // lambda returned through three function calls
     let f <- double_wrap(make_fn())
     t |> equal(f(5), 10)
 }
 
-[test]
+[test(description = "a returned capturing lambda wrapped by another function keeps its captured value")]
 def test_lambda_return_capture_chain(t : T?) {
     let f <- wrap_fn(make_fn_capture(7))
     t |> equal(f(4), 28)

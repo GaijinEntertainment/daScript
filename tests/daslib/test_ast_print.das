@@ -62,7 +62,7 @@ def printed_fixture(t : T?; name : string) : string {
     return txt
 }
 
-[test]
+[test(description = "printing an AST shows each local's and closure argument's own mutability")]
 def test_ast_print_let_var(t : T?) {
     g_seed = 1
     t |> equal(fixture_shape(), 19)
@@ -87,7 +87,7 @@ def test_ast_print_let_var(t : T?) {
     }
 }
 
-[test]
+[test(description = "printing an AST spells raw copy, move and clone as written")]
 def test_ast_print_raw_assignments(t : T?) {
     t |> run("the raw copy, move and clone print their own spelling") @(t : T?) {
         let out = 0
@@ -99,7 +99,7 @@ def test_ast_print_raw_assignments(t : T?) {
     }
 }
 
-[test]
+[test(description = "printing an AST shows function argument mutability and the unused marker")]
 def test_ast_print_function_arguments(t : T?) {
     g_seed = 1
     t |> equal(fixture_args(g_seed, 0), 2)

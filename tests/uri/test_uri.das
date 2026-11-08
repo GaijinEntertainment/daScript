@@ -6,7 +6,7 @@ require daslib/uriparser_boost
 require daslib/strings_boost
 require daslib/defer
 
-[test]
+[test(description = "a Uri parsed from a full URI string prints back identically and exposes its scheme, userinfo, host, port, path, query and fragment")]
 def test_uri(t : T?) {
     let uriStr = "scheme://userinfo@host:1234/one/two/three?quone=one&qtow=2#someframgnet"
     using(uriStr) $(var uri : Uri#) {
@@ -25,7 +25,7 @@ def test_uri(t : T?) {
     }
 }
 
-[test]
+[test(description = "normalize removes dot segments, and adding, removing a base uri and strip rewrite the uri as expected")]
 def test_normalize_and_rebase(t : T?) {
     t |> run("normalize") @@(t : T?) {
         let uriStr = "file://somepath/./deadend/.././subpath/file.txt#somefrag"
@@ -68,7 +68,7 @@ def test_normalize_and_rebase(t : T?) {
     }
 }
 
-[test]
+[test(description = "a file URI converts to Windows and Unix file names and back")]
 def test_uri_file_name(t : T?) {
     t |> run("to_file_name") @@(t : T?) {
         let uriStr = "file:///somedir/somefile.txt"
@@ -97,7 +97,7 @@ def test_uri_file_name(t : T?) {
     }
 }
 
-[test]
+[test(description = "file names with spaces become escaped URIs for Windows and Unix paths and round-trip")]
 def test_file_name_to_uri_escapes_reserved(t : T?) {
     // windows_file_name_to_uri only segments/escapes on '\'. daslang normalizes
     // paths to '/', so a '/'-only Windows path used to be copied verbatim
@@ -129,7 +129,7 @@ def test_file_name_to_uri_escapes_reserved(t : T?) {
     }
 }
 
-[test]
+[test(description = "a uri query splits into key-value pairs and composes back")]
 def test_uri_query(t : T?) {
     t |> run("split query") @@(t : T?) {
         let uriStr = "something?one=1&two=2&three=3&nothing"

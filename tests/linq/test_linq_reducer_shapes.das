@@ -8,7 +8,7 @@ require daslib/linq_boost
 // selector overloads sum/min/max/average(src, selector), untyped lambda params
 // on the group-bucket surface, and identity-lambda canonicalization.
 
-[test]
+[test(description = "sum/min/max/average with a selector project before reducing, over arrays, iterators and a different result type")]
 def test_selector_reducers_tier2(t : T?) {
     t |> run("max with selector over array returns projected max") @(tt : T?) {
         tt |> equal(6, [3, 1, 2] |> max(@(v : int) => v * 2))
@@ -35,7 +35,7 @@ def test_selector_reducers_tier2(t : T?) {
     }
 }
 
-[test]
+[test(description = "an untyped inner-select lambda infers its parameter and matches the typed spelling, including over a table source")]
 def test_inner_select_untyped_param(t : T?) {
     t |> run("untyped inner-select lambda infers (fused bare form)") @(tt : T?) {
         let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select(_._1 |> select(@(x) => x * 2) |> sum))
@@ -67,7 +67,7 @@ def test_inner_select_untyped_param(t : T?) {
     }
 }
 
-[test]
+[test(description = "two-argument reducers over a group bucket match the select-then-reduce spelling, fused and unfused")]
 def test_two_arg_reducers_over_bucket(t : T?) {
     t |> run("2-arg max over bucket == select-then-max spelling (fused)") @(tt : T?) {
         let arr = [10, 20, 30, 11, 21, 31, 12]
@@ -102,7 +102,7 @@ def test_two_arg_reducers_over_bucket(t : T?) {
     }
 }
 
-[test]
+[test(description = "an identity-lambda reducer gives the same result as the bare reducer")]
 def test_identity_lambda_canonicalizes(t : T?) {
     t |> run("identity-lambda reducer == bare reducer (fused)") @(tt : T?) {
         let arr = [10, 20, 30, 11, 21, 31, 12]

@@ -1,6 +1,10 @@
-// A hand-written delete cast<Ancestor>(self) that SKIPS the immediate parent does not
-// satisfy the chain lint: it would bypass the parent's field-slice cleanup now that
-// generated finalizers chain level by level. Only the immediate parent counts.
+//! a finalizer that deletes itself as a grandparent, skipping the
+//! immediate parent, does not compile: only the immediate parent
+//! satisfies the chain
+// A hand-written delete cast<Ancestor>(self) that SKIPS the immediate
+// parent does not satisfy the chain lint: it would bypass the
+// parent's field-slice cleanup now that generated finalizers chain
+// level by level. Only the immediate parent counts.
 options gen2
 expect 30308
 

@@ -34,7 +34,7 @@ def private printed(var expr : ExpressionPtr) : string {
 def private missing_arm_fixture_path() : string =>
     "{get_das_root()}/tests/ast/_variant_missing_arm_fixture.das"
 
-[test]
+[test(description = "printing a make-variant for a case without a value spells the bare case")]
 def test_print_variant_bare_case(t : T?) {
     var inscope access <- make_file_access("")
     using() $(var mg : ModuleGroup) {
@@ -58,7 +58,7 @@ def test_print_variant_bare_case(t : T?) {
     }
 }
 
-[test]
+[test(description = "the missing-arm report spells a bare variant case")]
 def test_missing_arm_report_spells_bare_case(t : T?) {
     var inscope access <- make_file_access("")
     using() $(var mg : ModuleGroup) {
@@ -73,7 +73,7 @@ def test_missing_arm_report_spells_bare_case(t : T?) {
     }
 }
 
-[test]
+[test(description = "a baked variant with a bare case prints the bare case")]
 def test_baked_variant_bare_case(t : T?) {
     ast_gc_guard() {
         let bare = ValueTags(nada)

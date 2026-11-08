@@ -1,7 +1,6 @@
 options gen2
 
 require dastest/testing_boost public
-
 require daslib/sql
 require sqlite/sqlite_boost
 require daslib/sql_linq
@@ -35,7 +34,7 @@ def private temp_archive_path(name : string) : string {
     return path
 }
 
-[test]
+[test(description = "with_attached detaches the schema and lets a panic in its body propagate")]
 def test_with_attached_finally_on_panic(t : T?) {
     with_sqlite(":memory:") $(db) {
         var panicked = false
@@ -50,7 +49,7 @@ def test_with_attached_finally_on_panic(t : T?) {
     }
 }
 
-[test]
+[test(description = "with_schema returns a runner for another schema that shares the same connection handle")]
 def test_with_schema_pure_copy(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> with_schema("archive") $(arch) {
@@ -61,7 +60,7 @@ def test_with_schema_pure_copy(t : T?) {
     }
 }
 
-[test]
+[test(description = "attach exposes another database under a schema name and detach removes it")]
 def test_attach_detach_round_trip(t : T?) {
     let archive_path = temp_archive_path("attach_round_trip")
     build_archive_db(archive_path)
@@ -79,7 +78,7 @@ def test_attach_detach_round_trip(t : T?) {
     remove(archive_path)
 }
 
-[test]
+[test(description = "with_attached runs its block against the attached schema")]
 def test_with_attached_block(t : T?) {
     let archive_path = temp_archive_path("with_attached")
     build_archive_db(archive_path)
@@ -99,7 +98,7 @@ def test_with_attached_block(t : T?) {
     remove(archive_path)
 }
 
-[test]
+[test(description = "try_attach on an unopenable path returns the error")]
 def test_try_attach_bad_path_returns_some(t : T?) {
     with_sqlite(":memory:") $(db) {
         let err = db |> try_attach("/no/such/dir/missing.db", "ghost")
@@ -107,7 +106,7 @@ def test_try_attach_bad_path_returns_some(t : T?) {
     }
 }
 
-[test]
+[test(description = "create_table in an attached schema creates its indexes there, not in main")]
 def test_attached_create_table_with_sql_index(t : T?) {
     // Regression: `_qualify_schema` must rewrite `CREATE INDEX "..."` (no IF NOT EXISTS)
     // emitted by [sql_index] so the index lands in the attached schema, not main.
@@ -134,7 +133,7 @@ def test_attached_create_table_with_sql_index(t : T?) {
     remove(archive_path)
 }
 
-[test]
+[test(description = "insert, update and delete through a schema runner act on the attached schema")]
 def test_schema_qualified_insert_update_delete(t : T?) {
     let archive_path = temp_archive_path("schema_dml")
     build_archive_db(archive_path)

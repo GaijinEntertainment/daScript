@@ -15,7 +15,7 @@ def write_fixture(content : string) {
     }
 }
 
-[test]
+[test(description = "loading a missing lint config leaves the disabled code set untouched")]
 def test_missing_file_no_op(t : T?) {
     t |> run("missing file leaves disabled_codes untouched") @@(t : T?) {
         var d : table<string>
@@ -24,7 +24,7 @@ def test_missing_file_no_op(t : T?) {
     }
 }
 
-[test]
+[test(description = "a 'CODE = false' rule inserts the code into the disabled set")]
 def test_rule_false_inserts(t : T?) {
     t |> run("'STYLE100 = false' inserts the code (off)") @@(t : T?) {
         write_fixture("[rules]\nSTYLE100 = false\n")
@@ -35,7 +35,7 @@ def test_rule_false_inserts(t : T?) {
     }
 }
 
-[test]
+[test(description = "a 'CODE = true' rule erases a preloaded default-disabled code")]
 def test_rule_true_erases_default(t : T?) {
     t |> run("'STYLE005 = true' erases a preloaded default (on)") @@(t : T?) {
         write_fixture("[rules]\nSTYLE005 = true\n")
@@ -47,7 +47,7 @@ def test_rule_true_erases_default(t : T?) {
     }
 }
 
-[test]
+[test(description = "comments and blank lines inside [rules] are tolerated")]
 def test_comments_and_blanks_skipped(t : T?) {
     t |> run("# comments and blank lines inside [rules] are tolerated") @@(t : T?) {
         write_fixture("# header line\n\n[rules]\n# inline comment\nSTYLE100 = false\n")
@@ -58,7 +58,7 @@ def test_comments_and_blanks_skipped(t : T?) {
     }
 }
 
-[test]
+[test(description = "non-boolean entries under [rules] are ignored without error")]
 def test_non_bool_under_rules_ignored(t : T?) {
     t |> run("non-bool entries under [rules] are silently ignored") @@(t : T?) {
         write_fixture("[rules]\nSTYLE100 = \"on\"\nSTYLE200 = 1\nSTYLE300 = false\n")
@@ -70,7 +70,7 @@ def test_non_bool_under_rules_ignored(t : T?) {
     }
 }
 
-[test]
+[test(description = "malformed TOML leaves the defaults standing")]
 def test_malformed_toml_no_op(t : T?) {
     t |> run("malformed TOML returns null → defaults stand") @@(t : T?) {
         write_fixture("[rules\nSTYLE100 = false\n")        // unclosed header
@@ -83,7 +83,7 @@ def test_malformed_toml_no_op(t : T?) {
     }
 }
 
-[test]
+[test(description = "a config file without a [rules] section changes nothing")]
 def test_no_rules_section_no_op(t : T?) {
     t |> run("file without [rules] section is harmless") @@(t : T?) {
         write_fixture("name = \"unrelated\"\nversion = 1\n")
@@ -96,7 +96,7 @@ def test_no_rules_section_no_op(t : T?) {
     }
 }
 
-[test]
+[test(description = "'CODE = true' for a code that is not in the set is harmless")]
 def test_rule_true_for_unset_code_is_noop(t : T?) {
     t |> run("'X = true' when X is not in the set is harmless") @@(t : T?) {
         write_fixture("[rules]\nSTYLE999 = true\n")
@@ -106,7 +106,7 @@ def test_rule_true_for_unset_code_is_noop(t : T?) {
     }
 }
 
-[test]
+[test(description = "the [paths] exclude array parses, skipping non-strings, and a missing section or file yields no excludes")]
 def test_path_excludes_parse(t : T?) {
     t |> run("[paths] exclude array parses; non-strings ignored") @@(t : T?) {
         write_fixture("[paths]\nexclude = [\"tests/**\", 42, \"benchmarks/*.das\", \"\"]\n[rules]\nSTYLE100 = false\n")
@@ -132,7 +132,7 @@ def test_path_excludes_parse(t : T?) {
     }
 }
 
-[test]
+[test(description = "exclude globs match nested paths with **, never cross a separator with *, and an empty list matches nothing")]
 def test_path_excludes_match(t : T?) {
     t |> run("root-relative ** glob matches nested paths, either spelling") @@(t : T?) {
         let ex <- ["tests/**"]
@@ -171,7 +171,7 @@ def private cascade_root() : string {
     return root
 }
 
-[test]
+[test(description = "the format policy resolves nearest-config-wins up to the .git root, skipping malformed levels and non-bool values")]
 def test_format_policy_cascade(t : T?) {
     t |> run("no config anywhere: format on, keep comments") @@(t : T?) {
         let bare = path_join(test_temp_dir(), "bare")
@@ -218,7 +218,7 @@ def test_format_policy_cascade(t : T?) {
     }
 }
 
-[test]
+[test(description = "each [format] key resolves independently, so setting one key never resets another and a decided key ignores ancestors")]
 def test_format_policy_per_key_cascade(t : T?) {
     t |> run("nearest level wins its key; the other key still cascades from above") @@(t : T?) {
         let root = path_join(test_temp_dir(), "perkey")
@@ -260,7 +260,7 @@ def test_format_policy_per_key_cascade(t : T?) {
     }
 }
 
-[test]
+[test(description = "partitioning drops disabled trees and gives each job its folder's format policy")]
 def test_partition_by_format_policy(t : T?) {
     t |> run("skips disabled trees, jobs carry their folder's policy") @@(t : T?) {
         let root = path_join(test_temp_dir(), "partition")
@@ -282,7 +282,7 @@ def test_partition_by_format_policy(t : T?) {
     }
 }
 
-[test]
+[test(description = "daslib ships with comment stripping off")]
 def test_daslib_policy_comments_harvested(t : T?) {
     t |> run("daslib ships with force_clean_comments off") @@(t : T?) {
         let pol = format_policy_for(path_join(get_das_root(), "daslib/lint.das"))

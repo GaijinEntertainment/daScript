@@ -9,7 +9,7 @@ require _common
 // N-ary concat (3..8 sources). The binary forms live in test_linq_concat.das;
 // this file exercises only the multi-source overloads and their fold fusion.
 
-[test]
+[test(description = "three-source concat yields the sources in order as iterator or array and works in place on arrays")]
 def test_concat3(t : T?) {
     t |> run("3 iterators -> iterator") @(t : T?) {
         var query = concat(
@@ -53,7 +53,7 @@ def test_concat3(t : T?) {
     }
 }
 
-[test]
+[test(description = "five- and eight-source concat keeps source order for arrays and iterators, in place too")]
 def test_concat_high_arity(t : T?) {
     t |> run("5 arrays -> array") @(t : T?) {
         let result = concat(
@@ -95,7 +95,7 @@ def test_concat_high_arity(t : T?) {
     }
 }
 
-[test]
+[test(description = "a three-source concat whose sources are themselves where/select chains folds into one array with the expected elements")]
 def test_concat3_fold(t : T?) {
     t |> run("3-source concat fold") @(t : T?) {
         // Each source is its own sub-pipeline — exercises recursive folding of args 0, 1, 2.

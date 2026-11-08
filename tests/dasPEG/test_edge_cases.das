@@ -60,7 +60,7 @@ def parse_ts_test(input : string; blk : block<(val : bool; err : array<ParsingEr
     }
 }
 
-[test]
+[test(description = "empty input matches EOF-only and fails a word parser")]
 def test_empty_input(t : T?) {
     t |> run("empty input matches EOF") @(t : T?) {
         parse_eof_only("") $(val; _err) {
@@ -74,14 +74,14 @@ def test_empty_input(t : T?) {
     }
 }
 
-[test]
+[test(description = "a one-character input parses as a word")]
 def test_single_character(t : T?) {
     parse_word("a") $(val; _err) {
         t |> equal("a", val)
     }
 }
 
-[test]
+[test(description = "a 1000-character word parses in full")]
 def test_long_input(t : T?) {
     let long_word = build_string() $(var writer) {
         for (_ in range(1000)) {
@@ -93,14 +93,14 @@ def test_long_input(t : T?) {
     }
 }
 
-[test]
+[test(description = "whitespace-only input does not satisfy a word parser")]
 def test_whitespace_only(t : T?) {
     parse_word("   ") $(val; _err) {
         t |> equal("", val, "whitespace-only should fail word parser")
     }
 }
 
-[test]
+[test(description = "WS accepts newlines and mixed whitespace")]
 def test_ws_newline(t : T?) {
     t |> run("WS accepts newlines") @(t : T?) {
         parse_ws_test("a\nb") $(val; _err) {
@@ -114,7 +114,7 @@ def test_ws_newline(t : T?) {
     }
 }
 
-[test]
+[test(description = "TS accepts space and tab but rejects a newline")]
 def test_ts_no_newline(t : T?) {
     t |> run("TS accepts space") @(t : T?) {
         parse_ts_test("a b") $(val; _err) {
@@ -133,14 +133,14 @@ def test_ts_no_newline(t : T?) {
     }
 }
 
-[test]
+[test(description = "a six-digit number parses to its full value")]
 def test_large_number(t : T?) {
     parse_number("999999") $(val; _err) {
         t |> equal(999999, val)
     }
 }
 
-[test]
+[test(description = "the number zero parses to 0")]
 def test_zero(t : T?) {
     parse_number("0") $(val; _err) {
         t |> equal(0, val)

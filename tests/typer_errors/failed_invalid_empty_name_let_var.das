@@ -1,9 +1,12 @@
-// Regression test for invalid_empty_name (30296) on Variable inside ExprLet.
-// This is the EXACT shape that bit PR D3: `Foo(field := value)` in a
-// named-arg struct constructor silently dropped the field, propagating an
-// empty string `resBindName` into a macro-built `Variable(name := "")`,
-// emitting `var :tuple<...> = ...` (nameless var) and triggering
-// nonsensical "tuple<X> vs tuple<Y>" type errors downstream.
+//! A macro-built let with an empty variable name must be rejected
+//! before inference goes further (30296).
+// Regression test for invalid_empty_name (30296) on Variable inside
+// ExprLet. This is the EXACT shape that bit PR D3: `Foo(field :=
+// value)` in a named-arg struct constructor silently dropped the
+// field, propagating an empty string `resBindName` into a macro-built
+// `Variable(name := "")`, emitting `var :tuple<...> = ...` (nameless
+// var) and triggering nonsensical "tuple<X> vs tuple<Y>" type errors
+// downstream.
 //
 // The validator now catches this at preVisitLet so it surfaces with
 // a clear diagnostic instead. No cascading error — the empty variable

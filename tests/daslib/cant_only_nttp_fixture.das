@@ -1,3 +1,6 @@
+//! An [only_nttp] kernel calling a member-bound extern
+//! (get_env_variable) must not compile: only inline-bound calls are
+//! allowed.
 options gen2
 options no_aot
 expect 50501

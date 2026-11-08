@@ -1,3 +1,5 @@
+//! a value-type global initialized with a pointer from new does not
+//! compile
 // global variable initialization type mismatch
 // verifies compiler rejects initializing a value-type global with
 // a pointer (new returns Foo?, but g expects Foo)

@@ -1,4 +1,5 @@
-// out-of-range value in a variant arm clone-initializer
+//! An out-of-range value in a variant arm clone-initializer must not
+//! compile (30515).
 options gen2
 
 expect 30515

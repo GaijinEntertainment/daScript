@@ -38,7 +38,7 @@ def parse_keyword(input : string; blk : block<(val : string; err : array<Parsing
     }
 }
 
-[test]
+[test(description = "a committed failure produces a non-empty error list")]
 def test_commit_generates_errors(t : T?) {
     t |> run("missing value after commit produces errors") @(t : T?) {
         parse_with_commit("val = ;") $(val; err) {
@@ -47,7 +47,7 @@ def test_commit_generates_errors(t : T?) {
     }
 }
 
-[test]
+[test(description = "a committed error carries a positive input index")]
 def test_commit_error_has_index(t : T?) {
     parse_with_commit("val = ;") $(_val; err) {
         if (!empty(err)) {
@@ -58,7 +58,7 @@ def test_commit_error_has_index(t : T?) {
     }
 }
 
-[test]
+[test(description = "a committed error carries non-empty message text")]
 def test_commit_error_has_text(t : T?) {
     parse_with_commit("val = ;") $(_val; err) {
         if (!empty(err)) {
@@ -69,7 +69,7 @@ def test_commit_error_has_text(t : T?) {
     }
 }
 
-[test]
+[test(description = "a successful parse returns its value with an empty error list")]
 def test_successful_parse_no_errors(t : T?) {
     parse_with_commit("val = 42;") $(val; err) {
         t |> success(err |> empty, "successful parse should have no errors")
@@ -77,7 +77,7 @@ def test_successful_parse_no_errors(t : T?) {
     }
 }
 
-[test]
+[test(description = "an error after a committed keyword is positioned at or past the end of the keyword")]
 def test_error_position_after_keyword(t : T?) {
     parse_keyword("print") $(_val; err) {
         if (!empty(err)) {
@@ -89,7 +89,7 @@ def test_error_position_after_keyword(t : T?) {
     }
 }
 
-[test]
+[test(description = "truncated input after a commit still produces errors")]
 def test_multiple_error_sources(t : T?) {
     parse_with_commit("val =") $(_val; err) {
         t |> success(!empty(err), "incomplete input should produce errors")

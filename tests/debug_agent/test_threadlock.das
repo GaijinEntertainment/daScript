@@ -37,7 +37,7 @@ def ensure_tl_agent() {
     }
 }
 
-[test]
+[test(description = "invoke_in_context succeeds on an agent installed with a thread lock")]
 def test_threadlock_invoke(t : T?) {
     t |> run("invoke_in_context succeeds with threadlock") @(t : T?) {
         ensure_tl_agent()
@@ -53,7 +53,7 @@ def test_threadlock_invoke(t : T?) {
     }
 }
 
-[test]
+[test(description = "repeated invoke_in_context calls on a thread-locked agent all run")]
 def test_threadlock_multiple(t : T?) {
     t |> run("multiple invoke_in_context calls under threadlock") @(t : T?) {
         ensure_tl_agent()
@@ -69,7 +69,7 @@ def test_threadlock_multiple(t : T?) {
     }
 }
 
-[test]
+[test(description = "delete_debug_agent_context removes the named agent")]
 def test_cleanup(t : T?) {
     t |> run("delete_debug_agent_context removes threadlock_test agent") @(t : T?) {
         ensure_tl_agent()

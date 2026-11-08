@@ -1,7 +1,9 @@
 options gen2
+//! register_function must not compile with an unsupported argument or
+//! return type or too many arguments
 
-// register_function rejects unsupported argument and return types at compile
-// time with a per-position diagnostic naming the offender.
+// register_function rejects unsupported argument and return types at
+// compile time with a per-position diagnostic naming the offender.
 //
 //   1. struct argument
 //   2. struct return

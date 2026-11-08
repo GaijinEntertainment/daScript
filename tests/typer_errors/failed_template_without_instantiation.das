@@ -1,8 +1,11 @@
-// Regression test for issue #3065 (fuzzer): a `struct template` used directly
-// as a type (here a function parameter) without going through its typemacro
-// instantiation slipped past infer and tripped the DAS_VERIFYF in
-// makeStructureDebugInfo ("cannot make debug info for template structure").
-// verifyType now rejects it cleanly with invalid_structure_template (30241).
+//! A struct template used directly as a type, without its typemacro
+//! instantiation, must not compile (30241).
+// Regression test for issue #3065 (fuzzer): a `struct template` used
+// directly as a type (here a function parameter) without going
+// through its typemacro instantiation slipped past infer and tripped
+// the DAS_VERIFYF in makeStructureDebugInfo ("cannot make debug info
+// for template structure"). verifyType now rejects it cleanly with
+// invalid_structure_template (30241).
 options gen2
 expect 30241
 

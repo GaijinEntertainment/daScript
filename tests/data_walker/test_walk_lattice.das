@@ -1,3 +1,9 @@
+options gen2
+options no_unused_function_arguments = false
+options no_unused_block_arguments = false
+
+require _dw_common
+
 // Tests for DapiDataWalker — 16/8-bit type lattice leaves
 //
 // Covers: Float16, Half2/3/4/8, Short2/3/4/8, UShort2/3/4/8,
@@ -5,11 +11,7 @@
 //         lattice fields inside structs, fixed/dynamic arrays of lattice
 //         elements, and mutation through the by-ref leaf callbacks
 
-options gen2
-options no_unused_function_arguments = false
-options no_unused_block_arguments = false
 
-require dw_common
 
 
 // ============================================================
@@ -44,7 +46,7 @@ class LatticeMutator : DapiDataWalker {
 // Standalone leaf dispatch
 // ============================================================
 
-[test]
+[test(description = "the half, short and byte families of leaf types dispatch to the das-side walker callbacks")]
 def test_walk_lattice_leaves(t : T?) { // nolint:STYLE038 - flat list of independent walker arms
     t |> run("half family") @(t : T?) {
         var walker = new LogWalker()
@@ -152,7 +154,7 @@ def test_walk_lattice_leaves(t : T?) { // nolint:STYLE038 - flat list of indepen
 // Lattice fields inside a struct
 // ============================================================
 
-[test]
+[test(description = "lattice-typed fields inside a struct are visited")]
 def test_walk_lattice_struct(t : T?) {
     t |> run("struct with lattice fields") @(t : T?) {
         var walker = new LogWalker()
@@ -181,7 +183,7 @@ def test_walk_lattice_struct(t : T?) {
 // Arrays of lattice elements
 // ============================================================
 
-[test]
+[test(description = "fixed and dynamic arrays of lattice elements are visited element by element")]
 def test_walk_lattice_arrays(t : T?) {
     t |> run("fixed array of half4") @(t : T?) {
         var walker = new LogWalker()
@@ -217,7 +219,7 @@ def test_walk_lattice_arrays(t : T?) {
 // Mutation through by-ref leaves
 // ============================================================
 
-[test]
+[test(description = "by-ref lattice leaf callbacks overwrite half2 and byte4 values in place")]
 def test_walk_lattice_mutation(t : T?) {
     t |> run("mutate half2 and byte4") @(t : T?) {
         var walker = new LatticeMutator()
@@ -231,6 +233,98 @@ def test_walk_lattice_mutation(t : T?) {
         }
         t |> equal(h == half2(9., 9.), true)
         t |> equal(b == byte4(1, 2, 3, 4), true)
+        unsafe { delete walker; }
+    }
+}
+
+// Tests for DapiDataWalker — in-place mutation via walker callbacks
+//
+// Covers: mutate scalars, mutate struct fields, mutate array elements,
+//         mutate strings in nested structs and arrays
+
+
+
+
+// ============================================================
+// Local walker classes for mutation tests
+// ============================================================
+
+// Doubles every int and float encountered
+class Doubler : DapiDataWalker {
+    def override Int(var value : int&) : void {
+        value *= 2
+    }
+    def override Float(var value : float&) : void {
+        value *= 2.0
+    }
+}
+
+// Converts all strings to upper case
+class StringUpperWalker : DapiDataWalker {
+    def override String(var value : string&) : void {
+        value = to_upper(value)
+    }
+}
+
+
+// ============================================================
+// Tests
+// ============================================================
+
+[test(description = "walker callbacks mutate ints and floats in place in scalars, struct fields and array elements")]
+def test_mutation(t : T?) {
+    t |> run("mutate scalar int") @(t : T?) {
+        var walker = new Doubler()
+        var x = 21
+        make_data_walker(walker) $(adapter) {
+            adapter |> walk_data(unsafe(addr(x)), typeinfo rtti_typeinfo(x))
+        }
+        t |> equal(x, 42)
+        unsafe { delete walker; }
+    }
+    t |> run("mutate struct fields") @(t : T?) {
+        var walker = new Doubler()
+        var s = SimpleStruct(x = 5, y = 1.5)
+        make_data_walker(walker) $(adapter) {
+            adapter |> walk_data(unsafe(addr(s)), typeinfo rtti_typeinfo(s))
+        }
+        t |> equal(s.x, 10)
+        t |> equal(s.y, 3.0)
+        unsafe { delete walker; }
+    }
+    t |> run("mutate array elements") @(t : T?) {
+        var walker = new Doubler()
+        var arr = [1, 2, 3]
+        make_data_walker(walker) $(adapter) {
+            adapter |> walk_data(unsafe(addr(arr)), typeinfo rtti_typeinfo(arr))
+        }
+        t |> equal(arr[0], 2)
+        t |> equal(arr[1], 4)
+        t |> equal(arr[2], 6)
+        unsafe { delete walker; }
+    }
+}
+
+
+[test(description = "walker callbacks mutate strings nested in a struct and in an array")]
+def test_mutate_nested(t : T?) {
+    t |> run("mutate strings in struct") @(t : T?) {
+        var walker = new StringUpperWalker()
+        var s = NestedStruct(inner = SimpleStruct(x = 1, y = 2.0), tag = "hello")
+        make_data_walker(walker) $(adapter) {
+            adapter |> walk_data(unsafe(addr(s)), typeinfo rtti_typeinfo(s))
+        }
+        t |> equal(s.tag, "HELLO")
+        unsafe { delete walker; }
+    }
+    t |> run("mutate strings in array") @(t : T?) {
+        var walker = new StringUpperWalker()
+        var arr = ["abc", "def"]
+        make_data_walker(walker) $(adapter) {
+            adapter |> walk_data(unsafe(addr(arr)), typeinfo rtti_typeinfo(arr))
+        }
+        t |> equal(arr[0], "ABC")
+        t |> equal(arr[1], "DEF")
         unsafe { delete walker; }
     }
 }

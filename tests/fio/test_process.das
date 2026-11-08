@@ -51,7 +51,7 @@ def wait_for_ready(t : T?; var p : process; ready : string) {
 // src/builtin/ARCHITECTURE.md#child-cannot-start: a binary that cannot start is an exited child
 // on every platform, never a throw - POSIX gives that through the child's own _exit(127), Windows
 // builds the same handle at CreateProcess
-[test]
+[test(description = "Spawning an unrunnable binary yields an exited child with code 127, no output and no throw")]
 def test_process_cannot_start(t : T?) {
     t |> run("an unrunnable binary hands back an exited child: exit 127, no output, no throw") @(t : T?) {
         let noenv : array<string>
@@ -73,7 +73,7 @@ def test_process_cannot_start(t : T?) {
     }
 }
 
-[test]
+[test(description = "A spawned process streams its lines, reports running, returns its exit code and honors env and cwd")]
 def test_process_lifecycle(t : T?) {
     t |> run("spawn, drain lines, poll running, wait exit code, apply env + cwd") @(t : T?) {
         let tmp = create_temp_directory_result("das process test ")
@@ -122,7 +122,7 @@ def test_process_lifecycle(t : T?) {
     }
 }
 
-[test]
+[test(description = "Closing a process handle, explicitly or by leaving with_process, kills a child still running")]
 def test_close_kills_a_running_child(t : T?) {
     t |> run("closing the handle - explicitly, or leaving a with_process block - kills a child still running") @(t : T?) {
         let root_dir = make_temp_root(t, "das process close ")
@@ -157,7 +157,7 @@ def test_close_kills_a_running_child(t : T?) {
     }
 }
 
-[test]
+[test(description = "terminate stops a child parked on a release that never comes")]
 def test_process_terminate(t : T?) {
     t |> run("terminate stops a child parked on a release that never comes") @(t : T?) {
         let tmp = create_temp_directory_result("das process kill ")
@@ -185,7 +185,7 @@ def test_process_terminate(t : T?) {
     }
 }
 
-[test]
+[test(description = "run_and_capture applies cwd and env, kills a child at the timeout, keeps a partial last line and honors a zero timeout", timeout = 1200)]
 def test_run_and_capture_with_cwd_and_env(t : T?) {
     let fixture = path_join(get_das_root(), "tests/fio/_fixture_process_child.das")
     t |> run("the child runs in cwd with the env overrides, and its code and every line come back") @(t : T?) {
@@ -249,7 +249,7 @@ def test_run_and_capture_with_cwd_and_env(t : T?) {
     }
 }
 
-[test]
+[test(description = "exit_now ends a child with the code it was given and the line printed before it still arrives")]
 def test_exit_now_carries_its_code(t : T?) {
     t |> run("exit_now ends a child with the code it was given, and the line printed before it arrives") @(t : T?) {
         let fixture = path_join(get_das_root(), "tests/fio/_fixture_exit_now_child.das")
@@ -262,7 +262,7 @@ def test_exit_now_carries_its_code(t : T?) {
     }
 }
 
-[test]
+[test(description = "exit ends a child with the code it was given")]
 def test_exit_carries_its_code(t : T?) {
     let fixture = path_join(get_das_root(), "tests/fio/_fixture_exit_child.das")
     for (code in [42, 0]) {

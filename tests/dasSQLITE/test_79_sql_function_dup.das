@@ -1,7 +1,6 @@
 options gen2
 
 require dastest/testing_boost public
-
 require sqlite/sqlite_boost
 require daslib/sql_linq
 
@@ -17,7 +16,7 @@ def dup_a(x : int) : int => x
 [sql_function(name="dup_collide")]
 def dup_b(x : int) : int => x * 2
 
-[test]
+[test(description = "two sql_function declarations with one name and arity make try_open_sqlite return an error", standalone = "its duplicate [sql_function] fails every database open in the program")]
 def test_duplicate_name_arity_detected(t : T?) {
     let r <- try_open_sqlite(":memory:")
     t |> equal(r |> is_err, true, "duplicate (name, arity) at install time → err")

@@ -23,7 +23,7 @@ def private query_all(var pat : Pattern) : array<Event> {
 
 // ─── Formant data lookup ───
 
-[test]
+[test(description = "the vowel a has its first formant at 660 Hz")]
 def test_vowel_a_formant_data(t : T?) {
     var data : FormantData
     t |> success(vowel_get_formant_data("a", data))
@@ -33,7 +33,7 @@ def test_vowel_a_formant_data(t : T?) {
     t |> equal(data.qs[0], 80.0)
 }
 
-[test]
+[test(description = "the vowel e has its first formant at 440 Hz")]
 def test_vowel_e_formant_data(t : T?) {
     var data : FormantData
     t |> success(vowel_get_formant_data("e", data))
@@ -41,7 +41,7 @@ def test_vowel_e_formant_data(t : T?) {
     t |> equal(data.freqs[1], 1800.0)
 }
 
-[test]
+[test(description = "the vowel i has its first formant at 270 Hz")]
 def test_vowel_i_formant_data(t : T?) {
     var data : FormantData
     t |> success(vowel_get_formant_data("i", data))
@@ -49,7 +49,7 @@ def test_vowel_i_formant_data(t : T?) {
     t |> equal(data.freqs[1], 1850.0)
 }
 
-[test]
+[test(description = "the vowel o has its first formant at 430 Hz")]
 def test_vowel_o_formant_data(t : T?) {
     var data : FormantData
     t |> success(vowel_get_formant_data("o", data))
@@ -57,7 +57,7 @@ def test_vowel_o_formant_data(t : T?) {
     t |> equal(data.freqs[1], 820.0)
 }
 
-[test]
+[test(description = "the vowel u has its first formant at 370 Hz")]
 def test_vowel_u_formant_data(t : T?) {
     var data : FormantData
     t |> success(vowel_get_formant_data("u", data))
@@ -65,20 +65,20 @@ def test_vowel_u_formant_data(t : T?) {
     t |> equal(data.freqs[1], 630.0)
 }
 
-[test]
+[test(description = "an unknown vowel name has no formant data")]
 def test_vowel_unknown_returns_false(t : T?) {
     var data : FormantData
     t |> success(!vowel_get_formant_data("xyz", data))
 }
 
-[test]
+[test(description = "the extended vowel ae has its first formant at 650 Hz")]
 def test_vowel_extended_ae(t : T?) {
     var data : FormantData
     t |> success(vowel_get_formant_data("ae", data))
     t |> equal(data.freqs[0], 650.0)
 }
 
-[test]
+[test(description = "the extended vowel aa has its first formant at 560 Hz")]
 def test_vowel_extended_aa(t : T?) {
     var data : FormantData
     t |> success(vowel_get_formant_data("aa", data))
@@ -87,7 +87,7 @@ def test_vowel_extended_aa(t : T?) {
 
 // ─── VowelFilter init ───
 
-[test]
+[test(description = "initializing the vowel filter for a activates it with its formants")]
 def test_vowel_filter_init_a(t : T?) {
     var vf = VowelFilter()
     vowel_filter_init(vf, "a")
@@ -97,14 +97,14 @@ def test_vowel_filter_init_a(t : T?) {
     }
 }
 
-[test]
+[test(description = "initializing the vowel filter for an unknown vowel leaves it inactive")]
 def test_vowel_filter_init_unknown(t : T?) {
     var vf = VowelFilter()
     vowel_filter_init(vf, "xyz")
     t |> success(!vf.active)
 }
 
-[test]
+[test(description = "initializing the vowel filter with an empty name leaves it inactive")]
 def test_vowel_filter_init_empty(t : T?) {
     var vf = VowelFilter()
     vowel_filter_init(vf, "")
@@ -113,7 +113,7 @@ def test_vowel_filter_init_empty(t : T?) {
 
 // ─── FormantBiquad bandpass basic behavior ───
 
-[test]
+[test(description = "the band-pass filter passes a tone at its center frequency")]
 def test_bpf_passes_center_frequency(t : T?) {
     var bq = FormantBiquad()
     formant_biquad_setup_bpf(bq, 1000.0, 10.0, 48000.0)
@@ -130,7 +130,7 @@ def test_bpf_passes_center_frequency(t : T?) {
     t |> success(maxAbs > 0.1)
 }
 
-[test]
+[test(description = "the band-pass filter attenuates a distant tone")]
 def test_bpf_rejects_distant_frequency(t : T?) {
     var bq = FormantBiquad()
     formant_biquad_setup_bpf(bq, 1000.0, 10.0, 48000.0)
@@ -150,7 +150,7 @@ def test_bpf_rejects_distant_frequency(t : T?) {
 
 // ─── VowelFilter tick produces output ───
 
-[test]
+[test(description = "ticking the vowel filter on a noise input produces audible output")]
 def test_vowel_filter_tick_produces_output(t : T?) {
     var vf = VowelFilter()
     vowel_filter_init(vf, "a")
@@ -166,7 +166,7 @@ def test_vowel_filter_tick_produces_output(t : T?) {
     t |> success(maxAbs > 0.1, "peak {maxAbs}, energy {energy} over 4800 samples - this seed peaks near 0.28")
 }
 
-[test]
+[test(description = "different vowels filter the same input to different output")]
 def test_different_vowels_different_output(t : T?) {
     var vf_a = VowelFilter()
     var vf_i = VowelFilter()
@@ -191,7 +191,7 @@ def test_different_vowels_different_output(t : T?) {
 
 // ─── Pattern-level set_vowel ───
 
-[test]
+[test(description = "set_vowel with a fixed name sets the vowel and keeps the sound")]
 def test_set_vowel_static(t : T?) {
     let pat <- atom("sawtooth") |> set_vowel("a")
     let ev = query_first(pat)
@@ -199,14 +199,14 @@ def test_set_vowel_static(t : T?) {
     t |> equal(ev.s, "sawtooth")
 }
 
-[test]
+[test(description = "set_vowel with u sets the vowel field")]
 def test_set_vowel_static_u(t : T?) {
     let pat <- atom("sine") |> set_vowel("u")
     let ev = query_first(pat)
     t |> equal(ev.vowel, "u")
 }
 
-[test]
+[test(description = "set_vowel with a pattern sets the vowel for the event")]
 def test_set_vowel_pattern(t : T?) {
     let vowelPat <- fastcat([atom("a"), atom("e")])
     let pat <- atom("sawtooth") |> set_vowel(vowelPat)
@@ -214,7 +214,7 @@ def test_set_vowel_pattern(t : T?) {
     t |> equal(ev.vowel, "a")
 }
 
-[test]
+[test(description = "set_vowel works on events made by s() mini-notation")]
 def test_set_vowel_with_s_mini(t : T?) {
     // s() mini-notation creates events with .s field
     let vowelPat <- s("a e i")
@@ -223,7 +223,7 @@ def test_set_vowel_with_s_mini(t : T?) {
     t |> equal(ev.vowel, "a")
 }
 
-[test]
+[test(description = "set_vowel detects and parses a mini-notation string")]
 def test_set_vowel_mini_notation(t : T?) {
     // set_vowel("<a e i o u>") detects mini-notation and parses it
     let pat <- atom("sawtooth") |> set_vowel("<a e i o u>")
@@ -231,7 +231,7 @@ def test_set_vowel_mini_notation(t : T?) {
     t |> equal(ev.vowel, "a")
 }
 
-[test]
+[test(description = "the event vowel is empty by default")]
 def test_vowel_default_empty(t : T?) {
     let pat <- atom("sine")
     let ev = query_first(pat)
@@ -240,7 +240,7 @@ def test_vowel_default_empty(t : T?) {
 
 // ─── Extended vowels ───
 
-[test]
+[test(description = "all five basic vowels initialize an active filter")]
 def test_all_basic_vowels_init(t : T?) {
     var vowels = fixed_array("a", "e", "i", "o", "u")
     for (v in vowels) {
@@ -250,7 +250,7 @@ def test_all_basic_vowels_init(t : T?) {
     }
 }
 
-[test]
+[test(description = "the extended vowels initialize an active filter")]
 def test_extended_vowels_init(t : T?) {
     var vowels = fixed_array("ae", "aa", "oe", "ue", "y")
     for (v in vowels) {
@@ -260,7 +260,7 @@ def test_extended_vowels_init(t : T?) {
     }
 }
 
-[test]
+[test(description = "the nasal vowels initialize an active filter")]
 def test_nasal_vowels_init(t : T?) {
     var vowels = fixed_array("uh", "un", "en", "an", "on")
     for (v in vowels) {
@@ -272,7 +272,7 @@ def test_nasal_vowels_init(t : T?) {
 
 // ─── OscVoice vowel integration ───
 
-[test]
+[test(description = "an oscillator voice with a vowel renders audible output")]
 def test_osc_voice_vowel_renders(t : T?) {
     var voice = OscVoice(
         osc_type = OscType.osc_sawtooth,
@@ -298,7 +298,7 @@ def test_osc_voice_vowel_renders(t : T?) {
     t |> success(maxAbs > 0.01)
 }
 
-[test]
+[test(description = "a vowel changes the oscillator voice output compared with no vowel")]
 def test_osc_voice_vowel_vs_no_vowel(t : T?) {
     let chunkFrames = 2400
     var output_plain, output_vowel : array<float>

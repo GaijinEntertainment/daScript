@@ -1,4 +1,7 @@
-// super(args) cannot skip an intermediate whose ctor takes different arguments.
+//! super(args) that skips an intermediate class whose constructor
+//! takes different arguments does not compile
+// super(args) cannot skip an intermediate whose ctor takes different
+// arguments.
 options gen2
 expect 30245
 

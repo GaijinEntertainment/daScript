@@ -1,6 +1,9 @@
+//! symbols of an indirectly required module are not visible, and
+//! module-qualified access respects visibility, so those references
+//! do not compile
 // module visibility and scope errors
-// verifies that symbols from indirectly required modules are not visible,
-// and that module-qualified access respects visibility rules
+// verifies that symbols from indirectly required modules are not
+// visible, and that module-qualified access respects visibility rules
 options gen2
 expect 30341:4, 30837:2, 30838:2 // , 30308
 
@@ -32,19 +35,25 @@ def fun_5 {
 def test {
 
     verify(::global_1 == "local")
-    verify(module_a::global_1 == "from_a")// 30305: can't locate variable module_a::global_1, not visible
+    // 30305: can't locate variable module_a::global_1, not visible
+    verify(module_a::global_1 == "from_a")
     verify(_module_b::global_1 == "from_b")
     verify(global_2 == "from_a")          // 30305: can't locate variable global_2, not visible
-    verify(from_a_get_3() == "from_a")    // 30304: no matching functions or generics from_a_get_3, not visible
+    // 30304: no matching functions or generics from_a_get_3, not visible
+    verify(from_a_get_3() == "from_a")
     verify(from_b_get_3() == "from_a")
     verify(from_b_get_4() == "from_b")
     verify(global_3 == "local")
 
     verify(::fun_1() == "local")
-    verify(module_a::fun_1() == "from_a")// 30304: no matching functions or generics module_a::fun_1, not visible
+    // 30304: no matching functions or generics module_a::fun_1, not
+    // visible
+    verify(module_a::fun_1() == "from_a")
     verify(_module_b::fun_1() == "from_b")
-    verify(fun_2() == "from a")          // 30304: no matching functions or generics fun_2, not visible
-    verify(from_a_get_fun_3() == "from_a")// 30304: no matching functions or generics from_a_get_fun_3
+    // 30304: no matching functions or generics fun_2, not visible
+    verify(fun_2() == "from a")
+    // 30304: no matching functions or generics from_a_get_fun_3
+    verify(from_a_get_fun_3() == "from_a")
     verify(from_b_get_fun_3() == "from_a")
     verify(fun_3() == "local")
 
@@ -53,8 +62,9 @@ def test {
     verify(from_b_get_own_fun_5() == "from_b")
 
     // this test is commented out, becase its a PARSER error
-    //  and needs to be stand-alone in the file, or it does not get to infer at all
-    // assert(int(inA one)==1)                      // 30308: enumeraiton not found inA
+    // and needs to be stand-alone in the file, or it does not get to
+    // infer at all assert(int(inA one)==1)                      // 30308:
+    // enumeraiton not found inA
 
     assert(typeinfo sizeof(type<structInA>) == 4)    // 30301: undefined type structInA
     assert(typeinfo sizeof(type<aliasInA>) == 4)     // 30301: undefined type aliasInA

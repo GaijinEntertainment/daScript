@@ -1,4 +1,5 @@
-// 65536 doesn't fit in uint16 (range 0..65535)
+//! 65536 assigned to a uint16 must not compile (30515), the range
+//! being 0..65535.
 options gen2
 
 expect 30515

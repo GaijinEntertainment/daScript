@@ -1,7 +1,6 @@
 options gen2
 
 require dastest/testing_boost public
-
 require daslib/sql
 require sqlite/sqlite_boost
 require daslib/sql_linq
@@ -22,7 +21,7 @@ def private fixture(db : SqlRunner) {
     db |> insert(Car(Id = 5, Name = "Lambo", Price = 999))
 }
 
-[test]
+[test(description = "each_sql streams every row of the table through a for loop")]
 def test_each_sql_iterate_full_rows(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -33,7 +32,7 @@ def test_each_sql_iterate_full_rows(t : T?) {
     }
 }
 
-[test]
+[test(description = "breaking out of an each_sql loop finalizes the statement so later writes succeed")]
 def test_each_sql_break_finalizes_stmt(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -56,7 +55,7 @@ def test_each_sql_break_finalizes_stmt(t : T?) {
     }
 }
 
-[test]
+[test(description = "each_sql after a where streams only the matching rows")]
 def test_each_sql_with_where_filter(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -70,7 +69,7 @@ def test_each_sql_with_where_filter(t : T?) {
     }
 }
 
-[test]
+[test(description = "each_sql after a column select streams single values")]
 def test_each_sql_single_column_projection(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -80,7 +79,7 @@ def test_each_sql_single_column_projection(t : T?) {
     }
 }
 
-[test]
+[test(description = "each_sql after a named-tuple select streams computed tuple values")]
 def test_each_sql_named_tuple_projection(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)

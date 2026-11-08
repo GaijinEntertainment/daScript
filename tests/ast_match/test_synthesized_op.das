@@ -14,7 +14,7 @@ require dastest/testing_boost public
 // macro-built node (`new ExprOp2(op := "-")`) leaves `name` empty. Matching
 // keys on `op` + children only — the call-machinery fields are skipped.
 
-[test]
+[test(description = "an operator pattern matches a synthesized ExprOp2 whose name is empty and captures its operands")]
 def test_synthesized_op2_matches(t : T?) {
     ast_gc_guard() {
         var e : ExpressionPtr = new ExprOp2(at = LineInfo(), op := "-", left = qmacro(p), right = qmacro(q))
@@ -28,7 +28,7 @@ def test_synthesized_op2_matches(t : T?) {
     }
 }
 
-[test]
+[test(description = "a minus pattern does not match a synthesized plus ExprOp2")]
 def test_synthesized_op2_wrong_op_fails(t : T?) {
     ast_gc_guard() {
         var e : ExpressionPtr = new ExprOp2(at = LineInfo(), op := "+", left = qmacro(p), right = qmacro(q))
@@ -38,7 +38,7 @@ def test_synthesized_op2_wrong_op_fails(t : T?) {
     }
 }
 
-[test]
+[test(description = "a unary pattern matches a synthesized ExprOp1 whose name is empty")]
 def test_synthesized_op1_matches(t : T?) {
     ast_gc_guard() {
         var e : ExpressionPtr = new ExprOp1(at = LineInfo(), op := "-", subexpr = qmacro(p))
@@ -51,7 +51,7 @@ def test_synthesized_op1_matches(t : T?) {
     }
 }
 
-[test]
+[test(description = "a nested pattern matches a synthesized tree of operator nodes")]
 def test_synthesized_nested_matches(t : T?) {
     ast_gc_guard() {
         // the flatten re-fuse shape: synthesized mul under synthesized add

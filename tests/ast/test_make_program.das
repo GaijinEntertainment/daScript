@@ -39,7 +39,7 @@ def private has_error(program : ProgramPtr; text : string) : bool {
     return false
 }
 
-[test]
+[test(description = "a built module, math and builtin.das all reach the main module and the program runs")]
 def test_built_program_runs(t : T?) {
     t |> run("a built module, math and builtin.das all reach the main module, and the program runs") @(t : T?) {
         using() $(var cop : CodeOfPolicies) {
@@ -70,7 +70,7 @@ def test_built_program_runs(t : T?) {
     }
 }
 
-[test]
+[test(description = "a type error in the main module comes back on the program")]
 def test_built_program_errors(t : T?) {
     t |> run("a type error in the main module comes back on the program") @(t : T?) {
         using() $(var cop : CodeOfPolicies) {
@@ -123,7 +123,7 @@ def test_built_program_errors(t : T?) {
     }
 }
 
-[test]
+[test(description = "build calls made outside make_program are refused")]
 def test_build_calls_outside_make_program(t : T?) {
     var outside = false
     try {
@@ -158,7 +158,7 @@ def test_build_calls_outside_make_program(t : T?) {
     t |> success(nameless, "a nameless module throws")
 }
 
-[test]
+[test(description = "a panic inside a build leaves make_program cleanly")]
 def test_build_panic_leaves_make_program(t : T?) {
     var caught = false
     try {
@@ -192,7 +192,7 @@ def test_build_panic_leaves_make_program(t : T?) {
     }
 }
 
-[test]
+[test(description = "add_module_require refuses a null module, a self-require, a cycle and a module from another make_program")]
 def test_build_requires_refused(t : T?) {
     t |> run("add_module_require refuses a null module and a module requiring itself") @(t : T?) {
         using() $(var cop : CodeOfPolicies) {
@@ -248,7 +248,7 @@ def test_build_requires_refused(t : T?) {
     }
 }
 
-[test]
+[test(description = "module names are validated and a name already in the group is refused")]
 def test_build_module_names(t : T?) {
     for (name in fixed_array("math", "a::b", "1abc", "__")) {
         using() $(var cop : CodeOfPolicies) {
@@ -266,7 +266,7 @@ def test_build_module_names(t : T?) {
     }
 }
 
-[test]
+[test(description = "a function built outside the module's block is refused and a failed module makes the next one answer null")]
 def test_build_scope_rules(t : T?) {
     t |> run("a function built outside the module's block is refused") @(t : T?) {
         using() $(var cop : CodeOfPolicies) {
@@ -316,7 +316,7 @@ def test_build_scope_rules(t : T?) {
     }
 }
 
-[test]
+[test(description = "a built module can export all of its symbols")]
 def test_build_export_all(t : T?) {
     for (export_all in fixed_array(false, true)) {
         using() $(var cop : CodeOfPolicies) {
@@ -336,7 +336,7 @@ def test_build_export_all(t : T?) {
     }
 }
 
-[test]
+[test(description = "a built program stays usable after the make_program scope ends")]
 def test_build_program_outlives_scope(t : T?) {
     var inscope kept : ProgramPtr
     var caught = false

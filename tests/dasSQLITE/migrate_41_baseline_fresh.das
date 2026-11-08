@@ -18,7 +18,7 @@ def m3(db : SqlRunner) {
     db |> exec("ALTER TABLE users ADD COLUMN Score INTEGER NOT NULL DEFAULT 0")
 }
 
-[test]
+[test(description = "baseline stamps audit rows for versions 1 through n on a fresh database", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_baseline_stamps_v1_through_n(t : T?) {
     var inscope db = open_sqlite(":memory:")
     let r <- db |> try_baseline(3)
@@ -31,7 +31,7 @@ def test_baseline_stamps_v1_through_n(t : T?) {
     t |> equal(h[2].version, 3, "third row is v3")
 }
 
-[test]
+[test(description = "baseline uses the annotated description for registered versions")]
 def test_baseline_uses_annotation_description_when_available(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> baseline(2)

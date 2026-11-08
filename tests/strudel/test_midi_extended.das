@@ -37,7 +37,7 @@ def push_track_header(var d : array<uint8>; size : uint) {
 
 // ─── Control Change Tests ───
 
-[test]
+[test(description = "CC7, CC10, CC11 and CC64 set channel volume, pan, expression and sustain pedal")]
 def test_control_changes(t : T?) {
     t |> run("CC7 sets channel volume") <| @(t : T?) {
         // build MIDI: CC7 on channel 0, value 80
@@ -92,7 +92,7 @@ def test_control_changes(t : T?) {
 
 // ─── Program Change ───
 
-[test]
+[test(description = "a MIDI program change event is parsed")]
 def test_program_change(t : T?) {
     t |> run("program change updates channel") <| @(t : T?) {
         var d : array<uint8>
@@ -110,7 +110,7 @@ def test_program_change(t : T?) {
 
 // ─── Tempo Change ───
 
-[test]
+[test(description = "a tempo event updates ticks per second")]
 def test_tempo_change(t : T?) {
     t |> run("tempo event updates ticks_per_sec") <| @(t : T?) {
         // Build MIDI with tempo = 250000 usec/qn = 240 BPM
@@ -132,7 +132,7 @@ def test_tempo_change(t : T?) {
 
 // ─── Multi-Voice Polyphony ───
 
-[test]
+[test(description = "several note-ons create several voices that release independently on note-off")]
 def test_polyphony(t : T?) {
     t |> run("multiple note-ons create multiple voices") <| @(t : T?) {
         // 3 notes on channel 0
@@ -175,7 +175,7 @@ def test_polyphony(t : T?) {
 
 // ─── Voice Cleanup ───
 
-[test]
+[test(description = "finished voices are removed after a tick")]
 def test_voice_cleanup(t : T?) {
     t |> run("finished voices are removed after tick") <| @(t : T?) {
         var d : array<uint8>
@@ -199,7 +199,7 @@ def test_voice_cleanup(t : T?) {
 
 // ─── Running Status ───
 
-[test]
+[test(description = "consecutive note-ons using MIDI running status are parsed")]
 def test_running_status(t : T?) {
     t |> run("consecutive note-ons with running status") <| @(t : T?) {
         // Running status: after 0x90, subsequent messages omit the status byte
@@ -224,7 +224,7 @@ def test_running_status(t : T?) {
 
 // ─── Pitch Bend ───
 
-[test]
+[test(description = "pitch bend is parsed, updates the channel and reaches plus two semitones at maximum")]
 def test_pitch_bend(t : T?) {
     t |> run("pitch bend parsed from MIDI") <| @(t : T?) {
         var d : array<uint8>
@@ -275,7 +275,7 @@ def test_pitch_bend(t : T?) {
 
 // ─── Mod Wheel ───
 
-[test]
+[test(description = "CC1 sets the mod wheel")]
 def test_mod_wheel(t : T?) {
     t |> run("CC1 sets mod wheel") <| @(t : T?) {
         var d : array<uint8>

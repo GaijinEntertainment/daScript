@@ -17,7 +17,7 @@ def take_bool(var order : int&; v : int; result : bool) : bool {
     return result
 }
 
-[test]
+[test(description = "A plain binary operator evaluates its left operand first in AOT")]
 def test_plain_op_evaluates_left_first(t : T?) {
     var order = 0
     t |> equal(take(order, 1) + take(order, 2), 3)
@@ -27,7 +27,7 @@ def test_plain_op_evaluates_left_first(t : T?) {
     t |> equal(order, 12, "left operand of < evaluated first")
 }
 
-[test]
+[test(description = "A policy binary operator evaluates its left operand first in AOT")]
 def test_policy_op_evaluates_left_first(t : T?) {
     var order = 0
     t |> equal(take(order, 3) % take(order, 4), 3)
@@ -41,14 +41,14 @@ def test_policy_op_evaluates_left_first(t : T?) {
     t |> equal(order, 121212, "left operand of % evaluated first in a loop")
 }
 
-[test]
+[test(description = "Boolean xor evaluates its left operand first in AOT")]
 def test_bool_xor_evaluates_left_first(t : T?) {
     var order = 0
     t |> equal(take_bool(order, 1, true) ^^ take_bool(order, 2, false), true)
     t |> equal(order, 12, "left operand of ^^ evaluated first")
 }
 
-[test]
+[test(description = "Short-circuit operators skip the right operand when the left decides the result")]
 def test_short_circuit_skips_right(t : T?) {
     var order = 0
     t |> equal(take_bool(order, 1, false) && take_bool(order, 2, true), false)
@@ -58,7 +58,7 @@ def test_short_circuit_skips_right(t : T?) {
     t |> equal(order, 1, "|| does not evaluate the right operand")
 }
 
-[test]
+[test(description = "A post-decrement operand in a loop evaluates in order in AOT")]
 def test_post_decrement_operand_in_loop(t : T?) {
     var roll = 2
     var limit = 5

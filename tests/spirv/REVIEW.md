@@ -4,7 +4,7 @@
 docs: `modules/dasSpirv/ARCHITECTURE.md`, `modules/dasSpirv/ARCHITECTURE_COOPMAT.md`. Shared
 emitter rules: `modules/REVIEW_SHADER_EMITTERS.md` - apply that list with this one.
 
-**A `*_words` function a `[test]` asserts on has an `add_set` row in `test_census.das` - the
+**A `*_words` function a `[test]` asserts on has an `add_set` row in `uncategorized.das` - the
 per-function list the opcode census sums: a diff that adds such a function adds its row in the
 same change, and a diff that removes a row removes the function with it.** A function with no
 row is outside the census, so an opcode nothing declares can be emitted unnoticed.

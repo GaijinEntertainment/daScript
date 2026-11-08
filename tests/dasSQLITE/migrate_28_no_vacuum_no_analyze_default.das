@@ -8,7 +8,7 @@ def m1(db : SqlRunner) {
     db |> exec("CREATE TABLE users (Id INTEGER PRIMARY KEY)")
 }
 
-[test]
+[test(description = "no ANALYZE runs unless a migration asks for it", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_no_analyze_unless_flagged(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()

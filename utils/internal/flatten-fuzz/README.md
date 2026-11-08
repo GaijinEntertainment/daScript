@@ -14,7 +14,7 @@ f(x) == f_flat(x)   for all generated f, for all x
 `[flatten] def f` leaves `f` untouched (real control flow) and emits the
 branchless `f_flat` twin, so the un-flattened `f` is a **free, independent ground
 truth** that never trusts flatten. The fuzzer is, in effect, an auto-generated,
-randomized, at-scale [`tests/flatten/test_flatten_basic.das`](../../tests/flatten/test_flatten_basic.das).
+randomized, at-scale [`tests/flatten/test_flatten_differential.das`](../../tests/flatten/test_flatten_differential.das).
 
 ## Run
 

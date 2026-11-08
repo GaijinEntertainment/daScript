@@ -4,7 +4,6 @@ require dastest/testing_boost public
 require sqlite/sqlite_migrate
 
 // Versions can be gappy (1, 5, 10) — strict-forward pending detection works on gaps.
-
 [sql_migration(version = 1, description = "first")]
 def m1(db : SqlRunner) {
     db |> exec("CREATE TABLE a (x INT)")
@@ -20,7 +19,7 @@ def m10(db : SqlRunner) {
     db |> exec("CREATE TABLE c (x INT)")
 }
 
-[test]
+[test(description = "migrations with gaps in their version numbers all apply in ascending order", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_gappy_versions_run_in_order(t : T?) {
     var inscope db = open_sqlite(":memory:")
     let n = db |> migrate_to_latest()

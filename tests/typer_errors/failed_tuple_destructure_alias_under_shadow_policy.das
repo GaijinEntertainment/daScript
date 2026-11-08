@@ -1,11 +1,15 @@
+//! Tuple destructuring must still reject a repeated name (30704
+//! twice) when the file relaxes the shadowing policy, because
+//! destructured names are same-scope aliases.
 options gen2
 options allow_local_variable_shadowing
 
 expect 30704 : 2
 
-// Destructured names are assume aliases - same-scope REPLACEMENT, not scoped
-// shadowing - so the alias collision checks stay on even when the shadowing
-// policy is relaxed, exactly like the taken-by-alias check on a plain `let`.
+// Destructured names are assume aliases - same-scope REPLACEMENT, not
+// scoped shadowing - so the alias collision checks stay on even when
+// the shadowing policy is relaxed, exactly like the taken-by-alias
+// check on a plain `let`.
 
 def p1() : tuple<bool; int> {
     return (true, 1)

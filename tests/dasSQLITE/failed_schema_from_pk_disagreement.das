@@ -1,6 +1,9 @@
 options gen2
+//! a sql_primary_key field over a column the schema does not report
+//! as primary key must not compile
 
-// User attaches @sql_primary_key to a column the schema does NOT report as PK.
+// User attaches @sql_primary_key to a column the schema does NOT
+// report as PK.
 expect 20800
 
 require daslib/sql

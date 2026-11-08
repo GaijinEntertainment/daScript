@@ -68,7 +68,7 @@ struct Box {
         v + pad + invoke(body)
 }
 
-[test]
+[test(description = "a block piped after named arguments lands on a method's block parameter")]
 def test_method_named_piped_block(t : T?) {
     let h = Holder(v = 100)
     let r = h.setv("go", x = 5) {
@@ -77,7 +77,7 @@ def test_method_named_piped_block(t : T?) {
     t |> equal(r, 125)
 }
 
-[test]
+[test(description = "a block piped after named arguments lands on a free function's block parameter")]
 def test_freefn_named_piped_block(t : T?) {
     let r = freefn(3, scale = 10) {
         return 4
@@ -85,7 +85,7 @@ def test_freefn_named_piped_block(t : T?) {
     t |> equal(r, 43)
 }
 
-[test]
+[test(description = "named arguments combine with defaults padded before the piped block")]
 def test_named_piped_padding(t : T?) {
     // block param last, named 'opt' in between -> block pads across opt
     let r1 = sec(5, opt = 3) {
@@ -109,7 +109,7 @@ def test_named_piped_padding(t : T?) {
     t |> equal(r4, 8)
 }
 
-[test]
+[test(description = "a piped block with named arguments selects the right overload")]
 def test_named_piped_overload(t : T?) {
     // least padding wins: the 3-arg ov (block at slot 2) beats the 4-arg one
     let r = ov(1, x = 2) {
@@ -118,7 +118,7 @@ def test_named_piped_overload(t : T?) {
     t |> equal(r, 106)
 }
 
-[test]
+[test(description = "dot-call and generic callees pad defaults before a piped block that follows named arguments")]
 def test_dot_and_generic_padding(t : T?) {
     // dot-syntax free function, block param last, named 'indent' -> block pads across indent
     let p = Panel(depth = 100)
@@ -133,7 +133,7 @@ def test_dot_and_generic_padding(t : T?) {
     t |> equal(r2, 5)
 }
 
-[test]
+[test(description = "a class method called with named arguments pads defaults before the piped block")]
 def test_class_method_padding(t : T?) {
     var f = new Frame(depth = 100)
     // middle positional "hdr" + named indent, block param last -> block pads across indent
@@ -156,7 +156,7 @@ def test_class_method_padding(t : T?) {
     unsafe { delete f }
 }
 
-[test]
+[test(description = "a struct method called with named arguments pads defaults before the piped block")]
 def test_struct_method_padding(t : T?) {
     var b = new Box(v = 10)
     let r = b.cell("hdr", pad = 5) {
@@ -166,13 +166,13 @@ def test_struct_method_padding(t : T?) {
     unsafe { delete b }
 }
 
-[test]
+[test(description = "a piped call with named arguments survives generic instancing")]
 def test_piped_named_in_generic(t : T?) {
     // the piped named call lives in a generic body; the positional and block must survive the clone
     t |> equal(in_generic(5), 9)
 }
 
-[test]
+[test(description = "an arrow call with named arguments takes a piped block")]
 def test_arrow_named_piped_block(t : T?) {
     // '->' arrow form parses to the same ExprNamedCall as '.', so the piped-block padding
     // applies identically. free function via dot-target struct:

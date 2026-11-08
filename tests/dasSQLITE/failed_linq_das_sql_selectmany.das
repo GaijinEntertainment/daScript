@@ -1,11 +1,16 @@
 options gen2
+//! a linq_das correlated second from over a SQL source must not
+//! compile
 
-// linq_das correlated `from c … from x in <c-referencing collection>` (SelectMany flatten) over a SQL
-// source. The reader emits `_select_many`, which expands to `select_many_pair`; `_sql`'s analyze_chain
-// rejects it — a correlated inner collection is a per-row value, not a `[sql_table]`, so it has no SQL
-// translation. (Here the inner `[c.id]` is an inline array referencing the outer row — any correlated
-// second source over SQL is rejected the same way; use a `join` on a related table instead.)
-// One macro_error (50503), no cascade.
+// linq_das correlated `from c … from x in <c-referencing collection>`
+// (SelectMany flatten) over a SQL source. The reader emits
+// `_select_many`, which expands to `select_many_pair`; `_sql`'s
+// analyze_chain rejects it — a correlated inner collection is a
+// per-row value, not a `[sql_table]`, so it has no SQL translation.
+// (Here the inner `[c.id]` is an inline array referencing the outer
+// row — any correlated second source over SQL is rejected the same
+// way; use a `join` on a related table instead.) One macro_error
+// (50503), no cascade.
 expect 50503
 
 require daslib/linq_das

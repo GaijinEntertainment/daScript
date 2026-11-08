@@ -9,6 +9,10 @@ require dastest/testing_boost public
 require strings
 require daslib/strings_boost
 require _optimized_body_helper
+require _inline_counter_helper
+require _never_inline_module
+require _inline_scope_helper
+require _inline_unsafe_helper
 
 // structural FIRED proof + behavioral safety net for [inline] splicing
 // (src/ast/ast_inline.cpp): every direct call to an [inline] function is replaced
@@ -242,7 +246,7 @@ def has(s, sub : string) : bool => find(s, sub, 0) >= 0
 
 def count_of(s, sub : string) : int => length(split(s, sub)) - 1
 
-[test]
+[test(description = "every direct call to an [inline] function is replaced by its body - expression, multi-statement, generic, multi-return and loop-return bodies alike - binding temps only where an argument needs one")]
 def test_inline_fired(t : T?) {
     ast_gc_guard() {
         t |> run("expression body with leaf + pure args grafts in place") @(t : T?) {
@@ -288,7 +292,7 @@ def test_inline_fired(t : T?) {
     }
 }
 
-[test]
+[test(description = "inlined calls compute the same values as calls, evaluating impure arguments once in call order and keeping by-value, by-ref, global-snapshot and finally semantics")]
 def test_inline_behavior(t : T?) {  // nolint:STYLE038 - flat list of independent test arms
     t |> run("values preserved") @(t : T?) {
         t |> equal(target_basic(5, 6), 12);
@@ -421,5 +425,318 @@ def test_inline_behavior(t : T?) {  // nolint:STYLE038 - flat list of independen
         let picked aka chosen = qq > 0 ? madd(qq, 1, 0) : madd(qq, 2, 0);
         t |> equal(chosen, 41);
         t |> equal(picked, 41);
+    }
+}
+
+// cross-module splice of a body that already carries interior _inl0_* temps
+// (src/ast/ast_inline.cpp): pins that the interior temps survive the splice through
+// the rename join (never minting `__`) and that the site mints its own distinct ids.
+// the cross-module counter BUMP itself has no distinguishing test - a one-site splice
+// renames interior temps into the site's namespace either way
+
+var g_cross_seed = 1
+
+def impure() : int {
+    g_cross_seed += 0
+    return g_cross_seed
+}
+
+[never_inline]
+def target_cross() : int {
+    return cnt_outer(2 + impure())
+}
+
+[test(description = "a cross-module splice of a body carrying interior inline temps keeps their renamed ids, mints its own argument temp and never mints a double underscore")]
+def test_counter_bump(t : T?) {
+    g_cross_seed = 1
+    ast_gc_guard() {
+        t |> run("interior temps survive a cross-module splice, no `__` minted") @(t : T?) {
+            let b = body_of(t, "target_cross")
+            t |> success(has(b, "u_inl0_"), "interior temp lost its rename join: {b}")
+            t |> success(has(b, "_arg_v"), "site arg temp missing: {b}")
+            t |> success(!has(b, "__"), "GLSL-reserved `__` minted: {b}")
+        }
+    }
+    t |> run("value") @(t : T?) {
+        t |> equal(target_cross(), 8)
+    }
+}
+
+// structural proof for `options never_inline` (src/ast/ast_inline.cpp); fixture
+// module: _never_inline_module.das - the run labels below carry the claims
+
+[inline]
+def nvm_step(x : int) : int => x + 1
+
+var g_seed = 1
+
+[never_inline]  // structural anchors resist the heuristic tier (skills/internal/tests_in_repo.md)
+def target_must() : int => nvm_add(g_seed, 2)
+
+[never_inline]
+def target_literal() : int {
+    return nvm_apply(5 * g_seed) $(v : int) : int {
+        return v * 2
+    }
+}
+
+[never_inline]
+def target_instance() : int => nvm_gen(6 + g_seed)
+
+[never_inline]
+def target_baseline() : int {
+    return nvm_step(3 + g_seed)
+}
+
+[never_inline]
+def target_canon() : int {
+    return nvm_guarded(6 + g_seed) $(v : int) : int {
+        return v * 2
+    }
+}
+
+// a generic instance carries a mangled name (origin`name`hash) the exact-name
+// for_each_function lookup misses - match by substring instead
+def instance_body_of(t : T?; nm : string) : string {
+    var body = ""
+    compiling_module() |> for_each_function("") $(func) {
+        if (empty(body) && find("{func.name}", nm) >= 0) {
+            body = "{describe(func.body)}"
+        }
+    }
+    t |> success(!empty(body), "instance not found")
+    let clean <- [for (ln in split(body, "\n")); ln; where !(ln |> has("coverage("))]
+    return join(clean, "\n")
+}
+
+[test(description = "calls into a never_inline module stay calls in every inline tier while the pass stays live elsewhere, and the module's neverInline flag is rtti-visible")]
+def test_never_inline_module(t : T?) {
+    g_seed = 1  // runtime taint, written here on purpose: pure targets with constant args fold + reap
+    ast_gc_guard() {
+        t |> run("[inline] callee from a never_inline module stays a call") @(t : T?) {
+            let b = body_of(t, "target_must")
+            t |> success(has(b, "nvm_add("), "call survives: {b}")
+        }
+        t |> run("block-literal tier declines a never_inline callee") @(t : T?) {
+            let b = body_of(t, "target_literal")
+            t |> success(has(b, "nvm_apply("), "call survives: {b}")
+        }
+        t |> run("generic instance neither inlines nor hosts splices") @(t : T?) {
+            let b = body_of(t, "target_instance")
+            t |> success(has(b, "nvm_gen"), "call survives: {b}")  // no paren: the instance call spells the mangled name
+            let gb = instance_body_of(t, "nvm_gen")
+            t |> success(has(gb, "nvm_step("), "instance body untouched: {gb}")
+        }
+        t |> run("baseline: the pass is live in this module") @(t : T?) {
+            let b = body_of(t, "target_baseline")
+            t |> success(!has(b, "nvm_step("), "[inline] splice fired: {b}")
+        }
+        t |> run("the pass skips the module's own bodies") @(t : T?) {
+            var body = ""
+            find_module(this_program(), "_never_inline_module") |> for_each_function("nvm_chain") $(func) {
+                if (empty(body)) {
+                    body = "{describe(func.body)}"
+                }
+            }
+            t |> success(has(body, "nvm_add("), "internal [inline] call survives: {body}")
+        }
+        t |> run("flagged-origin instance skips return canonicalization") @(t : T?) {
+            let gb = instance_body_of(t, "nvm_guarded")
+            t |> success(!has(gb, "else"), "early-exit shape kept, no synthesized else: {gb}")
+        }
+        t |> run("the module bit is set and rtti-visible") @(t : T?) {
+            t |> success(find_module(this_program(), "_never_inline_module").moduleFlags.neverInline, "neverInline flag")
+        }
+    }
+    t |> run("targets still compute their values") @(t : T?) {
+        t |> equal(target_must(), 3)
+        t |> equal(target_literal(), 10)
+        t |> equal(target_instance(), 8)
+        t |> equal(target_baseline(), 5)
+        t |> equal(target_canon(), 14)
+    }
+}
+
+// structural FIRED proof + behavioral safety net for cross-module splices whose
+// bodies use the callee module's private symbols (src/ast/ast_inline.cpp): the
+// spliced body clone rides a generated `with (module <origin>)` wrapper, so its
+// privates and require graph resolve exactly as at the callee's own compile.
+// argument and prefix temps bind OUTSIDE the wrapper (the mirror rule): caller
+// expressions keep resolving at the caller, proven by the g_shared collision test.
+
+var g_shared = 555      // collides with _inline_scope_helper's g_shared on purpose
+
+[export]
+def target_scoped_add(a, b : int) : int {
+    return scoped_add(a, b)
+}
+
+[export]
+def target_scoped_pick(v : int) : int {
+    return scoped_pick(v)
+}
+
+[export]
+def target_mirror_rule() : int {
+    return scoped_echo(g_shared)
+}
+
+[export]
+def target_block_literal(src : array<int>) : int => scoped_filter_sum(src) $(v) => v % 2 == 0
+
+[export]
+def target_inside_with(a, b : int) : int {
+    var r : int
+    with (module _inline_scope_helper) {
+        // the enclosing scope IS the resolution context - the splice lands bare here
+        r = scoped_add(a, b)
+    }
+    return r
+}
+
+[test(description = "an [inline] callee that uses its module's private symbols still splices, under a generated with (module) wrapper, and so does a call inside a user with (module) block")]
+def test_scope_wrapped_inline_fired(t : T?) {
+    ast_gc_guard() {
+        t |> run("[inline] callee with private use splices under with (module)") @(t : T?) {
+            let b = body_of(t, "target_scoped_add")
+            t |> success(!has(b, "scoped_add("), "call is gone: {b}")
+            t |> success(has(b, "hidden_boost("), "private call spliced in: {b}")
+        }
+        t |> run("multi-return callee rides the same wrapped splice") @(t : T?) {
+            let b = body_of(t, "target_scoped_pick")
+            t |> success(!has(b, "scoped_pick("), "call is gone: {b}")
+        }
+        t |> run("call inside user with (module) splices bare") @(t : T?) {
+            let b = body_of(t, "target_inside_with")
+            t |> success(!has(b, "scoped_add("), "call is gone: {b}")
+        }
+    }
+}
+
+[test(description = "scope-wrapped splices read and write the callee module's private globals, while argument expressions keep resolving at the caller even against a same-named global")]
+def test_scope_wrapped_inline_behavior(t : T?) {
+    t |> run("private helper and private global values") @(t : T?) {
+        t |> equal(target_scoped_add(1, 2), (1 + 7) + (2 + 7))
+        t |> equal(target_scoped_pick(5), 5 + 7)
+        t |> equal(target_scoped_pick(-5), -(5 + 7))
+        t |> equal(target_inside_with(3, 4), (3 + 7) + (4 + 7))
+    }
+    t |> run("mirror rule: caller global wins over callee module's same-named global") @(t : T?) {
+        // caller g_shared = 555 substitutes outside the wrap; body's own g_shared
+        // read resolves to the helper's (100). wrong binding gives 100100 or 555555
+        t |> equal(target_mirror_rule(), 555 * 1000 + 100)
+    }
+    t |> run("block-literal auto tier with private use in the body") @(t : T?) {
+        // even numbers boosted by secret_bias: (2+7) + (4+7)
+        t |> equal(target_block_literal([1, 2, 3, 4]), 9 + 11)
+    }
+    t |> run("private global write stays visible to the callee module") @(t : T?) {
+        with (module _inline_scope_helper) {
+            secret_bias = 20
+        }
+        t |> equal(target_scoped_add(1, 2), (1 + 20) + (2 + 20))
+        with (module _inline_scope_helper) {
+            secret_bias = 7
+        }
+    }
+}
+
+// unsafe callee bodies splice under a generated `unsafe { }` wrapper
+// (src/ast/ast_inline.cpp): a compiled callee lost its wrappers to foldUnsafe, so a
+// wrapper-less spliced body re-errors against the caller on re-infer. FIRED proof: the
+// cross-module calls (and the [inline] MUST call) are gone, invokes inside the unsafe
+// region devirtualize; behavioral: values identical. The negative pins the kept gate:
+// [unsafe_deref]/[unsafe_operation] change runtime semantics when spliced (re-infer
+// re-stamps deref null-check elision from the CALLER's flag), so they stay calls.
+
+def local_unsafe_sum(src : array<int>; blk : block<(v : int) : int>) : int {
+    // same-module callee: its own `unsafe { }` wrapper is still present at patch time
+    var total = 0
+    var p = unsafe(addr(total))
+    for (v in src) {
+        *p += invoke(blk, v)
+    }
+    return total
+}
+
+[export]
+def target_block_unsafe(src : array<int>) : int => src |> sum_via_ptr() $(v) => v * v
+
+[export]
+def target_single_return_unsafe(src : array<int>) : int => src |> first_via_ptr() $(v) => v + 10
+
+[export]
+def target_expr_unsafe(src : array<int>) : int => src |> expr_unsafe_sum() $(v) => v * 3
+
+[export]
+def target_local_unsafe(src : array<int>) : int => src |> local_unsafe_sum() $(v) => v - 1
+
+[export]
+def target_unsafe_deref(src : array<int>) : int => src |> deref_first() $(v) => v + 1
+
+[export]
+def target_must_unsafe(x : int) : int {
+    return scaled_bits(x, 7)
+}
+
+[export]
+def target_devirt_unsafe_literal(x : int) : int {
+    // caller-origin literal with expression-form unsafe: the devirt splice keeps the
+    // caller's own unsafe accounting (userSaidItsSafe survives non-callee splices)
+    let blk <- $(v : int) : int {
+        return unsafe(reinterpret<int>(uint(v))) + 1
+    }
+    return invoke(blk, x)
+}
+
+[test(description = "callees with block-form, expression-form or same-module unsafe bodies splice under a generated unsafe wrapper and devirtualize their invokes, while an [unsafe_deref] callee stays a call")]
+def test_inline_unsafe_fired(t : T?) {
+    ast_gc_guard() {
+        t |> run("cross-module block-form unsafe body splices") @(t : T?) {
+            let b = body_of(t, "target_block_unsafe")
+            t |> success(!has(b, "sum_via_ptr("), "call is gone: {b}")
+            t |> success(!has(b, "invoke("), "invoke devirtualized: {b}")
+        }
+        t |> run("invoke inside the unsafe region devirtualizes") @(t : T?) {
+            let b = body_of(t, "target_single_return_unsafe")
+            t |> success(!has(b, "first_via_ptr("), "call is gone: {b}")
+            t |> success(!has(b, "invoke("), "invoke devirtualized: {b}")
+        }
+        t |> run("expression-form unsafe body splices") @(t : T?) {
+            let b = body_of(t, "target_expr_unsafe")
+            t |> success(!has(b, "expr_unsafe_sum("), "call is gone: {b}")
+            t |> success(!has(b, "invoke("), "invoke devirtualized: {b}")
+        }
+        t |> run("same-module unsafe body splices") @(t : T?) {
+            let b = body_of(t, "target_local_unsafe")
+            t |> success(!has(b, "local_unsafe_sum("), "call is gone: {b}")
+            t |> success(!has(b, "invoke("), "invoke devirtualized: {b}")
+        }
+        t |> run("[unsafe_deref] callee stays a call") @(t : T?) {
+            let b = body_of(t, "target_unsafe_deref")
+            t |> success(has(b, "deref_first("), "call stays regular: {b}")
+        }
+        t |> run("[inline] MUST callee with unsafe body splices") @(t : T?) {
+            let b = body_of(t, "target_must_unsafe")
+            t |> success(!has(b, "scaled_bits("), "call is gone: {b}")
+        }
+        t |> run("caller-origin unsafe literal devirtualizes") @(t : T?) {
+            let b = body_of(t, "target_devirt_unsafe_literal")
+            t |> success(!has(b, "invoke("), "invoke devirtualized: {b}")
+        }
+    }
+}
+
+[test(description = "functions whose inlined callees carry unsafe bodies compute the same values as the calls did")]
+def test_inline_unsafe_behavior(t : T?) {
+    t |> run("values preserved") @(t : T?) {
+        let src <- [1, 2, 3, 4]
+        t |> equal(target_block_unsafe(src), 30)
+        t |> equal(target_single_return_unsafe(src), 11)
+        t |> equal(target_expr_unsafe(src), 30)
+        t |> equal(target_local_unsafe(src), 6)
+        t |> equal(target_unsafe_deref(src), 2)
+        t |> equal(target_must_unsafe(6), 42)
+        t |> equal(target_devirt_unsafe_literal(41), 42)
     }
 }

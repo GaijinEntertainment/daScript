@@ -21,7 +21,7 @@ def m_002(db : SqlRunner) {
     db |> add_column(type<User>, "Score", 0)
 }
 
-[test]
+[test(description = "add_column of an int field creates a NOT NULL INTEGER column with DEFAULT 0", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_int_default_emits_not_null_default_zero(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()
@@ -36,7 +36,7 @@ def test_int_default_emits_not_null_default_zero(t : T?) {
     t |> equal(stype, "INTEGER", "int maps to INTEGER storage")
 }
 
-[test]
+[test(description = "rows inserted before add_column read the default value afterwards")]
 def test_existing_rows_get_default_value(t : T?) {
     // SQLite ALTER TABLE … ADD COLUMN with DEFAULT backfills pre-existing rows.
     var inscope db = open_sqlite(":memory:")

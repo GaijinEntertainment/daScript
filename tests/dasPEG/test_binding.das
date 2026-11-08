@@ -97,7 +97,7 @@ def parse_pair(input : string; blk : block<(val : string; err : array<ParsingErr
     }
 }
 
-[test]
+[test(description = "a bound number rule returns the parsed integer value")]
 def test_bind_number(t : T?) {
     parse_bound_number("42") $(val; err) {
         t |> success(err |> empty)
@@ -105,7 +105,7 @@ def test_bind_number(t : T?) {
     }
 }
 
-[test]
+[test(description = "a bound string rule returns the string literal contents without quotes")]
 def test_bind_string(t : T?) {
     parse_bound_string("\"hello\"") $(val; err) {
         t |> success(err |> empty)
@@ -113,7 +113,7 @@ def test_bind_string(t : T?) {
     }
 }
 
-[test]
+[test(description = "a bound double rule returns the parsed double value")]
 def test_bind_double(t : T?) {
     parse_bound_double("3.14") $(val; err) {
         t |> success(err |> empty)
@@ -121,7 +121,7 @@ def test_bind_double(t : T?) {
     }
 }
 
-[test]
+[test(description = "bindings to nonterminal results combine into an addition and fall back to a single term")]
 def test_bind_nonterminal(t : T?) {
     t |> run("addition") @(t : T?) {
         parse_add("3 + 5") $(val; err) {
@@ -137,7 +137,7 @@ def test_bind_nonterminal(t : T?) {
     }
 }
 
-[test]
+[test(description = "a text-capturing binding extracts the matched word, including a single letter")]
 def test_text_extract(t : T?) {
     t |> run("extract word") @(t : T?) {
         parse_text_extract("Hello") $(val; err) {
@@ -153,7 +153,7 @@ def test_text_extract(t : T?) {
     }
 }
 
-[test]
+[test(description = "an identifier binding captures alphanumeric names and names starting with an underscore")]
 def test_ident_extract(t : T?) {
     t |> run("alphanumeric identifier") @(t : T?) {
         parse_ident("foo_bar123") $(val; err) {
@@ -169,7 +169,7 @@ def test_ident_extract(t : T?) {
     }
 }
 
-[test]
+[test(description = "several bindings in one rule are all visible to the rule's action")]
 def test_multiple_bindings(t : T?) {
     parse_pair("key = value") $(val; err) {
         t |> success(err |> empty)

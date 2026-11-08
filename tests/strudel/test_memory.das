@@ -40,7 +40,7 @@ def measure_leak_rate(var pat : Pattern; warmup, batch : int) : tuple<int64; int
 // (integer division of 0 is still 0, but just in case).
 let MAX_BYTES_PER_QUERY = 1l
 
-[test]
+[test(description = "repeatedly querying a pure pattern does not leak heap")]
 def test_pure_memory(t : T?) {
     t |> run("pure pattern memory regression") @(t : T?) {
         let pat <- pure(Event(s = "bd"))
@@ -49,7 +49,7 @@ def test_pure_memory(t : T?) {
     }
 }
 
-[test]
+[test(description = "repeatedly querying an atom pattern does not leak heap")]
 def test_atom_memory(t : T?) {
     t |> run("atom pattern memory regression") @(t : T?) {
         let pat <- atom("sd")
@@ -58,7 +58,7 @@ def test_atom_memory(t : T?) {
     }
 }
 
-[test]
+[test(description = "repeatedly querying a stack pattern does not leak heap")]
 def test_stack_memory(t : T?) {
     t |> run("stack pattern memory regression") @(t : T?) {
         let pat <- stack([atom("bd"), atom("sd"), atom("hh"), atom("cp")])
@@ -67,7 +67,7 @@ def test_stack_memory(t : T?) {
     }
 }
 
-[test]
+[test(description = "repeatedly querying a cat pattern does not leak heap")]
 def test_cat_memory(t : T?) {
     t |> run("cat pattern memory regression") @(t : T?) {
         let pat <- cat([atom("bd"), atom("sd"), atom("hh"), atom("cp")])
@@ -76,7 +76,7 @@ def test_cat_memory(t : T?) {
     }
 }
 
-[test]
+[test(description = "repeatedly querying a fast pattern does not leak heap")]
 def test_fast_memory(t : T?) {
     t |> run("fast pattern memory regression") @(t : T?) {
         let pat <- fast(atom("bd"), 4.0lf)
@@ -85,7 +85,7 @@ def test_fast_memory(t : T?) {
     }
 }
 
-[test]
+[test(description = "repeatedly querying an fmap with a lambda does not leak heap")]
 def test_fmap_memory(t : T?) {
     t |> run("fmap with lambda memory regression") @(t : T?) {
         let pat <- fmap(atom("bd"), @(e : Event) : Event {
@@ -98,7 +98,7 @@ def test_fmap_memory(t : T?) {
     }
 }
 
-[test]
+[test(description = "repeatedly querying a degraded pattern does not leak heap")]
 def test_degrade_memory(t : T?) {
     t |> run("degrade pattern memory regression") @(t : T?) {
         let pat <- degrade(atom("bd"), 0.5)
@@ -107,7 +107,7 @@ def test_degrade_memory(t : T?) {
     }
 }
 
-[test]
+[test(description = "repeatedly querying a mini-notation pattern does not leak heap")]
 def test_mini_memory(t : T?) {
     t |> run("mini-notation pattern memory regression") @(t : T?) {
         let pat <- s("bd sd [hh hh] cp")
@@ -116,7 +116,7 @@ def test_mini_memory(t : T?) {
     }
 }
 
-[test]
+[test(description = "repeatedly querying a complex nested pattern does not leak heap")]
 def test_complex_memory(t : T?) {
     t |> run("complex nested pattern memory regression") @(t : T?) {
         let pat <- stack([

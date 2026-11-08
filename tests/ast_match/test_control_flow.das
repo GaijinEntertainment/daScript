@@ -11,7 +11,7 @@ require dastest/testing_boost public
 
 // ── if-then-else ────────────────────────────────────────────────────────
 
-[test]
+[test(description = "qmatch_block matches an if statement without else")]
 def test_if_then(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { if (a < 5) { return b; }; })
@@ -24,7 +24,7 @@ def test_if_then(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_block matches an if statement with else")]
 def test_if_then_else(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { if (a < 5) { return b; } else { return c; }; })
@@ -39,7 +39,7 @@ def test_if_then_else(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_block rejects an if whose condition differs")]
 def test_if_then_wrong_cond(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { if (a < 5) { return b; }; })
@@ -52,7 +52,7 @@ def test_if_then_wrong_cond(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_block rejects an if whose body differs")]
 def test_if_then_wrong_body(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { if (a < 5) { return b; }; })
@@ -65,7 +65,7 @@ def test_if_then_wrong_body(t : T?) {
     }
 }
 
-[test]
+[test(description = "an if pattern without else does not match an if that has an else")]
 def test_if_has_else_but_pattern_doesnt(t : T?) {
     ast_gc_guard() {
         // Actual has else, pattern doesn't — should fail because else is a non-null field
@@ -79,7 +79,7 @@ def test_if_has_else_but_pattern_doesnt(t : T?) {
     }
 }
 
-[test]
+[test(description = "an if pattern with else does not match an if that has no else")]
 def test_if_no_else_but_pattern_has(t : T?) {
     ast_gc_guard() {
         // Actual has no else, pattern has else — should fail
@@ -95,7 +95,7 @@ def test_if_no_else_but_pattern_has(t : T?) {
     }
 }
 
-[test]
+[test(description = "a $e capture binds the condition of an if")]
 def test_if_capture_cond(t : T?) {
     ast_gc_guard() {
         // Capture the condition expression
@@ -113,7 +113,7 @@ def test_if_capture_cond(t : T?) {
     }
 }
 
-[test]
+[test(description = "$e captures bind the then and else bodies of an if")]
 def test_if_capture_bodies(t : T?) {
     ast_gc_guard() {
         // Capture both branches
@@ -135,7 +135,7 @@ def test_if_capture_bodies(t : T?) {
 
 // ── while loop ──────────────────────────────────────────────────────────
 
-[test]
+[test(description = "qmatch_block matches a while loop")]
 def test_while_match(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { while (x > 0) { x --; }; })
@@ -148,7 +148,7 @@ def test_while_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_block rejects a while loop whose condition differs")]
 def test_while_wrong_cond(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { while (x > 0) { x --; }; })
@@ -161,7 +161,7 @@ def test_while_wrong_cond(t : T?) {
     }
 }
 
-[test]
+[test(description = "a $e capture binds the condition of a while loop")]
 def test_while_capture_cond(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { while (x > 0) { x --; }; })
@@ -180,7 +180,7 @@ def test_while_capture_cond(t : T?) {
 
 // ── for loop ────────────────────────────────────────────────────────────
 
-[test]
+[test(description = "qmatch_block matches a for loop")]
 def test_for_match(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { for (x in arr) { print(); }; })
@@ -193,7 +193,7 @@ def test_for_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_block rejects a for loop whose body differs")]
 def test_for_wrong_body(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { for (x in arr) { print(); }; })
@@ -206,7 +206,7 @@ def test_for_wrong_body(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_block rejects a for loop whose source differs")]
 def test_for_wrong_source(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { for (x in arr) { print(); }; })
@@ -221,7 +221,7 @@ def test_for_wrong_source(t : T?) {
 
 // ── return ──────────────────────────────────────────────────────────────
 
-[test]
+[test(description = "qmatch_block matches a return with a value expression")]
 def test_return_value(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { return a + b; })
@@ -232,7 +232,7 @@ def test_return_value(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_block rejects a return whose value differs")]
 def test_return_wrong_value(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { return a + b; })
@@ -243,7 +243,7 @@ def test_return_wrong_value(t : T?) {
     }
 }
 
-[test]
+[test(description = "a $e capture binds the value of a return")]
 def test_return_capture(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { return a + b; })
@@ -260,7 +260,7 @@ def test_return_capture(t : T?) {
 
 // ── for — double iterators ───────────────────────────────────────────
 
-[test]
+[test(description = "qmatch_block matches a for loop over two iterators")]
 def test_for_two_iterators(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { for (k, v in keys, values) { print(); }; })
@@ -273,7 +273,7 @@ def test_for_two_iterators(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_block rejects a two-iterator for whose second iterator name differs")]
 def test_for_two_iterators_wrong_name(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { for (k, v in keys, values) { print(); }; })
@@ -286,7 +286,7 @@ def test_for_two_iterators_wrong_name(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_block rejects a two-iterator for whose second source differs")]
 def test_for_two_iterators_wrong_source(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { for (k, v in keys, values) { print(); }; })
@@ -299,7 +299,7 @@ def test_for_two_iterators_wrong_source(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_block rejects a for loop whose iterator count differs from the pattern's")]
 def test_for_iterator_count_mismatch(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { for (k, v in keys, values) { print(); }; })
@@ -314,7 +314,7 @@ def test_for_iterator_count_mismatch(t : T?) {
 
 // ── for — $i capture ────────────────────────────────────────────────
 
-[test]
+[test(description = "an $i capture on the first iterator works next to a fixed second iterator name")]
 def test_for_capture_single_with_two_iterators(t : T?) {
     ast_gc_guard() {
         // $i tag only works on the first iterator (parser limitation)
@@ -330,7 +330,7 @@ def test_for_capture_single_with_two_iterators(t : T?) {
     }
 }
 
-[test]
+[test(description = "an $i capture on the first iterator does not rescue a wrong fixed second name")]
 def test_for_capture_first_wrong_second(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { for (k, v in keys, values) { print(); }; })
@@ -346,7 +346,7 @@ def test_for_capture_first_wrong_second(t : T?) {
 
 // ── for — $e capture on sources ─────────────────────────────────────
 
-[test]
+[test(description = "a $e capture binds the source of a for loop")]
 def test_for_capture_source(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { for (x in range(10)) { print(); }; })
@@ -363,7 +363,7 @@ def test_for_capture_source(t : T?) {
     }
 }
 
-[test]
+[test(description = "$e captures bind both sources of a two-iterator for loop")]
 def test_for_capture_two_sources(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { for (k, v in keys, values) { print(); }; })
@@ -383,7 +383,7 @@ def test_for_capture_two_sources(t : T?) {
 
 // ── for — $e capture on body ────────────────────────────────────────
 
-[test]
+[test(description = "a $e capture binds the body of a for loop")]
 def test_for_capture_body(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { for (x in arr) { a + b; }; })
@@ -402,7 +402,7 @@ def test_for_capture_body(t : T?) {
 
 // ── for — mixed capture ($i + $e) ───────────────────────────────────
 
-[test]
+[test(description = "an $i and a $e capture bind the iterator name and source of a for loop together")]
 def test_for_capture_iterator_and_source(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { for (x in range(10)) { print(); }; })
@@ -421,7 +421,7 @@ def test_for_capture_iterator_and_source(t : T?) {
     }
 }
 
-[test]
+[test(description = "$i and $e captures bind iterator names, sources and body of a two-iterator for loop together")]
 def test_for_capture_iterator_and_sources(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { for (k, v in keys, values) { a + b; }; })
@@ -444,7 +444,7 @@ def test_for_capture_iterator_and_sources(t : T?) {
 
 // ── for — with range() source ───────────────────────────────────────
 
-[test]
+[test(description = "qmatch_block matches a for loop over range(10)")]
 def test_for_range_source(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { for (i in range(10)) { print(); }; })
@@ -457,7 +457,7 @@ def test_for_range_source(t : T?) {
     }
 }
 
-[test]
+[test(description = "a for loop over range(10) does not match a pattern over range(20)")]
 def test_for_range_wrong_arg(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { for (i in range(10)) { print(); }; })
@@ -472,7 +472,7 @@ def test_for_range_wrong_arg(t : T?) {
 
 // ── for — in wildcard context ───────────────────────────────────────
 
-[test]
+[test(description = "a for loop between wildcard statements is found and its iterator captured")]
 def test_for_in_wildcard(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { var x = 0; for (i in arr) { x += i; }; print(); })
@@ -492,7 +492,7 @@ def test_for_in_wildcard(t : T?) {
 
 // ── Mixed with wildcards ────────────────────────────────────────────────
 
-[test]
+[test(description = "an if statement between wildcard statements is found")]
 def test_if_in_wildcard_sandwich(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { print(); if (a < 5) { return b; }; foo(); })
@@ -507,7 +507,7 @@ def test_if_in_wildcard_sandwich(t : T?) {
     }
 }
 
-[test]
+[test(description = "a while loop after a leading wildcard statement is found")]
 def test_while_after_wildcard(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { var x = 10; while (x > 0) { x --; }; })

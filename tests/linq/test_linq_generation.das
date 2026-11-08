@@ -6,7 +6,7 @@ require daslib/linq
 
 require _common
 
-[test]
+[test(description = "default_empty yields the supplied default for an empty sequence and leaves a non-empty one unchanged, also for struct types")]
 def test_defaultempty(t : T?) {
     t |> run("basic default empty") @(t : T?) {
         var query = default_empty(
@@ -45,7 +45,7 @@ def test_defaultempty(t : T?) {
     }
 }
 
-[test]
+[test(description = "empty produces a sequence with no elements for plain and struct element types")]
 def test_empty(t : T?) {
     t |> run("basic empty") @(t : T?) {
         var query = empty(type<int>)
@@ -65,7 +65,7 @@ def test_empty(t : T?) {
     }
 }
 
-[test]
+[test(description = "range_sequence yields the integers from its first to its last argument inclusive")]
 def test_range(t : T?) {
     t |> run("basic range_sequence") @(t : T?) {
         var query = range_sequence(0, 5)
@@ -76,7 +76,7 @@ def test_range(t : T?) {
     }
 }
 
-[test]
+[test(description = "repeat yields the same element the requested number of times for plain and struct elements")]
 def test_repeat(t : T?) {
     t |> run("basic repeat") @(t : T?) {
         var query = repeat(42, 5)

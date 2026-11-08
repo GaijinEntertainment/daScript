@@ -1,12 +1,13 @@
 options gen2
-options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
+
 
 // Contract area: Option<T> nullability — DDL NULL-ability, bind/read of some/none,
 // and the is_some / is_none / unwrap_or predicate translations.
 
 require dastest/testing_boost public
+
 require _conformance_provider
 
 [sql_table(name = "ConfUsers")]
@@ -25,7 +26,7 @@ def private seed(db) {
         ConfUser(Id = 0, Name = "c", Nick = none(type<string>), Age = none(type<int>))])
 }
 
-[test]
+[test(description = "some and none option values survive an insert and select round-trip", standalone = "a provider copies this directory and drops files per capability; the file is the unit")]
 def test_conf_option_roundtrip(t : T?) {
     t |> run("some/none survive an insert + select_from round-trip") @(t : T?) {
         with_conf_db() $(db) {
@@ -45,7 +46,7 @@ def test_conf_option_roundtrip(t : T?) {
     }
 }
 
-[test]
+[test(description = "is_some, is_none and unwrap_or translate to the NULL tests and COALESCE")]
 def test_conf_null_predicates(t : T?) {
     t |> run("is_some / is_none translate to IS [NOT] NULL") @(t : T?) {
         with_conf_db() $(db) {

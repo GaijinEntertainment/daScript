@@ -8,14 +8,14 @@ def m1(db : SqlRunner) {
     db |> exec("CREATE TABLE users (Id INTEGER PRIMARY KEY)")
 }
 
-[test]
+[test(description = "a second migrate_to_latest on an up-to-date database returns 0", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_second_call_returns_zero(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()
     t |> equal(db |> migrate_to_latest(), 0, "rerun on up-to-date DB must return 0")
 }
 
-[test]
+[test(description = "a rerun adds no audit rows")]
 def test_second_call_does_not_add_audit_rows(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()

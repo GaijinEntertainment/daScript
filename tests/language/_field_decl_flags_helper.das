@@ -1,9 +1,11 @@
-// Helper module for tests/language/test_field_decl_flags.das.
+// Helper module for the field-decl-flags test in
+// tests/language/annotations.das.
 //
-// Declares [check_add_field_flags(abstract=..., inherited=...)] — a structure_macro
-// that walks st.fields looking for "add", and macro_errors if its _abstract /
-// inherited bits don't match the annotation arguments. The compile succeeding
-// is the test: any mismatch turns into a compile-time error.
+// Declares [check_add_field_flags(abstract=..., inherited=...)] — a
+// structure_macro that walks st.fields looking for "add", and
+// macro_errors if its _abstract / inherited bits don't match the
+// annotation arguments. The compile succeeding is the test: any
+// mismatch turns into a compile-time error.
 options gen2
 options indenting = 4
 

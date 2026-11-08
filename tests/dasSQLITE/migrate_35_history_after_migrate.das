@@ -18,7 +18,7 @@ def m3(db : SqlRunner) {
     db |> exec("CREATE TABLE z (c INT)")
 }
 
-[test]
+[test(description = "migration_history lists every applied migration in version order with its description and a timestamp", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_history_contains_all_applied_in_version_order(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()
@@ -33,7 +33,7 @@ def test_history_contains_all_applied_in_version_order(t : T?) {
     t |> success(h[2].applied_at >= h[0].applied_at, "applied_at must be monotonic")
 }
 
-[test]
+[test(description = "current_schema_version equals the highest applied version")]
 def test_current_after_migrate(t : T?) {
     var inscope db = open_sqlite(":memory:")
     db |> migrate_to_latest()

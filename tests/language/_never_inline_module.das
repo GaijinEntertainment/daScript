@@ -3,8 +3,8 @@ options never_inline
 
 module _never_inline_module public
 
-// fixture for `options never_inline` (inline_never_module.das): nothing defined here
-// may be spliced
+// fixture for `options never_inline` (optimization_inline.das):
+// nothing defined here may be spliced
 
 [inline]
 def nvm_add(a, b : int) : int => a + b

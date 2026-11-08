@@ -29,7 +29,7 @@ require _qmatch_r2v_helper
 // equate `*foo` with `foo`.
 // ============================================================================
 
-[test]
+[test(description = "a field pattern matches a source field access wrapped in ExprRef2Value")]
 def test_source_wrapped_field(t : T?) {
     ast_gc_guard() {
         var inner = qmacro(a.foo)
@@ -39,7 +39,7 @@ def test_source_wrapped_field(t : T?) {
     }
 }
 
-[test]
+[test(description = "a variable pattern matches a source variable wrapped in ExprRef2Value")]
 def test_source_wrapped_var(t : T?) {
     ast_gc_guard() {
         var inner = qmacro(somevar)
@@ -49,7 +49,7 @@ def test_source_wrapped_var(t : T?) {
     }
 }
 
-[test]
+[test(description = "an operator pattern matches a source operator wrapped in ExprRef2Value")]
 def test_source_wrapped_op(t : T?) {
     ast_gc_guard() {
         var inner = qmacro(a + b)
@@ -59,7 +59,7 @@ def test_source_wrapped_op(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch peels several nested ExprRef2Value wrappers from the source")]
 def test_nested_wrappers(t : T?) {
     ast_gc_guard() {
         var inner = qmacro(a.foo)
@@ -71,7 +71,7 @@ def test_nested_wrappers(t : T?) {
     }
 }
 
-[test]
+[test(description = "a $e capture matches a source wrapped in ExprRef2Value")]
 def test_capture_e_peels_wrapper(t : T?) {
     // $e(var) capture must yield the underlying expression, not the wrapper —
     // downstream callers check `captured is ExprField`, not `is ExprRef2Value`.
@@ -88,7 +88,7 @@ def test_capture_e_peels_wrapper(t : T?) {
     }
 }
 
-[test]
+[test(description = "an $f capture matches a field access wrapped in ExprRef2Value and captures its name")]
 def test_capture_f_peels_wrapper(t : T?) {
     // The hand-rolled is_underscore_field in sqlite_linq existed to do exactly
     // this: peel ExprRef2Value, then capture the field name. With auto-peel,
@@ -103,7 +103,7 @@ def test_capture_f_peels_wrapper(t : T?) {
     }
 }
 
-[test]
+[test(description = "a source without any ExprRef2Value wrapper still matches")]
 def test_clean_source_still_matches(t : T?) {
     // Regression — peeling logic must not break the no-wrapper case.
     ast_gc_guard() {
@@ -115,7 +115,7 @@ def test_clean_source_still_matches(t : T?) {
 
 // ── ExprPtr2Ref NOT auto-peeled (negative tests) ─────────────────────────
 
-[test]
+[test(description = "qmatch does not peel ExprPtr2Ref, so a wrapped source fails the plain pattern")]
 def test_ptr2ref_not_peeled(t : T?) {
     // *foo is user-visible — should NOT match a pattern of bare foo.
     ast_gc_guard() {
@@ -126,7 +126,7 @@ def test_ptr2ref_not_peeled(t : T?) {
     }
 }
 
-[test]
+[test(description = "ExprRef2Value around ExprPtr2Ref does not match an unwrapped pattern")]
 def test_ref2value_around_ptr2ref(t : T?) {
     // Mixed: ExprRef2Value(ExprPtr2Ref(inner)). The Ref2Value layer peels
     // away, but the Ptr2Ref must remain — so a bare-inner pattern still fails.
@@ -141,7 +141,7 @@ def test_ref2value_around_ptr2ref(t : T?) {
 
 // ── Pattern-side peel (via helper macro that emits qmatch with wrapped pattern) ──
 
-[test]
+[test(description = "a pattern carrying an ExprRef2Value wrapper peels it and matches a clean source")]
 def test_pattern_side_wrapper_peeled(t : T?) {
     // The helper macro emits: qmatch(<source>, ExprRef2Value(qmacro(a.foo))).
     // generate_match's pattern-side peel must strip the wrapper so a clean

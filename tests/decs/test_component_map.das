@@ -9,7 +9,7 @@ require dastest/testing_boost public
 
 // === ComponentMap set/get/has/remove ===
 
-[test]
+[test(description = "a ComponentMap stores and returns an int")]
 def test_component_map_set_get_int(t : T?) {
     var cmp : ComponentMap
     cmp |> set("x", 42)
@@ -18,7 +18,7 @@ def test_component_map_set_get_int(t : T?) {
     t |> equal(v, 42)
 }
 
-[test]
+[test(description = "a ComponentMap stores and returns a float")]
 def test_component_map_set_get_float(t : T?) {
     var cmp : ComponentMap
     cmp |> set("y", 3.14)
@@ -27,7 +27,7 @@ def test_component_map_set_get_float(t : T?) {
     t |> equal(v, 3.14)
 }
 
-[test]
+[test(description = "a ComponentMap stores and returns a string")]
 def test_component_map_set_get_string(t : T?) {
     var cmp : ComponentMap
     cmp |> set("name", "hello")
@@ -36,7 +36,7 @@ def test_component_map_set_get_string(t : T?) {
     t |> equal(v, "hello")
 }
 
-[test]
+[test(description = "has reports whether a component is in the ComponentMap")]
 def test_component_map_has(t : T?) {
     var cmp : ComponentMap
     cmp |> set("alpha", 1)
@@ -44,7 +44,7 @@ def test_component_map_has(t : T?) {
     t |> success(!(cmp |> has("beta")))
 }
 
-[test]
+[test(description = "remove deletes one component and keeps the rest")]
 def test_component_map_remove(t : T?) {
     var cmp : ComponentMap
     cmp |> set("a", 10)
@@ -55,7 +55,7 @@ def test_component_map_remove(t : T?) {
     t |> success(cmp |> has("b"))
 }
 
-[test]
+[test(description = "setting a component again replaces its value")]
 def test_component_map_overwrite(t : T?) {
     var cmp : ComponentMap
     cmp |> set("x", 1)
@@ -65,7 +65,7 @@ def test_component_map_overwrite(t : T?) {
     t |> equal(v, 99)
 }
 
-[test]
+[test(description = "components set with the dot and clone-assign syntax are read back by a query on the entity")]
 def test_component_map_dot_syntax(t : T?) {
     // cmp.name := value uses operator . + operator :=
     restart()
@@ -84,7 +84,7 @@ def test_component_map_dot_syntax(t : T?) {
     t |> equal(foundTag, "test")
 }
 
-[test]
+[test(description = "components are kept sorted by name")]
 def test_component_map_sorted_order(t : T?) {
     // Components in ComponentMap are kept in sorted order by name
     var cmp : ComponentMap
@@ -96,7 +96,7 @@ def test_component_map_sorted_order(t : T?) {
     t |> equal(cmp[2].name, "zebra")
 }
 
-[test]
+[test(description = "removing a missing component does nothing")]
 def test_component_map_remove_nonexistent(t : T?) {
     // Removing a non-existent component should be a no-op
     var cmp : ComponentMap
@@ -108,7 +108,7 @@ def test_component_map_remove_nonexistent(t : T?) {
 
 // === Multiple component types ===
 
-[test]
+[test(description = "components of vector and other wide types are stored and read back")]
 def test_wide_component_types(t : T?) {
     restart()
     let eid = create_entity() @(eid, cmp) {
@@ -143,7 +143,7 @@ struct MaxSizeComponent {
     d : float4
 }
 
-[test]
+[test(description = "a component of the maximum allowed size is stored and read back")]
 def test_component_map_max_size_component(t : T?) {
     var cmp : ComponentMap
     set(cmp.big, MaxSizeComponent(a = float4(1.0), d = float4(4.0)))
@@ -155,7 +155,7 @@ def test_component_map_max_size_component(t : T?) {
 
 // === EntityId as component ===
 
-[test]
+[test(description = "a component holding an entity id links entities")]
 def test_entity_id_component(t : T?) {
     restart()
     let parent = create_entity() @(eid, cmp) {

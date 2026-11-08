@@ -7,7 +7,7 @@ options gen2
 options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
-require dw_common
+require _dw_common
 
 
 // ============================================================
@@ -122,7 +122,7 @@ class SelectiveStructWalker : DapiDataWalker {
 // Tests
 // ============================================================
 
-[test]
+[test(description = "canVisitStructure and canVisitArray returning false skip those nodes")]
 def test_can_visit_filtering(t : T?) {
     t |> run("skip structures") @(t : T?) {
         var walker = new SkipStructWalker()
@@ -150,7 +150,7 @@ def test_can_visit_filtering(t : T?) {
 }
 
 
-[test]
+[test(description = "canVisitArrayData false skips the elements but still reports before and after the array")]
 def test_can_visit_array_data(t : T?) {
     t |> run("skip array data but still get before/after array") @(t : T?) {
         var walker = new SkipArrayDataWalker()
@@ -168,7 +168,7 @@ def test_can_visit_array_data(t : T?) {
 }
 
 
-[test]
+[test(description = "canVisitTableData false skips the table entries")]
 def test_can_visit_table_data(t : T?) {
     t |> run("skip table data entries") @(t : T?) {
         var walker = new SkipTableDataWalker()
@@ -186,7 +186,7 @@ def test_can_visit_table_data(t : T?) {
 }
 
 
-[test]
+[test(description = "canVisitPointer false stops the walk from dereferencing a pointer")]
 def test_can_visit_pointer(t : T?) {
     t |> run("skip pointer dereference") @(t : T?) {
         var walker = new SkipPointerWalker()
@@ -202,7 +202,7 @@ def test_can_visit_pointer(t : T?) {
 }
 
 
-[test]
+[test(description = "a walker can skip one named inner struct while still visiting the rest")]
 def test_selective_struct_visit(t : T?) {
     t |> run("skip inner struct only") @(t : T?) {
         var walker = new SelectiveStructWalker()

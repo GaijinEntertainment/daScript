@@ -1,13 +1,15 @@
 options gen2
 options no_unused_function_arguments = false
 options no_unused_block_arguments = false
+
 require daslib/algorithm
 require dastest/testing_boost public
 require daslib/cmp
+require daslib/functional
 
 // ---- unique ----
 
-[test]
+[test(description = "unique drops adjacent duplicates only, so unsorted input keeps its non-adjacent repeats")]
 def test_unique_sorted(t : T?) {
     t |> run("removes adjacent duplicates from sorted array") @(t : T?) {
         var a <- [1, 1, 2, 2, 3, 3]
@@ -49,7 +51,7 @@ def test_unique_sorted(t : T?) {
 
 // ---- sort_unique ----
 
-[test]
+[test(description = "sort_unique leaves the array sorted with every duplicate removed, on empty and single-element input too")]
 def test_sort_unique(t : T?) {
     t |> run("sorts and deduplicates") @(t : T?) {
         var a <- [3, 1, 2, 1, 3, 2]
@@ -85,7 +87,7 @@ def test_sort_unique(t : T?) {
 
 // ---- reverse ----
 
-[test]
+[test(description = "reverse flips an array in place for even, odd, empty, single, two-element and fixed-size inputs")]
 def test_reverse(t : T?) {
     t |> run("reverses even-length array") @(t : T?) {
         var a <- [1, 2, 3, 4]
@@ -128,7 +130,7 @@ def test_reverse(t : T?) {
 
 // ---- combine ----
 
-[test]
+[test(description = "combine returns the concatenation of two arrays and tolerates either or both being empty")]
 def test_combine(t : T?) {
     t |> run("combines two arrays") @(t : T?) {
         let a <- [1, 2]
@@ -163,7 +165,7 @@ def test_combine(t : T?) {
 
 // ---- lower_bound ----
 
-[test]
+[test(description = "lower_bound returns the first position not less than the key, including with a comparator, a range and duplicates")]
 def test_lower_bound(t : T?) {
     t |> run("finds insertion point") @(t : T?) {
         let a <- [1, 3, 5, 7, 9]
@@ -204,7 +206,7 @@ def test_lower_bound(t : T?) {
 
 // ---- binary_search ----
 
-[test]
+[test(description = "binary_search reports whether an element is present on sorted input, with a comparator and range, and false on empty")]
 def test_binary_search(t : T?) {
     t |> run("finds existing element") @(t : T?) {
         let a <- [1, 3, 5, 7, 9]
@@ -249,7 +251,7 @@ def test_binary_search(t : T?) {
 
 // ---- erase_all ----
 
-[test]
+[test(description = "erase_all removes every occurrence of a value and leaves the array unchanged when the value is absent")]
 def test_erase_all(t : T?) {
     t |> run("erases all occurrences") @(t : T?) {
         var a <- [1, 2, 3, 2, 4, 2]
@@ -300,7 +302,7 @@ struct TsNode {
     before : table<int>
 }
 
-[test]
+[test(description = "topological_sort orders a chain, a diamond, a single node, an empty graph and an edgeless graph consistently with their dependencies")]
 def test_topological_sort_cases(t : T?) {
     t |> run("linear chain") @(t : T?) {
         // 0 -> 1 -> 2
@@ -349,7 +351,7 @@ def test_topological_sort_cases(t : T?) {
 
 // ---- set operations ----
 
-[test]
+[test(description = "intersection of two sets holds exactly the shared keys, empty when nothing is shared or either side is empty")]
 def test_intersection(t : T?) {
     t |> run("basic intersection") @(t : T?) {
         let a <- { 1, 2, 3 }
@@ -382,7 +384,7 @@ def test_intersection(t : T?) {
     }
 }
 
-[test]
+[test(description = "union of two sets holds every key of both, and an empty side adds nothing")]
 def test_union(t : T?) {
     t |> run("basic union") @(t : T?) {
         let a <- { 1, 2 }
@@ -403,7 +405,7 @@ def test_union(t : T?) {
     }
 }
 
-[test]
+[test(description = "difference holds the keys of the first set missing from the second, all of them when disjoint and none for a subset")]
 def test_difference(t : T?) {
     t |> run("basic difference") @(t : T?) {
         let a <- { 1, 2, 3 }
@@ -425,7 +427,7 @@ def test_difference(t : T?) {
     }
 }
 
-[test]
+[test(description = "identical is true only for sets with the same keys, regardless of insertion order")]
 def test_identical(t : T?) {
     t |> run("equal sets") @(t : T?) {
         let a <- { 1, 2, 3 }
@@ -446,4 +448,53 @@ def test_identical(t : T?) {
         let a, b : table<int>
         t |> equal(identical(a, b), true)
     }
+}
+
+// ---- set operations ----
+
+[test(description = "intersection, union and difference of integer sets give the expected key sets in both directions")]
+def test_set_operations(t : T?) {
+    let a <- { 1, 2, 3 }
+    let b <- { 2, 3, 4 }
+    let c <- intersection(a, b)
+    t |> success(identical(c, {2, 3}))
+    let d <- union(a, b)
+    t |> success(identical(d, {1, 2, 3, 4}))
+    let e <- difference(a, b)
+    t |> success(identical(e, {1}))
+    let f <- difference(b, a)
+    t |> success(identical(f, {4}))
+}
+
+// ---- topological sort ----
+
+struct Node {
+    id     : int
+    before : table<int>
+}
+
+[test(description = "topological_sort puts each node after the nodes it must follow in a diamond graph and keeps every node")]
+def test_topological_sort(t : T?) {
+    // 0 -> 1 -> 3
+    // 0 -> 2 -> 3
+    let nodes <- [Node(
+        id=3, before <- {1, 2}), Node(
+        id=0), Node(
+        id=2, before <- {0}), Node(
+        id=1, before <- {0}
+    )]
+    var res <- topological_sort(nodes)
+    t |> success(length(res) == 4, "expecting all the same nodes")
+    var good : bool[4]
+    for (n, i in res, range(4)) {
+        good[n.id] = true
+        if (n.id == 0) {
+            t |> success(i == 0, "0 is first")
+        } elif (n.id == 3) {
+            t |> success(i == 3, "3 is last")
+        } elif (n.id == 1 || n.id == 2) {
+            t |> success(i == 1 || i == 2, "1 or 2 is second and third")
+        }
+    }
+    t |> success(all(good), "all nodes are present")
 }

@@ -9,7 +9,7 @@ require dastest/testing_boost public
 
 // === Update component value ===
 
-[test]
+[test(description = "updating an entity changes a component value")]
 def test_update_modify_value(t : T?) {
     restart()
     let eid = create_entity() @(eid, cmp) {
@@ -31,7 +31,7 @@ def test_update_modify_value(t : T?) {
 
 // === Update add component (archetype change) ===
 
-[test]
+[test(description = "updating an entity can add a component")]
 def test_update_add_component(t : T?) {
     restart()
     let eid = create_entity() @(eid, cmp) {
@@ -53,7 +53,7 @@ def test_update_add_component(t : T?) {
 
 // === Update remove component (archetype change) ===
 
-[test]
+[test(description = "updating an entity can remove a component")]
 def test_update_remove_component(t : T?) {
     restart()
     let eid = create_entity() @(eid, cmp) {
@@ -82,7 +82,7 @@ def test_update_remove_component(t : T?) {
 
 // === Update same archetype (no archetype change) ===
 
-[test]
+[test(description = "an update that keeps the component set leaves the entity in its archetype")]
 def test_update_same_archetype(t : T?) {
     restart()
     let eid = create_entity() @(eid, cmp) {
@@ -105,7 +105,7 @@ def test_update_same_archetype(t : T?) {
 
 // === Update deleted entity is a no-op ===
 
-[test]
+[test(description = "updating a deleted entity does nothing")]
 def test_update_deleted_entity(t : T?) {
     restart()
     let eid = create_entity() @(eid, cmp) {
@@ -128,7 +128,7 @@ def test_update_deleted_entity(t : T?) {
 
 // === Multiple updates before commit ===
 
-[test]
+[test(description = "several updates before one commit all apply")]
 def test_multiple_updates_before_commit(t : T?) {
     restart()
     let eid = create_entity() @(eid, cmp) {
@@ -156,7 +156,7 @@ def test_multiple_updates_before_commit(t : T?) {
 
 // === Update preserves other entities ===
 
-[test]
+[test(description = "updating one entity leaves other entities unchanged")]
 def test_update_preserves_others(t : T?) {
     restart()
     let e1 = create_entity() @(eid, cmp) {
@@ -189,7 +189,7 @@ def test_update_preserves_others(t : T?) {
 
 // === Update with replace of component type (add + remove) ===
 
-[test]
+[test(description = "an update can replace a component with another type of value")]
 def test_update_replace_component(t : T?) {
     restart()
     let eid = create_entity() @(eid, cmp) {

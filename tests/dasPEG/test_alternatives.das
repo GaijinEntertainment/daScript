@@ -85,7 +85,7 @@ def parse_prefix(input : string; blk : block<(val : string; err : array<ParsingE
     }
 }
 
-[test]
+[test(description = "an ordered choice picks the first alternative that matches (bool, number or string) and reports which one")]
 def test_ordered_choice(t : T?) {
     t |> run("true is bool") @(t : T?) {
         parse_token_type("true") $(val; err) {
@@ -113,7 +113,7 @@ def test_ordered_choice(t : T?) {
     }
 }
 
-[test]
+[test(description = "a choice falls through failing alternatives to the next matching one, and yields nothing when none match")]
 def test_fallthrough(t : T?) {
     t |> run("null matches first") @(t : T?) {
         parse_value("null") $(val; err) {
@@ -140,7 +140,7 @@ def test_fallthrough(t : T?) {
     }
 }
 
-[test]
+[test(description = "a choice over five comparison operators selects the matching operator")]
 def test_many_alternatives(t : T?) {
     t |> run("==") @(t : T?) {
         parse_operator("==") $(val; err) {
@@ -174,7 +174,7 @@ def test_many_alternatives(t : T?) {
     }
 }
 
-[test]
+[test(description = "with shared prefixes the earlier (longer) alternative wins and the shorter one still matches when the longer fails")]
 def test_prefix_ordering(t : T?) {
     t |> run("longer prefix matches first") @(t : T?) {
         parse_prefix("foobar") $(val; err) {

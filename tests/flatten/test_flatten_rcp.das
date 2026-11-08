@@ -6,15 +6,19 @@ require dastest/testing_boost public
 require daslib/flatten
 require math
 
-//! Twin corpus for the fast-math division rewrites: `x / C → x * (1/C)` (fold arm) and
-//! `x / U → x * _preshader(1/U)` (extraction, U uniform). Exactness tiers: a power-of-two
-//! reciprocal is exact (`equal`); any other reciprocal rounds, so those twins compare
-//! `fapprox` — the rounding is the fast-math contract, `options _flatten_no_fast_math`
-//! turns it off (see test_flatten_nofastmath.das). A zero divisor keeps the division
-//! (no inf literal is minted); integer division is out of scope entirely. The structural
-//! FIRED half (no un-rcp'd const/uniform division residual) lives in
-//! tests/flatten/no_aot/test_flatten_fold.das via the option-aware oracles; the backend
-//! node proof is capability/cap_rcp.shader (one shared per-draw reciprocal).
+//! Twin corpus for the fast-math division rewrites: `x / C → x *
+//! (1/C)` (fold arm) and `x / U → x * _preshader(1/U)` (extraction, U
+//! uniform). Exactness tiers: a power-of-two reciprocal is exact
+//! (`equal`); any other reciprocal rounds, so those twins compare
+//! `fapprox` — the rounding is the fast-math contract, `options
+//! _flatten_no_fast_math` turns it off (see
+//! uncategorized__flatten_no_fast_math.das). A zero divisor keeps the
+//! division (no inf literal is minted); integer division is out of
+//! scope entirely. The structural FIRED half (no un-rcp'd
+//! const/uniform division residual) lives in
+//! tests/flatten/no_aot/test_flatten_fold.das via the option-aware
+//! oracles; the backend node proof is capability/cap_rcp.shader (one
+//! shared per-draw reciprocal).
 
 var G_RCP = 3.0
 
@@ -62,7 +66,7 @@ def cmp3f_approx(t : T?; a, b : float3) {
     fapprox(t, a.x, b.x); fapprox(t, a.y, b.y); fapprox(t, a.z, b.z)
 }
 
-[test]
+[test(description = "division by a constant or uniform is rewritten to multiplication by a reciprocal, exactly for powers of two and to rounding otherwise, and a zero divisor keeps the division", standalone = "no_aot/test_flatten_fold.das compiles this file by path as a unit and checks its twins structurally")]
 def test_flatten_rcp(t : T?) {
     if (HOST_FAST_MATH) {
         t |> skip("host runtime is built -ffast-math: the pow2 reciprocal rewrites this file pins are exact only in precise math")

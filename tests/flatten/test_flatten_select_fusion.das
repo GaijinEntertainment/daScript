@@ -124,7 +124,7 @@ def cmp3(t : T?; a, b : float3) {
     t |> equal(a.x, b.x); t |> equal(a.y, b.y); t |> equal(a.z, b.z)
 }
 
-[test]
+[test(description = "a chain of selects on one loop-invariant guard fuses without changing values, and a per-iteration guard or a division by zero stays correct", standalone = "no_aot/test_flatten_fold.das compiles this file by path as a unit and checks its twins structurally")]
 def test_flatten_select_fusion(t : T?) {
     t |> run("additive (base 0)") @(t : T?) {
         for (s in SG) { for (n in NG) { t |> equal(sf_add_flat(s, n), sf_add(s, n)) } }

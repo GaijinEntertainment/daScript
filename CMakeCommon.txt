@@ -166,7 +166,7 @@ MACRO(SETUP_COMPILER)
     # same UB, despite presenting an MSVC-style driver (only the real MSVC `cl`
     # defaults to wrap). clang-cl accepts the plain `-fwrapv` clang flag. The
     # earlier `FRONTEND_VARIANT != MSVC` exclusion regressed the Windows
-    # clang-cl AOT lane (tests/language/random_numbers — random_int escaped its
+    # clang-cl AOT lane (tests/language/math_library — random_int escaped its
     # `& 0x7FFF` mask), so the gate is now compiler-id based only.
     IF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" OR
        "${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR

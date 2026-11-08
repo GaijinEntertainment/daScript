@@ -14,7 +14,7 @@ require dastest/testing_boost public
 
 // ── for-loop: both iterator slots tagged ────────────────────────────────
 
-[test]
+[test(description = "an $i tag in each of two for-loop slots is replaced by its own name")]
 def test_for_both_slots(t : T?) {
     ast_gc_guard() {
         let kName = "kk"
@@ -39,7 +39,7 @@ def test_for_both_slots(t : T?) {
 
 // ── comprehension: tag in the second slot ───────────────────────────────
 
-[test]
+[test(description = "an $i tag in the second slot of a comprehension is replaced by its name")]
 def test_comprehension_slot1(t : T?) {
     ast_gc_guard() {
         let kName = "kk"
@@ -56,7 +56,7 @@ def test_comprehension_slot1(t : T?) {
 
 // ── let declaration: both names tagged / literal+tag mix ────────────────
 
-[test]
+[test(description = "an $i tag in each slot of a let declaration is replaced by its own name")]
 def test_let_both_slots(t : T?) {
     ast_gc_guard() {
         let kName = "kk"
@@ -73,7 +73,7 @@ def test_let_both_slots(t : T?) {
     }
 }
 
-[test]
+[test(description = "a let with a literal name followed by an $i tag keeps the literal and replaces the tag")]
 def test_let_literal_then_tag(t : T?) {
     ast_gc_guard() {
         let vName = "vv"
@@ -89,7 +89,7 @@ def test_let_literal_then_tag(t : T?) {
 
 // ── block argument list: shared-type group with both names tagged ───────
 
-[test]
+[test(description = "block arguments built from two $i tags share one declared type")]
 def test_block_args_shared_type(t : T?) {
     ast_gc_guard() {
         let aName = "kk"

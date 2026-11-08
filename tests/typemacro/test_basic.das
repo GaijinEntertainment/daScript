@@ -8,7 +8,7 @@ options gen2
 require dastest/testing_boost public
 require _typemacro_mod
 
-[test]
+[test(description = "a type macro is usable in the name(args), $name(args), name<types>(args) and $name<types>(args) forms")]
 def test_grammar_forms(t : T?) {
     t |> run("name(args) form") @(t : T?) {
         var a : tm_make(type<float>, 4, true, "arr")
@@ -30,7 +30,7 @@ def test_grammar_forms(t : T?) {
     }
 }
 
-[test]
+[test(description = "a type macro takes bool and int constant arguments that change the shape and size of the result and composes with structs")]
 def test_const_arguments(t : T?) {
     t |> run("bool argument switches result shape") @(t : T?) {
         var _plain : tm_make(type<int>, 1, false, "plain")
@@ -51,7 +51,7 @@ def test_const_arguments(t : T?) {
     }
 }
 
-[test]
+[test(description = "typedecl(expr) resolves to the type of the expression")]
 def test_typedecl_payload(t : T?) {
     t |> run("typedecl(expr) resolves to expression type") @(t : T?) {
         var _x = 5
@@ -64,7 +64,7 @@ def test_typedecl_payload(t : T?) {
     }
 }
 
-[test]
+[test(description = "shift and rotate operators still parse after a name<types> type macro form")]
 def test_shift_after_type_list(t : T?) {
     // '>>' after a closed type list is a shift, not two '>'
     t |> run("shift and rotate after name<types> forms") @(t : T?) {

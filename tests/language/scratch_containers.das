@@ -2,18 +2,20 @@ options gen2
 options persistent_heap = true
 options no_coverage
 
-// The scratch one-shot family's capacity/length semantics, plus the inert-outside-very-safe
-// control: this file deliberately does NOT set very_safe_context, so the scratch bit must
-// change nothing here. The very-safe halves live in scratch_very_safe_array/table.das.
+// The scratch one-shot family's capacity/length semantics, plus the
+// inert-outside-very-safe control: this file deliberately does NOT
+// set very_safe_context, so the scratch bit must change nothing here.
+// The very-safe halves live in scratch_very_safe.das.
 
 require dastest/testing_boost public
 
-// globals: a stack-promoted local never reaches array_reserve, and the heap delta in the
-// control arm below would read zero against a broken predicate
+// globals: a stack-promoted local never reaches array_reserve, and
+// the heap delta in the control arm below would read zero against a
+// broken predicate
 var g_marked : array<int>
 var g_plain : array<int>
 
-[test]
+[test(description = "scratch_reserve sets capacity to exactly the asked size, for the int and int64 overloads, and leaves length zero")]
 def test_scratch_reserve(t : T?) {
     t |> run("scratch_reserve is exact - reserve never rounds") @(t : T?) {
         var inscope a : array<int>
@@ -28,7 +30,7 @@ def test_scratch_reserve(t : T?) {
     }
 }
 
-[test]
+[test(description = "scratch_ensure_capacity keeps a sufficient capacity, doubles when doubling covers the ask, and otherwise grows to exactly the ask")]
 def test_scratch_ensure_capacity(t : T?) {
     t |> run("no-op at or below capacity") @(t : T?) {
         var inscope a : array<int>
@@ -56,7 +58,7 @@ def test_scratch_ensure_capacity(t : T?) {
     }
 }
 
-[test]
+[test(description = "scratch_resize grows to exactly the asked capacity where plain resize rounds to a power of two, shrinking keeps capacity, and a negative scratch_reserve is a no-op")]
 def test_scratch_resize(t : T?) {
     t |> run("grow reserves the exact size - plain resize pow2-rounds") @(t : T?) {
         var inscope a : array<int>
@@ -91,7 +93,7 @@ def test_scratch_resize(t : T?) {
     }
 }
 
-[test]
+[test(description = "outside very_safe_context the scratch bit changes nothing: a marked array grows and frees exactly like an unmarked one")]
 def test_scratch_inert_outside_very_safe(t : T?) {
     t |> run("a normal context grows identically with and without the bit") @(t : T?) {
         let before = heap_bytes_allocated()

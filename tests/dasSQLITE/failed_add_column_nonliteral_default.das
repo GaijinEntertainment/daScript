@@ -1,8 +1,11 @@
 options gen2
+//! add_column with a default that is not a compile-time literal must
+//! not compile
 
-// AddColumnMacro requires the DEFAULT to be a compile-time literal: int / float /
-// double / bool / string. Runtime expressions (function calls, variables, arithmetic)
-// are rejected with a fixit pointing to db |> exec(…).
+// AddColumnMacro requires the DEFAULT to be a compile-time literal:
+// int / float / double / bool / string. Runtime expressions (function
+// calls, variables, arithmetic) are rejected with a fixit pointing to
+// db |> exec(…).
 expect 50503
 
 require sqlite/sqlite_migrate

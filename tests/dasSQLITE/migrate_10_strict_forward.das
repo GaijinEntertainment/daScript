@@ -21,7 +21,7 @@ def m3(db : SqlRunner) {
     db |> exec("ALTER TABLE users ADD COLUMN Score INTEGER NOT NULL DEFAULT 0")
 }
 
-[test]
+[test(description = "a migration below the recorded maximum version is never applied", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_skips_gap_silently(t : T?) {
     var inscope db = open_sqlite(":memory:")
     // Set up: applied = {1, 3} (manually, simulating dev-branch divergence).

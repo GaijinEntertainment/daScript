@@ -10,7 +10,7 @@ struct IntVal {
 
 // ---- Single-item edge case ----
 
-[test]
+[test(description = "A single pushed item is visited by for_each_clone")]
 def test_channel_single_item(t : T?) {
     t |> run("single push then for_each_clone") @(t : T?) {
         with_channel() $(ch) {
@@ -27,7 +27,7 @@ def test_channel_single_item(t : T?) {
 
 // ---- Large batch ----
 
-[test]
+[test(description = "100 pushed items all pop back")]
 def test_channel_large_batch(t : T?) {
     t |> run("push and pop 100 items") @(t : T?) {
         let N = 100
@@ -50,7 +50,7 @@ def test_channel_large_batch(t : T?) {
 
 // ---- Empty channel pop ----
 
-[test]
+[test(description = "Popping an empty channel returns false")]
 def test_channel_empty_pop(t : T?) {
     t |> run("pop from empty channel returns false") @(t : T?) {
         with_channel() $(ch) {
@@ -65,7 +65,7 @@ def test_channel_empty_pop(t : T?) {
 
 // ---- Lockbox create/destroy ----
 
-[test]
+[test(description = "with_lock_box creates and destroys a lock box whose handle is valid inside the block")]
 def test_lockbox_basics(t : T?) {
     t |> run("with_lock_box creates and destroys") @(t : T?) {
         var entered = false
@@ -79,7 +79,7 @@ def test_lockbox_basics(t : T?) {
 
 // ---- Channel properties tracking ----
 
-[test]
+[test(description = "isEmpty and total track pushes and pops")]
 def test_channel_properties(t : T?) {
     t |> run("isEmpty and total track correctly") @(t : T?) {
         with_channel() $(ch) {
@@ -98,7 +98,7 @@ def test_channel_properties(t : T?) {
 
 // ---- gather_and_forward ----
 
-[test]
+[test(description = "gather_and_forward copies data from one channel to another")]
 def test_gather_and_forward(t : T?) {
     t |> run("gather_and_forward copies data between channels") @(t : T?) {
         with_channel() $(src) {
@@ -125,7 +125,7 @@ def test_gather_and_forward(t : T?) {
 
 // ---- Concurrent jobs pushing to same channel ----
 
-[test]
+[test(description = "Multiple jobs can push to the same channel concurrently")]
 def test_concurrent_jobs(t : T?) {
     t |> run("multiple jobs pushing to same channel") @(t : T?) {
         with_job_que() {

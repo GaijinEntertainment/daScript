@@ -55,7 +55,7 @@ argument.
 
 - **Weakening `REVIEW.das`'s fail-closed sync check is a defect.** That check requires every
   `tests/msl/_fail_closed/` fixture to have a `check_rejects` call in
-  `tests/msl/test_msl_fail_closed.das` (repo root), and every such call to have a fixture.
+  `tests/msl/uncategorized_no_aot.das` (repo root), and every such call to have a fixture.
 
 - **Weakening the `REVIEW.das` shim pool check (`ARCHITECTURE.md#shim-autorelease-pools`) is a
   defect.** That check requires every Objective-C property read in `src/dasMetal.mm` to sit

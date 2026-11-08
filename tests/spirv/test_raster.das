@@ -32,7 +32,7 @@ def private has_builtin(words : array<uint>; bi : SpvBuiltIn) : bool =>
 def private has_location(words : array<uint>; loc : uint) : bool =>
     op_has_operand_pair(words, SpvOp.Decorate, uint(SpvDecoration.Location), loc)
 
-[test]
+[test(description = "A vertex passthrough emits Location-decorated in and out variables, gl_Position and a CompositeConstruct.")]
 def test_vertex_passthrough(t : T?) {
     t |> run("vertex: @in/@out + Location, gl_Position, float4(...) -> CompositeConstruct") <| @(t : T?) {
         var words <- tri_vert_words()
@@ -57,7 +57,7 @@ def test_vertex_passthrough(t : T?) {
     }
 }
 
-[test]
+[test(description = "A fragment passthrough emits OriginUpperLeft and a CompositeConstruct of float4(vec3, 1.0).")]
 def test_fragment_passthrough(t : T?) {
     t |> run("fragment: OriginUpperLeft, float4(vec3, 1.0) -> CompositeConstruct") <| @(t : T?) {
         var words <- tri_frag_words()
@@ -75,7 +75,7 @@ def test_fragment_passthrough(t : T?) {
     }
 }
 
-[test]
+[test(description = "gl_VertexIndex and gl_InstanceIndex drive a procedural vertex position.")]
 def test_vertex_index_builtins(t : T?) {
     t |> run("vertex: gl_VertexIndex / gl_InstanceIndex builtins drive a procedural position") <| @(t : T?) {
         var words <- vindex_words()
@@ -88,7 +88,7 @@ def test_vertex_index_builtins(t : T?) {
     }
 }
 
-[test]
+[test(description = "gl_PointSize lowers to a BuiltIn PointSize output.")]
 def test_vertex_point_size(t : T?) {
     t |> run("vertex: gl_PointSize (BuiltIn PointSize Output) for POINT_LIST rasterisation") <| @(t : T?) {
         var words <- point_size_words()
@@ -112,7 +112,7 @@ def test_vertex_point_size(t : T?) {
 // gl_DrawID -> BuiltIn DrawIndex on a vertex-stage Input variable + the DrawParameters capability
 // (the multi-draw draw-call ordinal isn't part of the base Shader cap, so the emitter must add the
 // capability when the builtin is referenced).
-[test]
+[test(description = "gl_DrawID lowers to a BuiltIn DrawIndex input with the DrawParameters capability.")]
 def test_vertex_draw_id(t : T?) {
     t |> run("vertex: gl_DrawID (BuiltIn DrawIndex Input) + DrawParameters capability") <| @(t : T?) {
         var words <- draw_id_words()
@@ -138,7 +138,7 @@ def test_vertex_draw_id(t : T?) {
     }
 }
 
-[test]
+[test(description = "gl_PointCoord lowers to a BuiltIn PointCoord input.")]
 def test_fragment_point_coord(t : T?) {
     t |> run("fragment: gl_PointCoord (BuiltIn PointCoord Input) for point-sprite UV") <| @(t : T?) {
         var words <- point_coord_words()
@@ -156,7 +156,7 @@ def test_fragment_point_coord(t : T?) {
     }
 }
 
-[test]
+[test(description = "gl_FragCoord with dot, sqrt and clamp lowers to the GLSL.std.450 math opcodes.")]
 def test_fragment_math(t : T?) {
     t |> run("fragment: gl_FragCoord + GLSL.std.450 math (dot/sqrt/clamp)") <| @(t : T?) {
         var words <- raster_math_words()
@@ -172,7 +172,7 @@ def test_fragment_math(t : T?) {
 // without it the driver returns garbage. The emitter auto-applies Flat to int/uint @in/@out, and
 // honours an explicit `@flat` on float varyings (low-poly stylised look). The negative control is a
 // plain float varying with no @flat — it must NOT pick up Flat.
-[test]
+[test(description = "An int vertex output is auto-Flat, a @flat float output is Flat and a plain float output is not.")]
 def test_vertex_flat(t : T?) {
     t |> run("vertex: int @out is auto-Flat; @flat float @out is Flat; plain float @out is not") <| @(t : T?) {
         var words <- flat_vert_words()
@@ -191,7 +191,7 @@ def test_vertex_flat(t : T?) {
 // The two interfaces Flat may not reach, one at each end of the pipe: a vertex @in the vertex buffer
 // feeds whole, and a fragment @out written straight to its attachment.  On both, an interpolation
 // decoration is a spec violation rather than a mandate.
-[test]
+[test(description = "An int vertex input attribute takes no Flat decoration.")]
 def test_vertex_attribute_is_never_flat(t : T?) {
     t |> run("vertex: an int @in attribute takes no Flat") <| @(t : T?) {
         var words <- attr_vert_words()
@@ -203,7 +203,7 @@ def test_vertex_attribute_is_never_flat(t : T?) {
     }
 }
 
-[test]
+[test(description = "An int fragment output attachment takes no Flat decoration.")]
 def test_fragment_output_is_never_flat(t : T?) {
     t |> run("fragment: an int @out attachment takes no Flat") <| @(t : T?) {
         var words <- attr_frag_words()
@@ -215,7 +215,7 @@ def test_fragment_output_is_never_flat(t : T?) {
     }
 }
 
-[test]
+[test(description = "An int fragment input is auto-Flat, a @flat float input is Flat and a plain float input is not.")]
 def test_fragment_flat(t : T?) {
     t |> run("fragment: int @in is auto-Flat; @flat float @in is Flat; plain float @in is not") <| @(t : T?) {
         var words <- flat_frag_words()

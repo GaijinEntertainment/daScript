@@ -1,4 +1,5 @@
-// struct patterns are checked field by field - a field value no arm covers is missing
+//! struct patterns are checked field by field - a field value no arm
+//! covers is missing
 options gen2
 
 require daslib/match

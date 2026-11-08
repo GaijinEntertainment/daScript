@@ -1,7 +1,6 @@
 options gen2
 
 require dastest/testing_boost public
-
 require daslib/sql
 require sqlite/sqlite_boost
 require daslib/sql_linq
@@ -35,7 +34,7 @@ def private fixture(db : SqlRunner) {
     db |> insert(Car(Id = 5, Name = "Lambo", Price = 999))
 }
 
-[test]
+[test(description = "a sql_view struct creates its view and select_from returns the filtered full rows")]
 def test_view_create_and_select_full_row(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -48,7 +47,7 @@ def test_view_create_and_select_full_row(t : T?) {
     }
 }
 
-[test]
+[test(description = "a sql_view built from a named-tuple projection selects only the projected columns")]
 def test_view_named_tuple_projection(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -61,7 +60,7 @@ def test_view_named_tuple_projection(t : T?) {
     }
 }
 
-[test]
+[test(description = "a view can be queried through the _sql macro like a table")]
 def test_view_select_via_sql_macro(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -73,7 +72,7 @@ def test_view_select_via_sql_macro(t : T?) {
     }
 }
 
-[test]
+[test(description = "drop_view_if_exists removes a view so it can be created again with a different filter")]
 def test_drop_view_if_exists(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -90,7 +89,7 @@ def test_drop_view_if_exists(t : T?) {
     }
 }
 
-[test]
+[test(description = "try_drop_view_if_exists on a missing view returns no error")]
 def test_try_drop_view_if_exists_idempotent(t : T?) {
     with_sqlite(":memory:") $(db) {
         // dropping a non-existent view is a no-op (IF EXISTS)
@@ -137,7 +136,7 @@ struct WriteableOrder {
     PermBits  : uint8
 }
 
-[test]
+[test(description = "an enum literal in a view predicate is rendered into the view definition")]
 def test_view_predicate_with_enum_literal(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<OrderRec>)
@@ -154,7 +153,7 @@ def test_view_predicate_with_enum_literal(t : T?) {
     }
 }
 
-[test]
+[test(description = "a bitfield literal in a view predicate is rendered into the view definition")]
 def test_view_predicate_with_bitfield_literal(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<OrderRec>)
@@ -230,7 +229,7 @@ def private inv_fixture(db : SqlRunner) {
     db |> insert(Item(Id = 5, Name = "Apple",  Price = 100, Weight = 0.2lf, OnSale = true))
 }
 
-[test]
+[test(description = "an int local captured in a view predicate is inlined into the view definition")]
 def test_view_captured_int_local(t : T?) {
     with_sqlite(":memory:") $(db) {
         inv_fixture(db)
@@ -242,7 +241,7 @@ def test_view_captured_int_local(t : T?) {
     }
 }
 
-[test]
+[test(description = "a double local captured in a view predicate is inlined into the view definition")]
 def test_view_captured_double_local(t : T?) {
     with_sqlite(":memory:") $(db) {
         inv_fixture(db)
@@ -255,7 +254,7 @@ def test_view_captured_double_local(t : T?) {
     }
 }
 
-[test]
+[test(description = "a bool local captured in a view predicate is inlined into the view definition")]
 def test_view_captured_bool_local(t : T?) {
     with_sqlite(":memory:") $(db) {
         inv_fixture(db)
@@ -267,7 +266,7 @@ def test_view_captured_bool_local(t : T?) {
     }
 }
 
-[test]
+[test(description = "a string local captured in a view predicate is inlined with its quote escaped")]
 def test_view_captured_string_local(t : T?) {
     with_sqlite(":memory:") $(db) {
         inv_fixture(db)
@@ -304,7 +303,7 @@ struct StructFieldFilteredItem {
 
 def private compute_threshold() : int => 100
 
-[test]
+[test(description = "a struct field read in a view predicate is inlined into the view definition")]
 def test_view_struct_field_bind(t : T?) {
     with_sqlite(":memory:") $(db) {
         inv_fixture(db)
@@ -325,7 +324,7 @@ struct FnCallFilteredItem {
     OnSale : bool
 }
 
-[test]
+[test(description = "a function call result in a view predicate is inlined into the view definition")]
 def test_view_fn_call_bind(t : T?) {
     with_sqlite(":memory:") $(db) {
         inv_fixture(db)
@@ -361,7 +360,7 @@ struct GoldMemberRow {
     TierVal : int
 }
 
-[test]
+[test(description = "a user to_sql_literal overload decides how an enum is inlined into a view")]
 def test_view_user_enum_overload(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<MemberRow>)

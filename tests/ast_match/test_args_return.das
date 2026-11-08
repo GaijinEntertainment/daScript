@@ -19,7 +19,7 @@ def target_three(x, y, z : float) : float => x + y + z
 
 // ── qmatch_function argument names ───────────────────────────────────────
 
-[test]
+[test(description = "qmatch_function matches a compiled function whose parameter names and types equal the pattern's")]
 def test_func_arg_names(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_add)
@@ -38,7 +38,7 @@ def test_func_arg_names(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_function rejects a function whose parameter names differ from the pattern's")]
 def test_func_arg_name_mismatch(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_add)
@@ -52,7 +52,7 @@ def test_func_arg_name_mismatch(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_function rejects a function whose parameter count differs from the pattern's")]
 def test_func_arg_count_mismatch(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_add)
@@ -66,7 +66,7 @@ def test_func_arg_count_mismatch(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_function rejects a function whose return type differs from the pattern's")]
 def test_func_return_type_mismatch(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_add)
@@ -80,7 +80,7 @@ def test_func_return_type_mismatch(t : T?) {
     }
 }
 
-[test]
+[test(description = "a function pattern that omits the return type matches a function with any return type")]
 def test_func_no_return_matches_any(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_add)
@@ -95,7 +95,7 @@ def test_func_no_return_matches_any(t : T?) {
     }
 }
 
-[test]
+[test(description = "a function pattern without parameters rejects a function that has parameters")]
 def test_func_no_args_fails_when_target_has_args(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_add)
@@ -110,7 +110,7 @@ def test_func_no_args_fails_when_target_has_args(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_function rejects a function whose parameter type differs from the pattern's")]
 def test_func_arg_type_mismatch(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_add)
@@ -124,7 +124,7 @@ def test_func_arg_type_mismatch(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_function matches a function with three float parameters")]
 def test_func_three_args(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@target_three)
@@ -140,7 +140,7 @@ def test_func_three_args(t : T?) {
 
 // ── qmatch_block argument matching ───────────────────────────────────────
 
-[test]
+[test(description = "qmatch_block matches a block whose parameter list equals the pattern's")]
 def test_block_args(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($(a : int; b : float) : int { return a; })
@@ -151,7 +151,7 @@ def test_block_args(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_block rejects a block whose parameter name differs")]
 def test_block_args_wrong_name(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($(a : int; b : float) : int { return a; })
@@ -162,7 +162,7 @@ def test_block_args_wrong_name(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_block rejects a block whose parameter type differs")]
 def test_block_args_wrong_type(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($(a : int; b : float) : int { return a; })
@@ -173,7 +173,7 @@ def test_block_args_wrong_type(t : T?) {
     }
 }
 
-[test]
+[test(description = "a block pattern without parameters rejects a block that has parameters")]
 def test_block_no_args_fails_when_target_has_args(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($(a : int) : int { return a; })
@@ -190,7 +190,7 @@ def test_block_no_args_fails_when_target_has_args(t : T?) {
 [export, marker(no_coverage), unused_argument(b), unused_argument(c), unused_argument(d), unused_argument(e)]
 def target_five(a, b : int; c : float; d : string; e : bool) : int => a
 
-[test]
+[test(description = "an $a capture binds every parameter of a function")]
 def test_a_capture_all(t : T?) {
     ast_gc_guard() {
         // $a(rest) with no fixed args — captures all arguments
@@ -207,7 +207,7 @@ def test_a_capture_all(t : T?) {
     }
 }
 
-[test]
+[test(description = "an $a capture binds the parameters after the fixed first one")]
 def test_a_capture_remainder(t : T?) {
     ast_gc_guard() {
         // Match first arg, capture rest
@@ -228,7 +228,7 @@ def test_a_capture_remainder(t : T?) {
     }
 }
 
-[test]
+[test(description = "an $a capture binds the single parameter left after the fixed ones")]
 def test_a_capture_one_remaining(t : T?) {
     ast_gc_guard() {
         // Match all but last, capture last via $a
@@ -248,7 +248,7 @@ def test_a_capture_one_remaining(t : T?) {
     }
 }
 
-[test]
+[test(description = "an $a capture binds nothing when all parameters are fixed in the pattern")]
 def test_a_capture_empty(t : T?) {
     ast_gc_guard() {
         // Match all fixed args, $a captures zero remaining
@@ -265,7 +265,7 @@ def test_a_capture_empty(t : T?) {
     }
 }
 
-[test]
+[test(description = "a pattern with more fixed parameters than the function has fails")]
 def test_a_too_few_args(t : T?) {
     ast_gc_guard() {
         // More fixed args in pattern than actual — should fail
@@ -281,7 +281,7 @@ def test_a_too_few_args(t : T?) {
     }
 }
 
-[test]
+[test(description = "an $a capture binds the four parameters after the first of a five-parameter function")]
 def test_a_capture_five_args(t : T?) {
     ast_gc_guard() {
         // Capture many remaining args
@@ -298,7 +298,7 @@ def test_a_capture_five_args(t : T?) {
     }
 }
 
-[test]
+[test(description = "an $a capture on a block binds the parameters after the fixed ones")]
 def test_a_block_capture(t : T?) {
     ast_gc_guard() {
         // $a on block arguments

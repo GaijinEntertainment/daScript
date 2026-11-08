@@ -8,7 +8,7 @@ struct Bag {
     items : array<int>
 }
 
-[test]
+[test(description = "an array literal of ints builds a heap array of the right length with every element in place")]
 def test_int_literal(t : T?) {
     var a <- [10, 20, 30, 40, 50]
     t |> equal(a |> length, 5)
@@ -17,7 +17,7 @@ def test_int_literal(t : T?) {
     delete a
 }
 
-[test]
+[test(description = "an array literal of structs holding arrays builds with each element moved in intact")]
 def test_move_only_literal(t : T?) {
     // element type carries an array<int> -> non-copyable, exercises the emplace fill path
     var a <- [Bag(items <- [1, 2]), Bag(items <- [3, 4, 5])]
@@ -27,7 +27,7 @@ def test_move_only_literal(t : T?) {
     delete a
 }
 
-[test]
+[test(description = "a table literal builds a table with every key and value reachable")]
 def test_table_literal(t : T?) {
     var m <- {1 => 100, 2 => 200, 3 => 300}
     t |> equal(m |> length, 3)
@@ -40,7 +40,7 @@ struct Cell {
     data : int[2048]   // 8 KB per element
 }
 
-[test]
+[test(description = "a literal of sixteen large structs builds on the heap without overflowing the stack and keeps writes to the elements")]
 def test_large_literal_no_stack_overflow(t : T?) {
     // Building directly on the heap has no stack-size limit. The old stack T[N] + copy path first
     // materializes the whole literal (128 KB here) on the stack, so a regression back to stack-build

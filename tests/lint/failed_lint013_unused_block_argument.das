@@ -1,15 +1,22 @@
+//! An unused block argument raises exactly one LINT013 while
+//! underscore-prefixed, read and nolint-marked block arguments
+//! raise none.
 // LINT013 — unused block argument.
-// Combined-assertion fixture (see failed_lint012 for the 50503 counting note).
+// Combined-assertion fixture (see failed_lint012 for the 50503
+// counting note).
 //
-//   b1 deadB    : plainly-named, never read       — fires LINT013  (the 1 expected)
-//   b1 usedA    : read                             — not fired
-//   b2 _ok      : underscore-prefixed, unused      — suppressed
-//   b3 _used    : underscore-prefixed but read     — NOT fired (args don't get LINT004)
+// b1 deadB    : plainly-named, never read       — fires LINT013  (the
+// 1 expected) b1 usedA    : read                             — not
+// fired b2 _ok      : underscore-prefixed, unused      — suppressed
+// b3 _used    : underscore-prefixed but read     — NOT fired (args
+// don't get LINT004)
 //   b4 nolintB  : // nolint:LINT013 on its line    — suppressed
 //
 // Total expected 50503 hits: 1.
 options gen2
-options disable_auto_inline    // this fixture pins LINT013 diagnostics; splicing the call away would eat them
+// this fixture pins LINT013 diagnostics; splicing the call away would
+// eat them
+options disable_auto_inline
 
 require daslib/lint
 

@@ -1,3 +1,6 @@
+//! qmacro_template_class with a name argument that has no type must
+//! not compile with its own error (50503, 30838) instead of throwing
+//! an exception.
 options gen2
 expect 50503, 30838
 

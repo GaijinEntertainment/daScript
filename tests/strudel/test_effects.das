@@ -10,7 +10,7 @@ require math
 
 // ─── Setter propagation (bare aliases + scalar + Pattern) ───
 
-[test]
+[test(description = "the crush alias sets the event bit-crush depth")]
 def test_crush_alias(t : T?) {
     let pat <- atom("bd") |> crush(8.0)
     let haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
@@ -18,42 +18,42 @@ def test_crush_alias(t : T?) {
     t |> success(abs(haps[0].value.crush - 8.0) < 0.001)
 }
 
-[test]
+[test(description = "the coarse alias sets the event sample-rate reduction")]
 def test_coarse_alias(t : T?) {
     let pat <- atom("bd") |> coarse(4)
     let haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
     t |> equal(haps[0].value.coarse, 4)
 }
 
-[test]
+[test(description = "the shape alias sets the event waveshaper amount")]
 def test_shape_alias(t : T?) {
     let pat <- atom("bd") |> shape(0.5)
     let haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
     t |> success(abs(haps[0].value.shape - 0.5) < 0.001)
 }
 
-[test]
+[test(description = "the djf alias sets the event DJ filter position")]
 def test_djf_alias(t : T?) {
     let pat <- atom("bd") |> djf(0.2)
     let haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
     t |> success(abs(haps[0].value.djf - 0.2) < 0.001)
 }
 
-[test]
+[test(description = "the bpf alias sets the event band-pass frequency")]
 def test_bpf_alias(t : T?) {
     let pat <- atom("bd") |> bpf(1200.0)
     let haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
     t |> success(abs(haps[0].value.bpf - 1200.0) < 0.001)
 }
 
-[test]
+[test(description = "the bpq alias sets the event band-pass resonance")]
 def test_bpq_alias(t : T?) {
     let pat <- atom("bd") |> bpq(5.0)
     let haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
     t |> success(abs(haps[0].value.bpq - 5.0) < 0.001)
 }
 
-[test]
+[test(description = "all six effect setters stack onto one pattern and each keeps its own value")]
 def test_effects_chain(t : T?) {
     // all six setters stack onto one pattern
     let pat <- atom("bd") |> crush(10.0) |> coarse(2) |> shape(0.3) |> djf(0.7) |> bpf(800.0) |> bpq(3.0)
@@ -67,7 +67,7 @@ def test_effects_chain(t : T?) {
     t |> success(abs(e.bpq - 3.0) < 0.001)
 }
 
-[test]
+[test(description = "a pattern-valued crush is sampled at the event onset and mapped into the requested range")]
 def test_crush_pattern_modulator(t : T?) {
     // Pattern-valued modulator: a signal sampled at the event's onset
     let pat <- atom("bd") |> crush(signal_saw() |> signal_range(4.0, 12.0))
@@ -79,7 +79,7 @@ def test_crush_pattern_modulator(t : T?) {
 
 // ─── VoiceFX behavior ───
 
-[test]
+[test(description = "a default event leaves the voice FX inactive")]
 def test_voicefx_default_is_inactive(t : T?) {
     var fx : VoiceFX
     let e = Event()
@@ -91,7 +91,7 @@ def test_voicefx_default_is_inactive(t : T?) {
     t |> success(!fx.has_bpf)
 }
 
-[test]
+[test(description = "a crush value activates the voice FX and its bitcrusher stage")]
 def test_voicefx_crush_activates(t : T?) {
     var fx : VoiceFX
     var e = Event()
@@ -102,7 +102,7 @@ def test_voicefx_crush_activates(t : T?) {
     t |> success(!fx.has_shape)
 }
 
-[test]
+[test(description = "coarse alone routes the voice through the bitcrusher")]
 def test_voicefx_coarse_alone_activates(t : T?) {
     var fx : VoiceFX
     var e = Event()
@@ -112,7 +112,7 @@ def test_voicefx_coarse_alone_activates(t : T?) {
     t |> success(fx.active)
 }
 
-[test]
+[test(description = "a djf of 0.5 is a bypass and does not activate the DJ filter")]
 def test_voicefx_djf_bypass_when_half(t : T?) {
     var fx : VoiceFX
     let e = Event()
@@ -121,7 +121,7 @@ def test_voicefx_djf_bypass_when_half(t : T?) {
     t |> success(!fx.has_djf, "djf at 0.5 is bypass — FX should not activate")
 }
 
-[test]
+[test(description = "a djf away from 0.5 activates the DJ filter")]
 def test_voicefx_djf_offcenter_activates(t : T?) {
     var fx : VoiceFX
     var e = Event()
@@ -131,7 +131,7 @@ def test_voicefx_djf_offcenter_activates(t : T?) {
     t |> success(fx.active)
 }
 
-[test]
+[test(description = "a band-pass frequency activates the band-pass stage")]
 def test_voicefx_bpf_activates(t : T?) {
     var fx : VoiceFX
     var e = Event()
@@ -142,7 +142,7 @@ def test_voicefx_bpf_activates(t : T?) {
     t |> success(fx.active)
 }
 
-[test]
+[test(description = "applying inactive FX leaves the buffer unchanged")]
 def test_fx_apply_bypass_is_noop(t : T?) {
     var fx : VoiceFX
     let e = Event()
@@ -165,7 +165,7 @@ def test_fx_apply_bypass_is_noop(t : T?) {
     delete buf
 }
 
-[test]
+[test(description = "a 2-bit crush collapses the signal onto a small set of levels")]
 def test_fx_apply_crush_quantizes(t : T?) {
     var fx : VoiceFX
     var e = Event()
@@ -197,7 +197,7 @@ def test_fx_apply_crush_quantizes(t : T?) {
     delete buf
 }
 
-[test]
+[test(description = "the waveshaper keeps its output bounded")]
 def test_fx_apply_shape_clamps(t : T?) {
     var fx : VoiceFX
     var e = Event()
@@ -254,7 +254,7 @@ def private diff_rms(a, b : array<float>) : float {
     return sqrt(sum / float(n))
 }
 
-[test]
+[test(description = "a crush applied by the scheduler to an oscillator voice changes its output")]
 def test_scheduler_osc_crush_differs_from_dry(t : T?) {
     t |> run("crush applied to osc voice changes output") @(t : T?) {
         var inscope dry_sched : Scheduler
@@ -277,7 +277,7 @@ def test_scheduler_osc_crush_differs_from_dry(t : T?) {
     }
 }
 
-[test]
+[test(description = "a narrow band-pass reduces an oscillator voice's overall energy")]
 def test_scheduler_osc_bpf_reduces_rms(t : T?) {
     t |> run("narrow bandpass reduces overall energy") @(t : T?) {
         var inscope dry_sched : Scheduler
@@ -299,7 +299,7 @@ def test_scheduler_osc_bpf_reduces_rms(t : T?) {
     }
 }
 
-[test]
+[test(description = "the scheduler marks an oscillator voice FX active when the event has effect parameters")]
 def test_scheduler_osc_voicefx_marked_active(t : T?) {
     t |> run("osc voice gets fx.active when event has effect params") @(t : T?) {
         var inscope sched : Scheduler
@@ -316,7 +316,7 @@ def test_scheduler_osc_voicefx_marked_active(t : T?) {
     }
 }
 
-[test]
+[test(description = "a crush applied to a pre-rendered drum changes its output")]
 def test_scheduler_drum_crush_differs_from_dry(t : T?) {
     t |> run("crush applied to pre-rendered drum changes output") @(t : T?) {
         var inscope dry_sched : Scheduler
@@ -335,7 +335,7 @@ def test_scheduler_drum_crush_differs_from_dry(t : T?) {
     }
 }
 
-[test]
+[test(description = "a djf of 0.1 acts as a low-pass and differs from the 0.5 bypass")]
 def test_scheduler_djf_lpf_vs_bypass(t : T?) {
     t |> run("djf=0.1 (full LPF) differs from djf=0.5 (bypass)") @(t : T?) {
         var inscope dry_sched : Scheduler
@@ -354,7 +354,7 @@ def test_scheduler_djf_lpf_vs_bypass(t : T?) {
     }
 }
 
-[test]
+[test(description = "shape adds harmonic distortion to an oscillator voice")]
 def test_scheduler_shape_distorts(t : T?) {
     t |> run("shape adds harmonic distortion to osc voice") @(t : T?) {
         var inscope dry_sched : Scheduler
@@ -375,14 +375,14 @@ def test_scheduler_shape_distorts(t : T?) {
 
 // ─── Phase 5 effects: phaser, tremolo, compressor ───
 
-[test]
+[test(description = "the phaser alias sets the event phaser rate")]
 def test_phaser_alias(t : T?) {
     let pat <- atom("sawtooth") |> phaser(2.0)
     let haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
     t |> success(abs(haps[0].value.phaser - 2.0) < 0.001)
 }
 
-[test]
+[test(description = "phaser and phaserdepth set their own event fields")]
 def test_phaser_params(t : T?) {
     let pat <- atom("sawtooth") |> phaser(1.5) |> phaserdepth(0.5) |> phasercenter(800.0) |> phasersweep(1500.0)
     let haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
@@ -393,7 +393,7 @@ def test_phaser_params(t : T?) {
     t |> success(abs(e.phasersweep - 1500.0) < 0.001)
 }
 
-[test]
+[test(description = "the short phaser aliases set the rate and depth fields")]
 def test_phaser_short_aliases(t : T?) {
     let pat <- atom("sawtooth") |> ph(3.0) |> phd(0.25) |> phc(1200.0) |> phs(1800.0)
     let haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
@@ -404,7 +404,7 @@ def test_phaser_short_aliases(t : T?) {
     t |> success(abs(e.phasersweep - 1800.0) < 0.001)
 }
 
-[test]
+[test(description = "the tremolo aliases set the event rate and depth")]
 def test_tremolo_alias(t : T?) {
     let pat <- atom("sawtooth") |> tremolo(5.0) |> tremolodepth(0.7)
     let haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
@@ -413,7 +413,7 @@ def test_tremolo_alias(t : T?) {
     t |> success(abs(e.tremolodepth - 0.7) < 0.001)
 }
 
-[test]
+[test(description = "the short tremolo aliases set the rate and depth fields")]
 def test_tremolo_short_aliases(t : T?) {
     let pat <- atom("sawtooth") |> trem(4.0) |> tremdepth(0.5)
     let haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
@@ -422,14 +422,14 @@ def test_tremolo_short_aliases(t : T?) {
     t |> success(abs(e.tremolodepth - 0.5) < 0.001)
 }
 
-[test]
+[test(description = "the compressor alias sets the event threshold")]
 def test_compressor_alias(t : T?) {
     let pat <- atom("sawtooth") |> compressor(-20.0)
     let haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
     t |> success(abs(haps[0].value.compressor - (-20.0)) < 0.001)
 }
 
-[test]
+[test(description = "the camelCase compressor aliases set threshold and ratio")]
 def test_compressor_camel_case_aliases(t : T?) {
     // camelCase aliases
     let pat <- atom("sawtooth") |> compressor(-15.0) |> compressorRatio(8.0) |> compressorKnee(5.0) |> compressorAttack(0.003) |> compressorRelease(0.04)
@@ -442,7 +442,7 @@ def test_compressor_camel_case_aliases(t : T?) {
     t |> success(abs(e.compressor_release - 0.04) < 0.0001)
 }
 
-[test]
+[test(description = "the snake_case compressor aliases set ratio and knee")]
 def test_compressor_snake_case_aliases(t : T?) {
     // idiomatic daScript snake_case variants
     let pat <- atom("sawtooth") |> compressor(-10.0) |> compressor_ratio(6.0) |> compressor_knee(2.0) |> compressor_attack(0.001) |> compressor_release(0.03)
@@ -454,7 +454,7 @@ def test_compressor_snake_case_aliases(t : T?) {
     t |> success(abs(e.compressor_release - 0.03) < 0.0001)
 }
 
-[test]
+[test(description = "a phaser rate above zero activates the phaser stage")]
 def test_voicefx_phaser_activates(t : T?) {
     var fx : VoiceFX
     var e = Event()
@@ -464,7 +464,7 @@ def test_voicefx_phaser_activates(t : T?) {
     t |> success(fx.active)
 }
 
-[test]
+[test(description = "a phaser rate of zero stays inactive even with a depth set")]
 def test_voicefx_phaser_off(t : T?) {
     var fx : VoiceFX
     var e = Event()
@@ -474,7 +474,7 @@ def test_voicefx_phaser_off(t : T?) {
     t |> success(!fx.has_phaser, "phaser rate=0 stays inactive")
 }
 
-[test]
+[test(description = "a tremolo with depth activates the tremolo stage")]
 def test_voicefx_tremolo_activates(t : T?) {
     var fx : VoiceFX
     var e = Event()
@@ -485,7 +485,7 @@ def test_voicefx_tremolo_activates(t : T?) {
     t |> success(fx.active)
 }
 
-[test]
+[test(description = "a tremolo depth of zero stays inactive")]
 def test_voicefx_tremolo_zero_depth_inactive(t : T?) {
     var fx : VoiceFX
     var e = Event()
@@ -495,7 +495,7 @@ def test_voicefx_tremolo_zero_depth_inactive(t : T?) {
     t |> success(!fx.has_tremolo, "tremolo depth=0 stays inactive")
 }
 
-[test]
+[test(description = "the default compressor threshold stays a bypass")]
 def test_voicefx_compressor_bypass_by_default(t : T?) {
     var fx : VoiceFX
     let e = Event()
@@ -504,7 +504,7 @@ def test_voicefx_compressor_bypass_by_default(t : T?) {
     t |> success(!fx.has_compressor, "compressor default (+1 dB) stays bypass")
 }
 
-[test]
+[test(description = "a compressor threshold below zero dB activates the compressor")]
 def test_voicefx_compressor_activates(t : T?) {
     var fx : VoiceFX
     var e = Event()
@@ -514,7 +514,7 @@ def test_voicefx_compressor_activates(t : T?) {
     t |> success(fx.active)
 }
 
-[test]
+[test(description = "the phaser changes a static sine signal")]
 def test_fx_apply_phaser_modulates(t : T?) {
     // Phaser should modify a static sine test signal (notch filter output differs from input).
     var fx : VoiceFX
@@ -541,7 +541,7 @@ def test_fx_apply_phaser_modulates(t : T?) {
     delete buf
 }
 
-[test]
+[test(description = "the tremolo sweeps the amplitude between peaks and troughs")]
 def test_fx_apply_tremolo_envelopes(t : T?) {
     // Tremolo should produce an amplitude envelope — peaks and troughs vs dry constant.
     var fx : VoiceFX
@@ -567,7 +567,7 @@ def test_fx_apply_tremolo_envelopes(t : T?) {
     delete buf
 }
 
-[test]
+[test(description = "a compressor with an aggressive threshold reduces the peak of a loud signal")]
 def test_fx_apply_compressor_reduces_peaks(t : T?) {
     // Compressor with aggressive threshold should reduce peak amplitude of a loud signal.
     var fx : VoiceFX
@@ -594,7 +594,7 @@ def test_fx_apply_compressor_reduces_peaks(t : T?) {
     delete buf
 }
 
-[test]
+[test(description = "a phaser applied by the scheduler changes an oscillator voice's output")]
 def test_scheduler_osc_phaser_differs_from_dry(t : T?) {
     t |> run("phaser changes osc voice output") @(t : T?) {
         var inscope dry_sched : Scheduler
@@ -613,7 +613,7 @@ def test_scheduler_osc_phaser_differs_from_dry(t : T?) {
     }
 }
 
-[test]
+[test(description = "a tremolo on an oscillator voice sets its has_tremolo flag")]
 def test_scheduler_osc_tremolo_marks_fx(t : T?) {
     t |> run("tremolo on osc voice sets has_tremolo") @(t : T?) {
         var inscope sched : Scheduler

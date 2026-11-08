@@ -56,7 +56,7 @@ compares equal, so nothing dedups) and is then unreachable to every lookup, `key
 erase, on any platform. Bytes small in magnitude spell denormals, which a host built with FTZ/DAZ
 reads as zero, so two such keys merge wherever they meet in the probe sequence. A float key pays
 for the bit compare with the `0.0 == -0.0` tie, which its two distinct hashes never honoured
-anyway. `tests/language/table_vector_keys.das` covers both patterns.
+anyway. `tests/language/tables.das` covers both patterns.
 
 ## Function and global lookup
 

@@ -10,7 +10,7 @@ def private decoded(value : string) : array<uint8> {
     return <- result
 }
 
-[test]
+[test(description = "crypto_hmac_sha256 and crypto_hmac_sha1 produce the published digests for known key and message vectors")]
 def crypto_hmac_known_vectors(t : T?) {
     let key <- decoded("CwsLCwsLCwsLCwsLCwsLCwsLCws=")
     let message <- decoded("SGkgVGhlcmU=")
@@ -21,7 +21,7 @@ def crypto_hmac_known_vectors(t : T?) {
     t |> equal(base64_encode(digest), "thcxhlUFcmTii8C2+zeMjvFGvgA=")
 }
 
-[test]
+[test(description = "crypto_random_bytes fills the requested length and rejects a negative or oversized one, and crypto_equal tells equal buffers from different ones")]
 def crypto_random_and_constant_time_equality(t : T?) {
     var bytes : array<uint8>
     t |> success(crypto_random_bytes(32, bytes))
@@ -39,7 +39,7 @@ def crypto_random_and_constant_time_equality(t : T?) {
     t |> success(crypto_equal(bytes, bytes))
 }
 
-[test]
+[test(description = "AES-256-GCM seal then open restores the plaintext, and open and seal fail without returning plaintext when the message or the key and nonce sizes are tampered with")]
 def crypto_authenticated_encryption_rejects_tampering(t : T?) {
     var key : array<uint8>; resize(key, 32)
     var nonce : array<uint8>; resize(nonce, 12)
@@ -58,7 +58,7 @@ def crypto_authenticated_encryption_rejects_tampering(t : T?) {
     t |> equal(length(ciphertext), 0)
 }
 
-[test]
+[test(description = "crypto_verify_rsa_sha256 accepts a valid signature and rejects altered inputs and empty ones")]
 def crypto_rsa_sha256_public_verification(t : T?) {
     var n <- decoded("vJiiP9ba2Hd9J+hcryDEWM0ZrtHTaFADicLQ3WHBjWbaHWvnte5ScqDoHF49i0UWinvRwlIoLvuU7UB+bUIb872hXyf3tGAgGPVVmaZPOnWn4n9fSvWckeyQ+9M9NrEPlAK2VNZy8XHLdsA27HifbLXTdR83Vogrtcx+ZdM/G6jZH3aOZkN22x/XZHkxryZcl/XT8num6t58A3LfZqkGecySeAiYHb+rYYivV76Uih9ICF2bMUTkJlhNcBvTJ/Yw5nFNVC8Qn1+85coNstBG49FtX6vuH4b8J/XMKJBAGwaD5rMs7f4GKTbOSNJVL3AkT0Q28QKrs25COO3IDm2wUQ==")
     let e <- decoded("AQAB")
@@ -79,7 +79,7 @@ def crypto_rsa_sha256_public_verification(t : T?) {
     t |> success(!crypto_verify_rsa_sha256(empty, empty, empty, empty))
 }
 
-[test]
+[test(description = "crypto_aes256_gcm_seal matches a known ciphertext vector and round-trips an empty plaintext")]
 def crypto_gcm_known_vector_and_empty_plaintext(t : T?) {
     // AES-256-GCM zero-key/zero-IV vectors (GCM specification cases 13 and 14).
     var key, nonce, plain, aad, ciphertext, restored : array<uint8>
@@ -102,7 +102,7 @@ def crypto_gcm_known_vector_and_empty_plaintext(t : T?) {
     t |> success(!crypto_aes256_gcm_open(key, nonce, ciphertext, aad, restored))
 }
 
-[test]
+[test(description = "crypto_hmac_sha256 gives the correct digest when the output array is the key array itself")]
 def crypto_outputs_may_alias_inputs(t : T?) {
     var key <- decoded("CwsLCwsLCwsLCwsLCwsLCwsLCws=")
     let message <- decoded("SGkgVGhlcmU=")
@@ -120,7 +120,7 @@ def crypto_outputs_may_alias_inputs(t : T?) {
     t |> equal(length(content), 0)
 }
 
-[test]
+[test(description = "an input over the byte limit makes the crypto call fail and leaves the output array empty rather than stale")]
 def crypto_byte_limits_fail_without_stale_output(t : T?) {
     var oversized : array<uint8>; resize(oversized, 16 * 1024 * 1024 + 1)
     let short <- decoded("YWJj")

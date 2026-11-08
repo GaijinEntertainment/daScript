@@ -1,3 +1,5 @@
+//! sscan_json into a vector constructor expression must not compile:
+//! a temporary vector is const, not a destination.
 options gen2
 expect 30341
 

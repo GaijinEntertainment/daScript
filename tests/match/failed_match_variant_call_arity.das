@@ -1,4 +1,5 @@
-// a case without a value takes no argument, a case with one takes one
+//! a case without a value takes no argument, a case with one takes
+//! one
 options gen2
 
 require daslib/match

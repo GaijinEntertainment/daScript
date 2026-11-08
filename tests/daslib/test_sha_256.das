@@ -4,7 +4,7 @@ require dastest/testing_boost public
 require daslib/sha_256
 require strings
 
-[test]
+[test(description = "sha256 matches the NIST vectors from the empty string to one million a's")]
 def test_nist_vectors(t : T?) {
     t |> run("empty string") @(t : T?) {
         t |> equal(sha256_hex(""), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
@@ -30,7 +30,7 @@ def test_nist_vectors(t : T?) {
     }
 }
 
-[test]
+[test(description = "sha256 digests at the padding boundaries match known values")]
 def test_padding_boundaries(t : T?) {
     // These lengths straddle the padding split (0x80 + length must fit or spill
     // into a second block). Digests come from an INDEPENDENT SHA-256: the two
@@ -57,7 +57,7 @@ def test_padding_boundaries(t : T?) {
     }
 }
 
-[test]
+[test(description = "split streaming updates give the same digest as a one-shot hash")]
 def test_streaming_equals_oneshot(t : T?) {
     t |> run("split updates match one-shot") @(t : T?) {
         let msg = "the quick brown fox jumps over the lazy dog"

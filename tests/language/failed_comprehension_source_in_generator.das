@@ -1,3 +1,5 @@
+//! a malformed nesting of comprehensions as iterator sources reports
+//! type errors instead of crashing the compiler
 options gen2
 expect 30166, 30183, 30192, 30341
 

@@ -33,7 +33,7 @@ struct SingleField {
 // resize
 // ===========================
 
-[test]
+[test(description = "resize grows, shrinks and clears the SOA and keeps existing elements")]
 def test_soa_resize(t : T?) {
     t |> run("resize grows SOA") @(t : T?) {
         var soa : Particle`SOA
@@ -70,7 +70,7 @@ def test_soa_resize(t : T?) {
 // reserve
 // ===========================
 
-[test]
+[test(description = "reserve leaves the length unchanged and pushing after it works")]
 def test_soa_reserve(t : T?) {
     t |> run("reserve does not change length") @(t : T?) {
         var soa : Particle`SOA
@@ -92,7 +92,7 @@ def test_soa_reserve(t : T?) {
 // clear
 // ===========================
 
-[test]
+[test(description = "clear empties the SOA, is a no-op on an empty one and pushing after it works")]
 def test_soa_clear(t : T?) {
     t |> run("clear empties SOA") @(t : T?) {
         var soa : Particle`SOA
@@ -122,7 +122,7 @@ def test_soa_clear(t : T?) {
 // pop
 // ===========================
 
-[test]
+[test(description = "pop removes the last element, down to empty, including string fields")]
 def test_soa_pop(t : T?) {
     t |> run("pop removes last element") @(t : T?) {
         var soa : Particle`SOA
@@ -156,7 +156,7 @@ def test_soa_pop(t : T?) {
 // capacity
 // ===========================
 
-[test]
+[test(description = "capacity is at least the length and grows after reserve")]
 def test_soa_capacity(t : T?) {
     t |> run("capacity >= length") @(t : T?) {
         var soa : Particle`SOA
@@ -176,7 +176,7 @@ def test_soa_capacity(t : T?) {
 // swap
 // ===========================
 
-[test]
+[test(description = "swap exchanges two elements, is a no-op for the same index and supports a manual sort")]
 def test_soa_swap(t : T?) {
     t |> run("swap two elements") @(t : T?) {
         var soa : Particle`SOA
@@ -230,7 +230,7 @@ def test_soa_swap(t : T?) {
 // from_array
 // ===========================
 
-[test]
+[test(description = "from_array fills the SOA from an array, appends to existing contents and handles empty arrays and strings")]
 def test_soa_from_array(t : T?) {
     t |> run("from_array populates SOA") @(t : T?) {
         var soa : Particle`SOA
@@ -281,7 +281,7 @@ def test_soa_from_array(t : T?) {
 // to_array
 // ===========================
 
-[test]
+[test(description = "to_array converts the SOA back to an array and from_array then to_array round-trips the data")]
 def test_soa_to_array(t : T?) {
     t |> run("to_array converts SOA back") @(t : T?) {
         var soa : Particle`SOA

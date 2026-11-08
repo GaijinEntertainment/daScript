@@ -27,7 +27,7 @@ def dispatch_residue(t : T?; line : string) : uint64 {
     return heap_bytes_allocated() - before
 }
 
-[test]
+[test(description = "dispatch_line frees the parsed document for single, batch, malformed and unparseable input")]
 def test_dispatch_line_owns_the_document(t : T?) {
     t |> run("a dispatched single request leaves nothing on the heap") @(t : T?) {
         t |> equal(dispatch_residue(t, SINGLE), 0ul, "no parse tree survives dispatch")
@@ -43,7 +43,7 @@ def test_dispatch_line_owns_the_document(t : T?) {
     }
 }
 
-[test]
+[test(description = "parse_response and parse_response_batch free their parsed document")]
 def test_response_parsers_own_their_document(t : T?) {
     t |> run("parse_response leaves nothing on the heap") @(t : T?) {
         let before = heap_bytes_allocated()
@@ -64,7 +64,7 @@ def test_response_parsers_own_their_document(t : T?) {
     }
 }
 
-[test]
+[test(description = "free_request ends the parsed document scope without invalidating the request strings or accumulating heap")]
 def test_free_request_ends_the_scope(t : T?) {
     t |> run("parse_request hands back an owned document") @(t : T?) {
         let before = heap_bytes_allocated()
@@ -104,7 +104,7 @@ def test_free_request_ends_the_scope(t : T?) {
     }
 }
 
-[test]
+[test(description = "free_batch frees the single document of a whole batch, including on a framing error")]
 def test_free_batch_ends_the_scope(t : T?) {
     t |> run("parse_batch hands back one owned document for the whole batch") @(t : T?) {
         let before = heap_bytes_allocated()

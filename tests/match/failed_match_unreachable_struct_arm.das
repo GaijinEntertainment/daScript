@@ -1,4 +1,5 @@
-// an arm whose struct values earlier struct arms already cover is unreachable
+//! an arm whose struct values earlier struct arms already cover is
+//! unreachable
 options gen2
 
 require daslib/match

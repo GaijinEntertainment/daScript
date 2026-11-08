@@ -6,7 +6,7 @@ require daslib/linq_boost
 
 require _common
 
-[test]
+[test(description = "to_table builds a table from key and value selectors over iterators, struct elements and arrays")]
 def test_totable(t : T?) {
     t |> run("basic totable") @(t : T?) {
         var query = to_table(
@@ -54,7 +54,7 @@ def test_totable(t : T?) {
     }
 }
 
-[test]
+[test(description = "where keeps only the elements the predicate accepts for iterators, structs and arrays, as iterator or array")]
 def test_where(t : T?) {
     t |> run("basic where") @(t : T?) {
         var query = _where(
@@ -115,7 +115,7 @@ def test_where(t : T?) {
     }
 }
 
-[test]
+[test(description = "sequence_equal is true for equal sequences and false for unequal ones across ints, structs and arrays")]
 def test_sequenceequal(t : T?) {
     t |> run("basic sequence equal") @(t : T?) {
         let query = sequence_equal(
@@ -147,7 +147,7 @@ def test_sequenceequal(t : T?) {
     }
 }
 
-[test]
+[test(description = "sequence_equal_by compares sequences through a key selector and reports equal and unequal pairs correctly")]
 def test_sequenceequalby(t : T?) {
     t |> run("basic sequence equal by") @(t : T?) {
         let query = _sequence_equal_by(

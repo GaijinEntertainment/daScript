@@ -1,3 +1,5 @@
+//! assert and debug called with too few or too many arguments do not
+//! compile
 // wrong argument count in function calls
 // verifies compiler rejects calling assert and debug with
 // too few or too many arguments

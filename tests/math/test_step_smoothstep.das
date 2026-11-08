@@ -7,7 +7,7 @@ options optimize = false
 // Math correctness for step + smoothstep: scalar GLSL semantics plus float2/3/4 per-lane sanity.
 // dastest --isolated-mode exercises interpreter / JIT / AOT; one test file covers all three.
 
-[test]
+[test(description = "step returns 0 below the edge and 1 at or above it for scalars")]
 def test_step_scalar(t : T?) {
     // GLSL: step(edge, x) = x < edge ? 0 : 1. At x == edge the result is 1.
     t |> equal(step(0.5f, 0.3f), 0.0f)
@@ -17,14 +17,14 @@ def test_step_scalar(t : T?) {
     t |> equal(step(0.0f, 0.0f), 1.0f)
 }
 
-[test]
+[test(description = "step works per lane on float vectors")]
 def test_step_vec(t : T?) {
     t |> equal(step(float2(0.5, 0.5), float2(0.3, 0.7)), float2(0.0, 1.0))
     t |> equal(step(float3(0.0, 1.0, -1.0), float3(0.5, 1.0, -2.0)), float3(1.0, 1.0, 0.0))
     t |> equal(step(float4(0.0, 0.0, 0.0, 0.0), float4(-1.0, 0.0, 1.0, 2.0)), float4(0.0, 1.0, 1.0, 1.0))
 }
 
-[test]
+[test(description = "smoothstep returns 0, 1 and the smooth interpolation inside the edges for scalars")]
 def test_smoothstep_scalar(t : T?) {
     // t = clamp((x-e0)/(e1-e0), 0, 1); return t*t*(3-2t).
     // smoothstep(0, 1, 0.5) -> t=0.5 -> 0.25 * (3-1) = 0.5
@@ -39,7 +39,7 @@ def test_smoothstep_scalar(t : T?) {
     t |> equal(smoothstep(2.0f, 4.0f, 3.0f), 0.5f)
 }
 
-[test]
+[test(description = "smoothstep works per lane on float vectors")]
 def test_smoothstep_vec(t : T?) {
     if (HOST_FAST_MATH) {
         t |> skip("host runtime is built -ffast-math: smoothstep's vector arm reassociates, so it is not bit-equal to the scalar reference")

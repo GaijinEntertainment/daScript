@@ -15,56 +15,56 @@ def private query_first(var pat : Pattern) : Event {
 
 // ─── Float setters ───
 
-[test]
+[test(description = "set_room sets the event room amount")]
 def test_set_room(t : T?) {
     let pat <- atom("bd") |> set_room(0.7)
     let ev = query_first(pat)
     t |> success(abs(ev.room - 0.7) < 0.001)
 }
 
-[test]
+[test(description = "set_roomsize sets the event room size")]
 def test_set_roomsize(t : T?) {
     let pat <- atom("bd") |> set_roomsize(0.9)
     let ev = query_first(pat)
     t |> success(abs(ev.roomsize - 0.9) < 0.001)
 }
 
-[test]
+[test(description = "set_delay sets the event delay amount")]
 def test_set_delay(t : T?) {
     let pat <- atom("bd") |> set_delay(0.6)
     let ev = query_first(pat)
     t |> success(abs(ev.delay_amount - 0.6) < 0.001)
 }
 
-[test]
+[test(description = "set_delaytime sets the event delay time")]
 def test_set_delaytime(t : T?) {
     let pat <- atom("bd") |> set_delaytime(0.25)
     let ev = query_first(pat)
     t |> success(abs(ev.delaytime - 0.25) < 0.001)
 }
 
-[test]
+[test(description = "set_delayfeedback sets the event delay feedback")]
 def test_set_delayfeedback(t : T?) {
     let pat <- atom("bd") |> set_delayfeedback(0.8)
     let ev = query_first(pat)
     t |> success(abs(ev.delayfeedback - 0.8) < 0.001)
 }
 
-[test]
+[test(description = "set_orbit sets the event orbit")]
 def test_set_orbit(t : T?) {
     let pat <- atom("bd") |> set_orbit(3)
     let ev = query_first(pat)
     t |> equal(ev.orbit, 3)
 }
 
-[test]
+[test(description = "set_fm sets the event FM depth")]
 def test_set_fm(t : T?) {
     let pat <- atom("sine") |> set_fm(2.0)
     let ev = query_first(pat)
     t |> success(abs(ev.fm - 2.0) < 0.001)
 }
 
-[test]
+[test(description = "set_fmh sets the event FM harmonicity")]
 def test_set_fmh(t : T?) {
     let pat <- atom("sine") |> set_fmh(1.5)
     let ev = query_first(pat)
@@ -73,7 +73,7 @@ def test_set_fmh(t : T?) {
 
 // ─── Chaining ───
 
-[test]
+[test(description = "chained setters each keep their own field value")]
 def test_setter_chaining(t : T?) {
     let pat <- atom("sawtooth") |> set_gain(0.5) |> set_lpf(1000.0) |> set_room(0.3) |> set_delay(0.4)
     let ev = query_first(pat)
@@ -85,7 +85,7 @@ def test_setter_chaining(t : T?) {
 
 // ─── Pattern-valued setters ───
 
-[test]
+[test(description = "set_room with a signal pattern samples the signal at the event onset")]
 def test_set_room_pattern(t : T?) {
     // atom("bd") onset is at cycle start (0.0); signal_saw at t=0.0 → 0.0
     let pat <- atom("bd") |> set_room(signal_saw())
@@ -94,7 +94,7 @@ def test_set_room_pattern(t : T?) {
     t |> success(abs(haps[0].value.room) < 0.05)
 }
 
-[test]
+[test(description = "set_fm with a signal pattern samples and scales the signal at the event onset")]
 def test_set_fm_pattern(t : T?) {
     // signal_saw at t=0.0 → 0.0, scaled to 0..4 → fm=0
     let pat <- atom("sine") |> set_fm(signal_saw() |> signal_range(0.0, 4.0))
@@ -105,7 +105,7 @@ def test_set_fm_pattern(t : T?) {
 
 // ─── Default values ───
 
-[test]
+[test(description = "a fresh event carries the documented effect defaults")]
 def test_event_defaults(t : T?) {
     let ev = Event()
     t |> success(abs(ev.room) < 0.001)

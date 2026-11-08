@@ -6,7 +6,7 @@ require _regex_test_helpers
 
 // ── ^ anchor (beginning of string) ─────────────────────────
 
-[test]
+[test(description = "the caret start anchor matches only at the start, with quantifiers, on empty input and rejects a non-zero offset")]
 def test_bos_anchor(t : T?) {
     t |> run("caret matches at start") @(t : T?) {
         t |> equal(regex_test_match("^abc", "abc"), 3)
@@ -31,7 +31,7 @@ def test_bos_anchor(t : T?) {
 
 // ── counted quantifiers ─────────────────────────────────────
 
-[test]
+[test(description = "an exact repeat matches n of a char or set and rejects fewer")]
 def test_repeat_exact(t : T?) {
     t |> run("exact 3 matches") @(t : T?) {
         t |> equal(regex_test_match("a\{3}", "aaa"), 3)
@@ -49,7 +49,7 @@ def test_repeat_exact(t : T?) {
     }
 }
 
-[test]
+[test(description = "an open-ended repeat is unlimited above its minimum")]
 def test_repeat_min(t : T?) {
     t |> run("min 2 unlimited") @(t : T?) {
         t |> equal(regex_test_match("a\{2,}", "a"), -1)
@@ -62,7 +62,7 @@ def test_repeat_min(t : T?) {
     }
 }
 
-[test]
+[test(description = "a ranged repeat takes between n and m and backtracks")]
 def test_repeat_range(t : T?) {
     t |> run("range 2 to 4") @(t : T?) {
         t |> equal(regex_test_match("a\{2,4}", "a"), -1)
@@ -84,7 +84,7 @@ def test_repeat_range(t : T?) {
     }
 }
 
-[test]
+[test(description = "exact and range repeats apply to groups")]
 def test_repeat_with_groups(t : T?) {
     t |> run("group repeat exact 2") @(t : T?) {
         t |> equal(regex_test_match("(ab)\{2}", "abab"), 4)
@@ -100,7 +100,7 @@ def test_repeat_with_groups(t : T?) {
 
 // ── \b word boundary ────────────────────────────────────────
 
-[test]
+[test(description = "the word boundary matches at word start, word end and the string edges but not inside a word")]
 def test_word_boundary(t : T?) {
     t |> run("boundary at word start") @(t : T?) {
         t |> equal(regex_test_match("\\bworld", "hello world", 6), 11)
@@ -125,7 +125,7 @@ def test_word_boundary(t : T?) {
 
 // ── \B non-word boundary ────────────────────────────────────
 
-[test]
+[test(description = "the non-boundary matches inside a word and rejects word edges")]
 def test_non_word_boundary(t : T?) {
     t |> run("non-boundary interior") @(t : T?) {
         t |> equal(regex_test_match("\\Bell", "hello", 1), 4)
@@ -137,7 +137,7 @@ def test_non_word_boundary(t : T?) {
 
 // ── combined new features ───────────────────────────────────
 
-[test]
+[test(description = "anchors, fixed repeats and boundaries combine in word and phone-number patterns")]
 def test_combined_new(t : T?) {
     t |> run("anchored fixed-len word") @(t : T?) {
         t |> equal(regex_test_match("^\\w\{3,5}$", "ab"), -1)

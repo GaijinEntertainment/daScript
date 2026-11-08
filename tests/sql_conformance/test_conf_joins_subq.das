@@ -1,12 +1,13 @@
 options gen2
-options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
+
 
 // Contract area: joins (_join / _left_join with Option-flowing right side) and
 // subquery predicates (_in / _not_in / _any / _none).
 
 require dastest/testing_boost public
+
 require _conformance_provider
 
 [sql_table(name = "ConfCust")]
@@ -36,7 +37,7 @@ def private seed(db) {
         ConfOrder(Id = 0, CustId = 2, Amount = 50)])
 }
 
-[test]
+[test(description = "inner, exact-source, aggregated, chained and left joins return the contract rows with an absent right side as none", standalone = "a provider copies this directory and drops files per capability; the file is the unit")]
 def test_conf_join(t : T?) {   // nolint:STYLE038 flat list of independent join-contract arms
     t |> run("inner _join matches pairs") @(t : T?) {
         with_conf_db() $(db) {
@@ -123,7 +124,7 @@ def test_conf_join(t : T?) {   // nolint:STYLE038 flat list of independent join-
     }
 }
 
-[test]
+[test(description = "in, not_in, any and none over subqueries select the rows the contract defines")]
 def test_conf_subqueries(t : T?) {
     t |> run("_in / _not_in over a one-column subquery") @(t : T?) {
         with_conf_db() $(db) {

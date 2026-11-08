@@ -1,17 +1,22 @@
 options gen2
+//! a directonly sql_function must not compile inside a view body, its
+//! subquery or its projection
 
-// [sql_function(directonly=true)] cannot be used in `_create_view` body —
-// SQLite rejects SQLITE_DIRECTONLY functions in views/triggers/CHECK.
-// The chain analyzer surfaces this at compile time via pred_fail. Three cases:
-//   1. directly in the outer view body's WHERE
-//   2. inside a nested subquery (`_in(...)`) within the view body — verifies
-//      that `q.inView` propagates into `analyze_subquery`'s sub-`SqlQuery`.
-//   3. as a SQL-side computation in `_select` projection — verifies that the
-//      directonly+inView guard fires from `try_recognize_sql_function_proj` too.
-// Each case is a separate top-level `def` so that `macro_error` from one doesn't cascade into the
-// other and inflate the count. Each surfaces the actionable directonly reject (50503). The free-`_`
-// residual left in the AST after `_create_view` returns null is now rejected cleanly by pred_to_sql's
-// source-arg guard, instead of leaking a confusing `30838 can't locate variable '_'` cascade.
+// [sql_function(directonly=true)] cannot be used in `_create_view`
+// body — SQLite rejects SQLITE_DIRECTONLY functions in
+// views/triggers/CHECK. The chain analyzer surfaces this at compile
+// time via pred_fail. Three cases: 1. directly in the outer view
+// body's WHERE 2. inside a nested subquery (`_in(...)`) within the
+// view body — verifies that `q.inView` propagates into
+// `analyze_subquery`'s sub-`SqlQuery`. 3. as a SQL-side computation
+// in `_select` projection — verifies that the directonly+inView guard
+// fires from `try_recognize_sql_function_proj` too. Each case is a
+// separate top-level `def` so that `macro_error` from one doesn't
+// cascade into the other and inflate the count. Each surfaces the
+// actionable directonly reject (50503). The free-`_` residual left in
+// the AST after `_create_view` returns null is now rejected cleanly
+// by pred_to_sql's source-arg guard, instead of leaking a confusing
+// `30838 can't locate variable '_'` cascade.
 expect 50503:3
 
 require daslib/sql
@@ -46,7 +51,8 @@ struct ShoutedItem {
 def shout(s : string) : string => s |> to_upper
 
 def case1_outer_where(db : SqlRunner) {
-    // shout in the outer view body's WHERE — chain analyzer rejects at compile time.
+    // shout in the outer view body's WHERE — chain analyzer rejects at
+    // compile time.
     db |> _create_view(type<LoudItem>,
         db |> select_from(type<Item>)
             |> _where(shout(_.Name) == "X")
@@ -54,9 +60,10 @@ def case1_outer_where(db : SqlRunner) {
 }
 
 def case2_subquery_where(db : SqlRunner) {
-    // shout in a NESTED subquery's WHERE within the view body — `q.inView` must
-    // propagate into analyze_subquery's sub-SqlQuery, otherwise this slips past
-    // macro analysis and fails at SQLite runtime.
+    // shout in a NESTED subquery's WHERE within the view body —
+    // `q.inView` must propagate into analyze_subquery's sub-SqlQuery,
+    // otherwise this slips past macro analysis and fails at SQLite
+    // runtime.
     db |> _create_view(type<MarkedItem>,
         db |> select_from(type<Item>)
             |> _where(_.Id._in(
@@ -67,8 +74,9 @@ def case2_subquery_where(db : SqlRunner) {
 }
 
 def case3_select_projection(db : SqlRunner) {
-    // shout in `_select` projection slot inside the view body — the directonly+inView
-    // guard must fire from `try_recognize_sql_function_proj`'s `fn_call_to_sql` call too.
+    // shout in `_select` projection slot inside the view body — the
+    // directonly+inView guard must fire from
+    // `try_recognize_sql_function_proj`'s `fn_call_to_sql` call too.
     db |> _create_view(type<ShoutedItem>,
         db |> select_from(type<Item>)
             |> _select((Id = _.Id, Name = shout(_.Name))))

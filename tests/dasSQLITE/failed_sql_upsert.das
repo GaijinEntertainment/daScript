@@ -1,4 +1,5 @@
 options gen2
+//! malformed _sql_upsert calls must not compile
 
 // Each `_sql_upsert` call below is intentionally malformed and must emit
 // a macro_error (40104) from the analyzer.

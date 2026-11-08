@@ -1,3 +1,5 @@
+//! Setting a component value larger than the component size limit
+//! must not compile (error 31400).
 options gen2
 expect 31400
 

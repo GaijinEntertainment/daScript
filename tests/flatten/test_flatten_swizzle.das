@@ -80,7 +80,7 @@ def eq3(t : T?; a, b : float3) {
     t |> equal(a.z, b.z)
 }
 
-[test]
+[test(description = "swizzles of constructors fold to the cheapest equivalent lane selection and every twin equals its original exactly", standalone = "no_aot/test_flatten_fold.das compiles this file by path as a unit and checks its twins structurally")]
 def test_flatten_swizzle(t : T?) {
     t |> run("whole-base / nested / swizzle-of-swizzle — exact") @(t : T?) {
         for (v in GRID) {

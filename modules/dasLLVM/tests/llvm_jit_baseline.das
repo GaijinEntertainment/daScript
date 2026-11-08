@@ -101,7 +101,8 @@ def test_baseline_class_replaces_the_box(t : T?) {
     t |> success(ld |> has("{BASELINE_LINE}{klass}"), "a -jit run under a baseline announces the class too")
     t |> success(ld |> has("HOSTF=[0] TIER=[{lowest_class_bits()}]"), "the jitted kernels bake the class's gates on the generic rail: {join(ld, "\n")}")
 
-    // run the built exe where the platform can load the shared lib (the jit_exe.das gates)
+    // run the built exe where the platform can load the shared lib
+    // (the jit_artifacts.das gates)
     let can_run = get_platform_name() != "windows" && das_is_dll_build()
     if (can_run && fexist("{exe}.exe")) {
         var lr : array<string>

@@ -133,7 +133,7 @@ def match_report(t : T?; r : QMatchResult; msg : string) {
 // ── Tests ───────────────────────────────────────────────────────────
 
 // Dead code after return should be removed — body is just `return a + 1`
-[test]
+[test(description = "BlockFolding removes the unreachable statement after a return")]
 def test_dead_code_after_return(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@fold_dead_code)
@@ -146,7 +146,7 @@ def test_dead_code_after_return(t : T?) {
 }
 
 // If-else return folds to ternary: return (a < 5) ? b : c
-[test]
+[test(description = "CondFolding turns an if/else that returns in both branches into a ternary return")]
 def test_if_else_to_ternary(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@fold_if_else_return)
@@ -160,7 +160,7 @@ def test_if_else_to_ternary(t : T?) {
 }
 
 // If-chain folds to nested ternary: (a==1) ? 10 : ((a==2) ? 20 : ((a==3) ? 30 : b))
-[test]
+[test(description = "CondFolding turns a chain of if-return statements into nested ternaries")]
 def test_if_chain_to_nested_ternary(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@fold_if_chain)
@@ -179,7 +179,7 @@ def test_if_chain_to_nested_ternary(t : T?) {
 }
 
 // Void trailing return removed — body is print("hello\n"), no return
-[test]
+[test(description = "BlockFolding removes the trailing bare return of a void function")]
 def test_void_trailing_return(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@fold_void_trailing_return)
@@ -194,7 +194,7 @@ def test_void_trailing_return(t : T?) {
 }
 
 // Nested block flattened: body is `let x = a+1; return x` (not wrapped in block)
-[test]
+[test(description = "BlockFolding flattens a nested block into its parent block")]
 def test_nested_block_flattened(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@fold_nested_block)
@@ -208,7 +208,7 @@ def test_nested_block_flattened(t : T?) {
 }
 
 // Dead code after terminating if/else: folds to ternary, return 0 removed
-[test]
+[test(description = "BlockFolding removes the dead statement after an if/else that returns in both branches")]
 def test_dead_after_if_else(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@fold_dead_after_if_else)
@@ -222,7 +222,7 @@ def test_dead_after_if_else(t : T?) {
 }
 
 // If-break chain: inside for, `if (cond) break; stmt` → `if (cond) break else stmt`
-[test]
+[test(description = "CondFolding turns an if-break inside a for loop into an if/else")]
 def test_if_break_chain(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@fold_if_break)
@@ -245,7 +245,7 @@ def test_if_break_chain(t : T?) {
 }
 
 // If-continue chain: same pattern with continue
-[test]
+[test(description = "CondFolding turns an if-continue inside a for loop into an if/else")]
 def test_if_continue_chain(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@fold_if_continue)
@@ -267,7 +267,7 @@ def test_if_continue_chain(t : T?) {
 }
 
 // 5-condition chain: all fold to single nested ternary return
-[test]
+[test(description = "CondFolding folds a chain of five if-return statements into one ternary")]
 def test_if_chain_5(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@fold_if_chain_5)
@@ -286,7 +286,7 @@ def test_if_chain_5(t : T?) {
 }
 
 // if-return with work: `if (a>0) { return a+b; } return a-b` → `return (a>0) ? (a+b) : (a-b)`
-[test]
+[test(description = "CondFolding folds an if-return whose branches compute a value into a ternary")]
 def test_if_return_with_work(t : T?) {
     ast_gc_guard() {
         var func = find_module_function_via_rtti(compiling_module(), @@fold_if_with_work)

@@ -88,7 +88,7 @@ def parse_any(input : string; blk : block<(val : bool; err : array<ParsingError>
     }
 }
 
-[test]
+[test(description = "the number builtin parses integers (zero, large) and fails on a letter")]
 def test_number_basic(t : T?) {
     t |> run("simple integer") @(t : T?) {
         parse_number("42") $(val; err) {
@@ -115,7 +115,7 @@ def test_number_basic(t : T?) {
     }
 }
 
-[test]
+[test(description = "the double builtin parses integers, decimals, negatives and scientific notation")]
 def test_double_basic(t : T?) {
     t |> run("integer as double") @(t : T?) {
         parse_double("42") $(val; err) {
@@ -149,7 +149,7 @@ def test_double_basic(t : T?) {
     }
 }
 
-[test]
+[test(description = "the string-literal builtin parses plain, empty and spaced strings and fails on an unclosed one")]
 def test_string_literal(t : T?) {
     t |> run("simple string") @(t : T?) {
         parse_string("\"hello\"") $(val; err) {
@@ -176,7 +176,7 @@ def test_string_literal(t : T?) {
     }
 }
 
-[test]
+[test(description = "WS skips spaces, tabs and runs of whitespace and also accepts no whitespace at all")]
 def test_ws_whitespace(t : T?) {
     t |> run("space between tokens") @(t : T?) {
         parse_ws("a b") $(val; err) {
@@ -200,7 +200,7 @@ def test_ws_whitespace(t : T?) {
     }
 }
 
-[test]
+[test(description = "TS accepts a space or a tab between tokens and requires at least one of them")]
 def test_ts_tab_or_space(t : T?) {
     t |> run("space") @(t : T?) {
         parse_ts("a b") $(val; err) {
@@ -219,7 +219,7 @@ def test_ts_tab_or_space(t : T?) {
     }
 }
 
-[test]
+[test(description = "EOF matches only the empty input")]
 def test_eof(t : T?) {
     t |> run("empty input matches EOF") @(t : T?) {
         parse_eof("") $(val; err) {
@@ -234,7 +234,7 @@ def test_eof(t : T?) {
     }
 }
 
-[test]
+[test(description = "EOL matches both LF and CRLF line endings")]
 def test_eol(t : T?) {
     t |> run("LF between tokens") @(t : T?) {
         parse_eol("a\nb") $(val; err) {
@@ -248,7 +248,7 @@ def test_eol(t : T?) {
     }
 }
 
-[test]
+[test(description = "ANY matches exactly the requested count of characters and fails on fewer or on leftover input")]
 def test_any(t : T?) {
     t |> run("three chars match") @(t : T?) {
         parse_any("abc") $(val; err) {

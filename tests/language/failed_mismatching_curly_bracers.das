@@ -1,3 +1,4 @@
+//! an extra closing curly brace does not parse
 // mismatched curly braces
 // verifies parser detects extra closing brace
 options gen2

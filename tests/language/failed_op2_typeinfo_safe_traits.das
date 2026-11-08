@@ -1,9 +1,15 @@
-// A safe_* typeinfo trait that answers false replaces its node, so it tells infer to run again.
-// Each arm takes its value from a nested typeinfo, or from an index that folds, so the trait
-// resolves one pass late - in a pass where nothing else changes, which is the pass that catches a
-// missing signal. Keep this file free of anything that keeps signalling (a print's string builder
-// will do it): that grants the enclosing operator a repair pass and the arms stop proving anything.
-// Without the signal every arm reports 50613 instead, the reported input included.
+//! a safe typeinfo trait that answers false and resolves a pass late
+//! makes infer run again, so each wrong use is reported as
+//! function-not-found rather than a missing-signal error
+// A safe_* typeinfo trait that answers false replaces its node, so it
+// tells infer to run again. Each arm takes its value from a nested
+// typeinfo, or from an index that folds, so the trait resolves one
+// pass late - in a pass where nothing else changes, which is the pass
+// that catches a missing signal. Keep this file free of anything that
+// keeps signalling (a print's string builder will do it): that grants
+// the enclosing operator a repair pass and the arms stop proving
+// anything. Without the signal every arm reports 50613 instead, the
+// reported input included.
 options gen2
 expect 30341
 
@@ -23,6 +29,7 @@ def main {
     var c = true
     c &&= typeinfo struct_safe_has_annotation_argument < no_such_annotation; no_such_argument > (typeinfo is_ref(1))
     var d = true
-    d &&= typeinfo struct_safe_has_annotation_argument < no_such_annotation; no_such_argument > (g_tsr_annotated[typeinfo sizeof(type<int>)])
+    d &&= typeinfo struct_safe_has_annotation_argument < no_such_annotation; no_such_argument > (
+        g_tsr_annotated[typeinfo sizeof(type<int>)])
     1 &&= typeinfo safe_has_field < no_such_type > (typeinfo is_ref(1))
 }

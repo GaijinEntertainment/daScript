@@ -9,7 +9,7 @@ require dastest/testing_boost public
 
 // === Deferred semantics: entities not visible until commit ===
 
-[test]
+[test(description = "a created entity is invisible to queries until commit")]
 def test_entity_not_visible_before_commit(t : T?) {
     restart()
     create_entity() @(eid, cmp) {
@@ -29,7 +29,7 @@ def test_entity_not_visible_before_commit(t : T?) {
     t |> equal(count, 1)
 }
 
-[test]
+[test(description = "a delete takes effect only at commit")]
 def test_delete_not_effective_before_commit(t : T?) {
     restart()
     let eid = create_entity() @(eid, cmp) {
@@ -54,7 +54,7 @@ def test_delete_not_effective_before_commit(t : T?) {
 
 // === Multiple operations in single commit ===
 
-[test]
+[test(description = "a batch of creates becomes visible together at one commit")]
 def test_batch_create_commit(t : T?) {
     restart()
     for (i in range(10)) {
@@ -70,7 +70,7 @@ def test_batch_create_commit(t : T?) {
     t |> equal(count, 10)
 }
 
-[test]
+[test(description = "an entity created and deleted before one commit never appears")]
 def test_create_and_delete_same_commit(t : T?) {
     restart()
     let e1 = create_entity() @(eid, cmp) {
@@ -91,7 +91,7 @@ def test_create_and_delete_same_commit(t : T?) {
     t |> equal(vals[0], 2)
 }
 
-[test]
+[test(description = "create, update and delete before one commit leave nothing behind")]
 def test_create_update_delete_same_commit(t : T?) {
     restart()
     let e1 = create_entity() @(eid, cmp) {
@@ -113,7 +113,7 @@ def test_create_update_delete_same_commit(t : T?) {
 
 // === Multiple sequential commits ===
 
-[test]
+[test(description = "consecutive commits each apply their own changes")]
 def test_sequential_commits(t : T?) {
     restart()
     create_entity() @(eid, cmp) {
@@ -149,7 +149,7 @@ def test_sequential_commits(t : T?) {
 
 // === Empty commit is a no-op ===
 
-[test]
+[test(description = "a commit with no pending changes leaves the world as it was")]
 def test_empty_commit(t : T?) {
     restart()
     create_entity() @(eid, cmp) {
@@ -168,7 +168,7 @@ def test_empty_commit(t : T?) {
 
 // === Deferred order: actions processed in order ===
 
-[test]
+[test(description = "deferred operations apply in the order they were issued")]
 def test_deferred_order(t : T?) {
     restart()
     let e1 = create_entity() @(eid, cmp) {

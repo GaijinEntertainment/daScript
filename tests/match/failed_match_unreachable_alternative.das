@@ -1,4 +1,5 @@
-// an alternative an earlier arm already matches is unreachable, though the rest of its arm is not
+//! an alternative an earlier arm already matches is unreachable,
+//! though the rest of its arm is not
 options gen2
 
 require daslib/match

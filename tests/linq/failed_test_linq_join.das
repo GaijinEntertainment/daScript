@@ -1,3 +1,6 @@
+//! _join and _left_join with a non-equi-join on predicate (theta or
+//! AND-chained multi-key) must not compile: each shape emits macro
+//! error 50503.
 // regression test: _join / _left_join must reject non-equi-join `on`
 // predicates (theta joins, AND-chained multi-key equality) with a
 // clear macro_error pointing at raw SQL as the escape hatch.

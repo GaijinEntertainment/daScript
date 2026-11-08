@@ -2,7 +2,7 @@ options gen2
 options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
-require dastest/testing_boost
+require dastest/testing_boost public
 require daslib/logger
 require daslib/json_boost
 require daslib/defer
@@ -69,7 +69,7 @@ def reset() {
     logger_set_stderr_fallback(false)
 }
 
-[test]
+[test(description = "an info record is one JSON Lines line carrying ts, level, cat and msg")]
 def test_basic_write(t : T?) {
     t |> run("info writes one JSON Lines record with ts/level/cat/msg") @(t : T?) {
         reset()
@@ -92,7 +92,7 @@ def test_basic_write(t : T?) {
     }
 }
 
-[test]
+[test(description = "records below the minimum level are dropped")]
 def test_level_filter(t : T?) {
     t |> run("min_level drops records below threshold") @(t : T?) {
         reset()
@@ -113,7 +113,7 @@ def test_level_filter(t : T?) {
     }
 }
 
-[test]
+[test(description = "a dotted category prefix override applies to its descendants")]
 def test_category_prefix_override(t : T?) {
     t |> run("dotted prefix category override applies to descendants") @(t : T?) {
         reset()
@@ -135,7 +135,7 @@ def test_category_prefix_override(t : T?) {
     }
 }
 
-[test]
+[test(description = "quotes, newlines and tabs in a message are JSON-escaped and round-trip")]
 def test_msg_escaping(t : T?) {
     t |> run("msg with quotes / newlines / tabs is JSON-escaped and round-trips") @(t : T?) {
         reset()
@@ -152,7 +152,7 @@ def test_msg_escaping(t : T?) {
     }
 }
 
-[test]
+[test(description = "the fields argument is embedded as a nested JSON object")]
 def test_fields_serialization(t : T?) {
     t |> run("fields object is embedded as a nested JSON object") @(t : T?) {
         reset()
@@ -175,7 +175,7 @@ def test_fields_serialization(t : T?) {
     }
 }
 
-[test]
+[test(description = "with no path and the stderr fallback off, nothing is written anywhere")]
 def test_no_open_silent_when_fallback_disabled(t : T?) {
     t |> run("never writes anywhere if path unset and stderr fallback off") @(t : T?) {
         reset()
@@ -201,7 +201,7 @@ def private run_child(cmd : string; var output : string&) : int {
 // `logger_install_hook()` is tested through a child process (`_logger_hook_child.das`): the
 // global debug agent it registers keeps the installing context, so an in-process cell would leave
 // a dead agent behind for the harness's next line.
-[test]
+[test(description = "the hook's at field gives the call-site line in decimal and the stderr echo prints one plain line")]
 def test_hook_at_field_decimal(t : T?) {
     set_env_variable("DAS_LOG_LEVEL", "info")
     defer() {
@@ -263,4 +263,48 @@ def test_hook_at_field_decimal(t : T?) {
         t |> success(find(out_only, "hook at-field probe") < 0, "stdout carries no echo: {out_only}")
         remove(p)
     }
+}
+
+[test(description = "logger_try_log reports a failed open as false, opens lazily, and round-trips UTF-8 once the path is valid")]
+def checked_logger_reports_output_and_recoverable_open_failure(t : T?) {
+    var error : string
+    let root = create_temp_directory("logger-checked-", error)
+    t |> equal(error, "")
+    logger_close(); logger_set_stderr_fallback(false); logger_clear_category_levels()
+    logger_set_min_level(LOG_INFO)
+    logger_set_path(root)
+    t |> success(!logger_try_log(LOG_INFO, "test", "cannot append to a directory"))
+    logger_close()
+    let path = path_join(root, "events.jsonl")
+    logger_set_path(path)
+    t |> success(!logger_try_log(LOG_DEBUG, "test", "filtered"))
+    t |> success(!fexist(path), "filtered records do not open the file")
+    var fields = JV((code = 7))
+    t |> success(logger_try_log(LOG_INFO, "test", "Привет", fields)) // nolint:STYLE039 - UTF-8 log round-trip fixture
+    delete_json(fields)
+    logger_close()
+    var value = read_json(fread(path), error)
+    t |> equal(error, "")
+    t |> success(value?["msg"].value is _string)
+    t |> equal(value?["msg"].value as _string, "Привет") // nolint:STYLE039 - UTF-8 log round-trip fixture
+    delete_json(value)
+    logger_set_path(""); remove(path); rmdir(root)
+}
+
+[test(description = "try_fflush reports false for a null stream and for a stream with an earlier write error")]
+def checked_flush_reports_null_and_prior_write_error(t : T?) {
+    t |> success(!try_fflush(null))
+    var error : string
+    let root = create_temp_directory("flush-checked-", error)
+    t |> equal(error, "")
+    let path = path_join(root, "data")
+    t |> success(fwrite(path, "original"))
+    fopen(path, "rb") $(file) {
+        t |> success(try_fflush(file))
+        let bytes = [1u8]
+        t |> equal(fwrite(file, bytes), 0, "writing a read-only stream fails")
+        t |> success(!try_fflush(file), "stream errors are not reported as a successful flush")
+    }
+    t |> equal(fread(path), "original")
+    remove(path); rmdir(root)
 }

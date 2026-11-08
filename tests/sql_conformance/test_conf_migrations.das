@@ -1,7 +1,7 @@
 options gen2
-options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
+
 
 // Contract area: provider-neutral migrations (daslib/sql_migrate + the provider's glue
 // module) — apply order, idempotence, pending/history inspection, baseline adoption,
@@ -9,6 +9,7 @@ options no_unused_function_arguments = false
 // live in this provider's STREAM (keyed by the runner type of the body's parameter).
 
 require dastest/testing_boost public
+
 require _conformance_provider
 
 // ===== registered migrations (program-global registry, fresh DB per test) =====
@@ -48,7 +49,7 @@ def private conf_migration_v4(db : SqlRunner) {
     }
 }
 
-[test]
+[test(description = "migrate_to_latest applies pending migrations in order, is idempotent and reports pending and history correctly")]
 def test_conf_migrate_apply(t : T?) {
     t |> run("applies all pending in order; idempotent on re-run") @(t : T?) {
         with_conf_db() $(db) {
@@ -89,7 +90,7 @@ def test_conf_migrate_apply(t : T?) {
     }
 }
 
-[test]
+[test(description = "baseline stamps versions without running bodies and rejects a version above the registered maximum")]
 def test_conf_migrate_baseline(t : T?) {
     t |> run("baseline stamps without running bodies; migrate applies the rest") @(t : T?) {
         with_conf_db() $(db) {
@@ -116,7 +117,7 @@ def test_conf_migrate_baseline(t : T?) {
     }
 }
 
-[test]
+[test(description = "a failing migration body rolls back the whole call and a retry succeeds")]
 def test_conf_migrate_rollback(t : T?) {
     t |> run("body failure rolls back the whole call; retry succeeds") @(t : T?) {
         with_conf_db() $(db) {
@@ -152,7 +153,7 @@ def private conf_shape_old_to_new(old : ConfShapeOld; var fresh : ConfShape) {
     fresh.Area = 2.0lf
 }
 
-[test]
+[test(description = "convert_and_rename rebuilds a table with translated rows")]
 def test_conf_struct_convert_rebuild(t : T?) {
     t |> run("convert_and_rename rebuilds the table with translated rows") @(t : T?) {
         with_conf_db() $(db) {

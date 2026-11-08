@@ -95,7 +95,7 @@ def cmp3f_approx(t : T?; a, b : float3) {
     fapprox(t, a.x, b.x); fapprox(t, a.y, b.y); fapprox(t, a.z, b.z)
 }
 
-[test]
+[test(description = "the ctor lane algebra (zero-lane kill, splat collapse, lane re-vectorization, shared-factor extraction, majority-const compensation) gives twins that match their originals", standalone = "no_aot/test_flatten_fold.das compiles this file by path as a unit and checks its twins structurally")]
 def test_flatten_ctor(t : T?) {  // nolint:STYLE038 — flat list of independent `t |> run` cases, one per ctor lane rewrite
     t |> run("zero-lane kill collapses the whole product (exact)") @(t : T?) {
         for (v in GRID) {

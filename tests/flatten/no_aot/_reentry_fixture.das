@@ -3,12 +3,15 @@ options indenting = 4
 
 require daslib/flatten
 
-//! `[flatten]` unit for the optimize re-entry test — NOT a [test] file; it is compiled by
-//! tests/flatten/no_aot/test_flatten_reentry.das, which then mutates the twin's body (the way a
-//! backend rewrite would) and calls `flatten_optimize` a second time. The twin is shaped to keep
-//! one `_preshader_0` let (the uniform `u` chain) and one `_cse_0` let (the duplicated varying
-//! `(x + 1.0) * x`) in its final body, so a re-entered pass with un-seeded counters would mint
-//! colliding names.
+//! `[flatten]` unit for the optimize re-entry test — NOT a [test]
+//! file; it is compiled by the reentry test in
+//! tests/flatten/no_aot/uncategorized.das, which then mutates the
+//! twin's body (the way a backend rewrite would) and calls
+//! `flatten_optimize` a second time. The twin is shaped to keep one
+//! `_preshader_0` let (the uniform `u` chain) and one `_cse_0` let
+//! (the duplicated varying `(x + 1.0) * x`) in its final body, so a
+//! re-entered pass with un-seeded counters would mint colliding
+//! names.
 
 var G_REENTRY = 2.5
 

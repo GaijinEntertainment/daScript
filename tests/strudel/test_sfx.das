@@ -32,7 +32,7 @@ def private check_sound(t : T?; buf : array<float>; name : string) {
     t |> success(all_finite_in_range(buf), "{name}: samples in [-1,1]")
 }
 
-[test]
+[test(description = "render_voice renders both kinds of sound layers audibly")]
 def test_render_voice_both_kinds(t : T?) {
     var seed = 7u
     let s = render_voice(VoiceParams(sfxr = sfxr_pickup_coin(seed)))
@@ -41,7 +41,7 @@ def test_render_voice_both_kinds(t : T?) {
     check_sound(t, m, "modal voice")
 }
 
-[test]
+[test(description = "a two-layer sound mixes its layers into one audible buffer")]
 def test_two_layer_mix(t : T?) {
     // ball-on-table: low thud + hard click, one sound
     let sound <- [
@@ -52,7 +52,7 @@ def test_two_layer_mix(t : T?) {
     check_sound(t, buf, "table mix")
 }
 
-[test]
+[test(description = "a layer's onset delay shifts the buffer out")]
 def test_delay_extends_length(t : T?) {
     var sound : array<Layer>
     var lyr = modal_layer("d", ModalVoice(duration = 0.1))
@@ -62,7 +62,7 @@ def test_delay_extends_length(t : T?) {
     t |> success(length(buf) >= int(0.2 * float(SR)), "onset delay shifts the buffer out")
 }
 
-[test]
+[test(description = "a disabled layer neither extends nor changes the mix")]
 def test_disabled_layer_skipped(t : T?) {
     var sound : array<Layer>
     sound |> push(modal_layer("a", ModalVoice(duration = 0.1)))
@@ -76,7 +76,7 @@ def test_disabled_layer_skipped(t : T?) {
     t |> equal(length(one), length(with_disabled))
 }
 
-[test]
+[test(description = "a linked layer mirrors its source voice and keeps its own delay")]
 def test_link_mirrors_source(t : T?) {
     var sound : array<Layer>
     sound |> push(modal_layer("src", ModalVoice(pitch = 1234.0, ring = 0.08, brightness = 0.7)))
@@ -102,7 +102,7 @@ def test_link_mirrors_source(t : T?) {
     t |> success(sound[1].delay == 0.12, "linked layer keeps its own delay")
 }
 
-[test]
+[test(description = "a sound document saved to a temp file loads back equal")]
 def test_save_load_roundtrip(t : T?) {
     var sd = 9u
     var doc = Sound()
@@ -138,7 +138,7 @@ def test_save_load_roundtrip(t : T?) {
     t |> success(peak(buf) > 0.02, "loaded sound renders audible")
 }
 
-[test]
+[test(description = "conforming a sound resamples, applies gain, and keeps a one-shot's natural length")]
 def test_sfx_conform_resample_pad_fade(t : T?) {
     // 0.1s constant tone, upsampled 44100 -> 48000 at half gain
     var buf : array<float>
@@ -172,7 +172,7 @@ def test_sfx_conform_resample_pad_fade(t : T?) {
     t |> equal(length(e), 0)
 }
 
-[test]
+[test(description = "the generated daslang source has the standard one-shot render shape or the parametric tom shape")]
 def test_emit_das_shape(t : T?) {
     var sd = 5u
     var doc = Sound()

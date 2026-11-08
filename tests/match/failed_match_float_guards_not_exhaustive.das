@@ -1,4 +1,5 @@
-// complementary float comparisons do not cover a value - with NaN neither holds
+//! complementary float comparisons do not cover a value - with NaN
+//! neither holds
 options gen2
 
 require daslib/match

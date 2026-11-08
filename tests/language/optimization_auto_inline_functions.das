@@ -497,7 +497,7 @@ def target_upcast_of_rvalue {
 
 def has(s, sub : string) : bool => find(s, sub, 0) >= 0
 
-[test]
+[test(description = "under auto_inline_functions small loop-free callees, and private callees referenced once regardless of budget, splice at their call sites")]
 def test_auto_inline_functions_fired(t : T?) {
     ast_gc_guard() {
         t |> run("small expression-body callee splices at every site") @(t : T?) {
@@ -546,7 +546,7 @@ def test_auto_inline_functions_fired(t : T?) {
     }
 }
 
-[test]
+[test(description = "heuristic auto inlining declines [never_inline], over-budget, looping, recursive, twice-referenced, @@-taken, generic-instance and reference-binding callees, leaving them calls")]
 def test_auto_inline_functions_declines(t : T?) {
     ast_gc_guard() {
         t |> run("[never_inline] callee stays a call") @(t : T?) {
@@ -590,7 +590,7 @@ def test_auto_inline_functions_declines(t : T?) {
     }
 }
 
-[test]
+[test(description = "generated finalizers, callers annotated to fence the pass and function-level finally callees stay calls, and a cross-origin generic instance still compiles and runs")]
 def test_auto_inline_macro_fences(t : T?) {
     ast_gc_guard() {
         t |> run("generated callee (struct finalizer) stays a call") @(t : T?) {
@@ -616,7 +616,7 @@ def test_auto_inline_macro_fences(t : T?) {
     }
 }
 
-[test]
+[test(description = "auto-inlined and declined calls compute the same results, impure arguments evaluate in call order, and move returns keep their values")]
 def test_auto_inline_functions_behavior(t : T?) {
     t |> run("spliced results match") @(t : T?) {
         t |> equal(target_expr_body(3, 4), 3 * 4 + 4 * 4)
@@ -669,7 +669,7 @@ def test_auto_inline_functions_behavior(t : T?) {
     }
 }
 
-[test]
+[test(description = "an auto-inlined var parameter binds a reference to a cast, upcast or reinterpret of the argument, and materializes rvalue arguments into a temp before splicing")]
 def test_auto_inline_writable_ref_args(t : T?) {
     ast_gc_guard() {
         // the binding's `&` is the load-bearing half: a by-value temp splices the call away
@@ -734,7 +734,7 @@ def test_auto_inline_writable_ref_args(t : T?) {
     }
 }
 
-[test]
+[test(description = "writes through an auto-inlined var parameter reach the caller's variable, and a non-copyable argument is aliased rather than moved out")]
 def test_auto_inline_writable_ref_args_behavior(t : T?) {
     t |> run("writes through the param reach the caller") @(t : T?) {
         var p = WrPlain()

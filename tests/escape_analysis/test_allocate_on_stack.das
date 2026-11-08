@@ -124,7 +124,7 @@ def sum_multi_let() : int {
 }
 
 // plain `new` with field stores -> stack frame -> heap stays EXACTLY flat (zero growth)
-[test]
+[test(description = "a plain new of a small struct is placed on the stack so the heap does not grow")]
 def test_stack_plain_new(t : T?) {
     let before = heap_bytes_allocated()
     let s = sum_plain_new()
@@ -134,7 +134,7 @@ def test_stack_plain_new(t : T?) {
 }
 
 // `new T(f = v)` (ascend) -> built in the frame -> heap stays EXACTLY flat
-[test]
+[test(description = "a new with ascend of a small struct is placed on the stack so the heap does not grow")]
 def test_stack_ascend_new(t : T?) {
     let before = heap_bytes_allocated()
     let s = sum_ascend_new()
@@ -144,7 +144,7 @@ def test_stack_ascend_new(t : T?) {
 }
 
 // shell in the frame, owned arrays freed at scope exit -> heap stays flat (a few slots at most)
-[test]
+[test(description = "a stack-allocated struct frees the heap it owns when it dies")]
 def test_stack_owning_frees_owned_heap(t : T?) {
     let before = heap_bytes_allocated()
     let s = sum_owning()
@@ -154,7 +154,7 @@ def test_stack_owning_frees_owned_heap(t : T?) {
 }
 
 // over-the-cap struct: stays on the heap (not stack), still freed at scope exit -> heap bounded
-[test]
+[test(description = "a struct too big for the stack stays on the heap")]
 def test_stack_big_struct_stays_on_heap(t : T?) {
     let before = heap_bytes_allocated()
     let s = sum_big()
@@ -164,7 +164,7 @@ def test_stack_big_struct_stays_on_heap(t : T?) {
 }
 
 // multiple live stack-allocated objects in one frame keep distinct slots: values intact + heap flat
-[test]
+[test(description = "several live stack-allocated objects at once all keep correct values")]
 def test_stack_multiple_live_objects(t : T?) {
     let before = heap_bytes_allocated()
     let s = sum_multi_live()
@@ -175,7 +175,7 @@ def test_stack_multiple_live_objects(t : T?) {
 }
 
 // the two variables of one `let` keep distinct slots: a write through b leaves a alone + heap flat
-[test]
+[test(description = "a multi-variable let of new objects places each on the stack")]
 def test_stack_multi_variable_let(t : T?) {
     let before = heap_bytes_allocated()
     let s = sum_multi_let()
@@ -186,7 +186,7 @@ def test_stack_multi_variable_let(t : T?) {
 }
 
 // control: an escaping pointer must stay on the heap and the heap must grow by N nodes
-[test]
+[test(description = "an escaping allocation is not moved to the stack, so the heap grows as the control case")]
 def test_stack_control_grows(t : T?) {
     g_list |> clear()
     let before = heap_bytes_allocated()

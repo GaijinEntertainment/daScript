@@ -1,3 +1,5 @@
+//! A [decs_template] struct with no fields must not compile: the
+//! template needs at least one field.
 options gen2
 expect 20800
 
@@ -9,8 +11,8 @@ require dastest/testing_boost public
 
 [decs_template]
 struct Particle {}
-// 30111: macro [decs_template] failed to apply to the structure Particle
-// expecting at least one field in the desc_template Particle
+// 30111: macro [decs_template] failed to apply to the structure
+// Particle expecting at least one field in the desc_template Particle
 
 [test]
 def test_create_from_templates(t : T?) {

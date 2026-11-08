@@ -25,7 +25,7 @@ def read_file_bytes(path : string) : array<uint8> {
     return <- result
 }
 
-[test]
+[test(description = "an OGG file loads from memory")]
 def test_load_audio_memory(t : T?) {
     t |> run("load OGG from memory") <| @(t : T?) {
         let bytes <- read_file_bytes("{MEDIA}/drums/bd/kick_0.ogg")
@@ -36,7 +36,7 @@ def test_load_audio_memory(t : T?) {
     }
 }
 
-[test]
+[test(description = "loading an OGG from a file and from memory gives identical samples")]
 def test_round_trip(t : T?) {
     t |> run("file vs memory loading identical") <| @(t : T?) {
         let path = "{MEDIA}/drums/bd/kick_0.ogg"
@@ -54,7 +54,7 @@ def test_round_trip(t : T?) {
     }
 }
 
-[test]
+[test(description = "a sound loaded from memory is added to the sample bank")]
 def test_load_sound_memory_bank(t : T?) {
     t |> run("sound added to bank") <| @(t : T?) {
         let bytes <- read_file_bytes("{MEDIA}/drums/bd/kick_0.ogg")
@@ -64,7 +64,7 @@ def test_load_sound_memory_bank(t : T?) {
     }
 }
 
-[test]
+[test(description = "loading an empty array returns an empty sample")]
 def test_empty_data(t : T?) {
     t |> run("empty array returns empty sample") <| @(t : T?) {
         let empty : array<uint8>
@@ -73,7 +73,7 @@ def test_empty_data(t : T?) {
     }
 }
 
-[test]
+[test(description = "loading garbage bytes returns an empty sample")]
 def test_invalid_data(t : T?) {
     t |> run("garbage bytes returns empty sample") <| @(t : T?) {
         var garbage : array<uint8>
@@ -86,7 +86,7 @@ def test_invalid_data(t : T?) {
     }
 }
 
-[test]
+[test(description = "render_sample over the full range matches the default render")]
 def test_render_sample_full(t : T?) {
     t |> run("render_sample full range matches default") <| @(t : T?) {
         var bank : SampleBank
@@ -99,7 +99,7 @@ def test_render_sample_full(t : T?) {
     }
 }
 
-[test]
+[test(description = "render_sample from 0.5 produces about half the sample")]
 def test_render_sample_half_slice(t : T?) {
     t |> run("render_sample begin=0.5 produces ~half") <| @(t : T?) {
         var bank : SampleBank
@@ -117,7 +117,7 @@ def test_render_sample_half_slice(t : T?) {
     }
 }
 
-[test]
+[test(description = "four quarter slices together cover the full sample length")]
 def test_render_sample_quarter_slices(t : T?) {
     t |> run("render_sample 4 quarters cover the full length") <| @(t : T?) {
         var bank : SampleBank
@@ -137,7 +137,7 @@ def test_render_sample_quarter_slices(t : T?) {
     }
 }
 
-[test]
+[test(description = "the head and tail slices of a sample render different audio")]
 def test_render_sample_head_not_equal_tail(t : T?) {
     t |> run("head and tail slices produce different audio") <| @(t : T?) {
         var bank : SampleBank

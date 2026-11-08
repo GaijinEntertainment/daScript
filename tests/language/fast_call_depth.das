@@ -26,7 +26,7 @@ def guard_armed : bool {
     return find(why, "max_fast_call_depth") >= 0
 }
 
-[test]
+[test(description = "fastcall recursion exactly at max_fast_call_depth passes and one call past it panics naming the option, for one, two, computed and nine arguments")]
 def test_fast_call_depth_panics(t : T?) {
     g_no_fold = 0
     if (!guard_armed()) {
@@ -61,7 +61,7 @@ def test_fast_call_depth_panics(t : T?) {
     }
 }
 
-[test]
+[test(description = "a thousand recovered fastcall overflows leave the depth counter where it was, so a recursion at the cap still passes")]
 def test_recovered_overflow_leaves_no_drift(t : T?) {
     g_no_fold = 0
     if (!guard_armed()) {
@@ -83,7 +83,7 @@ def test_recovered_overflow_leaves_no_drift(t : T?) {
 //! calls, past_cap 17, and overflow never returns.
 let HOST_CAPPED_SOURCE = "options gen2\nvar g_no_fold = 0\nvar g_sink = 0\ndef rec_sum(n : int) : int \{\n    return n == 0 ? 0 : n + rec_sum(n - 1)\n\}\ndef rec_forever(n : int) : int \{\n    return rec_forever(n + 1)\n\}\n[export]\ndef at_cap \{\n    g_sink = rec_sum(15 + g_no_fold)\n\}\n[export]\ndef past_cap \{\n    g_sink = rec_sum(16 + g_no_fold)\n\}\n[export]\ndef overflow \{\n    g_sink = rec_forever(g_no_fold)\n\}\n"
 
-[test]
+[test(description = "a host CodeOfPolicies cap limits fastcall depth in a program with no options line, and a host-side catch of the overflow restores the counter")]
 def test_host_policy_and_host_catch(t : T?) {
     t |> run("the policy caps a program with no options line, and a host catch restores the counter") @(t : T?) {
         let path = path_join(test_temp_dir(), "host_capped.das")

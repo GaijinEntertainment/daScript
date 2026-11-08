@@ -285,7 +285,7 @@ What it took, each a general fix rather than a dasLLAMA one:
   dependencies, saw a false cycle (`BatchWorkspace` embeds `Session`; a `function<(...BatchWorkspace...)>`
   typedef names it) and fell back to source order - C++ then embedded an incomplete type.
   `collectStructDeps` skips function / lambda / block types, and a residual (container-mediated)
-  cycle keeps the sorted prefix. Gate: `tests/aot/test_struct_order.das`.
+  cycle keeps the sorted prefix. Gate: `tests/aot/test_structures.das`.
 - `das_is_aot_function` / `das_is_jit_function` and the jobque affinity pair had no AOT header
   declaration (`aot_builtin.h`, `aot_builtin_jobque.h`); the generated C++ named them undeclared.
 - The AOT TUs include every closure module's C++ header, so the target compiles with dasAudio's,
@@ -422,7 +422,7 @@ gguf pair's 113. An OPFS reader stays open.
   kernel-tier `[init]` gates ask the target arch, so a wasm cross-compile from an arm64 box
   registers no NEON tier. The `--jit-target` argument keys the module cache (it sits after the
   `--` separator, which the key ignored, so a cached native compile served a cross one with the
-  host's folds). Gate: `tests/jit_tests/cross_target_folds.das`.
+  host's folds). Gate: `tests/jit_tests/jit_artifacts.das`.
 - Limits to design around: SIMD is 128-bit through the `-msse2` shim and that flag is
   load-bearing (`web/CMakeLists.txt:34`; without it vecmath drops to scalar); a process-wide
   malloc spinlock under shared memory (`src/hal/wasm_thread_malloc.cpp`); the main-thread join
@@ -457,7 +457,7 @@ extmul + `extadd_pairwise` chain (the 9.1 row above); the relaxed 7-bit dot behi
 withdrawn in review, because the sign trick that feeds it wraps at -128 in either operand and
 `+relaxed-simd` re-means float-vector min/max/mad engine-wide - and the portable kernels pick
 `dot_q8q8_idot4_ps` (and its s16 twin) on a wasm target at compile time and keep the template
-everywhere else. Gates: `tests/jit_tests/wasm_idot_lowering.das` (the cross dump carries the
+everywhere else. Gates: `tests/jit_tests/jit_artifacts.das` (the cross dump carries the
 pairwise adds and no relaxed dot, the host dump no wasm intrinsic) and the new `test_q8q8_idot4_ps` cell in the
 kernel-family test (fp64 bar, s16 twin bit-identical). End to end: Kitten nano under node on 4
 lanes 0.27x -> 0.14x real time; in Chrome 0.37-0.43x -> 0.23-0.26x (the generator stage 1.1 s

@@ -62,7 +62,7 @@ class RequestBuilderServer : HvWebServer {
 // Tests
 // ??????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 
-[test]
+[test(description = "A GET built with with_http_request reaches the server and returns its response")]
 def test_with_http_request_basic(t : T?) {
     with_test_server(type<RequestBuilderServer>) $(base_url) {
         t |> run("basic GET via request builder") @(t : T?) {
@@ -78,7 +78,7 @@ def test_with_http_request_basic(t : T?) {
     }
 }
 
-[test]
+[test(description = "A POST built with with_http_request sends its body")]
 def test_request_with_body(t : T?) {
     with_test_server(type<RequestBuilderServer>) $(base_url) {
         t |> run("POST with body via request builder") @(t : T?) {
@@ -94,7 +94,7 @@ def test_request_with_body(t : T?) {
     }
 }
 
-[test]
+[test(description = "set_header adds a header the server sees")]
 def test_set_header_on_request(t : T?) {
     with_test_server(type<RequestBuilderServer>) $(base_url) {
         t |> run("set_header adds header to request") @(t : T?) {
@@ -110,7 +110,7 @@ def test_set_header_on_request(t : T?) {
     }
 }
 
-[test]
+[test(description = "set_content_type sets the Content-Type header the server sees")]
 def test_set_content_type_on_request(t : T?) {
     with_test_server(type<RequestBuilderServer>) $(base_url) {
         t |> run("set_content_type sets Content-Type header") @(t : T?) {
@@ -127,7 +127,7 @@ def test_set_content_type_on_request(t : T?) {
     }
 }
 
-[test]
+[test(description = "set_timeout and set_connect_timeout leave a normal request working")]
 def test_timeout_settings(t : T?) {
     with_test_server(type<RequestBuilderServer>) $(base_url) {
         t |> run("set_timeout and set_connect_timeout do not break request") @(t : T?) {
@@ -144,7 +144,7 @@ def test_timeout_settings(t : T?) {
     }
 }
 
-[test]
+[test(description = "set_param adds query parameters and get_param reads them back")]
 def test_query_params(t : T?) {
     with_test_server(type<RequestBuilderServer>) $(base_url) {
         t |> run("set_param adds query parameters") @(t : T?) {
@@ -170,7 +170,7 @@ def test_query_params(t : T?) {
     }
 }
 
-[test]
+[test(description = "set_basic_auth sets a Basic Authorization header")]
 def test_basic_auth(t : T?) {
     with_test_server(type<RequestBuilderServer>) $(base_url) {
         t |> run("set_basic_auth sets Authorization header") @(t : T?) {
@@ -186,7 +186,7 @@ def test_basic_auth(t : T?) {
     }
 }
 
-[test]
+[test(description = "set_bearer_token_auth sets a Bearer Authorization header")]
 def test_bearer_token_auth(t : T?) {
     with_test_server(type<RequestBuilderServer>) $(base_url) {
         t |> run("set_bearer_token_auth sets Authorization header") @(t : T?) {
@@ -202,7 +202,7 @@ def test_bearer_token_auth(t : T?) {
     }
 }
 
-[test]
+[test(description = "allow_redirect(false) leaves a redirect unfollowed and allow_redirect(true) follows it")]
 def test_redirect_control(t : T?) {
     with_test_server(type<RequestBuilderServer>) $(base_url) {
         t |> run("allow_redirect(false) does not follow redirect") @(t : T?) {

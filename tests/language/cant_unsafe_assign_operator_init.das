@@ -1,4 +1,7 @@
-// an operator = marked [unsafe_operation] needs an unsafe block at an initialization the same way it does at an assignment
+//! an initialization through an [unsafe_operation] operator = outside
+//! unsafe does not compile, the same as an assignment through it
+// an operator = marked [unsafe_operation] needs an unsafe block at an
+// initialization the same way it does at an assignment
 options gen2
 expect 31013:1
 

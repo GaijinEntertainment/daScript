@@ -34,7 +34,7 @@ struct ShapeHolder {
 
 // -- original tests --
 
-[test]
+[test(description = "is_instance_of answers true for a class pointer's own class and every base, and false otherwise")]
 def test_is_instance_of(t : T?) {
     t |> run("circle is Circle") @(t : T?) {
         var c = new Circle()
@@ -51,7 +51,7 @@ def test_is_instance_of(t : T?) {
     }
 }
 
-[test]
+[test(description = "dynamic_type_cast of a base pointer returns the derived pointer for the right class, null for the wrong one, and succeeds to a base type")]
 def test_dynamic_type_cast(t : T?) {
     t |> run("cast Shape? to Circle?") @(t : T?) {
         var s : Shape? = new Circle()
@@ -67,7 +67,7 @@ def test_dynamic_type_cast(t : T?) {
     }
 }
 
-[test]
+[test(description = "force_dynamic_type_cast to the object's real class returns a usable derived pointer")]
 def test_force_dynamic_type_cast(t : T?) {
     t |> run("force cast succeeds on correct type") @(t : T?) {
         var s : Shape? = new Circle()
@@ -76,7 +76,7 @@ def test_force_dynamic_type_cast(t : T?) {
     }
 }
 
-[test]
+[test(description = "with dynamic_cast_rtti the is and as operators on class pointers check and cast by the runtime class")]
 def test_is_as_syntax(t : T?) {
     t |> run("is syntax") @(t : T?) {
         var s : Shape? = new Circle()
@@ -90,7 +90,7 @@ def test_is_as_syntax(t : T?) {
     }
 }
 
-[test]
+[test(description = "a virtual method called through a base pointer dispatches to the derived override, inherited ones included")]
 def test_polymorphic_area(t : T?) {
     t |> run("area via const method") @(t : T?) {
         var c : Shape? = new Circle()
@@ -105,7 +105,7 @@ def test_polymorphic_area(t : T?) {
 
 // -- pointer type coercion in data structures --
 
-[test]
+[test(description = "derived class pointers push into an array of base pointers and keep their runtime class")]
 def test_array_of_base_pointers(t : T?) {
     t |> run("array of base pointers from derived instances") @(t : T?) {
         var arr <- array<Shape?>(new Circle(), new Rectangle(), new Square(2.0))
@@ -116,7 +116,7 @@ def test_array_of_base_pointers(t : T?) {
     }
 }
 
-[test]
+[test(description = "a derived pointer copy-assigns and move-assigns into a base pointer variable")]
 def test_copy_derived_to_base(t : T?) {
     t |> run("copy assign derived to base pointer") @(t : T?) {
         var s : Shape?
@@ -133,7 +133,7 @@ def test_copy_derived_to_base(t : T?) {
     }
 }
 
-[test]
+[test(description = "a base-pointer struct field initializes from a derived pointer")]
 def test_struct_field_init(t : T?) {
     t |> run("struct field with derived pointer") @(t : T?) {
         var h = ShapeHolder(shape = new Circle())
@@ -142,7 +142,7 @@ def test_struct_field_init(t : T?) {
     }
 }
 
-[test]
+[test(description = "tuple elements of base-pointer type accept derived pointers by assignment")]
 def test_tuple_with_base_pointers(t : T?) {
     t |> run("tuple of base pointers via assignment") @(t : T?) {
         var tup : tuple<Shape?; Shape?>
@@ -160,7 +160,7 @@ variant ShapeOrName {
     name : string
 }
 
-[test]
+[test(description = "a variant case of base-pointer type holds a derived pointer")]
 def test_variant_with_base_pointers(t : T?) {
     t |> run("variant holding base pointer") @(t : T?) {
         var v = ShapeOrName(shape = new Circle())
@@ -171,7 +171,7 @@ def test_variant_with_base_pointers(t : T?) {
 
 def take_shape(s : Shape?) : float => s->area()
 
-[test]
+[test(description = "a derived pointer passes to a base-pointer parameter and dispatches its override")]
 def test_pass_derived_to_function(t : T?) {
     t |> run("pass derived pointer as base arg") @(t : T?) {
         var c = new Circle()
@@ -179,7 +179,7 @@ def test_pass_derived_to_function(t : T?) {
     }
 }
 
-[test]
+[test(description = "a function returning a base pointer returns a derived pointer that keeps its runtime class")]
 def test_return_derived_as_base(t : T?) {
     t |> run("return derived pointer as base") @(t : T?) {
         var s : Shape? = new Circle()

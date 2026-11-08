@@ -1,3 +1,5 @@
+//! a recursive generic that instantiates ever-deeper pointer types
+//! stops at the infer pass limit with an error
 // recursive type definition loop
 // verifies compiler detects infinite type inference caused by
 // a recursive generic function creating ever-deeper pointer types

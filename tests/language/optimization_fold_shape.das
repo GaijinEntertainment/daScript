@@ -1,7 +1,9 @@
 options gen2
 options rtti
 options no_coverage // shape pins: injected coverage calls legitimately block the folds
-options auto_inline_functions = false // shape pins: splices rewrite the very call shapes the folds are probed on
+// shape pins: splices rewrite the very call shapes the folds are
+// probed on
+options auto_inline_functions = false
 
 require daslib/ast
 require daslib/rtti
@@ -12,10 +14,11 @@ require strings
 require daslib/strings_boost
 require _optimized_body_helper
 
-// structural FIRED proof for the ConstFolding algebraic identities: inspects the
-// post-optimize AST of the target functions below and asserts the rewrite actually
-// happened. the behavioral half (value preservation, purity gates) lives in
-// optimization_folding.das — a silently disabled fold passes there but fails here.
+// structural FIRED proof for the ConstFolding algebraic identities:
+// inspects the post-optimize AST of the target functions below and
+// asserts the rewrite actually happened. the behavioral half (value
+// preservation, purity gates) lives in optimization.das — a silently
+// disabled fold passes there but fails here.
 
 [export]
 def target_mul_one(x : int) : int => x * 1
@@ -77,7 +80,8 @@ def target_and_false(b : bool) : bool => b && false
 [export]
 def target_reassoc(f : float) : float => (f + 1.0) + 2.0
 
-// ===== Expression::sameAs powered folds (same-shape operands beyond bare vars) =====
+// ===== Expression::sameAs powered folds (same-shape operands beyond
+// bare vars) =====
 
 struct SamePair {
     a : int
@@ -162,7 +166,7 @@ def target_defer_in_arm(c : bool) : int {
 
 def has(s, sub : string) : bool => find(s, sub, 0) >= 0
 
-[test]
+[test(description = "algebraic identity folds rewrite the post-optimize AST - x*1, x+0, x*0, double negation, same-type casts, dead loops, splat collapse, x^x - while reassociation stays off without fast_math")]
 def test_identity_folds_fired(t : T?) {
     ast_gc_guard() {
         t |> run("x*1 leaves no multiply") @(t : T?) {
@@ -238,7 +242,7 @@ def test_identity_folds_fired(t : T?) {
     }
 }
 
-[test]
+[test(description = "folds on structurally identical pure operands - fields, swizzles, index reads, ternary arms - fire, while impure operands and float f - f without fast_math do not fold")]
 def test_same_as_folds_fired(t : T?) {
     ast_gc_guard() {
         t |> run("s.a ^ s.a becomes the zero constant") @(t : T?) {
@@ -273,12 +277,13 @@ def test_same_as_folds_fired(t : T?) {
     }
 }
 
-[test]
+[test(description = "if/else-return chains fold into ternaries and void arms with a pure condition fold away, while an impure condition or a finally section blocks the fold")]
 def test_cond_folds_fired(t : T?) {
     ast_gc_guard() {
         t |> run("elif chain of returns collapses fully") @(t : T?) {
-            // regression: the inner fold leaves a naked ExprReturn as if_false, which
-            // the outer level used to reject (rtti_isBlock) — jamming after one level
+            // regression: the inner fold leaves a naked ExprReturn as if_false,
+            // which the outer level used to reject (rtti_isBlock) — jamming after
+            // one level
             let b = body_of(t, "target_elif_chain")
             t |> success(!has(b, "if"), "no `if` survives: {b}")
             t |> success(has(b, "?"), "ternary chain present: {b}")
@@ -293,15 +298,16 @@ def test_cond_folds_fired(t : T?) {
             t |> success(has(b, "bump_side"), "condition side effect kept: {b}")
         }
         t |> run("arm with a finally section does not fold") @(t : T?) {
-            // regression: `if (c) { return 1 } finally { ... } else { return 2 }` — the
-            // shape defer() leaves — used to fold to a ternary, dropping the finally
+            // regression: `if (c) { return 1 } finally { ... } else { return 2 }`
+            // — the shape defer() leaves — used to fold to a ternary, dropping
+            // the finally
             let b = body_of(t, "target_defer_in_arm")
             t |> success(has(b, "finally"), "finally section kept: {b}")
         }
     }
 }
 
-[test]
+[test(description = "same-shape folds preserve values, and impure same-shape operands still evaluate exactly twice")]
 def test_same_as_folds_behavior(t : T?) {
     t |> run("values preserved") @(t : T?) {
         t |> equal(target_xor_self_field(SamePair(a = 77, b = 5)), 0)

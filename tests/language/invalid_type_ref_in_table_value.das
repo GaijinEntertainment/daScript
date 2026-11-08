@@ -1,3 +1,4 @@
+//! a reference type as a table value does not compile
 // ref type as table value
 // verifies compiler rejects reference types in table values
 options gen2

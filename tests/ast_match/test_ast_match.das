@@ -20,7 +20,7 @@ def make_add_xb() : ExpressionPtr => qmacro(x + b)
 
 // ── Basic matching ──────────────────────────────────────────────────────
 
-[test]
+[test(description = "the QmResult helpers report matched true with no error for a success and the recorded error for a failure")]
 def test_result_types(t : T?) {
     ast_gc_guard() {
         let r = qm_ok()
@@ -31,7 +31,7 @@ def test_result_types(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch matches an int constant against the same value")]
 def test_const_int_match(t : T?) {
     ast_gc_guard() {
         var expr = make_int(42)
@@ -39,7 +39,7 @@ def test_const_int_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch rejects an int constant against a different value")]
 def test_const_int_mismatch(t : T?) {
     ast_gc_guard() {
         var expr = make_int(42)
@@ -49,7 +49,7 @@ def test_const_int_mismatch(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch rejects a bool pattern against an int constant")]
 def test_rtti_mismatch(t : T?) {
     ast_gc_guard() {
         var expr = make_int(42)
@@ -59,7 +59,7 @@ def test_rtti_mismatch(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch matches a bool constant against the same value")]
 def test_const_bool_match(t : T?) {
     ast_gc_guard() {
         var expr = make_bool(true)
@@ -67,7 +67,7 @@ def test_const_bool_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch rejects a bool constant against the opposite value")]
 def test_const_bool_mismatch(t : T?) {
     ast_gc_guard() {
         var expr = make_bool(false)
@@ -75,7 +75,7 @@ def test_const_bool_mismatch(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch matches a binary operator with identical operands")]
 def test_op2_match(t : T?) {
     ast_gc_guard() {
         var expr <- make_add_ab()
@@ -83,7 +83,7 @@ def test_op2_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch rejects a binary operator of a different kind")]
 def test_op2_wrong_op(t : T?) {
     ast_gc_guard() {
         var expr <- make_add_ab()
@@ -91,7 +91,7 @@ def test_op2_wrong_op(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch rejects a binary operator whose operand variable differs")]
 def test_op2_wrong_var(t : T?) {
     ast_gc_guard() {
         var expr <- make_add_xb()
@@ -101,7 +101,7 @@ def test_op2_wrong_var(t : T?) {
 
 // ── $e capture ──────────────────────────────────────────────────────────
 
-[test]
+[test(description = "$e captures bind both operands of a binary operator")]
 def test_capture_e_op2(t : T?) {
     ast_gc_guard() {
         // Match a + b, capture left and right as ExpressionPtr
@@ -116,7 +116,7 @@ def test_capture_e_op2(t : T?) {
     }
 }
 
-[test]
+[test(description = "an operator pattern with $e operands rejects a constant")]
 def test_capture_e_rtti_mismatch(t : T?) {
     ast_gc_guard() {
         // $e captures should still fail on RTTI mismatch at the outer level
@@ -130,7 +130,7 @@ def test_capture_e_rtti_mismatch(t : T?) {
 
 // ── $v capture ──────────────────────────────────────────────────────────
 
-[test]
+[test(description = "a $v capture extracts the value of an int constant")]
 def test_capture_v_int(t : T?) {
     ast_gc_guard() {
         var expr = make_int(42)
@@ -149,7 +149,7 @@ def test_capture_v_int(t : T?) {
 
 // ── $i capture ──────────────────────────────────────────────────────────
 
-[test]
+[test(description = "an $i capture extracts the name of a variable")]
 def test_capture_i_var(t : T?) {
     ast_gc_guard() {
         // Extract variable name from ExprVar
@@ -163,7 +163,7 @@ def test_capture_i_var(t : T?) {
     }
 }
 
-[test]
+[test(description = "$i captures extract the variable names of both operands of an operator")]
 def test_capture_i_from_op2(t : T?) {
     ast_gc_guard() {
         // Extract variable names from a + b
@@ -182,7 +182,7 @@ def test_capture_i_from_op2(t : T?) {
 
 // ── Null expression ─────────────────────────────────────────────────────
 
-[test]
+[test(description = "qmatch fails without crashing on a null expression")]
 def test_null_expr_fails(t : T?) {
     ast_gc_guard() {
         var expr : ExpressionPtr
@@ -194,7 +194,7 @@ def test_null_expr_fails(t : T?) {
 
 // ── String constant ─────────────────────────────────────────────────────
 
-[test]
+[test(description = "qmatch matches a string constant against the same text")]
 def test_const_string_match(t : T?) {
     ast_gc_guard() {
         var expr = qmacro("hello")
@@ -202,7 +202,7 @@ def test_const_string_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch rejects a string constant against different text")]
 def test_const_string_mismatch(t : T?) {
     ast_gc_guard() {
         var expr = qmacro("hello")
@@ -212,7 +212,7 @@ def test_const_string_mismatch(t : T?) {
 
 // ── Float constant ──────────────────────────────────────────────────────
 
-[test]
+[test(description = "qmatch matches a float constant against the same value")]
 def test_const_float_match(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(3.14)
@@ -220,7 +220,7 @@ def test_const_float_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch rejects a float constant against a different value")]
 def test_const_float_mismatch(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(3.14)
@@ -230,7 +230,7 @@ def test_const_float_mismatch(t : T?) {
 
 // ── Cross-type mismatch ─────────────────────────────────────────────────
 
-[test]
+[test(description = "qmatch rejects a string pattern against an int constant")]
 def test_int_vs_string(t : T?) {
     ast_gc_guard() {
         var expr = make_int(42)
@@ -238,7 +238,7 @@ def test_int_vs_string(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch rejects an int pattern against a bool constant")]
 def test_bool_vs_int(t : T?) {
     ast_gc_guard() {
         var expr = make_bool(true)
@@ -246,7 +246,7 @@ def test_bool_vs_int(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch rejects a constant pattern against a binary operator")]
 def test_op2_vs_const(t : T?) {
     ast_gc_guard() {
         var expr <- make_add_ab()
@@ -254,7 +254,7 @@ def test_op2_vs_const(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch rejects an operator pattern against a constant")]
 def test_const_vs_op2(t : T?) {
     ast_gc_guard() {
         var expr = make_int(42)
@@ -269,7 +269,7 @@ def make_block_ab() : ExpressionPtr {
     return qmacro($ { a + b; return c; })
 }
 
-[test]
+[test(description = "qmatch_block matches a block statement for statement")]
 def test_block_exact_match(t : T?) {
     ast_gc_guard() {
         var expr <- make_block_ab()
@@ -281,7 +281,7 @@ def test_block_exact_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_block rejects a block whose statement differs")]
 def test_block_wrong_stmt(t : T?) {
     ast_gc_guard() {
         var expr <- make_block_ab()
@@ -293,7 +293,7 @@ def test_block_wrong_stmt(t : T?) {
     }
 }
 
-[test]
+[test(description = "qmatch_block rejects a block that has more statements than the pattern without a wildcard")]
 def test_block_extra_stmt(t : T?) {
     ast_gc_guard() {
         var expr <- make_block_ab()
@@ -304,7 +304,7 @@ def test_block_extra_stmt(t : T?) {
     }
 }
 
-[test]
+[test(description = "a trailing wildcard matches the remaining statements of a block")]
 def test_block_wildcard_trailing(t : T?) {
     ast_gc_guard() {
         var expr <- make_block_ab()
@@ -316,7 +316,7 @@ def test_block_wildcard_trailing(t : T?) {
     }
 }
 
-[test]
+[test(description = "a leading wildcard followed by a fixed statement matches a block")]
 def test_block_wildcard_leading(t : T?) {
     ast_gc_guard() {
         var expr <- make_block_ab()
@@ -352,7 +352,7 @@ def make_block_4() : ExpressionPtr {
 
 // _wildcard() before a fixed pattern — zero prefix
 
-[test]
+[test(description = "a leading wildcard matches zero statements before the fixed one")]
 def test_wildcard_zero_prefix(t : T?) {
     ast_gc_guard() {
         // Pattern: _wildcard(); a + b  — actual has just a + b (wildcard matches 0)
@@ -365,7 +365,7 @@ def test_wildcard_zero_prefix(t : T?) {
     }
 }
 
-[test]
+[test(description = "a leading wildcard skips one statement before the fixed one")]
 def test_wildcard_one_prefix(t : T?) {
     ast_gc_guard() {
         // Pattern: _wildcard(); a + b  — actual: print(); a + b
@@ -378,7 +378,7 @@ def test_wildcard_one_prefix(t : T?) {
     }
 }
 
-[test]
+[test(description = "a leading wildcard skips two statements before the fixed one")]
 def test_wildcard_two_prefix(t : T?) {
     ast_gc_guard() {
         // Pattern: _wildcard(); a + b  — actual: print(); print(); a + b
@@ -393,7 +393,7 @@ def test_wildcard_two_prefix(t : T?) {
 
 // _wildcard() after a fixed pattern — consume trailing
 
-[test]
+[test(description = "a fixed statement followed by a wildcard matches a block with several trailing statements")]
 def test_wildcard_trailing_multi(t : T?) {
     ast_gc_guard() {
         // Pattern: a + b; _wildcard()  — actual: a + b; return c; print()
@@ -408,7 +408,7 @@ def test_wildcard_trailing_multi(t : T?) {
 
 // No wildcard — must match exactly
 
-[test]
+[test(description = "a single fixed statement matches a one-statement block")]
 def test_no_wildcard_exact(t : T?) {
     ast_gc_guard() {
         var expr <- make_block_1()
@@ -419,7 +419,7 @@ def test_no_wildcard_exact(t : T?) {
     }
 }
 
-[test]
+[test(description = "a single fixed statement does not match a two-statement block")]
 def test_no_wildcard_too_few(t : T?) {
     ast_gc_guard() {
         var expr <- make_block_2()
@@ -432,7 +432,7 @@ def test_no_wildcard_too_few(t : T?) {
 
 // _wildcard() sandwiching a fixed pattern
 
-[test]
+[test(description = "a wildcard on each side of a fixed statement matches a longer block")]
 def test_wildcard_sandwich(t : T?) {
     ast_gc_guard() {
         // Pattern: _wildcard(); a + b; _wildcard()  — actual: print(); a + b; return c; print()
@@ -448,7 +448,7 @@ def test_wildcard_sandwich(t : T?) {
 
 // _wildcard() with no fixed — matches any block
 
-[test]
+[test(description = "a bare wildcard matches any block")]
 def test_wildcard_only(t : T?) {
     ast_gc_guard() {
         var expr <- make_block_3()
@@ -461,7 +461,7 @@ def test_wildcard_only(t : T?) {
 
 // Empty block
 
-[test]
+[test(description = "a bare wildcard matches an empty block")]
 def test_wildcard_empty_block(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ {})
@@ -474,7 +474,7 @@ def test_wildcard_empty_block(t : T?) {
 
 // _wildcard1 — requires at least one
 
-[test]
+[test(description = "_wildcard1 before the only statement fails because it needs at least one prefix statement")]
 def test_wildcard1_zero_fails(t : T?) {
     ast_gc_guard() {
         var expr <- make_block_1()
@@ -486,7 +486,7 @@ def test_wildcard1_zero_fails(t : T?) {
     }
 }
 
-[test]
+[test(description = "_wildcard1 matches exactly one prefix statement")]
 def test_wildcard1_one_passes(t : T?) {
     ast_gc_guard() {
         var expr <- make_block_2()
@@ -498,7 +498,7 @@ def test_wildcard1_one_passes(t : T?) {
     }
 }
 
-[test]
+[test(description = "_wildcard1 scans forward over two prefix statements")]
 def test_wildcard1_two_prefix(t : T?) {
     ast_gc_guard() {
         // { print(); print(); a + b } — _wildcard1 should scan forward to find a + b
@@ -511,7 +511,7 @@ def test_wildcard1_two_prefix(t : T?) {
     }
 }
 
-[test]
+[test(description = "_wildcard1 on each side of a fixed statement matches")]
 def test_wildcard1_sandwich(t : T?) {
     ast_gc_guard() {
         // { print(); print(); a + b; return c; print() } — _wildcard1 on both sides
@@ -525,7 +525,7 @@ def test_wildcard1_sandwich(t : T?) {
     }
 }
 
-[test]
+[test(description = "_wildcard1 before a fixed statement at position 0 fails")]
 def test_wildcard1_sandwich_too_few_before(t : T?) {
     ast_gc_guard() {
         // { a + b; return c; print() } — a + b is at pos 0, no room for 1+ before it
@@ -541,7 +541,7 @@ def test_wildcard1_sandwich_too_few_before(t : T?) {
 
 // _any — exactly one
 
-[test]
+[test(description = "_any before a fixed statement matches exactly one prefix statement")]
 def test_any_exact(t : T?) {
     ast_gc_guard() {
         var expr <- make_block_2()
@@ -553,7 +553,7 @@ def test_any_exact(t : T?) {
     }
 }
 
-[test]
+[test(description = "_any before the only statement fails because it needs exactly one")]
 def test_any_zero_fails(t : T?) {
     ast_gc_guard() {
         var expr <- make_block_1()
@@ -567,7 +567,7 @@ def test_any_zero_fails(t : T?) {
 
 // _wildcard not found — fixed pattern doesn't exist in block
 
-[test]
+[test(description = "scanning for a statement the block does not contain fails")]
 def test_wildcard_not_found(t : T?) {
     ast_gc_guard() {
         var expr <- make_block_3()
@@ -581,7 +581,7 @@ def test_wildcard_not_found(t : T?) {
 
 // Multiple fixed patterns with wildcards between
 
-[test]
+[test(description = "two fixed statements separated by wildcards match in order")]
 def test_two_fixed_with_wildcards(t : T?) {
     ast_gc_guard() {
         var expr <- make_block_4()
@@ -604,7 +604,7 @@ def test_two_fixed_with_wildcards(t : T?) {
 
 // ── _optional — zero or one ──────────────────────────────────────────
 
-[test]
+[test(description = "_optional before a fixed statement matches zero prefix statements")]
 def test_optional_zero(t : T?) {
     ast_gc_guard() {
         // { a + b } — _optional() matches 0, then fixed matches a + b
@@ -617,7 +617,7 @@ def test_optional_zero(t : T?) {
     }
 }
 
-[test]
+[test(description = "_optional before a fixed statement matches one prefix statement")]
 def test_optional_one(t : T?) {
     ast_gc_guard() {
         // { print(); a + b } — _optional() matches print(), then fixed matches a + b
@@ -630,7 +630,7 @@ def test_optional_one(t : T?) {
     }
 }
 
-[test]
+[test(description = "_optional before a fixed statement fails when two statements precede it")]
 def test_optional_two_fails(t : T?) {
     ast_gc_guard() {
         // { print(); print(); a + b } — _optional() can't match 2, should fail
@@ -643,7 +643,7 @@ def test_optional_two_fails(t : T?) {
     }
 }
 
-[test]
+[test(description = "a trailing _optional matches zero remaining statements")]
 def test_optional_trailing_zero(t : T?) {
     ast_gc_guard() {
         // { a + b } — fixed matches, trailing _optional() matches 0
@@ -656,7 +656,7 @@ def test_optional_trailing_zero(t : T?) {
     }
 }
 
-[test]
+[test(description = "a trailing _optional matches one remaining statement")]
 def test_optional_trailing_one(t : T?) {
     ast_gc_guard() {
         // { a + b; return c; print() } — fixed matches a+b, trailing _optional() matches 1? No, 2 remain
@@ -670,7 +670,7 @@ def test_optional_trailing_one(t : T?) {
     }
 }
 
-[test]
+[test(description = "a trailing _optional fails when two statements remain")]
 def test_optional_trailing_two_fails(t : T?) {
     ast_gc_guard() {
         // { print(); print(); a + b } — fixed matches print(), trailing _optional() has 2 remaining
@@ -683,7 +683,7 @@ def test_optional_trailing_two_fails(t : T?) {
     }
 }
 
-[test]
+[test(description = "a lone trailing _optional matches an empty block")]
 def test_optional_trailing_only_zero(t : T?) {
     ast_gc_guard() {
         // Empty block — trailing _optional() alone matches 0
@@ -695,7 +695,7 @@ def test_optional_trailing_only_zero(t : T?) {
     }
 }
 
-[test]
+[test(description = "a lone trailing _optional matches a one-statement block")]
 def test_optional_trailing_only_one(t : T?) {
     ast_gc_guard() {
         // { a + b } — _optional() alone matches 1
@@ -707,7 +707,7 @@ def test_optional_trailing_only_one(t : T?) {
     }
 }
 
-[test]
+[test(description = "a lone trailing _optional fails on a two-statement block")]
 def test_optional_trailing_only_two_fails(t : T?) {
     ast_gc_guard() {
         // { print(); a + b } — _optional() alone can't match 2
@@ -719,7 +719,7 @@ def test_optional_trailing_only_two_fails(t : T?) {
     }
 }
 
-[test]
+[test(description = "_optional between two fixed statements matches one statement between them")]
 def test_optional_sandwich(t : T?) {
     ast_gc_guard() {
         // { a + b; return c; print() } — fixed, _optional(), fixed
@@ -733,7 +733,7 @@ def test_optional_sandwich(t : T?) {
     }
 }
 
-[test]
+[test(description = "_optional between two fixed statements matches zero statements between them")]
 def test_optional_sandwich_zero(t : T?) {
     ast_gc_guard() {
         // { a + b; print() } — 2 stmts, fixed + _optional(0) + fixed
@@ -747,7 +747,7 @@ def test_optional_sandwich_zero(t : T?) {
     }
 }
 
-[test]
+[test(description = "_optional between two fixed statements fails when two statements sit between them")]
 def test_optional_sandwich_two_fails(t : T?) {
     ast_gc_guard() {
         // { a + b; foo(); bar(); print() } — 4 stmts, 2 between fixed stmts

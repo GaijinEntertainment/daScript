@@ -25,7 +25,7 @@ require dastest/testing_boost public
 // doesn't reintroduce the regression.
 // ============================================================================
 
-[test]
+[test(description = "a field pattern on a typed-source expression whose fieldIndex is set still matches")]
 def test_fieldindex_set_does_not_break_match(t : T?) {
     // Source has a non-default fieldIndex (post-typer state). Pattern has
     // fieldIndex=-1 (qmacro default). Without the skip, this would fail.
@@ -40,7 +40,7 @@ def test_fieldindex_set_does_not_break_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "an $f capture on a typed-source field with fieldIndex 0 still matches and captures the field name")]
 def test_capture_f_with_fieldindex_set(t : T?) {
     // $f capture against a typed source (fieldIndex resolved).
     ast_gc_guard() {
@@ -56,7 +56,7 @@ def test_capture_f_with_fieldindex_set(t : T?) {
     }
 }
 
-[test]
+[test(description = "an $f capture on a typed-source struct field with a high fieldIndex captures the field name")]
 def test_fieldindex_high_value(t : T?) {
     // Higher fieldIndex (e.g. 5th tuple slot) — same skip path.
     ast_gc_guard() {
@@ -72,7 +72,7 @@ def test_fieldindex_high_value(t : T?) {
     }
 }
 
-[test]
+[test(description = "a chained field pattern matches through two typed-source levels")]
 def test_chained_fields_typed(t : T?) {
     // Two-level field access — both ExprFields have resolved fieldIndex.
     // Mimics `_._0._1` (multi-key group projection).
@@ -91,7 +91,7 @@ def test_chained_fields_typed(t : T?) {
     }
 }
 
-[test]
+[test(description = "an $f capture on the outer level of a chained typed-source field captures its name")]
 def test_chained_capture_outer(t : T?) {
     // Pattern captures the outer field, inner fixed.
     ast_gc_guard() {
@@ -124,7 +124,7 @@ def test_chained_capture_outer(t : T?) {
 // the caller pins the type. These tests document the contract so a future
 // matcher rewrite that loses the discrimination property fails loudly.
 
-[test]
+[test(description = "a $e receiver with an $f field capture captures a variable receiver and the field name")]
 def test_e_recv_dot_f_captures_var_receiver(t : T?) {
     // Single-level access — receiver is a bare ExprVar, captured via $e.
     ast_gc_guard() {
@@ -141,7 +141,7 @@ def test_e_recv_dot_f_captures_var_receiver(t : T?) {
     }
 }
 
-[test]
+[test(description = "a $e receiver with an $f field capture binds a nested field access as the receiver and the outer field name")]
 def test_e_recv_dot_f_rejects_nested_receiver(t : T?) {
     // Two-level access — receiver of the outer ExprField is itself an
     // ExprField (a.b), NOT an ExprVar. The qmatch DOES match (it's still
@@ -160,7 +160,7 @@ def test_e_recv_dot_f_rejects_nested_receiver(t : T?) {
     }
 }
 
-[test]
+[test(description = "a $e receiver with an $f field capture binds a call result as the receiver and the outer field name")]
 def test_e_recv_dot_f_rejects_call_receiver(t : T?) {
     // Receiver is a function call (`compute().X`) — also not a bare
     // ExprVar; the discrimination contract rejects this shape too.

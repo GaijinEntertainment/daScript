@@ -1,4 +1,5 @@
-// 256 doesn't fit in uint8 — emits exactly one exceeds_constant_range
+//! 256 assigned to a uint8 must not compile with exactly one
+//! exceeds-constant-range error (30515).
 options gen2
 
 expect 30515

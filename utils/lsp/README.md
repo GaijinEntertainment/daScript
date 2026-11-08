@@ -113,7 +113,7 @@ intentional errors.
 
 ## Tests
 
-`tests/lsp/test_lsp_protocol.das` drives the front over a stdio pipe, through
+`tests/lsp/uncategorized.das` drives the front over a stdio pipe, through
 the interpreter host and through the static exe where it is built:
 initialize -> didOpen with broken buffer text against a clean disk file
 (proves the overlay) -> didChange back to clean -> definition -> the
@@ -125,5 +125,5 @@ verbatim -> outgoingCalls from the returned caller item) -> implementation
 bin/daslang dastest/dastest.das -- --test tests/lsp
 ```
 
-`tests/watchdog/test_lsp_front.das` covers the cross-tree guard over throwaway
+`tests/watchdog/test_stdio_front.das` covers the cross-tree guard over throwaway
 git-style trees.

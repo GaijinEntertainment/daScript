@@ -31,7 +31,7 @@ def acc_pick(sel : float) : float {
 [flatten]
 def inline_acc(sel : float) : float => acc_pick(sel)
 
-[test]
+[test(description = "an accumulator declared in an inlined helper is SSA-renamed and the flattened twin matches its original", standalone = "compiles its own source file by path to inspect the flattened body")]
 def test_flatten_inline_accumulator(t : T?) {
     t |> run("inlined-helper accumulator: flattened twin matches original") @(t : T?) {
         // exact: the accumulator selects a constant per iteration, so no float reordering

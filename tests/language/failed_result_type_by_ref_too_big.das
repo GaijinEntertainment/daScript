@@ -1,5 +1,8 @@
-// The oversized result on its own, with no other error to stop compilation first: this one
-// reaches Program::simulate, where the debug-info walk sizes the result and asserts.
+//! a function returning a reference to an oversized fixed array does
+//! not compile, instead of asserting in the debug-info walk
+// The oversized result on its own, with no other error to stop
+// compilation first: this one reaches Program::simulate, where the
+// debug-info walk sizes the result and asserts.
 options gen2
 expect 30512
 

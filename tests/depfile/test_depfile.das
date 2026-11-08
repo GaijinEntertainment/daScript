@@ -83,7 +83,7 @@ def private target_of(depfile : string) : string {
     return colon < 0 ? "" : slice(text, 0, colon)
 }
 
-[test]
+[test(description = "-MD -MF writes a depfile listing the root, every required module and builtin.das")]
 def test_md_names_every_source_the_compile_read(t : T?) {
     let tmp = tree(t, "das_depfile_read")
     if (empty(tmp)) return
@@ -103,7 +103,7 @@ def test_md_names_every_source_the_compile_read(t : T?) {
     t |> success(lists(depfile, "{get_das_root()}/daslib/builtin.das"), "so is builtin.das, which no source requires by name")
 }
 
-[test]
+[test(description = "without -MT the depfile target is the depfile path minus its .d suffix, and -MT overrides it")]
 def test_target_defaults_to_the_path_without_its_d(t : T?) {
     let tmp = tree(t, "das_depfile_target")
     if (empty(tmp)) return
@@ -123,7 +123,7 @@ def test_target_defaults_to_the_path_without_its_d(t : T?) {
 
 //! a path in the merged list that no longer exists is dropped at write time: ninja treats a
 //! missing dependency as dirty, so naming one would re-run the check forever
-[test]
+[test(description = "a source that disappeared between two runs is dropped from the merged depfile rule")]
 def test_a_vanished_file_is_not_an_input(t : T?) {
     let tmp = tree(t, "das_depfile_gone")
     if (empty(tmp)) return
@@ -149,7 +149,7 @@ def test_a_vanished_file_is_not_an_input(t : T?) {
 //! a data file a PROGRAM reads is not what the compile required, and a build artifact is not an
 //! input at all - a check that named the jitted object cache among its inputs would never be up
 //! to date again
-[test]
+[test(description = "a file the script reads while running is not listed as a depfile input")]
 def test_a_runtime_read_is_not_an_input(t : T?) {
     let tmp = tree(t, "das_depfile_runtime")
     if (empty(tmp)) return
@@ -169,7 +169,7 @@ def test_a_runtime_read_is_not_an_input(t : T?) {
     t |> success(!lists(depfile, data), "a file the program read at runtime is not")
 }
 
-[test]
+[test(description = "DAS_DEPFILE alone makes a spawned daslang write a depfile, with no command-line flag")]
 def test_the_environment_arms_a_spawned_process(t : T?) {
     let tmp = tree(t, "das_depfile_env")
     if (empty(tmp)) return
@@ -185,7 +185,7 @@ def test_the_environment_arms_a_spawned_process(t : T?) {
     t |> success(lists(depfile, root), "DAS_DEPFILE alone arms the run - no flag reaches a process a build edge spawns:\n{fread(depfile)}")
 }
 
-[test]
+[test(description = "a directory named in DAS_DEPFILE_EXCLUDE contributes no inputs to the depfile")]
 def test_excluded_directories_stay_out(t : T?) {
     let tmp = tree(t, "das_depfile_exclude")
     if (empty(tmp)) return
@@ -205,7 +205,7 @@ def test_excluded_directories_stay_out(t : T?) {
     t |> success(!lists(depfile, hidden), "a build directory named in DAS_DEPFILE_EXCLUDE contributes nothing")
 }
 
-[test]
+[test(description = "two runs with the same -MF and -MT merge into a single rule holding both inputs")]
 def test_two_runs_merge_into_one_rule(t : T?) {
     let tmp = tree(t, "das_depfile_merge")
     if (empty(tmp)) return
@@ -227,7 +227,7 @@ def test_two_runs_merge_into_one_rule(t : T?) {
 
 //! a windows target opens with a drive letter, and its colon is not the rule's separator. The
 //! shape is reproducible on any host: what matters is a colon inside the target
-[test]
+[test(description = "a drive-lettered -MT target keeps its name and merges both runs inputs without listing its own tail")]
 def test_a_target_with_a_drive_letter_merges(t : T?) {
     let tmp = tree(t, "das_depfile_drive")
     if (empty(tmp)) return

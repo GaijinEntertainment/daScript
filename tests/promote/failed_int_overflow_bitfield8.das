@@ -1,4 +1,4 @@
-// 256 doesn't fit in bitfield8
+//! 256 assigned to a bitfield8 must not compile (30515).
 options gen2
 
 expect 30515

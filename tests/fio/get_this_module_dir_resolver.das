@@ -8,7 +8,7 @@ require daslib/module_path
 // site in a real build. These tests call the builtin directly with an explicit
 // flag so they are deterministic under any execution tier.
 
-[test]
+[test(description = "A real project-local path resolves to its own directory when not standalone")]
 def test_real_project_local_path_returns_baked_dir(t : T?) {
     t |> run("dev (not standalone): real project-local path returns its dir_name") @(t : T?) {
         // This test file is project-local (sits in tests/fio/, no /modules/ segment).
@@ -18,7 +18,7 @@ def test_real_project_local_path_returns_baked_dir(t : T?) {
     }
 }
 
-[test]
+[test(description = "A standalone build prefers the executable's directory over an existing baked directory for a project-local path")]
 def test_standalone_project_local_prefers_exe_dir(t : T?) {
     t |> run("standalone: project-local path prefers exe dir over the (existing) baked dir") @(t : T?) {
         // The dictation-bot release-config bug: on the author's own machine the
@@ -32,7 +32,7 @@ def test_standalone_project_local_prefers_exe_dir(t : T?) {
     }
 }
 
-[test]
+[test(description = "A nonexistent project-local baked path falls back to an existing directory")]
 def test_nonexistent_project_local_falls_back_to_exe_dir(t : T?) {
     t |> run("dev (not standalone): nonexistent project-local baked path falls back to an existing dir") @(t : T?) {
         // No /modules/ segment AND dir doesn't exist on disk → should fall
@@ -46,7 +46,7 @@ def test_nonexistent_project_local_falls_back_to_exe_dir(t : T?) {
     }
 }
 
-[test]
+[test(description = "A nonexistent modules baked path is returned unchanged when not standalone")]
 def test_nonexistent_modules_path_keeps_baked(t : T?) {
     t |> run("dev (not standalone): nonexistent /modules/ baked path returns baked dir unchanged") @(t : T?) {
         // When rel is non-empty and not standalone the fallback does NOT fire —
@@ -58,7 +58,7 @@ def test_nonexistent_modules_path_keeps_baked(t : T?) {
     }
 }
 
-[test]
+[test(description = "A standalone build refuses the dev directory for a nonexistent modules baked path")]
 def test_standalone_modules_path_prefers_exe_dir(t : T?) {
     t |> run("standalone: nonexistent /modules/ baked path still refuses the dev dir") @(t : T?) {
         // rel non-empty, but neither <exe_dir>/<rel> nor <das_root>/<rel> exists;
@@ -71,7 +71,7 @@ def test_standalone_modules_path_prefers_exe_dir(t : T?) {
     }
 }
 
-[test]
+[test(description = "An empty baked path resolves to an empty path")]
 def test_empty_baked_returns_empty(t : T?) {
     t |> run("empty input returns empty") @(t : T?) {
         t |> equal(__builtin_resolve_this_module_dir("", false), "")

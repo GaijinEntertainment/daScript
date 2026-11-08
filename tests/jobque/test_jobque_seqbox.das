@@ -17,7 +17,7 @@ struct Snap {
     n : int
 }
 
-[test]
+[test(description = "A seq box with nothing published reads back false")]
 def test_empty_box_reads_nothing(t : T?) {
     t |> run("a box with nothing published reads back false") @(t : T?) {
         with_seq_box() $(box) {
@@ -33,7 +33,7 @@ def test_empty_box_reads_nothing(t : T?) {
     }
 }
 
-[test]
+[test(description = "Reading a seq box hands back exactly what was published")]
 def test_publish_then_read(t : T?) {
     t |> run("read hands back exactly what was published") @(t : T?) {
         with_seq_box() $(box) {
@@ -52,7 +52,7 @@ def test_publish_then_read(t : T?) {
     }
 }
 
-[test]
+[test(description = "Reading does not consume: the same snapshot reads back until the next publish")]
 def test_read_consumes_nothing(t : T?) {
     t |> run("the same snapshot reads back until the next publish") @(t : T?) {
         with_seq_box() $(box) {
@@ -77,7 +77,7 @@ def test_read_consumes_nothing(t : T?) {
     }
 }
 
-[test]
+[test(description = "clear drops the published snapshot")]
 def test_clear_empties_the_box(t : T?) {
     t |> run("clear drops the snapshot") @(t : T?) {
         with_seq_box() $(box) {
@@ -92,7 +92,7 @@ def test_clear_empties_the_box(t : T?) {
     }
 }
 
-[test]
+[test(description = "Reading a seq box as a different-sized type fails instead of reinterpreting")]
 def test_size_mismatch_is_refused(t : T?) {
     t |> run("reading as a different-sized type fails instead of reinterpreting") @(t : T?) {
         with_seq_box() $(box) {
@@ -107,7 +107,7 @@ def test_size_mismatch_is_refused(t : T?) {
     }
 }
 
-[test]
+[test(description = "Reading as an equal-size different type returns the reinterpreted bytes")]
 def test_equal_size_read_reinterprets(t : T?) {
     t |> run("an equal-size different type reads back byte-reinterpreted, as documented") @(t : T?) {
         with_seq_box() $(box) {
@@ -124,7 +124,7 @@ def test_equal_size_read_reinterprets(t : T?) {
     }
 }
 
-[test]
+[test(description = "A payload of exactly SEQ_BOX_PAYLOAD bytes round-trips")]
 def test_payload_boundary_roundtrips(t : T?) {
     t |> run("a payload of exactly SEQ_BOX_PAYLOAD bytes round-trips") @(t : T?) {
         static_assert(typeinfo sizeof(type<Full64>) == SEQ_BOX_PAYLOAD, "Full64 must fill the box exactly")
@@ -172,7 +172,7 @@ struct Full64 {
 
 // ---- lifetime: the last reference deletes, in either order ----
 
-[test]
+[test(description = "A seq box survives until its second holder releases it")]
 def test_owner_releases_last(t : T?) {
     t |> run("box survives until the second holder releases it") @(t : T?) {
         let before = count_jobque_leaks()
@@ -191,7 +191,7 @@ def test_owner_releases_last(t : T?) {
     }
 }
 
-[test]
+[test(description = "Releasing the holders out of order leaks nothing")]
 def test_other_holder_releases_last(t : T?) {
     t |> run("releasing out of order leaks nothing") @(t : T?) {
         let before = count_jobque_leaks()
@@ -204,7 +204,7 @@ def test_other_holder_releases_last(t : T?) {
     }
 }
 
-[test]
+[test(description = "with_seq_box balances its own reference count")]
 def test_with_seq_box_leaves_nothing(t : T?) {
     t |> run("with_seq_box balances its own reference") @(t : T?) {
         let before = count_jobque_leaks()
@@ -217,7 +217,7 @@ def test_with_seq_box_leaves_nothing(t : T?) {
 
 // ---- capture: a lambda captures the box by reference count ----
 
-[test]
+[test(description = "A job can capture a seq box, publish into it and release its share explicitly")]
 def test_capture_in_job(t : T?) {
     t |> run("a job captures the box, publishes, and releases its share explicitly") @(t : T?) {
         let before = count_jobque_leaks()

@@ -1,5 +1,8 @@
+//! typeinfo sizeof and typename of an unresolved auto type do not
+//! compile
 // typeinfo on auto types
-// verifies compiler rejects typeinfo sizeof and typename on unresolved auto types
+// verifies compiler rejects typeinfo sizeof and typename on
+// unresolved auto types
 options gen2
 expect 30265:2
 

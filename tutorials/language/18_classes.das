@@ -236,7 +236,7 @@ def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the less
     //   }
     //
     // Empty intermediates (no user ctor) are still legal to skip — that's
-    // the SkipMid pattern in tests/language/super.das.
+    // the SuperSkipMid pattern in tests/language/structs_and_classes.das.
 
     // === Summary ===
 
@@ -256,7 +256,7 @@ def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the less
     // 'def static' functions, enabling obj.method() syntax on structs.
     // Generic static methods (with `auto` parameters) are also supported —
     // the macro rewrites the template once and every instantiation inherits
-    // the injected `self`. See tests/language/generic_class_method.das.
+    // the injected `self`. See tests/language/structs_and_classes.das.
 }
 
 // output:

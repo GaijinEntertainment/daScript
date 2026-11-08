@@ -1,3 +1,5 @@
+//! writing a field through a const pointer, directly or through safe
+//! navigation, does not compile
 // const value write violations
 // verifies compiler rejects writes through const pointers,
 // including direct field writes and safe-navigation writes
@@ -17,11 +19,14 @@ def test() {
     let foo : Foo
     unsafe {
         var t = Test(v = addr(foo))
-        t.v.i = 10                          // 30504: can't write to a constant value, int const& = int const
+        // 30504: can't write to a constant value, int const& = int const
+        t.v.i = 10
         var r = t.v
-        r.i = 10                            // 30504: can't write to a constant value, int const& = int const
+        // 30504: can't write to a constant value, int const& = int const
+        r.i = 10
         var j = 10
-        t.v?.i ?? j = 11                    // 30504: can't write to a constant value, int const& = int const
+        // 30504: can't write to a constant value, int const& = int const
+        t.v?.i ?? j = 11
     }
     return true
 }

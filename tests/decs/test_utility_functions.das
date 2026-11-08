@@ -7,7 +7,7 @@ require math
 
 // === is_alive ===
 
-[test]
+[test(description = "is_alive is true for a live entity")]
 def test_is_alive_basic(t : T?) {
     t |> run("alive entity returns true") @(t : T?) {
         restart()
@@ -20,7 +20,7 @@ def test_is_alive_basic(t : T?) {
     }
 }
 
-[test]
+[test(description = "is_alive is false for the invalid id")]
 def test_is_alive_invalid(t : T?) {
     t |> run("INVALID_ENTITY_ID is not alive") @(t : T?) {
         restart()
@@ -29,7 +29,7 @@ def test_is_alive_invalid(t : T?) {
     }
 }
 
-[test]
+[test(description = "is_alive is false for a deleted entity")]
 def test_is_alive_deleted(t : T?) {
     t |> run("deleted entity is not alive") @(t : T?) {
         restart()
@@ -45,7 +45,7 @@ def test_is_alive_deleted(t : T?) {
     }
 }
 
-[test]
+[test(description = "is_alive is false for an old generation of a recycled slot")]
 def test_is_alive_stale_generation(t : T?) {
     t |> run("stale generation returns false after slot recycling") @(t : T?) {
         restart()
@@ -68,7 +68,7 @@ def test_is_alive_stale_generation(t : T?) {
     }
 }
 
-[test]
+[test(description = "is_alive is false for an id beyond the lookup table")]
 def test_is_alive_out_of_bounds(t : T?) {
     t |> run("entity id beyond lookup table is not alive") @(t : T?) {
         restart()
@@ -78,7 +78,7 @@ def test_is_alive_out_of_bounds(t : T?) {
     }
 }
 
-[test]
+[test(description = "is_alive tells live from dead among several entities")]
 def test_is_alive_multiple_entities(t : T?) {
     t |> run("mixed alive and dead entities") @(t : T?) {
         restart()
@@ -101,7 +101,7 @@ def test_is_alive_multiple_entities(t : T?) {
     }
 }
 
-[test]
+[test(description = "is_alive is false for an entity created but not yet committed")]
 def test_is_alive_before_commit(t : T?) {
     t |> run("entity not alive before first commit") @(t : T?) {
         restart()
@@ -118,7 +118,7 @@ def test_is_alive_before_commit(t : T?) {
 
 // === entity_count ===
 
-[test]
+[test(description = "an empty world has zero entities")]
 def test_entity_count_empty(t : T?) {
     t |> run("empty world has zero entities") @(t : T?) {
         restart()
@@ -127,7 +127,7 @@ def test_entity_count_empty(t : T?) {
     }
 }
 
-[test]
+[test(description = "entity_count counts entities across archetypes")]
 def test_entity_count_basic(t : T?) {
     t |> run("counts entities across archetypes") @(t : T?) {
         restart()
@@ -150,7 +150,7 @@ def test_entity_count_basic(t : T?) {
     }
 }
 
-[test]
+[test(description = "entity_count drops after a delete")]
 def test_entity_count_after_delete(t : T?) {
     t |> run("count decreases after deletion") @(t : T?) {
         restart()
@@ -172,7 +172,7 @@ def test_entity_count_after_delete(t : T?) {
     }
 }
 
-[test]
+[test(description = "an entity created and deleted in one commit is not counted")]
 def test_entity_count_create_delete_same_commit(t : T?) {
     t |> run("create and delete in same commit") @(t : T?) {
         restart()
@@ -192,7 +192,7 @@ def test_entity_count_create_delete_same_commit(t : T?) {
     }
 }
 
-[test]
+[test(description = "entity_count counts a hundred entities")]
 def test_entity_count_many(t : T?) {
     t |> run("counts 100 entities") @(t : T?) {
         restart()
@@ -209,7 +209,7 @@ def test_entity_count_many(t : T?) {
 
 // === get_component ===
 
-[test]
+[test(description = "get_component returns an int component")]
 def test_get_component_int(t : T?) {
     t |> run("get int component") @(t : T?) {
         restart()
@@ -222,7 +222,7 @@ def test_get_component_int(t : T?) {
     }
 }
 
-[test]
+[test(description = "get_component returns a float component")]
 def test_get_component_float(t : T?) {
     t |> run("get float component") @(t : T?) {
         restart()
@@ -236,7 +236,7 @@ def test_get_component_float(t : T?) {
     }
 }
 
-[test]
+[test(description = "get_component returns a string component")]
 def test_get_component_string(t : T?) {
     t |> run("get string component") @(t : T?) {
         restart()
@@ -249,7 +249,7 @@ def test_get_component_string(t : T?) {
     }
 }
 
-[test]
+[test(description = "get_component returns a float3 component")]
 def test_get_component_float3(t : T?) {
     t |> run("get float3 component") @(t : T?) {
         restart()
@@ -265,7 +265,7 @@ def test_get_component_float3(t : T?) {
     }
 }
 
-[test]
+[test(description = "get_component returns a bool component")]
 def test_get_component_bool(t : T?) {
     t |> run("get bool component") @(t : T?) {
         restart()
@@ -278,7 +278,7 @@ def test_get_component_bool(t : T?) {
     }
 }
 
-[test]
+[test(description = "get_component returns the default for a missing component")]
 def test_get_component_missing(t : T?) {
     t |> run("missing component returns default") @(t : T?) {
         restart()
@@ -291,7 +291,7 @@ def test_get_component_missing(t : T?) {
     }
 }
 
-[test]
+[test(description = "get_component returns the default for a dead entity")]
 def test_get_component_dead_entity(t : T?) {
     t |> run("dead entity returns default") @(t : T?) {
         restart()
@@ -306,7 +306,7 @@ def test_get_component_dead_entity(t : T?) {
     }
 }
 
-[test]
+[test(description = "get_component returns the default for the invalid id")]
 def test_get_component_invalid_entity(t : T?) {
     t |> run("INVALID_ENTITY_ID returns default") @(t : T?) {
         restart()
@@ -315,7 +315,7 @@ def test_get_component_invalid_entity(t : T?) {
     }
 }
 
-[test]
+[test(description = "get_component reflects an updated value")]
 def test_get_component_after_update(t : T?) {
     t |> run("reflects updated component value") @(t : T?) {
         restart()
@@ -333,7 +333,7 @@ def test_get_component_after_update(t : T?) {
     }
 }
 
-[test]
+[test(description = "get_component returns the default for a stale id after recycling")]
 def test_get_component_stale_generation(t : T?) {
     t |> run("stale entity id returns default after recycling") @(t : T?) {
         restart()
@@ -355,7 +355,7 @@ def test_get_component_stale_generation(t : T?) {
     }
 }
 
-[test]
+[test(description = "get_component reads the right value from each of several entities")]
 def test_get_component_multiple_entities(t : T?) {
     t |> run("get components from different entities") @(t : T?) {
         restart()
@@ -376,7 +376,7 @@ def test_get_component_multiple_entities(t : T?) {
     }
 }
 
-[test]
+[test(description = "the value get_component returns is a copy, not a reference")]
 def test_get_component_returns_copy(t : T?) {
     t |> run("returned value is a copy, not a reference") @(t : T?) {
         restart()

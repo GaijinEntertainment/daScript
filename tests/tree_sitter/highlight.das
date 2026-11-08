@@ -25,7 +25,7 @@ def private ranges_are_ordered(tokens : array<SyntaxToken> const) : bool {
     return true
 }
 
-[test]
+[test(description = "syntax_language_available reports daslang, C and C++ including their aliases, and rejects unknown names")]
 def test_tree_sitter_language_registry(t : T?) {
     t |> success(syntax_language_available("das"), "daslang alias is available")
     t |> success(syntax_language_available("c"), "C is available")
@@ -35,7 +35,7 @@ def test_tree_sitter_language_registry(t : T?) {
     t |> success(!syntax_language_available("glsl"), "unregistered language is explicit")
 }
 
-[test]
+[test(description = "daslang highlighting yields correct byte ranges for UTF-8 text and tolerates incomplete source")]
 def test_tree_sitter_daslang_highlights_utf8_and_incomplete_source(t : T?) {
     let lb = to_char(123)
     let source = "// привет\ndef greet(name : string) {lb}\n    let value = \"мир\"\n    return name\n"
@@ -51,7 +51,7 @@ def test_tree_sitter_daslang_highlights_utf8_and_incomplete_source(t : T?) {
                  "UTF-8 string range uses source bytes")
 }
 
-[test]
+[test(description = "daslang highlighting marks field accesses and string interpolations")]
 def test_tree_sitter_daslang_fields_and_interpolations(t : T?) {
     let lb = to_char(123)
     let rb = to_char(125)
@@ -65,7 +65,7 @@ def test_tree_sitter_daslang_fields_and_interpolations(t : T?) {
                  "a field name inside an interpolation is a property")
 }
 
-[test]
+[test(description = "C highlighting marks preprocessor definitions, functions and predicate-matched names")]
 def test_tree_sitter_c_predicates_and_functions(t : T?) {
     let lb = to_char(123)
     let rb = to_char(125)
@@ -79,7 +79,7 @@ def test_tree_sitter_c_predicates_and_functions(t : T?) {
     t |> success(ranges_are_ordered(tokens), "C captures do not overlap")
 }
 
-[test]
+[test(description = "C++ highlighting combines the C and C++ queries")]
 def test_tree_sitter_cpp_composes_c_and_cpp_queries(t : T?) {
     let lb = to_char(123)
     let rb = to_char(125)
@@ -94,7 +94,7 @@ def test_tree_sitter_cpp_composes_c_and_cpp_queries(t : T?) {
                  "C base keywords remain active in C++")
 }
 
-[test]
+[test(description = "Markdown highlighting combines the block and inline grammars including a fenced code block")]
 def test_tree_sitter_markdown_combines_block_and_inline_grammars(t : T?) {
     let source = "# **Hello**\n\n[site](https://example.com)\n\n```cpp\nint x;\n```\n"
     var tokens : array<SyntaxToken>
@@ -108,7 +108,7 @@ def test_tree_sitter_markdown_combines_block_and_inline_grammars(t : T?) {
     t |> success(ranges_are_ordered(tokens), "block and inline captures are flattened")
 }
 
-[test]
+[test(description = "highlighting an unknown language returns unknown_language and leaves the token list as it was")]
 def test_tree_sitter_unknown_language_is_non_destructive(t : T?) {
     var tokens = [SyntaxToken(start_byte = 1, end_byte = 2)]
     t |> equal(syntax_highlight("not-a-language", "text", tokens),

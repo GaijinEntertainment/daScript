@@ -6,7 +6,7 @@ require daslib/ast_boost
 require daslib/rtti
 require math
 
-def fixture_path() : string => "{get_das_root()}/tests/daslib/eval_single_expression_fixture.das"
+def fixture_path() : string => "{get_das_root()}/tests/daslib/_eval_single_expression_fixture.das"
 
 def compile_fixture(t : T?; blk : block<(program : smart_ptr<Program>; ctx : smart_ptr<Context>) : void>) {
     var inscope access <- make_file_access("")
@@ -47,7 +47,7 @@ def find_foo_field(program : smart_ptr<Program>; field_name : string) : Expressi
     return found
 }
 
-[test]
+[test(description = "a literal initializer evaluates without a context")]
 def test_eval_literal_no_context(t : T?) {
     t |> run("literal init evaluates without a context") <| @(t2 : T?) {
         compile_fixture(t2) $(program; ctx) {
@@ -61,7 +61,7 @@ def test_eval_literal_no_context(t : T?) {
     }
 }
 
-[test]
+[test(description = "a literal initializer evaluates through the context overload")]
 def test_eval_literal_with_context(t : T?) {
     t |> run("literal init evaluates via context-aware overload") <| @(t2 : T?) {
         compile_fixture(t2) $(program; ctx) {
@@ -76,7 +76,7 @@ def test_eval_literal_with_context(t : T?) {
 
 // Regression: `PI` folds away (index=-2, no runtime slot) yet struct-field-default ASTs
 // keep the unfolded ExprVar(PI); re-simulating it used to deref a missing shared-global slot.
-[test]
+[test(description = "a folded-away constexpr variable evaluates without crashing in the two-argument overload")]
 def test_eval_folded_away_constexpr_var_no_context(t : T?) {
     t |> run("ExprVar(folded constexpr global) no longer crashes (2-arg overload)") <| @(t2 : T?) {
         compile_fixture(t2) $(program; ctx) {
@@ -91,7 +91,7 @@ def test_eval_folded_away_constexpr_var_no_context(t : T?) {
     }
 }
 
-[test]
+[test(description = "a folded-away constexpr variable evaluates without crashing in the context overload")]
 def test_eval_folded_away_constexpr_var_with_context(t : T?) {
     t |> run("ExprVar(folded constexpr global) no longer crashes (3-arg overload)") <| @(t2 : T?) {
         compile_fixture(t2) $(program; ctx) {
@@ -104,7 +104,7 @@ def test_eval_folded_away_constexpr_var_with_context(t : T?) {
     }
 }
 
-[test]
+[test(description = "evaluating a null expression sets ok to false instead of crashing")]
 def test_eval_null_expr_with_context(t : T?) {
     t |> run("null expression sets ok=false safely") <| @(t2 : T?) {
         compile_fixture(t2) $(program; ctx) {

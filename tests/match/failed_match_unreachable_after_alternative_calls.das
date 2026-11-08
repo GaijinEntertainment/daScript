@@ -1,4 +1,4 @@
-// a _ arm after a call per alternative is unreachable
+//! a _ arm after a call per alternative is unreachable
 options gen2
 
 require daslib/match

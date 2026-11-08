@@ -30,7 +30,7 @@ def same(t : T?; name : string; refArr : array<int>; var got : iterator<int -con
     delete g
 }
 
-[test]
+[test(description = "concat with one array and one iterator source, in either order, gives the same result as the all-array call")]
 def test_mixed_concat(t : T?) {
     let a <- fixture_ints_a(); let b <- fixture_ints_b()
     let refArr <- (a |> concat(b))
@@ -38,7 +38,7 @@ def test_mixed_concat(t : T?) {
     same(t, "concat array+iter", refArr, a |> concat(unsafe(each(b))))
 }
 
-[test]
+[test(description = "union with one array and one iterator source, in either order, gives the same result as the all-array call")]
 def test_mixed_union(t : T?) {
     let a <- fixture_ints_a(); let b <- fixture_ints_b()
     let refArr <- (a |> union(b))
@@ -46,7 +46,7 @@ def test_mixed_union(t : T?) {
     same(t, "union array+iter", refArr, a |> union(unsafe(each(b))))
 }
 
-[test]
+[test(description = "union_by with one array and one iterator source, in either order, gives the same result as the all-array call")]
 def test_mixed_union_by(t : T?) {
     let a <- fixture_ints_a(); let b <- fixture_ints_b()
     let refArr <- (a |> union_by(b, $(x : int) => x % 10))
@@ -54,7 +54,7 @@ def test_mixed_union_by(t : T?) {
     same(t, "union_by array+iter", refArr, a |> union_by(unsafe(each(b)), $(x : int) => x % 10))
 }
 
-[test]
+[test(description = "intersect with one array and one iterator source, in either order, gives the same result as the all-array call")]
 def test_mixed_intersect(t : T?) {
     let a <- fixture_ints_a(); let b <- fixture_ints_b()
     let refArr <- (a |> intersect(b))
@@ -62,7 +62,7 @@ def test_mixed_intersect(t : T?) {
     same(t, "intersect array+iter", refArr, a |> intersect(unsafe(each(b))))
 }
 
-[test]
+[test(description = "intersect_by with one array and one iterator source, in either order, gives the same result as the all-array call")]
 def test_mixed_intersect_by(t : T?) {
     let a <- fixture_ints_a(); let b <- fixture_ints_b()
     let refArr <- (a |> intersect_by(b, $(x : int) => x % 10))
@@ -70,7 +70,7 @@ def test_mixed_intersect_by(t : T?) {
     same(t, "intersect_by array+iter", refArr, a |> intersect_by(unsafe(each(b)), $(x : int) => x % 10))
 }
 
-[test]
+[test(description = "except with one array and one iterator source, in either order, gives the same result as the all-array call")]
 def test_mixed_except(t : T?) {
     let a <- fixture_ints_a(); let b <- fixture_ints_b()
     let refArr <- (a |> except(b))
@@ -78,7 +78,7 @@ def test_mixed_except(t : T?) {
     same(t, "except array+iter", refArr, a |> except(unsafe(each(b))))
 }
 
-[test]
+[test(description = "except_by with one array and one iterator source, in either order, gives the same result as the all-array call")]
 def test_mixed_except_by(t : T?) {
     let a <- fixture_ints_a(); let b <- fixture_ints_b()
     let refArr <- (a |> except_by(b, $(x : int) => x % 10))
@@ -86,7 +86,7 @@ def test_mixed_except_by(t : T?) {
     same(t, "except_by array+iter", refArr, a |> except_by(unsafe(each(b)), $(x : int) => x % 10))
 }
 
-[test]
+[test(description = "join with one array and one iterator source, in either order, gives the same result as the all-array call")]
 def test_mixed_join(t : T?) {
     let a <- fixture_l(); let b <- fixture_r()
     let refArr <- (join(a, b, $(l : L) => l.k, $(r : R) => r.k, $(l : L, r : R) => l.id + r.v))
@@ -96,7 +96,7 @@ def test_mixed_join(t : T?) {
         join(a, unsafe(each(b)), $(l : L) => l.k, $(r : R) => r.k, $(l : L, r : R) => l.id + r.v))
 }
 
-[test]
+[test(description = "the _join macro with one array and one iterator source, in either order, gives the same result as the all-array call")]
 def test_mixed_join_macro(t : T?) {
     // The _join shorthand macro forwards to join(...), so it picks up the mixed overload automatically.
     let a <- fixture_l(); let b <- fixture_r()
@@ -106,7 +106,7 @@ def test_mixed_join_macro(t : T?) {
     t |> equal(c2, 5)
 }
 
-[test]
+[test(description = "group_join with one array and one iterator source, in either order, gives the same result as the all-array call")]
 def test_mixed_group_join(t : T?) {
     let a <- fixture_l(); let b <- fixture_r()
     let refArr <- (group_join(a, b, $(l : L) => l.k, $(r : R) => r.k, $(l : L, rs : array<R>) => l.id + length(rs)))
@@ -116,7 +116,7 @@ def test_mixed_group_join(t : T?) {
         group_join(a, unsafe(each(b)), $(l : L) => l.k, $(r : R) => r.k, $(l : L, rs : array<R>) => l.id + length(rs)))
 }
 
-[test]
+[test(description = "left_join with one array and one iterator source, in either order, gives the same result as the all-array call")]
 def test_mixed_left_join(t : T?) {
     let a <- fixture_l(); let b <- fixture_r()
     let refArr <- (left_join(a, b, $(l : L) => l.k, $(r : R) => r.k, $(l : L, r : Option<R>) => l.id + (r |> is_some ? 1 : 0)))
@@ -126,7 +126,7 @@ def test_mixed_left_join(t : T?) {
         left_join(a, unsafe(each(b)), $(l : L) => l.k, $(r : R) => r.k, $(l : L, r : Option<R>) => l.id + (r |> is_some ? 1 : 0)))
 }
 
-[test]
+[test(description = "right_join with one array and one iterator source, in either order, gives the same result as the all-array call")]
 def test_mixed_right_join(t : T?) {
     let a <- fixture_l(); let b <- fixture_r()
     let refArr <- (right_join(a, b, $(l : L) => l.k, $(r : R) => r.k, $(l : Option<L>, r : R) => (l |> is_some ? 1 : 0) + r.v))
@@ -136,7 +136,7 @@ def test_mixed_right_join(t : T?) {
         right_join(a, unsafe(each(b)), $(l : L) => l.k, $(r : R) => r.k, $(l : Option<L>, r : R) => (l |> is_some ? 1 : 0) + r.v))
 }
 
-[test]
+[test(description = "full_outer_join with one array and one iterator source, in either order, gives the same result as the all-array call")]
 def test_mixed_full_outer_join(t : T?) {
     let a <- fixture_l(); let b <- fixture_r()
     let refArr <- (full_outer_join(a, b, $(l : L) => l.k, $(r : R) => r.k,
@@ -149,7 +149,7 @@ def test_mixed_full_outer_join(t : T?) {
             $(l : Option<L>, r : Option<R>) => (l |> is_some ? 1 : 0) + (r |> is_some ? 1 : 0)))
 }
 
-[test]
+[test(description = "cross_join with one array and one iterator source, in either order, gives the same result as the all-array call")]
 def test_mixed_cross_join(t : T?) {
     let a <- fixture_l(); let b <- fixture_r()
     let refArr <- (cross_join(a, b, $(l : L, r : R) => l.id * r.v))
@@ -159,7 +159,7 @@ def test_mixed_cross_join(t : T?) {
         cross_join(a, unsafe(each(b)), $(l : L, r : R) => l.id * r.v))
 }
 
-[test]
+[test(description = "sequence_equal with one array and one iterator source, in either order, gives the same result as the all-array call")]
 def test_mixed_sequence_equal(t : T?) {
     let a <- fixture_ints_a(); let a2 <- fixture_ints_a(); let b <- fixture_ints_b()
     // equal sequences
@@ -170,7 +170,7 @@ def test_mixed_sequence_equal(t : T?) {
     t |> success(!sequence_equal(a, unsafe(each(b))), "sequence_equal array+iter (unequal)")
 }
 
-[test]
+[test(description = "sequence_equal_by with one array and one iterator source, in either order, gives the same result as the all-array call")]
 def test_mixed_sequence_equal_by(t : T?) {
     let a <- fixture_ints_a(); let a2 <- fixture_ints_a(); let b <- fixture_ints_b()
     t |> success(sequence_equal_by(unsafe(each(a)), a2, $(x : int) => x), "sequence_equal_by iter+array (equal)")

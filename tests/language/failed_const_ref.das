@@ -1,3 +1,6 @@
+//! writing to const values, moving to or from const, copying
+//! incompatible types, const pointer writes and const table indexing
+//! do not compile
 // const ref restrictions
 // comprehensive const-correctness checks: writing to const values,
 // moving to/from const, copying incompatible types, const pointers,
@@ -19,11 +22,15 @@ def add(a : int const&; b : int) {
 }
 
 def set(a : string const&; b : string) {
-    a = b               // 30504: can't write to a constant value, string const& = string const&
+    // 30504: can't write to a constant value, string const& = string
+    // const&
+    a = b
 }
 
 def move_ar(a : array<int> const; b : array<int>) {
-    a <- b              // 30505: can't move to a constant value, array<int> const <- array<int> const
+    // 30505: can't move to a constant value, array<int> const <-
+    // array<int> const
+    a <- b
 }
 
 struct Foo {
@@ -48,7 +55,9 @@ def goodPassThrough(var a : int?) : int const? {
 }
 
 def passThrough(a : int? const) : int? {
-    return a            // error[30102]: incompatible return type, expecting int?, passing int? const
+    // error[30102]: incompatible return type, expecting int?, passing
+    // int? const
+    return a
 }
 
 def test {
@@ -71,7 +80,9 @@ def test {
         var pb : Foo?
         setFoo(deref(pa))    // 30304: no matching functions or generics setFoo ( Foo const& )
         setFoo(deref(pb))
-        setFooPtr(pa)        // 30304: no matching functions or generics setFooPtr ( Foo const?& -const )
+        // 30304: no matching functions or generics setFooPtr ( Foo const?&
+        // -const )
+        setFooPtr(pa)
         setFooPtr(pb)
     }
     {
@@ -89,11 +100,18 @@ def test {
         var a, b : table<string; int>
         var c : table<string; int> const
         var d : int
-        a = b           // 30303: can only copy compatible type, int?& -const = int const?& -const
-                        // 30507: this type can't be copied, table<string;int>& -const = table<string;int>& -const
+        // 30303: can only copy compatible type, int?& -const = int const?&
+        // -const
+        a = b
+                        // 30507: this type can't be copied, table<string;int>& -const =
+                        // table<string;int>& -const
         a <- b
-        c <- a          // 30505: can't move to a constant value, table<string;int> const& -const <- table<string;int>& -const
-        c <- d          // 30508: can't move compatible type, table<string;int> const& -const <- int& -const
+        // 30505: can't move to a constant value, table<string;int> const&
+        // -const <- table<string;int>& -const
+        c <- a
+        // 30508: can't move compatible type, table<string;int> const& -const
+        // <- int& -const
+        c <- d
     }
     {
         var a, b : int
@@ -103,6 +121,8 @@ def test {
     {
         var a : ::TestObjectFoo
         var b : _helper_foo::TestObjectFoo
-        a = b           // 30303: can only copy compatible type, TestObjectFoo& -const = _helper_foo::TestObjectFoo& -const
+        // 30303: can only copy compatible type, TestObjectFoo& -const =
+        // _helper_foo::TestObjectFoo& -const
+        a = b
     }
 }

@@ -1,5 +1,8 @@
-// Pointer arithmetic whose pointee carries a dimension the parser already rejected. The
-// dimension is negative, so the element count wrapped and the size read as 2^64-48.
+//! pointer arithmetic on a pointee with a rejected negative dimension
+//! reports errors instead of using a wrapped element size
+// Pointer arithmetic whose pointee carries a dimension the parser
+// already rejected. The dimension is negative, so the element count
+// wrapped and the size read as 2^64-48.
 options gen2
 expect 30109, 30239
 

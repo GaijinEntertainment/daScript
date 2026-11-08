@@ -1,3 +1,4 @@
+//! a global initialized from itself does not compile
 options gen2
 expect 30177
 

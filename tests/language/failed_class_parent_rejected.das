@@ -1,6 +1,10 @@
-// A class deriving from a class whose own declaration is rejected. The `class B : A` error
-// returns before B gets its generated __rtti and __finalize fields, so `class C : B` - which is
-// accepted - reaches field generation with a parent that carries neither.
+//! a class deriving from a class whose own declaration was rejected
+//! reports an error instead of reaching field generation without the
+//! parent's generated fields
+// A class deriving from a class whose own declaration is rejected.
+// The `class B : A` error returns before B gets its generated __rtti
+// and __finalize fields, so `class C : B` - which is accepted -
+// reaches field generation with a parent that carries neither.
 options gen2
 expect 30134
 

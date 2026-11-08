@@ -1,11 +1,13 @@
 options gen2
 options indenting = 4
 
-// Fixture for test_fixup_global_init.das: a function annotation whose fixup() installs a
-// CALL-SHAPED global init (the array<uint> literal's to_array_move lowering — the shape
-// dasSpirv's blob capture wraps in unpack_spirv_words). Pins the pipeline contract that fixup-set global inits get a
-// dirty re-infer (ast_parse.cpp) — without it this fails 50607 ('to_array_move' was not
-// resolved during type inference).
+// Fixture for the fixup-global-init test in globals.das: a function
+// annotation whose fixup() installs a CALL-SHAPED global init (the
+// array<uint> literal's to_array_move lowering — the shape dasSpirv's
+// blob capture wraps in unpack_spirv_words). Pins the pipeline
+// contract that fixup-set global inits get a dirty re-infer
+// (ast_parse.cpp) — without it this fails 50607 ('to_array_move' was
+// not resolved during type inference).
 
 module _fixup_init_macro shared public
 
@@ -43,7 +45,8 @@ class FixupInitCapture : AstFunctionAnnotation {
         let argName = args |> find_arg("name") ?as tString ?? "{func.name}`captured"
         var glob = find_variable(compiling_module(), argName)
         if (glob != null && glob.init == null && glob.name == argName) {
-            // deterministic fixup-derived content: [7, 11, 13] plus the annotated function's arity
+            // deterministic fixup-derived content: [7, 11, 13] plus the annotated
+            // function's arity
             let words <- [7u, 11u, 13u, uint(func.arguments |> length)]
             glob.init = build_uint_array_literal(words, func.at)
         }

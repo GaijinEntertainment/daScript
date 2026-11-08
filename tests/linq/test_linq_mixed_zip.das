@@ -35,7 +35,7 @@ def same_ints(t : T?; name : string; refArr : array<int>; gotArr : array<int>) {
     }
 }
 
-[test]
+[test(description = "zip of an array and an iterator, in either order, matches the all-array zip and stops at the shorter source")]
 def test_mixed_zip(t : T?) {
     let a <- fixture_a(); let b <- fixture_b()
     let refArr <- zip(a, b)
@@ -46,7 +46,7 @@ def test_mixed_zip(t : T?) {
     delete m1; delete m2
 }
 
-[test]
+[test(description = "zip with a result selector over a mixed array and iterator pair matches the all-array result")]
 def test_mixed_zip_selector(t : T?) {
     let a <- fixture_a(); let b <- fixture_b()
     let refSum <- [for (p in zip(a, b)); p._0 + p._1]
@@ -57,7 +57,7 @@ def test_mixed_zip_selector(t : T?) {
     delete g1; delete g2
 }
 
-[test]
+[test(description = "zip_to_array over a mixed array and iterator pair matches the all-array result")]
 def test_mixed_zip_to_array(t : T?) {
     let a <- fixture_a(); let b <- fixture_b()
     let refArr <- zip(a, b)
@@ -68,7 +68,7 @@ def test_mixed_zip_to_array(t : T?) {
     delete m1; delete m2
 }
 
-[test]
+[test(description = "zip_to_array with a result selector over a mixed pair matches the all-array result")]
 def test_mixed_zip_to_array_selector(t : T?) {
     let a <- fixture_a(); let b <- fixture_b()
     let refSum <- [for (p in zip(a, b)); p._0 + p._1]
@@ -79,7 +79,7 @@ def test_mixed_zip_to_array_selector(t : T?) {
     delete g1; delete g2
 }
 
-[test]
+[test(description = "_fold over an iterator-sourced zip with an array operand counts 3 and sums 66, in both directions")]
 def test_mixed_zip_fold(t : T?) {
     // _fold over an iterator-sourced zip with a bare-array operand: the fold's array-rewrite lowers
     // this to zip_to_array(iterator, array). count stops at min(4,3)=3; sum = (10+1)+(20+2)+(30+3)=66.

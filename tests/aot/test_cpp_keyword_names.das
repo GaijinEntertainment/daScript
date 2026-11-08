@@ -17,7 +17,7 @@ def double(h : Foo) : int => h.a + h.a
 
 def do(h : Foo) : int => h.a * 10
 
-[test]
+[test(description = "Functions named after C++ keywords compile and run in AOT")]
 def test_cpp_keyword_function_names(t : T?) {
     let h = Foo(a = 21)
     t |> run("def float") @(t : T?) {
@@ -78,7 +78,7 @@ def call_with_int(f : function<(char : int) : int>; v : int) : int => invoke(f, 
 // --- global var named after a C++ keyword ---
 var g_char = 100
 
-[test]
+[test(description = "A for-loop iterator named after a C++ keyword compiles and runs in AOT")]
 def test_for_loop_iter(t : T?) {
     t |> run("aot for-loop iter named char") @(t : T?) {
         var sum = 0
@@ -89,7 +89,7 @@ def test_for_loop_iter(t : T?) {
     }
 }
 
-[test]
+[test(description = "let and var locals named after C++ keywords compile and run in AOT")]
 def test_let_var(t : T?) {
     t |> run("aot let var named char") @(t : T?) {
         let char = 42
@@ -103,14 +103,14 @@ def test_let_var(t : T?) {
     }
 }
 
-[test]
+[test(description = "A global named after a C++ keyword compiles and runs in AOT")]
 def test_global_var(t : T?) {
     t |> run("aot global var named g_char") @(t : T?) {
         t |> equal(g_char, 100)
     }
 }
 
-[test]
+[test(description = "Struct fields named after C++ keywords compile and run in AOT")]
 def test_struct_fields(t : T?) {
     t |> run("aot struct fields named after C++ keywords") @(t : T?) {
         let s = StFields(char = 5, register = 3.14, extern = true, mutable = "ok")
@@ -121,7 +121,7 @@ def test_struct_fields(t : T?) {
     }
 }
 
-[test]
+[test(description = "A struct named after a C++ keyword compiles and runs in AOT")]
 def test_struct_name(t : T?) {
     t |> run("aot struct name 'register'") @(t : T?) {
         let r = register(value = 17)
@@ -129,7 +129,7 @@ def test_struct_name(t : T?) {
     }
 }
 
-[test]
+[test(description = "A class named after a C++ keyword compiles and runs in AOT")]
 def test_class_name(t : T?) {
     t |> run("aot class name 'extern'") @(t : T?) {
         var c = new extern()
@@ -138,7 +138,7 @@ def test_class_name(t : T?) {
     }
 }
 
-[test]
+[test(description = "An enum named after a C++ keyword compiles and runs in AOT")]
 def test_enum_name(t : T?) {
     t |> run("aot enum name 'signed'") @(t : T?) {
         let s = signed.plus
@@ -147,7 +147,7 @@ def test_enum_name(t : T?) {
     }
 }
 
-[test]
+[test(description = "Enum values named after C++ keywords compile and run in AOT")]
 def test_enum_values(t : T?) {
     t |> run("aot enum values short/long/union") @(t : T?) {
         let w = Width.short
@@ -157,7 +157,7 @@ def test_enum_values(t : T?) {
     }
 }
 
-[test]
+[test(description = "A type alias named after a C++ keyword compiles and runs in AOT")]
 def test_typedef_alias(t : T?) {
     t |> run("aot typedef alias named short") @(t : T?) {
         let x : short = 5
@@ -165,7 +165,7 @@ def test_typedef_alias(t : T?) {
     }
 }
 
-[test]
+[test(description = "A function argument named after a C++ keyword compiles and runs in AOT")]
 def test_function_arg(t : T?) {
     t |> run("aot function arg 'char'") @(t : T?) {
         t |> equal(double_it(5), 10)
@@ -175,7 +175,7 @@ def test_function_arg(t : T?) {
     }
 }
 
-[test]
+[test(description = "A lambda argument named after a C++ keyword compiles and runs in AOT")]
 def test_lambda_arg(t : T?) {
     t |> run("aot lambda arg 'char'") @(t : T?) {
         var f <- @(char : int) => char * 3

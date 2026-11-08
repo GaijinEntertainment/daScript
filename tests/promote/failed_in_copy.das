@@ -1,4 +1,5 @@
-// out-of-range literal via copy (=) — promotion's range error must suppress cant_copy
+//! An out-of-range literal assigned with = must report the range
+//! error (30515) and not a copy error.
 options gen2
 
 expect 30515

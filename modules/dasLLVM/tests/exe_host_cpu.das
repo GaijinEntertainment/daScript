@@ -113,8 +113,9 @@ def test_exe_host_cpu(t : T?) {
         + "\"{BASELINE_SCRIPT}\"", lb)
     t |> equal(0, rcb, "the intrinsic-calling kernel-free exe must build on the generic baseline: {join(lb, "\n")}")
 
-    // run the built exes where the platform can load the shared lib (same gates as jit_exe.das:
-    // Windows lacks RPATH; static builds ship no runtime lib for the exe to call into)
+    // run the built exes where the platform can load the shared lib
+    // (same gates as jit_artifacts.das: Windows lacks RPATH; static
+    // builds ship no runtime lib for the exe to call into)
     let can_run = get_platform_name() != "windows" && das_is_dll_build()
     if (can_run && fexist("{KERNEL_EXE}.exe")) {
         var lr : array<string>

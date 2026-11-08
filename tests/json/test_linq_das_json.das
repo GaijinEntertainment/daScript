@@ -29,7 +29,7 @@ def fixture_array() : array<Car> {
 
 def fixture_json() : JsonValue? => JV([for (c in fixture_array()); JV(c)])
 
-[test]
+[test(description = "a linq where and select over a JSON source gives the same ids as over an array")]
 def query_where_select(t : T?) {
     let jv = fixture_json()
     let arr <- fixture_array()
@@ -38,7 +38,7 @@ def query_where_select(t : T?) {
     t |> equal(j, a)
 }
 
-[test]
+[test(description = "a linq descending orderby over a JSON source matches the array result")]
 def query_orderby(t : T?) {
     let jv = fixture_json()
     let arr <- fixture_array()
@@ -47,7 +47,7 @@ def query_orderby(t : T?) {
     t |> equal(j, a)
 }
 
-[test]
+[test(description = "a linq let and several wheres over a JSON source match the array result")]
 def query_let_and_multi_where(t : T?) {
     let jv = fixture_json()
     let arr <- fixture_array()
@@ -56,7 +56,7 @@ def query_let_and_multi_where(t : T?) {
     t |> equal(j, a)
 }
 
-[test]
+[test(description = "a linq group by over a JSON source matches the array result")]
 def query_group_by(t : T?) {
     let jv = fixture_json()
     let arr <- fixture_array()
@@ -65,7 +65,7 @@ def query_group_by(t : T?) {
     t |> equal(j, a)
 }
 
-[test]
+[test(description = "a linq query ending in iterator over a JSON source yields the same sequence as over an array")]
 def query_iterator_keyword(t : T?) {
     let jv = fixture_json()
     let arr <- fixture_array()
@@ -86,7 +86,7 @@ def private mk_brands() : array<BrandHQ> {
                BrandHQ(brand = "Honda", country = "Japan")]
 }
 
-[test]
+[test(description = "a linq join and select over a JSON source gives the inner-join rows")]
 def query_join_select_terminal(t : T?) {
     let jv = fixture_json()
     let brands <- mk_brands()
@@ -100,7 +100,7 @@ def query_join_select_terminal(t : T?) {
     t |> equal(usa, 3, "three Fords → USA")
 }
 
-[test]
+[test(description = "a where before a join filters the JSON rows first")]
 def query_join_pre_join_where(t : T?) {
     let jv = fixture_json()
     let brands <- mk_brands()
@@ -109,7 +109,7 @@ def query_join_pre_join_where(t : T?) {
     t |> equal(length(rows), 2, "pre-join where prunes the array walk")
 }
 
-[test]
+[test(description = "an orderby after a join sorts the joined pairs")]
 def query_join_orderby(t : T?) {
     let jv = fixture_json()
     let brands <- mk_brands()
@@ -120,7 +120,7 @@ def query_join_orderby(t : T?) {
     t |> equal(ids[4], 6, "Honda id6 price 300 last")
 }
 
-[test]
+[test(description = "a group by after a join buckets rows by the joined country")]
 def query_join_group_after(t : T?) {
     let jv = fixture_json()
     let brands <- mk_brands()
@@ -136,7 +136,7 @@ def query_join_group_after(t : T?) {
 // The JSON source is the unfused `_cross_join` chain head — `from_json` is passed as a raw argument (not a
 // fused for-loop source), so it relies on the unsafe wrap surviving from_in's `$c` expansion. =====
 
-[test]
+[test(description = "a second from over a JSON source gives the cartesian product")]
 def query_multifrom_tuple(t : T?) {
     let jv = fixture_json()
     let brands <- mk_brands()
@@ -144,7 +144,7 @@ def query_multifrom_tuple(t : T?) {
     t |> equal(length(rows), 14, "7 JSON cars × 2 brands cartesian product")
 }
 
-[test]
+[test(description = "a where before a second from prunes the JSON rows before the cross")]
 def query_multifrom_pre_where(t : T?) {
     let jv = fixture_json()
     let brands <- mk_brands()
@@ -163,7 +163,7 @@ struct CorrOrder {
     lines : JsonValue?
 }
 
-[test]
+[test(description = "a correlated from with a row-type annotation reads its rows through from_json")]
 def test_correlated_from_honors_row_type(t : T?) {
     var orders <- [ <- CorrOrder(id = 1, lines = JV([JV((sku = "a", qty = 2)), JV((sku = "b", qty = 3))])),
                    <- CorrOrder(id = 2, lines = JV([JV((sku = "c", qty = 5))]))]

@@ -10,7 +10,7 @@ require strings
 
 // ===== Envelope builders =====
 
-[test]
+[test(description = "response builds the 2.0 result envelope for scalar and object results and integer, string and null ids")]
 def test_response_envelope(t : T?) {
     t |> run("scalar result, integer id") @(t : T?) {
         let r = response("1", "true")
@@ -30,7 +30,7 @@ def test_response_envelope(t : T?) {
     }
 }
 
-[test]
+[test(description = "error builds the 2.0 error envelope, with a null id for parse errors and JSON-escaped messages")]
 def test_error_envelope(t : T?) {
     t |> run("method-not-found shape") @(t : T?) {
         let r = error("\"abc\"", METHOD_NOT_FOUND, "method not found")
@@ -48,7 +48,7 @@ def test_error_envelope(t : T?) {
     }
 }
 
-[test]
+[test(description = "error_with_data adds an object or scalar data field to the error envelope")]
 def test_error_with_data_envelope(t : T?) {
     t |> run("error with object data") @(t : T?) {
         let r = error_with_data("1", INTERNAL_ERROR, "internal", "\{\"trace\":\"foo\"}")
@@ -60,7 +60,7 @@ def test_error_with_data_envelope(t : T?) {
     }
 }
 
-[test]
+[test(description = "serialize_id writes null, integers and strings in their JSON forms")]
 def test_serialize_id(t : T?) {
     t |> run("null id serializes to 'null'") @(t : T?) {
         t |> equal(serialize_id(null), "null")
@@ -73,7 +73,7 @@ def test_serialize_id(t : T?) {
     }
 }
 
-[test]
+[test(description = "the standard JSON-RPC error codes have their specified values")]
 def test_error_constants(t : T?) {
     t |> equal(PARSE_ERROR,      -32700)
     t |> equal(INVALID_REQUEST,  -32600)

@@ -1,9 +1,11 @@
 options gen2
 options indenting = 4
 
-// Compiled by test_const_fold_under_lint with folding off, so every const here reaches the emitter
-// as the arithmetic that was written rather than as a literal. Read by name from the test; the
-// leading underscore keeps the directory scan from running it as a test of its own.
+// Compiled by test_const_fold_under_lint (uncategorized_no_aot.das)
+// with folding off, so every const here reaches the emitter as the
+// arithmetic that was written rather than as a literal. Read by name
+// from the test; the leading underscore keeps the directory scan from
+// running it as a test of its own.
 
 require spirv/spirv_shader
 

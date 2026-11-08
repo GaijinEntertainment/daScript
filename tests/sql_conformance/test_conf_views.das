@@ -1,12 +1,13 @@
 options gen2
-options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
+
 
 // Contract area: [sql_view] + _create_view — a view reads like a table through the
 // same select_from / _sql surface; captured locals inline via to_sql_literal.
 
 require dastest/testing_boost public
+
 require _conformance_provider
 
 [sql_table(name = "ConfOrders2")]
@@ -23,7 +24,7 @@ struct ConfBigOrder {
     Status : string
 }
 
-[test]
+[test(description = "create_view makes a view that reads back typed rows like a table", standalone = "a provider copies this directory and drops files per capability; the file is the unit")]
 def test_conf_view(t : T?) {
     t |> run("_create_view + typed reads through the view") @(t : T?) {
         with_conf_db() $(db) {

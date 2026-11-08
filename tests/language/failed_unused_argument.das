@@ -1,3 +1,5 @@
+//! under no_unused_function_arguments a function argument that is
+//! never read does not compile
 // unused function argument warnings
 // verifies compiler reports unused arguments when
 // no_unused_function_arguments option is enabled

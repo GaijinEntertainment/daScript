@@ -6,7 +6,7 @@ require daslib/linq_boost
 
 require _common
 
-[test]
+[test(description = "distinct removes duplicates for iterators, structs, arrays, empty input, array result and in place")]
 def test_distinct(t : T?) {
     t |> run("basic distinct") @(t : T?) {
         var query = distinct(
@@ -58,7 +58,7 @@ def test_distinct(t : T?) {
     }
 }
 
-[test]
+[test(description = "distinct_by removes elements with duplicate keys, also on empty input, as array and in place")]
 def test_distinctby(t : T?) {
     t |> run("basic distinct by") @(t : T?) {
         var query = _distinct_by(
@@ -108,7 +108,7 @@ def test_distinctby(t : T?) {
     }
 }
 
-[test]
+[test(description = "union returns the elements of both inputs without duplicates, for plain, struct and array-result forms")]
 def test_union(t : T?) {
     t |> run("basic union") @(t : T?) {
         var query = union(
@@ -153,7 +153,7 @@ def test_union(t : T?) {
     }
 }
 
-[test]
+[test(description = "union_by merges two inputs deduplicating by key, for plain, struct and array-result forms")]
 def test_unionby(t : T?) {
     t |> run("basic union by") @(t : T?) {
         var query = _union_by(
@@ -201,7 +201,7 @@ def test_unionby(t : T?) {
     }
 }
 
-[test]
+[test(description = "except returns the elements of the first input absent from the second, including empty and array-result forms")]
 def test_except(t : T?) {
     t |> run("basic except") @(t : T?) {
         var query = except(
@@ -260,7 +260,7 @@ def test_except(t : T?) {
     }
 }
 
-[test]
+[test(description = "except_by removes elements whose key occurs in the second input, for plain, struct and array-result forms")]
 def test_exceptby(t : T?) {
     t |> run("basic except by") @(t : T?) {
         var query = _except_by(
@@ -302,7 +302,7 @@ def test_exceptby(t : T?) {
     }
 }
 
-[test]
+[test(description = "intersect returns the elements present in both inputs, including empty and array-result forms")]
 def test_intersect(t : T?) {
     t |> run("basic intersect") @(t : T?) {
         var query = intersect(
@@ -361,7 +361,7 @@ def test_intersect(t : T?) {
     }
 }
 
-[test]
+[test(description = "intersect_by returns the elements whose key occurs in both inputs, for plain, struct and array-result forms")]
 def test_intersectby(t : T?) {
     t |> run("basic intersect by") @(t : T?) {
         var query = _intersect_by(

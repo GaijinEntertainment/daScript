@@ -1,3 +1,5 @@
+//! a non-integer index into a fixed or dynamic array, and indexing a
+//! constant table, do not compile
 // wrong index type for containers
 // verifies compiler rejects non-integer indices for fixed arrays,
 // dynamic arrays, and constant table indexing

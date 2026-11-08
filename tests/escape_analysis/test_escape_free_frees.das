@@ -122,7 +122,7 @@ def sum_escaping() : int {
     return total
 }
 
-[test]
+[test(description = "an allocation that never escapes is freed each iteration so the heap does not grow")]
 def test_escape_free_actually_frees(t : T?) {
     let before = heap_bytes_allocated()
     let s = sum_nonescaping()
@@ -133,7 +133,7 @@ def test_escape_free_actually_frees(t : T?) {
 
 // multi-variable let: both a and b are independently owned and freed -> heap stays flat (no alias,
 // no double-free).
-[test]
+[test(description = "several non-escaping allocations are all freed within a small heap budget")]
 def test_escape_free_multi_var(t : T?) {
     let before = heap_bytes_allocated()
     let s = sum_multi()
@@ -142,7 +142,7 @@ def test_escape_free_multi_var(t : T?) {
 }
 
 // passed only to a pure (SideEffects::none) bound C++ function -> can't escape -> freed
-[test]
+[test(description = "an allocation passed only to a pure builtin is freed")]
 def test_escape_free_pure_call(t : T?) {
     let before = heap_bytes_allocated()
     let s = sum_pure_builtin()
@@ -152,7 +152,7 @@ def test_escape_free_pure_call(t : T?) {
 }
 
 // passed only to a pure SCRIPT function whose parameter provably does not escape -> freed
-[test]
+[test(description = "an allocation passed only to a pure script function is freed")]
 def test_escape_free_pure_script_call(t : T?) {
     let before = heap_bytes_allocated()
     let s = sum_pure_script()
@@ -163,7 +163,7 @@ def test_escape_free_pure_script_call(t : T?) {
 
 // the parameter-escape result is interprocedural: read_node_t only forwards p to read_node, so the
 // escape-free property transits the call chain and the local is still freed
-[test]
+[test(description = "an allocation passed through nested pure script functions is freed")]
 def test_escape_free_pure_script_transitive(t : T?) {
     let before = heap_bytes_allocated()
     let s = sum_pure_script_transitive()
@@ -173,7 +173,7 @@ def test_escape_free_pure_script_transitive(t : T?) {
 }
 
 // the optimization still frees in a function containing try/recover (normal path).
-[test]
+[test(description = "an allocation inside a try block is freed and the loop result is correct")]
 def test_escape_free_under_try_recover(t : T?) {
     let before = heap_bytes_allocated()
     let s = sum_with_try()
@@ -184,7 +184,7 @@ def test_escape_free_under_try_recover(t : T?) {
 
 // the raw collect must free the owned heap field too, not just the struct slot. If the array
 // backing were left, the N `data` arrays (~N*20*4 bytes) would leak and the heap would grow.
-[test]
+[test(description = "freeing an owning struct also collects the heap it owns")]
 def test_escape_free_collects_owned_heap(t : T?) {
     let before = heap_bytes_allocated()
     let s = sum_owning()
@@ -193,7 +193,7 @@ def test_escape_free_collects_owned_heap(t : T?) {
     t |> success(grew < uint64(40 * (typeinfo sizeof(type<OwningNode>))))   // owned arrays freed too
 }
 
-[test]
+[test(description = "an escaping allocation is not freed, so the heap grows as the control case")]
 def test_escape_free_control_grows(t : T?) {
     g_list |> clear()
     let before = heap_bytes_allocated()

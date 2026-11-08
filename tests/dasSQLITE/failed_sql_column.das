@@ -1,13 +1,14 @@
 options gen2
+//! sql_column must not compile with an empty or unsafe name or a name
+//! that collides with another column
 
-// `@sql_column` validation. Each struct below trips one of the rejection
-// paths in `[sql_table]`'s field-annotation reader:
-//   1. Empty value (`@sql_column = ""`).
-//   2. Embedded `"` (SQL identifier hygiene).
-//   3. Embedded `\` (SQL identifier hygiene).
-//   4. Cross-field collision — two fields produce the same SQL column name.
-//   5. Cross-field collision — a `@sql_column` rename collides with the
-//      daslang name of a sibling field.
+// `@sql_column` validation. Each struct below trips one of the
+// rejection paths in `[sql_table]`'s field-annotation reader: 1.
+// Empty value (`@sql_column = ""`). 2. Embedded `"` (SQL identifier
+// hygiene). 3. Embedded `\` (SQL identifier hygiene). 4. Cross-field
+// collision — two fields produce the same SQL column name. 5.
+// Cross-field collision — a `@sql_column` rename collides with the
+// daslang name of a sibling field.
 //
 // All five fail with 30111 ("macro [sql_table] failed to apply").
 expect 20800:5

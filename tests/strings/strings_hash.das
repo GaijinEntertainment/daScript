@@ -4,7 +4,7 @@ require daslib/faker
 require daslib/fuzzer
 require strings
 
-[test]
+[test(description = "hashing a das_string equals hashing the same text as a string")]
 def test_hash_das_string(t : T?) {
     var h = 0ul
     var h2 = 0ul
@@ -16,7 +16,7 @@ def test_hash_das_string(t : T?) {
     t |> equal(h, h2)
 }
 
-[test]
+[test(description = "build_hash over one written string equals hash of that string for fuzzed strings")]
 def test_hash_builder(t : T?) {
     var fake <- Faker()
     fuzz() {
@@ -32,7 +32,7 @@ def test_hash_builder(t : T?) {
 }
 
 
-[test]
+[test(description = "hash of short strings equals the reference FNV-1a values")]
 def test_hash_string_reference(t : T?) {
     // Pins hash(string) to known hash_blockz64 (FNV-1a) values across lengths and
     // parities, including the empty string (-> FNV basis). Under JIT this validates
@@ -50,7 +50,7 @@ def test_hash_string_reference(t : T?) {
     t |> equal(hash("key_15"), 0x64248ac4102d2508ul)
 }
 
-[test]
+[test(description = "hash of runtime-built strings equals the reference values")]
 def test_hash_string_runtime(t : T?) {
     // Same pins as test_hash_string_reference, but keys are built at runtime and read
     // back through a heap array so the JIT hash intrinsic cannot const-fold them — this
@@ -61,7 +61,7 @@ def test_hash_string_runtime(t : T?) {
     delete ks
 }
 
-[test]
+[test(description = "build_hash over four written strings equals hash of their concatenation for fuzzed strings")]
 def test_hash_builder4(t : T?) {
     var fake <- Faker()
     fuzz() {

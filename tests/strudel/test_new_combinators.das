@@ -7,7 +7,7 @@ require math
 
 // ─── palindrome ───
 
-[test]
+[test(description = "palindrome plays forward on even cycles")]
 def test_palindrome_even_cycle(t : T?) {
     // On even cycle (0), palindrome plays forward
     let pat <- palindrome(s("bd sd hh cp"))
@@ -22,7 +22,7 @@ def test_palindrome_even_cycle(t : T?) {
     t |> success(abs(haps[0].whole.stop - 0.25lf) < 0.001lf)
 }
 
-[test]
+[test(description = "palindrome plays reversed on odd cycles")]
 def test_palindrome_odd_cycle(t : T?) {
     // On odd cycle (1), palindrome plays reversed
     let pat <- palindrome(s("bd sd hh cp"))
@@ -40,7 +40,7 @@ def test_palindrome_odd_cycle(t : T?) {
 
 // ─── superimpose ───
 
-[test]
+[test(description = "superimpose stacks the original with a transformed copy")]
 def test_superimpose(t : T?) {
     // Stack original + reversed copy
     let pat <- superimpose(atom("bd"), @(p) => rev(p))
@@ -51,7 +51,7 @@ def test_superimpose(t : T?) {
     t |> equal(haps[1].value.s, "bd")
 }
 
-[test]
+[test(description = "superimpose with transpose yields the original and a transposed copy")]
 def test_superimpose_transpose(t : T?) {
     // superimpose with transpose: original + transposed copy
     let pat <- superimpose(atom("sine") |> set_note(60.0), @(p) => transpose(p, 7.0))
@@ -72,7 +72,7 @@ def test_superimpose_transpose(t : T?) {
 
 // ─── echo ───
 
-[test]
+[test(description = "echo with one repeat yields just the original with its gain")]
 def test_echo_single(t : T?) {
     // echo with times=1 produces just the original (no delayed copies)
     let pat <- echo(atom("bd"), 1, 0.25lf, 0.5)
@@ -82,7 +82,7 @@ def test_echo_single(t : T?) {
     t |> success(abs(haps[0].whole.start - 0.0lf) < 0.001lf)
 }
 
-[test]
+[test(description = "echoes play later than the original with decreasing gain")]
 def test_echo_forward_decay(t : T?) {
     // echoes must play LATER than the original, with decreasing gain
     let pat <- echo(atom("bd"), 4, 0.125lf, 0.5)
@@ -120,7 +120,7 @@ def test_echo_forward_decay(t : T?) {
 
 // ─── stut (alias for echo with different param order) ───
 
-[test]
+[test(description = "stut is echo with its arguments reordered")]
 def test_stut_single(t : T?) {
     // stut(pat, times, feedback, time) == echo(pat, times, time, feedback)
     let pat <- stut(atom("bd"), 1, 0.5, 0.25lf)
@@ -131,7 +131,7 @@ def test_stut_single(t : T?) {
 
 // ─── ply ───
 
-[test]
+[test(description = "ply repeats each event n times within its span")]
 def test_ply(t : T?) {
     // ply repeats each event n times within its span
     let pat <- ply(atom("bd"), 3)
@@ -146,7 +146,7 @@ def test_ply(t : T?) {
     t |> success(abs(haps[2].whole.stop - 1.0lf) < 0.001lf)
 }
 
-[test]
+[test(description = "ply repeats every event of a multi-event pattern")]
 def test_ply_multi_event(t : T?) {
     // ply on 2-event pattern with ply=2
     let pat <- ply(s("bd sd"), 2)
@@ -161,7 +161,7 @@ def test_ply_multi_event(t : T?) {
 
 // ─── iter ───
 
-[test]
+[test(description = "iter does not shift on cycle 0")]
 def test_iter_cycle_0(t : T?) {
     // Cycle 0: no shift (0/4 = 0)
     let pat <- iter(s("bd sd hh cp"), 4)
@@ -173,7 +173,7 @@ def test_iter_cycle_0(t : T?) {
     t |> equal(haps[3].value.s, "cp")
 }
 
-[test]
+[test(description = "iter shifts the pattern left by one step on cycle 1")]
 def test_iter_cycle_1(t : T?) {
     // Cycle 1: shift left by 1/4
     let pat <- iter(s("bd sd hh cp"), 4)
@@ -188,7 +188,7 @@ def test_iter_cycle_1(t : T?) {
 
 // ─── iterBack ───
 
-[test]
+[test(description = "iterBack does not shift on cycle 0")]
 def test_iterBack_cycle_0(t : T?) {
     // Cycle 0: no shift
     let pat <- iterBack(s("bd sd hh cp"), 4)
@@ -200,7 +200,7 @@ def test_iterBack_cycle_0(t : T?) {
     t |> equal(haps[3].value.s, "cp")
 }
 
-[test]
+[test(description = "iterBack shifts the pattern right by one step on cycle 1")]
 def test_iterBack_cycle_1(t : T?) {
     // Cycle 1: shift right by 1/4
     let pat <- iterBack(s("bd sd hh cp"), 4)
@@ -215,7 +215,7 @@ def test_iterBack_cycle_1(t : T?) {
 
 // ─── when_cycle ───
 
-[test]
+[test(description = "whenCycle applies its transform only on the matching cycles")]
 def test_when_cycle_applies_on_match(t : T?) {
     // Transform on even cycles, original on odd
     let pat <- when_cycle(atom("sine") |> set_note(60.0),
@@ -234,7 +234,7 @@ def test_when_cycle_applies_on_match(t : T?) {
 
 // ─── linger ───
 
-[test]
+[test(description = "linger repeats the first fraction of the pattern across the cycle")]
 def test_linger(t : T?) {
     // linger(pat, 0.25) loops the first quarter — expect bd repeated 4x per cycle
     let pat <- linger(s("bd sd hh cp"), 0.25lf)
@@ -263,7 +263,7 @@ def test_linger(t : T?) {
 
 // ─── hurry ───
 
-[test]
+[test(description = "hurry speeds the pattern up and sets the matching speed")]
 def test_hurry(t : T?) {
     // hurry = fast + speed. Factor 2: twice as fast, speed=2.0
     let pat <- hurry(atom("bd"), 2.0lf)
@@ -277,7 +277,7 @@ def test_hurry(t : T?) {
 
 // ─── compress ───
 
-[test]
+[test(description = "compress squeezes the pattern into a window of the cycle")]
 def test_compress(t : T?) {
     // Squeeze full pattern into [0.25, 0.75]
     let pat <- compress(s("bd sd"), 0.25lf, 0.75lf)
@@ -290,7 +290,7 @@ def test_compress(t : T?) {
     t |> success(abs(haps[1].whole.stop - 0.75lf) < 0.001lf)
 }
 
-[test]
+[test(description = "a query outside the compress window returns nothing")]
 def test_compress_outside_window(t : T?) {
     // Query outside the window should return nothing
     let pat <- compress(atom("bd"), 0.5lf, 0.75lf)
@@ -300,7 +300,7 @@ def test_compress_outside_window(t : T?) {
 
 // ─── chunk ───
 
-[test]
+[test(description = "chunk applies its transform to a rotating chunk of the cycle")]
 def test_chunk(t : T?) {
     // chunk(pat, 4, transform) applies transform to rotating chunk.
     // Cycle 0: chunk 0 is transformed
@@ -316,7 +316,7 @@ def test_chunk(t : T?) {
 
 // ─── striate ───
 
-[test]
+[test(description = "striate cuts a sample into slices with begin and end positions")]
 def test_striate(t : T?) {
     // striate(pat, 4) cuts the sample into 4 slices via begin/end
     let pat <- striate(atom("bd"), 4)
@@ -334,7 +334,7 @@ def test_striate(t : T?) {
 
 // ─── struct_ ───
 
-[test]
+[test(description = "struct_ takes the timing of a mask pattern for the events")]
 def test_struct_(t : T?) {
     // struct_ restructures pattern using a mask pattern's timing
     // mask s("x x") has 2 windows: [0,0.5) and [0.5,1.0)
@@ -353,7 +353,7 @@ def test_struct_(t : T?) {
 
 // ─── mask ───
 
-[test]
+[test(description = "mask keeps only the events inside the mask's active windows")]
 def test_mask(t : T?) {
     // mask keeps events where mask pattern has events
     // atom("bd") produces 1 event [0,1). mask with s("x ~") has event at [0,0.5) only
@@ -365,7 +365,7 @@ def test_mask(t : T?) {
     t |> equal(length(haps), 4)
 }
 
-[test]
+[test(description = "a mask covering the whole cycle lets every event through")]
 def test_mask_partial(t : T?) {
     // mask with atom("x") covers full [0,1), so all events pass through
     let pat <- mask(s("bd sd hh cp"), atom("x"))
@@ -375,7 +375,7 @@ def test_mask_partial(t : T?) {
 
 // ─── choose ───
 
-[test]
+[test(description = "choose picks exactly one pattern per cycle")]
 def test_choose(t : T?) {
     // choose picks one pattern per cycle deterministically (hash-based)
     var pats : array<Pattern>
@@ -394,7 +394,7 @@ def test_choose(t : T?) {
     }
 }
 
-[test]
+[test(description = "choose picks the same pattern every time for the same cycle")]
 def test_choose_deterministic(t : T?) {
     // Same cycle should always pick same pattern
     var pats : array<Pattern>
@@ -412,7 +412,7 @@ def test_choose_deterministic(t : T?) {
 
 // ─── wchoose ───
 
-[test]
+[test(description = "wchoose with weights 100 and 0 always picks the heavy pattern")]
 def test_wchoose(t : T?) {
     // Weighted random: heavier weight should appear more often
     var pats : array<Pattern>
@@ -433,7 +433,7 @@ def test_wchoose(t : T?) {
 
 // ─── randcat ───
 
-[test]
+[test(description = "randcat behaves like choose")]
 def test_randcat(t : T?) {
     // randcat is alias for choose
     var pats : array<Pattern>
@@ -451,7 +451,7 @@ def test_randcat(t : T?) {
 
 // ─── chooseCycles ───
 
-[test]
+[test(description = "chooseCycles behaves like choose")]
 def test_choose_cycles(t : T?) {
     // chooseCycles is an alias for choose (per-cycle pick)
     var pats : array<Pattern>
@@ -469,7 +469,7 @@ def test_choose_cycles(t : T?) {
 
 // ─── shuffle ───
 
-[test]
+[test(description = "shuffle yields a permutation of the subdivisions and keeps the count")]
 def test_shuffle(t : T?) {
     // shuffle(pat, 4) produces a permutation of 4 subdivisions
     let pat <- shuffle(s("bd sd hh cp"), 4)
@@ -482,7 +482,7 @@ def test_shuffle(t : T?) {
     }
 }
 
-[test]
+[test(description = "shuffle gives the same permutation for the same cycle")]
 def test_shuffle_deterministic(t : T?) {
     // Same cycle gives same permutation
     let pat <- shuffle(s("bd sd hh cp"), 4)
@@ -496,7 +496,7 @@ def test_shuffle_deterministic(t : T?) {
 
 // ─── scramble ───
 
-[test]
+[test(description = "scramble picks a subdivision for each slot with replacement")]
 def test_scramble(t : T?) {
     // scramble(pat, 4) picks random subdivision for each slot (with replacement)
     let pat <- scramble(s("bd sd hh cp"), 4)
@@ -508,7 +508,7 @@ def test_scramble(t : T?) {
     }
 }
 
-[test]
+[test(description = "scramble gives the same picks for the same cycle")]
 def test_scramble_deterministic(t : T?) {
     let pat <- scramble(s("bd sd hh cp"), 4)
     let haps1 <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
@@ -519,7 +519,7 @@ def test_scramble_deterministic(t : T?) {
     }
 }
 
-[test]
+[test(description = "scramble(8) puts slot i at i/8")]
 def test_scramble_slot_positions(t : T?) {
     // scramble(8) produces 8 slots; each slot start at i/8
     let pat <- scramble(s("bd sd hh cp ho oh lt ht"), 8)
@@ -542,7 +542,7 @@ def test_scramble_slot_positions(t : T?) {
     }
 }
 
-[test]
+[test(description = "neighbouring scramble slots do not pick the same index every cycle")]
 def test_scramble_no_slot_correlation(t : T?) {
     // Regression: the LCG-based RNG made slots 2 and 3 produce the same index
     // in every cycle. Check that across many cycles, slot i and slot i+1 are
@@ -570,7 +570,7 @@ def test_scramble_no_slot_correlation(t : T?) {
     }
 }
 
-[test]
+[test(description = "scramble picks with replacement, so repeats occur across cycles")]
 def test_scramble_allows_repeats_across_cycles(t : T?) {
     // scramble picks with replacement — over many cycles, expect some sample to
     // appear with non-uniform frequency (unlike shuffle which is always a permutation).
@@ -614,7 +614,7 @@ def test_scramble_allows_repeats_across_cycles(t : T?) {
 
 // ─── New Signals ───
 
-[test]
+[test(description = "the square signal is 1.0 in the first half and 0.0 in the second")]
 def test_square_signal(t : T?) {
     let pat <- square()
     // First half = 1.0
@@ -627,7 +627,7 @@ def test_square_signal(t : T?) {
     t |> success(abs(haps_second[0].value.note - 0.0) < 0.01)
 }
 
-[test]
+[test(description = "the inverted saw signal falls from 1.0 to 0.0")]
 def test_isaw_signal(t : T?) {
     // Inverted saw: falls from 1.0 to 0.0
     let pat <- isaw()
@@ -639,7 +639,7 @@ def test_isaw_signal(t : T?) {
     t |> success(abs(haps_mid[0].value.note - 0.5) < 0.02)
 }
 
-[test]
+[test(description = "the inverted triangle signal is 1.0 at start, 0.0 at mid and 1.0 at end")]
 def test_itri_signal(t : T?) {
     // Inverted triangle: 1.0 at start, 0.0 at mid, 1.0 at end
     let pat <- itri()
@@ -651,7 +651,7 @@ def test_itri_signal(t : T?) {
     t |> success(abs(haps_mid[0].value.note - 0.0) < 0.02)
 }
 
-[test]
+[test(description = "the bipolar sine signal runs from -1 to 1")]
 def test_sine2_signal(t : T?) {
     // Bipolar sine -1..1
     let pat <- sine2()
@@ -663,7 +663,7 @@ def test_sine2_signal(t : T?) {
     t |> success(abs(haps_trough[0].value.note - (-1.0)) < 0.02)
 }
 
-[test]
+[test(description = "the bipolar cosine signal runs from 1 at start to -1 at mid")]
 def test_cosine2_signal(t : T?) {
     // Bipolar cosine -1..1
     let pat <- cosine2()
@@ -675,7 +675,7 @@ def test_cosine2_signal(t : T?) {
     t |> success(abs(haps_mid[0].value.note - (-1.0)) < 0.02)
 }
 
-[test]
+[test(description = "the bipolar saw signal runs from -1 at start through 0 at mid")]
 def test_saw2_signal(t : T?) {
     // Bipolar sawtooth -1..1
     let pat <- saw2()
@@ -687,7 +687,7 @@ def test_saw2_signal(t : T?) {
     t |> success(abs(haps_mid[0].value.note - 0.0) < 0.02)
 }
 
-[test]
+[test(description = "the bipolar triangle signal starts at -1 and reaches 0 at a quarter")]
 def test_tri2_signal(t : T?) {
     // Bipolar triangle -1..1
     let pat <- tri2()
@@ -702,7 +702,7 @@ def test_tri2_signal(t : T?) {
     t |> success(abs(haps_mid[0].value.note - 1.0) < 0.02)
 }
 
-[test]
+[test(description = "the bipolar square signal is 1.0 then -1.0")]
 def test_square2_signal(t : T?) {
     // Bipolar square -1..1
     let pat <- square2()
@@ -714,7 +714,7 @@ def test_square2_signal(t : T?) {
     t |> success(abs(haps_second[0].value.note - (-1.0)) < 0.01)
 }
 
-[test]
+[test(description = "rand yields a value between 0 and 1")]
 def test_rand_signal(t : T?) {
     // rand() returns values in 0..1
     let pat <- rand()
@@ -723,7 +723,7 @@ def test_rand_signal(t : T?) {
     t |> success(haps[0].value.note >= 0.0 && haps[0].value.note <= 1.0)
 }
 
-[test]
+[test(description = "irand(4) yields an integer from 0 to 3")]
 def test_irand_signal(t : T?) {
     // irand(4) returns integers 0..3
     let pat <- irand(4)
@@ -735,7 +735,7 @@ def test_irand_signal(t : T?) {
     t |> success(abs(v - float(int(v))) < 0.001)
 }
 
-[test]
+[test(description = "run(4) yields the discrete events 0 to 3, each spanning a quarter cycle")]
 def test_run_signal(t : T?) {
     // run(4) produces discrete events 0, 1, 2, 3
     let pat <- run(4)
@@ -754,7 +754,7 @@ def test_run_signal(t : T?) {
 
 // ─── isaw2, itri2, rand2 (additional bipolar signals) ───
 
-[test]
+[test(description = "the bipolar inverted saw signal starts at 1 and reaches 0 at mid")]
 def test_isaw2_signal(t : T?) {
     // Bipolar inverted sawtooth -1..1
     let pat <- isaw2()
@@ -766,7 +766,7 @@ def test_isaw2_signal(t : T?) {
     t |> success(abs(haps_mid[0].value.note - 0.0) < 0.02)
 }
 
-[test]
+[test(description = "the bipolar inverted triangle signal is 1 at start and -1 at mid")]
 def test_itri2_signal(t : T?) {
     // Bipolar inverted triangle -1..1
     let pat <- itri2()
@@ -778,7 +778,7 @@ def test_itri2_signal(t : T?) {
     t |> success(abs(haps_mid[0].value.note - (-1.0)) < 0.02)
 }
 
-[test]
+[test(description = "rand2 yields a value between -1 and 1")]
 def test_rand2_signal(t : T?) {
     // rand2() returns values in -1..1
     let pat <- rand2()

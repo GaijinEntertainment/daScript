@@ -18,7 +18,7 @@ def m3(db : SqlRunner) {
     db |> exec("ALTER TABLE users ADD COLUMN Score INTEGER NOT NULL DEFAULT 0")
 }
 
-[test]
+[test(description = "migrate_to_latest after a baseline applies only the migrations above it", standalone = "[sql_migration] registers into the program-wide registry that migrate_to_latest applies whole")]
 def test_baseline_then_migrate_applies_only_remainder(t : T?) {
     var inscope db = open_sqlite(":memory:")
     // Simulate existing v1 schema.

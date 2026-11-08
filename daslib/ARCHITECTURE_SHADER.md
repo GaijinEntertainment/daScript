@@ -73,7 +73,7 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
 - **`atomicAdd` (int and uint) returns the OLD value on every rail**: the CPU body adds and
   returns what the element held, the SPIR-V rail lowers it to `OpAtomicIAdd` and the MSL rail
   to a relaxed `atomic_fetch_add_explicit` - both return the old value; a kernel that reads the
-  return (a compaction slot) computes the same on a CPU run, and `tests/metal/test_metal_atomics.das`
+  return (a compaction slot) computes the same on a CPU run, and `tests/metal/test_metal_simd.das`
   holds the returned values on both halves.
 
 ## Color output boundaries {#color-output-boundaries}

@@ -30,7 +30,7 @@ def async_with_coroutine() : void {
     await_next_frame()
 }
 
-[test]
+[test(description = "an async function can await a coroutine and run it to completion")]
 def test_await_coroutine(t : T?) {
     t |> run("await coroutine from async function") @(t : T?) {
         g_coroutine_steps = 0
@@ -57,7 +57,7 @@ def counting_async() : int {
     yield 30
 }
 
-[test]
+[test(description = "a coroutine yields bare values while an async yields variant-wrapped ones")]
 def test_both_in_same_file(t : T?) {
     t |> run("coroutine yields direct values") @(t : T?) {
         let vals <- [for (v in counting_co()); v]
@@ -88,7 +88,7 @@ def work_coroutine() {
     g_ran_steps ++
 }
 
-[test]
+[test(description = "async_run drives a coroutine through all its steps")]
 def test_async_run_on_coroutine(t : T?) {
     t |> run("async_run drives coroutine to completion") @(t : T?) {
         g_ran_steps = 0
@@ -123,7 +123,7 @@ def top_async() : void {
     g_deep_log |> push("top:end")
 }
 
-[test]
+[test(description = "async calling async calling a coroutine runs the steps in order")]
 def test_deep_nesting(t : T?) {
     t |> run("async -> async -> coroutine nesting") @(t : T?) {
         g_deep_log |> clear()
@@ -159,7 +159,7 @@ def mix_co_b() {
     g_mix_log |> push("b:3")
 }
 
-[test]
+[test(description = "cr_run_all drives several coroutines to completion")]
 def test_cr_run_all_coroutines(t : T?) {
     t |> run("cr_run_all with multiple coroutines") @(t : T?) {
         g_mix_log |> clear()

@@ -24,7 +24,7 @@ def make_recs() : array<Rec> {
     return <- a
 }
 
-[test]
+[test(description = "a leading select before order_by, distinct and take(3) fuses and returns the three smallest distinct keys")]
 def leading_select_order_distinct_take(t : T?) {
     // Row 3 (order_then_plain_distinct): distinct sorted keys, top 3.
     let recs <- make_recs()
@@ -36,7 +36,7 @@ def leading_select_order_distinct_take(t : T?) {
     delete got
 }
 
-[test]
+[test(description = "a leading select before order_by and take(3) fuses and returns the three smallest keys including duplicates")]
 def leading_select_order_take(t : T?) {
     // Row 2 (bounded_heap): sorted keys with dups, top 3 smallest.
     let recs <- make_recs()
@@ -48,7 +48,7 @@ def leading_select_order_take(t : T?) {
     delete got
 }
 
-[test]
+[test(description = "a leading select followed by where and order_by fuses and returns the sorted keys that pass the filter")]
 def leading_select_where_order(t : T?) {
     // Row 4 (fused_prefilter): keys >= 2, sorted.
     let recs <- make_recs()
@@ -65,7 +65,7 @@ def leading_select_where_order(t : T?) {
     delete got
 }
 
-[test]
+[test(description = "a leading select before order_by and first fuses into the minimum projected key")]
 def leading_select_order_first(t : T?) {
     // Row 1 (streaming_min): min projected key.
     let recs <- make_recs()
@@ -73,7 +73,7 @@ def leading_select_order_first(t : T?) {
     t |> equal(got, 0)
 }
 
-[test]
+[test(description = "an order_by and take chain without a leading select still fuses and returns the same smallest rows")]
 def leading_select_no_regression_plain_order(t : T?) {
     // A chain WITHOUT a leading select must still fuse + produce the same order (srcsel slot is optional).
     let recs <- make_recs()

@@ -1,4 +1,7 @@
-// Super absent from try/recover entirely — both branches lack super, no normal path covers it.
+//! a constructor whose try and recover blocks both lack super() does
+//! not compile
+// Super absent from try/recover entirely — both branches lack super,
+// no normal path covers it.
 options gen2
 expect 30308
 

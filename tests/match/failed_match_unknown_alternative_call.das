@@ -1,4 +1,4 @@
-// a call naming no alternative of the variant is not a pattern
+//! a call naming no alternative of the variant is not a pattern
 options gen2
 
 require daslib/match

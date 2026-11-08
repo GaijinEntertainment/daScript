@@ -8,7 +8,7 @@ require daslib/regex_boost
 // Feature 1: regex_search
 // ──────────────────────────────────────────
 
-[test]
+[test(description = "regex_search finds the first match, honors an offset and handles no match, empty input, start, end and groups")]
 def test_regex_search(t : T?) {
     t |> run("search finds first match") @(t : T?) {
         var re <- regex_compile("\\d+")
@@ -60,7 +60,7 @@ def test_regex_search(t : T?) {
 // Feature 2: regex_split
 // ──────────────────────────────────────────
 
-[test]
+[test(description = "regex_split splits on a pattern and handles no match, empty input, boundaries and whitespace")]
 def test_regex_split(t : T?) {
     t |> run("split by comma-space") @(t : T?) {
         var re <- regex_compile(",\\s*")
@@ -113,7 +113,7 @@ def test_regex_split(t : T?) {
 // Feature 3: Non-capturing groups (?:...)
 // ──────────────────────────────────────────
 
-[test]
+[test(description = "non-capturing groups match without taking a capture index, alone, nested, with alternation and quantifiers")]
 def test_non_capturing_groups(t : T?) {
     t |> run("non-capturing basic") @(t : T?) {
         var re <- regex_compile("(?:abc)+")
@@ -158,7 +158,7 @@ def test_non_capturing_groups(t : T?) {
 // Feature 4: regex_match_all
 // ──────────────────────────────────────────
 
-[test]
+[test(description = "regex_match_all returns every match span for digits and words, none on no match")]
 def test_regex_match_all(t : T?) {
     t |> run("match_all digits") @(t : T?) {
         var re <- regex_compile("\\d+")
@@ -192,7 +192,7 @@ def test_regex_match_all(t : T?) {
 // Feature 5: Named groups (?P<name>...)
 // ──────────────────────────────────────────
 
-[test]
+[test(description = "named groups capture by name and by index, mix with unnamed ones and report a missing name")]
 def test_named_groups(t : T?) {
     t |> run("named group basic") @(t : T?) {
         var re <- regex_compile("(?P<word>\\w+)")
@@ -240,7 +240,7 @@ def test_named_groups(t : T?) {
 // Feature 6: Lazy quantifiers
 // ──────────────────────────────────────────
 
-[test]
+[test(description = "the lazy question quantifier prefers zero while the greedy one takes one when possible")]
 def test_lazy_question(t : T?) {
     t |> run("lazy ?? prefers zero") @(t : T?) {
         var re <- regex_compile("a??b")
@@ -261,7 +261,7 @@ def test_lazy_question(t : T?) {
     }
 }
 
-[test]
+[test(description = "lazy star matches minimally and greedy star matches all, also in search")]
 def test_lazy_star(t : T?) {
     t |> run("lazy *? matches minimal") @(t : T?) {
         var re <- regex_compile("a*?b")
@@ -287,7 +287,7 @@ def test_lazy_star(t : T?) {
     }
 }
 
-[test]
+[test(description = "lazy plus matches minimally and greedy plus matches all, also in search")]
 def test_lazy_plus(t : T?) {
     t |> run("lazy +? matches minimal") @(t : T?) {
         var re <- regex_compile("a+?b")
@@ -312,7 +312,7 @@ def test_lazy_plus(t : T?) {
     }
 }
 
-[test]
+[test(description = "lazy bounded and open repeats take the minimum and extend only when needed")]
 def test_lazy_repeat(t : T?) {
     t |> run("lazy \{n,m\}? prefers minimum") @(t : T?) {
         var re <- regex_compile("a\\d\{2,4}?b")
@@ -357,7 +357,7 @@ def test_lazy_repeat(t : T?) {
 // Combined / integration tests
 // ──────────────────────────────────────────
 
-[test]
+[test(description = "non-capturing groups, named groups and lazy quantifiers combine with search, split, match_all and the reader macro")]
 def test_combined_phase2(t : T?) {
     t |> run("non-capturing in search") @(t : T?) {
         var re <- regex_compile("(?:foo|bar)baz")
@@ -409,7 +409,7 @@ def test_combined_phase2(t : T?) {
 // Feature 7: operator [] on Regex
 // ──────────────────────────────────────────
 
-[test]
+[test(description = "the Regex index operator returns capture spans by int index and by name")]
 def test_regex_operator_index(t : T?) {
     t |> run("operator [] by int index") @(t : T?) {
         var re : Regex

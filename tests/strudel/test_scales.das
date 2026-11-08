@@ -23,7 +23,7 @@ def private query_all(var pat : Pattern) : array<Event> {
 
 // ─── Scale interval tables ───
 
-[test]
+[test(description = "the major scale has seven intervals starting at zero")]
 def test_major_intervals(t : T?) {
     var inscope intervals <- get_scale_intervals_by_name("major")
     t |> equal(length(intervals), 7)
@@ -36,7 +36,7 @@ def test_major_intervals(t : T?) {
     t |> equal(intervals[6], 11)
 }
 
-[test]
+[test(description = "the minor scale has seven intervals starting at zero")]
 def test_minor_intervals(t : T?) {
     var inscope intervals <- get_scale_intervals_by_name("minor")
     t |> equal(length(intervals), 7)
@@ -45,7 +45,7 @@ def test_minor_intervals(t : T?) {
     t |> equal(intervals[4], 7)  // perfect fifth
 }
 
-[test]
+[test(description = "the pentatonic scale has five intervals starting at zero")]
 def test_pentatonic_intervals(t : T?) {
     var inscope intervals <- get_scale_intervals_by_name("pentatonic")
     t |> equal(length(intervals), 5)
@@ -56,7 +56,7 @@ def test_pentatonic_intervals(t : T?) {
     t |> equal(intervals[4], 10)
 }
 
-[test]
+[test(description = "the blues scale has six intervals with the tritone blue note")]
 def test_blues_intervals(t : T?) {
     var inscope intervals <- get_scale_intervals_by_name("blues")
     t |> equal(length(intervals), 6)
@@ -65,29 +65,29 @@ def test_blues_intervals(t : T?) {
 
 // ─── Root note parsing ───
 
-[test]
+[test(description = "parse_root reads C4 as MIDI 60")]
 def test_parse_root_c4(t : T?) {
     t |> equal(parse_root("C4"), 60)
 }
 
-[test]
+[test(description = "parse_root reads C3 as MIDI 48")]
 def test_parse_root_c3(t : T?) {
     t |> equal(parse_root("C3"), 48)
 }
 
-[test]
+[test(description = "parse_root reads G without an octave as G3, MIDI 55")]
 def test_parse_root_g(t : T?) {
     // G without octave → G3 = 55 (default octave is 3)
     t |> equal(parse_root("G"), 55)
 }
 
-[test]
+[test(description = "parse_root reads Eb4 as MIDI 63")]
 def test_parse_root_eb4(t : T?) {
     // Eb4 = E4 - 1 = 64 - 1 = 63
     t |> equal(parse_root("Eb4"), 63)
 }
 
-[test]
+[test(description = "parse_root reads Fs3 as F sharp 3, MIDI 54")]
 def test_parse_root_fs3(t : T?) {
     // F#3 = F3 + 1 = 53 + 1 = 54
     t |> equal(parse_root("Fs3"), 54)
@@ -95,7 +95,7 @@ def test_parse_root_fs3(t : T?) {
 
 // ─── degree_to_note ───
 
-[test]
+[test(description = "degree_to_note maps C major degrees to the right MIDI notes")]
 def test_degree_to_note_c_major(t : T?) {
     // C major: C D E F G A B = 60 62 64 65 67 69 71
     var inscope intervals <- get_scale_intervals_by_name("major")
@@ -108,7 +108,7 @@ def test_degree_to_note_c_major(t : T?) {
     t |> success(abs(degree_to_note(6, 60, intervals) - 71.0) < 0.01)
 }
 
-[test]
+[test(description = "a degree past the scale length wraps into the next octave")]
 def test_scale_octave_wrap(t : T?) {
     // degree 7 in major scale = root + 12 (next octave)
     var inscope intervals <- get_scale_intervals_by_name("major")
@@ -119,7 +119,7 @@ def test_scale_octave_wrap(t : T?) {
     t |> success(abs(degree_to_note(14, 60, intervals) - 84.0) < 0.01)
 }
 
-[test]
+[test(description = "a negative degree wraps down into the octave below")]
 def test_scale_negative_degrees(t : T?) {
     // degree -1 in C major = B3 = 59
     var inscope intervals <- get_scale_intervals_by_name("major")
@@ -130,7 +130,7 @@ def test_scale_negative_degrees(t : T?) {
     t |> success(abs(degree_to_note(-7, 60, intervals) - 48.0) < 0.01)
 }
 
-[test]
+[test(description = "degree_to_note maps C pentatonic degrees to the right notes and wraps at degree 5")]
 def test_degree_to_note_pentatonic(t : T?) {
     // C4 pentatonic (minor): C Eb F G Bb = 60 63 65 67 70
     var inscope intervals <- get_scale_intervals_by_name("pentatonic")
@@ -145,7 +145,7 @@ def test_degree_to_note_pentatonic(t : T?) {
 
 // ─── set_scale setter ───
 
-[test]
+[test(description = "n with scale C4:major maps degrees 0 2 4 to C E G")]
 def test_set_scale_c_major(t : T?) {
     // n("0 2 4") with scale "C4:major" → notes 60, 64, 67 (C E G)
     let pat <- n("0 2 4") |> set_scale("C4:major")
@@ -156,7 +156,7 @@ def test_set_scale_c_major(t : T?) {
     t |> success(abs(events[2].note - 67.0) < 0.01)  // G4
 }
 
-[test]
+[test(description = "n with scale C4:minor maps degrees 0 2 4 to C Eb G")]
 def test_set_scale_c_minor(t : T?) {
     // n("0 2 4") with C4:minor → 60, 63, 67 (C Eb G)
     let pat <- n("0 2 4") |> set_scale("C4:minor")
@@ -167,7 +167,7 @@ def test_set_scale_c_minor(t : T?) {
     t |> success(abs(events[2].note - 67.0) < 0.01)  // G4
 }
 
-[test]
+[test(description = "n with scale G3:major maps degrees to G3 A3 B3")]
 def test_set_scale_g_major(t : T?) {
     // n("0 1 2") with G3:major → 55, 57, 59 (G3 A3 B3)
     let pat <- n("0 1 2") |> set_scale("G3:major")
@@ -178,7 +178,7 @@ def test_set_scale_g_major(t : T?) {
     t |> success(abs(events[2].note - 59.0) < 0.01)  // B3
 }
 
-[test]
+[test(description = "a scale name without a root defaults to C3")]
 def test_set_scale_no_root(t : T?) {
     // just "major" without root → defaults to C3 (default octave 3)
     let pat <- n("0 4") |> set_scale("major")
@@ -190,7 +190,7 @@ def test_set_scale_no_root(t : T?) {
 
 // ─── scale_pattern convenience ───
 
-[test]
+[test(description = "scale accepts a pattern of degrees and maps each to a note")]
 def test_scale_pattern(t : T?) {
     let pat <- scale_pattern("0 2 4", "C4:major", "sawtooth")
     var inscope events <- query_all(pat)
@@ -199,7 +199,7 @@ def test_scale_pattern(t : T?) {
     t |> equal(events[0].s, "sawtooth")
 }
 
-[test]
+[test(description = "rests in a scale pattern stay silent and only real steps give events")]
 def test_scale_pattern_with_rests(t : T?) {
     // rests produce silence (no events)
     let pat <- scale_pattern("0 ~ 2 ~", "C4:pentatonic")
@@ -211,7 +211,7 @@ def test_scale_pattern_with_rests(t : T?) {
 
 // ─── Chaining with other setters ───
 
-[test]
+[test(description = "scale combines with effect setters without losing the notes")]
 def test_scale_with_effects(t : T?) {
     let pat <- n("0 4") |> set_scale("C4:major") |> set_room(0.5) |> set_gain(0.3)
     var inscope events <- query_all(pat)
@@ -223,7 +223,7 @@ def test_scale_with_effects(t : T?) {
 
 // ─── Angle bracket alternation with scale ───
 
-[test]
+[test(description = "an alternating degree pattern picks one scale degree per cycle")]
 def test_scale_with_alternation(t : T?) {
     // <0 4> alternates per cycle: cycle 0 → degree 0, cycle 1 → degree 4
     let pat <- n("<0 4>") |> set_scale("C4:major")
@@ -239,7 +239,7 @@ def test_scale_with_alternation(t : T?) {
 
 // ─── Colon-separated format (strudel compat) ───
 
-[test]
+[test(description = "C4:minor:pentatonic names the same scale as C4:minor_pentatonic")]
 def test_scale_colon_format(t : T?) {
     // "C4:minor:pentatonic" same as "C4:minor_pentatonic"
     let pat <- n("0 1 2 3 4") |> set_scale("C4:minor:pentatonic")
@@ -250,7 +250,7 @@ def test_scale_colon_format(t : T?) {
     t |> success(abs(events[2].note - 65.0) < 0.01)  // F4
 }
 
-[test]
+[test(description = "C4:major:pentatonic names the same scale as C4:major_pentatonic")]
 def test_scale_colon_major_pentatonic(t : T?) {
     // "C4:major:pentatonic" same as "C4:major_pentatonic"
     let pat <- n("0 1 2") |> set_scale("C4:major:pentatonic")
@@ -261,7 +261,7 @@ def test_scale_colon_major_pentatonic(t : T?) {
     t |> success(abs(events[2].note - 64.0) < 0.01)  // E4
 }
 
-[test]
+[test(description = "C4:harmonic:minor names the same scale as C4:harmonic_minor")]
 def test_scale_colon_harmonic_minor(t : T?) {
     // "C4:harmonic:minor" same as "C4:harmonic_minor"
     let pat <- n("0 6") |> set_scale("C4:harmonic:minor")

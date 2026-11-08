@@ -49,7 +49,7 @@ def private seed_decs() {
 
 // ===== group … into g … select  (grouped aggregation) =====
 
-[test]
+[test(description = "group ... into g exposes g.key and the member collection so count, sum, min and max per brand come out right")]
 def test_group_into_aggregate(t : T?) {
     let cars <- mk_cars()
     let rep <- %linq! from c in cars
@@ -76,7 +76,7 @@ def test_group_into_aggregate(t : T?) {
     }
 }
 
-[test]
+[test(description = "group ... into g supports an average over the bucket members per brand")]
 def test_group_into_average(t : T?) {
     let cars <- mk_cars()
     let rep <- %linq! from c in cars
@@ -88,7 +88,7 @@ def test_group_into_average(t : T?) {
     }
 }
 
-[test]
+[test(description = "a where after group ... into g filters whole buckets, keeping only those with more than one member")]
 def test_group_into_where_on_groups(t : T?) {
     let cars <- mk_cars()
     // keep only buckets with >1 member → just eco
@@ -101,7 +101,7 @@ def test_group_into_where_on_groups(t : T?) {
     t |> equal(rep[0].n, 2)
 }
 
-[test]
+[test(description = "an orderby after group ... into g sorts the buckets by an aggregate of their members, descending")]
 def test_group_into_orderby_on_groups(t : T?) {
     let cars <- mk_cars()
     // order buckets by their total, descending → lux(300) before eco(200)
@@ -114,7 +114,7 @@ def test_group_into_orderby_on_groups(t : T?) {
     t |> equal(rep[1].brand, "eco")
 }
 
-[test]
+[test(description = "explicit g._0 and g._1 pass through the into rewrite untouched and agree with g.key and bare g")]
 def test_group_into_explicit_tuple_access(t : T?) {
     let cars <- mk_cars()
     // The group `g` is a `tuple<key; members>`; explicit `g._0` (key) / `g._1` (members array) must pass
@@ -132,7 +132,7 @@ def test_group_into_explicit_tuple_access(t : T?) {
     }
 }
 
-[test]
+[test(description = "select g after group ... into g yields the group tuples of key and members unchanged")]
 def test_group_into_member_keeping_identity(t : T?) {
     let cars <- mk_cars()
     // `select g` is the identity continuation — yields the group tuples (key, members) unchanged.
@@ -144,7 +144,7 @@ def test_group_into_member_keeping_identity(t : T?) {
     }
 }
 
-[test]
+[test(description = "a where before the group filters rows first, so the bucket counts reflect only the survivors")]
 def test_group_into_pre_where(t : T?) {
     let cars <- mk_cars()
     // a pre-group `where` filters rows before grouping; the continuation aggregates the survivors.
@@ -158,7 +158,7 @@ def test_group_into_pre_where(t : T?) {
 
 // ===== select … into n … (projection continuation) =====
 
-[test]
+[test(description = "select ... into p rebinds the projected value so a following where filters on it")]
 def test_select_into_then_where(t : T?) {
     let cars <- mk_cars()
     let rep <- %linq! from c in cars
@@ -170,7 +170,7 @@ def test_select_into_then_where(t : T?) {
     t |> equal(rep[1], 300)
 }
 
-[test]
+[test(description = "select ... into p rebinds the projected value so a following orderby descending sorts on it")]
 def test_select_into_orderby(t : T?) {
     let cars <- mk_cars()
     let rep <- %linq! from c in cars
@@ -181,7 +181,7 @@ def test_select_into_orderby(t : T?) {
     t |> equal(rep[2], 50)
 }
 
-[test]
+[test(description = "group, project into agg, then where and orderby on the aggregated rows run as one chain")]
 def test_multi_stage_group_then_project_then_filter(t : T?) {
     let cars <- mk_cars()
     // 3 stages: group → aggregate → filter+order the aggregated rows.
@@ -196,7 +196,7 @@ def test_multi_stage_group_then_project_then_filter(t : T?) {
     t |> equal(rep[1], "eco")
 }
 
-[test]
+[test(description = "a group ... into g query with the iterator suffix yields the two aggregated buckets lazily")]
 def test_group_into_iterator_output(t : T?) {
     let cars <- mk_cars()
     var n = 0
@@ -206,7 +206,7 @@ def test_group_into_iterator_output(t : T?) {
 
 // ===== type-bracket clause body (find_kw_depth0 regression) =====
 
-[test]
+[test(description = "a clause body ending in a type bracket such as default<int> does not swallow the following clause keyword")]
 def test_type_bracket_body_before_keyword(t : T?) {
     let cars <- mk_cars()
     // A clause body that ends in a type/generic bracket `>` at depth 0 (`default<int>`) must NOT swallow the
@@ -223,7 +223,7 @@ def test_type_bracket_body_before_keyword(t : T?) {
 
 // ===== decs source =====
 
-[test]
+[test(description = "group ... into g over a decs source counts the entities per brand bucket")]
 def test_decs_group_into_aggregate(t : T?) {
     seed_decs()
     // count per brand bucket via the group continuation (a/a/b → a:2, b:1).
@@ -235,7 +235,7 @@ def test_decs_group_into_aggregate(t : T?) {
     }
 }
 
-[test]
+[test(description = "select ... into p over a decs source rebinds the projection for a following where")]
 def test_decs_select_into(t : T?) {
     seed_decs()
     let rep <- %linq! from c : CarComp in decs

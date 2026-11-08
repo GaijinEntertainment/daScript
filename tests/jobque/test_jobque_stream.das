@@ -18,7 +18,7 @@ variant CmdVariant {
     shutdown : bool
 }
 
-[test]
+[test(description = "with_stream creates and destroys a stream, with or without an initial count")]
 def test_stream_basics(t : T?) {
     t |> run("with_stream creates and destroys") @(t : T?) {
         var entered = false
@@ -42,7 +42,7 @@ def test_stream_basics(t : T?) {
     }
 }
 
-[test]
+[test(description = "push and try_pop round-trip bytes in FIFO order, and try_pop on an empty stream returns false")]
 def test_stream_push_pop_bytes(t : T?) {
     t |> run("push + try_pop round-trip bytes") @(t : T?) {
         with_stream() $(var s : Stream?) {
@@ -93,7 +93,7 @@ def test_stream_push_pop_bytes(t : T?) {
     }
 }
 
-[test]
+[test(description = "gather drains a stream while peek leaves its contents in place")]
 def test_stream_gather_peek(t : T?) {
     t |> run("gather drains stream") @(t : T?) {
         with_stream() $(var s : Stream?) {
@@ -130,7 +130,7 @@ def test_stream_gather_peek(t : T?) {
     }
 }
 
-[test]
+[test(description = "push_archive and pop_archive round-trip a struct, and gather_archive visits messages in FIFO order")]
 def test_stream_archive_struct(t : T?) {
     t |> run("push_archive + pop_archive struct round-trip") @(t : T?) {
         with_stream() $(var s : Stream?) {
@@ -165,7 +165,7 @@ def test_stream_archive_struct(t : T?) {
     }
 }
 
-[test]
+[test(description = "A variant carrying uint64 handles serializes through the stream end to end")]
 def test_stream_archive_variant(t : T?) {
     t |> run("variant with uint64 handles serializes end-to-end") @(t : T?) {
         with_stream() $(var s : Stream?) {
@@ -199,7 +199,7 @@ def test_stream_archive_variant(t : T?) {
     }
 }
 
-[test]
+[test(description = "try_pop_archive returns true on a non-empty stream and false on an empty one")]
 def test_stream_try_pop_archive(t : T?) {
     t |> run("try_pop_archive on non-empty stream returns true") @(t : T?) {
         with_stream() $(var s : Stream?) {
@@ -225,7 +225,7 @@ def test_stream_try_pop_archive(t : T?) {
     }
 }
 
-[test]
+[test(description = "pop_archive_with_timeout consumes a queued value and waits out its timeout on an empty stream")]
 def test_stream_pop_archive_with_timeout(t : T?) {
     t |> run("pop_archive_with_timeout consumes a queued value") @(t : T?) {
         with_stream() $(var s : Stream?) {
@@ -260,7 +260,7 @@ def test_stream_pop_archive_with_timeout(t : T?) {
 // Items pushed during a gather join the NEXT drain, never the current one. This is
 // what lets a consumer (the audio command processor on the wasm AudioWorklet) run
 // arbitrary das code per command without wedging producers on other threads.
-[test]
+[test(description = "A gather or gather_archive block may push to or query the stream it is draining")]
 def test_stream_gather_reentrant(t : T?) {
     t |> run("gather block may push to the same stream") @(t : T?) {
         with_stream() $(var s : Stream?) {
@@ -316,7 +316,7 @@ def test_stream_gather_reentrant(t : T?) {
     }
 }
 
-[test]
+[test(description = "push_batch adds every item to the stream")]
 def test_stream_push_batch(t : T?) {
     t |> run("push_batch adds all items") @(t : T?) {
         with_stream() $(var s : Stream?) {
@@ -349,7 +349,7 @@ struct InitializedStreamValue {
     count : int = 7
 }
 
-[test]
+[test(description = "Every archive receive method accepts a record type with field initializers")]
 def archive_stream_receivers_accept_initialized_records(t : T?) {
     with_stream() $(var stream : Stream?) {
         var input = InitializedStreamValue(name = "sent", count = 42)

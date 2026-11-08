@@ -1,7 +1,6 @@
 options gen2
 
 require dastest/testing_boost public
-
 require strings
 require daslib/sql
 require sqlite/sqlite_boost
@@ -43,7 +42,7 @@ def private fixture(db : SqlRunner) {
 
 // ===== B1 — computed scalar _select =====
 
-[test]
+[test(description = "a computed _select renders its arithmetic into the aggregate argument")]
 def test_computed_select_emits_fragment(t : T?) {
     var _db = SqlRunner()
     let sql = _sql_text(_db |> select_from(type<Car>) |> _select(_.Price + _.Id) |> sum())
@@ -51,7 +50,7 @@ def test_computed_select_emits_fragment(t : T?) {
         "computed _select renders the arithmetic into the aggregate argument")
 }
 
-[test]
+[test(description = "sum over a computed select totals the computed values")]
 def test_computed_select_sum_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -61,7 +60,7 @@ def test_computed_select_sum_runtime(t : T?) {
     }
 }
 
-[test]
+[test(description = "min, max and average over a computed select use the computed values")]
 def test_computed_select_min_max_avg_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -72,7 +71,7 @@ def test_computed_select_min_max_avg_runtime(t : T?) {
     }
 }
 
-[test]
+[test(description = "a computed expression in a where filters rows at runtime")]
 def test_computed_predicate_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -83,7 +82,7 @@ def test_computed_predicate_runtime(t : T?) {
     }
 }
 
-[test]
+[test(description = "a bare column select still emits a plain column aggregate, not the computed path")]
 def test_bare_column_select_still_works(t : T?) {
     // regression: single-column `_select(_.Col)` must keep emitting `SUM("Col")`, not the computed path.
     var _db = SqlRunner()
@@ -93,7 +92,7 @@ def test_bare_column_select_still_works(t : T?) {
 
 // ===== B2 — computed columns in a named-tuple _select (projection) =====
 
-[test]
+[test(description = "a named-tuple select pushes a computed column down next to a plain column")]
 def test_computed_named_tuple_emits_fragment(t : T?) {
     var _db = SqlRunner()
     let sql = _sql_text(_db |> select_from(type<Car>)
@@ -105,7 +104,7 @@ def test_computed_named_tuple_emits_fragment(t : T?) {
         "computed column pushed down next to the plain column; SQL: {sql}")
 }
 
-[test]
+[test(description = "a named-tuple select with a computed column returns the computed values")]
 def test_computed_named_tuple_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -121,7 +120,7 @@ def test_computed_named_tuple_runtime(t : T?) {
     }
 }
 
-[test]
+[test(description = "a computed named-tuple column works together with a computed where")]
 def test_computed_named_tuple_with_computed_where_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -139,7 +138,7 @@ def test_computed_named_tuple_with_computed_where_runtime(t : T?) {
     }
 }
 
-[test]
+[test(description = "computed and plain columns mix in one named-tuple select")]
 def test_computed_mixed_with_plain_columns_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -153,7 +152,7 @@ def test_computed_mixed_with_plain_columns_runtime(t : T?) {
     }
 }
 
-[test]
+[test(description = "a named-tuple select of plain columns still emits plain column references")]
 def test_bare_named_tuple_select_unchanged(t : T?) {
     // regression: a pure-column named-tuple must keep emitting plain column refs, not the computed path.
     with_sqlite(":memory:") $(db) {
@@ -169,14 +168,14 @@ def test_bare_named_tuple_select_unchanged(t : T?) {
 
 // ===== B3 — string concatenation (`+` → SQL `||`) =====
 
-[test]
+[test(description = "string concatenation in a select emits the SQL concatenation operator")]
 def test_string_concat_column_emits_pipe(t : T?) {
     var _db = SqlRunner()
     let sql = _sql_text(_db |> select_from(type<Car>) |> _select((G = _.Name + "!")) |> to_array())
     t |> success(sql == "SELECT (\"Name\") || (?) AS \"G\" FROM \"Cars\"", "string `+` lowers to SQL `||`; SQL: {sql}")
 }
 
-[test]
+[test(description = "string concatenation in a select returns the joined strings")]
 def test_string_concat_column_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -187,7 +186,7 @@ def test_string_concat_column_runtime(t : T?) {
     }
 }
 
-[test]
+[test(description = "string concatenation in a where filters on the joined string")]
 def test_string_concat_in_where_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -198,7 +197,7 @@ def test_string_concat_in_where_runtime(t : T?) {
 
 // ===== C — computed _order_by keys (single + tuple entry), constants inlined =====
 
-[test]
+[test(description = "a computed order_by key is inlined into the ORDER BY without binds")]
 def test_computed_order_by_emits_fragment(t : T?) {
     var _db = SqlRunner()
     let sql = _sql_text(_db |> select_from(type<Car>)
@@ -209,7 +208,7 @@ def test_computed_order_by_emits_fragment(t : T?) {
         "computed order key inlined (no binds); SQL: {sql}")
 }
 
-[test]
+[test(description = "a computed order_by key sorts ascending at runtime")]
 def test_computed_order_by_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -225,7 +224,7 @@ def test_computed_order_by_runtime(t : T?) {
     }
 }
 
-[test]
+[test(description = "a computed descending order_by key sorts at runtime")]
 def test_computed_order_by_descending_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -239,7 +238,7 @@ def test_computed_order_by_descending_runtime(t : T?) {
     }
 }
 
-[test]
+[test(description = "a computed key can be one entry of a tuple order_by")]
 def test_computed_order_by_tuple_entry_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -255,7 +254,7 @@ def test_computed_order_by_tuple_entry_runtime(t : T?) {
     }
 }
 
-[test]
+[test(description = "a row-referencing string order key is emitted as a computed expression")]
 def test_order_by_string_concat_key_emits(t : T?) {
     var _db = SqlRunner()
     let sql = _sql_text(_db |> select_from(type<Car>) |> _order_by(_.Name + "!") |> _select(_.Id) |> to_array())
@@ -263,7 +262,7 @@ def test_order_by_string_concat_key_emits(t : T?) {
         "row-referencing string order key routes to computed ||; SQL: {sql}")
 }
 
-[test]
+[test(description = "a to_lower order key sorts case-insensitively at runtime")]
 def test_order_by_lower_key_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -274,7 +273,7 @@ def test_order_by_lower_key_runtime(t : T?) {
     }
 }
 
-[test]
+[test(description = "a captured string order key stays a runtime column name")]
 def test_order_by_dynamic_column_name(t : T?) {
     // a captured string (no row reference) is still a dynamic column NAME, not a computed expression
     var _db = SqlRunner()
@@ -286,14 +285,14 @@ def test_order_by_dynamic_column_name(t : T?) {
 
 // ===== D — bitwise (& | << >>) and unary (- ~) operators =====
 
-[test]
+[test(description = "bitwise and, or and shifts in a predicate emit the SQLite operators")]
 def test_bitwise_and_emits(t : T?) {
     var _db = SqlRunner()
     let sql = _sql_text(_db |> select_from(type<Car>) |> _select((V = _.Price & 96)) |> to_array())
     t |> success(sql == "SELECT (\"Price\") & (?) AS \"V\" FROM \"Cars\"", "bitwise & lowers to SQL &; SQL: {sql}")
 }
 
-[test]
+[test(description = "bitwise and and shift operators compute correctly at runtime")]
 def test_bitwise_and_shift_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -309,7 +308,7 @@ def test_bitwise_and_shift_runtime(t : T?) {
     }
 }
 
-[test]
+[test(description = "unary minus and bitwise not compute correctly at runtime")]
 def test_unary_minus_and_not_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -320,7 +319,7 @@ def test_unary_minus_and_not_runtime(t : T?) {
     }
 }
 
-[test]
+[test(description = "a bitwise expression in a where filters rows at runtime")]
 def test_bitwise_in_where_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -332,7 +331,7 @@ def test_bitwise_in_where_runtime(t : T?) {
 
 // ===== A — take/skip before an aggregate =====
 
-[test]
+[test(description = "take before count wraps the limited query in a subquery")]
 def test_take_before_count_emits_subquery(t : T?) {
     var _db = SqlRunner()
     let sql = _sql_text(_db |> select_from(type<Car>) |> _where(_.Price > 100) |> take(2) |> count())
@@ -340,7 +339,7 @@ def test_take_before_count_emits_subquery(t : T?) {
         "take before count wraps the pre-aggregate chain (LIMIT inner)")
 }
 
-[test]
+[test(description = "take before sum wraps the limited query and sums on the outer select")]
 def test_take_before_sum_emits_subquery(t : T?) {
     var _db = SqlRunner()
     let sql = _sql_text(_db |> select_from(type<Car>) |> _select(_.Price) |> take(2) |> sum())
@@ -348,7 +347,7 @@ def test_take_before_sum_emits_subquery(t : T?) {
         "take before sum wraps; outer SUM references the inner column")
 }
 
-[test]
+[test(description = "count after a take counts only the taken rows")]
 def test_take_count_filtered_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -358,7 +357,7 @@ def test_take_count_filtered_runtime(t : T?) {
     }
 }
 
-[test]
+[test(description = "sum after a take totals only the taken rows")]
 def test_take_sum_aggregate_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -368,7 +367,7 @@ def test_take_sum_aggregate_runtime(t : T?) {
     }
 }
 
-[test]
+[test(description = "count after a skip counts the rows past the offset")]
 def test_skip_before_count_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -378,7 +377,7 @@ def test_skip_before_count_runtime(t : T?) {
     }
 }
 
-[test]
+[test(description = "a where after take filters the taken rows before counting")]
 def test_take_then_where_then_count_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -390,7 +389,7 @@ def test_take_then_where_then_count_runtime(t : T?) {
 
 // ===== composition — computed _select + take + aggregate =====
 
-[test]
+[test(description = "sum of a computed select after take totals only the taken rows")]
 def test_computed_select_take_sum_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
@@ -402,7 +401,7 @@ def test_computed_select_take_sum_runtime(t : T?) {
 
 // ===== E — workhorse type casts → SQLite CAST (int*/uint*→INTEGER, float/double→REAL, string→TEXT) =====
 
-[test]
+[test(description = "an int64 cast in a select emits CAST AS INTEGER")]
 def test_cast_int64_select_emits_cast(t : T?) {
     var _db = SqlRunner()
     let sql = _sql_text(_db |> select_from(type<Car>) |> _select(int64(_.Price) * int64(_.Id)) |> sum())
@@ -410,7 +409,7 @@ def test_cast_int64_select_emits_cast(t : T?) {
         "int64 cast renders CAST(... AS INTEGER) into the aggregate argument; SQL: {sql}")
 }
 
-[test]
+[test(description = "a double cast in a where emits CAST AS REAL")]
 def test_cast_double_where_emits_real(t : T?) {
     // the retired failed_sql_macro bad6b case (`_where(double(_.Price) > 1.0)`) now lowers
     var _db = SqlRunner()
@@ -419,7 +418,7 @@ def test_cast_double_where_emits_real(t : T?) {
         "double cast renders CAST(... AS REAL); SQL: {sql}")
 }
 
-[test]
+[test(description = "a string cast in a select emits CAST AS TEXT")]
 def test_cast_string_select_emits_text(t : T?) {
     var _db = SqlRunner()
     let sql = _sql_text(_db |> select_from(type<Car>) |> _select(string(_.Id)))
@@ -431,7 +430,7 @@ def test_cast_string_select_emits_text(t : T?) {
     t |> equal(sqlFalse, sql, "explicit hex=false lowers identically to the bare string cast")
 }
 
-[test]
+[test(description = "an int64 cast makes a large SUM read back without 32-bit truncation")]
 def test_cast_int64_avoids_int32_truncation(t : T?) {
     // SQLite computes SUM(Price*Id) in 64-bit; without int64(...) the projection's daslang type is int,
     // so the result column reads back int32-truncated. The cast makes the projection int64 → faithful.
@@ -450,7 +449,7 @@ def test_cast_int64_avoids_int32_truncation(t : T?) {
     }
 }
 
-[test]
+[test(description = "a double cast forces real division instead of integer division")]
 def test_cast_double_forces_real_division(t : T?) {
     // double(_.Price)/2.0 → REAL division; the no-cast _.Price/2 would be integer division.
     with_sqlite(":memory:") $(db) {
@@ -461,7 +460,7 @@ def test_cast_double_forces_real_division(t : T?) {
     }
 }
 
-[test]
+[test(description = "a double cast in a where filters correctly at runtime")]
 def test_cast_double_where_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)

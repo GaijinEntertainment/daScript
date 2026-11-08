@@ -1,3 +1,5 @@
+//! A macro-built variable reference with an empty name must be
+//! rejected (30296, with a cascading 30838).
 // Regression test for invalid_empty_name (30296) on ExprVar.
 // The call_macro splices `ExprVar(name := "")` — typer rejects via
 // the preVisit empty-name check, then 30838 fires as the downstream

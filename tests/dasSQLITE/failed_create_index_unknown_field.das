@@ -1,7 +1,10 @@
 options gen2
+//! create_index naming a field the struct does not have must not
+//! compile
 
-// CreateIndexMacro must reject field names that don't exist on the struct,
-// with the same wording the [sql_index] structure annotation uses.
+// CreateIndexMacro must reject field names that don't exist on the
+// struct, with the same wording the [sql_index] structure annotation
+// uses.
 expect 50503
 
 require sqlite/sqlite_migrate
