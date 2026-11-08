@@ -1,0 +1,125 @@
+options gen2
+
+require dastest/testing_boost public
+require daslib/fio
+require daslib/strings_boost
+require strings
+
+def private gate_findings_for(root : string; var rc : int&) : array<string> {
+    let exe = get_command_line_arguments()[0]
+    var output : string
+    rc = run_and_capture(
+                         [exe, "-dasroot", get_das_root(), "{get_das_root()}/tests/REVIEW.das",
+                          "--", "--root", root], output)
+    var findings : array<string>
+    for (line in split(output, "\n")) {
+        let at = find(line, ": ")
+        if (find(line, " writes `") >= 0 && at >= 0) {
+            findings |> push(strip(slice(line, at + 2)))
+        }
+    }
+    return <- findings
+}
+
+//! the gate's `path: finding` lines over `root`, as `<file name>:
+//! <finding>`
+def private shape_findings_for(root : string; cap : int; var rc : int&) : array<string> {
+    let exe = get_command_line_arguments()[0]
+    var output : string
+    rc = run_and_capture(
+                         [exe, "-dasroot", get_das_root(), "{get_das_root()}/tests/REVIEW.das",
+                          "--", "--root", root, "--cap", "{cap}"], output)
+    var findings : array<string>
+    for (line in split(output, "\n")) {
+        let at = find(line, ": ")
+        continue if (at < 0 || find(line, ".das") < 0 || line |> starts_with("REVIEW.das"))
+        let fileName = base_name(slice(line, 0, at))
+        let stem = find(fileName, ".das")
+        findings |> push("{slice(fileName, 0, stem + 4)}: {strip(slice(line, at + 2))}")
+    }
+    return <- findings
+}
+
+[test(description = "every file-shape rule fires once on the fixture that breaks it, and the well-formed files are clean")]
+def test_tests_review_gate_shape(tt : T?) {
+    tt |> run("the shape findings, one per broken fixture file") <| @(t : T?) {
+        var rc = 0
+        var inscope findings <- shape_findings_for(
+            "{get_das_root()}/tests/dastest/_tests_shape_fixture", 3, rc)
+        t |> equal(rc, 1)
+        let expected = [
+            "lonely.das: a category file holds three or more `[test]` functions; this one holds 1",
+            "nodesc.das: `test_undescribed` has no description",
+            "failed_nohead.das: a compile-fail fixture states its claim as a `//!` line " +
+                "above its first declaration",
+            "plain.das: a run file with no `[test]` and no `expect` proves nothing by name",
+            "spill.das: the `[test(` annotation does not close on its line",
+            "big.das: 4 `[test]` functions, over the cap of 3; split the file",
+            "uncategorized_rtti.das: `uncategorized_rtti.das` carries no fence option",
+            "uncategorized_3.das: `uncategorized_3.das` continues `uncategorized_2.das`, " +
+                "which does not exist",
+            "uncategorized_persistent_heap_2.das: `uncategorized_persistent_heap_2.das` " +
+                "continues `uncategorized_persistent_heap.das`, which holds 1 `[test]` " +
+                    "functions, under the cap of 3",
+            "noprefix.das: a compile-fail fixture's name starts with `failed_`, `cant_` " +
+                "or `invalid_`",
+            "uncategorized_heap.das: `uncategorized_heap.das` is named apart from its " +
+                "fence signature [persistent_heap]; a fenced uncategorized file is named " +
+                    "by its signature, `uncategorized_persistent_heap.das`"
+        ]
+        for (e in expected) {
+            t |> success(findings |> has_value_prefix(e),
+                         "missing: {e}\nfound:\n{join(findings, "\n")}")
+        }
+        t |> equal(length(findings), length(expected), "found:\n{join(findings, "\n")}")
+        for (f in findings) {
+            t |> success(!(f |> starts_with("uncategorized.das:"))
+                         && !(f |> starts_with("uncategorized_persistent_heap.das:"))
+                && !(f |> starts_with("alone.das:")), "a well-formed file fired: {f}")
+        }
+    }
+
+    tt |> run("a plain uncategorized file that carries a fence option is a finding") <| @(t : T?) {
+        var rc = 0
+        var inscope findings <- shape_findings_for(
+            "{get_das_root()}/tests/dastest/_tests_shape_fixture_plain", 3, rc)
+        t |> equal(rc, 1)
+        t |> equal(length(findings), 1, "found:\n{join(findings, "\n")}")
+        let want = "uncategorized.das: `uncategorized.das` carries fence options [persistent_heap]"
+        t |> success(findings |> has_value_prefix(want), "found:\n{join(findings, "\n")}")
+    }
+}
+
+[test(description = "the tests/ gate flags every write whose path is built from the repo root, through helpers and bound variables alike, and nothing else")]
+def test_tests_review_gate(tt : T?) {
+    tt |> run("every write built from the repo root is a finding, and nothing else is") <| @(t : T?) {
+        var rc = 0
+        var inscope findings <- gate_findings_for("{get_das_root()}/tests/dastest/_tests_gate_fixture", rc)
+        t |> equal(rc, 1)
+        let expected = [
+            "fopen(...) writes `out`",
+            "fopen(...) writes `fixture_path(\"y.tmp\")`",
+            "fopen(...) writes `\"relative.tmp\"`",
+            "mkdir_rec(...) writes `GLOBAL_OUT`",
+            "remove(...) writes `fixture_path(\"y.tmp\")`",
+            "rename(...) writes `out`",
+            "rename(...) writes `path_join(root, \"renamed.tmp\")`",
+            "copy_file(...) writes `path_join(root, \"copied.tmp\")`",
+            "fwrite(...) writes `path_join(get_das_root(), \"written.tmp\")`",
+            "mkdir_rec(...) writes `server.upload_dir`",
+            "save(...) writes `fixture_path(\"image.png\")`"
+        ]
+        for (e in expected) {
+            t |> success(findings |> has_value_prefix(e),
+                         "missing: {e}\nfound:\n{join(findings, "\n")}")
+        }
+        t |> equal(length(findings), length(expected), "found:\n{join(findings, "\n")}")
+    }
+}
+
+def private has_value_prefix(lines : array<string>; prefix : string) : bool {
+    for (l in lines) {
+        return true if (starts_with(l, prefix))
+    }
+    return false
+}

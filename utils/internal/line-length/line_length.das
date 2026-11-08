@@ -188,7 +188,8 @@ def private scan_comments(d : array<uint8> const implicit) : table<int; int> {
     return <- s.cols
 }
 
-//! Maps a 0-based line index to the byte column where a comment starts on that line.
+//! Maps a 0-based line index to the byte column where a comment
+//! starts on that line.
 def comment_columns(text : string) : table<int; int> {
     var cols : table<int; int>
     peek_data(text) $(d) {
@@ -197,9 +198,20 @@ def comment_columns(text : string) : table<int; int> {
     return <- cols
 }
 
-//! The findings over ``added`` under the limits ``pol`` carries; a limit of 0 measures nothing
+//! a one-line annotation, `[...]` or a field's `@name = ...`: its string
+//! arguments (a test's description, a flag's help) are constants that
+//! cannot be split across lines
+def is_annotation_line(raw : string) : bool {
+    let t = strip(raw)
+    return (t |> starts_with("[") && t |> ends_with("]")) || t |> starts_with("@")
+}
+
+//! The findings over ``added`` under the limits ``pol`` carries; a
+//! limit of 0 measures nothing. A line whose stripped text is in
+//! ``moved`` left another place in the same diff: a move, not an
+//! addition
 def find_violations(path, text : string; added : array<int>;
-                    pol : LineLengthPolicy) : array<Finding> {
+                    pol : LineLengthPolicy; moved : table<string>) : array<Finding> {
     var found : array<Finding>
     if (!is_checked(path) || is_generated(text) || (pol.code <= 0 && pol.comment <= 0)) {
         return <- found
@@ -209,8 +221,9 @@ def find_violations(path, text : string; added : array<int>;
     for (ln in added) {
         continue if (ln < 1 || ln > length(lines))
         let raw = rtrim(lines[ln - 1])
+        continue if (moved |> key_exists(strip(raw)))
         let width = display_width(raw)
-        if (pol.code > 0 && width > pol.code) {
+        if (pol.code > 0 && width > pol.code && !is_annotation_line(raw)) {
             let message = "line is {width} columns, limit {pol.code}"
             found |> push(Finding(line = ln, message = message))
             continue
@@ -227,9 +240,30 @@ def find_violations(path, text : string; added : array<int>;
     return <- found
 }
 
+//! The findings under the limits ``pol`` carries, with no moved lines
+def find_violations(path, text : string; added : array<int>;
+                    pol : LineLengthPolicy) : array<Finding> {
+    let moved : table<string>
+    return <- find_violations(path, text, added, pol, moved)
+}
+
 //! The findings under the repo defaults
 def find_violations(path, text : string; added : array<int>) : array<Finding>
     => <- find_violations(path, text, added, LineLengthPolicy())
+
+//! Reads a `git diff -U0` output's removed lines, stripped: the
+//! base-side text that left its place.
+def removed_lines(diff : string) : table<string> {
+    var result : table<string>
+    for (line in split(diff, "\n")) {
+        continue if (!starts_with(line, "-") || starts_with(line, "--- "))
+        let text = strip(slice(line, 1))
+        if (!empty(text)) {
+            result |> insert(text)
+        }
+    }
+    return <- result
+}
 
 def untracked_paths(ls_files_out : string) : array<string> => <- [
     for (path in non_empty_lines(ls_files_out)); path; where is_checked(path)]
@@ -237,7 +271,8 @@ def untracked_paths(ls_files_out : string) : array<string> => <- [
 def all_lines(text : string) : array<int> => <- [
     for (k in range(1, count(text, "\n") + 2)); k]
 
-//! Reads `git diff -U0` output: the new-side line numbers each file's hunks add.
+//! Reads `git diff -U0` output: the new-side line numbers each file's
+//! hunks add.
 def added_lines(diff : string) : table<string; array<int>> {
     var result : table<string; array<int>>
     var path = ""

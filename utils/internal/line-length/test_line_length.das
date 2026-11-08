@@ -39,6 +39,26 @@ def test_code_width(t : T?) {
     }
 }
 
+[test(description = "a line that left another place in the same diff is a move and is not measured, and a one-line annotation is exempt from the code width")]
+def test_moved_and_annotation_lines(t : T?) {
+    t |> run("a one-line annotation over the limit is not a finding; its comment is") @(t : T?) {
+        t |> equal(length(kinds("a.das", "[test(description = \"{LONG_CODE}\")]\n")), 0)
+        t |> equal(kinds("a.das", "[test] // {LONG_COMMENT}\n"), ["1:comment"])
+        t |> equal(kinds("a.das", "[test(description = \"{LONG_CODE}\"\n"), ["1:line"])
+        t |> equal(length(kinds("a.das", "    @clarg_doc = \"{LONG_CODE}\"\n")), 0)
+    }
+    t |> run("an added line whose stripped text was removed elsewhere is a move") @(t : T?) {
+        let moved <- removed_lines("--- a/old.das\n+++ /dev/null\n-    let s = " +
+            "\"{LONG_CODE}\"\n-\n")
+        t |> success(moved |> key_exists("let s = \"{LONG_CODE}\""))
+        t |> success(!(moved |> key_exists("")))
+        let text = "        let s = \"{LONG_CODE}\"\nlet t = \"{LONG_CODE}\"\n"
+        let found <- find_violations("a.das", text, [1, 2], LineLengthPolicy(), moved)
+        t |> equal(length(found), 1)
+        t |> equal(found[0].line, 2)
+    }
+}
+
 [test]
 def test_comment_width(t : T?) {
     t |> run("line comment") @(t : T?) {

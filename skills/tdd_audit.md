@@ -74,6 +74,11 @@ every test the diff touches in one of these shapes:
 - a skip, exclude, or platform gate added to a test that ran before
 - a test rewritten wholesale in the same change that rewrites the code it tests
 
+A test moved between files with its body unchanged - a file merge, a rename, a split at a
+cap - is not a test edit, whatever the diff tool shows; annotation arguments added around an
+unchanged body (`description`, `timeout`, `standalone`) do not make it one either. The cheat
+check reads bodies, not file names.
+
 For each, run the **reverse control**: the OLD test against the NEW code.
 
 - Old test FAILS -> the diff changed behavior AND re-tuned the test to match. Legitimate
@@ -140,4 +145,8 @@ branches and tests is a real result; "tests pass" is not an audit.
   in `skills/internal/make_pr.md` step 0a beside the REVIEW.md auditors - one instance for the
   whole diff, so code no REVIEW.md reaches is covered too.
 - Repo test placement (AOT registration, the `tests/.das_test` gate) is
-  `skills/internal/tests_in_repo.md`.
+  `skills/internal/tests_in_repo.md`. Under `tests/` the auditor also checks WHERE a new
+  `[test]` landed - an existing category file or the folder's `uncategorized.das`, never a
+  new file; a `description` on it; and no three-of-a-kind left in the touched
+  `uncategorized.das` - per `tests/REVIEW.md`, with `tests/REVIEW.das --shape` as the
+  mechanical half.
