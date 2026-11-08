@@ -6,6 +6,7 @@ require dastest/testing_boost public
 
 require strings
 require daslib/fio
+require _lint_cli
 
 // LINT026 is a FOLDER rule the runner enforces with its own tree walk, not a compile pass, so it
 // cannot ride the `expect 50503:N` fixture form the rule fixtures here use - the check is driven
@@ -93,16 +94,11 @@ def private plant_doc(dir, name : string; anchors : array<string>) {
 
 // argv[0] is the running interpreter - dastest itself is spawned as
 // `daslang(.exe) dastest/dastest.das ...`, so it names the binary to spawn.
-def private das_exe() : string {
-    let args <- get_command_line_arguments()
-    return empty(args) ? "" : args[0]
-}
-
-
 def private run_lint_argv(extra : array<string>; root : string; var output : string&) : int {
-    var argv <- [das_exe(), "-dasroot", get_das_root(), "{get_das_root()}/utils/lint/main.das", "--", "-q"]
-    argv |> push_from(extra)
-    argv |> push(root)
+    var after <- ["-q"]
+    after |> push_from(extra)
+    after |> push(root)
+    var argv <- lint_cli_argv([], after)
     return unsafe(popen_argv(argv, 0.0, $(f) {
         if (f != null) {
             output = fread(f)

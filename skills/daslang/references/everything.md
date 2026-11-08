@@ -6763,6 +6763,12 @@ The lint_config module loads `{get_das_root()}/.lint_config` (a TOML file with a
 
 - `line_length_policy_for`
 
+### Result cache
+
+- `is_lint_cache_entry`
+- `reset_lint_cache_in`
+- `standalone_lint_version`
+
 ## lint_fixups
 
 The lint_fixups module holds the helpers the lint passes build their `--fix` edits from: the source text of a node or a range, the checks a rewrite must pass, and the shared `LintFix` constructors.

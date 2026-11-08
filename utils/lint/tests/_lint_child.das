@@ -10,7 +10,7 @@ require dastest/testing_boost public
 require strings
 require daslib/strings_boost
 require daslib/fio
-require daslib/command_line   // get_das_exe
+require _lint_cli
 
 def plant(dir, name, content : string) {
     fopen(path_join(dir, name), "wb") $(f) {
@@ -21,16 +21,13 @@ def plant(dir, name, content : string) {
 }
 
 //! the lint over `root` with its cache under `root/cache`; `host`:
-//! daslang's flags before the script, `extra`: after `--`
+//! daslang's flags before the script - a disabled module changes what
+//! the lint sees, so a call with host flags takes the script form -
+//! `extra`: the lint's own arguments
 def run_lint(root : string; extra, host : array<string>) : string {
-    var argv <- [get_das_exe(), "-dasroot", get_das_root()]
-    argv |> push_from(host)
-    argv |> push("{get_das_root()}/utils/lint/main.das")
-    argv |> push("--")
-    argv |> push(root)
-    argv |> push("--cache-dir")
-    argv |> push(path_join(root, "cache"))
-    argv |> push_from(extra)
+    var after <- [root, "--cache-dir", path_join(root, "cache")]
+    after |> push_from(extra)
+    var argv <- lint_cli_argv(host, after, empty(host))
     var output : string
     unsafe(popen_argv(argv, 0.0, $(f) {
         if (f != null) {

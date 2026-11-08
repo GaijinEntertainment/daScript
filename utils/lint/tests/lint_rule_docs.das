@@ -7,6 +7,7 @@ require dastest/testing_boost public
 require strings
 require daslib/strings_boost
 require daslib/fio
+require _lint_cli
 
 // LINT025, LINT027, LINT032 and LINT033 are FOLDER rules the runner
 // enforces with its own
@@ -69,16 +70,11 @@ def private plant(dir, name, content : string) {
 
 // argv[0] is the running interpreter - dastest itself is spawned as
 // `daslang(.exe) dastest/dastest.das ...`, so it names the binary to spawn.
-def private das_exe() : string {
-    let args <- get_command_line_arguments()
-    return empty(args) ? "" : args[0]
-}
-
-
 def private run_lint_roots(extra : array<string>; roots : array<string>;
                            var output : string&) : int {
-    var argv <- [das_exe(), "-dasroot", get_das_root(), "{get_das_root()}/utils/lint/main.das", "--", "-q"]
-    argv |> push_from(extra, roots)
+    var after <- ["-q"]
+    after |> push_from(extra, roots)
+    var argv <- lint_cli_argv([], after)
     return unsafe(popen_argv(argv, 0.0, $(f) {
         if (f != null) {
             output = fread(f)
@@ -285,8 +281,7 @@ def test_rule_docs_only_modes(t : T?) {
     t |> run("overlapping scan roots report each stray once") @(t : T?) {
         let root = build_stray_tree()
         var out : string
-        let argv <- [das_exe(), "-dasroot", get_das_root(), "{get_das_root()}/utils/lint/main.das",
-                     "--", "-q", root, path_join(root, "tagged")]
+        let argv <- lint_cli_argv([], ["-q", root, path_join(root, "tagged")])
         unsafe(popen_argv(argv, 0.0, $(f) {
             if (f != null) {
                 out = fread(f)
@@ -317,8 +312,7 @@ def test_rule_docs_only_modes(t : T?) {
     t |> run("--enable whitelist mode silences an unlisted LINT025") @(t : T?) {
         let root = build_stray_tree()
         var out : string
-        let argv <- [das_exe(), "-dasroot", get_das_root(), "{get_das_root()}/utils/lint/main.das",
-                     "--", "-q", "--enable", "LINT001", root]
+        let argv <- lint_cli_argv([], ["-q", "--enable", "LINT001", root])
         unsafe(popen_argv(argv, 0.0, $(f) {
             if (f != null) {
                 out = fread(f)
@@ -329,8 +323,7 @@ def test_rule_docs_only_modes(t : T?) {
     t |> run("--disable LINT025 silences the pass") @(t : T?) {
         let root = build_stray_tree()
         var out : string
-        let argv <- [das_exe(), "-dasroot", get_das_root(), "{get_das_root()}/utils/lint/main.das",
-                     "--", "-q", "--disable", "LINT025", root]
+        let argv <- lint_cli_argv([], ["-q", "--disable", "LINT025", root])
         let rc = unsafe(popen_argv(argv, 0.0, $(f) {
             if (f != null) {
                 out = fread(f)

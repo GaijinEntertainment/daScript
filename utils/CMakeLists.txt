@@ -427,6 +427,9 @@ add_custom_target(check_format_exe
     COMMENT "Verifying .das formatting with the standalone das-fmt"
 )
 add_dependencies(check_format_exe check_standalone_exes)
+# the lint suites spawn bin/das-lint.exe when a fresh one is there (lint/tests/_lint_cli.das);
+# built first, so a lane never meets a half-written exe or a stale one
+add_dependencies(run_utils_tests check_standalone_exes)
 
 add_das_target(run_coverage
     COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --cov-path ${CMAKE_CURRENT_BINARY_DIR}/coverage.lcov --color --failures-only --test ${PROJECT_SOURCE_DIR}/tests/language --timeout 1800

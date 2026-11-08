@@ -5,6 +5,7 @@ require _lint_child public
 
 require strings
 require daslib/fio
+require daslib/lint_config
 require daslib/style_lint
 
 //! A tree of three files: `a.das` requires the module `b.das`, `c.das` carries a LINT003 finding
@@ -66,6 +67,23 @@ def test_lint_result_cache(t : T?) {
         t |> equal(status_of(out, root, "a.das"), "PASS", "nothing survives a version change\n{out}")
         t |> equal(fread(stamp), current, "the new version's hash is recorded")
         t |> equal(entry_count(root), 2, "one entry per clean file")
+    }
+    t |> run("a version change removes the entries and the stamp, nothing else") @(t : T?) {
+        let root = build_cache_tree("foreign")
+        let cache = path_join(root, "cache")
+        mkdir_rec(cache)
+        plant(cache, "keep.txt", "not a lint entry")
+        plant(cache, "0xb8dba33ea09a874b", "an entry")
+        plant(cache, "0xzz", "not an entry either")
+        reset_lint_cache_in(cache, "v1")
+        t |> success(!stat(path_join(cache, "0xb8dba33ea09a874b")).is_valid, "the entry goes")
+        t |> success(stat(path_join(cache, "keep.txt")).is_valid, "a foreign file stays")
+        t |> success(stat(path_join(cache, "0xzz")).is_valid, "so does a near miss")
+        t |> equal(fread(path_join(cache, "lint_hash.txt")), "v1", "and the stamp is written")
+        reset_lint_cache_in(cache, "v1")
+        t |> success(stat(path_join(cache, "keep.txt")).is_valid, "a match touches nothing")
+        t |> success(is_lint_cache_entry("0x0") && !is_lint_cache_entry("0x")
+                     && !is_lint_cache_entry("lint_hash.txt"), "the entry shape")
     }
     t |> run("--no-cache lints every file") @(t : T?) {
         let root = build_cache_tree("off")

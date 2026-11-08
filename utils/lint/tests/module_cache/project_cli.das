@@ -34,8 +34,10 @@ def test_project_compile_errors(t : T?) {
     for (kind in ["error", "library"]) {
         t |> run("mapped compile failure: {kind}") @(t : T?) {
             let root = build_tree("compile-{kind}", "{kind}.das")
+            // the library arm asks the host which native modules it
+            // loads; the standalone exe answers for itself alone
             let result = run_lint(root, ["--project",
-                path_join(root, "map.das_project")])
+                path_join(root, "map.das_project")], kind != "library")
             let extern_disabled = (kind == "library"
                 && get_running_platform_name() == "windows"
                 && typeinfo sizeof(type<void?>) == 4)

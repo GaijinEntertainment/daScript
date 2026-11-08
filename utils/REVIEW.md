@@ -64,6 +64,12 @@ standing decision.
 **A diff that deletes a tool named in `DAS_UTILS_SHIPPED_EXES` leaves a comment line beside
 the list naming the removed exe, in the same change.**
 
+**A `daslang -exe` build of a tool that exists for the tool's tests - `bin/das-lint.exe`, which
+`lint/tests/_lint_cli.das` spawns when a fresh one is there - never joins `DAS_UTILS_SHIPPED_EXES`,
+an install rule, or a release bundle.** A standalone exe carries the modules it was built with,
+and a user's tree loads its own set dynamically; the shipped form of a tool stays a copy of
+`daslang` that compiles the tool at launch.
+
 **An arm the diff adds or changes that covers a change to a tool, whose load-bearing
 assertions a CI row can run against the change, ships with a CI row that executes those
 assertions on every pull request, wherever the diff puts the arm, added in the same change
