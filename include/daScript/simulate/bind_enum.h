@@ -1,5 +1,6 @@
 #pragma once
 
+#include "daScript/misc/basic_type.h"
 #include "for_each.h"
 
 #define DAS_BIND_ENUM_PRINT_HELPER(x, ARG) #x,

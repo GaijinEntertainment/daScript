@@ -1030,6 +1030,7 @@ include/daScript/misc/fpe.h
 include/daScript/misc/platform.h
 include/daScript/misc/vectypes.h
 include/daScript/misc/arraytype.h
+include/daScript/misc/basic_type.h
 include/daScript/misc/rangetype.h
 include/daScript/misc/float2string.h
 include/daScript/misc/string_writer.h
@@ -1806,6 +1807,7 @@ SET(DAS_RELEASE_MISC_INCLUDE
     include/daScript/misc/anyhash.h
     include/daScript/misc/arch.h
     include/daScript/misc/arraytype.h
+    include/daScript/misc/basic_type.h
     include/daScript/misc/callable.h
     include/daScript/misc/crash_handler.h
     include/daScript/misc/das_asan.h

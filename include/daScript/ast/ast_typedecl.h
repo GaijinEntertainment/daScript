@@ -5,7 +5,7 @@
 #include "daScript/simulate/jit_abi.h"
 #include "daScript/misc/free_list.h"
 #include "daScript/misc/gc_node.h"
-#include <limits.h> // ULONG_MAX
+#include "daScript/misc/basic_type.h"
 
 namespace das {
 
@@ -329,114 +329,6 @@ namespace das {
     };
 
     DAS_API void findMatchingOptions ( const TypeDeclPtr & type, vector<MatchingOptionError> & matching );
-
-    template <typename TT> struct ToBasicType {
-        enum { type = Type::none };
-        static_assert( int(type)!=int(Type::none),"This type is not supported or not bound. For the bound type missing or not included are "
-            "MAKE_TYPE_FACTORY or MAKE_EXTERNAL_TYPE_FACTORY as well as addAnnotation in the appropriate module.");
-    };
-
-    template<> struct ToBasicType<Bitfield>     { enum { type = Type::tBitfield }; };
-    template<> struct ToBasicType<Bitfield8>    { enum { type = Type::tBitfield8 }; };
-    template<> struct ToBasicType<Bitfield16>   { enum { type = Type::tBitfield16 }; };
-    template<> struct ToBasicType<Bitfield64>   { enum { type = Type::tBitfield64 }; };
-    template<> struct ToBasicType<EnumStub>     { enum { type = Type::tEnumeration }; };
-    template<> struct ToBasicType<EnumStub8>    { enum { type = Type::tEnumeration8 }; };
-    template<> struct ToBasicType<EnumStub16>   { enum { type = Type::tEnumeration16 }; };
-    template<> struct ToBasicType<EnumStub64>   { enum { type = Type::tEnumeration64 }; };
-    template<> struct ToBasicType<EnumStub8u>   { enum { type = Type::tEnumeration8 }; };
-    template<> struct ToBasicType<EnumStub16u>  { enum { type = Type::tEnumeration16 }; };
-    template<> struct ToBasicType<EnumStub64u>  { enum { type = Type::tEnumeration64 }; };
-    template<> struct ToBasicType<Sequence>     { enum { type = Type::tIterator }; };
-    template<> struct ToBasicType<Sequence *>   { enum { type = Type::tIterator }; };
-    template<> struct ToBasicType<void *>       { enum { type = Type::tPointer }; };
-    template<> struct ToBasicType<char *>       { enum { type = Type::tString }; };
-    template<> struct ToBasicType<bool>         { enum { type = Type::tBool }; };
-    template<> struct ToBasicType<int64_t>      { enum { type = Type::tInt64 }; };
-    template<> struct ToBasicType<uint64_t>     { enum { type = Type::tUInt64 }; };
-    template<> struct ToBasicType<int8_t>       { enum { type = Type::tInt8 }; };
-    template<> struct ToBasicType<uint8_t>      { enum { type = Type::tUInt8 }; };
-    template<> struct ToBasicType<int16_t>      { enum { type = Type::tInt16 }; };
-    template<> struct ToBasicType<uint16_t>     { enum { type = Type::tUInt16 }; };
-    template<> struct ToBasicType<int32_t>      { enum { type = Type::tInt }; };
-    template<> struct ToBasicType<uint32_t>     { enum { type = Type::tUInt }; };
-    template<> struct ToBasicType<float>        { enum { type = Type::tFloat }; };
-    template<> struct ToBasicType<void>         { enum { type = Type::tVoid }; };
-    template<> struct ToBasicType<char>         { enum { type = Type::tInt8 }; };
-#if defined(_WIN32)
-    // Broadened from _MSC_VER to cover mingw (clang-mingw64 + gcc-mingw) too —
-    // Windows LLP64 makes `long`/`unsigned long` 32-bit regardless of compiler.
-    // Without this, dasClangBind fails to build on mingw because libclang's
-    // CXUnsavedFile::Length (unsigned long) hits the primary template's
-    // static_assert.
-    template<> struct ToBasicType<long>             { enum { type = Type::tInt }; };
-    template<> struct ToBasicType<unsigned long>    { enum { type = Type::tUInt }; };
-    template<> struct ToBasicType<long double>      { enum { type = Type::tDouble }; };
-    template<> struct ToBasicType<wchar_t>          { enum { type = Type::tUInt16 }; };
-#endif
-#if defined(__APPLE__)
-    // note - under MSVC size_t is unsigned __int64 (or 32) accordingly
-    template<> struct ToBasicType<size_t>           { enum { type = sizeof(size_t)==8 ? Type::tUInt64 : Type::tUInt }; };
-    template<> struct ToBasicType<long>             { enum { type = Type::tInt }; };
-    template<> struct ToBasicType<long double>      { enum { type = Type::tDouble }; };
-    template<> struct ToBasicType<wchar_t>          { enum { type = Type::tUInt16 }; };
-#endif
-#if !defined(_MSC_VER) && !defined(__APPLE__) && !defined(_EMSCRIPTEN_VER) && defined(ULONG_MAX) && ULONG_MAX == UINT64_MAX
-    template<> struct ToBasicType<long long int>      { enum { type = Type::tInt64 }; };
-    template<> struct ToBasicType<unsigned long long int>     { enum { type = Type::tUInt64 }; };
-#endif
-#ifdef _EMSCRIPTEN_VER
-    template<> struct ToBasicType<unsigned long>    { enum { type = Type::tUInt }; };
-#endif
-    template<> struct ToBasicType<float2>       { enum { type = Type::tFloat2 }; };
-    template<> struct ToBasicType<float3>       { enum { type = Type::tFloat3 }; };
-    template<> struct ToBasicType<float4>       { enum { type = Type::tFloat4 }; };
-    template<> struct ToBasicType<int2>         { enum { type = Type::tInt2 }; };
-    template<> struct ToBasicType<int3>         { enum { type = Type::tInt3 }; };
-    template<> struct ToBasicType<int4>         { enum { type = Type::tInt4 }; };
-    template<> struct ToBasicType<uint2>        { enum { type = Type::tUInt2 }; };
-    template<> struct ToBasicType<uint3>        { enum { type = Type::tUInt3 }; };
-    template<> struct ToBasicType<uint4>        { enum { type = Type::tUInt4 }; };
-    template<> struct ToBasicType<double>       { enum { type = Type::tDouble }; };
-    template<> struct ToBasicType<float16_t>    { enum { type = Type::tFloat16 }; };
-    template<> struct ToBasicType<half2>        { enum { type = Type::tHalf2 }; };
-    template<> struct ToBasicType<half3>        { enum { type = Type::tHalf3 }; };
-    template<> struct ToBasicType<half4>        { enum { type = Type::tHalf4 }; };
-    template<> struct ToBasicType<half8>        { enum { type = Type::tHalf8 }; };
-    template<> struct ToBasicType<short2>       { enum { type = Type::tShort2 }; };
-    template<> struct ToBasicType<short3>       { enum { type = Type::tShort3 }; };
-    template<> struct ToBasicType<short4>       { enum { type = Type::tShort4 }; };
-    template<> struct ToBasicType<short8>       { enum { type = Type::tShort8 }; };
-    template<> struct ToBasicType<ushort2>      { enum { type = Type::tUShort2 }; };
-    template<> struct ToBasicType<ushort3>      { enum { type = Type::tUShort3 }; };
-    template<> struct ToBasicType<ushort4>      { enum { type = Type::tUShort4 }; };
-    template<> struct ToBasicType<ushort8>      { enum { type = Type::tUShort8 }; };
-    template<> struct ToBasicType<byte2>        { enum { type = Type::tByte2 }; };
-    template<> struct ToBasicType<byte3>        { enum { type = Type::tByte3 }; };
-    template<> struct ToBasicType<byte4>        { enum { type = Type::tByte4 }; };
-    template<> struct ToBasicType<byte8>        { enum { type = Type::tByte8 }; };
-    template<> struct ToBasicType<byte16>       { enum { type = Type::tByte16 }; };
-    template<> struct ToBasicType<ubyte2>       { enum { type = Type::tUByte2 }; };
-    template<> struct ToBasicType<ubyte3>       { enum { type = Type::tUByte3 }; };
-    template<> struct ToBasicType<ubyte4>       { enum { type = Type::tUByte4 }; };
-    template<> struct ToBasicType<ubyte8>       { enum { type = Type::tUByte8 }; };
-    template<> struct ToBasicType<ubyte16>      { enum { type = Type::tUByte16 }; };
-    template<> struct ToBasicType<range>        { enum { type = Type::tRange }; };
-    template<> struct ToBasicType<urange>       { enum { type = Type::tURange }; };
-    template<> struct ToBasicType<range64>      { enum { type = Type::tRange64 }; };
-    template<> struct ToBasicType<urange64>     { enum { type = Type::tURange64 }; };
-    template<> struct ToBasicType<Array *>      { enum { type = Type::tArray }; };
-    template<> struct ToBasicType<Table *>      { enum { type = Type::tTable }; };
-    template<> struct ToBasicType<Array>        { enum { type = Type::tArray }; };
-    template<> struct ToBasicType<Table>        { enum { type = Type::tTable }; };
-    template<> struct ToBasicType<Block>        { enum { type = Type::tBlock }; };
-    template<> struct ToBasicType<Func>         { enum { type = Type::tFunction }; };
-    template<> struct ToBasicType<Lambda>       { enum { type = Type::tLambda }; };
-    template<> struct ToBasicType<Tuple>        { enum { type = Type::tTuple }; };
-    template<> struct ToBasicType<Variant>      { enum { type = Type::tVariant }; };
-    template<> struct ToBasicType<Context *>    { enum { type = Type::fakeContext }; };
-    template<> struct ToBasicType<LineInfoArg *>{ enum { type = Type::fakeLineInfo }; };
-    template<> struct ToBasicType<vec4f>        { enum { type = Type::anyArgument }; };
 
     template <typename TT>
     struct typeFactory {
