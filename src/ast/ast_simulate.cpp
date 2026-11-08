@@ -1,16 +1,16 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/ast/ast.h"
-#include "daScript/ast/ast_match.h"
+#include "ast_match.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_simulate.h"
-#include "daScript/simulate/simulate_fusion.h"
+#include "../simulate/simulate_fusion.h"
 
 #include "daScript/simulate/runtime_array.h"
 #include "daScript/simulate/runtime_table_nodes.h"
 #include "daScript/simulate/runtime_range.h"
-#include "daScript/simulate/runtime_string_delete.h"
+#include "../simulate/runtime_string_delete.h"
 #include "daScript/simulate/hash.h"
 #include "daScript/simulate/das_qsort_r.h"
 

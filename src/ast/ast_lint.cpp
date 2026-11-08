@@ -1,7 +1,7 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/ast/ast.h"
-#include "daScript/ast/ast_generate.h"
+#include "ast_generate.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/simulate/aot_builtin_ast.h"

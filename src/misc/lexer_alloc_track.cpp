@@ -2,7 +2,7 @@
 
 #if DAS_TRACK_ALLOC
 
-#include "daScript/misc/lexer_alloc_track.h"
+#include "lexer_alloc_track.h"
 
 #include <unordered_map>
 #include <mutex>

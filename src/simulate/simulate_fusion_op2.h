@@ -32,8 +32,8 @@
 #define FUSION_OP2_SUBEXPR_LEFT(CTYPE,node)     ((static_cast<SimNode_Set<CTYPE> *>(node))->l)
 #define FUSION_OP2_SUBEXPR_RIGHT(CTYPE,node)    ((static_cast<SimNode_Set<CTYPE> *>(node))->r)
 
-#include "daScript/simulate/simulate_fusion_op2_set_impl.h"
-#include "daScript/simulate/simulate_fusion_op2_set_perm.h"
+#include "simulate_fusion_op2_set_impl.h"
+#include "simulate_fusion_op2_set_perm.h"
 
 // OP(COMPUTEL,*)
 #define IMPLEMENT_OP2_NODE_ANYR(INLINE,OPNAME,TYPE,CTYPE,COMPUTEL) \
@@ -73,7 +73,7 @@
 
 #define IMPLEMENT_OP2_SETUP_NODE(result,node)
 
-#include "daScript/simulate/simulate_fusion_op2_impl.h"
-#include "daScript/simulate/simulate_fusion_op2_perm.h"
+#include "simulate_fusion_op2_impl.h"
+#include "simulate_fusion_op2_perm.h"
 
 

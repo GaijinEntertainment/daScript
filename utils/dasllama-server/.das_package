@@ -28,7 +28,7 @@ def release() {
     release_include_from("include/dag_noise/LICENSE", "licenses/DAG_NOISE.LICENSE")
     release_include_from("include/vecmath/LICENSE", "licenses/VEC_MATH.LICENSE")
     release_include_from("3rdparty/fmt/LICENSE", "licenses/FMT.LICENSE")
-    release_include_from("include/fast_float/LICENSE", "licenses/FAST_FLOAT.LICENSE")
+    release_include_from("3rdparty/fast_float/LICENSE", "licenses/FAST_FLOAT.LICENSE")
     release_include_from("src/misc/LUAU.LICENSE", "licenses/LUAU.LICENSE")
     release_include_from("3rdparty/unicode/LICENSE.txt", "licenses/UNICODE.LICENSE")
     release_include_from("daslib/color_mapping.LICENSE", "licenses/COLOR_MAPPING.LICENSE")

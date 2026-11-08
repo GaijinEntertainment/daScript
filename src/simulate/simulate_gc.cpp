@@ -3,7 +3,7 @@
 #include "daScript/ast/ast.h"
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/data_walker.h"
-#include "daScript/simulate/simulate_gc.h"
+#include "simulate_gc.h"
 #include "daScript/simulate/debug_print.h"
 #include "daScript/misc/performance_time.h"
 

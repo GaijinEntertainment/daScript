@@ -5,7 +5,7 @@
 #endif
 
 #include "daScript/ast/ast.h"
-#include "daScript/simulate/simulate_fusion.h"
+#include "simulate_fusion.h"
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/simulate/simulate_visit_op.h"
 

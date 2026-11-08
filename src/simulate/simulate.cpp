@@ -4,9 +4,8 @@
 #include "daScript/simulate/simulate_nodes.h"
 #include "daScript/simulate/runtime_string.h"
 #include "daScript/simulate/debug_print.h"
-#include "daScript/misc/fpe.h"
+#include "../misc/fpe.h"
 #include "daScript/misc/string_writer.h"
-#include "daScript/misc/debug_break.h"
 #include "daScript/ast/ast.h"
 #include "misc/include_fmt.h"
 

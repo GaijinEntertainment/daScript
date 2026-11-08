@@ -4,7 +4,7 @@
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_cfg.h"
-#include "daScript/ast/ast_generate_typed.h"
+#include "ast_generate_typed.h"
 #include "daScript/misc/anyhash.h"
 
 #include "ast_alias.h"

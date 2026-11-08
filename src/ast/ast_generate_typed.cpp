@@ -1,6 +1,6 @@
 #include "daScript/misc/platform.h"
 
-#include "daScript/ast/ast_generate_typed.h"
+#include "ast_generate_typed.h"
 
 namespace das {
 

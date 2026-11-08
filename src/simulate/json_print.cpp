@@ -1,8 +1,7 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/simulate/debug_print.h"
-#include "daScript/misc/fpe.h"
-#include "daScript/misc/debug_break.h"
+#include "../misc/fpe.h"
 
 #include "daScript/ast/ast.h"
 

@@ -1,10 +1,10 @@
 ﻿#include "daScript/misc/platform.h"
 
 #include "daScript/ast/ast.h"
-#include "daScript/ast/ast_generate.h"
-#include "daScript/ast/ast_generate_typed.h"
-#include "daScript/ast/ast_infer_type.h"
-#include "daScript/ast/ast_pass_macros.h"
+#include "ast_generate.h"
+#include "ast_generate_typed.h"
+#include "ast_infer_type.h"
+#include "ast_pass_macros.h"
 #include "daScript/ast/ast_visitor.h"
 
 #define DAS_XSTR(s) #s

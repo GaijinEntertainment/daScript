@@ -4,7 +4,7 @@
 #pragma warning(disable:4505)
 #endif
 
-#include "daScript/simulate/simulate_fusion.h"
+#include "simulate_fusion.h"
 
 #if DAS_FUSION
 
@@ -75,8 +75,8 @@ namespace das {
 #define FUSION_OP2_SUBEXPR_LEFT(CTYPE,node)     ((static_cast<SimNode_Table *>(node))->tabExpr)
 #define FUSION_OP2_SUBEXPR_RIGHT(CTYPE,node)    ((static_cast<SimNode_Table *>(node))->keyExpr)
 
-#include "daScript/simulate/simulate_fusion_op2_set_impl.h"
-#include "daScript/simulate/simulate_fusion_op2_set_perm.h"
+#include "simulate_fusion_op2_set_impl.h"
+#include "simulate_fusion_op2_set_perm.h"
 
     IMPLEMENT_SETOP_NUMERIC(TableIndex);
     IMPLEMENT_ANY_SETOP(__forceinline,TableIndex,Ptr,StringPtr,StringPtr); \

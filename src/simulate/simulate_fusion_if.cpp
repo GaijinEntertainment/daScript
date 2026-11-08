@@ -4,13 +4,13 @@
 #pragma warning(disable:4505)
 #endif
 
-#include "daScript/simulate/simulate_fusion.h"
+#include "simulate_fusion.h"
 
 #if DAS_FUSION
 
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/ast/ast.h"
-#include "daScript/simulate/simulate_fusion_op1.h"
+#include "simulate_fusion_op1.h"
 #include "daScript/simulate/simulate_visit_op.h"
 
 namespace das {
@@ -71,8 +71,8 @@ namespace das {
     rn->if_true = sn->if_true; \
     rn->if_false = sn->if_false;
 
-#include "daScript/simulate/simulate_fusion_op1_impl.h"
-#include "daScript/simulate/simulate_fusion_op1_perm.h"
+#include "simulate_fusion_op1_impl.h"
+#include "simulate_fusion_op1_perm.h"
 
     IMPLEMENT_OP1_WORKHORSE_FUSION_POINT(IfZeroThenElse);
 
@@ -102,8 +102,8 @@ namespace das {
         } \
     };
 
-#include "daScript/simulate/simulate_fusion_op1_impl.h"
-#include "daScript/simulate/simulate_fusion_op1_perm.h"
+#include "simulate_fusion_op1_impl.h"
+#include "simulate_fusion_op1_perm.h"
 
     IMPLEMENT_OP1_WORKHORSE_FUSION_POINT(IfNotZeroThenElse);
 
@@ -123,8 +123,8 @@ namespace das {
         } \
     };
 
-#include "daScript/simulate/simulate_fusion_op1_impl.h"
-#include "daScript/simulate/simulate_fusion_op1_perm.h"
+#include "simulate_fusion_op1_impl.h"
+#include "simulate_fusion_op1_perm.h"
 
     IMPLEMENT_OP1_WORKHORSE_FUSION_POINT(IfZeroThen);
 
@@ -144,12 +144,12 @@ namespace das {
         } \
     };
 
-#include "daScript/simulate/simulate_fusion_op1_impl.h"
-#include "daScript/simulate/simulate_fusion_op1_perm.h"
+#include "simulate_fusion_op1_impl.h"
+#include "simulate_fusion_op1_perm.h"
 
     IMPLEMENT_OP1_WORKHORSE_FUSION_POINT(IfNotZeroThen);
 
-#include "daScript/simulate/simulate_fusion_op1_reg.h"
+#include "simulate_fusion_op1_reg.h"
 
     void createFusionEngine_if()
     {

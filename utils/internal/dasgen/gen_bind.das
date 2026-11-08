@@ -13,7 +13,7 @@ require strings
 
 [export]
 def main {
-    let root = get_das_root() + "/include/daScript/builtin/"
+    let root = get_das_root() + "/src/builtin/"
     fwrite_if_changed(root + "ast_gen.inc", build_string() $(var cpp_file) {
         ast_gc_guard() {
             log_cpp_class_adapter(cpp_file, "AstFunctionAnnotation_Adapter", typeinfo ast_typedecl(type<AstFunctionAnnotation>))

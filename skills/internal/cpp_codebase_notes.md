@@ -8,7 +8,7 @@ and how to search them.
 
 | What | Where |
 |---|---|
-| Type inference | `src/ast/ast_infer_type.cpp` + `include/daScript/ast/ast_infer_type.h` |
+| Type inference | `src/ast/ast_infer_type.cpp` + `src/ast/ast_infer_type.h` |
 | Builtin runtime functions | `src/builtin/module_builtin_runtime.cpp` |
 | Error codes (10005-50640) | `include/daScript/ast/compilation_errors.h` |
 | Lexer / parser | `src/parser/ds2_lexer.lpp` / `src/parser/ds2_parser.ypp` (grammar truth) |

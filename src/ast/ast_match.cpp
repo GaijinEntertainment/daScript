@@ -1,6 +1,6 @@
 #include "daScript/misc/platform.h"
 
-#include "daScript/ast/ast_match.h"
+#include "ast_match.h"
 #include "daScript/ast/ast_expressions.h"
 
 namespace das {

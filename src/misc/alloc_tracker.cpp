@@ -12,7 +12,7 @@
 #include <string>
 #include <chrono>
 
-#include "daScript/misc/lexer_alloc_track.h"
+#include "lexer_alloc_track.h"
 
 #if defined(_MSC_VER)
     #include <windows.h>

@@ -131,4 +131,4 @@ When AOT fails with `error[50101]: AOT link failed`, the issue is a **semantic h
 
 For the full debugging workflow, see `skills/internal/aot_hash_desync_debugging.md` (side-by-side SimNode dumps via `options log_nodes`/`log_nodes_aot_hash`, common shapes, C++ debug switches).
 
-The AOT C++ emitter lives in **`daslib/aot_cpp.das`**, not in C++ (`include/daScript/ast/ast_aot_cpp.h` is the header alone). When codegen output diverges, edit `daslib/aot_cpp.das`.
+The AOT C++ emitter lives in **`daslib/aot_cpp.das`**, not in C++. When codegen output diverges, edit `daslib/aot_cpp.das`.

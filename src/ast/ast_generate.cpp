@@ -1,6 +1,6 @@
 #include "daScript/misc/platform.h"
 
-#include "daScript/ast/ast_generate.h"
+#include "ast_generate.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_visitor.h"
 

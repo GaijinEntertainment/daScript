@@ -989,9 +989,6 @@ include/daScript/ast/ast.h
 include/daScript/ast/ast_expressions.h
 include/daScript/ast/ast_visitor.h
 include/daScript/ast/ast_const_visitor.h
-include/daScript/ast/ast_gc_report.h
-include/daScript/ast/ast_generate.h
-include/daScript/ast/ast_match.h
 include/daScript/ast/ast_interop.h
 include/daScript/ast/ast_handle.h
 include/daScript/ast/ast_policy_types.h
@@ -1000,8 +997,6 @@ list(SORT AST_SRC)
 SOURCE_GROUP_FILES("ast" AST_SRC)
 
 SET(BUILTIN_SRC
-include/daScript/builtin/ast_gen.inc
-include/daScript/builtin/debugapi_gen.inc
 
 src/builtin/module_builtin.h
 src/builtin/module_builtin.cpp
@@ -1038,7 +1033,6 @@ ENDIF()
 SET(MISC_SRC
 include/daScript/misc/enums.h
 include/daScript/misc/hal.h
-include/daScript/misc/fpe.h
 include/daScript/misc/platform.h
 include/daScript/misc/vectypes.h
 include/daScript/misc/arraytype.h
@@ -1054,13 +1048,10 @@ include/daScript/misc/smart_ptr.h
 include/daScript/misc/free_list.h
 include/daScript/misc/sysos.h
 include/daScript/misc/callable.h
-include/daScript/misc/debug_break.h
-include/daScript/misc/instance_debugger.h
 include/daScript/misc/gc_node.h
 include/daScript/misc/job_que.h
 include/daScript/misc/handle_registry.h
 include/daScript/misc/uric.h
-include/daScript/misc/lexer_alloc_track.h
 include/daScript/misc/env_cfg.h
 include/daScript/misc/dep_recorder.h
 src/misc/env_cfg.cpp
@@ -1107,19 +1098,6 @@ src/simulate/simulate_fusion_misc_copy.cpp
 src/simulate/simulate_fusion_call1.cpp
 src/simulate/simulate_fusion_call2.cpp
 src/simulate/simulate_fusion_if.cpp
-include/daScript/simulate/simulate_fusion.h
-include/daScript/simulate/simulate_fusion_op1.h
-include/daScript/simulate/simulate_fusion_op1_impl.h
-include/daScript/simulate/simulate_fusion_op1_perm.h
-include/daScript/simulate/simulate_fusion_op1_set_impl.h
-include/daScript/simulate/simulate_fusion_op1_set_perm.h
-include/daScript/simulate/simulate_fusion_op1_reg.h
-include/daScript/simulate/simulate_fusion_op2.h
-include/daScript/simulate/simulate_fusion_op2_impl.h
-include/daScript/simulate/simulate_fusion_op2_perm.h
-include/daScript/simulate/simulate_fusion_op2_set_impl.h
-include/daScript/simulate/simulate_fusion_op2_set_perm.h
-include/daScript/simulate/simulate_fusion_op2_vec_settings.h
 )
 list(SORT SIMULATE_FUSION_SRC)
 SOURCE_GROUP_FILES("fusion" SIMULATE_FUSION_SRC)
@@ -1167,7 +1145,6 @@ src/simulate/heap.cpp
 include/daScript/simulate/debug_info.h
 include/daScript/simulate/interop.h
 include/daScript/simulate/runtime_string.h
-include/daScript/simulate/runtime_string_delete.h
 include/daScript/simulate/runtime_iterator.h
 include/daScript/simulate/runtime_array.h
 include/daScript/simulate/runtime_table.h
@@ -1248,7 +1225,6 @@ include/das_hash_map/das_hash_map.h
 SOURCE_GROUP_FILES("das_hash_map" DAS_HASH_MAP_SRC)
 
 SET(FAST_FLOAT_SRC
-include/fast_float/fast_float.h
 )
 
 SET(MAIN_SRC
@@ -1288,6 +1264,7 @@ MACRO(SETUP_LIBDASCRIPT library shared_lib full_setup sources exports_def)
     target_include_directories(${library} PRIVATE
             ${DAS_SMMALLOC_DIR}
             ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/uriparser/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/fast_float/include
             ${CMAKE_CURRENT_SOURCE_DIR}/include
     )
     IF(${full_setup})
@@ -1743,14 +1720,10 @@ endif()
 
 # This list should be significantly reduced, most of the files, except aot related should be private.
 SET(DAS_RELEASE_AST_INCLUDE
-    include/daScript/ast/aot_templates.h
     include/daScript/ast/ast_expressions.h
-    include/daScript/ast/ast_generate.h
     include/daScript/ast/ast.h
     include/daScript/ast/ast_handle.h
-    include/daScript/ast/ast_infer_type.h
     include/daScript/ast/ast_interop.h
-    include/daScript/ast/ast_match.h
     include/daScript/ast/ast_policy_types.h
     include/daScript/ast/ast_serialize_macro.h
     include/daScript/ast/ast_serializer.h
@@ -1758,7 +1731,6 @@ SET(DAS_RELEASE_AST_INCLUDE
     include/daScript/ast/ast_typedecl.h
     include/daScript/ast/ast_typefactory.h
     include/daScript/ast/ast_visitor.h
-    include/daScript/ast/ast_aot_cpp.h
     include/daScript/ast/ast_const_visitor.h
     include/daScript/ast/compilation_errors.h
     include/daScript/ast/dyn_modules.h
@@ -1784,18 +1756,14 @@ SET(DAS_RELEASE_MISC_INCLUDE
     include/daScript/misc/crash_handler.h
     include/daScript/misc/das_asan.h
     include/daScript/misc/das_common.h
-    include/daScript/misc/debug_break.h
     include/daScript/misc/dep_recorder.h
     include/daScript/misc/enums.h
     include/daScript/misc/env_cfg.h
-    include/daScript/misc/fpe.h
     include/daScript/misc/free_list.h
     include/daScript/misc/gc_node.h
     include/daScript/misc/hal.h
     include/daScript/misc/hash.h
-    include/daScript/misc/instance_debugger.h
     include/daScript/misc/job_que.h
-    include/daScript/misc/lexer_alloc_track.h
     include/daScript/misc/handle_registry.h
     include/daScript/misc/macro.h
     include/daScript/misc/memory_model.h
@@ -1852,24 +1820,10 @@ SET(DAS_SIMULATE_INCLUDES
     include/daScript/simulate/runtime_matrices.h
     include/daScript/simulate/runtime_profile.h
     include/daScript/simulate/runtime_range.h
-    include/daScript/simulate/runtime_string_delete.h
     include/daScript/simulate/runtime_string.h
     include/daScript/simulate/runtime_table.h
     include/daScript/simulate/runtime_table_nodes.h
     include/daScript/simulate/sim_policy.h
-    include/daScript/simulate/simulate_fusion.h
-    include/daScript/simulate/simulate_fusion_op1.h
-    include/daScript/simulate/simulate_fusion_op1_impl.h
-    include/daScript/simulate/simulate_fusion_op1_perm.h
-    include/daScript/simulate/simulate_fusion_op1_reg.h
-    include/daScript/simulate/simulate_fusion_op1_set_impl.h
-    include/daScript/simulate/simulate_fusion_op1_set_perm.h
-    include/daScript/simulate/simulate_fusion_op2.h
-    include/daScript/simulate/simulate_fusion_op2_impl.h
-    include/daScript/simulate/simulate_fusion_op2_perm.h
-    include/daScript/simulate/simulate_fusion_op2_set_impl.h
-    include/daScript/simulate/simulate_fusion_op2_set_perm.h
-    include/daScript/simulate/simulate_fusion_op2_vec_settings.h
     include/daScript/simulate/simulate.h
     include/daScript/simulate/name_lookup.h
     include/daScript/simulate/simulate_nodes.h
@@ -1923,13 +1877,6 @@ install(FILES include/dag_noise/dag_uint_noise.h
 # Install internal builtin headers (needed by integration tutorials like class adapters).
 file(GLOB DAS_BUILTIN_HEADERS ${PROJECT_SOURCE_DIR}/src/builtin/*.h)
 install(FILES ${DAS_BUILTIN_HEADERS}
-    DESTINATION include/daScript/builtin
-)
-# The generated binding tables: the shipped aot_builtin_ast.h includes ast_gen.inc, so without it
-# an SDK consumer's AOT translation unit that touches the ast module fails to compile.
-install(FILES
-    ${PROJECT_SOURCE_DIR}/include/daScript/builtin/ast_gen.inc
-    ${PROJECT_SOURCE_DIR}/include/daScript/builtin/debugapi_gen.inc
     DESTINATION include/daScript/builtin
 )
 
@@ -2052,7 +1999,7 @@ install(FILES ${PROJECT_SOURCE_DIR}/3rdparty/uriparser/COPYING DESTINATION ${DAS
 install(FILES ${PROJECT_SOURCE_DIR}/include/dag_noise/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME DAG_NOISE.LICENSE)
 install(FILES ${PROJECT_SOURCE_DIR}/include/vecmath/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME VEC_MATH.LICENSE)
 install(FILES ${PROJECT_SOURCE_DIR}/3rdparty/fmt/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME FMT.LICENSE)
-install(FILES ${PROJECT_SOURCE_DIR}/include/fast_float/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME FAST_FLOAT.LICENSE)
+install(FILES ${PROJECT_SOURCE_DIR}/3rdparty/fast_float/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME FAST_FLOAT.LICENSE)
 install(FILES ${PROJECT_SOURCE_DIR}/src/misc/LUAU.LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME LUAU.LICENSE)
 install(FILES ${PROJECT_SOURCE_DIR}/daslib/color_mapping.LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME COLOR_MAPPING.LICENSE)
 install(FILES ${PROJECT_SOURCE_DIR}/3rdparty/unicode/LICENSE.txt DESTINATION ${DAS_INSTALL_DOCDIR} RENAME UNICODE.LICENSE COMPONENT UnicodeData)

@@ -4,7 +4,7 @@
 #include "daScript/simulate/runtime_range.h"
 #include "daScript/simulate/runtime_table_nodes.h"
 #include "daScript/simulate/runtime_array.h"
-#include "daScript/simulate/runtime_string_delete.h"
+#include "runtime_string_delete.h"
 #include "daScript/simulate/simulate_nodes.h"
 #include "daScript/simulate/simulate_visit_op.h"
 #include "misc/include_fmt.h"

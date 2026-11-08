@@ -4,13 +4,13 @@
 #pragma warning(disable:4505)
 #endif
 
-#include "daScript/simulate/simulate_fusion.h"
+#include "simulate_fusion.h"
 
 #if DAS_FUSION
 
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/ast/ast.h"
-#include "daScript/simulate/simulate_fusion_op1.h"
+#include "simulate_fusion_op1.h"
 #include "vecmath/dag_vecMathDecl.h"
 
 namespace das {
@@ -35,8 +35,8 @@ namespace das {
 #undef FUSION_OP1_SUBEXPR
 #define FUSION_OP1_SUBEXPR(CTYPE,node)      ((static_cast<SimNode_Return*>(node))->subexpr)
 
-#include "daScript/simulate/simulate_fusion_op1_impl.h"
-#include "daScript/simulate/simulate_fusion_op1_perm.h"
+#include "simulate_fusion_op1_impl.h"
+#include "simulate_fusion_op1_perm.h"
 
 IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,Return,,vec4f,vec4f)
 
@@ -58,8 +58,8 @@ IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,Return,,vec4f,vec4f)
         } \
     };
 
-#include "daScript/simulate/simulate_fusion_op1_impl.h"
-#include "daScript/simulate/simulate_fusion_op1_perm.h"
+#include "simulate_fusion_op1_impl.h"
+#include "simulate_fusion_op1_perm.h"
 
     IMPLEMENT_OP1_WORKHORSE_FUSION_POINT(Return);
 
@@ -80,8 +80,8 @@ IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,Return,,vec4f,vec4f)
         } \
     };
 
-#include "daScript/simulate/simulate_fusion_op1_impl.h"
-#include "daScript/simulate/simulate_fusion_op1_perm.h"
+#include "simulate_fusion_op1_impl.h"
+#include "simulate_fusion_op1_perm.h"
 
     IMPLEMENT_OP1_NUMERIC_VEC(Return);
 
@@ -89,7 +89,7 @@ IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,Return,,vec4f,vec4f)
 #define REGISTER_OP1_FUSION_POINT(OPNAME,TYPE,CTYPE) \
     (*getFusionEngine())[#OPNAME].emplace_back(new Op1FusionPoint_##OPNAME##_##CTYPE());
 
-#include "daScript/simulate/simulate_fusion_op1_reg.h"
+#include "simulate_fusion_op1_reg.h"
 
     void createFusionEngine_return()
     {

@@ -2,7 +2,7 @@
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_expressions.h"
-#include "daScript/ast/ast_gc_report.h"
+#include "ast_gc_report.h"
 #include "daScript/misc/env_cfg.h"
 
 #include <algorithm>

@@ -4,14 +4,14 @@
 #pragma warning(disable:4505)
 #endif
 
-#include "daScript/simulate/simulate_fusion.h"
+#include "simulate_fusion.h"
 
 #if DAS_FUSION>=2
 
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/ast/ast.h"
-#include "daScript/simulate/simulate_fusion_op2.h"
-#include "daScript/simulate/simulate_fusion_op2_vec_settings.h"
+#include "simulate_fusion_op2.h"
+#include "simulate_fusion_op2_vec_settings.h"
 
 namespace das {
 

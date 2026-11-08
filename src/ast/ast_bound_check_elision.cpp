@@ -3,7 +3,7 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_cfg.h"
-#include "daScript/ast/ast_bound_check_elision.h"
+#include "ast_bound_check_elision.h"
 
 #include <set>
 #include <algorithm>
