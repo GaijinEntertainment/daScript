@@ -14,7 +14,7 @@
 #include "daScript/ast/ast_policy_types.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_visitor.h"
-#include "../ast/ast_generate.h"
+#include "daScript/ast/ast_generate.h"
 #include "daScript/ast/ast_simulate.h"
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/misc/das_common.h"
