@@ -113,7 +113,7 @@ The call is the user's: name the divergence, offer (1) fix at source vs (2) keep
 
 ## 3. Kill by path, never by image name
 
-`taskkill /IM daslang.exe` kills every daslang on the box, including the dasHerd watcher that owns other sessions' PTYs - they die with a silent exit 1 and no log.
+`taskkill /IM daslang.exe` kills every daslang on the box, including the servers other sessions depend on - they die with a silent exit 1 and no log.
 
 ```powershell
 # Only processes running from THIS tree

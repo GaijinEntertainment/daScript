@@ -24,8 +24,6 @@ var private INTERNAL_REF_EXEMPT <- {
     "utils/REVIEW.md",              // states the rule
     "utils/REVIEW.das",             // carries the needle
     "utils/CMakeLists.txt",         // builds and CI-tests internal tools, never ships
-    "utils/mcp/setup.das",          // wires the internal das-herd shim behind an exists-check; same exclusion as ci/smoke_test_bundle.sh
-    "utils/mcp/test_setup.das",     // plants that shim in a scratch root to drive the exists-check; not installed
     "utils/daslang/tests/test_tool_dispatch.das"    // runs an internal tool to prove `daslang -tool`'s source-tree fallback; not installed
 }
 

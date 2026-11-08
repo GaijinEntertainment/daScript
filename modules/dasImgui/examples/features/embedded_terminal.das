@@ -59,7 +59,7 @@ def update() { // nolint:STYLE038
     let viewport = GetMainViewport()
     SetNextWindowPos(viewport.WorkPos, ImGuiCond.Always)
     SetNextWindowSize(viewport.WorkSize, ImGuiCond.Always)
-    window(TERMINAL_WIN, (text = "dasHerd terminal", closable = false,
+    window(TERMINAL_WIN, (text = "embedded terminal", closable = false,
             flags = ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove)) {
         let io & = unsafe(GetIO())
         if (IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows) && io.KeyCtrl) {

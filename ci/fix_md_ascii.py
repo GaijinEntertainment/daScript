@@ -33,7 +33,6 @@ SHIPPED_BASENAMES = {"README.md", "CHANGELIST.md"}
 SHIPPED_FILES = {"skills/daslang/references/everything.md"}
 
 EXEMPT_FILES = {
-    "utils/internal/das-herd/LANGUAGE_SUPPORT_PLAN.md",  # non-English samples are the subject
     "examples/text/README.md",                           # text-rendering demo strings
     "modules/dasLLAMA/README.md",                        # model prompt samples
     "site-dasllama/_stories/2026-09-03-text-to-speech.md",  # the phonemizer's IPA output is shown

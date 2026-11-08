@@ -84,8 +84,6 @@ def test_emit_mcp_config(t : T?) {
         t |> success(json_array_has(entry?["args"], "-tool"), "the watchdog's -tool front is asked for")
         t |> success(json_array_has(entry?["args"], "mcp"), "over the MCP server")
         t |> success(json_array_has(entry?["args"], root), "--cwd names the root")
-        let herd = doc?["mcpServers"]?["dasherd"]
-        t |> success(herd == null || herd.value is _null, "no dasherd entry without the das-herd shim")
         unsafe {
             delete doc
         }
@@ -106,23 +104,6 @@ def test_emit_mcp_config(t : T?) {
             delete doc
         }
         no_leftovers(t, root)
-    }
-    t |> run("the das-herd shim gets its own entry") @(t : T?) {
-        let root = make_root(t)
-        return if (empty(root))
-        let shim = path_join(root, "utils/internal/das-herd/mcp_main.das")
-        mkdir(path_join(root, "utils"))
-        mkdir(path_join(root, "utils/internal"))
-        mkdir(path_join(root, "utils/internal/das-herd"))
-        write_text(shim, "options gen2\n")
-        t |> success(emit_mcp_config(root, "bin/daslang"), "emit_mcp_config reports success")
-        var doc = read_doc(path_join(root, ".mcp.json"))
-        let entry = doc?["mcpServers"]?["dasherd"]
-        t |> success(entry != null, "the dasherd entry is written")
-        t |> success(json_array_has(entry?["args"], "utils/internal/das-herd/mcp_main.das"), "it runs the shim")
-        unsafe {
-            delete doc
-        }
     }
     t |> run("a file that is not a JSON object is refused and left alone") @(t : T?) {
         let root = make_root(t)
