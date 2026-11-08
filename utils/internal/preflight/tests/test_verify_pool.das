@@ -45,6 +45,29 @@ def test_verify_argv(t : T?) {
         "a run cache is named")
 }
 
+[test(description = "the verifiers' skip set is one predicate: compile-fail fixtures by name always; the ast-fuzz self-test breakers and the whole-stack compiles (dasllama-server, dasllama-convert, das2rst) in changed mode only, so --file verifies what it names")]
+def test_ast_verify_skips(t : T?) {
+    t |> success(ast_verify_skips("tests/x/failed_thing.das", true), "a compile-fail fixture")
+    t |> success(ast_verify_skips("tests/x/cant_thing.das", false), "cant_ in tree mode too")
+    t |> success(ast_verify_skips("utils/internal/ast-fuzz/selftest/alias_breaker.das", true),
+                 "a self-test breaker in changed mode")
+    t |> success(!ast_verify_skips("utils/internal/ast-fuzz/selftest/alias_breaker.das", false),
+                 "the tree mode verifies the breakers")
+    t |> success(ast_verify_skips("utils/dasllama-server/test_openai_server.das", true),
+                 "dasllama-server in changed mode")
+    t |> success(ast_verify_skips("utils\\dasllama-server\\cli.das", true),
+                 "Windows separators")
+    t |> success(!ast_verify_skips("utils/dasllama-server/cli.das", false),
+                 "a file named to --file is verified")
+    t |> success(ast_verify_skips("utils/dasllama-convert/test_convert.das", true),
+                 "dasllama-convert pulls the llama stack too")
+    t |> success(ast_verify_skips("doc/reflections/das2rst.das", true),
+                 "das2rst requires every module")
+    t |> success(!ast_verify_skips("doc/reflections/imgui2rst.das", true),
+                 "the other reflections are verified")
+    t |> success(!ast_verify_skips("utils/lint/main.das", true), "an ordinary file is verified")
+}
+
 //! the broken fixture reported on twice - a module cache the first
 //! child wrote must not pass the second
 [test(description = "the verify pool reports results in input order and the broken fixture fails on its second child too, past the cache the first one wrote", timeout = 1200)]

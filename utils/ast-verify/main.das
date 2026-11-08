@@ -54,11 +54,8 @@ def private report(findings : string; limit : int) {
     }
 }
 
-def private is_unverifiable(file : string; changed_mode : bool) : bool {
-    let name = base_name(file)
-    return (name |> starts_with("cant_") || name |> starts_with("failed_") || name |> starts_with("invalid_")
-            || (changed_mode && find(file, "ast-fuzz/selftest/") >= 0))
-}
+def private is_unverifiable(file : string; changed_mode : bool) : bool =>
+    ast_verify_skips(file, changed_mode)
 
 //! Gen2 only - gen1 does not stamp ranges; one ModuleGroup for the
 //! batch compiles each require once. Answers the files reported on.
@@ -153,7 +150,7 @@ def private verify_changed(daslang : string; cfg : Config; changed : array<strin
     for (f, r in children, results) {
         failed += report_result(f, r) ? 0 : 1
     }
-    let total_s = get_time_usec(t0) / 1000000
+    let total_s = get_time_nsec(t0) / 1000000000l
     to_log(LOG_INFO, "ast-verify: {length(changed)} changed file(s) in {total_s}s\n")
     if (failed != 0) {
         to_log(LOG_ERROR, "ast-verify: {failed} file(s) reported\n")
