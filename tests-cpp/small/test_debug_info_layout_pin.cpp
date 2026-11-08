@@ -173,10 +173,11 @@ struct ModuleFileAccessPins : ModuleFileAccess {
     using ModuleFileAccess::annotationAllowed;
     using ModuleFileAccess::podInScopeAllowed;
     using ModuleFileAccess::dynModulesFolderGet;
+    using ModuleFileAccess::projectAccess;
 };
 
 static_assert(sizeof(FileAccess) == 248, DAS_PIN_MSG);
-static_assert(sizeof(ModuleFileAccess) == 352, DAS_PIN_MSG);
+static_assert(sizeof(ModuleFileAccess) == 360, DAS_PIN_MSG);
 static_assert(offsetof(FileInfo, name) == 8, DAS_PIN_MSG);
 static_assert(offsetof(FileInfo, tabSize) == 40, DAS_PIN_MSG);
 static_assert(offsetof(FileInfoPins, lineOffsets) == 48, DAS_PIN_MSG);
@@ -203,6 +204,7 @@ static_assert(offsetof(ModuleFileAccessPins, optionBlocked) == 320, DAS_PIN_MSG)
 static_assert(offsetof(ModuleFileAccessPins, annotationAllowed) == 328, DAS_PIN_MSG);
 static_assert(offsetof(ModuleFileAccessPins, podInScopeAllowed) == 336, DAS_PIN_MSG);
 static_assert(offsetof(ModuleFileAccessPins, dynModulesFolderGet) == 344, DAS_PIN_MSG);
+static_assert(offsetof(ModuleFileAccessPins, projectAccess) == 352, DAS_PIN_MSG);
 #endif
 
 TEST_CASE("debug_info.h layout pins hold") {

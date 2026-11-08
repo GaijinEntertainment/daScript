@@ -373,6 +373,7 @@ namespace das
         SimFunction *       annotationAllowed = nullptr;
         SimFunction *       podInScopeAllowed = nullptr;
         SimFunction *       dynModulesFolderGet = nullptr;
+        FileAccessPtr       projectAccess;
     };
     template <> struct isCloneable<ModuleFileAccess> : false_type {};
 

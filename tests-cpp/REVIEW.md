@@ -10,9 +10,8 @@ checklist as well as this one.**
 subfolder's checklist as well as this one.**
 
 **A diff that adds or changes a C++ test, or adds or changes a gate that decides whether one
-builds, registers, or runs - a doctest skip, a `#if` a configuration leaves undefined, a CMake
-gate on a build option - names in the PR one configuration that does run that test: its
-configure flags and its ctest command.**
+builds, registers, or runs, names in the PR one configuration that executes the added or
+changed lines: its configure flags and its ctest command.**
 
 **A diff to `REVIEW.das` that weakens `check_lane_wiring` or `builds_nothing_for_its_tests` is
 a defect.** What each gate reports is stated at its definition in `REVIEW.das`.
