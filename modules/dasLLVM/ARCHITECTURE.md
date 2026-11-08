@@ -213,3 +213,24 @@ compile error - therefore prints on the run that wrote the record and on no late
 assertion that such a line is absent passes on a hit whatever the macro would do. A line printed
 after the front end - by the backend or by the runtime guard, such as the `LLVM JIT:` announce,
 the covered-box announce or `re-tuning (--tune)` - prints on every run, hit or miss.
+
+## 13. A pointer is an address: no type-based alias information {#pointer-alias-model}
+
+A load or a store carries no `!tbaa`, and a pointer parameter carries no `noalias` the source did
+not ask for: a `float?` store may change what an `int?` points at, as clang treats C under
+`-fno-strict-aliasing`. That is the language's pointer model - any type reads through any pointer
+(`reinterpret` between pointer types, a `uint8?` view over a quantized block, a float's bits
+through an `int?`), and the host build compiles with `DAS_STRICT_ALIASING` off - so a type-based
+root set would make every such read undefined behavior. The cost lands on a loop that reads a
+bound or an operand through a pointer of one type beside a store through a pointer of another:
+the read is repeated after every store, the trip count stays unknown and the loop does not
+vectorize. What `apply_impl_param_attrs` (`daslib/llvm_jit.das`) stamps is what the source
+states: `readonly` on a const indirect parameter the body never writes through and whose type
+can be copied - a container, or a type holding one, is lock-written by `for` even when const, and a
+`readonly` the lock contradicts turns into stale reads the moment a `noalias` joins it; `noalias` and
+`nocapture` on the context, the capture frame and the result slot, which the runtime owns; and
+the user's promise - `[hint(noalias = p)]` for one parameter, `[hint(unsafe_alias)]` for all of
+them - as LLVM's `noalias`, under which the reads above leave the loop. A `noalias`, `nocapture`
+or `align16` hint naming no parameter is a compile error (`process_function_hints`), since a hint
+that names nothing would otherwise do nothing. Passing the bound and the operand by value is the
+other way out: a value is never reloaded.
