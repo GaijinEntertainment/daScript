@@ -7,7 +7,7 @@ options indenting = 4
 // from array_shaders (arr_vert). Each quadrant samples a distinct checkerboard texel, so the readback
 // proves the split image/sampler descriptors bind and combine correctly on a real driver.
 
-module separate_shaders shared public
+module _separate_shaders shared public
 
 require spirv/spirv_shader
 require spirv/spirv_builtins public

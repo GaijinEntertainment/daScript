@@ -106,7 +106,7 @@ produce.
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/11_hdr/test_hdr.das
    :language: das
-   :start-at: [test]
+   :start-at: [test(
 
 See it live
 -----------

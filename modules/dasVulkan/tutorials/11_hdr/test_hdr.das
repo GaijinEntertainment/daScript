@@ -32,7 +32,7 @@ def bg(p : int3) : bool {
 
 def luma(p : int3) : int => (p.x * 77 + p.y * 150 + p.z * 29) / 256   // BT.601-ish, fast integer
 
-[test]
+[test(description = "the HDR scene keeps the emissive cubes near-saturated after ACES tonemapping and a bright halo in the central band", timeout = 1200, standalone = "the tutorial's own pixel oracle")]
 def test_hdr_oracle(t : T?) {
     var pixels <- render_hdr_scene(TEST_TIME, TEST_CAM)
 

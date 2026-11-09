@@ -83,7 +83,7 @@ it skips cleanly.
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/13_mesh/test_mesh.das
    :language: das
-   :start-at: [test]
+   :start-at: [test(
 
 See it live
 -----------

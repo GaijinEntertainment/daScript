@@ -9,7 +9,7 @@ options indenting = 4
 require dastest/testing_boost public
 require ../../examples/shader_objects.das
 
-[test]
+[test(description = "two linked shader objects bound per stage render the red, green and blue triangle corners", timeout = 1200, standalone = "the example's triangle shaders re-declare the tri_vert_spv and tri_frag_spv the integration fixtures already define")]
 def test_shader_objects_triangle(t : T?) {
     if (!shader_objects_available()) {
         feint("VK_EXT_shader_object not advertised by this device; skipping\n")

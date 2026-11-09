@@ -11,7 +11,7 @@ options indenting = 4
 // uploads the MVP column-major; a correct render proves daslang's float4x4 layout matches the
 // emitter's ColMajor + MatrixStride 16 decoration.
 
-module phase4_shaders shared public
+module _phase4_shaders shared public
 
 require spirv/spirv_shader
 require spirv/spirv_builtins public

@@ -20,7 +20,7 @@ def bg(p : int3) : bool {
     return p.x < 55 && p.y < 4 && p.z < 72
 }
 
-[test]
+[test(description = "the instanced swarm fills the central box over the clear-color corners with both red-leading and blue-leading hues", timeout = 1200, standalone = "the tutorial's own pixel oracle")]
 def test_instancing_oracle(t : T?) {
     var pixels <- render_instance_swarm(TEST_TIME, TEST_CAM)
 

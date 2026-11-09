@@ -11,7 +11,7 @@ require dastest/testing_boost public
 require triangle_tut
 require math
 
-[test]
+[test(description = "the spin triangle shows the red, blue and green corners at angle 0 and the push-constant angle moves the red vertex at angle pi", timeout = 1200, standalone = "the tutorial's own pixel oracle")]
 def test_triangle_spin(t : T?) {
     // angle 0: identical geometry to the classic hello-triangle -- the proven sample points hold.
     var p0 <- render_spin_triangle(0.0f)

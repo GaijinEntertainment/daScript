@@ -9,7 +9,7 @@ options indenting = 4
 // gl_GlobalInvocationID.x, G from .y, B=0, A=1.0 (stored -> 255 through the unorm8 conversion). With the
 // image <= 256 wide, x/255 round-trips to x through the unorm8 store.
 
-module storage_image_shaders shared public
+module _storage_image_shaders shared public
 
 require spirv/spirv_shader
 require spirv/spirv_builtins public

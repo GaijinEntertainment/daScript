@@ -106,7 +106,7 @@ the floor is the load-bearing visual element.
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/08_shadow/test_shadow.das
    :language: das
-   :start-at: [test]
+   :start-at: [test(
 
 See it live
 -----------

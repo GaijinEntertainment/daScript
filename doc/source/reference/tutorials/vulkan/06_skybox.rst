@@ -94,7 +94,7 @@ band is brighter on average than the bottom band (ground darker than sky).
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/06_skybox/test_skybox.das
    :language: das
-   :start-at: [test]
+   :start-at: [test(
 
 See it live
 -----------

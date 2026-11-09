@@ -8,7 +8,7 @@ options indenting = 4
 // match exactly -- the real-driver proof that texelFetch reads the right texel (spirv-val cannot check
 // the coordinate semantics). texelFetch is derivative-free, so this runs in a compute shader.
 
-module texelfetch_shaders shared public
+module _texelfetch_shaders shared public
 
 require spirv/spirv_shader
 require spirv/spirv_builtins public

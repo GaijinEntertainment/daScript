@@ -8,7 +8,7 @@ options indenting = 4
 // `tri_vert_spv` / `tri_frag_spv : array<uint>` globals, fed straight to
 // create_shader_module(device, code : array<uint>). No GLSL, no glslang, no committed .spv.
 
-module triangle_shaders shared public
+module _triangle_shaders shared public
 
 require spirv/spirv_shader
 require spirv/spirv_builtins public

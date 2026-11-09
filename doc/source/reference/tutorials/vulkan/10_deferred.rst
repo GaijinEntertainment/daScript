@@ -121,7 +121,7 @@ cube area, orange-brick pixels on the floor in BOTH lit and albedo modes
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/10_deferred/test_deferred.das
    :language: das
-   :start-at: [test]
+   :start-at: [test(
 
 See it live
 -----------

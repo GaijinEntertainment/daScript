@@ -12,7 +12,7 @@ require sdf_tut
 
 let TEST_TIME = 1.2f                    // chosen so the scene is mid-orbit and the blob is visible
 
-[test]
+[test(description = "the raymarched scene shows sky in the top corners, ground along the bottom row and the warm blob in the central band", timeout = 1200, standalone = "the tutorial's own pixel oracle")]
 def test_sdf(t : T?) {
     var p <- render_sdf(TEST_TIME)
 

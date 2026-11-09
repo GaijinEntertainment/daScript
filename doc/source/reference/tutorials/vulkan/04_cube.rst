@@ -90,7 +90,7 @@ cyan-dominant pixel from the perspective grid).
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/04_cube/test_cube.das
    :language: das
-   :start-at: [test]
+   :start-at: [test(
 
 See it live
 -----------

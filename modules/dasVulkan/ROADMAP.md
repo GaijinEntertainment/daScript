@@ -123,7 +123,7 @@ don't show up strongly in the rendered output. Known soft spots:
 
 The push-constant trailing-scalar drop is RESOLVED: pushes are staged
 through the shared std140 walk (`std140_block_writes`; regression gate
-`tests/integration/test_push_std140.das`), so tutorial 10's `gbuffer_fs`
+`tests/integration/test_ubo_layouts.das`), so tutorial 10's `gbuffer_fs`
 positional material hack is now redundant and can be swept.
 
 Per-shader `bind_uniform` binds only the FIRST `@uniform` block -- by

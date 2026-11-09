@@ -1,5 +1,5 @@
 options gen2
-module texture_grad_shaders shared public
+module _vk_texture_grad_shaders shared public
 require spirv/spirv_shader
 require spirv/spirv_builtins public
 require math

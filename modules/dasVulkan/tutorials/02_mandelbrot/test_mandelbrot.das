@@ -12,7 +12,7 @@ options indenting = 4
 require dastest/testing_boost public
 require mandelbrot_tut
 
-[test]
+[test(description = "points inside the Mandelbrot set render black, points outside render colored, and mirrored rows match", timeout = 1200, standalone = "the tutorial's own pixel oracle")]
 def test_mandelbrot(t : T?) {
     var p <- render_mandelbrot()
 

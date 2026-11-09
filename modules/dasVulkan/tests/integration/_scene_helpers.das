@@ -6,16 +6,16 @@ options indenting = 4
 // run the compute square, returning the result data for assertions. No [test]
 // functions here -- required by the test files.
 
-module scene_helpers
+module _scene_helpers
 
 require math
 require vulkan public
 require vulkan/vulkan_boost public
-require compute_shaders
-require triangle_shaders
-require phase4_shaders
-require array_shaders
-require separate_shaders
+require _compute_shaders
+require _triangle_shaders
+require _phase4_shaders
+require _array_shaders
+require _separate_shaders
 require vulkan/vulkan_reflect
 require dastest/testing_boost public
 

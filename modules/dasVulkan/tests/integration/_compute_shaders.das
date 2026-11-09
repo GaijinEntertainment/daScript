@@ -7,7 +7,7 @@ options indenting = 4
 // examples/shaders/square.comp(.spv): the emitted blob is the public `square_spv : array<uint>`
 // global, fed straight to create_shader_module(device, code : array<uint>).
 
-module compute_shaders shared public
+module _compute_shaders shared public
 
 require spirv/spirv_shader
 require spirv/spirv_builtins public

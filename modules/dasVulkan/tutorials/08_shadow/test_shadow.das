@@ -14,7 +14,7 @@ def public px(pixels : array<uint8>; x, y : int) : int3 {
 
 def luminance(rgb : int3) : int => (rgb.x + rgb.y + rgb.z) / 3
 
-[test]
+[test(description = "the shadow-mapped scene shows a dark sky, a lit floor and a shadowed floor patch with real contrast", timeout = 1200, standalone = "the tutorial's own pixel oracle")]
 def test_shadow_oracle(t : T?) {
     t |> run("shadow_tut: shadow visible on floor + cube lit, sky clear") <| @(t : T?) {
         var pixels <- render_shadow_scene(0.0f, 0.5f)

@@ -7,7 +7,7 @@ options indenting = 4
 // filtering, every quadrant renders exactly its layer's color -- the real-driver proof that the array
 // Arrayed image + the layer coordinate (.z) select the right layer.
 
-module array_shaders shared public
+module _array_shaders shared public
 
 require spirv/spirv_shader
 require spirv/spirv_builtins public

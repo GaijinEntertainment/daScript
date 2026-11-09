@@ -6,7 +6,7 @@ options indenting = 4
 // single-triangle fullscreen trick covers every pixel, and a constant white fragment
 // makes color-blend state (CONSTANT_COLOR blend factors) exactly predictable per pixel.
 
-module flat_shaders shared public
+module _flat_shaders shared public
 
 require spirv/spirv_shader
 require spirv/spirv_builtins public

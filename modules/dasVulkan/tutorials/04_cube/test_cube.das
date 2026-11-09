@@ -25,7 +25,7 @@ def bg(p : int3) : bool {
     return p.x < 50 && p.y < 4 && p.z < 80
 }
 
-[test]
+[test(description = "the cube fills the central box over the clear-color corners and samples both the magenta sky band and the cyan grid", timeout = 1200, standalone = "the tutorial's own pixel oracle")]
 def test_cube_oracle(t : T?) {
     var pixels <- render_synthwave_cube(TEST_TIME, TEST_CAM)
 

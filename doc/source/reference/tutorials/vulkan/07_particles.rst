@@ -103,7 +103,7 @@ palette spans both the cool-teal and hot-magenta ends.
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/07_particles/test_particles.das
    :language: das
-   :start-at: [test]
+   :start-at: [test(
 
 See it live
 -----------
