@@ -48,14 +48,14 @@ def test_embedded_terminal_focus_and_input(t : T?) {
         t |> success(wait_for_bool_value(d, TERMINAL_TARGET, "focused", true, 300),
             "terminal focus effect becomes observable")
 
-        let command = "Write-Output ('DASHERD_' + 'RESULT')\n"
+        let command = "Write-Output ('PROBE_' + 'RESULT')\n"
         let typed = post_command(d, "imgui_key_type", JV((text = command)))
         t |> success(typed != null, "terminal accepts synthesized text")
         t |> success(wait_for_key_idle(d, 6.0f), "terminal key timeline drains")
 
         var output = wait_until_sec(d, 10.0f) $(var snap) {
             let screen = widget_payload_field(snap, TERMINAL_TARGET, "screen_text") ?? ""
-            return contains(screen, "DASHERD_RESULT")
+            return contains(screen, "PROBE_RESULT")
         }
         t |> success(output != null,
             "PowerShell result reaches the semantic terminal snapshot")

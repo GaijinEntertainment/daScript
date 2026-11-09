@@ -19,15 +19,18 @@ require strings
 //! glob re-resolution ctor (built by llvm_exe's extern resolver). All the AOT-object-only "register
 //! it into the host" logic lives here; run_jit calls build_llvm_aot_ctors once, in emit_aot_object mode.
 
-// The das_aot_register ctor: for each emitted function, emit das_aot_register(aotHash, publ) so
-// the linked .o self-registers into the AOT library at load; also wire the glob re-resolution callback.
-def private emit_aot_register_ctor_dtor(types : PrimitiveTypes?; funcs : array<FunctionPtr>; uids : UidNodes?; _prog : Program?; glob_ctor : LLVMOpaqueValue?) : tuple<LLVMOpaqueValue?, LLVMOpaqueValue?> {
+typedef AotCtorDtor = tuple<LLVMOpaqueValue?, LLVMOpaqueValue?>
+
+// The das_aot_register ctor: each emitted function self-registers at
+// load; a declined one registers its reason, so the link names it
+// instead of calling the artifact stale.
+def private emit_aot_register_ctor_dtor(types : PrimitiveTypes?; funcs : array<FunctionPtr>;
+                                        declined : array<tuple<FunctionPtr; string>>;
+                                        uids : UidNodes?; _prog : Program?;
+                                        glob_ctor : LLVMOpaqueValue?) : AotCtorDtor {
     let regType = LLVMFunctionType(types.t_void,
         fixed_array<LLVMTypeRef>(types.t_int64, types.LLVMVoidPtrType()))
-    var regFn = LLVMGetNamedFunction(g_mod, "das_aot_register")
-    if (regFn == null) {
-        regFn = LLVMAddFunctionWithType(g_mod, "das_aot_register", regType)  // linker binds it to daScript core
-    }
+    var regFn = declare_extern_fn("das_aot_register", regType)  // linker binds it to daScript core
     let functionType = LLVMFunctionType(types.t_void, null, 0u, 0)
     // Private: each object defines it, so public linkage would clash when many link together.
     let reg_ctor = LLVMAddFunctionWithType(g_mod, "das_aot_register_constructor", functionType)
@@ -48,13 +51,20 @@ def private emit_aot_register_ctor_dtor(types : PrimitiveTypes?; funcs : array<F
         var reg_args = array<LLVMValueRef>(types.ConstI64(aot_hash), publ_ptr)
         LLVMBuildCall2(ctor_builder, regType, regFn, reg_args, "")
     }
+    if (!empty(declined)) {
+        var declined_reg_fn = declare_extern_fn("das_aot_register_declined", regType)
+        for (d in declined) {
+            let reason = get_string_constant_ptr(ctor_builder, d._1)
+            var reason_ptr = LLVMBuildPointerCast(ctor_builder, reason, types.LLVMVoidPtrType(), "")
+            let aot_hash = get_function_aot_hash(d._0)
+            var declined_args = array<LLVMValueRef>(types.ConstI64(aot_hash), reason_ptr)
+            LLVMBuildCall2(ctor_builder, regType, declined_reg_fn, declined_args, "")
+        }
+    }
     // Record the glob re-resolution callback; the runtime runs it lazily at the first AotLibrary drain (not static-init).
     if (glob_ctor != null) {
         let giType = LLVMFunctionType(types.t_void, fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType()))
-        var giFn = LLVMGetNamedFunction(g_mod, "das_aot_register_globinit")
-        if (giFn == null) {
-            giFn = LLVMAddFunctionWithType(g_mod, "das_aot_register_globinit", giType)
-        }
+        var giFn = declare_extern_fn("das_aot_register_globinit", giType)
         var gi_ptr = LLVMBuildPointerCast(ctor_builder, glob_ctor, types.LLVMVoidPtrType(), "")
         var gi_args = array<LLVMValueRef>(gi_ptr)
         LLVMBuildCall2(ctor_builder, giType, giFn, gi_args, "")
@@ -100,9 +110,12 @@ def public emit_aot_object_globinit(ctx : LLVMContextRef; mod : LLVMOpaqueModule
 
 //! Build both offline-AOT-object ctors (the extern-resolver globinit + the das_aot_register ctor) and
 //! return the (ctor, dtor) pair to append to llvm.global_ctors/dtors. Called by run_jit in emit_aot_object mode.
-def public build_llvm_aot_ctors(ctx : LLVMContextRef; mod : LLVMOpaqueModule?; var types : PrimitiveTypes?; var funcs : array<FunctionPtr>; var uids : UidNodes?; prog : Program?) : tuple<LLVMOpaqueValue?, LLVMOpaqueValue?> {
+def public build_llvm_aot_ctors(ctx : LLVMContextRef; mod : LLVMOpaqueModule?;
+                                var types : PrimitiveTypes?; var funcs : array<FunctionPtr>;
+                                declined : array<tuple<FunctionPtr; string>>;
+                                var uids : UidNodes?; prog : Program?) : AotCtorDtor {
     let glob_ctor = emit_aot_object_globinit(ctx, mod, types, funcs, uids, prog)
-    return emit_aot_register_ctor_dtor(types, funcs, uids, prog, glob_ctor)
+    return emit_aot_register_ctor_dtor(types, funcs, declined, uids, prog, glob_ctor)
 }
 
 //! jam links an AOT object in only through the aot_<obj>_pull symbol its pull list names.

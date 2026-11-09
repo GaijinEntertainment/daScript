@@ -276,3 +276,15 @@ def test_f32_to_f16_boundaries(t : T?) {
         t |> success(is_f16_nan(h), "nan input yields an f16 nan")
     }
 }
+
+def direct_half_json : string {
+    let h = 2.5h
+    return sprint_json(h, false)
+}
+
+[test(description = "a half passed by value to the interop builtin sprint_json rides the vec4f argument slot, so the function stays jitted and prints the value")]
+def test_half_by_value_into_interop_stays_jitted(t : T?) {
+    t |> equal(direct_half_json(), "2.5")
+    t |> success(!jit_enabled() || is_jit_function(@@direct_half_json),
+        "a by-value half into an interop builtin no longer declines the function")
+}

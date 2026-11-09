@@ -125,8 +125,8 @@ reads like a regression but is pure port contention. A timed-out dastest also le
 child holding 9090; sweep before re-running:
 
 ```powershell
-# By PATH, never bare by name - a bare name-kill also murders the dasHerd
-# watcher and every other tree's daslang (observed 2026-07-29).
+# By PATH, never bare by name - a bare name-kill also murders every other
+# tree's daslang.
 Get-Process -Name daslang,daslang-live -ErrorAction SilentlyContinue |
   Where-Object { $_.Path -like "<your-tree>\*" } | Stop-Process -Force
 ```

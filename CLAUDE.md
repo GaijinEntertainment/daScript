@@ -126,7 +126,6 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/internal/visitor_gen_bind.md` | Adding `Visitor` virtual methods / `canVisit*` gates / `gen_bind.das` regen |
 | `skills/daslang_live.md` | `daslang-live`, live-reload lifecycle, `[live_command]`, `[before_reload]`/`[after_reload]` |
 | `skills/internal/daslang_lsp.md` | Working on `utils/lsp/` (the LSP server) - locked architecture, coordinate conventions, protocol tests |
-| `utils/internal/das-herd/dasherder.md` | Running INSIDE a dasHerd-managed agent session (`DASHERD_SESSION_ID` set) - mailbox, participating repositories, Review Bundles, `dasherd.ps1` |
 | `skills/imgui_ui_debugging.md` | **CRITICAL UI SKILL** - ANY dasImgui UI/interaction bug: reproduce -> observe in `imgui_snapshot` -> fix -> prove via snapshot + test. Never claim a UI fix from logic or a screenshot alone |
 | `skills/imgui_application.md` | Building any dasImgui application - harness lifecycle, the headless arm, heap/GC ownership, touch/phone layout |
 | `skills/imgui_migration.md` | Migrating v1 `imgui_boost` code to the v2 boost layer (`imgui_lint` IMGUI002 points here) |

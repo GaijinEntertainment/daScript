@@ -72,8 +72,8 @@ namespace das {
         return builtin_getFunctionByMnh(mnh, ctx).PTR;
     }
 
-    static vector<pair<uint64_t,void*>> & llvmAotEntries() {
-        static vector<pair<uint64_t,void*>> entries;
+    static vector<pair<uint64_t,AotFactory>> & llvmAotEntries() {
+        static vector<pair<uint64_t,AotFactory>> entries;
         return entries;
     }
 
@@ -106,15 +106,22 @@ namespace das {
         todo(&ctx);
     }
     static void registerLlvmAotFunctions ( AotLibrary & lib ) {
-        for ( auto & e : llvmAotEntries() ) {
-            lib.emplace(e.first, AotFactory(e.second));
+        for ( auto & [hash, factory] : llvmAotEntries() ) {
+            auto [it, inserted] = lib.emplace(hash, factory);
+            if ( !inserted && it->second.declineReason && !factory.declineReason ) {
+                it->second = factory;
+            }
         }
     }
     static AotListBase g_llvmAotList(registerLlvmAotFunctions);
 
     extern "C" void das_aot_register ( uint64_t aotHash, void * publ ) {
-        llvmAotEntries().emplace_back(aotHash, publ);
+        llvmAotEntries().emplace_back(aotHash, AotFactory(publ));
         llvmAotPendingPubl().push_back(publ);
+    }
+
+    extern "C" void das_aot_register_declined ( uint64_t aotHash, const char * reason ) {
+        llvmAotEntries().emplace_back(aotHash, AotFactory::declined(reason));
     }
 
     extern "C" void das_aot_register_globinit ( void (*fn)(Context*) ) {

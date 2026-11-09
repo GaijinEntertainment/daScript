@@ -27,6 +27,7 @@ namespace das {
                 }
                 DAS_FATAL_ERROR("failed to compile: %s\n%s\n", pak.c_str(), tout.str().c_str());
             } else {
+                projectAccess = program->access;
                 context = get_context(program->getContextStackSize());
                 if ( !program->simulate(*context, tout) ) {
                     tout << "failed to simulate\n";

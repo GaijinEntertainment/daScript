@@ -265,8 +265,7 @@ def private replace_server(var servers : table<string; JsonValue?>&; name, comma
     servers[name] = JV(entry)
 }
 
-//! writes the daslang and daslang-dap entries, and the dasherd entry where the tree carries its
-//! shim; other servers, each entry's defer_loading and an unparseable file stay as is
+//! writes the daslang and daslang-dap entries; the rest stays as is
 def emit_mcp_config(root, binary : string) : bool {
     let path = path_join(root, ".mcp.json")
     var config : JsonValue?
@@ -297,9 +296,6 @@ def emit_mcp_config(root, binary : string) : bool {
     replace_server(servers_node.value as _object, "daslang", mcp.command, mcp.args)
     let dap = tool_front_command(root, binary, "dap")
     replace_server(servers_node.value as _object, "daslang-dap", dap.command, dap.args)
-    if (fexist(path_join(root, "utils/internal/das-herd/mcp_main.das"))) {
-        replace_server(servers_node.value as _object, "dasherd", path_join(root, binary), ["-ignore-manifest", "utils/internal/das-herd/mcp_main.das"])
-    }
     let text = write_json(config)
     unsafe {
         delete config

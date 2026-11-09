@@ -37,7 +37,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x89c4c5329f1262deul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x6f46922f97d04f69ul
 
 //! every instruction of `fn`, block by block
 def private for_each_instruction(fn : LLVMOpaqueValue?; blk : block<(inst : LLVMOpaqueValue?)>) {
@@ -749,6 +749,7 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
     // g_target_* truth must be set BEFORE it runs, not first at init_jit time below.
     init_jit_target_flags(target_triple, use_host_cpu)
     var funcs : array<FunctionPtr>
+    var declined : array<tuple<FunctionPtr; string>>
     var visitorDisabled = 0
     var emit_failed = false
     defer() { reset_codegen_accumulators(); }
@@ -756,6 +757,7 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
     make_visitor(*disableJitVisitor) $(disableJitVisitorAdapter) {
         for (fun in plan.candidates) {
             disableJitVisitor.disable = false
+            disableJitVisitor.reason = ""
             // if DisableJitVisitor ever grows a preVisitFunction check again, it must
             // be dispatched explicitly here — `visit(fun)` never calls preVisitFunction
             fun |> visit(disableJitVisitorAdapter)
@@ -763,7 +765,8 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
                 funcs |> push(fun)
             } else {
                 visitorDisabled++
-                to_log(LOG_INFO, "LLVM JIT: disabled {fun.name}\n")
+                declined |> push((fun, disableJitVisitor.reason))
+                to_log(LOG_INFO, "LLVM JIT: declined {fun.name}\n")
             }
         }
     }
@@ -918,7 +921,7 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
             var aot_ctor : LLVMOpaqueValue? = null
             var aot_dtor : LLVMOpaqueValue? = null
             if (emit_aot_object) {
-                var pair = build_llvm_aot_ctors(g_ctx, g_mod, g_prim_t, funcs, uids, prog)
+                var pair = build_llvm_aot_ctors(g_ctx, g_mod, g_prim_t, funcs, declined, uids, prog)
                 aot_ctor = pair._0
                 aot_dtor = pair._1
                 emit_aot_pull_anchor(g_mod, g_prim_t, base_name(output_path))

@@ -4190,13 +4190,17 @@ namespace das
             }
         }
         vector<pair<int,uint64_t>> misses;
+        vector<pair<int,const char *>> declined;
         das_hash_map<Module *,int> linkedPerModule;
         for ( int fni=0, fnis=context.totalFunctions; fni!=fnis; ++fni ) {
             if ( !fnn[fni]->noAot && !(isLlvmAot && fnn[fni]->requestNoJit) ) {
                 SimFunction & fn = context.functions[fni];
                 uint64_t semHash = getFunctionAotHash(fnn[fni]);
                 auto it = aotLib.find(semHash);
-                if ( it != aotLib.end() ) {
+                if ( it != aotLib.end() && it->second.declineReason ) {
+                    if ( logIt ) logs << "DECLINED " << fn.mangledName << " AOT=0x" << HEX << semHash << DEC << ": " << it->second.declineReason << "\n";
+                    declined.emplace_back(fni, it->second.declineReason);
+                } else if ( it != aotLib.end() ) {
                     fn.code = (it->second)(context);
                     if ( fn.code->rtti_node_isJit() ) {
                         fn.jit = true;
@@ -4230,6 +4234,12 @@ namespace das
             }
             tp << "// " << getAotHashComment(fnn[fni]) << "\n";
             printSimFunction(tp, &context, indexToFunction[fni], fn.code, true);
+            linkError(string(fn.mangledName), tp.str() );
+        }
+        for ( auto & [fni, reason] : declined ) {
+            SimFunction & fn = context.functions[fni];
+            TextWriter tp;
+            tp << "LLVM AOT declined this function (it interprets unless fail_on_no_aot is set): " << reason << "\n";
             linkError(string(fn.mangledName), tp.str() );
         }
     }

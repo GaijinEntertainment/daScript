@@ -96,7 +96,7 @@ TEST_CASE("terminal: native PTY is a raw byte transport") {
 
     std::string received;
     REQUIRE(waitForBytes(
-        *process, received, "DASHERD_READY:", integration_timeout_ms, error));
+        *process, received, "PROBE_READY:", integration_timeout_ms, error));
     INFO(error);
 
     REQUIRE(process->resize(100, 30, error));
@@ -104,7 +104,7 @@ TEST_CASE("terminal: native PTY is a raw byte transport") {
     REQUIRE(process->write(
         reinterpret_cast<const uint8_t *>(input.data()), input.size(), error));
     REQUIRE(waitForBytes(
-        *process, received, "DASHERD_ECHO:semantic-probe",
+        *process, received, "PROBE_ECHO:semantic-probe",
         integration_timeout_ms, error));
     INFO(error);
 

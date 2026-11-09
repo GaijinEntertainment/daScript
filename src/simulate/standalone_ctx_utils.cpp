@@ -43,7 +43,7 @@ namespace das {
     void FillFunction(Context &ctx, const AotLibrary &aotLib, vector<pair<uint64_t, SimFunction*>> &functions) {
         for (auto [semHash, fn]: functions) {
             auto it = aotLib.find(semHash);
-            if ( it != aotLib.end() ) {
+            if ( it != aotLib.end() && !it->second.declineReason ) {
                 fn->code = (it->second)(ctx);
                 fn->aot = true;
                 auto fcb = (SimNode_CallBase *) fn->code;

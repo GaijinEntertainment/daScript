@@ -1,0 +1,13 @@
+options gen2
+require debugapi
+
+typedef module_info = tuple<string; string; string> const
+
+[export]
+def module_get(req, from : string) : module_info {
+    let resolver_file = "{get_line_info().fileInfo.name}"
+    if (req == "probe" && !empty(resolver_file)) {
+        return ("probe", "{get_das_root()}/tests-cpp/small/test_project_access_probe.das", "probe")
+    }
+    return ("", "", "")
+}
