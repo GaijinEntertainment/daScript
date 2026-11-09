@@ -1909,14 +1909,11 @@ namespace das
         inline static DAS_THREAD_LOCAL(daScriptEnvironment *) owned;
     };
 
-    // The module-vintage stamp: DAS_BUILD_ID changes only at releases, so a shared module built
-    // against DIFFERENT headers of the SAME version passes the build-id gate and is silently,
-    // subtly wrong (ABI drift surfaces as behavior/perf skew, not a crash). This folds the sizeof
-    // of the core ABI surface; REGISTER_DYN_MODULE exports it per module and the loader compares
-    // (warning, not refusal). Computed per-TU from the including binary's own headers.
+    // src/ast/ARCHITECTURE_MODULE_SCAN.md#shared-module-vintage
+    #define DAS_ABI_VERSION 1
     constexpr DAS_ABI_LOCAL uint64_t das_abi_vintage () {
         constexpr uint64_t sizes[] = {
-            uint64_t(DAS_BUILD_ID),
+            uint64_t(DAS_BUILD_ID), uint64_t(DAS_ABI_VERSION),
             sizeof(Module), sizeof(Context), sizeof(SimNode), sizeof(Program),
             sizeof(TypeDecl), sizeof(Function), sizeof(Structure), sizeof(Variable),
             sizeof(Expression), sizeof(TypeAnnotation), sizeof(CodeOfPolicies),

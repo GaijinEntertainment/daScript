@@ -139,3 +139,22 @@ fallback `[module] loading every deferred module (K)`, and the scan's own fallba
 itself first with `[module] a pending module's artifact exists - loading every deferred module`.
 A replayed descriptor's time is its manifest read plus its rows, and the second number is the
 share the `.shared_module` dlopen and module constructor took.
+
+## The shared-module vintage stamp {#shared-module-vintage}
+
+`REGISTER_DYN_MODULE` (`include/daScript/ast/ast.h`) exports two C symbols from a shared
+module: `register_dyn_<name>(buildId)`, which constructs the module, and `vintage_dyn_<name>()`,
+which returns `das_abi_vintage()` as the headers the module was compiled against compute it.
+`register_dynamic_module` (`src/builtin/module_builtin_fio.cpp`) reads the vintage first and
+calls the registrar only when `dynamic_module_vintage_error` answers nothing: the registrar
+constructs the module through the host's vtables, so a module from other headers is refused
+before any of its code runs, on the same report-and-close path as a missing registrar, and a
+module exporting no vintage symbol is refused the same way. The vintage folds `DAS_BUILD_ID`,
+`DAS_ABI_VERSION` and the `sizeof` of the core classes a module derives from or holds by value
+(`Module`, `Context`, `SimNode`, `TypeAnnotation`, ...): a field added to or removed from one of
+them moves a size, while a vtable change - a virtual added as a new slot, removed, reordered or re-signed, in
+any class the `include/daScript/ast` and `include/daScript/simulate` headers declare - moves
+none once the class has a vtable, so `DAS_ABI_VERSION` is the hand-bumped counter for that case,
+and those two headers' checklists bind the bump. A module built with another `DAS_BUILD_ID` fails the vintage check too,
+since the vintage folds the build id; the registrar's own build-id argument is the guard for a
+host that calls the registrar without reading the vintage first.

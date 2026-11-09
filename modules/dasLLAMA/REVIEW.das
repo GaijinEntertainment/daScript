@@ -2522,7 +2522,7 @@ let private GEMM_GEN_FILES = [
     "modules/dasLLAMA/dasllama/dasllama_gemm_gen.das",
     "modules/dasLLAMA/dasllama/dasllama_gemm_schema.das"
 ]
-let private GEMM_GEN_STAMP_HASH = 0x45fc139a1f074602ul
+let private GEMM_GEN_STAMP_HASH = 0x54d049dbeea4a900ul
 
 [arch(at = "ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers")]
 def private check_gemm_gen_stamp {

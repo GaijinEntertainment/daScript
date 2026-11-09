@@ -251,10 +251,46 @@ int das_wsc_open ( Handle<hv::WebSocketClient> h, const char* url ) {
     return p->open(url ? url : "");
 }
 
+// modules/dasHV/ARCHITECTURE.md#websocket-send-on-loop
+static const int WS_SEND_ON_LOOP_DEADLINE_MS = 5000;
+static int send_on_channel_loop ( const WebSocketChannelPtr & channel, std::function<int()> op ) {
+    if ( !channel || !channel->io() ) return -1;
+    hloop_t * loop = hevent_loop(channel->io());
+    if ( !loop || hloop_status(loop) != HLOOP_STATUS_RUNNING ) return -1;
+    if ( hloop_tid(loop) == hv_gettid() ) return op();
+    struct Call {
+        hevent_t ev;
+        std::function<int()> op;
+        std::promise<int> result;
+        std::mutex lock;
+        bool abandoned = false;
+    };
+    auto call = std::make_shared<Call>();
+    memset(&call->ev, 0, sizeof(hevent_t));
+    call->op = das::move(op);
+    call->ev.event_type = (hevent_type_e)(HEVENT_TYPE_CUSTOM + 1);
+    call->ev.userdata = new std::shared_ptr<Call>(call);
+    call->ev.cb = [](hevent_t * ev) {
+        auto holder = (std::shared_ptr<Call> *) hevent_userdata(ev);
+        {
+            std::lock_guard<std::mutex> guard((*holder)->lock);
+            if ( !(*holder)->abandoned ) (*holder)->result.set_value((*holder)->op());
+        }
+        delete holder;
+    };
+    auto result = call->result.get_future();
+    hloop_post_event(loop, &call->ev);
+    if ( result.wait_for(std::chrono::milliseconds(WS_SEND_ON_LOOP_DEADLINE_MS)) == std::future_status::ready ) return result.get();
+    std::lock_guard<std::mutex> guard(call->lock);
+    call->abandoned = true;
+    return result.wait_for(std::chrono::seconds(0)) == std::future_status::ready ? result.get() : -1;
+}
+
 int das_wsc_send ( Handle<hv::WebSocketClient> h, const char* msg ) {
     auto p = HandleRegistry<hv::WebSocketClient>::instance().lookup(h);
     if ( !p ) return -1;
-    return p->send(msg ? msg : "");
+    string text = msg ? msg : "";
+    return send_on_channel_loop(p->channel, [p, text]() { return p->send(text); });
 }
 
 int das_wsc_send_buf ( Handle<hv::WebSocketClient> h, const char* msg, int32_t len, ws_opcode opcode ) {
@@ -262,7 +298,8 @@ int das_wsc_send_buf ( Handle<hv::WebSocketClient> h, const char* msg, int32_t l
     if ( !p ) return -1;
     if ( len < 0 ) return -1;
     if ( !msg && len != 0 ) return -1;
-    return p->send(msg ? msg : "", len, opcode);
+    string payload(msg ? msg : "", size_t(len));
+    return send_on_channel_loop(p->channel, [p, payload, opcode]() { return p->send(payload.data(), int(payload.size()), opcode); });
 }
 
 int das_wsc_close ( Handle<hv::WebSocketClient> h ) {
@@ -813,7 +850,8 @@ Handle<hv::WebSocketServer> makeWebSocketServer ( int port, int httpsPort, const
 int das_wss_send ( Handle<hv::WebSocketChannel> h, const char * msg, ws_opcode opcode, bool fin ) {
     auto p = HandleRegistry<hv::WebSocketChannel>::instance().lookup(h);
     if ( !p ) return -1;
-    return p->send(string(msg ? msg : ""), opcode, fin);
+    string text = msg ? msg : "";
+    return send_on_channel_loop(p, [p, text, opcode, fin]() { return p->send(text, opcode, fin); });
 }
 
 int das_wss_send_buf ( Handle<hv::WebSocketChannel> h, const char * buf, int32_t len, ws_opcode opcode, bool fin ) {
@@ -821,7 +859,8 @@ int das_wss_send_buf ( Handle<hv::WebSocketChannel> h, const char * buf, int32_t
     if ( !p ) return -1;
     if ( len < 0 ) return -1;
     if ( !buf && len != 0 ) return -1;
-    return p->send(buf, len, opcode, fin);
+    string payload(buf ? buf : "", size_t(len));
+    return send_on_channel_loop(p, [p, payload, opcode, fin]() { return p->send(payload.data(), int(payload.size()), opcode, fin); });
 }
 
 int das_wss_send_fragment ( Handle<hv::WebSocketChannel> h, const char * buf, int32_t len, int32_t fragment, ws_opcode opcode ) {
@@ -829,7 +868,8 @@ int das_wss_send_fragment ( Handle<hv::WebSocketChannel> h, const char * buf, in
     if ( !p ) return -1;
     if ( len < 0 || fragment < 0 ) return -1;
     if ( !buf && len != 0 ) return -1;
-    return p->send(buf, len, fragment, opcode);
+    string payload(buf ? buf : "", size_t(len));
+    return send_on_channel_loop(p, [p, payload, fragment, opcode]() { return p->send(payload.data(), int(payload.size()), fragment, opcode); });
 }
 
 int das_wss_close_channel ( Handle<hv::WebSocketChannel> h ) {

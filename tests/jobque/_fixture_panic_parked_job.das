@@ -11,7 +11,7 @@ require daslib/clargs
 //            serving slot's worker loop waiting for work
 //   thread   a detached new_thread that never returns
 //   clean    nothing - the panic finds no job and no thread
-// The process must exit with 1 either way. The parked worker waits on
+// The process exits with -2 either way. The parked worker waits on
 // a sleep, not a channel: a `with_channel` scope a panic unwinds out
 // of is its own failure (its release guard sees the channel held).
 def park_forever() {

@@ -51,3 +51,19 @@ stops every live server and client there: `stop()` joins the loop threads, and t
 adapters' own destructors find them stopped. The live adapters are collected first
 and stopped outside the registry lock, because loop-thread callbacks look handles up
 through that lock.
+
+## WebSocket sends run on the channel's loop {#websocket-send-on-loop}
+
+A das program calls `send` on a server channel or a client from its own thread, while
+the channel's libhv loop runs on a loop thread, and libhv's `hio_write` reads the io's
+state outside the lock that guards its write queue. `send_on_channel_loop` posts the send
+to the io's loop as a custom event and waits for the result, so the write and its
+backpressure verdict - a refusal past the connection's write-buffer budget - happen on the
+loop thread and come back to the caller synchronously, as a direct call's did. A call
+already on the loop thread runs the send inline. A loop that is not running answers -1
+without posting, and a posted send the loop has not served within
+`WS_SEND_ON_LOOP_DEADLINE_MS` is cancelled under the record's lock and answers -1, so a loop
+stopped between the check and the post cannot hang the program and a send the caller saw
+fail is never written later; a send the loop serves in the same instant wins the lock first
+and its result is the answer. The record is shared between the caller and the posted event
+and holds its own copy of the payload, so neither side reads memory the other has freed.

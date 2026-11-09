@@ -358,14 +358,14 @@ foreach(util_path ${DAS_UTILS})
     add_dependencies(all_utils_exe ${util}_exe)
 endforeach()
 
-# Prewarm the JIT dll cache for the whole test tree, except module-gated folders and gc
-# (mirrors tests/.das_test: gc stays interp-only under -jit — heap_collect can't see
-# jitted-frame locals; quote/qmacro folders prewarm fine now that jit_enabled triggers
-# daslib/quote lowering). Reuses the jit_exe target built by the foreach above
-# (bin/jit.exe, built with --jit-register-all-modules). Run explicitly:
+# Prewarm the JIT dll cache for the whole test tree. The walk applies tests/.das_test, so the
+# module-gated folders follow the build's module set; gc stays excluded by name because the
+# filter skips it only on a `-jit` argv, which jit.exe does not carry (heap_collect can't see
+# jitted-frame locals). Reuses the jit_exe target built by the foreach above (bin/jit.exe, built
+# with --jit-register-all-modules). Run explicitly:
 #   ninja jit_cache_all_tests
 add_custom_target(jit_cache_all_tests
-    COMMAND ${UTIL_BIN_DIR}/jit.exe ${PROJECT_SOURCE_DIR}/tests --parallel 0 $<IF:$<CONFIG:Debug>,--jit-opt-level=0,--jit-opt-level=3> --exclude gc --exclude dasHV --exclude dasPUGIXML --exclude dasSQLITE --exclude sql_conformance --exclude stbimage --exclude dasGLTF --exclude live_host --exclude audio --exclude strudel --exclude strudel_device --exclude minfft
+    COMMAND ${UTIL_BIN_DIR}/jit.exe ${PROJECT_SOURCE_DIR}/tests --parallel 0 $<IF:$<CONFIG:Debug>,--jit-opt-level=0,--jit-opt-level=3> --exclude gc
     DEPENDS jit_exe
     WORKING_DIRECTORY ${UTIL_BIN_DIR}
     COMMENT "JIT-compiling tests/ into the .cache/daslang folder"

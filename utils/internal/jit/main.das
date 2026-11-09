@@ -5,6 +5,8 @@ require daslib/clargs
 require daslib/fio
 require daslib/jobque_boost
 require daslib/strings_boost
+require dastest/folder_filter
+require dastest/fs
 
 require llvm/daslib/llvm_jit_cli
 require llvm/daslib/llvm_jit_run // nolint:STYLE030 registration side effect: bakes the native llvm module into a standalone -exe build (see simulate() comment below)
@@ -55,46 +57,37 @@ struct JitToolArgs {
     help : bool
 }
 
-// Test files that are EXPECTED to fail compilation — by daslang convention,
-// basenames prefixed cant_ / failed_ / invalid_. Skipped during a directory
-// walk so a prewarm over a test tree doesn't report them as errors.
-def is_expected_failure(name : string) : bool {
-    return (name |> starts_with("cant_") ||
-            name |> starts_with("failed_") ||
-            name |> starts_with("invalid_"))
-}
-
-// Expand a positional input into concrete .das files. An explicitly-named file
-// is taken as-is; a directory is walked recursively, skipping "_"-prefixed
-// entries (fixtures / harness-only files), expected-failure tests, and any
-// directory whose name is in `exclude`.
-def collect_das_files(path : string; exclude : array<string>; var out : array<string>) {
+// Expand a positional input into concrete .das files. A named file is
+// taken as-is; a directory is walked through dastest's scan (no
+// "_"-prefixed entries, no expected-failure tests), skipping any
+// directory named in `exclude` or declined by the root's .das_test.
+def collect_das_files(path : string; exclude : array<string>; var cache : table<string; void?>;
+                      var out : array<string>) : bool {
     let st = stat(path)
     if (!st.is_valid) {
-        return
+        to_log(LOG_ERROR, "jit: no such input {path}\n")
+        return false
     }
     if (st.is_reg) {
         if (path |> ends_with(".das")) {
             out |> push(path)
         }
-        return
+        return true
     }
-    // Skip non-dirs and any directory whose own name is excluded (covers both
-    // the top-level argument and nested folders reached via recursion below).
     if (!st.is_dir || find_index(exclude, base_name(path)) >= 0) {
-        return
+        return true
     }
-    fio::dir(path) $(name) {
-        if (name == "." || name == ".." || name |> starts_with("_")) {
-            return
+    return with_folder_filter(path) $(can_visit) {
+        var found : array<string>
+        let scanned = fs::scan_dir(path, cache, found, ".das") $(name) {
+            return find_index(exclude, name) < 0 && can_visit |> invoke(name)
         }
-        let full = path_join(path, name)
-        let cst = stat(full)
-        if (cst.is_dir) {
-            collect_das_files(full, exclude, out)
-        } elif (cst.is_reg && name |> ends_with(".das") && !is_expected_failure(name)) {
-            out |> push(full)
+        for (f in found) {
+            if (!fs::is_expected_failure_test(f)) {
+                out |> push(f)
+            }
         }
+        return scanned
     }
 }
 
@@ -383,8 +376,13 @@ def main() : int {
     let jit <- jit_r |> move_unwrap
 
     var files : array<string>
+    var inscope cache : table<string; void?>
     for (input in tool.inputs) {
-        collect_das_files(input, tool.exclude, files)
+        if (!collect_das_files(input, tool.exclude, cache, files)) {
+            to_log(LOG_ERROR, "jit: cannot walk {input} - its .das_test did not compile, " +
+                "or the scan failed\n")
+            return 1
+        }
     }
     if (empty(files)) {
         to_log(LOG_ERROR, "jit: no .das files found in inputs\n")

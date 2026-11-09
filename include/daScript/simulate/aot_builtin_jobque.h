@@ -423,5 +423,6 @@ namespace das {
     // alive and the caller must LEAK the context (freeing it under running jobs is heap corruption)
     DAS_API bool shutdown_job_que_bounded ( int timeoutMs );
     // src/builtin/ARCHITECTURE_JOBQUE.md#jobque-panic-teardown
+    constexpr int DAS_PANIC_EXIT_CODE = -2;
     DAS_API void jobque_teardown_or_exit_after_panic ( int timeoutMs );
 }

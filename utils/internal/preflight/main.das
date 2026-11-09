@@ -1358,6 +1358,12 @@ def gate_tests_cpp(ctx : PreflightCtx) : GateResult {
         return GateResult(name = "tests-cpp", status = GateStatus.Skip, seconds = seconds_since(t0),
             detail = "no configured build dir — cmake -B build first")
     }
+    let b = run_argv(["cmake", "--build", ctx.build_dir, "--config", ctx.config,
+        "--target", "tests-cpp-small", "--parallel", cmake_jobs(ctx)])
+    if (b.rc != 0) {
+        return classify_build_fail("tests-cpp", "the small C++ test binaries did not build",
+            b, ctx.daslang, t0)
+    }
     var args <- ["ctest", "--test-dir", ctx.build_dir]
     if (ctx.multi_config) {
         args |> push("--build-config")
@@ -1365,9 +1371,9 @@ def gate_tests_cpp(ctx : PreflightCtx) : GateResult {
     }
     args |> push("-L")
     args |> push("small")
-    args |> push("--no-tests=error")        // unbuilt tests-cpp-small must FAIL, not 0-tests-pass
+    args |> push("--no-tests=error")
     args |> push("--output-on-failure")
-    return run_test_gate("tests-cpp", args, "ctest -L small failures (build tests-cpp-small target if missing)")
+    return run_test_gate("tests-cpp", args, "ctest -L small failures")
 }
 
 //! The build fan-out for every cmake invocation: the user's ``-j`` when set, else hardware

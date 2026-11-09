@@ -7,13 +7,8 @@ module _conformance_provider shared public
 //! suite (see README.md). Exposes a scoped open over the provider's runner plus
 //! capability constants for self-skip of unsupported groups.
 
-// The migration glue MUST be required before the boost: after >=2 intentionally-failing
-// compile tests in one dastest process, requiring the boost first resurrects a stale
-// module generation and cross-module typed calls die with "expecting SqlRunner, passing
-// SqlRunner" (daslang shared-module promotion bug; minimal repro in the PR that added
-// test_conf_migrations). Glue-first keeps one generation per program.
-require sqlite/sqlite_migrate public
 require sqlite/sqlite_boost public
+require sqlite/sqlite_migrate public
 require daslib/sql_linq public
 
 // Capability constants — mirror the provider's SqlProviderCaps registry entry.

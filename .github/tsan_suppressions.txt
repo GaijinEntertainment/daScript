@@ -10,9 +10,8 @@
 # hloop_process_events read — upstream idiom, worst case is one extra loop iteration.
 race:hloop_stop
 
-# Cross-thread WebSocket send: das_wss_send / das_wsc_send call hio_write from das threads;
-# libhv mutex-guards the write queue but hio_write4 reads io state outside it (#3428).
-race:hio_write4
+# hio_is_opened is polled cross-thread by das_writer_is_connected; a momentarily stale
+# answer is the API's contract.
 race:hio_is_opened
 
 # libdbus's own global locks, taken in one order by dbus_bus_get_private (the Linux tray's

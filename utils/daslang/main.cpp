@@ -698,7 +698,7 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
                     startupRunUsec += get_time_usec(run0);
                     if ( auto ex = pctx->getException() ) {
                         tout << "EXCEPTION: " << ex << " at " << pctx->exceptionAt.describe() << "\n";
-                        exitCode = 1;
+                        exitCode = das::DAS_PANIC_EXIT_CODE;
                         das::jobque_teardown_or_exit_after_panic(3000);   // src/builtin/ARCHITECTURE_JOBQUE.md#jobque-panic-teardown
                     } else if ( fnTest->debugInfo && fnTest->debugInfo->result ) {
                         auto resType = fnTest->debugInfo->result->type;
@@ -709,7 +709,7 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
                         }
                     }
                     // Check for app leaks (TypeDecl nodes created during execution)
-                    if ( !gc_thread_root_is_settled(tout, "GC APP LEAK", "after execution") ) {
+                    if ( !gc_thread_root_is_settled(tout, "GC APP LEAK", "after execution") && exitCode != das::DAS_PANIC_EXIT_CODE ) {
                         exitCode = 1;
                     }
                 }

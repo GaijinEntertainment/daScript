@@ -1,5 +1,7 @@
 #include <doctest/doctest.h>
 
+#include <stdlib.h>
+
 #include "daScript/daScript.h"
 
 namespace das {
@@ -8,7 +10,19 @@ namespace das {
     DAS_API void retry_pending_dynamic_modules();
     DAS_API string describe_pending_dynamic_modules();
     DAS_API int report_pending_dynamic_modules();
+    DAS_API string dynamic_module_vintage_error(bool hasStamp, uint64_t vintage);
 }
+
+// src/ast/ARCHITECTURE_MODULE_SCAN.md#shared-module-vintage
+TEST_CASE("register_dynamic_module — the vintage verdict refuses every stamp but the host's") {
+    CHECK(das::dynamic_module_vintage_error(true, das::das_abi_vintage()).empty());
+    const das::string unstamped = das::dynamic_module_vintage_error(false, 0);
+    CHECK(unstamped.find("no ABI vintage stamp") != das::string::npos);
+    const das::string drifted = das::dynamic_module_vintage_error(true, das::das_abi_vintage() ^ 1u);
+    CHECK(drifted.find("a different daScript") != das::string::npos);
+    CHECK(drifted.find("rebuild the module") != das::string::npos);
+}
+
 
 namespace {
 
@@ -27,6 +41,34 @@ const char * loadable_non_das_library() {
 enum { Quiet = 0, ErrorMsg = 1, Fail = 2 }; // mirrors RegisterOnError in module_builtin_fio.cpp
 
 } // anon
+
+// src/ast/ARCHITECTURE_MODULE_SCAN.md#shared-module-vintage
+TEST_CASE("register_dynamic_module — a drifted or unstamped module is refused before its registrar runs") {
+#ifdef DAS_VINTAGE_PROBE_PATH
+    #if defined(_WIN32) || defined(_WIN64)
+        _putenv_s("DAS_VINTAGE_PROBE_REGISTRAR_RAN", "");
+    #else
+        unsetenv("DAS_VINTAGE_PROBE_REGISTRAR_RAN");
+    #endif
+    auto registrarRan = []() {
+        const char * mark = getenv("DAS_VINTAGE_PROBE_REGISTRAR_RAN");
+        return mark && *mark;
+    };
+    SUBCASE("a vintage other than the host's") {
+        CHECK(das::register_dynamic_module(DAS_VINTAGE_PROBE_PATH,
+            "VintageProbeDrifted", ErrorMsg, nullptr, nullptr) == nullptr);
+        CHECK_FALSE(registrarRan());
+    }
+    SUBCASE("no vintage symbol at all") {
+        CHECK(das::register_dynamic_module(DAS_VINTAGE_PROBE_PATH,
+            "VintageProbeUnstamped", ErrorMsg, nullptr, nullptr) == nullptr);
+        CHECK_FALSE(registrarRan());
+    }
+#else
+    MESSAGE("DAS_VINTAGE_PROBE_PATH is not defined - the probe module target did not feed this build");
+    CHECK(false);
+#endif
+}
 
 // Issue #2580: these calls used to segfault — the registrator-missing branch
 // called context->to_err unconditionally, and JIT/standalone callers pass
