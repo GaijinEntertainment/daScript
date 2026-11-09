@@ -1434,12 +1434,48 @@ if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
             src/misc/aot_stub.cpp
     )
 
-    #UNITIZE_BUILD("daslib" AOT_GENERATED_SRC)
+    # Every generated AOT unit opens the same runtime and AST headers before its own code, and
+    # parsing them is most of a typical unit's compile; a precompiled header parses them once
+    # per target. The list is the set every unit emits; a module header a unit adds after them
+    # (sqlite, pugixml, hv) is parsed by that unit alone. A unit built against a precompiled
+    # header cannot be served by sccache, so a target that is in ALL keeps a configured
+    # compiler launcher instead (the per-PR lanes hit the cache on those units), while a
+    # target built only on request - the nightly test_aot, the bench host - always takes the
+    # precompiled header and drops the launcher.
+    OPTION(DAS_AOT_PCH_DISABLED "Compile the AOT stub and test_aot units without a precompiled header" OFF)
+    SET(DAS_AOT_PCH_HEADERS
+        <daScript/misc/platform.h>
+        <daScript/simulate/simulate.h>
+        <daScript/simulate/aot.h>
+        <daScript/simulate/aot_library.h>
+        <daScript/simulate/bin_serializer.h>
+        <daScript/simulate/runtime_profile.h>
+        <daScript/misc/performance_time.h>
+        <daScript/simulate/aot_builtin_rtti.h>
+        <daScript/ast/ast.h>
+        <daScript/ast/ast_handle.h>
+        <daScript/simulate/aot_builtin_ast.h>
+        <daScript/simulate/aot_builtin_string.h>
+        <daScript/simulate/aot_builtin_math.h>
+        <daScript/simulate/aot_builtin_fio.h>
+        <daScript/simulate/aot_builtin_debugger.h>
+        <daScript/simulate/aot_builtin_jobque.h>
+    )
+    MACRO(DAS_AOT_PCH target)
+        get_target_property(_das_aot_pch_on_request ${target} EXCLUDE_FROM_ALL)
+        IF(DAS_AOT_PCH_DISABLED)
+        ELSEIF(CMAKE_CXX_COMPILER_LAUNCHER AND NOT _das_aot_pch_on_request)
+        ELSE()
+            target_precompile_headers(${target} PRIVATE ${DAS_AOT_PCH_HEADERS})
+            set_target_properties(${target} PROPERTIES C_COMPILER_LAUNCHER "" CXX_COMPILER_LAUNCHER "")
+        ENDIF()
+    ENDMACRO()
 
     ADD_DAS_STATIC_LIBRARY(libDaScriptAot ${AOT_GENERATED_SRC} ${AOT_STUB_SRC})
     ADD_DEPENDENCIES(libDaScriptAot dasAotStub libDaScript)
     TARGET_LINK_LIBRARIES(libDaScriptAot PUBLIC libDaScript)
     SETUP_CPP11(libDaScriptAot)
+    DAS_AOT_PCH(libDaScriptAot)
 endif()
 
 SET(DAS_DASCRIPT_MAIN_SRC

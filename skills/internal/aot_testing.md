@@ -60,6 +60,18 @@ tests/aot/
 3. All generated `.cpp` files are compiled and linked into `test_aot` alongside `libDaScriptAot`
 4. At runtime, `test_aot` is `daslang` with extra AOT stubs - runs tests with `cop.aot=true`
 
+Every generated unit opens the same runtime and AST headers before its own code, and parsing
+them is most of a typical unit's compile, so the AOT targets compile against a precompiled
+header of that set (`DAS_AOT_PCH_HEADERS` + the `DAS_AOT_PCH` macro in the root
+`CMakeLists.txt`, one PCH per target). CMake force-includes it (`/FI`, `-include`), so the
+emitted C++ never mentions it and compiles unchanged outside this tree; `main.cpp` skips it
+and compiles as in `daslang`. A unit built against a PCH cannot be served by sccache, so the
+macro keeps a configured compiler launcher on a target that is in ALL (`libDaScriptAot`,
+`test_aot_subset` - the per-PR lanes hit the cache on those units) and gives the PCH only to
+the on-request targets there (`test_aot`, `test_aot_bench`); with no launcher configured, as
+on a developer box, every AOT target gets it. `-DDAS_AOT_PCH_DISABLED=ON` turns all of it
+off, which is the A/B switch for build timing.
+
 ### CMake macros
 
 | Macro | Purpose | AOT flag |
