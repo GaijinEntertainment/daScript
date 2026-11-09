@@ -54,7 +54,10 @@ on exit never sees one. So after printing the panic the host calls
 reach zero - a live thread can still enqueue work - and the global que must then drain with the
 count still zero - a drained job can still start a thread; the two are rechecked until both hold
 in one pass. When that does not happen in time it prints that it is exiting without teardown and `_Exit`s
-with code 1 - the panic was fatal already, and the leak and heap reports a teardown would print
-describe a program that never reached its shutdown. Both hosts call it: `daslang`
+with `DAS_PANIC_EXIT_CODE` (-2, which a POSIX parent reads as 254) - the code both hosts also
+return after a panic that did tear down, so an uncaught exception is told apart from a compile
+error's 1; the panic was fatal already, and the leak and
+heap reports a teardown would print describe a program that never reached its shutdown. Both
+hosts call it: `daslang`
 (`utils/daslang/main.cpp`) and the standalone exe's `jit_run_main_guarded`
 (`src/builtin/jit_runtime.cpp`).

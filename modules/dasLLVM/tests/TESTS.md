@@ -46,7 +46,7 @@ compile-fail fixture: a [tuned] `perm=` pin naming a perm outside the grid refus
 - `test_exe_name_lookup` - has_function, invoke by name and a global by name answer the same in a standalone exe as interpreted
 - `test_exe_native_paths` - a runtime-only exe registers no require-resolver rows, and a --jit-register-all-modules exe registers the host's rows exactly once each
 - `register_all_executable_keeps_unrelated_missing_modules_optional` - a register-all exe started beside an unrelated descriptor whose module is missing still runs, and runs again once the descriptor is gone
-- `test_exe_panic_with_parked_job_exits` - a standalone exe whose main panics with a job parked on a channel exits with code 1 instead of hanging
+- `test_exe_panic_with_parked_job_exits` - a standalone exe whose main panics exits with the panic code -2, with a job parked on a channel (no teardown) and with nothing running (regular teardown) alike
 - `test_exe_shared_module_function_address` - function addresses a shared module's global initializers take dispatch the same in a standalone exe as interpreted
 - `test_exe_split` - a split -exe (one partition per das module) runs the fixture like the one-unit exe and leaves no partition files beside it
 - `test_exe_flags_outside_their_rail` - --jit-lto and --jit-obj-cache without the split announce that they are ignored, and the one-unit exe still runs

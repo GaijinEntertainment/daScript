@@ -1541,7 +1541,7 @@ namespace das {
         tp << "a job or thread is still running after the panic - exiting without teardown\n";
         tp.output();
         fflush(stdout);
-        _Exit(1);
+        _Exit(DAS_PANIC_EXIT_CODE);
     }
 
     void jobStatusAddRef ( JobStatus * status, Context * context, LineInfoArg * at ) {

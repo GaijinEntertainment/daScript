@@ -132,13 +132,14 @@ def run_panic_fixture(mode : string; var output : string&) : int {
     return run_and_capture(args, output, 60.0)
 }
 
-[test(description = "A panic in main with a job or a detached thread still parked on a channel exits with code 1 instead of hanging the teardown, and a panic with nothing running tears down as before, proven by child runs", timeout = 1200)]
+[test(description = "A panic in main with a job or a detached thread still parked on a channel exits with the panic code -2 instead of hanging the teardown, and a panic with nothing running tears down as before with the same code, proven by child runs", timeout = 1200)]
 def panic_with_a_parked_job_exits(t : T?) {
+    let panicCode = get_running_platform_name() == "windows" ? -2 : 254
     for (mode in ["", "thread"]) {
         t |> run(empty(mode) ? "a parked que job" : "a parked detached thread") @(t : T?) {
             var output : string
             let result = run_panic_fixture(mode, output)
-            t |> equal(result, 1, output)
+            t |> equal(result, panicCode, output)
             t |> success(contains(output, "EXCEPTION: boom"), output)
             t |> success(contains(output, "exiting without teardown"), output)
         }
@@ -146,7 +147,7 @@ def panic_with_a_parked_job_exits(t : T?) {
     t |> run("nothing running: the regular teardown, no early exit") @(t : T?) {
         var output : string
         let result = run_panic_fixture("clean", output)
-        t |> equal(result, 1, output)
+        t |> equal(result, panicCode, output)
         t |> success(contains(output, "EXCEPTION: boom"), output)
         t |> success(!contains(output, "exiting without teardown"), output)
     }

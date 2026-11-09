@@ -6,7 +6,8 @@ options gen2
 //   - the in-process handler (src/hal/crash_handler.cpp) prints a symbolized stack to stderr for
 //     SEH faults, but declines EXCEPTION_STACK_OVERFLOW and never sees fast-fail (abort/terminate);
 //   - WER local dumps catch fast-fail and stack overflow, but only if configured;
-//   - a das panic is neither: the host prints `EXCEPTION: ...` and exits 1 with no fault at all.
+//   - a das panic is neither: the host prints `EXCEPTION: ...` and
+//     exits -2 with no fault at all.
 //
 // A run that produces no evidence in any tier is the interesting result, not a broken test.
 
@@ -19,7 +20,7 @@ require daslib/jobque_boost
 
 enum CrashKind {
     none                //!< control: start, print, return 0
-    das_panic           //!< das panic — host prints `EXCEPTION:`, exit 1, no fault, no dump
+    das_panic           //!< das panic — host prints `EXCEPTION:`, exit -2, no fault, no dump
     das_verify          //!< failed verify() — same path, and unlike assert survives Release
     das_exit_code       //!< main returns a non-zero code — clean exit, no output, no dump
     das_fio_exit        //!< script calls fio's exit(1) directly, bypassing main's return entirely
