@@ -1119,7 +1119,7 @@ def private metal_census_blind_drain(t : T?; cov : table<string; int64>) {
     }
 }
 
-[test]
+[test(description = "Census over the small-model zoo on a Metal device: at least 40 distinct kernels dispatched on an unfiltered run, and each declared blind-spot entry names a compiled kernel that no stocked carrier dispatches")]
 def test_metal_kernel_coverage(tst : T?) {
     tst |> run("Metal kernel coverage census: the small-model zoo across format/graph/batch/KV axes") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -1368,13 +1368,15 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     "da_attn_bw_cls_spv", "da_attn_bw_f16_cls_spv",
     // the per-32 routed down GEMVs' summing twins serve only the gemma-4 MoE's device experts, and no zoo row loads a 26B-A4B file
     // (above the zoo's tier). A key a line - its carrier's down stacks, the stocked file that runs it, the model-free cell's summed arm:
-    // q51: gemma-4-26B-A4B-it-Q4_K_M.gguf (Q5_1 down), test_gpu_resident_gemma4_26b_k.das and
-    //      test_gpu_resident_regions_gemma4moe.das; test_vkd_q51_gemv
-    // iq4nl32: gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf (IQ4_NL down), test_gpu_resident_gemma4_26b.das; test_vkd_iq4nl32_gemv
+    // q51: gemma-4-26B-A4B-it-Q4_K_M.gguf (Q5_1 down), test_gpu_resident_gemma4_moe.das's test_gpu_resident_gemma4_26b_k
+    //      and test_gpu_resident_regions_gemma4moe.das; test_vkd_q51_gemv
+    // iq4nl32: gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf (IQ4_NL down), test_gpu_resident_gemma4_moe.das's
+    //          test_gpu_resident_gemma4_26b; test_vkd_iq4nl32_gemv
     // q4032: gemma-4-26B-A4B-it-Q4_0.gguf (Q4_0 down), no stocked Vulkan file (the Metal census's gemma4moe row alone loads it);
     //        test_vkd_q4032_gemv
     // q5032: no stocked file carries a Q5_0 down stack; test_vkd_q5032_gemv
-    // mx4: gemma-4-26B-A4B-it-MXFP4_MOE-q4km-local.gguf (MXFP4 down), test_gpu_resident_gemma4_26b_mx4.das; test_vkd_mx4_gemv
+    // mx4: gemma-4-26B-A4B-it-MXFP4_MOE-q4km-local.gguf (MXFP4 down), test_gpu_resident_gemma4_moe.das's 26b_mx4 cells;
+    //      test_vkd_mx4_gemv
     "q51_gemv_sum_cls_spv", "iq4nl32_gemv_sum_cls_spv", "q4032_gemv_sum_cls_spv", "q5032_gemv_sum_cls_spv", "mx4_gemv_sum_cls_spv",
     // the E-series per-layer-embedding pre-step's classes serve only an E-series load, and no Vulkan census row loads one (the
     // E-series rows are Metal's). A key a line - the stocked file that dispatches it, the model-free cell:
@@ -1398,8 +1400,8 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // engage (a batched step here rides f32 sessions on the per-op rails); the q8 row-pair stamps serve only past
     // `g_q8_n2_min_n`, off until a box's token command proves the pair. Their coverage is test_vkd_gemv_ncol in
     // test_vulkan_kernels.das; the stocked carriers are the regions files - test_gpu_resident_regions_qwen3.das and
-    // the gemma files for q8, test_gpu_resident_regions_llama.das for k4 and k6, test_gpu_resident_regions_hybrid_iq3s.das
-    // for iq3s, test_gpu_resident_regions_hybrid_q3kxl.das for the eight low-bit leaves
+    // the gemma files for q8, test_gpu_resident_regions_kquant.das for k4 and k6, test_gpu_resident_regions_hybrid_formats.das
+    // for iq3s (its iq3s cells) and the eight low-bit leaves (its q3kxl cells)
     "q8_gemv_n2_cls_spv", "q8_gemv_n4_cls_spv", "q8_gemv_n8_cls_spv",
     "q8_gemv_n2p_cls_spv", "q8_gemv_n4p_cls_spv", "q8_gemv_n8p_cls_spv",
     "kq_gemv_k4_n_cls_spv", "kq_gemv_k5_n_cls_spv", "kq_gemv_k6_n_cls_spv", "kq_gemv_q40_n_cls_spv", "kq_gemv_iq4xs_n_cls_spv", "kq_gemv_iq3s4_n_cls_spv",
@@ -1551,7 +1553,7 @@ def private vk_cov_mode_sweep(t : T?) {
     }
 }
 
-[test]
+[test(description = "The Vulkan serving census over the local zoo, codec carriers, coopmat mode sweep and tower rows dispatches at least 24 distinct kernels, and every declared blind spot names a seeded kernel with zero dispatches")]
 def test_vulkan_kernel_coverage_serving(tst : T?) {
     tst |> run("Vulkan serving census: the local zoo across resident/arena/kq/deltanet/MoE") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1627,7 +1629,7 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
     }
 }
 
-[test]
+[test(description = "Device-free: the compile-time Vulkan lens spec seeds the coverage census with at least 40 kernels, every one reading zero after a reset")]
 def test_vulkan_kernel_coverage_rail(tst : T?) {
     tst |> run("Vulkan kernel coverage rail: the lens spec seeds the census (device-free)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {

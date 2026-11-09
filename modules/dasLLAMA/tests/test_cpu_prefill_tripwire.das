@@ -19,7 +19,7 @@ require dasllama/dasllama_math   // with_dasllama_jobque_
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 let NROWS = 40l
 
-[test]
+[test(description = "On a Metal-capable build an undeclared 40-row CPU prefill panics the tripwire for a non-causal span, a causal prefill, an mrope quantum and a deepstack quantum alike", standalone = "a program that arms allow_cpu_prefill() - test_attn_span's [init], every runner child - disarms the guard this test trips, so the runner exempts the file by name")]
 def test_cpu_prefill_tripwire(t : T?) {
     t |> run("an undeclared prefill trips - span and causal alike (needs stories15M)") @(t : T?) {
         if (!stat(MODEL_PATH).is_valid) {

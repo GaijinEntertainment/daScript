@@ -67,7 +67,7 @@ def private slot_diff(c : Config; a, b : array<float>; pos : int64) : float {
     return span_maxdiff(a, b, slot * hcd, slot * hcd, hcd).diff
 }
 
-[test]
+[test(description = "On micro-qwen4exp at depth 3 the device verifies four rows, and a forced reject at row 0 rolls back on the device with no CPU verify: the rejected rows' n-gram ring slots hold their pre-round bytes bit for bit, the committed slot its row")]
 def test_gpu_resident_hc_micro_round_depth(t : T?) {
     t |> run("micro-qwen4exp at depth 3: the hyper-connection verify rail serves four rows on the device, and a reject at row 0 puts the n-gram ring's rejected slots back and recommits the committed row") @(t : T?) {
         if (!micro_ready(t)) return
@@ -156,7 +156,7 @@ def private drafts_per_round(tr : Model; prompt : array<int64>; rounds : int64; 
     return <- out
 }
 
-[test]
+[test(description = "On micro-qwen4exp at depth 3 the draft chain cut stops each round at one row under a 0.99 floor the random weights never reach, while with the cut at 0 every round drafts all three rows")]
 def test_gpu_resident_hc_micro_chain_cut(t : T?) {
     t |> run("micro-qwen4exp at depth 3 under a chain cut of 0.99: random weights hold every draft under the floor, so each round drafts one row; with the cut at 0 each round drafts three") @(t : T?) {
         if (!micro_ready(t)) return
@@ -184,7 +184,7 @@ def test_gpu_resident_hc_micro_chain_cut(t : T?) {
     }
 }
 
-[test]
+[test(description = "On micro-qwen4exp at depth 2 a seeded sampled stream through the device selection, every landing falling back to the rows, decodes the rows-landed stream token for token and accepts the same drafts")]
 def test_gpu_resident_hc_micro_sampled_selection(t : T?) {
     t |> run("micro-qwen4exp at depth 2: a sampled stream through the device's selection on the hyper-connection chain decodes the rows-landed stream token for token, the same drafts accepted") @(t : T?) {
         if (!micro_ready(t)) return
@@ -208,7 +208,7 @@ def test_gpu_resident_hc_micro_sampled_selection(t : T?) {
             t |> success(sel.selections > 0l, "the selection served the hyper-connection chain's steps ({sel.selections} selections)")
             // what makes the two streams draw alike: random weights give every row a flat nucleus that reaches past the landed
             // survivors, so every landing falls back to the rows and both streams draw off the same rows with the same seed - the
-            // plumbing's witness, not the selection's (test_sampling_landed.das holds the landed draw's equivalence)
+            // plumbing's witness, not the selection's (test_mtp_sampled_walk.das holds the landed draw's equivalence)
             t |> equal(sel.late_landings, sel.selections, "every landing fell back to the rows: a random row's nucleus reaches past the survivors ({sel.late_landings} late landings of {sel.selections} selections)")
             t |> success(ids_equal(rows.ids, sel.ids), "the two streams agree token for token ({length(sel.ids)} tokens)")
             t |> equal(sel.accepted, rows.accepted, "the walk accepts the same drafts under the selection")
@@ -221,7 +221,7 @@ def test_gpu_resident_hc_micro_sampled_selection(t : T?) {
     }
 }
 
-[test]
+[test(description = "With the transfer queue off a child arms the whole-model driver on micro-qwen4exp, announces no transfer queue, and prefills and steps on the compute timeline alone")]
 def test_gpu_resident_hc_micro_single_queue(t : T?) {
     t |> run("micro-qwen4exp with the transfer queue off (DASLLAMA_VK_XFERQ=0): the host-experts form's streamed bundles and token command run on the compute timeline alone - a child loads, prefills and steps") @(t : T?) {
         if (!micro_ready(t)) return

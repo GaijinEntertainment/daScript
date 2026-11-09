@@ -177,7 +177,7 @@ print shows the fast-tier-only pool, pp/tg spot-check against existing rows with
 - **GPU parity for the crown/forwarder changes**: every das Metal row of the m5/m4 re-mint ran
   behind the per-row parity pregate with `--ngl` armed - q8 (E2B Q8_0, canary Q8_0) and kq
   (12B/30B Q4_K_M) both covered. The 14 boot-restore `[init]`s are `if (== null)` guards - no-ops
-  on the `-jit` rail, exercised on the `-exe` rail by `test_exe_smoke`. The Vulkan-armed proof is
+  on the `-jit` rail, exercised on the `-exe` rail by `test_facade.das`'s `test_exe_smoke`. The Vulkan-armed proof is
   deferred: the vulkan hooks arrived from the parallel vulkan arc and no Vulkan box runs in this
   arc.
 - **exe-smoke knockout scope**: the smoke's SmolLM2 CPU generate reaches the decode claim path
@@ -207,7 +207,7 @@ print shows the fast-tier-only pool, pp/tg spot-check against existing rows with
   pregate's claim. Ledgered as followup 60 (should the twins' race envelope tighten until
   strict gates pass crowned?). Also fixed on the way: the two role fixtures gained their
   `tgmem=` (the new lens refusal fired first, masking the role-error the test expects), and
-  `test_exe_smoke` reads the env through `env_value_of` (the registry gate).
+  `test_facade.das`'s `test_exe_smoke` reads the env through `env_value_of` (the registry gate).
 - **Census dlim purge (caught by the final suite pass)**: the pinned-lane census loads baked
   wrong-lane `.dlim` flavors to disk, and the bake's sibling GC purged the serving lane's
   image - `test_audio_embedder` then panicked on the wrong identity. All four new tower rows

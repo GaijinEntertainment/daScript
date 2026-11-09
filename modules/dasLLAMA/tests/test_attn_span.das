@@ -22,7 +22,7 @@ require dasllama/dasllama_load   // quantize_weights_q4: the q4_0 requant leg
 // the span attends [the sliding-window floor, span_end) — the non-causal decode semantics gemma
 // vision decodes under. The reference here is the MASK DIRECTION itself: under causal
 // attention position 0's residual cannot depend on later rows; under the span it must.
-// Needs llama2.c's stories15M.bin (test_flash's fixture); skips cleanly when absent.
+// Needs llama2.c's stories15M.bin (test_prefill's fixture); skips cleanly when absent.
 
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 
@@ -139,7 +139,7 @@ def private probe_override(t : Model; var s : Session; npos, start_pos : int64) 
     return false
 }
 
-[test]
+[test(description = "On stories15M a causal prefill keeps row 0 bit-blind to a last-row perturbation while the non-causal span lets it see it on f32 and q4_0, flash agrees with classic within 1e-2, and a later causal prefill is bit-exact")]
 def test_attn_span(t : T?) {
     t |> run("the non-causal span: direction, propagation, mode agreement, flag reset") @(tt : T?) {
         if (!stat(MODEL_PATH).is_valid) {
@@ -217,7 +217,7 @@ def private mrope_turn_logits(t : Model; embd : array<float>; fuse : bool; nx, n
     return <- lg
 }
 
-[test]
+[test(description = "The mrope span quantum gives bit-exact fused and spliced decode logits, sets rope_pos_delta to max grid minus span rows, and its grid positions and grid shape both change the logits")]
 def test_mrope_span(t : T?) {
     t |> run("the mrope quantum: fused == splice, the delta advances, the map reaches the math") @(tt : T?) {
         if (!stat(MODEL_PATH).is_valid) {
@@ -263,7 +263,7 @@ def test_mrope_span(t : T?) {
     }
 }
 
-[test]
+[test(description = "The fused mid-turn span eval leaves the same cache as the three-eval splice (bit-exact decode logits on classic, within 1e-2 on flash) and in one eval keeps head rows causal while span rows see each other")]
 def test_attn_span_fused(t : T?) {
     t |> run("the fused mid-turn span: splice equivalence + per-query mask direction") @(tt : T?) {
         if (!stat(MODEL_PATH).is_valid) {
@@ -314,7 +314,7 @@ def test_attn_span_fused(t : T?) {
     }
 }
 
-[test]
+[test(description = "Inverted or foreign span bounds and a recurrent graph panic the prefill, a split-span override sees three calls and a fused one one, and an override without the mrope or deepstack seat is never asked")]
 def test_attn_span_guards(t : T?) {   // nolint:STYLE038 — one sequential guard story over one loaded toy: panics → seats → declines → refusals
     t |> run("the guards and the split-span capability seat") @(tt : T?) {
         if (!stat(MODEL_PATH).is_valid) {
@@ -476,7 +476,7 @@ def private ds_eval_logits(t : Model; embd : array<float>) : array<float> {
     return <- lg
 }
 
-[test]
+[test(description = "Deepstack wide rows with zero tails match the narrow eval bit-exact, nonzero tail slices move the logits at slice-dependent depths, and a following text eval sees no stale plane")]
 def test_deepstack_rail(t : T?) {
     t |> run("the deepstack wide-row seam: split, per-layer adds, clean reset") @(tt : T?) {
         if (!stat(MODEL_PATH).is_valid) {

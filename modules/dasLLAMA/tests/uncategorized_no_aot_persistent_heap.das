@@ -33,7 +33,7 @@ def private compile_issues(file_path : string; lint : bool = false) : tuple<ok :
 
 def private fixture(name : string) : string => "{get_das_root()}/modules/dasLLAMA/tests/_role_fixtures/{name}.das"
 
-[test]
+[test(description = "The Metal kernel lens grid micro-grammar compiles a fixture with literal grid dims and refuses one carrying the token 4l, naming the bad token rather than truncating it through to_int")]
 def test_grid_micro_grammar(t : T?) {
     t |> run("the grid micro-grammar folds integer literals and refuses malformed tokens") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -53,7 +53,7 @@ def test_grid_micro_grammar(t : T?) {
     }
 }
 
-[test]
+[test(description = "The @role derivation reads a buffer handed whole, by pointer, by inline addr, through a generic or a method chain off the callee parameter: matching fixtures compile, contradicting ones are refused with the declared-vs-derived message")]
 def test_role_whole_buffer_rule(t : T?) {   // nolint:STYLE038 — parallel per-shape cells of one rule; a split would scatter the rule's coverage
     t |> run("a buffer passed whole to a helper takes the callee parameter's direction") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {

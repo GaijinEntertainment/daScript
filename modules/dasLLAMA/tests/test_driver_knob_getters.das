@@ -19,7 +19,7 @@ let private PROBE = "knob-getters-probe"   //! a decode override name no backend
 [unused_argument(t, ws, sessions, nrows)]
 def private probe_batch(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool => false
 
-[test]
+[test(description = "`mtp_depth_pin` reads back whether and at what depth `set_mtp_depth` pinned, and `restore_mtp_depth` puts back both a cleared and a pinned state exactly as found")]
 def test_mtp_depth_pin(t : T?) {
     t |> run("mtp_depth_pin reads whether set_mtp_depth pinned a depth and the depth, restore_mtp_depth puts both back") @(t : T?) {
         let found = mtp_depth_pin()
@@ -41,7 +41,7 @@ def test_mtp_depth_pin(t : T?) {
     }
 }
 
-[test]
+[test(description = "`unregister_decode_override` removes a probe override and its batched step, deselects it only when active, and a re-registered single-stream name arms no batch twin while a re-registered batch step does")]
 def test_unregister_decode_override(t : T?) {
     t |> run("unregister_decode_override drops the override and its batched step, deselecting it where it is active") @(t : T?) {
         let found = active_decode_override()
@@ -71,7 +71,7 @@ def test_unregister_decode_override(t : T?) {
     }
 }
 
-[test]
+[test(description = "Each Metal driver knob getter (decode fuse, prefill last row, gemma trace, gemma carry pre-norm) reads back what its setter set and the value found restores, and the carry choice leaves the decode carry alone with no drafter attached")]
 def test_metal_knob_getters(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         t |> run("get_metal_decode_fuse reads the rail set_metal_decode_fuse set") @(t : T?) {

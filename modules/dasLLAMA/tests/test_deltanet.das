@@ -32,7 +32,7 @@ require _model_tier   // models_dir() + model_available() presence/size-tier gat
 
 let private DN_LOGIT_BAR_REL = 0.04   // of the step's max |logit|; the two forms measure ~0.015 of it apart
 
-[test]
+[test(description = "On Qwen3.5-0.8B with GPU routes and vector activations pinned off, a 150-token chunked deltanet prefill lands within 4 percent of max logit of the recurrent one, and stays there over 8 forced-feed decode steps, while a one-step-off compare reds the bar")]
 def test_deltanet_chunked_prefill(t : T?) {
     t |> run("deltanet chunked prefill == recurrent (Qwen3.5-0.8B, multi-chunk)") @(t : T?) {
         let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
@@ -163,7 +163,7 @@ def private step_logits(tr : Model; tabled : bool) : array<float> {
     return <- out
 }
 
-[test]
+[test(description = "On Qwen3.5-0.8B the rope-scaling override refuses unknown kinds and factor-less yarn, folds linear and none exactly, and YaRN x4 lands the divisors and mscale in the decode rope row against an fp64 fold, with table and direct paths agreeing and the fold moving the logits")]
 def test_deltanet_yarn_override(t : T?) {
     t |> run("the YaRN override on the partial-rotary 0.8B: the fold lands in the rope row, both rope paths take it, the plain load stays llama.cpp's") @(t : T?) {
         let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
@@ -283,7 +283,7 @@ def private counting_release(state_lo : uint64; state_hi : uint64) {
     g_release_hi = state_hi
 }
 
-[test]
+[test(description = "A session's deltanet owner token spans exactly the host dn_state range, and a counting release hook sees one release carrying that range on position-zero reset, on speculative rollback, and on delete")]
 def test_deltanet_owner_release(t : T?) {
     t |> run("the session's deltanet owner token releases its own state range on reset, rollback and delete") @(t : T?) {
         return if (!jit_only(t))
@@ -312,7 +312,7 @@ def test_deltanet_owner_release(t : T?) {
     }
 }
 
-[test]
+[test(description = "A model-free run state at 27B deltanet geometry allocates the 144 MB S state, and a d_conv 64 twin the conv history, each in one grow past the max_unreserved_size guard with the exact element counts")]
 def test_deltanet_state_sizing(t : T?) {
     t |> run("deltanet session state at 27B geometry clears max_unreserved_size") @(t : T?) {
         return if (!jit_only(t))

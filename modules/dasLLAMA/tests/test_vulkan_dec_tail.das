@@ -517,7 +517,7 @@ def private span_layer_ref_sh(var q : Quad; f : Ffn; sh : Shexp; router : array<
     }
 }
 
-[test]
+[test(description = "span_args_current holds the cached span arguments current only for the carrier that filled them, refusing a same-layout carrier, another suffix start or another suffix length")]
 def test_vulkan_dec_span_cache(t : T?) {
     t |> run("dec span: the cached arguments follow the carrier, not only the offsets") @(t : T?) {
         // two carriers with the same layout - the same first attention offset - own different rows
@@ -538,7 +538,7 @@ def test_vulkan_dec_span_cache(t : T?) {
     }
 }
 
-[test]
+[test(description = "The whole-token decode span (two k4 attention layers, device router and top-k, routed FFN) matches a CPU reference routed by moe_select_core within 1e-3 of the row max at two positions, and vulkan_moe_span registers")]
 def test_vulkan_dec_span(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         install_vk_moe_hooks()
@@ -581,7 +581,7 @@ def test_vulkan_dec_span(t : T?) {
 
 //! the span with a gated shared expert: the routed slots plus sigmoid(gate) times the shared down
 //! row in one combine, the shared feed off the same normed row, one submit per position
-[test]
+[test(description = "The decode span with a shared q8 expert, sigmoid-gated and ungated, matches the CPU residual row within 1e-3 of the row max at two positions, and the reference without the shared expert misses the device row")]
 def test_vulkan_dec_span_shexp(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         vk_span_reset()   //! the span records once per model: this cell is the second model in the process
@@ -651,7 +651,7 @@ def private shexp_mixed_ref(w1, w3, w2 : array<float>; x : array<float>; rows : 
 //! a shared expert whose gate and up take two activation forms - a q8 gate fed Q8_0 beside a k4 up fed Q8_K, a k6 down - through
 //! `shexp_gpu_gemms`: every plane read in its own format over its own image, at one row (a decode step) and at three (a prefill);
 //! the k4 up fed the gate's Q8_0 image - one image for both - misses its row (the control that the two images are load-bearing)
-[test]
+[test(description = "shexp_gpu_gemms reads a q8 gate on Q8_0, a k4 up on Q8_K and a k6 down, matching the per-image reference within 1e-3 of the row max at 1 and 3 rows, every row counted; the k4 up fed Q8_0 misses (control)")]
 def test_vulkan_shexp_mixed_forms(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         install_vk_moe_hooks()
@@ -735,7 +735,7 @@ def private q51_rows_ref(wq, ws : array<uint8>; xq : array<int8>; xs : array<flo
 //! a dense FFN triple of two activation forms - a q51 gate fed Q8_0 beside a k4 up fed Q8_K, a k6 down - through `ffn_gpu_gemms`,
 //! the per-op FFN rail's form for such a layer: the q51 gate on the per-32 batch tile, every plane over its own image, at one row
 //! and at three; the k4 up fed the gate's Q8_0 image misses its row (the control)
-[test]
+[test(description = "ffn_gpu_gemms runs a q51 gate on Q8_0, a k4 up on Q8_K and a k6 down, matching the engine scalar dots within 1e-3 of the row max at 1 and 3 rows; the k4 up fed the gate Q8_0 image misses (control)")]
 def test_vulkan_dense_ffn_mixed_forms(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         install_vk_moe_hooks()
@@ -859,7 +859,7 @@ def private routed_regions(f : Mx4Experts; ex, cnt : array<int64>; var o1, o3, o
 //! native-MXFP4 routed stacks on the per-op expert chain, plain and under gpt-oss's form (`MoeGpuFfnForm`: the gate/up bias rows,
 //! the clamped swiglu), on the decode GEMV arm and the batch arm against the engine's scalar dots; the plain reference misses the
 //! biased rows (the control that the form reaches the act)
-[test]
+[test(description = "matmul_moe_gpu_ffn over native-MXFP4 expert stacks matches the engine mx4 scalar dot within 1e-3 of the row max on decode and batch arms, plain and under gpt-oss bias plus clamped swiglu, which the plain reference misses")]
 def test_vulkan_routed_mx4_form(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         install_vk_moe_hooks()
@@ -951,7 +951,7 @@ def private two_forms_ref(w1, w3, w2 : array<float>; g8, uk : array<float>; ex, 
 //! routed experts whose gate and up take two activation classes - a q8 gate stack fed Q8_0 beside a k4 up stack fed Q8_K, a k6
 //! down - through `matmul_moe_gpu_ffn`, the up stacks reading the call's second image (`set_moe_gpu_image2`), on the decode GEMV
 //! arm and the batch arm; the up stacks fed the gate's Q8_0 image miss the rows (the control that the second image reaches them)
-[test]
+[test(description = "matmul_moe_gpu_ffn with a q8 gate stack on Q8_0 and a k4 up stack on the second Q8_K image matches the reference within 1e-3 of the row max on decode and batch arms; up stacks fed the Q8_0 image miss")]
 def test_vulkan_routed_two_forms(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         install_vk_moe_hooks()
@@ -1009,7 +1009,7 @@ let private HEAT_LAYER = 11l   //! the heat cell's pool layer
 //! the heat pool under gpt-oss's form: native-MXFP4 stacks streamed, two experts pinned, a top-k of three splitting into two hits
 //! the pool serves on the async chain under the biased clamped swiglu - the hits' experts carried beside their slot regions
 //! (`set_moe_gpu_ffn_experts`) - against the engine's scalar dots; the plain reference misses the hit rows (the control)
-[test]
+[test(description = "The heat pool serves the two pinned experts of a top-k of three over streamed MXFP4 stacks on the async chain, under gpt-oss biased clamped swiglu, within 1e-3 of the row max; the plain reference misses")]
 def test_vulkan_heat_mx4_form(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         install_vk_moe_hooks()
@@ -1071,7 +1071,7 @@ def test_vulkan_heat_mx4_form(t : T?) {
     }
 }
 
-[test]
+[test(description = "The decode attention block and FFN tail match the CPU reference within 1e-3 of the row max for k4, q8 and biased q8 quad pairs, both hydrate arms, and a k4 and q8 quad at one plane offset")]
 def test_vulkan_dec_tail(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         install_vk_moe_hooks()

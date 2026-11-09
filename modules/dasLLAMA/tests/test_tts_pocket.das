@@ -99,7 +99,7 @@ def private load_tokens_fixture(path : string = tokens_fixture_path()) : TokFixt
 
 def private ids_text(a : array<int64>) : string => join(a, " ")
 
-[test]
+[test(description = "The Pocket unigram tokenizer encodes all 200 prepared corpus sentences and the byte-fallback probes id for id with the reference package and decodes them back, never encodes typed control text to EOS, and panics on an out-of-vocab unk id")]
 def test_pocket_tokenizer(t : T?) {
     let path = gguf_path()
     if (!model_available(t, path)) {
@@ -178,7 +178,7 @@ def test_pocket_tokenizer(t : T?) {
 
 // the reference's own text preparation, row by row: the oracle prepared every corpus sentence
 // (`prepared`, `frames_after_eos`) and ours must land the same string and the same tail
-[test]
+[test(description = "`prepare_pocket_text` matches the reference's prepared string and frames-after-EOS on all 200 corpus rows and the fixture probes, applies the terminal-mark and word-count rules, and panics on blank text while the chunker yields none")]
 def test_prepare_pocket_text(t : T?) {
     let path = gguf_path()
     if (!model_available(t, path)) {
@@ -314,7 +314,7 @@ let CODEC_BAR = 2.0e-3    // the codec chain: eleven convs and a transformer of 
 let ENCODER_BAR = 2.0e-3
 let FRAME_BAR = 5.0e-3    // one frame teacher-forced: six transformer layers and the head
 
-[test]
+[test(description = "On the f32 CPU lane the Pocket codec decoder and encoder hold 2e-3 of the oracle's peak, and the voice prompt's frame count and per-layer KV rows hold 5e-3, against the oracle dumps")]
 def test_pocket_parity(t : T?) {
     let path = gguf_path()
     if (!model_available(t, path)) {
@@ -386,7 +386,7 @@ let STREAM_BAR = 1.0e-5   // absolute, on a waveform or a latent frame: float no
 //! the codec stream (ARCHITECTURE_POCKET.md#pocket-codec-stream): a chunk decoded and a clip encoded a
 //! window of frames per step give the whole run's output on the f32 lane, one frame per step
 //! included, with the activations scaling with the window
-[test]
+[test(description = "The windowed Pocket codec decode and encode match the whole-run output within 1e-5 absolute at window 1 and the default, using under half the scratch, and after `pocket_release_scratch` frees every buffer the next decode matches again")]
 def test_pocket_codec_stream(t : T?) {
     let path = gguf_path()
     if (!model_available(t, path)) {
@@ -450,7 +450,7 @@ def test_pocket_codec_stream(t : T?) {
     }
 }
 
-[test]
+[test(description = "Teacher-forced on the oracle's noise and frames, Pocket reproduces the token and frame counts, and the flow head, conditioning, EOS logits and latents hold 5e-3 of the oracle's peak, the waveform 8e-3")]
 def test_pocket_frames(t : T?) {
     let path = gguf_path()
     if (!model_available(t, path)) {
@@ -496,7 +496,7 @@ def test_pocket_frames(t : T?) {
 //! The codec seat on the Metal tower against the CPU chain over the oracle's latents, on the f32
 //! lane: the served leg within GPU_CODEC_BAR with the bar's control and the compare's control, one
 //! tower encode a call, and the knob-off leg bit-equal to the CPU chain with its decline recorded.
-[test]
+[test(description = "The Pocket codec seat on the GPU tower, f32 lane, holds rel-l2 1e-5 of the CPU chain over the oracle's latents with one encode a call, and with the knob off the CPU result is bit-equal and the decline recorded")]
 def test_pocket_codec_metal(t : T?) {
     let path = gguf_path()
     if (!model_available(t, path)) {
@@ -534,7 +534,7 @@ def test_pocket_codec_metal(t : T?) {
 //! The codec seat on the served planes of the q8 and kq files against each file's own CPU chain
 //! over the oracle's latents, within GPU_CODEC_SERVED_BAR with the bar's one-sample control, one
 //! hook call served and one encode a call.
-[test]
+[test(description = "The Pocket codec seat on the served planes of the stocked q8 and kq files holds rel-l2 2e-1 of each file's own CPU chain over the oracle's latents, served once a call, with one-sample and x3-scaled controls")]
 def test_pocket_codec_metal_served(t : T?) {
     var inscope man <- stocked_manifest(t)
     return if (empty(man.cases))
@@ -689,7 +689,7 @@ def private frames_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : s
 //! The prompt seat's two model-free rules on a bare voice state: the cache admission's four refusals, and the
 //! residency record - spent by one take, and held to the voice, the slot build, the fill, the row count and the
 //! embedding rows it was set under.
-[test]
+[test(description = "`tts_pk_prompt_admit` refuses an empty prompt, a cache count off the layers, rows past capacity and a capacity past the keys, and the prompt residency record is spent by one take and missed on any changed build, rows, embedding or fill")]
 def test_pocket_prompt_rules(t : T?) {
     t |> run("the prompt admission refuses an empty prompt, a cache count off the layers, rows past the capacity and a capacity past the keys") @(t : T?) {
         var inscope m = PocketModel()
@@ -734,7 +734,7 @@ def test_pocket_prompt_rules(t : T?) {
     }
 }
 
-[test]
+[test(description = "`pocket_gpu_stats` panics naming an unknown seat key, and `pocket_gpu_seats` lists codec, frames, prompt in dispatch order, each reading counters with served never above calls")]
 def test_pocket_seat_stats(t : T?) {
     t |> run("a seat name no stage carries panics, so a misspelt key cannot read as zero counters") @(t : T?) {
         let why = panic_text() {
@@ -815,7 +815,7 @@ def private prompt_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : s
 }
 
 //! The prompt seat on the f32 lane and on the served planes of the q8 and kq files, as `prompt_seat_leg` holds it.
-[test]
+[test(description = "The Pocket prompt seat's per-layer K/V rows hold rel-l2 1e-5 of the CPU chain on the f32 lane and 5e-2 on the q8 and kq served planes, one call and encode, knob-off bit-equal, with one-element and rotated-text controls")]
 def test_pocket_prompt_gpu(t : T?) {
     let path = gguf_path()
     if (!model_available(t, path)) {
@@ -853,7 +853,7 @@ def test_pocket_prompt_gpu(t : T?) {
 //! control, the generator left where the CPU loop leaves it, one hook call served, one encode a
 //! batch, the knob-off leg bit-equal to the CPU chain with its decline recorded; then the free run
 //! served.
-[test]
+[test(description = "The Pocket frames seat on the tower, f32 lane, teacher-forced holds latents, conditioning and EOS at rel-l2 2e-5 of the CPU chain with the RNG ending equal, the free run 5e-3, batches of 3 too, and an empty driver record reaches no hook")]
 def test_pocket_frames_metal(t : T?) {
     let path = gguf_path()
     if (!model_available(t, path)) {
@@ -939,7 +939,7 @@ def test_pocket_frames_metal(t : T?) {
 //! teacher-forced on the oracle's noise and frames: the latents within GPU_FRAME_SERVED_BAR with
 //! the bar's one-element control, the frame count equal, one hook call served, one encode a batch;
 //! the distance to the f32 oracle logged beside the CPU chain's.
-[test]
+[test(description = "The Pocket frames seat on the q8 and kq served planes, teacher-forced for one case a voice, makes the CPU chain's frame count with latents within rel-l2 1e-1 of each file's own CPU chain, served once with one encode a batch")]
 def test_pocket_frames_metal_served(t : T?) {
     var inscope man <- stocked_manifest(t)
     return if (empty(man.cases))
@@ -965,7 +965,7 @@ def test_pocket_frames_metal_served(t : T?) {
 
 //! The frames seat after the LLM tier's model drop in the same process (a slot switch, a reload): the seat serves again on
 //! the same voice and reads the same frames, the slabs, the scratch and the voice slot rebuilt behind the drop.
-[test]
+[test(description = "After the LLM tier's `moe_gpu_drop_model` in the same process, the Pocket q8 frames seat serves again and holds the same bar against the CPU chain at the same frame count as before the drop")]
 def test_pocket_frames_after_model_drop(t : T?) {
     var inscope man <- stocked_manifest(t)
     return if (empty(man.cases))
@@ -997,7 +997,7 @@ def test_pocket_frames_after_model_drop(t : T?) {
 //! The served synthesis across the tower knob on the served lane: every chunk's codec and frame
 //! loop on the tower, one codec encode a chunk, the knob-off leg declining every seat per chunk,
 //! both legs speaking.
-[test]
+[test(description = "Pocket served-lane synthesis serves every seat once a chunk with the knob on and declines each with it off, encoding more than once a chunk, both legs finite and over a second of speech")]
 def test_pocket_synthesis_metal(t : T?) {
     let path = gguf_path()
     if (!model_available(t, path)) {
@@ -1025,7 +1025,7 @@ def test_pocket_synthesis_metal(t : T?) {
 // logged and the lane's quality gate is the rig (harness/tts_rig.py --q8 against --f32)
 let Q8_RMS_BAR = 0.5   //! a quantized conditioning row moves a flow sample by tenths on a few elements; the control shifts the expectation by its own rms
 
-[test]
+[test(description = "On the pinned q8 lane the Pocket backbone GEMMs serve q8 and codec convs f32, teacher-forced latents hold rel-l2 0.5 of the f32 oracle with an rms-shift control, and the free run lands within 4 frames of the oracle with speech")]
 def test_pocket_q8_lane(t : T?) {
     let path = gguf_path()
     if (!model_available(t, path)) {
@@ -1072,7 +1072,7 @@ def private forced_latents(m : PocketModel; c : PocketCase; man : PocketManifest
     return <- rows.lat
 }
 
-[test]
+[test(description = "The published Q8_0 Pocket file loads every backbone GEMM as q8 with codec convs f32, and its teacher-forced latents hold rel-l2 5e-2 of the f16 file's on both the q8 lane and the dequantized f32 lane")]
 def test_pocket_q8_file(t : T?) {
     //! The published form: a file whose served GEMM weights are Q8_0 blocks in the kernels'
     //! layout, read straight into the int8 planes, against the f16 file quantized at load.
@@ -1133,7 +1133,7 @@ let KQ_HEAD_BAR = 2.0e-2    //! the flow head on its Q8_0 route against the f32 
 
 def private kq_gguf_path() : string => path_join(models_dir(), "pocket-tts-en-kq.gguf")
 
-[test]
+[test(description = "The K-quant Pocket file serves Q4_K planes unpinned, Q8_0 pinned q8 and f32 pinned f32; its kq lane holds rel-l2 5e-2 of the q8 and exact lanes, the Q8_0 head 2e-2 of the oracle, and a roster-name clone keeps 19 voices and speaks")]
 def test_pocket_kq_file(t : T?) {
     //! The small form (`convert_pocket.py --kq`): the backbone's and the codec transformers'
     //! matrices and the text embedding as Q4_K, the flow head as Q8_0. Unpinned, the K-quant
@@ -1318,7 +1318,7 @@ def private language_cells(t : T?; L : PocketLang) {
     to_log(LOG_INFO, "pocket {L.config}: {timings_line(a.timings, a.sample_rate)}\n")
 }
 
-[test]
+[test(description = "Each of the five other-language Pocket Q8_0 files reports its code and one default voice, tokenizes its corpus and probes id for id with the reference, holds teacher-forced latents at rel-l2 0.5 within 2 frames, and speaks through the facade")]
 def test_pocket_languages(t : T?) {
     with_dasllama_jobque_() {
         for (L in LANGS) {
@@ -1615,7 +1615,7 @@ def private small_cells(t : T?; S : PocketSmall) {
     small_published_cells(t, S, man, odir, fx)
 }
 
-[test]
+[test(description = "Each small Pocket model (18M, 7M, 2M) loads its declared shape and driver rules, refuses each broken frames-admission clause, keeps decimals in one chunk, holds the oracle's stage bars and GPU seat bars, and its published file tokenizes exactly and speaks")]
 def test_pocket_small_models(t : T?) {
     for (S in SMALL) {
         small_cells(t, S)
@@ -1623,7 +1623,7 @@ def test_pocket_small_models(t : T?) {
 }
 
 //! the reward-tuned twins: the same shapes and rules, one sentence each through the facade
-[test]
+[test(description = "Each stocked reward-tuned small Pocket twin reports a _refl_2026-10 config with the six-frame EOS guard and speaks a sentence as finite audio with rms above 0.01")]
 def test_pocket_small_refl(t : T?) {
     with_dasllama_jobque_() {
         for (stem in REWARD_TUNED_TWINS) {
@@ -1639,7 +1639,7 @@ def test_pocket_small_refl(t : T?) {
     }
 }
 
-[test]
+[test(description = "Pocket through the facade reports a cloning English model with 19 voices and no speed, matches the reference chunker, speaks 1 to 8 seconds, clones a voice from the checked-in clip, and refuses unknown voice, speed, phonemes, wrong rate and over-long clips by name")]
 def test_pocket_facade(t : T?) {
     facade_smoke(t, gguf_path(), false, 19) $(var m : TtsModel; c : TtsCaps) {
         t |> success(c.cloning, "a Pocket model clones")
@@ -1706,7 +1706,7 @@ def private pocket_refusals(t : T?; var m : TtsModel; clip : array<float>) {
 // (`convert_pocket.py --voices stuart_bell --no-cloning --kq`) - it speaks its roster from the
 // stored frames, says it cannot clone, and refuses a clip by name; the 18m twin speaks the same
 // samples as the full 18m-kq file, whose stuart_bell tensors it carries unchanged
-[test]
+[test(description = "A one-voice Pocket file without the codec encoder needs no packs, does not clone, speaks stuart_bell from stored frames and refuses a clip naming the missing encoder, and the 18M one-voice twin speaks bit-identical samples to the full 18M-kq file")]
 def test_pocket_no_encoder(t : T?) {
     for (file in ["pocket-tts-en-stuart-kq.gguf", "pocket-tts-en-18m-stuart-kq.gguf"]) {
         no_encoder_cells(t, file)
@@ -1785,7 +1785,7 @@ def private quiet_floor_db(pcm : array<float>; rate : int) : float {
     return 20.0 * log10(max(acc / float(k), 1e-9))
 }
 
-[test]
+[test(description = "On the kq file the q8 lane's quiet floor (the quietest twentieth of differenced 100 ms windows) sits within 6 dB of the f32 lane's, while the f32 render with a -60 dBFS hiss mixed in lands past that bar")]
 def test_pocket_quiet_floor(t : T?) {
     //! A per-frame parity bar reads the loud part of a frame, so the quiet floor is the only lane compare that catches a hiss in the silences.
     let path = kq_gguf_path()
@@ -1827,7 +1827,7 @@ def test_pocket_quiet_floor(t : T?) {
 // a text the chunker cannot split - no sentence mark, no comma - is one chunk past the token
 // budget: the voice's caches grow to hold its text and every frame the cap allows, and the
 // synthesis runs to EOS instead of panicking on the cache
-[test]
+[test(description = "An unsplittable chunk past POCKET_MAX_TOKENS speaks instead of panicking, the GPU codec seat declining it by shape, the voice's caches grow to the chunk's need, and a following short sentence on the same voice still speaks")]
 def test_pocket_long_chunk(t : T?) {
     let path = gguf_path()
     if (!model_available(t, path)) {
@@ -1872,7 +1872,7 @@ def test_pocket_long_chunk(t : T?) {
     }
 }
 
-[test]
+[test(description = "A voice prompt prepared on a cloning Pocket file survives JSON and registers lazily on an encoder-less file, a flipped latent-space id refuses it, it conditions an 18M model that speaks, and the small model trims a padded clip to end on a pause")]
 def test_pocket_prepared_prompt_transfer(t : T?) {
     let sender_path = path_join(models_dir(), "pocket-tts-en-kq.gguf")
     let receiver_path = path_join(models_dir(), "pocket-tts-en-stuart-kq.gguf")
@@ -1927,7 +1927,7 @@ def test_pocket_prepared_prompt_transfer(t : T?) {
 }
 
 //! the EOS rule's guard: a logit over the threshold on a chunk's first `min_frames_before_eos` frames pins nothing
-[test]
+[test(description = "`pocket_eos_stops` ignores an over-threshold EOS logit before min_frames_before_eos, pins EOS at the first allowed frame and stops two frames later, pins immediately with no guard, and ignores under-threshold logits")]
 def test_pocket_eos_guard(t : T?) {
     var inscope m = PocketModel(eos_threshold = -1.0, min_frames_before_eos = 6l)
     var eos_at = -1l
@@ -1948,7 +1948,7 @@ def private fingerprint_of(rate : int; ld, fs : int64; mean0, std0 : float) : ui
 }
 
 //! the latent-space fingerprint reads every one of its inputs: the rate, the latent width, the frame length and both statistics
-[test]
+[test(description = "`pocket_latent_space_id` is stable for the same space and changes when any one input - sample rate, latent width, frame length, latent mean or deviation - changes")]
 def test_pocket_latent_space_fingerprint(t : T?) {
     let id = fingerprint_of(24000, 32l, 1920l, 0.1, 1.5)
     t |> equal(id, fingerprint_of(24000, 32l, 1920l, 0.1, 1.5), "the same space reads the same id")
@@ -1962,7 +1962,7 @@ def test_pocket_latent_space_fingerprint(t : T?) {
 def private tf_shell(d, heads, kv, dh, attn, ffn : int64) : PocketTransformer => PocketTransformer(d = d, heads = heads, kv_heads = kv, dh = dh, attn_dim = attn, ffn = ffn)
 
 //! the shared transformer admission's rejections, each clause alone off a shape it admits
-[test]
+[test(description = "`tts_pk_tf_ok` admits a 64-wide head and grouped 32-wide heads at the 32 floor, and refuses each clause alone: off-lattice widths, no KV head, non-multiple query heads, mismatched attention width, heads under the floor, not dividing or past hs")]
 def test_pocket_shape_admission(t : T?) {
     t |> success(tts_pk_tf_ok(tf_shell(64l, 1l, 1l, 64l, 64l, 64l), 64l), "one 64-wide head is admitted at hs 64 with no floor")
     t |> success(!tts_pk_tf_ok(tf_shell(64l, 2l, 1l, 32l, 64l, 64l), 64l), "a 32-wide head is refused at hs 64 with no floor (the head is the stamp's)")

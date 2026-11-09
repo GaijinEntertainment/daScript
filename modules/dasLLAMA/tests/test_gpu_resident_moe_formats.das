@@ -190,17 +190,17 @@ def private knob_cells(t : T?; tag : string) {
     }
 }
 
-[test]
+[test(description = "With Q8_0 experts on twenty host layers, the hot pool's DMA fill, heat-gate share and decode meet each run as their counters show, DMA-off the control, and the fed steps hold the CPU chain within the routed bar")]
 def test_moe_formats_knobs_Q8_0(t : T?) {
     knob_cells(t, "Q8_0")
 }
 
-[test]
+[test(description = "With Q4_K experts on twenty host layers, the hot pool's DMA fill, heat-gate share and decode meet each run as their counters show, DMA-off the control, and the fed steps hold the CPU chain within the routed bar")]
 def test_moe_formats_knobs_Q4_K(t : T?) {
     knob_cells(t, "Q4_K")
 }
 
-[test]
+[test(description = "With IQ4_XS experts on twenty host layers, the hot pool's DMA fill, heat-gate share and decode meet each run as their counters show, DMA-off the control, and the fed steps hold the CPU chain within the routed bar")]
 def test_moe_formats_knobs_IQ4_XS(t : T?) {
     knob_cells(t, "IQ4_XS")
 }
@@ -208,7 +208,7 @@ def test_moe_formats_knobs_IQ4_XS(t : T?) {
 //! the rare rail's three A/B arms pinned off on the Q4_K file, one cell each: the three region-list passes in place of the
 //! one-pass lane, the rows core a row in place of the batched cores, and the planar planes in place of the arena - the same
 //! compare at the matrix's bar, the arm's counter the witness
-[test]
+[test(description = "Each rare-rail A/B arm pinned off on Q4_K host experts - the three-pass rail, the row-at-a-time core, the planar planes reading no device row - still holds the CPU chain's logits within the routed bar")]
 def test_moe_formats_rail_arms(t : T?) {
     let fx = MoeFixture(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps-Q4_K.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, host_layers_ask = 4l)
     t |> run("Q4_K experts on four host layers through the three-pass rail (DASLLAMA_RARE_ONEPASS=0): the token command vs the CPU chain") @(ct : T?) {
@@ -247,101 +247,101 @@ def test_moe_formats_rail_arms(t : T?) {
 }
 
 //! one [test] a format, so a run names one carrier a process (`--test-names test_moe_formats_<TYPE>`): under DASLLAMA_IMAGE=0 a loaded model's planes stay in the heap past its delete, and four carriers in one process exhaust the box
-[test]
+[test(description = "Q2_K routed experts on four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows")]
 def test_moe_formats_Q2_K(t : T?) {
     format_cells(t, "Q2_K")
 }
 
-[test]
+[test(description = "Q3_K routed experts on four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows")]
 def test_moe_formats_Q3_K(t : T?) {
     format_cells(t, "Q3_K")
 }
 
-[test]
+[test(description = "Q4_K routed experts on four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows")]
 def test_moe_formats_Q4_K(t : T?) {
     format_cells(t, "Q4_K")
 }
 
-[test]
+[test(description = "Q5_K routed experts on four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows")]
 def test_moe_formats_Q5_K(t : T?) {
     format_cells(t, "Q5_K")
 }
 
-[test]
+[test(description = "Q6_K routed experts on four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows")]
 def test_moe_formats_Q6_K(t : T?) {
     format_cells(t, "Q6_K")
 }
 
-[test]
+[test(description = "Q4_0 routed experts on four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows")]
 def test_moe_formats_Q4_0(t : T?) {
     format_cells(t, "Q4_0")
 }
 
-[test]
+[test(description = "Q8_0 routed experts on four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows")]
 def test_moe_formats_Q8_0(t : T?) {   //! the source file itself, linked into the matrix folder under the matrix's naming
     format_cells(t, "Q8_0")
 }
 
-[test]
+[test(description = "IQ4_XS routed experts on four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows")]
 def test_moe_formats_IQ4_XS(t : T?) {
     format_cells(t, "IQ4_XS")
 }
 
 //! the carrier is the 35B NVFP4 file itself (large tier): its routed stacks reach the nv4 row-major kernels under the per-tensor scale word
-[test]
+[test(description = "Qwen3.6-35B NVFP4 with four host layers reads its attention and expert sites in nv4 under the per-tensor scale, and the host rail plus nv4 kernels hold the CPU chain within the routed bar over one and two windows")]
 def test_moe_formats_NVFP4_35B(t : T?) {
     //! the census binds the file's nv4 sites; its BF16 deltanet planes, table and classifier serve as q8 by the tier's design
     format_cells_of(t, "NVFP4 (Qwen3.6-35B-A3B)", MoeFixture(file = "Qwen3.6-35B-A3B-NVFP4.gguf", shexp = true, census = true, fp4_chain = true, dn_chunk = true,
         census_sites = "attention q/k/v/o;routed experts;shared expert", bar_rel = MOE_LOGIT_BAR_REL, host_layers_ask = 4l))
 }
 
-[test]
+[test(description = "IQ4_NL routed experts on four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows")]
 def test_moe_formats_IQ4_NL(t : T?) {
     format_cells(t, "IQ4_NL")
 }
 
-[test]
+[test(description = "IQ3_XXS routed experts on four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows")]
 def test_moe_formats_IQ3_XXS(t : T?) {
     format_cells(t, "IQ3_XXS")
 }
 
-[test]
+[test(description = "IQ3_S routed experts on four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows")]
 def test_moe_formats_IQ3_S(t : T?) {
     format_cells(t, "IQ3_S")
 }
 
-[test]
+[test(description = "IQ2_S routed experts on four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows")]
 def test_moe_formats_IQ2_S(t : T?) {
     format_cells(t, "IQ2_S")
 }
 
-[test]
+[test(description = "IQ2_XS routed experts on four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows")]
 def test_moe_formats_IQ2_XS(t : T?) {
     format_cells(t, "IQ2_XS")
 }
 
-[test]
+[test(description = "IQ2_XXS routed experts on four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows")]
 def test_moe_formats_IQ2_XXS(t : T?) {
     format_cells(t, "IQ2_XXS")
 }
 
-[test]
+[test(description = "Q5_0 routed experts on four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows")]
 def test_moe_formats_Q5_0(t : T?) {
     format_cells(t, "Q5_0")
 }
 
-[test]
+[test(description = "Q5_1 routed experts on four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows")]
 def test_moe_formats_Q5_1(t : T?) {
     format_cells(t, "Q5_1")
 }
 
-[test]
+[test(description = "MXFP4 routed experts on four host layers, read off the device planes through the one-copy rare rail, hold the CPU chain's logits within the routed bar over one and two windows")]
 def test_moe_formats_MXFP4(t : T?) {
     format_cells(t, "MXFP4")
 }
 
 //! the hot expert pool over streamed layers: twenty of the Q4_K file's routed layers on the host arm the unasked pool, its slots filled off the layers' pinned mirrors - the fed steps' picks against the CPU chain, the slot copies and the uploads the witness
-[test]
+[test(description = "With Q4_K experts on twenty host layers the unasked hot pool arms and fills each slot off the pinned mirrors - three plane copies an upload, no planar read - while the fed steps hold the CPU chain's routed bar")]
 def test_moe_formats_hot_pool(t : T?) {
     let fx = MoeFixture(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps-Q4_K.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, host_layers_ask = 20l)
     t |> run("Q4_K experts on twenty host layers with the hot pool: the slots filled off the mirrors, the token command vs the CPU chain") @(ct : T?) {
@@ -364,7 +364,7 @@ def test_moe_formats_hot_pool(t : T?) {
 }
 
 //! the expert cache at half: twenty of the Q4_K file's routed layers streamed under a budget keeping about half of each layer's experts resident, the misses read off the lane into the ring - the fed steps' picks against the CPU chain, the on-demand reads the witness
-[test]
+[test(description = "Under a 3500 MB expert cache over twenty Q4_K host layers the misses read off the lane on demand within the CPU chain's routed bar, and a second feed with the saved heat profile reads fewer planes")]
 def test_moe_formats_expert_cache(t : T?) {
     let fx = MoeFixture(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps-Q4_K.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, host_layers_ask = 20l, image = true)
     t |> run("Q4_K experts on twenty host layers under a 3500 MB expert cache: the misses read off the lane, the token command vs the CPU chain") @(ct : T?) {

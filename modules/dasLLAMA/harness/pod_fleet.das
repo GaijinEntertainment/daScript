@@ -68,7 +68,7 @@ struct Fleet {
 }
 
 //! the index `up` gives its next pod: past the largest live one, since a partial `down` leaves the set sparse. Non-private:
-//! test_pod_fleet.das holds it
+//! the pod-fleet tests (tests/uncategorized_persistent_heap_stack_524288.das) hold it
 def next_pod_index(fleet : Fleet) : int {
     var top = 0
     for (pod in fleet.pods) {
@@ -80,7 +80,7 @@ def next_pod_index(fleet : Fleet) : int {
 }
 
 //! the shard each live pod runs, 1..n in the fleet's order, whatever the pods' indices (a partial `down` leaves them sparse).
-//! Non-private: test_pod_fleet.das holds it
+//! Non-private: the pod-fleet tests (tests/uncategorized_persistent_heap_stack_524288.das) hold it
 def shard_plan(fleet : Fleet) : array<tuple<pod : int; shard : int>> => <- [for (i, pod in iter_range(fleet.pods), fleet.pods); (pod = pod.index, shard = i + 1)]
 
 //! the shape of a `runpodctl pod create --wait -o json` record this tool reads; every other key is ignored
@@ -107,7 +107,7 @@ def home_path(path : string) : string {
 }
 
 //! the `runpodctl pod create` argument list for the fleet's pod `index`; `pub` is the public key line. Non-private:
-//! tests/test_pod_fleet.das reads it
+//! the pod-fleet tests (tests/uncategorized_persistent_heap_stack_524288.das) read it
 def create_argv(cfg : FleetArgs; index : int; pub : string) : array<string> {
     //! the container's command: sshd admitting the key, rsync for the tree's copy, git for --changed, the Vulkan
     //! loader for the Vulkan home with the GL and EGL loaders the NVIDIA ICD (`libGLX_nvidia`, which the container
@@ -137,7 +137,7 @@ def prep_command() : string =>
 //! the volume (TMPDIR), the runner's own log beside them, RUN-EXIT=<rc> as its last line. LD_LIBRARY_PATH puts the
 //! pod's copy of the runtime libraries ahead of the binary's RUNPATH, which names the volume tree's - a rebuild
 //! there mid-run would otherwise kill every child started after it. Non-private:
-//! tests/test_pod_fleet.das reads it
+//! the pod-fleet tests (tests/uncategorized_persistent_heap_stack_524288.das) read it
 def run_command(cfg : FleetArgs; run : string; index, n : int) : string {
     let log = "{FLEET_LOGS}/{run}/shard_{index}.log"
     let tmp = "{FLEET_LOGS}/{run}/pod_{index}"

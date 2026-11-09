@@ -52,7 +52,7 @@ def private bare(ps : string) : string {
     return replace(replace(s, "ɾ", "t"), "T", "t")   // nolint:STYLE039
 }
 
-[test]
+[test(description = "The American G2P reproduces the reference front end's phonemes on the 200-sentence corpus except exactly 2 named tag-call rows and the pinned beyond-reference set, and reads both heteronym forms in at least 32 of 38 sentences")]
 def test_corpus_phonemes(t : T?) {
     t |> run("phoneme-identical with the reference front end on 200 normalized sentences") @(t : T?) {
         return if (!data_present(t))
@@ -120,7 +120,7 @@ let private BEYOND_REFERENCE <- { "ht001", "ht003", "ht010", "ht017", "ht024", "
     "lj024", "lj027", "lj037", "ov000", "ov001", "ov003", "ov004", "ov006", "ov009", "ov011", "ov012", "ov015", "ov016",
     "ov017", "ov018", "ov019", "ov020", "ov021", "ov022", "ov025", "ov027", "ov028" }
 
-[test, arch(at = "../ARCHITECTURE_TTS_FRONT_END.md#tts-heteronym-context")]
+[test(description = "A verb tag on lead out-ranks the collocation table, so the pipes lead out reads the verb while get the lead out, lead pipes and lead singer keep their exact readings"), arch(at = "../ARCHITECTURE_TTS_FRONT_END.md#tts-heteronym-context")]
 def test_heteronym_context(t : T?) {
     t |> run("a verb tag out-ranks the collocation table") @(t : T?) {
         return if (!data_present(t))
@@ -134,7 +134,7 @@ def test_heteronym_context(t : T?) {
     }
 }
 
-[test]
+[test(description = "The G2P number reader reads values past 2^31 in full (3000000000 as three billion, with ordinal and -s suffixes) and a run wider than int64 digit by digit, to exact phoneme strings")]
 def test_number_reader(t : T?) {
     t |> run("a number reads all its digits, past 2^31 too") @(t : T?) {
         return if (!data_present(t))
@@ -151,7 +151,7 @@ def test_number_reader(t : T?) {
     }
 }
 
-[test]
+[test(description = "Function words take the reading the next word selects (a/an, the, to before a vowel, used to), speaking symbols and dotted or plain acronyms read to exact phoneme strings")]
 def test_function_words(t : T?) {
     t |> run("the arms that read what follows") @(t : T?) {
         return if (!data_present(t))
@@ -185,7 +185,7 @@ def test_function_words(t : T?) {
     }
 }
 
-[test]
+[test(description = "The word splitter (dashes, Mac/O' names, camelCase, slashes, apostrophes, the 2 alias, em dash, plural possessive) and the inflection stemmer (-s, -ing, -ed, doubled consonants, -ies) produce exact phoneme strings")]
 def test_pieces_and_stems(t : T?) {
     t |> run("the splitter's alternatives") @(t : T?) {
         return if (!data_present(t))
@@ -226,7 +226,7 @@ def private write_pack_header(path : string; version : int) {
     fclose(f)
 }
 
-[test]
+[test(description = "The American-only G2P pack reads the corpus identically to the full pack and refuses British by name, and `g2p_pack_path` prefers the full pack, serves the American twin alone, and panics on an empty directory")]
 def test_us_only_pack(t : T?) {
     t |> run("the American-only pack reads the corpus as the full pack does and refuses British") @(t : T?) {
         return if (!data_present(t))
@@ -287,7 +287,7 @@ def test_us_only_pack(t : T?) {
     }
 }
 
-[test]
+[test(description = "`load_g2p` panics on a missing pack and on a version 1 header, while the stocked version 2 pack loads through the same call as positive control")]
 def test_missing_pack(t : T?) {
     t |> run("a missing pack panics by name") @(t : T?) {
         var refused = false
@@ -326,7 +326,7 @@ def test_missing_pack(t : T?) {
     }
 }
 
-[test]
+[test(description = "Stress helpers and ARPAbet conversion give exact strings, the fallback chain never drops a word and consults the lexicon before CMUdict in both dialects, and the pack loads under 50 ms with table and file sizes in budget")]
 def test_pieces(t : T?) {
     t |> run("stress helpers") @(t : T?) {
         t |> equal(apply_stress("hɛlˈO", -2.0), "hɛlO")   // nolint:STYLE039
@@ -428,7 +428,7 @@ def private american_only_count(ps : string) : int {
 // they carry in the American rail read WITH the reference here.
 let private GB_BEYOND_REFERENCE <- { "ht001", "ht003", "ht010", "ht017", "ht024", "ht038" }
 
-[test]
+[test(description = "British G2P matches the reference British front end on all 157 in-vocabulary corpus sentences but exactly 2 tag-call rows and the pinned heteronym set, and emits no American-only or off-inventory symbol where the American output carries over 100")]
 def test_british_corpus(t : T?) {
     t |> run("British: phoneme-identical with the reference front end where no word is out of vocabulary") @(t : T?) {
         return if (!data_present(t))
@@ -487,7 +487,7 @@ def test_british_corpus(t : T?) {
     }
 }
 
-[test]
+[test(description = "British G2P applies its own -ed and -s inflections, declines -ing on schwa or length-mark stems the American rail stems, and reads bath-trap, LOT and non-rhotic vowels from its lexicon, to exact phoneme strings")]
 def test_british_rules(t : T?) {
     t |> run("British: the inflection rules the reference switches on the flag") @(t : T?) {
         return if (!data_present(t))
@@ -535,7 +535,7 @@ def test_british_rules(t : T?) {
 
 // what the American fallback chain owes a British voice: the rewrite table itself, then the
 // chain end to end on words no lexicon carries
-[test]
+[test(description = "`misaki_us_to_gb` rewrites the American inventory to exact British strings and is idempotent on its output, and for out-of-lexicon words the British reading equals the American one through the rewrite, inside the British inventory")]
 def test_british_rewrite(t : T?) {
     t |> run("the American inventory rewritten into the British one") @(t : T?) {
         // a post-vocalic ɹ drops into the vowel it leaves, and links before a vowel

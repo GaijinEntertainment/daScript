@@ -14,7 +14,7 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 require dastest/testing_boost public
 require ../performance/box_ident.das
 
-[test]
+[test(description = "WMI answer parsing keeps Key=value lines across wmic and CIM endings, reads a key value on the first equals sign only, sums RAM modules, and the CIM script spells the stand-in query exactly")]
 def test_wmi_answers(t : T?) {
     t |> run("a WMI answer's Key=value lines: wmic's \\r\\r\\n endings and blank lines dropped, CIM's plain lines kept") @(t : T?) {
         var inscope wmic <- wmi_lines_of("\r\r\nCapacity=34359738368\r\r\nSpeed=3200\r\r\n\r\r\nCapacity=34359738368\r\r\nSpeed=3200\r\r\n\r\r\n")
@@ -63,7 +63,7 @@ def test_wmi_answers(t : T?) {
     }
 }
 
-[test]
+[test(description = "A cgroup limit reads to whole GiB with no-limit and malformed spellings as 0, Linux RAM takes the v2 then v1 limit when under MemTotal, and this box live probes report a CPU brand and nonzero RAM")]
 def test_box_probes(t : T?) {
     t |> run("a cgroup limit file's byte count, no limit read as none") @(t : T?) {
         t |> equal(58, ram_gb_from_cgroup("61999996928\n"), "a 62 GB container limit (v2)")
@@ -107,7 +107,7 @@ def test_box_probes(t : T?) {
     }
 }
 
-[test]
+[test(description = "Recorded fleet CPU brands map to their store tags, unknown hardware and bigger M3 chips slug from the brand, DASLLAMA_BOX overrides, and an unset env derives this box tag from its probed brand")]
 def test_box_ident(t : T?) {
     t |> run("fleet table: recorded CPU brands map to their store tags") @(t : T?) {
         t |> equal("m1", box_tag_for_cpu("Apple M1 Max"))

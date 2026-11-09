@@ -36,7 +36,7 @@ def private text_reaches_fixture_root(text : string) : bool {
 }
 
 //! a test reaches a fixture root through its own text or through a shared fixture module beside it - a same-folder
-//! `require _<fixture>` (the one-model gemma files reach `model_available` through `_gemma_resident` alone)
+//! `require _<fixture>` (test_gpu_resident_gemma4_26b_host.das reaches `model_available` through `_gemma_resident` alone)
 def private reaches_fixture_root(file : string) : bool {
     let text = file_text(file)
     if (text_reaches_fixture_root(text)) {
@@ -52,7 +52,7 @@ def private reaches_fixture_root(file : string) : bool {
     return false
 }
 
-[test]
+[test(description = "Every model-free suite file reaches no machine-local fixture root by its text or a same-folder fixture, every stocked file reaches one and declares persistent_heap, and no file sits in both lists")]
 def test_suite_split_matches_the_files(t : T?) {
     var seen : table<string; void?>
     for (file in suite_files("model-free")) {
@@ -72,7 +72,7 @@ def test_suite_split_matches_the_files(t : T?) {
 
 //! every test file in the folder sits in some run.das suite; the one exemption is the CPU-prefill
 //! tripwire, whose header says why (it asserts the guard the runner disarms for every child)
-[test]
+[test(description = "Every test_, failed_ and uncategorized file in the folder sits in some run.das suite except the declared CPU-prefill tripwire, over more than 50 files walked, and run.das carries no [init]")]
 def test_every_file_sits_in_a_suite(t : T?) {
     var listed : table<string; void?>   // nolint:STYLE027 - a nested walk over the suite tables, not one comprehension
     for (suite in ["decode", "mtp", "prefill", "matrix", "kernels", "image", "image-vulkan", "coverage", "model-free", "stocked"]) {
@@ -83,7 +83,7 @@ def test_every_file_sits_in_a_suite(t : T?) {
     let exempt <- ["test_cpu_prefill_tripwire.das"]
     var count = 0
     fio::dir("modules/dasLLAMA/tests") $(name) {
-        if ((name |> starts_with("test_") || name |> starts_with("failed_")) && name |> ends_with(".das")) {
+        if ((name |> starts_with("test_") || name |> starts_with("failed_") || name |> starts_with("uncategorized")) && name |> ends_with(".das")) {
             count++
             t |> success(key_exists(listed, name) || find_index(exempt, name) >= 0, "a test file sits in a run.das suite, or is the declared tripwire exemption: {name}")
         }
@@ -95,7 +95,7 @@ def test_every_file_sits_in_a_suite(t : T?) {
 
 //! the area tables cover the per-PR census exactly: every area file is a model-free or stocked file,
 //! every such file has at least one area, and every image-suite arm an area names exists
-[test]
+[test(description = "The runner's area tables cover the model-free plus stocked census exactly, every image arm an area names exists in test_model_image, and every image arm is reachable from an area or listed unclaimed")]
 def test_area_tables_match_the_census(t : T?) {
     var census <- [for (f in suite_files("model-free")); base_name(f)]
     census |> push_from([for (f in suite_files("stocked")); base_name(f)])
@@ -141,7 +141,7 @@ def test_area_tables_match_the_census(t : T?) {
 }
 
 //! the change-to-area map behind --changed
-[test]
+[test(description = "`areas_for_path` maps a pinned table of module, fixture, test and tree paths to their expected areas, unmapped module paths to every area, outside paths to none, and `skipped_cells` reads the summary's skip count")]
 def test_areas_for_path(t : T?) {
     let every = join(AREAS, ",")
     t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_audio.das"), ","), "audio", "an audio module reaches audio")
@@ -196,7 +196,7 @@ def test_areas_for_path(t : T?) {
 
 //! the pure planners behind an area run: the file set is the areas' census files, deduplicated and
 //! sorted, with the image suite's file appended once when any area owns image arms
-[test]
+[test(description = "`area_plan` returns an area's census files sorted and deduplicated with the image file appended once and last when an area owns image arms, and `plan_files` lets an area override --suite")]
 def test_area_plan(t : T?) {
     let tts <- area_plan(["tts"])
     t |> equal(length(tts.files), 21, "tts plans its twenty files and the image file its kitten arm rides")
@@ -229,7 +229,7 @@ def test_area_plan(t : T?) {
 
 //! the argument contracts: an area run refuses --arm/--full/--suite and an unknown area; a per-PR
 //! suite refuses --arm and --full; a model suite wants exactly one of --arm and --full, and --full is refused
-[test]
+[test(description = "The runner refuses unknown areas and --area beside --suite or --arm, a per-PR suite refuses --arm, a model suite needs --arm and refuses --full, and child timeouts are 3600 for stocked and 1200 for arm runs")]
 def test_argument_contracts(t : T?) {
     let plain = RunArgs()
     let none <- select_areas(plain)
@@ -272,7 +272,7 @@ def private run_runner(args : string; var output : string&) : int {
 
 //! the runner end to end with a no-op child binary: the AREAS line, the image file's arm env, the
 //! REPORT and NEXT lines, and the refusals main prints
-[test]
+[test(description = "A dry runner run with a no-op child prints the AREAS, START, REPORT and NEXT lines, gives the image child alone the arms union, batches other files, and refuses an all-excluding filter or unresolvable base")]
 def test_runner_dry_run(t : T?) {
     if (get_platform_name() == "windows") {
         t |> skip("the dry run stands in a POSIX no-op binary for the child")
@@ -299,8 +299,8 @@ def test_runner_dry_run(t : T?) {
     t |> success(find(out, "REPORT areas audio,vision: ") >= 0, "the REPORT line names the scope")
     t |> success(find(out, "NEXT before the PR") >= 0, "the NEXT line names the per-PR suites")
     var llm : string
-    t |> equal(run_runner("--area infra --das /usr/bin/true --exclude test_exe_smoke", llm), 0, "an infra dry run with an exclusion exits clean")
-    t |> success(find(llm, "EXCLUDED test_exe_smoke.das") >= 0 && find(llm, "1 file(s) excluded") >= 0, "the exclusion is loud and counted:\n{llm}")
+    t |> equal(run_runner("--area infra --das /usr/bin/true --exclude test_facade.das", llm), 0, "an infra dry run with an exclusion exits clean")
+    t |> success(find(llm, "EXCLUDED test_facade.das") >= 0 && find(llm, "1 file(s) excluded") >= 0, "the exclusion is loud and counted:\n{llm}")
     var refused : string
     t |> equal(run_runner("--suite stocked --exclude test", refused), 2, "an exclusion that drops every file is refused")
     t |> success(find(refused, "dropped every file") >= 0, "and says so:\n{refused}")
@@ -326,7 +326,7 @@ def start_timeout(out : string; tag : string) : int {
 
 //! a batch whose child ends before any verdict reruns its files one child each, each red single child a failure of its
 //! own; a batch's timeout is its file count times the single's
-[test]
+[test(description = "A batch child that exits red before any verdict reruns each file alone and counts each red single as a failure, the batch timeout is file count times the single's, and a green child retries nothing")]
 def test_runner_retries_a_verdictless_batch(t : T?) {
     return if (get_platform_name() == "windows")   //! the child binary stands in a POSIX one, as test_runner_dry_run's
     var out : string
@@ -344,9 +344,9 @@ def test_runner_retries_a_verdictless_batch(t : T?) {
     t |> success(find(clean, "RETRY") < 0, "nothing retried:\n{clean}")
 }
 
-[test]
+[test(description = "`exclude_files` drops the files whose base name contains any comma-listed token, ignores blank tokens, matches base names not directories, and keeps everything on an empty list")]
 def test_exclude_filter(t : T?) {
-    let files <- ["modules/dasLLAMA/tests/test_ple_modes.das", "modules/dasLLAMA/tests/test_parity.das", "modules/dasLLAMA/tests/test_flash.das"]
+    let files <- ["modules/dasLLAMA/tests/test_ple_modes.das", "modules/dasLLAMA/tests/test_parity.das", "modules/dasLLAMA/tests/test_prefill.das"]
     let none <- exclude_files(files, "")
     t |> equal(length(none.kept), 3, "an empty exclude keeps every file")
     t |> equal(length(none.dropped), 0, "an empty exclude drops nothing")
@@ -354,14 +354,14 @@ def test_exclude_filter(t : T?) {
     t |> equal(length(one.kept), 2, "a token drops the files whose base name contains it")
     t |> equal(length(one.dropped), 1, "the dropped list carries the match")
     t |> equal(one.dropped[0], files[0], "the dropped file is the matching one")
-    let two <- exclude_files(files, " ple_modes, ,flash ")
+    let two <- exclude_files(files, " ple_modes, ,prefill ")
     t |> equal(length(two.kept), 1, "a comma list drops every match, blanks ignored")
     t |> equal(two.kept[0], files[1], "the survivor is the unmatched file")
     let dir <- exclude_files(files, "dasLLAMA")
     t |> equal(length(dir.kept), 3, "a token matches the base name, not the directory")
 }
 
-[test]
+[test(description = "`shard_files` i/n takes every n-th file from the i-th so shards partition the run exactly, malformed specs are refused, and a sharded dry run's SHARD, REPORT and NEXT lines name the shard")]
 def test_shard_filter(t : T?) {
     let files <- [for (k in range(7)); "modules/dasLLAMA/tests/test_{k}.das"]
     let whole <- shard_files(files, "")
@@ -400,7 +400,7 @@ def test_shard_filter(t : T?) {
 
 //! --only keeps the files whose name contains a token and nothing else, "" the whole list; the dry run names each kept
 //! file on an ONLY line and the REPORT line carries the tokens, and a --only that keeps nothing is refused
-[test]
+[test(description = "`only_files` keeps in order the files whose name holds a token, a dry run prints an ONLY line per kept file and the tokens on the REPORT line, and a --only keeping nothing is refused")]
 def test_only_filter(t : T?) {
     let files <- ["a/test_cuda_kernels.das", "a/test_gpu_resident_cuda_llama.das", "a/test_gpu_resident_segments.das", "a/test_kv_codec.das"]
     let whole <- only_files(files, "")
@@ -412,8 +412,8 @@ def test_only_filter(t : T?) {
     return if (get_platform_name() == "windows")   //! the dry run's no-op child binary is a POSIX one, as test_runner_dry_run's
     var out : string
     t |> equal(run_runner("--area infra --das /usr/bin/true --only exchange,facade", out), 0, "an infra dry run under --only exits clean:\n{out}")
-    t |> success(find(out, "ONLY test_exchange_schema.das (--only exchange,facade)") >= 0 && find(out, "ONLY test_facade_docs.das") >= 0, "each kept file sits on an ONLY line:\n{out}")
-    t |> success(find(out, "REPORT areas infra only exchange,facade: 2 file(s)") >= 0, "the REPORT line carries the tokens, so the run cannot read as whole:\n{out}")
+    t |> success(find(out, "ONLY test_exchange_schema.das (--only exchange,facade)") >= 0 && find(out, "ONLY test_facade.das") >= 0 && find(out, "ONLY test_facade_docs.das") >= 0, "each kept file sits on an ONLY line:\n{out}")
+    t |> success(find(out, "REPORT areas infra only exchange,facade: 3 file(s)") >= 0, "the REPORT line carries the tokens, so the run cannot read as whole:\n{out}")
     var refused : string
     t |> equal(run_runner("--area infra --das /usr/bin/true --only no-such-file", refused), 2, "a --only that keeps nothing is refused")
     t |> success(find(refused, "keeps no file") >= 0, "and says so:\n{refused}")
@@ -422,7 +422,7 @@ def test_only_filter(t : T?) {
 //! the reach plan behind --changed: a test file itself, a fixture the tests requiring it through the fixtures between, an
 //! engine module its witness row or the core set beside its other areas whole, a benchmark the bench rows' files; every
 //! witness row and the core set name census files, and every row's module exists and reaches llm
-[test]
+[test(description = "`reach_for_path` maps a test to itself, a fixture to its requiring census tests, a leaf module to its witness row, a core module to the core plus every other area, and every witness names census files")]
 def test_reach_for_path(t : T?) {
     let own <- reach_for_path("modules/dasLLAMA/tests/test_gemma3v.das")
     t |> equal(join(own.files, ","), "test_gemma3v.das", "a test file reaches itself")
@@ -433,7 +433,7 @@ def test_reach_for_path(t : T?) {
     t |> success(find_index(feed.files, "test_gpu_resident_llama.das") >= 0, "a fixture reaches the tests requiring it ({length(feed.files)})")
     t |> success(find_index(feed.files, "test_tts_kitten.das") < 0, "and not the tests that do not")
     let oracle <- reach_for_path("modules/dasLLAMA/tests/_attn_oracle.das")
-    t |> success(find_index(oracle.files, "test_vulkan_kernels.das") >= 0 && find_index(oracle.files, "test_metal_attn_kernels.das") < 0, "a fixture's reach stops at the census: a model-suite file takes --arm ({join(oracle.files, ", ")})")
+    t |> success(find_index(oracle.files, "test_vulkan_kernels.das") >= 0 && find_index(oracle.files, "test_metal_decode_kernels.das") < 0, "a fixture's reach stops at the census: a model-suite file takes --arm ({join(oracle.files, ", ")})")
     let tier <- reach_for_path("modules/dasLLAMA/tests/_model_tier.das")
     t |> success(length(tier.files) > length(feed.files), "the shared tier fixture reaches more, through the fixtures between ({length(tier.files)})")
     let qwen35 <- reach_for_path("modules/dasLLAMA/dasllama/dasllama_arch_qwen35.das")
@@ -471,7 +471,7 @@ def test_reach_for_path(t : T?) {
 //! the children's per-test module cache: a folder keyed by the binary, the folders of other binaries removed on
 //! the runner's own binary and kept on a --das dry run, no folder for a binary that cannot be stat'd, and the
 //! child command carrying --module-cache-dir
-[test]
+[test(description = "`child_cache_dir` keys the children's module cache by binary size and mtime, removes other binaries' folders only for the runner's own binary, gives none to an unstattable one, and children get --module-cache-dir")]
 def test_child_cache_dir(t : T?) {
     t |> equal(child_cache_dir("no/such/binary", true), "", "a binary that cannot be stat'd gets no cache folder")
     let own = das_exe()
@@ -498,7 +498,7 @@ def test_child_cache_dir(t : T?) {
     }
 }
 
-[test]
+[test(description = "`child_chunks` batches files in order by the batch size, and cuts out the image file on area runs, an expected-failure compile test, and a tier contract file to run alone")]
 def test_child_chunks(t : T?) {
     let files <- [for (i in range(7)); "{TESTS_DIR}/test_{i}.das"]
     let threes <- child_chunks(files, 3, false)

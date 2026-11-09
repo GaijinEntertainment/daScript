@@ -41,7 +41,7 @@ def private gate_encode(t : T?; tw : Qwen25vTower; var st : Qwen25vState; kind :
     }
 }
 
-[test]
+[test(description = "The Qwen2.5-Omni-3B window-ViT tower loads its pinned shape and its CPU encode matches the llama-mtmd dumps on five canvases within 2e-4 abs plus 1e-2 of token rms, and an off-grid canvas panics")]
 def test_qwen25v_tier1(t : T?) {
     t |> run("tier-1 window-ViT parity vs the mtmd encode dumps (Qwen2.5-Omni-3B)") @(tt : T?) {
         let mm = path_join(models_dir(), "mmproj-Qwen2.5-Omni-3B-f16.gguf")
@@ -226,7 +226,7 @@ def private shallow_routing_cell(t : T?; mm, name, backend : string; wa : int64;
     set_gpu_knobs(knobs)
 }
 
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
+[test(description = "On the serving discrete home, the qwen25v device block loop holds to the exact CPU chain within a depth-scaled rms bar at 1, 2, 8 and 32 blocks, one-block window and full routing hold 0.1 abs, and zeroed-block poisons exceed the bars"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def test_qwen25v_discrete_twin(t : T?) {
     t |> run("the serving discrete home's block loop ({serving_tower_dev(TowerFamily.vision)}) vs the exact CPU chain, and the window routing") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -263,7 +263,7 @@ def test_qwen25v_discrete_twin(t : T?) {
     }
 }
 
-[test]
+[test(description = "On Metal, the device-served qwen25v tower matches the mtmd dumps within 8e-2 of token rms on four canvases and via the f16 twin route, the knob-off leg never dispatches, and a zeroed-block poison exceeds the bar")]
 def test_qwen25v_tier1_gpu(t : T?) {
     t |> run("tier-1 GPU attempt vs the mtmd encode dumps (scale-relative rung)") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {

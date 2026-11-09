@@ -72,7 +72,7 @@ def private census_unpin(pins : CensusPins) {
     set_wscale_f16(pins.wscale)
 }
 
-[test]
+[test(description = "On Qwen3.6-35B-A3B IQ4_XS-pure, every site loads tagged with the file's own format, and the Metal prefill window and six decode steps stay within 6.0 of the CPU chain on the IQ4_XS forms, the table gathered on device")]
 def test_metal_format_census_iq4xs_pure(t : T?) {
     t |> run("{CENSUS_FILE}: every site's tag is the file's format, and the Metal window and steps hold the CPU chain") <| @(t : T?) {
         if (!family_on(t, "qwen35moe") || !arm_on(t, "census-iq4xs")) return
@@ -126,7 +126,7 @@ def test_metal_format_census_iq4xs_pure(t : T?) {
     }
 }
 
-[test]
+[test(description = "On Llama-3.2-3B Q4_K_M, the tied Q6_K token table loads native as the classifier's plane, and the Metal window and six steps hold the CPU chain within 4.0 with the device gathering table rows, no fp32 table read")]
 def test_metal_format_census_tied_kq(t : T?) {
     t |> run("{TIED_FILE}: the tied Q6_K table is the classifier's plane and the device gathers its rows") <| @(t : T?) {
         if (!family_on(t, "llama") || !arm_on(t, "census-tied")) return
@@ -165,7 +165,7 @@ def private planes_tagged(m : Model; f : KqFmt) : int64 {
         + long_count(m.we2_fmt, $(x) => x == f) + long_count(m.we3_fmt, $(x) => x == f))
 }
 
-[test]
+[test(description = "Under the lut pin, IQ3_S dense planes (Qwen2.5-1.5B) and routed downs (Qwen3.6-35B) load as iq3s4, none as the grid, and the Metal window and steps ride the iq3s4 stamps while holding the CPU chain")]
 def test_metal_format_census_iq3s4(t : T?) {
     t |> run("{IQ3S_DENSE_FILE} under the lut pin: the dense IQ3_S planes serve as iq3s4 on Metal, the window and the steps on its stamps") <| @(t : T?) {
         if (!family_on(t, "qwen2") || !arm_on(t, "census-iq3s4")) return
@@ -306,7 +306,7 @@ def private dense_census_sites(hybrid : bool) : array<string> {
 
 //! the per-32 carriers: the dense planes, and on the `-pure` / table mints the token table, the classifier, the NextN eh_proj and
 //! the deltanet planes in the per-32 form too, each site's census asserted native
-[test]
+[test(description = "On six per-32 local mints (Q5_1, IQ4_NL, Q4_0, Q5_0, the Qwen3.5 hybrid), every site loads native and the Metal window and steps ride the per-32 stamps and GEMVs within 4.0 of the CPU chain")]
 def test_metal_format_census_per32(t : T?) {
     for (spec in [(file = "Llama-3.2-1B-Instruct-Q5_1-local.gguf", fam = "llama", arm = "census-q51", emb = "MetalEmbedK6_metal_embed_kq", hy = false),
                   (file = "Qwen2.5-0.5B-Instruct-IQ4_NL-local.gguf", fam = "qwen2", arm = "census-iq4nl32", emb = "metal_embed_q8", hy = false),
@@ -375,7 +375,7 @@ def private iq4_family_mm_dispatches(stem : string) : int64 {
 //! table), its table mint (the nv4 token table, the tied classifier reading it) and the Qwen3.5-0.8B-MTP `--pure` mint (the
 //! deltanet planes, the NextN eh_proj, the table and the classifier as nv4) - each site's census asserted native, the window on
 //! the nv4 forms and the steps on the nv4 GEMVs against the CPU chain
-[test]
+[test(description = "On the nv4 dense mints (Llama-3.2-1B, its nv4-table mint, the Qwen3.5 hybrid pure mint), every site loads native and the Metal window and steps ride the nv4 stamps and GEMVs within 4.0 of the CPU chain")]
 def test_metal_format_census_nv4(t : T?) {
     for (spec in [(file = "Llama-3.2-1B-Instruct-NVFP4-local.gguf", fam = "llama", arm = "census-nv4", emb = "MetalEmbedK6_metal_embed_kq", hy = false),
                   (file = "Llama-3.2-1B-Instruct-emb-NVFP4-local.gguf", fam = "llama", arm = "census-nv4-table", emb = "MetalEmbedNv4_metal_embed_kq", hy = false),
@@ -423,7 +423,7 @@ let private NV4_MOE_BAR = 3.0
 //! classifier as nv4 (the Qwen1.5-MoE's 1408-wide stacks sit off the 256 lattice, where NVFP4's 64-weight disk block lands and the
 //! nv4 superblock cannot, so that file's experts fall to the q8 rail) - each site's census asserted native, the window and the steps
 //! on the nv4 routed stamps against the CPU chain
-[test]
+[test(description = "On Qwen3-30B-A3B NVFP4-pure, every routed stack loads as nv4 with every site native, and the Metal window and six steps ride the nv4 routed stamps and GEMV within 3.0 of the CPU chain")]
 def test_metal_format_census_nv4_moe(t : T?) {
     t |> run("Qwen3-30B-A3B-NVFP4-pure-local.gguf: the nv4 routed stacks serve their own bytes on Metal - census, window and steps") <| @(t : T?) {
         if (!family_on(t, "qwen3moe") || !arm_on(t, "census-moe-nv4")) return
@@ -470,7 +470,7 @@ let private PLAIN_MOE_BAR = 2.0
 //! - as q51, the Q4_0 mint's 1408-wide routed down stacks as q4032, the Q5_0 `--pure` mint's every site - the routed and shared
 //! expert stacks and the token table among them - as q5032, each site's census asserted native, the window and the steps on the
 //! device against the CPU chain
-[test]
+[test(description = "On the Qwen1.5-MoE Q5_1, Q4_0 and Q5_0-pure mints, the routed and shared expert stacks load in their per-32 form with every site native, and the Metal window and steps ride their routed stamps within 2.0 of the CPU chain")]
 def test_metal_format_census_per32_moe(t : T?) {
     for (spec in [(file = "Qwen1.5-MoE-A2.7B-Chat-Q5_1-local.gguf", arm = "census-moe-q51", emb = "MetalEmbedB32Q51_metal_embed_b32", f = KqFmt.q51),
                   (file = "Qwen1.5-MoE-A2.7B-Chat-Q4_0-local.gguf", arm = "census-moe-q4032", emb = "MetalEmbedQ40_metal_embed_kq", f = KqFmt.q4032),
@@ -523,7 +523,7 @@ let private MLX_MOE_BAR = 3.0
 //! the routed affine carrier (large tier): the mlx-community Qwen3.6-35B-A3B 4-bit snapshot - every site but the router in its
 //! own mlx4b member, the routed stacks among them - each site's census asserted native, the window and the steps on the member's
 //! routed stamps against the CPU chain
-[test]
+[test(description = "On the mlx-community Qwen3.6-35B-A3B 4-bit snapshot, every routed stack loads as mlx4b with every site native, and the Metal window and six steps ride the mlx4b routed stamps within 3.0 of the CPU chain")]
 def test_metal_format_census_mlx_moe(t : T?) {
     t |> run("mlx-community/Qwen3.6-35B-A3B-4bit: the mlx4b routed stacks serve their own bytes on Metal - census, window and steps") <| @(t : T?) {
         if (!family_on(t, "qwen35moe") || !arm_on(t, "census-moe-mlx4b")) return
@@ -571,7 +571,7 @@ def test_metal_format_census_mlx_moe(t : T?) {
     }
 }
 
-[test]
+[test(description = "On the tied all-F16 canary decoder, the load keeps a q8 classifier copy, the census lists table and classifier as converted copies, and the Metal window and steps hold the CPU chain within 1.0 on fp32 rows")]
 def test_metal_format_census_tied_f16(t : T?) {
     let name = ("{TIED_F16_FILE}: the F16 carrier runs on Metal through converted copies - the"
         + " classifier's q8, the rows' fp32 - the census listing them")
@@ -628,7 +628,7 @@ def private converted_cls_cell(t : T?; tr : Model; path, tag : string) {
     fclose(f)
 }
 
-[test]
+[test(description = "On Model shells, a tied fp32 table gives the device no classifier plane until a q8 copy is kept, a Q8_0 or K-quant table serves as its own classifier plane, and a tied table's plane offset is the classifier's")]
 def test_metal_tied_classifier_reads(t : T?) {
     t |> run("a tied table with no plane of its own reads fp32 alone until the load keeps a q8 copy for the device classifier") @(t : T?) {
         var inscope m <- Model()

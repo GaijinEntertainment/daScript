@@ -104,7 +104,7 @@ def private maxdiff(a, b : array<float>; n : int64) : float {
     return m
 }
 
-[test]
+[test(description = "`hc_mix_row` matches a scalar hyper-connection reference within 1e-5 on the mixed row and 1e-4 on the inject logits, the head mixer leaves inject alone, and `hc_combine_row` adds out times 2 sigmoid(inject over hc) per stream")]
 def test_hc_mixer(t : T?) {
     t |> run("hc_mix_row: the sigmoid-gated stream mean and the scatter logits match the scalar reference") @(t : T?) {
         var m = Model()
@@ -212,7 +212,7 @@ def private hc_down_affine(var m : Model; zero_scales : bool) {
     }
 }
 
-[test]
+[test(description = "An mlx8b-tagged hyper-connection down plane is named by `hc_planes_unserved_by`, and `hc_mix_row` served off its planes lands within 1e-2 of the reference while zeroed scales land outside it")]
 def test_hc_mixer_tagged(t : T?) {
     t |> run("hc_mix_row on an mlx8b-tagged down plane: the member's planes serve the site, within the activations' Q8_0 rounding of the reference") @(t : T?) {
         for (zero_scales in [false, true]) {
@@ -289,7 +289,7 @@ def private hc_batch_run(m : Model) : HcBatch {
     return <- r
 }
 
-[test]
+[test(description = "Over 2048 positions the threaded `hc_mix_b` and `block_resid_b` dispatch yet bit-match the inline leg, and rows at the ends and middle match the scalar mixer while the neighbor row's reference misses")]
 def test_hc_mixer_batched(t : T?) {
     t |> run("hc_mix_b and block_resid_b split over positions without moving a bit, and each row is the mixer's") @(t : T?) {
         var m = Model()
@@ -387,7 +387,7 @@ def private ngram_fixture(var t : Model; eos : int64) {
 def private gathered_rows(dst : array<float>) : array<int64> =>
     <- [for (h in range64(4l)); int64(dst[h * HD] + 0.5)]
 
-[test]
+[test(description = "`ngram_gather` lands each head on the hand-computed XOR-hash row of a 200-row table and copies the whole row, an EOS predecessor cuts older context, and the token's own EOS cuts nothing")]
 def test_ngram_gather(t : T?) {
     t |> run("the hash: bigram heads XOR two scaled tokens, trigram heads three; row = mixed % vocab + offset") @(t : T?) {
         var m = Model()
@@ -439,7 +439,7 @@ def test_ngram_gather(t : T?) {
     }
 }
 
-[test]
+[test(description = "A fresh session's n-gram window is two -1 slots read as EOS, so a first token hashes to the hand-computed rows, and filling the newest slot feeds it as the immediate predecessor")]
 def test_ngram_window(t : T?) {
     t |> run("a missing predecessor reads as EOS: the session window feeds the batch's first rows, -1 slots cut") @(t : T?) {
         var m = Model()
@@ -470,7 +470,7 @@ def test_ngram_window(t : T?) {
     }
 }
 
-[test]
+[test(description = "The n-gram gather's Q8_0 row decoder yields f16 scale times int8 exactly, and its IQ4_NL decoder maps every low and high nibble through the codebook exactly")]
 def test_ngram_row_decoders(t : T?) {
     t |> run("the Q8_0 and IQ4_NL row decoders: f16 scale x int8 / x the nibble codebook") @(t : T?) {
         var m = Model()

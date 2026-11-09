@@ -853,7 +853,7 @@ def private istft_case(t : T?; n : int64; k : int64; hop : int64; pad : int64; z
     held_env(t, nm, wave, want, env, IS_REL, IS_FLOOR, 0.01lf)
 }
 
-[test]
+[test(description = "`mm_blob_b` and `mm_bf16_b` match an fp64 GEMM within 2e-5 of each output's magnitude envelope, and the borrowed-plane, per-tensor-flag routed and zero-padded forms equal the owned-blob result bit for bit, each bar with a poison control")]
 def test_tower_gemm_wrappers(t : T?) {
     with_dasllama_jobque_() {
         t |> run("the wrappers against an fp64 GEMM, and the plane, per-tensor-flag and zero-padded forms against them") @(t : T?) {
@@ -867,7 +867,7 @@ def test_tower_gemm_wrappers(t : T?) {
     }
 }
 
-[test]
+[test(description = "`layernorm` and `layernorm_batch` at offsets match an fp64 population-variance layernorm within 1e-5 of the envelope, and the borrowed-plane batch equals the owned-blob batch bit for bit, each with a poison control")]
 def test_tower_layernorm(t : T?) {
     with_dasllama_jobque_() {
         t |> run("layernorm and layernorm_batch against the fp64 population-variance form") @(t : T?) {
@@ -878,7 +878,7 @@ def test_tower_layernorm(t : T?) {
     }
 }
 
-[test]
+[test(description = "`add_bias_rows` (array and plane forms) and `add_inplace_rows` equal the scalar f32 loop bit for bit at widths that are not a float4 multiple, with a poison control")]
 def test_tower_row_adds(t : T?) {
     with_dasllama_jobque_() {
         t |> run("the bias and residual row adds against the scalar f32 loop") @(t : T?) {
@@ -889,7 +889,7 @@ def test_tower_row_adds(t : T?) {
     }
 }
 
-[test]
+[test(description = "`gelu_erf_batch` matches an fp64 erf-series GELU within 1e-6 of the envelope and equals the whole-image `gelu_erf` bit for bit, each with a poison control")]
 def test_tower_gelu_erf_batch(t : T?) {
     with_dasllama_jobque_() {
         t |> run("gelu_erf_batch against an fp64 erf series, and against its whole-image form") @(t : T?) {
@@ -899,7 +899,7 @@ def test_tower_gelu_erf_batch(t : T?) {
     }
 }
 
-[test]
+[test(description = "`rope_neox_tab_rows` matches an fp64 NeoX rotation within 2e-6 of the envelope with one table row per token shared by all heads, and a table with one live row rotates that token alone, every other row bit-unchanged")]
 def test_tower_rope_neox_tab_rows(t : T?) {
     with_dasllama_jobque_() {
         t |> run("the full-head table rope against the fp64 rotation, and its per-row table index") @(t : T?) {
@@ -910,7 +910,7 @@ def test_tower_rope_neox_tab_rows(t : T?) {
     }
 }
 
-[test]
+[test(description = "`attention_bidir_windows` over ragged windows matches an fp64 oracle attending strictly inside each window within 1e-5 of the envelope, with a poison control")]
 def test_tower_attention_windows(t : T?) {
     with_dasllama_jobque_() {
         t |> run("attention_bidir_windows against an oracle that attends strictly inside each window") @(t : T?) {
@@ -919,7 +919,7 @@ def test_tower_attention_windows(t : T?) {
     }
 }
 
-[test]
+[test(description = "`interpolate_grid_bilinear_aa` matches an fp64 antialiased resample within 5e-6 of the envelope for downscale, anisotropic and upscale grids, including a non-zero source plane offset")]
 def test_tower_interpolate_grid_aa(t : T?) {
     with_dasllama_jobque_() {
         t |> run("the antialiased grid resample down and up, at a non-zero plane offset") @(t : T?) {
@@ -930,7 +930,7 @@ def test_tower_interpolate_grid_aa(t : T?) {
     }
 }
 
-[test]
+[test(description = "`build_fft_plan` yields an involutive bit-reversal with rev[1] = n/2 and fp64-accurate twiddles and refuses non-power-of-2 or sub-2 sizes, `fft_pow2_run` matches an fp64 O(n^2) DFT, and the 400-point DFT table matches fp64 within 2e-6")]
 def test_audio_fft_and_dft_tables(t : T?) {
     t |> run("the radix-2 plan's bit-reversal permutation and its twiddles") @(t : T?) {
         t |> equal(fft_plan_rev_bad(256l), 0, "build_fft_plan(256) rev is an involutive permutation with rev[1] = n/2")
@@ -948,7 +948,7 @@ def test_audio_fft_and_dft_tables(t : T?) {
     }
 }
 
-[test]
+[test(description = "Both linear resampler conventions match an fp64 two-tap reference within 2e-6 of the envelope at scales 2.0, 1.5 and 0.5, with a poison control")]
 def test_tts_linear_resamplers(t : T?) {
     t |> run("both interpolation conventions against an fp64 two-tap reference") @(t : T?) {
         resize_case(t, false, 2.0)
@@ -960,14 +960,14 @@ def test_tts_linear_resamplers(t : T?) {
     }
 }
 
-[test]
+[test(description = "`magnitude_phase` matches an fp64 magnitude and phase within 2e-6 of the envelope, including bins with zero imaginary part planted at both +0 and -0")]
 def test_tts_magnitude_phase(t : T?) {
     t |> run("magnitude_phase against an fp64 reference, the zero-imaginary branch planted at both zero signs") @(t : T?) {
         mp_case(t)
     }
 }
 
-[test]
+[test(description = "`istft_envelope_divide` matches an fp64 window-envelope divide within 4e-6 over ragged lengths, hops and pads, and leaves samples undivided where a zeroed window makes the envelope vanish")]
 def test_tts_istft_envelope(t : T?) {
     t |> run("the istft window-envelope divide against an fp64 envelope, and its zero-envelope guard") @(t : T?) {
         istft_case(t, 200l, 32l, 8l, 16l, false)

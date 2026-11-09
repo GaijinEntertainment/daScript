@@ -42,7 +42,7 @@ def private gate_encode(t : T?; tw : Gemma3vTower; var st : Gemma3vState; kind :
     }
 }
 
-[test]
+[test(description = "The gemma-3-4b SigLIP tower on the exact f32 lane reads its geometry off the mmproj and matches the llama-mtmd encode dumps of five 896 canvases within 4e-3 of token rms, panics on a non-896 canvas, and refuses a gemma4v mmproj and the over-cap f32 twin")]
 def test_gemma3v_tier1(t : T?) {
     t |> run("tier-1 tower parity vs the mtmd encode dumps (gemma-3-4b)") @(tt : T?) {
         let mm = path_join(models_dir(), "mmproj-gemma-3-4b-it-F16.gguf")
@@ -113,7 +113,7 @@ def test_gemma3v_tier1(t : T?) {
 
 // The GPU rung: the same dumps through the Metal tower's block loop (the f32 mulmm stages f16
 // tiles, and the 72-wide heads restride to 128 around the attention trio).
-[test]
+[test(description = "On the Metal tower gemma3v matches the mtmd encode dumps within 4e-2 of token rms with flash attention on and off, the knob-off leg runs the CPU chain with one decline, the q8 lane serves with a red poison control, and the f16 twin route serves")]
 def test_gemma3v_tier1_gpu(t : T?) {
     t |> run("tier-1 GPU attempt vs the mtmd encode dumps (scale-relative rung)") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -198,7 +198,7 @@ def test_gemma3v_tier1_gpu(t : T?) {
 // The Metal chain with the projector tail behind its blocks against the CPU chain on the exact lane's image (the CPU image,
 // which the device reads as stored): the soft tokens within `tower_parity_deep`'s bar, the tail counter up by the device leg
 // alone, another canvas outside the bar (the control).
-[test]
+[test(description = "With the Metal tower on, gemma3v's post-norm, grid pool, soft norm and projection run on the device behind the blocks in one tail encode, landing within the deep-tower bar of the CPU chain while another canvas lands outside it")]
 def test_gemma3v_tail_gpu(t : T?) {
     t |> run("the post-norm, grid pool, soft norm and projection ride the device behind the blocks") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -242,7 +242,7 @@ def test_gemma3v_tail_gpu(t : T?) {
 }
 
 // The q8 serving lane (the CPU default): the same dumps on its own scale-relative bar.
-[test]
+[test(description = "The gemma3v q8 block-GEMM serving lane matches the mtmd encode dumps within 0.32 of token rms on the CPU and on the serving discrete home's device rung, with a mid-stack zeroed-block poison red, and the vision carrier stamps q8 or f32 by lane")]
 def test_gemma3v_tier1_q8(t : T?) {
     t |> run("tier-1 on the q8 block-GEMM lane (the serving default)") @(tt : T?) {
         let mm = path_join(models_dir(), "mmproj-gemma-3-4b-it-F16.gguf")
@@ -318,7 +318,7 @@ def private twin_encode(tt : T?; tw : Gemma3vTower; var st : Gemma3vState; tw_ex
         $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb, serving_tower_dev(TowerFamily.vision)) }) $(t; var s; var out) => gemma3v_encode(t, s, planes, tw.image_px, tw.image_px, out)
 }
 
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
+[test(description = "The serving discrete home's gemma3v chain matches the CPU q8 chain on one- and two-block towers and the full tower, a zeroed-block poison reds the one-block bar, and the exact f32 lane is served on the device"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def test_gemma3v_discrete_twin(t : T?) {
     t |> run("the serving discrete home's chain ({serving_tower_dev(TowerFamily.vision)}) vs the CPU q8 chain, and the exact lane served") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {

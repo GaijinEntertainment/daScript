@@ -39,7 +39,7 @@ require _tts_oracle   // captured_noise: the source's noise stream in the refere
 // carrier's generator rows, waveform and noise gone, the next synthesis sample-identical, and a
 // lowered cap speaking the same sentences in more pieces.
 
-[test]
+[test(description = "`tts_chunks` splits text at terminal punctuation followed by a space into exact sentence chunks, and a final chunk without punctuation gains a comma")]
 def test_chunker(t : T?) {
     t |> run("sentences split on terminal punctuation followed by space") @(t : T?) {
         var inscope c <- tts_chunks("First sentence. Second one! Third? Fourth")
@@ -51,7 +51,7 @@ def test_chunker(t : T?) {
     }
 }
 
-[test]
+[test(description = "With the appended-comma rule off, `tts_chunks` passes text through unpunctuated, keeps the text's own punctuation, and leaves word-split pieces bare")]
 def test_chunker_family_rule(t : T?) {
     t |> run("the appended comma is Kitten's driver rule; off, the text goes through as it is") @(t : T?) {
         var inscope bare <- tts_chunks("hello how are you", TTS_CHUNK_CHARS, false)
@@ -73,7 +73,7 @@ def test_chunker_family_rule(t : T?) {
     }
 }
 
-[test]
+[test(description = "`tts_chunks` does not end a sentence at abbreviations, decimals or a.m./p.m. before lower case, splits long sentences on words under a codepoint (not byte) cap, hard-splits a whitespace-free run losslessly, and yields nothing for blank text")]
 def test_chunker_rules(t : T?) {
     t |> run("abbreviations, decimals and clock times do not end a sentence") @(t : T?) {
         var inscope c <- tts_chunks("Dr. Smith paid 3.50 dollars at 9 a.m. today. Then he left.")
@@ -147,7 +147,7 @@ def test_chunker_rules(t : T?) {
 
 // A pack whose name carries no language of the pipeline's shape: the refusal has no code to name,
 // and must say so in words rather than render a blank. Hand-built - every stocked pack is shaped.
-[test]
+[test(description = "`tts_voice_lang` on a voice whose pack names no language panics naming the voice and saying its language is not phonemized, never rendering an empty language code")]
 def test_voice_refusal_without_a_language(t : T?) {
     t |> run("a voice whose pack names no language refuses in words, not in an empty code") @(t : T?) {
         var inscope m = TtsModel()
@@ -164,7 +164,7 @@ def test_voice_refusal_without_a_language(t : T?) {
     }
 }
 
-[test]
+[test(description = "`tts_normalize` expands abbreviations, decimals, money, clock times, dates, ordinals, percentages and units to exact spoken English, and keeps empty text empty")]
 def test_facade_normalizer(t : T?) {
     t |> run("the facade reaches the normalizer every synthesis runs first") @(t : T?) {
         t |> equal(tts_normalize("Dr. Chen read 3.5 pages and paid $12."),
@@ -180,7 +180,7 @@ def test_facade_normalizer(t : T?) {
     }
 }
 
-[test]
+[test(description = "`kitten_token_ids` drops an unknown phoneme so the ids equal those of the same string without it, id for id, with no doubled separator")]
 def test_kitten_symbol_drop(t : T?) {
     t |> run("an unknown phoneme takes its separator space with it") @(t : T?) {
         // 'a' and 'b' are in the table, '\x01' is in no table: the ids around it must read as
@@ -196,7 +196,7 @@ def test_kitten_symbol_drop(t : T?) {
     }
 }
 
-[test]
+[test(description = "`rtf` returns 0 for zero or negative sample counts instead of dividing, and 0.001 for one second of audio made in one millisecond")]
 def test_timings_guard(t : T?) {
     t |> run("rtf answers zero rather than dividing by no audio") @(t : T?) {
         var timings = TtsTimings()
@@ -209,7 +209,7 @@ def test_timings_guard(t : T?) {
     }
 }
 
-[test]
+[test(description = "`wav_pcm16_bytes` writes a 44-byte RIFF header with mono and the sample rate in place, and a written WAV loads back within one 16-bit quantization step per sample")]
 def test_wav_writer(t : T?) {
     t |> run("the 16-bit container round-trips") @(t : T?) {
         var inscope pcm <- [for (i in range(2400)); 0.5 * sin(float(i) * 0.1)]
@@ -240,7 +240,7 @@ def test_wav_writer(t : T?) {
 // reached a family's rewrite instead of the front end's own inventory reds here
 let private PINNED_CORPUS_ROWS <- {"lj000", "lj002", "lj003"}
 
-[test]
+[test(description = "On kitten-nano, `tts_phonemize` reproduces the pinned corpus rows' misaki phonemes exactly, bare and with en-us, the model declares en-us alone, and an undeclared language panics")]
 def test_facade_phonemizer(t : T?) {
     t |> run("the facade phonemizes into the front end's own inventory, on the corpus rail") @(t : T?) {
         let gguf = path_join(models_dir(), "kitten-nano.gguf")
@@ -288,7 +288,7 @@ def test_facade_phonemizer(t : T?) {
 
 // The model-keyed chunker picks the family's driver rule, and Kitten's is the arm no model-free
 // cell can reach: the boolean form is pinned above, Kokoro's bare text in test_tts_kokoro.das.
-[test]
+[test(description = "A loaded Kitten model's own chunker appends the driver's comma to unpunctuated chunks and keeps the text's own punctuation as is")]
 def test_chunker_model_rule(t : T?) {
     t |> run("a Kitten model's chunks gain the driver's comma") @(t : T?) {
         let gguf = path_join(models_dir(), "kitten-nano.gguf")
@@ -306,7 +306,7 @@ def test_chunker_model_rule(t : T?) {
     }
 }
 
-[test, arch(at = "../ARCHITECTURE_TTS.md#tts-two-layouts")]
+[test(description = "Kitten streaming synthesis at one lane emits one chunk a sentence whose concatenation equals the buffered synthesis at the box's lane count sample for sample, and the summed timings count every sample"), arch(at = "../ARCHITECTURE_TTS.md#tts-two-layouts")]
 def test_streaming(t : T?) {
     t |> run("chunks concatenate to the buffered synthesis, at a different worker count") @(t : T?) {
         let gguf = path_join(models_dir(), "kitten-nano.gguf")
@@ -341,7 +341,7 @@ def test_streaming(t : T?) {
     }
 }
 
-[test]
+[test(description = "`tts_set_chunk_chars` lowers the model chunker's codepoint cap and restores it, a cap under one is refused by name, and `tts_release_scratch` keeps a captured-noise carrier but empties a drawn one")]
 def test_chunk_cap_knob(t : T?) {
     t |> run("a lowered cap splits the same text into shorter pieces, on the model's own chunker") @(t : T?) {
         var inscope m = TtsModel()
@@ -397,7 +397,7 @@ def private samples_off(a, b : array<float>) : int {
     return diffs
 }
 
-[test]
+[test(description = "On a hand-built decoder the drawn source noise speaks the captured stream's samples bit for bit at the default, whole-run and five-frame windows, another seed moves most samples, and a negative window is refused by name")]
 def test_source_stream_contract(t : T?) {
     t |> run("the drawn noise is the captured stream's layout: phases first, then the normals in row order") @(t : T?) {
         {   // a bare block: the defer is a per-call cleanup, not the lambda's finalizer
@@ -465,7 +465,7 @@ def test_source_stream_contract(t : T?) {
     }
 }
 
-[test]
+[test(description = "On kitten-nano CPU, the source window and `tts_release_scratch` leave the next synthesis sample-identical while the release frees the carrier, and a 24-codepoint cap yields more chunks of audible speech of about the same length")]
 def test_release_and_cap_on_a_model(t : T?) {
     t |> run("the release empties the carrier and the next synthesis speaks the same samples; a cap makes more chunks") @(t : T?) {
         let gguf = path_join(models_dir(), "kitten-nano.gguf")

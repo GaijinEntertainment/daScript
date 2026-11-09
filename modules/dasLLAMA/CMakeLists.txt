@@ -137,6 +137,5 @@ if(NOT DAS_TOOLS_DISABLED)
         JIT_FILES
             modules/dasLLAMA/tests/failed_dasllama_lint_require.das
             modules/dasLLAMA/tests/failed_dasllama_lint_sidedoor.das
-            modules/dasLLAMA/tests/test_dasllama_lint_escape.das
             modules/dasLLAMA/tests/test_dasllama_lint_contracts.das)
 endif()

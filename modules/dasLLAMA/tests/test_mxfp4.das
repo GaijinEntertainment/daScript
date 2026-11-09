@@ -53,7 +53,7 @@ def private close(t : T?; got, want : float; tol : float; what : string) {
     t |> success(abs(got - want) <= tol * max(abs(want), 1.0), "{what}: got {got} want {want}")
 }
 
-[test]
+[test(description = "`e8m0_half` decodes E8M0 scale bytes to exact powers of two - 127 to 0.5, 128 to 1.0 - including the denormal bit patterns at 0 and 1, FLT_MIN at 2 and 2^126 at 254")]
 def test_e8m0_half(t : T?) {
     t |> run("normal range - powers of two around 1.0") @(t : T?) {
         t |> equal(e8m0_half(127u), 0.5)
@@ -70,7 +70,7 @@ def test_e8m0_half(t : T?) {
     }
 }
 
-[test]
+[test(description = "The scalar MXFP4 x Q8 dot matches an fp64 elementwise dequant reference within 1e-5 relative, and the TBL+SDOT dot matches the scalar leaf within 1e-6 at n 96, 128 and 256, the 96 covering the unroll tail")]
 def test_dot_mx4q8(t : T?) {
     t |> run("scalar reference vs fp64 elementwise dequant") @(t : T?) {
         let n = 128l
@@ -122,7 +122,7 @@ def private gemv_case(var wn : array<uint8>; var we : array<uint8>; var xq : arr
     }
 }
 
-[test]
+[test(description = "`matmul_mx4q8` matches the per-row scalar leaf within 1e-6 relative on 5 rows under the active backend and every row-major backend, and on arm64-gen after `repack_mx4_weight` on 6 rows including the 2 tail rows")]
 def test_matmul_mx4q8(t : T?) {
     t |> run("active backend GEMV matches the per-row scalar leaf") @(t : T?) {
         var wn, we : array<uint8>

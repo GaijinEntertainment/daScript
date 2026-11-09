@@ -19,7 +19,7 @@ require ../../../examples/dasLLAMA/interpreter/turn.das
 // models_dir(), and on the ASR corpus's ru_short.wav; the voice-activity model is the tree's own. The run opens the
 // example's window for about a minute and plays the English through the mixer, so a box without a window server skips.
 
-[test]
+[test(description = "The interpreter's utterance window pads the speech a quarter second each side clamped to the take, never exceeds the cap, and a take idles out only with no speech open")]
 def test_utterance_window(t : T?) {
     t |> run("the window is the speech plus a quarter second at each end, inside the take") @(t : T?) {
         let pad = int64(UTTERANCE_PAD_S * float(LISTEN_RATE))
@@ -46,7 +46,7 @@ def test_utterance_window(t : T?) {
     }
 }
 
-[test]
+[test(description = "The listen drain appends frames under the gain clamped to plus or minus 1 with the appended frames' rms, clips the padded window, and its speech marks decide the cut at end, at cap, idle or none")]
 def test_listen_drain(t : T?) {
     t |> run("frames append under the gain, clamped, and the drain reads their rms") @(t : T?) {
         var raw <- [0.1]
@@ -108,7 +108,7 @@ def test_listen_drain(t : T?) {
     }
 }
 
-[test]
+[test(description = "The turn ledger counts only in-flight turns and finds a turn by number, and landing text moves a turn transcribing to translating to speaking, or to empty when the text has no words")]
 def test_turn_ledger(t : T?) {
     t |> run("turns on their way are counted, the spoken and the empty are not, and a turn is found by its number") @(t : T?) {
         var turns : array<TurnRow> <- [TurnRow(no = 1, state = TurnState.spoken), TurnRow(no = 2, state = TurnState.empty), TurnRow(no = 3, state = TurnState.translating), TurnRow(no = 4, state = TurnState.transcribing)]
@@ -159,7 +159,7 @@ def private translated(out : string) : string {
     return ""
 }
 
-[test]
+[test(description = "The interpreter example's smoke run hears a Russian clip, translates it to English carrying its words, speaks it and ends on the turn; a non-audio clip and a missing ASR model are refused by name")]
 def test_smoke_hears_translates_and_speaks(t : T?) {
     t |> run("the smoke rail hears the clip, translates it, speaks the English and ends on the spoken turn") @(t : T?) {
         return if (!ready(t))

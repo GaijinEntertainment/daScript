@@ -19,37 +19,37 @@ require dasllama/dasllama_kv_dtype
 let private REGIONS_FILE = "Llama-3.2-3B-Instruct-Q4_K_M.gguf"
 let private LONG = LongCtx(regions = 4l, ctx = 32768l, cpu_n = 12288l, cpu_bar_rel = 0.10, split_n = 30000l, split_cut = 20480l, bar = LogitsBar.split_bar)
 
-[init]
-def private llama3b_init() {
-    pin_file_kv(KVDtype.f16)
-}
-
-[finalize]
-def private llama3b_restore() {
-    unpin_file_kv()
-}
-
-[test]
+[test(description = "A Llama-3.2-3B Q4_K_M f16 mirror of four regions at 32768 positions binds in two slab pairs, and single and batched steps over two sessions hold the split bar of each alone")]
 def test_regions_slabbed_mirror_llama3b(t : T?) {
-    cell_regions_slabbed_mirror(t, REGIONS_FILE, LONG)
+    with_kv_dtype(KVDtype.f16) {
+        cell_regions_slabbed_mirror(t, REGIONS_FILE, LONG)
+    }
 }
 
-[test]
+[test(description = "On the slabbed four-region 32768-context Llama-3.2-3B mirror a 12288-token prompt and its fed steps sit within 10% of the CPU chain's max logit, the one-step-off control past it")]
 def test_long_prompt_against_cpu_llama3b(t : T?) {
-    cell_long_prompt_against_cpu(t, REGIONS_FILE, LONG)
+    with_kv_dtype(KVDtype.f16) {
+        cell_long_prompt_against_cpu(t, REGIONS_FILE, LONG)
+    }
 }
 
-[test]
+[test(description = "On Llama-3.2-3B at 32768 context a 30000-token prompt continued on the device from 20480, and four steps over it, sit within the split bar of the one-call prefill")]
 def test_long_continuation_llama3b(t : T?) {
-    cell_long_continuation(t, REGIONS_FILE, LONG)
+    with_kv_dtype(KVDtype.f16) {
+        cell_long_continuation(t, REGIONS_FILE, LONG)
+    }
 }
 
-[test]
+[test(description = "Four Llama-3.2-3B device-home streams at 9175 to 26624 positions prefill bit for bit the host-cached sessions, and every batched step over all reads what each stream reads alone")]
 def test_long_streams_llama3b(t : T?) {
-    cell_long_streams(t, REGIONS_FILE, LONG)
+    with_kv_dtype(KVDtype.f16) {
+        cell_long_streams(t, REGIONS_FILE, LONG)
+    }
 }
 
-[test]
+[test(description = "On the slabbed Llama-3.2-3B mirror, device-prefilled rows brought down carry CPU steps and CPU-prefilled rows uploaded carry resident steps, both within 10% of the CPU chain alone")]
 def test_long_rows_through_host_llama3b(t : T?) {
-    cell_long_rows_through_host(t, REGIONS_FILE, LONG)
+    with_kv_dtype(KVDtype.f16) {
+        cell_long_rows_through_host(t, REGIONS_FILE, LONG)
+    }
 }

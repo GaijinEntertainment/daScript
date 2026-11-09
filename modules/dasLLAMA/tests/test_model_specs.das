@@ -11,7 +11,7 @@ require daslib/clargs
 // models_provenance). Model-free data checks: a malformed row reds every PR before any box
 // fetches or measures against it.
 
-[test]
+[test(description = "Every model_specs row has a unique file key and unique display name, every official row pins provenance and parity evidence, and evidence carries exactly one prompt form while arm flags never appear without evidence")]
 def test_model_specs_invariants(t : T?) {
     t |> run("spec rows are keyed, unique, and facet-coherent") @(t : T?) {
         var inscope specs <- model_specs()
@@ -53,7 +53,7 @@ def test_model_specs_invariants(t : T?) {
     }
 }
 
-[test]
+[test(description = "`prefix_match_len` stops at the first differing id and at the shorter row's length, and `fixture_ok` holds a whole match under both forms but a partial one only under prefix_bar when it covers at least half the span")]
 def test_fixture_bar_rule(t : T?) {
     t |> run("the fixture compare: token for token, or a matching prefix of half the span under prefix_bar") @(t : T?) {
         let want <- [for (i in range(12)); 100l + int64(i)]
@@ -108,7 +108,7 @@ def private check_companion_pins(t : T?; specs : array<ModelSpec>) {
     delete seen
 }
 
-[test]
+[test(description = "`llm_catalog` and `official_catalog` are exact filters of the spec table, `spec_by_file` finds rows by path or base name, `mmproj_companion` pairs vision rows by name, and the image fixture and every companion are pinned on some row")]
 def test_model_spec_views(t : T?) {
     t |> run("llm_catalog / official_catalog are exact filters over the table") @(t : T?) {
         var inscope specs <- model_specs()
@@ -176,7 +176,7 @@ def test_model_spec_views(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every `models_provenance` entry is uniquely named under a known root with sha256 or a recipe, fetched entries are https with bytes and sha, and the view holds exactly the pinned text and ASR rows and companions, each once")]
 def test_models_provenance_invariants(t : T?) {
     t |> run("the provenance view is well-formed") @(t : T?) {
         var inscope entries <- models_provenance()
@@ -240,7 +240,7 @@ def test_models_provenance_invariants(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every quantize-minted spec row names a fetched source and carries the recipe its quantize spells into the provenance view, `convert_route` picks quantize, canary, no-recipe or a Windows refusal, and `mint_steps` refuses a missing source")]
 def test_quantize_rows(t : T?) {
     t |> run("a quantize-minted row names a fetched source and reaches fetch_models with its recipe") @(t : T?) {
         var inscope entries <- models_provenance()
@@ -288,7 +288,7 @@ def test_quantize_rows(t : T?) {
     }
 }
 
-[test]
+[test(description = "`board_provenance` holds every official row, the image fixture, every ASR carrier and mmproj and every TTS model, and excludes off-board rows and the tts_oracle parity files")]
 def test_board_provenance(t : T?) {
     t |> run("a board box's fetch holds every file the board sweeps read, and no test-only carrier") @(t : T?) {
         var names : table<string>
@@ -314,7 +314,7 @@ def test_board_provenance(t : T?) {
     }
 }
 
-[test]
+[test(description = "fetch_models parses -o NAME into a one-row scope with no board set and --board into the board set with no row scope")]
 def test_fetch_models_flags(t : T?) {
     t |> run("-o names one row by substring; --board asks the board set") @(t : T?) {
         let one <- parse_args(default<FetchArgs>, ["-o", "kokoro-82m"])
@@ -329,7 +329,7 @@ def test_fetch_models_flags(t : T?) {
     }
 }
 
-[test]
+[test(description = "`tts_catalog` holds exactly the spec rows carrying a TTS voice, at least five, each found by file through `tts_spec_of`, and an off-board TTS model has no cell")]
 def test_tts_catalog_is_a_view(t : T?) {
     t |> run("the TTS board is exactly the model rows carrying a TTS cell") @(t : T?) {
         var inscope specs <- model_specs()

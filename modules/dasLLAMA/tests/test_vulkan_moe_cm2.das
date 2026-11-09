@@ -144,7 +144,7 @@ def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; wof
     }
 }
 
-[test]
+[test(description = "The cm2 expert chain (k4 gate and up, k6 down, f16 feed) matches an f16-rounding CPU reference within 4e-3 of the row max over two-region routings: small, a region ending mid-tile, and a 2048-wide multi-tile")]
 def test_vulkan_moe_cm2_chain(t : T?) {
     t |> run("cm2 expert chain (k4 gate/up + k6 down, f16 feed) == the CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -164,7 +164,7 @@ def test_vulkan_moe_cm2_chain(t : T?) {
     }
 }
 
-[test]
+[test(description = "The cm2 expert chain in the shared expert call shape, one region over every position with the identity slot map at unit weight, matches the CPU reference within 4e-3 of the row max at 512 and 2048 wide")]
 def test_vulkan_moe_cm2_one_region(t : T?) {
     t |> run("cm2 expert chain as the shared expert calls it: one region over every position, the identity slot map at unit weight == the CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -179,7 +179,7 @@ def test_vulkan_moe_cm2_one_region(t : T?) {
     }
 }
 
-[test]
+[test(description = "The cm2 expert chain over streamed stacks, through the slot rebase and the timeline hand-off, matches the f16-rounding CPU reference within 4e-3 of the row max on two activation windows")]
 def test_vulkan_moe_cm2_streamed(t : T?) {
     t |> run("cm2 expert chain over a streamed group (slot rebase + the timeline hand-off) == the CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -191,7 +191,7 @@ def test_vulkan_moe_cm2_streamed(t : T?) {
     }
 }
 
-[test]
+[test(description = "The cm2 chain async begin and join over a region head (resident, one streamed expert, and two streamed experts through the ring) matches the CPU reference with the other slots at zero weight, within 4e-3 of the row max")]
 def test_vulkan_moe_cm2_split(t : T?) {
     t |> run("cm2 expert chain async arm: a region head (the streamed-layer split's GPU share, an expert a copy and a submit) == the CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {

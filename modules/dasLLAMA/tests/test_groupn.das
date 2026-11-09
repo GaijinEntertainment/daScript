@@ -70,7 +70,7 @@ def private mx4_weights(var wn0 : array<uint8>; var we0 : array<uint8>) {
     }
 }
 
-[test]
+[test(description = "Under every kernel backend the q8 region-list GEMV matches three per-region single GEMVs within 1e-6 relative and an fp64 dequant dot within its per-block bar, a 0.05 poison past the bar the control")]
 def test_q8q8_groupn(t : T?) {
     t |> run("q8 groupN == per-region GEMV under every backend (repack where needed)") @(t : T?) {
         // one blob of NREG regions [D x N] + 2 activation rows, all deterministic
@@ -123,7 +123,7 @@ def test_q8q8_groupn(t : T?) {
     }
 }
 
-[test]
+[test(description = "Under every kernel backend the biased q8 and mx4 region-list GEMVs equal the unbiased GEMV plus the per-region bias added after, bit for bit")]
 def test_groupn_bias_fold(t : T?) {
     t |> run("biased groupN == unbiased + add-after, q8 and mx4, every backend") @(t : T?) {
         let wq0 <- q8_weights()
@@ -190,7 +190,7 @@ def test_groupn_bias_fold(t : T?) {
     }
 }
 
-[test]
+[test(description = "Under every kernel backend, repacked where it needs it, the mx4 region-list GEMV matches three per-region single mx4 GEMVs within 1e-6 relative")]
 def test_mx4q8_groupn(t : T?) {
     t |> run("mx4 groupN == per-region GEMV under every backend (repack where needed)") @(t : T?) {
         var wn0, we0 : array<uint8>

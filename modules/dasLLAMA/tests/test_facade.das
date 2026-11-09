@@ -9,8 +9,19 @@ require dasllama/dasllama_tokenizer
 require dasllama/dasllama_bpe
 require dasllama/dasllama_gpu_tier   // the K/V room seam a cell doubles
 require ?das_metal dasllama/dasllama_metal_common   // the mirror ceiling behind that seam on a Metal box
+require dasllama/dasllama_common
+require dasllama/dasllama_load
+require dasllama/dasllama_bench
+require dasllama/dasllama_math   // with_dasllama_jobque_
+require daslib/jobque_boost
 require daslib/fio
-require _model_tier
+require math
+require daslib/strings_boost
+require strings
+require daslib/env_registry
+require _model_tier   // llama2c_dir
+require ../../dasLLVM/tests/_exe_test_common.das   // lto_driver_missing - the LTO driver gate the dasLLVM exe tests share
+require ../../dasLLVM/tests/_spawn_common.das      // with_child_log_info - the build announces its form at LOG_INFO
 
 // The unified tokenizer facade (encode/decode/piece over auto-selected SPM/BPE) must produce
 // exactly what a caller writes today against the raw backend — so migrating onto it is a no-op.
@@ -19,7 +30,7 @@ require _model_tier
 // Regression (Copilot #3340): SPM encode/decode must use the per-model bos_id/eos_id loaded from
 // GGUF, not the struct defaults 1/2 — Gemma has bos=2 / eos=1. Empty text isolates the BOS/EOS
 // framing (no vocab lookup), so this needs no model file.
-[test]
+[test(description = "SPM encode of empty text frames it with the tokenizer's own bos_id and eos_id (Gemma's 2 and 1), while a default SpmTokenizer keeps the Llama-2 ids 1 and 2")]
 def test_spm_encode_respects_model_bos_eos(t : T?) {
     let tk = SpmTokenizer(bos_id = 2l, eos_id = 1l, add_space_prefix = false)
     let ids <- encode(tk, "", true, true)
@@ -32,7 +43,7 @@ def test_spm_encode_respects_model_bos_eos(t : T?) {
     t |> equal(ids2[1], 2l, "default eos_id=2 unchanged")
 }
 
-[test]
+[test(description = "The facade's jobque spin knobs default to 30 ms and 500 us and their setters reach the engine, while with no driver armed the CPU window stays in force whatever the GPU knob reads")]
 def test_facade_jobque_spin_knob(t : T?) {
     t |> run("the spin window reads the default before any set, and the facade setter reaches the engine") @(t : T?) {
         t |> equal(get_jobque_spin_us(), 30000l, "the default is the 30 ms window, on every platform including a browser")
@@ -50,7 +61,7 @@ def test_facade_jobque_spin_knob(t : T?) {
     }
 }
 
-[test]
+[test(description = "`load_tokenizer_auto` on tinyllama selects SPM and encodes ids equal to the raw SentencePiece tokenizer's, with and without BOS")]
 def test_facade_spm(t : T?) {
     t |> run("SPM facade auto-dispatch matches raw SentencePiece") @(t : T?) {
         let path = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
@@ -70,7 +81,7 @@ def test_facade_spm(t : T?) {
     }
 }
 
-[test]
+[test(description = "`load_tokenizer_auto` on Qwen2.5 selects BPE, encodes ids equal to raw `bpe_encode` with BOS only where the model asks, and decodes ASCII back exactly")]
 def test_facade_bpe(t : T?) {
     t |> run("BPE facade auto-dispatch matches raw byte-level BPE") @(t : T?) {
         let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
@@ -99,7 +110,7 @@ def test_facade_bpe(t : T?) {
     }
 }
 
-[test]
+[test(description = "`load_model_` populates the model's BPE tokenizer, and the model-level encode and piece return exactly what the tokenizer's own calls return")]
 def test_facade_model(t : T?) {
     t |> run("load_model_ owns the tokenizer; model facade delegates") @(t : T?) {
         let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
@@ -120,7 +131,7 @@ def test_facade_model(t : T?) {
     }
 }
 
-[test]
+[test(description = "`eval_segments` on a bare model returns without panicking for no segments, and refuses by name a chunk with no session and a null session before any read")]
 def test_facade_eval_segments_empty(t : T?) {
     t |> run("no segments is a no-op on a bare model shell: nothing is dispatched, nothing read") @(t : T?) {
         var m = Model()
@@ -150,7 +161,7 @@ def private room_of_a_megabyte(row_bytes : int64) : int64 => 1000000l / row_byte
 
 //! The rows a device holds a session's K/V for: the installed room seam over the model's K/V bytes a row, both planes of every
 //! layer that keeps rows of its own, never past the model's context; no seam bounds nothing.
-[test]
+[test(description = "`device_kv_max_rows` divides the installed room seam by K/V bytes a row over the layers owning rows (488 f16, 244 f32 in a megabyte), caps at the model context, and on Metal ignores the idle mirror cap")]
 def test_facade_device_kv_rows(t : T?) {
     var m = Model()
     m.config.n_layers = 3l
@@ -180,4 +191,127 @@ def test_facade_device_kv_rows(t : T?) {
         set_metal_decode_mirror_cap_mb(prev_cap)
     }
     delete m
+}
+
+
+// The bench rows' contracts on a real model (stories15M, the llama2.c checkpoint): what the
+// released exe and the server's /bench run per row, held on the smallest model that runs them.
+
+let private STORIES_MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
+
+// a pp row on a session sized to `seq_len`: under the prompt it must refuse before it writes,
+// at or over it the row runs
+def private pp_row_panics(var tr : Model; seq_len, plen : int64; warm : bool) : bool {
+    tr.config.seq_len = seq_len
+    var s <- make_run_state(tr.config)
+    var tripped = false
+    try {
+        if (warm) {
+            bench_pp_warm(tr, s, plen)
+        } else {
+            bench_pp_rep(tr, s, plen, 1l)
+        }
+    } recover {
+        tripped = true
+    }
+    delete s
+    return tripped
+}
+
+[test(description = "On stories15M the pp bench warmup and a timed pp rep panic on a session whose seq_len is under the prompt length before writing, and the warmup runs on a session that fits")]
+def test_pp_rows_capacity(t : T?) {
+    t |> run("the pp rows refuse a session sized under their prompt (needs stories15M)") @(t : T?) {
+        if (!stat(STORIES_MODEL_PATH).is_valid) {
+            t |> skip("stories15M.bin not present at {STORIES_MODEL_PATH} (set DASLLAMA_LLAMA2C_DIR)")
+            return
+        }
+        var tr <- load_checkpoint(STORIES_MODEL_PATH)
+        with_dasllama_jobque_() {
+            t |> success(!pp_row_panics(tr, 16l, 8l, true), "a session that fits runs the warmup")
+            t |> success(pp_row_panics(tr, 4l, 8l, true), "the warmup prefill checks the cap before it writes")
+            t |> success(pp_row_panics(tr, 4l, 8l, false), "a timed rep checks the cap before it writes")
+        }
+    }
+}
+
+
+// The standalone-exe context gate: build `_exe_smoke_root.das` with `-jit -exe` and run the
+// artifact - the one rail where globals restore as DATA, so a function-typed global with no
+// boot-restore [init] dies on its first invoke while every -jit suite stays green. One tiny
+// model, one 4-token generate, ~90 s; skips honestly without the model. The split-plus-LTO arm
+// builds the root again with --jit-split-modules=-1 --jit-lto and also skips on a POSIX box
+// without clang++ on PATH.
+
+def private self_daslang() : string {
+    let argv <- get_command_line_arguments()
+    return find(to_generic_path(argv[0]), "/") < 0 ? argv[0] : get_full_file_name(normalize(argv[0]))
+}
+
+//! `build_says` is the line the build must announce, `build_never` the one it must not (the form a dropped or a leaked flag would take)
+def private smoke_build_and_run(t : T?; tag : string; jit_args : array<string>; build_says, build_never : string) {
+    let model = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
+    if (!model_available(t, model)) {
+        return
+    }
+    let dir_r = create_temp_directory_result("dasllama_exe_smoke")
+    if (!(dir_r is value)) {
+        t |> failure("temp dir failed")
+        return
+    }
+    let dir = unsafe(dir_r.value)
+    let exe = path_join(dir, "smoke.exe")
+    var bout = ""
+    var argv <- [self_daslang(), "-jit", "-exe", "-output", exe,
+                 "modules/dasLLAMA/tests/_exe_smoke_root.das"]
+    if (!empty(jit_args)) {
+        argv |> push("--")
+        argv |> push_from(jit_args)
+    }
+    var brc = 0
+    with_child_log_info() {
+        brc = run_and_capture(argv, bout, 600.0)
+    }
+    t |> equal(0, brc, "the -exe build ({tag}) succeeds: {slice(bout, max(0, length(bout) - 400))}")
+    t |> success(find(bout, build_says) >= 0, "the build ({tag}) announces its form `{build_says}`: {slice(bout, max(0, length(bout) - 400))}")
+    t |> success(find(bout, build_never) < 0, "the build ({tag}) never announces `{build_never}`: {slice(bout, max(0, length(bout) - 400))}")
+    if (brc != 0 || !stat(exe).is_valid) {
+        t |> success(stat(exe).is_valid, "the exe artifact exists at -output ({tag})")
+        rmdir_rec_result(dir)
+        return
+    }
+    var out = ""
+    let prev_untuned = env_value_of("DASLLAMA_ALLOW_UNTUNED")
+    set_env_variable("DASLLAMA_ALLOW_UNTUNED", "1")   //! inherited by the child; /usr/bin/env does not exist on Windows
+    //! the artifact links the producing daslang's runtime DLLs, which resolve through PATH and never from the
+    //! temp dir - so the run prepends that daslang's dir through the shell; the command opens with `set` or an
+    //! assignment, never a quote, which cmd.exe would strip
+    let bin_dir = dir_name(self_daslang())
+    var cmd = "PATH=\"{bin_dir}:$PATH\" \"{exe}\" -- \"{model}\" 2>&1"
+    if (get_platform_name() == "windows") {
+        cmd = "set \"PATH={bin_dir};%PATH%\"&& \"{exe}\" -- \"{model}\" 2>&1"
+    }
+    let rc = unsafe(popen_timeout(cmd, 300.0, $(f) {
+        if (f != null) {
+            out = fread(f)
+        }
+    }))
+    set_env_variable("DASLLAMA_ALLOW_UNTUNED", prev_untuned)
+    t |> equal(0, rc, "the exe ({tag}) runs clean: {slice(out, max(0, length(out) - 400))}")
+    t |> success(find(out, "EXE_SMOKE_OK") >= 0, "the generate completed in the exe ({tag}): {slice(out, max(0, length(out) - 400))}")
+    rmdir_rec_result(dir)
+}
+
+[test(description = "A standalone `-jit -exe` build of the facade root, as one unit and split with LTO, announces its build form and the artifact completes a 4-token SmolLM2 generate on the serialized-globals rail, so every function-typed global is boot-restored", timeout = 1200)]
+def test_exe_smoke(t : T?) {
+    t |> run("a -jit -exe build of the facade generates on the serialized-globals rail") @(t : T?) {
+        smoke_build_and_run(t, "one unit", [], "standalone exe entry point generated", "split codegen (--jit-split-modules)")
+    }
+    t |> run("the facade built split with LTO (--jit-split-modules --jit-lto) generates the same way") @(t : T?) {
+        let why_not = lto_driver_missing()
+        if (!empty(why_not)) {
+            t |> skip(why_not)
+            return
+        }
+        smoke_build_and_run(t, "split + LTO", ["--jit-split-modules=-1", "--jit-lto"], "bitcode partitions, the link runs LTO", "ignored for this run")
+    }
 }

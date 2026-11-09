@@ -61,7 +61,7 @@ def private check_all_chunkings(t : T?; tmpl : ChatTemplate; reply, want_r, want
 
 // ===== symmetric: Qwen / GLM (<think> ... </think>) =====
 
-[test]
+[test(description = "A ChatML instruct template whose think markers appear only in history declares no reasoning mode and cannot be armed by request, while hybrid and thinking-only templates keep symmetric mode with and without an off switch")]
 def test_chatml_instruct_reasoning(t : T?) {
     t |> run("ChatML instruct generation ignores history-only reasoning markers") @(t : T?) {
         var m = Model()
@@ -100,7 +100,7 @@ def test_chatml_instruct_reasoning(t : T?) {
     }
 }
 
-[test]
+[test(description = "The qwen3 and glm4moe registered templates split think-tagged replies into exact reasoning and content, whole-string and streamed at every chunk size down to 1 byte, covering truncation, mid-reply tags, empty blocks and strip_think parity")]
 def test_split_symmetric(t : T?) {
     t |> run("qwen family template declares the symmetric pair") @(t : T?) {
         var ct <- arch_chat("qwen3")
@@ -167,7 +167,7 @@ def test_split_symmetric(t : T?) {
 // C `isspace` six, so FF/VT must count as whitespace exactly like space/tab/CR/LF. A matcher wired
 // to a narrower four-byte set would read these replies as plain content instead.
 
-[test]
+[test(description = "Form feed and vertical tab count as whitespace at every marker boundary - before the qwen, gemma4 and harmony openers and after a closer, where the streamed content delta itself opens past them")]
 def test_split_ff_vt_whitespace(t : T?) {
     t |> run("FF/VT lead-in before a symmetric opener is whitespace") @(t : T?) {
         var ct <- arch_chat("qwen3")
@@ -216,7 +216,7 @@ let CH_CLOSE = 101l
 def private feed_stops(var g : NothinkStopGuard; steps : array<tuple<id : int64; piece : string>>) : array<bool> =>
     <- [for (s in steps); nothink_stop_here_(g, s.id, s.piece)]
 
-[test]
+[test(description = "The gemma4 instruct stop guard passes channel markers that precede any non-whitespace content and stops on the first marker after content, pinned per token, while an unarmed guard never stops")]
 def test_nothink_stop_guard(t : T?) {
     t |> run("a leading thought block passes whole; the first marker after content stops") @(t : T?) {
         var ct <- arch_chat("gemma4")
@@ -265,7 +265,7 @@ def test_nothink_stop_guard(t : T?) {
 // the decided prefix is emitted, the partial marker is parked in ts.hold, and the next feed
 // completes it without duplicating or dropping a byte.
 
-[test]
+[test(description = "A marker split across two feeds (qwen closer, opener with FF/VT lead-in, harmony re-header) emits the decided prefix, parks exactly the partial bytes in ts.hold, and completes on the next feed with no byte lost or duplicated")]
 def test_split_partial_marker_holdback(t : T?) {
     t |> run("a symmetric closer split across the feed boundary holds back, then completes") @(t : T?) {
         var ct <- arch_chat("qwen3")
@@ -323,7 +323,7 @@ def test_split_partial_marker_holdback(t : T?) {
 
 // ===== asymmetric: gemma-4 (<|channel>thought ... <channel|>) =====
 
-[test]
+[test(description = "The gemma4 template declares the asymmetric channel pair with think gate and opener, and splits thought replies at every chunking with an optional opener newline, truncated thoughts as reasoning and markerless replies as content")]
 def test_split_gemma4(t : T?) {
     t |> run("gemma4 template declares the asymmetric pair, thinking on by default") @(t : T?) {
         var ct <- arch_chat("gemma4")
@@ -357,7 +357,7 @@ def test_split_gemma4(t : T?) {
 
 // ===== channel-switch: gpt-oss (Harmony channels) =====
 
-[test]
+[test(description = "The gpt-oss harmony splitter routes analysis and commentary segments to reasoning and final to content by channel name token, not substring, at every chunking, with truncated analysis as reasoning and unframed text as content")]
 def test_split_gptoss(t : T?) {
     t |> run("gpt-oss template declares channel_switch") @(t : T?) {
         var ct <- arch_chat("gpt-oss")
@@ -408,7 +408,7 @@ def test_split_gptoss(t : T?) {
 
 // ===== unarmed / non-thinking =====
 
-[test]
+[test(description = "A family with no reasoning mode (llama) and an unarmed qwen3 stream both pass think-tagged text through verbatim as content with empty reasoning")]
 def test_split_unarmed(t : T?) {
     t |> run("non-thinking families (mode none) pass everything through") @(t : T?) {
         var ct <- arch_chat("llama")
@@ -432,7 +432,7 @@ def test_split_unarmed(t : T?) {
     }
 }
 
-[test]
+[test(description = "The gpt-oss splitter handles the live wire with the end control token suppressed, classifies a segment after the final channel by its own header, and drops a bare trailing re-header as framing")]
 def test_split_gptoss_no_end(t : T?) {
     t |> run("analysis -> final with the <|end|> control token suppressed (live wire)") @(t : T?) {
         var ct <- arch_chat("gpt-oss")

@@ -83,7 +83,7 @@ def indexed_storm(t : T?; rounds : int) {
     }
 }
 
-[test]
+[test(description = "With no job queue, the bool form of `maybe_parallel_for` with a true flag runs one inline invoke over the whole range and bumps the inline counter by exactly one")]
 def test_maybe_parallel_for_bool_no_que(t : T?) {
     t |> run("no job que - a true flag runs the bool form inline, one invoke over the whole range") @(t : T?) {
         let before = get_disp_inline()
@@ -146,7 +146,7 @@ def private nj_form_round(t : T?; tag : string; expect_inline : bool) {
     delete hits
 }
 
-[test]
+[test(description = "Single-thread mode makes every dispatch form run inline with exactly-once coverage on team and fifo queues, turning it off restores dispatch, and hybrid phase parking leaves the worker limit alone under it")]
 def test_single_thread(t : T?) {
     with_job_que() {
         set_jobque_fork_pool(true, true)
@@ -225,7 +225,7 @@ def private count_of(haystack, needle : string) : int {
 
 let ANNOUNCE = "single thread - this context runs every kernel"
 
-[test]
+[test(description = "A child process started with DASLLAMA_SINGLE_THREAD=1 reads the flag at context init, dispatches none of three rounds and prints the announce once; unset, it dispatches all three and stays silent")]
 def test_single_thread_env(t : T?) {
     t |> run("DASLLAMA_SINGLE_THREAD=1 reaches the flag at context init, and the announce prints once") @(t : T?) {
         var out : string
@@ -246,7 +246,7 @@ def test_single_thread_env(t : T?) {
     }
 }
 
-[test]
+[test(description = "`maybe_parallel_for_indexed` covers every index exactly once with slots inside the dispatch bound and per-slot checksums summing exactly, inline, in team and fifo modes, and under a worker limit")]
 def test_maybe_parallel_for_indexed(t : T?) {
     t |> run("no job que - inline as slot 0") @(t : T?) {
         single_invoke_round(t, 8, 32)

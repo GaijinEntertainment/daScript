@@ -20,7 +20,7 @@ let TOKENIZER_PATH = path_join(llama2c_dir(), "tokenizer.bin")
 let ORACLE <- [9038l, 2501l, 263l, 931l, 29892l, 727l, 471l, 263l, 2217l, 7826l, 4257l, 365l]
 let PROMPT_ORACLE <- [1l, 9038l, 2501l, 263l, 931l]
 
-[test]
+[test(description = "On fp32 stories15M the tokenizer encodes the prompt to llama2.c's ids and empty-prompt greedy decode with scalar activations reproduces llama2.c's 12 token ids token for token")]
 def test_forward_end_to_end(t : T?) {
     t |> run("forward + tokenizer match llama2.c (needs stories15M.bin)") @(t : T?) {
         return if (!jit_only(t))
@@ -50,7 +50,7 @@ def test_forward_end_to_end(t : T?) {
     }
 }
 
-[test]
+[test(description = "With every 2-D weight of stories15M quantized to Q8_0, empty-prompt greedy decode still reproduces the llama2.c fp32 oracle's 12 token ids token for token")]
 def test_forward_q8(t : T?) {
     t |> run("all-weights Q8 forward matches fp32 oracle (needs stories15M.bin)") @(t : T?) {
         return if (!jit_only(t))
@@ -78,7 +78,7 @@ def test_forward_q8(t : T?) {
     }
 }
 
-[test]
+[test(description = "With every 2-D weight of stories15M quantized to Q4_0, empty-prompt greedy decode still matches the llama2.c fp32 oracle over its 12-token prefix")]
 def test_forward_q4(t : T?) {
     t |> run("all-weights Q4 forward matches the fp32 oracle prefix (needs stories15M.bin)") @(t : T?) {
         return if (!jit_only(t))
@@ -107,7 +107,7 @@ def test_forward_q4(t : T?) {
     }
 }
 
-[test]
+[test(description = "Decode attention forced fully threaded and forced inline leaves bit-identical logits after five stories15M positions, so any difference is a race in the head loop")]
 def test_forward_threaded_decode_attention(t : T?) {
     t |> run("threaded decode attention is bit-exact vs inline (needs stories15M.bin)") @(t : T?) {
         return if (!jit_only(t))

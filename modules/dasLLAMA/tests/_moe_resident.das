@@ -80,7 +80,7 @@ def private fp4_chain_served() : bool {
     }
 }
 
-//! the logits bar as a fraction of the step's max |logit|: the routed chain's CPU-vs-device noise class (test_gpu_moe_shexp.das's
+//! the logits bar as a fraction of the step's max |logit|: the routed chain's CPU-vs-device noise class (test_gpu_resident_moe.das's
 //! reading) - the arms agree to 1e-8 at layer 0 and part from layer 1 on, where the device chain's summation order moves the
 //! residual by ulps, the next layer's Q8 requant rounds a few elements the other way and the router flips a near-tie; against
 //! the all-CPU chain that reads 0.07-0.11 on the twin and the 30B at 40 and 600 tokens and 0.09-0.16 on the 35B, whose

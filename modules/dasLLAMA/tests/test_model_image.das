@@ -386,7 +386,7 @@ def private fill_bytes(var a : array<uint8>; n : int; seed : int) {
     }
 }
 
-[test]
+[test(description = "A synthetic image carrier round-trips the q51, iq4nl32 and mlx planes byte-exact through their top-level section pairs while the same formats' table slots write no section, so no two sections share a name")]
 def test_image_table_slot_names(t : T?) {
     t |> run("synthetic carrier: a 32-block format's table slot never writes - its planes are the top-level pair of the same section name") @(t : T?) {
         if (!arm_on(t, "mechanics")) {
@@ -435,7 +435,7 @@ def test_image_table_slot_names(t : T?) {
     }
 }
 
-[test]
+[test(description = "`serialize_image_meta` writes and reads back an nv4 site-scale entry and a three-expert per-expert scale vector with every value exact")]
 def test_image_meta_carries_site_scales(t : T?) {
     t |> run("Model meta: an nv4 stack's per-expert scale vector rides the image beside the site table, both directions") @(t : T?) {
         if (!arm_on(t, "mechanics")) {
@@ -471,7 +471,7 @@ def test_image_meta_carries_site_scales(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every exact-lane tower image tag (f32, f16 and vision towers) yields the same `image_identity` under every whole CPU backend, while the control parakeet-q8 lane's identity changes with the backend")]
 def test_tower_exact_lanes_are_config_free(t : T?) {
     t |> run("a tower's exact lane keys one identity whatever CPU backend the process runs; its q8 lane follows the backend") @(t : T?) {
         if (!arm_on(t, "mechanics")) {
@@ -506,7 +506,7 @@ def test_tower_exact_lanes_are_config_free(t : T?) {
     }
 }
 
-[test]
+[test(description = "A save failed by the write-fault seam publishes nothing and leaves no temp file, and the next good save deletes a backdated stale temp file while a fresh one, possibly a live writer's, survives")]
 def test_image_tmp_does_not_outlive_a_save(t : T?) {
     t |> run("a failed write removes the save's temp file; a temp file a killed writer left goes at the next save, a fresh one stays") @(t : T?) {
         if (!arm_on(t, "mechanics")) {
@@ -542,7 +542,7 @@ def test_image_tmp_does_not_outlive_a_save(t : T?) {
     }
 }
 
-[test]
+[test(description = "On a synthetic carrier the .dlim image round-trips planes and nested fields element-exact, declines wrong tag, version, meta, section-count, size and absent files, tees the cold in-memory build to disk, and spells lanes and rope suffixes")]
 def test_image_mechanics(t : T?) {
     t |> run("synthetic carrier: round trip, nested planes, declines, unmap-remap") @(t : T?) {
         if (!arm_on(t, "mechanics")) {
@@ -932,7 +932,7 @@ def private text_image_roundtrip(t : T?; path : string; n_gen : int) {
     delete prompt
 }
 
-[test]
+[test(description = "SmolLM2-135M and the untied stories15M emit the GGUF load's greedy tokens exactly from cold-built, warm and re-mapped images, with config and tokenizer round-tripping byte-exact and the untied image dropping the f32 table")]
 def test_model_image_roundtrip(t : T?) {
     t |> run("SmolLM2-135M q8: gguf load vs mapped image, token-for-token") @(t : T?) {
         if (!family_on(t, "llama") || !arm_on(t, "smol")) return
@@ -1002,7 +1002,7 @@ def private forced_logits_maxd(tc, tg : Model; prompt, teach : array<int64>; tag
     return maxd
 }
 
-[test]
+[test(description = "SmolLM2 and the untied TinyLlama mint a blob-form Metal image whose GPU teacher-forced logits sit within 4.0 of a planar CPU control, mint and warm-mapped greedy ids match exactly, and CPU inference on a blob model panics")]
 def test_metal_flavor_image(tst : T?) {
     tst |> run("SmolLM2 q8: metal flavor - blob mint + map + GPU serve + CPU tripwire") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -1133,7 +1133,7 @@ def test_metal_flavor_image(tst : T?) {
     }
 }
 
-[test]
+[test(description = "A cold Metal mint of gemma-4 E2B clears the PLE go-live tripwire and serves a continuation, and the warm-mapped blob image emits the mint's greedy ids exactly")]
 def test_gemma4e_flavor_image(tst : T?) {
     tst |> run("E2B q8: the metal-flavor image serves the PLE table (mint + map, the go-live tripwire seam)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -1186,7 +1186,7 @@ def test_gemma4e_flavor_image(tst : T?) {
 // The blob plane exists on two rails: the in-RAM transform builds it, the image writer derives it
 // band by band from the planar planes so a cold metal mint never holds a second copy. They must
 // agree byte for byte — this is the only thing keeping the cheap rail honest.
-[test]
+[test(description = "The blob plane and kq scale strips a cold Metal image mint derives band by band from SmolLM2's planar planes are byte-identical to the in-RAM `convert_model_to_metal_blob` transform's")]
 def test_metal_flavor_derive(tst : T?) {
     tst |> run("SmolLM2 q8: the derived blob plane equals the in-RAM transform's") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -1280,7 +1280,7 @@ def private b32_streamed_mint(t : T?; path : string) {
     remove(img)
 }
 
-[test]
+[test(description = "A cold streamed planar mint of the Qwen2.5-0.5B Q4_0, Q5_0 and IQ4_NL per-32 files maps every served plane byte-identical to the eager load's, and its prompt logits equal the eager load's bit for bit")]
 def test_b32_streamed_mint(t : T?) {
     for (file in ["Qwen2.5-0.5B-Instruct-Q4_0-local.gguf", "Qwen2.5-0.5B-Instruct-Q5_0-pure-local.gguf", "Qwen2.5-0.5B-Instruct-IQ4_NL-pure-local.gguf"]) {
         t |> run("{file} q8: the streamed planar mint serves the eager load's planes and logits") @(t : T?) {
@@ -1294,7 +1294,7 @@ def test_b32_streamed_mint(t : T?) {
     }
 }
 
-[test]
+[test(description = "The Llama-3.2-1B MLX 8-bit snapshot mints its planar .dlim beside the snapshot directory, every served affine plane byte-identical to the eager load's and its prompt logits bit-exact")]
 def test_mlx_snapshot_mint(t : T?) {
     t |> run("the Llama-3.2-1B 8-bit snapshot directory: the planar image beside it serves the eager load's affine planes and logits") @(t : T?) {
         if (!family_on(t, "llama") || !arm_on(t, "mlx")) return
@@ -1316,7 +1316,7 @@ def test_mlx_snapshot_mint(t : T?) {
 //! device logits sit within the spec's bar of the CPU's - the dense bar on the 1B 8-bit snapshot, the routed census bar on the
 //! 35B-A3B (large tier: its routed stacks ride the member's routed forms out of the lane) - and the 1B's walk is the CPU rails'
 //! token for token, where the 35B-A3B's flips at a near tie ("nine, ten" / "nine, and ten") and stands on the forced logits
-[test]
+[test(description = "An MLX snapshot's cold Metal mint lands a .metal.dlim beside the directory keeping the affine token table, its forced device logits within the dense 4.0 or routed 3.0 bar of the CPU, and mint and warm-map greedy ids match")]
 def test_mlx_snapshot_metal_image(tst : T?) {
     for (spec in [(repo = "mlx-community/Llama-3.2-1B-Instruct-8bit", fam = "llama", arm = "mlx-metal", f = KqFmt.mlx8, bar = 4.0, large = false, walk = true),
                   (repo = "mlx-community/Qwen3.6-35B-A3B-4bit", fam = "qwen35moe", arm = "mlx-metal-35b", f = KqFmt.mlx4b, bar = 3.0, large = true, walk = false)]) {
@@ -1466,7 +1466,7 @@ def private mx4_streamed_metal_mint(t : T?; path : string) {
     }
 }
 
-[test]
+[test(description = "A cold planar mint of the gemma-4-26B MXFP4_MOE and gpt-oss-20b files streams the native-MXFP4 expert planes: the minted nibble and E8M0 planes equal the eager load's, and on macOS the mint's peak footprint stays under the plane bytes")]
 def test_mx4_streamed_mint(t : T?) {
     t |> run("gemma-4-26B-A4B MXFP4_MOE q8: the cold mint streams the native-MXFP4 expert planes") @(t : T?) {
         if (!family_on(t, "gemma4moe") || !arm_on(t, "mx4-stream")) return
@@ -1565,7 +1565,7 @@ def private kitten_image_roundtrip(path : string; q8 : bool) : KittenRoundtrip {
 
 // the TTS area's image arm: the StyleTTS2 carrier through its own loader (load_styletts2),
 // on both lanes, and the image loaded by its own path with the kitten family data riding its meta
-[test, arch(at = "../ARCHITECTURE_TTS.md#tts-image-rail")]
+[test(description = "On both the f32 and q8 lanes the kitten-nano image (cold, warm and in-memory mint) serves every sampled weight span and all 8 voices element-exact against the staged read, and the image loaded by path carries the alias and speed-prior data"), arch(at = "../ARCHITECTURE_TTS.md#tts-image-rail")]
 def test_kitten_image(t : T?) {
     let path = path_join(models_dir(), "kitten-nano.gguf")
     t |> run("kitten-nano: the staged read, the mapped image and the in-memory mint agree on both lanes") @(t : T?) {
@@ -1620,7 +1620,7 @@ def test_kitten_image(t : T?) {
     }
 }
 
-[test]
+[test(description = "The voxtral-mini q8 image, which crosses 2 GiB and so exercises 64-bit plane IO, emits the GGUF load's greedy tokens exactly from cold, warm and re-mapped loads with the config round-tripping exactly")]
 def test_voxtral_mini_image(t : T?) {
     t |> run("voxtral-mini q8: the >2 GiB-plane image round trip") @(t : T?) {
         if (!family_on(t, "voxtral") || !arm_on(t, "voxtral")) return
@@ -1632,7 +1632,7 @@ def test_voxtral_mini_image(t : T?) {
     }
 }
 
-[test]
+[test(description = "The gemma-4 E2B q8 image keeps every serialized config field (the arch configure's sliding-window fallbacks do not clobber them) and its cold, warm and re-mapped loads emit the GGUF load's greedy tokens exactly")]
 def test_gemma4_image_roundtrip(t : T?) {
     t |> run("gemma-4-E2B q8: arch-configure fallbacks must not clobber mapped config") @(t : T?) {
         // gemma4's configure sets gguf-overridable fallbacks (sliding_window, swa_pattern);
@@ -1645,7 +1645,7 @@ def test_gemma4_image_roundtrip(t : T?) {
     }
 }
 
-[test]
+[test(description = "The ultravox-1b audio tower's CPU image serves fblob and geometry element-exact against the staged read, and on a GPU home each lane's cold and warm flavored image carries the in-memory mint's device plan and bytes exactly")]
 def test_tower_image_roundtrip(t : T?) {
     t |> run("ultravox-1b tower: mapped image planes are element-exact vs gguf") @(t : T?) {
         if (!family_on(t, "ultravox") || !arm_on(t, "tower")) return
@@ -1713,7 +1713,7 @@ def private whisper_transcribe_text(path : string; samples : array<float>; cache
     return (text = text, mapped = mapped)
 }
 
-[test]
+[test(description = "Whisper tiny's f32, q8 and mixed images transcribe jfk identically to an in-memory mint, their streamed planes equal the staged read's element-exact, enc-q8/dec-f32 minting panics, and GPU-flavored lanes carry the mint's device bytes")]
 def test_whisper_image_roundtrip(t : T?) {
     t |> run("whisper tiny: gguf load vs mapped image, transcript-exact") @(t : T?) {
         if (!family_on(t, "whisper") || !arm_on(t, "whisper")) return
@@ -1800,7 +1800,7 @@ def private asr_f16_by_path(t : T?; tag : string; fam : TowerFamily; img, lang :
 }
 
 //! whisper tiny's f16-encoder image (`whisper-f16-q8`), minted by a `set_asr_tower_fp32` load, through `load_asr_model` by path
-[test]
+[test(description = "`load_asr_model` on whisper tiny's f16-encoder .dlim path maps the GPU home's f16 image, runs the encoder on the device chain, and transcribes jfk above the word floor")]
 def test_whisper_f16_image_by_path(t : T?) {
     t |> run("whisper tiny f16 image: the facade loads the discrete home's f16-encoder .dlim by path and serves it on the device") @(t : T?) {
         return if (!family_on(t, "whisper") || !arm_on(t, "whisper") || !jit_only(t))
@@ -1908,7 +1908,7 @@ def private whisper_lane_text(path : string; samples : array<float>; enc_q8 : bo
 // Metal-flavored image on the device, encoder and decoder - transcript equality on the corpus clip + geometry-derived counter
 // deltas, the knob-off leg on the CPU image. The exact encoder's Metal image is its f16 one, the CPU image's the f32 planes.
 // Numeric bars live in the kernels suite; the transcript is the backend-portable oracle (battery: stated claims).
-[test]
+[test(description = "Whisper tiny's exact (f16) and q8 encoders on the Metal tower transcribe jfk identically to the CPU with block, row and conv counter deltas from the geometry, a zeroed layer changing the text, and knob-off, required-mode and re-arm legs holding")]
 def test_whisper_metal_tower(tst : T?) {
     tst |> run("whisper tiny exact encoder: the Metal tower blocks on the f16 image - transcript + counters + knob") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -2052,7 +2052,7 @@ def private wdec_transcribe(w : WhisperModel; samples : array<float>) : string {
 // default's step on the CPU beside the device cross-KV (`#tower-dev-step-cpu`), the knob off's step on the device too - each
 // transcript-exact against the CPU chain on the CPU image, window/step counter deltas, the knob/quant_mode decline classes,
 // required-mode contract, and the shutdown re-arm.
-[test]
+[test(description = "Whisper tiny q8's Metal decoder, with the step on the CPU or on the device, transcribes jfk identically to the CPU chain, counts its windows and steps, declines the knob and the f32 decoder by reason, and panics only on the capability decline under required")]
 def test_whisper_metal_cross_kv(tst : T?) {
     tst |> run("whisper tiny q8: GPU cross-KV - transcript + counters + knob + declines") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -2180,7 +2180,7 @@ def private pk_asr_model(path : string; dev : TowerDev; q8 : bool = false) : Asr
     return <- m
 }
 
-[test]
+[test(description = "Parakeet's exact-lane FastConformer encode on Metal tracks the CPU f32 rail under 5e-2 rel-l2 on every attention and halfword form (a x3 mel poison breaks the bar), with jfk token ids identical to the CPU's and counters matching n_layer")]
 def test_parakeet_tower_metal(tst : T?) {
     tst |> run("parakeet tower: the Metal FastConformer block loop matches the CPU f32 rail on jfk") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -2339,7 +2339,7 @@ def test_parakeet_tower_metal(tst : T?) {
 }
 
 //! the q8 parakeet's Metal image serves off its q8 slab to the CPU q8 text; a capability decline panics naming the mode, a policy decline serves the CPU
-[test]
+[test(description = "Parakeet's q8 lane on the Metal chain reads its q8 slab and emits the CPU q8 chain's jfk token ids exactly, while under required mode a halfword image with the twin knob off panics on `device` and a knob-off policy decline serves the CPU")]
 def test_parakeet_tower_q8_metal(tst : T?) {
     tst |> run("parakeet tower: the q8 lane serves on the Metal chain off its q8 slab, and the seat's required-mode contract") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -2451,7 +2451,7 @@ def private parakeet_transcribe_text(path : string; samples : array<float>; cach
     return (text = text, mapped = mapped)
 }
 
-[test]
+[test(description = "Parakeet v3's cold-built and warm-mapped images on the policy lane transcribe jfk identically to an in-memory mint, and on a GPU home the exact and q8 lanes' flavored images carry the mint's device plan and bytes exactly")]
 def test_parakeet_image_roundtrip(t : T?) {
     t |> run("parakeet v3: bin load vs mapped image, transcript-exact") @(t : T?) {
         if (!family_on(t, "parakeet") || !arm_on(t, "parakeet")) return
@@ -2520,7 +2520,7 @@ def private ga_dev_block_leg(t : T?; tag, path : string; q8 : bool; img : string
     dev_block_same(t, tag, cold.dev_backend, img, cold, mapped, fresh)
 }
 
-[test]
+[test(description = "GigaAM v3's cold GGUF load bakes the image of the lane it serves, the .dlim routes back through `load_asr_model` with the same exec format and device block, and both transcribe ru_short identically to an in-memory mint")]
 def test_gigaam_image_roundtrip(t : T?) {
     t |> run("gigaam v3: the GGUF's cold load bakes its image, the .dlim loads back through load_asr_model, transcript-exact") @(t : T?) {
         if (!family_on(t, "gigaam") || !arm_on(t, "gigaam")) return
@@ -2556,7 +2556,7 @@ def test_gigaam_image_roundtrip(t : T?) {
     }
 }
 
-[test]
+[test(description = "GigaAM v3 q4_k's cold load takes the k4 kq lane and bakes the gigaam-kq image, which maps back with the same repack layout and device block, and cold and mapped transcribe ru_short identically to an in-memory mint")]
 def test_gigaam_kq_image_roundtrip(t : T?) {
     t |> run("gigaam v3 q4_k: the kq lane's cold load bakes the gigaam-kq image, the .dlim loads back through load_asr_model, transcript-exact") @(t : T?) {
         if (!family_on(t, "gigaam") || !arm_on(t, "gigaam")) return
@@ -2607,7 +2607,7 @@ def private nmt_lines(m : NmtModel; lines : array<string>) : array<string> {
 //! The in-memory mint, the cold-built image and the mapped image translate through one entry point (`nmt_translate`) on one
 //! lane - the CPU chain, the device seat pinned off and put back - so the three sides' logits are bit-identical and the lines
 //! compare exactly.
-[test]
+[test(description = "On both the f32 and q8 lanes the bergamot ru-en tiny cold-built and mapped images translate three Russian lines on the CPU chain exactly as the in-memory mint does")]
 def test_bergamot_image_roundtrip(t : T?) {
     t |> run("bergamot ru-en tiny: the .bin's cold load bakes each lane's image, the .dlim loads back, translation-exact") @(t : T?) {
         if (!family_on(t, "bergamot") || !arm_on(t, "bergamot")) return
@@ -2645,7 +2645,7 @@ def test_bergamot_image_roundtrip(t : T?) {
 }
 
 //! qwen3a's f16 image (`qwen3a-f16`), minted by an exact-pinned tower load, through the facade's mmproj route by path
-[test]
+[test(description = "`load_asr_model` with qwen3a's f16 mmproj .dlim path maps the GPU home's halfword tower, encodes on the device chain, and transcribes jfk above the word floor")]
 def test_qwen3a_f16_image_by_path(t : T?) {
     t |> run("qwen3a f16 image: the facade loads the discrete home's halfword mmproj .dlim by path and serves it on the device") @(t : T?) {
         return if (!family_on(t, "qwen3a") || !arm_on(t, "qwen3a") || !jit_only(t))
@@ -2668,7 +2668,7 @@ def test_qwen3a_f16_image_by_path(t : T?) {
 }
 
 //! ultravox-1b's f16 tower image by path through the audio embedder: the baked tag routes it, every chunk's soft tokens finite off the device chain
-[test]
+[test(description = "The audio embedder loading ultravox-1b's f16 tower .dlim by path serves it on the GPU home's device chain, emitting finite soft tokens of the projector's width")]
 def test_tower_f16_image_by_path(t : T?) {
     t |> run("ultravox-1b f16 image: the audio embedder loads the discrete home's halfword .dlim by path and serves it on the device") @(t : T?) {
         return if (!family_on(t, "ultravox") || !arm_on(t, "tower") || !jit_only(t))
@@ -2710,7 +2710,7 @@ def test_tower_f16_image_by_path(t : T?) {
 }
 
 //! parakeet v3's f16 image (`parakeet-f16`), minted by an exact load on the GPU home, through `load_asr_model` by path
-[test]
+[test(description = "`load_asr_model` on parakeet v3's f16 .dlim path maps the GPU home's halfword image, encodes on the device chain, and transcribes jfk above the word floor")]
 def test_parakeet_f16_image_by_path(t : T?) {
     t |> run("parakeet v3 f16 image: the facade loads the GPU home's halfword .dlim by path and serves it on the device") @(t : T?) {
         return if (!family_on(t, "parakeet") || !arm_on(t, "parakeet") || !jit_only(t))
@@ -2730,7 +2730,7 @@ def test_parakeet_f16_image_by_path(t : T?) {
 }
 
 //! canary's f16 encoder image (`canary-f16`), minted by an exact load on the GPU home, through the facade's mmproj route by path
-[test]
+[test(description = "`load_asr_model` with canary's f16 encoder .dlim path maps the GPU home's halfword encoder, encodes on the device chain, and transcribes jfk above the word floor")]
 def test_canary_f16_image_by_path(t : T?) {
     t |> run("canary f16 image: the facade loads the GPU home's halfword encoder .dlim by path and serves it on the device") @(t : T?) {
         return if (!family_on(t, "canary") || !arm_on(t, "canary") || !jit_only(t))
@@ -2750,7 +2750,7 @@ def test_canary_f16_image_by_path(t : T?) {
     }
 }
 
-[test]
+[test(description = "The qwen3a 0.6B tower's q8 and f32 CPU images serve every plane and geometry field element-exact against the staged read, and on a GPU home each lane's flavored image carries the in-memory mint's device plan and bytes")]
 def test_qwen3a_tower_image_roundtrip(t : T?) {
     t |> run("qwen3a 0.6B tower: mapped image planes are element-exact vs gguf") @(t : T?) {
         if (!family_on(t, "qwen3a") || !arm_on(t, "qwen3a")) return
@@ -2813,7 +2813,7 @@ def private qwen3a_cpu_roundtrip(t : T?; path : string) {
     }
 }
 
-[test]
+[test(description = "The gemma-4 mixed BF16 mmproj's embedder image keeps the F32 patch embedder on the fp32 plane and exactly the projection on the bf16 plane, element-exact against the staged read, while an all-F32 mmproj mints no bf16 plane")]
 def test_gemma4uv_embedder_image_roundtrip(t : T?) {
     t |> run("gemma4uv embedder: mapped image planes are element-exact vs mmproj, bf16 lane") @(t : T?) {
         if (!family_on(t, "gemma") || !arm_on(t, "gemma4uv")) return
@@ -2865,7 +2865,7 @@ def test_gemma4uv_embedder_image_roundtrip(t : T?) {
     }
 }
 
-[test]
+[test(description = "The gemma4v tower's exact and q8 images serve every plane element-exact against the staged read, a named .dlim serves its baked lane whatever the pin, and the q8 GPU flavor's image carries the mint's device block")]
 def test_gemma4v_tower_image_roundtrip(t : T?) {
     t |> run("gemma4v tower: mapped image planes are element-exact vs mmproj, bf16 lane") @(t : T?) {
         if (!family_on(t, "gemma") || !arm_on(t, "gemma4v")) return
@@ -2950,7 +2950,7 @@ def private gemma4v_cpu_roundtrip(t : T?; path : string) {
     }
 }
 
-[test]
+[test(description = "The gemma3v tower's exact and q8 images serve every plane element-exact against the staged read and route by baked lane, the q8 GPU flavor carries the mint's device block, and with the tower off that image's first encode refuses by name")]
 def test_gemma3v_tower_image_roundtrip(t : T?) {
     t |> run("gemma3v tower: mapped image planes are element-exact vs mmproj, both lanes") @(t : T?) {
         if (!family_on(t, "gemma") || !arm_on(t, "gemma3v")) {
@@ -3047,7 +3047,7 @@ def private gemma3v_cpu_roundtrip(t : T?; path : string) {
 // The GPU tower vs the CPU chain on synthetic canvases — engage evidence is COUNTER DELTAS
 // (a green that never dispatched is vacuous), and the OFF leg lives in the same arm so the
 // knob is proven both ways every run.
-[test]
+[test(description = "The gemma4uv embedder on the Metal tower matches the CPU chain on five synthetic canvas shapes and the all-F32 mmproj within tower parity (rel_l2 and norm_dev at most 4e-3, cos at least 1-1e-5), with npos and encode counters from the geometry and a counted knob decline")]
 def test_gemma4uv_metal_tower(tst : T?) {
     tst |> run("gemma4uv: the Metal tower serves the embedder - parity + counters + knob") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -3118,7 +3118,7 @@ def test_gemma4uv_metal_tower(tst : T?) {
     }
 }
 
-[test]
+[test(description = "Canary's exact-lane encoder image serves blob, filters, window and twiddles element-exact against the staged read, and on a GPU home its flavored image carries the in-memory mint's device plan and bytes")]
 def test_canary_encoder_image_roundtrip(t : T?) {
     t |> run("canary encoder: mapped image planes are element-exact vs bin") @(t : T?) {
         if (!family_on(t, "canary") || !arm_on(t, "canary")) return
@@ -3161,7 +3161,7 @@ def private canary_cpu_roundtrip(t : T?; path : string) {
     }
 }
 
-[test]
+[test(description = "Canary's q8 encoder image serves qblob, qscales, the compact fp32 blob and filters element-exact against the staged transcode, an in-memory mint matches too, and on a GPU home the q8 flavored image carries the mint's device bytes")]
 def test_canary_encoder_q8_image_roundtrip(t : T?) {
     t |> run("canary encoder q8: mapped image planes are element-exact vs bin transcode") @(t : T?) {
         if (!family_on(t, "canary") || !arm_on(t, "canary")) return
@@ -3212,7 +3212,7 @@ def private canary_q8_cpu_roundtrip(t : T?; path : string) {
     }
 }
 
-[test]
+[test(description = "The gemma4a E2B audio encoder's q8 and f32 images serve every plane and table element-exact against the staged transcode, and on a GPU home each lane's flavored image carries the in-memory mint's device plan and bytes")]
 def test_gemma4a_encoder_image_roundtrip(t : T?) {
     t |> run("gemma4a encoder q8: mapped image planes are element-exact vs gguf transcode") @(t : T?) {
         if (!family_on(t, "gemma4a") || !arm_on(t, "gemma4a")) return
@@ -3290,7 +3290,7 @@ def same_words(t : T?; who : string; q8_text, f32_text : string) {
     t |> success(join(short, " ") != f32, "control: the q8 words one short miss the f32 rail")
 }
 
-[test]
+[test(description = "Gemma-4 E2B transcribing jfk through the q8 audio tower yields the same word list as through the f32 tower, punctuation aside, while the q8 list one word short misses (the control)")]
 def test_gemma4a_transcribe_q8_ab(t : T?) {
     t |> run("gemma4a transcribe: the q8 tower vs the f32 rail on jfk, the same words") @(t : T?) {
         return if (!family_on(t, "gemma4a") || !arm_on(t, "gemma4a") || !jit_only(t))
@@ -3331,7 +3331,7 @@ def test_gemma4a_transcribe_q8_ab(t : T?) {
 }
 
 //! the discrete home's f16 E2B encoder image by path through the mmproj route: the baked tag routes it, jfk transcribed off the device chain
-[test]
+[test(description = "`load_asr_model` with the gemma4a E2B f16 encoder .dlim path maps the GPU home's halfword encoder, encodes on the device chain, and transcribes jfk above the word floor")]
 def test_gemma4a_f16_image_by_path(t : T?) {
     t |> run("gemma4a f16 image: the facade loads the discrete home's halfword .dlim by path and serves it on the device") @(t : T?) {
         return if (!family_on(t, "gemma4a") || !arm_on(t, "gemma4a") || !jit_only(t))
@@ -3353,13 +3353,13 @@ def test_gemma4a_f16_image_by_path(t : T?) {
     }
 }
 
-[test]
+[test(description = "The gemma4a E2B Conformer tower on Metal, projector tail included, encodes within 5e-3 rel-l2 of the CPU f32 rail and transcribes jfk to the CPU's words, its q8 lane matching the CPU q8 token ids exactly, and a half-silenced clip reads other words")]
 def test_gemma4a_tower_metal(t : T?) {
     g4a_tower_metal_cell(t, "E2B", "gemma-4-E2B-it-Q8_0.gguf", "mmproj-gemma-4-E2B-it-bf16.gguf", 1536l)
 }
 
 //! E4B's audio embedder widens the encoder's 1536 to the decoder's 2560, where E2B's is square
-[test]
+[test(description = "The gemma4a E4B tower on Metal projects 1536 to the decoder's 2560 on the device, encodes within 5e-3 rel-l2 of the CPU rail, transcribes jfk to the CPU's words, and its q8 lane emits the CPU q8 token ids exactly")]
 def test_gemma4a_tower_metal_e4b(t : T?) {
     g4a_tower_metal_cell(t, "E4B", "gemma-4-E4B-it-Q8_0.gguf", "mmproj-gemma-4-E4B-it-BF16.gguf", 2560l)
 }
@@ -3489,7 +3489,7 @@ def private g4a_tower_metal_cell(tst : T?; tag, dec_file, mmp_file : string; wan
     }
 }
 
-[test, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
+[test(description = "Canary's FastConformer encoder on Metal, mel and subsample front on the device, tracks the CPU f32 rail under 5e-2 rel-l2 (half-silenced frames break it), transcribes jfk identically, and its q8 lane emits the CPU q8 token ids exactly"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def test_canary_tower_metal(t : T?) {
     t |> run("canary tower: the Metal FastConformer block loop matches the CPU f32 rail on jfk") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -3617,7 +3617,7 @@ def test_canary_tower_metal(t : T?) {
     }
 }
 
-[test]
+[test(description = "The qwen3a 0.6B tower's q8 core encodes jfk window 0 to the same row count as the f32 rail and within 0.05 rel-l2 of it, an element-level tripwire behind the transcript gate")]
 def test_qwen3a_tower_q8_ab(t : T?) {
     t |> run("qwen3a tower: the q8 core tracks the f32 rail on jfk window 0") @(t : T?) {
         if (!family_on(t, "qwen3a") || !arm_on(t, "qwen3a")) return
@@ -3659,7 +3659,7 @@ def test_qwen3a_tower_q8_ab(t : T?) {
     }
 }
 
-[test]
+[test(description = "Qwen3-ASR 0.6B transcribing jfk through the q8 tower core yields the same word list as through the f32 tower, punctuation aside, while the q8 list one word short misses (the control)")]
 def test_qwen3a_transcribe_q8_ab(t : T?) {
     t |> run("qwen3a transcribe: the q8 tower core vs the f32 rail on jfk, the same words") @(t : T?) {
         return if (!family_on(t, "qwen3a") || !arm_on(t, "qwen3a") || !jit_only(t))
@@ -3704,7 +3704,7 @@ def test_qwen3a_transcribe_q8_ab(t : T?) {
 // load's Metal image - the exact lane's f16 image beside the CPU's f32 one, then the q8 lane, the serving default, on both -
 // transcript equality, the blocks counter from the tower's own n_layer, the front and the projector counted on the device, the
 // exact lane's window-0 encode element-level, the halfword counter on the exact lane alone.
-[test, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
+[test(description = "On both the exact (f16) and q8 lanes the qwen3a tower on Metal, conv front and projector on the device, transcribes jfk identically to its CPU image, counts n_layer blocks per encode, and the exact lane's window-0 encode sits within 5e-3 rel-l2"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def test_qwen3a_metal_tower(tst : T?) {
     for (q8 in fixed_array(false, true)) {
         tst |> run("qwen3a {q8 ? "q8" : "exact"} lane: the Metal tower - transcript + counters") @(t : T?) {
@@ -3803,7 +3803,7 @@ def private q3a_metal_lane_cell(t : T?; dec_path, mmp_path : string; samples : a
     }
 }
 
-[test]
+[test(description = "The canary decoder's opt-in fp32 image, cold-built and warm-mapped, emits the off-rail fp32 GGUF load's 16 greedy tokens exactly")]
 def test_fp32_decoder_image_roundtrip(t : T?) {
     t |> run("canary decoder fp32: gguf load vs mapped image, token-for-token") @(t : T?) {
         if (!family_on(t, "canary") || !arm_on(t, "canary-dec")) return
@@ -3844,7 +3844,7 @@ def test_fp32_decoder_image_roundtrip(t : T?) {
 // planar sibling, then --clean reaped the metal images.
 def private probe_layout() : uint64 => 0xf00dcafeul
 
-[test]
+[test(description = "`dlim_image_verdict` calls a cross-context GPU or unregistered-family image FOREIGN (kept), own-lane knob drift OTHER, a drifted layout fingerprint STALE, and a config-free tag's identity is the default configuration's rather than the box's")]
 def test_dlim_flavor_lanes(t : T?) {
     t |> run("flavor lanes: another bake context's image is never judged from here") @(t : T?) {
         if (!arm_on(t, "mechanics")) {
@@ -3924,7 +3924,7 @@ def test_dlim_flavor_lanes(t : T?) {
 // Model-free: the k6 scale-plane GPU split at 27B scale — a ~1.8B-weight q6 region is a strip
 // past the 64 MB max_unreserved_size guard, so the staging copy must reserve, not bare-resize.
 // Split layout owner: metal_blob_scale_plane in dasllama_layout.das.
-[test]
+[test(description = "Only lattice member spellings plus s name split scale planes, a 72 MB k6 strip past the unreserved-size guard splits into sub-scale and d strips in place, and k3/k6 lead with the 16-byte strip while other formats lead with d, a poison byte moving only its tail")]
 def test_k6_scale_split_sizing(t : T?) {
     t |> run("a scale-plane name is a lattice format's member spelling plus s, and nothing else") @(t : T?) {
         if (!arm_on(t, "mechanics")) {
@@ -4009,7 +4009,7 @@ def test_k6_scale_split_sizing(t : T?) {
 // Model-free: the streamed save transforms each kq scale plane in place as its turn comes, and a
 // writer that dies mid-walk hands the carrier - planes already converted - to the in-memory
 // streamer, which walks it again. The per-carrier memo is what makes that second walk correct.
-[test]
+[test(description = "`blob_stream_scale_plane` called twice on one carrier leaves the k6 scale plane byte-equal to a single split, while a hand-doubled split shreds it - proving the per-carrier memo, not the transform, keeps it once")]
 def test_blob_stream_scale_plane_once(t : T?) {
     t |> run("the streamed blob build converts a named scale plane at most once per carrier") @(tt : T?) {
         if (!arm_on(tt, "mechanics")) {
@@ -4105,7 +4105,7 @@ struct FpRowsPlus {
 // the dev-W bake tables: devw_bake_tables fills the four site tables from the job list, and it
 // is the WHOLE bake set each time - a second call on the same carrier must not append to the
 // first. Model-free: the tables are pure taxonomy over a job list, no plane bytes are read.
-[test, arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-devw-plane")]
+[test(description = "`devw_bake_tables` rebuilds rather than appends its four site tables, keys q8 sites by mblob byte offset and kq by elem woff, skips routed _exps slices but bakes the shared expert, and bakes split-scale panels only on whole superblocks and 64-row lattices"), arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-devw-plane")]
 def test_devw_bake_tables(t : T?) {
     t |> run("the bake tables are rebuilt, not appended, and key by format") @(tt : T?) {
         if (!arm_on(tt, "mechanics")) {
@@ -4185,7 +4185,7 @@ def test_devw_bake_tables(t : T?) {
     }
 }
 
-[test]
+[test(description = "`layout_fingerprint` is deterministic per type and moves on field reorder, retype, add, nesting and array element shape, the Model closure fingerprints nonzero, and a flipped fingerprint byte at header offset 48 declines the image load")]
 def test_layout_fingerprint(t : T?) {
     t |> run("the fingerprint moves on any field-shape change and holds on none") @(t : T?) {
         if (!arm_on(t, "mechanics")) {
@@ -4234,7 +4234,7 @@ def test_layout_fingerprint(t : T?) {
     }
 }
 
-[test]
+[test(description = "The .dlim identity's kq segment has one interleave slot per lattice format in enum order, each format's interleave changing its own slot, and a nonzero pack-code version folds in as a vNpM prefix with nothing else moving")]
 def test_dlim_identity_pack_version(t : T?) {
     t |> run("the interleave segment has one slot per lattice format, in enum order") <| @(t : T?) {
         var lattice = 0

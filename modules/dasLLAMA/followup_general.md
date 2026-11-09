@@ -205,7 +205,7 @@
    are pointer-dispatched forward-loop internals moved out of `dasllama_common` during the reorg;
    today their only coverage is the forward/family matrix - exactly the "the model still runs"
    posture REVIEW's Tests section calls out. Their siblings from the same wave have direct
-   suites (`test_batch_decode`/`test_batch_grid`, `test_prefill`/`test_flash`, `test_sampling`).
+   suites (`test_batch_decode`/`test_matmul_batch`, `test_prefill`, `test_sampling`).
    Done = each of the three gets a feed-the-function suite (a block kernel against a reference
    forward step; `moe_ffn_core` routing against a hand-checked top-k case; the PLE pre-step
    against a fixture), or a written carve-out on the rule for pointer-dispatched move-outs.
@@ -534,7 +534,8 @@
     construction) FORCES the blanket switch onto any kernel that carries it. Done = make the
     license a property of the call (a call-site argument the emitter reads beside m/n/sgs, or
     a distinct builtin spelling for deliberate f32 forms) and exempt q8b by construction;
-    test_metal_float_a_gate's arms then split per-stamp.
+    the float-A gate's arms (`test_float_a_gate` in
+    `uncategorized_persistent_heap_stack_524288.das`) then split per-stamp.
 
 51. **`pool_release` cannot enforce its own postcondition - the handle survives the release.**
     The reviewer's point stands: after a release the caller still holds the pointer, and a
@@ -612,7 +613,7 @@
 59. **daslang's AST serializer could restore function-typed globals by name - retiring the
     boot-restore class outright.** A serialized exe restores globals as data, so function
     values arrive null; today every module carrying `var g_x = @@fn` declaration defaults
-    owes a boot-restore `[init]` (the REVIEW.das restore check + test_exe_smoke guard the
+    owes a boot-restore `[init]` (the REVIEW.das restore check + test_facade.das's test_exe_smoke guard the
     dasLLAMA tree, minted after the vulkan decode-mirror claim shipped crashing every exe
     forward). The root fix is daslang-core: serialize a function value as its mangled name
     and re-resolve at restore - the whole hazard class disappears language-wide, and the
@@ -2500,7 +2501,7 @@
     at every step; the two-window prompt's steps hold the bar at 0.5 to 1.5, and the fixture's one-step-off rows sit 4.8
     of 48 apart at three of the steps, so a wider bar lets the control through; the CUDA kernels built without
     `--use_fast_math` read 2.84 at the same step (`PERF_LEDGER.md`, the host-experts section's "Phi-3.5-mini Q4_K_M
-    one-window readings on both homes" entry of 2026-10-28). `tests/test_gpu_resident_cuda_phi3.das` holds the two-window
+    one-window readings on both homes" entry of 2026-10-28). `test_gpu_resident_cuda_phi35_mini` in `tests/test_gpu_resident_cuda_dense.das` holds the two-window
     arm of the Q4_K_M file meanwhile, the Vulkan regions file the same. The site is the shared K-quant one-row decode
     chain against the CPU reference, not a home: on the Q8_0 file both homes read 0.21 to 0.73 of bars of 1.9 to 2.9 at
     every step. Done = the K-quant chain's arms (`followup_vulkan.md` item 75's list: the split add+rms and the Q8_K

@@ -116,14 +116,14 @@ def private batched_rows_cell(t : T?; file : string; rows : int64; col_stamps : 
     delete tr
 }
 
-[test]
+[test(description = "On the CUDA home with Llama-3.2-1B Q8_0, two sessions batched six steps through the N-row command land every row within the split bar of each session stepped alone, the previous step outside it, with the q8 two-column stamp launched")]
 def test_gpu_resident_cuda_batch_two_rows(t : T?) {
     t |> run("{FILE_1B}: two sessions at two regions, six batched steps through the N-row command against each alone") @(t : T?) {
         batched_rows_cell(t, FILE_1B, 2l, ["q8_gemv_n2_cls_cuda"])
     }
 }
 
-[test]
+[test(description = "On the CUDA home with Llama-3.2-1B Q4_K_M, two sessions batched through the N-row command over the K-quant N-column leaves land every row within the split bar of each session alone, the previous step outside it")]
 def test_gpu_resident_cuda_batch_two_rows_k(t : T?) {
     t |> run("{FILE_1B_K}: the same on the K-quant planes (the kq N-column leaves, the Q8_K feeds)") @(t : T?) {
         var inscope no_stamps : array<string>
@@ -131,7 +131,7 @@ def test_gpu_resident_cuda_batch_two_rows_k(t : T?) {
     }
 }
 
-[test]
+[test(description = "On the CUDA home with Llama-3.2-1B Q8_0, twelve sessions in one N-row command a step land every row within the split bar of each session alone, launching the q8 eight- and four-column stamps, every command carrying all twelve rows")]
 def test_gpu_resident_cuda_batch_twelve_rows(t : T?) {
     t |> run("{FILE_1B}: twelve sessions at twelve regions, one command of twelve rows a step (a tile of eight columns and one of four)") @(t : T?) {
         batched_rows_cell(t, FILE_1B, 12l, ["q8_gemv_n8_cls_cuda", "q8_gemv_n4_cls_cuda"])

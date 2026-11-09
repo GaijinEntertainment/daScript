@@ -23,7 +23,7 @@ require _model_tier                    // models_dir + model_available (presence
 // only; every arm skips honestly when its model is absent. Requires the bench by relative
 // path (like test_tok_seed), so it pays the bench's full engine compile.
 
-[test]
+[test(description = "The board pregate `parity_check` passes Qwen3-0.6B's pinned-ids fixture, fails it with the last id flipped, and refuses a spec with no evidence")]
 def test_parity_pregate_ids_form(t : T?) {
     t |> run("the pinned-ids fixture passes; one flipped id fails; no evidence refuses") @(t : T?) {
         return if (!jit_only(t))
@@ -43,7 +43,7 @@ def test_parity_pregate_ids_form(t : T?) {
 // The timed run's fixture gate (the sanity line every lcpp_bench row set opens with): fed the
 // table's own fixture the served model reproduces the opening; an opening that matches nothing
 // refuses; a row with no evidence stands aside and leaves the finiteness gate alone.
-[test]
+[test(description = "The timed run's `fixture_gate_check` passes the table's fixture on a loaded Qwen3-0.6B, refuses an opening with every id shifted, and passes a row with no evidence")]
 def test_fixture_gate(t : T?) {
     t |> run("the timed run's fixture gate passes the table's fixture, refuses a wrong opening, stands aside without evidence") @(t : T?) {
         return if (!jit_only(t))
@@ -70,7 +70,7 @@ def test_fixture_gate(t : T?) {
 // The half-span prefix bar of a `prefix_bar` carrier (the gemma-4-26B MoE's form, driven here on a
 // small stand-in): a fixture whose tail half is flipped holds, a flip inside the first half reds it,
 // and the strict form reds the same flipped tail - the flag is what admits it.
-[test]
+[test(description = "With prefix_bar set, a Llama-3.2-1B fixture whose tail half is flipped still passes `parity_check` while a flip inside the first half fails, and the strict form fails the same flipped tail")]
 def test_parity_pregate_prefix_bar(t : T?) {
     t |> run("a prefix_bar fixture holds on a flipped tail half, reds on a flip inside the first half and under the strict form") @(t : T?) {
         return if (!jit_only(t))
@@ -97,7 +97,7 @@ def test_parity_pregate_prefix_bar(t : T?) {
     }
 }
 
-[test]
+[test(description = "The gemma-4-E2B text-form fixture, encoded through the model's tokenizer, reproduces its pinned continuation under `parity_check`")]
 def test_parity_pregate_text_form(t : T?) {
     t |> run("a text-form fixture encodes through the model's tokenizer") @(t : T?) {
         return if (!jit_only(t))
@@ -109,7 +109,7 @@ def test_parity_pregate_text_form(t : T?) {
     }
 }
 
-[test]
+[test(description = "The Qwen3-4B Q4_K_M row's kq-native load reproduces its pinned continuation under `parity_check`, and the pregate restores the kquant-native mode it flipped")]
 def test_parity_pregate_kq_native(t : T?) {
     t |> run("a kq_native fixture loads native K-quant planes and reproduces") @(t : T?) {
         return if (!jit_only(t))
@@ -128,7 +128,7 @@ def test_parity_pregate_kq_native(t : T?) {
 // Split-k is pinned off for both arms: the wave model splits the whole arm's GEMMs on a box with
 // SMs to spare (82 on the RTX PRO 4500) where a sliced region never splits, and the two k orders
 // round apart - the claim is the slice's row arithmetic, not the pick's rounding.
-[test]
+[test(description = "On the resident Vulkan driver, a 512-token Llama-3.2-1B prefill with the last layer's FFN sliced yields logits bit-identical to the whole-window prefill, split-k pinned off for both arms")]
 def test_parity_last_layer_slice(t : T?) {
     t |> run("the last layer's 32-row FFN slice reproduces the whole window's logits bit for bit") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {

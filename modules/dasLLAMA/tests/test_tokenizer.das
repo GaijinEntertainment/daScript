@@ -68,17 +68,17 @@ def private corpus_case(t : T?; title, gguf : string) {
     }
 }
 
-[test]
+[test(description = "The gemma-4 SPM-style BPE tokenizer encodes every input of the llama.cpp corpus to the reference ids exactly and decodes each back to its input losslessly")]
 def test_tokenizer_gemma4(t : T?) {
     corpus_case(t, "gemma4 SPM-style BPE vs the llama.cpp corpus", "ggml-vocab-gemma-4.gguf")
 }
 
-[test]
+[test(description = "The llama3 byte-level BPE tokenizer encodes every input of the llama.cpp corpus to the reference ids exactly and decodes each back to its input losslessly")]
 def test_tokenizer_llama_bpe(t : T?) {
     corpus_case(t, "llama3 byte-level BPE vs the llama.cpp corpus", "ggml-vocab-llama-bpe.gguf")
 }
 
-[test]
+[test(description = "The qwen35 BPE tokenizer with mark-absorbing letter runs encodes every llama.cpp corpus input to the reference ids exactly and round-trips each through decode losslessly")]
 def test_tokenizer_qwen35(t : T?) {
     corpus_case(t, "qwen35 BPE (mark-absorbing letter runs) vs the llama.cpp corpus", "ggml-vocab-qwen35.gguf")
 }
@@ -133,7 +133,7 @@ def private snapshot_twin_case(t : T?; title, repo, twin, corpus : string) {
     }
 }
 
-[test]
+[test(description = "A HF snapshot's tokenizer.json loads to the same pre-tokenizer, specials, token table, types and merge count as its GGUF twin and encodes every corpus input to identical ids, for Llama-3.2 and Qwen3.8")]
 def test_tokenizer_snapshot_twins(t : T?) {
     snapshot_twin_case(t, "Llama-3.2 tokenizer.json vs its GGUF twin over the llama-bpe corpus", "mlx-community/Llama-3.2-1B-Instruct-8bit",
         "Llama-3.2-1B-Instruct-Q8_0.gguf", "ggml-vocab-llama-bpe.gguf.inp")
@@ -141,7 +141,7 @@ def test_tokenizer_snapshot_twins(t : T?) {
         "Qwen3.8-27B-Q4_K_M.gguf", "ggml-vocab-qwen35.gguf.inp")
 }
 
-[test]
+[test(description = "Without an add_bos_token key, BOS defaults on only for the llama-bpe and tekken pre-tokenizers, so the qwen35 vocab encodes Once upon a time to four ids with no BOS")]
 def test_tokenizer_bos_default(t : T?) {
     t |> run("a BPE vocab without add_bos_token prepends BOS only for upstream's BOS families") @(t : T?) {
         t |> success(bpe_pre_adds_bos("llama-bpe") && bpe_pre_adds_bos("tekken"), "the llama3 family and tekken default to a BOS")
@@ -161,22 +161,22 @@ def test_tokenizer_bos_default(t : T?) {
     }
 }
 
-[test]
+[test(description = "The qwen2 byte-level BPE tokenizer encodes every input of the llama.cpp corpus to the reference ids exactly and decodes each back to its input losslessly")]
 def test_tokenizer_qwen2(t : T?) {
     corpus_case(t, "qwen2 byte-level BPE vs the llama.cpp corpus", "ggml-vocab-qwen2.gguf")
 }
 
-[test]
+[test(description = "The gpt-2 byte-level BPE tokenizer encodes every input of the llama.cpp corpus to the reference ids exactly and decodes each back to its input losslessly")]
 def test_tokenizer_gpt2(t : T?) {
     corpus_case(t, "gpt-2 byte-level BPE vs the llama.cpp corpus", "ggml-vocab-gpt-2.gguf")
 }
 
-[test]
+[test(description = "The phi-3 SentencePiece tokenizer encodes every input of the llama.cpp corpus to the reference ids exactly and decodes each back to its input losslessly")]
 def test_tokenizer_phi3(t : T?) {
     corpus_case(t, "phi-3 SentencePiece vs the llama.cpp corpus", "ggml-vocab-phi-3.gguf")
 }
 
-[test]
+[test(description = "The llama-2 SentencePiece tokenizer encodes every input of the llama.cpp corpus to the reference ids exactly and decodes each back to its input losslessly")]
 def test_tokenizer_llama_spm(t : T?) {
     corpus_case(t, "llama-2 SentencePiece vs the llama.cpp corpus", "ggml-vocab-llama-spm.gguf")
 }
@@ -212,7 +212,7 @@ def private spm_vocab_with_bytes(n_control : int) : SpmTokenizer {
 def private pieces_of(tk : SpmTokenizer; ids : array<int64>) : array<string> =>
     <- [for (id in ids); tk.vocab[id]]
 
-[test]
+[test(description = "A SentencePiece byte fallback finds the <0xXX> piece by name, not at 3 + byte, so control-first and bytes-first vocabs both encode a newline as its byte piece, and a vocab with no byte pieces panics instead of inventing an id")]
 def test_tokenizer_spm_byte_pieces_by_name(t : T?) {
     t |> run("a byte with no piece encodes as its <0xXX> piece in either layout") @(t : T?) {
         // Mistral v0.3's layout: control tokens ahead of the byte
@@ -257,7 +257,7 @@ def test_tokenizer_spm_byte_pieces_by_name(t : T?) {
     }
 }
 
-[test]
+[test(description = "On the Mistral v0.3 vocab, newline and tab byte pieces resolve to 781 and 780 past the control tokens, and sample texts encode to the exact ids llama-tokenize gives and decode back")]
 def test_tokenizer_mistral_v03_byte_pieces(t : T?) {
     t |> run("Mistral v0.3: byte pieces past 768 control tokens, llama-tokenize's ids") @(t : T?) {
         let path = path_join(models_dir(), "Mistral-7B-Instruct-v0.3-Q8_0.gguf")

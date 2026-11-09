@@ -48,7 +48,7 @@ def private samples_for(var m : TtsModel; ps : string; voice : string) : int64 {
     return styletts2_synthesize(m.model, ids, style, 1.0, m.scratch.noise, 0ul, null, tm, m.scratch)
 }
 
-[test]
+[test(description = "`kokoro_token_ids` maps a hand-built vocabulary in order between pads and drops unknown symbols, `kokoro_voice_lang` reads a language only from the exact pack-name shape, and the style row is phoneme count minus one, clamped")]
 def test_kokoro_symbols(t : T?) {
     t |> run("the vocabulary maps in order and drops what it does not carry") @(t : T?) {
         var inscope fam = KokoroFamily()
@@ -110,7 +110,7 @@ def test_kokoro_symbols(t : T?) {
     }
 }
 
-[test]
+[test(description = "Kokoro-82M against the PyTorch reference with captured noise: every case's token ids and sample count match, and each traced stage holds 1e-4 of the oracle's peak, with poisoned controls")]
 def test_kokoro_oracle(t : T?) {
     t |> run("against the PyTorch reference, captured noise") @(t : T?) {
         if (!model_available(t, gguf_path())) {
@@ -130,14 +130,14 @@ def test_kokoro_oracle(t : T?) {
     }
 }
 
-[test]
+[test(description = "Kokoro on the GPU tower serves every seat once a chunk on the served lane, speaks above the 0.05 peak floor with a sample count within a twentieth of the CPU chain, then holds the f32 reference lane against the CPU")]
 def test_kokoro_synthesis_metal(t : T?) {
     t |> run("kokoro: the synthesis on the Metal tower vs the CPU chain, the served lane") @(t : T?) {
         tts_gpu_synthesis(t, gguf_path(), "The tower serves the generator, and the words still land.", "af_heart")
     }
 }
 
-[test]
+[test(description = "Kokoro through the facade declares en-us and en-gb, lists 28 voices each in a declared language (8 British), adds no chunk mark, and speaks a sentence as 1 to 10 seconds of finite audio peaking above 0.05")]
 def test_kokoro_facade(t : T?) {
     t |> run("text in, speech out") @(t : T?) {
         // the American and British packs: the front end phonemizes no other language
@@ -166,7 +166,7 @@ def test_kokoro_facade(t : T?) {
     }
 }
 
-[test]
+[test(description = "Kokoro phonemizes a line to exact en-us and en-gb strings whose symbols all survive tokenization, and bf_emma's synthesis has exactly the British string's sample count, which differs from the American one")]
 def test_kokoro_dialects(t : T?) {
     t |> run("a British voice speaks the British inventory, and the vocabulary carries it") @(t : T?) {
         if (tts_data_missing(t, gguf_path())) {
@@ -208,7 +208,7 @@ def test_kokoro_dialects(t : T?) {
 
 def private ru_gguf_path() : string => path_join(models_dir(), "kokoro-ru.gguf")
 
-[test]
+[test(description = "kokoro-ru asks only for the Russian stress pack, declares ru for both voices from the file, normalizes and phonemizes to exact strings with English words spliced, and sveta's synthesis has the pack-default string's exact sample count")]
 def test_kokoro_ru_facade(t : T?) {
     t |> run("a Russian fine-tune: its packs speak the language the file declares, and the front end reads it") @(t : T?) {
         return if (tts_data_missing(t, ru_gguf_path()) || ru_pack_missing(t))
@@ -255,7 +255,7 @@ def test_kokoro_ru_facade(t : T?) {
     }
 }
 
-[test]
+[test(description = "`styletts2_gpu_stats` panics naming the key for a seat name no stage carries, so a misspelt key cannot read as zero counters")]
 def test_seat_stats_refusal(t : T?) {
     t |> run("a seat name no stage carries panics, so a misspelt key cannot read as zero counters") @(t : T?) {
         let why = panic_text() {
@@ -265,7 +265,7 @@ def test_seat_stats_refusal(t : T?) {
     }
 }
 
-[test]
+[test(description = "Kokoro carries the Japanese pack but caps does not offer it, and `tts_voice_lang` refuses jf_alpha naming the voice and the ja it speaks, and refuses an absent voice with no language named")]
 def test_kokoro_voice_refusals(t : T?) {
     t |> run("a voice the front end cannot phonemize refuses, naming the language its pack speaks") @(t : T?) {
         if (tts_data_missing(t, gguf_path())) {

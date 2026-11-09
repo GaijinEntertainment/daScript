@@ -3273,13 +3273,13 @@ half-width dot); the whole bf16 tower set shares that gap.
     `CODEC_APPLIED_REL` 0.5 there, the least the device's distance from the f16 chain may be of the CPU
     codec chain's (every resident carrier reads 0.95-1.08; a driver serving f16 rows in the codec's place
     would read near 0).
-  - `test_gpu_resident_codec_llama_k.das` / `_llama_iq.das` (Llama-3.2-1B Q4_K_M and IQ4_XS):
+  - `test_gpu_resident_codec_llama.das` (its `_k_` and `_iq_` cells: Llama-3.2-1B Q4_K_M and IQ4_XS):
     `Q8KV_BAR_REL` 0.10 (reads 0.25-0.42 of 8.4-9.4); `CODEC_DIST_REL` 1.15 (reads 0.99 and 1.00, one step
     off 4.7 and 5.0); `CODEC_PAIR_REL` 1.4 (reads 1.02 and 1.13, one step off 4.9 and 5.1) - tq4 moves these
     carriers a point a row, three times the kernels' rounding, so the two codec chains part as two
     independent quantizations do.
-  - `test_gpu_perop_kv_codec.das` / `_k.das` / `_iq.das` (Qwen3-0.6B Q8_0, Qwen3-4B Q4_K_M, Qwen2.5-1.5B
-    IQ3_XS): `PeropBars.rows` 0.05, the share of layer 0's cache bytes off the CPU chain's (reads 0 to
+  - `test_gpu_perop_kv_codec.das` (Qwen3-0.6B Q8_0, Qwen3-4B Q4_K_M in its `_k_` cells, Qwen2.5-1.5B
+    IQ3_XS in its `_iq_` cells): `PeropBars.rows` 0.05, the share of layer 0's cache bytes off the CPU chain's (reads 0 to
     4e-5); `PeropBars.dist_rel` 1.0, the device's summed distance from the f16 chain over the CPU codec
     chain's (reads 0.05 and 0.31 on the 0.6B where the device prefilled, 0.90 over rows the CPU quantized,
     0.28 and 0.80 on the 4B, 0.79 under q8_0 on the 1.5B), and 0.5 for the 1.5B's tq4 cell, whose CPU chain
@@ -3294,7 +3294,7 @@ half-width dot); the whole bf16 tower set shares that gap.
     chain's own (reads 0.91 at 40 tokens, 3.42 against 3.77, and 0.93 at 600, one step off 21 and 25): at
     the step the old 6% bar missed, the device sits 0.63 and the CPU chain 0.50 from the f32 row, on
     either side of it, and the device's pick is the f32 chain's.
-  - `test_gpu_resident_gemma3_1b.das` and `test_gpu_resident_gemma4_e2b.das` hold their block-codec cells
+  - `test_gpu_resident_gemma2_3.das` (`test_gpu_resident_gemma3_block_codecs`) and `test_gpu_resident_gemma4_e2b.das` hold their block-codec cells
     to the gemma rig's own bars (`GEMMA_LOGIT_BAR_REL` 0.16 under q8_0: gemma-3-1b at 1100 tokens reads
     0.46-1.37 against bars of 3.3-5.1; `GEMMA_PPL_RATIO` 1.05 under tq4: 1.022 against the CPU chain's
     1.033 on gemma-3-1b, 1.032 against 1.032 on E2B). `test_gpu_resident_moe.das` holds its twin under
@@ -6970,8 +6970,8 @@ hour, `external`; every ratio `tg128@4` against the reference's `S_TG` at `-npl 
   a row at a time, where the one slot went home and back on every stream switch. pp512 cm2 / KHR:
   the 0.8B 29102 / 23862, the 9B 5326 / 4223, the 35B 4583 / 4138 (the reference's four-stream
   prompt rate 29067 / 5008 / 4588). The 9B's four-row ratio is the section's tightest and its flat
-  ratio 1.02: the dense K-quant 9B trunk, not the recurrent form, sets it. Its regions file
-  (`test_gpu_resident_regions_hybrid_k.das`, the split bar, 4 of 4) is what found the rows form's
+  ratio 1.02: the dense K-quant 9B trunk, not the recurrent form, sets it. Its regions cells
+  (the `hybrid_k` cells of `test_gpu_resident_regions_hybrid_formats.das`, the split bar, 4 of 4) are what found the rows form's
   Q8_0 feed and, after it, an N rail that never ensured a recurrent layer's FFN leaves.
 - **The rows against the sessions alone:** the hybrid regions file's batched cells bit for bit
   through the N-row command (11 of 11), the scheduler's deltanet cells, the resident hybrid file,
@@ -6994,8 +6994,8 @@ hour, `external`; every ratio `tg128@4` against the reference's `S_TG` at `-npl 
   574.8 +/- 0.4 / 552.1 (1.05 / 1.04), flat 220.4 / 221.0 / 217.4; gemma-3-1b Q8_0 1240.1 +/- 0.3 /
   1240.3 +/- 1.2 / 845.5 (1.47 / 1.47), flat 398.3 / 395.2 / 310.5; gemma-3-4b Q8_0 542.8 +/- 0.6 /
   543.4 +/- 0.6 / 442.6 (1.23 / 1.23), flat 152.2 / 152.6 / 137.2. The regions files pin the rows:
-  `test_gpu_resident_regions_gemma3.das` bit for bit (6 of 6), `test_gpu_resident_regions_phi3.das`
-  on the split bar (4 of 4). Mistral-Small-3.1-24B Q4_K_M has no row and no regions file: the pod's
+  `test_gpu_resident_regions_gemma3.das` bit for bit (6 of 6), the `phi3` cells of
+  `test_gpu_resident_regions_kquant.das` on the split bar (4 of 4). Mistral-Small-3.1-24B Q4_K_M has no row and no regions file: the pod's
   volume holds no room for its 14 GB beside the stocked models (`followup_vulkan.md` item 87).
 
 ### From the M4 Metal pass (2026-09-13)
@@ -7941,11 +7941,11 @@ so every figure is direction-grade.
   35B, 41 x 48 on Flash-Next), where the cap of 64 left room idle. The engaged line prints the host-visible total and
   the das heap beside the slot.
 - **The bars the arc's cells hold** (`tests/run.das -- --suite stocked` on this box; the readings the cells print under
-  `DAS_LOG_LEVEL=info`): `test_gpu_resident_continuation.das` holds Qwen3.5-0.8B-Q4_K_M's continued and adopted rows
+  `DAS_LOG_LEVEL=info`): `test_gpu_resident_window.das`'s continuation cells hold Qwen3.5-0.8B-Q4_K_M's continued and adopted rows
   within `CONT_BAR_REL` 0.05 of the whole prompt's row (readings 0.3-1.2% of the row's max, the one-token-short control
   past 1 bar); Qwen3.8-Flash-Next UD-IQ4_XS at `ROUTED_WIDE_BAR_REL` 0.5 (the same device run twice reads up to 20%: a
   near-tie expert flips on the pool's fill and the meet's split), its n-gram conv ring after a window row for row the CPU
-  chain's within 2%, a zeroed ring 15% off; `test_gpu_resident_long_window.das` holds the 0.8B's last row at a 2048-row
+  chain's within 2%, a zeroed ring 15% off; its `test_gpu_resident_long_window` holds the 0.8B's last row at a 2048-row
   pin within `BAR_REL` 0.10 of the CPU chain's (reading 3%; an uncut 2048-row window read 30%, 1536 read 72%);
   `test_gpu_resident_moe_formats.das` holds every moe-formats carrier at `MOE_LOGIT_BAR_REL` (the routed block's bar
   `test_gpu_resident_moe.das` reads) through the one-copy rail, one window and two, and the expert-cache cell's
@@ -8448,7 +8448,7 @@ records as the expert GEMVs' regions, the act and the combine.
   other six steps 0.7 to 1.4 apart and the two homes within 0.2 of each other at every step; the fixture's one-step-off
   rows sit 4.8 of 48 apart at three of the steps (the control a wider bar would let through); the CUDA kernels compiled
   without `--use_fast_math` (the option list of `das_cuda_boost.das` edited for the probe, not a shipped flag) read 2.84
-  at position 44. The readings are a one-window `cuda_forced_feed` arm of `tests/test_gpu_resident_cuda_phi3.das` under
+  at position 44. The readings are a one-window `cuda_forced_feed` arm of `test_gpu_resident_cuda_phi35_mini` (`tests/test_gpu_resident_cuda_dense.das`) under
   `DASLLAMA_GPU=1 DASLLAMA_CUDA=1` and the Vulkan regions file's twin under `DASLLAMA_GPU=1`; neither file keeps the arm,
   so the command line that re-runs it is owed (`followup_general.md` row 270).
 - **STATED - the lasting allocations the CUDA home's host-experts, stream, chain, head and hidden-rows paths add**

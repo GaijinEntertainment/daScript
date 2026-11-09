@@ -1,4 +1,5 @@
 options gen2
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _comment_hygiene = true
 options _dasllama_internal = true
 options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
@@ -15,6 +16,12 @@ require dasllama/dasllama_math_default   // dequant_kq_row_grp — the independe
 require dasllama/dasllama_gguf           // dequant_*_plane_superblock — the independent disk reader
 require dasllama/dasllama_gemm_schema    // kq_qsb/kq_ssb — the fmt-id plane strides
 require _vk_kq_fixtures
+require dasllama/dasllama_math
+require dasllama/dasllama_math_gen
+require dasllama/dasllama_convert
+require dasllama/dasllama_par
+require daslib/jobque_boost
+require _kq_fixtures   // quantize_rows: the plane's Q8_0 rows
 
 // deterministic byte source (LCG) — no Math.random in tests
 struct private Rng {
@@ -47,7 +54,7 @@ def private f16_val(var rng : Rng; lo, hi : float) : float {
 // The writer places known values by the on-disk packing rule (the inverse direction of the
 // extractor), so reader and expected value come from independent formulations.
 
-[test]
+[test(description = "`k45_nib`, `k5_hbit` and `k6_nib` read back every weight's value from rows built by an independent writer of the ggml k4/k5 nibble, k5 qh and k6 ql packings")]
 def test_extractors(t : T?) {
     t |> run("k45_nib reads the ggml k4/k5 nibble packing") @(t : T?) {
         // packing rule: byte js*32+i carries weight js*64+i in its low nibble and
@@ -152,7 +159,7 @@ def private build_iq4nl32(n, d : int64; var q : array<uint8>; var s : array<uint
 
 // ===== q8q8: identity at mr=1, inverse map at mr=4, wbias, tails =====
 
-[test]
+[test(description = "`repack_q8q8_grp` at mr=1 leaves the q8 weight and scale planes byte-identical")]
 def test_repack_q8q8_identity(t : T?) {
     t |> run("mr=1 is the identity") @(t : T?) {
         let n = 64l
@@ -180,7 +187,7 @@ def test_repack_q8q8_identity(t : T?) {
     }
 }
 
-[test]
+[test(description = "`repack_q8q8_grp` at mr=4 kgroup=4 places every weight and scale byte where the documented inverse map says, and the two tail rows stay row-major and untouched")]
 def test_repack_q8q8_inverse_map(t : T?) {
     t |> run("mr=4 kgroup=4 matches the documented inverse map; tails stay row-major") @(t : T?) {
         let n = 64l
@@ -230,7 +237,7 @@ def test_repack_q8q8_inverse_map(t : T?) {
     }
 }
 
-[test]
+[test(description = "`repack_q8q8_grp` with wbias=128 equals the unbiased repack XOR 0x80 on the group region and leaves the tail rows unbiased")]
 def test_repack_q8q8_wbias(t : T?) {
     t |> run("wbias=128 biases the group region only") @(t : T?) {
         let n = 64l
@@ -267,7 +274,7 @@ def test_repack_q8q8_wbias(t : T?) {
 
 // ===== mx4: identity at mr=1, inverse map at mr=4 =====
 
-[test]
+[test(description = "The mx4 grp repack is byte-identical at mr=1, and at mr=4 its nibble dwords and exponent plane match the documented inverse map")]
 def test_repack_mx4(t : T?) {
     t |> run("mr=1 is the identity") @(t : T?) {
         let n = 64l
@@ -333,7 +340,7 @@ def test_repack_mx4(t : T?) {
 
 // ===== q51: identity at mr=1 (grp1 IS disk order), inverse map at mr=2 =====
 
-[test]
+[test(description = "The q51 grp repack is the disk order byte for byte at mr=1, and at mr=2 its quant dwords, qh tail and scales match the documented inverse map")]
 def test_repack_q51(t : T?) {
     t |> run("mr=1 is the identity (grp1 == disk order)") @(t : T?) {
         let n = 64l
@@ -409,7 +416,7 @@ def private bytes_differ(a, b : array<uint8>) : int64 {
     return n
 }
 
-[test]
+[test(description = "For mlx4, mlx8b and mlx6b the grp repack is the disk order at mr=1, and at mr=2 it moves bytes exactly per the documented inverse map for quants and scales")]
 def test_repack_mlx_affine(t : T?) {
     for (f in [KqFmt.mlx4, KqFmt.mlx8b, KqFmt.mlx6b]) {
         t |> run("{f}: mr=1 is the identity, mr=2 the documented inverse map") @(t : T?) {
@@ -469,7 +476,7 @@ def test_repack_mlx_affine(t : T?) {
 
 // ===== iq4nl32: identity at mr=1, inverse map at mr=2 (16 nibble bytes as 4 dwords, a 2B scale) =====
 
-[test]
+[test(description = "The iq4nl32 grp repack is the disk order at mr=1, and at mr=2 its nibble dwords and 2-byte scales match the documented inverse map with bytes actually moved")]
 def test_repack_iq4nl32(t : T?) {
     t |> run("mr=1 is the identity (grp1 == disk order)") @(t : T?) {
         let n = 64l
@@ -643,7 +650,7 @@ def private check_kq_fmt(t : T?; fmt : int64; n, d, mr : int64) {
     delete want
 }
 
-[test]
+[test(description = "For k4, k5, k6 and q40 at mr 1, 2 and 4, the grp reader over repacked planes dequantizes every row exactly as the independent disk-order reader, and tail rows stay disk-order")]
 def test_repack_kq_cross_reader(t : T?) {
     let n = 512l   // 2 superblocks per row
     for (fmt in [4l, 5l, 6l, 40l]) {
@@ -721,7 +728,7 @@ def private check_unpack(t : T?; fmt : int64; n, d, mr : int64) {
     delete panel
 }
 
-[test]
+[test(description = "`unpack_kq_panel_grp` after a k5 or k6 grp repack at mr 4 and 8 yields panel bytes equal to the weight values extracted straight off the disk planes, high bits included")]
 def test_unpack_kq_panel(t : T?) {
     t |> run("k5 unpack (mr=4, mr=8)") @(t : T?) {
         check_unpack(t, 5l, 512l, 8l, 4l)
@@ -730,5 +737,181 @@ def test_unpack_kq_panel(t : T?) {
     t |> run("k6 unpack (mr=4, mr=8)") @(t : T?) {
         check_unpack(t, 6l, 512l, 8l, 4l)
         check_unpack(t, 6l, 512l, 8l, 8l)
+    }
+}
+
+// kg8 plane rail: repack_q8q8_grp at kgroup=8 writes [kg8][r][8 bytes]
+// groups; q8q8_token_grp_generic reads kg4 and kg8 planes to the same
+// floats (same int accumulators, same fold order). Pure das, no i8mm.
+
+def build_q8(n, d : int64; var q : array<int8>; var s : array<float>) {
+    var inscope w : array<float>
+    w |> resize(n * d)
+    for (i in range64(n * d)) {
+        w[i] = float(i % 19l) * 0.11 - 0.9
+    }
+    quantize_rows(w, d, n, q, s)
+}
+
+[test(description = "repack_q8q8_grp with kgroup 8 lays each mr-row group out as kg8 by row by 8-byte runs of the row-major Q8_0 master on an odd block count, the rows past the last whole group left row-major")]
+def test_kg8_plane_bytes(t : T?) {
+    t |> run("kg8 repack writes [kg8][r][8b] groups; tails stay row-major") @(t : T?) {
+        let n = 96l    // nb = 3 (odd block count)
+        let d = 20l    // mr=8 -> 2 groups + 4 row-major tail rows
+        let mr = 8l
+        var q : array<int8>
+        var s : array<float>
+        build_q8(n, d, q, s)
+        var qr := q    // row-major master
+        unsafe {
+            repack_q8q8_grp(addr(q[0]), addr(s[0]), n, d, mr, 0l, 8l)
+        }
+        var bytesOk = true
+        for (g in range64(d / mr)) {
+            let gbase = g * mr * n
+            for (kg in range64(n / 8l)) {
+                for (r in range64(mr)) {
+                    for (j in range64(8l)) {
+                        bytesOk &&= q[gbase + kg * 8l * mr + r * 8l + j] == qr[(g * mr + r) * n + kg * 8l + j]
+                    }
+                }
+            }
+        }
+        t |> success(bytesOk, "kg8 group bytes match the row-major master")
+        var tailOk = true
+        for (i in range64((d / mr) * mr * n, d * n)) {
+            tailOk &&= q[i] == qr[i]
+        }
+        t |> success(tailOk, "row tail stays row-major")
+        delete q
+        delete s
+        delete qr
+    }
+}
+
+[test(description = "q8q8_token_grp_generic reads a kg4-repacked and a kg8-repacked Q8_0 plane to bit-identical outputs at row groups of 4 and 8")]
+def test_kg8_generic_dot_parity(t : T?) {
+    t |> run("token generic reads kg4 and kg8 planes to the exact same result") @(t : T?) {
+        let n = 96l
+        let d = 16l
+        var q : array<int8>
+        var s : array<float>
+        build_q8(n, d, q, s)
+        var xrow : array<float>
+        var xq : array<int8>
+        var xs : array<float>
+        xrow |> resize(int(n))
+        xq |> resize(int(n))
+        xs |> resize(int(n / 32l))
+        for (i in range64(n)) {
+            xrow[i] = float(i % 23l) * 0.07 - 0.8
+        }
+        quantize_q8_0_into(xrow, n, xq, xs, 0l, 0l)
+        for (mr in [4l, 8l]) {
+            var inscope q4 := q
+            var inscope s4 := s
+            var inscope q8v := q
+            var inscope s8v := s
+            unsafe {
+                repack_q8q8_grp(addr(q4[0]), addr(s4[0]), n, d, mr, 0l, 4l)
+                repack_q8q8_grp(addr(q8v[0]), addr(s8v[0]), n, d, mr, 0l, 8l)
+                var inscope y4, y8 : array<float>
+                y4 |> resize(int(d))
+                y8 |> resize(int(d))
+                for (g in range64(d / mr)) {
+                    q8q8_token_grp_generic(addr(y4[0]), addr(q4[g * mr * n]), addr(s4[g * mr * (n / 32l)]),
+                        addr(xq[0]), addr(xs[0]), n, d, g * mr, 0l, mr, 0l, 4l)
+                    q8q8_token_grp_generic(addr(y8[0]), addr(q8v[g * mr * n]), addr(s8v[g * mr * (n / 32l)]),
+                        addr(xq[0]), addr(xs[0]), n, d, g * mr, 0l, mr, 0l, 8l)
+                }
+                var same = true
+                for (i in range64((d / mr) * mr)) {
+                    same &&= y4[i] == y8[i]
+                }
+                t |> success(same, "kg4/kg8 outputs identical at mr {mr}")
+                delete y4
+                delete y8
+            }
+            delete q4
+            delete s4
+            delete q8v
+            delete s8v
+        }
+        delete q
+        delete s
+        delete xrow
+        delete xq
+        delete xs
+    }
+}
+
+// The eager loader fans its weight repack across jobque lanes, and a
+// pool lane never sees the arming context's dasllama_math globals, so
+// a repack slot must give a pool lane the bytes the arming thread gets.
+
+def private fill_pattern(var q : array<int8>; var s : array<float>) {
+    for (i in range(length(q))) {
+        q[i] = int8((i * 7 + 3) % 251 - 125)
+    }
+    for (i in range(length(s))) {
+        s[i] = 0.5 + 0.25 * float(i % 8)
+    }
+}
+
+[test(description = "The active backend's q8q8 repack slot, invoked from a fifo jobque pool lane that cannot see the arming context's globals, writes weight and scale bytes identical to the same repack on the main thread")]
+def test_repack_slot_is_context_proof(t : T?) {
+    t |> run("gen repack slot: pool-lane bytes == main-thread bytes") @(t : T?) {
+        select_matmul_backend_for_load_()
+        if (!kernel_backend_needs_repack(active_kernel_backend())) {
+            t |> success(true, "active backend has no repack - nothing to prove on this box")
+            return
+        }
+        let n = 64l    // k-elems per row (multiple of 32)
+        let d = 32l    // rows (multiple of every backend mr)
+        var q_main : array<int8>
+        var s_main : array<float>
+        q_main |> resize(int(n * d))
+        s_main |> resize(int(n * d / 32l))
+        fill_pattern(q_main, s_main)
+        var q_lane := q_main
+        var s_lane := s_main
+
+        // main-thread repack — the reference bytes
+        repack_q8q8_weight(q_main, s_main, 0l, n, d)
+
+        // the same repack from a plain fifo jobque lane — the eager loader's fan shape:
+        // the slot FN is hoisted as a value (repack_regions' discipline), the body runs in the
+        // lane. NO team setup on purpose: pool contexts are the divergent ones.
+        let rq8 = active_repack_q8q8()
+        with_job_que() {
+            unsafe {
+                var qp = addr(q_lane[0])
+                var sp = addr(s_lane[0])
+                var done = 0
+                var dp = addr(done)
+                parallel_for(0, 1, 1) $(rb, re, wg) {
+                    feint("{rb} {re}")
+                    invoke(rq8, qp, sp, n, d)
+                    unsafe(dp[0]) = 1
+                    wg |> notify_and_release
+                }
+                t |> equal(done, 1)
+            }
+        }
+
+        var diff = 0
+        for (a, b in q_main, q_lane) {
+            if (a != b) {
+                diff++
+            }
+        }
+        t |> equal(diff, 0)
+        var sdiff = 0
+        for (a, b in s_main, s_lane) {
+            if (a != b) {
+                sdiff++
+            }
+        }
+        t |> equal(sdiff, 0)
     }
 }

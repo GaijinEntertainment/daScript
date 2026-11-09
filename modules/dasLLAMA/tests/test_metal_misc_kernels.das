@@ -3373,7 +3373,7 @@ def private dispatch_align_gate(t : T?; var dev, queue) {
     }
 }
 
-[test]
+[test(description = "The Metal decode and tower elementwise corpus - argmax and draft top-k, accept and draw, embed gathers, add-rms and norms, activations, im2col, whisper-decoder, hyper-connection mixer and PLE kernels - matches direct CPU oracles on served and tail shapes.")]
 def test_metal_misc_kernels(t : T?) {
     t |> run("decode elementwise/misc kernels == direct CPU oracles") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -3676,7 +3676,7 @@ def private spawn_lens_call(tag, body : string) : tuple<rc : int; out : string> 
 }
 
 //! device-free: a driver's forward answer through `metal_served` - only a served one opens the GPU-served spin window
-[test]
+[test(description = "`metal_served` passes a forward's served or declined answer through unchanged; a served one opens the GPU-served dispatch window, a decline never opens it, and a later decline does not close it.")]
 def test_metal_served(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let was = get_dispatch_gpu_served()
@@ -3695,7 +3695,7 @@ def test_metal_served(t : T?) {
 
 //! the concatenated weight regions key on every piece: two concats over one first piece and two different second pieces each
 //! hold their own bytes, and a repeat of either is its cached buffer
-[test]
+[test(description = "`upload_region_cat` keys its cache on every piece: two concats sharing a first piece hold their own second piece's bytes, a repeat returns the cached buffer, and exactly two regions are added.")]
 def test_metal_region_cat_keys(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         with_metal_decode_gate(t) $(var _queue) {
@@ -3725,7 +3725,7 @@ def test_metal_region_cat_keys(t : T?) {
 
 //! a model swap returns the mirror rings' slack to its floor: the next model's rings are cut at its own windows, not the
 //! outgoing model's widest, and the steps encoded over the old layout are stale
-[test]
+[test(description = "A weights reload drops the mirror ring slack back to `MIRROR_RING_SLACK_MIN` and bumps the arena epoch to stale old encoded steps; a reload already at the floor leaves the epoch where it was.")]
 def test_metal_ring_slack_reload(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let was = g_mirror_ring_slack
@@ -3759,7 +3759,7 @@ def private layout_shell(window : int64) : Model {
 }
 
 //! device-free: the mirror's layout key names its layout - one field moved, the key moves
-[test]
+[test(description = "`mirror_layout_key_of` is equal for two shells of one layout and moves when the sliding window, a row prefix, the layer count, the KV ring pin or the ring slack changes, returning when the slack is restored.")]
 def test_metal_mirror_layout_key(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let slack0 = g_mirror_ring_slack
@@ -3793,7 +3793,7 @@ def test_metal_mirror_layout_key(t : T?) {
 
 //! device-free: the K-quant MoE twins' pick - a crowned family takes the twin at every shape, an uncrowned
 //! box at or under the knee's mean rows an expert (the adaptive op's region), never past it
-[test]
+[test(description = "`metal_moe_kq_twin_pick` gives a crowned family the K-quant MoE twin at every shape, and an uncrowned box the twin only at or under the knee's mean rows per expert, never at a knee of 0.")]
 def test_metal_moe_kq_twin_pick(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let was = set_metal_moe_kq_twin_avg(16l)
@@ -3810,7 +3810,7 @@ def test_metal_moe_kq_twin_pick(t : T?) {
     }
 }
 
-[test]
+[test(description = "A spawned compile of a `metal_dispatch` class with workgroup state and no tgmem= fails naming the gate, while the tgmem= twin, a stamped class and a stamped class with a named kernel all compile.")]
 def test_lens_tgmem_gate(t : T?) {
     t |> run("[metal_dispatch] on @workgroup state refuses to compile without tgmem=") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -3835,7 +3835,7 @@ def test_lens_tgmem_gate(t : T?) {
     }
 }
 
-[test]
+[test(description = "A spawned compile refuses `metal_kernel` max_threads = 0 or a string with the positive-int diagnostic, and compiles max_threads = 64 as the control.")]
 def test_lens_max_threads_gate(t : T?) {
     t |> run("[metal_kernel] max_threads= takes a positive int, the threadgroup the entry declares") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -3852,7 +3852,7 @@ def test_lens_max_threads_gate(t : T?) {
     }
 }
 
-[test]
+[test(description = "A spawned compile refuses a `metal_dispatch` requires= item with a non-integer modulus or no percent sign, naming the item grammar, and compiles the well-formed n % 64 twin.")]
 def test_lens_requires_gate(t : T?) {
     t |> run("[metal_dispatch] requires= takes only 'lhs % int' items") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -3869,7 +3869,7 @@ def test_lens_requires_gate(t : T?) {
     }
 }
 
-[test]
+[test(description = "A spawned compile refuses a `metal_dispatch` params= name no grid=, tg=, requires= or span reads, matching whole identifiers so a substring of another name is still unread, and accepts a requires-only param.")]
 def test_lens_params_gate(t : T?) {
     t |> run("[metal_dispatch] params= names only values a grid=, tg=, requires= or @span reads") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -3887,7 +3887,7 @@ def test_lens_params_gate(t : T?) {
     }
 }
 
-[test]
+[test(description = "A `metal_dispatch` with workgroup state compiles with no tgmem= when tgmem_param= names a params= entry, and a spawned compile refuses a tgmem_param= naming no param.")]
 def test_lens_tgmem_param_gate(t : T?) {
     t |> run("[metal_dispatch] tgmem_param= sizes the threadgroup memory off a params= name") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -3902,7 +3902,7 @@ def test_lens_tgmem_param_gate(t : T?) {
     }
 }
 
-[test]
+[test(description = "A spawned compile refuses a `metal_dispatch` stamp= spec of two tokens, an unknown family, an unserved form, or a class with two kernel methods under one stamp, each with its own diagnostic.")]
 def test_lens_stamp_gate(t : T?) {
     t |> run("[metal_dispatch] stamp= takes a three-token spec naming a served family and form") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -3926,7 +3926,7 @@ def test_lens_stamp_gate(t : T?) {
     }
 }
 
-[test]
+[test(description = "Spawned compiles refuse `compile_stamp`, `race_pso_pair_stamp`, `race_stems` and `release_handles` at a wrong arity or a source global off the _msl stem, while one named release_handles slot compiles as the control.")]
 def test_lens_call_macro_gates(t : T?) {
     t |> run("compile_stamp and release_handles refuse a shape they cannot spell") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -3959,7 +3959,7 @@ def test_lens_call_macro_gates(t : T?) {
     }
 }
 
-[test, arch(at="../ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#kq-rows-crown")]
+[test(description = "The decode race times both arms for every K-quant rows and half-x format in the race table, which covers every served superblock format, with no twin output mismatch, and the crown held after it is the verdict returned."), arch(at="../ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#kq-rows-crown")]
 def test_kq_rows_race_verdicts(t : T?) {
     t |> run("the decode race returns a small-batch verdict per K-quant format") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {

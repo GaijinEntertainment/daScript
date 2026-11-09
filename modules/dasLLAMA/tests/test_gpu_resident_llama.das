@@ -69,12 +69,12 @@ def private llama_cells(t : T?; file : string) {
     }
 }
 
-[test]
+[test(description = "On Llama-3.2-1B Q8_0 the resident chain serves every call and holds the CPU chain's logits within 6% of the max over one and two windows plus eight steps, the GPU spin window in force while armed")]
 def test_gpu_resident_llama_1b(t : T?) {
     llama_cells(t, "Llama-3.2-1B-Instruct-Q8_0.gguf")
 }
 
-[test]
+[test(description = "On Llama-3.2-1B Q8_0 the greedy chain's steps reproduce the plain steps bit for bit, both where the fed token hits the device pick and where it misses it")]
 def test_gpu_resident_llama_greedy_chain(t : T?) {
     t |> run("Llama-3.2-1B Q8_0: the greedy chain's steps are the plain steps bit for bit, hits on the pick and misses off it") @(t : T?) {
         greedy_chain_cell(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf"))
@@ -84,7 +84,7 @@ def test_gpu_resident_llama_greedy_chain(t : T?) {
 //! the batched bench row on the 1B, the driver homing two streams: a refusal names the streams the device homes against
 //! the row's ask and reads 0, and a rep the device can home serves - a rate, no refusal, every stream parked after it
 //! (a one-stream row is no batch: the step census counts it a row at a time and the row refuses by name)
-[test]
+[test(description = "bench_tg_batched_rep reads 0 and names the refusal when a row asks more streams than the device homes, and a row it can home serves at a positive rate with every call on the device and every stream parked")]
 def test_gpu_resident_llama_batched_row(t : T?) {
     t |> run("bench_tg_batched_rep: the refusal past the homed streams, then one served rep") @(t : T?) {
         let path = llama_model_path(t, "Llama-3.2-1B-Instruct-Q8_0.gguf")
@@ -114,7 +114,7 @@ def test_gpu_resident_llama_batched_row(t : T?) {
 }
 
 //! the 1B's Q4_0 requant: its q40 planes take the window chain's kq batch arm off the f16 feed and the cm2 tiles on it
-[test]
+[test(description = "The Llama-3.2-1B Q4_0 requant's q40 planes on the resident chain hold the CPU chain's logits within bar over one and two windows plus eight steps")]
 def test_gpu_resident_llama_1b_q40(t : T?) {
     llama_cells(t, "Llama-3.2-1B-Instruct-Q4_0-local.gguf")
 }
@@ -122,7 +122,7 @@ def test_gpu_resident_llama_1b_q40(t : T?) {
 //! the 1B's Q5_1 requant (`-local`, the catalog row's recipe): every dense plane keeps the per-32 q51 tag - the window's GEMMs on
 //! the cm2 column the shape picks on the f16 feed and the per-32 batch tile off it, the steps on the per-32 GEMVs; the tied
 //! table demotes to q8
-[test]
+[test(description = "The Llama-3.2-1B Q5_1 requant keeps the q51 tag on every dense plane, and the resident chain holds the CPU chain's logits within bar over one and two windows plus eight steps")]
 def test_gpu_resident_llama_1b_q51(t : T?) {
     let file = "Llama-3.2-1B-Instruct-Q5_1-local.gguf"
     t |> run("{file}: every dense plane keeps the q51 tag") @(t : T?) {
@@ -135,12 +135,12 @@ def test_gpu_resident_llama_1b_q51(t : T?) {
     llama_cells(t, file)
 }
 
-[test]
+[test(description = "On Llama-3.2-3B Q8_0 the resident chain holds the CPU chain's logits within bar over one and two windows plus eight steps, every call served on the device")]
 def test_gpu_resident_llama_3b(t : T?) {
     llama_cells(t, "Llama-3.2-3B-Instruct-Q8_0.gguf")
 }
 
-[test]
+[test(description = "On Llama-3.1-8B Q4_K_M the resident chain's mixed Q8_0 and K-quant planes hold the CPU chain's logits within bar over one and two windows plus eight steps")]
 def test_gpu_resident_llama_8b_k(t : T?) {
     llama_cells(t, "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf")
 }
@@ -159,21 +159,21 @@ def private llama_peel(t : T?; file : string) {
     delete tr
 }
 
-[test]
+[test(description = "On Llama-3.2-1B Q8_0 tails of 1, 2, 5 and 8 rows peel through the token commands within the split bar of the row-at-a-time tail, while one row more or the lever off takes the window chain")]
 def test_gpu_resident_llama_peel_1b(t : T?) {
     t |> run("Llama-3.2-1B Q8_0: a short tail peels through the token commands and reads what the one-row steps read") @(t : T?) {
         llama_peel(t, "Llama-3.2-1B-Instruct-Q8_0.gguf")
     }
 }
 
-[test]
+[test(description = "On Llama-3.2-1B Q5_1 short tails peel through the per-32 planes' N-column leaves within the split bar of the row-at-a-time tail, the longer tail and lever-off arm taking the chain")]
 def test_gpu_resident_llama_peel_1b_q51(t : T?) {
     t |> run("Llama-3.2-1B Q5_1: the same on the per-32 planes' N-column leaves") @(t : T?) {
         llama_peel(t, "Llama-3.2-1B-Instruct-Q5_1-local.gguf")
     }
 }
 
-[test]
+[test(description = "On Llama-3.2-1B Q4_K_M short tails peel through the K-quant planes' N-column leaves within the split bar of the row-at-a-time tail, the longer tail and lever-off arm taking the chain")]
 def test_gpu_resident_llama_peel_1b_k(t : T?) {
     t |> run("Llama-3.2-1B Q4_K_M: the same on the K-quant planes' N-column leaves") @(t : T?) {
         llama_peel(t, "Llama-3.2-1B-Instruct-Q4_K_M.gguf")

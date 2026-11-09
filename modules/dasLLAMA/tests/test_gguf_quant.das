@@ -57,7 +57,7 @@ def private synth_q5_0_bytes : array<uint8> {
     return <- data
 }
 
-[test]
+[test(description = "`ggml_type_bytes` returns the ggml block sizes for K, i-quant, Q8_0 and F16 types and 0 for an unknown type, `ggml_type_name` the upstream spelling, and every KqFmt names its ggml type and block bytes")]
 def test_gguf_type_sizes(t : T?) {
     t |> run("ggml_type_bytes follows the ggml block sizes and ggml_type_name the upstream spelling") @(t : T?) {
         t |> equal(144l, ggml_type_bytes(GGML_TYPE_Q4_K, 256l))
@@ -99,7 +99,7 @@ def private load_panic(bytes : array<uint8>; name : string) : string {
     }
 }
 
-[test]
+[test(description = "Loading a synthetic GGUF whose tensor is Q4_1 panics naming the tensor and its disk type, while the same file at Q8_0 passes the type check and stops later on missing metadata")]
 def test_gguf_load_declines_unread_types(t : T?) {
     t |> run("the load declines a file carrying a tensor of a type the reader has no arm for, naming the tensor and the type") @(t : T?) {
         var q41 : array<uint8>
@@ -115,7 +115,7 @@ def test_gguf_load_declines_unread_types(t : T?) {
     }
 }
 
-[test]
+[test(description = "On a synthetic 3-block Q5_0 tensor the f32 reader matches a hand-rolled ggml reference exactly, the Q8 transcode keeps d verbatim and reproduces every value bit for bit, and a src_off slice lands the full run's bytes")]
 def test_gguf_q5_0(t : T?) {
     // The dequant arm (gguf_read_tensor_f32) must match the hand-rolled reference exactly.
     t |> run("q5_0 dequant matches ggml reference") @(t : T?) {
@@ -188,7 +188,7 @@ def private sub_rel(x, y : array<float>; off : int64) : float {
     return sx == 0.0 ? 0.0 : sqrt(se / 32.0) / sqrt(sx / 32.0)
 }
 
-[test]
+[test(description = "The Q5_K encoder round-trips a scale-laddered input with every 32-element sub-block under 0.15 relative rmse and the 4-byte scale tail zeroed, and encodes an all-zero superblock to exact zeros")]
 def test_q5k_encoder(t : T?) {
     let nsb = 8l
     let n = nsb * 256l
@@ -259,7 +259,7 @@ def private synth_sb_bytes(sbb : int64; seed : int) : array<uint8> {
     return <- b
 }
 
-[test]
+[test(description = "For each of nine superblock K-quant and i-quant types over random bytes, `gguf_read_tensor_f32` equals the native transcode-then-dequant value for value, a NaN pair counting as agreement")]
 def test_gguf_f32_reader_superblock_types(t : T?) {
     t |> run("gguf_read_tensor_f32 decodes every superblock i-quant / K-quant the native tier reads") <| @(t : T?) {
         let types <- [GGML_TYPE_IQ4_XS, GGML_TYPE_Q3_K, GGML_TYPE_IQ3_S, GGML_TYPE_IQ3_XXS, GGML_TYPE_IQ4_NL,

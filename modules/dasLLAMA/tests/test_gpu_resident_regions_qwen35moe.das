@@ -7,6 +7,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_common   // Model, get_mtp_spec / set_mtp_spec
 require dasllama/dasllama_math   // with_dasllama_jobque_
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active
+require dasllama/dasllama_core   // set_gpu_ctx_max: the peel's mirror context cap
 require daslib/fio
 require _resident_regions
 require _resident_feed   // greedy_chain_cell, recurrent_peel_cell
@@ -26,22 +27,22 @@ require _moe_resident   // MOE_LOGIT_BAR_REL: the routed chain's bar
 let private REGIONS_FILE = "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf"
 let private WIDE_ROWS = 10l   //! past the N-row command's eight rows and its GEMVs' eight-column tile
 
-[test]
+[test(description = "On the Qwen3.6-35B MTP hybrid MoE a prefill continued past zero runs the window chain from the region's live recurrent state within the routed bar of the one-call prefill, every call served")]
 def test_prefill_continues_qwen35moe(t : T?) {
     cell_prefill_continues_on_the_device(t, REGIONS_FILE, MOE_LOGIT_BAR_REL)
 }
 
-[test]
+[test(description = "Ten Qwen3.6-35B hybrid MoE sessions, past the N-row command's eight rows, step in command groups with column-tiled GEMVs, every row within the wide bar of its session alone")]
 def test_regions_batched_groups_qwen35moe(t : T?) {
     cell_regions_batched_groups(t, REGIONS_FILE, WIDE_ROWS, LogitsBar.wide_bar)
 }
 
-[test]
+[test(description = "On the Qwen3.6-35B hybrid MoE a device-home scheduler's openings and checkpoints outlive their regions in the host pool, later requests take them up as the host prefix cache does")]
 def test_device_pool_qwen35moe(t : T?) {
     cell_device_pool(t, REGIONS_FILE)
 }
 
-[test]
+[test(description = "With speculation off, the greedy chain on the Qwen3.6-35B hybrid MoE, forced on and adaptive, reads the plain walk's tokens and logits bit for bit, every on-pick step chained")]
 def test_greedy_chain_qwen35moe(t : T?) {
     t |> run("the greedy chain forced on reads the plain walk's tokens and logits bit for bit, every on-pick step chained") @(t : T?) {
         let spec0 = get_mtp_spec()
@@ -51,13 +52,15 @@ def test_greedy_chain_qwen35moe(t : T?) {
     }
 }
 
-[test]
+[test(description = "With speculation off, a short tail on the Qwen3.6-35B hybrid MoE peels through the token commands, recurrent rows in order and the routed block every row, within the routed bar of one-row steps")]
 def test_peel_qwen35moe(t : T?) {
     t |> run("a short tail peels through the token commands, the recurrent rows in order in the region's slot, the routed block every row, and reads what the one-row steps read") @(t : T?) {
         let path = path_join(models_dir(), REGIONS_FILE)
         if (!resident_ready(t, path)) return
         let spec0 = get_mtp_spec()
         set_mtp_spec(false)
+        let levers = resident_levers()
+        set_gpu_ctx_max(REGIONS_RIG_CTX)   //! the rig's mirror context for the load; the levers go back after
         var tr <- load_resident(path, 1l)
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the routed hybrid (the load log names any decline)")
         if (moe_gpu_resident_active()) {
@@ -66,6 +69,7 @@ def test_peel_qwen35moe(t : T?) {
             }
         }
         delete tr
+        restore_resident_levers(levers)
         set_mtp_spec(spec0)
     }
 }

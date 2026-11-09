@@ -501,7 +501,7 @@ def private paged_batch_greedy(tr, trg : Model; prompts : array<array<int64>>; p
     return <- got
 }
 
-[test]
+[test(description = "Metal batched greedy decode on Llama-3.2 Q8 and K-quant carriers emits the CPU batch control's tokens across row counts, KV codecs, paged and mixed schedules, its one-step logits and KV rows in tolerance, and leaks nothing")]
 def test_metal_batch_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, one t |> run cell per arm
     t |> run("GPU batched decode == CPU batch control, greedy streams (Llama-3.2-1B Q8)") <| @(t : T?) {
         if (!family_on(t, "llama")) return
@@ -846,7 +846,7 @@ def test_metal_batch_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm l
 }
 
 //! the mixed twin: K-quant deltanet qkv / gate planes beside a Q8_0 out plane, every batched site dispatching by its own tag
-[test]
+[test(description = "On Qwen3.5-0.8B Q4_K_M with a Q8_0 deltanet out plane, the Metal batched driver serves every step at 3, 9 and 12 rows without a decline, each stream token for token the GPU single-row step's")]
 def test_metal_batch_mixed_sites(t : T?) {
     t |> run("GPU batched decode on a layer mixing q8 and K-quant planes == the GPU single-row step (Qwen3.5-0.8B-Q4_K_M-q8out)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -909,7 +909,7 @@ def private per32_planes(m : Model) : int64 {
 //! the per-32 dense planes on the batched driver: two to eight rows on the small-batch form, nine and twelve on the mul_mm tile -
 //! every step the batched driver's with no decline, every small-batch dispatch carrying every row (none a row at a time), and
 //! the streams the GPU single-row step's token for token
-[test]
+[test(description = "On per-32 dense carriers (Q5_1, IQ4_NL, MLX 8-bit and 4-bit), the Metal batched driver serves 2 to 12 rows - small-batch form up to eight carrying every row, mul_mm past - token for token the single-row step")]
 def test_metal_batch_per32_sites(t : T?) {
     //! a `repo` row is a stocked safetensors snapshot (the affine members' carriers), a `file` row a GGUF under the models root
     for (spec in [(file = "Llama-3.2-1B-Instruct-Q5_1-local.gguf", repo = "", fam = "llama"), (file = "Qwen2.5-0.5B-Instruct-IQ4_NL-local.gguf", repo = "", fam = "qwen2"),
@@ -979,7 +979,7 @@ def test_metal_batch_per32_sites(t : T?) {
     }
 }
 
-[test]
+[test(description = "Metal-resident single-row decode on Llama-3.2-1B Q8 emits the CPU control's 40-token greedy continuation across hybrid prefill, concurrent encode, paging, rewind, KV codecs, reloads, K-quants and depth, and leaks nothing")]
 def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, one t |> run cell per arm
     t |> run("GPU-resident decode == CPU control, greedy continuations (Llama-3.2-1B Q8)") <| @(t : T?) {
         if (!family_on(t, "llama")) return
@@ -1517,7 +1517,7 @@ def private foreign_gpu_prefill(tr, trg : Model) {   // nolint:LINT012,LINT019 �
 // decode's concat lookup reads past its end — garbage K/V bias on every layer. The gate runs
 // the same forced-feed measure twice: on a fresh pair (sanity control), then on fresh loads
 // (the weights-epoch flush isolates) after ONE foreign GPU prefill.
-[test]
+[test(description = "On Qwen2.5-0.5B Q8, forced-feed Metal decode stays within 4.0 of the CPU logits both on a fresh load and after one foreign Metal prefill that registers the shared bias regions plain first")]
 def test_metal_prefill_poison(t : T?) {
     t |> run("GPU decode after a foreign GPU prefill: shared-region collision (Qwen2.5-0.5B Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen2")) return
@@ -1587,7 +1587,7 @@ def private host_sel_den(logits : array<float>; temp : float) : float {
 //! so every step's selection reads the stream's own temperature and recent window: the landed denominator is the host's over
 //! the step's rows at temp 0.5 (top-k off, so the top-p cut reads it), never the temp-1 one a slot-indexed read takes (the
 //! bar's control), and every recent id's landed raw logit is the row's
-[test]
+[test(description = "On Llama-3.2-1B Q8, consecutive single-row sampled Metal steps land the softmax denominator at the stream's temperature 0.5 within 1e-3, not the temp-1 one, and every recent id's raw logit, on both landing slots")]
 def test_metal_sel_single_row_ask(t : T?) {
     t |> run("consecutive single-row sampled steps on Metal land the denominator at the stream's temperature and the recent window's raw logits on either landing slot (Llama-3.2-1B Q8)") <| @(t : T?) {
         if (!family_on(t, "llama") || !arm_on(t, "arm16-sel-ask")) return

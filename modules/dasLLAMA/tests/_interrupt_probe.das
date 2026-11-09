@@ -2,7 +2,8 @@ options gen2
 options indenting = 4
 options _dasllama_internal = true
 
-// dastest fixture, spawned by test_tune_interrupt.das: one interrupt_gate() call between a
+// dastest fixture, spawned by test_interrupt_aborts_without_minting
+// (uncategorized_persistent_heap_stack_524288.das): one interrupt_gate() call between a
 // BEFORE and an AFTER print. While DAS_TUNE_CONTROL names an existing file the gate must
 // abort (exit 1, nothing past it runs); otherwise it passes through.
 

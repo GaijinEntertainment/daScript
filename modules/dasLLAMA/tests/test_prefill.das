@@ -17,6 +17,7 @@ require daslib/jobque_boost
 require daslib/fio
 require daslib/linq   // sequence_equal: the logits rows and the codec-encoded KV byte blobs compare element for element (byte equality IS bit-exactness for a same-dtype pair)
 require dasllama/dasllama_math  // with_dasllama_jobque_ + the runtime knob setters (engine-level, not re-exported)
+require math
 require _compares   // mismatch_rel, logits_maxdiff: the tile arm's bar
 
 // forward_prefill / forward_batch must be BIT-FOR-BIT identical to calling forward() once per
@@ -98,7 +99,7 @@ def check_continuation(t : T?; tr : Model; prompt : array<int64>; split : int64;
     }
 }
 
-[test]
+[test(description = "On fp32 stories15M with the row nest pinned, `forward_batch` and a continuation prefill match per-token `forward` bit for bit in logits and KV cache, and the shipped tile walk stays within 1e-4 per-element relative")]
 def test_prefill_fp32(t : T?) {
     t |> run("prefill == Nx forward, fp32 (needs stories15M.bin)") @(t : T?) {
         return if (!jit_only(t))
@@ -122,7 +123,7 @@ def test_prefill_fp32(t : T?) {
     }
 }
 
-[test]
+[test(description = "On Q8 stories15M under the portable backend, batched prefill of a short and a 200-token prompt and a start_pos 4 continuation match per-token `forward` bit for bit in last logits and KV cache")]
 def test_prefill_q8(t : T?) {
     t |> run("prefill == Nx forward, Q8 (needs stories15M.bin)") @(t : T?) {
         return if (!jit_only(t))
@@ -150,7 +151,7 @@ def test_prefill_q8(t : T?) {
     }
 }
 
-[test]
+[test(description = "On q4_0 stories15M the batched prefill through the Q4_0 GEMM and a start_pos 4 continuation match per-token `forward` bit for bit in last logits and KV cache")]
 def test_prefill_q4_batched(t : T?) {
     t |> run("q4_0 prefill rides the batched stack and matches (needs stories15M.bin)") @(t : T?) {
         return if (!jit_only(t))
@@ -168,5 +169,105 @@ def test_prefill_q4_batched(t : T?) {
         check_continuation(t, tr, prompt, 4l, AttnPrefillMode.classic)
         delete tk
         delete tr
+    }
+}
+
+
+// Flash prefill attention is online-softmax (NOT bit-exact vs classic — the FP sums reorder), so it
+// is gated on (a) the predicted next token matching classic on a confident prompt and (b) the full
+// logit vector staying within a small relative tolerance of classic. The token-for-token oracle for
+// flash is covered by test_parity / test_forward, which run through flash as the default mode.
+// Needs llama2.c's stories15M.bin (gitignored); skips cleanly when absent.
+
+def private argmax(a : array<float>) : int {
+    var bi = 0
+    var bv = a[0]
+    for (i in range(length(a))) {
+        if (a[i] > bv) {
+            bv = a[i]
+            bi = i
+        }
+    }
+    return bi
+}
+
+// flash prefill must land within REL_TOL of the classic prefill it replaces, and (for a confident
+// prompt) predict the same next token. start_pos>0 exercises the continuation path.
+def check_flash(t : T?; tr : Model; prompt : array<int64>; start_pos : int64; confident : bool) {
+    let c = tr.config
+    let n = long_length(prompt)
+    let REL_TOL = 0.05
+    with_dasllama_jobque_() {
+        set_prefill_attn_mode(AttnPrefillMode.classic)
+        var sc <- make_run_state(c)
+        for (p in range64(start_pos)) {
+            forward(tr, sc, prompt[p], p)
+        }
+        let tailc <- [for (p in range64(start_pos, n)); prompt[p]]
+        forward_prefill(tr, sc, tailc, n - start_pos, start_pos)
+        set_prefill_attn_mode(AttnPrefillMode.flash)
+        var sf <- make_run_state(c)
+        for (p in range64(start_pos)) {
+            forward(tr, sf, prompt[p], p)
+        }
+        let tailf <- [for (p in range64(start_pos, n)); prompt[p]]
+        forward_prefill(tr, sf, tailf, n - start_pos, start_pos)
+        set_prefill_attn_mode(AttnPrefillMode.flash)
+        let rel = logits_maxdiff(sc.logits, sf.logits) / max(logits_maxabs(sc.logits), 1.0e-6)
+        t |> success(rel < REL_TOL, "flash logits within {REL_TOL} rel of classic (sp={start_pos}, got {rel})")
+        if (confident) {
+            t |> success(argmax(sf.logits) == argmax(sc.logits), "flash predicts the same next token as classic")
+        }
+        delete sc
+        delete sf
+    }
+}
+
+def run_all(t : T?; tr : Model; tk : SpmTokenizer) {
+    let short <- encode(tk, "Once upon a time, there was a little girl", true, false)
+    check_flash(t, tr, short, 0l, true)
+    check_flash(t, tr, short, 4l, true)                            // continuation
+    let lng <- [for (i in range64(200l)); i % 200l + 1l]
+    check_flash(t, tr, lng, 0l, false)                             // long: threaded + multi-tile
+    check_flash(t, tr, lng, 37l, false)                            // unaligned continuation
+}
+
+[test(description = "On fp32 stories15M, flash prefill attention lands within 5 percent relative max-logit of classic on short and 200-token prompts from position 0 and mid-sequence continuations, predicting the same next token on the confident prompt")]
+def test_flash_fp32(t : T?) {
+    t |> run("flash ~= classic, fp32 (needs stories15M.bin)") @(t : T?) {
+        return if (!jit_only(t))
+        if (!stat(MODEL_PATH).is_valid || !stat(TOKENIZER_PATH).is_valid) {
+            t |> skip("stories15M.bin not present")
+            return
+        }
+        var tr <- load_checkpoint(MODEL_PATH)
+        var tk <- load_tokenizer(TOKENIZER_PATH, tr.config.vocab_size)
+        run_all(t, tr, tk)
+        delete tk
+        delete tr
+    }
+}
+
+[test(description = "On Q8-quantized stories15M, flash prefill stays within 5 percent relative max-logit of classic on the same prompts and continuations, and also under a forced 8-token sliding window")]
+def test_flash_q8(t : T?) {
+    t |> run("flash ~= classic, Q8 + forced sliding window (needs stories15M.bin)") @(t : T?) {
+        return if (!jit_only(t))
+        if (!stat(MODEL_PATH).is_valid || !stat(TOKENIZER_PATH).is_valid) {
+            t |> skip("stories15M.bin not present")
+            return
+        }
+        var tr <- load_checkpoint(MODEL_PATH)
+        quantize_weights(tr)
+        var tk <- load_tokenizer(TOKENIZER_PATH, tr.config.vocab_size)
+        run_all(t, tr, tk)
+        // exercise the flash sliding-window key-range bounds (Gemma2-style SWA)
+        var trs <- load_checkpoint(MODEL_PATH)
+        quantize_weights(trs)
+        trs.config.sliding_window = 8l
+        let lng <- [for (i in range64(200l)); i % 200l + 1l]
+        check_flash(t, trs, lng, 0l, false)
+        delete tk
+        delete tr
+        delete trs
     }
 }

@@ -74,7 +74,7 @@ def private q8_store_arm(t : T?; window : bool) {
     }
 }
 
-[test]
+[test(description = "The q8_0 K/V store writes the CPU cache codec bytes bit for bit at token rows over two regions and at window rows off an odd layer base, other bytes left at fill, a past-half-range scale clamped")]
 def test_vkc_q8_store(t0 : T?) {
     t0 |> run("the q8_0 K/V store == the CPU cache's bytes, at token rows and at window rows; a block scale past the half range clamped") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -175,7 +175,7 @@ def private tq_store_arm(t : T?; hs, nqh, nkh : int; window : bool = false) {
     }
 }
 
-[test]
+[test(description = "The tq4 K/V store rotates q in place and stores K and V bit for bit as the CPU rotation and tq4 codec at heads of 32 to 512, token and window rows, and a shared-KV dispatch that stores nothing")]
 def test_vkc_tq4_store(t0 : T?) {
     t0 |> run("the tq4 K/V store == the CPU rotation and the CPU cache's bytes, the q rows rotated in place, at token rows and at window rows") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -196,7 +196,7 @@ def test_vkc_tq4_store(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The decode attention q8_0 codec stamps match the CPU attention over the dequantized mirror rows within 1e-4 relative on every path of the pass, the oracle over the unquantized rows missing")]
 def test_vkc_q8_da_attn(t0 : T?) {
     t0 |> run("the decode attention's q8_0 stamps == the CPU attention over the dequantized mirror rows, on every path of the pass") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -211,7 +211,7 @@ def test_vkc_q8_da_attn(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The decode attention tq4 codec stamps match the CPU attention over the dequantized rotated rows within 1e-4 relative on every path of the pass, the oracle over the unrotated query missing")]
 def test_vkc_tq4_da_attn(t0 : T?) {
     t0 |> run("the decode attention's tq4 stamps == the CPU attention over the dequantized rotated rows, on every path of the pass") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -281,7 +281,7 @@ def private shadow_arm(t : T?; kv : KVDtype; kvd : int) {
     }
 }
 
-[test]
+[test(description = "The q8_0 and tq4 mirror f16 shadow passes equal the CPU dequant rounded to half and clamped at 65504 bit for bit, the rows outside the pass left at their NaN sentinel")]
 def test_vkc_shadow(t0 : T?) {
     t0 |> run("a block-codec mirror's f16 shadow == the CPU dequant rounded to half and clamped, bit for bit, the rows outside the pass left alone") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -347,7 +347,7 @@ def private ur_arm(t : T?; hs, nh : int; gated : bool) {
     }
 }
 
-[test]
+[test(description = "The tq4 un-rotation kernel equals tq4_unrotate_batch bit for bit at heads of 32, 64 and 512, and under the sigmoid head gate at 128 within 2e-3, the ungated rows missing as control")]
 def test_vkc_tq4_unrot(t0 : T?) {
     t0 |> run("the tq4 un-rotation == the CPU un-rotation, bit for bit, and under the head gate") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {

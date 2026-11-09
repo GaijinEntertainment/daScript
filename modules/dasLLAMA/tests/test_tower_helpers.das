@@ -20,7 +20,7 @@ require math
 
 def private near(a, b, tol : float) : bool => abs(a - b) <= tol
 
-[test]
+[test(description = "A default Clamp is inactive with +-FLT_MAX bounds, and `clamp_rows` equals scalar clamp on every element across the 1024-element chunk seam, both into a separate destination and in place")]
 def test_clamp_rows(t : T?) {
     t |> run("default Clamp is the inactive identity") @(t : T?) {
         let c = Clamp()
@@ -52,7 +52,7 @@ def test_clamp_rows(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every tower row helper (clamp, rms, weightless rms, geglu LUT, 2D rope) is a no-op on zero rows, and `avg_pool2d_rows` pools a grid smaller than its kernel to zero rows, writing nothing")]
 def test_empty_inputs(t : T?) {
     t |> run("every row helper is a no-op on zero rows / zero elements") @(t : T?) {
         var a, b : array<float>
@@ -71,7 +71,7 @@ def test_empty_inputs(t : T?) {
     }
 }
 
-[test]
+[test(description = "Weighted `rms_rows` per head-width row matches the formula within 1e-6 and its in-place form is bit-identical, and `rms_rows_weightless` leaves every row at unit mean square")]
 def test_rms_rows(t : T?) {
     t |> run("weighted rms per row against the formula; heads = rows of head width") @(t : T?) {
         // two tokens of two 4-wide heads = four rows of 4 under the per-head form
@@ -117,7 +117,7 @@ def test_rms_rows(t : T?) {
     }
 }
 
-[test]
+[test(description = "`geglu_quick_lut_rows` stays within the f16 envelope (2e-3 relative plus 1e-4) of exact gelu_quick(gate) times up, and like the ggml-cpu f16 table maps an input and its f16 rounding to the same f16 output")]
 def test_geglu_quick_lut_rows(t : T?) {
     t |> run("gelu_quick(gate)*up through ggml-cpu's f16 table") @(t : T?) {
         var gate <- [0.0, 1.0, -1.0, 2.5, -3.0, 0.1, 7.0, -0.25]
@@ -147,7 +147,7 @@ def test_geglu_quick_lut_rows(t : T?) {
     }
 }
 
-[test]
+[test(description = "`im2col_rgb_patches` cuts an interleaved RGB canvas into row-major patches laid out channel, then ky, then kx, checked by exact pixel values that encode their own coordinates")]
 def test_im2col_rgb_patches(t : T?) {
     t |> run("[C][KH][KW] rows over row-major patches of an interleaved canvas") @(t : T?) {
         // 4x2 canvas, p = 2 -> 2 patches side by side; pixel value encodes (x, y, c)
@@ -173,7 +173,7 @@ def test_im2col_rgb_patches(t : T?) {
     }
 }
 
-[test]
+[test(description = "`rope_neox_2d_rows` rotates each head's first half by pos_x and second half by pos_y as NeoX pairs with theta 100, within 1e-5 of a hand rotation, leaving a position-0 half unchanged")]
 def test_rope_neox_2d_rows(t : T?) {
     t |> run("first half rotates by pos_x, second half by pos_y (NEOX pairs, theta 100)") @(t : T?) {
         let npos = 2l
@@ -218,7 +218,7 @@ def test_rope_neox_2d_rows(t : T?) {
     }
 }
 
-[test]
+[test(description = "`rel_pos_table` grows to ww x d and lands every element within 4e-6 of an fp64 Transformer-XL sin/cos table with the zero-offset row exactly (0, 1), while a one-frame-shifted table misses the bar as control")]
 def test_rel_pos_table(t : T?) {
     t |> run("Transformer-XL rel-position table against an fp64 reference; the zero row exact; a poisoned expectation misses") @(t : T?) {
         let d = 64l
@@ -260,7 +260,7 @@ def private rel_pos_off(got : array<float>; want : array<double>; bar : double) 
     return off
 }
 
-[test]
+[test(description = "`avg_pool2d_rows` with a 3x3 stride-3 kernel over a 7x3 token-major grid yields two windows with the expected per-channel means, dropping the ragged column")]
 def test_avg_pool2d_rows(t : T?) {
     t |> run("3x3 stride-3 mean over a token-major grid, ragged edge dropped") @(t : T?) {
         // 7x3 grid (one ragged column), d = 2: channel 0 = gx, channel 1 = gy
@@ -297,7 +297,7 @@ def private attention_ref(qq, kk, vv : array<float>; tt, d, n_head : int64; scal
     return <- out
 }
 
-[test]
+[test(description = "`attention_bidir` matches a naive per-row attention oracle within 1e-5 at scales 0.5 and 1.0, so the scale is applied, and grows its hp scratch to at least 4 x tt x d")]
 def test_attention_bidir(t : T?) {
     t |> run("matches the naive reference at two scales; the scale is applied") @(t : T?) {
         let tt = 5l

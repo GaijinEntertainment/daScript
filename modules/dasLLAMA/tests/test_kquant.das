@@ -55,7 +55,7 @@ def private formula_row(nw : int; f : block<(k : int) : float>) : array<float> {
     return <- w
 }
 
-[test]
+[test(description = "The Q4_K, Q5_K and Q6_K superblock dequants reproduce hand-packed superblocks, written in the pack direction, bit for bit against the element formula")]
 def test_q4k_synthetic(t : T?) {
     t |> run("Q4_K superblock unpacks the 6-bit scale/min packing") @(t : T?) {
         let blkb <- build_q4k_block()
@@ -120,7 +120,7 @@ def private file_dequant(blkb : array<uint8>; dequant : block<(b : array<uint8>;
     return <- want
 }
 
-[test]
+[test(description = "Every K-quant, grid, iq2 lattice and per-32 format's transcoded plane pair dequants a hand-packed synthetic block bit for bit to the file dequant or the format's element formula")]
 def test_kq_transcode_planes(t : T?) {
     kquant_plane_cells(t)
     grid_plane_cells(t)
@@ -849,7 +849,7 @@ def private mlx_cells(t : T?; f : auto(TT)) {
     }
 }
 
-[test]
+[test(description = "The five MLX affine members dequant hand-packed blocks to scale x q + bias exactly (another packing order misses), and their dot, groupn, grp, batch, dense-router and row-major kernels match the scalar row dots")]
 def test_mlx_affine_kernels(t : T?) {
     mlx_cells(t, KqTag_mlx4())
     mlx_cells(t, KqTag_mlx8())
@@ -858,22 +858,22 @@ def test_mlx_affine_kernels(t : T?) {
     mlx_cells(t, KqTag_mlx6b())
 }
 
-[test]
+[test(description = "Under the portable backend at a 704-wide row, the q51 scalar dot matches an fp64 plane-dequant reference and its GPU gather, groupn, grp repack, batch and dense routers bit-match the disk-order scalar dots")]
 def test_q51_kernels(t : T?) {
     p32_cells(t, KqTag_q51())
 }
 
-[test]
+[test(description = "Under the portable backend at a 2560-wide row, the iq4nl32 scalar dot matches an fp64 plane-dequant reference and its GPU gather, groupn, grp repack, batch and dense routers bit-match the disk-order scalar dots")]
 def test_iq4nl32_kernels(t : T?) {
     p32_cells(t, KqTag_iq4nl32())
 }
 
-[test]
+[test(description = "Under the portable backend at a 1408-wide row, the q4032 scalar dot matches an fp64 plane-dequant reference and its GPU gather, groupn, grp repack, batch and dense routers bit-match the disk-order scalar dots")]
 def test_q4032_kernels(t : T?) {
     p32_cells(t, KqTag_q4032())
 }
 
-[test]
+[test(description = "Under the portable backend at a 1408-wide row, the q5032 scalar dot matches an fp64 plane-dequant reference and its GPU gather, groupn, grp repack, batch and dense routers bit-match the disk-order scalar dots")]
 def test_q5032_kernels(t : T?) {
     p32_cells(t, KqTag_q5032())
 }
@@ -907,7 +907,7 @@ def private kq_dot_gate(t : T?; fmt : int; n : int64 = 512l) {
     t |> success(abs(got - float(ref)) / denom < 1.0e-4, "kernel dot must match the fp64 plane-dequant reference")
 }
 
-[test]
+[test(description = "For every superblock format at n = 512, 1024 and 3072, the integer-domain `dot_kq` over LCG-distinct superblocks lands within 1e-4 relative of an fp64 dot over the plane dequant and Q8_K activation")]
 def test_kq_dots(t : T?) {
     // beside 512, the 122B-class widths: 3072 (qwen35moe-122B gate/up/cls) and 1024 (its k5 down_exps)
     for (fmt in KQ_IDS) {
@@ -941,7 +941,7 @@ def private kq_gemv_rows_gate(t : T?; fmt : int; n : int64 = 512l) {
     check(t, "portable {kf} multi-row GEMV against the per-row disk dots", y, want, BAR_EXACT, FLAT_SHAPE)
 }
 
-[test]
+[test(description = "For every superblock format, the portable `matmul_kq` over eight LCG-distinct rows bit-matches the per-row disk dots, pinning the per-row quant and scale plane strides past row 0")]
 def test_kq_gemv_rows(t : T?) {
     for (fmt in KQ_IDS) {
         let kf = kq_fmt_of_id(fmt, "test_kq_gemv_rows")
@@ -998,7 +998,7 @@ def private kq_disk_ref(w : array<float>; x : Q8kActs; tk, r, n, nsb : int64) : 
     return float(acc)
 }
 
-[test]
+[test(description = "For every superblock format, the disk-order three-token batch GEMM bit-matches the GEMV run a token at a time and lands within 1e-4 of the largest output of an fp64 plane-dequant reference")]
 def test_kq_gemm_disk_batch(t : T?) {
     for (fmt in KQ_IDS) {
         let kf = kq_fmt_of_id(fmt, "test_kq_gemm_disk_batch")
@@ -1113,7 +1113,7 @@ def private kq_repack_gate(t : T?; fmt : int; mr : int64; n : int64 = 512l) {
     }
 }
 
-[test]
+[test(description = "For every superblock format, the grp repack at mr 4, 8 and 16 keeps row dots and row dequants bit-exact to the disk plane, and at mr 16 the bf16 panels hold each weight within a bf16 step at its pair slot")]
 def test_kq_repack_grp(t : T?) {
     for (fmt in KQ_IDS) {
         let kf = kq_fmt_of_id(fmt, "test_kq_repack_grp")
@@ -1188,7 +1188,7 @@ def private kq_tile_gate(t : T?; fmt : int; n : int64 = 512l) {
     check(t, "{kf} 4-token tile against per-token GEMVs", ytile, ygemv, BAR_EXACT, Shape(row_width = int(d)))
 }
 
-[test]
+[test(description = "For every superblock format not stamped as a bf16 tile, the 4-token kq tile over grp-repacked planes, with a 3-token GEMV tail, is bit-exact to one full GEMV per token")]
 def test_kq_tile(t : T?) {
     for (fmt in KQ_IDS) {
         let kf = kq_fmt_of_id(fmt, "test_kq_tile")
@@ -1207,7 +1207,7 @@ def test_kq_tile(t : T?) {
 // its layout companion the reference interleave, whatever perm the box's profile or fallback list
 // names. A shared companion that generated for such a format would repack its planes at the
 // perm's mr while the tuner's per-variant clones of its reference bodies read the reference one.
-[test]
+[test(description = "A superblock format with no emitter arm reads a false witness and keeps the reference layout companion mr = 4, whatever perm the profile names")]
 def test_kq_declined_family_keeps_the_reference_layout(t : T?) {
     for (fmt in KQ_IDS) {
         let kf = kq_fmt_of_id(fmt, "test_kq_declined_family_keeps_the_reference_layout")
@@ -1295,7 +1295,7 @@ def private kq_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 = 32l;
     check(t, "{kf} grp groupn against per-region rows-core calls (per-region rows)", y, want_pr, BAR_EXACT, rows)
 }
 
-[test]
+[test(description = "The region-list kq GEMV bit-matches per-row disk dots on disk planes and per-region rows-core calls on grp slices, under shared and per-region activations, up to the 122B expert slice shapes")]
 def test_kq_groupn(t : T?) {
     for (fmt in KQ_IDS) {
         let kf = kq_fmt_of_id(fmt, "test_kq_groupn")
@@ -1383,7 +1383,7 @@ def private kq_batch_groupn_cell(t : T?; fmt : int; n, d : int64) {
     check(t, "{kf} batch groupn against per-(region, token) rows-core calls", y, want, BAR_EXACT, Shape(row_width = int(d)))
 }
 
-[test]
+[test(description = "On the gen backend, the fused-prefill `matmul_kq_batch_groupn` over runs of 1, 4, 6 and 13 tokens per region bit-matches per-(region, token) rows-core calls, up to the 122B slice shapes")]
 def test_kq_batch_groupn(t : T?) {
     for (fmt in KQ_IDS) {
         let kf = kq_fmt_of_id(fmt, "test_kq_batch_groupn")
@@ -1400,7 +1400,7 @@ def test_kq_batch_groupn(t : T?) {
     }
 }
 
-[test]
+[test(description = "The bs Q8 quantizer writes the same quants and scales as `quantize_q8_0` byte for byte, plus per-16 sums equal to the exact integer sums of those quants")]
 def test_quantize_bs(t : T?) {
     t |> run("bs quantizer matches quantize_q8_0 byte-for-byte plus exact per-16 sums") @(t : T?) {
         let n = 4096l
@@ -1533,7 +1533,7 @@ def private check_nv4_site_scale_epilogue(t : T?; tr : Model; fdq : array<float>
     delete x
 }
 
-[test]
+[test(description = "A portable-pinned kq-native load of Qwen3-4B Q4_K_M, Qwen3.5 NVFP4 and gemma-4-26B Q4_0 places each tagged tensor at its cursor offset: plane dequant prefixes match the file dequant, and `mm_b_kq` matches the per-position GEMV")]
 def test_kq_load_layout(t : T?) {
     // End-to-end stage-2 oracle: a kquant_native load must place every tagged tensor at its
     // cursor-assigned plane offset. Plane-dequant of tensor prefixes vs the file dequant —
@@ -1634,7 +1634,7 @@ def private rows_dot_dev(w, x, y : array<float>; n, rows : int64) : float {
     return worst
 }
 
-[test]
+[test(description = "On the box's own backend, gemma-4-26B Q4_0's repacked expert gate and up regions dot the fused tensor's rows exactly on an exact Q8_K row, the tied k6 embedding matches the file, and the region-list dispatch matches per-region GEMVs")]
 def test_kq_q40_repacked_planes(t : T?) {
     // The REPACKED twin of test_kq_load_layout's q40 arm: that arm pins the portable backend, so
     // it proves cursor placement over disk-order planes only. This one runs the box's own backend,
@@ -1743,7 +1743,7 @@ def private routed_dispatch_cell(t : T?; tr : Model; x : array<float>; var xq : 
     delete offs
 }
 
-[test]
+[test(description = "Phi-3.5 Q4_K_M's fused attn_qkv splits into k5 q and k slices whose plane dequants match the file dequant within 1e-3 relative L2, the k slice at its dim x qd source offset")]
 def test_kq_fused_qkv_slices(t : T?) {
     // Fused-projection (Phi3) gate-lift oracle: attn_qkv / ffn_up split at load with dim-multiple
     // src_offs into the kq planes — a slice landing off by one superblock shows up as noise vs
@@ -1783,7 +1783,7 @@ def test_kq_fused_qkv_slices(t : T?) {
     }
 }
 
-[test]
+[test(description = "Loaded Phi-3.5 Q4_K_M, whose context runs past the original 4096, carries the file's 48 `rope_factors_long` values bit for bit as `rope_freqs`, and they differ from the short set")]
 def test_kq_phi3_longrope_factors(t : T?) {
     t |> run("phi3 LongRoPE: the long set serves a context past the original 4096") @(t : T?) {
         load_kq_native(t, "Phi-3.5-mini-instruct-Q4_K_M.gguf", true, false) $(tr; path) {
@@ -1807,7 +1807,7 @@ def test_kq_phi3_longrope_factors(t : T?) {
     }
 }
 
-[test]
+[test(description = "gemma-4-E2B Q4_K_M's per-layer token table loads on the k5 plane, not a silent q8 fallback, and its first 16 rows dequant within 1e-3 relative L2 of the file dequant")]
 def test_kq_ple_table(t : T?) {
     // E-series PLE token table (family c): gather-only tensor rides native kq planes — the tag
     // must take (a silent q8 fallback also passes parity, so pin it here) and whole-row plane
@@ -1835,7 +1835,7 @@ def test_kq_ple_table(t : T?) {
 //! the per-32 table carriers on the CPU rails (the `-local` mints of `../performance/model_specs.das`): every table site native
 //! (the census), the token table's rows through `embed_row` bit for bit the file's own dequant, the classifier rows - and the
 //! NextN eh_proj's on the hybrid - through the format router against the file rows' dot with the Q8_0 activation's dequant
-[test]
+[test(description = "On four per-32 local mints, every table site loads native, `embed_row` rows match the file dequant bit for bit (job lanes too), and classifier and eh_proj rows match the file rows' dot within f32 reassociation")]
 def test_per32_tables_cpu(t : T?) {
     for (spec in [(file = "Qwen2.5-0.5B-Instruct-Q4_0-local.gguf", fmt = KqFmt.q4032, eh = false),
                   (file = "Qwen2.5-0.5B-Instruct-Q5_0-pure-local.gguf", fmt = KqFmt.q5032, eh = false),
@@ -1967,7 +1967,7 @@ def private read_prefix(path, name : string; n : int64; var gt : int&; first : i
 }
 
 
-[test]
+[test(description = "The iq3xxs plane pair dequants a hand-packed superblock bit for bit to an independent recomputation off the disk bytes through the grid and ksigns tables")]
 def test_iq3xxs_planes(t : T?) {
     t |> run("iq3xxs planes fold the 0.25 into d and the grid, and decode exactly") @(t : T?) {
         let blkb <- build_iq3xxs_block()
@@ -1995,7 +1995,7 @@ def test_iq3xxs_planes(t : T?) {
     }
 }
 
-[test]
+[test(description = "The iq4nl plane dequant matches a codebook recomputation exactly and reads the same values on a jobque team lane as on the main thread, and q8 plane transcode and grp repack both panic")]
 def test_iq4nl_planes(t : T?) {
     t |> run("iq4nl planes split q40's bytes and decode through the codebook exactly") @(t : T?) {
         let blkb <- build_iq4nl_block()
@@ -2101,7 +2101,7 @@ def private split_scale_plane(ks : array<uint8>; ssb : int64) : array<uint8> {
     return <- out
 }
 
-[test]
+[test(description = "For the iq2, iq3 and iq4xs formats, `dequant_kq_plane_sb` over the Metal-blob split scale plane reads random-byte superblocks to exactly the row form's values")]
 def test_kq_plane_sb_metal_blob_form(t : T?) {
     t |> run("dequant_kq_plane_sb reads the Metal-blob split scale plane to the same values as the row form") <| @(t : T?) {
         // one superblock per format from random disk bytes: transcode, dequant the row form, then
@@ -2193,7 +2193,7 @@ def private vbmi_plane_gate(t : T?; kq : int) {
     t |> equal(bad, 0, "kq {kq}: every grid byte round-trips through the code plane and alphabet")
 }
 
-[test]
+[test(description = "The VBMI lattice tables are self-consistent on any box: every iq2 and iq3 grid byte round-trips through its packed code and alphabet, and `pm1_of` matches the scalar +-1 expansion of all 256 ksigns bytes")]
 def test_vbmi_lattice_tables(t : T?) {
     for (kq in [25, 24, 23, 34, 33]) {
         t |> run("vbmi code planes round-trip the kq {kq} grid") @(t : T?) {
@@ -2315,7 +2315,7 @@ def private kq_gpu_gather_iq_gate(t : T?; fmt : KqFmt) {
     delete m
 }
 
-[test]
+[test(description = "For the iq4xs, iq3 and iq2xxs codebook formats, the GPU expert gather's two-word device scale rows decode back to the plane's f16 d and sub-scales, and grp-plane gathers equal disk-order gathers byte for byte")]
 def test_kq_gpu_gather_iq(t : T?) {
     for (fmt in [KqFmt.iq4xs, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2xxs, KqFmt.iq3s4]) {
         t |> run("moe_gpu_gather_stack_kq {fmt}: the codebook format's two-word device scale rows") @(t : T?) {
@@ -2324,7 +2324,7 @@ def test_kq_gpu_gather_iq(t : T?) {
     }
 }
 
-[test]
+[test(description = "For the k3, k6 and nv4 planes, the GPU expert gather off grp-repacked planes writes byte-identical quant and scale device bytes to the gather off disk-order planes")]
 def test_kq_gpu_gather_grp(t : T?) {
     for (fmt in [3, 6, 49]) {
         t |> run("moe_gpu_gather_stack_kq kq {fmt}: disk-order and grp planes gather identically") @(t : T?) {
@@ -2374,7 +2374,7 @@ def private nv4_gather_row_misses(scale0, scale1 : float; repacked : bool = fals
     return miss
 }
 
-[test]
+[test(description = "The nv4 GPU gather writes each 20-byte device scale row as the sixteen UE4M3 codes verbatim, then its slice's site-scale f32 word, per expert and off disk or grp planes alike")]
 def test_kq_gpu_gather_nv4_row(t : T?) {
     t |> run("moe_gpu_gather_stack_kq nv4: the device scale row is the UE4M3 codes, then the slice's scale word") @(t : T?) {
         t |> equal(nv4_gather_row_misses(1.0299681e-4, 1.0299681e-4), 0, "every row carries its codes verbatim and the 0.8B's scale word")
@@ -2429,7 +2429,7 @@ def private nv4_ue4m3_code_misses() : int {
     return miss
 }
 
-[test]
+[test(description = "The live nv4 row-major GEMV decodes each of the 128 UE4M3 scale codes, subnormals and the NaN code included, to `ue4m3_half_f32`'s exact float word on a constant-nibble, all-127 row")]
 def test_nv4_rm_gemv_ue4m3_codes(t : T?) {
     t |> run("nv4q8_rm_gemv_gen: every UE4M3 scale code decodes to ue4m3_half_f32's word, the subnormals and the nan code among them") @(t : T?) {
         t |> equal(nv4_ue4m3_code_misses(), 0, "128 codes, every row's word exact")
@@ -2482,7 +2482,7 @@ def private q8_plane_row_arm(t : T?; mr, kgroup, wbias, nout, tail : int64) {
     delete row
 }
 
-[test]
+[test(description = "`q8_plane_row_f32` reads Q8_0 rows repacked at grp4 biased and grp16 unbiased, with and without a row tail, back as q x the block's f32 scale bit for bit, where an f16-rounded scale misses")]
 def test_q8_plane_row_f32(t : T?) {
     t |> run("q8_plane_row_f32: grp4 kgroup 8 bias128, 12 group rows and 15 with a tail of 3, q x the f32 scale bit for bit") @(t : T?) {
         q8_plane_row_arm(t, 4l, 8l, 128l, 12l, 0l)

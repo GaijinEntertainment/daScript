@@ -106,7 +106,7 @@ def preproc_hash_q(t : T?; kind : string; w, h : int; want_w, want_h : int; want
         Q_ALIGN, Q_MIN_TOKENS, Q_MAX_TOKENS, 0.5, 0.5, "qwen3vl-vision-oracle")
 }
 
-[test]
+[test(description = "`vision_target_size` at gemma4's 48 px alignment reproduces the mtmd oracle's target sizes including the half-away rounding tie, token counts match, and extreme aspects or huge sources stay inside the token budget without int32 wrap")]
 def test_vision_geometry(t : T?) {
     t |> run("dynamic-resolution geometry matches the oracle table") @(t : T?) {
         // (src w, h) → (target w, h): round-to-align, then β down/upscale — all six oracle cases
@@ -145,7 +145,7 @@ def test_vision_geometry(t : T?) {
     }
 }
 
-[test]
+[test(description = "Gemma4 vision preprocessing (target size, letterbox, normalize) of synthetic fixtures hashes FNV-1a 64 bit-identical to the mtmd oracle's planes across square, non-square, upscale, downscale and rounding-tie cases")]
 def test_vision_preproc_bit_exact(t : T?) {
     t |> run("square fixtures - pure downscale, no pad") @(t : T?) {
         t |> preproc_hash("gray", 640, 640, 624, 624, 0x08e308d22870c325ul)
@@ -166,7 +166,7 @@ def test_vision_preproc_bit_exact(t : T?) {
     }
 }
 
-[test]
+[test(description = "`vision_target_size` at the qwen towers' 32 px alignment and 8..4096 token budget reproduces the oracle table including the rounding tie and beta downscale, and extreme aspects stay within budget")]
 def test_vision_geometry_qwen(t : T?) {
     t |> run("qwen dynamic-resolution geometry matches the oracle table") @(t : T?) {
         t |> equal(vision_target_size(640, 640, Q_ALIGN, Q_MIN_TOKENS, Q_MAX_TOKENS), int2(640, 640))
@@ -188,7 +188,7 @@ def test_vision_geometry_qwen(t : T?) {
     }
 }
 
-[test]
+[test(description = "Qwen vision preprocessing with mean and std 0.5 hashes FNV-1a 64 bit-identical to the oracle's normalized planes for aligned, nearest-multiple, rounding-tie, small-grid and letterboxed downscale fixtures")]
 def test_vision_preproc_bit_exact_qwen(t : T?) {
     t |> run("aligned squares pass through, post-normalize planes hash exactly") @(t : T?) {
         t |> preproc_hash_q("gray", 640, 640, 640, 640, 0x0c3357530ace2325ul)
@@ -223,7 +223,7 @@ def count_byte_diffs(a, b : array<uint8>) : int {
     return n
 }
 
-[test]
+[test(description = "`vision_normalize3` applies each channel's own mean and std within 1e-6 of the formula, so swapping the channel parameters would move the values")]
 def test_vision_normalize3_channels(t : T?) {
     t |> run("per-channel CLIP normalize picks mean/std by channel, not by a shared scalar") @(t : T?) {
         var img = VisionImage(width = 2, height = 1)
@@ -243,7 +243,7 @@ def test_vision_normalize3_channels(t : T?) {
     }
 }
 
-[test]
+[test(description = "PNG bytes and a `dump_image_png` file decode back through `load_image_rgb` to the exact source RGB, `write_image_ppm` writes the exact header and bytes, and a zero-size image refuses to write")]
 def test_vision_io_roundtrip(t : T?) {
     t |> run("PNG bytes decode back to the exact RGB the writer saw") @(t : T?) {
         let src <- make_fixture("cb", 21, 13)   // odd non-square keeps stride and orientation honest
@@ -293,7 +293,7 @@ def test_vision_io_roundtrip(t : T?) {
     }
 }
 
-[test]
+[test(description = "`load_image_rgb` returns a zero-size image for empty, garbage or missing input and for anything over max_pixels decided from the header alone, and `probe_image_size` reads dimensions from a pixel-less header")]
 def test_vision_io_guards(t : T?) {
     t |> run("decode failure yields a zero-size image") @(t : T?) {
         var none : array<uint8>
@@ -344,7 +344,7 @@ def test_vision_io_guards(t : T?) {
     }
 }
 
-[test]
+[test(description = "`vision_letterbox` pads a portrait image with black corners around exact content, copies an identity-size image byte for byte, and upscales a checkerboard corner-aligned with the oracle's 138 center value")]
 def test_vision_letterbox_probes(t : T?) {
     t |> run("portrait gray letterboxes on black - oracle probe values") @(t : T?) {
         let src <- make_fixture("gray", 480, 800)

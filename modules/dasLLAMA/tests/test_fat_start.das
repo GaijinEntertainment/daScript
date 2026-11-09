@@ -41,7 +41,7 @@ def private with_temp_sidecar(t : T?; blk : block<(path : string) : void>) {
     remove(path)
 }
 
-[test]
+[test(description = "`dasllama_runtime_snapshot` carries the crown list as metal_tensor, the current (not default) q8_token_block value, the lane count as threads, and the Metal prefill constants")]
 def test_runtime_snapshot_carries_the_crowns_and_knobs(t : T?) {
     with_job_que() {
         let saved = get_q8_token_block()
@@ -58,7 +58,7 @@ def test_runtime_snapshot_carries_the_crowns_and_knobs(t : T?) {
 
 // a fat exe's first start runs before the application opens its job queue (the bench applies the
 // box profile first, with_job_que later), so the snapshot cannot ask the queue for anything
-[test]
+[test(description = "The runtime snapshot builds with no job queue open, recording threads as 0 instead of throwing and still carrying the knob values")]
 def test_the_snapshot_needs_no_job_queue(t : T?) {
     t |> run("the runtime snapshot is written with no job queue, its lanes receipt 0") @(t : T?) {
         var snap = dasllama_runtime_snapshot("")
@@ -69,7 +69,7 @@ def test_the_snapshot_needs_no_job_queue(t : T?) {
     }
 }
 
-[test]
+[test(description = "The first-start race writes a redirected sidecar whose runtime section names the crown list and the split-K knees with an empty kernels section, and the checked box-profile apply then reads it back")]
 def test_first_start_race_writes_the_section_the_apply_reads(t : T?) {
     with_job_que() {
         with_temp_sidecar(t) $(path) {
@@ -96,7 +96,7 @@ def test_first_start_race_writes_the_section_the_apply_reads(t : T?) {
 
 //! The split-K knee race crowns this box's knees: on a Metal box each lands on its race's ladder and goes live in the knobs the
 //! snapshot records; without one it races nothing and the knobs stand (ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-split-k)
-[test]
+[test(description = "On a Metal box the split-K knee race lands every knee, the n32 rows and the dev-W grid floor on a rung of its own race or off, and the snapshot records the raced K-quant knees; with no device every knee stands")]
 def test_the_knee_race_sets_the_split_knees(t : T?) {
     let q8 = metal_split_k_tgs()
     let kq = metal_split_k_tgs_kq()
@@ -149,7 +149,7 @@ def private vk_cm2_device() : bool {
 //! The Vulkan short window's knee race (`dasllama_vulkan_knee_race`, ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split): on a device
 //! with the cm2 s column the knee lands on a rung of its race, or 0, and goes live in the knob the snapshot records; on any other
 //! device, or with the GPU tier unasked, the knob stands. Which rung wins is the race's verdict, not this cell's.
-[test]
+[test(description = "On a Vulkan device with the cm2 s column the short-window knee race overwrites a marker knob with a rung of its race or 0, recorded in the snapshot; on any other device the marker stands")]
 def test_the_vulkan_knee_race_sets_the_knee(t : T?) {
     let saved = vk_split_k_tgs()
     let marker = 77l   // a knob no rung offers: the race either overwrites it or leaves it standing
@@ -174,7 +174,7 @@ def test_the_vulkan_knee_race_sets_the_knee(t : T?) {
 //! home's ask on a device with the q8 s column the knee lands on a rung of its race, or 0, goes live in the knob the snapshot
 //! records, and a second race allocates nothing the first left - every width's planes came back through the rung loop's close;
 //! with the home unasked or no device, the knob stands. Which rung wins is the race's verdict, not this cell's.
-[test]
+[test(description = "Under the CUDA home the knee race lands the knob on a rung of its race or 0, recorded in the snapshot, and a second race leaves device bytes allocated unchanged; with no CUDA device a marker knob stands")]
 def test_the_cuda_knee_race_sets_the_knee(t : T?) {
     let saved = cud_split_k_tgs()
     let marker = 77l   // a knob no rung offers: the race either overwrites it or leaves it standing
@@ -210,7 +210,7 @@ def private fake_race() : bool {
     return tune_sidecar_merge(noKernels, runtime)
 }
 
-[test]
+[test(description = "The box-profile apply fires an installed race hook exactly once for an absent sidecar, reads the knob the race minted, and never re-races once the box's own section exists")]
 def test_the_apply_fires_the_race_hook_only_for_a_missing_section(t : T?) {
     with_temp_sidecar(t) $(_path) {
         let savedBlock = get_q8_token_block()
@@ -231,7 +231,7 @@ def test_the_apply_fires_the_race_hook_only_for_a_missing_section(t : T?) {
 
 // restoring a null previous hook must disarm the race, or the next apply on a missing section
 // would invoke a null function
-[test]
+[test(description = "Restoring a null race hook after a fake one disarms the race: the apply on an absent section declines with absent instead of invoking a null function")]
 def test_restoring_a_null_hook_disarms_the_race(t : T?) {
     t |> run("a null hook restored after a fake one leaves the apply declining, never invoking") @(t : T?) {
         let orig = set_runtime_race_hook(@@fake_race)
@@ -245,7 +245,7 @@ def test_restoring_a_null_hook_disarms_the_race(t : T?) {
     }
 }
 
-[test]
+[test(description = "Outside a fat exe `dasllama_fat_first_start` declines and writes no sidecar")]
 def test_the_fat_hook_is_inert_outside_a_fat_exe(t : T?) {
     with_temp_sidecar(t) $(path) {
         t |> success(!dasllama_fat_first_start(), "this process is not a fat exe, so the fat hook declines")
@@ -265,7 +265,7 @@ def private fake_place() {
 
 //! the per-box runtime file: its path under the home's tune/, what makes it valid for this run (this box, these kernels, a
 //! runtime section), the race writing one the apply reads, and the hook standing down under an explicit manifest
-[test]
+[test(description = "The per-box runtime file sits at a stable box-keyed path under tune, is valid only for this box, these kernels and a runtime section, is raced and applied when no manifest is set, and stands down under a manifest or the reference policy")]
 def test_box_runtime_file(t : T?) {
     t |> run("the per-box path sits under tune/ with a key that is this box's and stable") @(t : T?) {
         let p = dasllama_box_runtime_path_from("H/.dasllama")
@@ -334,7 +334,7 @@ def test_box_runtime_file(t : T?) {
     }
 }
 
-[test]
+[test(description = "The fat sidecar lives under the per-user tune directory, is adopted from beside the exe once and never overwritten, its placement hook runs before the default apply reads the path, and only a chosen manifest counts as explicit")]
 def test_fat_sidecar_lives_per_user(t : T?) {
     t |> run("the per-user path keeps the exe's sidecar name under tune/") @(t : T?) {
         t |> equal(dasllama_fat_sidecar_path("H/.dasllama", "/opt/dasllama/dasllama-server.tune.json"),
@@ -413,7 +413,7 @@ def test_fat_sidecar_lives_per_user(t : T?) {
 //! The rule both GPU homes serve and the pricing their knee races share (`dasllama_gpu_knee`): the split engages at half the
 //! knee, doubles to eight while the grid fits, keeps each share whole chunks - even, or the last one short - and the pickers
 //! crown the cheapest priced knob or cutoff, each standing down under a 1% gain
-[test]
+[test(description = "The shared GPU split-K rule engages at half the knee, doubles ways to eight while the grid fits, keeps shares in whole chunks, and the knee and cutoff pickers crown the cheapest priced rung, standing down under a 1 percent gain")]
 def test_the_shared_knee_rule_and_pricing(t : T?) {
     let metal = SplitKnee(tgs = 256l, min_k = 128l)
     t |> success(split_k_on(128l, 2048l, metal) && !split_k_on(129l, 2048l, metal), "the split engages at half the knee")

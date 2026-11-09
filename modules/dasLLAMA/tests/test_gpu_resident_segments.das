@@ -43,8 +43,7 @@ let private TAIL_B = 31l
 let private SEG_WINDOW = 512l   //! the file's prompt window: two LONG_TAILs run past it, so the segmented call runs two windows, the second holding B's rows alone
 let private LONG_TAIL = 300l
 
-[init]
-def private window_intent() {
+def private pin_window_rows() {
     set_pf_window_rows_pin(SEG_WINDOW)   //! before every load of the file: the plan and the window chain read it
 }
 let private STEPS = 8l
@@ -419,13 +418,15 @@ def private segments_cells(t : T?; file : string) {
     delete tr
 }
 
-[test]
+[test(description = "On Llama-3.2-1B Q8_0 two sessions' tails as one segmented window, within and across windows, hold the split bar of their solo windows; ownership binds owners first and the decline arms fall back unsegmented")]
 def test_gpu_resident_segments_llama_1b_q8(t : T?) {
+    pin_window_rows()
     segments_cells(t, "Llama-3.2-1B-Instruct-Q8_0.gguf")
 }
 
-[test]
+[test(description = "On Llama-3.2-1B Q4_K_M two sessions' tails as one segmented window, within and across windows, hold the split bar of their solo windows; ownership binds owners first and the decline arms fall back unsegmented")]
 def test_gpu_resident_segments_llama_1b_k(t : T?) {
+    pin_window_rows()
     segments_cells(t, "Llama-3.2-1B-Instruct-Q4_K_M.gguf")
 }
 
@@ -530,26 +531,30 @@ def private recurrent_segments_cells(t : T?; file : string) {
 
 let private MOE_SEG_BAR_REL = 0.20   //! the routed chain's bar (`_moe_resident.das`' reading)
 
-[test]
+[test(description = "On the Qwen3.5-0.8B hybrid segmented windows - a tail under the conv taps, tails past one window - hold the split bar of solo windows, and checkpoint stops captured inside one call adopt and continue at their rows")]
 def test_gpu_resident_segments_hybrid(t : T?) {
+    pin_window_rows()
     recurrent_segments_cells(t, "Qwen3.5-0.8B-Q8_0.gguf")
 }
 
-[test]
+[test(description = "On the NextN-headed Qwen3.5-0.8B-MTP hybrid segmented windows hold the split bar of solo windows, and checkpoint stops captured inside one call adopt and continue at their rows")]
 def test_gpu_resident_segments_hybrid_mtp(t : T?) {
+    pin_window_rows()
     recurrent_segments_cells(t, "Qwen3.5-0.8B-MTP-Q8_0.gguf")
 }
 
-[test]
+[test(description = "On the Qwen3.6-35B hybrid MoE segmented windows with the routed block over every row hold the routed bar of solo windows, and checkpoint stops captured inside one call adopt and continue at their rows")]
 def test_gpu_resident_segments_hybrid_moe(t : T?) {
+    pin_window_rows()
     recurrent_segments_cells(t, "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf")   //! large tier: the routed block over every row of the window
 }
 
 //! the segmented window on the E-series (gemma-4-E2B Q8_0): every segment's side rows gathered off its ids and finished on the
 //! device in the one window, at the gemma rig's bar (`_gemma_resident.das`: the CPU chain's own two paths sit 6-10% of the max logit
 //! apart on this family, and two window splits round apart the same way)
-[test]
+[test(description = "On gemma-4-E2B each segment's side rows gather off its ids in one segmented window within 16% of solo windows, and with the token-table gate unseated host-embedded rows decline the segmented form")]
 def test_gpu_resident_segments_gemma4_e2b(t : T?) {
+    pin_window_rows()
     let file = "gemma-4-E2B-it-Q8_0.gguf"
     let path = path_join(models_dir(), file)
     return if (!family_on(t, "gemma4e") || !resident_ready(t, path))

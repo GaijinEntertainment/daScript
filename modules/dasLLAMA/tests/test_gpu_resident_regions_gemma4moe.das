@@ -17,22 +17,22 @@ require _resident_regions
 // without the file under models_dir(); the split-forms cell skips under DASLLAMA_CUDA=1 - the fuse knob is the Vulkan driver's.
 let private REGIONS_FILE = "gemma-4-26B-A4B-it-Q4_K_M.gguf"
 
-[test]
+[test(description = "On gemma-4-26B-A4B with the fused one-row forms off, the N-row command's routed block batches two sessions within the wide bar of each alone, the one-token-off control past it, with no routed down folded")]
 def test_regions_batched_steps_g4moe(t : T?) {
     cell_regions_batched_steps_split_forms(t, REGIONS_FILE, LogitsBar.ctrl_bar)
 }
 
-[test]
+[test(description = "On gemma-4-26B-A4B the batched rows fold the per-32 routed down under the routing weights as the fused one-row command does, within the wide bar, on the summed down stamps with no per-slot leaf")]
 def test_regions_batched_down_fold_g4moe(t : T?) {
     cell_regions_batched_down_fold(t, REGIONS_FILE, LogitsBar.ctrl_bar)
 }
 
-[test]
+[test(description = "On gemma-4-26B-A4B the batched rows gather their token rows on the device off their ids, logits bit for bit those of a load whose host embeds every row, the gather-off counters the control")]
 def test_regions_batched_embed_gather_g4moe(t : T?) {
     cell_regions_batched_embed_gather(t, REGIONS_FILE)
 }
 
-[test]
+[test(description = "On gemma-4-26B-A4B a batched step over two rows, a one-row step, then batched steps over three record new row counts on the N-row command, every row within the wide bar of its session alone")]
 def test_regions_batched_widen_g4moe(t : T?) {
     cell_regions_batched_widen(t, REGIONS_FILE, LogitsBar.ctrl_bar, split_forms = true)
 }

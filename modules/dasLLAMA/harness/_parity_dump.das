@@ -5,7 +5,7 @@ options _dasllama_internal = true
 // The parity dump: one arm's forced-feed run written to a file - the prompt and feed ids, the routing tape the arm took or
 // replayed, and every row's logits - so two arms that cannot share a process (a model past the box with both arms up, a
 // CPU reference that runs once and serves every device run after it) compare as files. `parity_dump.das` is the tool,
-// `tests/test_parity_dump.das` the round trip.
+// `tests/test_parity.das` the round trip.
 
 require dasllama/dasllama_common
 require dasllama/dasllama_moe

@@ -26,7 +26,7 @@ require ?vulkan dasllama/dasllama_vulkan_common   // g_gpu, vk_kernel_coverage -
 // another mirror codec over the one they ask (DASLLAMA_VK_KV32=1).
 let private GEMMA4E_FILE = GemmaFile(file = "gemma-4-E2B-it-Q8_0.gguf", arm = "g4e")
 
-[test]
+[test(description = "On gemma-4-E2B Q8_0 the resident driver's logits sit within the bar of the CPU chain over forty tokens, its perplexity within the CPU ratio on one and two windows, and the window chain agrees with the token command")]
 def test_gpu_resident_gemma4_e2b(t : T?) {
     t |> run("gemma-4-E2B Q8_0: resident prefill + decode - the per-layer-embedding branch, the shared-KV layers, two FFN widths - vs the CPU chain, forty tokens") @(t : T?) {
         gemma_forced_feed(t, 40l, GEMMA4E_FILE)
@@ -43,7 +43,7 @@ def test_gpu_resident_gemma4_e2b(t : T?) {
     }
 }
 
-[test]
+[test(description = "On gemma-4-E2B with the shared-KV layers storing no rows, a q8_0 K/V mirror holds the CPU chain's logits over forty tokens and a tq4 mirror holds its perplexity within the ratio")]
 def test_gpu_resident_gemma4_e2b_block_codecs(t : T?) {
     t |> run("gemma-4-E2B Q8_0: a q8_0 K/V mirror - the shared-KV layers store no row of their own - vs the CPU chain, forty tokens") @(t : T?) {
         with_gpu_kv_dtype(t, KVDtype.q8_0) {
@@ -62,7 +62,7 @@ def test_gpu_resident_gemma4_e2b_block_codecs(t : T?) {
 //! the plan seats the table under its tag, and the forced feed's prefill gathers the side rows off it against the CPU chain on
 //! the format's gather leaf (`gather`: its census count rises; the token table the mint requantized with it rides the same leaf),
 //! every other format's leaf unmoved - on the Q8_0 file every one of them, the leaves' control
-[test]
+[test(description = "A gemma-4-E2B per-layer-embedding table in Q5_0, Q5_1, Q4_0, Q6_K or IQ4_XS keeps its tag, seats on the device, and the prefill gathers its rows on that format's leaf alone; the Q8_0 file moves no leaf")]
 def test_gpu_resident_gemma4_e2b_ple_tables(t : T?) {
     let leaves = fixed_array("q5032_emb_cls_spv", "q51_emb_cls_spv", "kq_emb_q40_cls_spv", "kq_emb_k6_cls_spv", "kq_emb_iq4xs_cls_spv")
     for (spec in [(file = "gemma-4-E2B-it-Q8_0.gguf", fmt = KqFmt.q8, gather = ""),
@@ -104,7 +104,7 @@ def test_gpu_resident_gemma4_e2b_ple_tables(t : T?) {
 //! GEMV (`gemv`: their census counts rise over the fed steps - on the mints no other plane carries the format) with the f32 classes and
 //! the staged tile undispatched (the control); the Q8_0 file (arm `g4e-kq-q8`), whose every plane is Q8_0, dispatches none of the three formats'
 //! GEMVs - their counters' control
-[test]
+[test(description = "The gemma-4-E2B per-layer gate and projection planes run in their file format against the CPU chain: F32 planes on the f32 act and the staged or scalar f32 tile, quantized planes on their format's GEMV, Q8_0 on none")]
 def test_gpu_resident_gemma4_e2b_ple_planes(t : T?) {
     let gemvs = fixed_array("kq_gemv_q40", "kq_gemv_k6", "q5032_gemv")
     for (spec in [(file = "gemma-4-E2B-it-Q4_K_M.gguf", f32 = true, arm = "g4e-kq", gemv = "", tile = ""),
@@ -202,7 +202,7 @@ def private format_gemv_count(gemv : string) : int64 => census("{gemv}_cls_spv")
 //! projected under the CPU's 1/sqrt(dim) and finished, read back against the CPU pre-step's row of the same token at 1e-4 of its
 //! largest - the projection without the 1/sqrt(dim) reads the eps alone apart, 1e-3 - with another token's CPU row the control;
 //! then a load with the gather off, whose step gathers no row off its id (the gather counter's control)
-[test]
+[test(description = "The gemma-4-E2B decode step builds its per-layer side row on the device off the gathered token id, within 1e-4 of the CPU pre-step's row with no CPU row built; with the gather off no row gathers")]
 def test_gpu_resident_gemma4_e2b_ple_pre_step(t : T?) {
     t |> run("gemma-4-E2B Q8_0: the step's side row built on the device is the CPU pre-step's row") @(t : T?) {
         with_gpu_resident_embed(1) {   //! the step gathers its row off its token id
@@ -249,7 +249,7 @@ def test_gpu_resident_gemma4_e2b_ple_pre_step(t : T?) {
 
 //! the greedy chain on the E-series (arm `g4e-chain`): a chained step's side row gathers off the pick the device lands in the id
 //! plane, so the chained walk is bit for bit the plain walk (`greedy_chain_cell`)
-[test]
+[test(description = "On gemma-4-E2B the greedy chain, whose steps gather the side row off the device-picked id, walks bit for bit the same tokens as the plain greedy walk")]
 def test_gpu_resident_gemma4_e2b_greedy_chain(t : T?) {
     t |> run("gemma-4-E2B Q8_0: the greedy chain over the side rows, bit for bit the plain walk") @(t : T?) {
         return if (!arm_on(t, "g4e-chain"))
@@ -260,7 +260,7 @@ def test_gpu_resident_gemma4_e2b_greedy_chain(t : T?) {
 //! the tied F16 token table (arm `g4e-f16`, the `-local` mint of `../performance/model_specs.das`): no device plane carries the
 //! classifier, so the whole-model driver declines the model by name and the per-op rails take it - never a q8 plane seated where no
 //! bytes sit; the PLE table loads as a q8 transcode (the stated converted copy)
-[test]
+[test(description = "A gemma-4-E2B with a tied F16 token table carries no q8 or K-quant classifier plane, so the whole-model driver declines it naming the tied classifier, and the PLE table loads as a q8 transcode")]
 def test_gpu_resident_gemma4_e2b_tied_f16(t : T?) {
     t |> run("gemma-4-E2B Q8_0 with an F16 token table: the whole-model driver declines the tied classifier by name") @(t : T?) {
         return if (!arm_on(t, "g4e-f16"))
@@ -278,7 +278,7 @@ def test_gpu_resident_gemma4_e2b_tied_f16(t : T?) {
 //! a short tail on the E-series peels through the token commands, each row's side input finished on the device: after a 40-row
 //! opening, tails of 1, 2 and 5 rows (one peel counted each) and four fed steps within the split bar of the same tail stepped a row at
 //! a time on a second session, the row one step off the control
-[test]
+[test(description = "On gemma-4-E2B tails of 1, 2 and 5 rows after a 40-row opening peel as one prefill call each, landing within the split bar of the same tail stepped a row at a time, one-step-off row the control")]
 def test_gpu_resident_gemma4_e2b_short_window(t : T?) {
     t |> run("gemma-4-E2B Q8_0: short tails peel through the token commands, the side rows riding them") @(t : T?) {
         with_gemma_rig(t, GEMMA4E_FILE) $(tr) {
@@ -289,7 +289,7 @@ def test_gpu_resident_gemma4_e2b_short_window(t : T?) {
 
 //! the sliding layers' rings against the flat mirror (`ring_vs_flat`): 1300 prose ids past the 512-position window - three windows of
 //! the chain - and eight steps, bit for bit, on the f16 mirror and both block codecs (their f16 shadow reads each position's slot)
-[test]
+[test(description = "The gemma-4-E2B sliding layers' rings match the flat mirror bit for bit over 1300 ids and eight steps on f16, q8_0 and tq4 mirrors, and the load log names rings, flat mirror and host embed under their pins")]
 def test_gpu_resident_gemma4_e2b_ring(t : T?) {
     for (kv in fixed_array(KVDtype.f16, KVDtype.q8_0, KVDtype.tq4)) {
         t |> run("gemma-4-E2B Q8_0: the sliding layers' rings against every row kept, a {kv} mirror, 1300 ids and eight steps") @(t : T?) {

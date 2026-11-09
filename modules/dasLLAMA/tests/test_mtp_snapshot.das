@@ -20,7 +20,7 @@ def private big_state(var a : array<float>; n : int64; fill : float) {
     }
 }
 
-[test]
+[test(description = "A first `mtp_state_snapshot` of a 151 MB deltanet state past the unreserved-growth guard holds every float, and `mtp_state_restore` puts back every lane span, the conv state, the position, the n-gram window and the PLE ring row")]
 def test_first_snapshot_of_a_large_recurrent_state(t : T?) {
     var s : Session
     let ns = 48l * 32l * 128l * 192l   // 37748736 floats = 151 MB, the Qwen3.8-27B deltanet state
@@ -63,7 +63,7 @@ def test_first_snapshot_of_a_large_recurrent_state(t : T?) {
 
 // The per-position accept telemetry both round drivers feed: hit[i] / try[i] over the rounds
 // since the last reset, one entry per drafted depth, silent past the deepest draft.
-[test]
+[test(description = "`mtp_pos_report` prints each drafted depth's hits over tries since the reset (2/3, 1/2, 0/1 for three noted rounds), omits a depth never drafted, and is empty after `mtp_pos_reset`")]
 def test_per_position_accept_telemetry(t : T?) {
     mtp_pos_reset()
     mtp_pos_note(3l, 2l)
@@ -81,7 +81,7 @@ def test_per_position_accept_telemetry(t : T?) {
 
 // Why neither home drafts a round (`mtp_round_cold_why`), one reason at a time on a Session shell over a 64-position context:
 // each call fails one arm with every other arm's input held ready, and "" where the round drafts.
-[test]
+[test(description = "`mtp_round_cold_why` returns empty for a warm round and names each single failing arm - position 0, a hidden row carried for another position, a row narrower than the drafter, a depth running past the context - with the host predicate agreeing")]
 def test_mtp_round_cold_why(t : T?) {
     var m = Model()
     m.config.seq_len = 64l
@@ -103,7 +103,7 @@ def private window_tokens() : array<int64> => <- [for (i in range64(16l)); 500l 
 
 // The checkpoint capture's contract on a bare Session (`dn_capture_begin` ahead of a window, `dn_capture_check` after it):
 // the refusals panic by name, the well-formed stops open one unfilled snapshot each.
-[test]
+[test(description = "`dn_capture_begin` opens one unfilled state-sized snapshot per ascending stop inside the window and panics by name on a model with no recurrent state or a stop outside the window or out of order, and `dn_capture_check` refuses unfilled captures")]
 def test_dn_capture_contract(t : T?) {
     t |> run("stops inside the window, ascending, open one unfilled snapshot each at its position") @(t : T?) {
         var toks <- window_tokens()

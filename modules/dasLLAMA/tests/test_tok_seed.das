@@ -13,7 +13,7 @@ require _scratch_dir   // scratch_file: the corpus fixtures' files
 // NOT gated here: an empty result PANICS by design (an empty/missing corpus is a bench-config
 // error), so an empty file and a header-only file have no assertable return.
 
-[test]
+[test(description = "`tok_read_seed` strips one or more leading '#' provenance lines, a bare '#' line included, and returns the remaining corpus body byte for byte")]
 def test_tok_seed_headers(t : T?) {
     t |> run("two '#' header lines come off, the body survives whole") @(t : T?) {
         let p = scratch_file("two_headers.txt",
@@ -30,7 +30,7 @@ def test_tok_seed_headers(t : T?) {
     }
 }
 
-[test]
+[test(description = "`tok_read_seed` returns a header-less corpus unchanged, with or without a trailing newline")]
 def test_tok_seed_body_only(t : T?) {
     t |> run("a body-only corpus passes through unchanged") @(t : T?) {
         let p = scratch_file("body_only.txt", "no headers here\njust corpus bytes\n")
@@ -42,7 +42,7 @@ def test_tok_seed_body_only(t : T?) {
     }
 }
 
-[test]
+[test(description = "`flat_row_plen` keeps the tg-real row's context cap as the flat rows' prompt length unless the flat prompt is longer, and `rows_ctx_need` takes the max of flat and batched-stream needs, pinned to exact values")]
 def test_flat_row_plen(t : T?) {
     t |> run("the flat session's prompt rows never shrink the context under the tg-real row's prompts") @(t : T?) {
         // -p 0 -n 32 beside a real row whose longest prompt capped the context at 270 + 32 + 8
@@ -59,7 +59,7 @@ def test_flat_row_plen(t : T?) {
     }
 }
 
-[test]
+[test(description = "`tok_read_seed` stops the header walk at the first body line, so a mid-line '#' and a later '#' line both stay as corpus bytes")]
 def test_tok_seed_hash_in_body(t : T?) {
     t |> run("a '#' MID-LINE in the body is corpus, not a header") @(t : T?) {
         let p = scratch_file("mid_line_hash.txt", "# header\nlet x = 1 # not a header\ntail\n")
@@ -71,7 +71,7 @@ def test_tok_seed_hash_in_body(t : T?) {
     }
 }
 
-[test]
+[test(description = "`tok_read_seed` keeps a final '#' header line that has no trailing newline instead of stripping it, alone or after stripped headers")]
 def test_tok_seed_unterminated_header(t : T?) {
     t |> run("a '#' header with NO trailing newline is kept, not stripped") @(t : T?) {
         // the walk needs a newline to know where the header ENDS; with none it leaves the text
@@ -85,7 +85,7 @@ def test_tok_seed_unterminated_header(t : T?) {
     }
 }
 
-[test]
+[test(description = "`mtp_ab_drafter_line` formats rounds, joint verifies, per-round draft and verify ms and cold total to an exact string, and reads 0 per round rather than dividing by zero when there are no rounds")]
 def test_mtp_ab_drafter_line(t : T?) {
     t |> run("--mtp-ab's drafter line: the rounds, the joint verifies, the draft and verify a round, the cold steps' total") @(t : T?) {
         t |> equal(mtp_ab_drafter_line(MtpAssistantStats(rounds = 4l, joint = 1l, draft_us = 8000l, verify_us = 2000l, cold_us = 1500l)),
@@ -96,7 +96,7 @@ def test_mtp_ab_drafter_line(t : T?) {
     }
 }
 
-[test]
+[test(description = "`mtp_ab_drafter_attach` refuses with no sidecar beside the trunk and also when the facade resolves a planted sidecar no backend can load, leaving no drafter attached")]
 def test_mtp_ab_drafter_attach(t : T?) {
     t |> run("--mtp-ab on a headless model attaches the drafter beside it through the facade, and refuses where none attaches") @(t : T?) {
         var shell = Model()
@@ -111,7 +111,7 @@ def test_mtp_ab_drafter_attach(t : T?) {
 }
 
 //! `--ab-reverse` runs the A/B's arms the other way round: arm 0 on and arm 1 off; without it arm 0 is off and arm 1 on
-[test]
+[test(description = "`ab_arm_on` turns arm 1 on and arm 0 off by default, and the reverse under --ab-reverse, all four cases pinned")]
 def test_ab_arm_on(t : T?) {
     t |> run("the A/B arm predicate under --ab-reverse") @(t : T?) {
         t |> equal(ab_arm_on(false, 0), false, "arm 0 is off")

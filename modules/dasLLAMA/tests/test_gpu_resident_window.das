@@ -4,7 +4,7 @@ options persistent_heap
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require dasllama/dasllama_transformer
+require dasllama/dasllama_transformer   // the umbrella fires each arch [init] registration (qwen35): the load needs it
 require dasllama/dasllama
 require daslib/jobque_boost
 require daslib/fio
@@ -12,6 +12,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_env
+require ?vulkan dasllama/dasllama_vulkan_common
 require _model_tier
 require _resident_feed
 require _resident_regions
@@ -65,12 +66,15 @@ def private adopted_row(t : T?; tr : Model; prompt, first, rest : array<int64>) 
     return <- adopted
 }
 
-[test]
+[test(description = "On Qwen3.5-0.8B under the whole-model driver, a prompt's second half continued in place and from a checkpoint a fresh session adopts lands within 5 percent of max logit of the whole prompt in one window, while the prompt one token short lands past it")]
 def test_gpu_resident_continuation_hybrid(t : T?) {
     t |> run("Qwen3.5-0.8B: a prompt continued from its position on the device, and from an adopted checkpoint, against one window") @(t : T?) {
         let path = path_join(models_dir(), HYBRID)
         if (!continuation_ready(t, path)) return
+        let levers = resident_levers()
+        set_gpu_ctx_max(REGIONS_RIG_CTX)   //! the rig's mirror context for the load; the levers go back after
         var tr <- load_resident(path)
+        restore_resident_levers(levers)
         t |> success(tr.config.recr_mask != 0ul, "the carrier is the hybrid with the recurrent state a continuation carries")
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on it (the load log names any decline)")
         with_dasllama_jobque_() {
@@ -98,7 +102,7 @@ def test_gpu_resident_continuation_hybrid(t : T?) {
     }
 }
 
-[test]
+[test(description = "On Qwen3.8-Flash-Next under the whole-model driver, continuations in place and from an adopted checkpoint stay within the wide routed bar of the whole prompt, every prefill on the device, and the n-gram conv ring matches the CPU chain's within 2 percent while a zeroed ring misses")]
 def test_gpu_resident_continuation_hc(t : T?) {
     t |> run("Qwen3.8-Flash-Next: a prompt continued from its position on the device, and from an adopted checkpoint, against one window; the n-gram ring against the CPU chain's") @(t : T?) {
         let path = path_join(models_dir(), FN_TRUNK)
@@ -154,5 +158,82 @@ def test_gpu_resident_continuation_hc(t : T?) {
             delete prompt
         }
         delete tr
+    }
+}
+
+// A long prompt through the whole-model driver on a recurrent model: the window chain cuts a recurrent model's window at
+// DN_WINDOW rows, the rows the deltanet smalls planes and the scan workspace hold, where a window past them copied its rows
+// past the planes into the next. One cell reads the wide window the driver picks first, which is DN_WINDOW itself and runs
+// uncut; the other a window pinned past it, which the cut bounds; the prompt passes DN_WINDOW, so the cut has rows to cut.
+// The pin is read back as the witness that the driver saw it, and the window
+// chain's prefill count that the device served the prompt. Skips: no file, no armed tier.
+
+[init]
+def private allow_cpu_prefill_intent() {
+    allow_cpu_prefill()   // the CPU reference and its control prefill on the CPU by design
+}
+
+let private PROMPT = 5000l        //! past DN_WINDOW: the cut has rows to cut
+let private PAST_WINDOW = 5120l   //! past DN_WINDOW: two deltanet chunks a window were the cap absent (the cell asserts it passes)
+let private BAR_REL = 0.10   //! the device chain against the CPU's on a plain hybrid: the arms read 3%; a window past the planes read 30-72%
+
+//! the `PROMPT`-token prompt at a `window`-row prompt window: the device's last row against the CPU chain's, the one-token-short control past the bar
+def private long_prompt_cell(t : T?; window : int64) {
+    let path = path_join(models_dir(), HYBRID)
+    if (!resident_ready(t, path)) return
+    let pin_was = pf_window_rows_pin()
+    set_pf_window_rows_pin(window)
+    t |> equal(pf_window_rows(), window, "the pin reached the driver's window")
+    let levers = resident_levers()
+    set_gpu_ctx_max(REGIONS_RIG_CTX)   //! the rig's mirror context for the load; the levers (the window pin among them) go back after it
+    var tr <- load_resident(path)
+    restore_resident_levers(levers)
+    t |> success(tr.config.recr_mask != 0ul, "the carrier is the hybrid whose recurrent window the cap bounds")
+    t |> success(moe_gpu_resident_active(), "the whole-model driver armed on it (the load log names any decline)")
+    with_dasllama_jobque_() {
+        var prompt <- resident_prompt(PROMPT)
+        var control_prompt <- [for (i in range64(PROMPT - 1l)); prompt[i]]
+        let served0 = gpu_resident_prefills_()
+        var sd <- create_session(tr, mirror_kv_dtype())
+        forward_prefill(tr, sd, prompt, PROMPT, 0l)
+        t |> equal(gpu_resident_prefills_(), served0 + 1l, "the window chain served the prompt")
+        served_every_call(t)
+        var dev <- [for (x in sd.logits); x]
+        delete sd
+        moe_gpu_drop_model()
+        var sh <- create_session(tr, mirror_kv_dtype())
+        forward_prefill(tr, sh, prompt, PROMPT, 0l)
+        var cpu <- [for (x in sh.logits); x]
+        delete sh
+        var sx <- create_session(tr, mirror_kv_dtype())
+        forward_prefill(tr, sx, control_prompt, PROMPT - 1l, 0l)
+        var control <- [for (x in sx.logits); x]
+        delete sx
+        let bar = row_bar(cpu, BAR_REL)
+        control_past(t, "the prompt's last row", cpu, control, bar)
+        row_within_say(t, tr, "the device's last row at a {window}-row window against the CPU chain", dev, cpu, bar)
+        delete control
+        delete cpu
+        delete dev
+        delete control_prompt
+        delete prompt
+    }
+    delete tr
+    set_pf_window_rows_pin(pin_was)
+}
+
+[test(description = "A 5000-token prompt on the Qwen3.5-0.8B hybrid lands its last row within 10% of the CPU chain's, at the wide window equal to DN_WINDOW and at a 5120-row window the recurrent cut bounds, the one-token-short prompt the control")]
+def test_gpu_resident_long_window(t0 : T?) {
+    t0 |> run("Qwen3.5-0.8B: a {PROMPT}-token prompt at the wide prompt window against the CPU chain - the recurrent window uncut at DN_WINDOW") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            t |> equal(PF_ROWS_WIDE, DN_WINDOW, "the wide window the driver picks first is one deltanet chunk ({PF_ROWS_WIDE} rows, DN_WINDOW {DN_WINDOW}): the window runs uncut")
+        }
+        long_prompt_cell(t, PF_ROWS_WIDE)   // DN_WINDOW's twin the vulkan-free build can name; the arm above pins them equal
+    }
+    t0 |> run("Qwen3.5-0.8B: a {PROMPT}-token prompt at a {PAST_WINDOW}-row prompt window against the CPU chain - the recurrent window cut at DN_WINDOW") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            t |> success(PAST_WINDOW > DN_WINDOW, "the window asked passes DN_WINDOW ({PAST_WINDOW} over {DN_WINDOW}): the cut is what the cell reads")
+        }
+        long_prompt_cell(t, PAST_WINDOW)
     }
 }

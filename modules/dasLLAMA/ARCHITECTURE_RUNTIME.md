@@ -132,7 +132,7 @@ on the arms that hit the CPU-prefill guard - `set_metal_mode` with a runtime val
 nothing, since `MetalMode.off` leaves the guard armed - and logs, once, which configuration it
 ended on. The guard panics, and a panic takes every live stream down: an undeclared root serves
 normally until its first long prompt. Both halves of root discipline are enforced by
-`tests/test_program_roots.das`.
+`test_program_roots` in `tests/test_facade_docs.das`.
 
 ### Environment knobs {#env-knobs}
 

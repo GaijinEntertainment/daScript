@@ -22,7 +22,7 @@ require ../../../examples/dasLLAMA/parrot/take.das
 // for about half a minute and plays the say through the mixer, so a box without a window server
 // skips; --clip stands in for the microphone, which the run never opens.
 
-[test]
+[test(description = "Parrot's 24 to 16 kHz VAD resampler yields 16000 linearly interpolated samples per second, a stream fed in drains of any size is sample-identical to one fed at once, and `vad_to_mic` maps indices back by 3/2")]
 def test_vad_resampler(t : T?) {
     t |> run("24 kHz to 16 kHz over the whole take: fed in drains of any size, the stream is the one fed at once") @(t : T?) {
         var take : array<float>
@@ -67,7 +67,7 @@ def test_vad_resampler(t : T?) {
     }
 }
 
-[test]
+[test(description = "A take ends exactly at two seconds of post-speech quiet, at the cap, or after six silent device seconds, and `clip_window` pads speech by a quarter second clamped to the take and never longer than the cap")]
 def test_take_rules(t : T?) {
     t |> run("the take ends two seconds after speech, at the cap, or when the device gave nothing for long") @(t : T?) {
         t |> success(!take_ends(false, false, 100.0, 10.0, 0.0), "no speech yet, nothing ends it")
@@ -98,7 +98,7 @@ def test_take_rules(t : T?) {
     }
 }
 
-[test]
+[test(description = "Parrot's panels: the silence countdown shows seconds left only after speech and never below zero, waveform min/max columns grown in drains equal those built at once, and a say reads out only when every chunk played")]
 def test_panels(t : T?) {
     t |> run("the silence countdown: nothing before speech or during it, the seconds left after") @(t : T?) {
         t |> equal(countdown_left(false, false, 0.5), 0.0, "no speech yet")
@@ -181,7 +181,7 @@ def private read_out_figures(out : string) : tuple<speech : float; playback : fl
     return (speech = 0.0, playback = 0.0)
 }
 
-[test]
+[test(description = "The parrot example's smoke run clones a voice from the JFK clip, says the text in it with over two seconds of speech played at least 80 percent through, and a non-audio --clip is refused by name")]
 def test_smoke_clones_and_says(t : T?) {
     t |> run("the smoke rail clones the voice from the clip, says the text in it and reads it out to the end") @(t : T?) {
         return if (!ready(t))

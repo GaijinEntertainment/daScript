@@ -250,7 +250,7 @@ def private zero_length_dots() : float {
     }
 }
 
-[test]
+[test(description = "Over tail lengths 1 to 1025, `dot` bit-matches an fp64 sum on dyadic inputs fp32 cannot round, and on unit-range inputs lands within an n-squared bar a 0.5 poison leg falls outside")]
 def test_dot(t : T?) {
     t |> run("dot bit-matches an fp64 accumulation on inputs fp32 cannot round") @(t : T?) {
         report(t, "dot exact", sweep_dot_exact())
@@ -260,7 +260,7 @@ def test_dot(t : T?) {
     }
 }
 
-[test]
+[test(description = "Over tail lengths 1 to 1025, `dot_bf16` bit-matches an fp64 sum over exactly-bf16 dyadic operands, and on unit-range inputs lands within an n-squared bar a 0.5 poison leg falls outside")]
 def test_dot_bf16(t : T?) {
     t |> run("dot_bf16 bit-matches an fp64 accumulation over exactly-bf16 operands") @(t : T?) {
         report(t, "dot_bf16 exact", sweep_dot_bf16_exact())
@@ -270,7 +270,7 @@ def test_dot_bf16(t : T?) {
     }
 }
 
-[test]
+[test(description = "Over tail lengths 1 to 1025, `copy_floats`, `add_inplace` and `add_scale_inplace` land the fp64 result bit for bit on dyadic operands and move every destination element")]
 def test_copy_and_add(t : T?) {
     t |> run("copy_floats replaces every sentinel with the source bit for bit") @(t : T?) {
         report_inplace(t, "copy_floats", sweep_copy_floats())
@@ -283,7 +283,7 @@ def test_copy_and_add(t : T?) {
     }
 }
 
-[test]
+[test(description = "Over tail lengths 1 to 1025, `mul_inplace`, `scale_inplace` and `axpy` land the fp64 result bit for bit on dyadic operands and move every destination element")]
 def test_mul_scale_axpy(t : T?) {
     t |> run("mul_inplace is exact on operands no multiplier of which is one") @(t : T?) {
         report_inplace(t, "mul_inplace", sweep_mul_inplace())
@@ -296,7 +296,7 @@ def test_mul_scale_axpy(t : T?) {
     }
 }
 
-[test]
+[test(description = "A zero count leaves the destination untouched in every in-place elementwise kernel, and `dot` and `dot_bf16` answer an empty sum of 0")]
 def test_zero_length(t : T?) {
     t |> run("a zero count is a no-op on every elementwise kernel") @(t : T?) {
         t |> equal(zero_length_moves(), 0, "a zero count must leave the destination untouched")
@@ -338,7 +338,7 @@ def private f16_edge_values : array<float> {
     return <- edge
 }
 
-[test]
+[test(description = "`cvt_f32_to_f16` bit-matches the float16 cast over the tail sweep, halfway ties, subnormals and signed zeros, and clamps to +-65504 where the cast overflows")]
 def test_f32_to_f16_forms(t : T?) {
     t |> run("cvt_f32_to_f16 bit-matches the float16 cast over the tail sweep and the rounding edges") @(t : T?) {
         var total = 0
@@ -360,7 +360,7 @@ def test_f32_to_f16_forms(t : T?) {
     }
 }
 
-[test]
+[test(description = "`active_q8_repack_layout` answers the disk-order record (mr 1, kgroup 4, no bias) when not repacked, and the active backend's row tile, k group and weight bias when repacked")]
 def test_active_q8_repack_layout(t : T?) {
     t |> run("active_q8_repack_layout: the disk-order record off the repack, the backend's layout on it") @(t : T?) {
         let plain = active_q8_repack_layout(false)

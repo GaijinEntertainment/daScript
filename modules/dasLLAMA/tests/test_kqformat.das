@@ -20,7 +20,7 @@ require dasllama/dasllama_gemm_schema   // the int-id delegation under test
 require ?vulkan dasllama/dasllama_vulkan_common   // DAT_KEY_FMTS, the decode block's layer-key radix
 require daslib/enum_trait   // the radix guard walks the whole KqFmt enum
 
-[test]
+[test(description = "With dasVulkan, every `KqFmt` member's int id sits strictly under `DAT_KEY_FMTS`, so the decode block's layer key never hands one layer another layer's mirror")]
 def test_kqfmt_under_dat_key_radix(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         t |> run("every KqFmt id sits under the decode block's layer-key radix") @(t : T?) {
@@ -33,7 +33,7 @@ def test_kqfmt_under_dat_key_radix(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every `KqFmt` member's int value is pinned to a literal 0 through 25, the ids device tags and stream codes key off")]
 def test_kqfmt_enum_values(t : T?) {
     t |> run("int(KqFmt.*) values are pinned - device tags and stream codes key off them") @(t : T?) {
         t |> equal(int(KqFmt.q8), 0)
@@ -65,7 +65,7 @@ def test_kqfmt_enum_values(t : T?) {
     }
 }
 
-[test]
+[test(description = "The mlx affine members are per-32, unstamped on the discrete homes and id-less, with literal quant bytes, 2-byte scale unit, ggml types and disk bytes, and `mlx_affine_ggml_type` maps only real bit and group pairs")]
 def test_kqfmt_affine_rows(t : T?) {
     t |> run("the affine members' rows: per-32 planes, the codes verbatim, a 2-byte scale unit a block (a 64-group pair a block pair)") @(t : T?) {
         for (f in [KqFmt.mlx4, KqFmt.mlx8, KqFmt.mlx4b, KqFmt.mlx8b, KqFmt.mlx6b]) {
@@ -101,7 +101,7 @@ def test_kqfmt_affine_rows(t : T?) {
     }
 }
 
-[test]
+[test(description = "`kq_sb` holds exactly for the superblock lattice on both enum and int ids, and the per-32, nv4 and iq3s4 members' strides, ggml types, schema ids and the Q4_0 codebook match literals")]
 def test_kqfmt_predicates(t : T?) {
     t |> run("kq_sb truth table: exactly the superblock lattice") @(t : T?) {
         t |> success(!kq_sb(KqFmt.q8), "q8 is not superblock")
@@ -169,7 +169,7 @@ def test_kqfmt_predicates(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every K-quant format's quant and scale strides and their named constants equal the literal byte layouts, the IQ4_NL codebook is upstream's monotonic table, and the iq3s4 codebook steps odd magnitudes by 2")]
 def test_kqfmt_strides(t : T?) {
     t |> run("typed strides match the literal byte layouts") @(t : T?) {
         t |> equal(kq_qsb(KqFmt.k4), 128l)    // 128 nibble bytes
@@ -250,7 +250,7 @@ def test_kqfmt_strides(t : T?) {
     }
 }
 
-[test]
+[test(description = "`IQ3S_GRID` matches upstream's iq3s_grid at its first and last entries, and the worker-safe `iq3s_grid` local agrees with it at sampled entries")]
 def test_kqfmt_grid(t : T?) {
     t |> run("the IQ3_S grid is upstream's iq3s_grid, and the worker-safe local agrees") @(t : T?) {
         t |> equal(IQ3S_GRID[0], 0x01010101u)
@@ -261,7 +261,7 @@ def test_kqfmt_grid(t : T?) {
     }
 }
 
-[test]
+[test(description = "`kq_schema_id` maps each lattice format to its pinned kernel id, and the int-id stride forms answer the same strides as the enum forms for every one")]
 def test_kqfmt_id_bridge(t : T?) {
     t |> run("kq_schema_id is the one enum->kernel-id bridge (3/4/5/6/40/44/33)") @(t : T?) {
         t |> equal(kq_schema_id(KqFmt.k4), 4)
@@ -287,7 +287,7 @@ def test_kqfmt_id_bridge(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every descriptor row's disk bytes equal ggml's block bytes and its schema id round-trips or is -1 off the lattice, bytes per weight follow the stride table, and every stream code is pinned")]
 def test_kqfmt_elems_and_stream(t : T?) {   // nolint:STYLE038 - one pin per KqFmt member
     t |> run("elems per stride unit: 256 for the lattice, 32 elsewhere") @(t : T?) {
         t |> equal(kq_elems(KqFmt.k4), 256l)
@@ -375,7 +375,7 @@ def test_kqfmt_elems_and_stream(t : T?) {   // nolint:STYLE038 - one pin per KqF
     }
 }
 
-[test]
+[test(description = "The halved IQ3_XXS grid matches its local with every byte even in 2..30 or 31, ksigns carry even parity in bit 7, and `f16_half_bits` halves normal, negative and edge-subnormal f16 exactly")]
 def test_iq3xxs_tables(t : T?) {
     t |> run("the halved IQ3_XXS grid, ksigns and the f16 halver hold their contracts") @(t : T?) {
         let lut = iq3xxs_grid()
@@ -404,7 +404,7 @@ def test_iq3xxs_tables(t : T?) {
     }
 }
 
-[test]
+[test(description = "Each per-32 format's quant words and scale bytes sum to its descriptor's disk bytes, and every per-32 and mlx block fits the one-block scratch")]
 def test_b32_plane_words(t : T?) {
     t |> run("a per-32 block's quant words and scale bytes are its disk bytes") @(t : T?) {
         t |> equal(int64(KQ_Q51_QWORDS * 4u + KQ_Q51_SBYTES), kq_desc(KqFmt.q51).disk_bytes, "q51: five quant words (the nibbles, the qh word) and the d | m halves")
@@ -423,7 +423,7 @@ def test_b32_plane_words(t : T?) {
     }
 }
 
-[test]
+[test(description = "`kq_fmt_row_ok` and `kq_fmt_expert_ok` move Q4_0 and IQ4_NL rows off the superblock lattice to their per-32 planes, other formats off it to q8, keep q51 and q5032 on 32-multiples, and send rows off 32 to q8")]
 def test_kq_fmt_row_demotion(t : T?) {
     t |> run("the 32-block disk formats take their per-32 planes on rows the superblock walkers cannot tile") <| @(t : T?) {
         // 704 = 22 blocks of 32, not a 256-multiple: q40 and iq4nl to their per-32 planes, k5 to q8
@@ -477,7 +477,7 @@ def private stamped_family(fmt : KqFmt) : string {   // nolint:STYLE037 - the st
     return r
 }
 
-[test]
+[test(description = "`kq_fmt_stamp` binds each `KqFmt` member to its own tag type, so a per-format overload family resolves k4 and q51 to their overloads and every other member to its named tag")]
 def test_kq_fmt_stamp(t : T?) {
     t |> run("kq_fmt_stamp binds every member's tag, so a per-format overload family resolves at compile time") <| @(t : T?) {
         t |> equal("k4", stamped_family(KqFmt.k4))
@@ -490,7 +490,7 @@ def test_kq_fmt_stamp(t : T?) {
     }
 }
 
-[test]
+[test(description = "`gguf_need_tensor` on a tensor absent from the file panics with text naming both the family and the tensor")]
 def test_gguf_need_tensor_refuses(t : T?) {
     t |> run("gguf_need_tensor: a tensor the file lacks panics naming the family and the tensor") @(t : T?) {
         let m : GGUFMeta
@@ -501,7 +501,7 @@ def test_gguf_need_tensor_refuses(t : T?) {
     }
 }
 
-[test]
+[test(description = "A tensor of an unread ggml type declines the load naming the tensor, its type and the served type to requantize to, Q8_0 for a type with no row, while a file of served types loads")]
 def test_gguf_decline_unread_types(t : T?) {
     t |> run("a tensor of a type the reader has no arm for declines the load, naming the tensor, the type and the served type to requantize to") @(t : T?) {
         for (gt, name, target in [GGML_TYPE_Q4_1, GGML_TYPE_IQ1_S, GGML_TYPE_IQ1_M, GGML_TYPE_TQ1_0, GGML_TYPE_TQ2_0],
@@ -535,7 +535,7 @@ def test_gguf_decline_unread_types(t : T?) {
 
 //! the Metal per-32 GEMV family's block constants (`MetalBlk32GemvT`'s `BE`, `QW`, `SH`: the template's defaults and the q5_1
 //! stamps' overrides, spelled as literals in the kernel class) against the descriptor rows
-[test]
+[test(description = "The literal block constants of the Metal per-32 GEMV, tile and embed classes (BE, QW, SH, B32W, B32S, B32E) equal the per-32 descriptor rows' elements, quant bytes and scale bytes")]
 def test_metal_b32_block_constants(t : T?) {
     t |> run("BE, QW and SH are the per-32 rows' block width, quant words and scale halves") @(t : T?) {
         t |> equal(kq_elems(KqFmt.q51), 32l, "BE: 32 weights a block")
@@ -563,7 +563,7 @@ def test_metal_b32_block_constants(t : T?) {
 //! the Metal K-quant token-table gathers' superblock constants
 //! (`MetalEmbedKqT`'s `SB_UINTS`, `MetalEmbedK45T`'s `QH0`) against
 //! the descriptor rows
-[test]
+[test(description = "The Metal K-quant token-table gathers' literal SB_UINTS and QH0 equal the k4, k5 and codebook formats' superblock quant words and k5's qh strip start")]
 def test_metal_kq_table_constants(t : T?) {
     t |> run("SB_UINTS and QH0 are a superblock's quant words and k5's qh strip start") @(t : T?) {
         t |> equal(kq_qsb(KqFmt.k4), int64(32u * 4u), "SB_UINTS = 32: k4's 128 nibble bytes")
@@ -576,7 +576,7 @@ def test_metal_kq_table_constants(t : T?) {
 }
 
 //! a load report row names the plane's site beside its disk type and the form it serves in: a kq plane by its `KqFmt` member
-[test]
+[test(description = "`gguf_tensor_role` reads the role off a tensor name, `kq_site_words` turns it into site words, and `conv_row_name` renders exact rows naming site, disk type and served plane or conversion")]
 def test_load_report_row_names_site(t : T?) {
     t |> run("the GGUF role reads off a tensor name, and the site words off the role") @(t : T?) {
         t |> equal(gguf_tensor_role("blk.12.attn_q.weight"), "attn_q")
@@ -601,7 +601,7 @@ let private STAMPED_TAILS = "a b"
 
 //! `kq_tile_stamped` answers the pairs a `kq_tile_stamp` over the same words arms: a pair word drops one tail of a member, a member
 //! word every tail, `!b32` every member but the per-32 ones; the same words without `!b32` keep a superblock member (the control)
-[test]
+[test(description = "`kq_tile_stamped` drops a member word's every tail, a pair word's one tail and with `!b32` every non-per-32 member, keeping the superblock member once `!b32` is gone")]
 def test_kq_tile_stamped(t : T?) {
     let q51 = int(KqFmt.q51)
     let q5032 = int(KqFmt.q5032)

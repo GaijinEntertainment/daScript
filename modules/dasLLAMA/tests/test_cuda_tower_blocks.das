@@ -30,7 +30,7 @@ require _cuda_cell
 require _discrete_cells
 require _child_run   // a load's flavor refusal prints through to_log, which no in-process cell reads
 
-[test]
+[test(description = "The CUDA Conformer row stamps (GLU, causal depthwise conv, windowed RPE attention at both head widths) match the CPU forms on the shared discrete-cell case")]
 def test_cud_tower_conformer(t0 : T?) {
     t0 |> run("CUDA Conformer row classes (GLU, causal depthwise conv, windowed RPE attention on both head widths) == the CPU forms") <| @(t : T?) {
         return if (!cuda_up(t) || !stamps_built(t, ensure_tower_glu_sig_cls() && ensure_tower_dw_conv5_cls() && ensure_tower_g4a_attn64_cls() && ensure_tower_g4a_attn_cls(),
@@ -41,7 +41,7 @@ def test_cud_tower_conformer(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The CUDA FastConformer conv module tails (centered depthwise conv with folded BN and silu, tap-major, and gigaam biased form) match the CPU form")]
 def test_cud_tower_fastconformer(t0 : T?) {
     t0 |> run("CUDA FastConformer conv module tails (the centered depthwise conv + folded BN + silu, tap-major, gigaam's biased form) == the CPU form") <| @(t : T?) {
         return if (!cuda_up(t) || !stamps_built(t, ensure_tower_cn_dw_cls() && ensure_tower_pk_dw_cls() && ensure_tower_ga_dw_cls(), "the conv-tail stamps"))
@@ -52,7 +52,7 @@ def test_cud_tower_fastconformer(t0 : T?) {
 }
 
 //! gigaam's f16-tap depthwise conv (`CuTowerGaDwH`) vs the CPU halfword loop, itself bit-exact to the f32 loop; a poisoned tap the control
-[test]
+[test(description = "The CUDA gigaam f16-tap depthwise conv matches the CPU loop over the same halfwords, itself bit-exact to the f32 loop, and a poisoned tap reds it")]
 def test_cud_tower_ga_dwh(t0 : T?) {
     t0 |> run("CUDA f16-tap depthwise conv == the CPU loop over the same halfwords") <| @(t : T?) {
         return if (!cuda_up(t) || !stamps_built(t, ensure_tower_ga_dwh_cls(), "tower_ga_dwh"))
@@ -63,7 +63,7 @@ def test_cud_tower_ga_dwh(t0 : T?) {
 }
 
 //! the chat tails' pair pool and swapped gate (`swiglu_swapped_rows`) at an off-multiple width; the unswapped gate the control
-[test]
+[test(description = "The CUDA chat-tail pair pool and swapped SwiGLU rows match the CPU forms at an off-multiple width, with the unswapped gate as the control")]
 def test_cud_tower_tail_rows(t0 : T?) {
     t0 |> run("CUDA pair pool and swapped SwiGLU rows == the CPU forms") <| @(t : T?) {
         return if (!cuda_up(t) || !stamps_built(t, ensure_tower_pool_rows_cls() && ensure_tower_swiglu_swapped_cls(), "the tail stamps"))
@@ -74,7 +74,7 @@ def test_cud_tower_tail_rows(t0 : T?) {
 }
 
 //! the Transformer-XL rel table vs the CPU loop in double: rel 0 exactly (0, 1), the pad rows past 2 tt - 1 exactly zero
-[test]
+[test(description = "The CUDA Transformer-XL rel-position sinusoid table matches the CPU double loop, rel 0 exactly (0, 1) and the pad rows past 2 tt - 1 exactly zero")]
 def test_cud_tower_rel_sincos(t0 : T?) {
     t0 |> run("CUDA rel-position sinusoid table == the CPU loop, the pad rows zero") <| @(t : T?) {
         return if (!cuda_up(t) || !stamps_built(t, ensure_tower_rel_sincos_cls(), "tower_rel_sincos"))
@@ -85,7 +85,7 @@ def test_cud_tower_rel_sincos(t0 : T?) {
 }
 
 //! the plain seam (`CuTowerPostAddPlain`) with the next rms, `ln_on = 0` the seam alone; the post-norm seam's CPU form the control
-[test]
+[test(description = "The CUDA plain residual seam with its next rms, at ascale 0.5 and with ln_on 0, matches the CPU form, and the post-norm seam CPU form is the control")]
 def test_cud_tower_post_add_plain(t0 : T?) {
     t0 |> run("CUDA plain residual seam at ascale 0.5 and ln_on 0 == the CPU form") <| @(t : T?) {
         return if (!cuda_up(t) || !stamps_built(t, ensure_tower_post_add_plain_cls(), "tower_post_add_plain"))
@@ -96,7 +96,7 @@ def test_cud_tower_post_add_plain(t0 : T?) {
 }
 
 //! the bias-less seam (`CuTowerPostAddLnNb`) with the next layernorm, `ln_on = 0` the seam alone; the biased seam's form the control
-[test]
+[test(description = "The CUDA bias-less residual seam with its next layernorm, and alone at ln_on 0, matches the CPU form, with the biased seam form as the control")]
 def test_cud_tower_post_add_ln_nb(t0 : T?) {
     t0 |> run("CUDA bias-less residual seam and its next layernorm == the CPU form") <| @(t : T?) {
         return if (!cuda_up(t) || !stamps_built(t, ensure_tower_post_add_ln_nb_cls(), "tower_post_add_ln_nb"))
@@ -107,7 +107,7 @@ def test_cud_tower_post_add_ln_nb(t0 : T?) {
 }
 
 //! the weighted rms rows (`CuTowerRms`, its `rsqrt` held by the case's `NORM_BAR`) vs `rms_rows`; the other weight row the control
-[test]
+[test(description = "The CUDA weighted rms rows match rms_rows within NORM_BAR despite rsqrt, and the other weight row lands outside as the control")]
 def test_cud_tower_rms(t0 : T?) {
     t0 |> run("CUDA weighted rms rows == rms_rows") <| @(t : T?) {
         return if (!cuda_up(t) || !stamps_built(t, ensure_tower_rms_cls(), "tower_rms"))
@@ -118,7 +118,7 @@ def test_cud_tower_rms(t0 : T?) {
 }
 
 //! the gemma4v seam (`CuTowerPostAdd`, `rsqrt` in both norms) at ascale 1, ln_on 0 and ascale 0.5; the add without the post-norm the control
-[test]
+[test(description = "The CUDA gemma4v post-normed residual seam and its next rms match the CPU form at ascale 1, at ln_on 0 and at ascale 0.5, with the add minus post-norm as the control")]
 def test_cud_tower_post_add(t0 : T?) {
     t0 |> run("CUDA post-normed residual seam and its next rms == the CPU form") <| @(t : T?) {
         return if (!cuda_up(t) || !stamps_built(t, ensure_tower_post_add_cls(), "tower_post_add"))
@@ -129,7 +129,7 @@ def test_cud_tower_post_add(t0 : T?) {
 }
 
 //! the qwen25v seam (`CuTowerPostAddRms`, `rsqrt` in the next rms) and `ln_on = 0`; the add without the bias row the control
-[test]
+[test(description = "The CUDA qwen25v biased residual seam and its next rms, and the seam alone at ln_on 0, match the CPU form, with the add minus the bias row as the control")]
 def test_cud_tower_post_add_rms(t0 : T?) {
     t0 |> run("CUDA biased residual seam and its next rms == the CPU form") <| @(t : T?) {
         return if (!cuda_up(t) || !stamps_built(t, ensure_tower_post_add_rms_cls(), "tower_post_add_rms"))
@@ -140,7 +140,7 @@ def test_cud_tower_post_add_rms(t0 : T?) {
 }
 
 //! the layernorm into halves (`CuTowerLn16`) bit for bit its f32 twin's (`CuTowerLn`) rows rounded, both vs `layernorm_batch`
-[test]
+[test(description = "The CUDA layernorm into halves equals its f32 twin rows rounded to f16 bit for bit, and both match layernorm_batch")]
 def test_cud_tower_ln16(t0 : T?) {
     t0 |> run("CUDA layernorm into halves == the f32 stamp rounded, and layernorm_batch") <| @(t : T?) {
         return if (!cuda_up(t) || !stamps_built(t, ensure_tower_ln_cls() && ensure_tower_ln16_cls(), "tower_ln and tower_ln16"))
@@ -151,7 +151,7 @@ def test_cud_tower_ln16(t0 : T?) {
 }
 
 //! the seam with the next layernorm into halves (`CuTowerPostAddLn16`) bit for bit its f32 twin's (`CuTowerPostAddLn`), and `ln_on = 0`
-[test]
+[test(description = "The CUDA biased residual seam with its next layernorm into halves equals its f32 twin rounded bit for bit, also at ln_on 0, and matches the CPU form")]
 def test_cud_tower_post_add_ln16(t0 : T?) {
     t0 |> run("CUDA biased residual seam with its next layernorm into halves == the f32 stamp rounded, and the CPU form") <| @(t : T?) {
         return if (!cuda_up(t) || !stamps_built(t, ensure_tower_post_add_ln_cls() && ensure_tower_post_add_ln16_cls(), "tower_post_add_ln and tower_post_add_ln16"))
@@ -162,7 +162,7 @@ def test_cud_tower_post_add_ln16(t0 : T?) {
 }
 
 //! canary's rel-plane attention on both head stamps vs the rel-pos loop with u / v biases, idle lanes writing nothing; scaled keys and rel the controls
-[test]
+[test(description = "The CUDA canary rel-plane attention at both head widths matches the CPU rel-pos loop with u and v biases, idle lanes writing nothing, with scaled keys and rel planes as controls")]
 def test_cud_tower_cn_attn_rel_plane(t0 : T?) {
     t0 |> run("CUDA rel-plane FastConformer attention (both head widths) over CPU-built planes == the CPU loop") <| @(t : T?) {
         return if (!cuda_up(t) || !stamps_built(t, ensure_tower_cn_attn_r64_cls() && ensure_tower_cn_attn_r_cls(), "the rel-plane attention stamps"))
@@ -174,7 +174,7 @@ def test_cud_tower_cn_attn_rel_plane(t0 : T?) {
 
 //! the f16 GEMM's s column (`CuF16GemmCm2WS`, the tower GEMM sites `cud_f16_tc` puts on the 32-position column) against the f32
 //! dot of the same halves and bit for bit its m column twin (`CuF16GemmCm2W`)
-[test]
+[test(description = "The CUDA f16 GEMM s-column stamp matches the f32 dot of the same halves and equals its m-column twin bit for bit")]
 def test_cud_f16_gemm_s(t0 : T?) {
     t0 |> run("CUDA f16 GEMM s column == the f32 dot of the same halves, bit for bit the m column") <| @(t : T?) {
         return if (!cuda_up(t) || !stamps_built(t, ensure_f16_gemm_cm2_ws_cls() && ensure_f16_gemm_cm2_w_cls(), "the f16 GEMM's s and m column stamps"))
@@ -185,7 +185,7 @@ def test_cud_f16_gemm_s(t0 : T?) {
 }
 
 //! the f16 tile's column rule: s to 64 rows, m on a card of unknown SM count, past that the cheaper of the two waves
-[test]
+[test(description = "f16_cm2_col picks the 32-wide s column up to 64 rows, the 128-wide m column when the SM count is unknown, and the cheaper wave past that, pinned at literal shapes and SM counts")]
 def test_cud_f16_cm2_col(t0 : T?) {
     t0 |> run("f16_cm2_col: the s column to 64 rows, m where the SM count is unknown, the cheaper wave past them") <| @(t : T?) {
         t |> equal(f16_cm2_col(1024l, 64l, 0l), 32l, "64 rows: s, whatever the card")
@@ -214,7 +214,7 @@ def private tower_pick(d, rows, n : int64; split_ok : bool; cap : int64) : tuple
 }
 
 //! the tower's Q8_0 cm2 pick at the fc2 split gate race's shapes (`PERF_LEDGER.md`), each seam answering the value it replaced
-[test]
+[test(description = "On a 35 to 48 SM card the CUDA tower Q8_0 cm2 pick reads the pinned column, split and tile counts at the fc2 race shapes, each seam answers the value it replaced, and the seams are put back")]
 def test_cud_tower_cm2_pick(t0 : T?) {
     t0 |> run("the CUDA tower's cm2 pick at the fc2 race's shapes, the forced column held at a split site, each seam put back") <| @(t : T?) {
         return if (!cuda_up(t))
@@ -281,7 +281,7 @@ def test_cud_tower_cm2_pick(t0 : T?) {
 }
 
 //! a family's CUDA flavor stood down at load: the tower knob off, then no home armed - the line a load says read off a child's log
-[test]
+[test(description = "qwen3a takes no CUDA flavor with the tower knob off or with no home armed, and a child load logs the exact line naming each condition")]
 def test_cud_tower_flavor_refusals(t0 : T?) {
     t0 |> run("a family takes no CUDA flavor with the tower knob off or no home armed, its line naming the condition") <| @(t : T?) {
         let was = cuda_tower_on()
@@ -304,7 +304,7 @@ def test_cud_tower_flavor_refusals(t0 : T?) {
 }
 
 //! the compile gate: every stamp of `dasllama_cuda_classes_blocks` compiles through NVRTC and loads
-[test]
+[test(description = "Every cuda_dispatch stamp of the tower blocks file compiles through NVRTC and loads, none refused")]
 def test_cud_blocks_compile_gate(t0 : T?) {
     t0 |> run("every [cuda_dispatch] stamp of the block file compiles and loads") <| @(t : T?) {
         return if (!cuda_up(t))
@@ -323,7 +323,7 @@ def test_cud_blocks_compile_gate(t0 : T?) {
 }
 
 //! the leak gate: every device buffer the cells uploaded freed, every module released at the shutdown, nothing counted live
-[test]
+[test(description = "After the block cells, the CUDA tier shutdown leaves no CUDA object or device allocation live, as counted by the leak log")]
 def test_cud_blocks_shutdown_leaks(t0 : T?) {
     t0 |> run("the CUDA tier shuts down with nothing live after the block cells") <| @(t : T?) {
         cud_shutdown()

@@ -29,7 +29,7 @@ let private BAR_EXACT_POISON_PCT = Bar(exact = true, poison = 0.01, poison_scale
 let private AX_N = 1030        //! four whole workgroups and six more
 let private AX_SCALE = 0.25    //! a power of two: scale * y is exact, so the fused and the unfused form both round once, as the f32 form does
 
-[test]
+[test(description = "The stage-sum axpy equals o + 0.25 y in f32 bit for bit over 1030 elements when accumulating, and 0.25 y over a NaN-filled o when overwriting, with the elements outside the run untouched")]
 def test_vkt_axpy(t0 : T?) {
     t0 |> run("the axpy == o + 0.25 y in f32, exact, accumulating (zero = 0) and overwriting (zero = 1)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -70,7 +70,7 @@ def test_vkt_axpy(t0 : T?) {
 let private RF_T = 37
 let private RF_C = 24
 
-[test]
+[test(description = "The reflect pad built from two row copies equals `pad_reflect_left_rows_inplace` bit for bit: x [37][24] shifted down one row behind its own row 1, nothing written past the 38 rows")]
 def test_vkt_reflect1(t0 : T?) {
     t0 |> run("the reflect pad as the driver's two row copies: y [38][24] == x [37][24] behind x's row 1, exact") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -282,7 +282,7 @@ def private src_ready : bool {
     }
 }
 
-[test]
+[test(description = "The harmonic source on the torch and onnx laws holds phase frames to one ulp and the mixed signal to 2e-6 of the CPU `sine_source`, a poisoned f0 frame reds both; at up 300 the 40000-frame cumsum and the seeded own noise draw match too")]
 def test_vkt_source(t0 : T?) {
     for (torch in fixed_array(true, false)) {
         let law = torch ? "torch" : "onnx"
@@ -380,7 +380,7 @@ def private stft_arm(t : T?; reflect : bool) {
     }
 }
 
-[test]
+[test(description = "The STFT on reflect and edge pads produces 10 frames x 4 bins of magnitude and phase within 1e-4 of the double form, the zero-imaginary bin reading +pi or 0, and a poisoned sample reds the compare")]
 def test_vkt_stft(t0 : T?) {
     for (reflect in fixed_array(true, false)) {
         t0 |> run("the STFT, {reflect ? "reflect" : "edge"} pad, 10 frames x 4 bins == the double form") <| @(t : T?) {
@@ -455,7 +455,7 @@ def private istft_arm(t : T?; envelope : bool) {
     }
 }
 
-[test]
+[test(description = "The inverse STFT with and without the window envelope turns 9 frames x 3 bins into 36 samples within 5e-4 of the double overlap-add, some samples under a zero envelope, and a poisoned magnitude reds the compare")]
 def test_vkt_istft(t0 : T?) {
     for (envelope in fixed_array(true, false)) {
         t0 |> run("the inverse STFT, envelope {envelope ? "on" : "off"}, 9 frames x 3 bins into 36 samples == the double overlap-add") <| @(t : T?) {

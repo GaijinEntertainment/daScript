@@ -70,7 +70,7 @@ def private letters(s : string) : int {
     return n
 }
 
-[test]
+[test(description = "An fp32 load of gemma-4-E2B Q8_0 keeps the PLE table on an exactly-sized q8 plane with no fp32 expansion, its rows dequant bit-identical to the file, and both in-place requant forms refuse the model")]
 def test_ple_fp32_rail(t : T?) {
     t |> run("fp32 serving pins the Q8_0 PLE table to its own q8 plane, bit-exact (E2B Q8_0)") @(t : T?) {
         return if (!jit_only(t))
@@ -124,7 +124,7 @@ def test_ple_fp32_rail(t : T?) {
     }
 }
 
-[test]
+[test(description = "An fp32 load of gemma-4-E2B Q4_K_M pins the PLE table to its native k5 plane with no q8 side plane, and row 0 dequantized off it matches the file within 1e-3 relative RMS")]
 def test_ple_fp32_kq_table(t : T?) {
     t |> run("fp32 serving pins a K-quant PLE table to its native plane (E2B Q4_K_M)") @(t : T?) {
         return if (!jit_only(t))
@@ -161,7 +161,7 @@ def test_ple_fp32_kq_table(t : T?) {
 //! the per-32 PLE table carriers (`../performance/model_specs.das`: E2B Q8_0 requantized with the token table - and so the
 //! PLE table - in Q5_0, Q5_1 and Q4_0): the table keeps its disk format's tag, its rows gather off that plane bit for bit
 //! the file's dequant (control: the neighbor row must miss), and a greedy turn runs on the CPU chain
-[test]
+[test(description = "E2B carriers with a Q5_0, Q5_1 or Q4_0 PLE table keep that format's tag, `ple_gather_row` matches the file dequant bit for bit on four rows with a neighbor-row miss control, and a greedy CPU turn yields text")]
 def test_ple_per32_tables(t : T?) {
     for (spec in [(file = "gemma-4-E2B-it-emb-Q5_0-local.gguf", fmt = KqFmt.q5032),
                   (file = "gemma-4-E2B-it-emb-Q5_1-local.gguf", fmt = KqFmt.q51),
@@ -205,7 +205,7 @@ def test_ple_per32_tables(t : T?) {
     }
 }
 
-[test]
+[test(description = "gemma-4-E2B Q8_0 served in q8, fp32 and q4_0 modes each completes a greedy chat turn whose continuation contains at least three letters")]
 def test_ple_mode_forwards(t : T?) {
     t |> run("fp32 and q4 E2B chat turns run end to end (E2B Q8_0)") @(t : T?) {
         return if (!jit_only(t))

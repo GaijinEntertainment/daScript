@@ -93,7 +93,7 @@ def private synth_dflash(fc_type : int) : array<uint8> {
     return <- b
 }
 
-[test]
+[test(description = "`load_dflash_drafter` refuses a missing path, a non-GGUF file, and a synthesized drafter with an IQ4_XS fc.weight (naming tensor, disk type and member) with a reason and no weights, while a Q4_K fc.weight passes tagged k4 (control)")]
 def test_dflash_refusals(t : T?) {
     if (!arm_on(t, "dflash-refuse")) {
         return
@@ -594,7 +594,7 @@ def private sampled_modes_walk(t : T?; m : Model; drafter : string; device : boo
     delete s1
 }
 
-[test]
+[test(description = "On the 27B trunk with the Q8_0 DFlash2 drafter on the CPU arm, the exact-accept sampled speculative walk equals the plain seeded sampled walk with drafts accepted, honors a stop id, and both rejection walks accept some drafts and reject some")]
 def test_dflash_27b_sampled_cpu(t : T?) {
     if (!arm_on(t, "dflash-27b-sampled-cpu") || !family_on(t, "qwen35")) {
         return
@@ -634,7 +634,7 @@ def private sampled_metal_cell(t : T?; trunk : string; tag : string) {
     }
 }
 
-[test]
+[test(description = "On the Metal device arm over the 27B GGUF trunk, the sampled DFlash walks hold the CPU arm's exact and rejection contracts, drawn drafts end on the device selector, and verify-ahead off or the soft pick off reproduce the same stream")]
 def test_dflash_27b_sampled_metal(t : T?) {
     if (!arm_on(t, "dflash-27b-sampled-metal") || !family_on(t, "qwen35")) {
         return
@@ -642,7 +642,7 @@ def test_dflash_27b_sampled_metal(t : T?) {
     sampled_metal_cell(t, gguf_trunk(t), "sampled metal")
 }
 
-[test]
+[test(description = "The sampled DFlash walks on the Metal device arm hold over the 27B affine mlx 4-bit snapshot trunk: exact equals the plain sampled walk, rejection walks accept and reject, and device and host draws give the same stream")]
 def test_dflash_27b_mlx_sampled(t : T?) {
     if (!arm_on(t, "dflash-27b-mlx-sampled") || !family_on(t, "qwen35")) {
         return
@@ -650,7 +650,7 @@ def test_dflash_27b_mlx_sampled(t : T?) {
     sampled_metal_cell(t, snapshot_trunk(t), "mlx sampled metal")
 }
 
-[test]
+[test(description = "On the planar 27B Q4_K_M trunk with the Q8_0 DFlash2 drafter on the CPU arm, the greedy speculative walk emits the plain greedy walk's ids token for token with drafts accepted")]
 def test_dflash_27b_cpu(t : T?) {
     if (!arm_on(t, "dflash-27b-cpu") || !family_on(t, "qwen35")) {
         return
@@ -658,7 +658,7 @@ def test_dflash_27b_cpu(t : T?) {
     cpu_lossless_cell(t, DRAFTER_FILE, "cpu")
 }
 
-[test]
+[test(description = "The Q4_K_M DFlash2 drafter tags every plane with its disk type's format, and on the CPU arm its greedy speculative walk emits the plain greedy walk's ids token for token with drafts accepted")]
 def test_dflash_27b_k4_cpu(t : T?) {
     if (!arm_on(t, "dflash-27b-k4-cpu") || !family_on(t, "qwen35")) {
         return
@@ -669,7 +669,7 @@ def test_dflash_27b_k4_cpu(t : T?) {
     cpu_lossless_cell(t, DRAFTER_K4_FILE, "k4 cpu")
 }
 
-[test]
+[test(description = "On the Metal device arm over the 27B GGUF trunk the greedy DFlash walk is lossless; device accept and selector match the host's drafts and accept count, replays commit unwaited on the tape, the CPU arm accepts the same count, and depth pins hold")]
 def test_dflash_27b_metal(t : T?) {
     if (!arm_on(t, "dflash-27b-metal") || !family_on(t, "qwen35")) {
         return
@@ -677,7 +677,7 @@ def test_dflash_27b_metal(t : T?) {
     metal_lossless_cell(t, gguf_trunk(t), DRAFTER_FILE, [KqFmt.q8], array<KqFmt>(), "metal")
 }
 
-[test]
+[test(description = "The lossless greedy DFlash gate on the Metal device arm holds over the 27B mlx 4-bit snapshot trunk, with device and host accept and selector agreeing and mlx4b planes among the trunk's rows8 verify sites where rows8 runs")]
 def test_dflash_27b_mlx_metal(t : T?) {
     if (!arm_on(t, "dflash-27b-mlx-metal") || !family_on(t, "qwen35")) {
         return
@@ -685,7 +685,7 @@ def test_dflash_27b_mlx_metal(t : T?) {
     metal_lossless_cell(t, snapshot_trunk(t), DRAFTER_FILE, [KqFmt.q8], [KqFmt.mlx4b], "mlx metal")
 }
 
-[test]
+[test(description = "The Q4_K_M DFlash2 drafter tags planes by disk type and its greedy walk on the Metal device arm is lossless, with k4 and k6 sites encoded by the pass and device and host accept and selector agreeing")]
 def test_dflash_27b_k4_metal(t : T?) {
     if (!arm_on(t, "dflash-27b-k4-metal") || !family_on(t, "qwen35")) {
         return

@@ -77,7 +77,7 @@ def private qwen2_forced_feed(t : T?; n : int64; file : string = CARRIER; dense 
 }
 
 
-[test]
+[test(description = "On Qwen2.5-0.5B with the q/k/v bias folded into the device rope stage, the resident chain holds the CPU chain's logits within 6% over one and two windows plus eight steps - a dropped bias lands far past it")]
 def test_gpu_resident_qwen2_bias(t : T?) {
     t |> run("Qwen2.5-0.5B: resident prefill + decode with the q/k/v bias on device vs the CPU chain, one window") @(t : T?) {
         qwen2_forced_feed(t, 40l)
@@ -91,7 +91,7 @@ def test_gpu_resident_qwen2_bias(t : T?) {
 //! the IQ4_NL mint (`-local`, the catalog row's recipe): its 896-wide rows sit off the superblock lattice, so every dense plane
 //! serves off the per-32 iq4nl32 planes - the window's GEMMs on the s tile on the f16 feed and the per-32 batch tile off it, the
 //! steps on the per-32 GEMVs; the token table demotes to q8
-[test]
+[test(description = "The Qwen2.5-0.5B IQ4_NL mint serves every dense plane off the per-32 iq4nl32 planes and holds the CPU chain's logits within 8% over one and two windows plus eight steps")]
 def test_gpu_resident_qwen2_iq4nl32(t : T?) {
     let file = "Qwen2.5-0.5B-Instruct-IQ4_NL-local.gguf"
     t |> run("{file}: the dense iq4nl32 planes, resident prefill + decode vs the CPU chain, one window") @(t : T?) {
@@ -103,7 +103,7 @@ def test_gpu_resident_qwen2_iq4nl32(t : T?) {
     }
 }
 
-[test]
+[test(description = "On Qwen2.5-0.5B a q8_0 K/V mirror holds the CPU chain on q8_0 sessions within 10% of the max logit over one and two windows plus the fed steps")]
 def test_gpu_resident_qwen2_q8kv(t : T?) {
     t |> run("Qwen2.5-0.5B: the q8_0 K/V mirror - resident prefill + decode vs the CPU chain on q8_0 sessions, one window") @(t : T?) {
         cell_codec_forced_feed(t, CARRIER, 40l, KVDtype.q8_0, Q8KV_BAR_REL)
@@ -114,7 +114,7 @@ def test_gpu_resident_qwen2_q8kv(t : T?) {
     }
 }
 
-[test]
+[test(description = "On Qwen3-0.6B a tq4 K/V mirror sits within 1.25 times the CPU tq4 chain's distance from the f16 rows, the two tq4 chains within 1.0 of it apart, over one and two windows")]
 def test_gpu_resident_qwen2_tq4kv(t : T?) {
     t |> run("Qwen3-0.6B: the tq4 K/V mirror - resident prefill + decode against the CPU chain's tq4 and f16 rows, one window") @(t : T?) {
         cell_codec_distance(t, CARRIER_TQ4, 40l, KVDtype.tq4, false, CODEC_DIST_REL, CODEC_PAIR_REL_TQ4)
@@ -127,7 +127,7 @@ def test_gpu_resident_qwen2_tq4kv(t : T?) {
 
 //! the serving rule on the biased carrier: a tq4 ask arms the q8_0 mirror, the session serves q8_0, and the forced feed holds
 //! the q8_0 bar - the carrier's K bias outliers would set every 4-bit block's scale
-[test]
+[test(description = "On the Q/K/V-biased Qwen2.5-0.5B a tq4 ask arms the q8_0 mirror and q8_0 sessions by the serving rule, and the forced feed holds the q8_0 bar of the CPU chain")]
 def test_gpu_resident_qwen2_tq4_steps_down(t : T?) {
     t |> run("Qwen2.5-0.5B: a tq4 ask serves at q8_0") @(t : T?) {
         let path = path_join(models_dir(), CARRIER)
@@ -150,7 +150,7 @@ def test_gpu_resident_qwen2_tq4_steps_down(t : T?) {
     }
 }
 
-[test]
+[test(description = "The device steps over q8_0 and tq4 K/V rows a CPU prefill wrote and uploaded, holding the codec distance ratios against the CPU codec chain and the f16 rows")]
 def test_gpu_resident_qwen2_codec_rows_up(t : T?) {
     t |> run("Qwen2.5-0.5B: the device steps over q8_0 rows the CPU prefill wrote") @(t : T?) {
         cell_codec_distance(t, CARRIER, 40l, KVDtype.q8_0, true, CODEC_DIST_REL, CODEC_PAIR_REL)
@@ -160,7 +160,7 @@ def test_gpu_resident_qwen2_codec_rows_up(t : T?) {
     }
 }
 
-[test]
+[test(description = "Layer 0's stored bytes in the q8_0 mirror on Qwen2.5-0.5B and the tq4 mirror on Qwen3-0.6B match the CPU cache's within the K and V byte bars, a row held to the next the control")]
 def test_gpu_resident_qwen2_codec_rows(t : T?) {
     t |> run("Qwen2.5-0.5B: the q8_0 mirror's stored rows against the CPU cache's, layer 0") @(t : T?) {
         cell_codec_stored_rows(t, CARRIER, KVDtype.q8_0, ROWS_BARS)

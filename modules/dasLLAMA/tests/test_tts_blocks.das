@@ -908,7 +908,7 @@ def private report_split(t : T?; r : SplitCase) {
     t |> equal(r.diffs, 0, "{r.name}: elements differing between one dispatch lane and many")
 }
 
-[test]
+[test(description = "Every rows-layout TTS kernel (forward, strided and transposed convs, linear, attention, snake, AdaIN, norms, pool, padding) matches its channel-major twin or reference within a dot-envelope bar or exactly, q8 and K-quant lanes at their own bars, each with a must-red control")]
 def test_rows_convs(t : T?) {
     with_dasllama_jobque_() {
         t |> run("forward convs at the generator's taps") @(t : T?) {
@@ -1015,7 +1015,7 @@ def private split_arms(t : T?; axis : SplitAxis) {
     }
 }
 
-[test]
+[test(description = "`conv1d_dims_of` maps GGUF conv dims to (cin, cout) for forward and transposed orientations, multiplying the groups into the grouped axis, pinned to exact values")]
 def test_conv1d_dims_of(t : T?) {
     t |> run("conv1d_dims_of: the GGUF dims to (cin, cout) on both orientations, the groups folded into the grouped axis") @(t : T?) {
         let dims <- [3l, 8l, 20l]
@@ -1034,7 +1034,7 @@ def test_conv1d_dims_of(t : T?) {
 // oversplit. The jobque worker limit: 1 leaves one live worker plus the caller lane, the box's
 // job count wakes the whole pool - and unlike the cap it moves get_dispatch_lanes(), so it is
 // the only axis that reaches the AdaIN column stats and the bare lanes_for_work sites.
-[test]
+[test(description = "The rows convs (f32 and q8), AdaIN, attention and dense layer produce bit-identical output at one dispatch lane and at many, on both the batch-lane-cap and worker-limit axes, with a witness that each axis moved the split")]
 def test_rows_split_invariance(t : T?) {
     with_dasllama_jobque_() {
         split_arms(t, SplitAxis.lane_cap)
@@ -1093,7 +1093,7 @@ def private catt_split_case(name : string; n, t : int64; axis : SplitAxis) : Spl
     return split_diff(name, one, many)
 }
 
-[test]
+[test(description = "`attention_causal_rows` matches a double-precision reference within 1e-5 across prompt, decode and windowed shapes, a grown KV cache answers bit-identically, a one-key window returns that value row, results are split-invariant, and cache overflow panics")]
 def test_causal_attention(t : T?) {
     with_dasllama_jobque_() {
         catt_case(t, "prompt 40 of 40, full", 40l, 40l, 0l, 11ul)
@@ -1210,7 +1210,7 @@ def private gqa_case(t : T?; name : string; n, nt, context, group : int64; seed 
     t |> equal(d.diffs, 0, "{d.name}: elements that differ")
 }
 
-[test]
+[test(description = "Grouped-query causal attention matches the double reference within 1e-5 and equals bit for bit the plain form over a cache with each KV head repeated, a moved key must exceed the bar, and widths off the head lattice are refused")]
 def test_grouped_query_attention(t : T?) {
     with_dasllama_jobque_() {
         gqa_case(t, "prompt 40 of 40, two query heads a cache head", 40l, 40l, 0l, 2l, 31ul)
@@ -1236,7 +1236,7 @@ def test_grouped_query_attention(t : T?) {
 }
 
 //! rows of a served width packed to their channel count: every kept value at [r][c], nothing moved when the strides agree, a wider target refused
-[test]
+[test(description = "`compact_rows` packs 16-wide rows to 12 with every kept value exactly at its new place, leaves rows alone when strides agree, and panics on a wider target")]
 def test_compact_rows(t : T?) {
     var inscope y : array<float>
     y |> resize(5 * 16)
@@ -1270,7 +1270,7 @@ def test_compact_rows(t : T?) {
 }
 
 //! the onset ramp: sample i of the first n scaled by i / (n - 1), the rest untouched, clamped past the wave's end, a no-op at 0 or 1 samples
-[test]
+[test(description = "`fade_in` scales sample i of the first n by i over n - 1 within 1e-6 and leaves the rest untouched, keeps the long ramp's step on a wave shorter than n, and is a no-op at 0 or 1 samples, with a one-sample-longer control")]
 def test_fade_in(t : T?) {
     var inscope w : array<float>
     w |> resize(10)
@@ -1347,7 +1347,7 @@ def private end_on_pause_ref(pcm : array<float>; rate : int) : array<float> {
     return <- out
 }
 
-[test]
+[test(description = "`end_on_pause` cuts the tail 35 dB under the loudest 20 ms frame, fades the last 20 ms to zero and appends 80 ms of silence, matching a double-precision form within 1e-6, exact on the one-sample-fade and short-clip edges")]
 def test_end_on_pause(t : T?) {
     let rate = 24000
     // half a second of tone, then 300 ms of near-silence 80 dB down: the silence is cut, 80 ms of zeros follow the fade
@@ -1403,7 +1403,7 @@ def test_end_on_pause(t : T?) {
     t |> equal(length(out3), 100, "a clip shorter than a frame comes back as it is")
 }
 
-[test]
+[test(description = "`elu_rows` matches scalar ELU within 1e-6, `layer_scale_rows` equals the per-channel product exactly, `pad_edge_left_rows` repeats the first row, and `rng_normal` panics on an unseeded generator instead of spinning")]
 def test_elu_and_layer_scale(t : T?) {
     with_dasllama_jobque_() {
         var r = TtsRng()
@@ -1467,7 +1467,7 @@ def test_elu_and_layer_scale(t : T?) {
 }
 
 // the two elementwise kernels that dispatch, bit-equal on both axes that move the split
-[test]
+[test(description = "`elu_rows` and `layer_scale_rows` give bit-identical output at one dispatch lane and at many on both the lane-cap and worker-limit axes, each axis witnessed to move the split")]
 def test_elementwise_split_invariance(t : T?) {
     with_dasllama_jobque_() {
         var r = TtsRng()
@@ -1504,7 +1504,7 @@ def test_elementwise_split_invariance(t : T?) {
 
 // rope over rows against the leaf applied per row, and the variance-scaled norm against its
 // double-precision form
-[test]
+[test(description = "`rope_rows` equals the per-row `rope_scaled` leaf bit for bit at each row's own position, and `var_scale_norm` matches its double-precision form within 1e-6, a poisoned expectation missing the bar")]
 def test_rope_rows_and_var_scale_norm(t : T?) {
     var r = TtsRng()
     rng_seed(r, 24ul)
@@ -1568,7 +1568,7 @@ def private rows_conv_panics(c : TtsConv1d; x : array<float>; t_in : int64) : bo
     return tripped
 }
 
-[test]
+[test(description = "`conv1d_rows` panics on a grouped conv and on a strided or transposed q8 conv, and `conv1d_pad_cin` panics on a depthwise-grouped conv whose cout differs from its cin")]
 def test_rows_conv_refuses_the_wrong_shape(t : T?) {
     t |> run("a grouped conv is not a rows conv") @(t : T?) {
         var r = TtsRng()
@@ -1750,7 +1750,7 @@ def private sine_window_arm(t : T?; torch_math : bool) {
     }
 }
 
-[test]
+[test(description = "Window forms are bit-identical to the whole run: both resamplers' windows at offset strides, the harmonic sine source in 1, 5 and 16 frame windows under both arithmetics, and its linear mix under both row splits; an oversized window panics")]
 def test_source_windows(t : T?) {
     t |> run("a resampler's window form equals the whole row at offsets and strides off it") @(t : T?) {
         window_resize_arm(t, false)

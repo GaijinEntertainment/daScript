@@ -53,7 +53,7 @@ require ?cuda dasllama/dasllama_cuda_common   // cud_kernel_census_of: the kq la
 // their carriers (the canary and parakeet v3 f32 encoders, the E2B / E4B mmprojs) and without jfk.wav; the gemma4a
 // one also when interpreted.
 
-[test]
+[test(description = "gelu_erf reproduces the exact-erf form x times Phi(x) at 1, -1, 0, 3 and 0.5 to within 1e-6 (1e-5 at 3) of the closed-form values")]
 def test_gelu_erf(t : T?) {
     t |> run("gelu_erf matches the exact-erf form") @(t : T?) {
         var g = [1.0, -1.0, 0.0, 3.0, 0.5]
@@ -67,7 +67,7 @@ def test_gelu_erf(t : T?) {
     }
 }
 
-[test]
+[test(description = "The 400-point Hann window is periodic: zero at 0, peak 1 at 200, 0.5 at 100, and h[399] equals h[1]")]
 def test_hann_window(t : T?) {
     t |> run("periodic hann-400 endpoints and center") @(t : T?) {
         let h <- build_hann_window(400l)
@@ -78,7 +78,7 @@ def test_hann_window(t : T?) {
     }
 }
 
-[test]
+[test(description = "The 128-mel slaney filterbank for a 400-point FFT at 16 kHz is 128 x 201 with no negative weight and nonzero support on every mel row")]
 def test_mel_filterbank(t : T?) {
     t |> run("slaney filterbank shape invariants") @(t : T?) {
         let fb <- build_mel_filterbank(128l, 400l, 16000l)
@@ -103,7 +103,7 @@ def test_mel_filterbank(t : T?) {
     }
 }
 
-[test]
+[test(description = "Whisper log-mel puts a 440 Hz sine peak on mel row 18, clamps the spread to 2, fills padded silence uniformly at the floor, and chunks 5 s into one 3000-frame chunk and 35 s into two")]
 def test_log_mel_chunks(t : T?) {
     t |> run("whisper mel: 440 Hz sine lands on its mel row, silence clamps") @(t : T?) {
         // 5 s of sine and the 30 s of zeros past it: one full 3000-frame chunk, the partial one dropped
@@ -153,7 +153,7 @@ def test_log_mel_chunks(t : T?) {
     }
 }
 
-[test]
+[test(description = "swiglu_swapped_rows applies silu to the second half of each row and multiplies the first half by it, matching hand-computed values within 1e-6")]
 def test_swiglu_swapped(t : T?) {
     t |> run("swiglu_swapped: silu on the SECOND half, passthrough first") @(t : T?) {
         // rows of [a b | c d] -> [silu(c)*a, silu(d)*b]; silu(1)=0.7310586, silu(-1)=-0.2689414
@@ -180,7 +180,7 @@ def private load_cpu_audio_tower(path : string) : AudioTower {
     return <- tw
 }
 
-[test]
+[test(description = "The ultravox f32 mmproj loads as a stack-8 projector with proj_dim 2048 read from mm2 and 187 tokens a chunk, and its CPU encode of a constant mel matches llama-mtmd-debug token 0, mean and max")]
 def test_ultravox_tower(t : T?) {
     t |> run("ultravox mmproj: stack-8 projector shapes + 187 tokens/chunk") @(t : T?) {
         let path = path_join(models_dir(), "mmproj-ultravox-1b-f32.gguf")
@@ -224,7 +224,7 @@ def test_ultravox_tower(t : T?) {
     }
 }
 
-[test]
+[test(description = "The voxtral f32 mmproj loads as an avg-pooled stack-4 projector with proj_dim 3072 and 187 tokens a chunk, and its CPU encode of a constant mel matches llama-mtmd-debug token 0, mean and max")]
 def test_voxtral_tower(t : T?) {
     t |> run("voxtral mmproj: avg-pool + stack-4 projector shapes + 187 tokens/chunk") @(t : T?) {
         let path = path_join(models_dir(), "voxtral-mini-mmproj-f32.gguf")
@@ -502,7 +502,7 @@ def private g4a_discrete_twin(tst : T?; tag, mm_file : string; want_proj : int64
 }
 
 //! E2B's audio embedder is square on the encoder's 1536; E4B's widens it to the decoder's 2560 - the projector tail at two widths
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+[test(description = "The gemma4a E2B and E4B encoders on the discrete home stay within the three-way bar the CPU q8 chain sets against the exact chain on jfk, across regrown and fresh residencies, and a zeroed-blocks poison exceeds it"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def test_gemma4a_discrete_twin(tst : T?) {
     g4a_discrete_twin(tst, "E2B", "mmproj-gemma-4-E2B-it-bf16.gguf", 1536l)
     g4a_discrete_twin(tst, "E4B", "mmproj-gemma-4-E4B-it-BF16.gguf", 2560l)
@@ -612,7 +612,7 @@ def private fc_exact_lane_leg(t : T?; tag : string; fam : TowerFamily; tw_exact 
     front_served(t, "{tag} exact lane", convs, 2l, 0l)
 }
 
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+[test(description = "The canary encoder on the discrete home serves its front and every block on the device within the three-way bar on jfk, holds it across regrown and fresh residencies and on the exact f16 lane, and a poison exceeds it"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def test_canary_discrete_twin(tst : T?) {
     tst |> run("canary-qwen 2.5B: the discrete home's FastConformerblocks vs the CPU q8 chain on jfk, the exact chain the reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
@@ -742,7 +742,7 @@ def private short_clip_cell(t : T?; tag : string; fam : TowerFamily; tw : auto(T
     }
 }
 
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+[test(description = "Clips of 320 to 1600 samples through the gemma4a, canary and parakeet GPU-flavored images serve as one device encode with no decline, the CPU image row count and rows within SHORT_CLIP_BAR, a noise clip outside it"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def test_vulkan_short_clips(tst : T?) {
     tst |> run("gemma4a E2B: clips of 320 to 1600 samples serve on the discrete home's image as the CPU image reads them") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
@@ -800,7 +800,7 @@ def test_vulkan_short_clips(tst : T?) {
     }
 }
 
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+[test(description = "Parakeet-TDT v2 on the discrete home serves its front and every block on the device within the three-way bar on jfk, refuses the CPU chain past the storage range, and a poison and the exact lane hold their bars"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def test_parakeet_discrete_twin(tst : T?) {
     tst |> run("parakeet-TDT 0.6B v2: the discrete home's FastConformerfront and blocks vs the CPU q8 chain on jfk, the exact chain the reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
@@ -873,7 +873,7 @@ def private spectrum_ref(xw, tw, filt : array<float>; n_len, n_fft, n_bins, n_me
     return <- out
 }
 
-[test]
+[test(description = "mel_spectrum_rows sums the magnitude or the power of the spectrum into the filters to within 1e-5 of a double-precision DFT reference, and the magnitude form must mismatch the power reference")]
 def test_mel_spectrum_magnitude(t : T?) {
     t |> run("the magnitude form sums |X| into the filters, the power form |X|^2, each against a double DFT") @(t : T?) {
         let n_len = 5l
@@ -1275,7 +1275,7 @@ def private ga_prof_legs(t : T?; m, mc : GigaamModel; samples : array<float>) {
     }
 }
 
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary")]
+[test(description = "GigaAM v3 e2e-rnnt on Metal runs its conv front and every block on the device within 1e-2 of the CPU exact rows with the CPU transcript on the ru clips, a scaled mel outside the bar, and its q8 and kq lanes hold"), arch(at = "../ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-rotary")]
 def test_gigaam_metal_twin(tst : T?) {
     tst |> run("GigaAM v3 e2e-rnnt: the Metal rotary FastConformer chain vs the CPU exact chain on the FLEURS ru clips, the q8 lane and the Q4_K carrier's kq lane beside it") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -1339,7 +1339,7 @@ def test_gigaam_metal_twin(tst : T?) {
     }
 }
 
-[test]
+[test(description = "A canary encode served on the Metal tower counts one device encode and leaves zero encoder rows held on the device, since no transducer decodes them")]
 def test_canary_metal_holds_no_rows(tst : T?) {
     tst |> run("canary's served Metal encode leaves no encoder rows on the device: no transducer decodes them") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -1397,7 +1397,7 @@ def private metal_q8_twin(t : T?; tag : string; fam : TowerFamily; tw : auto(TW)
 }
 
 //! the Metal home's FastConformer rel-form twins on jfk: the q8 lane three ways with its poison, then the exact lane (`fc_exact_lane_leg`)
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
+[test(description = "Canary and parakeet v3 on the Metal FastConformer chain serve every block on the q8 slab within the three-way bar on jfk with no quant_mode decline, a poison exceeds it, and the exact f16 lane holds its bar"), arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def test_fc_metal_twin(tst : T?) {
     tst |> run("canary-qwen 2.5B: the Metal FastConformer chain's q8 and f16 lanes vs the CPU chains on jfk, the exact chain the reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -1454,7 +1454,7 @@ def test_fc_metal_twin(tst : T?) {
 }
 
 //! the Metal home's gemma4a twins on jfk, E2B and E4B: the q8 lane three ways with its poison, then the exact lane (`exact_flavor_leg`)
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
+[test(description = "The gemma4a E2B and E4B encoders on the Metal Conformer chain serve every block on the q8 slab within the three-way bar on jfk, a poison exceeds it, and the exact f16 lane holds its bar"), arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def test_gemma4a_metal_twin(tst : T?) {
     for (tag, mm_file in fixed_array("E2B", "E4B"), fixed_array("mmproj-gemma-4-E2B-it-bf16.gguf", "mmproj-gemma-4-E4B-it-BF16.gguf")) {
         let mm = path_join(models_dir(), mm_file)
@@ -1780,7 +1780,7 @@ def private ga_discrete_kq_mix_cell(t : T?; mx : GigaamModel; samples : array<fl
     }
 }
 
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-rotary")]
+[test(description = "GigaAM v3 e2e-rnnt on the discrete home holds the three-way bar on its q8 lane, its exact f16 lane and its Q4_K and mixed kq lanes over the ru clips, with the CPU chain ids, every member tile counted and poisons outside"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-rotary")]
 def test_gigaam_discrete_twin(tst : T?) {
     tst |> run("GigaAM v3 e2e-rnnt: the discrete home's rotary FastConformer front and blocks on every lane - the q8 lane vs the CPU q8 chain, the exact lane off the halfwords vs the CPU exact chain, the Q4_K carrier's kq lane vs the CPU kq chain - on the FLEURS ru clips") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
@@ -1885,7 +1885,7 @@ def private ga_discrete_ctc_cell(t : T?; m, mc : GigaamModel; samples : array<fl
     }
 }
 
-[test, arch(at = "../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
+[test(description = "The GigaAM CTC head on the discrete seat, off held device rows and off uploaded rows, gives the CPU head picks, ids and transcript with log-sums within CTC_PLOG_BAR, and a 1.05x clip lands outside the bar"), arch(at = "../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
 def test_gigaam_ctc_discrete_twin(tst : T?) {
     for (kind, q8 in ["e2e-ctc", "ctc", "e2e-ctc", "ctc"], [false, false, true, true]) {
         tst |> run("GigaAM v3 {kind} {q8 ? "q8" : "f16"}: the CTC head on the discrete device seat is the CPU head's, off the encode's held rows and off uploaded rows") @(t : T?) {
@@ -1912,7 +1912,7 @@ def test_gigaam_ctc_discrete_twin(tst : T?) {
     }
 }
 
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+[test(description = "The qwen2audio, voxtral, omni-3b and ultravox towers on the discrete home run every block and the projector tail on the device within the three-way bar on a synthetic mel, a poison exceeds it, and the exact lane holds"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def test_encoder_blocks_vulkan(tst : T?) {
     tst |> run("qwen2audio tower: the discrete home's blocksvs the CPU q8 chain on the synthetic mel, 32 layers") @(t : T?) {
         blocks_twin(t, "qwen2audio", "qwen2audio-mmproj-f32.gguf", 32l)
@@ -2009,7 +2009,7 @@ def private q3a_mel_range_legs(t : T?; samples : array<float>; n_mel : int64; me
     }
 }
 
-[test]
+[test(description = "Qwen3-ASR on the discrete home computes the jfk log-mel within 1e-3 of the CPU mel, then serves front, blocks and projector on windows 0 and the tail within the three-way bar, a poison and the exact lane holding theirs")]
 def test_qwen3a_vulkan_front(tst : T?) {
     tst |> run("qwen3a: the discrete home's mel + conv front + blocks vs the CPU q8 chain on jfk windows 0 and the tail") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
@@ -2130,7 +2130,7 @@ def private metal_tower_chain_cell(t : T?; file : string; kind : AudioProjKind; 
     }
 }
 
-[test]
+[test(description = "The qwen2audio, voxtral, omni-3b and ultravox towers on Metal run every block and the projector tail on the q8 slab within the three-way bar on a synthetic mel, a poison exceeds it, and the f16 exact lane holds")]
 def test_encoder_blocks_gpu(tst : T?) {
     tst |> run("qwen2audio tower: the Metal chain vs the CPU encoder, 32 layers") @(t : T?) {
         metal_tower_chain_cell(t, "qwen2audio-mmproj-f32.gguf", AudioProjKind.qwen2a, 32l)
@@ -2149,7 +2149,7 @@ def test_encoder_blocks_gpu(tst : T?) {
 //! The chat towers' chunked mel on the device seat against the CPU spectrum: a 128-mel clip's chunk within 1e-3 of the CPU
 //! mel, the mel counter up by the device leg alone, an 80-mel call (off the seat's lattice) served by the CPU with the
 //! counter unmoved, and a second clip's mel outside the bar (the control).
-[test]
+[test(description = "The chunked 128-mel log-mel on the Metal mel seat lands within 1e-3 of the CPU mel with one device mel counted, an 80-mel call falls to the CPU, and another clip mel lands outside the bar")]
 def test_log_mel_chunks_gpu(t : T?) {
     t |> run("the chunked whisper mel rides the device mel seat") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -2181,7 +2181,7 @@ def test_log_mel_chunks_gpu(t : T?) {
     }
 }
 
-[test]
+[test(description = "The Qwen2.5-Omni 3B mmproj loads its audio side as a qwen2a tower (proj_dim 2048, 32 layers, 750 tokens a chunk) with the vision tensors skipped")]
 def test_omni_tower(t : T?) {
     t |> run("qwen2.5o mmproj: audio side is qwen2a verbatim, vision tensors skipped") @(t : T?) {
         let path = path_join(models_dir(), "mmproj-omni-3b-f32.gguf")
@@ -2195,7 +2195,7 @@ def test_omni_tower(t : T?) {
     }
 }
 
-[test]
+[test(description = "The qwen2audio f32 tower has the pinned shape, and its CPU encode of an all-ones mel matches the llama-mtmd-debug token 0 values within 5e-3 and the mean and max of the output")]
 def test_encoder_oracle(t : T?) {
     t |> run("all-ones mel through the tower matches mtmd (needs qwen2audio mmproj)") @(t : T?) {
         let path = path_join(models_dir(), "qwen2audio-mmproj-f32.gguf")
@@ -2243,7 +2243,7 @@ def test_encoder_oracle(t : T?) {
 // Model-free: encoder-state sizing on a whole-clip tower — tt = the clip's frames, so at
 // minutes scale the tt- and 4·tt·d-sized buffers cross the 64 MB max_unreserved_size guard
 // and make_encoder_state must reserve each exact size (a bare resize panics here).
-[test]
+[test(description = "make_encoder_state for a 16384-frame whole-clip tower reserves x, hp and h at their exact sizes past the max_unreserved_size guard without panicking")]
 def test_encoder_state_sizing(t : T?) {
     t |> run("whole-clip encoder state clears max_unreserved_size") @(t : T?) {
         return if (!jit_only(t))
@@ -2290,7 +2290,7 @@ def private pk_device_decode_clip(t : T?; m, mc : ParakeetModel; samples : array
     }
 }
 
-[test]
+[test(description = "The parakeet v2 and v3 TDT decode on the device seat, both lanes, matches the CPU decoder tokens with log-probs within PK_DEVICE_PLOG_BAR on jfk and gb1, and encoder rows scaled 1.05x move them past it")]
 def test_parakeet_device_decode_twin(tst : T?) {
     with_dasllama_jobque_() {
         for (v in ["v2", "v3"]) {

@@ -82,7 +82,7 @@ def private gate_encode(t : T?; tw : Qwen3vTower; var st : Qwen3vState; kind : s
     }
 }
 
-[test]
+[test(description = "The Omni-30B qwen3v tower on the exact CPU lane loads its pinned shape and matches the mtmd dumps on seven canvases within 2e-4 abs plus 1.5e-2 of token rms; an off-grid canvas panics and a zeroed layer 13 reds the bar")]
 def test_qwen3v_tier1(t : T?) {
     t |> run("tier-1 tower parity vs the mtmd encode dumps (Omni-30B)") @(tt : T?) {
         let mm = path_join(models_dir(), "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf")
@@ -188,7 +188,7 @@ def private q3v_poison_leg(tt : T?; mm : string; kind : string; w, h : int; logn
 
 // The Metal tower arm: the SAME fixtures and bars, tower pinned ON — the GPU chain's parity
 // gate, with engage evidence (encode/block counter deltas), never "the model ran".
-[test]
+[test(description = "On the Metal tower, the Omni-30B and 4B deepstack towers match the mtmd dumps within 4e-2 and 8e-2 of token rms with every gated encode and block counted, the q8 lane serves on its bar, and zeroed-layer poisons red")]
 def test_qwen3v_tier1_metal(t : T?) {
     t |> run("tier-1 on the Metal tower (Omni-30B narrow + 4B deepstack)") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -261,7 +261,7 @@ def test_qwen3v_tier1_metal(t : T?) {
     }
 }
 
-[test, arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane")]
+[test(description = "On Metal's twin-W route, the 4B f16 and Omni bf16 qwen3v towers match the mtmd dumps on the GPU bars with every gated encode on the f16-W route, and the knob-off leg stays on the f32 GEMM route"), arch(at="../ARCHITECTURE_IMAGE_GPU_PLANES.md#image-tower-twin-plane")]
 def test_qwen3v_tier1_metal_f16(t : T?) {
     t |> run("tier-1 on the Metal tower's twin-W route (crowned twins, 4B f16 + Omni bf16)") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -319,7 +319,7 @@ def test_qwen3v_tier1_metal_f16(t : T?) {
     }
 }
 
-[test]
+[test(description = "The Qwen3-VL 4B deepstack tower on the exact CPU lane loads three taps at blocks 5/11/17 with a 10240-wide row and matches the mtmd dumps on four canvases within 2e-4 abs plus 4e-2 of token rms")]
 def test_qwen3v_tier1_deepstack(t : T?) {
     t |> run("tier-1 deepstack tower parity vs the mtmd encode dumps (Qwen3-VL 4B)") @(tt : T?) {
         let mm = path_join(models_dir(), "mmproj-Qwen3VL-4B-Instruct-F16.gguf")
@@ -352,7 +352,7 @@ def test_qwen3v_tier1_deepstack(t : T?) {
 }
 
 // The q8 serving lane (the CPU default): the same dumps on their own scale-relative bars.
-[test]
+[test(description = "The Omni-30B q8 serving lane matches the mtmd dumps within 1.0 of token rms at the reference f32 tile, a zeroed layer-13 qblob reds that bar, the baked q8 image sniffs to qwen3v, and the GPU q8 image mints and reloads")]
 def test_qwen3v_tier1_q8(t : T?) {
     t |> run("tier-1 on the q8 block-GEMM lane (the serving default, Omni-30B)") @(tt : T?) {
         let mm = path_join(models_dir(), "mmproj-Qwen3-Omni-30B-A3B-Instruct-bf16.gguf")
@@ -442,7 +442,7 @@ def private twin_encode(tt : T?; tw : Qwen3vTower; var st : Qwen3vState; tw_exac
         $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb, serving_tower_dev(TowerFamily.vision)) }) $(t; var s; var out) => qwen3v_encode(t, s, planes, int64(w), int64(h), out)
 }
 
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
+[test(description = "On the serving discrete home, the qwen3v 4B deepstack device chain holds to the CPU q8 and exact chains at 1, 2, 6 and 24 blocks on structured canvases, a one-block zeroed poison exceeds the bar, and the exact lane is device-served"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def test_qwen3v_discrete_twin(t : T?) {
     t |> run("the serving discrete home's chain ({serving_tower_dev(TowerFamily.vision)}) vs the CPU q8 chain (Qwen3-VL 4B, deepstack), and the exact lane served") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -489,7 +489,7 @@ def test_qwen3v_discrete_twin(t : T?) {
     }
 }
 
-[test]
+[test(description = "The Qwen3-VL 4B deepstack q8 lane matches the mtmd dumps within 0.82 of token rms at the reference f32 tile, and zeroing the tap-1 block's qblob reds that bar")]
 def test_qwen3v_tier1_q8_deepstack(t : T?) {
     t |> run("tier-1 deepstack on the q8 block-GEMM lane (Qwen3-VL 4B)") @(tt : T?) {
         let mm = path_join(models_dir(), "mmproj-Qwen3VL-4B-Instruct-F16.gguf")
@@ -541,7 +541,7 @@ def test_qwen3v_tier1_q8_deepstack(t : T?) {
 
 // the lane policy itself - model-free: the default follows the GPU tower's exact lane and the box's
 // accelerate tier (q8 when neither serves), the pin flips it either way, reset returns to the policy
-[test]
+[test(description = "The qwen3v lane default is q8 unless the GPU exact lane or the accelerate tier serves, the pin forces q8 or exact either way, and reset from the exact pin returns to the policy default")]
 def test_qwen3v_lane_knob(t : T?) {
     t |> run("the q8 lane pin and policy default") @(tt : T?) {
         tt |> equal(qwen3v_serves_q8(), !(qwen3v_gpu_exact_serves() || float_batch_override_active()), "the policy default follows the Metal tower and the accelerate tier")

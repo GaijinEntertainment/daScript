@@ -12,6 +12,7 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 require dasllama/dasllama   // create_session, create_batch_workspace, eval_batch
 require _scheduler_rig   // the device-mode scheduler cell: make_req, drain, toks_of, finished_of
 require math
+require daslib/defer
 require daslib/jobque_boost
 require daslib/fio
 require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
@@ -43,20 +44,17 @@ let private CAPPED_RIG_CTX = 4096l   //! the cap cell's context: the smallest th
 [init]
 def private regions_rig_init() {
     allow_cpu_prefill()   // the pin cell's outsider prefills on the CPU by design
-    set_gpu_ctx_max(REGIONS_RIG_CTX)
 }
 
-var private g_file_kv_found : tuple<pinned : bool; dt : KVDtype>
-
-//! the K/V mirror asked at `dt` for every load of the file that calls it from its `[init]` - a process runs one test file
-def pin_file_kv(dt : KVDtype) {
-    g_file_kv_found = gpu_kv_dtype_pin()
+//! `body` with the K/V mirror asked at `dt` for every load it makes, the codec ask put back as `body` found it, however
+//! `body` leaves - a test's pin, never a file's `[init]`, which reaches every batch-mate compiled into the same program
+def with_kv_dtype(dt : KVDtype; body : block<() : void>) {
+    let found = gpu_kv_dtype_pin()
+    defer() {
+        restore_gpu_kv_dtype(found)
+    }
     set_gpu_kv_dtype(dt)
-}
-
-//! the codec pin `pin_file_kv` found put back, from the same file's `[finalize]`
-def unpin_file_kv() {
-    restore_gpu_kv_dtype(g_file_kv_found)
+    invoke(body)
 }
 
 let private STEPS = 8l
@@ -105,8 +103,11 @@ def private hold_within(t : T?; tr : Model; got, want, control : array<float>; w
 
 //! `file` loaded at `regions` regions. A card whose room the plan does not fit registers a skip naming it, any other decline
 //! is a red; either way the driver is left unarmed, which the caller reads off `moe_gpu_resident_active()` before it runs rows.
-def private load_regions(t : T?; file : string; regions : int64; host_ctx : int64 = REGIONS_RIG_CTX) : Model {
+def private load_regions(t : T?; file : string; regions : int64; host_ctx : int64 = REGIONS_RIG_CTX; ctx : int64 = REGIONS_RIG_CTX) : Model {
+    let levers = resident_levers()
+    set_gpu_ctx_max(ctx)   //! the mirror context, read as the driver arms; the levers go back after the load
     var tr <- load_resident(path_join(models_dir(), file), regions)   //! the rig measures the resident driver: its route is pinned on for the load whatever the environment says
+    restore_resident_levers(levers)
     tr.config.seq_len = min(tr.config.seq_len, host_ctx)
     resident_admitted(t, "the whole-model driver armed at {regions} regions (the load log names any decline)", " at {regions} regions")
     return <- tr
@@ -114,7 +115,7 @@ def private load_regions(t : T?; file : string; regions : int64; host_ctx : int6
 
 def private load_two_regions(t : T?; file : string) : Model => <- load_regions(t, file, 2l)
 
-//! the resident gate, and for a file that asks a mirror codec (`set_gpu_kv_dtype` in its `[init]`) the skip where the
+//! the resident gate, and for a test that asks a mirror codec (`with_kv_dtype` around its cells) the skip where the
 //! environment arms another over it: DASLLAMA_VK_KV32=1's f32 mirror
 def private regions_ready(t : T?; file : string) : bool {
     return false if (!resident_ready(t, path_join(models_dir(), file)))
@@ -146,11 +147,10 @@ def private with_regions_rig(t : T?; file : string; load : RegionsLoad; body : b
     if (!regions_ready(t, file)) return
     let levers = resident_levers()
     split_forms_pin(load.split_forms)
-    set_gpu_ctx_max(load.ctx)
     var tr <- Model()
     with_gpu_kv_ring(load.ring) {
         delete tr
-        tr <- load_regions(t, file, load.regions, load.host_ctx)
+        tr <- load_regions(t, file, load.regions, load.host_ctx, load.ctx)
     }
     restore_resident_levers(levers)
     if (moe_gpu_resident_active()) {

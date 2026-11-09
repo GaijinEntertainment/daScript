@@ -20,7 +20,7 @@ def private has_content(turn : ChatTurn) : bool {
     return false
 }
 
-[test]
+[test(description = "The [init] registry holds exactly the nineteen supported arch names, no more, and an unknown arch name is not registered")]
 def test_arch_registry_populated(t : T?) {
     t |> run("all nineteen arches self-register at [init]") @(t : T?) {
         let expected <- ["llama", "mistral3", "qwen2", "qwen2vl", "qwen3", "qwen3vl", "phi3", "gemma2", "gemma3", "gemma4", "qwen2moe", "qwen3moe", "qwen3vlmoe", "qwen35", "qwen35moe", "qwen3next", "qwen4exp", "glm4moe", "gpt-oss"]
@@ -32,7 +32,7 @@ def test_arch_registry_populated(t : T?) {
     }
 }
 
-[test]
+[test(description = "Resolving qwen3vl and qwen3vlmoe sets mrope_interleaved (the IMROPE walk) while qwen2vl keeps the contiguous MROPE walk")]
 def test_mrope_walk_flags(t : T?) {
     t |> run("the qwen3vl family ropes interleaved, qwen2vl contiguous - the flag decides the builder") @(t : T?) {
         for (name in ["qwen3vl", "qwen3vlmoe"]) {
@@ -48,7 +48,7 @@ def test_mrope_walk_flags(t : T?) {
     }
 }
 
-[test]
+[test(description = "Per-arch LlmCaps reports no system role for gemma2, gemma3 and gemma4 and a system role for every other registered arch")]
 def test_llm_caps(t : T?) {
     t |> run("per-arch LlmCaps: gemma has no system role, everyone else does") @(t : T?) {
         for (name in ["gemma2", "gemma3", "gemma4"]) {
@@ -60,7 +60,7 @@ def test_llm_caps(t : T?) {
     }
 }
 
-[test]
+[test(description = "The chat templates carry the exact audio span marker strings for qwen2, qwen2vl, qwen3vl and gemma4, and llama splices audio embeddings bare with no markers")]
 def test_audio_wrap_parts(t : T?) {
     t |> run("audio span markers: qwen2 family wraps, llama splices bare") @(t : T?) {
         for (name in ["qwen2", "qwen2vl"]) {
@@ -81,7 +81,7 @@ def test_audio_wrap_parts(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every arch chat template has a user turn with a content slot, a non-empty assistant_open and stop tokens, with mistral3 opening bare and glm4moe carrying its prelude and think_suppress")]
 def test_arch_chat_templates(t : T?) {
     t |> run("each arch has a well-formed chat template") @(t : T?) {
         for (name in ["llama", "qwen2", "qwen2vl", "qwen3", "qwen3vl", "phi3", "gemma2", "gemma3", "gemma4", "qwen2moe", "qwen3moe", "qwen3vlmoe", "qwen35", "qwen35moe", "qwen3next", "glm4moe", "gpt-oss"]) {

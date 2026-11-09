@@ -144,7 +144,7 @@ def private with_clip(blk : block<(clip : string) : void>) {
     remove(clip)
 }
 
-[test]
+[test(description = "Against a fake speech server, a transcription reports its wall and text or the failure reason, a clip row refuses reps that read differing texts, every rep uploads an unseen clip copy, and a loaded row stands only inside the chat turn")]
 def test_speech_rows_against_fakes(t : T?) {
     with_test_server(type<FakeSpeechServer>) $(speech_url) {
         with_clip() $(clip) {
@@ -188,7 +188,7 @@ def test_speech_rows_against_fakes(t : T?) {
     }
 }
 
-[test]
+[test(description = "WAV seconds are samples over rate (zero for non-WAV or missing files), a synthesis carries its wall and audio seconds or the failure reason, and a scene round lands one chat rate plus each lane, paced lanes once and failures below zero")]
 def test_synthesis_and_scene_against_fakes(t : T?) {
     t |> run("a WAV answer's seconds are its samples over its rate; other bytes carry none") @(t : T?) {
         let half = silent_wav(8000)
@@ -249,7 +249,7 @@ def test_synthesis_and_scene_against_fakes(t : T?) {
     }
 }
 
-[test]
+[test(description = "Over fake servers the TTS and scene row counts come out exact: a failing model or lane refuses only its own row, a flooded lane keeps no pace, a paced TTS lane waits its audio second, a never-fitting lane is refused")]
 def test_synthesis_and_scene_rows_against_fakes(t : T?) {
     with_test_server(type<FakeSpeechServer>) $(speech_url) {
         with_clip() $(clip) {
@@ -284,7 +284,7 @@ def test_synthesis_and_scene_rows_against_fakes(t : T?) {
     }
 }
 
-[test]
+[test(description = "A scene row needs two samples both alone and in the scene, `args_error` refuses flag sets that would report no row of the asked mode, and `scene_lanes` builds the ASR lanes in flag order then the TTS lane last")]
 def test_scene_rows_flags_and_lanes(t : T?) {
     t |> run("a scene row needs two samples alone and two in the scene") @(t : T?) {
         var two <- [10.0, 12.0]
@@ -324,7 +324,7 @@ def test_scene_rows_flags_and_lanes(t : T?) {
     }
 }
 
-[test]
+[test(description = "The system prompt leads with its nonce and cycles the corpus to the asked size, the corpus reader keeps non-comment %% segments, and the row statistic, server-clock bracket and decode rate match hand-computed values")]
 def test_prompt_and_rows(t : T?) {
     t |> run("a system prompt opens on its nonce and holds the asked characters of the corpus, cycled") @(t : T?) {
         let base = "alpha beta gamma delta."
@@ -362,7 +362,7 @@ def test_prompt_and_rows(t : T?) {
     }
 }
 
-[test]
+[test(description = "Against a fake chat server a complete SSE stream yields exact token counts, cache hit, both clock spans and the server's own TTFT, image and audio rows stand or refuse per file, and every incomplete turn or dead address names its reason")]
 def test_turns_against_a_fake_server(t : T?) {
     with_test_server(type<FakeChatServer>) $(base_url) {
         t |> run("a complete stream is a turn: counts, the cache hit, both spans, the server's own clock") @(t : T?) {
