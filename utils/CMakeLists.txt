@@ -33,17 +33,26 @@ list(FILTER _lint_files EXCLUDE REGEX "^modules/dasLLAMA/")
 list(LENGTH _lint_files _lint_count)
 math(EXPR _lint_size "(${_lint_count} + 127) / 128")
 DAS_CHUNKS(_lint_chunks ${_lint_size} ${_lint_files})
+# the depfile names what each lint compile read; the .lint_config files and rule documents lint reads while it runs are listed here
+file(GLOB _lint_run_inputs ${PROJECT_SOURCE_DIR}/*.md ${PROJECT_SOURCE_DIR}/.lint_config)
+list(TRANSFORM _lint_roots PREPEND "${PROJECT_SOURCE_DIR}/" OUTPUT_VARIABLE _lint_input_globs)
+list(TRANSFORM _lint_input_globs APPEND "/*.md" OUTPUT_VARIABLE _lint_md_globs)
+list(TRANSFORM _lint_input_globs APPEND "/.lint_config" OUTPUT_VARIABLE _lint_config_globs)
+file(GLOB_RECURSE _lint_tree_inputs CONFIGURE_DEPENDS ${_lint_md_globs} ${_lint_config_globs})
+list(FILTER _lint_tree_inputs EXCLUDE REGEX "/(\\.[^/]+|node_modules)/")
+list(APPEND _lint_run_inputs ${_lint_tree_inputs})
 set(_lint_targets)
 foreach(_n ${_lint_chunks})
-    add_custom_target(lint_tree_chunk_${_n}
+    add_das_target(lint_tree_chunk_${_n}
         COMMAND $<TARGET_FILE:daslang> ./utils/lint/main.das -- ${_lint_chunks_${_n}} -q --silent
-        DEPENDS daslang WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        DEPENDS daslang ${_lint_run_inputs} WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     list(APPEND _lint_targets lint_tree_chunk_${_n})
 endforeach()
 add_custom_target(check_lint_tree DEPENDS ${_lint_targets})
-add_custom_target(check_lint_dasllama
+file(GLOB_RECURSE _lint_dasllama_files CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/*.das)
+add_das_target(check_lint_dasllama
     COMMAND $<TARGET_FILE:daslang> ./utils/lint/main.das -- modules/dasLLAMA -q --silent
-    DEPENDS daslang WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    DEPENDS daslang ${_lint_run_inputs} ${_lint_dasllama_files} WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     COMMENT "Linting modules/dasLLAMA in one process, its engine graph compiled once")
 
 set(_dupe_paths -p daslib -p utils -p src)
