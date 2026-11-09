@@ -649,13 +649,14 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
             startupSimulateUsec += get_time_usec(simulate0);
             finishModuleCache();
             // Check for compiler leaks (TypeDecl nodes left on thread root after compile+simulate)
-            if ( !gc_thread_root_is_settled(tout, "GC COMPILE LEAK", "after compile") ) {
+            auto compileLeaked = !gc_thread_root_is_settled(tout, "GC COMPILE LEAK", "after compile");
+            if ( compileLeaked ) {
                 exitCode = 1;
             }
             if ( !pctx ) {
                 exitCode = 1;
             } else if ( dryRun ) {
-                exitCode = 0;
+                exitCode = compileLeaked ? 1 : 0;
                 auto li = LineInfoArg();
                 toLog(LogLevel::info, (string("dry run: ") + fn + "\n").c_str(), pctx.get(), &li);
             } else if ( program->thisModule->isModule ) {
@@ -709,7 +710,8 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
                         }
                     }
                     // Check for app leaks (TypeDecl nodes created during execution)
-                    if ( !gc_thread_root_is_settled(tout, "GC APP LEAK", "after execution") && exitCode != das::DAS_PANIC_EXIT_CODE ) {
+                    auto appLeaked = !gc_thread_root_is_settled(tout, "GC APP LEAK", "after execution");
+                    if ( (appLeaked || compileLeaked) && exitCode != das::DAS_PANIC_EXIT_CODE ) {
                         exitCode = 1;
                     }
                 }
