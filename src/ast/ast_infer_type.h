@@ -477,6 +477,8 @@ namespace das {
         virtual ExpressionPtr visit(ExprSafeAt *expr) override;
         // ExprBlock
         void setBlockCopyMoveFlags(ExprBlock *block);
+        enum class SeedLiteral { untouched, seeded, mismatch };
+        SeedLiteral seedAutoLiteralFromTarget(Expression *arg, const TypeDeclPtr &target);
         virtual void preVisit(ExprBlock *block) override;
         virtual void preVisitBlockFinal(ExprBlock *block) override;
         virtual void preVisitBlockArgument(ExprBlock *block, const VariablePtr &var, bool lastArg) override;

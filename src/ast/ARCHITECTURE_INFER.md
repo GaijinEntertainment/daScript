@@ -2,6 +2,40 @@
 
 Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across the family.
 
+## A literal takes the type of its destination (`ast_infer_type_function.cpp`) {#literal-takes-target-type}
+
+An empty array or table literal parses to an `ExprMakeStruct` whose `makeType` is
+`array<auto>` or `table<auto;auto>`, and a block, lambda or function literal whose arguments
+carry no types infers to a block type with `auto` in it. Nothing in the literal resolves those
+`auto`s; the expression the literal is handed to does. `seedAutoLiteralFromTarget` is the one
+place a container or block literal takes that type (a `cast<auto>` argument or initializer
+takes its destination's type at its own sites): given the literal and the type of its
+destination, it runs `inferGenericType` from the literal's type toward the destination,
+applies the destination's auto contracts, and writes the result into the literal - `makeType`
+for a container, the block's return and argument types for a block - then reports the AST
+changed so the next pass infers the literal as a concrete type. A reference destination seeds
+its value type. A tuple literal handed a tuple type seeds each element against the matching
+element type, which is how `([], "ok")` reaches `tuple<array<int>; string>` at a return, an
+assignment or a field; a call or invoke argument never gets that far, because a tuple literal
+with an unresolved element has no type and the call waits for one. The helper answers seeded,
+untouched or mismatch: a literal that is not auto, a destination still unresolved, an auto
+array or table expression that is not an empty literal, and a tuple literal whose element
+count differs from the destination's are untouched, and the ordinary type check that follows
+reports any incompatibility; an auto literal the destination cannot take is a mismatch, which
+the call site reports as a default argument that does not match the signature and every other
+site leaves to the same ordinary check.
+
+The destinations that seed are: a call's argument, once a single candidate function is chosen
+(`inferFunctionCall`); an `invoke` argument, against the block, lambda or function type's
+parameter - class and struct method calls lower to `invoke`, so this is the method-call path;
+a `return` value, against the function's or the enclosing block's declared result; the right
+side of `=` and `<-`, against the left type; a field in a make-struct, against the field's
+type; an element of a tuple literal whose record type is known. A `let` with an empty
+container initializer takes the declared type through `isEmptyInit` instead. The matcher
+accepts an auto-typed container or block pass type while it is still unseeded
+(`isMatchingArgument` with `inferBlock`), so the call and invoke sites type-check in the same
+pass the seed lands.
+
 ## Overloads of `=`, `<-` and `:=` (`ast_infer_type_op.cpp`, `ast_infer_type_function.cpp`) {#assign-operator-lookup}
 
 An `ExprCopy` or `ExprMove` whose `no_promotion` flag is clear first looks for a user function

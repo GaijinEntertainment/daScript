@@ -668,6 +668,8 @@ namespace das {
                 }
             }
         }
+        if (expr->left->type && seedAutoLiteralFromTarget(expr->right, expr->left->type) == SeedLiteral::seeded)
+            return Visitor::visit(expr);
         if (!expr->left->type || !expr->right->type)
             return Visitor::visit(expr);
         if (!expr->no_promotion && !expr->right->type->isAutoOrAlias()) {
@@ -834,6 +836,8 @@ namespace das {
             reportAstChanged();
             return nExpr;
         }
+        if (expr->left->type && seedAutoLiteralFromTarget(expr->right, expr->left->type) == SeedLiteral::seeded)
+            return Visitor::visit(expr);
         if (!expr->left->type || !expr->right->type)
             return Visitor::visit(expr);
         // try promoting RHS int literal to LHS type

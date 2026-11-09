@@ -2041,13 +2041,14 @@ namespace das {
         }
         for (size_t i = 0, is = blockT->argTypes.size(); i != is; ++i) {
             auto &passType = expr->arguments[i + 1]->type;
+            auto &argType = blockT->argTypes[i];
+            seedAutoLiteralFromTarget(expr->arguments[i + 1], argType);
             if (!passType) {
                 error("invoke argument " + to_string(i + 1) + " type can't be inferred", "", "",
                       expr->at, CompilationError::not_resolved_yet_invoke_argument_type);
                 return Visitor::visit(expr);
             }
-            auto &argType = blockT->argTypes[i];
-            if (!isMatchingArgument(nullptr, argType, passType, false, false)) {
+            if (!isMatchingArgument(nullptr, argType, passType, false, true)) {
                 auto extras = verbose ? ("\n" + describeMismatchingArgument(to_string(i + 1), passType, argType, (int)i)) : "";
                 error("incompatible argument " + to_string(i + 1),
                       "\t" + describeType(passType) + " vs " + describeType(argType) + extras, "",
@@ -4735,6 +4736,9 @@ namespace das {
             expr->block = block;
             block->hasReturn = true;
             if (expr->subexpr) {
+                if (seedAutoLiteralFromTarget(expr->subexpr, block->returnType) == SeedLiteral::seeded) {
+                    return Visitor::visit(expr);
+                }
                 if (!expr->subexpr->type) {
                     reportUnresolvedReturnValue(expr);
                     return Visitor::visit(expr);
@@ -4779,6 +4783,9 @@ namespace das {
             // infer
             func->hasReturn = true;
             if (expr->subexpr) {
+                if (seedAutoLiteralFromTarget(expr->subexpr, func->result) == SeedLiteral::seeded) {
+                    return Visitor::visit(expr);
+                }
                 if (!expr->subexpr->type) {
                     reportUnresolvedReturnValue(expr);
                     return Visitor::visit(expr);
