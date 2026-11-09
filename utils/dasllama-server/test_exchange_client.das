@@ -175,7 +175,7 @@ def private read_provenance(t : T?; path : string; key : string) : string {
     return r
 }
 
-[test]
+[test(description = "the Windows UBR folds out of the exchange match key while a non-Windows os_build stays unfolded")]
 def test_box_match_key(t : T?) {
     t |> run("the Windows UBR folds out of the match key, everything else stays") @(tt : T?) {
         let a = "windows|x86_64||10.0.26200.8875|AMD64 Family 23 Model 49 Stepping 0, AuthenticAMD"
@@ -194,7 +194,7 @@ def test_box_match_key(t : T?) {
     }
 }
 
-[test]
+[test(description = "the exchange lookup parses the ladder response and fails loudly on a transport error", timeout = 1200)]
 def test_lookup_and_pick(t : T?) {
     with_fake_exchange() $(base_url) {
         t |> run("lookup parses the ladder response") @(tt : T?) {
@@ -221,7 +221,7 @@ def test_lookup_and_pick(t : T?) {
     }
 }
 
-[test]
+[test(description = "a verified hit applies clean, a sibling-box hit reads fresh, a local tune discards adopted winners and version or tamper gates refuse", timeout = 1200)]
 def test_fetch_and_apply(t : T?) {
     with_fake_exchange() $(base_url) {
         t |> run("exact verified hit applies clean") @(tt : T?) {
@@ -283,7 +283,7 @@ def test_fetch_and_apply(t : T?) {
     }
 }
 
-[test]
+[test(description = "binary and path-shaped provenance is stripped and garbage or a smuggled path never leaves the box")]
 def test_privacy_strip(t : T?) {
     t |> run("binary and path-shaped provenance are stripped") @(tt : T?) {
         var doc = JV((
@@ -348,7 +348,7 @@ def test_privacy_strip(t : T?) {
     }
 }
 
-[test]
+[test(description = "sidecar and record submits round-trip stripped, unversioned sidecars are refused before the wire and origin and box are guarded", timeout = 1200)]
 def test_submit_rails(t : T?) {
     with_fake_exchange() $(base_url) {
         t |> run("sidecar submit round-trips stripped") @(tt : T?) {
@@ -426,7 +426,7 @@ def private fixture_records : string {
     return text
 }
 
-[test]
+[test(description = "the exchange policy has defaults, reads TOML and degrades, and may_contact composes the gate over every consent state")]
 def test_policy_and_discovery(t : T?) {
     t |> run("policy: defaults, toml, and degradation") @(tt : T?) {
         let p0 = exchange_policy_from_config("")
@@ -458,7 +458,7 @@ def test_policy_and_discovery(t : T?) {
     }
 }
 
-[test]
+[test(description = "consent is unset, recorded and round-trips beside a manifest with or without the .json suffix")]
 def test_consent(t : T?) {
     t |> run("may_contact: the gate composition over every consent state") @(tt : T?) {
         let res = create_temp_file_result("exchange_gate_", ".tune.json")

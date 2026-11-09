@@ -3,7 +3,7 @@ options gen2
 require dastest/testing_boost public
 require daslib/fio
 
-//! a fixture for test_annotation_args.das: one test raises its own
+//! a fixture for test_timeouts.das: one test raises its own
 //! budget past the per-file deadline the parent passes
 
 [test(description = "a test that declares its budget keeps the file alive past the per-file deadline", timeout = 10)]

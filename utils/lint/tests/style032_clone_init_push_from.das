@@ -1,3 +1,5 @@
+//! STYLE032 reports an array default-initialized and then filled by
+//! one push_from from another array.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // STYLE032: array<T> default-initialized then filled by a single `push_from` /

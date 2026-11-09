@@ -8,8 +8,8 @@ through `require`, that a `.cmd` launcher runs, or that a shipped document tells
 run adds it to an `install(FILES ...)` block with `DESTINATION utils/mcp` in `CMakeLists.txt`
 (repo root), in the same change.** A file left out is missing from the shipped SDK.
 
-**Weakening any case in `test_tools.das` that pins which comments the formatter keeps is a
-defect.**
+**Weakening any case in `test_tools_format.das` that pins which comments the formatter keeps is
+a defect.**
 
 **Never normalize a path that `resolve_path` or `server_root` (`tools/common.das`) returns - keep
 the generic, forward-slash spelling.** `normalize` / `lexically_normal` rewrites every separator to

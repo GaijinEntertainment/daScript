@@ -6,6 +6,7 @@ require dastest/testing_boost public
 
 require strings
 require daslib/fio
+require _lint_cli
 
 // LINT026 is a FOLDER rule the runner enforces with its own tree walk, not a compile pass, so it
 // cannot ride the `expect 50503:N` fixture form the rule fixtures here use - the check is driven
@@ -93,16 +94,11 @@ def private plant_doc(dir, name : string; anchors : array<string>) {
 
 // argv[0] is the running interpreter - dastest itself is spawned as
 // `daslang(.exe) dastest/dastest.das ...`, so it names the binary to spawn.
-def private das_exe() : string {
-    let args <- get_command_line_arguments()
-    return empty(args) ? "" : args[0]
-}
-
-
 def private run_lint_argv(extra : array<string>; root : string; var output : string&) : int {
-    var argv <- [das_exe(), "-dasroot", get_das_root(), "{get_das_root()}/utils/lint/main.das", "--", "-q"]
-    argv |> push_from(extra)
-    argv |> push(root)
+    var after <- ["-q"]
+    after |> push_from(extra)
+    after |> push(root)
+    var argv <- lint_cli_argv([], after)
     return unsafe(popen_argv(argv, 0.0, $(f) {
         if (f != null) {
             output = fread(f)
@@ -161,7 +157,7 @@ def private build_reverse(name : string) : string {
 }
 
 
-[test]
+[test(description = "LINT026 reports each unresolved citation once, resolves against the citing file's folder, and stays silent on a resolving one", timeout = 1200)]
 def test_arch_forward(t : T?) {
     t |> run("each unresolved citation fires once, and the resolving one is silent") @(t : T?) {
         let dir = build_forward("fwd")
@@ -192,7 +188,7 @@ def test_arch_forward(t : T?) {
 }
 
 
-[test]
+[test(description = "a LINT026 finding follows its citation, a commented-out citation is not one, and rule-document and structure citations are checked", timeout = 1200)]
 def test_arch_forward_control(t : T?) {
     t |> run("negative control - the forward finding follows the citation") @(t : T?) {
         let dir = path_join(tmp_root(), "fwdctl")
@@ -320,7 +316,7 @@ def private plant_comment_cite(dir, lost_head : string) {
 }
 
 
-[test]
+[test(description = "a citation that resolves but sits inside a comment annotates nothing and is reported without counting as a citer", timeout = 1200)]
 def test_arch_comment_citation(t : T?) {
     t |> run("a citation that resolves but sits inside a comment annotates nothing: a finding, and no citer") @(t : T?) {
         let dir = path_join(tmp_root(), "incomment")
@@ -343,7 +339,7 @@ def test_arch_comment_citation(t : T?) {
 }
 
 
-[test]
+[test(description = "LINT026 skips build trees and other repositories under a root, arms on a .md positional, folds nested roots and sees a document above the root", timeout = 1200)]
 def test_arch_roots(t : T?) {
     t |> run("a CMake build tree under a root is not source - its documents and files are skipped") @(t : T?) {
         let root = path_join(tmp_root(), "buildtree")
@@ -411,7 +407,7 @@ def test_arch_roots(t : T?) {
 }
 
 
-[test]
+[test(description = "an uncited anchor is reported in every folder, and dropping a citation orphans the anchor it covered", timeout = 1200)]
 def test_arch_reverse(t : T?) {
     t |> run("an uncited anchor fires in every folder - no tag arms the reverse pass") @(t : T?) {
         let root = build_reverse("rev")
@@ -461,7 +457,7 @@ def private plant_cpp(dir, name : string; pointers : array<string>) {
 }
 
 
-[test]
+[test(description = "a C++ doc-anchor pointer is a citation that satisfies its anchor or fires at its line when dangling", timeout = 1200)]
 def test_arch_cpp_pointers(t : T?) {
     t |> run("a C++ `// <doc>#<anchor>` pointer is a citation: it satisfies the anchor, and a dangling one fires at its line") @(t : T?) {
         let dir = path_join(tmp_root(), "cpp")
@@ -517,7 +513,7 @@ def test_arch_cpp_pointers(t : T?) {
 }
 
 
-[test]
+[test(description = "--disable LINT026, an --enable whitelist without it, and a file positional each behave as documented", timeout = 1200)]
 def test_arch_modes(t : T?) {
     t |> run("--disable LINT026 silences the forward direction") @(t : T?) {
         let dir = build_forward("fwddis")

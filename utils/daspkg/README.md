@@ -320,12 +320,12 @@ Review gates live in [REVIEW.md](REVIEW.md) - run the unit suite on every change
 
 | File | Count | Type |
 |------|-------|------|
-| `test_daspkg.das` | 151 | Unit tests (local operations, parsing, lock file, package_runner) |
-| `test_daspkg_git.das` | 70 | Integration tests (git clone, version resolve, index, global modules) |
+| `test_daspkg_<topic>.das` (names_versions, cli, lockfile, commands, install, index, manifest, release) and `uncategorized.das` | 102 | Unit tests (local operations, parsing, lock file, package_runner, release), one file per topic |
+| `test_daspkg_git.das` | 35 | Integration tests (git clone, version resolve, index, global modules) |
 
 ```bash
 # unit tests - fast, no network
-daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg.das
+daslang dastest/dastest.das -- --test utils/daspkg --exclude test_daspkg_git
 
 # integration tests - requires network
 daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg_git.das

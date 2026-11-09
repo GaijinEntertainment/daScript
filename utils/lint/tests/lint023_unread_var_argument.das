@@ -1,3 +1,5 @@
+//! LINT023 reports a by-value var argument that is written but never
+//! read.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // LINT023: mutable (var) by-value argument is written but never read

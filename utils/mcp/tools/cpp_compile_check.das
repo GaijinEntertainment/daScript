@@ -57,14 +57,19 @@ def cpp_locate_compile_db(build_dir : string) : string {
     for (c in candidates) {
         if (fexist(c)) return c
     }
-    for (pat in ["build*/compile_commands.json", "cmake-build-*/compile_commands.json"]) {
-        var inscope hits : array<string>
-        parse_file_list(path_join(root, pat), hits)
-        for (h in hits) {
-            if (fexist(h)) return h
+    // a build directory is a direct child of the root, so the search
+    // reads one directory listing; a wildcard with a `/` in it would
+    // walk the whole tree, build directory included
+    var found = ""
+    dir(root) $(name) {
+        let isBuildDir = name |> starts_with("build") || name |> starts_with("cmake-build-")
+        return if (!empty(found) || !isBuildDir)
+        let candidate = path_join(root, "{name}/compile_commands.json")
+        if (fexist(candidate)) {
+            found = candidate
         }
     }
-    return ""
+    return found
 }
 
 def private obj_str(m : JsonValue?; key : string) : string {

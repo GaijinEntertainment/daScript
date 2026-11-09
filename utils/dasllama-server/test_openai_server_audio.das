@@ -117,7 +117,7 @@ def private usage_of(t : T?; body : string; tag : string) : ChatReply {
     return res
 }
 
-[test]
+[test(description = "native audio input turns input_audio into soft tokens that the model transcribes", timeout = 1200)]
 def test_openai_server_audio(t : T?) {   // nolint:STYLE038 — one live server session per test: every endpoint assertion runs against that one boot
     t |> run("native audio: input_audio -> gemma4a soft tokens -> a transcription (needs E2B + its mmproj)") @(t : T?) {
         if (!jit_enabled()) {
@@ -311,7 +311,7 @@ def private text_prompt(t : T?; base_url, system, text : string) : int {
     return n
 }
 
-[test]
+[test(description = "an ultravox mmproj arms a stock decoder's audio as bare rows after the text", timeout = 1200)]
 def test_openai_server_audio_tower(t : T?) {
     t |> run("an ultravox mmproj arms a stock decoder's audio: bare rows after the text (needs Llama-3.2-1B + the ultravox mmproj)") @(t : T?) {
         if (!jit_enabled()) {
@@ -416,7 +416,7 @@ let SYS_C = "You are brief."
 // `media_lost` on admission, and the server encodes the clip and submits once more - the client sees one answer.
 let LOST_PORT = 18178
 
-[test]
+[test(description = "an audio span the cache does not hold is encoded and resubmitted", timeout = 1200)]
 def test_openai_server_audio_lost_span(t : T?) {
     t |> run("a span the cache does not hold is encoded and resubmitted (needs Llama-3.2-1B + the ultravox mmproj)") @(t : T?) {
         var inscope files <- [UV_DEC_PATH, UV_MM_PATH, JFK_PATH]
@@ -456,7 +456,7 @@ def test_openai_server_audio_lost_span(t : T?) {
 // parked request gets the encode-failure 400, never a hang.
 let FAULT_PORT = 18179
 
-[test]
+[test(description = "a failed audio encode answers 400 naming the failed encode", timeout = 1200)]
 def test_openai_server_audio_media_job_fails(t : T?) {
     var inscope files <- [UV_DEC_PATH, UV_MM_PATH, JFK_PATH]
     return if (model_missing(t, files))
@@ -513,7 +513,7 @@ def private audio_arms(t : T?; base_url, id : string) : tuple<default_arm : bool
     return res
 }
 
-[test]
+[test(description = "a runtime model load arms audio from the audio_mmproj key", timeout = 1200)]
 def test_openai_server_audio_runtime_load(t : T?) {
     t |> run("a runtime load arms audio from audio_mmproj (needs SmolLM2-135M, Llama-3.2-1B + the ultravox mmproj)") @(t : T?) {
         var inscope files <- [SMOL_PATH, UV_DEC_PATH, UV_MM_PATH, JFK_PATH]

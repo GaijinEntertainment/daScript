@@ -1,3 +1,5 @@
+//! STYLE023 reports an int cast of a bitfield bit test that a direct
+//! field read replaces.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options _nolint = "STYLE042"

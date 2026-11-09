@@ -1,3 +1,5 @@
+//! LINT002 is reported for: a local variable that is declared and
+//! never read.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // LINT002: a local variable that is declared and never read

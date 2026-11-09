@@ -6,6 +6,7 @@ require daslib/fio
 require daslib/regex
 require daslib/regex_boost
 require dastest/review_gate
+require dastest/test_shape
 
 // The mechanical half of utils/REVIEW.md (contract: REVIEW_COMMON.md at the repo root).
 // Run from the repo root: bin/daslang utils/REVIEW.das — exit 0 clean, 1 with findings.
@@ -23,6 +24,7 @@ var private SUPERVISED_TOOLS <- { "mcp", "lsp", "dap" }
 var private INTERNAL_REF_EXEMPT <- {
     "utils/REVIEW.md",              // states the rule
     "utils/REVIEW.das",             // carries the needle
+    "utils/TESTS.md",               // the generated test index names its generator
     "utils/CMakeLists.txt",         // builds and CI-tests internal tools, never ships
     "utils/daslang/tests/test_tool_dispatch.das"    // runs an internal tool to prove `daslang -tool`'s source-tree fallback; not installed
 }
@@ -296,5 +298,8 @@ def main() : int {
     check_shipped_exes(externals)
     check_tool_lists()
     check_supervised_tools()
+    // the test-tree shape over every suite under utils/ - a tool's
+    // sources and the fixtures its suite feeds it are not tests
+    check_test_shape("utils", 100, true)
     return gate_verdict("utils")
 }

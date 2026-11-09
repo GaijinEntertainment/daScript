@@ -186,7 +186,7 @@ journalctl -u dasweb-buildd-roll.service -n 50      # last night's roll
 ```
 
 `--green` reads the public Actions API unauthenticated (60 requests an hour; one per commit
-walked, at most 30) and needs `jq` on the box. `test_roll_toolchain.das` drives the green
+walked, at most 30) and needs `jq` on the box. `uncategorized.das` (the roll-toolchain test) drives the green
 predicate through `--green-check <runs.json>`, one recorded run shape per branch of the rule,
 and the worktree guard through `--dirty-check <worktree>`, which settles the named worktree the
 way a roll would - restores line-ending-only rewrites, exits 12 on a real edit - and stops.

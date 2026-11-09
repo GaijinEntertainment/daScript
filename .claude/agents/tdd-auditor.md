@@ -73,7 +73,8 @@ the run with a checked-out base file in place.
 
 ## Test placement under `tests/` (repo root)
 
-A diff that adds a `[test]` under `tests/` is also audited for WHERE it landed; the rules are
+A diff that adds a `[test]` under any test root - `tests/`, a tool's suite under `utils/`,
+`dastest/tests`, a module's `tests/` - is also audited for WHERE it landed; the rules are
 `tests/REVIEW.md` and the shape is `tests/ARCHITECTURE.md`. Three checks, all cheap:
 
 1. **No new test file.** Every added `[test]` sits in a file that existed before the diff, or
@@ -92,7 +93,8 @@ A diff that adds a `[test]` under `tests/` is also audited for WHERE it landed; 
    or more of its tests - the new one among them or not - belong to one topic, the finding is
    `EXTRACT` naming the three and the category file they make, new or existing.
 
-The mechanical half (`daslang tests/REVIEW.das -- --shape --root tests/<folder>`) reports the
+The mechanical half (`daslang tests/REVIEW.das -- --root <folder>`, with `--tests-only` for a
+folder under `utils/`) reports the
 shape defects a scan can see; run it on each touched folder and fold its lines into the
 report. Checks 1 and 3 are yours alone - the gate cannot tell a new file from an old one or a
 topic from a coincidence.

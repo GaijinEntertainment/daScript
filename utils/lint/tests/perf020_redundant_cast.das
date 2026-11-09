@@ -1,3 +1,5 @@
+//! PERF020 is reported for: T(x) where x is already T (workhorse
+//! type) is a no-op cast - drop it.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // PERF020: T(x) where x is already T (workhorse type) is a no-op cast — drop it.

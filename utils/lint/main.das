@@ -1567,8 +1567,16 @@ def private lint_order(files : array<string>) : array<int> =>
     <- lint_shared_modules ? require_order(files) : [for (i in range(length(files))); i]
 
 def private configure_lint(cfg : Config) {
-    lint_cache_dir = (cfg.no_cache || is_standalone_exe() || jit_enabled()
-        ? "" : cfg.cache_dir)
+    // a standalone exe is JIT-compiled code too, but it versions its
+    // cache by itself (below), so only a `-jit` run of the script, which
+    // the `lint_tool_hash` macro cannot version, runs without one
+    let unversioned = jit_enabled() && !is_standalone_exe()
+    lint_cache_dir = cfg.no_cache || unversioned ? "" : cfg.cache_dir
+    if (is_standalone_exe() && !empty(lint_cache_dir)) {
+        // the version check `lint_tool_hash` does while the runner
+        // compiles; a standalone exe never compiles, so it runs here
+        reset_lint_cache_in(lint_cache_dir, standalone_lint_version())
+    }
     lint_shared_modules = !cfg.no_shared_modules && empty(cfg.project)
     lint_exclude_roots |> reserve(length(cfg.exclude))
     for (x in cfg.exclude) {

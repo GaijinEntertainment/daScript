@@ -8,7 +8,8 @@ require ../patch.das
 
 //! Engine tests: offsets, the comment/string scan, and the edit set.
 //!
-//! The cases that matter are the ones the design turns on — an edit inside a construct plus an
+//! The cases that matter are the ones the design turns on - an edit
+//! inside a construct plus an
 //! edit around it, two edits at one offset, and a deletion that would eat a comment.
 
 
@@ -18,7 +19,7 @@ def private rewrite(text : string; var set : EditSet) : string {
 }
 
 
-[test]
+[test(description = "the line index and span clamping give correct offsets at the edges")]
 def test_offsets(t : T?) {
     t |> run("line index and span clamping") @(t : T?) {
         let src = make_source("abc\ndefgh\n\nxy")
@@ -37,7 +38,7 @@ def test_offsets(t : T?) {
 }
 
 
-[test]
+[test(description = "the lexical scan separates comments from literals including the traps, guards deletions and steps a line edge past a block comment")]
 def test_lexical_scan(t : T?) {
     t |> run("comments and literals, including the traps") @(t : T?) {
         let src = make_source("a /*b*/ c // d\ne \"/*not*/\" f '\"' g")
@@ -71,7 +72,7 @@ def test_lexical_scan(t : T?) {
 }
 
 
-[test]
+[test(description = "inner, outer and same-offset edits compose in one pass while overlapping edits and comment-eating deletions are refused")]
 def test_edits(t : T?) {
     t |> run("inner and outer edits compose in one pass") @(t : T?) {
         let text = "[[Bar a=[[Foo b=2]]]]"
@@ -132,7 +133,7 @@ def test_edits(t : T?) {
 }
 
 
-[test]
+[test(description = "the comment-conservation gate catches loss, duplication and reordering")]
 def test_comment_conservation(t : T?) {
     t |> run("the gate catches loss, duplication and reordering") @(t : T?) {
         let was = "/*a*/ x /*b*/"

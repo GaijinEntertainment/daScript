@@ -12,6 +12,28 @@ require strings
 //! shared by `utils/ast-verify --changed` and preflight's
 //! ast-verify gate.
 
+//! True for a `.das` the verifiers leave out. A compile-fail fixture
+//! (`cant_`, `failed_`, `invalid_` - no AST to verify) always; in
+//! changed mode - every gate's mode, where the set is derived, not
+//! named - also the ast-fuzz self-test breakers (they report by
+//! design; test_ast_fuzz.das owns them) and the whole-stack compiles:
+//! `utils/dasllama-server/` and `utils/dasllama-convert/` pull every
+//! llama module into one compile, `doc/reflections/das2rst.das`
+//! requires every module in the tree, each past a 1200 s cap on a
+//! small runner with siblings in flight, and their own lanes compile
+//! them anyway. A file named to `--file` skips only as a fixture
+def public ast_verify_skips(file : string; changed_mode : bool) : bool {
+    let name = base_name(file)
+    let generic = to_generic_path(file)
+    return true if (name |> starts_with("cant_") || name |> starts_with("failed_")
+                    || name |> starts_with("invalid_"))
+    return false if (!changed_mode)
+    return (find(generic, "ast-fuzz/selftest/") >= 0
+            || find(generic, "utils/dasllama-server/") >= 0
+            || find(generic, "utils/dasllama-convert/") >= 0
+            || generic |> ends_with("doc/reflections/das2rst.das"))
+}
+
 struct public VerifyResult {
     index : int
     //! clean, unverifiable, AST verify, timed out, failed to start,
@@ -88,7 +110,7 @@ def public verify_argv(daslang, path, cache : string) : array<string> {
 
 def private log_in_flight(in_flight : table<int; int64>; files : array<string>) {
     var names <- [for (k, t0 in keys(in_flight), values(in_flight));
-                  "{files[k]} ({get_time_usec(t0) / 1000000}s)"]
+                  "{files[k]} ({get_time_nsec(t0) / 1000000000l}s)"]
     sort(names)
     to_log(LOG_INFO, "ast-verify: still running: {join(names, ", ")}\n")
 }

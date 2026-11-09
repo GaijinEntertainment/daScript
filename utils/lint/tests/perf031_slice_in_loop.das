@@ -1,3 +1,5 @@
+//! PERF031 is reported for: slice/chop on a loop-invariant string
+//! inside a loop.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options _enable_default_off_rules = true   // fixture mode: immune to repo .lint_config rule toggles

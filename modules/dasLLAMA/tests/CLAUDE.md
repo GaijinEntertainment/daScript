@@ -4937,7 +4937,7 @@ Every `[test]` file requiring a `dasllama/*` module outside this folder, each wi
   same-dir name: the chat request's `response_format` / `tool_choice` fields read to a grammar text
   or a refusal (model-free), and the grammar constraint walking tinyllama's own token pieces along a
   schema's sentence, the stop token admitted at its end alone (JIT, skips without the model).
-- `utils/dasllama-server/test_worker_dispatch.das` - requires the server (`openai_server`) by
+- `utils/dasllama-server/uncategorized__dasllama_internal_stack_524288.das` (worker dispatch) - requires the server (`openai_server`) by
   bare same-dir name, like the server suites beside it.
 - `utils/dasllama-server/test_server_flags.das` - requires the server's program root (`main`) and
   `openai_server` by bare same-dir name; its ctx-clamp cell doubles the engine's K/V room seam

@@ -56,12 +56,12 @@ def normalize_report(report : string) : string {
     return replace(report, root, "")
 }
 
-[test]
+[test(description = "the report for a single if/else names the source, registers the functions and counts the taken and untaken branch exactly")]
 def test_simple_branch(t : T?) {
-    let input_file = "{get_das_root()}/utils/dascov/tests/simple_branch.das"
+    let input_file = "{get_das_root()}/utils/dascov/tests/_simple_branch.das"
     let report = normalize_report(get_coverage_report(input_file))
     t |> run("source file") @(t : T?) {
-        t |> success(report |> has_line("SF:tests/simple_branch.das"))
+        t |> success(report |> has_line("SF:tests/_simple_branch.das"))
     }
     t |> run("functions registered") @(t : T?) {
         t |> success(report |> has_line("FN:5,foo"))
@@ -94,12 +94,12 @@ def test_simple_branch(t : T?) {
     }
 }
 
-[test]
+[test(description = "a straight-line program reports every line hit and no branches")]
 def test_simple_linear(t : T?) {
-    let input_file = "{get_das_root()}/utils/dascov/tests/simple_linear.das"
+    let input_file = "{get_das_root()}/utils/dascov/tests/_simple_linear.das"
     let report = normalize_report(get_coverage_report(input_file))
     t |> run("source file") @(t : T?) {
-        t |> success(report |> has_line("SF:tests/simple_linear.das"))
+        t |> success(report |> has_line("SF:tests/_simple_linear.das"))
     }
     t |> run("main called") @(t : T?) {
         t |> success(report |> has_line("FNDA:1,main"))
@@ -117,9 +117,9 @@ def test_simple_linear(t : T?) {
     }
 }
 
-[test]
+[test(description = "called functions and main are hit while an uncalled function's lines are zero")]
 def test_multi_func(t : T?) {
-    let input_file = "{get_das_root()}/utils/dascov/tests/multi_func.das"
+    let input_file = "{get_das_root()}/utils/dascov/tests/_multi_func.das"
     let report = normalize_report(get_coverage_report(input_file))
     t |> run("all functions registered") @(t : T?) {
         t |> success(report |> has_line("FN:3,called_func"))
@@ -144,9 +144,9 @@ def test_multi_func(t : T?) {
     }
 }
 
-[test]
+[test(description = "nested branches report which side of each branch was taken and which lines are covered")]
 def test_nested_branch(t : T?) {
-    let input_file = "{get_das_root()}/utils/dascov/tests/nested_branch.das"
+    let input_file = "{get_das_root()}/utils/dascov/tests/_nested_branch.das"
     let report = normalize_report(get_coverage_report(input_file))
     t |> run("main registered and called") @(t : T?) {
         t |> success(report |> has_line("FN:4,main"))
@@ -194,7 +194,7 @@ def private promoted_requires(name, dep : string) : tuple<registered : bool; req
     return res
 }
 
-[test]
+[test(description = "the program is instrumented while a shared module outlives it without a coverage dependency")]
 def test_shared_module_not_instrumented(t : T?) {
     let root = test_temp_dir()
     fwrite(path_join(root, "cov_shared_probe.das"),

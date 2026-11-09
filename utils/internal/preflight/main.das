@@ -451,8 +451,10 @@ def gate_review_md(ctx : PreflightCtx) : GateResult {
 }
 
 //! CI's `Test review-md discovery` step, suite for suite
-let REVIEW_MD_TEST_SUITES <- ["utils/internal/review-md/test_scan.das", "utils/internal/review-md/test_gate.das",
-    "utils/internal/review-md/test_walkers.das", "utils/internal/make-pr/test_gates.das", "utils/internal/preflight/tests"]
+let REVIEW_MD_TEST_SUITES <- ["utils/internal/review-md/test_scan.das",
+    "utils/internal/review-md/uncategorized.das",
+    "utils/internal/review-md/test_walkers.das", "utils/internal/make-pr/test_gates.das",
+    "utils/internal/preflight/tests"]
 
 def gate_review_md_tests(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
@@ -646,10 +648,7 @@ def gate_ast_verify(ctx : PreflightCtx) : GateResult {
     // the CI step's set: changed .das minus the negative fixtures, plus the qmacro canary
     var files : array<string>
     for (f in ctx.changed_das) {
-        let base = base_name(f)
-        // ast-fuzz/selftest holds deliberately broken fixtures; test_ast_fuzz.das owns them
-        continue if (starts_with(base, "cant_") || starts_with(base, "failed_") || starts_with(base, "invalid_")
-                || find(f, "ast-fuzz/selftest/") >= 0)
+        continue if (ast_verify_skips(f, true))
         files |> push(f)
     }
     if (empty(files)) {

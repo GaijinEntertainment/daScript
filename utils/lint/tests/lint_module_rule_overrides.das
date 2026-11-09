@@ -1,3 +1,5 @@
+//! Module options _lint arms a default-off rule and _nolint silences
+//! one, with the enable winning when both name the same rule.
 options gen2
 options auto_inline_functions = false
 options _lint = "STYLE005"

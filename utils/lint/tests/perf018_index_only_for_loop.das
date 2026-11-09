@@ -1,3 +1,5 @@
+//! PERF018 is reported for: for (i in range(length(arr))) where i
+//! only indexes arr.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // PERF018: for (i in range(length(arr))) where i only indexes arr

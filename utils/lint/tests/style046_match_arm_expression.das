@@ -1,3 +1,4 @@
+//! STYLE046 reports a match arm whose block holds one expression.
 options gen2
 
 expect 31209:4

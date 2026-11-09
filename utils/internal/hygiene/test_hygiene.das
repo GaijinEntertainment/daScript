@@ -8,7 +8,7 @@ require rules
 require process
 
 
-[test]
+[test(description = "a doc-comment line inside a private function's body is stripped")]
 def test_strip_private_function_docstring(t : T?) {
     let input = "def private foo() \{\n    //! description\n    return 1\n\}\n"
     let want = "def private foo() \{\n    return 1\n\}\n"
@@ -16,14 +16,14 @@ def test_strip_private_function_docstring(t : T?) {
 }
 
 
-[test]
+[test(description = "a doc-comment line inside a public function's body is kept")]
 def test_preserve_public_function_docstring(t : T?) {
     let input = "def foo() \{\n    //! description\n    return 1\n\}\n"
     t |> equal(trim_private_docstrings(input), input)
 }
 
 
-[test]
+[test(description = "a trailing field doc on a private struct's field is stripped along with its padding")]
 def test_strip_struct_field_trailing_doc(t : T?) {
     let input = "struct private S \{\n    x : int        //!< desc\n\}\n"
     let want = "struct private S \{\n    x : int\n\}\n"
@@ -31,14 +31,14 @@ def test_strip_struct_field_trailing_doc(t : T?) {
 }
 
 
-[test]
+[test(description = "a plain line comment inside a private function is left alone")]
 def test_preserve_plain_why_comment(t : T?) {
     let input = "def private foo() \{\n    // why\n    return 1\n\}\n"
     t |> equal(trim_private_docstrings(input), input)
 }
 
 
-[test]
+[test(description = "a private function whose signature spans several lines still has its body doc comment stripped")]
 def test_multiline_signature(t : T?) {
     let input = "def private foo(\n    a : int\n) : int \{\n    //! description\n    return a\n\}\n"
     let want = "def private foo(\n    a : int\n) : int \{\n    return a\n\}\n"
@@ -46,7 +46,7 @@ def test_multiline_signature(t : T?) {
 }
 
 
-[test]
+[test(description = "a private class with a base class loses both its body docstring and its field docs")]
 def test_class_private_with_base(t : T?) {
     let input = "class private C : Base \{\n    //! private class docstring\n    f : int        //!< field doc\n\}\n"
     let want = "class private C : Base \{\n    f : int\n\}\n"
@@ -54,7 +54,7 @@ def test_class_private_with_base(t : T?) {
 }
 
 
-[test]
+[test(description = "stripping private docstrings a second time changes nothing")]
 def test_idempotent(t : T?) {
     let input = "def private foo() \{\n    //! description\n    return 1\n\}\n"
     let once = trim_private_docstrings(input)
@@ -63,7 +63,7 @@ def test_idempotent(t : T?) {
 }
 
 
-[test]
+[test(description = "only the private function between two public ones loses its doc comment; both public ones keep theirs")]
 def test_strip_only_inside_private(t : T?) {
     let input = "def public_fn() \{\n    //! kept\n\}\ndef private foo() \{\n    //! stripped\n\}\ndef public_again() \{\n    //! also kept\n\}\n"
     let want = "def public_fn() \{\n    //! kept\n\}\ndef private foo() \{\n\}\ndef public_again() \{\n    //! also kept\n\}\n"
@@ -71,14 +71,14 @@ def test_strip_only_inside_private(t : T?) {
 }
 
 
-[test]
+[test(description = "a file with no private declarations comes back unchanged")]
 def test_no_changes_when_clean(t : T?) {
     let input = "def public_only() \{\n    return 42\n\}\n"
     t |> equal(trim_private_docstrings(input), input)
 }
 
 
-[test]
+[test(description = "a close brace inside a string literal does not end the private body early, so the doc comment after it is still stripped")]
 def test_string_literal_unbalanced_close_brace(t : T?) {
     // `}` inside a string literal must not exit the private body early.
     // Without the fix, the brace counter underflows on line 2 and the //! on
@@ -89,7 +89,7 @@ def test_string_literal_unbalanced_close_brace(t : T?) {
 }
 
 
-[test]
+[test(description = "an open brace inside a string literal does not hold the private body open past its close, so the next public doc comment survives")]
 def test_string_literal_unbalanced_open_brace(t : T?) {
     // `{` inside a string literal must not push body_depth past the actual
     // close. Without the fix, body_depth stays > 0 after the real `}` and the
@@ -99,7 +99,7 @@ def test_string_literal_unbalanced_open_brace(t : T?) {
 }
 
 
-[test]
+[test(description = "CRLF input with nothing to strip round-trips byte for byte")]
 def test_preserve_crlf_when_no_strip(t : T?) {
     // CRLF input with no private docstrings must round-trip byte-for-byte.
     // Without the fix, \r is stripped on read and join uses \n on emit,
@@ -109,7 +109,7 @@ def test_preserve_crlf_when_no_strip(t : T?) {
 }
 
 
-[test]
+[test(description = "stripping a private docstring from CRLF input keeps the CRLF line ends")]
 def test_preserve_crlf_when_stripping(t : T?) {
     // CRLF input with a private docstring strips correctly AND keeps CRLF.
     let input = "def private foo() \{\r\n    //! description\r\n    return 1\r\n\}\r\n"
@@ -118,7 +118,7 @@ def test_preserve_crlf_when_stripping(t : T?) {
 }
 
 
-[test]
+[test(description = "an open brace inside a line comment does not hold the private body open, so the next public doc comment survives")]
 def test_brace_in_line_comment(t : T?) {
     // `{` / `}` inside a `//` comment must not desync the brace counter.
     // Without the fix, the `{` in the comment on line 2 keeps body_depth > 0
@@ -129,7 +129,7 @@ def test_brace_in_line_comment(t : T?) {
 }
 
 
-[test]
+[test(description = "a close brace inside a line comment does not end the private body, so the doc comment after it is still stripped")]
 def test_close_brace_in_line_comment(t : T?) {
     // `}` inside a `//` comment must not exit the body early. Without the
     // fix, the `}` in the comment on line 2 underflows body_depth and the
@@ -140,7 +140,7 @@ def test_close_brace_in_line_comment(t : T?) {
 }
 
 
-[test]
+[test(description = "an open brace inside a one-line block comment does not desync the brace count")]
 def test_brace_in_single_line_block_comment(t : T?) {
     // `{` inside a `/* ... */` block comment that opens and closes on the
     // same line must not desync the brace counter.
@@ -149,7 +149,7 @@ def test_brace_in_single_line_block_comment(t : T?) {
 }
 
 
-[test]
+[test(description = "braces on any line of a multi-line block comment are ignored until its close")]
 def test_brace_in_multiline_block_comment(t : T?) {
     // Block comment spanning multiple lines — braces inside any line of the
     // comment must be ignored; counter resumes only after `*/`.
@@ -158,7 +158,7 @@ def test_brace_in_multiline_block_comment(t : T?) {
 }
 
 
-[test]
+[test(description = "braces inside nested block comments are ignored until the outermost close")]
 def test_brace_in_nested_block_comment(t : T?) {
     // daslang's lexer supports nested `/* /* */ */`. Braces at any nesting
     // level must be ignored; the counter resumes only after the outermost
@@ -168,7 +168,7 @@ def test_brace_in_nested_block_comment(t : T?) {
 }
 
 
-[test]
+[test(description = "a missing input file reports missing_file, not no_change")]
 def test_process_path_missing_file(t : T?) {
     // Missing input must surface as missing_file, not be silently treated
     // as no_change. Without the fix, fread returns "" on missing files and
@@ -178,7 +178,7 @@ def test_process_path_missing_file(t : T?) {
 }
 
 
-[test]
+[test(description = "a directory passed as the input reports not_a_file, not no_change")]
 def test_process_path_directory(t : T?) {
     // Passing a directory must surface as not_a_file. Without the fix,
     // stat(dir).is_valid is true, fread(dir) returns "", and the function
@@ -189,7 +189,7 @@ def test_process_path_directory(t : T?) {
 }
 
 
-[test]
+[test(description = "two blank lines in a row collapse to one")]
 def test_collapse_double_blank(t : T?) {
     let input = "a\n\n\nb\n"
     let want = "a\n\nb\n"
@@ -197,7 +197,7 @@ def test_collapse_double_blank(t : T?) {
 }
 
 
-[test]
+[test(description = "a run of four blank lines collapses to one")]
 def test_collapse_many_blank(t : T?) {
     let input = "a\n\n\n\n\nb\n"
     let want = "a\n\nb\n"
@@ -205,21 +205,21 @@ def test_collapse_many_blank(t : T?) {
 }
 
 
-[test]
+[test(description = "a single blank line is kept")]
 def test_preserve_single_blank(t : T?) {
     let input = "a\n\nb\n"
     t |> equal(collapse_blank_lines(input), input)
 }
 
 
-[test]
+[test(description = "text with no blank lines comes back unchanged")]
 def test_no_blanks_unchanged(t : T?) {
     let input = "a\nb\nc\n"
     t |> equal(collapse_blank_lines(input), input)
 }
 
 
-[test]
+[test(description = "lines holding only spaces or tabs count as blank and collapse to the first of the run")]
 def test_collapse_whitespace_only_blank(t : T?) {
     // Lines containing only spaces/tabs count as blank for collapsing.
     let input = "a\n   \n\t\nb\n"
@@ -228,7 +228,7 @@ def test_collapse_whitespace_only_blank(t : T?) {
 }
 
 
-[test]
+[test(description = "collapsing blank lines a second time changes nothing")]
 def test_collapse_idempotent(t : T?) {
     let input = "a\n\n\n\nb\n\n\nc\n"
     let once = collapse_blank_lines(input)
@@ -237,7 +237,7 @@ def test_collapse_idempotent(t : T?) {
 }
 
 
-[test]
+[test(description = "collapsing blank lines in CRLF input keeps the CRLF line ends")]
 def test_collapse_preserves_crlf(t : T?) {
     let input = "a\r\n\r\n\r\nb\r\n"
     let want = "a\r\n\r\nb\r\n"
@@ -245,7 +245,7 @@ def test_collapse_preserves_crlf(t : T?) {
 }
 
 
-[test]
+[test(description = "the rule chain runs the blank-line collapse after the docstring strip, so a top-level triple blank becomes one")]
 def test_apply_all_rules_chains_collapse(t : T?) {
     // Top-level double-blank between two public defs must be collapsed by
     // the rule chain (collapse_blank_lines runs after trim_private_docstrings).

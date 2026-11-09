@@ -1,3 +1,5 @@
+//! STYLE033 reports a run of two or more bulk push_from calls that
+//! one concatenation replaces.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // STYLE033: a run of >=2 bulk `push_from` / `push_clone_from` from arrays.

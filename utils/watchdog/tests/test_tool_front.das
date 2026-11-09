@@ -9,7 +9,7 @@ require ../watchdog.das
 def host(is_windows : bool) : ToolHost =>
     ToolHost(daslang = "/sdk/bin/daslang", cwd = "/work/proj", das_root = "/sdk", is_windows = is_windows, cmd_exe = "C:/Windows/System32/cmd.exe")
 
-[test]
+[test(description = "the watchdog rewrites a -tool front (lsp, mcp, dap) into the right command line and project root, and refuses a missing name or no daslang")]
 def test_tool_front(t : T?) {
     t |> run("no -tool: the command line comes back as it was") @(t : T?) {
         let front = tool_front(["--cwd", "x", "--", "-tool", "mcp"], host(false))
@@ -65,7 +65,7 @@ def touch(t : T?; path : string) {
     }
 }
 
-[test]
+[test(description = "the watchdog finds the daslang in its own directory or one level up and reports when none is in reach")]
 def test_daslang_beside_watchdog(t : T?) {
     let exe = get_platform_name() == "windows" ? ".exe" : ""
     let root = path_join(test_temp_dir(), "beside")
@@ -98,7 +98,7 @@ def run_captured(argv : array<string>) : Captured {
     return Captured(rc = rc, out = out)
 }
 
-[test]
+[test(description = "the interpreter and exe hosts refuse an unknown front with exit 2 and --help lists the fronts", timeout = 1200)]
 def test_tool_front_hosts(t : T?) {
     let daslang = get_host_binary()
     t |> run("the interpreter host refuses an unknown front with exit 2") @(t : T?) {

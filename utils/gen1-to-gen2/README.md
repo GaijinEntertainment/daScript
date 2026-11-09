@@ -117,4 +117,4 @@ module that already carries one.
 | `convert.das` | the rules, and `convert_file` |
 | `main.das` | CLI |
 | `test_engine.das` | offsets, lexical scan, edit composition |
-| `test_convert.das` | end-to-end over `_fixture_gen1_basic.das` |
+| `uncategorized_rtti_strict_smart_pointers_false.das` | end-to-end over `_fixture_gen1_basic.das` |

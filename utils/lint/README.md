@@ -30,7 +30,8 @@ folder is versioned by the semantic hash of the runner's `[lint_tool_entry]` `ma
 it reaches included: the `lint_tool_hash` simulate macro (`daslib/lint_config.das`) compares it with
 `lint_hash.txt` while the runner compiles and empties the folder when it differs, so a changed rule
 re-lints everything while a comment or an unreached helper re-lints nothing. A standalone `-exe`
-build of the runner never compiles, cannot check that version, and runs without the cache. The cache does not track
+build of the runner never compiles, so it versions the folder by the exe file itself (its size and
+modification time): a rebuilt exe starts a fresh cache. The cache does not track
 `include`d files, macro-pinned environment and command-line inputs, or the C++ build: a change to
 those alone re-lints nothing until `--no-cache`. CI keeps the folder between runs, one per platform
 (`actions/cache` in `.github/workflows/extended_checks.yml`).

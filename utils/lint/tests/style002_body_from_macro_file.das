@@ -1,3 +1,5 @@
+//! STYLE001 and STYLE002 read only the lines the author wrote, not a
+//! body a macro built in another file.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // The defer-pipe scan (STYLE001/STYLE002) reads the lines the author wrote. A function

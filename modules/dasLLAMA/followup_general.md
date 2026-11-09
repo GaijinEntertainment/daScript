@@ -2042,7 +2042,7 @@
 212. **A request served off the prefix cache can answer differently from its cold run.** A cached run attaches
     every row of the prompt but its last token's and evals that token alone, where the cold run evaled it
     inside the prefill batch. On SmolLM2-135M Q8_0 on the CPU, a 138-token prompt (the model's default system
-    line and the robot story of `utils/dasllama-server/test_openai_server_stream.das`) reads "eyes sparkle"
+    line and the robot story of `utils/dasllama-server/test_openai_server.das`) reads "eyes sparkle"
     cold and "eyes light up" off the cache under greedy sampling, the two parting at the fifth generated
     token; a 117-token prompt reads the same both ways, and two cached runs always agree. The classic
     attention mode set in the server's thread did not close it, which a rounding difference alone would

@@ -1,3 +1,5 @@
+//! STYLE043 reports adjacent declarations of one type that could be
+//! merged.
 options gen2
 
 expect 31209:4

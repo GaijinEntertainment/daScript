@@ -145,8 +145,9 @@ branches and tests is a real result; "tests pass" is not an audit.
   in `skills/internal/make_pr.md` step 0a beside the REVIEW.md auditors - one instance for the
   whole diff, so code no REVIEW.md reaches is covered too.
 - Repo test placement (AOT registration, the `tests/.das_test` gate) is
-  `skills/internal/tests_in_repo.md`. Under `tests/` the auditor also checks WHERE a new
+  `skills/internal/tests_in_repo.md`. Under any test root (`tests/`, a tool's suite under
+  `utils/`, `dastest/tests`, a module's `tests/`) the auditor also checks WHERE a new
   `[test]` landed - an existing category file or the folder's `uncategorized.das`, never a
   new file; a `description` on it; and no three-of-a-kind left in the touched
-  `uncategorized.das` - per `tests/REVIEW.md`, with `tests/REVIEW.das --shape` as the
+  `uncategorized.das` - per `tests/REVIEW.md`, with the root's `REVIEW.das` as the
   mechanical half.

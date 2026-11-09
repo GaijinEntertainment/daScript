@@ -26,7 +26,7 @@ require dasllama/dasllama_scheduler
 // model and an armed Vulkan tier, and skips without them.
 //! the process-argument cell skips when the test process was given no `--` flag
 
-[test]
+[test(description = "a flag matches bare and as flag=value, never as a prefix of another flag")]
 def test_flag_match(t : T?) {
     t |> run("a flag matches bare and as flag=value, never as a prefix of another flag") @(t : T?) {
         let args <- ["-m", "model.gguf", "--flat", "--mtp=false", "--streams", "1"]
@@ -45,7 +45,7 @@ def test_flag_match(t : T?) {
 //! the `auto` pick's table (`gpu_auto_pick`, README.md#gpu-key): Metal first; then the home the environment spells where its
 //! witness answers; then Vulkan wherever a Vulkan device answers (the fully served home); then the CUDA home; else off. The
 //! probe under the environment's CUDA ask (DASLLAMA_CUDA=1 on a card) lands `cuda`
-[test]
+[test(description = "the auto GPU pick chooses metal, the environment's home, vulkan, cuda or off in that order")]
 def test_gpu_auto_pick(t : T?) {
     t |> run("the auto pick: metal, the environment's home, vulkan, cuda, off") @(t : T?) {
         t |> equal(gpu_auto_pick(true, true, true, "vulkan"), "metal", "Metal wins over both discrete homes")
@@ -63,7 +63,7 @@ def test_gpu_auto_pick(t : T?) {
     }
 }
 
-[test]
+[test(description = "a flag the process was given reads present and one it was not given reads absent")]
 def test_cli_has_flag(t : T?) {
     t |> run("a flag this process was given reads present, one it was not given reads absent") @(t : T?) {
         var given = ""
@@ -83,14 +83,14 @@ def test_cli_has_flag(t : T?) {
     }
 }
 
-[test]
+[test(description = "the acceptance a process starts with is rejection sampling")]
 def test_mtp_accept_default(t : T?) {
     t |> run("the acceptance a process starts with is rejection sampling - the lossless walk over the head's whole distribution; this file never sets it") @(t : T?) {
         t |> equal(int(get_mtp_accept()), int(MtpAccept.rejection), "the default acceptance ({get_mtp_accept()})")
     }
 }
 
-[test]
+[test(description = "an mtp key set by TOML or flag pins 0 or 1, unset is -1, and the unset default resolves on only where the catalog row lists the GPU")]
 def test_mtp_setting_tri_state(t : T?) {
     t |> run("a key the TOML or --mtp set pins 0 / 1; unset is -1 and each slot decides") @(t : T?) {
         t |> equal(mtp_setting(true, true), 1, "mtp = true")
@@ -126,7 +126,7 @@ def test_mtp_setting_tri_state(t : T?) {
     }
 }
 
-[test]
+[test(description = "an unset prefill chunk resolves from the slot's own arm outcome, not from the box's GPU tier")]
 def test_slot_chunk_defaults(t : T?) {
     t |> run("a slot's chunk defaults read its own arm outcome: the CPU's short chunk and one-window idle chunk, a GPU's one-window chunk and the idle floor, the resident driver's idle chunk at its prompt window or wider") @(t : T?) {
         let cpu = slot_chunk_defaults(false, "cpu")
@@ -141,7 +141,7 @@ def test_slot_chunk_defaults(t : T?) {
     }
 }
 
-[test]
+[test(description = "a slot arms on one stream decoding on a listed GPU, and the ASR dispatch and Metal modes resolve from the slots")]
 def test_slot_arm_rules(t : T?) {
     t |> run("a slot arms on one stream whose decode runs on a GPU the model's row lists") @(t : T?) {
         t |> success(mtp_auto_arms(1l, true, "cpu", "metal"), "the Metal flavor - its tier word reads cpu")
@@ -193,7 +193,7 @@ def private room_of_a_megabyte(row_bytes : int64) : int64 => 1000000l / row_byte
 
 //! The context clamp a blob-only model gets: its `seq_len` cut to the rows the device's KV room holds, a planar model and a
 //! context under the room left alone.
-[test]
+[test(description = "a blob-only model is cut to the rows the device has room for, while a planar model or a context already under the room keeps its length")]
 def test_ctx_clamp_to_device_room(t : T?) {
     var m = Model()
     m.config.n_layers = 3l
@@ -215,7 +215,7 @@ def test_ctx_clamp_to_device_room(t : T?) {
 }
 
 //! The interface the front binds: unset reads loopback (this machine alone), a configured one stands as given.
-[test]
+[test(description = "an unset bind host binds loopback and a configured host binds as given")]
 def test_bind_host_defaults_to_loopback(t : T?) {
     t |> equal("127.0.0.1", DEFAULT_BIND_HOST, "the default is loopback")
     t |> equal(DEFAULT_BIND_HOST, bind_host(""), "an unset host binds loopback")
@@ -225,7 +225,7 @@ def test_bind_host_defaults_to_loopback(t : T?) {
 
 //! The K/V codec a slot runs on, which the live-load clamp reads too: a slot that asked for none inherits the server default
 //! (never SlotOpts' f16 seed), one that asked keeps its own.
-[test]
+[test(description = "a slot that asked for no K/V codec inherits the server default and one that asked keeps its own")]
 def test_slot_kv_dtype(t : T?) {
     let plain = SlotOpts()
     t |> success(slot_kv_dtype(plain) == sched_default_kv_dtype(), "an unset slot inherits the server default")
@@ -237,7 +237,7 @@ def test_slot_kv_dtype(t : T?) {
 
 //! An [[asr]] / [[tts]] roster in the config: every table is a served model in file order, the flat keys read as the
 //! first one, and a one-path `asr` / `tts` key is a roster of one.
-[test]
+[test(description = "the TOML [[asr]] and [[tts]] tables are rosters whose first entry is the default and a flag overrides a non-authoritative config")]
 def test_speech_roster_from_toml(t : T?) {
     let path = "_test_speech_roster.toml"
     t |> run("the tables are the roster, the first is the default") @(t : T?) {
@@ -282,7 +282,7 @@ def test_speech_roster_from_toml(t : T?) {
 
 //! The audio tower's two spellings: `--audio-mmproj` on the command line and `audio_mmproj` in the config, the flag
 //! winning over a config that is not authoritative.
-[test]
+[test(description = "--audio-mmproj parses onto the server arguments and the config key lands only when the config is authoritative")]
 def test_audio_mmproj_flag_and_key(t : T?) {
     t |> run("--audio-mmproj parses onto the server's arguments") @(t : T?) {
         let r <- parse_args(type<ServerArgs>, ["--audio-mmproj", "au.gguf", "--image-mmproj", "v.gguf"])
@@ -316,7 +316,7 @@ def test_audio_mmproj_flag_and_key(t : T?) {
 
 //! The `translate` key and flag: the flag's comma list and the config's string or array of paths read as one spec, its
 //! row and source on the /config surface, and a boot with a present translation model alone is a serving one.
-[test]
+[test(description = "--translate is the config surface's translate row, takes one path or an array, and a present model file makes a serving boot")]
 def test_translate_key_and_flag(t : T?) {
     let path = path_join(test_temp_dir(), "translate.toml")
     t |> run("--translate is the config surface's translate row, sourced cli") @(t : T?) {
@@ -377,7 +377,7 @@ def test_translate_key_and_flag(t : T?) {
 
 //! The roster a kind's flags make: the flat key's model first, with its own keys, then every other path named; a
 //! repeated flag's first value is the default, whatever clargs kept.
-[test]
+[test(description = "one flag is a roster of one, several keep their order and a config's flat key takes no flag's paths")]
 def test_roster_from_flags(t : T?) {
     t |> run("one flag is a roster of one, several keep their order, and a config's flat key takes no flag's paths") @(t : T?) {
         var none : array<string>
@@ -470,21 +470,21 @@ def private slot_mtp_device_home(t : T?; file : string) {
     }
 }
 
-[test]
+[test(description = "a Qwen3.5-0.8B-MTP slot whose catalog row lists vulkan speculates device-home")]
 def test_slot_mtp_device_home(t : T?) {
     t |> run("Qwen3.5-0.8B-MTP, a row listing vulkan modeled: speculates device-home") @(t : T?) {
         slot_mtp_device_home(t, "Qwen3.5-0.8B-MTP-Q8_0.gguf")
     }
 }
 
-[test]
+[test(description = "a routed NextN head on the 35B MoE drafts and verifies on the device")]
 def test_slot_mtp_device_home_moe(t : T?) {
     t |> run("the same over Qwen3.6-35B-A3B-MTP-IQ4_XS-pure: the routed NextN head drafts and verifies on the device") @(t : T?) {
         slot_mtp_device_home(t, "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf")
     }
 }
 
-[test]
+[test(description = "the catalog's serve_mtp platforms are read off the model file's base name and a file with no row lists none")]
 def test_mtp_catalog_platforms(t : T?) {
     t |> run("the catalog's serve_mtp is read off the model file's base name; a file with no row lists none") @(t : T?) {
         t |> equal(catalog_mtp_platforms("/models/Qwen3.8-27B-UD-Q4_K_M.gguf"), "metal, vulkan", "the Qwen3.8-27B row lists both platforms: whole on either, the round measured a win on both")
@@ -495,7 +495,7 @@ def test_mtp_catalog_platforms(t : T?) {
     }
 }
 
-[test]
+[test(description = "GET /config's unset mtp reads the configured model's catalog row")]
 def test_config_mtp_catalog(t : T?) {
     t |> run("GET /config's unset mtp reads the configured model's catalog row") @(t : T?) {
         let listed = "/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf"
@@ -512,7 +512,7 @@ def test_config_mtp_catalog(t : T?) {
 //! the slot options both load paths build carry the catalog row's
 //! platforms, so an unset `mtp` arms a listed model's slot alike at
 //! boot and at a runtime POST load
-[test]
+[test(description = "boot and runtime-load options resolve mtp from the slot, then the server, then the catalog")]
 def test_slot_mtp_platforms(t : T?) {
     let listed = "/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf"
     let no_row = "/models/no-such-model.gguf"
@@ -550,7 +550,7 @@ def test_slot_mtp_platforms(t : T?) {
     }
 }
 
-[test]
+[test(description = "the checkpoint budget is the MB asked, else a quarter of RAM, else 4 GB, and the count follows that byte budget")]
 def test_prefix_state_budget(t : T?) {
     t |> run("the checkpoint budget: the MB asked, else a quarter of RAM, else 4 GB") @(t : T?) {
         t |> equal(16384l, prefix_state_budget_mb(0l, 64l), "a 64 GB box")

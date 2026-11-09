@@ -10,8 +10,9 @@ require model_catalog
 require daslib/fio
 require daslib/json_boost
 require strings
+require main                                            // the program root: ModelEntry, apply_model_override, boot_default_index (sibling by bare name)
 
-[test]
+[test(description = "every assistant drafter resolves pinned and the gemma-4 26B card carries the upstream head")]
 def test_catalog_drafters(t : T?) {
     t |> run("every assistant drafter resolves pinned, and the gemma-4 26B card carries the upstream head") @(t : T?) {
         var found = false
@@ -36,7 +37,7 @@ let private TTS_SET_FILES <- ["kitten-nano.gguf", "kitten-mini.gguf", "kokoro-82
                               "pocket-tts-en-18m-q8.gguf", "pocket-tts-en-18m-kq.gguf", "pocket-tts-en-18m-stuart-kq.gguf", "pocket-tts-en-7m-q8.gguf", "pocket-tts-en-2m.gguf",
                               "pocket-tts-en-18m-refl-q8.gguf", "pocket-tts-en-7m-refl-q8.gguf", "pocket-tts-en-2m-refl.gguf"]
 
-[test]
+[test(description = "catalog entries are pinned, unique, carry towers and exactly one is the default, and the text-to-speech set is pinned like any carrier")]
 def test_catalog_table(t : T?) {
     t |> run("entries are pinned, unique, and exactly one is the default") @(t : T?) {
         var names, files : table<string>
@@ -116,7 +117,7 @@ def test_catalog_table(t : T?) {
     }
 }
 
-[test]
+[test(description = "the models dir resolves env over config over the home default and the wrapper yields a usable absolute path")]
 def test_models_dir_resolution(t : T?) {
     t |> run("the pure core: env > config > home default, separators stripped, roots kept") @(t : T?) {
         t |> equal(catalog_models_dir_from("D:/somewhere/models/", "", "H:/u"), "D:/somewhere/models")
@@ -136,7 +137,7 @@ def test_models_dir_resolution(t : T?) {
     }
 }
 
-[test]
+[test(description = "an absent file reads not present and a planted one reads present at its path")]
 def test_local_presence(t : T?) {
     t |> run("an absent file is not present; a planted one is, at its path") @(t : T?) {
         let dir = path_join(test_temp_dir(), "presence")
@@ -153,7 +154,7 @@ def test_local_presence(t : T?) {
     }
 }
 
-[test]
+[test(description = "a download without an events channel, of a present file, of a file outside the TTS set, or of an unpinned tower or drafter is refused")]
 def test_download_refusals(t : T?) {
     t |> run("no events channel refuses instead of spawning a doomed worker") @(t : T?) {
         let dir = path_join(test_temp_dir(), "chan")
@@ -211,7 +212,7 @@ def test_download_refusals(t : T?) {
 // form reads text and needs no pack, everything else is a phoneme family
 def private needs_packs_by_name(path : string) : bool => find(base_name(path), "pocket-tts-") < 0
 
-[test]
+[test(description = "the /catalog document carries every entry with presence and an idle download machine, and a planted tower reads present")]
 def test_state_json(t : T?) {
     t |> run("the /catalog document carries every entry with presence and an idle machine") @(t : T?) {
         let dir = path_join(test_temp_dir(), "doc")
@@ -278,7 +279,7 @@ def test_state_json(t : T?) {
     }
 }
 
-[test]
+[test(description = "a planted drafter reads present with its file and canonical bytes while other rows' drafters read absent")]
 def test_state_json_drafter(t : T?) {
     t |> run("a planted drafter reads present, its file and canonical bytes named; the other rows' drafters read absent") @(t : T?) {
         let dir = path_join(test_temp_dir(), "drafterdoc")
@@ -322,7 +323,7 @@ def test_state_json_drafter(t : T?) {
     }
 }
 
-[test]
+[test(description = "the ACCEPTED body echoes the download id the state machine registers and the bytes of what downloads")]
 def test_download_accepted_json(t : T?) {
     t |> run("the ACCEPTED body echoes the download id the state machine registers and the bytes of what downloads") @(t : T?) {
         var e = CatalogEntry(name = "x", file = "x.gguf", bytes = 11l)
@@ -343,7 +344,7 @@ def test_download_accepted_json(t : T?) {
     }
 }
 
-[test]
+[test(description = "the tts list names the front-end packs and the models, each saying whether it reads them")]
 def test_state_json_tts(t : T?) {
     t |> run("the tts list: the front-end packs the route loads, then the models, each saying whether it reads them") @(t : T?) {
         let dir = path_join(test_temp_dir(), "ttsdoc")
@@ -387,7 +388,7 @@ def test_state_json_tts(t : T?) {
     }
 }
 
-[test]
+[test(description = "the captured catalog fixtures carry only normalized paths")]
 def test_fixture_path_normalization(t : T?) {
     t |> run("the captured catalog fixtures carry only normalized paths") @(t : T?) {
         // pins capture_catalog.das's normalize_paths ON ITS ARTIFACTS: every path value in
@@ -401,5 +402,59 @@ def test_fixture_path_normalization(t : T?) {
                 t |> success(find(text, "\"{leak}") < 0, "{fx}: no machine-local path ({leak})")
             }
         }
+    }
+}
+
+// Model-free unit coverage for the --model-over-roster override (the match arm, the append
+// arm, and the two warn-and-degrade arms: missing file, route-name collision) and for the
+// boot's default pick past embedding models. Runs fully in CI — no GGUF, no JIT.
+
+def private plant(name : string) : string {
+    var terr = ""
+    let td = temp_directory(terr)
+    let p = path_join(empty(td) ? "/tmp" : td, name)
+    fwrite(p, "x")
+    return p
+}
+
+[test(description = "--model over a roster matches, appends as the default, or warns and degrades on a missing file or route-name collision")]
+def test_model_override(t : T?) {
+    t |> run("--model over a roster: match, append, and the warn-and-degrade arms") @(t : T?) {
+        let a = plant("dasllama_ovr_a.gguf")
+        let b = plant("dasllama_ovr_b.gguf")
+        var models <- [ModelEntry(path = a, is_default = true), ModelEntry(path = b)]
+        apply_model_override(models, path_join(dir_name(a), "dasllama_ovr_missing.gguf"))
+        t |> success(length(models) == 2 && models[0].is_default && !models[1].is_default,
+                     "a missing --model leaves the roster untouched")
+        apply_model_override(models, to_generic_path(b))
+        t |> success(length(models) == 2 && !models[0].is_default && models[1].is_default,
+                     "a spelling-variant match flips the default onto the matched entry")
+        let c = plant("dasllama_ovr_c.gguf")
+        apply_model_override(models, c)
+        t |> success(length(models) == 3 && models[2].is_default && !models[0].is_default && !models[1].is_default,
+                     "an unlisted --model joins the roster AS the default")
+        var collide <- [ModelEntry(path = a, name = "kept", is_default = true),
+                        ModelEntry(path = b, name = "dasllama_ovr_c.gguf")]
+        apply_model_override(collide, c)
+        t |> success(length(collide) == 2 && collide[0].is_default && !collide[1].is_default,
+                     "a route-name collision leaves the roster untouched")
+        remove(a)
+        remove(b)
+        remove(c)
+        delete models
+        delete collide
+    }
+}
+
+[test(description = "the default slot is always a chat entry and an embedding model never takes the default mark")]
+def test_boot_default_index(t : T?) {
+    t |> run("the default slot is a chat entry: an embedding model never takes the mark") @(t : T?) {
+        var inscope models <- [ModelEntry(path = "chat_a.gguf"), ModelEntry(path = "emb.gguf", is_default = true), ModelEntry(path = "chat_b.gguf")]
+        t |> equal(boot_default_index(models, [false, false, false]), 1, "a marked chat entry is the default")
+        t |> equal(boot_default_index(models, [false, true, false]), 0, "a marked embedding model hands the default to the first chat entry")
+        t |> equal(boot_default_index(models, [true, true, false]), 2, "the first chat entry, past every embedding model")
+        t |> equal(boot_default_index(models, [true, true, true]), -1, "an all-embedding roster has no default slot")
+        var inscope unmarked <- [ModelEntry(path = "emb.gguf"), ModelEntry(path = "chat.gguf")]
+        t |> equal(boot_default_index(unmarked, [true, false]), 1, "with no mark, the first chat entry")
     }
 }

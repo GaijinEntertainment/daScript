@@ -1,3 +1,5 @@
+//! PERF030 is reported for: move-assign onto a heap-carrying bare
+//! variable drops the old contents.
 options gen2
 // PERF030: move-assign onto a heap-carrying bare variable drops the old contents
 //

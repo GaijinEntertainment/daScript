@@ -81,4 +81,4 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics, prog
 
 **`"defer_loading": false` (repo-only).** The repo's `.mcp.json` sets this on the `daslang` server entry so tool schemas load at session start instead of being deferred (deferred = caller has to `ToolSearch select:<tool>` before each first call). When the harness honors the flag, this removes the per-call ToolSearch friction. When it doesn't, the flag is harmless and tools fall back to the deferred path; CLAUDE.md's "MCP-first search" rule documents that workflow.
 
-**Tests:** run `dastest/dastest.das -- --test utils/mcp/test_tools.das` through the daslang binary.
+**Tests:** run `dastest/dastest.das -- --test utils/mcp` through the daslang binary (the suite is split by tool family, `utils/mcp/test_tools_<family>.das`; pass one file to run one family).

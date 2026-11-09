@@ -7,7 +7,7 @@ require strings
 
 def private no_args : array<string> => <- array<string>()
 
-[test]
+[test(description = "the defaults stand with no toml keys, toml values override them with provenance recorded, and a wrong-typed value is an error rather than a silent zero")]
 def test_defaults_and_toml(t : T?) {
     t |> run("defaults stand with no toml keys") @(t : T?) {
         var cfg = BuilddArgs()
@@ -53,7 +53,7 @@ def test_defaults_and_toml(t : T?) {
     }
 }
 
-[test]
+[test(description = "an explicit CLI flag beats the toml unless authoritative flips the order, and a hyphenated flag marks its underscored key")]
 def test_cli_precedence(t : T?) {
     t |> run("an explicit cli flag beats the toml") @(t : T?) {
         var cfg = BuilddArgs()
@@ -84,7 +84,7 @@ def test_cli_precedence(t : T?) {
     }
 }
 
-[test]
+[test(description = "an explicit config path that does not exist is an error")]
 def test_load_config_missing_explicit(t : T?) {
     t |> run("an explicit config path that does not exist is an error") @(t : T?) {
         var cfg = BuilddArgs()
@@ -96,7 +96,7 @@ def test_load_config_missing_explicit(t : T?) {
     }
 }
 
-[test]
+[test(description = "the startup banner reports whether the token is set and where it came from, never its value")]
 def test_banner_hides_the_token(t : T?) {
     t |> run("the banner reports set/unset and provenance, never the value") @(t : T?) {
         var cfg = BuilddArgs()

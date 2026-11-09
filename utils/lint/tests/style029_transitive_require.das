@@ -1,3 +1,5 @@
+//! STYLE029 reports a require used only for one module it re-exports,
+//! and stays silent when two or more re-exports are used.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // STYLE029: 'require X' used only for ONE module X re-exports — require it

@@ -15,7 +15,7 @@ def private with_temp_dir(prefix : string; blk : block<(dir : string) : void>) {
     rmdir_rec(dir)
 }
 
-[test]
+[test(description = "only plain .das file names pass the source-name check; every other name is refused")]
 def test_source_filename_validation(t : T?) {
     t |> run("boring .das names pass, everything else is refused") @(tt : T?) {
         tt |> success(is_valid_source_filename("main.das"), "main.das")
@@ -28,7 +28,7 @@ def test_source_filename_validation(t : T?) {
     }
 }
 
-[test]
+[test(description = "a raw daslang source unpacks into main.das")]
 def test_unpack_raw_source(t : T?) {
     with_temp_dir("buildd_src_") $(dir) {
         t |> run("raw das text becomes main.das") @(tt : T?) {
@@ -39,7 +39,7 @@ def test_unpack_raw_source(t : T?) {
     }
 }
 
-[test]
+[test(description = "a bundle unpacks with its active entry, and one with a hostile name, an active outside its files, no active, or non-text content is refused whole")]
 def test_unpack_bundle(t : T?) {
     with_temp_dir("buildd_src_") $(dir) {
         t |> run("a bundle with files and active materializes with its entry") @(tt : T?) {
@@ -80,7 +80,7 @@ def test_unpack_bundle(t : T?) {
     }
 }
 
-[test]
+[test(description = "an empty build command reports itself unconfigured, a real one has its output captured, and a failing one keeps its exit code", timeout = 1200)]
 def test_run_build_command(t : T?) {
     t |> run("empty build_cmd reports itself") @(tt : T?) {
         let r = run_build_command("", "s", "o", "module", "main.das", 5.0)
@@ -99,7 +99,7 @@ def test_run_build_command(t : T?) {
     }
 }
 
-[test]
+[test(description = "module mode collects its one artifact with its sha, and the manifest takes the upload shape")]
 def test_collect_artifacts(t : T?) {
     with_temp_dir("buildd_out_") $(dir) {
         fwrite(path_join(dir, "sample.wasm"), "wasm bytes")
@@ -120,7 +120,7 @@ def test_collect_artifacts(t : T?) {
     }
 }
 
-[test]
+[test(description = "a build cannot widen what it publishes: smuggled files are dropped, an undefined mode publishes nothing, and page mode publishes its html+js+wasm triple whole or not at all")]
 def test_build_cannot_widen_its_own_output(t : T?) {
     // Regression, proven on zen4: a compile-time [init] in the user's own
     // source can fwrite into the output directory. The sandbox stops it
@@ -177,7 +177,7 @@ def test_build_cannot_widen_its_own_output(t : T?) {
     }
 }
 
-[test]
+[test(description = "the generated page package names the app sample and the job's entry, and declared assets become absolute-src embeds")]
 def test_write_page_package(t : T?) {
     with_temp_dir("buildd_pkg_") $(dir) {
         t |> run("the generated package names the app sample and the job's entry") @(tt : T?) {
@@ -205,7 +205,7 @@ def test_write_page_package(t : T?) {
     }
 }
 
-[test]
+[test(description = "wasm-assets lines parse and nothing else does, asset paths must sit under the allowlist with plain components, and a bad one fails closed naming it")]
 def test_declared_assets(t : T?) {
     t |> run("wasm-assets lines parse; everything else is ignored") @(tt : T?) {
         let src = ("options gen2\n" +
@@ -245,7 +245,7 @@ def test_declared_assets(t : T?) {
     }
 }
 
-[test]
+[test(description = "a job hash must be exactly 64 lowercase hex characters and a toolchain id 7 to 64")]
 def test_job_identity_validation(t : T?) {
     // The builder assembles a scratch path from the hash the SERVER sent, so
     // its shape is checked on arrival — "the server said so" is not validation.
@@ -264,7 +264,7 @@ def test_job_identity_validation(t : T?) {
     }
 }
 
-[test]
+[test(description = "an artifact that is a symlink to a host file is refused, so nothing is uploaded", timeout = 1200)]
 def test_symlinked_artifact_is_refused(t : T?) {
     // A build writes its output directory with the user's own compile-time
     // code. Everything downstream reads the artifact path on the HOST, outside
@@ -298,7 +298,7 @@ def test_symlinked_artifact_is_refused(t : T?) {
     }
 }
 
-[test]
+[test(description = "a git checkout derives its 40-hex HEAD sha as the toolchain id and a non-repo directory derives nothing", timeout = 1200)]
 def test_derive_toolchain(t : T?) {
     t |> run("this repo's HEAD is a 40-hex sha") @(tt : T?) {
         let sha = derive_toolchain(".")

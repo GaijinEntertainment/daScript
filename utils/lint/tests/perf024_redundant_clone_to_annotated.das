@@ -1,3 +1,5 @@
+//! PERF024 is reported for: redundant pre-clone before a
+//! [clone(...)]-annotated function.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options rtti

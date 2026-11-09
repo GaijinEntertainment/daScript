@@ -1,3 +1,5 @@
+//! PERF029 is reported for: parallel-array indexing via
+//! range(length(X)) - zip the arrays instead.
 options gen2
 // PERF029: parallel-array indexing via range(length(X)) — zip the arrays instead
 //

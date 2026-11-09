@@ -1,3 +1,5 @@
+//! LINT001 is reported for: a statement after a `return` in the same
+//! block never runs.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // LINT001: a statement after a `return` in the same block never runs; every dead statement of

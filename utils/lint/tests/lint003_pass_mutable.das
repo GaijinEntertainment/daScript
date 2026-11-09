@@ -1,3 +1,6 @@
+//! LINT003 does not suggest const for a var passed only to a
+//! mutable-ref parameter of a callee that never writes it, and still
+//! reports the rest.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // LINT003: pass-mutable suppression (issue #3090)

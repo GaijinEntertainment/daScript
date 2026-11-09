@@ -39,6 +39,7 @@ module lint_config shared private
 //! The ``[arch]`` reverse pass (LINT026: an anchor no code cites) and the LINT027
 //! line gate over rule documents need no tag - they run in every folder.
 
+require strings
 require daslib/fio
 require daslib/json
 require daslib/toml
@@ -475,6 +476,30 @@ class private LintToolEntry : AstFunctionAnnotation {
     //! ``[lint_tool_entry]`` marks the lint runner's entry point: its semantic hash, every function it reaches included, versions the result cache
 }
 
+//! True for a result-cache entry's name: ``0x`` and the hex digits of
+//! the entry key's hash, the shape the lint runner writes
+def public is_lint_cache_entry(name : string) : bool {
+    return false if (length(name) < 3 || !(name |> starts_with("0x")))
+    for (c in slice(name, 2)) {
+        return false if (!is_hex(c))
+    }
+    return true
+}
+
+//! Empties the cache under ``cache_dir`` when its ``lint_hash.txt``
+//! records another ``tool_version``, and stamps the new one; only the
+//! entries go, so a ``--cache-dir`` naming the checkout loses nothing
+def public reset_lint_cache_in(cache_dir : string; tool_version : string) {
+    return if (empty(cache_dir))
+    let stamp = "{cache_dir}/lint_hash.txt"
+    return if (fread(stamp) == tool_version)
+    dir(cache_dir) $(name) {
+        remove("{cache_dir}/{name}") if (is_lint_cache_entry(name))
+    }
+    mkdir_rec(cache_dir)
+    fwrite(stamp, tool_version)
+}
+
 def private reset_lint_cache(tool_hash : string) {
     let args <- get_command_line_arguments()
     var dir = LINT_CACHE_DEFAULT_DIR
@@ -484,11 +509,16 @@ def private reset_lint_cache(tool_hash : string) {
             dir = args[i + 1]
         }
     }
-    let stamp = "{dir}/lint_hash.txt"
-    return if (fread(stamp) == tool_hash)
-    rmdir_rec(dir)
-    mkdir_rec(dir)
-    fwrite(stamp, tool_hash)
+    reset_lint_cache_in(dir, tool_hash)
+}
+
+//! The cache version of a standalone ``-exe`` lint runner: the exe
+//! file's size and modification time, since the ``lint_tool_hash``
+//! macro never runs there; a rebuilt exe is a new version
+def public standalone_lint_version() : string {
+    let exe = get_command_line_arguments()[0]
+    let st = stat(exe)
+    return st.is_valid ? "exe {st.size} {int64(st.mtime)}" : "exe"
 }
 
 [simulate_macro(name="lint_tool_hash")]

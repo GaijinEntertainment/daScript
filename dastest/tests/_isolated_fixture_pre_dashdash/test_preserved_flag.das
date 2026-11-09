@@ -1,12 +1,11 @@
 options gen2
 
 require dastest/testing_boost public
-require strings
 
 // This fixture asserts that a daslang flag passed BEFORE the dastest.das
 // script (e.g. `daslang -dasroot <path> dastest.das -- ...`) is preserved
 // through dastest's isolated-mode singleTest cmd reconstruction. The outer
-// test_isolated_mode.das spawns dastest with a pre-`--` `-dasroot` flag;
+// uncategorized.das spawns dastest with a pre-`--` `-dasroot` flag;
 // this fixture runs in the spawned subprocess and checks that `-dasroot`
 // is in its own raw argv (because dastest preserved it via launchPrefix).
 [test]

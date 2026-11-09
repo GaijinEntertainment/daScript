@@ -14,7 +14,8 @@ require ../convert.das
 //!
 //! The expectations are byte-exact, including where comments land: a comment written before the
 //! type stays before it, one written after the type lands after the `(`, and one written inside
-//! a `Foo()` initializer joins the leading run — there is nowhere else for it to go once the
+//! a `Foo()` initializer joins the leading run - there is nowhere
+//! else for it to go once the
 //! parens are gone.
 
 let FIXTURE = "{get_das_root()}/utils/gen1-to-gen2/tests/_fixture_make_syntax.das"
@@ -34,7 +35,7 @@ def private body_line(text : string; needle : string) : string {
 }
 
 
-[test]
+[test(description = "every v1 make-struct shape converts and nested make-structs compose in one pass")]
 def test_make_struct(t : T?) {
     t |> run("every v1 make-struct shape") @(t : T?) {
         let out = converted()
@@ -52,7 +53,7 @@ def test_make_struct(t : T?) {
 }
 
 
-[test]
+[test(description = "array and tuple make forms convert and an element type moves outside the call")]
 def test_make_array(t : T?) {
     t |> run("array and tuple forms") @(t : T?) {
         let out = converted()
@@ -73,7 +74,7 @@ def test_make_array(t : T?) {
 }
 
 
-[test]
+[test(description = "the array-of and table-of bracket forms and comprehensions convert keeping their bodies")]
 def test_make_wrappers(t : T?) {
     t |> run("the array-of and table-of bracket forms") @(t : T?) {
         let out = converted()
@@ -90,7 +91,7 @@ def test_make_wrappers(t : T?) {
 }
 
 
-[test]
+[test(description = "the converted make-syntax compiles as gen2")]
 def test_make_compiles(t : T?) {
     t |> run("the converted make-syntax compiles as gen2") @(t : T?) {
         var issues = ""
@@ -99,7 +100,7 @@ def test_make_compiles(t : T?) {
 }
 
 
-[test]
+[test(description = "no make-syntax rule loses a comment or is refused")]
 def test_make_comments_conserved(t : T?) {
     t |> run("no comment is lost by any make rule") @(t : T?) {
         let res <- convert_file(FIXTURE, ConvertOptions(v2 = true))

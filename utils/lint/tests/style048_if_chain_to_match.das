@@ -1,3 +1,5 @@
+//! STYLE048 (armed by _enable_default_off_rules) reports an if chain
+//! over one value that a match replaces.
 options gen2
 options _enable_default_off_rules = true
 

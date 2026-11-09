@@ -1,3 +1,5 @@
+//! LINT029 (armed by _lint) reports a function that fills an
+//! out-parameter it should return.
 options gen2
 options auto_inline_functions = false
 options _lint = "LINT029"   // the rule ships default-off; the fixture arms it

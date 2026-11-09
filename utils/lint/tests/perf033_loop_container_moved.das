@@ -1,3 +1,5 @@
+//! PERF033 reports a container declared inside a loop that leaks its
+//! buffer every iteration unless it is inscope or moved out.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options _nolint = "STYLE042,PERF006,PERF022"

@@ -1,3 +1,5 @@
+//! LINT009 is reported for: `then` branch is equivalent to `else`
+//! branch.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // LINT009: `then` branch is equivalent to `else` branch

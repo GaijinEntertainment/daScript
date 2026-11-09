@@ -1489,7 +1489,8 @@ def document_module_lint_config(_root : string) {
         group_by_regex("Fixes", mod, %regex~(apply_lint_fixes|applied_lint_fix_spans|lint_source_line)$%%),
         group_by_regex("Format policy", mod,
             %regex~(format_policy_for|partition_by_format_policy)$%%),
-        group_by_regex("Line-length policy", mod, %regex~(line_length_policy_for)$%%)
+        group_by_regex("Line-length policy", mod, %regex~(line_length_policy_for)$%%),
+        group_by_regex("Result cache", mod, %regex~(reset_lint_cache_in|is_lint_cache_entry|standalone_lint_version)$%%)
     )
     document("Repo-level lint configuration", mod, "lint_config.rst", groups)
 }

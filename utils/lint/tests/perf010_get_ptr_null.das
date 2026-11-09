@@ -1,3 +1,4 @@
+//! PERF010 is reported for: get_ptr(x) == null should be x == null.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // PERF010: get_ptr(x) == null should be x == null

@@ -89,6 +89,11 @@ def private report_file(uri : string; status : SuiteResult; fileDt : int64) {
 }
 // ! with the spawn tick, names each isolated child's stderr file
 var private g_stderr_seq : int = 0
+
+//! 1-based index of the file the sequential sweep is on; 0 in the
+//! modes that run files in parallel. The --timeout watchdog thread
+//! reads it through a pointer: new_thread clones the context
+var private g_running_index : int
 var private jsonFilePath : string
 var private jsonTestFile : string
 
@@ -638,32 +643,6 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
     var res : SuiteResult
     let startTime = ref_time_ticks()
 
-    let timeout = test_args.timeout
-    if (timeout > 0.) {
-        unsafe {
-            new_thread() @() {
-                // Polled sleep: chunk into 100ms slices and watch for jobque
-                // shutdown so a clean main-return does not have to wait for
-                // the full timeout. ~Module_JobQue busy-waits on the thread
-                // count, so without this the shutdown path hangs.
-                let total_ms = uint(timeout * 1000.)
-                var slept = 0u
-                while (slept < total_ms && !is_job_que_shutting_down()) {
-                    let chunk = min(100u, total_ms - slept)
-                    fio::sleep(chunk)
-                    slept += chunk
-                }
-                if (slept >= total_ms) {
-                    log::error("dastest: the suite ran past its --timeout of {timeout}s; the process ends here with exit code {TIMEOUT_EXIT_CODE} and no summary")
-                    // not fio::exit - it runs the job queue teardown, which busy-waits on
-                    // this very thread; and nothing here invokes into the main context,
-                    // which the main thread is still running
-                    unsafe(fio::exit_now(TIMEOUT_EXIT_CODE))
-                }
-            }
-        }
-    }
-
     let together = !empty(test_args.together)
     var inputPaths := together ? test_args.together : test_args.test_files
     var files : array<string>
@@ -695,6 +674,38 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
         files |> erase_if() $(f) {
             let base = base_name(f)
             return (find_index_if(test_args.exclude_files) $(pat) => base |> contains(pat)) >= 0
+        }
+    }
+
+    let timeout = test_args.timeout
+    if (timeout > 0.) {
+        let running_index = unsafe(addr(g_running_index))
+        unsafe {
+            new_thread <| @capture(:= files, = running_index) {
+                // Polled sleep: chunk into 100ms slices and watch for jobque
+                // shutdown so a clean main-return does not have to wait for
+                // the full timeout. ~Module_JobQue busy-waits on the thread
+                // count, so without this the shutdown path hangs.
+                let total_ms = uint(timeout * 1000.)
+                var slept = 0u
+                while (slept < total_ms && !is_job_que_shutting_down()) {
+                    let chunk = min(100u, total_ms - slept)
+                    fio::sleep(chunk)
+                    slept += chunk
+                }
+                if (slept >= total_ms) {
+                    let idx = *running_index
+                    let at_file = (idx > 0 && idx <= length(files)
+                        ? "; running {files[idx - 1]} (file {idx} of {length(files)})" : "")
+                    let ends = "the process ends here with exit code {TIMEOUT_EXIT_CODE}"
+                    let past = "dastest: the suite ran past its --timeout of {timeout}s"
+                    log::error("{past}; {ends} and no summary{at_file}")
+                    // not fio::exit - it runs the job queue teardown, which busy-waits on
+                    // this very thread; and nothing here invokes into the main context,
+                    // which the main thread is still running
+                    unsafe(fio::exit_now(TIMEOUT_EXIT_CODE))
+                }
+            }
         }
     }
 
@@ -755,6 +766,7 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
             let uri = ctx.uriPaths ? file_name_to_uri(file) : file
             let fileTime = ref_time_ticks()
             fileIndex ++
+            g_running_index = fileIndex
             log::started("run {fileIndex}/{length(files)}: {uri}")
             let status = suite::test_file(file, ctx)
             let fileDt = get_time_nsec(fileTime) / 1000

@@ -14,7 +14,7 @@ require daslib/strings_boost   // join
 require strings
 require math
 
-[test]
+[test(description = "the command word dispatches to its plan: no arguments, --help and an unknown command ask for usage or a refusal, and every command name and help spelling resolves")]
 def test_plan_dispatch(t : T?) {
     t |> run("no arguments asks for the usage") @(t : T?) {
         let none : array<string>
@@ -50,7 +50,7 @@ def test_plan_dispatch(t : T?) {
     }
 }
 
-[test]
+[test(description = "--play and --null-audio parse on the commands that speak and are off by default")]
 def test_plan_playback(t : T?) {
     t |> run("--play and --null-audio parse on the commands that speak, off by default") @(t : T?) {
         for (cmd in ["chat", "speak", "talk", "translate"]) {
@@ -68,7 +68,7 @@ def test_plan_playback(t : T?) {
     }
 }
 
-[test]
+[test(description = "--verbose parses on every command and is off by default")]
 def test_plan_verbose(t : T?) {
     t |> run("--verbose is a shared flag on every command, off by default") @(t : T?) {
         let quiet <- parse_cli(["complete", "-m", "x.gguf", "hi"])
@@ -84,7 +84,7 @@ def test_plan_verbose(t : T?) {
     }
 }
 
-[test]
+[test(description = "complete, transcribe, talk, chat, bench, tokenize and embed each land their own flags and bare tokens on one plan")]
 def test_plan_flags(t : T?) {
     t |> run("complete: the shared, the sampler and its own flags land on one plan") @(t : T?) {
         let plan <- parse_cli(["complete", "-m", "x.gguf", "--gpu", "off", "-t", "4", "--temp", "0.7", "-n", "12", "-p", "hi", "--quiet"])
@@ -155,7 +155,7 @@ def test_plan_flags(t : T?) {
     }
 }
 
-[test]
+[test(description = "translate takes its model by flag or bare, with the speech model, script and lane")]
 def test_plan_translate(t : T?) {
     t |> run("translate: the model by flag or bare, the speech model, the script and the lane") @(t : T?) {
         let plan <- parse_cli(["translate", "--nmt", "model.ruen.intgemm.alphas.bin", "--tts", "t.gguf", "-v", "af", "--script", "s.txt", "--out-dir", "w", "--exact", "--quiet"])
@@ -177,7 +177,7 @@ def test_plan_translate(t : T?) {
     }
 }
 
-[test]
+[test(description = "--mic, --asr, --asr-mmproj and --lang parse on the commands that listen")]
 def test_plan_mic(t : T?) {
     t |> run("--mic, --asr, --asr-mmproj and --lang parse on the commands that listen") @(t : T?) {
         for (cmd in ["chat", "translate"]) {
@@ -193,7 +193,7 @@ def test_plan_mic(t : T?) {
     }
 }
 
-[test]
+[test(description = "one command's value flag never shadows another's, and a model path, -n, --temp and a spaced prompt together parse without silently decoding greedy")]
 def test_plan_flag_neighbours(t : T?) {
     t |> run("another struct's value flag never shadows this one's: --gpu off then --temp 2.0") @(t : T?) {
         let plan <- parse_cli(["complete", "-m", "x.gguf", "--gpu", "off", "--temp", "2.0", "hi"])
@@ -224,7 +224,7 @@ def test_plan_flag_neighbours(t : T?) {
     }
 }
 
-[test]
+[test(description = "unset sampler knobs resolve to greedy for a completion and the chat preset for a conversation, and an explicit value always wins")]
 def test_sampler_defaults(t : T?) {
     t |> run("unset knobs: greedy for a completion, the chat preset for a conversation") @(t : T?) {
         let unset <- parse_cli(["chat", "-m", "l.gguf"])
@@ -246,7 +246,7 @@ def test_sampler_defaults(t : T?) {
     }
 }
 
-[test]
+[test(description = "reasoning streams when shown with one blank line before the answer, prints nothing when hidden, and a reply without reasoning is the answer alone")]
 def test_think_print(t : T?) {
     t |> run("reasoning streams when shown, one blank line before the answer, then the answer") @(t : T?) {
         var thought = false
@@ -268,7 +268,7 @@ def test_think_print(t : T?) {
     }
 }
 
-[test]
+[test(description = "the usage names every command and each command's help carries its own flags, the sampler where it samples, and the shared flags")]
 def test_help_surfaces(t : T?) {
     t |> run("the usage names every command") @(t : T?) {
         let usage = cli_usage()
@@ -288,7 +288,7 @@ def test_help_surfaces(t : T?) {
     }
 }
 
-[test]
+[test(description = "the prompt text resolves with the flag first, then the file, then the bare token")]
 def test_text_input(t : T?) {
     t |> run("the flag wins, then the file, then the bare token") @(t : T?) {
         var err = ""
@@ -307,7 +307,7 @@ def test_text_input(t : T?) {
     }
 }
 
-[test]
+[test(description = "a config's speech roster supplies the ASR and TTS models with their own keys")]
 def test_config_speech_roster(t : T?) {
     t |> run("a speech roster's first table supplies the ASR and TTS models and their own keys") @(t : T?) {
         let speech = "[[asr]]\npath = \"a.gguf\"\nmmproj = \"mm.gguf\"\n[[asr]]\npath = \"b.gguf\"\n[[tts]]\npath = \"k.gguf\"\nlane = \"f32\"\nvoices_dir = \"v\"\n[[tts]]\npath = \"p.gguf\"\n"
@@ -321,7 +321,7 @@ def test_config_speech_roster(t : T?) {
     }
 }
 
-[test]
+[test(description = "a config file fills only what the flags left empty, with flat keys and roster defaults, and reports bad TOML or a missing explicit file as errors")]
 def test_config_file(t : T?) {
     let body = "model = \"a.gguf\"\ngpu = \"vulkan\"\ngpu_layers = 3\nthreads = 6\nasr = \"asr.bin\"\ntts = \"t.gguf\"\nimage_mmproj = \"v.gguf\"\naudio_mmproj = \"au.gguf\"\nmodels_dir = \"/m\"\n"
     t |> run("the flat keys land") @(t : T?) {
@@ -399,7 +399,7 @@ def test_config_file(t : T?) {
     }
 }
 
-[test]
+[test(description = "a model path resolves as given, else as a bare name under the models dir, else to nothing")]
 def test_model_path(t : T?) {
     t |> run("a path as given, a bare name under the models dir, else nothing") @(t : T?) {
         var terr = ""
@@ -418,7 +418,7 @@ def test_model_path(t : T?) {
     }
 }
 
-[test]
+[test(description = "the chat loop reads a plain line as a message, a slash line as a command, a triple-quote block as one message, and saves and loads transcripts")]
 def test_repl_lines(t : T?) {
     t |> run("a plain line is a message, a slash line a command") @(t : T?) {
         t |> equal(parse_repl_line("hello there").op, ReplOp.say)
@@ -476,7 +476,7 @@ def test_repl_lines(t : T?) {
     }
 }
 
-[test]
+[test(description = "every command's pre-load refusals fire, the config supplies what a refusal would ask for, and a valid plan is not refused")]
 def test_validate_plan(t : T?) {
     let none = CliConfig()
     t |> run("every pre-load refusal, by command") @(t : T?) {
@@ -532,7 +532,7 @@ def test_validate_plan(t : T?) {
     }
 }
 
-[test]
+[test(description = "--show-help, unparsable shared flags and one bad value per command are refusals, and flag values never eat the bare text")]
 def test_plan_parse_errors(t : T?) {
     t |> run("--show-help as the first word asks for the usage") @(t : T?) {
         t |> success(parse_cli(["--show-help"]).help, "help")
@@ -572,7 +572,7 @@ def test_plan_parse_errors(t : T?) {
     }
 }
 
-[test]
+[test(description = "an empty roster leaves the model empty and the roster, rope-scaling and common keys land on the plan")]
 def test_config_edges(t : T?) {
     t |> run("an empty roster leaves the model empty") @(t : T?) {
         var cfg = CliConfig()
@@ -635,7 +635,7 @@ def test_config_edges(t : T?) {
     }
 }
 
-[test]
+[test(description = "every command spelling maps and a relative model path with a separator is never re-rooted under the models dir")]
 def test_repl_names(t : T?) {
     t |> run("every command spelling maps") @(t : T?) {
         t |> equal(parse_repl_line("/help").op, ReplOp.help)
@@ -705,7 +705,7 @@ def private drive(lines : array<string>; speak_ok : bool = false) : tuple<st : R
     return <- (st = st, eng = eng)
 }
 
-[test]
+[test(description = "the chat loop sends messages in order, handles /regen, /clear, /system, /image, /audio and /read, and stops on /exit")]
 def test_repl_loop(t : T?) {
     t |> run("messages reach the model in order, the block as one, and /exit stops the input") @(t : T?) {
         var r <- drive(["hello", "\"\"\"", "line one", "line two", "\"\"\"", "/exit", "never"])
@@ -773,7 +773,7 @@ def test_repl_loop(t : T?) {
     }
 }
 
-[test]
+[test(description = "/save, /load, /stats, /speak and /help behave and name the reason when a file or directory is unusable")]
 def test_repl_loop_toggles(t : T?) {
     t |> run("/load names why a file is not a transcript; /save names a directory it cannot write into") @(t : T?) {
         var terr = ""
@@ -814,7 +814,7 @@ def private empty_flag_cell(t : T?; langs : array<string>) {
     t |> equal(why, "", "{length(langs)} languages: nothing refused")
 }
 
-[test]
+[test(description = "--lang is passed to the ASR facade as given, as auto, or as a listed code, and an unsupported code is refused with what the model takes")]
 def test_asr_lang_hint(t : T?) {
     t |> run("no --lang hands the facade \"\" whatever the model's languages - create_session picks its default") @(t : T?) {
         let none : array<string>

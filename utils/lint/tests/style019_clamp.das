@@ -1,3 +1,4 @@
+//! STYLE019 is reported for: nested min/max -> clamp(x, lo, hi).
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options _nolint = "STYLE042"

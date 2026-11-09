@@ -25,7 +25,7 @@ def private download_field(dir, key : string) : string {
     return v
 }
 
-[test]
+[test(description = "a drafter pinned to a local file source starts under the id drafter:<name> and the worker refuses bytes off the pinned sha, leaving no file", timeout = 1200, standalone = "the download machine is process state that test_model_catalog's document cells read idle")]
 def test_companion_download_starts(t : T?) {
     t |> run("a pinned drafter starts its download under the id drafter:<name>, and the worker refuses bytes off the pinned sha") @(t : T?) {
         catalog_events_init()

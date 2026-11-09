@@ -31,10 +31,19 @@ lane's runner image carries that tool. One arm can hold assertions of both kinds
 **A changed file that belongs to a tool, wherever the tool sits, is reviewed with that tool's
 own `REVIEW.md`, where one exists, as well as with this checklist.**
 
-**A diff that adds a `[test]` file covering a change to a tool puts that file under the tool's
-directory; a test that calls a `common/` module directly goes under `common/`, even when it also
-runs a tool, one that tests a `common/` change by running a tool that requires it goes under that
-tool, and a test covering two tools goes under either one.**
+**A diff that adds a `[test]` covering a change to a tool puts it under the tool's directory, in
+the tool's existing category file for the topic or in that directory's `uncategorized.das`,
+never in a new file; a test that calls a `common/` module directly goes under `common/`, even
+when it also runs a tool, one that tests a `common/` change by running a tool that requires it
+goes under that tool, and a test covering two tools goes under either one.** The shape rules -
+three or more tests per category file, one `uncategorized.das` per directory, a description
+on every test, `timeout = 1200` on a test that builds, spawns or waits - are `tests/REVIEW.md`
+(repo root) and `tests/ARCHITECTURE.md`; `REVIEW.das` (beside this file) applies them to every
+suite under this folder in tests-only mode, where a `.das` with neither `[test]` nor `expect`
+is a tool's source or a fixture its suite feeds it. `TESTS.md` (beside this file) is the
+generated index of those suites: `daslang utils/internal/test-audit/main.das -- --root utils
+--tests-only --index utils/TESTS.md --readme` writes it, and the `check_tests_index` target
+verifies it.
 
 **A diff that changes how a tool builds a `.dlim` from a `.gguf` model file, how one loads it,
 or what identifies one - the fields that decide whether two `.dlim`s are the same image -
@@ -54,6 +63,12 @@ standing decision.
 
 **A diff that deletes a tool named in `DAS_UTILS_SHIPPED_EXES` leaves a comment line beside
 the list naming the removed exe, in the same change.**
+
+**A `daslang -exe` build of a tool that exists for the tool's tests - `bin/das-lint.exe`, which
+`lint/tests/_lint_cli.das` spawns when a fresh one is there - never joins `DAS_UTILS_SHIPPED_EXES`,
+an install rule, or a release bundle.** A standalone exe carries the modules it was built with,
+and a user's tree loads its own set dynamically; the shipped form of a tool stays a copy of
+`daslang` that compiles the tool at launch.
 
 **An arm the diff adds or changes that covers a change to a tool, whose load-bearing
 assertions a CI row can run against the change, ships with a CI row that executes those

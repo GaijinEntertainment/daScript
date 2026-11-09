@@ -1,3 +1,5 @@
+//! STYLE025 is reported for: `unsafe { ... }` block where only one
+//! statement needs unsafe.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // STYLE025: `unsafe { ... }` block where only one statement needs unsafe

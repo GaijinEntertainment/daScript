@@ -130,7 +130,7 @@ def private four_at_once(base_url : string) : int {
     return ok
 }
 
-[test]
+[test(description = "two ASR and two TTS models are listed, answer under their own ids and serve four simultaneous requests", timeout = 1200)]
 def test_two_asr_and_two_tts_models_serve_at_once(t : T?) {
     var inscope files <- roster_files()
     return if (model_missing(t, files))
@@ -190,7 +190,7 @@ def test_two_asr_and_two_tts_models_serve_at_once(t : T?) {
 
 //! One ASR model takes every transcription, whatever model the request names: a client written for another server
 //! names a model of its own, and there is only one to mean.
-[test]
+[test(description = "a lone ASR model takes every transcription whatever model name the request carries", timeout = 1200)]
 def test_one_asr_model_takes_any_name(t : T?) {
     var inscope files <- roster_files()
     return if (model_missing(t, files))
@@ -237,7 +237,7 @@ def private asr_alone_decoder(t : T?; port : int; mode : MetalMode) : string {
 
 //! An ASR model serves with no LLM and no TTS beside it, and its decoder runs where the engine's Metal mode puts it:
 //! on the device under the mode a Metal build serves with, on the CPU with the mode off.
-[test]
+[test(description = "an ASR model serves with no LLM or TTS and its decoder runs on the backend the engine's Metal mode picks", timeout = 1200)]
 def test_asr_alone_serves_on_the_engine_backend(t : T?) {
     var inscope files <- [path_join(models_dir(), "{ASR_A}.gguf"), asr_mmproj(ASR_A)]
     return if (model_missing(t, files))
@@ -251,7 +251,7 @@ def test_asr_alone_serves_on_the_engine_backend(t : T?) {
 
 //! An ASR model that cannot load fails the boot with the loader's reason: the speech thread reports it to the engine,
 //! which was waiting on that thread's first word. The control is the return itself - a boot that hung never gets here.
-[test]
+[test(description = "an ASR model that cannot load fails the boot with the loader's reason instead of hanging", timeout = 1200)]
 def test_asr_load_failure_fails_the_boot(t : T?) {
     var inscope files <- roster_files()
     return if (model_missing(t, files))
@@ -282,7 +282,7 @@ let RU_SHORT = "modules/dasLLAMA/benchmarks/asr/corpus/ru_short.wav"
 //! A one-file ASR model (GigaAM) serves alone: its worker reports the lane its encoder serves on - the build's GPU tier where
 //! the tower serves its exact lane, though no decoder of it is a Metal-flavor Model - it transcribes the Russian clip, and
 //! /v1/audio/translations refuses it as a model whose caps declare no translation.
-[test]
+[test(description = "a GigaAM tower serves transcription alone and /v1/audio/translations refuses it as a model with no translation", timeout = 1200)]
 def test_gigaam_alone_serves_and_refuses_translation(t : T?) {
     let gguf = path_join(models_dir(), "{GIGAAM}.gguf")
     return if (model_missing(t, gguf))

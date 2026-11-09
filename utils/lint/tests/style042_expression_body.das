@@ -1,3 +1,5 @@
+//! STYLE042 reports a function whose body is one return and should be
+//! an expression body.
 options gen2
 
 expect 31209:3

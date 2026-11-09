@@ -1,3 +1,5 @@
+//! LINT018 is reported for: narrowing the size/position argument of a
+//! call that has a 64-bit overload.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // LINT018: narrowing the size/position argument of a call that has a 64-bit overload

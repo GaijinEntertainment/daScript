@@ -1,3 +1,5 @@
+//! LINT021 is reported for: a 64-bit local that is never consumed as
+//! 64-bit.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // LINT021: a 64-bit local that is never consumed as 64-bit

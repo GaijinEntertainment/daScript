@@ -1,3 +1,4 @@
+//! STYLE039 reports a non-ASCII byte in a string literal.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options _ascii_strings = true   // fixture is not under daslib/ or modules/ - force the rule on

@@ -36,7 +36,7 @@ among them - is raced inside the exe at first start, because that race needs no 
 5. **Release** - landed: `daspkg release --fat <class>` builds under the baseline and the fat
    mode, mints nothing, ships no sidecar, and refuses a kernel whose baseline clone came from
    no profile (the deps JSON's `fat_unprofiled`). Test: `test_cmd_release_fat` in
-   `utils/daspkg/test_daspkg.das`.
+   `utils/daspkg/test_daspkg_release.das`.
 
 ## Rules decided up front
 

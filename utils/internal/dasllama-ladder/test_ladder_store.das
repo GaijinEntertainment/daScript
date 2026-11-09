@@ -77,7 +77,7 @@ def private seed_v1_store(db : SqlRunner) {
     }
 }
 
-[test]
+[test(description = "a fresh ladder database migrates to the latest schema, and migrations 2 to 9 backfill the cells of rows stored before them")]
 def test_migration(t : T?) {
     t |> run("fresh db migrates to latest") @(t : T?) {
         with_latest_sqlite(":memory:") $(db) {
@@ -134,7 +134,7 @@ def test_migration(t : T?) {
     }
 }
 
-[test]
+[test(description = "a versioned sidecar stores and dedups with path-shaped provenance stripped, a slashed cpu brand keeps its box, an unversioned one is refused, and the size and rate gates hold")]
 def test_put_sidecar(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         t |> run("a versioned sidecar stores and dedups") @(tt : T?) {
@@ -207,7 +207,7 @@ def test_put_sidecar(t : T?) {
     }
 }
 
-[test]
+[test(description = "the sidecar ladder tiers exact, then cpu, then arch within a version, puts a verified sidecar first in its tier, and a delete drops it and its verbatim submission")]
 def test_sidecar_ladder(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         var pol = test_policy()
@@ -262,7 +262,7 @@ def test_sidecar_ladder(t : T?) {
     }
 }
 
-[test]
+[test(description = "version 0 lists every sidecar newest first with no tier, and a version scopes the listing")]
 def test_list_sidecars(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         var pol = test_policy()
@@ -288,7 +288,7 @@ def test_list_sidecars(t : T?) {
     }
 }
 
-[test]
+[test(description = "a stamped records submission lands as unverified community rows, a byte-identical resubmit dedups, and an unstamped one is refused")]
 def test_put_records(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         t |> run("a stamped submission lands as unverified community rows") @(tt : T?) {
@@ -344,7 +344,7 @@ def test_put_records(t : T?) {
     }
 }
 
-[test]
+[test(description = "submitted records lose their home-layout paths on the server")]
 def test_records_redacted_server_side(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         t |> run("submitted records lose their home-layout paths") @(tt : T?) {
@@ -367,7 +367,7 @@ def test_records_redacted_server_side(t : T?) {
     }
 }
 
-[test]
+[test(description = "verifying a submission flips every run it carries, and deleting one removes its runs or its sidecar row")]
 def test_admin_levers(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         let put = put_records(db, records_doc(), "10.3.0.1", test_policy(), 1000l)
@@ -401,7 +401,7 @@ def test_admin_levers(t : T?) {
     }
 }
 
-[test]
+[test(description = "official rows import verified, a byte-identical re-import is a no-op, a re-measure replaces on its identity, and garbage is refused")]
 def test_official_import(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         let text1 = official_doc()
@@ -444,7 +444,7 @@ def private run_of(rows : array<Run>; engine, workload : string) : Run {
     return Run()
 }
 
-[test]
+[test(description = "an image-chat import lands its encode, prefill and decode cells")]
 def test_image_cells(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         t |> run("an image-chat import lands the encode, prefill and decode cells") @(tt : T?) {
@@ -462,7 +462,7 @@ def test_image_cells(t : T?) {
     }
 }
 
-[test]
+[test(description = "a void blanks the named cells of exactly the runs it selects")]
 def test_voids(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         t |> run("a void blanks the named cells of the runs it selects, " +
@@ -504,7 +504,7 @@ def test_voids(t : T?) {
     }
 }
 
-[test]
+[test(description = "a hold withholds every run of its model on its workload and box only, and an import replaces the holds whole while a malformed one changes nothing")]
 def test_holds(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         t |> run("a hold withholds every run of its model on its workload, " +
@@ -545,7 +545,7 @@ def test_holds(t : T?) {
     }
 }
 
-[test]
+[test(description = "official and community asr/tts runs fill their audio cells, an audio-chat run takes its asr-keyed clips, and an LLM run carries none")]
 def test_audio_cells(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         t |> run("an official asr/tts import fills the audio cells") @(tt : T?) {
@@ -626,7 +626,7 @@ def private outlier_run_cells(rows : array<Run>; engine, backend : string) : arr
     return <- array<AudioCell>()
 }
 
-[test]
+[test(description = "an audio cell past the outlier rule, or named by its run's void, is marked voided")]
 def test_audio_cells_voided(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         t |> run("a cell past the outlier rule, or named by the run's " +
@@ -656,7 +656,7 @@ def test_audio_cells_voided(t : T?) {
     }
 }
 
-[test]
+[test(description = "a planted sidecar stores verified with the importer stamp, re-planting promotes it, a non-strip-invariant plant still dedups its community twin, and plants are validated like imports")]
 def test_plant_sidecar(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         t |> run("a planted sidecar stores verified with the importer stamp") @(tt : T?) {
@@ -717,7 +717,7 @@ def test_plant_sidecar(t : T?) {
     }
 }
 
-[test]
+[test(description = "the version list merges versions from runs and sidecars, newest first")]
 def test_list_versions(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         var pol = test_policy()

@@ -1,3 +1,5 @@
+//! PERF032 reports an @exact_size array grown by resize with no
+//! explicit capacity.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // PERF032: an @exact_size array grown by resize without explicit capacity

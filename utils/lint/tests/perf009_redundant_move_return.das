@@ -1,3 +1,5 @@
+//! PERF009 is reported for: Redundant move-init variable immediately
+//! returned.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // PERF009: Redundant move-init variable immediately returned

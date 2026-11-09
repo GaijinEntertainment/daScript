@@ -146,7 +146,7 @@ def private latin_letters(s : string) : int {
     return n
 }
 
-[test]
+[test(description = "sentences end at . ! ? before a space or at a newline with separators kept, and a dot inside a word or number does not end one")]
 def test_sentence_pieces(t : T?) {
     t |> run("a sentence ends at . ! ? before a space and at a newline; the separators are kept") @(t : T?) {
         var inscope pieces <- sentence_pieces("Hi there. How are you?  Fine!\nNext line\n\nLast")
@@ -182,7 +182,7 @@ def test_sentence_pieces(t : T?) {
 //! The refusals that come before any translation model, on a server whose one model cannot load (its bytes are not a
 //! Marian model) - model-free: the request shape, the size limit counted over a repeated form `q`, then the 503 while no
 //! model is ready; and a model named twice is left out the second time.
-[test]
+[test(description = "a missing or twice-named translation model is left out, and requests are refused with the right status while no model is ready", timeout = 1200)]
 def test_refusals_with_no_model_ready(t : T?) {
     let dir = path_join(test_temp_dir(), "xx-en-broken")
     let broken = path_join(dir, "model.xxen.intgemm.alphas.bin")
@@ -223,7 +223,7 @@ def test_refusals_with_no_model_ready(t : T?) {
     remove(broken)
 }
 
-[test]
+[test(description = "the LibreTranslate-style /translate route translates strings and lists on a Bergamot ru-en pair", timeout = 1200)]
 def test_libre_routes_on_bergamot(t : T?) {
     return if (model_missing(t, [RU_EN, EN_RU]))
     with_translate_server(TEST_PORT, [RU_EN, EN_RU], "") $(base_url) {
@@ -279,7 +279,7 @@ def test_libre_routes_on_bergamot(t : T?) {
     }
 }
 
-[test]
+[test(description = "the /translate route translates strings and lists on a MiLMMT translation LLM", timeout = 1200)]
 def test_libre_routes_on_milmmt(t : T?) {
     return if (model_missing(t, MILMMT))
     with_translate_server(TEST_PORT + 1, [MILMMT], "") $(base_url) {
@@ -305,7 +305,7 @@ def test_libre_routes_on_milmmt(t : T?) {
     }
 }
 
-[test]
+[test(description = "/v1/audio/translations transcribes the clip and translates it to the requested target", timeout = 1200)]
 def test_audio_translation_target(t : T?) {
     return if (model_missing(t, [RU_EN, GIGAAM]))
     if (!stat(RU_SHORT).is_valid) {

@@ -7,7 +7,7 @@ require daslib/strings_boost
 require strings
 require _host_fixture
 
-[test]
+[test(description = "-tool with no name lists the SDK tools, an unknown or path-shaped name is refused naming where it looked, das-fmt runs dasfmt.das and a name outside utils/ resolves under utils/internal/", timeout = 1200)]
 def test_tool_names(t : T?) {
     t |> run("no name lists the SDK tools, never an internal one") @(t : T?) {
         let r = run_daslang([get_host_binary(), "-tool"])
@@ -42,7 +42,7 @@ def test_tool_names(t : T?) {
     }
 }
 
-[test]
+[test(description = "-dasroot before -tool picks the root, a -- right after the name is the tool separator and a -tool after the script -- is the script argument", timeout = 1200)]
 def test_tool_arguments(t : T?) {
     let sdk = make_sdk(t, "args_sdk", array<string>())
     t |> run("-dasroot before -tool resolves the tool under that root") @(t : T?) {
@@ -62,7 +62,7 @@ def test_tool_arguments(t : T?) {
     }
 }
 
-[test]
+[test(description = "a daslang copy named after a tool runs that tool and hands its children the right daslang", timeout = 1200)]
 def test_tool_by_binary_name(t : T?) {
     t |> run("a copy named after a tool, alone in its bin/, hands its children itself") @(t : T?) {
         let sdk = make_sdk(t, "lone_sdk", [exe_name("echo")])
@@ -106,7 +106,7 @@ def project_copy(t : T?; name : string) : string {
     return dst
 }
 
-[test]
+[test(description = "a tool takes the project root from the directory it runs in unless an explicit flag before -tool says otherwise", timeout = 1200)]
 def test_tool_project_root(t : T?) {
     t |> run("a tool takes the project root from the directory it runs in") @(t : T?) {
         let project = project_copy(t, "project_default")

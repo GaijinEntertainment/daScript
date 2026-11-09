@@ -1,3 +1,5 @@
+//! LINT012 counts arguments a discarded static_if arm names as used,
+//! and still reports an argument neither arm names.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // LINT012: a function argument the body never uses. An argument or local a DISCARDED `static_if`

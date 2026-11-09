@@ -1,3 +1,5 @@
+//! STYLE040 is reported for: a run of statements duplicated elsewhere
+//! in the module.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options _dupe_min_nodes = 16            // keep fixture functions small

@@ -9,7 +9,7 @@ require strings
 def private test_policy : StorePolicy =>
     StorePolicy(max_source_bytes = 64, max_inserts_per_ip_hour = 3)
 
-[test]
+[test(description = "a fresh samples database migrates to the latest schema")]
 def test_migration(t : T?) {
     t |> run("fresh db migrates to latest") @(t : T?) {
         with_latest_sqlite(":memory:") $(db) {
@@ -18,7 +18,7 @@ def test_migration(t : T?) {
     }
 }
 
-[test]
+[test(description = "nothing is listed until promoted, promotion lists by category then title, an unknown hash cannot be promoted, and demotion unlists while the permalink stays")]
 def test_listing_and_promotion(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         let src = "print(\"curated\")"
@@ -58,7 +58,7 @@ def test_listing_and_promotion(t : T?) {
     }
 }
 
-[test]
+[test(description = "a put stores the source under its content hash and an unknown hash reads as empty")]
 def test_put_and_get(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         t |> run("put stores and returns the content hash") @(tt : T?) {
@@ -77,7 +77,7 @@ def test_put_and_get(t : T?) {
     }
 }
 
-[test]
+[test(description = "a second put of the same source dedups and the first writer's row metadata is kept")]
 def test_dedup_first_writer_wins(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         let src = "let x = 1"
@@ -100,7 +100,7 @@ def test_dedup_first_writer_wins(t : T?) {
     }
 }
 
-[test]
+[test(description = "a curated upsert inserts once past the put policy, listing sets every field, and the stale sweep demotes only curated hashes outside the keep set")]
 def test_curated_store_ops(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         t |> run("upsert_curated_source inserts once, bypassing policy") @(tt : T?) {
@@ -139,7 +139,7 @@ def test_curated_store_ops(t : T?) {
     }
 }
 
-[test]
+[test(description = "an empty or over-cap source is rejected and a rejected put stores nothing")]
 def test_rejections(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         t |> run("empty source") @(tt : T?) {
@@ -156,7 +156,7 @@ def test_rejections(t : T?) {
     }
 }
 
-[test]
+[test(description = "the default size cap admits a 300 KB bundle and still rejects one byte over")]
 def test_default_cap_admits_a_multi_file_bundle(t : T?) {
     //! Regression: the playground POSTs a multi-file sample as one JSON
     //! document, so the cap is measured against the whole bundle rather than
@@ -177,7 +177,7 @@ def test_default_cap_admits_a_multi_file_bundle(t : T?) {
     }
 }
 
-[test]
+[test(description = "the per-ip ceiling rejects the fourth insert, even one that would dedup, leaves other ips alone, and lifts when the window expires")]
 def test_rate_ceiling(t : T?) {
     with_latest_sqlite(":memory:") $(db) {
         let pol = test_policy()   // 3 per hour
@@ -201,7 +201,7 @@ def test_rate_ceiling(t : T?) {
     }
 }
 
-[test]
+[test(description = "an operator promotion clears the importer's ownership, so a later import with an empty keep set leaves the sample listed")]
 def test_promotion_releases_importer_ownership(t : T?) {
     //! Regression: promote_sample used to leave PrimaryPath set, so promoting a
     //! sample the manifest once carried left it looking importer-owned and the
@@ -225,7 +225,7 @@ def test_promotion_releases_importer_ownership(t : T?) {
     }
 }
 
-[test]
+[test(description = "the listing keeps manifest order over alphabetical, and an operator promotion sorts after every manifest entry")]
 def test_listing_keeps_manifest_order(t : T?) {
     //! Regression: the dropdown ordered by (category, title), which reshuffled
     //! the site-authored manifest order and changed which sample the playground
@@ -251,7 +251,7 @@ def test_listing_keeps_manifest_order(t : T?) {
     }
 }
 
-[test]
+[test(description = "valid UTF-8 sequences pass validation and malformed ones fail it")]
 def test_utf8_validation(t : T?) {
     t |> run("valid sequences") @(t : T?) {
         t |> success(is_valid_utf8("plain ascii"), "ascii")

@@ -1,3 +1,5 @@
+//! LINT031 reports a const pointer or reference parameter written
+//! through after the const is stripped.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // LINT031: a const pointer or reference parameter the body writes through after stripping

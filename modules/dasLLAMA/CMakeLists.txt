@@ -101,12 +101,10 @@ if(NOT DAS_TOOLS_DISABLED)
         COMPILE_ONLY_FILES
             utils/dasllama-server/test_openai_server.das
             utils/dasllama-server/test_openai_server_think.das
-            utils/dasllama-server/test_openai_server_stream.das
             utils/dasllama-server/test_openai_server_vision.das
             utils/dasllama-server/test_openai_server_audio.das
             utils/dasllama-server/test_openai_server_speech.das
             utils/dasllama-server/test_openai_server_speech_multi.das
-            utils/dasllama-server/test_openai_server_vision_multi.das
             utils/dasllama-server/test_openai_server_mtp.das
             utils/dasllama-server/test_openai_server_embed.das
             utils/dasllama-server/test_cli.das
@@ -115,15 +113,14 @@ if(NOT DAS_TOOLS_DISABLED)
             utils/dasllama-server/test_exchange_client.das
             utils/dasllama-server/test_model_catalog.das
             utils/dasllama-server/test_catalog_download.das
-            utils/dasllama-server/test_setup_mode.das
+            utils/dasllama-server/uncategorized_persistent_heap_stack_524288.das
             utils/dasllama-server/test_user_state.das
-            utils/dasllama-server/test_model_override.das
             utils/dasllama-server/test_slot_served.das
             utils/dasllama-server/test_server_flags.das
             utils/dasllama-server/test_cache_probe.das
             utils/dasllama-server/test_openai_server_translate.das
         JIT_FILES
-            utils/dasllama-server/test_worker_dispatch.das
+            utils/dasllama-server/uncategorized__dasllama_internal_stack_524288.das
             utils/dasllama-server/test_constraints.das)
     
     das_lane_dastest_target(run_tests_dasllama_convert COMMENT "Testing dasllama-convert"

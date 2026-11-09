@@ -17,7 +17,7 @@ def stage_bundle(names : array<string>) : string {
     return root
 }
 
-[test]
+[test(description = "argv tokens substitute @DASLANG@, @OUT@ anywhere in a token, and @EXE:name@ through the bundle's bin folder, leaving plain tokens alone")]
 def test_substitute_tokens(t : T?) {
     let root = stage_bundle(["lint.exe"])
     t |> success(!empty(root), "staged a bundle")
@@ -31,7 +31,7 @@ def test_substitute_tokens(t : T?) {
     rmdir_rec(root)
 }
 
-[test]
+[test(description = "a bundle tool resolves to its .exe first, then its bare name, and a missing tool still names bin/<name> so its launch fails naming it")]
 def test_bundle_exe_prefers_exe_then_bare_then_names_bin(t : T?) {
     let root = stage_bundle(["both.exe", "both", "bare"])
     t |> success(!empty(root), "staged a bundle")
@@ -42,7 +42,7 @@ def test_bundle_exe_prefers_exe_then_bare_then_names_bin(t : T?) {
     rmdir_rec(root)
 }
 
-[test]
+[test(description = "a row passes only on its expected exit code with its oracle text present, keeps any other non-zero code, and heads its report with what was missing")]
 def test_judged_rc_and_head(t : T?) {
     let row <- ToolCheck(name = "x", want <- ["Verified!"])
     t |> equal(0, judged_rc(row, 0, "Verified! 3 files"), "rc 0 with the oracle met stays 0")
@@ -60,7 +60,7 @@ def test_judged_rc_and_head(t : T?) {
     t |> equal("expected `unknown argument` in output", judged_head(refusal, 2, "tool: started"))
 }
 
-[test]
+[test(description = "a row's output fails on a missing want or a present forbid, and a forbid starting with a newline matches only at a line start")]
 def test_unmet_wants_and_forbids(t : T?) {
     let row <- ToolCheck(name = "x", want <- ["0 failed, 0 errors"], forbid <- ["\n0 tests,"])
     t |> equal("", unmet(row, "17 tests, 17 passed, 0 failed, 0 errors, 0 skipped\nSUCCESS!"))
@@ -72,7 +72,7 @@ def test_unmet_wants_and_forbids(t : T?) {
     t |> equal("", unmet(lint, "148 files, 0 issue(s), 0 error(s)"))
 }
 
-[test]
+[test(description = "every row of the utils check table has a unique name, an argv and a positive timeout")]
 def test_rows_are_well_formed(t : T?) {
     var inscope rows <- utils_checks()
     t |> success(length(rows) > 20, "{length(rows)} rows")

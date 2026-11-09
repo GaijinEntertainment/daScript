@@ -58,7 +58,7 @@ def make_pilot_fixture(t : T?; tree, root : string) {
     t |> success(copy_file(path_join(tree, "utils/REVIEW.das"), path_join(root, "utils/REVIEW.das"), true, err), "copied the real gate")
 }
 
-[test]
+[test(description = "the utils/ gate is green on a consistent planted tree and fires each of its findings, one per check class, once violations are planted", timeout = 1200)]
 def test_pilot_gate_fixtures(t : T?) {
     let tree = getcwd()
     let fixture = repo_fixture(t, "utils/REVIEW.das", "review_pilot")
@@ -275,7 +275,7 @@ def restamp_dasllama_gate(t : T?; root : string) {
     t |> success(fwrite(gate, join(lines, "\n")), "re-stamped the fixture's gate copy")
 }
 
-[test]
+[test(description = "the dasLLAMA gate is green on a covered tree, keeps the image stamp across a CRLF checkout and an out-of-closure line, and fires every stamp, census and family finding once violations are planted", timeout = 1200)]
 def test_dasllama_gate_fixtures(t : T?) {
     let tree = getcwd()
     let fixture = repo_fixture(t, "modules/dasLLAMA/REVIEW.das", "review_dasllama")
@@ -397,7 +397,7 @@ let DASLLAMA_RED_NEEDLE_CENSUS <- [
 //! the citation, require-ban and harness-dashv gates on the same planted tree: the green run carries a clean control per gate
 //! (every citation form the rule licenses, the tower file on a shape helper, the two decoder files on their containers, a harness
 //! tool on the exchange module and one naming the site without dashv), the red run one plant per finding arm
-[test]
+[test(description = "the dasLLAMA gate passes the licensed citations and requires and flags a by-number section citation and each banned tower, decoder or exchange require", timeout = 1200)]
 def test_dasllama_cite_require_gates(t : T?) {
     let tree = getcwd()
     let fixture = repo_fixture(t, "modules/dasLLAMA/REVIEW.das", "review_dasllama_bans")
@@ -499,7 +499,7 @@ def private leg_resident(extra : string) : string => replace(LEG_RESIDENT, "\{EX
 //! pinned evidence cell, a format-named `load_big`, a worded pass
 //! reason, a documented arm, resolving names, a regions entry naming
 //! its cells by the lead's names); the red run one plant per arm
-[test]
+[test(description = "the dasLLAMA leg gates are green on their controls and flag a drifted race stamp, a running max difference, a stale coverage citation, an untyped load, a missing pass arm and an unlisted resident cell", timeout = 1200)]
 def test_dasllama_leg_gates(t : T?) {   // nolint:STYLE038 - one planted tree, read in gate order
     let tree = getcwd()
     let fixture = repo_fixture(t, "modules/dasLLAMA/REVIEW.das", "review_dasllama_leg")
@@ -670,7 +670,7 @@ let METAL_SHIM_RED = ("    void * raw_contents ( MetalBuffer * buf ) \{\n"
 //! one, a static helper every call of which sits in a pool, a setter
 //! - and the red run's plants: a dot getter and a bracket getter
 //! outside a pool, a static helper called outside one
-[test]
+[test(description = "the dasMetal gate flags each Objective-C object read outside an @autoreleasepool in the Metal shim and leaves the pooled controls alone", timeout = 1200)]
 def test_dasmetal_gate_fixtures(t : T?) {
     let tree = getcwd()
     let fixture = repo_fixture(t, "modules/dasMetal/REVIEW.das", "review_dasmetal")
@@ -708,7 +708,7 @@ def test_dasmetal_gate_fixtures(t : T?) {
 
 //! the generator stamp on the planted tree: no generator files - the check stands down; planted - red until the stamp the finding prints is set;
 //! a comment edit leaves the stamp alone, a code edit moves it
-[test]
+[test(description = "the GEMM generator stamp is absent-green, red on changed generators, green at the hash the finding prints, unmoved by a comment edit and moved by a code edit", timeout = 1200)]
 def test_dasllama_gemm_gen_stamp(t : T?) {
     let tree = getcwd()
     let fixture = repo_fixture(t, "modules/dasLLAMA/REVIEW.das", "review_dasllama_gemm_gen")
@@ -763,7 +763,7 @@ def make_vulkan_fixture(t : T?; tree, root : string) {
     t |> success(copy_file(path_join(tree, "modules/dasVulkan/REVIEW.das"), path_join(root, "modules/dasVulkan/REVIEW.das"), true, err), "copied the real dasvulkan gate")
 }
 
-[test]
+[test(description = "the dasVulkan gate is green on a covered tree and flags a module file missing from .das_module and a listed module with no file, ignoring a commented-out entry", timeout = 1200)]
 def test_vulkan_gate_fixtures(t : T?) {
     let tree = getcwd()
     let fixture = repo_fixture(t, "modules/dasVulkan/REVIEW.das", "review_vulkan")
@@ -806,7 +806,7 @@ def make_llvm_fixture(t : T?; tree, root : string) {
     t |> success(copy_file(path_join(tree, "modules/dasLLVM/REVIEW.das"), path_join(root, "modules/dasLLVM/REVIEW.das"), true, err), "copied the real dasllvm gate")
 }
 
-[test]
+[test(description = "the dasLLVM gate is green when tests only read the tracked tune-profile dir and flags each way a write reaches it, plus .das_module drift", timeout = 1200)]
 def test_llvm_gate_fixtures(t : T?) {
     let tree = getcwd()
     let fixture = repo_fixture(t, "modules/dasLLVM/REVIEW.das", "review_llvm")
@@ -877,7 +877,7 @@ def make_server_fixture(t : T?; tree, root : string) {
     t |> success(copy_file(path_join(tree, "utils/dasllama-server/REVIEW.das"), path_join(root, "utils/dasllama-server/REVIEW.das"), true, err), "copied the real server gate")
 }
 
-[test]
+[test(description = "the dasllama-server gate is green on a consistent tree and flags route, flag and license-notice drift in each direction", timeout = 1200)]
 def test_server_gate_fixtures(t : T?) {
     let tree = getcwd()
     let fixture = repo_fixture(t, "utils/dasllama-server/REVIEW.das", "review_server")
@@ -925,7 +925,7 @@ def test_server_gate_fixtures(t : T?) {
     t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
 }
 
-[test]
+[test(description = "all.das turns red on an orphan or a red gate, and main.das blocks its listing on a red gate unless --list-only, never bypassing a changed orphan gate", timeout = 1200)]
 def test_all_and_main_walker_wiring(t : T?) {
     let tree = getcwd()
     let all_das = path_join(tree, "utils/internal/review-md/all.das")
@@ -999,7 +999,7 @@ def make_root_gate_fixture(t : T?; tree, root : string) {
     t |> equal(0, run_in(root, ["git", "add", "-A"]).rc, "fixture files are tracked")
 }
 
-[test]
+[test(description = "the root gate flags a shared module name two tracked files declare, each naming the other, ignores an untracked duplicate and a tolerated pair, and refuses to run from a subfolder", timeout = 1200)]
 def test_root_gate_fixtures(t : T?) {
     let tree = getcwd()
     let fixture = repo_fixture(t, "REVIEW.das", "review_root")
@@ -1039,7 +1039,7 @@ def test_root_gate_fixtures(t : T?) {
     t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
 }
 
-[test]
+[test(description = "the root gate passes a CMake URL download with a positive literal INACTIVITY_TIMEOUT and flags a missing, zero, variable or valueless one at its own line", timeout = 1200)]
 def test_root_gate_download_timeouts(t : T?) {
     let tree = getcwd()
     let fixture = repo_fixture(t, "REVIEW.das", "review_root_dl")
@@ -1087,7 +1087,7 @@ def test_root_gate_download_timeouts(t : T?) {
     t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
 }
 
-[test]
+[test(description = "the workflows gate flags every job that sets runs-on without a job-level timeout-minutes, passes timed jobs, reusable calls and non-YAML files, and is a usage error on a root with no contract or workflows", timeout = 1200)]
 def test_workflows_gate_job_timeouts(t : T?) {
     let tree = getcwd()
     let fixture = repo_fixture(t, ".github/workflows/REVIEW.das", "review_workflows")
@@ -1134,7 +1134,7 @@ def test_workflows_gate_job_timeouts(t : T?) {
     t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
 }
 
-[test]
+[test(description = "the doc gate is red when das2rst.das is missing or requires daslib/rst before daslib/rst_comment, and green when rst_comment comes first", timeout = 1200)]
 def test_doc_gate_rst_comment_first(t : T?) {
     let tree = getcwd()
     let fixture = repo_fixture(t, "doc/REVIEW.das", "review_doc")

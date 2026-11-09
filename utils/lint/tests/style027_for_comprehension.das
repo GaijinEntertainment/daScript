@@ -1,3 +1,5 @@
+//! STYLE027 reports an empty array or table filled only by a for loop
+//! that a comprehension replaces.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options _nolint = "STYLE042,STYLE043"

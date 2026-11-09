@@ -1,3 +1,5 @@
+//! STYLE015 reports a comment block inside a private function past
+//! its cap, and accepts one line.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options _comment_hygiene = true
@@ -46,7 +48,7 @@ def private bad_private_contract_doc() {
     //! Returns nothing.
     //! Takes nothing.
     //! Never fails.
-    //! Fourth line — exceeds the doc cap.
+    //! Fourth line - exceeds the doc cap.
     let _ = 1
 }
 

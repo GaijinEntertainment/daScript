@@ -64,9 +64,30 @@ def is_fixture_name(stem : string) : bool =>
     (stem |> starts_with("failed_") || stem |> starts_with("cant_") ||
     stem |> starts_with("invalid_"))
 
+//! a `//` inside a string literal (a description quoting a path or a
+//! comment marker) is text, not a comment
 def private strip_line_comment(line : string) : string {
-    let c = find(line, "//")
-    return c < 0 ? line : slice(line, 0, c)
+    var cut = -1
+    peek_data(line) $(d) {
+        var inString = false
+        var i = 0
+        while (i < length(d) && cut < 0) {
+            let b = int(d[i])
+            if (inString) {
+                if (b == '\\') {
+                    i++
+                } elif (b == '"') {
+                    inString = false
+                }
+            } elif (b == '"') {
+                inString = true
+            } elif (b == '/' && i + 1 < length(d) && int(d[i + 1]) == '/') {
+                cut = i
+            }
+            i++
+        }
+    }
+    return cut < 0 ? line : slice(line, 0, cut)
 }
 
 def private is_test_annotation(line : string) : bool =>
@@ -247,10 +268,46 @@ def is_run_file(rel : string) : bool {
     return true
 }
 
-//! every run file under `root`, in walk order
+//! true when `rel` sits under the `modules/` directory of a daspkg
+//! package root - a directory holding `.das_package`, whose installed
+//! dependencies land there - so its tests belong to the installed
+//! packages, not to the tree under census
+def private is_installed_package_path(root : string; rel : string) : bool {
+    let parts <- split(to_generic_path(rel), "/")
+    for (i in range(length(parts) - 1)) {
+        continue if (parts[i] != "modules")
+        let parent = join([for (j in range(i)); parts[j]], "/")
+        let marker = empty(parent) ? ".das_package" : "{parent}/.das_package"
+        return true if (fexist(path_join(root, marker)))
+    }
+    return false
+}
+
+//! the files under `root` that git ignores, relative to `root` with
+//! generic separators; empty when `root` is not inside a repository,
+//! so a tree outside git is censused whole
+def private ignored_files(root : string) : table<string> {
+    var ignored : table<string>
+    var out : string
+    let rc = run_and_capture(["git", "-C", root, "ls-files", "--others", "--ignored",
+                              "--exclude-standard"], out, 60.0)
+    return <- ignored if (rc != 0)
+    for (line in split(out, "\n")) {
+        let rel = strip(line)
+        continue if (empty(rel))
+        ignored |> insert(to_generic_path(rel))
+    }
+    return <- ignored
+}
+
+//! every run file under `root`, in walk order; what git ignores - a
+//! build's or a test's leftovers, an installed package - is not part
+//! of the tree
 def census_tree(root : string; var out : array<TestFileCensus>) {
+    var inscope ignored <- ignored_files(root)
     dir_rec(root) $(name, is_dir) {
-        return if (is_dir || !is_run_file(name))
+        return if (is_dir || !is_run_file(name) || is_installed_package_path(root, name)
+                   || ignored |> key_exists(to_generic_path(name)))
         out |> emplace(census_file(root, name))
     }
 }

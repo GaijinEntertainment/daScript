@@ -1,3 +1,5 @@
+//! STYLE013 reports a struct variable default-initialized and then
+//! given a run of field assignments.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options _nolint = "STYLE042"

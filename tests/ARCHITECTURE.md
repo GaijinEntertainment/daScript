@@ -8,8 +8,13 @@ at the repo root.
 - `README.md` - the generated index: every run file, its tests and their descriptions. Written
   by `utils/internal/test-audit/main.das --readme`; the `check_tests_index` CI target runs
   `--verify` against it.
-- `REVIEW.das` - the mechanical half of the checklist: the write-path scan and the file-shape
-  rules, over the census in `dastest/file_census.das` (repo root).
+- `REVIEW.das` - the mechanical half of the checklist: the write-path scan, and the file-shape
+  rules of `dastest/test_shape.das` (repo root) over the census in `dastest/file_census.das`.
+  The shape binds every test root the same way - this tree, each tool's suite under `utils/`,
+  `dastest/tests`, a module's `tests/` - and each root's own `REVIEW.das` calls the same
+  check; a tool tree calls it in tests-only mode, where a `.das` with neither `[test]` nor
+  `expect` is a source or a fixture the suite feeds the tool, and a compile-fail fixture keeps
+  the tool's own naming.
 - `.das_test` - per-folder gating dastest consults at the `--test` root: module availability and
   the per-mode skips (`--use-aot`, `-jit`, `--ser`/`--deser`).
 - `aot/CMakeLists.txt` - what `test_aot` compiles, folder by folder.

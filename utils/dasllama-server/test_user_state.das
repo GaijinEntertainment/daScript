@@ -17,7 +17,7 @@ def private scratch(t : T?; what : string) : string {
     return dir
 }
 
-[test]
+[test(description = "the config is found in the working directory, then the home, then beside the program, and none is an empty path")]
 def test_config_lookup(t : T?) {
     t |> run("the working directory, then the home, then beside the program; none is empty") @(t : T?) {
         let root = scratch(t, "lookup")
@@ -41,7 +41,7 @@ def test_config_lookup(t : T?) {
     }
 }
 
-[test]
+[test(description = "the save path is in the home and a write creates the missing directories")]
 def test_config_save(t : T?) {
     t |> run("the save path is in the home; a write makes the missing directories") @(t : T?) {
         t |> equal(config_save_path("H/.dasllama"), path_join("H/.dasllama", "dasllama-server.toml"))
@@ -53,7 +53,7 @@ def test_config_save(t : T?) {
     }
 }
 
-[test]
+[test(description = "a standalone exe logs in the home and a run from the source tree logs in the das root")]
 def test_logs_dir(t : T?) {
     t |> run("a standalone exe logs in the home, a run from the source tree in the das root") @(t : T?) {
         t |> equal(logs_dir(true, "H/.dasllama"), path_join("H/.dasllama", "logs"))

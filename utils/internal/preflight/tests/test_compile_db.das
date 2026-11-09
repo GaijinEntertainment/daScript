@@ -10,7 +10,7 @@ require ../compile_db.das
 // name the file it should, and the gate then reports an error against the wrong input - or a
 // spurious one. Windows is the case the author is least likely to be running, so it is pinned
 // here rather than left to a red CI lane.
-[test]
+[test(description = "the compile-command tokenizer keeps backslash paths intact, a trailing backslash included")]
 def test_cc_tokenize_windows_paths(t : T?) {
     t |> run("a backslash path survives intact") @(t : T?) {
         let tok <- cc_tokenize("clang-cl -IC:\\src\\daScript\\include C:\\src\\x.cpp")
@@ -30,7 +30,7 @@ def test_cc_tokenize_windows_paths(t : T?) {
 // A per-file output switch that survives into the grouped argv makes clang-cl reject the
 // sweep for naming one output for many inputs, and the gate reports that as if the source
 // were broken. The joined MSVC spellings are the ones a POSIX-only author misses.
-[test]
+[test(description = "per-file output switches in MSVC and GNU spellings, joined forms included, are stripped and real flags are kept")]
 def test_cc_is_compile_switch(t : T?) {
     t |> run("msvc spellings are stripped") @(t : T?) {
         t |> success(cc_is_compile_switch("/c"), "/c")
@@ -55,7 +55,7 @@ def test_cc_is_compile_switch(t : T?) {
 // A configure done through a differently-cased spelling of the checkout (macOS and Windows
 // fold case) writes that spelling into the database; a case-honoring lookup then misses every
 // entry and the gate sweeps with its approximate include list instead, silently.
-[test]
+[test(description = "the database key folds case on Windows and macOS and keeps it elsewhere, so each file has one spelling")]
 def test_cc_key_folds_case_where_the_filesystem_does(t : T?) {
     t |> run("the key is one spelling per file") @(t : T?) {
         let platform = get_platform_name()
@@ -66,7 +66,7 @@ def test_cc_key_folds_case_where_the_filesystem_does(t : T?) {
 }
 
 
-[test]
+[test(description = "the tokenizer unescapes quotes and backslashes, keeps a quoted token's spaces, and mints no empty token from whitespace runs")]
 def test_cc_tokenize_quoting(t : T?) {
     t |> run("an escaped quote in a define becomes a literal quote") @(t : T?) {
         let tok <- cc_tokenize("clang++ -DDAS_INSTALL_BINDIR=\\\"/usr/local/bin\\\" -c a.cpp")

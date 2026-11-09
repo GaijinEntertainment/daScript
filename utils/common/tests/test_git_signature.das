@@ -26,7 +26,7 @@ def md_predicate(p : string) : bool => ends_with(p, ".md")
 
 // ─── extract_status_path ─────────────────────────────────────────────
 
-[test]
+[test(description = "a modified or untracked status line yields its file name")]
 def test_extract_status_path_basic(t : T?) {
     t |> run("modified file: ' M file.txt' -> 'file.txt'") <| @(t : T?) {
         t |> equal(extract_status_path(" M file.txt"), "file.txt")
@@ -36,14 +36,14 @@ def test_extract_status_path_basic(t : T?) {
     }
 }
 
-[test]
+[test(description = "a rename status line yields the new name")]
 def test_extract_status_path_rename(t : T?) {
     t |> run("rename: 'R  old.txt -> new.txt' returns the new name") <| @(t : T?) {
         t |> equal(extract_status_path("R  old.txt -> new.txt"), "new.txt")
     }
 }
 
-[test]
+[test(description = "a status line of three characters or fewer yields an empty path")]
 def test_extract_status_path_short(t : T?) {
     t |> run("line of length <= 3 returns empty") <| @(t : T?) {
         t |> equal(extract_status_path(""), "")
@@ -54,7 +54,7 @@ def test_extract_status_path_short(t : T?) {
 
 // ─── compute_filesystem_signature ────────────────────────────────────
 
-[test]
+[test(description = "two invocations on the same on-disk state produce the same filesystem signature")]
 def test_filesystem_signature_deterministic(t : T?) {
     let root = make_temp_root(t)
     if (empty(root)) return
@@ -70,7 +70,7 @@ def test_filesystem_signature_deterministic(t : T?) {
     cleanup_root(root)
 }
 
-[test]
+[test(description = "a predicate on the extension makes other files invisible to the signature")]
 def test_filesystem_signature_predicate_filters(t : T?) {
     let root_a = make_temp_root(t)
     let root_b = make_temp_root(t)
@@ -100,7 +100,7 @@ def test_filesystem_signature_predicate_filters(t : T?) {
     cleanup_root(root_b)
 }
 
-[test]
+[test(description = "a signature over search dirs that all are missing is empty")]
 def test_filesystem_signature_returns_empty_when_dirs_missing(t : T?) {
     t |> run("all search_dirs missing -> empty signature") <| @(t : T?) {
         let sig = compute_filesystem_signature("/", @(p : string) => md_predicate(p), ["/__definitely_does_not_exist_42__"])
@@ -110,7 +110,7 @@ def test_filesystem_signature_returns_empty_when_dirs_missing(t : T?) {
 
 // ─── compute_signature ───────────────────────────────────────────────
 
-[test]
+[test(description = "compute_signature returns a non-empty signature with a git: or fs: prefix")]
 def test_compute_signature_returns_non_empty(t : T?) {
     let root = make_temp_root(t)
     if (empty(root)) return
@@ -125,7 +125,7 @@ def test_compute_signature_returns_non_empty(t : T?) {
     cleanup_root(root)
 }
 
-[test]
+[test(description = "a system temp dir outside git gets an fs: signature")]
 def test_compute_signature_no_git_falls_back(t : T?) {
     // create_temp_directory creates dirs in the system temp area (e.g.
     // /var/folders/... on macOS, /tmp on Linux), which is not inside a

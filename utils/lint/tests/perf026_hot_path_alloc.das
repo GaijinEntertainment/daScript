@@ -1,3 +1,4 @@
+//! PERF026 is reported for: heap traffic on a hot path.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // PERF026: heap traffic on a hot path

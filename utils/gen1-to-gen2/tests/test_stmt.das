@@ -11,7 +11,8 @@ require ../patch.das
 require ../convert.das
 
 //! Statement and declaration conversion: indentation becomes braces, conditions gain
-//! parentheses, and the result has to compile as gen2 — which is the only check that really
+//! parentheses, and the result has to compile as gen2 - which is the
+//! only check that really
 //! says the rewrite worked.
 
 let STMT = "{get_das_root()}/utils/gen1-to-gen2/tests/_fixture_gen1_stmt.das"
@@ -27,7 +28,7 @@ def private convert(file : string) : string {
 def private has(text, needle : string) : bool => text |> find(needle) >= 0
 
 
-[test]
+[test(description = "blocks, conditions and the else and recover joins get braces and the result compiles as gen2")]
 def test_statement_braces(t : T?) {
     t |> run("blocks, conditions and the else/recover joins") @(t : T?) {
         let out = convert(STMT)
@@ -69,7 +70,7 @@ def test_statement_braces(t : T?) {
 //! Shapes only v1 spells, and only in a file the formatter never rewrites: they are written
 //! to a temporary file rather than kept in a checked-in fixture.
 
-[test]
+[test(description = "v1-only shapes keep a keyword's head past a comment, take a type as an argument and keep a continued initializer in one expression")]
 def test_v1_only_shapes(t : T?) {
     t |> run("a comment where whitespace would be keeps the keyword's head") @(t : T?) {
         let temp = create_temp_file_result("commented_head", ".das")
@@ -111,7 +112,7 @@ def test_v1_only_shapes(t : T?) {
 }
 
 
-[test]
+[test(description = "declaration bodies get braces and the converted declarations compile as gen2")]
 def test_declaration_braces(t : T?) {
     t |> run("declaration bodies") @(t : T?) {
         let out = convert(DECL)
@@ -132,7 +133,7 @@ def test_declaration_braces(t : T?) {
 }
 
 
-[test]
+[test(description = "converting statements and declarations loses no comment")]
 def test_statements_keep_comments(t : T?) {
     t |> run("no comment is lost converting statements or declarations") @(t : T?) {
         for (f in [STMT, DECL]) {

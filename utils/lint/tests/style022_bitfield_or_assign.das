@@ -1,3 +1,5 @@
+//! STYLE022 reports a compound bit set or clear on a bitfield that a
+//! field assignment replaces.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // STYLE022: bitfield compound-bit-set/clear → field-assign

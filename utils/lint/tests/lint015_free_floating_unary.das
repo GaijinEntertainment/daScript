@@ -1,3 +1,5 @@
+//! LINT015 is reported for: free-floating unary +/- expression as a
+//! statement.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // LINT015: free-floating unary +/- expression as a statement

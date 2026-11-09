@@ -1,3 +1,5 @@
+//! STYLE034 is reported for: reinterpret<T?>(addr(x)) collapses to
+//! addr<T?>(x).
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 // STYLE034: reinterpret<T?>(addr(x)) collapses to addr<T?>(x)
