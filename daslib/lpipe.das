@@ -16,7 +16,8 @@ require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost
 
-def lpipe_expr(var fnCall : ExpressionPtr&; var arg : ExpressionPtr&) : ExpressionPtr {
+def lpipe_expr(var fnCall : ExpressionPtr&;  // nolint:STYLE037 - exact-type is ladder
+               var arg : ExpressionPtr&) : ExpressionPtr {
     if (fnCall is ExprVar) {
         let pVar = fnCall as ExprVar
         var pCall = make_call(pVar.at, "{pVar.name}")
@@ -26,24 +27,31 @@ def lpipe_expr(var fnCall : ExpressionPtr&; var arg : ExpressionPtr&) : Expressi
         return pCall
     } elif (fnCall is ExprCopy) {
         var cCopy = clone_expression(fnCall)
-        (cCopy as ExprCopy).right = lpipe_expr((fnCall as ExprCopy).right, arg)
+        var piped = lpipe_expr((fnCall as ExprCopy).right, arg)
+        if (piped == null) return null
+        (cCopy as ExprCopy).right = piped
         return cCopy
     } elif (fnCall is ExprMove) {
         var cCopy = clone_expression(fnCall)
-        (cCopy as ExprMove).right = lpipe_expr((fnCall as ExprMove).right, arg)
+        var piped = lpipe_expr((fnCall as ExprMove).right, arg)
+        if (piped == null) return null
+        (cCopy as ExprMove).right = piped
         return cCopy
     } elif (fnCall is ExprClone) {
         var cCopy = clone_expression(fnCall)
-        (cCopy as ExprClone).right = lpipe_expr((fnCall as ExprClone).right, arg)
+        var piped = lpipe_expr((fnCall as ExprClone).right, arg)
+        if (piped == null) return null
+        (cCopy as ExprClone).right = piped
         return cCopy
     } elif (fnCall is ExprLet) {
         var pLet = fnCall as ExprLet
         if (length(pLet.variables) != 1 || pLet.variables[0].init == null) {
-            arg = null
             return null
         }
         var cLet = clone_expression(fnCall)
-        (cLet as ExprLet).variables[0].init = lpipe_expr(pLet.variables[0].init, arg)
+        var piped = lpipe_expr(pLet.variables[0].init, arg)
+        if (piped == null) return null
+        (cLet as ExprLet).variables[0].init = piped
         return cLet
     } elif (fnCall |> is_expr_like_call()) {
         var pCall = unsafe(reinterpret<ExprLooksLikeCall?>(fnCall))
@@ -51,7 +59,6 @@ def lpipe_expr(var fnCall : ExpressionPtr&; var arg : ExpressionPtr&) : Expressi
         pCall.arguments |> emplace(arg)
         return fnCall
     } else {
-        arg = null
         return null
     }
 }
@@ -89,6 +96,11 @@ class LpipeMacro : AstCallMacro {
                 return
             }
             let pidx = eidx - 1
+            if (blk.list[pidx] is ExprReturn) {
+                macro_error(prog, call.at, "can't pipe into a return: the return already took " +
+                    "its trailing block - assign the call's result first, pipe, then return it")
+                return
+            }
             var pipe = lpipe_expr(blk.list[pidx], call.arguments[0])
             if (pipe == null) {
                 macro_error(prog, call.at, "can only pipe to a function call, and not {blk.list[pidx].__rtti}")

@@ -214,3 +214,22 @@ def test_string_null_byte(t : T?) {
         }
     }
 }
+
+[test(description = "an lpipe() stranded after a return names the return and the assign-first spelling in its error text")]
+def test_lpipe_after_return_message(t : T?) {
+    var inscope access <- make_file_access("")
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
+            cop.threadlock_context = true
+            let fixture = "{get_das_root()}/tests/ast/_fixture_lpipe_after_return.das"
+            compile_file(fixture, access, unsafe(addr(mg)), cop) $(ok; _program; issues) {
+                let text = "{issues}"
+                t |> success(!ok, "the program is refused")
+                t |> success(find(text, "can't pipe into a return") >= 0,
+                    "the return is named: {text}")
+                t |> success(find(text, "assign the call's result first") >= 0,
+                    "the assign-first spelling is named: {text}")
+            }
+        }
+    }
+}

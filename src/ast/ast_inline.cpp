@@ -1790,7 +1790,9 @@ namespace das {
             if ( !mkb->block || !mkb->block->rtti_isBlock() ) { why = "no block body"; return false; }
             auto blk = static_cast<ExprBlock *>(mkb->block);
             for ( auto & ann : blk->annotations ) {
-                if ( ann->annotation && ann->annotation->name=="never_inline" ) { why = "block is [never_inline]"; return false; }
+                if ( !ann->annotation ) continue;
+                why = "annotated block [" + ann->annotation->name + "]";   // the splice would drop the annotation's call-site semantics
+                return false;
             }
             bool isVoid = !blk->returnType || blk->returnType->isVoid();
             if ( !isVoid && blk->returnType->ref ) { why = "result is not by-value"; return false; }
