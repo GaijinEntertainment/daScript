@@ -48,6 +48,14 @@ target_include_directories(tests-cpp-small PRIVATE ${NEED_MODULES_PATH})
 SETUP_CPP11(tests-cpp-small)
 set_target_properties(tests-cpp-small PROPERTIES FOLDER "tests-cpp")
 
+# A module-shaped shared library with a wrong (and a missing) vintage stamp, which
+# test_register_dynamic_module.cpp feeds to the loader; it links nothing.
+add_library(test_vintage_probe MODULE small/vintage_probe_module.cpp)
+set_target_properties(test_vintage_probe PROPERTIES FOLDER "tests-cpp" PREFIX "")
+target_compile_definitions(tests-cpp-small PRIVATE
+    DAS_VINTAGE_PROBE_PATH="$<TARGET_FILE:test_vintage_probe>")
+add_dependencies(tests-cpp-small test_vintage_probe)
+
 # Register each TEST_CASE as its own ctest entry.
 # Note: this version of doctest.cmake (v2.4.11) uses POST_BUILD discovery only
 # (no DISCOVERY_MODE option). For cross-compile targets that can't execute

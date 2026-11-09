@@ -229,6 +229,20 @@ namespace das {
         return result;
     }
 #endif
+
+    // src/ast/ARCHITECTURE_MODULE_SCAN.md#shared-module-vintage
+    DAS_API string dynamic_module_vintage_error(bool hasStamp, uint64_t vintage) {
+        if (!hasStamp) {
+            return "carries no ABI vintage stamp (built before vintage stamps); rebuild the module against current daScript headers";
+        }
+        if (vintage != das_abi_vintage()) {
+            TextWriter tw;
+            tw << "was built against a different daScript - other headers, version or ABI version (vintage 0x" << HEX << vintage
+               << " vs host 0x" << das_abi_vintage() << DEC << "); rebuild the module";
+            return tw.str();
+        }
+        return string();
+    }
 }
 
 #if DAS_NO_FILEIO
@@ -2682,15 +2696,17 @@ namespace das {
             LOG(LogLevel::info) << "[module] " << (mod_name ? mod_name : "(null)") << " <- " << actualPath
                 << " : " << (lib ? "loaded" : ("FAILED - " + dlErr)) << "\n";
         }
+        auto report = [&](const string & what) {
+            auto err_msg = "dynamic module `" + string(mod_name ? mod_name : "(null)") + "` - " + what + "\n";
+            if (context) context->to_err(at, err_msg.c_str());
+            else LOG(LogLevel::error) << err_msg;
+            if (context && static_cast<RegisterOnError>(on_error) == RegisterOnError::Fail) {
+                context->throw_error(err_msg.c_str());
+            }
+        };
         if (!lib) {
             if (static_cast<RegisterOnError>(on_error) != RegisterOnError::Quiet) {
-                auto err_msg = "dynamic module `" + string(mod_name) + "` - failed to load: " + actualPath
-                    + (dlErr.empty() ? string("\n") : (" (" + dlErr + ")\n"));
-                if (context) context->to_err(at, err_msg.c_str());
-                else LOG(LogLevel::error) << err_msg;
-                if (context && static_cast<RegisterOnError>(on_error) == RegisterOnError::Fail) {
-                    context->throw_error(err_msg.c_str());
-                }
+                report("failed to load: " + actualPath + (dlErr.empty() ? string() : (" (" + dlErr + ")")));
             } else {
                 // Quiet: a sibling-module DT_NEEDED dependency may not be loaded yet
                 // (module .so's live in modules/<dep>/, not on RUNPATH, so a dependent
@@ -2700,42 +2716,26 @@ namespace das {
             }
             return nullptr;
         }
+        auto broken = [&](const string & what) -> void * {
+            report(what);
+            closeLibrary(lib);
+            return nullptr;
+        };
         const auto regName = getDynModuleRegistratorName(mod_name);
         auto rawFn = getFunctionAddress(lib, regName.c_str());
         if (!rawFn) {
-            auto err_msg = "dynamic module `" + string(mod_name) + "` - function `" + regName + "` not found in `" + actualPath + "`\n";
-            if (context) context->to_err(at, err_msg.c_str());
-            else LOG(LogLevel::error) << err_msg;
-            if (context && static_cast<RegisterOnError>(on_error) == RegisterOnError::Fail) {
-                context->throw_error(err_msg.c_str());
-            }
-            closeLibrary(lib);
-            return nullptr;
+            return broken("function `" + regName + "` not found in `" + actualPath + "`");
+        }
+        // src/ast/ARCHITECTURE_MODULE_SCAN.md#shared-module-vintage
+        auto vinFn = getFunctionAddress(lib, getDynModuleVintageName(mod_name).c_str());
+        auto vintage = vinFn ? reinterpret_cast<uint64_t(*)()>(vinFn)() : 0;
+        if (auto why = dynamic_module_vintage_error(vinFn != nullptr, vintage); !why.empty()) {
+            return broken("(" + actualPath + ") " + why);
         }
         auto fn = reinterpret_cast<Module*(*)(int)>(rawFn);
         auto mod = fn(DAS_BUILD_ID);
         if (!mod) {
-            auto err_msg = "dynamic module `" + string(mod_name) + "` - build-id mismatch (host " + to_string(DAS_BUILD_ID) + "); rebuild the module for current configuration\n";
-            if (context) context->to_err(at, err_msg.c_str());
-            else LOG(LogLevel::error) << err_msg;
-            if (context && static_cast<RegisterOnError>(on_error) == RegisterOnError::Fail) {
-                context->throw_error(err_msg.c_str());
-            }
-            closeLibrary(lib);
-            return nullptr;
-        }
-        // Module-vintage stamp: DAS_BUILD_ID (checked above) changes only at releases, so a module
-        // built against DIFFERENT headers of the SAME version passes it and is silently, subtly
-        // wrong (ABI drift surfaces as behavior/perf skew, not a crash). Warn loud, don't refuse.
-        auto vinFn = getFunctionAddress(lib, getDynModuleVintageName(mod_name).c_str());
-        if (!vinFn) {
-            LOG(LogLevel::warning) << "dynamic module `" << mod_name << "` (" << actualPath
-                << ") carries no ABI vintage stamp (built before vintage stamps) - rebuild it against current daScript headers\n";
-        } else if (auto vintage = reinterpret_cast<uint64_t(*)()>(vinFn)(); vintage != das_abi_vintage()) {
-            LOG(LogLevel::warning) << "dynamic module `" << mod_name << "` (" << actualPath
-                << ") was built against DIFFERENT daScript headers (vintage 0x" << HEX << vintage
-                << " vs host 0x" << das_abi_vintage() << DEC
-                << ") - ABI drift surfaces as subtle misbehavior, not a crash; rebuild the module\n";
+            return broken("its registrar returned no module (host build-id " + to_string(DAS_BUILD_ID) + "); rebuild the module for current configuration");
         }
         *ModuleKarma += unsigned(intptr_t(mod));
         g_registered_dynamic_modules.emplace_back(path, mod_name, mod->name);

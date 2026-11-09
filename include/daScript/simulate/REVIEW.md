@@ -18,6 +18,12 @@ or reordered, or a base changed - applies `skills/internal/abi_break_sweep.md` t
 header here ships with the SDK, `DAS_API` or not, so an out-of-tree module compiled against the
 old layout reads the new one wrong.
 
+**A diff that adds a virtual function overriding no base virtual, removes or reorders a virtual
+function, or changes a virtual function's signature, in any class declared under this folder,
+bumps `DAS_ABI_VERSION` (`include/daScript/ast/ast.h`) in the same change.** A slot added, moved
+or re-signed in an existing vtable changes no class size, so only this counter makes the loader
+refuse a shared module built against the old slot order.
+
 **A diff that adds a field to `CodeOfPolicies` (`code_of_policies.h`) adds it to
 `DAS_MODULE_CACHE_POLICY_FIELDS` in `src/builtin/module_builtin_ast_serialize.cpp`, in the
 same change** - that list drives both the module-cache record's policy stream and the compare

@@ -22,9 +22,12 @@
   The JIT's DLL cache key folds the codegen version and each function's AST hash, never a bound
   type's offsets, so a cache hit binds the old offsets and crashes.
 
-- **A diff that changes the signature of a virtual declared under this folder applies
-  `skills/internal/abi_break_sweep.md` (repo root) too.** An out-of-tree subclass that omits
-  `override` keeps compiling and silently stops being called.
+- **A diff that adds a virtual function overriding no base virtual, or removes, reorders or
+  re-signs a virtual function, in any class declared under this folder bumps `DAS_ABI_VERSION`
+  (`ast.h`) and applies `skills/internal/abi_break_sweep.md` (repo root), in the same change.** A
+  slot added, moved or re-signed in an existing vtable changes no class size, so only that counter
+  makes the loader refuse a shared module built against the old vtable, and an out-of-tree
+  subclass that omits `override` keeps compiling and silently stops being called.
 
 - **A diff that adds a field to `Function` or `Variable` (`ast.h`) whose value one compiled
   program decides, so two programs sharing the module would want different values, is a defect;
