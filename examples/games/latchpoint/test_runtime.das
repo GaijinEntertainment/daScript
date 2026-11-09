@@ -3,6 +3,9 @@ options persistent_heap
 require dastest/testing_boost public
 require lp_runtime
 require lp_behavior
+require lp_audio
+
+//! Native runtime: authority, routes, saves, gates, archive.
 
 def reset_test_world() {
     delete world
@@ -12,7 +15,7 @@ def reset_test_world() {
     archive_aperture = -1.0
 }
 
-[test]
+[test(description = "Only the resident with the authority opens each gate; the power-first route needs the accepted task and both archive conditions, the repair-first route uses each item once, and neither a free spare nor a follow request duplicates an item or skips the repair.")]
 def test_native_runtime(suite : T?) {
     suite |> run("only residents with authority can change access") @(t : T?) {
         reset_test_world()
@@ -62,7 +65,7 @@ def test_native_runtime(suite : T?) {
     }
 }
 
-[test]
+[test(description = "A runtime snapshot round-trips the inventory and each resident's own memory, a partial or wrong-version save is rejected without touching the current world, and an opening gate keeps blocking until it gives head clearance.")]
 def test_native_save_and_motion(suite : T?) {
     suite |> run("snapshot preserves ownership and separate resident memories") @(t : T?) {
         reset_test_world()
@@ -98,5 +101,27 @@ def test_native_save_and_motion(suite : T?) {
         tick_behavior(2.0)
         t |> equal(workshop_aperture, 1.0)
         t |> success(can_stand(float2(4.0, 0.3)))
+    }
+}
+
+[test(description = "The archive record can be inspected only once the archive is open, records its event once, survives a save round trip, and is offered only to an avatar standing at it.")]
+def test_archive_payoff(suite : T?) {
+    suite |> run("archive inspection is gated and records its payoff only once") @(t : T?) {
+        delete world
+        world = WorldState()
+        t |> success(!runtime_physical("inspect archive record").ok)
+        world.archive_open = true
+        t |> success(runtime_physical("inspect archive record").ok)
+        t |> success(world.archive_inspected)
+        let events = length(world.events)
+        t |> success(runtime_physical("inspect archive record").ok)
+        t |> equal(length(world.events), events)
+        let saved = runtime_snapshot()
+        t |> success(runtime_load(saved))
+        t |> success(world.archive_inspected)
+        avatar = float3(-4.0, 9.8, 1.65)
+        t |> success(physical_at_avatar() != "inspect archive record")
+        avatar = float3(-4.0, 12.0, 1.65)
+        t |> equal(physical_at_avatar(), "inspect archive record")
     }
 }

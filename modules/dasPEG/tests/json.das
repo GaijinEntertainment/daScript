@@ -150,7 +150,7 @@ def get_parser_with(json : string; blk : block<(var res_json : JsonValue?# impli
 
 
 
-[test]
+[test(description = "The PEG JSON grammar reads 23 nested empty arrays into the same document daslib/json's reader builds.")]
 def test1(t : T?) {
     let input = "[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]"
 
@@ -163,7 +163,7 @@ def test1(t : T?) {
 }
 
 
-[test]
+[test(description = "The PEG JSON grammar reads an object of a number and a boolean into the same document daslib/json's reader builds.")]
 def test2(t : T?) {
     let input = "\{\"a\" : 123.53, \"b\": true \}"
 
@@ -176,7 +176,7 @@ def test2(t : T?) {
 }
 
 
-[test]
+[test(description = "The PEG JSON grammar reads an array mixing strings, booleans, empty containers and nested arrays and objects into the same document daslib/json's reader builds.")]
 def test3(t : T?) {
     let input = "[\"123\", true,[], \{\}, \{\"hello\" : true, \"less\": \"more\"\}, [[[true]]], \"123\"]"
 
@@ -189,7 +189,7 @@ def test3(t : T?) {
 }
 
 
-[test]
+[test(description = "The PEG JSON grammar reads a multi-line object with nested objects, a number array and a mixed array holding null into the same document daslib/json's reader builds.")]
 def test4(t : T?) {
     let input = "\{\"message\": \"Hello, world!\", \"nested\": \{\"nested_again\":
     \{\"is_it_deep\": true, \"numbers\": [1, 2, 3, 4]\}\}, \"array\": [false, null, \"mixed array\"]\}"
@@ -203,7 +203,7 @@ def test4(t : T?) {
 }
 
 
-[test]
+[test(description = "The PEG JSON grammar reads a top-level array of records with nested record arrays and scalars into the same document daslib/json's reader builds.")]
 def test5(t : T?) {
     let input = "[\{\"name\": \"John\", \"age\": 30, \"city\": \"New York\", \"siblings\":
     [\{\"name\": \"Jane\", \"age\": 25, \"city\": \"Chicago\"\},
@@ -218,7 +218,7 @@ def test5(t : T?) {
 }
 
 
-[test]
+[test(description = "The PEG JSON grammar reads an object holding an array of seven color records into the same document daslib/json's reader builds.")]
 def test6(t : T?) {
     let input = "\{\"colors\": [\{\"colorName\": \"red\", \"hexValue\": \"#f00\"\},
     \{\"colorName\": \"green\", \"hexValue\": \"#0f0\"\},
@@ -237,7 +237,7 @@ def test6(t : T?) {
 }
 
 
-[test]
+[test(description = "The PEG JSON grammar reports a parse error for an object missing its closing brace.")]
 def test_json_error_1(t : T?) {
     let input = %stringify~{
 "name": "John",
@@ -252,7 +252,7 @@ def test_json_error_1(t : T?) {
 }
 
 
-[test]
+[test(description = "The PEG JSON grammar reports a parse error for a member missing its colon.")]
 def test_json_error_2(t : T?) {
     let input = %stringify~{
   "name": "John",
@@ -267,7 +267,7 @@ def test_json_error_2(t : T?) {
     }
 }
 
-[test]
+[test(description = "The PEG JSON grammar reports a parse error for a bare member and a stray closing brace with no opening one.")]
 def test_json_error_3(t : T?) {
     let input = %stringify~"city": "New York"
 }%%
@@ -280,7 +280,7 @@ def test_json_error_3(t : T?) {
 }
 
 
-[test]
+[test(description = "The PEG JSON grammar reports a parse error for a string value missing its closing quote.")]
 def test_json_error_4(t : T?) {
     let input = %stringify~{
   "name": "John,
@@ -299,7 +299,7 @@ def test_json_error_4(t : T?) {
 }
 
 
-[test]
+[test(description = "The PEG JSON grammar reports a parse error for an array closed by a brace instead of a bracket.")]
 def test_json_error_5(t: T?) {
     let input = %stringify~
 {

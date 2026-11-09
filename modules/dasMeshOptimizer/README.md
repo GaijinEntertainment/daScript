@@ -20,5 +20,5 @@ for a consumer. Translucent materials preserve their triangle order there.
 The same bindings build as a native shared module and a WASM archive. The public
 wrapper header supports daslang AOT/JIT. `daspkg build --wasm` includes this archive.
 
-Tests: `tests/test_meshoptimizer.das` covers deduplication, optimization, exact
+Tests: `tests/uncategorized.das` covers deduplication, optimization, exact
 packed-vertex codec round trips, oriented triangles and corrupt-input rejection.

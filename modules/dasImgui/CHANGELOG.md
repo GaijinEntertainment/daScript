@@ -22,7 +22,7 @@ All notable changes to dasImgui are documented in this file. Format based on
   with scoped, conflict-detectable, explicitly persisted bindings.
 - **F11 toggles fullscreen** in `imgui_harness` (`widgets/imgui_harness.das`) - in `harness_new_frame` (after `NewFrame`, windowed mode only): web routes through the dasGlfw `glfw_toggle_fullscreen()` extern (real browser fullscreen - the canvas grows to screen at native scale + DPR, not a CSS-magnified iframe), desktop uses the existing `glfwToggleNativeFullscreen(live_window)` (native macOS fullscreen, no-op elsewhere). Headless is skipped. Requires daslang with `glfw_toggle_fullscreen` (`GaijinEntertainment/daScript#3326`).
 - `with_font(font, size)` (`widgets/imgui_scope_builtin.das`) - the scope wrapper now forwards a per-push pixel size to `PushFont` (imgui 1.92 dynamic fonts), so one font renders at several sizes in a single frame. `size` defaults to `0.0f` (keep current size), so existing `with_font(font) { ... }` call sites are unchanged.
-- 1.92-API tutorials + walkthroughs (`examples/tutorial/` + `doc/source/tutorials/`): `dynamic_fonts` (`FontScaleMain` + `with_font(font, size)`), `texture_ref` (`ImTextureRef` / `TexData` null-gate), `item_flags` (`with_item_flag` + `ImGuiItemFlagsPrivate` cross-enum `|`), `log_capture` (`with_log` + renamed `ImGuiLogFlags`). Plus `examples/features/dynamic_font_scale.das` + the `tests/integration/test_dynamic_font_scale.das` size-gate smoke.
+- 1.92-API tutorials + walkthroughs (`examples/tutorial/` + `doc/source/tutorials/`): `dynamic_fonts` (`FontScaleMain` + `with_font(font, size)`), `texture_ref` (`ImTextureRef` / `TexData` null-gate), `item_flags` (`with_item_flag` + `ImGuiItemFlagsPrivate` cross-enum `|`), `log_capture` (`with_log` + renamed `ImGuiLogFlags`). Plus `examples/features/dynamic_font_scale.das` + the `dynamic_font_scale` size-gate smoke in `tests/test_style_scopes.das`.
 - `imgui_mouse_click_at` live command (`widgets/imgui_live_core.das`) - atomic click at `(x, y)`: travel -> press -> release as one self-contained synth timeline, with a `button` arg (`0`=left, `1`=right, `2`=middle) and optional `travel_ms`. Callers no longer hand-build a `click_at` event array for `imgui_mouse_play`; one round-trip can't interleave with real input mid-gesture.
 - `set_user_control` live command (`widgets/imgui_live_core.das`) - `{enabled:false}` makes `imgui_synth_tick` clear the GLFW backend's queued mouse/keyboard each frame (via `GetIO().ClearEventsQueue()`) so ONLY synth IO drives the UI, with no real-input bleed-through racing the synth cursor; `{enabled:true}` releases synth ownership (stops playback, releases held buttons/keys, clears `synth_cursor_owned`) and hands control back. Defaults on - zero behavior change when never called. Public getter `user_control_enabled()`.
 - Live docs site at https://borisbat.github.io/dasImgui
@@ -104,7 +104,7 @@ is scaffolding only.
   popup never visibly opened. Fix: ``popup_window`` peels its own
   ``widget_ident`` PushID off just around ``BeginPopup`` (PopID before,
   PushID after), so BeginPopup's hash matches the caller's OpenPopup.
-- `tests/integration/test_popup_window.das` - smoke + click-opens-popup
+- the `popup_window` tests in `tests/test_menus_popups.das` - smoke + click-opens-popup
   pair. Verifies both ``BTN_POPUP`` / ``REG_POPUP`` register under their
   ``with_id`` scopes and that ``imgui_click`` on the trigger button
   surfaces ``MAIN_WIN/via_button/BTN_POPUP/PICK_APPLE`` in the next
@@ -180,8 +180,7 @@ is scaffolding only.
   Depends on daslang PR #2681 (daslang-live forwards post-`--` argv to
   scripts via `setCommandLineArguments`). Local smoke: 98/111 PASS
   headless; the 13 failures (and CI excludes) are
-  `test_glfw_synth_keys`, `test_glfw_synth_mouse`,
-  `test_visual_aids_key_hud` - all post `key_press` / `mouse_*` HTTP
+  the GLFW synth tests (now `tests/test_glfw_synth.das`) - all post `key_press` / `mouse_*` HTTP
   commands targeting `glfw_live`'s synth driver, which has no event
   queue without a GLFW context. Inherently windowed-only; revisit
   alongside a windowed CI job or a backend-neutral key-event API.

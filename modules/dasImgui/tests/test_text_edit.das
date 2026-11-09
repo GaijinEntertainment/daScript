@@ -40,7 +40,7 @@ def private open_edit_fixture(t : T?; d : ImguiApp; label_ : string;
     return initial != null
 }
 
-[test]
+[test(description = "real keystrokes in the live editor land in its buffer: PageDown and End move the caret, typed text marks it dirty, Enter splits the line and Backspace at column zero joins it back", timeout = 1200)]
 def test_text_edit_keystrokes_reach_buffer(t : T?) {
     let no_modules : array<string>
 
@@ -105,7 +105,7 @@ def test_text_edit_keystrokes_reach_buffer(t : T?) {
     }
 }
 
-[test]
+[test(description = "numpad PageUp and Home navigate like the dedicated keys, Insert toggles overtype so a typed character replaces without growing the buffer, and Ctrl+Right, Shift+End and Ctrl+Shift+Down move and extend by their own bindings", timeout = 1200)]
 def test_text_edit_numpad_and_overtype(t : T?) {
     let no_modules : array<string>
     with_imgui_app(EDIT_FEATURE, no_modules, "", "") $(d) {
@@ -177,7 +177,7 @@ def test_text_edit_numpad_and_overtype(t : T?) {
     }
 }
 
-[test]
+[test(description = "Ctrl+H seeds find from the selected word and focuses replace, Enter replaces the current match, Ctrl+Alt+Enter the rest in one undo unit, and Ctrl+G jumps to a line:col and hands the keyboard back", timeout = 1200)]
 def test_text_edit_find_replace(t : T?) {
     let no_modules : array<string>
     with_imgui_app(EDIT_FEATURE, no_modules, "", "") $(d) {

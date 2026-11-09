@@ -18,7 +18,7 @@ def private frame(touches : array<PadTouch>) {
     pad_begin_frame()
 }
 
-[test]
+[test(description = "Injected fingers hold a button's keys only while inside it and not on a release frame, a same-frame tap counts, held keys read back through glfwGetKey, zones claim their fingers, and the d-pad picks the dominant axis with a dead center.")]
 def test_touch_pad(t : T?) {
     pad_set_enabled(true)
     pad_set_window_size(1000.0, 500.0)
@@ -99,7 +99,7 @@ def test_touch_pad(t : T?) {
 
 }
 
-[test]
+[test(description = "A diagonal d-pad holds both axes only when asked, a swipe pulses once per threshold measured from the last pulse, a tap presses for one frame and never from a claimed finger, and the drag axis is the free finger's x fraction or -1 with none.")]
 def test_touch_pad_gestures(t : T?) {
     pad_set_enabled(true)
     pad_set_window_size(1000.0, 500.0)
@@ -158,7 +158,7 @@ def test_touch_pad_gestures(t : T?) {
     }
 }
 
-[test]
+[test(description = "A landscape game in a portrait window asks to rotate and every pad control holds nothing until the window turns, and a disabled pad holds nothing.")]
 def test_touch_pad_modes(t : T?) {
     pad_set_enabled(true)
     pad_set_window_size(1000.0, 500.0)

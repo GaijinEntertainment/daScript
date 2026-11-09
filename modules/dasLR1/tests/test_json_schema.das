@@ -45,7 +45,7 @@ def private trimmed(s : string) : string {
     return join(lines, "\n")
 }
 
-[test]
+[test(description = "Every schema of the lifted conversion corpus compiles to the reference converter's grammar text, whitespace aside, and the text builds on the engine; the corpus's failure cases are refused.")]
 def test_schema_conversion_corpus(t : T?) {
     t |> run("every schema of the conversion corpus compiles to the reference converter's grammar text") @(tt : T?) {
         var js = load_json_file("_schema_corpus.json")
@@ -74,7 +74,7 @@ def test_schema_conversion_corpus(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every schema case of the lifted acceptance corpus compiles to a grammar that admits its documents and refuses the others.")]
 def test_schema_acceptance_corpus(t : T?) {
     t |> run("every schema case of the acceptance corpus admits its documents and refuses the others") @(tt : T?) {
         var js = load_json_file("_gbnf_corpus.json")
@@ -101,7 +101,7 @@ def test_schema_acceptance_corpus(t : T?) {
     }
 }
 
-[test]
+[test(description = "A tool-call schema compiles to a conflict-free grammar that admits the well-formed call, refuses an unknown tool, a missing argument or a dropped key, and lets only the arguments key follow the name byte by byte.")]
 def test_schema_tool_call_shape(t : T?) {
     t |> run("a tool call's schema: the name an enum, the arguments an object with required keys - the viable prefix forbids a dropped key") @(tt : T?) {
         let schema = "\{\"type\":\"object\",\"properties\":\{\"name\":\{\"enum\":[\"control\",\"room_devices\"]\},\"arguments\":\{\"type\":\"object\",\"properties\":\{\"point\":\{\"type\":\"string\"\},\"action\":\{\"type\":\"string\"\}\},\"required\":[\"point\",\"action\"],\"additionalProperties\":false\}\},\"required\":[\"name\",\"arguments\"],\"additionalProperties\":false\}"
@@ -133,7 +133,7 @@ def private admits(schema : string; text : string) : bool {
     return lr_matches(g, text)
 }
 
-[test]
+[test(description = "oneOf, anyOf, allOf, $ref and prefixItems each compile to a grammar that admits exactly the documents the composition allows.")]
 def test_schema_composed_keywords(t : T?) {
     t |> run("oneOf, anyOf, allOf, $ref and prefixItems: the engine admits exactly the composed documents") @(t : T?) {
         let one_of = "\{\"oneOf\":[\{\"type\":\"integer\"\},\{\"type\":\"boolean\"\}]\}"
@@ -154,7 +154,7 @@ def test_schema_composed_keywords(t : T?) {
     }
 }
 
-[test]
+[test(description = "The schema parser lands string escapes as their bytes, the uuid, date and date-time formats and a recursive $ref constrain documents, the pattern forms compile, and malformed patterns or schema text are refused.")]
 def test_schema_parser_and_formats(t : T?) {
     t |> run("the schema parser's escapes, the uuid and date formats, a recursive $ref, and the pattern forms") @(t : T?) {
         // string escapes land as their bytes in the emitted literal
@@ -188,7 +188,7 @@ def test_schema_parser_and_formats(t : T?) {
     }
 }
 
-[test]
+[test(description = "json_schema_to_gbnf refuses an unknown or nameless type, a remote $ref, an unanchored pattern, malformed text and every count past the cap with a message naming the fault, and compiles a count at the cap.")]
 def test_schema_refusals(t : T?) {
     t |> run("what the compiler refuses, by name") @(tt : T?) {
         var err = ""

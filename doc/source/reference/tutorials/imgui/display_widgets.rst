@@ -109,6 +109,6 @@ entry under the window instead.
 
    Full source: :download:`modules/dasImgui/examples/tutorial/display_widgets.das <../../../../../modules/dasImgui/examples/tutorial/display_widgets.das>`
 
-   Integration test: ``modules/dasImgui/tests/test_display_progress.das`` and ``modules/dasImgui/tests/test_display_image.das``.
+   Integration tests: ``modules/dasImgui/tests/test_display_widgets.das``.
 
    :ref:`Boost macros <stdlib_imgui_boost_section>` — the macro layer.

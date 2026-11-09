@@ -102,7 +102,7 @@ def private segment_of_line(app : ImguiApp; line : int) : JsonValue const? {
     return null
 }
 
-[test]
+[test(description = "in rich-das view a click on a visible line of another source segment lands the caret on that line and never scrolls", timeout = 1200)]
 def test_rich_das_cross_segment_click_no_jump(t : T?) {
     // play round 3: a click on ANOTHER source segment used to be hijacked by
     // the primary (caret clamped to its first line) and the follow scrolled
@@ -152,7 +152,7 @@ def test_rich_das_cross_segment_click_no_jump(t : T?) {
     }
 }
 
-[test]
+[test(description = "after Ctrl+End scrolls the caret's segment out of view, Ctrl+Home and plain arrows still reach the editor with no click", timeout = 1200)]
 def test_rich_das_keys_after_ctrl_end(t : T?) {
     // play round 3: after Ctrl+End the caret's segment-child owns neither nav
     // focus nor (once scrolled out) a drawn body - keys must survive both
@@ -191,7 +191,7 @@ def test_rich_das_keys_after_ctrl_end(t : T?) {
     }
 }
 
-[test]
+[test(description = "source runs and rich comment groups partition the buffer, and only the comment group holding the caret renders as source", timeout = 1200)]
 def test_rich_das_groups_and_unfold(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))
@@ -233,7 +233,7 @@ def test_rich_das_groups_and_unfold(t : T?) {
     }
 }
 
-[test]
+[test(description = "typing in an unfolded comment group makes the debounced resync reparse exactly one fragment, and code lines with trailing comments never join the groups", timeout = 1200)]
 def test_rich_das_edit_refreshes_one_fragment(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))

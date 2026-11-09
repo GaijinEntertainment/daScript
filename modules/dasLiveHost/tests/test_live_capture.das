@@ -17,7 +17,7 @@ def setup_capture_fixture() {
     capture_application = "fixture"; capture_build = "build-A"; value = 7; unwanted_calls = 0
     live_capture_provider(LiveCaptureProvider(name = "state", version = 1, read = @@read_fixture, validate = @@validate_fixture, apply = @@apply_fixture))
 }
-[test]
+[test(description = "live_capture snapshots only the registered providers without calling unrelated live commands, keeps the last 256 events, and restoring the snapshot brings the provider state back.")]
 def test_capture_is_opt_in_and_restores(t : T?) {
     setup_capture_fixture()
     for (_i in range(300)){live_capture_event("input", "event")}
@@ -30,7 +30,7 @@ def test_capture_is_opt_in_and_restores(t : T?) {
     t |> equal(value, 7)
     delete_json(snapshot); delete_json(result)
 }
-[test]
+[test(description = "A restore whose provider state fails validation, or whose build differs from the running one, is rejected before any state changes.")]
 def test_capture_validation_precedes_mutation(t : T?) {
     setup_capture_fixture(); value = 101
     var invalid = live_capture(null); value = 42
@@ -46,10 +46,10 @@ def test_capture_validation_precedes_mutation(t : T?) {
     delete_json(snapshot); delete_json(result)
 }
 
-[test]
+[test(description = "A flushed capture writes a valid response.json carrying the escaped request id, the frame, the provider state and timings, and the saved snapshot file restores the state.")]
 def test_capture_flush_roundtrip_and_timings(t : T?) {
     setup_capture_fixture()
-    let directory = "/tmp/das-capture-timing-test"
+    let directory = path_join(test_temp_dir(), "das-capture-timing-test")
     live_capture_configure("fixture", "build-A", directory)
     capture_request_id = "quoted-\"-identifier"
     capture_pending = true
@@ -81,10 +81,10 @@ def custom_capture_artifact(_file : string) : bool {
     return true
 }
 def failed_capture_artifact(_file : string) : bool => false
-[test]
+[test(description = "A capture's response carries the image artifact's name, format and size, a failed image capture still yields a report with that metadata cleared, and native builds keep earlier capture files while the browser keeps only the latest.")]
 def test_capture_artifact_metadata_and_failure(t : T?) {
     setup_capture_fixture()
-    let directory = "/tmp/das-capture-artifact-test"
+    let directory = path_join(test_temp_dir(), "das-capture-artifact-test")
     live_capture_configure("fixture", "build-A", directory)
     let previous_artifact = capture_artifact
     capture_artifact = @@custom_capture_artifact

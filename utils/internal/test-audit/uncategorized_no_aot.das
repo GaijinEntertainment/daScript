@@ -108,6 +108,24 @@ def test_audit(tt : T?) {  // nolint:STYLE038 - one arm per tool flag
                              output), 0, output)
     }
 
+    tt |> run("several --root flags share one index, each root a section of its " +
+        "own") <| @(t : T?) {
+        let index = path_join(test_temp_dir(), "roots_TESTS.md")
+        let alpha = path_join(tree, "alpha")
+        let beta = path_join(tree, "beta")
+        var output : string
+        t |> equal(run_audit(["--root", alpha, "--root", beta, "--index", index, "--readme"],
+                             output), 0, output)
+        let text = fread(index)
+        t |> success(text |> contains("alpha/\n") && text |> contains("beta/\n"),
+                     "expected a section per root, got:\n{text}")
+        t |> success(text |> contains("### pairs.das"),
+                     "expected the file named under its root's section, got:\n{text}")
+        t |> equal(run_audit(["--root", alpha, "--root", beta, "--index", index, "--verify"],
+                             output), 0, output)
+        t |> success(output |> contains("matches the census"), output)
+    }
+
     tt |> run("--verify exits 1 on an index that differs from the census") <| @(t : T?) {
         let indexPath = path_join(tree, "README.md")
         t |> success(fwrite(indexPath, fread(indexPath) + "\nhand edit\n"))

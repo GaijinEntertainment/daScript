@@ -140,5 +140,6 @@ bin/Release/daslang.exe dastest/dastest.das -- --test examples/games/latchpoint/
 ```
 
 The `test_*.das` files cover world state, conversations, input, audio processing, geometry and
-render-state contracts. `test_core_gl.das` needs a working OpenGL context. Real-model dialogue,
+render-state contracts. `uncategorized_persistent_heap_stack_262144.das` needs a working OpenGL
+context. Real-model dialogue,
 microphone permissions, voice appeal and perceived rendering smoothness also need playtesting.

@@ -16,7 +16,7 @@ let TERMINAL_ZOOM = "TERMINAL_WIN/TERMINAL_ZOOM"
 let TERMINAL_VIEW_MENU = "TERMINAL_WIN/TERMINAL_VIEW_MENU"
 let TERMINAL_ZOOM_IN = "TERMINAL_WIN/TERMINAL_VIEW_POPUP/TERMINAL_ZOOM_IN"
 
-[test]
+[test(description = "the embedded terminal renders a measured PTY grid with a blinking cursor at 150 percent zoom, zooms in five percent steps from its View menu, takes focus on click, and shows a typed PowerShell command's output", timeout = 1200, standalone = "CI excludes the file by name: the terminal needs the Windows-only ConPTY backend")]
 def test_embedded_terminal_focus_and_input(t : T?) {
     let extra_modules <- ["modules/dasTerminal"]
     with_imgui_app(TERMINAL_FEATURE, extra_modules, "", "") $(d) {

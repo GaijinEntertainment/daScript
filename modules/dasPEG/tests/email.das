@@ -62,7 +62,7 @@ def get_parser_with(email : string; blk : block<(email : Email; err : array<Pars
 }
 
 
-[test]
+[test(description = "The email grammar splits abc@mail.example.com into the user abc and the domain mail.example.com.")]
 def test_email_1(t : T?) {
     let input = "abc@mail.example.com"
 
@@ -72,7 +72,7 @@ def test_email_1(t : T?) {
     }
 }
 
-[test]
+[test(description = "The email grammar keeps a dot inside the user name: john.doe@example.com.")]
 def test_email_2(t : T?) {
     let input = "john.doe@example.com"
 
@@ -82,7 +82,7 @@ def test_email_2(t : T?) {
     }
 }
 
-[test]
+[test(description = "The email grammar reads a long user name made of underscored words.")]
 def test_email_3(t : T?) {
     let input = "this_is_a_very_long_username@example.com"
 
@@ -92,7 +92,7 @@ def test_email_3(t : T?) {
     }
 }
 
-[test]
+[test(description = "The email grammar reads an all-digit user name: 12345@example.com.")]
 def test_email_4(t : T?) {
     let input = "12345@example.com"
 
@@ -102,7 +102,7 @@ def test_email_4(t : T?) {
     }
 }
 
-[test]
+[test(description = "The email grammar keeps hyphens in both the user name and the domain: jane-doe@mail-example.com.")]
 def test_email_5(t : T?) {
     let input = "jane-doe@mail-example.com"
 
@@ -112,7 +112,7 @@ def test_email_5(t : T?) {
     }
 }
 
-[test]
+[test(description = "The email grammar keeps an underscore inside the user name: user_name@example.com.")]
 def test_email_6(t : T?) {
     let input = "user_name@example.com"
 
@@ -122,7 +122,7 @@ def test_email_6(t : T?) {
     }
 }
 
-[test]
+[test(description = "The email grammar reads a domain with several subdomains: user@subdomain1.subdomain2.example.com.")]
 def test_email_7(t : T?) {
     let input = "user@subdomain1.subdomain2.example.com"
 
@@ -134,7 +134,7 @@ def test_email_7(t : T?) {
 
 // Test parsing failures
 
-[test]
+[test(description = "The email grammar reports a parse error for a bare @ with no user or domain.")]
 def test_email_error_1(t : T?) {
     let input = "@"
 
@@ -145,7 +145,7 @@ def test_email_error_1(t : T?) {
     }
 }
 
-[test]
+[test(description = "The email grammar reports a parse error for an address with no @: john.gmail.com.")]
 def test_email_error_2(t : T?) {
     let input = "john.gmail.com"
 

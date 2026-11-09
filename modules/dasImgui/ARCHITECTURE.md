@@ -45,7 +45,8 @@ The pinned ImGui 1.92.6 input editor uses exact modifier shortcuts for Enter.
 the existing multiline newline/validation policy still decides what they do. The
 configure step is idempotent and refuses an unrecognized upstream implementation,
 so an ImGui update requires reviewing the patch rather than silently dropping it.
-The headless `test_io_synth_text.das` test drives both modified keys into a real
+The headless synthetic-text test in `modules/dasImgui/tests/test_synth_io.das` drives both modified
+keys into a real
 multiline widget and checks its resulting buffer. The same patch set preserves queued
 text-before-mouse ordering so a mouse click cannot redirect an earlier text commit
 into the newly focused editor.

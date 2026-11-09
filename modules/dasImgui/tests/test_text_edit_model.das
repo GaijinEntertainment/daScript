@@ -6,7 +6,7 @@ require imgui/imgui_text_source_edit
 
 //! Pure-logic coverage for the E1 editing core: no UI, no live host.
 
-[test]
+[test(description = "loading detects the CRLF or LF flavor and splits lines with a trailing empty line, and the source round-trips byte-exact and clean, the empty source included")]
 def test_edit_load_and_source_round_trip(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "a\r\nb\r\n")
@@ -25,7 +25,7 @@ def test_edit_load_and_source_round_trip(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "inserting text marks the buffer dirty and advances the revision, a newline splits the line at the caret, and a multi-line insert joins its ends to the split halves with the caret after the last segment")]
 def test_edit_insert_and_line_splits(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "")
@@ -56,7 +56,7 @@ def test_edit_insert_and_line_splits(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "backspace at column zero and delete at line end join lines keeping both halves, each removes one character otherwise, and both are no-ops at the buffer edges")]
 def test_edit_backspace_delete_and_joins(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "ab\ncd")
@@ -85,7 +85,7 @@ def test_edit_backspace_delete_and_joins(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "left, right and backspace step over whole UTF-8 graphemes of 1 to 4 bytes, a combining-mark cluster included")]
 def test_edit_utf8_grapheme_movement(t : T?) {
     var ed = TextEditState()
     // a(1) é(2) 你(3) 🌍(4) b(1) — byte boundaries 0,1,3,6,10,11.
@@ -118,7 +118,7 @@ def test_edit_utf8_grapheme_movement(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "vertical moves clamp to a short line but restore the preferred column after it, and up or down past the buffer edge goes to the line start or end")]
 def test_edit_vertical_preferred_column(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "longer line\nab\nabcdef")
@@ -140,7 +140,7 @@ def test_edit_vertical_preferred_column(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "a selection reports its multi-line text in order even when made backwards, plain left and right collapse it to its start and end, and select-all and clear cover and drop it")]
 def test_edit_selection_core(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "alpha\nbeta\ngamma")
@@ -166,7 +166,7 @@ def test_edit_selection_core(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "with a selection active, insert replaces it and backspace or delete removes exactly the selection")]
 def test_edit_selection_edits(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "alpha\nbeta\ngamma")
@@ -186,7 +186,7 @@ def test_edit_selection_edits(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "shifted movement extends and shrinks the selection by graphemes, to line end and across lines, collapses when the caret returns to the anchor, and set_cursor clears it")]
 def test_edit_shift_movement(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "one two\nthree")
@@ -207,7 +207,7 @@ def test_edit_shift_movement(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "word-left stops at word starts and word-right at word ends, skipping a lone separator but stopping on a separator run, and word-left at column zero wraps to the previous line's end")]
 def test_edit_word_motion(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "foo.bar baz")
@@ -237,7 +237,7 @@ def test_edit_word_motion(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "delete-word-left removes the word and keeps the space before it, a run of two or more spaces deletes on its own, and delete-word-right eats the space and word or joins at line end")]
 def test_edit_word_delete(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "foo bar baz")
@@ -264,7 +264,7 @@ def test_edit_word_delete(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "Home goes to the first non-blank and toggles between it and column zero on repeat")]
 def test_edit_smart_home(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "    code")
@@ -278,7 +278,7 @@ def test_edit_smart_home(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "a typing run is one undo unit that undo reverts whole and redo restores with its after-cursor")]
 def test_undo_typing_coalesces(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "")
@@ -296,7 +296,7 @@ def test_undo_typing_coalesces(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "typing undoes in word-sized units broken before each space, and a new edit clears the redo stack")]
 def test_undo_word_sized_units(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "")
@@ -312,7 +312,7 @@ def test_undo_word_sized_units(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "an undo unit breaks when the edit kind changes or the caret jumps, so the first undo reverts only the last unit")]
 def test_undo_breaks_on_kind_and_adjacency(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "")
@@ -330,7 +330,7 @@ def test_undo_breaks_on_kind_and_adjacency(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "a backspace run coalesces into one undo unit, and undoing a line join restores the newline and the pre-join caret line")]
 def test_undo_backspace_run_and_joins(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "abcd")
@@ -350,7 +350,7 @@ def test_undo_backspace_run_and_joins(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "Enter fences off the run before it and undoes together with the typing after it, and undoing a replaced selection restores both the text and the selection")]
 def test_undo_enter_fence_and_selection_restore(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "")
@@ -370,7 +370,7 @@ def test_undo_enter_fence_and_selection_restore(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "an explicit fence splits same-kind typing into two undo units, and word deletes never coalesce, each undoing alone")]
 def test_undo_push_stop_and_word_delete(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "")
@@ -390,7 +390,7 @@ def test_undo_push_stop_and_word_delete(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "a multi-line insert undoes cleanly back to the insert point and redoes cleanly")]
 def test_undo_multiline_insert(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "headtail")
@@ -405,7 +405,7 @@ def test_undo_multiline_insert(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "mark_saved fences the typing run and makes undo or redo landing exactly on the save point clean, while any state before or after it is dirty")]
 def test_save_point_clears_dirty_on_undo(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "base")
@@ -431,7 +431,7 @@ def test_save_point_clears_dirty_on_undo(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "after undoing past the save point and editing, the save point is unreachable, so a state at the same undo depth with a different history stays dirty")]
 def test_save_point_unreachable_after_divergence(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "")
@@ -449,7 +449,7 @@ def test_save_point_unreachable_after_divergence(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "saving a pristine buffer is a no-op whose save point undo returns to clean, load resets the save point, and undoing a replace_all returns to it")]
 def test_save_point_at_pristine_load(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "text")
@@ -477,7 +477,7 @@ def test_save_point_at_pristine_load(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "copy returns and records the selected text, paste inserts it at the caret, and paste and cut are each one undo unit, undoing a cut restoring the selection")]
 def test_clipboard_selection_round_trip(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "alpha beta")
@@ -500,7 +500,7 @@ def test_clipboard_selection_round_trip(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "with no selection copy and cut take the whole line with its newline, a line-mode paste inserts above the caret line keeping the caret column, and each is one undo unit")]
 def test_clipboard_line_mode(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "one\ntwo\nthree")
@@ -528,7 +528,7 @@ def test_clipboard_line_mode(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "text the editor did not copy pastes at the caret rather than as a line block")]
 def test_clipboard_external_text_is_not_line_mode(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "one\ntwo")
@@ -540,7 +540,7 @@ def test_clipboard_external_text_is_not_line_mode(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "overtype replaces the next character as one coalesced undo run, falls back to insert at line end without eating the newline, and toggles off")]
 def test_overtype_mode(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "abcd")
@@ -567,7 +567,7 @@ def test_overtype_mode(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "move-line swaps with the neighbour as one undo unit (a no-op at the top), duplicate puts the caret on the lower copy, and delete-line removes the line with its newline")]
 def test_line_operations(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "one\ntwo\nthree")
@@ -595,7 +595,7 @@ def test_line_operations(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "insert-above and insert-below carry indentation, block indent skips empty lines and outdent strips a tab or up to four spaces with the caret following its byte, and Ctrl+L selects then extends whole lines")]
 def test_line_insert_indent_and_expand(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "\tindented\nplain")
@@ -640,7 +640,7 @@ def test_line_insert_indent_and_expand(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "Tab block-indents a multi-line or full-line selection but replaces a partial-line one, and scroll requests accumulate for the widget")]
 def test_tab_smart_and_scroll_verb(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "aa\nbb")
@@ -661,7 +661,7 @@ def test_tab_smart_and_scroll_verb(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "vertical moves land by visual column with tabs expanded, rounding a column inside a tab to its nearer edge, for plain and shifted moves alike")]
 def test_vertical_moves_are_tab_visual(t : T?) {
     var ed = TextEditState()
     // tab_cells = 4: line 0 is [tab]X, so X starts at visual column 4.
@@ -684,7 +684,7 @@ def test_vertical_moves_are_tab_visual(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "goto-line takes 1-based lines and columns, clamps past the end, parses line:col and line,col queries, declines garbage without moving, and opening arms the dialog")]
 def test_edit_goto_line(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "one\ntwo\nthree four\nfive")
@@ -708,7 +708,7 @@ def test_edit_goto_line(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "a color literal scans only as 6 or 8 hex digits at identifier boundaries, 6 digits parse opaque and 8 carry alpha, and both round-trip")]
 def test_edit_color_literals(t : T?) {
     // scan: 6 or 8 hex digits at ident boundaries only
     var hit = text_edit_scan_color("let c = 0x12AF2A // tint", 0)
@@ -730,7 +730,7 @@ def test_edit_color_literals(t : T?) {
     t |> equal(text_edit_color_text(argb, 8), "0x80FF8040", "ARGB round-trips")
 }
 
-[test]
+[test(description = "join-lines collapses the seam to one space with the caret at it, a selection joins all its lines in one undo unit, and an empty next line joins with no stray space")]
 def test_edit_join_lines(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "one  \n\ttwo\nthree")
@@ -757,7 +757,7 @@ def test_edit_join_lines(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "dragging a selection moves it whole and keeps it selected as one undo unit, adjusting a target on or past its own lines for the removal, and a drop inside the selection declines")]
 def test_edit_move_selection_to(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "alpha beta\ngamma")
@@ -803,7 +803,7 @@ def test_edit_move_selection_to(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "byte offsets and positions map both ways over LF-joined text whatever the line flavor, ranges map by byte across newlines, and past-the-end values clamp to the buffer end")]
 def test_edit_byte_mapping(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "ab\r\ncd\r\né")  // nolint:STYLE039 (multi-byte grapheme fixture)
@@ -833,7 +833,7 @@ def test_edit_byte_mapping(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "replacing a single- or multi-line range splices the text with the caret after it, and undo and redo restore and reapply it with the caret")]
 def test_edit_replace_range_undo(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "hello world")
@@ -855,7 +855,7 @@ def test_edit_replace_range_undo(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "replace-all reports its count, applies back to front so earlier spans stay valid, and undoes and redoes as a single unit")]
 def test_edit_replace_all_is_one_undo_unit(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "one two one\nthree one")
@@ -878,7 +878,7 @@ def test_edit_replace_all_is_one_undo_unit(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "find sync highlights every match and selects the current one, stepping moves the selection, replace-one rewrites only the current match and advances, replace-all undoes as one unit, and closing clears the highlights")]
 def test_edit_find_sync_flow(t : T?) {
     var ed = TextEditState()
     var find = TextFindState()
@@ -917,7 +917,7 @@ def test_edit_find_sync_flow(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "replace-one resumes past its own insertion, so a replacement containing the query is not matched again")]
 def test_edit_find_sync_no_replace_loop(t : T?) {
     var ed = TextEditState()
     var find = TextFindState()
@@ -936,7 +936,7 @@ def test_edit_find_sync_no_replace_loop(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "the lexical tier gives every line a style entry with keyword, line-comment, string and number runs, and clearing the language drops the styles")]
 def test_edit_lexical_syntax(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "def foo() \{ // note\n\tlet s = \"str\" + 42\n\}")
@@ -960,7 +960,7 @@ def test_edit_lexical_syntax(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "an opened block comment carries comment style into the lines below, closing it restyles them plain, and undoing the close restyles them again")]
 def test_edit_block_comment_carry(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "aa\nbb\ncc")
@@ -981,7 +981,7 @@ def test_edit_block_comment_carry(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "Enter after an unmatched opener indents and otherwise carries the indent, a typed closer dedents in one undo unit, openers in strings and comments and Markdown never indent, and Enter between a pair splits it into three lines")]
 def test_edit_auto_indent_on_enter(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "def f() \{")
@@ -1025,7 +1025,7 @@ def test_edit_auto_indent_on_enter(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "an opener auto-closes except before a word, the typed closer steps over its twin, backspace eats an empty pair, quotes pair only at word boundaries, a selection is surrounded in one undo unit, and plain text pairs nothing")]
 def test_edit_auto_close_pairs(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "")
@@ -1077,7 +1077,7 @@ def test_edit_auto_close_pairs(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "a bracket at or just after the caret matches its partner across lines, skipping brackets in strings and respecting nesting, and an unbalanced opener reports a mismatch at its own position")]
 def test_edit_bracket_match(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "def f(a : int) \{\n\tx = g(\"\}\")\n\}")
@@ -1117,7 +1117,7 @@ def test_edit_bracket_match(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "line splits and joins keep the style entries aligned with the lines, and a shifted line keeps its keyword run")]
 def test_edit_syntax_tracks_line_edits(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "def a\ndef b")
@@ -1132,7 +1132,7 @@ def test_edit_syntax_tracks_line_edits(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "a regex replace-all expands group templates per match and undoes as one unit")]
 def test_edit_find_sync_regex_groups(t : T?) {
     var ed = TextEditState()
     var find = TextFindState()
@@ -1151,7 +1151,7 @@ def test_edit_find_sync_regex_groups(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "a highlight range made stale by an edit clamps each row span to the current line length, and a row outside the buffer has no span")]
 def test_edit_highlight_row_span_clamps(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "alpha beta\ngamma")
@@ -1181,7 +1181,7 @@ def test_edit_highlight_row_span_clamps(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "issue spans follow each language's convention - daslang 1-based lines with 0-based columns, clang 1-based both, plain 0-based columns - for single and multi-line spans")]
 def test_edit_issue_span_language_convention(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "int main() \{ return; \}")
@@ -1205,7 +1205,7 @@ def test_edit_issue_span_language_convention(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "in the virtual source view a byte's line top comes from the last drawn content height, past-the-end clamps to the last row, and an undrawn view declines")]
 def test_source_view_line_top_virtual_mode(t : T?) {
     // the virtual path (>= 128 KB documents) never fills state.key, so the row
     // pitch has to come from the content height the last draw stamped

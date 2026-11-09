@@ -27,7 +27,7 @@ def chip_remove_scale(t : float) : float {
 
 def chip_remove_alpha(t : float) : float => 1.0 - clamp(t, 0.0, 1.0)
 
-[test]
+[test(description = "The chip-place scale curve starts at 0, rises to a 1.2 overshoot at t=0.6, settles back to 1.0 at t=1, and clamps past the end.")]
 def test_chip_place_scale(t : T?) {
     t |> run("starts at zero") @(t : T?) {
         t |> success(abs(chip_place_scale(0.0)) < 0.001)
@@ -62,7 +62,7 @@ def test_chip_place_scale(t : T?) {
     }
 }
 
-[test]
+[test(description = "The chip-remove scale curve starts at 1.0, flashes up to 1.3 at t=0.2, shrinks to 0 at t=1, and never goes negative.")]
 def test_chip_remove_scale(t : T?) {
     t |> run("starts at 1.0") @(t : T?) {
         t |> success(abs(chip_remove_scale(0.0) - 1.0) < 0.001)
@@ -84,7 +84,7 @@ def test_chip_remove_scale(t : T?) {
     }
 }
 
-[test]
+[test(description = "The chip-remove fade goes from opaque to transparent without ever rising, and clamps outside 0..1.")]
 def test_chip_remove_alpha(t : T?) {
     t |> run("starts opaque") @(t : T?) {
         t |> success(abs(chip_remove_alpha(0.0) - 1.0) < 0.001)
@@ -116,7 +116,7 @@ def card_fly_ease(t : float) : float {
     return 1.0 - (1.0 - tc) * (1.0 - tc)
 }
 
-[test]
+[test(description = "The card-fly ease-out runs from 0 to 1 without ever falling and covers more distance in its first half than in its second.")]
 def test_card_fly_ease(t : T?) {
     t |> run("starts at 0") @(t : T?) {
         t |> success(abs(card_fly_ease(0.0)) < 0.001)

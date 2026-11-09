@@ -437,7 +437,7 @@ IF(COMMAND ADD_MODULE_CPP)
             SET_TESTS_PROPERTIES(imgui_texture_ref_abi_interpreted PROPERTIES TIMEOUT 60)
             das_lane_dastest_target(run_tests_imgui_integration COMMENT "Testing dasImgui headless"
                 FILES modules/dasImgui/tests
-                ARGS ${_imgui_test_args} --exclude glfw_synth --exclude key_hud --exclude embedded_terminal --headless
+                ARGS ${_imgui_test_args} --exclude glfw_synth --exclude embedded_terminal --headless
                 DEPENDS daslang-live dasModuleImgui imguiAppHeadless)
         ENDIF()
     ENDIF()

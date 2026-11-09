@@ -6,7 +6,7 @@ require imgui/imgui_text_edit_syntax
 
 //! Pure-logic coverage for the full-parse refinement tier.
 
-[test]
+[test(description = "applying parse tokens maps each role to its line style, splits a token that spans a newline into per-line runs, and records the parse revision")]
 def test_apply_syntax_maps_and_splits(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "abc\ndef\nghi")
@@ -29,7 +29,7 @@ def test_apply_syntax_maps_and_splits(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "parse-refined runs survive typing: an edit at the line end keeps both runs, an edit inside a run drops only that run and shifts the next, and an edit on the next line leaves this line's styles alone")]
 def test_parse_styles_survive_same_line_edits(t : T?) {
     // Boris's flicker catch: typing re-lexes the line and dropped
     // parse-refined colors to plain until the reparse - blue/white/blue.
@@ -66,7 +66,7 @@ def test_parse_styles_survive_same_line_edits(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "syntax sync parses only after the idle debounce, refines a function name to the function style, skips an unchanged revision, and an edit both stales the parse and restarts the debounce")]
 def test_syntax_sync_debounce_and_refine(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "def foo() \{\n\tlet x = 1\n\}")

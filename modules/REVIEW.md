@@ -38,3 +38,13 @@ generates the module's binding would otherwise generate - makes that binder's `s
 override return true for the function, and deletes the function's generated registration from
 the module's `src/`, in the same change.** Otherwise the generated registration sits beside the
 hand-bound one and the module registers the name twice.
+
+**A diff that adds a `[test]` under a module's `tests/` folder that carries no `REVIEW.md` of its
+own puts it in the existing category file for its topic or in that folder's `uncategorized.das`,
+never in a new file, with a `description`, and with `timeout = 1200` when the test builds, spawns
+a child or waits on a peer** - the shape rules are `tests/REVIEW.md` (repo root) and
+`tests/ARCHITECTURE.md`; `REVIEW.das` (beside this file) applies them to every such folder it
+names, and `TESTS.md` (beside this file) is their one generated index (`daslang
+utils/internal/test-audit/main.das -- --root modules/<M>/tests ... --index modules/TESTS.md
+--readme`, one `--root` per folder in the gate's list; the `check_tests_index` target verifies
+it). A module whose tests folder carries its own `REVIEW.md` gates and indexes its tests there.

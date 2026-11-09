@@ -4,15 +4,20 @@ options _ascii_strings = false // CJK and supplementary-plane input regression.
 require dastest/testing_boost public
 require imgui/imgui_playwright public
 require imgui
+require daslib/fio
+require daslib/rtti
 require daslib/json_boost
+require daslib/sha_256
 require strings
+
+//! The text_input example: Unicode typing, IME, its package.
 
 let private FEATURE = "modules/dasImgui/examples/features/text_input/main.das"
 let private SINGLE = "TEXT_INPUT/SINGLE"
 let private EDITOR = "TEXT_INPUT/EDITOR/unicode_editor"
 let private WINDOW_WIDTH = 1040.0
 
-[test]
+[test(description = "CJK and emoji typed into a single-line field reach its rendered UTF-8 buffer byte for byte, and the custom editor keeps Backspace, which removes a whole grapheme without touching the neighbouring field", timeout = 1200)]
 def unicode_input_reaches_rendered_buffers_and_custom_editor_keeps_keyboard_commands(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         let ready = wait_for_visible(app, SINGLE, 15.0)
@@ -72,7 +77,7 @@ def private overlay_drawn(app : ImguiApp) : bool {
     return (overlay?["z"] ?? 0.0) > (overlay?["x"] ?? 0.0)
 }
 
-[test]
+[test(description = "an IME preedit draws its overlay and candidate rectangle at the focused field without committing, and a click on another field commits it into the field it leaves and none into the new one", timeout = 1200)]
 def composition_draws_at_the_caret_and_a_click_commits_it_into_the_old_field(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         let ready = wait_for_visible(app, SINGLE, 15.0)
@@ -121,7 +126,7 @@ def private focus_single(t : T?; app : ImguiApp) : bool {
     return focused
 }
 
-[test]
+[test(description = "the preedit overlay underlines each conversion block, thickens the focused one, places and clamps the caret inside the composition, uses the field's font, and shifts a long composition inside the window", timeout = 1200)]
 def the_overlay_marks_blocks_and_caret_in_the_field_font_inside_the_window(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!focus_single(t, app))
@@ -166,7 +171,7 @@ def the_overlay_marks_blocks_and_caret_in_the_field_font_inside_the_window(t : T
     }
 }
 
-[test]
+[test(description = "Tab to another field cancels the composition and commits nothing anywhere, and Escape ends editing while held but releases text-input focus only once the keys settle", timeout = 1200)]
 def a_keyboard_owner_change_cancels_and_focus_waits_for_keys_to_settle(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!focus_single(t, app))
@@ -197,7 +202,7 @@ def a_keyboard_owner_change_cancels_and_focus_waits_for_keys_to_settle(t : T?) {
     }
 }
 
-[test]
+[test(description = "detaching real user input cancels an open composition and commits nothing into the field", timeout = 1200)]
 def turning_real_input_off_cancels_the_composition(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!focus_single(t, app))
@@ -210,4 +215,48 @@ def turning_real_input_off_cancels_the_composition(t : T?) {
             "nothing is committed")
         post_command(app, "set_user_control", JV((enabled = true)))
     }
+}
+
+[test(description = "a daspkg release of the text_input example still starts after its bundle is moved away, with its bundled fonts and licenses byte-identical to the sources", timeout = 1200)]
+def relocated_text_input_package_starts_with_bundled_fonts(t : T?) {
+    if (!has_module("llvm")) { t |> skip("native package compilation requires dasLLVM"); return }
+    let made = create_temp_directory_result("imgui_text_input_package")
+    if (!(made is value)) { t |> failure("could not create release directory"); return }
+    let temporary = made as value
+    {
+        let root = path_join(get_das_root(), "modules/dasImgui/examples/features/text_input")
+        let output = path_join(temporary, "built")
+        var log : string
+        let built = run_and_capture([get_executable_path(), "-no-module-cache",
+                                     path_join(get_das_root(), "utils/daspkg/main.das"), "--",
+                                     "release", "--root", root, "--out", output], log, 180.0)
+        t |> equal(built, 0, log)
+        if (built != 0) return
+        let darwin = get_platform_name() == "darwin"
+        let bundle = path_join(output, darwin ? "text_input.app" : "text_input")
+        let relocated = path_join(temporary, "relocated")
+        t |> success(rename(bundle, relocated), "release can be moved away from its output path")
+        let artifacts = darwin ? path_join(relocated, "Contents/MacOS") : relocated
+        var error : string
+        var manifest = read_json(fread(path_join(artifacts, "fonts/manifest.json")), error)
+        t |> success(empty(error), error)
+        {
+            for (font in (manifest?["fonts"].value as _array)) {
+                let file = font?["file"] ?? ""
+                t |> success(!empty(file))
+                t |> equal(sha256_file_hex(path_join(artifacts, "fonts/{file}")),
+                           font?["sha256"] ?? "", "bundled font bytes are unchanged")
+                for (license in (font?["license_files"].value as _array)) {
+                    let file_name = license ?? ""
+                    t |> equal(fread(path_join(artifacts, "fonts/{file_name}")),
+                               fread(path_join(root, "fonts/{file_name}")),
+                               "bundled license is unchanged")
+                }
+            }
+        } finally { delete_json(manifest) }
+        let executable = path_join(artifacts, darwin ? "text_input" : "text_input.exe")
+        let ran = run_and_capture([executable, "--", "--headless", "--headless-frames=5",
+                                   "--no-imgui-ini"], log, 30.0)
+        t |> equal(ran, 0, "relocated native input example starts and exits cleanly: {log}")
+    } finally { rmdir_rec_result(temporary) }
 }

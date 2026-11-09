@@ -17,7 +17,7 @@ def border_is_steel(c : Cave) : bool {
     return true
 }
 
-[test]
+[test(description = "A generated cave has the standard size, a steel border, one Rockford, an exit, diamonds with a quota no larger than the diamonds present, enough time, and scattered boulders.")]
 def test_generated_cave_invariants(t : T?) {
     let c <- generate_cave(1984, 0)
     t |> equal(c.cols, CAVE_COLS)
@@ -34,7 +34,7 @@ def test_generated_cave_invariants(t : T?) {
     t |> success(cave_count(c, Tile.boulder) > 20, "scattered boulders")
 }
 
-[test]
+[test(description = "Generation is deterministic: the same world seed and cave index give the same layout and quota.")]
 def test_same_seed_identical(t : T?) {
     let a <- generate_cave(42, 3)
     let b <- generate_cave(42, 3)
@@ -42,7 +42,7 @@ def test_same_seed_identical(t : T?) {
     t |> equal(a.diamonds_need, b.diamonds_need)
 }
 
-[test]
+[test(description = "Changing either the world seed or the cave index changes the generated layout.")]
 def test_different_seeds_differ(t : T?) {
     let a <- generate_cave(1984, 0)
     let b <- generate_cave(2026, 0)
@@ -51,7 +51,7 @@ def test_different_seeds_differ(t : T?) {
     t |> success(cave_to_ascii(a) != cave_to_ascii(d), "cave index changes layout")
 }
 
-[test]
+[test(description = "The fallback cave passes the sanity check, has a steel border, and holds exactly one Rockford.")]
 def test_fallback_playable(t : T?) {
     let c <- fallback_cave()
     t |> success(cave_is_sane(c))
@@ -59,7 +59,7 @@ def test_fallback_playable(t : T?) {
     t |> equal(cave_count(c, Tile.player), 1)
 }
 
-[test]
+[test(description = "Caves from 20 seeds all pass the sanity check, and none asks for more diamonds than it holds.")]
 def test_many_seeds_sane(t : T?) {
     for (s in range(20)) {
         let c <- generate_cave(1000 + s, s % 5)
@@ -80,7 +80,7 @@ def survives_idle(c0 : Cave; ticks : int) : bool {
     return true
 }
 
-[test]
+[test(description = "In early caves across many seeds, a Rockford who does not move survives the first 24 ticks: nothing crushes or catches him at the spawn.")]
 def test_spawn_not_sucker(t : T?) {
     t |> run("seed 1984 cave 3 survives idle") <| @(t : T?) {
         let c <- generate_cave(1984, 2)

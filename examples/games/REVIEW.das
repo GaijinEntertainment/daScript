@@ -4,6 +4,7 @@ require strings
 require daslib/strings_boost
 require daslib/fio
 require dastest/review_gate
+require dastest/test_shape
 
 // The mechanical half of examples/games/REVIEW.md (contract: REVIEW_COMMON.md at the repo root).
 // Run from the repo root: bin/daslang examples/games/REVIEW.das - exit 0 clean, 1 with findings.
@@ -271,5 +272,7 @@ def main() : int {
         check_port_identity()
     }
     check_package_names()
+    // tests-only: each game's sources sit beside its tests
+    check_test_shape(GAMES_DIR, 100, true)
     return gate_verdict("examples/games")
 }

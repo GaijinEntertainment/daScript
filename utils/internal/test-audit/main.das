@@ -18,8 +18,8 @@ require math
 
 [CommandLineArgs]
 struct Config {
-    @clarg_doc = "Root to scan (default: <das root>/tests)"
-    root : string
+    @clarg_doc = "Root to scan, repeatable (default: <das root>/tests); several roots share one audit and one index, each root a section of its own"
+    root : array<string>
 
     @clarg_doc = "Cap on [test] functions per file for the what-if projection and the generated index"
     cap : int = 100
@@ -360,9 +360,24 @@ def main : int {
     var cfg = Config()
     let rc = parse_args_with_help(cfg, "test-audit")
     return rc if (rc >= 0)
-    let root = empty(cfg.root) ? path_join(get_das_root(), "tests") : cfg.root
+    let root = empty(cfg.root) ? path_join(get_das_root(), "tests") : cfg.root[0]
     var files : array<TestFileCensus>
-    census_tree(root, files)
+    if (length(cfg.root) <= 1) {
+        census_tree(root, files)
+    } else {
+        for (r in cfg.root) {
+            var inscope part : array<TestFileCensus>
+            census_tree(r, part)
+            files |> reserve(length(files) + length(part))
+            // a file's folder and path carry its root, so each root is
+            // a section of the shared index
+            for (c in part) {
+                c.path = "{r}/{c.path}"
+                c.folder = c.folder == "." ? r : "{r}/{c.folder}"
+                files |> emplace(c)
+            }
+        }
+    }
     if (cfg.tests_only) {
         var inscope judged <- [for (c in files); c; where c.cls != TestFileClass.script]
         delete files
@@ -379,7 +394,7 @@ def main : int {
             // a CRLF checkout (autocrlf=true) must read as the same index
             let have = fread(readmePath) |> replace("\r", "")
             if (have != want |> replace("\r", "")) {
-                let rootArg = empty(cfg.root) ? "" : " --root {cfg.root}"
+                let rootArg = join([for (r in cfg.root); " --root {r}"], "")
                 let indexArg = empty(cfg.index) ? "" : " --index {cfg.index}"
                 let onlyArg = cfg.tests_only ? " --tests-only" : ""
                 print("{readmePath} differs from the census; regenerate it: daslang " +
@@ -397,6 +412,6 @@ def main : int {
         print("wrote {readmePath}\n")
         return 0
     }
-    print_audit(files, root, cfg)
+    print_audit(files, length(cfg.root) > 1 ? join(cfg.root, " ") : root, cfg)
     return 0
 }

@@ -11,7 +11,7 @@ require strings
 //! These intentionally do not create an ImGui context: layout consumes a
 //! measurement callback and emits source-mapped fragments.
 
-[test]
+[test(description = "a combining sequence, a ZWJ emoji and a regional-indicator flag each form one grapheme cluster, and caret movement crosses each whole cluster in both directions")]
 def test_text_flow_graphemes(t : T?) {
     // e + COMBINING ACUTE, woman-technologist ZWJ sequence, and a two-RI flag
     // are each one caret/wrap unit despite occupying multiple UTF-8 scalars.
@@ -34,7 +34,7 @@ def test_text_flow_graphemes(t : T?) {
     t |> equal(g[3].source.end_byte, 23, "regional-indicator pair is one cluster")
 }
 
-[test]
+[test(description = "terminal cell widths give ASCII and a combining grapheme one cell, and CJK, ZWJ emoji, flags and emoji-presentation sequences two")]
 def test_text_flow_terminal_cell_widths(t : T?) {
     t |> equal(text_cell_width("A"), 1, "ASCII occupies one source cell")
     t |> equal(text_cell_width("é"), 1,
@@ -48,7 +48,7 @@ def test_text_flow_terminal_cell_widths(t : T?) {
                "variation-selector emoji presentation occupies two cells")
 }
 
-[test]
+[test(description = "empty source lines each produce a visual line mapped to their newline byte, and the final empty caret line maps to the source end")]
 def test_text_flow_empty_source_lines_keep_byte_positions(t : T?) {
     let source = "a\n\nb\n"
     let spans = [TextFlowSpan(
@@ -67,7 +67,7 @@ def test_text_flow_empty_source_lines_keep_byte_positions(t : T?) {
                "final empty caret line maps to source end")
 }
 
-[test]
+[test(description = "a long URI wraps greedily into several source-mapped fragments, and its copy control takes one inline slot after the URI with its identity kept and no source bytes consumed")]
 def test_text_flow_uri_fragments(t : T?) {
     let prefix = "Open "
     let uri = "https://example.com/文档/a-long-name?q=é&mode=full"
@@ -126,7 +126,7 @@ def test_text_flow_uri_fragments(t : T?) {
     t |> equal(control_count, 1, "copy control reserves exactly one inline slot")
 }
 
-[test]
+[test(description = "leading and trailing controls become distinct fragments that keep their consumer kind and consume no source bytes, and a leading placeholder never wraps away from the first grapheme")]
 def test_text_flow_leading_and_trailing_controls(t : T?) {
     let source = "alt"
     let spans = [TextFlowSpan(
@@ -171,7 +171,7 @@ def test_text_flow_leading_and_trailing_controls(t : T?) {
     }
 }
 
-[test]
+[test(description = "a control-only span over an empty source still emits its control fragment with its identity and kind, anchored at the source start and consuming no bytes")]
 def test_text_flow_empty_source_control_only_span(t : T?) {
     // an image-only paragraph has no display text, so the placeholder is the whole line
     let spans = [TextFlowSpan(
@@ -194,7 +194,7 @@ def test_text_flow_empty_source_control_only_span(t : T?) {
     t |> equal(control.source.end_byte, 0, "empty-source control consumes no source bytes")
 }
 
-[test]
+[test(description = "plain-text URI detection finds scheme, custom-scheme, slash-form and case-insensitive www URIs, keeps Unicode bytes, and asks a www target for a scheme prefix")]
 def test_plain_text_uri_detection(t : T?) {
     let source = "See https://example.com/文档/naïve/é?q=👩‍💻, editor://workspace/文档 and WWW.Example.org/path. Note: ordinary text."
     let uris <- text_uris(source)
@@ -210,7 +210,7 @@ def test_plain_text_uri_detection(t : T?) {
     t |> equal(uris[2].kind, TextUriKind.www, "www target requests scheme prefix")
 }
 
-[test]
+[test(description = "measurement receives each run's style id, fragments keep it, and a wider style's metrics change where lines wrap")]
 def test_text_flow_style_aware_measurement(t : T?) {
     let source = "regular WIDE"
     let spans = [
@@ -241,7 +241,7 @@ def test_text_flow_style_aware_measurement(t : T?) {
                  "wider role metrics change wrapping rather than only rendering")
 }
 
-[test]
+[test(description = "hit-testing a point snaps to the nearer boundary of a whole combining grapheme and reports leading affinity at an interior boundary")]
 def test_text_flow_hit_test_grapheme_boundaries(t : T?) {
     let source = "AéB"
     let spans = [TextFlowSpan(

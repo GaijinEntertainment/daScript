@@ -13,7 +13,7 @@ require openai/openai_chat
 // condition deterministically — plain content, CRLF endings + comment lines,
 // and fragmented tool-call frames.
 
-[test]
+[test(description = "chat_stream against the local mock server accumulates five content deltas in order into the full text and finishes with stop and no tool calls.", timeout = 1200)]
 def test_stream_plain(t : T?) {
     t |> run("plain content stream accumulates in order") @(t : T?) {
         with_stream_server() $(base_url) {
@@ -36,7 +36,7 @@ def test_stream_plain(t : T?) {
     }
 }
 
-[test]
+[test(description = "chat_stream reads a stream with CRLF line endings and an SSE comment line into the same content a plain stream gives.", timeout = 1200)]
 def test_stream_crlf(t : T?) {
     t |> run("CRLF endings and comment lines parse cleanly") @(t : T?) {
         with_stream_server() $(base_url) {
@@ -51,7 +51,7 @@ def test_stream_crlf(t : T?) {
     }
 }
 
-[test]
+[test(description = "chat_stream reassembles a tool call streamed as fragments by index into one call with its id, name and arguments, dropping frames with a negative or over-cap index.", timeout = 1200)]
 def test_stream_tool_calls(t : T?) {
     t |> run("streamed tool-call fragments reassemble by index") @(t : T?) {
         with_stream_server() $(base_url) {
@@ -77,7 +77,7 @@ def test_stream_tool_calls(t : T?) {
     }
 }
 
-[test]
+[test(description = "Under stream_options.include_usage chat_stream reads the usage chunk's counts, cache hit and timings and keeps reasoning apart from content; without details or a usage chunk it reads no cache hit and no counts.", timeout = 1200)]
 def test_stream_usage(t : T?) {
     t |> run("stream_options.include_usage: the usage chunk's counts, cache hit and timings; reasoning deltas fire too; the request's template kwargs reach the wire") @(t : T?) {
         with_stream_server() $(base_url) {

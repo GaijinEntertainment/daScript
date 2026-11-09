@@ -6,7 +6,7 @@ require dastest/testing_boost public
 require lp_dialogue
 require daslib/fio
 
-[test]
+[test(description = "New Game over a corrupt save writes a fresh valid save, keeps the corrupt one as .corrupt, and writes its pose beside the chosen save without touching the normal pose save.")]
 def test_new_game_replaces_a_corrupt_save(t : T?) {
     var error : string
     let root = create_temp_directory("latchpoint-save", error)
@@ -37,7 +37,7 @@ def test_new_game_replaces_a_corrupt_save(t : T?) {
     rmdir_rec(root)
 }
 
-[test]
+[test(description = "A broken or missing primary save is recovered from the previous save and republished, the broken file is kept as .corrupt, and a missing save with no backup starts a writable runtime.")]
 def test_save_recovery_and_missing_save(t : T?) {
     var error : string
     let root = create_temp_directory("latchpoint-recovery", error)
@@ -69,7 +69,7 @@ def test_save_recovery_and_missing_save(t : T?) {
     rmdir_rec(root)
 }
 
-[test]
+[test(description = "When New Game cannot write its save, the previous world is restored and the player is told.")]
 def test_new_game_rolls_back_when_publish_fails(t : T?) {
     var error : string
     let root = create_temp_directory("latchpoint-rollback", error)

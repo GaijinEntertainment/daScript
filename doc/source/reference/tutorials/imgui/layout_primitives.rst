@@ -101,7 +101,7 @@ not the reported kind):
 
 Tests that want to verify "this layout was produced" can walk the
 snapshot and confirm the markers fired in the expected order — see
-``modules/dasImgui/tests/test_layout_primitives.das`` for the assertion shape.
+``modules/dasImgui/tests/test_layout.das`` for the assertion shape.
 
 .. seealso::
 
@@ -110,6 +110,6 @@ snapshot and confirm the markers fired in the expected order — see
    Companion tutorial: :ref:`tutorial_layout` — the higher-level layout
    helpers (``with_indent``, ``with_item_width``, ``with_text_wrap_pos``).
 
-   Integration test: ``modules/dasImgui/tests/test_layout_primitives.das``.
+   Integration test: ``modules/dasImgui/tests/test_layout.das``.
 
    :ref:`Boost macros <stdlib_imgui_boost_section>` — the macro layer.

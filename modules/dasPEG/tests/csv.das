@@ -118,7 +118,7 @@ def get_parser_with(csv : string; blk : block<(email : array<string>; err : arra
 }
 
 
-[test]
+[test(description = "The CSV grammar splits a plain newline-terminated row into its cells.")]
 def test_basic_csv(t : T?) {
     let input = "John,Doe,30\n";
     var inscope expected_res <-  array<string>("John", "Doe", "30");
@@ -135,7 +135,7 @@ def test_basic_csv(t : T?) {
 }
 
 
-[test]
+[test(description = "The CSV grammar reads quoted cells without their quotes, keeping the commas inside them as text.")]
 def test_quoted_fields(t : T?) {
     let input = %stringify~"John Doe","123, Main Street, NY","123-456-7890"
     %%;
@@ -154,7 +154,7 @@ def test_quoted_fields(t : T?) {
 }
 
 
-[test]
+[test(description = "The CSV grammar keeps spaces, dots and an at sign inside unquoted cells.")]
 def test_special_chars(t : T?) {
     let input = "John Doe,john.doe@example.com\n";
     var inscope expected_res <-  array<string>("John Doe", "john.doe@example.com");
@@ -171,7 +171,7 @@ def test_special_chars(t : T?) {
     }
 }
 
-[test]
+[test(description = "The CSV grammar reads a quoted cell holding doubled quotes and commas, keeping the doubled quotes as written.")]
 def test_escaped_quotes(t : T?) {
     let input = %stringify~1,"She said, ""Hello, world!"""
     %%;
@@ -189,7 +189,7 @@ def test_escaped_quotes(t : T?) {
     }
 }
 
-[test]
+[test(description = "The CSV grammar keeps the leading and trailing spaces of unquoted cells.")]
 def test_leading_trailing_spaces(t : T?) {
     let input = " John Doe , 123 Main Street, NY , 123-456-7890 \n";
     var inscope expected_res <-  array<string>(" John Doe ", " 123 Main Street", " NY ", " 123-456-7890 ");
@@ -206,7 +206,7 @@ def test_leading_trailing_spaces(t : T?) {
     }
 }
 
-[test]
+[test(description = "The CSV grammar reads a row of only commas as that many empty cells.")]
 def test_all_empty_fields(t : T?) {
     let input = ",,\n";
     var inscope expected_res <-  array<string>("", "", "");
@@ -226,7 +226,7 @@ def test_all_empty_fields(t : T?) {
 
 // Test errors
 
-[test]
+[test(description = "The CSV grammar reports a parse error for the row 1,True with no line ending.")]
 def test_no_eol(t : T?) {
     let input = %stringify~1,True%%;
 
@@ -238,7 +238,7 @@ def test_no_eol(t : T?) {
     }
 }
 
-[test]
+[test(description = "The CSV grammar reports a parse error for a quoted cell that is never closed.")]
 def test_missing_quote(t : T?) {
     let input = %stringify~1,"True
     %%;

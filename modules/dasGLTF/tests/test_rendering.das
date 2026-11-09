@@ -1,0 +1,749 @@
+options gen2
+options persistent_heap
+require dastest/testing_boost public
+require daslib/defer
+require daslib/fio
+require daslib/safe_addr
+require glfw/glfw_boost
+require gltf/gltf_pbr
+require gltf/gltf_types
+require gltf/gltf_processed_gl
+require math
+require strings
+
+//! Rendering: the PBR renderer drawn into float render targets on
+//! a hidden GL window, the packed vertex attributes and skin upload
+//! contracts, and the surface controls. The render-target test
+//! asserts on heap_bytes_allocated, which needs persistent_heap.
+
+[test(description = "Packed geometry keeps the skin and tangent attributes for every skinned mesh instance, leaves them off a rigid one, and omits vertex color for ordinary materials.")]
+def test_packed_geometry_preserves_skinning_for_every_skinned_mesh_instance(t : T?){
+    var scene : GltfScene
+    scene.materials |> push(GltfMaterial(normalTex = 0))
+    scene.nodes <- [GltfNode(mesh = 1, skin = -1), GltfNode(mesh = 0, skin = 0)]
+    let skinned = gltf_packed_primitive_attributes(scene, 0, 0)
+    let rigid = gltf_packed_primitive_attributes(scene, 1, -1)
+    t |> success((skinned & VERTEX_SKIN) != 0)
+    t |> success((skinned & VERTEX_TANGENT) != 0)
+    t |> success((skinned & VERTEX_COLOR) == 0, "ordinary packed materials omit vertex color")
+    t |> success((rigid & VERTEX_SKIN) == 0)
+}
+
+[test(description = "The processed draw mask marks exactly the generic attributes a vertex layout lacks, and none for a complete layout.")]
+def test_processed_draw_mask_tracks_only_missing_generic_attributes(t : T?){
+    let minimal = gltf_processed_missing_attributes(VERTEX_UV)
+    t |> success((minimal & GLTF_GL_ATTR_UV0) == 0u)
+    t |> success((minimal & GLTF_GL_ATTR_TANGENT) != 0u)
+    t |> success((minimal & GLTF_GL_ATTR_JOINTS0) != 0u)
+    t |> success((minimal & GLTF_GL_ATTR_WEIGHTS0) != 0u)
+    let complete = gltf_processed_missing_attributes(VERTEX_UV | VERTEX_TANGENT | VERTEX_SKIN | VERTEX_UV1 | VERTEX_COLOR)
+    t |> equal(complete, 0u)
+}
+
+[test(description = "The GL upload, the processed GL layout and the PBR shader source still carry the compact skin contract: canonicalized influences, joints and weights as 4 bytes each, and the first weight rebuilt from the other three.")]
+def test_compact_skin_upload_and_shader_source_contracts(t : T?){
+    let root = get_das_root()
+    let gl_source = fread("{root}/modules/dasGLTF/gltf/gltf_gl.das")
+    let processed_gl_source = fread("{root}/modules/dasGLTF/gltf/gltf_processed_gl.das")
+    let shader_source = fread("{root}/modules/dasGLTF/gltf/gltf_pbr.das")
+    t |> success(find(gl_source, "let skin = canonicalize_skin_influences(v.joints0, v.weights0)") >= 0)
+    t |> success(find(processed_gl_source, "packed_attribute(6u, 4, GL_UNSIGNED_BYTE, false, p.stride, at)") >= 0)
+    t |> success(find(processed_gl_source, "packed_attribute(7u, 4, GL_UNSIGNED_BYTE, true, p.stride, at + 4); at += 8") >= 0)
+    t |> success(find(shader_source, "let weights = float4(1.0 - a_weights0.y - a_weights0.z - a_weights0.w, a_weights0.yzw)") >= 0)
+    t |> success(find(shader_source, "if (weights.y > 0.0)") >= 0)
+    t |> success(find(shader_source, "if (weights.z > 0.0)") >= 0)
+    t |> success(find(shader_source, "if (weights.w > 0.0)") >= 0)
+}
+
+[test(description = "A new PBR renderer starts with unit material scale and no wetness or reflection, and with no wetness the surface roughness is the material's roughness factor.")]
+def test_surface_controls_preserve_standard_defaults(t : T?){
+    let renderer = GltfPbrRenderer()
+    t |> equal(renderer.materialScale, float2(1.0)); t |> equal(renderer.materialWetness, 0.0); t |> equal(renderer.reflectionAmount, 0.0)
+    u_material_scale = float2(1.0); u_material_wetness = 0.0; u_roughness_factor = .5
+    t |> equal(gltf_surface_roughness(float4(1.0)), .5)
+}
+
+[test(description = "Full wetness pulls surface roughness to 0.16 only where the red mask is set, and a tiny material scale cannot push roughness below 0.04.")]
+def test_optional_wetness_respects_red_mask_and_roughness_limits(t : T?){
+    u_material_scale = float2(1.0); u_roughness_factor = .8; u_material_wetness = 1.0
+    t |> success(abs(gltf_surface_roughness(float4(1.0)) - .16) < .0001)
+    t |> equal(gltf_surface_roughness(float4(0.0, 1.0, 0.0, 1.0)), .8)
+    u_material_wetness = 0.0; u_material_scale = float2(.01, 1.0)
+    t |> equal(gltf_surface_roughness(float4(1.0)), .04)
+    u_material_scale = float2(1.0); u_roughness_factor = 1.0
+}
+
+def private render_target(internal : int; format, attachment : uint) : uint {
+    var texture : uint
+    glGenTextures(1, safe_addr(texture))
+    glBindTexture(GL_TEXTURE_2D, texture)
+    glTexImage2D(GL_TEXTURE_2D, 0, internal, 4, 4, 0, format, format == GL_DEPTH_COMPONENT ? GL_FLOAT : GL_HALF_FLOAT, null)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+    glFramebufferTexture2D(GL_FRAMEBUFFER, attachment, GL_TEXTURE_2D, texture, 0)
+    return texture
+}
+
+def private render_fixture_scene : GltfScene {
+    var scene : GltfScene
+    var mesh : GltfMesh
+    var primitive = GltfPrimitive()
+    primitive.vertices <- [
+        GltfVertex(position = float3(-1.0, -1.0, 0.0), normal = float3(0.0, 0.0, 1.0), tangent = float4(1.0, 0.0, 0.0, 1.0), uv0 = float2(0.5)),
+        GltfVertex(position = float3(3.0, -1.0, 0.0), normal = float3(0.0, 0.0, 1.0), tangent = float4(1.0, 0.0, 0.0, 1.0), uv0 = float2(0.5)),
+        GltfVertex(position = float3(-1.0, 3.0, 0.0), normal = float3(0.0, 0.0, 1.0), tangent = float4(1.0, 0.0, 0.0, 1.0), uv0 = float2(0.5))
+    ]
+    primitive.indices <- [0u, 1u, 2u]
+    mesh.primitives |> emplace(primitive)
+    scene.meshes |> emplace(mesh)
+    scene.nodes |> emplace(GltfNode(mesh = 0, world = identity4x4()))
+    return <- scene
+}
+
+def private read_rgba(attachment : uint) : float4 {
+    glReadBuffer(attachment)
+    var pixel : float4
+    glReadPixels(1, 1, 1, 1, GL_RGBA, GL_FLOAT, unsafe(addr(pixel)))
+    return pixel
+}
+
+def private read_motion : float2 {
+    glReadBuffer(GL_COLOR_ATTACHMENT2)
+    var pixel : float2
+    glReadPixels(1, 1, 1, 1, GL_RG, GL_FLOAT, unsafe(addr(pixel)))
+    return pixel
+}
+
+def private check_surface_motion(t : T?; var renderer : GltfPbrRenderer; model : GltfGlModel; var scene : GltfScene){
+    glClearColor(0.0, 0.0, 0.0, 0.0); glClear(GL_COLOR_BUFFER_BIT)
+    gltf_pbr_render_normals(renderer, model, scene, identity4x4(), identity4x4(), false, false, true)
+    t |> equal(renderer.normalProgram, 0u, "surface mode does not create an unused normal program")
+    t |> equal(renderer.motionProgram, 0u, "surface mode does not create the optional motion program")
+    let normal_roughness = read_rgba(GL_COLOR_ATTACHMENT0)
+    let albedo_metallic = read_rgba(GL_COLOR_ATTACHMENT1)
+    t |> success(abs(normal_roughness.x - 0.5) < 0.01 && abs(normal_roughness.y - 0.5) < 0.01 && normal_roughness.z > 0.99 && normal_roughness.w > 0.99,
+        "surface attachment carries encoded normal and roughness")
+    t |> success(albedo_metallic.x > 0.99 && albedo_metallic.y > 0.99 && albedo_metallic.z > 0.99 && albedo_metallic.w > 0.99,
+        "material attachment carries base color and metallic")
+
+    scene.nodes[0].world[0] = float4(.70710678, 0.0, -.70710678, 0.0)
+    scene.nodes[0].world[2] = float4(.70710678, 0.0, .70710678, 0.0)
+    glClear(GL_COLOR_BUFFER_BIT)
+    gltf_pbr_render_normals(renderer, model, scene,
+        identity4x4(), identity4x4(), false, false, true)
+    let rotated_normal = read_rgba(GL_COLOR_ATTACHMENT0)
+    t |> success(length(rotated_normal.xyz - float3(.85355339, .5, .85355339)) < .01,
+        "rigid surface normals follow the node transform")
+    scene.nodes[0].world = identity4x4()
+
+    var inscope previous = GltfMotionPose()
+    gltf_motion_capture(previous, scene, identity4x4())
+    gltf_pbr_render_normals(renderer, model, scene, identity4x4(), identity4x4(), false, false, false, true,
+        unsafe(addr(previous)), identity4x4(), float2(0.0), 1)
+    t |> equal(float2(0.0), read_motion(), "valid unchanged history emits zero motion")
+    scene.nodes[0].world[3].x = 0.5
+    gltf_pbr_render_normals(renderer, model, scene, identity4x4(), identity4x4(), false, false, false, true,
+        unsafe(addr(previous)), identity4x4(), float2(0.0), 1)
+    let translated_motion = read_motion()
+    t |> success(abs(translated_motion.x + 0.25) < 0.01 && abs(translated_motion.y) < 0.01,
+        "translated geometry emits previous-minus-current UV motion")
+    scene.nodes[0].world = identity4x4()
+    var inscope missing = GltfMotionPose()
+    gltf_pbr_render_normals(renderer, model, scene, identity4x4(), identity4x4(), false, false, false, true,
+        unsafe(addr(missing)), identity4x4(), float2(0.0), 1)
+    t |> equal(float2(2.0), read_motion(), "missing node history emits rejection sentinel")
+    gltf_pbr_render_normals(renderer, model, scene, identity4x4(), identity4x4(), false, false, false, true,
+        null, identity4x4(), float2(0.0), 1)
+    t |> equal(float2(2.0), read_motion(), "null history emits rejection sentinel")
+    gltf_pbr_render_normals(renderer, model, scene, identity4x4(), identity4x4(), false, false, false, true,
+        null, identity4x4(), float2(0.0), 0)
+    t |> equal(float2(4.0), read_motion(), "static/camera history emits reconstruction sentinel")
+    gltf_pbr_render_normals(renderer, model, scene, identity4x4(), identity4x4(), false, false, false, true,
+        null, identity4x4(), float2(0.0), 2)
+    t |> equal(float2(2.0), read_motion(), "invalid history emits rejection sentinel")
+
+}
+
+def private check_point_light_rejections(t : T?; model : GltfGlModel; scene : GltfScene){
+    var renderer <- gltf_pbr_create()
+    defer(){delete renderer}
+    var inscope lights <- [GltfPbrPointLight(position = float3(0.0, 0.0, 1.0), radius = 8.0, color = float3(1.0))]
+    gltf_pbr_set_point_lights(renderer, lights)
+    renderer.pointPosition |> push(float4(0.0))
+    let shape_error = panic_text() $ { gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), GltfPbrLight()) }
+    t |> success(find(shape_error, "assert failed") >= 0, "a draw rejects a light array whose length differs from pointCount")
+    var maximum : int
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, safe_addr(maximum))
+    renderer.pointCount = min(256, maximum) * maximum / 3 + 1
+    resize(renderer.pointPosition, renderer.pointCount)
+    resize(renderer.pointColor, renderer.pointCount)
+    resize(renderer.pointShadow, renderer.pointCount)
+    var inscope empty_scene = GltfScene()
+    let capacity_error = panic_text() $ { gltf_pbr_render(renderer, model, empty_scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), GltfPbrLight()) }
+    t |> success(find(capacity_error, "Point light data exceeds GL texture capacity") >= 0, "a draw rejects a light set beyond the device texture capacity")
+    t |> equal(uint(GL_NO_ERROR), glGetError())
+}
+
+def private check_many_point_lights(t : T?; var renderer : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene){
+    var color_only = GL_COLOR_ATTACHMENT0; glDrawBuffers(1, safe_addr(color_only))
+    let dark = GltfPbrLight(direction = float3(0.0, 0.0, 1.0), color = float3(0.0), intensity = 0.0, ambient = float3(0.0), environment = 0.0)
+    var shadow_texture : uint
+    glGenTextures(1, safe_addr(shadow_texture))
+    defer(){renderer.localShadowTex = 0u; glDeleteTextures(1, safe_addr(shadow_texture))}
+    glBindTexture(GL_TEXTURE_2D, shadow_texture)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+    var depths : float[6]
+    glTexImage2D(GL_TEXTURE_2D, 0, int(GL_DEPTH_COMPONENT32F), 6, 1, 0, GL_DEPTH_COMPONENT, GL_FLOAT, safe_addr(depths[0]))
+    var inscope lights : array<GltfPbrPointLight>
+    for (count in fixed_array(9, 97, 1, 0)){
+        resize(lights, count)
+        for (light in lights){light = GltfPbrPointLight(position = float3(100.0), radius = 1.0)}
+        if (count > 0){lights[count - 1] = GltfPbrPointLight(position = float3(0.0, 0.0, 1.0), radius = 8.0, color = float3(4.0, 0.0, 0.0))}
+        gltf_pbr_set_point_lights(renderer, lights)
+        glClearColor(0.0, 0.0, 0.0, 0.0); glClear(GL_COLOR_BUFFER_BIT)
+        gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), dark)
+        let red = read_rgba(GL_COLOR_ATTACHMENT0)
+        t |> success(count == 0 ? length(red.xyz) < .01 : red.x > .1 && red.y < .01, "last point light illuminates the surface, including beyond eight and after resizing")
+        if (count > 0 && count <= renderer.pointCount){
+            renderer.pointColor[count - 1] = float4(0.0, 4.0, 0.0, 0.0)
+            glClear(GL_COLOR_BUFFER_BIT)
+            gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), dark)
+            let green = read_rgba(GL_COLOR_ATTACHMENT0)
+            t |> success(green.y > .1 && green.x < .01, "direct per-light edits reach the next rendered draw")
+            glClear(GL_COLOR_BUFFER_BIT)
+            gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), dark)
+            t |> equal(read_rgba(GL_COLOR_ATTACHMENT0), green, "unchanged light data reuses the same rendered result")
+            renderer.localShadowTex = shadow_texture; renderer.localShadowSize = float2(1.0, 1.0)
+            for (weight in fixed_array(.5, 1.0)){
+                renderer.pointShadow[count - 1] = float4(1.0, weight, .08, 8.0)
+                glClear(GL_COLOR_BUFFER_BIT)
+                gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), dark)
+                let shaded = read_rgba(GL_COLOR_ATTACHMENT0)
+                t |> success(weight == 1.0 ? length(shaded.xyz) < .01 : shaded.y > .01 && shaded.y < green.y, "late-index shadow settings support partial and full occlusion")
+            }
+            gltf_pbr_set_point_lights(renderer, lights)
+            glClear(GL_COLOR_BUFFER_BIT)
+            gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), dark)
+            let reset = read_rgba(GL_COLOR_ATTACHMENT0)
+            t |> success(reset.x > .1 && reset.y < .01, "replacing an equally sized light set clears its previous shadow settings")
+            renderer.localShadowTex = 0u
+        }
+    }
+    t |> equal(uint(GL_NO_ERROR), glGetError())
+}
+
+def private check_shadow_filters(t : T?; var renderer : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene){
+    var color_only = GL_COLOR_ATTACHMENT0
+    glDrawBuffers(1, safe_addr(color_only))
+    glClearColor(0.0, 0.0, 0.0, 0.0); glClear(GL_COLOR_BUFFER_BIT)
+    renderer.shadowFilter = 1
+    let light = GltfPbrLight(direction = float3(0.0, 0.0, 1.0), color = float3(0.0), intensity = 0.0,
+        ambient = float3(1.0), environment = 0.0)
+    gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), light)
+    let fallback_pixel = read_rgba(GL_COLOR_ATTACHMENT0)
+    t |> success(fallback_pixel.x > 0.99 && fallback_pixel.y > 0.99 && fallback_pixel.z > 0.99,
+        "hardware shadow mode renders through the lit fallback when no shadow map is attached")
+
+    var shadow_texture : uint
+    glGenTextures(1, safe_addr(shadow_texture))
+    defer(){glDeleteTextures(1, safe_addr(shadow_texture))}
+    glBindTexture(GL_TEXTURE_2D, shadow_texture)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE)
+    var shadow_depth = 1.0
+    glTexImage2D(GL_TEXTURE_2D, 0, int(GL_DEPTH_COMPONENT32F), 1, 1, 0, GL_DEPTH_COMPONENT, GL_FLOAT, unsafe(addr(shadow_depth)))
+    gltf_pbr_set_shadow(renderer, shadow_texture, identity4x4(), 1, 0.0, 1.0)
+    let direct_light = GltfPbrLight(direction = float3(0.0, 0.0, 1.0), color = float3(1.0), intensity = 4.0,
+        ambient = float3(0.0), environment = 0.0)
+    glClear(GL_COLOR_BUFFER_BIT)
+    gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), direct_light)
+    let lit_pixel = read_rgba(GL_COLOR_ATTACHMENT0)
+    shadow_depth = 0.0
+    glBindTexture(GL_TEXTURE_2D, shadow_texture)
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, unsafe(addr(shadow_depth)))
+    glClear(GL_COLOR_BUFFER_BIT)
+    gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), direct_light)
+    let shadowed_pixel = read_rgba(GL_COLOR_ATTACHMENT0)
+    t |> success(lit_pixel.x > 0.1 && shadowed_pixel.x < 0.01 && lit_pixel.x > shadowed_pixel.x + 0.1,
+        "hardware comparison shadow map toggles direct light")
+    t |> equal(uint(GL_NO_ERROR), glGetError())
+}
+
+def private check_linear_output(t : T?) {
+    var color_only = GL_COLOR_ATTACHMENT0
+    glDrawBuffers(1, safe_addr(color_only))
+    var scene <- render_fixture_scene()
+    defer(){delete scene}
+    let radiance = float3(.18, 2.0, 4.0)
+    scene.materials <- [GltfMaterial(baseColorFactor = float4(0.0, 0.0, 0.0, 1.0),
+        emissiveFactor = radiance)]
+    scene.meshes[0].primitives[0].material = 0
+    var model <- upload_gltf(scene)
+    defer(){delete model}
+    var renderer <- gltf_pbr_create()
+    defer(){delete renderer}
+    t |> equal(renderer.linearOutput, false, "renderer defaults to legacy display encoding")
+    let dark = GltfPbrLight(intensity = 0.0, ambient = float3(0.0), environment = 0.0)
+    let fog = float3(.2, .4, .6)
+    for (linear in fixed_array(false, true, false)) {
+        renderer.linearOutput = linear
+        let expected = linear ? radiance : pow(radiance, float3(1.0 / 2.2))
+        for (effect in range(3)) {
+            renderer.atmosphere = (effect == 1 ?
+                Atmosphere(color = fog, density = 100.0) : Atmosphere())
+            renderer.backgroundTint = (effect == 2 ?
+                float4(.5, .25, 1.0, 1.0) : float4(1.0, 1.0, 1.0, 0.0))
+            glClearColor(0.0, 0.0, 0.0, 0.0); glClear(GL_COLOR_BUFFER_BIT)
+            gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(),
+                float3(0.0, 0.0, 2.0), dark)
+            let pixel = read_rgba(GL_COLOR_ATTACHMENT0)
+            var reference = expected
+            if (effect == 1){reference = linear ? pow(fog, float3(2.2)) : fog}
+            elif (effect == 2){
+                reference = float3(dot(expected, float3(.299, .587, .114))) * float3(.5, .25, 1.0)
+            }
+            t |> success(length(pixel.xyz - reference) < .005,
+                "linear={linear} effect={effect}: RGB {pixel.xyz} matches {reference}")
+            t |> equal(pixel.w, 1.0, "linear mode preserves opaque alpha")
+        }
+    }
+    t |> equal(glGetError(), uint(GL_NO_ERROR))
+}
+
+def private check_draw_opacity(t : T?; var renderer : GltfPbrRenderer; var model : GltfGlModel; var scene : GltfScene){
+    var color_only = GL_COLOR_ATTACHMENT0; glDrawBuffers(1, safe_addr(color_only))
+    scene.materials <- [GltfMaterial()]
+    let light = GltfPbrLight(direction = float3(0.0, 0.0, 1.0), color = float3(0.0), intensity = 0.0, ambient = float3(1.0), environment = 0.0)
+    for (mode in range(-1, 3)){
+        model.meshes[0].primitives[0].material = mode < 0 ? -1 : 0
+        scene.materials[0].alphaMode = mode == 1 ? GltfAlphaMode.mask : mode == 2 ? GltfAlphaMode.blend : GltfAlphaMode.opaque
+        for (opacity in fixed_array(-.5, .5, 1.5)){
+            for (root in fixed_array(false, true)){
+                glClearColor(0.0, 0.0, 0.0, 0.0); glClear(GL_COLOR_BUFFER_BIT)
+                if (root){gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), light, opacity)}
+                else{gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), light, opacity)}
+                let pixel = read_rgba(GL_COLOR_ATTACHMENT0)
+                t |> success(abs(pixel.w - clamp(opacity, 0.0, 1.0)) < .01, "draw opacity clamps and retains alpha for compositing")
+            }
+        }
+    }
+    model.meshes[0].primitives[0].material = -1
+}
+
+
+def private check_unlit_light_invariance(t : T?; var renderer : GltfPbrRenderer; packed : bool) {
+    var color_only = GL_COLOR_ATTACHMENT0; glDrawBuffers(1, safe_addr(color_only))
+    var scene <- render_fixture_scene()
+    scene.materials <- [GltfMaterial(unlit = true, baseColorFactor = float4(.8, .6, .4, 1.0))]
+    for (v in scene.meshes[0].primitives[0].vertices) { v.color0 = float4(.25, .5, 1.0, 1.0) }
+    scene.meshes[0].primitives[0].material = 0
+    var owner <- upload_gltf(scene)
+    var model <- packed ? upload_gltf_geometry_packed(scene, owner) : upload_gltf_geometry(scene, owner)
+    let dark = GltfPbrLight(direction = float3(0.0, 0.0, 1.0), color = float3(0.0), intensity = 0.0,
+        ambient = float3(0.0), environment = 0.0)
+    let bright = GltfPbrLight(direction = float3(0.0, 0.0, 1.0), color = float3(1.0), intensity = 5.0,
+        ambient = float3(3.0), environment = 0.0)
+    glClearColor(0.0, 0.0, 0.0, 0.0); glClear(GL_COLOR_BUFFER_BIT)
+    gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), dark)
+    let unlit_dark = read_rgba(GL_COLOR_ATTACHMENT0)
+    glClear(GL_COLOR_BUFFER_BIT)
+    gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), bright)
+    let unlit_bright = read_rgba(GL_COLOR_ATTACHMENT0)
+    t |> success(length(unlit_dark.xyz - unlit_bright.xyz) < .01, "unlit surface ignores direct and ambient light")
+    t |> success(unlit_dark.x > .2 && unlit_dark.y > .2 && unlit_dark.z > .2, "unlit base color remains visible in darkness")
+    t |> success(length(unlit_dark.xyz - float3(.4811565, .5785326, .6593533)) < .015, "unlit output includes vertex color times base color")
+    scene.materials[0].alphaMode = GltfAlphaMode.mask
+    scene.materials[0].alphaCutoff = .5
+    scene.materials[0].baseColorFactor.w = .25
+    glClear(GL_COLOR_BUFFER_BIT)
+    gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), bright)
+    t |> success(length(read_rgba(GL_COLOR_ATTACHMENT0)) < .01, "masked unlit fragment below cutoff is discarded")
+    scene.materials[0].baseColorFactor.w = 1.0
+    glClear(GL_COLOR_BUFFER_BIT)
+    gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), bright)
+    t |> success(length(read_rgba(GL_COLOR_ATTACHMENT0).xyz - unlit_dark.xyz) < .01, "masked unlit fragment above cutoff is retained")
+    scene.materials[0].alphaMode = GltfAlphaMode.opaque
+    scene.materials[0].unlit = false
+    glClear(GL_COLOR_BUFFER_BIT)
+    gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), dark)
+    let lit_dark = read_rgba(GL_COLOR_ATTACHMENT0)
+    glClear(GL_COLOR_BUFFER_BIT)
+    gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), bright)
+    let lit_bright = read_rgba(GL_COLOR_ATTACHMENT0)
+    t |> success(length(lit_dark.xyz - lit_bright.xyz) > .1, "ordinary material still responds to lighting")
+    delete model; delete owner; delete scene
+}
+
+
+def private check_vertex_alpha_passes(t : T?; var renderer : GltfPbrRenderer; packed : bool) {
+    var scene <- render_fixture_scene()
+    scene.materials <- [GltfMaterial(unlit = true, alphaMode = GltfAlphaMode.mask, alphaCutoff = .5)]
+    scene.meshes[0].primitives[0].material = 0
+    var owner <- upload_gltf(scene)
+    for (alpha in fixed_array(.25, 1.0)) {
+        for (v in scene.meshes[0].primitives[0].vertices){v.color0 = float4(.25, .5, 1.0, alpha)}
+        var model <- packed ? upload_gltf_geometry_packed(scene, owner) : upload_gltf_geometry(scene, owner)
+        for (unlit in fixed_array(true, false)) {
+            scene.materials[0].unlit = unlit
+            for (render_kind in range(7)) {
+                var mrt = fixed_array(GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2)
+                glDrawBuffers(3, safe_addr(mrt[0]))
+                glClearColor(0.0, 0.0, 0.0, 0.0); glClearDepth(double(1.0))
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+                glDisable(GL_DEPTH_TEST)
+                if (render_kind == 0){
+                    let light = GltfPbrLight(direction = float3(0.0, 0.0, 1.0), color = float3(0.0), intensity = 0.0, ambient = float3(1.0), environment = 0.0)
+                    gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), light)
+                } elif (render_kind == 5){
+                    gltf_pbr_render_silhouette(renderer, model, scene, identity4x4(), identity4x4(), float4(1.0))
+                } elif (render_kind == 6){
+                    glEnable(GL_DEPTH_TEST)
+                    gltf_pbr_render_depth(renderer, model, scene, identity4x4(), identity4x4())
+                } else {
+                    gltf_pbr_render_normals(renderer, model, scene, identity4x4(), identity4x4(), false, render_kind == 2, render_kind == 3, render_kind == 4)
+                }
+                let discarded = unlit && alpha < .5
+                if (render_kind == 6){
+                    var depth : float
+                    glReadPixels(1, 1, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, unsafe(addr(depth)))
+                    t |> success(abs(depth - (discarded ? 1.0 : .5)) < .01, "vertex alpha controls unlit depth masking only")
+                } else {
+                    let pixel = read_rgba(GL_COLOR_ATTACHMENT0)
+                    t |> success(discarded ? length(pixel) < .01 : length(pixel) > .1, "vertex alpha controls unlit auxiliary masking only")
+                    if (!unlit && render_kind == 0){t |> success(length(pixel.xyz - float3(1.0)) < .01, "ordinary forward material ignores vertex tint")}
+                    if (!discarded && render_kind == 2){
+                        let expected = unlit ? float3(.25, .5, 1.0) : float3(1.0)
+                        t |> success(length(pixel.xyz - expected) < .01, "material pass applies vertex tint only to unlit")
+                    }
+                    if (render_kind == 3 || render_kind == 4){
+                        let expected = discarded ? float3(0.0) : (unlit ? float3(.25, .5, 1.0) : float3(1.0))
+                        t |> success(length(read_rgba(GL_COLOR_ATTACHMENT1).xyz - expected) < .01, "surface material attachment applies unlit color and mask")
+                    }
+                }
+            }
+        }
+        scene.materials[0].unlit = true
+        delete model
+    }
+    glDisable(GL_DEPTH_TEST)
+    delete owner; delete scene
+}
+
+def private check_silhouette_clip(t : T?; var renderer : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene){
+    var color_only = GL_COLOR_ATTACHMENT0; glDrawBuffers(1, safe_addr(color_only))
+    let color = float4(0.25, 0.5, 0.75, 1.0)
+    glClearColor(0.0, 0.0, 0.0, 0.0); glClear(GL_COLOR_BUFFER_BIT)
+    gltf_pbr_render_silhouette(renderer, model, scene, identity4x4(), identity4x4(), color)
+    t |> success(length(read_rgba(GL_COLOR_ATTACHMENT0) - color) < 0.01, "omitted plane preserves geometry")
+    for (sign in fixed_array(1.0, -1.0)){
+        glClear(GL_COLOR_BUFFER_BIT)
+        gltf_pbr_render_silhouette(renderer, model, scene, identity4x4(), identity4x4(), color, float4(sign, 0.0, 0.0, 0.0))
+        var left, right : float4
+        glReadPixels(0, 1, 1, 1, GL_RGBA, GL_FLOAT, unsafe(addr(left)))
+        glReadPixels(3, 1, 1, 1, GL_RGBA, GL_FLOAT, unsafe(addr(right)))
+        t |> success(length(left - (sign > 0.0 ? float4(0.0) : color)) < 0.01, "negative half-space is discarded")
+        t |> success(length(right - (sign > 0.0 ? color : float4(0.0))) < 0.01, "positive half-space is retained")
+    }
+    glClear(GL_COLOR_BUFFER_BIT)
+    gltf_pbr_render_silhouette(renderer, model, scene, identity4x4(), identity4x4(), color)
+    t |> success(length(read_rgba(GL_COLOR_ATTACHMENT0) - color) < 0.01, "default resets a previous clipping plane")
+    t |> equal(uint(GL_NO_ERROR), glGetError())
+}
+
+def private read_depth(x : int = 1; y : int = 1) : float {
+    var pixel : float
+    glReadPixels(x, y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, unsafe(addr(pixel)))
+    return pixel
+}
+
+def private check_rigid_depth_state(t : T?; var renderer : GltfPbrRenderer;
+                                    var model : GltfGlModel; var scene : GltfScene) {
+    scene.materials[0].alphaMode = GltfAlphaMode.opaque
+    scene.nodes[0].world = translation(float3(0, 0, .2))
+    for (skin in fixed_array(-1, 100)) {
+        scene.nodes[0].skin = skin
+        for (material in fixed_array(-1, 100, 0)) {
+            model.meshes[0].primitives[0].material = material
+            glClear(GL_DEPTH_BUFFER_BIT)
+            gltf_pbr_render_depth(renderer, model, scene,
+                translation(float3(0, 0, .1)), identity4x4())
+            t |> success(abs(read_depth() - .65) < .001,
+                "rigid node/root transforms survive invalid skin and missing material")
+        }
+    }
+    scene.nodes[0].skin = -1
+    scene.nodes[0].world = identity4x4()
+    glFrontFace(GL_CW)
+    for (double_sided in fixed_array(false, true)) {
+        scene.materials[0].doubleSided = double_sided
+        glClear(GL_DEPTH_BUFFER_BIT)
+        gltf_pbr_render_depth(renderer, model, scene, identity4x4(), identity4x4())
+        t |> success(abs(read_depth() - (double_sided ? .5 : 1.0)) < .001,
+            "back-facing geometry casts only when double-sided")
+        t |> equal(!glIsEnabled(GL_CULL_FACE), double_sided, "material controls face culling")
+    }
+    glFrontFace(GL_CCW)
+}
+
+def private check_depth_submission(t : T?) {
+    var inscope scene <- render_fixture_scene()
+    scene.meshes[0].primitives[0].material = 0
+    scene.materials |> emplace(GltfMaterial(baseColorFactor = float4(1.0, 1.0, 1.0, 0.0)))
+    var inscope model <- upload_gltf(scene)
+    var renderer <- gltf_pbr_create()
+    var sentinel : uint
+    glGenTextures(1, safe_addr(sentinel))
+    defer() { glDeleteTextures(1, safe_addr(sentinel)) }
+    glEnable(GL_DEPTH_TEST); glDepthMask(true); glDepthFunc(GL_LESS)
+    for (filtered in fixed_array(false, true)) {
+        scene.materials[0].alphaMode = GltfAlphaMode.opaque
+        scene.materials[0].baseColorFactor.w = 0.0
+        glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, sentinel)
+        glClearDepthf(1.0); glClear(GL_DEPTH_BUFFER_BIT)
+        let previous = renderer.depthProgram
+        gl_binding_scope(filtered) $ {
+            gltf_pbr_render_depth(renderer, model, scene, identity4x4(), identity4x4())
+        }
+        t |> success(abs(read_depth() - .5) < .001, "opaque alpha does not cut a depth hole")
+        if (previous != 0u) { t |> equal(renderer.depthProgram, previous, "reuse opaque program") }
+        if (!filtered) { t |> equal(renderer.depthMaskProgram, 0u, "masked program stays lazy") }
+        var binding : int
+        glGetIntegerv(GL_TEXTURE_BINDING_2D, safe_addr(binding))
+        t |> equal(binding, int(sentinel), "opaque depth leaves texture bindings untouched")
+        t |> equal(glGetUniformLocation(renderer.depthProgram, "u_base_color_tex"), -1,
+            "opaque depth has no material sampler")
+        for (alpha in fixed_array(0.0, 1.0)) {
+            scene.materials[0].alphaMode = GltfAlphaMode.mask
+            scene.materials[0].baseColorFactor.w = alpha
+            let previous_mask = renderer.depthMaskProgram
+            glClear(GL_DEPTH_BUFFER_BIT)
+            gl_binding_scope(filtered) $ {
+                gltf_pbr_render_depth(renderer, model, scene, identity4x4(), identity4x4())
+            }
+            t |> success(abs(read_depth() - (alpha == 0.0 ? 1.0 : .5)) < .001,
+                "mask alpha controls depth coverage")
+            if (previous_mask != 0u) {
+                t |> equal(renderer.depthMaskProgram, previous_mask, "reuse masked program")
+            }
+        }
+        scene.materials[0].baseColorFactor.w = .6
+        for (cutoff in fixed_array(.3, .7)) {
+            scene.materials[0].alphaCutoff = cutoff
+            glClear(GL_DEPTH_BUFFER_BIT)
+            gltf_pbr_render_depth(renderer, model, scene, identity4x4(), identity4x4())
+            t |> success(abs(read_depth() - (cutoff < .6 ? .5 : 1.0)) < .001,
+                "masked depth follows the material cutoff")
+        }
+        scene.materials[0].alphaMode = GltfAlphaMode.blend
+        glClear(GL_DEPTH_BUFFER_BIT)
+        gltf_pbr_render_depth(renderer, model, scene, identity4x4(), identity4x4())
+        t |> equal(read_depth(), 1.0, "blend remains excluded")
+    }
+    check_rigid_depth_state(t, renderer, model, scene)
+    let opaque_program = renderer.depthProgram
+    let mask_program = renderer.depthMaskProgram
+    delete renderer
+    let retired_heap = heap_bytes_allocated()
+    gl_binding_forget_program(mask_program)
+    t |> equal(heap_bytes_allocated(), retired_heap, "mask uniform storage was already retired")
+    t |> success(!glIsProgram(opaque_program) && !glIsProgram(mask_program),
+        "renderer releases both depth programs")
+    glDisable(GL_DEPTH_TEST)
+}
+
+def private depth_quad(left, right : float; uv : float2) : GltfPrimitive {
+    var primitive = GltfPrimitive(material = 0)
+    reserve(primitive.vertices, 4)
+    for (point in fixed_array(float2(left, -1), float2(right, -1),
+        float2(right, 1), float2(left, 1))) {
+        primitive.vertices |> emplace(GltfVertex(position = float3(point, 0.0),
+            normal = float3(0, 0, 1), uv0 = uv))
+    }
+    primitive.indices <- [0u, 1u, 2u, 0u, 2u, 3u]
+    return <- primitive
+}
+
+def private check_depth_uv(t : T?) {
+    var inscope scene = GltfScene()
+    scene.materials |> emplace(GltfMaterial(alphaMode = GltfAlphaMode.mask))
+    var mesh <- GltfMesh(primitives <- [
+        depth_quad(-1.0, 0.0, float2(.25, .5)),
+        depth_quad(0.0, 1.0, float2(.75, .5))])
+    scene.meshes |> emplace(mesh)
+    scene.nodes |> emplace(GltfNode(mesh = 0, world = identity4x4()))
+    var inscope model <- upload_gltf(scene)
+    var inscope renderer <- gltf_pbr_create()
+    var texture : uint
+    glGenTextures(1, safe_addr(texture)); model.textures |> push(texture)
+    glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, texture)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+    var pixels = fixed_array(255u8, 255u8, 255u8, 0u8, 255u8, 255u8, 255u8, 255u8)
+    glTexImage2D(GL_TEXTURE_2D, 0, int(GL_RGBA8), 2, 1, 0,
+        GL_RGBA, GL_UNSIGNED_BYTE, safe_addr(pixels[0]))
+    scene.materials[0].baseColorTex = 0
+    glClear(GL_DEPTH_BUFFER_BIT)
+    gltf_pbr_render_depth(renderer, model, scene, identity4x4(), identity4x4())
+    t |> equal(read_depth(0, 1), 1.0, "left UV samples transparent texel")
+    t |> success(abs(read_depth(3, 1) - .5) < .001, "right UV samples opaque texel")
+}
+
+def private check_depth_skin_weights(t : T?) {
+    let weights = fixed_array(float4(1, 0, 0, 0), float4(.5, .5, 0, 0),
+        float4(.5, .3, .2, 0), float4(.4, .3, .2, .1), float4(1, 0, 0, 0))
+    let expected = fixed_array(.6, .625, .635, .65, .95)
+    var inscope renderer <- gltf_pbr_create()
+    for (weight, index in weights, count()) {
+        var inscope scene <- render_fixture_scene()
+        scene.meshes[0].primitives[0].material = 0
+        scene.materials |> emplace(GltfMaterial())
+        for (vertex in scene.meshes[0].primitives[0].vertices) {
+            vertex.weights0 = weight
+            vertex.joints0 = index == 4 ? float4(255, 0, 0, 0) : float4(0, 1, 2, 3)
+        }
+        scene.nodes[0].skin = 0
+        var skin = GltfSkin()
+        reserve(scene.nodes, GLTF_MAX_JOINTS + 1)
+        reserve(skin.joints, GLTF_MAX_JOINTS)
+        reserve(skin.inverseBind, GLTF_MAX_JOINTS)
+        for (joint in range(GLTF_MAX_JOINTS)) {
+            scene.nodes |> emplace(GltfNode(world = translation(
+                float3(0, 0, joint == GLTF_MAX_JOINTS - 1 ? .8 : .1 * float(joint + 1)))))
+            skin.joints |> push(joint + 1)
+            skin.inverseBind |> push(identity4x4())
+        }
+        scene.skins |> emplace(skin)
+        var inscope model <- upload_gltf(scene)
+        for (masked in fixed_array(false, true)) {
+            scene.materials[0].alphaMode = masked ? GltfAlphaMode.mask : GltfAlphaMode.opaque
+            glClear(GL_DEPTH_BUFFER_BIT)
+            gltf_pbr_render_depth(renderer, model, scene,
+                translation(float3(0, 0, .1)), identity4x4())
+            t |> success(abs(read_depth() - expected[index]) < .001,
+                "skin influences/clamp case {index}, masked={masked}")
+            scene.materials[0].unlit = true
+            glClearColor(0.0, 0.0, 0.0, 0.0); glClear(GL_COLOR_BUFFER_BIT)
+            glDepthFunc(GL_EQUAL)
+            gltf_pbr_render(renderer, model, scene, translation(float3(0, 0, .1)),
+                identity4x4(), identity4x4(), float3(0, 0, 3), GltfPbrLight())
+            t |> success(read_rgba(GL_COLOR_ATTACHMENT0).w > .99,
+                "colour pass covers the matching skinned depth prepass")
+            glDepthFunc(GL_LESS)
+            scene.materials[0].unlit = false
+        }
+    }
+}
+
+def private check_depth_program_switches(t : T?) {
+    var inscope scene = GltfScene()
+    scene.materials <- [GltfMaterial(), GltfMaterial(alphaMode = GltfAlphaMode.mask)]
+    reserve(scene.meshes, 4)
+    reserve(scene.nodes, 6)
+    for (index in range(4)) {
+        var primitive <- depth_quad(-1.0 + float(index) * .5,
+            -.5 + float(index) * .5, float2(.5))
+        primitive.material = index == 1 || index == 2 ? 1 : 0
+        var mesh = GltfMesh()
+        mesh.primitives |> emplace(primitive)
+        scene.meshes |> emplace(mesh)
+        scene.nodes |> emplace(GltfNode(mesh = index, skin = index == 2 ? 1 : 0,
+            world = identity4x4()))
+    }
+    for (height in fixed_array(.2, .4)) {
+        scene.nodes |> emplace(GltfNode(world = translation(float3(0, 0, height))))
+    }
+    scene.skins <- [GltfSkin(joints = [4], inverseBind = [identity4x4()]),
+        GltfSkin(joints = [5], inverseBind = [identity4x4()])]
+    var inscope model <- upload_gltf(scene)
+    var inscope renderer <- gltf_pbr_create()
+    gl_binding_scope(true) $ {
+        for (offset in fixed_array(.1, .3)) {
+            glClear(GL_DEPTH_BUFFER_BIT)
+            gltf_pbr_render_depth(renderer, model, scene,
+                translation(float3(0, 0, offset)), identity4x4())
+            for (pixel in range(4)) {
+                let expected = .5 + .5 * (offset + (pixel == 2 ? .4 : .2))
+                t |> success(abs(read_depth(pixel, 1) - expected) < .001,
+                    "filtered opaque/mask programs receive skin/root palette at pixel {pixel}")
+            }
+        }
+        gl_use_program_filtered(0u)
+    }
+}
+
+[test(description = "On a GL 3.3 window the PBR renderer's surface, motion, light, shadow, opacity, silhouette and depth passes write the expected values into float render targets, its creation leaves the texture bindings as they were, and its deletion releases its light texture; skipped without such a context or float MRT.")]
+def gltf_surface_motion_and_shadow_fallback_render_on_gl(t : T?){
+    if (glfwInit() == 0){t |> skip("GLFW display unavailable"); return }
+    glfwInitOpenGL(3, 3)
+    glfwWindowHint(int(GLFW_VISIBLE), GLFW_FALSE)
+    let window = glfwCreateWindow(32, 32, "glTF render targets", null, null)
+    if (window == null){glfwTerminate(); t |> skip("OpenGL context unavailable"); return }
+    glfwMakeContextCurrent(window)
+    defer(){gl_binding_clear(); glfwDestroyWindow(window); glfwTerminate()}
+
+    var scene <- render_fixture_scene()
+    defer(){delete scene}
+    var model <- upload_gltf(scene)
+    defer(){delete model}
+    var scratch_texture : uint
+    glGenTextures(1, safe_addr(scratch_texture))
+    glActiveTexture(GL_TEXTURE0 + 3u)
+    glBindTexture(GL_TEXTURE_2D, scratch_texture)
+    var active_before, binding_before : int
+    glGetIntegerv(GL_ACTIVE_TEXTURE, safe_addr(active_before))
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, safe_addr(binding_before))
+    var renderer <- gltf_pbr_create()
+    defer(){
+        let point_texture = renderer.pointTexture
+        delete renderer
+        if (point_texture != 0u){t |> success(!glIsTexture(point_texture), "renderer deletion releases its light data texture")}
+        glDeleteTextures(1, safe_addr(scratch_texture))
+    }
+    var active_after, binding_after : int
+    glGetIntegerv(GL_ACTIVE_TEXTURE, safe_addr(active_after))
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, safe_addr(binding_after))
+    t |> equal(active_before, active_after, "renderer creation preserves the active texture unit")
+    t |> equal(binding_before, binding_after, "renderer creation preserves the active unit's 2D binding")
+
+    var fbo : uint
+    glGenFramebuffers(1, safe_addr(fbo))
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo)
+    let surface = render_target(int(GL_RGBA16F), GL_RGBA, GL_COLOR_ATTACHMENT0)
+    let material = render_target(int(GL_RGBA16F), GL_RGBA, GL_COLOR_ATTACHMENT1)
+    let motion = render_target(int(GL_RG16F), GL_RG, GL_COLOR_ATTACHMENT2)
+    let depth = render_target(int(GL_DEPTH_COMPONENT32F), GL_DEPTH_COMPONENT, GL_DEPTH_ATTACHMENT)
+    defer(){
+        var a = surface; var b = material; var c = motion; var d = depth
+        glDeleteTextures(1, safe_addr(a)); glDeleteTextures(1, safe_addr(b)); glDeleteTextures(1, safe_addr(c)); glDeleteTextures(1, safe_addr(d))
+        glDeleteFramebuffers(1, safe_addr(fbo))
+    }
+    var mrt = fixed_array(GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2)
+    glDrawBuffers(3, safe_addr(mrt[0]))
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE){t |> skip("float MRT unavailable"); return }
+    glViewport(0, 0, 4, 4)
+    glDisable(GL_DEPTH_TEST)
+
+    check_surface_motion(t, renderer, model, scene)
+    check_linear_output(t)
+
+    check_point_light_rejections(t, model, scene)
+    check_many_point_lights(t, renderer, model, scene)
+    t |> success(renderer.pointTexture != 0u, "rendering lights allocates the owned data texture")
+    check_draw_opacity(t, renderer, model, scene)
+    check_shadow_filters(t, renderer, model, scene)
+    for (packed in fixed_array(false, true)){
+        check_unlit_light_invariance(t, renderer, packed)
+        check_vertex_alpha_passes(t, renderer, packed)
+    }
+    check_silhouette_clip(t, renderer, model, scene)
+    check_depth_submission(t)
+    glEnable(GL_DEPTH_TEST)
+    check_depth_uv(t)
+    check_depth_skin_weights(t)
+    check_depth_program_switches(t)
+    glDisable(GL_DEPTH_TEST)
+    t |> equal(glGetError(), uint(GL_NO_ERROR), "depth fixture releases resources once")
+}

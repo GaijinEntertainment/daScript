@@ -5,7 +5,7 @@ options indenting = 4
 require dastest/testing_boost public
 require imgui/imgui_document_model public
 
-[test]
+[test(description = "installing UTF-8 bytes keeps the BOM as metadata outside the parser text, and an unedited save returns the original bytes exactly with mixed line endings and a clean dirty flag")]
 def test_document_source_roundtrip_preserves_bom_and_line_endings(t : T?) {
     let bom = "\xEF\xBB\xBF"
     let bytes = bom + "first\r\nsecond\nthird\r\n"
@@ -20,7 +20,7 @@ def test_document_source_roundtrip_preserves_bom_and_line_endings(t : T?) {
     t |> success(!text_document_dirty(document), "freshly loaded source is clean")
 }
 
-[test]
+[test(description = "an edit applies only at its base revision, so a stale replay is rejected with the bytes untouched, and its recorded inverse restores the original text exactly")]
 def test_document_edit_is_revision_checked_and_exactly_invertible(t : T?) {
     var document = TextDocumentSource()
     let _ = text_document_install_text(document, "- [X] done\r\n", "task.md", 3)
@@ -46,7 +46,7 @@ def test_document_edit_is_revision_checked_and_exactly_invertible(t : T?) {
                "inverse restores original spelling and line endings exactly")
 }
 
-[test]
+[test(description = "positions and range ends after an edit shift by its byte delta while those before it stay anchored")]
 def test_document_edit_maps_source_anchors(t : T?) {
     let edit = TextEdit(
         source = TextSourceRange(start_byte = 4, end_byte = 7),

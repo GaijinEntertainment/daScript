@@ -6,7 +6,7 @@ require imgui/imgui_text_find
 
 //! Pure-logic coverage for the find model: no UI, no live host.
 
-[test]
+[test(description = "a case-insensitive literal find matches every spelling with the needle's span, starts current at the first match, and skips a rebuild for an identical query and revision")]
 def test_find_literal_case_insensitive(t : T?) {
     var state = TextFindState()
     state.query = "ab"
@@ -22,7 +22,7 @@ def test_find_literal_case_insensitive(t : T?) {
     text_find_dispose(state)
 }
 
-[test]
+[test(description = "stepping through matches wraps forward past the last and back past the first, and every step advances the jump revision")]
 def test_find_step_wraps(t : T?) {
     var state = TextFindState()
     state.query = "a"
@@ -40,7 +40,7 @@ def test_find_step_wraps(t : T?) {
     text_find_dispose(state)
 }
 
-[test]
+[test(description = "narrowing the query rebuilds the matches while the current match stays at the same position")]
 def test_find_sticky_current_across_rebuild(t : T?) {
     var state = TextFindState()
     state.query = "aa"
@@ -55,7 +55,7 @@ def test_find_sticky_current_across_rebuild(t : T?) {
     text_find_dispose(state)
 }
 
-[test]
+[test(description = "regex find matches every occurrence with its span, an invalid pattern yields no matches and reports an error, and zero-width matches are dropped without an error")]
 def test_find_regex_and_errors(t : T?) {
     var state = TextFindState()
     state.use_regex = true
@@ -76,7 +76,7 @@ def test_find_regex_and_errors(t : T?) {
     text_find_dispose(state)
 }
 
-[test]
+[test(description = "reopening the find bar re-arms the jump to the kept current match, while opening with no matches or while already open arms nothing")]
 def test_find_reopen_rearms_jump(t : T?) {
     var state = TextFindState()
     text_find_open(state)
@@ -94,7 +94,7 @@ def test_find_reopen_rearms_jump(t : T?) {
     text_find_dispose(state)
 }
 
-[test]
+[test(description = "Ctrl+H opens both find and replace rows with focus on the replace input, replace-one and replace-all requests count, and programmatic replace text lands with widget sync armed")]
 def test_find_replace_requests_and_open(t : T?) {
     var state = TextFindState()
     text_find_open_replace(state)
@@ -111,7 +111,7 @@ def test_find_replace_requests_and_open(t : T?) {
     text_find_dispose(state)
 }
 
-[test]
+[test(description = "literal-mode replacement yields one replacement per match and never expands a template")]
 def test_find_replacements_literal(t : T?) {
     var state = TextFindState()
     state.query = "aa"
@@ -125,7 +125,7 @@ def test_find_replacements_literal(t : T?) {
     text_find_dispose(state)
 }
 
-[test]
+[test(description = "regex replacement templates expand numbered, braced and whole-match groups per match, keep a literal dollar, and expand an out-of-range group to nothing")]
 def test_find_replacements_regex_templates(t : T?) {
     var state = TextFindState()
     state.use_regex = true
@@ -149,7 +149,7 @@ def test_find_replacements_regex_templates(t : T?) {
     text_find_dispose(state)
 }
 
-[test]
+[test(description = "named regex groups expand in replacement templates with each match's own captures")]
 def test_find_replacements_named_groups(t : T?) {
     var state = TextFindState()
     state.use_regex = true
