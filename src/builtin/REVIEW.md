@@ -74,10 +74,12 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_DASBIND.md`.
 
 - **A diff that adds a namespace-scope function not marked `static` to the `#else` branch of a
   `DAS_NO_FILEIO` conditional in `module_builtin_fio.cpp` defines the same signature in that
-  conditional's `#if DAS_NO_FILEIO` branch, in the same change, returning the answer the function
-  gives when its operation fails.** The no-file-io build compiles only the `#if` branches into a static
-  library, so a missing stub passes CI's compile and fails only when a console build, or the
-  link check in `ci/build_eastl_config.sh no_fileio`, links a caller.
+  conditional's `#if DAS_NO_FILEIO` branch, in the same change, as a stub that either returns
+  the answer the function gives when its operation fails or, if the function takes a
+  `Context *`, calls `throw_error_at` on that context.** The no-file-io build compiles only the
+  `#if` branches into a static library, so a missing stub passes CI's compile and fails only
+  when a console build, or the link check in `ci/build_eastl_config.sh no_fileio`, links a
+  caller.
 
 - **A diff that changes a C++ type das binds through an annotation with `addField` in this folder
   and leaves a member whose type is a standard-library class other than `std::string`, or a
