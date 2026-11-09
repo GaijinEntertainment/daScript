@@ -210,7 +210,7 @@ jobs:
 
     - name: "Build Sphinx HTML"
       run: |
-        sphinx-build -W --keep-going -b html -d doc/sphinx-build doc/source build/site
+        sphinx-build -W --keep-going -j auto -b html -d doc/sphinx-build doc/source build/site
 
     # WASM build: the wasm32 interpreter playground (daslang_static) + the wasm64
     # compiled path (runtime/module archives, compute samples, and the /examples

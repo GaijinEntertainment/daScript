@@ -8,8 +8,8 @@ fi
 
 BUILDDIR=build
 SITEDIR=../site
-ALLSPHINXOPTS="-d $BUILDDIR/doctrees $SPHINXOPTS source"
-I18NSPHINXOPTS="$SPHINXOPTS source"
+ALLSPHINXOPTS="-j auto -d $BUILDDIR/doctrees $SPHINXOPTS source"
+I18NSPHINXOPTS="-j auto $SPHINXOPTS source"
 
 if [ -n "$PAPER" ]; then
     ALLSPHINXOPTS="-D latex_paper_size=$PAPER $ALLSPHINXOPTS"
@@ -81,7 +81,7 @@ case "$1" in
     
     site)
         check_sphinx
-        $SPHINXBUILD -b html -d sphinx-build source ../site/doc
+        $SPHINXBUILD -j auto -b html -d sphinx-build source ../site/doc
         if [ $? -ne 0 ]; then
             exit 1
         fi

@@ -140,7 +140,7 @@ After creating or modifying RST, stdlib docs, `//!` comments in `daslib/*.das`, 
 1. Regenerate - if `daslib/*.das` or `das2rst.das` changed.
 2. Sphinx build (`-d` keeps the doctree cache across iterations):
    ```
-   sphinx-build -b html -d doc/sphinx-build doc/source site/doc 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | tee /tmp/sphinx_out.txt
+   sphinx-build -j auto -b html -d doc/sphinx-build doc/source site/doc 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | tee /tmp/sphinx_out.txt
    ```
    Delete `doc/sphinx-build` before both builders; preflight's docs gate does this unconditionally so
    stale doctrees cannot hide warnings. `sphinx-build` comes from PATH - `pip install sphinx` if

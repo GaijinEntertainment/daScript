@@ -7,8 +7,8 @@ if "%SPHINXBUILD%" == "" (
 )
 set BUILDDIR=build
 set SITEDIR=../site
-set ALLSPHINXOPTS=-d %BUILDDIR%/doctrees %SPHINXOPTS% source
-set I18NSPHINXOPTS=%SPHINXOPTS% source
+set ALLSPHINXOPTS=-j auto -d %BUILDDIR%/doctrees %SPHINXOPTS% source
+set I18NSPHINXOPTS=-j auto %SPHINXOPTS% source
 if NOT "%PAPER%" == "" (
     set ALLSPHINXOPTS=-D latex_paper_size=%PAPER% %ALLSPHINXOPTS%
     set I18NSPHINXOPTS=-D latex_paper_size=%PAPER% %I18NSPHINXOPTS%
@@ -74,7 +74,7 @@ if errorlevel 9009 (
 
 
 if "%1" == "site" (
-    %SPHINXBUILD% -b html -d sphinx-build source ../site/doc
+    %SPHINXBUILD% -j auto -b html -d sphinx-build source ../site/doc
     if errorlevel 1 exit /b 1
     echo.
     echo.Build finished. The HTML pages are in %BUILDDIR%/html.
