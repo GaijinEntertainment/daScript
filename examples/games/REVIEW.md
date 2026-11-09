@@ -25,3 +25,12 @@ incomplete** - WebGL2 does not guarantee a float colour attachment.
 (`web/examples/ui/samples/data.json`) in the same change** - a staged file no list names never
 mounts, and the sample fails to load with `missing prerequisite`.
 
+**A diff that adds a `[test]` to a game puts it in the game's existing category file for its
+topic or in the game's `uncategorized.das`, never in a new file, with a `description`, and with
+`timeout = 1200` when the test spawns a child or waits on a peer** - the shape rules are
+`tests/REVIEW.md` (repo root) and `tests/ARCHITECTURE.md`; `REVIEW.das` (beside this file)
+applies them tests-only, since each game's sources sit beside its tests, and `TESTS.md` (beside
+this file) is the generated index (`daslang utils/internal/test-audit/main.das -- --root
+examples/games --tests-only --index examples/games/TESTS.md --readme`; the `check_tests_index`
+target verifies it). A game with a playground copy carries the same test files in both.
+

@@ -241,9 +241,12 @@ add_das_target(check_tests_index
     COMMAND $<TARGET_FILE:daslang> ./utils/internal/test-audit/main.das -- --root modules/dasLLVM/tests --index modules/dasLLVM/tests/TESTS.md --verify
     COMMAND $<TARGET_FILE:daslang> ./utils/internal/test-audit/main.das -- --root modules/dasVulkan/tests --verify
     COMMAND $<TARGET_FILE:daslang> ./utils/internal/test-audit/main.das -- --root modules/dasVulkan/tutorials --tests-only --index modules/dasVulkan/tutorials/TESTS.md --verify
+    COMMAND $<TARGET_FILE:daslang> ./utils/internal/test-audit/main.das -- --root modules/dasImgui/tests --tests-only --index modules/dasImgui/tests/TESTS.md --verify
+    COMMAND $<TARGET_FILE:daslang> ./utils/internal/test-audit/main.das -- --root modules/dasAudio/tests --root modules/dasGLTF/tests --root modules/dasGlfw/tests --root modules/dasLR1/tests --root modules/dasLiveHost/tests --root modules/dasMeshOptimizer/tests --root modules/dasOPENAI/tests --root modules/dasOpenGL/tests --root modules/dasPEG/tests --root modules/dasStbImage/tests --index modules/TESTS.md --verify
+    COMMAND $<TARGET_FILE:daslang> ./utils/internal/test-audit/main.das -- --root examples/games --tests-only --index examples/games/TESTS.md --verify
     DEPENDS daslang
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    COMMENT "Checking the generated test indexes (tests/README.md, utils/TESTS.md, dastest/tests/README.md, modules/dasLLVM/tests/TESTS.md, modules/dasVulkan/tests/README.md, modules/dasVulkan/tutorials/TESTS.md) against the [test] census (regenerate: test-audit --readme)"
+    COMMENT "Checking the generated test indexes (tests/README.md, utils/TESTS.md, dastest/tests/README.md, modules/dasLLVM/tests/TESTS.md, modules/dasVulkan/tests/README.md, modules/dasVulkan/tutorials/TESTS.md, modules/dasImgui/tests/TESTS.md, modules/TESTS.md, examples/games/TESTS.md) against the [test] census (regenerate: test-audit --readme)"
 )
 
 add_das_target(check_gated_das
