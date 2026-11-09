@@ -13,9 +13,8 @@
 # budget everywhere - a watchdog only catches a hang while it is still tight.
 # The lanes that need it run the sweep at about half speed on their own - the
 # RelWithDebInfo Windows nightly (DAS_TRACK_ALLOC with the free list off, its
-# budget set in nightly.yml), the unoptimized Windows Debug cell and the linux
-# sanitizer cells (ci/ci_matrix.py) - and ride a hosted runner that swings
-# another ~1.4x night to night.
+# budget set in nightly.yml) and the linux sanitizer cells (ci/ci_matrix.py) -
+# and ride a hosted runner that swings another ~1.4x night to night.
 if(NOT DAS_TOOLS_DISABLED)
     set(DAS_TEST_TIMEOUT 1800 CACHE STRING
         "dastest global suite watchdog, seconds, for run_tests_interpreter")
