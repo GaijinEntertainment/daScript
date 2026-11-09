@@ -4,7 +4,7 @@
 `README.md`.
 
 **A diff under this folder applies `utils/REVIEW.md` (repo root) too** - dastest is a shipped
-tool: `CMakeLists.txt` (repo root) installs `dastest/dastest.das`.
+tool: `CMakeLists.txt` (repo root) installs every `dastest/*.das`.
 
 **A test of dastest itself, and any file it spawns, wherever the diff puts it, answers to the
 `tests/` subfolder's checklist.** A test of dastest itself is a `[test]` file that asserts on

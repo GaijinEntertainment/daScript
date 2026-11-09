@@ -4,6 +4,7 @@ options no_unused_block_arguments = false
 
 require dastest/testing_boost public
 require dastest/file_census
+require dastest/folder_filter
 require daslib/fio
 require daslib/rtti
 require daslib/strings_boost
@@ -157,6 +158,56 @@ def test_file_census(tt : T?) {  // nolint:STYLE038 - one arm per census fact
             "block is not the header\ndef main() \{\}\n")
         t |> equal(wrapped.header, "a claim that wraps")
     }
+}
+
+[test(description = "with_folder_filter answers the root's .das_test per folder name, admits every folder where there is none, and refuses a .das_test that does not compile")]
+def test_with_folder_filter(t : T?) {
+    let tmp = create_temp_directory_result("folder_filter")
+    if (!(tmp is value)) {
+        t |> failure("could not create temp directory: {tmp as error}")
+        return
+    }
+    let root = tmp as value
+    let gated = path_join(root, "gated")
+    let broken = path_join(root, "broken")
+    mkdir_rec(gated)
+    mkdir_rec(broken)
+    t |> success(fwrite(path_join(gated, ".das_test"), "options gen2\n[export, pinvoke]\n" +
+        "def can_visit_folder(folder_name : string; var result : bool?) \{\n" +
+            "    *result = folder_name != \"skipped\"\n\}\n"), "the gating .das_test is written")
+    t |> success(fwrite(path_join(broken, ".das_test"), "this is not a daslang program\n"),
+        "the broken .das_test is written")
+    t |> run("a .das_test at the root decides per folder name") @(t : T?) {
+        let answered = with_folder_filter(gated) $(can_visit) {
+            t |> success(can_visit |> invoke("kept"), "a folder the filter admits")
+            t |> success(!(can_visit |> invoke("skipped")), "a folder the filter declines")
+            return true
+        }
+        t |> success(answered, "the block's answer comes back")
+    }
+    t |> run("no .das_test admits every folder") @(t : T?) {
+        let answered = with_folder_filter(root) $(can_visit) {
+            return can_visit |> invoke("skipped")
+        }
+        t |> success(answered, "every folder is visitable")
+    }
+    t |> run("the block's own false comes back through a gated root") @(t : T?) {
+        let answered = with_folder_filter(gated) $(_can_visit) {
+            return false
+        }
+        t |> success(!answered, "a scan the block reports as failed fails the walk")
+    }
+    t |> run("a .das_test that does not compile answers false and runs no block") @(t : T?) {
+        var ran = false
+        let answered = with_folder_filter(broken) $(_can_visit) {
+            ran = true
+            return true
+        }
+        t |> success(!answered && !ran, "the walk is refused, not run unfiltered")
+    }
+    t |> success(remove(path_join(gated, ".das_test")) && remove(path_join(broken, ".das_test")),
+        "the two .das_test files are removed")
+    t |> success(rmdir(gated) && rmdir(broken) && rmdir(root), "the temp tree is removed")
 }
 
 [test(description = "a benchmark reports the batch that met the time budget, for both a fast op and a slow one")]
