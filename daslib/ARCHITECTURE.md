@@ -9,7 +9,7 @@ Companion documents carry separate concerns.
 - `ARCHITECTURE_LINQ.md` - the in-memory linq family (linq, linq_boost, linq_das); `ARCHITECTURE_LINQ_FOLD.md` - the `_fold` splice kernel, `ARCHITECTURE_LINQ_FOLD_SOURCES.md` - its array, decs, json, table and sql adapters; `ARCHITECTURE_SQL_LINQ.md` - sql_linq and sql_migrate.
 - `ARCHITECTURE_CURSOR.md` - sec. 40: ast_cursor, the cursor module the LSP and MCP navigation tools share.
 - `ARCHITECTURE_SYNTAX.md` - sec. 42: the raw assignment spellings, the formatter / printer / builtin sides of the lexer, parser and inference pairs.
-- `ARCHITECTURE_MEMORY.md` - sec. 43: runtime memory snapshots.
+- `ARCHITECTURE_MEMORY.md` - sec. 43: runtime memory snapshots; `ARCHITECTURE_RST.md` - sec. 44: rst_comment, the `//!` reader's require closure.
 
 ## 8. ast_verify {#ast-verify}
 

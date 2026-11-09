@@ -137,6 +137,31 @@ def test_mkdir_error(t : T?) {
     }
 }
 
+[test(description = "mkdir_rec creates every missing level, accepts an existing directory and an empty path, and its error overload reports a path under a file")]
+def test_mkdir_rec(t : T?) {
+    let root = test_temp_dir()
+    t |> run("creates every missing level") @(t : T?) {
+        let deep = path_join(root, "a/b/c")
+        t |> success(mkdir_rec(deep), "mkdir_rec should create a/b/c")
+        var st : FStat
+        t |> success(stat(deep, st) && st.is_dir, "a/b/c should be a directory")
+        t |> success(mkdir_rec(deep), "an existing directory is accepted")
+        t |> success(mkdir_rec(""), "an empty path is accepted")
+    }
+    t |> run("the error overload names the failure") @(t : T?) {
+        let blocker = path_join(root, "file.txt")
+        fopen(blocker, "wb") $(f) {
+            if (f != null) {
+                f |> fwrite("x")
+            }
+        }
+        var error : string
+        let ok = mkdir_rec(path_join(blocker, "under"), error)
+        t |> success(!ok, "a path under a file cannot be created")
+        t |> success(!empty(error), "error should be non-empty")
+    }
+}
+
 [test(description = "rmdir_rec succeeds for a missing directory")]
 def test_rmdir_rec_error(t : T?) {
     t |> run("succeeds for missing directory") @(t : T?) {

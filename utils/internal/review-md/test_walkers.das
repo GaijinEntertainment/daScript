@@ -1160,3 +1160,45 @@ def test_doc_gate_rst_comment_first(t : T?) {
 
     t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
 }
+
+[test(description = "the daslib gate walks the //! comment reader's require closure: builtins, ast, rtti and rst_label are green, any other daslib module at any depth is red, and no reader is a usage error")]
+def test_daslib_gate_reader_closure(t : T?) {
+    let tree = getcwd()
+    let fixture = repo_fixture(t, "daslib/REVIEW.das", "review_daslib")
+    if (empty(fixture)) return
+    var err : string
+    t |> success(mkdir_rec(path_join(fixture, "daslib")), "fixture daslib folder created")
+    t |> success(copy_file(path_join(tree, "daslib/REVIEW.das"),
+            path_join(fixture, "daslib/REVIEW.das"), true, err), "copied the real gate")
+    let gate = path_join(fixture, "daslib/REVIEW.das")
+
+    t |> equal(2, spawn_at(fixture, [gate]).rc, "no daslib/rst_comment.das is a usage error")
+
+    write_at(t, fixture, "daslib/rst_comment.das",
+        "options gen2\n\nrequire daslib/ast\nrequire fio_core\nrequire strings\n"
+        + "require daslib/rst_label\n")
+    write_at(t, fixture, "daslib/rst_label.das",
+        "options gen2\n\nrequire ast_core\nrequire rtti_core\nrequire strings\n")
+    write_at(t, fixture, "daslib/ast.das",
+        "options gen2\n\nrequire ast_core public\nrequire daslib/rtti public\nrequire strings\n")
+    write_at(t, fixture, "daslib/rtti.das",
+        "options gen2\n\nrequire rtti_core public\nrequire strings\n")
+    let green = spawn_at(fixture, [gate])
+    t |> equal(0, green.rc, "builtins, ast, rtti and rst_label are green: {green.out}")
+
+    write_at(t, fixture, "daslib/rst_label.das",
+        "options gen2\n\nrequire ast_core\nrequire daslib/strings_boost\n")
+    let red = spawn_at(fixture, [gate])
+    t |> equal(1, red.rc, "a daslib module required by the leaf is red")
+    t |> success(find(red.out, "daslib/rst_label.das:4: requires daslib/strings_boost") >= 0,
+        red.out)
+
+    write_at(t, fixture, "daslib/rst_label.das", "options gen2\n\nrequire ast_core\n")
+    write_at(t, fixture, "daslib/rtti.das",
+        "options gen2\n\nrequire rtti_core public\nrequire daslib/algorithm\n")
+    let deep = spawn_at(fixture, [gate])
+    t |> equal(1, deep.rc, "a daslib module two requires down is red")
+    t |> success(find(deep.out, "daslib/rtti.das:4: requires daslib/algorithm") >= 0, deep.out)
+
+    t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
+}

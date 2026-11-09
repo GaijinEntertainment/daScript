@@ -674,14 +674,23 @@ def document_module_rst(_root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Document writers", mod, %regex~(document|write_digest)%%),
         group_by_regex("Descriptions", mod, %regex~describe%%),
-        group_by_regex("Label makers", mod, %regex~(\w+_label_name|function_label_file)%%),
+        group_by_regex("Label makers", mod, %regex~\w+_label_name%%),
         group_by_regex("RST section makers", mod, %regex~make%%),
         group_by_regex("Documentation queries", mod, %regex~.+_needs%%),
         group_by_regex("Group operations", mod, %regex~.*group%%),
-        group_by_regex("Naming helpers", mod, %regex~(topic|module_name|function_name|safe_function_name)$%%),
+        group_by_regex("Naming helpers", mod, %regex~(topic|module_name|function_name)$%%),
         group_by_regex("Reference policy", mod, %regex~mark_module_pageless$%%)
     )
     document("Documentation generator", mod, "rst.rst", groups)
+}
+
+def document_module_rst_label(_root : string) {
+    var mod = find_module("rst_label")
+    var groups <- array<DocGroup>(
+        group_by_regex("Label makers", mod, %regex~(function_label_file|safe_function_name)$%%),
+        group_by_regex("Short type names", mod, %regex~(describe_type_short|cleanup_type_short)$%%)
+    )
+    document("RST labels and short type names", mod, "rst_label.rst", groups)
 }
 
 def document_module_apply(_root : string) {
@@ -2179,6 +2188,7 @@ def main {  // nolint:STYLE038 — flat one-call-per-documented-module dispatch 
     document_module_remove_call_args(root)
     document_module_result(root)
     document_module_rst(root)
+    document_module_rst_label(root)
     document_module_safe_addr(root)
     document_module_soa(root)
     document_module_sort_boost(root)

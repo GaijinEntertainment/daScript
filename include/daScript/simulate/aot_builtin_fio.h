@@ -135,6 +135,7 @@ namespace das {
     DAS_API bool builtin_stat ( const char * filename, FStat & fs );
     DAS_API void builtin_dir ( const char * path, const Block & fblk, Context * context, LineInfoArg * at );
     DAS_API bool builtin_mkdir ( const char * path );
+    DAS_API bool builtin_mkdir_rec ( const char * path );
     DAS_API bool builtin_chdir ( const char * path );
     DAS_API char * builtin_getcwd ( Context * context, LineInfoArg * at );
     DAS_API const FILE * builtin_stdin();
@@ -207,6 +208,7 @@ namespace das {
     DAS_API bool    builtin_remove_file_ec ( const char * path, char * & error, Context * context, LineInfoArg * at );
     DAS_API bool    builtin_rename_file_ec ( const char * old_path, const char * new_path, char * & error, Context * context, LineInfoArg * at );
     DAS_API bool    builtin_mkdir_ec ( const char * path, char * & error, Context * context, LineInfoArg * at );
+    DAS_API bool    builtin_mkdir_rec_ec ( const char * path, char * & error, Context * context, LineInfoArg * at );
     DAS_API bool    builtin_rmdir_ec ( const char * path, char * & error, Context * context, LineInfoArg * at );
     DAS_API bool    builtin_rmdir_rec_ec ( const char * path, char * & error, Context * context, LineInfoArg * at );
 }

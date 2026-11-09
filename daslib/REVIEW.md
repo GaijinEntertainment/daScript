@@ -4,17 +4,18 @@
 docs: `ARCHITECTURE.md`, `ARCHITECTURE_CAPI.md`, `ARCHITECTURE_CURSOR.md`, `ARCHITECTURE_EMIT.md`,
 `ARCHITECTURE_JOBQUE.md`, `ARCHITECTURE_LINQ.md`, `ARCHITECTURE_LINQ_FOLD.md`,
 `ARCHITECTURE_LINQ_FOLD_SOURCES.md`, `ARCHITECTURE_LINT.md`, `ARCHITECTURE_MEMORY.md`,
-`ARCHITECTURE_SHADER.md`, `ARCHITECTURE_SQL_LINQ.md`, `ARCHITECTURE_SYNTAX.md`. A diff touching the
-linq family - `linq*.das`, `sql_*.das` - applies `REVIEW_LINQ.md` too. A diff that changes
-compile-time AST-building code - a class deriving an `Ast*Annotation` or `Ast*Macro`, an
-`AstVisitor` a macro or an annotation runs at compile time (the `aot_cpp.das` visitors included),
-a `[macro_function]`, or any function that calls `qmacro*`, `apply_template`, `macro_error`, or
-`macro_sticky_error` - applies `REVIEW_MACROS.md` too. A diff touching `daspkg.das` - the
-functions a `.das_package` manifest body calls - applies `utils/daspkg/REVIEW.md` (repo root)
-too. A diff touching `shader_lingua_franca.das`
-or `shader_emit_common.das` - the declarations and helpers the shader emitters share - applies
-`modules/REVIEW_SHADER_EMITTERS.md` (repo root) too. A diff touching a file listed in `RULE_MODULES`
-of `utils/lint/REVIEW.das` (repo root) applies `utils/lint/REVIEW.md` (repo root) too.
+`ARCHITECTURE_RST.md`, `ARCHITECTURE_SHADER.md`, `ARCHITECTURE_SQL_LINQ.md`,
+`ARCHITECTURE_SYNTAX.md`. A diff touching the linq family - `linq*.das`, `sql_*.das` - applies
+`REVIEW_LINQ.md` too. A diff that changes compile-time AST-building code - a class deriving an
+`Ast*Annotation` or `Ast*Macro`, an `AstVisitor` a macro or an annotation runs at compile time
+(the `aot_cpp.das` visitors included), a `[macro_function]`, or any function that calls
+`qmacro*`, `apply_template`, `macro_error`, or `macro_sticky_error` - applies
+`REVIEW_MACROS.md` too. A diff touching `daspkg.das` - the functions a `.das_package` manifest
+body calls - applies `utils/daspkg/REVIEW.md` (repo root) too. A diff touching
+`shader_lingua_franca.das` or `shader_emit_common.das` - the declarations and helpers the shader
+emitters share - applies `modules/REVIEW_SHADER_EMITTERS.md` (repo root) too. A diff touching a
+file listed in `RULE_MODULES` of `utils/lint/REVIEW.das` (repo root) applies
+`utils/lint/REVIEW.md` (repo root) too.
 
 **A diff that changes a `.das` here that an `AOT_*_MODULE_FILES` variable of
 `tests/aot/CMakeLists.txt` (repo root) picks up, and that is not marked `options no_aot`, states in
@@ -260,16 +261,19 @@ rvalue stays materialized, because a reference to a temporary dangles.
 **Never reuse a swizzle rewrite's source node in a second output lane without cloning it** - the
 first appearance moves it, and skipping the clone gives one node two parents.
 
-**A diff that adds or changes a site in `rst.das` that spells a symbol's RST label (the `.. _name:`
-target) or topic key (the `|detail/...|` / `|handmade/...|` substitution name) keeps every site in
-`rst.das` that spells the label or key of that same symbol byte-for-byte equal.** When two such
-sites differ, the page prints a bare signature and the generator writes a fresh empty stub for the
-symbol.
+**A diff that adds or changes a site in `rst.das`, `rst_label.das` or `rst_comment.das` that
+spells a symbol's RST label (the `.. _name:` target) or topic key (the `|detail/...|` /
+`|handmade/...|` substitution name - `rst.das`'s `topic()` sites and `rst_comment.das`'s
+`write_to_detail` names included) keeps every site in those three files that spells the label
+or key of that same symbol byte-for-byte equal.** When two such sites differ, the page prints a
+bare signature and the generator writes a fresh empty stub for the symbol.
 
-**A diff that changes the category or the name a topic key carries - in `rst.das`'s `topic()` sites
-or in `rst_comment.das`'s `write_to_detail` names - makes the same change on the other side, in the
-same change.** `rst_comment.das` writes a detail file under one key and `rst.das`'s page reads it
-under the other; a mismatch prints a bare signature.
+**Weakening `REVIEW.das` (beside this file) is a defect - a diff that makes it read fewer
+files, report less on the same tree, or allow a module in the `//!` comment reader's require
+closure beyond builtin modules, `daslib/ast`, `daslib/rtti` and `daslib/rst_label` is weaker.**
+A module in that closure - the modules `rst_comment.das` requires, directly or through other
+`daslib/` modules - is parsed before the reader exists and loses its `//!` comments
+(`ARCHITECTURE_RST.md#comment-reader-closure`).
 
 **A diff that changes what `rst.das` or `rst_comment.das` places on a page states, in the PR body,
 that every name the generator newly places names a symbol, module or file that exists in the

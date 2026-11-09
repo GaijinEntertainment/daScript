@@ -3808,7 +3808,7 @@ namespace das {
             var->type = new TypeDecl(Type::autoinfer, var->at);  // repair in place; the sticky error still fails the compile
             var->type->at = var->at;
         }
-        if (!var->can_shadow && !program->policies.allow_block_variable_shadowing) {
+        if (!var->can_shadow && !block->isLambdaBlock && !program->policies.allow_block_variable_shadowing) {
             if (func) {
                 for (auto &fna : func->arguments) {
                     if (fna->name == var->name) {

@@ -108,6 +108,7 @@ One section per module: what the module is for, then its public symbols grouped 
 - [remove_call_args](#remove_call_args) - The REMOVE_CALL_ARGS module provides AST transformation macros that remove specific arguments from function calls at compile time.
 - [result](#result) - Monadic `Result<T, E>` — a value (`ok`) or an error (`err`).
 - [rst](#rst) - The RST module implements the documentation generation pipeline for daslang.
+- [rst_label](#rst_label) - The RST_LABEL module spells the RST label of a function and the short type names that label hashes.
 - [rtti](#rtti) - The RTTI module exposes runtime type information and program introspection facilities.
 - [runtime_memory](#runtime_memory) - Context and retained idle-fork memory snapshots for runtime diagnostics.
 - [safe_addr](#safe_addr) - The SAFE_ADDR module provides compile-time checked pointer operations.
@@ -855,7 +856,7 @@ The FIO module implements file input/output and filesystem operations. It provid
 - `ftell` - Returns the current byte offset of the file pointer for the given FILE, equivalent to C ftell.
 - `funbuffered` - Turns off the C stream buffer on the stream, so every read goes to the descriptor and `fpoll` sees every byte the stream holds: nothing waits in a stdio buffer the poll cannot see.
 - `fwrite` - Writes raw binary data from a POD value to a file.
-- `fwrite_if_changed`
+- `fwrite_if_changed` - Writes `text` to `path` unless the file already holds it; returns whether it wrote.
 - `getchar` - Reads and returns the next character from standard input as an integer, equivalent to C getchar.
 - `is_reparse_point` - Returns true if the path is a symbolic link — and on Windows, any reparse point: a junction, a mount point, or a less common flavor such as a cloud-file placeholder.
 - `is_reparse_point_result`
@@ -931,13 +932,13 @@ The FIO module implements file input/output and filesystem operations. It provid
 ### OS specific routines
 
 - `close_process` - Frees the handle.
-- `executable_on_path`
+- `executable_on_path` - True when the shell finds `name` as a command - `where` on Windows, `command -v` elsewhere - so a program on PATH answers, and so does a shell builtin; the exit code decides.
 - `exit` - Terminates the program immediately with the specified integer exit code, equivalent to C exit.
 - `exit_now` - Ends the process at once with the given exit code: stdout and stderr are flushed, and nothing else runs - no `atexit` handler, no module teardown, no leak dump.
 - `get_env_variable` - Returns the string value of the environment variable with the given name, or an empty string if undefined.
 - `has_env_variable` - Returns true if an environment variable with the given name is defined in the current process environment.
-- `is_death_exit_code`
-- `is_spawn_failure`
+- `is_death_exit_code` - Read as a death by the shell's convention: 128 + N for POSIX signal N (a child's own exit(128+) reads the same), a negative NTSTATUS on Windows; -1, popen_timed_out, process_running are not.
+- `is_spawn_failure` - A child that never ran: -1 when the spawn failed, 126 and 127 when the child could not exec its program, as a shell reports them; on Windows a child's own exit(-1) reads the same as a failed spawn.
 - `popen` - Opens a pipe to the given shell command, provides the resulting FILE pointer to the block, and returns the process exit code - on POSIX 128 + N when the shell is killed by signal N.
 - `popen_argv` - Spawns a subprocess directly via argv, bypassing the shell, in the directory `cwd` (empty inherits the caller's) with each `env` entry, `KEY=VALUE`, applied over the inherited environment.
 - `popen_argv_pipe` - Spawns a subprocess with bidirectional pipes connected to its stdin and stdout (child stderr is merged into stdout).
@@ -950,14 +951,14 @@ The FIO module implements file input/output and filesystem operations. It provid
 - `process_poll` - The child's exit code if it has exited, else `process_running`; never waits.
 - `process_terminate` - Asks the child and everything it spawned to stop: `SIGTERM` to its process group on POSIX, `TerminateJobObject` with exit code 15 on Windows, where nothing gentler reaches a console-less process.
 - `process_wait` - Waits up to `timeout` seconds for the child to exit and returns its exit code (on POSIX 128 + N for a child killed by signal N, as `process_poll` reports it), or `process_running` when the timeout passes first.
-- `run_and_capture`
+- `run_and_capture` - Run an external command from `cwd` ("" inherits) with `env` `KEY=VALUE` overrides, capturing its stdout+stderr through `popen_argv`.
 - `sanitize_command_line` - Escapes and sanitizes a command-line argument string to prevent shell injection.
 - `set_env_variable` - Sets an environment variable in the current process (the `setenv`/`_putenv` family).
 - `sleep` - Suspends execution of the current thread for the specified number of milliseconds.
 - `spawn_argv` - Launches a detached subprocess directly from an argument array without invoking a shell.
 - `spawn_process` - Spawns `argv` as a long-lived child and returns its handle.
 - `system` - Runs a shell command via the C runtime `system()` function.
-- `with_process`
+- `with_process` - `with_process` inheriting the parent's directory and environment.
 
 ### Dynamic modules
 
@@ -4781,33 +4782,33 @@ The ALGORITHM module provides array and collection manipulation algorithms inclu
 
 ### Search
 
-- `binary_search`
-- `equal_range`
-- `lower_bound`
-- `upper_bound`
+- `binary_search` - Returns true if val appears within the range [f, last).
+- `equal_range` - Returns a pair of indices [lower, upper) bounding the range of elements equal to val within [f, l).
+- `lower_bound` - Returns the index of the first element in the range [f, l) that is not less than val, or l if no such element is found.
+- `upper_bound` - Returns the index of the first element in the range [f, l) that is greater than val, or l if no such element is found.
 
 ### Array manipulation
 
-- `combine`
-- `erase_all`
-- `fill`
-- `is_sorted`
-- `max_element`
-- `min_element`
-- `reverse`
-- `rotate`
-- `sort_unique`
-- `topological_sort`
-- `unique`
+- `combine` - Returns a new array containing elements from a followed by b.
+- `erase_all` - Erases all elements equal to value from arr in O(n) time.
+- `fill` - Sets all elements of the array to the given value using clone.
+- `is_sorted` - Returns true if the array is sorted in non-descending order.
+- `max_element` - Returns the index of the maximum element in the array, or -1 if the array is empty.
+- `min_element` - Returns the index of the minimum element in the array, or -1 if the array is empty.
+- `reverse` - Reverses the elements of a in place.
+- `rotate` - Rotates the array so that the element at index mid becomes the first element.
+- `sort_unique` - Returns an array of elements from a, sorted and with duplicates removed.
+- `topological_sort` - Topological sort of a graph.
+- `unique` - Returns an array with adjacent duplicate elements removed.
 
 ### Table manipulation
 
-- `difference`
-- `identical`
-- `intersection`
-- `is_subset`
-- `symmetric_difference`
-- `union`
+- `difference` - Returns the difference of two sets.
+- `identical` - Returns true if the two sets are identical.
+- `intersection` - Returns the intersection of two sets.
+- `is_subset` - Returns true if all elements of a are contained in b.
+- `symmetric_difference` - Returns the symmetric difference of two sets (elements in either set but not both).
+- `union` - Returns the union of two sets.
 
 ## ansi_colors
 
@@ -4940,16 +4941,16 @@ The ARRAY_BOOST module extends array operations with temporary array views over 
 
 ### Temporary arrays
 
-- `temp_array`
+- `temp_array` - Creates temporary array from the given object.
 
 ### Empty check
 
-- `empty`
+- `empty` - returns true if 'v' has 0 elements.
 
 ### Sub-array view
 
-- `array_view`
-- `pod_view`
+- `array_view` - creates a subview of an existing borrowed array, valid only within the block
+- `pod_view` - reads one raw POD value from borrowed bytes at an arbitrary, possibly unaligned, byte offset; bounds-checked byte copy — the alignment-free complement of the typed `array_view`
 
 ## assert_once
 
@@ -5495,26 +5496,26 @@ The CONTRACTS module provides compile-time type constraints for generic function
 
 ### Function annotations
 
-- `expect_any_variant`
-- `expect_any_workhorse`
-- `expect_any_function`
-- `expect_any_lambda`
-- `expect_ref`
-- `expect_any_bitfield`
-- `expect_value_handle`
-- `expect_any_struct`
-- `expect_any_enum`
-- `expect_any_tuple`
-- `expect_any_numeric`
-- `expect_any_array`
-- `expect_any_vector_type`
-- `expect_pointer`
-- `expect_class`
-- `expect_any_workhorse_raw`
+- `expect_any_variant` - [expect_any_variant(argname)] contract, which only accepts variants
+- `expect_any_workhorse` - [expect_any_workhorse(argname)] contract, which only accepts workhorse types (int, float, etc) Workhorse types are: bool,int*,uint*,float*,double,range and urange, range64 and urange64, string,enumeration,and non-smart pointers
+- `expect_any_function` - [expect_any_function(argname)] contract, which only accepts functions
+- `expect_any_lambda` - [expect_any_lambda(argname)] contract, which only accepts lambdas
+- `expect_ref` - [expect_ref(argname)] contract, which only accepts references
+- `expect_any_bitfield` - [expect_any_bitfield(argname)] contract, which only accepts bitfields
+- `expect_value_handle` - [expect_value_handle(argname)] contract, which only accepts value handles
+- `expect_any_struct` - [expect_any_struct(argname)] contract, which only accepts structs (but not classes)
+- `expect_any_enum` - [expect_any_enum(argname)] contract, which only accepts enumerations
+- `expect_any_tuple` - [expect_any_tuple(argname)] contract, which only accepts tuples
+- `expect_any_numeric` - [expect_any_numeric(argname)] contract, which only accepts numeric types (int, float, etc)
+- `expect_any_array` - [expect_any_array(argname)] contract, which only accepts array<T>, T[], or das`vector<T>
+- `expect_any_vector_type` - [expect_any_vector_type(argname)] contract, which only accepts vector types, i.e.
+- `expect_pointer` - [expect_pointer(argname)] contract, which only accepts pointers
+- `expect_class` - [expect_class(argname)] contract, which only accepts class instances
+- `expect_any_workhorse_raw` - [expect_any_workhorse_raw(argname)] contract, which only accepts workhorse types which are raw (not pointer or bool)
 
 ### Type queries
 
-- `isYetAnotherVectorTemplate`
+- `isYetAnotherVectorTemplate` - returns true if the given type declaration is a das::vector template bound on C++ side
 
 ## coroutines
 
@@ -7211,23 +7212,23 @@ The QUOTE module provides quasiquotation support for AST construction. It allows
 
 ### Structures
 
-- `CaptureEntryInitData`
-- `LineInfoInitData`
-- `EnumEntryInitData`
-- `AnnotationArgumentInitData`
-- `FileInfoInitData`
+- `CaptureEntryInitData` - Initialization data for a captured variable entry.
+- `LineInfoInitData` - Initialization data for source line info reconstruction.
+- `EnumEntryInitData` - Initialization data for a quoted enum entry.
+- `AnnotationArgumentInitData` - Initialization data for a quoted annotation argument.
+- `FileInfoInitData` - Initialization data for reconstructing file info.
 
 ### Clone operations
 
-- `clone`
-- `clone_file_info`
-- `clone_line_info`
-- `resolve_file_info`
+- `clone` - Clones an array of AnnotationArgumentInitData into an AnnotationArgumentList.
+- `clone_file_info` - Creates a FileInfo from a FileInfoInitData struct.
+- `clone_line_info` - Creates a LineInfo from a LineInfoInitData struct.
+- `resolve_file_info` - Stable FileInfo for reconstructed LineInfos: one interned dummy per (file name, tab size) (per context), instead of a fresh allocation per evaluation.
 
 ### Conversion
 
-- `cvt_to_mks`
-- `make_alias_type_decl`
+- `cvt_to_mks` - Converts an array of arguments into a MakeStruct pointer.
+- `make_alias_type_decl` - Reconstruction helper: a by-name alias TypeDecl, resolved by re-infer at the splice site.
 
 ## random
 
@@ -7432,10 +7433,6 @@ The RST module implements the documentation generation pipeline for daslang. It 
 
 - `describe_short` - Returns a concise one-line description of an expression or type.
 
-### Label makers
-
-- `function_label_file` - Creates a unique, file-name-safe label string for a function.
-
 ### RST section makers
 
 - `make_group` - Creates a named documentation group with a decorative RST section header.
@@ -7446,13 +7443,24 @@ The RST module implements the documentation generation pipeline for daslang. It 
 - `group_by_regex` - Groups module items whose names match the provided regular expression under a documentation section.
 - `hide_group` - Marks the specified documentation group as hidden so it is excluded from output.
 
-### Naming helpers
-
-- `safe_function_name` - Escapes special characters in a function name to produce a safe identifier for RST output.
-
 ### Reference policy
 
 - `mark_module_pageless` - Declares that a module (typically a raw native binding such as `imgui`) gets no generated documentation pages.
+
+## rst_label
+
+The RST_LABEL module spells the RST label of a function and the short type names that label hashes. It is the leaf both `rst` and the `rst_comment` reader share: the reader is a parser macro, and every module parsed before it registers loses its `//!` comments, so this module requires only builtin modules and its reference pages are written by hand.
+
+
+### Label makers
+
+- `function_label_file` - Creates a unique, file-name-safe label string for a function: its safe name and a hash of its argument types.
+- `safe_function_name` - Escapes special characters in a function name to produce a safe identifier for RST output.
+
+### Short type names
+
+- `cleanup_type_short` - Drops the const, ref, implicit and temporary suffixes `describe` spells, keeping the `#` and `[]` marks.
+- `describe_type_short` - Spells a type the way the reference manual does: aliases by name, containers and callables structurally, everything else through `describe` with its qualifiers dropped.
 
 ## safe_addr
 
@@ -7531,11 +7539,11 @@ The CMP module holds comparisons: it writes lexicographic orderings from a list 
 
 ### Call macros
 
-- `cmp_by`
+- `cmp_by` - `cmp_by(key, -key, ...)` - a comparator block ordering by keys over `_`, the element; `-` sorts a key descending.
 
 ### Structure macros
 
-- `ordered`
+- `ordered` - `[ordered]` / `[ordered(field, field = greater, key = fn)]` - generates the structure's `operator <`.
 
 ### Classes
 
@@ -7799,98 +7807,98 @@ The TEMPLATES_BOOST module extends template utilities with high-level macros for
 
 ### Structures
 
-- `Template`
+- `Template` - This structure contains collection of substitution rules for a template.
 
 ### Call macros
 
-- `qmacro_template_function`
-- `qmacro_variable`
-- `qmacro_type`
-- `qmacro_function`
-- `qmacro`
-- `qmacro_template_class`
-- `qmacro_method`
-- `qmacro_block`
-- `qmacro_expr`
-- `qmacro_block_to_array`
+- `qmacro_template_function` - Call macro for quoting named template functions.
+- `qmacro_variable` - This macro implements expression reification for variables.
+- `qmacro_type` - This macro implements type declaration reification 'qmacro_type'
+- `qmacro_function` - This macro implements expression reification for functions.
+- `qmacro` - This macro implements expression reification 'qmacro'
+- `qmacro_template_class` - Call macro for quoting named template class methods.
+- `qmacro_method` - This macro implements expression reification for class methods.
+- `qmacro_block` - This macro implements expression block reification 'qmacro_block'
+- `qmacro_expr` - This macro implements first line of the expression block reification 'qmacro_expr'
+- `qmacro_block_to_array` - This macro implements expression block to array reification 'qmacro_block_to_array'
 
 ### Template rules
 
-- `kaboomVarField`
-- `renameCall`
-- `renameField`
-- `renameVariable`
-- `replaceAnnotationArgument`
-- `replaceArgumentWithList`
-- `replaceBlockArgument`
-- `replaceStructWithTypeDecl`
-- `replaceType`
-- `replaceTypeWithTypeDecl`
-- `replaceVarTag`
-- `replaceVariable`
-- `replaceVariableWithList`
+- `kaboomVarField` - Adds a rule to to the template to replace a variable field access with a prefix and suffix.
+- `renameCall` - Adds a rule to the template to rename a call.
+- `renameField` - Adds a rule to the template to rename any field lookup (., ?., as, is, etc)
+- `renameVariable` - Adds a rule to the template to rename a variable.
+- `replaceAnnotationArgument` - Adds a rule to the template to replace an annotation argument with the result of a callback.
+- `replaceArgumentWithList` - Adds a rule to the template to replace a block argument with a list of variables.
+- `replaceBlockArgument` - Adds a rule to the template to rename a block argument.
+- `replaceStructWithTypeDecl` - Adds a rule to the template to replace a type alias with another type alias, specified by type declaration.
+- `replaceType` - Adds a rule to the template to replace a type alias with another type alias, specified by name.
+- `replaceTypeWithTypeDecl` - Adds a rule to the template to replace a type alias with another type alias, specified by type declaration.
+- `replaceVarTag` - Adds a rule to the template to replace a variable tag with an expression.
+- `replaceVariable` - Adds a rule to the template to replace a variable with an expression.
+- `replaceVariableWithList` - Adds a rule to the template to replace a variable with an expression list.
 
 ### Template application
 
-- `apply_template`
-- `bind_block_argument`
-- `clone_and_rename_var`
+- `apply_template` - Applies the template to the given expression.
+- `bind_block_argument` - Clones the body of a block literal with its argument `argname` replaced by the expression `bound`, and returns it as a plain (argument-less) block.
+- `clone_and_rename_var` - Clones `src` and renames every `ExprVar` named `from_name` to `to_name`.
 
 ### Expression helpers
 
-- `expression_at`
-- `remove_deref`
-- `visit_expression`
+- `expression_at` - Force expression location, then return it.
+- `remove_deref` - Removes dereferences of the variable `varname` from the expression.
+- `visit_expression` - Visits the expression with the given visitor adapter.
 
 ### Expression generation
 
-- `make_expression_block`
+- `make_expression_block` - Create ExprBlock and move all expressions from expr to the list of the block.
 
 ### Block helpers
 
-- `move_unquote_block`
-- `push_block_list`
-- `unquote_block`
+- `move_unquote_block` - Moves the corresponding block subexpression expression from the ExprMakeBlock.
+- `push_block_list` - Splice every statement from a `qmacro_block(...) { ...
+- `unquote_block` - Returns the corresponding block subexpression expression from the ExprMakeBlock.
 
 ### Global variable helpers
 
-- `add_global_let`
-- `add_global_private_let`
-- `add_global_private_var`
-- `add_global_var`
+- `add_global_let` - Add global variable to the module, given name and initial value.
+- `add_global_private_let` - Add global variable to the module, given name and initial value.
+- `add_global_private_var` - Add global variable to the module, given name and initial value.
+- `add_global_var` - Add global variable to the module, given name and type.
 
 ### Hygienic names
 
-- `make_unique_private_name`
+- `make_unique_private_name` - Generates unique private name for the variable, given prefix and line info.
 
 ### Quoting macros
 
-- `apply_qblock`
-- `apply_qblock_expr`
-- `apply_qblock_to_array`
-- `apply_qmacro`
-- `apply_qmacro_function`
-- `apply_qmacro_method`
-- `apply_qmacro_template_class`
-- `apply_qmacro_template_function`
-- `apply_qmacro_variable`
-- `apply_qtype`
+- `apply_qblock` - Implementation details for the expression reification.
+- `apply_qblock_expr` - Implementation details for the expression reification.
+- `apply_qblock_to_array` - Implementation details for the expression reification.
+- `apply_qmacro` - Implementation details for the expression reification.
+- `apply_qmacro_function` - Implementation details for reification.
+- `apply_qmacro_method` - Implementation details for reification.
+- `apply_qmacro_template_class` - Implementation details for the expression reification.
+- `apply_qmacro_template_function` - Applies template rules to a function, cloning it with substituted types.
+- `apply_qmacro_variable` - Implementation details for reification.
+- `apply_qtype` - Implementation details for the expression reification.
 
 ### Type pointer helpers
 
-- `add_array_ptr_ref`
-- `add_type_ptr_ref`
+- `add_array_ptr_ref` - Implementation details for the reification.
+- `add_type_ptr_ref` - Implementation details for the reification.
 
 ### Structure helpers
 
-- `add_structure_field`
+- `add_structure_field` - Adds a field to the structure.
 
 ### Class generation
 
-- `enum_class_type`
-- `make_class`
-- `make_class_constructor`
-- `modify_to_class_member`
+- `enum_class_type` - return underlying type for the enumeration
+- `make_class` - Creates a class structure.
+- `make_class_constructor` - Adds a class constructor from a constructor function.
+- `modify_to_class_member` - Modifies function to be a member of a particular class.
 
 ## templates
 
@@ -7899,12 +7907,12 @@ The TEMPLATES module implements template instantiation utilities for daslang cod
 
 ### Function annotations
 
-- `template`
+- `template` - This macro is used to remove unused (template) arguments from the instantiation of the generic function.
 
 ### Call macros
 
-- `decltype`
-- `decltype_noref`
+- `decltype` - This macro returns `ast::TypeDecl` for the corresponding expression.
+- `decltype_noref` - This macro returns TypeDecl for the corresponding expression, minus the ref (&) portion.
 
 ## type_traits
 

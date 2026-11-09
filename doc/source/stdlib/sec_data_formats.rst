@@ -18,4 +18,5 @@ JSON, TOML, XML, regular expressions, PEG parser generator, reStructuredText, an
    generated/regex_boost.rst
    generated/peg.rst
    generated/rst.rst
+   generated/rst_label.rst
    generated/md_boost.rst
