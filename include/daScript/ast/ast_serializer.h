@@ -362,7 +362,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 255;   // 255: an auto literal is seeded from every destination, not only a call argument
+            return 256;   // 256: an annotated block literal is never spliced by invoke-block inlining
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

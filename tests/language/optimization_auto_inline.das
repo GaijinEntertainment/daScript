@@ -8,6 +8,7 @@ require daslib/ast_boost
 require dastest/testing_boost public
 require strings
 require daslib/strings_boost
+require UnitTest
 require _optimized_body_helper
 
 // structural FIRED proof + behavioral safety net for automatic block inlining and
@@ -455,5 +456,27 @@ def test_never_inline_block(t : T?) {
     }
     t |> run("values preserved") @(t : T?) {
         t |> equal(target_never_inline_block(), 60)
+    }
+}
+
+[never_inline]
+def target_annotated_block() : int {
+    return transform_sum([1, 2, 3]) $ [block_ann_data] (v : int) : int {
+        return v * 10
+    }
+}
+
+[test(description = "a block literal carrying any annotation keeps its invoke, so the annotation's call-site semantics are not spliced away")]
+def test_annotated_block_declines_inline(t : T?) {
+    ast_gc_guard() {
+        t |> run("[block_ann_data] block declines invoke-block inlining") @(t : T?) {
+            let b = body_of(t, "target_annotated_block")
+            t |> success(!has(b, "transform_sum("), "the function still inlines: {b}")
+            t |> success(has(b, "invoke("), "the annotated block stays an invoke: {b}")
+            t |> success(has(b, "block_ann_data"), "the annotation survives on the block: {b}")
+        }
+    }
+    t |> run("values preserved") @(t : T?) {
+        t |> equal(target_annotated_block(), 60)
     }
 }
