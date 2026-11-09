@@ -1013,7 +1013,8 @@ def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:
     }
 
     t0 = ref_time_ticks()
-    let r5 = run_argv([sphinx, "-W", "--keep-going", "-b", "html", "-d", "doc/sphinx-build", "doc/source", "build/site"])
+    let r5 = run_argv([sphinx, "-W", "--keep-going", "-j", "auto",
+        "-b", "html", "-d", "doc/sphinx-build", "doc/source", "build/site"])
     let html_ok = r5.rc == 0
     // A missing `.. video::` target is a -W warning like any other, so name the
     // unstaged recordings when they are the likely cause rather than leaving the

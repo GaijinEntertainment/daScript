@@ -121,7 +121,7 @@ Local build, from the daslang root:
 
 ```bash
 daslang modules/dasImgui/utils/imgui2rst.das
-sphinx-build -b html doc/source doc/_build/html
+sphinx-build -j auto -b html doc/source doc/_build/html
 ```
 
 The first step runs the RST emitter (parallel to daslang's `das2rst`) - the

@@ -87,7 +87,7 @@ if(DAS_BUILD_DOCUMENTATION)
         # Step 2: build HTML with Sphinx
         add_custom_command(
             OUTPUT  ${CMAKE_CURRENT_BINARY_DIR}/sphinx.stamp
-            COMMAND ${Python3_EXECUTABLE} -m sphinx
+            COMMAND ${Python3_EXECUTABLE} -m sphinx -j auto
                     -b html
                     -d "${DAS_DOC_DOCTREE_DIR}"
                     "${DAS_DOC_SOURCE_DIR}"
@@ -106,7 +106,7 @@ if(DAS_BUILD_DOCUMENTATION)
         # Explicit (non-ALL); das_documentation above stays the local /
         # install-oriented build. Both regenerate RST via the das2rst.stamp dep.
         add_custom_target(build_doc
-            COMMAND ${Python3_EXECUTABLE} -m sphinx -W --keep-going
+            COMMAND ${Python3_EXECUTABLE} -m sphinx -W --keep-going -j auto
                     -b html -d "${DAS_DOC_DOCTREE_DIR}" "${DAS_DOC_SOURCE_DIR}" "${DAS_DOC_BUILD_DIR}"
             DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/das2rst.stamp
             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/doc

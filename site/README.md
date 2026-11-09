@@ -179,7 +179,7 @@ EOF
 
 ```bash
 # Local sphinx-build inside the project's venv.
-sphinx-build -W --keep-going -b html doc/source build/site
+sphinx-build -W --keep-going -j auto -b html doc/source build/site
 open build/site/index.html
 ```
 
@@ -280,7 +280,7 @@ cp site/playground/index.html _site/playground/index.html
 cp site/playground/{forge-skin,cm-forge}.css _site/playground/
 
 # Sphinx (requires daslang binary for das2rst - see doc/ build instructions)
-sphinx-build -b html doc/source _site/doc
+sphinx-build -j auto -b html doc/source _site/doc
 
 cd _site && python3 -m http.server 8000
 ```

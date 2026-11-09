@@ -290,13 +290,15 @@ further issues - loop gate 1 locally until clean. Workflow:
 | 2 | imgui2rst regenerates clean | `<daslang> modules/dasImgui/utils/imgui2rst.das` |
 | 3 | vulkan2rst regenerates clean | `<daslang> modules/dasVulkan/utils/vulkan2rst.das` |
 | 4-6 | the generated docs are fresh: no `// stub` in handmade docs, no `Uncategorized` sections, no untracked generated RST | `cmake --build build --target check_docs_fresh` - names the offending file and the fix (a `group_by_regex` in the owning generator for Uncategorized, `git add` for an untracked page). This is the same target doc.yml runs |
-| 7 | HTML sphinx, warnings-as-errors | `sphinx-build -W --keep-going -b html -d doc/sphinx-build doc/source build/site` - delete `doc/sphinx-build` first; cached builds hide errors |
+| 7 | HTML sphinx, warnings-as-errors | `sphinx-build -W --keep-going -j auto -b html -d doc/sphinx-build doc/source build/site` - delete `doc/sphinx-build` first; cached builds hide errors |
 
 preflight finds sphinx-build on PATH, then in `~/Library/Python/*/bin` +
 `~/.local/bin`, and stages the docs-assets release once per tree: a `.. video::`
 whose recording is missing from `doc/source/_static/tutorials/` is a `-W`
 warning like any other, and the gate detail says so when staging failed and the
-build then went red.
+build then went red. `-j auto` spreads the read and write phases over every
+core on Linux and macOS; Sphinx parallelizes only where it can fork, so on
+Windows the same flag runs one process and changes nothing.
 
 ## wasm_build.yml
 
