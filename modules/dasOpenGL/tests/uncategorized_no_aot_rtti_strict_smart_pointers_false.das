@@ -25,11 +25,15 @@ def private compile_fixture(name : string; blk : block<(ok : bool; prog : smart_
     }
 }
 
-//! a late-bound extern call is renamed `__dasbind__<name>@@<lib>#<n>` by late binding; this reads `<name>` back
+//! a late-bound extern call is renamed
+//! `<module>::__dasbind__<name>@@<lib>#<n>`; this reads `<name>` back
 def private gl_name(name : das_string) : string {
     let full = string(name)
-    if (!(full |> starts_with("__dasbind__"))) return full
-    return slice(full, length("__dasbind__"), find(full, "@@"))
+    let at = find(full, "__dasbind__")
+    if (at < 0) return full
+    let start = at + length("__dasbind__")
+    let stop = find(full, "@@", start)
+    return slice(full, start, stop < 0 ? length(full) : stop)
 }
 
 //! each call as `name(arg, arg, ...)` in statement order, nested blocks flattened; a non-call statement reads as "?"
